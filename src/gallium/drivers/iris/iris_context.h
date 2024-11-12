@@ -1492,7 +1492,6 @@ iris_execute_indirect_draw_supported(const struct iris_context *ice,
    const struct iris_screen *screen = (struct iris_screen *)ice->ctx.screen;
    const struct iris_vs_data *vs_data =
       iris_vs_data(ice->shaders.prog[MESA_SHADER_VERTEX]);
-   const bool is_multiview = draw->view_mask != 0;
    const size_t struct_size = draw->index_size ?
       sizeof(uint32_t) * 5 :
       sizeof(uint32_t) * 4;
@@ -1503,7 +1502,6 @@ iris_execute_indirect_draw_supported(const struct iris_context *ice,
            aligned_stride &&
            (indirect &&
            !indirect->count_from_stream_output) &&
-           !is_multiview &&
            !(vs_data->uses_firstvertex ||
              vs_data->uses_baseinstance ||
              vs_data->uses_drawid));
@@ -1528,6 +1526,9 @@ iris_execute_indirect_draw_supported(const struct iris_context *ice,
 #  include "iris_genx_protos.h"
 #  undef genX
 #  define genX(x) gfx20_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gfx30_##x
 #  include "iris_genx_protos.h"
 #  undef genX
 #endif

@@ -1,10 +1,9 @@
 // Copyright © 2024 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-extern crate bitview;
 extern crate nvidia_headers;
-extern crate paste;
 
+use compiler::bindings::*;
 use nak_bindings::*;
 use nvidia_headers::classes::{cla0c0, clc0c0, clc3c0, clc6c0};
 
@@ -14,7 +13,7 @@ use paste::paste;
 type QMDBitView<'a> = BitMutView<'a, [u32]>;
 
 trait QMD {
-    const GLOBAL_SIZE_OFFSET: usize;
+    const GLOBAL_SIZE_LAYOUT: nak_qmd_dispatch_size_layout;
 
     fn new() -> Self;
     fn set_barrier_count(&mut self, barrier_count: u8);
@@ -23,6 +22,7 @@ trait QMD {
     fn set_local_size(&mut self, width: u16, height: u16, depth: u16);
     fn set_prog_addr(&mut self, addr: u64);
     fn set_register_count(&mut self, register_count: u8);
+    fn set_crs_size(&mut self, crs_size: u32);
     fn set_slm_size(&mut self, slm_size: u32);
     fn set_smem_size(&mut self, smem_size: u32, smem_max: u32);
 }
@@ -65,10 +65,18 @@ macro_rules! qmd_impl_common {
             set_field!(bv, $c, $s, BARRIER_COUNT, barrier_count);
         }
 
-        const GLOBAL_SIZE_OFFSET: usize = {
+        const GLOBAL_SIZE_LAYOUT: nak_qmd_dispatch_size_layout = {
             let w = paste! {$c::[<$s _CTA_RASTER_WIDTH>]};
-            assert!(w.end == w.start + 32);
-            w.start / 8
+            let h = paste! {$c::[<$s _CTA_RASTER_HEIGHT>]};
+            let d = paste! {$c::[<$s _CTA_RASTER_DEPTH>]};
+            nak_qmd_dispatch_size_layout {
+                x_start: w.start as u16,
+                x_end: w.end as u16,
+                y_start: h.start as u16,
+                y_end: h.end as u16,
+                z_start: d.start as u16,
+                z_end: d.end as u16,
+            }
         };
 
         fn set_global_size(&mut self, width: u32, height: u32, depth: u32) {
@@ -90,6 +98,16 @@ macro_rules! qmd_impl_common {
             let slm_size = slm_size.next_multiple_of(0x10);
             set_field!(bv, $c, $s, SHADER_LOCAL_MEMORY_HIGH_SIZE, 0);
             set_field!(bv, $c, $s, SHADER_LOCAL_MEMORY_LOW_SIZE, slm_size);
+        }
+    };
+}
+
+macro_rules! qmd_impl_set_crs_size {
+    ($c:ident, $s:ident) => {
+        fn set_crs_size(&mut self, crs_size: u32) {
+            let mut bv = QMDBitView::new(&mut self.qmd);
+            let crs_size = crs_size.next_multiple_of(0x200);
+            set_field!(bv, $c, $s, SHADER_LOCAL_MEMORY_CRS_SIZE, crs_size);
         }
     };
 }
@@ -170,6 +188,7 @@ mod qmd_0_6 {
         }
 
         qmd_impl_common!(cla0c0, QMDV00_06);
+        qmd_impl_set_crs_size!(cla0c0, QMDV00_06);
         qmd_impl_set_cbuf!(cla0c0, QMDV00_06, SIZE);
         qmd_impl_set_prog_addr_32!(cla0c0, QMDV00_06);
         qmd_impl_set_register_count!(cla0c0, QMDV00_06, REGISTER_COUNT);
@@ -214,6 +233,7 @@ mod qmd_2_1 {
         }
 
         qmd_impl_common!(clc0c0, QMDV02_01);
+        qmd_impl_set_crs_size!(clc0c0, QMDV02_01);
         qmd_impl_set_cbuf!(clc0c0, QMDV02_01, SIZE_SHIFTED4);
         qmd_impl_set_prog_addr_32!(clc0c0, QMDV02_01);
         qmd_impl_set_register_count!(clc0c0, QMDV02_01, REGISTER_COUNT);
@@ -281,6 +301,7 @@ mod qmd_2_2 {
         }
 
         qmd_impl_common!(clc3c0, QMDV02_02);
+        qmd_impl_set_crs_size!(clc3c0, QMDV02_02);
         qmd_impl_set_cbuf!(clc3c0, QMDV02_02, SIZE_SHIFTED4);
         qmd_impl_set_prog_addr_64!(clc3c0, QMDV02_02);
         qmd_impl_set_register_count!(clc3c0, QMDV02_02, REGISTER_COUNT_V);
@@ -308,6 +329,11 @@ mod qmd_3_0 {
         }
 
         qmd_impl_common!(clc6c0, QMDV03_00);
+
+        fn set_crs_size(&mut self, crs_size: u32) {
+            assert!(crs_size == 0);
+        }
+
         qmd_impl_set_cbuf!(clc6c0, QMDV03_00, SIZE_SHIFTED4);
         qmd_impl_set_prog_addr_64!(clc6c0, QMDV03_00);
         qmd_impl_set_register_count!(clc6c0, QMDV03_00, REGISTER_COUNT_V);
@@ -324,7 +350,7 @@ fn fill_qmd<Q: QMD>(info: &nak_shader_info, qmd_info: &nak_qmd_info) -> Q {
 
     let mut qmd = Q::new();
 
-    qmd.set_barrier_count(info.num_barriers);
+    qmd.set_barrier_count(info.num_control_barriers);
     qmd.set_global_size(
         qmd_info.global_size[0],
         qmd_info.global_size[1],
@@ -337,6 +363,7 @@ fn fill_qmd<Q: QMD>(info: &nak_shader_info, qmd_info: &nak_qmd_info) -> Q {
     );
     qmd.set_prog_addr(qmd_info.addr);
     qmd.set_register_count(info.num_gprs);
+    qmd.set_crs_size(info.crs_size);
     qmd.set_slm_size(info.slm_size);
 
     assert!(qmd_info.smem_size >= cs_info.smem_size);
@@ -394,20 +421,17 @@ pub extern "C" fn nak_fill_qmd(
 }
 
 #[no_mangle]
-pub extern "C" fn nak_qmd_dispatch_size_offset(
-    dev: *const nv_device_info,
-) -> u32 {
-    assert!(!dev.is_null());
-    let dev = unsafe { &*dev };
-
+pub extern "C" fn nak_get_qmd_dispatch_size_layout(
+    dev: &nv_device_info,
+) -> nak_qmd_dispatch_size_layout {
     if dev.cls_compute >= clc6c0::AMPERE_COMPUTE_A {
-        Qmd3_0::GLOBAL_SIZE_OFFSET.try_into().unwrap()
+        Qmd3_0::GLOBAL_SIZE_LAYOUT.try_into().unwrap()
     } else if dev.cls_compute >= clc3c0::VOLTA_COMPUTE_A {
-        Qmd2_2::GLOBAL_SIZE_OFFSET.try_into().unwrap()
+        Qmd2_2::GLOBAL_SIZE_LAYOUT.try_into().unwrap()
     } else if dev.cls_compute >= clc0c0::PASCAL_COMPUTE_A {
-        Qmd2_1::GLOBAL_SIZE_OFFSET.try_into().unwrap()
+        Qmd2_1::GLOBAL_SIZE_LAYOUT.try_into().unwrap()
     } else if dev.cls_compute >= cla0c0::KEPLER_COMPUTE_A {
-        Qmd0_6::GLOBAL_SIZE_OFFSET.try_into().unwrap()
+        Qmd0_6::GLOBAL_SIZE_LAYOUT.try_into().unwrap()
     } else {
         panic!("Unsupported shader model");
     }

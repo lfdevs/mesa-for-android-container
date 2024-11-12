@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_handle_table.h"
 #include "util/u_transfer.h"
+#include "util/set.h"
 #include "vl/vl_winsys.h"
 
 #include "va_private.h"
@@ -197,6 +198,8 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
       if (buf->type == VAEncCodedBufferType) {
          VACodedBufferSegment* curr_buf_ptr = (VACodedBufferSegment*) buf->data;
 
+         vlVaGetBufferFeedback(buf);
+
          if ((buf->extended_metadata.present_metadata & PIPE_VIDEO_FEEDBACK_METADATA_TYPE_ENCODE_RESULT) &&
              (buf->extended_metadata.encode_result & PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_FAILED)) {
             curr_buf_ptr->status = VA_CODED_BUF_STATUS_BAD_BITSTREAM;
@@ -234,11 +237,12 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
 
             curr_buf_ptr = buf->data;
             for (size_t i = 0; i < buf->extended_metadata.codec_unit_metadata_count; i++) {
-               curr_buf_ptr->status |= VA_CODED_BUF_STATUS_SINGLE_NALU;
                curr_buf_ptr->size = buf->extended_metadata.codec_unit_metadata[i].size;
                curr_buf_ptr->buf = compressed_bitstream_data + buf->extended_metadata.codec_unit_metadata[i].offset;
                if (buf->extended_metadata.codec_unit_metadata[i].flags & PIPE_VIDEO_CODEC_UNIT_LOCATION_FLAG_MAX_SLICE_SIZE_OVERFLOW)
                   curr_buf_ptr->status |= VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK;
+               if (buf->extended_metadata.codec_unit_metadata[i].flags & PIPE_VIDEO_CODEC_UNIT_LOCATION_FLAG_SINGLE_NALU)
+                  curr_buf_ptr->status |= VA_CODED_BUF_STATUS_SINGLE_NALU;
 
                curr_buf_ptr = curr_buf_ptr->next;
             }
@@ -333,6 +337,17 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
    } else {
       FREE(buf->data);
    }
+
+   if (buf->ctx) {
+      assert(_mesa_set_search(buf->ctx->buffers, buf));
+      _mesa_set_remove_key(buf->ctx->buffers, buf);
+      vlVaGetBufferFeedback(buf);
+      if (buf->fence && buf->ctx->decoder && buf->ctx->decoder->destroy_fence)
+         buf->ctx->decoder->destroy_fence(buf->ctx->decoder, buf->fence);
+   }
+
+   if (buf->coded_surf)
+      buf->coded_surf->coded_buf = NULL;
 
    FREE(buf);
    handle_table_remove(VL_VA_DRIVER(ctx)->htab, buf_id);
@@ -542,30 +557,6 @@ vlVaSyncBuffer(VADriverContextP ctx, VABufferID buf_id, uint64_t timeout_ns)
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   /* Some apps like ffmpeg check for vaSyncBuffer to be present
-      to do async enqueuing of multiple vaEndPicture encode calls
-      before calling vaSyncBuffer with a pre-defined latency
-      If vaSyncBuffer is not implemented, they fallback to the
-      usual synchronous pairs of { vaEndPicture + vaSyncSurface }
-
-      As this might require the driver to support multiple
-      operations and/or store multiple feedback values before sync
-      fallback to backward compatible behaviour unless driver
-      explicitly supports PIPE_VIDEO_CAP_ENC_SUPPORTS_ASYNC_OPERATION
-   */
-   if (!drv->pipe->screen->get_video_param(drv->pipe->screen,
-                              PIPE_VIDEO_PROFILE_UNKNOWN,
-                              PIPE_VIDEO_ENTRYPOINT_ENCODE,
-                              PIPE_VIDEO_CAP_ENC_SUPPORTS_ASYNC_OPERATION))
-      return VA_STATUS_ERROR_UNIMPLEMENTED;
-
-   /* vaSyncBuffer spec states that "If timeout is zero, the function returns immediately." */
-   if (timeout_ns == 0)
-      return VA_STATUS_ERROR_TIMEDOUT;
-
-   if (timeout_ns != VA_TIMEOUT_INFINITE)
-      return VA_STATUS_ERROR_UNIMPLEMENTED;
-
    mtx_lock(&drv->mutex);
    buf = handle_table_get(drv->htab, buf_id);
 
@@ -574,33 +565,35 @@ vlVaSyncBuffer(VADriverContextP ctx, VABufferID buf_id, uint64_t timeout_ns)
       return VA_STATUS_ERROR_INVALID_BUFFER;
    }
 
-   if (!buf->feedback) {
+   if (!buf->fence) {
       /* No outstanding operation: nothing to do. */
       mtx_unlock(&drv->mutex);
       return VA_STATUS_SUCCESS;
    }
 
-   context = handle_table_get(drv->htab, buf->ctx);
+   context = buf->ctx;
    if (!context) {
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
 
-   vlVaSurface* surf = handle_table_get(drv->htab, buf->associated_encode_input_surf);
-
-   if ((buf->feedback) && (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE)) {
-      context->decoder->get_feedback(context->decoder, buf->feedback, &(buf->coded_size), &(buf->extended_metadata));
-      buf->feedback = NULL;
-      /* Also mark the associated render target (encode source texture) surface as done
-         in case they call vaSyncSurface on it to avoid getting the feedback twice*/
-      if(surf)
-      {
-         surf->feedback = NULL;
-         buf->associated_encode_input_surf = VA_INVALID_ID;
-      }
+   if (!context->decoder) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
    }
 
+   int ret = context->decoder->fence_wait(context->decoder, buf->fence, timeout_ns);
    mtx_unlock(&drv->mutex);
-   return VA_STATUS_SUCCESS;
+   return ret ? VA_STATUS_SUCCESS : VA_STATUS_ERROR_TIMEDOUT;
 }
 #endif
+
+void vlVaGetBufferFeedback(vlVaBuffer *buf)
+{
+   if (!buf->ctx || !buf->ctx->decoder || !buf->feedback)
+      return;
+
+   buf->ctx->decoder->get_feedback(buf->ctx->decoder, buf->feedback,
+                                   &buf->coded_size, &buf->extended_metadata);
+   buf->feedback = NULL;
+}

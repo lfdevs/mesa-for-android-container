@@ -30,6 +30,7 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
+#include "util/perf/cpu_trace.h"
 
 #include "util/u_debug.h"
 #include "util/u_memory.h"
@@ -84,8 +85,9 @@ v3d_screen_destroy(struct pipe_screen *pscreen)
         if (screen->ro)
                 screen->ro->destroy(screen->ro);
 
-        if (using_v3d_simulator)
-                v3d_simulator_destroy(screen->sim_file);
+#if USE_V3D_SIMULATOR
+        v3d_simulator_destroy(screen->sim_file);
+#endif
 
         v3d_compiler_free(screen->compiler);
 
@@ -634,6 +636,14 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
                 return false;
         }
 
+        /* We do not support EXT_float_blend (blending with 32F formats)*/
+        if ((usage & PIPE_BIND_BLENDABLE) &&
+            (format == PIPE_FORMAT_R32G32B32A32_FLOAT ||
+             format == PIPE_FORMAT_R32G32_FLOAT ||
+             format == PIPE_FORMAT_R32_FLOAT)) {
+                return false;
+        }
+
         if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
             !v3d_tex_format_supported(&screen->devinfo, format)) {
                 return false;
@@ -740,8 +750,10 @@ v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
                         nir_lower_shift64 |
                         nir_lower_ufind_msb64,
                 .lower_fquantize2f16 = true,
+                .lower_ufind_msb = true,
                 .has_fsub = true,
                 .has_isub = true,
+                .has_uclz = true,
                 .divergence_analysis_options =
                        nir_divergence_multiple_workgroup_per_compute_subgroup,
                 /* This will enable loop unrolling in the state tracker so we won't
@@ -751,6 +763,7 @@ v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
                  */
                 .max_unroll_iterations = 16,
                 .force_indirect_unrolling_sampler = true,
+                .scalarize_ddx = true,
         };
 
         if (!initialized) {
@@ -903,6 +916,8 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         struct v3d_screen *screen = rzalloc(NULL, struct v3d_screen);
         struct pipe_screen *pscreen;
 
+        util_cpu_trace_init();
+
         pscreen = &screen->base;
 
         pscreen->destroy = v3d_screen_destroy;
@@ -922,7 +937,7 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         (void)mtx_init(&screen->bo_handles_mutex, mtx_plain);
         screen->bo_handles = util_hash_table_create_ptr_keys();
 
-#if defined(USE_V3D_SIMULATOR)
+#if USE_V3D_SIMULATOR
         screen->sim_file = v3d_simulator_init(screen->fd);
 #endif
 

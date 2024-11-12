@@ -634,7 +634,7 @@ panfrost_batch_submit(struct panfrost_context *ctx,
    int ret;
 
    /* Nothing to do! */
-   if (!has_frag && batch->compute_count == 0)
+   if (!has_frag && batch->compute_count == 0 && !batch->has_time_query)
       goto out;
 
    if (batch->key.zsbuf && has_frag) {

@@ -727,7 +727,7 @@ static inline struct elk_reg
 elk_imm_uw(uint16_t uw)
 {
    struct elk_reg imm = elk_imm_reg(ELK_REGISTER_TYPE_UW);
-   imm.ud = uw | (uw << 16);
+   imm.ud = uw | ((uint32_t)uw << 16);
    return imm;
 }
 

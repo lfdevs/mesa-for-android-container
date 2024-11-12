@@ -721,7 +721,7 @@ intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t main_addre
       aux_inc_addr = aux_inc_addr + aux_page_size;
    }
    bool success = main_inc_addr - main_address >= main_size_B;
-   if (!success && (main_inc_addr - main_address) > 0) {
+   if (!success && (main_inc_addr > main_address)) {
       /* If the mapping failed, remove the mapped portion. */
       remove_mapping_locked(ctx, main_address,
                             main_inc_addr - main_address,

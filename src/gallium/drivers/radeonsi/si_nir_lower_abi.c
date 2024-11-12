@@ -262,6 +262,22 @@ static nir_def *get_num_vertices_per_prim(nir_builder *b, struct lower_abi_state
       return nir_iadd_imm(b, GET_FIELD_NIR(GS_STATE_OUTPRIM), 1);
 }
 
+static nir_def *get_small_prim_precision(nir_builder *b, struct lower_abi_state *s, bool lines)
+{
+   /* Compute FP32 value "num_samples / quant_mode" using integer ops.
+    * See si_shader.h for how this works.
+    */
+   struct si_shader_args *args = s->args;
+   nir_def *precision = GET_FIELD_NIR(GS_STATE_SMALL_PRIM_PRECISION);
+   nir_def *log_samples = GET_FIELD_NIR(GS_STATE_SMALL_PRIM_PRECISION_LOG_SAMPLES);
+
+   if (lines)
+      precision = nir_iadd(b, precision, log_samples);
+
+   /* The final FP32 value is: 1/2^(15 - precision) */
+   return nir_ishl_imm(b, nir_ior_imm(b, precision, 0x70), 23);
+}
+
 static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_state *s)
 {
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
@@ -324,13 +340,14 @@ static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_s
       break;
    case nir_intrinsic_load_lshs_vertex_stride_amd:
       if (stage == MESA_SHADER_VERTEX) {
-         replacement = nir_imm_int(b, sel->info.lshs_vertex_stride);
+         replacement = nir_imm_int(b, si_shader_lshs_vertex_stride(shader));
       } else if (stage == MESA_SHADER_TESS_CTRL) {
          if (sel->screen->info.gfx_level >= GFX9 && shader->is_monolithic) {
-            replacement = nir_imm_int(b, key->ge.part.tcs.ls->info.lshs_vertex_stride);
+            replacement = nir_imm_int(b, si_shader_lshs_vertex_stride(shader));
          } else {
             nir_def *num_ls_out = ac_nir_unpack_arg(b, &args->ac, args->tcs_offchip_layout, 17, 6);
-            replacement = nir_iadd_imm_nuw(b, nir_ishl_imm(b, num_ls_out, 4), 4);
+            nir_def *extra_dw = nir_bcsel(b, nir_ieq_imm(b, num_ls_out, 0), nir_imm_int(b, 0), nir_imm_int(b, 4));
+            replacement = nir_iadd_nuw(b, nir_ishl_imm(b, num_ls_out, 4), extra_dw);
          }
       } else {
          unreachable("no nir_load_lshs_vertex_stride_amd");
@@ -382,11 +399,14 @@ static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_s
       replacement = nir_load_smem_amd(b, 2, addr, nir_imm_int(b, 32));
       break;
    }
-   case nir_intrinsic_load_viewport_xy_scale_and_offset: {
-      bool prim_is_lines = key->ge.opt.ngg_culling & SI_NGG_CULL_LINES;
+   case nir_intrinsic_load_cull_triangle_viewport_xy_scale_and_offset_amd: {
       nir_def *addr = ac_nir_load_arg(b, &args->ac, args->small_prim_cull_info);
-      unsigned offset = prim_is_lines ? 16 : 0;
-      replacement = nir_load_smem_amd(b, 4, addr, nir_imm_int(b, offset));
+      replacement = nir_load_smem_amd(b, 4, addr, nir_imm_int(b, 0));
+      break;
+   }
+   case nir_intrinsic_load_cull_line_viewport_xy_scale_and_offset_amd: {
+      nir_def *addr = ac_nir_load_arg(b, &args->ac, args->small_prim_cull_info);
+      replacement = nir_load_smem_amd(b, 4, addr, nir_imm_int(b, 16));
       break;
    }
    case nir_intrinsic_load_num_vertices_per_primitive_amd:
@@ -405,22 +425,20 @@ static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_s
    case nir_intrinsic_load_cull_front_face_enabled_amd:
       replacement = nir_imm_bool(b, key->ge.opt.ngg_culling & SI_NGG_CULL_FRONT_FACE);
       break;
-   case nir_intrinsic_load_cull_small_prim_precision_amd: {
-      nir_def *small_prim_precision =
-         key->ge.opt.ngg_culling & SI_NGG_CULL_LINES ?
-         GET_FIELD_NIR(GS_STATE_SMALL_PRIM_PRECISION_NO_AA) :
-         GET_FIELD_NIR(GS_STATE_SMALL_PRIM_PRECISION);
-
-      /* Extract the small prim precision. */
-      small_prim_precision = nir_ior_imm(b, small_prim_precision, 0x70);
-      replacement = nir_ishl_imm(b, small_prim_precision, 23);
+   case nir_intrinsic_load_cull_small_triangle_precision_amd:
+      replacement = get_small_prim_precision(b, s, false);
       break;
-   }
-   case nir_intrinsic_load_cull_small_primitives_enabled_amd: {
-      unsigned mask = SI_NGG_CULL_LINES | SI_NGG_CULL_SMALL_LINES_DIAMOND_EXIT;
-      replacement = nir_imm_bool(b, (key->ge.opt.ngg_culling & mask) != SI_NGG_CULL_LINES);
+   case nir_intrinsic_load_cull_small_line_precision_amd:
+      replacement = get_small_prim_precision(b, s, true);
       break;
-   }
+   case nir_intrinsic_load_cull_small_triangles_enabled_amd:
+      /* Triangles always have small primitive culling enabled. */
+      replacement = nir_imm_bool(b, true);
+      break;
+   case nir_intrinsic_load_cull_small_lines_enabled_amd:
+      replacement =
+         nir_imm_bool(b, key->ge.opt.ngg_culling & SI_NGG_CULL_SMALL_LINES_DIAMOND_EXIT);
+      break;
    case nir_intrinsic_load_provoking_vtx_in_prim_amd:
       replacement = nir_bcsel(b, nir_i2b(b, GET_FIELD_NIR(GS_STATE_PROVOKING_VTX_FIRST)),
                               nir_imm_int(b, 0),

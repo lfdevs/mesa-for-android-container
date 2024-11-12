@@ -161,6 +161,7 @@ nir_options = {
    .support_16bit_alu = true,
    .preserve_mediump = true,
    .discard_is_demote = true,
+   .scalarize_ddx = true,
 };
 
 const nir_shader_compiler_options*
@@ -2040,7 +2041,7 @@ emit_metadata(struct ntd_context *ctx)
       if (!emit_tag(ctx, DXIL_SHADER_TAG_NUM_THREADS, emit_threads(ctx)))
          return false;
       if (ctx->mod.minor_version >= 6 &&
-          ctx->shader->info.subgroup_size >= SUBGROUP_SIZE_REQUIRE_8) {
+          ctx->shader->info.subgroup_size >= SUBGROUP_SIZE_REQUIRE_4) {
          if (ctx->mod.minor_version < 8) {
             if (!emit_tag(ctx, DXIL_SHADER_TAG_WAVE_SIZE, emit_wave_size(ctx)))
                return false;
@@ -2597,6 +2598,19 @@ emit_tertiary_intin(struct ntd_context *ctx, nir_alu_instr *alu,
 }
 
 static bool
+emit_derivative(struct ntd_context *ctx, nir_intrinsic_instr *intr,
+                 enum dxil_intr dxil_intr)
+{
+   const struct dxil_value *src = get_src(ctx, &intr->src[0], 0, nir_type_float);
+   enum overload_type overload = get_overload(nir_type_float, intr->src[0].ssa->bit_size);
+   const struct dxil_value *v = emit_unary_call(ctx, overload, dxil_intr, src);
+   if (!v)
+      return false;
+   store_def(ctx, &intr->def, 0, v);
+   return true;
+}
+
+static bool
 emit_bitfield_insert(struct ntd_context *ctx, nir_alu_instr *alu,
                      const struct dxil_value *base,
                      const struct dxil_value *insert,
@@ -2959,13 +2973,6 @@ emit_alu(struct ntd_context *ctx, nir_alu_instr *alu)
    case nir_op_ffract: return emit_unary_intin(ctx, alu, DXIL_INTR_FRC, src[0]);
    case nir_op_fisnormal: return emit_unary_intin(ctx, alu, DXIL_INTR_ISNORMAL, src[0]);
    case nir_op_fisfinite: return emit_unary_intin(ctx, alu, DXIL_INTR_ISFINITE, src[0]);
-
-   case nir_op_fddx:
-   case nir_op_fddx_coarse: return emit_unary_intin(ctx, alu, DXIL_INTR_DDX_COARSE, src[0]);
-   case nir_op_fddx_fine: return emit_unary_intin(ctx, alu, DXIL_INTR_DDX_FINE, src[0]);
-   case nir_op_fddy:
-   case nir_op_fddy_coarse: return emit_unary_intin(ctx, alu, DXIL_INTR_DDY_COARSE, src[0]);
-   case nir_op_fddy_fine: return emit_unary_intin(ctx, alu, DXIL_INTR_DDY_FINE, src[0]);
 
    case nir_op_fround_even: return emit_unary_intin(ctx, alu, DXIL_INTR_ROUND_NE, src[0]);
    case nir_op_frcp: {
@@ -4942,6 +4949,13 @@ emit_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
    case nir_intrinsic_exclusive_scan:
       return emit_reduce(ctx, intr);
 
+   case nir_intrinsic_ddx:
+   case nir_intrinsic_ddx_coarse: return emit_derivative(ctx, intr, DXIL_INTR_DDX_COARSE);
+   case nir_intrinsic_ddx_fine: return emit_derivative(ctx, intr, DXIL_INTR_DDX_FINE);
+   case nir_intrinsic_ddy:
+   case nir_intrinsic_ddy_coarse: return emit_derivative(ctx, intr, DXIL_INTR_DDY_COARSE);
+   case nir_intrinsic_ddy_fine: return emit_derivative(ctx, intr, DXIL_INTR_DDY_FINE);
+
    case nir_intrinsic_load_first_vertex:
       ctx->mod.feats.extended_command_info = true;
       return emit_load_unary_external_function(ctx, intr, "dx.op.startVertexLocation",
@@ -6214,10 +6228,11 @@ vectorize_filter(
    unsigned align_offset,
    unsigned bit_size,
    unsigned num_components,
+   unsigned hole_size,
    nir_intrinsic_instr *low, nir_intrinsic_instr *high,
    void *data)
 {
-   return util_is_power_of_two_nonzero(num_components);
+   return !hole_size && util_is_power_of_two_nonzero(num_components);
 }
 
 struct lower_mem_bit_sizes_data {
@@ -6339,7 +6354,7 @@ void dxil_fill_validation_state(struct ntd_context *ctx,
       sizeof(struct dxil_resource_v1) : sizeof(struct dxil_resource_v0);
    state->num_resources = ctx->resources.size / resource_element_size;
    state->resources.v0 = (struct dxil_resource_v0*)ctx->resources.data;
-   if (ctx->shader->info.subgroup_size >= SUBGROUP_SIZE_REQUIRE_8) {
+   if (ctx->shader->info.subgroup_size >= SUBGROUP_SIZE_REQUIRE_4) {
       state->state.psv1.psv0.max_expected_wave_lane_count = ctx->shader->info.subgroup_size;
       state->state.psv1.psv0.min_expected_wave_lane_count = ctx->shader->info.subgroup_size;
    } else {

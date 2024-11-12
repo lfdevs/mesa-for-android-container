@@ -884,35 +884,40 @@ build_copy_queries_shader(void)
    return build.shader;
 }
 
-static VkResult
-get_copy_queries_pipeline(struct nvk_device *dev,
-                          VkPipelineLayout layout,
-                          VkPipeline *pipeline_out)
+static struct nvk_shader *
+atomic_set_or_destroy_shader(struct nvk_device *dev,
+                             struct nvk_shader **shader_ptr,
+                             struct nvk_shader *shader,
+                             const VkAllocationCallbacks *alloc)
 {
-   const char key[] = "nvk-meta-copy-query-pool-results";
-   VkPipeline cached = vk_meta_lookup_pipeline(&dev->meta, key, sizeof(key));
-   if (cached != VK_NULL_HANDLE) {
-      *pipeline_out = cached;
+   struct nvk_shader *old_shader = p_atomic_cmpxchg(shader_ptr, NULL, shader);
+   if (old_shader == NULL) {
+      return shader;
+   } else {
+      vk_shader_destroy(&dev->vk, &shader->vk, alloc);
+      return old_shader;
+   }
+}
+
+static VkResult
+get_copy_queries_shader(struct nvk_device *dev,
+                        struct nvk_shader **shader_out)
+{
+   struct nvk_shader *shader = p_atomic_read(&dev->copy_queries);
+   if (shader != NULL) {
+      *shader_out = shader;
       return VK_SUCCESS;
    }
 
-   const VkPipelineShaderStageNirCreateInfoMESA nir_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NIR_CREATE_INFO_MESA,
-      .nir = build_copy_queries_shader(),
-   };
-   const VkComputePipelineCreateInfo info = {
-      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-      .stage = {
-         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-         .pNext = &nir_info,
-         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-         .pName = "main",
-      },
-      .layout = layout,
-   };
+   nir_shader *nir = build_copy_queries_shader();
+   VkResult result = nvk_compile_nir_shader(dev, nir, &dev->vk.alloc, &shader);
+   if (result != VK_SUCCESS)
+      return result;
 
-   return vk_meta_create_compute_pipeline(&dev->vk, &dev->meta, &info,
-                                          key, sizeof(key), pipeline_out);
+   *shader_out = atomic_set_or_destroy_shader(dev, &dev->copy_queries,
+                                              shader, &dev->vk.alloc);
+
+   return VK_SUCCESS;
 }
 
 static void
@@ -925,7 +930,13 @@ nvk_meta_copy_query_pool_results(struct nvk_cmd_buffer *cmd,
                                  VkQueryResultFlags flags)
 {
    struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
-   VkResult result;
+
+   struct nvk_shader *shader;
+   VkResult result = get_copy_queries_shader(dev, &shader);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmd->vk, result);
+      return;
+   }
 
    const struct nvk_copy_query_push push = {
       .pool_addr = pool->mem->va->addr,
@@ -937,54 +948,8 @@ nvk_meta_copy_query_pool_results(struct nvk_cmd_buffer *cmd,
       .dst_stride = dst_stride,
       .flags = flags,
    };
-
-   const char key[] = "nvk-meta-copy-query-pool-results";
-   const VkPushConstantRange push_range = {
-      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-      .size = sizeof(push),
-   };
-   VkPipelineLayout layout;
-   result = vk_meta_get_pipeline_layout(&dev->vk, &dev->meta, NULL, &push_range,
-                                        key, sizeof(key), &layout);
-   if (result != VK_SUCCESS) {
-      vk_command_buffer_set_error(&cmd->vk, result);
-      return;
-   }
-
-   VkPipeline pipeline;
-   result = get_copy_queries_pipeline(dev, layout, &pipeline);
-   if (result != VK_SUCCESS) {
-      vk_command_buffer_set_error(&cmd->vk, result);
-      return;
-   }
-
-   /* Save pipeline and push constants */
-   struct nvk_shader *shader_save = cmd->state.cs.shader;
-   uint8_t push_save[NVK_MAX_PUSH_SIZE];
-   nvk_descriptor_state_get_root_array(&cmd->state.cs.descriptors, push,
-                                       0, NVK_MAX_PUSH_SIZE, push_save);
-
-   dev->vk.dispatch_table.CmdBindPipeline(nvk_cmd_buffer_to_handle(cmd),
-                                          VK_PIPELINE_BIND_POINT_COMPUTE,
-                                          pipeline);
-
-   vk_common_CmdPushConstants(nvk_cmd_buffer_to_handle(cmd), layout,
-                              VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
-
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
-   P_IMMD(p, NVA0C0, SET_RENDER_ENABLE_OVERRIDE, MODE_ALWAYS_RENDER);
-
-   nvk_CmdDispatchBase(nvk_cmd_buffer_to_handle(cmd), 0, 0, 0,
-                       DIV_ROUND_UP(query_count, 32), 1, 1);
-
-   p = nvk_cmd_buffer_push(cmd, 2);
-   P_IMMD(p, NVA0C0, SET_RENDER_ENABLE_OVERRIDE, MODE_USE_RENDER_ENABLE);
-
-   /* Restore pipeline and push constants */
-   if (shader_save)
-      nvk_cmd_bind_compute_shader(cmd, shader_save);
-   nvk_descriptor_state_set_root_array(cmd, &cmd->state.cs.descriptors, push,
-                                       0, NVK_MAX_PUSH_SIZE, push_save);
+   nvk_cmd_dispatch_shader(cmd, shader, &push, sizeof(push),
+                           DIV_ROUND_UP(query_count, 32), 1, 1);
 }
 
 VKAPI_ATTR void VKAPI_CALL

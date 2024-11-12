@@ -25,6 +25,7 @@
 #include <inttypes.h>
 #include "util/format/u_format.h"
 #include "util/crc32.h"
+#include "util/perf/cpu_trace.h"
 #include "util/u_helpers.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
@@ -939,6 +940,7 @@ ntq_emit_comparison(struct vc4_compile *c, struct qreg *dest,
                 break;
         case nir_op_flt32:
         case nir_op_ilt32:
+        case nir_op_ult32:
         case nir_op_slt:
                 cond = QPU_COND_NS;
                 break;
@@ -1187,6 +1189,7 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
         case nir_op_ige32:
         case nir_op_uge32:
         case nir_op_ilt32:
+        case nir_op_ult32:
                 if (!ntq_emit_comparison(c, &result, instr, instr)) {
                         fprintf(stderr, "Bad comparison instruction\n");
                 }
@@ -1271,18 +1274,6 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
 
         case nir_op_umul_unorm_4x8_vc4:
                 result = qir_V8MULD(c, src[0], src[1]);
-                break;
-
-        case nir_op_fddx:
-        case nir_op_fddx_coarse:
-        case nir_op_fddx_fine:
-                result = ntq_fddx(c, src[0]);
-                break;
-
-        case nir_op_fddy:
-        case nir_op_fddy_coarse:
-        case nir_op_fddy_fine:
-                result = ntq_fddy(c, src[0]);
                 break;
 
         case nir_op_uadd_carry:
@@ -1858,6 +1849,20 @@ ntq_emit_intrinsic(struct vc4_compile *c, nir_intrinsic_instr *instr)
                 break;
         }
 
+        case nir_intrinsic_ddx:
+        case nir_intrinsic_ddx_coarse:
+        case nir_intrinsic_ddx_fine:
+                ntq_store_def(c, &instr->def, 0,
+                              ntq_fddx(c, ntq_get_src(c, instr->src[0], 0)));
+                break;
+
+        case nir_intrinsic_ddy:
+        case nir_intrinsic_ddy_coarse:
+        case nir_intrinsic_ddy_fine:
+                ntq_store_def(c, &instr->def, 0,
+                              ntq_fddy(c, ntq_get_src(c, instr->src[0], 0)));
+                break;
+
         default:
                 fprintf(stderr, "Unknown intrinsic: ");
                 nir_print_instr(&instr->instr, stderr);
@@ -2179,6 +2184,7 @@ static const nir_shader_compiler_options nir_options = {
         .lower_mul_high = true,
         .max_unroll_iterations = 32,
         .force_indirect_unrolling = (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
+        .scalarize_ddx = true,
 };
 
 const void *
@@ -2207,6 +2213,8 @@ vc4_shader_ntq(struct vc4_context *vc4, enum qstage stage,
                struct vc4_key *key, bool fs_threaded)
 {
         struct vc4_compile *c = qir_compile_init();
+
+        MESA_TRACE_FUNC();
 
         c->vc4 = vc4;
         c->stage = stage;

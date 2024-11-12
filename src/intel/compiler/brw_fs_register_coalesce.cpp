@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-/** @file brw_fs_register_coalesce.cpp
+/** @file
  *
  * Implements register coalescing: Checks if the two registers involved in a
  * raw move don't interfere, in which case they can both be stored in the same

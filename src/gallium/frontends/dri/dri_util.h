@@ -41,25 +41,28 @@
 #include "main/glconfig.h"
 #include "main/menums.h"
 #include "util/xmlconfig.h"
+#include "pipe/p_defines.h"
 #include <stdbool.h>
 
+struct pipe_screen;
 struct dri_screen;
+struct mesa_glinterop_device_info;
+struct mesa_glinterop_export_in;
+struct mesa_glinterop_export_out;
+struct mesa_glinterop_flush_out;
 
 #define __DRI_BACKEND_VTABLE "DRI_DriverVtable"
 
-struct __DRIconfigRec {
+struct dri_config {
     struct gl_config modes;
 };
 
-/**
- * Extensions.
- */
-extern const __DRIcoreExtension driCoreExtension;
-extern const __DRIswrastExtension driSWRastExtension;
-extern const __DRIdri2Extension driDRI2Extension;
-extern const __DRIdri2Extension swkmsDRI2Extension;
-extern const __DRI2configQueryExtension dri2ConfigQueryExtension;
-extern const __DRI2flushControlExtension dri2FlushControlExtension;
+enum dri_screen_type {
+   DRI_SCREEN_DRI3,
+   DRI_SCREEN_KOPPER,
+   DRI_SCREEN_SWRAST,
+   DRI_SCREEN_KMS_SWRAST,
+};
 
 /**
  * Description of the attributes used to create a config.
@@ -103,20 +106,16 @@ struct __DriverContextConfig {
 #define __DRIVER_CONTEXT_ATTRIB_NO_ERROR         (1 << 3)
 #define __DRIVER_CONTEXT_ATTRIB_PROTECTED        (1 << 4)
 
-__DRIscreen *
+PUBLIC struct dri_screen *
 driCreateNewScreen3(int scrn, int fd,
                     const __DRIextension **loader_extensions,
-                    const __DRIextension **driver_extensions,
-                    const __DRIconfig ***driver_configs, bool driver_name_is_inferred, void *data);
-__DRIscreen *
-driCreateNewScreen2(int scrn, int fd,
-                    const __DRIextension **loader_extensions,
-                    const __DRIextension **driver_extensions,
-                    const __DRIconfig ***driver_configs, void *data);
-__DRIcontext *
-driCreateContextAttribs(__DRIscreen *psp, int api,
-                        const __DRIconfig *config,
-                        __DRIcontext *shared,
+                    enum dri_screen_type type,
+                    const struct dri_config ***driver_configs, bool driver_name_is_inferred,
+                    bool has_multibuffer, void *data);
+PUBLIC struct dri_context *
+driCreateContextAttribs(struct dri_screen *psp, int api,
+                        const struct dri_config *config,
+                        struct dri_context *shared,
                         unsigned num_attribs,
                         const uint32_t *attribs,
                         unsigned *error,
@@ -124,7 +123,220 @@ driCreateContextAttribs(__DRIscreen *psp, int api,
 
 extern uint32_t
 driImageFormatToSizedInternalGLFormat(uint32_t image_format);
-
+PUBLIC unsigned int
+driGetAPIMask(struct dri_screen *screen);
+PUBLIC struct dri_drawable *
+dri_create_drawable(struct dri_screen *psp, const struct dri_config *config,
+                    bool isPixmap, void *loaderPrivate);
 extern const __DRIimageDriverExtension driImageDriverExtension;
+PUBLIC void driDestroyScreen(struct dri_screen *psp);
+PUBLIC int
+driGetConfigAttrib(const struct dri_config *config, unsigned int attrib, unsigned int *value);
+PUBLIC int
+driIndexConfigAttrib(const struct dri_config *config, int index, unsigned int *attrib, unsigned int *value);
+PUBLIC void
+driDestroyDrawable(struct dri_drawable *drawable);
+PUBLIC void
+driSwapBuffers(struct dri_drawable *drawable);
+PUBLIC void
+driSwapBuffersWithDamage(struct dri_drawable *drawable, int nrects, const int *rects);
+PUBLIC struct dri_context *
+driCreateNewContext(struct dri_screen *screen, const struct dri_config *config, struct dri_context *shared, void *data);
+PUBLIC int
+driCopyContext(struct dri_context *dest, struct dri_context *src, unsigned long mask);
+PUBLIC void
+driDestroyContext(struct dri_context *ctx);
+PUBLIC int driBindContext(struct dri_context *ctx, struct dri_drawable *draw, struct dri_drawable *read);
+PUBLIC int driUnbindContext(struct dri_context *ctx);
 
+
+PUBLIC int64_t
+kopperSwapBuffers(struct dri_drawable *dPriv, uint32_t flush_flags);
+PUBLIC int64_t
+kopperSwapBuffersWithDamage(struct dri_drawable *drawable, uint32_t flush_flags, int nrects, const int *rects);
+PUBLIC struct dri_drawable *
+kopperCreateNewDrawable(struct dri_screen *psp,
+                        const struct dri_config *config,
+                        void *data,
+                        __DRIkopperDrawableInfo *info);
+PUBLIC void
+kopperSetSwapInterval(struct dri_drawable *drawable, int interval);
+PUBLIC int
+kopperQueryBufferAge(struct dri_drawable *drawable);
+
+PUBLIC void
+driswCopySubBuffer(struct dri_drawable *drawable, int x, int y, int w, int h);
+
+PUBLIC void
+dri_set_tex_buffer2(struct dri_context *ctx, GLint target,
+                    GLint format, struct dri_drawable *drawable);
+
+PUBLIC int
+dri_query_renderer_string(struct dri_screen *_screen, int param,
+                           const char **value);
+PUBLIC int
+dri_query_renderer_integer(struct dri_screen *_screen, int param,
+                            unsigned int *value);
+
+PUBLIC void
+dri_flush_drawable(struct dri_drawable *dPriv);
+PUBLIC void
+dri_flush(struct dri_context *cPriv,
+          struct dri_drawable *dPriv,
+          unsigned flags,
+          enum __DRI2throttleReason reason);
+PUBLIC void
+dri_invalidate_drawable(struct dri_drawable *drawable);
+
+PUBLIC int
+dri2GalliumConfigQueryb(struct dri_screen *sPriv, const char *var,
+                        unsigned char *val);
+PUBLIC int
+dri2GalliumConfigQueryi(struct dri_screen *sPriv, const char *var, int *val);
+PUBLIC int
+dri2GalliumConfigQueryf(struct dri_screen *sPriv, const char *var, float *val);
+PUBLIC int
+dri2GalliumConfigQuerys(struct dri_screen *sPriv, const char *var, char **val);
+
+PUBLIC int dri_get_initial_swap_interval(struct dri_screen *driScreen);
+PUBLIC bool dri_valid_swap_interval(struct dri_screen *driScreen, int interval);
+
+PUBLIC void
+dri_throttle(struct dri_context *cPriv, struct dri_drawable *dPriv,
+             enum __DRI2throttleReason reason);
+
+PUBLIC int
+dri_interop_query_device_info(struct dri_context *ctx,
+                              struct mesa_glinterop_device_info *out);
+PUBLIC int
+dri_interop_export_object(struct dri_context *ctx,
+                          struct mesa_glinterop_export_in *in,
+                          struct mesa_glinterop_export_out *out);
+PUBLIC int
+dri_interop_flush_objects(struct dri_context *_ctx,
+                           unsigned count, struct mesa_glinterop_export_in *objects,
+                           struct mesa_glinterop_flush_out *out);
+
+PUBLIC struct dri_image *
+dri_create_image_from_renderbuffer(struct dri_context *dri_ctx,
+                                   int renderbuffer, void *loaderPrivate,
+                                   unsigned *error);
+
+PUBLIC void
+dri2_destroy_image(struct dri_image *img);
+
+PUBLIC struct dri_image *
+dri2_create_from_texture(struct dri_context *dri_ctx, int target, unsigned texture,
+                         int depth, int level, unsigned *error,
+                         void *loaderPrivate);
+
+PUBLIC struct dri_image *
+dri_create_image(struct dri_screen *screen,
+                 int width, int height,
+                 int format,
+                 const uint64_t *modifiers,
+                 const unsigned _count,
+                 unsigned int use,
+                 void *loaderPrivate);
+PUBLIC GLboolean
+dri2_query_image(struct dri_image *image, int attrib, int *value);
+PUBLIC struct dri_image *
+dri2_dup_image(struct dri_image *image, void *loaderPrivate);
+PUBLIC GLboolean
+dri2_validate_usage(struct dri_image *image, unsigned int use);
+PUBLIC struct dri_image *
+dri2_from_names(struct dri_screen *screen, int width, int height, int fourcc,
+                int *names, int num_names, int *strides, int *offsets,
+                void *loaderPrivate);
+PUBLIC struct dri_image *
+dri2_from_planar(struct dri_image *image, int plane, void *loaderPrivate);
+PUBLIC struct dri_image *
+dri2_from_dma_bufs(struct dri_screen *screen,
+                    int width, int height, int fourcc,
+                    uint64_t modifier, int *fds, int num_fds,
+                    int *strides, int *offsets,
+                    enum __DRIYUVColorSpace yuv_color_space,
+                    enum __DRISampleRange sample_range,
+                    enum __DRIChromaSiting horizontal_siting,
+                    enum __DRIChromaSiting vertical_siting,
+                    uint32_t dri_flags,
+                    unsigned *error,
+                    void *loaderPrivate);
+PUBLIC void
+dri2_blit_image(struct dri_context *ctx, struct dri_image *dst, struct dri_image *src,
+                int dstx0, int dsty0, int dstwidth, int dstheight,
+                int srcx0, int srcy0, int srcwidth, int srcheight,
+                int flush_flag);
+PUBLIC int
+dri2_get_capabilities(struct dri_screen *_screen);
+PUBLIC void *
+dri2_map_image(struct dri_context *ctx, struct dri_image *image,
+               int x0, int y0, int width, int height,
+               unsigned int flags, int *stride, void **data);
+PUBLIC void
+dri2_unmap_image(struct dri_context *ctx, struct dri_image *image, void *data);
+PUBLIC bool
+dri_query_dma_buf_formats(struct dri_screen *_screen, int max, int *formats,
+                           int *count);
+PUBLIC bool
+dri_query_dma_buf_modifiers(struct dri_screen *_screen, int fourcc, int max,
+                             uint64_t *modifiers, unsigned int *external_only,
+                             int *count);
+PUBLIC bool
+dri2_query_dma_buf_format_modifier_attribs(struct dri_screen *_screen,
+                                           uint32_t fourcc, uint64_t modifier,
+                                           int attrib, uint64_t *value);
+PUBLIC struct dri_image *
+dri_create_image_with_modifiers(struct dri_screen *screen,
+                                 uint32_t width, uint32_t height,
+                                 uint32_t dri_format, uint32_t dri_usage,
+                                 const uint64_t *modifiers,
+                                 unsigned int modifiers_count,
+                                 void *loaderPrivate);
+PUBLIC int
+dri_query_compatible_render_only_device_fd(int kms_only_fd);
+
+PUBLIC int
+driSWRastQueryBufferAge(struct dri_drawable *drawable);
+
+PUBLIC void
+dri2_set_in_fence_fd(struct dri_image *img, int fd);
+
+PUBLIC bool
+dri2_query_compression_rates(struct dri_screen *_screen, const struct dri_config *config, int max,
+                             enum __DRIFixedRateCompression *rates, int *count);
+PUBLIC bool
+dri2_query_compression_modifiers(struct dri_screen *_screen, uint32_t fourcc,
+                                 enum __DRIFixedRateCompression rate, int max,
+                                 uint64_t *modifiers, int *count);
+
+PUBLIC void
+dri_set_damage_region(struct dri_drawable *drawable, unsigned int nrects, int *rects);
+
+PUBLIC unsigned
+dri_fence_get_caps(struct dri_screen *screen);
+PUBLIC void *
+dri_create_fence(struct dri_context *ctx);
+PUBLIC void *
+dri_create_fence_fd(struct dri_context *_ctx, int fd);
+PUBLIC int
+dri_get_fence_fd(struct dri_screen *driscreen, void *_fence);
+PUBLIC void *
+dri_get_fence_from_cl_event(struct dri_screen *driscreen, intptr_t cl_event);
+PUBLIC void
+dri_destroy_fence(struct dri_screen *driscreen, void *_fence);
+PUBLIC GLboolean
+dri_client_wait_sync(struct dri_context *_ctx, void *_fence, unsigned flags,
+                      uint64_t timeout);
+PUBLIC void
+dri_server_wait_sync(struct dri_context *ctx, void *_fence, unsigned flags);
+
+PUBLIC void
+dri_set_blob_cache_funcs(struct dri_screen *screen, __DRIblobCacheSet set,
+                         __DRIblobCacheGet get);
+
+PUBLIC struct pipe_screen *
+dri_get_pipe_screen(struct dri_screen *driScreen);
+PUBLIC int
+dri_get_screen_param(struct dri_screen *driScreen, enum pipe_cap param);
 #endif /* _DRI_UTIL_H_ */

@@ -153,7 +153,7 @@ enum gfx9_resource_type
 
 struct gfx9_surf_meta_flags {
    uint8_t rb_aligned : 1;   /* optimal for RBs */
-   uint8_t pipe_aligned : 1; /* optimal for TC */
+   uint8_t pipe_aligned : 1; /* optimal for L2 */
    uint8_t independent_64B_blocks : 1;
    uint8_t independent_128B_blocks : 1;
    uint8_t max_compressed_block_size : 2;

@@ -2627,12 +2627,12 @@
     <field name="Semaphore Address High" start="96" end="111" type="address" />
   </instruction>
   <instruction name="MI_SET_PREDICATE" bias="1" length="1">
-    <field name="PREDICATE ENABLE" start="0" end="3" type="uint">
+    <field name="Predicate Enable" start="0" end="3" type="uint">
       <value name="NOOP Never" value="0" />
-      <value name="NOOP on Result2 clear" value="1" />
-      <value name="NOOP on Result2 set" value="2" />
-      <value name="NOOP on Result clear" value="3" />
-      <value name="NOOP on Result set" value="4" />
+      <value name="NOOP On Result2 Clear" value="1" />
+      <value name="NOOP On Result2 Set" value="2" />
+      <value name="NOOP On Result Clear" value="3" />
+      <value name="NOOP On Result Set" value="4" />
       <value name="Execute when one slice enabled." value="5" />
       <value name="Execute when two slices are enabled." value="6" />
       <value name="Execute when three slices are enabled." value="7" />

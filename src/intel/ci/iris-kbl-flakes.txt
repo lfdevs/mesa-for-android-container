@@ -22,3 +22,5 @@ spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear
 # uprev Piglit in Mesa
 spec@!opengl 1.2@tex3d-maxsize
 
+KHR-Single-GL46.arrays_of_arrays_gl.ConstructorsAndUnsizedDeclConstructors1
+KHR-Single-GL46.arrays_of_arrays_gl.ConstructorsAndUnsizedDeclConstructorSizing1

@@ -906,8 +906,7 @@ i915_queue_exec_locked(struct anv_queue *queue,
    if (result != VK_SUCCESS)
       goto error;
 
-   const bool has_perf_query =
-      perf_query_pool && perf_query_pass >= 0 && cmd_buffer_count;
+   const bool has_perf_query = perf_query_pool && cmd_buffer_count;
 
    if (INTEL_DEBUG(DEBUG_SUBMIT))
       anv_i915_debug_submit(&execbuf);
@@ -929,8 +928,11 @@ i915_queue_exec_locked(struct anv_queue *queue,
           (query_info->kind == INTEL_PERF_QUERY_TYPE_OA ||
            query_info->kind == INTEL_PERF_QUERY_TYPE_RAW)) {
          int ret = intel_perf_stream_set_metrics_id(device->physical->perf,
+                                                    device->fd,
                                                     device->perf_fd,
-                                                    query_info->oa_metrics_set_id);
+                                                    -1,/* this parameter, exec_queue is not used in i915 */
+                                                    query_info->oa_metrics_set_id,
+                                                    NULL);
          if (ret < 0) {
             result = vk_device_set_lost(&device->vk,
                                         "i915-perf config failed: %s",

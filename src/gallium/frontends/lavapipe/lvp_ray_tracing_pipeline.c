@@ -523,6 +523,10 @@ lvp_lower_isec_intrinsic(nir_builder *b, nir_intrinsic_instr *instr, void *data)
 
          nir_def *terminate = nir_load_var(b, state->terminate);
          nir_store_var(b, state->terminate, nir_ior(b, terminate, prev_terminate), 0x1);
+
+         nir_push_if(b, terminate);
+         nir_jump(b, nir_jump_return);
+         nir_pop_if(b, NULL);
       }
 
       nir_push_if(b, nir_load_var(b, state->accept));
@@ -1131,6 +1135,7 @@ lvp_create_ray_tracing_pipeline(VkDevice _device, const VkAllocationCallbacks *a
    pipeline->device = device;
    pipeline->layout = layout;
    pipeline->type = LVP_PIPELINE_RAY_TRACING;
+   pipeline->flags = vk_rt_pipeline_create_flags(create_info);
 
    pipeline->rt.stage_count = create_info->stageCount;
    pipeline->rt.group_count = create_info->groupCount;
@@ -1155,8 +1160,7 @@ lvp_create_ray_tracing_pipeline(VkDevice _device, const VkAllocationCallbacks *a
 
    lvp_init_ray_tracing_groups(pipeline, create_info);
 
-   VkPipelineCreateFlags2KHR create_flags = vk_rt_pipeline_create_flags(create_info);
-   if (!(create_flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)) {
+   if (!(pipeline->flags & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)) {
       lvp_compile_ray_tracing_pipeline(pipeline, create_info);
    }
 

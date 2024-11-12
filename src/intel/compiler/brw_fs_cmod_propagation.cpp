@@ -25,7 +25,7 @@
 #include "brw_cfg.h"
 #include "brw_eu.h"
 
-/** @file brw_fs_cmod_propagation.cpp
+/** @file
  *
  * Implements a pass that propagates the conditional modifier from a CMP x 0.0
  * instruction into the instruction that generated x. For instance, in this
@@ -59,7 +59,8 @@ cmod_propagate_cmp_to_add(const intel_device_info *devinfo, bblock_t *block,
 
    foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
       if (scan_inst->opcode == BRW_OPCODE_ADD &&
-          !scan_inst->is_partial_write() &&
+          !scan_inst->predicate &&
+          scan_inst->dst.is_contiguous() &&
           scan_inst->exec_size == inst->exec_size) {
          bool negate;
 
@@ -184,7 +185,8 @@ cmod_propagate_not(const intel_device_info *devinfo, bblock_t *block,
              scan_inst->opcode != BRW_OPCODE_AND)
             break;
 
-         if (scan_inst->is_partial_write() ||
+         if (scan_inst->predicate ||
+             !scan_inst->dst.is_contiguous() ||
              scan_inst->dst.offset != inst->src[0].offset ||
              scan_inst->exec_size != inst->exec_size)
             break;
@@ -298,7 +300,8 @@ opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
                 scan_inst->flags_written(devinfo) != flags_written)
                break;
 
-            if (scan_inst->is_partial_write() ||
+            if (scan_inst->predicate ||
+                !scan_inst->dst.is_contiguous() ||
                 scan_inst->dst.offset != inst->src[0].offset ||
                 scan_inst->exec_size != inst->exec_size)
                break;

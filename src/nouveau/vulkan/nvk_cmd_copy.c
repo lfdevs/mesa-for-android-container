@@ -216,12 +216,12 @@ nouveau_copy_rect(struct nvk_cmd_buffer *cmd, struct nouveau_copy *copy)
       if (copy->dst.image_type != VK_IMAGE_TYPE_3D)
          dst_addr += (z + copy->dst.offset_el.a) * copy->dst.array_stride;
 
-      if (!copy->src.tiling.is_tiled) {
+      if (copy->src.tiling.gob_type == NIL_GOB_TYPE_LINEAR) {
          src_addr += copy->src.offset_el.x * copy->src.bpp +
                      copy->src.offset_el.y * copy->src.row_stride;
       }
 
-      if (!copy->dst.tiling.is_tiled) {
+      if (copy->dst.tiling.gob_type == NIL_GOB_TYPE_LINEAR) {
          dst_addr += copy->dst.offset_el.x * copy->dst.bpp +
                      copy->dst.offset_el.y * copy->dst.row_stride;
       }
@@ -239,15 +239,14 @@ nouveau_copy_rect(struct nvk_cmd_buffer *cmd, struct nouveau_copy *copy)
       P_NV90B5_LINE_COUNT(p, copy->extent_el.height);
 
       uint32_t src_layout = 0, dst_layout = 0;
-      if (copy->src.tiling.is_tiled) {
+      if (copy->src.tiling.gob_type != NIL_GOB_TYPE_LINEAR) {
          P_MTHD(p, NV90B5, SET_SRC_BLOCK_SIZE);
+         assert(nil_gob_type_height(copy->src.tiling.gob_type) == 8);
          P_NV90B5_SET_SRC_BLOCK_SIZE(p, {
             .width = 0, /* Tiles are always 1 GOB wide */
             .height = copy->src.tiling.y_log2,
             .depth = copy->src.tiling.z_log2,
-            .gob_height = copy->src.tiling.gob_height_is_8 ?
-                          GOB_HEIGHT_GOB_HEIGHT_FERMI_8 :
-                          GOB_HEIGHT_GOB_HEIGHT_TESLA_4,
+            .gob_height = GOB_HEIGHT_GOB_HEIGHT_FERMI_8,
          });
          /* We use the stride for copies because the copy hardware has no
           * concept of a tile width.  Instead, we just set the width to the
@@ -280,15 +279,14 @@ nouveau_copy_rect(struct nvk_cmd_buffer *cmd, struct nouveau_copy *copy)
          src_layout = NV90B5_LAUNCH_DMA_SRC_MEMORY_LAYOUT_PITCH;
       }
 
-      if (copy->dst.tiling.is_tiled) {
+      if (copy->dst.tiling.gob_type != NIL_GOB_TYPE_LINEAR) {
          P_MTHD(p, NV90B5, SET_DST_BLOCK_SIZE);
+         assert(nil_gob_type_height(copy->dst.tiling.gob_type) == 8);
          P_NV90B5_SET_DST_BLOCK_SIZE(p, {
             .width = 0, /* Tiles are always 1 GOB wide */
             .height = copy->dst.tiling.y_log2,
             .depth = copy->dst.tiling.z_log2,
-            .gob_height = copy->dst.tiling.gob_height_is_8 ?
-                          GOB_HEIGHT_GOB_HEIGHT_FERMI_8 :
-                          GOB_HEIGHT_GOB_HEIGHT_TESLA_4,
+            .gob_height = GOB_HEIGHT_GOB_HEIGHT_FERMI_8,
          });
          /* We use the stride for copies because the copy hardware has no
           * concept of a tile width.  Instead, we just set the width to the

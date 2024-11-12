@@ -322,6 +322,11 @@ index("nir_op", "alu_op")
 index("unsigned", "systolic_depth")
 index("unsigned", "repeat_count")
 
+# For an AGX tilebuffer intrinsics, whether the coordinates are implicit or
+# explicit. Implicit coordinates are used in fragment shaders, explicit
+# coordinates in compute.
+index("bool", "explicit_coord")
+
 intrinsic("nop", flags=[CAN_ELIMINATE])
 
 # Uses a value and cannot be eliminated.
@@ -387,6 +392,10 @@ intrinsic("interp_deref_at_vertex", src_comp=[1, 1], dest_comp=0,
 intrinsic("deref_buffer_array_length", src_comp=[-1], dest_comp=1,
           indices=[ACCESS], flags=[CAN_ELIMINATE, CAN_REORDER])
 
+# Gets the length of an unsized array
+intrinsic("deref_implicit_array_length", src_comp=[-1], dest_comp=1,
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+
 # Ask the driver for the size of a given SSBO. It takes the buffer index
 # as source.
 intrinsic("get_ssbo_size", src_comp=[-1], dest_comp=1, bit_sizes=[32],
@@ -413,6 +422,13 @@ intrinsic("sparse_residency_code_and", dest_comp=1, src_comp=[1, 1], bit_sizes=[
 # sparse information.
 intrinsic("is_sparse_resident_zink", dest_comp=1, src_comp=[0], bit_sizes=[1],
           flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# The following intrinsics calculate screen-space partial derivatives. These are
+# not CAN_REORDER as they cannot be moved across discards.
+for suffix in ["", "_fine", "_coarse"]:
+    for axis in ["x", "y"]:
+        intrinsic(f"dd{axis}{suffix}", dest_comp=0, src_comp=[0],
+                  bit_sizes=[16, 32], flags=[CAN_ELIMINATE])
 
 # a barrier is an intrinsic with no inputs/outputs but which can't be moved
 # around/optimized in general
@@ -735,6 +751,7 @@ image("store", src_comp=[4, 1, 0, 1], extra_indices=[SRC_TYPE])
 image("atomic",  src_comp=[4, 1, 1], dest_comp=1, extra_indices=[ATOMIC_OP])
 image("atomic_swap", src_comp=[4, 1, 1, 1], dest_comp=1, extra_indices=[ATOMIC_OP])
 image("size",    dest_comp=0, src_comp=[1], flags=[CAN_ELIMINATE, CAN_REORDER])
+image("levels",  dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 image("samples", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 image("texel_address", dest_comp=1, src_comp=[4, 1],
       flags=[CAN_ELIMINATE, CAN_REORDER])
@@ -939,6 +956,8 @@ system_value("global_invocation_id", 3, bit_sizes=[32, 64])
 # e.g. global_work_offset of clEnqueueNDRangeKernel
 system_value("base_global_invocation_id", 3, bit_sizes=[32, 64])
 system_value("global_invocation_index", 1, bit_sizes=[32, 64])
+# threads per dimension in an invocation
+system_value("global_size", 3, bit_sizes=[32, 64])
 system_value("work_dim", 1)
 system_value("line_width", 1)
 system_value("aa_line_width", 1)
@@ -997,7 +1016,8 @@ system_value("viewport_z_offset", 1)
 system_value("viewport_scale", 3)
 system_value("viewport_offset", 3)
 # Pack xy scale and offset into a vec4 load (used by AMD NGG primitive culling)
-system_value("viewport_xy_scale_and_offset", 4)
+system_value("cull_triangle_viewport_xy_scale_and_offset_amd", 4)
+system_value("cull_line_viewport_xy_scale_and_offset_amd", 4)
 
 # Blend constant color values.  Float values are clamped. Vectored versions are
 # provided as well for driver convenience
@@ -1142,11 +1162,13 @@ load("input_vertex", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_EL
 load("per_vertex_input", [1, 1], [BASE, RANGE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { barycoord, offset }.
 load("interpolated_input", [2, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
+# src[] = { offset }.
+load("per_primitive_input", [1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
 
 # src[] = { buffer_index, offset }.
 load("ssbo", [-1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
-# src[] = { buffer_index }
-load("ssbo_address", [1], [], [CAN_ELIMINATE, CAN_REORDER])
+# src[] = { buffer_index, offset }
+load("ssbo_address", [1, 1], [], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { offset }.
 load("output", [1], [BASE, RANGE, COMPONENT, DEST_TYPE, IO_SEMANTICS], flags=[CAN_ELIMINATE])
 # src[] = { vertex, offset }.
@@ -1387,7 +1409,10 @@ barrier("preamble_end_ir3")
 intrinsic("elect_any_ir3", dest_comp=1, flags=[CAN_ELIMINATE])
 
 # IR3-specific intrinsic for stc. Should be used in the shader preamble.
-store("uniform_ir3", [], indices=[BASE])
+store("const_ir3", [], indices=[BASE])
+
+# IR3-specific intrinsic for loading from a const reg.
+load("const_ir3", [1], indices=[BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # IR3-specific intrinsic for ldc.k. Copies UBO to constant file.
 # base is the const file base in components, range is the amount to copy in
@@ -1411,6 +1436,15 @@ intrinsic("inclusive_scan_clusters_ir3", dest_comp=1, src_comp=[1],
           bit_sizes=src0, indices=[REDUCTION_OP])
 intrinsic("exclusive_scan_clusters_ir3", dest_comp=1, src_comp=[1, 1],
           bit_sizes=src0, indices=[REDUCTION_OP])
+
+# Like shuffle_{xor,up,down} except with a uniform index. Necessary since the
+# ir3 shfl instruction doesn't work with divergent indices.
+intrinsic("shuffle_xor_uniform_ir3", src_comp=[0, 1], dest_comp=0,
+          bit_sizes=src0, flags=[CAN_ELIMINATE])
+intrinsic("shuffle_up_uniform_ir3", src_comp=[0, 1], dest_comp=0,
+          bit_sizes=src0, flags=[CAN_ELIMINATE])
+intrinsic("shuffle_down_uniform_ir3", src_comp=[0, 1], dest_comp=0,
+          bit_sizes=src0, flags=[CAN_ELIMINATE])
 
 # IR3-specific intrinsics for prefetching descriptors in preambles.
 intrinsic("prefetch_sam_ir3", [1, 1], flags=[CAN_REORDER])
@@ -1515,6 +1549,11 @@ store("global_amd", [1, 1], indices=[BASE, ACCESS, ALIGN_MUL, ALIGN_OFFSET, WRIT
 # Same as shared_atomic_add, but with GDS. src[] = {store_val, gds_addr, m0}
 intrinsic("gds_atomic_add_amd",  src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
 
+# Optimized shared_atomic_add (1/-1) with constant address
+# returning the uniform pre-op value for all invocations.
+intrinsic("shared_append_amd",  src_comp=[], dest_comp=1, bit_sizes=[32], indices=[BASE])
+intrinsic("shared_consume_amd",  src_comp=[], dest_comp=1, bit_sizes=[32], indices=[BASE])
+
 # src[] = { sample_id, num_samples }
 intrinsic("load_sample_positions_amd", src_comp=[1, 1], dest_comp=2, flags=[CAN_ELIMINATE, CAN_REORDER])
 
@@ -1574,8 +1613,8 @@ system_value("streamout_offset_amd", 1, indices=[BASE])
 # AMD merged shader intrinsics
 
 # Whether the current invocation index in the subgroup is less than the source. The source must be
-# subgroup uniform and bits 0-7 must be less than or equal to the wave size.
-intrinsic("is_subgroup_invocation_lt_amd", src_comp=[1], dest_comp=1, bit_sizes=[1], flags=[CAN_ELIMINATE])
+# subgroup uniform and the 8 bits starting at the base bit must be less than or equal to the wave size.
+intrinsic("is_subgroup_invocation_lt_amd", src_comp=[1], dest_comp=1, bit_sizes=[1], indices=[BASE], flags=[CAN_ELIMINATE])
 
 # AMD NGG intrinsics
 
@@ -1606,12 +1645,16 @@ intrinsic("load_cull_front_face_enabled_amd", dest_comp=1, bit_sizes=[1], flags=
 intrinsic("load_cull_back_face_enabled_amd", dest_comp=1, bit_sizes=[1], flags=[CAN_ELIMINATE])
 # True if face culling should use CCW (false if CW).
 intrinsic("load_cull_ccw_amd", dest_comp=1, bit_sizes=[1], flags=[CAN_ELIMINATE])
-# Whether the shader should cull small primitives that are not visible in a pixel.
-intrinsic("load_cull_small_primitives_enabled_amd", dest_comp=1, bit_sizes=[1], flags=[CAN_ELIMINATE])
+# Whether the shader should cull small triangles that are not visible in a pixel.
+intrinsic("load_cull_small_triangles_enabled_amd", dest_comp=1, bit_sizes=[1], flags=[CAN_ELIMINATE])
+# Whether the shader should cull small lines that are not visible in a pixel.
+intrinsic("load_cull_small_lines_enabled_amd", dest_comp=1, bit_sizes=[1], flags=[CAN_ELIMINATE])
 # Whether any culling setting is enabled in the shader.
 intrinsic("load_cull_any_enabled_amd", dest_comp=1, bit_sizes=[1], flags=[CAN_ELIMINATE])
-# Small primitive culling precision
-intrinsic("load_cull_small_prim_precision_amd", dest_comp=1, bit_sizes=[32], flags=[CAN_ELIMINATE, CAN_REORDER])
+# Small triangle culling precision
+intrinsic("load_cull_small_triangle_precision_amd", dest_comp=1, bit_sizes=[32], flags=[CAN_ELIMINATE, CAN_REORDER])
+# Small line culling precision
+intrinsic("load_cull_small_line_precision_amd", dest_comp=1, bit_sizes=[32], flags=[CAN_ELIMINATE, CAN_REORDER])
 # Initial edge flags in a Vertex Shader, packed into the format the HW needs for primitive export.
 intrinsic("load_initial_edgeflags_amd", src_comp=[], dest_comp=1, bit_sizes=[32], indices=[])
 # Corresponds to s_sendmsg in the GCN/RDNA ISA, src[] = { m0_content }, BASE = imm
@@ -1839,6 +1882,10 @@ intrinsic("load_fep_w_v3d", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 # Equivalent to popcount(ballot(true) & ((1 << subgroup_invocation) - 1))
 intrinsic("load_active_subgroup_invocation_agx", dest_comp=1, flags=[CAN_ELIMINATE])
 
+# Total active invocations within the subgroup.
+# Equivalent to popcount(ballot(true))
+intrinsic("load_active_subgroup_count_agx", dest_comp=1, flags=[CAN_ELIMINATE])
+
 # Like ballot() but only within a quad.
 intrinsic("quad_ballot_agx", src_comp=[1], dest_comp=1, flags=[CAN_ELIMINATE])
 
@@ -1899,7 +1946,7 @@ intrinsic("load_uvs_index_agx", dest_comp = 1, bit_sizes=[16],
 # converting between floating-point registers and normalized memory formats.
 #
 # The format is the pipe_format of the local memory (the source), see
-# agx_internal_formats.h for the supported list.
+# ail for the supported list.
 #
 # Logically, this loads/stores a single sample. The sample to load is
 # specified by the bitfield sample mask source. However, for stores multiple
@@ -1916,9 +1963,9 @@ intrinsic("load_uvs_index_agx", dest_comp = 1, bit_sizes=[16],
 # src[] = { sample mask }
 # base = offset
 load("local_pixel_agx", [1], [BASE, FORMAT], [CAN_REORDER, CAN_ELIMINATE])
-# src[] = { value, sample mask }
+# src[] = { value, sample mask, coordinates }
 # base = offset
-store("local_pixel_agx", [1], [BASE, WRITE_MASK, FORMAT], [CAN_REORDER])
+store("local_pixel_agx", [1, -1], [BASE, WRITE_MASK, FORMAT, EXPLICIT_COORD], [CAN_REORDER])
 
 # Combined depth/stencil emit, applying to a mask of samples. base indicates
 # which to write (1 = depth, 2 = stencil, 3 = both).
@@ -1931,18 +1978,17 @@ intrinsic("store_zs_agx", [1, 1, 1], indices=[BASE], flags=[])
 # kernels.
 #
 # The format is the pipe_format of the local memory (the source), see
-# agx_internal_formats.h for the supported list. The image format is
+# ail for the supported list. The image format is
 # specified in the PBE descriptor.
 #
 # The image dimension is used to distinguish multisampled images from
 # non-multisampled images. It must be 2D or MS.
 #
-# src[] = { image index, logical offset within shared memory, layer }
-intrinsic("block_image_store_agx", [1, 1, 1], bit_sizes=[32, 16, 16],
-          indices=[FORMAT, IMAGE_DIM, IMAGE_ARRAY], flags=[CAN_REORDER])
+# extra src[] = { logical offset within shared memory, coordinates/layer }
+image("store_block_agx", [1, -1], extra_indices=[EXPLICIT_COORD])
 
-# Formatted load/store. The format is the pipe_format in memory (see
-# agx_internal_formats.h for the supported list). This accesses:
+# Formatted load/store. The format is the pipe_format in memory (see ail for the
+# supported list). This accesses:
 #
 #     address + extend(index) << (format shift + shift)
 #
@@ -2110,14 +2156,6 @@ image("load_raw_intel", src_comp=[1], dest_comp=0,
       flags=[CAN_ELIMINATE])
 image("store_raw_intel", src_comp=[1, 0])
 
-# Intrinsic to load a block of at least 32B of constant data from a 64-bit
-# global memory address.  The memory address must be uniform and 32B-aligned.
-# The second source is a predicate which indicates whether or not to actually
-# do the load.
-# src[] = { address, predicate }.
-intrinsic("load_global_const_block_intel", src_comp=[1, 1], dest_comp=0,
-          bit_sizes=[32], indices=[BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
-
 # Number of data items being operated on for a SIMD program.
 system_value("simd_width_intel", 1)
 
@@ -2140,16 +2178,6 @@ intrinsic("resource_intel", dest_comp=1, bit_sizes=[32],
           src_comp=[1, 1, 1, 1],
           indices=[DESC_SET, BINDING, RESOURCE_ACCESS_INTEL, RESOURCE_BLOCK_INTEL],
           flags=[CAN_ELIMINATE, CAN_REORDER])
-
-# 64-bit global address for a Vulkan descriptor set
-# src[0] = { set }
-intrinsic("load_desc_set_address_intel", dest_comp=1, bit_sizes=[64],
-          src_comp=[1], flags=[CAN_ELIMINATE, CAN_REORDER])
-
-# Base offset for a given set in the flatten array of dynamic offsets
-# src[0] = { set }
-intrinsic("load_desc_set_dynamic_index_intel", dest_comp=1, bit_sizes=[32],
-          src_comp=[1], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # OpSubgroupBlockReadINTEL and OpSubgroupBlockWriteINTEL from SPV_INTEL_subgroups.
 intrinsic("load_deref_block_intel", dest_comp=0, src_comp=[-1],
@@ -2193,8 +2221,10 @@ load("ssbo_uniform_block_intel", [-1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CA
 # src[] = { offset }.
 load("shared_uniform_block_intel", [1], [BASE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 
-# Intrinsics for Intel mesh shading
-system_value("mesh_inline_data_intel", 1, [ALIGN_OFFSET], bit_sizes=[32, 64])
+# Inline register delivery (available on Gfx12.5+ for CS/Mesh/Task stages)
+intrinsic("load_inline_data_intel", [], dest_comp=0,
+          indices=[BASE],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Intrinsics for Intel bindless thread dispatch
 # BASE=brw_topoloy_id

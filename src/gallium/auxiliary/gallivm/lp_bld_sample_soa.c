@@ -2512,13 +2512,18 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
          wnz = LLVMBuildSExt(builder, wnz, bld->int_coord_bld.vec_type, "");
          wnz = lp_build_any_true_range(&bld->coord_bld, bld->coord_bld.type.length, wnz);
          lp_build_if(&noloadw0, gallivm, wnz);
-         LLVMValueRef new_coords[4];
-         new_coords[0] = lp_build_div(coord_bld, lp_build_int_to_float(coord_bld, u_val), width_dim);
-         new_coords[1] = lp_build_div(coord_bld, lp_build_int_to_float(coord_bld, v_val), height_dim);
-         new_coords[2] = coords[2];
-         new_coords[3] = coords[3];
+         LLVMValueRef new_coords[4] = {
+            lp_build_div(coord_bld,
+                         lp_build_add(coord_bld, lp_build_int_to_float(coord_bld, u_val),
+                                      lp_build_const_vec(gallivm, coord_bld->type, 0.5)), width_dim),
+            lp_build_div(coord_bld,
+                         lp_build_add(coord_bld, lp_build_int_to_float(coord_bld, v_val),
+                                      lp_build_const_vec(gallivm, coord_bld->type, 0.5)), height_dim),
+            coords[2],
+            coords[3],
+         };
 
-         /* lookup q in filter table */
+         /* multiple colors by weight and add in. */
          LLVMValueRef temp_colors[4];
          lp_build_sample_image_nearest(bld, size0,
                                        row_stride0_vec, img_stride0_vec,
@@ -2532,17 +2537,17 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
             LLVMBuildStore(builder, tcolor, colors0[chan]);
          }
 
-         /* multiple colors by weight and add in. */
          /* den += weight; */
          LLVMValueRef den = LLVMBuildLoad2(builder, bld->texel_bld.vec_type, den_store, "");
          den = lp_build_add(&bld->texel_bld, den, weights);
          LLVMBuildStore(builder, den, den_store);
-
          lp_build_endif(&noloadw0);
-         /* q += dq; */
-         /* dq += ddq; */
+
+         /* lookup q in filter table */
          q = LLVMBuildLoad2(builder, bld->texel_bld.vec_type, q_store, "");
          dq = LLVMBuildLoad2(builder, bld->texel_bld.vec_type, dq_store, "");
+         /* q += dq; */
+         /* dq += ddq; */
          q = lp_build_add(coord_bld, q, dq);
          dq = lp_build_add(coord_bld, dq, ddq);
          LLVMBuildStore(builder, q, q_store);

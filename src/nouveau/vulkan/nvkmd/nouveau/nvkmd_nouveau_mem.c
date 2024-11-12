@@ -40,12 +40,8 @@ create_mem_or_close_bo(struct nvkmd_nouveau_dev *dev,
       goto fail_bo;
    }
 
-   mem->base.ops = &nvkmd_nouveau_mem_ops;
-   mem->base.dev = &dev->base;
-   mem->base.refcnt = 1;
-   mem->base.flags = mem_flags;
-   mem->base.bind_align_B = dev->base.pdev->bind_align_B;
-   mem->base.size_B = size_B;
+   nvkmd_mem_init(&dev->base, &mem->base, &nvkmd_nouveau_mem_ops,
+                  mem_flags, size_B, dev->base.pdev->bind_align_B);
    mem->bo = bo;
 
    result = nvkmd_dev_alloc_va(&dev->base, log_obj,
@@ -100,6 +96,9 @@ nvkmd_nouveau_alloc_tiled_mem(struct nvkmd_dev *_dev,
    } else if (flags & NVKMD_MEM_VRAM) {
       domains |= NOUVEAU_WS_BO_VRAM;
    }
+
+   if (dev->base.pdev->debug_flags & NVK_DEBUG_FORCE_GART)
+      domains = NOUVEAU_WS_BO_GART;
 
    /* TODO:
     *
@@ -183,12 +182,11 @@ static VkResult
 nvkmd_nouveau_mem_map(struct nvkmd_mem *_mem,
                       struct vk_object_base *log_obj,
                       enum nvkmd_mem_map_flags map_flags,
-                      void *fixed_addr)
+                      void *fixed_addr,
+                      void **map_out)
 {
    struct nvkmd_nouveau_mem *mem = nvkmd_nouveau_mem(_mem);
    struct nvkmd_nouveau_dev *dev = nvkmd_nouveau_dev(_mem->dev);
-
-   assert((fixed_addr == NULL) == !(map_flags & NVKMD_MEM_MAP_FIXED));
 
    int prot = 0;
    if (map_flags & NVKMD_MEM_MAP_RD)
@@ -205,35 +203,37 @@ nvkmd_nouveau_mem_map(struct nvkmd_mem *_mem,
    if (map == MAP_FAILED)
       return vk_error(log_obj, VK_ERROR_MEMORY_MAP_FAILED);
 
-   mem->base.map = map;
+   *map_out = map;
 
    return VK_SUCCESS;
 }
 
 static void
-nvkmd_nouveau_mem_unmap(struct nvkmd_mem *_mem)
+nvkmd_nouveau_mem_unmap(struct nvkmd_mem *_mem,
+                        enum nvkmd_mem_map_flags flags,
+                        void *map)
 {
    struct nvkmd_nouveau_mem *mem = nvkmd_nouveau_mem(_mem);
 
-   munmap(mem->base.map, mem->base.size_B);
-   mem->base.map = NULL;
+   munmap(map, mem->base.size_B);
 }
 
 static VkResult
 nvkmd_nouveau_mem_overmap(struct nvkmd_mem *_mem,
-                          struct vk_object_base *log_obj)
+                          struct vk_object_base *log_obj,
+                          enum nvkmd_mem_map_flags flags,
+                          void *map)
 {
    struct nvkmd_nouveau_mem *mem = nvkmd_nouveau_mem(_mem);
 
-   void *map = mmap(mem->base.map, mem->base.size_B, PROT_NONE,
-                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-   if (map == MAP_FAILED) {
+   void *new_map = mmap(map, mem->base.size_B, PROT_NONE,
+                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+   if (new_map == MAP_FAILED) {
       return vk_errorf(log_obj, VK_ERROR_MEMORY_MAP_FAILED,
                        "Failed to map over original mapping");
    }
 
-   assert(map == mem->base.map);
-   mem->base.map = NULL;
+   assert(new_map == map);
 
    return VK_SUCCESS;
 }

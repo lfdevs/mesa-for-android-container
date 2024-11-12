@@ -305,7 +305,8 @@ is_memory_instr(const Instruction* const instr)
    /* For memory instructions, we allow to reorder them with ALU if it helps
     * to form larger clauses or to increase def-use distances.
     */
-   return instr->isVMEM() || instr->isFlatLike() || instr->isSMEM() || instr->accessesLDS();
+   return instr->isVMEM() || instr->isFlatLike() || instr->isSMEM() || instr->accessesLDS() ||
+          instr->isEXP();
 }
 
 constexpr unsigned max_sgpr = 128;

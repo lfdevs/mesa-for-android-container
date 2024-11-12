@@ -10,7 +10,7 @@
 namespace aco {
 
 RegisterDemand
-get_live_changes(aco_ptr<Instruction>& instr)
+get_live_changes(Instruction* instr)
 {
    RegisterDemand changes;
    for (const Definition& def : instr->definitions) {
@@ -29,18 +29,7 @@ get_live_changes(aco_ptr<Instruction>& instr)
 }
 
 RegisterDemand
-get_additional_operand_demand(Instruction* instr)
-{
-   RegisterDemand additional_demand;
-   int op_idx = get_op_fixed_to_def(instr);
-   if (op_idx != -1 && !instr->operands[op_idx].isKill())
-      additional_demand += instr->definitions[0].getTemp();
-
-   return additional_demand;
-}
-
-RegisterDemand
-get_temp_registers(aco_ptr<Instruction>& instr)
+get_temp_registers(Instruction* instr)
 {
    RegisterDemand demand_before;
    RegisterDemand demand_after;
@@ -53,14 +42,15 @@ get_temp_registers(aco_ptr<Instruction>& instr)
    }
 
    for (Operand op : instr->operands) {
-      if (op.isFirstKill()) {
+      if (op.isFirstKill() || op.isCopyKill()) {
          demand_before += op.getTemp();
          if (op.isLateKill())
             demand_after += op.getTemp();
+      } else if (op.isClobbered() && !op.isKill()) {
+         demand_before += op.getTemp();
       }
    }
 
-   demand_before += get_additional_operand_demand(instr.get());
    demand_after.update(demand_before);
    return demand_after;
 }
@@ -179,8 +169,13 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
       ctx.program->needs_vcc |= instr_needs_vcc(insn);
       insn->register_demand = RegisterDemand(new_demand.vgpr, new_demand.sgpr);
 
+      bool has_vgpr_def = false;
+
       /* KILL */
       for (Definition& definition : insn->definitions) {
+         has_vgpr_def |= definition.regClass().type() == RegType::vgpr &&
+                         !definition.regClass().is_linear_vgpr();
+
          if (!definition.isTemp()) {
             continue;
          }
@@ -212,39 +207,96 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
             if (insn->operands[op_idx].isOfType(RegType::sgpr))
                insn->operands[op_idx].setLateKill(true);
          }
+      } else if (insn->opcode == aco_opcode::p_bpermute_readlane ||
+                 insn->opcode == aco_opcode::p_bpermute_permlane ||
+                 insn->opcode == aco_opcode::p_bpermute_shared_vgpr ||
+                 insn->opcode == aco_opcode::p_dual_src_export_gfx11 ||
+                 insn->opcode == aco_opcode::v_mqsad_u32_u8) {
+         for (Operand& op : insn->operands)
+            op.setLateKill(true);
+      } else if (insn->opcode == aco_opcode::p_interp_gfx11 && insn->operands.size() == 7) {
+         insn->operands[5].setLateKill(true); /* we re-use the destination reg in the middle */
+      } else if (insn->opcode == aco_opcode::v_interp_p1_f32 && ctx.program->dev.has_16bank_lds) {
+         insn->operands[0].setLateKill(true);
+      } else if (insn->opcode == aco_opcode::p_init_scratch) {
+         insn->operands.back().setLateKill(true);
+      } else if (instr_info.classes[(int)insn->opcode] == instr_class::wmma) {
+         insn->operands[0].setLateKill(true);
+         insn->operands[1].setLateKill(true);
       }
+
+      /* Check if a definition clobbers some operand */
+      int op_idx = get_op_fixed_to_def(insn);
+      if (op_idx != -1)
+         insn->operands[op_idx].setClobbered(true);
 
       /* we need to do this in a separate loop because the next one can
        * setKill() for several operands at once and we don't want to
        * overwrite that in a later iteration */
-      for (Operand& op : insn->operands)
+      for (Operand& op : insn->operands) {
          op.setKill(false);
+         /* Linear vgprs must be late kill: this is to ensure linear VGPR operands and
+          * normal VGPR definitions don't try to use the same register, which is problematic
+          * because of assignment restrictions.
+          */
+         if (op.hasRegClass() && op.regClass().is_linear_vgpr() && !op.isUndefined() &&
+             has_vgpr_def)
+            op.setLateKill(true);
+      }
 
       /* GEN */
+      RegisterDemand operand_demand;
       for (unsigned i = 0; i < insn->operands.size(); ++i) {
          Operand& operand = insn->operands[i];
          if (!operand.isTemp())
             continue;
-         if (operand.isFixed() && operand.physReg() == vcc)
-            ctx.program->needs_vcc = true;
+
          const Temp temp = operand.getTemp();
-         const bool inserted = live.insert(temp.id()).second;
-         if (inserted) {
+         if (operand.isPrecolored()) {
+            assert(!operand.isLateKill());
+            ctx.program->needs_vcc |= operand.physReg() == vcc;
+
+            /* Check if this operand gets overwritten by a precolored definition. */
+            if (std::any_of(insn->definitions.begin(), insn->definitions.end(),
+                            [=](Definition def)
+                            {
+                               return def.isFixed() &&
+                                      def.physReg() + def.size() > operand.physReg() &&
+                                      operand.physReg() + operand.size() > def.physReg();
+                            }))
+               operand.setClobbered(true);
+
+            /* Check if another precolored operand uses the same temporary.
+             * This assumes that operands of one instruction are not precolored twice to
+             * the same register. In this case, register pressure might be overestimated.
+             */
+            for (unsigned j = i + 1; !operand.isCopyKill() && j < insn->operands.size(); ++j) {
+               if (insn->operands[j].isPrecolored() && insn->operands[j].getTemp() == temp) {
+                  operand_demand += temp;
+                  insn->operands[j].setCopyKill(true);
+               }
+            }
+         }
+
+         if (operand.isKill())
+            continue;
+
+         if (live.insert(temp.id()).second) {
             operand.setFirstKill(true);
             for (unsigned j = i + 1; j < insn->operands.size(); ++j) {
-               if (insn->operands[j].isTemp() && insn->operands[j].tempId() == operand.tempId()) {
-                  insn->operands[j].setFirstKill(false);
+               if (insn->operands[j].isTemp() && insn->operands[j].getTemp() == temp)
                   insn->operands[j].setKill(true);
-               }
             }
             if (operand.isLateKill())
                insn->register_demand += temp;
             new_demand += temp;
+         } else if (operand.isClobbered()) {
+            operand_demand += temp;
          }
       }
 
-      RegisterDemand before_instr = new_demand + get_additional_operand_demand(insn);
-      insn->register_demand.update(before_instr);
+      operand_demand += new_demand;
+      insn->register_demand.update(operand_demand);
       block->register_demand.update(insn->register_demand);
    }
 
@@ -259,8 +311,7 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
          continue;
       }
       Definition& definition = insn->definitions[0];
-      if (definition.isFixed() && definition.physReg() == vcc)
-         ctx.program->needs_vcc = true;
+      ctx.program->needs_vcc |= definition.isFixed() && definition.physReg() == vcc;
       const size_t n = live.erase(definition.tempId());
       if (n && (definition.isKill() || ctx.handled_once > block->index)) {
          Block::edge_vec& preds =
@@ -283,8 +334,6 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
       for (Operand& operand : insn->operands) {
          if (!operand.isTemp())
             continue;
-         if (operand.isFixed() && operand.physReg() == vcc)
-            ctx.program->needs_vcc = true;
 
          /* set if the operand is killed by this (or another) phi instruction */
          operand.setKill(!live.count(operand.tempId()));
@@ -297,10 +346,8 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
                 block->logical_preds.back() <= block->linear_preds.back());
          ctx.worklist = std::max<int>(ctx.worklist, block->linear_preds.back());
       } else {
-         for (unsigned t : live) {
-            aco_err(ctx.program, "Temporary never defined or are defined after use: %%%d in BB%d",
-                    t, block->index);
-         }
+         ASSERTED bool is_valid = validate_ir(ctx.program);
+         assert(!is_valid);
       }
    }
 

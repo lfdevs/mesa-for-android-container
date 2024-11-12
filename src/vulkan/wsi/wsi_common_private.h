@@ -40,6 +40,7 @@ struct wsi_swapchain;
 #define WSI_DEBUG_NOSHM       (1ull << 2)
 #define WSI_DEBUG_LINEAR      (1ull << 3)
 #define WSI_DEBUG_DXGI        (1ull << 4)
+#define WSI_DEBUG_NOWLTS      (1ull << 5)
 
 extern uint64_t WSI_DEBUG;
 
@@ -120,7 +121,7 @@ enum wsi_explicit_sync_timelines
    WSI_ES_ACQUIRE,
    WSI_ES_RELEASE,
 
-   WSI_ES_COUNT, 
+   WSI_ES_COUNT,
 };
 
 struct wsi_image_explicit_sync_timeline {
@@ -183,7 +184,7 @@ struct wsi_swapchain {
 
    struct wsi_image_info image_info;
    uint32_t image_count;
-   
+
    uint64_t present_serial;
 
    struct {
@@ -416,6 +417,11 @@ VkResult wsi_win32_init_wsi(struct wsi_device *wsi_device,
                          VkPhysicalDevice physical_device);
 void wsi_win32_finish_wsi(struct wsi_device *wsi_device,
                        const VkAllocationCallbacks *alloc);
+VkResult wsi_metal_init_wsi(struct wsi_device *wsi_device,
+                           const VkAllocationCallbacks *alloc,
+                           VkPhysicalDevice physical_device);
+void wsi_metal_finish_wsi(struct wsi_device *wsi_device,
+                          const VkAllocationCallbacks *alloc);
 
 
 VkResult

@@ -41,6 +41,9 @@ struct queue_ctx {
    /* Current instruction end pointer */
    uint64_t *end;
 
+   /* Whether currently inside an exception handler */
+   bool in_exception_handler;
+
    /* Call stack. Depth=0 means root */
    struct {
       /* Link register to return to */
@@ -48,7 +51,7 @@ struct queue_ctx {
 
       /* End pointer, there is a return (or exit) after */
       uint64_t *end;
-   } call_stack[MAX_CALL_STACK_DEPTH];
+   } call_stack[MAX_CALL_STACK_DEPTH + 1]; /* +1 for exception handler */
    uint8_t call_stack_depth;
 
    unsigned gpu_id;
@@ -79,6 +82,9 @@ pandecode_run_compute(struct pandecode_context *ctx, FILE *fp,
    fprintf(fp, "RUN_COMPUTE%s.%s #%u\n",
            I->progress_increment ? ".progress_inc" : "", axes[I->task_axis],
            I->task_increment);
+
+   if (qctx->in_exception_handler)
+      return;
 
    ctx->indent++;
 
@@ -124,6 +130,9 @@ pandecode_run_compute_indirect(struct pandecode_context *ctx, FILE *fp,
            I->progress_increment ? ".progress_inc" : "",
            I->workgroups_per_task);
 
+   if (qctx->in_exception_handler)
+      return;
+
    ctx->indent++;
 
    unsigned reg_srt = 0 + (I->srt_select * 2);
@@ -166,6 +175,9 @@ pandecode_run_tiling(struct pandecode_context *ctx, FILE *fp,
    fprintf(fp, "RUN_TILING%s", I->progress_increment ? ".progress_inc" : "");
 
    fprintf(fp, "\n");
+
+   if (qctx->in_exception_handler)
+      return;
 
    ctx->indent++;
 
@@ -255,6 +267,9 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
 
    fprintf(fp, "\n");
 
+   if (qctx->in_exception_handler)
+      return;
+
    ctx->indent++;
 
    /* Merge flag overrides with the register flags */
@@ -328,13 +343,13 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
       (ctx, cs_get_u64(qctx, 20), "Fragment shader", qctx->gpu_id);
    }
 
-   DUMP_ADDR(ctx, LOCAL_STORAGE, cs_get_u64(qctx, 24),
+   DUMP_ADDR(ctx, LOCAL_STORAGE, cs_get_u64(qctx, reg_position_tsd),
              "Position Local Storage @%" PRIx64 ":\n",
              cs_get_u64(qctx, reg_position_tsd));
-   DUMP_ADDR(ctx, LOCAL_STORAGE, cs_get_u64(qctx, 24),
+   DUMP_ADDR(ctx, LOCAL_STORAGE, cs_get_u64(qctx, reg_vary_tsd),
              "Varying Local Storage @%" PRIx64 ":\n",
              cs_get_u64(qctx, reg_vary_tsd));
-   DUMP_ADDR(ctx, LOCAL_STORAGE, cs_get_u64(qctx, 30),
+   DUMP_ADDR(ctx, LOCAL_STORAGE, cs_get_u64(qctx, reg_frag_tsd),
              "Fragment Local Storage @%" PRIx64 ":\n",
              cs_get_u64(qctx, reg_frag_tsd));
 
@@ -394,6 +409,9 @@ pandecode_run_fragment(struct pandecode_context *ctx, FILE *fp,
            tile_order[I->tile_order],
            I->progress_increment ? ".progress_inc" : "");
 
+   if (qctx->in_exception_handler)
+      return;
+
    ctx->indent++;
 
    DUMP_CL(ctx, SCISSOR, &qctx->regs[42], "Scissor\n");
@@ -412,6 +430,9 @@ pandecode_run_fullscreen(struct pandecode_context *ctx, FILE *fp,
 {
    fprintf(fp, "RUN_FULLSCREEN%s\n",
            I->progress_increment ? ".progress_inc" : "");
+
+   if (qctx->in_exception_handler)
+      return;
 
    ctx->indent++;
 
@@ -553,7 +574,7 @@ disassemble_ceu_instr(struct pandecode_context *ctx, uint64_t dword,
 
    case MALI_CS_OPCODE_FINISH_FRAGMENT: {
       pan_unpack(bytes, CS_FINISH_FRAGMENT, I);
-      fprintf(fp, "FINISH_FRAGMENT.%s, d%u, d%u, #%x, #%u\n",
+      fprintf(fp, "FINISH_FRAGMENT%s d%u, d%u, #%x, #%u\n",
               I.increment_fragment_completed ? ".frag_end" : "",
               I.last_heap_chunk, I.first_heap_chunk, I.wait_mask,
               I.signal_slot);
@@ -825,6 +846,41 @@ interpret_ceu_jump(struct pandecode_context *ctx, struct queue_ctx *qctx,
    return true;
 }
 
+static bool
+eval_cond(struct queue_ctx *qctx, enum mali_cs_condition cond, uint32_t reg)
+{
+   int32_t val = qctx->regs[reg];
+
+   switch (cond) {
+   case MALI_CS_CONDITION_LEQUAL:
+      return val <= 0;
+   case MALI_CS_CONDITION_EQUAL:
+      return val == 0;
+   case MALI_CS_CONDITION_LESS:
+      return val < 0;
+   case MALI_CS_CONDITION_GREATER:
+      return val > 0;
+   case MALI_CS_CONDITION_NEQUAL:
+      return val != 0;
+   case MALI_CS_CONDITION_GEQUAL:
+      return val >= 0;
+   case MALI_CS_CONDITION_ALWAYS:
+      return true;
+   default:
+      assert(!"Invalid condition");
+      return false;
+   }
+}
+
+static void
+interpret_ceu_branch(struct pandecode_context *ctx, struct queue_ctx *qctx,
+                     int16_t offset, enum mali_cs_condition cond,
+                     uint32_t reg)
+{
+   if (eval_cond(qctx, cond, reg))
+      qctx->ip += offset;
+}
+
 /*
  * Interpret a single instruction of the CS, updating the register file,
  * instruction pointer, and call stack. Memory access and GPU controls are
@@ -841,6 +897,12 @@ interpret_ceu_instr(struct pandecode_context *ctx, struct queue_ctx *qctx)
 
    assert(qctx->ip < qctx->end);
 
+   /* Don't try to keep track of registers/operations inside exception handler */
+   if (qctx->in_exception_handler) {
+      assert(base.opcode != MALI_CS_OPCODE_SET_EXCEPTION_HANDLER);
+      goto no_interpret;
+   }
+
    switch (base.opcode) {
    case MALI_CS_OPCODE_MOVE: {
       pan_unpack(bytes, CS_MOVE, I);
@@ -854,6 +916,22 @@ interpret_ceu_instr(struct pandecode_context *ctx, struct queue_ctx *qctx)
       pan_unpack(bytes, CS_MOVE32, I);
 
       qctx->regs[I.destination] = I.immediate;
+      break;
+   }
+
+   case MALI_CS_OPCODE_LOAD_MULTIPLE: {
+      pan_unpack(bytes, CS_LOAD_MULTIPLE, I);
+      mali_ptr addr =
+         ((uint64_t)qctx->regs[I.address + 1] << 32) | qctx->regs[I.address];
+      addr += I.offset;
+
+      uint32_t *src =
+         pandecode_fetch_gpu_mem(ctx, addr, util_last_bit(I.mask) * 4);
+
+      for (uint32_t i = 0; i < 16; i++) {
+         if (I.mask & BITFIELD_BIT(i))
+            qctx->regs[I.base_register + i] = src[i];
+      }
       break;
    }
 
@@ -899,6 +977,31 @@ interpret_ceu_instr(struct pandecode_context *ctx, struct queue_ctx *qctx)
       return interpret_ceu_jump(ctx, qctx, I.address, I.length);
    }
 
+   case MALI_CS_OPCODE_SET_EXCEPTION_HANDLER: {
+      pan_unpack(bytes, CS_SET_EXCEPTION_HANDLER, I);
+
+      if (!I.address) return true;
+
+      assert(qctx->call_stack_depth < MAX_CALL_STACK_DEPTH);
+
+      qctx->ip++;
+
+      /* Note: tail calls are not optimized in the hardware. */
+      assert(qctx->ip <= qctx->end);
+
+      unsigned depth = qctx->call_stack_depth++;
+
+      qctx->call_stack[depth].lr = qctx->ip;
+      qctx->call_stack[depth].end = qctx->end;
+
+      /* Exception handler can use the full frame stack depth but we don't try
+       * to keep track of the nested JUMP/CALL as we don't know what will be
+       * the registers/memory content when the handler is triggered. */
+      qctx->in_exception_handler = true;
+
+      return interpret_ceu_jump(ctx, qctx, I.address, I.length);
+   }
+
    case MALI_CS_OPCODE_JUMP: {
       pan_unpack(bytes, CS_JUMP, I);
 
@@ -910,9 +1013,18 @@ interpret_ceu_instr(struct pandecode_context *ctx, struct queue_ctx *qctx)
       return interpret_ceu_jump(ctx, qctx, I.address, I.length);
    }
 
+   case MALI_CS_OPCODE_BRANCH: {
+      pan_unpack(bytes, CS_BRANCH, I);
+
+      interpret_ceu_branch(ctx, qctx, I.offset, I.condition, I.value);
+      break;
+   }
+
    default:
       break;
    }
+
+no_interpret:
 
    /* Update IP first to point to the next instruction, so call doesn't
     * require special handling (even for tail calls).
@@ -929,6 +1041,7 @@ interpret_ceu_instr(struct pandecode_context *ctx, struct queue_ctx *qctx)
 
       qctx->ip = qctx->call_stack[old_depth].lr;
       qctx->end = qctx->call_stack[old_depth].end;
+      qctx->in_exception_handler = false;
    }
 
    return true;

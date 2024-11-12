@@ -56,7 +56,7 @@ static struct panvk_priv_bo *
 panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
 {
    size_t bo_sz = ALIGN_POT(MAX2(pool->base.slab_size, sz), 4096);
-   struct panvk_priv_bo *bo;
+   struct panvk_priv_bo *bo = NULL;
 
    /* If there's a free BO in our BO pool, let's pick it. */
    if (pool->bo_pool && bo_sz == pool->base.slab_size &&
@@ -71,8 +71,19 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
        * flags to this function and keep the read/write,
        * fragment/vertex+tiler pools separate.
        */
-      bo = panvk_priv_bo_create(pool->dev, bo_sz, pool->props.create_flags,
-                                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+      VkResult result =
+         panvk_priv_bo_create(pool->dev, bo_sz, pool->props.create_flags,
+                              VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+
+      /* Pool allocations are indirect, meaning there's no VkResult returned
+       * and no way for the caller to know why the device memory allocation
+       * failed. We want to propagate host allocation failures, so set
+       * errno to -ENOMEM if panvk_priv_bo_create() returns
+       * VK_ERROR_OUT_OF_HOST_MEMORY.
+       * We expect the caller to check the returned pointer and catch the
+       * host allocation failure with a call to panvk_error(). */
+      if (result == VK_ERROR_OUT_OF_HOST_MEMORY)
+         errno = -ENOMEM;
    }
 
    if (bo == NULL)
@@ -132,8 +143,16 @@ panvk_pool_alloc_mem(struct panvk_pool *pool, struct panvk_pool_alloc_info info)
          panvk_priv_bo_ref(bo);
    }
 
+   uint32_t flags = 0;
+
+   if (pool->props.owns_bos)
+      flags |= PANVK_PRIV_MEM_OWNED_BY_POOL;
+
+   assert(!((uintptr_t)bo & 7));
+   assert(!(flags & ~7));
+
    struct panvk_priv_mem ret = {
-      .bo = bo,
+      .bo = (uintptr_t)bo | flags,
       .offset = offset,
    };
 

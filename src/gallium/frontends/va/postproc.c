@@ -551,6 +551,8 @@ vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *contex
    dst_surface = handle_table_get(drv->htab, context->target_id);
    if (!src_surface || !dst_surface)
       return VA_STATUS_ERROR_INVALID_SURFACE;
+   vlVaGetSurfaceBuffer(drv, src_surface);
+   vlVaGetSurfaceBuffer(drv, dst_surface);
    if (!src_surface->buffer || !dst_surface->buffer)
       return VA_STATUS_ERROR_INVALID_SURFACE;
 

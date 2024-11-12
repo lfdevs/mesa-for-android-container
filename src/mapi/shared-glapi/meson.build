@@ -39,7 +39,7 @@ libglapi = shared_library(
   gnu_symbol_visibility : 'hidden',
   link_args : [ld_args_gc_sections],
   include_directories : [inc_src, inc_include, inc_mapi],
-  dependencies : [dep_thread, dep_selinux, idep_mesautil],
+  dependencies : [dep_thread, idep_mesautil],
   soversion : host_machine.system() == 'windows' ? '' : '0',
   version : '0.0.0',
   name_prefix : host_machine.system() == 'windows' ? 'lib' : [],  # always use lib, but avoid warnings on !windows

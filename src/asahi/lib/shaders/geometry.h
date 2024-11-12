@@ -163,6 +163,13 @@ struct agx_geometry_params {
     */
    GLOBAL(uchar) xfb_base[MAX_SO_BUFFERS];
 
+   /* Address and present mask for the input to the geometry shader. These will
+    * reflect the vertex shader for VS->GS or instead the tessellation
+    * evaluation shader for TES->GS.
+    */
+   uint64_t input_buffer;
+   uint64_t input_mask;
+
    /* Location-indexed mask of flat outputs, used for lowering GL edge flags. */
    uint64_t flat_outputs;
 
@@ -201,7 +208,7 @@ struct agx_geometry_params {
     */
    uint32_t input_topology;
 } PACKED;
-AGX_STATIC_ASSERT(sizeof(struct agx_geometry_params) == 78 * 4);
+AGX_STATIC_ASSERT(sizeof(struct agx_geometry_params) == 82 * 4);
 
 /* TCS shared memory layout:
  *
@@ -241,7 +248,7 @@ libagx_tcs_in_size(uint32_t vertices_in_patch, uint64_t crosslane_vs_out_mask)
  */
 static inline uint
 libagx_tcs_out_offs(uint vtx_id, gl_varying_slot location, uint nr_patch_out,
-                    uint out_patch_size, uint64_t vtx_out_mask)
+                    uint64_t vtx_out_mask)
 {
    uint off = 0;
    if (location == VARYING_SLOT_TESS_LEVEL_OUTER)
@@ -267,8 +274,7 @@ static inline uint
 libagx_tcs_out_stride(uint nr_patch_out, uint out_patch_size,
                       uint64_t vtx_out_mask)
 {
-   return libagx_tcs_out_offs(out_patch_size, VARYING_SLOT_VAR0, nr_patch_out,
-                              out_patch_size, vtx_out_mask);
+   return libagx_tcs_out_offs(out_patch_size, 0, nr_patch_out, vtx_out_mask);
 }
 
 /* In a tess eval shader, stride for hw vertex ID */

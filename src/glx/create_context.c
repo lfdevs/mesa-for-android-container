@@ -105,8 +105,8 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
 #else
    if (direct && psc->vtable->create_context_attribs) {
       gc = psc->vtable->create_context_attribs(psc, cfg, share, num_attribs,
-					       (const uint32_t *) attrib_list,
-					       &error);
+                      (const uint32_t *) attrib_list,
+                      &error);
    } else if (!direct) {
       gc = indirect_create_context_attribs(psc, cfg, share, num_attribs,
                                            (const uint32_t *) attrib_list,

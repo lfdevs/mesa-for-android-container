@@ -61,6 +61,13 @@ struct nvk_image_plane {
 
    /** Reserved VA for sparse images, NULL otherwise. */
    struct nvkmd_va *va;
+
+   /* Needed for EXT_Host_Image_Copy. We get GPU addresses from the API,
+    * so we stash in the memory object and the offset in the plane to be able
+    * to retrieve CPU addresses for host copies.
+    */
+   struct nvk_device_memory *host_mem;
+   uint64_t host_offset;
 };
 
 struct nvk_image {

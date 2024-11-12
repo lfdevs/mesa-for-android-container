@@ -146,7 +146,7 @@ TEST_F(cmod_propagation_test, basic)
     * 0: add.ge.f0(8)  dest  src0  src1
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -178,7 +178,7 @@ TEST_F(cmod_propagation_test, basic_other_flag)
     * 0: add.ge.f0.1(8) dest  src0  src1
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -210,7 +210,7 @@ TEST_F(cmod_propagation_test, cmp_nonzero)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -241,7 +241,7 @@ TEST_F(cmod_propagation_test, non_cmod_instruction)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -272,7 +272,7 @@ TEST_F(cmod_propagation_test, non_cmod_livechannel)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -307,7 +307,7 @@ TEST_F(cmod_propagation_test, intervening_flag_write)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -346,7 +346,7 @@ TEST_F(cmod_propagation_test, intervening_mismatch_flag_write)
     * 1: cmp.ge.f0.1(8) null  src2  0.0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -385,7 +385,7 @@ TEST_F(cmod_propagation_test, intervening_flag_read)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -425,7 +425,7 @@ TEST_F(cmod_propagation_test, intervening_mismatch_flag_read)
     * 1: (+f0.1) sel(8) dest1 src2  0.0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -472,7 +472,7 @@ TEST_F(cmod_propagation_test, intervening_dest_write)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -512,7 +512,7 @@ TEST_F(cmod_propagation_test, intervening_flag_read_same_value)
     * 1: (+f0) sel(8)  dest1 src2  0.0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -546,7 +546,7 @@ TEST_F(cmod_propagation_test, negate)
     * 0: add.le.f0(8)  dest  src0  src1
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -577,7 +577,7 @@ TEST_F(cmod_propagation_test, movnz)
     * 0: cmp.ge.f0(8)  dest  src0  src1
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -609,7 +609,7 @@ TEST_F(cmod_propagation_test, different_types_cmod_with_zero)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -642,7 +642,7 @@ TEST_F(cmod_propagation_test, andnz_one)
     * 0: cmp.l.f0(8)     dest:F  src0:F  0F
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -676,7 +676,7 @@ TEST_F(cmod_propagation_test, andnz_non_one)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -708,7 +708,7 @@ TEST_F(cmod_propagation_test, cmp_cmpnz)
     * 0: cmp.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_TRUE(cmod_propagation(v));
@@ -735,7 +735,7 @@ TEST_F(cmod_propagation_test, cmp_cmpg)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_FALSE(cmod_propagation(v));
@@ -764,7 +764,7 @@ TEST_F(cmod_propagation_test, plnnz_cmpnz)
     * 0: pln.nz.f0.0(8) vgrf0:F, vgrf1:F, 0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_TRUE(cmod_propagation(v));
@@ -791,7 +791,7 @@ TEST_F(cmod_propagation_test, plnnz_cmpz)
     * 0: pln.z.f0.0(8) vgrf0:F, vgrf1:F, 0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_TRUE(cmod_propagation(v));
@@ -821,7 +821,7 @@ TEST_F(cmod_propagation_test, plnnz_sel_cmpz)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_FALSE(cmod_propagation(v));
@@ -852,7 +852,7 @@ TEST_F(cmod_propagation_test, cmp_cmpg_D)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_FALSE(cmod_propagation(v));
@@ -881,7 +881,7 @@ TEST_F(cmod_propagation_test, cmp_cmpg_UD)
     * 0: cmp.nz.f0.0(8) vgrf0:UD, vgrf1:UD, 0u
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_TRUE(cmod_propagation(v));
@@ -908,7 +908,7 @@ TEST_F(cmod_propagation_test, cmp_cmpl_D)
     * 0: cmp.nz.f0.0(8) vgrf0:D, vgrf1:D, 0d
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_TRUE(cmod_propagation(v));
@@ -935,7 +935,7 @@ TEST_F(cmod_propagation_test, cmp_cmpl_UD)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_FALSE(cmod_propagation(v));
@@ -966,7 +966,7 @@ TEST_F(cmod_propagation_test, andz_one)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -999,7 +999,7 @@ TEST_F(cmod_propagation_test, add_not_merge_with_compare)
     * = After =
     * (no changes)
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1029,7 +1029,7 @@ TEST_F(cmod_propagation_test, subtract_merge_with_compare)
     * = After =
     * 0: add.l.f0(8)     dest:F  src0:F  -src1:F
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1059,7 +1059,7 @@ TEST_F(cmod_propagation_test, subtract_immediate_merge_with_compare)
     * = After =
     * 0: add.nz.f0(8)    dest:F  src0:F  -1.0f
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1091,7 +1091,7 @@ TEST_F(cmod_propagation_test, subtract_merge_with_compare_intervening_add)
     * 0: add.l.f0(8)     dest0:F src0:F  -src1:F
     * 1: add(8)          dest1:F src0:F  src1:F
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1124,7 +1124,7 @@ TEST_F(cmod_propagation_test, subtract_not_merge_with_compare_intervening_partia
     * = After =
     * (no changes)
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1159,7 +1159,7 @@ TEST_F(cmod_propagation_test, subtract_not_merge_with_compare_intervening_add)
     * = After =
     * (no changes)
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1191,7 +1191,7 @@ TEST_F(cmod_propagation_test, add_merge_with_compare)
     * = After =
     * 0: add.l.f0(8)     dest:F  src0:F  src1:F
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1222,7 +1222,7 @@ TEST_F(cmod_propagation_test, negative_subtract_merge_with_compare)
     * = After =
     * 0: add.g.f0(8)     dest:F  src0:F  -src1:F
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1256,7 +1256,7 @@ TEST_F(cmod_propagation_test, subtract_delete_compare)
     * 0: add.l.f0(8)     dest:F  src0:F  -src1:F
     * 1: (+f0) mov(0)    dest1:F src2:F
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1297,7 +1297,7 @@ TEST_F(cmod_propagation_test, subtract_delete_compare_other_flag)
     * 0: add.l.f0.1(8)   dest:F  src0:F  -src1:F
     * 1: (+f0) mov(0)    dest1:F src2:F
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1330,7 +1330,7 @@ TEST_F(cmod_propagation_test, subtract_to_mismatch_flag)
     * = After =
     * No changes
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1377,7 +1377,7 @@ TEST_F(cmod_propagation_test,
     * Because of this, the cmp.l.f0 will always be chosen.  If the pass
     * changes its strategy, this test will also need to change.
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1418,7 +1418,7 @@ TEST_F(cmod_propagation_test,
     * 0: add.l.f0(8)    dest0:F src0:F  -src1:F
     * 1: (+f0.1) sel(8) dest1   src2    0.0f
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1455,7 +1455,7 @@ TEST_F(cmod_propagation_test, subtract_delete_compare_derp)
     * 0: add.l.f0(8)     dest0:F src0:F  -src1:F
     * 1: (+f0) add(0)    dest1:F -src0:F src1:F
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1487,7 +1487,7 @@ TEST_F(cmod_propagation_test, signed_unsigned_comparison_mismatch)
     * = After =
     * (no changes)
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1522,7 +1522,7 @@ TEST_F(cmod_propagation_test, ior_f2i_nz)
     * dest, interpreted as floating point, is 0.5.  This bit pattern is not
     * zero, but after the float-to-integer conversion, the value is zero.
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1565,7 +1565,7 @@ TEST_F(cmod_propagation_test, uand_b2f_g)
     * dest:UD can never be < 0.
     *
     */
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -1600,7 +1600,7 @@ cmod_propagation_test::test_mov_prop(enum brw_conditional_mod cmod,
    bld.MOV(retype(bld.null_reg_ud(), mov_dst_type), dest)
       ->conditional_mod = cmod;
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2187,7 +2187,7 @@ cmod_propagation_test::test_saturate_prop(enum brw_conditional_mod before,
          ->conditional_mod = before;
    }
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2669,7 +2669,7 @@ TEST_F(cmod_propagation_test, not_to_or)
     * 0: or.z.f0(8)    dest  src0  src1
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2702,7 +2702,7 @@ TEST_F(cmod_propagation_test, not_to_and)
     * 0: and.z.f0(8)   dest  src0  src1
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2740,7 +2740,7 @@ TEST_F(cmod_propagation_test, not_to_uadd)
     * No changes
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2780,7 +2780,7 @@ TEST_F(cmod_propagation_test, not_to_fadd_to_ud)
     * No changes
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2822,7 +2822,7 @@ TEST_F(cmod_propagation_test, not_to_fadd)
     * No changes
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2863,7 +2863,7 @@ TEST_F(cmod_propagation_test, not_to_or_intervening_flag_read_compatible_value)
     * 1: (+f0) sel(8)  dest1 src2  0.0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2905,7 +2905,7 @@ TEST_F(cmod_propagation_test,
     * No changes
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2949,7 +2949,7 @@ TEST_F(cmod_propagation_test, not_to_or_intervening_flag_read_incompatible_value
     * No changes
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -2992,7 +2992,7 @@ TEST_F(cmod_propagation_test, not_to_or_intervening_mismatch_flag_write)
     * 1: or.z.f0.1(8)   dest1 src0  src1
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -3037,7 +3037,7 @@ TEST_F(cmod_propagation_test, not_to_or_intervening_mismatch_flag_read)
     * 1: (+f0.1) sel(8) dest1 src2  0.0f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -3072,7 +3072,7 @@ TEST_F(cmod_propagation_test, cmp_to_add_float_e)
     * (no changes)
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_FALSE(cmod_propagation(v));
@@ -3102,7 +3102,7 @@ TEST_F(cmod_propagation_test, cmp_to_add_float_g)
     * 0: add.sat.g.f0.0(8) vgrf0:F, vgrf1:F, -10f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_TRUE(cmod_propagation(v));
@@ -3130,7 +3130,7 @@ TEST_F(cmod_propagation_test, cmp_to_add_float_le)
     * 0: add.sat.le.f0.0(8) vgrf0:F, vgrf1:F, -10f
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_TRUE(cmod_propagation(v));
@@ -3164,7 +3164,7 @@ TEST_F(cmod_propagation_test, prop_across_sel)
     * 1: sel.ge(8)     dest2 src2  src3
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -3179,3 +3179,33 @@ TEST_F(cmod_propagation_test, prop_across_sel)
    EXPECT_EQ(BRW_CONDITIONAL_GE, instruction(block0, 1)->conditional_mod);
 }
 
+TEST_F(cmod_propagation_test, Boolean_size_conversion)
+{
+   brw_reg dest1 = bld.vgrf(BRW_TYPE_W);
+   brw_reg src0 = bld.vgrf(BRW_TYPE_W);
+   brw_reg zero(brw_imm_w(0));
+
+   bld.CMP(dest1, src0, zero, BRW_CONDITIONAL_NZ);
+   set_condmod(BRW_CONDITIONAL_NZ, bld.MOV(bld.null_reg_d(), dest1));
+
+   /* = Before =
+    * 0: cmp.nz.f0     dest1:W    src0:W    0W
+    * 1: mov.nz.f0     null:D     dest1:W
+    *
+    * = After =
+    * 0: cmp.nz.f0     dest1:W    src0:W    0W
+    */
+
+   brw_calculate_cfg(*v);
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(0, block0->end_ip);
+
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_NZ, instruction(block0, 0)->conditional_mod);
+}

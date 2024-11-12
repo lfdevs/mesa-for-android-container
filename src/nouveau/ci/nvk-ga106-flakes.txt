@@ -1,3 +1,27 @@
+dEQP-VK.binding_model.mutable_descriptor.single.uniform_texel_buffer.update_copy.nonmutable_source.normal_source.pool_same_types.update_after_bind.no_array.tese
+
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.layers_3.a8b8g8r8_uint_pack32.samples_8
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.layers_3.b8g8r8a8_srgb.samples_8_resolve_level_3
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.layers_3.b8g8r8a8_unorm.samples_8_baseLayer1
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.layers_3.r16g16b16a16_sint.samples_8_resolve_level_4
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.r32g32b32a32_sint.samples_8_resolve_level_4
+
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_r8g8b8a8_unorm_4096_4096
+dEQP-VK.image.host_image_copy.optimal.image_to_image_copy.shader_read_only_optimal.stencil_read_only_optimal.51x63x1_1.64.r8g8b8a8_unorm
+dEQP-VK.image.host_image_copy.optimal.image_to_image_copy.transfer_src_optimal.general.32x32x1_2.64.r16_sfloat
+
+dEQP-VK.memory.pipeline_barrier.host_write_transfer_src.1048576
+
 dEQP-VK.pipeline.*.pipeline_cache.robustness2.storage
 
+dEQP-VK.rasterization.primitive_size.points.point_size_10000
+
+dEQP-VK.renderpass.suballocation.multisample_resolve.layers_3.r16g16_unorm.samples_8_baseLayer1
+dEQP-VK.renderpass.suballocation.multisample_resolve.layers_3.r32g32b32a32_sint.samples_8_baseLayer1
+dEQP-VK.renderpass2.suballocation.multisample_resolve.layers_3.r16g16b16a16_uint.samples_8_baseLayer1
+dEQP-VK.renderpass2.suballocation.multisample_resolve.layers_3.r8g8b8a8_snorm.samples_8
+
+dEQP-VK.shader_object.rendering.color_attachment_count_4.extra_attachment_after_2.none.none.random_color_formats.after.none.r8g8b8a8_srgb_d24_unorm_s8_uint
+
+dEQP-VK.sparse_resources.image_sparse_binding.cube_array.rg16ui.256_256_6
 dEQP-VK.sparse_resources.image_sparse_binding.cube_array.rgba32i.256_256_6

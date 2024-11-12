@@ -228,7 +228,7 @@ ac_build_gfx6_fmask_descriptor(const enum amd_gfx_level gfx_level, const struct 
          const uint64_t cmask_va = state->va + surf->cmask_offset;
 
          desc[6] |= S_008F28_COMPRESSION_EN(1);
-         desc[7] |= cmask_va >> 8;
+         desc[7] |= (cmask_va >> 8) | surf->fmask_tile_swizzle;
       }
    }
 }
@@ -1484,6 +1484,7 @@ ac_set_mutable_cb_surface_fields(const struct radeon_info *info, const struct ac
              * the texture block to read it.
              */
             cb->cb_color_info |= S_028C70_CMASK_ADDR_TYPE(2);
+            cb->cb_color_cmask |= surf->fmask_tile_swizzle;
          }
       }
    } else {

@@ -339,6 +339,13 @@ blorp_exec_on_render(struct blorp_batch *batch,
    genX(cmd_buffer_ensure_wa_14018283232)(cmd_buffer, false);
 #endif
 
+#if INTEL_WA_18038825448_GFX_VER
+   if (genX(cmd_buffer_set_coarse_pixel_active)
+       (cmd_buffer, ANV_COARSE_PIXEL_STATE_DISABLED)) {
+      batch->flags |= BLORP_BATCH_FORCE_CPS_DEPENDENCY;
+   }
+#endif
+
    if (params->depth.enabled &&
        !(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
       genX(cmd_buffer_emit_gfx12_depth_wa)(cmd_buffer, &params->depth.surf);
@@ -418,7 +425,11 @@ blorp_exec_on_render(struct blorp_batch *batch,
    }
 
    anv_cmd_dirty_mask_t dirty = ~(ANV_CMD_DIRTY_INDEX_BUFFER |
-                                  ANV_CMD_DIRTY_XFB_ENABLE);
+                                  ANV_CMD_DIRTY_XFB_ENABLE |
+                                  ANV_CMD_DIRTY_OCCLUSION_QUERY_ACTIVE |
+                                  ANV_CMD_DIRTY_FS_MSAA_FLAGS |
+                                  ANV_CMD_DIRTY_RESTART_INDEX |
+                                  ANV_CMD_DIRTY_COARSE_PIXEL_ACTIVE);
 
    cmd_buffer->state.gfx.vb_dirty = ~0;
    cmd_buffer->state.gfx.dirty |= dirty;
@@ -458,6 +469,55 @@ blorp_exec_on_blitter(struct blorp_batch *batch,
    blorp_exec(batch, params);
 }
 
+static enum isl_aux_op
+get_color_aux_op(const struct blorp_params *params)
+{
+   switch (params->op) {
+   case BLORP_OP_CCS_RESOLVE:
+   case BLORP_OP_CCS_PARTIAL_RESOLVE:
+   case BLORP_OP_CCS_COLOR_CLEAR:
+   case BLORP_OP_MCS_COLOR_CLEAR:
+      assert(params->fast_clear_op != ISL_AUX_OP_NONE);
+      return params->fast_clear_op;
+
+   /* Some auxiliary surface operations are not provided by hardware. To
+    * provide that functionality, BLORP sometimes tries to emulate what
+    * hardware would do with custom pixel shaders. For now, we assume that
+    * BLORP's implementation has the same cache invalidation and flushing
+    * requirements as similar hardware operations.
+    */
+   case BLORP_OP_CCS_AMBIGUATE:
+      assert(GFX_VER >= 11 || params->fast_clear_op == ISL_AUX_OP_NONE);
+      return ISL_AUX_OP_AMBIGUATE;
+   case BLORP_OP_MCS_AMBIGUATE:
+      assert(params->fast_clear_op == ISL_AUX_OP_NONE);
+      return ISL_AUX_OP_AMBIGUATE;
+   case BLORP_OP_MCS_PARTIAL_RESOLVE:
+      assert(params->fast_clear_op == ISL_AUX_OP_NONE);
+      return ISL_AUX_OP_PARTIAL_RESOLVE;
+
+   /* If memory aliasing is being done on an image, a pending fast clear
+    * could hit the destination address at an unknown time. Go back to the
+    * regular drawing mode to avoid this case.
+    */
+   case BLORP_OP_HIZ_AMBIGUATE:
+   case BLORP_OP_HIZ_CLEAR:
+   case BLORP_OP_HIZ_RESOLVE:
+   case BLORP_OP_SLOW_DEPTH_CLEAR:
+      assert(params->fast_clear_op == ISL_AUX_OP_NONE);
+      return ISL_AUX_OP_NONE;
+
+   /* The remaining operations are considered regular draws. */
+   case BLORP_OP_SLOW_COLOR_CLEAR:
+   case BLORP_OP_BLIT:
+   case BLORP_OP_COPY:
+      assert(params->fast_clear_op == ISL_AUX_OP_NONE);
+      return ISL_AUX_OP_NONE;
+   }
+
+   unreachable("Invalid value in params->op");
+}
+
 void
 genX(blorp_exec)(struct blorp_batch *batch,
                  const struct blorp_params *params)
@@ -473,6 +533,10 @@ genX(blorp_exec)(struct blorp_batch *batch,
          intel_get_default_l3_config(cmd_buffer->device->info);
       genX(cmd_buffer_config_l3)(cmd_buffer, cfg);
    }
+
+   /* Flush any in-progress CCS/MCS operations as needed. */
+   const enum isl_aux_op aux_op = get_color_aux_op(params);
+   genX(cmd_buffer_update_color_aux_op(cmd_buffer, aux_op));
 
    if (batch->flags & BLORP_BATCH_USE_BLITTER)
       blorp_exec_on_blitter(batch, params);

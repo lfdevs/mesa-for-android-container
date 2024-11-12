@@ -402,7 +402,7 @@ static void si_set_sampler_view_desc(struct si_context *sctx, struct si_sampler_
 
 static bool color_needs_decompression(struct si_texture *tex)
 {
-   struct si_screen *sscreen = (struct si_screen *)tex->buffer.b.b.screen;
+   struct si_screen *sscreen = si_screen(tex->buffer.b.b.screen);
 
    if (sscreen->info.gfx_level >= GFX11 || tex->is_depth)
       return false;
@@ -494,7 +494,8 @@ static void si_set_sampler_views(struct si_context *sctx, unsigned shader,
                      }
                   }
 
-                  if (vi_dcc_enabled(tex, sview->base.u.tex.first_level) &&
+                  if (shader == PIPE_SHADER_FRAGMENT &&
+                      vi_dcc_enabled(tex, sview->base.u.tex.first_level) &&
                       p_atomic_read(&tex->framebuffers_bound))
                      sctx->need_check_render_feedback = true;
                }
@@ -722,7 +723,7 @@ static void si_set_shader_image_desc(struct si_context *ctx, const struct pipe_i
       unsigned width = res->b.b.width0;
       unsigned height = res->b.b.height0;
       unsigned depth = res->b.b.depth0;
-      unsigned hw_level = level;
+      unsigned view_level = level;
 
       if (ctx->gfx_level <= GFX8) {
          /* Always force the base level to the selected level.
@@ -734,7 +735,7 @@ static void si_set_shader_image_desc(struct si_context *ctx, const struct pipe_i
          width = u_minify(width, level);
          height = u_minify(height, level);
          depth = u_minify(depth, level);
-         hw_level = 0;
+         view_level = 0;
       }
 
       if (access & SI_IMAGE_ACCESS_BLOCK_FORMAT_AS_UINT) {
@@ -751,13 +752,12 @@ static void si_set_shader_image_desc(struct si_context *ctx, const struct pipe_i
          }
       }
 
-      screen->make_texture_descriptor(
-         screen, tex, false, res->b.b.target, view->format, swizzle, hw_level, hw_level,
-         view->u.tex.first_layer, view->u.tex.last_layer, width, height, depth, false,
-         desc, fmask_desc);
+      si_make_texture_descriptor(screen, tex, false, res->b.b.target, view->format, swizzle,
+                                 view_level, view_level, view->u.tex.first_layer,
+                                 view->u.tex.last_layer, width, height, depth, false, desc,
+                                 fmask_desc);
       si_set_mutable_tex_desc_fields(screen, tex, &tex->surface.u.legacy.level[level], level, level,
-                                     util_format_get_blockwidth(view->format),
-                                     false, access, desc);
+                                     util_format_get_blockwidth(view->format), false, access, desc);
    }
 }
 
@@ -810,7 +810,8 @@ static void si_set_shader_image(struct si_context *ctx, unsigned shader, unsigne
             images->display_dcc_store_mask &= ~(1u << slot);
          }
 
-         if (vi_dcc_enabled(tex, level) && p_atomic_read(&tex->framebuffers_bound))
+         if (shader == PIPE_SHADER_FRAGMENT && vi_dcc_enabled(tex, level) &&
+             p_atomic_read(&tex->framebuffers_bound))
             ctx->need_check_render_feedback = true;
       }
    }
@@ -1639,7 +1640,7 @@ static void si_mark_bindless_descriptors_dirty(struct si_context *sctx)
    /* gfx_shader_pointers uploads bindless descriptors. */
    si_mark_atom_dirty(sctx, &sctx->atoms.s.gfx_shader_pointers);
    /* gfx_shader_pointers can flag cache flags, so we need to dirty this too. */
-   si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+   si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
 }
 
 /* Update all buffer bindings where the buffer is bound, including
@@ -1895,8 +1896,8 @@ static void si_upload_bindless_descriptors(struct si_context *sctx)
    /* Wait for graphics/compute to be idle before updating the resident
     * descriptors directly in memory, in case the GPU is using them.
     */
-   sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_CS_PARTIAL_FLUSH;
-   si_emit_cache_flush_direct(sctx);
+   sctx->barrier_flags |= SI_BARRIER_SYNC_PS | SI_BARRIER_SYNC_CS;
+   si_emit_barrier_direct(sctx);
 
    util_dynarray_foreach (&sctx->resident_tex_handles, struct si_texture_handle *, tex_handle) {
       unsigned desc_slot = (*tex_handle)->desc_slot;
@@ -1919,11 +1920,11 @@ static void si_upload_bindless_descriptors(struct si_context *sctx)
    }
 
    /* Invalidate scalar L0 because the cache doesn't know that L2 changed. */
-   sctx->flags |= SI_CONTEXT_INV_SCACHE;
+   sctx->barrier_flags |= SI_BARRIER_INV_SMEM;
 
    /* TODO: Range-invalidate GL2 */
    if (sctx->screen->info.cp_sdma_ge_use_system_memory_scope)
-      sctx->flags |= SI_CONTEXT_INV_L2;
+      sctx->barrier_flags |= SI_BARRIER_INV_L2;
 
    sctx->bindless_descriptors_dirty = false;
 }

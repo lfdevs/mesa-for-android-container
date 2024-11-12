@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MIT
 
 fs = import('fs')
-rust = import('rust')
 
 libmesa_rust_util_files = files(
   'util/lib.rs',
@@ -76,6 +75,13 @@ rusticl_args = [
   '-Aclippy::type_complexity',
 ]
 
+rusticl_drivers_enable = get_option('gallium-rusticl-enable-drivers')
+foreach driver : rusticl_drivers_enable
+  rusticl_args += [
+    '--cfg', 'rusticl_enable_' + driver,
+  ]
+endforeach
+
 if with_platform_x11
   rusticl_args += [
     '--cfg', 'glx',
@@ -105,16 +111,6 @@ rusticl_bindgen_args = [
   '--with-derive-default',
   '--anon-fields-prefix', 'anon_',
 ]
-
-bindgen_version = find_program('bindgen').version()
-
-if bindgen_version == 'unknown'
-  error('Failed to detect bindgen version. If you are using bindgen 0.69.0, please either update to 0.69.1 or downgrade to 0.68.1. You can install the latest version for your user with `cargo install bindgen-cli`.')
-endif
-
-if bindgen_version.version_compare('< 0.65')
-  error('rusticl requires bindgen 0.65 or newer. If your distribution does not ship a recent enough version, you can install the latest version for your user with `cargo install bindgen-cli`.')
-endif
 
 rusticl_bindgen_c_args = [
   '-fno-builtin-malloc',

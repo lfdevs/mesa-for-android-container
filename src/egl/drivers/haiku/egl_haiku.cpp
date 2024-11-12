@@ -361,6 +361,9 @@ haiku_initialize_impl(_EGLDisplay *disp, void *platformDisplay)
    disp->Extensions.IMG_context_priority =
       hgl_dpy->disp->fscreen->screen->get_param(hgl_dpy->disp->fscreen->screen,
                                                 PIPE_CAP_CONTEXT_PRIORITY_MASK);
+   disp->Extensions.NV_context_priority_realtime =
+      disp->Extensions.IMG_context_priority &
+      (1 << __EGL_CONTEXT_PRIORITY_REALTIME_BIT);
 
    disp->Extensions.EXT_pixel_format_float = EGL_TRUE;
 

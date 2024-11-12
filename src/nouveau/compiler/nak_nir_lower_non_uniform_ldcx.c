@@ -432,7 +432,7 @@ lower_cf_list(nir_builder *b, struct exec_list *cf_list)
 
       case nir_cf_node_if: {
          nir_if *nif = nir_cf_node_as_if(node);
-         if (nif->condition.ssa->divergent) {
+         if (nir_src_is_divergent(&nif->condition)) {
             nir_block *succ = nir_cf_node_as_block(nir_cf_node_next(node));
             progress |= lower_non_uniform_cf_node(b, node, block, succ);
          } else {
@@ -444,7 +444,7 @@ lower_cf_list(nir_builder *b, struct exec_list *cf_list)
 
       case nir_cf_node_loop: {
          nir_loop *loop = nir_cf_node_as_loop(node);
-         if (loop->divergent) {
+         if (nir_loop_is_divergent(loop)) {
             nir_block *succ = nir_cf_node_as_block(nir_cf_node_next(node));
             progress |= lower_non_uniform_cf_node(b, node, block, succ);
          } else {

@@ -21,6 +21,8 @@ enum panvk_debug_flags {
    PANVK_DEBUG_LINEAR = 1 << 5,
    PANVK_DEBUG_DUMP = 1 << 6,
    PANVK_DEBUG_NO_KNOWN_WARN = 1 << 7,
+   PANVK_DEBUG_CS = 1 << 8,
+   PANVK_DEBUG_COPY_GFX = 1 << 9,
 };
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \

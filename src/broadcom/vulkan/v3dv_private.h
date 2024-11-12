@@ -115,12 +115,6 @@
 
 struct v3dv_instance;
 
-#ifdef USE_V3D_SIMULATOR
-#define using_v3d_simulator true
-#else
-#define using_v3d_simulator false
-#endif
-
 struct v3d_simulator_file;
 
 /* Minimum required by the Vulkan 1.1 spec */
@@ -145,10 +139,6 @@ struct v3dv_physical_device {
    dev_t primary_devid;
    dev_t render_devid;
 
-#if using_v3d_simulator
-   uint32_t device_id;
-#endif
-
    uint8_t driver_build_sha1[20];
    uint8_t pipeline_cache_uuid[VK_UUID_SIZE];
    uint8_t device_uuid[VK_UUID_SIZE];
@@ -168,7 +158,9 @@ struct v3dv_physical_device {
 
    struct v3d_device_info devinfo;
 
+#if USE_V3D_SIMULATOR
    struct v3d_simulator_file *sim_file;
+#endif
 
    const struct v3d_compiler *compiler;
    uint32_t next_program_id;
@@ -2568,10 +2560,11 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(v3dv_sampler, base, VkSampler,
 static inline int
 v3dv_ioctl(int fd, unsigned long request, void *arg)
 {
-   if (using_v3d_simulator)
-      return v3d_simulator_ioctl(fd, request, arg);
-   else
-      return drmIoctl(fd, request, arg);
+#if USE_V3D_SIMULATOR
+   return v3d_simulator_ioctl(fd, request, arg);
+#else
+   return drmIoctl(fd, request, arg);
+#endif
 }
 
 /* Flags OOM conditions in command buffer state.

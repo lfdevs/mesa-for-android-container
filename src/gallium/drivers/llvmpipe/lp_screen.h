@@ -75,7 +75,7 @@ struct llvmpipe_screen
 
    struct disk_cache *disk_shader_cache;
 
-#ifdef HAVE_LIBDRM
+#if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    int udmabuf_fd;
 #endif
 
@@ -85,6 +85,9 @@ struct llvmpipe_screen
    uint64_t mem_file_size;
    struct util_vma_heap mem_heap;
 #endif
+
+   struct llvmpipe_memory_allocation *dummy_dmabuf;
+   int dummy_sync_fd;
 };
 
 

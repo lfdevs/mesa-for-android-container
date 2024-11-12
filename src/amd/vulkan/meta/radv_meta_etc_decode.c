@@ -136,7 +136,7 @@ radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *imag
                .layerCount = subresource->baseArrayLayer + vk_image_subresource_layer_count(&image->vk, subresource),
             },
       },
-      0, NULL);
+      NULL);
 
    VkFormat store_format = vk_texcompress_etc2_store_format(image->vk.format);
    struct radv_image_view dst_iview;
@@ -156,7 +156,7 @@ radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *imag
                .layerCount = subresource->baseArrayLayer + vk_image_subresource_layer_count(&image->vk, subresource),
             },
       },
-      0, NULL);
+      NULL);
 
    decode_etc(cmd_buffer, &src_iview, &dst_iview, &(VkOffset3D){offset.x, offset.y, base_slice},
               &(VkExtent3D){extent.width, extent.height, slice_count});

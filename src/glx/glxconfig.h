@@ -36,11 +36,11 @@ struct glx_config {
     GLuint doubleBufferMode;
     GLuint stereoMode;
 
-    GLint redBits, greenBits, blueBits, alphaBits;	/* bits per comp */
+    GLint redBits, greenBits, blueBits, alphaBits;   /* bits per comp */
     GLuint redMask, greenMask, blueMask, alphaMask;
     GLuint redShift, greenShift, blueShift, alphaShift;
-    GLint rgbBits;		/* total bits for rgb */
-    GLint indexBits;		/* total bits for colorindex */
+    GLint rgbBits;      /* total bits for rgb */
+    GLint indexBits;      /* total bits for colorindex */
 
     GLint accumRedBits, accumGreenBits, accumBlueBits, accumAlphaBits;
     GLint depthBits;
@@ -53,15 +53,15 @@ struct glx_config {
     /* GLX */
     GLint visualID;
     GLint visualType;     /**< One of the GLX X visual types. (i.e., 
-			   * \c GLX_TRUE_COLOR, etc.)
-			   */
+            * \c GLX_TRUE_COLOR, etc.)
+            */
 
     /* EXT_visual_rating / GLX 1.2 */
     GLint visualRating;
 
     /* EXT_visual_info / GLX 1.2 */
     GLint transparentPixel;
-				/*    colors are floats scaled to ints */
+            /*    colors are floats scaled to ints */
     GLint transparentRed, transparentGreen, transparentBlue, transparentAlpha;
     GLint transparentIndex;
 

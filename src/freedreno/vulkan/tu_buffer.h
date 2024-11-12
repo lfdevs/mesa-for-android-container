@@ -20,6 +20,7 @@ struct tu_buffer
 
    struct tu_bo *bo;
    uint64_t iova;
+   uint64_t bo_size;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_buffer, vk.base, VkBuffer,

@@ -55,6 +55,8 @@ if echo $BM_CMDLINE | grep -q "root=/dev/nfs"; then
   BM_FASTBOOT_NFSROOT=1
 fi
 
+section_start prepare_rootfs "Preparing rootfs components"
+
 set -ex
 
 # Clear out any previous run's artifacts.
@@ -105,7 +107,7 @@ if echo "$BM_KERNEL $BM_DTB" | grep -q http; then
 
   cat kernel dtb > Image.gz-dtb
 
-elif [ -n "${FORCE_KERNEL_TAG}" ]; then
+elif [ -n "${EXTERNAL_KERNEL_TAG}" ]; then
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
       "${FDO_HTTP_CACHE_URI:-}${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/${BM_KERNEL}" -o kernel
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
@@ -148,10 +150,12 @@ if [ -n "$BM_SERIAL_SCRIPT" ]; then
   done
 fi
 
+section_end prepare_rootfs
+
 set +e
 $BM/fastboot_run.py \
   --dev="$BM_SERIAL" \
-  --test-timeout ${TEST_PHASE_TIMEOUT:-20} \
+  --test-timeout ${TEST_PHASE_TIMEOUT_MINUTES:-20} \
   --fbserial="$BM_FASTBOOT_SERIAL" \
   --powerup="$BM_POWERUP" \
   --powerdown="$BM_POWERDOWN"

@@ -4,12 +4,12 @@
 #![allow(unstable_name_collisions)]
 
 use crate::api::{GetDebugFlags, DEBUG};
-use crate::bitset::BitSet;
 use crate::ir::*;
 use crate::liveness::{
     BlockLiveness, LiveSet, Liveness, NextUseBlockLiveness, NextUseLiveness,
 };
 
+use compiler::bitset::BitSet;
 use std::cell::RefCell;
 use std::cmp::{max, Ordering, Reverse};
 use std::collections::{BinaryHeap, HashMap, HashSet};

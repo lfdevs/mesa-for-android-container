@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2019 Rob Clark <robclark@freedesktop.org>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright © 2019 Rob Clark <robclark@freedesktop.org>
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Rob Clark <robclark@freedesktop.org>
@@ -41,7 +23,47 @@
 #include "fd6_emit.h"
 #include "fd6_pack.h"
 
-/* maybe move to fd6_program? */
+template <chip CHIP>
+static void
+cs_program_emit_local_size(struct fd_context *ctx, struct fd_ringbuffer *ring,
+                           struct ir3_shader_variant *v, uint16_t local_size[3])
+{
+   /*
+    * Devices that do not support double threadsize take the threadsize from
+    * A6XX_HLSQ_FS_CNTL_0_THREADSIZE instead of A6XX_HLSQ_CS_CNTL_1_THREADSIZE
+    * which is always set to THREAD128.
+    */
+   enum a6xx_threadsize thrsz = v->info.double_threadsize ? THREAD128 : THREAD64;
+   enum a6xx_threadsize thrsz_cs = ctx->screen->info->a6xx
+      .supports_double_threadsize ? thrsz : THREAD128;
+
+   if (CHIP == A7XX) {
+      unsigned tile_height = (local_size[1] % 8 == 0)   ? 3
+                             : (local_size[1] % 4 == 0) ? 5
+                             : (local_size[1] % 2 == 0) ? 9
+                                                           : 17;
+
+      OUT_REG(ring,
+         HLSQ_CS_CNTL_1(
+            CHIP,
+            .linearlocalidregid = INVALID_REG,
+            .threadsize = thrsz_cs,
+            .workgrouprastorderzfirsten = true,
+            .wgtilewidth = 4,
+            .wgtileheight = tile_height,
+         )
+      );
+
+      OUT_REG(ring,
+         A7XX_HLSQ_CS_LOCAL_SIZE(
+            .localsizex = local_size[0] - 1,
+            .localsizey = local_size[1] - 1,
+            .localsizez = local_size[2] - 1,
+         )
+      );
+   }
+}
+
 template <chip CHIP>
 static void
 cs_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
@@ -69,10 +91,8 @@ cs_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
                      A6XX_SP_CS_CONFIG_NTEX(v->num_samp) |
                      A6XX_SP_CS_CONFIG_NSAMP(v->num_samp)); /* SP_CS_CONFIG */
 
-   uint32_t local_invocation_id, work_group_id;
-   local_invocation_id =
-      ir3_find_sysval_regid(v, SYSTEM_VALUE_LOCAL_INVOCATION_ID);
-   work_group_id = ir3_find_sysval_regid(v, SYSTEM_VALUE_WORKGROUP_ID);
+   uint32_t local_invocation_id = v->cs.local_invocation_id;
+   uint32_t work_group_id = v->cs.work_group_id;
 
    /*
     * Devices that do not support double threadsize take the threadsize from
@@ -106,25 +126,6 @@ cs_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
                            A6XX_SP_CS_CNTL_1_THREADSIZE(thrsz));
       }
    } else {
-      enum a7xx_cs_yalign yalign = (v->local_size[1] % 8 == 0)   ? CS_YALIGN_8
-                                   : (v->local_size[1] % 4 == 0) ? CS_YALIGN_4
-                                   : (v->local_size[1] % 2 == 0) ? CS_YALIGN_2
-                                                                 : CS_YALIGN_1;
-
-      OUT_REG(ring,
-         HLSQ_CS_CNTL_1(
-            CHIP,
-            .linearlocalidregid = regid(63, 0),
-            .threadsize = thrsz_cs,
-            /* A7XX TODO: blob either sets all of these unknowns
-             * together or doesn't set them at all.
-             */
-            .unk11 = true,
-            .unk22 = true,
-            .yalign = yalign,
-         )
-      );
-
       OUT_REG(ring, HLSQ_FS_CNTL_0(CHIP, .threadsize = THREAD64));
       OUT_REG(ring,
          A6XX_SP_CS_CNTL_0(
@@ -139,19 +140,16 @@ cs_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
             CHIP,
             .linearlocalidregid = INVALID_REG,
             .threadsize = thrsz_cs,
-            /* A7XX TODO: enable UNK15 when we don't use subgroup ops. */
-            .unk15 = false,
-         )
-      );
-      OUT_REG(ring,
-         A7XX_HLSQ_CS_LOCAL_SIZE(
-            .localsizex = v->local_size[0] - 1,
-            .localsizey = v->local_size[1] - 1,
-            .localsizez = v->local_size[2] - 1,
+            .workitemrastorder =
+               v->cs.force_linear_dispatch ? WORKITEMRASTORDER_LINEAR
+                                           : WORKITEMRASTORDER_TILED,
          )
       );
       OUT_REG(ring, A7XX_SP_CS_UNKNOWN_A9BE(0)); // Sometimes is 0x08000000
    }
+
+   if (!v->local_size_variable)
+      cs_program_emit_local_size<CHIP>(ctx, ring, v, v->local_size);
 
    fd6_emit_shader<CHIP>(ctx, ring, v);
 }
@@ -174,7 +172,7 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
       cs->stateobj = fd_ringbuffer_new_object(ctx->pipe, 0x1000);
       cs_program_emit<CHIP>(ctx, cs->stateobj, cs->v);
 
-      cs->user_consts_cmdstream_size = fd6_user_consts_cmdstream_size(cs->v);
+      cs->user_consts_cmdstream_size = fd6_user_consts_cmdstream_size<CHIP>(cs->v);
    }
 
    trace_start_compute(&ctx->batch->trace, ring, !!info->indirect, info->work_dim,
@@ -212,10 +210,10 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
       fd6_emit_cs_state<CHIP>(ctx, ring, cs);
 
    if (ctx->gen_dirty & BIT(FD6_GROUP_CONST))
-      fd6_emit_cs_user_consts(ctx, ring, cs);
+      fd6_emit_cs_user_consts<CHIP>(ctx, ring, cs);
 
    if (cs->v->need_driver_params || info->input)
-      fd6_emit_cs_driver_params(ctx, ring, cs, info);
+      fd6_emit_cs_driver_params<CHIP>(ctx, ring, cs, info);
 
    OUT_PKT7(ring, CP_SET_MARKER, 1);
    OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(RM6_COMPUTE));
@@ -226,7 +224,7 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
    OUT_RING(ring, A6XX_SP_CS_UNKNOWN_A9B1_SHARED_SIZE(shared_size) |
                      A6XX_SP_CS_UNKNOWN_A9B1_UNK6);
 
-   if (ctx->screen->info->a6xx.has_lpac) {
+   if (CHIP == A6XX && ctx->screen->info->a6xx.has_lpac) {
       OUT_PKT4(ring, REG_A6XX_HLSQ_CS_UNKNOWN_B9D0, 1);
       OUT_RING(ring, A6XX_HLSQ_CS_UNKNOWN_B9D0_SHARED_SIZE(shared_size) |
                         A6XX_HLSQ_CS_UNKNOWN_B9D0_UNK6);
@@ -237,6 +235,11 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
    const unsigned *num_groups = info->grid;
    /* for some reason, mesa/st doesn't set info->work_dim, so just assume 3: */
    const unsigned work_dim = info->work_dim ? info->work_dim : 3;
+
+   if (cs->v->local_size_variable) {
+      uint16_t wg[] = {local_size[0], local_size[1], local_size[2]};
+      cs_program_emit_local_size<CHIP>(ctx, ring, cs->v, wg);
+   }
 
    OUT_REG(ring,
            HLSQ_CS_NDRANGE_0(
@@ -312,6 +315,31 @@ fd6_compute_state_delete(struct pipe_context *pctx, void *_hwcso)
    free(hwcso);
 }
 
+static void
+fd6_get_compute_state_info(struct pipe_context *pctx, void *cso, struct pipe_compute_state_object_info *info)
+{
+   static struct ir3_shader_key key; /* static is implicitly zeroed */
+   struct fd6_compute_state *cs = (struct fd6_compute_state *)cso;
+   struct ir3_shader_state *hwcso = (struct ir3_shader_state *)cs->hwcso;
+   struct ir3_shader_variant *v = ir3_shader_variant(ir3_get_shader(hwcso), key, false, &pctx->debug);
+   struct fd_context *ctx = fd_context(pctx);
+   uint32_t threadsize_base = ctx->screen->info->threadsize_base;
+
+   info->max_threads = threadsize_base * ctx->screen->info->max_waves;
+   info->simd_sizes = threadsize_base;
+   info->preferred_simd_size = threadsize_base;
+
+   if (ctx->screen->info->a6xx.supports_double_threadsize &&
+       v->info.double_threadsize) {
+
+      info->max_threads *= 2;
+      info->simd_sizes |= (threadsize_base * 2);
+      info->preferred_simd_size *= 2;
+   }
+
+   info->private_memory = v->pvtmem_size;
+}
+
 template <chip CHIP>
 void
 fd6_compute_init(struct pipe_context *pctx)
@@ -322,5 +350,6 @@ fd6_compute_init(struct pipe_context *pctx)
    ctx->launch_grid = fd6_launch_grid<CHIP>;
    pctx->create_compute_state = fd6_compute_state_create;
    pctx->delete_compute_state = fd6_compute_state_delete;
+   pctx->get_compute_state_info = fd6_get_compute_state_info;
 }
 FD_GENX(fd6_compute_init);

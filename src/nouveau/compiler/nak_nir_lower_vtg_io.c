@@ -53,6 +53,7 @@ lower_vtg_io_intrin(nir_builder *b,
                     nir_intrinsic_instr *intrin,
                     void *cb_data)
 {
+   const struct nak_compiler *nak = cb_data;
    b->cursor = nir_before_instr(&intrin->instr);
 
    nir_def *vtx = NULL, *offset = NULL, *data = NULL;
@@ -154,9 +155,9 @@ lower_vtg_io_intrin(nir_builder *b,
 
    uint32_t base_addr;
    if (b->shader->info.stage == MESA_SHADER_VERTEX && !is_output)
-      base_addr = nak_attribute_attr_addr(sem.location);
+      base_addr = nak_attribute_attr_addr(nak, sem.location);
    else
-      base_addr = nak_varying_attr_addr(sem.location);
+      base_addr = nak_varying_attr_addr(nak, sem.location);
    base_addr += 4 * component;
 
    uint32_t range;
@@ -253,5 +254,5 @@ nak_nir_lower_vtg_io(nir_shader *nir, const struct nak_compiler *nak)
 {
    return nir_shader_intrinsics_pass(nir, lower_vtg_io_intrin,
                                      nir_metadata_control_flow,
-                                     NULL);
+                                     (void *)nak);
 }

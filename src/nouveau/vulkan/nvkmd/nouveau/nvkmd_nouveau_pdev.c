@@ -140,6 +140,9 @@ nvkmd_nouveau_pdev_destroy(struct nvkmd_pdev *_pdev)
 {
    struct nvkmd_nouveau_pdev *pdev = nvkmd_nouveau_pdev(_pdev);
 
+   if (pdev->primary_fd >= 0)
+      close(pdev->primary_fd);
+
    nouveau_ws_device_destroy(pdev->ws_dev);
    FREE(pdev);
 }

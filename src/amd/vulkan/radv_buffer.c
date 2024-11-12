@@ -194,23 +194,11 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
    pMemoryRequirements->memoryRequirements.memoryTypeBits =
       ((1u << pdev->memory_properties.memoryTypeCount) - 1u) & ~pdev->memory_types_32bit;
 
-   /* Allow 32-bit address-space for DGC usage, as this buffer will contain
-    * cmd buffer upload buffers, and those get passed to shaders through 32-bit
-    * pointers.
-    *
-    * We only allow it with this usage set, to "protect" the 32-bit address space
-    * from being overused. The actual requirement is done as part of
-    * vkGetGeneratedCommandsMemoryRequirementsNV. (we have to make sure their
-    * intersection is non-zero at least)
-    */
-   if ((usage & VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR) && radv_uses_device_generated_commands(device))
-      pMemoryRequirements->memoryRequirements.memoryTypeBits |= pdev->memory_types_32bit;
-
    /* Force 32-bit address-space for descriptor buffers usage because they are passed to shaders
     * through 32-bit pointers.
     */
-   if (usage &
-       (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
+   if (usage & (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT))
       pMemoryRequirements->memoryRequirements.memoryTypeBits = pdev->memory_types_32bit;
 
    if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)

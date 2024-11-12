@@ -19,11 +19,15 @@
         - src/intel/ci/$GPU_VERSION-fails.txt
         - src/intel/ci/$GPU_VERSION-flakes.txt
         - src/intel/ci/$GPU_VERSION-skips.txt
+        - src/intel/ci/$GPU_VERSION-slow-skips.txt
+        - src/intel/ci/$VK_DRIVER-skips.txt
+        - src/intel/ci/$GALLIUM_DRIVER-skips.txt
+        - src/intel/ci/$DRIVER_NAME-skips.txt
         - src/intel/ci/$PIGLIT_TRACES_FILE
       when: on_success
 
 .intel-common-manual-rules:
-  stage: intel
+  stage: intel-postmerge
   rules:
     - changes:
         *intel_common_file_list
@@ -41,7 +45,7 @@
       when: on_success
 
 .i915g-manual-rules:
-  stage: intel
+  stage: intel-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -63,7 +67,7 @@
       when: on_success
 
 .crocus-manual-rules:
-  stage: intel
+  stage: intel-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -87,7 +91,7 @@
       when: on_success
 
 .iris-manual-rules:
-  stage: intel
+  stage: intel-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -101,7 +105,7 @@
 # to do duplicate the files lists to set the job to manual (see
 # .performance-rules)
 .iris-rules-performance:
-  stage: intel
+  stage: performance
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -114,7 +118,8 @@
   allow_failure: true # see comment in .performance-rules, which we don't inherit this line from.
   variables:
     JOB_PRIORITY: 40
-    S3_ARTIFACT_NAME: "mesa-x86_64-default-release"
+    LAVA_S3_ARTIFACT_NAME: mesa-x86_64-default-release
+    S3_ARTIFACT_NAME: mesa-python-test
   needs:
     - kernel+rootfs_x86_64
     - debian-release
@@ -132,7 +137,7 @@
       when: on_success
 
 .anv-manual-rules:
-  stage: intel
+  stage: intel-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -155,7 +160,7 @@
       when: on_success
 
 .hasvk-manual-rules:
-  stage: intel
+  stage: intel-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -175,7 +180,7 @@
     - !reference [.anv-rules, rules]
 
 .intel-manual-rules:
-  stage: intel
+  stage: intel-postmerge
   rules:
     - !reference [.test, rules]
     - !reference [.iris-manual-rules, rules]
@@ -191,6 +196,16 @@
     GPU_VERSION: iris-jsl
     HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-acer-cb317-1h-c3z6-dedede
+
+# Status: https://lava.collabora.dev/scheduler/device_type/acer-cbv514-1h-34uz-brya
+.lava-acer-cbv514-1h-34uz-brya:x86_64:
+  variables:
+    DEVICE_TYPE: acer-cbv514-1h-34uz-brya
+    FARM: collabora
+    FDO_CI_CONCURRENT: 9
+    GPU_VERSION: anv-adl
+    HWCI_KERNEL_MODULES: i915
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-cbv514-1h-34uz-brya
 
 # Status: https://lava.collabora.dev/scheduler/device_type/asus-C523NA-A20057-coral
 .lava-asus-C523NA-A20057-coral:x86_64:
@@ -265,6 +280,7 @@
     RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
 
 # Status: https://lava.collabora.dev/scheduler/device_type/asus-C436FA-Flip-hatch
+# Note: Reported they have too often network problems and fail to boot. Puff device is the alternative.
 .lava-asus-C436FA-Flip-hatch:x86_64:
   variables:
     DEVICE_TYPE: asus-C436FA-Flip-hatch
@@ -273,6 +289,14 @@
     GPU_VERSION: iris-cml
     HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-flip-hatch
+
+# Status: https://lava.collabora.dev/scheduler/device_type/acer-chromebox-cxi4-puff
+.lava-acer-chromebox-cxi4-puff:x86_64:
+  variables:
+    DEVICE_TYPE: acer-chromebox-cxi4-puff
+    FDO_CI_CONCURRENT: 9
+    GPU_VERSION: iris-cml
+    RUNNER_TAG: mesa-ci-x86-64-lava-acer-chromebox-cxi4-puff
 
 
 .intel-common-test:
@@ -308,7 +332,6 @@
 .anv-angle-test:
   extends:
     - .anv-test
-    - .intel-rules # Note: Xorg uses iris, so depend on both GL and vulkan
   variables:
     VK_DRIVER: intel
     USE_ANGLE: 1
@@ -345,8 +368,9 @@
 .iris-cml-test:
   extends:
     - .iris-test
-    - .iris-manual-rules    # Devices have too often network problems and fail to boot.
-    - .lava-asus-C436FA-Flip-hatch:x86_64
+    - .lava-acer-chromebox-cxi4-puff:x86_64
+#  variables:
+#    LAVA_FORCE_UART: 1
 
 .iris-whl-deqp:
   extends:
@@ -390,7 +414,8 @@
     HWCI_FREQ_MAX: "true"
     LAVA_TAGS: "cbg-0"
     # Ensure that we are using the release build artifact
-    S3_ARTIFACT_NAME: mesa-x86_64-default-release
+    LAVA_S3_ARTIFACT_NAME: mesa-x86_64-default-release
+    S3_ARTIFACT_NAME: mesa-python-test
 
 .iris-whl-traces-performance:
   extends:
@@ -407,6 +432,13 @@
     GPU_VERSION: intel-cml
 
 ## Intel (anv + iris)
+.intel-adl-test:
+  extends:
+    - .anv-test
+    - .intel-test
+  variables:
+    GPU_VERSION: intel-adl
+
 .intel-tgl-test:
   extends:
     - .anv-test

@@ -134,6 +134,7 @@ Enum("intel_platform",
       EnumValue("INTEL_PLATFORM_ARL_H", group_end="ARL"),
       "INTEL_PLATFORM_LNL",
       "INTEL_PLATFORM_BMG",
+      "INTEL_PLATFORM_PTL",
       ])
 
 Struct("intel_memory_class_instance",
@@ -467,6 +468,8 @@ Struct("intel_device_info",
                implementation details, the range of scratch ids may be larger than the
                number of subslices.""")),
 
+        Member("uint32_t", "max_scratch_size_per_thread", compiler_field=True),
+
         Member("intel_device_info_urb_desc", "urb"),
         Member("unsigned", "max_constant_urb_size_kb"),
         Member("unsigned", "mesh_max_constant_urb_size_kb"),
@@ -479,6 +482,7 @@ Struct("intel_device_info",
         Member("int", "simulator_id"),
         Member("char", "name", array="INTEL_DEVICE_MAX_NAME_SIZE"),
         Member("bool", "no_hw"),
+        Member("bool", "probe_forced", comment="Device needed INTEL_FORCE_PROBE"),
         Member("intel_device_info_mem_desc", "mem"),
         Member("intel_device_info_pat_desc", "pat"),
         Member("intel_cooperative_matrix_configuration",

@@ -78,12 +78,15 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
    VK_FROM_HANDLE(panvk_image, image, pCreateInfo->image);
+   bool driver_internal =
+      (pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA) != 0;
    struct panvk_image_view *view;
+   VkResult result;
 
-   view = vk_image_view_create(&device->vk, false, pCreateInfo, pAllocator,
-                               sizeof(*view));
+   view = vk_image_view_create(&device->vk, driver_internal, pCreateInfo,
+                               pAllocator, sizeof(*view));
    if (view == NULL)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    view->pview = (struct pan_image_view){
       .planes[0] = &image->pimage,
@@ -101,22 +104,27 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
     * depth and stencil but the view only contains one of these components, so
     * we can ignore the component we don't use.
     */
-   if (image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT &&
-       view->vk.view_format != VK_FORMAT_D32_SFLOAT_S8_UINT)
-      view->pview.format = view->vk.view_format == VK_FORMAT_D32_SFLOAT
-                              ? PIPE_FORMAT_Z32_FLOAT_S8X24_UINT
-                              : PIPE_FORMAT_X32_S8X24_UINT;
+   if (vk_format_is_depth_or_stencil(view->vk.view_format)) {
+      if (image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT &&
+          view->vk.view_format != VK_FORMAT_D32_SFLOAT_S8_UINT)
+         view->pview.format = view->vk.view_format == VK_FORMAT_D32_SFLOAT
+                                 ? PIPE_FORMAT_Z32_FLOAT_S8X24_UINT
+                                 : PIPE_FORMAT_X32_S8X24_UINT;
 
-   if (image->vk.format == VK_FORMAT_D24_UNORM_S8_UINT &&
-       view->vk.view_format == VK_FORMAT_S8_UINT)
-      view->pview.format = PIPE_FORMAT_X24S8_UINT;
+      if (image->vk.format == VK_FORMAT_D24_UNORM_S8_UINT &&
+          view->vk.view_format == VK_FORMAT_S8_UINT)
+         view->pview.format = PIPE_FORMAT_X24S8_UINT;
 
-   if (image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT &&
-       view->vk.view_format == VK_FORMAT_S8_UINT)
-      view->pview.format = PIPE_FORMAT_X32_S8X24_UINT;
+      if (image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT &&
+          view->vk.view_format == VK_FORMAT_S8_UINT)
+         view->pview.format = PIPE_FORMAT_X32_S8X24_UINT;
+   }
 
+   /* Attachments need a texture for the FB preload logic. */
    VkImageUsageFlags tex_usage_mask =
-      VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+      VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
 #if PAN_ARCH >= 9
    /* Valhall passes a texture descriptor to LEA_TEX. */
@@ -128,6 +136,10 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
        * descriptor emission without changing the original definition.
        */
       struct pan_image_view pview = view->pview;
+      bool can_preload_other_aspect =
+         (view->vk.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
+         (image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+          image->vk.format == VK_FORMAT_D24_UNORM_S8_UINT);
 
       if (util_format_is_depth_or_stencil(view->pview.format)) {
          /* Vulkan wants R001, where the depth/stencil is stored in the red
@@ -145,11 +157,23 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
       }
 
       struct panvk_pool_alloc_info alloc_info = {
-         .alignment = pan_alignment(TEXTURE),
-         .size = GENX(panfrost_estimate_texture_payload_size)(&pview),
+#if PAN_ARCH == 6
+         .alignment = pan_alignment(SURFACE_WITH_STRIDE),
+#elif PAN_ARCH == 7
+         .alignment = pan_alignment(MULTIPLANAR_SURFACE),
+#else
+         .alignment = pan_alignment(PLANE),
+#endif
+
+         .size = GENX(panfrost_estimate_texture_payload_size)(&pview) *
+                 (can_preload_other_aspect ? 2 : 1),
       };
 
       view->mem = panvk_pool_alloc_mem(&device->mempools.rw, alloc_info);
+      if (!panvk_priv_mem_host_addr(view->mem)) {
+         result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+	 goto err_destroy_iview;
+      }
 
       struct panfrost_ptr ptr = {
          .gpu = panvk_priv_mem_dev_addr(view->mem),
@@ -157,6 +181,33 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
       };
 
       GENX(panfrost_new_texture)(&pview, view->descs.tex.opaque, &ptr);
+
+      if (can_preload_other_aspect) {
+         switch (pview.format) {
+         case PIPE_FORMAT_Z32_FLOAT:
+         case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+            pview.format = PIPE_FORMAT_X32_S8X24_UINT;
+            break;
+         case PIPE_FORMAT_X32_S8X24_UINT:
+            pview.format = PIPE_FORMAT_Z32_FLOAT_S8X24_UINT;
+            break;
+         case PIPE_FORMAT_Z24X8_UNORM:
+         case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+            pview.format = PIPE_FORMAT_X24S8_UINT;
+            break;
+         case PIPE_FORMAT_X24S8_UINT:
+            pview.format = PIPE_FORMAT_Z24X8_UNORM;
+            break;
+         default:
+            assert(!"Invalid format");
+         }
+
+         ptr.cpu += alloc_info.size / 2;
+         ptr.gpu += alloc_info.size / 2;
+
+         GENX(panfrost_new_texture)(&pview, view->descs.other_aspect_tex.opaque,
+                                    &ptr);
+      }
    }
 
 #if PAN_ARCH <= 7
@@ -193,12 +244,13 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
       pan_pack(view->descs.img_attrib_buf[1].opaque,
                ATTRIBUTE_BUFFER_CONTINUATION_3D, cfg) {
          unsigned level = view->pview.first_level;
+         VkExtent3D extent = view->vk.extent;
 
-         cfg.s_dimension = u_minify(image->pimage.layout.width, level);
-         cfg.t_dimension = u_minify(image->pimage.layout.height, level);
+         cfg.s_dimension = extent.width;
+         cfg.t_dimension = extent.height;
          cfg.r_dimension =
             view->pview.dim == MALI_TEXTURE_DIMENSION_3D
-               ? u_minify(image->pimage.layout.depth, level)
+               ? extent.depth
                : (view->pview.last_layer - view->pview.first_layer + 1);
          cfg.row_stride = image->pimage.layout.slices[level].row_stride;
          if (cfg.r_dimension > 1) {
@@ -211,6 +263,10 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
 
    *pView = panvk_image_view_to_handle(view);
    return VK_SUCCESS;
+
+err_destroy_iview:
+   vk_image_view_destroy(&device->vk, pAllocator, &view->vk);
+   return result;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -223,6 +279,6 @@ panvk_per_arch(DestroyImageView)(VkDevice _device, VkImageView _view,
    if (!view)
       return;
 
-   panvk_pool_free_mem(&device->mempools.rw, view->mem);
+   panvk_pool_free_mem(&view->mem);
    vk_image_view_destroy(&device->vk, pAllocator, &view->vk);
 }

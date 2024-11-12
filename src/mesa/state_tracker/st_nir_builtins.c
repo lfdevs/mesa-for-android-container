@@ -81,7 +81,7 @@ st_nir_finish_builtin_nir(struct st_context *st, nir_shader *nir)
    }
 }
 
-struct pipe_shader_state *
+void *
 st_nir_finish_builtin_shader(struct st_context *st,
                              nir_shader *nir)
 {
@@ -98,7 +98,7 @@ st_nir_finish_builtin_shader(struct st_context *st,
 /**
  * Make a simple shader that copies inputs to corresponding outputs.
  */
-struct pipe_shader_state *
+void *
 st_nir_make_passthrough_shader(struct st_context *st,
                                const char *shader_name,
                                gl_shader_stage stage,
@@ -143,7 +143,7 @@ st_nir_make_passthrough_shader(struct st_context *st,
  * Make a simple shader that reads color value from a constant buffer
  * and uses it to clear all color buffers.
  */
-struct pipe_shader_state *
+void *
 st_nir_make_clearcolor_shader(struct st_context *st)
 {
    const nir_shader_compiler_options *options =

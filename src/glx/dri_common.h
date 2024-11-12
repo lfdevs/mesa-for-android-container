@@ -48,23 +48,19 @@ typedef struct __GLXDRIconfigPrivateRec __GLXDRIconfigPrivate;
 struct __GLXDRIconfigPrivateRec
 {
    struct glx_config base;
-   const __DRIconfig *driConfig;
+   const struct dri_config *driConfig;
 };
 
-extern struct glx_config *driConvertConfigs(const __DRIcoreExtension * core,
-                                           struct glx_config * modes,
-                                           const __DRIconfig ** configs);
+extern struct glx_config *driConvertConfigs(struct glx_config * modes,
+                                           const struct dri_config ** configs);
 
-extern void driDestroyConfigs(const __DRIconfig **configs);
+extern void driDestroyConfigs(const struct dri_config **configs);
 
 extern __GLXDRIdrawable *
 driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable);
 
 extern void
 driReleaseDrawables(struct glx_context *gc);
-
-extern const __DRIextension **driOpenDriver(const char *driverName,
-                                            bool driver_name_is_inferred);
 
 struct dri_ctx_attribs {
    unsigned major_ver;
@@ -76,6 +72,8 @@ struct dri_ctx_attribs {
    int release;
    int no_error;
 };
+
+extern const struct glx_screen_vtable dri_screen_vtable;
 
 extern unsigned
 dri_context_error_to_glx_error(unsigned error);
@@ -90,6 +88,34 @@ dri_common_create_context(struct glx_screen *base,
                           struct glx_context *shareList,
                           int renderType);
 
+extern const __DRIbackgroundCallableExtension driBackgroundCallable;
+extern const __DRIuseInvalidateExtension dri2UseInvalidate;
+
+Bool
+dri_bind_context(struct glx_context *context, GLXDrawable draw, GLXDrawable read);
+void
+dri_unbind_context(struct glx_context *context);
+void
+dri_destroy_context(struct glx_context *context);
+struct glx_context *
+dri_create_context_attribs(struct glx_screen *base,
+                           struct glx_config *config_base,
+                           struct glx_context *shareList,
+                           unsigned num_attribs,
+                           const uint32_t *attribs,
+                           unsigned *error);
+_X_HIDDEN int
+glx_dri_query_renderer_integer(struct glx_screen *base, int attribute,
+                            unsigned int *value);
+_X_HIDDEN int
+glx_dri_query_renderer_string(struct glx_screen *base, int attribute,
+                           const char **value);
+char *
+dri_get_driver_name(struct glx_screen *glx_screen);
+void
+dri_bind_tex_image(__GLXDRIdrawable *base, int buffer, const int *attrib_list);
+bool
+dri_screen_init(struct glx_screen *psc, struct glx_display *priv, int screen, int fd, const __DRIextension **loader_extensions, bool driver_name_is_inferred);
 #endif /* GLX_DIRECT_RENDERING */
 
 #endif /* _DRI_COMMON_H */

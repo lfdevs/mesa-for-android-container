@@ -1,6 +1,5 @@
 /*
  * Copyright © 2021 Google, Inc.
- *
  * SPDX-License-Identifier: MIT
  */
 

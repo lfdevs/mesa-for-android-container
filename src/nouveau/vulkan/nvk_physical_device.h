@@ -67,6 +67,12 @@ VK_DEFINE_HANDLE_CASTS(nvk_physical_device,
    VkPhysicalDevice,
    VK_OBJECT_TYPE_PHYSICAL_DEVICE)
 
+static inline uint32_t
+nvk_use_edb_buffer_views(const struct nvk_physical_device *pdev)
+{
+   return pdev->debug_flags & NVK_DEBUG_FORCE_EDB_BVIEW;
+}
+
 static inline struct nvk_instance *
 nvk_physical_device_instance(struct nvk_physical_device *pdev)
 {
@@ -78,6 +84,9 @@ VkResult nvk_create_drm_physical_device(struct vk_instance *vk_instance,
                                         struct vk_physical_device **pdev_out);
 
 void nvk_physical_device_destroy(struct vk_physical_device *vk_device);
+
+VkExtent2D nvk_max_shading_rate(const struct nvk_physical_device *pdev,
+                                VkSampleCountFlagBits samples);
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
     defined(VK_USE_PLATFORM_XCB_KHR) || \

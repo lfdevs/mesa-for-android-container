@@ -1515,7 +1515,7 @@ elk_fs_generator::enable_debug(const char *shader_name)
 
 int
 elk_fs_generator::generate_code(const elk_cfg_t *cfg, int dispatch_width,
-                            struct shader_stats shader_stats,
+                            struct elk_shader_stats shader_stats,
                             const elk::performance &perf,
                             struct elk_compile_stats *stats)
 {

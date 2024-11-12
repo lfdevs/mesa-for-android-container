@@ -51,12 +51,12 @@
 static const struct {
    /* Indicates the amount of temporaries for the shader. */
    uint32_t temp_count;
-   enum rogue_msaa_mode msaa_mode;
+   enum pvr_msaa_mode msaa_mode;
    /* Indicates the presence of PHAS instruction. */
    bool has_phase_rate_change;
 } pvr_pds_fragment_program_params = {
    .temp_count = 0,
-   .msaa_mode = ROGUE_MSAA_MODE_PIXEL,
+   .msaa_mode = PVR_MSAA_MODE_PIXEL,
    .has_phase_rate_change = false,
 };
 

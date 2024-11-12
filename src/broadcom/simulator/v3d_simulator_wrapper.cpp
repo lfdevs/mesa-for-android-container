@@ -27,8 +27,6 @@
  * v3d_simulator.c code to use.
  */
 
-#ifdef USE_V3D_SIMULATOR
-
 #include "v3d_simulator_wrapper.h"
 #include "v3d_hw_auto.h"
 
@@ -103,4 +101,3 @@ uint32_t v3d_hw_get_hub_core()
 }
 
 }
-#endif /* USE_V3D_SIMULATOR */

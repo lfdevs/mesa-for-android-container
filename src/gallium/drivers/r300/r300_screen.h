@@ -35,6 +35,11 @@ struct r300_screen {
     /* The MSAA texture with CMASK access; */
     struct pipe_resource *cmask_resource;
     mtx_t cmask_mutex;
+
+    struct {
+#define OPT_BOOL(name, dflt, description) bool name : 1;
+#include "r300_debug_options.h"
+    } options;
 };
 
 
@@ -87,6 +92,8 @@ radeon_winsys(struct pipe_screen *screen) {
 #define DBG_NO_HIZ      (1 << 22)
 #define DBG_NO_CMASK    (1 << 23)
 #define DBG_NO_TCL      (1 << 25)
+#define DBG_IEEEMATH    (1 << 26)
+#define DBG_FFMATH      (1 << 27)
 /*@}*/
 static inline bool SCREEN_DBG_ON(struct r300_screen * screen, unsigned flags)
 {

@@ -11,6 +11,7 @@
         - src/gallium/drivers/zink/ci/$GPU_VERSION-fails.txt
         - src/gallium/drivers/zink/ci/$GPU_VERSION-flakes.txt
         - src/gallium/drivers/zink/ci/$GPU_VERSION-skips.txt
+        - src/gallium/drivers/zink/ci/$GPU_VERSION-slow-skips.txt
         - src/gallium/drivers/zink/ci/$GPU_VERSION-validation-settings.txt
         - src/gallium/drivers/zink/ci/$PIGLIT_TRACES_FILE
       when: on_success
@@ -47,7 +48,7 @@
     - !reference [.zink-common-rules, rules]
 
 .zink-anv-manual-rules:
-  stage: layered-backends
+  stage: layered-backends-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -70,7 +71,7 @@
     - !reference [.zink-common-rules, rules]
 
 .zink-nvk-manual-rules:
-  stage: layered-backends
+  stage: layered-backends-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -87,7 +88,7 @@
     ZINK_DEBUG: optimal_keys
 
 .zink-turnip-collabora-manual-rules:
-  stage: layered-backends
+  stage: layered-backends-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -95,9 +96,10 @@
     - !reference [.zink-common-manual-rules, rules]
 
 .zink-turnip-valve-manual-rules:
-  stage: layered-backends
+  stage: layered-backends-postmerge
   extends: .no-auto-retry
   rules:
+    - !reference [.test, rules]
     - !reference [.valve-freedreno-turnip-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
 
@@ -109,7 +111,7 @@
     - !reference [.zink-common-rules, rules]
 
 .zink-radv-manual-rules:
-  stage: layered-backends
+  stage: layered-backends-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -166,7 +168,17 @@
     CROSVM_VK_DRIVER: "lvp"
     CROSVM_GPU_ARGS: "vulkan=true,gles=false,backend=virglrenderer,egl=true,surfaceless=true,fixed-blob-mapping=false"
 
-.zink-anv-test:
+.zink-anv-adl-test:
+  extends:
+    - .lava-acer-cbv514-1h-34uz-brya:x86_64
+    - .anv-test
+    - .zink-anv-rules
+    - .zink-test
+  variables:
+    VK_DRIVER: intel
+    GPU_VERSION: zink-anv-adl
+
+.zink-anv-tgl-test:
   extends:
     - .lava-acer-cp514-2h-1160g7-volteer:x86_64
     - .anv-test

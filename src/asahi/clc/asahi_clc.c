@@ -5,15 +5,8 @@
  */
 
 #include "asahi/compiler/agx_compile.h"
-#include "compiler/clc/clc.h"
 #include "compiler/glsl_types.h"
 #include "compiler/spirv/nir_spirv.h"
-#include "compiler/spirv/spirv_info.h"
-#include "util/build_id.h"
-#include "util/disk_cache.h"
-#include "util/macros.h"
-#include "util/mesa-sha1.h"
-#include "util/u_dynarray.h"
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_serialize.h"
@@ -27,40 +20,8 @@
 #include "util/u_math.h"
 #include <sys/mman.h>
 
-static const struct spirv_capabilities spirv_caps = {
-   .Addresses = true,
-   .Float16 = true,
-   .Float64 = true,
-   .Groups = true,
-   .StorageImageWriteWithoutFormat = true,
-   .Int8 = true,
-   .Int16 = true,
-   .Int64 = true,
-   .Int64Atomics = true,
-   .Kernel = true,
-   .Linkage = true, /* We receive linked kernel from clc */
-   .DenormFlushToZero = true,
-   .DenormPreserve = true,
-   .SignedZeroInfNanPreserve = true,
-   .RoundingModeRTE = true,
-   .RoundingModeRTZ = true,
-   .GenericPointer = true,
-   .GroupNonUniform = true,
-   .GroupNonUniformArithmetic = true,
-   .GroupNonUniformClustered = true,
-   .GroupNonUniformBallot = true,
-   .GroupNonUniformQuad = true,
-   .GroupNonUniformShuffle = true,
-   .GroupNonUniformVote = true,
-   .SubgroupDispatch = true,
-
-   .SubgroupShuffleINTEL = true,
-   .SubgroupBufferBlockIOINTEL = true,
-};
-
 static const struct spirv_to_nir_options spirv_options = {
    .environment = NIR_SPIRV_OPENCL,
-   .capabilities = &spirv_caps,
    .shared_addr_format = nir_address_format_62bit_generic,
    .global_addr_format = nir_address_format_62bit_generic,
    .temp_addr_format = nir_address_format_62bit_generic,
@@ -125,6 +86,46 @@ lower_builtins(nir_builder *b, nir_instr *instr, void *data)
    } else if (strcmp(func->name, "nir_fence_helper_exit_agx") == 0) {
       b->cursor = nir_instr_remove(&call->instr);
       nir_fence_helper_exit_agx(b);
+      return true;
+   } else if (strcmp(func->name, "nir_bindless_image_load_array") == 0) {
+      b->cursor = nir_instr_remove(&call->instr);
+
+      nir_def *texel = nir_bindless_image_load(
+         b, 4, 32, call->params[1].ssa, call->params[2].ssa, nir_imm_int(b, 0),
+         nir_imm_int(b, 0), .image_array = true,
+         .image_dim = GLSL_SAMPLER_DIM_2D, .dest_type = nir_type_uint32,
+         .access = ACCESS_IN_BOUNDS_AGX);
+
+      nir_store_deref(b, nir_src_as_deref(call->params[0]), texel, 0xf);
+      return true;
+   } else if (strcmp(func->name, "nir_bindless_image_store_array") == 0) {
+      b->cursor = nir_instr_remove(&call->instr);
+
+      nir_bindless_image_store(
+         b, call->params[0].ssa, call->params[1].ssa, nir_imm_int(b, 0),
+         call->params[2].ssa, nir_imm_int(b, 0), .image_array = true,
+         .image_dim = GLSL_SAMPLER_DIM_2D, .src_type = nir_type_uint32,
+         .access = ACCESS_NON_READABLE);
+      return true;
+   } else if (strcmp(func->name, "nir_bindless_image_load_ms_array") == 0) {
+      b->cursor = nir_instr_remove(&call->instr);
+
+      nir_def *texel = nir_bindless_image_load(
+         b, 4, 32, call->params[1].ssa, call->params[2].ssa,
+         call->params[3].ssa, nir_imm_int(b, 0), .image_array = true,
+         .image_dim = GLSL_SAMPLER_DIM_MS, .dest_type = nir_type_uint32,
+         .access = ACCESS_IN_BOUNDS_AGX);
+
+      nir_store_deref(b, nir_src_as_deref(call->params[0]), texel, 0xf);
+      return true;
+   } else if (strcmp(func->name, "nir_bindless_image_store_ms_array") == 0) {
+      b->cursor = nir_instr_remove(&call->instr);
+
+      nir_bindless_image_store(
+         b, call->params[0].ssa, call->params[1].ssa, call->params[2].ssa,
+         call->params[3].ssa, nir_imm_int(b, 0), .image_array = true,
+         .image_dim = GLSL_SAMPLER_DIM_MS, .src_type = nir_type_uint32,
+         .access = ACCESS_NON_READABLE);
       return true;
    }
 
@@ -256,16 +257,6 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size)
    return nir;
 }
 
-/* Shader functions */
-#define SPIR_V_MAGIC_NUMBER 0x07230203
-
-static void
-msg_callback(void *priv, const char *msg)
-{
-   (void)priv;
-   fprintf(stderr, "%s", msg);
-}
-
 static void
 print_u32_data(FILE *fp, const char *prefix, const char *arr_name,
                const uint32_t *data, size_t len)
@@ -310,22 +301,6 @@ print_usage(char *exec_name, FILE *f)
 
 #define OPT_PREFIX 1000
 
-static uint32_t
-get_module_spirv_version(const uint32_t *spirv, size_t size)
-{
-   assert(size >= 8);
-   assert(spirv[0] == SPIR_V_MAGIC_NUMBER);
-   return spirv[1];
-}
-
-static void
-set_module_spirv_version(uint32_t *spirv, size_t size, uint32_t version)
-{
-   assert(size >= 8);
-   assert(spirv[0] == SPIR_V_MAGIC_NUMBER);
-   spirv[1] = version;
-}
-
 int
 main(int argc, char **argv)
 {
@@ -334,26 +309,15 @@ main(int argc, char **argv)
       {"prefix", required_argument, 0, OPT_PREFIX},
       {"in", required_argument, 0, 'i'},
       {"out", required_argument, 0, 'o'},
-      {"spv", required_argument, 0, 's'},
       {"verbose", no_argument, 0, 'v'},
       {0, 0, 0, 0},
    };
 
-   char *outfile = NULL, *spv_outfile = NULL, *prefix = NULL;
-   struct util_dynarray clang_args;
-   struct util_dynarray input_files;
-   struct util_dynarray spirv_objs;
-   struct util_dynarray spirv_ptr_objs;
-
+   char *infile = NULL, *outfile = NULL, *prefix = NULL;
    void *mem_ctx = ralloc_context(NULL);
 
-   util_dynarray_init(&clang_args, mem_ctx);
-   util_dynarray_init(&input_files, mem_ctx);
-   util_dynarray_init(&spirv_objs, mem_ctx);
-   util_dynarray_init(&spirv_ptr_objs, mem_ctx);
-
    int ch;
-   while ((ch = getopt_long(argc, argv, "he:p:s:i:o:v", long_options, NULL)) !=
+   while ((ch = getopt_long(argc, argv, "he:p:i:o:v", long_options, NULL)) !=
           -1) {
       switch (ch) {
       case 'h':
@@ -363,10 +327,7 @@ main(int argc, char **argv)
          outfile = optarg;
          break;
       case 'i':
-         util_dynarray_append(&input_files, char *, optarg);
-         break;
-      case 's':
-         spv_outfile = optarg;
+         infile = optarg;
          break;
       case OPT_PREFIX:
          prefix = optarg;
@@ -378,124 +339,27 @@ main(int argc, char **argv)
       }
    }
 
-   for (int i = optind; i < argc; i++) {
-      util_dynarray_append(&clang_args, char *, argv[i]);
-   }
-
-   if (util_dynarray_num_elements(&input_files, char *) == 0) {
-      fprintf(stderr, "No input file(s).\n");
+   if (infile == NULL || outfile == NULL || prefix == NULL) {
+      fprintf(stderr, "Missing required argument.\n");
       print_usage(argv[0], stderr);
       return -1;
    }
 
-   if (prefix == NULL) {
-      fprintf(stderr, "No prefix specified.\n");
-      print_usage(argv[0], stderr);
-      return -1;
-   }
-
-   struct clc_logger logger = {
-      .error = msg_callback,
-      .warning = msg_callback,
-   };
-
-   util_dynarray_foreach(&input_files, char *, infile) {
-      int fd = open(*infile, O_RDONLY);
-      if (fd < 0) {
-         fprintf(stderr, "Failed to open %s\n", *infile);
-         ralloc_free(mem_ctx);
-         return 1;
-      }
-
-      off_t len = lseek(fd, 0, SEEK_END);
-      const void *map = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-      close(fd);
-      if (map == MAP_FAILED) {
-         fprintf(stderr, "Failed to mmap the file: errno=%d, %s\n", errno,
-                 strerror(errno));
-         ralloc_free(mem_ctx);
-         return 1;
-      }
-
-      const char *allowed_spirv_extensions[] = {
-         "SPV_EXT_shader_atomic_float_add",
-         "SPV_EXT_shader_atomic_float_min_max",
-         "SPV_KHR_float_controls",
-         "SPV_INTEL_subgroups",
-         NULL,
-      };
-
-      struct clc_compile_args clc_args = {
-         .source =
-            {
-               .name = *infile,
-               .value = map,
-            },
-         .features =
-            {
-               .fp16 = true,
-               .intel_subgroups = true,
-               .subgroups = true,
-               .subgroups_ifp = true,
-            },
-         .args = util_dynarray_begin(&clang_args),
-         .num_args = util_dynarray_num_elements(&clang_args, char *),
-         .allowed_spirv_extensions = allowed_spirv_extensions,
-      };
-
-      struct clc_binary *spirv_out =
-         util_dynarray_grow(&spirv_objs, struct clc_binary, 1);
-
-      if (!clc_compile_c_to_spirv(&clc_args, &logger, spirv_out)) {
-         ralloc_free(mem_ctx);
-         return 1;
-      }
-   }
-
-   util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {
-      util_dynarray_append(&spirv_ptr_objs, struct clc_binary *, p);
-   }
-
-   /* The SPIRV-Tools linker started checking that all modules have the same
-    * version. But SPIRV-LLVM-Translator picks the lower required version for
-    * each module it compiles. So we have to iterate over all of them and set
-    * the max found to make SPIRV-Tools link our modules.
-    *
-    * TODO: This is not the correct thing to do. We need SPIRV-LLVM-Translator
-    *       to pick a given SPIRV version given to it and have all the modules
-    *       at that version. We should remove this hack when this issue is
-    *       fixed :
-    *       https://github.com/KhronosGroup/SPIRV-LLVM-Translator/issues/1445
-    */
-   uint32_t max_spirv_version = 0;
-   util_dynarray_foreach(&spirv_ptr_objs, struct clc_binary *, module) {
-      max_spirv_version =
-         MAX2(max_spirv_version,
-              get_module_spirv_version((*module)->data, (*module)->size));
-   }
-
-   assert(max_spirv_version > 0);
-   util_dynarray_foreach(&spirv_ptr_objs, struct clc_binary *, module) {
-      set_module_spirv_version((*module)->data, (*module)->size,
-                               max_spirv_version);
-   }
-
-   struct clc_linker_args link_args = {
-      .in_objs = util_dynarray_begin(&spirv_ptr_objs),
-      .num_in_objs =
-         util_dynarray_num_elements(&spirv_ptr_objs, struct clc_binary *),
-      .create_library = true,
-   };
-   struct clc_binary final_spirv;
-   if (!clc_link_spirv(&link_args, &logger, &final_spirv)) {
+   int fd = open(infile, O_RDONLY);
+   if (fd < 0) {
+      fprintf(stderr, "Failed to open %s\n", infile);
       ralloc_free(mem_ctx);
       return 1;
    }
 
-   if (spv_outfile) {
-      FILE *fp = fopen(spv_outfile, "w");
-      fwrite(final_spirv.data, final_spirv.size, 1, fp);
-      fclose(fp);
+   off_t spirv_len = lseek(fd, 0, SEEK_END);
+   const void *spirv_map = mmap(NULL, spirv_len, PROT_READ, MAP_PRIVATE, fd, 0);
+   close(fd);
+   if (spirv_map == MAP_FAILED) {
+      fprintf(stderr, "Failed to mmap the file: errno=%d, %s\n", errno,
+              strerror(errno));
+      ralloc_free(mem_ctx);
+      return 1;
    }
 
    FILE *fp = stdout;
@@ -513,7 +377,7 @@ main(int argc, char **argv)
    fprintf(fp, " #include <stdint.h>\n");
 
    /* Compile SPIR-V to NIR */
-   nir_shader *nir = compile(mem_ctx, final_spirv.data, final_spirv.size);
+   nir_shader *nir = compile(mem_ctx, spirv_map, spirv_len);
 
    {
       nir_builder b = nir_builder_init_simple_shader(
@@ -534,7 +398,7 @@ main(int argc, char **argv)
       agx_compile_shader_nir(b.shader, &key, NULL, &compiled);
 
       print_u32_data(fp, "libagx_g13", "helper", compiled.binary,
-                     compiled.binary_size);
+                     compiled.info.binary_size);
       free(compiled.binary);
       ralloc_free(b.shader);
 
@@ -542,13 +406,12 @@ main(int argc, char **argv)
       exec_node_remove(&func->node);
    }
 
-   spirv_library_to_nir_builder(fp, final_spirv.data, final_spirv.size / 4,
-                                &spirv_options);
+   spirv_library_to_nir_builder(fp, spirv_map, spirv_len / 4, &spirv_options);
 
    /* Serialize NIR for embedding */
    struct blob blob;
    blob_init(&blob);
-   nir_serialize(&blob, nir, false /* strip */);
+   nir_serialize(&blob, nir, true /* strip */);
    print_u32_data(fp, prefix, "nir", (const uint32_t *)blob.data, blob.size);
    blob_finish(&blob);
 
@@ -557,12 +420,6 @@ main(int argc, char **argv)
    if (fp != stdout)
       fclose(fp);
 
-   util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {
-      clc_free_spirv(p);
-   }
-
-   clc_free_spirv(&final_spirv);
    ralloc_free(mem_ctx);
-
    return 0;
 }

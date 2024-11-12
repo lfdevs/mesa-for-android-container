@@ -38,13 +38,8 @@
  */
 
 static bool
-lower_alu_instr(nir_builder *b, nir_instr *instr_, UNUSED void *cb_data)
+lower_alu_instr(nir_builder *b, nir_alu_instr *instr, UNUSED void *cb_data)
 {
-   if (instr_->type != nir_instr_type_alu)
-      return false;
-
-   nir_alu_instr *instr = nir_instr_as_alu(instr_);
-
    nir_def *lowered = NULL;
 
    b->cursor = nir_before_instr(&instr->instr);
@@ -257,7 +252,6 @@ nir_lower_alu(nir_shader *shader)
        !shader->options->lower_fminmax_signed_zero)
       return false;
 
-   return nir_shader_instructions_pass(shader, lower_alu_instr,
-                                       nir_metadata_control_flow,
-                                       NULL);
+   return nir_shader_alu_pass(shader, lower_alu_instr,
+                              nir_metadata_control_flow, NULL);
 }

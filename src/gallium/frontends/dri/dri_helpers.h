@@ -53,27 +53,13 @@ enum pipe_format
 dri2_get_pipe_format_for_dri_format(int format);
 
 bool
-dri2_query_dma_buf_formats(__DRIscreen *_screen, int max, int *formats,
-                           int *count);
-bool
 dri2_yuv_dma_buf_supported(struct dri_screen *screen,
                            const struct dri2_format_mapping *map);
 
 bool
 dri2_validate_egl_image(struct dri_screen *screen, void *handle);
-
-__DRIimage *
-dri2_create_image_from_renderbuffer(__DRIcontext *context,
-				     int renderbuffer, void *loaderPrivate,
-                                     unsigned *error);
-
 void
-dri2_destroy_image(__DRIimage *img);
-
-__DRIimage *
-dri2_create_from_texture(__DRIcontext *context, int target, unsigned texture,
-                         int depth, int level, unsigned *error,
-                         void *loaderPrivate);
+dri_image_fence_sync(struct dri_context *ctx, struct dri_image *img);
 #endif
 
 /* vim: set sw=3 ts=8 sts=3 expandtab: */

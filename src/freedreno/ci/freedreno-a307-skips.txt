@@ -17,6 +17,9 @@ spec@arb_gpu_shader_fp64
 spec@arb_gpu_shader_int64
 spec@arb_tessellation_shader
 
+# Timeouts sometimes
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
+
 # 1.5 minutes
 spec@!opengl 1.2@tex3d-maxsize
 

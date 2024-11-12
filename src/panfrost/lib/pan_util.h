@@ -54,6 +54,7 @@
 
 #define PAN_DBG_YUV        0x20000
 #define PAN_DBG_FORCE_PACK 0x40000
+#define PAN_DBG_CS         0x80000
 
 struct pan_blendable_format;
 

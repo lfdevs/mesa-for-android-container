@@ -18,8 +18,8 @@ static const struct drm_asahi_params_global params = {
    .gpu_revision = 0,
    .vm_user_start = 0x1000000,
    .vm_user_end = 0x5000000,
-   .vm_shader_start = 0x8000000,
-   .vm_shader_end = 0x9000000,
+   .vm_usc_start = 0,
+   .vm_usc_end = 0,
    .vm_page_size = 4096,
 };
 

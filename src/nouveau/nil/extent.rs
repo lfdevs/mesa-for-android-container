@@ -3,8 +3,10 @@
 
 use crate::format::Format;
 use crate::image::SampleLayout;
-use crate::tiling::{gob_height, Tiling, GOB_DEPTH, GOB_WIDTH_B};
+use crate::tiling::{GOBType, Tiling};
 use crate::Minify;
+
+use std::ops::Add;
 
 pub mod units {
     #[derive(Clone, Debug, Copy, PartialEq)]
@@ -37,7 +39,7 @@ pub struct Extent4D<U> {
 }
 
 impl<U> Extent4D<U> {
-    pub fn new(
+    pub const fn new(
         width: u32,
         height: u32,
         depth: u32,
@@ -60,6 +62,14 @@ impl<U> Extent4D<U> {
             array_len: self.array_len.next_multiple_of(alignment.array_len),
             phantom: std::marker::PhantomData,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_aligned_to(&self, alignment: Extent4D<U>) -> bool {
+        (self.width % alignment.width) == 0
+            && (self.height % alignment.height) == 0
+            && (self.depth % alignment.depth) == 0
+            && (self.array_len % alignment.array_len) == 0
     }
 
     fn mul<V>(self, other: Extent4D<V>) -> Extent4D<V> {
@@ -147,6 +157,15 @@ pub extern "C" fn nil_extent4d_px_to_tl(
     extent_px.to_tl(tiling, format, sample_layout)
 }
 
+#[no_mangle]
+pub extern "C" fn nil_extent4d_px_to_B(
+    extent_px: Extent4D<units::Pixels>,
+    format: Format,
+    sample_layout: SampleLayout,
+) -> Extent4D<units::Bytes> {
+    extent_px.to_B(format, sample_layout)
+}
+
 impl Extent4D<units::Samples> {
     pub fn to_px(self, sample_layout: SampleLayout) -> Extent4D<units::Pixels> {
         self.div_ceil(sample_layout.px_extent_sa())
@@ -167,20 +186,15 @@ impl Extent4D<units::Elements> {
 }
 
 impl Extent4D<units::Bytes> {
-    pub fn size_B(&self) -> u32 {
-        self.width * self.height * self.depth
+    pub fn size_B(&self) -> u64 {
+        // size_B of something with layers doesn't make sense because we can't
+        // know the array stride based only on the other dimensions.
+        assert!(self.array_len == 1);
+        u64::from(self.width) * u64::from(self.height) * u64::from(self.depth)
     }
 
-    pub fn to_GOB(self, gob_height_is_8: bool) -> Extent4D<units::GOBs> {
-        let gob_extent_B = Extent4D {
-            width: GOB_WIDTH_B,
-            height: gob_height(gob_height_is_8),
-            depth: GOB_DEPTH,
-            array_len: 1,
-            phantom: std::marker::PhantomData,
-        };
-
-        self.div_ceil(gob_extent_B)
+    pub fn to_GOB(self, gob_type: GOBType) -> Extent4D<units::GOBs> {
+        self.div_ceil(gob_type.extent_B())
     }
 }
 
@@ -195,6 +209,24 @@ pub struct Offset4D<U> {
 }
 
 impl<U> Offset4D<U> {
+    pub const fn new(x: u32, y: u32, z: u32, a: u32) -> Offset4D<U> {
+        Offset4D {
+            x,
+            y,
+            z,
+            a,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_aligned_to(&self, alignment: Extent4D<U>) -> bool {
+        (self.x % alignment.width) == 0
+            && (self.y % alignment.height) == 0
+            && (self.z % alignment.depth) == 0
+            && (self.a % alignment.array_len) == 0
+    }
+
     fn div_floor<V>(self, other: Extent4D<U>) -> Offset4D<V> {
         Offset4D {
             x: self.x / other.width,
@@ -221,6 +253,20 @@ impl<U> Offset4D<U> {
             y: self.y,
             z: self.z,
             a: self.a,
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<U> Add<Extent4D<U>> for Offset4D<U> {
+    type Output = Offset4D<U>;
+
+    fn add(self, rhs: Extent4D<U>) -> Offset4D<U> {
+        Self {
+            x: self.x + rhs.width,
+            y: self.y + rhs.height,
+            z: self.z + rhs.depth,
+            a: self.a + rhs.array_len,
             phantom: std::marker::PhantomData,
         }
     }
@@ -272,6 +318,15 @@ pub extern "C" fn nil_offset4d_px_to_tl(
     sample_layout: SampleLayout,
 ) -> Offset4D<units::Tiles> {
     offset.to_tl(tiling, format, sample_layout)
+}
+
+#[no_mangle]
+pub extern "C" fn nil_offset4d_px_to_B(
+    offset: Offset4D<units::Pixels>,
+    format: Format,
+    sample_layout: SampleLayout,
+) -> Offset4D<units::Bytes> {
+    offset.to_B(format, sample_layout)
 }
 
 impl Offset4D<units::Elements> {

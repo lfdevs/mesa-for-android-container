@@ -9,23 +9,33 @@ use crate::image::{
 };
 use crate::ILog2Ceil;
 
-pub const GOB_WIDTH_B: u32 = 64;
-pub const GOB_DEPTH: u32 = 1;
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum GOBType {
+    #[default]
+    Linear,
+    Fermi8,
+}
 
-pub fn gob_height(gob_height_is_8: bool) -> u32 {
-    if gob_height_is_8 {
-        8
-    } else {
-        4
+impl GOBType {
+    pub fn extent_B(&self) -> Extent4D<units::Bytes> {
+        match self {
+            GOBType::Linear => Extent4D::new(1, 1, 1, 1),
+            GOBType::Fermi8 => Extent4D::new(64, 8, 1, 1),
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn nil_gob_type_height(self) -> u32 {
+        self.extent_B().height
     }
 }
 
 #[derive(Clone, Debug, Default, Copy, PartialEq)]
 #[repr(C)]
 pub struct Tiling {
-    pub is_tiled: bool,
-    /// Whether the GOB height is 4 or 8
-    pub gob_height_is_8: bool,
+    /// GOB type
+    pub gob_type: GOBType,
     /// log2 of the X tile dimension in GOBs
     pub x_log2: u8,
     /// log2 of the Y tile dimension in GOBs
@@ -41,7 +51,7 @@ impl Tiling {
     pub fn clamp(&self, extent_B: Extent4D<units::Bytes>) -> Self {
         let mut tiling = *self;
 
-        if !self.is_tiled {
+        if !self.is_tiled() {
             return tiling;
         }
 
@@ -54,7 +64,7 @@ impl Tiling {
             tiling.x_log2 = 0;
         }
 
-        let extent_GOB = extent_B.to_GOB(tiling.gob_height_is_8);
+        let extent_GOB = extent_B.to_GOB(tiling.gob_type);
 
         let ceil_h = extent_GOB.height.ilog2_ceil() as u8;
         let ceil_d = extent_GOB.depth.ilog2_ceil() as u8;
@@ -75,17 +85,14 @@ impl Tiling {
     }
 
     pub fn extent_B(&self) -> Extent4D<units::Bytes> {
-        if self.is_tiled {
-            Extent4D::new(
-                GOB_WIDTH_B << self.x_log2,
-                gob_height(self.gob_height_is_8) << self.y_log2,
-                GOB_DEPTH << self.z_log2,
-                1,
-            )
-        } else {
-            // We handle linear images in Image::new()
-            Extent4D::new(1, 1, 1, 1)
-        }
+        let gob_extent_B = self.gob_type.extent_B();
+        debug_assert!(gob_extent_B.array_len == 1);
+        Extent4D::new(
+            gob_extent_B.width << self.x_log2,
+            gob_extent_B.height << self.y_log2,
+            gob_extent_B.depth << self.z_log2,
+            1,
+        )
     }
 }
 
@@ -152,13 +159,11 @@ impl Tiling {
         assert!(sparse_block_extent_B.height.is_power_of_two());
         assert!(sparse_block_extent_B.depth.is_power_of_two());
 
-        let gob_height_is_8 = true;
-        let sparse_block_extent_gob =
-            sparse_block_extent_B.to_GOB(gob_height_is_8);
+        let gob_type = GOBType::Fermi8;
+        let sparse_block_extent_gob = sparse_block_extent_B.to_GOB(gob_type);
 
         Self {
-            is_tiled: true,
-            gob_height_is_8,
+            gob_type,
             x_log2: sparse_block_extent_gob.width.ilog2().try_into().unwrap(),
             y_log2: sparse_block_extent_gob.height.ilog2().try_into().unwrap(),
             z_log2: sparse_block_extent_gob.depth.ilog2().try_into().unwrap(),
@@ -176,8 +181,7 @@ impl Tiling {
         }
 
         let mut tiling = Tiling {
-            is_tiled: true,
-            gob_height_is_8: true,
+            gob_type: GOBType::Fermi8,
             x_log2: 0,
             y_log2: 5,
             z_log2: 5,
@@ -188,5 +192,16 @@ impl Tiling {
         }
 
         tiling.clamp(extent_px.to_B(format, sample_layout))
+    }
+
+    pub fn is_tiled(&self) -> bool {
+        if self.gob_type == GOBType::Linear {
+            debug_assert!(self.x_log2 == 0);
+            debug_assert!(self.y_log2 == 0);
+            debug_assert!(self.z_log2 == 0);
+            false
+        } else {
+            true
+        }
     }
 }

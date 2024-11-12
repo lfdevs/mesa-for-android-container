@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-/** @file brw_fs_bank_conflicts.cpp
+/** @file
  *
  * This file contains a GRF bank conflict mitigation pass.  The pass is
  * intended to be run after register allocation and works by rearranging the

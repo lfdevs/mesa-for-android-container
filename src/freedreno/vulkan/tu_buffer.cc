@@ -9,6 +9,8 @@
 
 #include "tu_buffer.h"
 
+#include "vk_debug_utils.h"
+
 #include "tu_device.h"
 #include "tu_rmv.h"
 
@@ -44,6 +46,7 @@ tu_DestroyBuffer(VkDevice _device,
 {
    VK_FROM_HANDLE(tu_device, device, _device);
    VK_FROM_HANDLE(tu_buffer, buffer, _buffer);
+   struct tu_instance *instance = device->physical_device->instance;
 
    if (!buffer)
       return;
@@ -53,6 +56,12 @@ tu_DestroyBuffer(VkDevice _device,
 #ifdef HAVE_PERFETTO
    tu_perfetto_log_destroy_buffer(device, buffer);
 #endif
+
+   if (buffer->iova)
+      vk_address_binding_report(&instance->vk, &buffer->vk.base,
+                                buffer->iova, buffer->bo_size,
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
+
 
    vk_buffer_destroy(&device->vk, pAllocator, &buffer->vk);
 }
@@ -126,6 +135,7 @@ tu_BindBufferMemory2(VkDevice device,
                      const VkBindBufferMemoryInfo *pBindInfos)
 {
    VK_FROM_HANDLE(tu_device, dev, device);
+   struct tu_instance *instance = dev->physical_device->instance;
 
    for (uint32_t i = 0; i < bindInfoCount; ++i) {
       VK_FROM_HANDLE(tu_device_memory, mem, pBindInfos[i].memory);
@@ -146,11 +156,16 @@ tu_BindBufferMemory2(VkDevice device,
 #ifdef HAVE_PERFETTO
          tu_perfetto_log_bind_buffer(dev, buffer);
 #endif
+         buffer->bo_size = mem->bo->size;
       } else {
          buffer->bo = NULL;
       }
 
       TU_RMV(buffer_bind, dev, buffer);
+
+      vk_address_binding_report(&instance->vk, &buffer->vk.base,
+                                buffer->bo->iova, buffer->bo->size,
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
    }
    return VK_SUCCESS;
 }

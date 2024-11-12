@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-/** @file brw_fs_scoreboard.cpp
+/** @file
  *
  * Gfx12+ hardware lacks the register scoreboard logic that used to guarantee
  * data coherency between register reads and writes in previous generations.

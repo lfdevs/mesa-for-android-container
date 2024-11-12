@@ -68,9 +68,13 @@ endif
 if with_platform_windows
   vulkan_wsi_list += '-DVK_USE_PLATFORM_WIN32_KHR'
 endif
-if host_machine.system() == 'darwin'
+if with_platform_macos
   vulkan_wsi_list += '-DVK_USE_PLATFORM_MACOS_MVK'
   vulkan_wsi_list += '-DVK_USE_PLATFORM_METAL_EXT'
+  vulkan_wsi_deps += dependency(
+    'appleframeworks',
+    modules : ['QuartzCore', 'Metal']
+  )
 endif
 
 idep_vulkan_wsi_defines = declare_dependency(
@@ -87,4 +91,7 @@ if with_vulkan_overlay_layer
 endif
 if with_vulkan_device_select_layer
   subdir('device-select-layer')
+endif
+if with_vulkan_screenshot_layer
+  subdir('screenshot-layer')
 endif

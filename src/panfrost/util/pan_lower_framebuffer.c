@@ -202,7 +202,7 @@ static nir_def *
 pan_fsat(nir_builder *b, nir_def *v, bool is_signed)
 {
    if (is_signed)
-      return nir_fsat_signed_mali(b, v);
+      return nir_fsat_signed(b, v);
    else
       return nir_fsat(b, v);
 }

@@ -137,6 +137,8 @@ MergeSplits::visit(BasicBlock *bb)
       si = i->getSrc(0)->getInsn();
       if (si->op != OP_SPLIT || si != i->getSrc(1)->getInsn())
          continue;
+      if (i->getSrc(0) != si->getDef(0) || i->getSrc(1) != si->getDef(1))
+         continue;
       i->def(0).replace(si->getSrc(0), false);
       delete_Instruction(prog, i);
    }
@@ -3219,14 +3221,19 @@ MemoryOpt::runOpt(BasicBlock *bb)
          }
          continue;
       }
+
+      DataFile file = ldst->src(0).getFile();
+      if (file != FILE_MEMORY_CONST &&
+          file != FILE_SHADER_INPUT &&
+          file != FILE_SHADER_OUTPUT)
+         continue;
+
       if (ldst->getPredicate()) // TODO: handle predicated ld/st
          continue;
       if (ldst->perPatch) // TODO: create separate per-patch lists
          continue;
 
       if (isLoad) {
-         DataFile file = ldst->src(0).getFile();
-
          // if ld l[]/g[] look for previous store to eliminate the reload
          if (file == FILE_MEMORY_GLOBAL || file == FILE_MEMORY_LOCAL) {
             // TODO: shared memory ?

@@ -502,12 +502,11 @@ emit_ds_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction* i
    encoding = 0;
    if (!instr->definitions.empty())
       encoding |= reg(ctx, instr->definitions[0], 8) << 24;
-   if (instr->operands.size() >= 3 && instr->operands[2].physReg() != m0)
-      encoding |= reg(ctx, instr->operands[2], 8) << 16;
-   if (instr->operands.size() >= 2 && instr->operands[1].physReg() != m0)
-      encoding |= reg(ctx, instr->operands[1], 8) << 8;
-   if (!instr->operands[0].isUndefined())
-      encoding |= reg(ctx, instr->operands[0], 8);
+   for (unsigned i = 0; i < MIN2(instr->operands.size(), 3); i++) {
+      Operand& op = instr->operands[i];
+      if (op.physReg() != m0 && !op.isUndefined())
+         encoding |= reg(ctx, op, 8) << (8 * i);
+   }
    out.push_back(encoding);
 }
 
@@ -1727,7 +1726,8 @@ emit_program(Program* program, std::vector<uint32_t>& code, std::vector<struct a
       program->info.merged_shader_compiled_separately;
 
    /* Prolog has no exports. */
-   if (!program->is_prolog && !program->info.has_epilog && !is_separately_compiled_ngg_vs_or_es &&
+   if (!program->is_prolog && !program->info.ps.has_epilog &&
+       !is_separately_compiled_ngg_vs_or_es &&
        (program->stage.hw == AC_HW_VERTEX_SHADER || program->stage.hw == AC_HW_PIXEL_SHADER ||
         program->stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER))
       fix_exports(ctx, code, program);

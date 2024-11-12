@@ -1338,7 +1338,7 @@ zink_screen_init_compiler(struct zink_screen *screen)
 {
    static const struct nir_shader_compiler_options
    default_options = {
-      .io_options = nir_io_glsl_lower_derefs,
+      .io_options = nir_io_has_intrinsics,
       .lower_ffma16 = true,
       .lower_ffma32 = true,
       .lower_ffma64 = true,
@@ -1401,7 +1401,7 @@ zink_screen_init_compiler(struct zink_screen *screen)
       screen->nir_options.max_unroll_iterations_fp64 = 32;
    }
 
-   if (screen->driver_workarounds.io_opt) {
+   if (screen->driver_compiler_workarounds.io_opt) {
       screen->nir_options.io_options |= nir_io_glsl_opt_varyings;
 
       switch (zink_driverid(screen)) {
@@ -3001,7 +3001,7 @@ zink_compiler_assign_io(struct zink_screen *screen, nir_shader *producer, nir_sh
             nir_shader_instructions_pass(consumer, rewrite_read_as_0, nir_metadata_dominance, var_in);
          }
       }
-      if (consumer->info.stage == MESA_SHADER_FRAGMENT && screen->driver_workarounds.needs_sanitised_layer)
+      if (consumer->info.stage == MESA_SHADER_FRAGMENT && screen->driver_compiler_workarounds.needs_sanitised_layer)
          do_fixup |= clamp_layer_output(producer, consumer, &io.reserved);
    }
    nir_shader_gather_info(producer, nir_shader_get_entrypoint(producer));
@@ -3674,7 +3674,7 @@ lower_zs_swizzle_tex_instr(nir_builder *b, nir_instr *instr, void *data)
  * draw-time shader recompile to do so.
  *
  * We may also need to apply shader swizzles for
- * driver_workarounds.needs_zs_shader_swizzle.
+ * driver_compiler_workarounds.needs_zs_shader_swizzle.
  */
 static bool
 lower_zs_swizzle_tex(nir_shader *nir, const void *swizzle, bool shadow_only)
@@ -4896,11 +4896,8 @@ match_tex_dests(nir_shader *shader, struct zink_shader *zs, bool pre_mangle)
 }
 
 static bool
-split_bitfields_instr(nir_builder *b, nir_instr *in, void *data)
+split_bitfields_instr(nir_builder *b, nir_alu_instr *alu, void *data)
 {
-   if (in->type != nir_instr_type_alu)
-      return false;
-   nir_alu_instr *alu = nir_instr_as_alu(in);
    switch (alu->op) {
    case nir_op_ubitfield_extract:
    case nir_op_ibitfield_extract:
@@ -4912,7 +4909,7 @@ split_bitfields_instr(nir_builder *b, nir_instr *in, void *data)
    unsigned num_components = alu->def.num_components;
    if (num_components == 1)
       return false;
-   b->cursor = nir_before_instr(in);
+   b->cursor = nir_before_instr(&alu->instr);
    nir_def *dests[NIR_MAX_VEC_COMPONENTS];
    for (unsigned i = 0; i < num_components; i++) {
       if (alu->op == nir_op_bitfield_insert)
@@ -4933,8 +4930,8 @@ split_bitfields_instr(nir_builder *b, nir_instr *in, void *data)
                                           nir_channel(b, alu->src[2].src.ssa, alu->src[2].swizzle[i]));
    }
    nir_def *dest = nir_vec(b, dests, num_components);
-   nir_def_rewrite_uses_after(&alu->def, dest, in);
-   nir_instr_remove(in);
+   nir_def_rewrite_uses_after(&alu->def, dest, &alu->instr);
+   nir_instr_remove(&alu->instr);
    return true;
 }
 
@@ -4942,7 +4939,8 @@ split_bitfields_instr(nir_builder *b, nir_instr *in, void *data)
 static bool
 split_bitfields(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(shader, split_bitfields_instr, nir_metadata_dominance, NULL);
+   return nir_shader_alu_pass(shader, split_bitfields_instr,
+                              nir_metadata_dominance, NULL);
 }
 
 static bool

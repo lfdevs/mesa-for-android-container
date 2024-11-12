@@ -32,12 +32,12 @@ impl From<&ShaderStageInfo> for ShaderType {
     fn from(value: &ShaderStageInfo) -> Self {
         match value {
             ShaderStageInfo::Vertex => ShaderType::Vertex,
-            ShaderStageInfo::Fragment => ShaderType::Fragment,
+            ShaderStageInfo::Fragment(_) => ShaderType::Fragment,
             ShaderStageInfo::Geometry(_) => ShaderType::Geometry,
             ShaderStageInfo::TessellationInit(_) => {
                 ShaderType::TessellationInit
             }
-            ShaderStageInfo::Tessellation => ShaderType::Tessellation,
+            ShaderStageInfo::Tessellation(_) => ShaderType::Tessellation,
             _ => panic!("Invalid ShaderStageInfo {:?}", value),
         }
     }
@@ -480,6 +480,8 @@ pub fn encode_header(
 
     let slm_size = shader_info.slm_size.next_multiple_of(16);
     sph.set_shader_local_memory_size(slm_size.into());
+    let crs_size = sm.crs_size(shader_info.max_crs_depth);
+    sph.set_shader_local_memory_crs_size(crs_size);
 
     match &shader_info.io {
         ShaderIoInfo::Vtg(io) => {
@@ -514,7 +516,6 @@ pub fn encode_header(
                 sph.set_imap_vector_ps(index, *imap);
             }
 
-            let zs_self_dep = fs_key.map_or(false, |key| key.zs_self_dep);
             let uses_underestimate =
                 fs_key.map_or(false, |key| key.uses_underestimate);
 
@@ -526,11 +527,9 @@ pub fn encode_header(
             // explicit fragment output locations.
             sph.set_multiple_render_target_enable(true);
 
-            sph.set_kills_pixels(io.uses_kill || zs_self_dep);
             sph.set_omap_sample_mask(io.writes_sample_mask);
             sph.set_omap_depth(io.writes_depth);
             sph.set_omap_targets(io.writes_color);
-            sph.set_does_interlock(io.does_interlock);
             sph.set_uses_underestimate(uses_underestimate);
 
             for (index, value) in io.barycentric_attr_in.iter().enumerate() {
@@ -541,6 +540,11 @@ pub fn encode_header(
     }
 
     match &shader_info.stage {
+        ShaderStageInfo::Fragment(stage) => {
+            let zs_self_dep = fs_key.map_or(false, |key| key.zs_self_dep);
+            sph.set_kills_pixels(stage.uses_kill || zs_self_dep);
+            sph.set_does_interlock(stage.does_interlock);
+        }
         ShaderStageInfo::Geometry(stage) => {
             sph.set_gs_passthrough_enable(stage.passthrough_enable);
             sph.set_stream_out_mask(stage.stream_out_mask);

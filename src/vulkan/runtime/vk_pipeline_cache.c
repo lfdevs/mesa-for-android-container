@@ -518,6 +518,10 @@ vk_pipeline_cache_add_nir(struct vk_pipeline_cache *cache,
                                       key_data, key_size,
                                       blob.data, blob.size);
    blob_finish(&blob);
+   if (data_obj == NULL) {
+      vk_pipeline_cache_log(cache, "Ran out of memory creating NIR shader");
+      return;
+   }
 
    struct vk_pipeline_cache_object *cached =
       vk_pipeline_cache_add_object(cache, &data_obj->base);
@@ -682,6 +686,7 @@ vk_common_CreatePipelineCache(VkDevice _device,
 
    struct vk_pipeline_cache_create_info info = {
       .pCreateInfo = pCreateInfo,
+      .skip_disk_cache = device->disable_internal_cache,
    };
    cache = vk_pipeline_cache_create(device, &info, pAllocator);
    if (cache == NULL)

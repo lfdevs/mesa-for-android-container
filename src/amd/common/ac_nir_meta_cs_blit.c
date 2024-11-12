@@ -392,7 +392,10 @@ ac_create_blit_cs(const struct ac_cs_blit_options *options, const union ac_cs_bl
    /* We need to load the descriptor here, otherwise the load would be after optimization
     * barriers waiting for image loads, i.e. after s_waitcnt vmcnt(0).
     */
-   nir_def *img_dst_desc = nir_image_deref_descriptor_amd(&b, 8, 32, deref_ssa(&b, img_dst));
+   nir_def *img_dst_desc =
+      nir_image_deref_descriptor_amd(&b, 8, 32, deref_ssa(&b, img_dst),
+                                     .image_dim = img_dst->type->sampler_dimensionality,
+                                     .image_array = img_dst->type->sampler_array);
    if (lane_size > 1 && !b.shader->info.use_aco_amd)
       img_dst_desc = nir_optimization_barrier_sgpr_amd(&b, 32, img_dst_desc);
 
@@ -564,6 +567,10 @@ ac_prepare_compute_blit(const struct ac_cs_blit_options *options,
        max_dst_chan_size == 6 || /* PIPE_FORMAT_R5G6B5_UNORM has precision issues */
        util_format_is_depth_or_stencil(blit->dst.format) ||
        dst_samples > SI_MAX_COMPUTE_BLIT_SAMPLES ||
+       /* Image stores support DCC since GFX10. Fail only for gfx queues because compute queues
+        * can't fall back to a pixel shader. DCC must be decompressed and disabled for compute
+        * queues by the caller. */
+       (options->info->gfx_level < GFX10 && blit->is_gfx_queue && blit->dst_has_dcc) ||
        (!is_clear &&
         /* Scaling is not implemented by the compute shader. */
         (blit->dst.box.width != abs(blit->src.box.width) ||
@@ -644,6 +651,7 @@ ac_prepare_compute_blit(const struct ac_cs_blit_options *options,
             /* Verified on Navi31. */
             if (is_resolve) {
                if (!((blit->dst.surf->bpe <= 2 && src_samples == 2) ||
+                     (blit->dst.surf->bpe == 2 && src_samples == 4) ||
                      (blit->dst.surf->bpe == 16 && src_samples == 4)))
                   return false;
             } else {
@@ -653,10 +661,7 @@ ac_prepare_compute_blit(const struct ac_cs_blit_options *options,
                   if (blit->dst.surf->bpe == 2 && blit->src.surf->is_linear && dst_samples == 1)
                      return false;
 
-                  if ((blit->dst.surf->bpe == 4 || blit->dst.surf->bpe == 8) && dst_samples == 1)
-                     return false;
-
-                  if (blit->dst.surf->bpe == 16 && dst_samples == 1 && !blit->src.surf->is_linear)
+                  if (blit->dst.surf->bpe >= 4 && dst_samples == 1 && !blit->src.surf->is_linear)
                      return false;
 
                   if (blit->dst.surf->bpe == 16 && dst_samples == 8)

@@ -57,6 +57,9 @@ static const uint32_t xtile_span = 64;
 static const uint32_t ytile_width = 128;
 static const uint32_t ytile_height = 32;
 static const uint32_t ytile_span = 16;
+static const uint32_t wtile_width = 64;
+static const uint32_t wtile_height = 64;
+static const uint32_t wtile_span = 2;
 
 static inline uint32_t
 ror(uint32_t n, uint32_t d)
@@ -98,6 +101,198 @@ rgba8_copy(void *dst, const void *src, size_t bytes)
       bytes -= 4;
    }
    return dst;
+}
+
+#define wtile_block_id(x, y)                    \
+   (((((x) >> 3) & 0x7) << 3) |                 \
+    (((y) >> 3) & 0x7))
+
+#define wtile_block_offset(x, y)                \
+   ((((y) & 4) << 3) +                          \
+    (((y) & 2) << 2) +                          \
+    (((y) & 1) << 1) +                          \
+    (((x) & 4) << 2) +                          \
+    (((x) & 2) << 1) +                          \
+    (((x) & 1) << 0))
+
+/**
+ * Copy from linear into a W tile block.
+ *
+ * @dst is a pointer to a block in a W tile, @src is a pointer to the linear
+ * data, coordinates are relative to the surface (not the tile).
+ */
+static inline void
+wtile_block_copy_from_linear(void *dst, const void *src,
+                             unsigned x0, unsigned x1,
+                             unsigned y0, unsigned y1,
+                             unsigned src_pitch)
+{
+   uint8_t *dst_data = dst + wtile_block_id(x0, y0) * 64;
+   const uint8_t *src_data = src;
+
+   for (unsigned y = y0; y < y1; y++)
+      for (unsigned x = x0; x < x1; x++)
+         dst_data[wtile_block_offset(x, y)] = src_data[y * src_pitch + x];
+}
+
+/**
+ * Copy from linear into a full W tile block.
+ *
+ * @dst is a pointer to a block in a W tile, @src is a pointer to the linear
+ * data.
+ */
+static inline void
+wtile_block_full_copy_from_linear(void *dst, const void *src,
+                                  unsigned x0, unsigned y0,
+                                  unsigned src_pitch)
+{
+   uint16_t *dst_data = dst + wtile_block_id(x0, y0) * 64;
+   const uint8_t *src_data = src;
+
+   /*
+    * The layout of a block is a series of 2 consecutive bytes elements.
+    * _________________________________
+    * |B00|B01|B04|B05|B16|B17|B20|B21|
+    * |B02|B03|B06|B07|B18|B19|B22|B23|
+    * |B08|B09|B12|B13|B24|B25|B28|B29|
+    * |B10|B11|B14|B15|B26|B27|B30|B31|
+    * |B32|B33|B36|B37|B48|B49|B52|B53|
+    * |B34|B35|B38|B39|B50|B51|B54|B55|
+    * |B40|B41|B44|B45|B56|B57|B60|B61|
+    * |B42|B43|B46|B47|B58|B59|B62|B64|
+    * ---------------------------------
+    */
+
+#define src_lin(bx, by) \
+   (*((const uint16_t *)(src_data + (y0 + by) * src_pitch + x0 + bx * 2)))
+
+   dst_data[0]  = src_lin(0, 0);
+   dst_data[1]  = src_lin(0, 1);
+   dst_data[2]  = src_lin(1, 0);
+   dst_data[3]  = src_lin(1, 1);
+   dst_data[4]  = src_lin(0, 2);
+   dst_data[5]  = src_lin(0, 3);
+   dst_data[6]  = src_lin(1, 2);
+   dst_data[7]  = src_lin(1, 3);
+
+   dst_data[8]  = src_lin(2, 0);
+   dst_data[9]  = src_lin(2, 1);
+   dst_data[10] = src_lin(3, 0);
+   dst_data[11] = src_lin(3, 1);
+   dst_data[12] = src_lin(2, 2);
+   dst_data[13] = src_lin(2, 3);
+   dst_data[14] = src_lin(3, 2);
+   dst_data[15] = src_lin(3, 3);
+
+   dst_data[16] = src_lin(0, 4);
+   dst_data[17] = src_lin(0, 5);
+   dst_data[18] = src_lin(1, 4);
+   dst_data[19] = src_lin(1, 5);
+   dst_data[20] = src_lin(0, 6);
+   dst_data[21] = src_lin(0, 7);
+   dst_data[22] = src_lin(1, 6);
+   dst_data[23] = src_lin(1, 7);
+
+   dst_data[24] = src_lin(2, 4);
+   dst_data[25] = src_lin(2, 5);
+   dst_data[26] = src_lin(3, 4);
+   dst_data[27] = src_lin(3, 5);
+   dst_data[28] = src_lin(2, 6);
+   dst_data[29] = src_lin(2, 7);
+   dst_data[30] = src_lin(3, 6);
+   dst_data[31] = src_lin(3, 7);
+
+#undef src_lin
+}
+
+/**
+ * Copy from W tile block into linear.
+ *
+ * @dst is a pointer to the linear data, @src is a pointer to a block in the W
+ * tile.
+ */
+static inline void
+wtile_block_copy_to_linear(void *dst, const void *src,
+                           unsigned x0, unsigned x1,
+                           unsigned y0, unsigned y1,
+                           unsigned dst_pitch)
+{
+   uint8_t *dst_data = dst;
+   const uint8_t *src_data = src + wtile_block_id(x0, y0) * 64;
+
+   for (unsigned y = y0; y < y1; y++)
+      for (unsigned x = x0; x < x1; x++)
+         dst_data[y * dst_pitch + x] = src_data[wtile_block_offset(x, y)];
+}
+
+/**
+ * Copy to linear from a full W tile block.
+ *
+ * @dst is a pointer to the linear data, @src is a pointer to a block in a W
+ * tile.
+ */
+static inline void
+wtile_block_full_copy_to_linear(void *dst, const void *src,
+                                unsigned x0, unsigned y0,
+                                unsigned dst_pitch)
+{
+   uint8_t *dst_data = dst;
+   const uint16_t *src_data = src + wtile_block_id(x0, y0) * 64;
+
+   /*
+    * The layout of a block is a series of 2 consecutive bytes elements.
+    * _________________________________
+    * |B00|B01|B04|B05|B16|B17|B20|B21|
+    * |B02|B03|B06|B07|B18|B19|B22|B23|
+    * |B08|B09|B12|B13|B24|B25|B28|B29|
+    * |B10|B11|B14|B15|B26|B27|B30|B31|
+    * |B32|B33|B36|B37|B48|B49|B52|B53|
+    * |B34|B35|B38|B39|B50|B51|B54|B55|
+    * |B40|B41|B44|B45|B56|B57|B60|B61|
+    * |B42|B43|B46|B47|B58|B59|B62|B64|
+    * ---------------------------------
+    */
+
+#define dst_lin(bx, by) \
+   (*((uint16_t *)(dst_data + (y0 + by) * dst_pitch + x0 + bx * 2)))
+
+   dst_lin(0, 0) = src_data[0];
+   dst_lin(0, 1) = src_data[1];
+   dst_lin(1, 0) = src_data[2];
+   dst_lin(1, 1) = src_data[3];
+   dst_lin(0, 2) = src_data[4];
+   dst_lin(0, 3) = src_data[5];
+   dst_lin(1, 2) = src_data[6];
+   dst_lin(1, 3) = src_data[7];
+
+   dst_lin(2, 0) = src_data[8];
+   dst_lin(2, 1) = src_data[9];
+   dst_lin(3, 0) = src_data[10];
+   dst_lin(3, 1) = src_data[11];
+   dst_lin(2, 2) = src_data[12];
+   dst_lin(2, 3) = src_data[13];
+   dst_lin(3, 2) = src_data[14];
+   dst_lin(3, 3) = src_data[15];
+
+   dst_lin(0, 4) = src_data[16];
+   dst_lin(0, 5) = src_data[17];
+   dst_lin(1, 4) = src_data[18];
+   dst_lin(1, 5) = src_data[19];
+   dst_lin(0, 6) = src_data[20];
+   dst_lin(0, 7) = src_data[21];
+   dst_lin(1, 6) = src_data[22];
+   dst_lin(1, 7) = src_data[23];
+
+   dst_lin(2, 4) = src_data[24];
+   dst_lin(2, 5) = src_data[25];
+   dst_lin(3, 4) = src_data[26];
+   dst_lin(3, 5) = src_data[27];
+   dst_lin(2, 6) = src_data[28];
+   dst_lin(2, 7) = src_data[29];
+   dst_lin(3, 6) = src_data[30];
+   dst_lin(3, 7) = src_data[31];
+
+#undef dst_lin
 }
 
 #ifdef __SSSE3__
@@ -603,6 +798,79 @@ linear_to_tile4(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
 }
 
 /**
+ * Copy texture data from linear to W tile layout.
+ *
+ * \copydoc tile_copy_fn
+ */
+static inline void
+linear_to_wtiled(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                 uint32_t y0, uint32_t y3,
+                 char *dst, const char *src, int32_t src_pitch)
+{
+   /*
+    * The layout is a series of block of 64B each.
+    * ___________________________________________
+    * |blk00|blk08|blk16|blk24|blk32|blk48|blk56|
+    * |blk01|blk09|blk17|blk25|blk33|blk49|blk57|
+    * |blk02|blk10|blk18|blk26|blk34|blk50|blk58|
+    * |blk03|blk11|blk19|blk27|blk35|blk51|blk59|
+    * |blk04|blk12|blk20|blk28|blk36|blk52|blk60|
+    * |blk05|blk13|blk21|blk29|blk37|blk53|blk61|
+    * |blk06|blk14|blk22|blk30|blk38|blk54|blk62|
+    * |blk07|blk15|blk23|blk31|blk39|blk55|blk63|
+    * -------------------------------------------
+    */
+
+   /* Find intermediate Y offsets that are aligned to a 64B element (8 rows).
+    */
+   uint32_t y1 = MIN2(y3, ALIGN_UP(y0, 8));
+   uint32_t y2 = MAX2(y1, ALIGN_DOWN(y3, 8));
+
+   uint32_t xo, yo;
+
+   /* If the y0 coordinate is not aligned to a block, do partial copies into
+    * blocks 0, 8, 16, 24, 32, 48 & 56.
+    */
+   if (y0 != y1) {
+      if (x0 != x1)
+         wtile_block_copy_from_linear(dst, src, x0, x1, y0, y1, src_pitch);
+      for (xo = x1; xo < x2; xo += 8)
+         wtile_block_copy_from_linear(dst, src, xo, xo + 8, y0, y1, src_pitch);
+      if (x2 != x3)
+         wtile_block_copy_from_linear(dst, src, x2, x3, y0, y1, src_pitch);
+   }
+
+   for (yo = y1; yo < y2; yo += 8) {
+      /* Do partial copies int blocks [1, 6] if x0 is not aligned to block. */
+      if (x0 != x1) {
+         wtile_block_copy_from_linear(dst, src,
+                                      x0, x1, yo, yo + 8, src_pitch);
+      }
+      /* Full block copies on the inside. */
+      for (xo = x1; xo < x2; xo += 8)
+         wtile_block_full_copy_from_linear(dst, src, xo, yo, src_pitch);
+      /* Do partial copies int blocks [57, 62] if y3 is not aligned to block.
+       */
+      if (x2 != x3) {
+         wtile_block_copy_from_linear(dst, src,
+                                      x2, x3, yo, yo + 8, src_pitch);
+      }
+   }
+
+   /* If the x3 coordinate is not aligned to a block, do partial copies into
+    * blocks [57,62].
+    */
+   if (y2 != y3) {
+      if (x0 != x1)
+         wtile_block_copy_from_linear(dst, src, x0, x1, y2, y3, src_pitch);
+      for (xo = x1; xo < x2; xo += 8)
+         wtile_block_copy_from_linear(dst, src, xo, xo + 8, y2, y3, src_pitch);
+      if (x2 != x3)
+         wtile_block_copy_from_linear(dst, src, x2, x3, y2, y3, src_pitch);
+   }
+}
+
+/**
  * Copy texture data from X tile layout to linear.
  *
  * \copydoc tile_copy_fn
@@ -961,6 +1229,78 @@ tile4_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
    }
 }
 
+/**
+ * Copy texture data from W tile layout to linear.
+ *
+ * \copydoc tile_copy_fn
+ */
+static inline void
+wtiled_to_linear(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                 uint32_t y0, uint32_t y3,
+                 char *dst, const char *src,
+                 int32_t dst_pitch)
+{
+   /*
+    * The layout is a series of block of 64B each.
+    * ___________________________________________
+    * |blk00|blk08|blk16|blk24|blk32|blk48|blk56|
+    * |blk01|blk09|blk17|blk25|blk33|blk49|blk57|
+    * |blk02|blk10|blk18|blk26|blk34|blk50|blk58|
+    * |blk03|blk11|blk19|blk27|blk35|blk51|blk59|
+    * |blk04|blk12|blk20|blk28|blk36|blk52|blk60|
+    * |blk05|blk13|blk21|blk29|blk37|blk53|blk61|
+    * |blk06|blk14|blk22|blk30|blk38|blk54|blk62|
+    * |blk07|blk15|blk23|blk31|blk39|blk55|blk63|
+    * -------------------------------------------
+    */
+
+   /* Find intermediate Y offsets that are aligned to a 64B element (8 rows).
+    */
+   uint32_t y1 = MIN2(y3, ALIGN_UP(y0, 8));
+   uint32_t y2 = MAX2(y1, ALIGN_DOWN(y3, 8));
+
+   uint32_t xo, yo;
+
+   /* If the y0 coordinate is not aligned to a block, do partial copies into
+    * blocks 0, 8, 16, 24, 32, 48 & 56.
+    */
+   if (y0 != y1) {
+      if (x0 != x1)
+         wtile_block_copy_to_linear(dst, src, x0, x1, y0, y1, dst_pitch);
+      for (xo = x1; xo < x2; xo += 8)
+         wtile_block_copy_to_linear(dst, src, xo, xo + 8, y0, y1, dst_pitch);
+      if (x2 != x3)
+         wtile_block_copy_to_linear(dst, src, x2, x3, y0, y1, dst_pitch);
+   }
+
+   for (yo = y1; yo < y2; yo += 8) {
+      /* Do partial copies int blocks [1, 6] if x0 is not aligned to block. */
+      if (x0 != x1)
+         wtile_block_copy_to_linear(dst, src, x0, x1, yo, yo + 8, dst_pitch);
+      /* Full block copies on the inside. */
+      for (xo = x1; xo < x2; xo += 8)
+         wtile_block_full_copy_to_linear(dst, src, xo, yo, dst_pitch);
+      /* Do partial copies int blocks [57, 62] if y3 is not aligned to block.
+       */
+      if (x2 != x3)
+         wtile_block_copy_to_linear(dst, src, x2, x3, yo, yo + 8, dst_pitch);
+   }
+
+   /* If the x3 coordinate is not aligned to a block, do partial copies into
+    * blocks [57,62].
+    */
+   if (y2 != y3) {
+      if (x0 != x1)
+         wtile_block_copy_to_linear(dst, src, x0, x1, y2, y3, dst_pitch);
+      for (xo = x1; xo < x2; xo += 8) {
+         wtile_block_copy_to_linear(dst, src,
+                                    xo, MIN2(xo + 8, x3), y2, y3, dst_pitch);
+      }
+      if (x2 != x3)
+         wtile_block_copy_to_linear(dst, src, x2, x3, y2, y3, dst_pitch);
+   }
+}
+
 #if defined(INLINE_SSE41)
 static ALWAYS_INLINE void *
 _memcpy_streaming_load(void *dest, const void *src, size_t count)
@@ -1136,6 +1476,35 @@ linear_to_tile4_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
 }
 
 /**
+ * Copy texture data from linear to tile W layout, faster.
+ *
+ * Same as \ref linear_to_tilew but faster, because it passes constant
+ * parameters for common cases, allowing the compiler to inline code
+ * optimized for those cases.
+ *
+ * \copydoc tile_copy_fn
+ */
+static FLATTEN void
+linear_to_wtiled_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                        uint32_t y0, uint32_t y1,
+                        char *dst, const char *src,
+                        int32_t src_pitch,
+                        uint32_t swizzle_bit,
+                        isl_memcpy_type copy_type)
+{
+   assert(swizzle_bit == 0);
+   if (x0 == 0 && x3 == wtile_width && y0 == 0 && y1 == wtile_height) {
+      return linear_to_wtiled(0, 0,
+                              wtile_width, wtile_width,
+                              0, wtile_height,
+                              dst, src, src_pitch);
+   } else {
+      return linear_to_wtiled(x0, x1, x2, x3, y0, y1,
+                              dst, src, src_pitch);
+   }
+}
+
+/**
  * Copy texture data from X tile layout to linear, faster.
  *
  * Same as \ref xtile_to_linear but faster, because it passes constant
@@ -1299,6 +1668,36 @@ tile4_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
 }
 
 /**
+ * Copy texture data from tileW layout to linear, faster.
+ *
+ * Same as \ref tilew_to_linear but faster, because it passes constant
+ * parameters for common cases, allowing the compiler to inline code
+ * optimized for those cases.
+ *
+ * \copydoc tile_copy_fn
+ */
+static FLATTEN void
+wtiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
+                        uint32_t y0, uint32_t y1,
+                        char *dst, const char *src,
+                        int32_t dst_pitch,
+                        uint32_t swizzle_bit,
+                        isl_memcpy_type copy_type)
+{
+   assert(swizzle_bit == 0);
+
+   if (x0 == 0 && x3 == wtile_width && y0 == 0 && y1 == wtile_height) {
+      return wtiled_to_linear(0, 0,
+                              wtile_width, wtile_width,
+                              0, wtile_height,
+                              dst, src, dst_pitch);
+   } else {
+      return wtiled_to_linear(x0, x1, x2, x3, y0, y1,
+                              dst, src, dst_pitch);
+   }
+}
+
+/**
  * Copy from linear to tiled texture.
  *
  * Divide the region given by X range [xt1, xt2) and Y range [yt1, yt2) into
@@ -1322,24 +1721,37 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
    uint32_t xt0, xt3;
    uint32_t yt0, yt3;
    uint32_t xt, yt;
-   uint32_t tw, th, span;
+   uint32_t tw, th, xt_sub_range_alignment;
    uint32_t swizzle_bit = has_swizzling ? 1<<6 : 0;
 
    if (tiling == ISL_TILING_X) {
       tw = xtile_width;
       th = xtile_height;
-      span = xtile_span;
+      xt_sub_range_alignment = xtile_span;
       tile_copy = linear_to_xtiled_faster;
    } else if (tiling == ISL_TILING_Y0) {
       tw = ytile_width;
       th = ytile_height;
-      span = ytile_span;
+      xt_sub_range_alignment = ytile_span;
       tile_copy = linear_to_ytiled_faster;
    } else if (tiling == ISL_TILING_4) {
       tw = ytile_width;
       th = ytile_height;
-      span = ytile_span;
+      xt_sub_range_alignment = ytile_span;
       tile_copy = linear_to_tile4_faster;
+   } else if (tiling == ISL_TILING_W) {
+      tw = wtile_width;
+      th = wtile_height;
+      /* The copy function prioritizes W-Tile blocks. The width of a W-Tile
+       * block is four W-Tile spans.
+       */
+      xt_sub_range_alignment = wtile_span * 4;
+      tile_copy = linear_to_wtiled_faster;
+      /* TileW is a special case with doubled physical tile width due to HW
+       * programming requirements (see isl_tiling_get_info() in
+       * src/intel/isl/isl.c)
+       */
+      dst_pitch /= 2;
    } else {
       unreachable("unsupported tiling");
    }
@@ -1371,16 +1783,17 @@ linear_to_tiled(uint32_t xt1, uint32_t xt2,
           * The sub-ranges could be empty.
           */
          uint32_t x1, x2;
-         x1 = ALIGN_UP(x0, span);
+         x1 = ALIGN_UP(x0, xt_sub_range_alignment);
          if (x1 > x3)
             x1 = x2 = x3;
          else
-            x2 = ALIGN_DOWN(x3, span);
+            x2 = ALIGN_DOWN(x3, xt_sub_range_alignment);
 
          assert(x0 <= x1 && x1 <= x2 && x2 <= x3);
-         assert(x1 - x0 < span && x3 - x2 < span);
+         assert(x1 - x0 < xt_sub_range_alignment &&
+                x3 - x2 < xt_sub_range_alignment);
          assert(x3 - x0 <= tw);
-         assert((x2 - x1) % span == 0);
+         assert((x2 - x1) % xt_sub_range_alignment == 0);
 
          /* Translate by (xt,yt) for single-tile copier. */
          tile_copy(x0-xt, x1-xt, x2-xt, x3-xt,
@@ -1418,24 +1831,37 @@ tiled_to_linear(uint32_t xt1, uint32_t xt2,
    uint32_t xt0, xt3;
    uint32_t yt0, yt3;
    uint32_t xt, yt;
-   uint32_t tw, th, span;
+   uint32_t tw, th, xt_sub_range_alignment;
    uint32_t swizzle_bit = has_swizzling ? 1<<6 : 0;
 
    if (tiling == ISL_TILING_X) {
       tw = xtile_width;
       th = xtile_height;
-      span = xtile_span;
+      xt_sub_range_alignment = xtile_span;
       tile_copy = xtiled_to_linear_faster;
    } else if (tiling == ISL_TILING_Y0) {
       tw = ytile_width;
       th = ytile_height;
-      span = ytile_span;
+      xt_sub_range_alignment = ytile_span;
       tile_copy = ytiled_to_linear_faster;
    } else if (tiling == ISL_TILING_4) {
       tw = ytile_width;
       th = ytile_height;
-      span = ytile_span;
+      xt_sub_range_alignment = ytile_span;
       tile_copy = tile4_to_linear_faster;
+   } else if (tiling == ISL_TILING_W) {
+      tw = wtile_width;
+      th = wtile_height;
+      /* The copy function prioritizes W-Tile blocks. The width of a W-Tile
+       * block is four W-Tile spans.
+       */
+      xt_sub_range_alignment = wtile_span * 4;
+      tile_copy = wtiled_to_linear_faster;
+      /* TileW is a special case with doubled physical tile width due to HW
+       * programming requirements (see isl_tiling_get_info() in
+       * src/intel/isl/isl.c)
+       */
+      src_pitch /= 2;
    } else {
       unreachable("unsupported tiling");
    }
@@ -1471,21 +1897,22 @@ tiled_to_linear(uint32_t xt1, uint32_t xt2,
          uint32_t x3 = MIN2(xt2, xt + tw);
          uint32_t y1 = MIN2(yt2, yt + th);
 
-         /* [x0,x3) is split into [x0,x1), [x1,x2), [x2,x3) such that
-          * the middle interval is the longest span-aligned part.
-          * The sub-ranges could be empty.
+         /* [x0,x3) is split into [x0,x1), [x1,x2), [x2,x3) such that the
+          * middle interval is the longest xt_sub_range_alignment aligned
+          * part. The sub-ranges could be empty.
           */
          uint32_t x1, x2;
-         x1 = ALIGN_UP(x0, span);
+         x1 = ALIGN_UP(x0, xt_sub_range_alignment);
          if (x1 > x3)
             x1 = x2 = x3;
          else
-            x2 = ALIGN_DOWN(x3, span);
+            x2 = ALIGN_DOWN(x3, xt_sub_range_alignment);
 
          assert(x0 <= x1 && x1 <= x2 && x2 <= x3);
-         assert(x1 - x0 < span && x3 - x2 < span);
+         assert(x1 - x0 < xt_sub_range_alignment &&
+                x3 - x2 < xt_sub_range_alignment);
          assert(x3 - x0 <= tw);
-         assert((x2 - x1) % span == 0);
+         assert((x2 - x1) % xt_sub_range_alignment == 0);
 
          /* Translate by (xt,yt) for single-tile copier. */
          tile_copy(x0-xt, x1-xt, x2-xt, x3-xt,

@@ -28,9 +28,10 @@ protected:
    nir_opt_loop_test();
 
    nir_deref_instr *add_loop_terminators(nir_if **term1, nir_if **term2,
-                                         bool deref_array);
+                                         bool break_in_else, bool deref_array);
    void create_loop_phis(nir_loop *loop, nir_if *term1, nir_if *term2,
                          nir_def *def1, nir_def *def2);
+   void test_merged_if(bool break_in_else);
 
    nir_def *in_def;
    nir_variable *out_var;
@@ -52,12 +53,16 @@ nir_opt_loop_test::nir_opt_loop_test()
 
 nir_deref_instr *
 nir_opt_loop_test::add_loop_terminators(nir_if **term1, nir_if **term2,
-                                        bool deref_array)
+                                        bool break_in_else, bool deref_array)
 {
    /* Add first terminator */
    nir_def *one = nir_imm_int(b, 1);
    nir_def *cmp_result = nir_ieq(b, in_def, one);
    nir_if *nif = nir_push_if(b, cmp_result);
+
+   if (break_in_else)
+      nir_push_else(b, nif);
+
    nir_jump(b, nir_jump_break);
    nir_pop_if(b, nif);
 
@@ -77,6 +82,10 @@ nir_opt_loop_test::add_loop_terminators(nir_if **term1, nir_if **term2,
    nir_def *two = nir_imm_int(b, 2);
    nir_def *cmp_result2 = nir_ieq(b, ubo_def, two);
    nir_if *nif2 = nir_push_if(b, cmp_result2);
+
+   if (break_in_else)
+      nir_push_else(b, nif2);
+
    nir_jump(b, nir_jump_break);
    nir_pop_if(b, nif2);
 
@@ -100,6 +109,38 @@ nir_opt_loop_test::create_loop_phis(nir_loop *loop,
                     &phi_instr->instr);
 }
 
+void
+nir_opt_loop_test::test_merged_if(bool break_in_else)
+{
+   /* Tests that opt_loop_merge_terminators results in valid nir and that
+    * the test condition is correct based on the location of the break in
+    * the terminators.
+    */
+   nir_loop *loop = nir_push_loop(b);
+
+   nir_if *term1;
+   nir_if *term2;
+   add_loop_terminators(&term1, &term2, break_in_else, false);
+
+   nir_pop_loop(b, loop);
+
+   ASSERT_TRUE(nir_opt_loop(b->shader));
+
+   nir_validate_shader(b->shader, NULL);
+
+   nir_alu_instr *alu = nir_instr_as_alu(term2->condition.ssa->parent_instr);
+   if (break_in_else)
+      ASSERT_TRUE(alu->op == nir_op_iand);
+   else
+      ASSERT_TRUE(alu->op == nir_op_ior);
+}
+
+TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_basic)
+{
+   test_merged_if(false);
+   test_merged_if(true);
+}
+
 TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_deref_after_first_if)
 {
    /* Tests that opt_loop_merge_terminators creates valid nir after it merges
@@ -107,7 +148,7 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_deref_after_first_if)
     */
    nir_loop *loop = nir_push_loop(b);
 
-   nir_deref_instr *deref = add_loop_terminators(NULL, NULL, false);
+   nir_deref_instr *deref = add_loop_terminators(NULL, NULL, false, false);
 
    /* Load from deref that will be moved inside the continue branch of the
     * first if-statements continue block. If not handled correctly during
@@ -131,7 +172,7 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_deref_phi_index)
     */
    nir_loop *loop = nir_push_loop(b);
 
-   nir_deref_instr *deref = add_loop_terminators(NULL, NULL, true);
+   nir_deref_instr *deref = add_loop_terminators(NULL, NULL, false, true);
 
    /* Load from deref that will be moved inside the continue branch of the
     * first if-statements continue block. If not handled correctly during
@@ -160,7 +201,7 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_skip_merge_if_phis)
 
    nir_if *term1;
    nir_if *term2;
-   add_loop_terminators(&term1, &term2, false);
+   add_loop_terminators(&term1, &term2, false, false);
 
    nir_pop_loop(b, loop);
 
@@ -188,13 +229,78 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_skip_merge_if_phis_nested_l
 
    nir_if *term1;
    nir_if *term2;
-   add_loop_terminators(&term1, &term2, false);
+   add_loop_terminators(&term1, &term2, false, false);
 
    nir_pop_loop(b, loop);
 
    create_loop_phis(loop, term1, term2, in_def, ubo_def);
 
    ASSERT_FALSE(nir_opt_loop(b->shader));
+
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_ends_with_jump)
+{
+   nir_loop *loop = nir_push_loop(b);
+
+   /* the break we want to move down: */
+   nir_break_if(b, nir_imm_true(b));
+
+   /* do_work_2: */
+   nir_push_if(b, nir_imm_true(b));
+   nir_jump(b, nir_jump_continue);
+   nir_pop_if(b, NULL);
+   nir_jump(b, nir_jump_return);
+
+   nir_pop_loop(b, loop);
+
+   ASSERT_FALSE(nir_opt_loop(b->shader));
+
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_nontrivial_break)
+{
+   nir_loop *loop = nir_push_loop(b);
+
+   nir_push_if(b, nir_imm_true(b));
+
+   nir_push_if(b, nir_imm_true(b));
+   nir_push_if(b, nir_imm_true(b));
+   nir_jump(b, nir_jump_break);
+   nir_pop_if(b, NULL);
+   nir_pop_if(b, NULL);
+   nir_nop(b);
+
+   nir_jump(b, nir_jump_break);
+   nir_pop_if(b, NULL);
+
+   /* do_work_2: */
+   nir_nop(b);
+
+   nir_pop_loop(b, loop);
+
+   ASSERT_FALSE(nir_opt_loop(b->shader));
+
+   nir_validate_shader(b->shader, NULL);
+}
+
+TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_deref)
+{
+   nir_loop *loop = nir_push_loop(b);
+
+   nir_deref_instr *var_deref = nir_build_deref_var(b, out_var);
+
+   nir_push_if(b, nir_imm_true(b));
+   nir_jump(b, nir_jump_break);
+   nir_pop_if(b, NULL);
+
+   nir_store_deref(b, var_deref, nir_imm_int(b, 42), 0x1);
+
+   nir_pop_loop(b, loop);
+
+   ASSERT_TRUE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
 }

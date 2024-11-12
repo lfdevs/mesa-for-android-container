@@ -135,7 +135,7 @@ elk_texture_offset(const nir_tex_instr *tex, unsigned src,
          return false;
 
       const unsigned shift = 4 * (2 - i);
-      offset_bits |= (offset << shift) & (0xF << shift);
+      offset_bits |= (offset & 0xF) << shift;
    }
 
    *offset_bits_out = offset_bits;

@@ -8,7 +8,7 @@
 # DEBIAN_TEST_VK_TAG
 # KERNEL_ROOTFS_TAG
 
-set -ex -o pipefail
+set -uex -o pipefail
 
 # See `deqp_build_targets` below for which release is used to produce which
 # binary. Unless this comment has bitrotten:
@@ -16,9 +16,9 @@ set -ex -o pipefail
 # - the GL release produces `glcts`, and
 # - the GLES release produces `deqp-gles*` and `deqp-egl`
 
-DEQP_VK_VERSION=1.3.8.2
-DEQP_GL_VERSION=4.6.4.1
-DEQP_GLES_VERSION=3.2.10.1
+DEQP_VK_VERSION=1.3.10.0
+DEQP_GL_VERSION=4.6.5.0
+DEQP_GLES_VERSION=3.2.11.0
 
 # Patches to VulkanCTS may come from commits in their repo (listed in
 # cts_commits_to_backport) or patch files stored in our repo (in the patch
@@ -28,14 +28,8 @@ DEQP_GLES_VERSION=3.2.10.1
 
 # shellcheck disable=SC2034
 vk_cts_commits_to_backport=(
-    # Fix more ASAN errors due to missing virtual destructors
-    dd40bcfef1b4035ea55480b6fd4d884447120768
-
-    # Remove "unused shader stages" tests
-    7dac86c6bbd15dec91d7d9a98cd6dd57c11092a7
-
-    # Emit point size from "many indirect draws" test
-    771e56d1c4d03e073ddb7f1200ad6d57e0a0c979
+    # Remove multi-line test results in DRM format modifier tests
+    8c95af68a2a85cbdc7e1d9267ab029f73e9427d2
 )
 
 # shellcheck disable=SC2034
@@ -112,20 +106,20 @@ do
   PATCH_URL="https://github.com/KhronosGroup/VK-GL-CTS/commit/$commit.patch"
   echo "Apply patch to ${DEQP_API} CTS from $PATCH_URL"
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 $PATCH_URL | \
-    git am -
+    GIT_COMMITTER_DATE=$(date -d@0) git am -
 done
 
 cts_patch_files="${deqp_api}_cts_patch_files[@]"
 for patch in "${!cts_patch_files}"
 do
   echo "Apply patch to ${DEQP_API} CTS from $patch"
-  git am < $OLDPWD/.gitlab-ci/container/patches/$patch
+  GIT_COMMITTER_DATE=$(date -d@0) git am < $OLDPWD/.gitlab-ci/container/patches/$patch
 done
 
 {
   echo "dEQP base version $DEQP_VERSION"
   echo "The following local patches are applied on top:"
-  git log --reverse --oneline $DEQP_VERSION.. --format=%s | sed 's/^/- /'
+  git log --reverse --oneline $DEQP_VERSION.. --format='- %s'
 } > /deqp/version-$deqp_api
 
 # --insecure is due to SSL cert failures hitting sourceforge for zlib and
@@ -144,7 +138,7 @@ if [ "${DEQP_API}" = 'GLES' ]; then
     cmake -S /VK-GL-CTS -B . -G Ninja \
         -DDEQP_TARGET=android \
         -DCMAKE_BUILD_TYPE=Release \
-        $EXTRA_CMAKE_ARGS
+        ${EXTRA_CMAKE_ARGS:-}
     mold --run ninja modules/egl/deqp-egl
     mv /deqp/modules/egl/deqp-egl /deqp/modules/egl/deqp-egl-android
   else
@@ -153,14 +147,14 @@ if [ "${DEQP_API}" = 'GLES' ]; then
     cmake -S /VK-GL-CTS -B . -G Ninja \
         -DDEQP_TARGET=x11_egl_glx \
         -DCMAKE_BUILD_TYPE=Release \
-        $EXTRA_CMAKE_ARGS
+        ${EXTRA_CMAKE_ARGS:-}
     mold --run ninja modules/egl/deqp-egl
     mv /deqp/modules/egl/deqp-egl /deqp/modules/egl/deqp-egl-x11
 
     cmake -S /VK-GL-CTS -B . -G Ninja \
         -DDEQP_TARGET=wayland \
         -DCMAKE_BUILD_TYPE=Release \
-        $EXTRA_CMAKE_ARGS
+        ${EXTRA_CMAKE_ARGS:-}
     mold --run ninja modules/egl/deqp-egl
     mv /deqp/modules/egl/deqp-egl /deqp/modules/egl/deqp-egl-wayland
   fi
@@ -169,7 +163,7 @@ fi
 cmake -S /VK-GL-CTS -B . -G Ninja \
       -DDEQP_TARGET=${DEQP_TARGET} \
       -DCMAKE_BUILD_TYPE=Release \
-      $EXTRA_CMAKE_ARGS
+      ${EXTRA_CMAKE_ARGS:-}
 
 # Make sure `default` doesn't silently stop detecting one of the platforms we care about
 if [ "${DEQP_TARGET}" = 'default' ]; then
@@ -212,22 +206,22 @@ if [ "${DEQP_TARGET}" != 'android' ]; then
 
     if [ "${DEQP_API}" = 'GL' ]; then
         cp \
-            /VK-GL-CTS/external/openglcts/data/mustpass/gl/khronos_mustpass/4.6.1.x/*-main.txt \
+            /VK-GL-CTS/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/main/*-main.txt \
             /deqp/mustpass/
         cp \
-            /VK-GL-CTS/external/openglcts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/*-single.txt \
+            /VK-GL-CTS/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass_single/main/*-single.txt \
             /deqp/mustpass/
     fi
 
     if [ "${DEQP_API}" = 'GLES' ]; then
         cp \
-            /VK-GL-CTS/external/openglcts/data/mustpass/gles/aosp_mustpass/3.2.6.x/*.txt \
+            /VK-GL-CTS/external/openglcts/data/gl_cts/data/mustpass/gles/aosp_mustpass/main/*.txt \
             /deqp/mustpass/
         cp \
-            /VK-GL-CTS/external/openglcts/data/mustpass/egl/aosp_mustpass/3.2.6.x/egl-main.txt \
+            /VK-GL-CTS/external/openglcts/data/gl_cts/data/mustpass/egl/aosp_mustpass/main/egl-main.txt \
             /deqp/mustpass/
         cp \
-            /VK-GL-CTS/external/openglcts/data/mustpass/gles/khronos_mustpass/3.2.6.x/*-main.txt \
+            /VK-GL-CTS/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/main/*-main.txt \
             /deqp/mustpass/
     fi
 
@@ -238,6 +232,10 @@ if [ "${DEQP_TARGET}" != 'android' ]; then
     rm -rf /deqp/executor
     mv /deqp/executor.save /deqp/executor
 fi
+
+# Compress the caselists, since Vulkan's in particular are gigantic; higher
+# compression levels provide no real measurable benefit.
+zstd -1 --rm /deqp/mustpass/*.txt
 
 # Remove other mustpass files, since we saved off the ones we wanted to conventient locations above.
 rm -rf /deqp/external/**/mustpass/

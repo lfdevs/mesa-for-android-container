@@ -4,12 +4,10 @@
  */
 
 #include <stdint.h>
-#include "compiler/agx_internal_formats.h"
 #include "compiler/glsl_types.h"
 #include "util/format/u_format.h"
 #include "util/macros.h"
 #include "agx_nir_format_helpers.h"
-#include "agx_pack.h"
 #include "agx_tilebuffer.h"
 #include "nir.h"
 #include "nir_builder.h"
@@ -90,12 +88,13 @@ store_tilebuffer(nir_builder *b, struct agx_tilebuffer_layout *tib,
       samples = nir_imm_intN_t(b, ALL_SAMPLES, 16);
 
    uint8_t offset_B = agx_tilebuffer_offset_B(tib, rt);
-   nir_store_local_pixel_agx(b, value, samples, .base = offset_B,
-                             .write_mask = write_mask, .format = format);
+   nir_store_local_pixel_agx(b, value, samples, nir_undef(b, 2, 16),
+                             .base = offset_B, .write_mask = write_mask,
+                             .format = format);
 }
 
 static nir_def *
-nir_fsat_signed(nir_builder *b, nir_def *x)
+nir_build_fsat_signed(nir_builder *b, nir_def *x)
 {
    return nir_fclamp(b, x, nir_imm_floatN_t(b, -1.0, x->bit_size),
                      nir_imm_floatN_t(b, +1.0, x->bit_size));
@@ -107,7 +106,7 @@ nir_fsat_to_format(nir_builder *b, nir_def *x, enum pipe_format format)
    if (util_format_is_unorm(format))
       return nir_fsat(b, x);
    else if (util_format_is_snorm(format))
-      return nir_fsat_signed(b, x);
+      return nir_build_fsat_signed(b, x);
    else
       return x;
 }
@@ -223,7 +222,7 @@ store_memory(nir_builder *b, unsigned bindless_base, unsigned nr_samples,
       nir_def *coverage = nir_load_sample_mask(b);
 
       if (samples != NULL)
-         coverage = nir_iand(b, coverage, samples);
+         coverage = nir_iand(b, coverage, nir_u2u32(b, samples));
 
       nir_def *covered = nir_ubitfield_extract(
          b, coverage, nir_u2u32(b, sample), nir_imm_int(b, 1));

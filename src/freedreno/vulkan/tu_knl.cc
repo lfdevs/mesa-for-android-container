@@ -18,6 +18,8 @@
 
 #include <sys/mman.h>
 
+#include "vk_debug_utils.h"
+
 #include "util/libdrm.h"
 
 #include "tu_device.h"
@@ -27,13 +29,30 @@
 
 VkResult
 tu_bo_init_new_explicit_iova(struct tu_device *dev,
+                             struct vk_object_base *base,
                              struct tu_bo **out_bo,
                              uint64_t size,
                              uint64_t client_iova,
                              VkMemoryPropertyFlags mem_property,
                              enum tu_bo_alloc_flags flags, const char *name)
 {
-   return dev->instance->knl->bo_init(dev, out_bo, size, client_iova, mem_property, flags, name);
+   struct tu_instance *instance = dev->physical_device->instance;
+
+   VkResult result =
+      dev->instance->knl->bo_init(dev, base, out_bo, size, client_iova,
+                                  mem_property, flags, name);
+   if (result != VK_SUCCESS)
+      return result;
+
+   if ((mem_property & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) &&
+       !(mem_property & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+      (*out_bo)->cached_non_coherent = true;
+
+   vk_address_binding_report(&instance->vk, base ? base : &dev->vk.base,
+                             (*out_bo)->iova, (*out_bo)->size,
+                             VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
+
+   return VK_SUCCESS;
 }
 
 VkResult
@@ -42,7 +61,19 @@ tu_bo_init_dmabuf(struct tu_device *dev,
                   uint64_t size,
                   int fd)
 {
-   return dev->instance->knl->bo_init_dmabuf(dev, bo, size, fd);
+   VkResult result = dev->instance->knl->bo_init_dmabuf(dev, bo, size, fd);
+   if (result != VK_SUCCESS)
+      return result;
+
+   /* If we have non-coherent cached memory, then defensively assume that it
+    * may need to be invalidated/flushed. If not, then we just have to assume
+    * that whatever dma-buf producer didn't allocate it non-coherent cached
+    * because we have no way of handling that.
+    */
+   if (dev->physical_device->has_cached_non_coherent_memory)
+      (*bo)->cached_non_coherent = true;
+   
+   return VK_SUCCESS;
 }
 
 int
@@ -54,6 +85,12 @@ tu_bo_export_dmabuf(struct tu_device *dev, struct tu_bo *bo)
 void
 tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
 {
+   struct tu_instance *instance = dev->physical_device->instance;
+
+   vk_address_binding_report(&instance->vk, bo->base ? bo->base : &dev->vk.base,
+                             bo->iova, bo->size,
+                             VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
+
    dev->instance->knl->bo_finish(dev, bo);
 }
 

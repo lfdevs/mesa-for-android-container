@@ -74,11 +74,36 @@ intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
       _mesa_hash_table_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
    ctx->stats =
       _mesa_hash_table_create(NULL, _mesa_hash_string, _mesa_key_string_equal);
+
+   const char *filters = getenv("INTEL_DECODE_FILTERS");
+   if (filters != NULL) {
+      ctx->filters =
+         _mesa_hash_table_create(NULL, _mesa_hash_string, _mesa_key_string_equal);
+      do {
+         const char *term = filters;
+         if (strlen(term) == 0)
+            break;
+
+         filters = strstr(term, ",");
+
+         char *str = ralloc_strndup(ctx->filters, term,
+                                    filters != NULL ?
+                                    (filters - term) : strlen(term));
+         _mesa_hash_table_insert(ctx->filters, str, str);
+
+         if (filters == NULL)
+            break;
+
+         filters++;
+      } while (true);
+   }
 }
 
 void
 intel_batch_decode_ctx_finish(struct intel_batch_decode_ctx *ctx)
 {
+   if (ctx->filters != NULL)
+      _mesa_hash_table_destroy(ctx->filters, NULL);
    _mesa_hash_table_destroy(ctx->commands, NULL);
    _mesa_hash_table_destroy(ctx->stats, NULL);
    intel_spec_destroy(ctx->spec);
@@ -92,7 +117,7 @@ intel_batch_decode_ctx_finish(struct intel_batch_decode_ctx *ctx)
 
 static void
 ctx_print_group(struct intel_batch_decode_ctx *ctx,
-                struct intel_group *group,
+                const struct intel_group *group,
                 uint64_t address, const void *map)
 {
    intel_print_group(ctx->fp, group, address, map, 0,
@@ -1109,7 +1134,7 @@ static void
 decode_3dstate_blend_state_pointers(struct intel_batch_decode_ctx *ctx,
                                     const uint32_t *p)
 {
-   decode_dynamic_state_pointers(ctx, "BLEND_STATE", p, 1);
+   decode_dynamic_state_pointers(ctx, "BLEND_STATE", p, 8);
 }
 
 static void
@@ -1457,10 +1482,17 @@ decode_cps_pointers(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 struct custom_decoder {
    const char *cmd_name;
    void (*decode)(struct intel_batch_decode_ctx *ctx, const uint32_t *p);
-} custom_decoders[] = {
+};
+
+/* Special handling to be able to decode other instructions */
+struct custom_decoder state_handlers[] = {
    { "STATE_BASE_ADDRESS", handle_state_base_address },
    { "3DSTATE_BINDING_TABLE_POOL_ALLOC", handle_binding_table_pool_alloc },
    { "MEDIA_INTERFACE_DESCRIPTOR_LOAD", handle_media_interface_descriptor_load },
+};
+
+/* Special printing of instructions */
+struct custom_decoder custom_decoders[] = {
    { "COMPUTE_WALKER", handle_compute_walker },
    { "MEDIA_CURBE_LOAD", handle_media_curbe_load },
    { "3DSTATE_VERTEX_BUFFERS", handle_3dstate_vertex_buffers },
@@ -1584,6 +1616,33 @@ intel_print_accumulated_instrs(struct intel_batch_decode_ctx *ctx)
    util_dynarray_fini(&arr);
 }
 
+static void
+print_instr(struct intel_batch_decode_ctx *ctx,
+            const struct intel_group *inst,
+            const uint32_t *p,
+            uint64_t offset)
+{
+   char *begin_color;
+   char *end_color;
+   get_inst_color(ctx, inst, &begin_color, &end_color);
+
+   fprintf(ctx->fp, "%s0x%08"PRIx64"%s:  0x%08x:  %-80s%s\n",
+           begin_color, offset,
+           ctx->acthd && offset == ctx->acthd ? " (ACTHD)" : "", p[0],
+           inst->name, end_color);
+
+   if (ctx->flags & INTEL_BATCH_DECODE_FULL) {
+      ctx_print_group(ctx, inst, offset, p);
+
+      for (int i = 0; i < ARRAY_SIZE(custom_decoders); i++) {
+         if (strcmp(inst->name, custom_decoders[i].cmd_name) == 0) {
+                  custom_decoders[i].decode(ctx, p);
+                  break;
+         }
+      }
+   }
+}
+
 void
 intel_print_batch(struct intel_batch_decode_ctx *ctx,
                   const uint32_t *batch, uint32_t batch_size,
@@ -1645,25 +1704,17 @@ intel_print_batch(struct intel_batch_decode_ctx *ctx,
              !strcmp(inst->name, "COMPUTE_WALKER")) {
             intel_print_accumulated_instrs(ctx);
          }
+      } else if (ctx->filters != NULL) {
+         if (_mesa_hash_table_search(ctx->filters, inst->name) != NULL)
+            print_instr(ctx, inst, p, offset);
       } else {
-         char *begin_color;
-         char *end_color;
-         get_inst_color(ctx, inst, &begin_color, &end_color);
+         print_instr(ctx, inst, p, offset);
+      }
 
-         fprintf(ctx->fp, "%s0x%08"PRIx64"%s:  0x%08x:  %-80s%s\n",
-                 begin_color, offset,
-                 ctx->acthd && offset == ctx->acthd ? " (ACTHD)" : "", p[0],
-                 inst->name, end_color);
-
-         if (ctx->flags & INTEL_BATCH_DECODE_FULL) {
-            ctx_print_group(ctx, inst, offset, p);
-
-            for (int i = 0; i < ARRAY_SIZE(custom_decoders); i++) {
-               if (strcmp(inst->name, custom_decoders[i].cmd_name) == 0) {
-                  custom_decoders[i].decode(ctx, p);
-                  break;
-               }
-            }
+      for (int i = 0; i < ARRAY_SIZE(state_handlers); i++) {
+         if (strcmp(inst->name, state_handlers[i].cmd_name) == 0) {
+            state_handlers[i].decode(ctx, p);
+            break;
          }
       }
 

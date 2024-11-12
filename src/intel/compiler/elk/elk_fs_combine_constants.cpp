@@ -193,11 +193,15 @@ public:
       success = (user_map != NULL && values_to_emit != NULL);
    }
 
+   combine_constants_result(const combine_constants_result &) = delete;
+
    ~combine_constants_result()
    {
       free(values_to_emit);
       free(user_map);
    }
+
+   combine_constants_result & operator=(const combine_constants_result &) = delete;
 
    void append_value(const nir_const_value &value, unsigned bit_size)
    {

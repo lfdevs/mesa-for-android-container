@@ -19,6 +19,21 @@
 
 #include "vk_format.h"
 
+static inline enum pipe_format
+radv_format_to_pipe_format(enum VkFormat vkformat)
+{
+   switch (vkformat) {
+   case VK_FORMAT_R10X6_UNORM_PACK16:
+   case VK_FORMAT_R12X4_UNORM_PACK16:
+      return PIPE_FORMAT_R16_UNORM;
+   case VK_FORMAT_R10X6G10X6_UNORM_2PACK16:
+   case VK_FORMAT_R12X4G12X4_UNORM_2PACK16:
+      return PIPE_FORMAT_R16G16_UNORM;
+   default:
+      return vk_format_to_pipe_format(vkformat);
+   }
+}
+
 /**
  * Return the index of the first non-void channel
  * -1 if no non-void channels
@@ -26,7 +41,7 @@
 static inline int
 vk_format_get_first_non_void_channel(VkFormat format)
 {
-   return util_format_get_first_non_void_channel(vk_format_to_pipe_format(format));
+   return util_format_get_first_non_void_channel(radv_format_to_pipe_format(format));
 }
 
 static inline enum pipe_swizzle
@@ -61,7 +76,7 @@ vk_format_compose_swizzles(const VkComponentMapping *mapping, const unsigned cha
 static inline bool
 vk_format_is_subsampled(VkFormat format)
 {
-   return util_format_is_subsampled_422(vk_format_to_pipe_format(format));
+   return util_format_is_subsampled_422(radv_format_to_pipe_format(format));
 }
 
 static inline VkFormat
@@ -102,18 +117,6 @@ vk_format_no_srgb(VkFormat format)
       assert(!vk_format_is_srgb(format));
       return format;
    }
-}
-
-static inline unsigned
-vk_format_get_plane_width(VkFormat format, unsigned plane, unsigned width)
-{
-   return util_format_get_plane_width(vk_format_to_pipe_format(format), plane, width);
-}
-
-static inline unsigned
-vk_format_get_plane_height(VkFormat format, unsigned plane, unsigned height)
-{
-   return util_format_get_plane_height(vk_format_to_pipe_format(format), plane, height);
 }
 
 struct radv_physical_device;

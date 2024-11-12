@@ -155,8 +155,6 @@ can_remat_instr(nir_instr *instr, struct sized_bitset *remat)
       case nir_intrinsic_load_vulkan_descriptor:
       case nir_intrinsic_load_push_constant:
       case nir_intrinsic_load_global_constant:
-      case nir_intrinsic_load_global_const_block_intel:
-      case nir_intrinsic_load_desc_set_address_intel:
          /* These intrinsics don't need to be spilled as long as they don't
           * depend on any spilled values.
           */
@@ -1922,6 +1920,7 @@ should_vectorize(unsigned align_mul,
                  unsigned align_offset,
                  unsigned bit_size,
                  unsigned num_components,
+                 unsigned hole_size,
                  nir_intrinsic_instr *low, nir_intrinsic_instr *high,
                  void *data)
 {
@@ -1935,7 +1934,7 @@ should_vectorize(unsigned align_mul,
    struct stack_op_vectorizer_state *state = data;
 
    return state->driver_callback(align_mul, align_offset,
-                                 bit_size, num_components,
+                                 bit_size, num_components, hole_size,
                                  low, high, state->driver_data);
 }
 

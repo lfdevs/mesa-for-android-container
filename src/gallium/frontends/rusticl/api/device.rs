@@ -198,7 +198,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_MIN_DATA_TYPE_ALIGN_SIZE => {
                 cl_prop::<cl_uint>(16 * size_of::<cl_ulong>() as cl_uint)
             }
-            CL_DEVICE_NAME => cl_prop::<&str>(&dev.screen().name()),
+            CL_DEVICE_NAME => cl_prop::<&CStr>(dev.screen().name()),
             CL_DEVICE_NATIVE_VECTOR_WIDTH_CHAR => cl_prop::<cl_uint>(1),
             CL_DEVICE_NATIVE_VECTOR_WIDTH_DOUBLE => cl_prop::<cl_uint>(dev.fp64_supported().into()),
             CL_DEVICE_NATIVE_VECTOR_WIDTH_FLOAT => cl_prop::<cl_uint>(1),
@@ -262,9 +262,9 @@ impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_QUEUE_ON_DEVICE_MAX_SIZE => cl_prop::<cl_uint>(0),
             CL_DEVICE_QUEUE_ON_DEVICE_PREFERRED_SIZE => cl_prop::<cl_uint>(0),
             CL_DEVICE_QUEUE_ON_DEVICE_PROPERTIES => cl_prop::<cl_command_queue_properties>(0),
-            CL_DEVICE_QUEUE_ON_HOST_PROPERTIES => {
-                cl_prop::<cl_command_queue_properties>(CL_QUEUE_PROFILING_ENABLE.into())
-            }
+            CL_DEVICE_QUEUE_ON_HOST_PROPERTIES => cl_prop::<cl_command_queue_properties>(
+                (CL_QUEUE_PROFILING_ENABLE | CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE).into(),
+            ),
             CL_DEVICE_REFERENCE_COUNT => cl_prop::<cl_uint>(1),
             CL_DEVICE_SHARED_SYSTEM_MEM_CAPABILITIES_INTEL => {
                 cl_prop::<cl_device_unified_shared_memory_capabilities_intel>(0)
@@ -299,7 +299,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_UUID_KHR => cl_prop::<[cl_uchar; CL_UUID_SIZE_KHR as usize]>(
                 dev.screen().device_uuid().unwrap_or_default(),
             ),
-            CL_DEVICE_VENDOR => cl_prop::<&str>(&dev.screen().device_vendor()),
+            CL_DEVICE_VENDOR => cl_prop::<&CStr>(dev.screen().device_vendor()),
             CL_DEVICE_VENDOR_ID => cl_prop::<cl_uint>(dev.vendor_id()),
             CL_DEVICE_VERSION => cl_prop::<&str>(&format!("OpenCL {} ", dev.cl_version.api_str())),
             CL_DRIVER_UUID_KHR => cl_prop::<[cl_char; CL_UUID_SIZE_KHR as usize]>(
@@ -370,6 +370,20 @@ fn retain_device(_device: cl_device_id) -> CLResult<()> {
 #[cl_entrypoint(clReleaseDevice)]
 fn release_device(_device: cl_device_id) -> CLResult<()> {
     Ok(())
+}
+
+#[cl_entrypoint(clCreateSubDevices)]
+fn create_sub_devices(
+    _device: cl_device_id,
+    _properties: *const cl_device_partition_property,
+    _num_devices: cl_uint,
+    _out_devices: *mut cl_device_id,
+    _num_devices_ret: *mut cl_uint,
+) -> CLResult<()> {
+    // CL_INVALID_VALUE if values specified in properties are not valid or
+    // if values specified in properties are valid but not supported by the
+    // device.
+    Err(CL_INVALID_VALUE)
 }
 
 #[cl_entrypoint(clGetDeviceAndHostTimer)]

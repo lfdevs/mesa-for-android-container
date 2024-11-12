@@ -47,8 +47,7 @@ panfrost_supports_compressed_format(struct panfrost_device *dev,
                                     unsigned texfeat_bit)
 {
    assert(texfeat_bit < 32);
-   return panfrost_query_compressed_formats(&dev->kmod.props) &
-          BITFIELD_BIT(texfeat_bit);
+   return dev->compressed_formats & BITFIELD_BIT(texfeat_bit);
 }
 
 void

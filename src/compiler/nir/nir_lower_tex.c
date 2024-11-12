@@ -949,8 +949,8 @@ lower_tex_to_txd(nir_builder *b, nir_tex_instr *tex)
    /* don't take the derivative of the array index */
    if (tex->is_array)
       coord = nir_channels(b, coord, nir_component_mask(coord->num_components - 1));
-   nir_def *dfdx = nir_fddx(b, coord);
-   nir_def *dfdy = nir_fddy(b, coord);
+   nir_def *dfdx = nir_ddx(b, coord);
+   nir_def *dfdy = nir_ddy(b, coord);
    txd->src[tex->num_srcs] = nir_tex_src_for_ssa(nir_tex_src_ddx, dfdx);
    txd->src[tex->num_srcs + 1] = nir_tex_src_for_ssa(nir_tex_src_ddy, dfdy);
 
@@ -1458,8 +1458,8 @@ nir_lower_lod_zero_width(nir_builder *b, nir_tex_instr *tex)
       nir_def *coord = nir_channel(b, tex->src[coord_index].src.ssa, i);
 
       /* Compute the sum of the absolute values of derivatives. */
-      nir_def *dfdx = nir_fddx(b, coord);
-      nir_def *dfdy = nir_fddy(b, coord);
+      nir_def *dfdx = nir_ddx(b, coord);
+      nir_def *dfdy = nir_ddy(b, coord);
       nir_def *fwidth = nir_fadd(b, nir_fabs(b, dfdx), nir_fabs(b, dfdy));
 
       /* Check if the sum is 0. */

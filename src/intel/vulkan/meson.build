@@ -23,6 +23,7 @@ anv_entrypoints = custom_target(
     '--device-prefix', 'gfx12',
     '--device-prefix', 'gfx125',
     '--device-prefix', 'gfx20',
+    '--device-prefix', 'gfx30',
     '--device-prefix', 'anv_doom64',
     '--device-prefix', 'anv_hitman3',
     '--device-prefix', 'anv_android',
@@ -90,6 +91,7 @@ anv_per_hw_ver_files = files(
   'genX_cmd_draw_generated_flush.h',
   'genX_cmd_draw_generated_indirect.h',
   'genX_cmd_video.c',
+  'genX_cmd_video_enc.c',
   'genX_gfx_state.c',
   'genX_gpu_memcpy.c',
   'genX_init_state.c',
@@ -102,7 +104,7 @@ if with_intel_vk_rt
   anv_per_hw_ver_files += files('genX_acceleration_structure.c',)
 endif
 
-foreach _gfx_ver : ['90', '110', '120', '125', '200']
+foreach _gfx_ver : ['90', '110', '120', '125', '200', '300']
   libanv_per_hw_ver_libs += static_library(
     'anv_per_hw_ver@0@'.format(_gfx_ver),
     [anv_per_hw_ver_files, anv_entrypoints[0]],
@@ -148,14 +150,20 @@ libanv_files = files(
   'anv_batch_chain.c',
   'anv_blorp.c',
   'anv_bo_sync.c',
+  'anv_buffer.c',
+  'anv_buffer_view.c',
   'anv_cmd_buffer.c',
   'anv_descriptor_set.c',
   'anv_device.c',
+  'anv_event.c',
   'anv_formats.c',
   'anv_genX.h',
   'anv_image.c',
+  'anv_image_host_copy.c',
+  'anv_image_view.c',
   'anv_internal_kernels.c',
   'anv_internal_kernels.h',
+  'anv_instance.c',
   'anv_kmd_backend.c',
   'anv_kmd_backend.h',
   'anv_measure.c',
@@ -170,12 +178,14 @@ libanv_files = files(
   'anv_nir_lower_resource_intel.c',
   'anv_nir_push_descriptor_analysis.c',
   'anv_perf.c',
+  'anv_physical_device.c',
   'anv_pipeline.c',
   'anv_pipeline_cache.c',
   'anv_private.h',
   'anv_queue.c',
   'anv_rmv.c',
   'anv_rmv.h',
+  'anv_sampler.c',
   'anv_sparse.c',
   'anv_util.c',
   'anv_utrace.c',
@@ -325,5 +335,7 @@ if with_tests
     ),
     suite : ['intel'],
     protocol : 'gtest',
+    is_parallel : false,
+    timeout : 60,
   )
 endif

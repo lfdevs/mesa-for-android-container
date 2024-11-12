@@ -38,13 +38,24 @@
 #include "lp_bld_printf.h"
 #include "lp_bld_type.h"
 
+
+static LLVMTypeRef
+lp_build_printf_hook_type(struct gallivm_state *gallivm)
+{
+   LLVMTypeRef format_type = LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0);
+   return LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context), &format_type, 1, 1);
+}
+
+
 void lp_init_printf_hook(struct gallivm_state *gallivm)
 {
    if (gallivm->debug_printf_hook)
       return;
-   LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32TypeInContext(gallivm->context), NULL, 0, 1);
-   gallivm->debug_printf_hook = LLVMAddFunction(gallivm->module, "debug_printf", printf_type);
+
+   gallivm->debug_printf_hook = LLVMAddFunction(gallivm->module, "debug_printf",
+                                                lp_build_printf_hook_type(gallivm));
 }
+
 
 /**
  * Generates LLVM IR to call debug_printf.
@@ -71,8 +82,8 @@ lp_build_print_args(struct gallivm_state* gallivm,
    }
 
    lp_init_printf_hook(gallivm);
-   LLVMTypeRef printf_type = LLVMFunctionType(LLVMInt32TypeInContext(gallivm->context), NULL, 0, 1);
-   return LLVMBuildCall2(builder, printf_type, gallivm->debug_printf_hook, args, argcount, "");
+   return LLVMBuildCall2(builder, lp_build_printf_hook_type(gallivm),
+                         gallivm->debug_printf_hook, args, argcount, "");
 }
 
 

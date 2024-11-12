@@ -1,25 +1,7 @@
 /*
- * Copyright (C) 2016 Rob Clark <robclark@freedesktop.org>
+ * Copyright © 2016 Rob Clark <robclark@freedesktop.org>
  * Copyright © 2018 Google, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Rob Clark <robclark@freedesktop.org>
@@ -254,7 +236,7 @@ fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
       OUT_RELOC(ring, so->bo, 0, 0, 0);
    }
 
-   fd6_emit_immediates(so, ring);
+   fd6_emit_immediates<CHIP>(so, ring);
 }
 FD_GENX(fd6_emit_shader);
 
@@ -481,32 +463,7 @@ next_regid(uint32_t reg, uint32_t increment)
    if (VALIDREG(reg))
       return reg + increment;
    else
-      return regid(63, 0);
-}
-
-static void
-fd6_emit_tess_bos(struct fd_screen *screen, struct fd_ringbuffer *ring,
-                  const struct ir3_shader_variant *s) assert_dt
-{
-   const struct ir3_const_state *const_state = ir3_const_state(s);
-   const unsigned regid = const_state->offsets.primitive_param + 1;
-   uint32_t dwords = 8;
-
-   if (regid >= s->constlen)
-      return;
-
-   fd_ringbuffer_attach_bo(ring, screen->tess_bo);
-
-   OUT_PKT7(ring, fd6_stage2opcode(s->type), 7);
-   OUT_RING(ring, CP_LOAD_STATE6_0_DST_OFF(regid) |
-                     CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
-                     CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
-                     CP_LOAD_STATE6_0_STATE_BLOCK(fd6_stage2shadersb(s->type)) |
-                     CP_LOAD_STATE6_0_NUM_UNIT(dwords / 4));
-   OUT_RING(ring, 0);
-   OUT_RING(ring, 0);
-   OUT_RELOC(ring, screen->tess_bo, FD6_TESS_FACTOR_SIZE, 0, 0);
-   OUT_RELOC(ring, screen->tess_bo, 0, 0, 0);
+      return INVALID_REG;
 }
 
 static enum a6xx_tess_output
@@ -543,7 +500,6 @@ emit_vfd_dest(struct fd_ringbuffer *ring, const struct ir3_shader_variant *vs)
       OUT_PKT4(ring, REG_A6XX_VFD_DEST_CNTL_INSTR(0), attr_count);
 
    for (uint32_t i = 0; i < attr_count; i++) {
-      assert(vs->inputs[i].compmask);
       assert(!vs->inputs[i].sysval);
       OUT_RING(ring,
                A6XX_VFD_DEST_CNTL_INSTR_WRITEMASK(vs->inputs[i].compmask) |
@@ -611,10 +567,12 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
       uint16_t reg_sp_xs_vpc_dst_reg;
       uint16_t reg_vpc_xs_pack;
       uint16_t reg_vpc_xs_clip_cntl;
+      uint16_t reg_vpc_xs_clip_cntl_v2;
       uint16_t reg_gras_xs_cl_cntl;
       uint16_t reg_pc_xs_out_cntl;
       uint16_t reg_sp_xs_primitive_cntl;
       uint16_t reg_vpc_xs_layer_cntl;
+      uint16_t reg_vpc_xs_layer_cntl_v2;
       uint16_t reg_gras_xs_layer_cntl;
    } reg_config[] = {
       [MESA_SHADER_VERTEX] = {
@@ -622,10 +580,12 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
          REG_A6XX_SP_VS_VPC_DST_REG(0),
          REG_A6XX_VPC_VS_PACK,
          REG_A6XX_VPC_VS_CLIP_CNTL,
+         REG_A6XX_VPC_VS_CLIP_CNTL_V2,
          REG_A6XX_GRAS_VS_CL_CNTL,
          REG_A6XX_PC_VS_OUT_CNTL,
          REG_A6XX_SP_VS_PRIMITIVE_CNTL,
          REG_A6XX_VPC_VS_LAYER_CNTL,
+         REG_A6XX_VPC_VS_LAYER_CNTL_V2,
          REG_A6XX_GRAS_VS_LAYER_CNTL
       },
       [MESA_SHADER_TESS_CTRL] = {
@@ -634,7 +594,9 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
          0,
          0,
          0,
+         0,
          REG_A6XX_PC_HS_OUT_CNTL,
+         0,
          0,
          0,
          0
@@ -644,10 +606,12 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
          REG_A6XX_SP_DS_VPC_DST_REG(0),
          REG_A6XX_VPC_DS_PACK,
          REG_A6XX_VPC_DS_CLIP_CNTL,
+         REG_A6XX_VPC_DS_CLIP_CNTL_V2,
          REG_A6XX_GRAS_DS_CL_CNTL,
          REG_A6XX_PC_DS_OUT_CNTL,
          REG_A6XX_SP_DS_PRIMITIVE_CNTL,
          REG_A6XX_VPC_DS_LAYER_CNTL,
+         REG_A6XX_VPC_DS_LAYER_CNTL_V2,
          REG_A6XX_GRAS_DS_LAYER_CNTL
       },
       [MESA_SHADER_GEOMETRY] = {
@@ -655,10 +619,12 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
          REG_A6XX_SP_GS_VPC_DST_REG(0),
          REG_A6XX_VPC_GS_PACK,
          REG_A6XX_VPC_GS_CLIP_CNTL,
+         REG_A6XX_VPC_GS_CLIP_CNTL_V2,
          REG_A6XX_GRAS_GS_CL_CNTL,
          REG_A6XX_PC_GS_OUT_CNTL,
          REG_A6XX_SP_GS_PRIMITIVE_CNTL,
          REG_A6XX_VPC_GS_LAYER_CNTL,
+         REG_A6XX_VPC_GS_LAYER_CNTL_V2,
          REG_A6XX_GRAS_GS_LAYER_CNTL
       },
    };
@@ -712,22 +678,22 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
    uint32_t pointsize_loc = 0xff, position_loc = 0xff, layer_loc = 0xff, view_loc = 0xff;
 
 // XXX replace regid(63,0) with INVALID_REG
-   if (layer_regid != regid(63, 0)) {
+   if (layer_regid != INVALID_REG) {
       layer_loc = linkage.max_loc;
       ir3_link_add(&linkage, VARYING_SLOT_LAYER, layer_regid, 0x1, linkage.max_loc);
    }
 
-   if (view_regid != regid(63, 0)) {
+   if (view_regid != INVALID_REG) {
       view_loc = linkage.max_loc;
       ir3_link_add(&linkage, VARYING_SLOT_VIEWPORT, view_regid, 0x1, linkage.max_loc);
    }
 
-   if (position_regid != regid(63, 0)) {
+   if (position_regid != INVALID_REG) {
       position_loc = linkage.max_loc;
       ir3_link_add(&linkage, VARYING_SLOT_POS, position_regid, 0xf, linkage.max_loc);
    }
 
-   if (pointsize_regid != regid(63, 0)) {
+   if (pointsize_regid != INVALID_REG) {
       pointsize_loc = linkage.max_loc;
       ir3_link_add(&linkage, VARYING_SLOT_PSIZ, pointsize_regid, 0x1, linkage.max_loc);
    }
@@ -740,12 +706,12 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
 
    /* Handle the case where clip/cull distances aren't read by the FS */
    uint32_t clip0_loc = linkage.clip0_loc, clip1_loc = linkage.clip1_loc;
-   if (clip0_loc == 0xff && clip0_regid != regid(63, 0)) {
+   if (clip0_loc == 0xff && clip0_regid != INVALID_REG) {
       clip0_loc = linkage.max_loc;
       ir3_link_add(&linkage, VARYING_SLOT_CLIP_DIST0, clip0_regid,
                    clip_cull_mask & 0xf, linkage.max_loc);
    }
-   if (clip1_loc == 0xff && clip1_regid != regid(63, 0)) {
+   if (clip1_loc == 0xff && clip1_regid != INVALID_REG) {
       clip1_loc = linkage.max_loc;
       ir3_link_add(&linkage, VARYING_SLOT_CLIP_DIST1, clip1_regid,
                    clip_cull_mask >> 4, linkage.max_loc);
@@ -762,6 +728,16 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
 
       if (!fd6_context(b->ctx)->streamout_disable_stateobj)
          setup_stream_out_disable(b->ctx);
+   }
+
+   /* There is a hardware bug on a750 where STRIDE_IN_VPC of 5 to 8 in GS with
+    * an input primitive type with adjacency, an output primitive type of
+    * points, and a high enough vertex count causes a hang.
+    */
+   if (b->ctx->screen->info->a7xx.gs_vpc_adjacency_quirk &&
+       b->gs && b->gs->gs.output_primitive == MESA_PRIM_POINTS &&
+       linkage.max_loc > 4) {
+      linkage.max_loc = MAX2(linkage.max_loc, 9);
    }
 
    /* The GPU hangs on some models when there are no outputs (xs_pack::CNT),
@@ -798,6 +774,11 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
                   A6XX_VPC_VS_PACK_STRIDE_IN_VPC(linkage.max_loc));
 
    OUT_PKT4(ring, cfg->reg_vpc_xs_clip_cntl, 1);
+   OUT_RING(ring, A6XX_VPC_VS_CLIP_CNTL_CLIP_MASK(clip_cull_mask) |
+                  A6XX_VPC_VS_CLIP_CNTL_CLIP_DIST_03_LOC(clip0_loc) |
+                  A6XX_VPC_VS_CLIP_CNTL_CLIP_DIST_47_LOC(clip1_loc));
+
+   OUT_PKT4(ring, cfg->reg_vpc_xs_clip_cntl_v2, 1);
    OUT_RING(ring, A6XX_VPC_VS_CLIP_CNTL_CLIP_MASK(clip_cull_mask) |
                   A6XX_VPC_VS_CLIP_CNTL_CLIP_DIST_03_LOC(clip0_loc) |
                   A6XX_VPC_VS_CLIP_CNTL_CLIP_DIST_47_LOC(clip1_loc));
@@ -839,7 +820,13 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
 
    OUT_PKT4(ring, cfg->reg_vpc_xs_layer_cntl, 1);
    OUT_RING(ring, A6XX_VPC_VS_LAYER_CNTL_LAYERLOC(layer_loc) |
-                  A6XX_VPC_VS_LAYER_CNTL_VIEWLOC(view_loc));
+                  A6XX_VPC_VS_LAYER_CNTL_VIEWLOC(view_loc) |
+                  A6XX_VPC_VS_LAYER_CNTL_SHADINGRATELOC(0xff));
+
+   OUT_PKT4(ring, cfg->reg_vpc_xs_layer_cntl_v2, 1);
+   OUT_RING(ring, A6XX_VPC_VS_LAYER_CNTL_LAYERLOC(layer_loc) |
+                  A6XX_VPC_VS_LAYER_CNTL_VIEWLOC(view_loc) |
+                  A6XX_VPC_VS_LAYER_CNTL_SHADINGRATELOC(0xff));
 
    OUT_PKT4(ring, cfg->reg_gras_xs_layer_cntl, 1);
    OUT_RING(ring, CONDREG(layer_regid, A6XX_GRAS_GS_LAYER_CNTL_WRITES_LAYER) |
@@ -862,8 +849,8 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
       OUT_PKT4(ring, REG_A6XX_PC_TESS_NUM_VERTEX, 1);
       OUT_RING(ring, b->hs->tess.tcs_vertices_out);
 
-      fd6_emit_link_map(b->vs, b->hs, ring);
-      fd6_emit_link_map(b->hs, b->ds, ring);
+      fd6_emit_link_map<CHIP>(b->ctx, b->vs, b->hs, ring);
+      fd6_emit_link_map<CHIP>(b->ctx, b->hs, b->ds, ring);
    }
 
    if (b->gs) {
@@ -872,10 +859,11 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
          b->ds ? b->ds->output_size : b->vs->output_size;
 
       if (b->hs) {
-         fd6_emit_link_map(b->ds, b->gs, ring);
+         fd6_emit_link_map<CHIP>(b->ctx, b->ds, b->gs, ring);
       } else {
-         fd6_emit_link_map(b->vs, b->gs, ring);
+         fd6_emit_link_map<CHIP>(b->ctx, b->vs, b->gs, ring);
       }
+
       vertices_out = MAX2(1, b->gs->gs.vertices_out) - 1;
       enum a6xx_tess_output output =
          primitive_to_tess((enum mesa_prim)b->gs->gs.output_primitive);
@@ -903,8 +891,10 @@ emit_vpc(struct fd_ringbuffer *ring, const struct program_builder *b)
          OUT_RING(ring, 0xff);
       }
 
-      OUT_PKT4(ring, REG_A6XX_PC_PRIMITIVE_CNTL_6, 1);
-      OUT_RING(ring, A6XX_PC_PRIMITIVE_CNTL_6_STRIDE_IN_VPC(vec4_size));
+      if (CHIP == A6XX) {
+         OUT_PKT4(ring, REG_A6XX_PC_PRIMITIVE_CNTL_6, 1);
+         OUT_RING(ring, A6XX_PC_PRIMITIVE_CNTL_6_STRIDE_IN_VPC(vec4_size));
+      }
 
       uint32_t prim_size = prev_stage_output_size;
       if (prim_size > 64)
@@ -944,7 +934,7 @@ emit_fs_inputs(struct fd_ringbuffer *ring, const struct program_builder *b)
    smask_in_regid  = ir3_find_sysval_regid(fs, SYSTEM_VALUE_SAMPLE_MASK_IN);
    face_regid      = ir3_find_sysval_regid(fs, SYSTEM_VALUE_FRONT_FACE);
    coord_regid     = ir3_find_sysval_regid(fs, SYSTEM_VALUE_FRAG_COORD);
-   zwcoord_regid   = VALIDREG(coord_regid) ? coord_regid + 2 : regid(63, 0);
+   zwcoord_regid   = VALIDREG(coord_regid) ? coord_regid + 2 : INVALID_REG;
    for (unsigned i = 0; i < ARRAY_SIZE(ij_regid); i++)
       ij_regid[i] = ir3_find_sysval_regid(fs, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + i);
 
@@ -1135,7 +1125,7 @@ emit_fs_outputs(struct fd_ringbuffer *ring, const struct program_builder *b)
     * end up masking the single sample!!
     */
    if (!b->key->key.msaa)
-      smask_regid = regid(63, 0);
+      smask_regid = INVALID_REG;
 
    int output_reg_count = 0;
    uint32_t fragdata_regid[8];
@@ -1186,11 +1176,6 @@ setup_stateobj(struct fd_ringbuffer *ring, const struct program_builder *b)
 
    emit_fs_inputs<CHIP>(ring, b);
    emit_fs_outputs(ring, b);
-
-   if (b->hs) {
-      fd6_emit_tess_bos(b->ctx->screen, ring, b->hs);
-      fd6_emit_tess_bos(b->ctx->screen, ring, b->ds);
-   }
 
    if (b->hs) {
       uint32_t patch_control_points = b->key->patch_vertices;
@@ -1398,16 +1383,6 @@ fd6_program_create(void *data, const struct ir3_shader_variant *bs,
    state->binning_stateobj = fd_ringbuffer_new_object(ctx->pipe, 0x1000);
    state->stateobj = fd_ringbuffer_new_object(ctx->pipe, 0x1000);
 
-#if MESA_DEBUG
-   if (!ds) {
-      for (unsigned i = 0; i < bs->inputs_count; i++) {
-         if (vs->inputs[i].sysval)
-            continue;
-         assert(bs->inputs[i].regid == vs->inputs[i].regid);
-      }
-   }
-#endif
-
    if (hs) {
       /* Allocate the fixed-size tess factor BO globally on the screen.  This
        * lets the program (which ideally we would have shared across contexts,
@@ -1487,23 +1462,33 @@ fd6_program_create(void *data, const struct ir3_shader_variant *bs,
 
    /* Note that binning pass uses same const state as draw pass: */
    state->user_consts_cmdstream_size =
-         fd6_user_consts_cmdstream_size(state->vs) +
-         fd6_user_consts_cmdstream_size(state->hs) +
-         fd6_user_consts_cmdstream_size(state->ds) +
-         fd6_user_consts_cmdstream_size(state->gs) +
-         fd6_user_consts_cmdstream_size(state->fs);
+         fd6_user_consts_cmdstream_size<CHIP>(state->vs) +
+         fd6_user_consts_cmdstream_size<CHIP>(state->hs) +
+         fd6_user_consts_cmdstream_size<CHIP>(state->ds) +
+         fd6_user_consts_cmdstream_size<CHIP>(state->gs) +
+         fd6_user_consts_cmdstream_size<CHIP>(state->fs);
 
    unsigned num_dp = 0;
+   unsigned num_ubo_dp = 0;
+
    if (vs->need_driver_params)
       num_dp++;
+
    if (gs && gs->need_driver_params)
-      num_dp++;
+      num_ubo_dp++;
    if (hs && hs->need_driver_params)
-      num_dp++;
+      num_ubo_dp++;
    if (ds && ds->need_driver_params)
-      num_dp++;
+      num_ubo_dp++;
+
+   if (!(CHIP == A7XX && vs->compiler->load_inline_uniforms_via_preamble_ldgk)) {
+      /* On a6xx all shader stages use driver params pushed in cmdstream: */
+      num_dp += num_ubo_dp;
+      num_ubo_dp = 0;
+   }
 
    state->num_driver_params = num_dp;
+   state->num_ubo_driver_params = num_ubo_dp;
 
    /* dual source blending has an extra fs output in the 2nd slot */
    if (fs->fs.color_is_dual_source) {

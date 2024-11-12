@@ -71,13 +71,14 @@ fn supported_command_queue_properties(
     dev: &Device,
     properties: cl_command_queue_properties,
 ) -> bool {
-    let profiling = cl_bitfield::from(CL_QUEUE_PROFILING_ENABLE);
-    let valid_flags = profiling;
-    if properties & !valid_flags != 0 {
-        return false;
+    let mut valid_flags = CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE;
+    if dev.caps.has_timestamp {
+        valid_flags |= CL_QUEUE_PROFILING_ENABLE;
     }
 
-    if properties & profiling != 0 && !dev.caps.has_timestamp {
+    // add on device queue properties here once supported and called from `clCreateCommandQueueWithProperties`
+
+    if properties & !cl_bitfield::from(valid_flags) != 0 {
         return false;
     }
 

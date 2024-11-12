@@ -96,6 +96,12 @@
    (MAX_DYNAMIC_UNIFORM_BUFFERS + 2 * MAX_DYNAMIC_STORAGE_BUFFERS) *         \
    A6XX_TEX_CONST_DWORDS
 
+/* With dynamic rendering, input attachment indices are shifted by 1 and
+ * attachment 0 is used for input attachments without an InputAttachmentIndex
+ * (which can only be depth/stencil).
+ */
+#define TU_DYN_INPUT_ATT_OFFSET 1
+
 #define SAMPLE_LOCATION_MIN 0.f
 #define SAMPLE_LOCATION_MAX 0.9375f
 

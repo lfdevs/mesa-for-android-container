@@ -17,7 +17,7 @@
       when: on_success
 
 .r300-manual-rules:
-  stage: amd
+  stage: amd-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -37,7 +37,7 @@
       when: on_success
 
 .r300-nine-manual-rules:
-  stage: amd
+  stage: amd-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]

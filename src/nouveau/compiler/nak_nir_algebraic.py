@@ -37,6 +37,7 @@ algebraic_lowering = [
     (('imax', 'a', 'b'), ('bcsel', ('ilt', a, b), b, a), volta),
     (('umin', 'a', 'b'), ('bcsel', ('ult', a, b), a, b), volta),
     (('umax', 'a', 'b'), ('bcsel', ('ult', a, b), b, a), volta),
+    (('iadd', 'a@64', ('ineg', 'b@64')), ('isub', a, b)),
 ]
 
 def main():

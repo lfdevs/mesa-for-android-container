@@ -1524,8 +1524,12 @@ mi_store_mem64_offset(struct mi_builder *b,
     */
 }
 
+#endif /* GFX_VERx10 >= 125 */
+
+#if GFX_VER >= 9
+
 /*
- * Control-flow Section.  Only available on XE_HP+
+ * Control-flow Section.  Only available on Gfx9+
  */
 
 struct _mi_goto {
@@ -1542,7 +1546,38 @@ struct mi_goto_target {
 
 #define MI_GOTO_TARGET_INIT ((struct mi_goto_target) {})
 
+/* On >= Gfx12.5, the predication of MI_BATCH_BUFFER_START is driven by the
+ * bit0 of the MI_SET_PREDICATE_RESULT register.
+ *
+ * ACM PRMs, Vol 2a: Command Reference: Instructions, MI_BATCH_BUFFER_START,
+ * Predication Enable:
+ *
+ *   "This bit is used to enable predication of this command. If this bit is
+ *    set and Bit 0 of the MI_SET_PREDICATE_RESULT register is set, this
+ *    command is ignored. Otherwise the command is performed normally."
+ *
+ * The register offset is not listed in the PRMs, but BSpec places it a
+ * 0x2418.
+ *
+ * On < Gfx12.5, the predication of MI_BATCH_BUFFER_START is driven by the
+ * bit0 of MI_PREDICATE_RESULT_1.
+ *
+ * SKL PRMs, Vol 2a: Command Reference: Instructions, MI_BATCH_BUFFER_START,
+ * Predication Enable:
+ *
+ *    "This bit is used to enable predication of this command. If this bit is
+ *     set and Bit 0 of the MI_PREDICATE_RESULT_1 register is clear, this
+ *     command is ignored. Otherwise the command is performed normally.
+ *     Specific to the Render command stream only."
+ *
+ * The register offset is listed in the SKL PRMs, Vol 2c: Command Reference:
+ * Registers, MI_PREDICATE_RESULT_1, at 0x241C.
+ */
+#if GFX_VERx10 >= 125
 #define MI_BUILDER_MI_PREDICATE_RESULT_num  0x2418
+#else
+#define MI_BUILDER_MI_PREDICATE_RESULT_num  0x241C
+#endif
 
 static inline void
 mi_goto_if(struct mi_builder *b, struct mi_value cond,
@@ -1571,11 +1606,13 @@ mi_goto_if(struct mi_builder *b, struct mi_value cond,
       predicated = true;
    }
 
+#if GFX_VERx10 >= 125
    if (predicated) {
       mi_builder_emit(b, GENX(MI_SET_PREDICATE), sp) {
          sp.PredicateEnable = NOOPOnResultClear;
       }
    }
+#endif
    if (t->placed) {
       mi_builder_emit(b, GENX(MI_BATCH_BUFFER_START), bbs) {
          bbs.PredicationEnable         = predicated;
@@ -1593,9 +1630,13 @@ mi_goto_if(struct mi_builder *b, struct mi_value cond,
       t->gotos[t->num_gotos++] = g;
    }
    if (predicated) {
+#if GFX_VERx10 >= 125
       mi_builder_emit(b, GENX(MI_SET_PREDICATE), sp) {
          sp.PredicateEnable = NOOPNever;
       }
+#else
+      mi_store(b, mi_reg32(MI_BUILDER_MI_PREDICATE_RESULT_num), mi_imm(0));
+#endif
    }
 }
 
@@ -1608,11 +1649,19 @@ mi_goto(struct mi_builder *b, struct mi_goto_target *t)
 static inline void
 mi_goto_target(struct mi_builder *b, struct mi_goto_target *t)
 {
+#if GFX_VERx10 >= 125
    mi_builder_emit(b, GENX(MI_SET_PREDICATE), sp) {
       sp.PredicateEnable = NOOPNever;
       t->addr = __gen_get_batch_address(b->user_data,
                                         mi_builder_get_inst_ptr(b));
    }
+#else
+   mi_builder_emit(b, GENX(MI_NOOP), sp) {
+      t->addr = __gen_get_batch_address(b->user_data,
+                                        mi_builder_get_inst_ptr(b));
+   }
+   mi_store(b, mi_reg32(MI_BUILDER_MI_PREDICATE_RESULT_num), mi_imm(0));
+#endif
    t->placed = true;
 
    struct GENX(MI_BATCH_BUFFER_START) bbs = { GENX(MI_BATCH_BUFFER_START_header) };
@@ -1643,6 +1692,6 @@ mi_goto_target_init_and_place(struct mi_builder *b)
 #define mi_continue(b) mi_goto(b, &__continue)
 #define mi_continue_if(b, cond) mi_goto_if(b, cond, &__continue)
 
-#endif /* GFX_VERx10 >= 125 */
+#endif /* GFX_VER >= 9 */
 
 #endif /* MI_BUILDER_H */

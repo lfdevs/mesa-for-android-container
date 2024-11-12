@@ -4,7 +4,12 @@
 # shellcheck disable=SC2086 # we want word splitting
 
 set -e
+
+. .gitlab-ci/setup-test-env.sh
+
 set -o xtrace
+
+uncollapsed_section_start debian_setup "Base Debian system setup"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -71,31 +76,14 @@ apt-get update
 apt-get install -y --no-remove --no-install-recommends \
       "${DEPS[@]}" "${EPHEMERAL[@]}"
 
-############### Install DXVK
-
-. .gitlab-ci/container/setup-wine.sh "/dxvk-wine64"
-. .gitlab-ci/container/install-wine-dxvk.sh
-
-############### Install apitrace binaries for wine
-
-. .gitlab-ci/container/install-wine-apitrace.sh
-# Add the apitrace path to the registry
-wine \
-    reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" \
-    /v Path \
-    /t REG_EXPAND_SZ \
-    /d "C:\windows\system32;C:\windows;C:\windows\system32\wbem;Z:\apitrace-msvc-win64\bin" \
-    /f
-
 ############### Building ...
 
 . .gitlab-ci/container/container_pre_build.sh
 
-############### Build parallel-deqp-runner's hang-detection tool
-
-. .gitlab-ci/container/build-hang-detection.sh
-
 ############### Build piglit replayer
+
+uncollapsed_section_switch piglit "Building Piglit for Vulkan (traces only)"
+
 # We don't run any _piglit_ Vulkan tests in the containers.
 PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
 	     -DPIGLIT_USE_GBM=OFF
@@ -114,11 +102,9 @@ PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
   PIGLIT_BUILD_TARGETS="piglit_replayer" \
   . .gitlab-ci/container/build-piglit.sh
 
-############### Build Fossilize
-
-. .gitlab-ci/container/build-fossilize.sh
-
 ############### Build dEQP VK
+
+uncollapsed_section_switch deqp "Building Vulkan CTS (dEQP)"
 
 DEQP_API=VK \
 DEQP_TARGET=default \
@@ -126,19 +112,33 @@ DEQP_TARGET=default \
 
 ############### Build apitrace
 
+uncollapsed_section_switch apitrace "Building apitrace"
+
 . .gitlab-ci/container/build-apitrace.sh
 
+############### Build Fossilize
+
+uncollapsed_section_switch fossilize "Building Fossilize"
+
+. .gitlab-ci/container/build-fossilize.sh
+
 ############### Build gfxreconstruct
+
+uncollapsed_section_switch gfxreconstruct "Building gfxreconstruct"
 
 . .gitlab-ci/container/build-gfxreconstruct.sh
 
 ############### Build VKD3D-Proton
+
+uncollapsed_section_switch proton "Installing Proton (Wine/D3DVK emulation)"
 
 . .gitlab-ci/container/setup-wine.sh "/vkd3d-proton-wine64"
 
 . .gitlab-ci/container/build-vkd3d-proton.sh
 
 ############### Uninstall the build software
+
+uncollapsed_section_switch debian_cleanup "Cleaning up base Debian system"
 
 apt-get purge -y "${EPHEMERAL[@]}"
 

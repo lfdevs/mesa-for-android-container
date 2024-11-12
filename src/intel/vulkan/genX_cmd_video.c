@@ -51,6 +51,19 @@ genX(CmdControlVideoCodingKHR)(VkCommandBuffer commandBuffer,
          flush.VideoPipelineCacheInvalidate = 1;
       }
    }
+
+   if (pCodingControlInfo->flags &  VK_VIDEO_CODING_CONTROL_ENCODE_RATE_CONTROL_BIT_KHR) {
+      const struct VkVideoEncodeRateControlInfoKHR *rate_control_info =
+         vk_find_struct_const(pCodingControlInfo->pNext, VIDEO_ENCODE_RATE_CONTROL_INFO_KHR);
+
+      /* Support for only CQP rate control for the moment */
+      assert((rate_control_info->rateControlMode == VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DEFAULT_KHR) ||
+             (rate_control_info->rateControlMode == VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR));
+
+      cmd_buffer->video.params->rc_mode = rate_control_info->rateControlMode;
+   } else {
+      cmd_buffer->video.params->rc_mode = VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DEFAULT_KHR;
+   }
 }
 
 void
@@ -1168,11 +1181,34 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+static void
+handle_inline_query_end(struct anv_cmd_buffer *cmd_buffer,
+                        const VkVideoInlineQueryInfoKHR *inline_query)
+{
+   ANV_FROM_HANDLE(anv_query_pool, pool, inline_query->queryPool);
+   if (pool == VK_NULL_HANDLE)
+      return;
+
+   struct anv_address query_addr = {
+      .bo = pool->bo,
+      .offset = inline_query->firstQuery * pool->stride,
+   };
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_FLUSH_DW), flush) {
+      flush.PostSyncOperation = WriteImmediateData;
+      flush.Address = query_addr;
+      flush.ImmediateData = true;
+   }
+}
+
 void
 genX(CmdDecodeVideoKHR)(VkCommandBuffer commandBuffer,
                         const VkVideoDecodeInfoKHR *frame_info)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   const VkVideoInlineQueryInfoKHR *inline_query =
+      vk_find_struct_const(frame_info->pNext, VIDEO_INLINE_QUERY_INFO_KHR);
 
    switch (cmd_buffer->video.vid->vk.op) {
    case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR:
@@ -1184,12 +1220,7 @@ genX(CmdDecodeVideoKHR)(VkCommandBuffer commandBuffer,
    default:
       assert(0);
    }
-}
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-void
-genX(CmdEncodeVideoKHR)(VkCommandBuffer commandBuffer,
-                        const VkVideoEncodeInfoKHR *pEncodeInfo)
-{
+   if (inline_query)
+      handle_inline_query_end(cmd_buffer, inline_query);
 }
-#endif

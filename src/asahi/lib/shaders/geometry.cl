@@ -544,8 +544,11 @@ libagx_gs_setup_indirect(global struct agx_gs_setup_indirect_params *gsi,
    state->heap_bottom +=
       align(p->input_primitives * p->count_buffer_stride, 16);
 
-   *(gsi->vertex_buffer) = (uintptr_t)(state->heap + state->heap_bottom);
+   p->input_buffer = (uintptr_t)(state->heap + state->heap_bottom);
+   *(gsi->vertex_buffer) = p->input_buffer;
    state->heap_bottom += align(vertex_buffer_size, 4);
+
+   p->input_mask = gsi->vs_outputs;
 
    if (state->heap_bottom > state->heap_size) {
       global uint *foo = (global uint *)(uintptr_t)0x1deadbeef;
@@ -587,7 +590,7 @@ libagx_work_group_scan_inclusive_add(uint x, local uint *scratch)
    uint prefix = base + sg;
 
    /* Reduce the workgroup using the prefix sum we already did */
-   uint reduction = sub_group_broadcast(other_sums, 31) + other_sum;
+   uint reduction = sub_group_broadcast(other_sums + other_sum, 31);
 
    return (uint2)(prefix, reduction);
 }
@@ -663,6 +666,14 @@ libagx_vertex_output_address(uintptr_t buffer, uint64_t mask, uint vtx,
                              gl_varying_slot location)
 {
    return buffer + libagx_tcs_in_offs(vtx, location, mask);
+}
+
+uintptr_t
+libagx_geometry_input_address(constant struct agx_geometry_params *p, uint vtx,
+                              gl_varying_slot location)
+{
+   return libagx_vertex_output_address(p->input_buffer, p->input_mask, vtx,
+                                       location);
 }
 
 unsigned

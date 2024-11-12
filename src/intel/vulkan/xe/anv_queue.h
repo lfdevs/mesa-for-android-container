@@ -33,3 +33,6 @@ anv_xe_create_engine(struct anv_device *device,
                      const VkDeviceQueueCreateInfo *pCreateInfo);
 void
 anv_xe_destroy_engine(struct anv_device *device, struct anv_queue *queue);
+
+int
+anv_xe_wait_exec_queue_idle(struct anv_device *device, uint32_t exec_queue_id);

@@ -53,7 +53,7 @@ TEST(SparseArrayTest, Multithread)
       struct util_sparse_array arr;
       util_sparse_array_init(&arr, sizeof(uint32_t), node_size);
 
-      thrd_t threads[16];
+      thrd_t threads[8];
       for (unsigned i = 0; i < ARRAY_SIZE(threads); i++) {
          int ret = thrd_create(&threads[i], test_thread, &arr);
          ASSERT_EQ(ret, thrd_success);

@@ -98,7 +98,9 @@ amd_common_files = files(
   'ac_nir_lower_ps.c',
   'ac_nir_meta.h',
   'ac_nir_meta_cs_blit.c',
+  'ac_nir_meta_cs_clear_copy_buffer.c',
   'ac_nir_meta_ps_resolve.c',
+  'ac_nir_opt_shared_append.c',
   'amd_family.c',
   'ac_parse_ib.c',
   'ac_perfcounter.c',
@@ -107,6 +109,7 @@ amd_common_files = files(
   'ac_pm4.h',
   'ac_vcn_av1_default.h',
   'ac_vcn_dec.c',
+  'ac_vcn_enc.c',
 )
 
 if dep_elf.found()
@@ -123,7 +126,7 @@ libamd_common = static_library(
   include_directories : [
     inc_include, inc_src, inc_amd,
   ],
-  dependencies : [
+  dependencies : [dep_llvm.partial_dependency(compile_args: true, includes: true)] + [
     dep_thread, dep_elf, dep_libdrm_amdgpu, dep_valgrind,
     idep_mesautil, idep_nir_headers, idep_nir
   ],

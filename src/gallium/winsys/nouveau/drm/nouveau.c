@@ -484,10 +484,10 @@ nouveau_device_set_classes_for_debug(struct nouveau_device *dev,
                                      uint32_t cls_m2mf,
                                      uint32_t cls_copy)
 {
-   dev->cls_eng3d = cls_eng3d;
-   dev->cls_compute = cls_compute;
-   dev->cls_m2mf = cls_m2mf;
-   dev->cls_copy = cls_copy;
+   dev->info.cls_eng3d = cls_eng3d;
+   dev->info.cls_compute = cls_compute;
+   dev->info.cls_m2mf = cls_m2mf;
+   dev->info.cls_copy = cls_copy;
 }
 
 void
@@ -1130,18 +1130,12 @@ pushbuf_dump(struct nouveau_device *dev,
       if (!bo->map)
          continue;
 
-      if (dev->cls_eng3d) {
-         struct nv_device_info info = {
-            .cls_eng3d = dev->cls_eng3d,
-            .cls_compute = dev->cls_compute,
-            .cls_m2mf = dev->cls_m2mf,
-            .cls_copy = dev->cls_copy,
-         };
+      if (dev->info.cls_eng3d) {
          struct nv_push push = {
             .start = bgn,
             .end = end
          };
-         vk_push_print(nouveau_out, &push, &info);
+         vk_push_print(nouveau_out, &push, &dev->info);
       } else {
          while (bgn < end)
             err("\t0x%08x\n", *bgn++);

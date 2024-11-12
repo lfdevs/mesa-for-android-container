@@ -412,7 +412,9 @@ eglGetDisplay(EGLNativeDisplayType nativeDisplay)
    _EGLDisplay *disp;
    void *native_display_ptr;
 
+#if !DETECT_OS_ANDROID
    util_cpu_trace_init();
+#endif
    _EGL_FUNC_START(NULL, EGL_OBJECT_THREAD_KHR, NULL);
 
    STATIC_ASSERT(sizeof(void *) >= sizeof(nativeDisplay));
@@ -477,7 +479,9 @@ eglGetPlatformDisplayEXT(EGLenum platform, void *native_display,
    EGLAttrib *attrib_list;
    EGLDisplay disp;
 
+#if !DETECT_OS_ANDROID
    util_cpu_trace_init();
+#endif
    _EGL_FUNC_START(NULL, EGL_OBJECT_THREAD_KHR, NULL);
 
    if (_eglConvertIntsToAttribs(int_attribs, &attrib_list) != EGL_SUCCESS)
@@ -492,7 +496,9 @@ PUBLIC EGLDisplay EGLAPIENTRY
 eglGetPlatformDisplay(EGLenum platform, void *native_display,
                       const EGLAttrib *attrib_list)
 {
+#if !DETECT_OS_ANDROID
    util_cpu_trace_init();
+#endif
    _EGL_FUNC_START(NULL, EGL_OBJECT_THREAD_KHR, NULL);
    return _eglGetPlatformDisplayCommon(platform, native_display, attrib_list);
 }
@@ -600,6 +606,7 @@ _eglCreateExtensionsString(_EGLDisplay *disp)
    _EGL_CHECK_EXTENSION(NOK_swap_region);
    _EGL_CHECK_EXTENSION(NOK_texture_from_pixmap);
 
+   _EGL_CHECK_EXTENSION(NV_context_priority_realtime);
    _EGL_CHECK_EXTENSION(NV_post_sub_buffer);
 
    _EGL_CHECK_EXTENSION(WL_bind_wayland_display);
@@ -645,11 +652,9 @@ _eglComputeVersion(_EGLDisplay *disp)
    if (disp->Extensions.KHR_fence_sync && disp->Extensions.KHR_cl_event2 &&
        disp->Extensions.KHR_wait_sync && disp->Extensions.KHR_image_base &&
        disp->Extensions.KHR_gl_texture_2D_image &&
-       disp->Extensions.KHR_gl_texture_3D_image &&
        disp->Extensions.KHR_gl_texture_cubemap_image &&
        disp->Extensions.KHR_gl_renderbuffer_image &&
        disp->Extensions.KHR_create_context &&
-       disp->Extensions.EXT_create_context_robustness &&
        disp->Extensions.KHR_get_all_proc_addresses &&
        disp->Extensions.KHR_gl_colorspace &&
        disp->Extensions.KHR_surfaceless_context)
@@ -670,6 +675,7 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
 {
    _EGLDisplay *disp = _eglLockDisplay(dpy);
 
+   util_cpu_trace_init();
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL);
 
    _eglDeviceRefreshList();

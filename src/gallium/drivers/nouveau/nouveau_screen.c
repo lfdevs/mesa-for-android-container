@@ -263,18 +263,6 @@ nouveau_pushbuf_destroy(struct nouveau_pushbuf **push)
    nouveau_pushbuf_del(push);
 }
 
-static bool
-nouveau_check_for_uma(int chipset, struct nouveau_device *dev)
-{
-   struct nv_device_info_v0 info = {
-      .version = 0,
-   };
-
-   nouveau_device_info(dev, &info);
-
-   return (info.platform == NV_DEVICE_INFO_V0_IGP) || (info.platform == NV_DEVICE_INFO_V0_SOC);
-}
-
 static int
 nouveau_screen_get_fd(struct pipe_screen *pscreen)
 {
@@ -329,12 +317,7 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
     */
    screen->drm = nouveau_drm(&dev->object);
    screen->device = dev;
-
-   /*
-    * this is initialized to 1 in nouveau_drm_screen_create after screen
-    * is fully constructed and added to the global screen list.
-    */
-   screen->refcount = -1;
+   screen->initialized = false;
 
    if (dev->chipset < 0xc0) {
       data = &nv04_data;
@@ -462,7 +445,7 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_STREAM_OUTPUT |
       PIPE_BIND_COMMAND_ARGS_BUFFER;
 
-   screen->is_uma = nouveau_check_for_uma(dev->chipset, dev);
+   screen->is_uma = dev->info.type != NV_DEVICE_TYPE_DIS;
 
    memset(&mm_config, 0, sizeof(mm_config));
    nouveau_fence_list_init(&screen->fence);

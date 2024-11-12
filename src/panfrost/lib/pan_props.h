@@ -105,4 +105,27 @@ unsigned
 panfrost_compute_max_thread_count(const struct pan_kmod_dev_props *props,
                                   unsigned work_reg_count);
 
+/* Returns the architecture version given a GPU ID, either from a table for
+ * old-style Midgard versions or directly for new-style Bifrost/Valhall
+ * versions */
+
+static inline unsigned
+pan_arch(unsigned gpu_id)
+{
+   switch (gpu_id) {
+   case 0x600:
+   case 0x620:
+   case 0x720:
+      return 4;
+   case 0x750:
+   case 0x820:
+   case 0x830:
+   case 0x860:
+   case 0x880:
+      return 5;
+   default:
+      return gpu_id >> 12;
+   }
+}
+
 #endif

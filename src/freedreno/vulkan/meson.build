@@ -143,6 +143,7 @@ tu_cpp_args += cpp.get_supported_arguments([
   '-Wno-unused-function',
   '-Wno-writable-strings',
   '-Wno-write-strings',
+  '-Wno-vla-cxx-extension',
 ])
 
 # HACK compiler.get_supported_arguments()/has_argument() do not seem

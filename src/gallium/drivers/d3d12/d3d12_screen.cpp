@@ -120,7 +120,7 @@ d3d12_get_video_mem(struct pipe_screen *pscreen)
 {
    struct d3d12_screen* screen = d3d12_screen(pscreen);
 
-   return screen->memory_size_megabytes;
+   return screen->memory_device_size_megabytes + screen->memory_system_size_megabytes;
 }
 
 static int
@@ -176,9 +176,11 @@ d3d12_get_param_default(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
-   case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
       return 1;
+
+   case PIPE_CAP_VERTEX_INPUT_ALIGNMENT:
+      return PIPE_VERTEX_INPUT_ALIGNMENT_4BYTE;
 
    /* We need to do some lowering that requires a link to the sampler */
    case PIPE_CAP_NIR_SAMPLERS_AS_DEREF:
@@ -286,7 +288,6 @@ d3d12_get_param_default(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
    case PIPE_CAP_QUERY_TIMESTAMP:
    case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
-   case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
    case PIPE_CAP_IMAGE_STORE_FORMATTED:
    case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
       return 1;
@@ -366,6 +367,11 @@ d3d12_get_param_default(struct pipe_screen *pscreen, enum pipe_cap param)
 
    case PIPE_CAP_SAMPLER_VIEW_TARGET:
       return screen->opts12.RelaxedFormatCastingSupported;
+
+#ifndef _GAMING_XBOX
+   case PIPE_CAP_QUERY_MEMORY_INFO:
+      return 1;
+#endif
 
    default:
       return u_pipe_screen_get_param_defaults(pscreen, param);
@@ -876,7 +882,7 @@ d3d12_flush_frontbuffer(struct pipe_screen * pscreen,
       winsys->displaytarget_unmap(winsys, res->dt);
    }
 
-#if defined(_WIN32) && !defined(_GAMING_XBOX)
+#if defined(_WIN32) && !defined(_GAMING_XBOX) && defined(HAVE_GALLIUM_D3D12_GRAPHICS)
    // WindowFromDC is Windows-only, and this method requires an HWND, so only use it on Windows
    ID3D12SharingContract *sharing_contract;
    if (SUCCEEDED(screen->cmdqueue->QueryInterface(IID_PPV_ARGS(&sharing_contract)))) {
@@ -1352,6 +1358,43 @@ static void* d3d12_fence_get_win32_handle(struct pipe_screen *pscreen,
 }
 #endif
 
+static void
+d3d12_query_memory_info(struct pipe_screen *pscreen, struct pipe_memory_info *info)
+{
+   struct d3d12_screen *screen = d3d12_screen(pscreen);
+
+   // megabytes to kilobytes
+   if (screen->architecture.UMA) {
+      /* https://asawicki.info/news_1755_untangling_direct3d_12_memory_heap_types_and_pools
+         All allocations are made in D3D12_MEMORY_POOL_L0 and they increase the usage of
+         DXGI_MEMORY_SEGMENT_GROUP_LOCAL, as there is only one unified memory and it's all "local" to the GPU.
+       */
+      info->total_device_memory =
+         (screen->memory_device_size_megabytes << 10) + (screen->memory_system_size_megabytes << 10);
+      info->total_staging_memory = 0;
+   } else {
+      info->total_device_memory = (screen->memory_device_size_megabytes << 10);
+      info->total_staging_memory = (screen->memory_system_size_megabytes << 10);
+   }
+
+   d3d12_memory_info m;
+   screen->get_memory_info(screen, &m);
+   // bytes to kilobytes
+   if (m.budget_local > m.usage_local) {
+      info->avail_device_memory = (m.budget_local - m.usage_local) / 1024;
+   } else {
+      info->avail_device_memory = 0;
+   }
+   if (m.budget_nonlocal > m.usage_nonlocal) {
+      info->avail_staging_memory = (m.budget_nonlocal - m.usage_nonlocal) / 1024;
+   } else {
+      info->avail_staging_memory = 0;
+   }
+
+   info->device_memory_evicted = screen->total_bytes_evicted / 1024;
+   info->nr_device_memory_evictions = screen->num_evictions;
+}
+
 bool
 d3d12_init_screen_base(struct d3d12_screen *screen, struct sw_winsys *winsys, LUID *adapter_luid)
 {
@@ -1401,6 +1444,7 @@ d3d12_init_screen_base(struct d3d12_screen *screen, struct sw_winsys *winsys, LU
 #ifdef _WIN32
    screen->base.fence_get_win32_handle = d3d12_fence_get_win32_handle;
 #endif
+   screen->base.query_memory_info = d3d12_query_memory_info;
 
    screen->d3d12_mod = util_dl_open(
       UTIL_DL_PREFIX
@@ -1638,8 +1682,10 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
 
    D3D12_FEATURE_DATA_FEATURE_LEVELS feature_levels;
    static const D3D_FEATURE_LEVEL levels[] = {
+#ifndef _GAMING_XBOX
       D3D_FEATURE_LEVEL_1_0_GENERIC,
       D3D_FEATURE_LEVEL_1_0_CORE,
+#endif
       D3D_FEATURE_LEVEL_11_0,
       D3D_FEATURE_LEVEL_11_1,
       D3D_FEATURE_LEVEL_12_0,
@@ -1665,7 +1711,9 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
 #ifdef HAVE_GALLIUM_D3D12_GRAPHICS
    if (screen->max_feature_level >= D3D_FEATURE_LEVEL_11_0) {
       static const D3D_SHADER_MODEL valid_shader_models[] = {
+#ifndef _GAMING_XBOX
          D3D_SHADER_MODEL_6_8,
+#endif
          D3D_SHADER_MODEL_6_7, D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5, D3D_SHADER_MODEL_6_4,
          D3D_SHADER_MODEL_6_3, D3D_SHADER_MODEL_6_2, D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0,
       };
@@ -1673,7 +1721,9 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
          D3D12_FEATURE_DATA_SHADER_MODEL shader_model = { valid_shader_models[i] };
          if (SUCCEEDED(screen->dev->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shader_model, sizeof(shader_model)))) {
             static_assert(D3D_SHADER_MODEL_6_0 == 0x60 && SHADER_MODEL_6_0 == 0x60000, "Validating math below");
+#ifndef _GAMING_XBOX
             static_assert(D3D_SHADER_MODEL_6_8 == 0x68 && SHADER_MODEL_6_8 == 0x60008, "Validating math below");
+#endif
             screen->max_shader_model = static_cast<dxil_shader_model>(((shader_model.HighestShaderModel & 0xf0) << 12) |
                                                                      (shader_model.HighestShaderModel & 0xf));
             break;

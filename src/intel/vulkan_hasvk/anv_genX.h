@@ -134,6 +134,12 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
                               struct anv_address addr,
                               enum anv_timestamp_capture_type);
 
+void genX(cmd_capture_data)(struct anv_batch *batch,
+                            struct anv_device *device,
+                            struct anv_address dst_addr,
+                            struct anv_address src_addr,
+                            uint32_t size_B);
+
 void
 genX(rasterization_mode)(VkPolygonMode raster_mode,
                          VkLineRasterizationModeEXT line_mode,

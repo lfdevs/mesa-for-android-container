@@ -8,7 +8,7 @@
       when: on_success
 
 .venus-manual-rules:
-  stage: layered-backends
+  stage: layered-backends-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]

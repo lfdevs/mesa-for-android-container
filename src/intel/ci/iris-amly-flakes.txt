@@ -29,3 +29,4 @@ spec@arb_query_buffer_object@qbo
 # The tests below are not actually detected as flaky, but they do behave as such
 spec@egl_chromium_sync_control@conformance
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
+KHR-Single-GL46.arrays_of_arrays_gl.SizedDeclarationsPrimitive

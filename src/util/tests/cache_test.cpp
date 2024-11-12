@@ -202,19 +202,8 @@ test_disk_cache_create(void *mem_ctx, const char *cache_dir_name,
    /* Test with XDG_CACHE_HOME set */
    setenv("XDG_CACHE_HOME", CACHE_TEST_TMP "/xdg-cache-home", 1);
    cache = disk_cache_create("test", driver_id, 0);
-   EXPECT_FALSE(cache_exists(cache))
-      << "disk_cache_create with XDG_CACHE_HOME set with a non-existing parent directory";
-
-   err = mkdir(CACHE_TEST_TMP, 0755);
-   if (err != 0) {
-      fprintf(stderr, "Error creating %s: %s\n", CACHE_TEST_TMP, strerror(errno));
-      GTEST_FAIL();
-   }
-   disk_cache_destroy(cache);
-
-   cache = disk_cache_create("test", driver_id, 0);
    EXPECT_TRUE(cache_exists(cache))
-      << "disk_cache_create with XDG_CACHE_HOME set";
+      << "disk_cache_create with XDG_CACHE_HOME set with a non-existing parent directory";
 
    char *path = ralloc_asprintf(
       mem_ctx, "%s%s", CACHE_TEST_TMP "/xdg-cache-home/", cache_dir_name);
@@ -677,6 +666,36 @@ test_put_and_get_between_instances_with_eviction(const char *driver_id)
    disk_cache_destroy(cache[0]);
    disk_cache_destroy(cache[1]);
 }
+
+static void
+test_put_big_sized_entry_to_empty_cache(const char *driver_id)
+{
+   static uint8_t blob[4096];
+   uint8_t blob_key[20];
+   struct disk_cache *cache;
+   char *result;
+   size_t size;
+
+#ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
+   setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
+#endif /* SHADER_CACHE_DISABLE_BY_DEFAULT */
+
+   setenv("MESA_SHADER_CACHE_MAX_SIZE", "1K", 1);
+   cache = disk_cache_create("test", driver_id, 0);
+
+   disk_cache_compute_key(cache, blob, sizeof(blob), blob_key);
+
+   disk_cache_put(cache, blob_key, blob, sizeof(blob), NULL);
+   disk_cache_wait_for_idle(cache);
+
+   result = (char *) disk_cache_get(cache, blob_key, &size);
+   EXPECT_NE(result, nullptr) << "disk_cache_get(cache) with existing item (pointer)";
+   EXPECT_EQ(size, sizeof(blob)) << "disk_cache_get of(cache) existing item (size)";
+
+   free(result);
+
+   disk_cache_destroy(cache);
+}
 #endif /* ENABLE_SHADER_CACHE */
 
 class Cache : public ::testing::Test {
@@ -796,6 +815,8 @@ TEST_F(Cache, Database)
    test_put_and_get_between_instances(driver_id);
 
    test_put_and_get_between_instances_with_eviction(driver_id);
+
+   test_put_big_sized_entry_to_empty_cache(driver_id);
 
    unsetenv("MESA_DISK_CACHE_DATABASE_NUM_PARTS");
 

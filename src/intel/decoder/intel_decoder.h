@@ -71,14 +71,14 @@ uint32_t intel_group_get_opcode(const struct intel_group *group);
 struct intel_field *intel_group_find_field(struct intel_group *group, const char *name);
 struct intel_enum *intel_spec_find_enum(struct intel_spec *spec, const char *name);
 
-bool intel_field_is_header(struct intel_field *field);
+bool intel_field_is_header(const struct intel_field *field);
 
 /* Only allow 5 levels of subgroup'ing
  */
 #define DECODE_MAX_ARRAY_DEPTH 5
 
 struct intel_field_iterator {
-   struct intel_group *group;
+   const struct intel_group *group;
    char name[128];
    char value[128];
    uint64_t raw_value;
@@ -89,12 +89,12 @@ struct intel_field_iterator {
    int start_bit; /**< current field starts at this bit offset into p */
    int end_bit; /**< current field ends at this bit offset into p */
 
-   struct intel_field *fields[DECODE_MAX_ARRAY_DEPTH];
-   struct intel_group *groups[DECODE_MAX_ARRAY_DEPTH];
+   const struct intel_field *fields[DECODE_MAX_ARRAY_DEPTH];
+   const struct intel_group *groups[DECODE_MAX_ARRAY_DEPTH];
    int array_iter[DECODE_MAX_ARRAY_DEPTH];
    int level;
 
-   struct intel_field *field;
+   const struct intel_field *field;
    bool print_colors;
 };
 
@@ -196,19 +196,20 @@ struct intel_field {
 };
 
 void intel_field_iterator_init(struct intel_field_iterator *iter,
-                               struct intel_group *group,
+                               const struct intel_group *group,
                                const uint32_t *p, int p_bit,
                                bool print_colors);
 
 bool intel_field_iterator_next(struct intel_field_iterator *iter);
 
-void intel_print_group_custom_spacing(FILE *outfile, struct intel_group *group,
+void intel_print_group_custom_spacing(FILE *outfile,
+                                      const struct intel_group *group,
                                       uint64_t offset, const uint32_t *p,
                                       int p_bit, bool color,
                                       const char *spacing_reg,
                                       const char *spacing_dword);
 void intel_print_group(FILE *out,
-                       struct intel_group *group,
+                       const struct intel_group *group,
                        uint64_t offset, const uint32_t *p, int p_bit,
                        bool color);
 
@@ -295,6 +296,7 @@ struct intel_batch_decode_ctx {
    uint64_t acthd;
 
    struct hash_table *commands;
+   struct hash_table *filters;
    struct hash_table *stats;
 
    void (*disassemble_program)(struct intel_batch_decode_ctx *ctx,

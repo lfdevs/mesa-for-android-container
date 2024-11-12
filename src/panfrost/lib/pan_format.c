@@ -207,8 +207,8 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMTC(BPTC_RGBA_UNORM,         BC7_UNORM,       RGBA8_UNORM, RGBA, L),
    FMTC(BPTC_SRGBA,              BC7_UNORM,       RGBA8_UNORM, RGBA, S),
 
-   /* Mesa does not yet support astc_decode_mode extensions, so non-sRGB
-    * formats must be assumed to be wide.
+   /* If ASTC decode mode is set to RGBA8, the hardware format
+    * will be overriden to RGBA8_UNORM later on.
     */
    FMTC(ASTC_4x4,                ASTC_2D_HDR,     RGBA16F,     RGBA, L),
    FMTC(ASTC_5x4,                ASTC_2D_HDR,     RGBA16F,     RGBA, L),
@@ -331,6 +331,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R16G16_SNORM,            RG16_SNORM,      RG01, L, VTR_),
    FMT(R8G8B8_SNORM,            RGB8_SNORM,      RGB1, L, VTR_),
    FMT(R8G8B8A8_SNORM,          RGBA8_SNORM,     RGBA, L, VTR_),
+   FMT(B8G8R8A8_SNORM,          RGBA8_SNORM,     BGRA, L, VTR_),
    FMT(R16G16B16A16_SNORM,      RGBA16_SNORM,    RGBA, L, VTR_),
 #else
    /* So far we haven't needed SNORM rendering on Midgard */
@@ -340,6 +341,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R16G16_SNORM,            RG16_SNORM,      RG01, L, VT__),
    FMT(R8G8B8_SNORM,            RGB8_SNORM,      RGB1, L, VT__),
    FMT(R8G8B8A8_SNORM,          RGBA8_SNORM,     RGBA, L, VT__),
+   FMT(B8G8R8A8_SNORM,          RGBA8_SNORM,     BGRA, L, VT__),
    FMT(R16G16B16A16_SNORM,      RGBA16_SNORM,    RGBA, L, VT__),
 #endif
    FMT(I8_SINT,                 R8I,             RRRR, L, VTR_),
@@ -517,6 +519,9 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(X24S8_UINT,              S8,              GRBA, L, _T_Z),
    FMT(S8_UINT,                 S8,              GRBA, L, _T__),
 
+   /* similarly, the interchange format is RGBA8, but we only
+      actually store 1 component in memory here */
+   FMT(A8_UNORM,                RGBA8_UNORM,     000A, L, VTR_),
 #else
    /* Specify real formats on Bifrost */
    FMT(Z32_FLOAT_S8X24_UINT,    Z32_X32,         RGBA, L, _T_Z),

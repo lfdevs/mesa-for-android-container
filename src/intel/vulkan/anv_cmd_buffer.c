@@ -51,6 +51,7 @@ anv_cmd_state_init(struct anv_cmd_buffer *cmd_buffer)
    state->current_pipeline = UINT32_MAX;
    state->gfx.restart_index = UINT32_MAX;
    state->gfx.object_preemption = true;
+   state->gfx.coarse_pixel_active = ANV_COARSE_PIXEL_STATE_UNKNOWN;
    state->gfx.dirty = 0;
 
    memcpy(state->gfx.dyn_state.dirty,
@@ -352,12 +353,12 @@ anv_cmd_buffer_mark_image_fast_cleared(struct anv_cmd_buffer *cmd_buffer,
 }
 
 void
-anv_cmd_buffer_load_clear_color_from_image(struct anv_cmd_buffer *cmd_buffer,
-                                           struct anv_state state,
-                                           const struct anv_image *image)
+anv_cmd_buffer_load_clear_color(struct anv_cmd_buffer *cmd_buffer,
+                                struct anv_state state,
+                                const struct anv_image_view *iview)
 {
    const struct intel_device_info *devinfo = cmd_buffer->device->info;
-   anv_genX(devinfo, load_image_clear_color)(cmd_buffer, state, image);
+   anv_genX(devinfo, cmd_buffer_load_clear_color)(cmd_buffer, state, iview);
 }
 
 void
@@ -476,6 +477,7 @@ anv_cmd_buffer_set_ray_query_buffer(struct anv_cmd_buffer *cmd_buffer,
    }
 
    /* Add the HW buffer to the list of BO used. */
+   assert(device->ray_query_bo);
    anv_reloc_list_add_bo(cmd_buffer->batch.relocs,
                          device->ray_query_bo);
 
@@ -792,7 +794,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
    assert(!set->pool || !set->pool->host_only);
 
    struct anv_descriptor_set_layout *set_layout =
-      layout->set[set_index].layout;
+      layout ? layout->set[set_index].layout: set->layout;
 
    anv_cmd_buffer_maybe_dirty_descriptor_mode(
       cmd_buffer,
@@ -873,6 +875,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
    if (dynamic_offsets) {
       if (set_layout->dynamic_offset_count > 0) {
          struct anv_push_constants *push = &pipe_state->push_constants;
+         assert(layout != NULL);
          uint32_t dynamic_offset_start =
             layout->set[set_index].dynamic_offset_start;
          uint32_t *push_offsets =
@@ -1198,8 +1201,10 @@ anv_cmd_buffer_merge_dynamic(struct anv_cmd_buffer *cmd_buffer,
    state = anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
                                               dwords * 4, alignment);
    p = state.map;
-   for (uint32_t i = 0; i < dwords; i++)
+   for (uint32_t i = 0; i < dwords; i++) {
+      assert((a[i] & b[i]) == 0);
       p[i] = a[i] | b[i];
+   }
 
    VG(VALGRIND_CHECK_MEM_IS_DEFINED(p, dwords * 4));
 
@@ -1477,7 +1482,13 @@ anv_cmd_buffer_save_state(struct anv_cmd_buffer *cmd_buffer,
       state->pipeline = pipe_state->pipeline;
 
    if (state->flags & ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_0)
-      state->descriptor_set = pipe_state->descriptors[0];
+      state->descriptor_set[0] = pipe_state->descriptors[0];
+
+   if (state->flags & ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_ALL) {
+      for (uint32_t i = 0; i < MAX_SETS; i++) {
+         state->descriptor_set[i] = pipe_state->descriptors[i];
+      }
+   }
 
    if (state->flags & ANV_CMD_SAVED_STATE_PUSH_CONSTANTS) {
       memcpy(state->push_constants, pipe_state->push_constants.client_data,
@@ -1506,11 +1517,24 @@ anv_cmd_buffer_restore_state(struct anv_cmd_buffer *cmd_buffer,
    }
 
    if (state->flags & ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_0) {
-      if (state->descriptor_set) {
+      if (state->descriptor_set[0]) {
          anv_cmd_buffer_bind_descriptor_set(cmd_buffer, bind_point, NULL, 0,
-                                            state->descriptor_set, NULL, NULL);
+                                            state->descriptor_set[0], NULL,
+                                            NULL);
       } else {
          pipe_state->descriptors[0] = NULL;
+      }
+   }
+
+   if (state->flags & ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_ALL) {
+      for (uint32_t i = 0; i < MAX_SETS; i++) {
+         if (state->descriptor_set[i]) {
+            anv_cmd_buffer_bind_descriptor_set(cmd_buffer, bind_point, NULL, i,
+                                               state->descriptor_set[i], NULL,
+                                               NULL);
+         } else {
+            pipe_state->descriptors[i] = NULL;
+         }
       }
    }
 

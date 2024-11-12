@@ -299,6 +299,7 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
       break;
    }
    case nir_intrinsic_load_ssbo_address: {
+      assert(nir_src_as_uint(intrin->src[1]) == 0);
       nir_def *desc = load_ssbo_desc(b, &intrin->src[0], s);
       nir_def *lo = nir_channel(b, desc, 0);
       nir_def *hi = nir_i2i32(b, nir_u2u16(b, nir_channel(b, desc, 1)));

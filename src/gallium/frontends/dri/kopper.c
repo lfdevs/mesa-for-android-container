@@ -33,14 +33,11 @@
 #include "state_tracker/st_context.h"
 #include "zink/zink_public.h"
 #include "zink/zink_kopper.h"
-#include "driver_trace/tr_screen.h"
 
 #include "dri_screen.h"
 #include "dri_context.h"
 #include "dri_drawable.h"
 #include "dri_helpers.h"
-#include "dri_query_renderer.h"
-#include "loader_dri_helper.h"
 
 #include <vulkan/vulkan.h>
 
@@ -52,71 +49,17 @@
 #include "util/libsync.h"
 #include <X11/Xlib-xcb.h>
 #include "drm-uapi/drm_fourcc.h"
+#include "loader_dri3_helper.h"
 #endif
-
-extern const __DRIimageExtension driVkImageExtension;
-extern const __DRIimageExtension driVkImageExtensionSw;
 
 static struct dri_drawable *
 kopper_create_drawable(struct dri_screen *screen, const struct gl_config *visual,
                        bool isPixmap, void *loaderPrivate);
 
-static inline void
-kopper_invalidate_drawable(__DRIdrawable *dPriv)
-{
-   struct dri_drawable *drawable = dri_drawable(dPriv);
-
-   drawable->texture_stamp = drawable->lastStamp - 1;
-
-   p_atomic_inc(&drawable->base.stamp);
-}
-
-static const __DRI2flushExtension driVkFlushExtension = {
-    .base = { __DRI2_FLUSH, 4 },
-
-    .flush                = dri_flush_drawable,
-    .invalidate           = kopper_invalidate_drawable,
-    .flush_with_flags     = dri_flush,
-};
-
-static const __DRIrobustnessExtension dri2Robustness = {
-   .base = { __DRI2_ROBUSTNESS, 1 }
-};
-
-const __DRIkopperExtension driKopperExtension;
-
-static const __DRIextension *drivk_screen_extensions[] = {
-   &driTexBufferExtension.base,
-   &dri2RendererQueryExtension.base,
-   &dri2ConfigQueryExtension.base,
-   &dri2FenceExtension.base,
-   &dri2Robustness.base,
-   &driVkImageExtension.base,
-   &dri2FlushControlExtension.base,
-   &driVkFlushExtension.base,
-   &driKopperExtension.base,
-   NULL
-};
-
-static const __DRIextension *drivk_sw_screen_extensions[] = {
-   &driTexBufferExtension.base,
-   &dri2RendererQueryExtension.base,
-   &dri2ConfigQueryExtension.base,
-   &dri2FenceExtension.base,
-   &dri2Robustness.base,
-   &driVkImageExtensionSw.base,
-   &dri2FlushControlExtension.base,
-   &driVkFlushExtension.base,
-   NULL
-};
-
-static const __DRIconfig **
+struct pipe_screen *
 kopper_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
 {
-   const __DRIconfig **configs;
    struct pipe_screen *pscreen = NULL;
-
-   (void) mtx_init(&screen->opencl_func_mutex, mtx_plain);
 
    if (!screen->kopper_loader) {
       fprintf(stderr, "mesa: Kopper interface not found!\n"
@@ -143,29 +86,10 @@ kopper_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
    if (!pscreen)
       return NULL;
 
-   dri_init_options(screen);
-   screen->unwrapped_screen = trace_screen_unwrap(pscreen);
-
-   configs = dri_init_screen(screen, pscreen);
-   if (!configs)
-      goto fail;
-
    assert(pscreen->get_param(pscreen, PIPE_CAP_DEVICE_RESET_STATUS_QUERY));
-   screen->has_reset_status_query = true;
-   screen->has_dmabuf = pscreen->get_param(pscreen, PIPE_CAP_DMABUF);
-   screen->has_modifiers = pscreen->query_dmabuf_modifiers != NULL;
    screen->is_sw = zink_kopper_is_cpu(pscreen);
-   if (screen->has_dmabuf)
-      screen->extensions = drivk_screen_extensions;
-   else
-      screen->extensions = drivk_sw_screen_extensions;
 
-   screen->create_drawable = kopper_create_drawable;
-
-   return configs;
-fail:
-   pipe_loader_release(&screen->dev, 1);
-   return NULL;
+   return pscreen;
 }
 
 // copypasta alert
@@ -205,122 +129,10 @@ pipe_format_to_fourcc(enum pipe_format format)
    }
 }
 
-#ifdef HAVE_DRI3_MODIFIERS
-static __DRIimage *
-dri3_create_image_from_buffers(xcb_connection_t *c,
-                               xcb_dri3_buffers_from_pixmap_reply_t *bp_reply,
-                               uint32_t fourcc,
-                               struct dri_screen *screen,
-                               const __DRIimageExtension *image,
-                               void *loaderPrivate)
-{
-   __DRIimage                           *ret;
-   int                                  *fds;
-   uint32_t                             *strides_in, *offsets_in;
-   int                                   strides[4], offsets[4];
-   unsigned                              error;
-   int                                   i;
-
-   if (bp_reply->nfd > 4)
-      return NULL;
-
-   fds = xcb_dri3_buffers_from_pixmap_reply_fds(c, bp_reply);
-   strides_in = xcb_dri3_buffers_from_pixmap_strides(bp_reply);
-   offsets_in = xcb_dri3_buffers_from_pixmap_offsets(bp_reply);
-   for (i = 0; i < bp_reply->nfd; i++) {
-      strides[i] = strides_in[i];
-      offsets[i] = offsets_in[i];
-   }
-
-   ret = image->createImageFromDmaBufs(opaque_dri_screen(screen),
-                                       bp_reply->width,
-                                       bp_reply->height,
-                                       fourcc,
-                                       bp_reply->modifier,
-                                       fds, bp_reply->nfd,
-                                       strides, offsets,
-                                       0, 0, 0, 0, /* UNDEFINED */
-                                       0, &error, loaderPrivate);
-
-   for (i = 0; i < bp_reply->nfd; i++)
-      close(fds[i]);
-
-   return ret;
-}
-#endif
-
-static __DRIimage *
-dri3_create_image(xcb_connection_t *c,
-                  xcb_dri3_buffer_from_pixmap_reply_t *bp_reply,
-                  uint32_t fourcc,
-                  struct dri_screen *screen,
-                  const __DRIimageExtension *image,
-                  void *loaderPrivate)
-{
-   int                                  *fds;
-   __DRIimage                           *image_planar, *ret;
-   int                                  stride, offset;
-
-   /* Get an FD for the pixmap object
-    */
-   fds = xcb_dri3_buffer_from_pixmap_reply_fds(c, bp_reply);
-
-   stride = bp_reply->stride;
-   offset = 0;
-
-   /* createImageFromDmaBufs creates a wrapper __DRIimage structure which
-    * can deal with multiple planes for things like Yuv images. So, once
-    * we've gotten the planar wrapper, pull the single plane out of it and
-    * discard the wrapper.
-    */
-   image_planar = image->createImageFromDmaBufs(opaque_dri_screen(screen),
-                                                bp_reply->width,
-                                                bp_reply->height,
-                                                fourcc,
-                                                DRM_FORMAT_MOD_INVALID, fds, 1,
-                                                &stride, &offset,
-                                                0, 0, 0, 0, 0,
-                                                NULL, loaderPrivate);
-   close(fds[0]);
-   if (!image_planar)
-      return NULL;
-
-   ret = image->fromPlanar(image_planar, 0, loaderPrivate);
-
-   if (!ret)
-      ret = image_planar;
-   else
-      image->destroyImage(image_planar);
-
-   return ret;
-}
-
-
-static void
-handle_in_fence(struct dri_context *ctx, __DRIimage *img)
-{
-   struct pipe_context *pipe = ctx->st->pipe;
-   struct pipe_fence_handle *fence;
-   int fd = img->in_fence_fd;
-
-   if (fd == -1)
-      return;
-
-   validate_fence_fd(fd);
-
-   img->in_fence_fd = -1;
-
-   pipe->create_fence_fd(pipe, &fence, fd, PIPE_FD_TYPE_NATIVE_SYNC);
-   pipe->fence_server_sync(pipe, fence);
-   pipe->screen->fence_reference(pipe->screen, &fence, NULL);
-
-   close(fd);
-}
-
 /** kopper_get_pixmap_buffer
  *
  * Get the DRM object for a pixmap from the X server and
- * wrap that with a __DRIimage structure using createImageFromDmaBufs
+ * wrap that with a struct dri_image structure using createImageFromDmaBufs
  */
 static struct pipe_resource *
 kopper_get_pixmap_buffer(struct dri_drawable *drawable,
@@ -344,54 +156,10 @@ kopper_get_pixmap_buffer(struct dri_drawable *drawable,
     */
    struct dri_screen *screen = drawable->screen;
 
-#ifdef HAVE_DRI3_MODIFIERS
-   if (drawable->has_modifiers) {
-      xcb_dri3_buffers_from_pixmap_cookie_t bps_cookie;
-      xcb_dri3_buffers_from_pixmap_reply_t *bps_reply;
-      xcb_generic_error_t *error;
-
-      bps_cookie = xcb_dri3_buffers_from_pixmap(conn, pixmap);
-      bps_reply = xcb_dri3_buffers_from_pixmap_reply(conn, bps_cookie, &error);
-      if (!bps_reply) {
-         mesa_loge("kopper: could not create texture from pixmap (%u)", error->error_code);
-         return NULL;
-      }
-      drawable->image =
-         dri3_create_image_from_buffers(conn, bps_reply, fourcc,
-                                        screen, &driVkImageExtension,
-                                        drawable);
-      if (!drawable->image)
-         return NULL;
-      width = bps_reply->width;
-      height = bps_reply->height;
-      free(bps_reply);
-   } else
-#endif
-   {
-#ifdef HAVE_DRI3
-      xcb_dri3_buffer_from_pixmap_cookie_t bp_cookie;
-      xcb_dri3_buffer_from_pixmap_reply_t *bp_reply;
-      xcb_generic_error_t *error;
-
-      bp_cookie = xcb_dri3_buffer_from_pixmap(conn, pixmap);
-      bp_reply = xcb_dri3_buffer_from_pixmap_reply(conn, bp_cookie, &error);
-      if (!bp_reply) {
-         mesa_loge("kopper: could not create texture from pixmap (%u)", error->error_code);
-         return NULL;
-      }
-
-      drawable->image = dri3_create_image(conn, bp_reply, fourcc,
-                                       screen, &driVkImageExtension,
-                                       drawable);
-      if (!drawable->image)
-         return NULL;
-      width = bp_reply->width;
-      height = bp_reply->height;
-      free(bp_reply);
-#else
+   drawable->image = loader_dri3_get_pixmap_buffer(conn, pixmap, screen,
+                                                   fourcc, drawable->screen->dmabuf_import, &width, &height, drawable);
+   if (!drawable->image)
       return NULL;
-#endif
-   }
 
    drawable->w = width;
    drawable->h = height;
@@ -556,7 +324,7 @@ XXX do this once swapinterval is hooked up
          else if (is_pixmap && statts[i] == ST_ATTACHMENT_FRONT_LEFT && !screen->is_sw) {
             drawable->textures[statts[i]] = kopper_get_pixmap_buffer(drawable, format);
             if (drawable->textures[statts[i]])
-               handle_in_fence(ctx, drawable->image);
+               dri_image_fence_sync(ctx, drawable->image);
          }
 #endif
          if (!drawable->textures[statts[i]])
@@ -584,8 +352,7 @@ get_drawable_info(struct dri_drawable *drawable, int *x, int *y, int *w, int *h)
    const __DRIswrastLoaderExtension *loader = drawable->screen->swrast_loader;
 
    if (loader)
-      loader->getDrawableInfo(opaque_dri_drawable(drawable),
-                              x, y, w, h,
+      loader->getDrawableInfo(drawable, x, y, w, h,
                               drawable->loaderPrivate);
 }
 
@@ -595,14 +362,13 @@ kopper_update_drawable_info(struct dri_drawable *drawable)
    struct dri_screen *screen = drawable->screen;
    bool is_window = drawable->info.bos.sType != 0;
    int x, y;
-   struct pipe_screen *pscreen = screen->unwrapped_screen;
    struct pipe_resource *ptex = drawable->textures[ST_ATTACHMENT_BACK_LEFT] ?
                                 drawable->textures[ST_ATTACHMENT_BACK_LEFT] :
                                 drawable->textures[ST_ATTACHMENT_FRONT_LEFT];
 
    bool do_kopper_update = is_window && ptex && screen->fd == -1;
    if (drawable->info.bos.sType == VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR && do_kopper_update)
-      zink_kopper_update(pscreen, ptex, &drawable->w, &drawable->h);
+      zink_kopper_update(kopper_get_zink_screen(screen->base.screen), ptex, &drawable->w, &drawable->h);
    else
       get_drawable_info(drawable, &x, &y, &drawable->w, &drawable->h);
 }
@@ -625,7 +391,8 @@ kopper_copy_to_front(struct pipe_context *pipe,
 {
    kopper_present_texture(pipe, drawable, ptex, nrects, boxes);
 
-   kopper_invalidate_drawable(opaque_dri_drawable(drawable));
+   drawable->lastStamp++;
+   p_atomic_inc(&drawable->base.stamp);
 }
 
 static bool
@@ -685,8 +452,7 @@ get_image(struct dri_drawable *drawable, int x, int y, int width, int height, vo
 {
    const __DRIswrastLoaderExtension *loader = drawable->screen->swrast_loader;
 
-   loader->getImage(opaque_dri_drawable(drawable),
-                    x, y, width, height,
+   loader->getImage(drawable, x, y, width, height,
                     data, drawable->loaderPrivate);
 }
 
@@ -706,9 +472,9 @@ get_image_shm(struct dri_drawable *drawable, int x, int y, int width, int height
       return false;
 
    if (loader->base.version > 5 && loader->getImageShm2)
-      return loader->getImageShm2(opaque_dri_drawable(drawable), x, y, width, height, whandle.handle, drawable->loaderPrivate);
+      return loader->getImageShm2(drawable, x, y, width, height, whandle.handle, drawable->loaderPrivate);
 
-   loader->getImageShm(opaque_dri_drawable(drawable), x, y, width, height, whandle.handle, drawable->loaderPrivate);
+   loader->getImageShm(drawable, x, y, width, height, whandle.handle, drawable->loaderPrivate);
    return true;
 }
 
@@ -718,42 +484,9 @@ kopper_update_tex_buffer(struct dri_drawable *drawable,
                          struct pipe_resource *res)
 {
    struct dri_screen *screen = drawable->screen;
-   struct st_context *st_ctx = (struct st_context *)ctx->st;
-   struct pipe_context *pipe = st_ctx->pipe;
-   struct pipe_transfer *transfer;
-   char *map;
-   int x, y, w, h;
-   int ximage_stride, line;
    if (screen->has_dmabuf || drawable->is_window || drawable->info.bos.sType != VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR)
       return;
-   int cpp = util_format_get_blocksize(res->format);
-
-   /* Wait for glthread to finish because we can't use pipe_context from
-    * multiple threads.
-    */
-   _mesa_glthread_finish(ctx->st->ctx);
-
-   get_drawable_info(drawable, &x, &y, &w, &h);
-
-   map = pipe_texture_map(pipe, res,
-                          0, 0, // level, layer,
-                          PIPE_MAP_WRITE,
-                          x, y, w, h, &transfer);
-
-   /* Copy the Drawable content to the mapped texture buffer */
-   if (!get_image_shm(drawable, x, y, w, h, res))
-      get_image(drawable, x, y, w, h, map);
-
-   /* The pipe transfer has a pitch rounded up to the nearest 64 pixels.
-      get_image() has a pitch rounded up to 4 bytes.  */
-   ximage_stride = ((w * cpp) + 3) & -4;
-   for (line = h-1; line; --line) {
-      memmove(&map[line * transfer->stride],
-              &map[line * ximage_stride],
-              ximage_stride);
-   }
-
-   pipe_texture_unmap(pipe, transfer);
+   drisw_update_tex_buffer(drawable, ctx, res);
 }
 
 static void
@@ -768,20 +501,11 @@ kopper_swap_buffers(struct dri_drawable *drawable);
 static void
 kopper_swap_buffers_with_damage(struct dri_drawable *drawable, int nrects, const int *rects);
 
-static struct dri_drawable *
-kopper_create_drawable(struct dri_screen *screen, const struct gl_config *visual,
-                       bool isPixmap, void *loaderPrivate)
+void
+kopper_init_drawable(struct dri_drawable *drawable, bool isPixmap, int alphaBits)
 {
-   /* always pass !pixmap because it isn't "handled" or relevant */
-   struct dri_drawable *drawable = dri_create_drawable(screen, visual, false,
-                                                       loaderPrivate);
-   if (!drawable)
-      return NULL;
+   struct dri_screen *screen = drawable->screen;
 
-   // relocate references to the old struct
-   drawable->base.visual = &drawable->stvis;
-
-   // and fill in the vtable
    drawable->allocate_textures = kopper_allocate_textures;
    drawable->update_drawable_info = kopper_update_drawable_info;
    drawable->flush_frontbuffer = kopper_flush_frontbuffer;
@@ -790,19 +514,16 @@ kopper_create_drawable(struct dri_screen *screen, const struct gl_config *visual
    drawable->swap_buffers = kopper_swap_buffers;
    drawable->swap_buffers_with_damage = kopper_swap_buffers_with_damage;
 
-   drawable->info.has_alpha = visual->alphaBits > 0;
+   drawable->info.has_alpha = alphaBits > 0;
    if (screen->kopper_loader->SetSurfaceCreateInfo)
       screen->kopper_loader->SetSurfaceCreateInfo(drawable->loaderPrivate,
                                                   &drawable->info);
    drawable->is_window = !isPixmap && drawable->info.bos.sType != 0;
-
-   return drawable;
 }
 
-static int64_t
-kopperSwapBuffersWithDamage(__DRIdrawable *dPriv, uint32_t flush_flags, int nrects, const int *rects)
+int64_t
+kopperSwapBuffersWithDamage(struct dri_drawable *drawable, uint32_t flush_flags, int nrects, const int *rects)
 {
-   struct dri_drawable *drawable = dri_drawable(dPriv);
    struct dri_context *ctx = dri_get_current();
    struct pipe_resource *ptex;
 
@@ -824,7 +545,7 @@ kopperSwapBuffersWithDamage(__DRIdrawable *dPriv, uint32_t flush_flags, int nrec
 
    drawable->texture_stamp = drawable->lastStamp - 1;
 
-   dri_flush(opaque_dri_context(ctx), opaque_dri_drawable(drawable),
+   dri_flush(ctx, drawable,
              __DRI2_FLUSH_DRAWABLE | __DRI2_FLUSH_CONTEXT | flush_flags,
              __DRI2_THROTTLE_SWAPBUFFER);
 
@@ -853,8 +574,8 @@ kopperSwapBuffersWithDamage(__DRIdrawable *dPriv, uint32_t flush_flags, int nrec
    return 0;
 }
 
-static int64_t
-kopperSwapBuffers(__DRIdrawable *dPriv, uint32_t flush_flags)
+int64_t
+kopperSwapBuffers(struct dri_drawable *dPriv, uint32_t flush_flags)
 {
    return kopperSwapBuffersWithDamage(dPriv, flush_flags, 0, NULL);
 }
@@ -863,7 +584,7 @@ static void
 kopper_swap_buffers_with_damage(struct dri_drawable *drawable, int nrects, const int *rects)
 {
 
-   kopperSwapBuffersWithDamage(opaque_dri_drawable(drawable), 0, nrects, rects);
+   kopperSwapBuffersWithDamage(drawable, 0, nrects, rects);
 }
 
 static void
@@ -872,29 +593,10 @@ kopper_swap_buffers(struct dri_drawable *drawable)
    kopper_swap_buffers_with_damage(drawable, 0, NULL);
 }
 
-static __DRIdrawable *
-kopperCreateNewDrawable(__DRIscreen *psp,
-                        const __DRIconfig *config,
-                        void *data,
-                        __DRIkopperDrawableInfo *info)
+void
+kopperSetSwapInterval(struct dri_drawable *drawable, int interval)
 {
-    assert(data != NULL);
-
-    struct dri_screen *screen = dri_screen(psp);
-    struct dri_drawable *drawable =
-       screen->create_drawable(screen, &config->modes, info->is_pixmap, data);
-   if (drawable)
-      drawable->has_modifiers = screen->has_modifiers && info->multiplanes_available;
-
-    return opaque_dri_drawable(drawable);
-}
-
-static void
-kopperSetSwapInterval(__DRIdrawable *dPriv, int interval)
-{
-   struct dri_drawable *drawable = dri_drawable(dPriv);
    struct dri_screen *screen = drawable->screen;
-   struct pipe_screen *pscreen = screen->unwrapped_screen;
    struct pipe_resource *ptex = drawable->textures[ST_ATTACHMENT_BACK_LEFT] ?
                                 drawable->textures[ST_ATTACHMENT_BACK_LEFT] :
                                 drawable->textures[ST_ATTACHMENT_FRONT_LEFT];
@@ -906,15 +608,16 @@ kopperSetSwapInterval(__DRIdrawable *dPriv, int interval)
     * we're before allocation, then the initial_swap_interval will be used when
     * the swapchain is eventually created.
     */
-   if (ptex)
+   if (ptex) {
+      struct pipe_screen *pscreen = kopper_get_zink_screen(screen->base.screen);
       zink_kopper_set_swap_interval(pscreen, ptex, interval);
+   }
    drawable->info.initial_swap_interval = interval;
 }
 
-static int
-kopperQueryBufferAge(__DRIdrawable *dPriv)
+int
+kopperQueryBufferAge(struct dri_drawable *drawable)
 {
-   struct dri_drawable *drawable = dri_drawable(dPriv);
    struct dri_context *ctx = dri_get_current();
    struct pipe_resource *ptex = drawable->textures[ST_ATTACHMENT_BACK_LEFT] ?
                                 drawable->textures[ST_ATTACHMENT_BACK_LEFT] :
@@ -932,33 +635,5 @@ kopperQueryBufferAge(__DRIdrawable *dPriv)
    return zink_kopper_query_buffer_age(ctx->st->pipe, ptex);
 }
 
-const __DRIkopperExtension driKopperExtension = {
-   .base = { __DRI_KOPPER, 1 },
-   .createNewDrawable          = kopperCreateNewDrawable,
-   .swapBuffers                = kopperSwapBuffers,
-   .swapBuffersWithDamage      = kopperSwapBuffersWithDamage,
-   .setSwapInterval            = kopperSetSwapInterval,
-   .queryBufferAge             = kopperQueryBufferAge,
-};
-
-static const struct __DRImesaCoreExtensionRec mesaCoreExtension = {
-   .base = { __DRI_MESA, 2 },
-   .version_string = MESA_INTERFACE_VERSION_STRING,
-   .createNewScreen = driCreateNewScreen2,
-   .createContext = driCreateContextAttribs,
-   .initScreen = kopper_init_screen,
-   .createNewScreen3 = driCreateNewScreen3,
-};
-
-const __DRIextension *galliumvk_driver_extensions[] = {
-   &driCoreExtension.base,
-   &mesaCoreExtension.base,
-   &driSWRastExtension.base,
-   &driDRI2Extension.base,
-   &driImageDriverExtension.base,
-   &driKopperExtension.base,
-   &gallium_config_options.base,
-   NULL
-};
 
 /* vim: set sw=3 ts=8 sts=3 expandtab: */

@@ -60,6 +60,11 @@ impl ShaderModel for ShaderModel70 {
         }
     }
 
+    fn crs_size(&self, max_crs_depth: u32) -> u32 {
+        assert!(max_crs_depth == 0);
+        0
+    }
+
     fn op_can_be_uniform(&self, op: &Op) -> bool {
         if !self.has_uniform_alu() {
             return false;
@@ -767,6 +772,9 @@ fn legalize_ext_instr(op: &mut impl SrcsAsSlice, b: &mut LegalizeBuilder) {
             SrcType::Pred => {
                 panic!("Predicates must be legalized explicitly");
             }
+            SrcType::Carry => {
+                panic!("Carry is invalid on Volta+");
+            }
             SrcType::Bar => (),
         }
     }
@@ -1437,6 +1445,8 @@ impl SM70Op for OpIAdd3 {
         swap_srcs_if_not_reg(src0, src1, gpr);
         swap_srcs_if_not_reg(src2, src1, gpr);
         if !src0.src_mod.is_none() && !src1.src_mod.is_none() {
+            assert!(self.overflow[0].is_none());
+            assert!(self.overflow[1].is_none());
             let val = b.alloc_ssa(gpr, 1);
             b.push_op(OpIAdd3 {
                 srcs: [Src::new_zero(), *src0, Src::new_zero()],
@@ -1447,6 +1457,10 @@ impl SM70Op for OpIAdd3 {
         }
         b.copy_alu_src_if_not_reg(src0, gpr, SrcType::I32);
         b.copy_alu_src_if_both_not_reg(src1, src2, gpr, SrcType::I32);
+        if !self.overflow[0].is_none() || !self.overflow[1].is_none() {
+            b.copy_alu_src_if_ineg_imm(src1, gpr, SrcType::I32);
+            b.copy_alu_src_if_ineg_imm(src2, gpr, SrcType::I32);
+        }
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
@@ -1551,6 +1565,7 @@ impl SM70Op for OpIDp4 {
             std::mem::swap(src_type0, src_type1);
         }
         b.copy_alu_src_if_not_reg(src0, gpr, SrcType::ALU);
+        b.copy_alu_src_if_ineg_imm(src1, gpr, SrcType::I32);
         b.copy_alu_src_if_not_reg(src2, gpr, SrcType::ALU);
     }
 
@@ -1903,6 +1918,34 @@ impl SM70Op for OpF2F {
         e.set_rnd_mode(78..80, self.rnd_mode);
         e.set_bit(80, self.ftz);
         e.set_field(84..86, (self.src_type.bits() / 8).ilog2());
+    }
+}
+
+impl SM70Op for OpF2FP {
+    fn legalize(&mut self, b: &mut LegalizeBuilder) {
+        let gpr = op_gpr(self);
+        let [src0, src1] = &mut self.srcs;
+        swap_srcs_if_not_reg(src0, src1, gpr);
+
+        b.copy_alu_src_if_not_reg(src0, gpr, SrcType::ALU);
+    }
+
+    fn encode(&self, e: &mut SM70Encoder<'_>) {
+        e.encode_alu(
+            0x03e,
+            Some(&self.dst),
+            Some(&self.srcs[0]),
+            Some(&self.srcs[1]),
+            Some(&Src::new_zero()),
+        );
+
+        // .MERGE_C behavior
+        // Use src1 and src2, src0 is unused
+        // src1 get converted and packed in the lower 16 bits of dest.
+        // src2 lower or high 16 bits (decided by .H1 flag) get packed in the upper of dest.
+        e.set_bit(78, false); // TODO: .MERGE_C
+        e.set_bit(72, false); // .H1 (MERGE_C only)
+        e.set_rnd_mode(79..81, self.rnd_mode);
     }
 }
 
@@ -2585,10 +2628,15 @@ impl SM70Op for OpSuAtom {
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
-        if matches!(self.atom_op, AtomOp::CmpExch) {
+        if self.dst.is_none() {
+            e.set_opcode(0x3a0);
+            e.set_atom_op(87..90, self.atom_op);
+        } else if let AtomOp::CmpExch(cmp_src) = self.atom_op {
             e.set_opcode(0x396);
+            assert!(cmp_src == AtomCmpSrc::Packed);
         } else {
             e.set_opcode(0x394);
+            e.set_atom_op(87..91, self.atom_op);
         };
 
         e.set_dst(self.dst);
@@ -2603,7 +2651,6 @@ impl SM70Op for OpSuAtom {
 
         e.set_bit(72, false); // .BA
         e.set_atom_type(73..76, self.atom_type);
-        e.set_atom_op(87..91, self.atom_op);
     }
 }
 
@@ -2755,11 +2802,10 @@ impl SM70Op for OpSt {
 
 impl SM70Encoder<'_> {
     fn set_atom_op(&mut self, range: Range<usize>, atom_op: AtomOp) {
-        assert!(range.len() == 4);
         self.set_field(
             range,
             match atom_op {
-                AtomOp::Add | AtomOp::CmpExch => 0_u8,
+                AtomOp::Add => 0_u8,
                 AtomOp::Min => 1_u8,
                 AtomOp::Max => 2_u8,
                 AtomOp::Inc => 3_u8,
@@ -2768,6 +2814,7 @@ impl SM70Encoder<'_> {
                 AtomOp::Or => 6_u8,
                 AtomOp::Xor => 7_u8,
                 AtomOp::Exch => 8_u8,
+                AtomOp::CmpExch(_) => panic!("CmpExch is a separate opcode"),
             },
         );
     }
@@ -2797,9 +2844,15 @@ impl SM70Op for OpAtom {
     fn encode(&self, e: &mut SM70Encoder<'_>) {
         match self.mem_space {
             MemSpace::Global(_) => {
-                if self.atom_op == AtomOp::CmpExch {
+                if self.dst.is_none() {
+                    e.set_opcode(0x98e);
+
+                    e.set_reg_src(32..40, self.data);
+                    e.set_atom_op(87..90, self.atom_op);
+                } else if let AtomOp::CmpExch(cmp_src) = self.atom_op {
                     e.set_opcode(0x3a9);
 
+                    assert!(cmp_src == AtomCmpSrc::Separate);
                     e.set_reg_src(32..40, self.cmpr);
                     e.set_reg_src(64..72, self.data);
                 } else {
@@ -2824,9 +2877,10 @@ impl SM70Op for OpAtom {
             }
             MemSpace::Local => panic!("Atomics do not support local"),
             MemSpace::Shared => {
-                if self.atom_op == AtomOp::CmpExch {
+                if let AtomOp::CmpExch(cmp_src) = self.atom_op {
                     e.set_opcode(0x38d);
 
+                    assert!(cmp_src == AtomCmpSrc::Separate);
                     e.set_reg_src(32..40, self.cmpr);
                     e.set_reg_src(64..72, self.data);
                 } else {
@@ -2993,6 +3047,7 @@ impl SM70Op for OpCCtl {
                 CCtlOp::IVAllP => 6_u8,
                 CCtlOp::WBAll => 7_u8,
                 CCtlOp::WBAllP => 8_u8,
+                op => panic!("Unsupported cache control {op:?}"),
             },
         );
     }
@@ -3236,12 +3291,13 @@ impl SM70Op for OpPixLd {
         e.set_dst(self.dst);
         e.set_field(
             78..81,
-            match self.val {
+            match &self.val {
                 PixVal::MsCount => 0_u8,
                 PixVal::CovMask => 1_u8,
                 PixVal::CentroidOffset => 2_u8,
                 PixVal::MyIndex => 3_u8,
                 PixVal::InnerCoverage => 4_u8,
+                other => panic!("Unsupported PixVal: {other}"),
             },
         );
         e.set_pred_dst(81..84, Dst::None);
@@ -3369,6 +3425,7 @@ macro_rules! as_sm70_op_match {
             Op::PopC(op) => op,
             Op::Shf(op) => op,
             Op::F2F(op) => op,
+            Op::F2FP(op) => op,
             Op::F2I(op) => op,
             Op::I2F(op) => op,
             Op::FRnd(op) => op,

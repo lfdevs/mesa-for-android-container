@@ -2,7 +2,7 @@
   stage: software-renderer
   rules:
     - !reference [.test, rules]
-    - if: $FORCE_KERNEL_TAG != null
+    - if: $EXTERNAL_KERNEL_TAG != null
       when: never
     - !reference [.vulkan-rules, rules]
     - !reference [.gallium-core-rules, rules]
@@ -15,6 +15,9 @@
         - src/gallium/frontends/lavapipe/ci/$GPU_VERSION-fails.txt
         - src/gallium/frontends/lavapipe/ci/$GPU_VERSION-flakes.txt
         - src/gallium/frontends/lavapipe/ci/$GPU_VERSION-skips.txt
+        - src/gallium/frontends/lavapipe/ci/$VK_DRIVER-skips.txt
+        - src/gallium/frontends/lavapipe/ci/$GALLIUM_DRIVER-skips.txt
+        - src/gallium/frontends/lavapipe/ci/$DRIVER_NAME-skips.txt
         - src/gallium/frontends/lavapipe/ci/$PIGLIT_TRACES_FILE
         - src/gallium/winsys/sw/**/*
         - src/gallium/auxiliary/draw/**/*
@@ -22,7 +25,7 @@
       when: on_success
 
 .lavapipe-manual-rules:
-  stage: software-renderer
+  stage: software-renderer-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]

@@ -1,6 +1,6 @@
 --- a/src/util/tests/cache_test.cpp
 +++ b/src/util/tests/cache_test.cpp
-@@ -82,8 +82,8 @@ check_directories_created(void *mem_ctx,
+@@ -84,8 +84,8 @@ check_directories_created(void *mem_ctx,
  {
     bool sub_dirs_created = false;
  

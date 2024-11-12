@@ -41,6 +41,8 @@ bool radv_nir_lower_ray_queries(nir_shader *shader, struct radv_device *device);
 bool radv_nir_lower_vs_inputs(nir_shader *shader, const struct radv_shader_stage *vs_stage,
                               const struct radv_graphics_state_key *gfx_state, const struct radeon_info *gpu_info);
 
+bool radv_nir_optimize_vs_inputs_to_const(nir_shader *shader, const struct radv_graphics_state_key *gfx_state);
+
 bool radv_nir_lower_primitive_shading_rate(nir_shader *nir, enum amd_gfx_level gfx_level);
 
 bool radv_nir_lower_fs_intrinsics(nir_shader *nir, const struct radv_shader_stage *fs_stage,

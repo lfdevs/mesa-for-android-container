@@ -68,6 +68,7 @@ struct nouveau_ws_bo *nouveau_ws_bo_from_dma_buf(struct nouveau_ws_device *,
 void nouveau_ws_bo_destroy(struct nouveau_ws_bo *);
 void *nouveau_ws_bo_map(struct nouveau_ws_bo *,
                         enum nouveau_ws_bo_map_flags);
+void nouveau_ws_bo_unmap(struct nouveau_ws_bo *bo, void *ptr);
 bool nouveau_ws_bo_wait(struct nouveau_ws_bo *, enum nouveau_ws_bo_map_flags flags);
 int nouveau_ws_bo_dma_buf(struct nouveau_ws_bo *, int *fd);
 
@@ -75,12 +76,6 @@ static inline void
 nouveau_ws_bo_ref(struct nouveau_ws_bo *bo)
 {
    bo->refcnt++;
-}
-
-static inline void
-nouveau_ws_bo_unmap(struct nouveau_ws_bo *bo, void *ptr)
-{
-   munmap(ptr, bo->size);
 }
 
 #ifdef __cplusplus

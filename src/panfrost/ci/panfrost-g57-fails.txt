@@ -24,11 +24,8 @@ shaders@point-vertex-id gl_vertexid,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
 spec@arb_base_instance@arb_base_instance-drawarrays,Fail
-spec@arb_depth_clamp@depth-clamp-range,Fail
 spec@arb_direct_state_access@gettextureimage-formats,Fail
 spec@arb_direct_state_access@gettextureimage-formats init-by-rendering,Fail
-spec@arb_framebuffer_object@fbo-luminance-alpha,Fail
-spec@arb_framebuffer_srgb@fbo-fast-clear,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_sample_shading@samplemask 2@0.250000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 2@0.500000 mask_in_one,Fail
@@ -134,20 +131,6 @@ spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_base_instance@arb_base_instance-drawarrays_gles3,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
-spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 2,Fail
-spec@ext_framebuffer_multisample@alpha-to-one-dual-src-blend 4,Fail
-spec@ext_framebuffer_multisample@draw-buffers-alpha-to-one 2,Fail
-spec@ext_framebuffer_multisample@draw-buffers-alpha-to-one 4,Fail
-spec@ext_framebuffer_multisample@fast-clear,Fail
-spec@ext_framebuffer_multisample@formats 2,Fail
-spec@ext_framebuffer_multisample@formats 4,Fail
-spec@ext_framebuffer_multisample@formats all_samples,Fail
-spec@ext_framebuffer_multisample@sample-alpha-to-one 2,Fail
-spec@ext_framebuffer_multisample@sample-alpha-to-one 4,Fail
-spec@ext_framebuffer_object@fbo-alphatest-formats,Fail
-spec@ext_framebuffer_object@fbo-alphatest-formats@GL_INTENSITY4,Fail
-spec@ext_framebuffer_object@fbo-alphatest-formats@GL_INTENSITY8,Fail
-spec@ext_framebuffer_object@fbo-alphatest-formats@GL_INTENSITY,Fail
 spec@ext_framebuffer_object@fbo-blending-format-quirks,Fail
 spec@ext_framebuffer_object@fbo-blending-formats,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA4,Fail
@@ -163,27 +146,6 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE8,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE_ALPHA,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE,Fail
 spec@ext_framebuffer_object@fbo-blending-snorm,Fail
-spec@ext_framebuffer_object@fbo-clear-formats,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY4,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY8,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE4_ALPHA4,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE4,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE8_ALPHA8,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE8,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE_ALPHA,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_INTENSITY4,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_INTENSITY8,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_INTENSITY,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_LUMINANCE4_ALPHA4,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_LUMINANCE4,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_LUMINANCE8_ALPHA8,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_LUMINANCE8,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_LUMINANCE_ALPHA,Fail
-spec@ext_framebuffer_object@fbo-colormask-formats@GL_LUMINANCE,Fail
-spec@ext_framebuffer_object@fbo-fast-clear,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-clear-and-render,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-rendering,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export,Fail
@@ -213,7 +175,6 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-unsupported_format,Fail
 spec@ext_packed_float@query-rgba-signed-components,Fail
-spec@ext_texture_srgb@fbo-fast-clear,Fail
 spec@ext_transform_feedback2@draw-auto,Fail
 spec@ext_transform_feedback@builtin-varyings gl_clipdistance,Fail
 spec@ext_transform_feedback@change-size base-shrink,Fail

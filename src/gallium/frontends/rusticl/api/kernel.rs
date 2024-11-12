@@ -374,8 +374,8 @@ fn set_kernel_arg(
                 }
             }
 
-            KernelArgType::Constant => {
-                if arg.size != arg_size {
+            KernelArgType::Constant(size) => {
+                if size as usize != arg_size {
                     return Err(CL_INVALID_ARG_SIZE);
                 }
             }
@@ -392,7 +392,7 @@ fn set_kernel_arg(
             }
             // If the argument is of type sampler_t, the arg_value entry must be a pointer to the
             // sampler object.
-            KernelArgType::Constant | KernelArgType::Sampler => {
+            KernelArgType::Constant(_) | KernelArgType::Sampler => {
                 if arg_value.is_null() {
                     return Err(CL_INVALID_ARG_VALUE);
                 }
@@ -406,7 +406,7 @@ fn set_kernel_arg(
                 KernelArgValue::None
             } else {
                 match arg.kind {
-                    KernelArgType::Constant => KernelArgValue::Constant(
+                    KernelArgType::Constant(_) => KernelArgValue::Constant(
                         slice::from_raw_parts(arg_value.cast(), arg_size).to_vec(),
                     ),
                     KernelArgType::MemConstant | KernelArgType::MemGlobal => {

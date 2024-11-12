@@ -47,7 +47,7 @@ nggc_bool_setting(nir_builder *b, unsigned mask, lower_abi_state *s)
 static nir_def *
 shader_query_bool_setting(nir_builder *b, unsigned mask, lower_abi_state *s)
 {
-   nir_def *settings = ac_nir_load_arg(b, &s->args->ac, s->args->shader_query_state);
+   nir_def *settings = GET_SGPR_FIELD_NIR(s->args->ngg_state, NGG_STATE_QUERY);
    return nir_test_mask(b, settings, mask);
 }
 
@@ -222,10 +222,10 @@ lower_abi_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    case nir_intrinsic_load_cull_ccw_amd:
       replacement = nggc_bool_setting(b, radv_nggc_face_is_ccw, s);
       break;
-   case nir_intrinsic_load_cull_small_primitives_enabled_amd:
+   case nir_intrinsic_load_cull_small_triangles_enabled_amd:
       replacement = nggc_bool_setting(b, radv_nggc_small_primitives, s);
       break;
-   case nir_intrinsic_load_cull_small_prim_precision_amd: {
+   case nir_intrinsic_load_cull_small_triangle_precision_amd: {
       /* To save space, only the exponent is stored in the high 8 bits.
        * We calculate the precision from those 8 bits:
        * exponent = nggc_settings >> 24
@@ -237,7 +237,7 @@ lower_abi_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       break;
    }
 
-   case nir_intrinsic_load_viewport_xy_scale_and_offset: {
+   case nir_intrinsic_load_cull_triangle_viewport_xy_scale_and_offset_amd: {
       nir_def *comps[] = {
          ac_nir_load_arg(b, &s->args->ac, s->args->ngg_viewport_scale[0]),
          ac_nir_load_arg(b, &s->args->ac, s->args->ngg_viewport_scale[1]),
@@ -350,7 +350,7 @@ lower_abi_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       break;
    case nir_intrinsic_load_provoking_vtx_in_prim_amd: {
       if (s->gfx_state->dynamic_provoking_vtx_mode) {
-         replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ngg_provoking_vtx);
+         replacement = GET_SGPR_FIELD_NIR(s->args->ngg_state, NGG_STATE_PROVOKING_VTX);
       } else {
          unsigned provoking_vertex = 0;
          if (s->gfx_state->rs.provoking_vtx_last) {
@@ -439,7 +439,7 @@ lower_abi_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       if (stage == MESA_SHADER_VERTEX) {
          /* For dynamic primitive topology with streamout. */
          if (s->info->vs.dynamic_num_verts_per_prim) {
-            replacement = ac_nir_load_arg(b, &s->args->ac, s->args->num_verts_per_prim);
+            replacement = GET_SGPR_FIELD_NIR(s->args->ngg_state, NGG_STATE_NUM_VERTS_PER_PRIM);
          } else {
             replacement = nir_imm_int(b, radv_get_num_vertices_per_prim(s->gfx_state));
          }

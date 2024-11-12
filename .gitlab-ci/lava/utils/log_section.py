@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum, auto
 from os import getenv
 from typing import Optional, Pattern, Union
@@ -10,12 +10,22 @@ from lava.utils.gitlab_section import GitlabSection
 
 class LogSectionType(Enum):
     UNKNOWN = auto()
+    LAVA_SUBMIT = auto()
+    LAVA_QUEUE = auto()
     LAVA_BOOT = auto()
     TEST_DUT_SUITE = auto()
     TEST_SUITE = auto()
     TEST_CASE = auto()
     LAVA_POST_PROCESSING = auto()
 
+# How long to wait whilst we try to submit a job; make it fairly short,
+# since the job will be retried.
+LAVA_SUBMIT_TIMEOUT = int(getenv("LAVA_SUBMIT_TIMEOUT", 5))
+
+# How long should we wait for a device to become available?
+# For post-merge jobs, this should be ~infinite, but we can fail more
+# aggressively for pre-merge.
+LAVA_QUEUE_TIMEOUT = int(getenv("LAVA_QUEUE_TIMEOUT", 60))
 
 # Empirically, successful device boot in LAVA time takes less than 3
 # minutes.
@@ -43,6 +53,8 @@ LAVA_POST_PROCESSING_TIMEOUT = int(getenv("LAVA_POST_PROCESSING_TIMEOUT", 5))
 
 FALLBACK_GITLAB_SECTION_TIMEOUT = timedelta(minutes=10)
 DEFAULT_GITLAB_SECTION_TIMEOUTS = {
+    LogSectionType.LAVA_SUBMIT: timedelta(minutes=LAVA_SUBMIT_TIMEOUT),
+    LogSectionType.LAVA_QUEUE: timedelta(minutes=LAVA_QUEUE_TIMEOUT),
     LogSectionType.LAVA_BOOT: timedelta(minutes=LAVA_BOOT_TIMEOUT),
     LogSectionType.TEST_DUT_SUITE: timedelta(minutes=LAVA_TEST_DUT_SUITE_TIMEOUT),
     LogSectionType.TEST_SUITE: timedelta(minutes=LAVA_TEST_SUITE_TIMEOUT),
@@ -63,7 +75,8 @@ class LogSection:
     collapsed: bool = False
 
     def from_log_line_to_section(
-        self, lava_log_line: dict[str, str]
+        self, lava_log_line: dict[str, str], main_test_case: Optional[str],
+        timestamp_relative_to: Optional[datetime]
     ) -> Optional[GitlabSection]:
         if lava_log_line["lvl"] not in self.levels:
             return
@@ -71,12 +84,16 @@ class LogSection:
         if match := re.search(self.regex, lava_log_line["msg"]):
             section_id = self.section_id.format(*match.groups())
             section_header = self.section_header.format(*match.groups())
+            is_main_test_case = section_id == main_test_case
             timeout = DEFAULT_GITLAB_SECTION_TIMEOUTS[self.section_type]
             return GitlabSection(
                 id=section_id,
                 header=f"{section_header} - Timeout: {timeout}",
                 type=self.section_type,
                 start_collapsed=self.collapsed,
+                suppress_start=is_main_test_case,
+                suppress_end=is_main_test_case,
+                timestamp_relative_to=timestamp_relative_to,
             )
 
 

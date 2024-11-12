@@ -136,7 +136,7 @@ TEST_F(copy_propagation_test, basic)
     * 1: add(8)        vgrf1  vgrf2  vgrf3
     */
 
-   v->calculate_cfg();
+   brw_calculate_cfg(*v);
    bblock_t *block0 = v->cfg->blocks[0];
 
    EXPECT_EQ(0, block0->start_ip);
@@ -197,7 +197,7 @@ TEST_F(copy_propagation_test, maxmax_sat_imm)
                                  bld.SEL(vgrf2, vgrf0,
                                          brw_imm_f(test[i].immediate)));
 
-      v->calculate_cfg();
+      brw_calculate_cfg(*v);
 
       bblock_t *block0 = v->cfg->blocks[0];
 
@@ -227,4 +227,90 @@ TEST_F(copy_propagation_test, maxmax_sat_imm)
       delete v->cfg;
       v->cfg = NULL;
    }
+}
+
+TEST_F(copy_propagation_test, mixed_integer_sign)
+{
+   brw_reg vgrf0 = bld.vgrf(BRW_TYPE_UD);
+   brw_reg vgrf1 = bld.vgrf(BRW_TYPE_D);
+   brw_reg vgrf2 = bld.vgrf(BRW_TYPE_UD);
+   brw_reg vgrf3 = bld.vgrf(BRW_TYPE_UD);
+   brw_reg vgrf4 = bld.vgrf(BRW_TYPE_UD);
+
+   bld.MOV(vgrf1, vgrf0);
+   bld.BFE(vgrf2, vgrf3, vgrf4, retype(vgrf1, BRW_TYPE_UD));
+
+   /* = Before =
+    *
+    * 0: mov(8)        vgrf1:D  vgrf0:UD
+    * 1: bfe(8)        vgrf2:UD vgrf3:UD  vgrf4:UD  vgrf1:UD
+    *
+    * = After =
+    * 0: mov(8)        vgrf1:D  vgrf0:UD
+    * 1: bfe(8)        vgrf2:UD vgrf3:UD  vgrf4:UD  vgrf0:UD
+    */
+
+   brw_calculate_cfg(*v);
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_TRUE(copy_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   fs_inst *mov = instruction(block0, 0);
+   EXPECT_EQ(BRW_OPCODE_MOV, mov->opcode);
+   EXPECT_TRUE(mov->dst.equals(vgrf1));
+   EXPECT_TRUE(mov->src[0].equals(vgrf0));
+
+   fs_inst *bfe = instruction(block0, 1);
+   EXPECT_EQ(BRW_OPCODE_BFE, bfe->opcode);
+   EXPECT_TRUE(bfe->dst.equals(vgrf2));
+   EXPECT_TRUE(bfe->src[0].equals(vgrf3));
+   EXPECT_TRUE(bfe->src[1].equals(vgrf4));
+   EXPECT_TRUE(bfe->src[2].equals(vgrf0));
+}
+
+TEST_F(copy_propagation_test, mixed_integer_sign_with_vector_imm)
+{
+   brw_reg vgrf0 = bld.vgrf(BRW_TYPE_W);
+   brw_reg vgrf1 = bld.vgrf(BRW_TYPE_UD);
+   brw_reg vgrf2 = bld.vgrf(BRW_TYPE_UD);
+
+   bld.MOV(vgrf0, brw_imm_uv(0xffff));
+   bld.ADD(vgrf1, vgrf2, retype(vgrf0, BRW_TYPE_UW));
+
+   /* = Before =
+    *
+    * 0: mov(8)        vgrf0:W  ...:UV
+    * 1: add(8)        vgrf1:UD vgrf2:UD  vgrf0:UW
+    *
+    * = After =
+    * No change
+    */
+
+   brw_calculate_cfg(*v);
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   const brw_reg src1 = instruction(block0, 1)->src[1];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_FALSE(copy_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   fs_inst *mov = instruction(block0, 0);
+   EXPECT_EQ(BRW_OPCODE_MOV, mov->opcode);
+   EXPECT_TRUE(mov->dst.equals(vgrf0));
+   EXPECT_TRUE(mov->src[0].file == IMM);
+
+   fs_inst *add = instruction(block0, 1);
+   EXPECT_EQ(BRW_OPCODE_ADD, add->opcode);
+   EXPECT_TRUE(add->dst.equals(vgrf1));
+   EXPECT_TRUE(add->src[0].equals(vgrf2));
+   EXPECT_TRUE(add->src[1].equals(src1));
 }

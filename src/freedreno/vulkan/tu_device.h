@@ -15,6 +15,7 @@
 #include "vk_device_memory.h"
 
 #include "tu_autotune.h"
+#include "tu_cs.h"
 #include "tu_pass.h"
 #include "tu_perfetto.h"
 #include "tu_suballoc.h"
@@ -123,6 +124,10 @@ struct tu_physical_device
    bool has_cached_non_coherent_memory;
    uintptr_t level1_dcache_size;
 
+   struct fdl_ubwc_config ubwc_config;
+
+   bool has_preemption;
+
    struct {
       uint32_t type_count;
       VkMemoryPropertyFlags types[VK_MAX_MEMORY_TYPES];
@@ -187,6 +192,14 @@ struct tu_instance
     * See: https://github.com/doitsujin/dxvk/issues/3861
     */
    bool allow_oob_indirect_ubo_loads;
+
+   /* DXVK and VKD3D-Proton use customBorderColorWithoutFormat
+    * and have most of D24S8 images with USAGE_SAMPLED, in such case we
+    * disable UBWC for correctness. However, games don't use border color for
+    * depth-stencil images. So we elect to ignore this edge case and force
+    * UBWC to be enabled.
+    */
+   bool disable_d24s8_border_color_workaround;
 };
 VK_DEFINE_HANDLE_CASTS(tu_instance, vk.base, VkInstance,
                        VK_OBJECT_TYPE_INSTANCE)
@@ -225,6 +238,8 @@ struct tu6_global
    } flush_base[4];
 
    alignas(16) uint32_t cs_indirect_xyz[12];
+
+   uint32_t vsc_state[32];
 
    volatile uint32_t vtx_stats_query_not_running;
 
@@ -375,12 +390,14 @@ struct tu_device
     */
    struct u_vector zombie_vmas;
 
+   struct tu_cs sub_cs;
+
    /* Command streams to set pass index to a scratch reg */
-   struct tu_cs *perfcntrs_pass_cs;
    struct tu_cs_entry *perfcntrs_pass_cs_entries;
 
-   struct tu_cs *cmdbuf_start_a725_quirk_cs;
-   struct tu_cs_entry *cmdbuf_start_a725_quirk_entry;
+   struct tu_cs_entry cmdbuf_start_a725_quirk_entry;
+
+   struct tu_cs_entry bin_preamble_entry;
 
    struct util_dynarray dynamic_rendering_pending;
    VkCommandPool dynamic_rendering_pool;
@@ -510,10 +527,10 @@ void tu_setup_dynamic_framebuffer(struct tu_cmd_buffer *cmd_buffer,
                                   const VkRenderingInfo *pRenderingInfo);
 
 void
-tu_copy_timestamp_buffer(struct u_trace_context *utctx, void *cmdstream,
-                         void *ts_from, uint32_t from_offset,
-                         void *ts_to, uint32_t to_offset,
-                         uint32_t count);
+tu_copy_buffer(struct u_trace_context *utctx, void *cmdstream,
+               void *ts_from, uint64_t from_offset_B,
+               void *ts_to, uint64_t to_offset_B,
+               uint64_t size_B);
 
 
 VkResult

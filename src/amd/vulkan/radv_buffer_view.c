@@ -42,7 +42,7 @@ radv_make_texel_buffer_descriptor(struct radv_device *device, uint64_t va, VkFor
    const struct ac_buffer_state ac_state = {
       .va = va,
       .size = range,
-      .format = vk_format_to_pipe_format(vk_format),
+      .format = radv_format_to_pipe_format(vk_format),
       .swizzle =
          {
             swizzle[0],

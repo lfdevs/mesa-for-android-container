@@ -45,6 +45,7 @@ struct panfrost_jm_batch {
 struct panfrost_batch;
 struct panfrost_context;
 struct pan_fb_info;
+struct pan_tls_info;
 struct pipe_draw_info;
 struct pipe_grid_info;
 struct pipe_draw_start_count_bias;
@@ -70,6 +71,8 @@ GENX(jm_cleanup_batch)(struct panfrost_batch *batch)
 int GENX(jm_submit_batch)(struct panfrost_batch *batch);
 
 void GENX(jm_preload_fb)(struct panfrost_batch *batch, struct pan_fb_info *fb);
+void GENX(jm_emit_fbds)(struct panfrost_batch *batch, struct pan_fb_info *fb,
+                        struct pan_tls_info *tls);
 void GENX(jm_emit_fragment_job)(struct panfrost_batch *batch,
                                 const struct pan_fb_info *pfb);
 
@@ -84,6 +87,14 @@ void GENX(jm_launch_draw)(struct panfrost_batch *batch,
                           unsigned drawid_offset,
                           const struct pipe_draw_start_count_bias *draw,
                           unsigned vertex_count);
+void GENX(jm_launch_draw_indirect)(struct panfrost_batch *batch,
+                                   const struct pipe_draw_info *info,
+                                   unsigned drawid_offset,
+                                   const struct pipe_draw_indirect_info *indirect);
+
+void GENX(jm_emit_write_timestamp)(struct panfrost_batch *batch,
+                                   struct panfrost_resource *dst,
+                                   unsigned offset);
 
 #endif /* PAN_ARCH < 10 */
 

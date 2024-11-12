@@ -19,7 +19,7 @@ SPDX-License-Identifier: MIT
 </template>
 
 <template name="INSTR_LOAD_STORE">
-	{NAME}{COND}{SKPHP}{DENORM}{LOCAL}{TYPE}{LEFT_SHIFT}{PMODE}
+	{NAME}{SAT}{COND}{SKPHP}{DENORM}{LOCAL}{TYPE}{LEFT_SHIFT}{PMODE}
 </template>
 
 <enum name="#cond">
@@ -907,8 +907,8 @@ SPDX-License-Identifier: MIT
 	<field name="SRC1_RGROUP" low="96" high="98" type="#reg_group"/>
 </bitset>
 
-<bitset name="#left-shift" size="2">
-	<field name="LEFT_SHIFT" low="0" high="1" type="uint"/>
+<bitset name="#left-shift" size="3">
+	<field name="LEFT_SHIFT" low="0" high="2" type="uint"/>
 
 	<override>
 		<expr>
@@ -940,8 +940,8 @@ SPDX-License-Identifier: MIT
 	<pattern low="27" high="31">00000</pattern> <!-- TEX_ID -->
 	<pattern low="32" high="33">00</pattern> <!-- RMODE -->
 	<field name="PMODE" pos="34" type="bool_inv" display=".pack"/>
-	<field name="LEFT_SHIFT" low="35" high="36" type="#left-shift"/>
-	<pattern low="37" high="38">00</pattern>
+	<field name="LEFT_SHIFT" low="35" high="37" type="#left-shift"/>
+	<pattern pos="38">0</pattern>
 	<field name="SKPHP" pos="39" type="bool" display=".skpHp"/>
 	<field name="LOCAL" pos="40" type="bool" display=".local"/>
 	<pattern pos="41">0</pattern>
@@ -1003,8 +1003,8 @@ SPDX-License-Identifier: MIT
 	<pattern low="27" high="31">xxxxx</pattern>
 	<pattern low="32" high="33">xx</pattern>
 	<field name="PMODE" pos="34" type="bool_inv" display=".pack"/>
-	<field name="LEFT_SHIFT" low="35" high="36" type="#left-shift"/>
-	<pattern low="37" high="38">00</pattern>
+	<field name="LEFT_SHIFT" low="35" high="37" type="#left-shift"/>
+	<pattern pos="38">0</pattern>
 	<field name="SKPHP" pos="39" type="bool" display=".skpHp"/>
 	<field name="LOCAL" pos="40" type="bool" display=".local"/>
 	<pattern low="41" high="41">x</pattern>
@@ -1290,6 +1290,11 @@ SPDX-License-Identifier: MIT
 	<pattern pos="80">0</pattern> <!-- OPCODE_BIT6 -->
 </bitset>
 
+<bitset name="clamp0_max" extends="#instruction-alu-src0-src1">
+	<pattern low="0" high="5">110110</pattern> <!-- OPC -->
+	<pattern pos="80">0</pattern> <!-- OPCODE_BIT6 -->
+</bitset>
+
 <bitset name="iaddsat" extends="#instruction-alu-src0-src2">
 	<pattern low="0" high="5">111011</pattern> <!-- OPC -->
 	<pattern pos="80">0</pattern> <!-- OPCODE_BIT6 -->
@@ -1448,6 +1453,11 @@ SPDX-License-Identifier: MIT
 	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
 </bitset>
 
+<bitset name="conv" extends="#instruction-alu-src0-src1">
+	<pattern low="0" high="5">110010</pattern> <!-- OPC -->
+	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
+</bitset>
+
 <bitset name="dp2" extends="#instruction-alu-src0-src1">
 	<pattern low="0" high="5">110011</pattern> <!-- OPC -->
 	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
@@ -1465,6 +1475,16 @@ SPDX-License-Identifier: MIT
 
 <bitset name="norm_dp4" extends="#instruction-alu-src0">
 	<pattern low="0" high="5">110110</pattern> <!-- OPC -->
+	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
+</bitset>
+
+<bitset name="img_load" extends="#instruction-load">
+	<pattern low="0" high="5">111001</pattern> <!-- OPC -->
+	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
+</bitset>
+
+<bitset name="img_store" extends="#instruction-store">
+	<pattern low="0" high="5">111010</pattern> <!-- OPC -->
 	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
 </bitset>
 

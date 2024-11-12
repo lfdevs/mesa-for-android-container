@@ -1,6 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2086 # we want word splitting
-set -ex
+set -uex
 
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
@@ -8,17 +8,18 @@ set -ex
 # DEBIAN_TEST_VK_TAG
 # KERNEL_ROOTFS_TAG
 
-REV="582f5490a124c27c26d3a452fee03a8c85fa9a5c"
+REV="c2b31333926a6171c3c02d182b756efad7770410"
 
 git clone https://gitlab.freedesktop.org/mesa/piglit.git --single-branch --no-checkout /piglit
 pushd /piglit
 git checkout "$REV"
 patch -p1 <$OLDPWD/.gitlab-ci/piglit/disable-vs_in.diff
-cmake -S . -B . -G Ninja -DCMAKE_BUILD_TYPE=Release $PIGLIT_OPTS $EXTRA_CMAKE_ARGS
-ninja $PIGLIT_BUILD_TARGETS
-find . -depth \( -name .git -o -name '*ninja*' -o -iname '*cmake*' -o -name '*.[chao]' \) -exec rm -rf {} \;
+cmake -S . -B . -G Ninja -DCMAKE_BUILD_TYPE=Release $PIGLIT_OPTS ${EXTRA_CMAKE_ARGS:-}
+ninja ${PIGLIT_BUILD_TARGETS:-}
+find . -depth \( -name .git -o -name '*ninja*' -o -iname '*cmake*' -o -name '*.[chao]' \) \
+       ! -name 'include_test.h' -exec rm -rf {} \;
 rm -rf target_api
-if [ "$PIGLIT_BUILD_TARGETS" = "piglit_replayer" ]; then
+if [ "${PIGLIT_BUILD_TARGETS:-}" = "piglit_replayer" ]; then
     find . -depth \
          ! -regex "^\.$" \
          ! -regex "^\.\/piglit.*" \

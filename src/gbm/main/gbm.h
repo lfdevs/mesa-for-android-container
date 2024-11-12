@@ -330,7 +330,11 @@ enum gbm_bo_flags {
     */
    GBM_BO_FIXED_COMPRESSION_12BPC = (13 << 7),
 
-   /* next available value is (1 << 11) */
+   /**
+    * This buffer will be used with an API with well defined transition points
+    * between context internal usage and external visibility.
+    */
+   GBM_BO_EXPLICIT_FLUSH = (1 << 11),
 };
 
 #define GBM_BO_FIXED_COMPRESSION_MASK (((1 << 11) - 1) & ~((1 << 7) - 1))

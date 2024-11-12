@@ -98,6 +98,7 @@ files_libnir = files(
   'nir_from_ssa.c',
   'nir_functions.c',
   'nir_gather_info.c',
+  'nir_gather_tcs_info.c',
   'nir_gather_types.c',
   'nir_gather_xfb_info.c',
   'nir_group_loads.c',
@@ -229,8 +230,10 @@ files_libnir = files(
   'nir_opt_dead_cf.c',
   'nir_opt_dead_write_vars.c',
   'nir_opt_find_array_copies.c',
+  'nir_opt_frag_coord_to_pixel_coord.c',
   'nir_opt_fragdepth.c',
   'nir_opt_gcm.c',
+  'nir_opt_generate_bfi.c',
   'nir_opt_idiv_const.c',
   'nir_opt_if.c',
   'nir_opt_intrinsics.c',
@@ -252,7 +255,6 @@ files_libnir = files(
   'nir_opt_reassociate_bfi.c',
   'nir_opt_rematerialize_compares.c',
   'nir_opt_remove_phis.c',
-  'nir_opt_reuse_constants.c',
   'nir_opt_shrink_stores.c',
   'nir_opt_shrink_vectors.c',
   'nir_opt_sink.c',
@@ -294,6 +296,7 @@ files_libnir = files(
   'nir_worklist.c',
   'nir_worklist.h',
   'nir_xfb_info.h',
+  'nir_lower_atomics.c'
 )
 
 # When a file is too large, -Wmisleading-indentation will give a note about
@@ -324,7 +327,7 @@ inc_nir = include_directories('.')
 idep_nir_headers = declare_dependency(
   sources : [nir_opcodes_h, nir_builder_opcodes_h, nir_intrinsics_h, nir_intrinsics_indices_h,
              ir_expression_operation_h, builtin_types_h],
-  include_directories : [inc_nir, inc_compiler],
+  include_directories : [inc_nir, inc_compiler, inc_src, inc_include],
 )
 
 # Also link with nir

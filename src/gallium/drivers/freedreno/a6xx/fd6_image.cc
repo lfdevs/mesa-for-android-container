@@ -1,25 +1,7 @@
 /*
- * Copyright (C) 2017 Rob Clark <robclark@freedesktop.org>
+ * Copyright © 2017 Rob Clark <robclark@freedesktop.org>
  * Copyright © 2018 Google, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Rob Clark <robclark@freedesktop.org>
@@ -90,6 +72,7 @@ fd6_image_descriptor(struct fd_context *ctx, const struct pipe_image_view *buf,
          .type = fdl_type_from_pipe_target(buf->resource->target),
          .chroma_offsets = {FDL_CHROMA_LOCATION_COSITED_EVEN,
                             FDL_CHROMA_LOCATION_COSITED_EVEN},
+         .ubwc_fc_mutable = false,
       };
 
       /* fdl6_view makes the storage descriptor treat cubes like a 2D array (so
@@ -268,9 +251,12 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
       OUT_REG(ring, SP_CS_BINDLESS_BASE_DESCRIPTOR(CHIP,
             idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
       ));
-      OUT_REG(ring, A6XX_HLSQ_CS_BINDLESS_BASE_DESCRIPTOR(
-            idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
-      ));
+
+      if (CHIP == A6XX) {
+         OUT_REG(ring, A6XX_HLSQ_CS_BINDLESS_BASE_DESCRIPTOR(
+               idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
+         ));
+      }
 
       if (bufso->enabled_mask) {
          OUT_PKT(ring, CP_LOAD_STATE6_FRAG,

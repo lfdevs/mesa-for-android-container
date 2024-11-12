@@ -81,7 +81,7 @@
 
 #define AMDGPU_VEGA10_RANGE     0x01, 0x14 //#  1 <= x < 20
 #define AMDGPU_VEGA12_RANGE     0x14, 0x28 //# 20 <= x < 40
-#define AMDGPU_VEGA20_RANGE     0x28, 0xFF //# 40 <= x < max
+#define AMDGPU_VEGA20_RANGE     0x28, 0x32 //# 40 <= x < max
 
 #define AMDGPU_RAVEN_RANGE      0x01, 0x81 //#   1 <= x < 129
 #define AMDGPU_RAVEN2_RANGE     0x81, 0x90 //# 129 <= x < 144

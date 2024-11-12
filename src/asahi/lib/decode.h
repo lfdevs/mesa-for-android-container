@@ -14,7 +14,7 @@
 
 struct agxdecode_ctx;
 
-struct agxdecode_ctx *agxdecode_new_context(void);
+struct agxdecode_ctx *agxdecode_new_context(uint64_t shader_base);
 
 void agxdecode_destroy_context(struct agxdecode_ctx *ctx);
 
@@ -41,8 +41,6 @@ void agxdecode_drm_cmd_compute(struct agxdecode_ctx *ctx,
 void agxdecode_dump_file_open(void);
 
 void agxdecode_track_alloc(struct agxdecode_ctx *ctx, struct agx_bo *alloc);
-
-void agxdecode_dump_mappings(struct agxdecode_ctx *ctx, unsigned map_index);
 
 void agxdecode_track_free(struct agxdecode_ctx *ctx, struct agx_bo *bo);
 

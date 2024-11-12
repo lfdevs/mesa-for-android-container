@@ -1683,7 +1683,7 @@ static void pvr_write_buffer_descriptor(const struct pvr_device_info *dev_info,
        * compiler change to allow us to skip the range check.
        */
       secondary[PVR_DESC_IMAGE_SECONDARY_OFFSET_WIDTH(dev_info)] =
-         (uint32_t)(bview->range / vk_format_get_blocksize(bview->format));
+         (uint32_t)(bview->vk.elements);
       secondary[PVR_DESC_IMAGE_SECONDARY_OFFSET_HEIGHT(dev_info)] = 1;
    }
 }

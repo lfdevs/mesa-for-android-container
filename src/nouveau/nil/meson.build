@@ -1,17 +1,5 @@
 # Copyright © 2022 Collabora Ltd
 # SPDX-License-Identifier: MIT
-if meson.version().version_compare('< 1.3.0')
-  error('NVK requires meson 1.3.0 or newer')
-endif
-
-add_languages('rust', required: true)
-rust = import('rust')
-
-rc = meson.get_compiler('rust')
-if rc.version().version_compare('< 1.73.0')
-  error('nil_rs requires Rust 1.73.0')
-endif
-
 prog_cbindgen = find_program(
   'cbindgen',
   required : true,

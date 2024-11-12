@@ -206,8 +206,6 @@ protected:
     Lib();  // Constructor is protected
     Lib(const Client* pClient);
 
-    static const UINT_32 MaxImageDim  = 65536; // Max image size is 64k
-    static const UINT_32 MaxMipLevels = 17;
     UINT_32 m_pipesLog2;                ///< Number of pipe per shader engine Log2
     UINT_32 m_pipeInterleaveLog2;       ///< Log2 of pipe interleave bytes
 
@@ -226,6 +224,11 @@ protected:
 
     // Block dimension lookup table according to swizzle mode, MSAA sample rate and bpp. This includes linear.
     ADDR_EXTENT3D        m_blockDimensionTable[ADDR3_MAX_TYPE][MaxMsaaRateLog2][MaxElementBytesLog2];
+
+    virtual ADDR_E_RETURNCODE HwlComputeStereoInfo(
+        const ADDR3_COMPUTE_SURFACE_INFO_INPUT* pIn,
+        UINT_32*                                pAlignY,
+        UINT_32*                                pRightXor) const = 0;
 
     void SetEquationTableEntry(
         Addr3SwizzleMode swMode,
@@ -374,6 +377,11 @@ protected:
         const ADDR3_COMPUTE_SURFACE_ADDRFROMCOORD_INPUT* pIn,
         ADDR3_COMPUTE_SURFACE_ADDRFROMCOORD_OUTPUT*      pOut) const;
 
+    virtual ADDR_E_RETURNCODE HwlComputeSurfaceAddrFromCoordLinear(
+        const ADDR3_COMPUTE_SURFACE_ADDRFROMCOORD_INPUT* pIn,
+        const ADDR3_COMPUTE_SURFACE_INFO_INPUT*          pSurfInfoIn,
+        ADDR3_COMPUTE_SURFACE_ADDRFROMCOORD_OUTPUT*      pOut) const = 0;
+
     ADDR_E_RETURNCODE ComputeSurfaceAddrFromCoordTiled(
         const ADDR3_COMPUTE_SURFACE_ADDRFROMCOORD_INPUT* pIn,
         ADDR3_COMPUTE_SURFACE_ADDRFROMCOORD_OUTPUT*      pOut) const;
@@ -447,6 +455,8 @@ protected:
         const ADDR3_COMPUTE_SURFACE_INFO_PARAMS_INPUT* pIn,
         const ADDR_EXTENT3D&                           blockDims) const = 0;
 
+    virtual BOOL_32 HwlValidateNonSwModeParams(const ADDR3_GET_POSSIBLE_SWIZZLE_MODE_INPUT* pIn) const = 0;
+
 private:
     // Disallow the copy constructor
     Lib(const Lib& a);
@@ -455,6 +465,8 @@ private:
     Lib& operator=(const Lib& a);
 
     void Init();
+
+    VOID ComputeQbStereoInfo(ADDR3_COMPUTE_SURFACE_INFO_OUTPUT* pOut) const;
 };
 
 } // V3

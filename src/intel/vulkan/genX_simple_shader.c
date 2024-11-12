@@ -36,8 +36,7 @@
 static void
 genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 {
-   assert(state->cmd_buffer == NULL ||
-          state->cmd_buffer->state.current_pipeline == _3D);
+   assert(state->cmd_buffer && state->cmd_buffer->state.current_pipeline == _3D);
 
    struct anv_batch *batch = state->batch;
    struct anv_device *device = state->device;
@@ -109,9 +108,7 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
    };
 
    genX(emit_l3_config)(batch, device, state->l3_config);
-
-   if (state->cmd_buffer)
-      state->cmd_buffer->state.current_l3_config = state->l3_config;
+   state->cmd_buffer->state.current_l3_config = state->l3_config;
 
    enum intel_urb_deref_block_size deref_block_size;
    genX(emit_urb_setup)(device, batch, state->l3_config,
@@ -214,6 +211,12 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
       ps.MaximumNumberofThreadsPerPSD = device->info->max_threads_per_psd - 1;
    }
 
+#if INTEL_WA_18038825448_GFX_VER
+   const bool needs_ps_dependency =
+      genX(cmd_buffer_set_coarse_pixel_active)
+         (state->cmd_buffer, ANV_COARSE_PIXEL_STATE_DISABLED);
+#endif
+
    anv_batch_emit(batch, GENX(3DSTATE_PS_EXTRA), psx) {
       psx.PixelShaderValid = true;
 #if GFX_VER < 20
@@ -222,6 +225,10 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
       psx.PixelShaderIsPerSample = prog_data->persample_dispatch;
       psx.PixelShaderComputedDepthMode = prog_data->computed_depth_mode;
       psx.PixelShaderComputesStencil = prog_data->computed_stencil;
+
+#if INTEL_WA_18038825448_GFX_VER
+      psx.EnablePSDependencyOnCPsizeChange = needs_ps_dependency;
+#endif
    }
 
    anv_batch_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), cc) {
@@ -358,7 +365,10 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 
    state->cmd_buffer->state.gfx.vb_dirty = BITFIELD_BIT(0);
    state->cmd_buffer->state.gfx.dirty |= ~(ANV_CMD_DIRTY_INDEX_BUFFER |
-                                           ANV_CMD_DIRTY_XFB_ENABLE);
+                                           ANV_CMD_DIRTY_XFB_ENABLE |
+                                           ANV_CMD_DIRTY_OCCLUSION_QUERY_ACTIVE |
+                                           ANV_CMD_DIRTY_FS_MSAA_FLAGS |
+                                           ANV_CMD_DIRTY_RESTART_INDEX);
    state->cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_FRAGMENT_BIT;
    state->cmd_buffer->state.gfx.push_constant_stages = VK_SHADER_STAGE_FRAGMENT_BIT;
 }
@@ -555,30 +565,30 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
          brw_cs_get_dispatch_info(devinfo, prog_data, NULL);
 
 #if GFX_VERx10 >= 125
-      anv_batch_emit(batch, GENX(COMPUTE_WALKER), cw) {
-         cw.SIMDSize                       = dispatch.simd_size / 16;
-         cw.MessageSIMD                    = dispatch.simd_size / 16,
-         cw.IndirectDataStartAddress       = push_state.offset;
-         cw.IndirectDataLength             = push_state.alloc_size;
-         cw.LocalXMaximum                  = prog_data->local_size[0] - 1;
-         cw.LocalYMaximum                  = prog_data->local_size[1] - 1;
-         cw.LocalZMaximum                  = prog_data->local_size[2] - 1;
-         cw.ThreadGroupIDXDimension        = DIV_ROUND_UP(num_threads,
-                                                          dispatch.simd_size);
-         cw.ThreadGroupIDYDimension        = 1;
-         cw.ThreadGroupIDZDimension        = 1;
-         cw.ExecutionMask                  = dispatch.right_mask;
-         cw.PostSync.MOCS                  = anv_mocs(device, NULL, 0);
+      struct GENX(COMPUTE_WALKER_BODY) body = {
+         .SIMDSize                       = dispatch.simd_size / 16,
+         .MessageSIMD                    = dispatch.simd_size / 16,
+         .IndirectDataStartAddress       = push_state.offset,
+         .IndirectDataLength             = push_state.alloc_size,
+         .LocalXMaximum                  = prog_data->local_size[0] - 1,
+         .LocalYMaximum                  = prog_data->local_size[1] - 1,
+         .LocalZMaximum                  = prog_data->local_size[2] - 1,
+         .ThreadGroupIDXDimension        = DIV_ROUND_UP(num_threads,
+                                                        dispatch.simd_size),
+         .ThreadGroupIDYDimension        = 1,
+         .ThreadGroupIDZDimension        = 1,
+         .ExecutionMask                  = dispatch.right_mask,
+         .PostSync.MOCS                  = anv_mocs(device, NULL, 0),
 
 #if GFX_VERx10 >= 125
-         cw.GenerateLocalID                = prog_data->generate_local_id != 0;
-         cw.EmitLocal                      = prog_data->generate_local_id;
-         cw.WalkOrder                      = prog_data->walk_order;
-         cw.TileLayout = prog_data->walk_order == INTEL_WALK_ORDER_YXZ ?
-                         TileY32bpe : Linear;
+         .GenerateLocalID                = prog_data->generate_local_id != 0,
+         .EmitLocal                      = prog_data->generate_local_id,
+         .WalkOrder                      = prog_data->walk_order,
+         .TileLayout = prog_data->walk_order == INTEL_WALK_ORDER_YXZ ?
+                       TileY32bpe : Linear,
 #endif
 
-         cw.InterfaceDescriptor = (struct GENX(INTERFACE_DESCRIPTOR_DATA)) {
+         .InterfaceDescriptor = (struct GENX(INTERFACE_DESCRIPTOR_DATA)) {
             .KernelStartPointer                = state->kernel->kernel.offset +
                                                  brw_cs_prog_data_prog_offset(prog_data,
                                                                               dispatch.simd_size),
@@ -589,7 +599,11 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
             .SharedLocalMemorySize             = intel_compute_slm_encode_size(GFX_VER,
                                                                                prog_data->base.total_shared),
             .NumberOfBarriers                  = prog_data->uses_barrier,
-         };
+         },
+      };
+
+      anv_batch_emit(batch, GENX(COMPUTE_WALKER), cw) {
+         cw.body = body;
       }
 #else
       const uint32_t vfe_curbe_allocation =

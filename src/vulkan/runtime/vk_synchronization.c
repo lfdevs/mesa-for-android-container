@@ -63,7 +63,7 @@ VkAccessFlags2
 vk_filter_src_access_flags2(VkPipelineStageFlags2 stages,
                             VkAccessFlags2 access)
 {
-   const VkPipelineStageFlags2 all_write_access =
+   const VkAccessFlags2 all_write_access =
       vk_write_access2_for_pipeline_stage_flags2(stages);
 
    /* We only care about write access in src flags */
@@ -74,7 +74,7 @@ VkAccessFlags2
 vk_filter_dst_access_flags2(VkPipelineStageFlags2 stages,
                             VkAccessFlags2 access)
 {
-   const VkPipelineStageFlags2 all_read_access =
+   const VkAccessFlags2 all_read_access =
       vk_read_access2_for_pipeline_stage_flags2(stages);
 
    /* We only care about read access in dst flags */

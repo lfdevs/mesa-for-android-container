@@ -507,8 +507,8 @@ static void si_blit_decompress_color(struct si_context *sctx, struct si_texture 
          /* Required before and after FMASK and DCC_DECOMPRESS. */
          if (custom_blend == sctx->custom_blend_fmask_decompress ||
              custom_blend == sctx->custom_blend_dcc_decompress) {
-            sctx->flags |= SI_CONTEXT_FLUSH_AND_INV_CB;
-            si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+            sctx->barrier_flags |= SI_BARRIER_SYNC_AND_INV_CB;
+            si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
          }
 
          si_blitter_begin(sctx, SI_DECOMPRESS);
@@ -517,8 +517,8 @@ static void si_blit_decompress_color(struct si_context *sctx, struct si_texture 
 
          if (custom_blend == sctx->custom_blend_fmask_decompress ||
              custom_blend == sctx->custom_blend_dcc_decompress) {
-            sctx->flags |= SI_CONTEXT_FLUSH_AND_INV_CB;
-            si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+            sctx->barrier_flags |= SI_BARRIER_SYNC_AND_INV_CB;
+            si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
          }
 
          /* When running FMASK decompression with DCC, we need to run the "eliminate fast clear" pass
@@ -933,7 +933,7 @@ void si_decompress_subresource(struct pipe_context *ctx, struct pipe_resource *t
        */
       if (sctx->framebuffer.state.zsbuf && sctx->framebuffer.state.zsbuf->u.tex.level == level &&
           sctx->framebuffer.state.zsbuf->texture == tex)
-         si_update_fb_dirtiness_after_rendering(sctx);
+         si_fb_barrier_after_rendering(sctx, SI_FB_BARRIER_SYNC_DB);
 
       si_decompress_depth(sctx, stex, planes, level, level, first_layer, last_layer);
    } else if (stex->surface.fmask_size || stex->cmask_buffer ||
@@ -946,7 +946,7 @@ void si_decompress_subresource(struct pipe_context *ctx, struct pipe_resource *t
          if (sctx->framebuffer.state.cbufs[i] &&
              sctx->framebuffer.state.cbufs[i]->u.tex.level == level &&
              sctx->framebuffer.state.cbufs[i]->texture == tex) {
-            si_update_fb_dirtiness_after_rendering(sctx);
+            si_fb_barrier_after_rendering(sctx, SI_FB_BARRIER_SYNC_CB);
             break;
          }
       }
@@ -965,7 +965,9 @@ void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst
 
    /* Handle buffers first. */
    if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
-      si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width, SI_OP_SYNC_BEFORE_AFTER);
+      si_barrier_before_simple_buffer_op(sctx, 0, dst, src);
+      si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width);
+      si_barrier_after_simple_buffer_op(sctx, 0, dst, src);
       return;
    }
 
@@ -1068,8 +1070,8 @@ static void si_do_CB_resolve(struct si_context *sctx, const struct pipe_blit_inf
                              enum pipe_format format)
 {
    /* Required before and after CB_RESOLVE. */
-   sctx->flags |= SI_CONTEXT_FLUSH_AND_INV_CB;
-   si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+   sctx->barrier_flags |= SI_BARRIER_SYNC_AND_INV_CB;
+   si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
 
    si_blitter_begin(
       sctx, SI_COLOR_RESOLVE | (info->render_condition_enable ? 0 : SI_DISABLE_RENDER_COND));
@@ -1206,7 +1208,9 @@ bool si_msaa_resolve_blit_via_CB(struct pipe_context *ctx, const struct pipe_bli
          if (!vi_dcc_get_clear_info(sctx, dst, info->dst.level, DCC_UNCOMPRESSED, &clear_info))
             return false;
 
-         si_execute_clears(sctx, &clear_info, 1, SI_CLEAR_TYPE_DCC, info->render_condition_enable);
+         si_barrier_before_image_fast_clear(sctx, SI_CLEAR_TYPE_DCC);
+         si_execute_clears(sctx, &clear_info, 1, info->render_condition_enable);
+         si_barrier_after_image_fast_clear(sctx);
          dst->dirty_level_mask &= ~(1 << info->dst.level);
       }
 
@@ -1267,7 +1271,7 @@ static void si_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
    if (unlikely(sctx->sqtt_enabled))
       sctx->sqtt_next_event = EventCmdCopyImage;
 
-   if (si_compute_blit(sctx, info, NULL, 0, 0, SI_OP_SYNC_BEFORE_AFTER | SI_OP_FAIL_IF_SLOW))
+   if (si_compute_blit(sctx, info, NULL, 0, 0, true))
       return;
 
    si_gfx_blit(ctx, info);

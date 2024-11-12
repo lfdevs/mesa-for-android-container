@@ -70,9 +70,6 @@ executable(
 
 # Only generate Rust bindings for NVK
 if with_nouveau_vk
-  add_languages('rust', required: true)
-  rust = import('rust')
-
   cl_rs_generated = []
   foreach cl : nv_classes
     cl_rs_generated += custom_target(
@@ -81,6 +78,14 @@ if with_nouveau_vk
       output : ['nvh_classes_'+cl+'.rs'],
       command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@',
                  '--out-rs', '@OUTPUT0@'],
+    )
+
+    cl_rs_generated += custom_target(
+      'nvh_' + cl + '_mthd.rs',
+      input : ['class_parser.py', 'nvidia/classes/'+cl+'.h'],
+      output : ['nvh_classes_'+cl+'_mthd.rs'],
+      command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@',
+                 '--out-rs-mthd', '@OUTPUT0@'],
     )
 
     fs = import('fs')
@@ -142,5 +147,17 @@ if with_nouveau_vk
 
   idep_nvidia_headers_rs = declare_dependency(
     link_with : _nvidia_headers_rs,
+  )
+
+  _libnv_push_rs = static_library(
+    'nv_push_rs',
+    files('nv_push_rs/lib.rs'),
+    gnu_symbol_visibility: 'hidden',
+    rust_abi: 'rust',
+    dependencies: [idep_nvidia_headers_rs],
+  )
+
+  idep_nv_push_rs = declare_dependency(
+    link_with : _libnv_push_rs,
   )
 endif

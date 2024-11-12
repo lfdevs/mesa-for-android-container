@@ -42,20 +42,10 @@
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define VER_MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#if defined(HAVE_DRI) || defined(HAVE_DRI2) || defined(HAVE_DRI3)
-extern const struct gbm_backend gbm_dri_backend;
-#endif
-
 struct gbm_backend_desc {
    const char *name;
    const struct gbm_backend *backend;
    void *lib;
-};
-
-static const struct gbm_backend_desc builtin_backends[] = {
-#if defined(HAVE_DRI) || defined(HAVE_DRI2) || defined(HAVE_DRI3)
-   { "dri", &gbm_dri_backend },
-#endif
 };
 
 #define BACKEND_LIB_SUFFIX "_gbm"
@@ -116,8 +106,16 @@ backend_create_device(const struct gbm_backend_desc *bd, int fd)
 }
 
 static struct gbm_device *
-load_backend(void *lib, int fd, const char *name)
+load_backend_by_name(const char *name, int fd, bool warn_on_fail)
 {
+   void *lib = loader_open_driver_lib(name, BACKEND_LIB_SUFFIX,
+                                      backend_search_path_vars,
+                                      DEFAULT_BACKENDS_PATH,
+                                      warn_on_fail);
+
+   if (!lib)
+      return NULL;
+
    struct gbm_device *dev = NULL;
    struct gbm_backend_desc *backend_desc;
    const struct gbm_backend *gbm_backend;
@@ -146,89 +144,25 @@ fail:
    return NULL;
 }
 
-static struct gbm_device *
-find_backend(const char *name, int fd)
-{
-   struct gbm_device *dev = NULL;
-   const struct gbm_backend_desc *bd;
-   void *lib;
-   unsigned i;
-
-   for (i = 0; i < ARRAY_SIZE(builtin_backends); ++i) {
-      bd = &builtin_backends[i];
-
-      if (name && strcmp(bd->name, name))
-         continue;
-
-      dev = backend_create_device(bd, fd);
-
-      if (dev)
-         break;
-   }
-
-   if (name && !dev) {
-      lib = loader_open_driver_lib(name, BACKEND_LIB_SUFFIX,
-                                   backend_search_path_vars,
-                                   DEFAULT_BACKENDS_PATH,
-                                   true);
-
-      if (lib)
-         dev = load_backend(lib, fd, name);
-   }
-
-   return dev;
-}
-
-static struct gbm_device *
-override_backend(int fd)
-{
-   struct gbm_device *dev = NULL;
-   const char *b;
-
-   b = getenv("GBM_BACKEND");
-   if (b)
-      dev = find_backend(b, fd);
-
-   return dev;
-}
-
-static struct gbm_device *
-backend_from_driver_name(int fd)
-{
-   struct gbm_device *dev = NULL;
-   drmVersionPtr v = drmGetVersion(fd);
-   void *lib;
-
-   if (!v)
-      return NULL;
-
-   lib = loader_open_driver_lib(v->name, BACKEND_LIB_SUFFIX,
-                                backend_search_path_vars,
-                                DEFAULT_BACKENDS_PATH,
-                                false);
-
-   if (lib)
-      dev = load_backend(lib, fd, v->name);
-
-   drmFreeVersion(v);
-
-   return dev;
-}
-
 struct gbm_device *
 _gbm_create_device(int fd)
 {
-   struct gbm_device *dev;
+   struct gbm_device *dev = NULL;
 
-   dev = override_backend(fd);
+   const char *b = getenv("GBM_BACKEND");
+   if (b) {
+      dev = load_backend_by_name(b, fd, true);
+      if (dev) return dev;
+   }
 
-   if (!dev)
-      dev = backend_from_driver_name(fd);
+   drmVersionPtr v = drmGetVersion(fd);
+   if (v) {
+      dev = load_backend_by_name(v->name, fd, false);
+      drmFreeVersion(v);
+      if (dev) return dev;
+   }
 
-   if (!dev)
-      dev = find_backend(NULL, fd);
-
-   return dev;
+   return load_backend_by_name("dri", fd, true);
 }
 
 void

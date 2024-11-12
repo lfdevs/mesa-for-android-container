@@ -48,7 +48,7 @@ include $(CLEAR_VARS)
 LOCAL_SHARED_LIBRARIES := libc libdl libdrm libm liblog libcutils libz libc++ libnativewindow libsync libhardware
 LOCAL_STATIC_LIBRARIES := libexpat libarect libelf
 LOCAL_HEADER_LIBRARIES := libnativebase_headers hwvulkan_headers
-MESON_GEN_PKGCONFIGS := cutils expat hardware libdrm:$(LIBDRM_VERSION) nativewindow sync zlib:1.2.11 libelf
+MESON_GEN_PKGCONFIGS := log cutils expat hardware libdrm:$(LIBDRM_VERSION) nativewindow sync zlib:1.2.11 libelf
 LOCAL_CFLAGS += $(BOARD_MESA3D_CFLAGS)
 
 ifneq ($(filter swrast,$(BOARD_MESA3D_GALLIUM_DRIVERS) $(BOARD_MESA3D_VULKAN_DRIVERS)),)
@@ -102,7 +102,10 @@ LOCAL_SHARED_LIBRARIES += \
     libgralloctypes \
     libhidlbase \
     libutils
-
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 35; echo $$?), 0)
+LOCAL_SHARED_LIBRARIES += libui
+MESON_GEN_PKGCONFIGS += ui
+endif
 MESON_GEN_PKGCONFIGS += android.hardware.graphics.mapper:4.0
 endif
 
@@ -184,6 +187,7 @@ $(foreach driver,$(BOARD_MESA3D_VULKAN_DRIVERS), \
 ifneq ($(filter true, $(BOARD_MESA3D_BUILD_LIBGBM)),)
 # Modules 'libgbm', produces '/vendor/lib{64}/libgbm.so'
 $(eval $(call mesa3d-lib,$(MESA_LIBGBM_NAME),,MESA3D_LIBGBM_BIN,$(MESA3D_TOP)/src/gbm/main))
+$(eval $(call mesa3d-lib,dri_gbm,,MESA3D_DRI_GBM_BIN))
 endif
 
 #-------------------------------------------------------------------------------

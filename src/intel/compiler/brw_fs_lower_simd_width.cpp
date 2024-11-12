@@ -377,6 +377,24 @@ brw_fs_get_lowered_simd_width(const fs_visitor *shader, const fs_inst *inst)
    case SHADER_OPCODE_TXS_LOGICAL:
       return get_sampler_lowered_simd_width(devinfo, inst);
 
+   case SHADER_OPCODE_MEMORY_LOAD_LOGICAL:
+   case SHADER_OPCODE_MEMORY_STORE_LOGICAL:
+   case SHADER_OPCODE_MEMORY_ATOMIC_LOGICAL:
+      if (devinfo->ver >= 20)
+         return inst->exec_size;
+
+      if (inst->src[MEMORY_LOGICAL_MODE].ud == MEMORY_MODE_TYPED)
+         return 8;
+
+      /* HDC A64 atomics are limited to SIMD8 */
+      if (!devinfo->has_lsc &&
+          inst->src[MEMORY_LOGICAL_BINDING_TYPE].ud == LSC_ADDR_SURFTYPE_FLAT
+          && lsc_opcode_is_atomic((enum lsc_opcode)
+                                  inst->src[MEMORY_LOGICAL_OPCODE].ud))
+         return 8;
+
+      return MIN2(16, inst->exec_size);
+
    /* On gfx12 parameters are fixed to 16-bit values and therefore they all
     * always fit regardless of the execution size.
     */
@@ -388,38 +406,6 @@ brw_fs_get_lowered_simd_width(const fs_visitor *shader, const fs_inst *inst)
        * unsuppported on Xe2.
        */
       return devinfo->ver < 20 ? 8 : 16;
-
-   case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:
-   case SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL:
-   case SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL:
-      return devinfo->ver < 20 ? 8 : inst->exec_size;
-
-   case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
-   case SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL:
-   case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:
-   case SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL:
-   case SHADER_OPCODE_BYTE_SCATTERED_READ_LOGICAL:
-   case SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL:
-   case SHADER_OPCODE_DWORD_SCATTERED_READ_LOGICAL:
-   case SHADER_OPCODE_A64_UNTYPED_WRITE_LOGICAL:
-   case SHADER_OPCODE_A64_UNTYPED_READ_LOGICAL:
-   case SHADER_OPCODE_A64_BYTE_SCATTERED_WRITE_LOGICAL:
-   case SHADER_OPCODE_A64_BYTE_SCATTERED_READ_LOGICAL:
-      return devinfo->ver < 20 ?
-             MIN2(16, inst->exec_size) :
-             inst->exec_size;
-
-   case SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL:
-   case SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL:
-   case SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL:
-      return devinfo->ver < 20 ?
-             MIN2(16, inst->exec_size) :
-             inst->exec_size;
-
-   case SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL:
-      return devinfo->ver < 20 ?
-             devinfo->has_lsc ? MIN2(16, inst->exec_size) : 8 :
-             inst->exec_size;
 
    case SHADER_OPCODE_URB_READ_LOGICAL:
    case SHADER_OPCODE_URB_WRITE_LOGICAL:

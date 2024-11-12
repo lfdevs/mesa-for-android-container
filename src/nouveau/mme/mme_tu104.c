@@ -386,7 +386,7 @@ mme_tu104_print_alu(FILE *fp, unsigned indent,
       fprintf(fp, "MERGE");
       mme_tu104_print_alu_src(fp, inst, alu_idx, 0);
       mme_tu104_print_alu_src(fp, inst, alu_idx, 1);
-      fprintf(fp, " (%u, %u, %u)", src_pos, bits, dst_pos);
+      fprintf(fp, " (%u, %u, %u)", dst_pos, bits, src_pos);
       break;
    }
    case MME_TU104_ALU_OP_STATE: {

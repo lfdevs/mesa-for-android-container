@@ -139,7 +139,7 @@ etna_create_sampler_state_state(struct pipe_context *pipe,
       VIVS_NTE_SAMPLER_BASELOD_COMPARE_FUNC(translate_texture_compare(ss->compare_func));
 
    /* force nearest filting for nir_lower_sample_tex_compare(..) */
-   if ((ctx->screen->specs.halti < 2) && ss->compare_mode) {
+   if ((ctx->screen->info->halti < 2) && ss->compare_mode) {
       cs->config0 &= ~VIVS_TE_SAMPLER_CONFIG0_MIN__MASK;
       cs->config0 &= ~VIVS_TE_SAMPLER_CONFIG0_MAG__MASK;
 
@@ -261,7 +261,7 @@ etna_create_sampler_view_state(struct pipe_context *pctx, struct pipe_resource *
 
    /* Workaround for npot textures -- it appears that only CLAMP_TO_EDGE is
     * supported when the appropriate capability is not set. */
-   if (!screen->specs.npot_tex_any_wrap &&
+   if (!etna_core_has_feature(screen->info, ETNA_FEATURE_NON_POWER_OF_TWO) &&
        (!util_is_power_of_two_or_zero(res->base.width0) ||
         !util_is_power_of_two_or_zero(res->base.height0))) {
       sv->config0_mask = ~(VIVS_TE_SAMPLER_CONFIG0_UWRAP__MASK |
@@ -620,7 +620,7 @@ etna_texture_state_init(struct pipe_context *pctx)
 
    STATIC_ASSERT(VIVS_TE_SAMPLER_LOD_ADDR__LEN == VIVS_NTE_SAMPLER_ADDR_LOD__LEN);
 
-   if (ctx->screen->specs.halti >= 1)
+   if (ctx->screen->info->halti >= 1)
       ctx->emit_texture_state = etna_emit_new_texture_state;
    else
       ctx->emit_texture_state = etna_emit_texture_state;

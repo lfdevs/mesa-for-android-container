@@ -25,6 +25,40 @@ libagx_tcs_unrolled_id(constant struct libagx_tess_args *p, uint3 wg_id)
    return (wg_id.y * p->patches_per_instance) + wg_id.x;
 }
 
+uint64_t
+libagx_tes_buffer(constant struct libagx_tess_args *p)
+{
+   return p->tes_buffer;
+}
+
+/*
+ * Helper to lower indexing for a tess eval shader ran as a compute shader. This
+ * handles the tess+geom case. This is simpler than the general input assembly
+ * lowering, as we know:
+ *
+ * 1. the index buffer is U32
+ * 2. the index is in bounds
+ *
+ * Therefore we do a simple load. No bounds checking needed.
+ */
+uint32_t
+libagx_load_tes_index(constant struct libagx_tess_args *p, uint32_t index)
+{
+   /* Swap second and third vertices of each triangle to flip winding order
+    * dynamically if needed.
+    */
+   if (p->ccw) {
+      uint id = index % 3;
+
+      if (id == 1)
+         index++;
+      else if (id == 2)
+         index--;
+   }
+
+   return p->index_buffer[index];
+}
+
 ushort
 libagx_tcs_in_offset(uint vtx, gl_varying_slot location,
                      uint64_t crosslane_vs_out_mask)
@@ -40,8 +74,8 @@ libagx_tcs_out_address(constant struct libagx_tess_args *p, uint patch_id,
    uint stride =
       libagx_tcs_out_stride(nr_patch_out, out_patch_size, vtx_out_mask);
 
-   uint offs = libagx_tcs_out_offs(vtx_id, location, nr_patch_out,
-                                   out_patch_size, vtx_out_mask);
+   uint offs =
+      libagx_tcs_out_offs(vtx_id, location, nr_patch_out, vtx_out_mask);
 
    return (uintptr_t)(p->tcs_buffer) + (patch_id * stride) + offs;
 }
@@ -74,7 +108,10 @@ libagx_load_tess_coord(constant struct libagx_tess_args *p, uint raw_id)
       &p->patch_coord_buffer[p->coord_allocs[patch] + vtx];
 
    /* Written weirdly because NIR struggles with loads of structs */
-   return *((global float2 *)t);
+   uint2 fixed = *((global uint2 *)t);
+
+   /* Convert fixed point to float */
+   return convert_float2(fixed) / (1u << 16);
 }
 
 uintptr_t
@@ -104,8 +141,7 @@ libagx_tess_level_inner_default(constant struct libagx_tess_args *p)
 }
 
 void
-libagx_tess_setup_indirect(global struct libagx_tess_args *p, bool with_counts,
-                           bool point_mode)
+libagx_tess_setup_indirect(global struct libagx_tess_args *p, bool point_mode)
 {
    uint count = p->indirect[0], instance_count = p->indirect[1];
    unsigned in_patches = count / p->input_patch_size;
@@ -115,9 +151,7 @@ libagx_tess_setup_indirect(global struct libagx_tess_args *p, bool with_counts,
       *(p->tcs_statistic) += in_patches;
    }
 
-   size_t draw_stride =
-      ((!with_counts && point_mode) ? 4 : 6) * sizeof(uint32_t);
-
+   size_t draw_stride = 5 * sizeof(uint32_t);
    unsigned unrolled_patches = in_patches * instance_count;
 
    uint32_t alloc = 0;
@@ -128,8 +162,7 @@ libagx_tess_setup_indirect(global struct libagx_tess_args *p, bool with_counts,
    alloc += unrolled_patches * 4;
 
    uint32_t count_offs = alloc;
-   if (with_counts)
-      alloc += unrolled_patches * sizeof(uint32_t);
+   alloc += unrolled_patches * sizeof(uint32_t);
 
    uint vb_offs = alloc;
    uint vb_size = libagx_tcs_in_size(count * instance_count, p->vertex_outputs);
@@ -145,21 +178,25 @@ libagx_tess_setup_indirect(global struct libagx_tess_args *p, bool with_counts,
    p->nr_patches = unrolled_patches;
 
    *(p->vertex_output_buffer_ptr) = (uintptr_t)(blob + vb_offs);
+   p->counts = (global uint32_t *)(blob + count_offs);
 
-   if (with_counts) {
-      p->counts = (global uint32_t *)(blob + count_offs);
-   } else {
-#if 0
-      /* Arrange so we return after all generated draws. agx_pack would be nicer
-       * here but designated initializers lead to scratch access...
-       */
-      global uint32_t *ret =
-         (global uint32_t *)(blob + draw_offs +
-                             (draw_stride * unrolled_patches));
+   global struct agx_ia_state *ia = p->ia;
+   ia->verts_per_instance = count;
 
-      *ret = (AGX_VDM_BLOCK_TYPE_BARRIER << 29) | /* with return */ (1u << 27);
-#endif
-      /* TODO */
+   /* If indexing is enabled, the third word is the offset into the index buffer
+    * in elements. Apply that offset now that we have it. For a hardware
+    * indirect draw, the hardware would do this for us, but for software input
+    * assembly we need to do it ourselves.
+    *
+    * XXX: Deduplicate?
+    */
+   if (p->in_index_size_B) {
+      ia->index_buffer =
+         libagx_index_buffer(p->in_index_buffer, p->in_index_buffer_range_el,
+                             p->indirect[2], p->in_index_size_B, 0);
+
+      ia->index_buffer_range_el = libagx_index_buffer_range_el(
+         p->in_index_buffer_range_el, p->indirect[2]);
    }
 
    /* VS grid size */

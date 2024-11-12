@@ -8,8 +8,6 @@
 set -e
 set -o xtrace
 
-export LLVM_VERSION="${LLVM_VERSION:=16}"
-
 EPHEMERAL=(
 )
 
@@ -38,8 +36,8 @@ DEPS=(
     musl-dev
     expat-dev
     elfutils-dev
+    libclc-dev
     libdrm-dev
-    libselinux-dev
     libva-dev
     libpciaccess-dev
     zlib-dev
@@ -53,6 +51,7 @@ DEPS=(
     py3-yaml
     vulkan-headers
     spirv-tools-dev
+    spirv-llvm-translator-dev
     util-macros
     wayland-dev
     wayland-protocols
@@ -62,14 +61,17 @@ apk --no-cache add "${DEPS[@]}" "${EPHEMERAL[@]}"
 
 pip3 install --break-system-packages sphinx===5.1.1 hawkmoth===0.16.0
 
-. .gitlab-ci/container/build-llvm-spirv.sh
-
-. .gitlab-ci/container/build-libclc.sh
-
 . .gitlab-ci/container/container_pre_build.sh
 
 
 ############### Uninstall the build software
+
+# too many vendor binarise, just keep the ones we need
+find /usr/share/clc \
+  \( -type f -o -type l \) \
+  ! -name 'spirv-mesa3d-.spv' \
+  ! -name 'spirv64-mesa3d-.spv' \
+  -delete
 
 apk del "${EPHEMERAL[@]}"
 

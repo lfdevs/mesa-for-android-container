@@ -193,8 +193,8 @@ def_analysis::validate(const fs_visitor *v) const
    return true;
 }
 
-void
-def_analysis::print_stats(const fs_visitor *v) const
+unsigned
+def_analysis::ssa_count() const
 {
    unsigned defs = 0;
 
@@ -202,6 +202,14 @@ def_analysis::print_stats(const fs_visitor *v) const
       if (def_insts[i])
          ++defs;
    }
+
+   return defs;
+}
+
+void
+def_analysis::print_stats(const fs_visitor *v) const
+{
+   const unsigned defs = ssa_count();
 
    fprintf(stderr, "DEFS: %u registers, %u SSA, %u non-SSA => %.1f SSA\n",
            def_count, defs, def_count - defs,

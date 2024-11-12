@@ -75,10 +75,6 @@ struct i915_fp_compile {
 
    bool log_program_errors;
    char *error;
-   uint32_t NumNativeInstructions;
-   uint32_t NumNativeAluInstructions;
-   uint32_t NumNativeTexInstructions;
-   uint32_t NumNativeTexIndirections;
 };
 
 /* Having zero and one in here makes the definition of swizzle a lot

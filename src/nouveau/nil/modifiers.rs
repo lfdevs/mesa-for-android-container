@@ -3,7 +3,7 @@
 
 use crate::format::Format;
 use crate::image::Image;
-use crate::tiling::Tiling;
+use crate::tiling::{GOBType, Tiling};
 
 use bitview::*;
 use nvidia_headers::classes::{cl9097, clc597};
@@ -170,9 +170,9 @@ impl BlockLinearModifier {
     }
 
     pub fn tiling(&self) -> Tiling {
+        assert!(self.gob_kind_version() != GOBKindVersion::G80);
         Tiling {
-            is_tiled: true,
-            gob_height_is_8: self.gob_kind_version() != GOBKindVersion::G80,
+            gob_type: GOBType::Fermi8,
             x_log2: 0,
             y_log2: self.height_log2(),
             z_log2: 0,

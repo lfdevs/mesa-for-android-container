@@ -62,12 +62,20 @@ TEST_F(nir_opt_varyings_test_bicm_binary_alu, \
    if ((INTERP_##interp1 == INTERP_##interp2 || !divergent[0] || !divergent[1]) &&\
        movable_across_interp(b2, nir_op_##alu, interp, divergent, bitsize)) { \
       ASSERT_EQ(opt_varyings(), (nir_progress_producer | nir_progress_consumer)); \
-      ASSERT_TRUE(shader_contains_alu_op(b1, nir_op_##alu, bitsize)); \
-      /* TES uses fadd and fmul for interpolation, so it's always present. */ \
-      if (MESA_SHADER_##consumer_stage != MESA_SHADER_TESS_EVAL || \
-          (nir_op_##alu != nir_op_fadd && nir_op_##alu != nir_op_fmul && \
-           nir_op_##alu != nir_op_ffma)) { \
-         ASSERT_TRUE(!shader_contains_alu_op(b2, nir_op_##alu, bitsize)); \
+      /* An opcode with a convergent non-float result isn't moved into */ \
+      /* the previous shader because a non-float result can't be interpolated. */ \
+      if (!divergent[0] && !divergent[1] && interp[0] != INTERP_FLAT && interp[1] != INTERP_FLAT && \
+          !(nir_op_infos[nir_op_##alu].output_type & nir_type_float)) { \
+         ASSERT_TRUE(!shader_contains_alu_op(b1, nir_op_##alu, bitsize)); \
+         ASSERT_TRUE(shader_contains_alu_op(b2, nir_op_##alu, bitsize)); \
+      } else { \
+         ASSERT_TRUE(shader_contains_alu_op(b1, nir_op_##alu, bitsize)); \
+         /* TES uses fadd and fmul for interpolation, so it's always present. */ \
+         if (MESA_SHADER_##consumer_stage != MESA_SHADER_TESS_EVAL || \
+             (nir_op_##alu != nir_op_fadd && nir_op_##alu != nir_op_fmul && \
+              nir_op_##alu != nir_op_ffma)) { \
+            ASSERT_TRUE(!shader_contains_alu_op(b2, nir_op_##alu, bitsize)); \
+         } \
       } \
       ASSERT_TRUE(shader_contains_instr(b1, &store[0]->instr)); \
       ASSERT_TRUE(!shader_contains_instr(b1, &store[1]->instr)); \

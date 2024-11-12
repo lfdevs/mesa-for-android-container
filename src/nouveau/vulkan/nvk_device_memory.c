@@ -192,12 +192,12 @@ nvk_AllocateMemory(VkDevice device,
       if (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
          void *map;
          result = nvkmd_mem_map(mem->mem, &dev->vk.base,
-                             NVKMD_MEM_MAP_RDWR, NULL, &map);
+                                NVKMD_MEM_MAP_RDWR, NULL, &map);
          if (result != VK_SUCCESS)
             goto fail_mem;
 
          memset(map, 0, mem->mem->size_B);
-         nvkmd_mem_unmap(mem->mem);
+         nvkmd_mem_unmap(mem->mem, 0);
       } else {
          result = nvk_upload_queue_fill(dev, &dev->upload,
                                         mem->mem->va->addr,
@@ -279,7 +279,8 @@ nvk_MapMemory2KHR(VkDevice device,
       vk_device_memory_range(&mem->vk, pMemoryMapInfo->offset,
                                        pMemoryMapInfo->size);
 
-   enum nvkmd_mem_map_flags map_flags = NVKMD_MEM_MAP_RDWR;
+   enum nvkmd_mem_map_flags map_flags = NVKMD_MEM_MAP_CLIENT |
+                                        NVKMD_MEM_MAP_RDWR;
 
    void *fixed_addr = NULL;
    if (pMemoryMapInfo->flags & VK_MEMORY_MAP_PLACED_BIT_EXT) {
@@ -315,7 +316,8 @@ nvk_MapMemory2KHR(VkDevice device,
    }
 
    void *mem_map;
-   result = nvkmd_mem_map(mem->mem, &mem->vk.base, map_flags, fixed_addr, &mem_map);
+   result = nvkmd_mem_map(mem->mem, &mem->vk.base, map_flags,
+                          fixed_addr, &mem_map);
    if (result != VK_SUCCESS)
       return result;
 
@@ -334,9 +336,9 @@ nvk_UnmapMemory2KHR(VkDevice device,
       return VK_SUCCESS;
 
    if (pMemoryUnmapInfo->flags & VK_MEMORY_UNMAP_RESERVE_BIT_EXT) {
-      return nvkmd_mem_overmap(mem->mem, &mem->vk.base);
+      return nvkmd_mem_overmap(mem->mem, &mem->vk.base, NVKMD_MEM_MAP_CLIENT);
    } else {
-      nvkmd_mem_unmap(mem->mem);
+      nvkmd_mem_unmap(mem->mem, NVKMD_MEM_MAP_CLIENT);
       return VK_SUCCESS;
    }
 }

@@ -42,7 +42,6 @@ KHR-GL46.sparse_texture2_tests.StandardPageSizesTestCase,Fail
 KHR-GL46.sparse_texture2_tests.UncommittedRegionsAccess,Fail
 KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor,Fail
 KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency,Fail
-KHR-GL46.tessellation_shader.tessellation_shader_tessellation.max_in_out_attributes,Crash
 KHR-GL46.sparse_texture2_tests.SparseTexture2Allocation_texture_2d_multisample_array_r11f_g11f_b10f,Fail
 KHR-GL46.sparse_texture2_tests.SparseTexture2Allocation_texture_2d_multisample_array_r16,Fail
 KHR-GL46.sparse_texture2_tests.SparseTexture2Allocation_texture_2d_multisample_array_r16_snorm,Fail
@@ -804,8 +803,6 @@ KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency_texture_cu
 # escts failures
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreCS,Fail
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreVS,Fail
-KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.max_in_out_attributes,Crash
-KHR-GLES32.core.tessellation_shader.tessellation_shader_tessellation.max_in_out_attributes,Crash
 
 # gfx11-only failures
 

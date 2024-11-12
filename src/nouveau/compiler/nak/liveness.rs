@@ -1,9 +1,9 @@
 // Copyright © 2022 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-use crate::bitset::BitSet;
 use crate::ir::*;
 
+use compiler::bitset::BitSet;
 use std::cell::RefCell;
 use std::cmp::{max, Ord, Ordering};
 use std::collections::{hash_set, HashMap, HashSet};
@@ -209,11 +209,11 @@ pub trait Liveness {
                     max(max_live[file], live_at_instr[file])
                 });
 
-                if let Op::FSOut(fs_out) = &instr.op {
+                if let Op::RegOut(reg_out) = &instr.op {
                     // This should be the last instruction.  Everything should
                     // be dead once we've processed it.
                     debug_assert!(live.count(RegFile::GPR) == 0);
-                    let num_gprs_out = fs_out.srcs.len().try_into().unwrap();
+                    let num_gprs_out = reg_out.srcs.len().try_into().unwrap();
                     max_live[RegFile::GPR] =
                         max(max_live[RegFile::GPR], num_gprs_out);
                 }

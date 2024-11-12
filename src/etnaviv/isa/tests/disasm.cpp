@@ -162,6 +162,7 @@ INSTANTIATE_TEST_SUITE_P(Opcodes, DisasmTest,
       disasm_state{ {0x00811131, 0x80001800, 0x00aa0040, 0x202a800a}, "cmp.le.pack       t1.x___, |t1.xxxx|, u0.yyyy, u0.zzzz\n"},
       disasm_state{ {0x00801032, 0x00000c04, 0x10000050, 0x00000007}, "load.denorm       t0.x___, u0.xxxx, 0, void\n"},
       disasm_state{ {0x00800033, 0x00000c84, 0x10000050, 0x0000000f}, "store.skpHp.denorm mem.x___, u0.xxxx, 0, t0.xxxx\n"},
+      disasm_state{ {0x00801036, 0x15400804, 0x01540050, 0x00000002}, "clamp0_max        t0.x___, u0.yyyy, u0.zzzz, void\n"},
       disasm_state{ {0x0080103b, 0x00001804, 0x40000000, 0x00400028}, "iaddsat.s32       t0.x___, t1.xxxx, void, -t2.xxxx\n"},
       disasm_state{ {0x01001008, 0x15400804, 0xd00100c0, 0x00000007}, "imod.u16          t0._y__, t0.yyyy, 1, void\n"},
       disasm_state{ {0x0080103c, 0x00001804, 0x40000140, 0x00000000}, "imullo0.s32       t0.x___, t1.xxxx, t2.xxxx, void\n"},
@@ -195,6 +196,8 @@ INSTANTIATE_TEST_SUITE_P(Opcodes, DisasmTest,
       disasm_state{ {0x00811034, 0x15c01804, 0x00010000, 0x00000000}, "norm_dp2          t1.x___, t1.wyyy, void, void\n"},
       disasm_state{ {0x04011035, 0x14801804, 0x00010000, 0x00000000}, "norm_dp3          t1.___w, t1.zxyy, void, void\n"},
       disasm_state{ {0x00821036, 0x0e401804, 0x00010000, 0x00000000}, "norm_dp4          t2.x___, t1.yzwx, void, void\n"},
+      disasm_state{ {0x07801039, 0x39204c00, 0x80a90050, 0x00000000}, "img_load.denorm.u32.pack t0, u4.xyzw, t0.xyyy, void\n"},
+      disasm_state{ {0x0780083a, 0x39200c00, 0x80a90050, 0x00390018}, "img_store.sat.denorm.u32.pack mem, u0.xyzw, t0.xyyy, t1.xyzw\n"},
       disasm_state{ {0x0381103f, 0x29201804, 0x80010000, 0x780000b8}, "bit_findlsb.u32   t1.xyz_, t1.xyzz, void, void\n"},
       disasm_state{ {0x0081103f, 0x00001804, 0x40010000, 0x780000c8}, "bit_findmsb.s32   t1.x___, t1.xxxx, void, void\n"}
    )
@@ -354,7 +357,19 @@ INSTANTIATE_TEST_SUITE_P(LoadStoreVariants, DisasmTest,
       disasm_state{ {0x01001032, 0x15400c14, 0x00000050, 0x00000000}, "load.denorm.ls2   t0._y__, u0.yyyy, t0.xxxx, void\n"},
       disasm_state{ {0x01001032, 0x15400d14, 0x00000040, 0x00000000}, "load.denorm.local.ls2 t0._y__, t0.yyyy, t0.xxxx, void\n"},
       disasm_state{ {0x00800033, 0x00000c14, 0x00000050, 0x00154008}, "store.denorm.ls2  mem.x___, u0.xxxx, t0.xxxx, t0.yyyy\n"},
-      disasm_state{ {0x00861033, 0x15400d04, 0x100efe40, 0x7085860f}, "store.denorm.local mem.x___, t0.yyyy, 4092, 99.000000\t; dontcare bits in store: 00000000000000000000000000061000\n", FLAG_FAILING_ASM}
+      disasm_state{ {0x00861033, 0x15400d04, 0x100efe40, 0x7085860f}, "store.denorm.local mem.x___, t0.yyyy, 4092, 99.000000\t; dontcare bits in store: 00000000000000000000000000061000\n", FLAG_FAILING_ASM},
+      disasm_state{ {0x07800033, 0x00200c34, 0x80000050, 0x00390018}, "store.denorm.u32.ls6 mem, u0.xxxx, t0.xxxx, t1.xyzw\n"}
+   )
+);
+// clang-format on
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(ConvVariants, DisasmTest,
+   testing::Values(
+      // seen on GC7000
+      disasm_state{ {0x01001032, 0x15400800, 0x100100c0, 0x00000007}, "conv.pack         t0._y__, t0.yyyy, 1, void\n"},
+      disasm_state{ {0x01001032, 0x15600800, 0x10010040, 0x00000007}, "conv.f16.pack     t0._y__, t0.yyyy, 0, void\n"},
+      disasm_state{ {0x01001832, 0x15400800, 0x100100c0, 0x00000007}, "conv.sat.pack     t0._y__, t0.yyyy, 1, void\n"}
    )
 );
 // clang-format on

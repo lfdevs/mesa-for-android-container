@@ -27,8 +27,8 @@ int main(int argc, char **argv)
    };
 
 //   nvk_test_build_all_mmes(&kepler);
-   nvk_test_build_all_mmes(&volta);
-   nvk_test_build_all_mmes(&turing);
+   nvk_test_all_mmes(&volta);
+   nvk_test_all_mmes(&turing);
 
    return 0;
 }

@@ -168,6 +168,7 @@ static bool
 is_input(nir_intrinsic_instr *intrin)
 {
    return intrin->intrinsic == nir_intrinsic_load_input ||
+          intrin->intrinsic == nir_intrinsic_load_per_primitive_input ||
           intrin->intrinsic == nir_intrinsic_load_per_vertex_input ||
           intrin->intrinsic == nir_intrinsic_load_interpolated_input;
 }
@@ -1123,10 +1124,11 @@ elk_nir_link_shaders(const struct elk_compiler *compiler,
    }
 }
 
-bool
+static bool
 elk_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
                              unsigned bit_size,
                              unsigned num_components,
+                             unsigned hole_size,
                              nir_intrinsic_instr *low,
                              nir_intrinsic_instr *high,
                              void *data)
@@ -1135,11 +1137,10 @@ elk_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
     * those back into 32-bit ones anyway and UBO loads aren't split in NIR so
     * we don't want to make a mess for the back-end.
     */
-   if (bit_size > 32)
+   if (bit_size > 32 || hole_size || !nir_num_components_valid(num_components))
       return false;
 
-   if (low->intrinsic == nir_intrinsic_load_global_const_block_intel ||
-       low->intrinsic == nir_intrinsic_load_ubo_uniform_block_intel ||
+   if (low->intrinsic == nir_intrinsic_load_ubo_uniform_block_intel ||
        low->intrinsic == nir_intrinsic_load_ssbo_uniform_block_intel ||
        low->intrinsic == nir_intrinsic_load_shared_uniform_block_intel ||
        low->intrinsic == nir_intrinsic_load_global_constant_uniform_block_intel) {
@@ -1463,7 +1464,6 @@ elk_postprocess_nir(nir_shader *nir, const struct elk_compiler *compiler,
    OPT(nir_opt_dead_cf);
 
    bool divergence_analysis_dirty = false;
-   NIR_PASS(_, nir, nir_convert_to_lcssa, true, true);
    NIR_PASS_V(nir, nir_divergence_analysis);
 
    /* TODO: Enable nir_opt_uniform_atomics on Gfx7.x too.
@@ -1471,7 +1471,7 @@ elk_postprocess_nir(nir_shader *nir, const struct elk_compiler *compiler,
     */
    bool opt_uniform_atomic_stage_allowed = devinfo->ver >= 8;
 
-   if (opt_uniform_atomic_stage_allowed && OPT(nir_opt_uniform_atomics)) {
+   if (opt_uniform_atomic_stage_allowed && OPT(nir_opt_uniform_atomics, false)) {
       const nir_lower_subgroups_options subgroups_options = {
          .ballot_bit_size = 32,
          .ballot_components = 1,
@@ -1488,15 +1488,11 @@ elk_postprocess_nir(nir_shader *nir, const struct elk_compiler *compiler,
    /* Do this only after the last opt_gcm. GCM will undo this lowering. */
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       if (divergence_analysis_dirty) {
-         NIR_PASS(_, nir, nir_convert_to_lcssa, true, true);
          NIR_PASS_V(nir, nir_divergence_analysis);
       }
 
       OPT(intel_nir_lower_non_uniform_barycentric_at_sample);
    }
-
-   /* Clean up LCSSA phis */
-   OPT(nir_opt_remove_phis);
 
    OPT(nir_lower_bool_to_int32);
    OPT(nir_copy_prop);
@@ -1615,6 +1611,9 @@ get_subgroup_size(const struct shader_info *info, unsigned max_subgroup_size)
        * size.
        */
       return info->stage == MESA_SHADER_FRAGMENT ? 0 : max_subgroup_size;
+
+   case SUBGROUP_SIZE_REQUIRE_4:
+      unreachable("Unsupported subgroup size type");
 
    case SUBGROUP_SIZE_REQUIRE_8:
    case SUBGROUP_SIZE_REQUIRE_16:
@@ -1872,8 +1871,7 @@ elk_nir_load_global_const(nir_builder *b, nir_intrinsic_instr *load_uniform,
       nir_def *data[2];
       for (unsigned i = 0; i < 2; i++) {
          nir_def *addr = nir_iadd_imm(b, base_addr, aligned_offset + i * 64);
-         data[i] = nir_load_global_const_block_intel(b, 16, addr,
-                                                     nir_imm_true(b));
+         data[i] = nir_load_global_constant_uniform_block_intel(b, 16, 32, addr);
       }
 
       sysval = nir_extract_bits(b, data, 2, suboffset * 8,

@@ -1355,7 +1355,7 @@ _mesa_is_compressed_format(const struct gl_context *ctx, GLenum format)
    case MESA_FORMAT_LAYOUT_ETC1:
       return _mesa_has_OES_compressed_ETC1_RGB8_texture(ctx);
    case MESA_FORMAT_LAYOUT_ETC2:
-      return _mesa_is_gles3(ctx) || _mesa_has_ARB_ES3_compatibility(ctx);
+      return _mesa_is_gles3_compatible(ctx);
    case MESA_FORMAT_LAYOUT_BPTC:
       return _mesa_has_ARB_texture_compression_bptc(ctx) ||
              _mesa_has_EXT_texture_compression_bptc(ctx);
@@ -1732,14 +1732,77 @@ static bool
 valid_texture_format_enum(const struct gl_context *ctx, GLenum format)
 {
    switch (format) {
+   case GL_RGBA:
+   case GL_RGB:
+   case GL_RED:
+      /* These are always supported */
+      return true;
+
+   case GL_STENCIL_INDEX:
+      return _mesa_is_desktop_gl(ctx) || _mesa_is_gles31(ctx);
+
+   case GL_COLOR_INDEX:
+      return _mesa_is_desktop_gl_compat(ctx);
+
    case GL_RG:
       return _mesa_has_rg_textures(ctx);
+
+   case GL_GREEN:
+   case GL_BLUE:
+      return _mesa_is_desktop_gl(ctx);
+
+   case GL_BGR:
+   case GL_BGRA:
+      assert(_mesa_is_desktop_gl(ctx) ||
+             _mesa_has_EXT_texture_format_BGRA8888(ctx));
+      return true;
+
+   case GL_RED_INTEGER:
+   case GL_GREEN_INTEGER:
+   case GL_BLUE_INTEGER:
+   case GL_RGB_INTEGER:
+   case GL_RGBA_INTEGER:
+      return _mesa_has_integer_textures(ctx);
+
+   case GL_RG_INTEGER:
+      return (_mesa_has_EXT_texture_integer(ctx) &&
+              _mesa_has_ARB_texture_rg(ctx)) ||
+             _mesa_is_gles3(ctx);
+
+   case GL_BGR_INTEGER:
+   case GL_BGRA_INTEGER:
+   case GL_ALPHA_INTEGER:
+      return _mesa_has_EXT_texture_integer(ctx);
+
+   case GL_LUMINANCE_INTEGER_EXT:
+   case GL_LUMINANCE_ALPHA_INTEGER_EXT:
+      return _mesa_is_desktop_gl_compat(ctx) &&
+             _mesa_has_EXT_texture_integer(ctx);
+
+   case GL_DEPTH_COMPONENT:
+      return _mesa_is_desktop_gl(ctx) ||
+             _mesa_has_OES_depth_texture(ctx);
+
+   case GL_DEPTH_STENCIL:
+      return _mesa_has_EXT_packed_depth_stencil(ctx) ||
+             (_mesa_has_OES_packed_depth_stencil(ctx) &&
+              _mesa_has_OES_depth_texture(ctx));
+
+   case GL_LUMINANCE_ALPHA:
+   case GL_LUMINANCE:
+   case GL_ALPHA:
+      return _mesa_is_desktop_gl_compat(ctx) ||
+             _mesa_has_ARB_ES3_compatibility(ctx) ||
+             _mesa_is_gles(ctx);
+
+   case GL_ABGR_EXT:
+      return _mesa_has_EXT_abgr(ctx);
 
    case GL_YCBCR_MESA:
       return _mesa_has_MESA_ycbcr_texture(ctx);
 
    default:
-      return true;
+      return false;
    }
 }
 
@@ -1747,14 +1810,68 @@ static bool
 valid_texture_type_enum(const struct gl_context *ctx, GLenum type)
 {
    switch (type) {
+   case GL_UNSIGNED_BYTE:
+   case GL_BYTE:
+   case GL_UNSIGNED_SHORT:
+   case GL_SHORT:
+   case GL_UNSIGNED_INT:
+   case GL_INT:
+   case GL_UNSIGNED_SHORT_5_6_5:
+   case GL_UNSIGNED_SHORT_4_4_4_4:
+   case GL_UNSIGNED_SHORT_5_5_5_1:
+      /* These are always supported */
+      return true;
+
+   case GL_FLOAT:
+      return _mesa_is_desktop_gl(ctx) || _mesa_has_OES_texture_float(ctx);
+
+   case GL_HALF_FLOAT:
+      return _mesa_has_ARB_half_float_pixel(ctx) || _mesa_is_gles3(ctx);
+
+   case GL_HALF_FLOAT_OES:
+      /* This is a different enum than the above, that only applies to this
+       * extension
+       */
+      return _mesa_has_OES_texture_half_float(ctx);
+
+   case GL_BITMAP:
+      return _mesa_is_desktop_gl_compat(ctx);
+
+   case GL_UNSIGNED_BYTE_3_3_2:
+   case GL_UNSIGNED_BYTE_2_3_3_REV:
+   case GL_UNSIGNED_SHORT_5_6_5_REV:
+   case GL_UNSIGNED_INT_8_8_8_8:
+   case GL_UNSIGNED_INT_8_8_8_8_REV:
+      return _mesa_is_desktop_gl(ctx);
+
+   case GL_UNSIGNED_SHORT_4_4_4_4_REV:
+   case GL_UNSIGNED_SHORT_1_5_5_5_REV:
+      assert(_mesa_is_desktop_gl(ctx) || _mesa_has_EXT_read_format_bgra(ctx));
+      return true;
+
+   case GL_UNSIGNED_INT_10_10_10_2:
+      /* not supported in GLESv3, unlike GL_UNSIGNED_INT_2_10_10_10_REV */
+      return _mesa_is_desktop_gl(ctx);
+
+   case GL_UNSIGNED_INT_2_10_10_10_REV:
+      return _mesa_has_texture_type_2_10_10_10_REV(ctx);
+
    case GL_UNSIGNED_INT_10F_11F_11F_REV:
       return _mesa_has_packed_float(ctx);
+
+   case GL_UNSIGNED_INT_5_9_9_9_REV:
+      return _mesa_has_texture_shared_exponent(ctx);
+
+   case GL_UNSIGNED_INT_24_8:
+      assert(_mesa_has_EXT_packed_depth_stencil(ctx) ||
+             _mesa_has_OES_packed_depth_stencil(ctx));
+      return true;
 
    case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
       return _mesa_has_float_depth_buffer(ctx);
 
    default:
-      return true;
+      return false;
    }
 }
 
@@ -1848,8 +1965,8 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
          break; /* OK */
       }
       if (type == GL_UNSIGNED_INT_2_10_10_10_REV && format == GL_RGB &&
-          _mesa_is_gles2(ctx)) {
-         break; /* OK by GL_EXT_texture_type_2_10_10_10_REV */
+          _mesa_has_EXT_texture_type_2_10_10_10_REV(ctx)) {
+         break; /* OK  */
       }
       return GL_INVALID_OPERATION;
 
@@ -1974,8 +2091,6 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
                return _mesa_has_EXT_texture_type_2_10_10_10_REV(ctx)
                   ? GL_NO_ERROR : GL_INVALID_ENUM;
             case GL_UNSIGNED_INT_5_9_9_9_REV:
-               return _mesa_has_texture_shared_exponent(ctx)
-                  ? GL_NO_ERROR : GL_INVALID_ENUM;
             case GL_UNSIGNED_INT_10F_11F_11F_REV:
                return GL_NO_ERROR;
             default:
@@ -2307,9 +2422,8 @@ _mesa_base_tex_format(const struct gl_context *ctx, GLint internalFormat)
       ; /* fallthrough */
    }
 
-   if (_mesa_has_ARB_ES2_compatibility(ctx) ||
-       _mesa_has_OES_framebuffer_object(ctx) ||
-       _mesa_is_gles2(ctx)) {
+   if (_mesa_has_OES_framebuffer_object(ctx) ||
+       _mesa_is_gles2_compatible(ctx)) {
       switch (internalFormat) {
       case GL_RGB565:
          return GL_RGB;
@@ -3215,7 +3329,7 @@ _mesa_gles_error_check_format_and_type(struct gl_context *ctx,
          break;
 
       case GL_UNSIGNED_INT_5_9_9_9_REV:
-         if (ctx->Version <= 20 || internalFormat != GL_RGB9_E5)
+         if (internalFormat != GL_RGB9_E5)
             return GL_INVALID_OPERATION;
          break;
 

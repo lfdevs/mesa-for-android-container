@@ -12,43 +12,15 @@
 #include "nv_push_clc597.h"
 
 struct mme_tu104_sim {
-   uint32_t param_count;
-   const uint32_t *params;
+   const struct mme_sim_state_ops *state_ops;
+   void *state_handler;
 
    uint32_t load[2];
-
-   /* Bound memory ranges */
-   uint32_t mem_count;
-   struct mme_tu104_sim_mem *mems;
-
-   /* SET_MME_MEM_ADDRESS_A/B */
-   uint64_t mem_addr;
-
-   /* RAM, accessed by DREAD/DWRITE */
-   struct {
-      uint32_t data[MME_TU104_DRAM_COUNT];
-
-      /* SET_MME_MEM_RAM_ADDRESS */
-      uint32_t addr;
-   } ram;
-
-   struct {
-      struct {
-         uint32_t data[1024];
-         uint64_t count;
-      } read_fifo;
-   } dma;
-
-   /* NVC597_SET_MME_SHADOW_SCRATCH(i) */
-   uint32_t scratch[256];
 
    struct {
       unsigned mthd:16;
       unsigned inc:4;
-      bool has_mthd:1;
-      unsigned _pad:5;
-      unsigned data_len:8;
-      uint32_t data[8];
+      unsigned _pad:12;
    } mthd;
 
    uint32_t set_regs;
@@ -96,123 +68,17 @@ load_params(struct mme_tu104_sim *sim,
                           inst_loads_out(inst, MME_TU104_OUT_OP_LOAD1);
    assert(has_load0 || !has_load1);
 
-   if (has_load0) {
-      sim->load[0] = *sim->params;
-      sim->params++;
-      sim->param_count--;
-   }
+   if (has_load0)
+      sim->load[0] = sim->state_ops->load(sim->state_handler);
 
-   if (has_load1) {
-      sim->load[1] = *sim->params;
-      sim->params++;
-      sim->param_count--;
-   }
+   if (has_load1)
+      sim->load[1] = sim->state_ops->load(sim->state_handler);
 }
 
 static uint32_t
 load_state(struct mme_tu104_sim *sim, uint16_t state)
 {
-   assert(state % 4 == 0);
-
-   if (NVC597_SET_MME_SHADOW_SCRATCH(0) <= state &&
-       state < NVC597_CALL_MME_MACRO(0)) {
-      uint32_t i = (state - NVC597_SET_MME_SHADOW_SCRATCH(0)) / 4;
-      assert(i <= ARRAY_SIZE(sim->scratch));
-      return sim->scratch[i];
-   }
-
-   return 0;
-}
-
-static uint32_t *
-find_mem(struct mme_tu104_sim *sim, uint64_t addr, const char *op_desc)
-{
-   for (uint32_t i = 0; i < sim->mem_count; i++) {
-      if (addr < sim->mems[i].addr)
-         continue;
-
-      uint64_t offset = addr - sim->mems[i].addr;
-      if (offset >= sim->mems[i].size)
-         continue;
-
-      assert(sim->mems[i].data != NULL);
-      return (uint32_t *)((char *)sim->mems[i].data + offset);
-   }
-
-   fprintf(stderr, "FAULT in %s at address 0x%"PRIx64"\n", op_desc, addr);
-   abort();
-}
-
-static void
-finish_dma_read_fifo(struct mme_tu104_sim *sim)
-{
-   if (sim->dma.read_fifo.count == 0)
-      return;
-
-   for (uint32_t i = 0; i < sim->dma.read_fifo.count; i++) {
-      uint32_t *src = find_mem(sim, sim->mem_addr + i * 4,
-                               "MME_DMA_READ_FIFOED");
-      assert(src != NULL);
-      sim->dma.read_fifo.data[i] = *src;
-   }
-
-   sim->param_count = sim->dma.read_fifo.count;
-   sim->params = sim->dma.read_fifo.data;
-}
-
-static void
-flush_mthd(struct mme_tu104_sim *sim)
-{
-   if (!sim->mthd.has_mthd)
-      return;
-
-   uint16_t mthd = sim->mthd.mthd;
-   const uint32_t *p = sim->mthd.data;
-   const uint32_t *end = sim->mthd.data + sim->mthd.data_len;
-   while (p < end) {
-      uint32_t dw_used = 1;
-      if (NVC597_SET_MME_SHADOW_SCRATCH(0) <= mthd &&
-          mthd < NVC597_CALL_MME_MACRO(0)) {
-         uint32_t i = (mthd - NVC597_SET_MME_SHADOW_SCRATCH(0)) / 4;
-         assert(i <= ARRAY_SIZE(sim->scratch));
-         sim->scratch[i] = *p;
-      } else {
-         switch (mthd) {
-         case NVC597_SET_REPORT_SEMAPHORE_A: {
-            assert(p + 4 <= end);
-            uint64_t addr = ((uint64_t)p[0] << 32) | p[1];
-            uint32_t data = p[2];
-            assert(p[3] == 0x10000000);
-            dw_used = 4;
-
-            uint32_t *mem = find_mem(sim, addr, "SET_REPORT_SEMAPHORE");
-            *mem = data;
-            break;
-         }
-         case NVC597_SET_MME_DATA_RAM_ADDRESS:
-            sim->ram.addr = *p;
-            break;
-         case NVC597_SET_MME_MEM_ADDRESS_A:
-            assert(p + 2 <= end);
-            sim->mem_addr = ((uint64_t)p[0] << 32) | p[1];
-            dw_used = 2;
-            break;
-         case NVC597_MME_DMA_READ_FIFOED:
-            sim->dma.read_fifo.count = *p;
-            break;
-         default:
-            fprintf(stdout, "%s:\n", P_PARSE_NVC597_MTHD(mthd));
-            P_DUMP_NVC597_MTHD_DATA(stdout, mthd, *p, "    ");
-            break;
-         }
-      }
-
-      p += dw_used;
-      assert(sim->mthd.inc == 1);
-      mthd += dw_used * 4;
-   }
-
-   sim->mthd.has_mthd = false;
+   return sim->state_ops->state(sim->state_handler, state);
 }
 
 static void
@@ -224,8 +90,8 @@ eval_extended(struct mme_tu104_sim *sim,
     */
    assert(x == 0x1000);
    assert(y == 1);
-   flush_mthd(sim);
-   finish_dma_read_fifo(sim);
+   if (sim->state_ops->barrier)
+      sim->state_ops->barrier(sim->state_handler);
 }
 
 static uint32_t
@@ -415,7 +281,6 @@ eval_alu(struct mme_tu104_sim *sim,
       res = eval_cond(inst->alu[alu_idx].op, x, y) ? ~0u : 0u;
       break;
    case MME_TU104_ALU_OP_STATE:
-      flush_mthd(sim);
       res = load_state(sim, (uint16_t)(x + y) * 4);
       break;
    case MME_TU104_ALU_OP_LOOP:
@@ -458,16 +323,18 @@ eval_alu(struct mme_tu104_sim *sim,
       }
       break;
    }
-   case MME_TU104_ALU_OP_DREAD:
+   case MME_TU104_ALU_OP_DREAD: {
       assert(inst->alu[alu_idx].src[1] == MME_TU104_REG_ZERO);
-      assert(x < ARRAY_SIZE(sim->ram.data));
-      res = sim->ram.data[x];
+      uint32_t *dram = sim->state_ops->map_dram(sim->state_handler, x);
+      res = *dram;
       break;
-   case MME_TU104_ALU_OP_DWRITE:
+   }
+   case MME_TU104_ALU_OP_DWRITE: {
       assert(inst->alu[alu_idx].dst == MME_TU104_REG_ZERO);
-      assert(x < ARRAY_SIZE(sim->ram.data));
-      sim->ram.data[x] = y;
+      uint32_t *dram = sim->state_ops->map_dram(sim->state_handler, x);
+      *dram = y;
       break;
+   }
    default:
       unreachable("Unhandled ALU op");
    }
@@ -513,31 +380,27 @@ eval_out(struct mme_tu104_sim *sim,
    if (inst->out[out_idx].mthd != MME_TU104_OUT_OP_NONE) {
       uint32_t data = load_out(sim, inst, inst->out[out_idx].mthd);
 
-      flush_mthd(sim);
       sim->mthd.mthd = (data & 0xfff) << 2;
       sim->mthd.inc = (data >> 12) & 0xf;
-      sim->mthd.has_mthd = true;
-      sim->mthd.data_len = 0;
    }
 
    if (inst->out[out_idx].emit != MME_TU104_OUT_OP_NONE) {
       uint32_t data = load_out(sim, inst, inst->out[out_idx].emit);
 
-      assert(sim->mthd.data_len < ARRAY_SIZE(sim->mthd.data));
-      sim->mthd.data[sim->mthd.data_len++] = data;
+      sim->state_ops->mthd(sim->state_handler,
+                           sim->mthd.mthd, data);
+      sim->mthd.mthd += sim->mthd.inc * 4;
    }
 }
 
 void
-mme_tu104_sim(uint32_t inst_count, const struct mme_tu104_inst *insts,
-              uint32_t param_count, const uint32_t *params,
-              uint32_t mem_count, struct mme_tu104_sim_mem *mems)
+mme_tu104_sim_core(uint32_t inst_count, const struct mme_tu104_inst *insts,
+                   const struct mme_sim_state_ops *state_ops,
+                   void *state_handler)
 {
    struct mme_tu104_sim sim = {
-      .param_count = param_count,
-      .params = params,
-      .mem_count = mem_count,
-      .mems = mems,
+      .state_ops = state_ops,
+      .state_handler = state_handler,
    };
 
    bool end_next = false;
@@ -575,6 +438,193 @@ mme_tu104_sim(uint32_t inst_count, const struct mme_tu104_inst *insts,
 
       sim.ip = sim.next_ip;
    }
+}
 
-   flush_mthd(&sim);
+struct mme_tu104_state_sim {
+   uint32_t param_count;
+   const uint32_t *params;
+
+   /* Bound memory ranges */
+   uint32_t mem_count;
+   struct mme_tu104_sim_mem *mems;
+
+   /* SET_MME_MEM_ADDRESS_A/B */
+   uint64_t mem_addr_lo;
+   uint64_t mem_addr_hi;
+
+   /* RAM, accessed by DREAD/DWRITE */
+   struct {
+      uint32_t data[MME_TU104_DRAM_COUNT];
+
+      /* SET_MME_MEM_RAM_ADDRESS */
+      uint32_t addr;
+   } ram;
+
+   struct {
+      struct {
+         uint32_t data[1024];
+         uint32_t count;
+      } read_fifo;
+   } dma;
+
+   /* NVC597_SET_MME_SHADOW_SCRATCH(i) */
+   uint32_t scratch[MME_TU104_SCRATCH_COUNT];
+
+   struct {
+      uint32_t addr_hi;
+      uint32_t addr_lo;
+      uint32_t data;
+   } report_sem;
+};
+
+static uint32_t *
+find_mem(struct mme_tu104_state_sim *sim, uint64_t addr, const char *op_desc)
+{
+   for (uint32_t i = 0; i < sim->mem_count; i++) {
+      if (addr < sim->mems[i].addr)
+         continue;
+
+      uint64_t offset = addr - sim->mems[i].addr;
+      if (offset >= sim->mems[i].size)
+         continue;
+
+      assert(sim->mems[i].data != NULL);
+      return (uint32_t *)((char *)sim->mems[i].data + offset);
+   }
+
+   fprintf(stderr, "FAULT in %s at address 0x%"PRIx64"\n", op_desc, addr);
+   abort();
+}
+
+static uint32_t
+mme_tu104_state_sim_load(void *_sim)
+{
+   struct mme_tu104_state_sim *sim = _sim;
+
+   assert(sim->param_count > 0);
+   uint32_t data = *sim->params;
+   sim->params++;
+   sim->param_count--;
+
+   return data;
+}
+
+static uint32_t
+mme_tu104_state_sim_state(void *_sim, uint16_t addr)
+{
+   struct mme_tu104_state_sim *sim = _sim;
+   assert(addr % 4 == 0);
+
+   if (NVC597_SET_MME_SHADOW_SCRATCH(0) <= addr &&
+       addr < NVC597_CALL_MME_MACRO(0)) {
+      uint32_t i = (addr - NVC597_SET_MME_SHADOW_SCRATCH(0)) / 4;
+      assert(i <= ARRAY_SIZE(sim->scratch));
+      return sim->scratch[i];
+   }
+
+   return 0;
+}
+
+static void
+mme_tu104_state_sim_mthd(void *_sim, uint16_t addr, uint32_t data)
+{
+   struct mme_tu104_state_sim *sim = _sim;
+   assert(addr % 4 == 0);
+
+   switch (addr) {
+   case NVC597_SET_REPORT_SEMAPHORE_A:
+      sim->report_sem.addr_hi = data;
+      break;
+   case NVC597_SET_REPORT_SEMAPHORE_B:
+      sim->report_sem.addr_lo = data;
+      break;
+   case NVC597_SET_REPORT_SEMAPHORE_C:
+      sim->report_sem.data = data;
+      break;
+   case NVC597_SET_REPORT_SEMAPHORE_D: {
+      assert(data == 0x10000000);
+      uint64_t sem_report_addr =
+         ((uint64_t)sim->report_sem.addr_hi << 32) | sim->report_sem.addr_lo;
+      uint32_t *mem = find_mem(sim, sem_report_addr, "SET_REPORT_SEMAPHORE");
+      *mem = sim->report_sem.data;
+      break;
+   }
+   case NVC597_SET_MME_DATA_RAM_ADDRESS:
+      sim->ram.addr = data;
+      break;
+   case NVC597_SET_MME_MEM_ADDRESS_A:
+      sim->mem_addr_hi = data;
+      break;
+   case NVC597_SET_MME_MEM_ADDRESS_B:
+      sim->mem_addr_lo = data;
+      break;
+   case NVC597_MME_DMA_READ_FIFOED:
+      sim->dma.read_fifo.count = data;
+      break;
+   default:
+      if (NVC597_SET_MME_SHADOW_SCRATCH(0) <= addr &&
+          addr < NVC597_CALL_MME_MACRO(0)) {
+         uint32_t i = (addr - NVC597_SET_MME_SHADOW_SCRATCH(0)) / 4;
+         assert(i <= ARRAY_SIZE(sim->scratch));
+         sim->scratch[i] = data;
+      } else {
+         fprintf(stdout, "%s:\n", P_PARSE_NVC597_MTHD(addr));
+         P_DUMP_NVC597_MTHD_DATA(stdout, addr, data, "    ");
+      }
+      break;
+   }
+}
+
+static void
+mme_tu104_state_sim_barrier(void *_sim)
+{
+   struct mme_tu104_state_sim *sim = _sim;
+
+   if (sim->dma.read_fifo.count == 0)
+      return;
+
+   const uint64_t mem_addr =
+      ((uint64_t)sim->mem_addr_hi << 32) | sim->mem_addr_lo;
+
+   for (uint32_t i = 0; i < sim->dma.read_fifo.count; i++) {
+      uint32_t *src = find_mem(sim, mem_addr + i * 4,
+                               "MME_DMA_READ_FIFOED");
+      assert(src != NULL);
+      sim->dma.read_fifo.data[i] = *src;
+   }
+
+   sim->param_count = sim->dma.read_fifo.count;
+   sim->params = sim->dma.read_fifo.data;
+}
+
+static uint32_t *
+mme_tu104_state_sim_map_dram(void *_sim, uint32_t idx)
+{
+   struct mme_tu104_state_sim *sim = _sim;
+
+   assert(idx < ARRAY_SIZE(sim->ram.data));
+   return &sim->ram.data[idx];
+}
+
+static const struct mme_sim_state_ops mme_tu104_state_sim_ops = {
+   .load = mme_tu104_state_sim_load,
+   .state = mme_tu104_state_sim_state,
+   .mthd = mme_tu104_state_sim_mthd,
+   .barrier = mme_tu104_state_sim_barrier,
+   .map_dram = mme_tu104_state_sim_map_dram,
+};
+
+void
+mme_tu104_sim(uint32_t inst_count, const struct mme_tu104_inst *insts,
+              uint32_t param_count, const uint32_t *params,
+              uint32_t mem_count, struct mme_tu104_sim_mem *mems)
+{
+   struct mme_tu104_state_sim state_sim = {
+      .param_count = param_count,
+      .params = params,
+      .mem_count = mem_count,
+      .mems = mems,
+   };
+
+   mme_tu104_sim_core(inst_count, insts, &mme_tu104_state_sim_ops, &state_sim);
 }

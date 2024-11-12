@@ -143,12 +143,12 @@ VkResult pvr_pds_fragment_program_create_and_upload(
    const VkAllocationCallbacks *allocator,
    const struct pvr_suballoc_bo *fragment_shader_bo,
    uint32_t fragment_temp_count,
-   enum rogue_msaa_mode msaa_mode,
+   enum pvr_msaa_mode msaa_mode,
    bool has_phase_rate_change,
    struct pvr_pds_upload *const pds_upload_out)
 {
    const enum PVRX(PDSINST_DOUTU_SAMPLE_RATE)
-      sample_rate = pvr_pdsinst_doutu_sample_rate_from_rogue(msaa_mode);
+      sample_rate = pvr_pdsinst_doutu_sample_rate(msaa_mode);
    struct pvr_pds_kickusc_program program = { 0 };
    uint32_t staging_buffer_size;
    uint32_t *staging_buffer;
@@ -1245,7 +1245,7 @@ static VkResult pvr_compute_pipeline_compile(
       /* We make sure that the compiler's unused reg value is compatible with
        * the pds api.
        */
-      STATIC_ASSERT(ROGUE_REG_UNUSED == PVR_PDS_COMPUTE_INPUT_REG_UNUSED);
+      STATIC_ASSERT(ROGUE_REG_UNUSED == PVR_PDS_REG_UNUSED);
 
       barrier_coefficient = build_info.barrier_reg;
 
@@ -1309,9 +1309,9 @@ static VkResult pvr_compute_pipeline_compile(
     * variant of the PDS compute program as well.
     */
    compute_pipeline->flags.base_workgroup =
-      work_group_input_regs[0] != PVR_PDS_COMPUTE_INPUT_REG_UNUSED ||
-      work_group_input_regs[1] != PVR_PDS_COMPUTE_INPUT_REG_UNUSED ||
-      work_group_input_regs[2] != PVR_PDS_COMPUTE_INPUT_REG_UNUSED;
+      work_group_input_regs[0] != PVR_PDS_REG_UNUSED ||
+      work_group_input_regs[1] != PVR_PDS_REG_UNUSED ||
+      work_group_input_regs[2] != PVR_PDS_REG_UNUSED;
 
    if (compute_pipeline->flags.base_workgroup) {
       result = pvr_pds_compute_base_workgroup_variant_program_init(

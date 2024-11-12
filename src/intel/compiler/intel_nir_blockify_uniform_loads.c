@@ -50,7 +50,7 @@ intel_nir_blockify_uniform_loads_instr(nir_builder *b,
       if (devinfo->ver < 9)
          return false;
 
-      if (nir_src_is_divergent(intrin->src[1]))
+      if (nir_src_is_divergent(&intrin->src[1]))
          return false;
 
       if (intrin->def.bit_size != 32)
@@ -73,7 +73,7 @@ intel_nir_blockify_uniform_loads_instr(nir_builder *b,
       if (devinfo->ver < 11)
          return false;
 
-      if (nir_src_is_divergent(intrin->src[0]))
+      if (nir_src_is_divergent(&intrin->src[0]))
          return false;
 
       if (intrin->def.bit_size != 32)
@@ -91,7 +91,7 @@ intel_nir_blockify_uniform_loads_instr(nir_builder *b,
       return true;
 
    case nir_intrinsic_load_global_constant:
-      if (nir_src_is_divergent(intrin->src[0]))
+      if (nir_src_is_divergent(&intrin->src[0]))
          return false;
 
       if (intrin->def.bit_size != 32)
@@ -104,39 +104,6 @@ intel_nir_blockify_uniform_loads_instr(nir_builder *b,
          return false;
 
       intrin->intrinsic = nir_intrinsic_load_global_constant_uniform_block_intel;
-      return true;
-
-   case nir_intrinsic_load_global_const_block_intel:
-      /* Only deal with the simple predication true case */
-      if (!nir_src_is_const(intrin->src[1]) ||
-          nir_src_as_uint(intrin->src[1]) == 0)
-         return false;
-
-      if (nir_src_is_divergent(intrin->src[0]))
-         return false;
-
-      if (intrin->def.bit_size != 32)
-         return false;
-
-      /* Without the LSC, we can only do block loads of at least 4dwords (1
-       * oword).
-       */
-      if (!devinfo->has_lsc && intrin->def.num_components < 4)
-         return false;
-
-      b->cursor = nir_before_instr(&intrin->instr);
-      nir_def *def =
-         nir_load_global_constant_uniform_block_intel(
-            b,
-            intrin->def.num_components,
-            intrin->def.bit_size,
-            intrin->src[0].ssa,
-            .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER,
-            .align_mul = 4,
-            .align_offset = 4);
-
-      nir_def_rewrite_uses(&intrin->def, def);
-      nir_instr_remove(&intrin->instr);
       return true;
 
    default:

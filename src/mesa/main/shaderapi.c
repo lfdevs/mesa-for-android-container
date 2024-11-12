@@ -53,7 +53,6 @@
 #include "compiler/glsl/builtin_functions.h"
 #include "compiler/glsl/glsl_parser_extras.h"
 #include "compiler/glsl/ir.h"
-#include "compiler/glsl/ir_uniform.h"
 #include "compiler/glsl/program.h"
 #include "program/program.h"
 #include "program/prog_print.h"
@@ -1232,29 +1231,10 @@ _mesa_compile_shader(struct gl_context *ctx, struct gl_shader *sh)
       /* this call will set the shader->CompileStatus field to indicate if
        * compilation was successful.
        */
-      _mesa_glsl_compile_shader(ctx, sh, false, false, false);
+      _mesa_glsl_compile_shader(ctx, sh, NULL, false, false, false);
 
       if (ctx->_Shader->Flags & GLSL_LOG) {
          _mesa_write_shader_to_file(sh);
-      }
-
-      if (ctx->_Shader->Flags & GLSL_DUMP) {
-         if (sh->CompileStatus) {
-            if (sh->ir) {
-               _mesa_log("GLSL IR for shader %d:\n", sh->Name);
-               _mesa_print_ir(mesa_log_get_file(), sh->ir, NULL);
-            } else {
-               _mesa_log("No GLSL IR for shader %d (shader may be from "
-                         "cache)\n", sh->Name);
-            }
-            _mesa_log("\n\n");
-         } else {
-            _mesa_log("GLSL shader %d failed to compile.\n", sh->Name);
-         }
-         if (sh->InfoLog && sh->InfoLog[0] != 0) {
-            _mesa_log("GLSL shader %d info log:\n", sh->Name);
-            _mesa_log("%s\n", sh->InfoLog);
-         }
       }
    }
 

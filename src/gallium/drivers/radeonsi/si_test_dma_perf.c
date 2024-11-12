@@ -60,6 +60,16 @@ enum {
    ALIGN_4,
    ALIGN_2,
    ALIGN_1,
+   ALIGN_SRC128,
+   ALIGN_SRC64,
+   ALIGN_SRC4,
+   ALIGN_SRC2,
+   ALIGN_SRC1,
+   ALIGN_DST128,
+   ALIGN_DST64,
+   ALIGN_DST4,
+   ALIGN_DST2,
+   ALIGN_DST1,
    ALIGN_SRC4_DST2,
    ALIGN_SRC4_DST1,
    ALIGN_SRC2_DST4,
@@ -83,6 +93,16 @@ static const struct align_info_t align_info[] = {
    [ALIGN_4] = {"both=4", 4, 4},
    [ALIGN_2] = {"both=2", 2, 2},
    [ALIGN_1] = {"both=1", 1, 1},
+   [ALIGN_SRC128] = {"src=128", 128, 0},
+   [ALIGN_SRC64] = {"src=64", 64, 0},
+   [ALIGN_SRC4] = {"src=4", 4, 0},
+   [ALIGN_SRC2] = {"src=2", 2, 0},
+   [ALIGN_SRC1] = {"src=1", 1, 0},
+   [ALIGN_DST128] = {"dst=128", 0, 128},
+   [ALIGN_DST64] = {"dst=64", 0, 64},
+   [ALIGN_DST4] = {"dst=4", 0, 4},
+   [ALIGN_DST2] = {"dst=2", 0, 2},
+   [ALIGN_DST1] = {"dst=1", 0, 1},
    [ALIGN_SRC4_DST2] = {"src=4 dst=2", 4, 2},
    [ALIGN_SRC4_DST1] = {"src=4 dst=1", 4, 1},
    [ALIGN_SRC2_DST4] = {"src=2 dst=4", 2, 4},
@@ -167,7 +187,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
 
                /* Don't test large sizes with GTT because it's slow. */
                if ((dst_usage == PIPE_USAGE_STREAM || src_usage == PIPE_USAGE_STREAM) &&
-                   size > 32 * 1024 * 1024) {
+                   size > 16 * 1024 * 1024) {
                   printf("%8s,", "n/a");
                   continue;
                }
@@ -187,38 +207,57 @@ void si_test_dma_perf(struct si_screen *sscreen)
 
                   if (method == METHOD_DEFAULT) {
                      if (is_copy) {
-                        si_copy_buffer(sctx, dst, src, dst_offset, src_offset, size,
-                                       SI_OP_SYNC_BEFORE_AFTER);
+                        si_barrier_before_simple_buffer_op(sctx, 0, dst, src);
+                        si_copy_buffer(sctx, dst, src, dst_offset, src_offset, size);
+                        si_barrier_after_simple_buffer_op(sctx, 0, dst, src);
                      } else {
                         sctx->b.clear_buffer(&sctx->b, dst, dst_offset, size, &clear_value,
                                              clear_value_size);
                      }
                   } else if (method == METHOD_CP_DMA) {
                      /* CP DMA */
+                     if (sscreen->info.cp_sdma_ge_use_system_memory_scope) {
+                        /* The CP DMA code doesn't implement this case. */
+                        success = false;
+                        continue;
+                     }
+
                      if (is_copy) {
-                        si_cp_dma_copy_buffer(sctx, dst, src, dst_offset, src_offset, size,
-                                              SI_OP_SYNC_BEFORE_AFTER, SI_COHERENCY_SHADER, L2_LRU);
-                     } else {
-                        /* CP DMA clears must be aligned to 4 bytes. */
-                        if (dst_offset % 4 || size % 4) {
+                        /* CP DMA copies are about as slow as PCIe on GFX6-8. */
+                        if (sctx->gfx_level <= GFX8 && size > 16 * 1024 * 1024) {
                            success = false;
                            continue;
                         }
+
+                        si_barrier_before_simple_buffer_op(sctx, 0, dst, src);
+                        si_cp_dma_copy_buffer(sctx, dst, src, dst_offset, src_offset, size);
+                        si_barrier_after_simple_buffer_op(sctx, 0, dst, src);
+                     } else {
+                        /* CP DMA clears must be aligned to 4 bytes. */
+                        if (dst_offset % 4 || size % 4 ||
+                            /* CP DMA clears are so slow on GFX6-8 that we risk getting a GPU timeout. */
+                            (sctx->gfx_level <= GFX8 && size > 512 * 1024)) {
+                           success = false;
+                           continue;
+                        }
+
                         assert(clear_value_size == 4);
+                        si_barrier_before_simple_buffer_op(sctx, 0, dst, src);
                         si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, dst, dst_offset, size,
-                                               clear_value[0], SI_OP_SYNC_BEFORE_AFTER,
-                                               SI_COHERENCY_SHADER, L2_LRU);
+                                               clear_value[0]);
+                        si_barrier_after_simple_buffer_op(sctx, 0, dst, src);
                      }
                   } else {
                      /* Compute */
+                     si_barrier_before_simple_buffer_op(sctx, 0, dst, src);
                      success &=
                         si_compute_clear_copy_buffer(sctx, dst, dst_offset, src, src_offset,
                                                      size, clear_value, clear_value_size,
-                                                     SI_OP_SYNC_BEFORE_AFTER, SI_COHERENCY_SHADER,
-                                                     dwords_per_thread, false);
+                                                     dwords_per_thread, false, false);
+                     si_barrier_after_simple_buffer_op(sctx, 0, dst, src);
                   }
 
-                  sctx->flags |= SI_CONTEXT_INV_L2;
+                  sctx->barrier_flags |= SI_BARRIER_INV_L2;
                }
 
                ctx->end_query(ctx, q);
@@ -232,7 +271,10 @@ void si_test_dma_perf(struct si_screen *sscreen)
                ctx->get_query_result(ctx, q, true, &result);
                ctx->destroy_query(ctx, q);
 
-               if (success) {
+               /* Navi10 and Vega10 sometimes incorrectly return elapsed time of 0 nanoseconds
+                * for very small ops.
+                */
+               if (success && result.u64) {
                   double GB = 1024.0 * 1024.0 * 1024.0;
                   double seconds = result.u64 / (double)NUM_RUNS / (1000.0 * 1000.0 * 1000.0);
                   double GBps = (size / GB) / seconds * (test_flavor == TEST_COPY_VRAM_VRAM ? 2 : 1);
@@ -354,5 +396,235 @@ si_test_mem_perf(struct si_screen *sscreen)
    }
 
 
+   exit(0);
+}
+
+#define COLOR_RESET  "\033[0m"
+#define COLOR_RED    "\033[1;31m"
+#define COLOR_YELLOW "\033[1;33m"
+#define COLOR_CYAN   "\033[1;36m"
+
+void si_test_clear_buffer(struct si_screen *sscreen)
+{
+   struct pipe_screen *screen = &sscreen->b;
+   struct pipe_context *ctx = screen->context_create(screen, NULL, 0);
+   struct si_context *sctx = (struct si_context *)ctx;
+   unsigned buf_size = 32;
+   unsigned num_tests = 0, num_passes = 0;
+
+   srand(0x9b47d95b);
+
+   printf("dst, si,dw, %-*s, %-*s, %-*s, %-*s\n",
+          32, "clear value",
+          buf_size * 2, "init dst",
+          buf_size * 2, "expected dst",
+          buf_size * 2, "observed dst");
+   printf("off, ze,th\n");
+
+   /* Generate an infinite number of random tests. */
+   while (1) {
+      struct pipe_resource *dst;
+
+      dst = pipe_aligned_buffer_create(screen, 0, PIPE_USAGE_STAGING, buf_size, 256);
+
+      unsigned clear_value_size = 1 << (rand() % 6);
+      if (clear_value_size == 32)
+         clear_value_size = 12; /* test only 1, 2, 4, 8, 16, and 12 */
+
+      uint8_t *clear_value = (uint8_t *)malloc(buf_size);
+      uint8_t *init_dst_buffer = (uint8_t *)malloc(buf_size);
+      uint8_t *expected_dst_buffer = (uint8_t *)malloc(buf_size);
+      uint8_t *read_dst_buffer = (uint8_t *)malloc(buf_size);
+
+      for (unsigned i = 0; i < buf_size; i++) {
+         clear_value[i] = rand();
+         init_dst_buffer[i] = rand();
+         expected_dst_buffer[i] = rand();
+      }
+
+      pipe_buffer_write(ctx, dst, 0, buf_size, init_dst_buffer);
+
+      unsigned op_size = (((rand() % buf_size) + 1) / clear_value_size) * clear_value_size;
+      if (!op_size)
+         op_size = clear_value_size;
+
+      unsigned dst_offset = rand() % (buf_size - op_size + 1);
+      if (clear_value_size == 12)
+         dst_offset &= ~0x3;
+
+      unsigned dwords_per_thread = 1 << (rand() % 3);
+      dwords_per_thread = MAX2(dwords_per_thread, DIV_ROUND_UP(clear_value_size, 4));
+
+      memcpy(expected_dst_buffer, init_dst_buffer, buf_size);
+      for (unsigned i = 0; i < op_size; i++)
+         expected_dst_buffer[dst_offset + i] = clear_value[i % clear_value_size];
+
+      printf(" %2u, %2u, %u, ", dst_offset, op_size, dwords_per_thread);
+
+      /* Visualize the clear. */
+      for (unsigned i = 0; i < clear_value_size; i++)
+         printf("%02x", clear_value[i]);
+      for (unsigned i = clear_value_size; i < 16; i++)
+         printf("  ");
+
+      printf("%s, %s", COLOR_RESET, COLOR_CYAN);
+      for (unsigned i = 0; i < buf_size; i++) {
+         printf("%s%02x",
+                i < dst_offset || i >= dst_offset + op_size ? COLOR_CYAN : COLOR_RESET,
+                init_dst_buffer[i]);
+      }
+      printf("%s, ", COLOR_RESET);
+      for (unsigned i = 0; i < buf_size; i++) {
+         printf("%s%02x",
+                i >= dst_offset && i < dst_offset + op_size ? COLOR_YELLOW : COLOR_CYAN,
+                expected_dst_buffer[i]);
+      }
+      printf("%s, ", COLOR_RESET);
+      fflush(stdout);
+
+      si_barrier_before_simple_buffer_op(sctx, 0, dst, NULL);
+      bool done = si_compute_clear_copy_buffer(sctx, dst, dst_offset, NULL, 0, op_size,
+                                               (uint32_t*)clear_value, clear_value_size,
+                                               dwords_per_thread, false, false);
+      si_barrier_after_simple_buffer_op(sctx, 0, dst, NULL);
+
+      if (done) {
+         pipe_buffer_read(ctx, dst, 0, buf_size, read_dst_buffer);
+         bool success = !memcmp(read_dst_buffer, expected_dst_buffer, buf_size);
+
+         num_tests++;
+         if (success)
+            num_passes++;
+
+         for (unsigned i = 0; i < buf_size; i++) {
+            printf("%s%02x",
+                   read_dst_buffer[i] != expected_dst_buffer[i] ? COLOR_RED :
+                   i >= dst_offset && i < dst_offset + op_size ? COLOR_YELLOW : COLOR_CYAN,
+                   read_dst_buffer[i]);
+         }
+
+         printf("%s, %s [%u/%u]\n", COLOR_RESET, success ? "pass" : "fail", num_passes, num_tests);
+      } else {
+         printf("%*s, skip [%u/%u]\n", buf_size * 2, "", num_passes, num_tests);
+      }
+
+      free(clear_value);
+      free(init_dst_buffer);
+      free(expected_dst_buffer);
+      free(read_dst_buffer);
+      pipe_resource_reference(&dst, NULL);
+   }
+
+   ctx->destroy(ctx);
+   exit(0);
+}
+
+void si_test_copy_buffer(struct si_screen *sscreen)
+{
+   struct pipe_screen *screen = &sscreen->b;
+   struct pipe_context *ctx = screen->context_create(screen, NULL, 0);
+   struct si_context *sctx = (struct si_context *)ctx;
+   unsigned buf_size = 32;
+   unsigned num_tests = 0, num_passes = 0;
+
+   srand(0x9b47d95b);
+
+   printf("src,dst, si,dw, %-*s, %-*s, %-*s, %-*s\n",
+          MIN2(buf_size, 32) * 2, "init src",
+          MIN2(buf_size, 32) * 2, "init dst",
+          MIN2(buf_size, 32) * 2, "expected dst",
+          MIN2(buf_size, 32) * 2, "observed dst");
+   printf("off,off, ze,th\n");
+
+   /* Generate an infinite number of random tests. */
+   while (1) {
+      struct pipe_resource *dst, *src;
+
+      dst = pipe_aligned_buffer_create(screen, 0, PIPE_USAGE_STAGING, buf_size, 256);
+      src = pipe_aligned_buffer_create(screen, 0, PIPE_USAGE_STAGING, buf_size, 256);
+
+      uint8_t *init_src_buffer = (uint8_t *)malloc(buf_size);
+      uint8_t *init_dst_buffer = (uint8_t *)malloc(buf_size);
+      uint8_t *expected_dst_buffer = (uint8_t *)malloc(buf_size);
+      uint8_t *read_dst_buffer = (uint8_t *)malloc(buf_size);
+
+      for (unsigned i = 0; i < buf_size; i++) {
+         init_src_buffer[i] = rand();
+         init_dst_buffer[i] = rand();
+      }
+
+      pipe_buffer_write(ctx, src, 0, buf_size, init_src_buffer);
+      pipe_buffer_write(ctx, dst, 0, buf_size, init_dst_buffer);
+
+      unsigned dst_offset = rand() % buf_size;
+      unsigned op_size = (rand() % (buf_size - dst_offset)) + 1;
+      unsigned src_offset = rand() % (buf_size - op_size + 1);
+      unsigned dwords_per_thread = 1 << (rand() % 3);
+
+      memcpy(expected_dst_buffer, init_dst_buffer, buf_size);
+      memcpy(expected_dst_buffer + dst_offset, init_src_buffer + src_offset, op_size);
+
+      printf(" %2u, %2u, %2u, %u, ", src_offset, dst_offset, op_size, dwords_per_thread);
+
+      if (buf_size <= 32) {
+         /* Visualize the copy. */
+         for (unsigned i = 0; i < buf_size; i++) {
+            printf("%s%02x",
+                   i >= src_offset && i < src_offset + op_size ? COLOR_YELLOW : COLOR_RESET,
+                   init_src_buffer[i]);
+         }
+         printf("%s, %s", COLOR_RESET, COLOR_CYAN);
+         for (unsigned i = 0; i < buf_size; i++) {
+            printf("%s%02x",
+                   i < dst_offset || i >= dst_offset + op_size ? COLOR_CYAN : COLOR_RESET,
+                   init_dst_buffer[i]);
+         }
+         printf("%s, ", COLOR_RESET);
+         for (unsigned i = 0; i < buf_size; i++) {
+            printf("%s%02x",
+                   i >= dst_offset && i < dst_offset + op_size ? COLOR_YELLOW : COLOR_CYAN,
+                   expected_dst_buffer[i]);
+         }
+         printf("%s, ", COLOR_RESET);
+      }
+      fflush(stdout);
+
+      si_barrier_before_simple_buffer_op(sctx, 0, dst, src);
+      bool done = si_compute_clear_copy_buffer(sctx, dst, dst_offset, src, src_offset, op_size,
+                                               NULL, 0, dwords_per_thread, false, false);
+      si_barrier_after_simple_buffer_op(sctx, 0, dst, src);
+
+      if (done) {
+         pipe_buffer_read(ctx, dst, 0, buf_size, read_dst_buffer);
+         bool success = !memcmp(read_dst_buffer, expected_dst_buffer, buf_size);
+
+         num_tests++;
+         if (success)
+            num_passes++;
+
+         if (buf_size <= 32) {
+            for (unsigned i = 0; i < buf_size; i++) {
+               printf("%s%02x",
+                      read_dst_buffer[i] != expected_dst_buffer[i] ? COLOR_RED :
+                      i >= dst_offset && i < dst_offset + op_size ? COLOR_YELLOW : COLOR_CYAN,
+                      read_dst_buffer[i]);
+            }
+            printf("%s, ", COLOR_RESET);
+         }
+
+         printf("%s [%u/%u]\n", success ? "pass" : "fail", num_passes, num_tests);
+      } else {
+         printf("%*s, skip [%u/%u]\n", buf_size * 2, "", num_passes, num_tests);
+      }
+
+      free(init_src_buffer);
+      free(init_dst_buffer);
+      free(expected_dst_buffer);
+      free(read_dst_buffer);
+      pipe_resource_reference(&dst, NULL);
+      pipe_resource_reference(&src, NULL);
+   }
+
+   ctx->destroy(ctx);
    exit(0);
 }

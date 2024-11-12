@@ -936,64 +936,7 @@
     <field name="Compute Command Opcode" start="24" end="26" type="uint" default="2" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
-    <field name="Indirect Data Length" start="64" end="80" type="uint" />
-    <field name="L3 prefetch disable" start="81" end="81" type="bool" />
-    <field name="Partition Type" start="94" end="95" type="uint">
-      <value name="WALKER_PARTITION_X" value="1" />
-      <value name="WALKER_PARTITION_Y" value="2" />
-      <value name="WALKER_PARTITION_Z" value="3" />
-    </field>
-    <field name="Indirect Data Start Address" start="102" end="127" type="offset" />
-    <field name="Message SIMD" start="145" end="146" type="uint">
-      <value name="SIMT16" value="1" />
-      <value name="SIMT32" value="2" />
-    </field>
-    <field name="Tile Layout" start="147" end="149" type="uint">
-      <value name="Linear" value="0" />
-      <value name="TileY 32bpe" value="1" />
-      <value name="TileY 64bpe" value="2" />
-      <value name="TileY 128bpe" value="3" />
-    </field>
-    <field name="Walk Order" start="150" end="152" type="uint">
-      <value name="Walk 012" value="0" />
-      <value name="Walk 021" value="1" />
-      <value name="Walk 102" value="2" />
-      <value name="Walk 120" value="3" />
-      <value name="Walk 201" value="4" />
-      <value name="Walk 210" value="5" />
-    </field>
-    <field name="Emit Inline Parameter" start="153" end="153" type="bool" />
-    <field name="Emit Local" start="154" end="156" type="uint">
-      <value name="Emit None" value="0" />
-      <value name="Emit X" value="1" />
-      <value name="Emit XY" value="3" />
-      <value name="Emit XYZ" value="7" />
-    </field>
-    <field name="Generate Local ID" start="157" end="157" type="bool" />
-    <field name="SIMD Size" start="158" end="159" type="uint">
-      <value name="SIMT16" value="1" />
-      <value name="SIMT32" value="2" />
-    </field>
-    <field name="Execution Mask" start="160" end="191" type="uint" />
-    <field name="Local X Maximum" start="192" end="201" type="uint" />
-    <field name="Local Y Maximum" start="202" end="211" type="uint" />
-    <field name="Local Z Maximum" start="212" end="221" type="uint" />
-    <field name="Thread Group ID X Dimension" start="224" end="255" type="uint" />
-    <field name="Thread Group ID Y Dimension" start="256" end="287" type="uint" />
-    <field name="Thread Group ID Z Dimension" start="288" end="319" type="uint" />
-    <field name="Thread Group ID Starting X" start="320" end="351" type="uint" />
-    <field name="Thread Group ID Starting Y" start="352" end="383" type="uint" />
-    <field name="Thread Group ID Starting Z" start="384" end="415" type="uint" />
-    <field name="Partition ID" start="416" end="447" type="uint" />
-    <field name="Partition Size" start="448" end="479" type="uint" />
-    <field name="Preempt X" start="480" end="511" type="uint" />
-    <field name="Preempt Y" start="512" end="543" type="uint" />
-    <field name="Preempt Z" start="544" end="575" type="uint" />
-    <field name="Interface Descriptor" start="608" end="863" type="INTERFACE_DESCRIPTOR_DATA" />
-    <field name="Post Sync" start="864" end="1023" type="POSTSYNC_DATA" />
-    <group count="8" start="1024" size="32">
-      <field name="Inline Data" start="0" end="31" type="uint" />
-    </group>
+    <field name="body" start="32" end="1280" type="COMPUTE_WALKER_BODY" />
   </instruction>
   <instruction name="EXECUTE_INDIRECT_DISPATCH" bias="2" length="45">
     <field name="DWord Length" start="0" end="7" type="uint" default="43" />
@@ -1139,12 +1082,13 @@
       <value name="Max 40" value="4" />
       <value name="Max 32" value="5" />
     </field>
-    <field name="Z Async Throttle settings" start="35" end="36" type="uint">
+    <field name="Z Async Throttle settings" start="35" end="36" type="uint" prefix="ZATS">
+      <value name="Defer to Async Compute Thread Limit" value="0" />
       <value name="Max 32" value="1" />
       <value name="Max 40" value="2" />
       <value name="Max 48" value="3" />
     </field>
-    <field name="Pixel Async Compute Thread Limit" start="39" end="41" type="uint" prefix="PACTL">
+    <field name="Async Compute Thread Limit" start="39" end="41" type="uint" prefix="ACTL">
       <value name="Disabled" value="0" />
       <value name="Max 2" value="1" />
       <value name="Max 8" value="2" />
@@ -1159,7 +1103,7 @@
     <field name="Z Pass Async Compute Thread Limit Mask" start="48" end="50" type="uint" />
     <field name="Mask1" start="48" end="63" type="uint" />
     <field name="Z Async Throttle settings Mask" start="51" end="52" type="uint" />
-    <field name="Pixel Async Compute Thread Limit Mask" start="55" end="57" type="uint" />
+    <field name="Async Compute Thread Limit Mask" start="55" end="57" type="uint" />
     <field name="EU Thread Scheduling Mode Override Mask" start="61" end="62" type="uint" />
     <field name="Large GRF Mode Mask" start="63" end="63" type="bool" />
     <field name="Midthread Preemption Delay Timer" start="64" end="66" type="uint">
@@ -1385,6 +1329,12 @@
     <field name="Destination Depth/Stencil Resource" start="498" end="498" type="bool" />
     <field name="Destination Array Index" start="501" end="511" type="uint" />
   </instruction>
+  <register name="BLT_TRTT_VA_RANGE" length="1" num="0x4484">
+    <field name="TR-VA Base" start="0" end="12" type="uint" />
+  </register>
+  <register name="COMP_CTX0_TRTT_VA_RANGE" length="1" num="0x4584">
+    <field name="TR-VA Base" start="0" end="12" type="uint" />
+  </register>
   <register name="GFX_TRTT_VA_RANGE" length="1" num="0x4404">
     <field name="TR-VA Base" start="0" end="12" type="uint" />
   </register>

@@ -28,7 +28,7 @@
 #include "brw_fs_builder.h"
 #include "brw_cfg.h"
 
-/** @file brw_fs_cse.cpp
+/** @file
  *
  * Support for SSA-based global Common Subexpression Elimination (CSE).
  */
@@ -119,6 +119,7 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case SHADER_OPCODE_INT_REMAINDER:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS:
+   case SHADER_OPCODE_LOAD_SUBGROUP_INVOCATION:
       return true;
    case SHADER_OPCODE_LOAD_PAYLOAD:
       return !is_coalescing_payload(v->alloc, inst);

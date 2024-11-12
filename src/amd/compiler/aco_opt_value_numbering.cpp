@@ -263,6 +263,13 @@ struct vn_ctx {
 bool
 dominates(vn_ctx& ctx, uint32_t parent, uint32_t child)
 {
+   Block& parent_b = ctx.program->blocks[parent];
+   Block& child_b = ctx.program->blocks[child];
+   if (!dominates_logical(parent_b, child_b) || parent_b.loop_nest_depth > child_b.loop_nest_depth)
+      return false;
+   if (parent_b.loop_nest_depth == child_b.loop_nest_depth && parent_b.loop_nest_depth == 0)
+      return true;
+
    unsigned parent_loop_nest_depth = ctx.program->blocks[parent].loop_nest_depth;
    while (parent < child && parent_loop_nest_depth <= ctx.program->blocks[child].loop_nest_depth)
       child = ctx.program->blocks[child].logical_idom;
@@ -378,6 +385,12 @@ process_block(vn_ctx& ctx, Block& block)
                ctx.renames[instr->definitions[i].tempId()] = orig_instr->definitions[i].getTemp();
                if (instr->definitions[i].isPrecise())
                   orig_instr->definitions[i].setPrecise(true);
+               if (instr->definitions[i].isSZPreserve())
+                  orig_instr->definitions[i].setSZPreserve(true);
+               if (instr->definitions[i].isInfPreserve())
+                  orig_instr->definitions[i].setInfPreserve(true);
+               if (instr->definitions[i].isNaNPreserve())
+                  orig_instr->definitions[i].setNaNPreserve(true);
                /* SPIR_V spec says that an instruction marked with NUW wrapping
                 * around is undefined behaviour, so we can break additions in
                 * other contexts.

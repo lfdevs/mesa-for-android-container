@@ -31,6 +31,7 @@
 #include "util/u_blitter.h"
 #include "util/format/u_format.h"
 #include "util/format_srgb.h"
+#include "util/helpers.h"
 #include "util/u_framebuffer.h"
 #include "util/u_inlines.h"
 #include "util/u_rect.h"

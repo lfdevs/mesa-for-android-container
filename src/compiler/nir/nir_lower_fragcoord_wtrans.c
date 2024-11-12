@@ -33,37 +33,37 @@
  */
 
 static bool
-lower_fragcoord_wtrans_filter(const nir_instr *instr, UNUSED const void *_options)
+lower_fragcoord_wtrans(nir_builder *b, nir_intrinsic_instr *intr,
+                       UNUSED void *_options)
 {
-   if (instr->type != nir_instr_type_intrinsic)
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_deref: {
+      nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+      if (!nir_deref_mode_must_be(deref, nir_var_shader_in))
+         return false;
+      nir_variable *var = nir_intrinsic_get_var(intr, 0);
+      if (var->data.location != VARYING_SLOT_POS)
+         return false;
+      break;
+   }
+   case nir_intrinsic_load_frag_coord:
+      break;
+   default:
       return false;
+   }
 
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   if (intr->intrinsic == nir_intrinsic_load_frag_coord)
-      return true;
+   assert(intr->def.num_components == 4);
 
-   if (intr->intrinsic != nir_intrinsic_load_deref)
-      return false;
+   b->cursor = nir_after_instr(&intr->instr);
 
-   nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-   if (!nir_deref_mode_must_be(deref, nir_var_shader_in))
-      return false;
+   nir_def *invert = nir_frcp(b, nir_channel(b, &intr->def, 3));
 
-   nir_variable *var = nir_intrinsic_get_var(intr, 0);
-   return var->data.location == VARYING_SLOT_POS;
-}
+   nir_def *frag_coord = nir_vector_insert_imm(b, &intr->def, invert, 3);
 
-static nir_def *
-lower_fragcoord_wtrans_impl(nir_builder *b, nir_instr *instr,
-                            UNUSED void *_options)
-{
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   nir_def_rewrite_uses_after(&intr->def, frag_coord,
+                              frag_coord->parent_instr);
 
-   return nir_vec4(b,
-                   nir_channel(b, &intr->def, 0),
-                   nir_channel(b, &intr->def, 1),
-                   nir_channel(b, &intr->def, 2),
-                   nir_frcp(b, nir_channel(b, &intr->def, 3)));
+   return true;
 }
 
 bool
@@ -71,8 +71,8 @@ nir_lower_fragcoord_wtrans(nir_shader *shader)
 {
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-   return nir_shader_lower_instructions(shader,
-                                        lower_fragcoord_wtrans_filter,
-                                        lower_fragcoord_wtrans_impl,
-                                        NULL);
+   return nir_shader_intrinsics_pass(shader,
+                                     lower_fragcoord_wtrans,
+                                     nir_metadata_control_flow,
+                                     NULL);
 }

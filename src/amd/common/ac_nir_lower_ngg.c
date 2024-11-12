@@ -528,8 +528,7 @@ has_input_vertex(nir_builder *b)
 static nir_def *
 has_input_primitive(nir_builder *b)
 {
-   return nir_is_subgroup_invocation_lt_amd(b,
-                                            nir_ushr_imm(b, nir_load_merged_wave_info_amd(b), 8));
+   return nir_is_subgroup_invocation_lt_amd(b, nir_load_merged_wave_info_amd(b), .base = 8);
 }
 
 static void
@@ -1121,8 +1120,6 @@ analyze_shader_before_culling_walk(nir_def *ssa,
 static void
 analyze_shader_before_culling(nir_shader *shader, lower_ngg_nogs_state *s)
 {
-   /* LCSSA is needed to get correct results from divergence analysis. */
-   nir_convert_to_lcssa(shader, true, true);
    /* We need divergence info for culling shaders. */
    nir_divergence_analysis(shader);
 
@@ -1286,7 +1283,7 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *s)
           */
          bool next_is_divergent_if =
             next_cf_node->type == nir_cf_node_if &&
-            nir_cf_node_as_if(next_cf_node)->condition.ssa->divergent;
+            nir_src_is_divergent(&nir_cf_node_as_if(next_cf_node)->condition);
 
          if (next_is_loop || next_is_divergent_if) {
             block = nir_cf_node_cf_tree_next(next_cf_node);

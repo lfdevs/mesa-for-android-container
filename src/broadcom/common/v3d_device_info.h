@@ -73,9 +73,24 @@ bool
 v3d_get_device_info(int fd, struct v3d_device_info* devinfo, v3d_ioctl_fun fun);
 
 static inline bool
-v3d_device_has_draw_index(struct v3d_device_info *devinfo)
+v3d_device_has_draw_index(const struct v3d_device_info *devinfo)
 {
         return devinfo->ver > 71 || (devinfo->ver == 71 && devinfo->rev >= 10);
+}
+
+static inline bool
+v3d_device_has_unpack_sat(const struct v3d_device_info *devinfo)
+{
+        return devinfo->ver > 45 || (devinfo->ver == 45 && devinfo->rev >= 7);
+}
+
+static inline bool
+v3d_device_has_unpack_max0(const struct v3d_device_info *devinfo)
+{
+        return devinfo->ver > 71 ||
+               (devinfo->ver == 71 &&
+                (devinfo->rev >= 7 ||
+                 (devinfo->rev == 6 && devinfo->compat_rev >= 4)));
 }
 
 #endif

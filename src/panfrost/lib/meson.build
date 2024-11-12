@@ -30,7 +30,6 @@ foreach ver : ['4', '5', '6', '7', '9', '10']
     'pan-arch-v' + ver,
     [
       'pan_blend.c',
-      'pan_blitter.c',
       'pan_desc.c',
       'pan_shader.c',
       'pan_texture.c',

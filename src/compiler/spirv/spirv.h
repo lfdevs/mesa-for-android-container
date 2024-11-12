@@ -194,7 +194,9 @@ typedef enum SpvExecutionMode_ {
     SpvExecutionModeOutputLinesNV = 5269,
     SpvExecutionModeOutputPrimitivesEXT = 5270,
     SpvExecutionModeOutputPrimitivesNV = 5270,
+    SpvExecutionModeDerivativeGroupQuadsKHR = 5289,
     SpvExecutionModeDerivativeGroupQuadsNV = 5289,
+    SpvExecutionModeDerivativeGroupLinearKHR = 5290,
     SpvExecutionModeDerivativeGroupLinearNV = 5290,
     SpvExecutionModeOutputTrianglesEXT = 5298,
     SpvExecutionModeOutputTrianglesNV = 5298,
@@ -381,6 +383,7 @@ typedef enum SpvImageChannelDataType_ {
     SpvImageChannelDataTypeUnormInt101010_2 = 16,
     SpvImageChannelDataTypeUnsignedIntRaw10EXT = 19,
     SpvImageChannelDataTypeUnsignedIntRaw12EXT = 20,
+    SpvImageChannelDataTypeUnormInt2_101010EXT = 21,
     SpvImageChannelDataTypeMax = 0x7fffffff,
 } SpvImageChannelDataType;
 
@@ -849,6 +852,7 @@ typedef enum SpvFunctionControlShift_ {
     SpvFunctionControlDontInlineShift = 1,
     SpvFunctionControlPureShift = 2,
     SpvFunctionControlConstShift = 3,
+    SpvFunctionControlOptNoneEXTShift = 16,
     SpvFunctionControlOptNoneINTELShift = 16,
     SpvFunctionControlMax = 0x7fffffff,
 } SpvFunctionControlShift;
@@ -859,6 +863,7 @@ typedef enum SpvFunctionControlMask_ {
     SpvFunctionControlDontInlineMask = 0x00000002,
     SpvFunctionControlPureMask = 0x00000004,
     SpvFunctionControlConstMask = 0x00000008,
+    SpvFunctionControlOptNoneEXTMask = 0x00010000,
     SpvFunctionControlOptNoneINTELMask = 0x00010000,
 } SpvFunctionControlMask;
 
@@ -1049,6 +1054,7 @@ typedef enum SpvCapability_ {
     SpvCapabilityTileImageColorReadAccessEXT = 4166,
     SpvCapabilityTileImageDepthReadAccessEXT = 4167,
     SpvCapabilityTileImageStencilReadAccessEXT = 4168,
+    SpvCapabilityCooperativeMatrixLayoutsARM = 4201,
     SpvCapabilityFragmentShadingRateKHR = 4422,
     SpvCapabilitySubgroupBallotKHR = 4423,
     SpvCapabilityDrawParameters = 4427,
@@ -1078,6 +1084,7 @@ typedef enum SpvCapability_ {
     SpvCapabilityRoundingModeRTZ = 4468,
     SpvCapabilityRayQueryProvisionalKHR = 4471,
     SpvCapabilityRayQueryKHR = 4472,
+    SpvCapabilityUntypedPointersKHR = 4473,
     SpvCapabilityRayTraversalPrimitiveCullingKHR = 4478,
     SpvCapabilityRayTracingKHR = 4479,
     SpvCapabilityTextureSampleWeightedQCOM = 4484,
@@ -1106,6 +1113,7 @@ typedef enum SpvCapability_ {
     SpvCapabilityMeshShadingEXT = 5283,
     SpvCapabilityFragmentBarycentricKHR = 5284,
     SpvCapabilityFragmentBarycentricNV = 5284,
+    SpvCapabilityComputeDerivativeGroupQuadsKHR = 5288,
     SpvCapabilityComputeDerivativeGroupQuadsNV = 5288,
     SpvCapabilityFragmentDensityEXT = 5291,
     SpvCapabilityShadingRateNV = 5291,
@@ -1143,6 +1151,7 @@ typedef enum SpvCapability_ {
     SpvCapabilityVulkanMemoryModelDeviceScopeKHR = 5346,
     SpvCapabilityPhysicalStorageBufferAddresses = 5347,
     SpvCapabilityPhysicalStorageBufferAddressesEXT = 5347,
+    SpvCapabilityComputeDerivativeGroupLinearKHR = 5350,
     SpvCapabilityComputeDerivativeGroupLinearNV = 5350,
     SpvCapabilityRayTracingProvisionalKHR = 5353,
     SpvCapabilityCooperativeMatrixNV = 5357,
@@ -1219,11 +1228,13 @@ typedef enum SpvCapability_ {
     SpvCapabilityAtomicFloat32AddEXT = 6033,
     SpvCapabilityAtomicFloat64AddEXT = 6034,
     SpvCapabilityLongCompositesINTEL = 6089,
+    SpvCapabilityOptNoneEXT = 6094,
     SpvCapabilityOptNoneINTEL = 6094,
     SpvCapabilityAtomicFloat16AddEXT = 6095,
     SpvCapabilityDebugInfoModuleINTEL = 6114,
     SpvCapabilityBFloat16ConversionINTEL = 6115,
     SpvCapabilitySplitBarrierINTEL = 6141,
+    SpvCapabilityArithmeticFenceEXT = 6144,
     SpvCapabilityFPGAClusterAttributesV2INTEL = 6150,
     SpvCapabilityFPGAKernelAttributesv2INTEL = 6161,
     SpvCapabilityFPMaxErrorINTEL = 6169,
@@ -1231,6 +1242,7 @@ typedef enum SpvCapability_ {
     SpvCapabilityFPGAArgumentInterfacesINTEL = 6174,
     SpvCapabilityGlobalVariableHostAccessINTEL = 6187,
     SpvCapabilityGlobalVariableFPGADecorationsINTEL = 6189,
+    SpvCapabilitySubgroupBufferPrefetchINTEL = 6220,
     SpvCapabilityGroupUniformArithmeticKHR = 6400,
     SpvCapabilityMaskedGatherScatterINTEL = 6427,
     SpvCapabilityCacheControlsINTEL = 6441,
@@ -1362,6 +1374,8 @@ typedef enum SpvCooperativeMatrixOperandsMask_ {
 typedef enum SpvCooperativeMatrixLayout_ {
     SpvCooperativeMatrixLayoutRowMajorKHR = 0,
     SpvCooperativeMatrixLayoutColumnMajorKHR = 1,
+    SpvCooperativeMatrixLayoutRowBlockedInterleavedARM = 4202,
+    SpvCooperativeMatrixLayoutColumnBlockedInterleavedARM = 4203,
     SpvCooperativeMatrixLayoutMax = 0x7fffffff,
 } SpvCooperativeMatrixLayout;
 
@@ -1419,6 +1433,10 @@ typedef enum SpvRawAccessChainOperandsMask_ {
     SpvRawAccessChainOperandsRobustnessPerComponentNVMask = 0x00000001,
     SpvRawAccessChainOperandsRobustnessPerElementNVMask = 0x00000002,
 } SpvRawAccessChainOperandsMask;
+
+typedef enum SpvFPEncoding_ {
+    SpvFPEncodingMax = 0x7fffffff,
+} SpvFPEncoding;
 
 typedef enum SpvOp_ {
     SpvOpNop = 0,
@@ -1769,8 +1787,16 @@ typedef enum SpvOp_ {
     SpvOpDepthAttachmentReadEXT = 4161,
     SpvOpStencilAttachmentReadEXT = 4162,
     SpvOpTerminateInvocation = 4416,
+    SpvOpTypeUntypedPointerKHR = 4417,
+    SpvOpUntypedVariableKHR = 4418,
+    SpvOpUntypedAccessChainKHR = 4419,
+    SpvOpUntypedInBoundsAccessChainKHR = 4420,
     SpvOpSubgroupBallotKHR = 4421,
     SpvOpSubgroupFirstInvocationKHR = 4422,
+    SpvOpUntypedPtrAccessChainKHR = 4423,
+    SpvOpUntypedInBoundsPtrAccessChainKHR = 4424,
+    SpvOpUntypedArrayLengthKHR = 4425,
+    SpvOpUntypedPrefetchKHR = 4426,
     SpvOpSubgroupAllKHR = 4428,
     SpvOpSubgroupAnyKHR = 4429,
     SpvOpSubgroupAllEqualKHR = 4430,
@@ -2148,6 +2174,8 @@ typedef enum SpvOp_ {
     SpvOpConvertBF16ToFINTEL = 6117,
     SpvOpControlBarrierArriveINTEL = 6142,
     SpvOpControlBarrierWaitINTEL = 6143,
+    SpvOpArithmeticFenceEXT = 6145,
+    SpvOpSubgroupBlockPrefetchINTEL = 6221,
     SpvOpGroupIMulKHR = 6401,
     SpvOpGroupFMulKHR = 6402,
     SpvOpGroupBitwiseAndKHR = 6403,
@@ -2517,8 +2545,16 @@ inline void SpvHasResultAndType(SpvOp opcode, bool *hasResult, bool *hasResultTy
     case SpvOpDepthAttachmentReadEXT: *hasResult = true; *hasResultType = true; break;
     case SpvOpStencilAttachmentReadEXT: *hasResult = true; *hasResultType = true; break;
     case SpvOpTerminateInvocation: *hasResult = false; *hasResultType = false; break;
+    case SpvOpTypeUntypedPointerKHR: *hasResult = true; *hasResultType = false; break;
+    case SpvOpUntypedVariableKHR: *hasResult = true; *hasResultType = true; break;
+    case SpvOpUntypedAccessChainKHR: *hasResult = true; *hasResultType = true; break;
+    case SpvOpUntypedInBoundsAccessChainKHR: *hasResult = true; *hasResultType = true; break;
     case SpvOpSubgroupBallotKHR: *hasResult = true; *hasResultType = true; break;
     case SpvOpSubgroupFirstInvocationKHR: *hasResult = true; *hasResultType = true; break;
+    case SpvOpUntypedPtrAccessChainKHR: *hasResult = true; *hasResultType = true; break;
+    case SpvOpUntypedInBoundsPtrAccessChainKHR: *hasResult = true; *hasResultType = true; break;
+    case SpvOpUntypedArrayLengthKHR: *hasResult = true; *hasResultType = true; break;
+    case SpvOpUntypedPrefetchKHR: *hasResult = false; *hasResultType = false; break;
     case SpvOpSubgroupAllKHR: *hasResult = true; *hasResultType = true; break;
     case SpvOpSubgroupAnyKHR: *hasResult = true; *hasResultType = true; break;
     case SpvOpSubgroupAllEqualKHR: *hasResult = true; *hasResultType = true; break;
@@ -2885,6 +2921,8 @@ inline void SpvHasResultAndType(SpvOp opcode, bool *hasResult, bool *hasResultTy
     case SpvOpConvertBF16ToFINTEL: *hasResult = true; *hasResultType = true; break;
     case SpvOpControlBarrierArriveINTEL: *hasResult = false; *hasResultType = false; break;
     case SpvOpControlBarrierWaitINTEL: *hasResult = false; *hasResultType = false; break;
+    case SpvOpArithmeticFenceEXT: *hasResult = true; *hasResultType = true; break;
+    case SpvOpSubgroupBlockPrefetchINTEL: *hasResult = false; *hasResultType = false; break;
     case SpvOpGroupIMulKHR: *hasResult = true; *hasResultType = true; break;
     case SpvOpGroupFMulKHR: *hasResult = true; *hasResultType = true; break;
     case SpvOpGroupBitwiseAndKHR: *hasResult = true; *hasResultType = true; break;
@@ -3026,8 +3064,8 @@ inline const char* SpvExecutionModeToString(SpvExecutionMode value) {
     case SpvExecutionModeRequireFullQuadsKHR: return "RequireFullQuadsKHR";
     case SpvExecutionModeOutputLinesEXT: return "OutputLinesEXT";
     case SpvExecutionModeOutputPrimitivesEXT: return "OutputPrimitivesEXT";
-    case SpvExecutionModeDerivativeGroupQuadsNV: return "DerivativeGroupQuadsNV";
-    case SpvExecutionModeDerivativeGroupLinearNV: return "DerivativeGroupLinearNV";
+    case SpvExecutionModeDerivativeGroupQuadsKHR: return "DerivativeGroupQuadsKHR";
+    case SpvExecutionModeDerivativeGroupLinearKHR: return "DerivativeGroupLinearKHR";
     case SpvExecutionModeOutputTrianglesEXT: return "OutputTrianglesEXT";
     case SpvExecutionModePixelInterlockOrderedEXT: return "PixelInterlockOrderedEXT";
     case SpvExecutionModePixelInterlockUnorderedEXT: return "PixelInterlockUnorderedEXT";
@@ -3219,6 +3257,7 @@ inline const char* SpvImageChannelDataTypeToString(SpvImageChannelDataType value
     case SpvImageChannelDataTypeUnormInt101010_2: return "UnormInt101010_2";
     case SpvImageChannelDataTypeUnsignedIntRaw10EXT: return "UnsignedIntRaw10EXT";
     case SpvImageChannelDataTypeUnsignedIntRaw12EXT: return "UnsignedIntRaw12EXT";
+    case SpvImageChannelDataTypeUnormInt2_101010EXT: return "UnormInt2_101010EXT";
     default: return "Unknown";
     }
 }
@@ -3643,6 +3682,7 @@ inline const char* SpvCapabilityToString(SpvCapability value) {
     case SpvCapabilityTileImageColorReadAccessEXT: return "TileImageColorReadAccessEXT";
     case SpvCapabilityTileImageDepthReadAccessEXT: return "TileImageDepthReadAccessEXT";
     case SpvCapabilityTileImageStencilReadAccessEXT: return "TileImageStencilReadAccessEXT";
+    case SpvCapabilityCooperativeMatrixLayoutsARM: return "CooperativeMatrixLayoutsARM";
     case SpvCapabilityFragmentShadingRateKHR: return "FragmentShadingRateKHR";
     case SpvCapabilitySubgroupBallotKHR: return "SubgroupBallotKHR";
     case SpvCapabilityDrawParameters: return "DrawParameters";
@@ -3670,6 +3710,7 @@ inline const char* SpvCapabilityToString(SpvCapability value) {
     case SpvCapabilityRoundingModeRTZ: return "RoundingModeRTZ";
     case SpvCapabilityRayQueryProvisionalKHR: return "RayQueryProvisionalKHR";
     case SpvCapabilityRayQueryKHR: return "RayQueryKHR";
+    case SpvCapabilityUntypedPointersKHR: return "UntypedPointersKHR";
     case SpvCapabilityRayTraversalPrimitiveCullingKHR: return "RayTraversalPrimitiveCullingKHR";
     case SpvCapabilityRayTracingKHR: return "RayTracingKHR";
     case SpvCapabilityTextureSampleWeightedQCOM: return "TextureSampleWeightedQCOM";
@@ -3696,7 +3737,7 @@ inline const char* SpvCapabilityToString(SpvCapability value) {
     case SpvCapabilityImageFootprintNV: return "ImageFootprintNV";
     case SpvCapabilityMeshShadingEXT: return "MeshShadingEXT";
     case SpvCapabilityFragmentBarycentricKHR: return "FragmentBarycentricKHR";
-    case SpvCapabilityComputeDerivativeGroupQuadsNV: return "ComputeDerivativeGroupQuadsNV";
+    case SpvCapabilityComputeDerivativeGroupQuadsKHR: return "ComputeDerivativeGroupQuadsKHR";
     case SpvCapabilityFragmentDensityEXT: return "FragmentDensityEXT";
     case SpvCapabilityGroupNonUniformPartitionedNV: return "GroupNonUniformPartitionedNV";
     case SpvCapabilityShaderNonUniform: return "ShaderNonUniform";
@@ -3717,7 +3758,7 @@ inline const char* SpvCapabilityToString(SpvCapability value) {
     case SpvCapabilityVulkanMemoryModel: return "VulkanMemoryModel";
     case SpvCapabilityVulkanMemoryModelDeviceScope: return "VulkanMemoryModelDeviceScope";
     case SpvCapabilityPhysicalStorageBufferAddresses: return "PhysicalStorageBufferAddresses";
-    case SpvCapabilityComputeDerivativeGroupLinearNV: return "ComputeDerivativeGroupLinearNV";
+    case SpvCapabilityComputeDerivativeGroupLinearKHR: return "ComputeDerivativeGroupLinearKHR";
     case SpvCapabilityRayTracingProvisionalKHR: return "RayTracingProvisionalKHR";
     case SpvCapabilityCooperativeMatrixNV: return "CooperativeMatrixNV";
     case SpvCapabilityFragmentShaderSampleInterlockEXT: return "FragmentShaderSampleInterlockEXT";
@@ -3788,11 +3829,12 @@ inline const char* SpvCapabilityToString(SpvCapability value) {
     case SpvCapabilityAtomicFloat32AddEXT: return "AtomicFloat32AddEXT";
     case SpvCapabilityAtomicFloat64AddEXT: return "AtomicFloat64AddEXT";
     case SpvCapabilityLongCompositesINTEL: return "LongCompositesINTEL";
-    case SpvCapabilityOptNoneINTEL: return "OptNoneINTEL";
+    case SpvCapabilityOptNoneEXT: return "OptNoneEXT";
     case SpvCapabilityAtomicFloat16AddEXT: return "AtomicFloat16AddEXT";
     case SpvCapabilityDebugInfoModuleINTEL: return "DebugInfoModuleINTEL";
     case SpvCapabilityBFloat16ConversionINTEL: return "BFloat16ConversionINTEL";
     case SpvCapabilitySplitBarrierINTEL: return "SplitBarrierINTEL";
+    case SpvCapabilityArithmeticFenceEXT: return "ArithmeticFenceEXT";
     case SpvCapabilityFPGAClusterAttributesV2INTEL: return "FPGAClusterAttributesV2INTEL";
     case SpvCapabilityFPGAKernelAttributesv2INTEL: return "FPGAKernelAttributesv2INTEL";
     case SpvCapabilityFPMaxErrorINTEL: return "FPMaxErrorINTEL";
@@ -3800,6 +3842,7 @@ inline const char* SpvCapabilityToString(SpvCapability value) {
     case SpvCapabilityFPGAArgumentInterfacesINTEL: return "FPGAArgumentInterfacesINTEL";
     case SpvCapabilityGlobalVariableHostAccessINTEL: return "GlobalVariableHostAccessINTEL";
     case SpvCapabilityGlobalVariableFPGADecorationsINTEL: return "GlobalVariableFPGADecorationsINTEL";
+    case SpvCapabilitySubgroupBufferPrefetchINTEL: return "SubgroupBufferPrefetchINTEL";
     case SpvCapabilityGroupUniformArithmeticKHR: return "GroupUniformArithmeticKHR";
     case SpvCapabilityMaskedGatherScatterINTEL: return "MaskedGatherScatterINTEL";
     case SpvCapabilityCacheControlsINTEL: return "CacheControlsINTEL";
@@ -3884,6 +3927,8 @@ inline const char* SpvCooperativeMatrixLayoutToString(SpvCooperativeMatrixLayout
     switch (value) {
     case SpvCooperativeMatrixLayoutRowMajorKHR: return "RowMajorKHR";
     case SpvCooperativeMatrixLayoutColumnMajorKHR: return "ColumnMajorKHR";
+    case SpvCooperativeMatrixLayoutRowBlockedInterleavedARM: return "RowBlockedInterleavedARM";
+    case SpvCooperativeMatrixLayoutColumnBlockedInterleavedARM: return "ColumnBlockedInterleavedARM";
     default: return "Unknown";
     }
 }
@@ -3939,6 +3984,12 @@ inline const char* SpvStoreCacheControlToString(SpvStoreCacheControl value) {
 inline const char* SpvNamedMaximumNumberOfRegistersToString(SpvNamedMaximumNumberOfRegisters value) {
     switch (value) {
     case SpvNamedMaximumNumberOfRegistersAutoINTEL: return "AutoINTEL";
+    default: return "Unknown";
+    }
+}
+
+inline const char* SpvFPEncodingToString(SpvFPEncoding value) {
+    switch (value) {
     default: return "Unknown";
     }
 }
@@ -4293,8 +4344,16 @@ inline const char* SpvOpToString(SpvOp value) {
     case SpvOpDepthAttachmentReadEXT: return "OpDepthAttachmentReadEXT";
     case SpvOpStencilAttachmentReadEXT: return "OpStencilAttachmentReadEXT";
     case SpvOpTerminateInvocation: return "OpTerminateInvocation";
+    case SpvOpTypeUntypedPointerKHR: return "OpTypeUntypedPointerKHR";
+    case SpvOpUntypedVariableKHR: return "OpUntypedVariableKHR";
+    case SpvOpUntypedAccessChainKHR: return "OpUntypedAccessChainKHR";
+    case SpvOpUntypedInBoundsAccessChainKHR: return "OpUntypedInBoundsAccessChainKHR";
     case SpvOpSubgroupBallotKHR: return "OpSubgroupBallotKHR";
     case SpvOpSubgroupFirstInvocationKHR: return "OpSubgroupFirstInvocationKHR";
+    case SpvOpUntypedPtrAccessChainKHR: return "OpUntypedPtrAccessChainKHR";
+    case SpvOpUntypedInBoundsPtrAccessChainKHR: return "OpUntypedInBoundsPtrAccessChainKHR";
+    case SpvOpUntypedArrayLengthKHR: return "OpUntypedArrayLengthKHR";
+    case SpvOpUntypedPrefetchKHR: return "OpUntypedPrefetchKHR";
     case SpvOpSubgroupAllKHR: return "OpSubgroupAllKHR";
     case SpvOpSubgroupAnyKHR: return "OpSubgroupAnyKHR";
     case SpvOpSubgroupAllEqualKHR: return "OpSubgroupAllEqualKHR";
@@ -4661,6 +4720,8 @@ inline const char* SpvOpToString(SpvOp value) {
     case SpvOpConvertBF16ToFINTEL: return "OpConvertBF16ToFINTEL";
     case SpvOpControlBarrierArriveINTEL: return "OpControlBarrierArriveINTEL";
     case SpvOpControlBarrierWaitINTEL: return "OpControlBarrierWaitINTEL";
+    case SpvOpArithmeticFenceEXT: return "OpArithmeticFenceEXT";
+    case SpvOpSubgroupBlockPrefetchINTEL: return "OpSubgroupBlockPrefetchINTEL";
     case SpvOpGroupIMulKHR: return "OpGroupIMulKHR";
     case SpvOpGroupFMulKHR: return "OpGroupFMulKHR";
     case SpvOpGroupBitwiseAndKHR: return "OpGroupBitwiseAndKHR";

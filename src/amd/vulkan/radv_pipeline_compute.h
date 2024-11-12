@@ -19,24 +19,11 @@ struct radv_shader_info;
 
 struct radv_compute_pipeline {
    struct radv_pipeline base;
-
-   struct {
-      uint64_t va;
-      uint64_t size;
-   } indirect;
 };
 
 RADV_DECL_PIPELINE_DOWNCAST(compute, RADV_PIPELINE_COMPUTE)
 
 struct radv_compute_pipeline_metadata {
-   uint32_t shader_va;
-   uint32_t rsrc1;
-   uint32_t rsrc2;
-   uint32_t rsrc3;
-   uint32_t compute_resource_limits;
-   uint32_t block_size_x;
-   uint32_t block_size_y;
-   uint32_t block_size_z;
    uint32_t wave32;
    uint32_t grid_base_sgpr;
    uint32_t push_const_sgpr;
@@ -61,5 +48,8 @@ VkResult radv_compute_pipeline_create(VkDevice _device, VkPipelineCache _cache,
                                       const VkAllocationCallbacks *pAllocator, VkPipeline *pPipeline);
 
 void radv_destroy_compute_pipeline(struct radv_device *device, struct radv_compute_pipeline *pipeline);
+
+void radv_compute_pipeline_hash(const struct radv_device *device, const VkComputePipelineCreateInfo *pCreateInfo,
+                                unsigned char *hash);
 
 #endif /* RADV_PIPELINE_COMPUTE_H */

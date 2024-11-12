@@ -31,7 +31,7 @@
 #include "panfrost/midgard/disassemble.h"
 #include "panfrost/util/pan_ir.h"
 #include "panfrost/util/pan_lower_framebuffer.h"
-
+#include "panfrost/lib/pan_props.h"
 #include "genxml/gen_macros.h"
 
 void bifrost_preprocess_nir(nir_shader *nir, unsigned gpu_id);

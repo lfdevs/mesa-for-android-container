@@ -78,7 +78,9 @@ public:
    };
 
    fs_live_variables(const elk_backend_shader *s);
+   fs_live_variables(const fs_live_variables &) = delete;
    ~fs_live_variables();
+   fs_live_variables & operator=(const fs_live_variables &) = delete;
 
    bool validate(const elk_backend_shader *s) const;
 

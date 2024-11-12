@@ -71,7 +71,7 @@ protected:
 
    static bool mem_vectorize_callback(unsigned align_mul, unsigned align_offset,
                                       unsigned bit_size,
-                                      unsigned num_components,
+                                      unsigned num_components, unsigned hole_size,
                                       nir_intrinsic_instr *low, nir_intrinsic_instr *high,
                                       void *data);
    static void shared_type_info(const struct glsl_type *type, unsigned *size, unsigned *align);
@@ -81,6 +81,9 @@ protected:
    std::map<unsigned, nir_alu_instr*> movs;
    std::map<unsigned, nir_alu_src*> loads;
    std::map<unsigned, nir_def*> res_map;
+   unsigned max_components = 4;
+   bool overfetch = false;
+   unsigned max_hole_size = 0;
 };
 
 std::string
@@ -88,7 +91,7 @@ nir_load_store_vectorize_test::swizzle(nir_alu_instr *instr, int src)
 {
    std::string swizzle;
    for (unsigned i = 0; i < nir_ssa_alu_instr_src_components(instr, src); i++) {
-      swizzle += "xyzw"[instr->src[src].swizzle[i]];
+      swizzle += "xyzwefghijklmnop"[instr->src[src].swizzle[i]];
    }
 
    return swizzle;
@@ -141,6 +144,7 @@ nir_load_store_vectorize_test::run_vectorizer(nir_variable_mode modes,
    opts.callback = mem_vectorize_callback;
    opts.modes = modes;
    opts.robust_modes = robust_modes;
+   opts.cb_data = this;
    bool progress = nir_opt_load_store_vectorize(b->shader, &opts);
 
    if (progress) {
@@ -336,10 +340,18 @@ bool nir_load_store_vectorize_test::test_alu_def(
 
 bool nir_load_store_vectorize_test::mem_vectorize_callback(
    unsigned align_mul, unsigned align_offset, unsigned bit_size,
-   unsigned num_components,
+   unsigned num_components, unsigned hole_size,
    nir_intrinsic_instr *low, nir_intrinsic_instr *high,
    void *data)
 {
+   nir_load_store_vectorize_test *test = (nir_load_store_vectorize_test *)data;
+
+   assert(hole_size <= 4);
+
+   if (hole_size > test->max_hole_size ||
+       (!test->overfetch && !nir_num_components_valid(num_components)))
+      return false;
+
    /* Calculate a simple alignment, like how nir_intrinsic_align() does. */
    uint32_t align = align_mul;
    if (align_offset)
@@ -347,7 +359,7 @@ bool nir_load_store_vectorize_test::mem_vectorize_callback(
 
    /* Require scalar alignment and less than 5 components. */
    return align % (bit_size / 8) == 0 &&
-          num_components <= 4;
+          (test->overfetch || num_components <= test->max_components);
 }
 
 void nir_load_store_vectorize_test::shared_type_info(
@@ -1935,6 +1947,30 @@ TEST_F(nir_load_store_vectorize_test, shared_offset_overflow_robust_indirect_str
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_deref), 3);
 }
 
+TEST_F(nir_load_store_vectorize_test, ubo_overlapping_vec4_vec4_unused_components)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 4);
+   create_load(nir_var_mem_ubo, 0, 4, 0x2, 32, 4);
+   movs[0x1]->def.num_components = 1;
+   movs[0x2]->def.num_components = 1;
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 1);
+
+   nir_intrinsic_instr *load = get_intrinsic(nir_intrinsic_load_ubo, 0);
+   ASSERT_EQ(load->def.bit_size, 32);
+   ASSERT_EQ(load->def.num_components, 2);
+   ASSERT_EQ(nir_intrinsic_range_base(load), 0);
+   ASSERT_EQ(nir_intrinsic_range(load), 8);
+   ASSERT_EQ(nir_def_components_read(&load->def), 0x3);
+   ASSERT_EQ(nir_src_as_uint(load->src[1]), 0);
+   EXPECT_INSTR_SWIZZLES(movs[0x1], load, "x");
+   EXPECT_INSTR_SWIZZLES(movs[0x2], load, "y");
+}
+
 TEST_F(nir_load_store_vectorize_test, ubo_alignment_16_4)
 {
    nir_def *offset = nir_load_local_invocation_index(b);
@@ -2013,4 +2049,214 @@ TEST_F(nir_load_store_vectorize_test, ubo_alignment_const_100)
    EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
    EXPECT_EQ(nir_intrinsic_align_mul(load), NIR_ALIGN_MUL_MAX);
    EXPECT_EQ(nir_intrinsic_align_offset(load), 100);
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_overfetch_vec6_as_vec8)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 4);
+   create_load(nir_var_mem_ubo, 0, 16, 0x2, 32, 2);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   this->overfetch = true;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->overfetch = false;
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 1);
+
+   nir_intrinsic_instr *load = get_intrinsic(nir_intrinsic_load_ubo, 0);
+   ASSERT_EQ(load->def.bit_size, 32);
+   ASSERT_EQ(load->def.num_components, 8);
+   ASSERT_EQ(nir_intrinsic_range_base(load), 0);
+   ASSERT_EQ(nir_intrinsic_range(load), 32);
+   ASSERT_EQ(nir_def_components_read(&load->def), 0x3f);
+   ASSERT_EQ(nir_src_as_uint(load->src[1]), 0);
+   EXPECT_INSTR_SWIZZLES(movs[0x1], load, "xyzw");
+   EXPECT_INSTR_SWIZZLES(movs[0x2], load, "ef");
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_overfetch_vec7_as_vec8)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 4);
+   create_load(nir_var_mem_ubo, 0, 16, 0x2, 32, 3);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   this->overfetch = true;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->overfetch = false;
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 1);
+
+   nir_intrinsic_instr *load = get_intrinsic(nir_intrinsic_load_ubo, 0);
+   ASSERT_EQ(load->def.bit_size, 32);
+   ASSERT_EQ(load->def.num_components, 8);
+   ASSERT_EQ(nir_intrinsic_range_base(load), 0);
+   ASSERT_EQ(nir_intrinsic_range(load), 32);
+   ASSERT_EQ(nir_def_components_read(&load->def), 0x7f);
+   ASSERT_EQ(nir_src_as_uint(load->src[1]), 0);
+   EXPECT_INSTR_SWIZZLES(movs[0x1], load, "xyzw");
+   EXPECT_INSTR_SWIZZLES(movs[0x2], load, "efg");
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_overfetch_vec7_as_vec8_disallowed)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 4);
+   create_load(nir_var_mem_ubo, 0, 16, 0x2, 32, 3);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_overfetch_vec11_as_vec16)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 8);
+   create_load(nir_var_mem_ubo, 0, 32, 0x2, 32, 3);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   this->overfetch = true;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->overfetch = false;
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 1);
+
+   nir_intrinsic_instr *load = get_intrinsic(nir_intrinsic_load_ubo, 0);
+   ASSERT_EQ(load->def.bit_size, 32);
+   ASSERT_EQ(load->def.num_components, 16);
+   ASSERT_EQ(nir_intrinsic_range_base(load), 0);
+   ASSERT_EQ(nir_intrinsic_range(load), 64);
+   ASSERT_EQ(nir_def_components_read(&load->def), 0x7ff);
+   ASSERT_EQ(nir_src_as_uint(load->src[1]), 0);
+   EXPECT_INSTR_SWIZZLES(movs[0x1], load, "xyzwefgh");
+   EXPECT_INSTR_SWIZZLES(movs[0x2], load, "ijk");
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_vec1_vec7as8)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 1);
+   create_load(nir_var_mem_ubo, 0, 4, 0x2, 32, 8);
+   movs[0x2]->src[0].swizzle[7] = 6; /* use only components 0..6 */
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   this->max_components = 8;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->max_components = 4;
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 1);
+
+   nir_intrinsic_instr *load = get_intrinsic(nir_intrinsic_load_ubo, 0);
+   ASSERT_EQ(load->def.bit_size, 32);
+   ASSERT_EQ(load->def.num_components, 8);
+   ASSERT_EQ(nir_intrinsic_range_base(load), 0);
+   ASSERT_EQ(nir_intrinsic_range(load), 32);
+   ASSERT_EQ(nir_def_components_read(&load->def), 0xff);
+   ASSERT_EQ(nir_src_as_uint(load->src[1]), 0);
+   EXPECT_INSTR_SWIZZLES(movs[0x1], load, "x");
+   EXPECT_INSTR_SWIZZLES(movs[0x2], load, "yzwefghh");
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_vec7as8_vec1)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 8);
+   movs[0x1]->src[0].swizzle[0] = 1; /* use only components 1..7 */
+   create_load(nir_var_mem_ubo, 0, 32, 0x2, 32, 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   this->max_components = 8;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->max_components = 4;
+
+   /* TODO: This is not merged by the pass, but we could implement it. */
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_vec2_hole1_vec1_disallowed)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 2);
+   create_load(nir_var_mem_ubo, 0, 12, 0x2, 32, 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_vec2_hole1_vec1)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 2);
+   create_load(nir_var_mem_ubo, 0, 12, 0x2, 32, 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   this->max_hole_size = 4;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->max_hole_size = 0;
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 1);
+
+   nir_intrinsic_instr *load = get_intrinsic(nir_intrinsic_load_ubo, 0);
+   ASSERT_EQ(load->def.bit_size, 32);
+   ASSERT_EQ(load->def.num_components, 4);
+   ASSERT_EQ(nir_intrinsic_range_base(load), 0);
+   ASSERT_EQ(nir_intrinsic_range(load), 16);
+   ASSERT_EQ(nir_def_components_read(&load->def), 1 | 2 | 8);
+   ASSERT_EQ(nir_src_as_uint(load->src[1]), 0);
+   EXPECT_INSTR_SWIZZLES(movs[0x1], load, "xy");
+   EXPECT_INSTR_SWIZZLES(movs[0x2], load, "w");
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_vec2_hole2_vec4_disallowed)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 2);
+   create_load(nir_var_mem_ubo, 0, 16, 0x2, 32, 1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   /* The pass only allows 4-byte holes. */
+   this->max_hole_size = 8;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->max_hole_size = 0;
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+}
+
+TEST_F(nir_load_store_vectorize_test, ubo_vec3_hole1_vec3)
+{
+   create_load(nir_var_mem_ubo, 0, 0, 0x1, 32, 3);
+   create_load(nir_var_mem_ubo, 0, 16, 0x2, 32, 3);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 2);
+
+   this->overfetch = true;
+   this->max_hole_size = 4;
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ubo));
+   this->max_hole_size = 0;
+   this->overfetch = false;
+
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ubo), 1);
+
+   nir_intrinsic_instr *load = get_intrinsic(nir_intrinsic_load_ubo, 0);
+   ASSERT_EQ(load->def.bit_size, 32);
+   ASSERT_EQ(load->def.num_components, 8);
+   ASSERT_EQ(nir_intrinsic_range_base(load), 0);
+   ASSERT_EQ(nir_intrinsic_range(load), 32);
+   ASSERT_EQ(nir_def_components_read(&load->def), 0x77);
+   ASSERT_EQ(nir_src_as_uint(load->src[1]), 0);
+   EXPECT_INSTR_SWIZZLES(movs[0x1], load, "xyz");
+   EXPECT_INSTR_SWIZZLES(movs[0x2], load, "efg");
 }

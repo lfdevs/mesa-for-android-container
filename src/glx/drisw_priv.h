@@ -31,31 +31,13 @@
 
 struct drisw_display
 {
-   __GLXDRIdisplay base;
-   enum try_zink zink;
 };
 
 struct drisw_screen
 {
    struct glx_screen base;
 
-   __DRIscreen *driScreen;
-   __GLXDRIscreen vtable;
-   const __DRIcoreExtension *core;
-   const __DRImesaCoreExtension *mesa;
-   const __DRIswrastExtension *swrast;
-   const __DRIkopperExtension *kopper;
-   const __DRI2flushExtension *f;
-   const __DRI2configQueryExtension *config;
-   const __DRItexBufferExtension *texBuffer;
-   const __DRIcopySubBufferExtension *copySubBuffer;
-   const __DRI2rendererQueryExtension *rendererQuery;
-
-   const __DRIconfig **driver_configs;
-
-   const char *name;
-
-   bool has_multibuffer;
+   bool kopper;
 };
 
 struct drisw_drawable
@@ -63,19 +45,11 @@ struct drisw_drawable
    __GLXDRIdrawable base;
 
    GC gc;
-   __DRIdrawable *driDrawable;
    struct glx_config *config;
    XImage *ximage;
    XShmSegmentInfo shminfo;
    int xDepth;
    int swapInterval;
 };
-
-_X_HIDDEN int
-drisw_query_renderer_integer(struct glx_screen *base, int attribute,
-                             unsigned int *value);
-_X_HIDDEN int
-drisw_query_renderer_string(struct glx_screen *base, int attribute,
-                            const char **value);
 
 #endif

@@ -19,12 +19,17 @@
 #include "genxml/gen_macros.h"
 
 #define PANVK_DESCRIPTOR_SIZE       32
-#define MAX_SETS                    4
 #define MAX_DYNAMIC_UNIFORM_BUFFERS 16
 #define MAX_DYNAMIC_STORAGE_BUFFERS 8
 #define MAX_PUSH_DESCS              32
 #define MAX_DYNAMIC_BUFFERS                                                    \
    (MAX_DYNAMIC_UNIFORM_BUFFERS + MAX_DYNAMIC_STORAGE_BUFFERS)
+
+#if PAN_ARCH <= 7
+#define MAX_SETS 4
+#else
+#define MAX_SETS 15
+#endif
 
 struct panvk_descriptor_set_binding_layout {
    VkDescriptorType type;

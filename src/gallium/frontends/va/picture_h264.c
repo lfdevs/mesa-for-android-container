@@ -55,8 +55,8 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
    context->desc.h264.field_order_cnt[0] = h264->CurrPic.TopFieldOrderCnt;
    context->desc.h264.field_order_cnt[1] = h264->CurrPic.BottomFieldOrderCnt;
    /*ReferenceFrames[16]*/
-   /*picture_width_in_mbs_minus1*/
-   /*picture_height_in_mbs_minus1*/
+   context->desc.h264.pps->sps->pic_width_in_mbs_minus1 = h264->picture_width_in_mbs_minus1;
+   context->desc.h264.pps->sps->pic_height_in_mbs_minus1 = h264->picture_height_in_mbs_minus1;
    context->desc.h264.pps->sps->bit_depth_luma_minus8 = h264->bit_depth_luma_minus8;
    context->desc.h264.pps->sps->bit_depth_chroma_minus8 = h264->bit_depth_chroma_minus8;
    context->desc.h264.num_ref_frames = h264->num_ref_frames;

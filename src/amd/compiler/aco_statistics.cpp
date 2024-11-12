@@ -178,7 +178,7 @@ get_perf_info(const Program& program, const Instruction& instr)
          return {7, WAIT_USE(valu, 1), WAIT_USE(valu_complex, 1)};
       case instr_class::smem: return {0, WAIT_USE(scalar, 1)};
       case instr_class::branch:
-      case instr_class::sendmsg: return {0, WAIT_USE(branch_sendmsg, 1)};
+      case instr_class::sendmsg: return {0, WAIT_USE(branch_sendmsg, 3)};
       case instr_class::ds:
          return instr.isDS() && instr.ds().gds ? perf_info{0, WAIT_USE(export_gds, 1)}
                                                : perf_info{0, WAIT_USE(lds, 1)};
@@ -210,9 +210,7 @@ get_perf_info(const Program& program, const Instruction& instr)
       case instr_class::valu_double_transcendental: return {64, WAIT_USE(valu, 64)};
       case instr_class::salu: return {4, WAIT_USE(scalar, 4)};
       case instr_class::smem: return {4, WAIT_USE(scalar, 4)};
-      case instr_class::branch:
-         return {8, WAIT_USE(branch_sendmsg, 8)};
-         return {4, WAIT_USE(branch_sendmsg, 4)};
+      case instr_class::branch: return {4, WAIT_USE(branch_sendmsg, 4)};
       case instr_class::ds:
          return instr.isDS() && instr.ds().gds ? perf_info{4, WAIT_USE(export_gds, 4)}
                                                : perf_info{4, WAIT_USE(lds, 4)};

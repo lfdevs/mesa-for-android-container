@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "util/macros.h"
 #include "agx_builder.h"
 #include "agx_compiler.h"
 #include "agx_minifloat.h"
@@ -56,7 +57,7 @@
 static bool
 agx_is_fmov(agx_instr *def)
 {
-   return (def->op == AGX_OPCODE_FADD) &&
+   return (def->op == AGX_OPCODE_FADD || def->op == AGX_OPCODE_HADD) &&
           agx_is_equiv(def->src[1], agx_negzero());
 }
 
@@ -109,12 +110,13 @@ agx_optimizer_fmov(agx_instr **defs, agx_instr *ins)
 static bool
 image_write_source_can_be_immediate(agx_instr *I, unsigned s)
 {
-   assert(I->op == AGX_OPCODE_IMAGE_WRITE);
+   bool block = I->op == AGX_OPCODE_BLOCK_IMAGE_STORE;
+   assert(I->op == AGX_OPCODE_IMAGE_WRITE || block);
 
    /* LOD can always be immediate. Actually, it's just zero so far, we don't
     * support nonzero LOD for images yet.
     */
-   if (s == 2)
+   if (s == 2 && !block)
       return true;
 
    /* If the "bindless" source (source 3) is an immediate, it means we don't
@@ -122,8 +124,9 @@ image_write_source_can_be_immediate(agx_instr *I, unsigned s)
     * allowed to have immediate texture state registers (source 4). However,
     * we're not allowed to have immediate bindless offsets (also source 4).
     */
-   bool is_texture_state = (I->src[3].type == AGX_INDEX_IMMEDIATE);
-   if (s == 4 && is_texture_state)
+   unsigned base = block ? 0 : 3;
+   bool is_texture_state = (I->src[base].type == AGX_INDEX_IMMEDIATE);
+   if (s == (base + 1) && is_texture_state)
       return true;
 
    /* Otherwise, must be from a register */
@@ -167,7 +170,8 @@ agx_optimizer_inline_imm(agx_instr **defs, agx_instr *I)
       if (I->op == AGX_OPCODE_SPLIT)
          continue;
 
-      if (I->op == AGX_OPCODE_IMAGE_WRITE &&
+      if ((I->op == AGX_OPCODE_IMAGE_WRITE ||
+           I->op == AGX_OPCODE_BLOCK_IMAGE_STORE) &&
           !image_write_source_can_be_immediate(I, s))
          continue;
 
@@ -184,6 +188,17 @@ agx_optimizer_inline_imm(agx_instr **defs, agx_instr *I)
          I->src[s] = agx_immediate(value);
       } else if (value_u16 == def->imm && agx_allows_16bit_immediate(I)) {
          I->src[s] = agx_abs(agx_immediate(value_u16));
+      } else if ((I->op == AGX_OPCODE_IADD || I->op == AGX_OPCODE_IMAD) &&
+                 s == agx_negate_src_index(I)) {
+         unsigned bits = agx_size_align_16(def->dest[0].size) * 16;
+         uint64_t mask = BITFIELD64_MASK(bits);
+         uint64_t negated = (-def->imm) & mask;
+         value = negated;
+
+         /* Try to negate the immediate */
+         if (value == negated) {
+            I->src[s] = agx_neg(agx_immediate(value));
+         }
       }
    }
 }
@@ -292,14 +307,14 @@ agx_optimizer_copyprop(agx_context *ctx, agx_instr **defs, agx_instr *I)
 /*
  * Fuse conditions into if. Specifically, acts on if_icmp and fuses:
  *
- *    if_icmp(cmp(x, y, *), 0, ne) -> if_cmp(x, y, *)
+ *    if_icmp(cmp(x, y, *), 0, ne/eq) -> if_cmp(x, y, *)
  */
 static void
 agx_optimizer_if_cmp(agx_instr **defs, agx_instr *I)
 {
    /* Check for unfused if */
    if (!agx_is_equiv(I->src[1], agx_zero()) || I->icond != AGX_ICOND_UEQ ||
-       !I->invert_cond || I->src[0].type != AGX_INDEX_NORMAL)
+       I->src[0].type != AGX_INDEX_NORMAL)
       return;
 
    /* Check for condition */
@@ -310,7 +325,7 @@ agx_optimizer_if_cmp(agx_instr **defs, agx_instr *I)
    /* Fuse */
    I->src[0] = def->src[0];
    I->src[1] = def->src[1];
-   I->invert_cond = def->invert_cond;
+   I->invert_cond = def->invert_cond ^ !I->invert_cond;
 
    if (def->op == AGX_OPCODE_ICMP) {
       I->op = AGX_OPCODE_IF_ICMP;
@@ -319,6 +334,31 @@ agx_optimizer_if_cmp(agx_instr **defs, agx_instr *I)
       I->op = AGX_OPCODE_IF_FCMP;
       I->fcond = def->fcond;
    }
+}
+
+/*
+ * Fuse invert into if. Acts on if_icmp and fuses:
+ *
+ *    if_icmp(xor(x, 1), 0, ne) -> if_cmp(x, 0, eq)
+ */
+static void
+agx_optimizer_if_not(agx_instr **defs, agx_instr *I)
+{
+   /* Check for unfused if */
+   if (!agx_is_equiv(I->src[1], agx_zero()) || I->icond != AGX_ICOND_UEQ ||
+       I->src[0].type != AGX_INDEX_NORMAL)
+      return;
+
+   /* Check for invert */
+   agx_instr *def = defs[I->src[0].value];
+   if (def->op != AGX_OPCODE_BITOP ||
+       !agx_is_equiv(def->src[1], agx_immediate(1)) ||
+       def->truth_table != AGX_BITOP_XOR)
+      return;
+
+   /* Fuse */
+   I->src[0] = def->src[0];
+   I->invert_cond = !I->invert_cond;
 }
 
 /*
@@ -428,7 +468,7 @@ agx_optimizer_bitop(agx_instr **defs, agx_instr *I)
    }
 }
 
-static void
+void
 agx_optimizer_forward(agx_context *ctx)
 {
    agx_instr **defs = calloc(ctx->alloc, sizeof(*defs));
@@ -451,73 +491,91 @@ agx_optimizer_forward(agx_context *ctx)
       /* Inline immediates if we can. TODO: systematic */
       if (I->op != AGX_OPCODE_COLLECT && I->op != AGX_OPCODE_IMAGE_LOAD &&
           I->op != AGX_OPCODE_TEXTURE_LOAD &&
-          I->op != AGX_OPCODE_UNIFORM_STORE &&
-          I->op != AGX_OPCODE_BLOCK_IMAGE_STORE && I->op != AGX_OPCODE_EXPORT)
+          I->op != AGX_OPCODE_UNIFORM_STORE && I->op != AGX_OPCODE_EXPORT)
          agx_optimizer_inline_imm(defs, I);
 
-      if (I->op == AGX_OPCODE_IF_ICMP)
+      if (I->op == AGX_OPCODE_IF_ICMP) {
+         agx_optimizer_if_not(defs, I);
          agx_optimizer_if_cmp(defs, I);
-      else if (I->op == AGX_OPCODE_ICMPSEL)
+      } else if (I->op == AGX_OPCODE_ICMPSEL) {
          agx_optimizer_cmpsel(defs, I);
-      else if (I->op == AGX_OPCODE_BALLOT || I->op == AGX_OPCODE_QUAD_BALLOT)
+      } else if (I->op == AGX_OPCODE_BALLOT ||
+                 I->op == AGX_OPCODE_QUAD_BALLOT) {
          agx_optimizer_ballot(ctx, defs, I);
-      else if (I->op == AGX_OPCODE_BITOP)
+      } else if (I->op == AGX_OPCODE_BITOP) {
          agx_optimizer_bitop(defs, I);
+      }
    }
 
    free(defs);
 }
 
 static void
+record_use(agx_instr **uses, BITSET_WORD *multiple, agx_instr *I, unsigned src)
+{
+   unsigned v = I->src[src].value;
+
+   if (uses[v])
+      BITSET_SET(multiple, v);
+   else
+      uses[v] = I;
+}
+
+void
 agx_optimizer_backward(agx_context *ctx)
 {
    agx_instr **uses = calloc(ctx->alloc, sizeof(*uses));
    BITSET_WORD *multiple = calloc(BITSET_WORDS(ctx->alloc), sizeof(*multiple));
 
-   agx_foreach_instr_global_rev(ctx, I) {
-      struct agx_opcode_info info = agx_opcodes_info[I->op];
+   agx_foreach_block_rev(ctx, block) {
+      /* Phi sources are logically read at the end of predecessor, so process
+       * our source in our successors' phis firsts. This ensures we set
+       * `multiple` correctly with phi sources.
+       */
+      agx_foreach_successor(block, succ) {
+         unsigned s = agx_predecessor_index(succ, block);
 
-      agx_foreach_ssa_src(I, s) {
-         if (I->src[s].type == AGX_INDEX_NORMAL) {
-            unsigned v = I->src[s].value;
-
-            if (uses[v])
-               BITSET_SET(multiple, v);
-            else
-               uses[v] = I;
+         agx_foreach_phi_in_block(succ, phi) {
+            record_use(uses, multiple, phi, s);
          }
       }
 
-      if (info.nr_dests != 1)
-         continue;
+      agx_foreach_instr_in_block_rev(block, I) {
+         struct agx_opcode_info info = agx_opcodes_info[I->op];
 
-      if (I->dest[0].type != AGX_INDEX_NORMAL)
-         continue;
+         /* Skip phis, they're handled specially */
+         if (I->op == AGX_OPCODE_PHI) {
+            continue;
+         }
 
-      agx_instr *use = uses[I->dest[0].value];
+         agx_foreach_ssa_src(I, s) {
+            record_use(uses, multiple, I, s);
+         }
 
-      if (!use || BITSET_TEST(multiple, I->dest[0].value))
-         continue;
+         if (info.nr_dests != 1)
+            continue;
 
-      if (agx_optimizer_not(I, use)) {
-         agx_remove_instruction(use);
-         continue;
-      }
+         if (I->dest[0].type != AGX_INDEX_NORMAL)
+            continue;
 
-      /* Destination has a single use, try to propagate */
-      if (info.is_float && agx_optimizer_fmov_rev(I, use)) {
-         agx_remove_instruction(use);
-         continue;
+         agx_instr *use = uses[I->dest[0].value];
+
+         if (!use || BITSET_TEST(multiple, I->dest[0].value))
+            continue;
+
+         if (agx_optimizer_not(I, use)) {
+            agx_remove_instruction(use);
+            continue;
+         }
+
+         /* Destination has a single use, try to propagate */
+         if (info.is_float && agx_optimizer_fmov_rev(I, use)) {
+            agx_remove_instruction(use);
+            continue;
+         }
       }
    }
 
    free(uses);
    free(multiple);
-}
-
-void
-agx_optimizer(agx_context *ctx)
-{
-   agx_optimizer_backward(ctx);
-   agx_optimizer_forward(ctx);
 }

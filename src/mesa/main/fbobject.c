@@ -57,6 +57,7 @@
 #include "state_tracker/st_context.h"
 #include "state_tracker/st_format.h"
 #include "state_tracker/st_util.h"
+#include "util/u_debug.h"
 
 /**
  * Notes:
@@ -447,6 +448,7 @@ render_texture(struct gl_context *ctx,
    rb->rtt_slice = att->Zoffset;
    rb->rtt_layered = att->Layered;
    rb->rtt_nr_samples = att->NumSamples;
+   rb->rtt_numviews = att->NumViews;
    pipe_resource_reference(&rb->texture, pt);
 
    _mesa_update_renderbuffer_surface(ctx, rb);
@@ -602,7 +604,7 @@ set_texture_attachment(struct gl_context *ctx,
                        struct gl_renderbuffer_attachment *att,
                        struct gl_texture_object *texObj,
                        GLenum texTarget, GLuint level, GLsizei samples,
-                       GLuint layer, GLboolean layered)
+                       GLuint layer, GLboolean layered, GLint numviews)
 {
    struct gl_renderbuffer *rb = att->Renderbuffer;
 
@@ -629,6 +631,7 @@ set_texture_attachment(struct gl_context *ctx,
    att->Zoffset = layer;
    att->Layered = layered;
    att->Complete = GL_FALSE;
+   att->NumViews = numviews;
 
    _mesa_update_texture_renderbuffer(ctx, fb, att);
 }
@@ -3721,6 +3724,47 @@ check_layered_texture_target(struct gl_context *ctx, GLenum target,
 
 
 /**
+ * Common code called by gl*FramebufferTextureMultiviewOVR() to verify the texture target
+ *
+ * \return true if no errors, false if errors
+ */
+static bool
+check_multiview_texture_target(struct gl_context *ctx, GLuint texture, GLenum target, GLint level,
+                               GLint baseViewIndex, GLsizei numViews, const char *caller)
+{
+   bool ret = true;
+   if (target != GL_TEXTURE_2D_ARRAY)
+   {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+            "%s(invalid texture target %s), only 2D_ARRAY is supported", caller,
+            _mesa_enum_to_string(target));
+      ret = false;
+   }
+   else if (level > 0)
+   {
+       _mesa_error(ctx, GL_INVALID_OPERATION,
+            "%s(invalid texture target %s), multisample is supported by OVR_multiview2", caller,
+            _mesa_enum_to_string(target));
+      ret = false;
+   }
+   else if ((numViews > MAX_VIEWS_OVR) || (numViews <= 0))
+   {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+         "%s numViews is less than 1 or greater than MAX_VIEWS_OVR)", caller);
+      ret = false;
+   }
+   else if ((texture > 0) && (baseViewIndex < 0))
+   {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+         "%s baseViewIndex is less than 0)", caller);
+      ret = false;
+   }
+
+   return ret;
+}
+
+
+/**
  * Common code called by gl*FramebufferTextureLayer() to verify the texture
  * target.
  *
@@ -3962,31 +4006,9 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
                           struct gl_renderbuffer_attachment *att,
                           struct gl_texture_object *texObj, GLenum textarget,
                           GLint level, GLsizei samples,
-                          GLuint layer, GLboolean layered)
+                          GLuint layer, GLboolean layered, GLsizei numviews)
 {
    FLUSH_VERTICES(ctx, _NEW_BUFFERS, 0);
-
-   /* EXT_multisampled_render_to_texture:
-
-      If samples is greater than the 
-      value of MAX_SAMPLES_EXT, then the error INVALID_VALUE is generated. 
-      An INVALID_OPERATION error is generated if samples is greater than
-      the maximum number of samples supported for target and its
-      internalformat. If samples is zero, then TEXTURE_SAMPLES_EXT is set
-      to zero, and FramebufferTexture2DMultisampleEXT behaves like
-      FramebufferTexture2D.
-    */
-   if (samples > ctx->Const.MaxSamples) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "invalid sample count %u",
-                  samples);
-      return;
-   }
-   if (samples > ctx->Const.MaxFramebufferSamples) {
-      _mesa_error(ctx, GL_INVALID_OPERATION, "invalid sample count %u",
-                  samples);
-      return;
-   }
-
 
    simple_mtx_lock(&fb->Mutex);
    if (texObj) {
@@ -4016,7 +4038,7 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
                                               BUFFER_DEPTH);
       } else {
          set_texture_attachment(ctx, fb, att, texObj, textarget,
-                                level, samples, layer, layered);
+                                level, samples, layer, layered, numviews);
 
          if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
             /* Above we created a new renderbuffer and attached it to the
@@ -4071,7 +4093,7 @@ framebuffer_texture_with_dims_no_error(GLenum target, GLenum attachment,
       get_attachment(ctx, fb, attachment, NULL);
 
    _mesa_framebuffer_texture(ctx, fb, attachment, att, texObj, textarget,
-                             level, 0, layer, GL_FALSE);
+                             level, 0, layer, GL_FALSE, 0);
 }
 
 
@@ -4118,7 +4140,7 @@ framebuffer_texture_with_dims(int dims, GLenum target, GLuint framebuffer,
       return;
 
    _mesa_framebuffer_texture(ctx, fb, attachment, att, texObj, textarget,
-                             level, samples, layer, GL_FALSE);
+                             level, samples, layer, GL_FALSE, 0);
 }
 
 
@@ -4195,8 +4217,8 @@ _mesa_FramebufferTexture3D(GLenum target, GLenum attachment,
 static ALWAYS_INLINE void
 frame_buffer_texture(GLuint framebuffer, GLenum target,
                      GLenum attachment, GLuint texture,
-                     GLint level, GLint layer, const char *func,
-                     bool dsa, bool no_error, bool check_layered)
+                     GLint level, GLsizei samples, GLint layer, const char *func,
+                     bool dsa, bool no_error, bool check_layered, GLsizei numviews)
 {
    GET_CURRENT_CONTEXT(ctx);
    GLboolean layered = GL_FALSE;
@@ -4257,7 +4279,36 @@ frame_buffer_texture(GLuint framebuffer, GLenum target,
             return;
       }
 
+      if (numviews > 1) {
+         /* We do this regardless of no_error because this sets multiviews */
+         if (!check_multiview_texture_target(ctx, texture, texObj->Target, level, layer, numviews, func))
+         {
+            _mesa_error(ctx, GL_INVALID_OPERATION, "%s(invalid target %s)",
+                        func, _mesa_enum_to_string(target));
+            return;
+         }
+      }
+
       if (!no_error) {
+         /* EXT_multisampled_render_to_texture:
+
+            If samples is greater than the 
+            value of MAX_SAMPLES_EXT, then the error INVALID_VALUE is generated. 
+            An INVALID_OPERATION error is generated if samples is greater than
+            the maximum number of samples supported for target and its
+            internalformat. If samples is zero, then TEXTURE_SAMPLES_EXT is set
+            to zero, and FramebufferTexture2DMultisampleEXT behaves like
+            FramebufferTexture2D.
+          */
+         if (samples > ctx->Const.MaxSamples) {
+            _mesa_error(ctx, GL_INVALID_VALUE, "%s(invalid sample count %u)",
+                        func, samples);
+         }
+         if (samples > ctx->Const.MaxFramebufferSamples) {
+            _mesa_error(ctx, GL_INVALID_OPERATION, "%s(invalid sample count %u)",
+                        func, samples);
+         }
+
          if (!check_layered) {
             if (!check_texture_target(ctx, texObj->Target, func))
                return;
@@ -4278,16 +4329,17 @@ frame_buffer_texture(GLuint framebuffer, GLenum target,
    }
 
    _mesa_framebuffer_texture(ctx, fb, attachment, att, texObj, textarget,
-                             level, 0, layer, layered);
+                             level, samples, layer, layered, numviews);
 }
+
 
 void GLAPIENTRY
 _mesa_FramebufferTextureLayer_no_error(GLenum target, GLenum attachment,
                                        GLuint texture, GLint level,
                                        GLint layer)
 {
-   frame_buffer_texture(0, target, attachment, texture, level, layer,
-                        "glFramebufferTextureLayer", false, true, false);
+   frame_buffer_texture(0, target, attachment, texture, level, 0, layer,
+                        "glFramebufferTextureLayer", false, true, false, 0);
 }
 
 
@@ -4295,8 +4347,8 @@ void GLAPIENTRY
 _mesa_FramebufferTextureLayer(GLenum target, GLenum attachment,
                               GLuint texture, GLint level, GLint layer)
 {
-   frame_buffer_texture(0, target, attachment, texture, level, layer,
-                        "glFramebufferTextureLayer", false, false, false);
+   frame_buffer_texture(0, target, attachment, texture, level, 0, layer,
+                        "glFramebufferTextureLayer", false, false, false, 0);
 }
 
 
@@ -4306,8 +4358,8 @@ _mesa_NamedFramebufferTextureLayer_no_error(GLuint framebuffer,
                                             GLuint texture, GLint level,
                                             GLint layer)
 {
-   frame_buffer_texture(framebuffer, 0, attachment, texture, level, layer,
-                        "glNamedFramebufferTextureLayer", true, true, false);
+   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0, layer,
+                        "glNamedFramebufferTextureLayer", true, true, false, 0);
 }
 
 
@@ -4315,8 +4367,68 @@ void GLAPIENTRY
 _mesa_NamedFramebufferTextureLayer(GLuint framebuffer, GLenum attachment,
                                    GLuint texture, GLint level, GLint layer)
 {
-   frame_buffer_texture(framebuffer, 0, attachment, texture, level, layer,
-                        "glNamedFramebufferTextureLayer", true, false, false);
+   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0, layer,
+                        "glNamedFramebufferTextureLayer", true, false, false, 0);
+}
+
+
+void GLAPIENTRY
+_mesa_FramebufferTextureMultiviewOVR_no_error(GLenum target, GLenum attachment,
+                                              GLuint texture, GLint level,
+                                              GLint baseViewIndex, GLsizei numViews)
+{
+   frame_buffer_texture(0, target, attachment, texture, level, 0, baseViewIndex,
+                        "glFramebufferTexture", false, true, false, numViews);
+}
+
+
+void GLAPIENTRY
+_mesa_FramebufferTextureMultiviewOVR(GLenum target, GLenum attachment,
+                                     GLuint texture, GLint level,
+                                     GLint baseViewIndex, GLsizei numViews)
+{
+   frame_buffer_texture(0, target, attachment, texture, level, 0, baseViewIndex,
+                        "glFramebufferTexture", false, false, false, numViews);
+}
+
+
+void GLAPIENTRY
+_mesa_FramebufferTextureMultisampleMultiviewOVR_no_error(GLenum target, GLenum attachment,
+                                                         GLuint texture, GLint level, GLsizei samples,
+                                                         GLint baseViewIndex, GLsizei numViews)
+{
+   frame_buffer_texture(0, target, attachment, texture, level, samples, baseViewIndex,
+                        "FramebufferTextureMultisampleMultiviewOVR", false, true, false, numViews);
+}
+
+
+void GLAPIENTRY
+_mesa_FramebufferTextureMultisampleMultiviewOVR(GLenum target, GLenum attachment,
+                                                GLuint texture, GLint level, GLsizei samples,
+                                                GLint baseViewIndex, GLsizei numViews)
+{
+   frame_buffer_texture(0, target, attachment, texture, level, samples, baseViewIndex,
+                        "FramebufferTextureMultisampleMultiviewOVR", false, false, false, numViews);
+}
+
+
+void GLAPIENTRY
+_mesa_NamedFramebufferTextureMultiviewOVR_no_error(GLuint framebuffer, GLenum attachment,
+                                                   GLuint texture, GLint level,
+                                                   GLint baseViewIndex, GLsizei numViews)
+{
+   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0, baseViewIndex,
+                        "glFramebufferTexture", true, true, false, numViews);
+}
+
+
+void GLAPIENTRY
+_mesa_NamedFramebufferTextureMultiviewOVR(GLuint framebuffer, GLenum attachment,
+                                          GLuint texture, GLint level,
+                                          GLint baseViewIndex, GLsizei numViews)
+{
+   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0, baseViewIndex,
+                        "glFramebufferTexture", true, false, false, numViews);
 }
 
 
@@ -4324,8 +4436,8 @@ void GLAPIENTRY
 _mesa_FramebufferTexture_no_error(GLenum target, GLenum attachment,
                                   GLuint texture, GLint level)
 {
-   frame_buffer_texture(0, target, attachment, texture, level, 0,
-                        "glFramebufferTexture", false, true, true);
+   frame_buffer_texture(0, target, attachment, texture, level, 0, 0,
+                        "glFramebufferTexture", false, true, true, 0);
 }
 
 
@@ -4333,16 +4445,16 @@ void GLAPIENTRY
 _mesa_FramebufferTexture(GLenum target, GLenum attachment,
                          GLuint texture, GLint level)
 {
-   frame_buffer_texture(0, target, attachment, texture, level, 0,
-                        "glFramebufferTexture", false, false, true);
+   frame_buffer_texture(0, target, attachment, texture, level, 0, 0,
+                        "glFramebufferTexture", false, false, true, 0);
 }
 
 void GLAPIENTRY
 _mesa_NamedFramebufferTexture_no_error(GLuint framebuffer, GLenum attachment,
                                        GLuint texture, GLint level)
 {
-   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0,
-                        "glNamedFramebufferTexture", true, true, true);
+   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0, 0,
+                        "glNamedFramebufferTexture", true, true, true, 0);
 }
 
 
@@ -4350,8 +4462,8 @@ void GLAPIENTRY
 _mesa_NamedFramebufferTexture(GLuint framebuffer, GLenum attachment,
                               GLuint texture, GLint level)
 {
-   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0,
-                        "glNamedFramebufferTexture", true, false, true);
+   frame_buffer_texture(framebuffer, 0, attachment, texture, level, 0, 0,
+                        "glNamedFramebufferTexture", true, false, true, 0);
 }
 
 

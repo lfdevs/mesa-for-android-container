@@ -30,9 +30,9 @@
 /**
  * flush commands to the hardware
  */
-static void flush(struct rvce_encoder *enc, unsigned flags)
+static void flush(struct rvce_encoder *enc, unsigned flags, struct pipe_fence_handle **fence)
 {
-   enc->ws->cs_flush(&enc->cs, flags, NULL);
+   enc->ws->cs_flush(&enc->cs, flags, fence);
    enc->task_info_idx = 0;
    enc->bs_idx = 0;
 }
@@ -116,13 +116,13 @@ static void sort_cpb(struct rvce_encoder *enc)
 /**
  * get number of cpbs based on dpb
  */
-static unsigned get_cpb_num(struct rvce_encoder *enc)
+static unsigned get_cpb_num(struct rvce_encoder *enc, unsigned level_idc)
 {
    unsigned w = align(enc->base.width, 16) / 16;
    unsigned h = align(enc->base.height, 16) / 16;
    unsigned dpb;
 
-   switch (enc->base.level) {
+   switch (level_idc) {
    case 10:
       dpb = 396;
       break;
@@ -225,7 +225,7 @@ static void rvce_destroy(struct pipe_video_codec *encoder)
       enc->fb = &fb;
       enc->session(enc);
       enc->destroy(enc);
-      flush(enc, PIPE_FLUSH_ASYNC);
+      flush(enc, PIPE_FLUSH_ASYNC, NULL);
       si_vid_destroy_buffer(&fb);
    }
    si_vid_destroy_buffer(&enc->cpb);
@@ -251,10 +251,41 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
       enc->pic.rate_ctrl[0].frame_rate_den != pic->rate_ctrl[0].frame_rate_den;
 
    enc->pic = *pic;
+   enc->base.max_references = pic->seq.max_num_ref_frames;
    enc->si_get_pic_param(enc, pic);
 
    enc->get_buffer(vid_buf->resources[0], &enc->handle, &enc->luma);
    enc->get_buffer(vid_buf->resources[1], NULL, &enc->chroma);
+
+   if (!enc->cpb_num) {
+      struct si_screen *sscreen = (struct si_screen *)encoder->context->screen;
+      unsigned cpb_size;
+
+      enc->cpb_num = get_cpb_num(enc, enc->pic.seq.level_idc);
+      if (!enc->cpb_num)
+         return;
+
+      enc->cpb_array = CALLOC(enc->cpb_num, sizeof(struct rvce_cpb_slot));
+      if (!enc->cpb_array)
+         return;
+
+      cpb_size = (sscreen->info.gfx_level < GFX9)
+                    ? align(enc->luma->u.legacy.level[0].nblk_x * enc->luma->bpe, 128) *
+                         align(enc->luma->u.legacy.level[0].nblk_y, 32)
+                    :
+
+                    align(enc->luma->u.gfx9.surf_pitch * enc->luma->bpe, 256) *
+                       align(enc->luma->u.gfx9.surf_height, 32);
+
+      cpb_size = cpb_size * 3 / 2;
+      cpb_size = cpb_size * enc->cpb_num;
+      if (enc->dual_pipe)
+         cpb_size += RVCE_MAX_AUX_BUFFER_NUM * RVCE_MAX_BITSTREAM_OUTPUT_ROW_SIZE * 2;
+      if (!si_vid_create_buffer(enc->screen, &enc->cpb, cpb_size, PIPE_USAGE_DEFAULT)) {
+         RVID_ERR("Can't create CPB buffer.\n");
+         return;
+      }
+   }
 
    if (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR)
       reset_cpb(enc);
@@ -271,7 +302,7 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
       enc->create(enc);
       enc->config(enc);
       enc->feedback(enc);
-      flush(enc, PIPE_FLUSH_ASYNC);
+      flush(enc, PIPE_FLUSH_ASYNC, NULL);
       // dump_feedback(enc, &fb);
       si_vid_destroy_buffer(&fb);
       need_rate_control = false;
@@ -280,7 +311,7 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
    if (need_rate_control) {
       enc->session(enc);
       enc->config(enc);
-      flush(enc, PIPE_FLUSH_ASYNC);
+      flush(enc, PIPE_FLUSH_ASYNC, NULL);
    }
 }
 
@@ -303,14 +334,13 @@ static void rvce_encode_bitstream(struct pipe_video_codec *encoder,
    enc->feedback(enc);
 }
 
-static void rvce_end_frame(struct pipe_video_codec *encoder, struct pipe_video_buffer *source,
-                           struct pipe_picture_desc *picture)
+static int rvce_end_frame(struct pipe_video_codec *encoder, struct pipe_video_buffer *source,
+                          struct pipe_picture_desc *picture)
 {
    struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
    struct rvce_cpb_slot *slot = list_entry(enc->cpb_slots.prev, struct rvce_cpb_slot, list);
 
-   if (!enc->dual_inst || enc->bs_idx > 1)
-      flush(enc, picture->flush_flags);
+   flush(enc, picture->flush_flags, picture->fence);
 
    /* update the CPB backtrack with the just encoded frame */
    slot->picture_type = enc->pic.picture_type;
@@ -320,6 +350,7 @@ static void rvce_end_frame(struct pipe_video_codec *encoder, struct pipe_video_b
       list_del(&slot->list);
       list_add(&slot->list, &enc->cpb_slots);
    }
+   return 0;
 }
 
 static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, unsigned *size,
@@ -345,6 +376,15 @@ static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, 
    FREE(fb);
 }
 
+static int rvce_fence_wait(struct pipe_video_codec *encoder,
+                           struct pipe_fence_handle *fence,
+                           uint64_t timeout)
+{
+   struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
+
+   return enc->ws->fence_wait(enc->ws, fence, timeout);
+}
+
 static void rvce_destroy_fence(struct pipe_video_codec *encoder,
                                struct pipe_fence_handle *fence)
 {
@@ -360,7 +400,7 @@ static void rvce_flush(struct pipe_video_codec *encoder)
 {
    struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
 
-   flush(enc, PIPE_FLUSH_ASYNC);
+   flush(enc, PIPE_FLUSH_ASYNC, NULL);
 }
 
 static void rvce_cs_flush(void *ctx, unsigned flags, struct pipe_fence_handle **fence)
@@ -375,9 +415,6 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
    struct si_screen *sscreen = (struct si_screen *)context->screen;
    struct si_context *sctx = (struct si_context *)context;
    struct rvce_encoder *enc;
-   struct pipe_video_buffer *tmp_buf, templat = {};
-   struct radeon_surf *tmp_surf;
-   unsigned cpb_size;
 
    if (!sscreen->info.vce_fw_version) {
       RVID_ERR("Kernel doesn't supports VCE!\n");
@@ -401,10 +438,6 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
        sscreen->info.family != CHIP_POLARIS11 && sscreen->info.family != CHIP_POLARIS12 &&
        sscreen->info.family != CHIP_VEGAM)
       enc->dual_pipe = true;
-   /* TODO enable B frame with dual instance */
-   if ((sscreen->info.family >= CHIP_TONGA) && (templ->max_references == 1) &&
-       (sscreen->info.vce_harvest_config == 0))
-      enc->dual_inst = true;
 
    enc->base = *templ;
    enc->base.context = context;
@@ -415,6 +448,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
    enc->base.end_frame = rvce_end_frame;
    enc->base.flush = rvce_flush;
    enc->base.get_feedback = rvce_get_feedback;
+   enc->base.fence_wait = rvce_fence_wait;
    enc->base.destroy_fence = rvce_destroy_fence;
    enc->get_buffer = get_buffer;
 
@@ -425,45 +459,6 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
       RVID_ERR("Can't get command submission context.\n");
       goto error;
    }
-
-   templat.buffer_format = PIPE_FORMAT_NV12;
-   templat.width = enc->base.width;
-   templat.height = enc->base.height;
-   templat.interlaced = false;
-   if (!(tmp_buf = context->create_video_buffer(context, &templat))) {
-      RVID_ERR("Can't create video buffer.\n");
-      goto error;
-   }
-
-   enc->cpb_num = get_cpb_num(enc);
-   if (!enc->cpb_num)
-      goto error;
-
-   get_buffer(((struct vl_video_buffer *)tmp_buf)->resources[0], NULL, &tmp_surf);
-
-   cpb_size = (sscreen->info.gfx_level < GFX9)
-                 ? align(tmp_surf->u.legacy.level[0].nblk_x * tmp_surf->bpe, 128) *
-                      align(tmp_surf->u.legacy.level[0].nblk_y, 32)
-                 :
-
-                 align(tmp_surf->u.gfx9.surf_pitch * tmp_surf->bpe, 256) *
-                    align(tmp_surf->u.gfx9.surf_height, 32);
-
-   cpb_size = cpb_size * 3 / 2;
-   cpb_size = cpb_size * enc->cpb_num;
-   if (enc->dual_pipe)
-      cpb_size += RVCE_MAX_AUX_BUFFER_NUM * RVCE_MAX_BITSTREAM_OUTPUT_ROW_SIZE * 2;
-   tmp_buf->destroy(tmp_buf);
-   if (!si_vid_create_buffer(enc->screen, &enc->cpb, cpb_size, PIPE_USAGE_DEFAULT)) {
-      RVID_ERR("Can't create CPB buffer.\n");
-      goto error;
-   }
-
-   enc->cpb_array = CALLOC(enc->cpb_num, sizeof(struct rvce_cpb_slot));
-   if (!enc->cpb_array)
-      goto error;
-
-   reset_cpb(enc);
 
    switch (sscreen->info.vce_fw_version) {
    case FW_40_2_2:
@@ -495,9 +490,6 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 error:
    enc->ws->cs_destroy(&enc->cs);
 
-   si_vid_destroy_buffer(&enc->cpb);
-
-   FREE(enc->cpb_array);
    FREE(enc);
    return NULL;
 }

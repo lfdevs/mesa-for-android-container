@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2021 Valve Corporation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright © 2021 Valve Corporation
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ir3_compiler.h"
@@ -402,6 +384,39 @@ aggressive_coalesce_collect(struct ir3_liveness *live,
 }
 
 static void
+aggressive_coalesce_rpt(struct ir3_liveness *live,
+                        struct ir3_instruction *instr)
+{
+   if (!ir3_instr_is_first_rpt(instr))
+      return;
+
+   struct ir3_register *def = instr->dsts[0];
+   unsigned def_offset = 0;
+   unsigned src_offsets[instr->srcs_count];
+   memset(src_offsets, 0, sizeof(unsigned) * instr->srcs_count);
+
+   foreach_instr_rpt_excl (rpt, instr) {
+      if (!(rpt->dsts[0]->flags & IR3_REG_SSA))
+         continue;
+
+      def_offset += reg_elem_size(def);
+      try_merge_defs(live, def, rpt->dsts[0], def_offset);
+
+      foreach_src_n (src, src_n, instr) {
+         struct ir3_register *rpt_src = rpt->srcs[src_n];
+
+         if (!(src->flags & IR3_REG_SSA) || !(rpt_src->flags & IR3_REG_SSA))
+            continue;
+         if (src->def == rpt_src->def)
+            continue;
+
+         src_offsets[src_n] += reg_elem_size(src->def);
+         try_merge_defs(live, src->def, rpt_src->def, src_offsets[src_n]);
+      }
+   }
+}
+
+static void
 create_parallel_copy(struct ir3_block *block)
 {
    for (unsigned i = 0; i < 2; i++) {
@@ -591,6 +606,12 @@ ir3_merge_regs(struct ir3_liveness *live, struct ir3 *ir)
          default:
             break;
          }
+      }
+   }
+
+   foreach_block (block, &ir->block_list) {
+      foreach_instr (instr, &block->instr_list) {
+         aggressive_coalesce_rpt(live, instr);
       }
    }
 

@@ -13,31 +13,8 @@
 #include "nv_push_cl902d.h"
 
 struct mme_fermi_sim {
-   uint32_t param_count;
-   const uint32_t *params;
-
-   /* Bound memory ranges */
-   uint32_t mem_count;
-   struct mme_fermi_sim_mem *mems;
-
-   /* SET_MME_MEM_ADDRESS_A/B */
-   uint64_t mem_addr;
-
-   /* RAM, accessed by STATE */
-   struct {
-      uint32_t data[MME_FERMI_DRAM_COUNT];
-
-      /* SET_MME_MEM_RAM_ADDRESS */
-      uint32_t addr;
-   } ram;
-
-   struct {
-      // TODO: check if read_fifo is supported.
-      struct {
-         uint32_t data[1024];
-         uint64_t count;
-      } read_fifo;
-   } dma;
+   const struct mme_sim_state_ops *state_ops;
+   void *state_handler;
 
    struct {
       unsigned mthd:16;
@@ -45,86 +22,15 @@ struct mme_fermi_sim {
       bool has_mthd:1;
    } mthd;
 
-   /* SET_MME_SHADOW_SCRATCH(i) */
-   uint32_t scratch[MME_FERMI_SCRATCH_COUNT];
-
    uint32_t regs[7];
    uint32_t alu_carry;
    uint16_t ip;
    uint16_t next_ip;
 };
 
-static uint32_t *
-find_mem(struct mme_fermi_sim *sim, uint64_t addr, const char *op_desc)
-{
-   for (uint32_t i = 0; i < sim->mem_count; i++) {
-      if (addr < sim->mems[i].addr)
-         continue;
-
-      uint64_t offset = addr - sim->mems[i].addr;
-      if (offset >= sim->mems[i].size)
-         continue;
-
-      assert(sim->mems[i].data != NULL);
-      return (uint32_t *)((char *)sim->mems[i].data + offset);
-   }
-
-   fprintf(stderr, "FAULT in %s at address 0x%"PRIx64"\n", op_desc, addr);
-   abort();
-}
-
-static uint32_t
-read_dmem(struct mme_fermi_sim *sim, uint64_t addr, const char *op_desc)
-{
-   uint32_t ram_index = addr / 4;
-
-   if (ram_index < ARRAY_SIZE(sim->ram.data)) {
-      return sim->ram.data[ram_index];
-   }
-
-   if (addr >= NV9097_SET_MME_SHADOW_SCRATCH(0) && addr < NV9097_CALL_MME_MACRO(0)) {
-      return sim->scratch[ram_index - NV9097_SET_MME_SHADOW_SCRATCH(0) / 4];
-   }
-
-   fprintf(stderr, "FAULT in %s at DMEM address 0x%"PRIx64"\n (READ)", op_desc, addr);
-   abort();
-}
-
-static void
-write_dmem(struct mme_fermi_sim *sim, uint64_t addr, uint32_t val, const char *op_desc)
-{
-   uint32_t ram_index = addr / 4;
-
-   if (ram_index < ARRAY_SIZE(sim->ram.data)) {
-      sim->ram.data[ram_index] = val;
-   }
-   else if (addr >= NV9097_SET_MME_SHADOW_SCRATCH(0) && addr < NV9097_CALL_MME_MACRO(0)) {
-      sim->scratch[ram_index - NV9097_SET_MME_SHADOW_SCRATCH(0) / 4] = val;
-   } else {
-      fprintf(stderr, "FAULT in %s at DMEM address 0x%"PRIx64" (WRITE)\n", op_desc, addr);
-      abort();
-   }
-}
-
-static uint64_t
-read_dmem64(struct mme_fermi_sim *sim, uint64_t addr, const char *op_desc)
-{
-   return ((uint64_t)read_dmem(sim, addr, op_desc) << 32) | read_dmem(sim, addr + 4, op_desc);
-}
-
 static uint32_t load_param(struct mme_fermi_sim *sim)
 {
-   if (sim->param_count == 0) {
-      // TODO: know what happens on hardware here
-      return 0;
-   }
-
-   uint32_t param = *sim->params;
-
-   sim->params++;
-   sim->param_count--;
-
-   return param;
+   return sim->state_ops->load(sim->state_handler);
 }
 
 static uint32_t load_reg(struct mme_fermi_sim *sim, enum mme_fermi_reg reg)
@@ -148,6 +54,11 @@ static void store_reg(struct mme_fermi_sim *sim, enum mme_fermi_reg reg, uint32_
 static int32_t load_imm(const struct mme_fermi_inst *inst)
 {
    return util_mask_sign_extend(inst->imm, 18);
+}
+
+static uint32_t load_state(struct mme_fermi_sim *sim, uint16_t addr)
+{
+   return sim->state_ops->state(sim->state_handler, addr);
 }
 
 static uint32_t eval_bfe_lsl(uint32_t value, uint32_t src_bit, uint32_t dst_bit, uint8_t size)
@@ -216,7 +127,7 @@ static uint32_t eval_op(struct mme_fermi_sim *sim, const struct mme_fermi_inst *
       case MME_FERMI_OP_BFE_LSL_REG:
          return eval_bfe_lsl(y, inst->bitfield.src_bit, x, inst->bitfield.size);
       case MME_FERMI_OP_STATE:
-         return read_dmem(sim, (x + load_imm(inst)) * 4, "STATE");
+         return load_state(sim, (x + load_imm(inst)) * 4);
       // TODO: reverse MME_FERMI_OP_UNK6
       default:
          unreachable("Unhandled op");
@@ -238,34 +149,7 @@ emit_mthd(struct mme_fermi_sim *sim, uint32_t val)
    if (!sim->mthd.has_mthd)
       return;
 
-   uint16_t mthd = sim->mthd.mthd;
-
-   write_dmem(sim, mthd, val, "EMIT");
-
-   switch (mthd) {
-   case NV9097_SET_REPORT_SEMAPHORE_D: {
-      assert(val == 0x10000000);
-
-      uint64_t addr = read_dmem64(sim, NV9097_SET_REPORT_SEMAPHORE_A, "SET_REPORT_SEMAPHORE");
-      uint32_t data = read_dmem(sim, NV9097_SET_REPORT_SEMAPHORE_C, "SET_REPORT_SEMAPHORE");
-
-      uint32_t *mem = find_mem(sim, addr, "SET_REPORT_SEMAPHORE");
-      *mem = data;
-      break;
-   }
-   case NV902D_SET_MME_DATA_RAM_ADDRESS:
-      sim->ram.addr = val;
-      break;
-   case NV902D_SET_MME_MEM_ADDRESS_B:
-      sim->mem_addr = read_dmem64(sim, NV902D_SET_MME_MEM_ADDRESS_A, "SET_MME_MEM_ADDRESS");
-      break;
-   case NV902D_MME_DMA_READ_FIFOED:
-      sim->dma.read_fifo.count = val;
-      break;
-   default:
-      break;
-   }
-
+   sim->state_ops->mthd(sim->state_handler, sim->mthd.mthd, val);
    sim->mthd.mthd += sim->mthd.inc * 4;
 }
 
@@ -323,15 +207,14 @@ eval_inst(struct mme_fermi_sim *sim, const struct mme_fermi_inst *inst)
    }
 }
 
-void mme_fermi_sim(uint32_t inst_count, const struct mme_fermi_inst *insts,
-                   uint32_t param_count, const uint32_t *params,
-                   uint32_t mem_count, struct mme_fermi_sim_mem *mems)
+void
+mme_fermi_sim_core(uint32_t inst_count, const struct mme_fermi_inst *insts,
+                   const struct mme_sim_state_ops *state_ops,
+                   void *state_handler)
 {
    struct mme_fermi_sim sim = {
-      .param_count = param_count,
-      .params = params,
-      .mem_count = mem_count,
-      .mems = mems,
+      .state_ops = state_ops,
+      .state_handler = state_handler,
    };
 
    sim.ip = 0;
@@ -372,4 +255,133 @@ void mme_fermi_sim(uint32_t inst_count, const struct mme_fermi_inst *insts,
    // Handle delay slot at exit
    assert(sim.ip < inst_count);
    eval_inst(&sim, &insts[sim.ip]);
+}
+
+struct mme_fermi_state_sim {
+   uint32_t param_count;
+   const uint32_t *params;
+
+   /* Bound memory ranges */
+   uint32_t mem_count;
+   struct mme_fermi_sim_mem *mems;
+
+   /* SET_MME_SHADOW_SCRATCH(i) */
+   uint32_t scratch[MME_FERMI_SCRATCH_COUNT];
+
+   struct {
+      uint32_t addr_hi;
+      uint32_t addr_lo;
+      uint32_t data;
+   } report_sem;
+};
+
+static uint32_t *
+find_mem(struct mme_fermi_state_sim *sim, uint64_t addr, const char *op_desc)
+{
+   for (uint32_t i = 0; i < sim->mem_count; i++) {
+      if (addr < sim->mems[i].addr)
+         continue;
+
+      uint64_t offset = addr - sim->mems[i].addr;
+      if (offset >= sim->mems[i].size)
+         continue;
+
+      assert(sim->mems[i].data != NULL);
+      return (uint32_t *)((char *)sim->mems[i].data + offset);
+   }
+
+   fprintf(stderr, "FAULT in %s at address 0x%"PRIx64"\n", op_desc, addr);
+   abort();
+}
+
+static uint32_t
+mme_fermi_state_sim_load(void *_sim)
+{
+   struct mme_fermi_state_sim *sim = _sim;
+
+   assert(sim->param_count > 0);
+   uint32_t data = *sim->params;
+   sim->params++;
+   sim->param_count--;
+
+   return data;
+}
+
+static uint32_t
+mme_fermi_state_sim_state(void *_sim, uint16_t addr)
+{
+   struct mme_fermi_state_sim *sim = _sim;
+   assert(addr % 4 == 0);
+
+   if (NV9097_SET_MME_SHADOW_SCRATCH(0) <= addr &&
+       addr < NV9097_CALL_MME_MACRO(0)) {
+      uint32_t i = (addr - NV9097_SET_MME_SHADOW_SCRATCH(0)) / 4;
+      assert(i <= ARRAY_SIZE(sim->scratch));
+      return sim->scratch[i];
+   }
+
+   return 0;
+}
+
+static void
+mme_fermi_state_sim_mthd(void *_sim, uint16_t addr, uint32_t data)
+{
+   struct mme_fermi_state_sim *sim = _sim;
+   assert(addr % 4 == 0);
+
+   switch (addr) {
+   case NV9097_SET_REPORT_SEMAPHORE_A:
+      sim->report_sem.addr_hi = data;
+      break;
+   case NV9097_SET_REPORT_SEMAPHORE_B:
+      sim->report_sem.addr_lo = data;
+      break;
+   case NV9097_SET_REPORT_SEMAPHORE_C:
+      sim->report_sem.data = data;
+      break;
+   case NV9097_SET_REPORT_SEMAPHORE_D: {
+      assert(data == 0x10000000);
+      uint64_t sem_report_addr =
+         ((uint64_t)sim->report_sem.addr_hi << 32) | sim->report_sem.addr_lo;
+      uint32_t *mem = find_mem(sim, sem_report_addr, "SET_REPORT_SEMAPHORE");
+      *mem = sim->report_sem.data;
+      break;
+   }
+   default:
+      if (NV9097_SET_MME_SHADOW_SCRATCH(0) <= addr &&
+          addr < NV9097_CALL_MME_MACRO(0)) {
+         uint32_t i = (addr - NV9097_SET_MME_SHADOW_SCRATCH(0)) / 4;
+         assert(i <= ARRAY_SIZE(sim->scratch));
+         sim->scratch[i] = data;
+      } else {
+         fprintf(stdout, "%s:\n", P_PARSE_NV9097_MTHD(addr));
+         P_DUMP_NV9097_MTHD_DATA(stdout, addr, data, "    ");
+      }
+      break;
+   }
+}
+
+static const struct mme_sim_state_ops mme_fermi_state_sim_ops = {
+   .load = mme_fermi_state_sim_load,
+   .state = mme_fermi_state_sim_state,
+   .mthd = mme_fermi_state_sim_mthd,
+};
+
+void
+mme_fermi_sim(uint32_t inst_count, const struct mme_fermi_inst *insts,
+              uint32_t param_count, const uint32_t *params,
+              uint32_t mem_count, struct mme_fermi_sim_mem *mems)
+{
+   const uint32_t zero = 0;
+   struct mme_fermi_state_sim state_sim = {
+      /* We need at least one param because the first param is always
+       * preloaded into $r1.
+       */
+      .param_count = MAX2(1, param_count),
+      .params = param_count == 0 ? &zero : params,
+      .mem_count = mem_count,
+      .mems = mems,
+   };
+
+   mme_fermi_sim_core(inst_count, insts, &mme_fermi_state_sim_ops, &state_sim);
 }

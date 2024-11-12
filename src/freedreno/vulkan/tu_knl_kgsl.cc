@@ -165,6 +165,7 @@ bo_init_new_ion_legacy(struct tu_device *dev, struct tu_bo **out_bo, uint64_t si
 
 static VkResult
 kgsl_bo_init(struct tu_device *dev,
+             struct vk_object_base *base,
              struct tu_bo **out_bo,
              uint64_t size,
              uint64_t client_iova,
@@ -231,6 +232,7 @@ kgsl_bo_init(struct tu_device *dev,
       .name = tu_debug_bos_add(dev, req.mmapsize, name),
       .refcnt = 1,
       .shared_fd = -1,
+      .base = base,
    };
 
    if (flags & TU_BO_ALLOC_REPLAYABLE) {
@@ -1092,7 +1094,7 @@ kgsl_queue_submit(struct tu_queue *queue, struct vk_queue_submit *vk_submit)
    }
 
    uint32_t perf_pass_index =
-      queue->device->perfcntrs_pass_cs ? vk_submit->perf_pass_index : ~0;
+      queue->device->perfcntrs_pass_cs_entries ? vk_submit->perf_pass_index : ~0;
 
    if (TU_DEBUG(LOG_SKIP_GMEM_OPS))
       tu_dbg_log_gmem_load_store_skips(queue->device);
@@ -1559,6 +1561,17 @@ tu_knl_kgsl_load(struct tu_instance *instance, int fd)
    if (get_kgsl_prop(fd, KGSL_PROP_UCHE_GMEM_VADDR, &gmem_iova, sizeof(gmem_iova)))
       goto fail;
 
+   uint32_t highest_bank_bit;
+   if (get_kgsl_prop(fd, KGSL_PROP_HIGHEST_BANK_BIT, &highest_bank_bit,
+                     sizeof(highest_bank_bit)))
+      goto fail;
+
+   uint32_t ubwc_version;
+   if (get_kgsl_prop(fd, KGSL_PROP_UBWC_MODE, &ubwc_version,
+                     sizeof(ubwc_version)))
+      goto fail;
+
+
    /* kgsl version check? */
 
    device->instance = instance;
@@ -1593,6 +1606,48 @@ tu_knl_kgsl_load(struct tu_instance *instance, int fd)
    device->has_cached_coherent_memory = kgsl_is_memory_type_supported(
       fd, KGSL_MEMFLAGS_IOCOHERENT |
              (KGSL_CACHEMODE_WRITEBACK << KGSL_CACHEMODE_SHIFT));
+
+   /* preemption is always supported on kgsl */
+   device->has_preemption = true;
+
+   device->ubwc_config.highest_bank_bit = highest_bank_bit;
+
+   /* The other config values can be partially inferred from the UBWC version,
+    * but kgsl also hardcodes overrides for specific a6xx versions that we
+    * have to follow here. Yuck.
+    */
+   switch (ubwc_version) {
+   case KGSL_UBWC_1_0:
+      device->ubwc_config.bank_swizzle_levels = 0x7;
+      device->ubwc_config.macrotile_mode = FDL_MACROTILE_4_CHANNEL;
+      break;
+   case KGSL_UBWC_2_0:
+      device->ubwc_config.bank_swizzle_levels = 0x6;
+      device->ubwc_config.macrotile_mode = FDL_MACROTILE_4_CHANNEL;
+      break;
+   case KGSL_UBWC_3_0:
+      device->ubwc_config.bank_swizzle_levels = 0x6;
+      device->ubwc_config.macrotile_mode = FDL_MACROTILE_4_CHANNEL;
+      break;
+   case KGSL_UBWC_4_0:
+      device->ubwc_config.bank_swizzle_levels = 0x6;
+      device->ubwc_config.macrotile_mode = FDL_MACROTILE_8_CHANNEL;
+      break;
+   default:
+      return vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
+                       "unknown UBWC version 0x%x", ubwc_version);
+   }
+
+   /* kgsl unfortunately hardcodes some settings for certain GPUs and doesn't
+    * expose them in the uAPI so hardcode them here to match.
+    */
+   if (device->dev_id.gpu_id == 663 || device->dev_id.gpu_id == 680) {
+      device->ubwc_config.macrotile_mode = FDL_MACROTILE_8_CHANNEL;
+   }
+   if (device->dev_id.gpu_id == 663) {
+      /* level2_swizzling_dis = 1 */
+      device->ubwc_config.bank_swizzle_levels = 0x4;
+   }
 
    instance->knl = &kgsl_knl_funcs;
 

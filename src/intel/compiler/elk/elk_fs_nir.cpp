@@ -1174,21 +1174,6 @@ fs_nir_emit_alu(nir_to_elk_state &ntb, nir_alu_instr *instr,
       inst = bld.emit(ELK_SHADER_OPCODE_COS, result, op[0]);
       break;
 
-   case nir_op_fddx_fine:
-      inst = bld.emit(ELK_FS_OPCODE_DDX_FINE, result, op[0]);
-      break;
-   case nir_op_fddx:
-   case nir_op_fddx_coarse:
-      inst = bld.emit(ELK_FS_OPCODE_DDX_COARSE, result, op[0]);
-      break;
-   case nir_op_fddy_fine:
-      inst = bld.emit(ELK_FS_OPCODE_DDY_FINE, result, op[0]);
-      break;
-   case nir_op_fddy:
-   case nir_op_fddy_coarse:
-      inst = bld.emit(ELK_FS_OPCODE_DDY_COARSE, result, op[0]);
-      break;
-
    case nir_op_fadd:
       if (nir_has_any_rounding_mode_enabled(execution_mode)) {
          elk_rnd_mode rnd =
@@ -3854,7 +3839,8 @@ fs_nir_emit_fs_intrinsic(nir_to_elk_state &ntb,
       break;
    }
 
-   case nir_intrinsic_load_input: {
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_per_primitive_input: {
       /* In Fragment Shaders load_input is used either for flat inputs or
        * per-primitive inputs.
        */
@@ -5285,69 +5271,6 @@ fs_nir_emit_intrinsic(nir_to_elk_state &ntb,
       fs_nir_emit_global_atomic(ntb, bld, instr);
       break;
 
-   case nir_intrinsic_load_global_const_block_intel: {
-      assert(instr->def.bit_size == 32);
-      assert(instr->num_components == 8 || instr->num_components == 16);
-
-      const fs_builder ubld = bld.exec_all().group(instr->num_components, 0);
-      elk_fs_reg load_val;
-
-      bool is_pred_const = nir_src_is_const(instr->src[1]);
-      if (is_pred_const && nir_src_as_uint(instr->src[1]) == 0) {
-         /* In this case, we don't want the UBO load at all.  We really
-          * shouldn't get here but it's possible.
-          */
-         load_val = elk_imm_ud(0);
-      } else {
-         /* The uniform process may stomp the flag so do this first */
-         elk_fs_reg addr = bld.emit_uniformize(get_nir_src(ntb, instr->src[0]));
-
-         load_val = ubld.vgrf(ELK_REGISTER_TYPE_UD);
-
-         /* If the predicate is constant and we got here, then it's non-zero
-          * and we don't need the predicate at all.
-          */
-         if (!is_pred_const) {
-            /* Load the predicate */
-            elk_fs_reg pred = bld.emit_uniformize(get_nir_src(ntb, instr->src[1]));
-            elk_fs_inst *mov = ubld.MOV(bld.null_reg_d(), pred);
-            mov->conditional_mod = ELK_CONDITIONAL_NZ;
-
-            /* Stomp the destination with 0 if we're OOB */
-            mov = ubld.MOV(load_val, elk_imm_ud(0));
-            mov->predicate = ELK_PREDICATE_NORMAL;
-            mov->predicate_inverse = true;
-         }
-
-         elk_fs_reg srcs[A64_LOGICAL_NUM_SRCS];
-         srcs[A64_LOGICAL_ADDRESS] = addr;
-         srcs[A64_LOGICAL_SRC] = elk_fs_reg(); /* No source data */
-         srcs[A64_LOGICAL_ARG] = elk_imm_ud(instr->num_components);
-         /* This intrinsic loads memory from a uniform address, sometimes
-          * shared across lanes. We never need to mask it.
-          */
-         srcs[A64_LOGICAL_ENABLE_HELPERS] = elk_imm_ud(0);
-
-         elk_fs_inst *load = ubld.emit(ELK_SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL,
-                                   load_val, srcs, A64_LOGICAL_NUM_SRCS);
-         if (!is_pred_const)
-            load->predicate = ELK_PREDICATE_NORMAL;
-      }
-
-      /* From the HW perspective, we just did a single SIMD16 instruction
-       * which loaded a dword in each SIMD channel.  From NIR's perspective,
-       * this instruction returns a vec16.  Any users of this data in the
-       * back-end will expect a vec16 per SIMD channel so we have to emit a
-       * pile of MOVs to resolve this discrepancy.  Fortunately, copy-prop
-       * will generally clean them up for us.
-       */
-      for (unsigned i = 0; i < instr->num_components; i++) {
-         bld.MOV(retype(offset(dest, bld, i), ELK_REGISTER_TYPE_UD),
-                 component(load_val, i));
-      }
-      break;
-   }
-
    case nir_intrinsic_load_global_constant_uniform_block_intel: {
       const unsigned total_dwords = ALIGN(instr->num_components,
                                           REG_SIZE * reg_unit(devinfo) / 4);
@@ -6013,6 +5936,25 @@ fs_nir_emit_intrinsic(nir_to_elk_state &ntb,
       }
       break;
    }
+
+   case nir_intrinsic_ddx_fine:
+      bld.emit(ELK_FS_OPCODE_DDX_FINE, retype(dest, ELK_REGISTER_TYPE_F),
+               retype(get_nir_src(ntb, instr->src[0]), ELK_REGISTER_TYPE_F));
+      break;
+   case nir_intrinsic_ddx:
+   case nir_intrinsic_ddx_coarse:
+      bld.emit(ELK_FS_OPCODE_DDX_COARSE, retype(dest, ELK_REGISTER_TYPE_F),
+               retype(get_nir_src(ntb, instr->src[0]), ELK_REGISTER_TYPE_F));
+      break;
+   case nir_intrinsic_ddy_fine:
+      bld.emit(ELK_FS_OPCODE_DDY_FINE, retype(dest, ELK_REGISTER_TYPE_F),
+               retype(get_nir_src(ntb, instr->src[0]), ELK_REGISTER_TYPE_F));
+      break;
+   case nir_intrinsic_ddy:
+   case nir_intrinsic_ddy_coarse:
+      bld.emit(ELK_FS_OPCODE_DDY_COARSE, retype(dest, ELK_REGISTER_TYPE_F),
+               retype(get_nir_src(ntb, instr->src[0]), ELK_REGISTER_TYPE_F));
+      break;
 
    case nir_intrinsic_reduce: {
       elk_fs_reg src = get_nir_src(ntb, instr->src[0]);

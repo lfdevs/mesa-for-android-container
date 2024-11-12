@@ -313,6 +313,17 @@ nir_build_tex_deref_instr(nir_builder *build, nir_texop op,
 }
 
 nir_def *
+nir_build_string(nir_builder *build, const char *value)
+{
+   nir_debug_info_instr *instr =
+      nir_debug_info_instr_create(build->shader, nir_debug_info_string, strlen(value));
+   memcpy(instr->string, value, instr->string_length);
+   nir_def_init(&instr->instr, &instr->def, 1, nir_get_ptr_bitsize(build->shader));
+   nir_builder_instr_insert(build, &instr->instr);
+   return &instr->def;
+}
+
+nir_def *
 nir_vec_scalars(nir_builder *build, nir_scalar *comp, unsigned num_components)
 {
    nir_op op = nir_op_vec(num_components);
@@ -374,9 +385,6 @@ nir_builder_instr_insert(nir_builder *build, nir_instr *instr)
 {
    nir_instr_insert(build->cursor, instr);
 
-   if (build->update_divergence)
-      nir_update_instr_divergence(build->shader, instr);
-
    /* Move the cursor forward. */
    build->cursor = nir_after_instr(instr);
 }
@@ -389,9 +397,6 @@ nir_builder_instr_insert_at_top(nir_builder *build, nir_instr *instr)
                        nir_cursors_equal(build->cursor, top);
 
    nir_instr_insert(top, instr);
-
-   if (build->update_divergence)
-      nir_update_instr_divergence(build->shader, instr);
 
    if (at_top)
       build->cursor = nir_after_instr(instr);

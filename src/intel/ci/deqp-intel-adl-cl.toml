@@ -1,0 +1,9 @@
+[[piglit]]
+piglit_folder = "/piglit"
+profile = "cl"
+process_isolation = true
+  [piglit.env]
+  PIGLIT_PLATFORM = "mixed_glx_egl"
+  RUSTICL_ENABLE = "iris"
+  RUSTICL_FEATURES = "fp16,fp64"
+  INTEL_DEBUG = "cl-quiet"

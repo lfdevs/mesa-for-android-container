@@ -247,6 +247,18 @@ public:
       free(buffer);
    }
 
+   /* Move-constructor and -assignment */
+   monotonic_buffer_resource(monotonic_buffer_resource&& other) : monotonic_buffer_resource()
+   {
+      *this = std::move(other);
+   }
+   monotonic_buffer_resource& operator=(monotonic_buffer_resource&& other)
+   {
+      release();
+      std::swap(buffer, other.buffer);
+      return *this;
+   }
+
    /* Delete copy-constructor and -assignment to avoid double free() */
    monotonic_buffer_resource(const monotonic_buffer_resource&) = delete;
    monotonic_buffer_resource& operator=(const monotonic_buffer_resource&) = delete;
@@ -515,6 +527,23 @@ struct IDSet {
 
    explicit IDSet(monotonic_buffer_resource& m) : words(m) {}
    explicit IDSet(const IDSet& other, monotonic_buffer_resource& m) : words(other.words, m) {}
+
+   bool operator==(const IDSet& other) const
+   {
+      auto it = words.begin();
+      for (auto block : other.words) {
+         if (block.second == block_t{0})
+            continue;
+         while (it != words.end() && it->second == block_t{0})
+            it++;
+         if (it == words.end() || block != *it)
+            return false;
+         it++;
+      }
+
+      return true;
+   }
+   bool operator!=(const IDSet& other) const { return !(*this == other); }
 
 private:
    static uint32_t get_first_set(const block_t& words)

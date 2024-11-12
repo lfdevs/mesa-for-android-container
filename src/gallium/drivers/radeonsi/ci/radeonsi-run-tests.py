@@ -209,6 +209,7 @@ gpu_name = "unknown"
 gpu_name_full = ""
 gfx_level = -1
 
+amd_debug = env["AMD_DEBUG"] if "AMD_DEBUG" in env else ""
 env["AMD_DEBUG"] = "info"
 p = subprocess.run(
     ["./glinfo"],
@@ -218,6 +219,8 @@ p = subprocess.run(
     env=env,
 )
 del env["AMD_DEBUG"]
+env["AMD_DEBUG"] = amd_debug
+
 for line in p.stdout.decode().split("\n"):
     if "GL_RENDER" in line:
         line = line.split("=")[1]

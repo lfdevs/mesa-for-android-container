@@ -88,9 +88,7 @@ gather_load_fs_input_info(const nir_shader *nir, const nir_intrinsic_instr *intr
    const bool per_primitive = nir->info.per_primitive_inputs & BITFIELD64_BIT(location);
 
    if (!per_primitive) {
-      if (intrin->intrinsic == nir_intrinsic_load_input) {
-         info->ps.flat_shaded_mask |= mapped_mask;
-      } else if (intrin->intrinsic == nir_intrinsic_load_input_vertex) {
+      if (intrin->intrinsic == nir_intrinsic_load_input_vertex) {
          if (io_sem.interp_explicit_strict)
             info->ps.explicit_strict_shaded_mask |= mapped_mask;
          else
@@ -100,6 +98,8 @@ gather_load_fs_input_info(const nir_shader *nir, const nir_intrinsic_instr *intr
             info->ps.float16_hi_shaded_mask |= mapped_mask;
          else
             info->ps.float16_shaded_mask |= mapped_mask;
+      } else if (intrin->intrinsic == nir_intrinsic_load_interpolated_input) {
+         info->ps.float32_shaded_mask |= mapped_mask;
       }
    }
 
@@ -270,6 +270,9 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
       }
       break;
    }
+   case nir_intrinsic_load_pixel_coord:
+      info->ps.reads_pixel_coord = true;
+      break;
    case nir_intrinsic_load_frag_coord:
       info->ps.reads_frag_coord_mask |= nir_def_components_read(&instr->def);
       break;
@@ -294,6 +297,7 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
       break;
    }
    case nir_intrinsic_load_input:
+   case nir_intrinsic_load_per_primitive_input:
    case nir_intrinsic_load_interpolated_input:
    case nir_intrinsic_load_input_vertex:
       gather_intrinsic_load_input_info(nir, instr, info, gfx_state, stage_key);
@@ -507,6 +511,9 @@ radv_compute_esgs_itemsize(const struct radv_device *device, uint32_t num_varyin
 static void
 gather_shader_info_ngg_query(struct radv_device *device, struct radv_shader_info *info)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   info->gs.has_pipeline_stat_query = pdev->emulate_ngg_gs_query_pipeline_stat && info->stage == MESA_SHADER_GEOMETRY;
    info->has_xfb_query = info->so.num_outputs > 0;
    info->has_prim_query = device->cache_key.primitives_generated_query || info->has_xfb_query;
 }
@@ -554,6 +561,9 @@ gather_shader_info_vs(struct radv_device *device, const nir_shader *nir,
       info->vs.has_prolog = true;
       info->vs.dynamic_inputs = true;
    }
+
+   info->gs_inputs_read = ~0ULL;
+   info->vs.hs_inputs_read = ~0ULL;
 
    /* Use per-attribute vertex descriptors to prevent faults and for correct bounds checking. */
    info->vs.use_per_attribute_vb_descs = radv_use_per_attribute_vb_descs(nir, gfx_state, stage_key);
@@ -636,6 +646,7 @@ gather_shader_info_tcs(struct radv_device *device, const nir_shader *nir,
 static void
 gather_shader_info_tes(struct radv_device *device, const nir_shader *nir, struct radv_shader_info *info)
 {
+   info->gs_inputs_read = ~0ULL;
    info->tes._primitive_mode = nir->info.tess._primitive_mode;
    info->tes.spacing = nir->info.tess.spacing;
    info->tes.ccw = nir->info.tess.ccw;
@@ -803,7 +814,6 @@ radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_inf
 static void
 gather_shader_info_gs(struct radv_device *device, const nir_shader *nir, struct radv_shader_info *info)
 {
-   const struct radv_physical_device *pdev = radv_device_physical(device);
    unsigned add_clip = nir->info.clip_distance_array_size + nir->info.cull_distance_array_size > 4;
    info->gs.gsvs_vertex_size = (util_bitcount64(nir->info.outputs_written) + add_clip) * 16;
    info->gs.max_gsvs_emit_size = info->gs.gsvs_vertex_size * nir->info.gs.vertices_out;
@@ -814,7 +824,6 @@ gather_shader_info_gs(struct radv_device *device, const nir_shader *nir, struct 
    info->gs.output_prim = nir->info.gs.output_primitive;
    info->gs.invocations = nir->info.gs.invocations;
    info->gs.max_stream = nir->info.gs.active_stream_mask ? util_last_bit(nir->info.gs.active_stream_mask) - 1 : 0;
-   info->gs.has_pipeline_stat_query = pdev->emulate_ngg_gs_query_pipeline_stat;
 
    for (unsigned slot = 0; slot < VARYING_SLOT_MAX; ++slot) {
       const uint8_t usage_mask = info->gs.output_usage_mask[slot];
@@ -933,6 +942,7 @@ gather_shader_info_fs(const struct radv_device *device, const nir_shader *nir,
    info->ps.post_depth_coverage = nir->info.fs.post_depth_coverage;
    info->ps.depth_layout = nir->info.fs.depth_layout;
    info->ps.uses_sample_shading = nir->info.fs.uses_sample_shading;
+   info->ps.uses_fbfetch_output = nir->info.fs.uses_fbfetch_output;
    info->ps.writes_memory = nir->info.writes_memory;
    info->ps.has_pcoord = nir->info.inputs_read & VARYING_BIT_PNTC;
    info->ps.prim_id_input = nir->info.inputs_read & VARYING_BIT_PRIMITIVE_ID;
@@ -956,6 +966,7 @@ gather_shader_info_fs(const struct radv_device *device, const nir_shader *nir,
       !(uses_persp_or_linear_interp || info->ps.needs_sample_positions || info->ps.reads_frag_shading_rate ||
         info->ps.writes_memory || nir->info.fs.needs_quad_helper_invocations ||
         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD) ||
+        BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PIXEL_COORD) ||
         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_POINT_COORD) ||
         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS) ||
@@ -972,9 +983,9 @@ gather_shader_info_fs(const struct radv_device *device, const nir_shader *nir,
       info->ps.spi_ps_input_addr &= C_02865C_COVERAGE_TO_SHADER_SELECT;
    }
 
-   info->has_epilog = gfx_state->ps.has_epilog && info->ps.colors_written;
+   info->ps.has_epilog = gfx_state->ps.has_epilog && info->ps.colors_written;
 
-   if (!info->has_epilog) {
+   if (!info->ps.has_epilog) {
       info->ps.mrt0_is_dual_src = gfx_state->ps.epilog.mrt0_is_dual_src;
       info->ps.spi_shader_col_format = gfx_state->ps.epilog.spi_shader_col_format;
 
@@ -988,7 +999,7 @@ gather_shader_info_fs(const struct radv_device *device, const nir_shader *nir,
       (info->ps.color0_written & 0x8) && (info->ps.writes_z || info->ps.writes_stencil || info->ps.writes_sample_mask);
 
    info->ps.exports_mrtz_via_epilog =
-      info->has_epilog && gfx_state->ps.exports_mrtz_via_epilog && export_alpha_and_mrtz;
+      info->ps.has_epilog && gfx_state->ps.exports_mrtz_via_epilog && export_alpha_and_mrtz;
 
    if (!info->ps.exports_mrtz_via_epilog) {
       info->ps.writes_mrt0_alpha = gfx_state->ms.alpha_to_coverage_via_mrtz && export_alpha_and_mrtz;
@@ -1759,11 +1770,17 @@ radv_link_shaders_info(struct radv_device *device, struct radv_shader_stage *pro
 
          es_info->workgroup_size = gs_info->workgroup_size;
       }
+
+      if (consumer && consumer->stage == MESA_SHADER_GEOMETRY) {
+         producer->info.gs_inputs_read = consumer->nir->info.inputs_read;
+      }
    }
 
    if (producer->stage == MESA_SHADER_VERTEX && consumer && consumer->stage == MESA_SHADER_TESS_CTRL) {
       struct radv_shader_stage *vs_stage = producer;
       struct radv_shader_stage *tcs_stage = consumer;
+
+      vs_stage->info.vs.hs_inputs_read = tcs_stage->nir->info.inputs_read;
 
       if (gfx_state->ts.patch_control_points) {
          vs_stage->info.workgroup_size =

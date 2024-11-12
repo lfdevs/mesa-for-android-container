@@ -992,7 +992,7 @@ struct zink_shader_module {
 struct zink_program {
    struct pipe_reference reference;
    struct zink_context *ctx;
-   unsigned char sha1[20];
+   blake3_hash blake3;
    struct util_queue_fence cache_fence;
    struct u_rwlock pipeline_cache_lock;
    VkPipelineCache pipeline_cache;
@@ -1272,7 +1272,6 @@ struct zink_resource_object {
    VkFormatFeatureFlags vkfeats;
    uint64_t modifier;
    VkImageAspectFlags modifier_aspect;
-   VkSamplerYcbcrConversion sampler_conversion;
    unsigned plane_offsets[3];
    unsigned plane_strides[3];
    unsigned plane_count;
@@ -1288,6 +1287,7 @@ struct zink_resource {
    enum pipe_format internal_format:16;
 
    struct zink_resource_object *obj;
+   struct pipe_surface *surface; //for swapchain images
    uint32_t queue;
    union {
       struct {
@@ -1370,7 +1370,7 @@ struct zink_transfer {
 
 
 /** screen types */
-struct zink_modifier_prop {
+struct zink_modifier_props {
     uint32_t                             drmFormatModifierCount;
     VkDrmFormatModifierPropertiesEXT*    pDrmFormatModifierProperties;
 };
@@ -1383,6 +1383,9 @@ struct zink_format_props {
 
 struct zink_screen {
    struct pipe_screen base;
+
+   const char *vendor_name;
+   const char *device_name;
 
    struct util_dl_library *loader_lib;
    PFN_vkGetInstanceProcAddr vk_GetInstanceProcAddr;
@@ -1519,11 +1522,19 @@ struct zink_screen {
    } driconf;
 
    struct zink_format_props format_props[PIPE_FORMAT_COUNT];
-   struct zink_modifier_prop modifier_props[PIPE_FORMAT_COUNT];
+   struct zink_modifier_props modifier_props[PIPE_FORMAT_COUNT];
+   bool format_props_init[PIPE_FORMAT_COUNT];
 
    VkExtent2D maxSampleLocationGridSize[5];
    VkPipelineLayout gfx_push_constant_layout;
 
+   struct {
+      /* these affect shader cache */
+      bool lower_robustImageAccess2;
+      bool needs_zs_shader_swizzle;
+      bool needs_sanitised_layer;
+      bool io_opt;
+   } driver_compiler_workarounds;
    struct {
       bool broken_l4a4;
       /* https://gitlab.khronos.org/vulkan/vulkan/-/issues/3306
@@ -1535,17 +1546,14 @@ struct zink_screen {
       bool disable_optimized_compile;
       bool always_feedback_loop;
       bool always_feedback_loop_zs;
-      bool needs_sanitised_layer;
       bool track_renderpasses;
       bool no_linestipple;
       bool no_linesmooth;
       bool no_hw_gl_point;
-      bool lower_robustImageAccess2;
-      bool needs_zs_shader_swizzle;
       bool can_do_invalid_linear_modifier;
-      bool io_opt;
       bool inconsistent_interpolation;
       bool can_2d_view_sparse;
+      bool general_depth_layout;
       unsigned z16_unscaled_bias;
       unsigned z24_unscaled_bias;
    } driver_workarounds;

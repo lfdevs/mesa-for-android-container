@@ -75,7 +75,7 @@ compute_local_index_id(nir_builder *b,
     */
 
    nir_def *id_x, *id_y, *id_z;
-   switch (nir->info.cs.derivative_group) {
+   switch (nir->info.derivative_group) {
    case DERIVATIVE_GROUP_NONE:
       if (nir->info.num_images == 0 &&
           nir->info.num_textures == 0) {
@@ -308,10 +308,10 @@ elk_nir_lower_cs_intrinsics(nir_shader *nir,
    /* Constraints from NV_compute_shader_derivatives. */
    if (gl_shader_stage_is_compute(nir->info.stage) &&
        !nir->info.workgroup_size_variable) {
-      if (nir->info.cs.derivative_group == DERIVATIVE_GROUP_QUADS) {
+      if (nir->info.derivative_group == DERIVATIVE_GROUP_QUADS) {
          assert(nir->info.workgroup_size[0] % 2 == 0);
          assert(nir->info.workgroup_size[1] % 2 == 0);
-      } else if (nir->info.cs.derivative_group == DERIVATIVE_GROUP_LINEAR) {
+      } else if (nir->info.derivative_group == DERIVATIVE_GROUP_LINEAR) {
          ASSERTED unsigned workgroup_size =
             nir->info.workgroup_size[0] *
             nir->info.workgroup_size[1] *

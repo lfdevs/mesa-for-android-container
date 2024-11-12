@@ -700,10 +700,8 @@ radv_emit_compute(struct radv_device *device, struct radeon_cmdbuf *cs, bool is_
    ac_pm4_set_reg(pm4, R_00B814_COMPUTE_START_Y, 0);
    ac_pm4_set_reg(pm4, R_00B818_COMPUTE_START_Z, 0);
 
-   if (device->tma_bo) {
+   if (pdev->info.gfx_level == GFX8 && device->tma_bo) {
       uint64_t tba_va, tma_va;
-
-      assert(pdev->info.gfx_level == GFX8);
 
       tba_va = radv_shader_get_va(device->trap_handler_shader);
       tma_va = radv_buffer_get_va(device->tma_bo);
@@ -721,64 +719,6 @@ radv_emit_compute(struct radv_device *device, struct radeon_cmdbuf *cs, bool is_
    ac_pm4_free_state(pm4);
 }
 
-static void
-radv_write_harvested_raster_configs(struct radv_physical_device *pdev, struct radeon_cmdbuf *cs, unsigned raster_config,
-                                    unsigned raster_config_1)
-{
-   unsigned num_se = MAX2(pdev->info.max_se, 1);
-   unsigned raster_config_se[4];
-   unsigned se;
-
-   ac_get_harvested_configs(&pdev->info, raster_config, &raster_config_1, raster_config_se);
-
-   for (se = 0; se < num_se; se++) {
-      /* GRBM_GFX_INDEX has a different offset on GFX6 and GFX7+ */
-      if (pdev->info.gfx_level < GFX7)
-         radeon_set_config_reg(
-            cs, R_00802C_GRBM_GFX_INDEX,
-            S_00802C_SE_INDEX(se) | S_00802C_SH_BROADCAST_WRITES(1) | S_00802C_INSTANCE_BROADCAST_WRITES(1));
-      else
-         radeon_set_uconfig_reg(
-            cs, R_030800_GRBM_GFX_INDEX,
-            S_030800_SE_INDEX(se) | S_030800_SH_BROADCAST_WRITES(1) | S_030800_INSTANCE_BROADCAST_WRITES(1));
-      radeon_set_context_reg(cs, R_028350_PA_SC_RASTER_CONFIG, raster_config_se[se]);
-   }
-
-   /* GRBM_GFX_INDEX has a different offset on GFX6 and GFX7+ */
-   if (pdev->info.gfx_level < GFX7)
-      radeon_set_config_reg(
-         cs, R_00802C_GRBM_GFX_INDEX,
-         S_00802C_SE_BROADCAST_WRITES(1) | S_00802C_SH_BROADCAST_WRITES(1) | S_00802C_INSTANCE_BROADCAST_WRITES(1));
-   else
-      radeon_set_uconfig_reg(
-         cs, R_030800_GRBM_GFX_INDEX,
-         S_030800_SE_BROADCAST_WRITES(1) | S_030800_SH_BROADCAST_WRITES(1) | S_030800_INSTANCE_BROADCAST_WRITES(1));
-
-   if (pdev->info.gfx_level >= GFX7)
-      radeon_set_context_reg(cs, R_028354_PA_SC_RASTER_CONFIG_1, raster_config_1);
-}
-
-static void
-radv_set_raster_config(struct radv_physical_device *pdev, struct radeon_cmdbuf *cs)
-{
-   unsigned num_rb = MIN2(pdev->info.max_render_backends, 16);
-   uint64_t rb_mask = pdev->info.enabled_rb_mask;
-   unsigned raster_config, raster_config_1;
-
-   ac_get_raster_config(&pdev->info, &raster_config, &raster_config_1, NULL);
-
-   /* Always use the default config when all backends are enabled
-    * (or when we failed to determine the enabled backends).
-    */
-   if (!rb_mask || util_bitcount64(rb_mask) >= num_rb) {
-      radeon_set_context_reg(cs, R_028350_PA_SC_RASTER_CONFIG, raster_config);
-      if (pdev->info.gfx_level >= GFX7)
-         radeon_set_context_reg(cs, R_028354_PA_SC_RASTER_CONFIG_1, raster_config_1);
-   } else {
-      radv_write_harvested_raster_configs(pdev, cs, raster_config, raster_config_1);
-   }
-}
-
 /* 12.4 fixed-point */
 static unsigned
 radv_pack_float_12p4(float x)
@@ -790,7 +730,7 @@ void
 radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
 {
    struct radv_physical_device *pdev = radv_device_physical(device);
-
+   const uint64_t border_color_va = device->border_color_data.bo ? radv_buffer_get_va(device->border_color_data.bo) : 0;
    bool has_clear_state = pdev->info.has_clear_state;
    int i;
 
@@ -805,62 +745,15 @@ radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       }
    }
 
-   if (pdev->info.gfx_level <= GFX8)
-      radv_set_raster_config(pdev, cs);
+   struct ac_pm4_state *pm4 = ac_pm4_create_sized(&pdev->info, false, 512, false);
+   if (!pm4)
+      return;
 
-   /* Emulated in shader code on GFX9+. */
-   if (pdev->info.gfx_level >= GFX9)
-      radeon_set_context_reg(cs, R_028AAC_VGT_ESGS_RING_ITEMSIZE, 1);
+   const struct ac_preamble_state preamble_state = {
+      .border_color_va = border_color_va,
+   };
 
-   radeon_set_context_reg(cs, R_028A18_VGT_HOS_MAX_TESS_LEVEL, fui(64));
-   if (!has_clear_state)
-      radeon_set_context_reg(cs, R_028A1C_VGT_HOS_MIN_TESS_LEVEL, fui(0));
-
-   /* FIXME calculate these values somehow ??? */
-   if (pdev->info.gfx_level <= GFX8) {
-      radeon_set_context_reg(cs, R_028A54_VGT_GS_PER_ES, SI_GS_PER_ES);
-      radeon_set_context_reg(cs, R_028A58_VGT_ES_PER_GS, 0x40);
-   }
-
-   if (!has_clear_state) {
-      if (pdev->info.gfx_level < GFX11) {
-         radeon_set_context_reg(cs, R_028A5C_VGT_GS_PER_VS, 0x2);
-         radeon_set_context_reg(cs, R_028B98_VGT_STRMOUT_BUFFER_CONFIG, 0x0);
-      }
-
-      if (pdev->info.gfx_level >= GFX12) {
-         radeon_set_uconfig_reg(cs, R_0309B4_VGT_PRIMITIVEID_RESET, 0x0);
-      } else {
-         radeon_set_context_reg(cs, R_028A8C_VGT_PRIMITIVEID_RESET, 0x0);
-      }
-   }
-
-   if (pdev->info.gfx_level <= GFX9)
-      radeon_set_context_reg(cs, R_028AA0_VGT_INSTANCE_STEP_RATE_0, 1);
-   if (!has_clear_state && pdev->info.gfx_level < GFX11)
-      radeon_set_context_reg(cs, R_028AB8_VGT_VTX_CNT_EN, 0x0);
-   if (pdev->info.gfx_level < GFX7)
-      radeon_set_config_reg(cs, R_008A14_PA_CL_ENHANCE, S_008A14_NUM_CLIP_SEQ(3) | S_008A14_CLIP_VTX_REORDER_ENA(1));
-
-   if (!has_clear_state)
-      radeon_set_context_reg(cs, R_02882C_PA_SU_PRIM_FILTER_CNTL, 0);
-
-   /* CLEAR_STATE doesn't clear these correctly on certain generations.
-    * I don't know why. Deduced by trial and error.
-    */
-   if (pdev->info.gfx_level <= GFX7 || !has_clear_state) {
-      radeon_set_context_reg(cs, R_028B28_VGT_STRMOUT_DRAW_OPAQUE_OFFSET, 0);
-      radeon_set_context_reg(cs, R_028204_PA_SC_WINDOW_SCISSOR_TL, S_028204_WINDOW_OFFSET_DISABLE(1));
-      radeon_set_context_reg(cs, R_028240_PA_SC_GENERIC_SCISSOR_TL, S_028240_WINDOW_OFFSET_DISABLE(1));
-      radeon_set_context_reg(cs, R_028244_PA_SC_GENERIC_SCISSOR_BR,
-                             S_028244_BR_X(MAX_FRAMEBUFFER_WIDTH) | S_028244_BR_Y(MAX_FRAMEBUFFER_HEIGHT));
-
-      if (pdev->info.gfx_level >= GFX12) {
-         radeon_set_context_reg(cs, R_028180_PA_SC_SCREEN_SCISSOR_TL, 0);
-      } else {
-         radeon_set_context_reg(cs, R_028030_PA_SC_SCREEN_SCISSOR_TL, 0);
-      }
-   }
+   ac_init_graphics_preamble_state(&preamble_state, pm4);
 
    if (!has_clear_state) {
       for (i = 0; i < 16; i++) {
@@ -870,149 +763,32 @@ radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
    }
 
    if (!has_clear_state) {
-      radeon_set_context_reg(cs, R_02820C_PA_SC_CLIPRECT_RULE, 0xFFFF);
       radeon_set_context_reg(cs, R_028230_PA_SC_EDGERULE, 0xAAAAAAAA);
       /* PA_SU_HARDWARE_SCREEN_OFFSET must be 0 due to hw bug on GFX6 */
       radeon_set_context_reg(cs, R_028234_PA_SU_HARDWARE_SCREEN_OFFSET, 0);
-      radeon_set_context_reg(cs, R_028820_PA_CL_NANINF_CNTL, 0);
-      radeon_set_context_reg(cs, R_028AC0_DB_SRESULTS_COMPARE_STATE0, 0x0);
-      radeon_set_context_reg(cs, R_028AC4_DB_SRESULTS_COMPARE_STATE1, 0x0);
-
-      if (pdev->info.gfx_level < GFX12)
-         radeon_set_context_reg(cs, R_028AC8_DB_PRELOAD_CONTROL, 0x0);
    }
 
-   radeon_set_context_reg(
-      cs, R_02800C_DB_RENDER_OVERRIDE,
-      S_02800C_FORCE_HIS_ENABLE0(V_02800C_FORCE_DISABLE) | S_02800C_FORCE_HIS_ENABLE1(V_02800C_FORCE_DISABLE));
-
-   if (pdev->info.gfx_level >= GFX10) {
-      if (pdev->info.gfx_level >= GFX12) {
-         radeon_set_context_reg(cs, R_028AA0_VGT_DRAW_PAYLOAD_CNTL, 0);
-      }
-
-      radeon_set_uconfig_reg(cs, R_030964_GE_MAX_VTX_INDX, ~0);
-      radeon_set_uconfig_reg(cs, R_030924_GE_MIN_VTX_INDX, 0);
-      radeon_set_uconfig_reg(cs, R_030928_GE_INDX_OFFSET, 0);
-      radeon_set_uconfig_reg(cs, R_03097C_GE_STEREO_CNTL, 0);
-
-      if (pdev->info.gfx_level >= GFX12) {
-         radeon_set_uconfig_reg(cs, R_030980_GE_USER_VGPR_EN, 0);
-      } else {
-         radeon_set_uconfig_reg(cs, R_030988_GE_USER_VGPR_EN, 0);
-      }
-
-      if (pdev->info.gfx_level < GFX11) {
-         radeon_set_context_reg(cs, R_028038_DB_DFSM_CONTROL, S_028038_PUNCHOUT_MODE(V_028038_FORCE_OFF));
-      }
-   } else if (pdev->info.gfx_level == GFX9) {
-      radeon_set_uconfig_reg(cs, R_030920_VGT_MAX_VTX_INDX, ~0);
-      radeon_set_uconfig_reg(cs, R_030924_VGT_MIN_VTX_INDX, 0);
-      radeon_set_uconfig_reg(cs, R_030928_VGT_INDX_OFFSET, 0);
-
-      radeon_set_context_reg(cs, R_028060_DB_DFSM_CONTROL, S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF));
-   } else {
-      /* These registers, when written, also overwrite the
-       * CLEAR_STATE context, so we can't rely on CLEAR_STATE setting
-       * them.  It would be an issue if there was another UMD
-       * changing them.
-       */
-      radeon_set_context_reg(cs, R_028400_VGT_MAX_VTX_INDX, ~0);
-      radeon_set_context_reg(cs, R_028404_VGT_MIN_VTX_INDX, 0);
-      radeon_set_context_reg(cs, R_028408_VGT_INDX_OFFSET, 0);
-   }
-
-   if (pdev->info.gfx_level >= GFX10) {
-      radeon_set_sh_reg(cs, R_00B524_SPI_SHADER_PGM_HI_LS, S_00B524_MEM_BASE(pdev->info.address32_hi >> 8));
+   if (pdev->info.gfx_level <= GFX8)
       radeon_set_sh_reg(cs, R_00B324_SPI_SHADER_PGM_HI_ES, S_00B324_MEM_BASE(pdev->info.address32_hi >> 8));
-   } else if (pdev->info.gfx_level == GFX9) {
-      radeon_set_sh_reg(cs, R_00B414_SPI_SHADER_PGM_HI_LS, S_00B414_MEM_BASE(pdev->info.address32_hi >> 8));
-      radeon_set_sh_reg(cs, R_00B214_SPI_SHADER_PGM_HI_ES, S_00B214_MEM_BASE(pdev->info.address32_hi >> 8));
-   } else {
-      radeon_set_sh_reg(cs, R_00B524_SPI_SHADER_PGM_HI_LS, S_00B524_MEM_BASE(pdev->info.address32_hi >> 8));
-      radeon_set_sh_reg(cs, R_00B324_SPI_SHADER_PGM_HI_ES, S_00B324_MEM_BASE(pdev->info.address32_hi >> 8));
-   }
 
    if (pdev->info.gfx_level < GFX11)
       radeon_set_sh_reg(cs, R_00B124_SPI_SHADER_PGM_HI_VS, S_00B124_MEM_BASE(pdev->info.address32_hi >> 8));
 
-   unsigned cu_mask_ps = 0xffffffff;
+   unsigned cu_mask_ps = pdev->info.gfx_level >= GFX10_3 ? ac_gfx103_get_cu_mask_ps(&pdev->info) : ~0u;
 
-   /* It's wasteful to enable all CUs for PS if shader arrays have a
-    * different number of CUs. The reason is that the hardware sends the
-    * same number of PS waves to each shader array, so the slowest shader
-    * array limits the performance.  Disable the extra CUs for PS in
-    * other shader arrays to save power and thus increase clocks for busy
-    * CUs. In the future, we might disable or enable this tweak only for
-    * certain apps.
-    */
-   if (pdev->info.gfx_level >= GFX10_3)
-      cu_mask_ps = u_bit_consecutive(0, pdev->info.min_good_cu_per_sa);
-
-   if (pdev->info.gfx_level >= GFX7) {
-      if (pdev->info.gfx_level >= GFX10 && pdev->info.gfx_level < GFX11) {
-         /* Logical CUs 16 - 31 */
-         radeon_set_sh_reg_idx(&pdev->info, cs, R_00B104_SPI_SHADER_PGM_RSRC4_VS, 3,
-                               ac_apply_cu_en(S_00B104_CU_EN(0xffff), C_00B104_CU_EN, 16, &pdev->info));
-      }
-
-      if (pdev->info.gfx_level >= GFX10) {
-         if (pdev->info.gfx_level >= GFX12) {
-            radeon_set_sh_reg(cs, R_00B420_SPI_SHADER_PGM_RSRC4_HS,
-                              S_00B420_WAVE_LIMIT(0x3ff) | S_00B420_GLG_FORCE_DISABLE(1));
-            radeon_set_sh_reg(cs, R_00B01C_SPI_SHADER_PGM_RSRC4_PS,
-                              S_00B01C_WAVE_LIMIT_GFX12(0x3FF) | S_00B01C_LDS_GROUP_SIZE_GFX12(1));
-         } else {
-            radeon_set_sh_reg_idx(&pdev->info, cs, R_00B404_SPI_SHADER_PGM_RSRC4_HS, 3,
-                                  ac_apply_cu_en(S_00B404_CU_EN(0xffff), C_00B404_CU_EN, 16, &pdev->info));
-            radeon_set_sh_reg_idx(&pdev->info, cs, R_00B004_SPI_SHADER_PGM_RSRC4_PS, 3,
-                                  ac_apply_cu_en(S_00B004_CU_EN(cu_mask_ps >> 16), C_00B004_CU_EN, 16, &pdev->info));
-         }
-
-      }
-
-      if (pdev->info.gfx_level >= GFX9) {
-         radeon_set_sh_reg_idx(
-            &pdev->info, cs, R_00B41C_SPI_SHADER_PGM_RSRC3_HS, 3,
-            ac_apply_cu_en(S_00B41C_CU_EN(0xffff) | S_00B41C_WAVE_LIMIT(0x3F), C_00B41C_CU_EN, 0, &pdev->info));
-      } else {
-         radeon_set_sh_reg(
-            cs, R_00B51C_SPI_SHADER_PGM_RSRC3_LS,
-            ac_apply_cu_en(S_00B51C_CU_EN(0xffff) | S_00B51C_WAVE_LIMIT(0x3F), C_00B51C_CU_EN, 0, &pdev->info));
-         radeon_set_sh_reg(cs, R_00B41C_SPI_SHADER_PGM_RSRC3_HS, S_00B41C_WAVE_LIMIT(0x3F));
-         radeon_set_sh_reg(
-            cs, R_00B31C_SPI_SHADER_PGM_RSRC3_ES,
-            ac_apply_cu_en(S_00B31C_CU_EN(0xffff) | S_00B31C_WAVE_LIMIT(0x3F), C_00B31C_CU_EN, 0, &pdev->info));
-         /* If this is 0, Bonaire can hang even if GS isn't being used.
-          * Other chips are unaffected. These are suboptimal values,
-          * but we don't use on-chip GS.
-          */
-         radeon_set_context_reg(cs, R_028A44_VGT_GS_ONCHIP_CNTL,
-                                S_028A44_ES_VERTS_PER_SUBGRP(64) | S_028A44_GS_PRIMS_PER_SUBGRP(4));
-      }
-
-      radeon_set_sh_reg_idx(&pdev->info, cs, R_00B01C_SPI_SHADER_PGM_RSRC3_PS, 3,
-                            ac_apply_cu_en(S_00B01C_CU_EN(cu_mask_ps) | S_00B01C_WAVE_LIMIT_GFX7(0x3F) |
-                                              S_00B01C_LDS_GROUP_SIZE_GFX11(pdev->info.gfx_level >= GFX11),
-                                           C_00B01C_CU_EN, 0, &pdev->info));
+   if (pdev->info.gfx_level >= GFX12) {
+      radeon_set_sh_reg(cs, R_00B420_SPI_SHADER_PGM_RSRC4_HS,
+                        S_00B420_WAVE_LIMIT(0x3ff) | S_00B420_GLG_FORCE_DISABLE(1));
+      radeon_set_sh_reg(cs, R_00B01C_SPI_SHADER_PGM_RSRC4_PS,
+                        S_00B01C_WAVE_LIMIT_GFX12(0x3FF) | S_00B01C_LDS_GROUP_SIZE_GFX12(1));
+   } else if (pdev->info.gfx_level >= GFX11) {
+      radeon_set_sh_reg_idx(&pdev->info, cs, R_00B404_SPI_SHADER_PGM_RSRC4_HS, 3,
+                            ac_apply_cu_en(S_00B404_CU_EN(0xffff), C_00B404_CU_EN, 16, &pdev->info));
+      radeon_set_sh_reg_idx(&pdev->info, cs, R_00B004_SPI_SHADER_PGM_RSRC4_PS, 3,
+                            ac_apply_cu_en(S_00B004_CU_EN(cu_mask_ps >> 16), C_00B004_CU_EN, 16, &pdev->info));
    }
 
    if (pdev->info.gfx_level >= GFX10) {
-      /* Break up a pixel wave if it contains deallocs for more than
-       * half the parameter cache.
-       *
-       * To avoid a deadlock where pixel waves aren't launched
-       * because they're waiting for more pixels while the frontend
-       * is stuck waiting for PC space, the maximum allowed value is
-       * the size of the PC minus the largest possible allocation for
-       * a single primitive shader subgroup.
-       */
-      uint32_t max_deallocs_in_wave = pdev->info.gfx_level >= GFX11 ? 16 : 512;
-      radeon_set_context_reg(cs, R_028C50_PA_SC_NGG_MODE_CNTL, S_028C50_MAX_DEALLOCS_IN_WAVE(max_deallocs_in_wave));
-
-      if (pdev->info.gfx_level < GFX11)
-         radeon_set_context_reg(cs, R_028C58_VGT_VERTEX_REUSE_BLOCK_CNTL, 14);
-
       /* Vulkan doesn't support user edge flags and it also doesn't
        * need to prevent drawing lines on internal edges of
        * decomposed primitives (such as quads) with polygon mode = lines.
@@ -1021,112 +797,10 @@ radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       radeon_set_context_reg(cs, R_028838_PA_CL_NGG_CNTL,
                              S_028838_INDEX_BUF_EDGE_FLAG_ENA(0) | S_028838_VERTEX_REUSE_DEPTH(vertex_reuse_depth));
 
-      /* Enable CMASK/FMASK/HTILE/DCC caching in L2 for small chips. */
-      unsigned meta_write_policy, meta_read_policy;
-      unsigned no_alloc = pdev->info.gfx_level >= GFX11 ? V_02807C_CACHE_NOA_GFX11 : V_02807C_CACHE_NOA_GFX10;
-
-      /* TODO: investigate whether LRU improves performance on other chips too */
-      if (pdev->info.max_render_backends <= 4) {
-         meta_write_policy = V_02807C_CACHE_LRU_WR; /* cache writes */
-         meta_read_policy = V_02807C_CACHE_LRU_RD;  /* cache reads */
-      } else {
-         meta_write_policy = V_02807C_CACHE_STREAM; /* write combine */
-         meta_read_policy = no_alloc;               /* don't cache reads */
-      }
-
-      if (pdev->info.gfx_level < GFX12) {
-         radeon_set_context_reg(cs, R_02807C_DB_RMI_L2_CACHE_CONTROL,
-                                S_02807C_Z_WR_POLICY(V_02807C_CACHE_STREAM) |
-                                   S_02807C_S_WR_POLICY(V_02807C_CACHE_STREAM) |
-                                   S_02807C_HTILE_WR_POLICY(meta_write_policy) |
-                                   S_02807C_ZPCPSD_WR_POLICY(V_02807C_CACHE_STREAM) | S_02807C_Z_RD_POLICY(no_alloc) |
-                                   S_02807C_S_RD_POLICY(no_alloc) | S_02807C_HTILE_RD_POLICY(meta_read_policy));
-      }
-
-      uint32_t gl2_cc;
-      if (pdev->info.gfx_level >= GFX11) {
-         gl2_cc = S_028410_DCC_WR_POLICY_GFX11(meta_write_policy) |
-                  S_028410_COLOR_WR_POLICY_GFX11(V_028410_CACHE_STREAM) |
-                  S_028410_COLOR_RD_POLICY(V_028410_CACHE_NOA_GFX11);
-      } else {
-         gl2_cc = S_028410_CMASK_WR_POLICY(meta_write_policy) | S_028410_FMASK_WR_POLICY(V_028410_CACHE_STREAM) |
-                  S_028410_DCC_WR_POLICY_GFX10(meta_write_policy) |
-                  S_028410_COLOR_WR_POLICY_GFX10(V_028410_CACHE_STREAM) | S_028410_CMASK_RD_POLICY(meta_read_policy) |
-                  S_028410_FMASK_RD_POLICY(V_028410_CACHE_NOA_GFX10) |
-                  S_028410_COLOR_RD_POLICY(V_028410_CACHE_NOA_GFX10);
-      }
-
-      radeon_set_context_reg(cs, R_028410_CB_RMI_GL2_CACHE_CONTROL, gl2_cc | S_028410_DCC_RD_POLICY(meta_read_policy));
-
-      radeon_set_sh_reg_seq(cs, R_00B0C8_SPI_SHADER_USER_ACCUM_PS_0, 4);
-      radeon_emit(cs, 0); /* R_00B0C8_SPI_SHADER_USER_ACCUM_PS_0 */
-      radeon_emit(cs, 0); /* R_00B0CC_SPI_SHADER_USER_ACCUM_PS_1 */
-      radeon_emit(cs, 0); /* R_00B0D0_SPI_SHADER_USER_ACCUM_PS_2 */
-      radeon_emit(cs, 0); /* R_00B0D4_SPI_SHADER_USER_ACCUM_PS_3 */
-
-      if (pdev->info.gfx_level < GFX11) {
-         radeon_set_sh_reg_seq(cs, R_00B1C8_SPI_SHADER_USER_ACCUM_VS_0, 4);
-         radeon_emit(cs, 0); /* R_00B1C8_SPI_SHADER_USER_ACCUM_VS_0 */
-         radeon_emit(cs, 0); /* R_00B1CC_SPI_SHADER_USER_ACCUM_VS_1 */
-         radeon_emit(cs, 0); /* R_00B1D0_SPI_SHADER_USER_ACCUM_VS_2 */
-         radeon_emit(cs, 0); /* R_00B1D4_SPI_SHADER_USER_ACCUM_VS_3 */
-      }
-
-      radeon_set_sh_reg_seq(cs, R_00B2C8_SPI_SHADER_USER_ACCUM_ESGS_0, 4);
-      radeon_emit(cs, 0); /* R_00B2C8_SPI_SHADER_USER_ACCUM_ESGS_0 */
-      radeon_emit(cs, 0); /* R_00B2CC_SPI_SHADER_USER_ACCUM_ESGS_1 */
-      radeon_emit(cs, 0); /* R_00B2D0_SPI_SHADER_USER_ACCUM_ESGS_2 */
-      radeon_emit(cs, 0); /* R_00B2D4_SPI_SHADER_USER_ACCUM_ESGS_3 */
-      radeon_set_sh_reg_seq(cs, R_00B4C8_SPI_SHADER_USER_ACCUM_LSHS_0, 4);
-      radeon_emit(cs, 0); /* R_00B4C8_SPI_SHADER_USER_ACCUM_LSHS_0 */
-      radeon_emit(cs, 0); /* R_00B4CC_SPI_SHADER_USER_ACCUM_LSHS_1 */
-      radeon_emit(cs, 0); /* R_00B4D0_SPI_SHADER_USER_ACCUM_LSHS_2 */
-      radeon_emit(cs, 0); /* R_00B4D4_SPI_SHADER_USER_ACCUM_LSHS_3 */
-
-      radeon_set_sh_reg(cs, R_00B0C0_SPI_SHADER_REQ_CTRL_PS,
-                        S_00B0C0_SOFT_GROUPING_EN(1) | S_00B0C0_NUMBER_OF_REQUESTS_PER_CU(4 - 1));
-
-      if (pdev->info.gfx_level < GFX11)
-         radeon_set_sh_reg(cs, R_00B1C0_SPI_SHADER_REQ_CTRL_VS, 0);
-
       if (pdev->info.gfx_level >= GFX10_3) {
-         radeon_set_context_reg(cs, R_028750_SX_PS_DOWNCONVERT_CONTROL, 0xff);
          /* This allows sample shading. */
          radeon_set_context_reg(cs, R_028848_PA_CL_VRS_CNTL,
                                 S_028848_SAMPLE_ITER_COMBINER_MODE(V_028848_SC_VRS_COMB_MODE_OVERRIDE));
-      }
-   }
-
-   if (pdev->info.gfx_level >= GFX11) {
-      /* ACCUM fields changed their meaning. */
-      radeon_set_context_reg(cs, R_028B50_VGT_TESS_DISTRIBUTION,
-                             S_028B50_ACCUM_ISOLINE(128) | S_028B50_ACCUM_TRI(128) | S_028B50_ACCUM_QUAD(128) |
-                                S_028B50_DONUT_SPLIT_GFX9(24) | S_028B50_TRAP_SPLIT(6));
-   } else if (pdev->info.gfx_level >= GFX9) {
-      radeon_set_context_reg(cs, R_028B50_VGT_TESS_DISTRIBUTION,
-                             S_028B50_ACCUM_ISOLINE(12) | S_028B50_ACCUM_TRI(30) | S_028B50_ACCUM_QUAD(24) |
-                                S_028B50_DONUT_SPLIT_GFX9(24) | S_028B50_TRAP_SPLIT(6));
-   } else if (pdev->info.gfx_level >= GFX8) {
-      uint32_t vgt_tess_distribution;
-
-      vgt_tess_distribution =
-         S_028B50_ACCUM_ISOLINE(32) | S_028B50_ACCUM_TRI(11) | S_028B50_ACCUM_QUAD(11) | S_028B50_DONUT_SPLIT_GFX81(16);
-
-      if (pdev->info.family == CHIP_FIJI || pdev->info.family >= CHIP_POLARIS10)
-         vgt_tess_distribution |= S_028B50_TRAP_SPLIT(3);
-
-      radeon_set_context_reg(cs, R_028B50_VGT_TESS_DISTRIBUTION, vgt_tess_distribution);
-   } else if (!has_clear_state) {
-      radeon_set_context_reg(cs, R_028C58_VGT_VERTEX_REUSE_BLOCK_CNTL, 14);
-      radeon_set_context_reg(cs, R_028C5C_VGT_OUT_DEALLOC_CNTL, 16);
-   }
-
-   if (device->border_color_data.bo) {
-      uint64_t border_color_va = radv_buffer_get_va(device->border_color_data.bo);
-
-      radeon_set_context_reg(cs, R_028080_TA_BC_BASE_ADDR, border_color_va >> 8);
-      if (pdev->info.gfx_level >= GFX7) {
-         radeon_set_context_reg(cs, R_028084_TA_BC_BASE_ADDR_HI, S_028084_ADDRESS(border_color_va >> 40));
       }
    }
 
@@ -1137,33 +811,11 @@ radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       radeon_set_context_reg(cs, R_02840C_VGT_MULTI_PRIM_IB_RESET_INDX, 0xffffffff);
    }
 
-   if (pdev->info.gfx_level >= GFX9) {
-      unsigned max_alloc_count = pdev->info.pbb_max_alloc_count;
-
-      /* GFX11+ shouldn't subtract 1 from pbb_max_alloc_count.  */
-      if (pdev->info.gfx_level < GFX11)
-         max_alloc_count -= 1;
-
-      radeon_set_context_reg(cs, R_028C48_PA_SC_BINNER_CNTL_1,
-                             S_028C48_MAX_ALLOC_COUNT(max_alloc_count) | S_028C48_MAX_PRIM_PER_BATCH(1023));
-
-      if (pdev->info.gfx_level >= GFX12) {
-         radeon_set_context_reg(cs, R_028C54_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL,
-                                S_028C4C_NULL_SQUAD_AA_MASK_ENABLE(1));
-      }
-
-      radeon_set_uconfig_reg(cs, R_030968_VGT_INSTANCE_BASE_ID, 0);
-   }
-
    unsigned tmp = (unsigned)(1.0 * 8.0);
    radeon_set_context_reg(cs, R_028A00_PA_SU_POINT_SIZE, S_028A00_HEIGHT(tmp) | S_028A00_WIDTH(tmp));
    radeon_set_context_reg(
       cs, R_028A04_PA_SU_POINT_MINMAX,
       S_028A04_MIN_SIZE(radv_pack_float_12p4(0)) | S_028A04_MAX_SIZE(radv_pack_float_12p4(8191.875 / 2)));
-
-   if (!has_clear_state) {
-      radeon_set_context_reg(cs, R_028004_DB_COUNT_CONTROL, S_028004_ZPASS_INCREMENT_DISABLE(1));
-   }
 
    /* Enable the Polaris small primitive filter control.
     * XXX: There is possibly an issue when MSAA is off (see RadeonSI
@@ -1212,10 +864,8 @@ radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
                                 S_028818_VPORT_Z_SCALE_ENA(1) | S_028818_VPORT_Z_OFFSET_ENA(1));
    }
 
-   if (device->tma_bo) {
+   if (pdev->info.gfx_level == GFX8 && device->tma_bo) {
       uint64_t tba_va, tma_va;
-
-      assert(pdev->info.gfx_level == GFX8);
 
       tba_va = radv_shader_get_va(device->trap_handler_shader);
       tma_va = radv_buffer_get_va(device->tma_bo);
@@ -1232,49 +882,15 @@ radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       }
    }
 
-   if (pdev->info.gfx_level >= GFX11) {
-      if (pdev->info.gfx_level >= GFX12) {
-         radeon_set_context_reg(cs, R_028C4C_PA_SC_BINNER_CNTL_2, S_028C4C_ENABLE_PING_PONG_BIN_ORDER(1));
-      } else if (pdev->info.gfx_level >= GFX11_5) {
-         radeon_set_context_reg(cs, R_028C54_PA_SC_BINNER_CNTL_2, S_028C54_ENABLE_PING_PONG_BIN_ORDER(1));
-      }
-
-      uint64_t rb_mask = BITFIELD64_MASK(pdev->info.max_render_backends);
-
-      radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 2, 0));
-      radeon_emit(cs, EVENT_TYPE(V_028A90_PIXEL_PIPE_STAT_CONTROL) | EVENT_INDEX(1));
-      radeon_emit(cs, PIXEL_PIPE_STATE_CNTL_COUNTER_ID(0) | PIXEL_PIPE_STATE_CNTL_STRIDE(2) |
-                         PIXEL_PIPE_STATE_CNTL_INSTANCE_EN_LO(rb_mask));
-      radeon_emit(cs, PIXEL_PIPE_STATE_CNTL_INSTANCE_EN_HI(rb_mask));
-   }
-
-   /* The exclusion bits can be set to improve rasterization efficiency if no sample lies on the
-    * pixel boundary (-8 sample offset). It's currently always TRUE because the driver doesn't
-    * support 16 samples.
-    */
-   bool exclusion = pdev->info.gfx_level >= GFX7;
-   radeon_set_context_reg(cs, R_02882C_PA_SU_PRIM_FILTER_CNTL,
-                          S_02882C_XMAX_RIGHT_EXCLUSION(exclusion) | S_02882C_YMAX_BOTTOM_EXCLUSION(exclusion));
-
    radeon_set_context_reg(cs, R_028828_PA_SU_LINE_STIPPLE_SCALE, 0x3f800000);
-   if (pdev->info.gfx_level >= GFX7) {
-      radeon_set_uconfig_reg(cs, R_030A00_PA_SU_LINE_STIPPLE_VALUE, 0);
-      radeon_set_uconfig_reg(cs, R_030A04_PA_SC_LINE_STIPPLE_STATE, 0);
-   } else {
-      radeon_set_config_reg(cs, R_008A60_PA_SU_LINE_STIPPLE_VALUE, 0);
-      radeon_set_config_reg(cs, R_008B10_PA_SC_LINE_STIPPLE_STATE, 0);
-   }
-
-   if (pdev->info.gfx_level >= GFX11) {
-      /* Disable primitive restart for all non-indexed draws. */
-      radeon_set_uconfig_reg(cs, R_03092C_GE_MULTI_PRIM_IB_RESET_EN, S_03092C_DISABLE_FOR_AUTO_INDEX(1));
-   }
 
    if (pdev->info.gfx_level >= GFX12) {
-      radeon_set_context_reg(cs, R_028A9C_VGT_REUSE_OFF, 0);
-      radeon_set_context_reg(cs, R_028C58_PA_SC_SHADER_CONTROL, 0);
       radeon_set_context_reg(cs, R_028000_DB_RENDER_CONTROL, 0);
    }
+
+   ac_pm4_finalize(pm4);
+   radeon_emit_array(cs, pm4->pm4, pm4->ndw);
+   ac_pm4_free_state(pm4);
 
    radv_emit_compute(device, cs, false);
 }
@@ -1648,7 +1264,6 @@ radv_update_preambles(struct radv_queue_state *queue, struct radv_device *device
                       bool *has_follower)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   bool has_indirect_pipeline_binds = false;
 
    if (queue->qf != RADV_QUEUE_GENERAL && queue->qf != RADV_QUEUE_COMPUTE) {
       for (uint32_t j = 0; j < cmd_buffer_count; j++) {
@@ -1688,16 +1303,6 @@ radv_update_preambles(struct radv_queue_state *queue, struct radv_device *device
       needs.sample_positions |= cmd_buffer->sample_positions_needed;
       *use_perf_counters |= cmd_buffer->state.uses_perf_counters;
       *has_follower |= !!cmd_buffer->gang.cs;
-
-      has_indirect_pipeline_binds |= cmd_buffer->has_indirect_pipeline_binds;
-   }
-
-   if (has_indirect_pipeline_binds) {
-      /* Use the maximum possible scratch size for indirect compute pipelines with DGC. */
-      simple_mtx_lock(&device->compute_scratch_mtx);
-      needs.compute_scratch_size_per_wave = MAX2(needs.compute_scratch_waves, device->compute_scratch_size_per_wave);
-      needs.compute_scratch_waves = MAX2(needs.compute_scratch_waves, device->compute_scratch_waves);
-      simple_mtx_unlock(&device->compute_scratch_mtx);
    }
 
    /* Sanitize scratch size information. */

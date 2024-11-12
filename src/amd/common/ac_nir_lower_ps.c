@@ -20,18 +20,22 @@ typedef struct {
    nir_variable *linear_sample;
    bool lower_load_barycentric;
 
-   /* Add one for dual source blend second output. */
-   nir_def *outputs[FRAG_RESULT_MAX + 1][4];
-   nir_alu_type output_types[FRAG_RESULT_MAX + 1];
+   nir_def *color[MAX_DRAW_BUFFERS][4];
+   nir_def *depth;
+   nir_def *stencil;
+   nir_def *sample_mask;
+
+   uint8_t colors_written;
+   nir_alu_type color_type[MAX_DRAW_BUFFERS];
+   bool has_dual_src_blending;
 
    /* MAX_DRAW_BUFFERS for MRT export, 1 for MRTZ export */
    nir_intrinsic_instr *exp[MAX_DRAW_BUFFERS + 1];
    unsigned exp_num;
 
    unsigned compacted_mrt_index;
+   unsigned spi_shader_col_format;
 } lower_ps_state;
-
-#define DUAL_SRC_BLEND_SLOT FRAG_RESULT_MAX
 
 static void
 create_interp_param(nir_builder *b, lower_ps_state *s)
@@ -194,26 +198,50 @@ lower_ps_load_barycentric(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_
 static bool
 gather_ps_store_output(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_state *s)
 {
-   nir_io_semantics sem = nir_intrinsic_io_semantics(intrin);
+   unsigned slot = nir_intrinsic_io_semantics(intrin).location;
+   unsigned dual_src_blend_index = nir_intrinsic_io_semantics(intrin).dual_source_blend_index;
    unsigned write_mask = nir_intrinsic_write_mask(intrin);
    unsigned component = nir_intrinsic_component(intrin);
-   nir_alu_type type = nir_intrinsic_src_type(intrin);
+   unsigned color_index = (slot >= FRAG_RESULT_DATA0 ? slot - FRAG_RESULT_DATA0 : 0) +
+                          dual_src_blend_index;
    nir_def *store_val = intrin->src[0].ssa;
 
    b->cursor = nir_before_instr(&intrin->instr);
 
-   unsigned slot = sem.dual_source_blend_index ?
-      DUAL_SRC_BLEND_SLOT : sem.location;
-
    u_foreach_bit (i, write_mask) {
+      nir_def *chan = nir_channel(b, store_val, i);
       unsigned comp = component + i;
-      s->outputs[slot][comp] = nir_channel(b, store_val, i);
+
+      switch (slot) {
+      case FRAG_RESULT_DEPTH:
+         assert(comp == 0);
+         s->depth = chan;
+         break;
+      case FRAG_RESULT_STENCIL:
+         assert(comp == 0);
+         s->stencil = chan;
+         break;
+      case FRAG_RESULT_SAMPLE_MASK:
+         assert(comp == 0);
+         if (!s->options->kill_samplemask)
+            s->sample_mask = chan;
+         break;
+      case FRAG_RESULT_COLOR:
+         s->color[color_index][comp] = chan;
+         break;
+      default:
+         assert(slot >= FRAG_RESULT_DATA0 && slot <= FRAG_RESULT_DATA7);
+         s->color[color_index][comp] = chan;
+         break;
+      }
    }
 
-   /* Same slot should have same type for all components. */
-   assert(s->output_types[slot] == nir_type_invalid || s->output_types[slot] == type);
-
-   s->output_types[slot] = type;
+   if ((slot == FRAG_RESULT_COLOR || (slot >= FRAG_RESULT_DATA0 && slot <= FRAG_RESULT_DATA7)) &&
+       write_mask) {
+      s->colors_written |= BITFIELD_BIT(color_index);
+      s->color_type[color_index] = nir_intrinsic_src_type(intrin);
+      s->has_dual_src_blending |= dual_src_blend_index == 1;
+   }
 
    /* Keep output instruction if not exported in nir. */
    if (!s->options->no_color_export && !s->options->no_depth_export) {
@@ -296,42 +324,26 @@ lower_ps_intrinsic(nir_builder *b, nir_instr *instr, void *state)
 static void
 emit_ps_color_clamp_and_alpha_test(nir_builder *b, lower_ps_state *s)
 {
-   uint32_t color_mask =
-      BITFIELD_BIT(FRAG_RESULT_COLOR) |
-      BITFIELD_RANGE(FRAG_RESULT_DATA0, MAX_DRAW_BUFFERS);
-   uint32_t color_outputs =
-      (b->shader->info.outputs_written & color_mask) |
-      /* both dual source blend outputs use FRAG_RESULT_DATA0 slot in nir,
-       * but we use an extra slot number in lower_ps_state for the second
-       * output
-       */
-      BITFIELD_BIT(DUAL_SRC_BLEND_SLOT);
-
-   u_foreach_bit (slot, color_outputs) {
+   u_foreach_bit (slot, s->colors_written) {
       if (s->options->clamp_color) {
          for (int i = 0; i < 4; i++) {
-            if (s->outputs[slot][i])
-               s->outputs[slot][i] = nir_fsat(b, s->outputs[slot][i]);
+            if (s->color[slot][i])
+               s->color[slot][i] = nir_fsat(b, s->color[slot][i]);
          }
       }
 
-      if (s->options->alpha_to_one) {
-         /* any one has written to this slot */
-         if (s->output_types[slot] != nir_type_invalid) {
-            unsigned bit_size = nir_alu_type_get_type_size(s->output_types[slot]);
-            s->outputs[slot][3] = nir_imm_floatN_t(b, 1, bit_size);
-         }
-      }
+      if (s->options->alpha_to_one)
+         s->color[slot][3] = nir_imm_floatN_t(b, 1, nir_alu_type_get_type_size(s->color_type[slot]));
 
-      if (slot == FRAG_RESULT_COLOR || slot == FRAG_RESULT_DATA0) {
+      if (slot == 0) {
          if (s->options->alpha_func == COMPARE_FUNC_ALWAYS) {
             /* always pass, do nothing */
          } else if (s->options->alpha_func == COMPARE_FUNC_NEVER) {
             nir_discard(b);
-         } else if (s->outputs[slot][3]) {
+         } else if (s->color[slot][3]) {
             nir_def *ref = nir_load_alpha_reference_amd(b);
             nir_def *cond =
-               nir_compare_func(b, s->options->alpha_func, s->outputs[slot][3], ref);
+               nir_compare_func(b, s->options->alpha_func, s->color[slot][3], ref);
             nir_discard_if(b, nir_inot(b, cond));
          }
       }
@@ -341,36 +353,14 @@ emit_ps_color_clamp_and_alpha_test(nir_builder *b, lower_ps_state *s)
 static void
 emit_ps_mrtz_export(nir_builder *b, lower_ps_state *s)
 {
-   uint64_t outputs_written = b->shader->info.outputs_written;
-
-   nir_def *mrtz_alpha = NULL;
-   if (s->options->alpha_to_coverage_via_mrtz) {
-      mrtz_alpha = s->outputs[FRAG_RESULT_COLOR][3] ?
-         s->outputs[FRAG_RESULT_COLOR][3] :
-         s->outputs[FRAG_RESULT_DATA0][3];
-   }
-
-   nir_def *depth = s->outputs[FRAG_RESULT_DEPTH][0];
-   nir_def *stencil = s->outputs[FRAG_RESULT_STENCIL][0];
-   nir_def *sample_mask = s->outputs[FRAG_RESULT_SAMPLE_MASK][0];
-
-   if (s->options->kill_samplemask) {
-      sample_mask = NULL;
-      outputs_written &= ~BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
-   }
+   nir_def *mrtz_alpha = s->options->alpha_to_coverage_via_mrtz ? s->color[0][3] : NULL;
 
    /* skip mrtz export if no one has written to any of them */
-   if (!depth && !stencil && !sample_mask && !mrtz_alpha)
+   if (!s->depth && !s->stencil && !s->sample_mask && !mrtz_alpha)
       return;
 
-   /* use outputs_written to determine export format as we use it to set
-    * R_028710_SPI_SHADER_Z_FORMAT instead of relying on the real store output,
-    * because store output may be optimized out.
-    */
    unsigned format =
-      ac_get_spi_shader_z_format(outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH),
-                                 outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL),
-                                 outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK),
+      ac_get_spi_shader_z_format(s->depth, s->stencil, s->sample_mask,
                                  s->options->alpha_to_coverage_via_mrtz);
 
    nir_def *undef = nir_undef(b, 1, 32);
@@ -379,33 +369,33 @@ emit_ps_mrtz_export(nir_builder *b, lower_ps_state *s)
    unsigned flags = 0;
 
    if (format == V_028710_SPI_SHADER_UINT16_ABGR) {
-      assert(!depth && !mrtz_alpha);
+      assert(!s->depth && !mrtz_alpha);
 
       if (s->options->gfx_level < GFX11)
          flags |= AC_EXP_FLAG_COMPRESSED;
 
-      if (stencil) {
-         outputs[0] = nir_ishl_imm(b, stencil, 16);
+      if (s->stencil) {
+         outputs[0] = nir_ishl_imm(b, s->stencil, 16);
          write_mask |= s->options->gfx_level >= GFX11 ? 0x1 : 0x3;
       }
 
-      if (sample_mask) {
-         outputs[1] = sample_mask;
+      if (s->sample_mask) {
+         outputs[1] = s->sample_mask;
          write_mask |= s->options->gfx_level >= GFX11 ? 0x2 : 0xc;
       }
    } else {
-      if (depth) {
-         outputs[0] = depth;
+      if (s->depth) {
+         outputs[0] = s->depth;
          write_mask |= 0x1;
       }
 
-      if (stencil) {
-         outputs[1] = stencil;
+      if (s->stencil) {
+         outputs[1] = s->stencil;
          write_mask |= 0x2;
       }
 
-      if (sample_mask) {
-         outputs[2] = sample_mask;
+      if (s->sample_mask) {
+         outputs[2] = s->sample_mask;
          write_mask |= 0x4;
       }
 
@@ -444,11 +434,11 @@ get_ps_color_export_target(lower_ps_state *s)
 }
 
 static bool
-emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, unsigned cbuf)
+emit_ps_color_export(nir_builder *b, lower_ps_state *s, unsigned output_index, unsigned mrt_index)
 {
-   assert(cbuf < 8);
+   assert(output_index < 8 && mrt_index < 8);
 
-   unsigned spi_shader_col_format = (s->options->spi_shader_col_format >> (cbuf * 4)) & 0xf;
+   unsigned spi_shader_col_format = (s->spi_shader_col_format >> (mrt_index * 4)) & 0xf;
    if (spi_shader_col_format == V_028714_SPI_SHADER_ZERO)
       return false;
 
@@ -457,26 +447,26 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
     */
    unsigned target = get_ps_color_export_target(s);
 
-   nir_alu_type type = s->output_types[slot];
    /* no one has written to this slot */
-   if (type == nir_type_invalid)
+   if (!(s->colors_written & BITFIELD_BIT(output_index)))
       return false;
 
-   bool is_int8 = s->options->color_is_int8 & BITFIELD_BIT(cbuf);
-   bool is_int10 = s->options->color_is_int10 & BITFIELD_BIT(cbuf);
+   bool is_int8 = s->options->color_is_int8 & BITFIELD_BIT(mrt_index);
+   bool is_int10 = s->options->color_is_int10 & BITFIELD_BIT(mrt_index);
    bool enable_mrt_output_nan_fixup =
-      s->options->enable_mrt_output_nan_fixup & BITFIELD_BIT(cbuf);
+      s->options->enable_mrt_output_nan_fixup & BITFIELD_BIT(mrt_index);
 
    nir_def *undef = nir_undef(b, 1, 32);
    nir_def *outputs[4] = {undef, undef, undef, undef};
    unsigned write_mask = 0;
    unsigned flags = 0;
 
+   nir_alu_type type = s->color_type[output_index];
    nir_alu_type base_type = nir_alu_type_get_base_type(type);
    unsigned type_size = nir_alu_type_get_type_size(type);
 
    nir_def *data[4];
-   memcpy(data, s->outputs[slot], sizeof(data));
+   memcpy(data, s->color[output_index], sizeof(data));
 
    /* Replace NaN by zero (for 32-bit float formats) to fix game bugs if requested. */
    if (enable_mrt_output_nan_fixup && type == nir_type_float32) {
@@ -490,17 +480,13 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
 
    switch (spi_shader_col_format) {
    case V_028714_SPI_SHADER_32_R:
-      if (!data[0])
-         return false;
-
-      outputs[0] = nir_convert_to_bit_size(b, data[0], base_type, 32);
-      write_mask = 0x1;
+      if (data[0]) {
+         outputs[0] = nir_convert_to_bit_size(b, data[0], base_type, 32);
+         write_mask = 0x1;
+      }
       break;
 
    case V_028714_SPI_SHADER_32_GR:
-      if (!data[0] && !data[1])
-         return false;
-
       if (data[0]) {
          outputs[0] = nir_convert_to_bit_size(b, data[0], base_type, 32);
          write_mask |= 0x1;
@@ -513,9 +499,6 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
       break;
 
    case V_028714_SPI_SHADER_32_AR:
-      if (!data[0] && !data[3])
-         return false;
-
       if (data[0]) {
          outputs[0] = nir_convert_to_bit_size(b, data[0], base_type, 32);
          write_mask |= 0x1;
@@ -661,7 +644,7 @@ emit_ps_dual_src_blend_swizzle(nir_builder *b, lower_ps_state *s, unsigned first
 
    uint32_t mrt0_write_mask = nir_intrinsic_write_mask(mrt0_exp);
    uint32_t mrt1_write_mask = nir_intrinsic_write_mask(mrt1_exp);
-   uint32_t write_mask = mrt0_write_mask | mrt1_write_mask;
+   uint32_t write_mask = mrt0_write_mask & mrt1_write_mask;
 
    nir_def *mrt0_arg = mrt0_exp->src[0].ssa;
    nir_def *mrt1_arg = mrt1_exp->src[0].ssa;
@@ -772,54 +755,37 @@ export_ps_outputs(nir_builder *b, lower_ps_state *s)
 
    unsigned first_color_export = s->exp_num;
 
-   /* When dual src blend is enabled and we need both src0 and src1
-    * export present, try to export both src, and add an empty export
-    * for either src missing.
+   /* Add exports for dual source blending manually if they are missing.
+    * It will automatically generate exports with undef.
     */
-   if (s->output_types[DUAL_SRC_BLEND_SLOT] != nir_type_invalid ||
-       s->options->dual_src_blend_swizzle) {
-      unsigned slot;
-      if (s->output_types[FRAG_RESULT_COLOR] != nir_type_invalid) {
-         /* when dual source blending, there must be only one color buffer */
-         assert(s->options->broadcast_last_cbuf == 0);
-         slot = FRAG_RESULT_COLOR;
-      } else {
-         slot = FRAG_RESULT_DATA0;
+   if (s->has_dual_src_blending) {
+      switch (s->colors_written) {
+      case BITFIELD_BIT(0):
+         s->colors_written |= BITFIELD_BIT(1);
+         s->color_type[1] = s->color_type[0];
+         s->spi_shader_col_format |= (s->spi_shader_col_format & 0xf) << 4;
+         break;
+
+      case BITFIELD_BIT(1):
+         s->colors_written |= BITFIELD_BIT(0);
+         s->color_type[0] = s->color_type[1];
+         s->spi_shader_col_format |= (s->spi_shader_col_format & 0xf0) >> 4;
+         break;
+      case BITFIELD_RANGE(0, 2):
+         break;
+      default:
+         unreachable("unexpected number of color outputs for dual source blending");
       }
+   }
 
-      bool src0_exported = emit_ps_color_export(b, s, slot, 0);
-      /* src1 use cubf1 info, when dual src blend is enabled it's
-       * same as cbuf0, but when dual src blend is disabled it's used
-       * to disable src1 export.
-       */
-      bool src1_exported = emit_ps_color_export(b, s, DUAL_SRC_BLEND_SLOT, 1);
-
-      bool need_empty_export =
-         /* miss src1, need to add src1 only when swizzle case */
-         (src0_exported && !src1_exported && s->options->dual_src_blend_swizzle) ||
-         /* miss src0, always need to add src0 */
-         (!src0_exported && src1_exported);
-
-      if (need_empty_export) {
-         /* set to expected value */
-         s->compacted_mrt_index = src0_exported ? 1 : 0;
-
-         unsigned target = get_ps_color_export_target(s);
-
-         s->exp[s->exp_num++] =
-            nir_export_amd(b, nir_undef(b, 4, 32), .base = target);
-      }
+   if (s->options->broadcast_last_cbuf > 0) {
+      /* write to all color buffers */
+      assert(s->colors_written & 0x1);
+      for (int cbuf = 0; cbuf <= s->options->broadcast_last_cbuf; cbuf++)
+         emit_ps_color_export(b, s, 0, cbuf);
    } else {
-      if (s->output_types[FRAG_RESULT_COLOR] != nir_type_invalid) {
-         /* write to all color buffers */
-         for (int cbuf = 0; cbuf <= s->options->broadcast_last_cbuf; cbuf++)
-            emit_ps_color_export(b, s, FRAG_RESULT_COLOR, cbuf);
-      } else {
-         for (int cbuf = 0; cbuf < MAX_DRAW_BUFFERS; cbuf++) {
-            unsigned slot = FRAG_RESULT_DATA0 + cbuf;
-            emit_ps_color_export(b, s, slot, cbuf);
-         }
-      }
+      for (int cbuf = 0; cbuf < MAX_DRAW_BUFFERS; cbuf++)
+         emit_ps_color_export(b, s, cbuf, cbuf);
    }
 
    if (s->exp_num) {
@@ -867,6 +833,8 @@ ac_nir_lower_ps(nir_shader *nir, const ac_nir_lower_ps_options *options)
 
    lower_ps_state state = {
       .options = options,
+      .has_dual_src_blending = options->dual_src_blend_swizzle,
+      .spi_shader_col_format = options->spi_shader_col_format,
    };
 
    create_interp_param(b, &state);

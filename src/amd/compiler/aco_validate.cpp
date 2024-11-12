@@ -74,8 +74,75 @@ validate_ir(Program* program)
       }
    };
 
+   /* check reachability */
+   if (program->progress < CompilationProgress::after_lower_to_hw) {
+      std::map<uint32_t, std::pair<uint32_t, bool>> def_blocks;
+      for (Block& block : program->blocks) {
+         for (aco_ptr<Instruction>& instr : block.instructions) {
+            for (Definition def : instr->definitions) {
+               if (!def.isTemp())
+                  continue;
+               check(!def_blocks.count(def.tempId()), "Temporary defined twice", instr.get());
+               def_blocks[def.tempId()] = std::make_pair(block.index, false);
+            }
+         }
+      }
+
+      for (Block& block : program->blocks) {
+         for (aco_ptr<Instruction>& instr : block.instructions) {
+            for (unsigned i = 0; i < instr->operands.size(); i++) {
+               Operand op = instr->operands[i];
+               if (!op.isTemp())
+                  continue;
+
+               uint32_t use_block_idx = block.index;
+               if (instr->opcode == aco_opcode::p_phi || instr->opcode == aco_opcode::p_boolean_phi)
+                  use_block_idx = block.logical_preds[i];
+               else if (instr->opcode == aco_opcode::p_linear_phi)
+                  use_block_idx = block.linear_preds[i];
+
+               auto it = def_blocks.find(op.tempId());
+               if (it != def_blocks.end()) {
+                  Block& def_block = program->blocks[it->second.first];
+                  Block& use_block = program->blocks[use_block_idx];
+                  bool dominates =
+                     def_block.index == use_block_idx
+                        ? (use_block_idx == block.index ? it->second.second : true)
+                        : (op.regClass().is_linear() ? dominates_linear(def_block, use_block)
+                                                     : dominates_logical(def_block, use_block));
+                  if (!dominates) {
+                     char msg[256];
+                     snprintf(msg, sizeof(msg), "Definition of %%%u does not dominate use",
+                              op.tempId());
+                     check(false, msg, instr.get());
+                  }
+               } else {
+                  char msg[256];
+                  snprintf(msg, sizeof(msg), "%%%u never defined", op.tempId());
+                  check(false, msg, instr.get());
+               }
+            }
+
+            for (Definition def : instr->definitions) {
+               if (def.isTemp())
+                  def_blocks[def.tempId()].second = true;
+            }
+         }
+      }
+   }
+
    for (Block& block : program->blocks) {
       for (aco_ptr<Instruction>& instr : block.instructions) {
+
+         if (program->progress < CompilationProgress::after_lower_to_hw) {
+            for (const Operand& op : instr->operands)
+               check(!op.isTemp() || op.regClass() == program->temp_rc[op.tempId()],
+                     "Operand RC not consistent.", instr.get());
+
+            for (const Definition& def : instr->definitions)
+               check(!def.isTemp() || def.regClass() == program->temp_rc[def.tempId()],
+                     "Definition RC not consistent.", instr.get());
+         }
 
          unsigned pck_defs = instr_info.definitions[(int)instr->opcode];
          unsigned pck_ops = instr_info.operands[(int)instr->opcode];
@@ -312,7 +379,8 @@ validate_ir(Program* program)
                     instr->operands[i].regClass().is_subdword() && !instr->operands[i].isFixed()))
                   check(!valu.opsel[i], "Unexpected opsel for operand", instr.get());
             }
-            if (instr->definitions[0].regClass().is_subdword() && !instr->definitions[0].isFixed())
+            if (!instr->definitions.empty() && instr->definitions[0].regClass().is_subdword() &&
+                !instr->definitions[0].isFixed())
                check(!valu.opsel[3], "Unexpected opsel for sub-dword definition", instr.get());
          } else if (instr->opcode == aco_opcode::v_fma_mixlo_f16 ||
                     instr->opcode == aco_opcode::v_fma_mixhi_f16 ||
@@ -361,11 +429,6 @@ validate_ir(Program* program)
             if (op.isFixed() || !op.hasRegClass() || !op.regClass().is_linear_vgpr() ||
                 op.isUndefined())
                continue;
-
-            /* Check that linear vgprs are late kill: this is to ensure linear VGPR operands and
-             * normal VGPR definitions don't try to use the same register, which is problematic
-             * because of assignment restrictions. */
-            check(op.isLateKill(), "Linear VGPR operands must be late kill", instr.get());
 
             /* Only kill linear VGPRs in top-level blocks. Otherwise, we might have to move linear
              * VGPRs to make space for normal ones and that isn't possible inside control flow. */
@@ -431,8 +494,9 @@ validate_ir(Program* program)
                   check(instr->definitions[0].regClass().type() == RegType::sgpr,
                         "Wrong Definition type for VALU instruction", instr.get());
                } else {
-                  check(instr->definitions[0].regClass().type() == RegType::vgpr,
-                        "Wrong Definition type for VALU instruction", instr.get());
+                  if (!instr->definitions.empty())
+                     check(instr->definitions[0].regClass().type() == RegType::vgpr,
+                           "Wrong Definition type for VALU instruction", instr.get());
                }
 
                unsigned num_sgprs = 0;
@@ -635,18 +699,22 @@ validate_ir(Program* program)
                unsigned data_bits = instr->operands[0].bytes() * 8u;
                unsigned op_bits = instr->operands[2].constantValue();
 
+               check(op_bits == 8 || op_bits == 16, "Size must be 8 or 16", instr.get());
                if (instr->opcode == aco_opcode::p_insert) {
-                  check(op_bits == 8 || op_bits == 16, "Size must be 8 or 16", instr.get());
                   check(op_bits < data_bits, "Size must be smaller than source", instr.get());
                } else if (instr->opcode == aco_opcode::p_extract) {
-                  check(op_bits == 8 || op_bits == 16 || op_bits == 32,
-                        "Size must be 8 or 16 or 32", instr.get());
                   check(data_bits >= op_bits, "Can't extract more bits than what the data has.",
                         instr.get());
                }
 
                unsigned comp = data_bits / MAX2(op_bits, 1);
                check(instr->operands[1].constantValue() < comp, "Index must be in-bounds",
+                     instr.get());
+
+               check(program->gfx_level >= GFX9 ||
+                        !instr->definitions[0].regClass().is_subdword() ||
+                        instr->operands[0].regClass().type() == RegType::vgpr,
+                     "Cannot extract/insert to subdword definition from SGPR before GFX9+",
                      instr.get());
             } else if (instr->opcode == aco_opcode::p_jump_to_epilog) {
                check(instr->definitions.size() == 0, "p_jump_to_epilog must have 0 definitions",
@@ -937,6 +1005,116 @@ validate_cfg(Program* program)
    return is_valid;
 }
 
+bool
+validate_live_vars(Program* program)
+{
+   if (!(debug_flags & DEBUG_VALIDATE_LIVE_VARS))
+      return true;
+
+   bool is_valid = true;
+   const int prev_num_waves = program->num_waves;
+   const monotonic_buffer_resource old_memory = std::move(program->live.memory);
+   const std::vector<IDSet> prev_live_in = std::move(program->live.live_in);
+   const RegisterDemand prev_max_demand = program->max_reg_demand;
+   std::vector<RegisterDemand> block_demands(program->blocks.size());
+   std::vector<RegisterDemand> live_in_demands(program->blocks.size());
+   std::vector<std::vector<RegisterDemand>> register_demands(program->blocks.size());
+
+   for (unsigned i = 0; i < program->blocks.size(); i++) {
+      Block& b = program->blocks[i];
+      block_demands[i] = b.register_demand;
+      live_in_demands[i] = b.live_in_demand;
+      register_demands[i].reserve(b.instructions.size());
+      for (unsigned j = 0; j < b.instructions.size(); j++)
+         register_demands[i].emplace_back(b.instructions[j]->register_demand);
+   }
+
+   aco::live_var_analysis(program);
+
+   /* Validate RegisterDemand calculation */
+   for (unsigned i = 0; i < program->blocks.size(); i++) {
+      Block& b = program->blocks[i];
+
+      if (!(b.register_demand == block_demands[i])) {
+         is_valid = false;
+         aco_err(program,
+                 "Register Demand not updated correctly for BB%d: got (%3u vgpr, %3u sgpr), but "
+                 "should be (%3u vgpr, %3u sgpr)",
+                 i, block_demands[i].vgpr, block_demands[i].sgpr, b.register_demand.vgpr,
+                 b.register_demand.sgpr);
+      }
+      if (!(b.live_in_demand == live_in_demands[i])) {
+         is_valid = false;
+         aco_err(program,
+                 "Live-in Demand not updated correctly for BB%d: got (%3u vgpr, %3u sgpr), but "
+                 "should be (%3u vgpr, %3u sgpr)",
+                 i, live_in_demands[i].vgpr, live_in_demands[i].sgpr, b.live_in_demand.vgpr,
+                 b.live_in_demand.sgpr);
+      }
+
+      for (unsigned j = 0; j < b.instructions.size(); j++) {
+         if (b.instructions[j]->register_demand == register_demands[i][j])
+            continue;
+
+         char* out;
+         size_t outsize;
+         struct u_memstream mem;
+         u_memstream_open(&mem, &out, &outsize);
+         FILE* const memf = u_memstream_get(&mem);
+
+         fprintf(memf,
+                 "Register Demand not updated correctly: got (%3u vgpr, %3u sgpr), but should be "
+                 "(%3u vgpr, %3u sgpr): \n\t",
+                 register_demands[i][j].vgpr, register_demands[i][j].sgpr,
+                 b.instructions[j]->register_demand.vgpr, b.instructions[j]->register_demand.sgpr);
+         aco_print_instr(program->gfx_level, b.instructions[j].get(), memf, print_kill);
+         u_memstream_close(&mem);
+
+         aco_err(program, "%s", out);
+         free(out);
+
+         is_valid = false;
+      }
+   }
+   if (!(program->max_reg_demand == prev_max_demand) || program->num_waves != prev_num_waves) {
+      is_valid = false;
+      aco_err(program,
+              "Max Register Demand and Num Waves not updated correctly: got (%3u vgpr, %3u sgpr) "
+              "and %2u waves, but should be (%3u vgpr, %3u sgpr) and %2u waves",
+              prev_max_demand.vgpr, prev_max_demand.sgpr, prev_num_waves,
+              program->max_reg_demand.vgpr, program->max_reg_demand.sgpr, program->num_waves);
+   }
+
+   /* Validate Live-in sets */
+   for (unsigned i = 0; i < program->blocks.size(); i++) {
+      if (prev_live_in[i] != program->live.live_in[i]) {
+         char* out;
+         size_t outsize;
+         struct u_memstream mem;
+         u_memstream_open(&mem, &out, &outsize);
+         FILE* const memf = u_memstream_get(&mem);
+
+         fprintf(memf, "Live-in set not updated correctly for BB%d:", i);
+         fprintf(memf, "\nMissing values: ");
+         for (unsigned t : program->live.live_in[i]) {
+            if (prev_live_in[i].count(t) == 0)
+               fprintf(memf, "%%%d, ", t);
+         }
+         fprintf(memf, "\nAdditional values: ");
+         for (unsigned t : prev_live_in[i]) {
+            if (program->live.live_in[i].count(t) == 0)
+               fprintf(memf, "%%%d, ", t);
+         }
+         u_memstream_close(&mem);
+         aco_err(program, "%s", out);
+         free(out);
+         is_valid = false;
+      }
+   }
+
+   return is_valid;
+}
+
 /* RA validation */
 namespace {
 
@@ -1081,6 +1259,7 @@ validate_subdword_definition(amd_gfx_level gfx_level, const aco_ptr<Instruction>
    case aco_opcode::global_load_short_d16_hi:
    case aco_opcode::ds_read_u8_d16_hi:
    case aco_opcode::ds_read_u16_d16_hi: return byte == 2;
+   case aco_opcode::p_v_cvt_pk_u8_f32: return true;
    default: break;
    }
 
@@ -1097,6 +1276,9 @@ get_subdword_bytes_written(Program* program, const aco_ptr<Instruction>& instr, 
       return gfx_level >= GFX8 ? def.bytes() : def.size() * 4u;
    if (instr->isVALU() || instr->isVINTRP()) {
       assert(def.bytes() <= 2);
+      if (instr->opcode == aco_opcode::p_v_cvt_pk_u8_f32)
+         return 1;
+
       if (instr->isSDWA())
          return instr->sdwa().dst_sel.size();
 

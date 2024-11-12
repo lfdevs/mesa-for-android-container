@@ -375,7 +375,7 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
                             nir_ior(nb, signed_zero, nir_ffract(nb, abs)));
 
       struct vtn_pointer *i_ptr = vtn_value(b, w[6], vtn_value_type_pointer)->pointer;
-      struct vtn_ssa_value *whole = vtn_create_ssa_value(b, i_ptr->type->type);
+      struct vtn_ssa_value *whole = vtn_create_ssa_value(b, i_ptr->type->pointed->type);
       whole->def = nir_ior(nb, signed_zero, nir_ffloor(nb, abs));
       vtn_variable_store(b, whole, i_ptr, 0);
       break;
@@ -614,7 +614,7 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
       dest->def = nir_frexp_sig(nb, src[0]);
 
       struct vtn_pointer *i_ptr = vtn_value(b, w[6], vtn_value_type_pointer)->pointer;
-      struct vtn_ssa_value *exp = vtn_create_ssa_value(b, i_ptr->type->type);
+      struct vtn_ssa_value *exp = vtn_create_ssa_value(b, i_ptr->type->pointed->type);
       exp->def = nir_frexp_exp(nb, src[0]);
       vtn_variable_store(b, exp, i_ptr, 0);
       break;

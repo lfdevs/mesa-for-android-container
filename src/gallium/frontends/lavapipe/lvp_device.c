@@ -50,10 +50,15 @@
 #include <sys/resource.h>
 #endif
 
+#if DETECT_OS_ANDROID
+#include "vk_android.h"
+#endif
+
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
     defined(VK_USE_PLATFORM_WIN32_KHR) || \
     defined(VK_USE_PLATFORM_XCB_KHR) || \
-    defined(VK_USE_PLATFORM_XLIB_KHR)
+    defined(VK_USE_PLATFORM_XLIB_KHR) || \
+    defined(VK_USE_PLATFORM_METAL_EXT)
 #define LVP_USE_WSI_PLATFORM
 #endif
 #define LVP_API_VERSION VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)
@@ -91,6 +96,9 @@ static const struct vk_instance_extension_table lvp_instance_extensions_supporte
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .KHR_xlib_surface                         = true,
 #endif
+#ifdef VK_USE_PLATFORM_METAL_EXT
+   .EXT_metal_surface                        = true,
+#endif
 #ifndef VK_USE_PLATFORM_WIN32_KHR
    .EXT_headless_surface                     = true,
 #endif
@@ -122,6 +130,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .KHR_external_semaphore                = true,
    .KHR_shader_float_controls             = true,
    .KHR_get_memory_requirements2          = true,
+   .KHR_global_priority                   = true,
 #ifdef LVP_USE_WSI_PLATFORM
    .KHR_incremental_present               = true,
 #endif
@@ -157,7 +166,9 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .KHR_shader_integer_dot_product        = true,
    .KHR_shader_maximal_reconvergence      = true,
    .KHR_shader_non_semantic_info          = true,
+   .KHR_shader_relaxed_extended_instruction = true,
    .KHR_shader_subgroup_extended_types    = true,
+   .KHR_shader_subgroup_rotate            = true,
    .KHR_shader_terminate_invocation       = true,
    .KHR_spirv_1_4                         = true,
    .KHR_storage_buffer_storage_class      = true,
@@ -186,6 +197,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_dynamic_rendering_unused_attachments = true,
    .EXT_descriptor_buffer                 = true,
    .EXT_descriptor_indexing               = true,
+   .EXT_device_generated_commands         = true,
    .EXT_extended_dynamic_state            = true,
    .EXT_extended_dynamic_state2           = true,
    .EXT_extended_dynamic_state3           = true,
@@ -216,6 +228,8 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_pipeline_creation_feedback        = true,
    .EXT_pipeline_creation_cache_control   = true,
    .EXT_pipeline_library_group_handles    = true,
+   .EXT_pipeline_protected_access         = true,
+   .EXT_pipeline_robustness               = true,
    .EXT_post_depth_coverage               = true,
    .EXT_private_data                      = true,
    .EXT_primitives_generated_query        = true,
@@ -249,6 +263,9 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_line_rasterization                = true,
    .EXT_robustness2                       = true,
    .AMDX_shader_enqueue                   = true,
+#if DETECT_OS_ANDROID
+   .ANDROID_native_buffer                 = true,
+#endif
    .GOOGLE_decorate_string                = true,
    .GOOGLE_hlsl_functionality1            = true,
    .NV_device_generated_commands          = true,
@@ -459,8 +476,14 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       /* VK_EXT_non_seamless_cube_map */
       .nonSeamlessCubeMap = true,
 
+      /* VK_KHR_global_priority */
+      .globalPriorityQuery = true,
+
       /* VK_EXT_attachment_feedback_loop_layout */
       .attachmentFeedbackLoopLayout = true,
+
+      /* VK_EXT_pipeline_protected_access */
+      .pipelineProtectedAccess = true,
 
       /* VK_EXT_rasterization_order_attachment_access */
       .rasterizationOrderColorAttachmentAccess = true,
@@ -566,6 +589,9 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       /* VK_EXT_multi_draw */
       .multiDraw = true,
 
+      /* VK_EXT_pipeline_robustness */
+      .pipelineRobustness = true,
+
       /* VK_EXT_depth_clip_enable */
       .depthClipEnable = (pdevice->pscreen->get_param(pdevice->pscreen, PIPE_CAP_DEPTH_CLAMP_ENABLE) != 0),
 
@@ -616,7 +642,11 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       .nullDescriptor = true,
 
       /* VK_NV_device_generated_commands */
+      .deviceGeneratedCommandsNV = true,
+
+      /* VK_EXT_device_generated_commands */
       .deviceGeneratedCommands = true,
+      .dynamicGeneratedPipelineLayout = true,
 
       /* VK_EXT_primitive_topology_list_restart */
       .primitiveTopologyListRestart = true,
@@ -709,6 +739,13 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       /* VK_EXT_swapchain_maintenance1 */
       .swapchainMaintenance1 = true,
 #endif
+
+      /* VK_KHR_shader_relaxed_extended_instruction */
+      .shaderRelaxedExtendedInstruction = true,
+
+      /* VK_KHR_shader_subgroup_rotate */
+      .shaderSubgroupRotate = true,
+      .shaderSubgroupRotateClustered = true,
    };
 }
 
@@ -832,7 +869,7 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       .maxComputeWorkGroupSize                  = { block_size[0], block_size[1], block_size[2] },
       .subPixelPrecisionBits                    = device->pscreen->get_param(device->pscreen, PIPE_CAP_RASTERIZER_SUBPIXEL_BITS),
       .subTexelPrecisionBits                    = 8,
-      .mipmapPrecisionBits                      = 4,
+      .mipmapPrecisionBits                      = 6,
       .maxDrawIndexedIndexValue                 = UINT32_MAX,
       .maxDrawIndirectCount                     = UINT32_MAX,
       .maxSamplerLodBias                        = 16,
@@ -1035,6 +1072,17 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       .minSequencesIndexBufferOffsetAlignment = 4,
       .minIndirectCommandsBufferOffsetAlignment = 4,
 
+      /* VK_EXT_device_generated_commands */
+      .maxIndirectPipelineCount = 1<<12,
+      .maxIndirectShaderObjectCount = 1<<12,
+      .maxIndirectCommandsIndirectStride = 2048,
+      .supportedIndirectCommandsInputModes = VK_INDIRECT_COMMANDS_INPUT_MODE_VULKAN_INDEX_BUFFER_EXT | VK_INDIRECT_COMMANDS_INPUT_MODE_DXGI_INDEX_BUFFER_EXT,
+      .supportedIndirectCommandsShaderStages = VK_SHADER_STAGE_ALL,
+      .supportedIndirectCommandsShaderStagesPipelineBinding = VK_SHADER_STAGE_ALL,
+      .supportedIndirectCommandsShaderStagesShaderBinding = VK_SHADER_STAGE_ALL,
+      .deviceGeneratedCommandsTransformFeedback = true,
+      .deviceGeneratedCommandsMultiDrawIndirectCount = true,
+
       /* VK_EXT_external_memory_host */
       .minImportedHostPointerAlignment = 4096,
 
@@ -1047,6 +1095,12 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
 
       /* VK_EXT_multi_draw */
       .maxMultiDrawCount = 2048,
+
+      /* VK_EXT_pipeline_robustness */
+      .defaultRobustnessStorageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT,
+      .defaultRobustnessUniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT,
+      .defaultRobustnessVertexInputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT,
+      .defaultRobustnessImages = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT,
 
       /* VK_EXT_descriptor_buffer */
       .combinedImageSamplerDescriptorSingleArray = VK_TRUE,
@@ -1143,7 +1197,7 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       .maxPerStageDescriptorUpdateAfterBindAccelerationStructures = MAX_DESCRIPTORS,
       .maxDescriptorSetAccelerationStructures = MAX_DESCRIPTORS,
       .maxDescriptorSetUpdateAfterBindAccelerationStructures = MAX_DESCRIPTORS,
-      .minAccelerationStructureScratchOffsetAlignment = 128,
+      .minAccelerationStructureScratchOffsetAlignment = 8,
 
       /* VK_EXT_legacy_vertex_attributes */
       .nativeUnalignedPerformance = true,
@@ -1171,7 +1225,8 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
    memset(p->deviceLUID, 0, VK_LUID_SIZE);
 
 #if LLVM_VERSION_MAJOR >= 10
-   p->subgroupSupportedOperations |= VK_SUBGROUP_FEATURE_SHUFFLE_BIT | VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT | VK_SUBGROUP_FEATURE_QUAD_BIT;
+   p->subgroupSupportedOperations |= VK_SUBGROUP_FEATURE_SHUFFLE_BIT | VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT | VK_SUBGROUP_FEATURE_QUAD_BIT |
+      VK_SUBGROUP_FEATURE_CLUSTERED_BIT | VK_SUBGROUP_FEATURE_ROTATE_BIT_KHR | VK_SUBGROUP_FEATURE_ROTATE_CLUSTERED_BIT_KHR;
 #endif
 
    /* Vulkan 1.2 */
@@ -1259,6 +1314,12 @@ lvp_physical_device_init(struct lvp_physical_device *device,
       device->vk.supported_extensions.EXT_external_memory_dma_buf = true;
    if ((supported_dmabuf_bits & dmabuf_bits) == dmabuf_bits)
       device->vk.supported_extensions.EXT_image_drm_format_modifier = true;
+   if (device->pscreen->get_param(device->pscreen, PIPE_CAP_NATIVE_FENCE_FD)) {
+      device->vk.supported_extensions.KHR_external_semaphore_fd = true;
+      device->vk.supported_extensions.KHR_external_fence_fd = true;
+   }
+   if (supported_dmabuf_bits & DRM_PRIME_CAP_IMPORT)
+      device->vk.supported_extensions.ANDROID_external_memory_android_hardware_buffer = true;
 #endif
 
    /* SNORM blending on llvmpipe fails CTS - disable by default */
@@ -1267,12 +1328,14 @@ lvp_physical_device_init(struct lvp_physical_device *device,
    lvp_get_features(device, &device->vk.supported_features);
    lvp_get_properties(device, &device->vk.properties);
 
+#ifdef LVP_USE_WSI_PLATFORM
    result = lvp_init_wsi(device);
    if (result != VK_SUCCESS) {
       vk_physical_device_finish(&device->vk);
       vk_error(instance, result);
       goto fail;
    }
+#endif
 
    return VK_SUCCESS;
  fail:
@@ -1282,7 +1345,9 @@ lvp_physical_device_init(struct lvp_physical_device *device,
 static void VKAPI_CALL
 lvp_physical_device_finish(struct lvp_physical_device *device)
 {
+#ifdef LVP_USE_WSI_PLATFORM
    lvp_finish_wsi(device);
+#endif
    device->pscreen->destroy(device->pscreen);
    vk_physical_device_finish(&device->vk);
 }
@@ -1338,6 +1403,10 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateInstance(
 
    //   VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
 
+#if DETECT_OS_ANDROID
+   vk_android_init_ugralloc();
+#endif
+
    *pInstance = lvp_instance_to_handle(instance);
 
    return VK_SUCCESS;
@@ -1351,6 +1420,10 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyInstance(
 
    if (!instance)
       return;
+
+#if DETECT_OS_ANDROID
+   vk_android_destroy_ugralloc();
+#endif
 
    pipe_loader_release(&instance->devs, instance->num_devices);
 
@@ -1436,6 +1509,15 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceQueueFamilyProperties2(
    VkQueueFamilyProperties2                   *pQueueFamilyProperties)
 {
    VK_OUTARRAY_MAKE_TYPED(VkQueueFamilyProperties2, out, pQueueFamilyProperties, pCount);
+
+   VkQueueFamilyGlobalPriorityPropertiesKHR *prio = vk_find_struct(pQueueFamilyProperties, QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR);
+   if (prio) {
+      prio->priorityCount = 4;
+      prio->priorities[0] = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
+      prio->priorities[1] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+      prio->priorities[2] = VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
+      prio->priorities[3] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
+   }
 
    vk_outarray_append_typed(VkQueueFamilyProperties2, &out, p) {
       p->queueFamilyProperties = (VkQueueFamilyProperties) {
@@ -1837,6 +1919,9 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_AllocateMemory(
    struct lvp_device_memory *mem;
    ASSERTED const VkExportMemoryAllocateInfo *export_info = NULL;
    ASSERTED const VkImportMemoryFdInfoKHR *import_info = NULL;
+#if DETECT_OS_ANDROID
+   ASSERTED const VkImportAndroidHardwareBufferInfoANDROID *ahb_import_info = NULL;
+#endif
    const VkImportMemoryHostPointerInfoEXT *host_ptr_info = NULL;
    VkResult error = VK_ERROR_OUT_OF_DEVICE_MEMORY;
    assert(pAllocateInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
@@ -1867,6 +1952,12 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_AllocateMemory(
          priority = get_mem_priority(prio->priority);
          break;
       }
+#if DETECT_OS_ANDROID
+      case VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID: {
+         ahb_import_info = (VkImportAndroidHardwareBufferInfoANDROID*)ext;
+         break;
+      }
+#endif
       default:
          break;
       }
@@ -1889,6 +1980,11 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_AllocateMemory(
    mem->memory_type = LVP_DEVICE_MEMORY_TYPE_DEFAULT;
    mem->backed_fd = -1;
    mem->size = pAllocateInfo->allocationSize;
+
+#if DETECT_OS_ANDROID
+   mem->android_hardware_buffer = NULL;
+#endif
+
    if (host_ptr_info) {
       mem->mem_alloc = (struct llvmpipe_memory_allocation) {
          .cpu_addr = host_ptr_info->pHostPointer,
@@ -1897,6 +1993,18 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_AllocateMemory(
       mem->map = host_ptr_info->pHostPointer;
       mem->memory_type = LVP_DEVICE_MEMORY_TYPE_USER_PTR;
    }
+#if DETECT_OS_ANDROID
+   else if(ahb_import_info) {
+      error = lvp_import_ahb_memory(device, mem, ahb_import_info);
+      if (error != VK_SUCCESS)
+         goto fail;
+   } else if(export_info &&
+             (export_info->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)) {
+      error = lvp_create_ahb_memory(device, mem, pAllocateInfo);
+      if (error != VK_SUCCESS)
+         goto fail;
+   }
+#endif
 #ifdef PIPE_MEMORY_FD
    else if(import_info && import_info->handleType) {
       bool dmabuf = import_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
@@ -2227,6 +2335,11 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
       VkBindMemoryStatusKHR *status = (void*)vk_find_struct_const(&pBindInfos[i], BIND_MEMORY_STATUS_KHR);
       bool did_bind = false;
 
+      if (!mem) {
+         continue;
+      }
+
+#ifdef LVP_USE_WSI_PLATFORM
       vk_foreach_struct_const(s, bind_info->pNext) {
          switch (s->sType) {
          case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR: {
@@ -2252,6 +2365,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
             break;
          }
       }
+#endif
 
       if (!did_bind) {
          uint64_t offset_B = 0;
@@ -2508,9 +2622,24 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceExternalFenceProperties(
    const VkPhysicalDeviceExternalFenceInfo    *pExternalFenceInfo,
    VkExternalFenceProperties                  *pExternalFenceProperties)
 {
-   pExternalFenceProperties->exportFromImportedHandleTypes = 0;
-   pExternalFenceProperties->compatibleHandleTypes = 0;
-   pExternalFenceProperties->externalFenceFeatures = 0;
+   LVP_FROM_HANDLE(lvp_physical_device, physical_device, physicalDevice);
+   const VkExternalFenceHandleTypeFlagBits handle_type = pExternalFenceInfo->handleType;
+
+   if (handle_type == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT &&
+       physical_device->pscreen->get_param(
+          physical_device->pscreen, PIPE_CAP_NATIVE_FENCE_FD)) {
+      pExternalFenceProperties->exportFromImportedHandleTypes =
+         VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
+      pExternalFenceProperties->compatibleHandleTypes =
+         VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
+       pExternalFenceProperties->externalFenceFeatures =
+          VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT |
+          VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT;
+   } else {
+      pExternalFenceProperties->exportFromImportedHandleTypes = 0;
+      pExternalFenceProperties->compatibleHandleTypes = 0;
+      pExternalFenceProperties->externalFenceFeatures = 0;
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceExternalSemaphoreProperties(
@@ -2518,9 +2647,28 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceExternalSemaphoreProperties(
    const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSemaphoreInfo,
    VkExternalSemaphoreProperties               *pExternalSemaphoreProperties)
 {
-   pExternalSemaphoreProperties->exportFromImportedHandleTypes = 0;
-   pExternalSemaphoreProperties->compatibleHandleTypes = 0;
-   pExternalSemaphoreProperties->externalSemaphoreFeatures = 0;
+   LVP_FROM_HANDLE(lvp_physical_device, physical_device, physicalDevice);
+   const VkSemaphoreTypeCreateInfo *type_info =
+      vk_find_struct_const(pExternalSemaphoreInfo->pNext, SEMAPHORE_TYPE_CREATE_INFO);
+   const VkSemaphoreType type = !type_info ? VK_SEMAPHORE_TYPE_BINARY : type_info->semaphoreType;
+   const VkExternalSemaphoreHandleTypeFlagBits handle_type = pExternalSemaphoreInfo->handleType;
+
+   if (type == VK_SEMAPHORE_TYPE_BINARY &&
+       handle_type == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT &&
+       physical_device->pscreen->get_param(
+          physical_device->pscreen, PIPE_CAP_NATIVE_FENCE_FD)) {
+      pExternalSemaphoreProperties->exportFromImportedHandleTypes =
+         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+      pExternalSemaphoreProperties->compatibleHandleTypes =
+         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+      pExternalSemaphoreProperties->externalSemaphoreFeatures =
+         VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
+         VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
+   } else {
+      pExternalSemaphoreProperties->exportFromImportedHandleTypes = 0;
+      pExternalSemaphoreProperties->compatibleHandleTypes = 0;
+      pExternalSemaphoreProperties->externalSemaphoreFeatures = 0;
+   }
 }
 
 static const VkTimeDomainEXT lvp_time_domains[] = {

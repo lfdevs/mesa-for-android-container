@@ -16,8 +16,8 @@ git clone -b v"$MOLD_VERSION" --single-branch --depth 1 https://github.com/rui31
 pushd mold
 
 cmake -DCMAKE_BUILD_TYPE=Release -D BUILD_TESTING=OFF -D MOLD_LTO=ON
-cmake --build . --parallel
-cmake --install .
+cmake --build . --parallel "${FDO_CI_CONCURRENT:-4}"
+cmake --install . --strip
 
 popd
 rm -rf mold

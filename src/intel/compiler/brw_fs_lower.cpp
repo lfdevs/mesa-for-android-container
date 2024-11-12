@@ -64,11 +64,11 @@ brw_fs_lower_constant_loads(fs_visitor &s)
          if (!s.get_pull_locs(inst->src[0], &index, &pull_index))
             continue;
 
-         s.VARYING_PULL_CONSTANT_LOAD(ibld, inst->dst,
-                                      brw_imm_ud(index),
-                                      brw_reg() /* surface_handle */,
-                                      inst->src[1],
-                                      pull_index * 4, 4, 1);
+         ibld.VARYING_PULL_CONSTANT_LOAD(inst->dst,
+                                         brw_imm_ud(index),
+                                         brw_reg() /* surface_handle */,
+                                         inst->src[1],
+                                         pull_index * 4, 4, 1);
          inst->remove(block);
 
          progress = true;
@@ -796,8 +796,9 @@ brw_fs_lower_load_subgroup_invocation(fs_visitor &s)
          continue;
 
       const fs_builder abld =
-         fs_builder(&s, block, inst).annotate("SubgroupInvocation", NULL);
+         fs_builder(&s, block, inst).annotate("SubgroupInvocation");
       const fs_builder ubld8 = abld.group(8, 0).exec_all();
+      ubld8.UNDEF(inst->dst);
 
       if (inst->exec_size == 8) {
          assert(inst->dst.type == BRW_TYPE_UD);
@@ -806,7 +807,6 @@ brw_fs_lower_load_subgroup_invocation(fs_visitor &s)
          ubld8.MOV(inst->dst, uw);
       } else {
          assert(inst->dst.type == BRW_TYPE_UW);
-         abld.UNDEF(inst->dst);
          ubld8.MOV(inst->dst, brw_imm_v(0x76543210));
          ubld8.ADD(byte_offset(inst->dst, 16), inst->dst, brw_imm_uw(8u));
          if (inst->exec_size > 16) {
@@ -817,11 +817,6 @@ brw_fs_lower_load_subgroup_invocation(fs_visitor &s)
 
       inst->remove(block);
       progress = true;
-
-      /* Currently this is only ever emitted once, so there's no point in
-       * continuing to look for more cases.  Drop if we ever re-emit it.
-       */
-      break;
    }
 
    if (progress)

@@ -13,26 +13,17 @@ enum libagx_tess_partitioning {
    LIBAGX_TESS_PARTITIONING_INTEGER,
 };
 
-enum libagx_tess_output_primitive {
-   LIBAGX_TESS_OUTPUT_POINT,
-   LIBAGX_TESS_OUTPUT_TRIANGLE_CW,
-   LIBAGX_TESS_OUTPUT_TRIANGLE_CCW,
-};
-
 enum libagx_tess_mode {
    /* Do not actually tessellate, just write the index counts */
    LIBAGX_TESS_MODE_COUNT,
 
    /* Tessellate using the count buffers to allocate indices */
    LIBAGX_TESS_MODE_WITH_COUNTS,
-
-   /* Tessellate without count buffers by generating VDM index list words */
-   LIBAGX_TESS_MODE_VDM,
 };
 
 struct libagx_tess_point {
-   float u;
-   float v;
+   uint32_t u;
+   uint32_t v;
 };
 AGX_STATIC_ASSERT(sizeof(struct libagx_tess_point) == 8);
 
@@ -51,8 +42,7 @@ struct libagx_tess_args {
     */
    GLOBAL(uint32_t) coord_allocs;
 
-   /* Space for output draws from the tessellator. Either API draw calls or
-    * VDM control words, depending on the mode. */
+   /* Space for output draws from the tessellator. API draw calls. */
    GLOBAL(uint32_t) out_draws;
 
    /* Tessellation control shader output buffer. */
@@ -81,6 +71,9 @@ struct libagx_tess_args {
     */
    GLOBAL(uint32_t) grids;
 
+   /* For indirect draws, the output input assembly descriptor */
+   GLOBAL(struct agx_ia_state) ia;
+
    /* For indirect draws, the indirect draw descriptor. */
    GLOBAL(uint32_t) indirect;
 
@@ -90,6 +83,16 @@ struct libagx_tess_args {
     * it's worth it though...
     */
    GLOBAL(uint64_t) vertex_output_buffer_ptr;
+
+   /* Yet more indirect draw garbage. I need a refactor. */
+   uint64_t in_index_buffer;
+   uint32_t in_index_buffer_range_el;
+   uint32_t in_index_size_B;
+
+   /* When geom+tess used together, the buffer containing TES outputs (executed
+    * as a hardware compute shader).
+    */
+   uint64_t tes_buffer;
 
    /* For indirect draws, the bitfield of VS outputs */
    uint64_t vertex_outputs;
@@ -120,5 +123,18 @@ struct libagx_tess_args {
 
    /* Number of patches being tessellated */
    uint32_t nr_patches;
+
+   /* Partitioning and points mode. These affect per-patch setup code but not
+    * the hot tessellation loop so we make them dynamic to reduce tessellator
+    * variants.
+    */
+   enum libagx_tess_partitioning partitioning;
+   uint32_t points_mode;
+
+   /* When fed into a geometry shader, triangles should be counter-clockwise.
+    * The tessellator always produces clockwise triangles, but we can swap
+    * dynamically in the TES.
+    */
+   uint32_t ccw;
 } PACKED;
-AGX_STATIC_ASSERT(sizeof(struct libagx_tess_args) == 40 * 4);
+AGX_STATIC_ASSERT(sizeof(struct libagx_tess_args) == 51 * 4);

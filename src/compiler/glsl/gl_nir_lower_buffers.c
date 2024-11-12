@@ -24,7 +24,6 @@
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
 #include "gl_nir.h"
-#include "ir_uniform.h"
 
 #include "util/compiler.h"
 #include "main/shader_types.h"

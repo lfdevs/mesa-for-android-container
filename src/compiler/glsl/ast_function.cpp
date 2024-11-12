@@ -704,6 +704,8 @@ match_function_by_name(const char *name,
       /* Look for a match in the local shader.  If exact, we're done. */
       bool is_exact = false;
       sig = local_sig = f->matching_signature(state, actual_parameters,
+                                              state->has_implicit_conversions(),
+                                              state->has_implicit_int_to_uint_conversion(),
                                               allow_builtins, &is_exact);
       if (is_exact)
          return sig;
@@ -755,6 +757,8 @@ match_subroutine_by_name(const char *name,
       return NULL;
    *var_r = var;
    sig = found->matching_signature(state, actual_parameters,
+                                   state->has_implicit_conversions(),
+                                   state->has_implicit_int_to_uint_conversion(),
                                    false, &is_exact);
    return sig;
 }
@@ -1162,7 +1166,9 @@ implicitly_convert_component(ir_rvalue * &from, const glsl_base_type to,
                           from->type->vector_elements,
                           from->type->matrix_columns);
 
-      if (_mesa_glsl_can_implicitly_convert(from->type, desired_type, state)) {
+      if (_mesa_glsl_can_implicitly_convert(from->type, desired_type,
+                                            state->has_implicit_conversions(),
+                                            state->has_implicit_int_to_uint_conversion())) {
          /* Even though convert_component() implements the constructor
           * conversion rules (not the implicit conversion rules), its safe
           * to use it here because we already checked that the implicit

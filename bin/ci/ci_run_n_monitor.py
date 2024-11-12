@@ -33,6 +33,7 @@ from gitlab_common import (
     get_gitlab_project,
     get_token_from_default_dir,
     pretty_duration,
+    print_once,
     read_token,
     wait_for_pipeline,
 )
@@ -59,8 +60,8 @@ STATUS_COLORS = {
     "skipped": "",
 }
 
-COMPLETED_STATUSES = {"success", "failed"}
-RUNNING_STATUSES = {"created", "pending", "running"}
+COMPLETED_STATUSES = frozenset({"success", "failed"})
+RUNNING_STATUSES = frozenset({"created", "pending", "running"})
 
 
 def print_job_status(
@@ -79,9 +80,9 @@ def print_job_status(
 
     duration = job_duration(job)
 
-    print(
+    print_once(
         STATUS_COLORS[job.status]
-        + "🞋 target job "  # U+1F78B Round target
+        + "🞋 job "  # U+1F78B Round target
         + link2print(job.web_url, job.name, job_name_field_pad)
         + (f"has new status: {job.status}" if new_status else f"{job.status}")
         + (f" ({pretty_duration(duration)})" if job.started_at else "")
@@ -113,8 +114,9 @@ def monitor_pipeline(
     project: gitlab.v4.objects.Project,
     pipeline: gitlab.v4.objects.ProjectPipeline,
     target_jobs_regex: re.Pattern,
+    include_stage_regex: re.Pattern,
+    exclude_stage_regex: re.Pattern,
     dependencies: set[str],
-    force_manual: bool,
     stress: int,
 ) -> tuple[Optional[int], Optional[int], Dict[str, Dict[int, Tuple[float, str, str]]]]:
     """Monitors pipeline and delegate canceling jobs"""
@@ -124,21 +126,39 @@ def monitor_pipeline(
     execution_times = defaultdict(lambda: defaultdict(tuple))
     target_id: int = -1
     name_field_pad: int = len(max(dependencies, key=len))+2
+    # In a running pipeline, we can skip following job traces that are in these statuses.
+    skip_follow_statuses: frozenset[str] = (COMPLETED_STATUSES)
 
     # Pre-populate the stress status counter for already completed target jobs.
     if stress:
         # When stress test, it is necessary to collect this information before start.
         for job in pipeline.jobs.list(all=True, include_retried=True):
-            if target_jobs_regex.fullmatch(job.name) and job.status in COMPLETED_STATUSES:
+            if target_jobs_regex.fullmatch(job.name) and \
+               include_stage_regex.fullmatch(job.stage) and \
+               not exclude_stage_regex.fullmatch(job.stage) and \
+               job.status in COMPLETED_STATUSES:
                 stress_status_counter[job.name][job.status] += 1
                 execution_times[job.name][job.id] = (job_duration(job), job.status, job.web_url)
 
+    # jobs_waiting is a list of job names that are waiting for status update.
+    # It occurs when a job that we want to run depends on another job that is not yet finished.
+    jobs_waiting = []
+    # FIXME: This function has too many parameters, consider refactoring.
+    enable_job_fn = partial(
+        enable_job,
+        project=project,
+        pipeline=pipeline,
+        job_name_field_pad=name_field_pad,
+        jobs_waiting=jobs_waiting,
+    )
     while True:
         deps_failed = []
         to_cancel = []
+        jobs_waiting.clear()
         for job in sorted(pipeline.jobs.list(all=True), key=lambda j: j.name):
-            # target jobs
-            if target_jobs_regex.fullmatch(job.name):
+            if target_jobs_regex.fullmatch(job.name) and \
+               include_stage_regex.fullmatch(job.stage) and \
+               not exclude_stage_regex.fullmatch(job.stage):
                 target_id = job.id
                 target_status = job.status
 
@@ -149,10 +169,10 @@ def monitor_pipeline(
                     ):
                         stress_status_counter[job.name][target_status] += 1
                         execution_times[job.name][job.id] = (job_duration(job), target_status, job.web_url)
-                        job = enable_job(project, pipeline, job, "retry", force_manual, name_field_pad)
+                        job = enable_job_fn(job=job, action_type="retry")
                 else:
                     execution_times[job.name][job.id] = (job_duration(job), target_status, job.web_url)
-                    job = enable_job(project, pipeline, job, "target", force_manual, name_field_pad)
+                    job = enable_job_fn(job=job, action_type="target")
 
                 print_job_status(job, target_status not in target_statuses[job.name], name_field_pad)
                 target_statuses[job.name] = target_status
@@ -165,7 +185,7 @@ def monitor_pipeline(
 
             # run dependencies and cancel the rest
             if job.name in dependencies:
-                job = enable_job(project, pipeline, job, "dep", True, name_field_pad)
+                job = enable_job_fn(job=job, action_type="dep")
                 if job.status == "failed":
                     deps_failed.append(job.name)
             else:
@@ -189,7 +209,14 @@ def monitor_pipeline(
                 pretty_wait(REFRESH_WAIT_JOBS)
                 continue
 
-        print("---------------------------------", flush=False)
+        if jobs_waiting:
+            print_once(
+                f"{Fore.YELLOW}Waiting for jobs to update status:",
+                ", ".join(jobs_waiting),
+                Fore.RESET,
+            )
+            pretty_wait(REFRESH_WAIT_JOBS)
+            continue
 
         if len(target_statuses) == 1 and RUNNING_STATUSES.intersection(
             target_statuses.values()
@@ -214,7 +241,7 @@ def monitor_pipeline(
             )
             return None, 1, execution_times
 
-        if {"success", "manual"}.issuperset(target_statuses.values()):
+        if skip_follow_statuses.issuperset(target_statuses.values()):
             return None, 0, execution_times
 
         pretty_wait(REFRESH_WAIT_JOBS)
@@ -233,13 +260,17 @@ def enable_job(
     pipeline: gitlab.v4.objects.ProjectPipeline,
     job: gitlab.v4.objects.ProjectPipelineJob,
     action_type: Literal["target", "dep", "retry"],
-    force_manual: bool,
     job_name_field_pad: int = 0,
+    jobs_waiting: list[str] = [],
 ) -> gitlab.v4.objects.ProjectPipelineJob:
-    """enable job"""
+    # We want to run this job, but it is not ready to run yet, so let's try again in the next
+    # iteration.
+    if job.status == "created":
+        jobs_waiting.append(job.name)
+        return job
+
     if (
         (job.status in COMPLETED_STATUSES and action_type != "retry")
-        or (job.status == "manual" and not force_manual)
         or job.status in {"skipped"} | RUNNING_STATUSES
     ):
         return job
@@ -289,7 +320,9 @@ def cancel_jobs(
     with ThreadPoolExecutor(max_workers=6) as exe:
         part = partial(cancel_job, project)
         exe.map(part, to_cancel)
-    print()
+
+    # The cancelled jobs are printed without a newline
+    print_once()
 
 
 def print_log(
@@ -325,8 +358,29 @@ def parse_args() -> argparse.Namespace:
         "--target",
         metavar="target-job",
         help="Target job regex. For multiple targets, pass multiple values, "
-             "eg. `--target foo bar`.",
+             "eg. `--target foo bar`. Only jobs in the target stage(s) "
+             "supplied, and their dependencies, will be considered.",
         required=True,
+        nargs=argparse.ONE_OR_MORE,
+    )
+    parser.add_argument(
+        "--include-stage",
+        metavar="include-stage",
+        help="Job stages to include when searching for target jobs. "
+             "For multiple targets, pass multiple values, eg. "
+             "`--include-stage foo bar`.",
+        default=[".*"],
+        nargs=argparse.ONE_OR_MORE,
+    )
+    parser.add_argument(
+        "--exclude-stage",
+        metavar="exclude-stage",
+        help="Job stages to exclude when searching for target jobs. "
+             "For multiple targets, pass multiple values, eg. "
+             "`--exclude-stage foo bar`. By default, performance and "
+             "post-merge jobs are excluded; pass --exclude-stage '' to "
+             "include them for consideration.",
+        default=["performance", ".*-postmerge"],
         nargs=argparse.ONE_OR_MORE,
     )
     parser.add_argument(
@@ -338,7 +392,8 @@ def parse_args() -> argparse.Namespace:
              f"otherwise it's read from {TOKEN_DIR / 'gitlab-token'}",
     )
     parser.add_argument(
-        "--force-manual", action="store_true", help="Force jobs marked as manual"
+        "--force-manual", action="store_true",
+        help="Deprecated argument; manual jobs are always force-enabled"
     )
     parser.add_argument(
         "--stress",
@@ -352,6 +407,11 @@ def parse_args() -> argparse.Namespace:
         "--project",
         default="mesa",
         help="GitLab project in the format <user>/<project> or just <project>",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Exit after printing target jobs and dependencies",
     )
 
     mutex_group1 = parser.add_mutually_exclusive_group()
@@ -403,6 +463,8 @@ def print_detected_jobs(
 def find_dependencies(
     token: str | None,
     target_jobs_regex: re.Pattern,
+    include_stage_regex: re.Pattern,
+    exclude_stage_regex: re.Pattern,
     project_path: str,
     iid: int
 ) -> set[str]:
@@ -431,7 +493,7 @@ def find_dependencies(
         gql_instance, {"projectPath": project_path.path_with_namespace, "iid": iid}
     )
 
-    target_dep_dag = filter_dag(dag, target_jobs_regex)
+    target_dep_dag = filter_dag(dag, target_jobs_regex, include_stage_regex, exclude_stage_regex)
     if not target_dep_dag:
         print(Fore.RED + "The job(s) were not found in the pipeline." + Fore.RESET)
         sys.exit(1)
@@ -549,14 +611,40 @@ def main() -> None:
 
         target_jobs_regex = re.compile(target)
 
+        include_stage = '|'.join(args.include_stage)
+        include_stage = include_stage.strip()
+
+        print("🞋 target from stages: " + Fore.BLUE + include_stage + Style.RESET_ALL)  # U+1F78B Round target
+
+        include_stage_regex = re.compile(include_stage)
+
+        exclude_stage = '|'.join(args.exclude_stage)
+        exclude_stage = exclude_stage.strip()
+
+        print("🞋 target excluding stages: " + Fore.BLUE + exclude_stage + Style.RESET_ALL)  # U+1F78B Round target
+
+        exclude_stage_regex = re.compile(exclude_stage)
+
         deps = find_dependencies(
             token=token,
             target_jobs_regex=target_jobs_regex,
+            include_stage_regex=include_stage_regex,
+            exclude_stage_regex=exclude_stage_regex,
             iid=pipe.iid,
             project_path=cur_project
         )
+
+        if args.dry_run:
+            sys.exit(0)
+
         target_job_id, ret, exec_t = monitor_pipeline(
-            cur_project, pipe, target_jobs_regex, deps, args.force_manual, args.stress
+            cur_project,
+            pipe,
+            target_jobs_regex,
+            include_stage_regex,
+            exclude_stage_regex,
+            deps,
+            args.stress
         )
 
         if target_job_id:

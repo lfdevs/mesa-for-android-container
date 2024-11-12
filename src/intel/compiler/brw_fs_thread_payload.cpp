@@ -379,6 +379,11 @@ cs_thread_payload::cs_thread_payload(const fs_visitor &v)
       /* TODO: Fill out uses_btd_stack_ids automatically */
       if (prog_data->uses_btd_stack_ids)
          r += reg_unit(v.devinfo);
+
+      if (v.stage == MESA_SHADER_COMPUTE && prog_data->uses_inline_data) {
+         inline_parameter = brw_ud1_grf(r, 0);
+         r += reg_unit(v.devinfo);
+      }
    }
 
    num_regs = r;
@@ -458,8 +463,11 @@ task_mesh_thread_payload::task_mesh_thread_payload(fs_visitor &v)
    if (v.devinfo->ver < 20 && v.dispatch_width == 32)
       r += reg_unit(v.devinfo);
 
-   inline_parameter = brw_ud1_grf(r, 0);
-   r += reg_unit(v.devinfo);
+   struct brw_cs_prog_data *prog_data = brw_cs_prog_data(v.prog_data);
+   if (prog_data->uses_inline_data) {
+      inline_parameter = brw_ud1_grf(r, 0);
+      r += reg_unit(v.devinfo);
+   }
 
    num_regs = r;
 }

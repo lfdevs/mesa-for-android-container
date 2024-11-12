@@ -1493,6 +1493,7 @@ pvr_frag_state_flags_init(const struct pvr_render_job *const job,
       .use_single_core = job->frag_uses_atomic_ops,
       .get_vis_results = job->get_vis_results,
       .has_spm_scratch_buffer = job->requires_spm_scratch_buffer,
+      .disable_pixel_merging = job->disable_pixel_merging,
    };
 }
 

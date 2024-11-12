@@ -36,6 +36,13 @@
 struct anv_device_memory;
 struct anv_device;
 struct anv_image;
+struct u_gralloc_buffer_handle;
+enum isl_tiling;
+
+VkResult
+anv_android_get_tiling(struct anv_device *device,
+                       struct u_gralloc_buffer_handle *gr_handle,
+                       enum isl_tiling *tiling_out);
 
 VkResult anv_image_init_from_gralloc(struct anv_device *device,
                                      struct anv_image *image,

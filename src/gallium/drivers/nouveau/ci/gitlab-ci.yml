@@ -1,7 +1,7 @@
 include:
   - local: 'src/gallium/drivers/nouveau/ci/gitlab-ci-inc.yml'
 
-gk20a-gles:
+.gk20a-gles:
   extends:
     - .baremetal-test-arm32
     - .nouveau-bm-test
@@ -23,7 +23,6 @@ gk20a-gles:
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     DEQP_SUITE: nouveau-gm20b
-    TEST_PHASE_TIMEOUT: 120
 
 .gm20b-gles:
   extends:

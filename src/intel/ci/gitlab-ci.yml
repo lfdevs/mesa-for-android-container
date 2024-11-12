@@ -9,18 +9,39 @@ anv-jsl:
     DEQP_SUITE: anv-jsl
     VK_DRIVER: intel
     DEQP_FRACTION: 2
-  parallel: 4
+  parallel: 5
 
 # We don't enable a full run of anv-jsl nightly because it's about 8 hours of
 # runtime, which would take too many boards at once.
 .anv-jsl-full:
   extends:
     - anv-jsl
-    - .intel-manual-rules
+    - .anv-manual-rules
   variables:
     DEQP_SUITE: anv-jsl-full
     JOB_TIMEOUT: 60
   parallel: 4
+
+anv-adl:
+  extends:
+    - .lava-acer-cbv514-1h-34uz-brya:x86_64
+    - .anv-test
+  variables:
+    DEQP_SUITE: anv-adl
+    VK_DRIVER: intel
+    DEQP_FRACTION: 2
+  timeout: 30m
+  parallel: 4
+
+anv-adl-full:
+  extends:
+    - anv-adl
+    - .anv-manual-rules
+  variables:
+    DEQP_SUITE: anv-adl-full
+    JOB_TIMEOUT: 90
+  timeout: 1h 40m
+  parallel: 5
 
 anv-tgl:
   extends:
@@ -36,7 +57,7 @@ anv-tgl:
 .anv-tgl-full:
   extends:
     - anv-tgl
-    - .intel-manual-rules
+    - .anv-manual-rules
   variables:
     DEQP_SUITE: anv-tgl-full
     DEQP_FRACTION: 1
@@ -71,6 +92,7 @@ anv-jsl-angle:
   variables:
     DEQP_SUITE: anv-jsl-angle
     GPU_VERSION: angle-anv-jsl
+  parallel: 2
 
 anv-jsl-angle-full:
   extends:
@@ -80,6 +102,25 @@ anv-jsl-angle-full:
     DEQP_SUITE: anv-jsl-angle-full
     JOB_TIMEOUT: 60
   parallel: 2
+
+anv-adl-angle:
+  extends:
+    - .lava-acer-cbv514-1h-34uz-brya:x86_64
+    - .anv-test
+    - .anv-angle-test
+  variables:
+    DEQP_SUITE: anv-adl-angle
+    GPU_VERSION: angle-anv-adl
+  timeout: 30m
+
+anv-adl-angle-full:
+  extends:
+    - anv-adl-angle
+    - .intel-manual-rules
+  variables:
+    DEQP_SUITE: anv-adl-angle-full
+    JOB_TIMEOUT: 60
+  timeout: 30m
 
 anv-tgl-angle:
   extends:
@@ -158,7 +199,7 @@ iris-jsl-deqp:
     - .iris-test
   variables:
     DEQP_SUITE: iris-jsl
-    DEQP_FRACTION: 4
+    DEQP_FRACTION: 8
   parallel: 2
 
 iris-amly-egl:
@@ -243,6 +284,31 @@ iris-kbl-traces-performance:
     - .profile-traces
   variables:
     GPU_VERSION: intel-kbl
+
+intel-adl-cl:
+  extends:
+    - .lava-acer-cbv514-1h-34uz-brya:x86_64
+    - .intel-adl-test
+    - .intel-rules
+  rules:
+    - !reference [.intel-adl-test, rules]
+    - !reference [.intel-rules, rules]
+    - !reference [.rusticl-rules, rules]
+  variables:
+    DEQP_SUITE: intel-adl-cl
+    VK_DRIVER: intel
+    HWCI_START_WESTON: 1
+  timeout: 20m
+
+intel-adl-skqp:
+  extends:
+    - .lava-acer-cbv514-1h-34uz-brya:x86_64
+    - .intel-adl-test
+  variables:
+    DEQP_SUITE: intel-adl-skqp
+    VK_DRIVER: intel
+    HWCI_START_XORG: 1
+  timeout: 30m
 
 intel-tgl-skqp:
   extends:

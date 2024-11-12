@@ -1,0 +1,6 @@
+execute {
+  src = [[
+    nop;
+    @eot
+  ]],
+}

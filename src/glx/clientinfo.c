@@ -125,30 +125,30 @@ glxSendClientInfo(struct glx_display *glx_dpy, int screen)
 
       const char *haystack = src->serverGLXexts;
       while (haystack != NULL) {
-	 char *match = strstr(haystack, "GLX_ARB_create_context");
+    char *match = strstr(haystack, "GLX_ARB_create_context");
 
-	 if (match == NULL)
-	    break;
+    if (match == NULL)
+       break;
 
-	 match += ext_length;
+    match += ext_length;
 
-	 switch (match[0]) {
-	 case '\0':
-	 case ' ':
-	    any_screen_has_ARB_create_context = True;
-	    break;
+    switch (match[0]) {
+    case '\0':
+    case ' ':
+       any_screen_has_ARB_create_context = True;
+       break;
 
-	 case '_':
-	    if (strncmp(match, "_profile", prof_length) == 0
-		    && (match[prof_length] == '\0'
-			|| match[prof_length] == ' ')) {
-	       any_screen_has_ARB_create_context_profile = True;
-	       match += prof_length;
-	    }
-	    break;
-	 }
+    case '_':
+       if (strncmp(match, "_profile", prof_length) == 0
+          && (match[prof_length] == '\0'
+         || match[prof_length] == ' ')) {
+          any_screen_has_ARB_create_context_profile = True;
+          match += prof_length;
+       }
+       break;
+    }
 
-	 haystack = match;
+    haystack = match;
       }
    }
 
@@ -166,30 +166,30 @@ glxSendClientInfo(struct glx_display *glx_dpy, int screen)
    if (glx_dpy->minorVersion == 4
        && any_screen_has_ARB_create_context_profile) {
       xcb_glx_set_client_info_2arb(c,
-				  GLX_MAJOR_VERSION, GLX_MINOR_VERSION,
-				   sizeof(gl_versions_profiles)
-				   / (3 * sizeof(gl_versions_profiles[0])),
-				  gl_extension_length,
-				  strlen(glx_extensions) + 1,
-				  gl_versions_profiles,
-				  gl_extension_string,
-				  glx_extensions);
+              GLX_MAJOR_VERSION, GLX_MINOR_VERSION,
+               sizeof(gl_versions_profiles)
+               / (3 * sizeof(gl_versions_profiles[0])),
+              gl_extension_length,
+              strlen(glx_extensions) + 1,
+              gl_versions_profiles,
+              gl_extension_string,
+              glx_extensions);
    } else if (glx_dpy->minorVersion == 4
-	      && any_screen_has_ARB_create_context) {
+         && any_screen_has_ARB_create_context) {
       xcb_glx_set_client_info_arb(c,
-				  GLX_MAJOR_VERSION, GLX_MINOR_VERSION,
-				  sizeof(gl_versions)
-				  / (2 * sizeof(gl_versions[0])),
-				  gl_extension_length,
-				  strlen(glx_extensions) + 1,
-				  gl_versions,
-				  gl_extension_string,
-				  glx_extensions);
+              GLX_MAJOR_VERSION, GLX_MINOR_VERSION,
+              sizeof(gl_versions)
+              / (2 * sizeof(gl_versions[0])),
+              gl_extension_length,
+              strlen(glx_extensions) + 1,
+              gl_versions,
+              gl_extension_string,
+              glx_extensions);
    } else {
       xcb_glx_client_info(c,
-			  GLX_MAJOR_VERSION, GLX_MINOR_VERSION,
-			  gl_extension_length,
-			  gl_extension_string);
+           GLX_MAJOR_VERSION, GLX_MINOR_VERSION,
+           gl_extension_length,
+           gl_extension_string);
    }
 
    free(gl_extension_string);

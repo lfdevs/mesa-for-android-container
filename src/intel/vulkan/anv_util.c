@@ -57,6 +57,25 @@ __anv_perf_warn(struct anv_device *device,
 }
 
 void
+anv_cmd_buffer_pending_pipe_debug(struct anv_cmd_buffer *cmd_buffer,
+                                  enum anv_pipe_bits bits,
+                                  const char* reason)
+{
+   if (bits == 0)
+      return;
+
+   fprintf(stdout, "acc: ");
+
+   fprintf(stdout, "bits: ");
+   anv_dump_pipe_bits(bits, stdout);
+   fprintf(stdout, "reason: %s", reason);
+
+   if (cmd_buffer->batch.pc_reasons_count < ARRAY_SIZE(cmd_buffer->batch.pc_reasons))
+      cmd_buffer->batch.pc_reasons[cmd_buffer->batch.pc_reasons_count++] = reason;
+   fprintf(stdout, "\n");
+}
+
+void
 anv_dump_pipe_bits(enum anv_pipe_bits bits, FILE *f)
 {
    if (bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT)

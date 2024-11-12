@@ -108,7 +108,7 @@ anv_device_perf_open(struct anv_device *device, uint64_t metric_id)
 
    return intel_perf_stream_open(device->physical->perf, device->fd,
                                  device->context_id, metric_id,
-                                 period_exponent, true, true);
+                                 period_exponent, true, true, NULL);
 }
 
 /* VK_INTEL_performance_query */
@@ -237,8 +237,11 @@ VkResult anv_QueueSetPerformanceConfigurationINTEL(
             return VK_ERROR_INITIALIZATION_FAILED;
       } else {
          int ret = intel_perf_stream_set_metrics_id(device->physical->perf,
+                                                    device->fd,
                                                     device->perf_fd,
-                                                    config->config_id);
+                                                    -1,/* this parameter, exec_queue is not used in i915 */
+                                                    config->config_id,
+                                                    NULL);
          if (ret < 0)
             return vk_device_set_lost(&device->vk, "i915-perf config failed: %m");
       }

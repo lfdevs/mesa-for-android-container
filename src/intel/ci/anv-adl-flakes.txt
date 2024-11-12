@@ -1,0 +1,4 @@
+# initial flakes
+dEQP-VK.wsi.direct_drm.maintenance1.present_fence.fifo.ordering
+shaderquery-dEQP-VK.query_pool.performance_query.query_compute
+

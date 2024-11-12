@@ -29,7 +29,7 @@
 #include "util/u_dynarray.h"
 #include "brw_fs.h"
 
-/** @file brw_cfg.cpp
+/** @file
  *
  * Walks the shader instructions generated and creates a set of basic
  * blocks with successor/predecessor edges connecting them.
@@ -162,7 +162,7 @@ bblock_t::dump(FILE *file) const
    int ip = this->start_ip;
    foreach_inst_in_block(fs_inst, inst, this) {
       fprintf(file, "%5d: ", ip);
-      s->dump_instruction(inst, file);
+      brw_print_instruction(*s, inst, file);
       ip++;
    }
 }
@@ -712,12 +712,12 @@ idom_tree::intersect(bblock_t *b1, bblock_t *b2) const
 }
 
 void
-idom_tree::dump() const
+idom_tree::dump(FILE *file) const
 {
-   printf("digraph DominanceTree {\n");
+   fprintf(file, "digraph DominanceTree {\n");
    for (unsigned i = 0; i < num_parents; i++)
-      printf("\t%d -> %d\n", parents[i]->num, i);
-   printf("}\n");
+      fprintf(file, "\t%d -> %d\n", parents[i]->num, i);
+   fprintf(file, "}\n");
 }
 
 void
@@ -735,11 +735,11 @@ cfg_t::dump_cfg()
 }
 
 void
-fs_visitor::calculate_cfg()
+brw_calculate_cfg(fs_visitor &s)
 {
-   if (this->cfg)
+   if (s.cfg)
       return;
-   cfg = new(mem_ctx) cfg_t(this, &this->instructions);
+   s.cfg = new(s.mem_ctx) cfg_t(&s, &s.instructions);
 }
 
 #define cfgv_assert(assertion)                                          \

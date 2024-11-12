@@ -8,6 +8,9 @@
         - src/broadcom/ci/$GPU_VERSION-fails.txt
         - src/broadcom/ci/$GPU_VERSION-flakes.txt
         - src/broadcom/ci/$GPU_VERSION-skips.txt
+        - src/broadcom/ci/$VK_DRIVER-skips.txt
+        - src/broadcom/ci/$GALLIUM_DRIVER-skips.txt
+        - src/broadcom/ci/$DRIVER_NAME-skips.txt
         - src/broadcom/ci/$PIGLIT_TRACES_FILE
         - src/broadcom/cle/**/*
         - src/broadcom/clif/**/*
@@ -26,7 +29,7 @@
 .vc4-rules:
   stage: broadcom
   rules:
-    - if: $FORCE_KERNEL_TAG != null
+    - if: $EXTERNAL_KERNEL_TAG != null
       when: never
     - !reference [.test, rules]
     - !reference [.igalia-farm-rules, rules]
@@ -40,7 +43,7 @@
       when: on_success
 
 .vc4-manual-rules:
-  stage: broadcom
+  stage: broadcom-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -53,7 +56,7 @@
 .v3d-rules:
   stage: broadcom
   rules:
-    - if: $FORCE_KERNEL_TAG != null
+    - if: $EXTERNAL_KERNEL_TAG != null
       when: never
     - !reference [.test, rules]
     - !reference [.igalia-farm-rules, rules]
@@ -67,7 +70,7 @@
       when: on_success
 
 .v3d-manual-rules:
-  stage: broadcom
+  stage: broadcom-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -85,7 +88,7 @@
     - !reference [.rusticl-rules, rules]
 
 .v3d-rusticl-manual-rules:
-  stage: broadcom
+  stage: broadcom-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.v3d-manual-rules, rules]
@@ -94,7 +97,7 @@
 .v3dv-rules:
   stage: broadcom
   rules:
-    - if: $FORCE_KERNEL_TAG != null
+    - if: $EXTERNAL_KERNEL_TAG != null
       when: never
     - !reference [.test, rules]
     - !reference [.igalia-farm-rules, rules]
@@ -105,7 +108,7 @@
       when: on_success
 
 .v3dv-manual-rules:
-  stage: broadcom
+  stage: broadcom-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]
@@ -136,7 +139,7 @@
   tags:
     - igalia-rpi4
 
-# 4 device (2024-07-11)
+# 10 devices (2024-07-31)
 .igalia-bcm2712-rpi-5:
   variables:
     DEVICE_TYPE: rpi5
@@ -151,10 +154,11 @@
   script:
     - ./install/bare-metal/poe-powered.sh
   variables:
+    BOOT_PHASE_TIMEOUT_SECONDS: 90
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     FLAKES_CHANNEL: "#videocore-ci"
     FARM: igalia
-  timeout: 20m
+  timeout: 25m
 
 .broadcom-test:arm64:
   extends:
@@ -162,6 +166,17 @@
     - .baremetal-test-arm64
   variables:
     BM_BOOTFS: /boot/raspberrypi_arm64
+
+.broadcom-test-full:arm64:
+  extends:
+    - .broadcom-test:arm64
+  variables:
+    BM_BOOTFS: /boot/raspberrypi_arm64_full
+
+.broadcom-asan-test:arm64:
+  extends:
+    - .broadcom-test:arm64
+    - .baremetal-arm64-asan-test
 
 .broadcom-test:arm32:
   extends:

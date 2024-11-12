@@ -14,6 +14,8 @@ files_libintel_common = files(
   'xe/intel_engine.h',
   'xe/intel_gem.c',
   'xe/intel_gem.h',
+  'xe/intel_queue.c',
+  'xe/intel_queue.h',
   'intel_aux_map.c',
   'intel_aux_map.h',
   'intel_bind_timeline.c',
@@ -88,7 +90,7 @@ endif
 if with_tests and not with_platform_android
   foreach g : [['70', 'gfx7'], ['75', 'hsw'], ['80', 'gfx8'],
                ['90', 'gfx9'], ['110', 'gfx11'], ['120', 'gfx12'],
-               ['125', 'gfx125']]
+               ['125', 'gfx125'], ['200', 'gfx20']]
     executable(
       'intel_@0@_mi_builder_test'.format(g[1]),
       files('tests/mi_builder_test.cpp'),

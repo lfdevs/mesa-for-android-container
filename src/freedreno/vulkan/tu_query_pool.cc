@@ -314,7 +314,7 @@ tu_CreateQueryPool(VkDevice _device,
             compare_perfcntr_pass);
    }
 
-   VkResult result = tu_bo_init_new(device, &pool->bo,
+   VkResult result = tu_bo_init_new(device, &pool->vk.base, &pool->bo,
          pCreateInfo->queryCount * slot_size, TU_BO_ALLOC_NO_FLAGS, "query pool");
    if (result != VK_SUCCESS) {
       vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
@@ -1161,6 +1161,16 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    const struct tu_render_pass *pass = cmdbuf->state.pass;
    struct tu_cs *cs = pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
 
+   struct tu_cs *epilogue_cs = &cmdbuf->cs;
+   if (pass)
+      /* Technically, queries should be tracked per-subpass, but here we track
+       * at the render pass level to simply the code a bit. This is safe
+       * because the only commands that use the available bit are
+       * vkCmdCopyQueryPoolResults and vkCmdResetQueryPool, both of which
+       * cannot be invoked from inside a render pass scope.
+       */
+      epilogue_cs = &cmdbuf->draw_epilogue_cs;
+
    uint64_t available_iova = query_available_iova(pool, query);
    uint64_t begin_iova = occlusion_query_iova(pool, query, begin);
    uint64_t result_iova = occlusion_query_iova(pool, query, result);
@@ -1228,20 +1238,21 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
       tu_cs_emit_qw(cs, begin_iova);
 
       tu_cs_emit_wfi(cs);
+
+      if (cmdbuf->device->physical_device->info->a7xx.has_generic_clear) {
+         /* If the next renderpass uses the same depth attachment, clears it
+          * with generic clear - ZPASS_DONE may somehow read stale values that
+          * are apparently invalidated by CCU_INVALIDATE_DEPTH.
+          * See dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_*
+          */
+         tu_emit_event_write<CHIP>(cmdbuf, epilogue_cs,
+                                   FD_CCU_INVALIDATE_DEPTH);
+      }
    }
 
-   if (pass)
-      /* Technically, queries should be tracked per-subpass, but here we track
-       * at the render pass level to simply the code a bit. This is safe
-       * because the only commands that use the available bit are
-       * vkCmdCopyQueryPoolResults and vkCmdResetQueryPool, both of which
-       * cannot be invoked from inside a render pass scope.
-       */
-      cs = &cmdbuf->draw_epilogue_cs;
-
-   tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 4);
-   tu_cs_emit_qw(cs, available_iova);
-   tu_cs_emit_qw(cs, 0x1);
+   tu_cs_emit_pkt7(epilogue_cs, CP_MEM_WRITE, 4);
+   tu_cs_emit_qw(epilogue_cs, available_iova);
+   tu_cs_emit_qw(epilogue_cs, 0x1);
 }
 
 /* PRIMITIVE_CTRS is used for two distinct queries:

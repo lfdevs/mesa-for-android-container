@@ -101,6 +101,7 @@ intel_measure_init(struct intel_measure_device *device)
       const char *batch_size_s = strstr(env_copy, "batch_size=");
       const char *buffer_size_s = strstr(env_copy, "buffer_size=");
       const char *cpu_s = strstr(env_copy, "cpu");
+      const char *no_ogl = strstr(env_copy, "nogl");
       while (true) {
          char *sep = strrchr(env_copy, ',');
          if (sep == NULL)
@@ -108,14 +109,14 @@ intel_measure_init(struct intel_measure_device *device)
          *sep = '\0';
       }
 
+      if (no_ogl && device->type == INTEL_MEASURE_DEVICE_OGL) {
+         config.enabled = false;
+         return;
+      }
+
       if (filename && __normal_user()) {
          filename += 5;
-         config.file = fopen(filename, "w");
-         if (!config.file) {
-            fprintf(stderr, "INTEL_MEASURE failed to open output file %s: %s\n",
-                    filename, strerror (errno));
-            abort();
-         }
+         config.deferred_create_filename = strdup(filename);
       }
 
       if (start_frame_s) {
@@ -213,16 +214,6 @@ intel_measure_init(struct intel_measure_device *device)
       if (cpu_s) {
          config.cpu_measure = true;
       }
-
-      if (!config.cpu_measure)
-         fputs("draw_start,draw_end,frame,batch,batch_size,renderpass,"
-               "event_index,event_count,type,count,vs,tcs,tes,"
-               "gs,fs,cs,ms,ts,idle_us,time_us\n",
-               config.file);
-      else
-         fputs("draw_start,frame,batch,batch_size,event_index,event_count,"
-               "type,count\n",
-               config.file);
    }
 
    device->config = NULL;
@@ -664,6 +655,27 @@ static void
 intel_measure_print(struct intel_measure_device *device,
                     const struct intel_device_info *info)
 {
+   if (unlikely(config.deferred_create_filename)) {
+      config.file = fopen(config.deferred_create_filename, "w");
+      if (!config.file) {
+         fprintf(stderr, "INTEL_MEASURE failed to open output file %s: %s\n",
+                  config.deferred_create_filename, strerror(errno));
+         abort();
+      }
+      free(config.deferred_create_filename);
+      config.deferred_create_filename = NULL;
+
+      if (!config.cpu_measure)
+         fputs("draw_start,draw_end,frame,batch,batch_size,renderpass,"
+               "event_index,event_count,type,count,vs,tcs,tes,"
+               "gs,fs,cs,ms,ts,idle_us,time_us\n",
+               config.file);
+      else
+         fputs("draw_start,frame,batch,batch_size,event_index,event_count,"
+               "type,count\n",
+               config.file);
+   }
+
    while (true) {
       const int events_to_combine = buffered_event_count(device);
       if (events_to_combine == 0)

@@ -91,19 +91,31 @@ void ac_set_nir_options(struct radeon_info *info, bool use_llvm,
    options->lower_int64_options = nir_lower_imul64 | nir_lower_imul_high64 | nir_lower_imul_2x32_64 | nir_lower_divmod64 |
                                   nir_lower_minmax64 | nir_lower_iabs64 | nir_lower_iadd_sat64 | nir_lower_conv64;
    options->divergence_analysis_options = nir_divergence_view_index_uniform;
-   options->optimize_quad_vote_to_reduce = true;
+   options->optimize_quad_vote_to_reduce = !use_llvm;
    options->lower_fisnormal = true;
    options->support_16bit_alu = info->gfx_level >= GFX8;
    options->vectorize_vec2_16bit = info->has_packed_math_16bit;
    options->discard_is_demote = true;
+   options->io_options = nir_io_has_flexible_input_interpolation_except_flat |
+                         (info->gfx_level >= GFX8 ? nir_io_16bit_input_output_support : 0) |
+                         nir_io_prefer_scalar_fs_inputs |
+                         nir_io_mix_convergent_flat_with_interpolated |
+                         nir_io_vectorizer_ignores_types;
+   options->scalarize_ddx = true;
+   options->skip_lower_packing_ops =
+      BITFIELD_BIT(nir_lower_packing_op_unpack_64_2x32) |
+      BITFIELD_BIT(nir_lower_packing_op_unpack_64_4x16) |
+      BITFIELD_BIT(nir_lower_packing_op_unpack_32_2x16) |
+      BITFIELD_BIT(nir_lower_packing_op_pack_32_4x8) |
+      BITFIELD_BIT(nir_lower_packing_op_unpack_32_4x8);
 }
 
 bool
 ac_nir_mem_vectorize_callback(unsigned align_mul, unsigned align_offset, unsigned bit_size,
-                              unsigned num_components, nir_intrinsic_instr *low,
+                              unsigned num_components, unsigned hole_size, nir_intrinsic_instr *low,
                               nir_intrinsic_instr *high, void *data)
 {
-   if (num_components > 4)
+   if (num_components > 4 || hole_size)
       return false;
 
    bool is_scratch = false;

@@ -88,7 +88,7 @@ struct etna_inst {
    unsigned skphp         : 1;
    unsigned denorm        : 1;
    unsigned local         : 1;
-   unsigned left_shift    : 2;
+   unsigned left_shift    : 3;
    struct etna_inst_dst dst;               /* destination operand */
    struct etna_inst_tex tex;               /* texture operand */
    struct etna_inst_src src[ETNA_NUM_SRC]; /* source operand */

@@ -28,7 +28,6 @@
 #include "main/shaderimage.h"
 #include "program/prog_parameter.h"
 #include "program/prog_print.h"
-#include "compiler/glsl/ir_uniform.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"

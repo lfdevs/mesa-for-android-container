@@ -79,6 +79,8 @@ typedef void (*isl_emit_cpb_control_s_func)(const struct isl_device *dev, void *
          return isl_gfx125_##func;                                      \
       case 200:                                                         \
          return isl_gfx20_##func;                                       \
+      case 300:                                                         \
+         return isl_gfx30_##func;                                       \
       default:                                                          \
          assert(!"Unknown hardware generation");                        \
          return NULL;                                                   \
@@ -299,6 +301,9 @@ _isl_notify_failure(const struct isl_surf_init_info *surf_info,
 #  include "isl_genX_priv.h"
 #  undef genX
 #  define genX(x) gfx20_##x
+#  include "isl_genX_priv.h"
+#  undef genX
+#  define genX(x) gfx30_##x
 #  include "isl_genX_priv.h"
 #  undef genX
 #endif

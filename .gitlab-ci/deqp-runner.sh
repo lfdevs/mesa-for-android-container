@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2086 # we want word splitting
+# shellcheck disable=SC1091 # paths only become valid at runtime
+
+. "${SCRIPTS_DIR}/setup-test-env.sh"
 
 section_start test_setup "deqp: preparing test setup"
 
@@ -25,9 +28,6 @@ export OCL_ICD_VENDORS="$PWD"/install/etc/OpenCL/vendors/
 if [ -n "$USE_ANGLE" ]; then
   export LD_LIBRARY_PATH=/angle:$LD_LIBRARY_PATH
 fi
-
-RESULTS="$PWD/${DEQP_RESULTS_DIR:-results}"
-mkdir -p "$RESULTS"
 
 # Ensure Mesa Shader Cache resides on tmpfs.
 SHADER_CACHE_HOME=${XDG_CACHE_HOME:-${HOME}/.cache}
@@ -60,33 +60,38 @@ if [ -z "$DEQP_SUITE" ]; then
 
     # Generate test case list file.
     if [ "$DEQP_VER" = "vk" ]; then
-       MUSTPASS=/deqp/mustpass/vk-main.txt
+       MUSTPASS=/deqp/mustpass/vk-main.txt.zst
        DEQP=/deqp/external/vulkancts/modules/vulkan/deqp-vk
     elif [ "$DEQP_VER" = "gles2" ] || [ "$DEQP_VER" = "gles3" ] || [ "$DEQP_VER" = "gles31" ] || [ "$DEQP_VER" = "egl" ]; then
-       MUSTPASS=/deqp/mustpass/$DEQP_VER-main.txt
+       MUSTPASS=/deqp/mustpass/$DEQP_VER-main.txt.zst
        DEQP=/deqp/modules/$DEQP_VER/deqp-$DEQP_VER
     elif [ "$DEQP_VER" = "gles2-khr" ] || [ "$DEQP_VER" = "gles3-khr" ] || [ "$DEQP_VER" = "gles31-khr" ] || [ "$DEQP_VER" = "gles32-khr" ]; then
-       MUSTPASS=/deqp/mustpass/$DEQP_VER-main.txt
+       MUSTPASS=/deqp/mustpass/$DEQP_VER-main.txt.zst
        DEQP=/deqp/external/openglcts/modules/glcts
     else
-       MUSTPASS=/deqp/mustpass/$DEQP_VER-main.txt
+       MUSTPASS=/deqp/mustpass/$DEQP_VER-main.txt.zst
        DEQP=/deqp/external/openglcts/modules/glcts
     fi
 
-    cp $MUSTPASS /tmp/case-list.txt
+    [ -z "${DEQP_FRACTION:-}" ] && DEQP_FRACTION=1
+    [ -z "${CI_NODE_INDEX:-}" ] && CI_NODE_INDEX=1
+    [ -z "${CI_NODE_TOTAL:-}" ] && CI_NODE_TOTAL=1
 
-    # If the caselist is too long to run in a reasonable amount of time, let the job
-    # specify what fraction (1/n) of the caselist we should run.  Note: N~M is a gnu
-    # sed extension to match every nth line (first line is #1).
-    if [ -n "$DEQP_FRACTION" ]; then
-       sed -ni 1~$DEQP_FRACTION"p" /tmp/case-list.txt
-    fi
-
-    # If the job is parallel at the gitab job level, take the corresponding fraction
-    # of the caselist.
-    if [ -n "$CI_NODE_INDEX" ]; then
-       sed -ni $CI_NODE_INDEX~$CI_NODE_TOTAL"p" /tmp/case-list.txt
-    fi
+    # This ugly sed expression does a single pass across the case list to take
+    # into account the global fraction and sharding.
+    #
+    # First, we select only every n'th line, according to DEQP_FRACTION; for a
+    # fraction of 3, it will select lines 1, 4, 7, 10, etc.
+    #
+    # Then, we select $CI_NODE_INDEX/$CI_NODE_TOTAL for sharding; for a two-way
+    # shard, the first node will select lines 1 and 7, and the second node will
+    # select lines 4 and 10.
+    #
+    # Sharding like this gives us the best coverage, as sequential tests often
+    # test very slightly different permutations of the same functionality. So
+    # by distributing our skips as widely across the set as possible, rather
+    # than grouping them together, we get the broadest coverage.
+    zstd -d $MUSTPASS -c | sed -n "$(((CI_NODE_INDEX - 1) * DEQP_FRACTION + 1))~$((DEQP_FRACTION * CI_NODE_TOTAL))p" > /tmp/case-list.txt
 
     if [ ! -s /tmp/case-list.txt ]; then
         echo "Caselist generation failed"
@@ -118,6 +123,10 @@ if [ -e "$INSTALL/$GPU_VERSION-skips.txt" ]; then
     DEQP_SKIPS="$DEQP_SKIPS $INSTALL/$GPU_VERSION-skips.txt"
 fi
 
+if [ -e "$INSTALL/$GPU_VERSION-slow-skips.txt" ] && [[ $CI_JOB_NAME != *full* ]]; then
+    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/$GPU_VERSION-slow-skips.txt"
+fi
+
 if [ "$PIGLIT_PLATFORM" != "gbm" ] ; then
     DEQP_SKIPS="$DEQP_SKIPS $INSTALL/x11-skips.txt"
 fi
@@ -126,9 +135,17 @@ if [ "$PIGLIT_PLATFORM" = "gbm" ]; then
     DEQP_SKIPS="$DEQP_SKIPS $INSTALL/gbm-skips.txt"
 fi
 
+if [ -n "$USE_ANGLE" ]; then
+    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/angle-skips.txt"
+fi
+
 if [ -n "$VK_DRIVER" ] && [ -z "$DEQP_SUITE" ]; then
     # Bump the number of tests per group to reduce the startup time of VKCTS.
     DEQP_RUNNER_OPTIONS="$DEQP_RUNNER_OPTIONS --tests-per-group ${DEQP_RUNNER_TESTS_PER_GROUP:-5000}"
+fi
+
+if [ -n "${DEQP_RUNNER_MAX_FAILS:-}" ]; then
+    DEQP_RUNNER_OPTIONS="$DEQP_RUNNER_OPTIONS --max-fails ${DEQP_RUNNER_MAX_FAILS}"
 fi
 
 # Set the path to VK validation layer settings (in case it ends up getting loaded)
@@ -152,7 +169,7 @@ if [ "$GALLIUM_DRIVER" = "virpipe" ]; then
     fi
 
     GALLIUM_DRIVER=llvmpipe \
-    virgl_test_server $VTEST_ARGS >$RESULTS/vtest-log.txt 2>&1 &
+    virgl_test_server $VTEST_ARGS >$RESULTS_DIR/vtest-log.txt 2>&1 &
 
     sleep 1
 fi
@@ -170,19 +187,22 @@ fi
 uncollapsed_section_switch deqp "deqp: deqp-runner"
 
 # Print the detailed version with the list of backports and local patches
+{ set +x; } 2>/dev/null
 for api in vk gl gles; do
   deqp_version_log=/deqp/version-$api
   if [ -r "$deqp_version_log" ]; then
     cat "$deqp_version_log"
   fi
 done
+set -x
 
 set +e
+deqp-runner -V
 if [ -z "$DEQP_SUITE" ]; then
     deqp-runner \
         run \
         --deqp $DEQP \
-        --output $RESULTS \
+        --output $RESULTS_DIR \
         --caselist /tmp/case-list.txt \
         --skips $INSTALL/all-skips.txt $DEQP_SKIPS \
         --flakes $INSTALL/$GPU_VERSION-flakes.txt \
@@ -190,7 +210,7 @@ if [ -z "$DEQP_SUITE" ]; then
         --jobs ${FDO_CI_CONCURRENT:-4} \
         $DEQP_RUNNER_OPTIONS \
         -- \
-        $DEQP_OPTIONS
+        $DEQP_OPTIONS; DEQP_EXITCODE=$?
 else
     # If you change the format of the suite toml filenames or the
     # $GPU_VERSION-{fails,flakes,skips}.txt filenames, look through the rest
@@ -199,42 +219,41 @@ else
     deqp-runner \
         suite \
         --suite $INSTALL/deqp-$DEQP_SUITE.toml \
-        --output $RESULTS \
+        --output $RESULTS_DIR \
         --skips $INSTALL/all-skips.txt $DEQP_SKIPS \
         --flakes $INSTALL/$GPU_VERSION-flakes.txt \
         --testlog-to-xml /deqp/executor/testlog-to-xml \
-        --fraction-start $CI_NODE_INDEX \
+        --fraction-start ${CI_NODE_INDEX:-1} \
         --fraction $((CI_NODE_TOTAL * ${DEQP_FRACTION:-1})) \
         --jobs ${FDO_CI_CONCURRENT:-4} \
-        $DEQP_RUNNER_OPTIONS
+        $DEQP_RUNNER_OPTIONS; DEQP_EXITCODE=$?
 fi
 
-DEQP_EXITCODE=$?
+{ set +x; } 2>/dev/null
+
 set -e
-
-set +x
-
-report_load
 
 section_switch test_post_process "deqp: post-processing test results"
 set -x
 
+report_load
+
 # Remove all but the first 50 individual XML files uploaded as artifacts, to
 # save fd.o space when you break everything.
-find $RESULTS -name \*.xml | \
+find $RESULTS_DIR -name \*.xml | \
     sort -n |
     sed -n '1,+49!p' | \
     xargs rm -f
 
 # If any QPA XMLs are there, then include the XSL/CSS in our artifacts.
-find $RESULTS -name \*.xml \
-    -exec cp /deqp/testlog.css /deqp/testlog.xsl "$RESULTS/" ";" \
+find $RESULTS_DIR -name \*.xml \
+    -exec cp /deqp/testlog.css /deqp/testlog.xsl "$RESULTS_DIR/" ";" \
     -quit
 
 deqp-runner junit \
    --testsuite dEQP \
-   --results $RESULTS/failures.csv \
-   --output $RESULTS/junit.xml \
+   --results $RESULTS_DIR/failures.csv \
+   --output $RESULTS_DIR/junit.xml \
    --limit 50 \
    --template "See $ARTIFACTS_BASE_URL/results/{{testcase}}.xml"
 
@@ -243,7 +262,7 @@ if [ -n "$FLAKES_CHANNEL" ]; then
   python3 $INSTALL/report-flakes.py \
          --host irc.oftc.net \
          --port 6667 \
-         --results $RESULTS/results.csv \
+         --results $RESULTS_DIR/results.csv \
          --known-flakes $INSTALL/$GPU_VERSION-flakes.txt \
          --channel "$FLAKES_CHANNEL" \
          --runner "$CI_RUNNER_DESCRIPTION" \
@@ -256,8 +275,9 @@ fi
 # Compress results.csv to save on bandwidth during the upload of artifacts to
 # GitLab. This reduces the size in a VKCTS run from 135 to 7.6MB, and takes
 # 0.17s on a Ryzen 5950X (16 threads, 0.95s when limited to 1 thread).
-zstd --rm -T0 -8q "$RESULTS/results.csv" -o "$RESULTS/results.csv.zst"
+zstd --quiet --rm --threads ${FDO_CI_CONCURRENT:-0} -8 "$RESULTS_DIR/results.csv" -o "$RESULTS_DIR/results.csv.zst"
 
+set +x
 section_end test_post_process
 
 exit $DEQP_EXITCODE

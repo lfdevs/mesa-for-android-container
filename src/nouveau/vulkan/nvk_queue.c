@@ -19,6 +19,10 @@
 #include "nv_push_clc3c0.h"
 #include "nv_push_clc397.h"
 
+static VkResult
+nvk_queue_submit_simple(struct nvk_queue *queue,
+                        uint32_t dw_count, const uint32_t *dw);
+
 static void
 nvk_queue_state_init(struct nvk_queue_state *qs)
 {
@@ -35,27 +39,13 @@ nvk_queue_state_finish(struct nvk_device *dev,
       nvkmd_mem_unref(qs->samplers.mem);
    if (qs->slm.mem)
       nvkmd_mem_unref(qs->slm.mem);
-   if (qs->push.mem)
-      nvkmd_mem_unref(qs->push.mem);
 }
 
-static void
-nvk_queue_state_dump_push(struct nvk_device *dev,
-                          struct nvk_queue_state *qs, FILE *fp)
-{
-   struct nvk_physical_device *pdev = nvk_device_physical(dev);
-
-   struct nv_push push = {
-      .start = (uint32_t *)qs->push.mem->map,
-      .end = (uint32_t *)qs->push.mem->map + qs->push.dw_count,
-   };
-   vk_push_print(fp, &push, &pdev->info);
-}
-
-VkResult
-nvk_queue_state_update(struct nvk_device *dev,
+static VkResult
+nvk_queue_state_update(struct nvk_queue *queue,
                        struct nvk_queue_state *qs)
 {
+   struct nvk_device *dev = nvk_queue_device(queue);
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
    struct nvkmd_mem *mem;
    uint32_t alloc_count, bytes_per_warp, bytes_per_tpc;
@@ -102,65 +92,56 @@ nvk_queue_state_update(struct nvk_device *dev,
          nvkmd_mem_unref(mem);
    }
 
-   /* TODO: We're currently depending on kernel reference counting to protect
-    * us here.  If we ever stop reference counting in the kernel, we will
-    * either need to delay destruction or hold on to our extra BO references
-    * and insert a GPU stall here if anything has changed before dropping our
-    * old references.
-    */
-
    if (!dirty)
       return VK_SUCCESS;
 
-   struct nvkmd_mem *push_mem;
-   VkResult result = nvkmd_dev_alloc_mapped_mem(dev->nvkmd, &dev->vk.base,
-                                                256 * 4, 0, NVKMD_MEM_LOCAL,
-                                                NVKMD_MEM_MAP_WR, &push_mem);
-   if (result != VK_SUCCESS)
-      return result;
-
+   uint32_t push_data[64];
    struct nv_push push;
-   nv_push_init(&push, push_mem->map, 256);
+   nv_push_init(&push, push_data, 64);
    struct nv_push *p = &push;
 
    if (qs->images.mem) {
-      /* Compute */
-      P_MTHD(p, NVA0C0, SET_TEX_HEADER_POOL_A);
-      P_NVA0C0_SET_TEX_HEADER_POOL_A(p, qs->images.mem->va->addr >> 32);
-      P_NVA0C0_SET_TEX_HEADER_POOL_B(p, qs->images.mem->va->addr);
-      P_NVA0C0_SET_TEX_HEADER_POOL_C(p, qs->images.alloc_count - 1);
-      P_IMMD(p, NVA0C0, INVALIDATE_TEXTURE_HEADER_CACHE_NO_WFI, {
-         .lines = LINES_ALL
-      });
+      if (queue->engines & NVKMD_ENGINE_COMPUTE) {
+         P_MTHD(p, NVA0C0, SET_TEX_HEADER_POOL_A);
+         P_NVA0C0_SET_TEX_HEADER_POOL_A(p, qs->images.mem->va->addr >> 32);
+         P_NVA0C0_SET_TEX_HEADER_POOL_B(p, qs->images.mem->va->addr);
+         P_NVA0C0_SET_TEX_HEADER_POOL_C(p, qs->images.alloc_count - 1);
+         P_IMMD(p, NVA0C0, INVALIDATE_TEXTURE_HEADER_CACHE_NO_WFI, {
+            .lines = LINES_ALL
+         });
+      }
 
-      /* 3D */
-      P_MTHD(p, NV9097, SET_TEX_HEADER_POOL_A);
-      P_NV9097_SET_TEX_HEADER_POOL_A(p, qs->images.mem->va->addr >> 32);
-      P_NV9097_SET_TEX_HEADER_POOL_B(p, qs->images.mem->va->addr);
-      P_NV9097_SET_TEX_HEADER_POOL_C(p, qs->images.alloc_count - 1);
-      P_IMMD(p, NV9097, INVALIDATE_TEXTURE_HEADER_CACHE_NO_WFI, {
-         .lines = LINES_ALL
-      });
+      if (queue->engines & NVKMD_ENGINE_3D) {
+         P_MTHD(p, NV9097, SET_TEX_HEADER_POOL_A);
+         P_NV9097_SET_TEX_HEADER_POOL_A(p, qs->images.mem->va->addr >> 32);
+         P_NV9097_SET_TEX_HEADER_POOL_B(p, qs->images.mem->va->addr);
+         P_NV9097_SET_TEX_HEADER_POOL_C(p, qs->images.alloc_count - 1);
+         P_IMMD(p, NV9097, INVALIDATE_TEXTURE_HEADER_CACHE_NO_WFI, {
+            .lines = LINES_ALL
+         });
+      }
    }
 
    if (qs->samplers.mem) {
-      /* Compute */
-      P_MTHD(p, NVA0C0, SET_TEX_SAMPLER_POOL_A);
-      P_NVA0C0_SET_TEX_SAMPLER_POOL_A(p, qs->samplers.mem->va->addr >> 32);
-      P_NVA0C0_SET_TEX_SAMPLER_POOL_B(p, qs->samplers.mem->va->addr);
-      P_NVA0C0_SET_TEX_SAMPLER_POOL_C(p, qs->samplers.alloc_count - 1);
-      P_IMMD(p, NVA0C0, INVALIDATE_SAMPLER_CACHE_NO_WFI, {
-         .lines = LINES_ALL
-      });
+      if (queue->engines & NVKMD_ENGINE_COMPUTE) {
+         P_MTHD(p, NVA0C0, SET_TEX_SAMPLER_POOL_A);
+         P_NVA0C0_SET_TEX_SAMPLER_POOL_A(p, qs->samplers.mem->va->addr >> 32);
+         P_NVA0C0_SET_TEX_SAMPLER_POOL_B(p, qs->samplers.mem->va->addr);
+         P_NVA0C0_SET_TEX_SAMPLER_POOL_C(p, qs->samplers.alloc_count - 1);
+         P_IMMD(p, NVA0C0, INVALIDATE_SAMPLER_CACHE_NO_WFI, {
+            .lines = LINES_ALL
+         });
+      }
 
-      /* 3D */
-      P_MTHD(p, NV9097, SET_TEX_SAMPLER_POOL_A);
-      P_NV9097_SET_TEX_SAMPLER_POOL_A(p, qs->samplers.mem->va->addr >> 32);
-      P_NV9097_SET_TEX_SAMPLER_POOL_B(p, qs->samplers.mem->va->addr);
-      P_NV9097_SET_TEX_SAMPLER_POOL_C(p, qs->samplers.alloc_count - 1);
-      P_IMMD(p, NV9097, INVALIDATE_SAMPLER_CACHE_NO_WFI, {
-         .lines = LINES_ALL
-      });
+      if (queue->engines & NVKMD_ENGINE_3D) {
+         P_MTHD(p, NV9097, SET_TEX_SAMPLER_POOL_A);
+         P_NV9097_SET_TEX_SAMPLER_POOL_A(p, qs->samplers.mem->va->addr >> 32);
+         P_NV9097_SET_TEX_SAMPLER_POOL_B(p, qs->samplers.mem->va->addr);
+         P_NV9097_SET_TEX_SAMPLER_POOL_C(p, qs->samplers.alloc_count - 1);
+         P_IMMD(p, NV9097, INVALIDATE_SAMPLER_CACHE_NO_WFI, {
+            .lines = LINES_ALL
+         });
+      }
    }
 
    if (qs->slm.mem) {
@@ -170,51 +151,67 @@ nvk_queue_state_update(struct nvk_device *dev,
       const uint64_t slm_per_tpc = qs->slm.bytes_per_tpc;
       assert(!(slm_per_tpc & 0x7fff));
 
-      /* Compute */
-      P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_A);
-      P_NVA0C0_SET_SHADER_LOCAL_MEMORY_A(p, slm_addr >> 32);
-      P_NVA0C0_SET_SHADER_LOCAL_MEMORY_B(p, slm_addr);
+      if (queue->engines & NVKMD_ENGINE_COMPUTE) {
+         P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_A);
+         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_A(p, slm_addr >> 32);
+         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_B(p, slm_addr);
 
-      P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_A);
-      P_NVA0C0_SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_A(p, slm_per_tpc >> 32);
-      P_NVA0C0_SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_B(p, slm_per_tpc);
-      P_NVA0C0_SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_C(p, 0xff);
+         P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_A);
+         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_A(p, slm_per_tpc >> 32);
+         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_B(p, slm_per_tpc);
+         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_NON_THROTTLED_C(p, 0xff);
 
-      if (pdev->info.cls_compute < VOLTA_COMPUTE_A) {
-         P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_THROTTLED_A);
-         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_THROTTLED_A(p, slm_per_tpc >> 32);
-         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_THROTTLED_B(p, slm_per_tpc);
-         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_THROTTLED_C(p, 0xff);
+         if (pdev->info.cls_compute < VOLTA_COMPUTE_A) {
+            P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_THROTTLED_A);
+            P_NVA0C0_SET_SHADER_LOCAL_MEMORY_THROTTLED_A(p, slm_per_tpc >> 32);
+            P_NVA0C0_SET_SHADER_LOCAL_MEMORY_THROTTLED_B(p, slm_per_tpc);
+            P_NVA0C0_SET_SHADER_LOCAL_MEMORY_THROTTLED_C(p, 0xff);
+         }
       }
 
-      /* 3D */
-      P_MTHD(p, NV9097, SET_SHADER_LOCAL_MEMORY_A);
-      P_NV9097_SET_SHADER_LOCAL_MEMORY_A(p, slm_addr >> 32);
-      P_NV9097_SET_SHADER_LOCAL_MEMORY_B(p, slm_addr);
-      P_NV9097_SET_SHADER_LOCAL_MEMORY_C(p, slm_size >> 32);
-      P_NV9097_SET_SHADER_LOCAL_MEMORY_D(p, slm_size);
-      P_NV9097_SET_SHADER_LOCAL_MEMORY_E(p, slm_per_warp);
+      if (queue->engines & NVKMD_ENGINE_3D) {
+         P_MTHD(p, NV9097, SET_SHADER_LOCAL_MEMORY_A);
+         P_NV9097_SET_SHADER_LOCAL_MEMORY_A(p, slm_addr >> 32);
+         P_NV9097_SET_SHADER_LOCAL_MEMORY_B(p, slm_addr);
+         P_NV9097_SET_SHADER_LOCAL_MEMORY_C(p, slm_size >> 32);
+         P_NV9097_SET_SHADER_LOCAL_MEMORY_D(p, slm_size);
+         P_NV9097_SET_SHADER_LOCAL_MEMORY_E(p, slm_per_warp);
+      }
    }
 
    /* We set memory windows unconditionally.  Otherwise, the memory window
     * might be in a random place and cause us to fault off into nowhere.
     */
-   if (pdev->info.cls_compute >= VOLTA_COMPUTE_A) {
-      uint64_t temp = 0xfeULL << 24;
-      P_MTHD(p, NVC3C0, SET_SHADER_SHARED_MEMORY_WINDOW_A);
-      P_NVC3C0_SET_SHADER_SHARED_MEMORY_WINDOW_A(p, temp >> 32);
-      P_NVC3C0_SET_SHADER_SHARED_MEMORY_WINDOW_B(p, temp & 0xffffffff);
+   if (queue->engines & NVKMD_ENGINE_COMPUTE) {
+      if (pdev->info.cls_compute >= VOLTA_COMPUTE_A) {
+         uint64_t temp = 0xfeULL << 24;
+         P_MTHD(p, NVC3C0, SET_SHADER_SHARED_MEMORY_WINDOW_A);
+         P_NVC3C0_SET_SHADER_SHARED_MEMORY_WINDOW_A(p, temp >> 32);
+         P_NVC3C0_SET_SHADER_SHARED_MEMORY_WINDOW_B(p, temp & 0xffffffff);
 
-      temp = 0xffULL << 24;
-      P_MTHD(p, NVC3C0, SET_SHADER_LOCAL_MEMORY_WINDOW_A);
-      P_NVC3C0_SET_SHADER_LOCAL_MEMORY_WINDOW_A(p, temp >> 32);
-      P_NVC3C0_SET_SHADER_LOCAL_MEMORY_WINDOW_B(p, temp & 0xffffffff);
-   } else {
-      P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_WINDOW);
-      P_NVA0C0_SET_SHADER_LOCAL_MEMORY_WINDOW(p, 0xff << 24);
+         temp = 0xffULL << 24;
+         P_MTHD(p, NVC3C0, SET_SHADER_LOCAL_MEMORY_WINDOW_A);
+         P_NVC3C0_SET_SHADER_LOCAL_MEMORY_WINDOW_A(p, temp >> 32);
+         P_NVC3C0_SET_SHADER_LOCAL_MEMORY_WINDOW_B(p, temp & 0xffffffff);
+      } else {
+         P_MTHD(p, NVA0C0, SET_SHADER_LOCAL_MEMORY_WINDOW);
+         P_NVA0C0_SET_SHADER_LOCAL_MEMORY_WINDOW(p, 0xff << 24);
 
-      P_MTHD(p, NVA0C0, SET_SHADER_SHARED_MEMORY_WINDOW);
-      P_NVA0C0_SET_SHADER_SHARED_MEMORY_WINDOW(p, 0xfe << 24);
+         P_MTHD(p, NVA0C0, SET_SHADER_SHARED_MEMORY_WINDOW);
+         P_NVA0C0_SET_SHADER_SHARED_MEMORY_WINDOW(p, 0xfe << 24);
+      }
+
+      /* From nvc0_screen.c:
+       *
+       *    "Reduce likelihood of collision with real buffers by placing the
+       *    hole at the top of the 4G area. This will have to be dealt with
+       *    for real eventually by blocking off that area from the VM."
+       *
+       * Really?!?  TODO: Fix this for realz.  Annoyingly, we only have a
+       * 32-bit pointer for this in 3D rather than a full 48 like we have for
+       * compute.
+       */
+      P_IMMD(p, NV9097, SET_SHADER_LOCAL_MEMORY_WINDOW, 0xff << 24);
    }
 
    /* From nvc0_screen.c:
@@ -229,13 +226,7 @@ nvk_queue_state_update(struct nvk_device *dev,
     */
    P_IMMD(p, NV9097, SET_SHADER_LOCAL_MEMORY_WINDOW, 0xff << 24);
 
-   if (qs->push.mem)
-      nvkmd_mem_unref(qs->push.mem);
-
-   qs->push.mem = push_mem;
-   qs->push.dw_count = nv_push_dw_count(&push);
-
-   return VK_SUCCESS;
+   return nvk_queue_submit_simple(queue, nv_push_dw_count(p), push_data);
 }
 
 static VkResult
@@ -285,36 +276,32 @@ nvk_queue_submit_exec(struct nvk_queue *queue,
 
    const bool sync = pdev->debug_flags & NVK_DEBUG_PUSH_SYNC;
 
-   uint64_t upload_time_point;
-   result = nvk_upload_queue_flush(dev, &dev->upload, &upload_time_point);
-   if (result != VK_SUCCESS)
-      return result;
-
-   if (upload_time_point > 0) {
-      struct vk_sync_wait wait = {
-         .sync = dev->upload.sync,
-         .stage_mask = ~0,
-         .wait_value = upload_time_point,
-      };
-      result = nvkmd_ctx_wait(queue->exec_ctx, &queue->vk.base, 1, &wait);
+   if (submit->command_buffer_count > 0) {
+      result = nvk_queue_state_update(queue, &queue->state);
       if (result != VK_SUCCESS)
-         goto fail;
+         return result;
+
+      uint64_t upload_time_point;
+      result = nvk_upload_queue_flush(dev, &dev->upload, &upload_time_point);
+      if (result != VK_SUCCESS)
+         return result;
+
+      if (upload_time_point > 0) {
+         struct vk_sync_wait wait = {
+            .sync = dev->upload.sync,
+            .stage_mask = ~0,
+            .wait_value = upload_time_point,
+         };
+         result = nvkmd_ctx_wait(queue->exec_ctx, &queue->vk.base, 1, &wait);
+         if (result != VK_SUCCESS)
+            goto fail;
+      }
    }
 
    result = nvkmd_ctx_wait(queue->exec_ctx, &queue->vk.base,
                            submit->wait_count, submit->waits);
    if (result != VK_SUCCESS)
       goto fail;
-
-   if (queue->state.push.mem != NULL) {
-      struct nvkmd_ctx_exec exec = {
-         .addr = queue->state.push.mem->va->addr,
-         .size_B = queue->state.push.dw_count * 4,
-      };
-      result = nvkmd_ctx_exec(queue->exec_ctx, &queue->vk.base, 1, &exec);
-      if (result != VK_SUCCESS)
-         goto fail;
-   }
 
    for (unsigned i = 0; i < submit->command_buffer_count; i++) {
       struct nvk_cmd_buffer *cmd =
@@ -359,8 +346,6 @@ nvk_queue_submit_exec(struct nvk_queue *queue,
 fail:
    if ((sync && result != VK_SUCCESS) ||
        (pdev->debug_flags & NVK_DEBUG_PUSH_DUMP)) {
-      nvk_queue_state_dump_push(dev, &queue->state, stderr);
-
       for (unsigned i = 0; i < submit->command_buffer_count; i++) {
          struct nvk_cmd_buffer *cmd =
             container_of(submit->command_buffers[i], struct nvk_cmd_buffer, vk);
@@ -377,7 +362,6 @@ nvk_queue_submit(struct vk_queue *vk_queue,
                  struct vk_queue_submit *submit)
 {
    struct nvk_queue *queue = container_of(vk_queue, struct nvk_queue, vk);
-   struct nvk_device *dev = nvk_queue_device(queue);
    VkResult result;
 
    if (vk_queue_is_lost(&queue->vk))
@@ -391,12 +375,6 @@ nvk_queue_submit(struct vk_queue *vk_queue,
       if (result != VK_SUCCESS)
          return vk_queue_set_lost(&queue->vk, "Bind operation failed");
    } else {
-      result = nvk_queue_state_update(dev, &queue->state);
-      if (result != VK_SUCCESS) {
-         return vk_queue_set_lost(&queue->vk, "Failed to update queue base "
-                                              "pointers pushbuf");
-      }
-
       result = nvk_queue_submit_exec(queue, submit);
       if (result != VK_SUCCESS)
          return vk_queue_set_lost(&queue->vk, "Submit failed");
@@ -453,14 +431,13 @@ nvk_queue_submit_simple(struct nvk_queue *queue,
 }
 
 static VkResult
-nvk_queue_init_context_state(struct nvk_queue *queue,
-                             enum nvkmd_engines engines)
+nvk_queue_init_context_state(struct nvk_queue *queue)
 {
    struct nvk_device *dev = nvk_queue_device(queue);
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VkResult result;
 
-   uint32_t push_data[1024 * 3];
+   uint32_t push_data[4096];
    struct nv_push push;
    nv_push_init(&push, push_data, ARRAY_SIZE(push_data));
    struct nv_push *p = &push;
@@ -477,13 +454,13 @@ nvk_queue_init_context_state(struct nvk_queue *queue,
       });
    }
 
-   if (engines & NVKMD_ENGINE_3D) {
+   if (queue->engines & NVKMD_ENGINE_3D) {
       result = nvk_push_draw_state_init(queue, p);
       if (result != VK_SUCCESS)
          return result;
    }
 
-   if (engines & NVKMD_ENGINE_COMPUTE) {
+   if (queue->engines & NVKMD_ENGINE_COMPUTE) {
       result = nvk_push_dispatch_state_init(queue, p);
       if (result != VK_SUCCESS)
          return result;
@@ -510,23 +487,23 @@ nvk_queue_init(struct nvk_device *dev, struct nvk_queue *queue,
 
    nvk_queue_state_init(&queue->state);
 
-   enum nvkmd_engines engines = 0;
+   queue->engines = 0;
    if (queue_family->queue_flags & VK_QUEUE_GRAPHICS_BIT) {
-      engines |= NVKMD_ENGINE_3D;
+      queue->engines |= NVKMD_ENGINE_3D;
       /* We rely on compute shaders for queries */
-      engines |= NVKMD_ENGINE_COMPUTE;
+      queue->engines |= NVKMD_ENGINE_COMPUTE;
    }
    if (queue_family->queue_flags & VK_QUEUE_COMPUTE_BIT) {
-      engines |= NVKMD_ENGINE_COMPUTE;
+      queue->engines |= NVKMD_ENGINE_COMPUTE;
       /* We currently rely on 3D engine MMEs for indirect dispatch */
-      engines |= NVKMD_ENGINE_3D;
+      queue->engines |= NVKMD_ENGINE_3D;
    }
    if (queue_family->queue_flags & VK_QUEUE_TRANSFER_BIT)
-      engines |= NVKMD_ENGINE_COPY;
+      queue->engines |= NVKMD_ENGINE_COPY;
 
-   if (engines) {
+   if (queue->engines) {
       result = nvkmd_dev_create_ctx(dev->nvkmd, &dev->vk.base,
-                                    engines, &queue->exec_ctx);
+                                    queue->engines, &queue->exec_ctx);
       if (result != VK_SUCCESS)
          goto fail_init;
 
@@ -550,7 +527,7 @@ nvk_queue_init(struct nvk_device *dev, struct nvk_queue *queue,
          goto fail_draw_cb0;
    }
 
-   result = nvk_queue_init_context_state(queue, engines);
+   result = nvk_queue_init_context_state(queue);
    if (result != VK_SUCCESS)
       goto fail_bind_ctx;
 

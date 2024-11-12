@@ -36,12 +36,12 @@ def collect_data(spirv, kind):
 
     values = {}
     for x in operands["enumerants"]:
-        name = x["enumerant"]
         val = x["value"]
-        if val not in values:
-            values[val] = [name]
-        else:
-            values[val].append(name)
+        assert(val not in values)
+        names = [x["enumerant"]]
+        if "aliases" in x:
+            names.extend(x["aliases"])
+        values[val] = names
 
     return (kind, list(values.values()), operands["category"])
 
@@ -49,15 +49,13 @@ def collect_opcodes(spirv):
     seen = set()
     values = []
     for x in spirv["instructions"]:
-        # Handle aliases by choosing the first one in the grammar.
-        # E.g. OpDecorateString and OpDecorateStringGOOGLE share same opcode.
-        if x["opcode"] in seen:
-            continue
         opcode = x["opcode"]
+        assert(opcode not in seen)
+        seen.add(opcode)
+
         name = x["opname"]
         assert name.startswith("Op")
         values.append([name[2:]])
-        seen.add(opcode)
 
     return ("Op", values, None)
 

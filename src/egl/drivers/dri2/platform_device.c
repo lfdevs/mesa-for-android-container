@@ -43,12 +43,13 @@
 #include "egl_dri2.h"
 #include "kopper_interface.h"
 #include "loader.h"
+#include "dri_util.h"
 
-static __DRIimage *
+static struct dri_image *
 device_alloc_image(struct dri2_egl_display *dri2_dpy,
                    struct dri2_egl_surface *dri2_surf)
 {
-   return dri2_dpy->image->createImage(
+   return dri_create_image(
       dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
       dri2_surf->base.Height, dri2_surf->visual, NULL, 0, 0, NULL);
 }
@@ -56,11 +57,8 @@ device_alloc_image(struct dri2_egl_display *dri2_dpy,
 static void
 device_free_images(struct dri2_egl_surface *dri2_surf)
 {
-   struct dri2_egl_display *dri2_dpy =
-      dri2_egl_display(dri2_surf->base.Resource.Display);
-
    if (dri2_surf->front) {
-      dri2_dpy->image->destroyImage(dri2_surf->front);
+      dri2_destroy_image(dri2_surf->front);
       dri2_surf->front = NULL;
    }
 
@@ -69,7 +67,7 @@ device_free_images(struct dri2_egl_surface *dri2_surf)
 }
 
 static int
-device_image_get_buffers(__DRIdrawable *driDrawable, unsigned int format,
+device_image_get_buffers(struct dri_drawable *driDrawable, unsigned int format,
                          uint32_t *stamp, void *loaderPrivate,
                          uint32_t buffer_mask, struct __DRIimageList *buffers)
 {
@@ -114,7 +112,7 @@ dri2_device_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_config *dri2_conf = dri2_egl_config(conf);
    struct dri2_egl_surface *dri2_surf;
-   const __DRIconfig *config;
+   const struct dri_config *config;
 
    /* Make sure to calloc so all pointers
     * are originally NULL.
@@ -155,12 +153,11 @@ cleanup_surface:
 static EGLBoolean
 device_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
 {
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
 
    device_free_images(dri2_surf);
 
-   dri2_dpy->core->destroyDrawable(dri2_surf->dri_drawable);
+   driDestroyDrawable(dri2_surf->dri_drawable);
 
    dri2_fini_surface(surf);
    free(dri2_surf);
@@ -182,7 +179,7 @@ static const struct dri2_egl_display_vtbl dri2_device_display_vtbl = {
 };
 
 static void
-device_flush_front_buffer(__DRIdrawable *driDrawable, void *loaderPrivate)
+device_flush_front_buffer(struct dri_drawable *driDrawable, void *loaderPrivate)
 {
 }
 
@@ -299,7 +296,7 @@ device_probe_device(_EGLDisplay *disp)
       dri2_dpy->driver_name = strdup("kms_swrast");
    }
 
-   if (!dri2_load_driver_dri3(disp))
+   if (!dri2_load_driver(disp))
       goto err_load;
 
    dri2_dpy->loader_extensions = image_loader_extensions;
@@ -327,7 +324,7 @@ device_probe_device_sw(_EGLDisplay *disp)
       return false;
 
    /* HACK: should be driver_swrast_null */
-   if (!dri2_load_driver_swrast(disp)) {
+   if (!dri2_load_driver(disp)) {
       free(dri2_dpy->driver_name);
       dri2_dpy->driver_name = NULL;
       return false;
@@ -364,11 +361,6 @@ dri2_initialize_device(_EGLDisplay *disp)
 
    if (!dri2_create_screen(disp)) {
       err = "DRI2: failed to create screen";
-      goto cleanup;
-   }
-
-   if (!dri2_setup_extensions(disp)) {
-      err = "DRI2: failed to find required DRI extensions";
       goto cleanup;
    }
 

@@ -32,9 +32,19 @@ static void get_rate_control_param(struct rvce_encoder *enc, struct pipe_h264_en
    enc->enc_pic.rc.vbv_buf_lv = pic->rate_ctrl[0].vbv_buf_lv;
    enc->enc_pic.rc.fill_data_enable = pic->rate_ctrl[0].fill_data_enable;
    enc->enc_pic.rc.enforce_hrd = pic->rate_ctrl[0].enforce_hrd;
-   enc->enc_pic.rc.target_bits_picture = pic->rate_ctrl[0].target_bits_picture;
-   enc->enc_pic.rc.peak_bits_picture_integer = pic->rate_ctrl[0].peak_bits_picture_integer;
-   enc->enc_pic.rc.peak_bits_picture_fraction = pic->rate_ctrl[0].peak_bits_picture_fraction;
+   enc->enc_pic.rc.target_bits_picture =
+      enc->pic.rate_ctrl[0].target_bitrate *
+      ((float)enc->pic.rate_ctrl[0].frame_rate_den /
+      enc->pic.rate_ctrl[0].frame_rate_num);
+   enc->enc_pic.rc.peak_bits_picture_integer =
+      enc->pic.rate_ctrl[0].peak_bitrate *
+      ((float)enc->pic.rate_ctrl[0].frame_rate_den /
+      enc->pic.rate_ctrl[0].frame_rate_num);
+   enc->enc_pic.rc.peak_bits_picture_fraction =
+      (((enc->pic.rate_ctrl[0].peak_bitrate *
+      (uint64_t)enc->pic.rate_ctrl[0].frame_rate_den) %
+      enc->pic.rate_ctrl[0].frame_rate_num) << 32) /
+      enc->pic.rate_ctrl[0].frame_rate_num;
 }
 
 static void get_motion_estimation_param(struct rvce_encoder *enc,
@@ -155,10 +165,7 @@ void si_vce_52_get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_
    enc->enc_pic.ref_idx_l0 = pic->ref_idx_l0_list[0];
    enc->enc_pic.ref_idx_l1 = pic->ref_idx_l1_list[0];
    enc->enc_pic.not_referenced = pic->not_referenced;
-   if (enc->dual_inst)
-      enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x00000201;
-   else
-      enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x01000201;
+   enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x01000201;
    enc->enc_pic.is_idr = (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR);
 }
 
@@ -170,7 +177,7 @@ static void create(struct rvce_encoder *enc)
    RVCE_BEGIN(0x01000001); // create cmd
    RVCE_CS(enc->enc_pic.ec.enc_use_circular_buffer);
    RVCE_CS(u_get_h264_profile_idc(enc->base.profile)); // encProfile
-   RVCE_CS(enc->base.level);                           // encLevel
+   RVCE_CS(enc->pic.seq.level_idc);                    // encLevel
    RVCE_CS(enc->enc_pic.ec.enc_pic_struct_restriction);
    RVCE_CS(enc->base.width);  // encImageWidth
    RVCE_CS(enc->base.height); // encImageHeight
@@ -198,20 +205,10 @@ static void encode(struct rvce_encoder *enc)
 {
    struct si_screen *sscreen = (struct si_screen *)enc->screen;
    signed luma_offset, chroma_offset, bs_offset;
-   unsigned dep, bs_idx = enc->bs_idx++;
+   unsigned bs_idx = enc->bs_idx++;
    int i;
 
-   if (enc->dual_inst) {
-      if (bs_idx == 0)
-         dep = 1;
-      else if (enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR)
-         dep = 0;
-      else
-         dep = 2;
-   } else
-      dep = 0;
-
-   enc->task_info(enc, 0x00000003, dep, 0, bs_idx);
+   enc->task_info(enc, 0x00000003, 0, 0, bs_idx);
 
    RVCE_BEGIN(0x05000001);                                      // context buffer
    RVCE_READWRITE(enc->cpb.res->buf, enc->cpb.res->domains, 0); // encodeContextAddressHi/Lo

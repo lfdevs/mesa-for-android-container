@@ -228,13 +228,13 @@ MoveState::downwards_move(DownwardsCursor& cursor, bool add_to_clause)
    }
 
    /* Check the new demand of the instructions being moved over */
-   const RegisterDemand candidate_diff = get_live_changes(instr);
+   const RegisterDemand candidate_diff = get_live_changes(instr.get());
    if (RegisterDemand(register_pressure - candidate_diff).exceeds(max_registers))
       return move_fail_pressure;
 
    /* New demand for the moved instruction */
-   const RegisterDemand temp = get_temp_registers(instr);
-   const RegisterDemand temp2 = get_temp_registers(block->instructions[dest_insert_idx - 1]);
+   const RegisterDemand temp = get_temp_registers(instr.get());
+   const RegisterDemand temp2 = get_temp_registers(block->instructions[dest_insert_idx - 1].get());
    const RegisterDemand new_demand =
       block->instructions[dest_insert_idx - 1]->register_demand - temp2 + temp;
    if (new_demand.exceeds(max_registers))
@@ -356,11 +356,12 @@ MoveState::upwards_move(UpwardsCursor& cursor)
 
    /* check if register pressure is low enough: the diff is negative if register pressure is
     * decreased */
-   const RegisterDemand candidate_diff = get_live_changes(instr);
-   const RegisterDemand temp = get_temp_registers(instr);
+   const RegisterDemand candidate_diff = get_live_changes(instr.get());
+   const RegisterDemand temp = get_temp_registers(instr.get());
    if (RegisterDemand(cursor.total_demand + candidate_diff).exceeds(max_registers))
       return move_fail_pressure;
-   const RegisterDemand temp2 = get_temp_registers(block->instructions[cursor.insert_idx - 1]);
+   const RegisterDemand temp2 =
+      get_temp_registers(block->instructions[cursor.insert_idx - 1].get());
    const RegisterDemand new_demand =
       block->instructions[cursor.insert_idx - 1]->register_demand - temp2 + candidate_diff + temp;
    if (new_demand.exceeds(max_registers))
@@ -1287,33 +1288,9 @@ schedule_program(Program* program)
    }
    update_vgpr_sgpr_demand(program, new_demand);
 
-/* if enabled, this code asserts that register_demand is updated correctly */
-#if 0
-   int prev_num_waves = program->num_waves;
-   const RegisterDemand prev_max_demand = program->max_reg_demand;
-
-   std::vector<RegisterDemand> block_demands(program->blocks.size());
-   std::vector<std::vector<RegisterDemand>> register_demands(program->blocks.size());
-   for (unsigned j = 0; j < program->blocks.size(); j++) {
-      Block &b = program->blocks[j];
-      block_demands[j] = b.register_demand;
-      register_demands[j].reserve(b.instructions.size());
-      for (unsigned i = 0; i < b.instructions.size(); i++)
-         register_demands[j].emplace_back(b.instructions[i]->register_demand);
-   }
-
-   aco::live_var_analysis(program);
-
-   for (unsigned j = 0; j < program->blocks.size(); j++) {
-      Block &b = program->blocks[j];
-      for (unsigned i = 0; i < b.instructions.size(); i++)
-         assert(register_demands[j][i] == b.instructions[i]->register_demand);
-      assert(b.register_demand == block_demands[j]);
-   }
-
-   assert(program->max_reg_demand == prev_max_demand);
-   assert(program->num_waves == prev_num_waves);
-#endif
+   /* Validate live variable information */
+   if (!validate_live_vars(program))
+      abort();
 }
 
 } // namespace aco

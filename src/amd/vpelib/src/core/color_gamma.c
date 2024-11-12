@@ -449,7 +449,6 @@ static bool build_regamma(struct vpe_priv *vpe_priv, uint32_t hw_points_num,
 
     i = 0;
     while (i <= hw_points_num) {
-        /* TODO use y vs r,g,b */
         rgb->r = vpe_fixpt_mul(coord_x->x, x_scale);
         rgb->r = translate_from_linear_space_ex(rgb->r, coeff, 0, cal_buffer);
         rgb->r = vpe_fixpt_mul(rgb->r, y_scale);

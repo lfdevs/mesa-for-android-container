@@ -90,7 +90,7 @@ panvk_per_arch(CreateSampler)(VkDevice _device,
    sampler =
       vk_sampler_create(&device->vk, pCreateInfo, pAllocator, sizeof(*sampler));
    if (!sampler)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    STATIC_ASSERT(sizeof(sampler->desc) >= pan_size(SAMPLER));
 

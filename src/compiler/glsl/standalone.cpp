@@ -36,19 +36,29 @@
 #include "standalone_scaffolding.h"
 #include "standalone.h"
 #include "util/set.h"
-#include "linker.h"
+#include "gl_nir_linker.h"
 #include "glsl_parser_extras.h"
 #include "builtin_functions.h"
+#include "linker_util.h"
 #include "main/mtypes.h"
 #include "program/program.h"
 
 static const struct standalone_options *options;
+
+static const struct nir_shader_compiler_options nir_vs_options = { 0 };
+static const struct nir_shader_compiler_options nir_fs_options = { 0 };
 
 static void
 initialize_context(struct gl_context *ctx, gl_api api)
 {
    initialize_context_to_defaults(ctx, api);
    _mesa_glsl_builtin_functions_init_or_ref();
+
+   ctx->Version = 450;
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].NirOptions =
+      &nir_fs_options;
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_FRAGMENT].NirOptions =
+      &nir_vs_options;
 
    /* The standalone compiler needs to claim support for almost
     * everything in order to compile the built-in functions.
@@ -303,15 +313,11 @@ load_text_file(void *ctx, const char *file_name)
 static void
 compile_shader(struct gl_context *ctx, struct gl_shader *shader)
 {
-   _mesa_glsl_compile_shader(ctx, shader, options->dump_ast,
+   /* Print out the resulting IR if requested */
+   FILE *print_file = options->dump_lir ? stdout : NULL;
+
+   _mesa_glsl_compile_shader(ctx, shader, print_file, options->dump_ast,
                              options->dump_hir, true);
-
-   /* Print out the resulting IR */
-   if (shader->CompileStatus == COMPILE_SUCCESS && options->dump_lir) {
-      _mesa_print_ir(stdout, shader->ir, NULL);
-   }
-
-   return;
 }
 
 extern "C" struct gl_shader_program *
@@ -421,7 +427,9 @@ standalone_compile_shader(const struct standalone_options *_options,
    if (status == EXIT_SUCCESS && options->do_link) {
       _mesa_clear_shader_program_data(ctx, whole_program);
 
-      link_shaders(ctx, whole_program);
+      whole_program->data->LinkStatus = LINKING_SUCCESS;
+      link_shaders_init(ctx, whole_program);
+      gl_nir_link_glsl(ctx, whole_program);
 
       status = (whole_program->data->LinkStatus) ? EXIT_SUCCESS : EXIT_FAILURE;
 

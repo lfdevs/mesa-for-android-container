@@ -1014,19 +1014,8 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
       i915_program_error(p, "Empty fragment shader");
 
    if (strlen(p->error) != 0) {
-      p->NumNativeInstructions = 0;
-      p->NumNativeAluInstructions = 0;
-      p->NumNativeTexInstructions = 0;
-      p->NumNativeTexIndirections = 0;
-
       i915_use_passthrough_shader(ifs);
    } else {
-      p->NumNativeInstructions =
-         p->nr_alu_insn + p->nr_tex_insn + p->nr_decl_insn;
-      p->NumNativeAluInstructions = p->nr_alu_insn;
-      p->NumNativeTexInstructions = p->nr_tex_insn;
-      p->NumNativeTexIndirections = p->nr_tex_indirect;
-
       /* patch in the program length */
       p->declarations[0] |= program_size + decl_size - 2;
 

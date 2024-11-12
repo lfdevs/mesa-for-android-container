@@ -48,8 +48,6 @@ DEPS=(
     "pkgconfig(libclc)"
     "pkgconfig(libelf)"
     "pkgconfig(libglvnd)"
-    "pkgconfig(libomxil-bellagio)"
-    "pkgconfig(libselinux)"
     "pkgconfig(libva)"
     "pkgconfig(pciaccess)"
     "pkgconfig(vdpau)"

@@ -276,17 +276,17 @@ declare_ps_input_vgprs(const struct radv_shader_info *info, struct radv_shader_a
    ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.front_face);
    ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.ancillary);
    ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.sample_coverage);
-   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* fixed pt */
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.pos_fixed_pt);
 
    if (args->remap_spi_ps_input)
       ac_compact_ps_vgpr_args(&args->ac, info->ps.spi_ps_input_ena);
 }
 
 static void
-declare_ngg_sgprs(const struct radv_shader_info *info, struct radv_shader_args *args, bool has_ngg_provoking_vtx)
+declare_ngg_sgprs(const struct radv_shader_info *info, struct radv_shader_args *args, bool ngg_needs_state_sgpr)
 {
-   if (has_ngg_provoking_vtx)
-      add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_provoking_vtx, AC_UD_NGG_PROVOKING_VTX);
+   if (ngg_needs_state_sgpr)
+      add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_state, AC_UD_NGG_STATE);
 
    if (info->has_ngg_culling) {
       add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_culling_settings, AC_UD_NGG_CULLING_SETTINGS);
@@ -451,9 +451,8 @@ declare_unmerged_vs_tes_gs_args(const enum amd_gfx_level gfx_level, const struct
    add_ud_arg(args, 1, AC_ARG_INT, &args->ac.view_index, AC_UD_VIEW_INDEX);
    add_ud_arg(args, 1, AC_ARG_INT, &args->tcs_offchip_layout, AC_UD_TCS_OFFCHIP_LAYOUT);
 
-   add_ud_arg(args, 1, AC_ARG_INT, &args->shader_query_state, AC_UD_SHADER_QUERY_STATE);
    if (info->is_ngg) {
-      add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_provoking_vtx, AC_UD_NGG_PROVOKING_VTX);
+      add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_state, AC_UD_NGG_STATE);
    }
    add_ud_arg(args, 1, AC_ARG_INT, &args->vgt_esgs_ring_itemsize, AC_UD_VGT_ESGS_RING_ITEMSIZE);
    add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_lds_layout, AC_UD_NGG_LDS_LAYOUT);
@@ -495,9 +494,9 @@ declare_unmerged_vs_tes_gs_args(const enum amd_gfx_level gfx_level, const struct
       ac_add_preserved(&args->ac, &args->streamout_state);
    ac_add_preserved(&args->ac, &args->ac.view_index);
    ac_add_preserved(&args->ac, &args->tcs_offchip_layout);
-   ac_add_preserved(&args->ac, &args->shader_query_state);
-   if (info->is_ngg)
-      ac_add_preserved(&args->ac, &args->ngg_provoking_vtx);
+   if (info->is_ngg) {
+      ac_add_preserved(&args->ac, &args->ngg_state);
+   }
    ac_add_preserved(&args->ac, &args->vgt_esgs_ring_itemsize);
    ac_add_preserved(&args->ac, &args->ngg_lds_layout);
 
@@ -596,7 +595,7 @@ declare_shader_args(const struct radv_device *device, const struct radv_graphics
          add_ud_arg(args, 1, AC_ARG_INT, &args->ac.task_ring_entry, AC_UD_TASK_RING_ENTRY);
 
          if (has_shader_query) {
-            add_ud_arg(args, 1, AC_ARG_INT, &args->shader_query_state, AC_UD_SHADER_QUERY_STATE);
+            add_ud_arg(args, 1, AC_ARG_INT, &args->task_state, AC_UD_TASK_STATE);
          }
       }
 
@@ -683,10 +682,6 @@ declare_shader_args(const struct radv_device *device, const struct radv_graphics
                add_ud_arg(args, 1, AC_ARG_INT, &args->tcs_offchip_layout, AC_UD_TCS_OFFCHIP_LAYOUT);
             }
 
-            if (info->has_epilog) {
-               add_ud_arg(args, 1, AC_ARG_INT, &args->epilog_pc, AC_UD_EPILOG_PC);
-            }
-
             ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.tcs_patch_id);
             ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.tcs_rel_ids);
 
@@ -701,10 +696,6 @@ declare_shader_args(const struct radv_device *device, const struct radv_graphics
 
          if (radv_tcs_needs_state_sgpr(info, gfx_state)) {
             add_ud_arg(args, 1, AC_ARG_INT, &args->tcs_offchip_layout, AC_UD_TCS_OFFCHIP_LAYOUT);
-         }
-
-         if (info->has_epilog) {
-            add_ud_arg(args, 1, AC_ARG_INT, &args->epilog_pc, AC_UD_EPILOG_PC);
          }
 
          ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &args->ac.tess_offchip_offset);
@@ -780,19 +771,17 @@ declare_shader_args(const struct radv_device *device, const struct radv_graphics
             if (previous_stage == MESA_SHADER_TESS_EVAL && radv_tes_needs_state_sgpr(info))
                add_ud_arg(args, 1, AC_ARG_INT, &args->tcs_offchip_layout, AC_UD_TCS_OFFCHIP_LAYOUT);
 
-            if (previous_stage == MESA_SHADER_VERTEX && info->vs.dynamic_num_verts_per_prim)
-               add_ud_arg(args, 1, AC_ARG_INT, &args->num_verts_per_prim, AC_UD_NUM_VERTS_PER_PRIM);
-
             /* Legacy GS force vrs is handled by GS copy shader. */
             if (info->force_vrs_per_vertex && info->is_ngg) {
                add_ud_arg(args, 1, AC_ARG_INT, &args->ac.force_vrs_rates, AC_UD_FORCE_VRS_RATES);
             }
 
-            if (has_shader_query)
-               add_ud_arg(args, 1, AC_ARG_INT, &args->shader_query_state, AC_UD_SHADER_QUERY_STATE);
-
             if (info->is_ngg) {
-               declare_ngg_sgprs(info, args, has_ngg_provoking_vtx);
+               const bool ngg_needs_state_sgpr =
+                  has_ngg_provoking_vtx || has_shader_query ||
+                  (previous_stage == MESA_SHADER_VERTEX && info->vs.dynamic_num_verts_per_prim);
+
+               declare_ngg_sgprs(info, args, ngg_needs_state_sgpr);
             }
 
             if (previous_stage != MESA_SHADER_MESH || !pdev->mesh_fast_launch_2) {
@@ -846,7 +835,7 @@ declare_shader_args(const struct radv_device *device, const struct radv_graphics
    case MESA_SHADER_FRAGMENT:
       declare_global_input_sgprs(gfx_level, info, user_sgpr_info, args);
 
-      if (info->has_epilog) {
+      if (info->ps.has_epilog) {
          add_ud_arg(args, 1, AC_ARG_INT, &args->epilog_pc, AC_UD_EPILOG_PC);
       }
 

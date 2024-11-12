@@ -48,6 +48,7 @@
  */
 static nir_shader *
 anv_shader_stage_to_nir(struct anv_device *device,
+                        VkPipelineCreateFlags2KHR pipeline_flags,
                         const VkPipelineShaderStageCreateInfo *stage_info,
                         enum elk_robustness_flags robust_flags,
                         void *mem_ctx)
@@ -76,7 +77,7 @@ anv_shader_stage_to_nir(struct anv_device *device,
 
    nir_shader *nir;
    VkResult result =
-      vk_pipeline_shader_stage_to_nir(&device->vk, stage_info,
+      vk_pipeline_shader_stage_to_nir(&device->vk, pipeline_flags, stage_info,
                                       &spirv_options, nir_options,
                                       mem_ctx, &nir);
    if (result != VK_SUCCESS)
@@ -336,6 +337,7 @@ populate_cs_prog_key(const struct anv_device *device,
 struct anv_pipeline_stage {
    gl_shader_stage stage;
 
+   VkPipelineCreateFlags2KHR pipeline_flags;
    const VkPipelineShaderStageCreateInfo *info;
 
    unsigned char shader_sha1[20];
@@ -440,7 +442,8 @@ anv_pipeline_stage_get_nir(struct anv_pipeline *pipeline,
       return nir;
    }
 
-   nir = anv_shader_stage_to_nir(pipeline->device, stage->info,
+   nir = anv_shader_stage_to_nir(pipeline->device,
+                                 stage->pipeline_flags, stage->info,
                                  stage->key.base.robust_flags, mem_ctx);
    if (nir) {
       anv_device_upload_nir(pipeline->device, cache, nir, stage->shader_sha1);
@@ -1045,7 +1048,8 @@ anv_graphics_pipeline_init_keys(struct anv_graphics_pipeline *pipeline,
 
       int64_t stage_start = os_time_get_nano();
 
-      vk_pipeline_hash_shader_stage(stages[s].info, NULL, stages[s].shader_sha1);
+      vk_pipeline_hash_shader_stage(stages[s].pipeline_flags, stages[s].info,
+                                    NULL, stages[s].shader_sha1);
 
       const struct anv_device *device = pipeline->base.device;
       enum elk_robustness_flags robust_flags = anv_device_get_robust_flags(device);
@@ -1216,6 +1220,9 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
    VkResult result;
 
+   const VkPipelineCreateFlags2KHR pipeline_flags =
+      vk_graphics_pipeline_create_flags(info);
+
    VkPipelineCreationFeedback pipeline_feedback = {
       .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT,
    };
@@ -1226,6 +1233,7 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
    for (uint32_t i = 0; i < info->stageCount; i++) {
       gl_shader_stage stage = vk_to_mesa_shader_stage(info->pStages[i].stage);
       stages[stage].stage = stage;
+      stages[stage].pipeline_flags = pipeline_flags;
       stages[stage].info = &info->pStages[i];
    }
 
@@ -1440,6 +1448,7 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
 
    struct anv_pipeline_stage stage = {
       .stage = MESA_SHADER_COMPUTE,
+      .pipeline_flags = vk_compute_pipeline_create_flags(info),
       .info = &info->stage,
       .cache_key = {
          .stage = MESA_SHADER_COMPUTE,
@@ -1448,7 +1457,8 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
          .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT,
       },
    };
-   vk_pipeline_hash_shader_stage(&info->stage, NULL, stage.shader_sha1);
+   vk_pipeline_hash_shader_stage(stage.pipeline_flags, &info->stage,
+                                 NULL, stage.shader_sha1);
 
    struct anv_shader_bin *bin = NULL;
 

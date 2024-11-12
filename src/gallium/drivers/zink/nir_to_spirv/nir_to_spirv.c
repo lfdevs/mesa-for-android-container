@@ -97,7 +97,7 @@ struct ntv_context {
          workgroup_id_var, num_workgroups_var,
          local_invocation_id_var, global_invocation_id_var,
          local_invocation_index_var, helper_invocation_var,
-         local_group_size_var,
+         local_group_size_var, view_index_var,
          base_vertex_var, base_instance_var, draw_id_var;
 
    SpvId shared_mem_size;
@@ -1706,21 +1706,6 @@ get_def_type(struct ntv_context *ctx, nir_def *def, nir_alu_type type)
    return get_alu_type(ctx, type, def->num_components, def->bit_size);
 }
 
-static bool
-needs_derivative_control(nir_alu_instr *alu)
-{
-   switch (alu->op) {
-   case nir_op_fddx_coarse:
-   case nir_op_fddx_fine:
-   case nir_op_fddy_coarse:
-   case nir_op_fddy_fine:
-      return true;
-
-   default:
-      return false;
-   }
-}
-
 static void
 emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
 {
@@ -1785,9 +1770,6 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
                         (alu_op_is_typeless(alu->op) ? typeless_type : nir_op_infos[alu->op].output_type);
    SpvId dest_type = get_def_type(ctx, &alu->def, atype);
 
-   if (needs_derivative_control(alu))
-      spirv_builder_emit_cap(&ctx->builder, SpvCapabilityDerivativeControl);
-
    SpvId result = 0;
    switch (alu->op) {
    case nir_op_mov:
@@ -1803,12 +1785,6 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
 
    UNOP(nir_op_ineg, SpvOpSNegate)
    UNOP(nir_op_fneg, SpvOpFNegate)
-   UNOP(nir_op_fddx, SpvOpDPdx)
-   UNOP(nir_op_fddx_coarse, SpvOpDPdxCoarse)
-   UNOP(nir_op_fddx_fine, SpvOpDPdxFine)
-   UNOP(nir_op_fddy, SpvOpDPdy)
-   UNOP(nir_op_fddy_coarse, SpvOpDPdyCoarse)
-   UNOP(nir_op_fddy_fine, SpvOpDPdyFine)
    UNOP(nir_op_f2i8, SpvOpConvertFToS)
    UNOP(nir_op_f2u8, SpvOpConvertFToU)
    UNOP(nir_op_f2i16, SpvOpConvertFToS)
@@ -2639,6 +2615,24 @@ emit_load_front_face(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 }
 
 static void
+emit_load_view_index(struct ntv_context *ctx, nir_intrinsic_instr *intr)
+{
+   SpvId var_type = spirv_builder_type_uint(&ctx->builder, 32);
+   spirv_builder_emit_extension(&ctx->builder, "SPV_KHR_multiview");
+   spirv_builder_emit_cap(&ctx->builder, SpvCapabilityMultiView);
+   if (!ctx->view_index_var)
+      ctx->view_index_var = create_builtin_var(ctx, var_type,
+                                               SpvStorageClassInput,
+                                               "gl_ViewIndex",
+                                               SpvBuiltInViewIndex);
+
+   SpvId result = spirv_builder_emit_load(&ctx->builder, var_type,
+                                          ctx->view_index_var);
+   assert(1 == intr->def.num_components);
+   store_def(ctx, intr->def.index, result, nir_type_uint);
+}
+
+static void
 emit_load_uint_input(struct ntv_context *ctx, nir_intrinsic_instr *intr, SpvId *var_id, const char *var_name, SpvBuiltIn builtin)
 {
    SpvId var_type = spirv_builder_type_uint(&ctx->builder, 32);
@@ -3212,6 +3206,47 @@ emit_barrier(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 }
 
 static void
+emit_derivative(struct ntv_context *ctx, nir_intrinsic_instr *intr)
+{
+   SpvOp op;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_ddx:
+      op = SpvOpDPdx;
+      break;
+   case nir_intrinsic_ddy:
+      op = SpvOpDPdy;
+      break;
+   case nir_intrinsic_ddx_fine:
+      op = SpvOpDPdxFine;
+      break;
+   case nir_intrinsic_ddy_fine:
+      op = SpvOpDPdyFine;
+      break;
+   case nir_intrinsic_ddx_coarse:
+      op = SpvOpDPdxCoarse;
+      break;
+   case nir_intrinsic_ddy_coarse:
+      op = SpvOpDPdyCoarse;
+      break;
+   default:
+      unreachable("invalid ddx/ddy");
+   }
+
+   if (op != SpvOpDPdx && op != SpvOpDPdy)
+      spirv_builder_emit_cap(&ctx->builder, SpvCapabilityDerivativeControl);
+
+   SpvId type = get_fvec_type(ctx, intr->def.bit_size, intr->def.num_components);
+
+   nir_alu_type atype;
+   SpvId value = get_src(ctx, &intr->src[0], &atype);
+   if (atype != nir_type_float)
+      value = emit_bitcast(ctx, type, value);
+
+   SpvId result = emit_unop(ctx, op, type, value);
+   store_def(ctx, intr->def.index, result, nir_type_float);
+}
+
+static void
 emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 {
    switch (intr->intrinsic) {
@@ -3259,6 +3294,10 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 
    case nir_intrinsic_load_front_face:
       emit_load_front_face(ctx, intr);
+      break;
+
+   case nir_intrinsic_load_view_index:
+      emit_load_view_index(ctx, intr);
       break;
 
    case nir_intrinsic_load_base_instance:
@@ -3471,6 +3510,15 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 
    case nir_intrinsic_is_helper_invocation:
       emit_is_helper_invocation(ctx, intr);
+      break;
+
+   case nir_intrinsic_ddx:
+   case nir_intrinsic_ddy:
+   case nir_intrinsic_ddx_fine:
+   case nir_intrinsic_ddy_fine:
+   case nir_intrinsic_ddx_coarse:
+   case nir_intrinsic_ddy_coarse:
+      emit_derivative(ctx, intr);
       break;
 
    default:
@@ -4122,6 +4170,9 @@ emit_block(struct ntv_context *ctx, struct nir_block *block)
       case nir_instr_type_deref:
          emit_deref(ctx, nir_instr_as_deref(instr));
          break;
+      case nir_instr_type_debug_info:
+         unreachable("nir_instr_type_debug_info not supported");
+         break;
       }
    }
 }
@@ -4734,12 +4785,12 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, const s
          spirv_builder_emit_specid(&ctx.builder, ctx.shared_mem_size, ZINK_VARIABLE_SHARED_MEM);
          spirv_builder_emit_name(&ctx.builder, ctx.shared_mem_size, "variable_shared_mem");
       }
-      if (s->info.cs.derivative_group) {
+      if (s->info.derivative_group) {
          SpvCapability caps[] = { 0, SpvCapabilityComputeDerivativeGroupQuadsNV, SpvCapabilityComputeDerivativeGroupLinearNV };
          SpvExecutionMode modes[] = { 0, SpvExecutionModeDerivativeGroupQuadsNV, SpvExecutionModeDerivativeGroupLinearNV };
          spirv_builder_emit_extension(&ctx.builder, "SPV_NV_compute_shader_derivatives");
-         spirv_builder_emit_cap(&ctx.builder, caps[s->info.cs.derivative_group]);
-         spirv_builder_emit_exec_mode(&ctx.builder, entry_point, modes[s->info.cs.derivative_group]);
+         spirv_builder_emit_cap(&ctx.builder, caps[s->info.derivative_group]);
+         spirv_builder_emit_exec_mode(&ctx.builder, entry_point, modes[s->info.derivative_group]);
          ctx.explicit_lod = false;
       }
       break;

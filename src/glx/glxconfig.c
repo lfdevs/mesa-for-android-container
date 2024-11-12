@@ -226,9 +226,9 @@ glx_config_create_list(unsigned count)
    for (i = 0; i < count; i++) {
       *next = calloc(1, size);
       if (*next == NULL) {
-	 glx_config_destroy_list(base);
-	 base = NULL;
-	 break;
+    glx_config_destroy_list(base);
+    base = NULL;
+    break;
       }
 
       (*next)->visualID = GLX_DONT_CARE;
@@ -283,7 +283,7 @@ glx_config_find_visual(struct glx_config *configs, int vid)
 
    for (c = configs; c != NULL; c = c->next)
       if (c->visualID == vid)
-	 return c;
+    return c;
 
    return NULL;
 }
@@ -295,7 +295,7 @@ glx_config_find_fbconfig(struct glx_config *configs, int fbid)
 
    for (c = configs; c != NULL; c = c->next)
       if (c->fbconfigID == fbid)
-	 return c;
+    return c;
 
    return NULL;
 }

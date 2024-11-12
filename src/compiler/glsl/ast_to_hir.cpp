@@ -4500,8 +4500,8 @@ get_variable_being_redeclared(ir_variable **var_ptr, YYLTYPE loc,
        * We don't really need to do anything here, just allow the
        * redeclaration. Any error on the gl_FragCoord is handled on the ast
        * level at apply_layout_qualifier_to_variable using the
-       * ast_type_qualifier and _mesa_glsl_parse_state, or later at
-       * linker.cpp.
+       * ast_type_qualifier and _mesa_glsl_parse_state, or later in the
+       * linker.
        */
       /* According to section 4.3.7 of the GLSL 1.30 spec,
        * the following built-in varaibles can be redeclared with an
@@ -6463,6 +6463,8 @@ ast_function::hir(exec_list *instructions,
                continue;
 
             tsig = fn->matching_signature(state, &sig->parameters,
+                                          state->has_implicit_conversions(),
+                                          state->has_implicit_int_to_uint_conversion(),
                                           false);
             if (!tsig) {
                _mesa_glsl_error(& loc, state, "subroutine type mismatch '%s' - signatures do not match\n", decl->identifier);
@@ -7167,7 +7169,9 @@ ast_case_label::hir(exec_list *instructions,
 
          /* Check if int->uint implicit conversion is supported. */
          bool integer_conversion_supported =
-            _mesa_glsl_can_implicitly_convert(&glsl_type_builtin_int, &glsl_type_builtin_uint, state);
+            _mesa_glsl_can_implicitly_convert(&glsl_type_builtin_int, &glsl_type_builtin_uint,
+                                              state->has_implicit_conversions(),
+                                              state->has_implicit_int_to_uint_conversion());
 
          if ((!glsl_type_is_integer_32(type_a) || !glsl_type_is_integer_32(type_b)) ||
               !integer_conversion_supported) {

@@ -202,7 +202,9 @@ void *si_clear_image_dcc_single_shader(struct si_context *sctx, bool is_msaa, un
 
    /* Store the clear color. */
    nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, coord, nir_imm_int(&b, 0),
-                         clear_color, nir_imm_int(&b, 0));
+                         clear_color, nir_imm_int(&b, 0),
+                         .image_dim = img_type->sampler_dimensionality,
+                         .image_array = img_type->sampler_array);
 
    return si_create_shader_state(sctx, b.shader);
 }
@@ -223,65 +225,6 @@ void *si_create_ubyte_to_ushort_compute_shader(struct si_context *sctx)
                                         load_address, .access = ACCESS_RESTRICT);
    nir_store_ssbo(&b, nir_u2u16(&b, ubyte_value), nir_imm_int(&b, 0),
                   store_address, .access = ACCESS_RESTRICT);
-
-   return si_create_shader_state(sctx, b.shader);
-}
-
-/* Create a compute shader implementing clear_buffer or copy_buffer. */
-void *si_create_dma_compute_shader(struct si_context *sctx, union si_cs_clear_copy_buffer_key *key)
-{
-   if (si_can_dump_shader(sctx->screen, MESA_SHADER_COMPUTE, SI_DUMP_SHADER_KEY)) {
-      fprintf(stderr, "Internal shader: dma\n");
-      fprintf(stderr, "   key.is_clear = %u\n", key->is_clear);
-      fprintf(stderr, "   key.dwords_per_thread = %u\n", key->dwords_per_thread);
-      fprintf(stderr, "   key.clear_value_size_is_12 = %u\n", key->clear_value_size_is_12);
-      fprintf(stderr, "\n");
-   }
-
-   assert(key->dwords_per_thread && key->dwords_per_thread <= 4);
-
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, sctx->screen->nir_options,
-                                                  "create_dma_compute");
-   b.shader->info.workgroup_size[0] = 64;
-   b.shader->info.workgroup_size[1] = 1;
-   b.shader->info.workgroup_size[2] = 1;
-   b.shader->info.num_ssbos = key->is_clear ? 1 : 2;
-   b.shader->info.cs.user_data_components_amd =
-      key->is_clear ? (key->clear_value_size_is_12 ? 3 : key->dwords_per_thread) : 0;
-
-   nir_def *thread_id = ac_get_global_ids(&b, 1, 32);
-   /* Convert the global thread ID into bytes. */
-   nir_def *offset = nir_imul_imm(&b, thread_id, 4 * key->dwords_per_thread);
-   nir_def *value;
-
-   if (key->is_clear) {
-      value = nir_trim_vector(&b, nir_load_user_data_amd(&b), key->dwords_per_thread);
-
-      /* We store 4 dwords per thread, but the clear value has 3 dwords. Swizzle it to 4 dwords.
-       * Storing 4 dwords per thread is faster even when the ALU cost is worse.
-       */
-      if (key->clear_value_size_is_12 && key->dwords_per_thread == 4) {
-         nir_def *dw_offset = nir_imul_imm(&b, thread_id, key->dwords_per_thread);
-         nir_def *vec[3];
-
-         /* Swizzle a 3-component clear value to get a 4-component clear value. Example:
-          * 0 1 2 3 | 4 5 6 7 | 8 9 10 11  // dw_offset
-          *              |
-          *              V
-          * 0 1 2 0 | 1 2 0 1 | 2 0 1 2    // clear value component indices
-          */
-         for (unsigned i = 0; i < 3; i++) {
-            vec[i] = nir_vector_extract(&b, value,
-                                        nir_umod_imm(&b, nir_iadd_imm(&b, dw_offset, i), 3));
-         }
-         value = nir_vec4(&b, vec[0], vec[1], vec[2], vec[0]);
-      }
-   } else {
-      value = nir_load_ssbo(&b, key->dwords_per_thread, 32, nir_imm_int(&b, 0), offset,
-                            .access = ACCESS_RESTRICT);
-   }
-
-   nir_store_ssbo(&b, value, nir_imm_int(&b, !key->is_clear), offset, .access = ACCESS_RESTRICT);
 
    return si_create_shader_state(sctx, b.shader);
 }
@@ -315,19 +258,20 @@ void *si_create_fmask_expand_cs(struct si_context *sctx, unsigned num_samples, b
       z = nir_channel(&b, nir_load_workgroup_id(&b), 2);
    }
 
-   nir_def *zero = nir_imm_int(&b, 0);
+   nir_def *zero_lod = nir_imm_int(&b, 0);
    nir_def *address = ac_get_global_ids(&b, 2, 32);
 
-   nir_def *sample[8], *addresses[8];
-   assert(num_samples <= ARRAY_SIZE(sample));
+   nir_def *coord[8], *values[8];
+   assert(num_samples <= ARRAY_SIZE(coord));
 
-   nir_def *img_def = &nir_build_deref_var(&b, img)->def;
+   nir_def *img_deref = &nir_build_deref_var(&b, img)->def;
 
    /* Load samples, resolving FMASK. */
    for (unsigned i = 0; i < num_samples; i++) {
-      nir_def *it = nir_imm_int(&b, i);
-      sample[i] = nir_vec4(&b, nir_channel(&b, address, 0), nir_channel(&b, address, 1), z, it);
-      addresses[i] = nir_image_deref_load(&b, 4, 32, img_def, sample[i], it, zero,
+      nir_def *sample = nir_imm_int(&b, i);
+      coord[i] = nir_vec4(&b, nir_channel(&b, address, 0), nir_channel(&b, address, 1), z,
+                          nir_undef(&b, 1, 32));
+      values[i] = nir_image_deref_load(&b, 4, 32, img_deref, coord[i], sample, zero_lod,
                                           .access = ACCESS_RESTRICT,
                                           .image_dim = GLSL_SAMPLER_DIM_2D,
                                           .image_array = is_array);
@@ -335,7 +279,8 @@ void *si_create_fmask_expand_cs(struct si_context *sctx, unsigned num_samples, b
 
    /* Store samples, ignoring FMASK. */
    for (unsigned i = 0; i < num_samples; i++) {
-      nir_image_deref_store(&b, img_def, sample[i], nir_imm_int(&b, i), addresses[i], zero,
+      nir_def *sample = nir_imm_int(&b, i);
+      nir_image_deref_store(&b, img_deref, coord[i], sample, values[i], zero_lod,
                             .access = ACCESS_RESTRICT,
                             .image_dim = GLSL_SAMPLER_DIM_2D,
                             .image_array = is_array);

@@ -8,6 +8,7 @@
 #include "util/format/u_format.h"
 #include "util/half_float.h"
 #include "util/macros.h"
+#include "agx_device.h"
 #include "agx_state.h"
 #include "pool.h"
 
@@ -18,7 +19,7 @@ agx_const_buffer_ptr(struct agx_batch *batch, struct pipe_constant_buffer *cb)
       struct agx_resource *rsrc = agx_resource(cb->buffer);
       agx_batch_reads(batch, rsrc);
 
-      return rsrc->bo->ptr.gpu + cb->buffer_offset;
+      return rsrc->bo->va->addr + cb->buffer_offset;
    } else {
       return 0;
    }
@@ -29,12 +30,10 @@ agx_upload_vbos(struct agx_batch *batch)
 {
    struct agx_context *ctx = batch->ctx;
    struct agx_vertex_elements *attribs = ctx->attributes;
+   struct agx_device *dev = agx_device(ctx->base.screen);
    uint64_t buffers[PIPE_MAX_ATTRIBS] = {0};
    size_t buf_sizes[PIPE_MAX_ATTRIBS] = {0};
 
-   /* TODO: To handle null vertex buffers, we use robustness always. Once we
-    * support soft fault in the kernel, we can optimize this.
-    */
    u_foreach_bit(vbo, ctx->vb_mask) {
       struct pipe_vertex_buffer vb = ctx->vertex_buffers[vbo];
       assert(!vb.is_user_buffer);
@@ -43,21 +42,30 @@ agx_upload_vbos(struct agx_batch *batch)
          struct agx_resource *rsrc = agx_resource(vb.buffer.resource);
          agx_batch_reads(batch, rsrc);
 
-         buffers[vbo] = rsrc->bo->ptr.gpu + vb.buffer_offset;
+         buffers[vbo] = rsrc->bo->va->addr + vb.buffer_offset;
          buf_sizes[vbo] = rsrc->layout.size_B - vb.buffer_offset;
       }
    }
 
-   uint32_t zeroes[4] = {0};
-   uint64_t sink = agx_pool_upload_aligned(&batch->pool, &zeroes, 16, 16);
+   /* NULL vertex buffers read zeroes from NULL. This depends on soft fault.
+    * Without soft fault, we just upload zeroes to read from.
+    */
+   uint64_t sink = 0;
+
+   if (!agx_has_soft_fault(dev)) {
+      uint32_t zeroes[4] = {0};
+      sink = agx_pool_upload_aligned(&batch->pool, &zeroes, 16, 16);
+   }
 
    for (unsigned i = 0; i < PIPE_MAX_ATTRIBS; ++i) {
       unsigned buf = attribs->buffers[i];
+      uint64_t addr;
 
       batch->uniforms.attrib_clamp[i] = agx_calculate_vbo_clamp(
          buffers[buf], sink, attribs->key[i].format, buf_sizes[buf],
-         attribs->key[i].stride, attribs->src_offsets[i],
-         &batch->uniforms.attrib_base[i]);
+         attribs->key[i].stride, attribs->src_offsets[i], &addr);
+
+      batch->uniforms.attrib_base[i] = addr;
    }
 }
 
@@ -146,7 +154,7 @@ agx_set_ssbo_uniforms(struct agx_batch *batch, enum pipe_shader_type stage)
             agx_batch_reads(batch, rsrc);
          }
 
-         unif->ssbo_base[cb] = rsrc->bo->ptr.gpu + sb->buffer_offset;
+         unif->ssbo_base[cb] = rsrc->bo->va->addr + sb->buffer_offset;
          unif->ssbo_size[cb] = st->ssbo[cb].buffer_size;
       } else {
          /* Invalid, so use the sink */

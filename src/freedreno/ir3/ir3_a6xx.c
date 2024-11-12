@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2017-2018 Rob Clark <robclark@freedesktop.org>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright © 2017-2018 Rob Clark <robclark@freedesktop.org>
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Rob Clark <robclark@freedesktop.org>
@@ -224,6 +206,9 @@ emit_intrinsic_atomic_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    struct ir3_instruction *atomic, *ibo, *src0, *src1, *data, *dummy;
    nir_atomic_op op = nir_intrinsic_atomic_op(intr);
    type_t type = nir_atomic_op_type(op) == nir_type_int ? TYPE_S32 : TYPE_U32;
+   if (intr->def.bit_size == 64) {
+      type = TYPE_ATOMIC_U64;
+   }
 
    ibo = ir3_ssbo_to_ibo(ctx, intr->src[0]);
 
@@ -248,10 +233,23 @@ emit_intrinsic_atomic_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    if (op == nir_atomic_op_cmpxchg) {
       src0 = ir3_get_src(ctx, &intr->src[4])[0];
       struct ir3_instruction *compare = ir3_get_src(ctx, &intr->src[3])[0];
-      src1 = ir3_collect(b, dummy, compare, data);
+      if (intr->def.bit_size == 64) {
+         struct ir3_instruction *dummy2 = create_immed(b, 0);
+         struct ir3_instruction *compare2 = ir3_get_src(ctx, &intr->src[3])[1];
+         struct ir3_instruction *data2 = ir3_get_src(ctx, &intr->src[2])[1];
+         src1 = ir3_collect(b, dummy, dummy2, compare, compare2, data, data2);
+      } else {
+         src1 = ir3_collect(b, dummy, compare, data);
+      }
    } else {
       src0 = ir3_get_src(ctx, &intr->src[3])[0];
-      src1 = ir3_collect(b, dummy, data);
+      if (intr->def.bit_size == 64) {
+         struct ir3_instruction *dummy2 = create_immed(b, 0);
+         struct ir3_instruction *data2 = ir3_get_src(ctx, &intr->src[2])[1];
+         src1 = ir3_collect(b, dummy, dummy2, data, data2);
+      } else {
+         src1 = ir3_collect(b, dummy, data);
+      }
    }
 
    atomic = emit_atomic(b, op, ibo, src0, src1);
@@ -268,10 +266,12 @@ emit_intrinsic_atomic_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    atomic->dsts[0]->wrmask = src1->dsts[0]->wrmask;
    ir3_reg_tie(atomic->dsts[0], atomic->srcs[2]);
    ir3_handle_nonuniform(atomic, intr);
-   struct ir3_instruction *split;
-   ir3_split_dest(b, &split, atomic, 0, 1);
-   return split;
-}
+
+   size_t num_results = intr->def.bit_size == 64 ? 2 : 1;
+   struct ir3_instruction *defs[num_results];
+   ir3_split_dest(b, defs, atomic, 0, num_results);
+   return ir3_create_collect(b, defs, num_results);
+  }
 
 /* src[] = { deref, coord, sample_index }. const_index[] = {} */
 static void
@@ -500,6 +500,9 @@ emit_intrinsic_atomic_global(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    struct ir3_instruction *value = ir3_get_src(ctx, &intr->src[1])[0];
    nir_atomic_op op = nir_intrinsic_atomic_op(intr);
    type_t type = nir_atomic_op_type(op) == nir_type_int ? TYPE_S32 : TYPE_U32;
+   if (intr->def.bit_size == 64) {
+      type = TYPE_ATOMIC_U64;
+   }
 
    addr = ir3_collect(b, ir3_get_src(ctx, &intr->src[0])[0],
                       ir3_get_src(ctx, &intr->src[0])[1]);
@@ -507,8 +510,20 @@ emit_intrinsic_atomic_global(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    if (op == nir_atomic_op_cmpxchg) {
       struct ir3_instruction *compare = ir3_get_src(ctx, &intr->src[2])[0];
       src1 = ir3_collect(b, compare, value);
+      if (intr->def.bit_size == 64) {
+         struct ir3_instruction *compare2 = ir3_get_src(ctx, &intr->src[2])[1];
+         struct ir3_instruction *value2 = ir3_get_src(ctx, &intr->src[1])[1];
+         src1 = ir3_collect(b, compare, compare2, value, value2);
+      } else {
+         src1 = ir3_collect(b, compare, value);
+      }
    } else {
-      src1 = value;
+      if (intr->def.bit_size == 64) {
+         struct ir3_instruction *value2 = ir3_get_src(ctx, &intr->src[1])[1];
+         src1 = ir3_collect(b, value, value2);
+      } else {
+         src1 = value;
+      }
    }
 
    switch (op) {
@@ -553,6 +568,7 @@ emit_intrinsic_atomic_global(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    atomic->cat6.type = type;
    atomic->barrier_class = IR3_BARRIER_BUFFER_W;
    atomic->barrier_conflict = IR3_BARRIER_BUFFER_R | IR3_BARRIER_BUFFER_W;
+   atomic->dsts[0]->wrmask = MASK(intr->def.bit_size == 64 ? 2 : 1);
 
    /* even if nothing consume the result, we can't DCE the instruction: */
    array_insert(b, b->keeps, atomic);

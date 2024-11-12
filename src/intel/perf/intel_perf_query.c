@@ -359,7 +359,7 @@ intel_perf_open(struct intel_perf_context *perf_ctx,
 {
    int fd = intel_perf_stream_open(perf_ctx->perf, drm_fd, ctx_id,
                                    metrics_set_id, period_exponent, false,
-                                   enable);
+                                   enable, NULL);
    if (fd == -1) {
       DBG("Error opening gen perf OA stream: %m\n");
       return false;

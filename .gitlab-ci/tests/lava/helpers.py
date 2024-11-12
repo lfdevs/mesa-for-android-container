@@ -34,22 +34,22 @@ def create_lava_yaml_msg(
 
 
 def generate_testsuite_result(
-    name="test-mesa-ci", result="pass", metadata_extra=None, extra=None
+    name="test-mesa-ci", result="pass", exit_code=0, metadata_extra=None, extra=None
 ):
     if metadata_extra is None:
         metadata_extra = {}
     if extra is None:
         extra = {}
-    return {"metadata": {"result": result, **metadata_extra}, "name": name}
+    return {"metadata": {"result": result, "exit_code": exit_code, **metadata_extra}, "name": name}
 
 
 def jobs_logs_response(
-    finished=False, msg=None, lvl="target", result=None
+    finished=False, msg=None, lvl="target", result=None, exit_code=None
 ) -> Tuple[bool, str]:
     timed_msg = {"dt": str(datetime.now()), "msg": "New message", "lvl": lvl}
     if result:
         timed_msg["lvl"] = "target"
-        timed_msg["msg"] = f"hwci: mesa: {result}"
+        timed_msg["msg"] = f"hwci: mesa: {result}, exit_code: {exit_code}"
 
     logs = [timed_msg] if msg is None else msg
 
@@ -57,7 +57,10 @@ def jobs_logs_response(
 
 
 def section_aware_message_generator(
-    messages: dict[LogSectionType, Iterable[int]], result: Optional[str] = None
+    messages: dict[LogSectionType,
+    Iterable[int]],
+    result: Optional[str] = None,
+    exit_code: Optional[int] = None
 ) -> Iterable[tuple[dict, Iterable[int]]]:
     default = [1]
 
@@ -69,7 +72,7 @@ def section_aware_message_generator(
         if result and section_type == result_message_section:
             # To consider the job finished, the result `echo` should be produced
             # in the correct section
-            yield create_lava_yaml_msg(msg=f"hwci: mesa: {result}"), delay
+            yield create_lava_yaml_msg(msg=f"hwci: mesa: {result}, exit_code: {exit_code}"), delay
 
 
 def message_generator():
@@ -87,6 +90,7 @@ def generate_n_logs(
     tick_fn: Union[Generator, Iterable[int], int] = 1,
     level_fn=level_generator,
     result="pass",
+    exit_code=0,
 ):
     """Simulate a log partitionated in n components"""
     level_gen = level_fn()
@@ -109,7 +113,7 @@ def generate_n_logs(
                 yield jobs_logs_response(finished=False, msg=[], lvl=level)
 
             time_travel.tick(tick_sec)
-            yield jobs_logs_response(finished=True, result=result)
+            yield jobs_logs_response(finished=True, result=result, exit_code=exit_code)
 
 
 def to_iterable(tick_fn):
@@ -121,12 +125,12 @@ def to_iterable(tick_fn):
         return cycle((tick_fn,))
 
 
-def mock_logs(messages=None, result=None):
+def mock_logs(messages=None, result=None, exit_code=None):
     if messages is None:
         messages = {}
     with freeze_time(datetime.now()) as time_travel:
         # Simulate a complete run given by message_fn
-        for msg, tick_list in section_aware_message_generator(messages, result):
+        for msg, tick_list in section_aware_message_generator(messages, result, exit_code):
             for tick_sec in tick_list:
                 yield jobs_logs_response(finished=False, msg=[msg])
                 time_travel.tick(tick_sec)

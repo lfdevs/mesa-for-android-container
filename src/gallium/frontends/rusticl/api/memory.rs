@@ -287,7 +287,7 @@ fn create_buffer_with_properties(
     if let Some((svm_ptr, svm_layout)) = c.find_svm_alloc(host_ptr as usize) {
         // SAFETY: they are part of the same allocation, and because host_ptr >= svm_ptr we can cast
         // to usize.
-        let diff = unsafe { host_ptr.offset_from(svm_ptr) } as usize;
+        let diff = unsafe { host_ptr.byte_offset_from(svm_ptr) } as usize;
 
         // technically we don't have to account for the offset, but it's almost for free.
         if size > svm_layout - diff {

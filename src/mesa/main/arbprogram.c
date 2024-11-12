@@ -894,64 +894,44 @@ get_program_iv(struct gl_program *prog, GLenum target, GLenum pname,
          *params = prog->Id;
          return;
       case GL_PROGRAM_INSTRUCTIONS_ARB:
+      case GL_PROGRAM_NATIVE_INSTRUCTIONS_ARB:
          *params = prog->arb.NumInstructions;
          return;
       case GL_MAX_PROGRAM_INSTRUCTIONS_ARB:
+      case GL_MAX_PROGRAM_NATIVE_INSTRUCTIONS_ARB:
          *params = limits->MaxInstructions;
          return;
-      case GL_PROGRAM_NATIVE_INSTRUCTIONS_ARB:
-         *params = prog->arb.NumNativeInstructions;
-         return;
-      case GL_MAX_PROGRAM_NATIVE_INSTRUCTIONS_ARB:
-         *params = limits->MaxNativeInstructions;
-         return;
       case GL_PROGRAM_TEMPORARIES_ARB:
+      case GL_PROGRAM_NATIVE_TEMPORARIES_ARB:
          *params = prog->arb.NumTemporaries;
          return;
       case GL_MAX_PROGRAM_TEMPORARIES_ARB:
+      case GL_MAX_PROGRAM_NATIVE_TEMPORARIES_ARB:
          *params = limits->MaxTemps;
          return;
-      case GL_PROGRAM_NATIVE_TEMPORARIES_ARB:
-         *params = prog->arb.NumNativeTemporaries;
-         return;
-      case GL_MAX_PROGRAM_NATIVE_TEMPORARIES_ARB:
-         *params = limits->MaxNativeTemps;
-         return;
       case GL_PROGRAM_PARAMETERS_ARB:
+      case GL_PROGRAM_NATIVE_PARAMETERS_ARB:
          *params = prog->arb.NumParameters;
          return;
       case GL_MAX_PROGRAM_PARAMETERS_ARB:
+      case GL_MAX_PROGRAM_NATIVE_PARAMETERS_ARB:
          *params = limits->MaxParameters;
          return;
-      case GL_PROGRAM_NATIVE_PARAMETERS_ARB:
-         *params = prog->arb.NumNativeParameters;
-         return;
-      case GL_MAX_PROGRAM_NATIVE_PARAMETERS_ARB:
-         *params = limits->MaxNativeParameters;
-         return;
       case GL_PROGRAM_ATTRIBS_ARB:
+      case GL_PROGRAM_NATIVE_ATTRIBS_ARB:
          *params = prog->arb.NumAttributes;
          return;
       case GL_MAX_PROGRAM_ATTRIBS_ARB:
+      case GL_MAX_PROGRAM_NATIVE_ATTRIBS_ARB:
          *params = limits->MaxAttribs;
          return;
-      case GL_PROGRAM_NATIVE_ATTRIBS_ARB:
-         *params = prog->arb.NumNativeAttributes;
-         return;
-      case GL_MAX_PROGRAM_NATIVE_ATTRIBS_ARB:
-         *params = limits->MaxNativeAttribs;
-         return;
       case GL_PROGRAM_ADDRESS_REGISTERS_ARB:
+      case GL_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB:
          *params = prog->arb.NumAddressRegs;
          return;
       case GL_MAX_PROGRAM_ADDRESS_REGISTERS_ARB:
-         *params = limits->MaxAddressRegs;
-         return;
-      case GL_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB:
-         *params = prog->arb.NumNativeAddressRegs;
-         return;
       case GL_MAX_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB:
-         *params = limits->MaxNativeAddressRegs;
+         *params = limits->MaxAddressRegs;
          return;
       case GL_MAX_PROGRAM_LOCAL_PARAMETERS_ARB:
          *params = limits->MaxLocalParams;
@@ -988,40 +968,28 @@ get_program_iv(struct gl_program *prog, GLenum target, GLenum pname,
       const struct gl_program *fp = ctx->FragmentProgram.Current;
       switch (pname) {
          case GL_PROGRAM_ALU_INSTRUCTIONS_ARB:
-            *params = fp->arb.NumNativeAluInstructions;
-            return;
          case GL_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB:
             *params = fp->arb.NumAluInstructions;
             return;
          case GL_PROGRAM_TEX_INSTRUCTIONS_ARB:
+         case GL_PROGRAM_NATIVE_TEX_INSTRUCTIONS_ARB:
             *params = fp->arb.NumTexInstructions;
             return;
-         case GL_PROGRAM_NATIVE_TEX_INSTRUCTIONS_ARB:
-            *params = fp->arb.NumNativeTexInstructions;
-            return;
          case GL_PROGRAM_TEX_INDIRECTIONS_ARB:
+         case GL_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB:
             *params = fp->arb.NumTexIndirections;
             return;
-         case GL_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB:
-            *params = fp->arb.NumNativeTexIndirections;
-            return;
          case GL_MAX_PROGRAM_ALU_INSTRUCTIONS_ARB:
+         case GL_MAX_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB:
             *params = limits->MaxAluInstructions;
             return;
-         case GL_MAX_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB:
-            *params = limits->MaxNativeAluInstructions;
-            return;
          case GL_MAX_PROGRAM_TEX_INSTRUCTIONS_ARB:
+         case GL_MAX_PROGRAM_NATIVE_TEX_INSTRUCTIONS_ARB:
             *params = limits->MaxTexInstructions;
             return;
-         case GL_MAX_PROGRAM_NATIVE_TEX_INSTRUCTIONS_ARB:
-            *params = limits->MaxNativeTexInstructions;
-            return;
          case GL_MAX_PROGRAM_TEX_INDIRECTIONS_ARB:
-            *params = limits->MaxTexIndirections;
-            return;
          case GL_MAX_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB:
-            *params = limits->MaxNativeTexIndirections;
+            *params = limits->MaxTexIndirections;
             return;
          default:
             _mesa_error(ctx, GL_INVALID_ENUM, "glGetProgramivARB(pname)");

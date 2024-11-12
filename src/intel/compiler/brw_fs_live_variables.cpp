@@ -32,7 +32,7 @@ using namespace brw;
 
 #define MAX_INSTRUCTION (1 << 30)
 
-/** @file brw_fs_live_variables.cpp
+/** @file
  *
  * Support for calculating liveness information about virtual GRFs.
  *

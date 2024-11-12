@@ -120,11 +120,20 @@ struct asahi_ccmd_gem_bind_rsp {
    int32_t ret;
 };
 
+#define ASAHI_EXTRES_READ  0x01
+#define ASAHI_EXTRES_WRITE 0x02
+
+struct asahi_ccmd_submit_res {
+   uint32_t res_id;
+   uint32_t flags;
+};
+
 struct asahi_ccmd_submit_req {
    struct vdrm_ccmd_req hdr;
    uint32_t queue_id;
    uint32_t result_res_id;
    uint32_t command_count;
+   uint32_t extres_count;
 
    uint8_t payload[];
 };

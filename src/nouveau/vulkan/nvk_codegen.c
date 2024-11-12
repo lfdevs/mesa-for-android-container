@@ -843,7 +843,7 @@ nvk_cg_compile_nir(struct nvk_physical_device *pdev, nir_shader *nir,
       shader->info.num_gprs = MAX2(4, info_out.bin.maxGPR + 3);
    else
       shader->info.num_gprs = MAX2(4, info_out.bin.maxGPR + 1);
-   shader->info.num_barriers = info_out.numBarriers;
+   shader->info.num_control_barriers = info_out.numBarriers;
 
    if (info_out.bin.tlsSpace) {
       assert(info_out.bin.tlsSpace < (1 << 24));

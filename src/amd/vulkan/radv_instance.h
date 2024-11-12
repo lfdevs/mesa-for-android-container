@@ -11,6 +11,7 @@
 #ifndef RADV_INSTANCE_H
 #define RADV_INSTANCE_H
 
+#include "util/simple_mtx.h"
 #include "util/xmlconfig.h"
 #include "radv_radeon_winsys.h"
 #include "vk_instance.h"
@@ -37,8 +38,11 @@ struct radv_instance {
 
    VkAllocationCallbacks alloc;
 
+   simple_mtx_t shader_dump_mtx;
+
    uint64_t debug_flags;
    uint64_t perftest_flags;
+   uint64_t trap_excp_flags;
    enum radeon_ctx_pstate profile_pstate;
 
    struct {
@@ -63,7 +67,6 @@ struct radv_instance {
       bool legacy_sparse_binding;
       bool force_pstate_peak_gfx11_dgpu;
       bool clear_lds;
-      bool enable_dgc;
       bool enable_khr_present_wait;
       bool report_llvm9_version_string;
       bool vk_require_etc2;

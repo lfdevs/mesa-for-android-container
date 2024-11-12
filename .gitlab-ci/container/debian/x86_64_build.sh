@@ -83,7 +83,7 @@ rm -rf $XORGMACROS_VERSION
 
 . .gitlab-ci/container/build-bindgen.sh
 
-python3 -m pip install --break-system-packages -r .gitlab-ci/lava/requirements.txt
+python3 -m pip install --break-system-packages -r bin/ci/requirements.txt
 
 ############### Uninstall the build software
 

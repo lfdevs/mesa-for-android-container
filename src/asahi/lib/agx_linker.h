@@ -117,23 +117,24 @@ struct agx_fs_epilog_link_info {
     */
    uint8_t size_32;
 
-   /* Mask of render targets written by the main shader */
-   uint8_t rt_written;
+   /* Mask of locations written by the main shader */
+   uint8_t loc_written;
 
    /* If set, the API fragment shader uses sample shading. This means the epilog
     * will be invoked per-sample as well.
     */
    unsigned sample_shading : 1;
 
-   /* If set, broadcast the render target #0 value to all render targets. This
-    * implements gl_FragColor semantics.
+   /* If set, broadcast location #0 value to all render targets. This
+    * implements gl_FragColor semantics. This tells the driver to set remap
+    * appropriately.
     */
    unsigned broadcast_rt0 : 1;
 
-   /* If set, force render target 0's W channel to 1.0. This optimizes blending
+   /* If set, force location 0's W channel to 1.0. This optimizes blending
     * calculations in some applications.
     */
-   unsigned rt0_w_1 : 1;
+   unsigned loc0_w_1 : 1;
 
    /* If set, the API fragment shader wants to write depth/stencil respectively.
     * This happens in the epilog for correctness when the epilog discards.
@@ -161,6 +162,12 @@ struct agx_fs_epilog_key {
 
    /* Blend state. Blending happens in the epilog. */
    struct agx_blend_key blend;
+
+   /* Colour attachment remapping for Vulkan. Negative values indicate that an
+    * attachment is discarded. Positive values indicate the output location we
+    * want to store at the indexed colour attachment.
+    */
+   int8_t remap[8];
 
    /* Tilebuffer configuration */
    enum pipe_format rt_formats[8];

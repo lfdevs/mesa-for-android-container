@@ -43,12 +43,6 @@ alu_src_get_fotid_mask(nir_alu_instr *instr, unsigned idx)
 static void
 update_fotid_alu(nir_builder *b, nir_alu_instr *instr, const radv_nir_opt_tid_function_options *options)
 {
-   /* For legacy reasons these are ALU instructions
-    * when they should be intrinsics.
-    */
-   if (nir_op_is_derivative(instr->op))
-      return;
-
    const nir_op_info *info = &nir_op_infos[instr->op];
 
    unsigned res = BITFIELD_MASK(instr->def.num_components);

@@ -409,7 +409,7 @@ add_node(struct v3d_compile *c, uint32_t temp, uint8_t class_bits)
         /* We fill the node priority after we are done inserting spills */
         c->nodes.info[node].class_bits = class_bits;
         c->nodes.info[node].priority = 0;
-        c->nodes.info[node].is_ldunif_dst = false;
+        c->nodes.info[node].try_rf0 = false;
         c->nodes.info[node].is_program_end = false;
         c->nodes.info[node].unused = false;
         c->nodes.info[node].payload_conflict = false;
@@ -965,7 +965,7 @@ v3d_ra_select_rf(struct v3d_ra_select_callback_data *v3d_ra,
          * cond field to encode the dst and would prevent merge with
          * instructions that use cond flags).
          */
-        if (v3d_ra->nodes->info[node].is_ldunif_dst &&
+        if (v3d_ra->nodes->info[node].try_rf0 &&
             BITSET_TEST(regs, v3d_ra->phys_index)) {
                 assert(v3d_ra->devinfo->ver >= 71);
                 *out = v3d_ra->phys_index;
@@ -1286,8 +1286,10 @@ update_graph_and_reg_classes_for_inst(struct v3d_compile *c,
         }
 
         if (inst->dst.file == QFILE_TEMP) {
-                /* Only a ldunif gets to write to R5, which only has a
-                 * single 32-bit channel of storage.
+                /* Only a ldunif gets to write to R5, which only has a single
+                 * 32-bit channel of storage. Disallow R5 if we are around
+                 * ldvary sequences, since ldvary writes that register too and
+                 * that would disallow pairing.
                  *
                  * NOTE: ldunifa is subject to the same, however, going by
                  * shader-db it is best to keep r5 exclusive to ldunif, probably
@@ -1295,7 +1297,9 @@ update_graph_and_reg_classes_for_inst(struct v3d_compile *c,
                  * more accumulator reuse and QPU merges.
                  */
                 if (c->devinfo->has_accumulators) {
-                        if (!inst->qpu.sig.ldunif) {
+                        if (!inst->qpu.sig.ldunif ||
+                            (c->s->info.stage == MESA_SHADER_FRAGMENT &&
+                             ip <= last_ldvary_ip + 4)) {
                                 uint8_t class_bits =
                                         get_temp_class_bits(c, inst->dst.index) &
                                         ~CLASS_BITS_R5;
@@ -1313,14 +1317,19 @@ update_graph_and_reg_classes_for_inst(struct v3d_compile *c,
                                                          temp_to_node(c, inst->dst.index),
                                                          implicit_rf_nodes[0]);
                         }
-                        /* Flag dst temps from ldunif(a) instructions
-                         * so we can try to assign rf0 to them and avoid
-                         * converting these to ldunif(a)rf.
+                        /* Flag dst temps from ldunif(a) instructions so we can
+                         * try to assign rf0 to them and avoid converting these
+                         * to ldunif(a)rf, however, we don't want to do this
+                         * when these instructions are nearby ldvary since these
+                         * have implicit writes to rf0 and that would hurt
+                         * pairing.
                          */
-                        if (inst->qpu.sig.ldunif || inst->qpu.sig.ldunifa) {
+                        if ((inst->qpu.sig.ldunif || inst->qpu.sig.ldunifa) &&
+                            (c->s->info.stage != MESA_SHADER_FRAGMENT ||
+                             ip > last_ldvary_ip + 4)) {
                                 const uint32_t dst_n =
                                         temp_to_node(c, inst->dst.index);
-                                c->nodes.info[dst_n].is_ldunif_dst = true;
+                                c->nodes.info[dst_n].try_rf0 = true;
                         }
                 }
         }
@@ -1433,7 +1442,7 @@ v3d_register_allocate(struct v3d_compile *c)
          * without accumulators that can have implicit writes to phys regs.
          */
         for (uint32_t i = 0; i < num_ra_nodes; i++) {
-                c->nodes.info[i].is_ldunif_dst = false;
+                c->nodes.info[i].try_rf0 = false;
                 c->nodes.info[i].is_program_end = false;
                 c->nodes.info[i].unused = false;
                 c->nodes.info[i].priority = 0;

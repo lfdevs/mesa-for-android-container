@@ -60,11 +60,11 @@ void st_nir_lower_uniforms(struct st_context *st, struct nir_shader *nir);
 
 void
 st_nir_finish_builtin_nir(struct st_context *st, struct nir_shader *nir);
-struct pipe_shader_state *
+void *
 st_nir_finish_builtin_shader(struct st_context *st,
                              struct nir_shader *nir);
 
-struct pipe_shader_state *
+void *
 st_nir_make_passthrough_shader(struct st_context *st,
                                const char *shader_name,
                                gl_shader_stage stage,
@@ -74,7 +74,7 @@ st_nir_make_passthrough_shader(struct st_context *st,
                                unsigned *interpolation_modes,
                                unsigned sysval_mask);
 
-struct pipe_shader_state *
+void *
 st_nir_make_clearcolor_shader(struct st_context *st);
 
 struct nir_variable *

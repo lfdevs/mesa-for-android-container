@@ -150,7 +150,6 @@ def type_base_type(type_):
 _2src_commutative = "2src_commutative "
 associative = "associative "
 selection = "selection "
-derivative = "derivative "
 
 # global dictionary of opcodes
 opcodes = {}
@@ -347,19 +346,6 @@ unop("fcos", tfloat, "bit_size == 64 ? cos(src0) : cosf(src0)")
 # dfrexp
 unop_convert("frexp_exp", tint32, tfloat, "frexp(src0, &dst);")
 unop_convert("frexp_sig", tfloat, tfloat, "int n; dst = frexp(src0, &n);")
-
-# Partial derivatives.
-deriv_template = """
-Calculate the screen-space partial derivative using {} derivatives of the input
-with respect to the {}-axis. The constant folding is trivial as the derivative
-of a constant is 0 if the constant is not Inf or NaN.
-"""
-
-for mode, suffix in [("either fine or coarse", ""), ("fine", "_fine"), ("coarse", "_coarse")]:
-    for axis in ["x", "y"]:
-        unop(f"fdd{axis}{suffix}", tfloat, "isfinite(src0) ? 0.0 : NAN",
-             algebraic_properties = derivative,
-             description = deriv_template.format(mode, axis.upper()))
 
 # Floating point pack and unpack operations.
 
@@ -1361,6 +1347,13 @@ opcode("imadshl_agx", 0, tint, [0, 0, 0, 0], [tint, tint, tint, tint], False,
 opcode("imsubshl_agx", 0, tint, [0, 0, 0, 0], [tint, tint, tint, tint], False,
        "", f"(src0 * src1) - (src2 << src3)")
 
+# Bounds check instruction.
+#
+# Sources: <data, end offset, bounds>
+opcode("bounds_agx", 0, tint, [0, 0, 0],
+       [tint, tint, tint], False,
+       "", "src1 <= src2 ? src0 : 0")
+
 binop_convert("interleave_agx", tuint32, tuint16, "", """
       dst = 0;
       for (unsigned bit = 0; bit < 16; bit++) {
@@ -1370,6 +1363,14 @@ binop_convert("interleave_agx", tuint32, tuint16, "", """
       Interleave bits of 16-bit integers to calculate a 32-bit integer. This can
       be used as-is for Morton encoding.
       """)
+
+# These are like fmin/fmax, but do not flush denorms on the output which is why
+# they're modeled as conversions. AGX flushes fp32 denorms but preserves fp16
+# denorms, so fp16 fmin/fmax work without lowering.
+binop_convert("fmin_agx", tuint32, tfloat32, _2src_commutative + associative,
+              "(src0 < src1 || isnan(src1)) ? src0 : src1")
+binop_convert("fmax_agx", tuint32, tfloat32, _2src_commutative + associative,
+              "(src0 > src1 || isnan(src1)) ? src0 : src1")
 
 # NVIDIA PRMT
 opcode("prmt_nv", 0, tuint32, [0, 0, 0], [tuint32, tuint32, tuint32],
@@ -1504,9 +1505,9 @@ unop("pack_2x16_to_unorm_2x10_v3d", tuint32, "pack_2x16_to_unorm_2x10(src0)")
 # and one 10 bit unorm
 unop("pack_2x16_to_unorm_10_2_v3d", tuint32, "pack_2x16_to_unorm_10_2(src0)")
 
-# Mali-specific opcodes
-unop("fsat_signed_mali", tfloat, ("fmin(fmax(src0, -1.0), 1.0)"))
-unop("fclamp_pos_mali", tfloat, ("fmax(src0, 0.0)"))
+# These opcodes are used used by Mali and V3D
+unop("fsat_signed", tfloat, ("fmin(fmax(src0, -1.0), 1.0)"))
+unop("fclamp_pos", tfloat, ("fmax(src0, 0.0)"))
 
 opcode("b32fcsel_mdg", 0, tuint, [0, 0, 0],
        [tbool32, tfloat, tfloat], False, selection, "src0 ? src1 : src2",
@@ -1515,10 +1516,6 @@ opcode("b32fcsel_mdg", 0, tuint, [0, 0, 0],
        integer sources. That includes support for floating point modifiers in
        the backend.
        """)
-
-# Magnitude equal to fddx/y, sign undefined. Derivative of a constant is zero.
-unop("fddx_must_abs_mali", tfloat, "0.0", algebraic_properties = "derivative")
-unop("fddy_must_abs_mali", tfloat, "0.0", algebraic_properties = "derivative")
 
 # DXIL specific double [un]pack
 # DXIL doesn't support generic [un]pack instructions, so we want those

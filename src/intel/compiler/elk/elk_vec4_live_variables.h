@@ -65,7 +65,9 @@ public:
    };
 
    vec4_live_variables(const elk_backend_shader *s);
+   vec4_live_variables(const vec4_live_variables &) = delete;
    ~vec4_live_variables();
+   vec4_live_variables & operator=(const vec4_live_variables &) = delete;
 
    bool
    validate(const elk_backend_shader *s) const;

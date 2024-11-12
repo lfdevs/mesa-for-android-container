@@ -16,7 +16,6 @@
 #include "ac_surface.h"
 #include "radv_amdgpu_bo.h"
 #include "radv_amdgpu_cs.h"
-#include "radv_amdgpu_surface.h"
 #include "radv_amdgpu_winsys_public.h"
 #include "radv_debug.h"
 #include "vk_drm_syncobj.h"
@@ -39,12 +38,6 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
     */
    for (enum amd_ip_type ip_type = AMD_IP_UVD; ip_type <= AMD_IP_VCN_ENC; ip_type++)
       ws->info.max_submitted_ibs[ip_type] = 1;
-
-   ws->addrlib = ac_addrlib_create(&ws->info, &ws->info.max_alignment);
-   if (!ws->addrlib) {
-      fprintf(stderr, "radv/amdgpu: Cannot create addrlib.\n");
-      return false;
-   }
 
    ws->info.ip[AMD_IP_SDMA].num_queues = MIN2(ws->info.ip[AMD_IP_SDMA].num_queues, MAX_RINGS_PER_TYPE);
    ws->info.ip[AMD_IP_COMPUTE].num_queues = MIN2(ws->info.ip[AMD_IP_COMPUTE].num_queues, MAX_RINGS_PER_TYPE);
@@ -183,7 +176,6 @@ radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
       amdgpu_vm_unreserve_vmid(ws->dev, 0);
 
    u_rwlock_destroy(&ws->log_bo_list_lock);
-   ac_addrlib_destroy(ws->addrlib);
    amdgpu_device_deinitialize(ws->dev);
    FREE(rws);
 }
@@ -270,7 +262,7 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
       r = amdgpu_vm_reserve_vmid(dev, 0);
       if (r) {
          fprintf(stderr, "radv/amdgpu: failed to reserve vmid.\n");
-         goto vmid_fail;
+         goto winsys_fail;
       }
    }
    int num_sync_types = 0;
@@ -305,15 +297,12 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    ws->base.get_sync_types = radv_amdgpu_winsys_get_sync_types;
    radv_amdgpu_bo_init_functions(ws);
    radv_amdgpu_cs_init_functions(ws);
-   radv_amdgpu_surface_init_functions(ws);
 
    _mesa_hash_table_insert(winsyses, dev, ws);
    simple_mtx_unlock(&winsys_creation_mutex);
 
    return &ws->base;
 
-vmid_fail:
-   ac_addrlib_destroy(ws->addrlib);
 winsys_fail:
    free(ws);
 fail:

@@ -132,8 +132,10 @@ get_cps_state_offset(struct anv_cmd_buffer *cmd_buffer, bool cps_enabled,
 static bool
 has_ds_feedback_loop(const struct vk_dynamic_graphics_state *dyn)
 {
-   return dyn->feedback_loops & (VK_IMAGE_ASPECT_DEPTH_BIT |
-                                 VK_IMAGE_ASPECT_STENCIL_BIT);
+   return (dyn->feedback_loops & (VK_IMAGE_ASPECT_DEPTH_BIT |
+                                  VK_IMAGE_ASPECT_STENCIL_BIT)) ||
+      dyn->ial.depth_att != MESA_VK_ATTACHMENT_UNUSED ||
+      dyn->ial.stencil_att != MESA_VK_ATTACHMENT_UNUSED;
 }
 
 UNUSED static bool
@@ -452,8 +454,10 @@ calculate_tile_dimensions(struct anv_cmd_buffer *cmd_buffer,
  * reemission if the values are changing.
  *
  * Nothing is emitted in the batch buffer.
+ *
+ * Returns a mask for state that we want to leave dirty afterwards.
  */
-void
+anv_cmd_dirty_mask_t
 genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
 {
    UNUSED struct anv_device *device = cmd_buffer->device;
@@ -465,6 +469,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
    struct anv_gfx_dynamic_state *hw_state = &gfx->dyn_state;
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
    struct anv_instance *instance = cmd_buffer->device->physical->instance;
+   anv_cmd_dirty_mask_t dirty_state_mask = 0;
 
 #define GET(field) hw_state->field
 #define SET(bit, field, value)                               \
@@ -563,7 +568,8 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
    }
 
    if ((gfx->dirty & ANV_CMD_DIRTY_PIPELINE) ||
-       (gfx->dirty & ANV_CMD_DIRTY_FS_MSAA_FLAGS)) {
+       (gfx->dirty & ANV_CMD_DIRTY_FS_MSAA_FLAGS) ||
+       (gfx->dirty & ANV_CMD_DIRTY_COARSE_PIXEL_ACTIVE)) {
       if (wm_prog_data) {
          const struct anv_shader_bin *fs_bin =
             pipeline->base.shaders[MESA_SHADER_FRAGMENT];
@@ -614,15 +620,24 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
          SET(PS_EXTRA, ps_extra.PixelShaderIsPerSample,
              brw_wm_prog_data_is_persample(wm_prog_data, gfx->fs_msaa_flags));
 #if GFX_VER >= 11
-         SET(PS_EXTRA, ps_extra.PixelShaderIsPerCoarsePixel,
-             brw_wm_prog_data_is_coarse(wm_prog_data, gfx->fs_msaa_flags));
+         const bool uses_coarse_pixel =
+            brw_wm_prog_data_is_coarse(wm_prog_data, gfx->fs_msaa_flags);
+         SET(PS_EXTRA, ps_extra.PixelShaderIsPerCoarsePixel, uses_coarse_pixel);
 #endif
 #if GFX_VERx10 >= 125
-         /* TODO: We should only require this when the last geometry shader
-          *       uses a fragment shading rate that is not constant.
-          */
-         SET(PS_EXTRA, ps_extra.EnablePSDependencyOnCPsizeChange,
-             brw_wm_prog_data_is_coarse(wm_prog_data, gfx->fs_msaa_flags));
+         enum anv_coarse_pixel_state cps_state = uses_coarse_pixel ?
+            ANV_COARSE_PIXEL_STATE_ENABLED : ANV_COARSE_PIXEL_STATE_DISABLED;
+         bool cps_state_toggled =
+            genX(cmd_buffer_set_coarse_pixel_active)(cmd_buffer, cps_state);
+         if (cps_state_toggled)
+            dirty_state_mask |= ANV_CMD_DIRTY_COARSE_PIXEL_ACTIVE;
+
+         const bool needs_ps_dependency =
+            /* TODO: We should only require this when the last geometry shader
+             *       uses a fragment shading rate that is not constant.
+             */
+            uses_coarse_pixel || cps_state_toggled;
+         SET(PS_EXTRA, ps_extra.EnablePSDependencyOnCPsizeChange, needs_ps_dependency);
 #endif
          SET(WM, wm.BarycentricInterpolationMode,
              wm_prog_data_barycentric_modes(wm_prog_data, gfx->fs_msaa_flags));
@@ -1012,19 +1027,6 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
         BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS_ENABLE)))
       BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SAMPLE_PATTERN);
 
-   if ((gfx->dirty & ANV_CMD_DIRTY_PIPELINE) ||
-       (gfx->dirty & ANV_CMD_DIRTY_RENDER_TARGETS) ||
-       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES)) {
-      /* 3DSTATE_WM in the hope we can avoid spawning fragment shaders
-       * threads.
-       */
-      bool force_thread_dispatch =
-         anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT) &&
-         (pipeline->force_fragment_thread_dispatch ||
-          anv_cmd_buffer_all_color_write_masked(cmd_buffer));
-      SET(WM, wm.ForceThreadDispatchEnable, force_thread_dispatch ? ForceON : 0);
-   }
-
    if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_ATTACHMENT_FEEDBACK_LOOP_ENABLE)) {
       SET_STAGE(PS_EXTRA, ps_extra.PixelShaderKillsPixel,
@@ -1033,6 +1035,33 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
                                  wm_prog_data->uses_kill),
                 FRAGMENT);
    }
+
+#if GFX_VERx10 >= 125
+   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) {
+      SET_STAGE(PS_EXTRA, ps_extra.PixelShaderHasUAV,
+                wm_prog_data && wm_prog_data->has_side_effects,
+                FRAGMENT);
+   }
+#else
+   if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                      ANV_CMD_DIRTY_OCCLUSION_QUERY_ACTIVE)) {
+      /* Prior to Gfx12.5 the HW seems to avoid spawning fragment shaders even
+       * if 3DSTATE_PS_EXTRA::PixelShaderKillsPixel=true when
+       * 3DSTATE_PS_BLEND::HasWriteableRT=false. This is causing problems with
+       * occlusion queries with 0 attachments. There are no CTS tests
+       * exercising this but zink+anv fails a bunch of tests like piglit
+       * arb_framebuffer_no_attachments-query.
+       *
+       * Here we choose to tweak the PixelShaderHasUAV to make sure the
+       * fragment shaders are run properly.
+       */
+      SET_STAGE(PS_EXTRA, ps_extra.PixelShaderHasUAV,
+                wm_prog_data && (wm_prog_data->has_side_effects ||
+                                 (gfx->color_att_count == 0 &&
+                                  gfx->n_occlusion_queries > 0)),
+                FRAGMENT);
+   }
+#endif
 
    if ((gfx->dirty & ANV_CMD_DIRTY_PIPELINE) ||
        (gfx->dirty & ANV_CMD_DIRTY_RENDER_TARGETS) ||
@@ -1047,39 +1076,48 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
       const uint8_t color_writes = dyn->cb.color_write_enables;
       bool has_writeable_rt =
          anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT) &&
-         (color_writes & ((1u << gfx->color_att_count) - 1)) != 0;
+         !anv_cmd_buffer_all_color_write_masked(cmd_buffer);
 
       SET(BLEND_STATE, blend.AlphaToCoverageEnable,
                        dyn->ms.alpha_to_coverage_enable);
       SET(BLEND_STATE, blend.AlphaToOneEnable,
                        dyn->ms.alpha_to_one_enable);
       SET(BLEND_STATE, blend.ColorDitherEnable,
-          cmd_buffer->state.gfx.rendering_flags & VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT);
+                       cmd_buffer->state.gfx.rendering_flags &
+                       VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT);
 
       bool independent_alpha_blend = false;
       /* Wa_14018912822, check if we set these during RT setup. */
       bool color_blend_zero = false;
       bool alpha_blend_zero = false;
-      for (uint32_t i = 0; i < MAX_RTS; i++) {
-         /* Disable anything above the current number of color attachments. */
-         bool write_disabled = i >= gfx->color_att_count ||
-                               (color_writes & BITFIELD_BIT(i)) == 0;
+      uint32_t rt_0 = MESA_VK_ATTACHMENT_UNUSED;
+      for (uint32_t rt = 0; rt < MAX_RTS; rt++) {
+         if (cmd_buffer->state.gfx.color_output_mapping[rt] >=
+             cmd_buffer->state.gfx.color_att_count)
+            continue;
 
-         SET(BLEND_STATE, blend.rts[i].WriteDisableAlpha,
+         uint32_t att = cmd_buffer->state.gfx.color_output_mapping[rt];
+         if (att == 0)
+            rt_0 = att;
+
+         /* Disable anything above the current number of color attachments. */
+         bool write_disabled = (color_writes & BITFIELD_BIT(att)) == 0;
+
+         SET(BLEND_STATE, blend.rts[rt].WriteDisableAlpha,
                           write_disabled ||
-                          (dyn->cb.attachments[i].write_mask &
+                          (dyn->cb.attachments[att].write_mask &
                            VK_COLOR_COMPONENT_A_BIT) == 0);
-         SET(BLEND_STATE, blend.rts[i].WriteDisableRed,
+         SET(BLEND_STATE, blend.rts[rt].WriteDisableRed,
                           write_disabled ||
-                          (dyn->cb.attachments[i].write_mask &
+                          (dyn->cb.attachments[att].write_mask &
                            VK_COLOR_COMPONENT_R_BIT) == 0);
-         SET(BLEND_STATE, blend.rts[i].WriteDisableGreen,
+         SET(BLEND_STATE, blend.rts[rt].WriteDisableGreen,
                           write_disabled ||
-                          (dyn->cb.attachments[i].write_mask &
+                          (dyn->cb.attachments[att].write_mask &
                            VK_COLOR_COMPONENT_G_BIT) == 0);
-         SET(BLEND_STATE, blend.rts[i].WriteDisableBlue,
+         SET(BLEND_STATE, blend.rts[rt].WriteDisableBlue,
                           write_disabled ||
-                          (dyn->cb.attachments[i].write_mask &
+                          (dyn->cb.attachments[att].write_mask &
                            VK_COLOR_COMPONENT_B_BIT) == 0);
          /* Vulkan specification 1.2.168, VkLogicOp:
           *
@@ -1096,28 +1134,28 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
           *   "Enabling LogicOp and Color Buffer Blending at the same time is
           *   UNDEFINED"
           */
-         SET(BLEND_STATE, blend.rts[i].LogicOpFunction,
+         SET(BLEND_STATE, blend.rts[rt].LogicOpFunction,
                           genX(vk_to_intel_logic_op)[dyn->cb.logic_op]);
-         SET(BLEND_STATE, blend.rts[i].LogicOpEnable, dyn->cb.logic_op_enable);
+         SET(BLEND_STATE, blend.rts[rt].LogicOpEnable, dyn->cb.logic_op_enable);
 
-         SET(BLEND_STATE, blend.rts[i].ColorClampRange, COLORCLAMP_RTFORMAT);
-         SET(BLEND_STATE, blend.rts[i].PreBlendColorClampEnable, true);
-         SET(BLEND_STATE, blend.rts[i].PostBlendColorClampEnable, true);
+         SET(BLEND_STATE, blend.rts[rt].ColorClampRange, COLORCLAMP_RTFORMAT);
+         SET(BLEND_STATE, blend.rts[rt].PreBlendColorClampEnable, true);
+         SET(BLEND_STATE, blend.rts[rt].PostBlendColorClampEnable, true);
 
          /* Setup blend equation. */
-         SET(BLEND_STATE, blend.rts[i].ColorBlendFunction,
+         SET(BLEND_STATE, blend.rts[rt].ColorBlendFunction,
                           genX(vk_to_intel_blend_op)[
-                             dyn->cb.attachments[i].color_blend_op]);
-         SET(BLEND_STATE, blend.rts[i].AlphaBlendFunction,
+                             dyn->cb.attachments[att].color_blend_op]);
+         SET(BLEND_STATE, blend.rts[rt].AlphaBlendFunction,
                           genX(vk_to_intel_blend_op)[
-                             dyn->cb.attachments[i].alpha_blend_op]);
+                             dyn->cb.attachments[att].alpha_blend_op]);
 
-         if (dyn->cb.attachments[i].src_color_blend_factor !=
-             dyn->cb.attachments[i].src_alpha_blend_factor ||
-             dyn->cb.attachments[i].dst_color_blend_factor !=
-             dyn->cb.attachments[i].dst_alpha_blend_factor ||
-             dyn->cb.attachments[i].color_blend_op !=
-             dyn->cb.attachments[i].alpha_blend_op) {
+         if (dyn->cb.attachments[att].src_color_blend_factor !=
+             dyn->cb.attachments[att].src_alpha_blend_factor ||
+             dyn->cb.attachments[att].dst_color_blend_factor !=
+             dyn->cb.attachments[att].dst_alpha_blend_factor ||
+             dyn->cb.attachments[att].color_blend_op !=
+             dyn->cb.attachments[att].alpha_blend_op) {
             independent_alpha_blend = true;
          }
 
@@ -1133,12 +1171,12 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
           * so we just disable the blending to prevent possible issues.
           */
          if (wm_prog_data && !wm_prog_data->dual_src_blend &&
-             anv_is_dual_src_blend_equation(&dyn->cb.attachments[i])) {
-            SET(BLEND_STATE, blend.rts[i].ColorBufferBlendEnable, false);
+             anv_is_dual_src_blend_equation(&dyn->cb.attachments[att])) {
+            SET(BLEND_STATE, blend.rts[rt].ColorBufferBlendEnable, false);
          } else {
-            SET(BLEND_STATE, blend.rts[i].ColorBufferBlendEnable,
+            SET(BLEND_STATE, blend.rts[rt].ColorBufferBlendEnable,
                              !dyn->cb.logic_op_enable &&
-                             dyn->cb.attachments[i].blend_enable);
+                             dyn->cb.attachments[att].blend_enable);
          }
 
          /* Our hardware applies the blend factor prior to the blend function
@@ -1151,26 +1189,26 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
          uint32_t DestinationBlendFactor;
          uint32_t SourceAlphaBlendFactor;
          uint32_t DestinationAlphaBlendFactor;
-         if (dyn->cb.attachments[i].color_blend_op == VK_BLEND_OP_MIN ||
-             dyn->cb.attachments[i].color_blend_op == VK_BLEND_OP_MAX) {
+         if (dyn->cb.attachments[att].color_blend_op == VK_BLEND_OP_MIN ||
+             dyn->cb.attachments[att].color_blend_op == VK_BLEND_OP_MAX) {
             SourceBlendFactor = BLENDFACTOR_ONE;
             DestinationBlendFactor = BLENDFACTOR_ONE;
          } else {
             SourceBlendFactor = genX(vk_to_intel_blend)[
-               dyn->cb.attachments[i].src_color_blend_factor];
+               dyn->cb.attachments[att].src_color_blend_factor];
             DestinationBlendFactor = genX(vk_to_intel_blend)[
-               dyn->cb.attachments[i].dst_color_blend_factor];
+               dyn->cb.attachments[att].dst_color_blend_factor];
          }
 
-         if (dyn->cb.attachments[i].alpha_blend_op == VK_BLEND_OP_MIN ||
-             dyn->cb.attachments[i].alpha_blend_op == VK_BLEND_OP_MAX) {
+         if (dyn->cb.attachments[att].alpha_blend_op == VK_BLEND_OP_MIN ||
+             dyn->cb.attachments[att].alpha_blend_op == VK_BLEND_OP_MAX) {
             SourceAlphaBlendFactor = BLENDFACTOR_ONE;
             DestinationAlphaBlendFactor = BLENDFACTOR_ONE;
          } else {
             SourceAlphaBlendFactor = genX(vk_to_intel_blend)[
-               dyn->cb.attachments[i].src_alpha_blend_factor];
+               dyn->cb.attachments[att].src_alpha_blend_factor];
             DestinationAlphaBlendFactor = genX(vk_to_intel_blend)[
-               dyn->cb.attachments[i].dst_alpha_blend_factor];
+               dyn->cb.attachments[att].dst_alpha_blend_factor];
          }
 
          /* Replace and Src1 value by 1.0 if dual source blending is not
@@ -1196,32 +1234,42 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
             }
          }
 
-         SET(BLEND_STATE, blend.rts[i].SourceBlendFactor, SourceBlendFactor);
-         SET(BLEND_STATE, blend.rts[i].DestinationBlendFactor, DestinationBlendFactor);
-         SET(BLEND_STATE, blend.rts[i].SourceAlphaBlendFactor, SourceAlphaBlendFactor);
-         SET(BLEND_STATE, blend.rts[i].DestinationAlphaBlendFactor, DestinationAlphaBlendFactor);
+         SET(BLEND_STATE, blend.rts[rt].SourceBlendFactor, SourceBlendFactor);
+         SET(BLEND_STATE, blend.rts[rt].DestinationBlendFactor, DestinationBlendFactor);
+         SET(BLEND_STATE, blend.rts[rt].SourceAlphaBlendFactor, SourceAlphaBlendFactor);
+         SET(BLEND_STATE, blend.rts[rt].DestinationAlphaBlendFactor, DestinationAlphaBlendFactor);
       }
       gfx->color_blend_zero = color_blend_zero;
       gfx->alpha_blend_zero = alpha_blend_zero;
 
       SET(BLEND_STATE, blend.IndependentAlphaBlendEnable, independent_alpha_blend);
 
+      if (rt_0 == MESA_VK_ATTACHMENT_UNUSED)
+         rt_0 = 0;
+
       /* 3DSTATE_PS_BLEND to be consistent with the rest of the
        * BLEND_STATE_ENTRY.
        */
       SET(PS_BLEND, ps_blend.HasWriteableRT, has_writeable_rt);
-      SET(PS_BLEND, ps_blend.ColorBufferBlendEnable, GET(blend.rts[0].ColorBufferBlendEnable));
-      SET(PS_BLEND, ps_blend.SourceAlphaBlendFactor, GET(blend.rts[0].SourceAlphaBlendFactor));
-      SET(PS_BLEND, ps_blend.DestinationAlphaBlendFactor, gfx->alpha_blend_zero ?
-                                                          BLENDFACTOR_CONST_ALPHA :
-                                                          GET(blend.rts[0].DestinationAlphaBlendFactor));
-      SET(PS_BLEND, ps_blend.SourceBlendFactor, GET(blend.rts[0].SourceBlendFactor));
-      SET(PS_BLEND, ps_blend.DestinationBlendFactor, gfx->color_blend_zero ?
-                                                     BLENDFACTOR_CONST_COLOR :
-                                                     GET(blend.rts[0].DestinationBlendFactor));
+      SET(PS_BLEND, ps_blend.ColorBufferBlendEnable,
+                    GET(blend.rts[rt_0].ColorBufferBlendEnable));
+      SET(PS_BLEND, ps_blend.SourceAlphaBlendFactor,
+                    GET(blend.rts[rt_0].SourceAlphaBlendFactor));
+      SET(PS_BLEND, ps_blend.DestinationAlphaBlendFactor,
+                    gfx->alpha_blend_zero ?
+                    BLENDFACTOR_CONST_ALPHA :
+                    GET(blend.rts[rt_0].DestinationAlphaBlendFactor));
+      SET(PS_BLEND, ps_blend.SourceBlendFactor,
+                    GET(blend.rts[rt_0].SourceBlendFactor));
+      SET(PS_BLEND, ps_blend.DestinationBlendFactor,
+                    gfx->color_blend_zero ?
+                    BLENDFACTOR_CONST_COLOR :
+                    GET(blend.rts[rt_0].DestinationBlendFactor));
       SET(PS_BLEND, ps_blend.AlphaTestEnable, false);
-      SET(PS_BLEND, ps_blend.IndependentAlphaBlendEnable, GET(blend.IndependentAlphaBlendEnable));
-      SET(PS_BLEND, ps_blend.AlphaToCoverageEnable, dyn->ms.alpha_to_coverage_enable);
+      SET(PS_BLEND, ps_blend.IndependentAlphaBlendEnable,
+                    GET(blend.IndependentAlphaBlendEnable));
+      SET(PS_BLEND, ps_blend.AlphaToCoverageEnable,
+                    dyn->ms.alpha_to_coverage_enable);
    }
 
    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_BLEND_CONSTANTS)) {
@@ -1239,11 +1287,32 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_VIEWPORTS) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_SCISSORS) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_CLAMP_ENABLE) ||
-       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE)) {
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_DEPTH_CLAMP_RANGE)) {
       struct anv_instance *instance = cmd_buffer->device->physical->instance;
       const VkViewport *viewports = dyn->vp.viewports;
 
       const float scale = dyn->vp.depth_clip_negative_one_to_one ? 0.5f : 1.0f;
+
+      /* From the Vulkan 1.0.45 spec:
+       *
+       *    "If the last active vertex processing stage shader entry point's
+       *     interface does not include a variable decorated with
+       *     ViewportIndex, then the first viewport is used."
+       *
+       * This could mean that we might need to set the MaximumVPIndex based on
+       * the pipeline's last stage, but if the last shader doesn't write the
+       * viewport index and the VUE header is used, the compiler will force
+       * the value to 0 (which is what the spec requires above). Otherwise it
+       * seems like the HW should be pulling 0 if the VUE header is not
+       * present.
+       *
+       * Avoiding a check on the pipeline seems to prevent additional
+       * emissions of 3DSTATE_CLIP which appear to impact performance on
+       * Assassin's Creed Valhalla..
+       */
+      SET(CLIP, clip.MaximumVPIndex, dyn->vp.viewport_count > 0 ?
+                                     dyn->vp.viewport_count - 1 : 0);
 
       for (uint32_t i = 0; i < dyn->vp.viewport_count; i++) {
          const VkViewport *vp = &viewports[i];
@@ -1361,28 +1430,14 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
          float max_depth = dyn->rs.depth_clamp_enable ?
                            MAX2(vp->minDepth, vp->maxDepth) : max_depth_limit;
 
+         if (dyn->rs.depth_clamp_enable &&
+            dyn->vp.depth_clamp_mode == VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT) {
+            min_depth = dyn->vp.depth_clamp_range.minDepthClamp;
+            max_depth = dyn->vp.depth_clamp_range.maxDepthClamp;
+         }
+
          SET(VIEWPORT_CC, vp_cc.elem[i].MinimumDepth, min_depth);
          SET(VIEWPORT_CC, vp_cc.elem[i].MaximumDepth, max_depth);
-
-         /* From the Vulkan 1.0.45 spec:
-          *
-          *    "If the last active vertex processing stage shader entry point's
-          *     interface does not include a variable decorated with
-          *     ViewportIndex, then the first viewport is used."
-          *
-          * This could mean that we might need to set the MaximumVPIndex based on
-          * the pipeline's last stage, but if the last shader doesn't write the
-          * viewport index and the VUE header is used, the compiler will force
-          * the value to 0 (which is what the spec requires above). Otherwise it
-          * seems like the HW should be pulling 0 if the VUE header is not
-          * present.
-          *
-          * Avoiding a check on the pipeline seems to prevent additional
-          * emissions of 3DSTATE_CLIP which appear to impact performance on
-          * Assassin's Creed Valhalla..
-          */
-         SET(CLIP, clip.MaximumVPIndex, dyn->vp.viewport_count > 0 ?
-                                        dyn->vp.viewport_count - 1 : 0);
       }
 
       /* If the HW state is already considered dirty or the previous
@@ -1519,6 +1574,8 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
 #undef SET_STAGE
 
    vk_dynamic_graphics_state_clear_dirty(&cmd_buffer->vk.dynamic_graphics_state);
+
+   return dirty_state_mask;
 }
 
 static void
@@ -1791,6 +1848,7 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_PS_EXTRA)) {
       anv_batch_emit_merge(&cmd_buffer->batch, GENX(3DSTATE_PS_EXTRA),
                            pipeline, partial.ps_extra, pse) {
+         SET(pse, ps_extra, PixelShaderHasUAV);
          SET(pse, ps_extra, PixelShaderIsPerSample);
 #if GFX_VER >= 11
          SET(pse, ps_extra, PixelShaderIsPerCoarsePixel);
@@ -2174,7 +2232,6 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_WM)) {
       anv_batch_emit_merge(&cmd_buffer->batch, GENX(3DSTATE_WM),
                            pipeline, partial.wm, wm) {
-         SET(wm, wm, ForceThreadDispatchEnable);
          SET(wm, wm, LineStippleEnable);
          SET(wm, wm, BarycentricInterpolationMode);
       }
@@ -2331,7 +2388,7 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
     * https://gitlab.freedesktop.org/mesa/mesa/-/issues/9781
     */
 #if GFX_VER == 11
-   if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_WM))
+   if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_BLEND_STATE))
       BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MULTISAMPLE);
 #endif
 

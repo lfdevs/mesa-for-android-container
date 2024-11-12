@@ -26,7 +26,7 @@ tu_CreateEvent(VkDevice _device,
    if (!event)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   VkResult result = tu_bo_init_new(device, &event->bo, 0x1000,
+   VkResult result = tu_bo_init_new(device, &event->base, &event->bo, 0x1000,
                                     TU_BO_ALLOC_NO_FLAGS, "event");
    if (result != VK_SUCCESS)
       goto fail_alloc;

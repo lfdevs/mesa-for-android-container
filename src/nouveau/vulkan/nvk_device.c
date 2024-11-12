@@ -52,17 +52,15 @@ nvk_slm_area_get_mem_ref(struct nvk_slm_area *area,
 static VkResult
 nvk_slm_area_ensure(struct nvk_device *dev,
                     struct nvk_slm_area *area,
-                    uint32_t bytes_per_thread)
+                    uint32_t slm_bytes_per_lane,
+                    uint32_t crs_bytes_per_warp)
 {
    struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VkResult result;
 
-   assert(bytes_per_thread < (1 << 24));
-
-   /* TODO: Volta+doesn't use CRC */
-   const uint32_t crs_size = 0;
-
-   uint64_t bytes_per_warp = bytes_per_thread * 32 + crs_size;
+   assert(slm_bytes_per_lane < (1 << 24));
+   assert(crs_bytes_per_warp <= (1 << 20));
+   uint64_t bytes_per_warp = slm_bytes_per_lane * 32 + crs_bytes_per_warp;
 
    /* The hardware seems to require this alignment for
     * NV9097_SET_SHADER_LOCAL_MEMORY_E_DEFAULT_SIZE_PER_WARP
@@ -159,17 +157,28 @@ nvk_CreateDevice(VkPhysicalDevice physicalDevice,
    if (result != VK_SUCCESS)
       goto fail_nvkmd;
 
+   result = nvkmd_dev_alloc_mapped_mem(dev->nvkmd, &pdev->vk.base,
+                                       0x1000, 0, NVKMD_MEM_LOCAL,
+                                       NVKMD_MEM_MAP_WR, &dev->zero_page);
+   if (result != VK_SUCCESS)
+      goto fail_upload;
+
+   memset(dev->zero_page->map, 0, 0x1000);
+   nvkmd_mem_unmap(dev->zero_page, 0);
+
    result = nvk_descriptor_table_init(dev, &dev->images,
                                       8 * 4 /* tic entry size */,
                                       1024, 1024 * 1024);
    if (result != VK_SUCCESS)
-      goto fail_upload;
+      goto fail_zero_page;
 
    /* Reserve the descriptor at offset 0 to be the null descriptor */
-   uint32_t null_image[8] = { 0, };
+   uint32_t null_tic[8] = { 0, };
+   nil_fill_null_tic(&pdev->info, dev->zero_page->va->addr, &null_tic);
+
    ASSERTED uint32_t null_image_index;
    result = nvk_descriptor_table_add(dev, &dev->images,
-                                     null_image, sizeof(null_image),
+                                     null_tic, sizeof(null_tic),
                                      &null_image_index);
    assert(result == VK_SUCCESS);
    assert(null_image_index == 0);
@@ -179,6 +188,13 @@ nvk_CreateDevice(VkPhysicalDevice physicalDevice,
                                       4096, 4096);
    if (result != VK_SUCCESS)
       goto fail_images;
+
+   if (dev->vk.enabled_features.descriptorBuffer ||
+       nvk_use_edb_buffer_views(pdev)) {
+      result = nvk_edb_bview_cache_init(dev, &dev->edb_bview_cache);
+      if (result != VK_SUCCESS)
+         goto fail_samplers;
+   }
 
    /* If we have a full BAR, go ahead and do shader uploads on the CPU.
     * Otherwise, we fall back to doing shader uploads via the upload queue.
@@ -194,7 +210,7 @@ nvk_CreateDevice(VkPhysicalDevice physicalDevice,
                           2048 /* overalloc */,
                           pdev->info.cls_eng3d < VOLTA_A);
    if (result != VK_SUCCESS)
-      goto fail_samplers;
+      goto fail_edb_bview_cache;
 
    result = nvk_heap_init(dev, &dev->event_heap,
                           NVKMD_MEM_LOCAL, NVKMD_MEM_MAP_WR,
@@ -204,15 +220,6 @@ nvk_CreateDevice(VkPhysicalDevice physicalDevice,
 
    nvk_slm_area_init(&dev->slm);
 
-   result = nvkmd_dev_alloc_mapped_mem(dev->nvkmd, &pdev->vk.base,
-                                       0x1000, 0, NVKMD_MEM_LOCAL,
-                                       NVKMD_MEM_MAP_WR, &dev->zero_page);
-   if (result != VK_SUCCESS)
-      goto fail_slm;
-
-   memset(dev->zero_page->map, 0, 0x1000);
-   nvkmd_mem_unmap(dev->zero_page);
-
    if (pdev->info.cls_eng3d >= FERMI_A &&
        pdev->info.cls_eng3d < MAXWELL_A) {
       /* max size is 256k */
@@ -220,7 +227,7 @@ nvk_CreateDevice(VkPhysicalDevice physicalDevice,
                                    1 << 17, 1 << 20, NVKMD_MEM_LOCAL,
                                    &dev->vab_memory);
       if (result != VK_SUCCESS)
-         goto fail_zero_page;
+         goto fail_slm;
    }
 
    result = nvk_queue_init(dev, &dev->queue,
@@ -252,17 +259,19 @@ fail_queue:
 fail_vab_memory:
    if (dev->vab_memory)
       nvkmd_mem_unref(dev->vab_memory);
-fail_zero_page:
-   nvkmd_mem_unref(dev->zero_page);
 fail_slm:
    nvk_slm_area_finish(&dev->slm);
    nvk_heap_finish(dev, &dev->event_heap);
 fail_shader_heap:
    nvk_heap_finish(dev, &dev->shader_heap);
+fail_edb_bview_cache:
+   nvk_edb_bview_cache_finish(dev, &dev->edb_bview_cache);
 fail_samplers:
    nvk_descriptor_table_finish(dev, &dev->samplers);
 fail_images:
    nvk_descriptor_table_finish(dev, &dev->images);
+fail_zero_page:
+   nvkmd_mem_unref(dev->zero_page);
 fail_upload:
    nvk_upload_queue_finish(dev, &dev->upload);
 fail_nvkmd:
@@ -282,13 +291,15 @@ nvk_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    if (!dev)
       return;
 
+   if (dev->copy_queries)
+      vk_shader_destroy(&dev->vk, &dev->copy_queries->vk, &dev->vk.alloc);
+
    nvk_device_finish_meta(dev);
 
    vk_pipeline_cache_destroy(dev->vk.mem_cache, NULL);
    nvk_queue_finish(dev, &dev->queue);
    if (dev->vab_memory)
       nvkmd_mem_unref(dev->vab_memory);
-   nvkmd_mem_unref(dev->zero_page);
    vk_device_finish(&dev->vk);
 
    /* Idle the upload queue before we tear down heaps */
@@ -297,8 +308,10 @@ nvk_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    nvk_slm_area_finish(&dev->slm);
    nvk_heap_finish(dev, &dev->event_heap);
    nvk_heap_finish(dev, &dev->shader_heap);
+   nvk_edb_bview_cache_finish(dev, &dev->edb_bview_cache);
    nvk_descriptor_table_finish(dev, &dev->samplers);
    nvk_descriptor_table_finish(dev, &dev->images);
+   nvkmd_mem_unref(dev->zero_page);
    nvk_upload_queue_finish(dev, &dev->upload);
    nvkmd_dev_destroy(dev->nvkmd);
    vk_free(&dev->vk.alloc, dev);
@@ -357,7 +370,10 @@ nvk_GetCalibratedTimestampsKHR(VkDevice _device,
 
 VkResult
 nvk_device_ensure_slm(struct nvk_device *dev,
-                      uint32_t bytes_per_thread)
+                      uint32_t slm_bytes_per_lane,
+                      uint32_t crs_bytes_per_warp)
 {
-   return nvk_slm_area_ensure(dev, &dev->slm, bytes_per_thread);
+   return nvk_slm_area_ensure(dev, &dev->slm,
+                              slm_bytes_per_lane,
+                              crs_bytes_per_warp);
 }

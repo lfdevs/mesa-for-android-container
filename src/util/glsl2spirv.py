@@ -146,6 +146,9 @@ def postprocess_file(args: 'Arguments') -> None:
 
 
 def preprocess_file(args: 'Arguments', origin_file: T.TextIO, directory: os.PathLike, filemap: T.Dict[str, str]) -> str:
+    if args.create_entry is None and args.glsl_ver is None:
+        return origin_file.name
+
     with open(os.path.join(directory, os.path.basename(origin_file.name)), "w") as copy_file:
         lines = origin_file.readlines()
 

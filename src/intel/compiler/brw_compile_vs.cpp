@@ -11,6 +11,56 @@
 
 using namespace brw;
 
+static void
+brw_assign_vs_urb_setup(fs_visitor &s)
+{
+   struct brw_vs_prog_data *vs_prog_data = brw_vs_prog_data(s.prog_data);
+
+   assert(s.stage == MESA_SHADER_VERTEX);
+
+   /* Each attribute is 4 regs. */
+   s.first_non_payload_grf += 4 * vs_prog_data->nr_attribute_slots;
+
+   assert(vs_prog_data->base.urb_read_length <= 15);
+
+   /* Rewrite all ATTR file references to the hw grf that they land in. */
+   foreach_block_and_inst(block, fs_inst, inst, s.cfg) {
+      s.convert_attr_sources_to_hw_regs(inst);
+   }
+}
+
+static bool
+run_vs(fs_visitor &s)
+{
+   assert(s.stage == MESA_SHADER_VERTEX);
+
+   s.payload_ = new vs_thread_payload(s);
+
+   nir_to_brw(&s);
+
+   if (s.failed)
+      return false;
+
+   s.emit_urb_writes();
+
+   brw_calculate_cfg(s);
+
+   brw_fs_optimize(s);
+
+   s.assign_curb_setup();
+   brw_assign_vs_urb_setup(s);
+
+   brw_fs_lower_3src_null_dest(s);
+   brw_fs_workaround_memory_fence_before_eot(s);
+   brw_fs_workaround_emit_dummy_mov_instruction(s);
+
+   brw_allocate_registers(s, true /* allow_spilling */);
+
+   brw_fs_workaround_source_arf_before_eot(s);
+
+   return !s.failed;
+}
+
 extern "C" const unsigned *
 brw_compile_vs(const struct brw_compiler *compiler,
                struct brw_compile_vs_params *params)
@@ -102,7 +152,7 @@ brw_compile_vs(const struct brw_compiler *compiler,
    fs_visitor v(compiler, &params->base, &key->base,
                 &prog_data->base.base, nir, dispatch_width,
                 params->base.stats != NULL, debug_enabled);
-   if (!v.run_vs()) {
+   if (!run_vs(v)) {
       params->base.error_str =
          ralloc_strdup(params->base.mem_ctx, v.fail_msg);
       return NULL;

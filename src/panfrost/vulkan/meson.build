@@ -22,7 +22,6 @@ libpanvk_files = files(
   'panvk_buffer.c',
   'panvk_cmd_pool.c',
   'panvk_device_memory.c',
-  'panvk_event.c',
   'panvk_image.c',
   'panvk_instance.c',
   'panvk_mempool.c',
@@ -40,9 +39,7 @@ panvk_per_arch_libs = []
 bifrost_archs = [6, 7]
 bifrost_inc_dir = ['bifrost']
 bifrost_files = [
-  'bifrost/panvk_vX_cmd_desc_state.c',
   'bifrost/panvk_vX_meta_desc_copy.c',
-  'bifrost/panvk_vX_nir_lower_descriptors.c',
 ]
 
 valhall_archs = [9, 10]
@@ -56,38 +53,40 @@ jm_files = [
   'jm/panvk_vX_cmd_dispatch.c',
   'jm/panvk_vX_cmd_draw.c',
   'jm/panvk_vX_cmd_event.c',
-  'jm/panvk_vX_meta.c',
-  'jm/panvk_vX_meta_blit.c',
-  'jm/panvk_vX_meta_clear.c',
-  'jm/panvk_vX_meta_copy.c',
+  'jm/panvk_vX_event.c',
   'jm/panvk_vX_queue.c',
+]
+
+csf_archs = [10]
+csf_inc_dir = ['csf']
+csf_files = [
+  'csf/panvk_vX_cmd_buffer.c',
+  'csf/panvk_vX_cmd_dispatch.c',
+  'csf/panvk_vX_cmd_draw.c',
+  'csf/panvk_vX_cmd_event.c',
+  'csf/panvk_vX_event.c',
+  'csf/panvk_vX_queue.c',
 ]
 
 common_per_arch_files = [
   panvk_entrypoints[0],
   'panvk_vX_blend.c',
   'panvk_vX_buffer_view.c',
+  'panvk_vX_cmd_fb_preload.c',
+  'panvk_vX_cmd_desc_state.c',
+  'panvk_vX_cmd_meta.c',
+  'panvk_vX_cmd_push_constant.c',
   'panvk_vX_descriptor_set.c',
   'panvk_vX_descriptor_set_layout.c',
   'panvk_vX_device.c',
   'panvk_vX_image_view.c',
+  'panvk_vX_nir_lower_descriptors.c',
   'panvk_vX_sampler.c',
   'panvk_vX_shader.c',
 ]
 
-foreach arch : [6, 7, 9, 10]
-  if arch in valhall_archs
-    # We're lacking key components to compile common source files for v9/v10.
-    # Just add the v9/v10 entrypoints for now.
-    per_arch_files = [
-      panvk_entrypoints[0],
-      'panvk_vX_descriptor_set.c',
-      'panvk_vX_descriptor_set_layout.c',
-    ]
-  else
-    per_arch_files = common_per_arch_files
-  endif
-
+foreach arch : [6, 7, 10]
+  per_arch_files = common_per_arch_files
   inc_panvk_per_arch = []
 
   if arch in bifrost_archs
@@ -101,6 +100,9 @@ foreach arch : [6, 7, 9, 10]
   if arch in jm_archs
     inc_panvk_per_arch += jm_inc_dir
     per_arch_files += jm_files
+  elif arch in csf_archs
+    inc_panvk_per_arch += csf_inc_dir
+    per_arch_files += csf_files
   endif
 
   panvk_per_arch_libs += static_library(

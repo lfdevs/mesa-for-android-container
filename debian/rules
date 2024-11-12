@@ -47,7 +47,6 @@ GALLIUM_DRIVERS = softpipe
 VULKAN_DRIVERS =
 VULKAN_LAYERS =
 
-confflags_DRI3 = -Ddri3=disabled
 confflags_OSMESA = -Dosmesa=true
 confflags_SSE2 = -Dsse2=true
 confflags_TEFLON = -Dteflon=false
@@ -70,7 +69,6 @@ else
 
   GALLIUM_DRIVERS += nouveau r300 r600 virgl
   confflags_DIRECT_RENDERING = -Dglx-direct=true
-  confflags_DRI3 = -Ddri3=enabled
   confflags_GBM = -Dgbm=enabled
   confflags_GALLIUM += -Dgallium-extra-hud=true
   confflags_GALLIUM += -Dgallium-vdpau=enabled
@@ -178,19 +176,16 @@ confflags_GALLIUM += -Dgallium-drivers="[$(GALLIUM_DRIVERS_LIST)]"
 
 confflags += \
 	-Ddri-drivers-path=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
-	-Ddri-search-path='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	-Dplatforms="[$(EGL_PLATFORMS_LIST)]" \
 	-Dvulkan-drivers="[$(VULKAN_DRIVERS_LIST)]" \
 	-Dvulkan-layers="[$(VULKAN_LAYERS_LIST)]" \
 	-Dglvnd=enabled \
 	-Dshared-glapi=enabled \
-	-Dgallium-omx=disabled \
 	-Db_ndebug=true \
 	-Dbuild-tests=true \
 	-Dtools=drm-shim \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_GBM) \
-	$(confflags_DRI3) \
 	$(confflags_GALLIUM) \
 	$(confflags_GLES) \
 	$(confflags_OSMESA) \

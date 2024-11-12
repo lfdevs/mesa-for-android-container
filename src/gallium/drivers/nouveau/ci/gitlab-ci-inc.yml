@@ -24,7 +24,7 @@
       when: on_success
 
 .nouveau-manual-rules:
-  stage: nouveau
+  stage: nouveau-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]

@@ -295,18 +295,19 @@ lower_cf_list(nir_builder *b, nir_def *esc_reg, struct scope *parent_scope,
          nir_if *nif = nir_cf_node_as_if(node);
 
          nir_def *cond = nif->condition.ssa;
+         bool divergent = nir_src_is_divergent(&nif->condition);
          nir_instr_clear_src(NULL, &nif->condition);
 
          nir_block *then_block = nir_block_create(b->shader);
          nir_block *else_block = nir_block_create(b->shader);
          nir_block *merge_block = nir_block_create(b->shader);
 
-         const bool needs_sync = cond->divergent &&
+         const bool needs_sync = divergent &&
             block_is_merge(nir_cf_node_as_block(nir_cf_node_next(node))) &&
             !parent_scope_will_sync(&nif->cf_node, parent_scope);
 
          struct scope scope = push_scope(b, SCOPE_TYPE_IF_MERGE,
-                                         parent_scope, cond->divergent,
+                                         parent_scope, divergent,
                                          needs_sync, merge_block);
 
          nir_goto_if(b, then_block, cond, else_block);
@@ -340,15 +341,19 @@ lower_cf_list(nir_builder *b, nir_def *esc_reg, struct scope *parent_scope,
           * while avoiding an extra sync for the loop break is tricky at best.
           */
          struct scope break_scope = push_scope(b, SCOPE_TYPE_LOOP_BREAK,
-                                               parent_scope, loop->divergent,
-                                               loop->divergent, break_block);
+                                               parent_scope,
+                                               nir_loop_is_divergent(loop),
+                                               nir_loop_is_divergent(loop),
+                                               break_block);
 
          nir_goto(b, head_block);
          push_block(b, head_block, break_scope.divergent);
 
          struct scope cont_scope = push_scope(b, SCOPE_TYPE_LOOP_CONT,
-                                              &break_scope, loop->divergent,
-                                              loop->divergent, cont_block);
+                                              &break_scope,
+                                              nir_loop_is_divergent(loop),
+                                              nir_loop_is_divergent(loop),
+                                              cont_block);
 
          lower_cf_list(b, esc_reg, &cont_scope, &loop->body);
          normal_exit(b, esc_reg, cont_block);

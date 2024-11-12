@@ -169,7 +169,10 @@ pipe_r300_create_screen(int fd, const struct pipe_screen_config *config)
    rw = radeon_drm_winsys_create(fd, config, r300_screen_create);
    return rw ? debug_screen_wrap(rw->screen) : NULL;
 }
-DRM_DRIVER_DESCRIPTOR(r300, NULL, 0)
+const driOptionDescription r300_driconf[] = {
+      #include "r300/driinfo_r300.h"
+};
+DRM_DRIVER_DESCRIPTOR(r300, r300_driconf, ARRAY_SIZE(r300_driconf))
 
 #else
 DRM_DRIVER_DESCRIPTOR_STUB(r300)

@@ -2393,6 +2393,24 @@ trace_context_set_hw_atomic_buffers(struct pipe_context *_pipe,
    trace_dump_call_end();
 }
 
+static enum pipe_reset_status
+trace_context_get_device_reset_status(struct pipe_context *_pipe)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+   enum pipe_reset_status status;
+
+   trace_dump_call_begin("pipe_context", "get_device_reset_status");
+   trace_dump_arg(ptr, pipe);
+
+   status = pipe->get_device_reset_status(pipe);
+
+   trace_dump_ret(uint, status);
+   trace_dump_call_end();
+
+   return status;
+}
+
 struct pipe_context *
 trace_context_create(struct trace_screen *tr_scr,
                      struct pipe_context *pipe)
@@ -2538,6 +2556,7 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(set_debug_callback);
    TR_CTX_INIT(set_global_binding);
    TR_CTX_INIT(set_hw_atomic_buffers);
+   TR_CTX_INIT(get_device_reset_status);
 
 
 #undef TR_CTX_INIT

@@ -414,18 +414,33 @@ anv_can_hiz_clear_ds_view(struct anv_device *device,
                               VK_IMAGE_ASPECT_DEPTH_BIT,
                               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                               layout);
-   if (!blorp_can_hiz_clear_depth(device->info,
-                                  &iview->image->planes[0].primary_surface.isl,
-                                  clear_aux_usage,
-                                  iview->planes[0].isl.base_level,
-                                  iview->planes[0].isl.base_array_layer,
-                                  render_area.offset.x,
-                                  render_area.offset.y,
-                                  render_area.offset.x +
-                                  render_area.extent.width,
-                                  render_area.offset.y +
-                                  render_area.extent.height))
+   if (!isl_aux_usage_has_fast_clears(clear_aux_usage))
       return false;
+
+   assert(GFX_VER == 8);
+   assert(iview->vk.format != VK_FORMAT_D16_UNORM_S8_UINT);
+   if (iview->vk.format == VK_FORMAT_D16_UNORM) {
+      /* From the BDW PRM, Vol 7, "Depth Buffer Clear":
+       *
+       *   The following restrictions apply only if the depth buffer surface
+       *   type is D16_UNORM and software does not use the “full surf clear”:
+       *
+       *   If Number of Multisamples is NUMSAMPLES_1, the rectangle must be
+       *   aligned to an 8x4 pixel block relative to the upper left corner of
+       *   the depth buffer, and contain an integer number of these pixel
+       *   blocks, and all 8x4 pixels must be lit.
+       *
+       * Simply disable partial clears for D16 on BDW.
+       */
+      if (render_area.offset.x > 0 ||
+          render_area.offset.y > 0 ||
+          render_area.extent.width !=
+          u_minify(iview->vk.extent.width, iview->vk.base_mip_level) ||
+          render_area.extent.height !=
+          u_minify(iview->vk.extent.height, iview->vk.base_mip_level)) {
+         return false;
+      }
+   }
 
    if (depth_clear_value != ANV_HZ_FC_VAL)
       return false;
@@ -743,38 +758,53 @@ genX(cmd_buffer_mark_image_written)(struct anv_cmd_buffer *cmd_buffer,
 }
 
 static void
-init_fast_clear_color(struct anv_cmd_buffer *cmd_buffer,
+set_image_clear_color(struct anv_cmd_buffer *cmd_buffer,
                       const struct anv_image *image,
-                      VkImageAspectFlagBits aspect)
+                      const VkImageAspectFlags aspect,
+                      const union isl_color_value clear_color)
 {
-   assert(cmd_buffer && image);
-   assert(image->vk.aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
+   uint32_t plane = anv_image_aspect_to_plane(image, aspect);
+   enum isl_format format = image->planes[plane].primary_surface.isl.format;
 
-   set_image_fast_clear_state(cmd_buffer, image, aspect,
-                              ANV_FAST_CLEAR_NONE);
-
-   /* Initialize the struct fields that are accessed for fast-clears so that
-    * the HW restrictions on the field values are satisfied.
-    */
    struct anv_address addr =
       anv_image_get_clear_color_addr(cmd_buffer->device, image, aspect);
+   assert(!anv_address_is_null(addr));
 
    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), sdi) {
       sdi.Address = addr;
       if (GFX_VERx10 >= 75) {
-         /* Pre-SKL, the dword containing the clear values also contains
-          * other fields, so we need to initialize those fields to match the
-          * values that would be in a color attachment.
+         /* On HSW+, the RENDER_SURFACE_STATE dword containing the clear
+          * values also contains other fields. The dword constructed here
+          * will later be copied onto a surface state as-is. So, initialize
+          * those fields to match the values that we typically expect in a
+          * surface.
+          *
+          * XXX: Handle other values for ShaderChannelSelect and
+          *      ResourceMinLOD.
           */
          sdi.ImmediateData = ISL_CHANNEL_SELECT_RED   << 25 |
                              ISL_CHANNEL_SELECT_GREEN << 22 |
                              ISL_CHANNEL_SELECT_BLUE  << 19 |
                              ISL_CHANNEL_SELECT_ALPHA << 16;
-      } else if (GFX_VER == 7) {
-         /* On IVB, the dword containing the clear values also contains
-          * other fields that must be zero or can be zero.
-          */
-         sdi.ImmediateData = 0;
+      }
+      if (isl_format_has_int_channel(format)) {
+         for (unsigned i = 0; i < 4; i++) {
+            assert(clear_color.u32[i] == 0 ||
+                   clear_color.u32[i] == 1);
+         }
+         sdi.ImmediateData |= (clear_color.u32[0] != 0) << 31;
+         sdi.ImmediateData |= (clear_color.u32[1] != 0) << 30;
+         sdi.ImmediateData |= (clear_color.u32[2] != 0) << 29;
+         sdi.ImmediateData |= (clear_color.u32[3] != 0) << 28;
+      } else {
+         for (unsigned i = 0; i < 4; i++) {
+            assert(clear_color.f32[i] == 0.0f ||
+                   clear_color.f32[i] == 1.0f);
+         }
+         sdi.ImmediateData |= (clear_color.f32[0] != 0.0f) << 31;
+         sdi.ImmediateData |= (clear_color.f32[1] != 0.0f) << 30;
+         sdi.ImmediateData |= (clear_color.f32[2] != 0.0f) << 29;
+         sdi.ImmediateData |= (clear_color.f32[3] != 0.0f) << 28;
       }
    }
 }
@@ -995,8 +1025,12 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    }
 
    if (must_init_fast_clear_state) {
-      if (base_level == 0 && base_layer == 0)
-         init_fast_clear_color(cmd_buffer, image, aspect);
+      if (base_level == 0 && base_layer == 0) {
+         const union isl_color_value zero_color = {};
+         set_image_clear_color(cmd_buffer, image, aspect, zero_color);
+         set_image_fast_clear_state(cmd_buffer, image, aspect,
+                                    ANV_FAST_CLEAR_NONE);
+      }
    }
 
    if (must_init_aux_surface) {
@@ -3031,6 +3065,11 @@ cmd_buffer_emit_depth_viewport(struct anv_cmd_buffer *cmd_buffer,
       float min_depth = MIN2(vp->minDepth, vp->maxDepth);
       float max_depth = MAX2(vp->minDepth, vp->maxDepth);
 
+      if (dyn->vp.depth_clamp_mode == VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT) {
+         min_depth = dyn->vp.depth_clamp_range.minDepthClamp;
+         max_depth = dyn->vp.depth_clamp_range.maxDepthClamp;
+      }
+
       struct GENX(CC_VIEWPORT) cc_viewport = {
          .MinimumDepth = depth_clamp_enable ? min_depth : 0.0f,
          .MaximumDepth = depth_clamp_enable ? max_depth : 1.0f,
@@ -4193,7 +4232,8 @@ void genX(CmdDrawIndirectCount)(
 
    mi_value_unref(&b, max);
 
-   trace_intel_end_draw_indirect_count(&cmd_buffer->trace, maxDrawCount);
+   trace_intel_end_draw_indirect_count(&cmd_buffer->trace,
+                                       anv_address_utrace(count_address));
 }
 
 void genX(CmdDrawIndexedIndirectCount)(
@@ -4263,8 +4303,8 @@ void genX(CmdDrawIndexedIndirectCount)(
 
    mi_value_unref(&b, max);
 
-   trace_intel_end_draw_indexed_indirect_count(&cmd_buffer->trace, maxDrawCount);
-
+   trace_intel_end_draw_indexed_indirect_count(&cmd_buffer->trace,
+                                               anv_address_utrace(count_address));
 }
 
 void genX(CmdBeginTransformFeedbackEXT)(
@@ -5161,6 +5201,9 @@ void genX(CmdBeginRendering)(
             base_clear_layer++;
             clear_layer_count--;
 
+            set_image_clear_color(cmd_buffer, iview->image,
+                                  VK_IMAGE_ASPECT_COLOR_BIT, clear_color);
+
             if (isl_color_value_is_zero(clear_color,
                                         iview->planes[0].isl.format)) {
                /* This image has the auxiliary buffer enabled. We can mark the
@@ -5189,7 +5232,7 @@ void genX(CmdBeginRendering)(
                                      iview->vk.base_array_layer + view, 1,
                                      render_area, clear_color);
             }
-         } else {
+         } else if (clear_layer_count > 0) {
             anv_image_clear_color(cmd_buffer, iview->image,
                                   VK_IMAGE_ASPECT_COLOR_BIT,
                                   aux_usage,
@@ -5952,4 +5995,15 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
    default:
       unreachable("invalid");
    }
+}
+
+void genX(cmd_capture_data)(struct anv_batch *batch,
+                            struct anv_device *device,
+                            struct anv_address dst_addr,
+                            struct anv_address src_addr,
+                            uint32_t size_B)
+{
+   struct mi_builder b;
+   mi_builder_init(&b, device->info, batch);
+   mi_memcpy(&b, dst_addr, src_addr, size_B);
 }

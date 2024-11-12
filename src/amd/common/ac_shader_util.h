@@ -243,8 +243,8 @@ void ac_set_nir_options(struct radeon_info *info, bool use_llvm,
                         nir_shader_compiler_options *options);
 
 bool ac_nir_mem_vectorize_callback(unsigned align_mul, unsigned align_offset, unsigned bit_size,
-                                   unsigned num_components, nir_intrinsic_instr *low,
-                                   nir_intrinsic_instr *high, void *data);
+                                   unsigned num_components, unsigned hole_size,
+                                   nir_intrinsic_instr *low, nir_intrinsic_instr *high, void *data);
 
 unsigned ac_get_spi_shader_z_format(bool writes_z, bool writes_stencil, bool writes_samplemask,
                                     bool writes_mrt0_alpha);

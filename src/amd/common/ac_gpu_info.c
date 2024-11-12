@@ -21,7 +21,7 @@
 #include <ctype.h>
 
 #define AMDGPU_MI100_RANGE       0x32, 0x3C
-#define AMDGPU_MI200_RANGE       0x3C, 0xFF
+#define AMDGPU_MI200_RANGE       0x3C, 0x46
 #define AMDGPU_GFX940_RANGE      0x46, 0xFF
 
 #define ASICREV_IS_MI100(r)      ASICREV_IS(r, MI100)
@@ -345,6 +345,11 @@ static const char *amdgpu_get_marketing_name(amdgpu_device_handle dev)
 static intptr_t readlink(const char *path, char *buf, size_t bufsiz)
 {
    return -1;
+}
+extern char *
+drmGetFormatModifierName(uint64_t modifier)
+{
+   return NULL;
 }
 #else
 #include "drm-uapi/amdgpu_drm.h"
@@ -1087,6 +1092,12 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->uses_kernel_cu_mask = false; /* Not implemented in the kernel. */
    info->has_graphics = info->ip[AMD_IP_GFX].num_queues > 0;
 
+   /* On GFX8, the TBA/TMA registers can be configured from the userspace.
+    * On GFX9+, they are privileged registers and they need to be configured
+    * from the kernel but it's not suppported yet.
+    */
+   info->has_trap_handler_support = info->gfx_level == GFX8;
+
    info->pa_sc_tile_steering_override = device_info.pa_sc_tile_steering_override;
    info->max_render_backends = device_info.num_rb_pipes;
    /* The value returned by the kernel driver was wrong. */
@@ -1188,6 +1199,9 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->mc_arb_ramcfg = amdinfo.mc_arb_ramcfg;
    info->gb_addr_config = amdinfo.gb_addr_cfg;
    if (info->gfx_level >= GFX9) {
+      if (!info->has_graphics && info->family >= CHIP_GFX940)
+         info->gb_addr_config = 0;
+
       info->num_tile_pipes = 1 << G_0098F8_NUM_PIPES(info->gb_addr_config);
       info->pipe_interleave_bytes = 256 << G_0098F8_PIPE_INTERLEAVE_SIZE_GFX9(info->gb_addr_config);
    } else {
@@ -1226,8 +1240,14 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->has_dcc_constant_encode =
       info->family == CHIP_RAVEN2 || info->family == CHIP_RENOIR || info->gfx_level >= GFX10;
 
-   /* TC-compat HTILE is only available for GFX8-GFX11.5. */
-   info->has_tc_compatible_htile = info->gfx_level >= GFX8 && info->gfx_level < GFX12;
+   /* TC-compat HTILE is only available on GFX8-GFX11.5.
+    *
+    * There are issues with TC-compatible HTILE on Tonga (and Iceland is the same design), and
+    * documented bug workarounds don't help. For example, this fails:
+    *   piglit/bin/tex-miplevel-selection 'texture()' 2DShadow -auto
+    */
+   info->has_tc_compatible_htile = info->gfx_level >= GFX8 && info->gfx_level < GFX12 &&
+                                   info->family != CHIP_TONGA && info->family != CHIP_ICELAND;
 
    info->has_etc_support = info->family == CHIP_STONEY || info->family == CHIP_VEGA10 ||
                            info->family == CHIP_RAVEN || info->family == CHIP_RAVEN2;
@@ -2002,6 +2022,7 @@ void ac_print_gpu_info(const struct radeon_info *info, FILE *f)
    }
 
    fprintf(f, "    has_tmz_support = %u\n", info->has_tmz_support);
+   fprintf(f, "    has_trap_handler_support = %u\n", info->has_trap_handler_support);
    for (unsigned i = 0; i < AMD_NUM_IP_TYPES; i++) {
       if (info->max_submitted_ibs[i]) {
          fprintf(f, "    IP %-7s max_submitted_ibs = %u\n", ac_get_ip_type_string(info, i),
@@ -2106,6 +2127,27 @@ void ac_print_gpu_info(const struct radeon_info *info, FILE *f)
               G_0098F8_MULTI_GPU_TILE_SIZE(info->gb_addr_config));
       fprintf(f, "    row_size = %u\n", 1024 << G_0098F8_ROW_SIZE(info->gb_addr_config));
       fprintf(f, "    num_lower_pipes = %u (raw)\n", G_0098F8_NUM_LOWER_PIPES(info->gb_addr_config));
+   }
+
+   struct ac_modifier_options modifier_options = {
+      .dcc = true,
+      .dcc_retile = true,
+   };
+   uint64_t modifiers[256];
+   unsigned modifier_count = ARRAY_SIZE(modifiers);
+
+   /* Get the number of modifiers. */
+   if (ac_get_supported_modifiers(info, &modifier_options, PIPE_FORMAT_R8G8B8A8_UNORM,
+                                  &modifier_count, modifiers)) {
+      if (modifier_count)
+         fprintf(f, "Modifiers (32bpp):\n");
+
+      for (unsigned i = 0; i < modifier_count; i++) {
+         char *name = drmGetFormatModifierName(modifiers[i]);
+
+         fprintf(f, "    %s\n", name);
+         free(name);
+      }
    }
 }
 
@@ -2342,6 +2384,10 @@ ac_get_compute_resource_limits(const struct radeon_info *info, unsigned waves_pe
                             info->max_waves_per_simd;
       }
 
+      /* On GFX12+, WAVES_PER_SH means waves per SE. */
+      if (info->gfx_level >= GFX12)
+         max_waves_per_sh *= info->max_sa_per_se;
+
       /* Force even distribution on all SIMDs in CU if the workgroup
        * size is 64. This has shown some good improvements if # of CUs
        * per SE is not a multiple of 4.
@@ -2514,4 +2560,16 @@ uint32_t ac_memory_ops_per_clock(uint32_t vram_type)
    case AMDGPU_VRAM_TYPE_GDDR6:
       return 16;
    }
+}
+
+uint32_t ac_gfx103_get_cu_mask_ps(const struct radeon_info *info)
+{
+   /* It's wasteful to enable all CUs for PS if shader arrays have a different
+    * number of CUs. The reason is that the hardware sends the same number of PS
+    * waves to each shader array, so the slowest shader array limits the performance.
+    * Disable the extra CUs for PS in other shader arrays to save power and thus
+    * increase clocks for busy CUs. In the future, we might disable or enable this
+    * tweak only for certain apps.
+    */
+   return u_bit_consecutive(0, info->min_good_cu_per_sa);
 }

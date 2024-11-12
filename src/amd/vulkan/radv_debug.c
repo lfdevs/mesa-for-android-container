@@ -27,6 +27,7 @@
 #include "radv_pipeline_rt.h"
 #include "radv_shader.h"
 #include "sid.h"
+#include "spirv/nir_spirv.h"
 
 #define TMA_BO_SIZE 4096
 
@@ -389,7 +390,7 @@ radv_dump_shader(struct radv_device *device, struct radv_pipeline *pipeline, str
       _mesa_sha1_format(sha1buf, sha1);
 
       if (device->vk.enabled_features.deviceFaultVendorBinary) {
-         radv_print_spirv(shader->spirv, shader->spirv_size, f);
+         spirv_print_asm(f, (const uint32_t *)shader->spirv, shader->spirv_size / 4);
       } else {
          fprintf(f, "SPIRV (see %s.spv)\n\n", sha1buf);
          radv_dump_spirv(shader, sha1buf, dump_dir);
@@ -725,6 +726,31 @@ enum radv_device_fault_chunk {
    RADV_DEVICE_FAULT_CHUNK_COUNT,
 };
 
+static char *
+radv_create_dump_dir()
+{
+#ifndef _WIN32
+   char dump_dir[256], buf_time[128];
+   struct tm *timep, result;
+   time_t raw_time;
+
+   time(&raw_time);
+   timep = os_localtime(&raw_time, &result);
+   strftime(buf_time, sizeof(buf_time), "%Y.%m.%d_%H.%M.%S", timep);
+
+   snprintf(dump_dir, sizeof(dump_dir), "%s/" RADV_DUMP_DIR "_%d_%s", debug_get_option("HOME", "."), getpid(),
+            buf_time);
+   if (mkdir(dump_dir, 0774) && errno != EEXIST) {
+      fprintf(stderr, "radv: can't create directory '%s' (%i).\n", dump_dir, errno);
+      abort();
+   }
+
+   return strdup(dump_dir);
+#else
+   return NULL;
+#endif
+}
+
 VkResult
 radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_info *submit_info)
 {
@@ -751,22 +777,12 @@ radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_i
    /* Create a directory into $HOME/radv_dumps_<pid>_<time> to save
     * various debugging info about that GPU hang.
     */
-   struct tm *timep, result;
-   time_t raw_time;
    FILE *f;
-   char dump_dir[256], dump_path[512], buf_time[128];
+   char *dump_dir = NULL;
+   char dump_path[512];
 
    if (save_hang_report) {
-      time(&raw_time);
-      timep = os_localtime(&raw_time, &result);
-      strftime(buf_time, sizeof(buf_time), "%Y.%m.%d_%H.%M.%S", timep);
-
-      snprintf(dump_dir, sizeof(dump_dir), "%s/" RADV_DUMP_DIR "_%d_%s", debug_get_option("HOME", "."), getpid(),
-               buf_time);
-      if (mkdir(dump_dir, 0774) && errno != EEXIST) {
-         fprintf(stderr, "radv: can't create directory '%s' (%i).\n", dump_dir, errno);
-         abort();
-      }
+      dump_dir = radv_create_dump_dir();
 
       fprintf(stderr, "radv: GPU hang report will be saved to '%s'!\n", dump_dir);
    }
@@ -845,6 +861,7 @@ radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_i
       fclose(f);
    }
 
+   free(dump_dir);
    free(wave_dump);
 
    if (save_hang_report) {
@@ -869,32 +886,6 @@ radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_i
 
 #endif
    return VK_ERROR_DEVICE_LOST;
-}
-
-void
-radv_print_spirv(const char *data, uint32_t size, FILE *fp)
-{
-#ifndef _WIN32
-   char path[] = "/tmp/fileXXXXXX";
-   char command[128];
-   int fd;
-
-   /* Dump the binary into a temporary file. */
-   fd = mkstemp(path);
-   if (fd < 0)
-      return;
-
-   if (write(fd, data, size) == -1)
-      goto fail;
-
-   /* Disassemble using spirv-dis if installed. */
-   sprintf(command, "spirv-dis %s", path);
-   radv_dump_cmd(command, fp);
-
-fail:
-   close(fd);
-   unlink(path);
-#endif
 }
 
 bool
@@ -958,7 +949,7 @@ radv_trap_handler_finish(struct radv_device *device)
 }
 
 static void
-radv_dump_faulty_shader(struct radv_device *device, uint64_t faulty_pc)
+radv_dump_faulty_shader(struct radv_device *device, uint64_t faulty_pc, FILE *f)
 {
    struct radv_shader *shader;
    uint64_t start_addr, end_addr;
@@ -969,10 +960,11 @@ radv_dump_faulty_shader(struct radv_device *device, uint64_t faulty_pc)
       return;
 
    start_addr = radv_shader_get_va(shader);
+   start_addr &= ((1ull << 48) - 1);
    end_addr = start_addr + shader->code_size;
    instr_offset = faulty_pc - start_addr;
 
-   fprintf(stderr,
+   fprintf(f,
            "Faulty shader found "
            "VA=[0x%" PRIx64 "-0x%" PRIx64 "], instr_offset=%d\n",
            start_addr, end_addr, instr_offset);
@@ -991,45 +983,67 @@ radv_dump_faulty_shader(struct radv_device *device, uint64_t faulty_pc)
       struct radv_shader_inst *inst = &instructions[i];
 
       if (start_addr + inst->offset == faulty_pc) {
-         fprintf(stderr, "\n!!! Faulty instruction below !!!\n");
-         fprintf(stderr, "%s\n", inst->text);
-         fprintf(stderr, "\n");
+         fprintf(f, "\n!!! Faulty instruction below !!!\n");
+         fprintf(f, "%s\n", inst->text);
+         fprintf(f, "\n");
       } else {
-         fprintf(stderr, "%s\n", inst->text);
+         fprintf(f, "%s\n", inst->text);
       }
    }
 
    free(instructions);
 }
 
-struct radv_sq_hw_reg {
-   uint32_t status;
-   uint32_t trap_sts;
-   uint32_t hw_id;
-   uint32_t ib_sts;
+#define MAX_SGPRS 108
+
+struct radv_trap_handler_layout {
+   uint32_t ttmp0;
+   uint32_t ttmp1;
+
+   struct {
+      uint32_t status;
+      uint32_t trap_sts;
+      uint32_t hw_id1;
+      uint32_t gpr_alloc;
+      uint32_t ib_sts;
+   } sq_wave_regs;
+
+   uint32_t sgprs[MAX_SGPRS];
 };
 
 static void
-radv_dump_sq_hw_regs(struct radv_device *device)
+radv_dump_sq_hw_regs(struct radv_device *device, const struct radv_trap_handler_layout *layout, FILE *f)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    enum amd_gfx_level gfx_level = pdev->info.gfx_level;
    enum radeon_family family = pdev->info.family;
-   struct radv_sq_hw_reg *regs = (struct radv_sq_hw_reg *)&device->tma_ptr[6];
 
-   fprintf(stderr, "\nHardware registers:\n");
+   fprintf(f, "\nHardware registers:\n");
    if (pdev->info.gfx_level >= GFX10) {
-      ac_dump_reg(stderr, gfx_level, family, R_000408_SQ_WAVE_STATUS, regs->status, ~0);
-      ac_dump_reg(stderr, gfx_level, family, R_00040C_SQ_WAVE_TRAPSTS, regs->trap_sts, ~0);
-      ac_dump_reg(stderr, gfx_level, family, R_00045C_SQ_WAVE_HW_ID1, regs->hw_id, ~0);
-      ac_dump_reg(stderr, gfx_level, family, R_00041C_SQ_WAVE_IB_STS, regs->ib_sts, ~0);
+      ac_dump_reg(f, gfx_level, family, R_000408_SQ_WAVE_STATUS, layout->sq_wave_regs.status, ~0);
+      ac_dump_reg(f, gfx_level, family, R_00040C_SQ_WAVE_TRAPSTS, layout->sq_wave_regs.trap_sts, ~0);
+      ac_dump_reg(f, gfx_level, family, R_00045C_SQ_WAVE_HW_ID1, layout->sq_wave_regs.hw_id1, ~0);
+      ac_dump_reg(f, gfx_level, family, R_000414_SQ_WAVE_GPR_ALLOC, layout->sq_wave_regs.gpr_alloc, ~0);
+      ac_dump_reg(f, gfx_level, family, R_00041C_SQ_WAVE_IB_STS, layout->sq_wave_regs.ib_sts, ~0);
    } else {
-      ac_dump_reg(stderr, gfx_level, family, R_000048_SQ_WAVE_STATUS, regs->status, ~0);
-      ac_dump_reg(stderr, gfx_level, family, R_00004C_SQ_WAVE_TRAPSTS, regs->trap_sts, ~0);
-      ac_dump_reg(stderr, gfx_level, family, R_000050_SQ_WAVE_HW_ID, regs->hw_id, ~0);
-      ac_dump_reg(stderr, gfx_level, family, R_00005C_SQ_WAVE_IB_STS, regs->ib_sts, ~0);
+      ac_dump_reg(f, gfx_level, family, R_000048_SQ_WAVE_STATUS, layout->sq_wave_regs.status, ~0);
+      ac_dump_reg(f, gfx_level, family, R_00004C_SQ_WAVE_TRAPSTS, layout->sq_wave_regs.trap_sts, ~0);
+      ac_dump_reg(f, gfx_level, family, R_000050_SQ_WAVE_HW_ID, layout->sq_wave_regs.hw_id1, ~0);
+      ac_dump_reg(f, gfx_level, family, R_000054_SQ_WAVE_GPR_ALLOC, layout->sq_wave_regs.gpr_alloc, ~0);
+      ac_dump_reg(f, gfx_level, family, R_00005C_SQ_WAVE_IB_STS, layout->sq_wave_regs.ib_sts, ~0);
    }
-   fprintf(stderr, "\n\n");
+   fprintf(f, "\n\n");
+}
+
+static void
+radv_dump_sgprs(const struct radv_trap_handler_layout *layout, FILE *f)
+{
+   fprintf(f, "\nSGPRS:\n");
+   for (uint32_t i = 0; i < MAX_SGPRS; i += 4) {
+      fprintf(f, "s[%d-%d]={0x%08x, 0x%08x, 0x%08x, 0x%08x}\n", i, i + 3, layout->sgprs[i], layout->sgprs[i + 1],
+              layout->sgprs[i + 2], layout->sgprs[i + 3]);
+   }
+   fprintf(f, "\n\n");
 }
 
 void
@@ -1038,6 +1052,7 @@ radv_check_trap_handler(struct radv_queue *queue)
    enum amd_ip_type ring = radv_queue_ring(queue);
    struct radv_device *device = radv_queue_device(queue);
    struct radeon_winsys *ws = device->ws;
+   const struct radv_trap_handler_layout *layout = (struct radv_trap_handler_layout *)&device->tma_ptr[4];
 
    /* Wait for the context to be idle in a finite time. */
    ws->ctx_wait_idle(queue->hw_ctx, ring, queue->vk.index_in_family);
@@ -1046,19 +1061,38 @@ radv_check_trap_handler(struct radv_queue *queue)
     * looking at ttmp0 which should be non-zero if a shader exception
     * happened.
     */
-   if (!device->tma_ptr[4])
+   if (!layout->ttmp0)
       return;
 
+   fprintf(stderr, "radv: Trap handler reached...\n");
+
+#ifndef _WIN32
+   char *dump_dir = NULL;
+   char dump_path[512];
+   FILE *f;
+
+   dump_dir = radv_create_dump_dir();
+
+   fprintf(stderr, "radv: Trap handler report will be saved to '%s'!\n", dump_dir);
+
+   snprintf(dump_path, sizeof(dump_path), "%s/trap_handler.log", dump_dir);
+   f = fopen(dump_path, "w+");
+   if (!f) {
+      free(dump_dir);
+      return;
+   }
+
 #if 0
-	fprintf(stderr, "tma_ptr:\n");
-	for (unsigned i = 0; i < 10; i++)
-		fprintf(stderr, "tma_ptr[%d]=0x%x\n", i, device->tma_ptr[i]);
+   fprintf(stderr, "tma_ptr:\n");
+   for (unsigned i = 0; i < 10; i++)
+      fprintf(stderr, "tma_ptr[%d]=0x%x\n", i, device->tma_ptr[i]);
 #endif
 
-   radv_dump_sq_hw_regs(device);
+   radv_dump_sq_hw_regs(device, layout, f);
+   radv_dump_sgprs(layout, f);
 
-   uint32_t ttmp0 = device->tma_ptr[4];
-   uint32_t ttmp1 = device->tma_ptr[5];
+   uint32_t ttmp0 = layout->ttmp0;
+   uint32_t ttmp1 = layout->ttmp1;
 
    /* According to the ISA docs, 3.10 Trap and Exception Registers:
     *
@@ -1072,11 +1106,16 @@ radv_check_trap_handler(struct radv_queue *queue)
    uint8_t pc_rewind = (ttmp1 >> 25) & 0xf;
    uint64_t pc = (ttmp0 | ((ttmp1 & 0x0000ffffull) << 32)) - (pc_rewind * 4);
 
-   fprintf(stderr, "PC=0x%" PRIx64 ", trapID=%d, HT=%d, PC_rewind=%d\n", pc, trap_id, ht, pc_rewind);
+   fprintf(f, "PC=0x%" PRIx64 ", trapID=%d, HT=%d, PC_rewind=%d\n", pc, trap_id, ht, pc_rewind);
 
-   radv_dump_faulty_shader(device, pc);
+   radv_dump_faulty_shader(device, pc, f);
 
+   fclose(f);
+   free(dump_dir);
+
+   fprintf(stderr, "radv: Trap handler report saved successfully!\n");
    abort();
+#endif
 }
 
 /* VK_EXT_device_fault */

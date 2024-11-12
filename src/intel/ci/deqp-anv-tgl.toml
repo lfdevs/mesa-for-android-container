@@ -2,6 +2,7 @@
 [[deqp]]
 deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
 caselists = ["/deqp/mustpass/vk-main.txt"]
+skips = ["install/anv-tgl-skips.txt"]
 fraction = 6
 renderer_check = "TGL GT2"
 

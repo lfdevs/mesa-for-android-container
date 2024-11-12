@@ -472,30 +472,11 @@ on Windows.
 Intel driver environment variables
 ----------------------------------------------------
 
-.. envvar:: ANV_NO_GPL
-
-   If set to 1, true, or yes, then VK_EXT_graphics_pipeline_library
-   will be disabled.
-
 .. envvar:: INTEL_BLACKHOLE_DEFAULT
 
    if set to 1, true or yes, then the OpenGL implementation will
    default ``GL_BLACKHOLE_RENDER_INTEL`` to true, thus disabling any
    rendering.
-
-.. envvar:: INTEL_COMPUTE_CLASS
-
-   If set to 1, true or yes, then I915_ENGINE_CLASS_COMPUTE will be
-   supported. For OpenGL, iris will attempt to use a compute engine
-   for compute dispatches if one is detected. For Vulkan, anvil will
-   advertise support for a compute queue if a compute engine is
-   detected.
-
-.. envvar:: INTEL_COPY_CLASS
-
-   If set to 1, true or yes, then I915_ENGINE_CLASS_COPY will be
-   supported. For Vulkan, anvil will advertise support for a transfer
-   queue if a copy engine is detected.
 
 .. envvar:: INTEL_DEBUG
 
@@ -857,6 +838,63 @@ Intel driver environment variables
    If none of widths for particular shader stage was specified, then all
    widths are allowed.
 
+Anvil(ANV) driver environment variables
+---------------------------------------
+
+.. envvar:: ANV_ENABLE_PIPELINE_CACHE
+
+   If defined to ``0`` or ``false``, this will disable pipeline
+   caching, forcing ANV to reparse and recompile any VkShaderModule
+   (SPIRV) it is given.
+
+.. envvar:: ANV_DISABLE_SECONDARY_CMD_BUFFER_CALLS
+
+   If defined to ``1`` or ``true``, this will prevent usage of self
+   modifying command buffers to implement ``vkCmdExecuteCommands``. As
+   a result of this, it will also disable :ext:`VK_KHR_performance_query`.
+
+.. envvar:: ANV_ALWAYS_BINDLESS
+
+   If defined to ``1`` or ``true``, this forces all descriptor sets to
+   use the internal :ref:`Bindless model`.
+
+.. envvar:: ANV_QUEUE_THREAD_DISABLE
+
+   If defined to ``1`` or ``true``, this disables support for timeline
+   semaphores.
+
+.. envvar:: ANV_USERSPACE_RELOCS
+
+   If defined to ``1`` or ``true``, this forces ANV to always do
+   kernel relocations in command buffers. This should only have an
+   effect on hardware that doesn't support soft-pinning (Ivybridge,
+   Haswell, Cherryview).
+
+.. envvar:: ANV_PRIMITIVE_REPLICATION_MAX_VIEWS
+
+   Specifies up to how many view shaders can be lowered to handle
+   :ext:`VK_KHR_multiview`. Beyond this number, multiview is implemented
+   using instanced rendering. If unspecified, the value default to
+   ``2``.
+
+.. envvar:: ANV_NO_GPL
+
+   If set to 1, true, or yes, then VK_EXT_graphics_pipeline_library
+   will be disabled.
+
+.. envvar:: ANV_SPARSE
+
+   By default, the sparse resources feature is enabled. However, if set to 0,
+   false, or no, it will be disabled.
+   Platforms older than Tiger Lake do not support this feature.
+
+.. envvar:: ANV_SPARSE_USE_TRTT
+
+   On platforms supported by Xe KMD (Lunar Lake and newer) this parameter
+   changes the implementation of sparse resources feature.
+   For i915 there is no option, sparse resources is always implemented with
+   TRTT.
+
 DRI environment variables
 -------------------------
 
@@ -1115,6 +1153,12 @@ Rusticl environment variables
 
    - ``allow_invalid_spirv`` disables validation of any input SPIR-V
    - ``clc`` dumps all OpenCL C source being compiled
+   - ``nir`` dumps nirs in various compilation stages. Might print nothing if shader caching is
+             enabled.
+   - ``no_reuse_context`` pipe_contexts are not recycled
+   - ``no_variants`` disable kernel variants (e.g. specialized binaries for offsets == 0)
+   - ``perf`` prints a warning when hitting slow paths once
+   - ``perfspam`` same as perf, but doesn't skip same warnings
    - ``program`` dumps compilation logs to stderr
    - ``sync`` waits on the GPU to complete after every event
    - ``validate`` validates any internally generated SPIR-Vs, e.g. through compiling OpenCL C code
@@ -1326,8 +1370,6 @@ RADV driver environment variables
       disable FMASK compression on MSAA images (GFX6-GFX10.3)
    ``nogpl``
       disable VK_EXT_graphics_pipeline_library
-   ``nogsfastlaunch2``
-      disable GS_FAST_LAUNCH=2 for Mesh shaders (GFX11 only)
    ``nohiz``
       disable HIZ for depthstencil images
    ``noibs``
@@ -1444,6 +1486,25 @@ RADV driver environment variables
 .. envvar:: RADV_THREAD_TRACE_QUEUE_EVENTS
 
    enable/disable SQTT/RGP queue events (enabled by default)
+
+.. envvar:: RADV_TRAP_HANDLER
+
+   enable/disable the experimental trap handler for debugging GPU hangs on GFX8
+   (disabled by default)
+
+.. envvar:: RADV_TRAP_HANDLER_EXCP
+
+  a comma-separated list of named flags to configure the trap handler
+  exceptions, see the list below:
+
+  ``mem_viol``
+    enable memory violation exception
+  ``float_div_by_zero``
+    enable floating point division by zero exception
+  ``float_overflow``
+    enable floating point overflow exception
+  ``float_underflow``
+    enable floating point underflow exception
 
 .. envvar:: RADV_RRA_TRACE_VALIDATE
 
@@ -1602,7 +1663,7 @@ RadeonSI driver environment variables
    ``nongg``
       Disable NGG and use the legacy pipeline.
    ``nggc``
-      Always use NGG culling even when it can hurt.
+      Always use NGG culling even on GPUs where it is disabled by default.
    ``nonggc``
       Disable NGG culling.
    ``switch_on_eop``
@@ -1808,6 +1869,13 @@ r300 driver environment variables
       Disable AA compression and fast AA clear
    ``notcl``
       Disable hardware accelerated Transform/Clip/Lighting
+   ``ieeemath``
+      Force IEEE versions of VS math opcodes where applicable
+      and also IEEE handling of multiply by zero (R5xx only)
+   ``ffmath``
+      Force FF versions of VS math opcodes where applicable
+      and 0 * anything = 0 rules in FS
+
 
 Asahi driver environment variables
 ----------------------------------

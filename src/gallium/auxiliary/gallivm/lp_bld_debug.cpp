@@ -126,15 +126,22 @@ disassemble(const void* func, std::ostream &buffer)
        * so that between runs.
        */
 
-      buffer << std::setw(6) << (unsigned long)pc << ":\t";
+      buffer << std::setw(6) << std::hex << (unsigned long)pc
+             << std::setw(0) << std::dec << ":";
 
       Size = LLVMDisasmInstruction(D, (uint8_t *)bytes + pc, extent - pc, 0, outline,
-                                   sizeof outline);
+                                   sizeof(outline));
 
       if (!Size) {
-         buffer << "invalid\n";
-         pc += 1;
+#if DETECT_ARCH_AARCH64
+         uint32_t invalid = bytes[pc + 0] << 0 | bytes[pc + 1] << 8 |
+                            bytes[pc + 2] << 16 | bytes[pc + 3] << 24;
+         snprintf(outline, sizeof(outline), "\tinvalid %x", invalid);
+         Size = 4;
+#else
+         buffer << "\tinvalid\n";
          break;
+#endif
       }
 
       /*
@@ -145,10 +152,11 @@ disassemble(const void* func, std::ostream &buffer)
          unsigned i;
          for (i = 0; i < Size; ++i) {
             buffer << std::hex << std::setfill('0') << std::setw(2)
-                   << static_cast<int> (bytes[pc + i]);
+                   << static_cast<int> (bytes[pc + i])
+                   << std::setw(0) << std::dec;
          }
          for (; i < 16; ++i) {
-            buffer << std::dec << "   ";
+            buffer << "   ";
          }
       }
 
@@ -156,26 +164,28 @@ disassemble(const void* func, std::ostream &buffer)
        * Print the instruction.
        */
 
-      buffer << std::setw(Size) << outline << '\n';
-
-      /*
-       * Stop disassembling on return statements, if there is no record of a
-       * jump to a successive address.
-       *
-       * XXX: This currently assumes x86
-       */
-
-#if DETECT_ARCH_X86 || DETECT_ARCH_X86_64
-      if (Size == 1 && bytes[pc] == 0xc3) {
-         break;
-      }
-#endif
+      buffer << outline << '\n';
 
       /*
        * Advance.
        */
 
       pc += Size;
+
+      /*
+       * Stop disassembling on return statements
+       */
+
+#if DETECT_ARCH_X86 || DETECT_ARCH_X86_64
+      if (Size == 1 && bytes[pc - 1] == 0xc3) {
+         break;
+      }
+#elif DETECT_ARCH_AARCH64
+      if (Size == 4 && bytes[pc - 1] == 0xD6 && bytes[pc - 2] == 0x5F &&
+            (bytes[pc - 3] & 0xFC) == 0 && (bytes[pc - 4] & 0x1F) == 0) {
+         break;
+      }
+#endif
 
       if (pc >= extent) {
          buffer << "disassembly larger than " << extent << " bytes, aborting\n";
@@ -191,8 +201,8 @@ disassemble(const void* func, std::ostream &buffer)
     * Print GDB command, useful to verify output.
     */
    if (0) {
-      buffer << "disassemble " << static_cast<const void*>(bytes) << ' '
-             << static_cast<const void*>(bytes + pc) << '\n';
+      buffer << "disassemble " << std::hex << static_cast<const void*>(bytes) << ' '
+             << static_cast<const void*>(bytes + pc) << std::dec << '\n';
    }
 
    return pc;
@@ -224,11 +234,14 @@ lp_disassemble(LLVMValueRef func, const void *code)
 extern "C" void
 lp_profile(LLVMValueRef func, const void *code)
 {
-#if defined(__linux__) && defined(PROFILE)
+#if defined(PROFILE)
    static std::ofstream perf_asm_file;
    static bool first_time = true;
    static FILE *perf_map_file = NULL;
    if (first_time) {
+      unsigned long long pid = (unsigned long long)getpid();
+      char filename[1024];
+#if defined(__linux__)
       /*
        * We rely on the disassembler for determining a function's size, but
        * the disassembly is a leaky and slow operation, so avoid running
@@ -236,19 +249,26 @@ lp_profile(LLVMValueRef func, const void *code)
        * by the PERF_BUILDID_DIR environment variable.
        */
       if (getenv("PERF_BUILDID_DIR")) {
-         pid_t pid = getpid();
-         char filename[256];
-         snprintf(filename, sizeof filename, "/tmp/perf-%llu.map", (unsigned long long)pid);
+         snprintf(filename, sizeof(filename), "/tmp/perf-%llu.map", pid);
          perf_map_file = fopen(filename, "wt");
-         snprintf(filename, sizeof filename, "/tmp/perf-%llu.map.asm", (unsigned long long)pid);
+         snprintf(filename, sizeof(filename), "/tmp/perf-%llu.map.asm", pid);
          perf_asm_file.open(filename);
       }
+#else
+      if (const char* output_dir = getenv("JIT_SYMBOL_MAP_DIR")) {
+         snprintf(filename, sizeof(filename), "%s/jit-symbols-%llu.map", output_dir, pid);
+         perf_map_file = fopen(filename, "wt");
+         snprintf(filename, sizeof(filename), "%s/jit-symbols-%llu.map.asm", output_dir, pid);
+         perf_asm_file.open(filename);
+      }
+#endif
       first_time = false;
    }
    if (perf_map_file) {
       const char *symbol = LLVMGetValueName(func);
       unsigned long addr = (uintptr_t)code;
-      perf_asm_file << symbol << ":\n";
+      perf_asm_file << symbol << " " << std::hex
+                    << (uintptr_t)code << std::dec << ":\n";
       unsigned long size = disassemble(code, perf_asm_file);
       perf_asm_file.flush();
       fprintf(perf_map_file, "%lx %lx %s\n", addr, size, symbol);
@@ -259,5 +279,3 @@ lp_profile(LLVMValueRef func, const void *code)
    (void)code;
 #endif
 }
-
-

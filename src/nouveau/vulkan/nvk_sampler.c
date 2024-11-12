@@ -293,20 +293,38 @@ nvk_CreateSampler(VkDevice device,
    struct nvk_sampler *sampler;
    VkResult result;
 
+   const VkOpaqueCaptureDescriptorDataCreateInfoEXT *cap_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
+   struct nvk_sampler_capture cap = {};
+   if (cap_info != NULL)
+      memcpy(&cap, cap_info->opaqueCaptureDescriptorData, sizeof(cap));
+
    sampler = vk_sampler_create(&dev->vk, pCreateInfo,
                                pAllocator, sizeof(*sampler));
    if (!sampler)
       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   uint32_t samp[8] = {};
-   sampler->plane_count = 1;
-   nvk_sampler_fill_header(pdev, pCreateInfo, &sampler->vk, samp);
-   result = nvk_descriptor_table_add(dev, &dev->samplers,
-                                     samp, sizeof(samp),
-                                     &sampler->planes[0].desc_index);
-   if (result != VK_SUCCESS) {
-      vk_sampler_destroy(&dev->vk, pAllocator, &sampler->vk);
-      return result;
+   {
+      uint32_t samp[8] = {};
+      sampler->plane_count = 1;
+      nvk_sampler_fill_header(pdev, pCreateInfo, &sampler->vk, samp);
+
+      uint32_t desc_index = 0;
+      if (cap_info != NULL) {
+         desc_index = cap.planes[0].desc_index;
+         result = nvk_descriptor_table_insert(dev, &dev->samplers,
+                                              desc_index, samp, sizeof(samp));
+      } else {
+         result = nvk_descriptor_table_add(dev, &dev->samplers,
+                                           samp, sizeof(samp), &desc_index);
+      }
+      if (result != VK_SUCCESS) {
+         vk_sampler_destroy(&dev->vk, pAllocator, &sampler->vk);
+         return result;
+      }
+
+      sampler->planes[0].desc_index = desc_index;
    }
 
    /* In order to support CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT, we
@@ -329,18 +347,29 @@ nvk_CreateSampler(VkDevice device,
          plane2_info.magFilter = chroma_filter;
          plane2_info.minFilter = chroma_filter;
 
-         memset(samp, 0, sizeof(samp));
+         uint32_t samp[8] = {};
          sampler->plane_count = 2;
          nvk_sampler_fill_header(pdev, &plane2_info, &sampler->vk, samp);
-         result = nvk_descriptor_table_add(dev, &dev->samplers,
-                                           samp, sizeof(samp),
-                                           &sampler->planes[1].desc_index);
+
+         uint32_t desc_index = 0;
+         if (cap_info != NULL) {
+            desc_index = cap.planes[1].desc_index;
+            result = nvk_descriptor_table_insert(dev, &dev->samplers,
+                                                 desc_index,
+                                                 samp, sizeof(samp));
+         } else {
+            result = nvk_descriptor_table_add(dev, &dev->samplers,
+                                              samp, sizeof(samp),
+                                              &desc_index);
+         }
          if (result != VK_SUCCESS) {
             nvk_descriptor_table_remove(dev, &dev->samplers,
                                         sampler->planes[0].desc_index);
             vk_sampler_destroy(&dev->vk, pAllocator, &sampler->vk);
             return result;
          }
+
+         sampler->planes[1].desc_index = desc_index;
       }
    }
 
@@ -366,4 +395,21 @@ nvk_DestroySampler(VkDevice device,
    }
 
    vk_sampler_destroy(&dev->vk, pAllocator, &sampler->vk);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+nvk_GetSamplerOpaqueCaptureDescriptorDataEXT(
+    VkDevice _device,
+    const VkSamplerCaptureDescriptorDataInfoEXT *pInfo,
+    void *pData)
+{
+   VK_FROM_HANDLE(nvk_sampler, sampler, pInfo->sampler);
+
+   struct nvk_sampler_capture cap = {};
+   for (uint8_t p = 0; p < sampler->plane_count; p++)
+      cap.planes[p].desc_index = sampler->planes[p].desc_index;
+
+   memcpy(pData, &cap, sizeof(cap));
+
+   return VK_SUCCESS;
 }

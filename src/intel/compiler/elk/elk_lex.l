@@ -277,6 +277,9 @@ nomask      	{ return MASK_DISABLE; }
 atomic       	{ return ATOMIC; }
 switch       	{ return SWITCH; }
 
+ /* Branch control */
+BranchCtrl	{ return BRANCH_CTRL; }
+
  /* compression control */
 compr 		{ return COMPR; }
 compr4    	{ return COMPR4; }

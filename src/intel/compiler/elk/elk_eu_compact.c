@@ -1796,11 +1796,19 @@ update_uip_jip(const struct elk_isa_info *isa, elk_inst *insn,
     */
    int shift = devinfo->ver >= 8 ? 3 : 0;
 
+   /* Even though the values are signed, we don't need the rounding behavior
+    * of integer division. The shifts are safe.
+    */
+   if (devinfo->ver >= 8) {
+      assert(elk_inst_jip(devinfo, insn) % 8 == 0 &&
+             elk_inst_uip(devinfo, insn) % 8 == 0);
+   }
+
    int32_t jip_compacted = elk_inst_jip(devinfo, insn) >> shift;
    jip_compacted -= compacted_between(this_old_ip,
                                       this_old_ip + (jip_compacted / 2),
                                       compacted_counts);
-   elk_inst_set_jip(devinfo, insn, jip_compacted << shift);
+   elk_inst_set_jip(devinfo, insn, (uint32_t)jip_compacted << shift);
 
    if (elk_inst_opcode(isa, insn) == ELK_OPCODE_ENDIF ||
        elk_inst_opcode(isa, insn) == ELK_OPCODE_WHILE ||
@@ -1811,7 +1819,7 @@ update_uip_jip(const struct elk_isa_info *isa, elk_inst *insn,
    uip_compacted -= compacted_between(this_old_ip,
                                       this_old_ip + (uip_compacted / 2),
                                       compacted_counts);
-   elk_inst_set_uip(devinfo, insn, uip_compacted << shift);
+   elk_inst_set_uip(devinfo, insn, (uint32_t)uip_compacted << shift);
 }
 
 static void

@@ -1876,8 +1876,7 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
 
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch,
-                        BLORP_BATCH_PREDICATE_ENABLE * predicate +
-                        BLORP_BATCH_NO_UPDATE_CLEAR_COLOR * !clear_value);
+                        BLORP_BATCH_PREDICATE_ENABLE * predicate);
    assert((batch.flags & BLORP_BATCH_USE_COMPUTE) == 0);
 
    struct blorp_surf surf;
@@ -1966,8 +1965,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
 
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch,
-                        BLORP_BATCH_PREDICATE_ENABLE * predicate +
-                        BLORP_BATCH_NO_UPDATE_CLEAR_COLOR * !clear_value);
+                        BLORP_BATCH_PREDICATE_ENABLE * predicate);
    assert((batch.flags & BLORP_BATCH_USE_COMPUTE) == 0);
 
    struct blorp_surf surf;

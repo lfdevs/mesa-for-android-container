@@ -483,6 +483,16 @@ bool ralloc_asprintf_append (char **str, const char *fmt, ...)
 bool ralloc_vasprintf_append(char **str, const char *fmt, va_list args);
 /// @}
 
+/**
+ * Estimate the memory usage in bytes of a ralloc context, recursively including
+ * all of its child counts. This is only available in debug builds as release
+ * builds do not track size information. It is providing as a aid for debugging
+ * memory bloat.
+ */
+#ifndef NDEBUG
+size_t ralloc_total_size(const void *ptr);
+#endif
+
 typedef struct gc_ctx gc_ctx;
 
 /**

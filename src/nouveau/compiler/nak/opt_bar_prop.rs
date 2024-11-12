@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 use crate::api::{GetDebugFlags, DEBUG};
-use crate::bitset::BitSet;
 use crate::ir::*;
 
+use compiler::bitset::BitSet;
 use std::collections::HashMap;
 
 struct PhiMap {

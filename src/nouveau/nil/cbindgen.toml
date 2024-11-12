@@ -23,12 +23,14 @@ renaming_overrides_prefixing = true
 
 # This is annoying. rename_types doesn't seem to work
 "Format" = "nil_format"
+"GOBType" = "nil_gob_type"
 "Image" = "nil_image"
 "ImageDim" = "nil_image_dim"
 "ImageInitInfo" = "nil_image_init_info"
 "ImageLevel" = "nil_image_level"
 "Offset4D" = "nil_offset4d"
 "SampleLayout" = "nil_sample_layout"
+"SampleOffset" = "nil_sample_offset"
 "Tiling" = "nil_tiling"
 "View" = "nil_view"
 "ViewType" = "nil_view_type"

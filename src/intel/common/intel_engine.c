@@ -97,14 +97,9 @@ intel_engines_supported_count(int fd, const struct intel_device_info *info,
 {
    bool supported;
 
-   /* check if user set the force enabled engine with run-time parameter */
    switch (engine_class) {
    case INTEL_ENGINE_CLASS_COMPUTE:
-      supported = debug_get_bool_option("INTEL_ENGINE_CLASS_COMPUTE", false);
-      supported |= is_guc_semaphore_functional(fd, info);
-      break;
-   case INTEL_ENGINE_CLASS_COPY:
-      supported = debug_get_bool_option("INTEL_ENGINE_CLASS_COPY", true);
+      supported = is_guc_semaphore_functional(fd, info);
       break;
    default:
       /* There is no restrictions or parameters for other engines */

@@ -22,7 +22,7 @@
  */
 
 /**
- * @file brw_inst.h
+ * @file
  *
  * A representation of i965 EU assembly instructions, with helper methods to
  * get and set various fields.  This is the actual hardware format.
@@ -204,35 +204,93 @@ brw_inst_##name(const struct intel_device_info *devinfo, const brw_inst *inst)\
 #define FDC(name, hi9, lo9, hi12ex, lo12ex, hi12, lo12, assertions)     \
    FFDC(name, hi9, lo9, hi12ex, lo12ex, hi12, lo12, assertions)
 
+static inline uint64_t
+brw_reg_file_to_hw_reg_file(enum brw_reg_file file)
+{
+   switch (file) {
+   case ARF:       return 0x0;
+   case FIXED_GRF: return 0x1;
+   default:        /* Fallthrough. */
+   case IMM:       return 0x3;
+   }
+}
 
-/* Macro for the 2-bit register file field, which on Gfx12+ is stored as the
- * variable length combination of an IsImm (hi12) bit and an additional file
- * (lo12) bit.
+static inline enum brw_reg_file
+hw_reg_file_to_brw_reg_file(uint64_t v)
+{
+   switch (v) {
+   case 0x0: return ARF;
+   case 0x1: return FIXED_GRF;
+   default:  return IMM;
+   }
+}
+
+/* Macro for storing register file field.  See variant FF below for no
+ * assertions.
+ *
+ * In Gfx12+, either a single bit is available (ARF or GRF) or two bits are
+ * available.  In that case the register file is stored as the variable length
+ * combination of an IsImm (hi12) bit and an additional file (lo12) bit.
+ *
+ * For some instructions in Gfx11, the encoding uses 0 for GRF, and 1 for
+ * either ARF (for accumulator) or IMM.
  */
-#define FI(name, hi9, lo9, hi12, lo12)                                        \
+#define FFC(name, hi9, lo9, hi12, lo12, assertions, ...)                      \
 static inline void                                                            \
 brw_inst_set_##name(const struct intel_device_info *devinfo,                  \
-                    brw_inst *inst, uint64_t value)                           \
+                    brw_inst *inst, enum brw_reg_file file)                   \
 {                                                                             \
-   if (devinfo->ver >= 12) {                                                  \
+   assert(assertions);                                                        \
+   const struct {                                                             \
+      bool _;  /* Exists to avoid empty initializer. */                       \
+      bool grf_or_imm;                                                        \
+      bool grf_or_acc;                                                        \
+   } args = { ._ = false, __VA_ARGS__ };                                      \
+   uint64_t value = brw_reg_file_to_hw_reg_file(file);                        \
+   if (devinfo->ver < 12) {                                                   \
+      if (devinfo->ver == 11 && args.grf_or_imm) {                            \
+         assert(file == FIXED_GRF || file == IMM);                            \
+         value = file == FIXED_GRF ? 0 : 1;                                   \
+      } else if (devinfo->ver == 11 && args.grf_or_acc) {                     \
+         assert(file == FIXED_GRF || file == ARF);                            \
+         value = file == FIXED_GRF ? 0 : 1;                                   \
+      }                                                                       \
+      brw_inst_set_bits(inst, hi9, lo9, value);                               \
+   } else if (hi12 == lo12) {                                                 \
+      brw_inst_set_bits(inst, hi12, lo12, value);                             \
+   } else {                                                                   \
       brw_inst_set_bits(inst, hi12, hi12, value >> 1);                        \
       if ((value >> 1) == 0)                                                  \
          brw_inst_set_bits(inst, lo12, lo12, value & 1);                      \
-   } else {                                                                   \
-      brw_inst_set_bits(inst, hi9, lo9, value);                               \
    }                                                                          \
 }                                                                             \
 static inline uint64_t                                                        \
 brw_inst_##name(const struct intel_device_info *devinfo, const brw_inst *inst)\
 {                                                                             \
-   if (devinfo->ver >= 12) {                                                  \
-      return (brw_inst_bits(inst, hi12, hi12) << 1) |                         \
-             (brw_inst_bits(inst, hi12, hi12) == 0 ?                          \
-              brw_inst_bits(inst, lo12, lo12) : 1);                           \
+   assert(assertions);                                                        \
+   const struct {                                                             \
+      bool _;  /* Exists to avoid empty initializer. */                       \
+      bool grf_or_imm;                                                        \
+      bool grf_or_acc;                                                        \
+   } args = { ._ = false, __VA_ARGS__ };                                      \
+   uint64_t value;                                                            \
+   if (devinfo->ver < 12) {                                                   \
+      value = brw_inst_bits(inst, hi9, lo9);                                  \
+      if (devinfo->ver == 11 && args.grf_or_imm)                              \
+         return value ? IMM : FIXED_GRF;                                      \
+      else if (devinfo->ver == 11 && args.grf_or_acc)                         \
+         return value ? ARF : FIXED_GRF;                                      \
+   } else if (hi12 == lo12) {                                                 \
+      value = brw_inst_bits(inst, hi12, lo12);                                \
    } else {                                                                   \
-      return brw_inst_bits(inst, hi9, lo9);                                   \
+      value = (brw_inst_bits(inst, hi12, hi12) << 1) |                        \
+              (brw_inst_bits(inst, hi12, hi12) == 0 ?                         \
+               brw_inst_bits(inst, lo12, lo12) : 1);                          \
    }                                                                          \
+   return hw_reg_file_to_brw_reg_file(value);                                 \
 }
+
+#define FF(name, hi9, lo9, hi12, lo12, ...) FFC(name, hi9, lo9, hi12, lo12, true, __VA_ARGS__)
 
 /* Macro for fields that become a constant in Gfx12+ not actually represented
  * in the instruction.
@@ -274,7 +332,7 @@ FD20(src1_da1_subreg_nr, /* 9+ */ 100, 96, /* 12+ */ 103, 99, /* 20+ */ 103, 99,
 F(src1_da16_swiz_y,    /* 9+ */ 99,  98,  /* 12+ */ -1, -1)
 F(src1_da16_swiz_x,    /* 9+ */ 97,  96,  /* 12+ */ -1, -1)
 F(src1_reg_hw_type,    /* 9+ */ 94,  91,  /* 12+ */ 91, 88)
-FI(src1_reg_file,      /* 9+ */ 90,  89,  /* 12+ */ 47, 98)
+FF(src1_reg_file,      /* 9+ */ 90,  89,  /* 12+ */ 47, 98)
 F(src1_is_imm,         /* 9+ */ -1,  -1,  /* 12+ */ 47, 47)
 FV20(src0_vstride,     /* 9+ */ 88,  85,  /* 12+ */ 87, 84,  /* 20+ */ 86, 84)
 F(src0_width,          /* 9+ */ 84,  82,  /* 12+ */ 83, 81)
@@ -300,10 +358,10 @@ F(dst_da16_subreg_nr,  /* 9+ */ 52,  52,  /* 12+ */ -1, -1)
 FD20(dst_da1_subreg_nr, /* 9+ */ 52, 48,  /* 12+ */ 55, 51, /* 20+ */ 55, 51, 33)
 F(da16_writemask,      /* 9+ */ 51,  48,  /* 12+ */ -1, -1) /* Dst.ChanEn */
 F(src0_reg_hw_type,    /* 9+ */ 46,  43,  /* 12+ */ 43, 40)
-FI(src0_reg_file,      /* 9+ */ 42,  41,  /* 12+ */ 46, 66)
+FF(src0_reg_file,      /* 9+ */ 42,  41,  /* 12+ */ 46, 66)
 F(src0_is_imm,         /* 9+ */ -1,  -1,  /* 12+ */ 46, 46)
 F(dst_reg_hw_type,     /* 9+ */ 40,  37,  /* 12+ */ 39, 36)
-F(dst_reg_file,        /* 9+ */ 36,  35,  /* 12+ */ 50, 50)
+FF(dst_reg_file,       /* 9+ */ 36,  35,  /* 12+ */ 50, 50)
 F(mask_control,        /* 9+ */ 34,  34,  /* 12+ */ 31, 31)
 F20(flag_reg_nr,       /* 9+ */ 33,  33,  /* 12+ */ 23, 23,  /* 20+ */ 23, 22)
 F20(flag_subreg_nr,    /* 9+ */ 32,  32,  /* 12+ */ 22, 22,  /* 20+ */ 21, 21)
@@ -333,15 +391,12 @@ F(hw_opcode,           /* 9+ */   6,  0,  /* 12+ */ 6,  0)
  *  @{
  */
 F(3src_src2_reg_nr,         /* 9+ */ 125, 118, /* 12+ */ 127, 120) /* same in align1 */
-F(3src_a16_src2_subreg_nr,  /* 9+ */ 117, 115, /* 12+ */ -1, -1) /* Extra discontiguous bit on CHV? */
 F(3src_a16_src2_swizzle,    /* 9+ */ 114, 107, /* 12+ */ -1, -1)
 F(3src_a16_src2_rep_ctrl,   /* 9+ */ 106, 106, /* 12+ */ -1, -1)
 F(3src_src1_reg_nr,         /* 9+ */ 104,  97, /* 12+ */ 111, 104) /* same in align1 */
-F(3src_a16_src1_subreg_nr,  /* 9+ */ 96,  94,  /* 12+ */ -1, -1) /* Extra discontiguous bit on CHV? */
 F(3src_a16_src1_swizzle,    /* 9+ */ 93,  86,  /* 12+ */ -1, -1)
 F(3src_a16_src1_rep_ctrl,   /* 9+ */ 85,  85,  /* 12+ */ -1, -1)
 F(3src_src0_reg_nr,         /* 9+ */ 83,  76,  /* 12+ */ 79, 72) /* same in align1 */
-F(3src_a16_src0_subreg_nr,  /* 9+ */ 75,  73,  /* 12+ */ -1, -1) /* Extra discontiguous bit on CHV? */
 F(3src_a16_src0_swizzle,    /* 9+ */ 72,  65,  /* 12+ */ -1, -1)
 F(3src_a16_src0_rep_ctrl,   /* 9+ */ 64,  64,  /* 12+ */ -1, -1)
 F(3src_dst_reg_nr,          /* 9+ */ 63,  56,  /* 12+ */ 63, 56) /* same in align1 */
@@ -379,6 +434,33 @@ F(3src_swsb,                /* 9+ */ -1, -1,   /* 12+ */ 15,  8)
 /* Bit 7 is Reserved (for future Opcode expansion) */
 F(3src_hw_opcode,           /* 9+ */ 6,  0,    /* 12+ */ 6, 0)
 /** @} */
+
+#define F_3SRC_A16_SUBREG_NR(srcN, src_base) \
+static inline void                                                          \
+brw_inst_set_3src_a16_##srcN##_subreg_nr(const struct                       \
+                                         intel_device_info *devinfo,        \
+                                         brw_inst *inst,                    \
+                                         unsigned value)                    \
+{                                                                           \
+   assert(devinfo->ver == 9);                                               \
+   assert((value & ~0b11110) == 0);                                         \
+   brw_inst_set_bits(inst, src_base + 11, src_base + 9, value >> 2);        \
+   brw_inst_set_bits(inst, src_base + 20, src_base + 20, (value >> 1) & 1); \
+}                                                                           \
+static inline unsigned                                                      \
+brw_inst_3src_a16_##srcN##_subreg_nr(const struct                           \
+                                     intel_device_info *devinfo,            \
+                                     const brw_inst *inst)                  \
+{                                                                           \
+   assert(devinfo->ver == 9);                                               \
+   return brw_inst_bits(inst, src_base + 11, src_base + 9) << 2 |           \
+          brw_inst_bits(inst, src_base + 20, src_base + 20) << 1;           \
+}
+
+F_3SRC_A16_SUBREG_NR(src0, 64)
+F_3SRC_A16_SUBREG_NR(src1, 85)
+F_3SRC_A16_SUBREG_NR(src2, 106)
+#undef F_3SRC_A16_SUBREG_NR
 
 #define REG_TYPE(reg)                                                         \
 static inline void                                                            \
@@ -429,15 +511,15 @@ FC(3src_a1_special_acc,     /* 9+ */   55,  52,  /* 12+ */ 54, 51, devinfo->ver 
 /* Reserved 51:50 */
 FC(3src_a1_dst_hstride,     /* 9+ */   49,  49,  /* 12+ */ 48, 48, devinfo->ver >= 10)
 FC(3src_a1_dst_hw_type,     /* 9+ */   48,  46,  /* 12+ */ 38, 36, devinfo->ver >= 10)
-FI(3src_a1_src2_reg_file,   /* 9+ */   45,  45,  /* 12+ */ 47, 114)
-FC(3src_a1_src1_reg_file,   /* 9+ */   44,  44,  /* 12+ */ 98, 98, devinfo->ver >= 10)
-FI(3src_a1_src0_reg_file,   /* 9+ */   43,  43,  /* 12+ */ 46, 66)
+FF(3src_a1_src2_reg_file,   /* 9+ */   45,  45,  /* 12+ */ 47, 114, .grf_or_imm = true)
+FFC(3src_a1_src1_reg_file,  /* 9+ */   44,  44,  /* 12+ */ 98, 98, devinfo->ver >= 10, .grf_or_acc = true)
+FF(3src_a1_src0_reg_file,   /* 9+ */   43,  43,  /* 12+ */ 46, 66, .grf_or_imm = true)
 
 F(3src_a1_src2_is_imm,      /* 9+ */   -1,  -1,  /* 12+ */ 47, 47)
 F(3src_a1_src0_is_imm,      /* 9+ */   -1,  -1,  /* 12+ */ 46, 46)
 
 /* Source Modifier fields same in align16 */
-FC(3src_a1_dst_reg_file,    /* 9+ */    36,  36, /* 12+ */ 50, 50, devinfo->ver >= 10)
+FFC(3src_a1_dst_reg_file,   /* 9+ */    36,  36, /* 12+ */ 50, 50, devinfo->ver >= 10, .grf_or_acc = true)
 FC(3src_a1_exec_type,       /* 9+ */    35,  35, /* 12+ */ 39, 39, devinfo->ver >= 10)
 /* Fields below this same in align16 */
 /** @} */
@@ -531,20 +613,20 @@ brw_inst_set_3src_a1_src2_imm(ASSERTED const struct intel_device_info *devinfo,
  */
 F(dpas_3src_src2_reg_nr,    /* 9+ */ -1, -1,   /* 12+ */ 127, 120)
 F(dpas_3src_src2_subreg_nr, /* 9+ */ -1, -1,   /* 12+ */ 119, 115)
-F(dpas_3src_src2_reg_file,  /* 9+ */ -1, -1,   /* 12+ */ 114, 114)
+FF(dpas_3src_src2_reg_file, /* 9+ */ -1, -1,   /* 12+ */ 114, 114)
 F(dpas_3src_src1_reg_nr,    /* 9+ */ -1, -1,   /* 12+ */ 111, 104)
 F(dpas_3src_src1_subreg_nr, /* 9+ */ -1, -1,   /* 12+ */ 103, 99)
-F(dpas_3src_src1_reg_file,  /* 9+ */ -1, -1,   /* 12+ */ 98,  98)
+FF(dpas_3src_src1_reg_file, /* 9+ */ -1, -1,   /* 12+ */ 98,  98)
 F(dpas_3src_src1_hw_type,   /* 9+ */ -1, -1,   /* 12+ */ 90,  88)
 F(dpas_3src_src1_subbyte,   /* 9+ */ -1, -1,   /* 12+ */ 87,  86)
 F(dpas_3src_src2_subbyte,   /* 9+ */ -1, -1,   /* 12+ */ 85,  84)
 F(dpas_3src_src2_hw_type,   /* 9+ */ -1, -1,   /* 12+ */ 82,  80)
 F(dpas_3src_src0_reg_nr,    /* 9+ */ -1, -1,   /* 12+ */ 79,  72)
 F(dpas_3src_src0_subreg_nr, /* 9+ */ -1, -1,   /* 12+ */ 71,  67)
-F(dpas_3src_src0_reg_file,  /* 9+ */ -1, -1,   /* 12+ */ 66,  66)
+FF(dpas_3src_src0_reg_file, /* 9+ */ -1, -1,   /* 12+ */ 66,  66)
 F(dpas_3src_dst_reg_nr,     /* 9+ */ -1, -1,   /* 12+ */ 63,  56)
 F(dpas_3src_dst_subreg_nr,  /* 9+ */ -1, -1,   /* 12+ */ 55,  51)
-F(dpas_3src_dst_reg_file,   /* 9+ */ -1, -1,   /* 12+ */ 50,  50)
+FF(dpas_3src_dst_reg_file,  /* 9+ */ -1, -1,   /* 12+ */ 50,  50)
 F(dpas_3src_sdepth,         /* 9+ */ -1, -1,   /* 12+ */ 49,  48)
 F(dpas_3src_rcount,         /* 9+ */ -1, -1,   /* 12+ */ 45,  43)
 F(dpas_3src_src0_hw_type,   /* 9+ */ -1, -1,   /* 12+ */ 42,  40)
@@ -631,11 +713,11 @@ F(send_ex_desc_ia_subreg_nr,  /* 9+ */ 82, 80, /* 12+ */  42,  40)
 F(send_src0_address_mode,     /* 9+ */ 79, 79, /* 12+ */  -1,  -1)
 F(send_sel_reg32_desc,        /* 9+ */ 77, 77, /* 12+ */  48,  48)
 F(send_sel_reg32_ex_desc,     /* 9+ */ 61, 61, /* 12+ */  49,  49)
-F(send_src0_reg_file,         /* 9+ */ 42, 41, /* 12+ */   66, 66)
+FF(send_src0_reg_file,        /* 9+ */ 42, 41, /* 12+ */   66, 66)
 F(send_src1_reg_nr,           /* 9+ */ 51, 44, /* 12+ */ 111, 104)
 FC(send_src1_len,             /* 9+ */ -1, -1, /* 12+ */ 103,  99, devinfo->verx10 >= 125)
-F(send_src1_reg_file,         /* 9+ */ 36, 36, /* 12+ */  98,  98)
-F(send_dst_reg_file,          /* 9+ */ 35, 35, /* 12+ */  50,  50)
+FF(send_src1_reg_file,        /* 9+ */ 36, 36, /* 12+ */  98,  98)
+FF(send_dst_reg_file,         /* 9+ */ 35, 35, /* 12+ */  50,  50)
 FC(send_ex_bso,               /* 9+ */ -1, -1, /* 12+ */  39,  39, devinfo->verx10 >= 125)
 /** @} */
 
@@ -993,7 +1075,7 @@ brw_inst_set_##reg##_file_type(const struct intel_device_info *devinfo,       \
                                brw_inst *inst, enum brw_reg_file file,        \
                                enum brw_reg_type type)                        \
 {                                                                             \
-   assert(file <= BRW_IMMEDIATE_VALUE);                                       \
+   assert(file <= IMM);                                       \
    unsigned hw_type = brw_type_encode(devinfo, file, type);                   \
    brw_inst_set_##reg##_reg_file(devinfo, inst, file);                        \
    brw_inst_set_##reg##_reg_hw_type(devinfo, inst, hw_type);                  \
@@ -1004,7 +1086,7 @@ brw_inst_##reg##_type(const struct intel_device_info *devinfo,                \
                       const brw_inst *inst)                                   \
 {                                                                             \
    unsigned file = __builtin_strcmp("dst", #reg) == 0 ?                       \
-                   (unsigned) BRW_GENERAL_REGISTER_FILE :                     \
+                   (unsigned) FIXED_GRF :                     \
                    brw_inst_##reg##_reg_file(devinfo, inst);                  \
    unsigned hw_type = brw_inst_##reg##_reg_hw_type(devinfo, inst);            \
    return brw_type_decode(devinfo, (enum brw_reg_file)file, hw_type);         \

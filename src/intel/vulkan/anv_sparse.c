@@ -404,41 +404,6 @@ trtt_get_page_table_bo(struct anv_device *device, struct anv_bo **bo,
    return VK_SUCCESS;
 }
 
-static VkResult
-anv_trtt_init_context_state(struct anv_device *device,
-                            struct anv_async_submit *submit)
-{
-   struct anv_trtt *trtt = &device->trtt;
-
-   struct anv_bo *l3_bo;
-   VkResult result = trtt_get_page_table_bo(device, &l3_bo, &trtt->l3_addr);
-   if (result != VK_SUCCESS)
-      return result;
-
-   trtt->l3_mirror = vk_zalloc(&device->vk.alloc, 4096, 8,
-                                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!trtt->l3_mirror) {
-      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-      return result;
-   }
-
-   /* L3 has 512 entries, so we can have up to 512 L2 tables. */
-   trtt->l2_mirror = vk_zalloc(&device->vk.alloc, 512 * 4096, 8,
-                               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!trtt->l2_mirror) {
-      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-      goto fail_free_l3;
-   }
-
-   result = anv_genX(device->info, init_trtt_context_state)(device, submit);
-
-   return result;
-
-fail_free_l3:
-   vk_free(&device->vk.alloc, trtt->l3_mirror);
-   return result;
-}
-
 /* For L3 and L2 pages, null and invalid entries are indicated by bits 1 and 0
  * respectively. For L1 entries, the hardware compares the addresses against
  * what we program to the GFX_TRTT_NULL and GFX_TRTT_INVAL registers.
@@ -447,14 +412,14 @@ fail_free_l3:
 #define ANV_TRTT_L3L2_INVALID_ENTRY (1 << 0)
 
 static void
-anv_trtt_bind_list_add_entry(struct anv_trtt_bind *binds, uint32_t *binds_len,
-                             uint64_t pte_addr, uint64_t entry_addr)
+anv_trtt_bind_list_add_entry(struct util_dynarray *binds, uint64_t pte_addr,
+                             uint64_t entry_addr)
 {
-   binds[*binds_len] = (struct anv_trtt_bind) {
+   struct anv_trtt_bind b = {
       .pte_addr = pte_addr,
       .entry_addr = entry_addr,
    };
-   (*binds_len)++;
+   util_dynarray_append(binds, struct anv_trtt_bind, b);
 }
 
 /* Adds elements to the anv_trtt_bind structs passed. This doesn't write the
@@ -463,10 +428,8 @@ anv_trtt_bind_list_add_entry(struct anv_trtt_bind *binds, uint32_t *binds_len,
 static VkResult
 anv_trtt_bind_add(struct anv_device *device,
                   uint64_t trtt_addr, uint64_t dest_addr,
-                  struct anv_trtt_bind *l3l2_binds,
-                  uint32_t *n_l3l2_binds,
-                  struct anv_trtt_bind *l1_binds,
-                  uint32_t *n_l1_binds)
+                  struct util_dynarray *l3l2_binds,
+                  struct util_dynarray *l1_binds)
 {
    VkResult result = VK_SUCCESS;
    struct anv_trtt *trtt = &device->trtt;
@@ -483,9 +446,8 @@ anv_trtt_bind_add(struct anv_device *device,
       if (is_null_bind) {
          trtt->l3_mirror[l3_index] = ANV_TRTT_L3L2_NULL_ENTRY;
 
-         anv_trtt_bind_list_add_entry(l3l2_binds, n_l3l2_binds,
-                                      trtt->l3_addr + l3_index *
-                                      sizeof(uint64_t),
+         anv_trtt_bind_list_add_entry(l3l2_binds, trtt->l3_addr +
+                                      l3_index * sizeof(uint64_t),
                                       ANV_TRTT_L3L2_NULL_ENTRY);
 
          return VK_SUCCESS;
@@ -498,19 +460,22 @@ anv_trtt_bind_add(struct anv_device *device,
 
       trtt->l3_mirror[l3_index] = l2_addr;
 
-      anv_trtt_bind_list_add_entry(l3l2_binds, n_l3l2_binds,
-                                   trtt->l3_addr + l3_index *
-                                   sizeof(uint64_t), l2_addr);
+      anv_trtt_bind_list_add_entry(l3l2_binds, trtt->l3_addr +
+                                   l3_index * sizeof(uint64_t), l2_addr);
 
       /* We have just created a new L2 table. Other resources may already have
        * been pointing to this L2 table relying on the fact that it was marked
        * as NULL, so now we need to mark every one of its entries as NULL in
        * order to preserve behavior for those entries.
        */
+      if (!util_dynarray_ensure_cap(l3l2_binds,
+            l3l2_binds->capacity + 512 * sizeof(struct anv_trtt_bind)))
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+
       for (int i = 0; i < 512; i++) {
          if (i != l2_index) {
             trtt->l2_mirror[l3_index * 512 + i] = ANV_TRTT_L3L2_NULL_ENTRY;
-            anv_trtt_bind_list_add_entry(l3l2_binds, n_l3l2_binds,
+            anv_trtt_bind_list_add_entry(l3l2_binds,
                                          l2_addr + i * sizeof(uint64_t),
                                          ANV_TRTT_L3L2_NULL_ENTRY);
          }
@@ -527,7 +492,7 @@ anv_trtt_bind_add(struct anv_device *device,
          trtt->l2_mirror[l3_index * 512 + l2_index] =
             ANV_TRTT_L3L2_NULL_ENTRY;
 
-         anv_trtt_bind_list_add_entry(l3l2_binds, n_l3l2_binds,
+         anv_trtt_bind_list_add_entry(l3l2_binds,
                                       l2_addr + l2_index * sizeof(uint64_t),
                                       ANV_TRTT_L3L2_NULL_ENTRY);
 
@@ -541,13 +506,13 @@ anv_trtt_bind_add(struct anv_device *device,
 
       trtt->l2_mirror[l3_index * 512 + l2_index] = l1_addr;
 
-      anv_trtt_bind_list_add_entry(l3l2_binds, n_l3l2_binds,
+      anv_trtt_bind_list_add_entry(l3l2_binds,
                                    l2_addr + l2_index * sizeof(uint64_t),
                                    l1_addr);
    }
    assert(l1_addr != 0 && l1_addr != ANV_TRTT_L3L2_NULL_ENTRY);
 
-   anv_trtt_bind_list_add_entry(l1_binds, n_l1_binds,
+   anv_trtt_bind_list_add_entry(l1_binds,
                                 l1_addr + l1_index * sizeof(uint32_t),
                                 dest_addr);
 
@@ -566,6 +531,11 @@ anv_sparse_trtt_garbage_collect_batches(struct anv_device *device,
          vk_sync_get_value(&device->vk, trtt->timeline, &last_value);
       if (result != VK_SUCCESS)
          return result;
+
+      /* Valgrind doesn't know that drmSyncobjQuery writes to 'last_value' on
+       * success.
+       */
+      VG(VALGRIND_MAKE_MEM_DEFINED(&last_value, sizeof(last_value)));
    } else {
       last_value = trtt->timeline_val;
    }
@@ -604,6 +574,169 @@ anv_sparse_trtt_garbage_collect_batches(struct anv_device *device,
    return VK_SUCCESS;
 }
 
+/* On success, this function initializes 'submit' and submits it, but doesn't
+ * wait or free it. This allows the caller to submit multiple queues at the
+ * same time before starting to wait for anything to complete.
+ * If the function fails, the caller doesn't need to wait or fini anything,
+ * just whatever other submissions may have succeeded in the past.
+ */
+static VkResult
+anv_trtt_first_bind_init_queue(struct anv_queue *queue,
+                               struct anv_async_submit *submit,
+                               bool init_l3_table, struct anv_bo *l3_bo)
+{
+   struct anv_device *device = queue->device;
+   struct anv_trtt *trtt = &device->trtt;
+   VkResult result;
+
+   result = anv_async_submit_init(submit, queue, &device->batch_bo_pool,
+                                  false, true);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = anv_genX(device->info, init_trtt_context_state)(submit);
+   if (result != VK_SUCCESS)
+      goto out_submit_fini;
+
+   /* We only need to do this once, so pick the first queue. */
+   if (init_l3_table) {
+      struct anv_trtt_bind l3l2_binds_data[512];
+      struct util_dynarray l3l2_binds;
+      util_dynarray_init_from_stack(&l3l2_binds, l3l2_binds_data,
+                                    sizeof(l3l2_binds_data));
+
+      for (int entry = 0; entry < 512; entry++) {
+         trtt->l3_mirror[entry] = ANV_TRTT_L3L2_NULL_ENTRY;
+         anv_trtt_bind_list_add_entry(&l3l2_binds,
+                                      trtt->l3_addr +
+                                      entry * sizeof(uint64_t),
+                                      ANV_TRTT_L3L2_NULL_ENTRY);
+      }
+
+      anv_genX(device->info, write_trtt_entries)(
+         submit, l3l2_binds.data,
+         util_dynarray_num_elements(&l3l2_binds, struct anv_trtt_bind),
+         NULL, 0);
+
+      result = anv_reloc_list_add_bo(&submit->relocs, l3_bo);
+      if (result != VK_SUCCESS)
+         goto out_submit_fini;
+   }
+
+   anv_genX(device->info, async_submit_end)(submit);
+
+   result = device->kmd_backend->queue_exec_async(submit, 0, NULL, 1,
+                                                  &submit->signal);
+   if (result != VK_SUCCESS)
+      goto out_submit_fini;
+
+   /* If we succeed, it's our caller that's going to call
+    * anv_async_submit_fini(). We do this so we can start waiting for the
+    * submissions only after all the submissions are submitted.
+    */
+   return VK_SUCCESS;
+
+out_submit_fini:
+   /* If we fail, undo everything this function has done so the caller has
+    * nothing to free.
+    */
+   anv_async_submit_fini(submit);
+   return result;
+}
+
+/* There are lots of applications that request for sparse binding to be
+ * enabled but never use it, so we choose to delay the initialization of TR-TT
+ * until the moment we know we're going to need it.
+ */
+static VkResult
+anv_trtt_first_bind_init(struct anv_device *device)
+{
+   struct anv_trtt *trtt = &device->trtt;
+   VkResult result = VK_SUCCESS;
+
+   /* TR-TT submission needs a queue even when the API entry point doesn't
+    * provide one, such as resource creation. We pick this queue from the user
+    * created queues at init_device_state() under anv_CreateDevice.
+    *
+    * It is technically possible for the user to create sparse resources even
+    * when they don't have a sparse queue: they won't be able to bind the
+    * resource but they should still be able to use the resource and rely on
+    * its unbound behavior. We haven't spotted any real world application or
+    * even test suite that exercises this behavior.
+    *
+    * For now let's just print an error message and return, which means that
+    * resource creation will succeed but the behavior will be undefined if the
+    * resource is used, which goes against our claim that we support the
+    * sparseResidencyNonResidentStrict property.
+    *
+    * TODO: be fully spec-compliant here. Maybe have a device-internal queue
+    * independent of the application's queues for the TR-TT operations.
+    */
+   if (unlikely(!trtt->queue)) {
+      static bool warned = false;
+      if (unlikely(!warned)) {
+         fprintf(stderr, "FIXME: application has created a sparse resource "
+                 "but no queues capable of binding sparse resources were "
+                 "created. Using these resources will result in undefined "
+                 "behavior.\n");
+         warned = true;
+      }
+      return VK_SUCCESS;
+   }
+
+   simple_mtx_lock(&trtt->mutex);
+
+   /* This means we have already initialized the first bind. */
+   if (likely(trtt->l3_addr)) {
+      simple_mtx_unlock(&trtt->mutex);
+      return VK_SUCCESS;
+   }
+
+   struct anv_async_submit submits[device->queue_count];
+
+   struct anv_bo *l3_bo;
+   result = trtt_get_page_table_bo(device, &l3_bo, &trtt->l3_addr);
+   if (result != VK_SUCCESS)
+      goto out;
+
+   trtt->l3_mirror = vk_zalloc(&device->vk.alloc, 4096, 8,
+                                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!trtt->l3_mirror) {
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto out;
+   }
+
+   /* L3 has 512 entries, so we can have up to 512 L2 tables. */
+   trtt->l2_mirror = vk_zalloc(&device->vk.alloc, 512 * 4096, 8,
+                               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!trtt->l2_mirror) {
+      vk_free(&device->vk.alloc, trtt->l3_mirror);
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto out;
+   }
+
+   int n_submits;
+   for (n_submits = 0; n_submits < device->queue_count; n_submits++) {
+      result = anv_trtt_first_bind_init_queue(&device->queues[n_submits],
+                                              &submits[n_submits],
+                                              n_submits == 0, l3_bo);
+      if (result != VK_SUCCESS)
+         break;
+   }
+
+   for (uint32_t i = 0; i < n_submits; i++) {
+      anv_async_submit_wait(&submits[i]);
+      anv_async_submit_fini(&submits[i]);
+   }
+
+out:
+   if (result != VK_SUCCESS)
+      trtt->l3_addr = 0;
+
+   simple_mtx_unlock(&trtt->mutex);
+   return result;
+}
+
 static VkResult
 anv_sparse_bind_trtt(struct anv_device *device,
                      struct anv_sparse_submission *sparse_submit)
@@ -611,9 +744,10 @@ anv_sparse_bind_trtt(struct anv_device *device,
    struct anv_trtt *trtt = &device->trtt;
    VkResult result;
 
-   /* TR-TT submission needs a queue even when the API entry point doesn't
-    * give one, such as resource creation. */
-   assert(trtt->queue != NULL);
+   /* See the same check at anv_trtt_first_bind_init(). */
+   if (unlikely(!trtt->queue))
+      return VK_SUCCESS;
+
    if (!sparse_submit->queue)
       sparse_submit->queue = trtt->queue;
 
@@ -627,9 +761,91 @@ anv_sparse_bind_trtt(struct anv_device *device,
                                   &device->batch_bo_pool,
                                   false, false);
    if (result != VK_SUCCESS)
-      goto error_async;
+      goto out_async;
 
    simple_mtx_lock(&trtt->mutex);
+
+   /* Do this so we can avoid reallocs later. */
+   int l1_binds_capacity = 0;
+   for (int b = 0; b < sparse_submit->binds_len; b++) {
+      assert(sparse_submit->binds[b].size % (64 * 1024) == 0);
+      int pages = sparse_submit->binds[b].size / (64 * 1024);
+      l1_binds_capacity += pages;
+   }
+
+   /* Turn a series of virtual address maps, into a list of L3/L2/L1 TRTT page
+    * table updates.
+    */
+
+   /* These are arrays of struct anv_trtt_bind. */
+   struct util_dynarray l3l2_binds = {};
+   struct util_dynarray l1_binds;
+
+   if (l1_binds_capacity <= 32) {
+      size_t alloc_size = l1_binds_capacity * sizeof(struct anv_trtt_bind);
+      struct anv_trtt_bind *ptr = alloca(alloc_size);
+      util_dynarray_init_from_stack(&l1_binds, ptr, alloc_size);
+   } else {
+      util_dynarray_init(&l1_binds, NULL);
+      if (!util_dynarray_ensure_cap(&l1_binds,
+            l1_binds_capacity * sizeof(struct anv_trtt_bind)))
+         goto out_dynarrays;
+   }
+
+   for (int b = 0; b < sparse_submit->binds_len; b++) {
+      struct anv_vm_bind *vm_bind = &sparse_submit->binds[b];
+      for (uint64_t i = 0; i < vm_bind->size; i += 64 * 1024) {
+         uint64_t trtt_addr = vm_bind->address + i;
+         uint64_t dest_addr =
+            (vm_bind->op == ANV_VM_BIND && vm_bind->bo) ?
+               vm_bind->bo->offset + vm_bind->bo_offset + i :
+               ANV_TRTT_L1_NULL_TILE_VAL;
+
+         result = anv_trtt_bind_add(device, trtt_addr, dest_addr,
+                                    &l3l2_binds, &l1_binds);
+         if (result != VK_SUCCESS)
+            goto out_dynarrays;
+      }
+   }
+
+   /* Convert the L3/L2/L1 TRTT page table updates in anv_trtt_bind elements
+    * into MI commands.
+    */
+   uint32_t n_l3l2_binds =
+      util_dynarray_num_elements(&l3l2_binds, struct anv_trtt_bind);
+   uint32_t n_l1_binds =
+      util_dynarray_num_elements(&l1_binds, struct anv_trtt_bind);
+   sparse_debug("trtt_binds: num_vm_binds:%02d l3l2:%04d l1:%04d\n",
+                sparse_submit->binds_len, n_l3l2_binds, n_l1_binds);
+
+   /* This is not an error, the application is simply trying to reset state
+    * that was already there. */
+   if (n_l3l2_binds == 0 && n_l1_binds == 0)
+      goto out_dynarrays;
+
+   anv_genX(device->info, write_trtt_entries)(&submit->base,
+                                              l3l2_binds.data, n_l3l2_binds,
+                                              l1_binds.data, n_l1_binds);
+
+   util_dynarray_fini(&l1_binds);
+   util_dynarray_fini(&l3l2_binds);
+
+   anv_genX(device->info, async_submit_end)(&submit->base);
+
+   if (submit->base.batch.status != VK_SUCCESS) {
+      result = submit->base.batch.status;
+      goto out_add_bind;
+   }
+
+   /* Add all the BOs backing TRTT page tables to the reloc list. */
+   if (device->physical->uses_relocs) {
+      for (int i = 0; i < trtt->num_page_table_bos; i++) {
+         result = anv_reloc_list_add_bo(&submit->base.relocs,
+                                        trtt->page_table_bos[i]);
+         if (result != VK_SUCCESS)
+            goto out_add_bind;
+      }
+   }
 
    anv_sparse_trtt_garbage_collect_batches(device, false);
 
@@ -638,105 +854,16 @@ anv_sparse_bind_trtt(struct anv_device *device,
       .signal_value = ++trtt->timeline_val,
    };
 
-   /* If the TRTT L3 table was never set, initialize it as part of this
-    * submission.
-    */
-   if (!trtt->l3_addr)
-      anv_trtt_init_context_state(device, &submit->base);
-
-   assert(trtt->l3_addr);
-
-   /* These capacities are conservative estimations. For L1 binds the
-    * number will match exactly unless we skip NULL binds due to L2 already
-    * being NULL. For L3/L2 things are harder to estimate, but the resulting
-    * numbers are so small that a little overestimation won't hurt.
-    *
-    * We have assertions below to catch estimation errors.
-    *
-    * TODO: a bug fix caused us to put that "+ 1024" in the l3l2 capacity so
-    * now our estimations are super overestimating things in most cases, as
-    * most cases are still using a total capacity of just 1 or 2. We should
-    * replace this whole thing with something more efficient.
-    */
-   int l3l2_binds_capacity = 1;
-   int l1_binds_capacity = 0;
-   for (int b = 0; b < sparse_submit->binds_len; b++) {
-      assert(sparse_submit->binds[b].size % (64 * 1024) == 0);
-      int pages = sparse_submit->binds[b].size / (64 * 1024);
-      l1_binds_capacity += pages;
-      l3l2_binds_capacity += (pages / 1024 + 1) * 2 + 1024;
-   }
-
-   /* Turn a series of virtual address maps, into a list of L3/L2/L1 TRTT page
-    * table updates.
-    */
-   STACK_ARRAY(struct anv_trtt_bind, l3l2_binds, l3l2_binds_capacity);
-   STACK_ARRAY(struct anv_trtt_bind, l1_binds, l1_binds_capacity);
-   uint32_t n_l3l2_binds = 0, n_l1_binds = 0;
-   for (int b = 0; b < sparse_submit->binds_len && result == VK_SUCCESS; b++) {
-      struct anv_vm_bind *vm_bind = &sparse_submit->binds[b];
-      for (uint64_t i = 0; i < vm_bind->size && result == VK_SUCCESS; i += 64 * 1024) {
-         uint64_t trtt_addr = vm_bind->address + i;
-         uint64_t dest_addr =
-            (vm_bind->op == ANV_VM_BIND && vm_bind->bo) ?
-               vm_bind->bo->offset + vm_bind->bo_offset + i :
-               ANV_TRTT_L1_NULL_TILE_VAL;
-
-         result = anv_trtt_bind_add(device, trtt_addr, dest_addr,
-                                    l3l2_binds, &n_l3l2_binds,
-                                    l1_binds, &n_l1_binds);
-         if (result != VK_SUCCESS)
-            goto error_stack_arrays;
-      }
-   }
-
-   assert(n_l3l2_binds <= l3l2_binds_capacity);
-   assert(n_l1_binds <= l1_binds_capacity);
-
-   /* Convert the L3/L2/L1 TRTT page table updates in anv_trtt_bind elements
-    * into MI commands.
-    */
-   sparse_debug("trtt_binds: num_vm_binds:%02d l3l2:%04d l1:%04d\n",
-                sparse_submit->binds_len, n_l3l2_binds, n_l1_binds);
-
-   if (n_l3l2_binds || n_l1_binds) {
-      anv_genX(device->info, write_trtt_entries)(
-         &submit->base, l3l2_binds, n_l3l2_binds, l1_binds, n_l1_binds);
-   }
-
-   STACK_ARRAY_FINISH(l1_binds);
-   STACK_ARRAY_FINISH(l3l2_binds);
-
-   anv_genX(device->info, async_submit_end)(&submit->base);
-
-   if (submit->base.batch.status != VK_SUCCESS) {
-      result = submit->base.batch.status;
-      goto error_add_bind;
-   }
-
-   /* Add all the BOs backing TRTT page tables to the reloc list.
-    *
-    * TODO: we could narrow down the list by using anv_address structures in
-    *       anv_trtt_bind for the pte_addr.
-    */
-   if (device->physical->uses_relocs) {
-      for (int i = 0; i < trtt->num_page_table_bos; i++) {
-         result = anv_reloc_list_add_bo(&submit->base.relocs,
-                                        trtt->page_table_bos[i]);
-         if (result != VK_SUCCESS)
-            goto error_add_bind;
-      }
-   }
-
    result =
       device->kmd_backend->queue_exec_async(&submit->base,
                                             sparse_submit->wait_count,
                                             sparse_submit->waits,
                                             sparse_submit->signal_count,
                                             sparse_submit->signals);
-   if (result != VK_SUCCESS)
-      goto error_add_bind;
-
+   if (result != VK_SUCCESS) {
+      trtt->timeline_val--;
+      goto out_add_bind;
+   }
 
    list_addtail(&submit->link, &trtt->in_flight_batches);
 
@@ -746,13 +873,13 @@ anv_sparse_bind_trtt(struct anv_device *device,
 
    return VK_SUCCESS;
 
- error_stack_arrays:
-   STACK_ARRAY_FINISH(l1_binds);
-   STACK_ARRAY_FINISH(l3l2_binds);
- error_add_bind:
+ out_dynarrays:
+   util_dynarray_fini(&l1_binds);
+   util_dynarray_fini(&l3l2_binds);
+ out_add_bind:
    simple_mtx_unlock(&trtt->mutex);
    anv_async_submit_fini(&submit->base);
- error_async:
+ out_async:
    vk_free(&device->vk.alloc, submit);
    return result;
 }
@@ -862,6 +989,7 @@ anv_init_sparse_bindings(struct anv_device *device,
                          uint64_t client_address,
                          struct anv_address *out_address)
 {
+   VkResult result;
    uint64_t size = align64(size_, ANV_SPARSE_BLOCK_SIZE);
 
    if (device->physical->sparse_type == ANV_SPARSE_TYPE_TRTT)
@@ -876,29 +1004,38 @@ anv_init_sparse_bindings(struct anv_device *device,
    out_address->bo = NULL;
    out_address->offset = sparse->address;
 
-   struct anv_vm_bind bind = {
-      .bo = NULL, /* That's a NULL binding. */
-      .address = sparse->address,
-      .bo_offset = 0,
-      .size = size,
-      .op = ANV_VM_BIND,
-   };
-   struct anv_sparse_submission submit = {
-      .queue = NULL,
-      .binds = &bind,
-      .binds_len = 1,
-      .binds_capacity = 1,
-      .wait_count = 0,
-      .signal_count = 0,
-   };
-   VkResult res = anv_sparse_bind(device, &submit);
-   if (res != VK_SUCCESS) {
-      anv_vma_free(device, sparse->vma_heap, sparse->address, sparse->size);
-      return res;
+   if (device->physical->sparse_type == ANV_SPARSE_TYPE_TRTT) {
+      result = anv_trtt_first_bind_init(device);
+      if (result != VK_SUCCESS)
+         goto out_vma_free;
+   } else {
+      struct anv_vm_bind bind = {
+         .bo = NULL, /* That's a NULL binding. */
+         .address = sparse->address,
+         .bo_offset = 0,
+         .size = size,
+         .op = ANV_VM_BIND,
+      };
+      struct anv_sparse_submission submit = {
+         .queue = NULL,
+         .binds = &bind,
+         .binds_len = 1,
+         .binds_capacity = 1,
+         .wait_count = 0,
+         .signal_count = 0,
+      };
+      result = anv_sparse_bind(device, &submit);
+      if (result != VK_SUCCESS)
+         goto out_vma_free;
    }
 
    p_atomic_inc(&device->num_sparse_resources);
    return VK_SUCCESS;
+
+out_vma_free:
+   anv_vma_free(device, sparse->vma_heap, sparse->address, sparse->size);
+   return result;
+
 }
 
 void
@@ -1239,7 +1376,7 @@ anv_sparse_bind_image_memory(struct anv_queue *queue,
    assert(!(bind->flags & VK_SPARSE_MEMORY_BIND_METADATA_BIT));
 
    struct anv_image_binding *img_binding = image->disjoint ?
-      anv_image_aspect_to_binding(image, aspect) :
+      &image->bindings[anv_image_aspect_to_binding(image, aspect)] :
       &image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN];
    struct anv_sparse_binding_data *sparse_data = &img_binding->sparse_data;
 

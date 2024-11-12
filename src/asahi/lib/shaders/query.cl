@@ -52,6 +52,12 @@ libagx_copy_xfb_counters(constant struct libagx_xfb_counter_copy *push)
 }
 
 void
+libagx_increment_statistic(constant struct libagx_increment_params *p)
+{
+   *(p->statistic) += p->delta;
+}
+
+void
 libagx_increment_cs_invocations(constant struct libagx_cs_invocation_params *p)
 {
    *(p->statistic) += libagx_cs_invocations(p->local_size_threads, p->grid[0],
@@ -99,4 +105,10 @@ libagx_increment_ia_counters(constant struct libagx_increment_ia_counters *p,
    if (p->vs_invocations) {
       *(p->vs_invocations) += count;
    }
+}
+
+void
+libagx_write_u32s(constant struct libagx_imm_write *p, uint id)
+{
+   *(p[id].address) = p[id].value;
 }

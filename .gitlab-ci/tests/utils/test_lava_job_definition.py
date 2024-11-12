@@ -54,8 +54,8 @@ def job_submitter_factory(mode: Literal["UBOOT", "FASTBOOT"], shell_file):
 
     return LAVAJobSubmitter(
         boot_method=boot_method,
-        ci_project_dir="/ci/project/dir",
         device_type=device_type,
+        farm="test_farm",
         dtb_filename="my_dtb_filename",
         first_stage_init=shell_file,
         job_timeout_min=job_timeout_min,
@@ -88,10 +88,19 @@ def mock_collabora_farm(clear_env_vars, monkeypatch):
 
 @pytest.mark.parametrize("force_uart", [True, False], ids=["SSH", "UART"])
 @pytest.mark.parametrize("mode", ["UBOOT", "FASTBOOT"])
+@mock.patch("lava.lava_job_submitter.setup_lava_proxy")
 def test_generate_lava_job_definition_sanity(
-    force_uart, mode, shell_file, mock_collabora_farm, monkeypatch
+    mock_lava_proxy,
+    force_uart,
+    mode,
+    shell_file,
+    mock_collabora_farm,
+    monkeypatch,
+    mock_proxy,
 ):
     monkeypatch.setattr(lava.utils.lava_job_definition, "FORCE_UART", force_uart)
+    # Do not actually connect to the LAVA server
+    mock_lava_proxy.return_value = mock_proxy
 
     init_script_content = f"echo test {mode}"
     job_submitter = job_submitter_factory(mode, shell_file(init_script_content))
@@ -175,8 +184,19 @@ def test_generate_lava_job_definition_sanity(
 # use yaml files from tests/data/ to test the job definition generation
 @pytest.mark.parametrize("force_uart", [False, True], ids=["SSH", "UART"])
 @pytest.mark.parametrize("mode", ["UBOOT", "FASTBOOT"])
-def test_lava_job_definition(mode, force_uart, shell_file, mock_collabora_farm, monkeypatch):
+@mock.patch("lava.lava_job_submitter.setup_lava_proxy")
+def test_lava_job_definition(
+    mock_lava_proxy,
+    mode,
+    force_uart,
+    shell_file,
+    mock_collabora_farm,
+    mock_proxy,
+    monkeypatch,
+):
     monkeypatch.setattr(lava.utils.lava_job_definition, "FORCE_UART", force_uart)
+    # Do not actually connect to the LAVA server
+    mock_lava_proxy.return_value = mock_proxy
 
     yaml = YAML()
     yaml.default_flow_style = False

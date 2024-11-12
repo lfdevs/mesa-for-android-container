@@ -50,6 +50,14 @@ We have two types of instructions:
 Each instruction can have operands (temporaries that it reads), and definitions (temporaries that it writes).
 Temporaries can be fixed to a specific register, or just specify a register class (either a single register, or a vector of several registers).
 
+#### Lower Phis
+
+After instructions selection, some phi instructions need further lowering. This includes booleans which are represented as scalar values. Because the scalar ALU doesn't respect the execution mask, divergent boolean phis need to be lowered to SALU shuffle code. This pass also inserts the necessary code in order to fix phis with subdword access and repairs phis in case of mismatches between logical and linear CFG.
+
+#### Lower Subdword
+
+For GFX6 and GFX7, this pass already lowers subdword pseudo instructions.
+
 #### Value Numbering
 
 The value numbering pass is necessary for two reasons: the lack of descriptor load representation in NIR,
@@ -88,14 +96,26 @@ Scheduling is another NP-complete problem where basically all known heuristics s
 
 The register allocator works on SSA (as opposed to LLVM's which works on virtual registers). The SSA properties guarantee that there are always as many registers available as needed. The problem is that some instructions require a vector of neighboring registers to be available, but the free regs might be scattered. In this case, the register allocator inserts shuffle code (moving some temporaries to other registers) to make space for the variable. The assumption is that it is (almost) always better to have a few more moves than to sacrifice a wave. The RA does SSA-reconstruction on the fly, which makes its runtime linear.
 
+#### Optimization (post-RA)
+
+Optimizations which depend on register assignment (like branching on VCCZ) are performed.
+
 #### SSA Elimination
 
 The next step is a pass out of SSA by inserting parallelcopies at the end of blocks to match the phi nodes' semantics.
+
+#### Jump Threading
+
+This pass aims to eliminate empty or unnecessary basic blocks. As this introduces critical edges, it can only be performed after SSA elimination.
 
 #### Lower to HW instructions
 
 Most pseudo instructions are lowered to actual machine instructions.
 These are mostly parallel copy instructions created by instruction selection or register allocation and spill/reload code.
+
+#### VOPD Scheduling
+
+This pass makes use of the VOPD instruction encoding on GFX11+. When using wave32 mode, this pass works on a partial dependency graph in order to combine two VALU instructions each into one VOPD instruction.
 
 #### ILP Scheduling
 
@@ -110,6 +130,10 @@ This means that we need to insert `s_waitcnt` instructions (and its variants) so
 
 Some instructions require wait states or other instructions to resolve hazards which are not handled by the hardware.
 This pass makes sure that no known hazards occur.
+
+#### Insert delay_alu and form clauses
+
+These passes introduce optional instructions which provide performance hints to the hardware. `s_delay_alu` is available on GFX11+ and describes ALU dependencies in order to allow the hardware to execute instructions from a different wave in the meantime. `s_clause` is avilable on GFX10+ with the purpose to complete an entire set of memory instructions before switching to a different wave.
 
 #### Emit program - Assembler
 

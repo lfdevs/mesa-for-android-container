@@ -699,6 +699,51 @@ is_lower_half_negative_one(UNUSED struct hash_table *ht, const nir_alu_instr *in
    return true;
 }
 
+/**
+ * Returns whether an operand is a constant bit-mask, meaning that it
+ * only has consecutive 1 bits starting from the LSB.
+ * Numbers whose MSB is 1 are excluded because they are not useful
+ * for the optimizations where this function is used.
+ */
+static inline bool
+is_const_bitmask(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
+                 unsigned src, unsigned num_components,
+                 const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      const unsigned bit_size = instr->src[src].src.ssa->bit_size;
+      const uint64_t c = nir_src_comp_as_uint(instr->src[src].src, swizzle[i]);
+      const unsigned num_bits = util_bitcount64(c);
+      if (c != BITFIELD64_MASK(num_bits) || num_bits == bit_size)
+         return false;
+   }
+
+   return true;
+}
+
+/**
+ * Returns whether the 5 LSBs of an operand are non-zero.
+ */
+static inline bool
+is_5lsb_not_zero(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
+                 unsigned src, unsigned num_components,
+                 const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      const uint64_t c = nir_src_comp_as_uint(instr->src[src].src, swizzle[i]);
+      if ((c & 0x1f) == 0)
+         return false;
+   }
+
+   return true;
+}
+
 static inline bool
 no_signed_wrap(const nir_alu_instr *instr)
 {

@@ -117,9 +117,10 @@ struct _egl_extensions {
    EGLBoolean EXT_swap_buffers_with_damage;
 
    unsigned int IMG_context_priority;
-#define __EGL_CONTEXT_PRIORITY_LOW_BIT    0
-#define __EGL_CONTEXT_PRIORITY_MEDIUM_BIT 1
-#define __EGL_CONTEXT_PRIORITY_HIGH_BIT   2
+#define __EGL_CONTEXT_PRIORITY_LOW_BIT      0
+#define __EGL_CONTEXT_PRIORITY_MEDIUM_BIT   1
+#define __EGL_CONTEXT_PRIORITY_HIGH_BIT     2
+#define __EGL_CONTEXT_PRIORITY_REALTIME_BIT 3
 
    EGLBoolean KHR_cl_event2;
    EGLBoolean KHR_config_attribs;
@@ -153,6 +154,7 @@ struct _egl_extensions {
    EGLBoolean NOK_texture_from_pixmap;
 
    EGLBoolean NV_post_sub_buffer;
+   EGLBoolean NV_context_priority_realtime;
 
    EGLBoolean WL_bind_wayland_display;
    EGLBoolean WL_create_wayland_buffer_from_image;

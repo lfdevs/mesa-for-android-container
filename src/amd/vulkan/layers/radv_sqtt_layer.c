@@ -10,6 +10,7 @@
 #include "radv_pipeline_rt.h"
 #include "radv_queue.h"
 #include "radv_shader.h"
+#include "radv_spm.h"
 #include "radv_sqtt.h"
 #include "vk_common_entrypoints.h"
 #include "vk_semaphore.h"
@@ -35,15 +36,15 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
 
       va = reloc->va[MESA_SHADER_VERTEX];
       if (vs->info.vs.as_ls) {
-         radeon_set_sh_reg(cs, R_00B520_SPI_SHADER_PGM_LO_LS, va >> 8);
+         radeon_set_sh_reg(cs, vs->info.regs.pgm_lo, va >> 8);
       } else if (vs->info.vs.as_es) {
-         radeon_set_sh_reg_seq(cs, R_00B320_SPI_SHADER_PGM_LO_ES, 2);
+         radeon_set_sh_reg_seq(cs, vs->info.regs.pgm_lo, 2);
          radeon_emit(cs, va >> 8);
          radeon_emit(cs, S_00B324_MEM_BASE(va >> 40));
       } else if (vs->info.is_ngg) {
-         radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
+         radeon_set_sh_reg(cs, vs->info.regs.pgm_lo, va >> 8);
       } else {
-         radeon_set_sh_reg_seq(cs, R_00B120_SPI_SHADER_PGM_LO_VS, 2);
+         radeon_set_sh_reg_seq(cs, vs->info.regs.pgm_lo, 2);
          radeon_emit(cs, va >> 8);
          radeon_emit(cs, S_00B124_MEM_BASE(va >> 40));
       }
@@ -51,18 +52,14 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
 
    /* TCS */
    if (pipeline->base.shaders[MESA_SHADER_TESS_CTRL]) {
+      const struct radv_shader *tcs = pipeline->base.shaders[MESA_SHADER_TESS_CTRL];
+
       va = reloc->va[MESA_SHADER_TESS_CTRL];
 
       if (gfx_level >= GFX9) {
-         if (gfx_level >= GFX12) {
-            radeon_set_sh_reg(cs, R_00B424_SPI_SHADER_PGM_LO_LS, va >> 8);
-         } else if (gfx_level >= GFX10) {
-            radeon_set_sh_reg(cs, R_00B520_SPI_SHADER_PGM_LO_LS, va >> 8);
-         } else {
-            radeon_set_sh_reg(cs, R_00B410_SPI_SHADER_PGM_LO_LS, va >> 8);
-         }
+         radeon_set_sh_reg(cs, tcs->info.regs.pgm_lo, va >> 8);
       } else {
-         radeon_set_sh_reg_seq(cs, R_00B420_SPI_SHADER_PGM_LO_HS, 2);
+         radeon_set_sh_reg_seq(cs, tcs->info.regs.pgm_lo, 2);
          radeon_emit(cs, va >> 8);
          radeon_emit(cs, S_00B424_MEM_BASE(va >> 40));
       }
@@ -74,17 +71,13 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
 
       va = reloc->va[MESA_SHADER_TESS_EVAL];
       if (tes->info.is_ngg) {
-         if (gfx_level >= GFX12) {
-            radeon_set_sh_reg(cs, R_00B224_SPI_SHADER_PGM_LO_ES, va >> 8);
-         } else {
-            radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
-         }
+         radeon_set_sh_reg(cs, tes->info.regs.pgm_lo, va >> 8);
       } else if (tes->info.tes.as_es) {
-         radeon_set_sh_reg_seq(cs, R_00B320_SPI_SHADER_PGM_LO_ES, 2);
+         radeon_set_sh_reg_seq(cs, tes->info.regs.pgm_lo, 2);
          radeon_emit(cs, va >> 8);
          radeon_emit(cs, S_00B324_MEM_BASE(va >> 40));
       } else {
-         radeon_set_sh_reg_seq(cs, R_00B120_SPI_SHADER_PGM_LO_VS, 2);
+         radeon_set_sh_reg_seq(cs, tes->info.regs.pgm_lo, 2);
          radeon_emit(cs, va >> 8);
          radeon_emit(cs, S_00B124_MEM_BASE(va >> 40));
       }
@@ -96,20 +89,12 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
 
       va = reloc->va[MESA_SHADER_GEOMETRY];
       if (gs->info.is_ngg) {
-         if (gfx_level >= GFX12) {
-            radeon_set_sh_reg(cs, R_00B224_SPI_SHADER_PGM_LO_ES, va >> 8);
-         } else {
-            radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
-         }
+         radeon_set_sh_reg(cs, gs->info.regs.pgm_lo, va >> 8);
       } else {
          if (gfx_level >= GFX9) {
-            if (gfx_level >= GFX10) {
-               radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
-            } else {
-               radeon_set_sh_reg(cs, R_00B210_SPI_SHADER_PGM_LO_ES, va >> 8);
-            }
+            radeon_set_sh_reg(cs, gs->info.regs.pgm_lo, va >> 8);
          } else {
-            radeon_set_sh_reg_seq(cs, R_00B220_SPI_SHADER_PGM_LO_GS, 2);
+            radeon_set_sh_reg_seq(cs, gs->info.regs.pgm_lo, 2);
             radeon_emit(cs, va >> 8);
             radeon_emit(cs, S_00B224_MEM_BASE(va >> 40));
          }
@@ -118,22 +103,22 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
 
    /* FS */
    if (pipeline->base.shaders[MESA_SHADER_FRAGMENT]) {
+      const struct radv_shader *ps = pipeline->base.shaders[MESA_SHADER_FRAGMENT];
+
       va = reloc->va[MESA_SHADER_FRAGMENT];
 
-      radeon_set_sh_reg_seq(cs, R_00B020_SPI_SHADER_PGM_LO_PS, 2);
+      radeon_set_sh_reg_seq(cs, ps->info.regs.pgm_lo, 2);
       radeon_emit(cs, va >> 8);
       radeon_emit(cs, S_00B024_MEM_BASE(va >> 40));
    }
 
    /* MS */
    if (pipeline->base.shaders[MESA_SHADER_MESH]) {
+      const struct radv_shader *ms = pipeline->base.shaders[MESA_SHADER_MESH];
+
       va = reloc->va[MESA_SHADER_MESH];
 
-      if (pdev->info.gfx_level >= GFX12) {
-         radeon_set_sh_reg(cs, R_00B224_SPI_SHADER_PGM_LO_ES, va >> 8);
-      } else {
-         radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
-      }
+      radeon_set_sh_reg(cs, ms->info.regs.pgm_lo, va >> 8);
    }
 }
 
@@ -155,6 +140,7 @@ radv_sqtt_reloc_graphics_shaders(struct radv_device *device, struct radv_graphic
    struct radv_shader_dma_submission *submission = NULL;
    struct radv_sqtt_shaders_reloc *reloc;
    uint32_t code_size = 0;
+   VkResult result;
 
    reloc = calloc(1, sizeof(*reloc));
    if (!reloc)
@@ -172,8 +158,8 @@ radv_sqtt_reloc_graphics_shaders(struct radv_device *device, struct radv_graphic
    /* Allocate memory for all shader binaries. */
    reloc->alloc = radv_alloc_shader_memory(device, code_size, false, pipeline);
    if (!reloc->alloc) {
-      free(reloc);
-      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+      result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+      goto fail;
    }
 
    reloc->bo = reloc->alloc->arena->bo;
@@ -185,8 +171,10 @@ radv_sqtt_reloc_graphics_shaders(struct radv_device *device, struct radv_graphic
 
    if (device->shader_use_invisible_vram) {
       submission = radv_shader_dma_get_submission(device, reloc->bo, slab_va, code_size);
-      if (!submission)
-         return VK_ERROR_UNKNOWN;
+      if (!submission) {
+         result = VK_ERROR_UNKNOWN;
+         goto fail;
+      }
    }
 
    for (int i = 0; i < MESA_VULKAN_SHADER_STAGES; ++i) {
@@ -210,8 +198,10 @@ radv_sqtt_reloc_graphics_shaders(struct radv_device *device, struct radv_graphic
    if (device->shader_use_invisible_vram) {
       uint64_t upload_seq = 0;
 
-      if (!radv_shader_dma_submit(device, submission, &upload_seq))
-         return VK_ERROR_UNKNOWN;
+      if (!radv_shader_dma_submit(device, submission, &upload_seq)) {
+         result = VK_ERROR_UNKNOWN;
+         goto fail;
+      }
 
       for (int i = 0; i < MESA_VULKAN_SHADER_STAGES; ++i) {
          struct radv_shader *shader = pipeline->base.shaders[i];
@@ -229,6 +219,12 @@ radv_sqtt_reloc_graphics_shaders(struct radv_device *device, struct radv_graphic
    pipeline->sqtt_shaders_reloc = reloc;
 
    return VK_SUCCESS;
+
+fail:
+   if (reloc->alloc)
+      radv_free_shader_memory(device, reloc->alloc);
+   free(reloc);
+   return result;
 }
 
 static void
@@ -677,6 +673,7 @@ radv_handle_sqtt(VkQueue _queue)
 
    if (device->sqtt_enabled) {
       struct ac_sqtt_trace sqtt_trace = {0};
+      struct ac_spm_trace spm_trace;
 
       radv_end_sqtt(queue);
       device->sqtt_enabled = false;
@@ -684,12 +681,7 @@ radv_handle_sqtt(VkQueue _queue)
       /* TODO: Do something better than this whole sync. */
       device->vk.dispatch_table.QueueWaitIdle(_queue);
 
-      if (radv_get_sqtt_trace(queue, &sqtt_trace)) {
-         struct ac_spm_trace spm_trace;
-
-         if (device->spm.bo)
-            ac_spm_get_trace(&device->spm, &spm_trace);
-
+      if (radv_get_sqtt_trace(queue, &sqtt_trace) && (!device->spm.bo || radv_get_spm_trace(queue, &spm_trace))) {
          ac_dump_rgp_capture(&pdev->info, &sqtt_trace, device->spm.bo ? &spm_trace : NULL);
       } else {
          /* Trigger a new capture if the driver failed to get
@@ -1268,11 +1260,12 @@ sqtt_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCou
 }
 
 VKAPI_ATTR void VKAPI_CALL
-sqtt_CmdExecuteGeneratedCommandsNV(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
-                                   const VkGeneratedCommandsInfoNV *pGeneratedCommandsInfo)
+sqtt_CmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer, VkBool32 isPreprocessed,
+                                    const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo)
 {
    /* There is no ExecuteIndirect Vulkan event in RGP yet. */
-   API_MARKER_ALIAS(ExecuteGeneratedCommandsNV, ExecuteCommands, commandBuffer, isPreprocessed, pGeneratedCommandsInfo);
+   API_MARKER_ALIAS(ExecuteGeneratedCommandsEXT, ExecuteCommands, commandBuffer, isPreprocessed,
+                    pGeneratedCommandsInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL

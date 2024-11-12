@@ -109,7 +109,7 @@ GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size)
    int best_rt = -1;
 
    for (unsigned i = 0; i < fb->rt_count; i++) {
-      if (!fb->rts[i].view || fb->rts[0].discard ||
+      if (!fb->rts[i].view || fb->rts[i].discard ||
           !pan_image_view_has_crc(fb->rts[i].view))
          continue;
 
@@ -429,6 +429,7 @@ pan_rt_init_format(const struct pan_image_view *rt,
        * Offset specified from RAW8, where 8 = 2^3 */
 
       unsigned bits = desc->block.bits;
+      assert(bits >= 8 && bits <= 128);
       unsigned offset = util_logbase2_ceil(bits) - 3;
       assert(offset <= 4);
 
@@ -623,7 +624,7 @@ pan_emit_midgard_tiler(const struct pan_fb_info *fb,
          cfg.heap_end = tiler_ctx->midgard.polygon_list;
       } else {
          cfg.hierarchy_mask = panfrost_choose_hierarchy_mask(
-            fb->width, fb->height, tiler_ctx->vertex_count, hierarchy);
+            fb->width, fb->height, tiler_ctx->midgard.vertex_count, hierarchy);
          header_size = panfrost_tiler_header_size(
             fb->width, fb->height, cfg.hierarchy_mask, hierarchy);
          cfg.polygon_list_size = panfrost_tiler_full_size(
@@ -750,8 +751,19 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
                                                   force_clean_write);
       cfg.post_frame = pan_fix_frame_shader_mode(fb->bifrost.pre_post.modes[2],
                                                  force_clean_write);
+#if PAN_ARCH <= 7
+      /* On Bifrost, the layer_id is passed through a push_uniform, which forces
+       * us to have one pre/post DCD array per layer. */
+      cfg.frame_shader_dcds =
+         fb->bifrost.pre_post.dcds.gpu + (layer_idx * 3 * pan_size(DRAW));
+#else
+      /* On Valhall, layer_id is passed through the framebuffer frame_arg, which
+       * is preloaded in r62, so we can use the same pre/post DCD array for all
+       * layers. */
       cfg.frame_shader_dcds = fb->bifrost.pre_post.dcds.gpu;
-      cfg.tiler = tiler_ctx->bifrost;
+#endif
+      cfg.tiler =
+         PAN_ARCH >= 9 ? tiler_ctx->valhall.desc : tiler_ctx->bifrost.desc;
 #endif
       cfg.width = fb->width;
       cfg.height = fb->height;
@@ -801,20 +813,40 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
          bool full = !fb->extent.minx && !fb->extent.miny &&
                      fb->extent.maxx == (fb->width - 1) &&
                      fb->extent.maxy == (fb->height - 1);
+         bool clean_tile_write = fb->rts[crc_rt].clear;
+
+#if PAN_ARCH >= 6
+         clean_tile_write |= pan_force_clean_write_rt(fb->rts[crc_rt].view, tile_size);
+#endif
+
+         /* If the CRC was valid it stays valid, if it wasn't, we must ensure
+          * the render operation covers the full frame, and clean tiles are
+          * pushed to memory. */
+         bool new_valid = *valid | (full && clean_tile_write);
 
          cfg.crc_read_enable = *valid;
 
          /* If the data is currently invalid, still write CRC
           * data if we are doing a full write, so that it is
           * valid for next time. */
-         cfg.crc_write_enable = *valid || full;
+         cfg.crc_write_enable = new_valid;
 
-         *valid |= full;
+         *valid = new_valid;
       }
 
 #if PAN_ARCH >= 9
       cfg.point_sprite_coord_origin_max_y = fb->sprite_coord_origin;
       cfg.first_provoking_vertex = fb->first_provoking_vertex;
+
+      /* internal_layer_index is used to select the right primitive list in the
+       * tiler context, and frame_arg is the value that's passed to the fragment
+       * shader through r62-r63, which we use to pass gl_Layer. Since the
+       * layer_idx only takes 8-bits, we might use the extra 56-bits we have
+       * in frame_argument to pass other information to the fragment shader at
+       * some point. */
+      assert(layer_idx >= tiler_ctx->valhall.layer_offset);
+      cfg.internal_layer_index = layer_idx - tiler_ctx->valhall.layer_offset;
+      cfg.frame_argument = layer_idx;
 #endif
    }
 

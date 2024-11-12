@@ -299,6 +299,8 @@ BEGIN_TEST(isel.cf.unreachable_continue.uniform_break)
    nb->cursor = nir_after_phis(nir_loop_first_block(loop));
    nir_builder_instr_insert(nb, &phi[0]->instr);
    nir_builder_instr_insert(nb, &phi[1]->instr);
+   nir_unit_test_amd(nb, &phi[0]->def);
+   nir_unit_test_amd(nb, &phi[1]->def);
 
    finish_isel_test();
 END_TEST
@@ -368,6 +370,8 @@ BEGIN_TEST(isel.cf.unreachable_continue.divergent_break)
    nb->cursor = nir_after_phis(nir_loop_first_block(loop));
    nir_builder_instr_insert(nb, &phi[0]->instr);
    nir_builder_instr_insert(nb, &phi[1]->instr);
+   nir_unit_test_amd(nb, &phi[0]->def);
+   nir_unit_test_amd(nb, &phi[1]->def);
 
    finish_isel_test();
 END_TEST
@@ -536,6 +540,8 @@ BEGIN_TEST(isel.cf.unreachable_continue.mixed_break)
    nb->cursor = nir_after_phis(nir_loop_first_block(loop));
    nir_builder_instr_insert(nb, &phi[0]->instr);
    nir_builder_instr_insert(nb, &phi[1]->instr);
+   nir_unit_test_amd(nb, &phi[0]->def);
+   nir_unit_test_amd(nb, &phi[1]->def);
 
    finish_isel_test();
 END_TEST
@@ -648,6 +654,8 @@ BEGIN_TEST(isel.cf.unreachable_continue.nested_mixed_break)
    nb->cursor = nir_after_phis(nir_loop_first_block(loop));
    nir_builder_instr_insert(nb, &phi[0]->instr);
    nir_builder_instr_insert(nb, &phi[1]->instr);
+   nir_unit_test_amd(nb, &phi[0]->def);
+   nir_unit_test_amd(nb, &phi[1]->def);
 
    finish_isel_test();
 END_TEST
@@ -833,6 +841,7 @@ BEGIN_TEST(isel.cf.hidden_continue)
 
    nb->cursor = nir_after_phis(nir_loop_first_block(loop));
    nir_builder_instr_insert(nb, &phi->instr);
+   nir_unit_test_amd(nb, &phi->def);
 
    finish_isel_test();
 END_TEST
@@ -876,6 +885,7 @@ BEGIN_TEST(isel.cf.hidden_break)
    nir_def_init(&phi->instr, &phi->def, 1, 32);
    nir_phi_instr_add_src(phi, block, brk);
    nir_builder_instr_insert(nb, &phi->instr);
+   nir_unit_test_amd(nb, &phi->def);
 
    finish_isel_test();
 END_TEST

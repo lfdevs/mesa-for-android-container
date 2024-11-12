@@ -8,15 +8,15 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- state.xml     (  30526 bytes, from 2024-06-12 08:52:00)
-- common.xml    (  35664 bytes, from 2024-04-10 11:43:40)
-- common_3d.xml (  15069 bytes, from 2024-04-10 11:43:40)
-- state_hi.xml  (  35854 bytes, from 2024-04-10 11:43:40)
-- copyright.xml (   1597 bytes, from 2016-11-10 13:58:32)
-- state_2d.xml  (  52271 bytes, from 2024-04-10 11:43:40)
-- state_3d.xml  (  89522 bytes, from 2024-04-10 11:43:40)
-- state_blt.xml (  14592 bytes, from 2024-04-10 11:43:40)
-- state_vg.xml  (   5975 bytes, from 2016-11-10 13:58:32)
+- state.xml     (  30526 bytes, from 2024-10-10 18:45:02)
+- common.xml    (  35664 bytes, from 2023-12-13 09:33:18)
+- common_3d.xml (  15069 bytes, from 2023-12-13 09:33:18)
+- state_hi.xml  (  35909 bytes, from 2024-06-21 11:31:54)
+- copyright.xml (   1597 bytes, from 2020-10-28 12:56:03)
+- state_2d.xml  (  52271 bytes, from 2023-05-30 20:50:02)
+- state_3d.xml  (  89542 bytes, from 2024-10-10 18:45:02)
+- state_blt.xml (  14592 bytes, from 2023-12-13 09:33:18)
+- state_vg.xml  (   5975 bytes, from 2020-10-28 12:56:03)
 
 Copyright (C) 2012-2024 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -93,7 +93,7 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_FE_VERTEX_ELEMENT_CONFIG_ENDIAN__SHIFT		4
 #define VIVS_FE_VERTEX_ELEMENT_CONFIG_ENDIAN(x)			(((x) << VIVS_FE_VERTEX_ELEMENT_CONFIG_ENDIAN__SHIFT) & VIVS_FE_VERTEX_ELEMENT_CONFIG_ENDIAN__MASK)
 #define VIVS_FE_VERTEX_ELEMENT_CONFIG_NONCONSECUTIVE		0x00000080
-#define VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM__MASK		0x00000700
+#define VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM__MASK		0x00000f00
 #define VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM__SHIFT		8
 #define VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM(x)			(((x) << VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM__SHIFT) & VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM__MASK)
 #define VIVS_FE_VERTEX_ELEMENT_CONFIG_NUM__MASK			0x00003000

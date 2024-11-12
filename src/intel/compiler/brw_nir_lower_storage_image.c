@@ -27,192 +27,6 @@
 #include "compiler/nir/nir_builder.h"
 #include "compiler/nir/nir_format_convert.h"
 
-static nir_def *
-_load_image_param(nir_builder *b, nir_deref_instr *deref, unsigned offset)
-{
-   nir_intrinsic_instr *load =
-      nir_intrinsic_instr_create(b->shader,
-                                 nir_intrinsic_image_deref_load_param_intel);
-   load->src[0] = nir_src_for_ssa(&deref->def);
-   nir_intrinsic_set_base(load, offset / 4);
-
-   switch (offset) {
-   case ISL_IMAGE_PARAM_OFFSET_OFFSET:
-   case ISL_IMAGE_PARAM_SWIZZLING_OFFSET:
-      load->num_components = 2;
-      break;
-   case ISL_IMAGE_PARAM_TILING_OFFSET:
-   case ISL_IMAGE_PARAM_SIZE_OFFSET:
-      load->num_components = 3;
-      break;
-   case ISL_IMAGE_PARAM_STRIDE_OFFSET:
-      load->num_components = 4;
-      break;
-   default:
-      unreachable("Invalid param offset");
-   }
-   nir_def_init(&load->instr, &load->def, load->num_components, 32);
-
-   nir_builder_instr_insert(b, &load->instr);
-   return &load->def;
-}
-
-#define load_image_param(b, d, o) \
-   _load_image_param(b, d, ISL_IMAGE_PARAM_##o##_OFFSET)
-
-static nir_def *
-image_coord_is_in_bounds(nir_builder *b, nir_deref_instr *deref,
-                         nir_def *coord)
-{
-   nir_def *size = load_image_param(b, deref, SIZE);
-   nir_def *cmp = nir_ilt(b, coord, size);
-
-   unsigned coord_comps = glsl_get_sampler_coordinate_components(deref->type);
-   nir_def *in_bounds = nir_imm_true(b);
-   for (unsigned i = 0; i < coord_comps; i++)
-      in_bounds = nir_iand(b, in_bounds, nir_channel(b, cmp, i));
-
-   return in_bounds;
-}
-
-/** Calculate the offset in memory of the texel given by \p coord.
- *
- * This is meant to be used with untyped surface messages to access a tiled
- * surface, what involves taking into account the tiling and swizzling modes
- * of the surface manually so it will hopefully not happen very often.
- *
- * The tiling algorithm implemented here matches either the X or Y tiling
- * layouts supported by the hardware depending on the tiling coefficients
- * passed to the program as uniforms.  See Volume 1 Part 2 Section 4.5
- * "Address Tiling Function" of the IVB PRM for an in-depth explanation of
- * the hardware tiling format.
- */
-static nir_def *
-image_address(nir_builder *b, const struct intel_device_info *devinfo,
-              nir_deref_instr *deref, nir_def *coord)
-{
-   if (glsl_get_sampler_dim(deref->type) == GLSL_SAMPLER_DIM_1D &&
-       glsl_sampler_type_is_array(deref->type)) {
-      /* It's easier if 1D arrays are treated like 2D arrays */
-      coord = nir_vec3(b, nir_channel(b, coord, 0),
-                          nir_imm_int(b, 0),
-                          nir_channel(b, coord, 1));
-   } else {
-      unsigned dims = glsl_get_sampler_coordinate_components(deref->type);
-      coord = nir_trim_vector(b, coord, dims);
-   }
-
-   nir_def *offset = load_image_param(b, deref, OFFSET);
-   nir_def *tiling = load_image_param(b, deref, TILING);
-   nir_def *stride = load_image_param(b, deref, STRIDE);
-
-   /* Shift the coordinates by the fixed surface offset.  It may be non-zero
-    * if the image is a single slice of a higher-dimensional surface, or if a
-    * non-zero mipmap level of the surface is bound to the pipeline.  The
-    * offset needs to be applied here rather than at surface state set-up time
-    * because the desired slice-level may start mid-tile, so simply shifting
-    * the surface base address wouldn't give a well-formed tiled surface in
-    * the general case.
-    */
-   nir_def *xypos = (coord->num_components == 1) ?
-                        nir_vec2(b, coord, nir_imm_int(b, 0)) :
-                        nir_trim_vector(b, coord, 2);
-   xypos = nir_iadd(b, xypos, offset);
-
-   /* The layout of 3-D textures in memory is sort-of like a tiling
-    * format.  At each miplevel, the slices are arranged in rows of
-    * 2^level slices per row.  The slice row is stored in tmp.y and
-    * the slice within the row is stored in tmp.x.
-    *
-    * The layout of 2-D array textures and cubemaps is much simpler:
-    * Depending on whether the ARYSPC_LOD0 layout is in use it will be
-    * stored in memory as an array of slices, each one being a 2-D
-    * arrangement of miplevels, or as a 2D arrangement of miplevels,
-    * each one being an array of slices.  In either case the separation
-    * between slices of the same LOD is equal to the qpitch value
-    * provided as stride.w.
-    *
-    * This code can be made to handle either 2D arrays and 3D textures
-    * by passing in the miplevel as tile.z for 3-D textures and 0 in
-    * tile.z for 2-D array textures.
-    *
-    * See Volume 1 Part 1 of the Gfx7 PRM, sections 6.18.4.7 "Surface
-    * Arrays" and 6.18.6 "3D Surfaces" for a more extensive discussion
-    * of the hardware 3D texture and 2D array layouts.
-    */
-   if (coord->num_components > 2) {
-      /* Decompose z into a major (tmp.y) and a minor (tmp.x)
-       * index.
-       */
-      nir_def *z = nir_channel(b, coord, 2);
-      nir_def *z_x = nir_ubfe(b, z, nir_imm_int(b, 0),
-                                  nir_channel(b, tiling, 2));
-      nir_def *z_y = nir_ushr(b, z, nir_channel(b, tiling, 2));
-
-      /* Take into account the horizontal (tmp.x) and vertical (tmp.y)
-       * slice offset.
-       */
-      xypos = nir_iadd(b, xypos, nir_imul(b, nir_vec2(b, z_x, z_y),
-                                             nir_channels(b, stride, 0xc)));
-   }
-
-   nir_def *addr;
-   if (coord->num_components > 1) {
-      /* Calculate the major/minor x and y indices.  In order to
-       * accommodate both X and Y tiling, the Y-major tiling format is
-       * treated as being a bunch of narrow X-tiles placed next to each
-       * other.  This means that the tile width for Y-tiling is actually
-       * the width of one sub-column of the Y-major tile where each 4K
-       * tile has 8 512B sub-columns.
-       *
-       * The major Y value is the row of tiles in which the pixel lives.
-       * The major X value is the tile sub-column in which the pixel
-       * lives; for X tiling, this is the same as the tile column, for Y
-       * tiling, each tile has 8 sub-columns.  The minor X and Y indices
-       * are the position within the sub-column.
-       */
-
-      /* Calculate the minor x and y indices. */
-      nir_def *minor = nir_ubfe(b, xypos, nir_imm_int(b, 0),
-                                       nir_trim_vector(b, tiling, 2));
-      nir_def *major = nir_ushr(b, xypos, nir_trim_vector(b, tiling, 2));
-
-      /* Calculate the texel index from the start of the tile row and the
-       * vertical coordinate of the row.
-       * Equivalent to:
-       *   tmp.x = (major.x << tile.y << tile.x) +
-       *           (minor.y << tile.x) + minor.x
-       *   tmp.y = major.y << tile.y
-       */
-      nir_def *idx_x, *idx_y;
-      idx_x = nir_ishl(b, nir_channel(b, major, 0), nir_channel(b, tiling, 1));
-      idx_x = nir_iadd(b, idx_x, nir_channel(b, minor, 1));
-      idx_x = nir_ishl(b, idx_x, nir_channel(b, tiling, 0));
-      idx_x = nir_iadd(b, idx_x, nir_channel(b, minor, 0));
-      idx_y = nir_ishl(b, nir_channel(b, major, 1), nir_channel(b, tiling, 1));
-
-      /* Add it to the start of the tile row. */
-      nir_def *idx;
-      idx = nir_imul(b, idx_y, nir_channel(b, stride, 1));
-      idx = nir_iadd(b, idx, idx_x);
-
-      /* Multiply by the Bpp value. */
-      addr = nir_imul(b, idx, nir_channel(b, stride, 0));
-   } else {
-      /* Multiply by the Bpp/stride value.  Note that the addr.y may be
-       * non-zero even if the image is one-dimensional because a vertical
-       * offset may have been applied above to select a non-zero slice or
-       * level of a higher-dimensional texture.
-       */
-      nir_def *idx;
-      idx = nir_imul(b, nir_channel(b, xypos, 1), nir_channel(b, stride, 1));
-      idx = nir_iadd(b, nir_channel(b, xypos, 0), idx);
-      addr = nir_imul(b, idx, nir_channel(b, stride, 0));
-   }
-
-   return addr;
-}
-
 struct format_info {
    const struct isl_format_layout *fmtl;
    unsigned chans;
@@ -343,87 +157,44 @@ lower_image_load_instr(nir_builder *b,
    const enum isl_format image_fmt =
       isl_format_for_pipe_format(var->data.image.format);
 
-   if (isl_has_matching_typed_storage_image_format(devinfo, image_fmt)) {
-      const enum isl_format lower_fmt =
-         isl_lower_storage_image_format(devinfo, image_fmt);
-      const unsigned dest_components =
-         sparse ? (intrin->num_components - 1) : intrin->num_components;
+   assert(isl_has_matching_typed_storage_image_format(devinfo, image_fmt));
+   const enum isl_format lower_fmt =
+      isl_lower_storage_image_format(devinfo, image_fmt);
+   const unsigned dest_components =
+      sparse ? (intrin->num_components - 1) : intrin->num_components;
 
-      /* Use an undef to hold the uses of the load while we do the color
-       * conversion.
-       */
-      nir_def *placeholder = nir_undef(b, 4, 32);
-      nir_def_rewrite_uses(&intrin->def, placeholder);
+   /* Use an undef to hold the uses of the load while we do the color
+    * conversion.
+    */
+   nir_def *placeholder = nir_undef(b, 4, 32);
+   nir_def_rewrite_uses(&intrin->def, placeholder);
 
-      intrin->num_components = isl_format_get_num_channels(lower_fmt);
+   intrin->num_components = isl_format_get_num_channels(lower_fmt);
+   intrin->def.num_components = intrin->num_components;
+
+   b->cursor = nir_after_instr(&intrin->instr);
+
+   nir_def *color = convert_color_for_load(b, devinfo, &intrin->def, image_fmt, lower_fmt,
+                                           dest_components);
+
+   if (sparse) {
+      /* Put the sparse component back on the original instruction */
+      intrin->num_components++;
       intrin->def.num_components = intrin->num_components;
 
-      b->cursor = nir_after_instr(&intrin->instr);
-
-      nir_def *color = convert_color_for_load(b, devinfo,
-                                                  &intrin->def,
-                                                  image_fmt, lower_fmt,
-                                                  dest_components);
-
-      if (sparse) {
-         /* Put the sparse component back on the original instruction */
-         intrin->num_components++;
-         intrin->def.num_components = intrin->num_components;
-
-         /* Carry over the sparse component without modifying it with the
-          * converted color.
-          */
-         nir_def *sparse_color[NIR_MAX_VEC_COMPONENTS];
-         for (unsigned i = 0; i < dest_components; i++)
-            sparse_color[i] = nir_channel(b, color, i);
-         sparse_color[dest_components] =
-            nir_channel(b, &intrin->def, intrin->num_components - 1);
-         color = nir_vec(b, sparse_color, dest_components + 1);
-      }
-
-      nir_def_rewrite_uses(placeholder, color);
-      nir_instr_remove(placeholder->parent_instr);
-   } else {
-      /* This code part is only useful prior to Gfx9, we do not have plans to
-       * enable sparse there.
+      /* Carry over the sparse component without modifying it with the
+       * converted color.
        */
-      assert(!sparse);
-
-      const struct isl_format_layout *image_fmtl =
-         isl_format_get_layout(image_fmt);
-      /* We have a matching typed format for everything 32b and below */
-      assert(image_fmtl->bpb == 64 || image_fmtl->bpb == 128);
-      enum isl_format raw_fmt = (image_fmtl->bpb == 64) ?
-                                ISL_FORMAT_R32G32_UINT :
-                                ISL_FORMAT_R32G32B32A32_UINT;
-      const unsigned dest_components = intrin->num_components;
-
-      b->cursor = nir_instr_remove(&intrin->instr);
-
-      nir_def *coord = intrin->src[1].ssa;
-
-      nir_def *do_load = image_coord_is_in_bounds(b, deref, coord);
-      nir_push_if(b, do_load);
-
-      nir_def *addr = image_address(b, devinfo, deref, coord);
-      nir_def *load =
-         nir_image_deref_load_raw_intel(b, image_fmtl->bpb / 32, 32,
-                                        &deref->def, addr);
-
-      nir_push_else(b, NULL);
-
-      nir_def *zero = nir_imm_zero(b, load->num_components, 32);
-
-      nir_pop_if(b, NULL);
-
-      nir_def *value = nir_if_phi(b, load, zero);
-
-      nir_def *color = convert_color_for_load(b, devinfo, value,
-                                                  image_fmt, raw_fmt,
-                                                  dest_components);
-
-      nir_def_rewrite_uses(&intrin->def, color);
+      nir_def *sparse_color[NIR_MAX_VEC_COMPONENTS];
+      for (unsigned i = 0; i < dest_components; i++)
+         sparse_color[i] = nir_channel(b, color, i);
+      sparse_color[dest_components] =
+         nir_channel(b, &intrin->def, intrin->num_components - 1);
+      color = nir_vec(b, sparse_color, dest_components + 1);
    }
+
+   nir_def_rewrite_uses(placeholder, color);
+   nir_instr_remove(placeholder->parent_instr);
 
    return true;
 }
@@ -515,50 +286,18 @@ lower_image_store_instr(nir_builder *b,
    const enum isl_format image_fmt =
       isl_format_for_pipe_format(var->data.image.format);
 
-   if (isl_has_matching_typed_storage_image_format(devinfo, image_fmt)) {
-      const enum isl_format lower_fmt =
-         isl_lower_storage_image_format(devinfo, image_fmt);
+   assert(isl_has_matching_typed_storage_image_format(devinfo, image_fmt));
+   const enum isl_format lower_fmt =
+      isl_lower_storage_image_format(devinfo, image_fmt);
 
-      /* Color conversion goes before the store */
-      b->cursor = nir_before_instr(&intrin->instr);
+   /* Color conversion goes before the store */
+   b->cursor = nir_before_instr(&intrin->instr);
 
-      nir_def *color = convert_color_for_store(b, devinfo,
-                                                   intrin->src[3].ssa,
-                                                   image_fmt, lower_fmt);
-      intrin->num_components = isl_format_get_num_channels(lower_fmt);
-      nir_src_rewrite(&intrin->src[3], color);
-   } else {
-      const struct isl_format_layout *image_fmtl =
-         isl_format_get_layout(image_fmt);
-      /* We have a matching typed format for everything 32b and below */
-      assert(image_fmtl->bpb == 64 || image_fmtl->bpb == 128);
-      enum isl_format raw_fmt = (image_fmtl->bpb == 64) ?
-                                ISL_FORMAT_R32G32_UINT :
-                                ISL_FORMAT_R32G32B32A32_UINT;
-
-      b->cursor = nir_instr_remove(&intrin->instr);
-
-      nir_def *coord = intrin->src[1].ssa;
-
-      nir_def *do_store = image_coord_is_in_bounds(b, deref, coord);
-      nir_push_if(b, do_store);
-
-      nir_def *addr = image_address(b, devinfo, deref, coord);
-      nir_def *color = convert_color_for_store(b, devinfo,
-                                                   intrin->src[3].ssa,
-                                                   image_fmt, raw_fmt);
-
-      nir_intrinsic_instr *store =
-         nir_intrinsic_instr_create(b->shader,
-                                    nir_intrinsic_image_deref_store_raw_intel);
-      store->src[0] = nir_src_for_ssa(&deref->def);
-      store->src[1] = nir_src_for_ssa(addr);
-      store->src[2] = nir_src_for_ssa(color);
-      store->num_components = image_fmtl->bpb / 32;
-      nir_builder_instr_insert(b, &store->instr);
-
-      nir_pop_if(b, NULL);
-   }
+   nir_def *color = convert_color_for_store(b, devinfo,
+                                                intrin->src[3].ssa,
+                                                image_fmt, lower_fmt);
+   intrin->num_components = isl_format_get_num_channels(lower_fmt);
+   nir_src_rewrite(&intrin->src[3], color);
 
    return true;
 }

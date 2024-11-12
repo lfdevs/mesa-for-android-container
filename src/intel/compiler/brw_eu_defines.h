@@ -323,62 +323,8 @@ enum opcode {
     */
    FS_OPCODE_PACK,
 
-   /**
-    * Typed and untyped surface access opcodes.
-    *
-    * LOGICAL opcodes are eventually translated to the matching non-LOGICAL
-    * opcode but instead of taking a single payload blob they expect their
-    * arguments separately as individual sources:
-    *
-    * Source 0: [required] Surface coordinates.
-    * Source 1: [optional] Operation source.
-    * Source 2: [required] Surface index.
-    * Source 3: [required] Number of coordinate components (as UD immediate).
-    * Source 4: [required] Opcode-specific control immediate, same as source 2
-    *                      of the matching non-LOGICAL opcode.
-    */
-   SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL,
-   SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL,
-   SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL,
-
-   SHADER_OPCODE_UNALIGNED_OWORD_BLOCK_READ_LOGICAL,
-   SHADER_OPCODE_OWORD_BLOCK_WRITE_LOGICAL,
-
-   /**
-    * Untyped A64 surface access opcodes.
-    *
-    * Source 0: 64-bit address
-    * Source 1: Operational source
-    * Source 2: [required] Opcode-specific control immediate, same as source 2
-    *                      of the matching non-LOGICAL opcode.
-    */
-   SHADER_OPCODE_A64_UNTYPED_READ_LOGICAL,
-   SHADER_OPCODE_A64_UNTYPED_WRITE_LOGICAL,
-   SHADER_OPCODE_A64_BYTE_SCATTERED_READ_LOGICAL,
-   SHADER_OPCODE_A64_BYTE_SCATTERED_WRITE_LOGICAL,
-   SHADER_OPCODE_A64_OWORD_BLOCK_READ_LOGICAL,
-   SHADER_OPCODE_A64_UNALIGNED_OWORD_BLOCK_READ_LOGICAL,
-   SHADER_OPCODE_A64_OWORD_BLOCK_WRITE_LOGICAL,
-   SHADER_OPCODE_A64_UNTYPED_ATOMIC_LOGICAL,
-
-   SHADER_OPCODE_TYPED_ATOMIC_LOGICAL,
-   SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL,
-   SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL,
-
    SHADER_OPCODE_RND_MODE,
    SHADER_OPCODE_FLOAT_CONTROL_MODE,
-
-   /**
-    * Byte scattered write/read opcodes.
-    *
-    * LOGICAL opcodes are eventually translated to the matching non-LOGICAL
-    * opcode, but instead of taking a single payload blog they expect their
-    * arguments separately as individual sources, like untyped write/read.
-    */
-   SHADER_OPCODE_BYTE_SCATTERED_READ_LOGICAL,
-   SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL,
-   SHADER_OPCODE_DWORD_SCATTERED_READ_LOGICAL,
-   SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL,
 
    /**
     * Memory fence messages.
@@ -456,6 +402,40 @@ enum opcode {
     * channel.
     */
    SHADER_OPCODE_SHUFFLE,
+
+   /* Combine all values in each subset (cluster) of channels using an operation,
+    * and broadcast the result to all channels in the subset.
+    *
+    * Source 0: Value.
+    * Source 1: Immediate with brw_reduce_op.
+    * Source 2: Immediate with cluster size.
+    */
+   SHADER_OPCODE_REDUCE,
+
+   /* Combine values of previous channels using an operation.  Inclusive scan
+    * will include the value of the channel itself in the channel result.
+    *
+    * Source 0: Value.
+    * Source 1: Immediate with brw_reduce_op.
+    */
+   SHADER_OPCODE_INCLUSIVE_SCAN,
+   SHADER_OPCODE_EXCLUSIVE_SCAN,
+
+   /* Check if any or all values in each subset (cluster) of channels are set,
+    * and broadcast the result to all channels in the subset.
+    *
+    * Source 0: Boolean value.
+    * Source 1: Immediate with cluster size.
+    */
+   SHADER_OPCODE_VOTE_ANY,
+   SHADER_OPCODE_VOTE_ALL,
+
+   /* Check if the values of all channels are equal, and broadcast the result
+    * to all channels.
+    *
+    * Source 0: Value.
+    */
+   SHADER_OPCODE_VOTE_EQUAL,
 
    /* Select between src0 and src1 based on channel enables.
     *
@@ -539,6 +519,10 @@ enum opcode {
    SHADER_OPCODE_LOAD_SUBGROUP_INVOCATION,
 
    RT_OPCODE_TRACE_RAY_LOGICAL,
+
+   SHADER_OPCODE_MEMORY_LOAD_LOGICAL,
+   SHADER_OPCODE_MEMORY_STORE_LOGICAL,
+   SHADER_OPCODE_MEMORY_ATOMIC_LOGICAL,
 };
 
 enum fb_write_logical_srcs {
@@ -626,41 +610,65 @@ enum get_buffer_size_srcs {
    GET_BUFFER_SIZE_SRCS
 };
 
-enum surface_logical_srcs {
-   /** Surface binding table index */
-   SURFACE_LOGICAL_SRC_SURFACE,
-   /** Surface bindless handle */
-   SURFACE_LOGICAL_SRC_SURFACE_HANDLE,
-   /** Surface address; could be multi-dimensional for typed opcodes */
-   SURFACE_LOGICAL_SRC_ADDRESS,
-   /** Data to be written or used in an atomic op */
-   SURFACE_LOGICAL_SRC_DATA,
-   /** Surface number of dimensions.  Affects the size of ADDRESS */
-   SURFACE_LOGICAL_SRC_IMM_DIMS,
-   /** Per-opcode immediate argument.  For atomics, this is the atomic opcode */
-   SURFACE_LOGICAL_SRC_IMM_ARG,
-   /**
-    * Some instructions with side-effects should not be predicated on
-    * sample mask, e.g. lowered stores to scratch.
-    */
-   SURFACE_LOGICAL_SRC_ALLOW_SAMPLE_MASK,
-
-   SURFACE_LOGICAL_NUM_SRCS
+enum memory_logical_mode {
+   MEMORY_MODE_TYPED,
+   MEMORY_MODE_UNTYPED,
+   MEMORY_MODE_SHARED_LOCAL,
+   MEMORY_MODE_SCRATCH,
 };
 
-enum a64_logical_srcs {
-   /** Address the A64 message operates on */
-   A64_LOGICAL_ADDRESS,
-   /** Source for the operation (unused of LOAD ops) */
-   A64_LOGICAL_SRC,
-   /** Per-opcode immediate argument. Number of dwords, bit size, or atomic op. */
-   A64_LOGICAL_ARG,
-   /**
-    * Some instructions do want to run on helper lanes (like ray queries).
-    */
-   A64_LOGICAL_ENABLE_HELPERS,
+enum memory_logical_srcs {
+   /** enum lsc_opcode (as UD immediate) */
+   MEMORY_LOGICAL_OPCODE,
 
-   A64_LOGICAL_NUM_SRCS
+   /** enum memory_logical_mode (as UD immediate) */
+   MEMORY_LOGICAL_MODE,
+
+   /** enum lsc_addr_surface_type (as UD immediate) */
+   MEMORY_LOGICAL_BINDING_TYPE,
+
+   /**
+    * Where to find the surface state.  Depends on BINDING_TYPE above:
+    *
+    * - SS: pointer to surface state (relative to surface base address)
+    * - BSS: pointer to surface state (relative to bindless surface base)
+    * - BTI: binding table index
+    * - FLAT: This should should be BAD_FILE
+    */
+   MEMORY_LOGICAL_BINDING,
+
+   /** Coordinate/address/offset for where to access memory */
+   MEMORY_LOGICAL_ADDRESS,
+
+   /** Dimensionality of the "address" source (as UD immediate) */
+   MEMORY_LOGICAL_COORD_COMPONENTS,
+
+   /** Required alignment of address in bytes; 0 for natural alignment */
+   MEMORY_LOGICAL_ALIGNMENT,
+
+   /** Bit-size in the form of enum lsc_data_size (as UD immediate) */
+   MEMORY_LOGICAL_DATA_SIZE,
+
+   /** Number of vector components (as UD immediate) */
+   MEMORY_LOGICAL_COMPONENTS,
+
+   /** memory_flags bitfield (as UD immediate) */
+   MEMORY_LOGICAL_FLAGS,
+
+   /** Data to write for stores or the first operand for atomics */
+   MEMORY_LOGICAL_DATA0,
+
+   /** Second operand for two-source atomics */
+   MEMORY_LOGICAL_DATA1,
+
+   MEMORY_LOGICAL_NUM_SRCS
+};
+
+enum memory_flags {
+   /** Whether this is a transposed (i.e. block) memory access */
+   MEMORY_FLAG_TRANSPOSE = 1 << 0,
+   /** Whether this operation should fire for helper invocations */
+   MEMORY_FLAG_INCLUDE_HELPERS = 1 << 1,
 };
 
 enum rt_logical_srcs {
@@ -698,6 +706,16 @@ enum interpolator_logical_srcs {
    INTERP_NUM_SRCS
 };
 
+enum brw_reduce_op {
+   BRW_REDUCE_OP_ADD,
+   BRW_REDUCE_OP_MUL,
+   BRW_REDUCE_OP_MIN,
+   BRW_REDUCE_OP_MAX,
+   BRW_REDUCE_OP_AND,
+   BRW_REDUCE_OP_OR,
+   BRW_REDUCE_OP_XOR,
+};
+
 enum ENUM_PACKED brw_predicate {
    BRW_PREDICATE_NONE                =  0,
    BRW_PREDICATE_NORMAL              =  1,
@@ -724,25 +742,15 @@ enum ENUM_PACKED brw_predicate {
 };
 
 enum ENUM_PACKED brw_reg_file {
-   BRW_ARCHITECTURE_REGISTER_FILE = 0,
-   BRW_GENERAL_REGISTER_FILE      = 1,
-   BRW_IMMEDIATE_VALUE            = 3,
+   BAD_FILE = 0,
 
-   ARF = BRW_ARCHITECTURE_REGISTER_FILE,
-   FIXED_GRF = BRW_GENERAL_REGISTER_FILE,
-   IMM = BRW_IMMEDIATE_VALUE,
+   ARF,
+   FIXED_GRF,
+   IMM,
 
-   /* These are not hardware values */
    VGRF,
    ATTR,
    UNIFORM, /* prog_data->params[reg] */
-   BAD_FILE,
-};
-
-enum ENUM_PACKED gfx10_align1_3src_reg_file {
-   BRW_ALIGN1_3SRC_GENERAL_REGISTER_FILE = 0,
-   BRW_ALIGN1_3SRC_IMMEDIATE_VALUE       = 1, /* src0, src2 */
-   BRW_ALIGN1_3SRC_ACCUMULATOR           = 1, /* dest, src1 */
 };
 
 /* CNL adds Align1 support for 3-src instructions. Bit 35 of the instruction
@@ -760,8 +768,6 @@ enum ENUM_PACKED gfx10_align1_3src_exec_type {
 #define BRW_ARF_ACCUMULATOR           0x20
 #define BRW_ARF_FLAG                  0x30
 #define BRW_ARF_MASK                  0x40
-#define BRW_ARF_MASK_STACK            0x50
-#define BRW_ARF_MASK_STACK_DEPTH      0x60
 #define BRW_ARF_STATE                 0x70
 #define BRW_ARF_CONTROL               0x80
 #define BRW_ARF_NOTIFICATION_COUNT    0x90
@@ -1361,11 +1367,6 @@ enum brw_message_target {
 #define GFX8_BTI_STATELESS_IA_COHERENT   255
 #define GFX8_BTI_STATELESS_NON_COHERENT  253
 #define GFX9_BTI_BINDLESS                252
-
-/* This ID doesn't map anything HW related value. It exists to inform the
- * lowering code to not use the bindless heap.
- */
-#define GFX125_NON_BINDLESS              (1u << 16)
 
 /* Dataport atomic operations for Untyped Atomic Integer Operation message
  * (and others).

@@ -1,8 +1,8 @@
 --- a/src/glx/dri_common.h
 +++ b/src/glx/dri_common.h
-@@ -57,6 +57,10 @@ extern struct glx_config *driConvertConf
+@@ -56,6 +56,10 @@ extern struct glx_config *driConvertConf
  
- extern void driDestroyConfigs(const __DRIconfig **configs);
+ extern void driDestroyConfigs(const struct dri_config **configs);
  
 +#ifndef __GLXDRIdrawable
 +typedef struct __GLXDRIdrawableRec __GLXDRIdrawable;

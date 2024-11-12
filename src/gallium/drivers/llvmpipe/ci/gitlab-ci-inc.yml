@@ -2,7 +2,7 @@
   stage: software-renderer
   rules:
     - !reference [.test, rules]
-    - if: $FORCE_KERNEL_TAG != null
+    - if: $EXTERNAL_KERNEL_TAG != null
       when: never
     - !reference [.gl-rules, rules]
     - changes: &llvmpipe_file_list
@@ -14,13 +14,15 @@
         - src/gallium/drivers/llvmpipe/ci/$GPU_VERSION-flakes.txt
         - src/gallium/drivers/llvmpipe/ci/$GPU_VERSION-skips.txt
         - src/gallium/drivers/llvmpipe/ci/$PIGLIT_TRACES_FILE
+        - src/gallium/drivers/llvmpipe/ci/$GALLIUM_DRIVER-skips.txt
+        - src/gallium/drivers/llvmpipe/ci/$DRIVER_NAME-skips.txt
         - src/gallium/winsys/sw/**/*
         - src/gallium/auxiliary/draw/**/*
         - src/gallium/auxiliary/gallivm/**/*
       when: on_success
 
 .llvmpipe-manual-rules:
-  stage: software-renderer
+  stage: software-renderer-postmerge
   extends: .no-auto-retry
   rules:
     - !reference [.test, rules]

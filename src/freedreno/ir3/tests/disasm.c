@@ -1,25 +1,7 @@
 /*
  * Copyright © 2016 Broadcom
  * Copyright © 2020 Google LLC
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 /* Unit test for disassembly of instructions.
@@ -117,7 +99,6 @@ static const struct test {
    INSTR_6XX(47308a02_00002000, "(rpt2)bary.f (ei)r0.z, (r)0, r0.x"),
    INSTR_6XX(47348000_00002000, "flat.b (ei)r0.x, 0, r0.x"),
    INSTR_6XX(43480801_00008001, "(nop3) absneg.s hr0.y, (abs)hr0.y"),
-   INSTR_6XX(50600004_2c010004, "(sy)mul.f hr1.x, hr1.x, h(0.5)"),
    INSTR_6XX(42280807_27ff0000, "(nop3) add.s hr1.w, hr0.x, h(-1)"),
    INSTR_6XX(40a500f8_2c000004, "cmps.f.ne p0.x, hr1.x, h(0.0)"),
    INSTR_6XX(438000f8_20010009, "and.b p0.x, hr2.y, h(1)"),
@@ -184,6 +165,8 @@ static const struct test {
    INSTR_6XX(a048d107_cc080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, t#6"),
    INSTR_6XX(a048d107_e0080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, a1.x"),
    INSTR_6XX(a1481606_e4803035, "saml.base0 (f32)(yz)r1.z, r6.z, r6.x, s#36, a1.x"),
+   INSTR_6XX(a0c89707_20a00005, "sam.s2en.uniform.base1 (f32)(xyz)r1.w, r0.z, r1.y, a1.x"),
+   INSTR_6XX(a1489f34_25e06e07, "saml.s2en.uniform.base1 (f32)(xyzw)r13.x, r0.w, r13.w, r11.w, a1.x"),
 
    INSTR_7XX(a0081f02_e2040001, "isam.base0 (f32)(xyzw)r0.z, r0.x, t#16, a1.x"),
    INSTR_7XX(a0081f02_e2000001, "isam.base0.1d (f32)(xyzw)r0.z, r0.x, t#16, a1.x"),
@@ -192,6 +175,7 @@ static const struct test {
    INSTR_7XX(a00c3101_c2040001, "isam.v.base0 (u32)(x)r0.y, r0.x, s#0, t#1"),
    INSTR_7XX(a00c3101_c2000001, "isam.v.base0.1d (u32)(x)r0.y, r0.x, s#0, t#1"),
    INSTR_7XX(a02c3f06_c2041003, "isam.v.base0 (u32)(xyzw)r1.z, r0.y+8, s#0, t#1"),
+   INSTR_7XX(a02c3f05_a1240601, "isam.v.s2en.uniform.base0 (u32)(xyzw)r1.y, r0.x+3, r2.y"),
 
    /* dEQP-VK.subgroups.arithmetic.compute.subgroupadd_float */
    INSTR_6XX(a7c03102_00100003, "brcst.active.w8 (u32)(x)r0.z, r0.y"), /* brcst.active.w8 (u32)(xOOO)r0.z, r0.y */
@@ -365,6 +349,24 @@ static const struct test {
    INSTR_6XX(40100007_68090008, "add.f r1.w, r2.x, (neg)(1/log2(10))"),
    INSTR_6XX(40100007_680a0008, "add.f r1.w, r2.x, (neg)(log2(10))"),
    INSTR_6XX(40100007_680b0008, "add.f r1.w, r2.x, (neg)(4.0)"),
+   INSTR_6XX(50600004_2c000004, "(sy)mul.f hr1.x, hr1.x, h(0.0)"),
+   INSTR_6XX(50600004_2c010004, "(sy)mul.f hr1.x, hr1.x, h(0.5)"),
+   INSTR_6XX(50600004_2c020004, "(sy)mul.f hr1.x, hr1.x, h(1.0)"),
+   INSTR_6XX(50600004_2c030004, "(sy)mul.f hr1.x, hr1.x, h(2.0)"),
+   INSTR_6XX(50600004_2c040004, "(sy)mul.f hr1.x, hr1.x, h(e)"),
+   INSTR_6XX(50600004_2c050004, "(sy)mul.f hr1.x, hr1.x, h(pi)"),
+   INSTR_6XX(50600004_2c060004, "(sy)mul.f hr1.x, hr1.x, h(1/pi)"),
+   INSTR_6XX(50600004_2c070004, "(sy)mul.f hr1.x, hr1.x, h(1/log2(e))"),
+   INSTR_6XX(50600004_2c080004, "(sy)mul.f hr1.x, hr1.x, h(log2(e))"),
+   INSTR_6XX(50600004_2c090004, "(sy)mul.f hr1.x, hr1.x, h(1/log2(10))"),
+   INSTR_6XX(50600004_2c0a0004, "(sy)mul.f hr1.x, hr1.x, h(log2(10))"),
+   INSTR_6XX(50600004_2c0b0004, "(sy)mul.f hr1.x, hr1.x, h(4.0)"),
+   INSTR_6XX(20444000_00000000, "mov.f32f32 r0.x, (0.000000)"),
+   INSTR_6XX(20444000_3f000000, "mov.f32f32 r0.x, (0.500000)"),
+   INSTR_6XX(20444000_3f800000, "mov.f32f32 r0.x, (1.000000)"),
+   INSTR_6XX(20444000_40000000, "mov.f32f32 r0.x, (2.000000)"),
+   INSTR_6XX(20444000_40400000, "mov.f32f32 r0.x, (3.000000)"),
+   INSTR_6XX(20444000_40800000, "mov.f32f32 r0.x, (4.000000)"),
 
    /* LDC.  Our disasm differs greatly from qcom here, and we've got some
     * important info they lack(?!), but same goes the other way.
@@ -455,6 +457,23 @@ static const struct test {
    /* dEQP-VK.subgroups.quad.graphics.subgroupquadbroadcast_int */
    INSTR_6XX(c0260001_00c98000, "getfiberid.u32 r0.y"),
 
+   /* dEQP-VK.subgroups.shuffle.compute.subgroupshuffleup_bvec4_constant */
+   INSTR_6XX(c6e4400d_05800002, "shfl.up.u16 hr3.y, hr0.y, 5"),
+   /* dEQP-VK.subgroups.shuffle.compute.subgroupshuffleup_f16vec3 */
+   INSTR_6XX(c6e44017_c0000018, "shfl.up.u16 hr5.w, hr3.x, r48.x"),
+   /* dEQP-VK.subgroups.shuffle.compute.subgroupshuffleup_uvec3_constant */
+   INSTR_6XX(c6e64006_05800000, "shfl.up.u32 r1.z, r0.x, 5"),
+   /* dEQP-VK.subgroups.shuffle.compute.subgroupshuffleup_ivec3_dynamically_uniform */
+   INSTR_6XX(c6e64007_05000004, "shfl.up.u32 r1.w, r0.z, r1.y"),
+   /* dEQP-VK.subgroups.shuffle.graphics.subgroupshuffledown_i8vec3 */
+   INSTR_6XX(c6e46011_c1000014, "shfl.down.u16 hr4.y, hr2.z, r48.y"),
+   /* dEQP-VK.memory_model.write_after_read.ext.u32.coherent.fence_atomic.atomicwrite.subgroup.payload_local.image.guard_local.image.frag */
+   INSTR_6XX(c6e62005_3f800008, "shfl.xor.u32 r1.y, r1.x, 63"),
+   /* dEQP-VK.subgroups.shuffle.graphics.subgroupshuffle_bvec4 */
+   INSTR_6XX(c6e4c012_c0000020, "shfl.rup.u16 hr4.z, hr4.x, r48.x"),
+   /* dEQP-VK.glsl.atomic_operations.exchange_unsigned64bit_compute */
+   INSTR_7XX(c03c0009_05648142, "atomic.b.xchg.untyped.1d.u64.1.uniform.base1 r2.y, r1.y, r0.x"),
+
    /* Custom test since we've never seen the blob emit these. */
    INSTR_6XX(c0260004_00490000, "getspid.u32 r1.x"),
    INSTR_6XX(c0260005_00494000, "getwid.u32 r1.y"),
@@ -542,15 +561,16 @@ main(int argc, char **argv)
          code[1] = test->instr_raw >> 32;
       }
 
-      printf("Testing a%d %08x_%08x: \"%s\"...\n", test->gpu_id, code[1], code[0],
-             test->expected);
-
       struct fd_dev_id dev_id = {
          .gpu_id = test->gpu_id,
          .chip_id = test->chip_id,
       };
 
       const struct fd_dev_info *dev_info = fd_dev_info_raw(&dev_id);
+      const char *name = fd_dev_name(&dev_id);
+
+      printf("Testing %s %08x_%08x: \"%s\"...\n", name, code[1], code[0],
+             test->expected);
 
       rewind(fdisasm);
       memset(disasm_output, 0, output_size);

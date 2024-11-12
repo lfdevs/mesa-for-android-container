@@ -102,6 +102,8 @@ nir_format_pack_uint_unmasked(nir_builder *b, nir_def *color,
    assert(num_components >= 1 && num_components <= 4);
    nir_def *packed = nir_imm_int(b, 0);
    unsigned offset = 0;
+
+   color = nir_u2u32(b, color);
    for (unsigned i = 0; i < num_components; i++) {
       if (bits[i] == 0)
          continue;
@@ -120,6 +122,8 @@ nir_format_pack_uint_unmasked_ssa(nir_builder *b, nir_def *color,
 {
    nir_def *packed = nir_imm_int(b, 0);
    nir_def *offset = nir_imm_int(b, 0);
+
+   color = nir_u2u32(b, color);
    for (unsigned i = 0; i < bits->num_components; i++) {
       packed = nir_ior(b, packed, nir_ishl(b, nir_channel(b, color, i), offset));
       offset = nir_iadd(b, offset, nir_channel(b, bits, i));

@@ -136,9 +136,11 @@ void mme_fermi_decode(struct mme_fermi_inst *insts,
    for (uint32_t i = 0; i < inst_count; i++) {
       const uint32_t *b = &in[i];
 
-      insts[i].op       = unpack_uint(b, 0, 3);
-      insts[i].end_next = unpack_uint(b, 7, 7);
-      insts[i].dst      = unpack_uint(b, 8, 10);
+      insts[i] = (struct mme_fermi_inst) {
+         .op       = unpack_uint(b, 0, 3),
+         .end_next = unpack_uint(b, 7, 7),
+         .dst      = unpack_uint(b, 8, 10),
+      };
 
       if (insts[i].op != MME_FERMI_OP_BRANCH) {
          insts[i].assign_op = unpack_uint(b, 4, 6);
@@ -222,9 +224,9 @@ mme_fermi_print_inst(FILE *fp, unsigned indent,
          fprintf(fp, "%s", mme_fermi_op_to_str(inst->op));
          print_reg(fp, inst->src[0]);
          print_reg(fp, inst->src[1]);
-         fprintf(fp, " (%u, %u, %u)", inst->bitfield.src_bit,
+         fprintf(fp, " (%u, %u, %u)", inst->bitfield.dst_bit,
                                       inst->bitfield.size,
-                                      inst->bitfield.dst_bit);
+                                      inst->bitfield.src_bit);
          break;
       case MME_FERMI_OP_BFE_LSL_IMM:
          fprintf(fp, "%s", mme_fermi_op_to_str(inst->op));

@@ -44,10 +44,8 @@ EXTENSIONS = [
         nonstandard=True),
     Extension("VK_KHR_surface"),
     Extension("VK_EXT_headless_surface"),
-    Extension("VK_KHR_wayland_surface",
-              conditions=["!display_dev"]),
-    Extension("VK_KHR_xcb_surface",
-              conditions=["!display_dev"]),
+    Extension("VK_KHR_wayland_surface"),
+    Extension("VK_KHR_xcb_surface"),
     Extension("VK_KHR_win32_surface"),
 ]
 
@@ -100,7 +98,7 @@ struct zink_instance_info {
 };
 
 bool
-zink_create_instance(struct zink_screen *screen, bool display_dev);
+zink_create_instance(struct zink_screen *screen);
 
 void
 zink_verify_instance_extensions(struct zink_screen *screen);
@@ -131,7 +129,7 @@ impl_code = """
 #include "zink_screen.h"
 
 bool
-zink_create_instance(struct zink_screen *screen, bool display_dev)
+zink_create_instance(struct zink_screen *screen)
 {
    struct zink_instance_info *instance_info = &screen->instance_info;
 

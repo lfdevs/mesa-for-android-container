@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2015 Rob Clark <robclark@freedesktop.org>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright © 2015 Rob Clark <robclark@freedesktop.org>
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Rob Clark <robclark@freedesktop.org>
@@ -51,6 +33,7 @@ static const struct debug_named_value shader_debug_options[] = {
    {"fullnop",    IR3_DBG_FULLNOP,    "Add nops before each instruction"},
    {"noearlypreamble", IR3_DBG_NOEARLYPREAMBLE, "Disable early preambles"},
    {"nodescprefetch", IR3_DBG_NODESCPREFETCH, "Disable descriptor prefetch optimization"},
+   {"expandrpt",  IR3_DBG_EXPANDRPT,  "Expand rptN instructions"},
 #if MESA_DEBUG
    /* MESA_DEBUG-only options: */
    {"schedmsgs",  IR3_DBG_SCHEDMSGS,  "Enable scheduler debug messages"},
@@ -125,10 +108,15 @@ static const nir_shader_compiler_options ir3_base_options = {
    .lower_cs_local_index_to_id = true,
    .lower_wpos_pntc = true,
 
+   .lower_hadd = true,
+   .lower_hadd64 = true,
+   .lower_fisnormal = true,
+
    .lower_int64_options = (nir_lower_int64_options)~0,
    .lower_doubles_options = (nir_lower_doubles_options)~0,
 
    .divergence_analysis_options = nir_divergence_uniform_load_tears,
+   .scalarize_ddx = true,
 };
 
 struct ir3_compiler *
@@ -164,6 +152,7 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    compiler->num_predicates = 1;
    compiler->bitops_can_write_predicates = false;
    compiler->has_branch_and_or = false;
+   compiler->has_rpt_bary_f = false;
 
    if (compiler->gen >= 6) {
       compiler->samgq_workaround = true;
@@ -208,6 +197,7 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
 
       compiler->has_dp2acc = dev_info->a6xx.has_dp2acc;
       compiler->has_dp4acc = dev_info->a6xx.has_dp4acc;
+      compiler->has_compliant_dp4acc = dev_info->a7xx.has_compliant_dp4acc;
 
       if (compiler->gen == 6 && options->shared_push_consts) {
          compiler->shared_consts_base_offset = 504;
@@ -232,6 +222,8 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
       compiler->has_ssbo_imm_offsets = dev_info->a6xx.has_ssbo_imm_offsets;
       compiler->fs_must_have_non_zero_constlen_quirk = dev_info->a7xx.fs_must_have_non_zero_constlen_quirk;
       compiler->has_early_preamble = dev_info->a6xx.has_early_preamble;
+      compiler->has_rpt_bary_f = true;
+      compiler->has_shfl = true;
    } else {
       compiler->max_const_pipeline = 512;
       compiler->max_const_geom = 512;
@@ -303,14 +295,19 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    if (compiler->gen >= 6) {
       compiler->nir_options.vectorize_io = true,
       compiler->nir_options.force_indirect_unrolling = nir_var_all,
+      compiler->nir_options.lower_device_index_to_zero = true;
 
-      compiler->nir_options.lower_device_index_to_zero = true,
-      compiler->nir_options.has_udot_4x8 = true,
-      compiler->nir_options.has_sudot_4x8 = true,
-      compiler->nir_options.has_udot_4x8 = dev_info->a6xx.has_dp2acc;
-      compiler->nir_options.has_sudot_4x8 = dev_info->a6xx.has_dp2acc;
-      compiler->nir_options.has_udot_4x8_sat = dev_info->a6xx.has_dp2acc;
-      compiler->nir_options.has_sudot_4x8_sat = dev_info->a6xx.has_dp2acc;
+      if (dev_info->a6xx.has_dp2acc || dev_info->a6xx.has_dp4acc) {
+         compiler->nir_options.has_udot_4x8 =
+            compiler->nir_options.has_udot_4x8_sat = true;
+         compiler->nir_options.has_sudot_4x8 =
+            compiler->nir_options.has_sudot_4x8_sat = true;
+      }
+
+      if (dev_info->a6xx.has_dp4acc && dev_info->a7xx.has_compliant_dp4acc) {
+         compiler->nir_options.has_sdot_4x8 =
+            compiler->nir_options.has_sdot_4x8_sat = true;
+      }
    } else if (compiler->gen >= 3 && compiler->gen <= 5) {
       compiler->nir_options.vertex_id_zero_based = true;
    } else if (compiler->gen <= 2) {

@@ -387,8 +387,8 @@ A618_NETWORK_ISSUE_SCENARIOS = {
 )
 def test_detect_failure(messages, expectation):
     boot_section = GitlabSection(
-        id="lava_boot",
-        header="LAVA boot",
+        id="dut_boot",
+        header="Booting hardware device",
         type=LogSectionType.LAVA_BOOT,
         start_collapsed=True,
     )

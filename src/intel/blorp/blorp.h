@@ -123,18 +123,16 @@ enum blorp_batch_flags {
    /* This flag indicates that the blorp call should be predicated. */
    BLORP_BATCH_PREDICATE_ENABLE      = BITFIELD_BIT(1),
 
-   /* This flag indicates that blorp should *not* update the indirect clear
-    * color buffer.
-    */
-   BLORP_BATCH_NO_UPDATE_CLEAR_COLOR = BITFIELD_BIT(2),
-
    /* This flag indicates that blorp should use a compute program for the
     * operation.
     */
-   BLORP_BATCH_USE_COMPUTE           = BITFIELD_BIT(3),
+   BLORP_BATCH_USE_COMPUTE           = BITFIELD_BIT(2),
 
    /** Use the hardware blitter to perform any operations in this batch */
-   BLORP_BATCH_USE_BLITTER           = BITFIELD_BIT(4),
+   BLORP_BATCH_USE_BLITTER           = BITFIELD_BIT(3),
+
+   /** Wa_18038825448 */
+   BLORP_BATCH_FORCE_CPS_DEPENDENCY  = BITFIELD_BIT(4),
 };
 
 struct blorp_batch {
@@ -234,6 +232,9 @@ blorp_blit(struct blorp_batch *batch,
            enum blorp_filter filter,
            bool mirror_x, bool mirror_y);
 
+enum isl_format
+blorp_copy_get_color_format(const struct isl_device *isl_dev,
+                            enum isl_format surf_format);
 void
 blorp_copy_get_formats(const struct isl_device *isl_dev,
                        const struct isl_surf *src_surf,
@@ -311,12 +312,7 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
                           uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1,
                           bool clear_depth, float depth_value,
                           uint8_t stencil_mask, uint8_t stencil_value);
-bool
-blorp_can_hiz_clear_depth(const struct intel_device_info *devinfo,
-                          const struct isl_surf *surf,
-                          enum isl_aux_usage aux_usage,
-                          uint32_t level, uint32_t layer,
-                          uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1);
+
 void
 blorp_hiz_clear_depth_stencil(struct blorp_batch *batch,
                               const struct blorp_surf *depth,

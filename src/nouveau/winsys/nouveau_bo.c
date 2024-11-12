@@ -288,6 +288,12 @@ nouveau_ws_bo_map(struct nouveau_ws_bo *bo,
    return res;
 }
 
+void
+nouveau_ws_bo_unmap(struct nouveau_ws_bo *bo, void *ptr)
+{
+   munmap(ptr, bo->size);
+}
+
 bool
 nouveau_ws_bo_wait(struct nouveau_ws_bo *bo, enum nouveau_ws_bo_map_flags flags)
 {

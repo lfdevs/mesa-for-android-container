@@ -451,12 +451,13 @@ static void pvr_init_tex_info(const struct pvr_device_info *dev_info,
                               uint32_t width,
                               pvr_dev_addr_t addr)
 {
-   const uint8_t *swizzle_arr = pvr_get_format_swizzle(tex_info->format);
+   const VkFormat vk_format = VK_FORMAT_R32_UINT;
+   const uint8_t *swizzle_arr = pvr_get_format_swizzle(vk_format);
    bool is_view_1d = !PVR_HAS_FEATURE(dev_info, tpu_extended_integer_lookup) &&
                      !PVR_HAS_FEATURE(dev_info, tpu_image_state_v2);
 
    *tex_info = (struct pvr_texture_state_info){
-      .format = VK_FORMAT_R32_UINT,
+      .format = vk_format,
       .mem_layout = PVR_MEMLAYOUT_LINEAR,
       .flags = PVR_TEXFLAGS_INDEX_LOOKUP,
       .type = is_view_1d ? VK_IMAGE_VIEW_TYPE_1D : VK_IMAGE_VIEW_TYPE_2D,

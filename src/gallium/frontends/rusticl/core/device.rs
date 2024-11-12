@@ -46,6 +46,7 @@ pub struct Device {
     pub lib_clc: NirShader,
     pub caps: DeviceCaps,
     helper_ctx: Mutex<PipeContext>,
+    reusable_ctx: Mutex<Vec<PipeContext>>,
 }
 
 #[derive(Default)]
@@ -216,6 +217,7 @@ impl Device {
             clc_features: Vec::new(),
             formats: HashMap::new(),
             lib_clc: lib_clc?,
+            reusable_ctx: Mutex::new(Vec::new()),
         };
 
         // check if we are embedded or full profile first
@@ -293,6 +295,14 @@ impl Device {
 
                 fs.insert(t, flags as cl_mem_flags);
             }
+
+            // Restrict supported formats with 1DBuffer images. This is an OpenCL CTS workaround.
+            // See https://github.com/KhronosGroup/OpenCL-CTS/issues/1889
+            let image1d_mask = fs[&CL_MEM_OBJECT_IMAGE1D];
+            if let Some(entry) = fs.get_mut(&CL_MEM_OBJECT_IMAGE1D_BUFFER) {
+                *entry &= image1d_mask;
+            }
+
             self.formats.insert(f.cl_image_format, fs);
         }
 
@@ -976,8 +986,24 @@ impl Device {
         })
     }
 
+    fn reusable_ctx(&self) -> MutexGuard<Vec<PipeContext>> {
+        self.reusable_ctx.lock().unwrap()
+    }
+
     pub fn screen(&self) -> &Arc<PipeScreen> {
         &self.screen
+    }
+
+    pub fn create_context(&self) -> Option<PipeContext> {
+        self.reusable_ctx()
+            .pop()
+            .or_else(|| self.screen.create_context())
+    }
+
+    pub fn recycle_context(&self, ctx: PipeContext) {
+        if Platform::dbg().reuse_context {
+            self.reusable_ctx().push(ctx);
+        }
     }
 
     pub fn subgroup_sizes(&self) -> Vec<usize> {

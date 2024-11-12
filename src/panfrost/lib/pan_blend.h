@@ -65,6 +65,7 @@ struct pan_blend_rt_state {
 };
 
 struct pan_blend_state {
+   bool alpha_to_one;
    bool logicop_enable;
    enum pipe_logicop logicop_func;
    float constants[4];
@@ -80,7 +81,8 @@ struct pan_blend_shader_key {
    uint32_t logicop_enable : 1;
    uint32_t logicop_func   : 4;
    uint32_t nr_samples     : 5;
-   uint32_t padding        : 18;
+   uint32_t alpha_to_one   : 1;
+   uint32_t padding        : 17;
    struct pan_blend_equation equation;
 };
 

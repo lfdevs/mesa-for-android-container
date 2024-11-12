@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-/** @file brw_fs_validate.cpp
+/** @file
  *
  * Implements a pass that validates various invariants of the IR.  The current
  * pass only validates that GRF's uses are sane.  More can be added later.
@@ -29,13 +29,14 @@
 
 #include "brw_fs.h"
 #include "brw_cfg.h"
+#include "brw_eu.h"
 
 #define fsv_assert(assertion)                                           \
    {                                                                    \
       if (!(assertion)) {                                               \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
                  _mesa_shader_stage_to_abbrev(s.stage));                \
-         s.dump_instruction(inst, stderr);                              \
+         brw_print_instruction(s, inst, stderr);                        \
          fprintf(stderr, "%s:%d: '%s' failed\n", __FILE__, __LINE__, #assertion);  \
          abort();                                                       \
       }                                                                 \
@@ -48,7 +49,7 @@
       if (a != b) {                                                     \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
                  _mesa_shader_stage_to_abbrev(s.stage));                \
-         s.dump_instruction(inst, stderr);                              \
+         brw_print_instruction(s, inst, stderr);                        \
          fprintf(stderr, "%s:%d: A == B failed\n", __FILE__, __LINE__); \
          fprintf(stderr, "  A = %s = %u\n", #A, a);                     \
          fprintf(stderr, "  B = %s = %u\n", #B, b);                     \
@@ -63,7 +64,7 @@
       if (a == b) {                                                     \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
                  _mesa_shader_stage_to_abbrev(s.stage));                \
-         s.dump_instruction(inst, stderr);                              \
+         brw_print_instruction(s, inst, stderr);                        \
          fprintf(stderr, "%s:%d: A != B failed\n", __FILE__, __LINE__); \
          fprintf(stderr, "  A = %s = %u\n", #A, a);                     \
          fprintf(stderr, "  B = %s = %u\n", #B, b);                     \
@@ -78,7 +79,7 @@
       if (a > b) {                                                      \
          fprintf(stderr, "ASSERT: Scalar %s validation failed!\n",      \
                  _mesa_shader_stage_to_abbrev(s.stage));                \
-         s.dump_instruction(inst, stderr);                              \
+         brw_print_instruction(s, inst, stderr);                        \
          fprintf(stderr, "%s:%d: A <= B failed\n", __FILE__, __LINE__); \
          fprintf(stderr, "  A = %s = %u\n", #A, a);                     \
          fprintf(stderr, "  B = %s = %u\n", #B, b);                     \
@@ -87,14 +88,189 @@
    }
 
 #ifndef NDEBUG
+static inline bool
+is_ud_imm(const brw_reg &reg)
+{
+   return reg.file == IMM && reg.type == BRW_TYPE_UD;
+}
+
+static void
+validate_memory_logical(const fs_visitor &s, const fs_inst *inst)
+{
+   const intel_device_info *devinfo = s.devinfo;
+
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_OPCODE]));
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_MODE]));
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_BINDING_TYPE]));
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_COORD_COMPONENTS]));
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_ALIGNMENT]));
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_DATA_SIZE]));
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_COMPONENTS]));
+   fsv_assert(is_ud_imm(inst->src[MEMORY_LOGICAL_FLAGS]));
+
+   enum lsc_data_size data_size =
+      (enum lsc_data_size) inst->src[MEMORY_LOGICAL_DATA_SIZE].ud;
+   unsigned data_size_B = lsc_data_size_bytes(data_size);
+
+   if (!devinfo->has_lsc) {
+      fsv_assert(data_size == LSC_DATA_SIZE_D8U32 ||
+                 data_size == LSC_DATA_SIZE_D16U32 ||
+                 data_size == LSC_DATA_SIZE_D32 ||
+                 data_size == LSC_DATA_SIZE_D64);
+   }
+
+   enum lsc_opcode op = (enum lsc_opcode) inst->src[MEMORY_LOGICAL_OPCODE].ud;
+   enum memory_flags flags = (memory_flags)inst->src[MEMORY_LOGICAL_FLAGS].ud;
+   bool transpose = flags & MEMORY_FLAG_TRANSPOSE;
+   bool include_helpers = flags & MEMORY_FLAG_INCLUDE_HELPERS;
+
+   fsv_assert(!transpose || !include_helpers);
+   fsv_assert(!transpose || lsc_opcode_has_transpose(op));
+
+   if (inst->src[MEMORY_LOGICAL_BINDING_TYPE].ud == LSC_ADDR_SURFTYPE_FLAT)
+      fsv_assert(inst->src[MEMORY_LOGICAL_BINDING].file == BAD_FILE);
+
+   if (inst->src[MEMORY_LOGICAL_DATA1].file != BAD_FILE) {
+      fsv_assert(inst->src[MEMORY_LOGICAL_COMPONENTS].ud ==
+                 inst->components_read(MEMORY_LOGICAL_DATA1));
+
+      fsv_assert(inst->src[MEMORY_LOGICAL_DATA0].type ==
+                 inst->src[MEMORY_LOGICAL_DATA1].type);
+   }
+
+   if (inst->src[MEMORY_LOGICAL_DATA0].file != BAD_FILE) {
+      fsv_assert(inst->src[MEMORY_LOGICAL_COMPONENTS].ud ==
+                 inst->components_read(MEMORY_LOGICAL_DATA0));
+
+      fsv_assert(brw_type_size_bytes(inst->src[MEMORY_LOGICAL_DATA0].type) ==
+                 data_size_B);
+   }
+
+   if (inst->dst.file != BAD_FILE)
+      fsv_assert(brw_type_size_bytes(inst->dst.type) == data_size_B);
+
+   switch (inst->opcode) {
+   case SHADER_OPCODE_MEMORY_LOAD_LOGICAL:
+      fsv_assert(op == LSC_OP_LOAD || op == LSC_OP_LOAD_CMASK);
+      fsv_assert(inst->src[MEMORY_LOGICAL_DATA0].file == BAD_FILE);
+      fsv_assert(inst->src[MEMORY_LOGICAL_DATA1].file == BAD_FILE);
+      break;
+   case SHADER_OPCODE_MEMORY_STORE_LOGICAL:
+      fsv_assert(lsc_opcode_is_store(op));
+      fsv_assert(inst->src[MEMORY_LOGICAL_DATA0].file != BAD_FILE);
+      fsv_assert(inst->src[MEMORY_LOGICAL_DATA1].file == BAD_FILE);
+      break;
+   case SHADER_OPCODE_MEMORY_ATOMIC_LOGICAL:
+      fsv_assert(lsc_opcode_is_atomic(op));
+      fsv_assert((inst->src[MEMORY_LOGICAL_DATA0].file == BAD_FILE)
+                  == (lsc_op_num_data_values(op) < 1));
+      fsv_assert((inst->src[MEMORY_LOGICAL_DATA1].file == BAD_FILE)
+                  == (lsc_op_num_data_values(op) < 2));
+      fsv_assert(inst->src[MEMORY_LOGICAL_COMPONENTS].ud == 1);
+      fsv_assert(!include_helpers);
+      break;
+   default:
+      unreachable("invalid opcode");
+   }
+}
+
+static const char *
+brw_shader_phase_to_string(enum brw_shader_phase phase)
+{
+   switch (phase) {
+   case BRW_SHADER_PHASE_INITIAL:               return "INITIAL";
+   case BRW_SHADER_PHASE_AFTER_NIR:             return "AFTER_NIR";
+   case BRW_SHADER_PHASE_AFTER_OPT_LOOP:        return "AFTER_OPT_LOOP";
+   case BRW_SHADER_PHASE_AFTER_EARLY_LOWERING:  return "AFTER_EARLY_LOWERING";
+   case BRW_SHADER_PHASE_AFTER_MIDDLE_LOWERING: return "AFTER_MIDDLE_LOWERING";
+   case BRW_SHADER_PHASE_AFTER_LATE_LOWERING:   return "AFTER_LATE_LOWERING";
+   case BRW_SHADER_PHASE_AFTER_REGALLOC:        return "AFTER_REGALLOC";
+   case BRW_SHADER_PHASE_INVALID:               break;
+   }
+   unreachable("invalid_phase");
+   return NULL;
+}
+
+static void
+brw_validate_instruction_phase(const fs_visitor &s, fs_inst *inst)
+{
+   enum brw_shader_phase invalid_from = BRW_SHADER_PHASE_INVALID;
+
+   switch (inst->opcode) {
+   case FS_OPCODE_FB_WRITE_LOGICAL:
+   case FS_OPCODE_FB_READ_LOGICAL:
+   case SHADER_OPCODE_TEX_LOGICAL:
+   case SHADER_OPCODE_TXD_LOGICAL:
+   case SHADER_OPCODE_TXF_LOGICAL:
+   case SHADER_OPCODE_TXL_LOGICAL:
+   case SHADER_OPCODE_TXS_LOGICAL:
+   case SHADER_OPCODE_IMAGE_SIZE_LOGICAL:
+   case FS_OPCODE_TXB_LOGICAL:
+   case SHADER_OPCODE_TXF_CMS_W_LOGICAL:
+   case SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL:
+   case SHADER_OPCODE_TXF_MCS_LOGICAL:
+   case SHADER_OPCODE_LOD_LOGICAL:
+   case SHADER_OPCODE_TG4_LOGICAL:
+   case SHADER_OPCODE_TG4_BIAS_LOGICAL:
+   case SHADER_OPCODE_TG4_EXPLICIT_LOD_LOGICAL:
+   case SHADER_OPCODE_TG4_IMPLICIT_LOD_LOGICAL:
+   case SHADER_OPCODE_TG4_OFFSET_LOGICAL:
+   case SHADER_OPCODE_TG4_OFFSET_LOD_LOGICAL:
+   case SHADER_OPCODE_TG4_OFFSET_BIAS_LOGICAL:
+   case SHADER_OPCODE_SAMPLEINFO_LOGICAL:
+   case SHADER_OPCODE_GET_BUFFER_SIZE:
+   case SHADER_OPCODE_MEMORY_LOAD_LOGICAL:
+   case SHADER_OPCODE_MEMORY_STORE_LOGICAL:
+   case SHADER_OPCODE_MEMORY_ATOMIC_LOGICAL:
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL:
+   case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
+   case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
+   case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
+   case SHADER_OPCODE_BTD_SPAWN_LOGICAL:
+   case SHADER_OPCODE_BTD_RETIRE_LOGICAL:
+   case RT_OPCODE_TRACE_RAY_LOGICAL:
+   case SHADER_OPCODE_URB_READ_LOGICAL:
+   case SHADER_OPCODE_URB_WRITE_LOGICAL:
+   case SHADER_OPCODE_REDUCE:
+   case SHADER_OPCODE_INCLUSIVE_SCAN:
+   case SHADER_OPCODE_EXCLUSIVE_SCAN:
+   case SHADER_OPCODE_VOTE_ANY:
+   case SHADER_OPCODE_VOTE_ALL:
+   case SHADER_OPCODE_VOTE_EQUAL:
+      invalid_from = BRW_SHADER_PHASE_AFTER_EARLY_LOWERING;
+      break;
+
+   case SHADER_OPCODE_LOAD_PAYLOAD:
+      invalid_from = BRW_SHADER_PHASE_AFTER_MIDDLE_LOWERING;
+      break;
+
+   default:
+      /* Nothing to do. */
+      break;
+   }
+
+   assert(s.phase < BRW_SHADER_PHASE_INVALID);
+   if (s.phase >= invalid_from) {
+      fprintf(stderr, "INVALID INSTRUCTION IN PHASE: %s\n",
+              brw_shader_phase_to_string(s.phase));
+      brw_print_instruction(s, inst, stderr);
+      abort();
+   }
+}
+
 void
 brw_fs_validate(const fs_visitor &s)
 {
    const intel_device_info *devinfo = s.devinfo;
 
+   if (s.phase <= BRW_SHADER_PHASE_AFTER_NIR)
+      return;
+
    s.cfg->validate(_mesa_shader_stage_to_abbrev(s.stage));
 
    foreach_block_and_inst (block, fs_inst, inst, s.cfg) {
+      brw_validate_instruction_phase(s, inst);
+
       switch (inst->opcode) {
       case SHADER_OPCODE_SEND:
          fsv_assert(is_uniform(inst->src[0]) && is_uniform(inst->src[1]));
@@ -102,6 +278,12 @@ brw_fs_validate(const fs_visitor &s)
 
       case BRW_OPCODE_MOV:
          fsv_assert(inst->sources == 1);
+         break;
+
+      case SHADER_OPCODE_MEMORY_LOAD_LOGICAL:
+      case SHADER_OPCODE_MEMORY_STORE_LOGICAL:
+      case SHADER_OPCODE_MEMORY_ATOMIC_LOGICAL:
+         validate_memory_logical(s, inst);
          break;
 
       default:
@@ -134,7 +316,7 @@ brw_fs_validate(const fs_visitor &s)
 
          if (devinfo->ver >= 10) {
             for (unsigned i = 0; i < 3; i++) {
-               if (inst->src[i].file == BRW_IMMEDIATE_VALUE)
+               if (inst->src[i].file == IMM)
                   continue;
 
                switch (inst->src[i].vstride) {
@@ -166,7 +348,7 @@ brw_fs_validate(const fs_visitor &s)
              * passes (e.g., combine constants) will fix them.
              */
             for (unsigned i = 0; i < 3; i++) {
-               fsv_assert_ne(inst->src[i].file, BRW_IMMEDIATE_VALUE);
+               fsv_assert_ne(inst->src[i].file, IMM);
 
                /* A stride of 1 (the usual case) or 0, with a special
                 * "repctrl" bit, is allowed. The repctrl bit doesn't work for
@@ -177,10 +359,13 @@ brw_fs_validate(const fs_visitor &s)
                 *    This is applicable to 32b datatypes and 16b datatype. 64b
                 *    datatypes cannot use the replicate control.
                 */
-               fsv_assert_lte(inst->src[i].vstride, 1);
-
-               if (brw_type_size_bytes(inst->src[i].type) > 4)
-                  fsv_assert_eq(inst->src[i].vstride, 1);
+               const unsigned stride_in_bytes = byte_stride(inst->src[i]);
+               const unsigned size_in_bytes = brw_type_size_bytes(inst->src[i].type);
+               if (stride_in_bytes == 0) {
+                  fsv_assert_lte(size_in_bytes, 4);
+               } else {
+                  fsv_assert_eq(stride_in_bytes, size_in_bytes);
+               }
             }
          }
       }

@@ -84,13 +84,13 @@ traces:
       checksum: 448886e3b24f6408e013ea13f7c96d28
   gputest/furmark-v2.trace:
     gl-intel-apl:
-      checksum: 06d587a2b934295da6ad874b750b9c9d
+      checksum: 06f4222f7f5737f93ed1d191cbdc0798
     gl-intel-glk:
-      checksum: 06d587a2b934295da6ad874b750b9c9d
+      checksum: 06f4222f7f5737f93ed1d191cbdc0798
     gl-intel-amly:
       checksum: 06d587a2b934295da6ad874b750b9c9d
     gl-intel-kbl:
-      checksum: 06d587a2b934295da6ad874b750b9c9d
+      checksum: 06f4222f7f5737f93ed1d191cbdc0798
     gl-intel-whl:
       checksum: 06d587a2b934295da6ad874b750b9c9d
     gl-intel-cml:
@@ -187,13 +187,13 @@ traces:
       checksum: cea8f26227763a3c3b2a2a6af9a0c1da
   gputest/tessmark-v2.trace:
     gl-intel-apl:
-      checksum: 10e49cd5a5e12d4a01f504c14b4335cc
+      checksum: f9309a25e696938c0372c1afc781d01b
     gl-intel-glk:
-      checksum: 10e49cd5a5e12d4a01f504c14b4335cc
+      checksum: f9309a25e696938c0372c1afc781d01b
     gl-intel-amly:
       checksum: 10e49cd5a5e12d4a01f504c14b4335cc
     gl-intel-kbl:
-      checksum: 10e49cd5a5e12d4a01f504c14b4335cc
+      checksum: f9309a25e696938c0372c1afc781d01b
     gl-intel-whl:
       checksum: 10e49cd5a5e12d4a01f504c14b4335cc
     gl-intel-cml:

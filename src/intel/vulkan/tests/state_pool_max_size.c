@@ -26,7 +26,7 @@
 #include "anv_private.h"
 #include "test_common.h"
 
-#define NUM_THREADS 16
+#define NUM_THREADS 8
 #define STATES_PER_THREAD 1024
 #define NUM_RUNS 1
 

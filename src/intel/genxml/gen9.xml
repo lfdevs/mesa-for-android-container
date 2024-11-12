@@ -164,6 +164,16 @@
     <field name="Address" start="0" end="63" type="address" />
     <field name="Memory Address Attributes" start="64" end="95" type="MEMORYADDRESSATTRIBUTES" />
   </struct>
+  <struct name="IMAGE_STATE_COST" length="2">
+    <field name="MV 0 Cost" start="0" end="7" type="uint" />
+    <field name="MV 1 Cost" start="8" end="15" type="uint" />
+    <field name="MV 2 Cost" start="16" end="23" type="uint" />
+    <field name="MV 3 Cost" start="24" end="31" type="uint" />
+    <field name="MV 4 Cost" start="32" end="39" type="uint" />
+    <field name="MV 5 Cost" start="40" end="47" type="uint" />
+    <field name="MV 6 Cost" start="48" end="55" type="uint" />
+    <field name="MV 7 Cost" start="56" end="63" type="uint" />
+  </struct>
   <struct name="INLINE_DATA_DESCRIPTION_FOR_MFD_AVC_BSD_OBJECT" length="3">
     <field name="MB Error Concealment P Slice Weight Prediction Disable" start="0" end="0" type="bool" />
     <field name="MB Error Concealment P Slice Motion Vectors Override Disable" start="1" end="1" type="bool" />
@@ -656,7 +666,7 @@
     <field name="Tiled Surface" start="33" end="33" type="uint" />
     <field name="Half Pitch for Chroma" start="34" end="34" type="bool" />
     <field name="Surface Pitch" start="35" end="51" type="uint" />
-    <field name="Format" start="59" end="63" type="uint" />
+    <field name="Interleave Chroma" start="59" end="59" type="uint" />
     <field name="Surface Format" start="60" end="63" type="uint" prefix="VDENC">
       <value name="YUV 4:2:2" value="0" />
       <value name="RGBA 4:4:4:4" value="1" />
@@ -1475,7 +1485,7 @@
     <field name="Indirect BSD Data Start Address" start="64" end="92" type="offset" />
   </instruction>
   <instruction name="HCP_FQM_STATE" bias="2" length="34" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="32" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="5" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -1496,7 +1506,7 @@
       <value name="Chroma Cr" value="2" />
     </field>
     <field name="FQM DC Value" start="48" end="63" type="uint" />
-    <group count="64" start="64" size="8">
+    <group count="128" start="64" size="8">
       <field name="Quantizer Matrix 8x8" start="0" end="7" type="uint" />
     </group>
   </instruction>
@@ -1904,6 +1914,7 @@
       <value name="Prev Reference Picture" value="2" />
       <value name="Golden Reference Picture" value="3" />
       <value name="AltRef Reference Picture" value="4" />
+      <value name="Reference Picture" value="5" />
     </field>
     <field name="Y Offset for U(Cb)" start="64" end="78" type="uint" />
     <field name="Surface Format" start="92" end="95" type="uint">
@@ -3015,8 +3026,8 @@
     <field name="Extended Stream-Out Enable" start="50" end="50" type="bool" />
     <field name="Pic Status/Error Report ID" start="96" end="127" type="uint" />
   </instruction>
-  <instruction name="MFX_QM_STATE" bias="2" length="34" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" default="32" />
+  <instruction name="MFX_QM_STATE" bias="2" length="18" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="16" />
     <field name="SubOpcode B" start="16" end="20" type="uint" default="7" />
     <field name="SubOpcode A" start="21" end="23" type="uint" default="0" />
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0" />
@@ -3049,6 +3060,7 @@
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
     <field name="Surface ID" start="32" end="35" type="uint" prefix="MFX">
+      <value name="Reference Picture" value="0" />
       <value name="Source Input Picture" value="4" />
       <value name="Reconstructed Scaled Reference Picture" value="5" />
     </field>
@@ -3831,19 +3843,31 @@
     <field name="Bindless Surface State Base Address" start="524" end="575" type="address" />
     <field name="Bindless Surface State Size" start="588" end="607" type="uint" />
   </instruction>
-  <instruction name="VDENC_CONST_QPT_STATE" bias="2" length="62" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" default="60" />
+  <instruction name="VDENC_CONST_QPT_STATE" bias="2" length="61" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="59" />
     <field name="SubOpcode B" start="16" end="20" type="uint" default="6" />
     <field name="SubOpcode A" start="21" end="22" type="uint" default="0" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="1" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
-    <field name="QP Lambda Array Index[n]" start="32" end="39" type="uint" />
-    <field name="Skip Threshold Array Index[n]" start="384" end="399" type="uint" />
-    <field name="SIC Forward Transform Coeff Threshold Matrix0 Array Index[n]" start="832" end="847" type="uint" />
-    <field name="SIC Forward Transform Coeff Threshold Matrix1/3/5 Array Index[n]" start="1280" end="1287" type="uint" />
-    <field name="SIC Forward Transform Coeff Threshold Matrix2 Array Index[n]" start="1504" end="1511" type="uint" />
-    <field name="SIC Forward Transform Coeff Threshold Matrix4/6 Array Index[n]" start="1728" end="1735" type="uint" />
+    <group count="42" start="32" size="8">
+      <field name="QP Lambda Array Index" start="0" end="7" type="uint" />
+    </group>
+    <group count="27" start="384" size="16">
+      <field name="Skip Threshold Array Index" start="0" end="15" type="uint" />
+    </group>
+    <group count="27" start="832" size="16">
+      <field name="SIC Forward Transform Coeff Threshold Matrix0 Array Index" start="0" end="15" type="uint" />
+    </group>
+    <group count="27" start="1280" size="8">
+      <field name="SIC Forward Transform Coeff Threshold Matrix1/3/5 Array Index" start="0" end="7" type="uint" />
+    </group>
+    <group count="27" start="1504" size="8">
+      <field name="SIC Forward Transform Coeff Threshold Matrix2 Array Index" start="0" end="7" type="uint" />
+    </group>
+    <group count="27" start="1728" size="8">
+      <field name="SIC Forward Transform Coeff Threshold Matrix4/6 Array Index" start="0" end="7" type="uint" />
+    </group>
   </instruction>
   <instruction name="VDENC_DS_REF_SURFACE_STATE" bias="2" length="6" engine="video">
     <field name="DWord Length" start="0" end="11" type="uint" default="4" />
@@ -3854,22 +3878,24 @@
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
     <field name="8X Surface State" start="64" end="191" type="VDENC_SURFACE_STATE_FIELDS" />
   </instruction>
-  <instruction name="VDENC_IMG_STATE" bias="2" length="36" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" default="34" />
+  <instruction name="VDENC_IMG_STATE" bias="2" length="35" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="33" />
     <field name="SubOpcode B" start="16" end="20" type="uint" default="5" />
     <field name="SubOpcode A" start="21" end="22" type="uint" default="0" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="1" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
     <field name="Bidirectional Mix Disable" start="34" end="34" type="bool" />
-    <field name="VDEnc Extended PAK_OBJ_ Command Enable" start="38" end="38" type="bool" />
+    <field name="VDEnc Extended PAK_OBJ_CMD Enable" start="38" end="38" type="bool" />
     <field name="Transform 8x8" start="39" end="39" type="bool" />
     <field name="VDEnc L1 Cache Priority" start="40" end="41" type="uint" />
     <field name="Lambda Value for Trellis" start="48" end="63" type="uint" />
+    <field name="Bidirectional Weight" start="80" end="85" type="uint" />
     <field name="Unidirectional Mix Disable" start="92" end="92" type="bool" />
     <field name="Picture Width" start="112" end="127" type="uint" />
     <field name="Sub-Pel Mode" start="140" end="141" type="uint" />
     <field name="Forward Transform Skip Check Enable" start="145" end="145" type="bool" />
+    <field name="Bme Disable For Fbr Message" start="146" end="146" type="bool" />
     <field name="Block-Based Skip Enable" start="147" end="147" type="bool" />
     <field name="Inter SAD Measure Adjustment" start="148" end="149" type="uint" prefix="ISMA">
       <value name="None" value="0" />
@@ -3915,8 +3941,8 @@
     <field name="Mode 9 Cost" start="360" end="367" type="uint" />
     <field name="RefID Cost" start="368" end="375" type="uint" />
     <field name="Chroma Intra Mode Cost" start="376" end="383" type="uint" />
-    <field name="MV Cost" start="384" end="447" type="uint" />
-    <field name="QpPrimeY" start="448" end="455" type="uint" />
+    <field name="MV Cost" start="384" end="447" type="IMAGE_STATE_COST" />
+    <field name="QpPrimeY" start="448" end="455" type="int" />
     <field name="TargetSizeInWord" start="472" end="479" type="uint" />
     <field name="AVC Intra 4x4 Mode Mask" start="544" end="552" type="uint" />
     <field name="AVC Intra 8x8 Mode Mask" start="560" end="568" type="uint" />
@@ -3942,7 +3968,7 @@
     <field name="HME Ref Windows Combining Threshold" start="840" end="847" type="uint" />
     <field name="Max Horizontal MV Range" start="864" end="879" type="uint" />
     <field name="Max Vertical MV Range" start="880" end="895" type="uint" />
-    <field name="HME MV Cost" start="896" end="959" type="uint" />
+    <field name="HME MV Cost" start="896" end="959" type="IMAGE_STATE_COST" />
     <field name="ROI QP Adjustment for Zone0" start="960" end="963" type="int" />
     <field name="ROI QP Adjustment for Zone1" start="964" end="967" type="int" />
     <field name="ROI QP Adjustment for Zone2" start="968" end="971" type="int" />
@@ -3957,8 +3983,8 @@
     <field name="Sad/Haar Threshold 0" start="1008" end="1023" type="uint" />
     <field name="Sad/Haar Threshold 1" start="1024" end="1039" type="uint" />
     <field name="Sad/Haar Threshold 2" start="1040" end="1055" type="uint" />
-    <field name="Min QP" start="1056" end="1063" type="uint" />
-    <field name="Max QP" start="1064" end="1071" type="uint" />
+    <field name="Max QP" start="1056" end="1063" type="uint" />
+    <field name="Min QP" start="1064" end="1071" type="uint" />
     <field name="Max Delta QP" start="1080" end="1083" type="uint" />
     <field name="ROI Enable" start="1088" end="1088" type="bool" />
     <field name="Fwd/Predictor0 MV Enable" start="1089" end="1089" type="bool" />
@@ -4011,6 +4037,7 @@
       <value name="4:4:4" value="3" />
     </field>
     <field name="Output Range Control After Color Space Conversion" start="49" end="49" type="bool" />
+    <field name="Disable Speed Mode Fetch Optimization" start="63" end="63" type="bool" />
   </instruction>
   <instruction name="VDENC_REF_SURFACE_STATE" bias="2" length="6" engine="video">
     <field name="DWord Length" start="0" end="11" type="uint" default="4" />
@@ -4030,8 +4057,8 @@
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
     <field name="Surface State" start="64" end="191" type="VDENC_SURFACE_STATE_FIELDS" />
   </instruction>
-  <instruction name="VDENC_WALKER_STATE" bias="2" length="2" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" default="0" />
+  <instruction name="VDENC_WALKER_STATE" bias="2" length="4" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="2" />
     <field name="SubOpcode B" start="16" end="20" type="uint" default="7" />
     <field name="SubOpcode A" start="21" end="22" type="uint" default="0" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="1" />
@@ -4040,14 +4067,25 @@
     <field name="MB/LCU Start Y Position" start="32" end="40" type="uint" />
     <field name="MB/LCU Start X Position" start="48" end="56" type="uint" />
     <field name="First Super Slice" start="60" end="60" type="bool" />
-    <field name="Tile Stream-In Offset Enable" start="192" end="192" type="bool" />
-    <field name="Tile Stream-In Offset" start="198" end="223" type="uint" />
-    <field name="Tile Row Store Offset Enable" start="224" end="224" type="bool" />
-    <field name="Tile Row Store Offset" start="230" end="255" type="uint" />
-    <field name="Tile Stream-Out Offset Enable" start="256" end="256" type="bool" />
-    <field name="Tile Stream-Out Offset" start="262" end="287" type="uint" />
-    <field name="Tile LCU Stream-Out Offset Enable" start="288" end="288" type="bool" />
-    <field name="Tile LCU Stream-Out Offset" start="294" end="319" type="uint" />
+    <field name="Next Slice MB Start Y Position" start="64" end="73" type="uint" />
+    <field name="Next Slice MB/LCU Start X Position" start="80" end="89" type="uint" />
+    <field name="Log2 Weight Denominator Luma" start="96" end="98" type="uint" />
+  </instruction>
+  <instruction name="VDENC_WEIGHTSOFFSETS_STATE" bias="2" length="3" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="1" />
+    <field name="SubOpcode B" start="16" end="20" type="uint" default="8" />
+    <field name="SubOpcode A" start="21" end="22" type="uint" default="0" />
+    <field name="Media Command OpCode" start="23" end="26" type="uint" default="1" />
+    <field name="Pipeline" start="27" end="28" type="uint" default="2" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Weights Forward Reference 0" start="32" end="39" type="int" />
+    <field name="Offset Forward Reference 0" start="40" end="47" type="int" />
+    <field name="Weights Forward Reference 1" start="48" end="55" type="int" />
+    <field name="Offset Forward Reference 1" start="56" end="63" type="int" />
+    <field name="Weights Forward Reference 2" start="64" end="71" type="int" />
+    <field name="Offset Forward Reference 2" start="72" end="79" type="int" />
+    <field name="HEVC/VP9 Weights Backward Reference 0" start="80" end="87" type="int" />
+    <field name="HEVC/VP9 Offset Backward Reference 0" start="88" end="95" type="int" />
   </instruction>
   <instruction name="VD_PIPELINE_FLUSH" bias="2" length="2" engine="video">
     <field name="DWord Length" start="0" end="11" type="uint" default="0" />

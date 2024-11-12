@@ -10,21 +10,13 @@ files_gbm = files(
   'main/gbm.h',
   'main/gbmint.h',
 )
-deps_gbm = []
 args_gbm = [
   '-DDEFAULT_BACKENDS_PATH="@0@"'.format(gbm_backends_path),
 ]
-deps_gbm = []
-incs_gbm = [
-  include_directories('main'), inc_include, inc_src, inc_loader, inc_gallium
-]
+incs_gbm = [include_directories('main'), inc_loader, inc_gallium]
 
 if with_dri2
-  files_gbm += files('backends/dri/gbm_dri.c', 'backends/dri/gbm_driint.h')
-endif
-if with_platform_wayland
-  deps_gbm += dep_wayland_server
-  incs_gbm += inc_wayland_drm
+  subdir('backends/dri')
 endif
 
 libgbm_name = 'gbm'
@@ -39,8 +31,8 @@ libgbm = shared_library(
   include_directories : incs_gbm,
   c_args : [args_gbm],
   link_args : [ld_args_gc_sections],
-  link_with : [libloader, libgallium_dri],
-  dependencies : [deps_gbm, dep_dl, dep_thread, dep_libdrm, idep_mesautil, idep_xmlconfig],
+  link_with : [libloader],
+  dependencies : [dep_libdrm, idep_xmlconfig],
   gnu_symbol_visibility : 'hidden',
   version : '1.0.0',
   install : true,

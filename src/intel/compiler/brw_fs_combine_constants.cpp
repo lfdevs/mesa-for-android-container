@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-/** @file brw_fs_combine_constants.cpp
+/** @file
  *
  * This file contains the opt_combine_constants() pass that runs after the
  * regular optimization loop. It passes over the instruction list and promotes
@@ -996,7 +996,7 @@ supports_src_as_imm(const struct intel_device_info *devinfo, const fs_inst *inst
 
    switch (inst->opcode) {
    case BRW_OPCODE_ADD3:
-      /* ADD3 only exists on Gfx12.5+. */
+   case BRW_OPCODE_BFE:
       return true;
 
    case BRW_OPCODE_CSEL:
@@ -1026,8 +1026,13 @@ can_promote_src_as_imm(const struct intel_device_info *devinfo, fs_inst *inst,
     * only propagates into src0. It's possible that src2 works for W or UW MAD
     * on Gfx12.5.
     */
-   if (src_idx != 0)
-      return false;
+   if (inst->opcode == BRW_OPCODE_BFE) {
+      if (src_idx == 1)
+         return false;
+   } else {
+      if (src_idx != 0)
+         return false;
+   }
 
    if (!supports_src_as_imm(devinfo, inst))
       return false;
@@ -1302,6 +1307,7 @@ brw_fs_opt_combine_constants(fs_visitor &s)
        * 16-bits, it would be better to add both sources with
        * allow_one_constant=true as is done for SEL.
        */
+      case BRW_OPCODE_BFE:
       case BRW_OPCODE_ADD3:
       case BRW_OPCODE_CSEL:
       case BRW_OPCODE_MAD: {
@@ -1319,7 +1325,6 @@ brw_fs_opt_combine_constants(fs_visitor &s)
          break;
       }
 
-      case BRW_OPCODE_BFE:
       case BRW_OPCODE_BFI2:
       case BRW_OPCODE_LRP:
          for (int i = 0; i < inst->sources; i++) {
@@ -1742,7 +1747,7 @@ brw_fs_opt_combine_constants(fs_visitor &s)
 
       delete s.cfg;
       s.cfg = NULL;
-      s.calculate_cfg();
+      brw_calculate_cfg(s);
    }
 
    ralloc_free(const_ctx);

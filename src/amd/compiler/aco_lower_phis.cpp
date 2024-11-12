@@ -316,6 +316,21 @@ init_state(Program* program, Block* block, ssa_state* state, aco_ptr<Instruction
 void
 lower_phi_to_linear(Program* program, ssa_state* state, Block* block, aco_ptr<Instruction>& phi)
 {
+   if (phi->opcode == aco_opcode::p_phi) {
+      /* Insert p_as_uniform for VGPR->SGPR phis. */
+      Builder bld(program);
+      for (unsigned i = 0; i < phi->operands.size(); i++) {
+         if (phi->operands[i].isOfType(RegType::vgpr)) {
+            Block* pred = &program->blocks[block->logical_preds[i]];
+            Temp new_phi_src = bld.tmp(phi->definitions[0].regClass());
+            insert_before_logical_end(
+               pred, bld.pseudo(aco_opcode::p_as_uniform, Definition(new_phi_src), phi->operands[i])
+                        .get_ptr());
+            phi->operands[i].setTemp(new_phi_src);
+         }
+      }
+   }
+
    if (block->linear_preds == block->logical_preds) {
       phi->opcode = aco_opcode::p_linear_phi;
       return;

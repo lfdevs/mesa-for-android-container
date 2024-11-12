@@ -11,16 +11,17 @@
 
 #include "genxml/gen_macros.h"
 
+#include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_desc_state.h"
 #include "panvk_device.h"
 #include "panvk_entrypoints.h"
+#include "panvk_meta.h"
 #include "panvk_physical_device.h"
 
 #include "pan_desc.h"
 #include "pan_encoder.h"
 #include "pan_jc.h"
-#include "pan_pool.h"
 #include "pan_props.h"
 
 #include <vulkan/vulkan_core.h>
@@ -39,6 +40,7 @@ panvk_per_arch(CmdDispatchBase)(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
    const struct panvk_shader *shader = cmdbuf->state.compute.shader;
+   VkResult result;
 
    if (groupCountX == 0 || groupCountY == 0 || groupCountZ == 0)
       return;
@@ -65,8 +67,10 @@ panvk_per_arch(CmdDispatchBase)(VkCommandBuffer commandBuffer,
    panvk_per_arch(cmd_alloc_tls_desc)(cmdbuf, false);
    dispatch.tsd = batch->tls.gpu;
 
-   panvk_per_arch(cmd_prepare_push_descs)(&cmdbuf->desc_pool.base, desc_state,
-                                          shader->desc_info.used_set_mask);
+   result = panvk_per_arch(cmd_prepare_push_descs)(
+      cmdbuf, desc_state, shader->desc_info.used_set_mask);
+   if (result != VK_SUCCESS)
+      return;
 
    struct panvk_compute_sysvals *sysvals = &cmdbuf->state.compute.sysvals;
    sysvals->base.x = baseGroupX;
@@ -78,8 +82,12 @@ panvk_per_arch(CmdDispatchBase)(VkCommandBuffer commandBuffer,
    sysvals->local_group_size.x = shader->local_size.x;
    sysvals->local_group_size.y = shader->local_size.y;
    sysvals->local_group_size.z = shader->local_size.z;
-   panvk_per_arch(cmd_prepare_dyn_ssbos)(&cmdbuf->desc_pool.base, desc_state,
-                                         shader, cs_desc_state);
+
+   result = panvk_per_arch(cmd_prepare_dyn_ssbos)(cmdbuf, desc_state, shader,
+                                                  cs_desc_state);
+   if (result != VK_SUCCESS)
+      return;
+
    sysvals->desc.dyn_ssbos = cs_desc_state->dyn_ssbos;
 
    for (uint32_t i = 0; i < MAX_SETS; i++) {
@@ -90,25 +98,32 @@ panvk_per_arch(CmdDispatchBase)(VkCommandBuffer commandBuffer,
    cmdbuf->state.compute.push_uniforms = 0;
 
    if (!cmdbuf->state.compute.push_uniforms) {
-      cmdbuf->state.compute.push_uniforms = panvk_cmd_prepare_push_uniforms(
-         &cmdbuf->desc_pool.base, &cmdbuf->state.push_constants,
-         &cmdbuf->state.compute.sysvals, sizeof(cmdbuf->state.compute.sysvals));
+      cmdbuf->state.compute.push_uniforms = panvk_per_arch(
+         cmd_prepare_push_uniforms)(cmdbuf, &cmdbuf->state.compute.sysvals,
+                                    sizeof(cmdbuf->state.compute.sysvals));
+      if (!cmdbuf->state.compute.push_uniforms)
+         return;
    }
 
    dispatch.push_uniforms = cmdbuf->state.compute.push_uniforms;
 
-   panvk_per_arch(cmd_prepare_shader_desc_tables)(
-      &cmdbuf->desc_pool.base, desc_state, shader, cs_desc_state);
+   result = panvk_per_arch(cmd_prepare_shader_desc_tables)(
+      cmdbuf, desc_state, shader, cs_desc_state);
 
-   struct panfrost_ptr copy_desc_job = panvk_per_arch(meta_get_copy_desc_job)(
-      dev, &cmdbuf->desc_pool.base, shader, &cmdbuf->state.compute.desc_state,
-      cs_desc_state, 0);
+   struct panfrost_ptr copy_desc_job;
+   result = panvk_per_arch(meta_get_copy_desc_job)(
+      cmdbuf, shader, &cmdbuf->state.compute.desc_state, cs_desc_state, 0,
+      &copy_desc_job);
+   if (result != VK_SUCCESS)
+      return;
 
    if (copy_desc_job.cpu)
       util_dynarray_append(&batch->jobs, void *, copy_desc_job.cpu);
 
-   struct panfrost_ptr job =
-      pan_pool_alloc_desc(&cmdbuf->desc_pool.base, COMPUTE_JOB);
+   struct panfrost_ptr job = panvk_cmd_alloc_desc(cmdbuf, COMPUTE_JOB);
+   if (!job.gpu)
+      return;
+
    util_dynarray_append(&batch->jobs, void *, job.cpu);
 
    panfrost_pack_work_groups_compute(

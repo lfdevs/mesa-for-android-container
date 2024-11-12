@@ -5,10 +5,13 @@
 
 #include "brw_eu.h"
 #include "brw_fs.h"
+#include "brw_fs_builder.h"
 #include "brw_prim.h"
 #include "brw_nir.h"
 #include "brw_private.h"
 #include "dev/intel_debug.h"
+
+using namespace brw;
 
 static const GLuint gl_prim_to_hw_prim[MESA_PRIM_TRIANGLE_STRIP_ADJACENCY+1] = {
    [MESA_PRIM_POINTS] =_3DPRIM_POINTLIST,
@@ -26,6 +29,110 @@ static const GLuint gl_prim_to_hw_prim[MESA_PRIM_TRIANGLE_STRIP_ADJACENCY+1] = {
    [MESA_PRIM_TRIANGLES_ADJACENCY] = _3DPRIM_TRILIST_ADJ,
    [MESA_PRIM_TRIANGLE_STRIP_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
 };
+
+static void
+brw_emit_gs_thread_end(fs_visitor &s)
+{
+   assert(s.stage == MESA_SHADER_GEOMETRY);
+
+   struct brw_gs_prog_data *gs_prog_data = brw_gs_prog_data(s.prog_data);
+
+   if (s.gs_compile->control_data_header_size_bits > 0) {
+      s.emit_gs_control_data_bits(s.final_gs_vertex_count);
+   }
+
+   const fs_builder abld = fs_builder(&s).at_end().annotate("thread end");
+   fs_inst *inst;
+
+   if (gs_prog_data->static_vertex_count != -1) {
+      /* Try and tag the last URB write with EOT instead of emitting a whole
+       * separate write just to finish the thread.
+       */
+      if (s.mark_last_urb_write_with_eot())
+         return;
+
+      brw_reg srcs[URB_LOGICAL_NUM_SRCS];
+      srcs[URB_LOGICAL_SRC_HANDLE] = s.gs_payload().urb_handles;
+      srcs[URB_LOGICAL_SRC_COMPONENTS] = brw_imm_ud(0);
+      inst = abld.emit(SHADER_OPCODE_URB_WRITE_LOGICAL, reg_undef,
+                       srcs, ARRAY_SIZE(srcs));
+   } else {
+      brw_reg srcs[URB_LOGICAL_NUM_SRCS];
+      srcs[URB_LOGICAL_SRC_HANDLE] = s.gs_payload().urb_handles;
+      srcs[URB_LOGICAL_SRC_DATA] = s.final_gs_vertex_count;
+      srcs[URB_LOGICAL_SRC_COMPONENTS] = brw_imm_ud(1);
+      inst = abld.emit(SHADER_OPCODE_URB_WRITE_LOGICAL, reg_undef,
+                       srcs, ARRAY_SIZE(srcs));
+   }
+   inst->eot = true;
+   inst->offset = 0;
+}
+
+static void
+brw_assign_gs_urb_setup(fs_visitor &s)
+{
+   assert(s.stage == MESA_SHADER_GEOMETRY);
+
+   struct brw_vue_prog_data *vue_prog_data = brw_vue_prog_data(s.prog_data);
+
+   s.first_non_payload_grf +=
+      8 * vue_prog_data->urb_read_length * s.nir->info.gs.vertices_in;
+
+   foreach_block_and_inst(block, fs_inst, inst, s.cfg) {
+      /* Rewrite all ATTR file references to GRFs. */
+      s.convert_attr_sources_to_hw_regs(inst);
+   }
+}
+
+static bool
+run_gs(fs_visitor &s)
+{
+   assert(s.stage == MESA_SHADER_GEOMETRY);
+
+   s.payload_ = new gs_thread_payload(s);
+
+   const fs_builder bld = fs_builder(&s).at_end();
+
+   s.final_gs_vertex_count = bld.vgrf(BRW_TYPE_UD);
+
+   if (s.gs_compile->control_data_header_size_bits > 0) {
+      /* Create a VGRF to store accumulated control data bits. */
+      s.control_data_bits = bld.vgrf(BRW_TYPE_UD);
+
+      /* If we're outputting more than 32 control data bits, then EmitVertex()
+       * will set control_data_bits to 0 after emitting the first vertex.
+       * Otherwise, we need to initialize it to 0 here.
+       */
+      if (s.gs_compile->control_data_header_size_bits <= 32) {
+         const fs_builder abld = bld.annotate("initialize control data bits");
+         abld.MOV(s.control_data_bits, brw_imm_ud(0u));
+      }
+   }
+
+   nir_to_brw(&s);
+
+   brw_emit_gs_thread_end(s);
+
+   if (s.failed)
+      return false;
+
+   brw_calculate_cfg(s);
+
+   brw_fs_optimize(s);
+
+   s.assign_curb_setup();
+   brw_assign_gs_urb_setup(s);
+
+   brw_fs_lower_3src_null_dest(s);
+   brw_fs_workaround_memory_fence_before_eot(s);
+   brw_fs_workaround_emit_dummy_mov_instruction(s);
+
+   brw_allocate_registers(s, true /* allow_spilling */);
+
+   brw_fs_workaround_source_arf_before_eot(s);
+
+   return !s.failed;
+}
 
 extern "C" const unsigned *
 brw_compile_gs(const struct brw_compiler *compiler,
@@ -244,7 +351,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
 
    fs_visitor v(compiler, &params->base, &c, prog_data, nir,
                 params->base.stats != NULL, debug_enabled);
-   if (v.run_gs()) {
+   if (run_gs(v)) {
       prog_data->base.dispatch_mode = INTEL_DISPATCH_MODE_SIMD8;
 
       assert(v.payload().num_regs % reg_unit(compiler->devinfo) == 0);

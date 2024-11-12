@@ -82,10 +82,6 @@ spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
 
-
-# Introduced with the uprev of piglit (70ce1dcacc92 - "ci: Update piglit with s3 support")
-spec@egl 1.4@egl-ext_egl_image_storage,Fail
-
 # Introduced by a8d2b288eee3 ("ci/piglit: 2023-01-19 uprev")
 spec@!opengl 1.1@line-smooth-stipple,Fail
 

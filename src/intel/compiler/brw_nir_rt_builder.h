@@ -60,10 +60,12 @@ brw_nir_rt_store(nir_builder *b, nir_def *addr, unsigned align,
 }
 
 static inline nir_def *
-brw_nir_rt_load_const(nir_builder *b, unsigned components,
-                      nir_def *addr, nir_def *pred)
+brw_nir_rt_load_const(nir_builder *b, unsigned components, nir_def *addr)
 {
-   return nir_load_global_const_block_intel(b, components, addr, pred);
+   return nir_load_global_constant_uniform_block_intel(
+      b, components, 32, addr,
+      .access = ACCESS_CAN_REORDER | ACCESS_NON_WRITEABLE,
+      .align_mul = 64);
 }
 
 static inline nir_def *
@@ -312,7 +314,7 @@ brw_nir_rt_load_globals_addr(nir_builder *b,
                              nir_def *addr)
 {
    nir_def *data;
-   data = brw_nir_rt_load_const(b, 16, addr, nir_imm_true(b));
+   data = brw_nir_rt_load_const(b, 16, addr);
    defs->base_mem_addr = nir_pack_64_2x32(b, nir_trim_vector(b, data, 2));
 
    defs->call_stack_handler_addr =
@@ -335,7 +337,7 @@ brw_nir_rt_load_globals_addr(nir_builder *b,
    defs->sw_stack_size = nir_channel(b, data, 12);
    defs->launch_size = nir_channels(b, data, 0x7u << 13);
 
-   data = brw_nir_rt_load_const(b, 8, nir_iadd_imm(b, addr, 64), nir_imm_true(b));
+   data = brw_nir_rt_load_const(b, 8, nir_iadd_imm(b, addr, 64));
    defs->call_sbt_addr =
       nir_pack_64_2x32_split(b, nir_channel(b, data, 0),
                                 nir_extract_i16(b, nir_channel(b, data, 1),

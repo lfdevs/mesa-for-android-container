@@ -5,6 +5,8 @@
 #ifndef MME_FERMI_SIM_H
 #define MME_FERMI_SIM_H
 
+#include "mme_sim.h"
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -19,6 +21,10 @@ struct mme_fermi_sim_mem {
    void *data;
    size_t size;
 };
+
+void mme_fermi_sim_core(uint32_t inst_count, const struct mme_fermi_inst *insts,
+                        const struct mme_sim_state_ops *state_ops,
+                        void *state_handler);
 
 void mme_fermi_sim(uint32_t inst_count, const struct mme_fermi_inst *insts,
                    uint32_t param_count, const uint32_t *params,

@@ -133,7 +133,7 @@ nir_blend_factor_value(
 }
 
 static nir_def *
-nir_fsat_signed(nir_builder *b, nir_def *x)
+nir_build_fsat_signed(nir_builder *b, nir_def *x)
 {
    return nir_fclamp(b, x, nir_imm_floatN_t(b, -1.0, x->bit_size),
                      nir_imm_floatN_t(b, +1.0, x->bit_size));
@@ -145,7 +145,7 @@ nir_fsat_to_format(nir_builder *b, nir_def *x, enum pipe_format format)
    if (util_format_is_unorm(format))
       return nir_fsat(b, x);
    else if (util_format_is_snorm(format))
-      return nir_fsat_signed(b, x);
+      return nir_build_fsat_signed(b, x);
    else
       return x;
 }

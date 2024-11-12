@@ -3318,6 +3318,94 @@ elk_fs_visitor::insert_gfx4_send_dependency_workarounds()
       invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 }
 
+/**
+ * flags_read() and flags_written() return flag access with byte granularity,
+ * but for Flag Register PRM lists "Access Granularity: Word", so we can assume
+ * accessing any part of a word will clear its register dependency.
+ */
+static unsigned
+bytes_bitmask_to_words(unsigned b)
+{
+   unsigned first_byte_mask = b & 0x55555555;
+   unsigned second_byte_mask = b & 0xaaaaaaaa;
+   return first_byte_mask |
+          (first_byte_mask << 1) |
+          second_byte_mask |
+          (second_byte_mask >> 1);
+}
+
+/**
+ * WaClearArfDependenciesBeforeEot
+ *
+ * Flag register dependency not cleared after EOT, so we have to source them
+ * before EOT. We can do this with simple `mov(1) nullUD, f{0,1}UD`
+ *
+ * To avoid emitting MOVs when it's not needed, check if each block  reads all
+ * the flags it sets. We might falsely determine register as unread if it'll be
+ * accessed inside the next blocks, but this still should be good enough.
+ */
+bool
+elk_fs_visitor::workaround_source_arf_before_eot()
+{
+   bool progress = false;
+
+   if (devinfo->platform != INTEL_PLATFORM_CHV)
+      return false;
+
+   unsigned flags_unread = 0;
+
+   foreach_block(block, cfg) {
+      unsigned flags_unread_in_block = 0;
+
+      foreach_inst_in_block(elk_fs_inst, inst, block) {
+         /* Instruction can read and write to the same flag, so the order is important */
+         flags_unread_in_block &= ~bytes_bitmask_to_words(inst->flags_read(devinfo));
+         flags_unread_in_block |= bytes_bitmask_to_words(inst->flags_written(devinfo));
+
+         /* HALT does not start its block even though it can leave a dependency */
+         if (inst->opcode == ELK_OPCODE_HALT ||
+             inst->opcode == ELK_SHADER_OPCODE_HALT_TARGET) {
+            flags_unread |= flags_unread_in_block;
+            flags_unread_in_block = 0;
+         }
+      }
+
+      flags_unread |= flags_unread_in_block;
+
+      if ((flags_unread & 0x0f) && (flags_unread & 0xf0))
+         break;
+   }
+
+   if (flags_unread) {
+      int eot_count = 0;
+
+      foreach_block_and_inst_safe(block, elk_fs_inst, inst, cfg)
+      {
+         if (!inst->eot)
+            continue;
+
+         /* Currently, we always emit only one EOT per program,
+          * this WA should be updated if it ever changes.
+          */
+         assert(++eot_count == 1);
+
+         const fs_builder ibld(this, block, inst);
+         const fs_builder ubld = ibld.exec_all().group(1, 0);
+
+         if (flags_unread & 0x0f)
+            ubld.MOV(ubld.null_reg_ud(), retype(elk_flag_reg(0, 0), ELK_REGISTER_TYPE_UD));
+
+         if (flags_unread & 0xf0)
+            ubld.MOV(ubld.null_reg_ud(), retype(elk_flag_reg(1, 0), ELK_REGISTER_TYPE_UD));
+      }
+
+      progress = true;
+      invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
+   }
+
+   return progress;
+}
+
 bool
 elk_fs_visitor::lower_load_payload()
 {
@@ -5945,6 +6033,8 @@ elk_fs_visitor::run_vs()
 
    allocate_registers(true /* allow_spilling */);
 
+   workaround_source_arf_before_eot();
+
    return !failed;
 }
 
@@ -6062,6 +6152,8 @@ elk_fs_visitor::run_tcs()
 
    allocate_registers(true /* allow_spilling */);
 
+   workaround_source_arf_before_eot();
+
    return !failed;
 }
 
@@ -6089,6 +6181,8 @@ elk_fs_visitor::run_tes()
    fixup_3src_null_dest();
 
    allocate_registers(true /* allow_spilling */);
+
+   workaround_source_arf_before_eot();
 
    return !failed;
 }
@@ -6134,6 +6228,8 @@ elk_fs_visitor::run_gs()
    fixup_3src_null_dest();
 
    allocate_registers(true /* allow_spilling */);
+
+   workaround_source_arf_before_eot();
 
    return !failed;
 }
@@ -6206,6 +6302,8 @@ elk_fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
       fixup_3src_null_dest();
 
       allocate_registers(allow_spilling);
+
+      workaround_source_arf_before_eot();
    }
 
    return !failed;
@@ -6243,6 +6341,8 @@ elk_fs_visitor::run_cs(bool allow_spilling)
    fixup_3src_null_dest();
 
    allocate_registers(allow_spilling);
+
+   workaround_source_arf_before_eot();
 
    return !failed;
 }

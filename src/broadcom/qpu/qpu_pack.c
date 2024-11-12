@@ -760,6 +760,8 @@ static const struct opcode_desc v3d71_mul_ops[] = {
         { 14, 14, .raddr_mask = OP_RANGE(12, 14), V3D_QPU_M_FMOV, 71 },
         { 14, 14, .raddr_mask = OP_RANGE(16, 18), V3D_QPU_M_FMOV, 71 },
         { 14, 14, .raddr_mask = OP_RANGE(20, 22), V3D_QPU_M_FMOV, 71 },
+        { 14, 14, .raddr_mask = OP_RANGE(24, 26), V3D_QPU_M_FMOV, 71 },
+        { 14, 14, .raddr_mask = OP_RANGE(28, 30), V3D_QPU_M_FMOV, 71 },
 
         { 14, 14, .raddr_mask = OP_MASK(3),  V3D_QPU_M_MOV, 71 },
         { 14, 14, .raddr_mask = OP_MASK(7),  V3D_QPU_M_MOV, 71 },

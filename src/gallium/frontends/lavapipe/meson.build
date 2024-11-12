@@ -37,6 +37,10 @@ liblvp_files = files(
     'lvp_ray_tracing_pipeline.c',
     'lvp_wsi.c')
 
+if with_platform_android
+  liblvp_files += 'lvp_android.c'
+endif
+
 lvp_deps = []
 lvp_flags = []
 

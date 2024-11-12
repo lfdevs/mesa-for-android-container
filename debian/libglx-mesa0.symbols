@@ -325,6 +325,8 @@ libGLX_mesa.so.0 libglx-mesa0
  glFramebufferTexture@Base 0
  glFramebufferTextureLayer@Base 0
  glFramebufferTextureLayerEXT@Base 0
+ glFramebufferTextureMultisampleMultiviewOVR@Base 24.3.0~rc1
+ glFramebufferTextureMultiviewOVR@Base 24.3.0~rc1
  glFrontFace@Base 0
  glFrustum@Base 0
  glFrustumf@Base 0

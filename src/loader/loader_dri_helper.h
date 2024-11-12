@@ -104,20 +104,6 @@ struct loader_screen_resources {
 #define __DRI_IMAGE_FORMAT_ABGR1555	PIPE_FORMAT_R5G5B5A1_UNORM
 #define __DRI_IMAGE_FORMAT_XBGR1555	PIPE_FORMAT_R5G5B5X1_UNORM
 
-__DRIimage *loader_dri_create_image(__DRIscreen *screen,
-                                    const __DRIimageExtension *image,
-                                    uint32_t width, uint32_t height,
-                                    uint32_t dri_format, uint32_t dri_usage,
-                                    const uint64_t *modifiers,
-                                    unsigned int modifiers_count,
-                                    void *loaderPrivate);
-
-int dri_get_initial_swap_interval(__DRIscreen *driScreen,
-                                  const __DRI2configQueryExtension *config);
-
-bool dri_valid_swap_interval(__DRIscreen *driScreen,
-                             const __DRI2configQueryExtension *config, int interval);
-
 int
 loader_image_format_to_fourcc(int format);
 

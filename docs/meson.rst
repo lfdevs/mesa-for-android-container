@@ -42,6 +42,67 @@ You'll also need `Ninja <https://ninja-build.org/>`__. If it's not
 already installed, use apt-get or dnf to install the *ninja-build*
 package.
 
+Dependencies
+++++++++++++
+
+Following are the dependencies you would need to install on linux to build and install mesa main. You can install these packages using your linux distibutions' package manager.
+
+.. note::
+   All these dependencies are for latest linux distros and is tested on ubuntu-24 only for now.
+
+   Also note, some packages below might not be available in your OS with the exact name, in such case you can search for it and install the distribution specific one.
+
+   For some packages (eg: libclc etc), you will need the full content of the packages, so make sure to also install ``-dev``/``-devel``/``-headers``/etc. packages (if available) on distributions that split the files into multiple packages.
+
+1. glslang-tools
+2. python3-pyyaml
+3. python3-mako
+4. libdrm (This will get libdrm for intel, amd, qualcomm, nvidia, etc. If you are building a specific driver out of these, you can install only that specific libdrm)
+5. libclc-<version>
+6. llvm-<version>
+7. libllvmspirvlib-<version>
+8. libclang-<version>
+9. byacc (or) bison
+10. flex
+
+.. note::
+   You should make sure that all the llvm related packages (libclc, libclc-dev, llvm, libllvmspirvlib, libclang) are of the same version. You can go with the latest version available on your OS if you are not aware of which version to select.
+
+wayland specific:
+
+1. libwayland
+2. libwayland-egl-backend
+
+x11 specific:
+
+1. libx11
+2. libxext
+3. libxfixes
+4. libxcb-glx
+5. libxcb-shm
+6. libx11-xcb
+7. libxcb-dri2
+8. libxcb-dri3
+9. libxcb-present
+10. libxshmfence
+11. libxxf86vm
+12. libxrandr
+
+for intel vulkan ray-tracing:
+
+1. python3-ply
+
+radeon specific:
+
+1. libelf
+
+nouveau/rusticl specific:
+
+1. rustc
+2. rustfmt
+3. bindgen
+4. cbindgen
+
 Windows
 ^^^^^^^
 
@@ -136,6 +197,20 @@ symbolic links for drivers). To install:
 .. code-block:: sh
 
    ninja -C build/ install
+
+After installation, you can check if the installation happened properly or not by running the command:
+
+.. code-block:: sh
+
+   glxinfo | grep OpenGL
+
+If the installation succeeded, you should see the Mesa devel version and also the commit hash of the latest commit.
+
+In case you don't see the devel version, you can run
+
+.. code-block:: sh
+
+   sudo ldconfig
 
 Windows specific instructions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -46,12 +46,6 @@ descriptor_size(struct tu_device *dev,
                 VkDescriptorType type)
 {
    switch (type) {
-   case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-      if (TU_DEBUG(DYNAMIC))
-         return A6XX_TEX_CONST_DWORDS * 4;
-
-      /* Input attachment doesn't use descriptor sets at all */
-      return 0;
    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
       /* We make offsets and sizes all 16 dwords, to match how the hardware
        * interprets indices passed to sample/load/store instructions in
@@ -281,8 +275,8 @@ tu_CreateDescriptorSetLayout(
 
    if (pCreateInfo->flags &
        VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT) {
-      result = tu_bo_init_new(device, &set_layout->embedded_samplers,
-                              set_layout->size,
+      result = tu_bo_init_new(device, &set_layout->vk.base,
+                              &set_layout->embedded_samplers, set_layout->size,
                               (enum tu_bo_alloc_flags) (TU_BO_ALLOC_ALLOW_DUMP |
                                                         TU_BO_ALLOC_INTERNAL_RESOURCE),
                               "embedded samplers");
@@ -367,8 +361,7 @@ tu_GetDescriptorSetLayoutSupport(
          for (uint32_t j = 0; j < list->descriptorTypeCount; j++) {
             /* Don't support the input attachement and combined image sampler type
              * for mutable descriptors */
-            if (list->pDescriptorTypes[j] == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
-                list->pDescriptorTypes[j] == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+            if (list->pDescriptorTypes[j] == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
                 list->pDescriptorTypes[j] == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
                supported = false;
                goto out;
@@ -805,7 +798,8 @@ tu_CreateDescriptorPool(VkDevice _device,
 
    if (bo_size) {
       if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT)) {
-         ret = tu_bo_init_new(device, &pool->bo, bo_size, TU_BO_ALLOC_ALLOW_DUMP, "descriptor pool");
+         ret = tu_bo_init_new(device, &pool->base, &pool->bo, bo_size,
+                              TU_BO_ALLOC_ALLOW_DUMP, "descriptor pool");
          if (ret)
             goto fail_alloc;
 
@@ -976,7 +970,7 @@ write_texel_buffer_descriptor_addr(uint32_t *dst,
       uint8_t swiz[4] = { PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z,
                           PIPE_SWIZZLE_W };
       fdl6_buffer_view_init(dst,
-                            tu_vk_format_to_pipe_format(buffer_info->format),
+                            vk_format_to_pipe_format(buffer_info->format),
                             swiz, buffer_info->address, buffer_info->range);
    }
 }
@@ -1199,11 +1193,8 @@ tu_GetDescriptorEXT(
       write_sampler_descriptor(dest, *pDescriptorInfo->data.pSampler);
       break;
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-      /* nothing in descriptor set - framebuffer state is used instead */
-      if (TU_DEBUG(DYNAMIC)) {
-         write_image_descriptor(dest, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-                                pDescriptorInfo->data.pInputAttachmentImage);
-      }
+      write_image_descriptor(dest, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                             pDescriptorInfo->data.pInputAttachmentImage);
       break;
    default:
       unreachable("unimplemented descriptor type");
@@ -1297,6 +1288,7 @@ tu_update_descriptor_sets(const struct tu_device *device,
             break;
          case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
             write_image_descriptor(ptr, writeset->descriptorType, writeset->pImageInfo + j);
             break;
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
@@ -1313,11 +1305,6 @@ tu_update_descriptor_sets(const struct tu_device *device,
                write_sampler_descriptor(ptr, writeset->pImageInfo[j].sampler);
             else if (copy_immutable_samplers)
                write_sampler_push(ptr, &samplers[writeset->dstArrayElement + j]);
-            break;
-         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-            /* nothing in descriptor set - framebuffer state is used instead */
-            if (TU_DEBUG(DYNAMIC))
-               write_image_descriptor(ptr, writeset->descriptorType, writeset->pImageInfo + j);
             break;
          default:
             unreachable("unimplemented descriptor type");
@@ -1630,7 +1617,8 @@ tu_update_descriptor_set_with_template(
             write_texel_buffer_descriptor(ptr, *(VkBufferView *) src);
             break;
          case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
+         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
             write_image_descriptor(ptr, templ->entry[i].descriptor_type,
                                    (const VkDescriptorImageInfo *) src);
             break;
@@ -1648,12 +1636,6 @@ tu_update_descriptor_set_with_template(
                write_sampler_descriptor(ptr, ((const VkDescriptorImageInfo *)src)->sampler);
             else if (samplers)
                write_sampler_push(ptr, &samplers[j]);
-            break;
-         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-            /* nothing in descriptor set - framebuffer state is used instead */
-            if (TU_DEBUG(DYNAMIC))
-               write_image_descriptor(ptr, templ->entry[i].descriptor_type,
-                                      (const VkDescriptorImageInfo *) src);
             break;
          default:
             unreachable("unimplemented descriptor type");

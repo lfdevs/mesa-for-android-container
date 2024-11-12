@@ -1,24 +1,6 @@
 /*
- * Copyright (c) 2013 Rob Clark <robdclark@gmail.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright © 2013 Rob Clark <robdclark@gmail.com>
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef IR3_H_
@@ -278,6 +260,14 @@ typedef enum {
    ALIAS_MEM = 4,
 } ir3_alias_scope;
 
+typedef enum {
+   SHFL_XOR = 1,
+   SHFL_UP = 2,
+   SHFL_DOWN = 3,
+   SHFL_RUP = 6,
+   SHFL_RDOWN = 7,
+} ir3_shfl_mode;
+
 typedef enum ir3_instruction_flags {
    /* (sy) flag is set on first instruction, and after sample
     * instructions (probably just on RAW hazard).
@@ -434,6 +424,7 @@ struct ir3_instruction {
          unsigned d    : 3; /* for ldc, component offset */
          bool typed    : 1;
          unsigned base : 3;
+         ir3_shfl_mode shfl_mode : 3;
       } cat6;
       struct {
          unsigned w : 1; /* write */
@@ -460,6 +451,7 @@ struct ir3_instruction {
           * until we resolve the phi srcs
           */
          void *nphi;
+         unsigned comp;
       } phi;
       struct {
          unsigned samp, tex;
@@ -554,10 +546,36 @@ struct ir3_instruction {
    /* Entry in ir3_block's instruction list: */
    struct list_head node;
 
+   /* List of this instruction's repeat group. Vectorized NIR instructions are
+    * emitted as multiple scalar instructions that are linked together using
+    * this field. After RA, the ir3_combine_rpt pass iterates these groups and,
+    * if the register assignment allows it, merges them into a (rptN)
+    * instruction.
+    *
+    * NOTE: this is not a typical list as there is no empty list head. The list
+    * head is stored in the first instruction of the repeat group so also refers
+    * to a list entry. In order to distinguish the list's first entry, we use
+    * serialno: instructions in a repeat group are always emitted consecutively
+    * so the first will have the lowest serialno.
+    *
+    * As this is not a typical list, we have to be careful with using the
+    * existing list helper. For example, using list_length on the first
+    * instruction will yield one less than the number of instructions in its
+    * group.
+    */
+   struct list_head rpt_node;
+
    uint32_t serialno;
 
    // TODO only computerator/assembler:
    int line;
+};
+
+/* Represents repeat groups in return values and arguments of the rpt builder
+ * API functions.
+ */
+struct ir3_instruction_rpt {
+   struct ir3_instruction *rpts[4];
 };
 
 struct ir3 {
@@ -807,6 +825,14 @@ struct ir3_instruction *ir3_instr_clone(struct ir3_instruction *instr);
 void ir3_instr_add_dep(struct ir3_instruction *instr,
                        struct ir3_instruction *dep);
 const char *ir3_instr_name(struct ir3_instruction *instr);
+void ir3_instr_remove(struct ir3_instruction *instr);
+
+void ir3_instr_create_rpt(struct ir3_instruction **instrs, unsigned n);
+bool ir3_instr_is_rpt(const struct ir3_instruction *instr);
+bool ir3_instr_is_first_rpt(const struct ir3_instruction *instr);
+struct ir3_instruction *ir3_instr_prev_rpt(const struct ir3_instruction *instr);
+struct ir3_instruction *ir3_instr_first_rpt(struct ir3_instruction *instr);
+unsigned ir3_instr_rpt_length(const struct ir3_instruction *instr);
 
 struct ir3_register *ir3_src_create(struct ir3_instruction *instr, int num,
                                     int flags);
@@ -900,6 +926,8 @@ bool ir3_valid_immediate(struct ir3_instruction *instr, int32_t immed);
  */
 struct ir3_instruction *
 ir3_get_cond_for_nonzero_compare(struct ir3_instruction *instr);
+
+bool ir3_supports_rpt(struct ir3_compiler *compiler, unsigned opc);
 
 #include "util/set.h"
 #define foreach_ssa_use(__use, __instr)                                        \
@@ -1381,7 +1409,9 @@ dest_regs(struct ir3_instruction *instr)
 static inline bool
 is_reg_gpr(const struct ir3_register *reg)
 {
-   if ((reg_num(reg) == REG_A0) || (reg->flags & IR3_REG_PREDICATE))
+   if (reg->flags & (IR3_REG_CONST | IR3_REG_IMMED | IR3_REG_PREDICATE))
+      return false;
+   if (reg_num(reg) == REG_A0)
       return false;
    if (!(reg->flags & (IR3_REG_SSA | IR3_REG_RELATIV)) &&
        reg->num == INVALID_REG)
@@ -1474,6 +1504,7 @@ static inline unsigned
 ir3_reg_file_offset(const struct ir3_register *reg, unsigned num,
                     bool mergedregs, enum ir3_reg_file *file)
 {
+   assert(!(reg->flags & (IR3_REG_IMMED | IR3_REG_CONST)));
    unsigned size = reg_elem_size(reg);
    if (!is_reg_gpr(reg)) {
       *file = IR3_FILE_NONGPR;
@@ -1504,16 +1535,6 @@ static inline bool
 conflicts(struct ir3_register *a, struct ir3_register *b)
 {
    return (a && b) && (a->def != b->def);
-}
-
-static inline bool
-reg_gpr(struct ir3_register *r)
-{
-   if (r->flags & (IR3_REG_CONST | IR3_REG_IMMED | IR3_REG_PREDICATE))
-      return false;
-   if (reg_num(r) == REG_A0)
-      return false;
-   return true;
 }
 
 static inline bool
@@ -1956,6 +1977,26 @@ __ssa_srcp_n(struct ir3_instruction *instr, unsigned n)
    list_for_each_entry_from_safe(struct ir3_instruction, __instr, __start,     \
                                  __list, node)
 
+/* Iterate over all instructions in a repeat group. */
+#define foreach_instr_rpt(__rpt, __instr)                                      \
+   if (assert(ir3_instr_is_first_rpt(__instr)), true)                          \
+      for (struct ir3_instruction *__rpt = __instr, *__first = __instr;        \
+           __first || __rpt != __instr;                                        \
+           __first = NULL, __rpt =                                             \
+                              list_entry(__rpt->rpt_node.next,                 \
+                                         struct ir3_instruction, rpt_node))
+
+/* Iterate over all instructions except the first one in a repeat group. */
+#define foreach_instr_rpt_excl(__rpt, __instr)                                 \
+   if (assert(ir3_instr_is_first_rpt(__instr)), true)                          \
+      list_for_each_entry (struct ir3_instruction, __rpt, &__instr->rpt_node,  \
+                           rpt_node)
+
+#define foreach_instr_rpt_excl_safe(__rpt, __instr)                            \
+   if (assert(ir3_instr_is_first_rpt(__instr)), true)                          \
+      list_for_each_entry_safe (struct ir3_instruction, __rpt,                 \
+                                &__instr->rpt_node, rpt_node)
+
 /* iterators for blocks: */
 #define foreach_block(__block, __list)                                         \
    list_for_each_entry (struct ir3_block, __block, __list, node)
@@ -2023,7 +2064,7 @@ is_ss_producer(struct ir3_instruction *instr)
    if (instr->block->in_early_preamble && writes_addr1(instr))
       return true;
 
-   return is_sfu(instr) || is_local_mem_load(instr);
+   return is_sfu(instr) || is_local_mem_load(instr) || instr->opc == OPC_SHFL;
 }
 
 static inline bool
@@ -2124,6 +2165,18 @@ soft_sy_delay(struct ir3_instruction *instr, struct ir3 *shader)
    }
 }
 
+/* Some instructions don't immediately consume their sources so may introduce a
+ * WAR hazard.
+ */
+static inline bool
+is_war_hazard_producer(struct ir3_instruction *instr)
+{
+   return is_tex(instr) || is_mem(instr) || is_ss_producer(instr) ||
+          instr->opc == OPC_STC;
+}
+
+bool ir3_cleanup_rpt(struct ir3 *ir, struct ir3_shader_variant *v);
+bool ir3_merge_rpt(struct ir3 *ir, struct ir3_shader_variant *v);
 bool ir3_opt_predicates(struct ir3 *ir, struct ir3_shader_variant *v);
 
 /* unreachable block elimination: */
@@ -2412,6 +2465,20 @@ ir3_MOV(struct ir3_block *block, struct ir3_instruction *src, type_t type)
    return instr;
 }
 
+static inline struct ir3_instruction_rpt
+ir3_MOV_rpt(struct ir3_block *block, unsigned nrpt,
+            struct ir3_instruction_rpt src, type_t type)
+{
+   struct ir3_instruction_rpt dst;
+   assert(nrpt <= ARRAY_SIZE(dst.rpts));
+
+   for (unsigned rpt = 0; rpt < nrpt; ++rpt)
+      dst.rpts[rpt] = ir3_MOV(block, src.rpts[rpt], type);
+
+   ir3_instr_create_rpt(dst.rpts, nrpt);
+   return dst;
+}
+
 static inline struct ir3_instruction *
 ir3_COV(struct ir3_block *block, struct ir3_instruction *src, type_t src_type,
         type_t dst_type)
@@ -2428,6 +2495,19 @@ ir3_COV(struct ir3_block *block, struct ir3_instruction *src, type_t src_type,
    instr->cat1.dst_type = dst_type;
    assert(!(src->dsts[0]->flags & IR3_REG_ARRAY));
    return instr;
+}
+
+static inline struct ir3_instruction_rpt
+ir3_COV_rpt(struct ir3_block *block, unsigned nrpt,
+            struct ir3_instruction_rpt src, type_t src_type, type_t dst_type)
+{
+   struct ir3_instruction_rpt dst;
+
+   for (unsigned rpt = 0; rpt < nrpt; ++rpt)
+      dst.rpts[rpt] = ir3_COV(block, src.rpts[rpt], src_type, dst_type);
+
+   ir3_instr_create_rpt(dst.rpts, nrpt);
+   return dst;
 }
 
 static inline struct ir3_instruction *
@@ -2489,7 +2569,19 @@ static inline struct ir3_instruction *ir3_##name(                              \
    __ssa_src(instr, a, aflags);                                                \
    instr->flags |= flag;                                                       \
    return instr;                                                               \
+}                                                                              \
+static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
+   struct ir3_block *block, unsigned nrpt,                                     \
+   struct ir3_instruction_rpt a, unsigned aflags)                              \
+{                                                                              \
+   struct ir3_instruction_rpt dst;                                             \
+   assert(nrpt <= ARRAY_SIZE(dst.rpts));                                       \
+   for (unsigned rpt = 0; rpt < nrpt; rpt++)                                   \
+      dst.rpts[rpt] = ir3_##name(block, a.rpts[rpt], aflags);                  \
+   ir3_instr_create_rpt(dst.rpts, nrpt);                                       \
+   return dst;                                                                 \
 }
+
 /* clang-format on */
 #define INSTR1F(f, name)  __INSTR1(IR3_INSTR_##f, 1, name##_##f, OPC_##name,   \
                                    false)
@@ -2512,6 +2604,20 @@ static inline struct ir3_instruction *ir3_##name(                              \
    __ssa_src(instr, b, bflags);                                                \
    instr->flags |= flag;                                                       \
    return instr;                                                               \
+}                                                                              \
+static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
+   struct ir3_block *block, unsigned nrpt,                                     \
+   struct ir3_instruction_rpt a, unsigned aflags,                              \
+   struct ir3_instruction_rpt b, unsigned bflags)                              \
+{                                                                              \
+   struct ir3_instruction_rpt dst;                                             \
+   assert(nrpt <= ARRAY_SIZE(dst.rpts));                                       \
+   for (unsigned rpt = 0; rpt < nrpt; rpt++) {                                 \
+      dst.rpts[rpt] = ir3_##name(block, a.rpts[rpt], aflags,                   \
+                                 b.rpts[rpt], bflags);                         \
+   }                                                                           \
+   ir3_instr_create_rpt(dst.rpts, nrpt);                                       \
+   return dst;                                                                 \
 }
 /* clang-format on */
 #define INSTR2F(f, name)   __INSTR2(IR3_INSTR_##f, 1, name##_##f, OPC_##name,  \
@@ -2538,6 +2644,22 @@ static inline struct ir3_instruction *ir3_##name(                              \
    __ssa_src(instr, c, cflags);                                                \
    instr->flags |= flag;                                                       \
    return instr;                                                               \
+}                                                                              \
+static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
+   struct ir3_block *block, unsigned nrpt,                                     \
+   struct ir3_instruction_rpt a, unsigned aflags,                              \
+   struct ir3_instruction_rpt b, unsigned bflags,                              \
+   struct ir3_instruction_rpt c, unsigned cflags)                              \
+{                                                                              \
+   struct ir3_instruction_rpt dst;                                             \
+   assert(nrpt <= ARRAY_SIZE(dst.rpts));                                       \
+   for (unsigned rpt = 0; rpt < nrpt; rpt++) {                                 \
+      dst.rpts[rpt] = ir3_##name(block, a.rpts[rpt], aflags,                   \
+                                 b.rpts[rpt], bflags,                          \
+                                 c.rpts[rpt], cflags);                         \
+   }                                                                           \
+   ir3_instr_create_rpt(dst.rpts, nrpt);                                       \
+   return dst;                                                                 \
 }
 /* clang-format on */
 #define INSTR3F(f, name)  __INSTR3(IR3_INSTR_##f, 1, name##_##f, OPC_##name,   \
@@ -2845,6 +2967,7 @@ INSTR1(QUAD_SHUFFLE_DIAG)
 INSTR2NODST(LDC_K)
 INSTR2NODST(STC)
 INSTR2NODST(STSC)
+INSTR2(SHFL)
 #ifndef GPU
 #elif GPU >= 600
 INSTR4NODST(STIB);

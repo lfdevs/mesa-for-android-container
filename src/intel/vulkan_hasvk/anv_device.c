@@ -67,6 +67,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ADAPTIVE_SYNC(true)
       DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
       DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(false)
+      DRI_CONF_VK_KHR_PRESENT_WAIT(false)
       DRI_CONF_VK_XWAYLAND_WAIT_READY(true)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(0)
       DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
@@ -236,6 +237,17 @@ get_device_extensions(const struct anv_physical_device *device,
           INTEL_DEBUG(DEBUG_NO_OACONFIG)) &&
          device->use_call_secondary,
       .KHR_pipeline_executable_properties    = true,
+      /* Hide these behind dri configs for now since we cannot implement it reliably on
+       * all surfaces yet. There is no surface capability query for present wait/id,
+       * but the feature is useful enough to hide behind an opt-in mechanism for now.
+       * If the instance only enables surface extensions that unconditionally support present wait,
+       * we can also expose the extension that way. */
+      .KHR_present_id =
+         driQueryOptionb(&device->instance->dri_options, "vk_khr_present_wait") ||
+         wsi_common_vk_instance_supports_present_wait(&device->instance->vk),
+      .KHR_present_wait =
+         driQueryOptionb(&device->instance->dri_options, "vk_khr_present_wait") ||
+         wsi_common_vk_instance_supports_present_wait(&device->instance->vk),
       .KHR_push_descriptor                   = true,
       .KHR_relaxed_block_layout              = true,
       .KHR_sampler_mirror_clamp_to_edge      = true,
@@ -248,6 +260,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_shader_float_controls             = true,
       .KHR_shader_integer_dot_product        = true,
       .KHR_shader_non_semantic_info          = true,
+      .KHR_shader_relaxed_extended_instruction = true,
       .KHR_shader_subgroup_extended_types    = device->info.ver >= 8,
       .KHR_shader_subgroup_uniform_control_flow = true,
       .KHR_shader_terminate_invocation       = true,
@@ -272,6 +285,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_conditional_rendering             = device->info.verx10 >= 75,
       .EXT_custom_border_color               = device->info.ver >= 8,
       .EXT_depth_clamp_zero_one              = true,
+      .EXT_depth_clamp_control               = true,
       .EXT_depth_clip_control                = true,
       .EXT_depth_clip_enable                 = true,
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
@@ -636,11 +650,23 @@ get_features(const struct anv_physical_device *pdevice,
       .primitiveTopologyListRestart = true,
       .primitiveTopologyPatchListRestart = true,
 
+      /* VK_EXT_depth_clamp_control */
+      .depthClampControl = true,
+
       /* VK_EXT_depth_clip_control */
       .depthClipControl = true,
 
+      /* VK_KHR_present_id */
+      .presentId = pdevice->vk.supported_extensions.KHR_present_id,
+
+      /* VK_KHR_present_wait */
+      .presentWait = pdevice->vk.supported_extensions.KHR_present_wait,
+
       /* VK_KHR_shader_expect_assume */
       .shaderExpectAssume = true,
+
+      /* VK_KHR_shader_relaxed_extended_instruction */
+      .shaderRelaxedExtendedInstruction = true,
    };
 
    /* We can't do image stores in vec4 shaders */
@@ -1778,7 +1804,6 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    device->compiler->constant_buffer_0_is_relative =
       device->info.ver < 8 || !device->info.has_context_isolation;
    device->compiler->supports_shader_constants = true;
-   device->compiler->indirect_ubos_use_sampler = device->info.ver < 12;
 
    isl_device_init(&device->isl_dev, &device->info);
 

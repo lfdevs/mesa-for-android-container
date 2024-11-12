@@ -45,6 +45,9 @@ struct glsl_symbol_table {
    glsl_symbol_table();
    ~glsl_symbol_table();
 
+   glsl_symbol_table(const glsl_symbol_table &) = delete;
+   glsl_symbol_table & operator=(const glsl_symbol_table &) = delete;
+
    /* In 1.10, functions and variables have separate namespaces. */
    bool separate_function_namespace;
 

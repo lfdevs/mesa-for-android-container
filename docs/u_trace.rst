@@ -44,6 +44,9 @@ u_trace is controlled by environment variables:
 
          - For Turnip, ``cffdump`` can be used to view the markers in
            the trace.
+   ``indirects``
+      enables indirect data capture for some of the tracepoints (like
+      indirect draw count or indirect dispatch size)
 
 .. envvar:: MESA_GPU_TRACEFILE
 

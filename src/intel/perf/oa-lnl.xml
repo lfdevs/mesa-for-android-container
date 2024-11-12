@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<metrics version="1717706518" merge_md5="">
+<metrics version="1725302004" merge_md5="">
   <set name="RenderBasic"
        chipset="LNL"
        symbol_name="RenderBasic"
@@ -1480,7 +1480,7 @@
     <counter name="L3 Hit"
              symbol_name="L3_HIT"
              underscore_name="l3_hit"
-             description="Number of Device Cache accesses (except atomics) which hits in the Device Cache cache"
+             description="Number of Device Cache accesses which hits in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -1493,7 +1493,7 @@
     <counter name="L3 Miss"
              symbol_name="L3_MISS"
              underscore_name="l3_miss"
-             description="Number of Device Cache accesses (except atomics) which miss in the Device Cache cache"
+             description="Number of Device Cache accesses which miss in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -2641,7 +2641,7 @@
     <counter name="AMFS L3 Hit"
              symbol_name="AMFS_L3_HIT"
              underscore_name="amfs_l3_hit"
-             description="Number of AMFS hits (except atomics) in Device Cache"
+             description="Number of AMFS hits in Device Cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -2719,7 +2719,7 @@
     <counter name="Load Store Cache L3 Hit"
              symbol_name="LOAD_STORE_CACHE_L3_HIT"
              underscore_name="load_store_cache_l3_hit"
-             description="Number of Load Store Cache requests (except atomics) to Device Cache that are hit"
+             description="Number of Load Store Cache requests to Device Cache that are hit"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -2823,7 +2823,7 @@
     <counter name="L3 Hit"
              symbol_name="L3_HIT"
              underscore_name="l3_hit"
-             description="Number of Device Cache accesses (except atomics) which hits in the Device Cache cache"
+             description="Number of Device Cache accesses which hits in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -2836,7 +2836,7 @@
     <counter name="L3 Miss"
              symbol_name="L3_MISS"
              underscore_name="l3_miss"
-             description="Number of Device Cache accesses (except atomics) which miss in the Device Cache cache"
+             description="Number of Device Cache accesses which miss in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -3422,7 +3422,7 @@
     <counter name="L3 Hit"
              symbol_name="L3_HIT"
              underscore_name="l3_hit"
-             description="Number of Device Cache accesses (except atomics) which hits in the Device Cache cache"
+             description="Number of Device Cache accesses which hits in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -3435,7 +3435,7 @@
     <counter name="L3 Miss"
              symbol_name="L3_MISS"
              underscore_name="l3_miss"
-             description="Number of Device Cache accesses (except atomics) which miss in the Device Cache cache"
+             description="Number of Device Cache accesses which miss in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -5890,7 +5890,7 @@
     <counter name="L3 Hit"
              symbol_name="L3_HIT"
              underscore_name="l3_hit"
-             description="Number of Device Cache accesses (except atomics) which hits in the Device Cache cache"
+             description="Number of Device Cache accesses which hits in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -5903,7 +5903,7 @@
     <counter name="L3 Miss"
              symbol_name="L3_MISS"
              underscore_name="l3_miss"
-             description="Number of Device Cache accesses (except atomics) which miss in the Device Cache cache"
+             description="Number of Device Cache accesses which miss in the Device Cache cache"
              data_type="uint64"
              units="events"
              semantic_type="event"
@@ -6766,218 +6766,6 @@
     <register_config type="FLEX">
         <register type="FLEX" address="0x0000E458" value="0x00000000" />
         <register type="FLEX" address="0x0000E558" value="0x00000000" />
-    </register_config>
-  </set>
-
-  <set name="TestOa"
-       chipset="LNL"
-       symbol_name="TestOa"
-       underscore_name="test_oa"
-       mdapi_supported_apis="VK OGL OCL IO"
-       oa_format="576B_PEC64LL"
-       hw_config_guid="24c33f2c-f8d9-40d9-b2db-64e863b4d625"
-       >
-    <counter name="GPU Time Elapsed"
-             symbol_name="GpuTime"
-             underscore_name="gpu_time"
-             description="Time elapsed on the GPU during the measurement."
-             data_type="uint64"
-             units="ns"
-             semantic_type="event"
-             equation="GPU_TIME 0 READ 1000000000 UMUL $GpuTimestampFrequency UDIV"
-             mdapi_group="GPU"
-             mdapi_usage_flags="Tier1 Overview System Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="GPU Core Clocks"
-             symbol_name="GpuCoreClocks"
-             underscore_name="gpu_core_clocks"
-             description="The total number of GPU core clocks elapsed during the measurement."
-             data_type="uint64"
-             units="cycles"
-             semantic_type="event"
-             equation="GPU_CLOCK 0 READ"
-             mdapi_group="GPU"
-             mdapi_usage_flags="Tier1 Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="AVG GPU Core Frequency"
-             symbol_name="AvgGpuCoreFrequency"
-             underscore_name="avg_gpu_core_frequency"
-             description="Average GPU Core Frequency in the measurement."
-             data_type="uint64"
-             max_equation="$GpuMaxFrequency"
-             units="hz"
-             semantic_type="event"
-             equation="$GpuCoreClocks 1000000000 UMUL $GpuTime UDIV"
-             mdapi_group="GPU"
-             mdapi_usage_flags="Tier1 Overview System Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="GPU Busy"
-             symbol_name="GPU_BUSY"
-             underscore_name="gpu_busy"
-             description="Percentage of time in which GPU is not idle including all GPU engines"
-             data_type="float"
-             units="percent"
-             semantic_type="duration"
-             equation="PEC 32 READ 100 UMUL $GpuCoreClocks FDIV"
-             mdapi_group="Front End"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="IA Vertex"
-             symbol_name="IA_VERTEX"
-             underscore_name="ia_vertex"
-             description="Number of vertices in a draw"
-             data_type="uint64"
-             units="events"
-             semantic_type="event"
-             equation="PEC 33 READ"
-             mdapi_group="Geometry"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="GpGpu Threadgroup Count"
-             symbol_name="GPGPU_THREADGROUP_COUNT"
-             underscore_name="gpgpu_threadgroup_count"
-             description="Number of GPGPU threadgroups dispatched"
-             data_type="uint64"
-             units="events"
-             semantic_type="event"
-             equation="PEC 0 READ"
-             mdapi_group="Thread Dispatcher"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="Async GpGpu Threadgroup Count"
-             symbol_name="ASYNC_GPGPU_THREADGROUP_COUNT"
-             underscore_name="async_gpgpu_threadgroup_count"
-             description="Number of Async GPGPU threadgroups dispatched"
-             data_type="uint64"
-             units="events"
-             semantic_type="event"
-             equation="PEC 1 READ"
-             mdapi_group="Thread Dispatcher"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="Rasterizer Sample Output"
-             symbol_name="RASTERIZER_SAMPLE_OUTPUT"
-             underscore_name="rasterizer_sample_output"
-             description="Number of lit samples emitted by Rasterizer"
-             data_type="uint64"
-             units="events"
-             semantic_type="event"
-             equation="PEC 34 READ"
-             mdapi_group="Rasterizer"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="Test Event1"
-             symbol_name="TEST_EVENT1"
-             underscore_name="test_event1"
-             description="Number of GPU (gt) clock cycles at every clock period"
-             data_type="float"
-             units="percent"
-             semantic_type="duration"
-             equation="PEC 2 READ $XeCoreTotalCount UDIV 100 UMUL $GpuCoreClocks FDIV"
-             mdapi_group="Test"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="Test Event1 Cycles"
-             symbol_name="TEST_EVENT1_CYCLES"
-             underscore_name="test_event1_cycles"
-             description="Number of GPU (gt) clock cycles at every clock period"
-             data_type="uint64"
-             units="cycles"
-             semantic_type="event"
-             equation="PEC 2 READ"
-             mdapi_group="Test"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="Test Event1 Cycles Average"
-             symbol_name="TEST_EVENT1_CYCLES_AVERAGE"
-             underscore_name="test_event1_cycles_average"
-             description="Average number of GPU (gt) clock cycles at every clock period"
-             data_type="uint64"
-             units="cycles"
-             semantic_type="event"
-             equation="PEC 2 READ $XeCoreTotalCount UDIV"
-             mdapi_group="Test"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="Test Event2"
-             symbol_name="TEST_EVENT2"
-             underscore_name="test_event2"
-             description="Number of GPU (gt) clock cycles at every other clock period"
-             data_type="float"
-             units="percent"
-             semantic_type="duration"
-             equation="PEC 35 READ $SliceTotalCount UDIV 100 UMUL $GpuCoreClocks FDIV"
-             mdapi_group="Test"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="Test Event2 Cycles"
-             symbol_name="TEST_EVENT2_CYCLES"
-             underscore_name="test_event2_cycles"
-             description="Number of GPU (gt) clock cycles at every other clock period"
-             data_type="uint64"
-             units="cycles"
-             semantic_type="event"
-             equation="PEC 35 READ"
-             mdapi_group="Test"
-             mdapi_usage_flags="Frame Batch Draw"
-             mdapi_supported_apis=""
-             mdapi_hw_unit_type="gpu"
-             />
-    <register_config type="OA">
-        <register type="OA" address="0x00013000" value="0x00001801" />
-        <register type="OA" address="0x00013004" value="0x00000000" />
-        <register type="OA" address="0x00013008" value="0x00001802" />
-        <register type="OA" address="0x0001300C" value="0x00000000" />
-        <register type="OA" address="0x00013010" value="0x00003E00" />
-        <register type="OA" address="0x00013014" value="0x00000000" />
-        <register type="OA" address="0x00013300" value="0x00005A00" />
-        <register type="OA" address="0x00013304" value="0x00000000" />
-        <register type="OA" address="0x00013500" value="0x00005A00" />
-        <register type="OA" address="0x00013504" value="0x00000000" />
-        <register type="OA" address="0x00013700" value="0x00005A00" />
-        <register type="OA" address="0x00013704" value="0x00000000" />
-        <register type="OA" address="0x00013308" value="0x00004405" />
-        <register type="OA" address="0x0001330C" value="0x00000000" />
-        <register type="OA" address="0x00013508" value="0x00004405" />
-        <register type="OA" address="0x0001350C" value="0x00000000" />
-        <register type="OA" address="0x00013708" value="0x00004405" />
-        <register type="OA" address="0x0001370C" value="0x00000000" />
-        <register type="OA" address="0x00013310" value="0x00006805" />
-        <register type="OA" address="0x00013314" value="0x00000000" />
-        <register type="OA" address="0x00013510" value="0x00006805" />
-        <register type="OA" address="0x00013514" value="0x00000000" />
-        <register type="OA" address="0x00013710" value="0x00006805" />
-        <register type="OA" address="0x00013714" value="0x00000000" />
-        <register type="OA" address="0x00013318" value="0x00007E00" />
-        <register type="OA" address="0x0001331C" value="0x00000000" />
-        <register type="OA" address="0x00013518" value="0x00007E00" />
-        <register type="OA" address="0x0001351C" value="0x00000000" />
-        <register type="OA" address="0x00013718" value="0x00007E00" />
-        <register type="OA" address="0x0001371C" value="0x00000000" />
     </register_config>
   </set>
 

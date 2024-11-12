@@ -455,16 +455,12 @@ nir_lower_alu_to_scalar(nir_shader *shader, nir_instr_filter_cb cb, const void *
 }
 
 static bool
-lower_alu_vec8_16_src(nir_builder *b, nir_instr *instr, void *_data)
+lower_alu_vec8_16_src(nir_builder *b, nir_alu_instr *alu, void *_data)
 {
-   if (instr->type != nir_instr_type_alu)
-      return false;
-
-   nir_alu_instr *alu = nir_instr_as_alu(instr);
    const nir_op_info *info = &nir_op_infos[alu->op];
 
    bool changed = false;
-   b->cursor = nir_before_instr(instr);
+   b->cursor = nir_before_instr(&alu->instr);
    for (int i = 0; i < info->num_inputs; i++) {
       if (alu->src[i].src.ssa->num_components < 8 || info->input_sizes[i])
          continue;
@@ -492,7 +488,7 @@ lower_alu_vec8_16_src(nir_builder *b, nir_instr *instr, void *_data)
 bool
 nir_lower_alu_vec8_16_srcs(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(shader, lower_alu_vec8_16_src,
-      nir_metadata_control_flow,
-      NULL);
+   return nir_shader_alu_pass(shader, lower_alu_vec8_16_src,
+                              nir_metadata_control_flow,
+                              NULL);
 }

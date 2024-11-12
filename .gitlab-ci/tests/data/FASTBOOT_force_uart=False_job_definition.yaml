@@ -22,8 +22,10 @@ actions:
       minutes: 10
     to: nfs
     nfsrootfs:
-      url: None/lava-rootfs.tar.zst
+      url: None
       compression: zstd
+      format: tar
+      overlays: {}
     namespace: dut
 - deploy:
     timeout:
@@ -40,8 +42,8 @@ actions:
         image: registry.gitlab.collabora.com/lava/health-check-docker
         steps:
         - cat Image.gz my_dtb_filename.dtb > Image.gz+dtb
-        - mkbootimg --kernel Image.gz+dtb --cmdline "root=/dev/nfs rw nfsroot=$NFS_SERVER_IP:$NFS_ROOTFS,tcp,hard
-          rootwait ip=dhcp init=/init" --pagesize 4096 --base 0x80000000 -o boot.img
+        - mkbootimg --kernel Image.gz+dtb --cmdline "root=/dev/nfs rw nfsroot=$NFS_SERVER_IP:$NFS_ROOTFS,tcp,hard,v3
+          ip=dhcp init=/init rootwait usbcore.quirks=0bda:8153:k" --pagesize 4096 --base 0x80000000 -o boot.img
     namespace: dut
 - deploy:
     timeout:
@@ -86,6 +88,7 @@ actions:
           steps:
           - |-
             echo test FASTBOOT
+            export CURRENT_SECTION=dut_boot
           - export -p > /dut-env-vars.sh
 - test:
     namespace: container
@@ -129,10 +132,7 @@ actions:
           - |-
             lava_ssh_test_case 'artifact_download' 'bash --' << EOF
             source /dut-env-vars.sh
-            set -ex
-            curl -L --retry 4 -f --retry-all-errors --retry-delay 60 None | tar -xz -C /
-            mkdir -p /ci/project/dir
-            curl -L --retry 4 -f --retry-all-errors --retry-delay 60 None | tar --zstd -x -C /ci/project/dir
+            set -e
             echo Could not find jwt file, disabling S3 requests...
             sed -i '/S3_RESULTS_UPLOAD/d' /set-job-env-vars.sh
             EOF

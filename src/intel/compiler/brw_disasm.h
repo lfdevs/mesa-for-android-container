@@ -35,6 +35,10 @@ int brw_disassemble_find_end(const struct brw_isa_info *isa,
 void brw_disassemble_with_errors(const struct brw_isa_info *isa,
                                  const void *assembly, int start, FILE *out);
 
+const char *brw_lsc_op_to_string(unsigned op);
+const char *brw_lsc_addr_surftype_to_string(unsigned t);
+const char *brw_lsc_data_size_to_string(unsigned s);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

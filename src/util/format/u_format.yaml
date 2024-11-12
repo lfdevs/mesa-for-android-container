@@ -1902,8 +1902,8 @@
   swizzles: [X, 0, 0, 1]
 
 
-# RGB version of NV12 and YV12 for hardware that supports sampling from
-# multiplane textures but needs color-space conversion in the shader.
+# RGB versions of NV12, YV12, P010, and P012 for hardware that supports sampling
+# from multiplane textures but needs color-space conversion in the shader.
 - name: R8_G8B8_420_UNORM
   layout: planar2
   colorspace: RGB
@@ -1946,15 +1946,56 @@
   block: {width: 1, height: 1, depth: 1}
   channels: [UN8]
   swizzles: [X, Y, Z, W]
+- name: X6G10_X6B10X6R10_420_UNORM
+  layout: planar2
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X6, UN10]
+  swizzles: [X, Y, Z, W]
+- name: X4G12_X4B12X4R12_420_UNORM
+  layout: planar2
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X4, UN12]
+  swizzles: [X, Y, Z, W]
 
-# While most of Mesa uses R8 for Y, U, and V planes, freedreno requires distinguishing
-# between tiled Y8 data and tiled R8 data.
+# While most of Mesa uses R8 for Y, U, and V planes, freedreno requires
+# distinguishing between tiled Y8 data and tiled R8 data.
 - name: Y8_UNORM
   layout: other
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: [UN8]
   swizzles: [X, 0, 0, 1]
+
+# Formats for plane 0/plane 1 of P010
+- name: X6R10_UNORM
+  layout: plain
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X6, UN10]
+  swizzles: [Y, 0, 0, 1]
+- name: X6R10X6G10_UNORM
+  layout: plain
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X6, UN10, X6, UN10]
+  swizzles: [Y, W, 0, 1]
+
+# Formats for plane 0/plane 1 of P012
+- name: X4R12_UNORM
+  layout: plain
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X4, UN12]
+  swizzles: [Y, 0, 0, 1]
+- name: X4R12X4G12_UNORM
+  layout: plain
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X4, UN12, X4, UN12]
+  swizzles: [Y, W, 0, 1]
+
 
 - name: Y8_U8_V8_422_UNORM
   layout: planar3

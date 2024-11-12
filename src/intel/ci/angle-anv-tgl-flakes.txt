@@ -6,6 +6,7 @@ dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_alpha_to_coverage
 dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_alpha_to_coverage
 
 dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both_inverted
+dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_both
 
 # "Failure: Non-zero green color component detected - should have been completely overwritten by red quad"
 # the "rendered image" looks suspiciously black, though, which is the clear color?

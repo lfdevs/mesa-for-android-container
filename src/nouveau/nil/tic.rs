@@ -14,6 +14,7 @@ use nvidia_headers::classes::clb097::tex as clb097;
 use nvidia_headers::classes::clb097::MAXWELL_A;
 use nvidia_headers::classes::clc097::tex as clc097;
 use nvidia_headers::classes::clc097::PASCAL_A;
+use nvidia_headers::classes::clc397::VOLTA_A;
 use paste::paste;
 use std::ops::Range;
 
@@ -24,6 +25,7 @@ use crate::image::ImageDim;
 use crate::image::SampleLayout;
 use crate::image::View;
 use crate::image::ViewType;
+use crate::tiling::GOBType;
 
 macro_rules! set_enum {
     ($th:expr, $cls:ident, $field:ident, $enum:ident) => {
@@ -163,8 +165,14 @@ fn nil_rs_to_nv9097_multi_sample_count(sample_layout: SampleLayout) -> u32 {
     match sample_layout {
         SampleLayout::_1x1 => cl9097::TEXHEADV2_MULTI_SAMPLE_COUNT_MODE_1X1,
         SampleLayout::_2x1 => cl9097::TEXHEADV2_MULTI_SAMPLE_COUNT_MODE_2X1,
+        SampleLayout::_2x1D3d => {
+            cl9097::TEXHEADV2_MULTI_SAMPLE_COUNT_MODE_2X1_D3D
+        }
         SampleLayout::_2x2 => cl9097::TEXHEADV2_MULTI_SAMPLE_COUNT_MODE_2X2,
         SampleLayout::_4x2 => cl9097::TEXHEADV2_MULTI_SAMPLE_COUNT_MODE_4X2,
+        SampleLayout::_4x2D3d => {
+            cl9097::TEXHEADV2_MULTI_SAMPLE_COUNT_MODE_4X2_D3D
+        }
         SampleLayout::_4x4 => cl9097::TEXHEADV2_MULTI_SAMPLE_COUNT_MODE_4X4,
         SampleLayout::Invalid => panic!("Invalid sample layout"),
     }
@@ -174,8 +182,14 @@ fn nil_rs_to_nvb097_multi_sample_count(sample_layout: SampleLayout) -> u32 {
     match sample_layout {
         SampleLayout::_1x1 => clb097::TEXHEAD_BL_MULTI_SAMPLE_COUNT_MODE_1X1,
         SampleLayout::_2x1 => clb097::TEXHEAD_BL_MULTI_SAMPLE_COUNT_MODE_2X1,
+        SampleLayout::_2x1D3d => {
+            clb097::TEXHEAD_BL_MULTI_SAMPLE_COUNT_MODE_2X1_D3D
+        }
         SampleLayout::_2x2 => clb097::TEXHEAD_BL_MULTI_SAMPLE_COUNT_MODE_2X2,
         SampleLayout::_4x2 => clb097::TEXHEAD_BL_MULTI_SAMPLE_COUNT_MODE_4X2,
+        SampleLayout::_4x2D3d => {
+            clb097::TEXHEAD_BL_MULTI_SAMPLE_COUNT_MODE_4X2_D3D
+        }
         SampleLayout::_4x4 => clb097::TEXHEAD_BL_MULTI_SAMPLE_COUNT_MODE_4X4,
         SampleLayout::Invalid => panic!("Invalid sample layout"),
     }
@@ -268,10 +282,10 @@ fn nv9097_fill_tic(
 
     let tiling = &image.levels[0].tiling;
 
-    if tiling.is_tiled {
+    if tiling.is_tiled() {
         set_enum!(th, cl9097, TEXHEADV2_MEMORY_LAYOUT, BLOCKLINEAR);
 
-        assert!(tiling.gob_height_is_8);
+        assert!(tiling.gob_type == GOBType::Fermi8);
         assert!(tiling.x_log2 == 0);
         set_enum!(th, cl9097, TEXHEADV2_GOBS_PER_BLOCK_WIDTH, ONE_GOB);
         th.set_field(cl9097::TEXHEADV2_GOBS_PER_BLOCK_HEIGHT, tiling.y_log2);
@@ -385,7 +399,7 @@ fn nvb097_fill_tic(
             u64::from(view.base_array_layer) * u64::from(image.array_stride_B);
     }
 
-    if tiling.is_tiled {
+    if tiling.is_tiled() {
         set_enum!(th, clb097, TEXHEAD_BL_HEADER_VERSION, SELECT_BLOCKLINEAR);
 
         let addr = BitView::new(&layer_address);
@@ -400,7 +414,7 @@ fn nvb097_fill_tic(
         );
         assert!(addr.get_bit_range_u64(48..64) == 0);
 
-        assert!(tiling.gob_height_is_8);
+        assert!(tiling.gob_type == GOBType::Fermi8);
 
         set_enum!(th, clb097, TEXHEAD_BL_GOBS_PER_BLOCK_WIDTH, ONE_GOB);
         th.set_field(clb097::TEXHEAD_BL_GOBS_PER_BLOCK_HEIGHT, tiling.y_log2);
@@ -625,4 +639,93 @@ pub fn fill_buffer_tic(
     } else {
         panic!("Tesla and older not supported");
     }
+}
+
+pub const ZERO_SWIZZLE: [nil_rs_bindings::pipe_swizzle; 4] = [
+    nil_rs_bindings::PIPE_SWIZZLE_0,
+    nil_rs_bindings::PIPE_SWIZZLE_0,
+    nil_rs_bindings::PIPE_SWIZZLE_0,
+    nil_rs_bindings::PIPE_SWIZZLE_0,
+];
+
+fn nv9097_fill_null_tic(zero_page_address: u64, desc_out: &mut [u32; 8]) {
+    *desc_out = [0u32; 8];
+    let mut th = BitMutView::new(desc_out);
+
+    th.set_field(cl9097::TEXHEADV2_USE_TEXTURE_HEADER_VERSION2, true);
+    let format = Format::try_from(PIPE_FORMAT_R8_UNORM).unwrap();
+    nvb097_set_th_bl_0(&mut th, &format, ZERO_SWIZZLE);
+
+    th.set_field(cl9097::TEXHEADV2_OFFSET_LOWER, zero_page_address as u32);
+    th.set_field(
+        cl9097::TEXHEADV2_OFFSET_UPPER,
+        (zero_page_address >> 32) as u32,
+    );
+
+    set_enum!(th, cl9097, TEXHEADV2_MEMORY_LAYOUT, BLOCKLINEAR);
+    set_enum!(th, cl9097, TEXHEADV2_TEXTURE_TYPE, TWO_D_ARRAY);
+    th.set_field(cl9097::TEXHEADV2_NORMALIZED_COORDS, true);
+
+    th.set_field(cl9097::TEXHEADV2_RES_VIEW_MIN_MIP_LEVEL, 1_u8);
+    th.set_field(cl9097::TEXHEADV2_RES_VIEW_MAX_MIP_LEVEL, 0_u8);
+}
+
+fn nvb097_fill_null_tic(zero_page_address: u64, desc_out: &mut [u32; 8]) {
+    *desc_out = [0u32; 8];
+    let mut th = BitMutView::new(desc_out);
+
+    let format = Format::try_from(PIPE_FORMAT_R8_UNORM).unwrap();
+    nvb097_set_th_bl_0(&mut th, &format, ZERO_SWIZZLE);
+
+    set_enum!(th, clb097, TEXHEAD_BL_HEADER_VERSION, SELECT_BLOCKLINEAR);
+
+    let addr = BitView::new(&zero_page_address);
+    assert!(addr.get_bit_range_u64(0..9) == 0);
+    th.set_field(
+        clb097::TEXHEAD_BL_ADDRESS_BITS31TO9,
+        addr.get_bit_range_u64(9..32),
+    );
+    th.set_field(
+        clb097::TEXHEAD_BL_ADDRESS_BITS47TO32,
+        addr.get_bit_range_u64(32..48),
+    );
+    assert!(addr.get_bit_range_u64(48..64) == 0);
+
+    set_enum!(th, clb097, TEXHEAD_BL_TEXTURE_TYPE, TWO_D_ARRAY);
+    set_enum!(th, clb097, TEXHEAD_BL_BORDER_SIZE, BORDER_SAMPLER_COLOR);
+    th.set_field(cl9097::TEXHEADV2_NORMALIZED_COORDS, true);
+
+    th.set_field(cl9097::TEXHEADV2_RES_VIEW_MIN_MIP_LEVEL, 1_u8);
+    th.set_field(cl9097::TEXHEADV2_RES_VIEW_MAX_MIP_LEVEL, 0_u8);
+
+    // This is copied from the D3D12 driver. I have no idea what these bits do
+    // or if they even do anything.
+    th.set_field(clb097::TEXHEAD_BL_RESERVED4A, 0x4_u8);
+    th.set_field(clb097::TEXHEAD_BL_RESERVED7Y, 0x80_u8);
+}
+
+pub fn fill_null_tic(
+    dev: &nil_rs_bindings::nv_device_info,
+    zero_page_address: u64,
+    desc_out: &mut [u32; 8],
+) {
+    if dev.cls_eng3d >= VOLTA_A {
+        // On Volta+, we can just fill with zeros
+        *desc_out = [0; 8]
+    } else if dev.cls_eng3d >= MAXWELL_A {
+        nvb097_fill_null_tic(zero_page_address, desc_out)
+    } else if dev.cls_eng3d >= FERMI_A {
+        nv9097_fill_null_tic(zero_page_address, desc_out)
+    } else {
+        panic!("Tesla and older not supported");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn nil_fill_null_tic(
+    dev: &nil_rs_bindings::nv_device_info,
+    zero_page_address: u64,
+    desc_out: &mut [u32; 8],
+) {
+    fill_null_tic(dev, zero_page_address, desc_out);
 }

@@ -78,15 +78,19 @@ genX(set_fast_clear_state)(struct anv_cmd_buffer *cmd_buffer,
                            union isl_color_value clear_color);
 
 void
-genX(load_image_clear_color)(struct anv_cmd_buffer *cmd_buffer,
-                             struct anv_state surface_state,
-                             const struct anv_image *image);
+genX(cmd_buffer_load_clear_color)(struct anv_cmd_buffer *cmd_buffer,
+                                  struct anv_state surface_state,
+                                  const struct anv_image_view *iview);
 
 void genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer);
+
+void
+genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
+                                     enum isl_aux_op aux_op);
 
 void genX(cmd_buffer_emit_gfx12_depth_wa)(struct anv_cmd_buffer *cmd_buffer,
                                           const struct isl_surf *surf);
@@ -149,6 +153,25 @@ genX(cmd_buffer_ensure_wa_14018283232)(struct anv_cmd_buffer *cmd_buffer,
 }
 #endif
 
+static inline bool
+genX(cmd_buffer_set_coarse_pixel_active)(struct anv_cmd_buffer *cmd_buffer,
+                                         enum anv_coarse_pixel_state state)
+{
+#if INTEL_WA_18038825448_GFX_VER
+   struct anv_cmd_graphics_state *gfx =
+      &cmd_buffer->state.gfx;
+   if (intel_needs_workaround(cmd_buffer->device->info, 18038825448) &&
+       gfx->coarse_pixel_active != state) {
+      gfx->coarse_pixel_active = state;
+      gfx->dirty |= ANV_CMD_DIRTY_COARSE_PIXEL_ACTIVE;
+      return true;
+   }
+   return false;
+#else
+   return false;
+#endif
+}
+
 void genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
                                struct anv_device *device,
                                struct anv_cmd_buffer *cmd_buffer,
@@ -181,7 +204,8 @@ genX(cmd_buffer_flush_descriptor_sets)(struct anv_cmd_buffer *cmd_buffer,
 
 void genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer);
 
-void genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer);
+anv_cmd_dirty_mask_t
+genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer);
 
@@ -241,6 +265,12 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
                               struct anv_address addr,
                               enum anv_timestamp_capture_type type,
                               void *data);
+
+void genX(cmd_capture_data)(struct anv_batch *batch,
+                            struct anv_device *device,
+                            struct anv_address dst_addr,
+                            struct anv_address src_addr,
+                            uint32_t size_B);
 
 void
 genX(batch_emit_post_3dprimitive_was)(struct anv_batch *batch,
@@ -354,8 +384,7 @@ genX(simple_shader_push_state_address)(struct anv_simple_shader *state,
 void
 genX(emit_simple_shader_end)(struct anv_simple_shader *state);
 
-VkResult genX(init_trtt_context_state)(struct anv_device *device,
-                                       struct anv_async_submit *submit);
+VkResult genX(init_trtt_context_state)(struct anv_async_submit *submit);
 
 void genX(write_trtt_entries)(struct anv_async_submit *submit,
                               struct anv_trtt_bind *l3l2_binds,

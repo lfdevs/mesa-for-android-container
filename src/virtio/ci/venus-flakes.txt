@@ -1,12 +1,5 @@
+dEQP-VK.pipeline.monolithic.timestamp.calibrated.calibration_test
+
 dEQP-VK.robustness.buffer_access.through_pointers.graphics.writes.fragment.32B_in_memory_with_vec4_s32
 
-# New CTS flakes in 1.3.7.0
-dEQP-VK.transform_feedback.primitives_generated_query.get.host_reset.*
-dEQP-VK.transform_feedback.primitives_generated_query.get.queue_reset.*
-
-# uprev Piglit in Mesa
 dEQP-VK.transform_feedback.primitives_generated_query.get.*reset.*
-
-# alternates between crash and timeout
-dEQP-VK.binding_model.mutable_descriptor.multiple_arrays_mixed.constant_size.aliasing.update_write.no_source.no_source.pool_no_types.pre_update.index_constant.comp
-dEQP-VK.binding_model.mutable_descriptor.multiple_arrays_mixed.unbounded.noaliasing.update_write.no_source.no_source.*

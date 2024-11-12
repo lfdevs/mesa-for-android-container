@@ -1,24 +1,6 @@
 /*
  * Copyright © 2021 Valve Corporation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ir3_compiler.h"
@@ -299,15 +281,14 @@ set_speculate(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *_)
 bool
 ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
 {
-   struct ir3_const_state *const_state = ir3_const_state(v);
-
    unsigned max_size;
    if (v->binning_pass) {
+      const struct ir3_const_state *const_state = ir3_const_state(v);
       max_size = const_state->preamble_size * 4;
    } else {
       struct ir3_const_state worst_case_const_state = {};
       ir3_setup_const_state(nir, v, &worst_case_const_state);
-      max_size = (ir3_max_const(v) - worst_case_const_state.offsets.immediate) * 4;
+      max_size = ir3_const_state_get_free_space(v, &worst_case_const_state) * 4;
    }
 
    if (max_size == 0)
@@ -330,8 +311,10 @@ ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
    unsigned size = 0;
    progress |= nir_opt_preamble(nir, &options, &size);
 
-   if (!v->binning_pass)
+   if (!v->binning_pass) {
+      struct ir3_const_state *const_state = ir3_const_state_mut(v);
       const_state->preamble_size = DIV_ROUND_UP(size, 4);
+   }
 
    return progress;
 }
@@ -613,7 +596,7 @@ get_preamble_offset(nir_def *def)
 bool
 ir3_nir_opt_prefetch_descriptors(nir_shader *nir, struct ir3_shader_variant *v)
 {
-   struct ir3_const_state *const_state = ir3_const_state(v);
+   const struct ir3_const_state *const_state = ir3_const_state(v);
 
    nir_function_impl *main = nir_shader_get_entrypoint(nir);
    struct set *instr_set = nir_instr_set_create(NULL);
@@ -760,9 +743,8 @@ ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v)
          unsigned offset = preamble_base + nir_intrinsic_base(intrin);
          b->cursor = nir_before_instr(instr);
 
-         nir_def *new_dest =
-            nir_load_uniform(b, dest->num_components, 32, nir_imm_int(b, 0),
-                             .base = offset);
+         nir_def *new_dest = nir_load_const_ir3(
+            b, dest->num_components, 32, nir_imm_int(b, 0), .base = offset);
 
          if (dest->bit_size == 1) {
             new_dest = nir_i2b(b, new_dest);
@@ -810,7 +792,7 @@ ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v)
             }
          }
 
-         nir_store_uniform_ir3(b, src, .base = offset);
+         nir_store_const_ir3(b, src, .base = offset);
          nir_instr_remove(instr);
          nir_instr_free(instr);
       }

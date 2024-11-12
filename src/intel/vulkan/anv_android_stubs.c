@@ -24,6 +24,14 @@
 #include "anv_android.h"
 
 VkResult
+anv_android_get_tiling(struct anv_device *device,
+                       struct u_gralloc_buffer_handle *gr_handle,
+                       enum isl_tiling *tiling_out)
+{
+   return VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
+VkResult
 anv_image_init_from_gralloc(struct anv_device *device,
                             struct anv_image *image,
                             const VkImageCreateInfo *base_info,

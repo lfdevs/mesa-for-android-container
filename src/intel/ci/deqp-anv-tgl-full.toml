@@ -2,4 +2,5 @@
 [[deqp]]
 deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
 caselists = ["/deqp/mustpass/vk-main.txt"]
+skips = ["install/anv-tgl-skips.txt"]
 renderer_check = "TGL GT2"

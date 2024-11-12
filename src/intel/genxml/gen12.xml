@@ -854,7 +854,7 @@
     <field name="Sample Mask" start="128" end="143" type="uint" />
   </instruction>
   <instruction name="HCP_FQM_STATE" bias="2" length="34" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="32" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="5" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -875,7 +875,7 @@
       <value name="Chroma Cr" value="2" />
     </field>
     <field name="FQM DC Value" start="48" end="63" type="uint" />
-    <group count="64" start="64" size="8">
+    <group count="128" start="64" size="8">
       <field name="Quantizer Matrix 8x8" start="0" end="7" type="uint" />
     </group>
   </instruction>
@@ -1194,6 +1194,10 @@
     <field name="Transform Skip Number of Non-Zero Coeffs Factor1" start="344" end="351" type="uint" />
     <field name="Original Slice Start Ctb X" start="352" end="361" type="uint" />
     <field name="Original Slice Start Ctb Y" start="368" end="377" type="uint" />
+    <field name="Slice Act Cr QP offset" start="384" end="389" type="uint" />
+    <field name="Slice Act Cb QP offset" start="390" end="395" type="uint" />
+    <field name="Slice Act Y QP offset" start="396" end="401" type="uint" />
+    <field name="Use Integer MV flag" start="415" end="415" type="uint" />
   </instruction>
   <instruction name="HCP_SURFACE_STATE" bias="2" length="5" engine="video">
     <field name="DWord Length" start="0" end="11" type="uint" default="3" />
@@ -1324,6 +1328,244 @@
     <field name="Address" start="66" end="111" type="address" />
     <field name="Immediate Data" start="128" end="191" type="uint" />
   </instruction>
+  <instruction name="VDENC_CMD1" bias="2" length="31" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="29" />
+    <field name="SubOpcodeB" start="16" end="20" type="uint" default="10" />
+    <field name="SubOpcodeA" start="21" end="22" type="uint" default="0" />
+    <field name="Media Command OpCode" start="23" end="26" type="uint" default="1" />
+    <field name="Pipeline" start="27" end="28" type="uint" default="2" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <group count="30" start="32" size="32">
+      <field name="Values" start="0" end="31" type="uint" />
+    </group>
+  </instruction>
+  <instruction name="VDENC_CMD2" bias="2" length="51" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="49" />
+    <field name="SubOpcodeB" start="16" end="20" type="uint" default="9" />
+    <field name="SubOpcodeA" start="21" end="22" type="uint" default="0" />
+    <field name="Media Command OpCode" start="23" end="26" type="uint" default="1" />
+    <field name="Pipeline" start="27" end="28" type="uint" default="2" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Frame Width In Pixels Minus One" start="32" end="47" type="uint" />
+    <field name="Values1" start="32" end="63" type="uint" />
+    <field name="Frame Height In Pixels Minus One" start="48" end="63" type="uint" />
+    <field name="Values2" start="64" end="95" type="uint" />
+    <field name="Picture Type" start="84" end="85" type="uint" />
+    <field name="Temporal MVP Enable Flag" start="86" end="86" type="bool" />
+    <field name="Long Term Reference Flags L0" start="88" end="90" type="uint" />
+    <field name="Long Term Reference Flags L1" start="91" end="91" type="uint" />
+    <field name="Transform Skip" start="94" end="94" type="bool" />
+    <field name="POC Number For Refid0 In L0" start="96" end="103" type="uint" />
+    <field name="Values3" start="96" end="127" type="uint" />
+    <field name="POC Number For Refid0 In L1" start="104" end="111" type="uint" />
+    <field name="POC Number For Refid1 In L0" start="112" end="119" type="uint" />
+    <field name="POC Number For Refid1 In L1" start="120" end="127" type="uint" />
+    <field name="POC Number For Refid2 In L0" start="128" end="135" type="uint" />
+    <field name="Values4" start="128" end="159" type="uint" />
+    <field name="POC Number For Refid2 In L1" start="136" end="143" type="uint" />
+    <field name="Values5" start="160" end="191" type="uint" />
+    <field name="Stream In ROI Enable" start="168" end="168" type="bool" />
+    <field name="Sub Pel Mode" start="170" end="171" type="uint" />
+    <field name="Num Ref Idx L0 Minus One" start="184" end="187" type="uint" />
+    <field name="Num Ref Idx L1 Minus One" start="188" end="191" type="uint" />
+    <field name="Values6" start="192" end="223" type="uint" />
+    <field name="Values7" start="224" end="255" type="uint" />
+    <field name="Segmentation Enable" start="228" end="228" type="bool" />
+    <field name="Segmentation Map Temporal Prediction Enable" start="229" end="229" type="bool" />
+    <field name="Tiling Enable" start="231" end="231" type="bool" />
+    <field name="VDEnc Stream In Enable" start="233" end="233" type="bool" />
+    <field name="PAK Only Multi Pass Enable" start="240" end="240" type="bool" />
+    <field name="Values8" start="256" end="287" type="uint" />
+    <field name="Values9" start="288" end="319" type="uint" />
+    <field name="Values10" start="320" end="351" type="uint" />
+    <field name="Values11" start="352" end="383" type="uint" />
+    <field name="Values12" start="384" end="415" type="uint" />
+    <field name="Values13" start="416" end="447" type="uint" />
+    <field name="Roi QP Adjustment For Zone1 Stage3" start="420" end="423" type="uint" />
+    <field name="Roi QP Adjustment For Zone2 Stage3" start="424" end="427" type="uint" />
+    <field name="Roi QP Adjustment For Zone3 Stage3" start="428" end="431" type="uint" />
+    <field name="Values14" start="448" end="479" type="uint" />
+    <field name="Values15" start="480" end="511" type="uint" />
+    <field name="Min Qp" start="512" end="519" type="uint" />
+    <field name="Values16" start="512" end="543" type="uint" />
+    <field name="Max Qp" start="520" end="527" type="uint" />
+    <field name="Values17" start="544" end="575" type="uint" />
+    <field name="Temporal MV Enable For Integer Search" start="564" end="564" type="bool" />
+    <field name="Values18" start="576" end="607" type="uint" />
+    <field name="Values19" start="608" end="639" type="uint" />
+    <field name="Values20" start="640" end="671" type="uint" />
+    <field name="Intra Refresh Pos" start="672" end="680" type="uint" />
+    <field name="Values21" start="672" end="703" type="uint" />
+    <field name="Intra Refresh MB Size Minus One" start="688" end="695" type="uint" />
+    <field name="Intra Refresh Mode" start="696" end="696" type="uint" />
+    <field name="QP Adjustment For Rolling I" start="700" end="703" type="uint" />
+    <field name="Values22" start="704" end="735" type="uint" />
+    <field name="Values23" start="736" end="767" type="uint" />
+    <field name="QP For Seg0" start="768" end="775" type="uint" />
+    <field name="Values24" start="768" end="799" type="uint" />
+    <field name="QP For Seg1" start="776" end="783" type="uint" />
+    <field name="QP For Seg2" start="784" end="791" type="uint" />
+    <field name="QP For Seg3" start="792" end="799" type="uint" />
+    <field name="QP For Seg4" start="800" end="807" type="uint" />
+    <field name="Values25" start="800" end="831" type="uint" />
+    <field name="QP For Seg5" start="808" end="815" type="uint" />
+    <field name="QP For Seg6" start="816" end="823" type="uint" />
+    <field name="QP For Seg7" start="824" end="831" type="uint" />
+    <field name="Rd Qp Lambda" start="832" end="847" type="uint" />
+    <field name="Values26" start="832" end="863" type="uint" />
+    <field name="Sad Qp Lambda" start="848" end="856" type="uint" />
+    <field name="VP9 Dynamic Slice Enable" start="857" end="857" type="bool" />
+    <field name="Qp Prime YDc" start="864" end="871" type="uint" />
+    <field name="Values27" start="864" end="895" type="uint" />
+    <field name="Qp Prime YAc" start="872" end="879" type="uint" />
+    <field name="Values28" start="896" end="927" type="uint" />
+    <field name="Values29" start="928" end="959" type="uint" />
+    <field name="Values30" start="960" end="991" type="uint" />
+    <field name="Values31" start="992" end="1023" type="uint" />
+    <field name="Values32" start="1024" end="1055" type="uint" />
+    <field name="Values33" start="1056" end="1087" type="uint" />
+    <field name="Values34" start="1088" end="1119" type="uint" />
+    <field name="Values35" start="1120" end="1151" type="uint" />
+    <field name="Intra Refresh Boundary Ref0" start="1152" end="1160" type="uint" />
+    <field name="Intra Refresh Boundary Ref1" start="1162" end="1170" type="uint" />
+    <field name="Intra Refresh Boundary Ref2" start="1172" end="1180" type="uint" />
+    <field name="Tile Replay Enable" start="1211" end="1211" type="bool" />
+    <field name="Values39" start="1216" end="1247" type="uint" />
+    <field name="Values40" start="1248" end="1279" type="uint" />
+    <field name="Values41" start="1280" end="1311" type="uint" />
+    <field name="Values42" start="1312" end="1343" type="uint" />
+    <field name="Values43" start="1344" end="1375" type="uint" />
+    <field name="Values44" start="1376" end="1407" type="uint" />
+    <field name="Values45" start="1408" end="1439" type="uint" />
+    <field name="Values46" start="1440" end="1471" type="uint" />
+    <field name="Values47" start="1472" end="1503" type="uint" />
+    <field name="Values48" start="1504" end="1535" type="uint" />
+    <field name="Values49" start="1536" end="1567" type="uint" />
+    <field name="Values50" start="1568" end="1599" type="uint" />
+  </instruction>
+  <instruction name="VDENC_CONTROL_STATE" bias="2" length="2" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="0" />
+    <field name="SubOpcode" start="16" end="22" type="uint" default="11" />
+    <field name="Media Command OpCode" start="23" end="26" type="uint" default="1" />
+    <field name="Pipeline" start="27" end="28" type="uint" default="2" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Vdenc Initialization" start="33" end="33" type="bool" />
+  </instruction>
+  <instruction name="VDENC_PIPE_BUF_ADDR_STATE" bias="2" length="71" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="69" />
+    <field name="SubOpcode B" start="16" end="20" type="uint" default="4" />
+    <field name="SubOpcode A" start="21" end="22" type="uint" default="0" />
+    <field name="Media Command Opcode" start="23" end="26" type="uint" default="1" />
+    <field name="Pipeline" start="27" end="28" type="uint" default="2" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="DS FWD REF0" start="32" end="127" type="VDENC_PICTURE" />
+    <field name="DS FWD REF1" start="128" end="223" type="VDENC_PICTURE" />
+    <field name="Original Uncompressed Picture" start="320" end="415" type="VDENC_PICTURE" />
+    <field name="Stream-In Data Picture" start="416" end="511" type="VDENC_PICTURE" />
+    <field name="Row Store Scratch Buffer" start="512" end="607" type="VDENC_PICTURE" />
+    <field name="Colocated MV Read Buffer" start="608" end="703" type="VDENC_PICTURE" />
+    <field name="FWD REF0" start="704" end="799" type="VDENC_PICTURE" />
+    <field name="FWD REF1" start="800" end="895" type="VDENC_PICTURE" />
+    <field name="FWD REF2" start="896" end="991" type="VDENC_PICTURE" />
+    <field name="BWD REF0" start="992" end="1087" type="VDENC_PICTURE" />
+    <field name="VDEnc Statistics Stream-Out" start="1088" end="1183" type="VDENC_PICTURE" />
+    <field name="DS FWD REF0 4X" start="1184" end="1279" type="VDENC_PICTURE" />
+    <field name="DS FWD REF1 4X" start="1280" end="1375" type="VDENC_PICTURE" />
+    <field name="VDEnc CU Record Stream-Out Buffer" start="1472" end="1567" type="VDENC_PICTURE" />
+    <field name="VDEnc LCU PAK_OBJ_CMD Buffer" start="1568" end="1663" type="VDENC_PICTURE" />
+    <field name="Scaled Reference Surface 8X" start="1664" end="1759" type="VDENC_PICTURE" />
+    <field name="Scaled Reference Surface 4X" start="1760" end="1855" type="VDENC_PICTURE" />
+    <field name="VP9 Segmentation Map Stream-In Buffer" start="1856" end="1951" type="VDENC_PICTURE" />
+    <field name="VP9 Segmentation Map Stream-Out Buffer" start="1952" end="1983" type="VDENC_PICTURE" />
+    <field name="Weights Histogram Stream-Out Offset" start="1984" end="2079" type="uint" />
+    <field name="VDEnc Tile Row Store Buffer" start="2080" end="2175" type="VDENC_PICTURE" />
+    <field name="VDEnc Cumulative CU Count Stream-Out Surface" start="2176" end="2271" type="VDENC_PICTURE" />
+    <field name="VDEnc Palette Mode Stream-Out Surface" start="2272" end="2367" type="VDENC_PICTURE" />
+  </instruction>
+  <instruction name="VDENC_PIPE_MODE_SELECT" bias="2" length="6" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="4" />
+    <field name="SubOpcode B" start="16" end="20" type="uint" default="0" />
+    <field name="SubOpcode A" start="21" end="22" type="uint" default="0" />
+    <field name="Media Command Opcode" start="23" end="26" type="uint" default="1" />
+    <field name="Pipeline" start="27" end="28" type="uint" default="2" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Standard Select" start="32" end="35" type="uint" prefix="SS">
+      <value name="HEVC" value="0" />
+      <value name="VP9" value="1" />
+      <value name="AVC" value="2" />
+    </field>
+    <field name="Scalability Mode" start="36" end="36" type="bool" />
+    <field name="Frame Statistics Stream-Out Enable" start="37" end="37" type="bool" />
+    <field name="VDEnc PAK_OBJ_CMD Stream-Out Enable" start="38" end="38" type="bool" />
+    <field name="TLB Prefetch Enable" start="39" end="39" type="bool" />
+    <field name="PAK Threshold Check Enable" start="40" end="40" type="bool" />
+    <field name="VDEnc Stream-In Enable" start="41" end="41" type="bool" />
+    <field name="DownScaled 8x Write Disable" start="42" end="42" type="bool" />
+    <field name="DownScaled 4x Write Disable" start="43" end="43" type="bool" />
+    <field name="Bit Depth" start="44" end="46" type="uint">
+      <value name="8-bit" value="0" />
+      <value name="10-bit" value="2" />
+    </field>
+    <field name="PAK Chroma Sub-Sampling Type" start="47" end="48" type="uint">
+      <value name="4:2:0" value="1" />
+      <value name="4:4:4" value="3" />
+    </field>
+    <field name="Output Range Control After Color Space Conversion" start="49" end="49" type="bool" />
+    <field name="Is Random Access" start="50" end="50" type="bool" />
+    <field name="RGB Encoding Enable" start="52" end="52" type="bool" />
+    <field name="Primary Channel Selection For RGB Encoding" start="53" end="54" type="uint" default="1" />
+    <field name="First Secondary Channel Selection For RGB Encoding" start="55" end="56" type="uint" default="2" />
+    <field name="Tile Replay Enable" start="57" end="57" type="bool" />
+    <field name="Streaming Buffer Config" start="58" end="59" type="uint" />
+    <field name="Disable Speed Mode Fetch Optimization" start="63" end="63" type="bool" />
+    <field name="HME Region Prefetch Enable" start="64" end="64" type="bool" default="1" />
+    <field name="Top Prefetch Enable Mode" start="65" end="66" type="uint" default="1" />
+    <field name="Left Prefetch At Wrap Around" start="67" end="67" type="bool" default="1" />
+    <field name="VerticalShift32Minus1" start="68" end="71" type="uint" />
+    <field name="HzShift32Minus1" start="72" end="75" type="uint" default="3" />
+    <field name="Number of Vertical Requests" start="80" end="83" type="uint" default="11" />
+    <field name="Number of Horizontal Requests" start="84" end="87" type="uint" default="2" />
+    <field name="Prefetch Offset for Reference" start="88" end="91" type="uint" />
+    <field name="Source Luma/Packed Data TLB Prefetch Enable" start="96" end="96" type="bool" default="1" />
+    <field name="Source Chroma TLB Prefetch Enable" start="97" end="97" type="bool" default="1" />
+    <field name="VerticalShift32Minus1Src" start="100" end="103" type="uint" />
+    <field name="HzShift32Minus1Src" start="104" end="107" type="uint" default="3" />
+    <field name="Number of Vertical Requests for Source" start="112" end="115" type="uint" />
+    <field name="Number of Horizontal Request for Source" start="116" end="119" type="uint" />
+    <field name="Prefetch Offset for Source" start="120" end="123" type="uint" default="4" />
+  </instruction>
+  <instruction name="VDENC_WALKER_STATE" bias="2" length="27" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="25" />
+    <field name="SubOpcode B" start="16" end="20" type="uint" default="7" />
+    <field name="SubOpcode A" start="21" end="22" type="uint" default="0" />
+    <field name="Media Command Opcode" start="23" end="26" type="uint" default="1" />
+    <field name="Pipeline" start="27" end="28" type="uint" default="2" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="MB/LCU Start Y Position" start="32" end="40" type="uint" />
+    <field name="MB/LCU Start X Position" start="48" end="56" type="uint" />
+    <field name="First Super Slice" start="60" end="60" type="bool" />
+    <field name="Next Slice MB Start Y Position" start="64" end="73" type="uint" />
+    <field name="Next Slice MB/LCU Start X Position" start="80" end="89" type="uint" />
+    <field name="Log2 Weight Denominator Luma" start="96" end="98" type="uint" />
+    <field name="HEVC/VP9 Log2 Weight Denominator Luma" start="100" end="102" type="uint" />
+    <field name="Number of Parallel Engines" start="105" end="106" type="uint" />
+    <field name="Tile Number" start="120" end="127" type="uint" />
+    <field name="Tile Start CTB-Y" start="128" end="143" type="uint" />
+    <field name="Tile Start CTB-X" start="144" end="159" type="uint" />
+    <field name="Tile Width" start="160" end="175" type="uint" />
+    <field name="Tile Height" start="176" end="191" type="uint" />
+    <field name="Tile Stream-In Offset Enable" start="192" end="192" type="bool" />
+    <field name="Tile Stream-In Offset" start="198" end="223" type="uint" />
+    <field name="Tile Row Store Offset Enable" start="224" end="224" type="bool" />
+    <field name="Tile Row Store Offset" start="230" end="255" type="uint" />
+    <field name="Tile Stream-Out Offset Enable" start="256" end="256" type="bool" />
+    <field name="Tile Stream-Out Offset" start="262" end="287" type="uint" />
+    <field name="Tile LCU Stream-Out Offset Enable" start="288" end="288" type="bool" />
+    <field name="Tile LCU Stream-Out Offset" start="294" end="319" type="uint" />
+    <field name="Palette Mode Enable" start="410" end="410" type="bool" />
+    <field name="IBC Control" start="411" end="412" type="uint" />
+    <field name="Adaptive Channel Threshold" start="536" end="539" type="uint" />
+  </instruction>
   <instruction name="VD_CONTROL_STATE" bias="2" length="3" engine="video">
     <field name="DWord Length" start="0" end="11" type="uint" default="1" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="10" />
@@ -1400,6 +1642,25 @@
       <field name="Fill Color" start="0" end="31" type="uint" />
     </group>
   </instruction>
+  <register name="BLT_TRTT_CR" length="1" num="0x4480">
+    <field name="TR-TT Enable" start="0" end="0" type="bool" />
+  </register>
+  <register name="BLT_TRTT_INVAL" length="1" num="0x4494">
+    <field name="Invalid Tile Detection Value" start="0" end="31" type="uint" />
+  </register>
+  <register name="BLT_TRTT_L3_BASE_HIGH" length="1" num="0x448C">
+    <field name="TR-VA L3 Pointer Upper Address" start="0" end="15" type="uint" />
+  </register>
+  <register name="BLT_TRTT_L3_BASE_LOW" length="1" num="0x4488">
+    <field name="TR-VA L3 Pointer Lower Address" start="12" end="31" type="uint" />
+  </register>
+  <register name="BLT_TRTT_NULL" length="1" num="0x4490">
+    <field name="Null Tile Detection Value" start="0" end="31" type="uint" />
+  </register>
+  <register name="BLT_TRTT_VA_RANGE" length="1" num="0x4484">
+    <field name="TR-VA Data Value" start="0" end="3" type="uint" />
+    <field name="TR-VA Mask Value" start="4" end="7" type="uint" />
+  </register>
   <register name="COMMON_SLICE_CHICKEN1" length="1" num="0x7010">
     <field name="HIZ Plane Optimization disable bit" start="9" end="9" type="bool" />
     <field name="RCC RHWO Optimization Disable" start="14" end="14" type="bool" />
@@ -1411,6 +1672,25 @@
   </register>
   <register name="COMPCS0_CCS_AUX_INV" length="1" num="0x42C8">
     <field name="Aux Inv" start="0" end="0" type="bool" />
+  </register>
+  <register name="COMP_CTX0_TRTT_CR" length="1" num="0x4580">
+    <field name="TR-TT Enable" start="0" end="0" type="bool" />
+  </register>
+  <register name="COMP_CTX0_TRTT_INVAL" length="1" num="0x4594">
+    <field name="Invalid Tile Detection Value" start="0" end="31" type="uint" />
+  </register>
+  <register name="COMP_CTX0_TRTT_L3_BASE_HIGH" length="1" num="0x458C">
+    <field name="TR-VA L3 Pointer Upper Address" start="0" end="15" type="uint" />
+  </register>
+  <register name="COMP_CTX0_TRTT_L3_BASE_LOW" length="1" num="0x4588">
+    <field name="TR-VA L3 Pointer Lower Address" start="12" end="31" type="uint" />
+  </register>
+  <register name="COMP_CTX0_TRTT_NULL" length="1" num="0x4590">
+    <field name="Null Tile Detection Value" start="0" end="31" type="uint" />
+  </register>
+  <register name="COMP_CTX0_TRTT_VA_RANGE" length="1" num="0x4584">
+    <field name="TR-VA Data Value" start="0" end="3" type="uint" />
+    <field name="TR-VA Mask Value" start="4" end="7" type="uint" />
   </register>
   <register name="CS_CHICKEN1" length="1" num="0x2580">
     <field name="Replay Mode" start="0" end="0" type="uint">

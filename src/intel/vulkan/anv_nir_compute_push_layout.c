@@ -26,8 +26,6 @@
 #include "compiler/brw_nir.h"
 #include "util/mesa-sha1.h"
 
-#define sizeof_field(type, field) sizeof(((type *)0)->field)
-
 void
 anv_nir_compute_push_layout(nir_shader *nir,
                             const struct anv_physical_device *pdevice,
@@ -64,26 +62,15 @@ anv_nir_compute_push_layout(nir_shader *nir,
                unsigned range = nir_intrinsic_range(intrin);
                push_start = MIN2(push_start, base);
                push_end = MAX2(push_end, base + range);
-               break;
-            }
-
-            case nir_intrinsic_load_desc_set_address_intel:
-            case nir_intrinsic_load_desc_set_dynamic_index_intel: {
-               unsigned base = offsetof(struct anv_push_constants,
-                                        desc_surface_offsets);
-               push_start = MIN2(push_start, base);
-               push_end = MAX2(push_end, base +
-                  sizeof_field(struct anv_push_constants,
-                               desc_surface_offsets));
-
-               if (desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER &&
-                   !pdevice->uses_ex_bso) {
-                  base = offsetof(struct anv_push_constants,
-                                  surfaces_base_offset);
-                  push_start = MIN2(push_start, base);
-                  push_end = MAX2(push_end, base +
-                                  sizeof_field(struct anv_push_constants,
-                                               surfaces_base_offset));
+               /* We need to retain this information to update the push
+                * constant on vkCmdDispatch*().
+                */
+               if (nir->info.stage == MESA_SHADER_COMPUTE &&
+                   base >= anv_drv_const_offset(cs.num_work_groups[0]) &&
+                   base < (anv_drv_const_offset(cs.num_work_groups[2]) + 4)) {
+                  struct brw_cs_prog_data *cs_prog_data =
+                     container_of(prog_data, struct brw_cs_prog_data, base);
+                  cs_prog_data->uses_num_work_groups = true;
                }
                break;
             }
@@ -109,16 +96,18 @@ anv_nir_compute_push_layout(nir_shader *nir,
        * the shader.
        */
       const uint32_t push_reg_mask_start =
-         offsetof(struct anv_push_constants, push_reg_mask[nir->info.stage]);
-      const uint32_t push_reg_mask_end = push_reg_mask_start + sizeof(uint64_t);
+         anv_drv_const_offset(push_reg_mask[nir->info.stage]);
+      const uint32_t push_reg_mask_end = push_reg_mask_start +
+                                         anv_drv_const_size(push_reg_mask[nir->info.stage]);
       push_start = MIN2(push_start, push_reg_mask_start);
       push_end = MAX2(push_end, push_reg_mask_end);
    }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT && fragment_dynamic) {
       const uint32_t fs_msaa_flags_start =
-         offsetof(struct anv_push_constants, gfx.fs_msaa_flags);
-      const uint32_t fs_msaa_flags_end = fs_msaa_flags_start + sizeof(uint32_t);
+         anv_drv_const_offset(gfx.fs_msaa_flags);
+      const uint32_t fs_msaa_flags_end = fs_msaa_flags_start +
+                                         anv_drv_const_size(gfx.fs_msaa_flags);
       push_start = MIN2(push_start, fs_msaa_flags_start);
       push_end = MAX2(push_end, fs_msaa_flags_end);
    }
@@ -131,8 +120,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
        * push constants one dword less than the full amount including
        * gl_SubgroupId.
        */
-      assert(push_end <= offsetof(struct anv_push_constants, cs.subgroup_id));
-      push_end = offsetof(struct anv_push_constants, cs.subgroup_id);
+      assert(push_end <= anv_drv_const_offset(cs.subgroup_id));
+      push_end = anv_drv_const_offset(cs.subgroup_id);
    }
 
    /* Align push_start down to a 32B boundary and make it no larger than
@@ -155,9 +144,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
    if (has_push_intrinsic) {
       nir_foreach_function_impl(impl, nir) {
-         nir_builder build = nir_builder_create(impl);
-         nir_builder *b = &build;
-
          nir_foreach_block(block, impl) {
             nir_foreach_instr_safe(instr, block) {
                if (instr->type != nir_instr_type_intrinsic)
@@ -178,56 +164,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
                   nir_intrinsic_set_base(intrin,
                                          nir_intrinsic_base(intrin) -
                                          base_offset);
-                  break;
-               }
-
-               case nir_intrinsic_load_desc_set_address_intel: {
-                  assert(brw_shader_stage_requires_bindless_resources(nir->info.stage));
-                  b->cursor = nir_before_instr(&intrin->instr);
-                  nir_def *desc_offset = nir_load_uniform(b, 1, 32,
-                     nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint32_t)),
-                     .base = offsetof(struct anv_push_constants,
-                                      desc_surface_offsets),
-                     .range = sizeof_field(struct anv_push_constants,
-                                           desc_surface_offsets),
-                     .dest_type = nir_type_uint32);
-                  desc_offset = nir_iand_imm(b, desc_offset, ANV_DESCRIPTOR_SET_OFFSET_MASK);
-                  if (desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER &&
-                      !pdevice->uses_ex_bso) {
-                     nir_def *bindless_base_offset = nir_load_uniform(
-                        b, 1, 32,
-                        nir_imm_int(b, 0),
-                        .base = offsetof(struct anv_push_constants,
-                                         surfaces_base_offset),
-                        .range = sizeof_field(struct anv_push_constants,
-                                              surfaces_base_offset),
-                        .dest_type = nir_type_uint32);
-                     desc_offset = nir_iadd(b, bindless_base_offset, desc_offset);
-                  }
-                  nir_def *desc_addr =
-                     nir_pack_64_2x32_split(
-                        b, desc_offset,
-                        nir_load_reloc_const_intel(
-                           b,
-                           desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER ?
-                           BRW_SHADER_RELOC_DESCRIPTORS_BUFFER_ADDR_HIGH :
-                           BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH));
-                  nir_def_rewrite_uses(&intrin->def, desc_addr);
-                  break;
-               }
-
-               case nir_intrinsic_load_desc_set_dynamic_index_intel: {
-                  b->cursor = nir_before_instr(&intrin->instr);
-                  nir_def *pc_load = nir_load_uniform(b, 1, 32,
-                     nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint32_t)),
-                     .base = offsetof(struct anv_push_constants,
-                                      desc_surface_offsets),
-                     .range = sizeof_field(struct anv_push_constants,
-                                           desc_surface_offsets),
-                     .dest_type = nir_type_uint32);
-                  pc_load = nir_iand_imm(
-                     b, pc_load, ANV_DESCRIPTOR_SET_DYNAMIC_INDEX_MASK);
-                  nir_def_rewrite_uses(&intrin->def, pc_load);
                   break;
                }
 
@@ -259,7 +195,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
       if (robust_flags & BRW_ROBUSTNESS_UBO) {
          const uint32_t push_reg_mask_offset =
-            offsetof(struct anv_push_constants, push_reg_mask[nir->info.stage]);
+            anv_drv_const_offset(push_reg_mask[nir->info.stage]);
          assert(push_reg_mask_offset >= push_start);
          prog_data->push_reg_mask_param =
             (push_reg_mask_offset - push_start) / 4;
@@ -315,7 +251,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
          container_of(prog_data, struct brw_wm_prog_data, base);
 
       const uint32_t fs_msaa_flags_offset =
-         offsetof(struct anv_push_constants, gfx.fs_msaa_flags);
+         anv_drv_const_offset(gfx.fs_msaa_flags);
       assert(fs_msaa_flags_offset >= push_start);
       wm_prog_data->msaa_flags_param =
          (fs_msaa_flags_offset - push_start) / 4;

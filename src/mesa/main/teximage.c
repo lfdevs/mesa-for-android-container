@@ -1594,7 +1594,7 @@ _mesa_target_can_be_compressed(const struct gl_context *ctx, GLenum target,
           */
          target_can_be_compresed =
             ctx->Extensions.EXT_texture_compression_s3tc &&
-            (_mesa_is_gles3(ctx) || ctx->Extensions.ARB_ES3_compatibility);
+            _mesa_is_gles3_compatible(ctx);
          break;
       case MESA_FORMAT_LAYOUT_ASTC:
          target_can_be_compresed =
@@ -5601,7 +5601,7 @@ compressed_subtexture_target_check(struct gl_context *ctx, GLenum target,
          case MESA_FORMAT_LAYOUT_S3TC:
             targetOK =
                ctx->Extensions.EXT_texture_compression_s3tc &&
-               (_mesa_is_gles3(ctx) || ctx->Extensions.ARB_ES3_compatibility);
+               _mesa_is_gles3_compatible(ctx);
             break;
          case MESA_FORMAT_LAYOUT_ASTC:
             targetOK =

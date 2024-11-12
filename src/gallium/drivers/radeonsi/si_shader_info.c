@@ -298,9 +298,9 @@ static void scan_io_usage(const nir_shader *nir, struct si_shader_info *info,
 
          info->input[loc].semantic = semantic + i;
 
-         if (semantic == VARYING_SLOT_PRIMITIVE_ID)
-            info->input[loc].interpolate = INTERP_MODE_FLAT;
-         else
+         /* "interpolate" starts out as FLAT. The first seen load_interpolated_input overwrites it.  */
+         if (semantic != VARYING_SLOT_PRIMITIVE_ID &&
+             info->input[loc].interpolate == INTERP_MODE_FLAT)
             info->input[loc].interpolate = interp;
 
          if (mask) {
@@ -629,7 +629,8 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
    memset(info, 0, sizeof(*info));
    info->base = nir->info;
    info->base.use_aco_amd = aco_is_gpu_supported(&sscreen->info) &&
-                            (sscreen->use_aco || nir->info.use_aco_amd);
+                            (sscreen->use_aco || nir->info.use_aco_amd) &&
+                            sscreen->info.has_image_opcodes;
 
    /* Get options from shader profiles. */
    for (unsigned i = 0; i < ARRAY_SIZE(si_shader_profiles); i++) {
@@ -660,6 +661,12 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
        * conditions are met.
        */
       info->writes_1_if_tex_is_1 = nir->info.writes_memory ? 0 : 0xff;
+
+      /* Initialize all FS inputs to flat. If we see load_interpolated_input for any component,
+       * it will be changed to its interp mode.
+       */
+      for (unsigned i = 0; i < ARRAY_SIZE(info->input); i++)
+         info->input[i].interpolate = INTERP_MODE_FLAT;
    }
 
    info->constbuf0_num_slots = nir->num_uniforms;
@@ -831,21 +838,18 @@ void si_nir_scan_shader(struct si_screen *sscreen, const struct nir_shader *nir,
    if (nir->info.stage == MESA_SHADER_VERTEX ||
        nir->info.stage == MESA_SHADER_TESS_CTRL ||
        nir->info.stage == MESA_SHADER_TESS_EVAL) {
-      info->esgs_vertex_stride = info->lshs_vertex_stride =
+      info->esgs_vertex_stride =
          util_last_bit64(info->outputs_written_before_tes_gs) * 16;
-
-      /* Add 1 dword to reduce LDS bank conflicts, so that each vertex
-       * will start on a different bank. (except for the maximum 32*16).
-       */
-      info->lshs_vertex_stride += 4;
 
       /* For the ESGS ring in LDS, add 1 dword to reduce LDS bank
        * conflicts, i.e. each vertex will start on a different bank.
        */
-      if (sscreen->info.gfx_level >= GFX9)
-         info->esgs_vertex_stride += 4;
-      else
+      if (sscreen->info.gfx_level >= GFX9) {
+         if (info->esgs_vertex_stride)
+            info->esgs_vertex_stride += 4;
+      } else {
          assert(((info->esgs_vertex_stride / 4) & C_028AAC_ITEMSIZE) == 0);
+      }
 
       info->tcs_vgpr_only_inputs = ~info->base.tess.tcs_cross_invocation_inputs_read &
                                    ~info->base.inputs_read_indirectly &

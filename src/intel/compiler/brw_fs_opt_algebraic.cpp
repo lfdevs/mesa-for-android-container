@@ -65,6 +65,176 @@ brw_imm_for_type(uint64_t value, enum brw_reg_type type)
 }
 
 bool
+brw_constant_fold_instruction(const intel_device_info *devinfo, fs_inst *inst)
+{
+   bool progress = false;
+
+   switch (inst->opcode) {
+   case BRW_OPCODE_ADD:
+      if (inst->src[1].file != IMM)
+         break;
+
+      if (brw_type_is_int(inst->src[1].type) &&
+          inst->src[1].is_zero()) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->resize_sources(1);
+         progress = true;
+         break;
+      }
+
+      if (inst->src[0].file == IMM) {
+         assert(inst->src[0].type == BRW_TYPE_F);
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0].f += inst->src[1].f;
+         inst->resize_sources(1);
+         progress = true;
+         break;
+      }
+
+      break;
+
+
+   case BRW_OPCODE_AND:
+      if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
+         const uint64_t src0 = src_as_uint(inst->src[0]);
+         const uint64_t src1 = src_as_uint(inst->src[1]);
+
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0] = brw_imm_for_type(src0 & src1, inst->dst.type);
+         inst->resize_sources(1);
+         progress = true;
+         break;
+      }
+
+      break;
+
+   case BRW_OPCODE_MUL:
+      if ((inst->src[0].file != IMM && inst->src[1].file != IMM) ||
+          brw_type_is_float(inst->src[1].type))
+         break;
+
+      /* From the BDW PRM, Vol 2a, "mul - Multiply":
+       *
+       *    "When multiplying integer datatypes, if src0 is DW and src1
+       *    is W, irrespective of the destination datatype, the
+       *    accumulator maintains full 48-bit precision."
+       *    ...
+       *    "When multiplying integer data types, if one of the sources
+       *    is a DW, the resulting full precision data is stored in
+       *    the accumulator."
+       *
+       * There are also similar notes in earlier PRMs.
+       *
+       * The MOV instruction can copy the bits of the source, but it
+       * does not clear the higher bits of the accumulator. So, because
+       * we might use the full accumulator in the MUL/MACH macro, we
+       * shouldn't replace such MULs with MOVs.
+       */
+      if ((brw_type_size_bytes(inst->src[0].type) == 4 ||
+           brw_type_size_bytes(inst->src[1].type) == 4) &&
+          (inst->dst.is_accumulator() ||
+           inst->writes_accumulator_implicitly(devinfo)))
+         break;
+
+      if (inst->src[0].is_zero() || inst->src[1].is_zero()) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0] = brw_imm_d(0);
+         inst->resize_sources(1);
+         progress = true;
+         break;
+      }
+
+      /* a * 1 = a */
+      if (inst->src[1].is_one()) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->resize_sources(1);
+         return true;
+      }
+
+      /* a * -1 = -a */
+      if (inst->src[0].is_negative_one()) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0] = inst->src[1];
+         inst->src[0].negate = !inst->src[0].negate;
+         inst->resize_sources(1);
+         progress = true;
+         break;
+      }
+
+      if (inst->src[1].is_negative_one()) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0].negate = !inst->src[0].negate;
+         inst->resize_sources(1);
+         progress = true;
+         break;
+      }
+
+      break;
+
+   case BRW_OPCODE_OR:
+      if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
+         const uint64_t src0 = src_as_uint(inst->src[0]);
+         const uint64_t src1 = src_as_uint(inst->src[1]);
+
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0] = brw_imm_for_type(src0 | src1, inst->dst.type);
+         inst->resize_sources(1);
+         progress = true;
+         break;
+      }
+
+      break;
+
+   case BRW_OPCODE_SHL:
+      if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
+         /* It's not currently possible to generate this, and this constant
+          * folding does not handle it.
+          */
+         assert(!inst->saturate);
+
+         brw_reg result;
+
+         switch (brw_type_size_bytes(inst->src[0].type)) {
+         case 2:
+            result = brw_imm_uw(0x0ffff & (inst->src[0].ud << (inst->src[1].ud & 0x1f)));
+            break;
+         case 4:
+            result = brw_imm_ud(inst->src[0].ud << (inst->src[1].ud & 0x1f));
+            break;
+         case 8:
+            result = brw_imm_uq(inst->src[0].u64 << (inst->src[1].ud & 0x3f));
+            break;
+         default:
+            /* Just in case a future platform re-enables B or UB types. */
+            unreachable("Invalid source size.");
+         }
+
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0] = retype(result, inst->dst.type);
+         inst->resize_sources(1);
+
+         progress = true;
+      }
+      break;
+
+   default:
+      break;
+   }
+
+#ifndef NDEBUG
+   /* The function is only intended to do constant folding, so the result of
+    * progress must be a MOV of an immediate value.
+    */
+   if (progress) {
+      assert(inst->opcode == BRW_OPCODE_MOV);
+      assert(inst->src[0].file == IMM);
+   }
+#endif
+
+   return progress;
+}
+
+bool
 brw_fs_opt_algebraic(fs_visitor &s)
 {
    const intel_device_info *devinfo = s.devinfo;
@@ -107,120 +277,18 @@ brw_fs_opt_algebraic(fs_visitor &s)
          break;
 
       case BRW_OPCODE_MUL:
-         if (inst->src[0].file != IMM && inst->src[1].file != IMM)
-            continue;
-
-         if (brw_type_is_float(inst->src[1].type))
-            break;
-
-         /* From the BDW PRM, Vol 2a, "mul - Multiply":
-          *
-          *    "When multiplying integer datatypes, if src0 is DW and src1
-          *    is W, irrespective of the destination datatype, the
-          *    accumulator maintains full 48-bit precision."
-          *    ...
-          *    "When multiplying integer data types, if one of the sources
-          *    is a DW, the resulting full precision data is stored in
-          *    the accumulator."
-          *
-          * There are also similar notes in earlier PRMs.
-          *
-          * The MOV instruction can copy the bits of the source, but it
-          * does not clear the higher bits of the accumulator. So, because
-          * we might use the full accumulator in the MUL/MACH macro, we
-          * shouldn't replace such MULs with MOVs.
-          */
-         if ((brw_type_size_bytes(inst->src[0].type) == 4 ||
-              brw_type_size_bytes(inst->src[1].type) == 4) &&
-             (inst->dst.is_accumulator() ||
-              inst->writes_accumulator_implicitly(devinfo)))
-            break;
-
-         if (inst->src[0].is_zero() || inst->src[1].is_zero()) {
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0] = brw_imm_d(0);
-            inst->resize_sources(1);
-            progress = true;
-            break;
-         }
-
-         /* a * 1.0 = a */
-         if (inst->src[1].is_one()) {
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->resize_sources(1);
-            progress = true;
-            break;
-         }
-
-         /* a * -1.0 = -a */
-         if (inst->src[0].is_negative_one()) {
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0] = inst->src[1];
-            inst->src[0].negate = !inst->src[0].negate;
-            inst->resize_sources(1);
-            progress = true;
-            break;
-         }
-
-         if (inst->src[1].is_negative_one()) {
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0].negate = !inst->src[0].negate;
-            inst->resize_sources(1);
-            progress = true;
-            break;
-         }
-
-         break;
       case BRW_OPCODE_ADD:
-         if (inst->src[1].file != IMM)
-            continue;
-
-         if (brw_type_is_int(inst->src[1].type) &&
-             inst->src[1].is_zero()) {
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->resize_sources(1);
-            progress = true;
-            break;
-         }
-
-         if (inst->src[0].file == IMM) {
-            assert(inst->src[0].type == BRW_TYPE_F);
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0].f += inst->src[1].f;
-            inst->resize_sources(1);
-            progress = true;
-            break;
-         }
-         break;
-
       case BRW_OPCODE_AND:
-         if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
-            const uint64_t src0 = src_as_uint(inst->src[0]);
-            const uint64_t src1 = src_as_uint(inst->src[1]);
-
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0] = brw_imm_for_type(src0 & src1, inst->dst.type);
-            inst->resize_sources(1);
+         if (brw_constant_fold_instruction(devinfo, inst))
             progress = true;
-            break;
-         }
 
          break;
 
       case BRW_OPCODE_OR:
-         if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
-            const uint64_t src0 = src_as_uint(inst->src[0]);
-            const uint64_t src1 = src_as_uint(inst->src[1]);
-
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0] = brw_imm_for_type(src0 | src1, inst->dst.type);
-            inst->resize_sources(1);
+         if (brw_constant_fold_instruction(devinfo, inst)) {
             progress = true;
-            break;
-         }
-
-         if (inst->src[0].equals(inst->src[1]) ||
-             inst->src[1].is_zero()) {
+         } else if (inst->src[0].equals(inst->src[1]) ||
+                    inst->src[1].is_zero()) {
             /* On Gfx8+, the OR instruction can have a source modifier that
              * performs logical not on the operand.  Cases of 'OR r0, ~r1, 0'
              * or 'OR r0, ~r1, ~r1' should become a NOT instead of a MOV.
@@ -388,35 +456,8 @@ brw_fs_opt_algebraic(fs_visitor &s)
          }
          break;
       case BRW_OPCODE_SHL:
-         if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
-            /* It's not currently possible to generate this, and this constant
-             * folding does not handle it.
-             */
-            assert(!inst->saturate);
-
-            brw_reg result;
-
-            switch (brw_type_size_bytes(inst->src[0].type)) {
-            case 2:
-               result = brw_imm_uw(0x0ffff & (inst->src[0].ud << (inst->src[1].ud & 0x1f)));
-               break;
-            case 4:
-               result = brw_imm_ud(inst->src[0].ud << (inst->src[1].ud & 0x1f));
-               break;
-            case 8:
-               result = brw_imm_uq(inst->src[0].u64 << (inst->src[1].ud & 0x3f));
-               break;
-            default:
-               /* Just in case a future platform re-enables B or UB types. */
-               unreachable("Invalid source size.");
-            }
-
-            inst->opcode = BRW_OPCODE_MOV;
-            inst->src[0] = retype(result, inst->dst.type);
-            inst->resize_sources(1);
-
+         if (brw_constant_fold_instruction(devinfo, inst))
             progress = true;
-         }
          break;
 
       case SHADER_OPCODE_BROADCAST:

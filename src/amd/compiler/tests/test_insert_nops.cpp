@@ -3,6 +3,8 @@
  *
  * SPDX-License-Identifier: MIT
  */
+#include "common/amdgfxregs.h"
+
 #include "helpers.h"
 
 using namespace aco;
@@ -1114,7 +1116,7 @@ BEGIN_TEST(insert_nops.valu_mask_write)
    bld.sopp(aco_opcode::s_waitcnt_depctr, 0xfffe);
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
 
-   /* Instruction which is both involved in the hazard and is a mitigation. */
+   /* v_cndmask_b32 is both involved in the hazard and is a mitigation. */
    //! p_unit_test 4
    //! v1: %0:v[0] = v_cndmask_b32 %0:s[2], 0, %0:s[0-1]
    //! s1: %0:s[1] = s_mov_b32 0
@@ -1125,6 +1127,156 @@ BEGIN_TEST(insert_nops.valu_mask_write)
                 Operand::zero(), Operand(PhysReg(0), s2));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
+
+   /* VALU reading exec does not mitigate the hazard. We also don't consider literals. */
+   //! p_unit_test 5
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   //! v1: %0:v[1] = v_mov_b32 %0:exec_lo
+   //! s1: %0:s[1] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[2] = s_mov_b32 %0:s[1]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand(exec_lo, s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
+
+   //! p_unit_test 6
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   //! v1: %0:v[1] = v_mov_b32 0x200
+   //! s1: %0:s[1] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[2] = s_mov_b32 %0:s[1]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand::literal32(0x200));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
+
+   /* Basic case: VALU. */
+   //! p_unit_test 7
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   //! s1: %0:s[1] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! v1: %0:v[1] = v_mov_b32 %0:s[1]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand(PhysReg(1), s1));
+
+   /* SALU which both reads and writes a lane mask SGPR. */
+   //! p_unit_test 8
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   //! s1: %0:s[1] = s_mov_b32 0
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[2-3]
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[2] = s_mov_b32 %0:s[1]
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[4] = s_mov_b32 %0:s[2]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(2), s2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand(PhysReg(2), s1));
+
+   /* When a SALU writes a lane mask, we shouldn't forget the current SGPRs used as lane masks then
+    * written. */
+   //! p_unit_test 9
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   //! s1: %0:s[0] = s_mov_b32 0
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[2-3]
+   //! s1: %0:s[2] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[4] = s_mov_b32 %0:s[0]
+   //! s1: %0:s[5] = s_mov_b32 %0:s[2]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(2), s2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand(PhysReg(0), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(5), s1), Operand(PhysReg(2), s1));
+
+   /* When a SALU writes a lane mask, we shouldn't forget all SGPRs used as lane masks, there might
+    * be later problematic writes. */
+   //! p_unit_test 10
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   //! s1: %0:s[0] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[4] = s_mov_b32 %0:s[0]
+   //! s1: %0:s[1] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[5] = s_mov_b32 %0:s[1]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand(PhysReg(0), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(5), s1), Operand(PhysReg(1), s1));
+
+   //! p_unit_test 11
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   //! s1: %0:s[0] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[4] = s_mov_b32 %0:s[0]
+   //! s1: %0:s[0] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[5] = s_mov_b32 %0:s[0]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand(PhysReg(0), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(5), s1), Operand(PhysReg(0), s1));
+
+   //! p_unit_test 12
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(12));
+
+   //! BB1
+   //! /* logical preds: / linear preds: BB0, / kind: */
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[0-1]
+   bld.reset(program->create_and_insert_block());
+   program->blocks[0].linear_succs.push_back(1);
+   program->blocks[1].linear_preds.push_back(0);
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
+
+   //! BB2
+   //! /* logical preds: / linear preds: BB0, / kind: */
+   //! v1: %0:v[0] = v_cndmask_b32 0, 0, %0:s[2-3]
+   bld.reset(program->create_and_insert_block());
+   program->blocks[0].linear_succs.push_back(2);
+   program->blocks[2].linear_preds.push_back(0);
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(2), s2));
+
+   //! BB3
+   //! /* logical preds: / linear preds: BB1, BB2, / kind: uniform, */
+   //! s1: %0:s[0] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[4] = s_mov_b32 %0:s[0]
+   //! s1: %0:s[2] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[5] = s_mov_b32 %0:s[2]
+   bld.reset(program->create_and_insert_block());
+   program->blocks[1].linear_succs.push_back(3);
+   program->blocks[2].linear_succs.push_back(3);
+   program->blocks[3].linear_preds.push_back(1);
+   program->blocks[3].linear_preds.push_back(2);
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand(PhysReg(0), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand::zero());
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(5), s1), Operand(PhysReg(2), s1));
 
    finish_insert_nops_test();
 END_TEST
@@ -1198,6 +1350,347 @@ BEGIN_TEST(insert_nops.wmma_raw)
    C.setFixed(PhysReg(256 + 20));
    bld.vop3p(aco_opcode::v_wmma_f16_16x16x16_f16, Definition(C.physReg(), C.regClass()), A, B, C, 0,
              0);
+
+   finish_insert_nops_test();
+END_TEST
+
+enum StageInfoFlags {
+   stage_separate = 1 << 0,
+   stage_has_prolog = 1 << 1,
+   stage_has_export = 1 << 2,
+   stage_is_prolog = 1 << 3,
+   stage_is_epilog = 1 << 4,
+};
+
+struct StageInfo {
+   const char* name;
+   Stage stage;
+   unsigned flags;
+};
+
+BEGIN_TEST(insert_nops.export_priority.stages)
+   Stage geometry_ngg(AC_HW_NEXT_GEN_GEOMETRY_SHADER, SWStage::GS);
+   for (StageInfo stage : (StageInfo[]){
+           {"_fs_first_last", fragment_fs, stage_has_export},
+           {"_fs_with_epilog_first", fragment_fs, 0},
+           {"_fs_prolog_first", fragment_fs, stage_is_prolog},
+           {"_fs_epilog_last", fragment_fs, stage_is_epilog | stage_has_export},
+           {"_vs_first_last", vertex_ngg, stage_has_export},
+           {"_vs_with_prolog_last", vertex_ngg, stage_has_export | stage_has_prolog},
+           {"_tes_first_last", tess_eval_ngg, stage_has_export},
+           {"_ms_first_last", mesh_ngg, stage_has_export},
+           {"_tesgs_first_last", tess_eval_geometry_ngg, stage_has_export},
+           {"_vsgs_first_last", vertex_geometry_ngg, stage_has_export},
+           {"_vsgs_with_prolog_last", vertex_geometry_ngg, stage_has_export | stage_has_prolog},
+           {"_separate_vs_first", vertex_ngg, stage_separate},
+           {"_separate_vs_with_prolog", vertex_ngg, stage_separate | stage_has_prolog},
+           {"_separate_tes_first", tess_eval_ngg, stage_separate},
+           {"_separate_gs_last", geometry_ngg, stage_separate | stage_has_export}}) {
+      if (!setup_cs(NULL, GFX11_5, CHIP_UNKNOWN, stage.name))
+         continue;
+
+      program->stage = stage.stage;
+      program->info.merged_shader_compiled_separately = stage.flags & stage_separate;
+      program->info.vs.has_prolog = stage.flags & stage_has_prolog;
+      program->is_prolog = stage.flags & stage_is_prolog;
+      program->is_epilog = stage.flags & stage_is_epilog;
+      //>> /* logical preds: / linear preds: / kind: uniform, top-level, */
+      //~.*first.*! s_setprio imm:2
+      if (stage.flags & stage_has_export) {
+         //~.*last.*! exp v1: undef, v1: undef, v1: undef, v1: undef en:**** pos0
+         //~.*last.*! s_setprio imm:0
+         //~.*last.*! s_nop
+         //~.*last.*! s_nop
+         //~.*last.*! s_endpgm
+         bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0x0,
+                 V_008DFC_SQ_EXP_POS, false);
+      } else {
+         //(?!.*last.*)! v_nop
+         bld.vop1(aco_opcode::v_nop);
+      }
+
+      finish_insert_nops_test(stage.flags & stage_has_export);
+   }
+END_TEST
+
+BEGIN_TEST(insert_nops.export_priority.instrs_after_export)
+   if (!setup_cs(NULL, GFX11_5))
+      return;
+
+   program->stage = vertex_ngg;
+   //>> /* logical preds: / linear preds: / kind: uniform, top-level, */
+   //! s_setprio imm:2
+   //! exp v1: undef, v1: undef, v1: undef, v1: undef en:**** pos0
+   //! s_setprio imm:0
+   //! s_waitcnt_expcnt %0:null imm:0
+   //! s_nop
+   //! s_nop
+   //! s_setprio imm:2
+   //! v_nop
+   //! s_endpgm
+   bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0x0,
+           V_008DFC_SQ_EXP_POS, false);
+   bld.vop1(aco_opcode::v_nop);
+
+   finish_insert_nops_test();
+END_TEST
+
+BEGIN_TEST(insert_nops.export_priority.fallthrough_to_endpgm)
+   if (!setup_cs(NULL, GFX11_5))
+      return;
+
+   program->stage = vertex_ngg;
+   //>> /* logical preds: / linear preds: / kind: top-level, */
+   //! s_setprio imm:2
+   //! exp v1: undef, v1: undef, v1: undef, v1: undef en:**** pos0
+   //! s_setprio imm:0
+   //! s_nop
+   //! s_nop
+   //>> BB1
+   //>> /* logical preds: BB0, / linear preds: BB0, / kind: uniform, */
+   //! s_endpgm
+   bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0x0,
+           V_008DFC_SQ_EXP_POS, false);
+
+   bld.reset(program->create_and_insert_block());
+   program->blocks[0].linear_succs.push_back(1);
+   program->blocks[0].logical_succs.push_back(1);
+   program->blocks[1].linear_preds.push_back(0);
+   program->blocks[1].logical_preds.push_back(0);
+
+   finish_insert_nops_test();
+END_TEST
+
+BEGIN_TEST(insert_nops.export_priority.multiple_exports)
+   if (!setup_cs(NULL, GFX11_5))
+      return;
+
+   program->stage = vertex_ngg;
+   //>> /* logical preds: / linear preds: / kind: uniform, top-level, */
+   //! s_setprio imm:2
+   //! exp v1: undef, v1: undef, v1: undef, v1: undef en:**** pos0
+   //! exp v1: undef, v1: undef, v1: undef, v1: undef en:**** pos1
+   //! s_setprio imm:0
+   //! s_nop
+   //! s_nop
+   //! s_endpgm
+   bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0x0,
+           V_008DFC_SQ_EXP_POS, false);
+   bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0x0,
+           V_008DFC_SQ_EXP_POS + 1, false);
+
+   finish_insert_nops_test();
+END_TEST
+
+BEGIN_TEST(insert_nops.export_priority.set_prio)
+   if (!setup_cs(NULL, GFX11_5))
+      return;
+
+   program->stage = vertex_ngg;
+   //>> /* logical preds: / linear preds: / kind: uniform, top-level, */
+   //! s_setprio imm:3
+   //! v_nop
+   //! s_setprio imm:2
+   //! exp v1: undef, v1: undef, v1: undef, v1: undef en:**** pos0
+   //! s_setprio imm:0
+   //! s_nop
+   //! s_nop
+   //! s_endpgm
+   bld.sopp(aco_opcode::s_setprio, 3);
+   bld.vop1(aco_opcode::v_nop);
+   bld.sopp(aco_opcode::s_setprio, 1);
+   bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0x0,
+           V_008DFC_SQ_EXP_POS, false);
+
+   finish_insert_nops_test();
+END_TEST
+
+BEGIN_TEST(insert_nops.valu_read_sgpr.basic)
+   if (!setup_cs(NULL, GFX12))
+      return;
+
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(4), s1));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(7), s1));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(sgpr_null, s1));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(exec_lo, s1));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(m0, s1));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(scc, s1));
+
+   /* no hazard: SALU write missing */
+   //>> p_unit_test 0
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   /* no hazard: SGPR never read by VALU */
+   //! p_unit_test 1
+   //! s1: %0:s[16] = s_mov_b32 0
+   //! s1: %0:s[64] = s_mov_b32 %0:s[16]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(16), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(16), s1));
+
+   /* basic case: SALU read */
+   //! p_unit_test 2
+   //! s1: %0:s[4] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   /* basic case again: VALU reads never expire */
+   //! p_unit_test 3
+   //! s1: %0:s[4] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   /* sa_sdst(0) resolves the hazard */
+   //! p_unit_test 4
+   //! s1: %0:s[4] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   //! p_unit_test 5
+   //! s1: %0:s[4] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   bld.sopp(aco_opcode::s_waitcnt_depctr, 0xfffe);
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   /* basic case: VALU read */
+   //! p_unit_test 6
+   //! s1: %0:s[4] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! v1: %0:v[0] = v_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(4), s1));
+
+   /* the SALU write is in the same SGPR pair as the VALU read */
+   //! p_unit_test 7
+   //! s1: %0:s[6] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[6]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(6), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(6), s1));
+
+   /* no hazard: these registers are not problematic */
+   //! p_unit_test 8
+   //! s1: %0:null = s_mov_b32 0
+   //! s1: %0:s[64] = s_mov_b32 %0:null
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(sgpr_null, s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(sgpr_null, s1));
+
+   //! p_unit_test 9
+   //! s1: %0:exec_lo = s_mov_b32 0
+   //! s1: %0:s[64] = s_mov_b32 %0:exec_lo
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(exec_lo, s1));
+
+   //! p_unit_test 10
+   //! s1: %0:m0 = s_mov_b32 0
+   //! s1: %0:s[64] = s_mov_b32 %0:m0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(m0, s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(m0, s1));
+
+   //! p_unit_test 11
+   //! s1: %0:scc = s_cmp_lg_i32 0, 0
+   //! s1: %0:s[64] = s_mov_b32 %0:scc
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
+   bld.sopc(aco_opcode::s_cmp_lg_i32, Definition(scc, s1), Operand::zero(4), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(scc, s1));
+
+   /* 11 SALU between the write and a VALU read expire the hazard */
+   //! p_unit_test 12
+   //! s1: %0:s[4] = s_mov_b32 0
+   //; for i in range(11): insert_pattern('s1: %0:s[64] = s_mov_b32 0')
+   //! v1: %0:v[0] = v_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(12));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   for (unsigned i = 0; i < 11; i++)
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand::zero(4));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(4), s1));
+
+   //! p_unit_test 13
+   //! s1: %0:s[4] = s_mov_b32 0
+   //; for i in range(10): insert_pattern('s1: %0:s[64] = s_mov_b32 0')
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! v1: %0:v[0] = v_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(13));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   for (unsigned i = 0; i < 10; i++)
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand::zero(4));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(4), s1));
+
+   /* 10 SALU between the write and a SALU read expire the hazard */
+   //! p_unit_test 14
+   //! s1: %0:s[4] = s_mov_b32 0
+   //; for i in range(10): insert_pattern('s1: %0:s[64] = s_mov_b32 0')
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(14));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   for (unsigned i = 0; i < 10; i++)
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   //! p_unit_test 15
+   //! s1: %0:s[4] = s_mov_b32 0
+   //; for i in range(9): insert_pattern('s1: %0:s[64] = s_mov_b32 0')
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(15));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   for (unsigned i = 0; i < 9; i++)
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   /* SOPP in-between the write and the read do not count */
+   //! p_unit_test 16
+   //! s1: %0:s[4] = s_mov_b32 0
+   //; for i in range(9): insert_pattern('s1: %0:s[64] = s_mov_b32 0')
+   //! s_nop
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(16));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   for (unsigned i = 0; i < 9; i++)
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand::zero(4));
+   bld.sopp(aco_opcode::s_nop, 0);
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
+
+   finish_insert_nops_test();
+END_TEST
+
+BEGIN_TEST(insert_nops.valu_read_sgpr.previous_part)
+   if (!setup_cs(NULL, GFX12))
+      return;
+
+   /* Raytracing shaders have a prolog and may also be split into several parts. */
+   program->stage = raytracing_cs;
+
+   /* Despite the SGPR never being read by a VALU in this shader, a sa_sdst(0) is needed. */
+   //>> p_unit_test 0
+   //! s1: %0:s[4] = s_mov_b32 0
+   //! s_waitcnt_depctr sa_sdst(0)
+   //! s1: %0:s[64] = s_mov_b32 %0:s[4]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand(PhysReg(4), s1));
 
    finish_insert_nops_test();
 END_TEST
@@ -1589,6 +2082,43 @@ BEGIN_TEST(insert_nops.setpc_gfx12)
    //! s_setpc_b64 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
    bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   /* VALUReadSGPRHazard */
+   //! p_unit_test 4
+   //! v1: %0:v[0] = v_mov_b32 %0:s[4]
+   //! s1: %0:s[4] = s_mov_b32 0
+   //! s_waitcnt_depctr va_vdst(0) sa_sdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(4), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   //! p_unit_test 5
+   //! v1: %0:v[0] = v_mov_b32 %0:s[4]
+   //! s1: %0:s[4] = s_mov_b32 0
+   //; for i in range(10): insert_pattern('s1: %0:s[64] = s_mov_b32 0')
+   //! s_waitcnt_depctr va_vdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(4), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   for (unsigned i = 0; i < 10; i++) /* the s_setpc_b64 counts */
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand::zero(4));
+   bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
+
+   //! p_unit_test 6
+   //! v1: %0:v[0] = v_mov_b32 %0:s[4]
+   //! s1: %0:s[4] = s_mov_b32 0
+   //; for i in range(9): insert_pattern('s1: %0:s[64] = s_mov_b32 0')
+   //! s_waitcnt_depctr va_vdst(0) sa_sdst(0)
+   //! s_setpc_b64 0
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+   bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(256), v1), Operand(PhysReg(4), s1));
+   bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(4), s1), Operand::zero(4));
+   for (unsigned i = 0; i < 9; i++)
+      bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(64), s1), Operand::zero(4));
    bld.sop1(aco_opcode::s_setpc_b64, Operand::zero(8));
 
    finish_insert_nops_test(true);

@@ -1,4 +1,8 @@
 # Too slow
+dEQP-VK.binding_model.descriptor_buffer.multiple.compute_comp_buffers32_sets1
+dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_comp_buffers32_sets1
+dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_frag_buffers32_sets1
+dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers32_sets1
 dEQP-VK.draw.*.shader_layer.(vertex|tessellation)_shader_256
 dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576
 dEQP-VK.reconvergence.(sub|work)group_uniform_control_flow_(ballot|elect).compute.nesting4.(0.40|7.10)

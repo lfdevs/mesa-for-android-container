@@ -201,6 +201,27 @@ tmu_write_is_sequence_terminator(uint32_t waddr)
 }
 
 static bool
+is_tmu_sequence_terminator(struct qinst *inst)
+{
+        if (inst->qpu.type != V3D_QPU_INSTR_TYPE_ALU)
+                return false;
+
+        if (inst->qpu.alu.add.op != V3D_QPU_A_NOP) {
+                if (!inst->qpu.alu.add.magic_write)
+                        return false;
+                return tmu_write_is_sequence_terminator(inst->qpu.alu.add.waddr);
+        }
+
+        if (inst->qpu.alu.mul.op != V3D_QPU_M_NOP) {
+                if (!inst->qpu.alu.mul.magic_write)
+                        return false;
+                return tmu_write_is_sequence_terminator(inst->qpu.alu.mul.waddr);
+        }
+
+        return false;
+}
+
+static bool
 can_reorder_tmu_write(const struct v3d_device_info *devinfo, uint32_t waddr)
 {
         if (tmu_write_is_sequence_terminator(waddr))
@@ -1533,6 +1554,7 @@ retry:
                          * this aspect in the compiler yet.
                          */
                         if (prev_inst->inst->qpu.sig.ldtmu &&
+                            is_tmu_sequence_terminator(n->inst) &&
                             !scoreboard->first_ldtmu_after_thrsw &&
                             (scoreboard->pending_ldtmu_count +
                              n->inst->ldtmu_count > 16 / c->threads)) {

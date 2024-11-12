@@ -425,8 +425,6 @@ lp_build_fill_mattrs(std::vector<std::string> &MAttrs)
 
 #if DETECT_ARCH_LOONGARCH64 == 1
    /*
-    * TODO: Implement util_get_cpu_caps()
-    *
     * No FPU-less LoongArch64 systems are ever shipped yet, and LP64D is
     * the default ABI, so FPU is enabled here.
     *
@@ -435,9 +433,16 @@ lp_build_fill_mattrs(std::vector<std::string> &MAttrs)
     * https://github.com/loongson/la-softdev-convention/releases/download/v0.1/la-softdev-convention.pdf
     */
    MAttrs = {"+f","+d"};
-#if LLVM_VERSION_MAJOR == 17
-   /* LLVM 17's LSX support is incomplete, so explicitly mask it */
+#if LLVM_VERSION_MAJOR >= 18
+   MAttrs.push_back(util_get_cpu_caps()->has_lsx ? "+lsx" : "-lsx");
+   MAttrs.push_back(util_get_cpu_caps()->has_lasx ? "+lasx" : "-lasx");
+#else
+   /*
+    * LLVM 17's LSX support is incomplete, and LLVM 16 isn't supported
+    * LSX and LASX. So explicitly mask it.
+    */
    MAttrs.push_back("-lsx");
+   MAttrs.push_back("-lasx");
 #endif
 #endif
 }

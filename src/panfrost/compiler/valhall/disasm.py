@@ -21,9 +21,12 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-from valhall import instructions, immediates, enums, typesize, safe_name
+import sys
+from valhall import valhall_parse_isa
 from mako.template import Template
 from mako import exceptions
+
+(instructions, immediates, enums, typesize, safe_name) = valhall_parse_isa()
 
 template = """
 #include "disassemble.h"

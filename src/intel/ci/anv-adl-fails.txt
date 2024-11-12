@@ -1,0 +1,4 @@
+# initial fails
+dEQP-VK.api.get_device_proc_addr.non_enabled,Fail
+dEQP-VK.api.version_check.unavailable_entry_points,Fail
+

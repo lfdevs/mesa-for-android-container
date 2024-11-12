@@ -45,6 +45,7 @@
 #include "util/list.h"
 #include "util/macros.h"
 #include "util/u_math.h"
+#define XXH_INLINE_ALL
 #include "util/xxhash.h"
 #include "vk_format.h"
 #include "vk_log.h"
@@ -392,8 +393,8 @@ pvr_pbe_src_format_normal(VkFormat src_format,
          if (dont_force_pbe) {
             count = vk_format_get_blocksizebits(dst_format) / 32U;
          } else {
-            count =
-               pvr_vk_format_get_common_color_channel_count(src_format, dst_format);
+            count = pvr_vk_format_get_common_color_channel_count(src_format,
+                                                                 dst_format);
          }
 
          if (!src_signed && !dst_signed) {
@@ -487,7 +488,7 @@ pvr_pbe_src_format_normal(VkFormat src_format,
                count = vk_format_get_blocksizebits(dst_format) / 32U;
             } else {
                count = pvr_vk_format_get_common_color_channel_count(src_format,
-                                                                dst_format);
+                                                                    dst_format);
             }
 
             switch (count) {
@@ -997,7 +998,7 @@ static void pvr_pbe_setup_swizzle(const struct pvr_transfer_cmd *transfer_cmd,
             uint32_t tmp;
 
             tmp = pvr_vk_format_get_common_color_channel_count(src_format,
-                                                           dst->vk_format);
+                                                               dst->vk_format);
 
             count = MAX2(count, tmp);
          }
@@ -2856,10 +2857,6 @@ static VkResult pvr_3d_copy_blit_core(struct pvr_transfer_ctx *ctx,
       pvr_csb_pack (&regs->isp_bgobjvals, CR_ISP_BGOBJVALS, reg) {
          reg.enablebgtag = true;
       }
-
-      /* clang-format off */
-      pvr_csb_pack (&regs->isp_aa, CR_ISP_AA, reg);
-      /* clang-format on */
    } else {
       /* No shader. */
       state->pds_temps = 0U;

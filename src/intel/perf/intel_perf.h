@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "compiler/glsl/list.h"
+#include "common/intel_bind_timeline.h"
 #include "dev/intel_device_info.h"
 #include "util/bitscan.h"
 #include "util/bitset.h"
@@ -321,6 +322,7 @@ enum intel_perf_features {
    INTEL_PERF_FEATURE_GLOBAL_SSEU = (1 << 1),
    /* Whether i915 has DRM_I915_QUERY_PERF_CONFIG support. */
    INTEL_PERF_FEATURE_QUERY_PERF = (1 << 2),
+   INTEL_PERF_FEATURE_METRIC_SYNC = (1 << 3),
 };
 
 struct intel_perf_config {
@@ -573,6 +575,12 @@ intel_perf_has_global_sseu(const struct intel_perf_config *perf)
    return perf->features_supported & INTEL_PERF_FEATURE_GLOBAL_SSEU;
 }
 
+static inline bool
+intel_perf_has_metric_sync(const struct intel_perf_config *perf)
+{
+   return perf->features_supported & INTEL_PERF_FEATURE_METRIC_SYNC;
+}
+
 uint32_t intel_perf_get_n_passes(struct intel_perf_config *perf,
                                  const uint32_t *counter_indices,
                                  uint32_t counter_indices_count,
@@ -585,14 +593,17 @@ void intel_perf_get_counters_passes(struct intel_perf_config *perf,
 int intel_perf_stream_open(struct intel_perf_config *perf_config, int drm_fd,
                            uint32_t ctx_id, uint64_t metrics_set_id,
                            uint64_t period_exponent, bool hold_preemption,
-                           bool enable);
+                           bool enable, struct intel_bind_timeline *timeline);
 int intel_perf_stream_read_samples(struct intel_perf_config *perf_config,
                                    int perf_stream_fd, uint8_t *buffer,
                                    size_t buffer_len);
 int intel_perf_stream_set_state(struct intel_perf_config *perf_config,
                                 int perf_stream_fd, bool enable);
 int intel_perf_stream_set_metrics_id(struct intel_perf_config *perf_config,
-                                     int perf_stream_fd, uint64_t metrics_set_id);
+                                     int drm_fd, int perf_stream_fd,
+                                     uint32_t exec_queue,
+                                     uint64_t metrics_set_id,
+                                     struct intel_bind_timeline *timeline);
 
 #ifdef __cplusplus
 } // extern "C"

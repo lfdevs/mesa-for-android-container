@@ -94,22 +94,22 @@ __indirect_glInterleavedArrays(GLenum format, GLsizei stride,
    struct
    {
         /**
-	 * The enum describing the GL type, as would be passed to the
-	 * appropriate gl*Pointer function.
-	 */
+    * The enum describing the GL type, as would be passed to the
+    * appropriate gl*Pointer function.
+    */
       GLushort type;
 
         /**
-	 * Number of elements in the subarray, as would be passed (as the
-	 * \c size parameter) to the appropriate gl*Pointer function.
-	 */
+    * Number of elements in the subarray, as would be passed (as the
+    * \c size parameter) to the appropriate gl*Pointer function.
+    */
       GLubyte count;
 
         /**
-	 * True size of a single element in the subarray, as would be passed
-	 * (as the \c stride parameter) to the appropriate gl*Pointer
-	 * function.
-	 */
+    * True size of a single element in the subarray, as would be passed
+    * (as the \c stride parameter) to the appropriate gl*Pointer
+    * function.
+    */
       GLubyte size;
    }
    static const modes[14][4] = {

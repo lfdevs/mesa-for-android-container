@@ -2,7 +2,12 @@
 # shellcheck disable=SC2086 # we want word splitting
 
 set -e
+
+. .gitlab-ci/setup-test-env.sh
+
 set -o xtrace
+
+uncollapsed_section_start debian_setup "Base Debian system setup"
 
 export DEBIAN_FRONTEND=noninteractive
 export LLVM_VERSION="${LLVM_VERSION:=15}"
@@ -79,6 +84,8 @@ apt-get install -y --no-remove "${DEPS[@]}" "${EPHEMERAL[@]}" \
 
 ############### Build piglit
 
+uncollapsed_section_switch piglit "Building Piglit"
+
 PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
 	     -DPIGLIT_USE_GBM=ON
 	     -DPIGLIT_USE_WAYLAND=ON
@@ -97,9 +104,13 @@ PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
 
 ############### Build dEQP GL
 
+uncollapsed_section_switch piglit_gl "Building dEQP for GL"
+
 DEQP_API=GL \
 DEQP_TARGET=surfaceless \
 . .gitlab-ci/container/build-deqp.sh
+
+uncollapsed_section_switch piglit_gles "Building dEQP for GLES"
 
 DEQP_API=GLES \
 DEQP_TARGET=surfaceless \
@@ -111,13 +122,19 @@ DEQP_TARGET=surfaceless \
 
 ############### Build validation layer for zink
 
+uncollapsed_section_switch vvl "Building Vulkan validation layers"
+
 . .gitlab-ci/container/build-vulkan-validation.sh
 
 ############### Build nine tests
 
+uncollapsed_section_switch nine "Building Nine tests"
+
 . .gitlab-ci/container/build-ninetests.sh
 
 ############### Uninstall the build software
+
+uncollapsed_section_switch debian_cleanup "Cleaning up base Debian system"
 
 apt-get purge -y "${EPHEMERAL[@]}"
 

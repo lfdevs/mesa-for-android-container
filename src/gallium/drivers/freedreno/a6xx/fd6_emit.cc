@@ -1,25 +1,7 @@
 /*
- * Copyright (C) 2016 Rob Clark <robclark@freedesktop.org>
+ * Copyright © 2016 Rob Clark <robclark@freedesktop.org>
  * Copyright © 2018 Google, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Rob Clark <robclark@freedesktop.org>
@@ -697,16 +679,16 @@ fd6_emit_3d_state(struct fd_ringbuffer *ring, struct fd6_emit *emit)
          fd6_state_take_group(&emit->state, state, FD6_GROUP_FS_BINDLESS);
          break;
       case FD6_GROUP_CONST:
-         state = fd6_build_user_consts<PIPELINE>(emit);
+         state = fd6_build_user_consts<CHIP, PIPELINE>(emit);
          fd6_state_take_group(&emit->state, state, FD6_GROUP_CONST);
          break;
       case FD6_GROUP_DRIVER_PARAMS:
-         state = fd6_build_driver_params<PIPELINE>(emit);
+         state = fd6_build_driver_params<CHIP, PIPELINE>(emit);
          fd6_state_take_group(&emit->state, state, FD6_GROUP_DRIVER_PARAMS);
          break;
       case FD6_GROUP_PRIMITIVE_PARAMS:
          if (PIPELINE == HAS_TESS_GS) {
-            state = fd6_build_tess_consts(emit);
+            state = fd6_build_tess_consts<CHIP>(emit);
             fd6_state_take_group(&emit->state, state, FD6_GROUP_PRIMITIVE_PARAMS);
          }
          break;
@@ -842,6 +824,8 @@ fd6_emit_ccu_cntl(struct fd_ringbuffer *ring, struct fd_screen *screen, bool gme
          );
       }
    } else {
+      OUT_WFI5(ring);   /* early a6xx (a630?) needed this */
+
       OUT_REG(ring,
          RB_CCU_CNTL(
             CHIP,
@@ -871,6 +855,230 @@ fd6_emit_stomp(struct fd_ringbuffer *ring, const uint16_t *regs, size_t count)
       }
    }
 }
+
+template <chip CHIP>
+void
+fd6_emit_static_regs(struct fd_context *ctx, struct fd_ringbuffer *ring)
+{
+   struct fd_screen *screen = ctx->screen;
+
+   if (CHIP >= A7XX) {
+      /* On A7XX, RB_CCU_CNTL was broken into two registers, RB_CCU_CNTL which has
+       * static properties that can be set once, this requires a WFI to take effect.
+       * While the newly introduced register RB_CCU_CNTL2 has properties that may
+       * change per-RP and don't require a WFI to take effect, only CCU inval/flush
+       * events are required.
+       */
+      OUT_REG(ring,
+         RB_CCU_CNTL(
+            CHIP,
+            .gmem_fast_clear_disable = true, // !screen->info->a6xx.has_gmem_fast_clear,
+            .concurrent_resolve = screen->info->a6xx.concurrent_resolve,
+         )
+      );
+   }
+
+   for (size_t i = 0; i < ARRAY_SIZE(screen->info->a6xx.magic_raw); i++) {
+      auto magic_reg = screen->info->a6xx.magic_raw[i];
+      if (!magic_reg.reg)
+         break;
+
+      uint32_t value = magic_reg.value;
+      switch(magic_reg.reg) {
+         case REG_A6XX_TPL1_DBG_ECO_CNTL1:
+            value = (value & ~A6XX_TPL1_DBG_ECO_CNTL1_TP_UBWC_FLAG_HINT) |
+                    (screen->info->a7xx.enable_tp_ubwc_flag_hint
+                        ? A6XX_TPL1_DBG_ECO_CNTL1_TP_UBWC_FLAG_HINT
+                        : 0);
+            break;
+      }
+
+      WRITE(magic_reg.reg, value);
+   }
+
+   WRITE(REG_A6XX_RB_DBG_ECO_CNTL, screen->info->a6xx.magic.RB_DBG_ECO_CNTL);
+   WRITE(REG_A6XX_SP_FLOAT_CNTL, A6XX_SP_FLOAT_CNTL_F16_NO_INF);
+   WRITE(REG_A6XX_SP_DBG_ECO_CNTL, screen->info->a6xx.magic.SP_DBG_ECO_CNTL);
+   WRITE(REG_A6XX_SP_PERFCTR_ENABLE, 0x3f);
+   if (CHIP == A6XX)
+      WRITE(REG_A6XX_TPL1_UNKNOWN_B605, 0x44);
+   WRITE(REG_A6XX_TPL1_DBG_ECO_CNTL, screen->info->a6xx.magic.TPL1_DBG_ECO_CNTL);
+   if (CHIP == A6XX) {
+      WRITE(REG_A6XX_HLSQ_UNKNOWN_BE00, 0x80);
+      WRITE(REG_A6XX_HLSQ_UNKNOWN_BE01, 0);
+   }
+
+   WRITE(REG_A6XX_VPC_DBG_ECO_CNTL, screen->info->a6xx.magic.VPC_DBG_ECO_CNTL);
+   WRITE(REG_A6XX_GRAS_DBG_ECO_CNTL, screen->info->a6xx.magic.GRAS_DBG_ECO_CNTL);
+   if (CHIP == A6XX)
+      WRITE(REG_A6XX_HLSQ_DBG_ECO_CNTL, screen->info->a6xx.magic.HLSQ_DBG_ECO_CNTL);
+   WRITE(REG_A6XX_SP_CHICKEN_BITS, screen->info->a6xx.magic.SP_CHICKEN_BITS);
+   WRITE(REG_A6XX_SP_IBO_COUNT, 0);
+   WRITE(REG_A6XX_SP_UNKNOWN_B182, 0);
+   if (CHIP == A6XX)
+      WRITE(REG_A6XX_HLSQ_SHARED_CONSTS, 0);
+   WRITE(REG_A6XX_UCHE_UNKNOWN_0E12, screen->info->a6xx.magic.UCHE_UNKNOWN_0E12);
+   WRITE(REG_A6XX_UCHE_CLIENT_PF, screen->info->a6xx.magic.UCHE_CLIENT_PF);
+   WRITE(REG_A6XX_RB_UNKNOWN_8E01, screen->info->a6xx.magic.RB_UNKNOWN_8E01);
+   WRITE(REG_A6XX_SP_UNKNOWN_A9A8, 0);
+   OUT_REG(ring,
+      A6XX_SP_MODE_CONTROL(
+         .constant_demotion_enable = true,
+         .isammode = ISAMMODE_GL,
+         .shared_consts_enable = false,
+      )
+   );
+   WRITE(REG_A6XX_VFD_ADD_OFFSET, A6XX_VFD_ADD_OFFSET_VERTEX);
+   WRITE(REG_A6XX_VPC_UNKNOWN_9107, 0);
+   WRITE(REG_A6XX_RB_UNKNOWN_8811, 0x00000010);
+   WRITE(REG_A6XX_PC_MODE_CNTL, screen->info->a6xx.magic.PC_MODE_CNTL);
+
+   WRITE(REG_A6XX_GRAS_LRZ_PS_INPUT_CNTL, 0);
+   WRITE(REG_A6XX_GRAS_SAMPLE_CNTL, 0);
+   WRITE(REG_A6XX_GRAS_UNKNOWN_8110, 0x2);
+
+   WRITE(REG_A6XX_RB_UNKNOWN_8818, 0);
+
+   if (CHIP == A6XX) {
+      WRITE(REG_A6XX_RB_UNKNOWN_8819, 0);
+      WRITE(REG_A6XX_RB_UNKNOWN_881A, 0);
+      WRITE(REG_A6XX_RB_UNKNOWN_881B, 0);
+      WRITE(REG_A6XX_RB_UNKNOWN_881C, 0);
+      WRITE(REG_A6XX_RB_UNKNOWN_881D, 0);
+      WRITE(REG_A6XX_RB_UNKNOWN_881E, 0);
+   }
+
+   WRITE(REG_A6XX_RB_UNKNOWN_88F0, 0);
+
+   WRITE(REG_A6XX_VPC_POINT_COORD_INVERT, A6XX_VPC_POINT_COORD_INVERT(0).value);
+   WRITE(REG_A6XX_VPC_UNKNOWN_9300, 0);
+
+   WRITE(REG_A6XX_VPC_SO_DISABLE, A6XX_VPC_SO_DISABLE(true).value);
+
+   OUT_REG(ring, PC_RASTER_CNTL(CHIP));
+
+   if (CHIP == A7XX)
+      OUT_REG(ring, A7XX_PC_RASTER_CNTL_V2());
+
+   WRITE(REG_A6XX_PC_MULTIVIEW_CNTL, 0);
+
+   WRITE(REG_A6XX_SP_UNKNOWN_B183, 0);
+
+   WRITE(REG_A6XX_GRAS_SU_CONSERVATIVE_RAS_CNTL, 0);
+   WRITE(REG_A6XX_GRAS_VS_LAYER_CNTL, 0);
+   WRITE(REG_A6XX_GRAS_SC_CNTL, A6XX_GRAS_SC_CNTL_CCUSINGLECACHELINESIZE(2));
+   WRITE(REG_A6XX_GRAS_UNKNOWN_80AF, 0);
+   if (CHIP == A6XX) {
+      WRITE(REG_A6XX_VPC_UNKNOWN_9210, 0);
+      WRITE(REG_A6XX_VPC_UNKNOWN_9211, 0);
+   }
+   WRITE(REG_A6XX_VPC_UNKNOWN_9602, 0);
+   WRITE(REG_A6XX_PC_UNKNOWN_9E72, 0);
+   /* NOTE blob seems to (mostly?) use 0xb2 for SP_TP_MODE_CNTL
+    * but this seems to kill texture gather offsets.
+    */
+   WRITE(REG_A6XX_SP_TP_MODE_CNTL, 0xa0 |
+         A6XX_SP_TP_MODE_CNTL_ISAMMODE(ISAMMODE_GL));
+
+   OUT_REG(ring, HLSQ_CONTROL_5_REG(
+         CHIP,
+         .linelengthregid = INVALID_REG,
+         .foveationqualityregid = INVALID_REG,
+   ));
+
+   emit_marker6(ring, 7);
+
+   OUT_REG(ring, A6XX_VFD_MODE_CNTL(RENDERING_PASS));
+
+   WRITE(REG_A6XX_VFD_MULTIVIEW_CNTL, 0);
+
+   /* Clear any potential pending state groups to be safe: */
+   OUT_PKT7(ring, CP_SET_DRAW_STATE, 3);
+   OUT_RING(ring, CP_SET_DRAW_STATE__0_COUNT(0) |
+                     CP_SET_DRAW_STATE__0_DISABLE_ALL_GROUPS |
+                     CP_SET_DRAW_STATE__0_GROUP_ID(0));
+   OUT_RING(ring, CP_SET_DRAW_STATE__1_ADDR_LO(0));
+   OUT_RING(ring, CP_SET_DRAW_STATE__2_ADDR_HI(0));
+
+   OUT_PKT4(ring, REG_A6XX_VPC_SO_STREAM_CNTL, 1);
+   OUT_RING(ring, 0x00000000); /* VPC_SO_STREAM_CNTL */
+
+   if (CHIP >= A7XX) {
+      OUT_REG(ring, A6XX_GRAS_LRZ_CNTL());
+      OUT_REG(ring, A7XX_GRAS_LRZ_CNTL2());
+   } else {
+      OUT_REG(ring, A6XX_GRAS_LRZ_CNTL());
+   }
+
+   OUT_REG(ring, A6XX_RB_LRZ_CNTL());
+   OUT_REG(ring, A6XX_RB_DEPTH_PLANE_CNTL());
+   OUT_REG(ring, A6XX_GRAS_SU_DEPTH_PLANE_CNTL());
+
+   OUT_PKT4(ring, REG_A6XX_GRAS_LRZ_CNTL, 1);
+   OUT_RING(ring, 0x00000000);
+
+   OUT_PKT4(ring, REG_A6XX_RB_LRZ_CNTL, 1);
+   OUT_RING(ring, 0x00000000);
+
+   /* Initialize VFD_FETCH[n].SIZE to zero to avoid iova faults trying
+    * to fetch from a VFD_FETCH[n].BASE which we've potentially inherited
+    * from another process:
+    */
+   for (int32_t i = 0; i < 32; i++) {
+      OUT_PKT4(ring, REG_A6XX_VFD_FETCH_SIZE(i), 1);
+      OUT_RING(ring, 0);
+   }
+
+   struct fd6_context *fd6_ctx = fd6_context(ctx);
+   struct fd_bo *bcolor_mem = fd6_ctx->bcolor_mem;
+
+   OUT_PKT4(ring, REG_A6XX_SP_TP_BORDER_COLOR_BASE_ADDR, 2);
+   OUT_RELOC(ring, bcolor_mem, 0, 0, 0);
+
+   OUT_PKT4(ring, REG_A6XX_SP_PS_TP_BORDER_COLOR_BASE_ADDR, 2);
+   OUT_RELOC(ring, bcolor_mem, 0, 0, 0);
+
+   /* These regs are blocked (CP_PROTECT) on a6xx: */
+   if (CHIP >= A7XX) {
+      OUT_REG(ring,
+         TPL1_BICUBIC_WEIGHTS_TABLE_0(CHIP, 0),
+         TPL1_BICUBIC_WEIGHTS_TABLE_1(CHIP, 0x3fe05ff4),
+         TPL1_BICUBIC_WEIGHTS_TABLE_2(CHIP, 0x3fa0ebee),
+         TPL1_BICUBIC_WEIGHTS_TABLE_3(CHIP, 0x3f5193ed),
+         TPL1_BICUBIC_WEIGHTS_TABLE_4(CHIP, 0x3f0243f0),
+      );
+   }
+
+   if (CHIP >= A7XX) {
+      /* Blob sets these two per draw. */
+      OUT_REG(ring, A7XX_PC_TESS_PARAM_SIZE(FD6_TESS_PARAM_SIZE));
+      /* Blob adds a bit more space ({0x10, 0x20, 0x30, 0x40} bytes)
+       * but the meaning of this additional space is not known,
+       * so we play safe and don't add it.
+       */
+      OUT_REG(ring, A7XX_PC_TESS_FACTOR_SIZE(FD6_TESS_FACTOR_SIZE));
+   }
+
+   /* There is an optimization to skip executing draw states for draws with no
+    * instances. Instead of simply skipping the draw, internally the firmware
+    * sets a bit in PC_DRAW_INITIATOR that seemingly skips the draw. However
+    * there is a hardware bug where this bit does not always cause the FS
+    * early preamble to be skipped. Because the draw states were skipped,
+    * SP_FS_CTRL_REG0, SP_FS_OBJ_START and so on are never updated and a
+    * random FS preamble from the last draw is executed. If the last visible
+    * draw is from the same submit, it shouldn't be a problem because we just
+    * re-execute the same preamble and preambles don't have side effects, but
+    * if it's from another process then we could execute a garbage preamble
+    * leading to hangs and faults. To make sure this doesn't happen, we reset
+    * SP_FS_CTRL_REG0 here, making sure that the EARLYPREAMBLE bit isn't set
+    * so any leftover early preamble doesn't get executed. Other stages don't
+    * seem to be affected.
+    */
+   if (screen->info->a6xx.has_early_preamble) {
+      WRITE(REG_A6XX_SP_FS_CTRL_REG0, 0);
+   }
+}
+FD_GENX(fd6_emit_static_regs);
 
 /* emit setup at begin of new cmdstream buffer (don't rely on previous
  * state, there could have been a context switch between ioctls):
@@ -926,235 +1134,23 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 
    OUT_WFI5(ring);
 
-   if (CHIP >= A7XX) {
-      /* On A7XX, RB_CCU_CNTL was broken into two registers, RB_CCU_CNTL which has
-       * static properties that can be set once, this requires a WFI to take effect.
-       * While the newly introduced register RB_CCU_CNTL2 has properties that may
-       * change per-RP and don't require a WFI to take effect, only CCU inval/flush
-       * events are required.
-       */
-      OUT_REG(ring,
-         RB_CCU_CNTL(
-            CHIP,
-            .gmem_fast_clear_disable = true, // !screen->info->a6xx.has_gmem_fast_clear,
-            .concurrent_resolve = screen->info->a6xx.concurrent_resolve,
-         )
-      );
-      OUT_WFI5(ring);
-   }
-
+   fd6_emit_ib(ring, fd6_context(ctx)->restore);
    fd6_emit_ccu_cntl<CHIP>(ring, screen, false);
 
-   for (size_t i = 0; i < ARRAY_SIZE(screen->info->a6xx.magic_raw); i++) {
-      auto magic_reg = screen->info->a6xx.magic_raw[i];
-      if (!magic_reg.reg)
-         break;
+   OUT_PKT7(ring, CP_SET_AMBLE, 3);
+   uint32_t dwords = fd_ringbuffer_emit_reloc_ring_full(ring, fd6_context(ctx)->preamble, 0) / 4;
+   OUT_RING(ring, CP_SET_AMBLE_2_DWORDS(dwords) |
+                  CP_SET_AMBLE_2_TYPE(BIN_PREAMBLE_AMBLE_TYPE));
 
-      uint32_t value = magic_reg.value;
-      switch(magic_reg.reg) {
-         case REG_A6XX_TPL1_DBG_ECO_CNTL1:
-            value = (value & ~A6XX_TPL1_DBG_ECO_CNTL1_TP_UBWC_FLAG_HINT) |
-                    (screen->info->a7xx.enable_tp_ubwc_flag_hint
-                        ? A6XX_TPL1_DBG_ECO_CNTL1_TP_UBWC_FLAG_HINT
-                        : 0);
-            break;
-      }
-
-      WRITE(magic_reg.reg, value);
-   }
-
-   WRITE(REG_A6XX_RB_DBG_ECO_CNTL, screen->info->a6xx.magic.RB_DBG_ECO_CNTL);
-   WRITE(REG_A6XX_SP_FLOAT_CNTL, A6XX_SP_FLOAT_CNTL_F16_NO_INF);
-   WRITE(REG_A6XX_SP_DBG_ECO_CNTL, screen->info->a6xx.magic.SP_DBG_ECO_CNTL);
-   WRITE(REG_A6XX_SP_PERFCTR_ENABLE, 0x3f);
-   if (CHIP == A6XX)
-      WRITE(REG_A6XX_TPL1_UNKNOWN_B605, 0x44);
-   WRITE(REG_A6XX_TPL1_DBG_ECO_CNTL, screen->info->a6xx.magic.TPL1_DBG_ECO_CNTL);
-   if (CHIP == A6XX) {
-      WRITE(REG_A6XX_HLSQ_UNKNOWN_BE00, 0x80);
-      WRITE(REG_A6XX_HLSQ_UNKNOWN_BE01, 0);
-   }
-
-   WRITE(REG_A6XX_VPC_DBG_ECO_CNTL, screen->info->a6xx.magic.VPC_DBG_ECO_CNTL);
-   WRITE(REG_A6XX_GRAS_DBG_ECO_CNTL, screen->info->a6xx.magic.GRAS_DBG_ECO_CNTL);
-   if (CHIP == A6XX)
-      WRITE(REG_A6XX_HLSQ_DBG_ECO_CNTL, screen->info->a6xx.magic.HLSQ_DBG_ECO_CNTL);
-   WRITE(REG_A6XX_SP_CHICKEN_BITS, screen->info->a6xx.magic.SP_CHICKEN_BITS);
-   WRITE(REG_A6XX_SP_IBO_COUNT, 0);
-   WRITE(REG_A6XX_SP_UNKNOWN_B182, 0);
-   if (CHIP == A6XX)
-      WRITE(REG_A6XX_HLSQ_SHARED_CONSTS, 0);
-   WRITE(REG_A6XX_UCHE_UNKNOWN_0E12, screen->info->a6xx.magic.UCHE_UNKNOWN_0E12);
-   WRITE(REG_A6XX_UCHE_CLIENT_PF, screen->info->a6xx.magic.UCHE_CLIENT_PF);
-   WRITE(REG_A6XX_RB_UNKNOWN_8E01, screen->info->a6xx.magic.RB_UNKNOWN_8E01);
-   WRITE(REG_A6XX_SP_UNKNOWN_A9A8, 0);
-   OUT_REG(ring,
-      A6XX_SP_MODE_CONTROL(
-         .constant_demotion_enable = true,
-         .isammode = ISAMMODE_GL,
-         .shared_consts_enable = false,
-      )
-   );
-   WRITE(REG_A6XX_SP_MODE_CONTROL,
-         A6XX_SP_MODE_CONTROL_CONSTANT_DEMOTION_ENABLE | 4);
-   WRITE(REG_A6XX_VFD_ADD_OFFSET, A6XX_VFD_ADD_OFFSET_VERTEX);
-   WRITE(REG_A6XX_VPC_UNKNOWN_9107, 0);
-   WRITE(REG_A6XX_RB_UNKNOWN_8811, 0x00000010);
-   WRITE(REG_A6XX_PC_MODE_CNTL, screen->info->a6xx.magic.PC_MODE_CNTL);
-
-   WRITE(REG_A6XX_GRAS_LRZ_PS_INPUT_CNTL, 0);
-   WRITE(REG_A6XX_GRAS_SAMPLE_CNTL, 0);
-   WRITE(REG_A6XX_GRAS_UNKNOWN_8110, 0x2);
-
-   WRITE(REG_A6XX_RB_UNKNOWN_8818, 0);
-
-   if (CHIP == A6XX) {
-      WRITE(REG_A6XX_RB_UNKNOWN_8819, 0);
-      WRITE(REG_A6XX_RB_UNKNOWN_881A, 0);
-      WRITE(REG_A6XX_RB_UNKNOWN_881B, 0);
-      WRITE(REG_A6XX_RB_UNKNOWN_881C, 0);
-      WRITE(REG_A6XX_RB_UNKNOWN_881D, 0);
-      WRITE(REG_A6XX_RB_UNKNOWN_881E, 0);
-   }
-
-   WRITE(REG_A6XX_RB_UNKNOWN_88F0, 0);
-
-   WRITE(REG_A6XX_VPC_POINT_COORD_INVERT, A6XX_VPC_POINT_COORD_INVERT(0).value);
-   WRITE(REG_A6XX_VPC_UNKNOWN_9300, 0);
-
-   WRITE(REG_A6XX_VPC_SO_DISABLE, A6XX_VPC_SO_DISABLE(true).value);
-
-   OUT_REG(ring, PC_RASTER_CNTL(CHIP));
-
-   WRITE(REG_A6XX_PC_MULTIVIEW_CNTL, 0);
-
-   WRITE(REG_A6XX_SP_UNKNOWN_B183, 0);
-
-   WRITE(REG_A6XX_GRAS_SU_CONSERVATIVE_RAS_CNTL, 0);
-   WRITE(REG_A6XX_GRAS_VS_LAYER_CNTL, 0);
-   WRITE(REG_A6XX_GRAS_SC_CNTL, A6XX_GRAS_SC_CNTL_CCUSINGLECACHELINESIZE(2));
-   WRITE(REG_A6XX_GRAS_UNKNOWN_80AF, 0);
-   if (CHIP == A6XX) {
-      WRITE(REG_A6XX_VPC_UNKNOWN_9210, 0);
-      WRITE(REG_A6XX_VPC_UNKNOWN_9211, 0);
-   }
-   WRITE(REG_A6XX_VPC_UNKNOWN_9602, 0);
-   WRITE(REG_A6XX_PC_UNKNOWN_9E72, 0);
-   /* NOTE blob seems to (mostly?) use 0xb2 for SP_TP_MODE_CNTL
-    * but this seems to kill texture gather offsets.
-    */
-   WRITE(REG_A6XX_SP_TP_MODE_CNTL, 0xa0 |
-         A6XX_SP_TP_MODE_CNTL_ISAMMODE(ISAMMODE_GL));
-
-   OUT_REG(ring, HLSQ_CONTROL_5_REG(
-         CHIP,
-         .linelengthregid = INVALID_REG,
-         .foveationqualityregid = INVALID_REG,
-   ));
-
-   emit_marker6(ring, 7);
-
-   OUT_PKT4(ring, REG_A6XX_VFD_MODE_CNTL, 1);
-   OUT_RING(ring, 0x00000000); /* VFD_MODE_CNTL */
-
-   WRITE(REG_A6XX_VFD_MULTIVIEW_CNTL, 0);
-
-   /* Clear any potential pending state groups to be safe: */
-   OUT_PKT7(ring, CP_SET_DRAW_STATE, 3);
-   OUT_RING(ring, CP_SET_DRAW_STATE__0_COUNT(0) |
-                     CP_SET_DRAW_STATE__0_DISABLE_ALL_GROUPS |
-                     CP_SET_DRAW_STATE__0_GROUP_ID(0));
-   OUT_RING(ring, CP_SET_DRAW_STATE__1_ADDR_LO(0));
-   OUT_RING(ring, CP_SET_DRAW_STATE__2_ADDR_HI(0));
-
-   OUT_PKT4(ring, REG_A6XX_VPC_SO_STREAM_CNTL, 1);
-   OUT_RING(ring, 0x00000000); /* VPC_SO_STREAM_CNTL */
-
-   if (CHIP >= A7XX) {
-      OUT_REG(ring, A6XX_GRAS_LRZ_CNTL());
-      OUT_REG(ring, A7XX_GRAS_LRZ_CNTL2());
-   } else {
-      OUT_REG(ring, A6XX_GRAS_LRZ_CNTL());
-   }
-
-   OUT_REG(ring, A6XX_RB_LRZ_CNTL());
-   OUT_REG(ring, A6XX_RB_DEPTH_PLANE_CNTL());
-   OUT_REG(ring, A6XX_GRAS_SU_DEPTH_PLANE_CNTL());
-
-   OUT_PKT4(ring, REG_A6XX_GRAS_LRZ_CNTL, 1);
+   OUT_PKT7(ring, CP_SET_AMBLE, 3);
    OUT_RING(ring, 0x00000000);
-
-   OUT_PKT4(ring, REG_A6XX_RB_LRZ_CNTL, 1);
    OUT_RING(ring, 0x00000000);
+   OUT_RING(ring, CP_SET_AMBLE_2_TYPE(PREAMBLE_AMBLE_TYPE));
 
-   /* Initialize VFD_FETCH[n].SIZE to zero to avoid iova faults trying
-    * to fetch from a VFD_FETCH[n].BASE which we've potentially inherited
-    * from another process:
-    */
-   for (int32_t i = 0; i < 32; i++) {
-      OUT_PKT4(ring, REG_A6XX_VFD_FETCH_SIZE(i), 1);
-      OUT_RING(ring, 0);
-   }
-
-   /* This happens after all drawing has been emitted to the draw CS, so we know
-    * whether we need the tess BO pointers.
-    */
-   if (batch->tessellation) {
-      assert(screen->tess_bo);
-      fd_ringbuffer_attach_bo(ring, screen->tess_bo);
-      OUT_REG(ring, PC_TESSFACTOR_ADDR(CHIP, screen->tess_bo));
-      /* Updating PC_TESSFACTOR_ADDR could race with the next draw which uses it. */
-      OUT_WFI5(ring);
-   }
-
-   struct fd6_context *fd6_ctx = fd6_context(ctx);
-   struct fd_bo *bcolor_mem = fd6_ctx->bcolor_mem;
-
-   OUT_PKT4(ring, REG_A6XX_SP_TP_BORDER_COLOR_BASE_ADDR, 2);
-   OUT_RELOC(ring, bcolor_mem, 0, 0, 0);
-
-   OUT_PKT4(ring, REG_A6XX_SP_PS_TP_BORDER_COLOR_BASE_ADDR, 2);
-   OUT_RELOC(ring, bcolor_mem, 0, 0, 0);
-
-   /* These regs are blocked (CP_PROTECT) on a6xx: */
-   if (CHIP >= A7XX) {
-      OUT_REG(ring,
-         TPL1_BICUBIC_WEIGHTS_TABLE_0(CHIP, 0),
-         TPL1_BICUBIC_WEIGHTS_TABLE_1(CHIP, 0x3fe05ff4),
-         TPL1_BICUBIC_WEIGHTS_TABLE_2(CHIP, 0x3fa0ebee),
-         TPL1_BICUBIC_WEIGHTS_TABLE_3(CHIP, 0x3f5193ed),
-         TPL1_BICUBIC_WEIGHTS_TABLE_4(CHIP, 0x3f0243f0),
-      );
-   }
-
-   if (CHIP >= A7XX) {
-      /* Blob sets these two per draw. */
-      OUT_REG(ring, A7XX_PC_TESS_PARAM_SIZE(FD6_TESS_PARAM_SIZE));
-      /* Blob adds a bit more space ({0x10, 0x20, 0x30, 0x40} bytes)
-       * but the meaning of this additional space is not known,
-       * so we play safe and don't add it.
-       */
-      OUT_REG(ring, A7XX_PC_TESS_FACTOR_SIZE(FD6_TESS_FACTOR_SIZE));
-   }
-
-   /* There is an optimization to skip executing draw states for draws with no
-    * instances. Instead of simply skipping the draw, internally the firmware
-    * sets a bit in PC_DRAW_INITIATOR that seemingly skips the draw. However
-    * there is a hardware bug where this bit does not always cause the FS
-    * early preamble to be skipped. Because the draw states were skipped,
-    * SP_FS_CTRL_REG0, SP_FS_OBJ_START and so on are never updated and a
-    * random FS preamble from the last draw is executed. If the last visible
-    * draw is from the same submit, it shouldn't be a problem because we just
-    * re-execute the same preamble and preambles don't have side effects, but
-    * if it's from another process then we could execute a garbage preamble
-    * leading to hangs and faults. To make sure this doesn't happen, we reset
-    * SP_FS_CTRL_REG0 here, making sure that the EARLYPREAMBLE bit isn't set
-    * so any leftover early preamble doesn't get executed. Other stages don't
-    * seem to be affected.
-    */
-   if (screen->info->a6xx.has_early_preamble) {
-      WRITE(REG_A6XX_SP_FS_CTRL_REG0, 0);
-   }
+   OUT_PKT7(ring, CP_SET_AMBLE, 3);
+   OUT_RING(ring, 0x00000000);
+   OUT_RING(ring, 0x00000000);
+   OUT_RING(ring, CP_SET_AMBLE_2_TYPE(POSTAMBLE_AMBLE_TYPE));
 
    if (!batch->nondraw) {
       trace_end_state_restore(&batch->trace, ring);

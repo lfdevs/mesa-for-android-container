@@ -420,6 +420,7 @@ output_isa(const struct intel_clc_params *params, struct clc_binary *binary)
 
    struct brw_compiler *compiler = brw_compiler_create(params->mem_ctx,
                                                        &params->devinfo);
+   compiler->spilling_rate = 11;
    compiler->shader_debug_log = compiler_log;
    compiler->shader_perf_log = compiler_log;
    struct disk_cache *disk_cache = get_disk_cache(compiler);

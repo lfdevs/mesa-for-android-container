@@ -30,6 +30,23 @@ struct vk_shader_module;
 #define TU102_SHADER_HEADER_SIZE (32 * 4)
 #define NVC0_MAX_SHADER_HEADER_SIZE TU102_SHADER_HEADER_SIZE
 
+#define NVK_SHADER_STAGE_VTGM_BITS \
+   (VK_SHADER_STAGE_VERTEX_BIT | \
+    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | \
+    VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | \
+    VK_SHADER_STAGE_GEOMETRY_BIT)
+
+#define NVK_SHADER_STAGE_GRAPHICS_BITS \
+   (NVK_SHADER_STAGE_VTGM_BITS | VK_SHADER_STAGE_FRAGMENT_BIT)
+
+static inline gl_shader_stage
+nvk_last_vtgm_shader_stage(VkShaderStageFlags stages)
+{
+   stages &= ~VK_SHADER_STAGE_FRAGMENT_BIT;
+   stages = 1 << (util_last_bit(stages) - 1);
+   return vk_to_mesa_shader_stage(stages);
+}
+
 static inline uint32_t
 nvk_cbuf_binding_for_stage(gl_shader_stage stage)
 {
@@ -62,6 +79,10 @@ struct nvk_cbuf_map {
    struct nvk_cbuf cbufs[16];
 };
 
+uint16_t
+nvk_max_shader_push_dw(struct nvk_physical_device *pdev,
+                       gl_shader_stage stage, bool last_vtgm);
+
 struct nvk_shader {
    struct vk_shader vk;
 
@@ -69,6 +90,7 @@ struct nvk_shader {
    struct nvk_cbuf_map cbuf_map;
 
    /* Only relevant for fragment shaders */
+   bool sample_shading_enable;
    float min_sample_shading;
 
    struct nak_shader_bin *nak;
@@ -91,7 +113,14 @@ struct nvk_shader {
 
    /* Address of the start of the shader data section */
    uint64_t data_addr;
+
+   uint16_t push_dw_count;
+   uint16_t vtgm_push_dw_count;
+   uint32_t *push_dw;
 };
+
+VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_shader, vk.base, VkShaderEXT,
+                               VK_OBJECT_TYPE_SHADER_EXT);
 
 extern const struct vk_device_shader_ops nvk_device_shader_ops;
 
@@ -110,20 +139,19 @@ nvk_ssbo_addr_format(const struct nvk_physical_device *pdev,
 bool
 nvk_nir_lower_descriptors(nir_shader *nir,
                           const struct nvk_physical_device *pdev,
+                          VkShaderCreateFlagsEXT shader_flags,
                           const struct vk_pipeline_robustness_state *rs,
                           uint32_t set_layout_count,
                           struct vk_descriptor_set_layout * const *set_layouts,
                           struct nvk_cbuf_map *cbuf_map_out);
-void
-nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
-              const struct vk_pipeline_robustness_state *rs,
-              bool is_multiview,
-              uint32_t set_layout_count,
-              struct vk_descriptor_set_layout * const *set_layouts,
-              struct nvk_cbuf_map *cbuf_map_out);
 
 VkResult
-nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader);
+nvk_compile_nir_shader(struct nvk_device *dev, nir_shader *nir,
+                       const VkAllocationCallbacks *alloc,
+                       struct nvk_shader **shader_out);
+
+uint32_t mesa_to_nv9097_shader_type(gl_shader_stage stage);
+uint32_t nvk_pipeline_bind_group(gl_shader_stage stage);
 
 /* Codegen wrappers.
  *

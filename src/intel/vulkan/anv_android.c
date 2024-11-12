@@ -114,8 +114,6 @@ inline VkFormat
 vk_format_from_android(unsigned android_format, unsigned android_usage)
 {
    switch (android_format) {
-   case AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM:
-      return VK_FORMAT_R8G8B8_UNORM;
    case AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420:
    case HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL:
       return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
@@ -320,6 +318,30 @@ anv_import_ahw_memory(VkDevice device_h,
 }
 
 VkResult
+anv_android_get_tiling(struct anv_device *device,
+                       struct u_gralloc_buffer_handle *gr_handle,
+                       enum isl_tiling *tiling_out)
+{
+   assert(device->u_gralloc);
+
+   struct u_gralloc_buffer_basic_info buf_info;
+   if (u_gralloc_get_buffer_basic_info(device->u_gralloc, gr_handle, &buf_info))
+      return vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                       "failed to get tiling from gralloc buffer info");
+
+   const struct isl_drm_modifier_info *mod_info =
+      isl_drm_modifier_get_info(buf_info.modifier);
+   if (!mod_info) {
+      return vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                       "invalid drm modifier from VkNativeBufferANDROID "
+                       "gralloc buffer info 0x%"PRIx64"", buf_info.modifier);
+   }
+
+   *tiling_out = mod_info->tiling;
+   return VK_SUCCESS;
+}
+
+VkResult
 anv_image_init_from_gralloc(struct anv_device *device,
                             struct anv_image *image,
                             const VkImageCreateInfo *base_info,
@@ -339,19 +361,13 @@ anv_image_init_from_gralloc(struct anv_device *device,
     */
    int dma_buf = gralloc_info->handle->data[0];
 
-   /* We need to set the WRITE flag on window system buffers so that GEM will
-    * know we're writing to them and synchronize uses on other rings (for
-    * example, if the display server uses the blitter ring).
-    *
-    * If this function fails and if the imported bo was resident in the cache,
+   /* If this function fails and if the imported bo was resident in the cache,
     * we should avoid updating the bo's flags. Therefore, we defer updating
     * the flags until success is certain.
     *
     */
    result = anv_device_import_bo(device, dma_buf,
-                                 ANV_BO_ALLOC_EXTERNAL |
-                                 ANV_BO_ALLOC_IMPLICIT_SYNC |
-                                 ANV_BO_ALLOC_IMPLICIT_WRITE,
+                                 ANV_BO_ALLOC_EXTERNAL,
                                  0 /* client_address */,
                                  &bo);
    if (result != VK_SUCCESS) {
@@ -361,21 +377,14 @@ anv_image_init_from_gralloc(struct anv_device *device,
 
    enum isl_tiling tiling;
    if (device->u_gralloc) {
-      struct u_gralloc_buffer_basic_info buf_info;
       struct u_gralloc_buffer_handle gr_handle = {
          .handle = gralloc_info->handle,
          .hal_format = gralloc_info->format,
          .pixel_stride = gralloc_info->stride,
       };
-      u_gralloc_get_buffer_basic_info(device->u_gralloc, &gr_handle, &buf_info);
-      const struct isl_drm_modifier_info *mod_info =
-         isl_drm_modifier_get_info(buf_info.modifier);
-      if (mod_info) {
-         tiling = mod_info->tiling;
-      } else {
-         return vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
-                          "unknown modifier of BO from VkNativeBufferANDROID");
-      }
+      result = anv_android_get_tiling(device, &gr_handle, &tiling);
+      if (result != VK_SUCCESS)
+         return result;
    } else {
       /* Fallback to get_tiling API. */
       result = anv_device_get_bo_tiling(device, bo, &tiling);
@@ -441,20 +450,14 @@ anv_image_bind_from_gralloc(struct anv_device *device,
     */
    int dma_buf = gralloc_info->handle->data[0];
 
-   /* We need to set the WRITE flag on window system buffers so that GEM will
-    * know we're writing to them and synchronize uses on other rings (for
-    * example, if the display server uses the blitter ring).
-    *
-    * If this function fails and if the imported bo was resident in the cache,
+   /* If this function fails and if the imported bo was resident in the cache,
     * we should avoid updating the bo's flags. Therefore, we defer updating
     * the flags until success is certain.
     *
     */
    struct anv_bo *bo = NULL;
    VkResult result = anv_device_import_bo(device, dma_buf,
-                                          ANV_BO_ALLOC_EXTERNAL |
-                                          ANV_BO_ALLOC_IMPLICIT_SYNC |
-                                          ANV_BO_ALLOC_IMPLICIT_WRITE,
+                                          ANV_BO_ALLOC_EXTERNAL,
                                           0 /* client_address */,
                                           &bo);
    if (result != VK_SUCCESS) {
@@ -462,12 +465,22 @@ anv_image_bind_from_gralloc(struct anv_device *device,
                        "failed to import dma-buf from VkNativeBufferANDROID");
    }
 
-   uint64_t img_size = image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN].memory_range.size;
-   if (img_size < bo->size) {
+   VkMemoryRequirements2 mem_reqs = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+   };
+
+   anv_image_get_memory_requirements(device, image, image->vk.aspects,
+                                     &mem_reqs);
+
+   VkDeviceSize aligned_image_size =
+      align64(mem_reqs.memoryRequirements.size,
+              mem_reqs.memoryRequirements.alignment);
+
+   if (bo->size < aligned_image_size) {
       result = vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
                          "dma-buf from VkNativeBufferANDROID is too small for "
                          "VkImage: %"PRIu64"B < %"PRIu64"B",
-                         bo->size, img_size);
+                         bo->size, aligned_image_size);
       anv_device_release_bo(device, bo);
       return result;
    }

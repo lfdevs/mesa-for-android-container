@@ -372,6 +372,12 @@ draw_set_clip_state(struct draw_context *draw,
    memcpy(&draw->plane[6], clip->ucp, sizeof(clip->ucp));
 }
 
+void
+draw_set_viewmask(struct draw_context *draw, uint8_t viewmask)
+{
+   draw->viewmask = viewmask;
+}
+
 
 /**
  * Set the draw module's viewport state.

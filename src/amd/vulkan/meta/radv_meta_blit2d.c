@@ -21,14 +21,14 @@ enum blit2d_src_type {
    BLIT2D_NUM_SRC_TYPES,
 };
 
-static VkResult blit2d_init_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, VkFormat format,
-                                           uint32_t log2_samples);
+static VkResult get_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, VkFormat format,
+                                   uint32_t log2_samples, VkPipeline *pipeline_out);
 
-static VkResult blit2d_init_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type,
-                                                uint32_t log2_samples);
+static VkResult get_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type,
+                                        uint32_t log2_samples, VkPipeline *pipeline_out);
 
-static VkResult blit2d_init_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type,
-                                                  uint32_t log2_samples);
+static VkResult get_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type,
+                                          uint32_t log2_samples, VkPipeline *pipeline_out);
 
 static void
 create_iview(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *surf, struct radv_image_view *iview,
@@ -54,7 +54,7 @@ create_iview(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *s
                                                 .baseArrayLayer = surf->layer,
                                                 .layerCount = 1},
                         },
-                        0, &(struct radv_image_view_extra_create_info){.disable_dcc_mrt = surf->disable_compression});
+                        &(struct radv_image_view_extra_create_info){.disable_dcc_mrt = surf->disable_compression});
 }
 
 static void
@@ -132,38 +132,13 @@ blit2d_bind_src(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf
 }
 
 static void
-bind_pipeline(struct radv_cmd_buffer *cmd_buffer, enum blit2d_src_type src_type, unsigned fs_key, uint32_t log2_samples)
-{
-   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
-   VkPipeline pipeline = device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key];
-
-   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-}
-
-static void
-bind_depth_pipeline(struct radv_cmd_buffer *cmd_buffer, enum blit2d_src_type src_type, uint32_t log2_samples)
-{
-   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
-   VkPipeline pipeline = device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type];
-
-   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-}
-
-static void
-bind_stencil_pipeline(struct radv_cmd_buffer *cmd_buffer, enum blit2d_src_type src_type, uint32_t log2_samples)
-{
-   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
-   VkPipeline pipeline = device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src_type];
-
-   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-}
-
-static void
 radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src_img,
                             struct radv_meta_blit2d_buffer *src_buf, struct radv_meta_blit2d_surf *dst,
                             struct radv_meta_blit2d_rect *rect, enum blit2d_src_type src_type, uint32_t log2_samples)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   VkPipeline pipeline;
+   VkResult result;
 
    radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
                        &(VkViewport){.x = rect->dst_x,
@@ -190,9 +165,6 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer, struct radv_meta
       else if (src_img)
          src_aspect_mask = src_img->aspect_mask;
 
-      struct blit2d_src_temps src_temps;
-      blit2d_bind_src(cmd_buffer, src_img, src_buf, &src_temps, src_type, depth_format, src_aspect_mask, log2_samples);
-
       struct radv_image_view dst_iview;
       create_iview(cmd_buffer, dst, &dst_iview, depth_format, aspect_mask);
 
@@ -207,109 +179,67 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer, struct radv_meta
                                  device->meta_state.blit2d[log2_samples].p_layouts[src_type],
                                  VK_SHADER_STAGE_VERTEX_BIT, 0, 16, vertex_push_constants);
 
+      const VkRenderingAttachmentInfo att_info = {
+         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+         .imageView = radv_image_view_to_handle(&dst_iview),
+         .imageLayout = dst->current_layout,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      };
+
+      VkRenderingInfo rendering_info = {
+         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+         .flags = VK_RENDERING_INPUT_ATTACHMENT_NO_CONCURRENT_WRITES_BIT_MESA,
+         .renderArea =
+            {
+               .offset = {rect->dst_x, rect->dst_y},
+               .extent = {rect->width, rect->height},
+            },
+         .layerCount = 1,
+      };
+
       if (aspect_mask == VK_IMAGE_ASPECT_COLOR_BIT || aspect_mask == VK_IMAGE_ASPECT_PLANE_0_BIT ||
           aspect_mask == VK_IMAGE_ASPECT_PLANE_1_BIT || aspect_mask == VK_IMAGE_ASPECT_PLANE_2_BIT) {
-         unsigned fs_key = radv_format_meta_fs_key(device, dst_iview.vk.format);
-
-         if (device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key] == VK_NULL_HANDLE) {
-            VkResult ret =
-               blit2d_init_color_pipeline(device, src_type, radv_fs_key_format_exemplars[fs_key], log2_samples);
-            if (ret != VK_SUCCESS) {
-               vk_command_buffer_set_error(&cmd_buffer->vk, ret);
-               goto fail_pipeline;
-            }
+         result = get_color_pipeline(device, src_type, dst_iview.vk.format, log2_samples, &pipeline);
+         if (result != VK_SUCCESS) {
+            vk_command_buffer_set_error(&cmd_buffer->vk, result);
+            goto fail_pipeline;
          }
 
-         const VkRenderingAttachmentInfo color_att_info = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = radv_image_view_to_handle(&dst_iview),
-            .imageLayout = dst->current_layout,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-         };
+         rendering_info.colorAttachmentCount = 1;
+         rendering_info.pColorAttachments = &att_info;
 
-         const VkRenderingInfo rendering_info = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea =
-               {
-                  .offset = {rect->dst_x, rect->dst_y},
-                  .extent = {rect->width, rect->height},
-               },
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &color_att_info,
-         };
-
-         radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
-
-         bind_pipeline(cmd_buffer, src_type, fs_key, log2_samples);
+         radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
       } else if (aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT) {
-         if (device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type] == VK_NULL_HANDLE) {
-            VkResult ret = blit2d_init_depth_only_pipeline(device, src_type, log2_samples);
-            if (ret != VK_SUCCESS) {
-               vk_command_buffer_set_error(&cmd_buffer->vk, ret);
-               goto fail_pipeline;
-            }
+         result = get_depth_only_pipeline(device, src_type, log2_samples, &pipeline);
+         if (result != VK_SUCCESS) {
+            vk_command_buffer_set_error(&cmd_buffer->vk, result);
+            goto fail_pipeline;
          }
 
-         const VkRenderingAttachmentInfo depth_att_info = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = radv_image_view_to_handle(&dst_iview),
-            .imageLayout = dst->current_layout,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-         };
+         rendering_info.pDepthAttachment = &att_info,
+         rendering_info.pStencilAttachment = (dst->image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) ? &att_info : NULL,
 
-         const VkRenderingInfo rendering_info = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea =
-               {
-                  .offset = {rect->dst_x, rect->dst_y},
-                  .extent = {rect->width, rect->height},
-               },
-            .layerCount = 1,
-            .pDepthAttachment = &depth_att_info,
-            .pStencilAttachment = (dst->image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) ? &depth_att_info : NULL,
-         };
-
-         radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
-
-         bind_depth_pipeline(cmd_buffer, src_type, log2_samples);
+         radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
       } else if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT) {
-         if (device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src_type] == VK_NULL_HANDLE) {
-            VkResult ret = blit2d_init_stencil_only_pipeline(device, src_type, log2_samples);
-            if (ret != VK_SUCCESS) {
-               vk_command_buffer_set_error(&cmd_buffer->vk, ret);
-               goto fail_pipeline;
-            }
+         result = get_stencil_only_pipeline(device, src_type, log2_samples, &pipeline);
+         if (result != VK_SUCCESS) {
+            vk_command_buffer_set_error(&cmd_buffer->vk, result);
+            goto fail_pipeline;
          }
 
-         const VkRenderingAttachmentInfo stencil_att_info = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = radv_image_view_to_handle(&dst_iview),
-            .imageLayout = dst->current_layout,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-         };
+         rendering_info.pDepthAttachment = (dst->image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) ? &att_info : NULL,
+         rendering_info.pStencilAttachment = &att_info,
 
-         const VkRenderingInfo rendering_info = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea =
-               {
-                  .offset = {rect->dst_x, rect->dst_y},
-                  .extent = {rect->width, rect->height},
-               },
-            .layerCount = 1,
-            .pDepthAttachment = (dst->image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) ? &stencil_att_info : NULL,
-            .pStencilAttachment = &stencil_att_info,
-         };
-
-         radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
-
-         bind_stencil_pipeline(cmd_buffer, src_type, log2_samples);
+         radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
       } else
          unreachable("Processing blit2d with multiple aspects.");
+
+      struct blit2d_src_temps src_temps;
+      blit2d_bind_src(cmd_buffer, src_img, src_buf, &src_temps, src_type, depth_format, src_aspect_mask, log2_samples);
+
+      radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
 
       radv_CmdDraw(radv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
 
@@ -542,18 +472,52 @@ radv_device_finish_meta_blit2d_state(struct radv_device *device)
 }
 
 static VkResult
-blit2d_init_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, VkFormat format,
-                           uint32_t log2_samples)
+meta_blit2d_create_pipe_layout(struct radv_device *device, int idx, uint32_t log2_samples)
+{
+   VkResult result = VK_SUCCESS;
+
+   if (!device->meta_state.blit2d[log2_samples].ds_layouts[idx]) {
+      VkDescriptorType desc_type =
+         (idx == BLIT2D_SRC_TYPE_BUFFER) ? VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+
+      const VkDescriptorSetLayoutBinding binding = {
+         .binding = 0,
+         .descriptorType = desc_type,
+         .descriptorCount = 1,
+         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      };
+
+      result = radv_meta_create_descriptor_set_layout(device, 1, &binding,
+                                                      &device->meta_state.blit2d[log2_samples].ds_layouts[idx]);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   if (!device->meta_state.blit2d[log2_samples].p_layouts[idx]) {
+      const VkPushConstantRange push_constant_ranges[] = {
+         {VK_SHADER_STAGE_VERTEX_BIT, 0, 16},
+         {VK_SHADER_STAGE_FRAGMENT_BIT, 16, 4},
+      };
+      int num_push_constant_range = (idx != BLIT2D_SRC_TYPE_IMAGE || log2_samples > 0) ? 2 : 1;
+
+      result = radv_meta_create_pipeline_layout(device, &device->meta_state.blit2d[log2_samples].ds_layouts[idx],
+                                                num_push_constant_range, push_constant_ranges,
+                                                &device->meta_state.blit2d[log2_samples].p_layouts[idx]);
+   }
+
+   return result;
+}
+
+static VkResult
+create_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, VkFormat format, uint32_t log2_samples,
+                      VkPipeline *pipeline)
 {
    VkResult result;
-   unsigned fs_key = radv_format_meta_fs_key(device, format);
    const char *name;
 
-   mtx_lock(&device->meta_state.mtx);
-   if (device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key]) {
-      mtx_unlock(&device->meta_state.mtx);
-      return VK_SUCCESS;
-   }
+   result = meta_blit2d_create_pipe_layout(device, src_type, log2_samples);
+   if (result != VK_SUCCESS)
+      return result;
 
    texel_fetch_build_func src_func;
    switch (src_type) {
@@ -665,27 +629,47 @@ blit2d_init_color_pipeline(struct radv_device *device, enum blit2d_src_type src_
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info,
-                                          &radv_pipeline_info, &device->meta_state.alloc,
-                                          &device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key]);
+                                          &radv_pipeline_info, &device->meta_state.alloc, pipeline);
 
    ralloc_free(vs);
    ralloc_free(fs);
-
-   mtx_unlock(&device->meta_state.mtx);
    return result;
 }
 
 static VkResult
-blit2d_init_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples)
+get_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, VkFormat format, uint32_t log2_samples,
+                   VkPipeline *pipeline_out)
+{
+   struct radv_meta_state *state = &device->meta_state;
+   const unsigned fs_key = radv_format_meta_fs_key(device, format);
+   VkResult result = VK_SUCCESS;
+   VkPipeline *pipeline;
+
+   mtx_lock(&state->mtx);
+   pipeline = &device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key];
+   if (!*pipeline) {
+      result = create_color_pipeline(device, src_type, radv_fs_key_format_exemplars[fs_key], log2_samples, pipeline);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+
+   *pipeline_out = *pipeline;
+
+fail:
+   mtx_unlock(&state->mtx);
+   return result;
+}
+
+static VkResult
+create_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples,
+                           VkPipeline *pipeline)
 {
    VkResult result;
    const char *name;
 
-   mtx_lock(&device->meta_state.mtx);
-   if (device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type]) {
-      mtx_unlock(&device->meta_state.mtx);
-      return VK_SUCCESS;
-   }
+   result = meta_blit2d_create_pipe_layout(device, src_type, log2_samples);
+   if (result != VK_SUCCESS)
+      return result;
 
    texel_fetch_build_func src_func;
    switch (src_type) {
@@ -821,27 +805,47 @@ blit2d_init_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info,
-                                          &radv_pipeline_info, &device->meta_state.alloc,
-                                          &device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type]);
+                                          &radv_pipeline_info, &device->meta_state.alloc, pipeline);
 
    ralloc_free(vs);
    ralloc_free(fs);
 
-   mtx_unlock(&device->meta_state.mtx);
    return result;
 }
 
 static VkResult
-blit2d_init_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples)
+get_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples,
+                        VkPipeline *pipeline_out)
+{
+   struct radv_meta_state *state = &device->meta_state;
+   VkResult result = VK_SUCCESS;
+   VkPipeline *pipeline;
+
+   mtx_lock(&state->mtx);
+   pipeline = &device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type];
+   if (!*pipeline) {
+      result = create_depth_only_pipeline(device, src_type, log2_samples, pipeline);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+
+   *pipeline_out = *pipeline;
+
+fail:
+   mtx_unlock(&state->mtx);
+   return result;
+}
+
+static VkResult
+create_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples,
+                             VkPipeline *pipeline_out)
 {
    VkResult result;
    const char *name;
 
-   mtx_lock(&device->meta_state.mtx);
-   if (device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src_type]) {
-      mtx_unlock(&device->meta_state.mtx);
-      return VK_SUCCESS;
-   }
+   result = meta_blit2d_create_pipe_layout(device, src_type, log2_samples);
+   if (result != VK_SUCCESS)
+      return result;
 
    texel_fetch_build_func src_func;
    switch (src_type) {
@@ -978,42 +982,39 @@ blit2d_init_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_ty
    ralloc_free(vs);
    ralloc_free(fs);
 
-   mtx_unlock(&device->meta_state.mtx);
    return result;
 }
 
 static VkResult
-meta_blit2d_create_pipe_layout(struct radv_device *device, int idx, uint32_t log2_samples)
+get_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples,
+                          VkPipeline *pipeline_out)
 {
-   VkResult result;
-   VkDescriptorType desc_type =
-      (idx == BLIT2D_SRC_TYPE_BUFFER) ? VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-   const VkPushConstantRange push_constant_ranges[] = {
-      {VK_SHADER_STAGE_VERTEX_BIT, 0, 16},
-      {VK_SHADER_STAGE_FRAGMENT_BIT, 16, 4},
-   };
-   int num_push_constant_range = (idx != BLIT2D_SRC_TYPE_IMAGE || log2_samples > 0) ? 2 : 1;
+   struct radv_meta_state *state = &device->meta_state;
+   VkResult result = VK_SUCCESS;
+   VkPipeline *pipeline;
 
-   const VkDescriptorSetLayoutBinding binding = {
-      .binding = 0,
-      .descriptorType = desc_type,
-      .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-   };
+   mtx_lock(&state->mtx);
+   pipeline = &device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src_type];
+   if (!*pipeline) {
+      result = create_stencil_only_pipeline(device, src_type, log2_samples, pipeline);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
 
-   result = radv_meta_create_descriptor_set_layout(device, 1, &binding, &device->meta_state.blit2d[log2_samples].ds_layouts[idx]);
-   if (result != VK_SUCCESS)
-      return result;
+   *pipeline_out = *pipeline;
 
-   return radv_meta_create_pipeline_layout(device, &device->meta_state.blit2d[log2_samples].ds_layouts[idx],
-                                           num_push_constant_range, push_constant_ranges,
-                                           &device->meta_state.blit2d[log2_samples].p_layouts[idx]);
+fail:
+   mtx_unlock(&state->mtx);
+   return result;
 }
 
 VkResult
 radv_device_init_meta_blit2d_state(struct radv_device *device, bool on_demand)
 {
    VkResult result;
+
+   if (on_demand)
+      return VK_SUCCESS;
 
    for (unsigned log2_samples = 0; log2_samples < MAX_SAMPLES_LOG2; log2_samples++) {
       for (unsigned src = 0; src < BLIT2D_NUM_SRC_TYPES; src++) {
@@ -1025,24 +1026,23 @@ radv_device_init_meta_blit2d_state(struct radv_device *device, bool on_demand)
          if (src == BLIT2D_SRC_TYPE_IMAGE_3D && log2_samples > 0)
             continue;
 
-         result = meta_blit2d_create_pipe_layout(device, src, log2_samples);
-         if (result != VK_SUCCESS)
-            return result;
-
-         if (on_demand)
-            continue;
-
          for (unsigned j = 0; j < NUM_META_FS_KEYS; ++j) {
-            result = blit2d_init_color_pipeline(device, src, radv_fs_key_format_exemplars[j], log2_samples);
+            VkFormat format = radv_fs_key_format_exemplars[j];
+            unsigned fs_key = radv_format_meta_fs_key(device, format);
+
+            result = create_color_pipeline(device, src, format, log2_samples,
+                                           &device->meta_state.blit2d[log2_samples].pipelines[src][fs_key]);
             if (result != VK_SUCCESS)
                return result;
          }
 
-         result = blit2d_init_depth_only_pipeline(device, src, log2_samples);
+         result = create_depth_only_pipeline(device, src, log2_samples,
+                                             &device->meta_state.blit2d[log2_samples].depth_only_pipeline[src]);
          if (result != VK_SUCCESS)
             return result;
 
-         result = blit2d_init_stencil_only_pipeline(device, src, log2_samples);
+         result = create_stencil_only_pipeline(device, src, log2_samples,
+                                               &device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src]);
          if (result != VK_SUCCESS)
             return result;
       }

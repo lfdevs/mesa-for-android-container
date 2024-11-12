@@ -315,6 +315,7 @@ private:
    bool emit_shader_clock(nir_intrinsic_instr *instr);
    bool emit_wait_ack();
    bool emit_barrier(nir_intrinsic_instr *instr);
+   bool emit_tex_fdd(const nir_intrinsic_instr* intr, int opcode, bool fine);
    bool emit_load_reg(nir_intrinsic_instr *intr);
    bool emit_load_reg_indirect(nir_intrinsic_instr *intr);
    bool emit_store_reg(nir_intrinsic_instr *intr);

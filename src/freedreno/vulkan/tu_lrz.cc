@@ -393,6 +393,32 @@ tu_lrz_tiling_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
 }
 TU_GENX(tu_lrz_tiling_begin);
 
+/* We need to re-emit LRZ state before each tile due to skipsaverestore.
+ */
+template <chip CHIP>
+void
+tu_lrz_before_tile(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
+{
+   struct tu_lrz_state *lrz = &cmd->state.lrz;
+
+   if (!lrz->image_view) {
+      tu6_emit_lrz_buffer<CHIP>(cs, NULL);
+   } else {
+      tu6_emit_lrz_buffer<CHIP>(cs, lrz->image_view->image);
+
+      if (lrz->gpu_dir_tracking) {
+         if (!lrz->valid) {
+            /* Make sure we fail the comparison of depth views */
+            tu6_write_lrz_reg(cmd, cs, A6XX_GRAS_LRZ_DEPTH_VIEW(.dword = 0));
+         } else {
+            tu6_write_lrz_reg(cmd, cs,
+               A6XX_GRAS_LRZ_DEPTH_VIEW(.dword = lrz->image_view->view.GRAS_LRZ_DEPTH_VIEW));
+         }
+      }
+   }
+}
+TU_GENX(tu_lrz_before_tile);
+
 template <chip CHIP>
 void
 tu_lrz_tiling_end(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
@@ -504,6 +530,31 @@ tu_disable_lrz(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
    tu6_disable_lrz_via_depth_view<CHIP>(cmd, cs);
 }
 TU_GENX(tu_disable_lrz);
+
+/* Disable LRZ from the CPU, for host image copy */
+template <chip CHIP>
+void
+tu_disable_lrz_cpu(struct tu_device *device, struct tu_image *image)
+{
+   if (!device->physical_device->info->a6xx.has_lrz_dir_tracking)
+      return;
+
+   if (!image->lrz_height)
+      return;
+
+   const unsigned lrz_dir_offset = offsetof(fd_lrzfc_layout<CHIP>, dir_track);
+   uint8_t *lrz_dir_tracking =
+      (uint8_t *)image->map + image->lrz_fc_offset + lrz_dir_offset;
+
+   *lrz_dir_tracking = FD_LRZ_GPU_DIR_DISABLED;
+
+   if (image->bo->cached_non_coherent) {
+      tu_bo_sync_cache(device, image->bo,
+                       image->bo_offset + image->lrz_offset + lrz_dir_offset,
+                       1, TU_MEM_SYNC_CACHE_TO_GPU);
+   }
+}
+TU_GENX(tu_disable_lrz_cpu);
 
 /* Clear LRZ, used for out of renderpass depth clears. */
 template <chip CHIP>

@@ -50,7 +50,6 @@ static const struct debug_named_value agx_debug_options[] = {
 #ifndef NDEBUG
    {"dirty",     AGX_DBG_DIRTY,    "Disable dirty tracking"},
 #endif
-   {"compblit",  AGX_DBG_COMPBLIT, "Enable compute blitter"},
    {"precompile",AGX_DBG_PRECOMPILE,"Precompile shaders for shader-db"},
    {"nocompress",AGX_DBG_NOCOMPRESS,"Disable lossless compression"},
    {"nocluster", AGX_DBG_NOCLUSTER,"Disable vertex clustering"},
@@ -65,6 +64,8 @@ static const struct debug_named_value agx_debug_options[] = {
    {"nomsaa",    AGX_DBG_NOMSAA,   "Force disable MSAA"},
    {"noshadow",  AGX_DBG_NOSHADOW, "Force disable resource shadowing"},
    {"scratch",   AGX_DBG_SCRATCH,  "Debug scratch memory usage"},
+   {"1queue",    AGX_DBG_1QUEUE,   "Force usage of a single queue for multiple contexts"},
+   {"nosoft",    AGX_DBG_NOSOFT,   "Disable soft fault optimizations"},
    DEBUG_NAMED_VALUE_END
 };
 /* clang-format on */
@@ -74,27 +75,13 @@ agx_bo_free(struct agx_device *dev, struct agx_bo *bo)
 {
    const uint64_t handle = bo->handle;
 
-   if (bo->ptr.cpu)
-      munmap(bo->ptr.cpu, bo->size);
+   if (bo->map)
+      munmap(bo->map, bo->size);
 
-   if (bo->ptr.gpu) {
-      struct util_vma_heap *heap;
-      uint64_t bo_addr = bo->ptr.gpu;
-
-      if (bo->flags & AGX_BO_LOW_VA) {
-         heap = &dev->usc_heap;
-         bo_addr += dev->shader_base;
-      } else {
-         heap = &dev->main_heap;
-      }
-
-      simple_mtx_lock(&dev->vma_lock);
-      util_vma_heap_free(heap, bo_addr, bo->size + dev->guard_size);
-      simple_mtx_unlock(&dev->vma_lock);
-
-      /* No need to unmap the BO, as the kernel will take care of that when we
-       * close it. */
-   }
+   /* Free the VA. No need to unmap the BO, as the kernel will take care of that
+    * when we close it.
+    */
+   agx_va_free(dev, bo->va);
 
    if (bo->prime_fd != -1)
       close(bo->prime_fd);
@@ -110,15 +97,15 @@ agx_bo_free(struct agx_device *dev, struct agx_bo *bo)
 
 static int
 agx_bo_bind(struct agx_device *dev, struct agx_bo *bo, uint64_t addr,
-            uint32_t flags)
+            size_t size_B, uint64_t offset_B, uint32_t flags, bool unbind)
 {
    struct drm_asahi_gem_bind gem_bind = {
-      .op = ASAHI_BIND_OP_BIND,
+      .op = unbind ? ASAHI_BIND_OP_UNBIND : ASAHI_BIND_OP_BIND,
       .flags = flags,
       .handle = bo->handle,
       .vm_id = dev->vm_id,
-      .offset = 0,
-      .range = bo->size,
+      .offset = offset_B,
+      .range = size_B,
       .addr = addr,
    };
 
@@ -137,9 +124,6 @@ agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
 {
    struct agx_bo *bo;
    unsigned handle = 0;
-
-   assert(size > 0);
-   size = ALIGN_POT(size, dev->params.vm_page_size);
 
    /* executable implies low va */
    assert(!(flags & AGX_BO_EXEC) || (flags & AGX_BO_LOW_VA));
@@ -170,26 +154,15 @@ agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
    /* Fresh handle */
    assert(!memcmp(bo, &((struct agx_bo){}), sizeof(*bo)));
 
-   bo->type = AGX_ALLOC_REGULAR;
    bo->size = gem_create.size;
-   bo->align = MAX2(dev->params.vm_page_size, align);
+   bo->align = align;
    bo->flags = flags;
-   bo->dev = dev;
    bo->handle = handle;
    bo->prime_fd = -1;
 
-   ASSERTED bool lo = (flags & AGX_BO_LOW_VA);
-
-   struct util_vma_heap *heap;
-   if (lo)
-      heap = &dev->usc_heap;
-   else
-      heap = &dev->main_heap;
-
-   simple_mtx_lock(&dev->vma_lock);
-   bo->ptr.gpu = util_vma_heap_alloc(heap, size + dev->guard_size, bo->align);
-   simple_mtx_unlock(&dev->vma_lock);
-   if (!bo->ptr.gpu) {
+   enum agx_va_flags va_flags = flags & AGX_BO_LOW_VA ? AGX_VA_USC : 0;
+   bo->va = agx_va_alloc(dev, size, bo->align, va_flags, 0);
+   if (!bo->va) {
       fprintf(stderr, "Failed to allocate BO VMA\n");
       agx_bo_free(dev, bo);
       return NULL;
@@ -200,45 +173,38 @@ agx_bo_alloc(struct agx_device *dev, size_t size, size_t align,
       bind |= ASAHI_BIND_WRITE;
    }
 
-   ret = dev->ops.bo_bind(dev, bo, bo->ptr.gpu, bind);
+   ret = dev->ops.bo_bind(dev, bo, bo->va->addr, bo->size, 0, bind, false);
    if (ret) {
       agx_bo_free(dev, bo);
       return NULL;
    }
 
-   dev->ops.bo_mmap(bo);
-
-   if (flags & AGX_BO_LOW_VA)
-      bo->ptr.gpu -= dev->shader_base;
-
-   assert(bo->ptr.gpu < (1ull << (lo ? 32 : 40)));
-
+   dev->ops.bo_mmap(dev, bo);
    return bo;
 }
 
 static void
-agx_bo_mmap(struct agx_bo *bo)
+agx_bo_mmap(struct agx_device *dev, struct agx_bo *bo)
 {
    struct drm_asahi_gem_mmap_offset gem_mmap_offset = {.handle = bo->handle};
    int ret;
 
-   if (bo->ptr.cpu)
+   if (bo->map)
       return;
 
-   ret =
-      drmIoctl(bo->dev->fd, DRM_IOCTL_ASAHI_GEM_MMAP_OFFSET, &gem_mmap_offset);
+   ret = drmIoctl(dev->fd, DRM_IOCTL_ASAHI_GEM_MMAP_OFFSET, &gem_mmap_offset);
    if (ret) {
       fprintf(stderr, "DRM_IOCTL_ASAHI_MMAP_BO failed: %m\n");
       assert(0);
    }
 
-   bo->ptr.cpu = os_mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                         bo->dev->fd, gem_mmap_offset.offset);
-   if (bo->ptr.cpu == MAP_FAILED) {
-      bo->ptr.cpu = NULL;
+   bo->map = os_mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                     dev->fd, gem_mmap_offset.offset);
+   if (bo->map == MAP_FAILED) {
+      bo->map = NULL;
       fprintf(stderr,
               "mmap failed: result=%p size=0x%llx fd=%i offset=0x%llx %m\n",
-              bo->ptr.cpu, (long long)bo->size, bo->dev->fd,
+              bo->map, (long long)bo->size, dev->fd,
               (long long)gem_mmap_offset.offset);
    }
 }
@@ -262,9 +228,9 @@ agx_bo_import(struct agx_device *dev, int fd)
    bo = agx_lookup_bo(dev, gem_handle);
    dev->max_handle = MAX2(dev->max_handle, gem_handle);
 
-   if (!bo->dev) {
-      bo->dev = dev;
+   if (!bo->size) {
       bo->size = lseek(fd, 0, SEEK_END);
+      bo->align = dev->params.vm_page_size;
 
       /* Sometimes this can fail and return -1. size of -1 is not
        * a nice thing for mmap to try mmap. Be more robust also
@@ -289,13 +255,9 @@ agx_bo_import(struct agx_device *dev, int fd)
       assert(bo->prime_fd >= 0);
 
       p_atomic_set(&bo->refcnt, 1);
+      bo->va = agx_va_alloc(dev, bo->size, bo->align, 0, 0);
 
-      simple_mtx_lock(&dev->vma_lock);
-      bo->ptr.gpu = util_vma_heap_alloc(
-         &dev->main_heap, bo->size + dev->guard_size, dev->params.vm_page_size);
-      simple_mtx_unlock(&dev->vma_lock);
-
-      if (!bo->ptr.gpu) {
+      if (!bo->va) {
          fprintf(
             stderr,
             "import failed: Could not allocate from VMA heap (0x%llx bytes)\n",
@@ -307,11 +269,11 @@ agx_bo_import(struct agx_device *dev, int fd)
          bo->vbo_res_id = vdrm_handle_to_res_id(dev->vdrm, bo->handle);
       }
 
-      ret = dev->ops.bo_bind(dev, bo, bo->ptr.gpu,
-                             ASAHI_BIND_READ | ASAHI_BIND_WRITE);
+      ret = dev->ops.bo_bind(dev, bo, bo->va->addr, bo->size, 0,
+                             ASAHI_BIND_READ | ASAHI_BIND_WRITE, false);
       if (ret) {
          fprintf(stderr, "import failed: Could not bind BO at 0x%llx\n",
-                 (long long)bo->ptr.gpu);
+                 (long long)bo->va->addr);
          abort();
       }
    } else {
@@ -344,13 +306,13 @@ error:
 }
 
 int
-agx_bo_export(struct agx_bo *bo)
+agx_bo_export(struct agx_device *dev, struct agx_bo *bo)
 {
    int fd;
 
    assert(bo->flags & AGX_BO_SHAREABLE);
 
-   if (drmPrimeHandleToFD(bo->dev->fd, bo->handle, DRM_CLOEXEC, &fd))
+   if (drmPrimeHandleToFD(dev->fd, bo->handle, DRM_CLOEXEC, &fd))
       return -1;
 
    if (!(bo->flags & AGX_BO_SHARED)) {
@@ -365,11 +327,11 @@ agx_bo_export(struct agx_bo *bo)
       if (writer) {
          int out_sync_fd = -1;
          int ret = drmSyncobjExportSyncFile(
-            bo->dev->fd, agx_bo_writer_syncobj(writer), &out_sync_fd);
+            dev->fd, agx_bo_writer_syncobj(writer), &out_sync_fd);
          assert(ret >= 0);
          assert(out_sync_fd >= 0);
 
-         ret = agx_import_sync_file(bo->dev, bo, out_sync_fd);
+         ret = agx_import_sync_file(dev, bo, out_sync_fd);
          assert(ret >= 0);
          close(out_sync_fd);
       }
@@ -418,7 +380,7 @@ agx_get_params(struct agx_device *dev, void *buf, size_t size)
 
 static int
 agx_submit(struct agx_device *dev, struct drm_asahi_submit *submit,
-           uint32_t vbo_res_id)
+           struct agx_submit_virt *virt)
 {
    return drmIoctl(dev->fd, DRM_IOCTL_ASAHI_SUBMIT, submit);
 }
@@ -437,30 +399,34 @@ agx_open_device(void *memctx, struct agx_device *dev)
    dev->debug =
       debug_get_flags_option("ASAHI_MESA_DEBUG", agx_debug_options, 0);
 
-   dev->agxdecode = agxdecode_new_context();
    dev->ops = agx_device_drm_ops;
 
    ssize_t params_size = -1;
-   drmVersionPtr version;
 
-   version = drmGetVersion(dev->fd);
-   if (!version) {
-      fprintf(stderr, "cannot get version: %s", strerror(errno));
-      return NULL;
-   }
+   /* DRM version check */
+   {
+      drmVersionPtr version = drmGetVersion(dev->fd);
+      if (!version) {
+         fprintf(stderr, "cannot get version: %s", strerror(errno));
+         return NULL;
+      }
 
-   if (!strcmp(version->name, "asahi")) {
-      dev->is_virtio = false;
-      dev->ops = agx_device_drm_ops;
-   } else if (!strcmp(version->name, "virtio_gpu")) {
-      dev->is_virtio = true;
-      if (!agx_virtio_open_device(dev)) {
-         fprintf(stderr,
-                 "Error opening virtio-gpu device for Asahi native context\n");
+      if (!strcmp(version->name, "asahi")) {
+         dev->is_virtio = false;
+         dev->ops = agx_device_drm_ops;
+      } else if (!strcmp(version->name, "virtio_gpu")) {
+         dev->is_virtio = true;
+         if (!agx_virtio_open_device(dev)) {
+            fprintf(
+               stderr,
+               "Error opening virtio-gpu device for Asahi native context\n");
+            return false;
+         }
+      } else {
          return false;
       }
-   } else {
-      return false;
+
+      drmFreeVersion(version);
    }
 
    params_size = dev->ops.get_params(dev, &dev->params, sizeof(dev->params));
@@ -511,46 +477,61 @@ agx_open_device(void *memctx, struct agx_device *dev)
       return false;
    }
 
-   if (dev->params.gpu_generation >= 13 && dev->params.gpu_variant != 'P') {
-      const char *variant = " Unknown";
-      switch (dev->params.gpu_variant) {
-      case 'G':
-         variant = "";
-         break;
-      case 'S':
-         variant = " Pro";
-         break;
-      case 'C':
-         variant = " Max";
-         break;
-      case 'D':
-         variant = " Ultra";
-         break;
-      }
-      snprintf(dev->name, sizeof(dev->name), "Apple M%d%s (G%d%c %02X)",
-               dev->params.gpu_generation - 12, variant,
-               dev->params.gpu_generation, dev->params.gpu_variant,
-               dev->params.gpu_revision + 0xA0);
-   } else {
-      // Note: untested, theoretically this is the logic for at least a few
-      // generations back.
-      const char *variant = " Unknown";
-      switch (dev->params.gpu_variant) {
-      case 'P':
-         variant = "";
-         break;
-      case 'G':
-         variant = "X";
-         break;
-      }
-      snprintf(dev->name, sizeof(dev->name), "Apple A%d%s (G%d%c %02X)",
-               dev->params.gpu_generation + 1, variant,
-               dev->params.gpu_generation, dev->params.gpu_variant,
-               dev->params.gpu_revision + 0xA0);
+   assert(dev->params.gpu_generation >= 13);
+   const char *variant = " Unknown";
+   switch (dev->params.gpu_variant) {
+   case 'G':
+      variant = "";
+      break;
+   case 'S':
+      variant = " Pro";
+      break;
+   case 'C':
+      variant = " Max";
+      break;
+   case 'D':
+      variant = " Ultra";
+      break;
    }
+   snprintf(dev->name, sizeof(dev->name), "Apple M%d%s (G%d%c %02X)",
+            dev->params.gpu_generation - 12, variant,
+            dev->params.gpu_generation, dev->params.gpu_variant,
+            dev->params.gpu_revision + 0xA0);
+
+   /* We need a large chunk of VA space carved out for robustness. Hardware
+    * loads can shift an i32 by up to 2, for a total shift of 4. If the base
+    * address is zero, 36-bits is therefore enough to trap any zero-extended
+    * 32-bit index. For more generality we would need a larger carveout, but
+    * this is already optimal for VBOs.
+    *
+    * TODO: Maybe this should be on top instead? Might be ok.
+    */
+   uint64_t reservation = (1ull << 36);
 
    dev->guard_size = dev->params.vm_page_size;
-   dev->shader_base = dev->params.vm_shader_start;
+   if (dev->params.vm_usc_start) {
+      dev->shader_base = dev->params.vm_usc_start;
+   } else {
+      // Put the USC heap at the bottom of the user address space, 4GiB aligned
+      dev->shader_base = ALIGN_POT(MAX2(dev->params.vm_user_start, reservation),
+                                   0x100000000ull);
+   }
+
+   if (dev->shader_base < reservation) {
+      /* Our robustness implementation requires the bottom unmapped */
+      fprintf(stderr, "Unexpected address layout, can't cope\n");
+      assert(0);
+      return false;
+   }
+
+   uint64_t shader_size = 0x100000000ull;
+   // Put the user heap after the USC heap
+   uint64_t user_start = dev->shader_base + shader_size;
+
+   assert(dev->shader_base >= dev->params.vm_user_start);
+   assert(user_start < dev->params.vm_user_end);
+
+   dev->agxdecode = agxdecode_new_context(dev->shader_base);
 
    util_sparse_array_init(&dev->bo_map, sizeof(struct agx_bo), 512);
    pthread_mutex_init(&dev->bo_map_lock, NULL);
@@ -561,7 +542,16 @@ agx_open_device(void *memctx, struct agx_device *dev)
    for (unsigned i = 0; i < ARRAY_SIZE(dev->bo_cache.buckets); ++i)
       list_inithead(&dev->bo_cache.buckets[i]);
 
-   struct drm_asahi_vm_create vm_create = {};
+   // Put the kernel heap at the top of the address space.
+   // Give it 32GB of address space, should be more than enough for any
+   // reasonable use case.
+   uint64_t kernel_size = MAX2(dev->params.vm_kernel_min_size, 32ull << 30);
+   struct drm_asahi_vm_create vm_create = {
+      .kernel_start = dev->params.vm_user_end - kernel_size,
+      .kernel_end = dev->params.vm_user_end,
+   };
+
+   uint64_t user_size = vm_create.kernel_start - user_start;
 
    int ret = asahi_simple_ioctl(dev, DRM_IOCTL_ASAHI_VM_CREATE, &vm_create);
    if (ret) {
@@ -571,11 +561,8 @@ agx_open_device(void *memctx, struct agx_device *dev)
    }
 
    simple_mtx_init(&dev->vma_lock, mtx_plain);
-   util_vma_heap_init(&dev->main_heap, dev->params.vm_user_start,
-                      dev->params.vm_user_end - dev->params.vm_user_start + 1);
-   util_vma_heap_init(
-      &dev->usc_heap, dev->params.vm_shader_start,
-      dev->params.vm_shader_end - dev->params.vm_shader_start + 1);
+   util_vma_heap_init(&dev->main_heap, user_start, user_size);
+   util_vma_heap_init(&dev->usc_heap, dev->shader_base, shader_size);
 
    dev->vm_id = vm_create.vm_id;
 
@@ -596,7 +583,7 @@ void
 agx_close_device(struct agx_device *dev)
 {
    ralloc_free((void *)dev->libagx);
-   agx_bo_unreference(dev->helper);
+   agx_bo_unreference(dev, dev->helper);
    agx_bo_cache_evict_all(dev);
    util_sparse_array_finish(&dev->bo_map);
    agxdecode_destroy_context(dev->agxdecode);
@@ -612,6 +599,16 @@ uint32_t
 agx_create_command_queue(struct agx_device *dev, uint32_t caps,
                          uint32_t priority)
 {
+
+   if (dev->debug & AGX_DBG_1QUEUE) {
+      // Abuse this lock for this, it's debug only anyway
+      simple_mtx_lock(&dev->vma_lock);
+      if (dev->queue_id) {
+         simple_mtx_unlock(&dev->vma_lock);
+         return dev->queue_id;
+      }
+   }
+
    struct drm_asahi_queue_create queue_create = {
       .vm_id = dev->vm_id,
       .queue_caps = caps,
@@ -626,17 +623,26 @@ agx_create_command_queue(struct agx_device *dev, uint32_t caps,
       assert(0);
    }
 
+   if (dev->debug & AGX_DBG_1QUEUE) {
+      dev->queue_id = queue_create.queue_id;
+      simple_mtx_unlock(&dev->vma_lock);
+   }
+
    return queue_create.queue_id;
 }
 
 int
 agx_destroy_command_queue(struct agx_device *dev, uint32_t queue_id)
 {
+   if (dev->debug & AGX_DBG_1QUEUE)
+      return 0;
+
    struct drm_asahi_queue_destroy queue_destroy = {
       .queue_id = queue_id,
    };
 
-   return drmIoctl(dev->fd, DRM_IOCTL_ASAHI_QUEUE_DESTROY, &queue_destroy);
+   return asahi_simple_ioctl(dev, DRM_IOCTL_ASAHI_QUEUE_DESTROY,
+                             &queue_destroy);
 }
 
 int
@@ -684,22 +690,25 @@ agx_debug_fault(struct agx_device *dev, uint64_t addr)
 
    for (uint32_t handle = 0; handle < dev->max_handle; handle++) {
       struct agx_bo *bo = agx_lookup_bo(dev, handle);
-      uint64_t bo_addr = bo->ptr.gpu;
+      if (!bo->va)
+         continue;
+
+      uint64_t bo_addr = bo->va->addr;
       if (bo->flags & AGX_BO_LOW_VA)
          bo_addr += dev->shader_base;
 
-      if (!bo->dev || bo_addr > addr)
+      if (!bo->size || bo_addr > addr)
          continue;
 
-      if (!best || bo_addr > best->ptr.gpu)
+      if (!best || bo_addr > best->va->addr)
          best = bo;
    }
 
    if (!best) {
       mesa_logw("Address 0x%" PRIx64 " is unknown\n", addr);
    } else {
-      uint64_t start = best->ptr.gpu;
-      uint64_t end = best->ptr.gpu + best->size;
+      uint64_t start = best->va->addr;
+      uint64_t end = best->va->addr + best->size;
       if (addr > (end + 1024 * 1024 * 1024)) {
          /* 1GiB max as a sanity check */
          mesa_logw("Address 0x%" PRIx64 " is unknown\n", addr);

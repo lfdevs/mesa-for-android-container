@@ -125,17 +125,17 @@ DRI2WireToEvent(Display *dpy, XEvent *event, xEvent *wire)
       aevent->drawable = awire->drawable;
       switch (awire->event_type) {
       case DRI2_EXCHANGE_COMPLETE:
-	 aevent->event_type = GLX_EXCHANGE_COMPLETE_INTEL;
-	 break;
+    aevent->event_type = GLX_EXCHANGE_COMPLETE_INTEL;
+    break;
       case DRI2_BLIT_COMPLETE:
-	 aevent->event_type = GLX_COPY_COMPLETE_INTEL;
-	 break;
+    aevent->event_type = GLX_COPY_COMPLETE_INTEL;
+    break;
       case DRI2_FLIP_COMPLETE:
-	 aevent->event_type = GLX_FLIP_COMPLETE_INTEL;
-	 break;
+    aevent->event_type = GLX_FLIP_COMPLETE_INTEL;
+    break;
       default:
-	 /* unknown swap completion type */
-	 return False;
+    /* unknown swap completion type */
+    return False;
       }
       aevent->ust = ((CARD64)awire->ust_hi << 32) | awire->ust_lo;
       aevent->msc = ((CARD64)awire->msc_hi << 32) | awire->msc_lo;
@@ -191,25 +191,25 @@ static int
 DRI2Error(Display *display, xError *err, XExtCodes *codes, int *ret_code)
 {
     if (err->majorCode == codes->major_opcode &&
-	err->errorCode == BadDrawable &&
-	err->minorCode == X_DRI2CopyRegion)
-	return True;
+   err->errorCode == BadDrawable &&
+   err->minorCode == X_DRI2CopyRegion)
+   return True;
 
     /* If the X drawable was destroyed before the GLX drawable, the
      * DRI2 drawble will be gone by the time we call
      * DRI2DestroyDrawable.  So just ignore BadDrawable here. */
     if (err->majorCode == codes->major_opcode &&
-	err->errorCode == BadDrawable &&
-	err->minorCode == X_DRI2DestroyDrawable)
-	return True;
+   err->errorCode == BadDrawable &&
+   err->minorCode == X_DRI2DestroyDrawable)
+   return True;
 
     /* If the server is non-local DRI2Connect will raise BadRequest.
      * Swallow this so that DRI2Connect can signal this in its return code */
     if (err->majorCode == codes->major_opcode &&
         err->minorCode == X_DRI2Connect &&
         err->errorCode == BadRequest) {
-	*ret_code = False;
-	return True;
+   *ret_code = False;
+   return True;
     }
 
     return False;
@@ -265,17 +265,17 @@ DRI2QueryVersion(Display * dpy, int *major, int *minor)
 
    switch (rep.minorVersion) {
    case 1:
-	   nevents = 0;
-	   break;
+      nevents = 0;
+      break;
    case 2:
-	   nevents = 1;
-	   break;
+      nevents = 1;
+      break;
    case 3:
    default:
-	   nevents = 2;
-	   break;
+      nevents = 2;
+      break;
    }
-	
+   
    for (i = 0; i < nevents; i++) {
        XESetWireToEvent (dpy, info->codes->first_event + i, DRI2WireToEvent);
        XESetEventToWire (dpy, info->codes->first_event + i, DRI2EventToWire);

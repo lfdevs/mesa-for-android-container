@@ -31,6 +31,27 @@
 extern "C" {
 #endif
 
+#define anv_drv_const_offset(field) \
+   (offsetof(struct anv_push_constants, field))
+#define anv_drv_const_size(field) \
+   (sizeof(((struct anv_push_constants *)0)->field))
+
+#define anv_load_driver_uniform(b, components, field)                   \
+   nir_load_push_constant(b, components,                                \
+                          anv_drv_const_size(field) * 8,                \
+                          nir_imm_int(b, 0),                            \
+                          .base = anv_drv_const_offset(field),          \
+                          .range = components * anv_drv_const_size(field))
+#define anv_load_driver_uniform_indexed(b, components, field, idx)      \
+   nir_load_push_constant(b, components,                                \
+                          anv_drv_const_size(field[0]) * 8,             \
+                          nir_imul_imm(b, idx,                          \
+                                       anv_drv_const_size(field[0])),   \
+                          .base = anv_drv_const_offset(field),          \
+                          .range = anv_drv_const_size(field))
+
+
+
 /* This map is represent a mapping where the key is the NIR
  * nir_intrinsic_resource_intel::block index. It allows mapping bindless UBOs
  * accesses to descriptor entry.

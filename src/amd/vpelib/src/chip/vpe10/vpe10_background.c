@@ -48,6 +48,11 @@ bool vpe10_split_bg_gap(struct vpe_rect *gaps, const struct vpe_rect *target_rec
         max_width = (uint16_t)((gap_width + gap_cnt - 1) / gap_cnt);
     }
 
+    // if gap width, after calculation < VPE_MIN_VIEWPORT_SIZE, don't further split
+    // need return true, not false, to prevent go to full BG flow
+    if ((gap_width < VPE_MIN_VIEWPORT_SIZE) || (max_width < VPE_MIN_VIEWPORT_SIZE))
+        return true;
+
     if (num_gaps_t + gap_cnt > max_gaps)
         return false;
 

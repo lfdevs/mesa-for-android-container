@@ -107,6 +107,7 @@ libfreedreno_ir3_files = files(
   'ir3_ra_validate.c',
   'ir3_reconvergence.c',
   'ir3_remove_unreachable.c',
+  'ir3_rpt.c',
   'ir3_sched.c',
   'ir3_shader.c',
   'ir3_shader.h',

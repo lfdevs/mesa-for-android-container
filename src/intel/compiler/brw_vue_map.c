@@ -22,7 +22,7 @@
  */
 
 /**
- * @file brw_vue_map.c
+ * @file
  *
  * This file computes the "VUE map" for a (non-fragment) shader stage, which
  * describes the layout of its output varyings.  The VUE map is used to match

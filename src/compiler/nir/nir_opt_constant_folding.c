@@ -247,6 +247,31 @@ try_fold_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
       return true;
    }
 
+   case nir_intrinsic_ddx:
+   case nir_intrinsic_ddx_fine:
+   case nir_intrinsic_ddx_coarse:
+   case nir_intrinsic_ddy:
+   case nir_intrinsic_ddy_fine:
+   case nir_intrinsic_ddy_coarse: {
+      if (!nir_src_is_const(intrin->src[0]))
+         return false;
+
+      /* Derivative of a constant is zero, except for NaNs and Infs */
+      nir_const_value imm[NIR_MAX_VEC_COMPONENTS];
+      unsigned sz = intrin->def.bit_size;
+
+      b->cursor = nir_before_instr(&intrin->instr);
+
+      for (unsigned i = 0; i < intrin->def.num_components; i++) {
+         bool finite = isfinite(nir_src_comp_as_float(intrin->src[0], i));
+         imm[i] = nir_const_value_for_float(finite ? 0 : NAN, sz);
+      }
+
+      nir_def_replace(&intrin->def,
+                      nir_build_imm(b, intrin->def.num_components, sz, imm));
+      return true;
+   }
+
    case nir_intrinsic_vote_any:
    case nir_intrinsic_vote_all:
    case nir_intrinsic_read_invocation:

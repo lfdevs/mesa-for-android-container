@@ -67,6 +67,10 @@ struct stw_winsys_framebuffer
    void
    (*flush_frontbuffer)(struct stw_winsys_framebuffer *fb,
                         struct pipe_context *context);
+
+   void
+   (*set_latency)(struct stw_winsys_framebuffer *fb,
+                  int latency);
 };
 
 struct stw_winsys

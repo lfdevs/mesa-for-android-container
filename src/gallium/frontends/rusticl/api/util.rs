@@ -97,7 +97,7 @@ macro_rules! cl_prop_for_type {
     ($ty: ty) => {
         impl CLProp for $ty {
             fn cl_vec(&self) -> Vec<MaybeUninit<u8>> {
-                unsafe { slice::from_raw_parts((self as *const Self).cast(), size_of::<Self>()) }
+                unsafe { slice::from_raw_parts(std::ptr::from_ref(self).cast(), size_of::<Self>()) }
                     .to_vec()
             }
         }

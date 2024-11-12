@@ -70,7 +70,7 @@ bi_lower_divergent_indirects_impl(nir_builder *b, nir_intrinsic_instr *intr,
       return false;
    }
 
-   if (!nir_src_is_divergent(*offset))
+   if (!nir_src_is_divergent(offset))
       return false;
 
    /* This indirect does need it */

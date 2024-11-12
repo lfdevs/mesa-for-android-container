@@ -170,6 +170,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
       return load_sysval_root(
          b, 1, 64, &u->pipeline_statistics[nir_intrinsic_base(intr)]);
    case nir_intrinsic_load_ssbo_address:
+      assert(nir_src_as_uint(intr->src[1]) == 0);
       return load_sysval_indirect(b, 1, 64, stage_table(b), &s->ssbo_base,
                                   intr->src[0].ssa);
    case nir_intrinsic_get_ubo_size:

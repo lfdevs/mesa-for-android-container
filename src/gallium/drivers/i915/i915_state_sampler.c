@@ -72,10 +72,11 @@
 static void
 update_sampler(struct i915_context *i915, uint32_t unit,
                const struct i915_sampler_state *sampler,
-               const struct i915_texture *tex, unsigned state[3])
+               const struct i915_texture *tex,
+               const struct pipe_sampler_view *view, unsigned state[3])
 {
    const struct pipe_resource *pt = &tex->b;
-   unsigned minlod, lastlod;
+   unsigned minlod;
 
    state[0] = sampler->state[0];
    state[1] = sampler->state[1];
@@ -153,15 +154,12 @@ update_sampler(struct i915_context *i915, uint32_t unit,
    }
 #endif
 
-   /* See note at the top of file */
-   minlod = sampler->minlod;
-   lastlod = pt->last_level << 4;
+   if (sampler->templ.min_mip_filter == PIPE_TEX_MIPFILTER_NONE)
+      minlod = view->u.tex.first_level * 16;
+   else 
+      minlod = MIN2(sampler->minlod + view->u.tex.first_level * 16, view->u.tex.last_level * 16);
 
-   if (lastlod < minlod) {
-      minlod = lastlod;
-   }
-
-   state[1] |= (sampler->minlod << SS3_MIN_LOD_SHIFT);
+   state[1] |= (minlod << SS3_MIN_LOD_SHIFT);
    state[1] |= (unit << SS3_TEXTUREMAP_INDEX_SHIFT);
 }
 
@@ -286,9 +284,7 @@ update_map(struct i915_context *i915, uint32_t unit,
 {
    const struct pipe_resource *pt = &tex->b;
    uint32_t width = pt->width0, height = pt->height0, depth = pt->depth0;
-   int first_level = view->u.tex.first_level;
-   const uint32_t num_levels = pt->last_level - first_level;
-   unsigned max_lod = num_levels * 4;
+   unsigned maxlod;
    uint32_t format, pitch;
 
    assert(tex);
@@ -307,20 +303,21 @@ update_map(struct i915_context *i915, uint32_t unit,
       (((height - 1) << MS3_HEIGHT_SHIFT) | ((width - 1) << MS3_WIDTH_SHIFT) |
        format | ms3_tiling_bits(tex->tiling));
 
+   if (sampler->templ.min_mip_filter == PIPE_TEX_MIPFILTER_NONE)
+      maxlod = view->u.tex.first_level * 4;
+   else 
+      maxlod = MIN2((sampler->maxlod >> 2) + view->u.tex.first_level * 4, view->u.tex.last_level * 4);
+
    /*
     * XXX When min_filter != mag_filter and there's just one mipmap level,
     * set max_lod = 1 to make sure i915 chooses between min/mag filtering.
     */
-   if (max_lod == 0)
-      max_lod = 1;
-
-   /* See note at the top of file */
-   if (max_lod > (sampler->maxlod >> 2))
-      max_lod = sampler->maxlod >> 2;
+   if (maxlod == 0)
+      maxlod = 1;
 
    /* MS4 state */
    state[1] = ((((pitch / 4) - 1) << MS4_PITCH_SHIFT) | MS4_CUBE_FACE_ENA_MASK |
-               ((max_lod) << MS4_MAX_LOD_SHIFT) |
+               ((maxlod) << MS4_MAX_LOD_SHIFT) |
                ((depth - 1) << MS4_VOLUME_DEPTH_SHIFT));
 
    state[2] = 0;
@@ -346,6 +343,7 @@ update_samplers(struct i915_context *i915)
          update_sampler(i915, unit,
                         i915->fragment_sampler[unit],   /* sampler state */
                         texture,                        /* texture */
+                        i915->fragment_sampler_views[unit], /* sampler view */
                         i915->current.sampler[unit]);   /* the result */
          update_map(i915, unit, texture,                /* texture */
                     i915->fragment_sampler[unit],       /* sampler state */

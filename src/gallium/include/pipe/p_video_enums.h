@@ -119,15 +119,6 @@ enum pipe_video_cap
       to kick off the work in the device
    */
    PIPE_VIDEO_CAP_REQUIRES_FLUSH_ON_END_FRAME = 32,
-
-   /*
-      If reported by the driver, then multiple p_video_codec encode
-      operations can be asynchronously enqueued (and also flushed)
-      with different feedback values in the device before get_feedback
-      is called on them to synchronize. The device can block on begin_frame
-      when it has reached its maximum async depth capacity
-   */
-   PIPE_VIDEO_CAP_ENC_SUPPORTS_ASYNC_OPERATION = 33,
    PIPE_VIDEO_CAP_MIN_WIDTH = 34,
    PIPE_VIDEO_CAP_MIN_HEIGHT = 35,
    PIPE_VIDEO_CAP_ENC_RATE_CONTROL_QVBR = 36,
@@ -164,6 +155,14 @@ enum pipe_video_cap
     * Encoding surface width/height alignment
     */
    PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT = 50,
+   /*
+    * HEVC range extension support pipe_h265_enc_cap_range_extension
+    */
+   PIPE_VIDEO_CAP_ENC_HEVC_RANGE_EXTENSION_SUPPORT = 51,
+   /*
+    * HEVC range extension support pipe_h265_enc_cap_range_extension_flags
+    */
+   PIPE_VIDEO_CAP_ENC_HEVC_RANGE_EXTENSION_FLAGS_SUPPORT = 52,
 };
 
 enum pipe_video_h264_enc_dbk_filter_mode_flags
@@ -192,6 +191,7 @@ enum codec_unit_location_flags
    PIPE_VIDEO_CODEC_UNIT_LOCATION_FLAG_NONE = 0x0,
    /* Requires PIPE_VIDEO_FEEDBACK_METADATA_TYPE_MAX_SLICE_SIZE_OVERFLOW */
    PIPE_VIDEO_CODEC_UNIT_LOCATION_FLAG_MAX_SLICE_SIZE_OVERFLOW = 0x1,
+   PIPE_VIDEO_CODEC_UNIT_LOCATION_FLAG_SINGLE_NALU = 0x2,
 };
 
 /* To be used with PIPE_VIDEO_CAP_ENC_SUPPORTS_FEEDBACK_METADATA

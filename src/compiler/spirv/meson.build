@@ -36,6 +36,7 @@ files_libvtn = files(
   'vtn_amd.c',
   'vtn_cfg.c',
   'vtn_cmat.c',
+  'vtn_debug.c',
   'vtn_glsl450.c',
   'vtn_opencl.c',
   'vtn_private.h',
@@ -54,12 +55,12 @@ libvtn = static_library(
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa],
   c_args : [c_msvc_compat_args, no_override_init_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [idep_nir, dep_valgrind],
+  dependencies : [dep_spirv_tools, idep_nir, dep_valgrind],
   build_by_default : false,
 )
 
 idep_vtn = declare_dependency(
-  dependencies : [idep_nir, idep_mesautil],
+  dependencies : [dep_spirv_tools, idep_nir, idep_mesautil],
   link_with : libvtn,
 )
 

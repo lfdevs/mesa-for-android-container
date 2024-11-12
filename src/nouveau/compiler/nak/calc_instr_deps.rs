@@ -464,20 +464,39 @@ fn assign_barriers(f: &mut Function, sm: &dyn ShaderModel) {
 }
 
 fn exec_latency(sm: u8, op: &Op) -> u32 {
-    match op {
-        Op::Bar(_) | Op::MemBar(_) => {
-            if sm >= 80 {
-                6
-            } else {
-                5
+    if sm >= 70 {
+        match op {
+            Op::Bar(_) | Op::MemBar(_) => {
+                if sm >= 80 {
+                    6
+                } else {
+                    5
+                }
             }
+            Op::CCtl(_op) => {
+                // CCTL.C needs 8, CCTL.I needs 11
+                11
+            }
+            // Op::DepBar(_) => 4,
+            _ => 1, // TODO: co-issue
         }
-        Op::CCtl(_op) => {
-            // CCTL.C needs 8, CCTL.I needs 11
-            11
+    } else {
+        match op {
+            Op::CCtl(_)
+            | Op::MemBar(_)
+            | Op::Bra(_)
+            | Op::SSy(_)
+            | Op::Sync(_)
+            | Op::Brk(_)
+            | Op::PBk(_)
+            | Op::Cont(_)
+            | Op::PCnt(_)
+            | Op::Exit(_)
+            | Op::Bar(_)
+            | Op::Kill(_)
+            | Op::OutFinal(_) => 13,
+            _ => 1,
         }
-        // Op::DepBar(_) => 4,
-        _ => 1, // TODO: co-issue
     }
 }
 

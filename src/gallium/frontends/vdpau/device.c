@@ -64,8 +64,10 @@ vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device,
    pipe_reference_init(&dev->reference, 1);
 
    dev->vscreen = vl_dri3_screen_create(display, screen);
+#ifdef HAVE_X11_DRI2
    if (!dev->vscreen)
       dev->vscreen = vl_dri2_screen_create(display, screen);
+#endif
    if (!dev->vscreen)
       dev->vscreen = vl_xlib_swrast_screen_create(display, screen);
    if (!dev->vscreen) {

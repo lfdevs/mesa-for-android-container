@@ -399,9 +399,8 @@ static nir_def *
 build_load_uniform(nir_builder *b, unsigned offset,
                    unsigned num_components, unsigned bit_size)
 {
-   return nir_load_uniform(b, num_components, bit_size, nir_imm_int(b, 0),
-                           .base = offset,
-                           .range = num_components * bit_size / 8);
+   return nir_load_inline_data_intel(b, num_components, bit_size,
+                                     .base = offset);
 }
 
 #define load_trampoline_param(b, name, num_components, bit_size) \

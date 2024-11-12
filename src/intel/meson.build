@@ -23,6 +23,7 @@ if with_intel_hasvk or with_intel_vk or with_gallium_iris
 endif
 if with_intel_tools
   subdir('tools')
+  subdir('executor')
 endif
 if get_option('vulkan-layers').contains('intel-nullhw')
   subdir('nullhw-layer')

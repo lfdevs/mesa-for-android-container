@@ -53,6 +53,10 @@ tu_disable_lrz(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
 
 template <chip CHIP>
 void
+tu_disable_lrz_cpu(struct tu_device *device, struct tu_image *image);
+
+template <chip CHIP>
+void
 tu_lrz_clear_depth_image(struct tu_cmd_buffer *cmd,
                          struct tu_image *image,
                          const VkClearDepthStencilValue *pDepthStencil,
@@ -73,6 +77,10 @@ tu_lrz_begin_secondary_cmdbuf(struct tu_cmd_buffer *cmd);
 template <chip CHIP>
 void
 tu_lrz_tiling_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs);
+
+template <chip CHIP>
+void
+tu_lrz_before_tile(struct tu_cmd_buffer *cmd, struct tu_cs *cs);
 
 template <chip CHIP>
 void

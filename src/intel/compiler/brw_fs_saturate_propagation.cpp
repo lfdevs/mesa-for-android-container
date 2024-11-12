@@ -27,7 +27,7 @@
 
 using namespace brw;
 
-/** @file brw_fs_saturate_propagation.cpp
+/** @file
  *
  * Implements a pass that propagates the SAT modifier from a MOV.SAT into the
  * instruction that produced the source of the MOV.SAT, thereby allowing the
@@ -45,6 +45,49 @@ using namespace brw;
  */
 
 static bool
+propagate_sat(fs_inst *inst, fs_inst *scan_inst)
+{
+   if (scan_inst->dst.type != inst->dst.type) {
+      scan_inst->dst.type = inst->dst.type;
+      for (int i = 0; i < scan_inst->sources; i++) {
+         scan_inst->src[i].type = inst->dst.type;
+      }
+   }
+
+   if (inst->src[0].negate) {
+      if (scan_inst->opcode == BRW_OPCODE_MUL) {
+         scan_inst->src[0].negate = !scan_inst->src[0].negate;
+         inst->src[0].negate = false;
+      } else if (scan_inst->opcode == BRW_OPCODE_MAD) {
+         for (int i = 0; i < 2; i++) {
+            if (scan_inst->src[i].file == IMM) {
+               brw_reg_negate_immediate(&scan_inst->src[i]);
+            } else {
+               scan_inst->src[i].negate = !scan_inst->src[i].negate;
+            }
+         }
+         inst->src[0].negate = false;
+      } else if (scan_inst->opcode == BRW_OPCODE_ADD) {
+         if (scan_inst->src[1].file == IMM) {
+            if (!brw_reg_negate_immediate(&scan_inst->src[1])) {
+               return false;
+            }
+         } else {
+            scan_inst->src[1].negate = !scan_inst->src[1].negate;
+         }
+         scan_inst->src[0].negate = !scan_inst->src[0].negate;
+         inst->src[0].negate = false;
+      } else {
+         return false;
+      }
+   }
+
+   scan_inst->saturate = true;
+   inst->saturate = false;
+   return true;
+}
+
+static bool
 opt_saturate_propagation_local(fs_visitor &s, bblock_t *block)
 {
    bool progress = false;
@@ -60,6 +103,37 @@ opt_saturate_propagation_local(fs_visitor &s, bblock_t *block)
           inst->src[0].file != VGRF ||
           inst->src[0].abs)
          continue;
+
+      const brw::def_analysis &defs = s.def_analysis.require();
+      fs_inst *def = defs.get(inst->src[0]);
+
+      if (def != NULL) {
+         if (def->exec_size != inst->exec_size)
+            continue;
+
+         if (def->dst.type != inst->dst.type && !def->can_change_types())
+            continue;
+
+         if (def->flags_written(s.devinfo) != 0)
+            continue;
+
+         if (def->saturate) {
+            inst->saturate = false;
+            progress = true;
+            continue;
+         } else if (defs.get_use_count(def->dst) == 1 &&
+                    def->can_do_saturate() &&
+                    propagate_sat(inst, def)) {
+            progress = true;
+            continue;
+         }
+
+         /* If the def is in a different block the liveness based pass will
+          * not be able to make progress, so skip it.
+          */
+         if (block != defs.get_block(inst->src[0]))
+            continue;
+      }
 
       const fs_live_variables &live = s.live_analysis.require();
       int src_var = live.var_from_reg(inst->src[0]);
@@ -82,44 +156,8 @@ opt_saturate_propagation_local(fs_visitor &s, bblock_t *block)
                inst->saturate = false;
                progress = true;
             } else if (src_end_ip == ip || inst->dst.equals(inst->src[0])) {
-               if (scan_inst->can_do_saturate()) {
-                  if (scan_inst->dst.type != inst->dst.type) {
-                     scan_inst->dst.type = inst->dst.type;
-                     for (int i = 0; i < scan_inst->sources; i++) {
-                        scan_inst->src[i].type = inst->dst.type;
-                     }
-                  }
-
-                  if (inst->src[0].negate) {
-                     if (scan_inst->opcode == BRW_OPCODE_MUL) {
-                        scan_inst->src[0].negate = !scan_inst->src[0].negate;
-                        inst->src[0].negate = false;
-                     } else if (scan_inst->opcode == BRW_OPCODE_MAD) {
-                        for (int i = 0; i < 2; i++) {
-                           if (scan_inst->src[i].file == IMM) {
-                              brw_reg_negate_immediate(&scan_inst->src[i]);
-                           } else {
-                              scan_inst->src[i].negate = !scan_inst->src[i].negate;
-                           }
-                        }
-                        inst->src[0].negate = false;
-                     } else if (scan_inst->opcode == BRW_OPCODE_ADD) {
-                        if (scan_inst->src[1].file == IMM) {
-                           if (!brw_reg_negate_immediate(&scan_inst->src[1])) {
-                              break;
-                           }
-                        } else {
-                           scan_inst->src[1].negate = !scan_inst->src[1].negate;
-                        }
-                        scan_inst->src[0].negate = !scan_inst->src[0].negate;
-                        inst->src[0].negate = false;
-                     } else {
-                        break;
-                     }
-                  }
-
-                  scan_inst->saturate = true;
-                  inst->saturate = false;
+               if (scan_inst->can_do_saturate() &&
+                   propagate_sat(inst, scan_inst)) {
                   progress = true;
                }
             }

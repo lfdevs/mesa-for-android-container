@@ -29,9 +29,9 @@
  * Supports serializing and deserializing glsl programs using a blob.
  */
 
+#include "compiler/glsl/linker_util.h"
 #include "compiler/glsl_types.h"
 #include "compiler/shader_info.h"
-#include "ir_uniform.h"
 #include "main/mtypes.h"
 #include "main/shaderobj.h"
 #include "program/program.h"

@@ -575,11 +575,19 @@ enum asahi_blit_clamp {
    ASAHI_BLIT_CLAMP_COUNT,
 };
 
+struct asahi_blit_key {
+   enum pipe_format src_format, dst_format;
+   bool array;
+   bool aligned;
+   bool pad[2];
+};
+static_assert(sizeof(struct asahi_blit_key) == 12, "packed");
+
+DERIVE_HASH_TABLE(asahi_blit_key);
+
 struct asahi_blitter {
    bool active;
-
-   /* [clamp_type][is_array] */
-   void *blit_cs[ASAHI_BLIT_CLAMP_COUNT][2];
+   struct hash_table *blit_cs;
 
    /* [filter] */
    void *sampler[2];
@@ -601,9 +609,9 @@ struct agx_oq_heap;
 
 struct agx_context {
    struct pipe_context base;
-   struct agx_compiled_shader *vs, *fs, *gs, *tcs, *tes;
+   struct agx_compiled_shader *vs, *fs, *gs, *tcs;
    struct {
-      struct agx_linked_shader *vs, *tcs, *tes, *gs, *fs;
+      struct agx_linked_shader *vs, *fs;
    } linked;
    uint32_t dirty;
 
@@ -683,7 +691,6 @@ struct agx_context {
    bool is_noop;
 
    bool in_tess;
-   bool in_generated_vdm;
 
    struct blitter_context *blitter;
    struct asahi_blitter compute_blitter;
@@ -705,6 +712,9 @@ struct agx_context {
    uint32_t dummy_syncobj;
    int in_sync_fd;
    uint32_t in_sync_obj;
+   uint64_t flush_last_seqid;
+   uint64_t flush_my_seqid;
+   uint64_t flush_other_seqid;
 
    struct agx_scratch scratch_vs;
    struct agx_scratch scratch_fs;
@@ -929,6 +939,13 @@ struct agx_screen {
    struct agx_device dev;
    struct disk_cache *disk_cache;
 
+   /* Shared timeline syncobj and value to serialize flushes across contexts */
+   uint32_t flush_syncobj;
+   uint64_t flush_cur_seqid;
+   uint64_t flush_wait_seqid;
+   /* Lock to protect flush_wait_seqid updates (reads are just atomic) */
+   simple_mtx_t flush_seqid_lock;
+
    /* Lock to protect syncobj usage vs. destruction in context destroy */
    struct u_rwlock destroy_lock;
 };
@@ -1009,14 +1026,14 @@ agx_resource_valid(struct agx_resource *rsrc, int level)
 static inline void *
 agx_map_texture_cpu(struct agx_resource *rsrc, unsigned level, unsigned z)
 {
-   return ((uint8_t *)rsrc->bo->ptr.cpu) +
+   return ((uint8_t *)rsrc->bo->map) +
           ail_get_layer_level_B(&rsrc->layout, z, level);
 }
 
 static inline uint64_t
 agx_map_texture_gpu(struct agx_resource *rsrc, unsigned z)
 {
-   return rsrc->bo->ptr.gpu +
+   return rsrc->bo->va->addr +
           (uint64_t)ail_get_layer_offset_B(&rsrc->layout, z);
 }
 

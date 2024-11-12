@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright © 2012 Rob Clark <robclark@freedesktop.org>
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Rob Clark <robclark@freedesktop.org>
@@ -81,7 +63,6 @@ static const struct debug_named_value fd_debug_options[] = {
    {"serialc",   FD_DBG_SERIALC,  "Disable asynchronous shader compile"},
    {"shaderdb",  FD_DBG_SHADERDB, "Enable shaderdb output"},
    {"flush",     FD_DBG_FLUSH,    "Force flush after every draw"},
-   {"deqp",      FD_DBG_DEQP,     "Enable dEQP hacks"},
    {"inorder",   FD_DBG_INORDER,  "Disable reordering for draws/blits"},
    {"bstat",     FD_DBG_BSTAT,    "Print batch stats at context destroy"},
    {"nogrow",    FD_DBG_NOGROW,   "Disable \"growable\" cmdstream buffers, even if kernel supports it"},
@@ -258,10 +239,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DEPTH_BOUNDS_TEST:
       return is_a6xx(screen);
 
-   case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-      return is_a2xx(screen);
+   case PIPE_CAP_VERTEX_INPUT_ALIGNMENT:
+      return is_a2xx(screen) ? PIPE_VERTEX_INPUT_ALIGNMENT_4BYTE : PIPE_VERTEX_INPUT_ALIGNMENT_NONE;
 
    case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
       return is_a2xx(screen);
@@ -648,15 +627,6 @@ fd_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
       return 0.1f;
    case PIPE_CAPF_MAX_LINE_WIDTH:
    case PIPE_CAPF_MAX_LINE_WIDTH_AA:
-      /* NOTE: actual value is 127.0f, but this is working around a deqp
-       * bug.. dEQP-GLES3.functional.rasterization.primitives.lines_wide
-       * uses too small of a render target size, and gets confused when
-       * the lines start going offscreen.
-       *
-       * See: https://code.google.com/p/android/issues/detail?id=206513
-       */
-      if (FD_DBG(DEQP))
-         return 48.0f;
       return 127.0f;
    case PIPE_CAPF_MAX_POINT_SIZE:
    case PIPE_CAPF_MAX_POINT_SIZE_AA:
@@ -1200,10 +1170,6 @@ fd_screen_create(int fd,
 
    screen->dev_info = info;
    screen->info = &screen->dev_info;
-
-   /* HACK: disable lrz for now on a7xx: */
-   if (screen->gen == 7)
-      fd_mesa_debug |= FD_DBG_NOLRZ;
 
    /* explicitly checking for GPU revisions that are known to work.  This
     * may be overly conservative for a3xx, where spoofing the gpu_id with

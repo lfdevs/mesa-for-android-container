@@ -4,6 +4,7 @@
  */
 #include "nvk_buffer.h"
 #include "nvk_cmd_buffer.h"
+#include "nvk_descriptor_set.h"
 #include "nvk_device.h"
 #include "nvk_entrypoints.h"
 #include "nvk_image.h"
@@ -62,8 +63,8 @@ struct nvk_meta_save {
    struct vk_dynamic_graphics_state dynamic;
    struct nvk_shader *shaders[MESA_SHADER_MESH + 1];
    struct nvk_addr_range vb0;
-   struct nvk_descriptor_set *desc0;
-   bool has_push_desc0;
+   struct nvk_descriptor_set_binding desc0;
+   struct nvk_buffer_address desc0_set_addr;
    struct nvk_push_descriptor_set push_desc0;
    uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
    uint8_t push[NVK_MAX_PUSH_SIZE];
@@ -85,9 +86,9 @@ nvk_meta_begin(struct nvk_cmd_buffer *cmd,
    save->vb0 = cmd->state.gfx.vb0;
 
    save->desc0 = desc->sets[0];
-   save->has_push_desc0 = desc->push[0];
-   if (save->has_push_desc0)
-      save->push_desc0 = *desc->push[0];
+   nvk_descriptor_state_get_root(desc, sets[0], &save->desc0_set_addr);
+   if (desc->sets[0].push != NULL)
+      save->push_desc0 = *desc->sets[0].push;
 
    nvk_descriptor_state_get_root_array(desc, set_dynamic_buffer_start,
                                        0, NVK_MAX_SETS,
@@ -127,8 +128,12 @@ nvk_meta_init_render(struct nvk_cmd_buffer *cmd,
       .depth_attachment_format = render->depth_att.vk_format,
       .stencil_attachment_format = render->stencil_att.vk_format,
    };
-   for (uint32_t a = 0; a < render->color_att_count; a++)
+   for (uint32_t a = 0; a < render->color_att_count; a++) {
       info->color_attachment_formats[a] = render->color_att[a].vk_format;
+      info->color_attachment_write_masks[a] =
+         VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+   }
 }
 
 static void
@@ -137,13 +142,34 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
 {
    struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
 
-   if (save->desc0) {
-      desc->sets[0] = save->desc0;
-      struct nvk_buffer_address addr = nvk_descriptor_set_addr(save->desc0);
+   switch (save->desc0.type) {
+   case NVK_DESCRIPTOR_SET_TYPE_NONE:
+      desc->sets[0].type = NVK_DESCRIPTOR_SET_TYPE_NONE;
+      break;
+
+   case NVK_DESCRIPTOR_SET_TYPE_SET: {
+      desc->sets[0].type = NVK_DESCRIPTOR_SET_TYPE_SET;
+      desc->sets[0].set = save->desc0.set;
+      struct nvk_buffer_address addr = nvk_descriptor_set_addr(save->desc0.set);
       nvk_descriptor_state_set_root(cmd, desc, sets[0], addr);
-   } else if (save->has_push_desc0) {
-      *desc->push[0] = save->push_desc0;
+      break;
+   }
+
+   case NVK_DESCRIPTOR_SET_TYPE_PUSH:
+      desc->sets[0].type = NVK_DESCRIPTOR_SET_TYPE_PUSH;
+      desc->sets[0].set = NULL;
+      *desc->sets[0].push = save->push_desc0;
       desc->push_dirty |= BITFIELD_BIT(0);
+      break;
+
+   case NVK_DESCRIPTOR_SET_TYPE_BUFFER:
+      desc->sets[0].type = NVK_DESCRIPTOR_SET_TYPE_BUFFER;
+      desc->sets[0].set = NULL;
+      nvk_descriptor_state_set_root(cmd, desc, sets[0], save->desc0_set_addr);
+      break;
+
+   default:
+      unreachable("Unknown descriptor set type");
    }
    nvk_cmd_dirty_cbufs_for_descriptors(cmd, ~0, 0, 1, 0, 0);
 

@@ -108,6 +108,8 @@ struct ac_cs_blit_description
       enum pipe_format format;   /* format reinterpretation */
    } dst, src;
 
+   bool is_gfx_queue;
+   bool dst_has_dcc;
    bool sample0_only;                  /* copy sample 0 instead of resolving */
    union pipe_color_union clear_color; /* if src.surf == NULL, this is the clear color */
 };
@@ -134,5 +136,65 @@ bool
 ac_prepare_compute_blit(const struct ac_cs_blit_options *options,
                         const struct ac_cs_blit_description *blit,
                         struct ac_cs_blit_dispatches *dispatches);
+
+/* clear_buffer/copy_buffer compute shader. */
+union ac_cs_clear_copy_buffer_key {
+   struct {
+      bool is_clear:1;
+      unsigned dwords_per_thread:3; /* 1..4 allowed */
+      bool clear_value_size_is_12:1;
+      bool src_is_sparse:1;
+      /* Unaligned clears and copies. */
+      unsigned src_align_offset:2; /* how much is the source address unaligned */
+      unsigned dst_align_offset:4; /* the first thread shouldn't write this many bytes */
+      unsigned dst_last_thread_bytes:4; /* if non-zero, the last thread should write this many bytes */
+      bool dst_single_thread_unaligned:1; /* only 1 thread executes, both previous fields apply */
+      bool has_start_thread:1; /* whether the first few threads should be skipped, making later
+                                  waves start on a 256B boundary */
+   };
+   uint64_t key;
+};
+
+struct ac_cs_clear_copy_buffer_options {
+   const nir_shader_compiler_options *nir_options;
+   const struct radeon_info *info;
+   bool print_key;      /* print the shader key into stderr */
+   bool fail_if_slow;   /* fail if a gfx blit is faster, set to false on compute queues */
+};
+
+struct ac_cs_clear_copy_buffer_info {
+   unsigned dst_offset;
+   unsigned src_offset;
+   unsigned size;
+   unsigned clear_value_size;
+   uint32_t clear_value[4];
+   unsigned dwords_per_thread;   /* Set to 0 to let the code choose the optimal value. */
+   bool render_condition_enabled;
+   bool dst_is_vram;
+   bool src_is_vram;
+   bool src_is_sparse;
+};
+
+struct ac_cs_clear_copy_buffer_dispatch {
+   union ac_cs_clear_copy_buffer_key shader_key;
+   uint32_t user_data[6];        /* for nir_intrinsic_load_user_data_amd */
+   unsigned num_ssbos;
+   unsigned workgroup_size;
+   unsigned num_threads;
+
+   struct {
+      unsigned offset;
+      unsigned size;
+   } ssbo[2];
+};
+
+nir_shader *
+ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
+                               union ac_cs_clear_copy_buffer_key *key);
+
+bool
+ac_prepare_cs_clear_copy_buffer(const struct ac_cs_clear_copy_buffer_options *options,
+                                const struct ac_cs_clear_copy_buffer_info *info,
+                                struct ac_cs_clear_copy_buffer_dispatch *out);
 
 #endif

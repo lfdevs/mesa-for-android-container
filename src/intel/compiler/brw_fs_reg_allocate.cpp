@@ -45,33 +45,34 @@ assign_reg(const struct intel_device_info *devinfo,
 }
 
 void
-fs_visitor::assign_regs_trivial()
+brw_assign_regs_trivial(fs_visitor &s)
 {
-   unsigned hw_reg_mapping[this->alloc.count + 1];
+   const struct intel_device_info *devinfo = s.devinfo;
+   unsigned hw_reg_mapping[s.alloc.count + 1];
    unsigned i;
-   int reg_width = dispatch_width / 8;
+   int reg_width = s.dispatch_width / 8;
 
    /* Note that compressed instructions require alignment to 2 registers. */
-   hw_reg_mapping[0] = ALIGN(this->first_non_payload_grf, reg_width);
-   for (i = 1; i <= this->alloc.count; i++) {
+   hw_reg_mapping[0] = ALIGN(s.first_non_payload_grf, reg_width);
+   for (i = 1; i <= s.alloc.count; i++) {
       hw_reg_mapping[i] = (hw_reg_mapping[i - 1] +
-                           DIV_ROUND_UP(this->alloc.sizes[i - 1],
+                           DIV_ROUND_UP(s.alloc.sizes[i - 1],
                                         reg_unit(devinfo)));
    }
-   this->grf_used = hw_reg_mapping[this->alloc.count];
+   s.grf_used = hw_reg_mapping[s.alloc.count];
 
-   foreach_block_and_inst(block, fs_inst, inst, cfg) {
+   foreach_block_and_inst(block, fs_inst, inst, s.cfg) {
       assign_reg(devinfo, hw_reg_mapping, &inst->dst);
       for (i = 0; i < inst->sources; i++) {
          assign_reg(devinfo, hw_reg_mapping, &inst->src[i]);
       }
    }
 
-   if (this->grf_used >= BRW_MAX_GRF) {
-      fail("Ran out of regs on trivial allocator (%d/%d)\n",
-	   this->grf_used, BRW_MAX_GRF);
+   if (s.grf_used >= BRW_MAX_GRF) {
+      s.fail("Ran out of regs on trivial allocator (%d/%d)\n",
+	     s.grf_used, BRW_MAX_GRF);
    } else {
-      this->alloc.count = this->grf_used;
+      s.alloc.count = s.grf_used;
    }
 
 }
@@ -150,7 +151,8 @@ count_to_loop_end(const bblock_t *block)
    unreachable("not reached");
 }
 
-void fs_visitor::calculate_payload_ranges(unsigned payload_node_count,
+void fs_visitor::calculate_payload_ranges(bool allow_spilling,
+                                          unsigned payload_node_count,
                                           int *payload_last_use_ip) const
 {
    int loop_depth = 0;
@@ -219,19 +221,22 @@ void fs_visitor::calculate_payload_ranges(unsigned payload_node_count,
          }
       }
 
-      if (inst->eot) {
-         /* We could omit this for the !inst->header_present case, except
-          * that the simulator apparently incorrectly reads from g0/g1
-          * instead of sideband.  It also really freaks out driver
-          * developers to see g0 used in unusual places, so just always
-          * reserve it.
-          */
+      /* The generator implicitly uses g0 to construct extended message
+       * descriptors for scratch send messages when this bit is set.
+       */
+      if (inst->send_ex_desc_scratch)
          payload_last_use_ip[0] = use_ip;
-         payload_last_use_ip[1] = use_ip;
-      }
 
       ip++;
    }
+
+   /* g0 is needed to construct scratch headers for spilling.  While we could
+    * extend its live range each time we spill a register, and update the
+    * interference graph accordingly, this would get pretty messy.  Instead,
+    * simply consider g0 live for the whole program if spilling is required.
+    */
+   if (allow_spilling)
+      payload_last_use_ip[0] = ip - 1;
 }
 
 class fs_reg_alloc {
@@ -286,8 +291,7 @@ private:
                                 int node_start_ip, int node_end_ip);
    void setup_inst_interference(const fs_inst *inst);
 
-   void build_interference_graph();
-   void discard_interference_graph();
+   void build_interference_graph(bool allow_spilling);
 
    brw_reg build_lane_offsets(const fs_builder &bld,
                              uint32_t spill_offset, int ip);
@@ -296,9 +300,9 @@ private:
    brw_reg build_legacy_scratch_header(const fs_builder &bld,
                                        uint32_t spill_offset, int ip);
 
-   void emit_unspill(const fs_builder &bld, struct shader_stats *stats,
+   void emit_unspill(const fs_builder &bld, struct brw_shader_stats *stats,
                      brw_reg dst, uint32_t spill_offset, unsigned count, int ip);
-   void emit_spill(const fs_builder &bld, struct shader_stats *stats,
+   void emit_spill(const fs_builder &bld, struct brw_shader_stats *stats,
                    brw_reg src, uint32_t spill_offset, unsigned count, int ip);
 
    void set_spill_costs();
@@ -401,13 +405,127 @@ fs_reg_alloc::setup_live_interference(unsigned node,
    }
 }
 
+/**
+ * Returns true if this instruction's sources and destinations cannot
+ * safely be the same register.
+ *
+ * In most cases, a register can be written over safely by the same
+ * instruction that is its last use.  For a single instruction, the
+ * sources are dereferenced before writing of the destination starts
+ * (naturally).
+ *
+ * However, there are a few cases where this can be problematic:
+ *
+ * - Virtual opcodes that translate to multiple instructions in the
+ *   code generator: if src == dst and one instruction writes the
+ *   destination before a later instruction reads the source, then
+ *   src will have been clobbered.
+ *
+ * - SIMD16 compressed instructions with certain regioning (see below).
+ *
+ * The register allocator uses this information to set up conflicts between
+ * GRF sources and the destination.
+ */
+static bool
+brw_inst_has_source_and_destination_hazard(const fs_inst *inst)
+{
+   switch (inst->opcode) {
+   case FS_OPCODE_PACK_HALF_2x16_SPLIT:
+      /* Multiple partial writes to the destination */
+      return true;
+   case SHADER_OPCODE_SHUFFLE:
+      /* This instruction returns an arbitrary channel from the source and
+       * gets split into smaller instructions in the generator.  It's possible
+       * that one of the instructions will read from a channel corresponding
+       * to an earlier instruction.
+       */
+   case SHADER_OPCODE_SEL_EXEC:
+      /* This is implemented as
+       *
+       * mov(16)      g4<1>D      0D            { align1 WE_all 1H };
+       * mov(16)      g4<1>D      g5<8,8,1>D    { align1 1H }
+       *
+       * Because the source is only read in the second instruction, the first
+       * may stomp all over it.
+       */
+      return true;
+   case SHADER_OPCODE_QUAD_SWIZZLE:
+      switch (inst->src[1].ud) {
+      case BRW_SWIZZLE_XXXX:
+      case BRW_SWIZZLE_YYYY:
+      case BRW_SWIZZLE_ZZZZ:
+      case BRW_SWIZZLE_WWWW:
+      case BRW_SWIZZLE_XXZZ:
+      case BRW_SWIZZLE_YYWW:
+      case BRW_SWIZZLE_XYXY:
+      case BRW_SWIZZLE_ZWZW:
+         /* These can be implemented as a single Align1 region on all
+          * platforms, so there's never a hazard between source and
+          * destination.  C.f. fs_generator::generate_quad_swizzle().
+          */
+         return false;
+      default:
+         return !is_uniform(inst->src[0]);
+      }
+   case BRW_OPCODE_DPAS:
+      /* This is overly conservative. The actual hazard is more complicated to
+       * describe. When the repeat count is N, the single instruction behaves
+       * like N instructions with a repeat count of one, but the destination
+       * and source registers are incremented (in somewhat complex ways) for
+       * each instruction.
+       *
+       * This means the source and destination register is actually a range of
+       * registers. The hazard exists of an earlier iteration would write a
+       * register that should be read by a later iteration.
+       *
+       * There may be some advantage to properly modeling this, but for now,
+       * be overly conservative.
+       */
+      return inst->rcount > 1;
+   default:
+      /* The SIMD16 compressed instruction
+       *
+       * add(16)      g4<1>F      g4<8,8,1>F   g6<8,8,1>F
+       *
+       * is actually decoded in hardware as:
+       *
+       * add(8)       g4<1>F      g4<8,8,1>F   g6<8,8,1>F
+       * add(8)       g5<1>F      g5<8,8,1>F   g7<8,8,1>F
+       *
+       * Which is safe.  However, if we have uniform accesses
+       * happening, we get into trouble:
+       *
+       * add(8)       g4<1>F      g4<0,1,0>F   g6<8,8,1>F
+       * add(8)       g5<1>F      g4<0,1,0>F   g7<8,8,1>F
+       *
+       * Now our destination for the first instruction overwrote the
+       * second instruction's src0, and we get garbage for those 8
+       * pixels.  There's a similar issue for the pre-gfx6
+       * pixel_x/pixel_y, which are registers of 16-bit values and thus
+       * would get stomped by the first decode as well.
+       */
+      if (inst->exec_size == 16) {
+         for (int i = 0; i < inst->sources; i++) {
+            if (inst->src[i].file == VGRF && (inst->src[i].stride == 0 ||
+                                              inst->src[i].type == BRW_TYPE_UW ||
+                                              inst->src[i].type == BRW_TYPE_W ||
+                                              inst->src[i].type == BRW_TYPE_UB ||
+                                              inst->src[i].type == BRW_TYPE_B)) {
+               return true;
+            }
+         }
+      }
+      return false;
+   }
+}
+
 void
 fs_reg_alloc::setup_inst_interference(const fs_inst *inst)
 {
    /* Certain instructions can't safely use the same register for their
     * sources and destination.  Add interference.
     */
-   if (inst->dst.file == VGRF && inst->has_source_and_destination_hazard()) {
+   if (inst->dst.file == VGRF && brw_inst_has_source_and_destination_hazard(inst)) {
       for (unsigned i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF) {
             ra_add_node_interference(g, first_vgrf_node + inst->dst.nr,
@@ -508,7 +626,7 @@ fs_reg_alloc::setup_inst_interference(const fs_inst *inst)
 }
 
 void
-fs_reg_alloc::build_interference_graph()
+fs_reg_alloc::build_interference_graph(bool allow_spilling)
 {
    /* Compute the RA node layout */
    node_count = 0;
@@ -523,7 +641,7 @@ fs_reg_alloc::build_interference_graph()
    last_vgrf_node = node_count - 1;
    first_spill_node = node_count;
 
-   fs->calculate_payload_ranges(payload_node_count,
+   fs->calculate_payload_ranges(allow_spilling, payload_node_count,
                                 payload_last_use_ip);
 
    assert(g == NULL);
@@ -559,14 +677,6 @@ fs_reg_alloc::build_interference_graph()
     */
    foreach_block_and_inst(block, fs_inst, inst, fs->cfg)
       setup_inst_interference(inst);
-}
-
-void
-fs_reg_alloc::discard_interference_graph()
-{
-   ralloc_free(g);
-   g = NULL;
-   have_spill_costs = false;
 }
 
 brw_reg
@@ -611,8 +721,10 @@ fs_reg_alloc::build_lane_offsets(const fs_builder &bld, uint32_t spill_offset, i
    _mesa_set_add(spill_insts, inst);
 
    /* Add the base offset */
-   inst = ubld.ADD(offset, offset, brw_imm_ud(spill_offset));
-   _mesa_set_add(spill_insts, inst);
+   if (spill_offset) {
+      inst = ubld.ADD(offset, offset, brw_imm_ud(spill_offset));
+      _mesa_set_add(spill_insts, inst);
+   }
 
    return offset;
 }
@@ -631,7 +743,8 @@ fs_reg_alloc::build_legacy_scratch_header(const fs_builder &bld,
    brw_reg header = retype(alloc_spill_reg(1, ip), BRW_TYPE_UD);
    ra_add_node_interference(g, first_vgrf_node + header.nr, first_payload_node);
 
-   fs_inst *inst = ubld8.emit(SHADER_OPCODE_SCRATCH_HEADER, header);
+   fs_inst *inst =
+      ubld8.emit(SHADER_OPCODE_SCRATCH_HEADER, header, brw_ud8_grf(0, 0));
    _mesa_set_add(spill_insts, inst);
 
    /* Write the scratch offset */
@@ -644,7 +757,7 @@ fs_reg_alloc::build_legacy_scratch_header(const fs_builder &bld,
 
 void
 fs_reg_alloc::emit_unspill(const fs_builder &bld,
-                           struct shader_stats *stats,
+                           struct brw_shader_stats *stats,
                            brw_reg dst,
                            uint32_t spill_offset, unsigned count, int ip)
 {
@@ -729,7 +842,7 @@ fs_reg_alloc::emit_unspill(const fs_builder &bld,
 
 void
 fs_reg_alloc::emit_spill(const fs_builder &bld,
-                         struct shader_stats *stats,
+                         struct brw_shader_stats *stats,
                          brw_reg src,
                          uint32_t spill_offset, unsigned count, int ip)
 {
@@ -1071,7 +1184,7 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
 bool
 fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
 {
-   build_interference_graph();
+   build_interference_graph(allow_spilling);
 
    unsigned spilled = 0;
    while (1) {
@@ -1141,13 +1254,13 @@ fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
 }
 
 bool
-fs_visitor::assign_regs(bool allow_spilling, bool spill_all)
+brw_assign_regs(fs_visitor &s, bool allow_spilling, bool spill_all)
 {
-   fs_reg_alloc alloc(this);
+   fs_reg_alloc alloc(&s);
    bool success = alloc.assign_regs(allow_spilling, spill_all);
    if (!success && allow_spilling) {
-      fail("no register to spill:\n");
-      dump_instructions(NULL);
+      s.fail("no register to spill:\n");
+      brw_print_instructions(s, NULL);
    }
    return success;
 }

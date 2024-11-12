@@ -540,6 +540,23 @@ vk_image_view_init(struct vk_device *device,
    image_view->extent =
       vk_image_mip_level_extent(image, image_view->base_mip_level);
 
+   if (vk_format_is_compressed(image->format) &&
+       !vk_format_is_compressed(image_view->format)) {
+      const struct util_format_description *fmt =
+         vk_format_description(image->format);
+
+      /* Non-compressed view of compressed image only works for single MIP
+       * views.
+       */
+      assert(image_view->level_count == 1);
+      image_view->extent.width =
+         DIV_ROUND_UP(image_view->extent.width, fmt->block.width);
+      image_view->extent.height =
+         DIV_ROUND_UP(image_view->extent.height, fmt->block.height);
+      image_view->extent.depth =
+         DIV_ROUND_UP(image_view->extent.depth, fmt->block.depth);
+   }
+
    /* By default storage uses the same as the image properties, but it can be
     * overriden with VkImageViewSlicedCreateInfoEXT.
     */

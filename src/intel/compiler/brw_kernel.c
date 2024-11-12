@@ -636,6 +636,12 @@ brw_nir_from_spirv(void *mem_ctx, unsigned gfx_version, const uint32_t *spirv,
       nir_print_shader(nir, stderr);
    }
 
+   nir_lower_printf_options printf_opts = {
+      .ptr_bit_size               = 64,
+      .use_printf_base_identifier = true,
+   };
+   NIR_PASS_V(nir, nir_lower_printf, &printf_opts);
+
    NIR_PASS_V(nir, implement_intel_builtins);
    NIR_PASS_V(nir, nir_link_shader_functions, spirv_options.clc_shader);
 

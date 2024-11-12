@@ -31,6 +31,7 @@
   */
 
 
+#include "nir_builder.h"
 #include "main/errors.h"
 
 #include "main/hash.h"
@@ -497,7 +498,7 @@ st_translate_stream_output_info(struct gl_program *prog)
  * Creates a driver shader from a NIR shader.  Takes ownership of the
  * passed nir_shader.
  */
-struct pipe_shader_state *
+void *
 st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state)
 {
    struct pipe_context *pipe = st->pipe;
@@ -511,7 +512,7 @@ st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state)
       nir_print_shader(nir, stderr);
    }
 
-   struct pipe_shader_state *shader;
+   void *shader;
    switch (stage) {
    case MESA_SHADER_VERTEX:
       shader = pipe->create_vs_state(pipe, state);
@@ -698,6 +699,19 @@ lower_ucp(struct st_context *st,
                  nir_shader_get_entrypoint(nir), true, false);
       NIR_PASS(_, nir, nir_lower_global_vars_to_local);
    }
+}
+
+static bool
+force_persample_shading(struct nir_builder *b, nir_intrinsic_instr *intr,
+                        void *data)
+{
+   if (intr->intrinsic == nir_intrinsic_load_barycentric_pixel ||
+       intr->intrinsic == nir_intrinsic_load_barycentric_centroid) {
+      intr->intrinsic = nir_intrinsic_load_barycentric_sample;
+      return true;
+   }
+
+   return false;
 }
 
 static struct st_common_variant *
@@ -984,8 +998,13 @@ st_create_fp_variant(struct st_context *st,
 
    if (key->persample_shading) {
       nir_shader *shader = state.ir.nir;
-      nir_foreach_shader_in_variable(var, shader)
-         var->data.sample = true;
+      if (shader->info.io_lowered) {
+         nir_shader_intrinsics_pass(shader, force_persample_shading,
+                                    nir_metadata_all, NULL);
+      } else {
+         nir_foreach_shader_in_variable(var, shader)
+            var->data.sample = true;
+      }
 
       /* In addition to requiring per-sample interpolation, sample shading
        * changes the behaviour of gl_SampleMaskIn, so we need per-sample shading

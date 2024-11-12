@@ -4,7 +4,7 @@
  */
 
 #include "agx_nir_lower_vbo.h"
-#include "asahi/compiler/agx_internal_formats.h"
+#include "asahi/layout/layout.h"
 #include "compiler/nir/nir_builder.h"
 #include "compiler/nir/nir_format_convert.h"
 #include "util/bitset.h"
@@ -187,21 +187,17 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
 
    /* Robustness is handled at the ID level */
    nir_def *bounds = nir_load_attrib_clamp_agx(b, buf_handle);
-
-   /* For now, robustness is always applied. This gives GL robustness semantics.
-    * For robustBufferAccess2, we'll want to check for out-of-bounds access
-    * (where el > bounds), and replace base with the address of a zero sink.
-    * With soft fault and a large enough sink, we don't need to clamp the index,
-    * allowing that robustness behaviour to be implemented in 2 cmpsel
-    * before the load. That is faster than the 4 cmpsel required after the load,
-    * and it avoids waiting on the load which should help prolog performance.
-    *
-    * TODO: Optimize.
-    *
-    * TODO: We always clamp to handle null descriptors. Maybe optimize?
-    */
    nir_def *oob = nir_ult(b, bounds, el);
-   el = nir_bcsel(b, oob, nir_imm_int(b, 0), el);
+
+   /* We clamp to handle GL robustness. This should be optimized further.
+    * However, with the fix up after the load for D3D robustness, we don't need
+    * this clamp if we can ignore the fault.
+    */
+   if (ctx->rs.level >= AGX_ROBUSTNESS_GL &&
+       !(ctx->rs.level >= AGX_ROBUSTNESS_D3D && ctx->rs.soft_fault)) {
+
+      el = nir_bcsel(b, oob, nir_imm_int(b, 0), el);
+   }
 
    nir_def *base = nir_load_vbo_base_agx(b, buf_handle);
 
@@ -217,8 +213,7 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
     * i.e. the set of formats that support masking.
     */
    if (offset_el == 0 && (stride_el == 2 || stride_el == 4) &&
-       agx_internal_format_supports_mask(
-          (enum agx_internal_formats)interchange_format)) {
+       ail_isa_format_supports_mask((enum ail_isa_format)interchange_format)) {
 
       shift = util_logbase2(stride_el);
       stride_el = 1;
@@ -227,13 +222,23 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def *stride_offset_el =
       nir_iadd_imm(b, nir_imul_imm(b, el, stride_el), offset_el);
 
+   /* Fixing up the address is expected to be profitable for vec3 and above, as
+    * it requires 2 instructions. It is implemented with a 64GiB carveout at the
+    * bottom of memory, using soft fault to return zeroes.
+    */
+   bool rs_address_fixup = interchange_comps > 2 && ctx->rs.soft_fault;
+
+   if (ctx->rs.level >= AGX_ROBUSTNESS_D3D && rs_address_fixup) {
+      base = nir_bcsel(b, oob, nir_imm_int64(b, 0), base);
+   }
+
    /* Load the raw vector */
    nir_def *memory = nir_load_constant_agx(
       b, interchange_comps, interchange_register_size, base, stride_offset_el,
       .format = interchange_format, .base = shift);
 
-   /* TODO: Optimize per above */
-   if (ctx->rs.level >= AGX_ROBUSTNESS_D3D) {
+   /* For scalar loads, it's faster to fix up the output than the address. */
+   if (ctx->rs.level >= AGX_ROBUSTNESS_D3D && !rs_address_fixup) {
       nir_def *zero = nir_imm_zero(b, memory->num_components, memory->bit_size);
       memory = nir_bcsel(b, oob, zero, memory);
    }
@@ -304,6 +309,13 @@ agx_nir_lower_vbo(nir_shader *shader, struct agx_attribute *attribs,
                   struct agx_robustness robustness)
 {
    assert(shader->info.stage == MESA_SHADER_VERTEX);
+
+   /* To implement null vertex buffer descriptors, we need either soft fault or
+    * GL robustness with a vertex buffer at 0x0.
+    */
+   if (!robustness.soft_fault) {
+      robustness.level = MAX2(robustness.level, AGX_ROBUSTNESS_GL);
+   }
 
    struct ctx ctx = {.attribs = attribs, .rs = robustness};
    return nir_shader_intrinsics_pass(shader, pass, nir_metadata_control_flow,

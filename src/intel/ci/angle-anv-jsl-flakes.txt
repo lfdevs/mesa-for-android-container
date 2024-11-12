@@ -9,3 +9,4 @@ dEQP-GLES31.functional.copy_image.*viewclass_.*
 # 2024-05-15, after the
 # https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/19414/
 dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_both_inverted
+dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_both

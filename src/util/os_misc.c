@@ -150,7 +150,10 @@ os_log_message(const char *message)
  *
  *  1) convert to lowercase
  *  2) replace '_' with '.'
- *  3) if necessary, prepend "mesa."
+ *  3) replace "MESA_" or prepend with "mesa."
+ *  4) look for "debug.mesa." prefix
+ *  5) look for "vendor.mesa." prefix
+ *  6) look for "mesa." prefix
  *
  * For example:
  *  - MESA_EXTENSION_OVERRIDE -> mesa.extension.override
@@ -175,9 +178,16 @@ os_get_android_option(const char *name)
       }
    }
 
-   int len = property_get(key, os_android_option_value, NULL);
-   if (len > 1) {
-      return os_android_option_value;
+   /* prefixes to search sorted by preference */
+   const char *prefices[] = { "debug.", "vendor.", "" };
+   char full_key[PROPERTY_KEY_MAX];
+   int len = 0;
+   for (int i = 0; i < ARRAY_SIZE(prefices); i++) {
+      strlcpy(full_key, prefices[i], PROPERTY_KEY_MAX);
+      strlcat(full_key, key, PROPERTY_KEY_MAX);
+      len = property_get(full_key, os_android_option_value, NULL);
+      if (len > 0)
+         return os_android_option_value;
    }
    return NULL;
 }

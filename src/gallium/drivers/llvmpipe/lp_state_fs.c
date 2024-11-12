@@ -403,6 +403,45 @@ lp_build_depth_clamp(struct gallivm_state *gallivm,
 }
 
 
+static LLVMValueRef
+lp_build_alpha_to_coverage_dither(struct gallivm_state *gallivm,
+                                  struct lp_type type,
+                                  unsigned coverage_samples,
+                                  const LLVMValueRef* pos,
+                                  LLVMValueRef alpha)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   /* Standard ordered dithering 2x2 threshold matrix. */
+   LLVMValueRef elems[] = {
+      lp_build_const_elem(gallivm, type, 0.125 / coverage_samples),
+      lp_build_const_elem(gallivm, type, 0.625 / coverage_samples),
+      lp_build_const_elem(gallivm, type, 0.875 / coverage_samples),
+      lp_build_const_elem(gallivm, type, 0.375 / coverage_samples),
+   };
+   LLVMValueRef dither_thresholds = LLVMConstVector(elems, ARRAY_SIZE(elems));
+   /* Get a two bit mask, where each bit is even/odd on X and Y. */
+   LLVMTypeRef int_vec_type = lp_build_int_vec_type(gallivm, type);
+   LLVMValueRef frag_int_pos_x = LLVMBuildFPToSI(builder, pos[0], int_vec_type, "frag_int_pos_x");
+   LLVMValueRef frag_int_pos_y = LLVMBuildFPToSI(builder, pos[1], int_vec_type, "frag_int_pos_y");
+   LLVMValueRef odd_bitmask = lp_build_const_int_vec(gallivm, type, 1);
+   LLVMValueRef dither_index = LLVMBuildOr(builder, LLVMBuildAnd(builder, frag_int_pos_x, odd_bitmask, ""),
+                                           LLVMBuildShl(builder, LLVMBuildAnd(builder, frag_int_pos_y, odd_bitmask, ""),
+                                                        lp_build_const_int_vec(gallivm, type, 1), ""), "dither_index");
+   /* Use the bit mask as an index in the threshold matrix, subtract it from the alpha value. */
+   LLVMValueRef offsets = LLVMGetUndef(lp_build_vec_type(gallivm, type));
+   for (unsigned i = 0; i < type.length; i++) {
+      LLVMValueRef index = lp_build_const_int32(gallivm, i);
+      offsets = LLVMBuildInsertElement(builder, offsets,
+                                       LLVMBuildExtractElement(builder, dither_thresholds,
+                                                               LLVMBuildExtractElement(builder, dither_index,
+                                                                                       index, "threshold"),
+                                                               ""), index, "");
+   }
+   /* Alpha value is only used in a comparison, no need to clamp to [0, 1]. */
+   return LLVMBuildFSub(builder, alpha, offsets, "");
+}
+
+
 static void
 lp_build_sample_alpha_to_coverage(struct gallivm_state *gallivm,
                                   struct lp_type type,
@@ -1067,6 +1106,19 @@ generate_fs_loop(struct gallivm_state *gallivm,
    /* Build the actual shader */
    lp_build_nir_soa(gallivm, nir, &params, outputs);
 
+   /*
+    * Must not count ps invocations if there's a null shader.
+    * (It would be ok to count with null shader if there's d/s tests,
+    * but only if there's d/s buffers too, which is different
+    * to implicit rasterization disable which must not depend
+    * on the d/s buffers.)
+    * Could disable if there's no stats query, but maybe not worth it.
+    */
+   if (shader->info.base.num_instructions > 1) {
+      LLVMValueRef invocs = lp_jit_thread_data_ps_invocations(gallivm, thread_data_type, thread_data_ptr);
+      lp_build_occlusion_count(gallivm, type, lp_build_mask_value(&mask), invocs);
+   }
+
    /* Alpha test */
    if (key->alpha.enabled) {
       int color0 = find_output_by_frag_result(nir, FRAG_RESULT_DATA0);
@@ -1087,12 +1139,17 @@ generate_fs_loop(struct gallivm_state *gallivm,
       }
    }
 
-   /* Emulate Alpha to Coverage with Alpha test */
+   /* Alpha to coverage */
    if (key->blend.alpha_to_coverage) {
       int color0 = find_output_by_frag_result(nir, FRAG_RESULT_DATA0);
 
       if (color0 != -1 && outputs[color0][3]) {
          LLVMValueRef alpha = LLVMBuildLoad2(builder, vec_type, outputs[color0][3], "alpha");
+
+         if (key->blend.alpha_to_coverage_dither) {
+            alpha = lp_build_alpha_to_coverage_dither(gallivm, type, key->coverage_samples,
+                                                      interp->pos, alpha);
+         }
 
          if (!key->multisample) {
             lp_build_alpha_to_coverage(gallivm, type,
@@ -3263,27 +3320,6 @@ generate_fragment(struct llvmpipe_context *lp,
    builder = gallivm->builder;
    assert(builder);
    LLVMPositionBuilderAtEnd(builder, block);
-
-   /*
-    * Must not count ps invocations if there's a null shader.
-    * (It would be ok to count with null shader if there's d/s tests,
-    * but only if there's d/s buffers too, which is different
-    * to implicit rasterization disable which must not depend
-    * on the d/s buffers.)
-    * Could use popcount on mask, but pixel accuracy is not required.
-    * Could disable if there's no stats query, but maybe not worth it.
-    */
-   if (shader->info.base.num_instructions > 1) {
-      LLVMValueRef invocs, val;
-      LLVMTypeRef invocs_type = LLVMInt64TypeInContext(gallivm->context);
-      invocs = lp_jit_thread_data_ps_invocations(gallivm, variant->jit_thread_data_type, thread_data_ptr);
-      val = LLVMBuildLoad2(builder, invocs_type, invocs, "");
-      val = LLVMBuildAdd(builder, val,
-                         LLVMConstInt(LLVMInt64TypeInContext(gallivm->context),
-                                      1, 0),
-                         "invoc_count");
-      LLVMBuildStore(builder, val, invocs);
-   }
 
    /* code generated texture sampling */
    struct lp_build_sampler_soa *sampler =

@@ -34,7 +34,6 @@ dump_assembly(void *assembly, int start_offset, int end_offset,
 {
    const struct brw_isa_info *isa = disasm->isa;
    const char *last_annotation_string = NULL;
-   const void *last_annotation_ir = NULL;
 
    void *mem_ctx = ralloc_context(NULL);
    const struct brw_label *root_label =
@@ -62,15 +61,6 @@ dump_assembly(void *assembly, int start_offset, int end_offset,
             fprintf(stderr, " (%u cycles)",
                     block_latency[group->block_start->num]);
          fprintf(stderr, "\n");
-      }
-
-      if (last_annotation_ir != group->ir) {
-         last_annotation_ir = group->ir;
-         if (last_annotation_ir) {
-            fprintf(stderr, "   ");
-            nir_print_instr((nir_instr *)group->ir, stderr);
-            fprintf(stderr, "\n");
-         }
       }
 
       if (last_annotation_string != group->annotation) {
@@ -139,10 +129,11 @@ disasm_annotate(struct disasm_info *disasm,
                              exec_list_get_tail_raw(&disasm->group_list), link);
    }
 
+#ifndef NDEBUG
    if (INTEL_DEBUG(DEBUG_ANNOTATION)) {
-      group->ir = inst->ir;
       group->annotation = inst->annotation;
    }
+#endif
 
    if (bblock_start(cfg->blocks[disasm->cur_block]) == inst) {
       group->block_start = cfg->blocks[disasm->cur_block];

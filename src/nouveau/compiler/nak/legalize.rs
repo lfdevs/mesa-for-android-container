@@ -169,17 +169,6 @@ pub trait LegalizeBuildHelpers: SSABuilder {
         src.src_ref = val.into();
     }
 
-    fn copy_alu_src_if_cbuf(
-        &mut self,
-        src: &mut Src,
-        reg_file: RegFile,
-        src_type: SrcType,
-    ) {
-        if matches!(src.src_ref, SrcRef::CBuf(_)) {
-            self.copy_alu_src(src, reg_file, src_type);
-        }
-    }
-
     fn copy_alu_src_if_not_reg(
         &mut self,
         src: &mut Src,
@@ -211,6 +200,18 @@ pub trait LegalizeBuildHelpers: SSABuilder {
         src_type: SrcType,
     ) {
         if src_is_imm(src) {
+            self.copy_alu_src(src, reg_file, src_type);
+        }
+    }
+
+    fn copy_alu_src_if_ineg_imm(
+        &mut self,
+        src: &mut Src,
+        reg_file: RegFile,
+        src_type: SrcType,
+    ) {
+        assert!(src_type == SrcType::I32);
+        if src_is_imm(src) && src.src_mod.is_ineg() {
             self.copy_alu_src(src, reg_file, src_type);
         }
     }
@@ -292,12 +293,16 @@ fn legalize_instr(
 ) {
     // Handle a few no-op cases up-front
     match &instr.op {
+        Op::Annotate(_) => {
+            // OpAnnotate does nothing.  There's nothing to legalize.
+            return;
+        }
         Op::Undef(_)
         | Op::PhiSrcs(_)
         | Op::PhiDsts(_)
         | Op::Pin(_)
         | Op::Unpin(_)
-        | Op::FSOut(_) => {
+        | Op::RegOut(_) => {
             // These are implemented by RA and can take pretty much anything
             // you can throw at them.
             debug_assert!(instr.pred.is_true());

@@ -396,7 +396,6 @@ struct rvce_encoder {
    bool use_vm;
    bool use_vui;
    bool dual_pipe;
-   bool dual_inst;
 };
 
 /* CPB handling functions */

@@ -248,13 +248,6 @@ void elk_nir_apply_key(nir_shader *nir,
 unsigned elk_nir_api_subgroup_size(const nir_shader *nir,
                                    unsigned hw_subgroup_size);
 
-bool elk_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
-                                  unsigned bit_size,
-                                  unsigned num_components,
-                                  nir_intrinsic_instr *low,
-                                  nir_intrinsic_instr *high,
-                                  void *data);
-
 void elk_nir_analyze_ubo_ranges(const struct elk_compiler *compiler,
                                 nir_shader *nir,
                                 struct elk_ubo_range out_ranges[4]);

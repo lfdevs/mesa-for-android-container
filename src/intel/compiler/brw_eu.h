@@ -157,6 +157,7 @@ void brw_init_codegen(const struct brw_isa_info *isa,
                       struct brw_codegen *p, void *mem_ctx);
 bool brw_has_jip(const struct intel_device_info *devinfo, enum opcode opcode);
 bool brw_has_uip(const struct intel_device_info *devinfo, enum opcode opcode);
+bool brw_has_branch_ctrl(const struct intel_device_info *devinfo, enum opcode opcode);
 const struct brw_shader_reloc *brw_get_shader_relocs(struct brw_codegen *p,
                                                      unsigned *num_relocs);
 const unsigned *brw_get_program( struct brw_codegen *p, unsigned *sz );
@@ -571,13 +572,6 @@ brw_mdc_cmask(unsigned num_channels)
 {
    /* See also MDC_CMASK in the SKL PRM Vol 2d. */
    return 0xf & (0xf << num_channels);
-}
-
-static inline unsigned
-lsc_cmask(unsigned num_channels)
-{
-   assert(num_channels > 0 && num_channels <= 4);
-   return BITSET_MASK(num_channels);
 }
 
 static inline uint32_t
@@ -1143,12 +1137,12 @@ lsc_vect_size(unsigned vect_size)
 }
 
 static inline uint32_t
-lsc_msg_desc_wcmask(const struct intel_device_info *devinfo,
+lsc_msg_desc(const struct intel_device_info *devinfo,
              enum lsc_opcode opcode,
              enum lsc_addr_surface_type addr_type,
              enum lsc_addr_size addr_sz,
-             enum lsc_data_size data_sz, unsigned num_channels,
-             bool transpose, unsigned cache_ctrl, unsigned cmask)
+             enum lsc_data_size data_sz, unsigned num_channels_or_cmask,
+             bool transpose, unsigned cache_ctrl)
 {
    assert(devinfo->has_lsc);
    assert(!transpose || lsc_opcode_has_transpose(opcode));
@@ -1163,23 +1157,11 @@ lsc_msg_desc_wcmask(const struct intel_device_info *devinfo,
       SET_BITS(addr_type, 30, 29);
 
    if (lsc_opcode_has_cmask(opcode))
-      msg_desc |= SET_BITS(cmask ? cmask : lsc_cmask(num_channels), 15, 12);
+      msg_desc |= SET_BITS(num_channels_or_cmask, 15, 12);
    else
-      msg_desc |= SET_BITS(lsc_vect_size(num_channels), 14, 12);
+      msg_desc |= SET_BITS(lsc_vect_size(num_channels_or_cmask), 14, 12);
 
    return msg_desc;
-}
-
-static inline uint32_t
-lsc_msg_desc(UNUSED const struct intel_device_info *devinfo,
-             enum lsc_opcode opcode,
-             enum lsc_addr_surface_type addr_type,
-             enum lsc_addr_size addr_sz,
-             enum lsc_data_size data_sz, unsigned num_channels,
-             bool transpose, unsigned cache_ctrl)
-{
-   return lsc_msg_desc_wcmask(devinfo, opcode, addr_type, addr_sz,
-                              data_sz, num_channels, transpose, cache_ctrl, 0);
 }
 
 static inline enum lsc_opcode

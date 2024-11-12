@@ -69,6 +69,12 @@ struct tu_bo {
 
    bool implicit_sync : 1;
    bool never_unmap : 1;
+   bool cached_non_coherent : 1;
+
+   /* Pointer to the vk_object_base associated with the BO
+    * for the purposes of VK_EXT_device_address_binding_report
+    */
+   struct vk_object_base *base;
 };
 
 struct tu_knl {
@@ -81,8 +87,9 @@ struct tu_knl {
    VkResult (*device_check_status)(struct tu_device *dev);
    int (*submitqueue_new)(struct tu_device *dev, int priority, uint32_t *queue_id);
    void (*submitqueue_close)(struct tu_device *dev, uint32_t queue_id);
-   VkResult (*bo_init)(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
-                       uint64_t client_iova, VkMemoryPropertyFlags mem_property,
+   VkResult (*bo_init)(struct tu_device *dev, struct vk_object_base *base,
+                       struct tu_bo **out_bo, uint64_t size, uint64_t client_iova,
+                       VkMemoryPropertyFlags mem_property,
                        enum tu_bo_alloc_flags flags, const char *name);
    VkResult (*bo_init_dmabuf)(struct tu_device *dev, struct tu_bo **out_bo,
                               uint64_t size, int prime_fd);
@@ -121,6 +128,7 @@ struct tu_timeline_sync {
 
 VkResult
 tu_bo_init_new_explicit_iova(struct tu_device *dev,
+                             struct vk_object_base *base,
                              struct tu_bo **out_bo,
                              uint64_t size,
                              uint64_t client_iova,
@@ -129,13 +137,14 @@ tu_bo_init_new_explicit_iova(struct tu_device *dev,
                              const char *name);
 
 static inline VkResult
-tu_bo_init_new(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
+tu_bo_init_new(struct tu_device *dev, struct vk_object_base *base,
+               struct tu_bo **out_bo, uint64_t size,
                enum tu_bo_alloc_flags flags, const char *name)
 {
    // TODO don't mark everything with HOST_VISIBLE !!! Anything that
    // never gets CPU access should not have this bit set
    return tu_bo_init_new_explicit_iova(
-      dev, out_bo, size, 0,
+      dev, base, out_bo, size, 0,
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,

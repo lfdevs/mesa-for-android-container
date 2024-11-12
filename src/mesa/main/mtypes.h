@@ -51,7 +51,6 @@
 #include "compiler/shader_info.h"
 #include "main/formats.h"       /* MESA_FORMAT_COUNT */
 #include "compiler/glsl/list.h"
-#include "compiler/glsl/ir_uniform.h"
 #include "util/u_idalloc.h"
 #include "util/simple_mtx.h"
 #include "util/u_dynarray.h"
@@ -971,6 +970,9 @@ struct gl_texture_object
 
    /** GL_EXT_texture_storage_compression */
    GLint CompressionRate; /**< Fixed-rate compression bitrate */
+
+   /** GL_EXT_texture_compression_astc_decode_mode */
+   GLenum16 AstcDecodePrecision; /**< ASTC decoding precision */
 
    /* The texture must include at levels [0..lastLevel] once validated:
     */
@@ -2553,6 +2555,7 @@ struct gl_renderbuffer
    unsigned rtt_face, rtt_slice;
    bool rtt_layered; /**< whether glFramebufferTexture was called */
    unsigned rtt_nr_samples; /**< from FramebufferTexture2DMultisampleEXT */
+   unsigned rtt_numviews;
 };
 
 
@@ -2582,6 +2585,7 @@ struct gl_renderbuffer_attachment
    GLuint Zoffset;      /**< Slice for 3D textures,  or layer for both 1D
                          * and 2D array textures */
    GLboolean Layered;
+   GLsizei NumViews;
 };
 
 

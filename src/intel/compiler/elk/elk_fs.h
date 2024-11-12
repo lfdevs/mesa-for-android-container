@@ -48,7 +48,9 @@ namespace elk {
     */
    struct register_pressure {
       register_pressure(const elk_fs_visitor *v);
+      register_pressure(const register_pressure &) = delete;
       ~register_pressure();
+      register_pressure & operator=(const register_pressure &) = delete;
 
       analysis_dependency_class
       dependency_class() const
@@ -75,7 +77,7 @@ namespace elk {
 class fs_builder;
 }
 
-struct shader_stats {
+struct elk_shader_stats {
    const char *scheduler_mode;
    unsigned promoted_constants;
    unsigned spill_count;
@@ -186,8 +188,11 @@ public:
               const nir_shader *shader,
               bool needs_register_pressure,
               bool debug_enabled);
+   elk_fs_visitor(const elk_fs_visitor &) = delete;
    void init();
    ~elk_fs_visitor();
+
+   elk_fs_visitor & operator=(const elk_fs_visitor &) = delete;
 
    elk_fs_reg vgrf(const glsl_type *const type);
    void import_uniforms(elk_fs_visitor *v);
@@ -261,6 +266,7 @@ public:
                                                     elk_fs_inst *inst);
    void insert_gfx4_post_send_dependency_workarounds(elk_bblock_t *block,
                                                      elk_fs_inst *inst);
+   bool workaround_source_arf_before_eot();
    void vfail(const char *msg, va_list args);
    void fail(const char *msg, ...);
    void limit_dispatch_width(unsigned n, const char *msg);
@@ -404,7 +410,7 @@ public:
    /* The API selected subgroup size */
    unsigned api_subgroup_size; /**< 0, 8, 16, 32 */
 
-   struct shader_stats shader_stats;
+   struct elk_shader_stats shader_stats;
 
    void lower_mul_dword_inst(elk_fs_inst *inst, elk_bblock_t *block);
    void lower_mul_qword_inst(elk_fs_inst *inst, elk_bblock_t *block);
@@ -447,7 +453,7 @@ public:
 
    void enable_debug(const char *shader_name);
    int generate_code(const elk_cfg_t *cfg, int dispatch_width,
-                     struct shader_stats shader_stats,
+                     struct elk_shader_stats shader_stats,
                      const elk::performance &perf,
                      struct elk_compile_stats *stats);
    void add_const_data(void *data, unsigned size);

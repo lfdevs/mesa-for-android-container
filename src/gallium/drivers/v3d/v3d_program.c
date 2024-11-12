@@ -262,8 +262,7 @@ v3d_shader_precompile(struct v3d_context *v3d,
                                                                  i);
                 }
                 v3d_get_compiled_shader(v3d, &key.base, sizeof(key), so);
-        } else {
-                assert(s->info.stage == MESA_SHADER_VERTEX);
+        } else if (s->info.stage == MESA_SHADER_VERTEX) {
                 struct v3d_vs_key key = {
                         /* Emit fixed function outputs */
                         .base.is_last_geometry_stage = true,
@@ -286,6 +285,11 @@ v3d_shader_precompile(struct v3d_context *v3d,
                                                                  i);
                 }
                 v3d_get_compiled_shader(v3d, &key.base, sizeof(key), so);
+        } else {
+                assert(s->info.stage == MESA_SHADER_COMPUTE);
+                struct v3d_key key = { 0 };
+                v3d_setup_shared_precompile_key(so, &key);
+                v3d_get_compiled_shader(v3d, &key, sizeof(key), so);
         }
 }
 

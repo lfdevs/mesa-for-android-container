@@ -63,22 +63,22 @@ __glXSendLargeImage(struct glx_context * gc, GLint compsize, GLint dim,
     /* Allocate a temporary holding buffer */
     GLubyte *buf = malloc(compsize);
     if (!buf) {
-	__glXSetError(gc, GL_OUT_OF_MEMORY);
-	return;
+   __glXSetError(gc, GL_OUT_OF_MEMORY);
+   return;
     }
 
     /* Apply pixel store unpack modes to copy data into buf */
     if (src != NULL) {
-	__glFillImage(gc, dim, width, height, depth, format, type,
+   __glFillImage(gc, dim, width, height, depth, format, type,
                       src, buf, modes);
     }
     else {
-	if (dim < 3) {
-	    (void) memcpy(modes, __glXDefaultPixelStore + 4, 20);
-	}
-	else {
-	    (void) memcpy(modes, __glXDefaultPixelStore + 0, 36);
-	}
+   if (dim < 3) {
+       (void) memcpy(modes, __glXDefaultPixelStore + 4, 20);
+   }
+   else {
+       (void) memcpy(modes, __glXDefaultPixelStore + 0, 36);
+   }
     }
 
     /* Send large command */

@@ -1590,66 +1590,7 @@
     <field name="Compute Command Opcode" start="24" end="26" type="uint" default="2" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
-    <field name="Indirect Data Length" start="64" end="80" type="uint" />
-    <field name="L3 prefetch disable" start="81" end="81" type="bool" />
-    <field name="Partition Type" start="94" end="95" type="uint">
-      <value name="WALKER_PARTITION_X" value="1" />
-      <value name="WALKER_PARTITION_Y" value="2" />
-      <value name="WALKER_PARTITION_Z" value="3" />
-    </field>
-    <field name="Indirect Data Start Address" start="102" end="127" type="offset" />
-    <field name="Message SIMD" start="145" end="146" type="uint">
-      <value name="SIMD8" value="0" />
-      <value name="SIMD16" value="1" />
-      <value name="SIMD32" value="2" />
-    </field>
-    <field name="Tile Layout" start="147" end="149" type="uint">
-      <value name="Linear" value="0" />
-      <value name="TileY 32bpe" value="1" />
-      <value name="TileY 64bpe" value="2" />
-      <value name="TileY 128bpe" value="3" />
-    </field>
-    <field name="Walk Order" start="150" end="152" type="uint">
-      <value name="Walk 012" value="0" />
-      <value name="Walk 021" value="1" />
-      <value name="Walk 102" value="2" />
-      <value name="Walk 120" value="3" />
-      <value name="Walk 201" value="4" />
-      <value name="Walk 210" value="5" />
-    </field>
-    <field name="Emit Inline Parameter" start="153" end="153" type="bool" />
-    <field name="Emit Local" start="154" end="156" type="uint">
-      <value name="Emit None" value="0" />
-      <value name="Emit X" value="1" />
-      <value name="Emit XY" value="3" />
-      <value name="Emit XYZ" value="7" />
-    </field>
-    <field name="Generate Local ID" start="157" end="157" type="bool" />
-    <field name="SIMD Size" start="158" end="159" type="uint">
-      <value name="SIMD8" value="0" />
-      <value name="SIMD16" value="1" />
-      <value name="SIMD32" value="2" />
-    </field>
-    <field name="Execution Mask" start="160" end="191" type="uint" />
-    <field name="Local X Maximum" start="192" end="201" type="uint" />
-    <field name="Local Y Maximum" start="202" end="211" type="uint" />
-    <field name="Local Z Maximum" start="212" end="221" type="uint" />
-    <field name="Thread Group ID X Dimension" start="224" end="255" type="uint" />
-    <field name="Thread Group ID Y Dimension" start="256" end="287" type="uint" />
-    <field name="Thread Group ID Z Dimension" start="288" end="319" type="uint" />
-    <field name="Thread Group ID Starting X" start="320" end="351" type="uint" />
-    <field name="Thread Group ID Starting Y" start="352" end="383" type="uint" />
-    <field name="Thread Group ID Starting Z" start="384" end="415" type="uint" />
-    <field name="Partition ID" start="416" end="447" type="uint" />
-    <field name="Partition Size" start="448" end="479" type="uint" />
-    <field name="Preempt X" start="480" end="511" type="uint" />
-    <field name="Preempt Y" start="512" end="543" type="uint" />
-    <field name="Preempt Z" start="544" end="575" type="uint" />
-    <field name="Interface Descriptor" start="576" end="831" type="INTERFACE_DESCRIPTOR_DATA" />
-    <field name="Post Sync" start="832" end="991" type="POSTSYNC_DATA" />
-    <group count="8" start="992" size="32">
-      <field name="Inline Data" start="0" end="31" type="uint" />
-    </group>
+    <field name="body" start="32" end="1248" type="COMPUTE_WALKER_BODY" />
   </instruction>
   <instruction name="EXECUTE_INDIRECT_DISPATCH" bias="2" length="44">
     <field name="DWord Length" start="0" end="7" type="uint" default="42" />
@@ -1686,7 +1627,7 @@
     <field name="Argument Buffer Start Address" start="130" end="191" type="address" />
   </instruction>
   <instruction name="HCP_FQM_STATE" bias="2" length="34" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="32" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="5" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -1707,7 +1648,7 @@
       <value name="Chroma Cr" value="2" />
     </field>
     <field name="FQM DC Value" start="48" end="63" type="uint" />
-    <group count="64" start="64" size="8">
+    <group count="128" start="64" size="8">
       <field name="Quantizer Matrix 8x8" start="0" end="7" type="uint" />
     </group>
   </instruction>
@@ -1892,10 +1833,16 @@
       <value name="Max 56" value="2" />
       <value name="Max 48" value="3" />
     </field>
-    <field name="Force Non-Coherent" start="35" end="36" type="uint">
+    <field name="Force Non-Coherent DG2" start="35" end="36" type="uint">
       <value name="Force Disabled" value="0" />
       <value name="Force CPU Non-Coherent" value="1" />
       <value name="Force GPU Non-Coherent" value="2" />
+    </field>
+    <field name="Z Async Throttle settings" start="35" end="36" type="uint" prefix="ZATS">
+      <value name="Defer to Pixel Async Compute Thread Limit" value="0" />
+      <value name="Max 32" value="1" />
+      <value name="Max 40" value="2" />
+      <value name="Max 48" value="3" />
     </field>
     <field name="Fast Clear Disabled on Compressed Surface" start="37" end="37" type="bool" />
     <field name="Disable SLM Read Merge Optimization" start="38" end="38" type="bool" />
@@ -1914,7 +1861,8 @@
     <field name="Large GRF Mode" start="47" end="47" type="bool" />
     <field name="Z Pass Async Compute Thread Limit Mask" start="48" end="50" type="uint" />
     <field name="Mask1" start="48" end="63" type="uint" />
-    <field name="Force Non-Coherent Mask" start="51" end="52" type="uint" />
+    <field name="Force Non-Coherent DG2 Mask" start="51" end="52" type="uint" />
+    <field name="Z Async Throttle settings Mask" start="51" end="52" type="uint" />
     <field name="Fast Clear Disabled on Compressed Surface Mask" start="53" end="53" type="bool" />
     <field name="Disable SLM Read Merge Optimization Mask" start="54" end="54" type="bool" />
     <field name="Pixel Async Compute Thread Limit Mask" start="55" end="57" type="uint" />

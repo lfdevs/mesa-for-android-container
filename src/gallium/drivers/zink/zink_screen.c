@@ -148,25 +148,37 @@ zink_get_vendor(struct pipe_screen *pscreen)
 static const char *
 zink_get_device_vendor(struct pipe_screen *pscreen)
 {
-   struct zink_screen *screen = zink_screen(pscreen);
-   static char buf[1000];
-   snprintf(buf, sizeof(buf), "Unknown (vendor-id: 0x%04x)", screen->info.props.vendorID);
-   return buf;
+   return zink_screen(pscreen)->vendor_name;
 }
 
 static const char *
 zink_get_name(struct pipe_screen *pscreen)
 {
-   struct zink_screen *screen = zink_screen(pscreen);
+   return zink_screen(pscreen)->device_name;
+}
+
+static int
+zink_set_driver_strings(struct zink_screen *screen)
+{
+   char buf[1000];
    const char *driver_name = vk_DriverId_to_str(zink_driverid(screen)) + strlen("VK_DRIVER_ID_");
-   static char buf[1000];
-   snprintf(buf, sizeof(buf), "zink Vulkan %d.%d(%s (%s))",
-            VK_VERSION_MAJOR(screen->info.device_version),
-            VK_VERSION_MINOR(screen->info.device_version),
-            screen->info.props.deviceName,
-            strstr(vk_DriverId_to_str(zink_driverid(screen)), "VK_DRIVER_ID_") ? driver_name : "Driver Unknown"
-            );
-   return buf;
+   int written = snprintf(buf, sizeof(buf), "zink Vulkan %d.%d(%s (%s))",
+      VK_VERSION_MAJOR(screen->info.device_version),
+      VK_VERSION_MINOR(screen->info.device_version),
+      screen->info.props.deviceName,
+      strstr(vk_DriverId_to_str(zink_driverid(screen)), "VK_DRIVER_ID_") ? driver_name : "Driver Unknown"
+   );
+   if (written < 0)
+      return written;
+   assert(written < sizeof(buf));
+   screen->device_name = ralloc_strdup(screen, buf);
+
+   written = snprintf(buf, sizeof(buf), "Unknown (vendor-id: 0x%04x)", screen->info.props.vendorID);
+   if (written < 0)
+      return written;
+   assert(written < sizeof(buf));
+   screen->vendor_name = ralloc_strdup(screen, buf);
+   return 0;
 }
 
 static void
@@ -256,7 +268,7 @@ get_video_mem(struct zink_screen *screen)
  * path.
  *
  * The output that gets stored in the frontend's cache is the result of
- * zink_shader_finalize().  So, our sha1 cache key here needs to include
+ * zink_shader_finalize().  So, our blake3 cache key here needs to include
  * everything that would change the NIR we generate from a given set of GLSL
  * source, including our driver build, the Vulkan device and driver (which could
  * affect the pipe caps we show the frontend), and any debug flags that change
@@ -272,16 +284,16 @@ disk_cache_init(struct zink_screen *screen)
       return true;
 
 #ifdef ENABLE_SHADER_CACHE
-   struct mesa_sha1 ctx;
-   _mesa_sha1_init(&ctx);
+   struct mesa_blake3 ctx;
+   _mesa_blake3_init(&ctx);
 
 #ifdef HAVE_DL_ITERATE_PHDR
    /* Hash in the zink driver build. */
    const struct build_id_note *note =
        build_id_find_nhdr_for_addr(disk_cache_init);
    unsigned build_id_len = build_id_length(note);
-   assert(note && build_id_len == 20); /* sha1 */
-   _mesa_sha1_update(&ctx, build_id_data(note), build_id_len);
+   assert(note && build_id_len == 20); /* blake3 */
+   _mesa_blake3_update(&ctx, build_id_data(note), build_id_len);
 #endif
 
    /* Hash in the Vulkan pipeline cache UUID to identify the combination of
@@ -295,26 +307,29 @@ disk_cache_init(struct zink_screen *screen)
    *  latter is used to identify a compatible device and driver combination to
    *  use when serializing and de-serializing pipeline state."
    */
-   _mesa_sha1_update(&ctx, screen->info.props.pipelineCacheUUID, VK_UUID_SIZE);
+   _mesa_blake3_update(&ctx, screen->info.props.pipelineCacheUUID, VK_UUID_SIZE);
 
    /* Hash in our debug flags that affect NIR generation as of finalize_nir */
    unsigned shader_debug_flags = zink_debug & ZINK_DEBUG_COMPACT;
-   _mesa_sha1_update(&ctx, &shader_debug_flags, sizeof(shader_debug_flags));
+   _mesa_blake3_update(&ctx, &shader_debug_flags, sizeof(shader_debug_flags));
+
+   /* add in these shader keys */
+   _mesa_blake3_update(&ctx, &screen->driver_compiler_workarounds, sizeof(screen->driver_compiler_workarounds));
 
    /* Some of the driconf options change shaders.  Let's just hash the whole
     * thing to not forget any (especially as options get added).
     */
-   _mesa_sha1_update(&ctx, &screen->driconf, sizeof(screen->driconf));
+   _mesa_blake3_update(&ctx, &screen->driconf, sizeof(screen->driconf));
 
    /* EXT_shader_object causes different descriptor layouts for separate shaders */
-   _mesa_sha1_update(&ctx, &screen->info.have_EXT_shader_object, sizeof(screen->info.have_EXT_shader_object));
+   _mesa_blake3_update(&ctx, &screen->info.have_EXT_shader_object, sizeof(screen->info.have_EXT_shader_object));
 
-   /* Finish the sha1 and format it as text. */
-   unsigned char sha1[20];
-   _mesa_sha1_final(&ctx, sha1);
+   /* Finish the blake3 and format it as text. */
+   blake3_hash blake3;
+   _mesa_blake3_final(&ctx, blake3);
 
    char cache_id[20 * 2 + 1];
-   mesa_bytes_to_hex(cache_id, sha1, 20);
+   mesa_bytes_to_hex(cache_id, blake3, 20);
 
    screen->disk_cache = disk_cache_create("zink", cache_id, 0);
 
@@ -363,7 +378,7 @@ cache_put_job(void *data, void *gdata, int thread_index)
       pg->pipeline_cache_size = size;
 
       cache_key key;
-      disk_cache_compute_key(screen->disk_cache, pg->sha1, sizeof(pg->sha1), key);
+      disk_cache_compute_key(screen->disk_cache, pg->blake3, sizeof(pg->blake3), key);
       disk_cache_put_nocopy(screen->disk_cache, key, pipeline_data, size, NULL);
    } else {
       mesa_loge("ZINK: vkGetPipelineCacheData failed (%s)", vk_Result_to_str(result));
@@ -396,7 +411,7 @@ cache_get_job(void *data, void *gdata, int thread_index)
    pcci.pInitialData = NULL;
 
    cache_key key;
-   disk_cache_compute_key(screen->disk_cache, pg->sha1, sizeof(pg->sha1), key);
+   disk_cache_compute_key(screen->disk_cache, pg->blake3, sizeof(pg->blake3), key);
    pcci.pInitialData = disk_cache_get(screen->disk_cache, key, &pg->pipeline_cache_size);
    pcci.initialDataSize = pg->pipeline_cache_size;
 
@@ -540,6 +555,9 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    switch (param) {
    case PIPE_CAP_NULL_TEXTURES:
       return screen->info.rb_image_feats.robustImageAccess;
+   case PIPE_CAP_MULTIVIEW:
+      /* support OVR_multiview and OVR_multiview2 */
+      return screen->info.have_vulkan13 ? 2 * screen->info.feats11.multiview : 0;
    case PIPE_CAP_TEXRECT:
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARTIAL_STRIDE:
       return 0;
@@ -567,7 +585,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    }
    case PIPE_CAP_SUPPORTED_PRIM_MODES: {
       uint32_t modes = BITFIELD_MASK(MESA_PRIM_COUNT);
-      if (!screen->have_triangle_fans)
+      if (!screen->have_triangle_fans || !screen->info.feats.features.geometryShader)
         modes &= ~BITFIELD_BIT(MESA_PRIM_QUADS);
       modes &= ~BITFIELD_BIT(MESA_PRIM_QUAD_STRIP);
       modes &= ~BITFIELD_BIT(MESA_PRIM_POLYGON);
@@ -660,7 +678,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
       return screen->info.feats.features.robustBufferAccess &&
-             (screen->info.rb2_feats.robustImageAccess2 || screen->driver_workarounds.lower_robustImageAccess2);
+             (screen->info.rb2_feats.robustImageAccess2 || screen->driver_compiler_workarounds.lower_robustImageAccess2);
 
    case PIPE_CAP_MULTI_DRAW_INDIRECT:
       return screen->info.feats.features.multiDrawIndirect;
@@ -741,8 +759,8 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_SWIZZLE:
       return 1;
 
-   case PIPE_CAP_VERTEX_ATTRIB_ELEMENT_ALIGNED_ONLY:
-      return !screen->info.have_EXT_legacy_vertex_attributes;
+   case PIPE_CAP_VERTEX_INPUT_ALIGNMENT:
+      return screen->info.have_EXT_legacy_vertex_attributes ? PIPE_VERTEX_INPUT_ALIGNMENT_NONE : PIPE_VERTEX_INPUT_ALIGNMENT_ELEMENT;
 
    case PIPE_CAP_GL_CLAMP:
       return 0;
@@ -1477,42 +1495,42 @@ zink_is_format_supported(struct pipe_screen *pscreen,
          return false;
    }
 
-   struct zink_format_props props = screen->format_props[format];
+   const struct zink_format_props *props = zink_get_format_props(screen, format);
 
    if (target == PIPE_BUFFER) {
       if (bind & PIPE_BIND_VERTEX_BUFFER) {
-         if (!(props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)) {
+         if (!(props->bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)) {
             enum pipe_format new_format = zink_decompose_vertex_format(format);
             if (!new_format)
                return false;
-            if (!(screen->format_props[new_format].bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT))
+            if (!(zink_get_format_props(screen, new_format)->bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT))
                return false;
          }
       }
 
       if (bind & PIPE_BIND_SAMPLER_VIEW &&
-         !(props.bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT))
+         !(props->bufferFeatures & VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT))
             return false;
 
       if (bind & PIPE_BIND_SHADER_IMAGE &&
-          !(props.bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT))
+          !(props->bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT))
          return false;
    } else {
       /* all other targets are texture-targets */
       if (bind & PIPE_BIND_RENDER_TARGET &&
-          !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
+          !(props->optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
          return false;
 
       if (bind & PIPE_BIND_BLENDABLE &&
-         !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT))
+         !(props->optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT))
         return false;
 
       if (bind & PIPE_BIND_SAMPLER_VIEW &&
-         !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))
+         !(props->optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))
             return false;
 
       if (bind & PIPE_BIND_SAMPLER_REDUCTION_MINMAX &&
-          !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT))
+          !(props->optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT))
          return false;
 
       if ((bind & PIPE_BIND_SAMPLER_VIEW) || (bind & PIPE_BIND_RENDER_TARGET)) {
@@ -1524,11 +1542,11 @@ zink_is_format_supported(struct pipe_screen *pscreen,
       }
 
       if (bind & PIPE_BIND_DEPTH_STENCIL &&
-          !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
+          !(props->optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
          return false;
 
       if (bind & PIPE_BIND_SHADER_IMAGE &&
-          !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT))
+          !(props->optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT))
          return false;
    }
 
@@ -1697,13 +1715,36 @@ zink_get_cpu_device_type(const struct zink_screen *screen, uint32_t pdev_count,
    return -1;
 }
 
+static int
+zink_match_adapter_luid(const struct zink_screen *screen, uint32_t pdev_count, const VkPhysicalDevice *pdevs, uint64_t adapter_luid)
+{
+   VkPhysicalDeviceVulkan11Properties props11 = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES
+   };
+   VkPhysicalDeviceProperties2 props = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+      &props11
+   };
+
+   for (uint32_t i = 0; i < pdev_count; ++i) {
+      VKSCR(GetPhysicalDeviceProperties2)(pdevs[i], &props);
+
+      if (!memcmp(props11.deviceLUID, &adapter_luid, sizeof(adapter_luid)))
+         return i;
+   }
+
+   mesa_loge("ZINK: matching LUID not found!");
+
+   return -1;
+}
+
 static void
-choose_pdev(struct zink_screen *screen, int64_t dev_major, int64_t dev_minor)
+choose_pdev(struct zink_screen *screen, int64_t dev_major, int64_t dev_minor, uint64_t adapter_luid)
 {
    bool cpu = debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false) ||
               debug_get_bool_option("D3D_ALWAYS_SOFTWARE", false);
 
-   if (cpu || (dev_major > 0 && dev_major < 255)) {
+   if (cpu || (dev_major > 0 && dev_major < 255) || adapter_luid) {
       uint32_t pdev_count;
       int idx;
       VkPhysicalDevice *pdevs;
@@ -1727,7 +1768,9 @@ choose_pdev(struct zink_screen *screen, int64_t dev_major, int64_t dev_minor)
       assert(result == VK_SUCCESS);
       assert(pdev_count > 0);
 
-      if (cpu)
+      if (adapter_luid)
+         idx = zink_match_adapter_luid(screen, pdev_count, pdevs, adapter_luid);
+      else if (cpu)
          idx = zink_get_cpu_device_type(screen, pdev_count, pdevs);
       else
          idx = zink_get_display_device(screen, pdev_count, pdevs, dev_major,
@@ -1878,45 +1921,6 @@ zink_is_depth_format_supported(struct zink_screen *screen, VkFormat format)
           VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
 }
 
-static enum pipe_format
-emulate_x8(enum pipe_format format)
-{
-   /* convert missing Xn variants to An */
-   switch (format) {
-   case PIPE_FORMAT_B8G8R8X8_UNORM:
-      return PIPE_FORMAT_B8G8R8A8_UNORM;
-
-   case PIPE_FORMAT_B8G8R8X8_SRGB:
-      return PIPE_FORMAT_B8G8R8A8_SRGB;
-   case PIPE_FORMAT_R8G8B8X8_SRGB:
-      return PIPE_FORMAT_R8G8B8A8_SRGB;
-
-   case PIPE_FORMAT_R8G8B8X8_SINT:
-      return PIPE_FORMAT_R8G8B8A8_SINT;
-   case PIPE_FORMAT_R8G8B8X8_SNORM:
-      return PIPE_FORMAT_R8G8B8A8_SNORM;
-   case PIPE_FORMAT_R8G8B8X8_UNORM:
-      return PIPE_FORMAT_R8G8B8A8_UNORM;
-
-   case PIPE_FORMAT_R16G16B16X16_FLOAT:
-      return PIPE_FORMAT_R16G16B16A16_FLOAT;
-   case PIPE_FORMAT_R16G16B16X16_SINT:
-      return PIPE_FORMAT_R16G16B16A16_SINT;
-   case PIPE_FORMAT_R16G16B16X16_SNORM:
-      return PIPE_FORMAT_R16G16B16A16_SNORM;
-   case PIPE_FORMAT_R16G16B16X16_UNORM:
-      return PIPE_FORMAT_R16G16B16A16_UNORM;
-
-   case PIPE_FORMAT_R32G32B32X32_FLOAT:
-      return PIPE_FORMAT_R32G32B32A32_FLOAT;
-   case PIPE_FORMAT_R32G32B32X32_SINT:
-      return PIPE_FORMAT_R32G32B32A32_SINT;
-
-   default:
-      return format;
-   }
-}
-
 VkFormat
 zink_get_format(struct zink_screen *screen, enum pipe_format format)
 {
@@ -1925,7 +1929,7 @@ zink_get_format(struct zink_screen *screen, enum pipe_format format)
    else if (!screen->driver_workarounds.broken_l4a4 || format != PIPE_FORMAT_L4A4_UNORM)
       format = zink_format_get_emulated_alpha(format);
 
-   VkFormat ret = vk_format_from_pipe_format(emulate_x8(format));
+   VkFormat ret = vk_format_from_pipe_format(zink_format_emulate_x8(format));
 
    if (format == PIPE_FORMAT_X32_S8X24_UINT &&
        screen->have_D32_SFLOAT_S8_UINT)
@@ -2137,6 +2141,82 @@ zink_internal_setup_moltenvk(struct zink_screen *screen)
    return true;
 }
 
+void
+zink_init_format_props(struct zink_screen *screen, enum pipe_format pformat)
+{
+   VkFormat format;
+retry:
+   format = zink_get_format(screen, pformat);
+   if (!format)
+      return;
+   if (VKSCR(GetPhysicalDeviceFormatProperties2)) {
+      VkFormatProperties2 props = {0};
+      props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+
+      VkDrmFormatModifierPropertiesListEXT mod_props;
+      VkDrmFormatModifierPropertiesEXT mods[128];
+      if (screen->info.have_EXT_image_drm_format_modifier) {
+         mod_props.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+         mod_props.pNext = NULL;
+         mod_props.drmFormatModifierCount = ARRAY_SIZE(mods);
+         mod_props.pDrmFormatModifierProperties = mods;
+         props.pNext = &mod_props;
+      }
+      VkFormatProperties3 props3 = {0};
+      if (screen->info.have_KHR_format_feature_flags2 || screen->info.have_vulkan13) {
+         props3.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3;
+         props3.pNext = props.pNext;
+         props.pNext = &props3;
+      }
+
+      VKSCR(GetPhysicalDeviceFormatProperties2)(screen->pdev, format, &props);
+
+      if (screen->info.have_KHR_format_feature_flags2 || screen->info.have_vulkan13) {
+         screen->format_props[pformat].linearTilingFeatures = props3.linearTilingFeatures;
+         screen->format_props[pformat].optimalTilingFeatures = props3.optimalTilingFeatures;
+         screen->format_props[pformat].bufferFeatures = props3.bufferFeatures;
+
+         if (props3.linearTilingFeatures & VK_FORMAT_FEATURE_2_LINEAR_COLOR_ATTACHMENT_BIT_NV)
+            screen->format_props[pformat].linearTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+      } else {
+         // MoltenVk is 1.2 API
+         screen->format_props[pformat].linearTilingFeatures = props.formatProperties.linearTilingFeatures;
+         screen->format_props[pformat].optimalTilingFeatures = props.formatProperties.optimalTilingFeatures;
+         screen->format_props[pformat].bufferFeatures = props.formatProperties.bufferFeatures;
+      }
+
+      if (screen->info.have_EXT_image_drm_format_modifier && mod_props.drmFormatModifierCount) {
+         screen->modifier_props[pformat].drmFormatModifierCount = mod_props.drmFormatModifierCount;
+         screen->modifier_props[pformat].pDrmFormatModifierProperties = ralloc_array(screen, VkDrmFormatModifierPropertiesEXT, mod_props.drmFormatModifierCount);
+         if (mod_props.pDrmFormatModifierProperties) {
+            for (unsigned j = 0; j < mod_props.drmFormatModifierCount; j++)
+               screen->modifier_props[pformat].pDrmFormatModifierProperties[j] = mod_props.pDrmFormatModifierProperties[j];
+         }
+      }
+   } else {
+      VkFormatProperties props = {0};
+      VKSCR(GetPhysicalDeviceFormatProperties)(screen->pdev, format, &props);
+      screen->format_props[pformat].linearTilingFeatures = props.linearTilingFeatures;
+      screen->format_props[pformat].optimalTilingFeatures = props.optimalTilingFeatures;
+      screen->format_props[pformat].bufferFeatures = props.bufferFeatures;
+   }
+   if (pformat == PIPE_FORMAT_A8_UNORM && !screen->driver_workarounds.missing_a8_unorm) {
+      if (!screen->format_props[pformat].linearTilingFeatures &&
+            !screen->format_props[pformat].optimalTilingFeatures &&
+            !screen->format_props[pformat].bufferFeatures) {
+         screen->driver_workarounds.missing_a8_unorm = true;
+         goto retry;
+      }
+   }
+   if (zink_format_is_emulated_alpha(pformat)) {
+      VkFormatFeatureFlags blocked = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+      screen->format_props[pformat].linearTilingFeatures &= ~blocked;
+      screen->format_props[pformat].optimalTilingFeatures &= ~blocked;
+      screen->format_props[pformat].bufferFeatures = 0;
+   }
+   screen->format_props_init[pformat] = true;
+}
+
 static void
 check_vertex_formats(struct zink_screen *screen)
 {
@@ -2225,78 +2305,7 @@ check_vertex_formats(struct zink_screen *screen)
 static void
 populate_format_props(struct zink_screen *screen)
 {
-   for (unsigned i = 0; i < PIPE_FORMAT_COUNT; i++) {
-      VkFormat format;
-retry:
-      format = zink_get_format(screen, i);
-      if (!format)
-         continue;
-      if (VKSCR(GetPhysicalDeviceFormatProperties2)) {
-         VkFormatProperties2 props = {0};
-         props.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
-
-         VkDrmFormatModifierPropertiesListEXT mod_props;
-         VkDrmFormatModifierPropertiesEXT mods[128];
-         if (screen->info.have_EXT_image_drm_format_modifier) {
-            mod_props.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
-            mod_props.pNext = NULL;
-            mod_props.drmFormatModifierCount = ARRAY_SIZE(mods);
-            mod_props.pDrmFormatModifierProperties = mods;
-            props.pNext = &mod_props;
-         }
-         VkFormatProperties3 props3 = {0};
-         if (screen->info.have_KHR_format_feature_flags2 || screen->info.have_vulkan13) {
-           props3.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3;
-           props3.pNext = props.pNext;
-           props.pNext = &props3;
-         }
-
-         VKSCR(GetPhysicalDeviceFormatProperties2)(screen->pdev, format, &props);
-
-         if (screen->info.have_KHR_format_feature_flags2 || screen->info.have_vulkan13) {
-            screen->format_props[i].linearTilingFeatures = props3.linearTilingFeatures;
-            screen->format_props[i].optimalTilingFeatures = props3.optimalTilingFeatures;
-            screen->format_props[i].bufferFeatures = props3.bufferFeatures;
-
-            if (props3.linearTilingFeatures & VK_FORMAT_FEATURE_2_LINEAR_COLOR_ATTACHMENT_BIT_NV)
-               screen->format_props[i].linearTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
-         } else {
-           // MoltenVk is 1.2 API
-           screen->format_props[i].linearTilingFeatures = props.formatProperties.linearTilingFeatures;
-           screen->format_props[i].optimalTilingFeatures = props.formatProperties.optimalTilingFeatures;
-           screen->format_props[i].bufferFeatures = props.formatProperties.bufferFeatures;
-         }
-
-         if (screen->info.have_EXT_image_drm_format_modifier && mod_props.drmFormatModifierCount) {
-            screen->modifier_props[i].drmFormatModifierCount = mod_props.drmFormatModifierCount;
-            screen->modifier_props[i].pDrmFormatModifierProperties = ralloc_array(screen, VkDrmFormatModifierPropertiesEXT, mod_props.drmFormatModifierCount);
-            if (mod_props.pDrmFormatModifierProperties) {
-               for (unsigned j = 0; j < mod_props.drmFormatModifierCount; j++)
-                  screen->modifier_props[i].pDrmFormatModifierProperties[j] = mod_props.pDrmFormatModifierProperties[j];
-            }
-         }
-      } else {
-         VkFormatProperties props = {0};
-         VKSCR(GetPhysicalDeviceFormatProperties)(screen->pdev, format, &props);
-         screen->format_props[i].linearTilingFeatures = props.linearTilingFeatures;
-         screen->format_props[i].optimalTilingFeatures = props.optimalTilingFeatures;
-         screen->format_props[i].bufferFeatures = props.bufferFeatures;
-      }
-      if (i == PIPE_FORMAT_A8_UNORM && !screen->driver_workarounds.missing_a8_unorm) {
-         if (!screen->format_props[i].linearTilingFeatures &&
-             !screen->format_props[i].optimalTilingFeatures &&
-             !screen->format_props[i].bufferFeatures) {
-            screen->driver_workarounds.missing_a8_unorm = true;
-            goto retry;
-         }
-      }
-      if (zink_format_is_emulated_alpha(i)) {
-         VkFormatFeatureFlags blocked = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-         screen->format_props[i].linearTilingFeatures &= ~blocked;
-         screen->format_props[i].optimalTilingFeatures &= ~blocked;
-         screen->format_props[i].bufferFeatures = 0;
-      }
-   }
+   zink_init_format_props(screen, PIPE_FORMAT_A8_UNORM);
    check_vertex_formats(screen);
    VkImageFormatProperties image_props;
    VkResult ret = VKSCR(GetPhysicalDeviceImageFormatProperties)(screen->pdev, VK_FORMAT_D32_SFLOAT,
@@ -2588,11 +2597,12 @@ static void
 zink_query_dmabuf_modifiers(struct pipe_screen *pscreen, enum pipe_format format, int max, uint64_t *modifiers, unsigned int *external_only, int *count)
 {
    struct zink_screen *screen = zink_screen(pscreen);
-   *count = screen->modifier_props[format].drmFormatModifierCount;
+   const struct zink_modifier_props *props = zink_get_modifier_props(screen, format);
+   *count = props->drmFormatModifierCount;
    for (int i = 0; i < MIN2(max, *count); i++) {
-      modifiers[i] = screen->modifier_props[format].pDrmFormatModifierProperties[i].drmFormatModifier;
+      modifiers[i] = props->pDrmFormatModifierProperties[i].drmFormatModifier;
       if (external_only)
-         external_only[i] = !(screen->modifier_props[format].pDrmFormatModifierProperties[i].drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+         external_only[i] = !(props->pDrmFormatModifierProperties[i].drmFormatModifierTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
    }
 }
 
@@ -2600,8 +2610,9 @@ static bool
 zink_is_dmabuf_modifier_supported(struct pipe_screen *pscreen, uint64_t modifier, enum pipe_format format, bool *external_only)
 {
    struct zink_screen *screen = zink_screen(pscreen);
-   for (unsigned i = 0; i < screen->modifier_props[format].drmFormatModifierCount; i++)
-      if (screen->modifier_props[format].pDrmFormatModifierProperties[i].drmFormatModifier == modifier)
+   const struct zink_modifier_props *props = zink_get_modifier_props(screen, format);
+   for (unsigned i = 0; i < props->drmFormatModifierCount; i++)
+      if (props->pDrmFormatModifierProperties[i].drmFormatModifier == modifier)
          return true;
    return false;
 }
@@ -2610,9 +2621,10 @@ static unsigned
 zink_get_dmabuf_modifier_planes(struct pipe_screen *pscreen, uint64_t modifier, enum pipe_format format)
 {
    struct zink_screen *screen = zink_screen(pscreen);
-   for (unsigned i = 0; i < screen->modifier_props[format].drmFormatModifierCount; i++)
-      if (screen->modifier_props[format].pDrmFormatModifierProperties[i].drmFormatModifier == modifier)
-         return screen->modifier_props[format].pDrmFormatModifierProperties[i].drmFormatModifierPlaneCount;
+   const struct zink_modifier_props *props = zink_get_modifier_props(screen, format);
+   for (unsigned i = 0; i < props->drmFormatModifierCount; i++)
+      if (props->pDrmFormatModifierProperties[i].drmFormatModifier == modifier)
+         return props->pDrmFormatModifierProperties[i].drmFormatModifierPlaneCount;
    return util_format_get_num_planes(format);
 }
 
@@ -2678,7 +2690,7 @@ zink_get_sparse_texture_virtual_page_size(struct pipe_screen *pscreen,
    VkImageUsageFlags use_flags = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                  VK_IMAGE_USAGE_STORAGE_BIT;
    use_flags |= is_zs ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-   VkImageUsageFlags flags = screen->format_props[pformat].optimalTilingFeatures & use_flags;
+   VkImageUsageFlags flags = zink_get_format_props(screen, pformat)->optimalTilingFeatures & use_flags;
    VkSparseImageFormatProperties props[4]; //planar?
    unsigned prop_count = ARRAY_SIZE(props);
    VKSCR(GetPhysicalDeviceSparseImageFormatProperties)(screen->pdev, format, type,
@@ -2972,10 +2984,10 @@ init_driver_workarounds(struct zink_screen *screen)
     */
    switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_IMAGINATION_PROPRIETARY:
-      screen->driver_workarounds.needs_sanitised_layer = true;
+      screen->driver_compiler_workarounds.needs_sanitised_layer = true;
       break;
    default:
-      screen->driver_workarounds.needs_sanitised_layer = false;
+      screen->driver_compiler_workarounds.needs_sanitised_layer = false;
       break;
    }
    /* these drivers will produce undefined results when using swizzle 1 with combined z/s textures
@@ -2984,15 +2996,15 @@ init_driver_workarounds(struct zink_screen *screen)
    switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_IMAGINATION_PROPRIETARY:
    case VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA:
-      screen->driver_workarounds.needs_zs_shader_swizzle = true;
+      screen->driver_compiler_workarounds.needs_zs_shader_swizzle = true;
       break;
    default:
-      screen->driver_workarounds.needs_zs_shader_swizzle = false;
+      screen->driver_compiler_workarounds.needs_zs_shader_swizzle = false;
       break;
    }
 
    /* When robust contexts are advertised but robustImageAccess2 is not available */
-   screen->driver_workarounds.lower_robustImageAccess2 =
+   screen->driver_compiler_workarounds.lower_robustImageAccess2 =
       !screen->info.rb2_feats.robustImageAccess2 &&
       screen->info.feats.features.robustBufferAccess &&
       screen->info.rb_image_feats.robustImageAccess;
@@ -3029,6 +3041,7 @@ init_driver_workarounds(struct zink_screen *screen)
    switch (zink_driverid(screen)) {
    case VK_DRIVER_ID_MESA_TURNIP:
    case VK_DRIVER_ID_MESA_NVK:
+   case VK_DRIVER_ID_MESA_LLVMPIPE:
       screen->driver_workarounds.can_do_invalid_linear_modifier = true;
       break;
    default:
@@ -3065,6 +3078,16 @@ init_driver_workarounds(struct zink_screen *screen)
    case VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS:
       /* this does wild things to block shapes */
       screen->driver_workarounds.can_2d_view_sparse = false;
+      break;
+   default:
+      break;
+   }
+
+   switch (zink_driverid(screen)) {
+   case VK_DRIVER_ID_MESA_RADV:
+   case VK_DRIVER_ID_MESA_NVK:
+   case VK_DRIVER_ID_NVIDIA_PROPRIETARY:
+      screen->driver_workarounds.general_depth_layout = true;
       break;
    default:
       break;
@@ -3113,9 +3136,9 @@ init_optimal_keys(struct zink_screen *screen)
                           !screen->driver_workarounds.no_linestipple &&
                           !screen->driver_workarounds.no_linesmooth &&
                           !screen->driver_workarounds.no_hw_gl_point &&
-                          !screen->driver_workarounds.lower_robustImageAccess2 &&
+                          !screen->driver_compiler_workarounds.lower_robustImageAccess2 &&
                           !screen->driconf.emulate_point_smooth &&
-                          !screen->driver_workarounds.needs_zs_shader_swizzle;
+                          !screen->driver_compiler_workarounds.needs_zs_shader_swizzle;
    if (!screen->optimal_keys && zink_debug & ZINK_DEBUG_OPTIMAL_KEYS && !(zink_debug & ZINK_DEBUG_QUIET)) {
       fprintf(stderr, "The following criteria are preventing optimal_keys enablement:\n");
       if (screen->need_decompose_attrs)
@@ -3124,7 +3147,7 @@ init_optimal_keys(struct zink_screen *screen)
          fprintf(stderr, "uniform inlining must be disabled (set ZINK_INLINE_UNIFORMS=0 in your env)\n");
       if (screen->driconf.emulate_point_smooth)
          fprintf(stderr, "smooth point emulation is enabled\n");
-      if (screen->driver_workarounds.needs_zs_shader_swizzle)
+      if (screen->driver_compiler_workarounds.needs_zs_shader_swizzle)
          fprintf(stderr, "Z/S shader swizzle workaround is enabled\n");
       CHECK_OR_PRINT(have_EXT_line_rasterization);
       CHECK_OR_PRINT(line_rast_feats.stippledBresenhamLines);
@@ -3257,8 +3280,15 @@ zink_screen_get_fd(struct pipe_screen *pscreen)
    return screen->drm_fd;
 }
 
+static const char*
+zink_cl_cts_version(struct pipe_screen *pscreen)
+{
+   /* https://www.khronos.org/conformance/adopters/conformant-products/opencl#submission_437 */
+   return "v2024-08-08-00";
+}
+
 static struct zink_screen *
-zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev_major, int64_t dev_minor)
+zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev_major, int64_t dev_minor, uint64_t adapter_luid)
 {
    if (getenv("ZINK_USE_LAVAPIPE")) {
       mesa_loge("ZINK_USE_LAVAPIPE is obsolete. Use LIBGL_ALWAYS_SOFTWARE\n");
@@ -3316,7 +3346,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
       screen->driconf.zink_shader_object_enable = driQueryOptionb(config->options, "zink_shader_object_enable");
    }
 
-   if (!zink_create_instance(screen, dev_major > 0 && dev_major < 255))
+   if (!zink_create_instance(screen))
       goto fail;
 
    if (zink_debug & ZINK_DEBUG_VALIDATION) {
@@ -3343,7 +3373,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
          debug_printf("ZINK: failed to setup debug utils\n");
    }
 
-   choose_pdev(screen, dev_major, dev_minor);
+   choose_pdev(screen, dev_major, dev_minor, adapter_luid);
    if (screen->pdev == VK_NULL_HANDLE) {
       if (!screen->driver_name_is_inferred)
          mesa_loge("ZINK: failed to choose pdev");
@@ -3363,6 +3393,11 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
    if (!zink_get_physical_device_info(screen)) {
       if (!screen->driver_name_is_inferred)
          debug_printf("ZINK: failed to detect features\n");
+      goto fail;
+   }
+
+   if (zink_set_driver_strings(screen)) {
+      mesa_loge("ZINK: failed to set driver strings\n");
       goto fail;
    }
 
@@ -3414,6 +3449,12 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
    if (!screen->info.have_KHR_timeline_semaphore && !screen->info.feats12.timelineSemaphore) {
       if (!screen->driver_name_is_inferred)
          mesa_loge("zink: KHR_timeline_semaphore is required");
+      goto fail;
+   }
+
+   if (zink_driverid(screen) == VK_DRIVER_ID_IMAGINATION_PROPRIETARY && !screen->info.feats.features.geometryShader) {
+      if (!screen->driver_name_is_inferred)
+         mesa_loge("zink: Imagination proprietary driver w/o geometryShader is unsupported");
       goto fail;
    }
 
@@ -3515,6 +3556,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
    screen->base.get_driver_query_group_info = zink_get_driver_query_group_info;
    screen->base.get_driver_query_info = zink_get_driver_query_info;
    screen->base.set_damage_region = zink_set_damage_region;
+   screen->base.get_cl_cts_version = zink_cl_cts_version;
 
    if (screen->info.have_EXT_sample_locations) {
       VkMultisamplePropertiesEXT prop;
@@ -3538,7 +3580,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
    zink_screen_fence_init(&screen->base);
 
    if (zink_debug & ZINK_DEBUG_IOOPT)
-      screen->driver_workarounds.io_opt = true;
+      screen->driver_compiler_workarounds.io_opt = true;
    zink_screen_init_compiler(screen);
    if (!disk_cache_init(screen)) {
       if (!screen->driver_name_is_inferred)
@@ -3695,7 +3737,7 @@ fail:
 struct pipe_screen *
 zink_create_screen(struct sw_winsys *winsys, const struct pipe_screen_config *config)
 {
-   struct zink_screen *ret = zink_internal_create_screen(config, -1, -1);
+   struct zink_screen *ret = zink_internal_create_screen(config, -1, -1, 0);
    if (ret) {
       ret->drm_fd = -1;
    }
@@ -3747,7 +3789,7 @@ zink_drm_create_screen(int fd, const struct pipe_screen_config *config)
    if (zink_render_rdev(fd, &dev_major, &dev_minor))
       return NULL;
 
-   ret = zink_internal_create_screen(config, dev_major, dev_minor);
+   ret = zink_internal_create_screen(config, dev_major, dev_minor, 0);
 
    if (ret)
       ret->drm_fd = os_dupfd_cloexec(fd);
@@ -3758,6 +3800,13 @@ zink_drm_create_screen(int fd, const struct pipe_screen_config *config)
    }
 
    return &ret->base;
+}
+
+struct pipe_screen *
+zink_win32_create_screen(uint64_t adapter_luid)
+{
+   struct zink_screen *ret = zink_internal_create_screen(NULL, -1, -1, adapter_luid);
+   return ret ? &ret->base : NULL;
 }
 
 void VKAPI_PTR zink_stub_function_not_loaded()

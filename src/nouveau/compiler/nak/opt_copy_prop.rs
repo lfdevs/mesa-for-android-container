@@ -448,7 +448,7 @@ impl CopyPropPass {
             SrcType::F64 => {
                 self.prop_to_f64_src(cbuf_rule, src);
             }
-            SrcType::Bar => (),
+            SrcType::Carry | SrcType::Bar => (),
         }
     }
 
@@ -562,12 +562,10 @@ impl CopyPropPass {
                 assert!(dst.comps() == 1);
                 let dst = dst[0];
 
-                if add.carry_in.is_zero() {
-                    if add.srcs[0].is_zero() {
-                        self.add_copy(bi, dst, SrcType::I32, add.srcs[1]);
-                    } else if add.srcs[1].is_zero() {
-                        self.add_copy(bi, dst, SrcType::I32, add.srcs[0]);
-                    }
+                if add.srcs[0].is_zero() {
+                    self.add_copy(bi, dst, SrcType::I32, add.srcs[1]);
+                } else if add.srcs[1].is_zero() {
+                    self.add_copy(bi, dst, SrcType::I32, add.srcs[0]);
                 }
             }
             Op::IAdd3(add) => {

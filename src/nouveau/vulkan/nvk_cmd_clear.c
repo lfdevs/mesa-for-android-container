@@ -6,6 +6,7 @@
 
 #include "nvk_device.h"
 #include "nvk_entrypoints.h"
+#include "nvk_format.h"
 #include "nvk_image.h"
 #include "nvk_image_view.h"
 #include "nvk_mme.h"
@@ -54,6 +55,34 @@ nvk_mme_clear(struct mme_builder *b)
    mme_free_reg(b, payload);
    mme_free_reg(b, view_mask);
 }
+
+const struct nvk_mme_test_case nvk_mme_clear_tests[] = {{
+   .init = (struct nvk_mme_mthd_data[]) {
+      { NVK_SET_MME_SCRATCH(VIEW_MASK), 0 },
+      { }
+   },
+   .params = (uint32_t[]) { 0x3c, 5 },
+   .expected = (struct nvk_mme_mthd_data[]) {
+      { NV9097_CLEAR_SURFACE, 0x003c },
+      { NV9097_CLEAR_SURFACE, 0x043c },
+      { NV9097_CLEAR_SURFACE, 0x083c },
+      { NV9097_CLEAR_SURFACE, 0x0c3c },
+      { NV9097_CLEAR_SURFACE, 0x103c },
+      { }
+   },
+}, {
+   .init = (struct nvk_mme_mthd_data[]) {
+      { NVK_SET_MME_SCRATCH(VIEW_MASK), 0xb },
+      { }
+   },
+   .params = (uint32_t[]) { 0x3c },
+   .expected = (struct nvk_mme_mthd_data[]) {
+      { NV9097_CLEAR_SURFACE, 0x03c },
+      { NV9097_CLEAR_SURFACE, 0x43c },
+      { NV9097_CLEAR_SURFACE, 0xc3c },
+      { }
+   },
+}, {}};
 
 static void
 emit_clear_rects(struct nvk_cmd_buffer *cmd,
@@ -301,7 +330,7 @@ nvk_CmdClearColorImage(VkCommandBuffer commandBuffer,
    if (vk_format == VK_FORMAT_R64_UINT || vk_format == VK_FORMAT_R64_SINT)
       vk_format = VK_FORMAT_R32G32_UINT;
 
-   enum pipe_format p_format = vk_format_to_pipe_format(vk_format);
+   enum pipe_format p_format = nvk_format_to_pipe_format(vk_format);
    assert(p_format != PIPE_FORMAT_NONE);
 
    if (!nil_format_supports_color_targets(&pdev->info, p_format)) {

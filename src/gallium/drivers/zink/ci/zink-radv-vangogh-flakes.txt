@@ -1,10 +1,26 @@
+KHR-GL46.layout_binding.buffer_layout_binding_atomicAdd_ComputeShader
+KHR-GL46.layout_binding.sampler2D_layout_binding_texture_ComputeShader
+KHR-GL46.packed_pixels.varied_rectangle.r32i
+KHR-GL46.shader_atomic_counter_ops_tests.ShaderAtomicCounterOpsBitwiseTestCase
+
 dEQP-GLES2.functional.shaders.random.swizzle.vertex.43
+dEQP-GLES3.functional.fbo.multiview.samples_1
+dEQP-GLES3.functional.fbo.multiview.samples_2
+dEQP-GLES3.functional.fbo.multiview.samples_4
 dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_12x10_rgba.srgb8_alpha8_astc_12x10_khr_rgba_astc_12x10_khr.texture3d_to_texture3d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_4x4_khr_rgba32ui.texture2d_array_to_texture2d_array
+dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_separate_grid_100x100_drawcount_1
 dEQP-GLES31.functional.texture.filtering.cube_array.sizes.8x8x6_nearest
 dEQP-GLES3.functional.texture.filtering.cube.combinations.linear_linear_mirror_mirror
 dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_nearest.greater_depth_component32f
+
 object namespace pollution@framebuffer with glgetteximage
+spec@!opengl 1.0@rasterpos
+spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked
+spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked
+spec@!opengl 1.1@depthstencil-default_fb-blit samples=4
+spec@!opengl 1.1@max-texture-size
+spec@!opengl 1.1@ppgtt_memory_alignment
 spec@arb_fragment_shader_interlock@arb_fragment_shader_interlock-image-load-store
 spec@arb_instanced_arrays@arb_instanced_arrays-instanced_arrays-vbo
 spec@arb_shader_image_load_store@shader-mem-barrier
@@ -28,14 +44,11 @@ spec@arb_tessellation_shader@execution@built-in-functions@tcs-sign-vec3
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB9_E5
 spec@arb_timer_query@timestamp-get
+spec@ext_texture_lod_bias@lodbias
 spec@glsl-1.10@execution@built-in-functions@vs-equal-vec2-vec2
 spec@glsl-1.50@execution@built-in-functions@gs-greaterthan-uvec3-uvec3
 spec@glsl-1.50@execution@geometry@point-size-out
 spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs
-spec@!opengl 1.0@rasterpos
-spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked
-spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked
-spec@!opengl 1.1@depthstencil-default_fb-blit samples=4
 
 # Marked as flake because it passes with ESO but crashes with pipelines.
 spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -scan 1 50
@@ -43,4 +56,4 @@ spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -s
 # uprev Piglit in Mesa (first seen on navi10 in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/58636780)
 KHR-GL46.sparse_buffer_tests.BufferStorageTest
 
-spec@ext_texture_lod_bias@lodbias
+spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-comp

@@ -28,6 +28,7 @@
 
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_limits.h"
+#include "gallivm/lp_bld_flow.h"
 #include "lp_bld_type.h"
 
 #include "gallivm/lp_bld_tgsi.h"
@@ -92,6 +93,9 @@ struct lp_build_nir_context
 
    LLVMValueRef func;
    nir_shader *shader;
+
+   struct lp_build_if_state if_stack[LP_MAX_TGSI_NESTING];
+   uint32_t if_stack_size;
 
    void (*load_ubo)(struct lp_build_nir_context *bld_base,
                     unsigned nc,
@@ -218,9 +222,9 @@ struct lp_build_nir_context
 
    void (*bgnloop)(struct lp_build_nir_context *bld_base);
    void (*endloop)(struct lp_build_nir_context *bld_base);
-   void (*if_cond)(struct lp_build_nir_context *bld_base, LLVMValueRef cond);
-   void (*else_stmt)(struct lp_build_nir_context *bld_base);
-   void (*endif_stmt)(struct lp_build_nir_context *bld_base);
+   void (*if_cond)(struct lp_build_nir_context *bld_base, LLVMValueRef cond, bool flatten);
+   void (*else_stmt)(struct lp_build_nir_context *bld_base, bool flatten_then, bool flatten_else);
+   void (*endif_stmt)(struct lp_build_nir_context *bld_base, bool flatten);
    void (*break_stmt)(struct lp_build_nir_context *bld_base);
    void (*continue_stmt)(struct lp_build_nir_context *bld_base);
 

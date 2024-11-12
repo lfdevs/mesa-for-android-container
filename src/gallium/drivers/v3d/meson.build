@@ -35,12 +35,7 @@ files_per_version = files(
   'v3dx_tfu.c',
 )
 
-v3d_args = ['-DV3D_BUILD_NEON']
-
-dep_v3d_hw = dependency('v3d_hw', required: false)
-if dep_v3d_hw.found()
-  v3d_args += '-DUSE_V3D_SIMULATOR'
-endif
+v3d_args = ['-DV3D_BUILD_NEON', v3d_simulator_arg]
 
 v3d_versions = ['42', '71']
 
@@ -68,7 +63,7 @@ libv3d = static_library(
   ],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
-    inc_simulator, inc_gallium_drivers,
+    inc_gallium_drivers,
   ],
   c_args : [v3d_args],
   cpp_args : [v3d_args],

@@ -183,13 +183,6 @@ typedef struct shader_info {
    /* Whether texture size, levels, or samples is queried. */
    bool uses_resource_info_query:1;
 
-   /**
-    * True if this shader uses the fddx/fddy opcodes.
-    *
-    * Note that this does not include the "fine" and "coarse" variants.
-    */
-   bool uses_fddx_fddy:1;
-
    /** Has divergence analysis ever been run? */
    bool divergence_analysis_run:1;
 
@@ -284,6 +277,12 @@ typedef struct shader_info {
      * in as a uniform.
      */
    bool use_legacy_math_rules;
+
+   /*
+    * Arrangement of invocations used to calculate derivatives in
+    * compute/task/mesh shaders.  From KHR_compute_shader_derivatives.
+    */
+   enum gl_derivative_group derivative_group:2;
 
    union {
       struct {
@@ -442,12 +441,6 @@ typedef struct shader_info {
          uint8_t user_data_components_amd:4;
 
          /*
-          * Arrangement of invocations used to calculate derivatives in a compute
-          * shader.  From NV_compute_shader_derivatives.
-          */
-         enum gl_derivative_group derivative_group:2;
-
-         /*
           * If the shader might run with shared mem on top of `shared_size`.
           */
          bool has_variable_shared_mem:1;
@@ -457,6 +450,15 @@ typedef struct shader_info {
           * SPV_KHR_cooperative_matrix.
           */
          bool has_cooperative_matrix:1;
+
+         /**
+          * Number of bytes of shared imageblock memory per thread. Currently,
+          * this requires that the workgroup size is 32x32x1 and that
+          * shared_size = 0. These requirements could be lifted in the future.
+          * However, there is no current OpenGL/Vulkan API support for
+          * imageblocks. This is only used internally to accelerate blit/copy.
+          */
+         uint8_t image_block_size_per_thread_agx;
 
          /**
           * pointer size is:
@@ -487,6 +489,14 @@ typedef struct shader_info {
          /** Is the vertex order counterclockwise? */
          bool ccw:1;
          bool point_mode:1;
+
+         /* Bit mask of TCS per-vertex inputs (VS outputs) that are used
+          * with a vertex index that is equal to the invocation id.
+          *
+          * Not mutually exclusive with tcs_cross_invocation_inputs_read, i.e.
+          * both input[0] and input[invocation_id] can be present.
+          */
+         uint64_t tcs_same_invocation_inputs_read;
 
          /* Bit mask of TCS per-vertex inputs (VS outputs) that are used
           * with a vertex index that is NOT the invocation id

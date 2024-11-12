@@ -557,3 +557,275 @@ BEGIN_TEST(optimize.sdwa.insert_modifiers)
       finish_opt_test();
    }
 END_TEST
+
+BEGIN_TEST(optimize.sdwa.special_case_valu)
+   //>> v1: %a, s1: %b = p_startpgm
+   if (!setup_cs("v1 s1", GFX10_3))
+      return;
+
+   Temp a = inputs[0];
+   Temp b = inputs[1];
+   Temp b_vgpr = bld.copy(bld.def(v1), b);
+
+   //! v1: %res0 = v_cvt_f32_ubyte0 %a
+   //! p_unit_test 0, %res0
+   writeout(0, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), ext_ubyte(a, 0)));
+
+   //! v1: %res1 = v_cvt_f32_ubyte1 %a
+   //! p_unit_test 1, %res1
+   writeout(1, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), ext_ubyte(a, 1)));
+
+   //! v1: %res2 = v_cvt_f32_ubyte2 %a
+   //! p_unit_test 2, %res2
+   writeout(2, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), ext_ubyte(a, 2)));
+
+   //! v1: %res3 = v_cvt_f32_ubyte3 %a
+   //! p_unit_test 3, %res3
+   writeout(3, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), ext_ubyte(a, 3)));
+
+   //! v1: %res4 = v_cvt_f32_u32 %a dst_sel:dword src0_sel:sbyte3
+   //! p_unit_test 4, %res4
+   writeout(4, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), ext_sbyte(a, 3)));
+
+   //! v1: %res5 = v_cvt_f32_u32 %a dst_sel:dword src0_sel:uword1
+   //! p_unit_test 5, %res5
+   writeout(5, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), ext_ushort(a, 1)));
+
+   //! v1: %res6_tmp = p_extract %b, 2, 8, 0
+   //! v1: %res6 = v_cvt_f32_u32 %res6_tmp dst_sel:dword src0_sel:sword1
+   //! p_unit_test 6, %res6
+   writeout(6,
+            bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), ext_sshort(ext_ubyte(b_vgpr, 2), 1)));
+
+   //! v1: %res7 = v_lshlrev_b32 16, %a
+   //! p_unit_test 7, %res7
+   writeout(7,
+            bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(16), ext_ushort(a, 0)));
+
+   //! v1: %res8 = v_lshlrev_b32 24, %a
+   //! p_unit_test 8, %res8
+   writeout(8, bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(24), ext_ubyte(a, 0)));
+
+   //! v1: %res9 = v_lshlrev_b32 16, %a
+   //! p_unit_test 9, %res9
+   writeout(9,
+            bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(16), ext_sshort(a, 0)));
+
+   //! v1: %res10 = v_lshlrev_b32 24, %a
+   //! p_unit_test 10, %res10
+   writeout(10,
+            bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(24), ext_sbyte(a, 0)));
+
+   //! v1: %res11 = v_lshlrev_b32 16, %a dst_sel:dword src0_sel:dword src1_sel:uword1
+   //! p_unit_test 11, %res11
+   writeout(11,
+            bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(16), ext_ushort(a, 1)));
+
+   //! v1: %res12 = v_lshlrev_b32 24, %a dst_sel:dword src0_sel:dword src1_sel:ubyte1
+   //! p_unit_test 12, %res12
+   writeout(12,
+            bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(24), ext_ubyte(a, 1)));
+
+   //! v1: %res13_tmp = p_extract %b, 0, 16, 1
+   //! v1: %res13 = v_lshlrev_b32 16, %res13_tmp dst_sel:dword src0_sel:dword src1_sel:ubyte2
+   //! p_unit_test 13, %res13
+   writeout(13, bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(16),
+                         ext_ubyte(ext_sshort(b_vgpr, 0), 2)));
+
+   finish_opt_test();
+END_TEST
+
+BEGIN_TEST(optimize.sdwa.extract_sgpr_limits)
+   //>> s1: %a = p_startpgm
+   if (!setup_cs("s1", GFX8))
+      return;
+
+   Temp a = inputs[0];
+   Temp a_vgpr = bld.copy(bld.def(v1), a);
+
+   /* The optimizer should make this VOP3 */
+   //! v1: %res0 = v_lshlrev_b32 16, %a
+   //! p_unit_test 0, %res0
+   writeout(
+      0, bld.vop2(aco_opcode::v_lshlrev_b32, bld.def(v1), Operand::c32(16), ext_ushort(a_vgpr, 0)));
+
+   /* Unsupported on GFX8 */
+   //! v1: %res1_tmp = p_extract %a, 0, 16, 0
+   //! v1b: %res1 = p_extract %res1_tmp, 0, 8, 0
+   //! p_unit_test 1, %res1
+   writeout(1, bld.pseudo(aco_opcode::p_extract, bld.def(v1b), ext_ushort(a_vgpr, 0),
+                          Operand::c32(0), Operand::c32(8), Operand::c32(false)));
+
+   finish_opt_test();
+END_TEST
+
+BEGIN_TEST(optimize.sdwa.subdword_extract)
+   //>> v1: %a, v1: %b, s2: %c = p_startpgm
+   if (!setup_cs("v1 v1 s2", GFX10_3))
+      return;
+
+   Temp a = inputs[0];
+   Temp b = inputs[1];
+
+   //! v2b: %res0 = v_lshlrev_b16_e64 4, hi(%a)
+   //! p_unit_test 0, %res0
+   writeout(0, bld.vop3(aco_opcode::v_lshlrev_b16_e64, bld.def(v2b), Operand::c32(4),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(1),
+                                   Operand::c32(16), Operand::c32(false))));
+
+   //! v2b: %res1 = v_add_f16 %a, %b dst_sel:uword0 dst_preserve src0_sel:uword1 src1_sel:uword1
+   //! p_unit_test 1, %res1
+   writeout(1,
+            bld.vop2(aco_opcode::v_add_f16, bld.def(v2b),
+                     bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), a, Operand::c32(1)),
+                     bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), b, Operand::c32(1))));
+
+   //! v2b: %res2 = v_cndmask_b32 %a, %b, %c:vcc dst_sel:uword0 dst_preserve src0_sel:ubyte0 src1_sel:ubyte1
+   //! p_unit_test 2, %res2
+   writeout(2, bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v2b),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(0),
+                                   Operand::c32(8), Operand::c32(0)),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v2b), b, Operand::c32(1),
+                                   Operand::c32(8), Operand::c32(0)),
+                        inputs[2]));
+
+   //! v1b: %res3 = v_or_b32 %a, %b dst_sel:ubyte0 dst_preserve src0_sel:ubyte0 src1_sel:ubyte2
+   //! p_unit_test 3, %res3
+   writeout(3, bld.vop2(aco_opcode::v_or_b32, bld.def(v1b),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v1b), a, Operand::c32(0),
+                                   Operand::c32(16), Operand::c32(0)),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v1b), b, Operand::c32(1),
+                                   Operand::c32(16), Operand::c32(0))));
+
+   finish_opt_test();
+END_TEST
+
+BEGIN_TEST(optimize.sdwa.extract_vector)
+   //>> v1: %a = p_startpgm
+   if (!setup_cs("v1", GFX10_3))
+      return;
+
+   Temp a = inputs[0];
+
+   //! v1b: %res0 = p_extract_vector %a, 0
+   //! p_unit_test 0, %res0
+   writeout(
+      0, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ubyte(a, 0), Operand::c32(0)));
+
+   //! v1b: %res1 = p_extract_vector %a, 1
+   //! p_unit_test 1, %res1
+   writeout(
+      1, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ubyte(a, 1), Operand::c32(0)));
+
+   //! v1b: %res2 = p_extract_vector %a, 2
+   //! p_unit_test 2, %res2
+   writeout(
+      2, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ubyte(a, 2), Operand::c32(0)));
+
+   //! v1b: %res3 = p_extract_vector %a, 3
+   //! p_unit_test 3, %res3
+   writeout(
+      3, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ubyte(a, 3), Operand::c32(0)));
+
+   //! v1b: %res4 = p_extract_vector %a, 0
+   //! p_unit_test 4, %res4
+   writeout(
+      4, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ushort(a, 0), Operand::c32(0)));
+
+   //! v1b: %res5 = p_extract_vector %a, 2
+   //! p_unit_test 5, %res5
+   writeout(
+      5, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ushort(a, 1), Operand::c32(0)));
+
+   //! v1b: %res6 = p_extract_vector %a, 1
+   //! p_unit_test 6, %res6
+   writeout(
+      6, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ushort(a, 0), Operand::c32(1)));
+
+   //! v1b: %res7 = p_extract_vector %a, 3
+   //! p_unit_test 7, %res7
+   writeout(
+      7, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ushort(a, 1), Operand::c32(1)));
+
+   //! v1: %res8_tmp = p_extract %a, 0, 8, 0
+   //! v1b: %res8 = p_extract_vector %res8_tmp, 1
+   //! p_unit_test 8, %res8
+   writeout(
+      8, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ubyte(a, 0), Operand::c32(1)));
+
+   //! v1: %res9_tmp = p_extract %a, 0, 16, 0
+   //! v1b: %res9 = p_extract_vector %res9_tmp, 2
+   //! p_unit_test 9, %res9
+   writeout(
+      9, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ushort(a, 0), Operand::c32(2)));
+
+   //! v1: %res10_tmp = p_extract %a, 1, 16, 0
+   //! v1b: %res10 = p_extract_vector %res10_tmp, 2
+   //! p_unit_test 10, %res10
+   writeout(10, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ushort(a, 1),
+                           Operand::c32(2)));
+
+   //! v1: %res11_tmp = p_extract %a, 1, 8, 0
+   //! v1b: %res11 = p_extract_vector %res11_tmp, 2
+   //! p_unit_test 11, %res11
+   writeout(
+      11, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b), ext_ubyte(a, 1), Operand::c32(2)));
+
+   //! v2b: %res12 = p_extract %a, 0, 8, 0
+   //! p_unit_test 12, %res12
+   writeout(
+      12, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ubyte(a, 0), Operand::c32(0)));
+
+   //! v2b: %res13 = p_extract %a, 1, 8, 0
+   //! p_unit_test 13, %res13
+   writeout(
+      13, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ubyte(a, 1), Operand::c32(0)));
+
+   //! v2b: %res14 = p_extract %a, 2, 8, 0
+   //! p_unit_test 14, %res14
+   writeout(
+      14, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ubyte(a, 2), Operand::c32(0)));
+
+   //! v2b: %res15 = p_extract %a, 3, 8, 0
+   //! p_unit_test 15, %res15
+   writeout(
+      15, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ubyte(a, 3), Operand::c32(0)));
+
+   //! v2b: %res16 = p_extract_vector %a, 0
+   //! p_unit_test 16, %res16
+   writeout(16, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ushort(a, 0),
+                           Operand::c32(0)));
+
+   //! v2b: %res17 = p_extract_vector %a, 1
+   //! p_unit_test 17, %res17
+   writeout(17, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ushort(a, 1),
+                           Operand::c32(0)));
+
+   //! v1: %res18_tmp = p_extract %a, 0, 8, 0
+   //! v2b: %res18 = p_extract_vector %res18_tmp, 1
+   //! p_unit_test 18, %res18
+   writeout(
+      18, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ubyte(a, 0), Operand::c32(1)));
+
+   //! v1: %res19_tmp = p_extract %a, 0, 16, 0
+   //! v2b: %res19 = p_extract_vector %res19_tmp, 1
+   //! p_unit_test 19, %res19
+   writeout(19, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), ext_ushort(a, 0),
+                           Operand::c32(1)));
+
+   //! v1b: %res20 = p_extract_vector %a, 2
+   //! p_unit_test 20, %res20
+   writeout(20, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b),
+                           bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(1),
+                                      Operand::c32(16), Operand::c32(false)),
+                           Operand::c32(0)));
+
+   //! v1b: %res21 = p_extract_vector %a, 3
+   //! p_unit_test 21, %res21
+   writeout(21, bld.pseudo(aco_opcode::p_extract_vector, bld.def(v1b),
+                           bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(1),
+                                      Operand::c32(16), Operand::c32(false)),
+                           Operand::c32(1)));
+
+   finish_opt_test();
+END_TEST

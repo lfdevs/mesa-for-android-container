@@ -160,6 +160,22 @@ struct sample_function_cache_key {
 
 DERIVE_HASH_TABLE(sample_function_cache_key)
 
+static struct hash_table *
+acquire_latest_sample_function_cache(struct lp_sampler_matrix *matrix)
+{
+   uint64_t value = p_atomic_read(&matrix->latest_cache.value);
+   return (struct hash_table *)(uintptr_t)value;
+}
+
+static void
+replace_sample_function_cache_locked(struct lp_sampler_matrix *matrix, struct hash_table *new_cache)
+{
+   uint64_t old_value = p_atomic_xchg(&matrix->latest_cache.value, (uint64_t)(uintptr_t)new_cache);
+   /* Like RCU pointers, defer cleanup of old values until we know no readers are left. */
+   struct hash_table *old_cache = (struct hash_table *)(uintptr_t)old_value;
+   util_dynarray_append(&matrix->trash_caches, struct hash_table *, old_cache);
+}
+
 void
 llvmpipe_init_sampler_matrix(struct llvmpipe_context *ctx)
 {
@@ -168,13 +184,19 @@ llvmpipe_init_sampler_matrix(struct llvmpipe_context *ctx)
    ctx->pipe.create_image_handle = llvmpipe_create_image_handle;
    ctx->pipe.delete_image_handle = llvmpipe_delete_image_handle;
 
-   util_dynarray_init(&ctx->sampler_matrix.gallivms, NULL);
+   struct lp_sampler_matrix *matrix = &ctx->sampler_matrix;
 
-   ctx->sampler_matrix.ctx = ctx;
+   util_dynarray_init(&matrix->gallivms, NULL);
 
-   ctx->sampler_matrix.compile_function = get_sample_function;
-   ctx->sampler_matrix.cache = sample_function_cache_key_table_create(NULL);
-   simple_mtx_init(&ctx->sampler_matrix.lock, mtx_plain);
+   matrix->ctx = ctx;
+
+   matrix->compile_function = get_sample_function;
+
+   struct hash_table *initial_cache = sample_function_cache_key_table_create(NULL);
+   p_atomic_set(&matrix->latest_cache.value, (uint64_t)(uintptr_t)initial_cache);
+   util_dynarray_init(&matrix->trash_caches, NULL);
+
+   simple_mtx_init(&matrix->lock, mtx_plain);
 }
 
 void
@@ -183,7 +205,11 @@ llvmpipe_sampler_matrix_destroy(struct llvmpipe_context *ctx)
    struct lp_sampler_matrix *matrix = &ctx->sampler_matrix;
 
    simple_mtx_destroy(&matrix->lock);
-   _mesa_hash_table_destroy(matrix->cache, NULL);
+
+   _mesa_hash_table_destroy(acquire_latest_sample_function_cache(matrix), NULL);
+   util_dynarray_foreach (&matrix->trash_caches, struct hash_table *, trash)
+      _mesa_hash_table_destroy(*trash, NULL);
+   util_dynarray_fini(&matrix->trash_caches);
 
    free(matrix->samplers);
 
@@ -204,13 +230,13 @@ llvmpipe_sampler_matrix_destroy(struct llvmpipe_context *ctx)
    }
    free(matrix->textures);
 
-   util_dynarray_foreach (&ctx->sampler_matrix.gallivms, struct gallivm_state *, gallivm)
+   util_dynarray_foreach (&matrix->gallivms, struct gallivm_state *, gallivm)
       gallivm_destroy(*gallivm);
 
-   util_dynarray_fini(&ctx->sampler_matrix.gallivms);
+   util_dynarray_fini(&matrix->gallivms);
 
-   if (ctx->sampler_matrix.context.ref)
-      lp_context_destroy(&ctx->sampler_matrix.context);
+   if (matrix->context.ref)
+      lp_context_destroy(&matrix->context);
 }
 
 static lp_context_ref *
@@ -251,7 +277,7 @@ compile_image_function(struct llvmpipe_context *ctx, struct lp_static_texture_st
    const struct util_format_description *desc = util_format_description(texture->format);
    if (desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS && !lp_storage_render_image_format_supported(texture->format))
       return NULL;
-   
+
    bool ms = op >= LP_TOTAL_IMAGE_OP_COUNT / 2;
    if (ms)
       op -= LP_TOTAL_IMAGE_OP_COUNT / 2;
@@ -529,8 +555,6 @@ get_sample_function(uint64_t _matrix, uint64_t _texture_functions, uint64_t _sam
    struct lp_descriptor *sampler_desc = (void *)(uintptr_t)_sampler_desc;
    uint32_t sampler_index = sampler_desc->texture.sampler_index;
 
-   simple_mtx_lock(&matrix->lock);
-
    struct lp_texture_functions *texture_functions = (void *)(uintptr_t)_texture_functions;
    struct sample_function_cache_key key = {
       .texture_functions = texture_functions,
@@ -539,17 +563,29 @@ get_sample_function(uint64_t _matrix, uint64_t _texture_functions, uint64_t _sam
    };
 
    void *result;
-   struct hash_entry *entry = _mesa_hash_table_search(matrix->cache, &key);
-   if (entry) {
-      result = entry->data;
-   } else {
-      result = compile_sample_function(matrix->ctx, &texture_functions->state, matrix->samplers + sampler_index, sample_key);
-      struct sample_function_cache_key *allocated_key = malloc(sizeof(struct sample_function_cache_key));
-      *allocated_key = key;
-      _mesa_hash_table_insert(matrix->cache, allocated_key, result);
+   {
+      struct hash_entry *entry = _mesa_hash_table_search(acquire_latest_sample_function_cache(matrix), &key);
+      result = entry ? entry->data : NULL;
    }
 
-   simple_mtx_unlock(&matrix->lock);
+   if (!result) {
+      simple_mtx_lock(&matrix->lock);
+      /* Check once more in case the cache got modified between the first check and acquiring the lock. */
+      struct hash_table *current_cache = acquire_latest_sample_function_cache(matrix);
+      struct hash_entry *entry = _mesa_hash_table_search(current_cache, &key);
+      result = entry ? entry->data : NULL;
+      if (!result) {
+         result = compile_sample_function(matrix->ctx, &texture_functions->state, matrix->samplers + sampler_index, sample_key);
+         struct sample_function_cache_key *allocated_key = malloc(sizeof(struct sample_function_cache_key));
+         *allocated_key = key;
+         /* RCU style update: swap in an updated copy of the cache.
+         /  Old caches are kept as trash to be safely deleted later. */
+         struct hash_table *new_cache = _mesa_hash_table_clone(current_cache, NULL);
+         _mesa_hash_table_insert(new_cache, allocated_key, result);
+         replace_sample_function_cache_locked(matrix, new_cache);
+      }
+      simple_mtx_unlock(&matrix->lock);
+   }
 
    return (uint64_t)(uintptr_t)result;
 }
@@ -1020,26 +1056,25 @@ llvmpipe_register_shader(struct pipe_context *ctx, const struct pipe_shader_stat
 void
 llvmpipe_clear_sample_functions_cache(struct llvmpipe_context *ctx, struct pipe_fence_handle **fence)
 {
+   if (!fence)
+      return;
+
    struct lp_sampler_matrix *matrix = &ctx->sampler_matrix;
 
-   simple_mtx_lock(&matrix->lock);
-
    /* If the cache is empty, there is nothing to do. */
-   if (!_mesa_hash_table_num_entries(matrix->cache)) {
-      simple_mtx_unlock(&matrix->lock);
+   if (!_mesa_hash_table_num_entries(acquire_latest_sample_function_cache(matrix)))
       return;
+
+   ctx->pipe.screen->fence_finish(ctx->pipe.screen, NULL, *fence, OS_TIMEOUT_INFINITE);
+
+   /* All work is finished, it's safe to move cache entries into the table. */
+   hash_table_foreach_remove(acquire_latest_sample_function_cache(matrix), entry) {
+      struct sample_function_cache_key *key = (void *)entry->key;
+      key->texture_functions->sample_functions[key->sampler_index][key->sample_key] = entry->data;
+      free(key);
    }
 
-   simple_mtx_unlock(&matrix->lock);
-
-   if (fence) {
-      ctx->pipe.screen->fence_finish(ctx->pipe.screen, NULL, *fence, OS_TIMEOUT_INFINITE);
-
-      /* All work is finished, it's safe to move cache entries into the table. */
-      hash_table_foreach_remove(matrix->cache, entry) {
-         struct sample_function_cache_key *key = (void *)entry->key;
-         key->texture_functions->sample_functions[key->sampler_index][key->sample_key] = entry->data;
-         free(key);
-      }
-   }
+   util_dynarray_foreach (&matrix->trash_caches, struct hash_table *, trash)
+      _mesa_hash_table_destroy(*trash, NULL);
+   util_dynarray_clear(&matrix->trash_caches);
 }

@@ -341,11 +341,11 @@ BEGIN_TEST(assembler.p_constaddr)
 
    //>> s_getpc_b64 s[0:1] ; be801c00
    //! s_add_u32 s0, s0, 44 ; 8000ff00 0000002c
-   bld.pseudo(aco_opcode::p_constaddr, dst0, Operand::zero());
+   bld.pseudo(aco_opcode::p_constaddr, dst0, bld.def(s1, scc), Operand::zero());
 
    //! s_getpc_b64 s[2:3] ; be821c00
    //! s_add_u32 s2, s2, 64 ; 8002ff02 00000040
-   bld.pseudo(aco_opcode::p_constaddr, dst1, Operand::c32(32));
+   bld.pseudo(aco_opcode::p_constaddr, dst1, bld.def(s1, scc), Operand::c32(32));
 
    aco::lower_to_hw_instr(program.get());
    finish_assembler_test();

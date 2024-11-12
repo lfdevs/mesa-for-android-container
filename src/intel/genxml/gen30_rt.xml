@@ -1,0 +1,4 @@
+<?xml version='1.0' encoding='utf-8'?>
+<genxml name="RT" gen="30">
+  <import name="gen20_rt.xml" />
+</genxml>

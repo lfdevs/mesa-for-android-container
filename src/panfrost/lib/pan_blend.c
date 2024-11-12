@@ -687,6 +687,13 @@ GENX(pan_blend_create_shader)(const struct pan_blend_state *state,
          .io_semantics.location = i ? VARYING_SLOT_VAR0 : VARYING_SLOT_COL0,
          .io_semantics.num_slots = 1, .base = i, .dest_type = src_type);
 
+      if (state->alpha_to_one && src_type == nir_type_float32) {
+         /* force alpha to 1 */
+         src = nir_vector_insert_imm(&b, src,
+                                     nir_imm_floatN_t(&b, 1.0, src->bit_size),
+                                     3);
+      }
+
       /* On Midgard, the blend shader is responsible for format conversion.
        * As the OpenGL spec requires integer conversions to saturate, we must
        * saturate ourselves here. On Bifrost and later, the conversion
@@ -808,10 +815,10 @@ GENX(pan_blend_get_shader_locked)(struct pan_blend_shader_cache *cache,
       .logicop_func = state->logicop_func,
       .nr_samples = state->rts[rt].nr_samples,
       .equation = state->rts[rt].equation,
+      .alpha_to_one = state->alpha_to_one,
    };
-
    /* Blend shaders should only be used for blending on Bifrost onwards */
-   assert(PAN_ARCH <= 5 || state->logicop_enable ||
+   assert(PAN_ARCH <= 5 || state->logicop_enable || state->alpha_to_one ||
           !pan_blend_is_opaque(state->rts[rt].equation));
    assert(state->rts[rt].equation.color_mask != 0);
 

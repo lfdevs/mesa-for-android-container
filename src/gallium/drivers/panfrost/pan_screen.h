@@ -104,15 +104,18 @@ struct panfrost_vtable {
                      struct pan_image_slice_layout *slice,
                      struct panfrost_bo *metadata, unsigned metadata_offset,
                      unsigned level);
+
+   void (*emit_write_timestamp)(struct panfrost_batch *batch,
+                                struct panfrost_resource *dst, unsigned offset);
 };
 
 struct panfrost_screen {
    struct pipe_screen base;
    struct panfrost_device dev;
    struct {
-      struct panfrost_pool bin_pool;
-      struct panfrost_pool desc_pool;
-   } blitter;
+      struct panfrost_pool bin;
+      struct panfrost_pool desc;
+   } mempools;
 
    struct panfrost_vtable vtbl;
    struct disk_cache *disk_cache;

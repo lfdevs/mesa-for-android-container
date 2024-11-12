@@ -46,6 +46,7 @@
 #include "pvr_srv_sync_prim.h"
 #include "pvr_types.h"
 #include "pvr_winsys.h"
+#include "util/compiler.h"
 #include "util/log.h"
 #include "util/macros.h"
 #include "util/u_math.h"
@@ -921,6 +922,9 @@ pvr_srv_fragment_cmd_init(struct rogue_fwif_cmd_3d *cmd,
 
    if (state->flags.has_spm_scratch_buffer)
       cmd->flags |= ROGUE_FWIF_RENDERFLAGS_SPMSCRATCHBUFFER;
+
+   if (state->flags.disable_pixel_merging)
+      cmd->flags |= ROGUE_FWIF_RENDERFLAGS_DISABLE_PIXELMERGE;
 }
 
 VkResult pvr_srv_winsys_render_submit(

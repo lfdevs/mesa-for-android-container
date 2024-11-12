@@ -13,8 +13,8 @@ if test -x /usr/bin/ccache; then
 
     export CCACHE_COMPILERCHECK=content
     export CCACHE_COMPRESS=true
-    export CCACHE_DIR=/cache/$CI_PROJECT_NAME/ccache
-    export PATH=$CCACHE_PATH:$PATH
+    export CCACHE_DIR="/cache/$CI_PROJECT_NAME/ccache"
+    export PATH="$CCACHE_PATH:$PATH"
 
     # CMake ignores $PATH, so we have to force CC/GCC to the ccache versions.
     export CC="${CCACHE_PATH}/gcc"
@@ -27,9 +27,14 @@ fi
 # linkers to gold, since it's so much faster for building.  We can't use
 # lld because we're on old debian and it's buggy.  mingw fails meson builds
 # with it with "meson.build:21:0: ERROR: Unable to determine dynamic linker"
-find /usr/bin -name \*-ld -o -name ld | \
+if [ -e /usr/bin/ld.gold ]; then
+  find /usr/bin -name \*-ld -o -name ld | \
     grep -v mingw | \
     xargs -n 1 -I '{}' ln -sf '{}.gold' '{}'
+else
+  echo "ld.gold is missing, not replacing ld with it."
+  echo "Builds might be slower, consider installing gold."
+fi
 
 # Make a wrapper script for ninja to always include the -j flags
 {

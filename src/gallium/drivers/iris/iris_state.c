@@ -428,6 +428,8 @@ flush_before_state_base_change(struct iris_batch *batch)
     * insufficient, we need to ensure that any rendering operations from
     * other processes are definitely complete before we try to do our own
     * rendering.  It's a bit of a big hammer but it appears to work.
+    *
+    * Render target cache flush before SBA is required by Wa_18039438632.
     */
    iris_emit_end_of_pipe_sync(batch,
                               "change STATE_BASE_ADDRESS (flushes)",
@@ -658,9 +660,9 @@ iris_rewrite_compute_walker_pc(struct iris_batch *batch,
    uint32_t dwords[GENX(COMPUTE_WALKER_length)];
 
    _iris_pack_command(batch, GENX(COMPUTE_WALKER), dwords, cw) {
-      cw.PostSync.Operation          = WriteTimestamp;
-      cw.PostSync.DestinationAddress = addr;
-      cw.PostSync.MOCS               = iris_mocs(NULL, &screen->isl_dev, 0);
+      cw.body.PostSync.Operation = WriteTimestamp;
+      cw.body.PostSync.DestinationAddress = addr;
+      cw.body.PostSync.MOCS = iris_mocs(NULL, &screen->isl_dev, 0);
    }
 
    for (uint32_t i = 0; i < GENX(COMPUTE_WALKER_length); i++)
@@ -1478,6 +1480,51 @@ iris_init_compute_context(struct iris_batch *batch)
 #endif
 
 #if GFX_VERx10 >= 125
+   /* Wa_14015782607 - Issue pipe control with HDC_flush and
+    * untyped cache flush set to 1 when CCS has NP state update with
+    * STATE_COMPUTE_MODE.
+    */
+   if (intel_needs_workaround(devinfo, 14015782607))
+      iris_emit_pipe_control_flush(batch, "Wa_14015782607",
+                                   PIPE_CONTROL_CS_STALL |
+                                   PIPE_CONTROL_UNTYPED_DATAPORT_CACHE_FLUSH |
+                                   PIPE_CONTROL_FLUSH_HDC);
+
+   /* Wa_14014427904/22013045878 - We need additional invalidate/flush when
+    * emitting NP state commands with ATS-M in compute mode.
+    */
+   if (intel_device_info_is_atsm(devinfo))
+      iris_emit_pipe_control_flush(batch, "Wa_14014427904/22013045878",
+                                   PIPE_CONTROL_CS_STALL |
+                                   PIPE_CONTROL_STATE_CACHE_INVALIDATE |
+                                   PIPE_CONTROL_CONST_CACHE_INVALIDATE |
+                                   PIPE_CONTROL_UNTYPED_DATAPORT_CACHE_FLUSH |
+                                   PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
+                                   PIPE_CONTROL_INSTRUCTION_INVALIDATE |
+                                   PIPE_CONTROL_FLUSH_HDC);
+
+   iris_emit_cmd(batch, GENX(STATE_COMPUTE_MODE), cm) {
+#if GFX_VER >= 20
+      cm.AsyncComputeThreadLimit = ACTL_Max8;
+      cm.ZPassAsyncComputeThreadLimit = ZPACTL_Max60;
+      cm.ZAsyncThrottlesettings = ZATS_DefertoAsyncComputeThreadLimit;
+      cm.AsyncComputeThreadLimitMask = 0x7;
+      cm.ZPassAsyncComputeThreadLimitMask = 0x7;
+      cm.ZAsyncThrottlesettingsMask = 0x3;
+#else
+      cm.PixelAsyncComputeThreadLimit = PACTL_Max24;
+      cm.ZPassAsyncComputeThreadLimit = ZPACTL_Max60;
+      cm.PixelAsyncComputeThreadLimitMask = 0x7;
+      cm.ZPassAsyncComputeThreadLimitMask = 0x7;
+      if (intel_device_info_is_mtl_or_arl(devinfo)) {
+         cm.ZAsyncThrottlesettings = ZATS_DefertoPixelAsyncComputeThreadLimit;
+         cm.ZAsyncThrottlesettingsMask = 0x3;
+      }
+#endif
+   }
+#endif
+
+#if GFX_VERx10 >= 125
    iris_emit_cmd(batch, GENX(CFE_STATE), cfe) {
       cfe.MaximumNumberofThreads =
          devinfo->max_cs_threads * devinfo->subslice_total;
@@ -2089,7 +2136,8 @@ genX(update_pma_fix)(struct iris_context *ice,
 
    /* According to the Broadwell PIPE_CONTROL documentation, software should
     * emit a PIPE_CONTROL with the CS Stall and Depth Cache Flush bits set
-    * prior to the LRI.  If stencil buffer writes are enabled, then a Render        * Cache Flush is also necessary.
+    * prior to the LRI.  If stencil buffer writes are enabled, then a Render
+    * Cache Flush is also necessary.
     *
     * The Gfx9 docs say to use a depth stall rather than a command streamer
     * stall.  However, the hardware seems to violently disagree.  A full
@@ -2471,7 +2519,7 @@ fill_sampler_state(uint32_t *sampler_state,
  * We fill out SAMPLER_STATE (except for the border color pointer), and
  * store that on the CPU.  It doesn't make sense to upload it to a GPU
  * buffer object yet, because 3DSTATE_SAMPLER_STATE_POINTERS requires
- * all bound sampler states to be in contiguous memor.
+ * all bound sampler states to be in contiguous memory.
  */
 static void *
 iris_create_sampler_state(struct pipe_context *ctx,
@@ -3695,6 +3743,9 @@ iris_set_framebuffer_state(struct pipe_context *ctx,
 
    unsigned samples = util_framebuffer_get_num_samples(state);
    unsigned layers = util_framebuffer_get_num_layers(state);
+
+   /* multiview not supported */
+   assert(!state->viewmask);
 
    if (cso->samples != samples) {
       ice->state.dirty |= IRIS_DIRTY_MULTISAMPLE;
@@ -4948,17 +4999,15 @@ iris_populate_cs_key(const struct iris_context *ice,
 {
 }
 
-static uint32_t
+static inline uint32_t
 encode_sampler_count(const struct iris_compiled_shader *shader)
 {
-   uint32_t count = util_last_bit64(shader->bt.samplers_used_mask);
-   uint32_t count_by_4 = DIV_ROUND_UP(count, 4);
-
    /* We can potentially have way more than 32 samplers and that's ok.
     * However, the 3DSTATE_XS packets only have 3 bits to specify how
     * many to pre-fetch and all values above 4 are marked reserved.
     */
-   return MIN2(count_by_4, 4);
+   uint32_t count = util_last_bit64(shader->bt.samplers_used_mask);
+   return DIV_ROUND_UP(CLAMP(count, 0, 16), 4);
 }
 
 #define INIT_THREAD_DISPATCH_FIELDS(pkt, prefix, stage)                   \
@@ -7784,19 +7833,9 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 
       iris_batch_emit(batch, cso_z->packets, sizeof(cso_z->packets));
 
-      /* Wa_14016712196:
-       * Emit depth flush after state that sends implicit depth flush.
-       */
-      if (intel_needs_workaround(batch->screen->devinfo, 14016712196)) {
-         iris_emit_pipe_control_flush(batch, "Wa_14016712196",
-                                      PIPE_CONTROL_DEPTH_CACHE_FLUSH);
-      }
-
-      if (zres)
-         genX(emit_depth_state_workarounds)(ice, batch, &zres->surf);
-
       if (intel_needs_workaround(batch->screen->devinfo, 1408224581) ||
-          intel_needs_workaround(batch->screen->devinfo, 14014097488)) {
+          intel_needs_workaround(batch->screen->devinfo, 14014097488) ||
+          intel_needs_workaround(batch->screen->devinfo, 14016712196)) {
          /* Wa_1408224581
           *
           * Workaround: Gfx12LP Astep only An additional pipe control with
@@ -7804,13 +7843,17 @@ iris_upload_dirty_render_state(struct iris_context *ice,
           * have an additional pipe control after the stencil state whenever
           * the surface state bits of this state is changing).
           *
-          * This also seems sufficient to handle Wa_14014097488.
+          * This also seems sufficient to handle Wa_14014097488 and
+          * Wa_14016712196.
           */
-         iris_emit_pipe_control_write(batch, "WA for stencil state",
+         iris_emit_pipe_control_write(batch, "WA for depth/stencil state",
                                       PIPE_CONTROL_WRITE_IMMEDIATE,
                                       screen->workaround_address.bo,
                                       screen->workaround_address.offset, 0);
       }
+
+      if (zres)
+         genX(emit_depth_state_workarounds)(ice, batch, &zres->surf);
    }
 
    if (dirty & (IRIS_DIRTY_DEPTH_BUFFER | IRIS_DIRTY_WM_DEPTH_STENCIL)) {
@@ -8969,29 +9012,33 @@ iris_upload_compute_walker(struct iris_context *ice,
 
       ice->utrace.last_compute_walker =
          iris_emit_dwords(batch, GENX(COMPUTE_WALKER_length));
+
+      struct GENX(COMPUTE_WALKER_BODY) body = {
+         .SIMDSize                       = dispatch.simd_size / 16,
+         .MessageSIMD                    = dispatch.simd_size / 16,
+         .LocalXMaximum                  = grid->block[0] - 1,
+         .LocalYMaximum                  = grid->block[1] - 1,
+         .LocalZMaximum                  = grid->block[2] - 1,
+         .ThreadGroupIDXDimension        = grid->grid[0],
+         .ThreadGroupIDYDimension        = grid->grid[1],
+         .ThreadGroupIDZDimension        = grid->grid[2],
+         .ExecutionMask                  = dispatch.right_mask,
+         .PostSync.MOCS                  = iris_mocs(NULL, &screen->isl_dev, 0),
+         .InterfaceDescriptor            = idd,
+
+#if GFX_VERx10 >= 125
+         .GenerateLocalID = cs_data->generate_local_id != 0,
+         .EmitLocal       = cs_data->generate_local_id,
+         .WalkOrder       = cs_data->walk_order,
+         .TileLayout = cs_data->walk_order == INTEL_WALK_ORDER_YXZ ?
+                       TileY32bpe : Linear,
+#endif
+      };
+
       _iris_pack_command(batch, GENX(COMPUTE_WALKER),
                          ice->utrace.last_compute_walker, cw) {
          cw.IndirectParameterEnable        = grid->indirect;
-         cw.SIMDSize                       = dispatch.simd_size / 16;
-         cw.MessageSIMD                    = dispatch.simd_size / 16;
-         cw.LocalXMaximum                  = grid->block[0] - 1;
-         cw.LocalYMaximum                  = grid->block[1] - 1;
-         cw.LocalZMaximum                  = grid->block[2] - 1;
-         cw.ThreadGroupIDXDimension        = grid->grid[0];
-         cw.ThreadGroupIDYDimension        = grid->grid[1];
-         cw.ThreadGroupIDZDimension        = grid->grid[2];
-         cw.ExecutionMask                  = dispatch.right_mask;
-         cw.PostSync.MOCS                  = iris_mocs(NULL, &screen->isl_dev, 0);
-         cw.InterfaceDescriptor            = idd;
-
-#if GFX_VERx10 >= 125
-         cw.GenerateLocalID = cs_data->generate_local_id != 0;
-         cw.EmitLocal       = cs_data->generate_local_id;
-         cw.WalkOrder       = cs_data->walk_order;
-         cw.TileLayout = cs_data->walk_order == INTEL_WALK_ORDER_YXZ ?
-                         TileY32bpe : Linear;
-#endif
-
+         cw.body                           = body;
          assert(iris_cs_push_const_total_size(shader, dispatch.threads) == 0);
       }
    }

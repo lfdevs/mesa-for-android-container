@@ -18,6 +18,8 @@
 # include "intel_gfx125_shaders_code.h"
 #elif GFX_VERx10 == 200
 # include "intel_gfx20_shaders_code.h"
+#elif GFX_VERx10 == 300
+# include "intel_gfx30_shaders_code.h"
 #else
 # error "Unsupported generation"
 #endif

@@ -318,7 +318,7 @@ panvk_per_arch(queue_init)(struct panvk_device *device,
                               &queue->sync);
    if (ret) {
       vk_queue_finish(&queue->vk);
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+      return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    queue->vk.driver_submit = panvk_queue_submit;
@@ -330,6 +330,9 @@ panvk_per_arch(QueueWaitIdle)(VkQueue _queue)
 {
    VK_FROM_HANDLE(panvk_queue, queue, _queue);
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
+
+   /* we need to use vk_common_QueueWaitIdle if we ever go threaded */
+   assert(queue->vk.submit.mode != VK_QUEUE_SUBMIT_MODE_THREADED);
 
    if (vk_device_is_lost(&dev->vk))
       return VK_ERROR_DEVICE_LOST;

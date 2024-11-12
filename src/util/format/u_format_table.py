@@ -105,6 +105,8 @@ def has_access(format):
         'g8r8_g8b8_unorm',
         'g8b8_g8r8_unorm',
         'b8g8_r8g8_unorm',
+        'x6g10_x6b10x6r10_420_unorm',
+        'x4g12_x4b12x4r12_420_unorm',
         'y8_400_unorm',
         'y8_u8_v8_422_unorm',
         'y8_u8v8_422_unorm',

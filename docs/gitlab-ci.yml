@@ -8,7 +8,7 @@
       - public/
   script:
     - meson setup _build -D prefix=$(pwd) --auto-features=disabled
-      -D vulkan-drivers="" -D gallium-drivers="" -D glx=disabled
+      -D vulkan-drivers="" -D gallium-drivers="" -D platforms=[] -D glx=disabled
       -D video-codecs="" -D html-docs=enabled -D html-docs-path=public
     - meson compile -C _build
     - meson install -C _build
@@ -17,6 +17,7 @@ pages:
   extends: .docs-base
   stage: deploy
   rules:
+    - !reference [.common-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
     - if: '$CI_PROJECT_NAMESPACE == "mesa" && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_COMMIT_BRANCH'
       changes: &docs-or-ci
@@ -36,6 +37,7 @@ test-docs:
   interruptible: true
   stage: deploy
   rules:
+    - !reference [.common-rules, rules]
     # pre-merge or merge pipeline
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *docs-or-ci
@@ -52,6 +54,7 @@ linkcheck-docs:
   interruptible: true
   stage: deploy
   rules:
+    - !reference [.common-rules, rules]
     - !reference [.scheduled_pipeline-rules, rules]
   allow_failure: true
   script:

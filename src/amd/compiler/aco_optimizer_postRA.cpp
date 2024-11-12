@@ -404,7 +404,8 @@ try_optimize_scc_nocompare(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
 
       /* Use the SCC def from wr_instr */
       ctx.uses[instr->operands[0].tempId()]--;
-      instr->operands[0] = Operand(wr_instr->definitions[1].getTemp(), scc);
+      instr->operands[0] = Operand(wr_instr->definitions[1].getTemp());
+      instr->operands[0].setFixed(scc);
       ctx.uses[instr->operands[0].tempId()]++;
 
       /* Set the opcode and operand to 32-bit */
@@ -523,6 +524,7 @@ try_eliminate_scc_copy(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
    }
 
    /* Duplicate the original producer of the SCC */
+   Definition scc_def = instr->definitions[0];
    instr.reset(create_instruction(producer_instr->opcode, producer_instr->format,
                                   producer_instr->operands.size(),
                                   producer_instr->definitions.size()));
@@ -545,6 +547,7 @@ try_eliminate_scc_copy(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
    for (unsigned i = 0; i < producer_instr->definitions.size(); ++i)
       instr->definitions[i] = Definition(producer_instr->definitions[i].physReg(),
                                          producer_instr->definitions[i].regClass());
+   instr->definitions.back() = scc_def; /* Keep temporary ID. */
 }
 
 void

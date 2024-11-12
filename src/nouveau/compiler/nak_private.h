@@ -37,6 +37,9 @@ enum ENUM_PACKED nak_attr {
    /* Patch attributes */
    NAK_ATTR_PATCH_START       = 0x020,
 
+   /* System values B? */
+   NAK_ATTR_VPRS_TABLE_INDEX  = 0x5c,
+
    /* System values B */
    NAK_ATTR_PRIMITIVE_ID      = 0x060,
    NAK_ATTR_RT_ARRAY_INDEX    = 0x064,
@@ -87,20 +90,23 @@ enum ENUM_PACKED nak_attr {
 };
 
 static inline uint16_t
-nak_attribute_attr_addr(gl_vert_attrib attrib)
+nak_attribute_attr_addr(UNUSED const struct nak_compiler *nak,
+                        gl_vert_attrib attrib)
 {
    assert(attrib >= VERT_ATTRIB_GENERIC0);
    return NAK_ATTR_GENERIC_START + (attrib - VERT_ATTRIB_GENERIC0) * 0x10;
 }
 
-uint16_t nak_varying_attr_addr(gl_varying_slot slot);
-uint16_t nak_sysval_attr_addr(gl_system_value sysval);
+uint16_t nak_varying_attr_addr(const struct nak_compiler *nak,
+                               gl_varying_slot slot);
+uint16_t nak_sysval_attr_addr(const struct nak_compiler *nak,
+                              gl_system_value sysval);
 
 enum ENUM_PACKED nak_sv {
    NAK_SV_LANE_ID          = 0x00,
    NAK_SV_VIRTCFG          = 0x02,
    NAK_SV_VIRTID           = 0x03,
-   NAK_SV_VERTEX_COUNT     = 0x10,
+   NAK_SV_PRIM_TYPE        = 0x10,
    NAK_SV_INVOCATION_ID    = 0x11,
    NAK_SV_THREAD_KILL      = 0x13,
    NAK_SV_INVOCATION_INFO  = 0x1d,
@@ -121,12 +127,14 @@ enum ENUM_PACKED nak_sv {
    NAK_SV_CLOCK_LO         = 0x50,
    NAK_SV_CLOCK_HI         = 0x51,
    NAK_SV_CLOCK            = NAK_SV_CLOCK_LO,
+   NAK_SV_VARIABLE_RATE    = 0x84,
 };
 
 bool nak_nir_workgroup_has_one_subgroup(const nir_shader *nir);
 
 struct nak_xfb_info
-nak_xfb_from_nir(const struct nir_xfb_info *nir_xfb);
+nak_xfb_from_nir(const struct nak_compiler *nak,
+                 const struct nir_xfb_info *nir_xfb);
 
 struct nak_io_addr_offset {
    nir_scalar base;
@@ -218,23 +226,12 @@ enum nak_fs_out {
 
 #define NAK_FS_OUT_COLOR(n) (NAK_FS_OUT_COLOR0 + (n) * 16)
 
+bool nak_nir_split_64bit_conversions(nir_shader *nir);
 bool nak_nir_lower_non_uniform_ldcx(nir_shader *nir);
 bool nak_nir_add_barriers(nir_shader *nir, const struct nak_compiler *nak);
 bool nak_nir_lower_cf(nir_shader *nir);
 
 void nak_optimize_nir(nir_shader *nir, const struct nak_compiler *nak);
-
-struct nak_memstream {
-   FILE *stream;
-   char *buffer;
-   size_t written;
-};
-
-void nak_open_memstream(struct nak_memstream *memstream);
-void nak_close_memstream(struct nak_memstream *memstream);
-void nak_flush_memstream(struct nak_memstream *memstream);
-void nak_clear_memstream(struct nak_memstream *memstream);
-void nak_nir_asprint_instr(struct nak_memstream *memstream, const nir_instr *instr);
 
 #ifdef __cplusplus
 }

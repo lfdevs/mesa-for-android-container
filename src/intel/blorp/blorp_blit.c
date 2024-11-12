@@ -870,10 +870,10 @@ bit_cast_color(struct nir_builder *b, nir_def *color,
    assert(src_fmtl->bpb == dst_fmtl->bpb);
 
    if (src_fmtl->bpb <= 32) {
-      assert(src_fmtl->channels.r.type == ISL_UINT ||
-             src_fmtl->channels.r.type == ISL_UNORM);
-      assert(dst_fmtl->channels.r.type == ISL_UINT ||
-             dst_fmtl->channels.r.type == ISL_UNORM);
+      assert(src_fmtl->uniform_channel_type == ISL_UINT ||
+             src_fmtl->uniform_channel_type == ISL_UNORM);
+      assert(dst_fmtl->uniform_channel_type == ISL_UINT ||
+             dst_fmtl->uniform_channel_type == ISL_UNORM);
 
       nir_def *packed = nir_imm_int(b, 0);
       for (unsigned c = 0; c < 4; c++) {
@@ -884,8 +884,14 @@ bit_cast_color(struct nir_builder *b, nir_def *color,
          const unsigned chan_bits = src_fmtl->channels_array[c].bits;
 
          nir_def *chan =  nir_channel(b, color, c);
-         if (src_fmtl->channels_array[c].type == ISL_UNORM)
+         if (src_fmtl->channels_array[c].type == ISL_UNORM) {
+
+            /* Don't touch the alpha channel */
+            if (c < 3 && src_fmtl->colorspace == ISL_COLORSPACE_SRGB)
+               chan = nir_format_linear_to_srgb(b, chan);
+
             chan = nir_format_float_to_unorm(b, chan, &chan_bits);
+         }
 
          packed = nir_ior(b, packed, nir_shift_imm(b, chan, chan_start_bit));
       }
@@ -902,8 +908,13 @@ bit_cast_color(struct nir_builder *b, nir_def *color,
          chans[c] = nir_iand_imm(b, nir_shift_imm(b, packed, -(int)chan_start_bit),
                                     BITFIELD_MASK(chan_bits));
 
-         if (dst_fmtl->channels_array[c].type == ISL_UNORM)
+         if (dst_fmtl->channels_array[c].type == ISL_UNORM) {
             chans[c] = nir_format_unorm_to_float(b, chans[c], &chan_bits);
+
+            /* Don't touch the alpha channel */
+            if (c < 3 && dst_fmtl->colorspace == ISL_COLORSPACE_SRGB)
+               chans[c] = nir_format_srgb_to_linear(b, chans[c]);
+         }
       }
       color = nir_vec(b, chans, 4);
    } else {
@@ -2121,7 +2132,8 @@ try_blorp_blit(struct blorp_batch *batch,
               key->dst_usage != ISL_SURF_USAGE_DEPTH_BIT) {
       key->dst_format = params->dst.view.format;
       params->dst.view.format = ISL_FORMAT_R32_UINT;
-   } else if (params->dst.view.format == ISL_FORMAT_A4B4G4R4_UNORM) {
+   } else if (!isl_format_supports_rendering(devinfo, params->dst.view.format)
+              && params->dst.view.format == ISL_FORMAT_A4B4G4R4_UNORM) {
       params->dst.view.swizzle =
          isl_swizzle_compose(params->dst.view.swizzle,
                              ISL_SWIZZLE(ALPHA, RED, GREEN, BLUE));
@@ -2651,7 +2663,7 @@ get_copy_format_for_bpb(const struct isl_device *isl_dev, unsigned bpb)
  * operation between the two bit layouts.
  */
 static enum isl_format
-get_ccs_compatible_copy_format(const struct isl_format_layout *fmtl)
+get_ccs_compatible_uint_format(const struct isl_format_layout *fmtl)
 {
    switch (fmtl->format) {
    case ISL_FORMAT_R32G32B32A32_FLOAT:
@@ -2711,22 +2723,16 @@ get_ccs_compatible_copy_format(const struct isl_format_layout *fmtl)
    case ISL_FORMAT_B10G10R10A2_UNORM:
    case ISL_FORMAT_B10G10R10A2_UNORM_SRGB:
    case ISL_FORMAT_R10G10B10A2_UNORM:
-   case ISL_FORMAT_R10G10B10A2_UNORM_SRGB:
-   case ISL_FORMAT_R10G10B10_FLOAT_A2_UNORM:
    case ISL_FORMAT_R10G10B10A2_UINT:
       return ISL_FORMAT_R10G10B10A2_UINT;
 
-   case ISL_FORMAT_R16_UNORM:
    case ISL_FORMAT_R16_SNORM:
    case ISL_FORMAT_R16_SINT:
-   case ISL_FORMAT_R16_UINT:
    case ISL_FORMAT_R16_FLOAT:
       return ISL_FORMAT_R16_UINT;
 
-   case ISL_FORMAT_R8G8_UNORM:
    case ISL_FORMAT_R8G8_SNORM:
    case ISL_FORMAT_R8G8_SINT:
-   case ISL_FORMAT_R8G8_UINT:
       return ISL_FORMAT_R8G8_UINT;
 
    case ISL_FORMAT_YCRCB_NORMAL:
@@ -2741,33 +2747,44 @@ get_ccs_compatible_copy_format(const struct isl_format_layout *fmtl)
        */
       return ISL_FORMAT_R8G8_UINT;
 
-   case ISL_FORMAT_B5G5R5X1_UNORM:
-   case ISL_FORMAT_B5G5R5X1_UNORM_SRGB:
-   case ISL_FORMAT_B5G5R5A1_UNORM:
-   case ISL_FORMAT_B5G5R5A1_UNORM_SRGB:
-      return ISL_FORMAT_B5G5R5A1_UNORM;
-
-   case ISL_FORMAT_A4B4G4R4_UNORM:
-   case ISL_FORMAT_B4G4R4A4_UNORM:
-   case ISL_FORMAT_B4G4R4A4_UNORM_SRGB:
-      return ISL_FORMAT_B4G4R4A4_UNORM;
-
-   case ISL_FORMAT_B5G6R5_UNORM:
-   case ISL_FORMAT_B5G6R5_UNORM_SRGB:
-      return ISL_FORMAT_B5G6R5_UNORM;
-
-   case ISL_FORMAT_A1B5G5R5_UNORM:
-      return ISL_FORMAT_A1B5G5R5_UNORM;
-
-   case ISL_FORMAT_A8_UNORM:
-   case ISL_FORMAT_R8_UNORM:
    case ISL_FORMAT_R8_SNORM:
    case ISL_FORMAT_R8_SINT:
-   case ISL_FORMAT_R8_UINT:
       return ISL_FORMAT_R8_UINT;
 
    default:
       unreachable("Not a compressible format");
+   }
+}
+
+enum isl_format
+blorp_copy_get_color_format(const struct isl_device *isl_dev,
+                            enum isl_format surf_format)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(surf_format);
+
+   if (ISL_GFX_VER(isl_dev) >= 9 && ISL_GFX_VER(isl_dev) <= 12 &&
+       fmtl->colorspace != ISL_COLORSPACE_YUV &&
+       fmtl->uniform_channel_type != ISL_SNORM &&
+       fmtl->uniform_channel_type != ISL_UFLOAT &&
+       fmtl->uniform_channel_type != ISL_SFLOAT &&
+       fmtl->uniform_channel_type != ISL_SINT &&
+       surf_format != ISL_FORMAT_R16G16B16A16_UNORM /* TODO */ &&
+       isl_format_supports_rendering(isl_dev->info, surf_format)) {
+      /* On gfx9-12, avoid format re-interpretation in order to support
+       * non-zero clear colors when copying. On gfx12, also do this in order
+       * to properly interpret the clear color of imported dmabuf surfaces.
+       */
+      return surf_format;
+   } else if (ISL_GFX_VER(isl_dev) <= 12 &&
+              isl_format_supports_ccs_e(isl_dev->info, surf_format)) {
+      /* On gfx9-12, choose a copy format that maintains compatibility with
+       * CCS_E. Although format reinterpretation doesn't affect compression
+       * support while rendering on gfx12, the sampler does have reduced
+       * support for compression when the bits-per-channel changes.
+       */
+      return get_ccs_compatible_uint_format(fmtl);
+   } else {
+      return get_copy_format_for_bpb(isl_dev, fmtl->bpb);
    }
 }
 
@@ -2874,33 +2891,17 @@ blorp_copy_get_formats(const struct isl_device *isl_dev,
        */
       *src_view_format = dst_surf->format;
       *dst_view_format = dst_surf->format;
-   } else if (isl_surf_usage_is_depth(src_surf->usage) ||
-              isl_surf_usage_is_depth(dst_surf->usage)) {
+   } else if (isl_surf_usage_is_depth_or_stencil(src_surf->usage) ||
+              isl_surf_usage_is_depth_or_stencil(dst_surf->usage)) {
       assert(src_fmtl->bpb == dst_fmtl->bpb);
       *src_view_format =
       *dst_view_format =
          get_copy_format_for_bpb(isl_dev, dst_fmtl->bpb);
-   } else if (ISL_GFX_VER(isl_dev) < 20 &&
-              isl_format_supports_ccs_e(isl_dev->info, dst_surf->format)) {
-      *dst_view_format = get_ccs_compatible_copy_format(dst_fmtl);
-      if (isl_format_supports_ccs_e(isl_dev->info, src_surf->format)) {
-         *src_view_format = get_ccs_compatible_copy_format(src_fmtl);
-      } else if (src_fmtl->bpb == dst_fmtl->bpb) {
-         *src_view_format = *dst_view_format;
-      } else {
-         *src_view_format = get_copy_format_for_bpb(isl_dev, src_fmtl->bpb);
-      }
-   } else if (ISL_GFX_VER(isl_dev) < 20 &&
-              isl_format_supports_ccs_e(isl_dev->info, src_surf->format)) {
-      *src_view_format = get_ccs_compatible_copy_format(src_fmtl);
-      if (src_fmtl->bpb == dst_fmtl->bpb) {
-         *dst_view_format = *src_view_format;
-      } else {
-         *dst_view_format = get_copy_format_for_bpb(isl_dev, dst_fmtl->bpb);
-      }
    } else {
-      *dst_view_format = get_copy_format_for_bpb(isl_dev, dst_fmtl->bpb);
-      *src_view_format = get_copy_format_for_bpb(isl_dev, src_fmtl->bpb);
+      *src_view_format =
+         blorp_copy_get_color_format(isl_dev, src_surf->format);
+      *dst_view_format =
+         blorp_copy_get_color_format(isl_dev, dst_surf->format);
    }
 }
 
@@ -2973,24 +2974,14 @@ blorp_copy(struct blorp_batch *batch,
 
    if (isl_aux_usage_has_fast_clears(params.src.aux_usage) &&
        isl_dev->ss.clear_color_state_size > 0) {
-      /* For 32bpc formats, the sampler fetches the raw clear color dwords
-       * used for rendering instead of the converted pixel dwords typically
-       * used for sampling. The CLEAR_COLOR struct page documents this for
-       * 128bpp formats, but not for 32bpp and 64bpp formats.
-       *
-       * Note that although the sampler doesn't use the converted clear color
-       * field with 32bpc formats, the Clear Color Conversion hardware feature
-       * still occurs when the format sizes are less than 128bpp.
-       *
-       * The sampler changing its clear color fetching location can be a
-       * problem in some cases, but we won't run into them here. When using an
-       * indirect clear color, we won't create 32bpc views of non-32bpc
-       * surfaces (and vice-versa).
+      /* Depending on the format, the sampler may change the location from
+       * which it fetches the clear color. This can be a problem in some
+       * cases, so make sure that the view format won't change the location.
        */
-      const struct isl_format_layout *src_view_fmtl =
-         isl_format_get_layout(params.src.view.format);
-      assert((src_fmtl->channels.r.bits == 32) ==
-             (src_view_fmtl->channels.r.bits == 32));
+      ASSERTED enum isl_format src_view_fmt = params.src.view.format;
+      ASSERTED enum isl_format src_surf_fmt = params.src.surf.format;
+      assert(isl_get_sampler_clear_field_offset(devinfo, src_view_fmt) ==
+             isl_get_sampler_clear_field_offset(devinfo, src_surf_fmt));
    }
 
    if (params.src.view.format != params.dst.view.format) {

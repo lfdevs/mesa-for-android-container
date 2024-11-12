@@ -1116,8 +1116,12 @@ TEST_F(mi_builder_test, store_mem64_offset)
       EXPECT_EQ(*(uint64_t *)(output + offsets[i]), values[i]);
 }
 
+#endif /* GFX_VERx10 >= 125 */
+
+#if GFX_VER >= 9
+
 /*
- * Control-flow tests.  Only available on XE_HP+
+ * Control-flow tests.  Only available on Gfx9+
  */
 
 TEST_F(mi_builder_test, goto)
@@ -1279,4 +1283,4 @@ TEST_F(mi_builder_test, loop_continue_if)
    EXPECT_EQ(*(uint64_t *)(output + 0), loop_count);
    EXPECT_EQ(*(uint64_t *)(output + 8), 10);
 }
-#endif /* GFX_VERx10 >= 125 */
+#endif /* GFX_VER >= 9 */

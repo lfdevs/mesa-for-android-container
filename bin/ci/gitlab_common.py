@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import time
+from functools import cache
 from pathlib import Path
 
 GITLAB_URL = "https://gitlab.freedesktop.org"
@@ -28,8 +29,14 @@ TOKEN_PREFIXES: dict[str, str] = {
     "Feed token": "glft-",
     "Incoming mail token": "glimt-",
     "GitLab Agent for Kubernetes token": "glagent-",
-    "SCIM Tokens": "glsoat-"
+    "SCIM Tokens": "glsoat-",
 }
+
+
+@cache
+def print_once(*args, **kwargs):
+    """Print without spamming the output"""
+    print(*args, **kwargs)
 
 
 def pretty_duration(seconds):
@@ -92,19 +99,23 @@ def get_token_from_default_dir() -> str:
 
 
 def validate_gitlab_token(token: str) -> bool:
-    token_suffix = token.split("-")[-1]
+    # Match against recognised token prefixes
+    token_suffix = None
+    for token_type, token_prefix in TOKEN_PREFIXES.items():
+        if token.startswith(token_prefix):
+            logging.info(f"Found probable token type: {token_type}")
+            token_suffix = token[len(token_prefix):]
+            break
+
+    if not token_suffix:
+        return False
+
     # Basic validation of the token suffix based on:
     # https://gitlab.com/gitlab-org/gitlab/-/blob/master/gems/gitlab-secret_detection/lib/gitleaks.toml
     if not re.match(r"(\w+-)?[0-9a-zA-Z_\-]{20,64}", token_suffix):
         return False
 
-    for token_type, token_prefix in TOKEN_PREFIXES.items():
-        if token.startswith(token_prefix):
-            logging.info(f"Found probable token type: {token_type}")
-            return True
-
-    # If the token type is not recognized, return False
-    return False
+    return True
 
 
 def get_token_from_arg(token_arg: str | Path | None) -> str | None:

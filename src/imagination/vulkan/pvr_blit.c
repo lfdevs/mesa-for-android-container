@@ -212,7 +212,7 @@ static void pvr_setup_transfer_surface(struct pvr_device *device,
 }
 
 void pvr_CmdBlitImage2(VkCommandBuffer commandBuffer,
-                          const VkBlitImageInfo2 *pBlitImageInfo)
+                       const VkBlitImageInfo2 *pBlitImageInfo)
 {
    PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    PVR_FROM_HANDLE(pvr_image, src, pBlitImageInfo->srcImage);
@@ -534,10 +534,15 @@ pvr_copy_or_resolve_image_region(struct pvr_cmd_buffer *cmd_buffer,
       dst_extent.height = MAX2(1U, src_extent.height * block_height);
    }
 
-   /* We don't care what format dst is as it's guaranteed to be size compatible
-    * with src.
-    */
-   dst_format = pvr_get_raw_copy_format(src->vk.format);
+   if (src->vk.samples > dst->vk.samples) {
+      /* Resolve op needs to know the actual format. */
+      dst_format = dst->vk.format;
+   } else {
+      /* We don't care what format dst is as it's guaranteed to be size
+       * compatible with src.
+       */
+      dst_format = pvr_get_raw_copy_format(src->vk.format);
+   }
    src_format = dst_format;
 
    src_layers =
@@ -688,7 +693,7 @@ static bool pvr_can_merge_ds_regions(const VkImageCopy2 *pRegionA,
 }
 
 void pvr_CmdCopyImage2(VkCommandBuffer commandBuffer,
-                          const VkCopyImageInfo2 *pCopyImageInfo)
+                       const VkCopyImageInfo2 *pCopyImageInfo)
 {
    PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    PVR_FROM_HANDLE(pvr_image, src, pCopyImageInfo->srcImage);
@@ -1241,6 +1246,8 @@ static VkResult pvr_cmd_copy_buffer_region(struct pvr_cmd_buffer *cmd_buffer,
    while (offset < size) {
       const VkDeviceSize remaining_size = size - offset;
       struct pvr_transfer_cmd *transfer_cmd;
+      uint32_t src_align = (src_addr.addr + offset + src_offset) & 0xF;
+      uint32_t dst_align = (dst_addr.addr + offset + src_offset) & 0xF;
       uint32_t texel_width;
       VkDeviceSize texels;
       VkFormat vk_format;
@@ -1251,7 +1258,9 @@ static VkResult pvr_cmd_copy_buffer_region(struct pvr_cmd_buffer *cmd_buffer,
       if (is_fill) {
          vk_format = VK_FORMAT_R32_UINT;
          texel_width = 4U;
-      } else if (remaining_size >= 16U) {
+      } else if (remaining_size >= 16U && (src_align % 16U) == 0 &&
+                 (dst_align % 16U) == 0) {
+         /* Only if address is 128bpp aligned */
          vk_format = VK_FORMAT_R32G32B32A32_UINT;
          texel_width = 16U;
       } else if (remaining_size >= 4U) {
@@ -1355,7 +1364,7 @@ void pvr_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
 }
 
 void pvr_CmdCopyBuffer2(VkCommandBuffer commandBuffer,
-                           const VkCopyBufferInfo2 *pCopyBufferInfo)
+                        const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
    PVR_FROM_HANDLE(pvr_buffer, src, pCopyBufferInfo->srcBuffer);
    PVR_FROM_HANDLE(pvr_buffer, dst, pCopyBufferInfo->dstBuffer);
@@ -2271,7 +2280,7 @@ void pvr_CmdClearAttachments(VkCommandBuffer commandBuffer,
 }
 
 void pvr_CmdResolveImage2(VkCommandBuffer commandBuffer,
-                             const VkResolveImageInfo2 *pResolveImageInfo)
+                          const VkResolveImageInfo2 *pResolveImageInfo)
 {
    PVR_FROM_HANDLE(pvr_image, src, pResolveImageInfo->srcImage);
    PVR_FROM_HANDLE(pvr_image, dst, pResolveImageInfo->dstImage);

@@ -171,6 +171,7 @@ aco_postprocess_shader(const struct aco_compiler_options* options,
       }
 
       ssa_elimination(program.get());
+      jump_threading(program.get());
    }
 
    /* Lower to HW Instructions */
@@ -184,12 +185,16 @@ aco_postprocess_shader(const struct aco_compiler_options* options,
    if (!options->optimisations_disabled && !(debug_flags & DEBUG_NO_SCHED_ILP))
       schedule_ilp(program.get());
 
-   /* Insert Waitcnt */
-   insert_wait_states(program.get());
+   insert_waitcnt(program.get());
    insert_NOPs(program.get());
+   if (program->gfx_level >= GFX11)
+      insert_delay_alu(program.get());
 
    if (program->gfx_level >= GFX10)
       form_hard_clauses(program.get());
+
+   if (program->gfx_level >= GFX11)
+      combine_delay_alu(program.get());
 
    if (program->collect_statistics || (debug_flags & DEBUG_PERF_INFO))
       collect_preasm_stats(program.get());
@@ -277,7 +282,7 @@ aco_compile_shader(const struct aco_compiler_options* options, const struct aco_
    /* OpenGL combine multi shader parts into one continous code block,
     * so only last part need the s_endpgm instruction.
     */
-   bool append_endpgm = !(options->is_opengl && info->has_epilog);
+   bool append_endpgm = !(options->is_opengl && info->ps.has_epilog);
    unsigned exec_size = emit_program(program.get(), code, &symbols, append_endpgm);
 
    if (program->collect_statistics)
@@ -315,10 +320,14 @@ aco_compile_rt_prolog(const struct aco_compiler_options* options,
 
    select_rt_prolog(program.get(), &config, options, info, in_args, out_args);
    validate(program.get());
-   insert_wait_states(program.get());
+   insert_waitcnt(program.get());
    insert_NOPs(program.get());
+   if (program->gfx_level >= GFX11)
+      insert_delay_alu(program.get());
    if (program->gfx_level >= GFX10)
       form_hard_clauses(program.get());
+   if (program->gfx_level >= GFX11)
+      combine_delay_alu(program.get());
 
    if (options->dump_shader)
       aco_print_program(program.get(), stderr);
@@ -462,13 +471,7 @@ aco_nir_op_supports_packed_math_16bit(const nir_alu_instr* alu)
    case nir_op_imin:
    case nir_op_imax:
    case nir_op_umin:
-   case nir_op_umax:
-   case nir_op_fddx:
-   case nir_op_fddy:
-   case nir_op_fddx_fine:
-   case nir_op_fddy_fine:
-   case nir_op_fddx_coarse:
-   case nir_op_fddy_coarse: return true;
+   case nir_op_umax: return true;
    case nir_op_ishl: /* TODO: in NIR, these have 32bit shift operands */
    case nir_op_ishr: /* while Radeon needs 16bit operands when vectorized */
    case nir_op_ushr:

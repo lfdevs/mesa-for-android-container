@@ -1,10 +1,10 @@
 // Copyright © 2023 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-use crate::bitset::BitSet;
 use crate::ir::*;
 use crate::union_find::UnionFind;
 
+use compiler::bitset::BitSet;
 use std::cell::RefCell;
 use std::collections::HashMap;
 

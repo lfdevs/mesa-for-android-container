@@ -292,25 +292,39 @@ mme_fermi_bfe(struct mme_fermi_builder *fb,
 }
 
 static void
-mme_fermi_sll_to(struct mme_fermi_builder *b,
+mme_fermi_sll_to(struct mme_builder *b,
                  struct mme_value dst,
                  struct mme_value x,
                  struct mme_value y)
 {
+   struct mme_fermi_builder *fb = &b->fermi;
    assert(mme_fermi_is_zero_or_reg(dst));
 
-   mme_fermi_bfe(b, dst, mme_zero(), x, y, 31);
+   if (x.type == MME_VALUE_TYPE_REG) {
+      mme_fermi_bfe(fb, dst, mme_zero(), x, y, 31);
+   } else {
+      assert(y.type != MME_VALUE_TYPE_REG || y.reg != dst.reg);
+      mme_mov_to(b, dst, x);
+      mme_fermi_bfe(fb, dst, mme_zero(), dst, y, 31);
+   }
 }
 
 static void
-mme_fermi_srl_to(struct mme_fermi_builder *b,
+mme_fermi_srl_to(struct mme_builder *b,
                  struct mme_value dst,
                  struct mme_value x,
                  struct mme_value y)
 {
+   struct mme_fermi_builder *fb = &b->fermi;
    assert(mme_fermi_is_zero_or_reg(dst));
 
-   mme_fermi_bfe(b, dst, y, x, mme_zero(), 31);
+   if (x.type == MME_VALUE_TYPE_REG) {
+      mme_fermi_bfe(fb, dst, y, x, mme_zero(), 31);
+   } else {
+      assert(y.type != MME_VALUE_TYPE_REG || y.reg != dst.reg);
+      mme_mov_to(b, dst, x);
+      mme_fermi_bfe(fb, dst, y, dst, mme_zero(), 31);
+   }
 }
 
 void
@@ -321,6 +335,45 @@ mme_fermi_bfe_to(struct mme_builder *b, struct mme_value dst,
    assert(mme_fermi_is_zero_or_reg(dst));
 
    mme_fermi_bfe(fb, dst, pos, x, mme_zero(), bits);
+}
+
+void
+mme_fermi_umul_32x32_32_to_free_srcs(struct mme_builder *b,
+                                     struct mme_value dst,
+                                     struct mme_value x,
+                                     struct mme_value y)
+{
+   mme_while (b, ine, x, mme_zero()) {
+      struct mme_value lsb = mme_and(b, x, mme_imm(1));
+      mme_if (b, ine, lsb, mme_zero()) {
+         mme_add_to(b, dst, dst, y);
+      }
+      mme_free_reg(b, lsb);
+      mme_srl_to(b, x, x, mme_imm(1u));
+      mme_sll_to(b, y, y, mme_imm(1u));
+   }
+   mme_free_reg(b, x);
+   mme_free_reg(b, y);
+}
+
+void
+mme_fermi_umul_32x64_64_to_free_srcs(struct mme_builder *b,
+                                     struct mme_value64 dst,
+                                     struct mme_value x,
+                                     struct mme_value64 y)
+{
+   mme_while (b, ine, x, mme_zero()) {
+      struct mme_value lsb = mme_and(b, x, mme_imm(1));
+      mme_if (b, ine, lsb, mme_zero()) {
+         mme_add64_to(b, dst, dst, y);
+      }
+      mme_free_reg(b, lsb);
+      mme_srl_to(b, x, x, mme_imm(1u));
+      /* y = y << 1 */
+      mme_add64_to(b, y, y, y);
+   }
+   mme_free_reg(b, x);
+   mme_free_reg64(b, y);
 }
 
 static struct mme_value
@@ -349,7 +402,7 @@ mme_fermi_load_imm_to_reg(struct mme_builder *b, struct mme_value data)
          uint32_t low_bits = imm & UINT16_MAX;
 
          mme_fermi_add_imm18(fb, dst, mme_zero(), high_bits);
-         mme_fermi_sll_to(fb, dst, dst, mme_imm(16));
+         mme_fermi_sll_to(b, dst, dst, mme_imm(16));
          mme_fermi_add_imm18(fb, dst, dst, low_bits);
       }
 
@@ -650,6 +703,7 @@ mme_to_fermi_alu_op(enum mme_alu_op op)
    ALU_CASE(SUB)
    ALU_CASE(SUBB)
    ALU_CASE(AND)
+   ALU_CASE(AND_NOT)
    ALU_CASE(NAND)
    ALU_CASE(OR)
    ALU_CASE(XOR)
@@ -692,11 +746,19 @@ mme_fermi_build_alu(struct mme_builder *b,
          return;
       }
       break;
+   case MME_ALU_OP_MUL:
+      x = mme_mov(b, x);
+      y = mme_mov(b, y);
+      mme_fermi_umul_32x32_32_to_free_srcs(b, dst, x, y);
+      return;
    case MME_ALU_OP_SLL:
-      mme_fermi_sll_to(fb, dst, x, y);
+      mme_fermi_sll_to(b, dst, x, y);
       return;
    case MME_ALU_OP_SRL:
-      mme_fermi_srl_to(fb, dst, x, y);
+      mme_fermi_srl_to(b, dst, x, y);
+      return;
+   case MME_ALU_OP_NOT:
+      mme_and_not_to(b, dst, mme_imm(~(uint32_t)0), x);
       return;
    default:
       break;

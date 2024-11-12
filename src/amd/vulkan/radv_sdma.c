@@ -194,8 +194,8 @@ radv_sdma_get_metadata_config(const struct radv_device *const device, const stru
    const VkFormat format = vk_format_get_aspect_format(image->vk.format, aspect_mask);
    const struct util_format_description *desc = vk_format_description(format);
 
-   const uint32_t data_format = ac_get_cb_format(pdev->info.gfx_level, vk_format_to_pipe_format(format));
-   const uint32_t alpha_is_on_msb = ac_alpha_is_on_msb(&pdev->info, vk_format_to_pipe_format(format));
+   const uint32_t data_format = ac_get_cb_format(pdev->info.gfx_level, radv_format_to_pipe_format(format));
+   const uint32_t alpha_is_on_msb = ac_alpha_is_on_msb(&pdev->info, radv_format_to_pipe_format(format));
    const uint32_t number_type = radv_translate_buffer_numformat(desc, vk_format_get_first_non_void_channel(format));
    const uint32_t surface_type = radv_sdma_surface_type_from_aspect_mask(aspect_mask);
    const uint32_t max_comp_block_size = surf->u.gfx9.color.dcc.max_compressed_block_size;

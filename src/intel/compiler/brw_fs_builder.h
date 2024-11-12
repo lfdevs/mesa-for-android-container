@@ -63,8 +63,11 @@ namespace brw {
          _group(inst->group),
          force_writemask_all(inst->force_writemask_all)
       {
+#ifndef NDEBUG
          annotation.str = inst->annotation;
-         annotation.ir = inst->ir;
+#else
+         annotation.str = NULL;
+#endif
       }
 
       /**
@@ -152,11 +155,10 @@ namespace brw {
        * Construct a builder with the given debug annotation info.
        */
       fs_builder
-      annotate(const char *str, const void *ir = NULL) const
+      annotate(const char *str) const
       {
          fs_builder bld = *this;
          bld.annotation.str = str;
-         bld.annotation.ir = ir;
          return bld;
       }
 
@@ -313,9 +315,7 @@ namespace brw {
          /* Use the emit() methods for specific operand counts to ensure that
           * opcode-specific operand fixups occur.
           */
-         if (n == 2) {
-            return emit(opcode, dst, srcs[0], srcs[1]);
-         } else if (n == 3) {
+         if (n == 3) {
             return emit(opcode, dst, srcs[0], srcs[1], srcs[2]);
          } else {
             return emit(fs_inst(opcode, dispatch_width(), dst, srcs, n));
@@ -334,8 +334,9 @@ namespace brw {
 
          inst->group = _group;
          inst->force_writemask_all = force_writemask_all;
+#ifndef NDEBUG
          inst->annotation = annotation.str;
-         inst->ir = annotation.ir;
+#endif
 
          if (block)
             static_cast<fs_inst *>(cursor)->insert_before(block, inst);
@@ -377,14 +378,10 @@ namespace brw {
           * dispatch. Once we teach const/copy propagation about scalars we
           * should go back to scalar destinations here.
           */
-         const fs_builder ubld = exec_all();
          const brw_reg chan_index = vgrf(BRW_TYPE_UD);
-         const brw_reg dst = vgrf(src.type);
 
-         ubld.emit(SHADER_OPCODE_FIND_LIVE_CHANNEL, chan_index);
-         ubld.emit(SHADER_OPCODE_BROADCAST, dst, src, component(chan_index, 0));
-
-         return brw_reg(component(dst, 0));
+         exec_all().emit(SHADER_OPCODE_FIND_LIVE_CHANNEL, chan_index);
+         return BROADCAST(src, component(chan_index, 0));
       }
 
       brw_reg
@@ -400,134 +397,6 @@ namespace brw {
          delete[] src_comps;
 
          return brw_reg(dst);
-      }
-
-      void
-      emit_scan_step(enum opcode opcode, brw_conditional_mod mod,
-                     const brw_reg &tmp,
-                     unsigned left_offset, unsigned left_stride,
-                     unsigned right_offset, unsigned right_stride) const
-      {
-         brw_reg left, right;
-         left = horiz_stride(horiz_offset(tmp, left_offset), left_stride);
-         right = horiz_stride(horiz_offset(tmp, right_offset), right_stride);
-         if ((tmp.type == BRW_TYPE_Q || tmp.type == BRW_TYPE_UQ) &&
-             (!shader->devinfo->has_64bit_int || shader->devinfo->ver >= 20)) {
-            switch (opcode) {
-            case BRW_OPCODE_MUL:
-               /* This will get lowered by integer MUL lowering */
-               set_condmod(mod, emit(opcode, right, left, right));
-               break;
-
-            case BRW_OPCODE_SEL: {
-               /* In order for the comparisons to work out right, we need our
-                * comparisons to be strict.
-                */
-               assert(mod == BRW_CONDITIONAL_L || mod == BRW_CONDITIONAL_GE);
-               if (mod == BRW_CONDITIONAL_GE)
-                  mod = BRW_CONDITIONAL_G;
-
-               /* We treat the bottom 32 bits as unsigned regardless of
-                * whether or not the integer as a whole is signed.
-                */
-               brw_reg right_low = subscript(right, BRW_TYPE_UD, 0);
-               brw_reg left_low = subscript(left, BRW_TYPE_UD, 0);
-
-               /* The upper bits get the same sign as the 64-bit type */
-               brw_reg_type type32 = brw_type_with_size(tmp.type, 32);
-               brw_reg right_high = subscript(right, type32, 1);
-               brw_reg left_high = subscript(left, type32, 1);
-
-               /* Build up our comparison:
-                *
-                *   l_hi < r_hi || (l_hi == r_hi && l_low < r_low)
-                */
-               CMP(null_reg_ud(), retype(left_low, BRW_TYPE_UD),
-                                  retype(right_low, BRW_TYPE_UD), mod);
-               set_predicate(BRW_PREDICATE_NORMAL,
-                             CMP(null_reg_ud(), left_high, right_high,
-                                 BRW_CONDITIONAL_EQ));
-               set_predicate_inv(BRW_PREDICATE_NORMAL, true,
-                                 CMP(null_reg_ud(), left_high, right_high, mod));
-
-               /* We could use selects here or we could use predicated MOVs
-                * because the destination and second source (if it were a SEL)
-                * are the same.
-                */
-               set_predicate(BRW_PREDICATE_NORMAL, MOV(right_low, left_low));
-               set_predicate(BRW_PREDICATE_NORMAL, MOV(right_high, left_high));
-               break;
-            }
-
-            default:
-               unreachable("Unsupported 64-bit scan op");
-            }
-         } else {
-            set_condmod(mod, emit(opcode, right, left, right));
-         }
-      }
-
-      void
-      emit_scan(enum opcode opcode, const brw_reg &tmp,
-                unsigned cluster_size, brw_conditional_mod mod) const
-      {
-         assert(dispatch_width() >= 8);
-
-         /* The instruction splitting code isn't advanced enough to split
-          * these so we need to handle that ourselves.
-          */
-         if (dispatch_width() * brw_type_size_bytes(tmp.type) > 2 * REG_SIZE) {
-            const unsigned half_width = dispatch_width() / 2;
-            const fs_builder ubld = exec_all().group(half_width, 0);
-            brw_reg left = tmp;
-            brw_reg right = horiz_offset(tmp, half_width);
-            ubld.emit_scan(opcode, left, cluster_size, mod);
-            ubld.emit_scan(opcode, right, cluster_size, mod);
-            if (cluster_size > half_width) {
-               ubld.emit_scan_step(opcode, mod, tmp,
-                                   half_width - 1, 0, half_width, 1);
-            }
-            return;
-         }
-
-         if (cluster_size > 1) {
-            const fs_builder ubld = exec_all().group(dispatch_width() / 2, 0);
-            ubld.emit_scan_step(opcode, mod, tmp, 0, 2, 1, 2);
-         }
-
-         if (cluster_size > 2) {
-            if (brw_type_size_bytes(tmp.type) <= 4) {
-               const fs_builder ubld =
-                  exec_all().group(dispatch_width() / 4, 0);
-               ubld.emit_scan_step(opcode, mod, tmp, 1, 4, 2, 4);
-               ubld.emit_scan_step(opcode, mod, tmp, 1, 4, 3, 4);
-            } else {
-               /* For 64-bit types, we have to do things differently because
-                * the code above would land us with destination strides that
-                * the hardware can't handle.  Fortunately, we'll only be
-                * 8-wide in that case and it's the same number of
-                * instructions.
-                */
-               const fs_builder ubld = exec_all().group(2, 0);
-               for (unsigned i = 0; i < dispatch_width(); i += 4)
-                  ubld.emit_scan_step(opcode, mod, tmp, i + 1, 0, i + 2, 1);
-            }
-         }
-
-         for (unsigned i = 4;
-              i < MIN2(cluster_size, dispatch_width());
-              i *= 2) {
-            const fs_builder ubld = exec_all().group(i, 0);
-            ubld.emit_scan_step(opcode, mod, tmp, i - 1, 0, i, 1);
-
-            if (dispatch_width() > i * 2)
-               ubld.emit_scan_step(opcode, mod, tmp, i * 3 - 1, 0, i * 3, 1);
-
-            if (dispatch_width() > i * 4) {
-               ubld.emit_scan_step(opcode, mod, tmp, i * 5 - 1, 0, i * 5, 1);
-               ubld.emit_scan_step(opcode, mod, tmp, i * 7 - 1, 0, i * 7, 1);
-            }
-         }
       }
 
       fs_inst *
@@ -608,6 +477,17 @@ namespace brw {
          const brw_reg &src2) const                                     \
       {                                                                 \
          return emit(BRW_OPCODE_##op, dst, src0, src1, src2);           \
+      }                                                                 \
+      brw_reg                                                           \
+      op(const brw_reg &src0, const brw_reg &src1, const brw_reg &src2, \
+         fs_inst **out = NULL) const                                    \
+      {                                                                 \
+         enum brw_reg_type inferred_dst_type =                          \
+            brw_type_larger_of(brw_type_larger_of(src0.type, src1.type),\
+                               src2.type);                              \
+         fs_inst *inst = op(vgrf(inferred_dst_type), src0, src1, src2); \
+         if (out) *out = inst;                                          \
+         return inst->dst;                                              \
       }
 
       ALU3(ADD3)
@@ -854,6 +734,67 @@ namespace brw {
          return inst;
       }
 
+      void
+      VARYING_PULL_CONSTANT_LOAD(const brw_reg &dst,
+                                 const brw_reg &surface,
+                                 const brw_reg &surface_handle,
+                                 const brw_reg &varying_offset,
+                                 uint32_t const_offset,
+                                 uint8_t alignment,
+                                 unsigned components) const
+      {
+         assert(components <= 4);
+
+         /* We have our constant surface use a pitch of 4 bytes, so our index can
+          * be any component of a vector, and then we load 4 contiguous
+          * components starting from that.  TODO: Support loading fewer than 4.
+          */
+         brw_reg total_offset = ADD(varying_offset, brw_imm_ud(const_offset));
+
+         /* The pull load message will load a vec4 (16 bytes). If we are loading
+          * a double this means we are only loading 2 elements worth of data.
+          * We also want to use a 32-bit data type for the dst of the load operation
+          * so other parts of the driver don't get confused about the size of the
+          * result.
+          */
+         brw_reg vec4_result = vgrf(BRW_TYPE_F, 4);
+
+         brw_reg srcs[PULL_VARYING_CONSTANT_SRCS];
+         srcs[PULL_VARYING_CONSTANT_SRC_SURFACE]        = surface;
+         srcs[PULL_VARYING_CONSTANT_SRC_SURFACE_HANDLE] = surface_handle;
+         srcs[PULL_VARYING_CONSTANT_SRC_OFFSET]         = total_offset;
+         srcs[PULL_VARYING_CONSTANT_SRC_ALIGNMENT]      = brw_imm_ud(alignment);
+
+         fs_inst *inst = emit(FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL,
+                              vec4_result, srcs, PULL_VARYING_CONSTANT_SRCS);
+         inst->size_written = 4 * vec4_result.component_size(inst->exec_size);
+
+         shuffle_from_32bit_read(*this, dst, vec4_result, 0, components);
+      }
+
+      brw_reg
+      LOAD_SUBGROUP_INVOCATION() const
+      {
+         brw_reg reg = vgrf(shader->dispatch_width < 16 ? BRW_TYPE_UD : BRW_TYPE_UW);
+         exec_all().emit(SHADER_OPCODE_LOAD_SUBGROUP_INVOCATION, reg);
+         return reg;
+      }
+
+      brw_reg
+      BROADCAST(brw_reg value, brw_reg index) const
+      {
+         const brw_reg dst = vgrf(value.type);
+
+         /* Ensure that the source of a broadcast is always register aligned.
+          * See brw_broadcast() non-scalar case for more details.
+          */
+         if (reg_offset(value) % (REG_SIZE * reg_unit(shader->devinfo)) != 0)
+            value = MOV(value);
+
+         exec_all().emit(SHADER_OPCODE_BROADCAST, dst, value, index);
+         return component(dst, 0);
+      }
+
       fs_visitor *shader;
 
       fs_inst *BREAK()    { return emit(BRW_OPCODE_BREAK); }
@@ -920,7 +861,6 @@ namespace brw {
       /** Debug annotation info. */
       struct {
          const char *str;
-         const void *ir;
       } annotation;
    };
 }

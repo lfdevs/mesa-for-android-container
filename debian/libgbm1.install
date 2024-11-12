@@ -1,1 +1,2 @@
 usr/lib/*/libgbm.so.1*
+usr/lib/*/gbm/dri_gbm.so

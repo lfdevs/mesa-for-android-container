@@ -1,8 +1,8 @@
 // Copyright © 2023 Mel Henning
 // SPDX-License-Identifier: MIT
 
-use crate::cfg::CFGBuilder;
 use crate::ir::*;
+use compiler::cfg::CFGBuilder;
 use std::collections::HashMap;
 
 fn clone_branch(op: &Op) -> Op {

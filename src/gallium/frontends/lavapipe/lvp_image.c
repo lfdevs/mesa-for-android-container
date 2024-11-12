@@ -27,6 +27,7 @@
 #include "util/u_surface.h"
 #include "pipe/p_state.h"
 #include "frontend/winsys_handle.h"
+#include "vk_android.h"
 
 static VkResult
 lvp_image_create(VkDevice _device,
@@ -36,12 +37,14 @@ lvp_image_create(VkDevice _device,
 {
    LVP_FROM_HANDLE(lvp_device, device, _device);
    struct lvp_image *image;
-
+   VkResult result = VK_SUCCESS;
+   bool android_surface = false;
+   const VkSubresourceLayout *layouts = NULL;
+   uint64_t modifier;
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
 
 #ifdef HAVE_LIBDRM
    unsigned num_layouts = 1;
-   const VkSubresourceLayout *layouts = NULL;
    enum pipe_format pipe_format = lvp_vk_format_to_pipe_format(pCreateInfo->format);
    const VkImageDrmFormatModifierExplicitCreateInfoEXT *modinfo = (void*)vk_find_struct_const(pCreateInfo->pNext,
                                                                   IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT);
@@ -59,6 +62,8 @@ lvp_image_create(VkDevice _device,
       mesa_loge("lavapipe: planar drm formats are not supported");
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
    }
+
+   modifier = DRM_FORMAT_MOD_LINEAR;
 #endif
 
    image = vk_image_create(&device->vk, pCreateInfo, alloc, sizeof(*image));
@@ -72,6 +77,20 @@ lvp_image_create(VkDevice _device,
    image->plane_count = vk_format_get_plane_count(pCreateInfo->format);
    image->disjoint = image->plane_count > 1 &&
                      (pCreateInfo->flags & VK_IMAGE_CREATE_DISJOINT_BIT);
+
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   VkImageDrmFormatModifierExplicitCreateInfoEXT eci;
+   VkSubresourceLayout a_plane_layouts[LVP_MAX_PLANE_COUNT];
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      result = vk_android_get_anb_layout(
+         pCreateInfo, &eci, a_plane_layouts, LVP_MAX_PLANE_COUNT);
+      if (result != VK_SUCCESS)
+         goto fail;
+
+      modifier = eci.drmFormatModifier;
+      layouts = a_plane_layouts;
+      android_surface = true;
+   }
 
    const struct vk_format_ycbcr_info *ycbcr_info =
       vk_format_get_ycbcr_info(pCreateInfo->format);
@@ -141,7 +160,7 @@ lvp_image_create(VkDevice _device,
       template.nr_storage_samples = pCreateInfo->samples;
 
 #ifdef HAVE_LIBDRM
-      if (modinfo && pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      if (android_surface || (modinfo && pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)) {
          struct winsys_handle whandle;
          whandle.type = WINSYS_HANDLE_TYPE_UNBACKED;
          whandle.layer = 0;
@@ -152,7 +171,7 @@ lvp_image_create(VkDevice _device,
          whandle.image_stride = layouts[p].depthPitch;
          image->offset = layouts[p].offset;
          whandle.format = pCreateInfo->format;
-         whandle.modifier = DRM_FORMAT_MOD_LINEAR;
+         whandle.modifier = modifier;
          image->planes[p].bo = device->pscreen->resource_from_handle(device->pscreen,
                                                            &template,
                                                            &whandle,
@@ -172,9 +191,23 @@ lvp_image_create(VkDevice _device,
 
       image->size += image->planes[p].size;
    }
+
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      result = vk_android_import_anb(&device->vk, pCreateInfo, alloc,
+                                     &image->vk);
+      if (result != VK_SUCCESS) {
+         mesa_logw("Failed to import memory");
+         goto fail;
+      }
+   }
+
    *pImage = lvp_image_to_handle(image);
 
    return VK_SUCCESS;
+fail:
+   vk_image_destroy(&device->vk, alloc, &image->vk);
+   return result;
 }
 
 struct lvp_image *
@@ -216,11 +249,13 @@ lvp_CreateImage(VkDevice device,
                 const VkAllocationCallbacks *pAllocator,
                 VkImage *pImage)
 {
+#if !DETECT_OS_ANDROID
    const VkImageSwapchainCreateInfoKHR *swapchain_info =
       vk_find_struct_const(pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
    if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE)
       return lvp_image_from_swapchain(device, pCreateInfo, swapchain_info,
                                       pAllocator, pImage);
+#endif
    return lvp_image_create(device, pCreateInfo, pAllocator,
                            pImage);
 }

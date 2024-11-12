@@ -61,10 +61,15 @@ enum intel_measure_events {
    INTEL_MEASURE_FRAME      = (1 << 4),
 };
 
+enum intel_measure_device_type { INTEL_MEASURE_DEVICE_VK=0, INTEL_MEASURE_DEVICE_OGL };
+
 struct intel_measure_config {
 
    /* Stderr, or optionally set with INTEL_MEASURE=file={path{ */
    FILE                      *file;
+
+   /* Defer log file create until first write */
+   char                      *deferred_create_filename;
 
    /* Events that will be measured.  Set only one flag, with
     * INTEL_MEASURE=[draw,rt,shader,batch,frame] */
@@ -138,6 +143,7 @@ struct intel_measure_device {
    unsigned frame;
    unsigned render_pass_count;
    intel_measure_release_batch_cb release_batch;
+   enum intel_measure_device_type type;
 
    /* Holds the list of (iris/anv)_measure_batch snapshots that have been
     * submitted for rendering, but have not completed.

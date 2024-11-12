@@ -105,7 +105,7 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
     * two >= 32). On x86 it doesn't matter, however.
     * We should be able to guarantee full alignment for any kind of texture
     * fetch (except ARB_texture_buffer_range, oops), but not vertex fetch
-    * (there's PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY and friends
+    * (there's PIPE_CAP_VERTEX_INPUT_ALIGNMENT
     * but I don't think that's quite what we wanted).
     * For ARB_texture_buffer_range, PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT
     * looks like a good fit, but it seems this cap bit (and OpenGL) aren't
@@ -185,7 +185,7 @@ lp_build_gather_elem_vec(struct gallivm_state *gallivm,
     * two >= 32). On x86 it doesn't matter, however.
     * We should be able to guarantee full alignment for any kind of texture
     * fetch (except ARB_texture_buffer_range, oops), but not vertex fetch
-    * (there's PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY and friends
+    * (there's PIPE_CAP_VERTEX_INPUT_ALIGNMENT
     * but I don't think that's quite what we wanted).
     * For ARB_texture_buffer_range, PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT
     * looks like a good fit, but it seems this cap bit (and OpenGL) aren't

@@ -139,6 +139,8 @@ linkcheck_ignore = [
   r'https://gitlab.com/.*#.*', # needs JS eval
   r'https://gitlab.freedesktop.org/.*#.*', # needs JS eval
   r'https://github.com/.*#.*', # needs JS eval
+  r'https://www.intel.com/.*', # intel.com is blocking the linkcheck user-agent; maybe it can be customized to look like a browser?
+  r'https://cgit.freedesktop.org/.*', # cgit is no more
 ]
 linkcheck_exclude_documents = [r'relnotes/.*']
 
@@ -146,7 +148,6 @@ linkcheck_allowed_redirects = {
     # Pages that forward the front-page to a wiki or some explore-page
     'https://www.freedesktop.org': 'https://www.freedesktop.org/wiki/',
     'https://x.org': 'https://x.org/wiki/',
-    'https://perf.wiki.kernel.org/': 'https://perf.wiki.kernel.org/index.php/Main_Page',
     'https://dri.freedesktop.org/': 'https://dri.freedesktop.org/wiki/',
     'https://gitlab.freedesktop.org/': 'https://gitlab.freedesktop.org/explore/groups',
     'https://www.sphinx-doc.org/': 'https://www.sphinx-doc.org/en/master/',

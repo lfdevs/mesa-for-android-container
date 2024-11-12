@@ -33,39 +33,33 @@ workflow:
     # merge pipeline
     - if: &is-merge-attempt $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       variables:
-        KERNEL_IMAGE_BASE: https://${S3_HOST}/${S3_KERNEL_BUCKET}/${KERNEL_REPO}/${KERNEL_TAG}
         MESA_CI_PERFORMANCE_ENABLED: 1
         VALVE_INFRA_VANGOGH_JOB_PRIORITY: ""  # Empty tags are ignored by gitlab
+        JOB_PRIORITY: 75
+        # fast-fail in merge pipelines: stop early if we get this many unexpected fails/crashes
+        DEQP_RUNNER_MAX_FAILS: 40
     # post-merge pipeline
     - if: &is-post-merge $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "push"
+    # Pre-merge pipeline
+    - if: &is-pre-merge $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Push to a branch on a fork
+    - if: &is-fork-push $CI_PROJECT_NAMESPACE != "mesa" && $CI_PIPELINE_SOURCE == "push"
     # nightly pipeline
     - if: &is-scheduled-pipeline $CI_PIPELINE_SOURCE == "schedule"
       variables:
-        KERNEL_IMAGE_BASE: https://${S3_HOST}/${S3_KERNEL_BUCKET}/${KERNEL_REPO}/${KERNEL_TAG}
-        JOB_PRIORITY: 50
-        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
+        # (some) nightly builds perform LTO, so they take much longer than the
+        # short timeout allowed in other pipelines.
+        # Note: 0 = infinity = gitlab's job `timeout:` applies, which is 1h
+        BUILD_JOB_TIMEOUT_OVERRIDE: 0
     # pipeline for direct pushes that bypassed the CI
     - if: &is-direct-push $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $GITLAB_USER_LOGIN != "marge-bot"
       variables:
-        KERNEL_IMAGE_BASE: https://${S3_HOST}/${S3_KERNEL_BUCKET}/${KERNEL_REPO}/${KERNEL_TAG}
         JOB_PRIORITY: 40
-        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
-    # pre-merge or fork pipeline
-    - if: $FORCE_KERNEL_TAG != null
-      variables:
-        KERNEL_IMAGE_BASE: https://${S3_HOST}/${S3_KERNEL_BUCKET}/${KERNEL_REPO}/${FORCE_KERNEL_TAG}
-        JOB_PRIORITY: 50
-        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
-    - if: $FORCE_KERNEL_TAG == null
-      variables:
-        KERNEL_IMAGE_BASE: https://${S3_HOST}/${S3_KERNEL_BUCKET}/${KERNEL_REPO}/${KERNEL_TAG}
-        JOB_PRIORITY: 50
-        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
 
 
 variables:
   FDO_UPSTREAM_REPO: mesa/mesa
-  MESA_TEMPLATES_COMMIT: &ci-templates-commit d5aa3941aa03c2f716595116354fb81eb8012acb
+  MESA_TEMPLATES_COMMIT: &ci-templates-commit e195d80f35b45cc73668be3767b923fd76c70ed5
   CI_PRE_CLONE_SCRIPT: |-
           set -o xtrace
           wget -q -O download-git-cache.sh ${CI_PROJECT_URL}/-/raw/${CI_COMMIT_SHA}/.gitlab-ci/download-git-cache.sh
@@ -101,12 +95,19 @@ variables:
   MESA_VK_ABORT_ON_DEVICE_LOSS: 1
   # Avoid the wall of "Unsupported SPIR-V capability" warnings in CI job log, hiding away useful output
   MESA_SPIRV_LOG_LEVEL: error
+  # Default priority for non-merge pipelines
+  VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
+  JOB_PRIORITY: 50
 
 default:
   id_tokens:
     S3_JWT:
       aud: https://s3.freedesktop.org
   before_script:
+    - |
+      if [ -z "${KERNEL_IMAGE_BASE:-}" ]; then
+        export KERNEL_IMAGE_BASE="https://${S3_HOST}/${S3_KERNEL_BUCKET}/${KERNEL_REPO}/${EXTERNAL_KERNEL_TAG:-$KERNEL_TAG}"
+      fi
     - >
       export SCRIPTS_DIR=$(mktemp -d) &&
       curl -L -s --retry 4 -f --retry-all-errors --retry-delay 60 -O --output-dir "${SCRIPTS_DIR}" "${CI_PROJECT_URL}/-/raw/${CI_COMMIT_SHA}/.gitlab-ci/setup-test-env.sh" &&
@@ -117,13 +118,6 @@ default:
   after_script:
     # Work around https://gitlab.com/gitlab-org/gitlab/-/issues/20338
     - find -name '*.log' -exec mv {} {}.txt \;
-
-    - >
-      set +x
-
-      test -e "${S3_JWT_FILE}" &&
-      export S3_JWT="$(<${S3_JWT_FILE})" &&
-      rm "${S3_JWT_FILE}"
 
   # Retry when job fails. Failed jobs can be found in the Mesa CI Daily Reports:
   # https://gitlab.freedesktop.org/mesa/mesa/-/issues/?sort=created_date&state=opened&label_name%5B%5D=CI%20daily
@@ -144,18 +138,28 @@ stages:
   - sanity
   - container
   - git-archive
-  - build-x86_64
-  - build-misc
+  - build-for-tests
+  - build-only
   - code-validation
   - amd
+  - amd-postmerge
   - intel
+  - intel-postmerge
   - nouveau
+  - nouveau-postmerge
   - arm
+  - arm-postmerge
   - broadcom
+  - broadcom-postmerge
   - freedreno
+  - freedreno-postmerge
   - etnaviv
+  - etnaviv-postmerge
   - software-renderer
+  - software-renderer-postmerge
   - layered-backends
+  - layered-backends-postmerge
+  - performance
   - deploy
 
 include:
@@ -180,12 +184,11 @@ include:
   - local: 'src/**/ci/gitlab-ci.yml'
 
 
-# YAML anchors for rule conditions
-# --------------------------------
-.rules-anchors:
-  # Pre-merge pipeline
-  - &is-pre-merge '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
+# Rules applied to every job in the pipeline
+.common-rules:
+  rules:
+    - if: *is-fork-push
+      when: manual
 
 .never-post-merge-rules:
   rules:
@@ -195,6 +198,7 @@ include:
 
 .container+build-rules:
   rules:
+    - !reference [.common-rules, rules]
     # Run when re-enabling a disabled farm, but not when disabling it
     - !reference [.disable-farm-mr-rules, rules]
     # Never run immediately after merging, as we just ran everything
@@ -295,19 +299,20 @@ sanity:
     - |
       set -eu
       image_tags=(
+        ALPINE_X86_64_BUILD_TAG
+        ALPINE_X86_64_LAVA_SSH_TAG
         DEBIAN_BASE_TAG
         DEBIAN_BUILD_TAG
+        DEBIAN_PYUTILS_TAG
         DEBIAN_TEST_ANDROID_TAG
         DEBIAN_TEST_GL_TAG
         DEBIAN_TEST_VK_TAG
-        ALPINE_X86_64_BUILD_TAG
-        ALPINE_X86_64_LAVA_SSH_TAG
         FEDORA_X86_64_BUILD_TAG
         KERNEL_ROOTFS_TAG
         KERNEL_TAG
         PKG_REPO_REV
-        WINDOWS_X64_MSVC_TAG
         WINDOWS_X64_BUILD_TAG
+        WINDOWS_X64_MSVC_TAG
         WINDOWS_X64_TEST_TAG
       )
       for var in "${image_tags[@]}"
@@ -348,4 +353,6 @@ mr-label-maker-test:
     - job: clang-format
       optional: true
     - job: rustfmt
+      optional: true
+    - job: toml-lint
       optional: true

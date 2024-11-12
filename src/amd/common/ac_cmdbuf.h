@@ -19,6 +19,10 @@ struct ac_preamble_state {
    uint64_t border_color_va;
 
    struct {
+      bool cache_rb_gl2;
+   } gfx10;
+
+   struct {
       uint32_t compute_dispatch_interleave;
    } gfx11;
 };
@@ -26,6 +30,10 @@ struct ac_preamble_state {
 void
 ac_init_compute_preamble_state(const struct ac_preamble_state *state,
                                struct ac_pm4_state *pm4);
+
+void
+ac_init_graphics_preamble_state(const struct ac_preamble_state *state,
+                                struct ac_pm4_state *pm4);
 
 #ifdef __cplusplus
 }

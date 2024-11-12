@@ -1,24 +1,6 @@
 /*
- * Copyright (c) 2013 Rob Clark <robdclark@gmail.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright © 2013 Rob Clark <robdclark@gmail.com>
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef INSTR_A3XX_H_
@@ -305,6 +287,7 @@ typedef enum {
    OPC_GETSPID         = _OPC(6, 36), /* SP ID */
    OPC_GETWID          = _OPC(6, 37), /* wavefront ID */
    OPC_GETFIBERID      = _OPC(6, 38), /* fiber ID */
+   OPC_SHFL            = _OPC(6, 39),
 
    /* Logical opcodes for things that differ in a6xx+ */
    OPC_STC             = _OPC(6, 40),
@@ -427,6 +410,7 @@ typedef enum {
    TYPE_U32 = 3,
    TYPE_S16 = 4,
    TYPE_S32 = 5,
+   TYPE_ATOMIC_U64 = 6, /* Only valid for a7xx atomics */
    TYPE_U8 = 6,
    TYPE_U8_32 = 7,
 } type_t;
@@ -460,6 +444,8 @@ type_uint_size(unsigned bit_size)
    case 1:  /* 1b bools are treated as normal half-regs */
    case 16: return TYPE_U16;
    case 32: return TYPE_U32;
+   case 64:
+      return TYPE_U32;
    default:
       ir3_assert(0); /* invalid size */
       return (type_t)0;
@@ -523,6 +509,8 @@ regid(int num, int comp)
 #define REG_A0 61 /* address register */
 #define REG_P0 62 /* predicate register */
 #define REG_P0_X regid(REG_P0, 0) /* p0.x */
+
+#define INVALID_CONST_REG UINT16_MAX
 
 /* With is_bindless_s2en = 1, this determines whether bindless is enabled and
  * if so, how to get the (base, index) pair for both sampler and texture.

@@ -24,7 +24,7 @@ struct panvk_queue {
 VK_DEFINE_HANDLE_CASTS(panvk_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
 static inline void
-panvk_queue_finish(struct panvk_queue *queue)
+panvk_per_arch(queue_finish)(struct panvk_queue *queue)
 {
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
 

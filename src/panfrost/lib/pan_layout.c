@@ -341,20 +341,28 @@ format_minimum_alignment(unsigned arch, enum pipe_format format, uint64_t mod)
    }
 }
 
-/* Computes sizes for checksumming, which is 8 bytes per 16x16 tile.
+/*
+ * Computes sizes for checksumming, which is 8 bytes per 16x16 tile.
  * Checksumming is believed to be a CRC variant (CRC64 based on the size?).
- * This feature is also known as "transaction elimination". */
+ * This feature is also known as "transaction elimination".
+ * CRC values are prefetched by 32x32 regions so size needs to be aligned.
+ */
 
-#define CHECKSUM_TILE_WIDTH     16
-#define CHECKSUM_TILE_HEIGHT    16
-#define CHECKSUM_BYTES_PER_TILE 8
+#define CHECKSUM_TILE_WIDTH        16
+#define CHECKSUM_TILE_HEIGHT       16
+#define CHECKSUM_REGION_SIZE       32
+#define CHECKSUM_X_TILE_PER_REGION (CHECKSUM_REGION_SIZE / CHECKSUM_TILE_WIDTH)
+#define CHECKSUM_Y_TILE_PER_REGION (CHECKSUM_REGION_SIZE / CHECKSUM_TILE_HEIGHT)
+#define CHECKSUM_BYTES_PER_TILE    8
 
 unsigned
 panfrost_compute_checksum_size(struct pan_image_slice_layout *slice,
                                unsigned width, unsigned height)
 {
-   unsigned tile_count_x = DIV_ROUND_UP(width, CHECKSUM_TILE_WIDTH);
-   unsigned tile_count_y = DIV_ROUND_UP(height, CHECKSUM_TILE_HEIGHT);
+   unsigned tile_count_x =
+      CHECKSUM_X_TILE_PER_REGION * DIV_ROUND_UP(width, CHECKSUM_REGION_SIZE);
+   unsigned tile_count_y =
+      CHECKSUM_Y_TILE_PER_REGION * DIV_ROUND_UP(height, CHECKSUM_REGION_SIZE);
 
    slice->crc.stride = tile_count_x * CHECKSUM_BYTES_PER_TILE;
 

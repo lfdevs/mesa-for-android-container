@@ -358,7 +358,7 @@ st_serialize_base_nir(struct gl_program *prog, struct nir_shader *nir);
 extern void
 st_finalize_program(struct st_context *st, struct gl_program *prog);
 
-struct pipe_shader_state *
+void *
 st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state);
 
 GLboolean st_program_string_notify(struct gl_context *ctx,

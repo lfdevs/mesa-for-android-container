@@ -1012,13 +1012,15 @@ namespace {
        *       weights used elsewhere in the compiler back-end.
        *
        *       Note that we provide slightly more pessimistic weights on
-       *       Gfx12+ for SIMD32, since the effective warp size on that
+       *       Gfx12.x for SIMD32, since the effective warp size on that
        *       platform is 2x the SIMD width due to EU fusion, which increases
        *       the likelihood of divergent control flow in comparison to
        *       previous generations, giving narrower SIMD modes a performance
        *       advantage in several test-cases with non-uniform discard jumps.
+       *       EU fusion has been removed on Xe2+ so its divergence behavior is
+       *       expected to be closer to pre-Gfx12 platforms.
        */
-      const float discard_weight = (dispatch_width > 16 || s->devinfo->ver < 12 ?
+      const float discard_weight = (dispatch_width > 16 || s->devinfo->ver != 12 ?
                                     1.0 : 0.5);
       const float loop_weight = 10;
       unsigned halt_count = 0;

@@ -60,7 +60,6 @@ static const struct etna_op_info etna_ops[] = {
    OPC(seq, SET, EQ), OPC(sne, SET, NE), OPC(sge, SET, GE), OPC(slt, SET, LT),
    OPC(fcsel, SELECT, NZ),
    OP(fdiv, DIV),
-   OP(fddx, DSX), OP(fddy, DSY),
 
    /* type convert */
    IOP(i2f32, I2F),
@@ -159,10 +158,6 @@ etna_emit_alu(struct etna_compile *c, nir_op op, struct etna_inst_dst dst,
       inst.src[1].swiz = inst_swiz_compose(src[1].swiz, swiz_scalar);
       break;
    /* deal with instructions which don't have 1:1 mapping */
-   case nir_op_fddx:
-   case nir_op_fddy:
-      inst.src[1] = src[0];
-      break;
    case nir_op_fmin:
    case nir_op_fmax:
    case nir_op_imin:
@@ -254,7 +249,7 @@ etna_emit_discard(struct etna_compile *c, struct etna_inst_src condition)
    struct etna_inst inst = {
       .opcode = ISA_OPC_TEXKILL,
       .cond = ISA_COND_NZ,
-      .type = (c->specs->halti < 2) ? ISA_TYPE_F32 : ISA_TYPE_U32,
+      .type = (c->info->halti < 2) ? ISA_TYPE_F32 : ISA_TYPE_U32,
       .src[0] = condition,
    };
    inst.src[0].swiz = INST_SWIZ_BROADCAST(inst.src[0].swiz & 3);

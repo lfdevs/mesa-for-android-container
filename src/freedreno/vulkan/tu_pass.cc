@@ -537,8 +537,15 @@ tu_render_pass_calc_hash(struct tu_render_pass *pass)
 }
 
 static void
-tu_render_pass_cond_config(struct tu_render_pass *pass)
+tu_render_pass_cond_config(struct tu_device *device,
+                           struct tu_render_pass *pass)
 {
+   /* With generic clears CmdClearAttachments isn't a draw and doesn't
+    * contribute to bin's geometry.
+    */
+   if (device->physical_device->info->a7xx.has_generic_clear)
+      return;
+
    for (uint32_t i = 0; i < pass->attachment_count; i++) {
       struct tu_render_pass_attachment *att = &pass->attachments[i];
 
@@ -913,6 +920,8 @@ tu_CreateRenderPass2(VkDevice _device,
       subpass->resolve_depth_stencil = is_depth_stencil_resolve_enabled(ds_resolve);
       subpass->samples = (VkSampleCountFlagBits) 0;
       subpass->srgb_cntl = 0;
+      subpass->legacy_dithering_enabled = desc->flags &
+         VK_SUBPASS_DESCRIPTION_ENABLE_LEGACY_DITHERING_BIT_EXT;
 
       const BITMASK_ENUM(VkSubpassDescriptionFlagBits) raster_order_access_bits =
          VK_SUBPASS_DESCRIPTION_RASTERIZATION_ORDER_ATTACHMENT_COLOR_ACCESS_BIT_EXT |
@@ -1005,7 +1014,7 @@ tu_CreateRenderPass2(VkDevice _device,
       }
    }
 
-   tu_render_pass_cond_config(pass);
+   tu_render_pass_cond_config(device, pass);
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
    tu_render_pass_calc_views(pass);
@@ -1075,9 +1084,25 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
    pass->attachments = cmd_buffer->dynamic_rp_attachments;
 
    subpass->color_count = subpass->resolve_count = info->colorAttachmentCount;
+   subpass->input_count = info->colorAttachmentCount + 1;
    subpass->color_attachments = cmd_buffer->dynamic_color_attachments;
+   subpass->input_attachments = cmd_buffer->dynamic_input_attachments;
    subpass->resolve_attachments = cmd_buffer->dynamic_resolve_attachments;
    subpass->multiview_mask = info->viewMask;
+   subpass->legacy_dithering_enabled = info->flags &
+      VK_RENDERING_ENABLE_LEGACY_DITHERING_BIT_EXT;
+
+   /* Because we don't know with dynamic rendering when input attachments
+    * are used relative to color attachments, we have to always assume
+    * they may be written as a color or depth/stencil attachment first. This
+    * means we can't apply the optimization in
+    * tu_render_pass_patch_input_gmem(). Initialize this for all possible
+    * attachments now so we don't have to update it later.
+    */
+   for (unsigned i = 0; i < ARRAY_SIZE(cmd_buffer->dynamic_input_attachments);
+        i++) {
+      subpass->input_attachments[i].patch_input_gmem = true;
+   }
 
    uint32_t a = 0;
    for (uint32_t i = 0; i < info->colorAttachmentCount; i++) {
@@ -1086,6 +1111,7 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
 
       if (att_info->imageView == VK_NULL_HANDLE) {
          subpass->color_attachments[i].attachment = VK_ATTACHMENT_UNUSED;
+         subpass->input_attachments[i + 1].attachment = VK_ATTACHMENT_UNUSED;
          subpass->resolve_attachments[i].attachment = VK_ATTACHMENT_UNUSED;
          continue;
       }
@@ -1098,6 +1124,9 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
                          VK_ATTACHMENT_LOAD_OP_DONT_CARE, att_info->storeOp,
                          VK_ATTACHMENT_STORE_OP_DONT_CARE);
       subpass->color_attachments[i].attachment = a++;
+      subpass->input_attachments[i + 1].attachment =
+         subpass->color_attachments[i].attachment;
+      subpass->input_attachments[i + 1].patch_input_gmem = true;
 
       subpass->samples = (VkSampleCountFlagBits) view->image->layout->nr_samples;
 
@@ -1136,6 +1165,9 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
          att->gmem = true;
          att->clear_views = info->viewMask;
          subpass->depth_stencil_attachment.attachment = a++;
+         subpass->input_attachments[0].attachment =
+            subpass->depth_stencil_attachment.attachment;
+         subpass->input_attachments[0].patch_input_gmem = true;
 
          subpass->depth_used = (bool) info->pDepthAttachment;
          subpass->stencil_used = (bool) info->pStencilAttachment;
@@ -1173,9 +1205,11 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
          }
       } else {
          subpass->depth_stencil_attachment.attachment = VK_ATTACHMENT_UNUSED;
+         subpass->input_attachments[0].attachment = VK_ATTACHMENT_UNUSED;
       }
    } else {
       subpass->depth_stencil_attachment.attachment = VK_ATTACHMENT_UNUSED;
+      subpass->input_attachments[0].attachment = VK_ATTACHMENT_UNUSED;
    }
 
    pass->attachment_count = a;
@@ -1206,7 +1240,7 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
 
    pass->attachment_count = a;
 
-   tu_render_pass_cond_config(pass);
+   tu_render_pass_cond_config(device, pass);
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
    tu_render_pass_calc_views(pass);

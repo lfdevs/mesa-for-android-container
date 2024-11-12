@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "vk_device.h"
+#include "vk_meta.h"
 
 #include "panvk_blend.h"
 #include "panvk_instance.h"
@@ -19,13 +20,18 @@
 
 #include "kmod/pan_kmod.h"
 #include "util/pan_ir.h"
-#include "pan_blend.h"
-#include "pan_blitter.h"
+
+#include "util/vma.h"
 
 #define PANVK_MAX_QUEUE_FAMILIES 1
 
 struct panvk_device {
    struct vk_device vk;
+
+   struct {
+      simple_mtx_t lock;
+      struct util_vma_heap heap;
+   } as;
 
    struct {
       struct pan_kmod_vm *vm;
@@ -36,16 +42,11 @@ struct panvk_device {
    struct panvk_priv_bo *tiler_heap;
    struct panvk_priv_bo *sample_positions;
 
-   struct panvk_blend_shader_cache blend_shader_cache;
-   struct panvk_meta meta;
-
-   struct {
-      struct panvk_priv_bo *shader_bo;
-      struct panvk_priv_bo *rsd_bo;
-   } desc_copy;
+   struct vk_meta_device meta;
 
    struct {
       struct panvk_pool rw;
+      struct panvk_pool rw_nc;
       struct panvk_pool exec;
    } mempools;
 
@@ -65,6 +66,19 @@ static inline struct panvk_device *
 to_panvk_device(struct vk_device *dev)
 {
    return container_of(dev, struct panvk_device, vk);
+}
+
+static inline uint32_t
+panvk_device_adjust_bo_flags(const struct panvk_device *device,
+                             uint32_t bo_flags)
+{
+   struct panvk_instance *instance =
+      to_panvk_instance(device->vk.physical->instance);
+
+   if (instance->debug_flags & (PANVK_DEBUG_DUMP | PANVK_DEBUG_TRACE))
+      bo_flags &= ~PAN_KMOD_BO_FLAG_NO_MMAP;
+
+   return bo_flags;
 }
 
 #if PAN_ARCH

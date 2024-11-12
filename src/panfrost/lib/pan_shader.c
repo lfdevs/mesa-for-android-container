@@ -193,8 +193,8 @@ GENX(pan_shader_compile)(nir_shader *s, struct panfrost_compile_inputs *inputs,
          (s->info.inputs_read & (1 << VARYING_SLOT_FACE)) ||
          BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_FRONT_FACE);
 #if PAN_ARCH >= 9
-      info->varyings.output_count =
-         util_last_bit(s->info.outputs_read >> VARYING_SLOT_VAR0);
+      info->varyings.input_count =
+         util_last_bit(s->info.inputs_read >> VARYING_SLOT_VAR0);
 #endif
       break;
    default:

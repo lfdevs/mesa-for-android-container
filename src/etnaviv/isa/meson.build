@@ -96,13 +96,6 @@ disasm = executable(
 )
 
 if with_tools.contains('etnaviv')
-  if meson.version().version_compare('< 1.4.0')
-    error('etnaviv requires meson 1.4.0 or newer')
-  endif
-
-  add_languages('rust', required: true)
-  rust = import('rust')
-
   isa_bindings_rs = rust.bindgen(
     input : 'bindings.h',
     output : 'isa_bindings.rs',

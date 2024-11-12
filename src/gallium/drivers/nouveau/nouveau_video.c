@@ -454,11 +454,12 @@ nouveau_decoder_decode_macroblock(struct pipe_video_codec *decoder,
    }
 }
 
-static void
+static int
 nouveau_decoder_end_frame(struct pipe_video_codec *decoder,
                           struct pipe_video_buffer *target,
                           struct pipe_picture_desc *picture)
 {
+   return 0;
 }
 
 static void

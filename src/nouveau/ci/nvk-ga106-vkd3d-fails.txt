@@ -1,0 +1,17 @@
+# src/nouveau/vulkan/nvk_cmd_draw.c:1900: nvk_flush_ms_state: Assertion `dyn->ms.rasterization_samples == 0 || dyn->ms.rasterization_samples == render->samples' failed.
+test_multisample_rendering,Crash
+
+# nouveau 0000:2d:00.0: gsp: mmu fault queued
+# nouveau 0000:2d:00.0: gsp: rc engn:00000001 chid:24 type:31 scope:1 part:233
+# nouveau 0000:2d:00.0: fifo:c00000:0003:0018:[d3d12[1056]] errored - disabling channel
+# nouveau 0000:2d:00.0: d3d12[1056]: channel 24 killed!
+test_uav_counter_null_behavior_dxbc,Crash
+test_uav_counter_null_behavior_dxil,Crash
+
+test_suballocate_small_textures_size,Fail
+test_sampler_feedback_implicit_lod_aniso,Fail
+
+test_execute_indirect_multi_dispatch_root_constants,Crash
+test_execute_indirect_multi_dispatch_root_descriptors,Crash
+test_execute_indirect_state_predication,Crash
+test_execute_indirect_state_tier_11,Crash

@@ -4,3 +4,6 @@ KHR-GL46.gpu_shader_fp64.builtin.inverse_dmat4
 KHR-Single-GL46.enhanced_layouts.xfb_global_buffer
 KHR-Single-GL46.enhanced_layouts.xfb_override_qualifiers_with_api
 dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic
+
+# Timed out https://gitlab.freedesktop.org/gallo/mesa/-/jobs/64257593
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap_map2

@@ -21,6 +21,11 @@ files_libdri = files(
 
 if with_platform_x11
   deps_for_libdri += dep_xcb
+  if with_dri_platform == 'drm'
+    deps_for_libdri += [dep_xcb_dri3, dep_xcb_present, dep_xcb_sync,
+                        dep_xshmfence, dep_xcb_xfixes]
+    files_libdri += files('loader_dri3_helper.c')
+  endif
 endif
 
 if with_dri
@@ -40,6 +45,8 @@ if with_gallium_zink and not with_platform_android
   endif
   files_libdri += files('kopper.c')
   deps_for_libdri += vulkan_wsi_deps
+else
+  files_libdri += files('kopper_stubs.c')
 endif
 
 libdri = static_library(

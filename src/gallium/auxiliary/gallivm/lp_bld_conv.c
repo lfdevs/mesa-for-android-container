@@ -76,6 +76,7 @@
 #include "lp_bld_intr.h"
 #include "lp_bld_printf.h"
 #include "lp_bld_format.h"
+#include "lp_bld_limits.h"
 
 
 /* the lp_test_format test fails on mingw/i686 at -O2 with gcc 10.x
@@ -105,13 +106,14 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
                             LLVMGetVectorSize(src_type) : 1;
 
    struct lp_type f32_type = lp_type_float_vec(32, 32 * src_length);
+   struct lp_type i16_type = lp_type_int_vec(16, 16 * src_length);
    struct lp_type i32_type = lp_type_int_vec(32, 32 * src_length);
-   LLVMTypeRef int_vec_type = lp_build_vec_type(gallivm, i32_type);
+   LLVMTypeRef int_vec_type = lp_build_vec_type(gallivm, i16_type);
+   LLVMTypeRef ext_int_vec_type = lp_build_vec_type(gallivm, i32_type);
    LLVMValueRef h;
 
-   if (util_get_cpu_caps()->has_f16c &&
-       (src_length == 4 || src_length == 8)) {
-      if (LLVM_VERSION_MAJOR < 11) {
+   if (lp_has_fp16() && (src_length == 4 || src_length == 8)) {
+      if (util_get_cpu_caps()->has_f16c && LLVM_VERSION_MAJOR < 11) {
          const char *intrinsic = NULL;
          if (src_length == 4) {
             src = lp_build_pad_vector(gallivm, src, 8);
@@ -140,7 +142,8 @@ lp_build_half_to_float(struct gallivm_state *gallivm,
       }
    }
 
-   h = LLVMBuildZExt(builder, src, int_vec_type, "");
+   src = LLVMBuildBitCast(builder, src, int_vec_type, "");
+   h = LLVMBuildZExt(builder, src, ext_int_vec_type, "");
    return lp_build_smallfloat_to_float(gallivm, f32_type, h, 10, 5, 0, true);
 }
 

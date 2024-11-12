@@ -860,7 +860,7 @@ update_cs_shader_module(struct zink_context *ctx, struct zink_compute_program *c
    struct zink_shader_module *zm = NULL;
    unsigned inline_size = 0, nonseamless_size = 0, zs_swizzle_size = 0;
    struct zink_shader_key *key = &ctx->compute_pipeline_state.key;
-   ASSERTED bool check_robustness = screen->driver_workarounds.lower_robustImageAccess2 && (ctx->flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS);
+   ASSERTED bool check_robustness = screen->driver_compiler_workarounds.lower_robustImageAccess2 && (ctx->flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS);
    assert(zink_cs_key(key)->robust_access == check_robustness);
 
    if (ctx && zs->info.num_inlinable_uniforms &&
@@ -1111,9 +1111,9 @@ gfx_program_create(struct zink_context *ctx,
    }
    if (stages[MESA_SHADER_TESS_EVAL] && !stages[MESA_SHADER_TESS_CTRL]) {
       util_queue_fence_wait(&stages[MESA_SHADER_TESS_EVAL]->precompile.fence);
-      prog->shaders[MESA_SHADER_TESS_EVAL]->non_fs.generated_tcs =
-      prog->shaders[MESA_SHADER_TESS_CTRL] =
-        zink_shader_tcs_create(screen, vertices_per_patch);
+      if (!prog->shaders[MESA_SHADER_TESS_EVAL]->non_fs.generated_tcs)
+         prog->shaders[MESA_SHADER_TESS_EVAL]->non_fs.generated_tcs = zink_shader_tcs_create(screen, vertices_per_patch);
+      prog->shaders[MESA_SHADER_TESS_CTRL] = prog->shaders[MESA_SHADER_TESS_EVAL]->non_fs.generated_tcs;
       prog->stages_present |= BITFIELD_BIT(MESA_SHADER_TESS_CTRL);
    }
    prog->stages_remaining = prog->stages_present;
@@ -1183,13 +1183,13 @@ gfx_program_init(struct zink_context *ctx, struct zink_gfx_program *prog)
    if (prog->libs)
       p_atomic_inc(&prog->libs->refcount);
 
-   struct mesa_sha1 sctx;
-   _mesa_sha1_init(&sctx);
+   struct mesa_blake3 sctx;
+   _mesa_blake3_init(&sctx);
    for (int i = 0; i < ZINK_GFX_SHADER_COUNT; ++i) {
       if (prog->shaders[i])
-         _mesa_sha1_update(&sctx, prog->shaders[i]->base.sha1, sizeof(prog->shaders[i]->base.sha1));
+         _mesa_blake3_update(&sctx, prog->shaders[i]->base.sha1, sizeof(prog->shaders[i]->base.sha1));
    }
-   _mesa_sha1_final(&sctx, prog->base.sha1);
+   _mesa_blake3_final(&sctx, prog->base.blake3);
 
    if (!zink_descriptor_program_init(ctx, &prog->base))
       goto fail;
@@ -1498,10 +1498,10 @@ precompile_compute_job(void *data, void *gdata, int thread_index)
    util_dynarray_init(&comp->shader_cache[0], comp);
    util_dynarray_init(&comp->shader_cache[1], comp);
 
-   struct mesa_sha1 sha1_ctx;
-   _mesa_sha1_init(&sha1_ctx);
-   _mesa_sha1_update(&sha1_ctx, comp->shader->blob.data, comp->shader->blob.size);
-   _mesa_sha1_final(&sha1_ctx, comp->base.sha1);
+   struct mesa_blake3 blake3_ctx;
+   _mesa_blake3_init(&blake3_ctx);
+   _mesa_blake3_update(&blake3_ctx, comp->shader->blob.data, comp->shader->blob.size);
+   _mesa_blake3_final(&blake3_ctx, comp->base.blake3);
 
    zink_descriptor_program_init(comp->base.ctx, &comp->base);
 
@@ -2007,7 +2007,7 @@ zink_bind_fs_state(struct pipe_context *pctx,
       }
       zink_set_zs_needs_shader_swizzle_key(ctx, MESA_SHADER_FRAGMENT, false);
       if (shadow_mask != ctx->gfx_stages[MESA_SHADER_FRAGMENT]->fs.legacy_shadow_mask &&
-          !zink_screen(pctx->screen)->driver_workarounds.needs_zs_shader_swizzle)
+          !zink_screen(pctx->screen)->driver_compiler_workarounds.needs_zs_shader_swizzle)
          zink_update_shadow_samplerviews(ctx, shadow_mask | ctx->gfx_stages[MESA_SHADER_FRAGMENT]->fs.legacy_shadow_mask);
       if (!ctx->track_renderpasses && !ctx->blitting)
          ctx->rp_tc_info_updated = true;

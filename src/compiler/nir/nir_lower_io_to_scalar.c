@@ -278,6 +278,7 @@ nir_lower_io_to_scalar_instr(nir_builder *b, nir_instr *instr, void *data)
       return false;
 
    if ((intr->intrinsic == nir_intrinsic_load_input ||
+        intr->intrinsic == nir_intrinsic_load_per_primitive_input ||
         intr->intrinsic == nir_intrinsic_load_per_vertex_input ||
         intr->intrinsic == nir_intrinsic_load_interpolated_input ||
         intr->intrinsic == nir_intrinsic_load_input_vertex) &&

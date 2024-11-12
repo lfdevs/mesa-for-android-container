@@ -48,8 +48,7 @@ struct inst_group {
    struct bblock_t *block_start;
    struct bblock_t *block_end;
 
-   /* Annotation for the generated IR.  One of the two can be set. */
-   const void *ir;
+   /* Annotation for the generated IR. */
    const char *annotation;
 };
 

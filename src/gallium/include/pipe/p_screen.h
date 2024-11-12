@@ -832,20 +832,6 @@ struct pipe_screen {
                                        int max, uint64_t *modifiers, int *count);
 
    /**
-    * Determine whether the modifer is enabling fixed-rate compression for
-    * the given screen and format.
-    *
-    * If \p rate is not NULL, the value it points to will be set to the
-    * bitrate (bits per component) associated with the modifier.
-    *
-    * \return true if the format+modifier pair is enabling fixed-rate
-    *         compression on \p screen, false otherwise.
-    */
-   bool (*is_compression_modifier)(struct pipe_screen *screen,
-                                   enum pipe_format format, uint64_t modifier,
-                                   uint32_t *rate);
-
-   /**
     * Check if the given \p target buffer is supported as output (or input for
     * encode) for this \p profile and \p entrypoint.
     *
@@ -862,6 +848,13 @@ struct pipe_screen {
                                             struct pipe_video_buffer *target,
                                             enum pipe_video_profile profile,
                                             enum pipe_video_entrypoint entrypoint);
+
+   /**
+    * pipe_screen is inherited by driver's screen but a simple cast to convert
+    * from the generic interface to the driver version won't work if dd_pipe
+    * is used.
+    */
+   struct pipe_screen* (*get_driver_pipe_screen)(struct pipe_screen *screen);
 };
 
 

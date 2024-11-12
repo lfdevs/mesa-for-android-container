@@ -105,6 +105,7 @@ disk_cache_get_function_identifier(void *ptr, struct mesa_sha1 *ctx)
 #include "util/rand_xor.h"
 
 /* Create a directory named 'path' if it does not already exist.
+ * This is for use by mkdir_with_parents_if_needed(). Use that instead.
  *
  * Returns: 0 if path already exists as a directory or if created.
  *         -1 in all other cases.
@@ -182,7 +183,6 @@ mkdir_with_parents_if_needed(const char *path)
  *
  * Returns NULL on any error, such as:
  *
- *      <path> does not exist or is not a directory
  *      <path>/<name> exists but is not a directory
  *      <path>/<name> cannot be created as a directory
  */
@@ -190,17 +190,13 @@ static char *
 concatenate_and_mkdir(void *ctx, const char *path, const char *name)
 {
    char *new_path;
-   struct stat sb;
-
-   if (stat(path, &sb) != 0 || ! S_ISDIR(sb.st_mode))
-      return NULL;
 
    new_path = ralloc_asprintf(ctx, "%s/%s", path, name);
 
-   if (mkdir_if_needed(new_path) == 0)
+   if (mkdir_with_parents_if_needed(new_path) == 0)
       return new_path;
-   else
-      return NULL;
+
+   return NULL;
 }
 
 struct lru_file {
@@ -444,7 +440,7 @@ make_cache_file_directory(struct disk_cache *cache, const cache_key key)
    if (asprintf(&dir, "%s/%c%c", cache->path, buf[0], buf[1]) == -1)
       return;
 
-   mkdir_if_needed(dir);
+   mkdir_with_parents_if_needed(dir);
    free(dir);
 }
 
@@ -904,9 +900,6 @@ disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
    }
 
    if (path) {
-      if (mkdir_with_parents_if_needed(path) == -1)
-         return NULL;
-
       path = concatenate_and_mkdir(mem_ctx, path, cache_dir_name);
       if (!path)
          return NULL;
@@ -916,9 +909,6 @@ disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
       char *xdg_cache_home = secure_getenv("XDG_CACHE_HOME");
 
       if (xdg_cache_home) {
-         if (mkdir_if_needed(xdg_cache_home) == -1)
-            return NULL;
-
          path = concatenate_and_mkdir(mem_ctx, xdg_cache_home, cache_dir_name);
          if (!path)
             return NULL;

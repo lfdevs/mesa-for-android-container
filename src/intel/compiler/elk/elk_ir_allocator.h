@@ -42,11 +42,15 @@ namespace elk {
       {
       }
 
+      simple_allocator(const simple_allocator &) = delete;
+
       ~simple_allocator()
       {
          free(offsets);
          free(sizes);
       }
+
+      simple_allocator & operator=(const simple_allocator &) = delete;
 
       unsigned
       allocate(unsigned size)

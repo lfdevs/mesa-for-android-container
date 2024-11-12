@@ -141,7 +141,7 @@ nouveau_ws_context_create(struct nouveau_ws_device *dev,
    if (ret)
       goto fail_subchan;
 
-   base = (0xbeef + req.channel) << 16;
+   base = (uint32_t)(0xbeef + req.channel) << 16;
 
    if (engines & NOUVEAU_WS_ENGINE_COPY) {
       uint32_t obj_class = nouveau_ws_context_find_class(classes, 0xb5);

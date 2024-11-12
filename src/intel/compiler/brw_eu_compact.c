@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-/** @file brw_eu_compact.c
+/** @file
  *
  * Instruction compaction is a feature of G45 and newer hardware that allows
  * for a smaller instruction encoding.
@@ -1571,10 +1571,10 @@ static bool
 has_immediate(const struct intel_device_info *devinfo, const brw_inst *inst,
               enum brw_reg_type *type)
 {
-   if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
+   if (brw_inst_src0_reg_file(devinfo, inst) == IMM) {
       *type = brw_inst_src0_type(devinfo, inst);
       return *type != BRW_TYPE_INVALID;
-   } else if (brw_inst_src1_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
+   } else if (brw_inst_src1_reg_file(devinfo, inst) == IMM) {
       *type = brw_inst_src1_type(devinfo, inst);
       return *type != BRW_TYPE_INVALID;
    }
@@ -1596,7 +1596,7 @@ precompact(const struct brw_isa_info *isa, brw_inst inst)
     * sequential elements, so convert to those before compacting.
     */
    if (devinfo->verx10 >= 125) {
-      if (brw_inst_src0_reg_file(devinfo, &inst) == BRW_GENERAL_REGISTER_FILE &&
+      if (brw_inst_src0_reg_file(devinfo, &inst) == FIXED_GRF &&
           brw_inst_src0_vstride(devinfo, &inst) > BRW_VERTICAL_STRIDE_1 &&
           brw_inst_src0_vstride(devinfo, &inst) == (brw_inst_src0_width(devinfo, &inst) + 1) &&
           brw_inst_src0_hstride(devinfo, &inst) == BRW_HORIZONTAL_STRIDE_1) {
@@ -1605,7 +1605,7 @@ precompact(const struct brw_isa_info *isa, brw_inst inst)
          brw_inst_set_src0_hstride(devinfo, &inst, BRW_HORIZONTAL_STRIDE_0);
       }
 
-      if (brw_inst_src1_reg_file(devinfo, &inst) == BRW_GENERAL_REGISTER_FILE &&
+      if (brw_inst_src1_reg_file(devinfo, &inst) == FIXED_GRF &&
           brw_inst_src1_vstride(devinfo, &inst) > BRW_VERTICAL_STRIDE_1 &&
           brw_inst_src1_vstride(devinfo, &inst) == (brw_inst_src1_width(devinfo, &inst) + 1) &&
           brw_inst_src1_hstride(devinfo, &inst) == BRW_HORIZONTAL_STRIDE_1) {
@@ -1615,7 +1615,7 @@ precompact(const struct brw_isa_info *isa, brw_inst inst)
       }
    }
 
-   if (brw_inst_src0_reg_file(devinfo, &inst) != BRW_IMMEDIATE_VALUE)
+   if (brw_inst_src0_reg_file(devinfo, &inst) != IMM)
       return inst;
 
    /* The Bspec's section titled "Non-present Operands" claims that if src0
@@ -2237,11 +2237,17 @@ update_uip_jip(const struct brw_isa_info *isa, brw_inst *insn,
    /* JIP and UIP are in units of bytes on Gfx8+. */
    int shift = 3;
 
+   /* Even though the values are signed, we don't need the rounding behavior
+    * of integer division. The shifts are safe.
+    */
+   assert(brw_inst_jip(devinfo, insn) % 8 == 0 &&
+          brw_inst_uip(devinfo, insn) % 8 == 0);
+
    int32_t jip_compacted = brw_inst_jip(devinfo, insn) >> shift;
    jip_compacted -= compacted_between(this_old_ip,
                                       this_old_ip + (jip_compacted / 2),
                                       compacted_counts);
-   brw_inst_set_jip(devinfo, insn, jip_compacted << shift);
+   brw_inst_set_jip(devinfo, insn, (uint32_t)jip_compacted << shift);
 
    if (brw_inst_opcode(isa, insn) == BRW_OPCODE_ENDIF ||
        brw_inst_opcode(isa, insn) == BRW_OPCODE_WHILE)
@@ -2251,7 +2257,7 @@ update_uip_jip(const struct brw_isa_info *isa, brw_inst *insn,
    uip_compacted -= compacted_between(this_old_ip,
                                       this_old_ip + (uip_compacted / 2),
                                       compacted_counts);
-   brw_inst_set_uip(devinfo, insn, uip_compacted << shift);
+   brw_inst_set_uip(devinfo, insn, (uint32_t)uip_compacted << shift);
 }
 
 static void
@@ -2282,6 +2288,7 @@ compaction_state_init(struct compaction_state *c,
    c->isa = isa;
    switch (devinfo->ver) {
    case 20:
+   case 30:
       c->control_index_table = xe2_control_index_table;
       c->datatype_table = xe2_datatype_table;
       c->subreg_table = xe2_subreg_table;
@@ -2435,9 +2442,9 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
          if (brw_inst_cmpt_control(devinfo, insn))
             break;
 
-         if (brw_inst_dst_reg_file(devinfo, insn) == BRW_ARCHITECTURE_REGISTER_FILE &&
+         if (brw_inst_dst_reg_file(devinfo, insn) == ARF &&
              brw_inst_dst_da_reg_nr(devinfo, insn) == BRW_ARF_IP) {
-            assert(brw_inst_src1_reg_file(devinfo, insn) == BRW_IMMEDIATE_VALUE);
+            assert(brw_inst_src1_reg_file(devinfo, insn) == IMM);
 
             int shift = 3;
             int jump_compacted = brw_inst_imm_d(devinfo, insn) >> shift;

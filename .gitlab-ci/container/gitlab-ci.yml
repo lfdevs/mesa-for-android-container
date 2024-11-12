@@ -72,10 +72,6 @@ debian/x86_64_build-base:
     - .debian-container
   variables:
     MESA_IMAGE_TAG: &debian-x86_64_build-base "${DEBIAN_BASE_TAG}--${PKG_REPO_REV}"
-  rules:
-    # python-test requires debian/x86_64_build, which requires this job
-    - !reference [python-test, rules]
-    - !reference [.container, rules]
 
 .use-debian/x86_64_build-base:
   extends:
@@ -95,10 +91,6 @@ debian/x86_64_build:
     - .use-debian/x86_64_build-base
   variables:
     MESA_IMAGE_TAG: &debian-x86_64_build ${DEBIAN_BUILD_TAG}
-  rules:
-    # python-test requires this job
-    - !reference [python-test, rules]
-    - !reference [.use-debian/x86_64_build-base, rules]
 
 .use-debian/x86_64_build:
   extends:
@@ -269,6 +261,28 @@ debian/x86_64_test-vk:
   needs:
     - debian/x86_64_test-android
 
+# Debian-based x86_64 image to run Python utilities
+debian/x86_64_pyutils:
+  extends:
+    - .debian-container
+  variables:
+    MESA_IMAGE_TAG: &debian-x86_64_pyutils "${DEBIAN_PYUTILS_TAG}"
+  rules:
+    # python-test requires this job
+    - !reference [python-test, rules]
+    - !reference [.container, rules]
+
+.use-debian/x86_64_pyutils:
+  extends:
+    - .fdo.container-build@debian
+    - .debian-container-version
+    - .set-image
+  variables:
+    MESA_IMAGE_PATH: ${DEBIAN_PYUTILS_IMAGE}
+    MESA_IMAGE_TAG: *debian-x86_64_pyutils
+  needs:
+    - debian/x86_64_pyutils
+
 # Debian based aarch64 test image for GL
 debian/arm64_test-gl:
   tags:
@@ -346,6 +360,7 @@ alpine/x86_64_build:
     - .alpine/x86_64_build-base
   variables:
     MESA_IMAGE_TAG: &alpine-x86_64_build ${ALPINE_X86_64_BUILD_TAG}
+    LLVM_VERSION: &alpine-llvm_version 19
   rules:
     # Note: the next three lines must remain in that order, so that the rules
     # in `linkcheck-docs` catch nightly pipelines before the rules in `pages`
@@ -361,6 +376,7 @@ alpine/x86_64_build:
   variables:
     MESA_IMAGE_PATH: "alpine/x86_64_build"
     MESA_IMAGE_TAG: *alpine-x86_64_build
+    LLVM_VERSION: *alpine-llvm_version
   needs:
     - alpine/x86_64_build
 
@@ -389,6 +405,22 @@ fedora/x86_64_build:
   needs:
     - fedora/x86_64_build
 
+# Get firmware directly rather than using package versions.
+# Change KERNEL_ROOTFS_TAG to add firmware changes.
+# FIRMWARE_FILES is a list of json files arranged by vendor in .gitlab-ci/firmware/*
+.firmware_x86_64:
+  variables:
+    FIRMWARE_FILES: |
+      .gitlab-ci/firmware/i915/mtl-fw.json
+
+.firmware_arm64:
+  variables:
+    FIRMWARE_FILES: |
+      .gitlab-ci/firmware/arm/mali/arch10.8/mali-fw.json
+
+.firmware_arm32:
+  variables:
+    FIRMWARE_FILES: |
 
 .kernel+rootfs:
   extends:
@@ -407,6 +439,7 @@ kernel+rootfs_x86_64:
   extends:
     - .use-debian/x86_64_build-base
     - .kernel+rootfs
+    - .firmware_x86_64
   image: "$FDO_BASE_IMAGE"
   variables:
     DEBIAN_ARCH: "amd64"
@@ -416,6 +449,7 @@ kernel+rootfs_arm64:
   extends:
     - .use-debian/arm64_build
     - .kernel+rootfs
+    - .firmware_arm64
   tags:
     - aarch64
   variables:
@@ -424,6 +458,7 @@ kernel+rootfs_arm64:
 kernel+rootfs_arm32:
   extends:
     - kernel+rootfs_arm64
+    - .firmware_arm32
   variables:
     DEBIAN_ARCH: "armhf"
 
@@ -520,6 +555,7 @@ debian/baremetal_arm64_test:
     - .windows-docker-msvc
     - .windows-shell-tags
   rules:
+    - !reference [.common-rules, rules]
     - !reference [.microsoft-farm-container-rules, rules]
     - !reference [.container+build-rules, rules]
   variables:
@@ -545,6 +581,7 @@ windows_build_msvc:
   extends:
     - .windows_container_build
   rules:
+    - !reference [.common-rules, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.container+build-rules, rules]
   variables:
@@ -563,6 +600,7 @@ windows_test_msvc:
   extends:
     - .windows_container_build
   rules:
+    - !reference [.common-rules, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.container+build-rules, rules]
   variables:

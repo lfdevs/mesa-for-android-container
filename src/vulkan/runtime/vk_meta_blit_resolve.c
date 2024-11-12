@@ -414,6 +414,9 @@ get_blit_pipeline(struct vk_device *device,
    if (key->aspects & VK_IMAGE_ASPECT_COLOR_BIT) {
       render.color_attachment_count = 1;
       render.color_attachment_formats[0] = key->dst_format;
+      render.color_attachment_write_masks[0] =
+         VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
    }
    if (key->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
       ds_info.depthTestEnable = VK_TRUE;

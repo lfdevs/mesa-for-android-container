@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 use crate::api::{GetDebugFlags, DEBUG};
-use crate::cfg::CFG;
 use crate::ir::*;
 use crate::liveness::{BlockLiveness, Liveness, SimpleLiveness};
 
+use compiler::cfg::CFG;
 use std::collections::HashMap;
 use std::iter::Peekable;
 

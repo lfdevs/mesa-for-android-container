@@ -1157,16 +1157,14 @@ emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
    }
 }
 
-static uint32_t
+static inline uint32_t
 get_sampler_count(const struct anv_shader_bin *bin)
 {
-   uint32_t count_by_4 = DIV_ROUND_UP(bin->bind_map.sampler_count, 4);
-
    /* We can potentially have way more than 32 samplers and that's ok.
     * However, the 3DSTATE_XS packets only have 3 bits to specify how
     * many to pre-fetch and all values above 4 are marked reserved.
     */
-   return MIN2(count_by_4, 4);
+   return DIV_ROUND_UP(CLAMP(bin->bind_map.sampler_count, 0, 16), 4);
 }
 
 static UNUSED struct anv_address
@@ -1623,26 +1621,6 @@ emit_3dstate_wm(struct anv_graphics_pipeline *pipeline,
          } else {
             wm.EarlyDepthStencilControl         = EDSC_NORMAL;
          }
-
-         /* Gen8 hardware tries to compute ThreadDispatchEnable for us but
-          * doesn't take into account KillPixels when no depth or stencil
-          * writes are enabled. In order for occlusion queries to work
-          * correctly with no attachments, we need to force-enable PS thread
-          * dispatch.
-          *
-          * The BDW docs are pretty clear that that this bit isn't validated
-          * and probably shouldn't be used in production:
-          *
-          *    "This must always be set to Normal. This field should not be
-          *     tested for functional validation."
-          *
-          * Unfortunately, however, the other mechanism we have for doing this
-          * is 3DSTATE_PS_EXTRA::PixelShaderHasUAV which causes hangs on BDW.
-          * Given two bad options, we choose the one which works.
-          */
-         pipeline->force_fragment_thread_dispatch =
-            wm_prog_data->has_side_effects ||
-            wm_prog_data->uses_kill;
       }
    }
 }
@@ -2201,12 +2179,11 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
       vfe.URBEntryAllocationSize = 2;
       vfe.CURBEAllocationSize    = vfe_curbe_allocation;
 
-      if (cs_bin->prog_data->total_scratch) {
+      if (cs_prog_data->base.total_scratch) {
          /* Broadwell's Per Thread Scratch Space is in the range [0, 11]
           * where 0 = 1k, 1 = 2k, 2 = 4k, ..., 11 = 2M.
           */
-         vfe.PerThreadScratchSpace =
-            ffs(cs_bin->prog_data->total_scratch) - 11;
+         vfe.PerThreadScratchSpace = ffs(cs_prog_data->base.total_scratch) - 11;
          vfe.ScratchSpaceBasePointer =
             get_scratch_address(&pipeline->base, MESA_SHADER_COMPUTE, cs_bin);
       }
@@ -2225,7 +2202,7 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
        * Typically set to 0 to avoid prefetching on every thread dispatch.
        */
       .BindingTableEntryCount = devinfo->verx10 == 125 ?
-         0 : 1 + MIN2(pipeline->cs->bind_map.surface_count, 30),
+         0 : MIN2(pipeline->cs->bind_map.surface_count, 30),
       .BarrierEnable          = cs_prog_data->uses_barrier,
       .SharedLocalMemorySize  =
          intel_compute_slm_encode_size(GFX_VER, cs_prog_data->base.total_shared),

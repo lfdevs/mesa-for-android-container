@@ -1706,6 +1706,19 @@ st_QueryInternalFormat(struct gl_context *ctx, GLenum target,
       params[0] = (GLint) num_rates;
       break;
    }
+   case GL_FRAMEBUFFER_BLEND: {
+      if (target == GL_RENDERBUFFER)
+         target = GL_TEXTURE_2D;
+      enum pipe_texture_target ptarget = gl_target_to_pipe(target);
+      mesa_format format = st_ChooseTextureFormat(ctx, target, internalFormat, GL_NONE, GL_NONE);
+      enum pipe_format pformat = st_mesa_format_to_pipe_format(st, format);
+      struct pipe_screen *screen = st->screen;
+      bool supported = pformat != PIPE_FORMAT_NONE &&
+                       screen->is_format_supported(screen, pformat, ptarget, 0, 0,
+                                                   PIPE_BIND_BLENDABLE | PIPE_BIND_RENDER_TARGET);
+      params[0] = supported ? GL_FULL_SUPPORT : GL_NONE;
+      break;
+   }
    default:
       /* For the rest of the pnames, we call back the Mesa's default
        * function for drivers that don't implement ARB_internalformat_query2.

@@ -147,8 +147,12 @@ set_io_mask(nir_shader *shader, nir_variable *var, int offset, int len,
                shader->info.inputs_read_indirectly |= bitfield;
          }
 
-         if (cross_invocation && shader->info.stage == MESA_SHADER_TESS_CTRL)
-            shader->info.tess.tcs_cross_invocation_inputs_read |= bitfield;
+         if (shader->info.stage == MESA_SHADER_TESS_CTRL) {
+            if (cross_invocation)
+               shader->info.tess.tcs_cross_invocation_inputs_read |= bitfield;
+            else
+               shader->info.tess.tcs_same_invocation_inputs_read |= bitfield;
+         }
 
          if (shader->info.stage == MESA_SHADER_FRAGMENT) {
             shader->info.fs.uses_sample_qualifier |= var->data.sample;
@@ -235,6 +239,10 @@ get_io_offset(nir_deref_instr *deref, nir_variable *var, bool is_arrayed,
          assert(glsl_type_is_array(var->type));
          return 0;
       }
+
+      if (deref->deref_type == nir_deref_type_array_wildcard)
+         return -1;
+
       assert(deref->deref_type == nir_deref_type_array);
       return nir_src_is_const(deref->arr.index) ? (nir_src_as_uint(deref->arr.index) + var->data.location_frac) / 4u : (unsigned)-1;
    }
@@ -539,6 +547,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_per_vertex_input:
    case nir_intrinsic_load_input_vertex:
    case nir_intrinsic_load_interpolated_input:
+   case nir_intrinsic_load_per_primitive_input:
       if (shader->info.stage == MESA_SHADER_TESS_EVAL &&
           instr->intrinsic == nir_intrinsic_load_input &&
           !is_patch_special) {
@@ -549,7 +558,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
          shader->info.inputs_read |= slot_mask;
          if (nir_intrinsic_io_semantics(instr).high_dvec2)
             shader->info.dual_slot_inputs |= slot_mask;
-         if (nir_intrinsic_io_semantics(instr).per_primitive)
+         if (instr->intrinsic == nir_intrinsic_load_per_primitive_input)
             shader->info.per_primitive_inputs |= slot_mask;
          shader->info.inputs_read_16bit |= slot_mask_16bit;
          if (!nir_src_is_const(*nir_get_io_offset_src(instr))) {
@@ -559,9 +568,12 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
       }
 
       if (shader->info.stage == MESA_SHADER_TESS_CTRL &&
-          instr->intrinsic == nir_intrinsic_load_per_vertex_input &&
-          !src_is_invocation_id(nir_get_io_arrayed_index_src(instr)))
-         shader->info.tess.tcs_cross_invocation_inputs_read |= slot_mask;
+          instr->intrinsic == nir_intrinsic_load_per_vertex_input) {
+         if (src_is_invocation_id(nir_get_io_arrayed_index_src(instr)))
+            shader->info.tess.tcs_same_invocation_inputs_read |= slot_mask;
+         else
+            shader->info.tess.tcs_cross_invocation_inputs_read |= slot_mask;
+      }
       break;
 
    case nir_intrinsic_load_output:
@@ -654,6 +666,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_draw_id:
    case nir_intrinsic_load_invocation_id:
    case nir_intrinsic_load_frag_coord:
+   case nir_intrinsic_load_pixel_coord:
    case nir_intrinsic_load_frag_shading_rate:
    case nir_intrinsic_load_fully_covered:
    case nir_intrinsic_load_point_coord:
@@ -677,6 +690,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_global_invocation_id:
    case nir_intrinsic_load_base_global_invocation_id:
    case nir_intrinsic_load_global_invocation_index:
+   case nir_intrinsic_load_global_size:
    case nir_intrinsic_load_workgroup_id:
    case nir_intrinsic_load_base_workgroup_id:
    case nir_intrinsic_load_workgroup_index:
@@ -755,6 +769,16 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
       } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {
          BITSET_SET(shader->info.system_values_read, SYSTEM_VALUE_BARYCENTRIC_LINEAR_COORD);
       }
+      break;
+
+   case nir_intrinsic_ddx:
+   case nir_intrinsic_ddx_fine:
+   case nir_intrinsic_ddx_coarse:
+   case nir_intrinsic_ddy:
+   case nir_intrinsic_ddy_fine:
+   case nir_intrinsic_ddy_coarse:
+      if (shader->info.stage == MESA_SHADER_FRAGMENT)
+         shader->info.fs.needs_quad_helper_invocations = true;
       break;
 
    case nir_intrinsic_quad_vote_any:
@@ -845,10 +869,13 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
       if (nir_intrinsic_writes_external_memory(instr))
          shader->info.writes_memory = true;
 
-      if (instr->intrinsic == nir_intrinsic_image_size ||
+      if (instr->intrinsic == nir_intrinsic_image_levels ||
+          instr->intrinsic == nir_intrinsic_image_size ||
           instr->intrinsic == nir_intrinsic_image_samples ||
+          instr->intrinsic == nir_intrinsic_image_deref_levels ||
           instr->intrinsic == nir_intrinsic_image_deref_size ||
           instr->intrinsic == nir_intrinsic_image_deref_samples ||
+          instr->intrinsic == nir_intrinsic_bindless_image_levels ||
           instr->intrinsic == nir_intrinsic_bindless_image_size ||
           instr->intrinsic == nir_intrinsic_bindless_image_samples)
          shader->info.uses_resource_info_query = true;
@@ -889,15 +916,6 @@ gather_tex_info(nir_tex_instr *instr, nir_shader *shader)
 static void
 gather_alu_info(nir_alu_instr *instr, nir_shader *shader)
 {
-   if (nir_op_is_derivative(instr->op) &&
-       shader->info.stage == MESA_SHADER_FRAGMENT) {
-
-      shader->info.fs.needs_quad_helper_invocations = true;
-   }
-
-   if (instr->op == nir_op_fddx || instr->op == nir_op_fddy)
-      shader->info.uses_fddx_fddy = true;
-
    const nir_op_info *info = &nir_op_infos[instr->op];
 
    for (unsigned i = 0; i < info->num_inputs; i++) {
@@ -1012,6 +1030,7 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
       shader->info.fs.needs_quad_helper_invocations = false;
    }
    if (shader->info.stage == MESA_SHADER_TESS_CTRL) {
+      shader->info.tess.tcs_same_invocation_inputs_read = 0;
       shader->info.tess.tcs_cross_invocation_inputs_read = 0;
       shader->info.tess.tcs_cross_invocation_outputs_read = 0;
    }

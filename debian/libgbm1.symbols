@@ -1,3 +1,5 @@
+dri_gbm.so libgbm1 #MINVER#
+ gbmint_get_backend@Base 24.3.0~rc1
 libgbm.so.1 libgbm1 #MINVER#
 | libgbm1-private
  gbm_bo_create@Base 7.11~1

@@ -29,9 +29,10 @@ struct radv_device;
 struct radv_pipeline;
 struct radv_ray_tracing_pipeline;
 struct radv_shader_args;
-struct radv_vs_input_state;
+struct radv_vertex_input_state;
 struct radv_shader_args;
 struct radv_serialized_shader_arena_block;
+struct vk_pipeline_robustness_state;
 
 enum {
    RADV_GRAPHICS_STAGE_BITS =
@@ -78,6 +79,7 @@ struct radv_shader_stage_key {
 
    uint8_t optimisations_disabled : 1;
    uint8_t keep_statistic_info : 1;
+   uint8_t view_index_from_device_index : 1;
 
    /* Shader version (up to 8) to force re-compilation when RADV_BUILD_ID_OVERRIDE is enabled. */
    uint8_t version : 3;
@@ -111,6 +113,7 @@ struct radv_ps_epilog_key {
 struct radv_spirv_to_nir_options {
    uint32_t lower_view_index_to_zero : 1;
    uint32_t fix_dual_src_mrt1_export : 1;
+   uint32_t lower_view_index_to_device_index : 1;
 };
 
 struct radv_graphics_state_key {
@@ -216,6 +219,13 @@ struct radv_nir_compiler_options {
 #define NGG_LDS_LAYOUT_SCRATCH_BASE__SHIFT       16
 #define NGG_LDS_LAYOUT_SCRATCH_BASE__MASK        0xffff
 
+#define NGG_STATE_NUM_VERTS_PER_PRIM__SHIFT 0
+#define NGG_STATE_NUM_VERTS_PER_PRIM__MASK  0x7
+#define NGG_STATE_PROVOKING_VTX__SHIFT      3
+#define NGG_STATE_PROVOKING_VTX__MASK       0x7
+#define NGG_STATE_QUERY__SHIFT              6
+#define NGG_STATE_QUERY__MASK               0x7
+
 #define PS_STATE_NUM_SAMPLES__SHIFT    0
 #define PS_STATE_NUM_SAMPLES__MASK     0xf
 #define PS_STATE_LINE_RAST_MODE__SHIFT 4
@@ -273,7 +283,7 @@ radv_is_last_vgt_stage(const struct radv_shader_stage *stage)
           (stage->info.next_stage == MESA_SHADER_FRAGMENT || stage->info.next_stage == MESA_SHADER_NONE);
 }
 
-struct radv_vs_input_state {
+struct radv_vertex_input_state {
    uint32_t attribute_mask;
 
    uint32_t instance_rate_inputs;
@@ -294,6 +304,7 @@ struct radv_vs_input_state {
    uint8_t format_align_req_minus_1[MAX_VERTEX_ATTRIBS];
    uint8_t component_align_req_minus_1[MAX_VERTEX_ATTRIBS];
    uint8_t format_sizes[MAX_VERTEX_ATTRIBS];
+   uint32_t attrib_index_offset[MAX_VERTEX_ATTRIBS]; /* Only used with static strides. */
 
    bool bindings_match_attrib;
 };
@@ -718,5 +729,8 @@ uint32_t radv_get_user_sgpr(const struct radv_shader *shader, int idx);
 
 void radv_precompute_registers_hw_ngg(struct radv_device *device, const struct ac_shader_config *config,
                                       struct radv_shader_info *info);
+
+void radv_set_stage_key_robustness(const struct vk_pipeline_robustness_state *rs, gl_shader_stage stage,
+                                   struct radv_shader_stage_key *key);
 
 #endif /* RADV_SHADER_H */

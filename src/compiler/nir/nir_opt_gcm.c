@@ -211,6 +211,7 @@ is_src_scalarizable(nir_src *src)
       case nir_intrinsic_load_global:
       case nir_intrinsic_load_global_constant:
       case nir_intrinsic_load_input:
+      case nir_intrinsic_load_per_primitive_input:
          return true;
       default:
          break;
@@ -314,11 +315,7 @@ gcm_pin_instructions(nir_function_impl *impl, struct gcm_state *state)
          case nir_instr_type_alu: {
             nir_alu_instr *alu = nir_instr_as_alu(instr);
 
-            if (nir_op_is_derivative(alu->op)) {
-               /* These can only go in uniform control flow */
-               instr->pass_flags = GCM_INSTR_SCHEDULE_EARLIER_ONLY;
-            } else if (alu->op == nir_op_mov &&
-                       !is_src_scalarizable(&alu->src[0].src)) {
+            if (alu->op == nir_op_mov && !is_src_scalarizable(&alu->src[0].src)) {
                instr->pass_flags = GCM_INSTR_PINNED;
             } else {
                instr->pass_flags = 0;

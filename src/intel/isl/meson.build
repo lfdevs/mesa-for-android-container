@@ -52,7 +52,8 @@ isl_per_hw_ver_libs = []
 foreach g : [['40', isl_gfx4_files], ['50', []], ['60', isl_gfx6_files],
              ['70', isl_gfx7_files], ['75', []], ['80', isl_gfx8_files],
              ['90', isl_gfx9_files], ['110', []], ['120', isl_gfx12_files],
-             ['125', isl_gfx12_files], ['200', isl_gfx20_files]]
+             ['125', isl_gfx12_files], ['200', isl_gfx20_files],
+             ['300', isl_gfx20_files]]
   _gfx_ver = g[0]
   isl_per_hw_ver_libs += static_library(
     'isl_per_hw_ver@0@'.format(_gfx_ver),
@@ -197,6 +198,17 @@ if with_tests
       link_with : libisl,
       c_args : '-DIN_UNIT_TEST',
       cpp_args : ['-std=c++17', '-DIN_UNIT_TEST'],
+    ),
+    suite : ['intel'],
+  )
+  test(
+    'isl_surf_get_image_range_B_tile',
+    executable(
+      'isl_surf_get_image_range_B_tile_test',
+      'tests/isl_surf_get_image_range_B_tile_test.c',
+      dependencies : [dep_m, idep_mesautil, idep_intel_dev],
+      link_with:  libisl,
+      include_directories : [inc_include, inc_src, inc_intel],
     ),
     suite : ['intel'],
   )

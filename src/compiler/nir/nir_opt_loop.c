@@ -162,7 +162,7 @@ opt_loop_terminator(nir_if *nif)
     * or dead control-flow passes and are perfectly legal.  Run a quick phi
     * removal on the block after the if to clean up any such phis.
     */
-   nir_opt_remove_phis_block(nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node)));
+   nir_remove_single_src_phis_block(nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node)));
 
    /* Finally, move the continue from branch after the if-statement. */
    nir_cf_list tmp;
@@ -266,7 +266,7 @@ opt_loop_last_block(nir_block *block, bool is_trivial_continue, bool is_trivial_
          continue;
 
       /* If there are single-source phis after the IF, get rid of them first */
-      nir_opt_remove_phis_block(nir_cf_node_cf_tree_next(prev));
+      nir_remove_single_src_phis_block(nir_cf_node_cf_tree_next(prev));
 
       /* We are about to remove one predecessor. */
       nir_lower_phis_to_regs_block(block->successors[0]);
@@ -405,7 +405,7 @@ opt_loop_peel_initial_break(nir_loop *loop)
     * or dead control-flow passes and are perfectly legal.  Run a quick phi
     * removal on the block after the if to clean up any such phis.
     */
-   nir_opt_remove_phis_block(nir_cf_node_cf_tree_next(if_node));
+   nir_remove_single_src_phis_block(nir_cf_node_cf_tree_next(if_node));
 
    /* We need LCSSA because we are going to wrap the loop into an IF. */
    nir_convert_loop_to_lcssa(loop);

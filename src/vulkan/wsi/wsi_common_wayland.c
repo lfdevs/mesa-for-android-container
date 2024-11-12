@@ -41,6 +41,8 @@
 #include "vk_util.h"
 #include "wsi_common_entrypoints.h"
 #include "wsi_common_private.h"
+#include "fifo-v1-client-protocol.h"
+#include "commit-timing-v1-client-protocol.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "presentation-time-client-protocol.h"
 #include "linux-drm-syncobj-v1-client-protocol.h"
@@ -112,6 +114,11 @@ struct wsi_wl_display {
 
    /* users want per-chain wsi_wl_swapchain->present_ids.wp_presentation */
    struct wp_presentation *wp_presentation_notwrapped;
+   uint32_t wp_presentation_version;
+
+   struct wp_fifo_manager_v1 *fifo_manager;
+   struct wp_commit_timing_manager_v1 *commit_timing_manager;
+   bool no_timestamps;
 
    struct wsi_wayland *wsi_wl;
 
@@ -122,6 +129,8 @@ struct wsi_wl_display {
 
    dev_t main_device;
    bool same_gpu;
+
+   clockid_t presentation_clock_id;
 };
 
 struct wsi_wayland {
@@ -167,6 +176,12 @@ struct wsi_wl_surface {
       uint64_t presentation_track_id;
    } analytics;
 
+   uint64_t last_target_time;
+   uint64_t displayed_time;
+   bool valid_refresh_nsec;
+   unsigned int refresh_nsec;
+   uint64_t display_time_error;
+   uint64_t display_time_correction;
    struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
    struct dmabuf_feedback dmabuf_feedback, pending_dmabuf_feedback;
 
@@ -178,6 +193,8 @@ struct wsi_wl_swapchain {
 
    struct wsi_wl_surface *wsi_wl_surface;
    struct wp_tearing_control_v1 *tearing_control;
+   struct wp_fifo_v1 *fifo;
+   struct wp_commit_timer_v1 *commit_timer;
 
    struct wl_callback *frame;
 
@@ -194,7 +211,7 @@ struct wsi_wl_swapchain {
    const uint64_t *drm_modifiers;
 
    VkPresentModeKHR present_mode;
-   bool fifo_ready;
+   bool legacy_fifo_ready;
 
    struct {
       mtx_t lock; /* protects all members */
@@ -246,6 +263,40 @@ stringify_wayland_id(uint32_t id)
       return NULL;
 
    return out;
+}
+
+/* Given a time base and a refresh period, find the next
+ * time past 'from' that is an even multiple of the period
+ * past the base.
+ */
+static uint64_t
+next_phase_locked_time(uint64_t base, uint64_t period, uint64_t from)
+{
+   uint64_t target, cycles;
+
+   assert(from != 0);
+
+   if (base == 0)
+      return from;
+
+   if (period == 0)
+      period = 16666666;
+
+   /* If our time base is in the future (which can happen when using
+    * presentation feedback events), target the next possible
+    * presentation time.
+    */
+   if (base >= from)
+      return base + period;
+
+   /* Round up our cycle count so imprecision in feedback times doesn't
+    * lead to a time just after a refresh and a time just before the
+    * following refresh producing the same cycle count.
+    */
+   cycles = (from - base + period - 1) / period;
+   target = base + cycles * period;
+
+   return target;
 }
 
 static struct wsi_wl_format *
@@ -815,6 +866,18 @@ static const struct wl_shm_listener shm_listener = {
 };
 
 static void
+presentation_handle_clock_id(void* data, struct wp_presentation *wp_presentation, uint32_t clk_id)
+{
+   struct wsi_wl_display *display = data;
+
+   display->presentation_clock_id = clk_id;
+}
+
+static const struct wp_presentation_listener presentation_listener = {
+   presentation_handle_clock_id,
+};
+
+static void
 registry_handle_global(void *data, struct wl_registry *registry,
                        uint32_t name, const char *interface, uint32_t version)
 {
@@ -839,11 +902,25 @@ registry_handle_global(void *data, struct wl_registry *registry,
    }
 
    if (strcmp(interface, wp_presentation_interface.name) == 0) {
+      if (version > 1)
+         display->wp_presentation_version = 2;
+      else
+         display->wp_presentation_version = 1;
+
       display->wp_presentation_notwrapped =
-         wl_registry_bind(registry, name, &wp_presentation_interface, 1);
+         wl_registry_bind(registry, name, &wp_presentation_interface,
+                          display->wp_presentation_version);
+      wp_presentation_add_listener(display->wp_presentation_notwrapped, &presentation_listener, display);
    } else if (strcmp(interface, wp_tearing_control_manager_v1_interface.name) == 0) {
       display->tearing_control_manager =
          wl_registry_bind(registry, name, &wp_tearing_control_manager_v1_interface, 1);
+   } else if (strcmp(interface, wp_fifo_manager_v1_interface.name) == 0) {
+      display->fifo_manager =
+         wl_registry_bind(registry, name, &wp_fifo_manager_v1_interface, 1);
+   } else if (!display->no_timestamps &&
+              strcmp(interface, wp_commit_timing_manager_v1_interface.name) == 0) {
+      display->commit_timing_manager =
+         wl_registry_bind(registry, name, &wp_commit_timing_manager_v1_interface, 1);
    }
 }
 
@@ -872,6 +949,10 @@ wsi_wl_display_finish(struct wsi_wl_display *display)
       zwp_linux_dmabuf_v1_destroy(display->wl_dmabuf);
    if (display->wp_presentation_notwrapped)
       wp_presentation_destroy(display->wp_presentation_notwrapped);
+   if (display->fifo_manager)
+      wp_fifo_manager_v1_destroy(display->fifo_manager);
+   if (display->commit_timing_manager)
+      wp_commit_timing_manager_v1_destroy(display->commit_timing_manager);
    if (display->tearing_control_manager)
       wp_tearing_control_manager_v1_destroy(display->tearing_control_manager);
    if (display->wl_display_wrapper)
@@ -893,6 +974,7 @@ wsi_wl_display_init(struct wsi_wayland *wsi_wl,
    if (!u_vector_init(&display->formats, 8, sizeof(struct wsi_wl_format)))
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+   display->presentation_clock_id = -1; // 0 is a valid clock ID
    display->wsi_wl = wsi_wl;
    display->wl_display = wl_display;
    display->sw = sw;
@@ -908,6 +990,8 @@ wsi_wl_display_init(struct wsi_wayland *wsi_wl,
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto fail;
    }
+
+   display->no_timestamps = wsi_wl->wsi->wayland.disable_timestamps;
 
    wl_proxy_set_queue((struct wl_proxy *) display->wl_display_wrapper,
                       display->queue);
@@ -1066,10 +1150,26 @@ wsi_wl_surface_get_support(VkIcdSurfaceBase *surface,
 }
 
 static uint32_t
-wsi_wl_surface_get_min_image_count(const VkSurfacePresentModeEXT *present_mode)
+wsi_wl_surface_get_min_image_count(struct wsi_wl_display *display,
+                                   const VkSurfacePresentModeEXT *present_mode)
 {
+   /* With legacy frame callback mechanism, report 4 images by default, unless
+    * EXT_surface_maintenance1 query is used to ask explicitly for FIFO. */
    if (present_mode && (present_mode->presentMode == VK_PRESENT_MODE_FIFO_KHR ||
                         present_mode->presentMode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)) {
+      if (display->fifo_manager) {
+         /* When FIFO protocol is supported, applications will no longer block
+          * in QueuePresentKHR due to frame callback, so returning 4 images
+          * for a FIFO swapchain is problematic due to excessive latency. This
+          * latency can only be limited through means of presentWait which few
+          * applications use.
+          * 2 images are enough for forward progress, but 3 is used here
+          * because 2 could result in waiting for the compositor to remove an
+          * old image from scanout when we'd like to be rendering.
+          */
+         return 3;
+      }
+
       /* If we receive a FIFO present mode, only 2 images is required for forward progress.
        * Performance with 2 images will be questionable, but we only allow it for applications
        * using the new API, so we don't risk breaking any existing apps this way.
@@ -1087,12 +1187,30 @@ wsi_wl_surface_get_min_image_count(const VkSurfacePresentModeEXT *present_mode)
 }
 
 static VkResult
-wsi_wl_surface_get_capabilities(VkIcdSurfaceBase *surface,
+wsi_wl_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
                                 struct wsi_device *wsi_device,
                                 const VkSurfacePresentModeEXT *present_mode,
                                 VkSurfaceCapabilitiesKHR* caps)
 {
-   caps->minImageCount = wsi_wl_surface_get_min_image_count(present_mode);
+   VkIcdSurfaceWayland *surface = (VkIcdSurfaceWayland *)icd_surface;
+   struct wsi_wl_surface *wsi_wl_surface =
+      wl_container_of((VkIcdSurfaceWayland *)icd_surface, wsi_wl_surface, base);
+   struct wsi_wayland *wsi =
+      (struct wsi_wayland *)wsi_device->wsi[VK_ICD_WSI_PLATFORM_WAYLAND];
+   struct wsi_wl_display temp_display, *display = wsi_wl_surface->display;
+
+   if (!wsi_wl_surface->display) {
+      if (wsi_wl_display_init(wsi, &temp_display, surface->display, true,
+                              wsi_device->sw, "mesa image count query"))
+         return VK_ERROR_SURFACE_LOST_KHR;
+      display = &temp_display;
+   }
+
+   caps->minImageCount = wsi_wl_surface_get_min_image_count(display, present_mode);
+
+   if (!wsi_wl_surface->display)
+      wsi_wl_display_finish(&temp_display);
+
    /* There is no real maximum */
    caps->maxImageCount = 0;
 
@@ -1658,6 +1776,9 @@ static VkResult wsi_wl_surface_init(struct wsi_wl_surface *wsi_wl_surface,
    }
 
    wsi_wl_surface_analytics_init(wsi_wl_surface, pAllocator);
+
+   wsi_wl_surface->valid_refresh_nsec = false;
+   wsi_wl_surface->refresh_nsec = 0;
    return VK_SUCCESS;
 
 fail:
@@ -1711,6 +1832,8 @@ struct wsi_wl_present_id {
    const VkAllocationCallbacks *alloc;
    struct wsi_wl_swapchain *chain;
    int buffer_id;
+   uint64_t target_time;
+   uint64_t correction;
    struct wl_list link;
 };
 
@@ -1877,6 +2000,37 @@ wsi_wl_swapchain_wait_for_present(struct wsi_swapchain *wsi_chain,
    }
 }
 
+static int
+wsi_wl_swapchain_ensure_dispatch(struct wsi_wl_swapchain *chain)
+{
+   struct wsi_wl_surface *wsi_wl_surface = chain->wsi_wl_surface;
+   struct wl_display *display = wsi_wl_surface->display->wl_display;
+   struct timespec timeout = {0, 0};
+   int ret = 0;
+
+   mtx_lock(&chain->present_ids.lock);
+   if (chain->present_ids.dispatch_in_progress)
+      goto already_dispatching;
+
+   chain->present_ids.dispatch_in_progress = true;
+   mtx_unlock(&chain->present_ids.lock);
+
+   /* Use a dispatch with an instant timeout because dispatch_pending
+    * won't read any events in the pipe.
+    */
+   ret = wl_display_dispatch_queue_timeout(display,
+                                           chain->present_ids.queue,
+                                           &timeout);
+
+   mtx_lock(&chain->present_ids.lock);
+   u_cnd_monotonic_broadcast(&chain->present_ids.list_advanced);
+   chain->present_ids.dispatch_in_progress = false;
+
+already_dispatching:
+   mtx_unlock(&chain->present_ids.lock);
+   return ret;
+}
+
 static VkResult
 wsi_wl_swapchain_acquire_next_image_explicit(struct wsi_swapchain *wsi_chain,
                                              const VkAcquireNextImageInfoKHR *info,
@@ -1939,6 +2093,15 @@ wsi_wl_swapchain_acquire_next_image_implicit(struct wsi_swapchain *wsi_chain,
    timespec_add(&end_time, &rel_timeout, &start_time);
 
    while (1) {
+      /* If we can use timestamps, we want to make sure the queue feedback
+       * events are in is dispatched so we eventually get a refresh rate
+       * and a vsync time to phase lock to. We don't need to wait for it
+       * now.
+        */
+      if (chain->commit_timer) {
+         if (wsi_wl_swapchain_ensure_dispatch(chain) == -1)
+            return VK_ERROR_OUT_OF_DATE_KHR;
+      }
       /* Try to find a free image. */
       for (uint32_t i = 0; i < chain->base.image_count; i++) {
          if (!chain->images[i].busy) {
@@ -1977,6 +2140,7 @@ wsi_wl_presentation_update_present_id(struct wsi_wl_present_id *id)
    if (id->present_id > id->chain->present_ids.max_completed)
       id->chain->present_ids.max_completed = id->present_id;
 
+   id->chain->wsi_wl_surface->display_time_correction -= id->correction;
    wl_list_remove(&id->link);
    mtx_unlock(&id->chain->present_ids.lock);
    vk_free(id->alloc, id);
@@ -1998,7 +2162,7 @@ trace_present(const struct wsi_wl_present_id *id,
       buffer_name = stringify_wayland_id(surface->analytics.presenting);
       MESA_TRACE_TIMESTAMP_END(buffer_name ? buffer_name : "Wayland buffer",
                                surface->analytics.presentation_track_id,
-                               presentation_time);
+                               chain->wsi_wl_surface->display->presentation_clock_id, presentation_time);
       free(buffer_name);
    }
 
@@ -2009,7 +2173,7 @@ trace_present(const struct wsi_wl_present_id *id,
       MESA_TRACE_TIMESTAMP_BEGIN(buffer_name ? buffer_name : "Wayland buffer",
                                  surface->analytics.presentation_track_id,
                                  id->flow_id,
-                                 presentation_time);
+                                 chain->wsi_wl_surface->display->presentation_clock_id, presentation_time);
       free(buffer_name);
    }
 }
@@ -2028,10 +2192,30 @@ presentation_handle_presented(void *data,
 
    MESA_TRACE_FUNC_FLOW(&id->flow_id);
 
+   struct wsi_wl_swapchain *chain = id->chain;
+   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
+   uint64_t target_time = id->target_time;
+
+   surface->refresh_nsec = refresh;
+
    presentation_ts.tv_sec = ((uint64_t)tv_sec_hi << 32) + tv_sec_lo;
    presentation_ts.tv_nsec = tv_nsec;
    presentation_time = timespec_to_nsec(&presentation_ts);
    trace_present(id, presentation_time);
+
+   if (!surface->valid_refresh_nsec) {
+      surface->valid_refresh_nsec = true;
+      surface->last_target_time = presentation_time;
+      target_time = presentation_time;
+   }
+
+   if (presentation_time > surface->displayed_time)
+      surface->displayed_time = presentation_time;
+
+   if (target_time && presentation_time > target_time)
+      surface->display_time_error = presentation_time - target_time;
+   else
+      surface->display_time_error = 0;
 
    wsi_wl_presentation_update_present_id(id);
    wp_presentation_feedback_destroy(feedback);
@@ -2044,6 +2228,16 @@ presentation_handle_discarded(void *data,
    struct wsi_wl_present_id *id = data;
 
    MESA_TRACE_FUNC_FLOW(&id->flow_id);
+   struct wsi_wl_swapchain *chain = id->chain;
+   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
+
+   if (!surface->valid_refresh_nsec) {
+      /* We've started occluded, so make up some safe values to throttle us */
+      surface->displayed_time = os_time_get_nano();
+      surface->last_target_time = surface->displayed_time;
+      surface->refresh_nsec = 16666666;
+      surface->valid_refresh_nsec = true;
+   }
 
    wsi_wl_presentation_update_present_id(id);
    wp_presentation_feedback_destroy(feedback);
@@ -2074,7 +2268,7 @@ frame_handle_done(void *data, struct wl_callback *callback, uint32_t serial)
    struct wsi_wl_swapchain *chain = data;
 
    chain->frame = NULL;
-   chain->fifo_ready = true;
+   chain->legacy_fifo_ready = true;
 
    wl_callback_destroy(callback);
 }
@@ -2083,6 +2277,71 @@ static const struct wl_callback_listener frame_listener = {
    frame_handle_done,
 };
 
+static bool
+set_timestamp(struct wsi_wl_swapchain *chain,
+              uint64_t *timestamp,
+              uint64_t *correction)
+{
+   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
+   uint64_t target;
+   struct timespec target_ts;
+   uint64_t refresh;
+   uint64_t displayed_time;
+   int32_t error = 0;
+
+   if (!surface->valid_refresh_nsec)
+      return false;
+
+   displayed_time = surface->displayed_time;
+   refresh = surface->refresh_nsec;
+
+   /* If refresh is 0, presentation feedback has informed us we have no
+    * fixed refresh cycle. In that case we can't generate sensible
+    * timestamps at all, so bail out.
+    */
+   if (!refresh)
+      return false;
+
+   /* We assume we're being fed at the display's refresh rate, but
+    * if that doesn't happen our timestamps fall into the past.
+    *
+    * This would result in an offscreen surface being unthrottled until
+    * it "catches up" on missed frames. Instead, correct for missed
+    * frame opportunities by jumping forward if our display time
+    * didn't match our target time.
+    *
+    * Since we might have a few frames in flight, we need to keep a
+    * running tally of how much correction we're applying and remove
+    * it as corrected frames are retired.
+    */
+   if (surface->display_time_error > surface->display_time_correction)
+      error = surface->display_time_error - surface->display_time_correction;
+
+   target = surface->last_target_time;
+   if (error > 0)  {
+      target += (error / refresh) * refresh;
+      *correction = (error / refresh) * refresh;
+   } else {
+      *correction = 0;
+   }
+
+   surface->display_time_correction += *correction;
+   target = next_phase_locked_time(displayed_time,
+                                   refresh,
+                                   target);
+  /* Take back 500 us as a safety margin, to ensure we don't miss our
+   * target due to round-off error.
+   */
+   timespec_from_nsec(&target_ts, target - 500000);
+   wp_commit_timer_v1_set_timestamp(chain->commit_timer,
+                                    (uint64_t)target_ts.tv_sec >> 32, target_ts.tv_sec,
+                                    target_ts.tv_nsec);
+
+   surface->last_target_time = target;
+   *timestamp = target;
+   return true;
+}
+
 static VkResult
 wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                uint32_t image_index,
@@ -2090,7 +2349,9 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                const VkPresentRegionKHR *damage)
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
+   bool timestamped = false;
    bool queue_dispatched = false;
+   bool need_legacy_throttling = true;
    uint64_t flow_id = chain->images[image_index].flow_id;
 
    MESA_TRACE_FUNC_FLOW(&flow_id);
@@ -2116,6 +2377,7 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
       return VK_ERROR_OUT_OF_DATE_KHR;
 
    struct wsi_wl_surface *wsi_wl_surface = chain->wsi_wl_surface;
+   bool mode_fifo = chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR;
 
    if (chain->buffer_type == WSI_WL_BUFFER_SHM_MEMCPY) {
       struct wsi_wl_image *image = &chain->images[image_index];
@@ -2125,7 +2387,7 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
    /* For EXT_swapchain_maintenance1. We might have transitioned from FIFO to MAILBOX.
     * In this case we need to let the FIFO request complete, before presenting MAILBOX. */
-   while (!chain->fifo_ready) {
+   while (!chain->legacy_fifo_ready) {
       int ret = wl_display_dispatch_queue(wsi_wl_surface->display->wl_display,
                                           wsi_wl_surface->display->queue);
       if (ret < 0)
@@ -2165,16 +2427,8 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
       wl_surface_damage(wsi_wl_surface->surface, 0, 0, INT32_MAX, INT32_MAX);
    }
 
-   if (chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR) {
-      chain->frame = wl_surface_frame(wsi_wl_surface->surface);
-      wl_callback_add_listener(chain->frame, &frame_listener, chain);
-      chain->fifo_ready = false;
-   } else {
-      /* If we present MAILBOX, any subsequent presentation in FIFO can replace this image. */
-      chain->fifo_ready = true;
-   }
-
-   if (present_id > 0 || util_perfetto_is_tracing_enabled()) {
+   if (present_id > 0 || (mode_fifo && chain->commit_timer) ||
+       util_perfetto_is_tracing_enabled()) {
       struct wsi_wl_present_id *id =
          vk_zalloc(chain->wsi_wl_surface->display->wsi_wl->alloc, sizeof(*id), sizeof(uintptr_t),
                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
@@ -2186,6 +2440,12 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
          wl_proxy_get_id((struct wl_proxy *)chain->images[image_index].buffer);
 
       id->submission_time = os_time_get_nano();
+
+      if (mode_fifo && chain->fifo && chain->commit_timer) {
+         timestamped = set_timestamp(chain, &id->target_time, &id->correction);
+         if (timestamped || !wsi_wl_surface->valid_refresh_nsec)
+            need_legacy_throttling = false;
+      }
 
       mtx_lock(&chain->present_ids.lock);
 
@@ -2205,6 +2465,37 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
    }
 
    chain->images[image_index].busy = true;
+
+   if (mode_fifo && need_legacy_throttling) {
+      chain->frame = wl_surface_frame(wsi_wl_surface->surface);
+      wl_callback_add_listener(chain->frame, &frame_listener, chain);
+      chain->legacy_fifo_ready = false;
+   } else {
+      /* If we present MAILBOX, any subsequent presentation in FIFO can replace this image. */
+      chain->legacy_fifo_ready = true;
+   }
+
+   if (mode_fifo && chain->fifo) {
+      wp_fifo_v1_set_barrier(chain->fifo);
+
+      /* If our surface is occluded and we're using vkWaitForPresentKHR,
+       * we can end up waiting forever. The FIFO condition and the time
+       * constraint are met, but the image hasn't been presented because
+       * we're occluded - but the image isn't discarded because there
+       * are no further content updates for the compositor to process.
+       *
+       * This extra commit gives us the second content update to move
+       * things along. If we're occluded the FIFO constraint is
+       * satisfied immediately after the time constraint is, pushing
+       * out a discard. If we're visible, the timed content update
+       * receives presented feedback and the FIFO one blocks further
+       * updates until the next refresh.
+       */
+      if (timestamped)
+         wl_surface_commit(wsi_wl_surface->surface);
+
+      wp_fifo_v1_wait_barrier(chain->fifo);
+   }
    wl_surface_commit(wsi_wl_surface->surface);
    wl_display_flush(wsi_wl_surface->display->wl_display);
 
@@ -2420,6 +2711,12 @@ wsi_wl_swapchain_chain_free(struct wsi_wl_swapchain *chain,
 
    vk_free(pAllocator, (void *)chain->drm_modifiers);
 
+   if (chain->fifo)
+      wp_fifo_v1_destroy(chain->fifo);
+
+   if (chain->commit_timer)
+      wp_commit_timer_v1_destroy(chain->commit_timer);
+
    wsi_swapchain_finish(&chain->base);
 }
 
@@ -2486,6 +2783,14 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       if (old_chain->tearing_control) {
          wp_tearing_control_v1_destroy(old_chain->tearing_control);
          old_chain->tearing_control = NULL;
+      }
+      if (old_chain->fifo) {
+         wp_fifo_v1_destroy(old_chain->fifo);
+         old_chain->fifo = NULL;
+      }
+      if (old_chain->commit_timer) {
+         wp_commit_timer_v1_destroy(old_chain->commit_timer);
+         old_chain->commit_timer = NULL;
       }
    }
 
@@ -2635,7 +2940,16 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
                          chain->present_ids.queue);
    }
 
-   chain->fifo_ready = true;
+   chain->legacy_fifo_ready = true;
+   struct wsi_wl_display *dpy = chain->wsi_wl_surface->display;
+   if (dpy->fifo_manager) {
+      chain->fifo = wp_fifo_manager_v1_get_fifo(dpy->fifo_manager,
+                                                chain->wsi_wl_surface->surface);
+   }
+   if (dpy->commit_timing_manager) {
+      chain->commit_timer = wp_commit_timing_manager_v1_get_timer(dpy->commit_timing_manager,
+                                                                  chain->wsi_wl_surface->surface);
+   }
 
    for (uint32_t i = 0; i < chain->base.image_count; i++) {
       result = wsi_wl_image_init(chain, &chain->images[i],

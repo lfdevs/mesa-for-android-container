@@ -423,7 +423,8 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       /* Nothing to do with these. */
       break;
 
-   case nir_intrinsic_load_input: {
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_per_primitive_input: {
       assert(instr->def.bit_size == 32);
       /* We set EmitNoIndirectInput for VS */
       unsigned load_offset = nir_src_as_uint(instr->src[0]);
@@ -1395,14 +1396,6 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       try_immediate_source(instr, op, true);
       inst = emit_minmax(ELK_CONDITIONAL_GE, dst, op[0], op[1]);
       break;
-
-   case nir_op_fddx:
-   case nir_op_fddx_coarse:
-   case nir_op_fddx_fine:
-   case nir_op_fddy:
-   case nir_op_fddy_coarse:
-   case nir_op_fddy_fine:
-      unreachable("derivatives are not valid in vertex shaders");
 
    case nir_op_ilt32:
    case nir_op_ult32:

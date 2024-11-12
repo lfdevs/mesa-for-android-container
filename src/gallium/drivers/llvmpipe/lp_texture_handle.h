@@ -25,6 +25,7 @@
 #define LP_SAMPLER_MATRIX
 
 #include "util/bitset.h"
+#include "util/u_atomic.h"
 #include "util/u_dynarray.h"
 #include "util/format/u_format.h"
 #include "util/simple_mtx.h"
@@ -44,7 +45,8 @@ struct lp_sampler_matrix {
    /* Per sample key functions which compile and cache sample functions on demand. */
    void *jit_sample_functions[LP_SAMPLE_KEY_COUNT];
    void *compile_function;
-   struct hash_table *cache;
+   p_atomic_uint64_t latest_cache;
+   struct util_dynarray trash_caches;
    simple_mtx_t lock;
 
    struct llvmpipe_context *ctx;

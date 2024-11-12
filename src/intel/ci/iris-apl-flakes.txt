@@ -12,7 +12,6 @@ dEQP-EGL.functional.render.*.rgba8888_pbuffer
 dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.programs.link.7
 dEQP-EGL.functional.sharing.gles2.multithread.random.images.copyteximage2d.19
 dEQP-EGL.functional.sharing.gles2.multithread.random.images.copyteximage2d.6
-dEQP-EGL.functional.sharing.gles2.multithread.random.images.copytexsubimage2d.1
 dEQP-EGL.functional.sharing.gles2.multithread.simple.buffers.bufferdata_render
 dEQP-EGL.functional.sharing.gles2.multithread.simple.buffers.buffersubdata_render
 

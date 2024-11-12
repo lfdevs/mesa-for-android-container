@@ -194,8 +194,7 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
    }
    if ((pformat != PIPE_FORMAT_R9G9B9E5_FLOAT) &&
        util_format_get_nr_components(pformat) != 3 &&
-       !util_format_is_subsampled_422(pformat) &&
-       !util_format_is_yuv(pformat) &&
+       !ycbcr_info &&
        pformat != PIPE_FORMAT_R10G10B10A2_SNORM &&
        pformat != PIPE_FORMAT_B10G10R10A2_SNORM &&
        pformat != PIPE_FORMAT_B10G10R10A2_UNORM) {
@@ -465,7 +464,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetPhysicalDeviceImageFormatProperties2(
       }
    }
 
-   if (external_info && external_info->handleType != 0) {
+   if (external_info && external_info->handleType != 0 && external_props) {
       VkExternalMemoryFeatureFlagBits flags = 0;
       VkExternalMemoryHandleTypeFlags export_flags = 0;
       VkExternalMemoryHandleTypeFlags compat_flags = 0;

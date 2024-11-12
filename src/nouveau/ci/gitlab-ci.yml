@@ -7,7 +7,21 @@ nvk-ga106-vkcts-valve:
     - .nvk-vkcts
     - .nvk-ga106-valve
     - .nvk-valve-manual-rules
-  timeout: 70m  # job runtime 52min, test runtime 50min
+  timeout: 120m  # current runtime is ~70min
   variables:
-    B2C_TIMEOUT_BOOT_MINUTES: 60
-    B2C_TIMEOUT_OVERALL_MINUTES: 65
+    B2C_TIMEOUT_BOOT_MINUTES: 110
+    B2C_TIMEOUT_OVERALL_MINUTES: 115
+
+nvk-ga106-vkd3d-valve:
+  extends:
+    - .b2c-x86_64-test-vk
+    - .nvk-vkcts
+    - .nvk-ga106-valve
+    - .nvk-valve-manual-rules
+  timeout: 15m  # base runtime 7min
+  variables:
+    HWCI_TEST_SCRIPT: install/vkd3d-runner.sh
+    B2C_TIMEOUT_BOOT_MINUTES: 10
+    B2C_TIMEOUT_OVERALL_MINUTES: 12
+    # Random tests fail/crash when trying to run them in parallel
+    FDO_CI_CONCURRENT: 1

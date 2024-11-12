@@ -114,7 +114,7 @@ libvulkan_powervr_mesa = shared_library(
   ],
   dependencies : [
     pvr_deps,
-    idep_nir,
+    idep_nir_headers,
   ],
   c_args : pvr_flags,
   link_args : [

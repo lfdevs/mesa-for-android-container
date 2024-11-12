@@ -281,7 +281,7 @@ static inline bool pvr_vk_format_is_fully_normalized(VkFormat vk_format)
 
 static inline uint32_t
 pvr_vk_format_get_common_color_channel_count(VkFormat src_format,
-                                         VkFormat dst_format)
+                                             VkFormat dst_format)
 {
    const struct util_format_description *dst_desc =
       vk_format_description(dst_format);
@@ -314,6 +314,5 @@ pvr_vk_format_get_common_color_channel_count(VkFormat src_format,
 
    return count;
 }
-
 
 #endif /* PVR_FORMATS_H */

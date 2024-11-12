@@ -28,7 +28,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "pvr_csb.h"
-#include "rogue/rogue.h"
+#include "pvr_private.h"
 #include "util/macros.h"
 
 static const char *
@@ -114,15 +114,15 @@ pvr_zls_format_type_is_int(enum PVRX(CR_ZLS_FORMAT_TYPE) type)
 
 /* clang-format off */
 static inline enum PVRX(PDSINST_DOUTU_SAMPLE_RATE)
-pvr_pdsinst_doutu_sample_rate_from_rogue(enum rogue_msaa_mode msaa_mode)
+pvr_pdsinst_doutu_sample_rate(enum pvr_msaa_mode msaa_mode)
 /* clang-format on */
 {
    switch (msaa_mode) {
-   case ROGUE_MSAA_MODE_PIXEL:
+   case PVR_MSAA_MODE_PIXEL:
       return PVRX(PDSINST_DOUTU_SAMPLE_RATE_INSTANCE);
-   case ROGUE_MSAA_MODE_SELECTIVE:
+   case PVR_MSAA_MODE_SELECTIVE:
       return PVRX(PDSINST_DOUTU_SAMPLE_RATE_SELECTIVE);
-   case ROGUE_MSAA_MODE_FULL:
+   case PVR_MSAA_MODE_FULL:
       return PVRX(PDSINST_DOUTU_SAMPLE_RATE_FULL);
    default:
       unreachable("Undefined MSAA mode.");

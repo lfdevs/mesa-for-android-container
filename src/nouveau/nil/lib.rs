@@ -4,6 +4,7 @@
 extern crate nil_rs_bindings;
 extern crate nvidia_headers;
 
+mod copy;
 mod extent;
 mod format;
 mod image;

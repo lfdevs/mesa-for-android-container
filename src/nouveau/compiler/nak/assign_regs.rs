@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 use crate::api::{GetDebugFlags, DEBUG};
-use crate::bitset::BitSet;
 use crate::ir::*;
 use crate::liveness::{BlockLiveness, Liveness, SimpleLiveness};
+use crate::union_find::UnionFind;
 
+use compiler::bitset::BitSet;
 use std::cmp::{max, Ordering};
 use std::collections::{HashMap, HashSet};
 
@@ -119,7 +120,7 @@ impl SSAUseMap {
     pub fn add_block(&mut self, b: &BasicBlock) {
         for (ip, instr) in b.instrs.iter().enumerate() {
             match &instr.op {
-                Op::FSOut(op) => {
+                Op::RegOut(op) => {
                     for (i, src) in op.srcs.iter().enumerate() {
                         let out_reg = u32::try_from(i).unwrap();
                         if let Some(ssa) = src_ssa_ref(src) {
@@ -146,6 +147,78 @@ impl SSAUseMap {
         };
         am.add_block(b);
         am
+    }
+}
+
+/// Tracks the most recent register assigned to a given phi web
+///
+/// During register assignment, we then try to assign this register
+/// to the next SSAValue in the same web.
+///
+/// This heuristic is inspired by the "Aggressive pre-coalescing" described in
+/// section 4 of Colombet et al 2011.
+///
+/// Q. Colombet, B. Boissinot, P. Brisk, S. Hack and F. Rastello,
+///     "Graph-coloring and treescan register allocation using repairing," 2011
+///     Proceedings of the 14th International Conference on Compilers,
+///     Architectures and Synthesis for Embedded Systems (CASES), Taipei,
+///     Taiwan, 2011, pp. 45-54, doi: 10.1145/2038698.2038708.
+struct PhiWebs {
+    uf: UnionFind<SSAValue>,
+    assignments: HashMap<SSAValue, u32>,
+}
+
+impl PhiWebs {
+    pub fn new(f: &Function) -> Self {
+        let mut uf = UnionFind::new();
+
+        // Populate uf with phi equivalence classes
+        //
+        // Note that we intentionally don't pay attention to move instructions
+        // below - the assumption is that any move instructions at this point
+        // were inserted by cssa-conversion and will hurt the coalescing
+        for b_idx in 0..f.blocks.len() {
+            let Some(phi_dsts) = f.blocks[b_idx].phi_dsts() else {
+                continue;
+            };
+            let dsts: HashMap<u32, &SSARef> = phi_dsts
+                .dsts
+                .iter()
+                .map(|(idx, dst)| {
+                    let ssa_ref = dst.as_ssa().expect("Expected ssa form");
+                    (*idx, ssa_ref)
+                })
+                .collect();
+
+            for pred_idx in f.blocks.pred_indices(b_idx) {
+                let phi_srcs =
+                    f.blocks[*pred_idx].phi_srcs().expect("Missing phi_srcs");
+                for (src_idx, src) in phi_srcs.srcs.iter() {
+                    let a = src.as_ssa().expect("Expected ssa form");
+                    let b = dsts[src_idx];
+
+                    assert_eq!(a.comps(), 1);
+                    assert_eq!(b.comps(), 1);
+
+                    uf.union(a[0], b[0]);
+                }
+            }
+        }
+
+        PhiWebs {
+            uf,
+            assignments: HashMap::new(),
+        }
+    }
+
+    pub fn get(&mut self, ssa: SSAValue) -> Option<u32> {
+        let phi_web_id = self.uf.find(ssa);
+        self.assignments.get(&phi_web_id).copied()
+    }
+
+    pub fn set(&mut self, ssa: SSAValue, reg: u32) {
+        let phi_web_id = self.uf.find(ssa);
+        self.assignments.insert(phi_web_id, reg);
     }
 }
 
@@ -338,8 +411,18 @@ impl RegAllocator {
         &mut self,
         ip: usize,
         sum: &SSAUseMap,
+        phi_webs: &mut PhiWebs,
         ssa: SSAValue,
     ) -> u32 {
+        // Bias register assignment using the phi coalescing
+        if let Some(reg) = phi_webs.get(ssa) {
+            if !self.reg_is_used(reg) {
+                self.assign_reg(ssa, reg);
+                return reg;
+            }
+        }
+
+        // Otherwise, use SSAUseMap heuristics
         if let Some(u) = sum.find_vec_use_after(ssa, ip) {
             match u {
                 SSAUse::FixedReg(reg) => {
@@ -657,13 +740,14 @@ fn instr_alloc_scalar_dsts_file(
     instr: &mut Instr,
     ip: usize,
     sum: &SSAUseMap,
+    phi_webs: &mut PhiWebs,
     ra: &mut RegAllocator,
 ) {
     for dst in instr.dsts_mut() {
         if let Dst::SSA(ssa) = dst {
             if ssa.file().unwrap() == ra.file() {
                 assert!(ssa.comps() == 1);
-                let reg = ra.alloc_scalar(ip, sum, ssa[0]);
+                let reg = ra.alloc_scalar(ip, sum, phi_webs, ssa[0]);
                 *dst = RegRef::new(ra.file(), reg, 1).into();
             }
         }
@@ -674,6 +758,7 @@ fn instr_assign_regs_file(
     instr: &mut Instr,
     ip: usize,
     sum: &SSAUseMap,
+    phi_webs: &mut PhiWebs,
     killed: &KillSet,
     pcopy: &mut OpParCopy,
     ra: &mut RegAllocator,
@@ -707,7 +792,7 @@ fn instr_assign_regs_file(
         instr_remap_srcs_file(instr, &mut vra);
         vra.free_killed(killed);
         vra.finish(pcopy);
-        instr_alloc_scalar_dsts_file(instr, ip, sum, ra);
+        instr_alloc_scalar_dsts_file(instr, ip, sum, phi_webs, ra);
         return;
     }
 
@@ -786,7 +871,7 @@ fn instr_assign_regs_file(
 
         vra.finish(pcopy);
 
-        instr_alloc_scalar_dsts_file(instr, ip, sum, ra);
+        instr_alloc_scalar_dsts_file(instr, ip, sum, phi_webs, ra);
     } else if could_trivially_allocate {
         let mut vra = VecRegAllocator::new(ra);
         for vec_dst in vec_dsts {
@@ -799,7 +884,7 @@ fn instr_assign_regs_file(
         instr_remap_srcs_file(instr, &mut vra);
         vra.free_killed(killed);
         vra.finish(pcopy);
-        instr_alloc_scalar_dsts_file(instr, ip, sum, ra);
+        instr_alloc_scalar_dsts_file(instr, ip, sum, phi_webs, ra);
     } else {
         let mut vra = VecRegAllocator::new(ra);
         instr_remap_srcs_file(instr, &mut vra);
@@ -817,7 +902,7 @@ fn instr_assign_regs_file(
         vra.free_killed(killed);
         vra.finish(pcopy);
 
-        instr_alloc_scalar_dsts_file(instr, ip, sum, ra);
+        instr_alloc_scalar_dsts_file(instr, ip, sum, phi_webs, ra);
     }
 }
 
@@ -864,10 +949,11 @@ impl AssignRegsBlock {
         &mut self,
         ip: usize,
         sum: &SSAUseMap,
+        phi_webs: &mut PhiWebs,
         ssa: SSAValue,
     ) -> RegRef {
         let ra = &mut self.ra[ssa.file()];
-        let reg = ra.alloc_scalar(ip, sum, ssa);
+        let reg = ra.alloc_scalar(ip, sum, phi_webs, ssa);
         RegRef::new(ssa.file(), reg, 1)
     }
 
@@ -915,6 +1001,7 @@ impl AssignRegsBlock {
         mut instr: Box<Instr>,
         ip: usize,
         sum: &SSAUseMap,
+        phi_webs: &mut PhiWebs,
         srcs_killed: &KillSet,
         dsts_killed: &KillSet,
         pcopy: &mut OpParCopy,
@@ -923,7 +1010,7 @@ impl AssignRegsBlock {
             Op::Undef(undef) => {
                 if let Dst::SSA(ssa) = undef.dst {
                     assert!(ssa.comps() == 1);
-                    self.alloc_scalar(ip, sum, ssa[0]);
+                    self.alloc_scalar(ip, sum, phi_webs, ssa[0]);
                 }
                 assert!(srcs_killed.is_empty());
                 self.ra.free_killed(dsts_killed);
@@ -949,7 +1036,7 @@ impl AssignRegsBlock {
                 for (id, dst) in phi.dsts.iter() {
                     if let Dst::SSA(ssa) = dst {
                         assert!(ssa.comps() == 1);
-                        let reg = self.alloc_scalar(ip, sum, ssa[0]);
+                        let reg = self.alloc_scalar(ip, sum, phi_webs, ssa[0]);
                         self.live_in.push(LiveValue {
                             live_ref: LiveRef::Phi(*id),
                             reg_ref: reg,
@@ -1025,7 +1112,9 @@ impl AssignRegsBlock {
                     if self.try_coalesce(*dst_ssa, &copy.src) {
                         del_copy = true;
                     } else {
-                        copy.dst = self.alloc_scalar(ip, sum, *dst_ssa).into();
+                        copy.dst = self
+                            .alloc_scalar(ip, sum, phi_webs, *dst_ssa)
+                            .into();
                     }
                 }
 
@@ -1117,7 +1206,9 @@ impl AssignRegsBlock {
                 for (dst, _) in pcopy.dsts_srcs.iter_mut() {
                     if let Dst::SSA(dst_vec) = dst {
                         debug_assert!(dst_vec.comps() == 1);
-                        *dst = self.alloc_scalar(ip, sum, dst_vec[0]).into();
+                        *dst = self
+                            .alloc_scalar(ip, sum, phi_webs, dst_vec[0])
+                            .into();
                     }
                 }
 
@@ -1130,7 +1221,7 @@ impl AssignRegsBlock {
                     Some(instr)
                 }
             }
-            Op::FSOut(out) => {
+            Op::RegOut(out) => {
                 for src in out.srcs.iter_mut() {
                     if let Some(src_vec) = src_ssa_ref(src) {
                         debug_assert!(src_vec.comps() == 1);
@@ -1160,6 +1251,7 @@ impl AssignRegsBlock {
                         &mut instr,
                         ip,
                         sum,
+                        phi_webs,
                         srcs_killed,
                         pcopy,
                         file,
@@ -1176,6 +1268,7 @@ impl AssignRegsBlock {
         b: &mut BasicBlock,
         bl: &BL,
         pred_ra: Option<&PerRegFile<RegAllocator>>,
+        phi_webs: &mut PhiWebs,
     ) {
         // Populate live in from the register file we're handed.  We'll add more
         // live in when we process the OpPhiDst, if any.
@@ -1236,6 +1329,7 @@ impl AssignRegsBlock {
                 instr,
                 ip,
                 &sum,
+                phi_webs,
                 &srcs_killed,
                 &dsts_killed,
                 &mut pcopy,
@@ -1259,6 +1353,13 @@ impl AssignRegsBlock {
 
             if let Some(instr) = instr {
                 instrs.push(instr);
+            }
+        }
+
+        // Update phi_webs with the registers assigned in this block
+        for ra in self.ra.values() {
+            for (ssa, reg) in &ra.ssa_reg {
+                phi_webs.set(*ssa, *reg);
             }
         }
 
@@ -1359,13 +1460,6 @@ impl Shader<'_> {
 
         self.info.num_gprs = total_gprs.try_into().unwrap();
 
-        // We do a maximum here because nak_from_nir may set num_barriers to 1
-        // in the case where there is an OpBar.
-        self.info.num_barriers = max(
-            self.info.num_barriers,
-            max_live[RegFile::Bar].try_into().unwrap(),
-        );
-
         let limit = PerRegFile::new_with(|file| {
             if file == RegFile::GPR {
                 gpr_limit
@@ -1373,6 +1467,8 @@ impl Shader<'_> {
                 self.sm.num_regs(file)
             }
         });
+
+        let mut phi_webs = PhiWebs::new(f);
 
         let mut blocks: Vec<AssignRegsBlock> = Vec::new();
         for b_idx in 0..f.blocks.len() {
@@ -1387,7 +1483,7 @@ impl Shader<'_> {
             let bl = live.block_live(b_idx);
 
             let mut arb = AssignRegsBlock::new(&limit, tmp_gprs);
-            arb.first_pass(&mut f.blocks[b_idx], bl, pred_ra);
+            arb.first_pass(&mut f.blocks[b_idx], bl, pred_ra, &mut phi_webs);
 
             assert!(blocks.len() == b_idx);
             blocks.push(arb);

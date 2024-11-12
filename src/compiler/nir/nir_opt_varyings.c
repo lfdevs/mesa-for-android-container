@@ -51,7 +51,7 @@
  * pass refers to such inputs, outputs, and varyings as "convergent" (meaning
  * all vertices are always equal).
  *
- * Flat varyings are the only ones that are never considered convergent
+ * By default, flat varyings are the only ones that are not considered convergent
  * because we want the flexibility to pack convergent varyings with both flat
  * and non-flat varyings, and since flat varyings can contain integers and
  * doubles, we can never interpolate them as FP32 or FP16. Optimizations start
@@ -59,6 +59,9 @@
  * they choose whether they want to promote convergent to interpolated or
  * flat, or whether to leave that decision to the end when the compaction
  * happens.
+ *
+ * The above default behavior doesn't apply when the hw supports convergent
+ * flat loads with interpolated vec4 slots. (there is a NIR option)
  *
  * TES patch inputs are always convergent because they are uniform within
  * a primitive.
@@ -363,10 +366,14 @@
  *
  * 7. Compaction to vec4 slots (AKA packing)
  *
- *    First, varyings are divided into these groups, and each group is
- *    compacted separately with some exceptions listed below:
+ *    First, varyings are divided into these groups, and components from each
+ *    group are assigned locations in this order (effectively forcing
+ *    components from the same group to be in the same vec4 slot or adjacent
+ *    vec4 slots) with some exceptions listed below:
  *
  *    Non-FS groups (patch and non-patch are packed separately):
+ *    * 32-bit cross-invocation (TCS inputs using cross-invocation access)
+ *    * 16-bit cross-invocation (TCS inputs using cross-invocation access)
  *    * 32-bit flat
  *    * 16-bit flat
  *    * 32-bit no-varying (TCS outputs read by TCS but not TES)
@@ -590,6 +597,7 @@ struct linkage_info {
    bool spirv;
    bool can_move_uniforms;
    bool can_move_ubos;
+   bool can_mix_convergent_flat_with_interpolated;
 
    gl_shader_stage producer_stage;
    gl_shader_stage consumer_stage;
@@ -620,6 +628,10 @@ struct linkage_info {
     */
    BITSET_DECLARE(xfb32_only_mask, NUM_SCALAR_SLOTS);
    BITSET_DECLARE(xfb16_only_mask, NUM_SCALAR_SLOTS);
+
+   /* Mask of all TCS inputs using cross-invocation access. */
+   BITSET_DECLARE(tcs_cross_invoc32_mask, NUM_SCALAR_SLOTS);
+   BITSET_DECLARE(tcs_cross_invoc16_mask, NUM_SCALAR_SLOTS);
 
    /* Mask of all TCS->TES slots that are read by TCS, but not TES. */
    BITSET_DECLARE(no_varying32_mask, NUM_SCALAR_SLOTS);
@@ -706,6 +718,8 @@ print_linkage(struct linkage_info *linkage)
           !BITSET_TEST(linkage->indirect_mask, i) &&
           !BITSET_TEST(linkage->xfb32_only_mask, i) &&
           !BITSET_TEST(linkage->xfb16_only_mask, i) &&
+          !BITSET_TEST(linkage->tcs_cross_invoc32_mask, i) &&
+          !BITSET_TEST(linkage->tcs_cross_invoc16_mask, i) &&
           !BITSET_TEST(linkage->no_varying32_mask, i) &&
           !BITSET_TEST(linkage->no_varying16_mask, i) &&
           !BITSET_TEST(linkage->interp_fp32_mask, i) &&
@@ -723,7 +737,7 @@ print_linkage(struct linkage_info *linkage)
           !BITSET_TEST(linkage->output_equal_mask, i))
          continue;
 
-      printf("  %7s.%c.%s: num_slots=%2u%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+      printf("  %7s.%c.%s: num_slots=%2u%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
              gl_varying_slot_name_for_stage(vec4_slot(i),
                                             linkage->producer_stage) + 13,
              "xyzw"[(i / 2) % 4],
@@ -733,6 +747,8 @@ print_linkage(struct linkage_info *linkage)
              BITSET_TEST(linkage->indirect_mask, i) ? " indirect" : "",
              BITSET_TEST(linkage->xfb32_only_mask, i) ? " xfb32_only" : "",
              BITSET_TEST(linkage->xfb16_only_mask, i) ? " xfb16_only" : "",
+             BITSET_TEST(linkage->tcs_cross_invoc32_mask, i) ? " tcs_cross_invoc32" : "",
+             BITSET_TEST(linkage->tcs_cross_invoc16_mask, i) ? " tcs_cross_invoc16" : "",
              BITSET_TEST(linkage->no_varying32_mask, i) ? " no_varying32" : "",
              BITSET_TEST(linkage->no_varying16_mask, i) ? " no_varying16" : "",
              BITSET_TEST(linkage->interp_fp32_mask, i) ? " interp_fp32" : "",
@@ -771,6 +787,8 @@ slot_disable_optimizations_and_compaction(struct linkage_info *linkage,
    BITSET_CLEAR(linkage->interp_explicit_strict16_mask, i);
    BITSET_CLEAR(linkage->per_primitive32_mask, i);
    BITSET_CLEAR(linkage->per_primitive16_mask, i);
+   BITSET_CLEAR(linkage->tcs_cross_invoc32_mask, i);
+   BITSET_CLEAR(linkage->tcs_cross_invoc16_mask, i);
    BITSET_CLEAR(linkage->no_varying32_mask, i);
    BITSET_CLEAR(linkage->no_varying16_mask, i);
    BITSET_CLEAR(linkage->color32_mask, i);
@@ -878,6 +896,27 @@ build_convert_inf_to_nan(nir_builder *b, nir_def *x)
    nir_def *fma = nir_ffma_imm1(b, x, 0, x);
    nir_instr_as_alu(fma->parent_instr)->exact = true;
    return fma;
+}
+
+static bool
+is_sysval(nir_instr *instr, gl_system_value sysval)
+{
+   if (instr->type == nir_instr_type_intrinsic) {
+      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+
+      if (intr->intrinsic == nir_intrinsic_from_system_value(sysval))
+         return true;
+
+      if (intr->intrinsic == nir_intrinsic_load_deref) {
+          nir_deref_instr *deref =
+            nir_instr_as_deref(intr->src[0].ssa->parent_instr);
+
+          return nir_deref_mode_is_one_of(deref, nir_var_system_value) &&
+                 deref->var->data.location == sysval;
+      }
+   }
+
+   return false;
 }
 
 /******************************************************************
@@ -1090,6 +1129,7 @@ gather_inputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_d
 
    if (intr->intrinsic != nir_intrinsic_load_input &&
        intr->intrinsic != nir_intrinsic_load_per_vertex_input &&
+       intr->intrinsic != nir_intrinsic_load_per_primitive_input &&
        intr->intrinsic != nir_intrinsic_load_interpolated_input &&
        intr->intrinsic != nir_intrinsic_load_input_vertex)
       return false;
@@ -1127,10 +1167,10 @@ gather_inputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_d
    if (linkage->consumer_stage == MESA_SHADER_FRAGMENT) {
       switch (intr->intrinsic) {
       case nir_intrinsic_load_input:
-         if (sem.per_primitive)
-            fs_vec4_type = FS_VEC4_TYPE_PER_PRIMITIVE;
-         else
-            fs_vec4_type = FS_VEC4_TYPE_FLAT;
+         fs_vec4_type = FS_VEC4_TYPE_FLAT;
+         break;
+      case nir_intrinsic_load_per_primitive_input:
+         fs_vec4_type = FS_VEC4_TYPE_PER_PRIMITIVE;
          break;
       case nir_intrinsic_load_input_vertex:
          if (sem.interp_explicit_strict)
@@ -1176,19 +1216,20 @@ gather_inputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_d
    if (linkage->consumer_stage == MESA_SHADER_FRAGMENT) {
       switch (intr->intrinsic) {
       case nir_intrinsic_load_input:
-         if (intr->def.bit_size == 32) {
-            if (sem.per_primitive)
-               BITSET_SET(linkage->per_primitive32_mask, slot);
-            else
-               BITSET_SET(linkage->flat32_mask, slot);
-         } else if (intr->def.bit_size == 16) {
-            if (sem.per_primitive)
-               BITSET_SET(linkage->per_primitive16_mask, slot);
-            else
-               BITSET_SET(linkage->flat16_mask, slot);
-         } else {
+         if (intr->def.bit_size == 32)
+            BITSET_SET(linkage->flat32_mask, slot);
+         else if (intr->def.bit_size == 16)
+            BITSET_SET(linkage->flat16_mask, slot);
+         else
             unreachable("invalid load_input type");
-         }
+         break;
+      case nir_intrinsic_load_per_primitive_input:
+         if (intr->def.bit_size == 32)
+            BITSET_SET(linkage->per_primitive32_mask, slot);
+         else if (intr->def.bit_size == 16)
+            BITSET_SET(linkage->per_primitive16_mask, slot);
+         else
+            unreachable("invalid load_input type");
          break;
       case nir_intrinsic_load_input_vertex:
          if (sem.interp_explicit_strict) {
@@ -1227,6 +1268,21 @@ gather_inputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_d
          BITSET_SET(linkage->flat16_mask, slot);
       else
          unreachable("invalid load_input type");
+
+      if (linkage->consumer_stage == MESA_SHADER_TESS_CTRL &&
+          intr->intrinsic == nir_intrinsic_load_per_vertex_input) {
+         nir_src *vertex_index_src = nir_get_io_arrayed_index_src(intr);
+         nir_instr *vertex_index_instr = vertex_index_src->ssa->parent_instr;
+
+         if (!is_sysval(vertex_index_instr, SYSTEM_VALUE_INVOCATION_ID)) {
+            if (intr->def.bit_size == 32)
+               BITSET_SET(linkage->tcs_cross_invoc32_mask, slot);
+            else if (intr->def.bit_size == 16)
+               BITSET_SET(linkage->tcs_cross_invoc16_mask, slot);
+            else
+               unreachable("invalid load_input type");
+         }
+      }
    }
    return false;
 }
@@ -1353,9 +1409,9 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
        * so we only propagate constants.
        * TODO: revisit this when workgroup divergence analysis is merged.
        */
-      const bool divergent = value->divergent ||
+      const bool divergent = (!constant && linkage->producer_stage == MESA_SHADER_MESH) ||
                              intr->instr.block->divergent ||
-                             (!constant && linkage->producer_stage == MESA_SHADER_MESH);
+                             nir_src_is_divergent(&intr->src[0]);
 
       if (!out->producer.value) {
          /* This is the first store to this output. */
@@ -1485,8 +1541,10 @@ tidy_up_convergent_varyings(struct linkage_info *linkage)
    bool optimize_convergent_slots = true; /* only turn off for debugging */
 
    if (optimize_convergent_slots) {
-      /* If a slot is flat and convergent, keep the flat bit and remove
-       * the convergent bit.
+      /* If a slot is flat and convergent and the driver can't load as flat
+       * from interpolated vec4 slots, keep the flat bit and remove
+       * the convergent bit. If the driver can load as flat from interpolated
+       * vec4 slots, keep the convergent bit.
        *
        * If a slot is interpolated and convergent, remove the interpolated
        * bit and keep the convergent bit, which means that it's interpolated,
@@ -1501,9 +1559,10 @@ tidy_up_convergent_varyings(struct linkage_info *linkage)
          if (!BITSET_TEST(linkage->interp_fp32_mask, i) &&
              !BITSET_TEST(linkage->flat32_mask, i) &&
              !BITSET_TEST(linkage->color32_mask, i)) {
-            /* Compaction disallowed. */
+            /* Clear the flag - not used by FS. */
             BITSET_CLEAR(linkage->convergent32_mask, i);
-         } else if (BITSET_TEST(linkage->flat32_mask, i) ||
+         } else if ((!linkage->can_mix_convergent_flat_with_interpolated &&
+                     BITSET_TEST(linkage->flat32_mask, i)) ||
                     (linkage->producer_stage == MESA_SHADER_GEOMETRY &&
                      !BITSET_TEST(linkage->output_equal_mask, i))) {
             /* Keep the original qualifier. */
@@ -1512,14 +1571,16 @@ tidy_up_convergent_varyings(struct linkage_info *linkage)
             /* Keep it convergent. */
             BITSET_CLEAR(linkage->interp_fp32_mask, i);
             BITSET_CLEAR(linkage->color32_mask, i);
+            BITSET_CLEAR(linkage->flat32_mask, i);
          }
       }
       BITSET_FOREACH_SET(i, linkage->convergent16_mask, NUM_SCALAR_SLOTS) {
          if (!BITSET_TEST(linkage->interp_fp16_mask, i) &&
              !BITSET_TEST(linkage->flat16_mask, i)) {
-            /* Compaction disallowed. */
+            /* Clear the flag - not used by FS. */
             BITSET_CLEAR(linkage->convergent16_mask, i);
-         } else if (BITSET_TEST(linkage->flat16_mask, i) ||
+         } else if ((!linkage->can_mix_convergent_flat_with_interpolated &&
+                     BITSET_TEST(linkage->flat16_mask, i)) ||
                     (linkage->producer_stage == MESA_SHADER_GEOMETRY &&
                      !BITSET_TEST(linkage->output_equal_mask, i))) {
             /* Keep the original qualifier. */
@@ -1527,6 +1588,7 @@ tidy_up_convergent_varyings(struct linkage_info *linkage)
          } else {
             /* Keep it convergent. */
             BITSET_CLEAR(linkage->interp_fp16_mask, i);
+            BITSET_CLEAR(linkage->flat16_mask, i);
          }
       }
    } else {
@@ -2009,6 +2071,7 @@ clone_ssa(struct linkage_info *linkage, nir_builder *b, nir_def *ssa)
       }
 
       case nir_intrinsic_load_input:
+      case nir_intrinsic_load_per_primitive_input:
       case nir_intrinsic_load_interpolated_input: {
          /* We are cloning load_input in the producer for backward
           * inter-shader code motion. Replace the input load with the stored
@@ -2263,11 +2326,11 @@ get_input_qualifier(struct linkage_info *linkage, unsigned i)
    nir_intrinsic_instr *load =
       list_first_entry(&slot->consumer.loads, struct list_node, head)->instr;
 
-   if (load->intrinsic == nir_intrinsic_load_input) {
-      if (nir_intrinsic_io_semantics(load).per_primitive)
-         return QUAL_PER_PRIMITIVE;
+   if (load->intrinsic == nir_intrinsic_load_input)
       return is_color ? QUAL_COLOR_FLAT : QUAL_VAR_FLAT;
-   }
+
+   if (load->intrinsic == nir_intrinsic_load_per_primitive_input)
+      return QUAL_PER_PRIMITIVE;
 
    if (load->intrinsic == nir_intrinsic_load_input_vertex) {
       return nir_intrinsic_io_semantics(load).interp_explicit_strict ?
@@ -2449,27 +2512,6 @@ deduplicate_outputs(struct linkage_info *linkage,
 /******************************************************************
  * FIND OPEN-CODED TES INPUT INTERPOLATION
  ******************************************************************/
-
-static bool
-is_sysval(nir_instr *instr, gl_system_value sysval)
-{
-   if (instr->type == nir_instr_type_intrinsic) {
-      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-      if (intr->intrinsic == nir_intrinsic_from_system_value(sysval))
-         return true;
-
-      if (intr->intrinsic == nir_intrinsic_load_deref) {
-          nir_deref_instr *deref =
-            nir_instr_as_deref(intr->src[0].ssa->parent_instr);
-
-          return nir_deref_mode_is_one_of(deref, nir_var_system_value) &&
-                 deref->var->data.location == sysval;
-      }
-   }
-
-   return false;
-}
 
 static nir_alu_instr *
 get_single_use_as_alu(nir_def *def)
@@ -2837,12 +2879,6 @@ update_movable_flags(struct linkage_info *linkage, nir_instr *instr)
       unsigned num_srcs = nir_op_infos[alu->op].num_inputs;
       unsigned alu_interp;
 
-      /* These are shader-dependent and thus unmovable. */
-      if (nir_op_is_derivative(alu->op)) {
-         instr->pass_flags |= FLAG_UNMOVABLE;
-         return;
-      }
-
       /* Make vector ops unmovable. They are technically movable but more
        * complicated, and NIR should be scalarized for this pass anyway.
        * The only remaining vector ops should be vecN for intrinsic sources.
@@ -3074,6 +3110,23 @@ try_move_postdominator(struct linkage_info *linkage,
    nir_def *new_input, *new_tes_loads[3];
    BITSET_WORD *mask;
 
+   /* Convergent instruction results that are not interpolatable (integer or
+    * FP64) should not be moved because compaction can relocate convergent
+    * varyings to interpolated vec4 slots because the definition of convergent
+    * varyings implies that they can be interpolated (which doesn't work with
+    * integer and FP64 values).
+    *
+    * Check the result type and if it's not float and the driver doesn't
+    * support convergent flat loads from interpolated vec4 slots, don't move
+    * it.
+    */
+   if (linkage->consumer_stage == MESA_SHADER_FRAGMENT &&
+       alu_interp == FLAG_INTERP_CONVERGENT &&
+       !linkage->can_mix_convergent_flat_with_interpolated &&
+       ((postdom->def.bit_size != 16 && postdom->def.bit_size != 32) ||
+        !(nir_op_infos[postdom->op].output_type & nir_type_float)))
+      return false;
+
    /* NIR can't do 1-bit inputs. Convert them to a bigger size. */
    assert(postdom->def.bit_size & (1 | 16 | 32));
    unsigned new_bit_size = postdom->def.bit_size;
@@ -3086,12 +3139,16 @@ try_move_postdominator(struct linkage_info *linkage,
       new_bit_size = 32;
    }
 
+   bool rewrite_convergent_to_flat =
+      alu_interp == FLAG_INTERP_CONVERGENT &&
+      linkage->can_mix_convergent_flat_with_interpolated;
+
    /* Create the new input load. This creates a new load (or a series of
     * loads in case of open-coded TES interpolation) that's identical to
     * the original load(s).
     */
    if (linkage->consumer_stage == MESA_SHADER_FRAGMENT &&
-       alu_interp != FLAG_INTERP_FLAT) {
+       alu_interp != FLAG_INTERP_FLAT && !rewrite_convergent_to_flat) {
       nir_def *baryc = NULL;
 
       /* Determine the barycentric coordinates. */
@@ -3188,7 +3245,13 @@ try_move_postdominator(struct linkage_info *linkage,
       mask = new_bit_size == 16 ? linkage->flat16_mask
                                 : linkage->flat32_mask;
    } else {
-      assert(linkage->consumer_stage != MESA_SHADER_FRAGMENT || alu_interp == FLAG_INTERP_FLAT);
+      /* We have to rewrite convergent to flat here and not during compaction
+       * because compaction adds code to convert Infs to NaNs for
+       * "load_interpolated_input -> load_input" replacements, which corrupts
+       * integer data.
+       */
+      assert(linkage->consumer_stage != MESA_SHADER_FRAGMENT ||
+             alu_interp == FLAG_INTERP_FLAT || rewrite_convergent_to_flat);
 
       new_input =
          nir_load_input(b, 1, new_bit_size, nir_imm_int(b, 0),
@@ -3200,6 +3263,11 @@ try_move_postdominator(struct linkage_info *linkage,
 
       mask = new_bit_size == 16 ? linkage->flat16_mask
                                 : linkage->flat32_mask;
+
+      if (rewrite_convergent_to_flat) {
+         mask = new_bit_size == 16 ? linkage->convergent16_mask
+                                   : linkage->convergent32_mask;
+      }
    }
 
    assert(!BITSET_TEST(linkage->no_varying32_mask, slot_index));
@@ -3479,10 +3547,9 @@ backward_inter_shader_code_motion(struct linkage_info *linkage,
                load->instr.pass_flags |= FLAG_INTERP_FLAT;
             }
             break;
+         case nir_intrinsic_load_per_primitive_input:
          case nir_intrinsic_load_input_vertex:
-            /* Inter-shader code motion is unimplemented for explicit
-             * interpolation.
-             */
+            /* Inter-shader code motion is unimplemented these. */
             continue;
          default:
             unreachable("unexpected load intrinsic");
@@ -3605,7 +3672,7 @@ backward_inter_shader_code_motion(struct linkage_info *linkage,
 static void
 relocate_slot(struct linkage_info *linkage, struct scalar_slot *slot,
               unsigned i, unsigned new_index, enum fs_vec4_type fs_vec4_type,
-              nir_opt_varyings_progress *progress)
+              bool convergent, nir_opt_varyings_progress *progress)
 {
    assert(!list_is_empty(&slot->producer.stores));
 
@@ -3704,19 +3771,21 @@ relocate_slot(struct linkage_info *linkage, struct scalar_slot *slot,
          if (fs_vec4_type == FS_VEC4_TYPE_PER_PRIMITIVE) {
             assert(intr->intrinsic == nir_intrinsic_store_per_primitive_output ||
                    intr->intrinsic == nir_intrinsic_load_per_primitive_output ||
-                   intr->intrinsic == nir_intrinsic_load_input);
-            assert(intr->intrinsic != nir_intrinsic_load_input || sem.per_primitive);
+                   intr->intrinsic == nir_intrinsic_load_per_primitive_input);
          } else {
-            assert(!sem.per_primitive);
             assert(intr->intrinsic != nir_intrinsic_store_per_primitive_output &&
-                   intr->intrinsic != nir_intrinsic_load_per_primitive_output);
+                   intr->intrinsic != nir_intrinsic_load_per_primitive_output &&
+                   intr->intrinsic != nir_intrinsic_load_per_primitive_input);
          }
 
          /* This path is used when promoting convergent interpolated
           * inputs to flat. Replace load_interpolated_input with load_input.
           */
-         if (fs_vec4_type == FS_VEC4_TYPE_FLAT &&
-             intr->intrinsic == nir_intrinsic_load_interpolated_input) {
+         if (intr->intrinsic == nir_intrinsic_load_interpolated_input &&
+             (fs_vec4_type == FS_VEC4_TYPE_FLAT ||
+              /* Promote all convergent loads to flat if the driver supports it. */
+              (convergent &&
+               linkage->can_mix_convergent_flat_with_interpolated))) {
             assert(instruction_lists[i] == &slot->consumer.loads);
             nir_builder *b = &linkage->consumer_builder;
 
@@ -3777,6 +3846,7 @@ fs_assign_slots(struct linkage_info *linkage,
                 enum fs_vec4_type fs_vec4_type,
                 unsigned slot_size,
                 unsigned max_assigned_slots,
+                bool convergent,
                 bool assign_colors,
                 unsigned color_channel_rotate,
                 nir_opt_varyings_progress *progress)
@@ -3858,7 +3928,7 @@ fs_assign_slots(struct linkage_info *linkage,
       /* Relocate the slot. */
       assert(slot_index < max_slot * 8);
       relocate_slot(linkage, &linkage->slot[i], i, new_slot_index,
-                    fs_vec4_type, progress);
+                    fs_vec4_type, convergent, progress);
 
       for (unsigned i = 0; i < slot_size; ++i)
          BITSET_SET(assigned_mask, slot_index + i);
@@ -3919,7 +3989,7 @@ fs_assign_slot_groups(struct linkage_info *linkage,
    unsigned unused_interp_slots =
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       interp_mask, sized_interp_type,
-                      slot_size, NUM_SCALAR_SLOTS, assign_colors,
+                      slot_size, NUM_SCALAR_SLOTS, false, assign_colors,
                       color_channel_rotate, progress);
 
    unsigned unused_color_interp_slots = 0;
@@ -3927,7 +3997,7 @@ fs_assign_slot_groups(struct linkage_info *linkage,
       unused_color_interp_slots =
          fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                          color_interp_mask, FS_VEC4_TYPE_INTERP_COLOR,
-                         slot_size, NUM_SCALAR_SLOTS, assign_colors,
+                         slot_size, NUM_SCALAR_SLOTS, false, assign_colors,
                          color_channel_rotate, progress);
    }
 
@@ -3939,7 +4009,7 @@ fs_assign_slot_groups(struct linkage_info *linkage,
    unsigned unused_flat_slots =
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       flat_mask, FS_VEC4_TYPE_FLAT,
-                      slot_size, NUM_SCALAR_SLOTS, assign_colors,
+                      slot_size, NUM_SCALAR_SLOTS, false, assign_colors,
                       color_channel_rotate, progress);
 
    /* Take the inputs with convergent values and assign them as follows.
@@ -3954,24 +4024,24 @@ fs_assign_slot_groups(struct linkage_info *linkage,
    if (unused_flat_slots) {
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       convergent_mask, FS_VEC4_TYPE_FLAT,
-                      slot_size, unused_flat_slots, assign_colors,
+                      slot_size, unused_flat_slots, true, assign_colors,
                       color_channel_rotate, progress);
    }
    if (unused_interp_slots) {
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       convergent_mask, sized_interp_type,
-                      slot_size, unused_interp_slots, assign_colors,
+                      slot_size, unused_interp_slots, true, assign_colors,
                       color_channel_rotate, progress);
    }
    if (unused_color_interp_slots) {
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       convergent_mask, FS_VEC4_TYPE_INTERP_COLOR,
-                      slot_size, unused_color_interp_slots, assign_colors,
+                      slot_size, unused_color_interp_slots, true, assign_colors,
                       color_channel_rotate, progress);
    }
    fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                    convergent_mask, FS_VEC4_TYPE_FLAT,
-                   slot_size, NUM_SCALAR_SLOTS, assign_colors,
+                   slot_size, NUM_SCALAR_SLOTS, true, assign_colors,
                    color_channel_rotate, progress);
 }
 
@@ -3996,7 +4066,7 @@ vs_tcs_tes_gs_assign_slots(struct linkage_info *linkage,
 
          assert(*patch_slot_index < VARYING_SLOT_TESS_MAX * 8);
          relocate_slot(linkage, &linkage->slot[i], i, *patch_slot_index,
-                       FS_VEC4_TYPE_NONE, progress);
+                       FS_VEC4_TYPE_NONE, false, progress);
          *patch_slot_index += slot_size; /* increment by 16 or 32 bits */
       } else {
          /* If the driver wants to use POS and we've already used it, move
@@ -4012,7 +4082,7 @@ vs_tcs_tes_gs_assign_slots(struct linkage_info *linkage,
 
          assert(*slot_index < VARYING_SLOT_MAX * 8);
          relocate_slot(linkage, &linkage->slot[i], i, *slot_index,
-                       FS_VEC4_TYPE_NONE, progress);
+                       FS_VEC4_TYPE_NONE, false, progress);
          *slot_index += slot_size; /* increment by 16 or 32 bits */
       }
    }
@@ -4060,38 +4130,38 @@ compact_varyings(struct linkage_info *linkage,
        */
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       linkage->interp_explicit32_mask, FS_VEC4_TYPE_INTERP_EXPLICIT,
-                      2, NUM_SCALAR_SLOTS, false, 0, progress);
+                      2, NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       linkage->interp_explicit16_mask, FS_VEC4_TYPE_INTERP_EXPLICIT,
-                      1, NUM_SCALAR_SLOTS, false, 0, progress);
+                      1, NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       /* Same for strict vertex ordering. */
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       linkage->interp_explicit_strict32_mask, FS_VEC4_TYPE_INTERP_EXPLICIT_STRICT,
-                      2, NUM_SCALAR_SLOTS, false, 0, progress);
+                      2, NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       linkage->interp_explicit_strict16_mask, FS_VEC4_TYPE_INTERP_EXPLICIT_STRICT,
-                      1, NUM_SCALAR_SLOTS, false, 0, progress);
+                      1, NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       /* Same for per-primitive. */
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       linkage->per_primitive32_mask, FS_VEC4_TYPE_PER_PRIMITIVE,
-                      2, NUM_SCALAR_SLOTS, false, 0, progress);
+                      2, NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       fs_assign_slots(linkage, assigned_mask, assigned_fs_vec4_type,
                       linkage->per_primitive16_mask, FS_VEC4_TYPE_PER_PRIMITIVE,
-                      1, NUM_SCALAR_SLOTS, false, 0, progress);
+                      1, NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       /* Put transform-feedback-only outputs last. */
       fs_assign_slots(linkage, assigned_mask, NULL,
                       linkage->xfb32_only_mask, FS_VEC4_TYPE_NONE, 2,
-                      NUM_SCALAR_SLOTS, false, 0, progress);
+                      NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       fs_assign_slots(linkage, assigned_mask, NULL,
                       linkage->xfb16_only_mask, FS_VEC4_TYPE_NONE, 1,
-                      NUM_SCALAR_SLOTS, false, 0, progress);
+                      NUM_SCALAR_SLOTS, false, false, 0, progress);
 
       /* Color varyings are only compacted among themselves. */
       /* Set whether the shader contains any color varyings. */
@@ -4118,7 +4188,7 @@ compact_varyings(struct linkage_info *linkage,
          /* Put transform-feedback-only outputs last. */
          fs_assign_slots(linkage, assigned_mask, NULL,
                          linkage->xfb32_only_mask, FS_VEC4_TYPE_NONE, 2,
-                         NUM_SCALAR_SLOTS, true, color_channel_rotate,
+                         NUM_SCALAR_SLOTS, false, true, color_channel_rotate,
                          progress);
       }
    } else {
@@ -4133,6 +4203,23 @@ compact_varyings(struct linkage_info *linkage,
                                      : VARYING_SLOT_VAR0) * 8;
       unsigned patch_slot_index = VARYING_SLOT_PATCH0 * 8;
 
+      if (linkage->consumer_stage == MESA_SHADER_TESS_CTRL) {
+         /* Make tcs_cross_invoc*_mask bits disjoint with flat*_mask bits
+          * because tcs_cross_invoc*_mask is initially a subset of flat*_mask,
+          * but we must assign each scalar slot only once.
+          */
+         BITSET_ANDNOT(linkage->flat32_mask, linkage->flat32_mask,
+                       linkage->tcs_cross_invoc32_mask);
+         BITSET_ANDNOT(linkage->flat16_mask, linkage->flat16_mask,
+                       linkage->tcs_cross_invoc16_mask);
+
+         /* Compact 32-bit inputs and 16-bit inputs separately. */
+         vs_tcs_tes_gs_assign_slots(linkage, linkage->tcs_cross_invoc32_mask,
+                                    &slot_index, &patch_slot_index, 2, progress);
+         vs_tcs_tes_gs_assign_slots(linkage, linkage->tcs_cross_invoc16_mask,
+                                    &slot_index, &patch_slot_index, 1, progress);
+      }
+
       /* Compact 32-bit inputs. */
       vs_tcs_tes_gs_assign_slots(linkage, linkage->flat32_mask, &slot_index,
                                  &patch_slot_index, 2, progress);
@@ -4143,13 +4230,15 @@ compact_varyings(struct linkage_info *linkage,
       vs_tcs_tes_gs_assign_slots(linkage, linkage->flat16_mask, &slot_index,
                                  &patch_slot_index, 1, progress);
 
-      /* Put no-varying slots last. These are TCS outputs read by TCS but not
-       * TES.
-       */
-      vs_tcs_tes_gs_assign_slots(linkage, linkage->no_varying32_mask, &slot_index,
-                                 &patch_slot_index, 2, progress);
-      vs_tcs_tes_gs_assign_slots(linkage, linkage->no_varying16_mask, &slot_index,
-                                 &patch_slot_index, 1, progress);
+      if (linkage->producer_stage == MESA_SHADER_TESS_CTRL) {
+         /* Put no-varying slots last. These are TCS outputs read by TCS but
+          * not TES.
+          */
+         vs_tcs_tes_gs_assign_slots(linkage, linkage->no_varying32_mask,
+                                    &slot_index, &patch_slot_index, 2, progress);
+         vs_tcs_tes_gs_assign_slots(linkage, linkage->no_varying16_mask,
+                                    &slot_index, &patch_slot_index, 1, progress);
+      }
 
       assert(slot_index <= VARYING_SLOT_MAX * 8);
       assert(patch_slot_index <= VARYING_SLOT_TESS_MAX * 8);
@@ -4167,6 +4256,10 @@ init_linkage(nir_shader *producer, nir_shader *consumer, bool spirv,
 {
    *linkage = (struct linkage_info){
       .spirv = spirv,
+      .can_mix_convergent_flat_with_interpolated =
+         consumer->info.stage == MESA_SHADER_FRAGMENT &&
+         consumer->options->io_options &
+         nir_io_mix_convergent_flat_with_interpolated,
       .producer_stage = producer->info.stage,
       .consumer_stage = consumer->info.stage,
       .producer_builder =
@@ -4235,8 +4328,6 @@ nir_opt_varyings(nir_shader *producer, nir_shader *consumer, bool spirv,
     * divergence information.
     */
    if (consumer->info.stage == MESA_SHADER_FRAGMENT) {
-      /* Required by the divergence analysis. */
-      NIR_PASS(_, producer, nir_convert_to_lcssa, true, true);
       nir_vertex_divergence_analysis(producer);
    }
 
@@ -4310,6 +4401,15 @@ nir_opt_varyings(nir_shader *producer, nir_shader *consumer, bool spirv,
       nir_validate_shader(producer, "nir_opt_varyings");
    if (progress & nir_progress_consumer)
       nir_validate_shader(consumer, "nir_opt_varyings");
+
+   if (consumer->info.stage == MESA_SHADER_FRAGMENT) {
+      /* We have called nir_vertex_divergence_analysis on the producer here.
+       * We need to reset the divergent field to true, otherwise it will be
+       * garbage after some other passes are run, and then we end up failing
+       * assertions in some passes because src is divergent and dst isn't.
+       */
+      nir_clear_divergence_info(producer);
+   }
 
    return progress;
 }

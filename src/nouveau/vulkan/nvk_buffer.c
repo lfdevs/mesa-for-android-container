@@ -236,7 +236,13 @@ nvk_bind_buffer_memory(struct nvk_device *dev,
 {
    VK_FROM_HANDLE(nvk_device_memory, mem, info->memory);
    VK_FROM_HANDLE(nvk_buffer, buffer, info->buffer);
+   struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VkResult result = VK_SUCCESS;
+
+   if ((pdev->debug_flags & NVK_DEBUG_PUSH_DUMP) &&
+       (buffer->vk.usage & (VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT_KHR |
+                            VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT)))
+      nvkmd_dev_track_mem(dev->nvkmd, mem->mem);
 
    if (buffer->va != NULL) {
       result = nvkmd_va_bind_mem(buffer->va, &buffer->vk.base,
@@ -324,4 +330,13 @@ nvk_queue_buffer_bind(struct nvk_queue *queue,
    STACK_ARRAY_FINISH(binds);
 
    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+nvk_GetBufferOpaqueCaptureDescriptorDataEXT(
+    VkDevice device,
+    const VkBufferCaptureDescriptorDataInfoEXT *pInfo,
+    void *pData)
+{
+   return VK_SUCCESS;
 }

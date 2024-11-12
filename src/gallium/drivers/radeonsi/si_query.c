@@ -888,13 +888,13 @@ static void si_update_hw_pipeline_stats(struct si_context *sctx, unsigned type, 
 
       /* Enable/disable pipeline stats if we have any queries. */
       if (diff == 1 && sctx->num_hw_pipestat_streamout_queries == 1) {
-         sctx->flags &= ~SI_CONTEXT_STOP_PIPELINE_STATS;
-         sctx->flags |= SI_CONTEXT_START_PIPELINE_STATS;
-         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+         sctx->barrier_flags &= ~SI_BARRIER_EVENT_PIPELINESTAT_STOP;
+         sctx->barrier_flags |= SI_BARRIER_EVENT_PIPELINESTAT_START;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
       } else if (diff == -1 && sctx->num_hw_pipestat_streamout_queries == 0) {
-         sctx->flags &= ~SI_CONTEXT_START_PIPELINE_STATS;
-         sctx->flags |= SI_CONTEXT_STOP_PIPELINE_STATS;
-         si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+         sctx->barrier_flags &= ~SI_BARRIER_EVENT_PIPELINESTAT_START;
+         sctx->barrier_flags |= SI_BARRIER_EVENT_PIPELINESTAT_STOP;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
       }
    }
 }
@@ -980,8 +980,7 @@ static void si_query_hw_do_emit_stop(struct si_context *sctx, struct si_query_hw
 
       radeon_begin(cs);
       if (sctx->screen->use_ngg && query->flags & SI_QUERY_EMULATE_GS_COUNTERS) {
-         radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
-         radeon_emit(EVENT_TYPE(V_028A90_VS_PARTIAL_FLUSH) | EVENT_INDEX(4));
+         radeon_event_write(V_028A90_VS_PARTIAL_FLUSH);
 
          if (--sctx->num_pipeline_stat_emulated_queries == 0) {
             si_set_internal_shader_buffer(sctx, SI_GS_QUERY_BUF, NULL);
@@ -1600,9 +1599,9 @@ static void si_query_hw_get_result_resource(struct si_context *sctx, struct si_q
       break;
    }
 
-   sctx->flags |= SI_CONTEXT_INV_SCACHE | SI_CONTEXT_INV_VCACHE |
-                  (sctx->gfx_level <= GFX8 ? SI_CONTEXT_INV_L2 : 0);
-   si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+   sctx->barrier_flags |= SI_BARRIER_INV_SMEM | SI_BARRIER_INV_VMEM |
+                          (sctx->gfx_level <= GFX8 ? SI_BARRIER_INV_L2 : 0);
+   si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
 
    for (qbuf = &query->buffer; qbuf; qbuf = qbuf_prev) {
       if (query->b.type != PIPE_QUERY_TIMESTAMP) {
@@ -1631,9 +1630,6 @@ static void si_query_hw_get_result_resource(struct si_context *sctx, struct si_q
          ssbo[2].buffer = resource;
          ssbo[2].buffer_offset = offset;
          ssbo[2].buffer_size = resource->width0 - offset;
-         /* assert size is correct, based on result_type ? */
-
-         si_resource(resource)->TC_L2_dirty = true;
       }
 
       if ((flags & PIPE_QUERY_WAIT) && qbuf == &query->buffer) {
@@ -1648,9 +1644,13 @@ static void si_query_hw_get_result_resource(struct si_context *sctx, struct si_q
 
          si_cp_wait_mem(sctx, &sctx->gfx_cs, va, 0x80000000, 0x80000000, WAIT_REG_MEM_EQUAL);
       }
+
+      unsigned writable_bitmask = 0x4;
+
+      si_barrier_before_internal_op(sctx, 0, 3, ssbo, writable_bitmask, 0, NULL);
       si_launch_grid_internal_ssbos(sctx, &grid, sctx->query_result_shader,
-                                    SI_OP_SYNC_AFTER, SI_COHERENCY_SHADER,
-                                    3, ssbo, 0x4);
+                                    3, ssbo, writable_bitmask, false);
+      si_barrier_after_internal_op(sctx, 0, 3, ssbo, writable_bitmask, 0, NULL);
    }
 
    si_restore_qbo_state(sctx, &saved_state);
@@ -1698,8 +1698,8 @@ static void si_render_condition(struct pipe_context *ctx, struct pipe_query *que
          /* Settings this in the render cond atom is too late,
           * so set it here. */
          if (sctx->gfx_level <= GFX8) {
-            sctx->flags |= SI_CONTEXT_WB_L2 | SI_CONTEXT_PFP_SYNC_ME;
-            si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+            sctx->barrier_flags |= SI_BARRIER_WB_L2 | SI_BARRIER_PFP_SYNC_ME;
+            si_mark_atom_dirty(sctx, &sctx->atoms.s.barrier);
          }
 
          sctx->render_cond_enabled = old_render_cond_enabled;

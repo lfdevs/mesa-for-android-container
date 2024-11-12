@@ -1,0 +1,33 @@
+api@clbuildprogram,Fail
+api@clcompileprogram,Fail
+api@clgetcommandqueueinfo,Fail
+api@clgetextensionfunctionaddressforplatform,Fail
+api@clgetkernelarginfo,Fail
+api@cllinkprogram,Fail
+program@execute@global-offset,Fail
+program@execute@global-offset@3d- input dependent,Fail
+program@execute@vstore@vstore-char-private,Crash
+program@execute@vstore@vstore-short-private,Crash
+program@execute@vstore@vstore-uchar-private,Crash
+program@execute@vstore@vstore-ushort-private,Crash
+program@execute@vstore@vstore_half-float-private,Crash
+
+# Piglit CL bug
+program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float16,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float2,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float4,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float8,Fail
+
+# RUSTICL_FEATURES="fp16,fp64" bugs
+program@execute@amdgcn-f32-inline-immediates,Crash
+program@execute@amdgcn-f64-inline-immediates,Crash
+program@execute@fdiv-modifiers-f64,Crash
+program@execute@scalar-arithmetic-double,Crash
+program@execute@vstore@vstore_half-double-global,Crash
+program@execute@vstore@vstore_half-double-local,Crash
+program@execute@vstore@vstore_half-double-private,Crash
+program@execute@vstore@vstorea_half-double-global,Crash
+program@execute@vstore@vstorea_half-double-local,Crash
+program@execute@vstore@vstorea_half-double-private,Crash

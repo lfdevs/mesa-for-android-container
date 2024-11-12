@@ -17,6 +17,7 @@
     paths:
       - results/
   rules:
+    - !reference [.common-rules, rules]
     - !reference [.never-post-merge-rules, rules]
 
 .formatting-check:
@@ -41,35 +42,34 @@ rustfmt:
     - shopt -s globstar
     - rustfmt --version
     - rustfmt --verbose src/**/lib.rs
-    - rustfmt --verbose src/**/main.rs
 
-python-test:
-  # Cancel job if a newer commit is pushed to the same branch
-  interruptible: true
-  stage: code-validation
+yaml-toml-shell-test:
   extends:
-    - .use-debian/x86_64_build
-  variables:
-    GIT_STRATEGY: fetch
-  timeout: 10m
+    - python-test
+    - .no-auto-retry  # this job can't be flaky
+  stage: code-validation
   script:
-    - cd bin/ci
-    - pip install --break-system-packages -r test/requirements.txt
-    - PYTHONPATH=. pytest -v
+    - uncollapsed_section_start tomllint "tomllint"
+    - echo "If your change looks right but this script rejects it, contact @eric (GitLab) / eric_engestrom (IRC)."
+    - python3 bin/toml_lint.py
+    - uncollapsed_section_switch yamllint "yamllint"
+    - .gitlab-ci/run-yamllint.sh
+    - uncollapsed_section_switch shellcheck "shellcheck"
+    - .gitlab-ci/run-shellcheck.sh
+    - section_end
   rules:
     - !reference [.disable-farm-mr-rules, rules]
     - !reference [.never-post-merge-rules, rules]
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: on_success
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_NAMESPACE == "mesa" && $GITLAB_USER_LOGIN != "marge-bot"
-      when: on_success
+    - !reference [.no_scheduled_pipelines-rules, rules]
     - if: $GITLAB_USER_LOGIN == "marge-bot"
-      changes: &bin_ci_files
-        - .gitlab-ci.yml
-        - .gitlab-ci/**/*
-        - bin/ci/**/*
+      changes: &toml_lint_files
+        - .gitlab-ci/test/gitlab-ci.yml
+        - .gitlab-ci/**/*.sh
+        - .shellcheckrc
+        - bin/toml_lint.py
+        - src/**/ci/*.toml
       when: on_success
-    - changes: *bin_ci_files
+    - changes: *toml_lint_files
       when: manual
 
 .test-gl:
@@ -125,7 +125,7 @@ python-test:
 
 .b2c-vkd3d-proton-test:
   variables:
-    HWCI_TEST_SCRIPT: ./install/vkd3d-proton/run.sh
+    HWCI_TEST_SCRIPT: install/vkd3d-runner.sh
 
 .piglit-traces-test:
   artifacts:
@@ -231,9 +231,6 @@ python-test:
 
 # ARM32/64 testing of bare-metal boards attached to an x86 gitlab-runner system, using an asan mesa build
 .baremetal-arm32-asan-test:
-  extends:
-    - .baremetal-test
-    - .use-debian/baremetal_arm32_test
   variables:
     DEQP_RUNNER_OPTIONS: "--env LD_PRELOAD=libasan.so.8:/install/lib/libdlclose-skip.so"
     S3_ARTIFACT_NAME: mesa-arm32-asan-debugoptimized
@@ -244,9 +241,6 @@ python-test:
     - !reference [.required-for-hardware-jobs, needs]
 
 .baremetal-arm64-asan-test:
-  extends:
-    - .baremetal-test
-    - .use-debian/baremetal_arm64_test
   variables:
     DEQP_RUNNER_OPTIONS: "--env LD_PRELOAD=libasan.so.8:/install/lib/libdlclose-skip.so"
     S3_ARTIFACT_NAME: mesa-arm64-asan-debugoptimized
@@ -281,7 +275,7 @@ python-test:
     # boot2container initrd configuration parameters.
     B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/gfx-ci/ci-tron/-/package_files/519/download'  # Linux 6.1
     B2C_INITRAMFS_URL: 'https://gitlab.freedesktop.org/mupuf/boot2container/-/releases/v0.9.10/downloads/initramfs.linux_amd64.cpio.xz'
-    B2C_JOB_SUCCESS_REGEX: 'hwci: mesa: pass\r$'
+    B2C_JOB_SUCCESS_REGEX: 'hwci: mesa: pass, exit_code: 0\r$'
     B2C_LOG_LEVEL: 6
     B2C_POWEROFF_DELAY: 15
     B2C_SESSION_END_REGEX: '^.*It''s now safe to turn off your computer\r$'
@@ -314,6 +308,8 @@ python-test:
 
     - |
       set -eux
+
+      section_start b2c_kernel_boot "Booting hardware device"
 
       # Useful as a hook point for runner admins. You may edit the
       # config.toml for the Gitlab runner and use a bind-mount to
