@@ -7,7 +7,7 @@
 #define H_ETNA_ML
 
 #include "pipe/p_state.h"
-#include "util/u_inlines.h"
+#include "util/u_dynarray.h"
 
 #define MAX_CONFIG_BOS 4
 

@@ -97,8 +97,9 @@ struct nvk_descriptor_state {
    const struct nvk_root_descriptor_table *root = \
       (const struct nvk_root_descriptor_table *)(desc)->root; \
    unsigned _start = start; \
-   assert(_start + count <= ARRAY_SIZE(root->member)); \
-   for (unsigned i = 0; i < count; i++) \
+   unsigned _count = count; \
+   assert(_start + _count <= ARRAY_SIZE(root->member)); \
+   for (unsigned i = 0; i < _count; i++) \
       (dst)[i] = root->member[i + _start]; \
 } while (0)
 
@@ -119,13 +120,14 @@ struct nvk_descriptor_state {
    struct nvk_root_descriptor_table *root = \
       (struct nvk_root_descriptor_table *)_desc->root; \
    unsigned _start = start; \
-   assert(_start + count <= ARRAY_SIZE(root->member)); \
-   for (unsigned i = 0; i < count; i++) \
+   unsigned _count = count; \
+   assert(_start + _count <= ARRAY_SIZE(root->member)); \
+   for (unsigned i = 0; i < _count; i++) \
       root->member[i + _start] = (src)[i]; \
    if (_desc->flush_root != NULL) { \
       size_t offset = (char *)&root->member[_start] - (char *)root; \
       _desc->flush_root((cmd), _desc, offset, \
-                        count * sizeof(root->member[0])); \
+                        _count * sizeof(root->member[0])); \
    } \
 } while (0)
 

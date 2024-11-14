@@ -627,12 +627,8 @@ nvk_cmd_dirty_cbufs_for_descriptors(struct nvk_cmd_buffer *cmd,
 
          case NVK_CBUF_TYPE_DESC_SET:
          case NVK_CBUF_TYPE_UBO_DESC:
-            if (cbuf->desc_set >= sets_start && cbuf->desc_set < sets_end)
-               group->dirty |= BITFIELD_BIT(i);
-            break;
-
          case NVK_CBUF_TYPE_DYNAMIC_UBO:
-            if (cbuf->dynamic_idx >= dyn_start && cbuf->dynamic_idx < dyn_end)
+            if (cbuf->desc_set >= sets_start && cbuf->desc_set < sets_end)
                group->dirty |= BITFIELD_BIT(i);
             break;
 
@@ -726,7 +722,7 @@ nvk_bind_descriptor_sets(struct nvk_cmd_buffer *cmd,
    assert(next_dyn_offset <= info->dynamicOffsetCount);
 
    nvk_descriptor_state_set_root_array(cmd, desc, dynamic_buffers,
-                                       dyn_buffer_start, dyn_buffer_end,
+                                       dyn_buffer_start, dyn_buffer_end - dyn_buffer_start,
                                        &dynamic_buffers[dyn_buffer_start]);
 
    /* We need to set everything above first_set because later calls to

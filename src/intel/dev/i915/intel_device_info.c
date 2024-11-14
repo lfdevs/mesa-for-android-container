@@ -491,7 +491,7 @@ has_get_tiling(int fd)
    struct drm_i915_gem_get_tiling get_tiling = {
       .handle = gem_create.handle,
    };
-   ret = intel_ioctl(fd, DRM_IOCTL_I915_GEM_SET_TILING, &get_tiling);
+   ret = intel_ioctl(fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling);
 
    struct drm_gem_close close = {
       .handle = gem_create.handle,

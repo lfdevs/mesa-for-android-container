@@ -929,6 +929,18 @@ radv_image_is_l2_coherent(const struct radv_device *device, const struct radv_im
    if (pdev->info.gfx_level >= GFX12) {
       return true; /* Everything is coherent with TC L2. */
    } else if (pdev->info.gfx_level >= GFX10) {
+      /* Add a special case for mips in the metadata mip-tail for GFX11. */
+      if (pdev->info.gfx_level >= GFX11) {
+         if (image->vk.mip_levels > 1 && (radv_image_has_dcc(image) || radv_image_has_htile(image))) {
+            for (unsigned i = 0; i < image->plane_count; ++i) {
+               const struct radeon_surf *surf = &image->planes[i].surface;
+
+               if (surf->num_meta_levels != image->vk.mip_levels)
+                  return false;
+            }
+         }
+      }
+
       return !pdev->info.tcc_rb_non_coherent && !radv_image_is_pipe_misaligned(device, image);
    } else if (pdev->info.gfx_level == GFX9) {
       if (image->vk.samples == 1 &&

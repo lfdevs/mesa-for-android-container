@@ -583,8 +583,10 @@ nir_lower_mediump_vars(nir_shader *shader, nir_variable_mode modes)
                nir_variable *var = nir_deref_instr_get_variable(deref);
 
                /* If we have atomic derefs that we can't track, then don't lower any mediump.  */
-               if (!var)
+               if (!var) {
+                  ralloc_free(no_lower_set);
                   return false;
+               }
 
                _mesa_set_add(no_lower_set, var);
                break;

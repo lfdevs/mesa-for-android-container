@@ -48,7 +48,7 @@ workflow:
     - if: &is-direct-push $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $GITLAB_USER_LOGIN != "marge-bot"
       variables:
         KERNEL_IMAGE_BASE: https://${S3_HOST}/${S3_KERNEL_BUCKET}/${KERNEL_REPO}/${KERNEL_TAG}
-        JOB_PRIORITY: 40
+        JOB_PRIORITY: 70
         VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
     # pre-merge or fork pipeline
     - if: $FORCE_KERNEL_TAG != null

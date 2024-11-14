@@ -2964,7 +2964,7 @@ struct anv_descriptor_pool {
     */
    bool host_only;
 
-   char host_mem[0];
+   alignas(8) char host_mem[0];
 };
 
 bool
@@ -3315,6 +3315,9 @@ enum anv_pipe_bits {
 
    ANV_PIPE_TLB_INVALIDATE_BIT               = (1 << 18),
 
+   /* L3 Fabric Flush */
+   ANV_PIPE_L3_FABRIC_FLUSH_BIT              = (1 << 19),
+
    ANV_PIPE_CS_STALL_BIT                     = (1 << 20),
    ANV_PIPE_END_OF_PIPE_SYNC_BIT             = (1 << 21),
 
@@ -3337,8 +3340,6 @@ enum anv_pipe_bits {
     */
    ANV_PIPE_POST_SYNC_BIT                    = (1 << 24),
 
-   /* L3 Fabric Flush */
-   ANV_PIPE_L3_FABRIC_FLUSH_BIT              = (1 << 25),
 };
 
 /* These bits track the state of buffer writes for queries. They get cleared
@@ -3403,6 +3404,14 @@ enum anv_query_bits {
    ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | \
    ANV_PIPE_TILE_CACHE_FLUSH_BIT | \
    ANV_PIPE_L3_FABRIC_FLUSH_BIT)
+
+#define ANV_PIPE_BARRIER_FLUSH_BITS ( \
+   ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | \
+   ANV_PIPE_DATA_CACHE_FLUSH_BIT | \
+   ANV_PIPE_HDC_PIPELINE_FLUSH_BIT | \
+   ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT | \
+   ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | \
+   ANV_PIPE_TILE_CACHE_FLUSH_BIT)
 
 #define ANV_PIPE_STALL_BITS ( \
    ANV_PIPE_STALL_AT_SCOREBOARD_BIT | \

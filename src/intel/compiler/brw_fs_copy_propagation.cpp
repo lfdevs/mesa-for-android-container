@@ -825,9 +825,8 @@ try_copy_propagate(const brw_compiler *compiler, fs_inst *inst,
     * destination of the copy, and simply replacing the sources would give a
     * program with different semantics.
     */
-   if ((brw_type_size_bits(entry->dst.type) < brw_type_size_bits(inst->src[arg].type) ||
-        entry->is_partial_write) &&
-       inst->opcode != BRW_OPCODE_MOV) {
+   if (brw_type_size_bits(entry->dst.type) < brw_type_size_bits(inst->src[arg].type) ||
+       (entry->is_partial_write && inst->opcode != BRW_OPCODE_MOV)) {
       return false;
    }
 
@@ -1505,8 +1504,7 @@ try_copy_propagate_def(const brw_compiler *compiler,
     * destination of the copy, and simply replacing the sources would give a
     * program with different semantics.
     */
-   if (inst->opcode != BRW_OPCODE_MOV &&
-       brw_type_size_bits(def->dst.type) <
+   if (brw_type_size_bits(def->dst.type) <
        brw_type_size_bits(inst->src[arg].type))
       return false;
 

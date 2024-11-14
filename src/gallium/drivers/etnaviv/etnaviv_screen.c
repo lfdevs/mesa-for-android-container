@@ -1102,7 +1102,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       goto fail;
    }
 
-   if (gpu != npu) {
+   if (npu && gpu != npu) {
       screen->pipe_nn = etna_pipe_new(npu, ETNA_PIPE_3D);
       if (!screen->pipe_nn) {
          DBG("could not create nn pipe");

@@ -35,8 +35,6 @@ dEQP-GLES31.functional.texture.border_clamp.range_clamp.linear_float_color,Fail
 # MESA: warning: sample averaging on fallback z24s8 blit when we shouldn't.
 KHR-GL46.direct_state_access.renderbuffers_storage_multisample,Fail
 
-KHR-GL46.multi_bind.dispatch_bind_image_textures,Fail
-
 # Fails when TU_DEBUG=forcebin is set
 gmem-dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_two_buffers_geom,Fail
 gmem-dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_two_buffers_vert,Fail

@@ -1,5 +1,4 @@
 KHR-GL46.direct_state_access.renderbuffers_storage_multisample,Fail
-KHR-GL46.multi_bind.dispatch_bind_image_textures,Fail
 KHR-GL46.shader_image_load_store.basic-allTargets-store,Fail
 KHR-GL46.shader_subroutine.control_flow_and_returned_subroutine_values_used_as_subroutine_input,Fail
 

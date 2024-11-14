@@ -2181,6 +2181,12 @@ if with_platform_x11
       with_gallium_omx != 'disabled'))
     dep_xcb_xfixes = dependency('xcb-xfixes')
   endif
+  if with_any_vk
+    dep_xcb_dri3 = dependency('xcb-dri3', version : '>= 1.13')
+    dep_xcb_present = dependency('xcb-present', version : '>= 1.13')
+    dep_xcb_shm = dependency('xcb-shm')
+    dep_xshmfence = dependency('xshmfence', version : '>= 1.1')
+  endif
   if with_xlib_lease or with_any_vk
     dep_xcb_xrandr = dependency('xcb-randr')
   endif

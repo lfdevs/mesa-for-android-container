@@ -394,6 +394,17 @@ genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer)
    struct anv_device *device = cmd_buffer->device;
    const uint32_t mocs = isl_mocs(&device->isl_dev, 0, false);
 
+   /* We're changing base location of binding tables which affects the state
+    * cache. We're adding texture cache invalidation following a
+    * recommendation from the ICL PRMs, Volume 9: Render Engine, Coherency
+    * Mechanisms:
+    *
+    *    "It is strongly recommended that a Texture cache invalidation be done
+    *     whenever a State cache invalidation is done."
+    *
+    * Prior to do the invalidation, we need a CS_STALL to ensure that all work
+    * using surface states has completed.
+    */
    genx_batch_emit_pipe_control(&cmd_buffer->batch,
                                 cmd_buffer->device->info,
                                 cmd_buffer->state.current_pipeline,
@@ -405,11 +416,12 @@ genX(cmd_buffer_emit_bt_pool_base_address)(struct anv_cmd_buffer *cmd_buffer)
       btpa.BindingTablePoolBufferSize = device->physical->va.binding_table_pool.size / 4096;
       btpa.MOCS = mocs;
    }
-
    genx_batch_emit_pipe_control(&cmd_buffer->batch,
                                 cmd_buffer->device->info,
                                 cmd_buffer->state.current_pipeline,
+                                ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT |
                                 ANV_PIPE_STATE_CACHE_INVALIDATE_BIT);
+
 #else /* GFX_VERx10 < 125 */
    genX(cmd_buffer_emit_state_base_address)(cmd_buffer);
 #endif
@@ -3495,14 +3507,14 @@ anv_pipe_flush_bits_for_access_flags(struct anv_cmd_buffer *cmd_buffer,
          /* We're transitioning a buffer for generic write operations. Flush
           * all the caches.
           */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
+         pipe_bits |= ANV_PIPE_BARRIER_FLUSH_BITS;
          break;
       case VK_ACCESS_2_HOST_WRITE_BIT:
          /* We're transitioning a buffer for access by CPU. Invalidate
           * all the caches. Since data and tile caches don't have invalidate,
           * we are forced to flush those as well.
           */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
+         pipe_bits |= ANV_PIPE_BARRIER_FLUSH_BITS;
          pipe_bits |= ANV_PIPE_INVALIDATE_BITS;
          break;
       case VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT:
@@ -3610,7 +3622,7 @@ anv_pipe_invalidate_bits_for_access_flags(struct anv_cmd_buffer *cmd_buffer,
          /* Generic write, make sure all previously written things land in
           * memory.
           */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
+         pipe_bits |= ANV_PIPE_BARRIER_FLUSH_BITS;
          break;
       case VK_ACCESS_2_CONDITIONAL_RENDERING_READ_BIT_EXT:
       case VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT:
@@ -3628,7 +3640,7 @@ anv_pipe_invalidate_bits_for_access_flags(struct anv_cmd_buffer *cmd_buffer,
          /* We're transitioning a buffer that was written by CPU.  Flush
           * all the caches.
           */
-         pipe_bits |= ANV_PIPE_FLUSH_BITS;
+         pipe_bits |= ANV_PIPE_BARRIER_FLUSH_BITS;
          break;
       case VK_ACCESS_2_TRANSFORM_FEEDBACK_WRITE_BIT_EXT:
          /* We're transitioning a buffer to be written by the streamout fixed
@@ -3934,21 +3946,13 @@ cmd_buffer_has_pending_copy_query(struct anv_cmd_buffer *cmd_buffer)
 }
 
 static void
-cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
-                   uint32_t n_dep_infos,
-                   const VkDependencyInfo *dep_infos,
-                   const char *reason)
+cmd_buffer_accumulate_barrier_bits(struct anv_cmd_buffer *cmd_buffer,
+                                   uint32_t n_dep_infos,
+                                   const VkDependencyInfo *dep_infos,
+                                   VkPipelineStageFlags2 *out_src_stages,
+                                   VkPipelineStageFlags2 *out_dst_stages,
+                                   enum anv_pipe_bits *out_bits)
 {
-   if (anv_cmd_buffer_is_video_queue(cmd_buffer)) {
-      cmd_buffer_barrier_video(cmd_buffer, n_dep_infos, dep_infos);
-      return;
-   }
-
-   if (anv_cmd_buffer_is_blitter_queue(cmd_buffer)) {
-      cmd_buffer_barrier_blitter(cmd_buffer, n_dep_infos, dep_infos);
-      return;
-   }
-
    /* XXX: Right now, we're really dumb and just flush whatever categories
     * the app asks for. One of these days we may make this a bit better but
     * right now that's all the hardware allows for in most areas.
@@ -3957,6 +3961,7 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
    VkAccessFlags2 dst_flags = 0;
 
    VkPipelineStageFlags2 src_stages = 0;
+   VkPipelineStageFlags2 dst_stages = 0;
 
 #if GFX_VER < 20
    bool apply_sparse_flushes = false;
@@ -3972,6 +3977,7 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
          dst_flags |= dep_info->pMemoryBarriers[i].dstAccessMask;
 
          src_stages |= dep_info->pMemoryBarriers[i].srcStageMask;
+         dst_stages |= dep_info->pMemoryBarriers[i].dstStageMask;
 
          /* Shader writes to buffers that could then be written by a transfer
           * command (including queries).
@@ -4006,6 +4012,7 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
          dst_flags |= buf_barrier->dstAccessMask;
 
          src_stages |= buf_barrier->srcStageMask;
+         dst_stages |= buf_barrier->dstStageMask;
 
          /* Shader writes to buffers that could then be written by a transfer
           * command (including queries).
@@ -4038,6 +4045,7 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
          dst_flags |= img_barrier->dstAccessMask;
 
          src_stages |= img_barrier->srcStageMask;
+         dst_stages |= img_barrier->dstStageMask;
 
          ANV_FROM_HANDLE(anv_image, image, img_barrier->image);
          const VkImageSubresourceRange *range = &img_barrier->subresourceRange;
@@ -4224,7 +4232,7 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
     * to flush anymore.
     */
    if (apply_sparse_flushes)
-      bits |= ANV_PIPE_FLUSH_BITS;
+      bits |= ANV_PIPE_BARRIER_FLUSH_BITS;
 #endif
 
    /* Copies from query pools are executed with a shader writing through the
@@ -4238,7 +4246,40 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
    if (dst_flags & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
       genX(cmd_buffer_flush_generated_draws)(cmd_buffer);
 
-   anv_add_pending_pipe_bits(cmd_buffer, bits, reason);
+   *out_src_stages = src_stages;
+   *out_dst_stages = dst_stages;
+   *out_bits = bits;
+}
+
+static void
+cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
+                   uint32_t n_dep_infos,
+                   const VkDependencyInfo *dep_infos,
+                   const char *reason)
+{
+   switch (cmd_buffer->batch.engine_class) {
+   case INTEL_ENGINE_CLASS_VIDEO:
+      cmd_buffer_barrier_video(cmd_buffer, n_dep_infos, dep_infos);
+      break;
+
+   case INTEL_ENGINE_CLASS_COPY:
+      cmd_buffer_barrier_blitter(cmd_buffer, n_dep_infos, dep_infos);
+      break;
+
+   case INTEL_ENGINE_CLASS_RENDER:
+   case INTEL_ENGINE_CLASS_COMPUTE: {
+      VkPipelineStageFlags2 src_stages, dst_stages;
+      enum anv_pipe_bits bits;
+      cmd_buffer_accumulate_barrier_bits(cmd_buffer, n_dep_infos, dep_infos,
+                                         &src_stages, &dst_stages, &bits);
+
+      anv_add_pending_pipe_bits(cmd_buffer, bits, reason);
+      break;
+   }
+
+   default:
+      unreachable("Invalid engine class");
+   }
 }
 
 void genX(CmdPipelineBarrier2)(
@@ -5700,7 +5741,9 @@ void genX(CmdSetEvent2)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_event, event, _event);
 
-   if (anv_cmd_buffer_is_video_queue(cmd_buffer)) {
+   switch (cmd_buffer->batch.engine_class) {
+   case INTEL_ENGINE_CLASS_VIDEO:
+   case INTEL_ENGINE_CLASS_COPY:
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_FLUSH_DW), flush) {
          flush.PostSyncOperation = WriteImmediateData;
          flush.Address = anv_state_pool_state_address(
@@ -5708,33 +5751,40 @@ void genX(CmdSetEvent2)(
             event->state);
          flush.ImmediateData = VK_EVENT_SET;
       }
-      return;
+      break;
+
+   case INTEL_ENGINE_CLASS_RENDER:
+   case INTEL_ENGINE_CLASS_COMPUTE: {
+      VkPipelineStageFlags2 src_stages = 0;
+
+      for (uint32_t i = 0; i < pDependencyInfo->memoryBarrierCount; i++)
+         src_stages |= pDependencyInfo->pMemoryBarriers[i].srcStageMask;
+      for (uint32_t i = 0; i < pDependencyInfo->bufferMemoryBarrierCount; i++)
+         src_stages |= pDependencyInfo->pBufferMemoryBarriers[i].srcStageMask;
+      for (uint32_t i = 0; i < pDependencyInfo->imageMemoryBarrierCount; i++)
+         src_stages |= pDependencyInfo->pImageMemoryBarriers[i].srcStageMask;
+
+      cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
+      enum anv_pipe_bits pc_bits = 0;
+      if (src_stages & ANV_PIPELINE_STAGE_PIPELINED_BITS) {
+         pc_bits |= ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
+         pc_bits |= ANV_PIPE_CS_STALL_BIT;
+      }
+
+      genx_batch_emit_pipe_control_write
+         (&cmd_buffer->batch, cmd_buffer->device->info,
+          cmd_buffer->state.current_pipeline, WriteImmediateData,
+          anv_state_pool_state_address(&cmd_buffer->device->dynamic_state_pool,
+                                       event->state),
+          VK_EVENT_SET, pc_bits);
+      break;
    }
 
-   VkPipelineStageFlags2 src_stages = 0;
-
-   for (uint32_t i = 0; i < pDependencyInfo->memoryBarrierCount; i++)
-      src_stages |= pDependencyInfo->pMemoryBarriers[i].srcStageMask;
-   for (uint32_t i = 0; i < pDependencyInfo->bufferMemoryBarrierCount; i++)
-      src_stages |= pDependencyInfo->pBufferMemoryBarriers[i].srcStageMask;
-   for (uint32_t i = 0; i < pDependencyInfo->imageMemoryBarrierCount; i++)
-      src_stages |= pDependencyInfo->pImageMemoryBarriers[i].srcStageMask;
-
-   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
-
-   enum anv_pipe_bits pc_bits = 0;
-   if (src_stages & ANV_PIPELINE_STAGE_PIPELINED_BITS) {
-      pc_bits |= ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
-      pc_bits |= ANV_PIPE_CS_STALL_BIT;
-  }
-
-   genx_batch_emit_pipe_control_write
-      (&cmd_buffer->batch, cmd_buffer->device->info,
-       cmd_buffer->state.current_pipeline, WriteImmediateData,
-       anv_state_pool_state_address(&cmd_buffer->device->dynamic_state_pool,
-                                    event->state),
-       VK_EVENT_SET, pc_bits);
+   default:
+      unreachable("Invalid engine class");
+   }
 }
 
 void genX(CmdResetEvent2)(
@@ -5745,7 +5795,9 @@ void genX(CmdResetEvent2)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_event, event, _event);
 
-   if (anv_cmd_buffer_is_video_queue(cmd_buffer)) {
+   switch (cmd_buffer->batch.engine_class) {
+   case INTEL_ENGINE_CLASS_VIDEO:
+   case INTEL_ENGINE_CLASS_COPY:
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_FLUSH_DW), flush) {
          flush.PostSyncOperation = WriteImmediateData;
          flush.Address = anv_state_pool_state_address(
@@ -5753,25 +5805,32 @@ void genX(CmdResetEvent2)(
             event->state);
          flush.ImmediateData = VK_EVENT_RESET;
       }
-      return;
+      break;
+
+   case INTEL_ENGINE_CLASS_RENDER:
+   case INTEL_ENGINE_CLASS_COMPUTE: {
+      cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
+      enum anv_pipe_bits pc_bits = 0;
+      if (stageMask & ANV_PIPELINE_STAGE_PIPELINED_BITS) {
+         pc_bits |= ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
+         pc_bits |= ANV_PIPE_CS_STALL_BIT;
+      }
+
+      genx_batch_emit_pipe_control_write
+         (&cmd_buffer->batch, cmd_buffer->device->info,
+          cmd_buffer->state.current_pipeline, WriteImmediateData,
+          anv_state_pool_state_address(&cmd_buffer->device->dynamic_state_pool,
+                                       event->state),
+          VK_EVENT_RESET,
+          pc_bits);
+      break;
    }
 
-   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
-
-   enum anv_pipe_bits pc_bits = 0;
-   if (stageMask & ANV_PIPELINE_STAGE_PIPELINED_BITS) {
-      pc_bits |= ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
-      pc_bits |= ANV_PIPE_CS_STALL_BIT;
-    }
-
-   genx_batch_emit_pipe_control_write
-      (&cmd_buffer->batch, cmd_buffer->device->info,
-       cmd_buffer->state.current_pipeline, WriteImmediateData,
-       anv_state_pool_state_address(&cmd_buffer->device->dynamic_state_pool,
-                                    event->state),
-       VK_EVENT_RESET,
-       pc_bits);
+   default:
+      unreachable("Invalid engine class");
+   }
 }
 
 void genX(CmdWaitEvents2)(
@@ -5861,7 +5920,7 @@ VkResult genX(CmdSetPerformanceOverrideINTEL)(
       if (pOverrideInfo->enable) {
          /* FLUSH ALL THE THINGS! As requested by the MDAPI team. */
          anv_add_pending_pipe_bits(cmd_buffer,
-                                   ANV_PIPE_FLUSH_BITS |
+                                   ANV_PIPE_BARRIER_FLUSH_BITS |
                                    ANV_PIPE_INVALIDATE_BITS,
                                    "perf counter isolation");
          genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
@@ -6104,7 +6163,7 @@ genX(cmd_buffer_begin_companion_rcs_syncpoint)(
     */
 
    if (anv_cmd_buffer_is_compute_queue(cmd_buffer)) {
-      anv_add_pending_pipe_bits(cmd_buffer, ANV_PIPE_FLUSH_BITS |
+      anv_add_pending_pipe_bits(cmd_buffer, ANV_PIPE_BARRIER_FLUSH_BITS |
                                             ANV_PIPE_INVALIDATE_BITS |
                                             ANV_PIPE_STALL_BITS,
                                 "post main cmd buffer invalidate");
@@ -6176,7 +6235,7 @@ genX(cmd_buffer_end_companion_rcs_syncpoint)(struct anv_cmd_buffer *cmd_buffer,
     *    - unblock the CCS
     */
    anv_add_pending_pipe_bits(cmd_buffer->companion_rcs_cmd_buffer,
-                             ANV_PIPE_FLUSH_BITS |
+                             ANV_PIPE_BARRIER_FLUSH_BITS |
                              ANV_PIPE_INVALIDATE_BITS |
                              ANV_PIPE_STALL_BITS,
                              "post rcs flush");

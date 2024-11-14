@@ -6983,24 +6983,25 @@ visit_load_global(isel_context* ctx, nir_intrinsic_instr* instr)
    info.align_offset = nir_intrinsic_align_offset(instr);
    info.sync = get_memory_sync_info(instr, storage_buffer, 0);
 
-   /* Don't expand global loads when they use MUBUF or SMEM.
-    * Global loads don't have the bounds checking that buffer loads have that
+   /* Global loads don't have the bounds checking that buffer loads have that
     * makes this safe.
     */
    unsigned align = nir_intrinsic_align(instr);
-   bool byte_align_for_smem_mubuf =
-      can_use_byte_align_for_global_load(num_components, component_size, align, false);
+   bool byte_align_for_vmem = can_use_byte_align_for_global_load(
+      num_components, component_size, align, ctx->options->gfx_level > GFX6);
+   bool byte_align_for_smem = can_use_byte_align_for_global_load(
+      num_components, component_size, align, false);
 
    unsigned access = nir_intrinsic_access(instr) | ACCESS_TYPE_LOAD;
    bool glc = access & (ACCESS_VOLATILE | ACCESS_COHERENT);
 
    /* VMEM stores don't update the SMEM cache and it's difficult to prove that
     * it's safe to use SMEM */
-   bool can_use_smem = (access & ACCESS_NON_WRITEABLE) && byte_align_for_smem_mubuf;
+   bool can_use_smem = (access & ACCESS_NON_WRITEABLE) && byte_align_for_smem;
    if (info.dst.type() == RegType::vgpr || (ctx->options->gfx_level < GFX8 && glc) ||
        !can_use_smem) {
       EmitLoadParameters params = global_load_params;
-      params.byte_align_loads = ctx->options->gfx_level > GFX6 || byte_align_for_smem_mubuf;
+      params.byte_align_loads = byte_align_for_vmem;
       info.cache = get_cache_flags(ctx, access);
       emit_load(ctx, bld, info, params);
    } else {

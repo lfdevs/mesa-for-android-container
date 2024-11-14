@@ -3015,7 +3015,7 @@ Converter::visit(nir_tex_instr *insn)
       if (lodIdx != -1 && !target.isMS())
          srcs.push_back(getSrc(&insn->src[lodIdx].src, 0));
       else if (op == OP_TXQ)
-         srcs.push_back(zero); // TXQ always needs an LOD
+         srcs.push_back(loadImm(NULL, 0)); // TXQ always needs an LOD
       else if (op == OP_TXF)
          lz = true;
       if (msIdx != -1)

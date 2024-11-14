@@ -79,6 +79,7 @@ static void radeon_enc_op_preset(struct radeon_encoder *enc)
 
 static void radeon_enc_session_init(struct radeon_encoder *enc)
 {
+   struct si_screen *sscreen = (struct si_screen *)enc->screen;
    uint32_t av1_height = enc->enc_pic.pic_height_in_luma_samples;
 
    switch (u_reduce_video_profile(enc->base.profile)) {
@@ -122,6 +123,12 @@ static void radeon_enc_session_init(struct radeon_encoder *enc)
                             enc->enc_pic.render_width) ||
                            (enc->enc_pic.session_init.aligned_picture_height !=
                             enc->enc_pic.render_height);
+
+         if (sscreen->info.vcn_ip_version == VCN_4_0_2 ||
+             sscreen->info.vcn_ip_version == VCN_4_0_5 ||
+             sscreen->info.vcn_ip_version == VCN_4_0_6)
+            enc->enc_pic.session_init.WA_flags = 1;
+
          break;
       default:
          assert(0);
@@ -143,7 +150,7 @@ static void radeon_enc_session_init(struct radeon_encoder *enc)
    RADEON_ENC_CS(enc->enc_pic.session_init.pre_encode_chroma_enabled);
    RADEON_ENC_CS(enc->enc_pic.session_init.slice_output_enabled);
    RADEON_ENC_CS(enc->enc_pic.session_init.display_remote);
-   RADEON_ENC_CS(0);
+   RADEON_ENC_CS(enc->enc_pic.session_init.WA_flags);
    RADEON_ENC_END();
 }
 

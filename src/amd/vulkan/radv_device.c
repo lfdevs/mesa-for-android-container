@@ -1396,6 +1396,8 @@ radv_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
 
    radv_device_finish_perf_counter(device);
 
+   radv_device_finish_tools(device);
+
    if (device->gfx_init)
       radv_bo_destroy(device, NULL, device->gfx_init);
 

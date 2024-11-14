@@ -238,7 +238,7 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
          surface->u.gfx9.color.dcc_data_format = ac_get_cb_format(sscreen->info.gfx_level, format);
       }
 
-      if (surface->modifier == DRM_FORMAT_MOD_INVALID &&
+      if (modifier == DRM_FORMAT_MOD_INVALID &&
           (ptex->bind & PIPE_BIND_CONST_BW ||
            sscreen->debug_flags & DBG(NO_DCC) ||
            (ptex->bind & PIPE_BIND_SCANOUT && sscreen->debug_flags & DBG(NO_DISPLAY_DCC))))
@@ -1124,18 +1124,23 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
    for (unsigned i = 0; i < ARRAY_SIZE(tex->depth_clear_value); i++)
       tex->depth_clear_value[i] = 1.0;
 
-   /* On GFX8, HTILE uses different tiling depending on the TC_COMPATIBLE_HTILE
-    * setting, so we have to enable it if we enabled it at allocation.
-    *
-    * GFX9 and later use the same tiling for both, so TC-compatible HTILE can be
-    * enabled on demand.
-    */
-   tex->tc_compatible_htile = (sscreen->info.gfx_level == GFX8 &&
-                               tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE) ||
-                              /* Mipmapping always starts TC-compatible. */
-                              (sscreen->info.gfx_level >= GFX8 &&
-                               tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE &&
-                               tex->buffer.b.b.last_level > 0);
+   if (tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE) {
+      /* On GFX8, HTILE uses different tiling depending on the TC_COMPATIBLE_HTILE
+       * setting, so we have to enable it if we enabled it at allocation.
+       *
+       * GFX11 has Z corruption if we don't enable TC-compatible HTILE, see:
+       * https://gitlab.freedesktop.org/mesa/mesa/-/issues/11891
+       *
+       * GFX9 and later use the same tiling for both, so TC-compatible HTILE can be
+       * enabled on demand.
+       */
+      tex->tc_compatible_htile = sscreen->info.gfx_level == GFX8 ||
+                                 sscreen->info.gfx_level >= GFX11 ||
+                                 /* Mipmapping always starts TC-compatible. */
+                                 (sscreen->info.gfx_level >= GFX9 &&
+                                  sscreen->info.gfx_level < GFX11 &&
+                                  tex->buffer.b.b.last_level > 0);
+   }
 
    print_debug_tex(sscreen, tex);
 
@@ -1380,17 +1385,25 @@ si_texture_create_with_modifier(struct pipe_screen *screen,
 
    bool is_flushed_depth = templ->flags & SI_RESOURCE_FLAG_FLUSHED_DEPTH ||
                            templ->flags & SI_RESOURCE_FLAG_FORCE_LINEAR;
-   bool tc_compatible_htile =
-      sscreen->info.has_tc_compatible_htile &&
-      /* There are issues with TC-compatible HTILE on Tonga (and
-       * Iceland is the same design), and documented bug workarounds
-       * don't help. For example, this fails:
-       *   piglit/bin/tex-miplevel-selection 'texture()' 2DShadow -auto
-       */
-      sscreen->info.family != CHIP_TONGA && sscreen->info.family != CHIP_ICELAND &&
-      (templ->flags & PIPE_RESOURCE_FLAG_TEXTURING_MORE_LIKELY) &&
-      !(sscreen->debug_flags & DBG(NO_HYPERZ)) && !is_flushed_depth &&
-      is_zs;
+   /* We enable TC-compatible HTILE for all Z/S on GFX11+ by default because non-TC-compatible
+    * HTILE causes corruption on Navi31.
+    *
+    * See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/11891
+    */
+   bool tc_compatible_htile = is_zs && !is_flushed_depth &&
+                              !(sscreen->debug_flags & DBG(NO_HYPERZ)) &&
+                              sscreen->info.has_tc_compatible_htile;
+   if (sscreen->info.gfx_level < GFX11) {
+      tc_compatible_htile &=
+         /* There are issues with TC-compatible HTILE on Tonga (and
+          * Iceland is the same design), and documented bug workarounds
+          * don't help. For example, this fails:
+          *   piglit/bin/tex-miplevel-selection 'texture()' 2DShadow -auto
+          */
+         sscreen->info.family != CHIP_TONGA && sscreen->info.family != CHIP_ICELAND &&
+         templ->flags & PIPE_RESOURCE_FLAG_TEXTURING_MORE_LIKELY;
+   }
+
    enum radeon_surf_mode tile_mode = si_choose_tiling(sscreen, templ, tc_compatible_htile);
 
    /* This allocates textures with multiple planes like NV12 in 1 buffer. */

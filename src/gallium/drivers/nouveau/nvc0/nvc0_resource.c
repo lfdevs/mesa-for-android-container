@@ -141,11 +141,9 @@ nvc0_resource_from_user_memory(struct pipe_screen *pipe,
                                const struct pipe_resource *templ,
                                void *user_memory)
 {
-   ASSERTED struct nouveau_screen *screen = nouveau_screen(pipe);
-
-   assert(screen->has_svm);
-   assert(templ->target == PIPE_BUFFER);
-
+   struct nouveau_screen *screen = nouveau_screen(pipe);
+   if (!screen->has_svm || templ->target != PIPE_BUFFER)
+      return NULL;
    return nouveau_buffer_create_from_user(pipe, templ, user_memory);
 }
 

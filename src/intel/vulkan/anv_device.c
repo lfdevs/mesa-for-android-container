@@ -165,6 +165,72 @@ compiler_perf_log(UNUSED void *data, UNUSED unsigned *id, const char *fmt, ...)
    va_end(args);
 }
 
+struct anv_descriptor_limits {
+   uint32_t max_ubos;
+   uint32_t max_ssbos;
+   uint32_t max_samplers;
+   uint32_t max_images;
+   uint32_t max_resources;
+};
+
+static void
+get_device_descriptor_limits(const struct anv_physical_device *device,
+                             struct anv_descriptor_limits *limits)
+{
+   memset(limits, 0, sizeof(*limits));
+
+   /* It's a bit hard to exactly map our implementation to the limits
+    * described by Vulkan. The bindless surface handle in the extended message
+    * descriptors is 20 bits on <= Gfx12.0, 26 bits on >= Gfx12.5 and it's an
+    * index into the table of RENDER_SURFACE_STATE structs that starts at
+    * bindless surface base address. On <= Gfx12.0, this means that we can
+    * have at must 1M surface states allocated at any given time. Since most
+    * image views take two descriptors, this means we have a limit of about
+    * 500K image views. On >= Gfx12.5, we do not need 2 surfaces per
+    * descriptors and we have 33M+ descriptors (we have a 2GB limit, due to
+    * overlapping heaps for workarounds, but HW can do 4GB).
+    *
+    * However, on <= Gfx12.0, since we allocate surface states at
+    * vkCreateImageView time, this means our limit is actually something on
+    * the order of 500K image views allocated at any time. The actual limit
+    * describe by Vulkan, on the other hand, is a limit of how many you can
+    * have in a descriptor set. Assuming anyone using 1M descriptors will be
+    * using the same image view twice a bunch of times (or a bunch of null
+    * descriptors), we can safely advertise a larger limit here.
+    *
+    * Here we use the size of the heap in which the descriptors are stored and
+    * divide by the size of the descriptor to get a limit value.
+    */
+   const uint64_t descriptor_heap_size =
+      device->indirect_descriptors ?
+      device->va.indirect_descriptor_pool.size :
+      device->va.bindless_surface_state_pool.size;;
+
+   const uint32_t buffer_descriptor_size =
+      device->indirect_descriptors ?
+      sizeof(struct anv_address_range_descriptor) :
+      ANV_SURFACE_STATE_SIZE;
+   const uint32_t image_descriptor_size =
+      device->indirect_descriptors ?
+      sizeof(struct anv_address_range_descriptor) :
+      ANV_SURFACE_STATE_SIZE;
+   const uint32_t sampler_descriptor_size =
+      device->indirect_descriptors ?
+      sizeof(struct anv_sampled_image_descriptor) :
+      ANV_SAMPLER_STATE_SIZE;
+
+   limits->max_ubos = descriptor_heap_size / buffer_descriptor_size;
+   limits->max_ssbos = descriptor_heap_size / buffer_descriptor_size;
+   limits->max_images = descriptor_heap_size / image_descriptor_size;
+   limits->max_samplers = descriptor_heap_size / sampler_descriptor_size;
+
+   limits->max_resources = UINT32_MAX;
+   limits->max_resources = MIN2(limits->max_resources, limits->max_ubos);
+   limits->max_resources = MIN2(limits->max_resources, limits->max_ssbos);
+   limits->max_resources = MIN2(limits->max_resources, limits->max_images);
+   limits->max_resources = MIN2(limits->max_resources, limits->max_samplers);
+}
+
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
     defined(VK_USE_PLATFORM_XCB_KHR) || \
     defined(VK_USE_PLATFORM_XLIB_KHR) || \
@@ -1111,25 +1177,10 @@ get_properties_1_2(const struct anv_physical_device *pdevice,
    p->shaderRoundingModeRTZFloat64           = true;
    p->shaderSignedZeroInfNanPreserveFloat64  = true;
 
-   /* It's a bit hard to exactly map our implementation to the limits
-    * described by Vulkan.  The bindless surface handle in the extended
-    * message descriptors is 20 bits and it's an index into the table of
-    * RENDER_SURFACE_STATE structs that starts at bindless surface base
-    * address.  This means that we can have at must 1M surface states
-    * allocated at any given time.  Since most image views take two
-    * descriptors, this means we have a limit of about 500K image views.
-    *
-    * However, since we allocate surface states at vkCreateImageView time,
-    * this means our limit is actually something on the order of 500K image
-    * views allocated at any time.  The actual limit describe by Vulkan, on
-    * the other hand, is a limit of how many you can have in a descriptor set.
-    * Assuming anyone using 1M descriptors will be using the same image view
-    * twice a bunch of times (or a bunch of null descriptors), we can safely
-    * advertise a larger limit here.
-    */
-   const unsigned max_bindless_views =
-      anv_physical_device_bindless_heap_size(pdevice, false) / ANV_SURFACE_STATE_SIZE;
-   p->maxUpdateAfterBindDescriptorsInAllPools            = max_bindless_views;
+   struct anv_descriptor_limits desc_limits;
+   get_device_descriptor_limits(pdevice, &desc_limits);
+
+   p->maxUpdateAfterBindDescriptorsInAllPools            = desc_limits.max_resources;
    p->shaderUniformBufferArrayNonUniformIndexingNative   = false;
    p->shaderSampledImageArrayNonUniformIndexingNative    = false;
    p->shaderStorageBufferArrayNonUniformIndexingNative   = true;
@@ -1137,20 +1188,20 @@ get_properties_1_2(const struct anv_physical_device *pdevice,
    p->shaderInputAttachmentArrayNonUniformIndexingNative = false;
    p->robustBufferAccessUpdateAfterBind                  = true;
    p->quadDivergentImplicitLod                           = false;
-   p->maxPerStageDescriptorUpdateAfterBindSamplers       = max_bindless_views;
-   p->maxPerStageDescriptorUpdateAfterBindUniformBuffers = MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS;
-   p->maxPerStageDescriptorUpdateAfterBindStorageBuffers = UINT32_MAX;
-   p->maxPerStageDescriptorUpdateAfterBindSampledImages  = max_bindless_views;
-   p->maxPerStageDescriptorUpdateAfterBindStorageImages  = max_bindless_views;
+   p->maxPerStageDescriptorUpdateAfterBindSamplers       = desc_limits.max_samplers;
+   p->maxPerStageDescriptorUpdateAfterBindUniformBuffers = desc_limits.max_ubos;
+   p->maxPerStageDescriptorUpdateAfterBindStorageBuffers = desc_limits.max_ssbos;
+   p->maxPerStageDescriptorUpdateAfterBindSampledImages  = desc_limits.max_images;
+   p->maxPerStageDescriptorUpdateAfterBindStorageImages  = desc_limits.max_images;
    p->maxPerStageDescriptorUpdateAfterBindInputAttachments = MAX_PER_STAGE_DESCRIPTOR_INPUT_ATTACHMENTS;
-   p->maxPerStageUpdateAfterBindResources                = UINT32_MAX;
-   p->maxDescriptorSetUpdateAfterBindSamplers            = max_bindless_views;
-   p->maxDescriptorSetUpdateAfterBindUniformBuffers      = 6 * MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS;
+   p->maxPerStageUpdateAfterBindResources                = desc_limits.max_resources;
+   p->maxDescriptorSetUpdateAfterBindSamplers            = desc_limits.max_samplers;
+   p->maxDescriptorSetUpdateAfterBindUniformBuffers      = desc_limits.max_ubos;
    p->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
-   p->maxDescriptorSetUpdateAfterBindStorageBuffers      = UINT32_MAX;
+   p->maxDescriptorSetUpdateAfterBindStorageBuffers      = desc_limits.max_ssbos;
    p->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
-   p->maxDescriptorSetUpdateAfterBindSampledImages       = max_bindless_views;
-   p->maxDescriptorSetUpdateAfterBindStorageImages       = max_bindless_views;
+   p->maxDescriptorSetUpdateAfterBindSampledImages       = desc_limits.max_images;
+   p->maxDescriptorSetUpdateAfterBindStorageImages       = desc_limits.max_images;
    p->maxDescriptorSetUpdateAfterBindInputAttachments    = MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS;
 
    /* We support all of the depth resolve modes */
@@ -1264,14 +1315,7 @@ get_properties(const struct anv_physical_device *pdevice,
 
       const struct intel_device_info *devinfo = &pdevice->info;
 
-   const uint32_t max_ssbos = UINT16_MAX;
-   const uint32_t max_textures = UINT16_MAX;
-   const uint32_t max_samplers = UINT16_MAX;
-   const uint32_t max_images = UINT16_MAX;
    const VkDeviceSize max_heap_size = anx_get_physical_device_max_heap_size(pdevice);
-
-   /* Claim a high per-stage limit since we have bindless. */
-   const uint32_t max_per_stage = UINT32_MAX;
 
    const uint32_t max_workgroup_size =
       MIN2(1024, 32 * devinfo->max_cs_workgroup_threads);
@@ -1296,6 +1340,9 @@ get_properties(const struct anv_physical_device *pdevice,
       u_gralloc_destroy(&gralloc);
    }
 #endif /* DETECT_OS_ANDROID */
+
+   struct anv_descriptor_limits desc_limits;
+   get_device_descriptor_limits(pdevice, &desc_limits);
 
    *props = (struct vk_properties) {
       .apiVersion = ANV_API_VERSION,
@@ -1322,20 +1369,20 @@ get_properties(const struct anv_physical_device *pdevice,
       .bufferImageGranularity                   = 1,
       .sparseAddressSpaceSize                   = sparse_addr_space_size,
       .maxBoundDescriptorSets                   = MAX_SETS,
-      .maxPerStageDescriptorSamplers            = max_samplers,
-      .maxPerStageDescriptorUniformBuffers      = MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS,
-      .maxPerStageDescriptorStorageBuffers      = max_ssbos,
-      .maxPerStageDescriptorSampledImages       = max_textures,
-      .maxPerStageDescriptorStorageImages       = max_images,
+      .maxPerStageDescriptorSamplers            = desc_limits.max_samplers,
+      .maxPerStageDescriptorUniformBuffers      = desc_limits.max_ubos,
+      .maxPerStageDescriptorStorageBuffers      = desc_limits.max_ssbos,
+      .maxPerStageDescriptorSampledImages       = desc_limits.max_images,
+      .maxPerStageDescriptorStorageImages       = desc_limits.max_images,
       .maxPerStageDescriptorInputAttachments    = MAX_PER_STAGE_DESCRIPTOR_INPUT_ATTACHMENTS,
-      .maxPerStageResources                     = max_per_stage,
-      .maxDescriptorSetSamplers                 = 6 * max_samplers, /* number of stages * maxPerStageDescriptorSamplers */
-      .maxDescriptorSetUniformBuffers           = 6 * MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS,           /* number of stages * maxPerStageDescriptorUniformBuffers */
+      .maxPerStageResources                     = desc_limits.max_resources,
+      .maxDescriptorSetSamplers                 = desc_limits.max_samplers,
+      .maxDescriptorSetUniformBuffers           = desc_limits.max_ubos,
       .maxDescriptorSetUniformBuffersDynamic    = MAX_DYNAMIC_BUFFERS / 2,
-      .maxDescriptorSetStorageBuffers           = 6 * max_ssbos,    /* number of stages * maxPerStageDescriptorStorageBuffers */
+      .maxDescriptorSetStorageBuffers           = desc_limits.max_ssbos,
       .maxDescriptorSetStorageBuffersDynamic    = MAX_DYNAMIC_BUFFERS / 2,
-      .maxDescriptorSetSampledImages            = 6 * max_textures, /* number of stages * maxPerStageDescriptorSampledImages */
-      .maxDescriptorSetStorageImages            = 6 * max_images,   /* number of stages * maxPerStageDescriptorStorageImages */
+      .maxDescriptorSetSampledImages            = desc_limits.max_images,
+      .maxDescriptorSetStorageImages            = desc_limits.max_images,
       .maxDescriptorSetInputAttachments         = MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS,
       .maxVertexInputAttributes                 = MAX_VES,
       .maxVertexInputBindings                   = MAX_VBS,
@@ -1366,7 +1413,8 @@ get_properties(const struct anv_physical_device *pdevice,
       .maxFragmentInputComponents               = 116, /* 128 components - (PSIZ, CLIP_DIST0, CLIP_DIST1) */
       .maxFragmentOutputAttachments             = 8,
       .maxFragmentDualSrcAttachments            = 1,
-      .maxFragmentCombinedOutputResources       = MAX_RTS + max_ssbos + max_images,
+      .maxFragmentCombinedOutputResources       = MAX_RTS + desc_limits.max_ssbos +
+                                                  desc_limits.max_images,
       .maxComputeSharedMemorySize               = intel_device_info_get_max_slm_size(&pdevice->info),
       .maxComputeWorkGroupCount                 = { 65535, 65535, 65535 },
       .maxComputeWorkGroupInvocations           = max_workgroup_size,

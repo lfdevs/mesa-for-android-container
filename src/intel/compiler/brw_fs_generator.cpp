@@ -771,6 +771,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 
    struct disasm_info *disasm_info = disasm_initialize(p->isa, cfg);
 
+   enum opcode prev_opcode = BRW_OPCODE_ILLEGAL;
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
       if (inst->opcode == SHADER_OPCODE_UNDEF)
          continue;
@@ -1082,9 +1083,16 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 	 break;
 
       case BRW_OPCODE_WHILE:
-	 brw_WHILE(p);
+         /* On LNL and newer, if we don't put a NOP in between two consecutive
+          * WHILE instructions we may end up with misrendering or GPU hangs.
+          * See HSD 22020521218.
+          */
+         if (devinfo->ver >= 20 && unlikely(prev_opcode == BRW_OPCODE_WHILE))
+            brw_NOP(p);
+
+         brw_WHILE(p);
          loop_count++;
-	 break;
+         break;
 
       case SHADER_OPCODE_RCP:
       case SHADER_OPCODE_RSQ:
@@ -1352,6 +1360,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       case SHADER_OPCODE_LOAD_PAYLOAD:
          unreachable("Should be lowered by lower_load_payload()");
       }
+      prev_opcode = inst->opcode;
 
       if (multiple_instructions_emitted)
          continue;

@@ -2339,6 +2339,7 @@ tu_reset_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer,
          vk_descriptor_set_layout_unref(&cmd_buffer->device->vk,
                                         &cmd_buffer->descriptors[i].push_set.layout->vk);
       }
+      vk_free(&cmd_buffer->device->vk.alloc, cmd_buffer->descriptors[i].push_set.mapped_ptr);
       memset(&cmd_buffer->descriptors[i].push_set, 0, sizeof(cmd_buffer->descriptors[i].push_set));
       cmd_buffer->descriptors[i].push_set.base.type = VK_OBJECT_TYPE_DESCRIPTOR_SET;
       cmd_buffer->descriptors[i].max_sets_bound = 0;
@@ -4413,8 +4414,8 @@ tu_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
                      const struct tu_image_view *, pass->attachment_count);
    vk_multialloc_add(&ma, &cmd->state.clear_values, VkClearValue,
                      pRenderPassBegin->clearValueCount);
-   if (!vk_multialloc_alloc(&ma, &cmd->vk.pool->alloc,
-                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT)) {
+   if (ma.size && !vk_multialloc_alloc(&ma, &cmd->vk.pool->alloc,
+                                       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT)) {
       vk_command_buffer_set_error(&cmd->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
       return;
    }

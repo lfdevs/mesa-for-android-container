@@ -7779,13 +7779,12 @@ radv_EndCommandBuffer(VkCommandBuffer commandBuffer)
        */
       cmd_buffer->state.flush_bits |= cmd_buffer->active_query_flush_bits;
 
-      /* Flush noncoherent images on GFX9+ so we can assume they're clean on the start of a
+      /* Flush noncoherent images when needed so we can assume they're clean on the start of a
        * command buffer.
        */
       if (cmd_buffer->state.rb_noncoherent_dirty && !can_skip_buffer_l2_flushes(device))
-         cmd_buffer->state.flush_bits |= radv_src_access_flush(
-            cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, NULL);
+         cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                                               VK_ACCESS_2_TRANSFER_WRITE_BIT, NULL);
 
       /* Since NGG streamout uses GDS, we need to make GDS idle when
        * we leave the IB, otherwise another process might overwrite

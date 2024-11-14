@@ -4251,6 +4251,32 @@ emit_if(struct ir3_context *ctx, nir_if *nif)
    emit_cf_list(ctx, &nif->else_list);
 }
 
+static bool
+has_nontrivial_continue(nir_loop *nloop)
+{
+   struct nir_block *nstart = nir_loop_first_block(nloop);
+
+   /* There's always one incoming edge from outside the loop, and if there
+    * is more than one backedge from inside the loop (so more than 2 total
+    * edges) then one must be a nontrivial continue.
+    */
+   if (nstart->predecessors->entries > 2)
+      return true;
+
+   /* Check whether the one backedge is a nontrivial continue. This can happen
+    * if the loop ends with a break.
+    */
+   set_foreach (nstart->predecessors, entry) {
+      nir_block *pred = (nir_block*)entry->key;
+      if (pred == nir_loop_last_block(nloop) ||
+          pred == nir_cf_node_as_block(nir_cf_node_prev(&nloop->cf_node)))
+         continue;
+      return true;
+   }
+
+   return false;
+}
+
 static void
 emit_loop(struct ir3_context *ctx, nir_loop *nloop)
 {
@@ -4260,12 +4286,11 @@ emit_loop(struct ir3_context *ctx, nir_loop *nloop)
    struct nir_block *nstart = nir_loop_first_block(nloop);
    struct ir3_block *continue_blk = NULL;
 
-   /* There's always one incoming edge from outside the loop, and if there
-    * is more than one backedge from inside the loop (so more than 2 total
-    * edges) then we need to create a continue block after the loop to ensure
-    * that control reconverges at the end of each loop iteration.
+   /* If the loop has a continue statement that isn't at the end, then we need to
+    * create a continue block in order to let control flow reconverge before
+    * entering the next iteration of the loop.
     */
-   if (nstart->predecessors->entries > 2) {
+   if (has_nontrivial_continue(nloop)) {
       continue_blk = create_continue_block(ctx, nstart);
    }
 
