@@ -452,10 +452,8 @@ anv_CopyImageToImageEXT(
                      .y = dst_offset_el.y + y_el,
                   };
                   VkExtent3D extent = {
-                     .width  = MIN2(extent_el.width - src_offset.x,
-                                    tile_width_el),
-                     .height = MIN2(extent_el.height - src_offset.y,
-                                    tile_height_el),
+                     .width  = MIN2(extent_el.width - x_el, tile_width_el),
+                     .height = MIN2(extent_el.height - y_el, tile_height_el),
                      .depth  = 1,
                   };
 

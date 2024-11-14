@@ -1848,7 +1848,7 @@ endif
 dep_spirv_tools = dependency(
   'SPIRV-Tools',
   required : with_clover_spirv or with_clc,
-  version : '>= 2018.0'
+  version : '>= 2022.1'
 )
 if dep_spirv_tools.found()
   pre_args += '-DHAVE_SPIRV_TOOLS'

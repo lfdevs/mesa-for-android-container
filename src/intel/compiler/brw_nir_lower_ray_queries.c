@@ -159,7 +159,7 @@ get_ray_query_shadow_addr(nir_builder *b,
             nir_imul(
                b,
                brw_load_btd_dss_id(b),
-               brw_nir_rt_load_num_simd_lanes_per_dss(b, state->devinfo)),
+               state->globals.num_dss_rt_stacks),
             brw_nir_rt_sync_stack_id(b)),
          BRW_RT_SIZEOF_SHADOW_RAY_QUERY);
 
@@ -232,7 +232,8 @@ lower_ray_query_intrinsic(nir_builder *b,
    nir_def *shadow_stack_addr =
       get_ray_query_shadow_addr(b, deref, state, &ctrl_level_deref);
    nir_def *hw_stack_addr =
-      brw_nir_rt_sync_stack_addr(b, state->globals.base_mem_addr, state->devinfo);
+      brw_nir_rt_sync_stack_addr(b, state->globals.base_mem_addr,
+                                 state->globals.num_dss_rt_stacks);
    nir_def *stack_addr = shadow_stack_addr ? shadow_stack_addr : hw_stack_addr;
 
    switch (intrin->intrinsic) {

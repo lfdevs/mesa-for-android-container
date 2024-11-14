@@ -548,9 +548,27 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
 
    assert(dest.nr < XE2_MAX_GRF);
 
-   if (devinfo->ver >= 10)
-      assert(!(src0.file == IMM &&
-               src2.file == IMM));
+   if (devinfo->ver <= 9) {
+      assert(src0.file != IMM && src2.file != IMM);
+   } else if (devinfo->ver <= 11) {
+      /* On Ice Lake, BFE and CSEL cannot have any immediate sources. */
+      assert((opcode != BRW_OPCODE_BFE && opcode != BRW_OPCODE_CSEL) ||
+             (src0.file != IMM && src2.file != IMM));
+
+      /* On Ice Lake, DP4A and MAD can only have one immediate source. */
+      assert((opcode != BRW_OPCODE_DP4A && opcode != BRW_OPCODE_MAD) ||
+             !(src0.file == IMM && src2.file == IMM));
+   } else {
+      /* Having two immediate sources is allowed, but this should have been
+       * converted to a regular ADD by brw_fs_opt_algebraic.
+       */
+      assert(opcode == BRW_OPCODE_ADD3 ||
+             !(src0.file == IMM && src2.file == IMM));
+   }
+
+   /* BFI2 cannot have any immediate sources on any platform. */
+   assert(opcode != BRW_OPCODE_BFI2 ||
+          (src0.file != IMM && src2.file != IMM));
 
    assert(src0.file == IMM || src0.nr < XE2_MAX_GRF);
    assert(src1.file != IMM && src1.nr < XE2_MAX_GRF);

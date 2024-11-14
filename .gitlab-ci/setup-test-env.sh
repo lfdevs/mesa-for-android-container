@@ -34,24 +34,6 @@ function get_current_minsec {
     printf "%02d:%02d" $((CURR_TIME/60)) $((CURR_TIME%60))
 }
 
-function error {
-    x_off 2>/dev/null
-    RED="\e[0;31m"
-    ENDCOLOR="\e[0m"
-    # we force the following to be not in a section
-    if [ -n "${CURRENT_SECTION:-}" ]; then
-      _section_end $CURRENT_SECTION
-    fi
-
-    CURR_MINSEC=$(get_current_minsec)
-    echo -e "\n${RED}[${CURR_MINSEC}] ERROR: $*${ENDCOLOR}\n"
-    x_restore
-}
-
-function trap_err {
-    error ${CURRENT_SECTION:-'unknown-section'}: ret code: $*
-}
-
 function _build_section_start {
     local section_params=$1
     shift
@@ -68,13 +50,13 @@ function _build_section_start {
 alias build_section_start="x_off; _build_section_start"
 
 function _section_start {
-    _build_section_start "[collapsed=true]" $*
+    build_section_start "[collapsed=true]" $*
     x_restore
 }
 alias section_start="x_off; _section_start"
 
 function _uncollapsed_section_start {
-    _build_section_start "" $*
+    build_section_start "" $*
     x_restore
 }
 alias uncollapsed_section_start="x_off; _uncollapsed_section_start"
@@ -87,7 +69,7 @@ function _build_section_end {
 alias build_section_end="x_off; _build_section_end"
 
 function _section_end {
-    _build_section_end $*
+    build_section_end $*
     x_restore
 }
 alias section_end="x_off; _section_end"
@@ -95,9 +77,10 @@ alias section_end="x_off; _section_end"
 function _section_switch {
     if [ -n "$CURRENT_SECTION" ]
     then
-	_build_section_end $CURRENT_SECTION
+        build_section_end $CURRENT_SECTION
+        x_off
     fi
-    _build_section_start "[collapsed=true]" $*
+    build_section_start "[collapsed=true]" $*
     x_restore
 }
 alias section_switch="x_off; _section_switch"
@@ -105,9 +88,10 @@ alias section_switch="x_off; _section_switch"
 function _uncollapsed_section_switch {
     if [ -n "$CURRENT_SECTION" ]
     then
-	_build_section_end $CURRENT_SECTION
+        build_section_end $CURRENT_SECTION
+        x_off
     fi
-    _build_section_start "" $*
+    build_section_start "" $*
     x_restore
 }
 alias uncollapsed_section_switch="x_off; _uncollapsed_section_switch"
@@ -116,8 +100,6 @@ export -f _x_store_state
 export -f _x_off
 export -f _x_restore
 export -f get_current_minsec
-export -f error
-export -f trap_err
 export -f _build_section_start
 export -f _section_start
 export -f _build_section_end
@@ -135,6 +117,28 @@ if [ -z "${RESULTS_DIR:-}" ]; then
 	fi
 	mkdir -p "${RESULTS_DIR}"
 fi
+
+function error {
+    x_off 2>/dev/null
+    RED="\e[0;31m"
+    ENDCOLOR="\e[0m"
+    # we force the following to be not in a section
+    if [ -n "${CURRENT_SECTION:-}" ]; then
+      section_end $CURRENT_SECTION
+      x_off
+    fi
+
+    CURR_MINSEC=$(get_current_minsec)
+    echo -e "\n${RED}[${CURR_MINSEC}] ERROR: $*${ENDCOLOR}\n"
+    x_restore
+}
+
+function trap_err {
+    error ${CURRENT_SECTION:-'unknown-section'}: ret code: $*
+}
+
+export -f error
+export -f trap_err
 
 set -E
 trap 'trap_err $?' ERR

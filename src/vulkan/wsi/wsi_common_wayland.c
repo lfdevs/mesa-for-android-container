@@ -1149,41 +1149,47 @@ wsi_wl_surface_get_support(VkIcdSurfaceBase *surface,
    return VK_SUCCESS;
 }
 
+/* For true mailbox mode, we need at least 4 images:
+ *  1) One to scan out from
+ *  2) One to have queued for scan-out
+ *  3) One to be currently held by the Wayland compositor
+ *  4) One to render to
+ */
+#define WSI_WL_BUMPED_NUM_IMAGES 4
+
+/* Catch-all. 3 images is a sound default for everything except MAILBOX. */
+#define WSI_WL_DEFAULT_NUM_IMAGES 3
+
 static uint32_t
 wsi_wl_surface_get_min_image_count(struct wsi_wl_display *display,
                                    const VkSurfacePresentModeEXT *present_mode)
 {
-   /* With legacy frame callback mechanism, report 4 images by default, unless
-    * EXT_surface_maintenance1 query is used to ask explicitly for FIFO. */
-   if (present_mode && (present_mode->presentMode == VK_PRESENT_MODE_FIFO_KHR ||
-                        present_mode->presentMode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)) {
-      if (display->fifo_manager) {
-         /* When FIFO protocol is supported, applications will no longer block
-          * in QueuePresentKHR due to frame callback, so returning 4 images
-          * for a FIFO swapchain is problematic due to excessive latency. This
-          * latency can only be limited through means of presentWait which few
-          * applications use.
-          * 2 images are enough for forward progress, but 3 is used here
-          * because 2 could result in waiting for the compositor to remove an
-          * old image from scanout when we'd like to be rendering.
-          */
-         return 3;
-      }
-
-      /* If we receive a FIFO present mode, only 2 images is required for forward progress.
-       * Performance with 2 images will be questionable, but we only allow it for applications
-       * using the new API, so we don't risk breaking any existing apps this way.
-       * Other ICDs expose 2 images here already. */
-       return 2;
-   } else {
-      /* For true mailbox mode, we need at least 4 images:
-       *  1) One to scan out from
-       *  2) One to have queued for scan-out
-       *  3) One to be currently held by the Wayland compositor
-       *  4) One to render to
-       */
-      return 4;
+   if (present_mode) {
+      return present_mode->presentMode == VK_PRESENT_MODE_MAILBOX_KHR ?
+             WSI_WL_BUMPED_NUM_IMAGES : WSI_WL_DEFAULT_NUM_IMAGES;
    }
+
+   /* If explicit present_mode is not being queried, we need to provide a safe "catch-all"
+    * which can work for any presentation mode. Implementations are allowed to bump the minImageCount
+    * on swapchain creation, so this limit should be the lowest value which can guarantee forward progress. */
+
+   /* When FIFO protocol is not supported, we always returned 4 here,
+    * despite it going against the spirit of minImageCount in the specification.
+    * To avoid any unforeseen breakage, just keep using the same values we always have.
+    * In this path, we also never consider bumping the image count in minImageCount in swapchain creation time. */
+
+   /* When FIFO protocol is supported, applications will no longer block
+    * in QueuePresentKHR due to frame callback, so returning 4 images
+    * for a FIFO swapchain is deeply problematic due to excessive latency.
+    * This latency can only be limited through means of presentWait which few applications use, and we cannot
+    * mandate that shipping applications are rewritten to avoid a regression.
+    * 2 images are enough for forward progress in FIFO, but 3 is used here as a pragmatic decision
+    * because 2 could result in waiting for the compositor to remove an
+    * old image from scanout when we'd like to be rendering,
+    * and we don't want naively written applications to head into poor performance territory by default.
+    * X11 backend has very similar logic and rationale here.
+    */
+   return display->fifo_manager ? WSI_WL_DEFAULT_NUM_IMAGES : WSI_WL_BUMPED_NUM_IMAGES;
 }
 
 static VkResult
@@ -2760,9 +2766,10 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       old_chain->retired = true;
    }
 
-   int num_images = pCreateInfo->minImageCount;
-
-   size_t size = sizeof(*chain) + num_images * sizeof(chain->images[0]);
+   /* We need to allocate the chain handle early, since display initialization code relies on it.
+    * We do not know the actual image count until we have initialized the display handle,
+    * so allocate conservatively in case we need to bump the image count. */
+   size_t size = sizeof(*chain) + MAX2(WSI_WL_BUMPED_NUM_IMAGES, pCreateInfo->minImageCount) * sizeof(chain->images[0]);
    chain = vk_zalloc(pAllocator, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -2801,6 +2808,31 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    result = wsi_wl_surface_init(wsi_wl_surface, wsi_device, pAllocator);
    if (result != VK_SUCCESS)
       goto fail;
+
+   uint32_t num_images = pCreateInfo->minImageCount;
+
+   /* If app provides a present mode list from EXT_swapchain_maintenance1,
+    * we don't know which present mode will be used.
+    * Application is assumed to be well-behaved and be spec-compliant.
+    * It needs to query all per-present mode minImageCounts individually and use the max() of those modes,
+    * so there should never be any need to bump image counts. */
+   bool uses_present_mode_group = vk_find_struct_const(
+         pCreateInfo->pNext, SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT) != NULL;
+
+   /* If FIFO manager is not used, minImageCount is already the bumped value for reasons outlined in
+    * wsi_wl_surface_get_min_image_count(), so skip any attempt to bump the counts. */
+   if (wsi_wl_surface->display->fifo_manager && !uses_present_mode_group) {
+      /* With proper FIFO, we return a lower minImageCount to make FIFO viable without requiring the use of KHR_present_wait.
+       * The image count for MAILBOX should be bumped for performance reasons in this case.
+       * This matches strategy for X11. */
+      const VkSurfacePresentModeEXT mode =
+            { VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_EXT, NULL, pCreateInfo->presentMode };
+
+      uint32_t min_images = wsi_wl_surface_get_min_image_count(wsi_wl_surface->display, &mode);
+      bool requires_image_count_bump = min_images == WSI_WL_BUMPED_NUM_IMAGES;
+      if (requires_image_count_bump)
+         num_images = MAX2(min_images, num_images);
+   }
 
    VkPresentModeKHR present_mode = wsi_swapchain_get_present_mode(wsi_device, pCreateInfo);
    if (present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {

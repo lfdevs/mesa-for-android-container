@@ -75,15 +75,6 @@ brw_load_btd_dss_id(nir_builder *b)
 }
 
 static inline nir_def *
-brw_nir_rt_load_num_simd_lanes_per_dss(nir_builder *b,
-                                       const struct intel_device_info *devinfo)
-{
-   return nir_imm_int(b, devinfo->num_thread_per_eu *
-                         devinfo->max_eus_per_subslice *
-                         16 /* The RT computation is based off SIMD16 */);
-}
-
-static inline nir_def *
 brw_load_eu_thread_simd(nir_builder *b)
 {
    return nir_load_topology_id_intel(b, .base = BRW_TOPOLOGY_ID_EU_THREAD_SIMD);
@@ -187,23 +178,27 @@ brw_nir_rt_sw_hotzone_addr(nir_builder *b,
 static inline nir_def *
 brw_nir_rt_sync_stack_addr(nir_builder *b,
                            nir_def *base_mem_addr,
-                           const struct intel_device_info *devinfo)
+                           nir_def *num_dss_rt_stacks)
 {
-   /* For Ray queries (Synchronous Ray Tracing), the formula is similar but
-    * goes down from rtMemBasePtr :
+   /* Bspec 47547 (Xe) and 56936 (Xe2+) say:
+    *    For Ray queries (Synchronous Ray Tracing), the formula is similar but
+    *    goes down from rtMemBasePtr :
     *
-    *    syncBase  = RTDispatchGlobals.rtMemBasePtr
-    *              - (DSSID * NUM_SIMD_LANES_PER_DSS + SyncStackID + 1)
-    *              * syncStackSize
+    *       syncBase  = RTDispatchGlobals.rtMemBasePtr
+    *                 - (DSSID * NUM_SIMD_LANES_PER_DSS + SyncStackID + 1)
+    *                 * syncStackSize
     *
-    * We assume that we can calculate a 32-bit offset first and then add it
-    * to the 64-bit base address at the end.
+    *    We assume that we can calculate a 32-bit offset first and then add it
+    *    to the 64-bit base address at the end.
+    *
+    * However, on HSD 14020275151 it's clarified that the HW uses
+    * NUM_SYNC_STACKID_PER_DSS instead.
     */
    nir_def *offset32 =
       nir_imul(b,
                nir_iadd(b,
                         nir_imul(b, brw_load_btd_dss_id(b),
-                                    brw_nir_rt_load_num_simd_lanes_per_dss(b, devinfo)),
+                                    num_dss_rt_stacks),
                         nir_iadd_imm(b, brw_nir_rt_sync_stack_id(b), 1)),
                nir_imm_int(b, BRW_RT_SIZEOF_RAY_QUERY));
    return nir_isub(b, base_mem_addr, nir_u2u64(b, offset32));

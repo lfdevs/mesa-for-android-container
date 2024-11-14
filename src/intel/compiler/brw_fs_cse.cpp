@@ -475,6 +475,19 @@ brw_fs_opt_cse_defs(fs_visitor &s)
                assert(ops_must_match);
             }
 
+            /* Some later instruction could depend on the flags written by
+             * this instruction. It can only be removed if the previous
+             * instruction that write the flags is identical.
+             */
+            if (inst->flags_written(devinfo)) {
+               bool ignored;
+
+               if (last_flag_write == NULL ||
+                   !instructions_match(last_flag_write, inst, &ignored)) {
+                  continue;
+               }
+            }
+
             progress = true;
             need_remaps = true;
             remap_table[inst->dst.nr] =

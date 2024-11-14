@@ -71,6 +71,10 @@ panvk_per_arch(cmd_meta_compute_end)(
 
    cmdbuf->state.compute.shader = save_ctx->cs.shader;
    cmdbuf->state.compute.cs.desc = save_ctx->cs.desc;
+
+#if PAN_ARCH >= 9
+   cmdbuf->state.compute.cs.desc.res_table = 0;
+#endif
 }
 
 void
@@ -136,6 +140,9 @@ panvk_per_arch(cmd_meta_gfx_end)(
    cmdbuf->state.gfx.vs.attribs = 0;
    cmdbuf->state.gfx.vs.attrib_bufs = 0;
    cmdbuf->state.gfx.fs.rsd = 0;
+#else
+   cmdbuf->state.gfx.fs.desc.res_table = 0;
+   cmdbuf->state.gfx.vs.desc.res_table = 0;
 #endif
 
    cmdbuf->vk.dynamic_graphics_state = save_ctx->dyn_state.all;

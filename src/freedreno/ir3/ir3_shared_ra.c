@@ -825,6 +825,24 @@ assign_src(struct ra_ctx *ctx, struct ir3_register *src)
    interval->src = false;
 }
 
+static bool
+is_nontrivial_collect(struct ir3_instruction *collect)
+{
+   if (collect->opc != OPC_META_COLLECT) {
+      return false;
+   }
+
+   struct ir3_register *dst = collect->dsts[0];
+
+   foreach_src_n (src, src_n, collect) {
+      if (src->num != dst->num + src_n) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
 static void
 handle_dst(struct ra_ctx *ctx, struct ir3_instruction *instr,
            struct ir3_register *dst)
@@ -861,10 +879,26 @@ handle_dst(struct ra_ctx *ctx, struct ir3_instruction *instr,
       free_space(ctx, physreg, size);
    }
 
+   dst->num = ra_physreg_to_num(physreg, dst->flags);
+
+   /* Non-trivial collects (i.e., ones that will introduce moves because the
+    * sources don't line-up with the destination) may cause source intervals to
+    * get implicitly moved when they are inserted as children of the destination
+    * interval. Since we don't support moving intervals in shared RA, this may
+    * cause illegal register allocations. Prevent this by creating a new
+    * top-level interval for the destination so that the source intervals will
+    * be left alone.
+    */
+   if (is_nontrivial_collect(instr)) {
+      dst->merge_set = NULL;
+      dst->interval_start = ctx->live->interval_offset;
+      dst->interval_end = dst->interval_start + reg_size(dst);
+      ctx->live->interval_offset = dst->interval_end;
+   }
+
    ra_update_affinity(reg_file_size(dst), dst, physreg);
    interval->physreg_start = physreg;
    interval->physreg_end = physreg + reg_size(dst);
-   dst->num = ra_physreg_to_num(physreg, dst->flags);
    ir3_reg_interval_insert(&ctx->reg_ctx, &interval->interval);
    d("insert dst %u physreg %u", dst->name, physreg);
 

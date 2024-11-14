@@ -7,7 +7,8 @@
 #define H_ETNA_ML
 
 #include "pipe/p_state.h"
-#include "util/u_inlines.h"
+#include "util/u_dynarray.h"
+#include "etnaviv_context.h"
 
 #define MAX_CONFIG_BOS 4
 
@@ -93,6 +94,8 @@ struct etna_operation {
 unsigned etna_ml_allocate_tensor(struct etna_ml_subgraph *subgraph);
 struct pipe_resource *etna_ml_get_tensor(struct etna_ml_subgraph *subgraph, unsigned idx);
 unsigned etna_ml_get_offset(struct etna_ml_subgraph *subgraph, unsigned idx);
+
+struct etna_core_npu_info *etna_ml_get_core_info(struct etna_context *context);
 
 struct pipe_ml_subgraph *
 etna_ml_subgraph_create(struct pipe_context *context,

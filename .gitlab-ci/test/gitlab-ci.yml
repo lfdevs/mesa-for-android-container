@@ -370,7 +370,7 @@ yaml-toml-shell-test:
   after_script:
     # Keep the results path the same as baremetal and LAVA
     - mkdir -p "${JOB_FOLDER}"/results
-    - mv "${JOB_FOLDER}"/results results/
+    - mv "${JOB_FOLDER}"/results ./
     - !reference [default, after_script]
 
   artifacts:

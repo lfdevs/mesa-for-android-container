@@ -61,6 +61,13 @@ etna_ml_create_tensor(struct etna_ml_subgraph *subgraph, unsigned idx, unsigned 
    ML_DBG("created resource %p for tensor %d with size %d\n", res, idx, size);
 }
 
+struct etna_core_npu_info *
+etna_ml_get_core_info(struct etna_context *context) {
+   struct etna_screen *screen = context->screen;
+   struct etna_core_info *info = etna_gpu_get_core_info(screen->npu);
+   return &info->npu;
+}
+
 static bool
 needs_reshuffle(const struct pipe_ml_operation *poperation)
 {
@@ -237,7 +244,7 @@ etna_ml_subgraph_create(struct pipe_context *pcontext,
                         unsigned count)
 {
    struct etna_context *ctx = etna_context(pcontext);
-   unsigned nn_core_count = ctx->screen->info->npu.nn_core_count;
+   unsigned nn_core_count = etna_ml_get_core_info(ctx)->nn_core_count;
    struct etna_ml_subgraph *subgraph;
    struct list_head operations;
    unsigned tensor_count;
@@ -358,7 +365,7 @@ void
 etna_ml_subgraph_invoke(struct pipe_context *pctx, struct pipe_ml_subgraph *psubgraph, struct pipe_tensor *input)
 {
    struct etna_context *ctx = etna_context(pctx);
-   unsigned tp_core_count = ctx->screen->info->npu.tp_core_count;
+   unsigned tp_core_count = etna_ml_get_core_info(ctx)->tp_core_count;
    struct etna_ml_subgraph *subgraph = (struct etna_ml_subgraph *)(psubgraph);
    struct etna_cmd_stream *stream = ctx->stream;
    static bool is_initialized = false;

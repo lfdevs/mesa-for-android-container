@@ -25,11 +25,12 @@
 #define _UTIL_PERFETTO_H
 
 #include "util/u_atomic.h"
+#include "util/detect_os.h"
 
 // On Unix, pass a clockid_t to designate which clock was used to gather the timestamp
 // On Windows, this paramter is ignored, and it's expected that `timestamp` comes from QueryPerformanceCounter
-#ifndef _WIN32
-#include <sys/types.h>
+#if DETECT_OS_POSIX
+#include <time.h>
 typedef clockid_t perfetto_clock_id;
 #else
 typedef int32_t perfetto_clock_id;

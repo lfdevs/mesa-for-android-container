@@ -3035,7 +3035,7 @@ struct anv_descriptor_pool {
     */
    bool host_only;
 
-   char host_mem[0];
+   alignas(8) char host_mem[0];
 };
 
 bool

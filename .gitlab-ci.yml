@@ -54,7 +54,7 @@ workflow:
     # pipeline for direct pushes that bypassed the CI
     - if: &is-direct-push $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $GITLAB_USER_LOGIN != "marge-bot"
       variables:
-        JOB_PRIORITY: 40
+        JOB_PRIORITY: 70
 
 
 variables:
