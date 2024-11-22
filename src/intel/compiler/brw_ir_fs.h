@@ -445,8 +445,12 @@ has_subdword_integer_region_restriction(const intel_device_info *devinfo,
             brw_type_size_bytes(inst->dst.type)) < 4) {
       for (unsigned i = 0; i < num_srcs; i++) {
          if (brw_type_is_int(srcs[i].type) &&
-             brw_type_size_bytes(srcs[i].type) < 4 &&
-             byte_stride(srcs[i]) >= 4)
+             ((brw_type_size_bytes(srcs[i].type) < 4 &&
+               byte_stride(srcs[i]) >= 4) ||
+              (MAX2(byte_stride(inst->dst),
+                   brw_type_size_bytes(inst->dst.type)) == 1 &&
+               brw_type_size_bytes(srcs[i].type) == 1 &&
+               byte_stride(srcs[i]) >= 2)))
             return true;
       }
    }

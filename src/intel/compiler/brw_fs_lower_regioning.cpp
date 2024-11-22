@@ -58,9 +58,8 @@ namespace {
          return MAX2(brw_type_size_bytes(inst->dst.type),
                      byte_stride(inst->dst));
 
-      } else if (has_subdword_integer_region_restriction(devinfo, inst) &&
-                 brw_type_size_bytes(inst->src[i].type) < 4 &&
-                 byte_stride(inst->src[i]) >= 4) {
+      } else if (has_subdword_integer_region_restriction(devinfo, inst,
+                                                         &inst->src[i], 1)) {
          /* Use a stride of 32bits if possible, since that will guarantee that
           * the copy emitted to lower this region won't be affected by the
           * sub-dword integer region restrictions.  This may not be possible
@@ -85,9 +84,8 @@ namespace {
       if (has_dst_aligned_region_restriction(devinfo, inst)) {
          return reg_offset(inst->dst) % (reg_unit(devinfo) * REG_SIZE);
 
-      } else if (has_subdword_integer_region_restriction(devinfo, inst) &&
-                 brw_type_size_bytes(inst->src[i].type) < 4 &&
-                 byte_stride(inst->src[i]) >= 4) {
+      } else if (has_subdword_integer_region_restriction(devinfo, inst,
+                                                         &inst->src[i], 1)) {
          const unsigned dst_byte_stride =
             MAX2(byte_stride(inst->dst), brw_type_size_bytes(inst->dst.type));
          const unsigned src_byte_stride = required_src_byte_stride(devinfo, inst, i);
@@ -647,9 +645,16 @@ namespace {
                      subscript(inst->dst, raw_type, j));
       }
 
-      for (unsigned j = 0; j < n; j++)
-         ibld.at(block, inst->next).MOV(subscript(inst->dst, raw_type, j),
-                                        subscript(tmp, raw_type, j));
+      for (unsigned j = 0; j < n; j++) {
+         fs_inst *jnst = ibld.at(block, inst->next).MOV(subscript(inst->dst, raw_type, j),
+                                                        subscript(tmp, raw_type, j));
+         if (has_subdword_integer_region_restriction(v->devinfo, jnst)) {
+            /* The copy isn't guaranteed to comply with all subdword integer
+             * regioning restrictions in some cases.  Lower it recursively.
+             */
+            lower_instruction(v, block, jnst);
+         }
+      }
 
       /* If the destination was an accumulator, after lowering it will be a
        * GRF. Clear writes_accumulator for the instruction.

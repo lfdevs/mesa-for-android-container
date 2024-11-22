@@ -1291,7 +1291,8 @@ impl Kernel {
                 && grid[0] <= hw_max_grid[0]
                 && grid[1] <= hw_max_grid[1]
                 && grid[2] <= hw_max_grid[2]
-                && block == kernel_info.work_group_size_hint
+                && (kernel_info.work_group_size_hint == [0; 3]
+                    || block == kernel_info.work_group_size_hint)
             {
                 NirKernelVariant::Optimized
             } else {

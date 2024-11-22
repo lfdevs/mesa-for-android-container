@@ -1478,6 +1478,24 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
 {
    VkResult result;
 
+   /* It's not safe to access submit->signals[] elements after submit because
+    * the elements might signal through the kernel before this function
+    * returns and another thread could wake up and destroy any of those
+    * elements.
+    *
+    * Build a list of anv_bo_sync elements here and put them in the signal
+    * state after without looking at any other element.
+    */
+   STACK_ARRAY(struct anv_bo_sync *, bo_signals, submit->signal_count);
+   uint32_t bo_signal_count = 0;
+   for (uint32_t i = 0; i < submit->signal_count; i++) {
+      if (!vk_sync_is_anv_bo_sync(submit->signals[i].sync))
+         continue;
+
+      bo_signals[bo_signal_count++] =
+         container_of(submit->signals[i].sync, struct anv_bo_sync, sync);
+   }
+
    if (submit->command_buffer_count == 0) {
       result = anv_queue_exec_locked(queue, submit->wait_count, submit->waits,
                                      0 /* cmd_buffer_count */,
@@ -1487,7 +1505,7 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
                                      0 /* perf_query_pass */,
                                      utrace_submit);
       if (result != VK_SUCCESS)
-         return result;
+         goto fail;
    } else {
       /* Everything's easier if we don't have to bother with container_of() */
       STATIC_ASSERT(offsetof(struct anv_cmd_buffer, vk) == 0);
@@ -1515,7 +1533,7 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
             /* The next buffer cannot be chained, or we have reached the
              * last buffer, submit what have been chained so far.
              */
-            VkResult result =
+            result =
                anv_queue_exec_locked(queue,
                                      start == 0 ? submit->wait_count : 0,
                                      start == 0 ? submit->waits : NULL,
@@ -1526,7 +1544,7 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
                                      submit->perf_pass_index,
                                      next == end ? utrace_submit : NULL);
             if (result != VK_SUCCESS)
-               return result;
+               goto fail;
             if (next < end) {
                start = next;
                perf_query_pool = cmd_buffers[start]->perf_query_pool;
@@ -1534,12 +1552,8 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
          }
       }
    }
-   for (uint32_t i = 0; i < submit->signal_count; i++) {
-      if (!vk_sync_is_anv_bo_sync(submit->signals[i].sync))
-         continue;
-
-      struct anv_bo_sync *bo_sync =
-         container_of(submit->signals[i].sync, struct anv_bo_sync, sync);
+   for (uint32_t i = 0; i < bo_signal_count; i++) {
+      struct anv_bo_sync *bo_sync = bo_signals[i];
 
       /* Once the execbuf has returned, we need to set the fence state to
        * SUBMITTED.  We can't do this before calling execbuf because
@@ -1557,7 +1571,9 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
 
    pthread_cond_broadcast(&queue->device->queue_submit);
 
-   return VK_SUCCESS;
+ fail:
+   STACK_ARRAY_FINISH(bo_signals);
+   return result;
 }
 
 static inline void

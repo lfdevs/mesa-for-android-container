@@ -346,7 +346,7 @@ static intptr_t readlink(const char *path, char *buf, size_t bufsiz)
 {
    return -1;
 }
-extern char *
+static char *
 drmGetFormatModifierName(uint64_t modifier)
 {
    return NULL;

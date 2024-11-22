@@ -32,8 +32,6 @@ struct mesa_cache_db {
    struct hash_table_u64 *index_db;
    struct mesa_cache_db_file cache;
    struct mesa_cache_db_file index;
-   void *index_entries;
-   size_t index_entries_size;
    uint64_t max_cache_size;
    simple_mtx_t flock_mtx;
    void *mem_ctx;

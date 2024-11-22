@@ -478,6 +478,7 @@ storage_image_format_supports_atomic(const struct intel_device_info *devinfo,
 static bool
 formats_ccs_e_compatible(const struct intel_device_info *devinfo,
                          VkImageCreateFlags create_flags,
+                         VkImageAspectFlagBits aspect,
                          enum isl_format format, VkImageTiling vk_tiling,
                          const VkImageFormatListCreateInfo *fmt_list)
 {
@@ -500,7 +501,7 @@ formats_ccs_e_compatible(const struct intel_device_info *devinfo,
 
       enum isl_format view_format =
          anv_get_isl_format(devinfo, fmt_list->pViewFormats[i],
-                            VK_IMAGE_ASPECT_COLOR_BIT, vk_tiling);
+                            aspect, vk_tiling);
 
       if (!isl_formats_are_ccs_e_compatible(devinfo, format, view_format))
          return false;
@@ -534,8 +535,8 @@ anv_formats_ccs_e_compatible(const struct intel_device_info *devinfo,
       enum isl_format format =
          anv_get_isl_format(devinfo, vk_format, aspect, vk_tiling);
 
-      if (!formats_ccs_e_compatible(devinfo, create_flags, format, vk_tiling,
-                                    fmt_list))
+      if (!formats_ccs_e_compatible(devinfo, create_flags, aspect,
+                                    format, vk_tiling, fmt_list))
          return false;
 
       if (vk_usage & VK_IMAGE_USAGE_STORAGE_BIT) {

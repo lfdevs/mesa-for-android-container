@@ -1001,11 +1001,11 @@ update_cache_sha1_cpu(struct mesa_sha1 *ctx)
    const struct util_cpu_caps_t *cpu_caps = util_get_cpu_caps();
    /*
     * Don't need the cpu cache affinity stuff. The rest
-    * is contained in first 6 dwords.
+    * is contained in first 5 dwords.
     */
    STATIC_ASSERT(offsetof(struct util_cpu_caps_t, num_L3_caches)
-                 == 6 * sizeof(uint32_t));
-   _mesa_sha1_update(ctx, cpu_caps, 6 * sizeof(uint32_t));
+                 == 5 * sizeof(uint32_t));
+   _mesa_sha1_update(ctx, cpu_caps, 5 * sizeof(uint32_t));
 }
 
 

@@ -12835,6 +12835,7 @@ radv_barrier(struct radv_cmd_buffer *cmd_buffer, uint32_t dep_count, const VkDep
    enum radv_cmd_flush_bits dst_flush_bits = 0;
    VkPipelineStageFlags2 src_stage_mask = 0;
    VkPipelineStageFlags2 dst_stage_mask = 0;
+   bool has_image_transitions = false;
 
    if (cmd_buffer->state.render.active)
       radv_mark_noncoherent_rb(cmd_buffer);
@@ -12869,20 +12870,14 @@ radv_barrier(struct radv_cmd_buffer *cmd_buffer, uint32_t dep_count, const VkDep
          dst_stage_mask |= barrier->dstStageMask;
          dst_flush_bits |= radv_dst_access_flush(cmd_buffer, barrier->dstStageMask, barrier->dstAccessMask, image);
       }
+
+      has_image_transitions |= dep_info->imageMemoryBarrierCount > 0;
    }
 
-   /* The Vulkan spec 1.1.98 says:
-    *
-    * "An execution dependency with only
-    *  VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT in the destination stage mask
-    *  will only prevent that stage from executing in subsequently
-    *  submitted commands. As this stage does not perform any actual
-    *  execution, this is not observable - in effect, it does not delay
-    *  processing of subsequent commands. Similarly an execution dependency
-    *  with only VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT in the source stage mask
-    *  will effectively not wait for any prior commands to complete."
+   /* Only optimize BOTTOM_OF_PIPE as dst when there is no image layout transitions because it might
+    * need to synchronize.
     */
-   if (dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
+   if (has_image_transitions || dst_stage_mask != VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
       radv_stage_flush(cmd_buffer, src_stage_mask);
    cmd_buffer->state.flush_bits |= src_flush_bits;
 

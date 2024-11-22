@@ -923,7 +923,7 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, enum glx_dr
 
       if(indirect) /* Load extensions required only for indirect glx */
          glxSendClientInfo(priv, i);
-      else if (priv->driver != GLX_DRIVER_WINDOWS)
+      else if (psc && priv->driver != GLX_DRIVER_WINDOWS)
          bind_extensions(psc, psc->driverName);
    }
    if (zink && !screen_count)

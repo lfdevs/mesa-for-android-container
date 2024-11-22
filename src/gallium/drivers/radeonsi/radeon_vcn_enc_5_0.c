@@ -341,7 +341,7 @@ static void radeon_enc_ctx_tier2(struct radeon_encoder *enc)
          continue;
       }
       struct rvid_buffer *pre = enc->enc_pic.dpb_bufs[i]->pre;
-      struct rvid_buffer *pre_fcb = enc->enc_pic.dpb_bufs[i]->fcb;
+      struct rvid_buffer *pre_fcb = enc->enc_pic.dpb_bufs[i]->pre_fcb;
       RADEON_ENC_READWRITE(pre->res->buf, pre->res->domains, 0);
       RADEON_ENC_CS(enc->enc_pic.ctx_buf.rec_luma_pitch);
       RADEON_ENC_READWRITE(pre->res->buf, pre->res->domains, enc->enc_pic.dpb_luma_size);

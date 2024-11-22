@@ -3904,13 +3904,7 @@ anv_device_init_rt_shaders(struct anv_device *device)
       nir_shader *trampoline_nir =
          brw_nir_create_raygen_trampoline(device->physical->compiler, tmp_ctx);
 
-      trampoline_nir->info.subgroup_size = SUBGROUP_SIZE_REQUIRE_16;
-
-      uint32_t dummy_params[4] = { 0, };
       struct brw_cs_prog_data trampoline_prog_data = {
-         .base.nr_params = 4,
-         .base.param = dummy_params,
-         .uses_inline_data = true,
          .uses_btd_stack_ids = true,
       };
       struct brw_compile_cs_params params = {

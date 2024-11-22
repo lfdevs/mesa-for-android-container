@@ -4845,6 +4845,10 @@ bi_optimize_nir(nir_shader *nir, unsigned gpu_id, bool is_blend)
       });
    NIR_PASS(progress, nir, nir_lower_pack);
 
+   /* nir_lower_pack can generate split operations, execute algebraic again to
+    * handle them */
+   NIR_PASS(progress, nir, nir_opt_algebraic);
+
    /* TODO: Why is 64-bit getting rematerialized?
     * KHR-GLES31.core.shader_image_load_store.basic-allTargets-atomicFS */
    NIR_PASS(progress, nir, nir_lower_int64);

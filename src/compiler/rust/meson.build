@@ -11,21 +11,6 @@ _compiler_rs_sources = [
   'smallvec.rs',
 ]
 
-bindgen_version = find_program('bindgen').version()
-
-if bindgen_version == 'unknown'
-  error('Failed to detect bindgen version. If you are using bindgen 0.69.0, ' +
-        'please either update to 0.69.1 or downgrade to 0.68.1. You can ' +
-        'install the latest version for your user with ' +
-        '`cargo install bindgen-cli`.')
-endif
-
-if bindgen_version.version_compare('< 0.65')
-  error('NAK requires bindgen 0.65 or newer. If your distribution does not ' +
-        'ship a recent enough version, you can install the latest version ' +
-        'for your user with `cargo install bindgen-cli`.')
-endif
-
 _compiler_binding_types = [
   'exec_list',
   'exec_node',

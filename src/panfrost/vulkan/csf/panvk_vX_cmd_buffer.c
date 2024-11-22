@@ -156,7 +156,7 @@ finish_cs(struct panvk_cmd_buffer *cmdbuf, uint32_t subqueue)
             /* Overwrite the sync error with the first error we encountered. */
             cs_store32(b, error, debug_sync_addr,
                        offsetof(struct panvk_cs_sync32, error));
-            cs_wait_slots(b, SB_ID(LS), false);
+            cs_wait_slot(b, SB_ID(LS), false);
          }
       }
    }

@@ -417,7 +417,6 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
     * should empty/destroy rsc->batches hashset)
     */
    fd_bc_invalidate_resource(rsc, false);
-   rebind_resource(rsc);
 
    fd_screen_lock(ctx->screen);
 
@@ -458,6 +457,8 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
    SWAP(rsc->track, shadow->track);
 
    fd_screen_unlock(ctx->screen);
+
+   rebind_resource(rsc);
 
    struct pipe_blit_info blit = {};
    blit.dst.resource = prsc;
@@ -740,8 +741,8 @@ invalidate_resource(struct fd_resource *rsc, unsigned usage) assert_dt
    unsigned op = translate_usage(usage);
 
    if (needs_flush || resource_busy(rsc, op)) {
-      rebind_resource(rsc);
       realloc_bo(rsc, fd_bo_size(rsc->bo));
+      rebind_resource(rsc);
    } else {
       util_range_set_empty(&rsc->valid_buffer_range);
    }
