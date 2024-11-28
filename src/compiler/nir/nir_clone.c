@@ -318,7 +318,8 @@ clone_load_const(clone_state *state, const nir_load_const_instr *lc)
 
    memcpy(&nlc->value, &lc->value, sizeof(*nlc->value) * lc->def.num_components);
 
-   add_remap(state, &nlc->def, &lc->def);
+   if (likely(state->remap_table))
+      add_remap(state, &nlc->def, &lc->def);
 
    return nlc;
 }
@@ -330,7 +331,8 @@ clone_ssa_undef(clone_state *state, const nir_undef_instr *sa)
       nir_undef_instr_create(state->ns, sa->def.num_components,
                              sa->def.bit_size);
 
-   add_remap(state, &nsa->def, &sa->def);
+   if (likely(state->remap_table))
+      add_remap(state, &nsa->def, &sa->def);
 
    return nsa;
 }

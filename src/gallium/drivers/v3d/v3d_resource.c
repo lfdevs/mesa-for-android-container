@@ -915,6 +915,10 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
         case DRM_FORMAT_MOD_INVALID:
                 rsc->tiled = false;
                 break;
+        case DRM_FORMAT_MOD_BROADCOM_SAND128:
+                rsc->tiled = false;
+                rsc->sand_col128_stride = whandle->stride;
+                break;
         default:
                 switch(fourcc_mod_broadcom_mod(whandle->modifier)) {
                 case DRM_FORMAT_MOD_BROADCOM_SAND128:

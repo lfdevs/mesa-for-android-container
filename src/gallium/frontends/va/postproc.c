@@ -347,7 +347,10 @@ static VAStatus vlVaPostProcBlit(vlVaDriver *drv, vlVaContext *context,
    struct u_rect dst_rect;
    bool scale = false;
    bool grab = false;
-   unsigned i;
+   unsigned i, src_num_planes, dst_num_planes;
+
+   src_num_planes = util_format_get_num_planes(src->buffer_format);
+   dst_num_planes = util_format_get_num_planes(dst->buffer_format);
 
    if ((src->buffer_format == PIPE_FORMAT_B8G8R8X8_UNORM ||
         src->buffer_format == PIPE_FORMAT_B8G8R8A8_UNORM ||
@@ -408,7 +411,9 @@ static VAStatus vlVaPostProcBlit(vlVaDriver *drv, vlVaContext *context,
    if (src->buffer_format == PIPE_FORMAT_YUYV ||
        src->buffer_format == PIPE_FORMAT_UYVY ||
        src->buffer_format == PIPE_FORMAT_YV12 ||
-       src->buffer_format == PIPE_FORMAT_IYUV) {
+       src->buffer_format == PIPE_FORMAT_IYUV ||
+       (src->interlaced == dst->interlaced &&
+        src_num_planes != dst_num_planes)) {
       vl_compositor_yuv_deint_full(&drv->cstate, &drv->compositor,
                                    src, dst, &src_rect, &dst_rect,
                                    VL_COMPOSITOR_NONE);

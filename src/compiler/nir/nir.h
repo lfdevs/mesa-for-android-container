@@ -6680,7 +6680,7 @@ bool nir_opt_reassociate_bfi(nir_shader *shader);
 bool nir_opt_rematerialize_compares(nir_shader *shader);
 
 bool nir_opt_remove_phis(nir_shader *shader);
-bool nir_opt_remove_phis_block(nir_block *block);
+bool nir_remove_single_src_phis_block(nir_block *block);
 
 bool nir_opt_phi_precision(nir_shader *shader);
 

@@ -2020,11 +2020,16 @@ handle_pseudo(ra_ctx& ctx, const RegisterFile& reg_file, Instruction* instr)
          reads_linear = true;
    }
 
-   if (!writes_linear || !reads_linear || !reg_file[scc])
+   if (!writes_linear || !reads_linear)
       return;
 
    instr->pseudo().needs_scratch_reg = true;
    instr->pseudo().tmp_in_scc = reg_file[scc];
+
+   if (!reg_file[scc]) {
+      instr->pseudo().scratch_sgpr = scc;
+      return;
+   }
 
    int reg = ctx.max_used_sgpr;
    for (; reg >= 0 && reg_file[PhysReg{(unsigned)reg}]; reg--)
@@ -2865,22 +2870,19 @@ emit_parallel_copy_internal(ra_ctx& ctx, std::vector<std::pair<Operand, Definiti
    pc.reset(create_instruction(aco_opcode::p_parallelcopy, Format::PSEUDO, parallelcopy.size(),
                                parallelcopy.size()));
    bool linear_vgpr = false;
-   bool sgpr_operands_alias_defs = false;
-   uint64_t sgpr_operands[4] = {0, 0, 0, 0};
+   bool may_swap_sgprs = false;
+   std::bitset<256> sgpr_operands;
    for (unsigned i = 0; i < parallelcopy.size(); i++) {
       linear_vgpr |= parallelcopy[i].first.regClass().is_linear_vgpr();
 
-      if (temp_in_scc && parallelcopy[i].first.isTemp() &&
+      if (!may_swap_sgprs && parallelcopy[i].first.isTemp() &&
           parallelcopy[i].first.getTemp().type() == RegType::sgpr) {
-         if (!sgpr_operands_alias_defs) {
-            unsigned reg = parallelcopy[i].first.physReg().reg();
-            unsigned size = parallelcopy[i].first.getTemp().size();
-            sgpr_operands[reg / 64u] |= u_bit_consecutive64(reg % 64u, size);
-
-            reg = parallelcopy[i].second.physReg().reg();
-            size = parallelcopy[i].second.getTemp().size();
-            if (sgpr_operands[reg / 64u] & u_bit_consecutive64(reg % 64u, size))
-               sgpr_operands_alias_defs = true;
+         unsigned op_reg = parallelcopy[i].first.physReg().reg();
+         unsigned def_reg = parallelcopy[i].second.physReg().reg();
+         for (unsigned j = 0; j < parallelcopy[i].first.size(); j++) {
+            sgpr_operands.set(op_reg + j);
+            if (sgpr_operands.test(def_reg + j))
+               may_swap_sgprs = true;
          }
       }
 
@@ -2897,7 +2899,7 @@ emit_parallel_copy_internal(ra_ctx& ctx, std::vector<std::pair<Operand, Definiti
       ctx.renames[ctx.block->index][orig.id()] = pc->definitions[i].getTemp();
    }
 
-   if (temp_in_scc && (sgpr_operands_alias_defs || linear_vgpr)) {
+   if (temp_in_scc && (may_swap_sgprs || linear_vgpr)) {
       /* disable definitions and re-enable operands */
       RegisterFile tmp_file(register_file);
       for (const Definition& def : instr->definitions) {
@@ -2911,8 +2913,9 @@ emit_parallel_copy_internal(ra_ctx& ctx, std::vector<std::pair<Operand, Definiti
 
       handle_pseudo(ctx, tmp_file, pc.get());
    } else {
-      pc->pseudo().needs_scratch_reg = sgpr_operands_alias_defs || linear_vgpr;
+      pc->pseudo().needs_scratch_reg = may_swap_sgprs || linear_vgpr;
       pc->pseudo().tmp_in_scc = false;
+      pc->pseudo().scratch_sgpr = scc;
    }
 
    instructions.emplace_back(std::move(pc));
@@ -3004,7 +3007,6 @@ register_allocation(Program* program, ra_test_policy policy)
       for (; instr_it != block.instructions.end(); ++instr_it) {
          aco_ptr<Instruction>& instr = *instr_it;
          std::vector<std::pair<Operand, Definition>> parallelcopy;
-         bool temp_in_scc = register_file[scc];
 
          if (instr->opcode == aco_opcode::p_branch) {
             /* unconditional branches are handled after phis of the target */
@@ -3061,6 +3063,7 @@ register_allocation(Program* program, ra_test_policy policy)
                   ctx.war_hint.set(operand.physReg().reg() + j);
             }
          }
+         bool temp_in_scc = register_file[scc];
 
          /* remove dead vars from register file */
          for (const Operand& op : instr->operands) {

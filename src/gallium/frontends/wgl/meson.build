@@ -8,7 +8,7 @@ if not with_shared_glapi
   _c_args_wgl += '-D_GLAPI_NO_EXPORTS'
 endif
 
-_wgl_deps = [idep_xmlconfig, driver_zink]
+_wgl_deps = [idep_xmlconfig, driver_zink, idep_mesautilformat]
 if with_gallium_zink
   _wgl_deps += idep_vulkan_wsi_defines
 endif

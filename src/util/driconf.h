@@ -657,6 +657,10 @@
    DRI_CONF_OPT_B(radv_disable_dcc, def, \
                   "Disable DCC for color images")
 
+#define DRI_CONF_RADV_DISABLE_DCC_MIPS(def) \
+   DRI_CONF_OPT_B(radv_disable_dcc_mips, def, \
+                  "Disable DCC for color images with mips")
+
 #define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
                  "Disable anisotropic filtering for single level images")

@@ -130,3 +130,38 @@ TEST_F(nir_cf_test, delete_break_in_loop)
 
    nir_metadata_require(b->impl, nir_metadata_dominance);
 }
+
+/* This tests a bug in nir_convert_loop_to_lcssa, two consecutive deref
+ * instructions can cause the function's loop to exit prematurely if
+ * rematerializing the second causes the first to also be rematerialized. */
+TEST_F(nir_cf_test, lcssa_iter_safety_during_deref_remat)
+{
+   nir_variable *ubo_var_array = nir_variable_create(
+      b->shader, nir_var_mem_ubo, glsl_array_type(glsl_int_type(), 4, 0), "ubo_array");
+   nir_variable *out_var = nir_variable_create(
+      b->shader, nir_var_shader_out, glsl_int_type(), "out");
+
+   nir_loop *loop = nir_push_loop(b);
+
+   nir_def *index = nir_imm_int(b, 2);
+   nir_deref_instr *deref = nir_build_deref_var(b, ubo_var_array);
+   deref = nir_build_deref_array(b, deref, index);
+   nir_jump(b, nir_jump_break);
+
+   nir_pop_loop(b, loop);
+
+   nir_def *val = nir_load_deref(b, deref);
+   nir_store_deref(b, nir_build_deref_var(b, out_var), val, 0x1);
+
+   nir_convert_loop_to_lcssa(loop);
+
+   nir_block *block_after_loop = nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
+
+   EXPECT_FALSE(nir_def_is_unused(index));
+   nir_foreach_use_including_if(src, index)
+      EXPECT_TRUE(!nir_src_is_if(src) && nir_src_parent_instr(src)->type == nir_instr_type_phi &&
+                  nir_src_parent_instr(src)->block == block_after_loop);
+
+   nir_validate_shader(b->shader, NULL);
+   nir_validate_ssa_dominance(b->shader, NULL);
+}

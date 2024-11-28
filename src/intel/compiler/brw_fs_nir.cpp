@@ -4918,7 +4918,7 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
          }
          case nir_op_ushr: {
             enum brw_reg_type utype =
-               brw_type_with_size(srcs[0].type,
+               brw_type_with_size(BRW_TYPE_UD,
                                   brw_type_size_bits(srcs[0].type));
             ubld.SHR(retype(srcs[0], utype),
                      retype(srcs[1], utype),
@@ -4936,10 +4936,10 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
          case nir_op_ult32: {
             if (brw_type_size_bits(srcs[0].type) != 32)
                break;
-            brw_reg dst = ubld.vgrf(srcs[0].type);
             enum brw_reg_type utype =
-               brw_type_with_size(srcs[0].type,
+               brw_type_with_size(BRW_TYPE_UD,
                                   brw_type_size_bits(srcs[0].type));
+            brw_reg dst = ubld.vgrf(utype);
             ntb.resource_insts[def->index] =
                ubld.CMP(dst,
                         retype(srcs[0], utype),

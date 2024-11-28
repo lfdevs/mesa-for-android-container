@@ -598,8 +598,8 @@ struct radv_ps_epilog_key radv_generate_ps_epilog_key(const struct radv_device *
 void radv_graphics_shaders_compile(struct radv_device *device, struct vk_pipeline_cache *cache,
                                    struct radv_shader_stage *stages, const struct radv_graphics_state_key *gfx_state,
                                    bool keep_executable_info, bool keep_statistic_info, bool is_internal,
-                                   struct radv_retained_shaders *retained_shaders, bool noop_fs,
-                                   struct radv_shader **shaders, struct radv_shader_binary **binaries,
+                                   bool skip_shaders_cache, struct radv_retained_shaders *retained_shaders,
+                                   bool noop_fs, struct radv_shader **shaders, struct radv_shader_binary **binaries,
                                    struct radv_shader **gs_copy_shader, struct radv_shader_binary **gs_copy_binary);
 
 struct radv_vgt_shader_key {

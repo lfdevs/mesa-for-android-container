@@ -537,8 +537,7 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
          enc_caps->maxRateControlLayers = RADV_ENC_MAX_RATE_LAYER;
          enc_caps->maxBitrate = 1000000000;
          enc_caps->maxQualityLevels = 2;
-         enc_caps->encodeInputPictureGranularity.width = 1;
-         enc_caps->encodeInputPictureGranularity.height = 1;
+         enc_caps->encodeInputPictureGranularity = pCapabilities->pictureAccessGranularity;
          enc_caps->supportedEncodeFeedbackFlags = VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BUFFER_OFFSET_BIT_KHR |
                                                   VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BYTES_WRITTEN_BIT_KHR;
       }
@@ -694,6 +693,8 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
 
       pCapabilities->pictureAccessGranularity.width = VK_VIDEO_H265_CTU_MAX_WIDTH;
       pCapabilities->pictureAccessGranularity.height = VK_VIDEO_H265_CTU_MAX_HEIGHT;
+      if (enc_caps)
+         enc_caps->encodeInputPictureGranularity = pCapabilities->pictureAccessGranularity;
 
       pCapabilities->maxDpbSlots = NUM_H2645_REFS;
       pCapabilities->maxActiveReferencePictures = NUM_H2645_REFS;

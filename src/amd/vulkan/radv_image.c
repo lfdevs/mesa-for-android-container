@@ -297,6 +297,10 @@ radv_use_dcc_for_image_early(struct radv_device *device, struct radv_image *imag
          return false;
    }
 
+   /* Force disable DCC for mips to workaround game bugs. */
+   if (instance->drirc.disable_dcc_mips && pCreateInfo->mipLevels > 1)
+      return false;
+
    /* DCC MSAA can't work on GFX10.3 and earlier without FMASK. */
    if (pCreateInfo->samples > 1 && pdev->info.gfx_level < GFX11 && (instance->debug_flags & RADV_DEBUG_NO_FMASK))
       return false;

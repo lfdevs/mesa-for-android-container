@@ -26,13 +26,6 @@
 #include "nir_control_flow.h"
 #include "nir_worklist.h"
 
-static bool
-nir_texop_implies_derivative(nir_texop op)
-{
-   return op == nir_texop_tex ||
-          op == nir_texop_txb ||
-          op == nir_texop_lod;
-}
 #define MOVE_INSTR_FLAG            1
 #define STOP_PROCESSING_INSTR_FLAG 2
 
@@ -154,7 +147,7 @@ opt_move_discards_to_top_impl(nir_function_impl *impl)
 
          case nir_instr_type_tex: {
             nir_tex_instr *tex = nir_instr_as_tex(instr);
-            if (nir_texop_implies_derivative(tex->op))
+            if (nir_tex_instr_has_implicit_derivative(tex))
                consider_discards = false;
             continue;
          }
@@ -193,6 +186,8 @@ opt_move_discards_to_top_impl(nir_function_impl *impl)
             case nir_intrinsic_shuffle_down:
             case nir_intrinsic_rotate:
             case nir_intrinsic_masked_swizzle_amd:
+            case nir_intrinsic_is_helper_invocation:
+            case nir_intrinsic_load_helper_invocation:
                instr->pass_flags = STOP_PROCESSING_INSTR_FLAG;
                goto break_all;
             case nir_intrinsic_terminate_if:

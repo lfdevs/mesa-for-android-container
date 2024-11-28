@@ -939,6 +939,7 @@ ntq_emit_comparison(struct vc4_compile *c, struct qreg *dest,
                 break;
         case nir_op_flt32:
         case nir_op_ilt32:
+        case nir_op_ult32:
         case nir_op_slt:
                 cond = QPU_COND_NS;
                 break;
@@ -1187,6 +1188,7 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
         case nir_op_ige32:
         case nir_op_uge32:
         case nir_op_ilt32:
+        case nir_op_ult32:
                 if (!ntq_emit_comparison(c, &result, instr, instr)) {
                         fprintf(stderr, "Bad comparison instruction\n");
                 }

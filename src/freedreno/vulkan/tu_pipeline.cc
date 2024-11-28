@@ -3867,6 +3867,7 @@ tu_pipeline_builder_build(struct tu_pipeline_builder *builder,
 
       result = tu_pipeline_builder_compile_shaders(builder, *pipeline);
       if (result != VK_SUCCESS) {
+         tu_pipeline_finish(*pipeline, builder->device, builder->alloc);
          vk_object_free(&builder->device->vk, builder->alloc, *pipeline);
          return result;
       }

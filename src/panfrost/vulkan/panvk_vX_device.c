@@ -244,7 +244,7 @@ fail:
       for (unsigned q = 0; q < device->queue_count[i]; q++)
          panvk_queue_finish(&device->queues[i][q]);
       if (device->queue_count[i])
-         vk_object_free(&device->vk, NULL, device->queues[i]);
+         vk_free(&device->vk.alloc, device->queues[i]);
    }
 
    panvk_per_arch(meta_cleanup)(device);
@@ -275,7 +275,7 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
       for (unsigned q = 0; q < device->queue_count[i]; q++)
          panvk_queue_finish(&device->queues[i][q]);
       if (device->queue_count[i])
-         vk_object_free(&device->vk, NULL, device->queues[i]);
+         vk_free(&device->vk.alloc, device->queues[i]);
    }
 
    panvk_per_arch(meta_cleanup)(device);

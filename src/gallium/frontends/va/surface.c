@@ -1078,6 +1078,31 @@ vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface,
    return VA_STATUS_SUCCESS;
 }
 
+static int
+rt_format_to_fourcc(uint32_t format)
+{
+   switch (format) {
+   case VA_RT_FORMAT_YUV420:
+      return VA_FOURCC_NV12;
+   case VA_RT_FORMAT_YUV420_10:
+      return VA_FOURCC_P010;
+   case VA_RT_FORMAT_YUV422:
+      return VA_FOURCC_YUY2;
+   case VA_RT_FORMAT_YUV444:
+      return VA_FOURCC_444P;
+   case VA_RT_FORMAT_YUV400:
+      return VA_FOURCC_Y800;
+   case VA_RT_FORMAT_RGBP:
+      return VA_FOURCC_RGBP;
+   case VA_RT_FORMAT_RGB32:
+      return VA_FOURCC_BGRA;
+   case VA_RT_FORMAT_RGB32_10:
+      return VA_FOURCC('A','B','3','0');
+   default:
+      return 0;
+   }
+}
+
 VAStatus
 vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
                     unsigned int width, unsigned int height,
@@ -1127,6 +1152,13 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
    expected_fourcc = 0;
    modifiers = NULL;
    modifiers_count = 0;
+
+   protected = format & VA_RT_FORMAT_PROTECTED;
+   format &= ~VA_RT_FORMAT_PROTECTED;
+
+   expected_fourcc = rt_format_to_fourcc(format);
+   if (!expected_fourcc)
+      return VA_STATUS_ERROR_UNSUPPORTED_RT_FORMAT;
 
    for (i = 0; i < num_attribs && attrib_list; i++) {
       if (!(attrib_list[i].flags & VA_SURFACE_ATTRIB_SETTABLE))
@@ -1194,20 +1226,6 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
       }
    }
 
-   protected = format & VA_RT_FORMAT_PROTECTED;
-   format &= ~VA_RT_FORMAT_PROTECTED;
-
-   if (VA_RT_FORMAT_YUV420 != format &&
-       VA_RT_FORMAT_YUV422 != format &&
-       VA_RT_FORMAT_YUV444 != format &&
-       VA_RT_FORMAT_YUV400 != format &&
-       VA_RT_FORMAT_YUV420_10BPP != format &&
-       VA_RT_FORMAT_RGBP != format &&
-       VA_RT_FORMAT_RGB32 != format &&
-       VA_RT_FORMAT_RGB32_10 != format) {
-      return VA_STATUS_ERROR_UNSUPPORTED_RT_FORMAT;
-   }
-
    switch (memory_type) {
    case VA_SURFACE_ATTRIB_MEM_TYPE_VA:
       break;
@@ -1239,34 +1257,20 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
 
    memset(&templat, 0, sizeof(templat));
 
-   templat.buffer_format = pscreen->get_video_param(
-      pscreen,
-      PIPE_VIDEO_PROFILE_UNKNOWN,
-      PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
-      PIPE_VIDEO_CAP_PREFERED_FORMAT
-   );
-
-   if (modifiers)
-      templat.interlaced = false;
-   else
+   if (!modifiers)
       templat.interlaced =
          pscreen->get_video_param(pscreen, PIPE_VIDEO_PROFILE_UNKNOWN,
                                   PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
                                   PIPE_VIDEO_CAP_PREFERS_INTERLACED);
 
-   if (expected_fourcc) {
-      enum pipe_format expected_format = VaFourccToPipeFormat(expected_fourcc);
-
 #ifndef _WIN32
-      if (expected_format != templat.buffer_format || memory_attribute || prime_desc)
+   if (expected_fourcc != VA_FOURCC_NV12 || memory_attribute || prime_desc)
 #else
-      if (expected_format != templat.buffer_format || memory_attribute)
+   if (expected_fourcc != VA_FOURCC_NV12 || memory_attribute)
 #endif
-        templat.interlaced = 0;
+     templat.interlaced = false;
 
-      templat.buffer_format = expected_format;
-   }
-
+   templat.buffer_format = VaFourccToPipeFormat(expected_fourcc);
    templat.width = width;
    templat.height = height;
    if (protected)

@@ -312,9 +312,15 @@ pan_slice_align(uint64_t modifier)
  * are required on all current GPUs.
  */
 uint32_t
-pan_afbc_body_align(uint64_t modifier)
+pan_afbc_body_align(unsigned arch, uint64_t modifier)
 {
-   return (modifier & AFBC_FORMAT_MOD_TILED) ? 4096 : 64;
+   if (modifier & AFBC_FORMAT_MOD_TILED)
+      return 4096;
+
+   if (arch >= 6)
+      return 128;
+
+   return 64;
 }
 
 static inline unsigned
@@ -477,7 +483,7 @@ pan_image_layout_init(unsigned arch, struct pan_image_layout *layout,
    bool linear = layout->modifier == DRM_FORMAT_MOD_LINEAR;
    bool is_3d = layout->dim == MALI_TEXTURE_DIMENSION_3D;
 
-   unsigned offset = explicit_layout ? explicit_layout->offset : 0;
+   uint64_t offset = explicit_layout ? explicit_layout->offset : 0;
    struct pan_block_size block_size =
       panfrost_block_size(layout->modifier, layout->format);
 
@@ -535,8 +541,8 @@ pan_image_layout_init(unsigned arch, struct pan_image_layout *layout,
          row_stride = ALIGN_POT(row_stride, 64);
       }
 
-      unsigned slice_one_size =
-         row_stride * (effective_height / block_size.height);
+      uint64_t slice_one_size =
+         (uint64_t)row_stride * (effective_height / block_size.height);
 
       /* Compute AFBC sizes if necessary */
       if (afbc) {
@@ -547,7 +553,7 @@ pan_image_layout_init(unsigned arch, struct pan_image_layout *layout,
             slice->afbc.stride * (effective_height / block_size.height);
          slice->afbc.header_size =
             ALIGN_POT(slice->row_stride * (effective_height / align_h),
-                      pan_afbc_body_align(layout->modifier));
+                      pan_afbc_body_align(arch, layout->modifier));
 
          if (explicit_layout &&
              explicit_layout->row_stride < slice->row_stride) {
@@ -575,7 +581,7 @@ pan_image_layout_init(unsigned arch, struct pan_image_layout *layout,
          slice->row_stride = row_stride;
       }
 
-      unsigned slice_full_size = slice_one_size * depth * layout->nr_samples;
+      uint64_t slice_full_size = slice_one_size * depth * layout->nr_samples;
 
       slice->surface_stride = slice_one_size;
 

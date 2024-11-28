@@ -965,13 +965,19 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
       for (unsigned int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == VGRF &&
              inst->src[i].nr == spill_reg) {
-            int count = regs_read(inst, i);
+            /* Count registers needed in units of physical registers */
+            int count = align(regs_read(inst, i), reg_unit(devinfo));
+            /* Align the spilling offset the physical register size */
             int subset_spill_offset = spill_offset +
                ROUND_DOWN_TO(inst->src[i].offset, REG_SIZE * reg_unit(devinfo));
             brw_reg unspill_dst = alloc_spill_reg(count, ip);
 
             inst->src[i].nr = unspill_dst.nr;
-            inst->src[i].offset %= REG_SIZE;
+            /* The unspilled register is aligned to physical register, so
+             * adjust the offset to the remaining within the physical register
+             * size.
+             */
+            inst->src[i].offset %= REG_SIZE * reg_unit(devinfo);
 
             /* We read the largest power-of-two divisor of the register count
              * (because only POT scratch read blocks are allowed by the
@@ -995,12 +1001,18 @@ fs_reg_alloc::spill_reg(unsigned spill_reg)
       if (inst->dst.file == VGRF &&
           inst->dst.nr == spill_reg &&
           inst->opcode != SHADER_OPCODE_UNDEF) {
+         /* Count registers needed in units of physical registers */
+         int count = align(regs_written(inst), reg_unit(devinfo));
+         /* Align the spilling offset the physical register size */
          int subset_spill_offset = spill_offset +
             ROUND_DOWN_TO(inst->dst.offset, reg_unit(devinfo) * REG_SIZE);
-         brw_reg spill_src = alloc_spill_reg(regs_written(inst), ip);
+         brw_reg spill_src = alloc_spill_reg(count, ip);
 
          inst->dst.nr = spill_src.nr;
-         inst->dst.offset %= REG_SIZE;
+         /* The spilled register is aligned to physical register, so adjust
+          * the offset to the remaining within the physical register size.
+          */
+         inst->dst.offset %= REG_SIZE * reg_unit(devinfo);
 
          /* If we're immediately spilling the register, we should not use
           * destination dependency hints.  Doing so will cause the GPU do

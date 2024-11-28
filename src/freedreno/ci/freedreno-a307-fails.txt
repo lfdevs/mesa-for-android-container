@@ -358,9 +358,6 @@ spec@arb_transform_feedback3@gl_nextbuffer-gl_nextbuffer,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@arb_uniform_buffer_object@rendering-array,Fail
 spec@arb_uniform_buffer_object@execution@std140-array-struct-array-struct,Fail
-spec@arb_vertex_buffer_object@vbo-subdata-many drawarrays,Fail
-spec@arb_vertex_buffer_object@vbo-subdata-many drawelements,Fail
-spec@arb_vertex_buffer_object@vbo-subdata-many drawrangeelements,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
@@ -847,7 +844,6 @@ spec@glsl-1.40@uniform_buffer@two-stages,Fail
 
 # new failures since 2023/02/08 (CTS uprevs, regressions etc.)
 shaders@glsl-max-varyings >max_varying_components,Fail
-spec@!opengl 1.0@gl-1.0-ortho-pos,Fail
 spec@!opengl 1.1@gl_select - alpha-test enabled,Fail
 spec@!opengl 1.1@gl_select - depth-test enabled,Fail
 spec@!opengl 1.1@gl_select - no test function,Fail
@@ -938,8 +934,6 @@ spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_HEIGHT
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_LAYERS,Fail
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_WIDTH,Fail
 spec@arb_map_buffer_range@copybuffersubdata offset=0,Fail
-spec@arb_map_buffer_range@map_invalidate_buffer_bit offset=0,Fail
-spec@arb_map_buffer_range@map_invalidate_range_bit offset=0,Fail
 spec@arb_occlusion_query@occlusion_query,Fail
 spec@arb_occlusion_query@occlusion_query_conform,Fail
 spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi2,Fail
@@ -1054,10 +1048,6 @@ spec@arb_texture_rg@texwrap formats@GL_R16- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_R8- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG16- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG8- NPOT,Fail
-spec@arb_uniform_buffer_object@rendering,Fail
-spec@arb_uniform_buffer_object@rendering-dsa,Fail
-spec@arb_uniform_buffer_object@rendering-dsa-offset,Fail
-spec@arb_uniform_buffer_object@rendering-offset,Fail
 spec@ati_texture_compression_3dc@texwrap formats,Fail
 spec@ati_texture_compression_3dc@texwrap formats@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI- NPOT,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_vyuy,Fail

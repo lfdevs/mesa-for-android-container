@@ -504,6 +504,7 @@ cmd_buffer_flush_gfx_push_constants(struct anv_cmd_buffer *cmd_buffer,
 
             cmd_buffer->state.push_constants_dirty |=
                mesa_to_vk_shader_stage(stage);
+            gfx_state->base.push_constants_data_dirty = true;
 
             range_start_reg += range->length;
          }

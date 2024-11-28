@@ -1935,8 +1935,11 @@ handle_operands(std::map<PhysReg, copy_operation>& copy_map, lower_context* ctx,
          continue;
       }
 
-      if (preserve_scc && it->second.def.getTemp().type() == RegType::sgpr)
-         assert(!(it->second.def.physReg() == pi->scratch_sgpr));
+      if (it->second.def.getTemp().type() == RegType::sgpr) {
+         assert(it->second.def.physReg() != pi->scratch_sgpr);
+         assert(pi->needs_scratch_reg);
+         assert(!preserve_scc || pi->scratch_sgpr != scc);
+      }
 
       /* to resolve the cycle, we have to swap the src reg with the dst reg */
       copy_operation swap = it->second;

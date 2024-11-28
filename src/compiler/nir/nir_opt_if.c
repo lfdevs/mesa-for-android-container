@@ -766,7 +766,7 @@ opt_if_simplification(nir_builder *b, nir_if *nif)
        */
       nir_block *const next_block =
          nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node));
-      nir_opt_remove_phis_block(next_block);
+      nir_remove_single_src_phis_block(next_block);
    }
 
    rewrite_phi_predecessor_blocks(nif, then_block, else_block, else_block,

@@ -343,7 +343,6 @@ spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-clamp-z,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2dproj-bias,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2dproj,Fail
-spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-giant-temp-array,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat2-col-row-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat2-col-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat2-index-col-row-wr,Fail

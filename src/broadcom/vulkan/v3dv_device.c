@@ -1290,7 +1290,7 @@ create_physical_device(struct v3dv_instance *instance,
    render_fd = open(path, O_RDWR | O_CLOEXEC);
    if (render_fd < 0) {
       fprintf(stderr, "Opening %s failed: %s\n", path, strerror(errno));
-      result = VK_ERROR_INITIALIZATION_FAILED;
+      result = VK_ERROR_INCOMPATIBLE_DRIVER;
       goto fail;
    }
 

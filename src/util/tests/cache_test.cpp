@@ -44,6 +44,10 @@
 #include "util/disk_cache_os.h"
 #include "util/ralloc.h"
 
+#ifdef FOZ_DB_UTIL_DYNAMIC_LIST
+#include <sys/inotify.h>
+#endif
+
 #ifdef ENABLE_SHADER_CACHE
 
 /* Callback for nftw used in rmrf_local below.
@@ -129,23 +133,46 @@ cache_exists(struct disk_cache *cache)
    return result != NULL;
 }
 
-static void *
-poll_disk_cache_get(struct disk_cache *cache,
-                    const cache_key key,
-                    size_t *size)
+#ifdef FOZ_DB_UTIL_DYNAMIC_LIST
+/*
+ * Wait for foz_db updater to close the foz db list file after its
+ * done updating.
+ */
+static void
+close_and_wait_for_list(FILE* list_file, const char* list_filename)
 {
-   void *result;
-
-   for (int iter = 0; iter < 1000; ++iter) {
-      result = disk_cache_get(cache, key, size);
-      if (result)
-         return result;
-
-      usleep(1000);
+   char buf[10 * (sizeof(struct inotify_event) + NAME_MAX + 1)];
+   int fd = inotify_init1(IN_CLOEXEC);
+   int wd = inotify_add_watch(fd, list_filename, IN_CLOSE_NOWRITE);
+   if (wd < 0) {
+       close(fd);
+       return;
    }
 
-   return NULL;
+   /* Prevent racing by closing the list file we wrote to after inotify
+    * has started. Since this was a write, it gets ignored by inotify
+    */
+   fclose(list_file);
+
+   int len = read(fd, buf, sizeof(buf));
+   if (len == -1)  {
+      close(fd);
+      inotify_rm_watch(fd, wd);
+      return;
+   }
+
+   int i = 0;
+   while (i < len) {
+      struct inotify_event *event = (struct inotify_event *)&buf[i];
+      i += sizeof(struct inotify_event) + event->len;
+      if (event->mask & IN_CLOSE_NOWRITE)
+         break;
+   }
+
+   inotify_rm_watch(fd, wd);
+   close(fd);
 }
+#endif
 
 #define CACHE_TEST_TMP "./cache-test-tmp"
 
@@ -1027,7 +1054,7 @@ TEST_F(Cache, Combined)
 #endif
 }
 
-TEST_F(Cache, DISABLED_List)
+TEST_F(Cache, List)
 {
    const char *driver_id = "make_check";
    char blob[] = "This is a RO blob";
@@ -1127,10 +1154,12 @@ TEST_F(Cache, DISABLED_List)
    /* Add ro_cache to list file for loading */
    list_file = fopen(list_filename, "a");
    fputs("ro_cache\n", list_file);
-   fclose(list_file);
 
-   /* Poll result to give time for updater to load ro cache */
-   result = (char *)poll_disk_cache_get(cache_sf, blob_key, &size);
+   /* Close the list file for writing and wait for the updater to finish
+    * updating from the list.
+    */
+   close_and_wait_for_list(list_file, list_filename);
+   result = (char *)disk_cache_get(cache_sf, blob_key, &size);
 
    /* Blob entry must present because it shall be retrieved from the
     * ro_cache.foz loaded from list at runtime */
@@ -1162,10 +1191,12 @@ TEST_F(Cache, DISABLED_List)
    fputs("no_cache/no_cache3\n", list_file);
    /* Add ro_cache to list file for loading */
    fputs("ro_cache\n", list_file);
-   fclose(list_file);
 
-   /* Poll result to give time for updater to load ro cache */
-   result = (char *)poll_disk_cache_get(cache_sf, blob_key, &size);
+   /* Close the list file for writing and wait for the updater to finish
+    * updating from the list.
+    */
+   close_and_wait_for_list(list_file, list_filename);
+   result = (char *)disk_cache_get(cache_sf, blob_key, &size);
 
    /* Blob entry must present because it shall be retrieved from the
     * ro_cache.foz loaded from list at runtime despite invalid files
