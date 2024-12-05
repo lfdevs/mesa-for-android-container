@@ -12,8 +12,12 @@ mesa (24.2.7-1) unstable; urgency=medium
 
 mesa (24.2.6-1) unstable; urgency=medium
 
+  [ Timo Aaltonen ]
   * New upstream release.
   * fix-armhf-build.diff: Dropped, upstream.
+
+  [ Fabio Pedretti ]
+  * control: lower librust-syn-dev dependency version
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 05 Nov 2024 09:59:12 +0200
 
