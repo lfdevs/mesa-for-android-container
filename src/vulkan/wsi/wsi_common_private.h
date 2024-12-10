@@ -41,6 +41,7 @@ struct wsi_swapchain;
 #define WSI_DEBUG_LINEAR      (1ull << 3)
 #define WSI_DEBUG_DXGI        (1ull << 4)
 #define WSI_DEBUG_NOWLTS      (1ull << 5)
+#define WSI_DEBUG_BLIT        (1ull << 8)
 
 extern uint64_t WSI_DEBUG;
 
@@ -49,6 +50,7 @@ enum wsi_image_type {
    WSI_IMAGE_TYPE_DRM,
    WSI_IMAGE_TYPE_DXGI,
    WSI_IMAGE_TYPE_METAL,
+   WSI_IMAGE_TYPE_AHB,
 };
 
 struct wsi_base_image_params {
@@ -90,6 +92,9 @@ struct wsi_image_info {
    VkImageDrmFormatModifierListCreateInfoEXT drm_mod_list;
    VkImageCompressionControlEXT img_compr_ctrl;
    VkColorSpaceKHR color_space;
+#ifdef __TERMUX__
+   struct AHardwareBuffer_Desc *ahardware_buffer_desc;
+#endif
 
    enum wsi_image_type image_type;
 
@@ -191,6 +196,9 @@ struct wsi_image {
    int dma_buf_fd;
 #endif
    void *cpu_map;
+#ifdef __TERMUX__
+   struct AHardwareBuffer *ahardware_buffer;
+#endif
 
    VkQueryPool query_pool;
    VkCommandBuffer *timestamp_cmd_buffers;
@@ -614,6 +622,17 @@ wsi_metal_configure_image(const struct wsi_swapchain *chain,
                           const struct wsi_metal_image_params *params,
                           struct wsi_image_info *info);
 #endif /* defined(VK_USE_PLATFORM_METAL_EXT) */
+
+enum wsi_swapchain_blit_type
+wsi_get_ahardware_buffer_blit_type(const struct wsi_device *wsi,
+                      const struct wsi_base_image_params *params,
+                                   VkDevice device);
+
+VkResult wsi_configure_ahardware_buffer_image(
+   const struct wsi_swapchain *chain,
+   const VkSwapchainCreateInfoKHR *pCreateInfo,
+   const struct wsi_base_image_params *params,
+   struct wsi_image_info *info);
 
 #ifdef __cplusplus
 }

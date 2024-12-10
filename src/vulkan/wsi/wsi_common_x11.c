@@ -71,6 +71,11 @@
 #include <sys/shm.h>
 #endif
 
+#ifdef __TERMUX__
+#include <android/hardware_buffer.h>
+#include <sys/socket.h>
+#endif
+
 #ifndef XCB_PRESENT_OPTION_ASYNC_MAY_TEAR
 #define XCB_PRESENT_OPTION_ASYNC_MAY_TEAR 16
 #endif
@@ -2662,6 +2667,17 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
       /* If the image has a modifier, we must have DRI3 v1.2. */
       assert(chain->has_dri3_modifiers);
 
+#ifdef __TERMUX__
+      int sock_fds[2] = { -1, -1 };
+      if (image->base.ahardware_buffer) {
+         if (socketpair(AF_UNIX, SOCK_STREAM, 0, sock_fds) < 0) {
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+         }
+         AHardwareBuffer_sendHandleToUnixSocket(
+            image->base.ahardware_buffer, sock_fds[0]);
+         image->base.dma_buf_fd = sock_fds[1];
+      }
+#endif
       /* XCB requires an array of file descriptors but we only have one */
       int fds[4] = { -1, -1, -1, -1 };
       for (int i = 0; i < image->base.num_planes; i++) {
@@ -2692,6 +2708,17 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
                                               chain->depth, bpp,
                                               image->base.drm_modifier,
                                               fds);
+#ifdef __TERMUX__
+      if (image->base.ahardware_buffer) {
+         xcb_flush(chain->conn);
+         uint8_t read_buf;
+         read(sock_fds[0], &read_buf, 1);
+         for (int i = 0; i < ARRAY_SIZE(sock_fds); i++) {
+            close(sock_fds[i]);
+         }
+         image->base.dma_buf_fd = -1;
+      }
+#endif
    } else {
       /* Without passing modifiers, we can't have multi-plane RGB images. */
       assert(image->base.num_planes == 1);
@@ -3207,6 +3234,12 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
          .alloc_shm = wsi_conn->has_mit_shm ? &alloc_shm : NULL,
       };
       image_params = &cpu_image_params.base;
+#ifdef __TERMUX__
+   } else if (wsi_device->wants_ahardware_buffer) {
+      image_params = &(struct wsi_base_image_params){
+         .image_type = WSI_IMAGE_TYPE_AHB,
+      };
+#endif
    } else {
 #ifdef HAVE_X11_DRM
       drm_image_params = (struct wsi_drm_image_params) {

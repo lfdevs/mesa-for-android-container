@@ -165,6 +165,9 @@ struct wsi_device {
 
    bool sw;
 
+   bool wants_ahardware_buffer;
+   bool needs_blit;
+
    /* Set to true if the implementation is ok with linear WSI images. */
    bool wants_linear;
 
@@ -258,6 +261,10 @@ struct wsi_device {
    WSI_CB(MapMemory);
    WSI_CB(UnmapMemory);
    WSI_CB(WaitSemaphores);
+#ifdef __TERMUX__
+   WSI_CB(GetMemoryAndroidHardwareBufferANDROID);
+   WSI_CB(GetAndroidHardwareBufferPropertiesANDROID);
+#endif
 #undef WSI_CB
 
     struct wsi_interface *                  wsi[VK_ICD_WSI_PLATFORM_MAX];
