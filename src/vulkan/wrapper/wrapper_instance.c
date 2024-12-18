@@ -167,6 +167,7 @@ wrapper_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 {
    const char *wrapper_enable_extensions[VK_INSTANCE_EXTENSION_COUNT];
    uint32_t wrapper_enable_extension_count = 0;
+   VkApplicationInfo wrapper_application_info = {};
    VkInstanceCreateInfo wrapper_create_info = *pCreateInfo;
    struct vk_instance_dispatch_table dispatch_table;
    struct wrapper_instance *instance;
@@ -213,6 +214,15 @@ wrapper_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                    &wrapper_enable_extension_count,
                                    wrapper_enable_extensions);
 
+   if (wrapper_create_info.pApplicationInfo) {
+      wrapper_application_info = *wrapper_create_info.pApplicationInfo;
+   } else {
+      wrapper_application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+      wrapper_application_info.pApplicationName = "wrapper";
+      wrapper_application_info.pEngineName = "wrapper";
+   }
+   enumerate_instance_version(&wrapper_application_info.apiVersion);
+   wrapper_create_info.pApplicationInfo = &wrapper_application_info;
    wrapper_create_info.enabledExtensionCount = wrapper_enable_extension_count;
    wrapper_create_info.ppEnabledExtensionNames = wrapper_enable_extensions;
 
