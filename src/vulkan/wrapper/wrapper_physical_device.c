@@ -145,15 +145,6 @@ VkResult enumerate_physical_device(struct vk_instance *_instance)
       pdevice->dispatch_table.GetPhysicalDeviceProperties2(
          pdevice->dispatch_handle, &pdevice->properties2);
 
-      if (strstr(pdevice->properties2.properties.deviceName, "Adreno") &&
-          strstr(pdevice->properties2.properties.deviceName, "750")) {
-         if (strstr(instance->vk.app_info.app_name, "clvk")) {
-         /* HACK: clvk failed to create device on Adreno 750
-          * with error VK_ERROR_NOT_PERMITTED, so disable it. */
-            supported_features->globalPriorityQuery = false;
-         }
-      }
-
       pdevice->dispatch_table.GetPhysicalDeviceMemoryProperties(
          pdevice->dispatch_handle, &pdevice->memory_properties);
 
@@ -225,16 +216,4 @@ wrapper_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
          break;
       }
    }
-}
-
-uint32_t
-wrapper_select_memory_type(VkPhysicalDeviceMemoryProperties props,
-                           VkMemoryPropertyFlags flags) {
-   int idx;
-   for (idx = 0; idx < props.memoryTypeCount; idx ++) {
-      if (props.memoryTypes[idx].propertyFlags & flags) {
-         break;
-      }
-   }
-   return idx < props.memoryTypeCount ? idx : UINT32_MAX;
 }

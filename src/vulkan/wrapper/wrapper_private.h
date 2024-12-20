@@ -6,7 +6,6 @@
 #include "vulkan/runtime/vk_log.h"
 #include "vulkan/util/vk_dispatch_table.h"
 #include "vulkan/wsi/wsi_common.h"
-#include "util/hash_table.h"
 
 extern const struct vk_instance_extension_table wrapper_instance_extensions;
 extern const struct vk_device_extension_table wrapper_device_extensions;
@@ -53,8 +52,8 @@ struct wrapper_device {
    struct vk_device vk;
 
    VkDevice dispatch_handle;
-   struct list_head command_buffers;
-   struct hash_table *memorys;
+   struct list_head command_buffer_list;
+   struct list_head memory_data_list;
    struct wrapper_physical_device *physical;
    struct vk_device_dispatch_table dispatch_table;
 };
@@ -74,12 +73,16 @@ struct wrapper_command_buffer {
 VK_DEFINE_HANDLE_CASTS(wrapper_command_buffer, vk.base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
 
-struct wrapper_device_memory {
+struct wrapper_memory_data {
    struct AHardwareBuffer *ahardware_buffer;
+   struct wrapper_device *device;
+   struct list_head link;
    int dmabuf_fd;
    void *map_address;
    size_t map_size;
    size_t alloc_size;
+   VkDeviceMemory memory;
+   const VkAllocationCallbacks *alloc;
 };
 
 VkResult enumerate_physical_device(struct vk_instance *_instance);
@@ -89,6 +92,6 @@ void
 wrapper_setup_device_features(struct wrapper_physical_device *physical_device);
 
 uint32_t
-wrapper_select_memory_type(VkPhysicalDeviceMemoryProperties props,
-                           VkMemoryPropertyFlags flags);
+wrapper_select_device_memory_type(struct wrapper_device *device,
+                                  VkMemoryPropertyFlags flags);
 
