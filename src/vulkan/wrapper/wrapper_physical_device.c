@@ -148,6 +148,16 @@ VkResult enumerate_physical_device(struct vk_instance *_instance)
       pdevice->dispatch_table.GetPhysicalDeviceMemoryProperties(
          pdevice->dispatch_handle, &pdevice->memory_properties);
 
+      const char *app_name = instance->vk.app_info.app_name
+         ? instance->vk.app_info.app_name : "wrapper";
+
+      if (pdevice->driver_properties.driverID == VK_DRIVER_ID_QUALCOMM_PROPRIETARY &&
+          pdevice->properties2.properties.driverVersion > VK_MAKE_VERSION(512, 744, 0) &&
+          strstr(app_name, "clvk")) {
+         /* HACK: Fixed clvk not working on qualcomm proprietary driver. */
+         supported_features->globalPriorityQuery = false;
+      }
+
       pdevice->dma_heap_fd = open("/dev/dma_heap/system", O_RDONLY);
       if (pdevice->dma_heap_fd < 0)
          pdevice->dma_heap_fd = open("/dev/ion", O_RDONLY);
