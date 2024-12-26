@@ -31,8 +31,6 @@ const struct vk_instance_extension_table wrapper_instance_extensions = {
    .EXT_direct_mode_display = true,
 #endif
    .EXT_headless_surface = true,
-   .EXT_debug_utils = true,
-   .EXT_debug_report = true,
 };
 
 static void *vulkan_library_handle;
@@ -110,6 +108,11 @@ static VkResult wrapper_vulkan_init()
 
       supported_instance_extensions->extensions[idx] = true;
    }
+
+   /* Block extensions that don't work. */
+   supported_instance_extensions->EXT_debug_utils = false;
+   supported_instance_extensions->EXT_debug_report = false;
+   supported_instance_extensions->KHR_device_group_creation = false;
 
    return VK_SUCCESS;
 }
@@ -251,37 +254,6 @@ wrapper_DestroyInstance(VkInstance _instance,
                                             pAllocator);
    vk_instance_finish(&instance->vk);
    vk_free2(&instance->vk.alloc, pAllocator, instance);
-}
-
-VKAPI_ATTR void VKAPI_CALL
-wrapper_DebugReportMessageEXT(VkInstance _instance,
-                                VkDebugReportFlagsEXT flags,
-                                VkDebugReportObjectTypeEXT objectType,
-                                uint64_t object,
-                                size_t location,
-                                int32_t messageCode,
-                                const char* pLayerPrefix,
-                                const char* pMessage)
-{
-   VK_FROM_HANDLE(wrapper_instance, instance, _instance);
-
-   switch (objectType) {
-   case VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT:
-   case VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT:
-   case VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT:
-   case VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT:
-   case VK_DEBUG_REPORT_OBJECT_TYPE_QUEUE_EXT:
-   case VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT:
-   case VK_DEBUG_REPORT_OBJECT_TYPE_SURFACE_KHR_EXT:
-   case VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT:
-      break;
-   default:
-      object = (uint64_t)VK_NULL_HANDLE;
-   }
-
-   vk_common_DebugReportMessageEXT(instance->dispatch_handle, flags,
-                                   objectType, object, location, messageCode,
-                                   pLayerPrefix, pMessage);
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
