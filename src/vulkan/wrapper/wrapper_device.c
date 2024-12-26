@@ -303,6 +303,23 @@ wrapper_QueueSubmit2(VkQueue _queue, uint32_t submitCount,
    return result;
 }
 
+
+VKAPI_ATTR void VKAPI_CALL
+wrapper_CmdExecuteCommands(VkCommandBuffer commandBuffer,
+                           uint32_t commandBufferCount,
+                           const VkCommandBuffer* pCommandBuffers)
+{
+   VK_FROM_HANDLE(wrapper_command_buffer, wcb, commandBuffer);
+   VkCommandBuffer command_buffers[commandBufferCount];
+
+   for (int i = 0; i < commandBufferCount; i++) {
+      command_buffers[i] =
+         wrapper_command_buffer_from_handle(pCommandBuffers[i])->dispatch_handle;
+   }
+   wcb->device->dispatch_table.CmdExecuteCommands(
+      wcb->dispatch_handle, commandBufferCount, command_buffers);
+}
+
 static VkResult
 wrapper_command_buffer_create(struct wrapper_device *device,
                               VkCommandPool pool,
