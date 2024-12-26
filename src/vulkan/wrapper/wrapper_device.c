@@ -98,9 +98,14 @@ wrapper_create_device_queue(struct wrapper_device *device,
          if (!queue)
             return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-         device->dispatch_table.GetDeviceQueue(device->dispatch_handle,
-                                               create_info->queueFamilyIndex,
-                                               j, &queue->dispatch_handle);;
+         device->dispatch_table.GetDeviceQueue2(device->dispatch_handle,
+                                                &(VkDeviceQueueInfo2) {
+                                                   .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+                                                   .flags = create_info->flags,
+                                                   .queueFamilyIndex = create_info->queueFamilyIndex,
+                                                   .queueIndex = j,
+                                                },
+                                                &queue->dispatch_handle);;
          queue->device = device;
 
          result = vk_queue_init(&queue->vk, &device->vk, create_info, j);
@@ -212,9 +217,21 @@ wrapper_GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-wrapper_GetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* pQueueInfo,
+wrapper_GetDeviceQueue2(VkDevice _device, const VkDeviceQueueInfo2* pQueueInfo,
                         VkQueue* pQueue) {
-   vk_common_GetDeviceQueue2(device, pQueueInfo, pQueue);
+   VK_FROM_HANDLE(vk_device, device, _device);
+
+   struct vk_queue *queue = NULL;
+   vk_foreach_queue(iter, device) {
+      if (iter->queue_family_index == pQueueInfo->queueFamilyIndex &&
+          iter->index_in_family == pQueueInfo->queueIndex &&
+          iter->flags == pQueueInfo->flags) {
+         queue = iter;
+         break;
+      }
+   }
+
+   *pQueue = queue ? vk_queue_to_handle(queue) : VK_NULL_HANDLE;
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
