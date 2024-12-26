@@ -469,3 +469,42 @@ wrapper_DestroyDevice(VkDevice _device, const VkAllocationCallbacks* pAllocator)
    vk_free2(&device->vk.alloc, pAllocator, device);
 }
 
+static uint64_t
+unwrap_device_object(VkObjectType objectType,
+                     uint64_t objectHandle)
+{
+   switch(objectType) {
+   case VK_OBJECT_TYPE_DEVICE:
+      return (uint64_t)(uintptr_t)wrapper_device_from_handle((VkDevice)(uintptr_t)objectHandle)->dispatch_handle;
+   case VK_OBJECT_TYPE_QUEUE:
+      return (uint64_t)(uintptr_t)wrapper_queue_from_handle((VkQueue)(uintptr_t)objectHandle)->dispatch_handle;
+   case VK_OBJECT_TYPE_COMMAND_BUFFER:
+      return (uint64_t)(uintptr_t)wrapper_command_buffer_from_handle((VkCommandBuffer)(uintptr_t)objectHandle)->dispatch_handle;
+   default:
+      return objectHandle;
+   }
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+wrapper_SetPrivateData(VkDevice _device, VkObjectType objectType,
+                       uint64_t objectHandle,
+                       VkPrivateDataSlot privateDataSlot,
+                       uint64_t data) {
+   VK_FROM_HANDLE(wrapper_device, device, _device);
+
+   uint64_t object_handle = unwrap_device_object(objectType, objectHandle);
+   return device->dispatch_table.SetPrivateData(device->dispatch_handle,
+      objectType, object_handle, privateDataSlot, data);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+wrapper_GetPrivateData(VkDevice _device, VkObjectType objectType,
+                       uint64_t objectHandle,
+                       VkPrivateDataSlot privateDataSlot,
+                       uint64_t* pData) {
+   VK_FROM_HANDLE(wrapper_device, device, _device);
+
+   uint64_t object_handle = unwrap_device_object(objectType, objectHandle);
+   return device->dispatch_table.GetPrivateData(device->dispatch_handle,
+      objectType, object_handle, privateDataSlot, pData);
+}
