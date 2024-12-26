@@ -245,23 +245,30 @@ wrapper_QueueSubmit(VkQueue _queue, uint32_t submitCount,
                     const VkSubmitInfo* pSubmits, VkFence fence)
 {
    VK_FROM_HANDLE(wrapper_queue, queue, _queue);
-   VkCommandBuffer wrapper_command_buffers[submitCount][32];
    VkSubmitInfo wrapper_submits[submitCount];
+   VkCommandBuffer *command_buffers;
+   VkResult result;
 
    for (int i = 0; i < submitCount; i++) {
       const VkSubmitInfo *submit_info = &pSubmits[i];
+      command_buffers = malloc(sizeof(VkCommandBuffer) *
+         submit_info->commandBufferCount);
       for (int j = 0; j < submit_info->commandBufferCount; j++) {
          VK_FROM_HANDLE(wrapper_command_buffer, wcb,
                         submit_info->pCommandBuffers[j]);
-         wrapper_command_buffers[i][j] = wcb->dispatch_handle;
+         command_buffers[j] = wcb->dispatch_handle;
       }
       wrapper_submits[i] = pSubmits[i];
-      wrapper_submits[i].pCommandBuffers = wrapper_command_buffers[i];
+      wrapper_submits[i].pCommandBuffers = command_buffers;
    }
-   return queue->device->dispatch_table.QueueSubmit(queue->dispatch_handle,
-                                                    submitCount,
-                                                    wrapper_submits,
-                                                    fence);
+
+   result = queue->device->dispatch_table.QueueSubmit(
+      queue->dispatch_handle, submitCount, wrapper_submits, fence);
+
+   for (int i = 0; i < submitCount; i++)
+      free((void *)wrapper_submits[i].pCommandBuffers);
+
+   return result;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -269,24 +276,31 @@ wrapper_QueueSubmit2(VkQueue _queue, uint32_t submitCount,
                      const VkSubmitInfo2* pSubmits, VkFence fence)
 {
    VK_FROM_HANDLE(wrapper_queue, queue, _queue);
-   VkCommandBufferSubmitInfo wrapper_command_buffers[submitCount][32];
    VkSubmitInfo2 wrapper_submits[submitCount];
+   VkCommandBufferSubmitInfo *command_buffers;
+   VkResult result;
 
    for (int i = 0; i < submitCount; i++) {
       const VkSubmitInfo2 *submit_info = &pSubmits[i];
+      command_buffers = malloc(sizeof(VkCommandBufferSubmitInfo) *
+         submit_info->commandBufferInfoCount);
       for (int j = 0; j < submit_info->commandBufferInfoCount; j++) {
          VK_FROM_HANDLE(wrapper_command_buffer, wcb,
                         submit_info->pCommandBufferInfos[j].commandBuffer);
-         wrapper_command_buffers[i][j] = pSubmits[i].pCommandBufferInfos[j];
-         wrapper_command_buffers[i][j].commandBuffer = wcb->dispatch_handle;
+         command_buffers[j] = pSubmits[i].pCommandBufferInfos[j];
+         command_buffers[j].commandBuffer = wcb->dispatch_handle;
       }
       wrapper_submits[i] = pSubmits[i];
-      wrapper_submits[i].pCommandBufferInfos = wrapper_command_buffers[i];
+      wrapper_submits[i].pCommandBufferInfos = command_buffers;
    }
-   return queue->device->dispatch_table.QueueSubmit2(queue->dispatch_handle,
-                                                     submitCount,
-                                                     wrapper_submits,
-                                                     fence);
+
+   result = queue->device->dispatch_table.QueueSubmit2(
+      queue->dispatch_handle, submitCount, wrapper_submits, fence);
+
+   for (int i = 0; i < submitCount; i++)
+      free((void *)wrapper_submits[i].pCommandBufferInfos);
+
+   return result;
 }
 
 static VkResult
@@ -294,19 +308,19 @@ wrapper_command_buffer_create(struct wrapper_device *device,
                               VkCommandPool pool,
                               VkCommandBuffer dispatch_handle,
                               VkCommandBuffer *pCommandBuffers) {
-   struct wrapper_command_buffer *wrapper_command_buffer;
-   wrapper_command_buffer = vk_object_zalloc(&device->vk, &device->vk.alloc,
-                              sizeof(struct wrapper_command_buffer),
-                              VK_OBJECT_TYPE_COMMAND_BUFFER);
-   if (!wrapper_command_buffer)
+   struct wrapper_command_buffer *wcb;
+   wcb = vk_object_zalloc(&device->vk, &device->vk.alloc,
+                          sizeof(struct wrapper_command_buffer),
+                          VK_OBJECT_TYPE_COMMAND_BUFFER);
+   if (!wcb)
       return vk_error(&device->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   wrapper_command_buffer->device = device;
-   wrapper_command_buffer->pool = pool;
-   wrapper_command_buffer->dispatch_handle = dispatch_handle;
-   list_add(&wrapper_command_buffer->link, &device->command_buffer_list);
+   wcb->device = device;
+   wcb->pool = pool;
+   wcb->dispatch_handle = dispatch_handle;
+   list_add(&wcb->link, &device->command_buffer_list);
 
-   *pCommandBuffers = wrapper_command_buffer_to_handle(wrapper_command_buffer);
+   *pCommandBuffers = wrapper_command_buffer_to_handle(wcb);
 
    return VK_SUCCESS;
 }
