@@ -279,13 +279,19 @@ wrapper_memory_data_destroy(struct wrapper_memory_data *data) {
 static struct wrapper_memory_data *
 wrapper_device_memory_data(struct wrapper_device *device,
                            VkDeviceMemory memory) {
+   struct wrapper_memory_data *result = NULL;
+
+   simple_mtx_lock(&device->resource_mutex);
+
    list_for_each_entry(struct wrapper_memory_data, data,
                        &device->memory_data_list, link) {
       if (data->memory == memory) {
-         return data;
+         result = data;
       }
    }
-   return NULL;
+
+   simple_mtx_unlock(&device->resource_mutex);
+   return result;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -308,15 +314,22 @@ wrapper_AllocateMemory(VkDevice _device,
    if (!(property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
       goto fallback;
 
+   if (vk_find_struct_const(pAllocateInfo, IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID))
+      goto fallback;
+
    if (vk_find_struct_const(pAllocateInfo, IMPORT_MEMORY_FD_INFO_KHR))
       goto fallback;
 
    if (vk_find_struct_const(pAllocateInfo, EXPORT_MEMORY_ALLOCATE_INFO))
       goto fallback;
 
+   simple_mtx_lock(&device->resource_mutex);
+
    result = wrapper_memory_data_create(device, pAllocator, &data);
-   if (result != VK_SUCCESS)
-      return vk_error(device, result);
+   if (result != VK_SUCCESS) {
+      vk_error(device, result);
+      goto out;
+   }
 
    result = wrapper_allocate_memory_dmabuf(device,
       pAllocateInfo, pAllocator, &data->memory, &data->dmabuf_fd);
@@ -335,12 +348,14 @@ wrapper_AllocateMemory(VkDevice _device,
 
    if (result != VK_SUCCESS) {
       wrapper_memory_data_destroy(data);
-      return vk_error(device, result);
+      vk_error(device, result);
+   } else {
+      *pMemory = data->memory;
    }
 
-   *pMemory = data->memory;
-   
-   return VK_SUCCESS;
+out:
+   simple_mtx_unlock(&data->device->resource_mutex);
+   return result;
 
 fallback:
    return device->dispatch_table.AllocateMemory(device->dispatch_handle,

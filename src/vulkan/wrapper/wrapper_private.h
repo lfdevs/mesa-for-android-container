@@ -6,6 +6,7 @@
 #include "vulkan/runtime/vk_log.h"
 #include "vulkan/util/vk_dispatch_table.h"
 #include "vulkan/wsi/wsi_common.h"
+#include "util/simple_mtx.h"
 
 extern const struct vk_instance_extension_table wrapper_instance_extensions;
 extern const struct vk_device_extension_table wrapper_device_extensions;
@@ -52,6 +53,7 @@ struct wrapper_device {
    struct vk_device vk;
 
    VkDevice dispatch_handle;
+   simple_mtx_t resource_mutex;
    struct list_head command_buffer_list;
    struct list_head memory_data_list;
    struct wrapper_physical_device *physical;

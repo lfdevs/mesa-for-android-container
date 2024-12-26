@@ -9,6 +9,7 @@
 #include "vk_queue.h"
 #include "vk_util.h"
 #include "util/list.h"
+#include "util/simple_mtx.h"
 
 const struct vk_device_extension_table wrapper_device_extensions =
 {
@@ -136,6 +137,7 @@ wrapper_CreateDevice(VkPhysicalDevice physicalDevice,
 
    list_inithead(&device->command_buffer_list);
    list_inithead(&device->memory_data_list);
+   simple_mtx_init(&device->resource_mutex, mtx_plain);
    device->physical = physical_device;
 
    vk_device_dispatch_table_from_entrypoints(
@@ -296,7 +298,7 @@ static void
 wrapper_command_buffer_destroy(struct wrapper_device *device,
                                struct wrapper_command_buffer *wcb) {
    list_del(&wcb->link);
-   vk_object_free(&device->vk, NULL, wcb);
+   vk_object_free(&device->vk, &device->vk.alloc, wcb);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -314,6 +316,8 @@ wrapper_AllocateCommandBuffers(VkDevice _device,
                                                           dispatch_handles);
    if (result != VK_SUCCESS)
       return result;
+
+   simple_mtx_lock(&device->resource_mutex);
 
    for (i = 0; i < pAllocateInfo->commandBufferCount; i++) {
       result = wrapper_command_buffer_create(device,
@@ -334,13 +338,14 @@ wrapper_AllocateCommandBuffers(VkDevice _device,
          wrapper_command_buffer_destroy(device, wcb);
       }
 
-      for (i = 0; i < pAllocateInfo->commandBufferCount; i++)
+      for (i = 0; i < pAllocateInfo->commandBufferCount; i++) {
          pCommandBuffers[i] = VK_NULL_HANDLE;
-
-      return result;
+      }
    }
 
-   return VK_SUCCESS;
+   simple_mtx_unlock(&device->resource_mutex);
+
+   return result;
 }
 
 
@@ -353,11 +358,16 @@ wrapper_FreeCommandBuffers(VkDevice _device,
    VK_FROM_HANDLE(wrapper_device, device, _device);
    VkCommandBuffer dispatch_handles[commandBufferCount];
 
+   simple_mtx_lock(&device->resource_mutex);
+
    for (int i = 0; i < commandBufferCount; i++) {
       VK_FROM_HANDLE(wrapper_command_buffer, wcb, pCommandBuffers[i]);
       dispatch_handles[i] = wcb->dispatch_handle;
       wrapper_command_buffer_destroy(device, wcb);
    }
+
+   simple_mtx_unlock(&device->resource_mutex);
+
    device->dispatch_table.FreeCommandBuffers(device->dispatch_handle,
                                              commandPool, commandBufferCount,
                                              dispatch_handles);
@@ -368,12 +378,18 @@ wrapper_DestroyCommandPool(VkDevice _device, VkCommandPool commandPool,
                            const VkAllocationCallbacks* pAllocator)
 {
    VK_FROM_HANDLE(wrapper_device, device, _device);
+
+   simple_mtx_lock(&device->resource_mutex);
+
    list_for_each_entry_safe(struct wrapper_command_buffer, wcb,
                             &device->command_buffer_list, link) {
       if (wcb->pool == commandPool) {
          wrapper_command_buffer_destroy(device, wcb);
       }
    }
+
+   simple_mtx_unlock(&device->resource_mutex);
+
    device->dispatch_table.DestroyCommandPool(device->dispatch_handle,
                                              commandPool, pAllocator);
 }
@@ -382,10 +398,16 @@ VKAPI_ATTR void VKAPI_CALL
 wrapper_DestroyDevice(VkDevice _device, const VkAllocationCallbacks* pAllocator)
 {
    VK_FROM_HANDLE(wrapper_device, device, _device);
+
+   simple_mtx_lock(&device->resource_mutex);
+
    list_for_each_entry_safe(struct wrapper_command_buffer, wcb,
                             &device->command_buffer_list, link) {
       wrapper_command_buffer_destroy(device, wcb);
    }
+
+   simple_mtx_unlock(&device->resource_mutex);
+
    list_for_each_entry_safe(struct vk_queue, queue, &device->vk.queues, link) {
       vk_queue_finish(queue);
       vk_free2(&device->vk.alloc, pAllocator, queue);
@@ -394,6 +416,7 @@ wrapper_DestroyDevice(VkDevice _device, const VkAllocationCallbacks* pAllocator)
       device->dispatch_table.DestroyDevice(device->
          dispatch_handle, pAllocator);
    }
+   simple_mtx_destroy(&device->resource_mutex);
    vk_device_finish(&device->vk);
    vk_free2(&device->vk.alloc, pAllocator, device);
 }
