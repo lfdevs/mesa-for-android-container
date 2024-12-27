@@ -230,68 +230,68 @@ wrapper_allocate_memory_ahardware_buffer(struct wrapper_device *device,
 }
 
 static void
-wrapper_memory_data_reset(struct wrapper_memory_data *data) {
-   struct wrapper_device *device = data->device;
-   if (data->ahardware_buffer) {
-      AHardwareBuffer_release(data->ahardware_buffer);
-      data->ahardware_buffer = NULL;
+wrapper_device_memory_reset(struct wrapper_device_memory *mem) {
+   struct wrapper_device *device = mem->device;
+   if (mem->ahardware_buffer) {
+      AHardwareBuffer_release(mem->ahardware_buffer);
+      mem->ahardware_buffer = NULL;
    }
-   if (data->dmabuf_fd != -1) {
-      close(data->dmabuf_fd);
-      data->dmabuf_fd = -1;
+   if (mem->dmabuf_fd != -1) {
+      close(mem->dmabuf_fd);
+      mem->dmabuf_fd = -1;
    }
-   if (data->map_address && data->map_size) {
-      munmap(data->map_address, data->map_size);
-      data->map_address = NULL;
+   if (mem->map_address && mem->map_size) {
+      munmap(mem->map_address, mem->map_size);
+      mem->map_address = NULL;
    }
-   if (data->memory != VK_NULL_HANDLE) {
+   if (mem->dispatch_handle != VK_NULL_HANDLE) {
       device->dispatch_table.FreeMemory(device->dispatch_handle,
-         data->memory, data->alloc);
-      data->memory = VK_NULL_HANDLE;
+         mem->dispatch_handle, mem->alloc);
+      mem->dispatch_handle = VK_NULL_HANDLE;
    }
 }
 
-static VkResult
-wrapper_memory_data_create(struct wrapper_device *device,
-                           const VkAllocationCallbacks *alloc,
-                           struct wrapper_memory_data **out_data)
+VkResult
+wrapper_device_memory_create(struct wrapper_device *device,
+                             const VkAllocationCallbacks *alloc,
+                             struct wrapper_device_memory **out_mem)
 {
-   *out_data = vk_zalloc2(&device->vk.alloc, alloc,
-                          sizeof(struct wrapper_memory_data),
-                          8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (*out_data == NULL)
+   *out_mem = vk_zalloc2(&device->vk.alloc, alloc,
+                         sizeof(struct wrapper_device_memory),
+                         8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (*out_mem == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   (*out_data)->dmabuf_fd = -1;
-   (*out_data)->device = device;
-   (*out_data)->alloc = alloc ? alloc : &device->vk.alloc;
-   list_add(&(*out_data)->link, &device->memory_data_list);
+   (*out_mem)->dmabuf_fd = -1;
+   (*out_mem)->device = device;
+   (*out_mem)->alloc = alloc ? alloc : &device->vk.alloc;
+   list_add(&(*out_mem)->link, &device->device_memory_list);
    return VK_SUCCESS;
 }
 
-static void
-wrapper_memory_data_destroy(struct wrapper_memory_data *data) {
-   wrapper_memory_data_reset(data);
-   list_del(&data->link);
-   vk_free2(&data->device->vk.alloc, data->alloc, data);
+void
+wrapper_device_memory_destroy(struct wrapper_device_memory *mem) {
+   wrapper_device_memory_reset(mem);
+   list_del(&mem->link);
+   vk_free2(&mem->device->vk.alloc, mem->alloc, mem);
 }
 
-static struct wrapper_memory_data *
-wrapper_device_memory_data(struct wrapper_device *device,
-                           VkDeviceMemory memory) {
-   struct wrapper_memory_data *result = NULL;
+static struct wrapper_device_memory *
+wrapper_device_memory_from_handle(struct wrapper_device *device,
+                                  VkDeviceMemory handle) {
+   struct wrapper_device_memory *mem = NULL;
 
    simple_mtx_lock(&device->resource_mutex);
 
-   list_for_each_entry(struct wrapper_memory_data, data,
-                       &device->memory_data_list, link) {
-      if (data->memory == memory) {
-         result = data;
+   list_for_each_entry(struct wrapper_device_memory, data,
+                       &device->device_memory_list, link) {
+      if (data->dispatch_handle == handle) {
+         mem = data;
       }
    }
 
    simple_mtx_unlock(&device->resource_mutex);
-   return result;
+   return mem;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -300,18 +300,18 @@ wrapper_AllocateMemory(VkDevice _device,
                        const VkAllocationCallbacks* pAllocator,
                        VkDeviceMemory* pMemory) {
    VK_FROM_HANDLE(wrapper_device, device, _device);
-   struct wrapper_memory_data *data;
+   struct wrapper_device_memory *mem;
    VkResult result;
 
    VkMemoryPropertyFlags property_flags =
       device->physical->memory_properties.memoryTypes[
          pAllocateInfo->memoryTypeIndex].propertyFlags;
 
-   if (!device->vk.enabled_features.memoryMapPlaced ||
-       !device->vk.enabled_extensions.EXT_map_memory_placed)
+   if (!(property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
       goto fallback;
 
-   if (!(property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
+   if (!device->vk.enabled_features.memoryMapPlaced ||
+       !device->vk.enabled_extensions.EXT_map_memory_placed)
       goto fallback;
 
    if (vk_find_struct_const(pAllocateInfo, IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID))
@@ -325,36 +325,36 @@ wrapper_AllocateMemory(VkDevice _device,
 
    simple_mtx_lock(&device->resource_mutex);
 
-   result = wrapper_memory_data_create(device, pAllocator, &data);
+   result = wrapper_device_memory_create(device, pAllocator, &mem);
    if (result != VK_SUCCESS) {
       vk_error(device, result);
       goto out;
    }
 
-   result = wrapper_allocate_memory_dmabuf(device,
-      pAllocateInfo, pAllocator, &data->memory, &data->dmabuf_fd);
+   result = wrapper_allocate_memory_dmabuf(device, pAllocateInfo,
+      pAllocator, &mem->dispatch_handle, &mem->dmabuf_fd);
 
    if (result != VK_SUCCESS) {
-      wrapper_memory_data_reset(data);
+      wrapper_device_memory_reset(mem);
       result = wrapper_allocate_memory_dmaheap(device,
-         pAllocateInfo, pAllocator, &data->memory, &data->dmabuf_fd);
+         pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->dmabuf_fd);
    }
 
    if (result != VK_SUCCESS) {
-      wrapper_memory_data_reset(data);
+      wrapper_device_memory_reset(mem);
       result = wrapper_allocate_memory_ahardware_buffer(device,
-         pAllocateInfo, pAllocator, &data->memory, &data->ahardware_buffer);
+         pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->ahardware_buffer);
    }
 
    if (result != VK_SUCCESS) {
-      wrapper_memory_data_destroy(data);
+      wrapper_device_memory_destroy(mem);
       vk_error(device, result);
    } else {
-      *pMemory = data->memory;
+      *pMemory = mem->dispatch_handle;
    }
 
 out:
-   simple_mtx_unlock(&data->device->resource_mutex);
+   simple_mtx_unlock(&mem->device->resource_mutex);
    return result;
 
 fallback:
@@ -367,12 +367,12 @@ wrapper_FreeMemory(VkDevice _device, VkDeviceMemory _memory,
                    const VkAllocationCallbacks* pAllocator)
 {
    VK_FROM_HANDLE(wrapper_device, device, _device);
-   struct wrapper_memory_data *data;
+   struct wrapper_device_memory *mem;
 
-   data = wrapper_device_memory_data(device, _memory);
-   if (data) {
-      data->alloc = pAllocator;
-      return wrapper_memory_data_destroy(data);
+   mem = wrapper_device_memory_from_handle(device, _memory);
+   if (mem) {
+      mem->alloc = pAllocator;
+      return wrapper_device_memory_destroy(mem);
    }
 
    device->dispatch_table.FreeMemory(device->dispatch_handle,
@@ -387,68 +387,68 @@ wrapper_MapMemory2KHR(VkDevice _device,
 {
    VK_FROM_HANDLE(wrapper_device, device, _device);
    const VkMemoryMapPlacedInfoEXT *placed_info = NULL;
-   struct wrapper_memory_data *data;
+   struct wrapper_device_memory *mem;
    int fd;
 
    if (pMemoryMapInfo->flags & VK_MEMORY_MAP_PLACED_BIT_EXT)
       placed_info = vk_find_struct_const(pMemoryMapInfo->pNext,
          MEMORY_MAP_PLACED_INFO_EXT);
 
-   data = wrapper_device_memory_data(device, pMemoryMapInfo->memory);
-   if (!placed_info || !data)
+   mem = wrapper_device_memory_from_handle(device, pMemoryMapInfo->memory);
+   if (!placed_info || !mem)
       return device->dispatch_table.MapMemory(device->dispatch_handle,
          pMemoryMapInfo->memory, pMemoryMapInfo->offset, pMemoryMapInfo->size,
             0, ppData);
 
-   if (data->map_address) {
-      if (placed_info->pPlacedAddress != data->map_address) {
+   if (mem->map_address) {
+      if (placed_info->pPlacedAddress != mem->map_address) {
          return VK_ERROR_MEMORY_MAP_FAILED;
       } else {
-         *ppData = (char *)data->map_address
+         *ppData = (char *)mem->map_address
             + pMemoryMapInfo->offset;
          return VK_SUCCESS;
       }
    }
-   assert(data->dmabuf_fd >= 0 || data->ahardware_buffer != NULL);
+   assert(mem->dmabuf_fd >= 0 || mem->ahardware_buffer != NULL);
 
-   if (data->ahardware_buffer) {
+   if (mem->ahardware_buffer) {
       const native_handle_t *handle;
       const int *handle_fds;
 
-      handle = AHardwareBuffer_getNativeHandle(data->ahardware_buffer);
+      handle = AHardwareBuffer_getNativeHandle(mem->ahardware_buffer);
       handle_fds = &handle->data[0];
 
       int idx;
       for (idx = 0; idx < handle->numFds; idx++) {
          size_t size = lseek(handle_fds[idx], 0, SEEK_END);
-         if (size >= data->alloc_size) {
+         if (size >= mem->alloc_size) {
             break;
          }
       }
       assert(idx < handle->numFds);
       fd = handle_fds[idx];
    } else {
-      fd = data->dmabuf_fd;
+      fd = mem->dmabuf_fd;
    }
 
    if (pMemoryMapInfo->size == VK_WHOLE_SIZE)
-      data->map_size = data->alloc_size > 0 ?
-         data->alloc_size : lseek(fd, 0, SEEK_END);
+      mem->map_size = mem->alloc_size > 0 ?
+         mem->alloc_size : lseek(fd, 0, SEEK_END);
    else
-      data->map_size = pMemoryMapInfo->size;
+      mem->map_size = pMemoryMapInfo->size;
 
-   data->map_address = mmap(placed_info->pPlacedAddress,
-      data->map_size, PROT_READ | PROT_WRITE,
+   mem->map_address = mmap(placed_info->pPlacedAddress,
+      mem->map_size, PROT_READ | PROT_WRITE,
          MAP_SHARED | MAP_FIXED, fd, 0);
 
-   if (data->map_address == MAP_FAILED) {
-      data->map_address = NULL;
-      data->map_size = 0;
+   if (mem->map_address == MAP_FAILED) {
+      mem->map_address = NULL;
+      mem->map_size = 0;
       fprintf(stderr, "%s: mmap failed\n", __func__);
       return vk_error(device, VK_ERROR_MEMORY_MAP_FAILED);
    }
 
-   *ppData = (char *)data->map_address + pMemoryMapInfo->offset;
+   *ppData = (char *)mem->map_address + pMemoryMapInfo->offset;
 
    return VK_SUCCESS;
 }
@@ -463,28 +463,28 @@ wrapper_UnmapMemory2KHR(VkDevice _device,
                         const VkMemoryUnmapInfoKHR* pMemoryUnmapInfo)
 {
    VK_FROM_HANDLE(wrapper_device, device, _device);
-   struct wrapper_memory_data *data;
+   struct wrapper_device_memory *mem;
 
-   data = wrapper_device_memory_data(device, pMemoryUnmapInfo->memory);
-   if (!data) {
+   mem = wrapper_device_memory_from_handle(device, pMemoryUnmapInfo->memory);
+   if (!mem) {
       device->dispatch_table.UnmapMemory(device->dispatch_handle,
          pMemoryUnmapInfo->memory);
       return VK_SUCCESS;
    }
 
    if (pMemoryUnmapInfo->flags & VK_MEMORY_UNMAP_RESERVE_BIT_EXT) {
-      data->map_address = mmap(data->map_address, data->map_size,
+      mem->map_address = mmap(mem->map_address, mem->map_size,
          PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-      if (data->map_address == MAP_FAILED) {
+      if (mem->map_address == MAP_FAILED) {
          fprintf(stderr, "Failed to replace mapping with reserved memory");
          return vk_error(device, VK_ERROR_MEMORY_MAP_FAILED);
       }
    } else {
-      munmap(data->map_address, data->map_size);
+      munmap(mem->map_address, mem->map_size);
    }
 
-   data->map_size = 0;
-   data->map_address = NULL;
+   mem->map_size = 0;
+   mem->map_address = NULL;
    return VK_SUCCESS;
 }
 

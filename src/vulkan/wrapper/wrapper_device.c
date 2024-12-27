@@ -141,7 +141,7 @@ wrapper_CreateDevice(VkPhysicalDevice physicalDevice,
       return vk_error(physical_device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    list_inithead(&device->command_buffer_list);
-   list_inithead(&device->memory_data_list);
+   list_inithead(&device->device_memory_list);
    simple_mtx_init(&device->resource_mutex, mtx_plain);
    device->physical = physical_device;
 
@@ -452,6 +452,10 @@ wrapper_DestroyDevice(VkDevice _device, const VkAllocationCallbacks* pAllocator)
    list_for_each_entry_safe(struct wrapper_command_buffer, wcb,
                             &device->command_buffer_list, link) {
       wrapper_command_buffer_destroy(device, wcb);
+   }
+   list_for_each_entry_safe(struct wrapper_device_memory, mem,
+                            &device->device_memory_list, link) {
+      wrapper_device_memory_destroy(mem);
    }
 
    simple_mtx_unlock(&device->resource_mutex);
