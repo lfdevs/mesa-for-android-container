@@ -39,7 +39,8 @@ wrapper_setup_device_extensions(struct wrapper_physical_device *pdevice) {
       if (wrapper_filter_extensions.extensions[idx])
          continue;
 
-      exts->extensions[idx] = true;
+      pdevice->base_supported_extensions.extensions[idx] =
+         exts->extensions[idx] = true;
    }
 
    exts->KHR_present_wait = exts->KHR_timeline_semaphore;
@@ -104,21 +105,30 @@ VkResult enumerate_physical_device(struct vk_instance *_instance)
       wrapper_setup_device_extensions(pdevice);
       wrapper_setup_device_features(pdevice);
 
-      const char *env = getenv("DISABLE_MAP_MEMORY_PLACED");
-      const bool disable_map_memory_placed = env && atoi(env) != 0;
-
-      if (disable_map_memory_placed)
-         pdevice->vk.supported_extensions.EXT_map_memory_placed = false;
-
       struct vk_features *supported_features = &pdevice->vk.supported_features;
-      pdevice->backup_supported_features = *supported_features;
+      pdevice->base_supported_features = *supported_features;
       supported_features->presentId = true;
       supported_features->presentWait = supported_features->timelineSemaphore;
       supported_features->swapchainMaintenance1 = true;
       supported_features->imageCompressionControlSwapchain = false;
-      supported_features->memoryMapPlaced = !disable_map_memory_placed;
-      supported_features->memoryUnmapReserve = !disable_map_memory_placed;
-      supported_features->textureCompressionBC = true;
+
+      pdevice->enable_bc =
+         !supported_features->textureCompressionBC
+         && (WRAPPER_DEBUG & WRAPPER_BC);
+
+      if (pdevice->enable_bc)
+         supported_features->textureCompressionBC = true;
+
+      pdevice->enable_map_memory_placed =
+         !pdevice->vk.supported_extensions.EXT_map_memory_placed
+         && (WRAPPER_DEBUG & WRAPPER_MAP_MEMORY_PLACED);
+
+      if (pdevice->enable_map_memory_placed) {
+         pdevice->vk.supported_extensions.EXT_map_memory_placed = true;
+         pdevice->vk.supported_extensions.KHR_map_memory2 = true;
+         supported_features->memoryMapPlaced = true;
+         supported_features->memoryUnmapReserve = true;
+      }
 
       result = wsi_device_init(&pdevice->wsi_device,
                                wrapper_physical_device_to_handle(pdevice),

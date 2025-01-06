@@ -12,6 +12,11 @@ extern const struct vk_instance_extension_table wrapper_instance_extensions;
 extern const struct vk_device_extension_table wrapper_device_extensions;
 extern const struct vk_device_extension_table wrapper_filter_extensions;
 
+extern uint64_t WRAPPER_DEBUG;
+
+#define WRAPPER_MAP_MEMORY_PLACED      (1ull << 0)
+#define WRAPPER_BC                     (1ull << 1)
+
 struct wrapper_instance {
    struct vk_instance vk;
 
@@ -26,13 +31,16 @@ struct wrapper_physical_device {
    struct vk_physical_device vk;
 
    int dma_heap_fd;
+   bool enable_map_memory_placed;
+   bool enable_bc;
    VkPhysicalDevice dispatch_handle;
    VkPhysicalDeviceProperties2 properties2;
    VkPhysicalDeviceDriverProperties driver_properties;
    VkPhysicalDeviceMemoryProperties memory_properties;
    struct wsi_device wsi_device;
    struct wrapper_instance *instance;
-   struct vk_features backup_supported_features;
+   struct vk_features base_supported_features;
+   struct vk_device_extension_table base_supported_extensions;
    struct vk_physical_device_dispatch_table dispatch_table;
 };
 

@@ -5,6 +5,14 @@
 #include "vk_dispatch_table.h"
 #include "vk_extensions.h"
 
+uint64_t WRAPPER_DEBUG;
+
+static const struct debug_control debug_control[] = {
+   { "placed",       WRAPPER_MAP_MEMORY_PLACED },
+   { "bc",           WRAPPER_BC },
+   { NULL, },
+};
+
 const struct vk_instance_extension_table wrapper_instance_extensions = {
    .KHR_get_surface_capabilities2 = true,
    .EXT_surface_maintenance1 = true,
@@ -52,6 +60,9 @@ static bool vulkan_library_init()
 {
    if (vulkan_library_handle)
       return true;
+
+   WRAPPER_DEBUG = parse_debug_string(getenv("WRAPPER_DEBUG"),
+                                      debug_control);
 
    const char *env = getenv("WRAPPER_VULKAN_PATH");
    vulkan_library_handle = dlopen(env ? env : DEFAULT_VULKAN_PATH,
