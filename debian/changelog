@@ -1,3 +1,9 @@
+mesa (24.3.3-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 08 Jan 2025 13:03:31 +0200
+
 mesa (24.3.0-1) experimental; urgency=medium
 
   * New upstream release.
