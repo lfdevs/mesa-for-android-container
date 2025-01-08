@@ -689,13 +689,29 @@ BEGIN_TEST(optimize.sdwa.subdword_extract)
                                    Operand::c32(8), Operand::c32(0)),
                         inputs[2]));
 
-   //! v1b: %res3 = v_or_b32 %a, %b dst_sel:ubyte0 dst_preserve src0_sel:ubyte0 src1_sel:ubyte2
+   //! v1b: %res3 = v_or_b32 %a, %b dst_sel:ubyte0 dst_preserve src0_sel:uword0 src1_sel:ubyte2
    //! p_unit_test 3, %res3
    writeout(3, bld.vop2(aco_opcode::v_or_b32, bld.def(v1b),
                         bld.pseudo(aco_opcode::p_extract, bld.def(v1b), a, Operand::c32(0),
                                    Operand::c32(16), Operand::c32(0)),
                         bld.pseudo(aco_opcode::p_extract, bld.def(v1b), b, Operand::c32(1),
                                    Operand::c32(16), Operand::c32(0))));
+
+   //! v2b: %res4 = v_cvt_f16_i16 %a dst_sel:uword0 dst_preserve src0_sel:sbyte0
+   //! p_unit_test 4, %res4
+   writeout(4, bld.vop1(aco_opcode::v_cvt_f16_i16, bld.def(v2b),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(0),
+                                   Operand::c32(8), Operand::c32(1))));
+
+   /* TODO incremental conversion to sdwa loses information if zero extend is actually necessary */
+   //! v2b: %tmp5 = p_extract %b, 1, 8, 1
+   //! v2b: %res5 = v_or_b32 %a, %tmp5 dst_sel:uword0 dst_preserve src0_sel:sbyte0 src1_sel:uword0
+   //! p_unit_test 5, %res5
+   writeout(5, bld.vop2(aco_opcode::v_or_b32, bld.def(v2b),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(0),
+                                   Operand::c32(8), Operand::c32(1)),
+                        bld.pseudo(aco_opcode::p_extract, bld.def(v2b), b, Operand::c32(1),
+                                   Operand::c32(8), Operand::c32(1))));
 
    finish_opt_test();
 END_TEST

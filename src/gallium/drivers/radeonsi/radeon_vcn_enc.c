@@ -24,6 +24,7 @@ static void radeon_vcn_enc_quality_modes(struct radeon_encoder *enc,
                                          struct pipe_enc_quality_modes *in)
 {
    rvcn_enc_quality_modes_t *p = &enc->enc_pic.quality_modes;
+   struct si_screen *sscreen = (struct si_screen *)enc->screen;
 
    p->preset_mode = in->preset_mode > RENCODE_PRESET_MODE_HIGH_QUALITY
                                     ? RENCODE_PRESET_MODE_HIGH_QUALITY
@@ -38,6 +39,13 @@ static void radeon_vcn_enc_quality_modes(struct radeon_encoder *enc,
 
    if (enc->enc_pic.rc_session_init.rate_control_method == RENCODE_RATE_CONTROL_METHOD_QUALITY_VBR)
       p->pre_encode_mode = RENCODE_PREENCODE_MODE_4X;
+
+   /* Disabling 2pass encoding for VCN 5.0
+    * This is a temporary limitation only for VCN 5.0 due to HW,
+    * once verified in future VCN 5.X versions, it will be enabled again. 
+    */
+   if (sscreen->info.vcn_ip_version >= VCN_5_0_0)
+      p->pre_encode_mode = RENCODE_PREENCODE_MODE_NONE;
 
    p->vbaq_mode = in->vbaq_mode ? RENCODE_VBAQ_AUTO : RENCODE_VBAQ_NONE;
 
@@ -1999,7 +2007,7 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
       radeon_enc_4_0_init(enc);
    }
    else if (sscreen->info.vcn_ip_version >= VCN_3_0_0) {
-      if (sscreen->info.vcn_enc_minor_version >= 24)
+      if (sscreen->info.vcn_enc_minor_version >= 29)
          enc->enc_pic.use_rc_per_pic_ex = true;
       radeon_enc_3_0_init(enc);
    }

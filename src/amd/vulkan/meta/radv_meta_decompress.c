@@ -528,7 +528,7 @@ radv_expand_depth_stencil_compute(struct radv_cmd_buffer *cmd_buffer, struct rad
    /* Initialize the HTILE metadata as "fully expanded". */
    uint32_t htile_value = radv_get_htile_initial_value(device, image);
 
-   cmd_buffer->state.flush_bits |= radv_clear_htile(cmd_buffer, image, subresourceRange, htile_value);
+   cmd_buffer->state.flush_bits |= radv_clear_htile(cmd_buffer, image, subresourceRange, htile_value, false);
 }
 
 void

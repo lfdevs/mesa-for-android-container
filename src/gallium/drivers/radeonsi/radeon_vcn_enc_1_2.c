@@ -1175,8 +1175,8 @@ static void radeon_enc_intra_refresh(struct radeon_encoder *enc)
 
 static void radeon_enc_rc_per_pic(struct radeon_encoder *enc)
 {
-   fprintf(stderr, "Warning: Obsoleted rate control is being used due to outdated VCN firmware on system.\n");
-   fprintf(stderr, "Updating VCN firmware is highly recommended.\n");
+   debug_warn_once("Obsoleted rate control is being used due to outdated VCN firmware on system. "
+                   "Updating VCN firmware is highly recommended.");
    RADEON_ENC_BEGIN(enc->cmd.rc_per_pic);
    RADEON_ENC_CS(enc->enc_pic.rc_per_pic.qp_obs);
    RADEON_ENC_CS(enc->enc_pic.rc_per_pic.min_qp_app_obs);

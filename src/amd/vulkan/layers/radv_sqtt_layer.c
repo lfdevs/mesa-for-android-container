@@ -1778,7 +1778,7 @@ sqtt_CreateRayTracingPipelinesKHR(VkDevice _device, VkDeferredOperationKHR defer
 
    result = device->layer_dispatch.rgp.CreateRayTracingPipelinesKHR(_device, deferredOperation, pipelineCache, count,
                                                                     pCreateInfos, pAllocator, pPipelines);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS && result != VK_OPERATION_DEFERRED_KHR)
       return result;
 
    for (unsigned i = 0; i < count; i++) {

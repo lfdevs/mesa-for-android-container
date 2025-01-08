@@ -433,7 +433,8 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
    enum pipe_video_format format = u_reduce_video_profile(context->templat.profile);
    static const uint8_t start_code_h264[] = { 0x00, 0x00, 0x01 };
    static const uint8_t start_code_h265[] = { 0x00, 0x00, 0x01 };
-   static const uint8_t start_code_vc1[] = { 0x00, 0x00, 0x01, 0x0d };
+   static const uint8_t start_code_vc1_frame[] = { 0x00, 0x00, 0x01, 0x0d };
+   static const uint8_t start_code_vc1_field[] = { 0x00, 0x00, 0x01, 0x0c };
    static const uint8_t eoi_jpeg[] = { 0xff, 0xd9 };
 
    if (!context->decoder)
@@ -467,14 +468,14 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
          context->bs.sizes[context->bs.num_buffers++] = sizeof(start_code_h265);
          break;
       case PIPE_VIDEO_FORMAT_VC1:
-         if (bufHasStartcode(buf, 0x0000010d, 32) ||
-             bufHasStartcode(buf, 0x0000010c, 32) ||
-             bufHasStartcode(buf, 0x0000010b, 32))
+         if (bufHasStartcode(buf, 0x000001, 24))
             break;
 
          if (context->decoder->profile == PIPE_VIDEO_PROFILE_VC1_ADVANCED) {
-            context->bs.buffers[context->bs.num_buffers] = (void *const)&start_code_vc1;
-            context->bs.sizes[context->bs.num_buffers++] = sizeof(start_code_vc1);
+            const uint8_t *start_code =
+               context->desc.vc1.is_first_field ? start_code_vc1_frame : start_code_vc1_field;
+            context->bs.buffers[context->bs.num_buffers] = (void *const)start_code;
+            context->bs.sizes[context->bs.num_buffers++] = sizeof(start_code_vc1_frame);
          }
          break;
       case PIPE_VIDEO_FORMAT_MPEG4:
@@ -1004,6 +1005,11 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
 
+   if (!context->target_id) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_OPERATION_FAILED;
+   }
+
    /* Always process VAProtectedSliceDataBufferType first because it changes the state */
    for (i = 0; i < num_buffers; ++i) {
       vlVaBuffer *buf = handle_table_get(drv->htab, buffers[i]);
@@ -1154,6 +1160,14 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
 
+   if (!context->target_id) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_OPERATION_FAILED;
+   }
+
+   output_id = context->target_id;
+   context->target_id = 0;
+
    if (!context->decoder) {
       if (context->templat.profile != PIPE_VIDEO_PROFILE_UNKNOWN) {
          mtx_unlock(&drv->mutex);
@@ -1165,7 +1179,6 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_SUCCESS;
    }
 
-   output_id = context->target_id;
    out_target = &context->target;
    apply_av1_fg = vlVaQueryApplyFilmGrainAV1(context, &output_id, &out_target);
 

@@ -31,6 +31,7 @@
 #include "util/libdrm.h"
 
 #include "intel_device_info.h"
+#include "intel_hwconfig.h"
 #include "intel_wa.h"
 #include "i915/intel_device_info.h"
 #include "xe/intel_device_info.h"
@@ -1965,6 +1966,8 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo, int min
 
    intel_device_info_init_was(devinfo);
    intel_device_info_apply_workarounds(devinfo);
+
+   intel_check_hwconfig_items(fd, devinfo);
 
    return true;
 }

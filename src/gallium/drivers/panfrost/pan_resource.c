@@ -1651,7 +1651,7 @@ panfrost_pack_afbc(struct panfrost_context *ctx,
          dst_slice->afbc.nr_blocks = dst_stride * dst_height;
          dst_slice->afbc.header_size =
             ALIGN_POT(dst_stride * dst_height * AFBC_HEADER_BYTES_PER_TILE,
-                      pan_afbc_body_align(dst_modifier));
+                      pan_afbc_body_align(dev->arch, dst_modifier));
          dst_slice->afbc.body_size = offset;
          dst_slice->afbc.surface_stride = dst_slice->afbc.header_size + offset;
 
@@ -1672,9 +1672,10 @@ panfrost_pack_afbc(struct panfrost_context *ctx,
    unsigned old_size = panfrost_bo_size(prsrc->bo);
    unsigned ratio = 100 * new_size / old_size;
 
-   if (ratio > screen->max_afbc_packing_ratio)
+   if (ratio > screen->max_afbc_packing_ratio) {
+      panfrost_bo_unreference(metadata_bo);
       return;
-
+   }
    perf_debug(ctx, "%i%%: %i KB -> %i KB\n", ratio, old_size / 1024,
               new_size / 1024);
 

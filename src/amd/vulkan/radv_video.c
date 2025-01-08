@@ -711,7 +711,7 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
       ext->flags = VK_VIDEO_ENCODE_H264_CAPABILITY_HRD_COMPLIANCE_BIT_KHR |
                    VK_VIDEO_ENCODE_H264_CAPABILITY_PER_PICTURE_TYPE_MIN_MAX_QP_BIT_KHR;
       ext->maxLevelIdc = cap ? cap->max_level : 0;
-      ext->maxSliceCount = 128;
+      ext->maxSliceCount = 1;
       ext->maxPPictureL0ReferenceCount = 1;
       ext->maxBPictureL0ReferenceCount = 0;
       ext->maxL1ReferenceCount = 0;
@@ -757,7 +757,7 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
       pCapabilities->maxActiveReferencePictures = NUM_H2645_REFS;
       ext->flags = VK_VIDEO_ENCODE_H265_CAPABILITY_PER_PICTURE_TYPE_MIN_MAX_QP_BIT_KHR;
       ext->maxLevelIdc = cap ? cap->max_level : 0;
-      ext->maxSliceSegmentCount = 128;
+      ext->maxSliceSegmentCount = 1;
       ext->maxTiles.width = 1;
       ext->maxTiles.height = 1;
       ext->ctbSizes = VK_VIDEO_ENCODE_H265_CTB_SIZE_64_BIT_KHR;
@@ -1973,9 +1973,9 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
    *slice_offset = 0;
 
    /* Intra-only decoding will only work without a setup slot for AV1
-    * currently, other codecs require the application to pass a
+    * (non-filmgrain) currently, other codecs require the application to pass a
     * setup slot for this use-case, since the FW is not able to skip write-out
-    * for H26X.  In order to fix that properly, additional scratch space will
+    * for H26X. In order to fix that properly, additional scratch space will
     * be needed in the video session just for intra-only DPB targets.
     */
    int dpb_update_required = 1;
@@ -2015,10 +2015,10 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
       assert(frame_info->pSetupReferenceSlot != NULL);
 
    struct radv_image_view *dpb_iv =
-      dpb_update_required
+      frame_info->pSetupReferenceSlot
          ? radv_image_view_from_handle(frame_info->pSetupReferenceSlot->pPictureResource->imageViewBinding)
          : NULL;
-   struct radv_image *dpb = dpb_update_required ? dpb_iv->image : img;
+   struct radv_image *dpb = dpb_iv ? dpb_iv->image : img;
 
    int dpb_array_idx = 0;
    if (dpb_update_required) {

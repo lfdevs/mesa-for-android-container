@@ -743,7 +743,7 @@ radv_depth_stencil_resolve_rendering_cs(struct radv_cmd_buffer *cmd_buffer, VkIm
 
       uint32_t htile_value = radv_get_htile_initial_value(device, dst_image);
 
-      cmd_buffer->state.flush_bits |= radv_clear_htile(cmd_buffer, dst_image, &range, htile_value);
+      cmd_buffer->state.flush_bits |= radv_clear_htile(cmd_buffer, dst_image, &range, htile_value, false);
    }
 
    radv_image_view_finish(&tsrc_iview);

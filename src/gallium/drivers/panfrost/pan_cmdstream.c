@@ -80,6 +80,7 @@ struct panfrost_sampler_view {
    struct panfrost_pool_ref state;
    struct mali_texture_packed bifrost_descriptor;
    mali_ptr texture_bo;
+   uint64_t texture_size;
    uint64_t modifier;
 
    /* Pool used to allocate the descriptor. If NULL, defaults to the global
@@ -1580,6 +1581,7 @@ panfrost_create_sampler_view_bo(struct panfrost_sampler_view *so,
    }
 
    so->texture_bo = prsrc->image.data.base;
+   so->texture_size = prsrc->image.layout.data_size;
    so->modifier = prsrc->image.layout.modifier;
 
    /* MSAA only supported for 2D textures */
@@ -1669,6 +1671,7 @@ panfrost_update_sampler_view(struct panfrost_sampler_view *view,
 {
    struct panfrost_resource *rsrc = pan_resource(view->base.texture);
    if (view->texture_bo != rsrc->image.data.base ||
+       view->texture_size != rsrc->image.layout.data_size ||
        view->modifier != rsrc->image.layout.modifier) {
       panfrost_bo_unreference(view->state.bo);
       panfrost_create_sampler_view_bo(view, pctx, &rsrc->base);
@@ -3338,7 +3341,7 @@ panfrost_afbc_pack(struct panfrost_batch *batch, struct panfrost_resource *src,
       .dst_stride = dst_slice->afbc.stride,
    };
 
-   panfrost_batch_write_rsrc(batch, src, PIPE_SHADER_COMPUTE);
+   panfrost_batch_read_rsrc(batch, src, PIPE_SHADER_COMPUTE);
    panfrost_batch_write_bo(batch, dst, PIPE_SHADER_COMPUTE);
    panfrost_batch_add_bo(batch, metadata, PIPE_SHADER_COMPUTE);
 

@@ -1049,15 +1049,6 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so,
       }
    }
 
-   if (so->binning_pass) {
-      if (OPT(s, lower_binning)) {
-         progress = true;
-
-         /* outputs_written has changed. */
-         nir_shader_gather_info(s, nir_shader_get_entrypoint(s));
-      }
-   }
-
    /* Note that it is intentional to use the VS lowering pass for GS, since we
     * lower GS into something that looks more like a VS in ir3_nir_lower_gs():
     */
@@ -1066,6 +1057,15 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so,
    } else if (s->info.stage == MESA_SHADER_FRAGMENT) {
       if (so->key.ucp_enables && !so->compiler->has_clip_cull)
          progress |= OPT(s, nir_lower_clip_fs, so->key.ucp_enables, true);
+   }
+
+   if (so->binning_pass) {
+      if (OPT(s, lower_binning)) {
+         progress = true;
+
+         /* outputs_written has changed. */
+         nir_shader_gather_info(s, nir_shader_get_entrypoint(s));
+      }
    }
 
    /* Move large constant variables to the constants attached to the NIR

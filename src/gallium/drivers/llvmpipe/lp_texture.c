@@ -1506,6 +1506,7 @@ llvmpipe_import_memory_fd(struct pipe_screen *screen,
       if (!ret) {
          free(alloc);
          *ptr = NULL;
+         return false;
       } else {
          *ptr = (struct pipe_memory_allocation*)alloc;
       }

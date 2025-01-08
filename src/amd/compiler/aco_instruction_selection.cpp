@@ -7303,6 +7303,9 @@ visit_store_buffer(isel_context* ctx, nir_intrinsic_instr* intrin)
       unsigned const_offset = resolve_excess_vmem_const_offset(
          bld, write_voffset, offsets[i] + nir_intrinsic_base(intrin));
 
+      /* write_voffset may be updated in resolve_excess_vmem_const_offset(). */
+      offen = write_voffset.id();
+
       Operand vaddr_op(v1);
       if (offen && idxen)
          vaddr_op = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), idx, write_voffset);
@@ -8603,8 +8606,12 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
       } else {
          aco_opcode subrev =
             instr->def.bit_size == 16 ? aco_opcode::v_subrev_f16 : aco_opcode::v_subrev_f32;
+
+         /* v_interp with constant sources only works on GFX11/11.5,
+          * and it's only faster on GFX11.5.
+          */
          bool use_interp = dpp_ctrl1 == dpp_quad_perm(0, 0, 0, 0) && instr->def.bit_size == 32 &&
-                           ctx->program->gfx_level >= GFX11_5;
+                           ctx->program->gfx_level == GFX11_5;
          if (!nir_src_is_divergent(&instr->src[0])) {
             bld.vop2(subrev, Definition(dst), src, src);
          } else if (use_interp && dpp_ctrl2 == dpp_quad_perm(1, 1, 1, 1)) {

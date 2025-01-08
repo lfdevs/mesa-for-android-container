@@ -57,6 +57,14 @@
  *   trailer
  */
 
+uint32_t
+radv_dgc_get_buffer_alignment(const struct radv_device *device)
+{
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   return MAX2(pdev->info.ip[AMD_IP_GFX].ib_alignment, pdev->info.ip[AMD_IP_COMPUTE].ib_alignment);
+}
+
 static uint32_t
 radv_pad_cmdbuf(const struct radv_device *device, uint32_t size, enum amd_ip_type ip_type)
 {
@@ -2740,8 +2748,7 @@ radv_GetGeneratedCommandsMemoryRequirementsEXT(VkDevice _device,
    get_dgc_cmdbuf_layout(device, layout, pInfo->pNext, pInfo->maxSequenceCount, true, &cmdbuf_layout);
 
    pMemoryRequirements->memoryRequirements.memoryTypeBits = pdev->memory_types_32bit;
-   pMemoryRequirements->memoryRequirements.alignment =
-      MAX2(pdev->info.ip[AMD_IP_GFX].ib_alignment, pdev->info.ip[AMD_IP_COMPUTE].ib_alignment);
+   pMemoryRequirements->memoryRequirements.alignment = radv_dgc_get_buffer_alignment(device);
    pMemoryRequirements->memoryRequirements.size =
       align(cmdbuf_layout.alloc_size, pMemoryRequirements->memoryRequirements.alignment);
 }
@@ -3165,7 +3172,7 @@ radv_DestroyIndirectCommandsLayoutEXT(VkDevice _device, VkIndirectCommandsLayout
    if (!layout)
       return;
 
-   vk_indirect_command_layout_destroy(&device->vk, pAllocator, &layout->vk);
+   radv_destroy_indirect_commands_layout(device, pAllocator, layout);
 }
 
 static void

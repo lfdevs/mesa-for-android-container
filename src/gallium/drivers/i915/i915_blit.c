@@ -44,6 +44,9 @@ i915_fill_blit(struct i915_context *i915, unsigned cpp, unsigned rgba_mask,
 
    switch (cpp) {
    case 1:
+      BR13 = (((int)dst_pitch) & 0xffff) | (0xF0 << 16);
+      CMD = XY_COLOR_BLT_CMD;
+      break;
    case 2:
    case 3:
       BR13 = (((int)dst_pitch) & 0xffff) | (0xF0 << 16) | (1 << 24);
@@ -99,6 +102,9 @@ i915_copy_blit(struct i915_context *i915, unsigned cpp,
 
    switch (cpp) {
    case 1:
+      BR13 = (((int)dst_pitch) & 0xffff) | (0xCC << 16);
+      CMD = XY_SRC_COPY_BLT_CMD;
+      break;
    case 2:
    case 3:
       BR13 = (((int)dst_pitch) & 0xffff) | (0xCC << 16) | (1 << 24);

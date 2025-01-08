@@ -899,14 +899,8 @@ gbm_dri_bo_create(struct gbm_device *gbm,
       dri_use |= __DRI_IMAGE_USE_LINEAR;
    if (usage & GBM_BO_USE_PROTECTED)
       dri_use |= __DRI_IMAGE_USE_PROTECTED;
-   if (usage & GBM_BO_USE_FRONT_RENDERING) {
-      assert (!(usage & GBM_BO_EXPLICIT_FLUSH));
+   if (usage & GBM_BO_USE_FRONT_RENDERING)
       dri_use |= __DRI_IMAGE_USE_FRONT_RENDERING;
-   }
-   if (usage & GBM_BO_EXPLICIT_FLUSH) {
-      assert (!(usage & GBM_BO_USE_FRONT_RENDERING));
-      dri_use |= __DRI_IMAGE_USE_BACKBUFFER;
-   }
 
    /* Gallium drivers requires shared in order to get the handle/stride */
    dri_use |= __DRI_IMAGE_USE_SHARE;
@@ -1110,7 +1104,7 @@ gbm_dri_surface_create(struct gbm_device *gbm,
    surf->base.v0.width = width;
    surf->base.v0.height = height;
    surf->base.v0.format = core->v0.format_canonicalize(format);
-   surf->base.v0.flags = flags | GBM_BO_EXPLICIT_FLUSH;
+   surf->base.v0.flags = flags;
    if (!modifiers) {
       assert(!count);
       return &surf->base;

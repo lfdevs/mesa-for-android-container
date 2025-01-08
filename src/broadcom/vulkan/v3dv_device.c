@@ -1530,7 +1530,7 @@ enumerate_devices(struct vk_instance *vk_instance)
    }
 
    if (render_fd < 0)
-      result = VK_ERROR_INITIALIZATION_FAILED;
+      result = VK_ERROR_INCOMPATIBLE_DRIVER;
    else
       result = create_physical_device(instance, render_fd, primary_fd);
 

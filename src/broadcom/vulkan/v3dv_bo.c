@@ -244,20 +244,16 @@ v3dv_bo_alloc(struct v3dv_device *device,
       }
    }
 
- retry:
-   ;
-
-   bool cleared_and_retried = false;
    struct drm_v3d_create_bo create = {
       .size = size
    };
 
-   int ret = v3dv_ioctl(device->pdevice->render_fd,
-                        DRM_IOCTL_V3D_CREATE_BO, &create);
+   int ret;
+retry:
+   ret = v3dv_ioctl(device->pdevice->render_fd,
+                    DRM_IOCTL_V3D_CREATE_BO, &create);
    if (ret != 0) {
-      if (!list_is_empty(&device->bo_cache.time_list) &&
-          !cleared_and_retried) {
-         cleared_and_retried = true;
+      if (!list_is_empty(&device->bo_cache.time_list)) {
          bo_cache_free_all(device, true);
          goto retry;
       }

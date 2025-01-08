@@ -176,12 +176,6 @@ struct wsi_wl_surface {
       uint64_t presentation_track_id;
    } analytics;
 
-   uint64_t last_target_time;
-   uint64_t displayed_time;
-   bool valid_refresh_nsec;
-   unsigned int refresh_nsec;
-   uint64_t display_time_error;
-   uint64_t display_time_correction;
    struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
    struct dmabuf_feedback dmabuf_feedback, pending_dmabuf_feedback;
 
@@ -210,12 +204,16 @@ struct wsi_wl_swapchain {
    uint32_t num_drm_modifiers;
    const uint64_t *drm_modifiers;
 
-   VkPresentModeKHR present_mode;
    bool legacy_fifo_ready;
+   bool next_present_force_wait_barrier;
 
    struct {
       mtx_t lock; /* protects all members */
       uint64_t max_completed;
+      uint64_t max_forward_progress_present_id;
+      uint64_t max_present_id;
+      uint64_t prev_max_present_id;
+
       struct wl_list outstanding_list;
       struct u_cnd_monotonic list_advanced;
       struct wl_event_queue *queue;
@@ -223,6 +221,13 @@ struct wsi_wl_swapchain {
       /* Fallback when wp_presentation is not supported */
       struct wl_surface *surface;
       bool dispatch_in_progress;
+
+      uint64_t display_time_error;
+      uint64_t display_time_correction;
+      uint64_t last_target_time;
+      uint64_t displayed_time;
+      bool valid_refresh_nsec;
+      unsigned int refresh_nsec;
    } present_ids;
 
    struct wsi_wl_image images[0];
@@ -279,9 +284,6 @@ next_phase_locked_time(uint64_t base, uint64_t period, uint64_t from)
    if (base == 0)
       return from;
 
-   if (period == 0)
-      period = 16666666;
-
    /* If our time base is in the future (which can happen when using
     * presentation feedback events), target the next possible
     * presentation time.
@@ -289,13 +291,31 @@ next_phase_locked_time(uint64_t base, uint64_t period, uint64_t from)
    if (base >= from)
       return base + period;
 
-   /* Round up our cycle count so imprecision in feedback times doesn't
-    * lead to a time just after a refresh and a time just before the
-    * following refresh producing the same cycle count.
+   /* The presentation time extension recommends that the compositor
+    * use a clock with "precision of one millisecond or better",
+    * so we shouldn't rely on these times being perfectly precise.
+    *
+    * Additionally, some compositors round off feedback times
+    * internally, (eg: to microsecond precision), so our times can
+    * have some jitter in either direction.
+    *
+    * We need to be especially careful not to miss an opportunity
+    * to display by calculating a cycle too far into the future.
+    * This will cause delays in frame presentation.
+    *
+    * If we choose a cycle too soon, fifo barrier will still keep
+    * the pace properly, except in the case of occluded surfaces -
+    * but occluded surfaces don't move their base time in response
+    * to presentation events, so there is no jitter and the math
+    * is more forgiving. That case just needs to monotonically
+    * increase.
+    *
+    * We fairly arbitrarily use period / 4 here to try to stay
+    * well away from rounding up too far, but to also avoid
+    * scheduling too soon if the time values are imprecise.
     */
-   cycles = (from - base + period - 1) / period;
-   target = base + cycles * period;
-
+   cycles = (from - base + period / 4) / period;
+   target = base + (cycles + 1) * period;
    return target;
 }
 
@@ -1783,8 +1803,6 @@ static VkResult wsi_wl_surface_init(struct wsi_wl_surface *wsi_wl_surface,
 
    wsi_wl_surface_analytics_init(wsi_wl_surface, pAllocator);
 
-   wsi_wl_surface->valid_refresh_nsec = false;
-   wsi_wl_surface->refresh_nsec = 0;
    return VK_SUCCESS;
 
 fail:
@@ -1944,6 +1962,13 @@ dispatch_present_id_queue(struct wsi_swapchain *wsi_chain, struct timespec *end_
    return VK_SUCCESS;
 }
 
+static bool
+wsi_wl_swapchain_present_id_completes_in_finite_time_locked(struct wsi_wl_swapchain *chain,
+                                                            uint64_t present_id)
+{
+   return present_id <= chain->present_ids.max_forward_progress_present_id;
+}
+
 static VkResult
 wsi_wl_swapchain_wait_for_present(struct wsi_swapchain *wsi_chain,
                                   uint64_t present_id,
@@ -1978,9 +2003,30 @@ wsi_wl_swapchain_wait_for_present(struct wsi_swapchain *wsi_chain,
     * The queue depth in WL WSI is just one frame due to frame callback in FIFO mode,
     * so from the time a frame has completed render to when it should be considered presented
     * will not exceed 100ms except in contrived edge cases. */
+
+   /* For FIFO without commit-timing we have a similar concern, but only when waiting on the last presented ID that is pending.
+    * It is possible the last presentation is held back due to being occluded, but this scenario is very rare
+    * in practice. An application blocking on the last presentation implies zero CPU and GPU overlap,
+    * and is likely only going to happen at swapchain destruction or similar. */
+
    uint64_t assumed_success_at = UINT64_MAX;
-   if (!chain->present_ids.wp_presentation)
+   if (!chain->present_ids.wp_presentation) {
       assumed_success_at = os_time_get_absolute_timeout(100 * 1000 * 1000);
+   } else {
+      err = mtx_lock(&chain->present_ids.lock);
+      if (err != thrd_success)
+         return VK_ERROR_OUT_OF_DATE_KHR;
+
+      /* If we're waiting for the very last commit made for whatever reason,
+       * we're not necessarily guaranteed forward progress until a subsequent commit is made.
+       * Add a timeout post GPU rendering completion to unblock any waiter in reasonable time. */
+      if (!wsi_wl_swapchain_present_id_completes_in_finite_time_locked(chain, present_id)) {
+         /* The queue depth could be larger, so just make a heuristic decision here to bump the timeout. */
+         uint32_t num_pending_cycles = wl_list_length(&chain->present_ids.outstanding_list) + 1;
+         assumed_success_at = os_time_get_absolute_timeout(100ull * 1000 * 1000 * num_pending_cycles);
+      }
+      mtx_unlock(&chain->present_ids.lock);
+   }
 
    /* If app timeout is beyond the deadline we set for reply,
     * always treat the timeout as successful. */
@@ -1998,9 +2044,29 @@ wsi_wl_swapchain_wait_for_present(struct wsi_swapchain *wsi_chain,
       if (completed)
          return VK_SUCCESS;
 
+retry:
       ret = dispatch_present_id_queue(wsi_chain, &end_time);
-      if (ret == VK_TIMEOUT)
+      if (ret == VK_TIMEOUT) {
+         if (timeout_result == VK_SUCCESS && chain->fifo && chain->present_ids.wp_presentation) {
+            /* If there have been subsequent commits since when we made the decision to add a timeout,
+             * we can drop that timeout condition and rely on forward progress instead. */
+            err = mtx_lock(&chain->present_ids.lock);
+            if (err != thrd_success)
+               return VK_ERROR_OUT_OF_DATE_KHR;
+
+            if (wsi_wl_swapchain_present_id_completes_in_finite_time_locked(chain, present_id)) {
+               timespec_from_nsec(&end_time, atimeout);
+               timeout_result = VK_TIMEOUT;
+            }
+            mtx_unlock(&chain->present_ids.lock);
+
+            /* Retry the wait, but now without any workaround. */
+            if (timeout_result == VK_TIMEOUT)
+               goto retry;
+         }
          return timeout_result;
+      }
+
       if (ret != VK_SUCCESS)
          return ret;
    }
@@ -2146,7 +2212,7 @@ wsi_wl_presentation_update_present_id(struct wsi_wl_present_id *id)
    if (id->present_id > id->chain->present_ids.max_completed)
       id->chain->present_ids.max_completed = id->present_id;
 
-   id->chain->wsi_wl_surface->display_time_correction -= id->correction;
+   id->chain->present_ids.display_time_correction -= id->correction;
    wl_list_remove(&id->link);
    mtx_unlock(&id->chain->present_ids.lock);
    vk_free(id->alloc, id);
@@ -2199,29 +2265,30 @@ presentation_handle_presented(void *data,
    MESA_TRACE_FUNC_FLOW(&id->flow_id);
 
    struct wsi_wl_swapchain *chain = id->chain;
-   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
    uint64_t target_time = id->target_time;
 
-   surface->refresh_nsec = refresh;
 
    presentation_ts.tv_sec = ((uint64_t)tv_sec_hi << 32) + tv_sec_lo;
    presentation_ts.tv_nsec = tv_nsec;
    presentation_time = timespec_to_nsec(&presentation_ts);
    trace_present(id, presentation_time);
 
-   if (!surface->valid_refresh_nsec) {
-      surface->valid_refresh_nsec = true;
-      surface->last_target_time = presentation_time;
+   mtx_lock(&chain->present_ids.lock);
+   chain->present_ids.refresh_nsec = refresh;
+   if (!chain->present_ids.valid_refresh_nsec) {
+      chain->present_ids.valid_refresh_nsec = true;
+      chain->present_ids.last_target_time = presentation_time;
       target_time = presentation_time;
    }
 
-   if (presentation_time > surface->displayed_time)
-      surface->displayed_time = presentation_time;
+   if (presentation_time > chain->present_ids.displayed_time)
+      chain->present_ids.displayed_time = presentation_time;
 
    if (target_time && presentation_time > target_time)
-      surface->display_time_error = presentation_time - target_time;
+      chain->present_ids.display_time_error = presentation_time - target_time;
    else
-      surface->display_time_error = 0;
+      chain->present_ids.display_time_error = 0;
+   mtx_unlock(&chain->present_ids.lock);
 
    wsi_wl_presentation_update_present_id(id);
    wp_presentation_feedback_destroy(feedback);
@@ -2235,15 +2302,16 @@ presentation_handle_discarded(void *data,
 
    MESA_TRACE_FUNC_FLOW(&id->flow_id);
    struct wsi_wl_swapchain *chain = id->chain;
-   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
 
-   if (!surface->valid_refresh_nsec) {
+   mtx_lock(&chain->present_ids.lock);
+   if (!chain->present_ids.valid_refresh_nsec) {
       /* We've started occluded, so make up some safe values to throttle us */
-      surface->displayed_time = os_time_get_nano();
-      surface->last_target_time = surface->displayed_time;
-      surface->refresh_nsec = 16666666;
-      surface->valid_refresh_nsec = true;
+      chain->present_ids.displayed_time = os_time_get_nano();
+      chain->present_ids.last_target_time = chain->present_ids.displayed_time;
+      chain->present_ids.refresh_nsec = 16666666;
+      chain->present_ids.valid_refresh_nsec = true;
    }
+   mtx_unlock(&chain->present_ids.lock);
 
    wsi_wl_presentation_update_present_id(id);
    wp_presentation_feedback_destroy(feedback);
@@ -2283,23 +2351,23 @@ static const struct wl_callback_listener frame_listener = {
    frame_handle_done,
 };
 
+/* The present_ids lock must be held */
 static bool
 set_timestamp(struct wsi_wl_swapchain *chain,
               uint64_t *timestamp,
               uint64_t *correction)
 {
-   struct wsi_wl_surface *surface = chain->wsi_wl_surface;
    uint64_t target;
    struct timespec target_ts;
    uint64_t refresh;
    uint64_t displayed_time;
    int32_t error = 0;
 
-   if (!surface->valid_refresh_nsec)
+   if (!chain->present_ids.valid_refresh_nsec)
       return false;
 
-   displayed_time = surface->displayed_time;
-   refresh = surface->refresh_nsec;
+   displayed_time = chain->present_ids.displayed_time;
+   refresh = chain->present_ids.refresh_nsec;
 
    /* If refresh is 0, presentation feedback has informed us we have no
     * fixed refresh cycle. In that case we can't generate sensible
@@ -2320,10 +2388,11 @@ set_timestamp(struct wsi_wl_swapchain *chain,
     * running tally of how much correction we're applying and remove
     * it as corrected frames are retired.
     */
-   if (surface->display_time_error > surface->display_time_correction)
-      error = surface->display_time_error - surface->display_time_correction;
+   if (chain->present_ids.display_time_error > chain->present_ids.display_time_correction)
+      error = chain->present_ids.display_time_error -
+              chain->present_ids.display_time_correction;
 
-   target = surface->last_target_time;
+   target = chain->present_ids.last_target_time;
    if (error > 0)  {
       target += (error / refresh) * refresh;
       *correction = (error / refresh) * refresh;
@@ -2331,7 +2400,7 @@ set_timestamp(struct wsi_wl_swapchain *chain,
       *correction = 0;
    }
 
-   surface->display_time_correction += *correction;
+   chain->present_ids.display_time_correction += *correction;
    target = next_phase_locked_time(displayed_time,
                                    refresh,
                                    target);
@@ -2343,7 +2412,7 @@ set_timestamp(struct wsi_wl_swapchain *chain,
                                     (uint64_t)target_ts.tv_sec >> 32, target_ts.tv_sec,
                                     target_ts.tv_nsec);
 
-   surface->last_target_time = target;
+   chain->present_ids.last_target_time = target;
    *timestamp = target;
    return true;
 }
@@ -2357,7 +2426,6 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
    bool timestamped = false;
    bool queue_dispatched = false;
-   bool need_legacy_throttling = true;
    uint64_t flow_id = chain->images[image_index].flow_id;
 
    MESA_TRACE_FUNC_FLOW(&flow_id);
@@ -2447,13 +2515,10 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
       id->submission_time = os_time_get_nano();
 
-      if (mode_fifo && chain->fifo && chain->commit_timer) {
-         timestamped = set_timestamp(chain, &id->target_time, &id->correction);
-         if (timestamped || !wsi_wl_surface->valid_refresh_nsec)
-            need_legacy_throttling = false;
-      }
-
       mtx_lock(&chain->present_ids.lock);
+
+      if (mode_fifo && chain->fifo && chain->commit_timer)
+         timestamped = set_timestamp(chain, &id->target_time, &id->correction);
 
       if (chain->present_ids.wp_presentation) {
          id->feedback = wp_presentation_feedback(chain->present_ids.wp_presentation,
@@ -2466,13 +2531,28 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
          wl_callback_add_listener(id->frame, &pres_frame_listener, id);
       }
 
+      chain->present_ids.prev_max_present_id = chain->present_ids.max_present_id;
+      if (present_id > chain->present_ids.max_present_id)
+         chain->present_ids.max_present_id = present_id;
+
+      if (timestamped || !present_id) {
+         /* In this case there is at least one commit that will replace the previous present in finite time. */
+         chain->present_ids.max_forward_progress_present_id = chain->present_ids.max_present_id;
+      } else if (chain->present_ids.prev_max_present_id > chain->present_ids.max_forward_progress_present_id) {
+         /* The previous commit will complete in finite time now.
+          * We need to keep track of this since it's possible for application to signal e.g. 2, 4, 6, 8, but wait for 7.
+          * A naive presentID - 1 is not correct. */
+         chain->present_ids.max_forward_progress_present_id = chain->present_ids.prev_max_present_id;
+      }
+
       wl_list_insert(&chain->present_ids.outstanding_list, &id->link);
       mtx_unlock(&chain->present_ids.lock);
    }
 
    chain->images[image_index].busy = true;
 
-   if (mode_fifo && need_legacy_throttling) {
+   if (mode_fifo && !chain->fifo) {
+      /* If we don't have FIFO protocol, we must fall back to legacy mechanism for throttling. */
       chain->frame = wl_surface_frame(wsi_wl_surface->surface);
       wl_callback_add_listener(chain->frame, &frame_listener, chain);
       chain->legacy_fifo_ready = false;
@@ -2483,6 +2563,7 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
    if (mode_fifo && chain->fifo) {
       wp_fifo_v1_set_barrier(chain->fifo);
+      wp_fifo_v1_wait_barrier(chain->fifo);
 
       /* If our surface is occluded and we're using vkWaitForPresentKHR,
        * we can end up waiting forever. The FIFO condition and the time
@@ -2497,10 +2578,61 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
        * receives presented feedback and the FIFO one blocks further
        * updates until the next refresh.
        */
-      if (timestamped)
-         wl_surface_commit(wsi_wl_surface->surface);
 
+      /* If the compositor supports FIFO, but not commit-timing, skip this.
+       * In this scenario, we have to consider best-effort implementation instead.
+       *
+       * We have to make the assumption that presentation events come through eventually.
+       * The FIFO protocol allows clearing the FIFO barrier earlier for forward progress guarantee purposes,
+       * and there's nothing stopping a compositor from signalling a presentation complete for an occluded surface.
+       * There are potential hazards with this approach,
+       * but none of these are worse than the code paths before FIFO was introduced:
+       * - Calling WaitPresentKHR on the last presented ID on a surface that starts occluded may hang until not occluded.
+       *   A compositor that exposes FIFO and not commit-timing would likely not exhibit indefinite blocking behavior,
+       *   i.e. it may not have special considerations to hold back frame callbacks for occluded surfaces.
+       * - Occluded surfaces may run un-throttled. This is objectively better than blocking indefinitely (frame callback)
+       *   as it breaks forward progress guarantees, but worse for power consumption.
+       *   We add a pragmatic workaround to deal with this scenario similar to frame-callback based present wait.
+       *   A compositor that exposes FIFO and not commit-timing would likely do throttling on its own,
+       *   either to refresh rate or some fixed value. */
+
+      if (timestamped) {
+         wl_surface_commit(wsi_wl_surface->surface);
+         /* Once we're in a steady state, we'd only need one of these
+          * barrier waits. However, the first time we use a timestamp
+          * we need both of our content updates to wait. The first
+          * needs to wait to avoid potentially provoking a feedback
+          * discarded event for the previous untimed content update,
+          * the second to prevent provoking a discard event for the
+          * timed update we've just made.
+          *
+          * Before the transition, we would only have a single content
+          * update per call, which would contain a barrier wait. After
+          * that, we would only need a barrier wait in the empty content
+          * update.
+          *
+          * Instead of statefully tracking the transition across calls to
+          * this function, just put a barrier wait in every content update.
+          */
+         wp_fifo_v1_wait_barrier(chain->fifo);
+      }
+
+      /* If the next frame transitions into MAILBOX mode make sure it observes the wait barrier.
+       * When using timestamps, we already emit a dummy commit with the wait barrier anyway. */
+      chain->next_present_force_wait_barrier = !timestamped;
+   } else if (chain->fifo && chain->next_present_force_wait_barrier) {
+      /* If we're using EXT_swapchain_maintenance1 to transition from FIFO to something non-FIFO
+       * the previous frame's FIFO must persist for a refresh cycle, i.e. it cannot be replaced by a MAILBOX presentation.
+       * From 1.4.303 spec:
+       * "Transition from VK_PRESENT_MODE_FIFO_KHR or VK_PRESENT_MODE_FIFO_RELAXED_KHR or VK_PRESENT_MODE_FIFO_LATEST_READY_EXT to
+       * VK_PRESENT_MODE_IMMEDIATE_KHR or VK_PRESENT_MODE_MAILBOX_KHR:
+       * If the FIFO queue is empty, presentation is done according to the behavior of the new mode.
+       * If there are present operations in the FIFO queue,
+       * once the last present operation is performed based on the respective vertical blanking period,
+       * the current and subsequent updates are applied according to the new mode"
+       * Ensure we have used a wait barrier if the previous commit did not do that already. */
       wp_fifo_v1_wait_barrier(chain->fifo);
+      chain->next_present_force_wait_barrier = false;
    }
    wl_surface_commit(wsi_wl_surface->surface);
    wl_display_flush(wsi_wl_surface->display->wl_display);
@@ -2978,7 +3110,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       chain->fifo = wp_fifo_manager_v1_get_fifo(dpy->fifo_manager,
                                                 chain->wsi_wl_surface->surface);
    }
-   if (dpy->commit_timing_manager) {
+   if (dpy->commit_timing_manager && chain->present_ids.wp_presentation) {
       chain->commit_timer = wp_commit_timing_manager_v1_get_timer(dpy->commit_timing_manager,
                                                                   chain->wsi_wl_surface->surface);
    }
@@ -2990,6 +3122,9 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
          goto fail_free_wl_images;
       chain->images[i].busy = false;
    }
+
+   chain->present_ids.valid_refresh_nsec = false;
+   chain->present_ids.refresh_nsec = 0;
 
    *swapchain_out = &chain->base;
 

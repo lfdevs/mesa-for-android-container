@@ -53,7 +53,7 @@ d3d12_video_processor_begin_frame(struct pipe_video_codec * codec,
 /**
  * Perform post-process effect
  */
-void
+int
 d3d12_video_processor_process_frame(struct pipe_video_codec *codec,
                         struct pipe_video_buffer *input_texture,
                         const struct pipe_vpp_desc *process_properties);

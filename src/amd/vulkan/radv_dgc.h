@@ -14,6 +14,7 @@
 #include "vk_device_generated_commands.h"
 
 struct radv_cmd_buffer;
+struct radv_device;
 enum radv_queue_family;
 
 struct radv_indirect_command_layout {
@@ -44,6 +45,8 @@ struct radv_indirect_execution_set {
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(radv_indirect_execution_set, base, VkIndirectExecutionSetEXT,
                                VK_OBJECT_TYPE_INDIRECT_EXECUTION_SET_EXT);
+
+uint32_t radv_dgc_get_buffer_alignment(const struct radv_device *device);
 
 uint32_t radv_get_indirect_main_cmdbuf_offset(const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo);
 uint32_t radv_get_indirect_ace_cmdbuf_offset(const VkGeneratedCommandsInfoEXT *pGeneratedCommandsInfo);

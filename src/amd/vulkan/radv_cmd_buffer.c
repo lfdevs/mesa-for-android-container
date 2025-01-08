@@ -635,6 +635,12 @@ radv_cmd_buffer_annotate(struct radv_cmd_buffer *cmd_buffer, const char *annotat
    device->ws->cs_annotate(cmd_buffer->cs, annotation);
 }
 
+#define RADV_TASK_SHADER_SENSITIVE_STAGES (\
+      VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT |\
+      VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT |\
+      VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT |\
+      VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT)
+
 static void
 radv_gang_barrier(struct radv_cmd_buffer *cmd_buffer, VkPipelineStageFlags2 src_stage_mask,
                   VkPipelineStageFlags2 dst_stage_mask)
@@ -644,8 +650,8 @@ radv_gang_barrier(struct radv_cmd_buffer *cmd_buffer, VkPipelineStageFlags2 src_
       cmd_buffer->state.flush_bits & RADV_CMD_FLUSH_ALL_COMPUTE & ~RADV_CMD_FLAG_CS_PARTIAL_FLUSH;
 
    /* Add stage flush only when necessary. */
-   if (src_stage_mask & (VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT |
-                         VK_PIPELINE_STAGE_2_COMMAND_PREPROCESS_BIT_EXT | VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT |
+   if (src_stage_mask & (VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT | VK_PIPELINE_STAGE_2_COMMAND_PREPROCESS_BIT_EXT |
+                         VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT | RADV_TASK_SHADER_SENSITIVE_STAGES |
                          VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT))
       cmd_buffer->gang.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH;
 
@@ -657,7 +663,7 @@ radv_gang_barrier(struct radv_cmd_buffer *cmd_buffer, VkPipelineStageFlags2 src_
 
    /* Increment the GFX/ACE semaphore when task shaders are blocked. */
    if (dst_stage_mask & (VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT |
-                         VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT))
+                         RADV_TASK_SHADER_SENSITIVE_STAGES))
       cmd_buffer->gang.sem.leader_value++;
 }
 
@@ -12474,7 +12480,7 @@ radv_initialize_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *ima
          radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_SHADER_READ_BIT, image);
    }
 
-   state->flush_bits |= radv_clear_htile(cmd_buffer, image, range, htile_value);
+   state->flush_bits |= radv_clear_htile(cmd_buffer, image, range, htile_value, false);
 
    radv_set_ds_clear_metadata(cmd_buffer, image, range, value, range->aspectMask);
 

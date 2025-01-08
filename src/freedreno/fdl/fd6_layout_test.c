@@ -902,6 +902,39 @@ static const struct testcase
                },
          },
 
+         /* dEQP-VK.image.texel_view_compatible.graphic.extended.3d_image.texture_read.astc_8x8_unorm_block.r32g32b32a32_uint
+          *
+          * This is an interesting case where the size is 4K-aligned but the
+          * height becomes not aligned, and we have to use MINLAYERSZ to
+          * intervene.
+          *
+          * This test can only use tiled layouts on a750+, and the blob seems
+          * to make this one texture linear rather than deal with the
+          * alignment problem.
+          */
+         {
+            .format = PIPE_FORMAT_R32G32B32A32_FLOAT,
+            .is_3d = true,
+            .layout =
+               {
+                  .tile_mode = TILE6_3,
+                  .ubwc = false,
+                  .width0 = 76,
+                  .height0 = 76,
+                  .depth0 = 1,
+                  .slices =
+                     {
+                        {.offset = 0, .pitch = 2048, .size0 = 163840},
+                        {.offset = 163840, .pitch = 1024, .size0 = 49152},
+                        {.offset = 212992, .pitch = 1024, .size0 = 49152},
+                        {.offset = 262144, .pitch = 1024},
+                        {.offset = 311296, .pitch = 1024},
+                        {.offset = 360448, .pitch = 1024},
+                        {.offset = 409600, .pitch = 1024},
+                     },
+               },
+         },
+
 };
 
 int

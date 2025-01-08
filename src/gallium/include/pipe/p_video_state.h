@@ -345,6 +345,7 @@ struct pipe_vc1_picture_desc
    uint32_t slice_count;
    uint8_t picture_type;
    uint8_t frame_coding_mode;
+   uint8_t is_first_field;
    uint8_t postprocflag;
    uint8_t pulldown;
    uint8_t interlace;

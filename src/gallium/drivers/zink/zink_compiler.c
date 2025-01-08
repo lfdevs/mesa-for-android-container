@@ -22,6 +22,7 @@
  */
 
 #include "nir_opcodes.h"
+#include "shader_enums.h"
 #include "zink_context.h"
 #include "zink_compiler.h"
 #include "zink_descriptors.h"
@@ -1096,6 +1097,8 @@ zink_create_quads_emulation_gs(const nir_shader_compiler_options *options,
    /* Create input/output variables. */
    nir_foreach_shader_out_variable(var, prev_stage) {
       assert(!var->data.patch);
+      assert(var->data.location != VARYING_SLOT_PRIMITIVE_ID &&
+            "not a VS output");
 
       /* input vars can't be created for those */
       if (var->data.location == VARYING_SLOT_LAYER ||
@@ -1132,6 +1135,30 @@ zink_create_quads_emulation_gs(const nir_shader_compiler_options *options,
       out_vars[num_vars++] = out;
    }
 
+   /* When a geometry shader is not used, a fragment shader may read primitive
+    * ID and get an implicit value without the vertex shader writing an ID. This
+    * case needs to work even when we inject a GS internally.
+    *
+    * However, if a geometry shader precedes a fragment shader that reads
+    * primitive ID, Vulkan requires that the geometry shader write primitive ID.
+    * To handle this case correctly, we must write primitive ID, copying the
+    * fixed-function gl_PrimitiveIDIn input which matches what the fragment
+    * shader will expect.
+    *
+    * If the fragment shader doesn't read primitive ID, this copy will likely be
+    * optimized out at link-time by the Vulkan driver. Unless this is
+    * non-monolithic -- in which case we don't know whether the fragment shader
+    * will read primitive ID either. In both cases, the right thing for Zink
+    * to do is copy primitive ID unconditionally.
+    */
+   in_vars[num_vars] = nir_create_variable_with_location(
+         nir, nir_var_shader_in, VARYING_SLOT_PRIMITIVE_ID, glsl_int_type());
+
+   out_vars[num_vars] = nir_create_variable_with_location(
+         nir, nir_var_shader_out, VARYING_SLOT_PRIMITIVE_ID, glsl_int_type());
+
+   num_vars++;
+
    int mapping_first[] = {0, 1, 2, 0, 2, 3};
    int mapping_last[] = {0, 1, 3, 1, 2, 3};
    nir_def *last_pv_vert_def = nir_load_provoking_last(&b);
@@ -1146,7 +1173,12 @@ zink_create_quads_emulation_gs(const nir_shader_compiler_options *options,
          if (in_vars[j]->data.location == VARYING_SLOT_EDGE) {
             continue;
          }
-         nir_deref_instr *in_value = nir_build_deref_array(&b, nir_build_deref_var(&b, in_vars[j]), idx);
+
+         /* gl_PrimitiveIDIn is not arrayed, all other inputs are */
+         nir_deref_instr *in_value = nir_build_deref_var(&b, in_vars[j]);
+         if (in_vars[j]->data.location != VARYING_SLOT_PRIMITIVE_ID)
+            in_value = nir_build_deref_array(&b, in_value, idx);
+
          copy_vars(&b, nir_build_deref_var(&b, out_vars[j]), in_value);
       }
       nir_emit_vertex(&b, 0);

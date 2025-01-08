@@ -1148,6 +1148,18 @@ iris_disable_rhwo_optimization(struct iris_batch *batch, bool disable)
 #endif
 }
 
+static void
+state_system_mem_fence_address_emit(struct iris_batch *batch)
+{
+#if GFX_VERx10 >= 200
+   struct iris_screen *screen = batch->screen;
+   struct iris_address addr = { .bo = iris_bufmgr_get_mem_fence_bo(screen->bufmgr) };
+   iris_emit_cmd(batch, GENX(STATE_SYSTEM_MEM_FENCE_ADDRESS), mem_fence_addr) {
+      mem_fence_addr.SystemMemoryFenceAddress = addr;
+   }
+#endif
+}
+
 /**
  * Upload initial GPU state for any kind of context.
  *
@@ -1196,6 +1208,8 @@ iris_init_common_context(struct iris_batch *batch)
       reg.CrossTilePartialWriteMergeEnable = true;
    }
 #endif
+
+   state_system_mem_fence_address_emit(batch);
 }
 
 static void
@@ -1542,6 +1556,8 @@ iris_init_copy_context(struct iris_batch *batch)
 #if GFX_VER >= 12
    init_aux_map_state(batch);
 #endif
+
+   state_system_mem_fence_address_emit(batch);
 
    iris_batch_sync_region_end(batch);
 }

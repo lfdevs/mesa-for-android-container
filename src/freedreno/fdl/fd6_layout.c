@@ -237,10 +237,8 @@ fdl6_layout(struct fdl_layout *layout, enum pipe_format format,
             if (pitch != fdl_pitch(layout, level - 1) / 2)
                min_3d_layer_size = slice->size0 = nblocksy * pitch;
 
-            /* If the height is now less than the alignment requirement, then
-             * scale it up and let this be the minimum layer size.
-             */
-            if (tile_mode && util_format_get_nblocksy(format, height) < heightalign)
+            /* If the height wouldn't be aligned, stay aligned instead */
+            if (slice->size0 < nblocksy * pitch)
                min_3d_layer_size = slice->size0 = nblocksy * pitch;
 
             /* If the size would become un-page-aligned, stay aligned instead. */

@@ -1772,7 +1772,12 @@ lower_rt_instruction_monolithic(nir_builder *b, nir_instr *instr, void *data)
 
    switch (intr->intrinsic) {
    case nir_intrinsic_execute_callable:
-      unreachable("nir_intrinsic_execute_callable");
+      /* It's allowed to place OpExecuteCallableKHR in a SPIR-V, even if the RT pipeline doesn't contain
+       * any callable shaders. However, it's impossible to execute the instruction in a valid way, so just remove any
+       * nir_intrinsic_execute_callable we encounter.
+       */
+      nir_instr_remove(instr);
+      return true;
    case nir_intrinsic_trace_ray: {
       vars->payload_offset = nir_src_as_uint(intr->src[10]);
 

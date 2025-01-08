@@ -6079,7 +6079,8 @@ nir_shader *nir_create_passthrough_gs(const nir_shader_compiler_options *options
                                       enum mesa_prim primitive_type,
                                       enum mesa_prim output_primitive_type,
                                       bool emulate_edgeflags,
-                                      bool force_line_strip_out);
+                                      bool force_line_strip_out,
+                                      bool passthrough_prim_id);
 
 bool nir_lower_fragcolor(nir_shader *shader, unsigned max_cbufs);
 bool nir_lower_fragcoord_wtrans(nir_shader *shader);

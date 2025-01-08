@@ -1720,8 +1720,6 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    case nir_op_b32csel:
    case nir_op_ubfe:
    case nir_op_bfm:
-   case nir_op_fmul:
-   case nir_op_fmulz:
    case nir_op_extract_u8:
    case nir_op_extract_i8:
    case nir_op_extract_u16:
@@ -1734,9 +1732,16 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    case nir_op_u2u8:
    case nir_op_u2u16:
    case nir_op_u2u32:
-   case nir_op_f2u32:
       if (nir_scalar_chase_alu_src(q.scalar, 0).def->bit_size > 32) {
          /* If src is >32 bits, return max */
+         return;
+      }
+      break;
+   case nir_op_fmul:
+   case nir_op_fmulz:
+   case nir_op_f2u32:
+      if (nir_scalar_chase_alu_src(q.scalar, 0).def->bit_size != 32) {
+         /* Only 32bit floats support for now, return max */
          return;
       }
       break;

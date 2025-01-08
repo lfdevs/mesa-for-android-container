@@ -63,6 +63,7 @@ struct radv_physical_device_cache_key {
    uint32_t split_fma : 1;
    uint32_t ssbo_non_uniform : 1;
    uint32_t tex_non_uniform : 1;
+   uint32_t lower_terminate_to_discard : 1;
    uint32_t use_llvm : 1;
    uint32_t use_ngg : 1;
    uint32_t use_ngg_culling : 1;

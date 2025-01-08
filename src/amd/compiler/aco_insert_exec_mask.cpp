@@ -467,6 +467,7 @@ process_instructions(exec_ctx& ctx, Block* block, std::vector<aco_ptr<Instructio
             exit_cond = andn2->definitions[1].getTemp();
          }
 
+         info.exec.back().op = Operand(exec, bld.lm);
          instr->opcode = aco_opcode::p_exit_early_if;
          instr->operands[0] = bld.scc(exit_cond);
          assert(!ctx.handle_wqm || (info.exec[0].type & mask_type_wqm) == 0);

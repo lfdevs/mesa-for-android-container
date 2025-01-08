@@ -82,7 +82,7 @@ err_dev_new:
    return NULL;
 }
 
-PUBLIC struct pipe_screen *
+struct pipe_screen *
 nouveau_drm_screen_create(int fd)
 {
    return u_pipe_screen_lookup_or_create(os_dupfd_cloexec(fd), NULL, NULL,

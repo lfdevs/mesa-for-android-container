@@ -1150,7 +1150,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
        */
       must_init_fast_clear_state = devinfo->ver < 20;
 
-      if (image->planes[plane].aux_usage == ISL_AUX_USAGE_MCS ||
+      if (isl_aux_usage_has_mcs(image->planes[plane].aux_usage) ||
           devinfo->has_illegal_ccs_values) {
 
          must_init_aux_surface = true;
@@ -6147,14 +6147,16 @@ void genX(CmdBindIndexBuffer2KHR)(
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_RESTART_INDEX;
    }
 
+   uint32_t index_size = buffer ? vk_buffer_range(&buffer->vk, offset, size) : 0;
    uint32_t index_type = vk_to_intel_index_type(indexType);
    if (cmd_buffer->state.gfx.index_buffer != buffer ||
        cmd_buffer->state.gfx.index_type != index_type ||
-       cmd_buffer->state.gfx.index_offset != offset) {
+       cmd_buffer->state.gfx.index_offset != offset ||
+       cmd_buffer->state.gfx.index_size != index_size) {
       cmd_buffer->state.gfx.index_buffer = buffer;
       cmd_buffer->state.gfx.index_type = vk_to_intel_index_type(indexType);
       cmd_buffer->state.gfx.index_offset = offset;
-      cmd_buffer->state.gfx.index_size = buffer ? vk_buffer_range(&buffer->vk, offset, size) : 0;
+      cmd_buffer->state.gfx.index_size = index_size;
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_INDEX_BUFFER;
    }
 }

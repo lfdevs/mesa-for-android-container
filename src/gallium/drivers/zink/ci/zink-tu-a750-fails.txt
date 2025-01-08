@@ -493,8 +493,6 @@ spec@glsl-1.50@built-in constants@gl_MaxFragmentInputComponents,Fail
 spec@glsl-1.50@execution@geometry@point-size-out,Fail
 spec@glsl-1.50@execution@geometry@primitive-id-restart gl_line_strip_adjacency other,Crash
 spec@glsl-1.50@execution@interface-blocks-complex-vs-fs,Fail
-spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
-spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec4-index-wr,Fail
 spec@glsl-3.30@built-in constants,Fail

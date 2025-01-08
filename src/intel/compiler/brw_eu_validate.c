@@ -2208,9 +2208,7 @@ brw_hw_decode_inst(const struct brw_isa_info *isa,
    }
 
    inst->access_mode = brw_inst_access_mode(devinfo, raw);
-   inst->cond_modifier = brw_inst_cond_modifier(devinfo, raw);
    inst->pred_control = brw_inst_pred_control(devinfo, raw);
-   inst->saturate = brw_inst_saturate(devinfo, raw);
 
    RETURN_ERROR_IF(inst->num_sources == 3 && inst->access_mode == BRW_ALIGN_1 && devinfo->ver == 9,
                    "Align1 mode not allowed on Gfx9 for 3-src instructions");
@@ -2508,6 +2506,20 @@ brw_hw_decode_inst(const struct brw_isa_info *isa,
    for (unsigned i = 0; i < inst->num_sources; i++) {
       ERROR_IF(inst->src[i].type == BRW_TYPE_INVALID,
                "Invalid source register type encoding.");
+   }
+
+   if ((format == FORMAT_BASIC ||
+        format == FORMAT_BASIC_THREE_SRC ||
+        format == FORMAT_DPAS_THREE_SRC) &&
+       !inst_is_send(inst)) {
+      inst->saturate = brw_inst_saturate(devinfo, raw);
+
+      if (inst->num_sources > 1 ||
+          devinfo->ver < 12 ||
+          inst->src[0].file != IMM  ||
+          brw_type_size_bytes(inst->src[0].type) < 8) {
+         inst->cond_modifier = brw_inst_cond_modifier(devinfo, raw);
+      }
    }
 
    return error_msg;

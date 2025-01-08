@@ -493,7 +493,11 @@ impl Program {
         };
 
         let lock = self.build_info();
-        for (i, d) in self.devs.iter().enumerate() {
+        for (d, ptr) in self.devs.iter().zip(ptrs) {
+            if ptr.is_null() {
+                return Err(CL_INVALID_VALUE);
+            }
+
             let info = lock.dev_build(d);
 
             // no spirv means nothing to write
@@ -506,7 +510,7 @@ impl Program {
                 let mut blob = blob::default();
 
                 // sadly we have to trust the buffer to be correctly sized...
-                blob_init_fixed(&mut blob, ptrs[i].cast(), usize::MAX);
+                blob_init_fixed(&mut blob, ptr.cast(), usize::MAX);
 
                 blob_write_bytes(
                     &mut blob,

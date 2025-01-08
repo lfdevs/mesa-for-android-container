@@ -662,11 +662,6 @@ si_vpe_processor_destroy(struct pipe_video_codec *codec)
    unsigned int i;
    assert(codec);
 
-   if (vpeproc->process_fence) {
-      SIVPE_INFO(vpeproc->log_level, "Wait fence\n");
-      vpeproc->ws->fence_wait(vpeproc->ws, vpeproc->process_fence, PIPE_DEFAULT_DECODER_FEEDBACK_TIMEOUT_NS);
-   }
-
    if (vpeproc->vpe_build_bufs)
       si_vpe_free_buffer(vpeproc->vpe_build_bufs);
 
@@ -726,7 +721,7 @@ si_vpe_cs_add_surface_buffer(struct vpe_video_processor *vpeproc,
    }
 }
 
-static void
+static int
 si_vpe_processor_process_frame(struct pipe_video_codec *codec,
                                struct pipe_video_buffer *input_texture,
                                const struct pipe_vpp_desc *process_properties)
@@ -747,7 +742,7 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    src_surfaces = input_texture->get_surfaces(input_texture);
    if (!src_surfaces || !src_surfaces[0]) {
       SIVPE_ERR("Get source surface failed\n");
-      return;
+      return 1;
    }
    vpeproc->src_surfaces = src_surfaces;
 
@@ -756,12 +751,12 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    build_param->num_streams = 1;
    if (build_param->num_streams > VPE_STREAM_MAX_NUM) {
       SIVPE_ERR("Can only suppport %d stream(s) now\n", VPE_STREAM_MAX_NUM);
-      return;
+      return 1;
    }
 
    if (!build_param->streams) {
       SIVPE_ERR("Streams structure is not allocated\n");
-      return;
+      return 1;
    }
 
    si_vpe_set_surface_info(vpeproc,
@@ -854,7 +849,7 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
                                                  PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
    if (!vpe_ptr) {
       SIVPE_ERR("Mapping Embbuf failed\n");
-      return;
+      return 1;
    }
    vpeproc->vpe_build_bufs->emb_buf.cpu_va = (uintptr_t)vpe_ptr;
    vpeproc->vpe_build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(emb_buf->res->buf);
@@ -990,12 +985,12 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    si_vpe_cs_add_surface_buffer(vpeproc, vpeproc->dst_surfaces, RADEON_USAGE_WRITE);
 
    SIVPE_DBG(vpeproc->log_level, "Success\n");
-   return;
+   return 0;
 
 fail:
    vpeproc->ws->buffer_unmap(vpeproc->ws, emb_buf->res->buf);
    SIVPE_ERR("Failed\n");
-   return;
+   return 1;
 }
 
 static int
@@ -1004,19 +999,11 @@ si_vpe_processor_end_frame(struct pipe_video_codec *codec,
                            struct pipe_picture_desc *picture)
 {
    struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
-   struct pipe_fence_handle *process_fence = NULL;
    assert(codec);
 
-   vpeproc->ws->cs_flush(&vpeproc->cs, picture->flush_flags, &process_fence);
+   vpeproc->ws->cs_flush(&vpeproc->cs, picture->flush_flags, picture->fence);
    next_buffer(vpeproc);
 
-   if (picture->fence && process_fence) {
-      *picture->fence = process_fence;
-      SIVPE_INFO(vpeproc->log_level, "Assign process fence\n");
-   } else
-      SIVPE_WARN(vpeproc->log_level, "Fence may have problem!\n");
-
-   SIVPE_INFO(vpeproc->log_level, "Success\n");
    return 0;
 }
 
@@ -1044,6 +1031,15 @@ static int si_vpe_processor_fence_wait(struct pipe_video_codec *codec,
    }
    SIVPE_INFO(vpeproc->log_level, "Wait processor fence success\n");
    return 1;
+}
+
+static void si_vpe_processor_destroy_fence(struct pipe_video_codec *codec,
+                                           struct pipe_fence_handle *fence)
+{
+   struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
+   assert(codec);
+
+   vpeproc->ws->fence_reference(vpeproc->ws, &fence, NULL);
 }
 
 struct pipe_video_codec*
@@ -1079,13 +1075,13 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
    vpeproc->base.end_frame = si_vpe_processor_end_frame;
    vpeproc->base.flush = si_vpe_processor_flush;
    vpeproc->base.fence_wait = si_vpe_processor_fence_wait;
+   vpeproc->base.destroy_fence = si_vpe_processor_destroy_fence;
 
    vpeproc->ver_major = sctx->screen->info.ip[AMD_IP_VPE].ver_major;
    vpeproc->ver_minor = sctx->screen->info.ip[AMD_IP_VPE].ver_minor;
 
    vpeproc->screen = context->screen;
    vpeproc->ws = ws;
-   vpeproc->process_fence = NULL;
 
    init_data = &vpeproc->vpe_data;
    if (VPE_STATUS_OK != si_vpe_populate_init_data(sctx, init_data, vpeproc->log_level)){

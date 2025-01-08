@@ -67,7 +67,7 @@ libgallium_dri = shared_library(
     driver_asahi, driver_crocus
   ],
   install : true,
-  name_suffix : 'so',
+  name_suffix : libname_suffix,
 )
 
 if with_gallium_va or with_gallium_vdpau
@@ -90,7 +90,7 @@ if with_gallium_va or with_gallium_vdpau
 
   if va_drivers.length() > 0
     meson.add_install_script(
-      install_megadrivers_py.full_path(),
+      install_megadrivers,
       libgallium_dri.full_path(),
       va_drivers_path,
       va_drivers,
@@ -101,7 +101,7 @@ if with_gallium_va or with_gallium_vdpau
 
   if vdpau_drivers.length() > 0
     meson.add_install_script(
-      install_megadrivers_py.full_path(),
+      install_megadrivers,
       libgallium_dri.full_path(),
       vdpau_drivers_path,
       vdpau_drivers,

@@ -517,7 +517,10 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
 
    pan_shader_preprocess(nir, compile_input->gpu_id);
 
-   if (stage == MESA_SHADER_VERTEX)
+   /* since valhall, panvk_per_arch(nir_lower_descriptors) separates the
+    * driver set and the user sets, and does not need pan_lower_image_index
+    */
+   if (PAN_ARCH < 9 && stage == MESA_SHADER_VERTEX)
       NIR_PASS_V(nir, pan_lower_image_index, MAX_VS_ATTRIBS);
 
    NIR_PASS_V(nir, nir_shader_instructions_pass, panvk_lower_sysvals,

@@ -9,6 +9,7 @@ use mesa_rust_util::string::*;
 
 use std::ffi::CString;
 use std::fmt::Debug;
+use std::ops::Not;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::ptr;
@@ -484,7 +485,8 @@ impl SPIRVKernelArg {
                 _ => return None,
             };
 
-            Some(Self {
+            // check overrun to ensure nothing went wrong
+            blob.overrun.not().then(|| Self {
                 name: String::from_utf8_unchecked(name.to_owned()),
                 type_name: String::from_utf8_unchecked(type_name.to_owned()),
                 access_qualifier: clc_kernel_arg_access_qualifier(access_qualifier),
