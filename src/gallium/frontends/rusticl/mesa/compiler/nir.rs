@@ -5,6 +5,7 @@ use mesa_rust_util::offset_of;
 use std::convert::TryInto;
 use std::ffi::CString;
 use std::marker::PhantomData;
+use std::ops::Not;
 use std::ptr;
 use std::ptr::NonNull;
 use std::slice;
@@ -158,7 +159,9 @@ impl NirShader {
         blob: &mut blob_reader,
         options: *const nir_shader_compiler_options,
     ) -> Option<Self> {
-        unsafe { Self::new(nir_deserialize(ptr::null_mut(), options, blob)) }
+        // we already create the NirShader here so it gets automatically deallocated on overrun.
+        let nir = Self::new(unsafe { nir_deserialize(ptr::null_mut(), options, blob) })?;
+        blob.overrun.not().then_some(nir)
     }
 
     pub fn serialize(&self, blob: &mut blob) {

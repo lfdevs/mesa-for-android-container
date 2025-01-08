@@ -4440,7 +4440,7 @@ agx_get_passthrough_gs(struct agx_context *ctx,
 
    nir_shader *gs = nir_create_passthrough_gs(
       &agx_nir_options, prev, mode, rast_prim(mode, poly_mode), edgeflags,
-      false /* force line strip out */);
+      false /* force line strip out */, false);
 
    ralloc_free(prev);
 

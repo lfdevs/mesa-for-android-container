@@ -1137,6 +1137,15 @@
     <field name="UAV Coherency Mode Mask" start="86" end="86" type="uint" />
     <field name="Memory allocation for Scratch and Midthread Preemption buffers Mask" start="91" end="91" type="uint" />
   </instruction>
+  <instruction name="STATE_SYSTEM_MEM_FENCE_ADDRESS" bias="2" length="3">
+    <field name="DWord Length" start="0" end="7" type="uint" default="1" />
+    <field name="Context Restore Invalid" start="15" end="15" type="bool" default="0" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="9" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="0" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="System Memory Fence Address" start="44" end="95" type="address" />
+  </instruction>
   <instruction name="XY_BLOCK_COPY_BLT" bias="2" length="22" engine="blitter">
     <field name="DWord Length" start="0" end="7" type="uint" default="20" />
     <field name="Special Mode of Operation" start="12" end="13" type="uint">

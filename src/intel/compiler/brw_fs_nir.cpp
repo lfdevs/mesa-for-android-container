@@ -4936,10 +4936,11 @@ try_rebuild_source(nir_to_brw_state &ntb, const brw::fs_builder &bld,
 
          case nir_intrinsic_load_reloc_const_intel: {
             uint32_t id = nir_intrinsic_param_idx(intrin);
+            uint32_t base = nir_intrinsic_base(intrin);
             brw_reg dst = ubld.vgrf(BRW_TYPE_D);
             ntb.resource_insts[def->index] =
                ubld.emit(SHADER_OPCODE_MOV_RELOC_IMM, dst,
-                         brw_imm_ud(id), brw_imm_ud(0));
+                         brw_imm_ud(id), brw_imm_ud(base));
             break;
          }
 

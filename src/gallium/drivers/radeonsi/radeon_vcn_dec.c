@@ -2516,6 +2516,8 @@ static void radeon_dec_decode_bitstream(struct pipe_video_codec *decoder,
       dec->ws->buffer_unmap(dec->ws, buf->res->buf);
       dec->bs_ptr = NULL;
 
+      total_bs_size = align(total_bs_size, 128);
+
       if (!dec->bs_size) {
          struct rvid_buffer old_buf = *buf;
          if (!si_vid_create_buffer(dec->screen, buf, total_bs_size, buf->usage)) {

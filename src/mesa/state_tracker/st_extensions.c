@@ -1161,6 +1161,10 @@ void st_init_extensions(struct pipe_screen *screen,
       }
    }
 
+   /* MESA_texture_const_bandwidth depends on EXT_memory_object */
+   if (!extensions->EXT_memory_object)
+      extensions->MESA_texture_const_bandwidth = GL_FALSE;
+
    /* EXT implies ARB here */
    if (extensions->EXT_texture_filter_minmax)
       extensions->ARB_texture_filter_minmax = GL_TRUE;

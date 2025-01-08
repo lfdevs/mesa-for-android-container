@@ -11,6 +11,7 @@
 #include "radv_buffer.h"
 #include "radv_device.h"
 #include "radv_device_memory.h"
+#include "radv_dgc.h"
 #include "radv_entrypoints.h"
 #include "radv_instance.h"
 #include "radv_physical_device.h"
@@ -201,10 +202,14 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
                 VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT))
       pMemoryRequirements->memoryRequirements.memoryTypeBits = pdev->memory_types_32bit;
 
-   if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)
+   if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
       pMemoryRequirements->memoryRequirements.alignment = 4096;
-   else
-      pMemoryRequirements->memoryRequirements.alignment = 16;
+   } else {
+      if (usage & VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT)
+         pMemoryRequirements->memoryRequirements.alignment = radv_dgc_get_buffer_alignment(device);
+      else
+         pMemoryRequirements->memoryRequirements.alignment = 16;
+   }
 
    /* Top level acceleration structures need the bottom 6 bits to store
     * the root ids of instances. The hardware also needs bvh nodes to

@@ -216,6 +216,7 @@ radv_physical_device_init_cache_key(struct radv_physical_device *pdev)
    key->split_fma = !!(instance->debug_flags & RADV_DEBUG_SPLIT_FMA);
    key->ssbo_non_uniform = instance->drirc.ssbo_non_uniform;
    key->tex_non_uniform = instance->drirc.tex_non_uniform;
+   key->lower_terminate_to_discard = instance->drirc.lower_terminate_to_discard;
    key->use_llvm = pdev->use_llvm;
    key->use_ngg = pdev->use_ngg;
    key->use_ngg_culling = pdev->use_ngg_culling;
@@ -1364,6 +1365,10 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
       device_type = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
    }
 
+   VkShaderStageFlags taskmesh_stages =
+      radv_taskmesh_enabled(pdev) ? VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_TASK_BIT_EXT : 0;
+   VkShaderStageFlags rt_stages = radv_enable_rt(pdev, true) ? RADV_RT_STAGE_BITS : 0;
+
    pdev->vk.properties = (struct vk_properties){
       .apiVersion = RADV_API_VERSION,
       .driverVersion = vk_get_driver_version(),
@@ -1990,7 +1995,7 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
    p->supportedIndirectCommandsInputModes =
       VK_INDIRECT_COMMANDS_INPUT_MODE_VULKAN_INDEX_BUFFER_EXT | VK_INDIRECT_COMMANDS_INPUT_MODE_DXGI_INDEX_BUFFER_EXT;
    p->supportedIndirectCommandsShaderStages =
-      RADV_GRAPHICS_STAGE_BITS | VK_SHADER_STAGE_COMPUTE_BIT | RADV_RT_STAGE_BITS;
+      VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | taskmesh_stages | rt_stages;
    p->supportedIndirectCommandsShaderStagesPipelineBinding = VK_SHADER_STAGE_COMPUTE_BIT;
    p->supportedIndirectCommandsShaderStagesShaderBinding = 0;
    p->deviceGeneratedCommandsTransformFeedback = true;

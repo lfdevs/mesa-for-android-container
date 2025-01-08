@@ -36,9 +36,11 @@
 
 #include "loader_dri_helper.h"
 #include "loader_dri3_helper.h"
+#include "pipe/p_screen.h"
 #include "util/macros.h"
 #include "util/simple_mtx.h"
 #include "drm-uapi/drm_fourcc.h"
+#include "dri_screen.h"
 #include "dri_util.h"
 
 /**
@@ -1401,7 +1403,7 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
 
    if (draw->dri_screen_render_gpu == draw->dri_screen_display_gpu) {
 #ifdef HAVE_X11_DRM
-      if (draw->multiplanes_available) {
+      if (draw->multiplanes_available && draw->dri_screen_render_gpu->base.screen->resource_create_with_modifiers) {
          xcb_dri3_get_supported_modifiers_cookie_t mod_cookie;
          xcb_dri3_get_supported_modifiers_reply_t *mod_reply;
          xcb_generic_error_t *error = NULL;

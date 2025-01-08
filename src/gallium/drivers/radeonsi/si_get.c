@@ -683,8 +683,18 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
       case PIPE_VIDEO_CAP_NPOT_TEXTURES:
          return 1;
       case PIPE_VIDEO_CAP_MIN_WIDTH:
+         if (sscreen->info.vcn_ip_version >= VCN_5_0_0) {
+            if (codec == PIPE_VIDEO_FORMAT_MPEG4_AVC)
+               return 96;
+            else if (codec == PIPE_VIDEO_FORMAT_HEVC)
+               return 384;
+            else if (codec == PIPE_VIDEO_FORMAT_AV1)
+               return 320;
+         }
          return (codec == PIPE_VIDEO_FORMAT_HEVC) ? 130 : 128;
       case PIPE_VIDEO_CAP_MIN_HEIGHT:
+         if (sscreen->info.vcn_ip_version >= VCN_5_0_0 && codec == PIPE_VIDEO_FORMAT_MPEG4_AVC)
+            return 32;
          return 128;
       case PIPE_VIDEO_CAP_MAX_WIDTH:
          if (codec != PIPE_VIDEO_FORMAT_UNKNOWN && QUERYABLE_KERNEL)

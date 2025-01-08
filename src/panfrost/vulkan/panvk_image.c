@@ -279,6 +279,17 @@ panvk_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                   const VkAllocationCallbacks *pAllocator, VkImage *pImage)
 {
    VK_FROM_HANDLE(panvk_device, dev, device);
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(dev->vk.physical);
+
+   const VkImageSwapchainCreateInfoKHR *swapchain_info =
+      vk_find_struct_const(pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
+   if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE) {
+      return wsi_common_create_swapchain_image(&phys_dev->wsi_device,
+                                               pCreateInfo,
+                                               swapchain_info->swapchain,
+                                               pImage);
+   }
 
    struct panvk_image *image =
       vk_image_create(&dev->vk, pCreateInfo, pAllocator, sizeof(*image));
@@ -393,19 +404,34 @@ VKAPI_ATTR VkResult VKAPI_CALL
 panvk_BindImageMemory2(VkDevice device, uint32_t bindInfoCount,
                        const VkBindImageMemoryInfo *pBindInfos)
 {
+   const VkBindImageMemorySwapchainInfoKHR *swapchain_info =
+      vk_find_struct_const(pBindInfos->pNext, BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR);
+
    for (uint32_t i = 0; i < bindInfoCount; ++i) {
       VK_FROM_HANDLE(panvk_image, image, pBindInfos[i].image);
-      VK_FROM_HANDLE(panvk_device_memory, mem, pBindInfos[i].memory);
       struct pan_kmod_bo *old_bo = image->bo;
 
-      assert(mem);
-      image->bo = pan_kmod_bo_get(mem->bo);
-      image->pimage.data.base = mem->addr.dev;
-      image->pimage.data.offset = pBindInfos[i].memoryOffset;
+      if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE) {
+         VkImage wsi_vk_image = wsi_common_get_image(swapchain_info->swapchain,
+                                                   swapchain_info->imageIndex);
+         VK_FROM_HANDLE(panvk_image, wsi_image, wsi_vk_image);
+
+         image->bo = pan_kmod_bo_get(wsi_image->bo);
+         image->pimage.data.base = wsi_image->pimage.data.base;
+         image->pimage.data.offset = wsi_image->pimage.data.offset;
+      } else {
+         VK_FROM_HANDLE(panvk_device_memory, mem, pBindInfos[i].memory);
+         assert(mem);
+         image->bo = pan_kmod_bo_get(mem->bo);
+         image->pimage.data.base = mem->addr.dev;
+         image->pimage.data.offset = pBindInfos[i].memoryOffset;
+      }
+
       /* Reset the AFBC headers */
       if (drm_is_afbc(image->pimage.layout.modifier)) {
          /* Transient CPU mapping */
-         void *base = pan_kmod_bo_mmap(mem->bo, 0, pan_kmod_bo_size(mem->bo),
+         void *base = pan_kmod_bo_mmap(image->bo, 0,
+                                       pan_kmod_bo_size(image->bo),
                                        PROT_WRITE, MAP_SHARED, NULL);
 
          assert(base != MAP_FAILED);
@@ -422,7 +448,7 @@ panvk_BindImageMemory2(VkDevice device, uint32_t bindInfoCount,
             }
          }
 
-         ASSERTED int ret = os_munmap(base, pan_kmod_bo_size(mem->bo));
+         ASSERTED int ret = os_munmap(base, pan_kmod_bo_size(image->bo));
          assert(!ret);
       }
 

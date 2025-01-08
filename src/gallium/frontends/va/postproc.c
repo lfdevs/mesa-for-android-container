@@ -329,7 +329,9 @@ static VAStatus vlVaVidEngineBlit(vlVaDriver *drv, vlVaContext *context,
                                     &context->desc.base);
       context->needs_begin_frame = false;
    }
-   context->decoder->process_frame(context->decoder, src, &context->desc.vidproc);
+
+   if (context->decoder->process_frame(context->decoder, src, &context->desc.vidproc))
+      return VA_STATUS_ERROR_OPERATION_FAILED;
 
    return VA_STATUS_SUCCESS;
 }

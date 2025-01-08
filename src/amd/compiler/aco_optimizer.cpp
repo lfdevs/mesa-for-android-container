@@ -1149,9 +1149,13 @@ apply_extract(opt_ctx& ctx, aco_ptr<Instruction>& instr, unsigned idx, ssa_info&
       instr.reset(mad);
    } else if (can_use_SDWA(ctx.program->gfx_level, instr, true) &&
               (tmp.type() == RegType::vgpr || ctx.program->gfx_level >= GFX9)) {
-      convert_to_SDWA(ctx.program->gfx_level, instr);
-      instr->sdwa().sel[idx] = apply_extract_twice(sel, instr->operands[idx].getTemp(),
-                                                   instr->sdwa().sel[idx], Temp(0, v1));
+      if (instr->isSDWA()) {
+         instr->sdwa().sel[idx] = apply_extract_twice(sel, instr->operands[idx].getTemp(),
+                                                      instr->sdwa().sel[idx], Temp(0, v1));
+      } else {
+         convert_to_SDWA(ctx.program->gfx_level, instr);
+         instr->sdwa().sel[idx] = sel;
+      }
    } else if (instr->isVALU()) {
       if (sel.offset()) {
          instr->valu().opsel[idx] = true;

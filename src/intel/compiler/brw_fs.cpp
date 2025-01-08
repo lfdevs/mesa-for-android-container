@@ -188,7 +188,7 @@ fs_inst::resize_sources(uint8_t num_sources)
 
       } else {
          new_src = new brw_reg[num_sources];
-         for (unsigned i = 0; i < num_sources; i++)
+         for (unsigned i = 0; i < this->sources; i++)
             new_src[i] = old_src[i];
       }
 

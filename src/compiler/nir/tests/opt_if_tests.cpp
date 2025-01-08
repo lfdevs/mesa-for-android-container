@@ -235,31 +235,35 @@ TEST_P(nir_opt_if_merge_test, opt_if_merge)
     * if %5 {
     *     block b1:   // preds: b0
     *     32     %6 = iadd %1, %2 (0x1)
+    *     32     %7 = deref_var &out (shader_out int)
+    *                 @store_deref (%7, %6) (wrmask=x, access=none)
     *                 // succs: b3
     * } else {
     *     block b2:   // preds: b0
-    *     32     %7 = iadd %1, %3 (0x2)
+    *     32     %8 = iadd %1, %3 (0x2)
+    *     32     %9 = deref_var &out (shader_out int)
+    *                 @store_deref (%9, %8) (wrmask=x, access=none)
     *                 // succs: b3
     * }
     * block b3:  // preds: b1 b2, succs: b4 b5
     * if %5 {
     *     block b4:   // preds: b3
-    *     32     %8 = imul %6, %3 (0x2)
+    *     32    %10 = imul %1, %3 (0x2)
     *                 // succs: b6
     * } else {
     *     block b5:   // preds: b3
-    *     32     %9 = imul %7, %4 (0x6)
+    *     32    %11 = imul %1, %4 (0x6)
     *                 // succs: b6
     * }
     * block b6:   // preds: b4 b5
-    * 32    %10 = phi b4: %8, b5: %9
-    * 32    %11 = deref_var &out (shader_out int)
-    *             @store_deref (%11, %10) (wrmask=x, access=none)
+    * 32    %12 = phi b4: %10, b5: %11
+    * 32    %13 = deref_var &out (shader_out int)
+    *             @store_deref (%13, %12) (wrmask=x, access=none)
     *             // succs: b7
     * block b7:
     */
 
-   int instr_in_1st_then = 1, instr_in_1st_else = 1;
+   int instr_in_1st_then = 3, instr_in_1st_else = 3;
    int instr_in_2nd_then = 1, instr_in_2nd_else = 1;
 
    nir_def *one = nir_imm_int(b, 1);
@@ -270,7 +274,7 @@ TEST_P(nir_opt_if_merge_test, opt_if_merge)
 
    nir_if *nif = nir_push_if(b, cmp_result);
 
-   nir_def *x1 = nir_iadd(b, in_def, one);
+   nir_store_var(b, out_var, nir_iadd(b, in_def, one), 1);
    if (return_location == nir_opt_if_merge_test_config::RETURN_IN_1ST_THEN) {
       nir_jump(b, nir_jump_return);
       instr_in_1st_then++;
@@ -278,7 +282,7 @@ TEST_P(nir_opt_if_merge_test, opt_if_merge)
 
    nir_push_else(b, NULL);
 
-   nir_def *x2 = nir_iadd(b, in_def, two);
+   nir_store_var(b, out_var, nir_iadd(b, in_def, two), 1);
    if (return_location == nir_opt_if_merge_test_config::RETURN_IN_1ST_ELSE) {
       nir_jump(b, nir_jump_return);
       instr_in_1st_else++;
@@ -292,7 +296,7 @@ TEST_P(nir_opt_if_merge_test, opt_if_merge)
 
    nir_if *next_if = nir_push_if(b, cmp_result);
 
-   nir_def *y1 = nir_imul(b, x1, two);
+   nir_def *y1 = nir_imul(b, in_def, two);
    if (return_location == nir_opt_if_merge_test_config::RETURN_IN_2ND_THEN) {
       nir_jump(b, nir_jump_return);
       instr_in_2nd_then++;
@@ -302,7 +306,7 @@ TEST_P(nir_opt_if_merge_test, opt_if_merge)
 
    nir_push_else(b, NULL);
 
-   nir_def *y2 = nir_imul(b, x2, six);
+   nir_def *y2 = nir_imul(b, in_def, six);
    if (return_location == nir_opt_if_merge_test_config::RETURN_IN_2ND_ELSE) {
       nir_jump(b, nir_jump_return);
       instr_in_2nd_else++;
@@ -322,8 +326,8 @@ TEST_P(nir_opt_if_merge_test, opt_if_merge)
       ASSERT_FALSE(nir_opt_if(b->shader, nir_opt_if_optimize_phi_true_false));
    } else if (return_location == nir_opt_if_merge_test_config::NO_RETURN) {
       ASSERT_TRUE(nir_opt_if(b->shader, nir_opt_if_optimize_phi_true_false));
-      instr_in_1st_then = 2;
-      instr_in_1st_else = 2;
+      instr_in_1st_then += instr_in_2nd_then;
+      instr_in_1st_else += instr_in_2nd_else;
       instr_in_2nd_then = 0;
       instr_in_2nd_else = 0;
    } else {

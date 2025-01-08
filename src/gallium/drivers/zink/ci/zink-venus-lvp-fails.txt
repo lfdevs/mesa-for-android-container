@@ -142,9 +142,6 @@ spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index2,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-non-const-uniform-index,Fail
 spec@arb_gpu_shader_fp64@execution@conversion,Fail
-spec@arb_tessellation_shader@execution@gs-primitiveid-instanced,Fail
-spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
-spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 spec@glsl-4.00@execution@conversion,Fail
 
 spec@ext_transform_feedback@tessellation quads wireframe,Fail

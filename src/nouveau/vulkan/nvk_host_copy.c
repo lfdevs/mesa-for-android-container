@@ -180,7 +180,7 @@ nvk_CopyMemoryToImageEXT(VkDevice _device,
 {
    VK_FROM_HANDLE(nvk_image, dst_image, info->dstImage);
 
-   VkResult result;
+   VkResult result = VK_SUCCESS;
 
    /* From the EXT spec:
     * VK_HOST_IMAGE_COPY_MEMCPY_EXT specifies that no memory layout swizzling is
@@ -306,7 +306,7 @@ nvk_CopyImageToMemoryEXT(VkDevice _device,
 {
    VK_FROM_HANDLE(nvk_image, image, info->srcImage);
 
-   VkResult result;
+   VkResult result = VK_SUCCESS;
 
    const bool use_memcpy = info->flags &
       VK_HOST_IMAGE_COPY_MEMCPY_EXT;
@@ -544,7 +544,7 @@ nvk_CopyImageToImageEXT(VkDevice _device,
    VK_FROM_HANDLE(nvk_image, src, pCopyImageToImageInfo->srcImage);
    VK_FROM_HANDLE(nvk_image, dst, pCopyImageToImageInfo->dstImage);
 
-   VkResult result;
+   VkResult result = VK_SUCCESS;
 
    for (unsigned r = 0; r < pCopyImageToImageInfo->regionCount; r++) {
       result = nvk_copy_image_to_image(device, src, dst,

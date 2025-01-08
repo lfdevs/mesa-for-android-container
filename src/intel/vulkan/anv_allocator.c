@@ -522,9 +522,9 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state,
     * We align to a page size because it makes it easier to do our
     * calculations later in such a way that we state page-aigned.
     */
-   uint32_t total_used = align(pool->state.next, PAGE_SIZE);
+   uint64_t total_used = align(pool->state.next, PAGE_SIZE);
 
-   uint32_t old_size = pool->size;
+   uint64_t old_size = pool->size;
 
    /* The block pool is always initialized to a nonzero size and this function
     * is always called after initialization.
@@ -535,7 +535,7 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state,
     * they are based on the next pointers which are updated prior to calling
     * this function.
     */
-   uint32_t required = MAX2(total_used, old_size);
+   uint64_t required = MAX2(total_used, old_size);
 
    /* With softpin, the pool is made up of a bunch of buffers with separate
     * maps.  Make sure we have enough contiguous space that we can get a
@@ -546,7 +546,7 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state,
    if (required > pool->max_size) {
       result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
    } else if (total_used * 2 > required) {
-      uint32_t size = old_size * 2;
+      uint64_t size = old_size * 2;
       while (size < required)
          size *= 2;
 

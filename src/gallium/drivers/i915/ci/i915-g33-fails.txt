@@ -62,33 +62,11 @@ dEQP-GLES2.functional.shaders.struct.uniform.equal_fragment,Fail
 dEQP-GLES2.functional.shaders.struct.uniform.not_equal_fragment,Fail
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4982
-# -Y face renders incorrectly (black instead of texture contents)
-dEQP-GLES2.functional.texture.filtering.cube.linear_linear_clamp_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.linear_linear_mirror_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.linear_linear_repeat_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.linear_mipmap_linear_nearest_repeat_l8,Fail
-dEQP-GLES2.functional.texture.filtering.cube.linear_mipmap_nearest_nearest_repeat_l8,Fail
-dEQP-GLES2.functional.texture.filtering.cube.linear_nearest_clamp_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.linear_nearest_mirror_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.linear_nearest_repeat_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_linear_clamp_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_linear_mirror_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_linear_repeat_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_mipmap_linear_nearest_repeat_l8,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_mipmap_nearest_nearest_repeat_l8,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_nearest_clamp_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_nearest_mirror_l8_pot,Fail
-dEQP-GLES2.functional.texture.filtering.cube.nearest_nearest_repeat_l8_pot,Fail
-dEQP-GLES2.functional.texture.size.cube.128x128_l8_mipmap,Fail
-dEQP-GLES2.functional.texture.size.cube.64x64_l8_mipmap,Fail
-
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/4982
 # Minor errors on all faces, perhaps around filtering's texel selection?
 dEQP-GLES2.functional.texture.size.cube.15x15_l8,Fail
 dEQP-GLES2.functional.texture.size.cube.15x15_rgb888,Fail
 dEQP-GLES2.functional.texture.size.cube.15x15_rgba4444,Fail
 dEQP-GLES2.functional.texture.size.cube.15x15_rgba8888,Fail
-dEQP-GLES2.functional.texture.size.cube.16x16_l8_mipmap,Fail
 
 # Texel differences in the middle of the texture?
 dEQP-GLES2.functional.texture.wrap.clamp_clamp_nearest_npot_etc1,Fail
@@ -329,6 +307,7 @@ spec@!opengl 2.1@polygon-stipple-fs,Fail
 
 spec@arb_arrays_of_arrays@execution@glsl-arrays-copy-size-mismatch,Fail
 spec@arb_depth_texture@depth-level-clamp,Fail
+
 spec@arb_depth_texture@fbo-clear-formats,Fail
 spec@arb_depth_texture@fbo-clear-formats@GL_DEPTH_COMPONENT,Fail
 spec@arb_depth_texture@fbo-clear-formats@GL_DEPTH_COMPONENT16,Fail
@@ -529,17 +508,6 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB10,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB4,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB5,Fail
 
-spec@ext_framebuffer_object@fbo-clear-formats,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY12,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY16,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY4,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY8,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE12,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE16,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE4,Fail
-spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE8,Fail
 spec@ext_framebuffer_object@fbo-colormask-formats,Fail
 spec@ext_framebuffer_object@fbo-colormask-formats@GL_ALPHA,Fail
 spec@ext_framebuffer_object@fbo-colormask-formats@GL_ALPHA12,Fail

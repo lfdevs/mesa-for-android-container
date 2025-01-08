@@ -1,3 +1,9 @@
+mesa (24.3.3-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 08 Jan 2025 13:11:38 +0200
+
 mesa (24.3.0-1) experimental; urgency=medium
 
   * New upstream release.
@@ -20,10 +26,26 @@ mesa (24.3.0~rc1-1) experimental; urgency=medium
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 12 Nov 2024 15:17:38 +0200
 
-mesa (24.2.6-1) unstable; urgency=medium
+mesa (24.2.8-1) unstable; urgency=medium
 
   * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 28 Nov 2024 13:59:57 +0200
+
+mesa (24.2.7-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 14 Nov 2024 14:08:39 +0200
+
+mesa (24.2.6-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
   * fix-armhf-build.diff: Dropped, upstream.
+
+  [ Fabio Pedretti ]
+  * control: lower librust-syn-dev dependency version
 
  -- Timo Aaltonen <tjaalton@debian.org>  Tue, 05 Nov 2024 09:59:12 +0200
 

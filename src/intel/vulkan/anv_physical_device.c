@@ -898,7 +898,7 @@ get_features(const struct anv_physical_device *pdevice,
       .dynamicRenderingLocalRead = true,
 
       /* VK_EXT_pipeline_protected_access */
-      .pipelineProtectedAccess = true,
+      .pipelineProtectedAccess = pdevice->has_protected_contexts,
 
       /* VK_EXT_host_image_copy */
       .hostImageCopy = true,
@@ -2201,6 +2201,11 @@ anv_override_engine_counts(int *gc_count, int *g_count, int *c_count, int *v_cou
    int v_override = -1;
    int blit_override = -1;
    const char *env_ = os_get_option("ANV_QUEUE_OVERRIDE");
+
+   /* Override queues for Android HWUI that expects min 2 queues. */
+#if DETECT_OS_ANDROID
+   *gc_count = 2;
+#endif
 
    if (env_ == NULL)
       return;

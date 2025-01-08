@@ -45,11 +45,13 @@
 #include "util/u_vector.h"
 #include "util/format/u_formats.h"
 #include "main/glconfig.h"
+#include "pipe/p_screen.h"
 #include "egl_dri2.h"
 #include "eglglobals.h"
 #include "kopper_interface.h"
 #include "loader.h"
 #include "loader_dri_helper.h"
+#include "dri_screen.h"
 #include "dri_util.h"
 #include <loader_wayland_helper.h>
 
@@ -1008,6 +1010,7 @@ create_dri_image(struct dri2_egl_surface *dri2_surf,
    uint64_t *modifiers;
    unsigned int num_modifiers;
    struct u_vector *modifiers_present;
+   bool implicit_mod_supported;
 
    assert(visual_idx != -1);
 
@@ -1045,6 +1048,26 @@ create_dri_image(struct dri2_egl_surface *dri2_surf,
    } else {
       modifiers = u_vector_tail(modifiers_present);
       num_modifiers = u_vector_length(modifiers_present);
+   }
+
+   if (!dri2_dpy->dri_screen_render_gpu->base.screen->resource_create_with_modifiers &&
+       dri2_dpy->wl_dmabuf) {
+      /* We don't support explicit modifiers, check if the compositor supports
+       * implicit modifiers. */
+      implicit_mod_supported = false;
+      for (unsigned int i = 0; i < num_modifiers; i++) {
+         if (modifiers[i] == DRM_FORMAT_MOD_INVALID) {
+            implicit_mod_supported = true;
+            break;
+         }
+      }
+
+      if (!implicit_mod_supported) {
+         return;
+      }
+
+      num_modifiers = 0;
+      modifiers = NULL;
    }
 
    /* For the purposes of this function, an INVALID modifier on
@@ -1193,14 +1216,25 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
    if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu &&
        dri2_surf->back->linear_copy == NULL) {
       uint64_t linear_mod = DRM_FORMAT_MOD_LINEAR;
+      const uint64_t *render_modifiers = NULL, *display_modifiers = NULL;
+      unsigned int render_num_modifiers = 0, display_num_modifiers = 0;
       struct dri_image *linear_copy_display_gpu_image = NULL;
+
+      if (dri2_dpy->dri_screen_render_gpu->base.screen->resource_create_with_modifiers) {
+         render_modifiers = &linear_mod;
+         render_num_modifiers = 1;
+      }
+      if (dri2_dpy->dri_screen_display_gpu->base.screen->resource_create_with_modifiers) {
+         display_modifiers = &linear_mod;
+         display_num_modifiers = 1;
+      }
 
       if (dri2_dpy->dri_screen_display_gpu) {
          linear_copy_display_gpu_image = dri_create_image_with_modifiers(
             dri2_dpy->dri_screen_display_gpu,
             dri2_surf->base.Width, dri2_surf->base.Height,
             linear_pipe_format, use_flags | __DRI_IMAGE_USE_LINEAR,
-            &linear_mod, 1, NULL);
+            display_modifiers, display_num_modifiers, NULL);
 
          if (linear_copy_display_gpu_image) {
             int i, ret = 1;
@@ -1285,7 +1319,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
             dri2_dpy->dri_screen_render_gpu,
             dri2_surf->base.Width, dri2_surf->base.Height,
             linear_pipe_format, use_flags | __DRI_IMAGE_USE_LINEAR,
-            &linear_mod, 1, NULL);
+            render_modifiers, render_num_modifiers, NULL);
       }
 
       if (dri2_surf->back->linear_copy == NULL)

@@ -518,7 +518,7 @@ SOFTWARE.
 	<field   low="32" high="39" name="DST_LO" type="uint"/>
 	<assert pos="40">0</assert>
 	<pattern low="41" high="48">xxxxxxxx</pattern>
-	<pattern low="52" high="53">xx</pattern>
+	<pattern low="52" high="53">00</pattern>
 	<pattern low="54" high="58">11101</pattern>  <!-- OPC -->
 
 	<derived name="DST" width="13" type="uint">

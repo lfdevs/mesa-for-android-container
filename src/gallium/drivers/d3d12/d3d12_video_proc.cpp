@@ -185,7 +185,7 @@ d3d12_video_processor_end_frame(struct pipe_video_codec * codec,
     return 0;
 }
 
-void
+int
 d3d12_video_processor_process_frame(struct pipe_video_codec *codec,
                         struct pipe_video_buffer *input_texture,
                         const struct pipe_vpp_desc *process_properties)
@@ -284,6 +284,7 @@ d3d12_video_processor_process_frame(struct pipe_video_codec *codec,
     /// Flush work to the GPU and blocking wait until GPU finishes
     ///
     pD3D12Proc->m_needsGPUFlush = true;
+    return 0;
 }
 
 void

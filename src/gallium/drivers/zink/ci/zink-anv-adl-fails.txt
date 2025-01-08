@@ -634,7 +634,6 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_revers
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_x,Fail
 wayland-dEQP-EGL.functional.resize.surface_size.shrink,Fail
-spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 dEQP-GLES3.functional.fbo.multiview.samples_1,Fail
 spec@arb_gpu_shader_fp64@uniform_buffers@fs-ubo-load.indirect.3,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_dst_y,Fail
@@ -682,4 +681,3 @@ spec@ext_framebuffer_multisample@interpolation 8 centroid-deriv-disabled,Fail
 wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_dst_x,Fail
-spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail

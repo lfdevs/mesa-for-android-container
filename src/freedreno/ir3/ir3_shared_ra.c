@@ -30,6 +30,11 @@ struct ra_interval {
    struct rb_node physreg_node;
    physreg_t physreg_start, physreg_end;
 
+   /* If this interval was spilled, the original physreg_start before spilling.
+    * Used when reloading live outs.
+    */
+   physreg_t physreg_start_orig;
+
    /* Where the shared register is spilled to. If there were no uses when it's
     * spilled it could be the original defining instruction.
     */
@@ -441,6 +446,7 @@ spill_interval_children(struct ra_interval *interval,
                                      interval->interval.reg->interval_start) /
                                     reg_elem_size(interval->interval.reg),
                                     reg_elems(child->interval.reg), before);
+         interval->physreg_start_orig = child->physreg_start;
       }
       spill_interval_children(child, before);
    }
@@ -484,6 +490,7 @@ spill_interval(struct ra_ctx *ctx, struct ra_interval *interval)
 
       ir3_instr_move_after(mov, before);
       interval->spill_def = dst;
+      interval->physreg_start_orig = interval->physreg_start;
    }
 
    spill_interval_children(interval, interval->spill_def->instr);
@@ -1145,6 +1152,16 @@ reload_live_outs(struct ra_ctx *ctx, struct ir3_block *block)
       struct ra_interval *interval = &ctx->intervals[name];
       if (!interval->interval.inserted) {
          d("reloading %d at end of backedge", reg->name);
+
+         /* When this interval was spilled inside the loop, we probably chose a
+          * different physreg for it than the original physreg when it was
+          * defined outside the loop. Restore the original physreg so that we
+          * spill it correctly.
+          */
+         unsigned size = interval->physreg_end - interval->physreg_start;
+         interval->physreg_start = interval->physreg_start_orig;
+         interval->physreg_end = interval->physreg_start + size;
+
          reload_interval(ctx, NULL, block, interval);
       }
    }

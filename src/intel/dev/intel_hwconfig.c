@@ -154,16 +154,10 @@ apply_hwconfig(const struct intel_device_info *devinfo)
    return devinfo->verx10 >= 125;
 }
 
-static inline bool
-should_apply_hwconfig_item(uint16_t always_apply_verx10,
-                           const struct intel_device_info *devinfo,
-                           const char *devinfo_name, uint32_t devinfo_val,
-                           const uint32_t hwconfig_key, uint32_t hwconfig_val)
+static inline void
+hwconfig_item_warning(const char *devinfo_name, uint32_t devinfo_val,
+                      const uint32_t hwconfig_key, uint32_t hwconfig_val)
 {
-   if (apply_hwconfig(devinfo) &&
-       (devinfo->verx10 >= always_apply_verx10 || devinfo_val == 0))
-         return true;
-
 #ifndef NDEBUG
    if (devinfo_val != hwconfig_val) {
       mesa_logw("%s (%u) != devinfo->%s (%u)",
@@ -171,6 +165,16 @@ should_apply_hwconfig_item(uint16_t always_apply_verx10,
                 devinfo_val);
    }
 #endif
+}
+
+static inline bool
+should_apply_hwconfig_item(uint16_t always_apply_verx10,
+                           const struct intel_device_info *devinfo,
+                           uint32_t devinfo_val)
+{
+   assert(apply_hwconfig(devinfo));
+   if ((devinfo->verx10 >= always_apply_verx10 || devinfo_val == 0))
+      return true;
 
    return false;
 }
@@ -189,8 +193,9 @@ should_apply_hwconfig_item(uint16_t always_apply_verx10,
  */
 #define DEVINFO_HWCONFIG_KV(CVER, F, K, V)                              \
    do {                                                                 \
-      if (should_apply_hwconfig_item((CVER), devinfo, #F, devinfo->F,   \
-                                     (K), (V)))                         \
+      if (check_only)                                                   \
+         hwconfig_item_warning(#F, devinfo->F, (K), (V));               \
+      else if (should_apply_hwconfig_item((CVER), devinfo, devinfo->F)) \
          devinfo->F = (V);                                              \
    } while (0)
 
@@ -198,8 +203,9 @@ should_apply_hwconfig_item(uint16_t always_apply_verx10,
    DEVINFO_HWCONFIG_KV((CVER), F, (I)->key, (I)->val[0])
 
 static void
-apply_hwconfig_item(struct intel_device_info *devinfo,
-                    const struct hwconfig *item)
+process_hwconfig_item(struct intel_device_info *devinfo,
+                      const struct hwconfig *item,
+                      const bool check_only)
 {
    switch (item->key) {
    case INTEL_HWCONFIG_MAX_SLICES_SUPPORTED:
@@ -320,11 +326,19 @@ apply_hwconfig_item(struct intel_device_info *devinfo,
    }
 }
 
+static void
+apply_hwconfig_item(struct intel_device_info *devinfo,
+                    const struct hwconfig *item)
+{
+   process_hwconfig_item(devinfo, item, false);
+}
+
 bool
 intel_hwconfig_process_table(struct intel_device_info *devinfo,
                              void *data, int32_t len)
 {
-   process_hwconfig_table(devinfo, data, len, apply_hwconfig_item);
+   if (apply_hwconfig(devinfo))
+      process_hwconfig_table(devinfo, data, len, apply_hwconfig_item);
 
    return apply_hwconfig(devinfo);
 }
@@ -347,26 +361,52 @@ intel_print_hwconfig_table(const struct hwconfig *hwconfig,
    process_hwconfig_table(NULL, hwconfig, hwconfig_len, print_hwconfig_item);
 }
 
+static struct hwconfig *
+intel_get_hwconfig_table(int fd, struct intel_device_info *devinfo,
+                         int32_t *hwconfig_len)
+{
+   switch (devinfo->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      return intel_device_info_i915_query_hwconfig(fd, hwconfig_len);
+   case INTEL_KMD_TYPE_XE:
+      return intel_device_info_xe_query_hwconfig(fd, hwconfig_len);
+   default:
+      unreachable("unknown kmd type");
+      return NULL;
+   }
+}
+
 void
 intel_get_and_print_hwconfig_table(int fd, struct intel_device_info *devinfo)
 {
    struct hwconfig *hwconfig;
    int32_t hwconfig_len = 0;
 
-   switch (devinfo->kmd_type) {
-   case INTEL_KMD_TYPE_I915:
-      hwconfig = intel_device_info_i915_query_hwconfig(fd, &hwconfig_len);
-      break;
-   case INTEL_KMD_TYPE_XE:
-      hwconfig = intel_device_info_xe_query_hwconfig(fd, &hwconfig_len);
-      break;
-   default:
-      unreachable("unknown kmd type");
-      break;
-   }
-
+   hwconfig = intel_get_hwconfig_table(fd, devinfo, &hwconfig_len);
    if (hwconfig) {
       intel_print_hwconfig_table(hwconfig, hwconfig_len);
       free(hwconfig);
    }
+}
+
+UNUSED static void
+check_hwconfig_item(struct intel_device_info *devinfo,
+                    const struct hwconfig *item)
+{
+   process_hwconfig_item(devinfo, item, true);
+}
+
+void
+intel_check_hwconfig_items(int fd, struct intel_device_info *devinfo)
+{
+#ifndef NDEBUG
+   struct hwconfig *data;
+   int32_t len = 0;
+
+   data = intel_get_hwconfig_table(fd, devinfo, &len);
+   if (data) {
+      process_hwconfig_table(devinfo, data, len, check_hwconfig_item);
+      free(data);
+   }
+#endif
 }

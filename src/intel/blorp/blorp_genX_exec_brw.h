@@ -1860,7 +1860,11 @@ xy_bcb_surf_dim(const struct isl_surf *surf)
 {
    switch (surf->dim) {
    case ISL_SURF_DIM_1D:
-      return XY_SURFTYPE_1D;
+      /* An undocumented assertion in simulation is that 1D surfaces must use
+       * LINEAR tiling. But that doesn't work, so instead consider 1D tiled
+       * surfaces as 2D with a Height=1.
+       */
+      return surf->tiling != ISL_TILING_LINEAR ? XY_SURFTYPE_2D: XY_SURFTYPE_1D;
    case ISL_SURF_DIM_2D:
       return XY_SURFTYPE_2D;
    case ISL_SURF_DIM_3D:

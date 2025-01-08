@@ -71,26 +71,22 @@ brw_constant_fold_instruction(const intel_device_info *devinfo, fs_inst *inst)
 
    switch (inst->opcode) {
    case BRW_OPCODE_ADD:
-      if (inst->src[1].file != IMM)
+      if (inst->src[0].file != IMM || inst->src[1].file != IMM)
          break;
 
-      if (brw_type_is_int(inst->src[1].type) &&
-          inst->src[1].is_zero()) {
-         inst->opcode = BRW_OPCODE_MOV;
-         inst->resize_sources(1);
-         progress = true;
-         break;
-      }
+      if (brw_type_is_int(inst->src[0].type)) {
+         const uint64_t src0 = src_as_uint(inst->src[0]);
+         const uint64_t src1 = src_as_uint(inst->src[1]);
 
-      if (inst->src[0].file == IMM) {
+         inst->src[0] = brw_imm_for_type(src0 + src1, inst->dst.type);
+      } else {
          assert(inst->src[0].type == BRW_TYPE_F);
-         inst->opcode = BRW_OPCODE_MOV;
          inst->src[0].f += inst->src[1].f;
-         inst->resize_sources(1);
-         progress = true;
-         break;
       }
 
+      inst->opcode = BRW_OPCODE_MOV;
+      inst->resize_sources(1);
+      progress = true;
       break;
 
 
@@ -109,8 +105,7 @@ brw_constant_fold_instruction(const intel_device_info *devinfo, fs_inst *inst)
       break;
 
    case BRW_OPCODE_MUL:
-      if ((inst->src[0].file != IMM && inst->src[1].file != IMM) ||
-          brw_type_is_float(inst->src[1].type))
+      if (brw_type_is_float(inst->src[1].type))
          break;
 
       /* From the BDW PRM, Vol 2a, "mul - Multiply":
@@ -144,31 +139,16 @@ brw_constant_fold_instruction(const intel_device_info *devinfo, fs_inst *inst)
          break;
       }
 
-      /* a * 1 = a */
-      if (inst->src[1].is_one()) {
-         inst->opcode = BRW_OPCODE_MOV;
-         inst->resize_sources(1);
-         return true;
-      }
+      if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
+         const uint64_t src0 = src_as_uint(inst->src[0]);
+         const uint64_t src1 = src_as_uint(inst->src[1]);
 
-      /* a * -1 = -a */
-      if (inst->src[0].is_negative_one()) {
          inst->opcode = BRW_OPCODE_MOV;
-         inst->src[0] = inst->src[1];
-         inst->src[0].negate = !inst->src[0].negate;
+         inst->src[0] = brw_imm_for_type(src0 * src1, inst->dst.type);
          inst->resize_sources(1);
          progress = true;
          break;
       }
-
-      if (inst->src[1].is_negative_one()) {
-         inst->opcode = BRW_OPCODE_MOV;
-         inst->src[0].negate = !inst->src[0].negate;
-         inst->resize_sources(1);
-         progress = true;
-         break;
-      }
-
       break;
 
    case BRW_OPCODE_OR:
@@ -242,6 +222,18 @@ brw_fs_opt_algebraic(fs_visitor &s)
 
    foreach_block_and_inst_safe(block, fs_inst, inst, s.cfg) {
       switch (inst->opcode) {
+      case BRW_OPCODE_ADD:
+         if (brw_constant_fold_instruction(devinfo, inst)) {
+            progress = true;
+         } else if (brw_type_is_int(inst->src[1].type) &&
+                    inst->src[1].is_zero()) {
+            inst->opcode = BRW_OPCODE_MOV;
+            inst->resize_sources(1);
+            progress = true;
+         }
+
+         break;
+
       case BRW_OPCODE_MOV:
          if ((inst->conditional_mod == BRW_CONDITIONAL_Z ||
               inst->conditional_mod == BRW_CONDITIONAL_NZ) &&
@@ -276,11 +268,67 @@ brw_fs_opt_algebraic(fs_visitor &s)
          }
          break;
 
-      case BRW_OPCODE_MUL:
-      case BRW_OPCODE_ADD:
       case BRW_OPCODE_AND:
          if (brw_constant_fold_instruction(devinfo, inst))
             progress = true;
+
+         break;
+
+      case BRW_OPCODE_MUL:
+         if (brw_constant_fold_instruction(devinfo, inst)) {
+            progress = true;
+         } else if (brw_type_is_int(inst->src[0].type)){
+            /* From the BDW PRM, Vol 2a, "mul - Multiply":
+             *
+             *    "When multiplying integer datatypes, if src0 is DW and src1
+             *    is W, irrespective of the destination datatype, the
+             *    accumulator maintains full 48-bit precision."
+             *    ...
+             *    "When multiplying integer data types, if one of the sources
+             *    is a DW, the resulting full precision data is stored in the
+             *    accumulator."
+             *
+             * There are also similar notes in earlier PRMs.
+             *
+             * The MOV instruction can copy the bits of the source, but it
+             * does not clear the higher bits of the accumulator. So, because
+             * we might use the full accumulator in the MUL/MACH macro, we
+             * shouldn't replace such MULs with MOVs.
+             */
+            if ((brw_type_size_bytes(inst->src[0].type) == 4 ||
+                 brw_type_size_bytes(inst->src[1].type) == 4) &&
+                (inst->dst.is_accumulator() ||
+                 inst->writes_accumulator_implicitly(devinfo)))
+               break;
+
+            for (unsigned i = 0; i < 2; i++) {
+               /* a * 1 = a */
+               if (inst->src[i].is_one()) {
+                  inst->opcode = BRW_OPCODE_MOV;
+               } else if (inst->src[i].is_negative_one()) {
+                  /* a * -1 = -a */
+                  inst->opcode = BRW_OPCODE_MOV;
+
+                  /* If the source other than the -1 is immediate, just
+                   * toggling the negation flag will not work. Due to the
+                   * previous call to brw_constant_fold_instruction, this
+                   * should not be possible.
+                   */
+                  assert(inst->src[1 - i].file != IMM);
+                  inst->src[1 - i].negate = !inst->src[1 - i].negate;
+               }
+
+               if (inst->opcode == BRW_OPCODE_MOV) {
+                  /* If the literal 1 was src0, put the old src1 in src0. */
+                  if (i == 0)
+                     inst->src[0] = inst->src[1];
+
+                  inst->resize_sources(1);
+                  progress = true;
+                  break;
+               }
+            }
+         }
 
          break;
 

@@ -369,6 +369,10 @@ create_rect_list_pipeline(struct vk_device *device,
                                                    1, &info_local, NULL,
                                                    pipeline_out);
 
+   ralloc_free(vs_nir_info.nir);
+   if (use_gs)
+      ralloc_free(gs_nir_info.nir);
+
    STACK_ARRAY_FINISH(dyn_state);
    STACK_ARRAY_FINISH(stages);
 

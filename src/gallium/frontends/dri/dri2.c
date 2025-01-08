@@ -1130,33 +1130,8 @@ dri_create_image(struct dri_screen *screen,
    if (!map)
       return NULL;
 
-   if (count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID) {
-      count = 0;
-      modifiers = NULL;
-   }
-
-   if (!pscreen->resource_create_with_modifiers && count > 0) {
-      bool invalid_ok = false;
-      bool linear_ok = false;
-
-      for (unsigned i = 0; i < _count; i++) {
-         if (modifiers[i] == DRM_FORMAT_MOD_LINEAR)
-            linear_ok = true;
-         else if (modifiers[i] == DRM_FORMAT_MOD_INVALID)
-            invalid_ok = true;
-      }
-
-      if (invalid_ok) {
-         count = 0;
-         modifiers = NULL;
-      } else if (linear_ok) {
-         count = 0;
-         modifiers = NULL;
-         use |= __DRI_IMAGE_USE_LINEAR;
-      } else {
-         return NULL;
-      }
-   }
+   if (!pscreen->resource_create_with_modifiers && count > 0)
+      return NULL;
 
    if (pscreen->is_format_supported(pscreen, map->pipe_format, screen->target,
                                     0, 0, PIPE_BIND_RENDER_TARGET))

@@ -202,7 +202,7 @@ trace_video_codec_encode_bitstream(struct pipe_video_codec *_codec,
     codec->encode_bitstream(codec, source, destination, feedback);
 }
 
-static void
+static int
 trace_video_codec_process_frame(struct pipe_video_codec *_codec,
                         struct pipe_video_buffer *_source,
                         const struct pipe_vpp_desc *process_properties)
@@ -219,6 +219,7 @@ trace_video_codec_process_frame(struct pipe_video_codec *_codec,
     trace_dump_call_end();
 
     codec->process_frame(codec, source, process_properties);
+    return 0;
 }
 
 static int

@@ -92,9 +92,11 @@ vl_video_buffer_plane_order(enum pipe_format format)
    case PIPE_FORMAT_UYVY:
    case PIPE_FORMAT_P010:
    case PIPE_FORMAT_P016:
+   case PIPE_FORMAT_Y8_400_UNORM:
       return const_resource_plane_order_YUV;
 
    default:
+      assert(0);
       return NULL;
    }
 }
@@ -119,6 +121,9 @@ vl_video_buffer_is_format_supported(struct pipe_screen *screen,
 {
    enum pipe_format resource_formats[VL_NUM_COMPONENTS];
    unsigned i;
+
+   if (entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING && format == PIPE_FORMAT_R8_G8_B8_UNORM)
+      return false;
 
    vl_get_video_buffer_formats(screen, format, resource_formats);
 
@@ -320,7 +325,6 @@ vl_video_buffer_sampler_view_components(struct pipe_video_buffer *buffer)
             goto error;
       }
    }
-   assert(component == VL_NUM_COMPONENTS);
 
    return buf->sampler_view_components;
 

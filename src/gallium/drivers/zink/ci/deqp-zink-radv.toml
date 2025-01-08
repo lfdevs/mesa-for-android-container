@@ -1,10 +1,31 @@
 [[deqp]]
-deqp = "/deqp/external/openglcts/modules/glcts"
-caselists = [
-    "/deqp/mustpass/gles2-main.txt",
-    "/deqp/mustpass/gles3-main.txt",
-    "/deqp/mustpass/gles31-main.txt",
+deqp = "/deqp/modules/gles2/deqp-gles2"
+caselists = ["/deqp/mustpass/gles2-main.txt"]
+deqp_args = [
+    "--deqp-surface-width=256",
+    "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+    "--deqp-visibility=hidden"
 ]
+timeout = 180.0
+renderer_check = "zink.*RADV"
+
+[[deqp]]
+deqp = "/deqp/modules/gles3/deqp-gles3"
+caselists = ["/deqp/mustpass/gles3-main.txt"]
+deqp_args = [
+    "--deqp-surface-width=256",
+    "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+    "--deqp-visibility=hidden"
+]
+timeout = 180.0
+
+[[deqp]]
+deqp = "/deqp/modules/gles31/deqp-gles31"
+caselists = ["/deqp/mustpass/gles31-main.txt"]
 deqp_args = [
     "--deqp-surface-width=256",
     "--deqp-surface-height=256",
@@ -28,7 +49,6 @@ deqp_args = [
     "--deqp-visibility=hidden"
 ]
 timeout = 180.0
-renderer_check = "zink.*RADV"
 
 [[piglit]]
 piglit_folder = "/piglit"

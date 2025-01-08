@@ -667,8 +667,9 @@ virtio_bo_init(struct tu_device *dev,
    }
 
    if (!(mem_property & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT)) {
-      blob_flags |= VIRTGPU_BLOB_FLAG_USE_CROSS_DEVICE |
-            VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
+      blob_flags |= VIRTGPU_BLOB_FLAG_USE_SHAREABLE;
+      if (vdev->vdrm->supports_cross_device)
+         blob_flags |= VIRTGPU_BLOB_FLAG_USE_CROSS_DEVICE;
    }
 
    if (flags & TU_BO_ALLOC_GPU_READ_ONLY)

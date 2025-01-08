@@ -180,6 +180,8 @@ get_preload_shader(struct panvk_device *dev,
 
    VkResult result = panvk_per_arch(create_internal_shader)(
       dev, nir, &inputs, &shader);
+   ralloc_free(nir);
+
    if (result != VK_SUCCESS)
       return result;
 

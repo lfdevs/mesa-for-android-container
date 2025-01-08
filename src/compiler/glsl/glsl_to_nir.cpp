@@ -481,11 +481,14 @@ nir_visitor::visit(ir_variable *ir)
 
    switch(ir->data.mode) {
    case ir_var_auto:
-   case ir_var_temporary:
-      if (is_global)
+      if (is_global) {
          var->data.mode = nir_var_shader_temp;
-      else
-         var->data.mode = nir_var_function_temp;
+         break;
+      }
+
+      FALLTHROUGH;
+   case ir_var_temporary:
+      var->data.mode = nir_var_function_temp;
       break;
 
    case ir_var_function_in:

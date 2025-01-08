@@ -2584,7 +2584,8 @@ zink_set_primitive_emulation_keys(struct zink_context *ctx)
                   prim,
                   ctx->gfx_pipeline_state.rast_prim,
                   lower_edge_flags,
-                  lower_line_stipple || lower_quad_prim);
+                  lower_line_stipple || lower_quad_prim,
+                  true);
             }
             zink_lower_system_values_to_inlined_uniforms(nir);
 
