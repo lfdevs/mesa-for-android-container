@@ -99,14 +99,21 @@ wrapper_create_device_queue(struct wrapper_device *device,
          if (!queue)
             return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-         device->dispatch_table.GetDeviceQueue2(device->dispatch_handle,
-                                                &(VkDeviceQueueInfo2) {
-                                                   .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
-                                                   .flags = create_info->flags,
-                                                   .queueFamilyIndex = create_info->queueFamilyIndex,
-                                                   .queueIndex = j,
-                                                },
-                                                &queue->dispatch_handle);;
+         if (create_info->flags) {
+            device->dispatch_table.GetDeviceQueue2(
+               device->dispatch_handle,
+               &(VkDeviceQueueInfo2) {
+                  .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+                  .flags = create_info->flags,
+                  .queueFamilyIndex = create_info->queueFamilyIndex,
+                  .queueIndex = j,
+               },
+               &queue->dispatch_handle);;
+         } else {
+            device->dispatch_table.GetDeviceQueue(
+               device->dispatch_handle, create_info->queueFamilyIndex,
+               j, &queue->dispatch_handle);
+         }
          queue->device = device;
 
          result = vk_queue_init(&queue->vk, &device->vk, create_info, j);
