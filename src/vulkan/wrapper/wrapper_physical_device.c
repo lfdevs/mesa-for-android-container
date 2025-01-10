@@ -48,6 +48,19 @@ wrapper_setup_device_extensions(struct wrapper_physical_device *pdevice) {
    return VK_SUCCESS;
 }
 
+static void
+wrapper_apply_device_extension_blacklist(struct wrapper_physical_device *physical_device) {
+   const char *blacklist = getenv("WRAPPER_EXTENSION_BLACKLIST");
+   if (!blacklist)
+      return;
+
+   for (int i = 0; i < VK_DEVICE_EXTENSION_COUNT; i++) {
+      if (strstr(blacklist, vk_device_extensions[i].extensionName)) {
+         physical_device->vk.supported_extensions.extensions[i] = false;
+      }
+   }
+}
+
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 wrapper_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
@@ -103,6 +116,7 @@ VkResult enumerate_physical_device(struct vk_instance *_instance)
                                              instance->dispatch_handle);
 
       wrapper_setup_device_extensions(pdevice);
+      wrapper_apply_device_extension_blacklist(pdevice);
       wrapper_setup_device_features(pdevice);
 
       struct vk_features *supported_features = &pdevice->vk.supported_features;
