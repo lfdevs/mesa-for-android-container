@@ -255,6 +255,7 @@ Section: libs
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
+ libgbm1 (= ${binary:Version}) [!hurd-any],
  libvulkan1 [@LLVM_ARCHS@],
  ${shlibs:Depends},
  ${misc:Depends}
