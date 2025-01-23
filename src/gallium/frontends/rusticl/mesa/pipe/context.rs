@@ -432,9 +432,10 @@ impl PipeContext {
         &self,
         res: &PipeResource,
         format: pipe_format,
+        size: u32,
         app_img_info: Option<&AppImgInfo>,
     ) -> *mut pipe_sampler_view {
-        let template = res.pipe_sampler_view_template(format, app_img_info);
+        let template = res.pipe_sampler_view_template(format, size, app_img_info);
 
         unsafe {
             let s_view = self.pipe.as_ref().create_sampler_view.unwrap()(

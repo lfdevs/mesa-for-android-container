@@ -1266,6 +1266,9 @@ emit_v_mov_b16(Builder& bld, Definition dst, Operand op)
    Instruction* instr = bld.vop1(aco_opcode::v_mov_b16, dst, op);
    instr->valu().opsel[0] = op.physReg().byte() == 2;
    instr->valu().opsel[3] = dst.physReg().byte() == 2;
+
+   if (op.physReg().reg() < 256 && instr->valu().opsel[0])
+      instr->format = asVOP3(instr->format);
 }
 
 void

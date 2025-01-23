@@ -170,14 +170,23 @@ anv_blorp_batch_finish(struct blorp_batch *batch)
 
 static isl_surf_usage_flags_t
 get_usage_flag_for_cmd_buffer(const struct anv_cmd_buffer *cmd_buffer,
-                              bool is_dest, bool protected)
+                              bool is_dest, bool is_depth, bool protected)
 {
    isl_surf_usage_flags_t usage;
 
    switch (cmd_buffer->queue_family->engine_class) {
    case INTEL_ENGINE_CLASS_RENDER:
-      usage = is_dest ? ISL_SURF_USAGE_RENDER_TARGET_BIT :
-                        ISL_SURF_USAGE_TEXTURE_BIT;
+      if (is_dest) {
+         /* Make the blorp operation match the MOCS used in
+          * cmd_buffer_emit_depth_stencil()
+          */
+         if (is_depth)
+            usage = ISL_SURF_USAGE_DEPTH_BIT;
+         else
+            usage = ISL_SURF_USAGE_RENDER_TARGET_BIT;
+      } else {
+         usage = ISL_SURF_USAGE_TEXTURE_BIT;
+      }
       break;
    case INTEL_ENGINE_CLASS_COMPUTE:
       usage = is_dest ? ISL_SURF_USAGE_STORAGE_BIT :
@@ -208,7 +217,7 @@ get_blorp_surf_for_anv_address(struct anv_cmd_buffer *cmd_buffer,
 {
    bool ok UNUSED;
    isl_surf_usage_flags_t usage =
-      get_usage_flag_for_cmd_buffer(cmd_buffer, is_dest, protected);
+      get_usage_flag_for_cmd_buffer(cmd_buffer, is_dest, false, protected);
 
    *blorp_surf = (struct blorp_surf) {
       .surf = isl_surf,
@@ -287,6 +296,7 @@ get_blorp_surf_for_anv_image(const struct anv_cmd_buffer *cmd_buffer,
    isl_surf_usage_flags_t isl_usage =
       get_usage_flag_for_cmd_buffer(cmd_buffer,
                                     usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                    aspect & VK_IMAGE_ASPECT_DEPTH_BIT,
                                     anv_image_is_protected(image));
    const struct anv_surface *surface = &image->planes[plane].primary_surface;
    const struct anv_address address =
@@ -1140,6 +1150,7 @@ void anv_CmdUpdateBuffer(
          .mocs = anv_mocs(cmd_buffer->device, NULL,
                           get_usage_flag_for_cmd_buffer(cmd_buffer,
                                                         false /* is_dest */,
+                                                        false /* is_depth */,
                                                         false /* protected */)),
       };
       struct blorp_address dst = {
@@ -1149,6 +1160,7 @@ void anv_CmdUpdateBuffer(
                           get_usage_flag_for_cmd_buffer(
                              cmd_buffer,
                              true /* is_dest */,
+                             false /* is_depth */,
                              anv_buffer_is_protected(dst_buffer))),
       };
 

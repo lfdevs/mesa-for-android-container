@@ -545,9 +545,6 @@ st_link_glsl_to_nir(struct gl_context *ctx,
             prog->nir->info.label = ralloc_strdup(shader, shader_program->Label);
       }
 
-      memcpy(prog->nir->info.source_blake3, shader->linked_source_blake3,
-             BLAKE3_OUT_LEN);
-
       nir_shader_gather_info(prog->nir, nir_shader_get_entrypoint(prog->nir));
       if (!st->ctx->SoftFP64 && ((prog->nir->info.bit_sizes_int | prog->nir->info.bit_sizes_float) & 64) &&
           (options->lower_doubles_options & nir_lower_fp64_full_software) != 0) {

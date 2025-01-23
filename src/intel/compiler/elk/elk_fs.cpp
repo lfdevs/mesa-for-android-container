@@ -3387,7 +3387,8 @@ elk_fs_visitor::workaround_source_arf_before_eot()
          /* Currently, we always emit only one EOT per program,
           * this WA should be updated if it ever changes.
           */
-         assert(++eot_count == 1);
+         ++eot_count;
+         assert(eot_count == 1);
 
          const fs_builder ibld(this, block, inst);
          const fs_builder ubld = ibld.exec_all().group(1, 0);

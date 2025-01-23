@@ -373,3 +373,11 @@ INSTANTIATE_TEST_SUITE_P(ConvVariants, DisasmTest,
    )
 );
 // clang-format on
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(ShadowSampler, DisasmTest,
+   testing::Values(
+      disasm_state{ {0x00811018, 0x15001800, 0x00000000, 0x002a8018}, "texld             t1.x___, tex0.xxxx, t1.xyyy, void, t1.zzzz\n", FLAG_FAILING_PARSE | FLAG_FAILING_ASM}
+   )
+);
+// clang-format on

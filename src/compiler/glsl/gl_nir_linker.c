@@ -2885,7 +2885,8 @@ link_intrastage_shaders(void *mem_ctx,
 
    /* Set the linked source BLAKE3. */
    if (num_shaders == 1) {
-      memcpy(linked->linked_source_blake3, shader_list[0]->compiled_source_blake3,
+      memcpy(linked->Program->nir->info.source_blake3,
+             shader_list[0]->compiled_source_blake3,
              BLAKE3_OUT_LEN);
    } else {
       struct mesa_blake3 blake3_ctx;
@@ -2898,7 +2899,7 @@ link_intrastage_shaders(void *mem_ctx,
          _mesa_blake3_update(&blake3_ctx, shader_list[i]->compiled_source_blake3,
                              BLAKE3_OUT_LEN);
       }
-      _mesa_blake3_final(&blake3_ctx, linked->linked_source_blake3);
+      _mesa_blake3_final(&blake3_ctx, linked->Program->nir->info.source_blake3);
    }
 
    return linked;

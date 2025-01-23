@@ -186,7 +186,12 @@ enum radeon_ctx_pstate
 #define RADEON_PRIO_SHADER_RINGS (1 << 22)
 #define RADEON_PRIO_SCRATCH_BUFFER (1 << 23)
 
-#define RADEON_ALL_PRIORITIES (RADEON_USAGE_READ - 1)
+#define RADEON_ALL_PRIORITIES    BITFIELD_MASK(24)
+
+/* When passed to radeon_winsys::buffer_wait, it disallows using the DRM ioctl for timeout=0
+ * queries because it can take ~1 ms to return, reducing FPS.
+ */
+#define RADEON_USAGE_DISALLOW_SLOW_REPLY (1 << 26)
 
 /* Upper bits of priorities are used by usage flags. */
 #define RADEON_USAGE_READ (1 << 27)
@@ -373,6 +378,13 @@ struct radeon_winsys {
     * The timeout of 0 will only return the status.
     * The timeout of OS_TIMEOUT_INFINITE will always wait until the buffer
     * is idle.
+    *
+    * usage is RADEON_USAGE_READ/WRITE.
+    *
+    * Checking whether a buffer is idle using timeout=0 can take 1 ms even if the DRM ioctl is
+    * used, reducing our FPS to several hundreds. To prevent that, set
+    * RADEON_USAGE_DISALLOW_SLOW_REPLY, which will return busy. This is a workaround for kernel
+    * inefficiency.
     */
    bool (*buffer_wait)(struct radeon_winsys *ws, struct pb_buffer_lean *buf,
                        uint64_t timeout, unsigned usage);

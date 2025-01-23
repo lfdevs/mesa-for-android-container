@@ -426,11 +426,21 @@ brw_emit_interpolation_setup(fs_visitor &s)
        * in X & Y axis.
        */
       brw_reg coef_payload = brw_vec8_grf(payload.depth_w_coef_reg, 0);
-      const brw_reg x_start = brw_vec1_grf(coef_payload.nr, 2);
-      const brw_reg y_start = brw_vec1_grf(coef_payload.nr, 6);
-      const brw_reg z_cx    = brw_vec1_grf(coef_payload.nr, 1);
-      const brw_reg z_cy    = brw_vec1_grf(coef_payload.nr, 0);
-      const brw_reg z_c0    = brw_vec1_grf(coef_payload.nr, 3);
+      const brw_reg x_start = devinfo->ver >= 20 ?
+         brw_vec1_grf(coef_payload.nr, 6) :
+         brw_vec1_grf(coef_payload.nr, 2);
+      const brw_reg y_start = devinfo->ver >= 20 ?
+         brw_vec1_grf(coef_payload.nr, 7) :
+         brw_vec1_grf(coef_payload.nr, 6);
+      const brw_reg z_cx    = devinfo->ver >= 20 ?
+         brw_vec1_grf(coef_payload.nr + 1, 1) :
+         brw_vec1_grf(coef_payload.nr, 1);
+      const brw_reg z_cy    = devinfo->ver >= 20 ?
+         brw_vec1_grf(coef_payload.nr + 1, 0) :
+         brw_vec1_grf(coef_payload.nr, 0);
+      const brw_reg z_c0    = devinfo->ver >= 20 ?
+         brw_vec1_grf(coef_payload.nr + 1, 2) :
+         brw_vec1_grf(coef_payload.nr, 3);
 
       const brw_reg float_pixel_x = abld.vgrf(BRW_TYPE_F);
       const brw_reg float_pixel_y = abld.vgrf(BRW_TYPE_F);

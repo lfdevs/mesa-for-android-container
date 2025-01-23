@@ -102,6 +102,12 @@ static bool amdgpu_bo_wait(struct radeon_winsys *rws,
       bool buffer_busy = true;
       int r;
 
+      /* The GEM_WAIT_IDLE ioctl with timeout=0 can take up to 1 ms to return. This is a kernel
+       * inefficiency. This flag indicates whether it's better to return busy than wait for 1 ms.
+       */
+      if (timeout == 0 && usage & RADEON_USAGE_DISALLOW_SLOW_REPLY)
+         return false;
+
       r = amdgpu_bo_wait_for_idle(get_real_bo(bo)->bo_handle, timeout, &buffer_busy);
       if (r)
          fprintf(stderr, "%s: amdgpu_bo_wait_for_idle failed %i\n", __func__, r);

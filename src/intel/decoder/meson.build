@@ -13,42 +13,61 @@ if not dep_expat.found()
   libintel_decoder_files += files(
     'intel_batch_decoder_stub.c',
   )
+  libintel_decoder_brw_files = files()
+  libintel_decoder_elk_files = files()
 else
   libintel_decoder_deps += dep_expat
   libintel_decoder_files += files(
     'intel_decoder.c',
     'intel_batch_decoder.c',
   )
+  libintel_decoder_brw_files = files('intel_batch_decoder_brw.c')
+  libintel_decoder_elk_files = files('intel_batch_decoder_elk.c')
 endif
 
-libintel_decoder_brw = static_library(
-  'intel_decoder_brw',
-  [libintel_decoder_files, 'intel_batch_decoder_brw.c', genX_xml_h, sha1_h],
+libintel_decoder = static_library(
+  'intel_decoder',
+  [libintel_decoder_files, genX_xml_h, sha1_h],
   include_directories : [inc_include, inc_src, inc_intel],
   c_args : [no_override_init_args, sse2_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : libintel_decoder_deps,
+  build_by_default : false,
+)
+
+idep_intel_decoder = declare_dependency(
+  link_with : [libintel_decoder],
+  dependencies : libintel_decoder_deps,
+)
+
+libintel_decoder_brw = static_library(
+  'intel_decoder_brw',
+  [libintel_decoder_brw_files, genX_xml_h, sha1_h],
+  include_directories : [inc_include, inc_src, inc_intel],
+  c_args : [no_override_init_args, sse2_args],
+  gnu_symbol_visibility : 'hidden',
+  dependencies : idep_intel_decoder,
   build_by_default : false,
 )
 
 idep_intel_decoder_brw = declare_dependency(
   link_with : [libintel_decoder_brw],
-  dependencies : libintel_decoder_deps,
+  dependencies : idep_intel_decoder,
 )
 
 libintel_decoder_elk = static_library(
   'intel_decoder_elk',
-  [libintel_decoder_files, 'intel_batch_decoder_elk.c', genX_xml_h, sha1_h],
+  [libintel_decoder_elk_files, genX_xml_h, sha1_h],
   include_directories : [inc_include, inc_src, inc_intel],
   c_args : [no_override_init_args, sse2_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : libintel_decoder_deps,
+  dependencies : idep_intel_decoder,
   build_by_default : false,
 )
 
 idep_intel_decoder_elk = declare_dependency(
   link_with : [libintel_decoder_elk],
-  dependencies : libintel_decoder_deps,
+  dependencies : idep_intel_decoder,
 )
 
 if with_tests and not with_platform_android

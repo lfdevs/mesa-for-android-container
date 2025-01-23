@@ -430,7 +430,7 @@ F(3src_no_dd_check,         /* 9+ */ 10, 10,   /* 12+ */ -1, -1)
 F(3src_no_dd_clear,         /* 9+ */  9,  9,   /* 12+ */ -1, -1)
 F(3src_mask_control,        /* 9+ */ 34, 34,   /* 12+ */ 31, 31)
 FK(3src_access_mode,        /* 9+ */  8,  8,   /* 12+ */ BRW_ALIGN_1)
-F(3src_swsb,                /* 9+ */ -1, -1,   /* 12+ */ 15,  8)
+F20(3src_swsb,              /* 9+ */ -1, -1,   /* 12+ */ 15,  8, /* 20+ */ 17, 8)
 /* Bit 7 is Reserved (for future Opcode expansion) */
 F(3src_hw_opcode,           /* 9+ */ 6,  0,    /* 12+ */ 6, 0)
 /** @} */

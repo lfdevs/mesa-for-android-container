@@ -1031,6 +1031,9 @@ _mesa_glsl_process_extension(const char *name, YYLTYPE *name_locp,
       }
    }
 
+   if (state->OVR_multiview2_enable)
+      state->OVR_multiview_enable = true;
+
    return true;
 }
 

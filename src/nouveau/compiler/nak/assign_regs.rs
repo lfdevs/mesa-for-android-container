@@ -7,7 +7,7 @@ use crate::liveness::{BlockLiveness, Liveness, SimpleLiveness};
 use crate::union_find::UnionFind;
 
 use compiler::bitset::BitSet;
-use std::cmp::{max, Ordering};
+use std::cmp::{max, min, Ordering};
 use std::collections::{HashMap, HashSet};
 
 struct KillSet {
@@ -1437,13 +1437,22 @@ impl Shader<'_> {
         let mut gpr_limit = max(max_live[RegFile::GPR], 16);
         let mut total_gprs = gpr_limit + u32::from(tmp_gprs);
 
-        let max_gprs = if DEBUG.spill() {
+        let mut max_gprs = if DEBUG.spill() {
             // We need at least 16 registers to satisfy RA constraints for
             // texture ops and another 2 for parallel copy lowering
             18
         } else {
             self.sm.num_regs(RegFile::GPR)
         };
+
+        if let ShaderStageInfo::Compute(cs_info) = &self.info.stage {
+            max_gprs = min(
+                max_gprs,
+                gpr_limit_from_local_size(&cs_info.local_size)
+                    - self.sm.hw_reserved_gprs(),
+            );
+        }
+
         if total_gprs > max_gprs {
             // If we're spilling GPRs, we need to reserve 2 GPRs for OpParCopy
             // lowering because it needs to be able lower Mem copies which

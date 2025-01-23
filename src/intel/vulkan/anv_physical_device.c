@@ -1685,7 +1685,7 @@ get_properties(const struct anv_physical_device *pdevice,
       /* Bounded by the maximum representable size in
        * 3DSTATE_MESH_SHADER_BODY::SharedLocalMemorySize.  Same for Task.
        */
-      const uint32_t max_slm_size = 64 * 1024;
+      const uint32_t max_slm_size = intel_device_info_get_max_slm_size(devinfo);
 
       /* Bounded by the maximum representable size in
        * 3DSTATE_MESH_SHADER_BODY::LocalXMaximum.  Same for Task.

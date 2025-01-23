@@ -443,6 +443,8 @@ static void scan_instruction(const struct nir_shader *nir, struct si_shader_info
 
       info->has_non_uniform_tex_access =
          tex->texture_non_uniform || tex->sampler_non_uniform;
+
+      info->has_shadow_comparison |= tex->is_shadow;
    } else if (instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
       const char *intr_name = nir_intrinsic_infos[intr->intrinsic].name;

@@ -299,6 +299,7 @@ template <chip CHIP>
 static void
 record_timestamp(struct fd_ringbuffer *ring, struct fd_bo *bo, unsigned offset)
 {
+   fd_ringbuffer_attach_bo(ring, bo);
    fd6_record_ts<CHIP>(ring, bo, offset, 0, 0);
 }
 

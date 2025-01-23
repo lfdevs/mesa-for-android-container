@@ -790,6 +790,7 @@ bind_extensions(struct glx_screen *psc, const char *driverName)
       __glXEnableDirectExtension(psc, "GLX_INTEL_swap_event");
    }
 
+#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
    mask = driGetAPIMask(psc->frontend_screen);
 
    __glXEnableDirectExtension(psc, "GLX_ARB_create_context");
@@ -846,6 +847,7 @@ bind_extensions(struct glx_screen *psc, const char *driverName)
          psc->keep_native_window_glx_drawable = keep_native_window_glx_drawable;
       }
    }
+#endif
 }
 
 
@@ -1074,6 +1076,13 @@ __glXInitialize(Display * dpy)
 
 #if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
    glx_driver |= GLX_DRIVER_SW;
+#endif
+
+#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
+   if (!applegl_create_display(dpyPriv)) {
+      free(dpyPriv);
+      return NULL;
+   }
 #endif
 
    if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, glx_driver, !env)) {

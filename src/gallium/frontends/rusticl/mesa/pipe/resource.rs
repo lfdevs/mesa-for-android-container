@@ -124,6 +124,7 @@ impl PipeResource {
         format: pipe_format,
         read_write: bool,
         host_access: u16,
+        size: u32,
         app_img_info: Option<&AppImgInfo>,
     ) -> PipeImageView {
         let pipe = PipeResource::as_ref(self);
@@ -140,7 +141,7 @@ impl PipeResource {
             pipe_image_view__bindgen_ty_1 {
                 buf: pipe_image_view__bindgen_ty_1__bindgen_ty_2 {
                     offset: 0,
-                    size: pipe.width0,
+                    size: size,
                 },
             }
         } else {
@@ -182,6 +183,7 @@ impl PipeResource {
     pub fn pipe_sampler_view_template(
         &self,
         format: pipe_format,
+        size: u32,
         app_img_info: Option<&AppImgInfo>,
     ) -> pipe_sampler_view {
         let mut res = pipe_sampler_view::default();
@@ -198,7 +200,7 @@ impl PipeResource {
             res.set_is_tex2d_from_buf(true);
         } else if res.target() == pipe_texture_target::PIPE_BUFFER {
             res.u.buf.offset = 0;
-            res.u.buf.size = self.as_ref().width0;
+            res.u.buf.size = size;
         }
 
         res

@@ -38,6 +38,10 @@ impl ShaderModel for ShaderModel50 {
         }
     }
 
+    fn hw_reserved_gprs(&self) -> u32 {
+        0
+    }
+
     fn crs_size(&self, max_crs_depth: u32) -> u32 {
         if max_crs_depth <= 16 {
             0

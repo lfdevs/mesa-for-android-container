@@ -5228,6 +5228,7 @@ radv_emit_color_blend(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   const struct radv_rendering_state *render = &cmd_buffer->state.render;
    const enum amd_gfx_level gfx_level = pdev->info.gfx_level;
    const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
    unsigned cb_blend_control[MAX_RTS], sx_mrt_blend_opt[MAX_RTS];
@@ -5251,6 +5252,12 @@ radv_emit_color_blend(struct radv_cmd_buffer *cmd_buffer)
          continue;
 
       if (!d->vk.cb.attachments[i].blend_enable) {
+         /* Disable logic op for float/srgb formats when blending isn't enabled. Otherwise it's
+          * implicitly disabled.
+          */
+         if (vk_format_is_float(render->color_att[i].format) || vk_format_is_srgb(render->color_att[i].format))
+            cb_blend_control[i] |= S_028780_DISABLE_ROP3(1);
+
          sx_mrt_blend_opt[i] |= S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) |
                                 S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
          continue;
@@ -9332,7 +9339,8 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
    if (pdev->info.rbplus_allowed)
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_RBPLUS;
 
-   cmd_buffer->state.dirty_dynamic |= RADV_DYNAMIC_DEPTH_BIAS | RADV_DYNAMIC_STENCIL_TEST_ENABLE;
+   cmd_buffer->state.dirty_dynamic |=
+      RADV_DYNAMIC_DEPTH_BIAS | RADV_DYNAMIC_STENCIL_TEST_ENABLE | RADV_DYNAMIC_COLOR_BLEND_ENABLE;
    if (pdev->info.gfx_level >= GFX12)
       cmd_buffer->state.dirty_dynamic |= RADV_DYNAMIC_RASTERIZATION_SAMPLES;
 
@@ -13616,6 +13624,8 @@ radv_CmdWriteBufferMarker2AMD(VkCommandBuffer commandBuffer, VkPipelineStageFlag
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    const uint64_t va = radv_buffer_get_va(buffer->bo) + buffer->offset + dstOffset;
+
+   radv_cs_add_buffer(device->ws, cs, buffer->bo);
 
    if (cmd_buffer->qf == RADV_QUEUE_TRANSFER) {
       radeon_check_space(device->ws, cmd_buffer->cs, 4);

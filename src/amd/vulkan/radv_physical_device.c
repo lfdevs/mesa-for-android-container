@@ -168,14 +168,6 @@ radv_get_conformance_version(const struct radv_physical_device *pdev)
    return conformance_version;
 }
 
-static bool
-radv_is_conformant(const struct radv_physical_device *pdev)
-{
-   VkConformanceVersion conformance_version = radv_get_conformance_version(pdev);
-
-   return conformance_version.major != 0;
-}
-
 static void
 parse_hex(char *out, const char *in, unsigned length)
 {
@@ -2132,7 +2124,7 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    snprintf(pdev->marketing_name, sizeof(pdev->name), "%s (RADV %s%s)", marketing_name ? marketing_name : "AMD Unknown",
             pdev->info.name, radv_get_compiler_string(pdev));
 
-   if (!radv_is_conformant(pdev))
+   if (pdev->info.gfx_level >= GFX12)
       vk_warn_non_conformant_implementation("radv");
 
    radv_get_driver_uuid(&pdev->driver_uuid);
