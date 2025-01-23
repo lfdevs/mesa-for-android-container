@@ -33,12 +33,7 @@ impl ShaderModel for ShaderModel70 {
 
     fn num_regs(&self, file: RegFile) -> u32 {
         match file {
-            RegFile::GPR => {
-                // Volta+ has a maximum of 253 registers.  Presumably
-                // because two registers get burned for UGPRs? Unclear
-                // on why we need it on Volta though.
-                253
-            }
+            RegFile::GPR => 255 - self.hw_reserved_gprs(),
             RegFile::UGPR => {
                 if self.has_uniform_alu() {
                     63
@@ -58,6 +53,13 @@ impl ShaderModel for ShaderModel70 {
             RegFile::Bar => 16,
             RegFile::Mem => RegRef::MAX_IDX + 1,
         }
+    }
+
+    fn hw_reserved_gprs(&self) -> u32 {
+        // On Volta+, 2 GPRs get burned for the program counter - see the
+        // footnote on table 2 of the volta whitepaper
+        // https://images.nvidia.com/content/volta-architecture/pdf/volta-architecture-whitepaper.pdf
+        2
     }
 
     fn crs_size(&self, max_crs_depth: u32) -> u32 {

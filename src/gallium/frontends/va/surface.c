@@ -416,6 +416,7 @@ vlVaPutSurface(VADriverContextP ctx, VASurfaceID surface_id, void* draw, short s
    struct u_rect dst_rect = {destx, destx + destw, desty, desty + desth};
    enum pipe_format format;
    VAStatus status;
+   enum VL_CSC_COLOR_STANDARD color_standard;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -455,6 +456,16 @@ vlVaPutSurface(VADriverContextP ctx, VASurfaceID surface_id, void* draw, short s
    src_rect.y1 = srch + srcy;
 
    format = surf->buffer->buffer_format;
+
+   if (flags & VA_SRC_BT601)
+      color_standard = VL_CSC_COLOR_STANDARD_BT_601;
+   else if (flags & VA_SRC_SMPTE_240)
+      color_standard = VL_CSC_COLOR_STANDARD_SMPTE_240M;
+   else
+      color_standard = VL_CSC_COLOR_STANDARD_BT_709;
+
+   vl_csc_get_matrix(color_standard, NULL, true, &drv->csc);
+   vl_compositor_set_csc_matrix(&drv->cstate, (const vl_csc_matrix *)&drv->csc, 1.0f, 0.0f);
 
    vl_compositor_clear_layers(&drv->cstate);
 
@@ -718,14 +729,17 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
                                   PIPE_VIDEO_CAP_MAX_HEIGHT);
       i++;
 #if VA_CHECK_VERSION(1, 21, 0)
-      attribs[i].type = VASurfaceAttribAlignmentSize;
-      attribs[i].value.type = VAGenericValueTypeInteger;
-      attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE;
-      attribs[i].value.value.i =
+      int surface_alignment =
          pscreen->get_video_param(pscreen,
                                   config->profile, config->entrypoint,
                                   PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT);
-      i++;
+      if (surface_alignment > 0) {
+         attribs[i].type = VASurfaceAttribAlignmentSize;
+         attribs[i].value.type = VAGenericValueTypeInteger;
+         attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE;
+         attribs[i].value.value.i = surface_alignment;
+         i++;
+      }
 #endif
    } else {
       attribs[i].type = VASurfaceAttribMaxWidth;

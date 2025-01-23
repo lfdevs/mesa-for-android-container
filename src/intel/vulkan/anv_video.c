@@ -310,49 +310,49 @@ anv_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
                           pVideoFormatProperties,
                           pVideoFormatPropertyCount);
 
-   bool need_10bit = false;
    const struct VkVideoProfileListInfoKHR *prof_list = (struct VkVideoProfileListInfoKHR *)
       vk_find_struct_const(pVideoFormatInfo->pNext, VIDEO_PROFILE_LIST_INFO_KHR);
 
    if (prof_list) {
       for (unsigned i = 0; i < prof_list->profileCount; i++) {
          const VkVideoProfileInfoKHR *profile = &prof_list->pProfiles[i];
+
+         if (profile->lumaBitDepth & VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR ||
+             profile->chromaBitDepth & VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR) {
+            vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
+               p->format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+               p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+               p->imageType = VK_IMAGE_TYPE_2D;
+               p->imageTiling = VK_IMAGE_TILING_OPTIMAL;
+               p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+            }
+
+            vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
+               p->format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+               p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+               p->imageType = VK_IMAGE_TYPE_2D;
+               p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+               p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+            }
+         }
+
          if (profile->lumaBitDepth & VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR ||
-             profile->chromaBitDepth & VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR)
-            need_10bit = true;
-      }
-   }
-
-   vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
-      p->format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
-      p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-      p->imageType = VK_IMAGE_TYPE_2D;
-      p->imageTiling = VK_IMAGE_TILING_OPTIMAL;
-      p->imageUsageFlags = pVideoFormatInfo->imageUsage;
-   }
-
-   vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
-      p->format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
-      p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-      p->imageType = VK_IMAGE_TYPE_2D;
-      p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-      p->imageUsageFlags = pVideoFormatInfo->imageUsage;
-   }
-
-   if (need_10bit) {
-      vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
-         p->format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
-         p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-         p->imageType = VK_IMAGE_TYPE_2D;
-         p->imageTiling = VK_IMAGE_TILING_OPTIMAL;
-         p->imageUsageFlags = pVideoFormatInfo->imageUsage;
-      }
-      vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
-         p->format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
-         p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-         p->imageType = VK_IMAGE_TYPE_2D;
-         p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-         p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+             profile->chromaBitDepth & VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR) {
+            vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
+               p->format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
+               p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+               p->imageType = VK_IMAGE_TYPE_2D;
+               p->imageTiling = VK_IMAGE_TILING_OPTIMAL;
+               p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+            }
+            vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
+               p->format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
+               p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+               p->imageType = VK_IMAGE_TYPE_2D;
+               p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+               p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+            }
+         }
       }
    }
 

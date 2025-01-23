@@ -793,7 +793,7 @@ template <typename T> struct bit_reference {
 
    constexpr bit_reference& operator&=(bool val)
    {
-      storage &= T(val) << bit;
+      storage &= ~(T(!val) << bit);
       return *this;
    }
 

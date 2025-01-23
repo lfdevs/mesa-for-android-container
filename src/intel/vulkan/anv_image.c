@@ -935,7 +935,7 @@ add_video_buffers(struct anv_device *device,
                   const struct VkVideoProfileListInfoKHR *profile_list,
                   bool independent_profile)
 {
-   ASSERTED bool ok;
+   ASSERTED VkResult ok;
    unsigned size = 0;
 
    if (independent_profile) {

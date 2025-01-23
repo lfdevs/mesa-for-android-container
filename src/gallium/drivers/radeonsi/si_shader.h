@@ -549,6 +549,7 @@ struct si_shader_info {
    bool uses_sampleid;
    bool uses_layer_id;
    bool has_non_uniform_tex_access;
+   bool has_shadow_comparison;
 
    bool uses_vmem_sampler_or_bvh;
    bool uses_vmem_load_other; /* all other VMEM loads and atomics with return */

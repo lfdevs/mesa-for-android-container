@@ -343,6 +343,9 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
          int slot_idx = frame_info->pReferenceSlots[i].slotIndex;
 
          assert(slot_idx < ANV_VIDEO_H265_MAX_NUM_REF_FRAME);
+
+         if (slot_idx < 0)
+            continue;
          dpb_idx[slot_idx] = i;
 
          buf.ReferencePictureAddress[i] =

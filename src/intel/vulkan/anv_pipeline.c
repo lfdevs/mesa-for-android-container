@@ -531,6 +531,15 @@ rp_color_mask(const struct vk_render_pass_state *rp)
          color_mask |= BITFIELD_BIT(i);
    }
 
+   /* If there is depth/stencil attachment, even if the fragment shader
+    * doesn't write the depth/stencil output, we need a valid render target so
+    * that the compiler doesn't use the null-rt which would cull the
+    * depth/stencil output.
+    */
+   if (rp->depth_attachment_format != VK_FORMAT_UNDEFINED ||
+       rp->stencil_attachment_format != VK_FORMAT_UNDEFINED)
+      color_mask |= 1;
+
    return color_mask;
 }
 

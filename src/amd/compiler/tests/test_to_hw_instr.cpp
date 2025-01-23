@@ -766,3 +766,26 @@ BEGIN_TEST(to_hw_instr.pack2x16_constant)
       finish_to_hw_instr_test();
    }
 END_TEST
+
+BEGIN_TEST(to_hw_instr.mov_b16_sgpr_src)
+   if (!setup_cs(NULL, GFX11))
+      return;
+
+   //>> p_unit_test 0
+   //! v2b: %0:v[0][0:16] = v_mov_b16 hi(%0:s[0][16:32])
+   bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
+   bld.pseudo(aco_opcode::p_extract_vector, Definition(PhysReg(256), v2b), Operand(PhysReg(0), s1),
+              Operand::c32(1));
+
+   //! s_sendmsg sendmsg(dealloc_vgprs)
+   //! s_endpgm
+
+   finish_to_hw_instr_test();
+
+   for (aco_ptr<Instruction>& instr : program->blocks[0].instructions) {
+      if (instr->opcode == aco_opcode::v_mov_b16 && instr->format != asVOP3(Format::VOP1)) {
+         fail_test("v_mov_b16 must be be VOP3");
+         return;
+      }
+   }
+END_TEST

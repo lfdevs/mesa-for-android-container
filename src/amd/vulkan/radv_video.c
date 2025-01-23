@@ -1957,8 +1957,12 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
    decode->dt_surf_tile_config = 0;
    decode->dt_uv_surf_tile_config = 0;
 
-   decode->dt_luma_top_offset = luma->surface.u.gfx9.surf_offset;
-   decode->dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset;
+   int dt_array_idx = frame_info->dstPictureResource.baseArrayLayer + dst_iv->vk.base_array_layer;
+
+   decode->dt_luma_top_offset = luma->surface.u.gfx9.surf_offset +
+      dt_array_idx * luma->surface.u.gfx9.surf_slice_size;
+   decode->dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset +
+      dt_array_idx * chroma->surface.u.gfx9.surf_slice_size;
 
    if (decode->dt_field_mode) {
       decode->dt_luma_bottom_offset = luma->surface.u.gfx9.surf_offset + luma->surface.u.gfx9.surf_slice_size;
@@ -2021,10 +2025,8 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
    struct radv_image *dpb = dpb_iv ? dpb_iv->image : img;
 
    int dpb_array_idx = 0;
-   if (dpb_update_required) {
-      if (dpb_iv->vk.view_type == VK_IMAGE_VIEW_TYPE_2D_ARRAY)
-         dpb_array_idx = frame_info->pSetupReferenceSlot->pPictureResource->baseArrayLayer;
-   }
+   if (dpb_update_required)
+      dpb_array_idx = frame_info->pSetupReferenceSlot->pPictureResource->baseArrayLayer + dpb_iv->vk.base_array_layer;
 
    decode->dpb_size = (vid->dpb_type != DPB_DYNAMIC_TIER_2) ? dpb->size : 0;
    decode->db_pitch = dpb->planes[0].surface.u.gfx9.surf_pitch;
@@ -2064,9 +2066,7 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
          radv_image_view_from_handle(frame_info->pReferenceSlots[i].pPictureResource->imageViewBinding);
       assert(f_dpb_iv != NULL);
       struct radv_image *dpb_img = f_dpb_iv->image;
-      int f_dpb_array_idx = 0;
-      if (f_dpb_iv->vk.view_type == VK_IMAGE_VIEW_TYPE_2D_ARRAY)
-         f_dpb_array_idx = frame_info->pReferenceSlots[i].pPictureResource->baseArrayLayer;
+      int f_dpb_array_idx = frame_info->pReferenceSlots[i].pPictureResource->baseArrayLayer + f_dpb_iv->vk.base_array_layer;
 
       radv_cs_add_buffer(device->ws, cmd_buffer->cs, dpb_img->bindings[0].bo);
       addr = radv_buffer_get_va(dpb_img->bindings[0].bo) + dpb_img->bindings[0].offset;
@@ -2085,13 +2085,14 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
 
    decode->decode_flags = 1;
    dynamic_dpb_t2->dpbConfigFlags = 0;
-   dynamic_dpb_t2->dpbLumaPitch = luma->surface.u.gfx9.surf_pitch;
-   dynamic_dpb_t2->dpbLumaAlignedHeight = luma->surface.u.gfx9.surf_height;
-   dynamic_dpb_t2->dpbLumaAlignedSize = luma->surface.u.gfx9.surf_slice_size;
 
-   dynamic_dpb_t2->dpbChromaPitch = chroma->surface.u.gfx9.surf_pitch;
-   dynamic_dpb_t2->dpbChromaAlignedHeight = chroma->surface.u.gfx9.surf_height;
-   dynamic_dpb_t2->dpbChromaAlignedSize = chroma->surface.u.gfx9.surf_slice_size;
+   dynamic_dpb_t2->dpbLumaPitch = dpb->planes[0].surface.u.gfx9.surf_pitch;
+   dynamic_dpb_t2->dpbLumaAlignedHeight = dpb->planes[0].surface.u.gfx9.surf_height;
+   dynamic_dpb_t2->dpbLumaAlignedSize = dpb->planes[0].surface.u.gfx9.surf_slice_size;
+
+   dynamic_dpb_t2->dpbChromaPitch = dpb->planes[1].surface.u.gfx9.surf_pitch;
+   dynamic_dpb_t2->dpbChromaAlignedHeight = dpb->planes[1].surface.u.gfx9.surf_height;
+   dynamic_dpb_t2->dpbChromaAlignedSize = dpb->planes[1].surface.u.gfx9.surf_slice_size;
 
    return true;
 }
@@ -2427,12 +2428,16 @@ ruvd_dec_message_decode(struct radv_device *device, struct radv_video_session *v
 
    msg->body.decode.dt_field_mode = false;
 
+   int dt_array_idx = frame_info->dstPictureResource.baseArrayLayer + dst_iv->vk.base_array_layer;
+
    if (pdev->info.gfx_level >= GFX9) {
       msg->body.decode.dt_pitch = luma->surface.u.gfx9.surf_pitch * luma->surface.blk_w;
       msg->body.decode.dt_tiling_mode = RUVD_TILE_LINEAR;
       msg->body.decode.dt_array_mode = RUVD_ARRAY_MODE_LINEAR;
-      msg->body.decode.dt_luma_top_offset = luma->surface.u.gfx9.surf_offset;
-      msg->body.decode.dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset;
+      msg->body.decode.dt_luma_top_offset = luma->surface.u.gfx9.surf_offset +
+         dt_array_idx * luma->surface.u.gfx9.surf_slice_size;
+      msg->body.decode.dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset +
+         dt_array_idx * chroma->surface.u.gfx9.surf_slice_size;
       if (msg->body.decode.dt_field_mode) {
          msg->body.decode.dt_luma_bottom_offset =
             luma->surface.u.gfx9.surf_offset + luma->surface.u.gfx9.surf_slice_size;
@@ -2463,9 +2468,9 @@ ruvd_dec_message_decode(struct radv_device *device, struct radv_video_session *v
          break;
       }
 
-      msg->body.decode.dt_luma_top_offset = texture_offset_legacy(&luma->surface, 0);
+      msg->body.decode.dt_luma_top_offset = texture_offset_legacy(&luma->surface, dt_array_idx);
       if (chroma)
-         msg->body.decode.dt_chroma_top_offset = texture_offset_legacy(&chroma->surface, 0);
+         msg->body.decode.dt_chroma_top_offset = texture_offset_legacy(&chroma->surface, dt_array_idx);
       if (msg->body.decode.dt_field_mode) {
          msg->body.decode.dt_luma_bottom_offset = texture_offset_legacy(&luma->surface, 1);
          if (chroma)

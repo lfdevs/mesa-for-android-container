@@ -9,9 +9,9 @@ void genX(write_3DSTATE_VERTEX_BUFFERS)(global void *dst_ptr,
 {
    struct GENX(3DSTATE_VERTEX_BUFFERS) v = {
       GENX(3DSTATE_VERTEX_BUFFERS_header),
+      .DWordLength = 1 + (buffer_count * 4) -
+                     GENX(3DSTATE_VERTEX_BUFFERS_length_bias),
    };
-   v.DWordLength = 1 + (buffer_count * 4) -
-                   GENX(3DSTATE_VERTEX_BUFFERS_length_bias);
    GENX(3DSTATE_VERTEX_BUFFERS_pack)(dst_ptr, &v);
 }
 

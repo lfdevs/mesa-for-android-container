@@ -767,7 +767,7 @@ radv_query_opaque_metadata(struct radv_device *device, struct radv_image *image,
                                 plane_height, image->vk.extent.depth, 0.0f, desc, NULL, NULL, NULL);
 
    radv_set_mutable_tex_desc_fields(device, image, base_level_info, plane_id, 0, 0, surface->blk_w, false, false, false,
-                                    false, desc, NULL);
+                                    false, desc, NULL, 0);
 
    ac_surface_compute_umd_metadata(&pdev->info, surface, image->vk.mip_levels, desc, &md->size_metadata, md->metadata,
                                    instance->debug_flags & RADV_DEBUG_EXTRA_MD);

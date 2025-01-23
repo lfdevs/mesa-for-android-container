@@ -145,6 +145,9 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
       return VA_STATUS_ERROR_INVALID_BUFFER;
    }
 
+   if (buf->type == VAEncCodedBufferType)
+      vlVaGetBufferFeedback(buf);
+
    if (buf->derived_surface.resource) {
       struct pipe_resource *resource;
       struct pipe_box box;
@@ -197,8 +200,6 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id,
 
       if (buf->type == VAEncCodedBufferType) {
          VACodedBufferSegment* curr_buf_ptr = (VACodedBufferSegment*) buf->data;
-
-         vlVaGetBufferFeedback(buf);
 
          if ((buf->extended_metadata.present_metadata & PIPE_VIDEO_FEEDBACK_METADATA_TYPE_ENCODE_RESULT) &&
              (buf->extended_metadata.encode_result & PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_FAILED)) {

@@ -2810,12 +2810,18 @@ panfrost_update_state_3d(struct panfrost_batch *batch)
    }
 #else
    unsigned vt_shader_dirty = ctx->dirty_shader[PIPE_SHADER_VERTEX];
+   struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
+   struct panfrost_vertex_state *vstate = ctx->vertex;
+   bool attr_offsetted_by_instance_base =
+      vstate->attr_depends_on_base_instance_mask &
+      BITFIELD_MASK(vs->info.attributes_read_count);
 
    /* Vertex data, vertex shader and images accessed by the vertex shader have
     * an impact on the attributes array, we need to re-emit anytime one of these
     * parameters changes. */
    if ((dirty & PAN_DIRTY_VERTEX) ||
-       (vt_shader_dirty & (PAN_DIRTY_STAGE_IMAGE | PAN_DIRTY_STAGE_SHADER))) {
+       (vt_shader_dirty & (PAN_DIRTY_STAGE_IMAGE | PAN_DIRTY_STAGE_SHADER)) ||
+       attr_offsetted_by_instance_base) {
       batch->attribs[PIPE_SHADER_VERTEX] = panfrost_emit_vertex_data(
          batch, &batch->attrib_bufs[PIPE_SHADER_VERTEX]);
    }
@@ -3440,6 +3446,8 @@ panfrost_create_vertex_elements_state(struct pipe_context *pctx,
       so->element_buffer[i] = pan_assign_vertex_buffer(
          so->buffers, &so->nr_bufs, elements[i].vertex_buffer_index,
          elements[i].instance_divisor);
+      if (elements[i].instance_divisor)
+         so->attr_depends_on_base_instance_mask |= BITFIELD_BIT(i);
    }
 
    for (int i = 0; i < num_elements; ++i) {

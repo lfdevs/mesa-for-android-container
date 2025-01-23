@@ -1121,6 +1121,11 @@ static void si_disk_cache_create(struct si_screen *sscreen)
       return;
 #endif
 
+   /* NIR options depend on si_screen::use_aco, which affects all shaders, including GLSL
+    * compilation.
+    */
+   _mesa_sha1_update(&ctx, &sscreen->use_aco, sizeof(sscreen->use_aco));
+
    _mesa_sha1_final(&ctx, sha1);
    mesa_bytes_to_hex(cache_id, sha1, 20);
 

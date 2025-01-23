@@ -7250,12 +7250,32 @@ pub struct ShaderInfo {
 pub trait ShaderModel {
     fn sm(&self) -> u8;
     fn num_regs(&self, file: RegFile) -> u32;
+    fn hw_reserved_gprs(&self) -> u32;
     fn crs_size(&self, max_crs_depth: u32) -> u32;
 
     fn op_can_be_uniform(&self, op: &Op) -> bool;
 
     fn legalize_op(&self, b: &mut LegalizeBuilder, op: &mut Op);
     fn encode_shader(&self, s: &Shader<'_>) -> Vec<u32>;
+}
+
+/// For compute shaders, large values of local_size impose an additional limit
+/// on the number of GPRs per thread
+pub fn gpr_limit_from_local_size(local_size: &[u16; 3]) -> u32 {
+    fn prev_multiple_of(x: u32, y: u32) -> u32 {
+        (x / y) * y
+    }
+
+    let local_size = local_size[0] * local_size[1] * local_size[2];
+    // Warps are allocated in multiples of 4
+    // Multiply that by 32 threads/warp
+    let local_size = local_size.next_multiple_of(4 * 32) as u32;
+    let total_regs: u32 = 65536;
+
+    let out = total_regs / local_size;
+    // GPRs are allocated in multiples of 8
+    let out = prev_multiple_of(out, 8);
+    min(out, 255)
 }
 
 pub struct Shader<'a> {

@@ -1414,11 +1414,14 @@ impl Kernel {
                                 };
 
                                 let format = image.pipe_format;
+                                let size =
+                                    image.size.try_into().map_err(|_| CL_OUT_OF_RESOURCES)?;
                                 let (formats, orders) = if api_arg.kind == KernelArgType::Image {
                                     iviews.push(res.pipe_image_view(
                                         format,
                                         false,
                                         image.pipe_image_host_access(),
+                                        size,
                                         app_img_info.as_ref(),
                                     ));
                                     (&mut img_formats, &mut img_orders)
@@ -1427,11 +1430,12 @@ impl Kernel {
                                         format,
                                         true,
                                         image.pipe_image_host_access(),
+                                        size,
                                         app_img_info.as_ref(),
                                     ));
                                     (&mut img_formats, &mut img_orders)
                                 } else {
-                                    sviews.push((res.clone(), format, app_img_info));
+                                    sviews.push((res.clone(), format, size, app_img_info));
                                     (&mut tex_formats, &mut tex_orders)
                                 };
 
@@ -1518,7 +1522,7 @@ impl Kernel {
 
             let mut sviews: Vec<_> = sviews
                 .iter()
-                .map(|(s, f, aii)| ctx.create_sampler_view(s, *f, aii.as_ref()))
+                .map(|(s, f, size, aii)| ctx.create_sampler_view(s, *f, *size, aii.as_ref()))
                 .collect();
             let samplers: Vec<_> = samplers
                 .iter()
@@ -1713,9 +1717,22 @@ impl Kernel {
     }
 
     pub fn local_mem_size(&self, dev: &Device) -> cl_ulong {
-        // TODO include args
+        // TODO: take alignment into account?
         // this is purely informational so it shouldn't even matter
-        self.builds.get(dev).unwrap()[NirKernelVariant::Default].shared_size as cl_ulong
+        let local =
+            self.builds.get(dev).unwrap()[NirKernelVariant::Default].shared_size as cl_ulong;
+        let args: cl_ulong = self
+            .arg_values()
+            .iter()
+            .map(|arg| match arg {
+                Some(KernelArgValue::LocalMem(val)) => *val as cl_ulong,
+                // If the local memory size, for any pointer argument to the kernel declared with
+                // the __local address qualifier, is not specified, its size is assumed to be 0.
+                _ => 0,
+            })
+            .sum();
+
+        local + args
     }
 
     pub fn has_svm_devs(&self) -> bool {

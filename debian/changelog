@@ -1,3 +1,10 @@
+mesa (24.3.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Make libgl1-mesa-dri depend on the same version of libgbm1.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 23 Jan 2025 19:48:02 +0200
+
 mesa (24.3.3-1) unstable; urgency=medium
 
   * New upstream release.

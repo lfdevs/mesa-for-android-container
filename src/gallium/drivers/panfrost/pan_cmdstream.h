@@ -93,6 +93,12 @@ struct panfrost_vertex_state {
    unsigned element_buffer[PIPE_MAX_ATTRIBS];
    unsigned nr_bufs;
 
+   /* Bitmask flagging attributes with a non-zero instance divisor which
+    * require an attribute offset adjustment when base_instance != 0.
+    * This is used to force attributes re-emission even if the vertex state
+    * isn't dirty to take the new base instance into account. */
+   uint32_t attr_depends_on_base_instance_mask;
+
    unsigned formats[PIPE_MAX_ATTRIBS];
 #endif
 };

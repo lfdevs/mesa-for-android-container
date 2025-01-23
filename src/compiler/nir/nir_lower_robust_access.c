@@ -211,6 +211,7 @@ lower(nir_builder *b, nir_instr *instr, void *_opts)
       }
       return false;
    case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
       if (opts->lower_ssbo) {
          lower_buffer_atomic(b, intr);
          return true;
