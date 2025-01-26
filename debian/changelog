@@ -1,3 +1,13 @@
+mesa (24.3.4-2) unstable; urgency=medium
+
+  * Build with gcc-12 and -O1 on ppc64el to workaround segfaults
+    on driswSwapBuffers. Thanks Dmitry Shachnev for debugging and
+    finding a working compiler and optimization level.
+    Closes: #1092890.
+  * Drop quilt usage, not needed with source format 3.0.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Sun, 26 Jan 2025 11:39:48 +0100
+
 mesa (24.3.4-1) unstable; urgency=medium
 
   * New upstream release.
