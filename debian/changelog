@@ -4,6 +4,7 @@ mesa (24.3.4-2) UNRELEASED; urgency=medium
     on driswSwapBuffers. Thanks Dmitry Shachnev for debugging and
     finding a working compiler and optimization level.
     Closes: #1092890.
+  * Drop quilt usage, not needed with source format 3.0.
 
  -- Emilio Pozuelo Monfort <pochu@debian.org>  Sun, 26 Jan 2025 10:53:05 +0100
 

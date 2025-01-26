@@ -12,7 +12,6 @@ Build-Depends:
  flatbuffers-compiler [linux-arm64],
  glslang-tools [@LLVM_ARCHS@],
  meson (>= 1.4.0),
- quilt (>= 0.63-8.2~),
  pkgconf,
  libdrm-dev (>= 2.4.121),
  libx11-dev,
