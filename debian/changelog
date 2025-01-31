@@ -1,6 +1,7 @@
 mesa (25.0.0~rc1-1) UNRELEASED; urgency=medium
 
   * New upstream release candidate.
+  * control: Remove libglapi-mesa, provided by mesa-libgallium now.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Fri, 31 Jan 2025 08:13:18 +0200
 
