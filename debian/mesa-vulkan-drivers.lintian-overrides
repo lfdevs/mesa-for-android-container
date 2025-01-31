@@ -1,0 +1,12 @@
+no-manual-page [usr/bin/mesa-overlay-control.py]
+package-name-doesnt-match-sonames libVkLayer-INTEL-nullhw libVkLayer-MESA-device-select libVkLayer-MESA-overlay libvulkan-intel libvulkan-intel-hasvk libvulkan-lvp libvulkan-nouveau libvulkan-radeon libvulkan-virtio
+script-with-language-extension [usr/bin/mesa-overlay-control.py]
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libVkLayer_INTEL_nullhw.so libVkLayer_INTEL_nullhw.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libVkLayer_MESA_device_select.so libVkLayer_MESA_device_select.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libVkLayer_MESA_overlay.so libVkLayer_MESA_overlay.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libvulkan_intel_hasvk.so libvulkan_intel_hasvk.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libvulkan_lvp.so libvulkan_lvp.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libvulkan_nouveau.so libvulkan_nouveau.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libvulkan_virtio.so libvulkan_virtio.so
+shlib-without-versioned-soname usr/lib/*/libvulkan_intel.so libvulkan_intel.so
+shlib-without-versioned-soname usr/lib/*/libvulkan_radeon.so libvulkan_radeon.so

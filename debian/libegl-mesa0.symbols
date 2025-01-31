@@ -1,0 +1,2 @@
+libEGL_mesa.so.0 libegl-mesa0 #MINVER#
+ __egl_Main@Base 17.0.0~

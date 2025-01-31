@@ -1,0 +1,4 @@
+package-name-doesnt-match-sonames libamdgpu-noop-drm-shim libnouveau-noop-drm-shim libradeon-noop-drm-shim
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libamdgpu_noop_drm_shim.so libamdgpu_noop_drm_shim.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libnouveau_noop_drm_shim.so libnouveau_noop_drm_shim.so
+shared-library-lacks-version usr/lib/x86_64-linux-gnu/libradeon_noop_drm_shim.so libradeon_noop_drm_shim.so

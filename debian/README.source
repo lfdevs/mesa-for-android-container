@@ -1,0 +1,47 @@
+------------------------------------------------------
+Quick Guide To Patching This Package For The Impatient
+------------------------------------------------------
+
+1. Make sure you have quilt installed
+2. Unpack the package as usual with "dpkg-source -x"
+3. Run the "patch" target in debian/rules
+4. Create a new patch with "quilt new" (see quilt(1))
+5. Edit all the files you want to include in the patch with "quilt edit" 
+   (see quilt(1)).
+6. Write the patch with "quilt refresh" (see quilt(1))
+7. Run the "clean" target in debian/rules
+
+Alternatively, instead of using quilt directly, you can drop the patch in to 
+debian/patches and add the name of the patch to debian/patches/series.
+
+
+The X Strike Force team maintains X packages in git repositories on
+salsa.debian.org in the xorg-team subdirectory. Most upstream packages
+are actually maintained in git repositories as well, so they often
+just need to be pulled into salsa.debian.org in a "upstream-*" branch.
+
+The .orig.tar.gz is upstream's mesa tarball.
+
+While building from git, dpkg-source can complain about symlinks vs.
+normal files mismatches. To work around this issue, before uploading,
+and without committing:
+
+  find -type l | while read dest; do src=$(readlink -f $dest); rm $dest; cp $src $dest; done
+
+The Debian packaging is added by creating the "debian-*" git branch
+which contains the aforementioned "upstream-*" branch plus the debian/
+repository files.
+When a patch has to be applied to the Debian package, two solutions
+are involved:
+* If the patch is available in one of the upstream branches, it
+  may be git'cherry-picked into the Debian repository. In this
+  case, it appears directly in the .diff.gz.
+* Otherwise, the patch is added to debian/patches/ which is managed
+  with quilt as documented in /usr/share/doc/quilt/README.source.
+  Thus, the patching system requires a build dependency on quilt.
+
+Updating debian/upstream/signing-key.asc with new keys requires the following steps:
+* fetch the key:
+  gpg [--keyserver $server] --recv-keys $keyid
+* export it to the file:
+  gpg --export-options export-minimal --export -a $keyid >> debian/upstream/signing-key.asc

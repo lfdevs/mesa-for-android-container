@@ -1,0 +1,5 @@
+usr/lib/*/libxatracker.so
+usr/lib/*/pkgconfig/xatracker.pc
+usr/include/xa_composite.h
+usr/include/xa_context.h
+usr/include/xa_tracker.h

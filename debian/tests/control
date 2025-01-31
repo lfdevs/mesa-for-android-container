@@ -1,0 +1,7 @@
+Tests: gles-gbm-build-test
+Depends:
+ build-essential,
+ libgbm-dev,
+ libgles2-mesa-dev,
+ pkg-config,
+Restrictions: superficial

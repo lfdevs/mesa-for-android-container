@@ -1,0 +1,1 @@
+usr/lib/${DEB_HOST_MULTIARCH}/libGLX_mesa.so.0	usr/lib/${DEB_HOST_MULTIARCH}/libGLX_indirect.so.0

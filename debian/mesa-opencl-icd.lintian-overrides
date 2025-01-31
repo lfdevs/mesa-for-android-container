@@ -1,0 +1,4 @@
+link-to-shared-library-in-wrong-package usr/lib/*/libMesaOpenCL.so.1.0.0 [usr/lib/*/libMesaOpenCL.so]
+link-to-shared-library-in-wrong-package usr/lib/*/libRusticlOpenCL.so.1.0.0 [usr/lib/*/libRusticlOpenCL.so]
+package-name-doesnt-match-sonames libMesaOpenCL1 libRusticlOpenCL1
+shared-library-lacks-prerequisites [usr/lib/x86_64-linux-gnu/gallium-pipe/pipe_i915.so]
