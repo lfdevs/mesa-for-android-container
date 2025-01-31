@@ -43,17 +43,13 @@ assign(unsigned int *reg_hw_locations, elk_backend_reg *reg)
 bool
 vec4_visitor::reg_allocate_trivial()
 {
-   unsigned int hw_reg_mapping[this->alloc.count];
-   bool virtual_grf_used[this->alloc.count];
+   unsigned int *hw_reg_mapping = ralloc_array(NULL, unsigned, this->alloc.count);
+   bool *virtual_grf_used = rzalloc_array(NULL, bool, this->alloc.count);
    int next;
 
    /* Calculate which virtual GRFs are actually in use after whatever
     * optimization passes have occurred.
     */
-   for (unsigned i = 0; i < this->alloc.count; i++) {
-      virtual_grf_used[i] = false;
-   }
-
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       if (inst->dst.file == VGRF)
          virtual_grf_used[inst->dst.nr] = true;
@@ -80,6 +76,9 @@ vec4_visitor::reg_allocate_trivial()
       assign(hw_reg_mapping, &inst->src[1]);
       assign(hw_reg_mapping, &inst->src[2]);
    }
+
+   ralloc_free(virtual_grf_used);
+   ralloc_free(hw_reg_mapping);
 
    if (prog_data->total_grf > max_grf) {
       fail("Ran out of regs on trivial allocator (%d/%d)\n",
@@ -158,7 +157,6 @@ vec4_visitor::setup_payload_interference(struct ra_graph *g,
 bool
 vec4_visitor::reg_allocate()
 {
-   unsigned int hw_reg_mapping[alloc.count];
    int payload_reg_count = this->first_non_payload_grf;
 
    /* Using the trivial allocator can be useful in debugging undefined
@@ -175,6 +173,8 @@ vec4_visitor::reg_allocate()
    node_count += payload_reg_count;
    struct ra_graph *g =
       ra_alloc_interference_graph(compiler->vec4_reg_set.regs, node_count);
+
+   unsigned int *hw_reg_mapping = ralloc_array(g, unsigned, alloc.count);
 
    for (unsigned i = 0; i < alloc.count; i++) {
       int size = this->alloc.sizes[i];
@@ -454,8 +454,8 @@ vec4_visitor::evaluate_spill_costs(float *spill_costs, bool *no_spill)
 int
 vec4_visitor::choose_spill_reg(struct ra_graph *g)
 {
-   float spill_costs[this->alloc.count];
-   bool no_spill[this->alloc.count];
+   float *spill_costs = ralloc_array(NULL, float, this->alloc.count);
+   bool *no_spill = ralloc_array(NULL, bool, this->alloc.count);
 
    evaluate_spill_costs(spill_costs, no_spill);
 
@@ -463,6 +463,9 @@ vec4_visitor::choose_spill_reg(struct ra_graph *g)
       if (!no_spill[i])
          ra_set_node_spill_cost(g, i, spill_costs[i]);
    }
+
+   ralloc_free(spill_costs);
+   ralloc_free(no_spill);
 
    return ra_get_best_spill_node(g);
 }

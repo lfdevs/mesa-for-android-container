@@ -1,1 +1,5 @@
 spec@arb_query_buffer_object@qbo
+
+# Timed out after raising the iris-cml-deqp parallel number from 4 to 8.
+# https://gitlab.freedesktop.org/mesa/mesa/-/jobs/66875845
+KHR-Single-GL46.arrays_of_arrays_gl.ConstructorsAndUnsizedDeclConstructorSizing1

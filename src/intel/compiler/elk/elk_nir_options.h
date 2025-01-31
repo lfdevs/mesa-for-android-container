@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef ELK_NIR_OPTIONS_H
-#define ELK_NIR_OPTIONS_H
+#pragma once
 
 #include "nir.h"
 
@@ -18,5 +17,3 @@ extern const struct nir_shader_compiler_options elk_vector_nir_options;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* ELK_NIR_OPTIONS_H */

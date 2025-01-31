@@ -1264,10 +1264,8 @@ void
 vec4_visitor::split_virtual_grfs()
 {
    int num_vars = this->alloc.count;
-   int new_virtual_grf[num_vars];
-   bool split_grf[num_vars];
-
-   memset(new_virtual_grf, 0, sizeof(new_virtual_grf));
+   int *new_virtual_grf = rzalloc_array(NULL, int, num_vars);
+   bool *split_grf = ralloc_array(NULL, bool, num_vars);
 
    /* Try to split anything > 0 sized. */
    for (int i = 0; i < num_vars; i++) {
@@ -1319,6 +1317,10 @@ vec4_visitor::split_virtual_grfs()
          }
       }
    }
+
+   ralloc_free(new_virtual_grf);
+   ralloc_free(split_grf);
+
    invalidate_analysis(DEPENDENCY_INSTRUCTION_DETAIL | DEPENDENCY_VARIABLES);
 }
 
@@ -2490,14 +2492,16 @@ vec4_visitor::run()
    if (INTEL_DEBUG(DEBUG_SPILL_VEC4)) {
       /* Debug of register spilling: Go spill everything. */
       const int grf_count = alloc.count;
-      float spill_costs[alloc.count];
-      bool no_spill[alloc.count];
+      float *spill_costs = ralloc_array(NULL, float, alloc.count);
+      bool *no_spill = ralloc_array(NULL, bool, alloc.count);
       evaluate_spill_costs(spill_costs, no_spill);
       for (int i = 0; i < grf_count; i++) {
          if (no_spill[i])
             continue;
          spill_reg(i);
       }
+      ralloc_free(spill_costs);
+      ralloc_free(no_spill);
 
       /* We want to run this after spilling because 64-bit (un)spills need to
        * emit code to shuffle 64-bit data for the 32-bit scratch read/write

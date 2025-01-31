@@ -984,6 +984,7 @@
     <value name="Stream Link" value="1"/>
     <value name="Stream Terminate" value="2"/>
     <value name="Barrier" value="3"/>
+    <value name="Stream Return" value="4"/>
   </enum>
 
   <enum name="CDM Mode">
@@ -1065,12 +1066,17 @@
 
   <struct name="CDM Stream Link" size="8">
     <field name="Target hi" size="8" start="0" type="hex"/>
+    <field name="With return" size="1" start="28" type="bool"/>
     <field name="Block Type" size="3" start="29" type="CDM Block Type" exact="Stream Link"/>
     <field name="Target lo" size="32" start="32" type="hex"/>
   </struct>
 
   <struct name="CDM Stream Terminate" size="8">
     <field name="Block Type" size="3" start="29" type="CDM Block Type" exact="Stream Terminate"/>
+  </struct>
+
+  <struct name="CDM Stream Return" size="8">
+    <field name="Block Type" size="3" start="29" type="CDM Block Type" exact="Stream Return"/>
   </struct>
   <!-- CDM commands end -->
 

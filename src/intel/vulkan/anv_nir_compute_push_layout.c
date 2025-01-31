@@ -175,6 +175,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
       }
    }
 
+   unsigned n_push_ranges = 0;
    if (push_ubo_ranges) {
       brw_nir_analyze_ubo_ranges(compiler, nir, prog_data->ubo_ranges);
 
@@ -188,10 +189,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
       }
       assert(total_push_regs <= max_push_regs);
 
-      int n = 0;
-
       if (push_constant_range.length > 0)
-         map->push_ranges[n++] = push_constant_range;
+         map->push_ranges[n_push_ranges++] = push_constant_range;
 
       if (robust_flags & BRW_ROBUSTNESS_UBO) {
          const uint32_t push_reg_mask_offset =
@@ -208,7 +207,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
          if (ubo_range->length == 0)
             continue;
 
-         if (n >= 4) {
+         if (n_push_ranges >= 4) {
             memset(ubo_range, 0, sizeof(*ubo_range));
             continue;
          }
@@ -217,7 +216,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
          const struct anv_pipeline_binding *binding =
             &push_map->block_to_descriptor[ubo_range->block];
 
-         map->push_ranges[n++] = (struct anv_push_range) {
+         map->push_ranges[n_push_ranges++] = (struct anv_push_range) {
             .set = binding->set,
             .index = binding->index,
             .dynamic_offset_index = binding->dynamic_offset_index,
@@ -234,7 +233,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
          range_start_reg += ubo_range->length;
       }
-   } else {
+   } else if (push_constant_range.length > 0) {
       /* For Ivy Bridge, the push constants packets have a different
        * rule that would require us to iterate in the other direction
        * and possibly mess around with dynamic state base address.
@@ -243,7 +242,26 @@ anv_nir_compute_push_layout(nir_shader *nir,
        * In the compute case, we don't have multiple push ranges so it's
        * better to just provide one in push_ranges[0].
        */
-      map->push_ranges[0] = push_constant_range;
+      map->push_ranges[n_push_ranges++] = push_constant_range;
+   }
+
+   /* Pass a single-register push constant payload for the PS stage even if
+    * empty, since PS invocations with zero push constant cycles have been
+    * found to cause hangs with TBIMR enabled. See HSDES #22020184996.
+    *
+    * XXX - Use workaround infrastructure and final workaround when provided
+    *       by hardware team.
+    */
+   if (n_push_ranges == 0 &&
+       nir->info.stage == MESA_SHADER_FRAGMENT &&
+       devinfo->needs_null_push_constant_tbimr_workaround) {
+      map->push_ranges[n_push_ranges++] = (struct anv_push_range) {
+         .set = ANV_DESCRIPTOR_SET_NULL,
+         .start = 0,
+         .length = 1,
+      };
+      assert(prog_data->nr_params == 0);
+      prog_data->nr_params = 32 / 4;
    }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT && fragment_dynamic) {

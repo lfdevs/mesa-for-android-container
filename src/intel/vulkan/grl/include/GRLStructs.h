@@ -46,7 +46,7 @@ GRL_NAMESPACE_BEGIN(_INTERNAL)
 
     // Matches the Vulkan VkAccelerationStructureBuildRangeInfoKHR structure
     // See Vulkan spec for data access rules:
-    //     https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureBuildRangeInfoKHR.html
+    //     https://registry.khronos.org/vulkan/specs/latest/man/html/VkAccelerationStructureBuildRangeInfoKHR.html
     //
     struct IndirectBuildRangeInfo
     {

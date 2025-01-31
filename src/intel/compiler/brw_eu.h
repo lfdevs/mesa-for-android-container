@@ -29,13 +29,11 @@
   *   Keith Whitwell <keithw@vmware.com>
   */
 
-
-#ifndef BRW_EU_H
-#define BRW_EU_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdio.h>
-#include "brw_inst.h"
+#include "brw_eu_inst.h"
 #include "brw_compiler.h"
 #include "brw_eu_defines.h"
 #include "brw_isa_info.h"
@@ -89,7 +87,7 @@ struct brw_insn_state {
 #define brw_last_inst (&p->store[p->nr_insn - 1])
 
 struct brw_codegen {
-   brw_inst *store;
+   brw_eu_inst *store;
    int store_size;
    unsigned nr_insn;
    unsigned int next_insn_offset;
@@ -144,8 +142,8 @@ void brw_set_default_exec_size(struct brw_codegen *p, unsigned value);
 void brw_set_default_mask_control( struct brw_codegen *p, unsigned value );
 void brw_set_default_saturate( struct brw_codegen *p, bool enable );
 void brw_set_default_access_mode( struct brw_codegen *p, unsigned access_mode );
-void brw_inst_set_group(const struct intel_device_info *devinfo,
-                        brw_inst *inst, unsigned group);
+void brw_eu_inst_set_group(const struct intel_device_info *devinfo,
+                        brw_eu_inst *inst, unsigned group);
 void brw_set_default_group(struct brw_codegen *p, unsigned group);
 void brw_set_default_predicate_control(struct brw_codegen *p, enum brw_predicate pc);
 void brw_set_default_predicate_inverse(struct brw_codegen *p, bool predicate_inverse);
@@ -172,28 +170,28 @@ bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
 void brw_realign(struct brw_codegen *p, unsigned alignment);
 int brw_append_data(struct brw_codegen *p, void *data,
                     unsigned size, unsigned alignment);
-brw_inst *brw_next_insn(struct brw_codegen *p, unsigned opcode);
+brw_eu_inst *brw_next_insn(struct brw_codegen *p, unsigned opcode);
 void brw_add_reloc(struct brw_codegen *p, uint32_t id,
                    enum brw_shader_reloc_type type,
                    uint32_t offset, uint32_t delta);
-void brw_set_dest(struct brw_codegen *p, brw_inst *insn, struct brw_reg dest);
-void brw_set_src0(struct brw_codegen *p, brw_inst *insn, struct brw_reg reg);
+void brw_set_dest(struct brw_codegen *p, brw_eu_inst *insn, struct brw_reg dest);
+void brw_set_src0(struct brw_codegen *p, brw_eu_inst *insn, struct brw_reg reg);
 
 /* Helpers for regular instructions:
  */
 #define ALU1(OP)				\
-brw_inst *brw_##OP(struct brw_codegen *p,	\
+brw_eu_inst *brw_##OP(struct brw_codegen *p,	\
 	      struct brw_reg dest,		\
 	      struct brw_reg src0);
 
 #define ALU2(OP)				\
-brw_inst *brw_##OP(struct brw_codegen *p,	\
+brw_eu_inst *brw_##OP(struct brw_codegen *p,	\
 	      struct brw_reg dest,		\
 	      struct brw_reg src0,		\
 	      struct brw_reg src1);
 
 #define ALU3(OP)				\
-brw_inst *brw_##OP(struct brw_codegen *p,	\
+brw_eu_inst *brw_##OP(struct brw_codegen *p,	\
 	      struct brw_reg dest,		\
 	      struct brw_reg src0,		\
 	      struct brw_reg src1,		\
@@ -1432,8 +1430,8 @@ brw_send_indirect_message(struct brw_codegen *p,
                           struct brw_reg dst,
                           struct brw_reg payload,
                           struct brw_reg desc,
-                          unsigned desc_imm,
-                          bool eot);
+                          bool eot,
+                          bool gather);
 
 void
 brw_send_indirect_split_message(struct brw_codegen *p,
@@ -1442,12 +1440,11 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 struct brw_reg payload0,
                                 struct brw_reg payload1,
                                 struct brw_reg desc,
-                                unsigned desc_imm,
                                 struct brw_reg ex_desc,
-                                unsigned ex_desc_imm,
-                                bool ex_desc_scratch,
+                                unsigned ex_mlen,
                                 bool ex_bso,
-                                bool eot);
+                                bool eot,
+                                bool gather);
 
 void gfx6_math(struct brw_codegen *p,
 	       struct brw_reg dest,
@@ -1474,24 +1471,24 @@ void brw_barrier(struct brw_codegen *p, struct brw_reg src);
 /* If/else/endif.  Works by manipulating the execution flags on each
  * channel.
  */
-brw_inst *brw_IF(struct brw_codegen *p, unsigned execute_size);
+brw_eu_inst *brw_IF(struct brw_codegen *p, unsigned execute_size);
 
 void brw_ELSE(struct brw_codegen *p);
 void brw_ENDIF(struct brw_codegen *p);
 
 /* DO/WHILE loops:
  */
-brw_inst *brw_DO(struct brw_codegen *p, unsigned execute_size);
+brw_eu_inst *brw_DO(struct brw_codegen *p, unsigned execute_size);
 
-brw_inst *brw_WHILE(struct brw_codegen *p);
+brw_eu_inst *brw_WHILE(struct brw_codegen *p);
 
-brw_inst *brw_BREAK(struct brw_codegen *p);
-brw_inst *brw_CONT(struct brw_codegen *p);
-brw_inst *brw_HALT(struct brw_codegen *p);
+brw_eu_inst *brw_BREAK(struct brw_codegen *p);
+brw_eu_inst *brw_CONT(struct brw_codegen *p);
+brw_eu_inst *brw_HALT(struct brw_codegen *p);
 
 /* Forward jumps:
  */
-brw_inst *brw_JMPI(struct brw_codegen *p, struct brw_reg index,
+brw_eu_inst *brw_JMPI(struct brw_codegen *p, struct brw_reg index,
                    unsigned predicate_control);
 
 void brw_NOP(struct brw_codegen *p);
@@ -1515,7 +1512,7 @@ void brw_CMPN(struct brw_codegen *p,
               struct brw_reg src0,
               struct brw_reg src1);
 
-brw_inst *brw_DPAS(struct brw_codegen *p, enum gfx12_systolic_depth sdepth,
+brw_eu_inst *brw_DPAS(struct brw_codegen *p, enum gfx12_systolic_depth sdepth,
                    unsigned rcount, struct brw_reg dest, struct brw_reg src0,
                    struct brw_reg src1, struct brw_reg src2);
 
@@ -1541,7 +1538,7 @@ brw_float_controls_mode(struct brw_codegen *p,
 
 void
 brw_update_reloc_imm(const struct brw_isa_info *isa,
-                     brw_inst *inst,
+                     brw_eu_inst *inst,
                      uint32_t value);
 
 void
@@ -1552,17 +1549,17 @@ brw_MOV_reloc_imm(struct brw_codegen *p,
 
 unsigned
 brw_num_sources_from_inst(const struct brw_isa_info *isa,
-                          const brw_inst *inst);
+                          const brw_eu_inst *inst);
 
-void brw_set_src1(struct brw_codegen *p, brw_inst *insn, struct brw_reg reg);
+void brw_set_src1(struct brw_codegen *p, brw_eu_inst *insn, struct brw_reg reg);
 
-void brw_set_desc_ex(struct brw_codegen *p, brw_inst *insn,
-                     unsigned desc, unsigned ex_desc);
+void brw_set_desc_ex(struct brw_codegen *p, brw_eu_inst *insn,
+                     unsigned desc, unsigned ex_desc, bool gather);
 
 static inline void
-brw_set_desc(struct brw_codegen *p, brw_inst *insn, unsigned desc)
+brw_set_desc(struct brw_codegen *p, brw_eu_inst *insn, unsigned desc, bool gather)
 {
-   brw_set_desc_ex(p, insn, desc, 0);
+   brw_set_desc_ex(p, insn, desc, 0, gather);
 }
 
 void brw_set_uip_jip(struct brw_codegen *p, int start_offset);
@@ -1574,16 +1571,16 @@ enum brw_conditional_mod brw_swap_cmod(enum brw_conditional_mod cmod);
 void brw_compact_instructions(struct brw_codegen *p, int start_offset,
                               struct disasm_info *disasm);
 void brw_uncompact_instruction(const struct brw_isa_info *isa,
-                               brw_inst *dst, brw_compact_inst *src);
+                               brw_eu_inst *dst, brw_eu_compact_inst *src);
 bool brw_try_compact_instruction(const struct brw_isa_info *isa,
-                                 brw_compact_inst *dst, const brw_inst *src);
+                                 brw_eu_compact_inst *dst, const brw_eu_inst *src);
 
 void brw_debug_compact_uncompact(const struct brw_isa_info *isa,
-                                 brw_inst *orig, brw_inst *uncompacted);
+                                 brw_eu_inst *orig, brw_eu_inst *uncompacted);
 
 /* brw_eu_validate.c */
 bool brw_validate_instruction(const struct brw_isa_info *isa,
-                              const brw_inst *inst, int offset,
+                              const brw_eu_inst *inst, int offset,
                               unsigned inst_size,
                               struct disasm_info *disasm);
 bool brw_validate_instructions(const struct brw_isa_info *isa,
@@ -1591,11 +1588,13 @@ bool brw_validate_instructions(const struct brw_isa_info *isa,
                                struct disasm_info *disasm);
 
 static inline int
-next_offset(const struct intel_device_info *devinfo, void *store, int offset)
+next_offset(struct brw_codegen *p, void *store, int offset)
 {
-   brw_inst *insn = (brw_inst *)((char *)store + offset);
+   const struct intel_device_info *devinfo = p->devinfo;
+   assert((char *)store + offset < (char *)p->store + p->next_insn_offset);
+   brw_eu_inst *insn = (brw_eu_inst *)((char *)store + offset);
 
-   if (brw_inst_cmpt_control(devinfo, insn))
+   if (brw_eu_inst_cmpt_control(devinfo, insn))
       return offset + 8;
    else
       return offset + 16;
@@ -1606,6 +1605,4 @@ next_offset(const struct intel_device_info *devinfo, void *store, int offset)
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

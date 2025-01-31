@@ -25,8 +25,7 @@
  *
  */
 
-#ifndef ELK_VEC4_LIVE_VARIABLES_H
-#define ELK_VEC4_LIVE_VARIABLES_H
+#pragma once
 
 #include "elk_ir_vec4.h"
 #include "elk_ir_analysis.h"
@@ -141,5 +140,3 @@ var_from_reg(const simple_allocator &alloc, const dst_reg &reg,
 }
 
 } /* namespace elk */
-
-#endif /* ELK_VEC4_LIVE_VARIABLES_H */

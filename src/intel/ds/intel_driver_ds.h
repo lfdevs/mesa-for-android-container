@@ -71,8 +71,14 @@ enum intel_ds_tracepoint_flags {
    /**
     * Whether this tracepoint's timestamp is recorded on the compute pipeline.
     */
-   INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE_CS = BITFIELD_BIT(1),
-
+   INTEL_DS_TRACEPOINT_FLAG_END_CS         = BITFIELD_BIT(1),
+   /**
+    * Whether this tracepoint's timestamp is recorded on the compute pipeline
+    * or from top of pipe if there was no dispatch (useful for acceleration
+    * structure builds where the runtime might choose to not emit anything for
+    * a number of reasons).
+    */
+   INTEL_DS_TRACEPOINT_FLAG_END_CS_OR_NOOP = BITFIELD_BIT(2),
 };
 
 /* Convert internal driver PIPE_CONTROL stall bits to intel_ds_stall_flag. */

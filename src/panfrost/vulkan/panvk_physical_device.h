@@ -63,16 +63,6 @@ to_panvk_physical_device(struct vk_physical_device *phys_dev)
    return container_of(phys_dev, struct panvk_physical_device, vk);
 }
 
-static inline uint32_t
-panvk_get_vk_version()
-{
-   const uint32_t version_override = vk_get_version_override();
-   if (version_override)
-      return version_override;
-
-   return VK_MAKE_API_VERSION(0, 1, 0, VK_HEADER_VERSION);
-}
-
 VkResult panvk_physical_device_init(struct panvk_physical_device *device,
                                     struct panvk_instance *instance,
                                     drmDevicePtr drm_device);

@@ -225,8 +225,6 @@ lp_bld_llvm_sampler_soa_emit_fetch_texel(const struct lp_build_sampler_soa *base
       args[num_args++] = texture_descriptor;
       args[num_args++] = sampler_desc_ptr;
 
-      args[num_args++] = params->aniso_filter_table;
-
       LLVMTypeRef coord_type;
       if (op_type == LP_SAMPLER_OP_FETCH)
          coord_type = lp_build_int_vec_type(gallivm, params->type);

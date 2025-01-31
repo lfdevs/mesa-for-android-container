@@ -25,8 +25,7 @@
  *
  */
 
-#ifndef BRW_FS_LIVE_VARIABLES_H
-#define BRW_FS_LIVE_VARIABLES_H
+#pragma once
 
 #include "brw_ir_analysis.h"
 #include "brw_ir_fs.h"
@@ -144,5 +143,3 @@ protected:
 };
 
 } /* namespace brw */
-
-#endif /* BRW_FS_LIVE_VARIABLES_H */

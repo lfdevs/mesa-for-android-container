@@ -31,9 +31,9 @@ radv_printf_data_init(struct radv_device *device)
    VkBufferCreateInfo buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .pNext =
-         &(VkBufferUsageFlags2CreateInfoKHR){
-            .sType = VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR,
-            .usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT_KHR | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR,
+         &(VkBufferUsageFlags2CreateInfo){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO,
+            .usage = VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
          },
       .size = device->printf.buffer_size,
    };
@@ -115,6 +115,9 @@ radv_build_printf(nir_builder *b, nir_def *cond, const char *format_string, ...)
 
    if (cond)
       nir_push_if(b, cond);
+
+   if (b->shader->info.stage == MESA_SHADER_FRAGMENT)
+      nir_push_if(b, nir_inot(b, nir_is_helper_invocation(b, 1)));
 
    nir_def *size = nir_imm_int(b, 4);
 
@@ -202,6 +205,9 @@ radv_build_printf(nir_builder *b, nir_def *cond, const char *format_string, ...)
    nir_pop_if(b, NULL);
 
    if (cond)
+      nir_pop_if(b, NULL);
+
+   if (b->shader->info.stage == MESA_SHADER_FRAGMENT)
       nir_pop_if(b, NULL);
 
    free(args);

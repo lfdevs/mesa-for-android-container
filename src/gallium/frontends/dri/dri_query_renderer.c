@@ -82,25 +82,21 @@ dri_query_renderer_integer(struct dri_screen *screen, int param,
    switch (param) {
    case __DRI2_RENDERER_VENDOR_ID:
       value[0] =
-         (unsigned int)screen->base.screen->get_param(screen->base.screen,
-                                                      PIPE_CAP_VENDOR_ID);
+         (unsigned int)screen->base.screen->caps.vendor_id;
       return 0;
    case __DRI2_RENDERER_DEVICE_ID:
       value[0] =
-         (unsigned int)screen->base.screen->get_param(screen->base.screen,
-                                                      PIPE_CAP_DEVICE_ID);
+         (unsigned int)screen->base.screen->caps.device_id;
       return 0;
    case __DRI2_RENDERER_ACCELERATED:
       value[0] =
-         (unsigned int)!!screen->base.screen->get_param(screen->base.screen,
-                                                        PIPE_CAP_ACCELERATED);
+         (unsigned int)!!screen->base.screen->caps.accelerated;
       return 0;
 
    case __DRI2_RENDERER_VIDEO_MEMORY: {
       int ov = driQueryOptioni(&screen->dev->option_cache, "override_vram_size");
       value[0] =
-         (unsigned int)screen->base.screen->get_param(screen->base.screen,
-                                                      PIPE_CAP_VIDEO_MEMORY);
+         (unsigned int)screen->base.screen->caps.video_memory;
       if (ov >= 0)
          value[0] = MIN2(ov, value[0]);
       return 0;
@@ -108,14 +104,12 @@ dri_query_renderer_integer(struct dri_screen *screen, int param,
 
    case __DRI2_RENDERER_UNIFIED_MEMORY_ARCHITECTURE:
       value[0] =
-         (unsigned int)screen->base.screen->get_param(screen->base.screen,
-                                                      PIPE_CAP_UMA);
+         (unsigned int)screen->base.screen->caps.uma;
       return 0;
 
    case __DRI2_RENDERER_PREFER_BACK_BUFFER_REUSE:
       value[0] =
-         screen->base.screen->get_param(screen->base.screen,
-                                        PIPE_CAP_PREFER_BACK_BUFFER_REUSE);
+         screen->base.screen->caps.prefer_back_buffer_reuse;
       return 0;
    default:
       return driQueryRendererIntegerCommon(screen, param, value);

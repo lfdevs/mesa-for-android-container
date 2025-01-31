@@ -377,7 +377,8 @@ aggressive_coalesce_collect(struct ir3_liveness *live,
 {
    for (unsigned i = 0, offset = 0; i < collect->srcs_count;
         offset += reg_elem_size(collect->srcs[i]), i++) {
-      if (!(collect->srcs[i]->flags & IR3_REG_SSA))
+      if (!(collect->srcs[i]->flags & IR3_REG_SSA) ||
+          !collect->srcs[i]->def)
          continue;
       try_merge_defs(live, collect->dsts[0], collect->srcs[i]->def, offset);
    }
@@ -467,7 +468,8 @@ create_parallel_copy(struct ir3_block *block)
       assert(j == phi_count);
 
       struct ir3_instruction *pcopy =
-         ir3_instr_create(block, OPC_META_PARALLEL_COPY, phi_count, phi_count);
+         ir3_instr_create_at(ir3_before_terminator(block),
+                             OPC_META_PARALLEL_COPY, phi_count, phi_count);
 
       for (j = 0; j < phi_count; j++) {
          struct ir3_register *reg = __ssa_dst(pcopy);

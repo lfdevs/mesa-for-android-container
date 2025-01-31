@@ -21,8 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef BRW_NIR_RT_BUILDER_H
-#define BRW_NIR_RT_BUILDER_H
+#pragma once
 
 /* This file provides helpers to access memory based data structures that the
  * RT hardware reads/writes and their locations.
@@ -983,5 +982,3 @@ brw_nir_rt_acceleration_structure_to_root_node(nir_builder *b,
 
    return nir_if_phi(b, null_node_ptr, root_node_ptr);
 }
-
-#endif /* BRW_NIR_RT_BUILDER_H */

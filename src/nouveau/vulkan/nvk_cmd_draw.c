@@ -2177,8 +2177,8 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
          unreachable("Unsupported depth bias representation");
       }
       /* TODO: The blob multiplies by 2 for some reason. We don't. */
-      P_IMMD(p, NV9097, SET_DEPTH_BIAS, fui(dyn->rs.depth_bias.constant));
-      P_IMMD(p, NV9097, SET_SLOPE_SCALE_DEPTH_BIAS, fui(dyn->rs.depth_bias.slope));
+      P_IMMD(p, NV9097, SET_DEPTH_BIAS, fui(dyn->rs.depth_bias.constant_factor));
+      P_IMMD(p, NV9097, SET_SLOPE_SCALE_DEPTH_BIAS, fui(dyn->rs.depth_bias.slope_factor));
       P_IMMD(p, NV9097, SET_DEPTH_BIAS_CLAMP, fui(dyn->rs.depth_bias.clamp));
    }
 
@@ -4578,7 +4578,7 @@ nvk_CmdBeginTransformFeedbackEXT(VkCommandBuffer commandBuffer,
    }
 
    for (uint32_t i = 0; i < counterBufferCount; ++i) {
-      if (pCounterBuffers[i] == VK_NULL_HANDLE)
+      if (pCounterBuffers == NULL || pCounterBuffers[i] == VK_NULL_HANDLE)
          continue;
 
       VK_FROM_HANDLE(nvk_buffer, buffer, pCounterBuffers[i]);
@@ -4618,7 +4618,7 @@ nvk_CmdEndTransformFeedbackEXT(VkCommandBuffer commandBuffer,
    P_IMMD(p, NV9097, SET_STREAM_OUTPUT, ENABLE_FALSE);
 
    for (uint32_t i = 0; i < counterBufferCount; ++i) {
-      if (pCounterBuffers[i] == VK_NULL_HANDLE)
+      if (pCounterBuffers == NULL || pCounterBuffers[i] == VK_NULL_HANDLE)
          continue;
 
       VK_FROM_HANDLE(nvk_buffer, buffer, pCounterBuffers[i]);

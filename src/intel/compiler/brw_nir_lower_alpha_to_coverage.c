@@ -82,7 +82,7 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
                                 const struct brw_wm_prog_data *prog_data)
 {
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
-   assert(key->alpha_to_coverage != BRW_NEVER);
+   assert(key->alpha_to_coverage != INTEL_NEVER);
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
@@ -172,7 +172,7 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader,
    nir_def *dither_mask = build_dither_mask(&b, color0);
    dither_mask = nir_iand(&b, sample_mask, dither_mask);
 
-   if (key->alpha_to_coverage == BRW_SOMETIMES) {
+   if (key->alpha_to_coverage == INTEL_SOMETIMES) {
       nir_def *push_flags =
          nir_load_uniform(&b, 1, 32, nir_imm_int(&b, prog_data->msaa_flags_param * 4));
       nir_def *alpha_to_coverage =

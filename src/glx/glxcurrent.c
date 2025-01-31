@@ -64,8 +64,8 @@ __glXSetCurrentContextNull(void)
 {
    __glXSetCurrentContext(&dummyContext);
 #if defined(GLX_DIRECT_RENDERING)
-   _glapi_set_dispatch(NULL);   /* no-op functions */
-   _glapi_set_context(NULL);
+   _mesa_glapi_set_dispatch(NULL);   /* no-op functions */
+   _mesa_glapi_set_context(NULL);
 #endif
 }
 

@@ -176,7 +176,7 @@ instr_is_invariant(nir_instr *instr, nir_loop *loop)
       return phi_is_invariant(nir_instr_as_phi(instr), loop);
    case nir_instr_type_intrinsic: {
       nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(instr);
-      if (!(nir_intrinsic_infos[intrinsic->intrinsic].flags & NIR_INTRINSIC_CAN_REORDER))
+      if (!nir_intrinsic_can_reorder(intrinsic))
          return not_invariant;
    }
       FALLTHROUGH;

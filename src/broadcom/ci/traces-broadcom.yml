@@ -6,9 +6,9 @@ traces-db:
 traces:
   0ad/0ad-v2.trace:
     broadcom-rpi4:
-      checksum: 8bdca9e63f483ee71970075842f003db
+      checksum: 97c16f22a887f03937c6ca9cd066f2d4
     broadcom-rpi5:
-      checksum: 3250bff5650882ced58d82779964ce0d
+      checksum: b218e753627320ad965abdef207fd7ce
 
   behdad-glyphy/glyphy-v2.trace:
     broadcom-rpi4:
@@ -198,9 +198,9 @@ traces:
 
   neverball/neverball-v2.trace:
     broadcom-rpi4:
-      checksum: c8e8ee352bdb303e4ed144b69272575e
+      checksum: 4f4b4b6f37c124fdda6a9efcad577257
     broadcom-rpi5:
-      checksum: 56a0adb0efdf799f269da2d734a6817c
+      checksum: 174394638c6f774948e7aac91c12f84d
 
   nheko/nheko-colors.trace:
     broadcom-rpi4:

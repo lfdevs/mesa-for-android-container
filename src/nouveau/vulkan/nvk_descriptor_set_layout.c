@@ -425,14 +425,8 @@ nvk_GetDescriptorSetLayoutSupport(VkDevice device,
       if (binding_flags != NULL && binding_flags->bindingCount > 0)
          flags = binding_flags->pBindingFlags[i];
 
-      switch (binding->descriptorType) {
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+      if (vk_descriptor_type_is_dynamic(binding->descriptorType))
          dynamic_buffer_count += binding->descriptorCount;
-         break;
-      default:
-         break;
-      }
 
       const VkMutableDescriptorTypeListEXT *type_list =
          nvk_descriptor_get_type_list(binding->descriptorType,

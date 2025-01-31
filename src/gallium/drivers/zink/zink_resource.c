@@ -367,6 +367,12 @@ check_ici(struct zink_screen *screen, VkImageCreateInfo *ici, uint64_t modifier)
       image_props = props2.imageFormatProperties;
       if (screen->info.have_EXT_host_image_copy && ici->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT)
          optimalDeviceAccess = hic.optimalDeviceAccess;
+#if defined(MVK_VERSION)
+      // MoltenVK cannot allocate a depth buffer with VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT
+      // As hic.identicalMemoryLayout is set, it is not needed?
+      if (screen->info.have_EXT_host_image_copy && ici->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT && hic.identicalMemoryLayout)
+         optimalDeviceAccess = false;
+#endif
    } else
       ret = VKSCR(GetPhysicalDeviceImageFormatProperties)(screen->pdev, ici->format, ici->imageType,
                                                    ici->tiling, ici->usage, ici->flags, &image_props);
@@ -2362,6 +2368,8 @@ zink_buffer_map(struct pipe_context *pctx,
          /* At this point, the buffer is always idle (we checked it above). */
          usage |= PIPE_MAP_UNSYNCHRONIZED;
       }
+   } else if (usage & ZINK_MAP_QBO) {
+      usage |= PIPE_MAP_UNSYNCHRONIZED;
    } else if (usage & PIPE_MAP_DONTBLOCK) {
       /* sparse/device-local will always need to wait since it has to copy */
       if (!res->obj->host_visible)
@@ -2432,7 +2440,7 @@ overwrite:
       // This is a known limitation of MoltenVK.
       // See https://github.com/KhronosGroup/MoltenVK/blob/master/Docs/MoltenVK_Runtime_UserGuide.md#known-moltenvk-limitations
 
-       || screen->instance_info.have_MVK_moltenvk
+       || screen->instance_info->have_MVK_moltenvk
 #endif
       ) {
       VkDeviceSize size = box->width;
@@ -3222,7 +3230,7 @@ zink_screen_resource_init(struct pipe_screen *pscreen)
    if (screen->info.have_EXT_external_memory_host) {
       pscreen->resource_from_user_memory = zink_resource_from_user_memory;
    }
-   if (screen->instance_info.have_KHR_external_memory_capabilities) {
+   if (screen->instance_info->have_KHR_external_memory_capabilities) {
       pscreen->memobj_create_from_handle = zink_memobj_create_from_handle;
       pscreen->memobj_destroy = zink_memobj_destroy;
       pscreen->resource_from_memobj = zink_resource_from_memobj;

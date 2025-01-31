@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef BRW_IR_ANALYSIS_H
-#define BRW_IR_ANALYSIS_H
+#pragma once
 
 namespace brw {
    /**
@@ -188,5 +187,3 @@ private:
    const C *c;
    T *p;
 };
-
-#endif

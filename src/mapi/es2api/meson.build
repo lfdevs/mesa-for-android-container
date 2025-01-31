@@ -36,7 +36,7 @@ libgles2 = shared_library(
   gnu_symbol_visibility : 'hidden',
   link_args : [ld_args_gc_sections],
   include_directories : [inc_src, inc_include, inc_mapi],
-  link_with : libglapi,
+  link_with : shared_glapi_lib,
   dependencies : [dep_thread, dep_libdrm, dep_m, dep_dl, idep_mesautilc11],
   soversion : host_machine.system() == 'windows' ? '' : '2',
   version : '2.0.0',

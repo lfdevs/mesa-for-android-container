@@ -279,38 +279,38 @@ static void
 i965_asm_set_instruction_options(struct brw_codegen *p,
 				 struct options options)
 {
-	brw_inst_set_access_mode(p->devinfo, brw_last_inst,
+	brw_eu_inst_set_access_mode(p->devinfo, brw_last_inst,
 			         options.access_mode);
-	brw_inst_set_mask_control(p->devinfo, brw_last_inst,
+	brw_eu_inst_set_mask_control(p->devinfo, brw_last_inst,
 				  options.mask_control);
 	if (p->devinfo->ver < 12) {
-		brw_inst_set_thread_control(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_thread_control(p->devinfo, brw_last_inst,
 					    options.thread_control);
-		brw_inst_set_no_dd_check(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_no_dd_check(p->devinfo, brw_last_inst,
 					 options.no_dd_check);
-		brw_inst_set_no_dd_clear(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_no_dd_clear(p->devinfo, brw_last_inst,
 					 options.no_dd_clear);
 	} else {
-		enum opcode opcode = brw_inst_opcode(p->isa, brw_last_inst);
-		brw_inst_set_swsb(p->devinfo, brw_last_inst,
+		enum opcode opcode = brw_eu_inst_opcode(p->isa, brw_last_inst);
+		brw_eu_inst_set_swsb(p->devinfo, brw_last_inst,
 		                  tgl_swsb_encode(p->devinfo, options.depinfo,
 						  opcode));
 	}
-	brw_inst_set_debug_control(p->devinfo, brw_last_inst,
+	brw_eu_inst_set_debug_control(p->devinfo, brw_last_inst,
 			           options.debug_control);
-	if (brw_has_branch_ctrl(p->devinfo, brw_inst_opcode(p->isa, brw_last_inst))) {
+	if (brw_has_branch_ctrl(p->devinfo, brw_eu_inst_opcode(p->isa, brw_last_inst))) {
 		if (options.acc_wr_control)
 			error(NULL, "Instruction does not support AccWrEnable\n");
 
-		brw_inst_set_branch_control(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_branch_control(p->devinfo, brw_last_inst,
 		                            options.branch_control);
 	} else if (options.branch_control) {
 		error(NULL, "Instruction does not support BranchCtrl\n");
 	} else if (p->devinfo->ver < 20) {
-		brw_inst_set_acc_wr_control(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_acc_wr_control(p->devinfo, brw_last_inst,
 					    options.acc_wr_control);
 	}
-	brw_inst_set_cmpt_control(p->devinfo, brw_last_inst,
+	brw_eu_inst_set_cmpt_control(p->devinfo, brw_last_inst,
 				  options.compaction);
 }
 
@@ -350,7 +350,7 @@ add_label(struct brw_codegen *p, const char* label_name, enum instr_label_type t
 	struct instoption instoption;
 	struct msgdesc msgdesc;
 	struct tgl_swsb depinfo;
-	brw_inst *instruction;
+	brw_eu_inst *instruction;
 }
 
 %token ABS
@@ -477,7 +477,7 @@ add_label(struct brw_codegen *p, const char* label_name, enum instr_label_type t
 /* register type */
 %token <integer> GENREG ADDRREG ACCREG FLAGREG NOTIFYREG STATEREG
 %token <integer> CONTROLREG IPREG PERFORMANCEREG THREADREG CHANNELENABLEREG
-%token <integer> MASKREG
+%token <integer> MASKREG SCALARREG
 
 %token <integer> INTEGER
 %token <llint> LONG
@@ -525,7 +525,7 @@ add_label(struct brw_codegen *p, const char* label_name, enum instr_label_type t
 %type <integer> swizzle
 
 /* registers */
-%type <reg> accreg addrreg channelenablereg controlreg flagreg ipreg
+%type <reg> accreg addrreg channelenablereg controlreg flagreg ipreg scalarreg
 %type <reg> notifyreg nullreg performancereg threadcontrolreg statereg maskreg
 %type <integer> subregnum
 
@@ -552,6 +552,7 @@ add_label(struct brw_codegen *p, const char* label_name, enum instr_label_type t
 %token <integer> REG_DIST_LONG
 %token <integer> REG_DIST_ALL
 %token <integer> REG_DIST_MATH
+%token <integer> REG_DIST_SCALAR
 %token <integer> SBID_ALLOC
 %token <integer> SBID_WAIT_SRC
 %token <integer> SBID_WAIT_DST
@@ -660,7 +661,7 @@ illegalinstruction:
 	ILLEGAL execsize instoptions
 	{
 		brw_next_insn(p, $1);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $2);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $2);
 		i965_asm_set_instruction_options(p, $3);
 	}
 	;
@@ -673,25 +674,25 @@ unaryinstruction:
 		i965_asm_unary_instruction($2, p, $6, $7);
 		brw_pop_insn_state(p);
 		i965_asm_set_instruction_options(p, $8);
-		brw_inst_set_cond_modifier(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_cond_modifier(p->devinfo, brw_last_inst,
 					   $4.cond_modifier);
 
-		if (!brw_inst_flag_reg_nr(p->devinfo, brw_last_inst)) {
-			brw_inst_set_flag_reg_nr(p->devinfo,
+		if (!brw_eu_inst_flag_reg_nr(p->devinfo, brw_last_inst)) {
+			brw_eu_inst_set_flag_reg_nr(p->devinfo,
 						 brw_last_inst,
 						 $4.flag_reg_nr);
-			brw_inst_set_flag_subreg_nr(p->devinfo,
+			brw_eu_inst_set_flag_subreg_nr(p->devinfo,
 						    brw_last_inst,
 						    $4.flag_subreg_nr);
 		}
 
 		if ($7.file != IMM) {
-			brw_inst_set_src0_vstride(p->devinfo, brw_last_inst,
+			brw_eu_inst_set_src0_vstride(p->devinfo, brw_last_inst,
 						  $7.vstride);
 		}
-		brw_inst_set_saturate(p->devinfo, brw_last_inst, $3);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $8.chan_offset);
+		brw_eu_inst_set_saturate(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $8.chan_offset);
 	}
 	;
 
@@ -718,19 +719,19 @@ binaryinstruction:
 		brw_set_default_access_mode(p, $9.access_mode);
 		i965_asm_binary_instruction($2, p, $6, $7, $8);
 		i965_asm_set_instruction_options(p, $9);
-		brw_inst_set_cond_modifier(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_cond_modifier(p->devinfo, brw_last_inst,
 					   $4.cond_modifier);
 
-		if (!brw_inst_flag_reg_nr(p->devinfo, brw_last_inst)) {
-			brw_inst_set_flag_reg_nr(p->devinfo, brw_last_inst,
+		if (!brw_eu_inst_flag_reg_nr(p->devinfo, brw_last_inst)) {
+			brw_eu_inst_set_flag_reg_nr(p->devinfo, brw_last_inst,
 					         $4.flag_reg_nr);
-			brw_inst_set_flag_subreg_nr(p->devinfo, brw_last_inst,
+			brw_eu_inst_set_flag_subreg_nr(p->devinfo, brw_last_inst,
 						    $4.flag_subreg_nr);
 		}
 
-		brw_inst_set_saturate(p->devinfo, brw_last_inst, $3);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
+		brw_eu_inst_set_saturate(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
 
 		brw_pop_insn_state(p);
 	}
@@ -761,21 +762,21 @@ binaryaccinstruction:
 		i965_asm_binary_instruction($2, p, $6, $7, $8);
 		brw_pop_insn_state(p);
 		i965_asm_set_instruction_options(p, $9);
-		brw_inst_set_cond_modifier(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_cond_modifier(p->devinfo, brw_last_inst,
 					   $4.cond_modifier);
 
-		if (!brw_inst_flag_reg_nr(p->devinfo, brw_last_inst)) {
-			brw_inst_set_flag_reg_nr(p->devinfo,
+		if (!brw_eu_inst_flag_reg_nr(p->devinfo, brw_last_inst)) {
+			brw_eu_inst_set_flag_reg_nr(p->devinfo,
 						 brw_last_inst,
 						 $4.flag_reg_nr);
-			brw_inst_set_flag_subreg_nr(p->devinfo,
+			brw_eu_inst_set_flag_subreg_nr(p->devinfo,
 						    brw_last_inst,
 						    $4.flag_subreg_nr);
 		}
 
-		brw_inst_set_saturate(p->devinfo, brw_last_inst, $3);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
+		brw_eu_inst_set_saturate(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
 	}
 	;
 
@@ -800,9 +801,9 @@ mathinstruction:
 		brw_set_default_access_mode(p, $9.access_mode);
 		gfx6_math(p, $6, $4, $7, $8);
 		i965_asm_set_instruction_options(p, $9);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
-		brw_inst_set_saturate(p->devinfo, brw_last_inst, $3);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
+		brw_eu_inst_set_saturate(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
 		brw_pop_insn_state(p);
 	}
 	;
@@ -841,19 +842,19 @@ ternaryinstruction:
 		i965_asm_ternary_instruction($2, p, $6, $7, $8, $9);
 		brw_pop_insn_state(p);
 		i965_asm_set_instruction_options(p, $10);
-		brw_inst_set_cond_modifier(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_cond_modifier(p->devinfo, brw_last_inst,
 					   $4.cond_modifier);
 
 		if (p->devinfo->ver < 12) {
-			brw_inst_set_3src_a16_flag_reg_nr(p->devinfo, brw_last_inst,
+			brw_eu_inst_set_3src_a16_flag_reg_nr(p->devinfo, brw_last_inst,
 					         $4.flag_reg_nr);
-			brw_inst_set_3src_a16_flag_subreg_nr(p->devinfo, brw_last_inst,
+			brw_eu_inst_set_3src_a16_flag_subreg_nr(p->devinfo, brw_last_inst,
 						    $4.flag_subreg_nr);
 		}
 
-		brw_inst_set_saturate(p->devinfo, brw_last_inst, $3);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $10.chan_offset);
+		brw_eu_inst_set_saturate(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $5);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $10.chan_offset);
 	}
 	;
 
@@ -873,7 +874,7 @@ waitinstruction:
 	{
 		brw_next_insn(p, $1);
 		i965_asm_set_instruction_options(p, $4);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $2);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $2);
 		brw_set_default_access_mode(p, $4.access_mode);
 		struct brw_reg dest = $3;
 		dest.swizzle = brw_swizzle_for_mask(dest.writemask);
@@ -882,7 +883,7 @@ waitinstruction:
 		brw_set_dest(p, brw_last_inst, dest);
 		brw_set_src0(p, brw_last_inst, dest);
 		brw_set_src1(p, brw_last_inst, brw_null_reg());
-		brw_inst_set_mask_control(p->devinfo, brw_last_inst, BRW_MASK_DISABLE);
+		brw_eu_inst_set_mask_control(p->devinfo, brw_last_inst, BRW_MASK_DISABLE);
 	}
 	;
 
@@ -891,16 +892,16 @@ sendinstruction:
 	predicate sendopcode execsize dst payload exp2 sharedfunction msgdesc instoptions
 	{
 		i965_asm_set_instruction_options(p, $9);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 		brw_set_dest(p, brw_last_inst, $4);
 		brw_set_src0(p, brw_last_inst, $5);
-		brw_inst_set_bits(brw_last_inst, 127, 96, $6);
-		brw_inst_set_src1_file_type(p->devinfo, brw_last_inst,
+		brw_eu_inst_set_bits(brw_last_inst, 127, 96, $6);
+		brw_eu_inst_set_src1_file_type(p->devinfo, brw_last_inst,
 				            IMM,
 					    BRW_TYPE_UD);
-		brw_inst_set_sfid(p->devinfo, brw_last_inst, $7);
-		brw_inst_set_eot(p->devinfo, brw_last_inst, $9.end_of_thread);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
+		brw_eu_inst_set_sfid(p->devinfo, brw_last_inst, $7);
+		brw_eu_inst_set_eot(p->devinfo, brw_last_inst, $9.end_of_thread);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $9.chan_offset);
 
 		brw_pop_insn_state(p);
 	}
@@ -909,47 +910,83 @@ sendinstruction:
 		assert(p->devinfo->ver < 12);
 
 		i965_asm_set_instruction_options(p, $10);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 		brw_set_dest(p, brw_last_inst, $4);
 		brw_set_src0(p, brw_last_inst, $5);
-		brw_inst_set_bits(brw_last_inst, 127, 96, $7);
-		brw_inst_set_sfid(p->devinfo, brw_last_inst, $8);
-		brw_inst_set_eot(p->devinfo, brw_last_inst, $10.end_of_thread);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $10.chan_offset);
+		brw_eu_inst_set_bits(brw_last_inst, 127, 96, $7);
+		brw_eu_inst_set_sfid(p->devinfo, brw_last_inst, $8);
+		brw_eu_inst_set_eot(p->devinfo, brw_last_inst, $10.end_of_thread);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $10.chan_offset);
 
 		brw_pop_insn_state(p);
 	}
 	| predicate sendsopcode execsize dst payload payload desc ex_desc sharedfunction msgdesc instoptions
 	{
 		i965_asm_set_instruction_options(p, $11);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 		brw_set_dest(p, brw_last_inst, $4);
 		brw_set_src0(p, brw_last_inst, $5);
 		brw_set_src1(p, brw_last_inst, $6);
 
 		if ($7.file == IMM) {
-			brw_inst_set_send_sel_reg32_desc(p->devinfo, brw_last_inst, 0);
-			brw_inst_set_send_desc(p->devinfo, brw_last_inst, $7.ud);
+			brw_eu_inst_set_send_sel_reg32_desc(p->devinfo, brw_last_inst, 0);
+			brw_eu_inst_set_send_desc(p->devinfo, brw_last_inst, $7.ud);
 		} else {
-			brw_inst_set_send_sel_reg32_desc(p->devinfo, brw_last_inst, 1);
+			brw_eu_inst_set_send_sel_reg32_desc(p->devinfo, brw_last_inst, 1);
 		}
 
 		if ($8.file == IMM) {
-			brw_inst_set_send_sel_reg32_ex_desc(p->devinfo, brw_last_inst, 0);
-			brw_inst_set_sends_ex_desc(p->devinfo, brw_last_inst, $8.ud);
+			brw_eu_inst_set_send_sel_reg32_ex_desc(p->devinfo, brw_last_inst, 0);
+			brw_eu_inst_set_sends_ex_desc(p->devinfo, brw_last_inst, $8.ud, false);
 		} else {
-			brw_inst_set_send_sel_reg32_ex_desc(p->devinfo, brw_last_inst, 1);
-			brw_inst_set_send_ex_desc_ia_subreg_nr(p->devinfo, brw_last_inst, $8.subnr >> 2);
+			brw_eu_inst_set_send_sel_reg32_ex_desc(p->devinfo, brw_last_inst, 1);
+			brw_eu_inst_set_send_ex_desc_ia_subreg_nr(p->devinfo, brw_last_inst, $8.subnr >> 2);
 		}
 
-		brw_inst_set_sfid(p->devinfo, brw_last_inst, $9);
-		brw_inst_set_eot(p->devinfo, brw_last_inst, $11.end_of_thread);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $11.chan_offset);
+		brw_eu_inst_set_sfid(p->devinfo, brw_last_inst, $9);
+		brw_eu_inst_set_eot(p->devinfo, brw_last_inst, $11.end_of_thread);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $11.chan_offset);
 
 		if (p->devinfo->verx10 >= 125 && $10.ex_bso) {
-			brw_inst_set_send_ex_bso(p->devinfo, brw_last_inst, 1);
-			brw_inst_set_send_src1_len(p->devinfo, brw_last_inst,
+			brw_eu_inst_set_send_ex_bso(p->devinfo, brw_last_inst, 1);
+			brw_eu_inst_set_send_src1_len(p->devinfo, brw_last_inst,
 						   $10.src1_len);
+		}
+
+		brw_pop_insn_state(p);
+	}
+	| predicate sendsopcode execsize dst GENREGFILE LSQUARE scalarreg RSQUARE desc ex_desc sharedfunction msgdesc instoptions
+	{
+                assert(p->devinfo->ver >= 30);
+
+		i965_asm_set_instruction_options(p, $13);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_set_dest(p, brw_last_inst, $4);
+		brw_set_src0(p, brw_last_inst, $7);
+		brw_set_src1(p, brw_last_inst, brw_null_reg());
+
+		if ($9.file == IMM) {
+			brw_eu_inst_set_send_sel_reg32_desc(p->devinfo, brw_last_inst, 0);
+			brw_eu_inst_set_send_desc(p->devinfo, brw_last_inst, $9.ud);
+		} else {
+			brw_eu_inst_set_send_sel_reg32_desc(p->devinfo, brw_last_inst, 1);
+		}
+
+		if ($10.file == IMM) {
+			brw_eu_inst_set_send_sel_reg32_ex_desc(p->devinfo, brw_last_inst, 0);
+			brw_eu_inst_set_sends_ex_desc(p->devinfo, brw_last_inst, $10.ud, true);
+		} else {
+			brw_eu_inst_set_send_sel_reg32_ex_desc(p->devinfo, brw_last_inst, 1);
+			brw_eu_inst_set_send_ex_desc_ia_subreg_nr(p->devinfo, brw_last_inst, $10.subnr >> 2);
+		}
+
+		brw_eu_inst_set_sfid(p->devinfo, brw_last_inst, $11);
+		brw_eu_inst_set_eot(p->devinfo, brw_last_inst, $13.end_of_thread);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $13.chan_offset);
+
+		if ($12.ex_bso) {
+			brw_eu_inst_set_send_ex_bso(p->devinfo, brw_last_inst, 1);
+                        /* Not settings src1 length, as its implied zero. */
 		}
 
 		brw_pop_insn_state(p);
@@ -1032,12 +1069,12 @@ jumpinstruction:
 	{
 		brw_next_insn(p, $2);
 		i965_asm_set_instruction_options(p, $5);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 		brw_set_dest(p, brw_last_inst, brw_ip_reg());
 		brw_set_src0(p, brw_last_inst, brw_ip_reg());
 		brw_set_src1(p, brw_last_inst, $4);
-		brw_inst_set_pred_control(p->devinfo, brw_last_inst,
-					  brw_inst_pred_control(p->devinfo,
+		brw_eu_inst_set_pred_control(p->devinfo, brw_last_inst,
+					  brw_eu_inst_pred_control(p->devinfo,
 								brw_last_inst));
 		brw_pop_insn_state(p);
 	}
@@ -1051,7 +1088,7 @@ branchinstruction:
 
 		brw_next_insn(p, $2);
 		i965_asm_set_instruction_options(p, $5);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 
 		brw_set_src0(p, brw_last_inst, brw_imm_d(0x0));
 
@@ -1064,7 +1101,7 @@ branchinstruction:
 
 		brw_next_insn(p, $1);
 		i965_asm_set_instruction_options(p, $5);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $2);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $2);
 
 		brw_set_dest(p, brw_last_inst, retype(brw_null_reg(),
 			     BRW_TYPE_D));
@@ -1078,7 +1115,7 @@ branchinstruction:
 
 		brw_next_insn(p, $2);
 		i965_asm_set_instruction_options(p, $6);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 
 		brw_set_dest(p, brw_last_inst,
 			     vec1(retype(brw_null_reg(),
@@ -1099,7 +1136,7 @@ breakinstruction:
 
 		brw_next_insn(p, $2);
 		i965_asm_set_instruction_options(p, $6);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 
 		brw_set_dest(p, brw_last_inst, retype(brw_null_reg(),
 			     BRW_TYPE_D));
@@ -1114,7 +1151,7 @@ breakinstruction:
 
 		brw_next_insn(p, $2);
 		i965_asm_set_instruction_options(p, $6);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 
 		brw_set_dest(p, brw_last_inst, retype(brw_null_reg(),
 			     BRW_TYPE_D));
@@ -1132,7 +1169,7 @@ breakinstruction:
 
 		brw_next_insn(p, $2);
 		i965_asm_set_instruction_options(p, $6);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 		brw_set_dest(p, brw_last_inst, brw_ip_reg());
 
 		brw_set_src0(p, brw_last_inst, brw_imm_d(0x0));
@@ -1149,7 +1186,7 @@ loopinstruction:
 
 		brw_next_insn(p, $2);
 		i965_asm_set_instruction_options(p, $5);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $3);
 
 		brw_set_dest(p, brw_last_inst,
 					retype(brw_null_reg(),
@@ -1182,10 +1219,10 @@ syncinstruction:
 		brw_set_default_access_mode(p, $6.access_mode);
 		brw_SYNC(p, $3);
 		i965_asm_set_instruction_options(p, $6);
-		brw_inst_set_exec_size(p->devinfo, brw_last_inst, $4);
+		brw_eu_inst_set_exec_size(p->devinfo, brw_last_inst, $4);
 		brw_set_src0(p, brw_last_inst, $5);
-		brw_inst_set_eot(p->devinfo, brw_last_inst, $6.end_of_thread);
-		brw_inst_set_group(p->devinfo, brw_last_inst, $6.chan_offset);
+		brw_eu_inst_set_eot(p->devinfo, brw_last_inst, $6.end_of_thread);
+		brw_eu_inst_set_group(p->devinfo, brw_last_inst, $6.chan_offset);
 
 		brw_pop_insn_state(p);
 	}
@@ -1296,6 +1333,7 @@ dstoperandex_typed:
 	| notifyreg
 	| performancereg
 	| statereg
+	| scalarreg
 	;
 
 dstreg:
@@ -1444,6 +1482,7 @@ srcarcoperandex_typed:
 	| ipreg
 	| maskreg
 	| statereg
+	| scalarreg
 	;
 
 indirectsrcoperand:
@@ -1611,6 +1650,18 @@ notifyreg:
 		$$.subnr = $2;
 	}
 	;
+
+scalarreg:
+	SCALARREG subregnum
+	{
+		if ($2 > 31)
+			error(&@2, "Scalar sub register number %d"
+			           " out of range\n", $2);
+
+		$$.file = ARF;
+		$$.nr = BRW_ARF_SCALAR;
+		$$.subnr = $2;
+	}
 
 statereg:
 	STATEREG subregnum
@@ -2068,6 +2119,12 @@ depinfo:
 		memset(&$$, 0, sizeof($$));
 		$$.regdist = $1;
 		$$.pipe = TGL_PIPE_MATH;
+	}
+	| REG_DIST_SCALAR
+	{
+		memset(&$$, 0, sizeof($$));
+		$$.regdist = $1;
+		$$.pipe = TGL_PIPE_SCALAR;
 	}
 	| SBID_ALLOC
 	{

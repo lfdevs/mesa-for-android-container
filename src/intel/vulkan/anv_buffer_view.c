@@ -43,7 +43,7 @@ anv_CreateBufferView(VkDevice _device,
       view_usage_info != NULL ? view_usage_info->usage : buffer->vk.usage;
 
    struct anv_format_plane format;
-   format = anv_get_format_plane(device->info, pCreateInfo->format,
+   format = anv_get_format_plane(device->physical, pCreateInfo->format,
                                  0, VK_IMAGE_TILING_LINEAR);
 
    const uint32_t format_bs = isl_format_get_layout(format.isl_format)->bpb / 8;

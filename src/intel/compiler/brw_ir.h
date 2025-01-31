@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef BRW_IR_H
-#define BRW_IR_H
+#pragma once
 
 #include <assert.h>
 #include "brw_reg.h"
@@ -38,5 +37,3 @@
 #define MAX_VGRF_SIZE(devinfo) ((devinfo)->ver >= 20 ? 40 : 20)
 
 struct bblock_t;
-
-#endif

@@ -22,6 +22,7 @@ static struct blorp_program
 blorp_compile_fs_elk(struct blorp_context *blorp, void *mem_ctx,
                      struct nir_shader *nir,
                      bool multisample_fbo,
+                     bool is_fast_clear,
                      bool use_repclear)
 {
    const struct elk_compiler *compiler = blorp->compiler->elk;

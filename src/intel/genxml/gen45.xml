@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <genxml name="CTG" gen="4.5">
-  <import name="gen4.xml" />
+  <import name="gen40.xml" />
   <struct name="CLIP_STATE" length="11">
     <field name="GRF Register Count" start="1" end="3" type="uint" />
     <field name="Kernel Start Pointer" start="6" end="31" type="address" />

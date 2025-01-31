@@ -71,7 +71,7 @@ protected:
 
    static bool mem_vectorize_callback(unsigned align_mul, unsigned align_offset,
                                       unsigned bit_size,
-                                      unsigned num_components, unsigned hole_size,
+                                      unsigned num_components, int64_t hole_size,
                                       nir_intrinsic_instr *low, nir_intrinsic_instr *high,
                                       void *data);
    static void shared_type_info(const struct glsl_type *type, unsigned *size, unsigned *align);
@@ -83,7 +83,7 @@ protected:
    std::map<unsigned, nir_def*> res_map;
    unsigned max_components = 4;
    bool overfetch = false;
-   unsigned max_hole_size = 0;
+   int64_t max_hole_size = 0;
 };
 
 std::string
@@ -340,13 +340,11 @@ bool nir_load_store_vectorize_test::test_alu_def(
 
 bool nir_load_store_vectorize_test::mem_vectorize_callback(
    unsigned align_mul, unsigned align_offset, unsigned bit_size,
-   unsigned num_components, unsigned hole_size,
+   unsigned num_components, int64_t hole_size,
    nir_intrinsic_instr *low, nir_intrinsic_instr *high,
    void *data)
 {
    nir_load_store_vectorize_test *test = (nir_load_store_vectorize_test *)data;
-
-   assert(hole_size <= 4);
 
    if (hole_size > test->max_hole_size ||
        (!test->overfetch && !nir_num_components_valid(num_components)))

@@ -117,7 +117,8 @@ foreach d : [[with_gallium_kmsro, [
              [with_gallium_r600, 'r600_dri.so'],
              [with_gallium_svga, 'vmwgfx_dri.so'],
              [with_gallium_virgl or
-               (with_gallium_freedreno and freedreno_kmds.contains('virtio')),
+               (with_gallium_freedreno and freedreno_kmds.contains('virtio')) or
+               (with_gallium_radeonsi and with_amdgpu_virtio),
                'virtio_gpu_dri.so'],
              [with_gallium_lima, 'lima_dri.so'],
              [with_gallium_d3d12, 'd3d12_dri.so'],

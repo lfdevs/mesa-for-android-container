@@ -262,6 +262,8 @@ vlVaHandleVAEncSliceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *contex
       context->desc.h264enc.picture_type = PIPE_H2645_ENC_PICTURE_TYPE_SKIP;
    }
 
+   context->desc.h264enc.dpb[context->desc.h264enc.dpb_curr_pic].picture_type = context->desc.h264enc.picture_type;
+
    context->desc.h264enc.pic_ctrl.enc_cabac_init_idc = h264->cabac_init_idc;
    context->desc.h264enc.dbk.disable_deblocking_filter_idc = h264->disable_deblocking_filter_idc;
    context->desc.h264enc.dbk.alpha_c0_offset_div2 = h264->slice_alpha_c0_offset_div2;

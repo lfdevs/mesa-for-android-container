@@ -1,0 +1,752 @@
+<?xml version='1.0' encoding='utf-8'?>
+<genxml name="XE3" gen="30">
+  <import name="gen200.xml">
+    <exclude name="CPS_STATE" />
+    <exclude name="3DSTATE_CPS_POINTERS" />
+  </import>
+  <enum name="STATE_CPS_COMBINER_OPCODE" prefix="CPS_COMB_OP">
+    <value name="PASSTHROUGH" value="0" />
+    <value name="OVERRIDE" value="1" />
+    <value name="HIGH_QUALITY" value="2" />
+    <value name="LOW_QUALITY" value="3" />
+    <value name="RELATIVE" value="4" />
+  </enum>
+  <enum name="STATE_CPS_SIZE">
+    <value name="CPSIZE_1" value="0" />
+    <value name="CPSIZE_2" value="1" />
+    <value name="CPSIZE_4" value="2" />
+  </enum>
+  <struct name="INTERFACE_DESCRIPTOR_DATA" length="8">
+    <field name="Kernel Start Pointer" start="6" end="31" type="offset" />
+    <field name="Software Exception Enable" start="71" end="71" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="77" end="77" type="bool" />
+    <field name="Floating Point Mode" start="80" end="80" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Single Program Flow" start="82" end="82" type="bool" />
+    <field name="Denorm Mode" start="83" end="83" type="uint">
+      <value name="Ftz" value="0" />
+      <value name="SetByKernel" value="1" />
+    </field>
+    <field name="Thread Preemption" start="84" end="84" type="bool" default="1" />
+    <field name="Registers Per Thread" start="90" end="94" type="uint" />
+    <field name="Sampler Count" start="98" end="100" type="uint">
+      <value name="No samplers used" value="0" />
+      <value name="Between 1 and 4 samplers used" value="1" />
+      <value name="Between 5 and 8 samplers used" value="2" />
+      <value name="Between 9 and 12 samplers used" value="3" />
+      <value name="Between 13 and 16 samplers used" value="4" />
+    </field>
+    <field name="Sampler State Pointer" start="101" end="127" type="offset" />
+    <field name="Binding Table Entry Count" start="128" end="132" type="uint" />
+    <field name="Binding Table Pointer" start="133" end="148" type="offset" />
+    <field name="Number of Threads in GPGPU Thread Group" start="160" end="169" type="uint" />
+    <field name="Thread group forward progress guarantee" start="173" end="173" type="bool" />
+    <field name="Shared Local Memory Size" start="176" end="180" type="uint">
+      <value name="Encodes 0K" value="0" />
+      <value name="Encodes 1K" value="1" />
+      <value name="Encodes 2K" value="2" />
+      <value name="Encodes 4K" value="3" />
+      <value name="Encodes 8K" value="4" />
+      <value name="Encodes 16K" value="5" />
+      <value name="Encodes 32K" value="6" />
+      <value name="Encodes 64K" value="7" />
+      <value name="Encodes 96K" value="10" />
+      <value name="Encodes 128K" value="11" />
+      <value name="Encodes 192K" value="12" />
+      <value name="Encodes 256K" value="13" />
+      <value name="Encodes 384K" value="14" />
+    </field>
+    <field name="Rounding Mode" start="182" end="183" type="uint">
+      <value name="RTNE" value="0" />
+      <value name="RU" value="1" />
+      <value name="RD" value="2" />
+      <value name="RTZ" value="3" />
+    </field>
+    <field name="Thread Group Dispatch Size" start="186" end="187" type="uint">
+      <value name="TG size 8" value="0" />
+      <value name="TG size 4" value="1" />
+      <value name="TG size 2" value="2" />
+      <value name="TG size 1" value="3" />
+    </field>
+    <field name="Number Of Barriers" start="188" end="190" type="uint" prefix="BARRIER_SIZE">
+      <value name="NONE" value="0" />
+      <value name="B1" value="1" />
+      <value name="B2" value="2" />
+      <value name="B4" value="3" />
+      <value name="B8" value="4" />
+      <value name="B16" value="5" />
+      <value name="B24" value="6" />
+      <value name="B32" value="7" />
+    </field>
+    <field name="BTD Mode" start="191" end="191" type="uint" />
+    <field name="Preferred SLM Allocation Size" start="224" end="227" type="PREF_SLM_ALLOCATION_SIZE" />
+  </struct>
+  <struct name="COMPUTE_WALKER_BODY" length="39">
+    <field name="Indirect Data Length" start="32" end="48" type="uint" />
+    <field name="L3 prefetch disable" start="49" end="49" type="bool" />
+    <field name="Partition Dispatch Parameter" start="50" end="61" type="uint" />
+    <field name="Partition Type" start="62" end="63" type="uint">
+      <value name="PartitionX" value="1" />
+      <value name="PartitionY" value="2" />
+      <value name="PartitionZ" value="3" />
+    </field>
+    <field name="Indirect Data Start Address" start="70" end="95" type="offset" />
+    <field name="Compute Dispatch All walker Enable" start="96" end="96" type="uint">
+      <value name="Disabled" value="0" />
+      <value name="Enabled" value="1" />
+    </field>
+    <field name="Thread Group Batch Size" start="99" end="100" type="uint">
+      <value name="TG_BATCH_1" value="0" />
+      <value name="TG_BATCH_2" value="1" />
+      <value name="TG_BATCH_4" value="2" />
+      <value name="TG_BATCH_8" value="3" />
+    </field>
+    <field name="Dispatch Walk Order" start="101" end="102" type="uint">
+      <value name="Linear Walk" value="0" />
+      <value name="Y order walk" value="1" />
+      <value name="Morton Walk" value="2" />
+    </field>
+    <field name="Message SIMD" start="113" end="114" type="uint">
+      <value name="SIMT16" value="1" />
+      <value name="SIMT32" value="2" />
+    </field>
+    <field name="Tile Layout" start="115" end="117" type="uint">
+      <value name="Linear" value="0" />
+      <value name="TileY 32bpe" value="1" />
+      <value name="TileY 64bpe" value="2" />
+      <value name="TileY 128bpe" value="3" />
+    </field>
+    <field name="Walk Order" start="118" end="120" type="uint">
+      <value name="Walk 012" value="0" />
+      <value name="Walk 021" value="1" />
+      <value name="Walk 102" value="2" />
+      <value name="Walk 120" value="3" />
+      <value name="Walk 201" value="4" />
+      <value name="Walk 210" value="5" />
+    </field>
+    <field name="Emit Inline Parameter" start="121" end="121" type="bool" />
+    <field name="Emit Local" start="122" end="124" type="uint">
+      <value name="Emit None" value="0" />
+      <value name="Emit X" value="1" />
+      <value name="Emit XY" value="3" />
+      <value name="Emit XYZ" value="7" />
+    </field>
+    <field name="Generate Local ID" start="125" end="125" type="bool" />
+    <field name="SIMD Size" start="126" end="127" type="uint">
+      <value name="SIMT16" value="1" />
+      <value name="SIMT32" value="2" />
+    </field>
+    <field name="Execution Mask" start="128" end="159" type="uint" />
+    <field name="Local X Maximum" start="160" end="169" type="uint" />
+    <field name="Local Y Maximum" start="170" end="179" type="uint" />
+    <field name="Local Z Maximum" start="180" end="189" type="uint" />
+    <field name="Thread Group ID X Dimension" start="192" end="223" type="uint" />
+    <field name="Thread Group ID Y Dimension" start="224" end="255" type="uint" />
+    <field name="Thread Group ID Z Dimension" start="256" end="287" type="uint" />
+    <field name="Thread Group ID Starting X" start="288" end="319" type="uint" />
+    <field name="Thread Group ID Starting Y" start="320" end="351" type="uint" />
+    <field name="Thread Group ID Starting Z" start="352" end="383" type="uint" />
+    <field name="Partition ID" start="384" end="415" type="uint" />
+    <field name="Partition Size" start="416" end="447" type="uint" />
+    <field name="Preempt X" start="448" end="479" type="uint" />
+    <field name="Preempt Y" start="480" end="511" type="uint" />
+    <field name="Preempt Z" start="512" end="543" type="uint" />
+    <field name="Walker ID" start="544" end="547" type="uint" />
+    <field name="Over dispatch TG count" start="552" end="567" type="uint" />
+    <field name="Interface Descriptor" start="576" end="831" type="INTERFACE_DESCRIPTOR_DATA" />
+    <field name="Post Sync" start="832" end="991" type="POSTSYNC_DATA" />
+    <group count="8" start="992" size="32">
+      <field name="Inline Data" start="0" end="31" type="uint" />
+    </group>
+  </struct>
+  <struct name="SAMPLER_STATE" length="4">
+    <field name="Anisotropic Algorithm" start="0" end="0" type="uint">
+      <value name="LEGACY" value="0" />
+      <value name="EWA Approximation" value="1" />
+    </field>
+    <field name="Texture LOD Bias" start="1" end="13" type="s4.8" />
+    <field name="Min Mode Filter" start="14" end="16" type="uint" prefix="MAPFILTER">
+      <value name="NEAREST" value="0" />
+      <value name="LINEAR" value="1" />
+      <value name="ANISOTROPIC" value="2" />
+      <value name="ANISOTROPIC_FAST" value="3" />
+      <value name="MONO" value="6" />
+    </field>
+    <field name="Mag Mode Filter" start="17" end="19" type="uint" prefix="MAPFILTER">
+      <value name="NEAREST" value="0" />
+      <value name="LINEAR" value="1" />
+      <value name="ANISOTROPIC" value="2" />
+      <value name="ANISOTROPIC_FAST" value="3" />
+      <value name="MONO" value="6" />
+    </field>
+    <field name="Mip Mode Filter" start="20" end="21" type="uint" prefix="MIPFILTER">
+      <value name="NONE" value="0" />
+      <value name="NEAREST" value="1" />
+      <value name="LINEAR" value="3" />
+    </field>
+    <field name="Coarse LOD Quality Mode" start="22" end="26" type="uint" />
+    <field name="LOD PreClamp Mode" start="27" end="28" type="uint" prefix="CLAMP_MODE">
+      <value name="NONE" value="0" />
+      <value name="OGL" value="2" />
+    </field>
+    <field name="Texture Border Color Mode" start="29" end="29" type="uint">
+      <value name="DX10/OGL" value="0" />
+      <value name="DX9" value="1" />
+    </field>
+    <field name="CPS LOD Compensation Enable" start="30" end="30" type="bool" />
+    <field name="Sampler Disable" start="31" end="31" type="bool" />
+    <field name="Cube Surface Control Mode" start="32" end="32" type="uint">
+      <value name="PROGRAMMED" value="0" />
+      <value name="OVERRIDE" value="1" />
+    </field>
+    <field name="Shadow Function" start="33" end="35" type="uint" prefix="PREFILTEROP">
+      <value name="ALWAYS" value="0" />
+      <value name="NEVER" value="1" />
+      <value name="LESS" value="2" />
+      <value name="EQUAL" value="3" />
+      <value name="LEQUAL" value="4" />
+      <value name="GREATER" value="5" />
+      <value name="NOTEQUAL" value="6" />
+      <value name="GEQUAL" value="7" />
+    </field>
+    <field name="ChromaKey Mode" start="36" end="36" type="uint">
+      <value name="KEYFILTER_KILL_ON_ANY_MATCH" value="0" />
+      <value name="KEYFILTER_REPLACE_BLACK" value="1" />
+    </field>
+    <field name="ChromaKey Index" start="37" end="38" type="uint" />
+    <field name="ChromaKey Enable" start="39" end="39" type="bool" />
+    <field name="Max LOD" start="40" end="51" type="u4.8" />
+    <field name="Min LOD" start="52" end="63" type="u4.8" />
+    <field name="LOD Clamp Magnification Mode" start="64" end="64" type="uint">
+      <value name="MIPNONE" value="0" />
+      <value name="MIPFILTER" value="1" />
+    </field>
+    <field name="SRGB DECODE" start="65" end="65" type="uint">
+      <value name="DECODE_EXT" value="0" />
+      <value name="SKIP_DECODE_EXT" value="1" />
+    </field>
+    <field name="Return Filter Weight for Null Texels" start="66" end="66" type="uint" />
+    <field name="Return Filter Weight for Border Texels" start="67" end="67" type="uint" />
+    <field name="Force gather4 Behavior" start="69" end="69" type="bool" />
+    <field name="Border Color Pointer" start="70" end="95" type="offset" />
+    <field name="TCZ Address Control Mode" start="96" end="98" type="Texture Coordinate Mode" />
+    <field name="TCY Address Control Mode" start="99" end="101" type="Texture Coordinate Mode" />
+    <field name="TCX Address Control Mode" start="102" end="104" type="Texture Coordinate Mode" />
+    <field name="Reduction Type Enable" start="105" end="105" type="bool" />
+    <field name="Non-normalized Coordinate Enable" start="106" end="106" type="bool" />
+    <field name="Trilinear Filter Quality" start="107" end="108" type="uint">
+      <value name="FULL" value="0" />
+      <value name="HIGH" value="1" />
+      <value name="MED" value="2" />
+      <value name="LOW" value="3" />
+    </field>
+    <field name="R Address Min Filter Rounding Enable" start="109" end="109" type="bool" />
+    <field name="R Address Mag Filter Rounding Enable" start="110" end="110" type="bool" />
+    <field name="V Address Min Filter Rounding Enable" start="111" end="111" type="bool" />
+    <field name="V Address Mag Filter Rounding Enable" start="112" end="112" type="bool" />
+    <field name="U Address Min Filter Rounding Enable" start="113" end="113" type="bool" />
+    <field name="U Address Mag Filter Rounding Enable" start="114" end="114" type="bool" />
+    <field name="Maximum Anisotropy" start="115" end="117" type="uint">
+      <value name="RATIO 2:1" value="0" />
+      <value name="RATIO 4:1" value="1" />
+      <value name="RATIO 6:1" value="2" />
+      <value name="RATIO 8:1" value="3" />
+      <value name="RATIO 10:1" value="4" />
+      <value name="RATIO 12:1" value="5" />
+      <value name="RATIO 14:1" value="6" />
+      <value name="RATIO 16:1" value="7" />
+    </field>
+    <field name="Reduction Type" start="118" end="119" type="uint">
+      <value name="STD_FILTER" value="0" />
+      <value name="COMPARISON" value="1" />
+      <value name="MINIMUM" value="2" />
+      <value name="MAXIMUM" value="3" />
+    </field>
+    <field name="Allow Low Quality LOD Calculation" start="120" end="120" type="bool" />
+    <field name="Low Quality Filter" start="122" end="122" type="bool" />
+  </struct>
+  <instruction name="3DSTATE_COARSE_PIXEL" bias="2" length="2" engine="render">
+    <field name="DWord Length" start="0" end="15" type="uint" default="0" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="137" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="CPSizeX" start="32" end="33" type="STATE_CPS_SIZE" />
+    <field name="CPSizeY" start="34" end="35" type="STATE_CPS_SIZE" />
+    <field name="CPSizeCombiner1Opcode" start="36" end="38" type="STATE_CPS_COMBINER_OPCODE" />
+    <field name="CPSizeCombiner0Opcode" start="39" end="41" type="STATE_CPS_COMBINER_OPCODE" />
+    <field name="Disable CPS Pointers" start="63" end="63" type="bool" />
+  </instruction>
+  <instruction name="3DSTATE_DS" bias="2" length="11" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="9" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="29" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Kernel Start Pointer" start="38" end="95" type="offset" />
+    <field name="Registers Per Thread" start="96" end="101" type="uint" />
+    <field name="Software Exception Enable" start="103" end="103" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="109" end="109" type="bool" />
+    <field name="Accesses UAV" start="110" end="110" type="bool" />
+    <field name="Floating Point Mode" start="112" end="112" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Thread Dispatch Priority" start="113" end="113" type="uint">
+      <value name="High" value="1" />
+    </field>
+    <field name="Binding Table Entry Count" start="114" end="121" type="uint" />
+    <field name="Sampler Count" start="123" end="125" type="uint">
+      <value name="No Samplers" value="0" />
+      <value name="1-4 Samplers" value="1" />
+      <value name="5-8 Samplers" value="2" />
+      <value name="9-12 Samplers" value="3" />
+      <value name="13-16 Samplers" value="4" />
+    </field>
+    <field name="Vector Mask Enable" start="126" end="126" type="bool" />
+    <field name="Scratch Space Buffer" start="138" end="159" type="uint" />
+    <field name="Patch URB Entry Read Offset" start="196" end="201" type="uint" />
+    <field name="Patch URB Entry Read Length" start="203" end="209" type="uint" />
+    <field name="Dispatch GRF Start Register For URB Data" start="212" end="216" type="uint" />
+    <field name="Enable" start="224" end="224" type="bool" />
+    <field name="Cache Disable" start="225" end="225" type="bool" />
+    <field name="Compute W Coordinate Enable" start="226" end="226" type="bool" />
+    <field name="Dispatch Mode" start="227" end="228" type="uint" prefix="DISPATCH_MODE">
+      <value name="SIMD8_SINGLE_PATCH" value="1" />
+      <value name="SIMD8_SINGLE_OR_DUAL_PATCH" value="2" />
+    </field>
+    <field name="Primitive ID Not Required" start="233" end="233" type="bool" />
+    <field name="Statistics Enable" start="234" end="234" type="bool" />
+    <field name="Maximum Number of Threads" start="245" end="254" type="uint" />
+    <field name="User Clip Distance Cull Test Enable Bitmask" start="256" end="263" type="uint" />
+    <field name="User Clip Distance Clip Test Enable Bitmask" start="264" end="271" type="uint" />
+    <field name="Vertex URB Entry Output Length" start="272" end="276" type="uint" />
+    <field name="Vertex URB Entry Output Read Offset" start="277" end="282" type="uint" />
+    <field name="QUAD_PATCH Kernel Start Pointer" start="294" end="351" type="offset" />
+  </instruction>
+  <instruction name="3DSTATE_GS" bias="2" length="10" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="8" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="17" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Kernel Start Pointer" start="38" end="95" type="offset" />
+    <field name="Expected Vertex Count" start="96" end="101" type="uint" />
+    <field name="Software Exception Enable" start="103" end="103" type="bool" />
+    <field name="Mask Stack Exception Enable" start="107" end="107" type="bool" />
+    <field name="Accesses UAV" start="108" end="108" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="109" end="109" type="bool" />
+    <field name="Floating Point Mode" start="112" end="112" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Thread Dispatch Priority" start="113" end="113" type="uint">
+      <value name="Normal" value="0" />
+      <value name="High" value="1" />
+    </field>
+    <field name="Binding Table Entry Count" start="114" end="121" type="uint" />
+    <field name="Sampler Count" start="123" end="125" type="uint">
+      <value name="No Samplers" value="0" />
+      <value name="1-4 Samplers" value="1" />
+      <value name="5-8 Samplers" value="2" />
+      <value name="9-12 Samplers" value="3" />
+      <value name="13-16 Samplers" value="4" />
+    </field>
+    <field name="Vector Mask Enable" start="126" end="126" type="uint">
+      <value name="Dmask" value="0" />
+    </field>
+    <field name="Single Program Flow" start="127" end="127" type="bool" />
+    <field name="Scratch Space Buffer" start="138" end="159" type="uint" />
+    <field name="Dispatch GRF Start Register For URB Data" start="192" end="195" type="uint" />
+    <field name="Vertex URB Entry Read Offset" start="196" end="201" type="uint" />
+    <field name="Include Vertex Handles" start="202" end="202" type="bool" />
+    <field name="Vertex URB Entry Read Length" start="203" end="208" type="uint" />
+    <field name="Output Topology" start="209" end="214" type="3D_Prim_Topo_Type" />
+    <field name="Output Vertex Size" start="215" end="220" type="uint" />
+    <field name="Dispatch GRF Start Register For URB Data [5:4]" start="221" end="222" type="uint" />
+    <field name="Enable" start="224" end="224" type="bool" />
+    <field name="Discard Adjacency" start="225" end="225" type="bool" />
+    <field name="Reorder Mode" start="226" end="226" type="uint">
+      <value name="LEADING" value="0" />
+      <value name="TRAILING" value="1" />
+    </field>
+    <field name="Hint" start="227" end="227" type="bool" />
+    <field name="Include Primitive ID" start="228" end="228" type="bool" />
+    <field name="Invocations Increment Value" start="229" end="233" type="uint" />
+    <field name="Statistics Enable" start="234" end="234" type="bool" />
+    <field name="Default Stream Id" start="237" end="238" type="uint" />
+    <field name="Instance Control" start="239" end="243" type="uint" />
+    <field name="Control Data Header Size" start="244" end="247" type="uint" />
+    <field name="Registers Per Thread" start="250" end="255" type="uint" />
+    <field name="Maximum Number of Threads" start="256" end="264" type="uint" />
+    <field name="Static Output Vertex Count" start="272" end="282" type="uint" />
+    <field name="Static Output" start="286" end="286" type="bool" />
+    <field name="Control Data Format" start="287" end="287" type="uint">
+      <value name="CUT" value="0" />
+      <value name="SID" value="1" />
+    </field>
+    <field name="User Clip Distance Cull Test Enable Bitmask" start="288" end="295" type="uint" />
+    <field name="User Clip Distance Clip Test Enable Bitmask" start="296" end="303" type="uint" />
+    <field name="Vertex URB Entry Output Length" start="304" end="308" type="uint" />
+    <field name="Vertex URB Entry Output Read Offset" start="309" end="314" type="uint" />
+  </instruction>
+  <instruction name="3DSTATE_HS" bias="2" length="8" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="6" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="27" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Patch Count Threshold" start="32" end="35" type="uint" />
+    <field name="Registers Per Thread" start="36" end="41" type="uint" />
+    <field name="Software Exception Enable" start="44" end="44" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="45" end="45" type="bool" />
+    <field name="Floating Point Mode" start="48" end="48" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="alternate" value="1" />
+    </field>
+    <field name="Thread Dispatch Priority" start="49" end="49" type="uint">
+      <value name="Normal" value="0" />
+      <value name="High" value="1" />
+    </field>
+    <field name="Binding Table Entry Count" start="50" end="57" type="uint" />
+    <field name="Sampler Count" start="59" end="61" type="uint">
+      <value name="No Samplers" value="0" />
+      <value name="1-4 Samplers" value="1" />
+      <value name="5-8 Samplers" value="2" />
+      <value name="9-12 Samplers" value="3" />
+      <value name="13-16 Samplers" value="4" />
+    </field>
+    <field name="Instance Count" start="64" end="68" type="uint" />
+    <field name="Maximum Number of Threads" start="72" end="80" type="uint" />
+    <field name="Statistics Enable" start="93" end="93" type="bool" />
+    <field name="Enable" start="95" end="95" type="bool" />
+    <field name="Kernel Start Pointer" start="102" end="159" type="offset" />
+    <field name="Scratch Space Buffer" start="170" end="191" type="uint" />
+    <field name="Include Primitive ID" start="224" end="224" type="bool" />
+    <field name="Vertex URB Entry Read Offset" start="228" end="233" type="uint" />
+    <field name="Vertex URB Entry Read Length" start="235" end="240" type="uint" />
+    <field name="Dispatch GRF Start Register For URB Data" start="243" end="247" type="uint" />
+    <field name="Include Vertex Handles" start="248" end="248" type="bool" />
+    <field name="Accesses UAV" start="249" end="249" type="bool" />
+    <field name="Vector Mask Enable" start="250" end="250" type="uint">
+      <value name="Dmask" value="0" />
+    </field>
+    <field name="Single Program Flow" start="251" end="251" type="bool" />
+    <field name="Dispatch GRF Start Register For URB Data [5]" start="252" end="252" type="uint" />
+  </instruction>
+  <instruction name="3DSTATE_MESH_SHADER" bias="2" length="8">
+    <field name="DWord Length" start="0" end="7" type="uint" default="6" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="122" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Kernel Start Pointer" start="38" end="95" type="offset" />
+    <field name="Local X Maximum" start="96" end="105" type="uint" />
+    <field name="Software Exception Enable" start="106" end="106" type="bool" />
+    <field name="Mask Stack Exception Enable" start="107" end="107" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="109" end="109" type="bool" />
+    <field name="Floating Point Mode" start="112" end="112" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Single Program Flow" start="114" end="114" type="uint" />
+    <field name="Denorm Mode" start="115" end="115" type="uint">
+      <value name="Ftz" value="0" />
+      <value name="SetByKernel" value="1" />
+    </field>
+    <field name="Registers Per Thread" start="116" end="121" type="uint" />
+    <field name="Number of Threads in GPGPU Thread Group" start="128" end="137" type="uint" />
+    <field name="Shared Local Memory Size" start="144" end="148" type="uint" />
+    <field name="Rounding Mode" start="150" end="151" type="uint">
+      <value name="RTNE" value="0" />
+      <value name="RU" value="1" />
+      <value name="RD" value="2" />
+      <value name="RTZ" value="3" />
+    </field>
+    <field name="Preferred SLM Allocation Size" start="152" end="155" type="PREF_SLM_ALLOCATION_SIZE" />
+    <field name="Number of Barriers" start="156" end="158" type="uint" />
+    <field name="Indirect Data Length" start="160" end="176" type="uint" />
+    <field name="L3 Prefetch Disable" start="177" end="177" type="bool" />
+    <field name="Emit Local ID X" start="178" end="178" type="bool" />
+    <field name="Emit Inline Parameter" start="179" end="179" type="bool" />
+    <field name="Systolic Mode Enable" start="180" end="180" type="bool" />
+    <field name="Accesses UAV" start="181" end="181" type="bool" />
+    <field name="XP0 Required" start="182" end="182" type="uint" />
+    <field name="Message SIMD" start="188" end="189" type="uint">
+      <value name="SIMD16" value="1" />
+      <value name="SIMD32" value="2" />
+    </field>
+    <field name="SIMD Size" start="190" end="191" type="uint">
+      <value name="SIMD16" value="1" />
+      <value name="SIMD32" value="2" />
+    </field>
+    <field name="Execution Mask" start="192" end="223" type="uint" />
+    <field name="Maximum Primitive Count" start="224" end="233" type="uint" />
+    <field name="Per-Primitive Data Pitch" start="236" end="240" type="uint" />
+    <field name="Per-Vertex Data Pitch" start="244" end="248" type="uint" />
+    <field name="Index Format" start="249" end="251" type="uint" prefix="INDEX">
+      <value name="U888X" value="0" />
+      <value name="U101010X" value="1" />
+      <value name="U8" value="4" />
+      <value name="U16" value="5" />
+      <value name="U32" value="3" />
+    </field>
+    <field name="Output Topology" start="252" end="253" type="uint" prefix="OUTPUT">
+      <value name="POINT" value="0" />
+      <value name="LINE" value="1" />
+      <value name="TRI" value="2" />
+    </field>
+    <field name="Per-Primitive Data Present" start="255" end="255" type="uint" />
+  </instruction>
+  <instruction name="3DSTATE_PS" bias="2" length="12" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="10" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="32" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Kernel 0 Enable" start="32" end="32" type="bool" />
+    <field name="Kernel[0] : SIMD Width" start="33" end="33" type="uint" prefix="PS">
+      <value name="SIMD16" value="0" />
+      <value name="SIMD32" value="1" />
+    </field>
+    <field name="Kernel Start Pointer 0" start="38" end="95" type="offset" />
+    <field name="Registers Per Thread" start="96" end="101" type="uint" />
+    <field name="Software Exception Enable" start="103" end="103" type="bool" />
+    <field name="Mask Stack Exception Enable" start="107" end="107" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="109" end="109" type="bool" />
+    <field name="Rounding Mode" start="110" end="111" type="uint">
+      <value name="RTNE" value="0" />
+      <value name="RU" value="1" />
+      <value name="RD" value="2" />
+      <value name="RTZ" value="3" />
+    </field>
+    <field name="Floating Point Mode" start="112" end="112" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Thread Dispatch Priority" start="113" end="113" type="uint">
+      <value name="Normal" value="0" />
+      <value name="High" value="1" />
+    </field>
+    <field name="Binding Table Entry Count" start="114" end="121" type="uint" />
+    <field name="Single Precision Denormal Mode" start="122" end="122" type="uint">
+      <value name="Flushed to Zero" value="0" />
+      <value name="Retained" value="1" />
+    </field>
+    <field name="Sampler Count" start="123" end="125" type="uint">
+      <value name="No Samplers" value="0" />
+      <value name="1-4 Samplers" value="1" />
+      <value name="5-8 Samplers" value="2" />
+      <value name="9-12 Samplers" value="3" />
+      <value name="13-16 Samplers" value="4" />
+    </field>
+    <field name="Vector Mask Enable" start="126" end="126" type="uint">
+      <value name="Dmask" value="0" />
+      <value name="Vmask" value="1" />
+    </field>
+    <field name="Single Program Flow" start="127" end="127" type="uint">
+      <value name="Multiple" value="0" />
+      <value name="Single" value="1" />
+    </field>
+    <field name="Scratch Space Buffer" start="138" end="159" type="uint" />
+    <field name="Position XY Offset Select" start="195" end="196" type="uint">
+      <value name="POSOFFSET_NONE" value="0" />
+      <value name="POSOFFSET_CENTROID" value="2" />
+      <value name="POSOFFSET_SAMPLE" value="3" />
+    </field>
+    <field name="Render Target Resolve Type" start="198" end="199" type="uint">
+      <value name="RESOLVE_DISABLED" value="0" />
+    </field>
+    <field name="Render Target Fast Clear Enable" start="200" end="200" type="bool" />
+    <field name="Overlapping Subspans Enable" start="201" end="201" type="bool" />
+    <field name="3D Scoreboard Address Size select" start="202" end="202" type="uint">
+      <value name="2x2" value="0" />
+      <value name="4x2" value="1" />
+    </field>
+    <field name="Clear/Resolve BTI for Render Target" start="204" end="211" type="uint" />
+    <field name="Pixel Scoreboard Disable" start="213" end="213" type="bool" />
+    <field name="Maximum Number of Threads Per PSD" start="215" end="223" type="uint" />
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 1" start="232" end="239" type="uint" />
+    <field name="Dispatch GRF Start Register For Constant/Setup Data 0" start="240" end="247" type="uint" />
+    <field name="Kernel[0] : Poly Packing Policy" start="248" end="250" type="uint">
+      <value name="POLY_PACK4_DYNAMIC" value="0" />
+      <value name="POLY_PACK8_DYNAMIC" value="1" />
+      <value name="POLY_PACK16_DYNAMIC" value="2" />
+      <value name="POLY_PACK16_FIXED" value="3" />
+      <value name="POLY_PACK8_FIXED" value="4" />
+    </field>
+    <field name="Kernel[0] : Maximum Polys per Thread" start="251" end="253" type="uint" />
+    <field name="Kernel 1 Selection Priority" start="255" end="255" type="uint">
+      <value name="PRI_SIMD" value="0" />
+      <value name="PRI_POLY" value="1" />
+    </field>
+    <field name="Kernel 1 Enable" start="256" end="256" type="bool" />
+    <field name="Kernel[1] : SIMD Width" start="257" end="257" type="uint" prefix="PS">
+      <value name="SIMD16" value="0" />
+      <value name="SIMD32" value="1" />
+    </field>
+    <field name="Kernel Start Pointer 1" start="262" end="319" type="offset" />
+  </instruction>
+  <instruction name="3DSTATE_TASK_SHADER" bias="2" length="7">
+    <field name="DWord Length" start="0" end="7" type="uint" default="5" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="125" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Kernel Start Pointer" start="38" end="95" type="offset" />
+    <field name="Local X Maximum" start="96" end="105" type="uint" />
+    <field name="Software Exception Enable" start="106" end="106" type="bool" />
+    <field name="Mask Stack Exception Enable" start="107" end="107" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="109" end="109" type="bool" />
+    <field name="Floating Point Mode" start="112" end="112" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Single Program Flow" start="114" end="114" type="uint" />
+    <field name="Denorm Mode" start="115" end="115" type="uint">
+      <value name="Ftz" value="0" />
+      <value name="SetByKernel" value="1" />
+    </field>
+    <field name="Registers Per Thread" start="116" end="121" type="uint" />
+    <field name="Number of Threads in GPGPU Thread Group" start="128" end="137" type="uint" />
+    <field name="Shared Local Memory Size" start="144" end="148" type="uint" />
+    <field name="Barrier Enable" start="149" end="149" type="bool" />
+    <field name="Rounding Mode" start="150" end="151" type="uint">
+      <value name="RTNE" value="0" />
+      <value name="RU" value="1" />
+      <value name="RD" value="2" />
+      <value name="RTZ" value="3" />
+    </field>
+    <field name="Preferred SLM Allocation Size" start="152" end="155" type="uint" />
+    <field name="Number of Barriers" start="156" end="158" type="uint" />
+    <field name="Indirect Data Length" start="160" end="176" type="uint" />
+    <field name="L3 Prefetch Disable" start="177" end="177" type="bool" />
+    <field name="Emit Local ID X" start="178" end="178" type="bool" />
+    <field name="Emit Inline Parameter" start="179" end="179" type="bool" />
+    <field name="Systolic Mode Enable" start="180" end="180" type="bool" />
+    <field name="Accesses UAV" start="181" end="181" type="bool" />
+    <field name="XP0 Required" start="182" end="182" type="uint" />
+    <field name="Message SIMD" start="188" end="189" type="uint">
+      <value name="SIMD16" value="1" />
+      <value name="SIMD32" value="2" />
+    </field>
+    <field name="SIMD Size" start="190" end="191" type="uint">
+      <value name="SIMD16" value="1" />
+      <value name="SIMD32" value="2" />
+    </field>
+    <field name="Execution Mask" start="192" end="223" type="uint" />
+  </instruction>
+  <instruction name="3DSTATE_VS" bias="2" length="9" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="7" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="16" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="0" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Kernel Start Pointer" start="38" end="95" type="offset" />
+    <field name="Registers Per Thread" start="96" end="101" type="uint" />
+    <field name="Software Exception Enable" start="103" end="103" type="bool" />
+    <field name="Accesses UAV" start="108" end="108" type="bool" />
+    <field name="Illegal Opcode Exception Enable" start="109" end="109" type="bool" />
+    <field name="Floating Point Mode" start="112" end="112" type="uint">
+      <value name="IEEE-754" value="0" />
+      <value name="Alternate" value="1" />
+    </field>
+    <field name="Thread Dispatch Priority" start="113" end="113" type="uint">
+      <value name="Normal" value="0" />
+      <value name="High" value="1" />
+    </field>
+    <field name="Binding Table Entry Count" start="114" end="121" type="uint" />
+    <field name="Sampler Count" start="123" end="125" type="uint">
+      <value name="No Samplers" value="0" />
+      <value name="1-4 Samplers" value="1" />
+      <value name="5-8 Samplers" value="2" />
+      <value name="9-12 Samplers" value="3" />
+      <value name="13-16 Samplers" value="4" />
+    </field>
+    <field name="Vector Mask Enable" start="126" end="126" type="uint">
+      <value name="Dmask" value="0" />
+    </field>
+    <field name="Scratch Space Buffer" start="138" end="159" type="uint" />
+    <field name="Vertex URB Entry Read Offset" start="196" end="201" type="uint" />
+    <field name="Vertex URB Entry Read Length" start="203" end="208" type="uint" />
+    <field name="Dispatch GRF Start Register For URB Data" start="212" end="216" type="uint" />
+    <field name="Enable" start="224" end="224" type="bool" />
+    <field name="Vertex Cache Disable" start="225" end="225" type="bool" />
+    <field name="Single Instance Dispatch Enable" start="233" end="233" type="bool" />
+    <field name="Statistics Enable" start="234" end="234" type="bool" />
+    <field name="Maximum Number of Threads" start="246" end="255" type="uint" />
+    <field name="User Clip Distance Cull Test Enable Bitmask" start="256" end="263" type="uint" />
+    <field name="User Clip Distance Clip Test Enable Bitmask" start="264" end="271" type="uint" />
+    <field name="Vertex URB Entry Output Length" start="272" end="276" type="uint" />
+    <field name="Vertex URB Entry Output Read Offset" start="277" end="282" type="uint" />
+  </instruction>
+  <instruction name="STATE_COMPUTE_MODE" bias="2" length="3" engine="render|compute">
+    <field name="DWord Length" start="0" end="7" type="uint" default="1" />
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="5" />
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1" />
+    <field name="Command SubType" start="27" end="28" type="uint" default="0" />
+    <field name="Command Type" start="29" end="31" type="uint" default="3" />
+    <field name="Z Pass Async Compute Thread Limit" start="32" end="34" type="uint" prefix="ZPACTL">
+      <value name="Max 60" value="0" />
+      <value name="Max 64" value="1" />
+      <value name="Max 56" value="2" />
+      <value name="Max 48" value="3" />
+      <value name="Max 40" value="4" />
+      <value name="Max 32" value="5" />
+    </field>
+    <field name="Z Async Throttle settings" start="35" end="36" type="uint" prefix="ZATS">
+      <value name="Defer to Async Compute Thread Limit" value="0" />
+      <value name="Max 32" value="1" />
+      <value name="Max 40" value="2" />
+      <value name="Max 48" value="3" />
+    </field>
+    <field name="Async Compute Thread Limit" start="39" end="41" type="uint" prefix="ACTL">
+      <value name="Disabled" value="0" />
+      <value name="Max 2" value="1" />
+      <value name="Max 8" value="2" />
+      <value name="Max 16" value="3" />
+      <value name="Max 24" value="4" />
+      <value name="Max 32" value="5" />
+      <value name="Max 40" value="6" />
+      <value name="Max 48" value="7" />
+    </field>
+    <field name="Enable Variable Register Size Allocation" start="42" end="42" type="bool" />
+    <field name="EU Thread Scheduling Mode Override" start="45" end="46" type="uint" />
+    <field name="Large GRF Mode" start="47" end="47" type="bool" />
+    <field name="Z Pass Async Compute Thread Limit Mask" start="48" end="50" type="uint" />
+    <field name="Mask1" start="48" end="63" type="uint" />
+    <field name="Z Async Throttle settings Mask" start="51" end="52" type="uint" />
+    <field name="Async Compute Thread Limit Mask" start="55" end="57" type="uint" />
+    <field name="Enable Variable Register Size Allocation Mask" start="58" end="58" type="uint" />
+    <field name="EU Thread Scheduling Mode Override Mask" start="61" end="62" type="uint" />
+    <field name="Large GRF Mode Mask" start="63" end="63" type="bool" />
+    <field name="Midthread Preemption Delay Timer" start="64" end="66" type="uint">
+      <value name="MTP_TIMER_VAL_0" value="0" />
+      <value name="MTP_TIMER_VAL_50" value="1" />
+      <value name="MTP_TIMER_VAL_100" value="2" />
+      <value name="MTP_TIMER_VAL_150" value="3" />
+    </field>
+    <field name="Midthread Preemption Overdispatch Thread group count" start="67" end="68" type="uint">
+      <value name="OD_TG_M2" value="0" />
+      <value name="OD_TG_M4" value="1" />
+      <value name="OD_TG_M8" value="2" />
+      <value name="OD_TG_M16" value="3" />
+    </field>
+    <field name="Midthread Preemption Overdispatch Test mode" start="69" end="69" type="uint">
+      <value name="Regular" value="0" />
+      <value name="Test mode" value="1" />
+    </field>
+    <field name="UAV Coherency Mode" start="70" end="70" type="uint">
+      <value name="Drain DataPort Mode" value="0" />
+      <value name="Flush Dataport L1" value="1" />
+    </field>
+    <field name="Midthread Preemption Delay Timer Mask" start="80" end="82" type="uint" />
+    <field name="Mask2" start="80" end="95" type="uint" />
+    <field name="Midthread Preemption Overdispatch Thread group count Mask" start="83" end="84" type="uint" />
+    <field name="Midthread Preemption Overdispatch Test mode Mask" start="85" end="85" type="uint" />
+    <field name="UAV Coherency Mode Mask" start="86" end="86" type="uint" />
+    <field name="Memory allocation for Scratch and Midthread Preemption buffers Mask" start="91" end="91" type="uint" />
+  </instruction>
+</genxml>

@@ -95,8 +95,6 @@ files_r300 = files(
   'compiler/radeon_regalloc.h',
   'compiler/radeon_remove_constants.c',
   'compiler/radeon_remove_constants.h',
-  'compiler/radeon_rename_regs.c',
-  'compiler/radeon_rename_regs.h',
   'compiler/radeon_swizzle.h',
   'compiler/radeon_variable.c',
   'compiler/radeon_variable.h',
@@ -121,7 +119,7 @@ libr300 = static_library(
     inc_mesa,
   ],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_libdrm_radeon, dep_llvm, idep_mesautil, idep_nir, idep_xmlconfig],
+  dependencies : [dep_llvm, idep_mesautil, idep_nir, idep_xmlconfig],
 )
 
 driver_r300 = declare_dependency(

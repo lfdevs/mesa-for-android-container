@@ -9,57 +9,44 @@
 #ifndef __OPENCL_VERSION__
 #include <stdint.h>
 
+#include <vulkan/vulkan_core.h>
+
 #include "util/macros.h"
 
 #else
-#define BITFIELD_BIT(i) (1u << i)
 
-typedef ulong uint64_t;
-typedef uint uint32_t;
-typedef ushort uint16_t;
-typedef uchar uint8_t;
-
-typedef long int64_t;
-typedef int int32_t;
-typedef short int16_t;
-typedef char int8_t;
-
-typedef struct VkDrawIndexedIndirectCommand {
-    uint32_t    indexCount;
-    uint32_t    instanceCount;
-    uint32_t    firstIndex;
-    int32_t     vertexOffset;
-    uint32_t    firstInstance;
-} VkDrawIndexedIndirectCommand __attribute__((aligned(4)));
-
-typedef struct VkDrawIndirectCommand {
-    uint32_t    vertexCount;
-    uint32_t    instanceCount;
-    uint32_t    firstVertex;
-    uint32_t    firstInstance;
-} VkDrawIndirectCommand __attribute__((aligned(4)));
+#define _MESA_LIBCL_ASSERT_IGNORE 1
+#include "libcl_vk.h"
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_cl_pack.h"
+
+#define PRAGMA_POISON(param)
 #endif
 
 /**
  * Flags for generated_draws.cl
  */
-#define ANV_GENERATED_FLAG_INDEXED    BITFIELD_BIT(0)
-#define ANV_GENERATED_FLAG_PREDICATED BITFIELD_BIT(1)
-/* Only used on Gfx9, means the pipeline is using gl_DrawID */
-#define ANV_GENERATED_FLAG_DRAWID     BITFIELD_BIT(2)
-/* Only used on Gfx9, means the pipeline is using gl_BaseVertex or
- * gl_BaseInstance
- */
-#define ANV_GENERATED_FLAG_BASE       BITFIELD_BIT(3)
-/* Whether the count is indirect  */
-#define ANV_GENERATED_FLAG_COUNT      BITFIELD_BIT(4)
-/* Whether the generation shader writes to the ring buffer */
-#define ANV_GENERATED_FLAG_RING_MODE  BITFIELD_BIT(5)
-/* Whether TBIMR tile-based rendering shall be enabled. */
-#define ANV_GENERATED_FLAG_TBIMR      BITFIELD_BIT(6)
+enum anv_generated_draw_flags {
+   ANV_GENERATED_FLAG_INDEXED        = BITFIELD_BIT(0),
+   ANV_GENERATED_FLAG_PREDICATED     = BITFIELD_BIT(1),
+   /* Only used on Gfx9, means the pipeline is using gl_DrawID */
+   ANV_GENERATED_FLAG_DRAWID         = BITFIELD_BIT(2),
+   /* Only used on Gfx9, means the pipeline is using gl_BaseVertex or
+    * gl_BaseInstance
+    */
+   ANV_GENERATED_FLAG_BASE           = BITFIELD_BIT(3),
+   /* Whether the count is indirect  */
+   ANV_GENERATED_FLAG_COUNT          = BITFIELD_BIT(4),
+   /* Whether the generation shader writes to the ring buffer */
+   ANV_GENERATED_FLAG_RING_MODE      = BITFIELD_BIT(5),
+   /* Whether TBIMR tile-based rendering shall be enabled. */
+   ANV_GENERATED_FLAG_TBIMR          = BITFIELD_BIT(6),
+   /* Wa_16011107343 */
+   ANV_GENERATED_FLAG_WA_16011107343 = BITFIELD_BIT(7),
+   /* Wa_22018402687 */
+   ANV_GENERATED_FLAG_WA_22018402687 = BITFIELD_BIT(8),
+};
 
 /**
  * Flags for query_copy.cl
@@ -119,6 +106,11 @@ void genX(write_draw)(global uint32_t *dst_ptr,
                       bool uses_base,
                       bool uses_draw_id,
                       uint32_t mocs);
+
+
+void genX(copy_data)(global void *dst_ptr,
+                     global void *src_ptr,
+                     uint32_t size);
 
 #endif /* __OPENCL_VERSION__ */
 

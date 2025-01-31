@@ -12,6 +12,9 @@ program@execute@vstore@vstore-uchar-private,Crash
 program@execute@vstore@vstore-ushort-private,Crash
 program@execute@vstore@vstore_half-float-private,Crash
 
+# (file=input,line=0,column=0,index=0): Unresolved external reference to "_Z21convert_char4_sat_rteDv4_i".
+program@execute@vector-conversion,Fail
+
 # Piglit CL bug
 program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail

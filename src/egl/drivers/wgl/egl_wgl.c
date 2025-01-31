@@ -269,8 +269,7 @@ wgl_initialize_impl(_EGLDisplay *disp, HDC hdc)
    disp->Extensions.MESA_query_driver = EGL_TRUE;
 
    /* Report back to EGL the bitmask of priorities supported */
-   disp->Extensions.IMG_context_priority = wgl_dpy->screen->get_param(
-      wgl_dpy->screen, PIPE_CAP_CONTEXT_PRIORITY_MASK);
+   disp->Extensions.IMG_context_priority = wgl_dpy->screen->caps.context_priority_mask;
    disp->Extensions.NV_context_priority_realtime =
       disp->Extensions.IMG_context_priority &
       (1 << __EGL_CONTEXT_PRIORITY_REALTIME_BIT);
@@ -509,7 +508,7 @@ wgl_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
 static void
 wgl_gl_flush_get(_glapi_proc *glFlush)
 {
-   *glFlush = _glapi_get_proc_address("glFlush");
+   *glFlush = _mesa_glapi_get_proc_address("glFlush");
 }
 
 static void

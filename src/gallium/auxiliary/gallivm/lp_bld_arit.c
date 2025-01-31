@@ -946,12 +946,15 @@ lp_build_mul(struct lp_build_context *bld,
    assert(lp_check_value(type, a));
    assert(lp_check_value(type, b));
 
-   if (a == bld->zero)
-      return bld->zero;
+   if (!type.floating || !type.nan_preserve) {
+      if (a == bld->zero)
+         return bld->zero;
+      if (b == bld->zero)
+         return bld->zero;
+   }
+
    if (a == bld->one)
       return b;
-   if (b == bld->zero)
-      return bld->zero;
    if (b == bld->one)
       return a;
    if (a == bld->undef || b == bld->undef)
@@ -1858,9 +1861,10 @@ static bool
 arch_rounding_available(const struct lp_type type)
 {
    if ((util_get_cpu_caps()->has_sse4_1 &&
-       (type.length == 1 || type.width*type.length == 128)) ||
-       (util_get_cpu_caps()->has_avx && type.width*type.length == 256) ||
-       (util_get_cpu_caps()->has_avx512f && type.width*type.length == 512))
+       (type.length == 1 || (LLVM_VERSION_MAJOR >= 8 && type.length == 2) ||
+        type.width * type.length == 128)) ||
+       (util_get_cpu_caps()->has_avx && type.width * type.length == 256) ||
+       (util_get_cpu_caps()->has_avx512f && type.width * type.length == 512))
       return true;
    else if ((util_get_cpu_caps()->has_altivec &&
             (type.width == 32 && type.length == 4)))
@@ -2055,6 +2059,12 @@ lp_build_trunc(struct lp_build_context *bld,
       trunc = LLVMBuildFPToSI(builder, a, int_vec_type, "");
       res = LLVMBuildSIToFP(builder, trunc, vec_type, "floor.trunc");
 
+      if (type.signed_zero_preserve) {
+         char intrinsic[64];
+         lp_format_intrinsic(intrinsic, 64, "llvm.copysign", bld->vec_type);
+         res = lp_build_intrinsic_binary(builder, intrinsic, vec_type, res, a);
+      }
+
       /* mask out sign bit */
       anosign = lp_build_abs(bld, a);
       /*
@@ -2112,6 +2122,17 @@ lp_build_round(struct lp_build_context *bld,
 
       res = lp_build_iround(bld, a);
       res = LLVMBuildSIToFP(builder, res, vec_type, "");
+
+      if (type.signed_zero_preserve) {
+         LLVMValueRef sign_mask =
+            lp_build_const_int_vec(bld->gallivm, type, 1llu << (type.width - 1));
+         LLVMValueRef a_sign = LLVMBuildBitCast(builder, a, int_vec_type, "");
+         a_sign = LLVMBuildAnd(builder, a_sign, sign_mask, "");
+
+         res = LLVMBuildBitCast(builder, res, int_vec_type, "");
+         res = LLVMBuildOr(builder, res, a_sign, "");
+         res = LLVMBuildBitCast(builder, res, vec_type, "");
+      }
 
       /* mask out sign bit */
       anosign = lp_build_abs(bld, a);
@@ -3076,7 +3097,7 @@ lp_build_pow(struct lp_build_context *bld,
                    __func__);
    }
 
-   LLVMValueRef cmp = lp_build_cmp(bld, PIPE_FUNC_EQUAL, x, lp_build_const_vec(bld->gallivm, bld->type, 0.0f));
+   LLVMValueRef cmp = lp_build_cmp_ordered(bld, PIPE_FUNC_EQUAL, x, lp_build_const_vec(bld->gallivm, bld->type, 0.0f));
    LLVMValueRef res = lp_build_exp2(bld, lp_build_mul(bld, lp_build_log2_safe(bld, x), y));
 
    res = lp_build_select(bld, cmp, lp_build_const_vec(bld->gallivm, bld->type, 0.0f), res);

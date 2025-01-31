@@ -41,7 +41,7 @@ TEST(GetProcAddress, ABIOffsetByName)
     */
    for (unsigned i = 0; linux_gl_abi[i].name != NULL; i++) {
       EXPECT_EQ(linux_gl_abi[i].offset,
-		_glapi_get_proc_offset(linux_gl_abi[i].name))
+		_mesa_glapi_get_proc_offset(linux_gl_abi[i].name))
 	 << "function name: " << linux_gl_abi[i].name;
    }
 }
@@ -52,7 +52,7 @@ TEST(GetProcAddress, TableBigEnoughForABI)
     * FINISHME: hold all of the unique functions for OpenGL 1.2, OpenGL ES
     * FINISHME: 1.1, and OpenGL ES 2.0.
     */
-   EXPECT_LT(408u, _glapi_get_dispatch_table_size());
+   EXPECT_LT(408u, _mesa_glapi_get_dispatch_table_size());
 }
 
 const struct name_offset linux_gl_abi[] = {

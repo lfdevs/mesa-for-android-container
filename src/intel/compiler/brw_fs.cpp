@@ -30,7 +30,7 @@
 
 #include "brw_eu.h"
 #include "brw_fs.h"
-#include "brw_fs_builder.h"
+#include "brw_builder.h"
 #include "brw_fs_live_variables.h"
 #include "brw_nir.h"
 #include "brw_cfg.h"
@@ -72,6 +72,7 @@ fs_inst::init(enum opcode opcode, uint8_t exec_size, const brw_reg &dst,
    /* This will be the case for almost all instructions. */
    switch (dst.file) {
    case VGRF:
+   case ADDRESS:
    case ARF:
    case FIXED_GRF:
    case ATTR:
@@ -205,6 +206,7 @@ fs_inst::is_send_from_grf() const
 {
    switch (opcode) {
    case SHADER_OPCODE_SEND:
+   case SHADER_OPCODE_SEND_GATHER:
    case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
    case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
    case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
@@ -239,6 +241,7 @@ fs_inst::is_control_source(unsigned arg) const
       return arg == 1 || arg == 2;
 
    case SHADER_OPCODE_SEND:
+   case SHADER_OPCODE_SEND_GATHER:
       return arg == 0 || arg == 1;
 
    case SHADER_OPCODE_MEMORY_LOAD_LOGICAL:
@@ -248,6 +251,14 @@ fs_inst::is_control_source(unsigned arg) const
              arg != MEMORY_LOGICAL_ADDRESS &&
              arg != MEMORY_LOGICAL_DATA0 &&
              arg != MEMORY_LOGICAL_DATA1;
+
+   case SHADER_OPCODE_QUAD_SWAP:
+   case SHADER_OPCODE_INCLUSIVE_SCAN:
+   case SHADER_OPCODE_EXCLUSIVE_SCAN:
+   case SHADER_OPCODE_VOTE_ANY:
+   case SHADER_OPCODE_VOTE_ALL:
+   case SHADER_OPCODE_REDUCE:
+      return arg != 0;
 
    default:
       return false;
@@ -268,6 +279,9 @@ fs_inst::is_payload(unsigned arg) const
 
    case SHADER_OPCODE_SEND:
       return arg == 2 || arg == 3;
+
+   case SHADER_OPCODE_SEND_GATHER:
+      return arg >= 2;
 
    default:
       return false;
@@ -324,6 +338,10 @@ fs_inst::can_do_source_mods(const struct intel_device_info *devinfo) const
    case SHADER_OPCODE_VOTE_ANY:
    case SHADER_OPCODE_VOTE_ALL:
    case SHADER_OPCODE_VOTE_EQUAL:
+   case SHADER_OPCODE_BALLOT:
+   case SHADER_OPCODE_QUAD_SWAP:
+   case SHADER_OPCODE_READ_FROM_LIVE_CHANNEL:
+   case SHADER_OPCODE_READ_FROM_CHANNEL:
       return false;
    default:
       return true;
@@ -381,6 +399,9 @@ fs_inst::can_do_cmod() const
          return false;
    }
 
+   if (dst.file == ARF && dst.nr == BRW_ARF_SCALAR && src[0].file == IMM)
+      return false;
+
    return true;
 }
 
@@ -395,56 +416,6 @@ fs_inst::can_change_types() const
             dst.type == src[1].type &&
             predicate != BRW_PREDICATE_NONE &&
             !src[1].abs && !src[1].negate && src[1].file != ATTR));
-}
-
-bool
-brw_reg::equals(const brw_reg &r) const
-{
-   return brw_regs_equal(this, &r);
-}
-
-bool
-brw_reg::negative_equals(const brw_reg &r) const
-{
-   return brw_regs_negative_equal(this, &r);
-}
-
-bool
-brw_reg::is_contiguous() const
-{
-   switch (file) {
-   case ARF:
-   case FIXED_GRF:
-      return hstride == BRW_HORIZONTAL_STRIDE_1 &&
-             vstride == width + hstride;
-   case VGRF:
-   case ATTR:
-      return stride == 1;
-   case UNIFORM:
-   case IMM:
-   case BAD_FILE:
-      return true;
-   }
-
-   unreachable("Invalid register file");
-}
-
-unsigned
-brw_reg::component_size(unsigned width) const
-{
-   if (file == ARF || file == FIXED_GRF) {
-      const unsigned w = MIN2(width, 1u << this->width);
-      const unsigned h = width >> this->width;
-      const unsigned vs = vstride ? 1 << (vstride - 1) : 0;
-      const unsigned hs = hstride ? 1 << (hstride - 1) : 0;
-      assert(w > 0);
-      /* Note this rounds up to next horizontal stride to be consistent with
-       * the VGRF case below.
-       */
-      return ((MAX2(1, h) - 1) * vs + MAX2(w * hs, 1)) * brw_type_size_bytes(type);
-   } else {
-      return MAX2(width * stride, 1) * brw_type_size_bytes(type);
-   }
 }
 
 void
@@ -632,7 +603,7 @@ fs_inst::components_read(unsigned i) const
 }
 
 unsigned
-fs_inst::size_read(int arg) const
+fs_inst::size_read(const struct intel_device_info *devinfo, int arg) const
 {
    switch (opcode) {
    case SHADER_OPCODE_SEND:
@@ -640,6 +611,14 @@ fs_inst::size_read(int arg) const
          return mlen * REG_SIZE;
       } else if (arg == 3) {
          return ex_mlen * REG_SIZE;
+      }
+      break;
+
+   case SHADER_OPCODE_SEND_GATHER:
+      if (arg >= 3) {
+         /* SEND_GATHER is Xe3+, so no need to pass devinfo around. */
+         const unsigned reg_unit = 2;
+         return REG_SIZE * reg_unit;
       }
       break;
 
@@ -710,11 +689,14 @@ fs_inst::size_read(int arg) const
    case IMM:
       return components_read(arg) * brw_type_size_bytes(src[arg].type);
    case BAD_FILE:
+   case ADDRESS:
    case ARF:
    case FIXED_GRF:
    case VGRF:
    case ATTR:
-      return components_read(arg) * src[arg].component_size(exec_size);
+      /* Regardless of exec_size, values marked as scalar are SIMD8. */
+      return components_read(arg) *
+             src[arg].component_size(src[arg].is_scalar ? 8 * reg_unit(devinfo) : exec_size);
    }
    return 0;
 }
@@ -760,7 +742,7 @@ fs_inst::flags_read(const intel_device_info *devinfo) const
    } else {
       unsigned mask = 0;
       for (int i = 0; i < sources; i++) {
-         mask |= brw_fs_flag_mask(src[i], size_read(i));
+         mask |= brw_fs_flag_mask(src[i], size_read(devinfo, i));
       }
       return mask;
    }
@@ -774,7 +756,11 @@ fs_inst::flags_written(const intel_device_info *devinfo) const
                            opcode != BRW_OPCODE_IF &&
                            opcode != BRW_OPCODE_WHILE)) {
       return brw_fs_flag_mask(this, 1);
-   } else if (opcode == FS_OPCODE_LOAD_LIVE_CHANNELS) {
+   } else if (opcode == FS_OPCODE_LOAD_LIVE_CHANNELS ||
+              opcode == SHADER_OPCODE_BALLOT ||
+              opcode == SHADER_OPCODE_VOTE_ANY ||
+              opcode == SHADER_OPCODE_VOTE_ALL ||
+              opcode == SHADER_OPCODE_VOTE_EQUAL) {
       return brw_fs_flag_mask(this, 32);
    } else {
       return brw_fs_flag_mask(dst, size_written);
@@ -830,17 +816,29 @@ fs_inst::is_raw_move() const
            brw_type_size_bits(src[0].type) == brw_type_size_bits(dst.type));
 }
 
+bool
+fs_inst::uses_address_register_implicitly() const
+{
+   switch (opcode) {
+   case SHADER_OPCODE_BROADCAST:
+   case SHADER_OPCODE_SHUFFLE:
+   case SHADER_OPCODE_MOV_INDIRECT:
+      return true;
+   default:
+      return false;
+   }
+}
+
 /* For SIMD16, we need to follow from the uniform setup of SIMD8 dispatch.
  * This brings in those uniform definitions
  */
 void
 fs_visitor::import_uniforms(fs_visitor *v)
 {
-   this->push_constant_loc = v->push_constant_loc;
    this->uniforms = v->uniforms;
 }
 
-enum brw_barycentric_mode
+enum intel_barycentric_mode
 brw_barycentric_mode(const struct brw_wm_prog_key *key,
                      nir_intrinsic_instr *intr)
 {
@@ -858,16 +856,16 @@ brw_barycentric_mode(const struct brw_wm_prog_key *key,
        * interpolation. We'll dynamically remap things so that the FS thread
        * payload is not affected.
        */
-      bary = key->persample_interp == BRW_SOMETIMES ?
-             BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE :
-             BRW_BARYCENTRIC_PERSPECTIVE_PIXEL;
+      bary = key->persample_interp == INTEL_SOMETIMES ?
+             INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE :
+             INTEL_BARYCENTRIC_PERSPECTIVE_PIXEL;
       break;
    case nir_intrinsic_load_barycentric_centroid:
-      bary = BRW_BARYCENTRIC_PERSPECTIVE_CENTROID;
+      bary = INTEL_BARYCENTRIC_PERSPECTIVE_CENTROID;
       break;
    case nir_intrinsic_load_barycentric_sample:
    case nir_intrinsic_load_barycentric_at_sample:
-      bary = BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE;
+      bary = INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE;
       break;
    default:
       unreachable("invalid intrinsic");
@@ -876,7 +874,7 @@ brw_barycentric_mode(const struct brw_wm_prog_key *key,
    if (mode == INTERP_MODE_NOPERSPECTIVE)
       bary += 3;
 
-   return (enum brw_barycentric_mode) bary;
+   return (enum intel_barycentric_mode) bary;
 }
 
 /**
@@ -940,7 +938,7 @@ fs_visitor::assign_curb_setup()
 
    if (is_compute && devinfo->verx10 >= 125 && uniform_push_length > 0) {
       assert(devinfo->has_lsc);
-      fs_builder ubld = fs_builder(this, 1).exec_all().at(
+      brw_builder ubld = brw_builder(this, 1).exec_all().at(
          cfg->first_block(), cfg->first_block()->start());
 
       /* The base offset for our push data is passed in as R0.0[31:6]. We have
@@ -977,18 +975,24 @@ fs_visitor::assign_curb_setup()
          fs_inst *send = ubld.emit(SHADER_OPCODE_SEND, dest, srcs, 4);
 
          send->sfid = GFX12_SFID_UGM;
-         send->desc = lsc_msg_desc(devinfo, LSC_OP_LOAD,
-                                   LSC_ADDR_SURFTYPE_FLAT,
-                                   LSC_ADDR_SIZE_A32,
-                                   LSC_DATA_SIZE_D32,
-                                   num_regs * 8 /* num_channels */,
-                                   true /* transpose */,
-                                   LSC_CACHE(devinfo, LOAD, L1STATE_L3MOCS));
+         uint32_t desc = lsc_msg_desc(devinfo, LSC_OP_LOAD,
+                                      LSC_ADDR_SURFTYPE_FLAT,
+                                      LSC_ADDR_SIZE_A32,
+                                      LSC_DATA_SIZE_D32,
+                                      num_regs * 8 /* num_channels */,
+                                      true /* transpose */,
+                                      LSC_CACHE(devinfo, LOAD, L1STATE_L3MOCS));
          send->header_size = 0;
          send->mlen = lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, 1);
          send->size_written =
             lsc_msg_dest_len(devinfo, LSC_DATA_SIZE_D32, num_regs * 8) * REG_SIZE;
          send->send_is_volatile = true;
+
+         send->src[0] = brw_imm_ud(desc |
+                                   brw_message_desc(devinfo,
+                                                    send->mlen,
+                                                    send->size_written / REG_SIZE,
+                                                    send->header_size));
 
          i += num_regs;
       }
@@ -1007,7 +1011,7 @@ fs_visitor::assign_curb_setup()
                constant_nr = ubo_push_start[inst->src[i].nr - UBO_START] +
                              inst->src[i].offset / 4;
             } else if (uniform_nr >= 0 && uniform_nr < (int) uniforms) {
-               constant_nr = push_constant_loc[uniform_nr];
+               constant_nr = uniform_nr;
             } else {
                /* Section 5.11 of the OpenGL 4.1 spec says:
                 * "Out-of-bounds reads return undefined values, which include
@@ -1026,7 +1030,11 @@ fs_visitor::assign_curb_setup()
             brw_reg.abs = inst->src[i].abs;
             brw_reg.negate = inst->src[i].negate;
 
-            assert(inst->src[i].stride == 0);
+            /* The combination of is_scalar for load_uniform, copy prop, and
+             * lower_btd_logical_send can generate a MOV from a UNIFORM with
+             * exec size 2 and stride of 1.
+             */
+            assert(inst->src[i].stride == 0 || inst->exec_size == 2);
             inst->src[i] = byte_offset(
                retype(brw_reg, inst->src[i].type),
                inst->src[i].offset % 4);
@@ -1036,7 +1044,7 @@ fs_visitor::assign_curb_setup()
 
    uint64_t want_zero = used & prog_data->zero_push_reg;
    if (want_zero) {
-      fs_builder ubld = fs_builder(this, 8).exec_all().at(
+      brw_builder ubld = brw_builder(this, 8).exec_all().at(
          cfg->first_block(), cfg->first_block()->start());
 
       /* push_reg_mask_param is in 32-bit units */
@@ -1053,7 +1061,7 @@ fs_visitor::assign_curb_setup()
                      brw_imm_v(0x01234567));
             ubld.SHL(shifted, horiz_offset(shifted, 8), brw_imm_w(8));
 
-            fs_builder ubld16 = ubld.group(16, 0);
+            brw_builder ubld16 = ubld.group(16, 0);
             b32 = ubld16.vgrf(BRW_TYPE_D);
             ubld16.group(16, 0).ASR(b32, shifted, brw_imm_w(15));
          }
@@ -1157,98 +1165,6 @@ brw_get_subgroup_id_param_index(const intel_device_info *devinfo,
    return -1;
 }
 
-/**
- * Assign UNIFORM file registers to either push constants or pull constants.
- *
- * We allow a fragment shader to have more than the specified minimum
- * maximum number of fragment shader uniform components (64).  If
- * there are too many of these, they'd fill up all of register space.
- * So, this will push some of them out to the pull constant buffer and
- * update the program to load them.
- */
-void
-fs_visitor::assign_constant_locations()
-{
-   /* Only the first compile gets to decide on locations. */
-   if (push_constant_loc)
-      return;
-
-   push_constant_loc = ralloc_array(mem_ctx, int, uniforms);
-   for (unsigned u = 0; u < uniforms; u++)
-      push_constant_loc[u] = u;
-
-   /* Now that we know how many regular uniforms we'll push, reduce the
-    * UBO push ranges so we don't exceed the 3DSTATE_CONSTANT limits.
-    *
-    * If changing this value, note the limitation about total_regs in
-    * brw_curbe.c/crocus_state.c
-    */
-   const unsigned max_push_length = 64;
-   unsigned push_length =
-      round_components_to_whole_registers(devinfo, prog_data->nr_params);
-   for (int i = 0; i < 4; i++) {
-      struct brw_ubo_range *range = &prog_data->ubo_ranges[i];
-
-      if (push_length + range->length > max_push_length)
-         range->length = max_push_length - push_length;
-
-      push_length += range->length;
-
-      assert(push_length % (1 * reg_unit(devinfo)) == 0);
-
-   }
-   assert(push_length <= max_push_length);
-}
-
-bool
-fs_visitor::get_pull_locs(const brw_reg &src,
-                          unsigned *out_surf_index,
-                          unsigned *out_pull_index)
-{
-   assert(src.file == UNIFORM);
-
-   if (src.nr < UBO_START)
-      return false;
-
-   const struct brw_ubo_range *range =
-      &prog_data->ubo_ranges[src.nr - UBO_START];
-
-   /* If this access is in our (reduced) range, use the push data. */
-   if (src.offset / 32 < range->length)
-      return false;
-
-   *out_surf_index = range->block;
-   *out_pull_index = (32 * range->start + src.offset) / 4;
-
-   prog_data->has_ubo_pull = true;
-
-   return true;
-}
-
-/**
- * Get the mask of SIMD channels enabled during dispatch and not yet disabled
- * by discard.  Due to the layout of the sample mask in the fragment shader
- * thread payload, \p bld is required to have a dispatch_width() not greater
- * than 16 for fragment shaders.
- */
-brw_reg
-brw_sample_mask_reg(const fs_builder &bld)
-{
-   const fs_visitor &s = *bld.shader;
-
-   if (s.stage != MESA_SHADER_FRAGMENT) {
-      return brw_imm_ud(0xffffffff);
-   } else if (s.devinfo->ver >= 20 ||
-              brw_wm_prog_data(s.prog_data)->uses_kill) {
-      return brw_flag_subreg(sample_mask_flag_subreg(s) + bld.group() / 16);
-   } else {
-      assert(bld.dispatch_width() <= 16);
-      assert(s.devinfo->ver < 20);
-      return retype(brw_vec1_grf((bld.group() >= 16 ? 2 : 1), 7),
-                    BRW_TYPE_UW);
-   }
-}
-
 uint32_t
 brw_fb_write_msg_control(const fs_inst *inst,
                          const struct brw_wm_prog_data *prog_data)
@@ -1278,46 +1194,6 @@ brw_fb_write_msg_control(const fs_inst *inst,
    }
 
    return mctl;
-}
-
- /**
- * Predicate the specified instruction on the sample mask.
- */
-void
-brw_emit_predicate_on_sample_mask(const fs_builder &bld, fs_inst *inst)
-{
-   assert(bld.shader->stage == MESA_SHADER_FRAGMENT &&
-          bld.group() == inst->group &&
-          bld.dispatch_width() == inst->exec_size);
-
-   const fs_visitor &s = *bld.shader;
-   const brw_reg sample_mask = brw_sample_mask_reg(bld);
-   const unsigned subreg = sample_mask_flag_subreg(s);
-
-   if (s.devinfo->ver >= 20 || brw_wm_prog_data(s.prog_data)->uses_kill) {
-      assert(sample_mask.file == ARF &&
-             sample_mask.nr == brw_flag_subreg(subreg).nr &&
-             sample_mask.subnr == brw_flag_subreg(
-                subreg + inst->group / 16).subnr);
-   } else {
-      bld.group(1, 0).exec_all()
-         .MOV(brw_flag_subreg(subreg + inst->group / 16), sample_mask);
-   }
-
-   if (inst->predicate) {
-      assert(inst->predicate == BRW_PREDICATE_NORMAL);
-      assert(!inst->predicate_inverse);
-      assert(inst->flag_subreg == 0);
-      assert(s.devinfo->ver < 20);
-      /* Combine the sample mask with the existing predicate by using a
-       * vertical predication mode.
-       */
-      inst->predicate = BRW_PREDICATE_ALIGN1_ALLV;
-   } else {
-      inst->flag_subreg = subreg;
-      inst->predicate = BRW_PREDICATE_NORMAL;
-      inst->predicate_inverse = false;
-   }
 }
 
 brw::register_pressure::register_pressure(const fs_visitor *v)
@@ -1356,6 +1232,7 @@ fs_visitor::invalidate_analysis(brw::analysis_dependency_class c)
 {
    live_analysis.invalidate(c);
    regpressure_analysis.invalidate(c);
+   performance_analysis.invalidate(c);
    idom_analysis.invalidate(c);
    def_analysis.invalidate(c);
 }
@@ -1375,7 +1252,19 @@ fs_visitor::debug_optimizer(const nir_shader *nir,
                       iteration, pass_num, pass_name);
    if (ret == -1)
       return;
-   brw_print_instructions(*this, filename);
+
+   FILE *file = stderr;
+   if (__normal_user()) {
+      file = fopen(filename, "w");
+      if (!file)
+         file = stderr;
+   }
+
+   brw_print_instructions(*this, file);
+
+   if (file != stderr)
+      fclose(file);
+
    free(filename);
 }
 
@@ -1441,25 +1330,25 @@ brw_allocate_registers(fs_visitor &s, bool allow_spilling)
    const nir_shader *nir = s.nir;
    bool allocated;
 
-   static const enum instruction_scheduler_mode pre_modes[] = {
-      SCHEDULE_PRE,
-      SCHEDULE_PRE_NON_LIFO,
-      SCHEDULE_NONE,
-      SCHEDULE_PRE_LIFO,
+   static const enum brw_instruction_scheduler_mode pre_modes[] = {
+      BRW_SCHEDULE_PRE,
+      BRW_SCHEDULE_PRE_NON_LIFO,
+      BRW_SCHEDULE_NONE,
+      BRW_SCHEDULE_PRE_LIFO,
    };
 
    static const char *scheduler_mode_name[] = {
-      [SCHEDULE_PRE] = "top-down",
-      [SCHEDULE_PRE_NON_LIFO] = "non-lifo",
-      [SCHEDULE_PRE_LIFO] = "lifo",
-      [SCHEDULE_POST] = "post",
-      [SCHEDULE_NONE] = "none",
+      [BRW_SCHEDULE_PRE] = "top-down",
+      [BRW_SCHEDULE_PRE_NON_LIFO] = "non-lifo",
+      [BRW_SCHEDULE_PRE_LIFO] = "lifo",
+      [BRW_SCHEDULE_POST] = "post",
+      [BRW_SCHEDULE_NONE] = "none",
    };
 
    uint32_t best_register_pressure = UINT32_MAX;
-   enum instruction_scheduler_mode best_sched = SCHEDULE_NONE;
+   enum brw_instruction_scheduler_mode best_sched = BRW_SCHEDULE_NONE;
 
-   brw_fs_opt_compact_virtual_grfs(s);
+   brw_opt_compact_virtual_grfs(s);
 
    if (s.needs_register_pressure)
       s.shader_stats.max_register_pressure = brw_compute_max_register_pressure(s);
@@ -1476,14 +1365,14 @@ brw_allocate_registers(fs_visitor &s, bool allow_spilling)
    fs_inst **best_pressure_order = NULL;
 
    void *scheduler_ctx = ralloc_context(NULL);
-   instruction_scheduler *sched = brw_prepare_scheduler(s, scheduler_ctx);
+   brw_instruction_scheduler *sched = brw_prepare_scheduler(s, scheduler_ctx);
 
    /* Try each scheduling heuristic to see if it can successfully register
     * allocate without spilling.  They should be ordered by decreasing
     * performance but increasing likelihood of allocating.
     */
    for (unsigned i = 0; i < ARRAY_SIZE(pre_modes); i++) {
-      enum instruction_scheduler_mode sched_mode = pre_modes[i];
+      enum brw_instruction_scheduler_mode sched_mode = pre_modes[i];
 
       brw_schedule_instructions_pre_ra(s, sched, sched_mode);
       s.shader_stats.scheduler_mode = scheduler_mode_name[sched_mode];
@@ -1553,15 +1442,17 @@ brw_allocate_registers(fs_visitor &s, bool allow_spilling)
    if (s.failed)
       return;
 
-   s.debug_optimizer(nir, "post_ra_alloc", 96, 0);
+   int pass_num = 0;
 
-   brw_fs_opt_bank_conflicts(s);
+   s.debug_optimizer(nir, "post_ra_alloc", 96, pass_num++);
 
-   s.debug_optimizer(nir, "bank_conflict", 96, 1);
+   brw_opt_bank_conflicts(s);
+
+   s.debug_optimizer(nir, "bank_conflict", 96, pass_num++);
 
    brw_schedule_instructions_post_ra(s);
 
-   s.debug_optimizer(nir, "post_ra_alloc_scheduling", 96, 2);
+   s.debug_optimizer(nir, "post_ra_alloc_scheduling", 96, pass_num++);
 
    /* Lowering VGRF to FIXED_GRF is currently done as a separate pass instead
     * of part of assign_regs since both bank conflicts optimization and post
@@ -1571,9 +1462,14 @@ brw_allocate_registers(fs_visitor &s, bool allow_spilling)
     * TODO: Change the passes above, then move this lowering to be part of
     * assign_regs.
     */
-   brw_fs_lower_vgrfs_to_fixed_grfs(s);
+   brw_lower_vgrfs_to_fixed_grfs(s);
 
-   s.debug_optimizer(nir, "lowered_vgrfs_to_fixed_grfs", 96, 3);
+   s.debug_optimizer(nir, "lowered_vgrfs_to_fixed_grfs", 96, pass_num++);
+
+   if (s.devinfo->ver >= 30) {
+      brw_lower_send_gather(s);
+      s.debug_optimizer(nir, "lower_send_gather", 96, pass_num++);
+   }
 
    brw_shader_phase_update(s, BRW_SHADER_PHASE_AFTER_REGALLOC);
 
@@ -1603,76 +1499,9 @@ brw_allocate_registers(fs_visitor &s, bool allow_spilling)
    if (s.failed)
       return;
 
-   brw_fs_lower_scoreboard(s);
-}
+   brw_lower_scoreboard(s);
 
-/**
- * Move load_interpolated_input with simple (payload-based) barycentric modes
- * to the top of the program so we don't emit multiple PLNs for the same input.
- *
- * This works around CSE not being able to handle non-dominating cases
- * such as:
- *
- *    if (...) {
- *       interpolate input
- *    } else {
- *       interpolate the same exact input
- *    }
- *
- * This should be replaced by global value numbering someday.
- */
-bool
-brw_nir_move_interpolation_to_top(nir_shader *nir)
-{
-   bool progress = false;
-
-   nir_foreach_function_impl(impl, nir) {
-      nir_block *top = nir_start_block(impl);
-      nir_cursor cursor = nir_before_instr(nir_block_first_instr(top));
-      bool impl_progress = false;
-
-      for (nir_block *block = nir_block_cf_tree_next(top);
-           block != NULL;
-           block = nir_block_cf_tree_next(block)) {
-
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-            if (intrin->intrinsic != nir_intrinsic_load_interpolated_input)
-               continue;
-            nir_intrinsic_instr *bary_intrinsic =
-               nir_instr_as_intrinsic(intrin->src[0].ssa->parent_instr);
-            nir_intrinsic_op op = bary_intrinsic->intrinsic;
-
-            /* Leave interpolateAtSample/Offset() where they are. */
-            if (op == nir_intrinsic_load_barycentric_at_sample ||
-                op == nir_intrinsic_load_barycentric_at_offset)
-               continue;
-
-            nir_instr *move[3] = {
-               &bary_intrinsic->instr,
-               intrin->src[1].ssa->parent_instr,
-               instr
-            };
-
-            for (unsigned i = 0; i < ARRAY_SIZE(move); i++) {
-               if (move[i]->block != top) {
-                  nir_instr_move(cursor, move[i]);
-                  impl_progress = true;
-               }
-            }
-         }
-      }
-
-      progress = progress || impl_progress;
-
-      nir_metadata_preserve(impl, impl_progress ? nir_metadata_control_flow
-                                                : nir_metadata_all);
-   }
-
-   return progress;
+   s.debug_optimizer(nir, "scoreboard", 96, pass_num++);
 }
 
 unsigned
@@ -1683,56 +1512,6 @@ brw_cs_push_const_total_size(const struct brw_cs_prog_data *cs_prog_data,
    assert(cs_prog_data->push.cross_thread.size % REG_SIZE == 0);
    return cs_prog_data->push.per_thread.size * threads +
           cs_prog_data->push.cross_thread.size;
-}
-
-static bool
-filter_simd(const nir_instr *instr, const void * /* options */)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   switch (nir_instr_as_intrinsic(instr)->intrinsic) {
-   case nir_intrinsic_load_simd_width_intel:
-   case nir_intrinsic_load_subgroup_id:
-      return true;
-
-   default:
-      return false;
-   }
-}
-
-static nir_def *
-lower_simd(nir_builder *b, nir_instr *instr, void *options)
-{
-   uintptr_t simd_width = (uintptr_t)options;
-
-   switch (nir_instr_as_intrinsic(instr)->intrinsic) {
-   case nir_intrinsic_load_simd_width_intel:
-      return nir_imm_int(b, simd_width);
-
-   case nir_intrinsic_load_subgroup_id:
-      /* If the whole workgroup fits in one thread, we can lower subgroup_id
-       * to a constant zero.
-       */
-      if (!b->shader->info.workgroup_size_variable) {
-         unsigned local_workgroup_size = b->shader->info.workgroup_size[0] *
-                                         b->shader->info.workgroup_size[1] *
-                                         b->shader->info.workgroup_size[2];
-         if (local_workgroup_size <= simd_width)
-            return nir_imm_int(b, 0);
-      }
-      return NULL;
-
-   default:
-      return NULL;
-   }
-}
-
-bool
-brw_nir_lower_simd(nir_shader *nir, unsigned dispatch_width)
-{
-   return nir_shader_lower_instructions(nir, filter_simd, lower_simd,
-                                 (void *)(uintptr_t)dispatch_width);
 }
 
 struct intel_cs_dispatch_info
@@ -1767,78 +1546,10 @@ brw_shader_phase_update(fs_visitor &s, enum brw_shader_phase phase)
 {
    assert(phase == s.phase + 1);
    s.phase = phase;
-   brw_fs_validate(s);
+   brw_validate(s);
 }
 
 bool brw_should_print_shader(const nir_shader *shader, uint64_t debug_flag)
 {
    return INTEL_DEBUG(debug_flag) && (!shader->info.internal || NIR_DEBUG(PRINT_INTERNAL));
 }
-
-namespace brw {
-   brw_reg
-   fetch_payload_reg(const brw::fs_builder &bld, uint8_t regs[2],
-                     brw_reg_type type, unsigned n)
-   {
-      if (!regs[0])
-         return brw_reg();
-
-      if (bld.dispatch_width() > 16) {
-         const brw_reg tmp = bld.vgrf(type, n);
-         const brw::fs_builder hbld = bld.exec_all().group(16, 0);
-         const unsigned m = bld.dispatch_width() / hbld.dispatch_width();
-         brw_reg *const components = new brw_reg[m * n];
-
-         for (unsigned c = 0; c < n; c++) {
-            for (unsigned g = 0; g < m; g++)
-               components[c * m + g] =
-                  offset(retype(brw_vec8_grf(regs[g], 0), type), hbld, c);
-         }
-
-         hbld.LOAD_PAYLOAD(tmp, components, m * n, 0);
-
-         delete[] components;
-         return tmp;
-
-      } else {
-         return brw_reg(retype(brw_vec8_grf(regs[0], 0), type));
-      }
-   }
-
-   brw_reg
-   fetch_barycentric_reg(const brw::fs_builder &bld, uint8_t regs[2])
-   {
-      if (!regs[0])
-         return brw_reg();
-      else if (bld.shader->devinfo->ver >= 20)
-         return fetch_payload_reg(bld, regs, BRW_TYPE_F, 2);
-
-      const brw_reg tmp = bld.vgrf(BRW_TYPE_F, 2);
-      const brw::fs_builder hbld = bld.exec_all().group(8, 0);
-      const unsigned m = bld.dispatch_width() / hbld.dispatch_width();
-      brw_reg *const components = new brw_reg[2 * m];
-
-      for (unsigned c = 0; c < 2; c++) {
-         for (unsigned g = 0; g < m; g++)
-            components[c * m + g] = offset(brw_vec8_grf(regs[g / 2], 0),
-                                           hbld, c + 2 * (g % 2));
-      }
-
-      hbld.LOAD_PAYLOAD(tmp, components, 2 * m, 0);
-
-      delete[] components;
-      return tmp;
-   }
-
-   void
-   check_dynamic_msaa_flag(const fs_builder &bld,
-                           const struct brw_wm_prog_data *wm_prog_data,
-                           enum intel_msaa_flags flag)
-   {
-      fs_inst *inst = bld.AND(bld.null_reg_ud(),
-                              dynamic_msaa_flags(wm_prog_data),
-                              brw_imm_ud(flag));
-      inst->conditional_mod = BRW_CONDITIONAL_NZ;
-   }
-}
-

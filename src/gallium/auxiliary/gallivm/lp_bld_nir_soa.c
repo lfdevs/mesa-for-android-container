@@ -2071,7 +2071,7 @@ static void lp_build_skip_branch(struct lp_build_nir_context *bld_base, bool fla
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
 
-   LLVMValueRef exec_mask = mask_vec(bld_base);
+   LLVMValueRef exec_mask = mask_vec_with_helpers(bld_base);
 
    LLVMValueRef bitmask = LLVMBuildICmp(builder, LLVMIntNE, exec_mask, bld_base->uint_bld.zero, "");
    bitmask = LLVMBuildBitCast(builder, bitmask, LLVMIntTypeInContext(gallivm->context, bld_base->uint_bld.type.length), "");
@@ -3029,21 +3029,36 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
 
    /* Setup build context */
    memset(&bld, 0, sizeof bld);
-   lp_build_context_init(&bld.bld_base.base, gallivm, type);
    lp_build_context_init(&bld.bld_base.uint_bld, gallivm, lp_uint_type(type));
    lp_build_context_init(&bld.bld_base.int_bld, gallivm, lp_int_type(type));
    lp_build_context_init(&bld.elem_bld, gallivm, lp_elem_type(type));
    lp_build_context_init(&bld.uint_elem_bld, gallivm, lp_elem_type(lp_uint_type(type)));
    {
+      struct lp_type float_type = type;
+      float_type.signed_zero_preserve =
+         !!(shader->info.float_controls_execution_mode & FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP32);
+      float_type.nan_preserve =
+         !!(shader->info.float_controls_execution_mode & FLOAT_CONTROLS_NAN_PRESERVE_FP32);
+      lp_build_context_init(&bld.bld_base.base, gallivm, float_type);
+   }
+   {
       struct lp_type dbl_type;
       dbl_type = type;
       dbl_type.width *= 2;
+      dbl_type.signed_zero_preserve =
+         !!(shader->info.float_controls_execution_mode & FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP64);
+      dbl_type.nan_preserve =
+         !!(shader->info.float_controls_execution_mode & FLOAT_CONTROLS_NAN_PRESERVE_FP64);
       lp_build_context_init(&bld.bld_base.dbl_bld, gallivm, dbl_type);
    }
    {
       struct lp_type half_type;
       half_type = type;
       half_type.width /= 2;
+      half_type.signed_zero_preserve =
+         !!(shader->info.float_controls_execution_mode & FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP16);
+      half_type.nan_preserve =
+         !!(shader->info.float_controls_execution_mode & FLOAT_CONTROLS_NAN_PRESERVE_FP16);
       lp_build_context_init(&bld.bld_base.half_bld, gallivm, half_type);
    }
    {
@@ -3145,7 +3160,6 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
    bld.resources_ptr = params->resources_ptr;
    bld.thread_data_type = params->thread_data_type;
    bld.thread_data_ptr = params->thread_data_ptr;
-   bld.bld_base.aniso_filter_table = params->aniso_filter_table;
    bld.image = params->image;
    bld.shared_ptr = params->shared_ptr;
    bld.payload_ptr = params->payload_ptr;

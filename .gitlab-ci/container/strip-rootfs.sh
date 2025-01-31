@@ -5,6 +5,8 @@
 # KERNEL_ROOTFS_TAG
 set -ex
 
+section_start strip-rootfs "Stripping rootfs"
+
 export DEBIAN_FRONTEND=noninteractive
 
 UNNEEDED_PACKAGES=(
@@ -155,3 +157,5 @@ EOF
 
 chmod +x /usr/bin/apt-get
 ln -s /usr/bin/apt-get /usr/bin/apt
+
+section_end strip-rootfs

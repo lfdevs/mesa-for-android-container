@@ -429,7 +429,6 @@ spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@ext_external_objects@vk-image-overwrite,Crash
 spec@ext_external_objects@vk-image-overwrite@RGBA 4 UNORM linear,Fail
-spec@ext_framebuffer_multisample@blit-mismatched-formats,Fail
 spec@ext_framebuffer_multisample@enable-flag,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-deriv-disabled,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-disabled,Fail

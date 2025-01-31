@@ -75,11 +75,9 @@ KHR-GLES3.packed_pixels.varied_rectangle.rg32ui,Fail
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
-glx@glx-visuals-depth -pixmap,Crash
+glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Crash
-glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
-glx@glx_arb_create_context_robustness@invalid reset notification strategy,Fail
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero,Fail
 glx@glx_arb_sync_control@waitformsc,Fail
 
@@ -250,6 +248,9 @@ spec@arb_uniform_buffer_object@execution@shared-array-struct-array-struct,Fail
 spec@arb_uniform_buffer_object@execution@std140-array-struct-array-struct,Fail
 
 # uprev Piglit in Mesa
+spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one,Fail
+spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-z,Fail
+spec@arb_framebuffer_object@execution@msaa-alpha-to-one,Fail
 spec@glsl-1.40@uniform_buffer@two-stages,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail
@@ -325,3 +326,8 @@ KHR-GLES3.packed_pixels.varied_rectangle.rgba32ui,Fail
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
 KHR-GLES3.packed_pixels.varied_rectangle.rgba16f,Fail
 KHR-GLES3.packed_pixels.varied_rectangle.rgba16ui,Fail
+
+spec@ext_transform_feedback@max-varyings,Fail
+spec@ext_transform_feedback@max-varyings@max-varying-arrays-of-arrays,Fail
+spec@ext_transform_feedback@max-varyings@max-varying-single-dimension-array,Fail
+spec@ext_transform_feedback@structs_gles3 basic-struct run,Fail

@@ -52,7 +52,9 @@ lower_fragcoord_wtrans(nir_builder *b, nir_intrinsic_instr *intr,
       return false;
    }
 
-   assert(intr->def.num_components == 4);
+   /* W is not read. */
+   if (intr->def.num_components < 4)
+      return false;
 
    b->cursor = nir_after_instr(&intr->instr);
 

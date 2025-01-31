@@ -40,9 +40,7 @@ TEST_F(nir_opt_varyings_test_dead_output, \
    ASSERT_TRUE(nir_intrinsic_io_semantics(intr).no_varying == \
                (VARYING_SLOT_##slot != VARYING_SLOT_POS && \
                 VARYING_SLOT_##slot != VARYING_SLOT_PSIZ && \
-                VARYING_SLOT_##slot != VARYING_SLOT_CLIP_VERTEX && \
-                /* RADV mesh multiview workaround */ \
-                (MESA_SHADER_##producer_stage != MESA_SHADER_MESH || VARYING_SLOT_##slot != VARYING_SLOT_LAYER))); \
+                VARYING_SLOT_##slot != VARYING_SLOT_CLIP_VERTEX)); \
 }
 
 #define TEST_DEAD_OUTPUT_KEPT_XFB(producer_stage, consumer_stage, slot, bitsize) \

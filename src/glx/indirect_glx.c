@@ -135,7 +135,7 @@ indirect_bind_context(struct glx_context *gc,
    if (sent) {
       if (!IndirectAPI)
          IndirectAPI = __glXNewIndirectAPI();
-      _glapi_set_dispatch(IndirectAPI);
+      _mesa_glapi_set_dispatch(IndirectAPI);
 
       /* The indirect vertex array state must to be initialised after we
        * have setup the context, as it needs to query server attributes.

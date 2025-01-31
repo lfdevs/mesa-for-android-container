@@ -35,7 +35,10 @@ class LAVAJob:
         self._is_finished = False
         self.log: dict[str, Any] = log
         self.status = "not_submitted"
-        self._exit_code = None
+        # Set the default exit code to 1 because we should set it to 0 only if the job has passed.
+        # If it fails or if it is interrupted, the exit code should be set to a non-zero value to
+        # make the GitLab job fail.
+        self._exit_code: int = 1
         self.__exception: Optional[Exception] = None
 
     def heartbeat(self) -> None:

@@ -25,37 +25,17 @@ dEQP-GLES2.functional.shaders.builtin_variable.frontfacing,Fail
 
 dEQP-GLES2.functional.shaders.functions.control_flow.mixed_return_break_continue_fragment,Fail
 dEQP-GLES2.functional.shaders.functions.control_flow.return_after_continue_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_fragment,Fail
-
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec4_dynamic_subscript_write_static_loop_subscript_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec4_dynamic_subscript_write_component_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec4_dynamic_subscript_write_direct_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec4_dynamic_subscript_write_dynamic_subscript_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec4_dynamic_subscript_write_static_subscript_read_fragment,Fail
 
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.101_iterations_fragment,Fail
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.conditional_continue_fragment,Fail
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.double_continue_fragment,Fail
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.mixed_break_continue_fragment,Fail
 
-dEQP-GLES2.functional.shaders.random.all_features.fragment.38,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.5,Fail
-dEQP-GLES2.functional.shaders.random.all_features.fragment.79,Fail
-dEQP-GLES2.functional.shaders.random.all_features.fragment.86,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.93,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.97,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.15,Fail
-dEQP-GLES2.functional.shaders.random.trigonometric.fragment.26,Fail
-dEQP-GLES2.functional.shaders.random.trigonometric.fragment.42,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.45,Fail
-dEQP-GLES2.functional.shaders.random.trigonometric.fragment.52,Fail
-dEQP-GLES2.functional.shaders.random.trigonometric.fragment.81,Fail
-
-dEQP-GLES2.functional.shaders.struct.local.nested_struct_array_dynamic_index_fragment,Fail
-dEQP-GLES2.functional.shaders.struct.uniform.nested_struct_array_dynamic_index_fragment,Fail
 
 # Need to port the DP3 trick for all_equal from st_glsl_to_tgsi.
 dEQP-GLES2.functional.shaders.struct.uniform.equal_fragment,Fail
@@ -71,14 +51,53 @@ dEQP-GLES2.functional.texture.size.cube.15x15_rgba8888,Fail
 # Texel differences in the middle of the texture?
 dEQP-GLES2.functional.texture.wrap.clamp_clamp_nearest_npot_etc1,Fail
 
+dEQP-GLES2.functional.uniform_api.info_query.array_in_struct.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.info_query.array_in_struct.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.info_query.array_in_struct.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.info_query.basic_array.mat4_both,Fail
+dEQP-GLES2.functional.uniform_api.info_query.basic_array.mat4_fragment,Fail
+dEQP-GLES2.functional.uniform_api.info_query.multiple_nested_structs_arrays.both,Fail
+dEQP-GLES2.functional.uniform_api.info_query.multiple_nested_structs_arrays.fragment,Fail
+dEQP-GLES2.functional.uniform_api.info_query.nested_structs_arrays.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.info_query.struct_in_array.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.info_query.struct_in_array.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.info_query.struct_in_array.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.random.8,Fail
+dEQP-GLES2.functional.uniform_api.random.9,Fail
 dEQP-GLES2.functional.uniform_api.random.13,Fail
 dEQP-GLES2.functional.uniform_api.random.20,Fail
+dEQP-GLES2.functional.uniform_api.random.27,Fail
 dEQP-GLES2.functional.uniform_api.random.54,Fail
 dEQP-GLES2.functional.uniform_api.random.71,Fail
 dEQP-GLES2.functional.uniform_api.random.74,Fail
+dEQP-GLES2.functional.uniform_api.random.75,Fail
 dEQP-GLES2.functional.uniform_api.random.81,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_full.array_in_struct.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_full.array_in_struct.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_full.array_in_struct.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_full.basic_array.mat4_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_full.basic_array.mat4_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_partial.array_in_struct.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_partial.array_in_struct.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_partial.array_in_struct.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_partial.basic_array.mat4_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.basic_array_assign_partial.basic_array.mat4_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.mat4_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.mat4_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.mat4_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.mat4_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_nested_structs_arrays.both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_nested_structs_arrays.fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.sampler2D_samplerCube_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.mat4_mat2_both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.sampler2D_samplerCube_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.mat4_both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.mat4_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_nested_structs_arrays.both,Fail
@@ -86,8 +105,24 @@ dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_nest
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.mat4_mat2_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.mat4_mat2_both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_value.get_uniform.array_in_struct.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_value.get_uniform.multiple_nested_structs_arrays.both,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_value.get_uniform.multiple_nested_structs_arrays.fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_value.get_uniform.struct_in_array.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.array_in_struct.sampler2D_samplerCube_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.multiple_nested_structs_arrays.both,Fail
 dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.multiple_nested_structs_arrays.fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.struct_in_array.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.array_in_struct.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.array_in_struct.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.both,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.multiple_nested_structs_arrays.fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.nested_structs_arrays.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_both,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.struct_in_array.mat4_mat2_fragment,Fail
+dEQP-GLES2.functional.uniform_api.value.initial.get_uniform.struct_in_array.sampler2D_samplerCube_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_both,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.array_in_struct.mat4_mat2_fragment,Fail
 dEQP-GLES2.functional.uniform_api.value.initial.render.multiple_nested_structs_arrays.both,Fail
@@ -109,14 +144,14 @@ KHR-GLES2.shaders.aggressive_optimizations.sin_vec3_frag,Fail
 # https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3134
 KHR-GLES2.texture_3d.filtering.combinations.negative,Fail
 
-shaders@glsl-bug-110796,Fail
-
 # No derivatives support in the HW.
 shaders@glsl-derivs,Fail
 
 shaders@glsl-fs-loop,Fail
 shaders@glsl-fs-loop-nested,Fail
 shaders@glsl-fs-raytrace-bug27060,Fail
+shaders@glsl-fs-user-varying-ff,Fail
+shaders@glsl-getactiveuniform-count: glsl-getactiveuniform-ftransform,Fail
 
 # No derivatives support in the HW.
 shaders@glsl-fwidth,Fail
@@ -172,8 +207,8 @@ spec@!opengl 1.0@gl-1.0-scissor-offscreen,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 
 spec@!opengl 1.1@depthstencil-default_fb-clear,Fail
+spec@!opengl 1.1@draw-pixels,Fail
 spec@!opengl 1.1@getteximage-formats,Fail
-spec@!opengl 1.1@gl-1.2-texture-base-level,Fail
 spec@!opengl 1.1@line-flat-clip-color,Fail
 spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
@@ -237,32 +272,22 @@ spec@!opengl 1.1@texwrap formats bordercolor@GL_RGBA2- border color only,Fail
 spec@!opengl 1.1@texwrap formats bordercolor@GL_RGBA4- border color only,Fail
 spec@!opengl 1.1@texwrap formats bordercolor@GL_RGBA8- border color only,Fail
 
-spec@!opengl 1.2@levelclamp,Fail
-
-spec@!opengl 1.2@texwrap 3d,Fail
-spec@!opengl 1.2@texwrap 3d@GL_RGBA8- NPOT,Fail
-
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@!opengl 1.2@texwrap 3d bordercolor,Fail
 spec@!opengl 1.2@texwrap 3d bordercolor@GL_RGBA8- border color only,Fail
-spec@!opengl 1.2@texwrap 3d proj,Fail
-spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- NPOT- projected,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor@GL_RGBA8- projected- border color only,Fail
 
-spec@!opengl 1.4@tex-miplevel-selection,Fail
-spec@!opengl 1.4@tex-miplevel-selection-lod,Fail
-spec@!opengl 1.4@tex-miplevel-selection-lod-bias,Fail
 spec@!opengl 1.5@depth-tex-compare,Fail
 
-# Need to be able to report 0 OQ bits, since there are no HW OQs.
-spec@!opengl 2.0@occlusion-query-discard,Fail
-
-spec@!opengl 2.0@tex3d-npot,Fail
+spec@!opengl 2.0@max-samplers,Fail
+spec@!opengl 2.0@max-samplers border,Fail
+spec@!opengl 2.0@vertex-program-two-side,Fail
 spec@!opengl 2.0@vertex-program-two-side back front2,Fail
 spec@!opengl 2.0@vertex-program-two-side back front2@vs and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side back front2 back2,Fail
 spec@!opengl 2.0@vertex-program-two-side back front2 back2@vs and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled back,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled back@vs and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled back back2,Fail
@@ -305,8 +330,7 @@ spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 
-spec@arb_arrays_of_arrays@execution@glsl-arrays-copy-size-mismatch,Fail
-spec@arb_depth_texture@depth-level-clamp,Fail
+spec@arb_clear_texture@arb_clear_texture-sized-formats,Fail
 
 spec@arb_depth_texture@fbo-clear-formats,Fail
 spec@arb_depth_texture@fbo-clear-formats@GL_DEPTH_COMPONENT,Fail
@@ -323,7 +347,6 @@ spec@arb_depth_texture@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT24 NPOT,Fail
 spec@arb_depth_texture@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32,Fail
 spec@arb_depth_texture@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32 NPOT,Fail
 spec@arb_depth_texture@texdepth,Fail
-spec@arb_draw_buffers@fbo-mrt-alphatest,Fail
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@arb_depth_texture@texwrap formats bordercolor,Fail
@@ -334,9 +357,6 @@ spec@arb_depth_texture@texwrap formats bordercolor@GL_DEPTH_COMPONENT32- border 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@arb_es2_compatibility@texwrap formats bordercolor,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor@GL_RGB565- border color only,Fail
-
-# GL_RGB10_A2 dest failures
-spec@arb_framebuffer_object@fbo-mipmap-copypix,Fail
 
 # Unexpected GL error: GL_INVALID_OPERATION 0x502
 # (Error at tests/spec/arb_framebuffer_object/same-attachment-tex2d-depth_stencil.c:135)
@@ -362,29 +382,21 @@ spec@arb_framebuffer_object@fbo-attachments-blit-scaled-linear,Fail
 # No derivatives support in the HW.
 spec@arb_framebuffer_object@fbo-deriv,Fail
 
-spec@arb_framebuffer_object@fbo-generatemipmap-1d,Fail
-spec@arb_framebuffer_object@fbo-generatemipmap-cubemap s3tc_dxt1,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels draw stencil,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
 spec@arb_framebuffer_object@same-attachment-glframebuffertexture2d-gl_depth_stencil_attachment,Fail
 
 # Need to be able to report 0 OQ bits, since there are no HW OQs.
-spec@arb_occlusion_query2@render,Fail
-spec@arb_occlusion_query@occlusion_query,Fail
 spec@arb_occlusion_query@occlusion_query_conform,Fail
 spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi2,Fail
-spec@arb_occlusion_query@occlusion_query_meta_fragments,Fail
-spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Fail
-spec@arb_occlusion_query@occlusion_query_meta_save,Fail
 
-spec@arb_pixel_buffer_object@cubemap npot pbo,Fail
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small,Fail
 spec@arb_pixel_buffer_object@pbo-getteximage,Fail
 
-spec@arb_point_parameters@arb_point_parameters-point-attenuation@Aliased combinations,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
 spec@arb_sampler_objects@gl_ext_texture_srgb_decode,Fail
-spec@arb_shader_texture_lod@execution@glsl-fs-texturelod-01,Fail
+spec@arb_separate_shader_objects@misc. api error checks,Fail
+spec@arb_separate_shader_objects@misc. api error checks@glUseProgramStages of a program that lacks a specified stage,Fail
 
 # No useful debug info.
 spec@arb_sync@clientwaitsync-timeout,Fail
@@ -402,7 +414,6 @@ spec@ati_texture_compression_3dc@texwrap formats bordercolor,Fail
 spec@ati_texture_compression_3dc@texwrap formats bordercolor@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI- border color only,Fail
 
 spec@arb_texture_cube_map@copyteximage cube,Fail
-spec@arb_texture_cube_map@cubemap npot,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-01,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-03,Fail
@@ -418,20 +429,6 @@ spec@arb_texture_rectangle@texwrap rect bordercolor@GL_RGBA8- border color only,
 spec@arb_texture_rectangle@texwrap rect proj bordercolor,Fail
 spec@arb_texture_rectangle@texwrap rect proj bordercolor@GL_RGBA8- projected- border color only,Fail
 
-# "Mesa: User error: GL_INVALID_OPERATION in glTexSubImage2D(invalid texture level 8)
-#  Probe color at (80,80)
-#    Expected: 0.000000 1.000000 0.000000
-#    Observed: 1.000000 0.000000 0.000000"
-#  texture-storage: wrong color for mipmap level 1
-# PIGLIT: {"subtest": {"2D mipmap rendering " : "fail"}}"
-spec@arb_texture_storage@texture-storage,Fail
-spec@arb_texture_storage@texture-storage@2D mipmap rendering ,Fail
-spec@arb_texture_storage@texture-storage@2D mipmap rendering (EXT_dsa),Fail
-
-# test checks for required ext (which we don't have) after compiling the shader
-# that uses dynamic loops
-spec@arb_timer_query@query gl_timestamp,Fail
-
 # "Probe color at (68,68)
 #   Left: 0.784314 1.000000 1.000000 1.000000
 #   Right: 0.800000 1.000000 1.000000 1.000000
@@ -440,26 +437,20 @@ spec@ati_fragment_shader@ati_fragment_shader-render-ops,Fail
 spec@ati_fragment_shader@ati_fragment_shader-render-ops@mov 8*c0,Fail
 
 spec@egl 1.4@eglterminate then unbind context,Fail
-spec@egl_ext_protected_content@conformance,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 
-spec@ext_external_objects@vk-buf-exchange,Fail
-spec@ext_external_objects@vk-depth-display,Fail
-spec@ext_external_objects@vk-image-display,Fail
-spec@ext_external_objects@vk-image-display-overwrite,Fail
-spec@ext_external_objects@vk-image-overwrite,Fail
-spec@ext_external_objects@vk-pix-buf-update-errors,Fail
-spec@ext_external_objects@vk-semaphores,Fail
-spec@ext_external_objects@vk-semaphores-2,Fail
-spec@ext_external_objects@vk-vert-buf-reuse,Fail
-spec@ext_external_objects@vk-vert-buf-update-errors,Fail
-
-# "Failed blit src(0,0;1,1) - dst(0,0;2147483647,2147483647)
-#  Failed blit src(0,0;40,40) - dst(0,0;134217727,134217727)
-#  ..."
-spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
+spec@ext_direct_state_access@program-uniform,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformMatrixfEXT,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformMatrixfEXT + display list GL_COMPILE,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformMatrixfEXT + display list GL_COMPILE_AND_EXECUTE,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformfEXT,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformfEXT + display list GL_COMPILE,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformfEXT + display list GL_COMPILE_AND_EXECUTE,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformiEXT,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformiEXT + display list GL_COMPILE,Fail
+spec@ext_direct_state_access@program-uniform@ProgramUniformiEXT + display list GL_COMPILE_AND_EXECUTE,Fail
 
 # Unsupported non-unrolled loop
 spec@ext_framebuffer_multisample@accuracy all_samples color depthstencil,Fail
@@ -529,20 +520,18 @@ spec@ext_framebuffer_object@fbo-depth-sample-compare,Fail
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4980
 spec@ext_framebuffer_object@fbo-fragcoord2,Fail
 
-spec@ext_framebuffer_object@fbo-generatemipmap-filtering,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index1-blit,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index16-blit,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index4-blit,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index8-blit,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export-tex,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-intel_external_sampler_only,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-reimport-bug,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv21,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_vyuy,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216,Fail
@@ -552,10 +541,7 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Fail
-
-# Need to be able to report 0 OQ bits, since there are no HW OQs.
-spec@ext_occlusion_query_boolean@any-samples,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvyu,Fail
 
 spec@ext_packed_depth_stencil@depth_stencil texture,Fail
 spec@ext_packed_depth_stencil@fbo-clear-formats,Fail
@@ -779,6 +765,7 @@ spec@glsl-1.10@execution@built-in-functions@fs-smoothstep-float-float-vec4,Fail
 spec@glsl-1.10@execution@built-in-functions@fs-smoothstep-vec2-vec2-vec2,Fail
 spec@glsl-1.10@execution@built-in-functions@fs-smoothstep-vec3-vec3-vec3,Fail
 spec@glsl-1.10@execution@built-in-functions@fs-smoothstep-vec4-vec4-vec4,Fail
+spec@glsl-1.10@execution@builtins@glsl-fs-tan-2,Fail
 spec@glsl-1.10@execution@builtins@glsl-fs-atan-3,Fail
 spec@glsl-1.10@execution@copy-propagation@glsl-copy-propagation-loop-1,Fail
 
@@ -811,6 +798,7 @@ spec@glsl-1.10@execution@glsl-clamp-vertex-color,Fail
 spec@glsl-1.10@execution@glsl-fs-convolution-1,Fail
 spec@glsl-1.10@execution@glsl-fs-convolution-2,Fail
 spec@glsl-1.10@execution@glsl-fs-if-nested-loop,Fail
+spec@glsl-1.10@execution@glsl-fs-multiple-builtins,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-fixed,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-none,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-vertex,Fail
@@ -837,8 +825,6 @@ spec@glsl-1.10@execution@loops@glsl-fs-loop-shadow-variables,Fail
 # Failed to link: error: looping not supported i915 fragment shaders, all loops must be statically unrollable.
 spec@glsl-1.10@execution@loops@glsl-fs-loop-vec4-counter,Fail
 
-spec@glsl-1.10@execution@loops@glsl-fs-unroll-out-param,Fail
-spec@glsl-1.10@execution@loops@glsl-fs-unroll-side-effect,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-01,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-03,Fail
@@ -874,6 +860,7 @@ spec@glsl-1.10@execution@variable-indexing@fs-uniform-array-mat4-index-col-row-r
 spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat3-index-col-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat3-index-col-row-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr-no-unroll,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec3-index-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec4-index-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat3-index-col-rd,Fail
@@ -908,7 +895,10 @@ spec@glsl-1.10@execution@varying-packing@simple vec3 array,Fail
 spec@glsl-1.10@execution@varying-packing@simple vec3 separate,Fail
 spec@glsl-1.10@execution@varying-packing@simple vec4 array,Fail
 spec@glsl-1.10@execution@varying-packing@simple vec4 separate,Fail
+
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
+
+spec@glsl-1.20@execution@array_bounds@glsl-array-bounds-13,Fail
 
 spec@glsl-1.20@execution@built-in-functions@fs-matrixcompmult-mat2x3-mat2x3,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-matrixcompmult-mat2x4-mat2x4,Fail
@@ -1031,10 +1021,11 @@ spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec3-vec4,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec2,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec3,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec4,Fail
-spec@glsl-1.20@execution@fs-function-inout-array-of-structs,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-min,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-064-elements,Fail
+spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-032-elements,Fail
+spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-048-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-128-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
 
@@ -1042,33 +1033,14 @@ spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
 spec@glsl-1.20@execution@glsl-fs-frontfacing,Fail
 spec@glsl-1.20@execution@glsl-fs-frontfacing-not,Fail
 
+spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-1,Fail
+spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-2,Fail
+spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-3,Fail
+spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-4,Fail
+spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-5,Fail
+spec@glsl-1.20@execution@matrix-out-of-bounds-access@fs-mat4-out-of-bounds-6,Fail
+
 spec@glsl-1.20@execution@out-parameter-indexing@fs-inout-index-two-level,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 3d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() cube,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 3d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) cube,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d_projvec4,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d_projvec4,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 3d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1d_projvec4,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d_projvec4,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 3d,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat2-array,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat3,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat3-array,Fail
@@ -1092,6 +1064,33 @@ spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-index-col-row-w
 spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-index-col-wr,Fail
 spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-index-row-wr,Fail
 spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-index-wr,Fail
+
+# regression between 81971118 and e26a383e
+spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-col-row-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-col-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-index-row-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-index-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-row-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-array-mat4-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-mat4-col-row-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-mat4-col-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-mat4-row-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-temp-mat4-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-col-row-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-col-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-index-row-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-index-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-row-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-mat4-col-row-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-mat4-col-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-mat4-row-wr,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-mat4-wr,Fail
+
+spec@glsl-1.20@linker@invariant-propagation,Fail
+spec@glsl-1.20@linker@invariant-propagation-globals,Fail
+spec@glsl-es-1.00@linker@glsl-undefined-varying,Fail
+
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-lines,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-quad_strip,Fail

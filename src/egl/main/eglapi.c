@@ -2870,7 +2870,7 @@ eglGetProcAddress(const char *procname)
    }
 
    if (!ret)
-      ret = _glapi_get_proc_address(procname);
+      ret = _mesa_glapi_get_proc_address(procname);
 
    RETURN_EGL_SUCCESS(NULL, ret);
 }

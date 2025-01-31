@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include "vk_descriptor_set_layout.h"
+#include "vk_util.h"
 
 #include "util/mesa-blake3.h"
 
@@ -78,8 +79,7 @@ panvk_get_desc_index(const struct panvk_descriptor_set_binding_layout *layout,
            (type == VK_DESCRIPTOR_TYPE_SAMPLER ||
             type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)));
 
-   assert(layout->type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
-          layout->type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC);
+   assert(!vk_descriptor_type_is_dynamic(layout->type));
 
    uint32_t desc_idx =
       layout->desc_idx + elem * panvk_get_desc_stride(layout->type);

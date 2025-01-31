@@ -1502,7 +1502,7 @@ dEQP-VK.robustness.robustness2.push.notemplate.rgba32i.unroll.nonvolatile.sample
 dEQP-VK.robustness.robustness2.push.notemplate.rgba32i.unroll.nonvolatile.sampled_image.no_fmt_qual.img.samples_4.2d_array.comp,Crash
 dEQP-VK.robustness.robustness2.push.notemplate.rgba32i.unroll.nonvolatile.sampled_image.no_fmt_qual.img.samples_4.2d_array.frag,Crash
 
-# ../src/intel/compiler/brw_inst.h:574: brw_inst_set_jip: Assertion `value >= -(1 << 15)' failed.
+# ../src/intel/compiler/brw_eu_inst.h:574: brw_inst_set_jip: Assertion `value >= -(1 << 15)' failed.
 dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_frag,Crash
 
 dEQP-VK.texture.filtering.unnormal.formats.d24_unorm_s8_uint_stencil.nearest,Fail

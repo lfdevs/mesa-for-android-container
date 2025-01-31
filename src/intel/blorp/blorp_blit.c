@@ -1525,7 +1525,7 @@ blorp_get_blit_kernel_fs(struct blorp_batch *batch,
    const bool multisample_fbo = key->rt_samples > 1;
 
    const struct blorp_program p =
-      blorp_compile_fs(blorp, mem_ctx, nir, multisample_fbo, false);
+      blorp_compile_fs(blorp, mem_ctx, nir, multisample_fbo, false, false);
 
    bool result =
       blorp->upload_shader(batch, MESA_SHADER_FRAGMENT,

@@ -96,7 +96,6 @@ struct ubo_block_info
 struct ubo_analysis_state
 {
    struct hash_table *blocks;
-   bool uses_regular_uniforms;
    const struct intel_device_info *devinfo;
 };
 
@@ -127,22 +126,8 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          continue;
 
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-      switch (intrin->intrinsic) {
-      case nir_intrinsic_load_uniform:
-      case nir_intrinsic_image_deref_load:
-      case nir_intrinsic_image_deref_store:
-      case nir_intrinsic_image_deref_atomic:
-      case nir_intrinsic_image_deref_atomic_swap:
-      case nir_intrinsic_image_deref_size:
-         state->uses_regular_uniforms = true;
+      if (intrin->intrinsic != nir_intrinsic_load_ubo)
          continue;
-
-      case nir_intrinsic_load_ubo:
-         break; /* Fall through to the analysis below */
-
-      default:
-         continue; /* Not a uniform or UBO intrinsic */
-      }
 
       if (brw_nir_ubo_surface_index_is_pushable(intrin->src[0]) &&
           nir_src_is_const(intrin->src[1])) {
@@ -161,8 +146,9 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
             continue;
 
          /* The value might span multiple sizeof(GRF) chunks. */
-         const int bytes = nir_intrinsic_dest_components(intrin) *
-                           (intrin->def.bit_size / 8);
+         const unsigned num_components =
+            nir_def_last_component_read(&intrin->def) + 1;
+         const int bytes = num_components * (intrin->def.bit_size / 8);
          const int start = ROUND_DOWN_TO(byte_offset, sizeof_GRF);
          const int end = ALIGN(byte_offset + bytes, sizeof_GRF);
          const int chunks = (end - start) / sizeof_GRF;
@@ -198,17 +184,10 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
    void *mem_ctx = ralloc_context(NULL);
 
    struct ubo_analysis_state state = {
-      .uses_regular_uniforms = false,
       .blocks =
          _mesa_hash_table_create(mem_ctx, NULL, _mesa_key_pointer_equal),
       .devinfo = compiler->devinfo,
    };
-
-   /* Compute shaders use push constants to get the subgroup ID so it's
-    * best to just assume some system values are pushed.
-    */
-   if (nir->info.stage == MESA_SHADER_COMPUTE)
-      state.uses_regular_uniforms = true;
 
    /* Walk the IR, recording how many times each UBO block/offset is used. */
    nir_foreach_function_impl(impl, nir) {
@@ -283,7 +262,7 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
 
    /* TODO: Consider combining ranges.
     *
-    * We can only push 3-4 ranges via 3DSTATE_CONSTANT_XS.  If there are
+    * We can only push 4 ranges via 3DSTATE_CONSTANT_XS.  If there are
     * more ranges, and two are close by with only a small hole, it may be
     * worth combining them.  The holes will waste register space, but the
     * benefit of removing pulls may outweigh that cost.
@@ -297,18 +276,26 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
 
    struct ubo_range_entry *entries = ranges.data;
 
-   /* Return the top 4 or so.  We drop by one if regular uniforms are in
-    * use, assuming one push buffer will be dedicated to those.  We may
-    * also only get 3 on Haswell if we can't write INSTPM.
+   /* Return the top 4, limited to the maximum number of push registers.
     *
-    * The backend may need to shrink these ranges to ensure that they
-    * don't exceed the maximum push constant limits.  It can simply drop
-    * the tail of the list, as that's the least valuable portion.  We
-    * unfortunately can't truncate it here, because we don't know what
-    * the backend is planning to do with regular uniforms.
+    * The Vulkan driver sets up additional non-UBO push constants, so it may
+    * need to shrink these ranges further (see anv_nir_compute_push_layout.c).
+    * The OpenGL driver treats legacy uniforms as a UBO, so this is enough.
+    *
+    * To limit further, simply drop the tail of the list, as that's the least
+    * valuable portion.
     */
-   const int max_ubos = 4 - state.uses_regular_uniforms;
+   const int max_ubos = 4;
    nr_entries = MIN2(nr_entries, max_ubos);
+
+   const unsigned max_push_regs = 64 / reg_unit(compiler->devinfo);
+   unsigned total_push_regs = 0;
+
+   for (unsigned i = 0; i < nr_entries; i++) {
+      if (total_push_regs + entries[i].range.length > max_push_regs)
+         entries[i].range.length = max_push_regs - total_push_regs;
+      total_push_regs += entries[i].range.length;
+   }
 
    for (int i = 0; i < nr_entries; i++) {
       out_ranges[i] = entries[i].range;

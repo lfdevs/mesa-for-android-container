@@ -21,11 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_DEAD_CONTROL_FLOW_H
-#define ELK_DEAD_CONTROL_FLOW_H
+#pragma once
 
 #include "elk_shader.h"
 
 bool elk_dead_control_flow_eliminate(elk_backend_shader *s);
-
-#endif /* ELK_DEAD_CONTROL_FLOW_H */

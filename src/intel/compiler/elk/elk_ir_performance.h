@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_IR_PERFORMANCE_H
-#define ELK_IR_PERFORMANCE_H
+#pragma once
 
 class elk_fs_visitor;
 
@@ -82,5 +81,3 @@ namespace elk {
       operator=(performance u);
    };
 }
-
-#endif

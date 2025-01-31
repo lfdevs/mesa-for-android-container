@@ -39,8 +39,7 @@
  * the abstract elk_reg type into the actual hardware instruction encoding.
  */
 
-#ifndef ELK_REG_H
-#define ELK_REG_H
+#pragma once
 
 #include <stdbool.h>
 #include "util/compiler.h"
@@ -83,6 +82,7 @@ struct intel_device_info;
 
 /** Number of message register file registers */
 #define ELK_MAX_MRF(gen) (gen == 6 ? 24 : 16)
+#define ELK_MAX_MRF_ALL  24
 
 #define ELK_SWIZZLE4(a,b,c,d) (((a)<<0) | ((b)<<2) | ((c)<<4) | ((d)<<6))
 #define ELK_GET_SWZ(swz, idx) (((swz) >> ((idx)*2)) & 0x3)
@@ -1359,6 +1359,4 @@ elk_type_is_float(enum elk_reg_type type)
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

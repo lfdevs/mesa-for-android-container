@@ -16,16 +16,12 @@ glx@glx-visuals-stencil -pixmap,Crash
 # X error 167 (GLXBadFBConfig (9)) was generated, but X error 8 was expected.
 glx@glx_arb_create_context_no_error@no error,Fail
 
-# "X error 2 (non-GLX error (-1)) was generated, but X error 8 was expected."
-glx@glx_arb_create_context_robustness@invalid reset notification strategy,Fail
-
 # X error 167 (GLXBadFBConfig (9)) was generated, but GLXBadProfileARB (13) was expected.
 # Version = 1.2
 # X error 167 (GLXBadFBConfig (9)) was generated, but GLXBadProfileARB (13) was expected.
 # Version = 2.1
 # X error 167 (GLXBadFBConfig (9)) was generated, but GLXBadProfileARB (13) was expected.
 # Version = 3.3
-glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 
 spec@!opengl 1.0@rasterpos,Fail
 
@@ -128,4 +124,9 @@ spec@!opengl 1.1@line-smooth-stipple,Fail
 
 # fails after Debian bookworm update
 spec@arb_viewport_array@display-list,Fail
+
+# Uprev Piglit in Mesa
+spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one,Fail
+spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-z,Fail
+spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage,Fail
 

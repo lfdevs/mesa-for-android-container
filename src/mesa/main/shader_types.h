@@ -188,7 +188,6 @@ struct gl_shader
 
    struct nir_shader *nir;
    struct exec_list *ir;
-   struct glsl_symbol_table *symbols;
 
    /**
     * Whether early fragment tests are enabled as defined by
@@ -233,6 +232,9 @@ struct gl_shader
 
    /** Global xfb_stride out qualifier if any */
    GLuint TransformFeedbackBufferStride[MAX_FEEDBACK_BUFFERS];
+
+   /* for OVR_multiview */
+   uint32_t view_mask;
 
    struct gl_shader_info info;
 

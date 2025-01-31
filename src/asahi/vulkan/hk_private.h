@@ -30,7 +30,7 @@
 #define HK_MAX_MULTIVIEW_VIEW_COUNT    32
 
 #define HK_SPARSE_ADDR_SPACE_SIZE (1ull << 39)
-#define HK_MAX_BUFFER_SIZE        (1ull << 31)
+#define HK_MAX_BUFFER_SIZE        (1ull << 37)
 #define HK_MAX_SHARED_SIZE        (32 * 1024)
 
 struct hk_addr_range {

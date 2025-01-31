@@ -266,8 +266,8 @@ d3d12_video_encode_supported_resolution_range(const D3D12_VIDEO_ENCODER_CODEC &a
 
    minResolution = capOutputResolutionData.MinResolutionSupported;
    maxResolution = capOutputResolutionData.MaxResolutionSupported;
-   alignment.bits.log2_width_alignment = std::log2(capOutputResolutionData.ResolutionWidthMultipleRequirement);
-   alignment.bits.log2_height_alignment = std::log2(capOutputResolutionData.ResolutionHeightMultipleRequirement);
+   alignment.bits.log2_width_alignment = static_cast<uint32_t>(std::log2(capOutputResolutionData.ResolutionWidthMultipleRequirement));
+   alignment.bits.log2_height_alignment = static_cast<uint32_t>(std::log2(capOutputResolutionData.ResolutionHeightMultipleRequirement));
 
    return true;
 }
@@ -443,8 +443,8 @@ d3d12_video_encode_supported_tile_structures(const D3D12_VIDEO_ENCODER_CODEC &co
          av1TileSupport.TilesConfiguration.ColCount = std::max(av1TileSupport.MinTileCols, 1u);
          av1TileSupport.TilesConfiguration.RowCount = std::max(av1TileSupport.MinTileRows, 1u);
          // Try for uniform grid tiles
-         UINT tileWPixel = capDataTilesSupport.FrameResolution.Width / av1TileSupport.TilesConfiguration.ColCount;
-         UINT tileHPixel = capDataTilesSupport.FrameResolution.Height / av1TileSupport.TilesConfiguration.RowCount;
+         UINT tileWPixel = static_cast<UINT>(capDataTilesSupport.FrameResolution.Width / av1TileSupport.TilesConfiguration.ColCount);
+         UINT tileHPixel = static_cast<UINT>(capDataTilesSupport.FrameResolution.Height / av1TileSupport.TilesConfiguration.RowCount);
          for (UINT i = 0; i < av1TileSupport.TilesConfiguration.ColCount; i++)
             av1TileSupport.TilesConfiguration.ColWidths[i] = (tileWPixel / superBlockSize);
          for (UINT j = 0; j < av1TileSupport.TilesConfiguration.RowCount; j++)
@@ -1019,8 +1019,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
 
                uint8_t minCuSize = d3d12_video_encoder_convert_12cusize_to_pixel_size_hevc(codecSupport.hevc_support.d3d12_caps.MinLumaCodingUnitSize);
                uint8_t maxCuSize = d3d12_video_encoder_convert_12cusize_to_pixel_size_hevc(codecSupport.hevc_support.d3d12_caps.MaxLumaCodingUnitSize);
-               uint8_t MinCbLog2SizeY = std::log2(minCuSize);
-               uint8_t CtbLog2SizeY = std::log2(maxCuSize);
+               uint8_t MinCbLog2SizeY = static_cast<uint8_t>(std::log2(minCuSize));
+               uint8_t CtbLog2SizeY = static_cast<uint8_t>(std::log2(maxCuSize));
                uint8_t minTuSize = d3d12_video_encoder_convert_12tusize_to_pixel_size_hevc(codecSupport.hevc_support.d3d12_caps.MinLumaTransformUnitSize);
                uint8_t maxTuSize = d3d12_video_encoder_convert_12tusize_to_pixel_size_hevc(codecSupport.hevc_support.d3d12_caps.MaxLumaTransformUnitSize);
 

@@ -39,10 +39,7 @@
 #include "aub_read.h"
 #include "aub_mem.h"
 
-#include "compiler/brw_disasm.h"
-#include "compiler/brw_isa_info.h"
-#include "compiler/elk/elk_disasm.h"
-#include "compiler/elk/elk_isa_info.h"
+#include "intel_tools.h"
 
 #define xtzalloc(name) ((decltype(&name)) calloc(1, sizeof(name)))
 #define xtalloc(name) ((decltype(&name)) malloc(sizeof(name)))
@@ -65,8 +62,6 @@ struct aub_file {
 
    /* Device state */
    struct intel_device_info devinfo;
-   struct brw_isa_info brw;
-   struct elk_isa_info elk;
    struct intel_spec *spec;
 };
 
@@ -134,10 +129,6 @@ handle_info(void *user_data, int pci_id, const char *app_name)
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", file->pci_id);
       exit(EXIT_FAILURE);
    }
-   if (file->devinfo.ver >= 9)
-      brw_init_isa_info(&file->brw, &file->devinfo);
-   else
-      elk_init_isa_info(&file->elk, &file->devinfo);
    file->spec = intel_spec_load(&file->devinfo);
 }
 
@@ -401,15 +392,9 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
    if (shader_bo.map) {
       FILE *f = open_memstream(&window->shader, &window->shader_size);
       if (f) {
-         if (context.file->devinfo.ver >= 9) {
-            brw_disassemble_with_errors(&context.file->brw,
-                                        (const uint8_t *) shader_bo.map +
-                                        (address - shader_bo.addr), 0, f);
-         } else {
-            elk_disassemble_with_errors(&context.file->elk,
-                                        (const uint8_t *) shader_bo.map +
-                                        (address - shader_bo.addr), 0, f);
-         }
+         intel_disassemble(&context.file->devinfo,
+                           (const uint8_t *) shader_bo.map +
+                           (address - shader_bo.addr), 0, f);
          fclose(f);
       }
    }

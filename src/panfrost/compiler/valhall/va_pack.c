@@ -427,6 +427,15 @@ va_pack_alu(const bi_instr *I)
          hex |= 1ull << 25;
       break;
 
+   case BI_OPCODE_FLUSH_F32:
+   case BI_OPCODE_FLUSH_V2F16:
+      hex |= I->nan_mode << 8;
+      if (I->ftz)
+         hex |= 1ull << 10;
+      if (I->flush_inf)
+         hex |= 1ull << 11;
+      break;
+
    /* Add mux type */
    case BI_OPCODE_MUX_I32:
    case BI_OPCODE_MUX_V2I16:
@@ -520,6 +529,10 @@ va_pack_alu(const bi_instr *I)
    case BI_OPCODE_LEA_TEX_IMM:
       hex |= ((uint64_t)I->table) << 16;
       hex |= ((uint64_t)I->texture_index) << 20;
+      break;
+
+   case BI_OPCODE_WMASK:
+      hex |= ((uint64_t)I->subgroup) << 36;
       break;
 
    case BI_OPCODE_ZS_EMIT:

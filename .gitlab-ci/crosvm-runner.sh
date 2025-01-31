@@ -80,9 +80,12 @@ ${SCRIPTS_DIR}/common/generate-env.sh | tee ${VM_TEMP_DIR}/crosvm-env.sh
 cp ${SCRIPTS_DIR}/setup-test-env.sh ${VM_TEMP_DIR}/setup-test-env.sh
 
 # Set the crosvm-script as the arguments of the current script
-echo "export SCRIPTS_DIR=${SCRIPTS_DIR}" > ${VM_TEMP_DIR}/crosvm-script.sh
-echo ". ${VM_TEMP_DIR}/setup-test-env.sh" >> ${VM_TEMP_DIR}/crosvm-script.sh
-echo "$@" >> ${VM_TEMP_DIR}/crosvm-script.sh
+{
+  echo "export SCRIPTS_DIR=${SCRIPTS_DIR}"
+  echo "export RESULTS_DIR=${RESULTS_DIR}"
+  echo ". ${VM_TEMP_DIR}/setup-test-env.sh"
+  echo "$@"
+} > ${VM_TEMP_DIR}/crosvm-script.sh
 
 # Setup networking
 /usr/sbin/iptables-legacy -w -t nat -A POSTROUTING -o eth0 -j MASQUERADE
@@ -102,7 +105,12 @@ CROSVM_KERN_ARGS="${CROSVM_KERN_ARGS} init=${SCRIPTS_DIR}/crosvm-init.sh -- ${VS
 [ "${CROSVM_GALLIUM_DRIVER:-}" = "llvmpipe" ] && \
     CROSVM_LIBGL_ALWAYS_SOFTWARE=true || CROSVM_LIBGL_ALWAYS_SOFTWARE=false
 
-set +e -x
+set +e
+
+if [ "${INSIDE_DEQP_RUNNER:-}" != "true" ]
+then
+  set -x
+fi
 
 # We aren't testing the host driver here, so we don't need to validate NIR on the host
 NIR_DEBUG="novalidate" \
@@ -129,7 +137,7 @@ CROSVM_RET=$?
 
 # Show crosvm output on error to help with debugging
 [ ${CROSVM_RET} -eq 0 ] || {
-    set +x
+    { set +x; } 2>/dev/null
     echo "Dumping crosvm output.." >&2
     cat ${VM_TEMP_DIR}/crosvm >&2
     set -x

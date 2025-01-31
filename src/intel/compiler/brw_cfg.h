@@ -25,8 +25,7 @@
  *
  */
 
-#ifndef BRW_CFG_H
-#define BRW_CFG_H
+#pragma once
 
 struct bblock_t;
 
@@ -535,5 +534,3 @@ namespace brw {
 }
 
 #endif
-
-#endif /* BRW_CFG_H */

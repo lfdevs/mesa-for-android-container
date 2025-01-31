@@ -46,6 +46,11 @@ extern "C" {
         vpe_priv->init.funcs.log(vpe_priv->init.funcs.log_ctx, __VA_ARGS__);                       \
     } while (0)
 
+#define vpe_event(event_id, ...)                                                                   \
+    do {                                                                                           \
+        vpe_priv->init.funcs.sys_event(event_id, __VA_ARGS__);                                     \
+    } while (0)
+
 #define container_of(ptr, type, member) (type *)(void *)((char *)ptr - offsetof(type, member))
 
 #define VPE_MIN_VIEWPORT_SIZE                                                                      \
@@ -166,7 +171,8 @@ struct stream_ctx {
 struct output_ctx {
     // stores the paramters built for generating vpep configs
     struct vpe_surface_info    surface;
-    struct vpe_color           bg_color;
+    struct vpe_color           mpc_bg_color;
+    struct vpe_color           opp_bg_color;
     struct vpe_rect            target_rect;
     enum vpe_alpha_mode        alpha_mode;
     struct vpe_clamping_params clamping_params;

@@ -150,7 +150,7 @@ d3d12_video_processor_ensure_fence_finished(struct pipe_video_codec *codec, uint
 bool
 d3d12_video_processor_sync_completion(struct pipe_video_codec *codec, uint64_t fenceValueToWaitOn, uint64_t timeout_ns);
 
-uint64_t
+unsigned int
 d3d12_video_processor_pool_current_index(struct d3d12_video_processor *codec);
 
 int d3d12_video_processor_fence_wait(struct pipe_video_codec *codec,

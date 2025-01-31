@@ -17,7 +17,7 @@ executor_includes = [
 ]
 
 executor_hw_libs = []
-foreach v: ['90', '110', '120', '125', '200']
+foreach v: ['90', '110', '120', '125', '200', '300']
   executor_hw_libs += static_library(
     'executor_hw_ver@0@'.format(v),
     ['executor_genx.c', gen_xml_pack],

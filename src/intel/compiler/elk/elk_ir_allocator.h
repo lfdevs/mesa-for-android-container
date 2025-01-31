@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_IR_ALLOCATOR_H
-#define ELK_IR_ALLOCATOR_H
+#pragma once
 
 #include "util/compiler.h"
 #include "util/glheader.h"
@@ -92,5 +91,3 @@ namespace elk {
       unsigned capacity;
    };
 }
-
-#endif

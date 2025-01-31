@@ -55,20 +55,24 @@ idep_intel_decoder_brw = declare_dependency(
   dependencies : idep_intel_decoder,
 )
 
-libintel_decoder_elk = static_library(
-  'intel_decoder_elk',
-  [libintel_decoder_elk_files, genX_xml_h, sha1_h],
-  include_directories : [inc_include, inc_src, inc_intel],
-  c_args : [no_override_init_args, sse2_args],
-  gnu_symbol_visibility : 'hidden',
-  dependencies : idep_intel_decoder,
-  build_by_default : false,
-)
+if with_intel_elk
+  libintel_decoder_elk = static_library(
+    'intel_decoder_elk',
+    [libintel_decoder_elk_files, genX_xml_h, sha1_h],
+    include_directories : [inc_include, inc_src, inc_intel],
+    c_args : [no_override_init_args, sse2_args],
+    gnu_symbol_visibility : 'hidden',
+    dependencies : idep_intel_decoder,
+    build_by_default : false,
+  )
 
-idep_intel_decoder_elk = declare_dependency(
-  link_with : [libintel_decoder_elk],
-  dependencies : idep_intel_decoder,
-)
+  idep_intel_decoder_elk = declare_dependency(
+    link_with : [libintel_decoder_elk],
+    dependencies : idep_intel_decoder,
+  )
+else
+  idep_intel_decoder_elk = null_dep
+endif
 
 if with_tests and not with_platform_android
   gentest_xml = 'tests/gentest.xml'

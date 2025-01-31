@@ -128,6 +128,9 @@ struct spirv_to_nir_options {
       void *private_data;
    } debug;
 
+   /* Whether debug_break instructions should be emitted. */
+   bool emit_debug_break;
+
    /* Force texture sampling to be non-uniform. */
    bool force_tex_non_uniform;
    /* Force SSBO accesses to be non-uniform. */

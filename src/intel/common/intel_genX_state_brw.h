@@ -96,7 +96,7 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
        *
        *    "Must not be enabled when dispatch rate is sample AND NUM_MULTISAMPLES > 1."
        */
-      if (GFX_VER >= 12 && rasterization_samples > 1)
+      if (GFX_VER >= 12 && GFX_VER < 20 && rasterization_samples > 1)
          enable_32 = false;
 
       /* Starting with SandyBridge (where we first get MSAA), the different
@@ -126,7 +126,7 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
     *
     * 16x MSAA only exists on Gfx9+, so we can skip this on Gfx8.
     */
-   if (GFX_VER >= 9 && rasterization_samples == 16 && !is_persample_dispatch) {
+   if (GFX_VER >= 9 && GFX_VER < 20 && rasterization_samples == 16 && !is_persample_dispatch) {
       assert(enable_8 || enable_16);
       enable_32 = false;
    }

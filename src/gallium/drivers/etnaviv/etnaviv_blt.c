@@ -142,6 +142,9 @@ emit_blt_clearimage(struct etna_cmd_stream *stream, const struct blt_clear_op *o
    etna_set_state(stream, VIVS_BLT_COMMAND, VIVS_BLT_COMMAND_COMMAND_CLEAR_IMAGE);
    etna_set_state(stream, VIVS_BLT_SET_COMMAND, 0x00000003);
    etna_set_state(stream, VIVS_BLT_ENABLE, 0x00000000);
+
+   if (DBG_ENABLED(ETNA_DBG_DRAW_STALL))
+      etna_stall(stream, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_PE);
 }
 
 /* Copy (a subset of) an image to another image. */
@@ -187,6 +190,9 @@ emit_blt_copyimage(struct etna_cmd_stream *stream, const struct blt_imgcopy_op *
    etna_set_state(stream, VIVS_BLT_COMMAND, VIVS_BLT_COMMAND_COMMAND_COPY_IMAGE);
    etna_set_state(stream, VIVS_BLT_SET_COMMAND, 0x00000003);
    etna_set_state(stream, VIVS_BLT_ENABLE, 0x00000000);
+
+   if (DBG_ENABLED(ETNA_DBG_DRAW_STALL))
+      etna_stall(stream, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_PE);
 }
 
 /* Emit in-place resolve using BLT. */
@@ -209,6 +215,9 @@ emit_blt_inplace(struct etna_cmd_stream *stream, const struct blt_inplace_op *op
    etna_set_state(stream, VIVS_BLT_COMMAND, 0x00000004);
    etna_set_state(stream, VIVS_BLT_SET_COMMAND, 0x00000003);
    etna_set_state(stream, VIVS_BLT_ENABLE, 0x00000000);
+
+   if (DBG_ENABLED(ETNA_DBG_DRAW_STALL))
+      etna_stall(stream, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_PE);
 }
 
 static void
@@ -271,6 +280,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, unsigned idx,
          surf->level->ts_meta->v0.clear_value = new_clear_value;
 
       etna_resource_level_ts_mark_valid(surf->level);
+      etna_resource_level_mark_unflushed(surf->level);
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
@@ -353,6 +363,7 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    if (surf->level->ts_size) {
       ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = surf->level->clear_value;
       etna_resource_level_ts_mark_valid(surf->level);
+      etna_resource_level_mark_unflushed(surf->level);
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
@@ -417,8 +428,11 @@ etna_try_blt_blit(struct pipe_context *pctx,
       return false;
 
    /* BLT does not support upscaling */
-   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale))
+   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale)) {
+      DBG("upscaling requested: source %dx%d destination %dx%d",
+          src_xscale, src_yscale, dst_xscale, dst_yscale);
       return false;
+   }
 
    if (src_xscale > dst_xscale)
       downsample_x = true;
@@ -451,8 +465,12 @@ etna_try_blt_blit(struct pipe_context *pctx,
     *  - set sRGB bits correctly
     *  - avoid trying to convert between float/int formats?
     */
-   if (blit_info->src.format != blit_info->dst.format)
+   if (blit_info->src.format != blit_info->dst.format) {
+      DBG("non matching formats: %s vs %s",
+          util_format_short_name(blit_info->src.format),
+          util_format_short_name(blit_info->dst.format));
       return false;
+   }
 
    /* try to find a exact format match first */
    uint32_t format = translate_blt_format(blit_info->dst.format);
@@ -461,10 +479,13 @@ etna_try_blt_blit(struct pipe_context *pctx,
     */
    if (format == ETNA_NO_MATCH && !downsample_x && !downsample_y)
       format = etna_compatible_blt_format(blit_info->dst.format);
-   if (format == ETNA_NO_MATCH)
+   if (format == ETNA_NO_MATCH) {
+      DBG("format not supported: %s", util_format_short_name(blit_info->dst.format));
       return false;
+   }
 
    if (blit_info->scissor_enable ||
+       blit_info->swizzle_enable ||
        blit_info->dst.box.depth != blit_info->src.box.depth ||
        blit_info->dst.box.depth != 1) {
       return false;

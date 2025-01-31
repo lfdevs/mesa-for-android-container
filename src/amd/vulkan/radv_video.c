@@ -35,6 +35,8 @@
 /* Not 100% sure this isn't too much but works */
 #define VID_DEFAULT_ALIGNMENT 256
 
+static void set_reg(struct radv_cmd_buffer *cmd_buffer, unsigned reg, uint32_t val);
+
 static bool
 radv_enable_tier2(struct radv_physical_device *pdev)
 {
@@ -61,20 +63,26 @@ radv_vid_buffer_upload_alloc(struct radv_cmd_buffer *cmd_buffer, unsigned size, 
 
 /* vcn unified queue (sq) ib header */
 void
-radv_vcn_sq_header(struct radeon_cmdbuf *cs, struct rvcn_sq_var *sq, unsigned type)
+radv_vcn_sq_header(struct radeon_cmdbuf *cs, struct rvcn_sq_var *sq, unsigned type, bool skip_signature)
 {
-   /* vcn ib signature */
-   radeon_emit(cs, RADEON_VCN_SIGNATURE_SIZE);
-   radeon_emit(cs, RADEON_VCN_SIGNATURE);
-   sq->ib_checksum = &cs->buf[cs->cdw];
-   radeon_emit(cs, 0);
-   sq->ib_total_size_in_dw = &cs->buf[cs->cdw];
-   radeon_emit(cs, 0);
+   if (!skip_signature) {
+      /* vcn ib signature */
+      radeon_emit(cs, RADEON_VCN_SIGNATURE_SIZE);
+      radeon_emit(cs, RADEON_VCN_SIGNATURE);
+      sq->signature_ib_checksum = &cs->buf[cs->cdw];
+      radeon_emit(cs, 0);
+      sq->signature_ib_total_size_in_dw = &cs->buf[cs->cdw];
+      radeon_emit(cs, 0);
+   } else {
+      sq->signature_ib_checksum = NULL;
+      sq->signature_ib_total_size_in_dw = NULL;
+   }
 
    /* vcn ib engine info */
    radeon_emit(cs, RADEON_VCN_ENGINE_INFO_SIZE);
    radeon_emit(cs, RADEON_VCN_ENGINE_INFO);
    radeon_emit(cs, type);
+   sq->engine_ib_size_of_packages = &cs->buf[cs->cdw];
    radeon_emit(cs, 0);
 }
 
@@ -85,18 +93,24 @@ radv_vcn_sq_tail(struct radeon_cmdbuf *cs, struct rvcn_sq_var *sq)
    uint32_t size_in_dw;
    uint32_t checksum = 0;
 
-   if (sq->ib_checksum == NULL || sq->ib_total_size_in_dw == NULL)
-      return;
-
    end = &cs->buf[cs->cdw];
-   size_in_dw = end - sq->ib_total_size_in_dw - 1;
-   *sq->ib_total_size_in_dw = size_in_dw;
-   *(sq->ib_total_size_in_dw + 4) = size_in_dw * sizeof(uint32_t);
 
-   for (int i = 0; i < size_in_dw; i++)
-      checksum += *(sq->ib_checksum + 2 + i);
+   if (sq->signature_ib_checksum == NULL && sq->signature_ib_total_size_in_dw == NULL) {
+      if (sq->engine_ib_size_of_packages == NULL)
+         return;
 
-   *sq->ib_checksum = checksum;
+      size_in_dw = end - sq->engine_ib_size_of_packages + 3; /* package_size, package_type, engine_type */
+      *sq->engine_ib_size_of_packages = size_in_dw * sizeof(uint32_t);
+   } else {
+      size_in_dw = end - sq->signature_ib_total_size_in_dw - 1;
+      *sq->signature_ib_total_size_in_dw = size_in_dw;
+      *sq->engine_ib_size_of_packages = size_in_dw * sizeof(uint32_t);
+
+      for (int i = 0; i < size_in_dw; i++)
+         checksum += *(sq->signature_ib_checksum + 2 + i);
+
+      *sq->signature_ib_checksum = checksum;
+   }
 }
 
 void
@@ -107,14 +121,21 @@ radv_vcn_write_event(struct radv_cmd_buffer *cmd_buffer, struct radv_event *even
    struct rvcn_sq_var sq;
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
 
-   if (pdev->vid_decode_ip != AMD_IP_VCN_UNIFIED)
-      return;
-
    radv_cs_add_buffer(device->ws, cs, event->bo);
    uint64_t va = radv_buffer_get_va(event->bo);
 
+   bool separate_queue = pdev->vid_decode_ip != AMD_IP_VCN_UNIFIED;
+   if (cmd_buffer->qf == RADV_QUEUE_VIDEO_DEC && separate_queue && pdev->vid_dec_reg.data2) {
+      radeon_check_space(device->ws, cmd_buffer->cs, 8);
+      set_reg(cmd_buffer, pdev->vid_dec_reg.data0, va & 0xffffffff);
+      set_reg(cmd_buffer, pdev->vid_dec_reg.data1, va >> 32);
+      set_reg(cmd_buffer, pdev->vid_dec_reg.data2, value);
+      set_reg(cmd_buffer, pdev->vid_dec_reg.cmd, RDECODE_CMD_WRITE_MEMORY << 1);
+      return;
+   }
+
    radeon_check_space(device->ws, cs, 256);
-   radv_vcn_sq_header(cs, &sq, RADEON_VCN_ENGINE_TYPE_COMMON);
+   radv_vcn_sq_header(cs, &sq, RADEON_VCN_ENGINE_TYPE_COMMON, separate_queue);
    struct rvcn_cmn_engine_ib_package *ib_header = (struct rvcn_cmn_engine_ib_package *)&(cs->buf[cs->cdw]);
    ib_header->package_size = sizeof(struct rvcn_cmn_engine_ib_package) + sizeof(struct rvcn_cmn_engine_op_writememory);
    cs->cdw++;
@@ -136,7 +157,7 @@ radv_vcn_sq_start(struct radv_cmd_buffer *cmd_buffer)
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
 
    radeon_check_space(device->ws, cmd_buffer->cs, 256);
-   radv_vcn_sq_header(cmd_buffer->cs, &cmd_buffer->video.sq, RADEON_VCN_ENGINE_TYPE_DECODE);
+   radv_vcn_sq_header(cmd_buffer->cs, &cmd_buffer->video.sq, RADEON_VCN_ENGINE_TYPE_DECODE, false);
    rvcn_decode_ib_package_t *ib_header = (rvcn_decode_ib_package_t *)&(cmd_buffer->cs->buf[cmd_buffer->cs->cdw]);
    ib_header->package_size = sizeof(struct rvcn_decode_buffer_s) + sizeof(struct rvcn_decode_ib_package_s);
    cmd_buffer->cs->cdw++;
@@ -190,6 +211,7 @@ init_vcn_decoder(struct radv_physical_device *pdev)
    case VCN_2_2_0:
       pdev->vid_dec_reg.data0 = RDECODE_VCN2_GPCOM_VCPU_DATA0;
       pdev->vid_dec_reg.data1 = RDECODE_VCN2_GPCOM_VCPU_DATA1;
+      pdev->vid_dec_reg.data2 = RDECODE_VCN2_GPCOM_VCPU_DATA2;
       pdev->vid_dec_reg.cmd = RDECODE_VCN2_GPCOM_VCPU_CMD;
       pdev->vid_dec_reg.cntl = RDECODE_VCN2_ENGINE_CNTL;
       break;
@@ -203,6 +225,7 @@ init_vcn_decoder(struct radv_physical_device *pdev)
    case VCN_3_1_2:
       pdev->vid_dec_reg.data0 = RDECODE_VCN2_5_GPCOM_VCPU_DATA0;
       pdev->vid_dec_reg.data1 = RDECODE_VCN2_5_GPCOM_VCPU_DATA1;
+      pdev->vid_dec_reg.data2 = RDECODE_VCN2_5_GPCOM_VCPU_DATA2;
       pdev->vid_dec_reg.cmd = RDECODE_VCN2_5_GPCOM_VCPU_CMD;
       pdev->vid_dec_reg.cntl = RDECODE_VCN2_5_ENGINE_CNTL;
       break;
@@ -254,12 +277,28 @@ radv_probe_video_decode(struct radv_physical_device *pdev)
 
    pdev->video_decode_enabled = false;
 
+   /* TODO: Add VCN 5.0+. */
+   if (pdev->info.vcn_ip_version >= VCN_5_0_0)
+      return;
+
+   /* The support for decode events are available at the same time as encode */
    if (pdev->info.vcn_ip_version >= VCN_4_0_0) {
       if (pdev->info.vcn_enc_major_version > 1)
          pdev->video_decode_enabled = true;
       /* VCN 4 FW 1.22 has all the necessary pieces to pass CTS */
-      /* VCN 4 has unified fw so use the enc versions */
       if (pdev->info.vcn_enc_major_version == 1 && pdev->info.vcn_enc_minor_version >= 22)
+         pdev->video_decode_enabled = true;
+   } else if (pdev->info.vcn_ip_version >= VCN_3_0_0) {
+      if (pdev->info.vcn_enc_major_version > 1)
+         pdev->video_decode_enabled = true;
+      /* VCN 3 FW 1.33 has all the necessary pieces to pass CTS */
+      if (pdev->info.vcn_enc_major_version == 1 && pdev->info.vcn_enc_minor_version >= 33)
+         pdev->video_decode_enabled = true;
+   } else if (pdev->info.vcn_ip_version >= VCN_2_0_0) {
+      if (pdev->info.vcn_enc_major_version > 1)
+         pdev->video_decode_enabled = true;
+      /* VCN 2 FW 1.24 has all the necessary pieces to pass CTS */
+      if (pdev->info.vcn_enc_major_version == 1 && pdev->info.vcn_enc_minor_version >= 24)
          pdev->video_decode_enabled = true;
    }
    if (instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE) {
@@ -394,7 +433,6 @@ radv_CreateVideoSessionKHR(VkDevice _device, const VkVideoSessionCreateInfoKHR *
       return result;
    }
 
-   vid->interlaced = false;
    vid->dpb_type = DPB_MAX_RES;
 
    switch (vid->vk.op) {
@@ -749,7 +787,6 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
          return VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR;
 
       pCapabilities->pictureAccessGranularity.width = VK_VIDEO_H265_CTU_MAX_WIDTH;
-      pCapabilities->pictureAccessGranularity.height = VK_VIDEO_H265_CTU_MAX_HEIGHT;
       if (enc_caps)
          enc_caps->encodeInputPictureGranularity = pCapabilities->pictureAccessGranularity;
 
@@ -1953,7 +1990,7 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
    decode->dt_tiling_mode = 0;
    decode->dt_swizzle_mode = luma->surface.u.gfx9.swizzle_mode;
    decode->dt_array_mode = pdev->vid_addr_gfx_mode;
-   decode->dt_field_mode = vid->interlaced ? 1 : 0;
+   decode->dt_field_mode = 0;
    decode->dt_surf_tile_config = 0;
    decode->dt_uv_surf_tile_config = 0;
 
@@ -1963,14 +2000,9 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
       dt_array_idx * luma->surface.u.gfx9.surf_slice_size;
    decode->dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset +
       dt_array_idx * chroma->surface.u.gfx9.surf_slice_size;
+   decode->dt_luma_bottom_offset = decode->dt_luma_top_offset;
+   decode->dt_chroma_bottom_offset = decode->dt_chroma_top_offset;
 
-   if (decode->dt_field_mode) {
-      decode->dt_luma_bottom_offset = luma->surface.u.gfx9.surf_offset + luma->surface.u.gfx9.surf_slice_size;
-      decode->dt_chroma_bottom_offset = chroma->surface.u.gfx9.surf_offset + chroma->surface.u.gfx9.surf_slice_size;
-   } else {
-      decode->dt_luma_bottom_offset = decode->dt_luma_top_offset;
-      decode->dt_chroma_bottom_offset = decode->dt_chroma_top_offset;
-   }
    if (vid->stream_type == RDECODE_CODEC_AV1)
       decode->db_pitch_uv = chroma->surface.u.gfx9.surf_pitch * chroma->surface.blk_w;
 
@@ -2438,15 +2470,8 @@ ruvd_dec_message_decode(struct radv_device *device, struct radv_video_session *v
          dt_array_idx * luma->surface.u.gfx9.surf_slice_size;
       msg->body.decode.dt_chroma_top_offset = chroma->surface.u.gfx9.surf_offset +
          dt_array_idx * chroma->surface.u.gfx9.surf_slice_size;
-      if (msg->body.decode.dt_field_mode) {
-         msg->body.decode.dt_luma_bottom_offset =
-            luma->surface.u.gfx9.surf_offset + luma->surface.u.gfx9.surf_slice_size;
-         msg->body.decode.dt_chroma_bottom_offset =
-            chroma->surface.u.gfx9.surf_offset + chroma->surface.u.gfx9.surf_slice_size;
-      } else {
-         msg->body.decode.dt_luma_bottom_offset = msg->body.decode.dt_luma_top_offset;
-         msg->body.decode.dt_chroma_bottom_offset = msg->body.decode.dt_chroma_top_offset;
-      }
+      msg->body.decode.dt_luma_bottom_offset = msg->body.decode.dt_luma_top_offset;
+      msg->body.decode.dt_chroma_bottom_offset = msg->body.decode.dt_chroma_top_offset;
       msg->body.decode.dt_surf_tile_config = 0;
    } else {
       msg->body.decode.dt_pitch = luma->surface.u.legacy.level[0].nblk_x * luma->surface.blk_w;
@@ -2471,14 +2496,8 @@ ruvd_dec_message_decode(struct radv_device *device, struct radv_video_session *v
       msg->body.decode.dt_luma_top_offset = texture_offset_legacy(&luma->surface, dt_array_idx);
       if (chroma)
          msg->body.decode.dt_chroma_top_offset = texture_offset_legacy(&chroma->surface, dt_array_idx);
-      if (msg->body.decode.dt_field_mode) {
-         msg->body.decode.dt_luma_bottom_offset = texture_offset_legacy(&luma->surface, 1);
-         if (chroma)
-            msg->body.decode.dt_chroma_bottom_offset = texture_offset_legacy(&chroma->surface, 1);
-      } else {
-         msg->body.decode.dt_luma_bottom_offset = msg->body.decode.dt_luma_top_offset;
-         msg->body.decode.dt_chroma_bottom_offset = msg->body.decode.dt_chroma_top_offset;
-      }
+      msg->body.decode.dt_luma_bottom_offset = msg->body.decode.dt_luma_top_offset;
+      msg->body.decode.dt_chroma_bottom_offset = msg->body.decode.dt_chroma_top_offset;
 
       if (chroma) {
          assert(luma->surface.u.legacy.bankw == chroma->surface.u.legacy.bankw);

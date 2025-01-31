@@ -106,7 +106,7 @@ _libcompiler_rs = static_library(
 # Rust linker.  See also https://github.com/mesonbuild/meson/issues/11741
 if with_tests and get_option('b_sanitize') == 'none'
   rust.test(
-    'compiler',
+    'compiler_test',
     _libcompiler_rs,
     suite : ['compiler', 'rs'],
     dependencies : [

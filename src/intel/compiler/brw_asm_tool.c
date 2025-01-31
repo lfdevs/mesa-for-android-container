@@ -27,7 +27,7 @@
 #include <getopt.h>
 
 #include "util/ralloc.h"
-#include "compiler/brw_inst.h"
+#include "compiler/brw_eu_inst.h"
 #include "dev/intel_device_info.h"
 
 #include "brw_asm.h"
@@ -59,7 +59,7 @@ print_help(const char *progname, FILE *file)
 }
 
 static uint32_t
-get_dword(const brw_inst *inst, int idx)
+get_dword(const brw_eu_inst *inst, int idx)
 {
    uint32_t dword;
    memcpy(&dword, (char *)inst + 4 * idx, sizeof(dword));
@@ -67,7 +67,7 @@ get_dword(const brw_inst *inst, int idx)
 }
 
 static void
-print_instruction(FILE *output, bool compact, const brw_inst *instruction)
+print_instruction(FILE *output, bool compact, const brw_eu_inst *instruction)
 {
    int byte_limit;
 
@@ -238,10 +238,10 @@ int main(int argc, char **argv)
       fprintf(output, "{\n");
 
    for (int i = 0; i < r.inst_count; i++) {
-      const brw_inst *insn = r.bin + offset;
+      const brw_eu_inst *insn = r.bin + offset;
       bool compacted = false;
 
-      if (compact && brw_inst_cmpt_control(devinfo, insn)) {
+      if (compact && brw_eu_inst_cmpt_control(devinfo, insn)) {
             offset += 8;
             compacted = true;
       } else {

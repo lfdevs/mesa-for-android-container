@@ -244,7 +244,7 @@ wsi_swapchain_init(const struct wsi_device *wsi,
                    const struct wsi_base_image_params *image_params,
                    const VkAllocationCallbacks *pAllocator);
 
-enum VkPresentModeKHR
+VkPresentModeKHR
 wsi_swapchain_get_present_mode(struct wsi_device *wsi,
                                const VkSwapchainCreateInfoKHR *pCreateInfo);
 

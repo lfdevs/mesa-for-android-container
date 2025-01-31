@@ -79,6 +79,7 @@ tu6_load_state_size(struct tu_pipeline *pipeline,
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
          case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
             /* IBO-backed resources only need one packet for all graphics stages */
             if (stage_count)
                count += 1;
@@ -174,7 +175,8 @@ tu6_emit_load_state(struct tu_device *device,
             FALLTHROUGH;
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: {
+         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
             unsigned mul = binding->size / (A6XX_TEX_CONST_DWORDS * 4);
             /* IBO-backed resources only need one packet for all graphics stages */
             if (stages & ~VK_SHADER_STAGE_COMPUTE_BIT) {
@@ -619,10 +621,10 @@ tu6_emit_const(struct tu_cs *cs, uint32_t opcode, enum tu_geom_consts_type type,
       uint32_t base;
       switch (type) {
       case TU_CONSTS_PRIMITIVE_MAP:
-         base = const_state->offsets.primitive_map;
+         base = const_state->allocs.consts[IR3_CONST_ALLOC_PRIMITIVE_MAP].offset_vec4;
          break;
       case TU_CONSTS_PRIMITIVE_PARAM:
-         base = const_state->offsets.primitive_param;
+         base = const_state->allocs.consts[IR3_CONST_ALLOC_PRIMITIVE_PARAM].offset_vec4;
          break;
       default:
          unreachable("bad consts type");
@@ -902,8 +904,11 @@ tu6_emit_vpc(struct tu_cs *cs,
       ir3_find_output_regid(last_shader, VARYING_SLOT_CLIP_DIST1);
    uint32_t flags_regid = gs ?
       ir3_find_output_regid(gs, VARYING_SLOT_GS_VERTEX_FLAGS_IR3) : 0;
+   const uint32_t shading_rate_regid =
+      ir3_find_output_regid(last_shader, VARYING_SLOT_PRIMITIVE_SHADING_RATE);
 
    uint32_t pointsize_loc = 0xff, position_loc = 0xff, layer_loc = 0xff, view_loc = 0xff;
+   uint32_t shading_rate_loc = 0xff;
 
    if (layer_regid != regid(63, 0)) {
       layer_loc = linkage.max_loc;
@@ -913,6 +918,12 @@ tu6_emit_vpc(struct tu_cs *cs,
    if (view_regid != regid(63, 0)) {
       view_loc = linkage.max_loc;
       ir3_link_add(&linkage, VARYING_SLOT_VIEWPORT, view_regid, 0x1, linkage.max_loc);
+   }
+
+   if (shading_rate_regid != regid(63, 0)) {
+      shading_rate_loc = linkage.max_loc;
+      ir3_link_add(&linkage, VARYING_SLOT_PRIMITIVE_SHADING_RATE,
+                   shading_rate_regid, 0x1, linkage.max_loc);
    }
 
    unsigned extra_pos = 0;
@@ -1026,7 +1037,8 @@ tu6_emit_vpc(struct tu_cs *cs,
                         CONDREG(layer_regid, A6XX_PC_VS_OUT_CNTL_LAYER) |
                         CONDREG(view_regid, A6XX_PC_VS_OUT_CNTL_VIEW) |
                         COND(primid, A6XX_PC_VS_OUT_CNTL_PRIMITIVE_ID) |
-                        A6XX_PC_VS_OUT_CNTL_CLIP_MASK(clip_cull_mask));
+                        A6XX_PC_VS_OUT_CNTL_CLIP_MASK(clip_cull_mask) |
+                        CONDREG(shading_rate_regid, A6XX_PC_VS_OUT_CNTL_SHADINGRATE));
       } else {
          tu_cs_emit(cs, COND(primid, A6XX_PC_VS_OUT_CNTL_PRIMITIVE_ID));
       }
@@ -1043,11 +1055,11 @@ tu6_emit_vpc(struct tu_cs *cs,
    tu_cs_emit_pkt4(cs, cfg->reg_vpc_xs_layer_cntl, 1);
    tu_cs_emit(cs, A6XX_VPC_VS_LAYER_CNTL_LAYERLOC(layer_loc) |
                   A6XX_VPC_VS_LAYER_CNTL_VIEWLOC(view_loc) |
-                  0xff0000);
+                  A6XX_VPC_VS_LAYER_CNTL_SHADINGRATELOC(shading_rate_loc));
    tu_cs_emit_pkt4(cs, cfg->reg_vpc_xs_layer_cntl_v2, 1);
    tu_cs_emit(cs, A6XX_VPC_VS_LAYER_CNTL_LAYERLOC(layer_loc) |
                   A6XX_VPC_VS_LAYER_CNTL_VIEWLOC(view_loc) |
-                  0xff0000);
+                  A6XX_VPC_VS_LAYER_CNTL_SHADINGRATELOC(shading_rate_loc));
 
    tu_cs_emit_pkt4(cs, cfg->reg_gras_xs_layer_cntl, 1);
    tu_cs_emit(cs, CONDREG(layer_regid, A6XX_GRAS_GS_LAYER_CNTL_WRITES_LAYER) |
@@ -1483,7 +1495,7 @@ tu_hash_shaders(unsigned char *hash,
       }
    }
    _mesa_sha1_update(&ctx, &state, sizeof(state));
-   enum ir3_shader_debug ir3_debug_key = ir3_shader_debug;
+   enum ir3_shader_debug ir3_debug_key = ir3_shader_debug_hash_key();
    _mesa_sha1_update(&ctx, &ir3_debug_key, sizeof(ir3_debug_key));
    _mesa_sha1_final(&ctx, hash);
 }
@@ -1503,7 +1515,7 @@ tu_hash_compute(unsigned char *hash,
       _mesa_sha1_update(&ctx, layout->sha1, sizeof(layout->sha1));
 
    tu_hash_stage(&ctx, pipeline_flags, stage, NULL, key);
-   enum ir3_shader_debug ir3_debug_key = ir3_shader_debug;
+   enum ir3_shader_debug ir3_debug_key = ir3_shader_debug_hash_key();
    _mesa_sha1_update(&ctx, &ir3_debug_key, sizeof(ir3_debug_key));
 
    _mesa_sha1_final(&ctx, hash);
@@ -2229,6 +2241,9 @@ tu_emit_program_state(struct tu_cs *sub_cs,
           push_consts->type == IR3_PUSH_CONSTS_SHARED_PREAMBLE) {
          prog->shared_consts = *push_consts;
       }
+
+      if (variants[i]->info.uses_ray_intersection)
+         prog->uses_ray_intersection = true;
    }
 
    unsigned dynamic_descriptor_offset = 0;
@@ -2293,6 +2308,9 @@ tu_emit_program_state(struct tu_cs *sub_cs,
       !last_shader->writes_viewport &&
       shaders[MESA_SHADER_FRAGMENT]->fs.has_fdm &&
       dev->physical_device->info->a6xx.has_per_view_viewport;
+   prog->writes_shading_rate = last_shader->writes_shading_rate;
+   prog->reads_shading_rate = fs->reads_shading_rate;
+   prog->accesses_smask = fs->reads_smask || fs->writes_smask;
 }
 
 static const enum mesa_vk_dynamic_graphics_state tu_vertex_input_state[] = {
@@ -2619,6 +2637,7 @@ tu6_emit_viewport_fdm(struct tu_cs *cs, struct tu_cmd_buffer *cmd,
    unsigned size = TU_CALLX(cmd->device, tu6_viewport_size)(cmd->device, &state.vp, &state.rs);
    tu_cs_begin_sub_stream(&cmd->sub_cs, size, cs);
    tu_create_fdm_bin_patchpoint(cmd, cs, size, fdm_apply_viewports, state);
+   cmd->state.rp.shared_viewport |= !cmd->state.per_view_viewport;
 }
 
 static const enum mesa_vk_dynamic_graphics_state tu_scissor_state[] = {
@@ -2742,7 +2761,7 @@ static unsigned
 tu6_sample_locations_size(struct tu_device *dev, bool enable,
                           const struct vk_sample_locations_state *samp_loc)
 {
-   return 6 + (enable ? 6 : 0);
+   return 6 + (enable ? 9 : 0);
 }
 
 template <chip CHIP>
@@ -2768,7 +2787,7 @@ tu6_emit_sample_locations(struct tu_cs *cs, bool enable,
    assert(samp_loc->grid_size.width == 1);
    assert(samp_loc->grid_size.height == 1);
 
-   uint32_t sample_locations = 0;
+   uint64_t sample_locations = 0;
    for (uint32_t i = 0; i < samp_loc->per_pixel; i++) {
       /* From VkSampleLocationEXT:
        *
@@ -2783,18 +2802,18 @@ tu6_emit_sample_locations(struct tu_cs *cs, bool enable,
                       SAMPLE_LOCATION_MAX);
 
       sample_locations |=
-         (A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_X(x) |
-          A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_Y(y)) << i*8;
+         ((uint64_t)(A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_X(x) |
+                     A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_Y(y))) << i*8;
    }
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_GRAS_SAMPLE_LOCATION_0, 1);
-   tu_cs_emit(cs, sample_locations);
+   tu_cs_emit_pkt4(cs, REG_A6XX_GRAS_SAMPLE_LOCATION_0, 2);
+   tu_cs_emit_qw(cs, sample_locations);
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_RB_SAMPLE_LOCATION_0, 1);
-   tu_cs_emit(cs, sample_locations);
+   tu_cs_emit_pkt4(cs, REG_A6XX_RB_SAMPLE_LOCATION_0, 2);
+   tu_cs_emit_qw(cs, sample_locations);
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_SP_TP_SAMPLE_LOCATION_0, 1);
-   tu_cs_emit(cs, sample_locations);
+   tu_cs_emit_pkt4(cs, REG_A6XX_SP_TP_SAMPLE_LOCATION_0, 2);
+   tu_cs_emit_qw(cs, sample_locations);
 }
 
 static const enum mesa_vk_dynamic_graphics_state tu_depth_bias_state[] = {
@@ -2814,8 +2833,8 @@ void
 tu6_emit_depth_bias(struct tu_cs *cs, const struct vk_rasterization_state *rs)
 {
    tu_cs_emit_pkt4(cs, REG_A6XX_GRAS_SU_POLY_OFFSET_SCALE, 3);
-   tu_cs_emit(cs, A6XX_GRAS_SU_POLY_OFFSET_SCALE(rs->depth_bias.slope).value);
-   tu_cs_emit(cs, A6XX_GRAS_SU_POLY_OFFSET_OFFSET(rs->depth_bias.constant).value);
+   tu_cs_emit(cs, A6XX_GRAS_SU_POLY_OFFSET_SCALE(rs->depth_bias.slope_factor).value);
+   tu_cs_emit(cs, A6XX_GRAS_SU_POLY_OFFSET_OFFSET(rs->depth_bias.constant_factor).value);
    tu_cs_emit(cs, A6XX_GRAS_SU_POLY_OFFSET_OFFSET_CLAMP(rs->depth_bias.clamp).value);
 }
 
@@ -3075,6 +3094,8 @@ static const enum mesa_vk_dynamic_graphics_state tu_rast_state[] = {
    MESA_VK_DYNAMIC_RS_RASTERIZATION_STREAM,
    MESA_VK_DYNAMIC_VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE,
    MESA_VK_DYNAMIC_RS_LINE_WIDTH,
+   MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE,
+   MESA_VK_DYNAMIC_RS_EXTRA_PRIMITIVE_OVERESTIMATION_SIZE,
 };
 
 template <chip CHIP>
@@ -3086,9 +3107,9 @@ tu6_rast_size(struct tu_device *dev,
               bool per_view_viewport)
 {
    if (CHIP == A6XX) {
-      return 15 + (dev->physical_device->info->a6xx.has_shading_rate ? 8 : 0);
+      return 15 + (dev->physical_device->info->a6xx.has_legacy_pipeline_shading_rate ? 8 : 0);
    } else {
-      return 17;
+      return 25;
    }
 }
 
@@ -3149,6 +3170,37 @@ tu6_emit_rast(struct tu_cs *cs,
       tu_cs_emit_regs(cs, A7XX_PC_RASTER_CNTL_V2(
          .stream = rs->rasterization_stream,
          .discard = rs->rasterizer_discard_enable));
+
+      bool conservative_ras_en =
+         rs->conservative_mode ==
+         VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT;
+
+      tu_cs_emit_regs(cs, RB_RENDER_CNTL(CHIP,
+            .raster_mode = TYPE_TILED,
+            .raster_direction = LR_TB,
+            .conservativerasen = conservative_ras_en));
+      tu_cs_emit_regs(cs, A7XX_GRAS_SU_RENDER_CNTL());
+      tu_cs_emit_regs(cs,
+                      A6XX_PC_DGEN_SU_CONSERVATIVE_RAS_CNTL(conservative_ras_en));
+
+      /* There are only two conservative rasterization modes:
+       * - shift_amount = 0 (NO_SHIFT) - normal rasterization
+       * - shift_amount = 1 (HALF_PIXEL_SHIFT) - overestimate by half a pixel
+       *   plus the rasterization grid size (1/256)
+       * - shift_amount = 2 (FULL_PIXEL_SHIFT) - overestimate by another half
+       *   a pixel
+       *
+       * We expose a max of 0.5 and a granularity of 0.5, so the app should
+       * only give us 0 or 0.5 which correspond to HALF_PIXEL_SHIFT and
+       * FULL_PIXEL_SHIFT respectively. If they give us anything else just
+       * assume they meant 0.5 as the most conservative choice.
+       */
+      enum a6xx_shift_amount shift_amount = conservative_ras_en ?
+         (rs->extra_primitive_overestimation_size != 0. ?
+            FULL_PIXEL_SHIFT : HALF_PIXEL_SHIFT) : NO_SHIFT;
+      tu_cs_emit_regs(cs, A6XX_GRAS_SU_CONSERVATIVE_RAS_CNTL(
+            .conservativerasen = conservative_ras_en,
+            .shiftamount = shift_amount));
    }
 
    /* move to hw ctx init? */
@@ -3156,7 +3208,7 @@ tu6_emit_rast(struct tu_cs *cs,
                    A6XX_GRAS_SU_POINT_MINMAX(.min = 1.0f / 16.0f, .max = 4092.0f),
                    A6XX_GRAS_SU_POINT_SIZE(1.0f));
 
-   if (CHIP == A6XX && cs->device->physical_device->info->a6xx.has_shading_rate) {
+   if (CHIP == A6XX && cs->device->physical_device->info->a6xx.has_legacy_pipeline_shading_rate) {
       tu_cs_emit_regs(cs, A6XX_RB_UNKNOWN_8A00());
       tu_cs_emit_regs(cs, A6XX_RB_UNKNOWN_8A10());
       tu_cs_emit_regs(cs, A6XX_RB_UNKNOWN_8A20());
@@ -3330,6 +3382,95 @@ tu6_emit_prim_mode_sysmem(struct tu_cs *cs,
                                          .single_prim_mode = sysmem_prim_mode));
 }
 
+static const enum mesa_vk_dynamic_graphics_state tu_fragment_shading_rate_state[] = {
+   MESA_VK_DYNAMIC_FSR,
+};
+
+template <chip CHIP>
+static unsigned
+tu6_fragment_shading_rate_size(struct tu_device *dev,
+                               const vk_fragment_shading_rate_state *fsr,
+                               bool enable_att_fsr,
+                               bool enable_prim_fsr,
+                               bool fs_reads_fsr,
+                               bool sample_shading)
+{
+   return 6;
+}
+
+template <chip CHIP>
+static void
+tu6_emit_fragment_shading_rate(struct tu_cs *cs,
+                               const vk_fragment_shading_rate_state *fsr,
+                               bool enable_att_fsr,
+                               bool enable_prim_fsr,
+                               bool fs_reads_fsr,
+                               bool accesses_smask)
+{
+   /* gl_ShadingRateEXT don't read 1x1 value with null config, so
+    * if it is read - we have to emit the config.
+    */
+   if (!fsr || (!fs_reads_fsr && vk_fragment_shading_rate_is_disabled(fsr))) {
+      tu_cs_emit_regs(cs, A6XX_RB_FSR_CONFIG());
+      tu_cs_emit_regs(cs, A7XX_SP_FSR_CONFIG());
+      tu_cs_emit_regs(cs, A7XX_GRAS_FSR_CONFIG());
+      return;
+   }
+
+   uint32_t frag_width = fsr->fragment_size.width;
+   uint32_t frag_height = fsr->fragment_size.height;
+
+   bool enable_draw_fsr = true;
+   if (enable_att_fsr) {
+      if (fsr->combiner_ops[1] ==
+          VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR) {
+         enable_draw_fsr = false;
+         enable_prim_fsr = false;
+      } else if (fsr->combiner_ops[1] ==
+                 VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
+         enable_att_fsr = false;
+      }
+   }
+   if (enable_prim_fsr) {
+      if (fsr->combiner_ops[0] ==
+          VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR) {
+         enable_draw_fsr = false;
+      } else if (fsr->combiner_ops[0] ==
+                 VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR) {
+         enable_prim_fsr = false;
+      }
+   }
+
+   /* Force 1x1 FSR because we don't support
+    * fragmentShadingRateWithShaderSampleMask.
+    */
+   if (accesses_smask) {
+      enable_att_fsr = enable_prim_fsr = false;
+      frag_width = frag_height = 1;
+      enable_draw_fsr = true;
+   }
+
+   tu_cs_emit_regs(
+      cs,
+      A6XX_RB_FSR_CONFIG(.unk2 = true, .pipeline_fsr_enable = enable_draw_fsr,
+                         .attachment_fsr_enable = enable_att_fsr,
+                         .primitive_fsr_enable = enable_prim_fsr));
+   tu_cs_emit_regs(
+      cs, A7XX_SP_FSR_CONFIG(.pipeline_fsr_enable = enable_draw_fsr,
+                             .attachment_fsr_enable = enable_att_fsr,
+                             .primitive_fsr_enable = enable_prim_fsr));
+   tu_cs_emit_regs(
+      cs, A7XX_GRAS_FSR_CONFIG(
+                .pipeline_fsr_enable = enable_draw_fsr,
+                .frag_size_x = util_logbase2(frag_width),
+                .frag_size_y = util_logbase2(frag_height),
+                .combiner_op_1 = (a6xx_fsr_combiner) fsr->combiner_ops[0],
+                .combiner_op_2 = (a6xx_fsr_combiner) fsr->combiner_ops[1],
+                .attachment_fsr_enable = enable_att_fsr,
+                .primitive_fsr_enable = enable_prim_fsr));
+}
+
+
 static inline bool
 emit_pipeline_state(BITSET_WORD *keep, BITSET_WORD *remove,
                     BITSET_WORD *pipeline_set,
@@ -3455,6 +3596,7 @@ tu_pipeline_builder_emit_state(struct tu_pipeline_builder *builder,
       tu_calc_bandwidth(&pipeline->bandwidth, cb,
                         builder->graphics_state.rp);
    DRAW_STATE(blend_constants, TU_DYNAMIC_STATE_BLEND_CONSTANTS, cb);
+
    if (attachments_valid &&
        !(builder->graphics_state.rp->attachments &
          MESA_VK_RP_ATTACHMENT_ANY_COLOR_BITS)) {
@@ -3513,6 +3655,20 @@ tu_pipeline_builder_emit_state(struct tu_pipeline_builder *builder,
                       pipeline->ds.raster_order_attachment_access,
                       vk_pipeline_flags_feedback_loops(builder->graphics_state.pipeline_flags),
                       &pipeline->prim_order.sysmem_single_prim_mode);
+   }
+
+   if (builder->device->physical_device->info->a6xx.has_attachment_shading_rate) {
+      bool has_fsr_att =
+         builder->graphics_state.pipeline_flags &
+         VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+      DRAW_STATE_COND(fragment_shading_rate,
+                      TU_DYNAMIC_STATE_A7XX_FRAGMENT_SHADING_RATE,
+                      attachments_valid && pipeline_contains_all_shader_state(pipeline),
+                      builder->graphics_state.fsr,
+                      has_fsr_att,
+                      pipeline->program.writes_shading_rate,
+                      pipeline->program.reads_shading_rate,
+                      pipeline->program.accesses_smask);
    }
 #undef DRAW_STATE
 #undef DRAW_STATE_COND
@@ -3663,9 +3819,8 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
               cmd->vk.dynamic_graphics_state.ms.alpha_to_coverage_enable,
               cmd->vk.dynamic_graphics_state.ms.alpha_to_one_enable,
               cmd->vk.dynamic_graphics_state.ms.sample_mask);
-   if (EMIT_STATE(blend_lrz) ||
-       ((cmd->state.dirty & TU_CMD_DIRTY_SUBPASS) &&
-        !cmd->state.pipeline_blend_lrz)) {
+   if (!cmd->state.pipeline_blend_lrz &&
+       (EMIT_STATE(blend_lrz) || (cmd->state.dirty & TU_CMD_DIRTY_SUBPASS))) {
       bool blend_reads_dest = tu6_calc_blend_lrz(&cmd->vk.dynamic_graphics_state.cb,
                                                  &cmd->state.vk_rp);
       if (blend_reads_dest != cmd->state.blend_reads_dest) {
@@ -3673,13 +3828,23 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
          cmd->state.dirty |= TU_CMD_DIRTY_LRZ;
       }
    }
-   if (EMIT_STATE(bandwidth) ||
-       ((cmd->state.dirty & TU_CMD_DIRTY_SUBPASS) &&
-        !cmd->state.pipeline_bandwidth))
+   if (!cmd->state.pipeline_bandwidth &&
+       (EMIT_STATE(bandwidth) || (cmd->state.dirty & TU_CMD_DIRTY_SUBPASS)))
       tu_calc_bandwidth(&cmd->state.bandwidth, &cmd->vk.dynamic_graphics_state.cb,
                         &cmd->state.vk_rp);
    DRAW_STATE(blend_constants, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
               &cmd->vk.dynamic_graphics_state.cb);
+
+   if (cmd->device->physical_device->info->a6xx.has_attachment_shading_rate) {
+      DRAW_STATE_COND(fragment_shading_rate,
+               TU_DYNAMIC_STATE_A7XX_FRAGMENT_SHADING_RATE,
+               cmd->state.dirty & (TU_CMD_DIRTY_SUBPASS | TU_CMD_DIRTY_SHADING_RATE),
+               &cmd->vk.dynamic_graphics_state.fsr,
+               cmd->state.subpass->fsr_attachment != VK_ATTACHMENT_UNUSED,
+               cmd->state.program.writes_shading_rate,
+               cmd->state.program.reads_shading_rate,
+               cmd->state.program.accesses_smask);
+   }
    DRAW_STATE_COND(rast, TU_DYNAMIC_STATE_RAST,
                    cmd->state.dirty & (TU_CMD_DIRTY_SUBPASS |
                                        TU_CMD_DIRTY_PER_VIEW_VIEWPORT),
@@ -4156,6 +4321,11 @@ tu_pipeline_builder_init_graphics(
       if (pass->fragment_density_map.attachment != VK_ATTACHMENT_UNUSED) {
          rp_flags |=
             VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT;
+      }
+
+      if (subpass->fsr_attachment != VK_ATTACHMENT_UNUSED) {
+         rp_flags |=
+            VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
       }
 
       builder->unscaled_input_fragcoord = 0;
@@ -4681,6 +4851,14 @@ tu_GetPipelineExecutableStatisticsKHR(
                 "shader executable.");
       stat->format = VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR;
       stat->value.u64 = exe->stats.ldp_count;
+   }
+
+   vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {
+      WRITE_STR(stat->name, "Preamble Instruction Count");
+      WRITE_STR(stat->description,
+                "Total number of IR3 instructions in the preamble.");
+      stat->format = VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR;
+      stat->value.u64 = exe->stats.preamble_instrs_count;
    }
 
    vk_outarray_append_typed(VkPipelineExecutableStatisticKHR, &out, stat) {

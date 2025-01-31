@@ -209,6 +209,10 @@ the correct layout is:
 VOP2 `v_pk_fmac_f16`. But like all other packed math opcodes, DPP does not function in practice.
 RDNA1 and RDNA2 support `v_pk_fmac_f16_dpp`.
 
+## ds_swizzle_b32 rotate/fft modes
+
+These are first mentioned in the GFX9 (Vega) ISA doc, information from the LLVM bug tracker
+and testing show they were already present on GFX8.
 
 # Hardware Bugs
 
@@ -377,3 +381,24 @@ SALU writing then SALU or VALU reading a SGPR that was previously used as a lane
 Mitigated by:
 A VALU instruction reading a non-exec SGPR before the SALU write, or a sa_sdst=0 wait after the
 SALU write: `s_waitcnt_depctr 0xfffe`
+
+## RDNA4 / GFX12 hazards
+
+### VcmpxPermlaneHazard
+
+Same as GFX10
+
+### LdsDirectVALUHazard
+### LdsDirectVMEMHazard
+
+Same as GFX11
+
+### VALUReadSGPRHazard
+
+Triggered by:
+VALU reads an SGPR, then written by SALU cannot safely be read by SALU or VALU, or
+VALU reads an SGPR, then written by VALU cannot safely be read by VALU.
+
+Mitigated by:
+After the SALU write a sa_sdst=0 wait. After the VALU write a va_sdst=0 / va_vcc=0 wait.
+It does not reset the first step.

@@ -41,7 +41,7 @@ def main():
     parser.add_argument('megadriver')
     parser.add_argument('libdir')
     parser.add_argument('drivers', nargs='+')
-    parser.add_argument('--megadriver_libdir')
+    parser.add_argument('--megadriver-libdir')
     parser.add_argument('--libname-suffix', required=True)
     args = parser.parse_args()
 

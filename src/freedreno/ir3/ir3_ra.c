@@ -1635,9 +1635,9 @@ insert_parallel_copy_instr(struct ra_ctx *ctx, struct ir3_instruction *instr)
    if (ctx->parallel_copies_count == 0)
       return;
 
-   struct ir3_instruction *pcopy =
-      ir3_instr_create(instr->block, OPC_META_PARALLEL_COPY,
-                       ctx->parallel_copies_count, ctx->parallel_copies_count);
+   struct ir3_instruction *pcopy = ir3_instr_create_at(
+      ir3_before_instr(instr), OPC_META_PARALLEL_COPY,
+      ctx->parallel_copies_count, ctx->parallel_copies_count);
 
    for (unsigned i = 0; i < ctx->parallel_copies_count; i++) {
       struct ra_parallel_copy *entry = &ctx->parallel_copies[i];
@@ -1661,8 +1661,6 @@ insert_parallel_copy_instr(struct ra_ctx *ctx, struct ir3_instruction *instr)
       assign_reg(pcopy, reg, ra_physreg_to_num(entry->src, reg->flags));
    }
 
-   list_del(&pcopy->node);
-   list_addtail(&pcopy->node, &instr->node);
    ctx->parallel_copies_count = 0;
 }
 
@@ -2113,8 +2111,9 @@ insert_liveout_copy(struct ir3_block *block, physreg_t dst, physreg_t src,
       old_pcopy = last;
 
    unsigned old_pcopy_srcs = old_pcopy ? old_pcopy->srcs_count : 0;
-   struct ir3_instruction *pcopy = ir3_instr_create(
-      block, OPC_META_PARALLEL_COPY, old_pcopy_srcs + 1, old_pcopy_srcs + 1);
+   struct ir3_instruction *pcopy =
+      ir3_instr_create_at(ir3_before_terminator(block), OPC_META_PARALLEL_COPY,
+                          old_pcopy_srcs + 1, old_pcopy_srcs + 1);
 
    for (unsigned i = 0; i < old_pcopy_srcs; i++) {
       old_pcopy->dsts[i]->instr = pcopy;

@@ -14,3 +14,15 @@ spec@egl 1.4@egl-copy-buffers
 # uprev Piglit in Mesa
 spec@egl_khr_gl_colorspace@srgb
 spec@egl_khr_gl_colorspace@linear
+
+# Exclude WSI related tests for a630-vk-asan
+# The ones that weren't being skipped were causing leaks
+asan-dEQP-VK.image.swapchain_mutable.*
+asan-dEQP-VK.wsi.*
+
+# Timeout
+spec@glsl-4.00@execution@built-in-functions@fs-op-div-dmat3-dmat3
+spec@glsl-4.00@execution@built-in-functions@fs-op-div-double-dmat3
+
+# Leaky in VKCTS 1.4.1.1
+asan-dEQP-VK.video.*

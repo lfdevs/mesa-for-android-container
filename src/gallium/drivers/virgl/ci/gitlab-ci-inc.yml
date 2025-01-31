@@ -39,7 +39,7 @@
   variables:
     JOB_PRIORITY: 40
     LAVA_S3_ARTIFACT_NAME: mesa-x86_64-default-release
-    S3_ARTIFACT_NAME: mesa-python-test
+    S3_ARTIFACT_NAME: mesa-python-ci-artifacts
   needs:
     - kernel+rootfs_x86_64
     - debian-release
@@ -64,13 +64,13 @@
     FLAKES_CHANNEL: "#virgl-ci"
     GALLIUM_DRIVER: "virgl"
     CROSVM_GALLIUM_DRIVER: "llvmpipe"
-    CROSVM_GPU_ARGS: "gles=false,backend=virglrenderer,egl=true,surfaceless=true,width=1024,height=768"
+    CROSVM_GPU_ARGS: "gles=false,backend=virglrenderer,egl=true,surfaceless=true"
     GALLIVM_PERF: "nopt,no_quad_lod"
 
 .virgl-iris-test:
   extends:
     - .lava-piglit-traces:x86_64
-    - .lava-acer-cp514-2h-1160g7-volteer:x86_64
+    - .lava-acer-cp514-2h-1130g7-volteer:x86_64
   variables:
     HWCI_KERNEL_MODULES: vhost_vsock
     HWCI_KVM: "true"
@@ -81,7 +81,7 @@
     DRIVER_NAME: virgl
     GALLIUM_DRIVER: virgl
     CROSVM_GALLIUM_DRIVER: iris
-    CROSVM_GPU_ARGS: "gles=false,backend=virglrenderer,egl=true,surfaceless=true,width=1024,height=768"
+    CROSVM_GPU_ARGS: "gles=false,backend=virglrenderer,egl=true,surfaceless=true"
     EGL_PLATFORM: surfaceless
     PIGLIT_PROFILES: replay
     PIGLIT_TRACES_FILE: traces-virgl-iris.yml

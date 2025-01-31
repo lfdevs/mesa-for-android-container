@@ -1697,7 +1697,7 @@ elk_fs_visitor::split_virtual_grfs()
 
    /* Count the total number of registers */
    unsigned reg_count = 0;
-   unsigned vgrf_to_reg[num_vars];
+   unsigned *vgrf_to_reg = new unsigned[num_vars];
    for (unsigned i = 0; i < num_vars; i++) {
       vgrf_to_reg[i] = reg_count;
       reg_count += alloc.sizes[i];
@@ -1866,6 +1866,7 @@ cleanup:
    delete[] vgrf_has_split;
    delete[] new_virtual_grf;
    delete[] new_reg_offset;
+   delete[] vgrf_to_reg;
 
    return progress;
 }
@@ -3022,7 +3023,7 @@ elk_fs_visitor::emit_repclear_shader()
 bool
 elk_fs_visitor::remove_duplicate_mrf_writes()
 {
-   elk_fs_inst *last_mrf_move[ELK_MAX_MRF(devinfo->ver)];
+   elk_fs_inst *last_mrf_move[ELK_MAX_MRF_ALL];
    bool progress = false;
 
    /* Need to update the MRF tracking for compressed instructions. */
@@ -3067,7 +3068,7 @@ elk_fs_visitor::remove_duplicate_mrf_writes()
       }
 
       /* Clear out any MRF move records whose sources got overwritten. */
-      for (unsigned i = 0; i < ARRAY_SIZE(last_mrf_move); i++) {
+      for (unsigned i = 0; i < ELK_MAX_MRF(devinfo->ver); i++) {
          if (last_mrf_move[i] &&
              regions_overlap(inst->dst, inst->size_written,
                              last_mrf_move[i]->src[0],
@@ -3182,8 +3183,8 @@ elk_fs_visitor::insert_gfx4_pre_send_dependency_workarounds(elk_bblock_t *block,
 {
    int write_len = regs_written(inst);
    int first_write_grf = inst->dst.nr;
-   bool needs_dep[ELK_MAX_MRF(devinfo->ver)];
-   assert(write_len < (int)sizeof(needs_dep) - 1);
+   bool needs_dep[ELK_MAX_MRF_ALL];
+   assert(write_len < ELK_MAX_MRF(devinfo->ver) - 1);
 
    memset(needs_dep, false, sizeof(needs_dep));
    memset(needs_dep, true, write_len);
@@ -3253,8 +3254,8 @@ elk_fs_visitor::insert_gfx4_post_send_dependency_workarounds(elk_bblock_t *block
 {
    int write_len = regs_written(inst);
    unsigned first_write_grf = inst->dst.nr;
-   bool needs_dep[ELK_MAX_MRF(devinfo->ver)];
-   assert(write_len < (int)sizeof(needs_dep) - 1);
+   bool needs_dep[ELK_MAX_MRF_ALL];
+   assert(write_len < ELK_MAX_MRF(devinfo->ver) - 1);
 
    memset(needs_dep, false, sizeof(needs_dep));
    memset(needs_dep, true, write_len);

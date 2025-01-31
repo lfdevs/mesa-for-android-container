@@ -581,6 +581,7 @@ impl SSAValueAllocator {
         SSAValueAllocator { count: 0 }
     }
 
+    #[allow(dead_code)]
     pub fn max_idx(&self) -> u32 {
         self.count
     }

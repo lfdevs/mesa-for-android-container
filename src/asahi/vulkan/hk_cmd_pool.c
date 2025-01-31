@@ -29,7 +29,7 @@ hk_cmd_bo_create(struct hk_cmd_pool *pool, bool usc, struct hk_cmd_bo **bo_out)
       return vk_error(pool, VK_ERROR_OUT_OF_DEVICE_MEMORY);
    }
 
-   bo->map = bo->bo->map;
+   bo->map = agx_bo_map(bo->bo);
 
    *bo_out = bo;
    return VK_SUCCESS;

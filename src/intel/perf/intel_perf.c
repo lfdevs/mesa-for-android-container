@@ -322,6 +322,9 @@ compute_topology_builtins(struct intel_perf_config *perf)
 
    perf->sys_vars.slice_mask = devinfo->slice_masks;
    perf->sys_vars.n_eu_slices = devinfo->num_slices;
+   perf->sys_vars.n_l3_banks = devinfo->l3_banks;
+   perf->sys_vars.n_l3_nodes = devinfo->l3_banks / 4;
+   perf->sys_vars.n_sq_idis =  devinfo->num_slices;
 
    perf->sys_vars.n_eu_slice0123 = 0;
    for (int s = 0; s < MIN2(4, devinfo->max_slices); s++) {
@@ -1536,8 +1539,10 @@ intel_perf_init_metrics(struct intel_perf_config *perf_cfg,
       load_oa_metrics(perf_cfg, drm_fd, devinfo);
 
    /* sort query groups by name */
-   qsort(perf_cfg->queries, perf_cfg->n_queries,
-         sizeof(perf_cfg->queries[0]), intel_perf_compare_query_names);
+   if (perf_cfg->queries != NULL) {
+      qsort(perf_cfg->queries, perf_cfg->n_queries,
+            sizeof(perf_cfg->queries[0]), intel_perf_compare_query_names);
+   }
 
    build_unique_counter_list(perf_cfg);
 

@@ -501,6 +501,7 @@ op("stack_store",
 # Convenient aliases.
 op("mov", _, srcs = 1)
 op("not", _, srcs = 1)
+op("signext", _, srcs = 1)
 
 op("collect", _, srcs = VARIABLE)
 op("split", _, srcs = 1, dests = VARIABLE)

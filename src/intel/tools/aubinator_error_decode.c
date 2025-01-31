@@ -41,12 +41,11 @@
 #include "aubinator_error_decode_lib.h"
 #include "aubinator_error_decode_xe.h"
 #include "common/intel_debug_identifier.h"
-#include "compiler/brw_compiler.h"
-#include "compiler/elk/elk_compiler.h"
 #include "decoder/intel_decoder.h"
 #include "dev/intel_debug.h"
 #include "error_decode_lib.h"
 #include "util/macros.h"
+#include "intel_tools.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -379,8 +378,6 @@ read_i915_data_file(FILE *file, enum intel_batch_decode_flags batch_flags)
    bool ring_wraps = false;
    char *ring_name = NULL;
    struct intel_device_info devinfo;
-   struct brw_isa_info brw;
-   struct elk_isa_info elk;
    uint64_t acthd = 0;
 
    while (getline(&line, &line_size, file) > 0) {
@@ -472,11 +469,6 @@ read_i915_data_file(FILE *file, enum intel_batch_decode_flags batch_flags)
             }
 
             printf("Detected GEN%i chipset\n", devinfo.ver);
-
-            if (devinfo.ver >= 9)
-               brw_init_isa_info(&brw, &devinfo);
-            else
-               elk_init_isa_info(&elk, &devinfo);
 
             if (xml_path == NULL)
                spec = intel_spec_load(&devinfo);
@@ -669,15 +661,9 @@ read_i915_data_file(FILE *file, enum intel_batch_decode_flags batch_flags)
    }
 
    struct intel_batch_decode_ctx batch_ctx;
-   if (devinfo.ver >= 9) {
-      intel_batch_decode_ctx_init_brw(&batch_ctx, &brw, &devinfo, stdout,
-                                      batch_flags, xml_path, get_intel_batch_bo,
-                                      NULL, NULL);
-   } else {
-      intel_batch_decode_ctx_init_elk(&batch_ctx, &elk, &devinfo, stdout,
-                                      batch_flags, xml_path, get_intel_batch_bo,
-                                      NULL, NULL);
-   }
+   intel_decoder_init(&batch_ctx, &devinfo, stdout,
+                      batch_flags, xml_path, get_intel_batch_bo,
+                      NULL, NULL);
    batch_ctx.acthd = acthd;
 
    if (option_dump_kernels)

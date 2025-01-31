@@ -35,9 +35,13 @@ LAVA_QUEUE_TIMEOUT = int(getenv("LAVA_QUEUE_TIMEOUT", 60))
 # the enqueue delay.
 LAVA_BOOT_TIMEOUT = int(getenv("LAVA_BOOT_TIMEOUT", 9))
 
+# Estimated overhead in minutes for a job from GitLab to reach the test phase,
+# including LAVA scheduling and boot duration
+LAVA_TEST_OVERHEAD_MIN = 5
+
 # Test DUT suite phase is where the initialization happens in DUT, not on docker.
 # The device will be listening to SSH session until the end of the job.
-LAVA_TEST_DUT_SUITE_TIMEOUT = int(getenv("JOB_TIMEOUT", 60))
+LAVA_TEST_DUT_SUITE_TIMEOUT = int(getenv("CI_JOB_TIMEOUT")) // 60 - LAVA_TEST_OVERHEAD_MIN
 
 # Test suite phase is where the initialization happens on docker.
 LAVA_TEST_SUITE_TIMEOUT = int(getenv("LAVA_TEST_SUITE_TIMEOUT", 5))
@@ -45,7 +49,7 @@ LAVA_TEST_SUITE_TIMEOUT = int(getenv("LAVA_TEST_SUITE_TIMEOUT", 5))
 # Test cases may take a long time, this script has no right to interrupt
 # them. But if the test case takes almost 1h, it will never succeed due to
 # Gitlab job timeout.
-LAVA_TEST_CASE_TIMEOUT = int(getenv("JOB_TIMEOUT", 60))
+LAVA_TEST_CASE_TIMEOUT = int(getenv("CI_JOB_TIMEOUT")) // 60 - LAVA_TEST_OVERHEAD_MIN
 
 # LAVA post processing may refer to a test suite teardown, or the
 # adjustments to start the next test_case

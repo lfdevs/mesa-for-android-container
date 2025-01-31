@@ -3,13 +3,12 @@ include:
 
 .ondracka-generic:
   extends:
-    - .b2c-x86_64-test-gl
+    - .b2c-x86_64-test-gl-manual # use debian-build-testing rather than debian-testing
     - .r300-manual-rules
   variables:
     FDO_CI_CONCURRENT: 2
     # 6.6.8 kernel with radeon driver.
     B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/ondracka/boot2container/-/wikis/uploads/1733cfc7cc114d08ec785044b24314f3/linux-x86_64'
-    B2C_INITRAMFS_URL: 'https://gitlab.freedesktop.org/gfx-ci/boot2container/-/releases/v0.9.11/downloads/initramfs.linux_amd64.cpio.xz'
 
 .ondracka-rv530:
   extends:

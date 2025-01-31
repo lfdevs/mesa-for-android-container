@@ -174,7 +174,8 @@ get_ahw_buffer_format_properties2(
    p->format = vk_format_from_android(desc.format, desc.usage);
    p->externalFormat = p->format;
 
-   const struct anv_format *anv_format = anv_get_format(p->format);
+   const struct anv_format *anv_format =
+      anv_get_format(device->physical, p->format);
 
    /* Default to OPTIMAL tiling but set to linear in case
     * of AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER usage.

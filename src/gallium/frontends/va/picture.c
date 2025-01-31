@@ -129,40 +129,14 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
 
    context->target_id = render_target;
    context->target = surf->buffer;
-   context->mjpeg.sampling_factor = 0;
+
+   if (context->templat.entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE)
+      context->needs_begin_frame = true;
 
    if (!context->decoder) {
-
-      /* VPP */
-      if (context->templat.profile == PIPE_VIDEO_PROFILE_UNKNOWN &&
-          context->target->buffer_format != PIPE_FORMAT_B8G8R8A8_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_R8G8B8A8_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_B8G8R8X8_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_R8G8B8X8_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_B10G10R10A2_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_R10G10B10A2_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_B10G10R10X2_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_R10G10B10X2_UNORM &&
-          context->target->buffer_format != PIPE_FORMAT_NV12 &&
-          context->target->buffer_format != PIPE_FORMAT_P010 &&
-          context->target->buffer_format != PIPE_FORMAT_P016) {
-         mtx_unlock(&drv->mutex);
-         return VA_STATUS_ERROR_UNIMPLEMENTED;
-      }
-
-      if (drv->pipe->screen->get_video_param(drv->pipe->screen,
-                              PIPE_VIDEO_PROFILE_UNKNOWN,
-                              PIPE_VIDEO_ENTRYPOINT_PROCESSING,
-                              PIPE_VIDEO_CAP_SUPPORTED)) {
-         context->needs_begin_frame = true;
-      }
-
       mtx_unlock(&drv->mutex);
       return VA_STATUS_SUCCESS;
    }
-
-   if (context->decoder->entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE)
-      context->needs_begin_frame = true;
 
    /* meta data and seis are per picture basis, it needs to be
     * cleared before rendering the picture. */
@@ -298,12 +272,16 @@ handlePictureParameterBuffer(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *
       if (!context->target)
          return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+      mtx_lock(&context->mutex);
+
       if (format == PIPE_VIDEO_FORMAT_MPEG4_AVC)
          context->templat.level = u_get_h264_level(context->templat.width,
             context->templat.height, &context->templat.max_references);
 
       context->decoder = drv->pipe->create_video_codec(drv->pipe,
          &context->templat);
+
+      mtx_unlock(&context->mutex);
 
       if (!context->decoder)
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
@@ -435,6 +413,7 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
    static const uint8_t start_code_h265[] = { 0x00, 0x00, 0x01 };
    static const uint8_t start_code_vc1_frame[] = { 0x00, 0x00, 0x01, 0x0d };
    static const uint8_t start_code_vc1_field[] = { 0x00, 0x00, 0x01, 0x0c };
+   static const uint8_t start_code_vc1_slice[] = { 0x00, 0x00, 0x01, 0x0b };
    static const uint8_t eoi_jpeg[] = { 0xff, 0xd9 };
 
    if (!context->decoder)
@@ -472,8 +451,13 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
             break;
 
          if (context->decoder->profile == PIPE_VIDEO_PROFILE_VC1_ADVANCED) {
-            const uint8_t *start_code =
-               context->desc.vc1.is_first_field ? start_code_vc1_frame : start_code_vc1_field;
+            const uint8_t *start_code;
+            if (context->slice_data_offset)
+               start_code = start_code_vc1_slice;
+            else if (context->desc.vc1.is_first_field)
+               start_code = start_code_vc1_frame;
+            else
+               start_code = start_code_vc1_field;
             context->bs.buffers[context->bs.num_buffers] = (void *const)start_code;
             context->bs.sizes[context->bs.num_buffers++] = sizeof(start_code_vc1_frame);
          }
@@ -1139,12 +1123,10 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
    vlVaSurface *surf;
    void *feedback = NULL;
    struct pipe_screen *screen;
-   bool supported;
-   bool realloc = false;
    bool apply_av1_fg = false;
-   enum pipe_format format;
    struct pipe_video_buffer **out_target;
    int output_id;
+   enum pipe_format target_format;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -1179,10 +1161,17 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_SUCCESS;
    }
 
+   if (context->needs_begin_frame) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_OPERATION_FAILED;
+   }
+
    out_target = &context->target;
    apply_av1_fg = vlVaQueryApplyFilmGrainAV1(context, &output_id, &out_target);
 
    surf = handle_table_get(drv->htab, output_id);
+   if (surf && !surf->buffer && context->desc.base.protected_playback)
+      surf->templat.bind |= PIPE_BIND_PROTECTED;
    vlVaGetSurfaceBuffer(drv, surf);
    if (!surf || !surf->buffer) {
       mtx_unlock(&drv->mutex);
@@ -1197,116 +1186,15 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
    context->mpeg4.frame_num++;
 
    screen = context->decoder->context->screen;
-   supported = screen->get_video_param(screen, context->decoder->profile,
-                                       context->decoder->entrypoint,
-                                       surf->buffer->interlaced ?
-                                       PIPE_VIDEO_CAP_SUPPORTS_INTERLACED :
-                                       PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE);
-
-   if (!supported) {
-      surf->templat.interlaced = screen->get_video_param(screen,
-                                       context->decoder->profile,
-                                       context->decoder->entrypoint,
-                                       PIPE_VIDEO_CAP_PREFERS_INTERLACED);
-      realloc = true;
-   }
-
-   format = screen->get_video_param(screen, context->decoder->profile,
-                                    context->decoder->entrypoint,
-                                    PIPE_VIDEO_CAP_PREFERED_FORMAT);
-
-   if (surf->buffer->buffer_format != format &&
-       surf->buffer->buffer_format == PIPE_FORMAT_NV12) {
-      /* check originally as NV12 only */
-      surf->templat.buffer_format = format;
-      realloc = true;
-   }
-
-   if (u_reduce_video_profile(context->templat.profile) == PIPE_VIDEO_FORMAT_JPEG) {
-      if (surf->buffer->buffer_format == PIPE_FORMAT_NV12 &&
-          context->mjpeg.sampling_factor != MJPEG_SAMPLING_FACTOR_NV12) {
-         /* workaround to reallocate surface buffer with right format
-          * if it doesnt match with sampling_factor. ffmpeg doesnt
-          * use VASurfaceAttribPixelFormat and defaults to NV12.
-          */
-         switch (context->mjpeg.sampling_factor) {
-            case MJPEG_SAMPLING_FACTOR_YUV422:
-            case MJPEG_SAMPLING_FACTOR_YUY2:
-               surf->templat.buffer_format = PIPE_FORMAT_YUYV;
-               break;
-            case MJPEG_SAMPLING_FACTOR_YUV444:
-               surf->templat.buffer_format = PIPE_FORMAT_Y8_U8_V8_444_UNORM;
-               break;
-            case MJPEG_SAMPLING_FACTOR_YUV400:
-               surf->templat.buffer_format = PIPE_FORMAT_Y8_400_UNORM;
-               break;
-            default:
-               mtx_unlock(&drv->mutex);
-               return VA_STATUS_ERROR_INVALID_SURFACE;
-         }
-         realloc = true;
-      }
-      /* check if format is supported before proceeding with realloc,
-       * also avoid submission if hardware doesnt support the format and
-       * applcation failed to check the supported rt_formats.
-       */
-      if (!screen->is_video_format_supported(screen, surf->templat.buffer_format,
-          PIPE_VIDEO_PROFILE_JPEG_BASELINE, PIPE_VIDEO_ENTRYPOINT_BITSTREAM)) {
-         mtx_unlock(&drv->mutex);
-         return VA_STATUS_ERROR_INVALID_SURFACE;
-      }
-   }
 
    if ((bool)(surf->templat.bind & PIPE_BIND_PROTECTED) != context->desc.base.protected_playback) {
-      if (context->desc.base.protected_playback) {
-         surf->templat.bind |= PIPE_BIND_PROTECTED;
-      }
-      else
-         surf->templat.bind &= ~PIPE_BIND_PROTECTED;
-      realloc = true;
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_INVALID_SURFACE;
    }
 
-   if (u_reduce_video_profile(context->templat.profile) == PIPE_VIDEO_FORMAT_AV1 &&
-       surf->buffer->buffer_format == PIPE_FORMAT_NV12 &&
-       context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
-      if (context->desc.av1.picture_parameter.bit_depth_idx == 1) {
-         surf->templat.buffer_format = PIPE_FORMAT_P010;
-         realloc = true;
-      }
-   }
-
-   if (realloc) {
-      struct pipe_video_buffer *old_buf = surf->buffer;
-
-      if (vlVaHandleSurfaceAllocate(drv, surf, &surf->templat, NULL, 0) != VA_STATUS_SUCCESS) {
-         mtx_unlock(&drv->mutex);
-         return VA_STATUS_ERROR_ALLOCATION_FAILED;
-      }
-
-      if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
-         if (old_buf->interlaced) {
-            struct u_rect src_rect, dst_rect;
-
-            dst_rect.x0 = src_rect.x0 = 0;
-            dst_rect.y0 = src_rect.y0 = 0;
-            dst_rect.x1 = src_rect.x1 = surf->templat.width;
-            dst_rect.y1 = src_rect.y1 = surf->templat.height;
-            vl_compositor_yuv_deint_full(&drv->cstate, &drv->compositor,
-                                         old_buf, surf->buffer,
-                                         &src_rect, &dst_rect, VL_COMPOSITOR_WEAVE);
-         } else {
-            /* Can't convert from progressive to interlaced yet */
-            mtx_unlock(&drv->mutex);
-            return VA_STATUS_ERROR_INVALID_SURFACE;
-         }
-      }
-
-      old_buf->destroy(old_buf);
-      *out_target = surf->buffer;
-   }
+   target_format = context->target->buffer_format;
 
    if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
-      struct pipe_screen *screen = context->decoder->context->screen;
       coded_buf = context->coded_buf;
       context->desc.base.fence = &coded_buf->fence;
       if (u_reduce_video_profile(context->templat.profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC)
@@ -1324,16 +1212,7 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
          context->desc.base.output_format = surf->buffer->buffer_format;
       }
       context->desc.base.input_full_range = surf->full_range;
-
-      if (screen->is_video_target_buffer_supported &&
-          !screen->is_video_target_buffer_supported(screen,
-                                                    context->desc.base.output_format,
-                                                    context->target,
-                                                    context->decoder->profile,
-                                                    context->decoder->entrypoint)) {
-            mtx_unlock(&drv->mutex);
-            return VA_STATUS_ERROR_INVALID_SURFACE;
-      }
+      target_format = context->desc.base.output_format;
 
       if (coded_buf->coded_surf)
          coded_buf->coded_surf->coded_buf = NULL;
@@ -1361,6 +1240,16 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       context->desc.base.fence = &surf->fence;
    } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
       context->desc.base.fence = &surf->fence;
+   }
+
+   if (screen->is_video_target_buffer_supported &&
+       !screen->is_video_target_buffer_supported(screen,
+                                                 target_format,
+                                                 context->target,
+                                                 context->decoder->profile,
+                                                 context->decoder->entrypoint)) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_INVALID_SURFACE;
    }
 
    /* when there are external handles, we can't set PIPE_FLUSH_ASYNC */

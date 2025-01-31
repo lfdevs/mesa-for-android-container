@@ -590,10 +590,9 @@ impl<'a> ShaderFromNir<'a> {
                                 let sc = dc * 2 + w;
                                 if sc < srcs.len() {
                                     let (ssa, byte) = srcs[sc];
-                                    let w_u8 = u8::try_from(w).unwrap();
                                     psrc[w] = ssa.into();
-                                    psel[w * 2 + 0] = (w_u8 * 4) + byte;
-                                    psel[w * 2 + 1] = (w_u8 * 4) + byte + 1;
+                                    psel[w * 2 + 0] = (w as u8 * 4) + byte;
+                                    psel[w * 2 + 1] = (w as u8 * 4) + byte + 1;
                                 }
                             }
                             comps.push(b.prmt(psrc[0], psrc[1], psel)[0]);
@@ -2563,12 +2562,14 @@ impl<'a> ShaderFromNir<'a> {
                 let size_B =
                     (intrin.def.bit_size() / 8) * intrin.def.num_components();
                 assert!(u32::from(size_B) <= intrin.align());
-                let order =
-                    if intrin.intrinsic == nir_intrinsic_load_global_constant {
-                        MemOrder::Constant
-                    } else {
-                        MemOrder::Strong(MemScope::System)
-                    };
+                let order = if intrin.intrinsic
+                    == nir_intrinsic_load_global_constant
+                    || (intrin.access() & ACCESS_CAN_REORDER) != 0
+                {
+                    MemOrder::Constant
+                } else {
+                    MemOrder::Strong(MemScope::System)
+                };
                 let access = MemAccess {
                     mem_type: MemType::from_size(size_B, false),
                     space: MemSpace::Global(MemAddrType::A64),

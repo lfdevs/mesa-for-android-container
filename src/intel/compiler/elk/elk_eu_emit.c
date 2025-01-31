@@ -2518,9 +2518,9 @@ elk_find_next_block_end(struct elk_codegen *p, int start_offset)
 
    int depth = 0;
 
-   for (offset = next_offset(devinfo, store, start_offset);
+   for (offset = next_offset(p, store, start_offset);
         offset < p->next_insn_offset;
-        offset = next_offset(devinfo, store, offset)) {
+        offset = next_offset(p, store, offset)) {
       elk_inst *insn = store + offset;
 
       switch (elk_inst_opcode(p->isa, insn)) {
@@ -2568,9 +2568,9 @@ elk_find_loop_end(struct elk_codegen *p, int start_offset)
    /* Always start after the instruction (such as a WHILE) we're trying to fix
     * up.
     */
-   for (offset = next_offset(devinfo, store, start_offset);
+   for (offset = next_offset(p, store, start_offset);
         offset < p->next_insn_offset;
-        offset = next_offset(devinfo, store, offset)) {
+        offset = next_offset(p, store, offset)) {
       elk_inst *insn = store + offset;
 
       if (elk_inst_opcode(p->isa, insn) == ELK_OPCODE_WHILE) {

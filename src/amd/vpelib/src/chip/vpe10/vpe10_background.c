@@ -23,7 +23,6 @@
  */
 
 #include "vpe10_background.h"
-#include "common.h"
 #include "vpe_priv.h"
 
 bool vpe10_split_bg_gap(struct vpe_rect *gaps, const struct vpe_rect *target_rect,

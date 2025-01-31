@@ -232,6 +232,39 @@ TEST_F(Optimizer, Copyprop)
           agx_fmul_to(b, out, wx, wy));
 }
 
+TEST_F(Optimizer, SourceZeroExtend)
+{
+   CASE32(
+      {
+         agx_index t = agx_temp(b->shader, AGX_SIZE_32);
+         agx_mov_to(b, t, hy);
+         agx_ffs_to(b, out, t);
+      },
+      agx_ffs_to(b, out, hy));
+}
+
+TEST_F(Optimizer, AddSourceZeroExtend)
+{
+   CASE32(
+      {
+         agx_index t = agx_temp(b->shader, AGX_SIZE_32);
+         agx_mov_to(b, t, hy);
+         agx_iadd_to(b, out, wx, t, 1);
+      },
+      agx_iadd_to(b, out, wx, agx_abs(hy), 1));
+}
+
+TEST_F(Optimizer, AddSourceSignExtend)
+{
+   CASE32(
+      {
+         agx_index t = agx_temp(b->shader, AGX_SIZE_32);
+         agx_signext_to(b, t, hy);
+         agx_iadd_to(b, out, wx, t, 1);
+      },
+      agx_iadd_to(b, out, wx, hy, 1));
+}
+
 TEST_F(Optimizer, SubInlineImmediate)
 {
    CASE16(agx_iadd_to(b, out, hx, agx_mov_imm(b, 16, -2), 0),
@@ -305,7 +338,7 @@ TEST_F(Optimizer, IntCopypropDoesntConvert)
    NEGCASE32({
       agx_index cvt = agx_temp(b->shader, AGX_SIZE_32);
       agx_mov_to(b, cvt, hx);
-      agx_xor_to(b, out, cvt, wy);
+      agx_fmul_to(b, out, cvt, wy);
    });
 }
 

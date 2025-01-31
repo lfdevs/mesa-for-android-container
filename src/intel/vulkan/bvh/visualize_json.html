@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BVH Visualization</title>
+</head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #container {
+            width: 100%;
+            height: 50%;
+            border: 2px solid #ccc;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .node circle {
+            fill: #999;
+            stroke: steelblue;
+            stroke-width: 1.5px;
+            cursor: pointer;
+        }
+
+        .node text {
+            font: 12px sans-serif;
+        }
+
+        .link {
+            fill: none;
+            stroke: #555;
+            stroke-opacity: 0.4;
+            stroke-width: 1.5px;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            width: 300px;
+            height: auto;
+            padding: 10px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 1px solid #333;
+            border-radius: 8px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            max-height: 400px;
+            visibility: hidden;
+        }
+
+        .tooltip h3 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .tooltip p {
+            margin: 5px 0;
+            font-size: 12px;
+            word-wrap: break-word;
+        }
+
+        .tooltip .indent {
+            margin-left: 20px;
+        }
+
+        #header {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #header h2 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        #header p {
+            margin: 5px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        #threeContainer {
+            width: 75%;
+            height: 100%;
+        }
+
+        #toggleControls {
+            width: 25%;
+            height: 100%;
+            overflow-y: auto;
+            margin-left: 20px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .toggle-container label {
+            font-size: 14px;
+            margin-left: 10px;
+        }
+
+        #mainContainer {
+            display: flex;
+            width: 100%;
+            height: 50%;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+    </style>
+<body>
+    <div id="header"></div>
+    <div id="container">
+        <div class="tooltip"></div>
+        <svg id="canvas"></svg>
+    </div>
+    <br></br>
+    <br></br>
+    <br></br>
+    <div id="mainContainer">
+        <div id="threeContainer"></div>
+        <div id="toggleControls"></div>
+    </div>
+    <br></br>
+    <br></br>
+    <br></br>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.130.1/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        function formatProperties(properties, depth = 0, maxDepth = 2, index = '') {
+            if (depth > maxDepth) {
+                return '<p><strong>...</strong></p>';
+            }
+
+            let html = '';
+            for (const [key, value] of Object.entries(properties)) {
+                const currentIndex = index ? `${index}.${key}` : key;
+                if (typeof value === 'object' && value !== null) {
+                    html += `<p><strong>${currentIndex}:</strong><div class="indent">${formatProperties(value, depth + 1, maxDepth, currentIndex)}</div></p>`;
+                } else {
+                    let displayValue = value;
+                    if (typeof value === 'string' && value.length > 100) {
+                        displayValue = value.substring(0, 100) + '...';
+                    }
+                    html += `<p><strong>${currentIndex}:</strong> ${displayValue}</p>`;
+                }
+            }
+            return html;
+        }
+
+        d3.json('bvh_dump.json').then(function(treeData) {
+            document.getElementById('header').innerHTML = `<h2>Header Information</h2>${formatProperties(treeData.header)}`;
+
+            var width = 1400,
+                height = 400; // Adjusted for half the height
+
+            var svg = d3.select("#canvas")
+                .attr("width", width)
+                .attr("height", height)
+                .call(d3.zoom().on("zoom", function (event) {
+                    g.attr("transform", event.transform);
+                }))
+                .append("g");
+
+            var g = svg.append("g");
+
+            var root = d3.hierarchy(treeData.nodes.find(n => n.id === 0), function(d) {
+                return treeData.relationships[d.id].map(id => treeData.nodes.find(n => n.id === id));
+            });
+
+            var treeLayout = d3.tree().size([height, width - 250]);
+
+            treeLayout(root);
+
+            var link = g.selectAll(".link")
+                .data(root.links())
+                .enter().append("path")
+                .attr("class", "link")
+                .attr("d", d3.linkHorizontal()
+                    .x(d => d.y)
+                    .y(d => d.x));
+
+            var node = g.selectAll(".node")
+                .data(root.descendants())
+                .enter().append("g")
+                .attr("class", "node")
+                .attr("transform", d => `translate(${d.y},${d.x})`);
+
+            node.append("circle")
+                .attr("r", 10)
+                .on("click", function(event, d) {
+                    const propertiesHtml = formatProperties(d.data.properties);
+
+                    d3.select(".tooltip")
+                        .html(`<h3>ID: ${d.data.id}</h3>${propertiesHtml}`)
+                        .style("visibility", "visible")
+                        .style("left", (event.pageX + 20) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                    d3.selectAll("circle").attr("r", 10);
+                    d3.select(this).attr("r", 15);
+                });
+
+            node.append("text")
+                .attr("dy", 3)
+                .attr("x", d => d.children ? -12 : 12)
+                .style("text-anchor", d => d.children ? "end" : "start")
+                .text(d => d.data.type);
+
+            d3.select("body").on("click", function(event) {
+                if (!event.target.closest(".node")) {
+                    d3.select(".tooltip").style("visibility", "hidden");
+                    d3.selectAll("circle").attr("r", 10);
+                }
+            });
+
+            initThreeJs(treeData);
+        });
+
+        function initThreeJs(treeData) {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth * 0.7 / 800, 0.1, 1000); // Adjusted for the new layout
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth * 0.7, 800); // Adjusted for half the height
+            document.getElementById('threeContainer').appendChild(renderer.domElement);
+
+            // Add orbit controls for zoom and rotate
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.25;
+            controls.screenSpacePanning = false;
+            controls.maxPolarAngle = Math.PI / 2;
+
+            // Add grid helper and axis helper for reference
+            const gridHelper = new THREE.GridHelper(10, 10);
+            scene.add(gridHelper);
+
+            const axesHelper = new THREE.AxesHelper(5);
+            scene.add(axesHelper);
+
+            const geometries = [];
+
+            function createBox(coord, color, id) {
+                const geometry = new THREE.BoxGeometry(
+                    coord.x_upper - coord.x_lower,
+                    coord.y_upper - coord.y_lower,
+                    coord.z_upper - coord.z_lower
+                );
+                const edges = new THREE.EdgesGeometry(geometry);
+                const material = new THREE.LineBasicMaterial({ color: color });
+                const box = new THREE.LineSegments(edges, material);
+                box.position.set(
+                    (coord.x_upper + coord.x_lower) / 2,
+                    (coord.y_upper + coord.y_lower) / 2,
+                    (coord.z_upper + coord.z_lower) / 2
+                );
+
+                scene.add(box);
+                geometries.push(box);
+
+                addToggleControl(box, id);
+            }
+
+            function createTriangle(vertices, leafColor, id) {
+                const geometry = new THREE.BufferGeometry();
+                const verticesArray = new Float32Array(vertices.flat());
+                geometry.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
+                const material = new THREE.MeshBasicMaterial({ color: leafColor, side: THREE.DoubleSide, wireframe: true });
+                const triangle = new THREE.Mesh(geometry, material);
+                scene.add(triangle);
+                geometries.push(triangle);
+
+                addToggleControl(triangle, id);
+            }
+
+            function createInstance(instanceProperties, color, id) {
+                const geometry = new THREE.SphereGeometry(0.1, 32, 32); // Create a sphere geometry
+                const material = new THREE.MeshBasicMaterial({ color: color, wireframe: false }); // Create a material with wireframe
+                const sphere = new THREE.Mesh(geometry, material); // Create a mesh
+
+                const { obj2world_p } = instanceProperties.part0;
+                sphere.position.set(obj2world_p[0], obj2world_p[1], obj2world_p[2]);
+
+                scene.add(sphere);
+                geometries.push(sphere);
+
+                addToggleControl(sphere, id);
+            }
+            function addToggleControl(geometry, id) {
+                const toggleContainer = document.createElement('div');
+                toggleContainer.className = 'toggle-container';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = true;
+                checkbox.addEventListener('change', () => {
+                    geometry.visible = checkbox.checked;
+                });
+
+                const labelElement = document.createElement('label');
+                labelElement.textContent = `${id}`;
+
+                toggleContainer.appendChild(checkbox);
+                toggleContainer.appendChild(labelElement);
+                document.getElementById('toggleControls').appendChild(toggleContainer);
+            }
+
+            function handleNode(node, parentType) {
+                const leafColor = 0xffa500;
+                const internalColor = 0x00ff00;
+                if (node.type === 'AnvInternalNode') {
+                    // Check if the internal node is a fatLeaf
+                    const isFatProceduralLeaf = node.properties.node_type.nodeType === 0x3;
+                    const isFatInstanceLeaf = node.properties.node_type.nodeType === 0x1;
+                    node.properties.child_data.forEach((child, index) => {
+                        if (child.blockIncr !== 1 && child.blockIncr !== 2) {
+                            return;
+                        }
+                        const childIsProcedural = child.startPrim === 0x3 || isFatProceduralLeaf;
+                        const childIsInstance = child.startPrim === 0x1 || isFatInstanceLeaf;
+                        const color = (childIsProcedural || childIsInstance) ? leafColor : internalColor;
+                        let label = node.id + "'s child box";
+                        label += (childIsProcedural) ? " also a procedural leaf" : "";
+                        label += (childIsInstance) ? " also a instance leaf" : "";
+                        createBox(node.properties.actual_coords[index], color, label);
+                    });
+                } else {
+                    switch (node.type) {
+                        case 'AnvQuadLeafNode':
+                            createTriangle(node.properties.v, leafColor, `Triangle. NodeID=${node.id}`);
+                            break;
+                        case 'AnvInstanceLeaf':
+                            // Skip. Already drawn by parents
+                            break;
+                        case 'AnvAabbLeafNode':
+                            // Skip. Already drawn by parents
+                            break;
+                    }
+                }
+            }
+
+            // Draw AABB from header
+            const headerAABB = treeData.header.aabb;
+            createBox({
+                x_lower: headerAABB.min_x,
+                x_upper: headerAABB.max_x,
+                y_lower: headerAABB.min_y,
+                y_upper: headerAABB.max_y,
+                z_lower: headerAABB.min_z,
+                z_upper: headerAABB.max_z
+            }, 0xff00ff, 'Root AABB');
+
+            // Draw nodes
+            treeData.nodes.forEach(node => {
+                handleNode(node, node.properties.node_type);
+            });
+
+            camera.position.z = 5;
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+    </script>
+</body>
+</html>
+

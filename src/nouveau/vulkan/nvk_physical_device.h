@@ -25,6 +25,7 @@ struct nvkmd_pdev;
 struct nvk_queue_family {
    VkQueueFlags queue_flags;
    uint32_t queue_count;
+   VkQueueGlobalPriority max_priority;
 };
 
 struct nvk_memory_heap {

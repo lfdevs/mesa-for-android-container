@@ -101,9 +101,9 @@ static void si_create_compute_state_async(void *job, void *gdata, int thread_ind
    compiler = &sscreen->compiler[thread_index];
 
    assert(program->ir_type == PIPE_SHADER_IR_NIR);
-   si_nir_scan_shader(sscreen, sel->nir, &sel->info);
+   si_nir_scan_shader(sscreen, sel->nir, &sel->info, false);
 
-   if (!sel->info.base.use_aco_amd && !*compiler)
+   if (!sel->nir->info.use_aco_amd && !*compiler)
       *compiler = si_create_llvm_compiler(sscreen);
 
    si_get_active_slot_masks(sscreen, &sel->info, &sel->active_const_and_shader_buffers,
@@ -117,11 +117,11 @@ static void si_create_compute_state_async(void *job, void *gdata, int thread_ind
     */
    unsigned user_sgprs = SI_NUM_RESOURCE_SGPRS + (sel->info.uses_grid_size ? 3 : 0) +
                          (sel->info.uses_variable_block_size ? 1 : 0) +
-                         sel->info.base.cs.user_data_components_amd;
+                         sel->nir->info.cs.user_data_components_amd;
 
    /* Fast path for compute shaders - some descriptors passed via user SGPRs. */
    /* Shader buffers in user SGPRs. */
-   for (unsigned i = 0; i < MIN2(3, sel->info.base.num_ssbos) && user_sgprs <= 12; i++) {
+   for (unsigned i = 0; i < MIN2(3, sel->nir->info.num_ssbos) && user_sgprs <= 12; i++) {
       user_sgprs = align(user_sgprs, 4);
       if (i == 0)
          sel->cs_shaderbufs_sgpr_index = user_sgprs;
@@ -130,16 +130,16 @@ static void si_create_compute_state_async(void *job, void *gdata, int thread_ind
    }
 
    /* Images in user SGPRs. */
-   unsigned non_fmask_images = u_bit_consecutive(0, sel->info.base.num_images);
+   unsigned non_fmask_images = u_bit_consecutive(0, sel->nir->info.num_images);
 
    /* Remove images with FMASK from the bitmask.  We only care about the first
     * 3 anyway, so we can take msaa_images[0] and ignore the rest.
     */
    if (sscreen->info.gfx_level < GFX11)
-      non_fmask_images &= ~sel->info.base.msaa_images[0];
+      non_fmask_images &= ~sel->nir->info.msaa_images[0];
 
    for (unsigned i = 0; i < 3 && non_fmask_images & (1 << i); i++) {
-      unsigned num_sgprs = BITSET_TEST(sel->info.base.image_buffers, i) ? 4 : 8;
+      unsigned num_sgprs = BITSET_TEST(sel->nir->info.image_buffers, i) ? 4 : 8;
 
       if (align(user_sgprs, num_sgprs) + num_sgprs > 16)
          break;
@@ -201,6 +201,14 @@ static void si_create_compute_state_async(void *job, void *gdata, int thread_ind
                                                         : sel->info.uses_thread_id[1] ? 1 : 0) |
                              S_00B84C_LDS_SIZE(shader->config.lds_size);
 
+      /* COMPUTE_PGM_RSRC3 is only present on GFX10+ and GFX940+. */
+      shader->config.rsrc3 = S_00B8A0_SHARED_VGPR_CNT(shader->config.num_shared_vgprs / 8);
+
+      if (sscreen->info.gfx_level >= GFX12)
+         shader->config.rsrc3 |= S_00B8A0_INST_PREF_SIZE_GFX12(si_get_shader_prefetch_size(shader));
+      else if (sscreen->info.gfx_level >= GFX11)
+         shader->config.rsrc3 |= S_00B8A0_INST_PREF_SIZE_GFX11(si_get_shader_prefetch_size(shader));
+
       simple_mtx_lock(&sscreen->shader_cache_mutex);
       si_shader_cache_insert_shader(sscreen, ir_sha1_cache_key, shader, true);
       simple_mtx_unlock(&sscreen->shader_cache_mutex);
@@ -238,6 +246,8 @@ static void *si_create_compute_state(struct pipe_context *ctx, const struct pipe
          assert(cso->ir_type == PIPE_SHADER_IR_NIR);
          sel->nir = (struct nir_shader *)cso->prog;
       }
+
+      sel->nir->info.shared_size = cso->static_shared_mem;
 
       if (si_can_dump_shader(sscreen, sel->stage, SI_DUMP_INIT_NIR))
          nir_print_shader(sel->nir, stderr);
@@ -522,15 +532,13 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
       simple_mtx_unlock(&shader->selector->mutex);
 
    if (sctx->gfx_level >= GFX12) {
-      unsigned rsrc3 = S_00B8A0_INST_PREF_SIZE_GFX12(si_get_shader_prefetch_size(shader));
-
       gfx12_push_compute_sh_reg(R_00B830_COMPUTE_PGM_LO, shader_va >> 8);
       gfx12_opt_push_compute_sh_reg(R_00B848_COMPUTE_PGM_RSRC1,
                                     SI_TRACKED_COMPUTE_PGM_RSRC1, config->rsrc1);
       gfx12_opt_push_compute_sh_reg(R_00B84C_COMPUTE_PGM_RSRC2,
                                     SI_TRACKED_COMPUTE_PGM_RSRC2, rsrc2);
       gfx12_opt_push_compute_sh_reg(R_00B8A0_COMPUTE_PGM_RSRC3,
-                                    SI_TRACKED_COMPUTE_PGM_RSRC3, rsrc3);
+                                    SI_TRACKED_COMPUTE_PGM_RSRC3, config->rsrc3);
       gfx12_opt_push_compute_sh_reg(R_00B860_COMPUTE_TMPRING_SIZE,
                                     SI_TRACKED_COMPUTE_TMPRING_SIZE, sctx->compute_tmpring_size);
       if (config->scratch_bytes_per_wave) {
@@ -542,15 +550,13 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
                                        sctx->compute_scratch_buffer->gpu_address >> 40);
       }
    } else if (sctx->screen->info.has_set_sh_pairs_packed) {
-      unsigned rsrc3 = S_00B8A0_INST_PREF_SIZE_GFX11(si_get_shader_prefetch_size(shader));
-
       gfx11_push_compute_sh_reg(R_00B830_COMPUTE_PGM_LO, shader_va >> 8);
       gfx11_opt_push_compute_sh_reg(R_00B848_COMPUTE_PGM_RSRC1,
                                     SI_TRACKED_COMPUTE_PGM_RSRC1, config->rsrc1);
       gfx11_opt_push_compute_sh_reg(R_00B84C_COMPUTE_PGM_RSRC2,
                                     SI_TRACKED_COMPUTE_PGM_RSRC2, rsrc2);
       gfx11_opt_push_compute_sh_reg(R_00B8A0_COMPUTE_PGM_RSRC3,
-                                    SI_TRACKED_COMPUTE_PGM_RSRC3, rsrc3);
+                                    SI_TRACKED_COMPUTE_PGM_RSRC3, config->rsrc3);
       gfx11_opt_push_compute_sh_reg(R_00B860_COMPUTE_TMPRING_SIZE,
                                     SI_TRACKED_COMPUTE_TMPRING_SIZE, sctx->compute_tmpring_size);
       if (config->scratch_bytes_per_wave) {
@@ -577,10 +583,9 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
                                 sctx->compute_scratch_buffer->gpu_address >> 40);
       }
 
-      if (sctx->gfx_level >= GFX11) {
+      if (sctx->gfx_level >= GFX10) {
          radeon_opt_set_sh_reg(R_00B8A0_COMPUTE_PGM_RSRC3,
-                               SI_TRACKED_COMPUTE_PGM_RSRC3,
-                               S_00B8A0_INST_PREF_SIZE_GFX11(si_get_shader_prefetch_size(shader)));
+                               SI_TRACKED_COMPUTE_PGM_RSRC3, config->rsrc3);
       }
       radeon_end();
    }

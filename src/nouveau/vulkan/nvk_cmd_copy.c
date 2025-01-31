@@ -197,7 +197,7 @@ nouveau_copy_rect(struct nvk_cmd_buffer *cmd, struct nouveau_copy *copy)
       });
    } else {
       /* When component remapping is disabled, dimensions are in units of
-       * bytes (an implicit block widht of 1B).
+       * bytes (an implicit block width of 1B).
        */
       assert(copy->src.bpp == copy->dst.bpp);
       src_bw = copy->src.bpp;

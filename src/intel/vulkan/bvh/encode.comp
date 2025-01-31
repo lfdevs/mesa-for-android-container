@@ -1,0 +1,587 @@
+/* Copyright © 2022 Friedrich Vock
+ * Copyright © 2024 Intel Corporation
+ * SPDX-License-Identifier: MIT
+ */
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_KHR_memory_scope_semantics : require
+#extension GL_EXT_shader_atomic_int64: require
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+#include "anv_build_helpers.h"
+#include "anv_build_interface.h"
+
+#define ULP 1.1920928955078125e-7f
+
+layout(push_constant) uniform CONSTS {
+   encode_args args;
+};
+
+uint64_t
+get_instance_flag(uint32_t src)
+{
+   uint32_t flags = src & 0xff;
+   return flags & 0xf;
+}
+
+void
+encode_leaf_node(uint32_t type, uint64_t src_node, uint64_t dst_node, REF(anv_accel_struct_header) dst_header)
+{
+   switch (type) {
+   case vk_ir_node_triangle: {
+      REF(anv_quad_leaf_node) quad_leaf = REF(anv_quad_leaf_node)(dst_node);
+
+      vk_ir_triangle_node src = DEREF(REF(vk_ir_triangle_node)(src_node));
+      uint32_t geometry_id_and_flags = src.geometry_id_and_flags & 0xffffff;
+
+      /* sub-type (4-bit) encoded on 24-bit index */
+      geometry_id_and_flags |= (ANV_SUB_TYPE_QUAD & 0xF) << 24;
+      /* Set disable opacity culling by default */
+      geometry_id_and_flags |= (1 << 29);
+
+      /* Disable the second triangle */
+      uint32_t prim_index1_delta = 0;
+      /* For now, blockIncr are all 1, so every quad leaf has its "last" bit set. */
+      prim_index1_delta |= (1 << 22);
+
+      DEREF(quad_leaf).prim_index1_delta = prim_index1_delta;
+
+      if ((src.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0) {
+         /* Geometry opqaue (1-bit) is encoded on 30-bit index */
+         geometry_id_and_flags |= (ANV_GEOMETRY_FLAG_OPAQUE << 30);
+         atomicAnd(DEREF(dst_header).instance_flags,
+                   ~ANV_INSTANCE_FLAG_FORCE_NON_OPAQUE);
+      } else {
+         atomicAnd(DEREF(dst_header).instance_flags,
+                   ~ANV_INSTANCE_FLAG_FORCE_OPAQUE);
+      }
+
+      DEREF(quad_leaf).prim_index0 = src.triangle_id;
+      DEREF(quad_leaf).leaf_desc.geometry_id_and_flags = geometry_id_and_flags;
+
+      /* shaderIndex is typically set to match geomIndex
+       * Geom mask is default to 0xFF
+       */
+      DEREF(quad_leaf).leaf_desc.shader_index_and_geom_mask = 0xFF000000 | (geometry_id_and_flags & 0xffffff);
+
+      /* Setup single triangle */
+      for (uint32_t i = 0; i < 3; i++) {
+         for (uint32_t j = 0; j < 3; j++) {
+            DEREF(quad_leaf).v[i][j] = src.coords[i][j];
+         }
+      }
+      break;
+   }
+   case vk_ir_node_aabb: {
+      REF(anv_procedural_leaf_node) aabb_leaf = REF(anv_procedural_leaf_node)(dst_node);
+
+      vk_ir_aabb_node src = DEREF(REF(vk_ir_aabb_node)(src_node));
+      uint32_t geometry_id_and_flags = src.geometry_id_and_flags & 0xffffff;
+
+      /* sub-type (4-bit) encoded on 24-bit index */
+      geometry_id_and_flags |= (ANV_SUB_TYPE_PROCEDURAL & 0xF) << 24;
+      /* Set disable opacity culling by default */
+      geometry_id_and_flags |= (1 << 29);
+
+      if ((src.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0) {
+         geometry_id_and_flags |= (ANV_GEOMETRY_FLAG_OPAQUE << 30);
+         atomicAnd(DEREF(dst_header).instance_flags,
+                   ~ANV_INSTANCE_FLAG_FORCE_NON_OPAQUE);
+      } else {
+         atomicAnd(DEREF(dst_header).instance_flags,
+                   ~ANV_INSTANCE_FLAG_FORCE_OPAQUE);
+      }
+
+      DEREF(aabb_leaf).leaf_desc.geometry_id_and_flags = geometry_id_and_flags;
+
+      /* shaderIndex is typically set to match geomIndex
+       * Geom mask is default to 0xFF
+       */
+      DEREF(aabb_leaf).leaf_desc.shader_index_and_geom_mask = 0xFF000000 | (geometry_id_and_flags & 0xffffff);
+
+      /* num primitives = 1 */
+      uint32_t dw1 = 1;
+      /* "last" has only 1 bit, and it is set. */
+      dw1 |= (1 << 31);
+
+      DEREF(aabb_leaf).DW1 = dw1;
+      DEREF(aabb_leaf).primIndex[0] = src.primitive_id;
+      break;
+   }
+   case vk_ir_node_instance: {
+      vk_ir_instance_node src = DEREF(REF(vk_ir_instance_node)(src_node));
+
+      REF(anv_instance_leaf) dst_instance = REF(anv_instance_leaf)(dst_node);
+
+      REF(anv_accel_struct_header) blas_header = REF(anv_accel_struct_header)(src.base_ptr);
+      uint64_t start_node_ptr = uint64_t(src.base_ptr) + DEREF(blas_header).rootNodeOffset;
+
+      uint32_t sbt_offset_and_flags = src.sbt_offset_and_flags;
+
+      uint32_t shader_index_and_geom_mask = 0;
+      shader_index_and_geom_mask |= (src.custom_instance_and_mask & 0xff000000);
+      DEREF(dst_instance).part0.shader_index_and_geom_mask = shader_index_and_geom_mask;
+
+      uint32_t instance_contribution_and_geom_flags = 0;
+      instance_contribution_and_geom_flags |= src.sbt_offset_and_flags & 0xffffff;
+      instance_contribution_and_geom_flags |= (1 << 29);
+      instance_contribution_and_geom_flags |=
+         (get_instance_flag(src.sbt_offset_and_flags >> 24) == ANV_INSTANCE_FLAG_FORCE_OPAQUE ?
+          ANV_GEOMETRY_FLAG_OPAQUE : 0) << 30;
+      DEREF(dst_instance).part0.instance_contribution_and_geom_flags =
+         instance_contribution_and_geom_flags;
+
+      uint32_t instance_flags = DEREF(blas_header).instance_flags;
+      if (((sbt_offset_and_flags >> 24) & (VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR |
+                                           VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR)) != 0) {
+         instance_flags &= ~(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR |
+                             VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR);
+         instance_flags |= (sbt_offset_and_flags >> 24) & (VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR |
+                                                           VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR);
+      }
+
+      DEREF(dst_instance).part0.start_node_ptr_and_inst_flags =
+         start_node_ptr |
+         (get_instance_flag(instance_flags | (src.sbt_offset_and_flags >> 24)) << 48);
+
+      mat4 transform = mat4(src.otw_matrix);
+
+      mat4 inv_transform = transpose(inverse(transpose(transform)));
+      mat3x4 wto_matrix = mat3x4(inv_transform);
+      mat3x4 otw_matrix = mat3x4(transform);
+
+      /* Arrange WTO transformation matrix in column-major order */
+      DEREF(dst_instance).part0.world2obj_vx_x = wto_matrix[0][0];
+      DEREF(dst_instance).part0.world2obj_vx_y = wto_matrix[1][0];
+      DEREF(dst_instance).part0.world2obj_vx_z = wto_matrix[2][0];
+      DEREF(dst_instance).part0.obj2world_p_x =  otw_matrix[0][3];
+
+      DEREF(dst_instance).part0.world2obj_vy_x = wto_matrix[0][1];
+      DEREF(dst_instance).part0.world2obj_vy_y = wto_matrix[1][1];
+      DEREF(dst_instance).part0.world2obj_vy_z = wto_matrix[2][1];
+      DEREF(dst_instance).part0.obj2world_p_y =  otw_matrix[1][3];
+
+      DEREF(dst_instance).part0.world2obj_vz_x = wto_matrix[0][2];
+      DEREF(dst_instance).part0.world2obj_vz_y = wto_matrix[1][2];
+      DEREF(dst_instance).part0.world2obj_vz_z = wto_matrix[2][2];
+      DEREF(dst_instance).part0.obj2world_p_z =  otw_matrix[2][3];
+
+      /* Arrange OTW transformation matrix in column-major order */
+      DEREF(dst_instance).part1.obj2world_vx_x = otw_matrix[0][0];
+      DEREF(dst_instance).part1.obj2world_vx_y = otw_matrix[1][0];
+      DEREF(dst_instance).part1.obj2world_vx_z = otw_matrix[2][0];
+      DEREF(dst_instance).part1.world2obj_p_x =  wto_matrix[0][3];
+
+      DEREF(dst_instance).part1.obj2world_vy_x = otw_matrix[0][1];
+      DEREF(dst_instance).part1.obj2world_vy_y = otw_matrix[1][1];
+      DEREF(dst_instance).part1.obj2world_vy_z = otw_matrix[2][1];
+      DEREF(dst_instance).part1.world2obj_p_y =  wto_matrix[1][3];
+
+      DEREF(dst_instance).part1.obj2world_vz_x = otw_matrix[0][2];
+      DEREF(dst_instance).part1.obj2world_vz_y = otw_matrix[1][2];
+      DEREF(dst_instance).part1.obj2world_vz_z = otw_matrix[2][2];
+      DEREF(dst_instance).part1.world2obj_p_z =  wto_matrix[2][3];
+
+      DEREF(dst_instance).part1.bvh_ptr = src.base_ptr;
+      DEREF(dst_instance).part1.instance_index = src.instance_id;
+      DEREF(dst_instance).part1.instance_id = src.custom_instance_and_mask & 0xffffff;
+
+      uint64_t instance_leaves_addr_base = args.output_bvh - args.output_bvh_offset + ANV_RT_BVH_HEADER_SIZE;
+      uint64_t cnt = atomicAdd(DEREF(dst_header).instance_count, 1);
+      DEREF(INDEX(uint64_t, instance_leaves_addr_base, cnt)) = dst_node;
+      break;
+   }
+   }
+}
+
+vk_aabb
+conservative_aabb(vk_aabb input_aabb)
+{
+   vk_aabb out_aabb;
+
+   vec3 reduce_value = max(abs(input_aabb.min), abs(input_aabb.max));
+   float err = ULP * max(reduce_value.x, max(reduce_value.y, reduce_value.z));
+
+   out_aabb.min = input_aabb.min - vec3(err);
+   out_aabb.max = input_aabb.max + vec3(err);
+
+   return out_aabb;
+}
+
+void
+aabb_extend(inout vk_aabb v1, vk_aabb v2)
+{
+   v1.min = min(v1.min, v2.min);
+   v1.max = max(v1.max, v2.max);
+}
+
+vec3
+aabb_size(vk_aabb input_aabb)
+{
+   return input_aabb.max - input_aabb.min;
+}
+
+/* Determine the node_type based on type of its children.
+ * If children are all the same leaves, this internal node is a fat leaf;
+ * Otherwise, it's a mixed node.
+ */
+uint8_t
+determine_internal_node_type(uint32_t children[6], uint child_count)
+{
+   if (child_count == 0)
+      return uint8_t(ANV_NODE_TYPE_INVALID);
+
+   uint32_t type_of_first_child = ir_id_to_type(children[0]);
+   for (uint32_t i = 1; i < child_count; ++i) {
+      uint32_t type = ir_id_to_type(children[i]);
+      if(type != type_of_first_child){
+         return uint8_t(ANV_NODE_TYPE_MIXED);
+      }
+   }
+
+   /* All children have same type. Now check what type they are. */
+   switch (type_of_first_child){
+   case vk_ir_node_triangle:
+      return uint8_t(ANV_NODE_TYPE_QUAD);
+   case vk_ir_node_aabb:
+      return uint8_t(ANV_NODE_TYPE_PROCEDURAL);
+   case vk_ir_node_instance:
+      return uint8_t(ANV_NODE_TYPE_INSTANCE);
+   case vk_ir_node_internal:
+      return uint8_t(ANV_NODE_TYPE_MIXED);
+   default:
+      return uint8_t(ANV_NODE_TYPE_INVALID);
+   }
+}
+
+vk_aabb
+quantize_bounds(vk_aabb aabb, vec3 base, i8vec3 exp)
+{
+   vk_aabb quant_aabb;
+   vec3 lower = aabb.min - base;
+   vec3 upper = aabb.max - base;
+
+   vec3 qlower = ldexp(lower, -exp + 8);
+   vec3 qupper = ldexp(upper, -exp + 8);
+
+   qlower = min(max(floor(qlower), vec3(0.0)), vec3(255.0));
+   qupper = min(max(ceil(qupper), vec3(0.0)), vec3(255.0));
+
+   quant_aabb.min = qlower;
+   quant_aabb.max = qupper;
+
+   return quant_aabb;
+}
+
+void
+encode_internal_node(uint32_t children[6], uint32_t child_block_offset_from_internal_node, uint child_count,
+                     vec3 min_offset, vec3 max_offset, uint32_t bvh_block_offset)
+{
+   REF(anv_internal_node) dst_node =
+      REF(anv_internal_node)(OFFSET(args.output_bvh, ANV_RT_BLOCK_SIZE * bvh_block_offset));
+
+   DEREF(dst_node).child_block_offset = child_block_offset_from_internal_node;
+
+   vk_aabb box;
+   box.min = min_offset;
+   box.max = max_offset;
+
+   vk_aabb conservative_child_aabb = conservative_aabb(box);
+   DEREF(dst_node).lower[0] = conservative_child_aabb.min.x;
+   DEREF(dst_node).lower[1] = conservative_child_aabb.min.y;
+   DEREF(dst_node).lower[2] = conservative_child_aabb.min.z;
+
+   float up = 1.0 + ULP;
+   ivec3 exp;
+
+   vec3 len = aabb_size(conservative_child_aabb) * up;
+   vec3 mant = frexp(len, exp);
+
+   exp.x += int((mant.x > (255.0f / 256.0f)));
+   exp.y += int((mant.y > (255.0f / 256.0f)));
+   exp.z += int((mant.z > (255.0f / 256.0f)));
+
+   i8vec3 exponent_i8 = i8vec3(exp);
+   DEREF(dst_node).exp_x = max(int8_t(-128), exponent_i8.x);
+   DEREF(dst_node).exp_y = max(int8_t(-128), exponent_i8.y);
+   DEREF(dst_node).exp_z = max(int8_t(-128), exponent_i8.z);
+
+   i8vec3 exp_i8 = i8vec3(DEREF(dst_node).exp_x, DEREF(dst_node).exp_y, DEREF(dst_node).exp_z);
+
+   DEREF(dst_node).node_mask = uint8_t(0xff);
+   DEREF(dst_node).node_type = determine_internal_node_type(children, child_count);
+
+   for (uint32_t i = 0; i < 6; i++) {
+      if (i < child_count) {
+         uint32_t type = ir_id_to_type(children[i]);
+         /* blockIncr and child_block_offset are how HW used to find children during traversal.
+          * If not set properly, gpu could hang.
+          */
+         DEREF(dst_node).data[i].block_incr_and_start_prim =
+            type == vk_ir_node_instance ? uint8_t(2) : uint8_t(1);
+
+         uint32_t offset = ir_id_to_offset(children[i]);
+
+         vk_aabb child_aabb =
+            DEREF(REF(vk_ir_node)OFFSET(args.intermediate_bvh, offset)).aabb;
+
+         child_aabb = conservative_aabb(child_aabb);
+
+         vk_aabb quantize_aabb = quantize_bounds(child_aabb, conservative_child_aabb.min, exp_i8);
+
+         DEREF(dst_node).lower_x[i] = uint8_t(quantize_aabb.min.x);
+         DEREF(dst_node).lower_y[i] = uint8_t(quantize_aabb.min.y);
+         DEREF(dst_node).lower_z[i] = uint8_t(quantize_aabb.min.z);
+         DEREF(dst_node).upper_x[i] = uint8_t(quantize_aabb.max.x);
+         DEREF(dst_node).upper_y[i] = uint8_t(quantize_aabb.max.y);
+         DEREF(dst_node).upper_z[i] = uint8_t(quantize_aabb.max.z);
+
+         /* for a mixed node, encode type of each children in startPrim in childdata */
+         if (DEREF(dst_node).node_type == uint8_t(ANV_NODE_TYPE_MIXED)){
+            uint32_t type = ir_id_to_type(children[i]);
+            switch (type){
+            case vk_ir_node_triangle:
+               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_QUAD) << 2);
+               break;
+            case vk_ir_node_aabb:
+               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_PROCEDURAL) << 2);
+               break;
+            case vk_ir_node_instance:
+               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_INSTANCE) << 2);
+               break;
+            case vk_ir_node_internal:
+               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_MIXED) << 2);
+               break;
+            }
+         }
+      } else {
+         /* Invalid Child Nodes: For invalid child nodes, the MSBs of lower and upper
+          * x planes are flipped. In other words:
+          * bool valid(int i) const {
+          *   return !(lower_x[i] & 0x80) || (upper_x[i] & 0x80);
+          * }
+          */
+         DEREF(dst_node).lower_x[i] = uint8_t(0x80);
+         DEREF(dst_node).lower_y[i] = uint8_t(0);
+         DEREF(dst_node).lower_z[i] = uint8_t(0);
+         DEREF(dst_node).upper_x[i] = uint8_t(0);
+         DEREF(dst_node).upper_y[i] = uint8_t(0);
+         DEREF(dst_node).upper_z[i] = uint8_t(0);
+
+         /* in case HW also references blockIncr to do something, we zero out the data. */
+         DEREF(dst_node).data[i].block_incr_and_start_prim = uint8_t(0);
+         DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_INVALID) << 2);
+      }
+   }
+}
+
+void
+main()
+{
+   /* Encode.comp is dispatched through indirect dispatch with calculated groupCountX,
+    * but we can still overdispatch invocations, so we need a guard here.
+    *
+    * Also, we can't support more than 0xFFFFFFFF internal nodes due to SW
+    * limit we enforce on indirect workgroup count for signaling.
+    */
+   if (gl_GlobalInvocationID.x >= DEREF(args.header).ir_internal_node_count ||
+       DEREF(args.header).ir_internal_node_count > 0xFFFFFFFF)
+      return;
+
+   /* Each lane will process one vk_ir_node_internal. The root node is sitting at the end
+    * of the IR BVH, and we let the lane with gl_GlobalInvocationID.x == 0 to take care of it.
+    */
+   uint32_t global_id = DEREF(args.header).ir_internal_node_count - 1 - gl_GlobalInvocationID.x;
+
+   uint32_t intermediate_leaf_node_size;
+   switch (args.geometry_type) {
+   case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
+      intermediate_leaf_node_size = SIZEOF(vk_ir_triangle_node);
+      break;
+   case VK_GEOMETRY_TYPE_AABBS_KHR:
+      intermediate_leaf_node_size = SIZEOF(vk_ir_aabb_node);
+      break;
+   default: /* instances */
+      intermediate_leaf_node_size = SIZEOF(vk_ir_instance_node);
+      break;
+   }
+
+   uint32_t intermediate_leaf_nodes_size = args.leaf_node_count * intermediate_leaf_node_size;
+
+   REF(vk_ir_box_node) intermediate_internal_nodes =
+      REF(vk_ir_box_node)OFFSET(args.intermediate_bvh, intermediate_leaf_nodes_size);
+   REF(vk_ir_box_node) src_node = INDEX(vk_ir_box_node, intermediate_internal_nodes, global_id);
+   vk_ir_box_node src = DEREF(src_node);
+
+   bool is_root_node = gl_GlobalInvocationID.x == 0;
+
+   REF(anv_accel_struct_header) header = REF(anv_accel_struct_header)(args.output_bvh - args.output_bvh_offset);
+
+   if (is_root_node) {
+      DEREF(header).instance_flags =
+         (args.geometry_type == VK_GEOMETRY_TYPE_AABBS_KHR ? ANV_INSTANCE_ALL_AABB : 0) |
+         /* These will be removed when processing leaf nodes */
+         ANV_INSTANCE_FLAG_FORCE_OPAQUE | ANV_INSTANCE_FLAG_FORCE_NON_OPAQUE;
+
+      /* Indicate where the next children should be encoded. Offset measured in number of 64B blocks and started from output_bvh */
+      DEREF(args.header).dst_node_offset = 1;
+
+      DEREF(header).instance_count = 0;
+   }
+
+   for (;;) {
+      /* Make changes to the current node's BVH offset value visible. */
+      memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                    gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+
+      /* Indicate where this internal node should be encoded. Offset measured in number of 64B blocks and started from output_bvh.*/
+      uint32_t bvh_block_offset = is_root_node ? 0 : DEREF(src_node).bvh_offset;
+
+      /* The invocation that processes this node is spinning, since its parent hasn't told it bvh_offset */
+      if (bvh_block_offset == VK_UNKNOWN_BVH_OFFSET)
+         continue;
+
+      if (bvh_block_offset == VK_NULL_BVH_OFFSET)
+         break;
+
+      uint32_t found_child_count = 0;
+      uint32_t children[6] = {VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE,
+                              VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE,
+                              VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE};
+
+      /* Initially, this node can have at most two children (can be internal nodes or leaves). */
+      for (uint32_t i = 0; i < 2; ++i)
+         if (src.children[i] != VK_BVH_INVALID_NODE)
+            children[found_child_count++] = src.children[i];
+
+      /* For this node, try to collapse binary to 6-ary children */
+      while (found_child_count < 6) {
+         /* For each iteration, find a vk_ir_node_internal child that has largest surface area */
+         int32_t collapsed_child_index = -1;
+         float largest_surface_area = -INFINITY;
+
+         for (int32_t i = 0; i < found_child_count; ++i) {
+            /* If a child is a leaf (not vk_ir_node_internal), there's no need to collapse it. */
+            if (ir_id_to_type(children[i]) != vk_ir_node_internal)
+               continue;
+
+            vk_aabb bounds =
+               DEREF(REF(vk_ir_node)OFFSET(args.intermediate_bvh,
+                                           ir_id_to_offset(children[i]))).aabb;
+
+            float surface_area = aabb_surface_area(bounds);
+            if (surface_area > largest_surface_area) {
+               largest_surface_area = surface_area;
+               collapsed_child_index = i;
+            }
+         }
+
+         if (collapsed_child_index != -1) {
+            /* Once I found a good vk_ir_node_internal child, try to connect myself
+             * to this child's children, i.e. my grandchildren. Grandchildren can be
+             * internal nodes or leaves.
+             */
+            REF(vk_ir_box_node) child_node =
+               REF(vk_ir_box_node)OFFSET(args.intermediate_bvh,
+                                        ir_id_to_offset(children[collapsed_child_index]));
+            uint32_t grandchildren[2] = DEREF(child_node).children;
+            uint32_t valid_grandchild_count = 0;
+
+            if (grandchildren[1] != VK_BVH_INVALID_NODE)
+               ++valid_grandchild_count;
+
+            if (grandchildren[0] != VK_BVH_INVALID_NODE)
+               ++valid_grandchild_count;
+            else
+               grandchildren[0] = grandchildren[1];
+
+            /* Grandchild now becomes my direct child, and can possibly be collapsed
+             * in the next iteration if found_child_count has not reached 6.
+             */
+            if (valid_grandchild_count > 1)
+               children[found_child_count++] = grandchildren[1];
+
+            if (valid_grandchild_count > 0)
+               children[collapsed_child_index] = grandchildren[0];
+            else {
+               /* This child doesn't have valid children, then I don't consider this
+                * child as my child anymore. This is possible depending on how and
+                * when lbvh/ploc algorithm marks a node as VK_BVH_INVALID_NODE.
+                */
+               found_child_count--;
+               children[collapsed_child_index] = children[found_child_count];
+            }
+
+            /* Finish collapsing, now I can mark this collapsed internal node as NULL,
+             * so whichever lane that would have processed it will return.
+             */
+            DEREF(child_node).bvh_offset = VK_NULL_BVH_OFFSET;
+         } else
+            break;
+      }
+
+      /* Count the number of instance children found. For each one found, it contributes to 2 blocks to dst_node_offset */
+      uint32_t num_blocks_to_add = 0;
+      for (uint32_t i = 0; i < found_child_count; ++i) {
+         uint32_t type = ir_id_to_type(children[i]);
+         num_blocks_to_add += (type == vk_ir_node_instance) ? 2 : 1;
+      }
+
+      /* Used for finding where to encode children. Also, update dst_node_offset so other invocations know where to start encoding */
+      uint32_t child_block_offset_from_output_bvh = atomicAdd(DEREF(args.header).dst_node_offset, num_blocks_to_add);
+
+      /* This is one of the needed information in anv_internal_node */
+      uint32_t child_block_offset_from_internal_node = child_block_offset_from_output_bvh - bvh_block_offset;
+
+      vec3 min_offset = vec3(INFINITY);
+      vec3 max_offset = vec3(-INFINITY);
+      for (uint32_t i = 0; i < found_child_count; ++i) {
+         /* Retrieve type and location of the child from IR BVH */
+         uint32_t type = ir_id_to_type(children[i]);
+         uint32_t offset = ir_id_to_offset(children[i]);
+
+         if (type == vk_ir_node_internal) {
+            REF(vk_ir_box_node) child_node = REF(vk_ir_box_node)OFFSET(args.intermediate_bvh, offset);
+            DEREF(child_node).bvh_offset = child_block_offset_from_output_bvh;
+         } else {
+            encode_leaf_node(type, args.intermediate_bvh + offset,
+                             args.output_bvh + ANV_RT_BLOCK_SIZE * child_block_offset_from_output_bvh,
+                             header);
+         }
+
+         vk_aabb child_aabb =
+            DEREF(REF(vk_ir_node)OFFSET(args.intermediate_bvh, offset)).aabb;
+
+         min_offset = min(min_offset, child_aabb.min);
+         max_offset = max(max_offset, child_aabb.max);
+
+         child_block_offset_from_output_bvh += (type == vk_ir_node_instance) ? 2 : 1;
+      }
+
+      /* Make changes to the children's BVH offset value available to the other invocations. */
+      memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                    gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+
+      encode_internal_node(children, child_block_offset_from_internal_node,
+                           found_child_count, min_offset, max_offset, bvh_block_offset);
+
+      break;
+   }
+
+   if (is_root_node) {
+      DEREF(header).aabb = src.base.aabb;
+      DEREF(header).rootNodeOffset = args.output_bvh_offset;
+   }
+}

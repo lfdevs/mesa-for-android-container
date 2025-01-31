@@ -102,7 +102,7 @@ nvk_slm_area_ensure(struct nvk_device *dev,
    simple_mtx_lock(&area->mutex);
    if (bytes_per_tpc <= area->bytes_per_tpc) {
       /* We lost the race, throw away our BO */
-      assert(area->bytes_per_warp == bytes_per_warp);
+      assert(area->bytes_per_warp >= bytes_per_warp);
       unref_mem = mem;
    } else {
       unref_mem = area->mem;
@@ -115,6 +115,14 @@ nvk_slm_area_ensure(struct nvk_device *dev,
    if (unref_mem)
       nvkmd_mem_unref(unref_mem);
 
+   return VK_SUCCESS;
+}
+
+static VkResult
+nvk_device_get_timestamp(struct vk_device *vk_dev, uint64_t *timestamp)
+{
+   struct nvk_device *dev = container_of(vk_dev, struct nvk_device, vk);
+   *timestamp = nvkmd_dev_get_gpu_timestamp(dev->nvkmd);
    return VK_SUCCESS;
 }
 
@@ -152,6 +160,8 @@ nvk_CreateDevice(VkPhysicalDevice physicalDevice,
 
    vk_device_set_drm_fd(&dev->vk, nvkmd_dev_get_drm_fd(dev->nvkmd));
    dev->vk.command_buffer_ops = &nvk_cmd_buffer_ops;
+
+   dev->vk.get_timestamp = nvk_device_get_timestamp;
 
    result = nvk_upload_queue_init(dev, &dev->upload);
    if (result != VK_SUCCESS)
@@ -315,57 +325,6 @@ nvk_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    nvk_upload_queue_finish(dev, &dev->upload);
    nvkmd_dev_destroy(dev->nvkmd);
    vk_free(&dev->vk.alloc, dev);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL
-nvk_GetCalibratedTimestampsKHR(VkDevice _device,
-                               uint32_t timestampCount,
-                               const VkCalibratedTimestampInfoKHR *pTimestampInfos,
-                               uint64_t *pTimestamps,
-                               uint64_t *pMaxDeviation)
-{
-   VK_FROM_HANDLE(nvk_device, dev, _device);
-   uint64_t max_clock_period = 0;
-   uint64_t begin, end;
-   int d;
-
-#ifdef CLOCK_MONOTONIC_RAW
-   begin = vk_clock_gettime(CLOCK_MONOTONIC_RAW);
-#else
-   begin = vk_clock_gettime(CLOCK_MONOTONIC);
-#endif
-
-   for (d = 0; d < timestampCount; d++) {
-      switch (pTimestampInfos[d].timeDomain) {
-      case VK_TIME_DOMAIN_DEVICE_KHR:
-         pTimestamps[d] = nvkmd_dev_get_gpu_timestamp(dev->nvkmd);
-         max_clock_period = MAX2(max_clock_period, 1); /* FIXME: Is timestamp period actually 1? */
-         break;
-      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR:
-         pTimestamps[d] = vk_clock_gettime(CLOCK_MONOTONIC);
-         max_clock_period = MAX2(max_clock_period, 1);
-         break;
-
-#ifdef CLOCK_MONOTONIC_RAW
-      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR:
-         pTimestamps[d] = begin;
-         break;
-#endif
-      default:
-         pTimestamps[d] = 0;
-         break;
-      }
-   }
-
-#ifdef CLOCK_MONOTONIC_RAW
-   end = vk_clock_gettime(CLOCK_MONOTONIC_RAW);
-#else
-   end = vk_clock_gettime(CLOCK_MONOTONIC);
-#endif
-
-   *pMaxDeviation = vk_time_max_deviation(begin, end, max_clock_period);
-
-   return VK_SUCCESS;
 }
 
 VkResult

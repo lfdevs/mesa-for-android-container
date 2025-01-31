@@ -26,7 +26,7 @@ use std::thread::JoinHandle;
 pub struct QueueContext {
     // need to use ManuallyDrop so we can recycle the context without cloning
     ctx: ManuallyDrop<PipeContext>,
-    dev: &'static Device,
+    pub dev: &'static Device,
     use_stream: bool,
 }
 
@@ -86,7 +86,7 @@ pub struct Queue {
     pub context: Arc<Context>,
     pub device: &'static Device,
     pub props: cl_command_queue_properties,
-    pub props_v2: Option<Properties<cl_queue_properties>>,
+    pub props_v2: Properties<cl_queue_properties>,
     state: Mutex<QueueState>,
     thrd: JoinHandle<()>,
 }
@@ -105,7 +105,7 @@ impl Queue {
         context: Arc<Context>,
         device: &'static Device,
         props: cl_command_queue_properties,
-        props_v2: Option<Properties<cl_queue_properties>>,
+        props_v2: Properties<cl_queue_properties>,
     ) -> CLResult<Arc<Queue>> {
         // we assume that memory allocation is the only possible failure. Any other failure reason
         // should be detected earlier (e.g.: checking for CAPs).

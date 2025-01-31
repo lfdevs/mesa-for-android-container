@@ -5,7 +5,11 @@
 # .gitlab-ci/image-tags.yml tags:
 # DEBIAN_BUILD_TAG
 
-set -ex
+set -e
+
+. .gitlab-ci/setup-test-env.sh
+
+set -x
 
 EPHEMERAL=(
     autoconf
@@ -16,10 +20,10 @@ EPHEMERAL=(
 apt-get install -y --no-remove "${EPHEMERAL[@]}"
 
 # Fetch the NDK and extract just the toolchain we want.
-ndk=$ANDROID_NDK
+ndk="android-ndk-${ANDROID_NDK_VERSION}"
 curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
   -o $ndk.zip https://dl.google.com/android/repository/$ndk-linux.zip
-unzip -d / $ndk.zip "$ndk/toolchains/llvm/*"
+unzip -d / $ndk.zip "$ndk/source.properties" "$ndk/build/cmake/*" "$ndk/toolchains/llvm/*"
 rm $ndk.zip
 # Since it was packed as a zip file, symlinks/hardlinks got turned into
 # duplicate files.  Turn them into hardlinks to save on container space.
@@ -85,9 +89,20 @@ for arch in \
                 --libdir=/usr/local/lib/${arch}
     make install
     make distclean
+
+    unset CC
+    unset CC
+    unset CXX
+    unset LD
+    unset RANLIB
 done
 
 cd ..
 rm -rf $LIBELF_VERSION
+
+
+# Build LLVM libraries for Android only if necessary, uploading a copy to S3
+# to avoid rebuilding it in a future run if the version does not change.
+bash .gitlab-ci/container/build-android-x86_64-llvm.sh
 
 apt-get purge -y "${EPHEMERAL[@]}"

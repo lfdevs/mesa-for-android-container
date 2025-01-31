@@ -7,6 +7,13 @@
 #include "nir_builder.h"
 #include "nir_vla.h"
 
+/*
+ * This pass relies on nak_nir_mark_lcssa_invariants being run first, because it
+ * assumes that convergent values used in convergent control flow can be
+ * allocated to uniform registers. See the example in that file for more
+ * details.
+ */
+
 static void
 lower_ldcx_to_global(nir_builder *b, nir_intrinsic_instr *load)
 {

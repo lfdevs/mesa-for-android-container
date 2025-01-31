@@ -62,6 +62,7 @@ lower_64b_intrinsics(nir_builder *b, nir_instr *instr, void *unused)
       switch (intr->intrinsic) {
       case nir_intrinsic_store_ssbo:
       case nir_intrinsic_store_global_ir3:
+      case nir_intrinsic_store_per_view_output:
          offset_src_idx = 2;
          break;
       default:
@@ -123,6 +124,7 @@ lower_64b_intrinsics(nir_builder *b, nir_instr *instr, void *unused)
       case nir_intrinsic_load_ssbo:
       case nir_intrinsic_load_ubo:
       case nir_intrinsic_load_global_ir3:
+      case nir_intrinsic_load_per_view_output:
          offset_src_idx = 1;
          break;
       default:

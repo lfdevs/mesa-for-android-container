@@ -1,7 +1,7 @@
 # Basic test set
 [[deqp]]
-deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-caselists = ["/deqp/mustpass/vk-main.txt"]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 skips = ["install/freedreno-a6xx-skips.txt"]
 renderer_check = "Turnip Adreno .* 750"
 tests_per_group = 10000
@@ -9,8 +9,8 @@ tests_per_group = 10000
 # force-gmem testing
 # Autotuner forces sysmem on most CTS tests
 [[deqp]]
-deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-caselists = ["/deqp/mustpass/vk-main.txt"]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 skips = ["install/freedreno-a6xx-skips.txt"]
 prefix = "gmem-"
 fraction = 20
@@ -20,8 +20,8 @@ TU_DEBUG = "gmem,forcebin"
 
 # force-gmem with unaligned gmem store testing
 [[deqp]]
-deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-caselists = ["/deqp/mustpass/vk-main.txt"]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 skips = ["install/freedreno-a6xx-skips.txt"]
 include = ["dEQP-VK.renderpass.*"]
 prefix = "gmem-unaligned-"
@@ -32,8 +32,8 @@ TU_DEBUG = "gmem,unaligned_store"
 
 # force-sysmem testing
 [[deqp]]
-deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-caselists = ["/deqp/mustpass/vk-main.txt"]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 skips = ["install/freedreno-a6xx-skips.txt"]
 include = ["dEQP-VK.renderpass.*"]
 prefix = "bypass-"
@@ -45,8 +45,8 @@ TU_DEBUG = "sysmem"
 # force-spilling testing
 # NOTE: Disabled due to crashing the board so hard it goes into Sahara mode
 # [[deqp]]
-# deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-# caselists = ["/deqp/mustpass/vk-main.txt"]
+# deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+# caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 # skips = ["install/freedreno-a6xx-skips.txt"]
 # include = ["dEQP-VK.graphicsfuzz.*"]
 # prefix = "spill-"
@@ -57,8 +57,8 @@ TU_DEBUG = "sysmem"
 
 # dynamic rendering testing using emulated renderpass
 [[deqp]]
-deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-caselists = ["/deqp/mustpass/vk-main.txt"]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 skips = ["install/freedreno-a6xx-skips.txt"]
 include = ["dEQP-VK.renderpass2.*"]
 prefix = "dynamic-"
@@ -69,8 +69,8 @@ TU_DEBUG = "dynamic"
 # testing for stale regs usage
 # NOTE: Disabled due to constant gpu hangs
 # [[deqp]]
-# deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-# caselists = ["/deqp/mustpass/vk-main.txt"]
+# deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+# caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 # skips = ["install/freedreno-a6xx-skips.txt"]
 # prefix = "stale-regs-"
 # fraction = 100

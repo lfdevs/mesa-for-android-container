@@ -24,8 +24,9 @@ struct radv_query_pool {
    uint32_t availability_offset;
    uint64_t size;
    char *ptr;
-   bool uses_gds; /* For NGG GS on GFX10+ */
+   bool uses_emulated_queries;
    bool uses_ace; /* For task shader invocations on GFX10.3+ */
+   bool uses_shader_query_buf; /* For generated/written primitives on GFX12+ */
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(radv_query_pool, vk.base, VkQueryPool, VK_OBJECT_TYPE_QUERY_POOL)

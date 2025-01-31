@@ -195,6 +195,9 @@ get_push_range_address(struct anv_cmd_buffer *cmd_buffer,
          cmd_buffer, gfx_state->base.push_constants_state);
    }
 
+   case ANV_DESCRIPTOR_SET_NULL:
+      return cmd_buffer->device->workaround_address;
+
    default: {
       assert(range->set < MAX_SETS);
       struct anv_descriptor_set *set =
@@ -258,6 +261,7 @@ get_push_range_bound_size(struct anv_cmd_buffer *cmd_buffer,
       return gfx_state->base.pipeline->layout.set[
          range->index].layout->descriptor_buffer_surface_size;
 
+   case ANV_DESCRIPTOR_SET_NULL:
    case ANV_DESCRIPTOR_SET_PUSH_CONSTANTS:
       return (range->start + range->length) * 32;
 
@@ -374,44 +378,12 @@ cmd_buffer_emit_push_constant(struct anv_cmd_buffer *cmd_buffer,
 
 #if GFX_VER >= 12
 static void
-emit_null_push_constant_tbimr_workaround(struct anv_cmd_buffer *cmd_buffer)
-{
-   /* Pass a single-register push constant payload for the PS
-    * stage even if empty, since PS invocations with zero push
-    * constant cycles have been found to cause hangs with TBIMR
-    * enabled.  See HSDES #22020184996.
-    *
-    * XXX - Use workaround infrastructure and final workaround
-    *       when provided by hardware team.
-    */
-   const struct anv_address null_addr = cmd_buffer->device->workaround_address;
-   uint32_t *dw = anv_batch_emitn(
-      &cmd_buffer->batch, 4,
-      GENX(3DSTATE_CONSTANT_ALL),
-      .ShaderUpdateEnable = (1 << MESA_SHADER_FRAGMENT),
-      .PointerBufferMask = 1,
-      .MOCS = isl_mocs(&cmd_buffer->device->isl_dev, 0, false));
-   GENX(3DSTATE_CONSTANT_ALL_DATA_pack)(
-      &cmd_buffer->batch, dw + 2,
-      &(struct GENX(3DSTATE_CONSTANT_ALL_DATA)) {
-         .PointerToConstantBuffer = null_addr,
-         .ConstantBufferReadLength = 1,
-      });
-}
-
-static void
 cmd_buffer_emit_push_constant_all(struct anv_cmd_buffer *cmd_buffer,
                                   uint32_t shader_mask,
                                   struct anv_address *buffers,
                                   uint32_t buffer_count)
 {
    if (buffer_count == 0) {
-      if (cmd_buffer->device->info->needs_null_push_constant_tbimr_workaround &&
-          (shader_mask & (1 << MESA_SHADER_FRAGMENT))) {
-         emit_null_push_constant_tbimr_workaround(cmd_buffer);
-         shader_mask &= ~(1 << MESA_SHADER_FRAGMENT);
-      }
-
       if (shader_mask) {
          anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CONSTANT_ALL), c) {
             c.ShaderUpdateEnable = shader_mask;
@@ -699,13 +671,67 @@ cmd_buffer_maybe_flush_rt_writes(struct anv_cmd_buffer *cmd_buffer,
 }
 
 ALWAYS_INLINE static void
+cmd_buffer_flush_vertex_buffers(struct anv_cmd_buffer *cmd_buffer,
+                                uint32_t vb_emit)
+{
+   const struct vk_dynamic_graphics_state *dyn =
+      &cmd_buffer->vk.dynamic_graphics_state;
+   const uint32_t num_buffers = __builtin_popcount(vb_emit);
+   const uint32_t num_dwords = 1 + num_buffers * 4;
+   uint32_t *p = anv_batch_emitn(&cmd_buffer->batch, num_dwords,
+                                 GENX(3DSTATE_VERTEX_BUFFERS));
+   uint32_t i = 0;
+   u_foreach_bit(vb, vb_emit) {
+      struct anv_buffer *buffer = cmd_buffer->state.vertex_bindings[vb].buffer;
+      uint32_t offset = cmd_buffer->state.vertex_bindings[vb].offset;
+
+      struct GENX(VERTEX_BUFFER_STATE) state;
+      if (buffer) {
+         uint32_t stride = dyn->vi_binding_strides[vb];
+         UNUSED uint32_t size = cmd_buffer->state.vertex_bindings[vb].size;
+
+         state = (struct GENX(VERTEX_BUFFER_STATE)) {
+            .VertexBufferIndex = vb,
+
+            .MOCS = anv_mocs(cmd_buffer->device, buffer->address.bo,
+                             ISL_SURF_USAGE_VERTEX_BUFFER_BIT),
+            .AddressModifyEnable = true,
+            .BufferPitch = stride,
+            .BufferStartingAddress = anv_address_add(buffer->address, offset),
+            .NullVertexBuffer = offset >= buffer->vk.size,
+#if GFX_VER >= 12
+            .L3BypassDisable = true,
+#endif
+
+            .BufferSize = size,
+         };
+      } else {
+         state = (struct GENX(VERTEX_BUFFER_STATE)) {
+            .VertexBufferIndex = vb,
+            .NullVertexBuffer = true,
+            .MOCS = anv_mocs(cmd_buffer->device, NULL,
+                             ISL_SURF_USAGE_VERTEX_BUFFER_BIT),
+         };
+      }
+
+#if GFX_VER == 9
+      genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, vb,
+                                                     state.BufferStartingAddress,
+                                                     state.BufferSize);
+#endif
+
+      GENX(VERTEX_BUFFER_STATE_pack)(&cmd_buffer->batch, &p[1 + i * 4], &state);
+      i++;
+   }
+}
+
+ALWAYS_INLINE static void
 genX(cmd_buffer_flush_gfx_state)(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_graphics_pipeline *pipeline =
       anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
    const struct vk_dynamic_graphics_state *dyn =
       &cmd_buffer->vk.dynamic_graphics_state;
-   uint32_t *p;
 
    assert((pipeline->base.base.active_stages & VK_SHADER_STAGE_COMPUTE_BIT) == 0);
 
@@ -750,57 +776,9 @@ genX(cmd_buffer_flush_gfx_state)(struct anv_cmd_buffer *cmd_buffer)
       vb_emit |= dyn->vi->bindings_valid;
 
    if (vb_emit) {
-      const uint32_t num_buffers = __builtin_popcount(vb_emit);
-      const uint32_t num_dwords = 1 + num_buffers * 4;
-
-      p = anv_batch_emitn(&cmd_buffer->batch, num_dwords,
-                          GENX(3DSTATE_VERTEX_BUFFERS));
-      uint32_t i = 0;
-      u_foreach_bit(vb, vb_emit) {
-         struct anv_buffer *buffer = cmd_buffer->state.vertex_bindings[vb].buffer;
-         uint32_t offset = cmd_buffer->state.vertex_bindings[vb].offset;
-
-         struct GENX(VERTEX_BUFFER_STATE) state;
-         if (buffer) {
-            uint32_t stride = dyn->vi_binding_strides[vb];
-            UNUSED uint32_t size = cmd_buffer->state.vertex_bindings[vb].size;
-
-            state = (struct GENX(VERTEX_BUFFER_STATE)) {
-               .VertexBufferIndex = vb,
-
-               .MOCS = anv_mocs(cmd_buffer->device, buffer->address.bo,
-                                ISL_SURF_USAGE_VERTEX_BUFFER_BIT),
-               .AddressModifyEnable = true,
-               .BufferPitch = stride,
-               .BufferStartingAddress = anv_address_add(buffer->address, offset),
-               .NullVertexBuffer = offset >= buffer->vk.size,
-#if GFX_VER >= 12
-               .L3BypassDisable = true,
-#endif
-
-               .BufferSize = size,
-            };
-         } else {
-            state = (struct GENX(VERTEX_BUFFER_STATE)) {
-               .VertexBufferIndex = vb,
-               .NullVertexBuffer = true,
-               .MOCS = anv_mocs(cmd_buffer->device, NULL,
-                                ISL_SURF_USAGE_VERTEX_BUFFER_BIT),
-            };
-         }
-
-#if GFX_VER == 9
-         genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, vb,
-                                                        state.BufferStartingAddress,
-                                                        state.BufferSize);
-#endif
-
-         GENX(VERTEX_BUFFER_STATE_pack)(&cmd_buffer->batch, &p[1 + i * 4], &state);
-         i++;
-      }
+      cmd_buffer_flush_vertex_buffers(cmd_buffer, vb_emit);
+      cmd_buffer->state.gfx.vb_dirty &= ~vb_emit;
    }
-
-   cmd_buffer->state.gfx.vb_dirty &= ~vb_emit;
 
    const bool any_dynamic_state_dirty =
       vk_dynamic_graphics_state_any_dirty(dyn);
@@ -876,12 +854,9 @@ genX(cmd_buffer_flush_gfx_state)(struct anv_cmd_buffer *cmd_buffer)
       }
    }
 
-   /* State left dirty after flushing runtime state. */
-   anv_cmd_dirty_mask_t dirty_state_mask = 0;
-
    /* Flush the runtime state into the HW state tracking */
    if (cmd_buffer->state.gfx.dirty || any_dynamic_state_dirty)
-      dirty_state_mask = genX(cmd_buffer_flush_gfx_runtime_state)(cmd_buffer);
+      genX(cmd_buffer_flush_gfx_runtime_state)(cmd_buffer);
 
    /* Flush the HW state into the commmand buffer */
    if (!BITSET_IS_EMPTY(cmd_buffer->state.gfx.dyn_state.dirty))
@@ -953,10 +928,7 @@ genX(cmd_buffer_flush_gfx_state)(struct anv_cmd_buffer *cmd_buffer)
    }
 #endif
 
-   /* When we're done, only thing left is the possible dirty state
-    * returned by cmd_buffer_flush_gfx_runtime_state.
-    */
-   cmd_buffer->state.gfx.dirty = dirty_state_mask;
+   cmd_buffer->state.gfx.dirty = 0;
 }
 
 ALWAYS_INLINE static bool
@@ -1076,7 +1048,7 @@ cmd_buffer_post_draw_wa(struct anv_cmd_buffer *cmd_buffer,
                         uint32_t access_type)
 {
    batch_post_draw_wa(&cmd_buffer->batch, cmd_buffer->device,
-                      cmd_buffer->state.gfx.primitive_topology,
+                      cmd_buffer->state.gfx.dyn_state.vft.PrimitiveTopologyType,
                       vertex_count);
 
    update_dirty_vbs_for_gfx8_vb_flush(cmd_buffer, access_type);
@@ -1153,7 +1125,9 @@ void genX(CmdDraw)(
 
    cmd_buffer_post_draw_wa(cmd_buffer, vertexCount, SEQUENTIAL);
 
-   trace_intel_end_draw(&cmd_buffer->trace, count);
+   trace_intel_end_draw(&cmd_buffer->trace, count,
+                        pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                        pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
 }
 
 void genX(CmdDrawMultiEXT)(
@@ -1208,7 +1182,9 @@ void genX(CmdDrawMultiEXT)(
                               pVertexInfo[drawCount - 1].vertexCount,
                               SEQUENTIAL);
 
-      trace_intel_end_draw_multi(&cmd_buffer->trace, count);
+      trace_intel_end_draw_multi(&cmd_buffer->trace, count,
+                                 pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                 pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
    }
 #else
    vk_foreach_multi_draw(draw, i, pVertexInfo, drawCount, stride) {
@@ -1242,7 +1218,9 @@ void genX(CmdDrawMultiEXT)(
                               pVertexInfo[drawCount - 1].vertexCount,
                               SEQUENTIAL);
 
-      trace_intel_end_draw_multi(&cmd_buffer->trace, count);
+      trace_intel_end_draw_multi(&cmd_buffer->trace, count,
+                                 pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                 pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
    }
 #endif
 }
@@ -1312,7 +1290,9 @@ void genX(CmdDrawIndexed)(
 
    cmd_buffer_post_draw_wa(cmd_buffer, indexCount, RANDOM);
 
-   trace_intel_end_draw_indexed(&cmd_buffer->trace, count);
+   trace_intel_end_draw_indexed(&cmd_buffer->trace, count,
+                                pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
 }
 
 void genX(CmdDrawMultiIndexedEXT)(
@@ -1383,7 +1363,9 @@ void genX(CmdDrawMultiIndexedEXT)(
                                     pIndexInfo[drawCount - 1].indexCount,
                                     RANDOM);
 
-            trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count);
+            trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count,
+                                               pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                               pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
             emitted = false;
          }
       } else {
@@ -1421,7 +1403,9 @@ void genX(CmdDrawMultiIndexedEXT)(
                                     pIndexInfo[drawCount - 1].indexCount,
                                     RANDOM);
 
-            trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count);
+            trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count,
+                                               pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                               pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
          }
       }
    } else {
@@ -1455,7 +1439,9 @@ void genX(CmdDrawMultiIndexedEXT)(
                                  pIndexInfo[drawCount - 1].indexCount,
                                  RANDOM);
 
-         trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count);
+         trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count,
+                                             pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                             pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
       }
    }
 #else
@@ -1492,7 +1478,9 @@ void genX(CmdDrawMultiIndexedEXT)(
                               pIndexInfo[drawCount - 1].indexCount,
                               RANDOM);
 
-      trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count);
+      trace_intel_end_draw_indexed_multi(&cmd_buffer->trace, count,
+                                         pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                         pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
    }
 #endif
 }
@@ -1612,7 +1600,9 @@ void genX(CmdDrawIndirectByteCountEXT)(
    cmd_buffer_post_draw_wa(cmd_buffer, 1, SEQUENTIAL);
 
    trace_intel_end_draw_indirect_byte_count(&cmd_buffer->trace,
-      instanceCount * pipeline->instance_multiplier);
+                                            instanceCount * pipeline->instance_multiplier,
+                                            pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                            pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
 }
 
 static void
@@ -1906,6 +1896,8 @@ void genX(CmdDrawIndirect)(
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
 
    if (anv_batch_has_error(&cmd_buffer->batch))
       return;
@@ -1943,7 +1935,9 @@ void genX(CmdDrawIndirect)(
                           stride, drawCount, false /* indexed */);
    }
 
-   trace_intel_end_draw_indirect(&cmd_buffer->trace, drawCount);
+   trace_intel_end_draw_indirect(&cmd_buffer->trace, drawCount,
+                                 pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                 pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
 }
 
 void genX(CmdDrawIndexedIndirect)(
@@ -1955,6 +1949,8 @@ void genX(CmdDrawIndexedIndirect)(
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
 
    if (anv_batch_has_error(&cmd_buffer->batch))
       return;
@@ -1992,7 +1988,9 @@ void genX(CmdDrawIndexedIndirect)(
                           stride, drawCount, true /* indexed */);
    }
 
-   trace_intel_end_draw_indexed_indirect(&cmd_buffer->trace, drawCount);
+   trace_intel_end_draw_indexed_indirect(&cmd_buffer->trace, drawCount,
+                                         pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                         pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
 }
 
 #define MI_PREDICATE_SRC0    0x2400
@@ -2155,6 +2153,8 @@ void genX(CmdDrawIndirectCount)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
    ANV_FROM_HANDLE(anv_buffer, count_buffer, _countBuffer);
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
 
    if (anv_batch_has_error(&cmd_buffer->batch))
       return;
@@ -2197,7 +2197,9 @@ void genX(CmdDrawIndirectCount)(
    }
 
    trace_intel_end_draw_indirect_count(&cmd_buffer->trace,
-                                       anv_address_utrace(count_address));
+                                       anv_address_utrace(count_address),
+                                       pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                       pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
 }
 
 void genX(CmdDrawIndexedIndirectCount)(
@@ -2212,6 +2214,8 @@ void genX(CmdDrawIndexedIndirectCount)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
    ANV_FROM_HANDLE(anv_buffer, count_buffer, _countBuffer);
+   struct anv_graphics_pipeline *pipeline =
+      anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
 
    if (anv_batch_has_error(&cmd_buffer->batch))
       return;
@@ -2254,7 +2258,9 @@ void genX(CmdDrawIndexedIndirectCount)(
    }
 
    trace_intel_end_draw_indexed_indirect_count(&cmd_buffer->trace,
-                                               anv_address_utrace(count_address));
+                                               anv_address_utrace(count_address),
+                                               pipeline->base.source_hashes[MESA_SHADER_VERTEX],
+                                               pipeline->base.source_hashes[MESA_SHADER_FRAGMENT]);
 
 }
 

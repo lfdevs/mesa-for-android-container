@@ -134,9 +134,8 @@ anv_physical_device_init_va_ranges(struct anv_physical_device *device)
     * located at an address with the lower 32bits at 0.
     */
    address = align64(address, _4Gb);
-   address = va_add(&device->va.instruction_state_pool, address, 2 * _1Gb);
+   address = va_add(&device->va.instruction_state_pool, address, 3 * _1Gb);
 
-   address += 1 * _1Gb;
    address = va_add(&device->va.dynamic_state_pool, address, _1Gb);
    address = va_add(&device->va.dynamic_visible_pool, address,
                     device->info.verx10 >= 125 ? (2 * _1Gb) : (3 * _1Gb - 4096));

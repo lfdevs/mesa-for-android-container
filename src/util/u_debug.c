@@ -426,7 +426,7 @@ parse_debug_string(const char *debug,
          const char *s = debug;
          unsigned n;
 
-         for (; n = strcspn(s, ", "), *s; s += MAX2(1, n)) {
+         for (; n = strcspn(s, ", \n"), *s; s += MAX2(1, n)) {
             if (!n)
                continue;
 
@@ -453,7 +453,7 @@ parse_enable_string(const char *debug,
       const char *s = debug;
       unsigned n;
 
-      for (; n = strcspn(s, ", "), *s; s += MAX2(1, n)) {
+      for (; n = strcspn(s, ", \n"), *s; s += MAX2(1, n)) {
          bool enable;
          if (s[0] == '+') {
             enable = true;

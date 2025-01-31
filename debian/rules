@@ -257,7 +257,6 @@ override_dh_install:
 
 	# Get rid of some files which aren't installed. Do not
 	# use -f to ensure we notice disappearing files:
-	rm debian/tmp/usr/lib/*/libglapi.so
 	rm debian/tmp/usr/lib/*/libEGL_mesa.so
 	rm debian/tmp/usr/lib/*/libGLX_mesa.so
   ifneq (,$(filter $(DEB_HOST_ARCH), $(NVK_ARCHS)))
@@ -308,7 +307,7 @@ override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4
 
 %:
-	dh $@ \
+	dh $@ --with quilt \
 		--builddirectory=build/ \
 		--buildsystem=meson
 

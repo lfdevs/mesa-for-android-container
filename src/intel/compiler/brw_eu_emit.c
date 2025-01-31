@@ -36,12 +36,12 @@
 #include "util/ralloc.h"
 
 void
-brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
+brw_set_dest(struct brw_codegen *p, brw_eu_inst *inst, struct brw_reg dest)
 {
    const struct intel_device_info *devinfo = p->devinfo;
 
    if (dest.file == FIXED_GRF)
-      assert(dest.nr < XE2_MAX_GRF);
+      assert(dest.nr < XE3_MAX_GRF);
 
    /* The hardware has a restriction where a destination of size Byte with
     * a stride of 1 is only allowed for a packed byte MOV. For any other
@@ -56,47 +56,49 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
    }
 
    if (devinfo->ver >= 12 &&
-       (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
-        brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC)) {
+       (brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
+        brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC)) {
       assert(dest.file == FIXED_GRF ||
+             dest.file == ADDRESS ||
              dest.file == ARF);
       assert(dest.address_mode == BRW_ADDRESS_DIRECT);
       assert(dest.subnr == 0);
-      assert(brw_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1 ||
+      assert(brw_eu_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1 ||
              (dest.hstride == BRW_HORIZONTAL_STRIDE_1 &&
               dest.vstride == dest.width + 1));
       assert(!dest.negate && !dest.abs);
-      brw_inst_set_dst_reg_file(devinfo, inst, dest.file);
-      brw_inst_set_dst_da_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
+      brw_eu_inst_set_dst_reg_file(devinfo, inst, phys_file(dest));
+      brw_eu_inst_set_dst_da_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
 
-   } else if (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
-              brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
+   } else if (brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
+              brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
       assert(devinfo->ver < 12);
       assert(dest.file == FIXED_GRF ||
+             dest.file == ADDRESS ||
              dest.file == ARF);
       assert(dest.address_mode == BRW_ADDRESS_DIRECT);
       assert(dest.subnr % 16 == 0);
       assert(dest.hstride == BRW_HORIZONTAL_STRIDE_1 &&
              dest.vstride == dest.width + 1);
       assert(!dest.negate && !dest.abs);
-      brw_inst_set_dst_da_reg_nr(devinfo, inst, dest.nr);
-      brw_inst_set_dst_da16_subreg_nr(devinfo, inst, dest.subnr / 16);
-      brw_inst_set_send_dst_reg_file(devinfo, inst, dest.file);
+      brw_eu_inst_set_dst_da_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
+      brw_eu_inst_set_dst_da16_subreg_nr(devinfo, inst, dest.subnr / 16);
+      brw_eu_inst_set_send_dst_reg_file(devinfo, inst, phys_file(dest));
    } else {
-      brw_inst_set_dst_file_type(devinfo, inst, dest.file, dest.type);
-      brw_inst_set_dst_address_mode(devinfo, inst, dest.address_mode);
+      brw_eu_inst_set_dst_file_type(devinfo, inst, phys_file(dest), dest.type);
+      brw_eu_inst_set_dst_address_mode(devinfo, inst, dest.address_mode);
 
       if (dest.address_mode == BRW_ADDRESS_DIRECT) {
-         brw_inst_set_dst_da_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
+         brw_eu_inst_set_dst_da_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
 
-         if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-            brw_inst_set_dst_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
+         if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+            brw_eu_inst_set_dst_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
             if (dest.hstride == BRW_HORIZONTAL_STRIDE_0)
                dest.hstride = BRW_HORIZONTAL_STRIDE_1;
-            brw_inst_set_dst_hstride(devinfo, inst, dest.hstride);
+            brw_eu_inst_set_dst_hstride(devinfo, inst, dest.hstride);
          } else {
-            brw_inst_set_dst_da16_subreg_nr(devinfo, inst, dest.subnr / 16);
-            brw_inst_set_da16_writemask(devinfo, inst, dest.writemask);
+            brw_eu_inst_set_dst_da16_subreg_nr(devinfo, inst, dest.subnr / 16);
+            brw_eu_inst_set_da16_writemask(devinfo, inst, dest.writemask);
             if (dest.file == FIXED_GRF) {
                assert(dest.writemask != 0);
             }
@@ -104,41 +106,41 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
              *    Although Dst.HorzStride is a don't care for Align16, HW needs
              *    this to be programmed as "01".
              */
-            brw_inst_set_dst_hstride(devinfo, inst, 1);
+            brw_eu_inst_set_dst_hstride(devinfo, inst, 1);
          }
       } else {
-         brw_inst_set_dst_ia_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
+         brw_eu_inst_set_dst_ia_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
 
          /* These are different sizes in align1 vs align16:
           */
-         if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-            brw_inst_set_dst_ia1_addr_imm(devinfo, inst,
+         if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+            brw_eu_inst_set_dst_ia1_addr_imm(devinfo, inst,
                                           dest.indirect_offset);
             if (dest.hstride == BRW_HORIZONTAL_STRIDE_0)
                dest.hstride = BRW_HORIZONTAL_STRIDE_1;
-            brw_inst_set_dst_hstride(devinfo, inst, dest.hstride);
+            brw_eu_inst_set_dst_hstride(devinfo, inst, dest.hstride);
          } else {
-            brw_inst_set_dst_ia16_addr_imm(devinfo, inst,
+            brw_eu_inst_set_dst_ia16_addr_imm(devinfo, inst,
                                            dest.indirect_offset);
             /* even ignored in da16, still need to set as '01' */
-            brw_inst_set_dst_hstride(devinfo, inst, 1);
+            brw_eu_inst_set_dst_hstride(devinfo, inst, 1);
          }
       }
    }
 }
 
 void
-brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
+brw_set_src0(struct brw_codegen *p, brw_eu_inst *inst, struct brw_reg reg)
 {
    const struct intel_device_info *devinfo = p->devinfo;
 
    if (reg.file == FIXED_GRF)
-      assert(reg.nr < XE2_MAX_GRF);
+      assert(reg.nr < XE3_MAX_GRF);
 
-   if (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND  ||
-       brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC ||
-       brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
-       brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
+   if (brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND  ||
+       brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC ||
+       brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
+       brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
       /* Any source modifiers or regions will be ignored, since this just
        * identifies the GRF to start reading the message contents from.
        * Check for some likely failures.
@@ -149,20 +151,26 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
    }
 
    if (devinfo->ver >= 12 &&
-       (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
-        brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC)) {
-      assert(reg.file != IMM);
+       (brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
+        brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC)) {
+      assert(reg.file == ARF || reg.file == FIXED_GRF);
       assert(reg.address_mode == BRW_ADDRESS_DIRECT);
-      assert(reg.subnr == 0);
       assert(has_scalar_region(reg) ||
              (reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
               reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
-      brw_inst_set_send_src0_reg_file(devinfo, inst, reg.file);
-      brw_inst_set_src0_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
 
-   } else if (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
-              brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
+      brw_eu_inst_set_send_src0_reg_file(devinfo, inst, phys_file(reg));
+      brw_eu_inst_set_src0_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
+
+      if (reg.file == ARF && reg.nr == BRW_ARF_SCALAR) {
+         assert(reg.subnr % 2 == 0);
+         brw_eu_inst_set_send_src0_subreg_nr(devinfo, inst, reg.subnr / 2);
+      } else {
+         assert(reg.subnr == 0);
+      }
+   } else if (brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
+              brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC) {
       assert(reg.file == FIXED_GRF);
       assert(reg.address_mode == BRW_ADDRESS_DIRECT);
       assert(reg.subnr % 16 == 0);
@@ -170,75 +178,75 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
              (reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
               reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
-      brw_inst_set_src0_da_reg_nr(devinfo, inst, reg.nr);
-      brw_inst_set_src0_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
+      brw_eu_inst_set_src0_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
+      brw_eu_inst_set_src0_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
    } else {
-      brw_inst_set_src0_file_type(devinfo, inst, reg.file, reg.type);
-      brw_inst_set_src0_abs(devinfo, inst, reg.abs);
-      brw_inst_set_src0_negate(devinfo, inst, reg.negate);
-      brw_inst_set_src0_address_mode(devinfo, inst, reg.address_mode);
+      brw_eu_inst_set_src0_file_type(devinfo, inst, phys_file(reg), reg.type);
+      brw_eu_inst_set_src0_abs(devinfo, inst, reg.abs);
+      brw_eu_inst_set_src0_negate(devinfo, inst, reg.negate);
+      brw_eu_inst_set_src0_address_mode(devinfo, inst, reg.address_mode);
 
       if (reg.file == IMM) {
          if (reg.type == BRW_TYPE_DF)
-            brw_inst_set_imm_df(devinfo, inst, reg.df);
+            brw_eu_inst_set_imm_df(devinfo, inst, reg.df);
          else if (reg.type == BRW_TYPE_UQ ||
                   reg.type == BRW_TYPE_Q)
-            brw_inst_set_imm_uq(devinfo, inst, reg.u64);
+            brw_eu_inst_set_imm_uq(devinfo, inst, reg.u64);
          else
-            brw_inst_set_imm_ud(devinfo, inst, reg.ud);
+            brw_eu_inst_set_imm_ud(devinfo, inst, reg.ud);
 
          if (devinfo->ver < 12 && brw_type_size_bytes(reg.type) < 8) {
-            brw_inst_set_src1_reg_file(devinfo, inst,
+            brw_eu_inst_set_src1_reg_file(devinfo, inst,
                                        ARF);
-            brw_inst_set_src1_reg_hw_type(devinfo, inst,
-                                          brw_inst_src0_reg_hw_type(devinfo, inst));
+            brw_eu_inst_set_src1_reg_hw_type(devinfo, inst,
+                                          brw_eu_inst_src0_reg_hw_type(devinfo, inst));
          }
       } else {
          if (reg.address_mode == BRW_ADDRESS_DIRECT) {
-            brw_inst_set_src0_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
-            if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-               brw_inst_set_src0_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
+            brw_eu_inst_set_src0_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
+            if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+               brw_eu_inst_set_src0_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
             } else {
-               brw_inst_set_src0_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
+               brw_eu_inst_set_src0_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
             }
          } else {
-            brw_inst_set_src0_ia_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
+            brw_eu_inst_set_src0_ia_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
 
-            if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-               brw_inst_set_src0_ia1_addr_imm(devinfo, inst, reg.indirect_offset);
+            if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+               brw_eu_inst_set_src0_ia1_addr_imm(devinfo, inst, reg.indirect_offset);
             } else {
-               brw_inst_set_src0_ia16_addr_imm(devinfo, inst, reg.indirect_offset);
+               brw_eu_inst_set_src0_ia16_addr_imm(devinfo, inst, reg.indirect_offset);
             }
          }
 
-         if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+         if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
             if (reg.width == BRW_WIDTH_1 &&
-                brw_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1) {
-               brw_inst_set_src0_hstride(devinfo, inst, BRW_HORIZONTAL_STRIDE_0);
-               brw_inst_set_src0_width(devinfo, inst, BRW_WIDTH_1);
-               brw_inst_set_src0_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_0);
+                brw_eu_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1) {
+               brw_eu_inst_set_src0_hstride(devinfo, inst, BRW_HORIZONTAL_STRIDE_0);
+               brw_eu_inst_set_src0_width(devinfo, inst, BRW_WIDTH_1);
+               brw_eu_inst_set_src0_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_0);
             } else {
-               brw_inst_set_src0_hstride(devinfo, inst, reg.hstride);
-               brw_inst_set_src0_width(devinfo, inst, reg.width);
-               brw_inst_set_src0_vstride(devinfo, inst, reg.vstride);
+               brw_eu_inst_set_src0_hstride(devinfo, inst, reg.hstride);
+               brw_eu_inst_set_src0_width(devinfo, inst, reg.width);
+               brw_eu_inst_set_src0_vstride(devinfo, inst, reg.vstride);
             }
          } else {
-            brw_inst_set_src0_da16_swiz_x(devinfo, inst,
+            brw_eu_inst_set_src0_da16_swiz_x(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_X));
-            brw_inst_set_src0_da16_swiz_y(devinfo, inst,
+            brw_eu_inst_set_src0_da16_swiz_y(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_Y));
-            brw_inst_set_src0_da16_swiz_z(devinfo, inst,
+            brw_eu_inst_set_src0_da16_swiz_z(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_Z));
-            brw_inst_set_src0_da16_swiz_w(devinfo, inst,
+            brw_eu_inst_set_src0_da16_swiz_w(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_W));
 
             if (reg.vstride == BRW_VERTICAL_STRIDE_8) {
                /* This is an oddity of the fact we're using the same
                 * descriptions for registers in align_16 as align_1:
                 */
-               brw_inst_set_src0_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_4);
+               brw_eu_inst_set_src0_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_4);
             } else {
-               brw_inst_set_src0_vstride(devinfo, inst, reg.vstride);
+               brw_eu_inst_set_src0_vstride(devinfo, inst, reg.vstride);
             }
          }
       }
@@ -247,28 +255,29 @@ brw_set_src0(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
 
 
 void
-brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
+brw_set_src1(struct brw_codegen *p, brw_eu_inst *inst, struct brw_reg reg)
 {
    const struct intel_device_info *devinfo = p->devinfo;
 
    if (reg.file == FIXED_GRF)
-      assert(reg.nr < XE2_MAX_GRF);
+      assert(reg.nr < XE3_MAX_GRF);
 
-   if (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
-       brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC ||
+   if (brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDS ||
+       brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDSC ||
        (devinfo->ver >= 12 &&
-        (brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
-         brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC))) {
+        (brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
+         brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC))) {
       assert(reg.file == FIXED_GRF ||
-             reg.file == ARF);
+             reg.file == ARF ||
+             reg.file == ADDRESS);
       assert(reg.address_mode == BRW_ADDRESS_DIRECT);
       assert(reg.subnr == 0);
       assert(has_scalar_region(reg) ||
              (reg.hstride == BRW_HORIZONTAL_STRIDE_1 &&
               reg.vstride == reg.width + 1));
       assert(!reg.negate && !reg.abs);
-      brw_inst_set_send_src1_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
-      brw_inst_set_send_src1_reg_file(devinfo, inst, reg.file);
+      brw_eu_inst_set_send_src1_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
+      brw_eu_inst_set_send_src1_reg_file(devinfo, inst, phys_file(reg));
    } else {
       /* From the IVB PRM Vol. 4, Pt. 3, Section 3.3.3.5:
        *
@@ -278,18 +287,18 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
       assert(reg.file != ARF ||
              (reg.nr & 0xF0) != BRW_ARF_ACCUMULATOR);
 
-      brw_inst_set_src1_file_type(devinfo, inst, reg.file, reg.type);
-      brw_inst_set_src1_abs(devinfo, inst, reg.abs);
-      brw_inst_set_src1_negate(devinfo, inst, reg.negate);
+      brw_eu_inst_set_src1_file_type(devinfo, inst, phys_file(reg), reg.type);
+      brw_eu_inst_set_src1_abs(devinfo, inst, reg.abs);
+      brw_eu_inst_set_src1_negate(devinfo, inst, reg.negate);
 
       /* Only src1 can be immediate in two-argument instructions.
        */
-      assert(brw_inst_src0_reg_file(devinfo, inst) != IMM);
+      assert(brw_eu_inst_src0_reg_file(devinfo, inst) != IMM);
 
       if (reg.file == IMM) {
          /* two-argument instructions can only use 32-bit immediates */
          assert(brw_type_size_bytes(reg.type) < 8);
-         brw_inst_set_imm_ud(devinfo, inst, reg.ud);
+         brw_eu_inst_set_imm_ud(devinfo, inst, reg.ud);
       } else {
          /* This is a hardware restriction, which may or may not be lifted
           * in the future:
@@ -297,41 +306,41 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
          assert (reg.address_mode == BRW_ADDRESS_DIRECT);
          /* assert (reg.file == FIXED_GRF); */
 
-         brw_inst_set_src1_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
-         if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
-            brw_inst_set_src1_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
+         brw_eu_inst_set_src1_da_reg_nr(devinfo, inst, phys_nr(devinfo, reg));
+         if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+            brw_eu_inst_set_src1_da1_subreg_nr(devinfo, inst, phys_subnr(devinfo, reg));
          } else {
-            brw_inst_set_src1_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
+            brw_eu_inst_set_src1_da16_subreg_nr(devinfo, inst, reg.subnr / 16);
          }
 
-         if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+         if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
             if (reg.width == BRW_WIDTH_1 &&
-                brw_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1) {
-               brw_inst_set_src1_hstride(devinfo, inst, BRW_HORIZONTAL_STRIDE_0);
-               brw_inst_set_src1_width(devinfo, inst, BRW_WIDTH_1);
-               brw_inst_set_src1_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_0);
+                brw_eu_inst_exec_size(devinfo, inst) == BRW_EXECUTE_1) {
+               brw_eu_inst_set_src1_hstride(devinfo, inst, BRW_HORIZONTAL_STRIDE_0);
+               brw_eu_inst_set_src1_width(devinfo, inst, BRW_WIDTH_1);
+               brw_eu_inst_set_src1_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_0);
             } else {
-               brw_inst_set_src1_hstride(devinfo, inst, reg.hstride);
-               brw_inst_set_src1_width(devinfo, inst, reg.width);
-               brw_inst_set_src1_vstride(devinfo, inst, reg.vstride);
+               brw_eu_inst_set_src1_hstride(devinfo, inst, reg.hstride);
+               brw_eu_inst_set_src1_width(devinfo, inst, reg.width);
+               brw_eu_inst_set_src1_vstride(devinfo, inst, reg.vstride);
             }
          } else {
-            brw_inst_set_src1_da16_swiz_x(devinfo, inst,
+            brw_eu_inst_set_src1_da16_swiz_x(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_X));
-            brw_inst_set_src1_da16_swiz_y(devinfo, inst,
+            brw_eu_inst_set_src1_da16_swiz_y(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_Y));
-            brw_inst_set_src1_da16_swiz_z(devinfo, inst,
+            brw_eu_inst_set_src1_da16_swiz_z(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_Z));
-            brw_inst_set_src1_da16_swiz_w(devinfo, inst,
+            brw_eu_inst_set_src1_da16_swiz_w(devinfo, inst,
                BRW_GET_SWZ(reg.swizzle, BRW_CHANNEL_W));
 
             if (reg.vstride == BRW_VERTICAL_STRIDE_8) {
                /* This is an oddity of the fact we're using the same
                 * descriptions for registers in align_16 as align_1:
                 */
-               brw_inst_set_src1_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_4);
+               brw_eu_inst_set_src1_vstride(devinfo, inst, BRW_VERTICAL_STRIDE_4);
             } else {
-               brw_inst_set_src1_vstride(devinfo, inst, reg.vstride);
+               brw_eu_inst_set_src1_vstride(devinfo, inst, reg.vstride);
             }
          }
       }
@@ -343,62 +352,63 @@ brw_set_src1(struct brw_codegen *p, brw_inst *inst, struct brw_reg reg)
  * message instruction.
  */
 void
-brw_set_desc_ex(struct brw_codegen *p, brw_inst *inst,
-                unsigned desc, unsigned ex_desc)
+brw_set_desc_ex(struct brw_codegen *p, brw_eu_inst *inst,
+                unsigned desc, unsigned ex_desc, bool gather)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   assert(brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
-          brw_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC);
+   assert(!gather || devinfo->ver >= 30);
+   assert(brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SEND ||
+          brw_eu_inst_opcode(p->isa, inst) == BRW_OPCODE_SENDC);
    if (devinfo->ver < 12)
-      brw_inst_set_src1_file_type(devinfo, inst,
+      brw_eu_inst_set_src1_file_type(devinfo, inst,
                                   IMM, BRW_TYPE_UD);
-   brw_inst_set_send_desc(devinfo, inst, desc);
+   brw_eu_inst_set_send_desc(devinfo, inst, desc);
    if (devinfo->ver >= 9)
-      brw_inst_set_send_ex_desc(devinfo, inst, ex_desc);
+      brw_eu_inst_set_send_ex_desc(devinfo, inst, ex_desc, gather);
 }
 
 static void
-brw_inst_set_state(const struct brw_isa_info *isa,
-                   brw_inst *insn,
+brw_eu_inst_set_state(const struct brw_isa_info *isa,
+                   brw_eu_inst *insn,
                    const struct brw_insn_state *state)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
 
-   brw_inst_set_exec_size(devinfo, insn, state->exec_size);
-   brw_inst_set_group(devinfo, insn, state->group);
-   brw_inst_set_access_mode(devinfo, insn, state->access_mode);
-   brw_inst_set_mask_control(devinfo, insn, state->mask_control);
+   brw_eu_inst_set_exec_size(devinfo, insn, state->exec_size);
+   brw_eu_inst_set_group(devinfo, insn, state->group);
+   brw_eu_inst_set_access_mode(devinfo, insn, state->access_mode);
+   brw_eu_inst_set_mask_control(devinfo, insn, state->mask_control);
    if (devinfo->ver >= 12)
-      brw_inst_set_swsb(devinfo, insn, tgl_swsb_encode(devinfo, state->swsb, brw_inst_opcode(isa, insn)));
-   brw_inst_set_saturate(devinfo, insn, state->saturate);
-   brw_inst_set_pred_control(devinfo, insn, state->predicate);
-   brw_inst_set_pred_inv(devinfo, insn, state->pred_inv);
+      brw_eu_inst_set_swsb(devinfo, insn, tgl_swsb_encode(devinfo, state->swsb, brw_eu_inst_opcode(isa, insn)));
+   brw_eu_inst_set_saturate(devinfo, insn, state->saturate);
+   brw_eu_inst_set_pred_control(devinfo, insn, state->predicate);
+   brw_eu_inst_set_pred_inv(devinfo, insn, state->pred_inv);
 
-   if (is_3src(isa, brw_inst_opcode(isa, insn)) &&
+   if (is_3src(isa, brw_eu_inst_opcode(isa, insn)) &&
        state->access_mode == BRW_ALIGN_16) {
-      brw_inst_set_3src_a16_flag_subreg_nr(devinfo, insn, state->flag_subreg % 2);
-      brw_inst_set_3src_a16_flag_reg_nr(devinfo, insn, state->flag_subreg / 2);
+      brw_eu_inst_set_3src_a16_flag_subreg_nr(devinfo, insn, state->flag_subreg % 2);
+      brw_eu_inst_set_3src_a16_flag_reg_nr(devinfo, insn, state->flag_subreg / 2);
    } else {
-      brw_inst_set_flag_subreg_nr(devinfo, insn, state->flag_subreg % 2);
-      brw_inst_set_flag_reg_nr(devinfo, insn, state->flag_subreg / 2);
+      brw_eu_inst_set_flag_subreg_nr(devinfo, insn, state->flag_subreg % 2);
+      brw_eu_inst_set_flag_reg_nr(devinfo, insn, state->flag_subreg / 2);
    }
 
    if (devinfo->ver < 20)
-      brw_inst_set_acc_wr_control(devinfo, insn, state->acc_wr_control);
+      brw_eu_inst_set_acc_wr_control(devinfo, insn, state->acc_wr_control);
 }
 
-static brw_inst *
+static brw_eu_inst *
 brw_append_insns(struct brw_codegen *p, unsigned nr_insn, unsigned alignment)
 {
-   assert(util_is_power_of_two_or_zero(sizeof(brw_inst)));
+   assert(util_is_power_of_two_or_zero(sizeof(brw_eu_inst)));
    assert(util_is_power_of_two_or_zero(alignment));
-   const unsigned align_insn = MAX2(alignment / sizeof(brw_inst), 1);
+   const unsigned align_insn = MAX2(alignment / sizeof(brw_eu_inst), 1);
    const unsigned start_insn = ALIGN(p->nr_insn, align_insn);
    const unsigned new_nr_insn = start_insn + nr_insn;
 
    if (p->store_size < new_nr_insn) {
-      p->store_size = util_next_power_of_two(new_nr_insn * sizeof(brw_inst));
-      p->store = reralloc(p->mem_ctx, p->store, brw_inst, p->store_size);
+      p->store_size = util_next_power_of_two(new_nr_insn * sizeof(brw_eu_inst));
+      p->store = reralloc(p->mem_ctx, p->store, brw_eu_inst, p->store_size);
    }
 
    /* Memset any padding due to alignment to 0.  We don't want to be hashing
@@ -406,12 +416,12 @@ brw_append_insns(struct brw_codegen *p, unsigned nr_insn, unsigned alignment)
     */
    if (p->nr_insn < start_insn) {
       memset(&p->store[p->nr_insn], 0,
-             (start_insn - p->nr_insn) * sizeof(brw_inst));
+             (start_insn - p->nr_insn) * sizeof(brw_eu_inst));
    }
 
-   assert(p->next_insn_offset == p->nr_insn * sizeof(brw_inst));
+   assert(p->next_insn_offset == p->nr_insn * sizeof(brw_eu_inst));
    p->nr_insn = new_nr_insn;
-   p->next_insn_offset = new_nr_insn * sizeof(brw_inst);
+   p->next_insn_offset = new_nr_insn * sizeof(brw_eu_inst);
 
    return &p->store[start_insn];
 }
@@ -426,28 +436,28 @@ int
 brw_append_data(struct brw_codegen *p, void *data,
                 unsigned size, unsigned alignment)
 {
-   unsigned nr_insn = DIV_ROUND_UP(size, sizeof(brw_inst));
+   unsigned nr_insn = DIV_ROUND_UP(size, sizeof(brw_eu_inst));
    void *dst = brw_append_insns(p, nr_insn, alignment);
    memcpy(dst, data, size);
 
    /* If it's not a whole number of instructions, memset the end */
-   if (size < nr_insn * sizeof(brw_inst))
-      memset(dst + size, 0, nr_insn * sizeof(brw_inst) - size);
+   if (size < nr_insn * sizeof(brw_eu_inst))
+      memset(dst + size, 0, nr_insn * sizeof(brw_eu_inst) - size);
 
    return dst - (void *)p->store;
 }
 
 #define next_insn brw_next_insn
-brw_inst *
+brw_eu_inst *
 brw_next_insn(struct brw_codegen *p, unsigned opcode)
 {
-   brw_inst *insn = brw_append_insns(p, 1, sizeof(brw_inst));
+   brw_eu_inst *insn = brw_append_insns(p, 1, sizeof(brw_eu_inst));
 
    memset(insn, 0, sizeof(*insn));
-   brw_inst_set_opcode(p->isa, insn, opcode);
+   brw_eu_inst_set_opcode(p->isa, insn, opcode);
 
    /* Apply the default instruction state */
-   brw_inst_set_state(p->isa, insn, p->current);
+   brw_eu_inst_set_state(p->isa, insn, p->current);
 
    return insn;
 }
@@ -471,17 +481,17 @@ brw_add_reloc(struct brw_codegen *p, uint32_t id,
    };
 }
 
-static brw_inst *
+static brw_eu_inst *
 brw_alu1(struct brw_codegen *p, unsigned opcode,
          struct brw_reg dest, struct brw_reg src)
 {
-   brw_inst *insn = next_insn(p, opcode);
+   brw_eu_inst *insn = next_insn(p, opcode);
    brw_set_dest(p, insn, dest);
    brw_set_src0(p, insn, src);
    return insn;
 }
 
-static brw_inst *
+static brw_eu_inst *
 brw_alu2(struct brw_codegen *p, unsigned opcode,
          struct brw_reg dest, struct brw_reg src0, struct brw_reg src1)
 {
@@ -491,7 +501,7 @@ brw_alu2(struct brw_codegen *p, unsigned opcode,
    assert(src1.file != IMM ||
           brw_type_size_bytes(src1.type) <= 4);
 
-   brw_inst *insn = next_insn(p, opcode);
+   brw_eu_inst *insn = next_insn(p, opcode);
    brw_set_dest(p, insn, dest);
    brw_set_src0(p, insn, src0);
    brw_set_src1(p, insn, src1);
@@ -539,14 +549,14 @@ to_3src_align1_hstride(enum brw_horizontal_stride hstride)
    }
 }
 
-static brw_inst *
+static brw_eu_inst *
 brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
          struct brw_reg src0, struct brw_reg src1, struct brw_reg src2)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *inst = next_insn(p, opcode);
+   brw_eu_inst *inst = next_insn(p, opcode);
 
-   assert(dest.nr < XE2_MAX_GRF);
+   assert(dest.nr < XE3_MAX_GRF);
 
    if (devinfo->ver <= 9) {
       assert(src0.file != IMM && src2.file != IMM);
@@ -560,7 +570,7 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
              !(src0.file == IMM && src2.file == IMM));
    } else {
       /* Having two immediate sources is allowed, but this should have been
-       * converted to a regular ADD by brw_fs_opt_algebraic.
+       * converted to a regular ADD by brw_opt_algebraic.
        */
       assert(opcode != BRW_OPCODE_ADD3 ||
              !(src0.file == IMM && src2.file == IMM));
@@ -570,73 +580,73 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
    assert(opcode != BRW_OPCODE_BFI2 ||
           (src0.file != IMM && src2.file != IMM));
 
-   assert(src0.file == IMM || src0.nr < XE2_MAX_GRF);
-   assert(src1.file != IMM && src1.nr < XE2_MAX_GRF);
-   assert(src2.file == IMM || src2.nr < XE2_MAX_GRF);
+   assert(src0.file == IMM || src0.nr < XE3_MAX_GRF);
+   assert(src1.file != IMM && src1.nr < XE3_MAX_GRF);
+   assert(src2.file == IMM || src2.nr < XE3_MAX_GRF);
    assert(dest.address_mode == BRW_ADDRESS_DIRECT);
    assert(src0.address_mode == BRW_ADDRESS_DIRECT);
    assert(src1.address_mode == BRW_ADDRESS_DIRECT);
    assert(src2.address_mode == BRW_ADDRESS_DIRECT);
 
-   if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+   if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
       assert(dest.file == FIXED_GRF ||
              (dest.file == ARF &&
               (dest.nr & 0xF0) == BRW_ARF_ACCUMULATOR));
 
-      brw_inst_set_3src_a1_dst_reg_file(devinfo, inst, dest.file);
-      brw_inst_set_3src_dst_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
-      brw_inst_set_3src_a1_dst_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest) / 8);
-      brw_inst_set_3src_a1_dst_hstride(devinfo, inst, BRW_ALIGN1_3SRC_DST_HORIZONTAL_STRIDE_1);
+      brw_eu_inst_set_3src_a1_dst_reg_file(devinfo, inst, phys_file(dest));
+      brw_eu_inst_set_3src_dst_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
+      brw_eu_inst_set_3src_a1_dst_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest) / 8);
+      brw_eu_inst_set_3src_a1_dst_hstride(devinfo, inst, BRW_ALIGN1_3SRC_DST_HORIZONTAL_STRIDE_1);
 
       if (brw_type_is_float(dest.type)) {
-         brw_inst_set_3src_a1_exec_type(devinfo, inst,
+         brw_eu_inst_set_3src_a1_exec_type(devinfo, inst,
                                         BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT);
       } else {
-         brw_inst_set_3src_a1_exec_type(devinfo, inst,
+         brw_eu_inst_set_3src_a1_exec_type(devinfo, inst,
                                         BRW_ALIGN1_3SRC_EXEC_TYPE_INT);
       }
 
-      brw_inst_set_3src_a1_dst_type(devinfo, inst, dest.type);
-      brw_inst_set_3src_a1_src0_type(devinfo, inst, src0.type);
-      brw_inst_set_3src_a1_src1_type(devinfo, inst, src1.type);
-      brw_inst_set_3src_a1_src2_type(devinfo, inst, src2.type);
+      brw_eu_inst_set_3src_a1_dst_type(devinfo, inst, dest.type);
+      brw_eu_inst_set_3src_a1_src0_type(devinfo, inst, src0.type);
+      brw_eu_inst_set_3src_a1_src1_type(devinfo, inst, src1.type);
+      brw_eu_inst_set_3src_a1_src2_type(devinfo, inst, src2.type);
 
       if (src0.file == IMM) {
-         brw_inst_set_3src_a1_src0_imm(devinfo, inst, src0.ud);
+         brw_eu_inst_set_3src_a1_src0_imm(devinfo, inst, src0.ud);
       } else {
-         brw_inst_set_3src_a1_src0_vstride(
+         brw_eu_inst_set_3src_a1_src0_vstride(
             devinfo, inst, to_3src_align1_vstride(devinfo, src0.vstride));
-         brw_inst_set_3src_a1_src0_hstride(devinfo, inst,
+         brw_eu_inst_set_3src_a1_src0_hstride(devinfo, inst,
                                            to_3src_align1_hstride(src0.hstride));
-         brw_inst_set_3src_a1_src0_subreg_nr(devinfo, inst, phys_subnr(devinfo, src0));
-         brw_inst_set_3src_src0_reg_nr(devinfo, inst, phys_nr(devinfo, src0));
-         brw_inst_set_3src_src0_abs(devinfo, inst, src0.abs);
-         brw_inst_set_3src_src0_negate(devinfo, inst, src0.negate);
+         brw_eu_inst_set_3src_a1_src0_subreg_nr(devinfo, inst, phys_subnr(devinfo, src0));
+         brw_eu_inst_set_3src_src0_reg_nr(devinfo, inst, phys_nr(devinfo, src0));
+         brw_eu_inst_set_3src_src0_abs(devinfo, inst, src0.abs);
+         brw_eu_inst_set_3src_src0_negate(devinfo, inst, src0.negate);
       }
-      brw_inst_set_3src_a1_src1_vstride(
+      brw_eu_inst_set_3src_a1_src1_vstride(
          devinfo, inst, to_3src_align1_vstride(devinfo, src1.vstride));
-      brw_inst_set_3src_a1_src1_hstride(devinfo, inst,
+      brw_eu_inst_set_3src_a1_src1_hstride(devinfo, inst,
                                         to_3src_align1_hstride(src1.hstride));
 
-      brw_inst_set_3src_a1_src1_subreg_nr(devinfo, inst, phys_subnr(devinfo, src1));
+      brw_eu_inst_set_3src_a1_src1_subreg_nr(devinfo, inst, phys_subnr(devinfo, src1));
       if (src1.file == ARF) {
-         brw_inst_set_3src_src1_reg_nr(devinfo, inst, BRW_ARF_ACCUMULATOR);
+         brw_eu_inst_set_3src_src1_reg_nr(devinfo, inst, BRW_ARF_ACCUMULATOR);
       } else {
-         brw_inst_set_3src_src1_reg_nr(devinfo, inst, phys_nr(devinfo, src1));
+         brw_eu_inst_set_3src_src1_reg_nr(devinfo, inst, phys_nr(devinfo, src1));
       }
-      brw_inst_set_3src_src1_abs(devinfo, inst, src1.abs);
-      brw_inst_set_3src_src1_negate(devinfo, inst, src1.negate);
+      brw_eu_inst_set_3src_src1_abs(devinfo, inst, src1.abs);
+      brw_eu_inst_set_3src_src1_negate(devinfo, inst, src1.negate);
 
       if (src2.file == IMM) {
-         brw_inst_set_3src_a1_src2_imm(devinfo, inst, src2.ud);
+         brw_eu_inst_set_3src_a1_src2_imm(devinfo, inst, src2.ud);
       } else {
-         brw_inst_set_3src_a1_src2_hstride(devinfo, inst,
+         brw_eu_inst_set_3src_a1_src2_hstride(devinfo, inst,
                                            to_3src_align1_hstride(src2.hstride));
          /* no vstride on src2 */
-         brw_inst_set_3src_a1_src2_subreg_nr(devinfo, inst, phys_subnr(devinfo, src2));
-         brw_inst_set_3src_src2_reg_nr(devinfo, inst, phys_nr(devinfo, src2));
-         brw_inst_set_3src_src2_abs(devinfo, inst, src2.abs);
-         brw_inst_set_3src_src2_negate(devinfo, inst, src2.negate);
+         brw_eu_inst_set_3src_a1_src2_subreg_nr(devinfo, inst, phys_subnr(devinfo, src2));
+         brw_eu_inst_set_3src_src2_reg_nr(devinfo, inst, phys_nr(devinfo, src2));
+         brw_eu_inst_set_3src_src2_abs(devinfo, inst, src2.abs);
+         brw_eu_inst_set_3src_src2_negate(devinfo, inst, src2.negate);
       }
 
       assert(src0.file == FIXED_GRF ||
@@ -649,22 +659,22 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
 
       if (devinfo->ver >= 12) {
          if (src0.file == IMM) {
-            brw_inst_set_3src_a1_src0_is_imm(devinfo, inst, 1);
+            brw_eu_inst_set_3src_a1_src0_is_imm(devinfo, inst, 1);
          } else {
-            brw_inst_set_3src_a1_src0_reg_file(devinfo, inst, src0.file);
+            brw_eu_inst_set_3src_a1_src0_reg_file(devinfo, inst, phys_file(src0));
          }
 
-         brw_inst_set_3src_a1_src1_reg_file(devinfo, inst, src1.file);
+         brw_eu_inst_set_3src_a1_src1_reg_file(devinfo, inst, phys_file(src1));
 
          if (src2.file == IMM) {
-            brw_inst_set_3src_a1_src2_is_imm(devinfo, inst, 1);
+            brw_eu_inst_set_3src_a1_src2_is_imm(devinfo, inst, 1);
          } else {
-            brw_inst_set_3src_a1_src2_reg_file(devinfo, inst, src2.file);
+            brw_eu_inst_set_3src_a1_src2_reg_file(devinfo, inst, phys_file(src2));
          }
       } else {
-         brw_inst_set_3src_a1_src0_reg_file(devinfo, inst, src0.file);
-         brw_inst_set_3src_a1_src1_reg_file(devinfo, inst, src1.file);
-         brw_inst_set_3src_a1_src2_reg_file(devinfo, inst, src2.file);
+         brw_eu_inst_set_3src_a1_src0_reg_file(devinfo, inst, phys_file(src0));
+         brw_eu_inst_set_3src_a1_src1_reg_file(devinfo, inst, phys_file(src1));
+         brw_eu_inst_set_3src_a1_src2_reg_file(devinfo, inst, phys_file(src2));
       }
 
    } else {
@@ -674,35 +684,35 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
              dest.type == BRW_TYPE_D  ||
              dest.type == BRW_TYPE_UD ||
              dest.type == BRW_TYPE_HF);
-      brw_inst_set_3src_dst_reg_nr(devinfo, inst, dest.nr);
-      brw_inst_set_3src_a16_dst_subreg_nr(devinfo, inst, dest.subnr / 4);
-      brw_inst_set_3src_a16_dst_writemask(devinfo, inst, dest.writemask);
+      brw_eu_inst_set_3src_dst_reg_nr(devinfo, inst, dest.nr);
+      brw_eu_inst_set_3src_a16_dst_subreg_nr(devinfo, inst, dest.subnr / 4);
+      brw_eu_inst_set_3src_a16_dst_writemask(devinfo, inst, dest.writemask);
 
       assert(src0.file == FIXED_GRF);
-      brw_inst_set_3src_a16_src0_swizzle(devinfo, inst, src0.swizzle);
-      brw_inst_set_3src_a16_src0_subreg_nr(devinfo, inst, src0.subnr);
-      brw_inst_set_3src_src0_reg_nr(devinfo, inst, src0.nr);
-      brw_inst_set_3src_src0_abs(devinfo, inst, src0.abs);
-      brw_inst_set_3src_src0_negate(devinfo, inst, src0.negate);
-      brw_inst_set_3src_a16_src0_rep_ctrl(devinfo, inst,
+      brw_eu_inst_set_3src_a16_src0_swizzle(devinfo, inst, src0.swizzle);
+      brw_eu_inst_set_3src_a16_src0_subreg_nr(devinfo, inst, src0.subnr);
+      brw_eu_inst_set_3src_src0_reg_nr(devinfo, inst, src0.nr);
+      brw_eu_inst_set_3src_src0_abs(devinfo, inst, src0.abs);
+      brw_eu_inst_set_3src_src0_negate(devinfo, inst, src0.negate);
+      brw_eu_inst_set_3src_a16_src0_rep_ctrl(devinfo, inst,
                                           src0.vstride == BRW_VERTICAL_STRIDE_0);
 
       assert(src1.file == FIXED_GRF);
-      brw_inst_set_3src_a16_src1_swizzle(devinfo, inst, src1.swizzle);
-      brw_inst_set_3src_a16_src1_subreg_nr(devinfo, inst, src1.subnr);
-      brw_inst_set_3src_src1_reg_nr(devinfo, inst, src1.nr);
-      brw_inst_set_3src_src1_abs(devinfo, inst, src1.abs);
-      brw_inst_set_3src_src1_negate(devinfo, inst, src1.negate);
-      brw_inst_set_3src_a16_src1_rep_ctrl(devinfo, inst,
+      brw_eu_inst_set_3src_a16_src1_swizzle(devinfo, inst, src1.swizzle);
+      brw_eu_inst_set_3src_a16_src1_subreg_nr(devinfo, inst, src1.subnr);
+      brw_eu_inst_set_3src_src1_reg_nr(devinfo, inst, src1.nr);
+      brw_eu_inst_set_3src_src1_abs(devinfo, inst, src1.abs);
+      brw_eu_inst_set_3src_src1_negate(devinfo, inst, src1.negate);
+      brw_eu_inst_set_3src_a16_src1_rep_ctrl(devinfo, inst,
                                           src1.vstride == BRW_VERTICAL_STRIDE_0);
 
       assert(src2.file == FIXED_GRF);
-      brw_inst_set_3src_a16_src2_swizzle(devinfo, inst, src2.swizzle);
-      brw_inst_set_3src_a16_src2_subreg_nr(devinfo, inst, src2.subnr);
-      brw_inst_set_3src_src2_reg_nr(devinfo, inst, src2.nr);
-      brw_inst_set_3src_src2_abs(devinfo, inst, src2.abs);
-      brw_inst_set_3src_src2_negate(devinfo, inst, src2.negate);
-      brw_inst_set_3src_a16_src2_rep_ctrl(devinfo, inst,
+      brw_eu_inst_set_3src_a16_src2_swizzle(devinfo, inst, src2.swizzle);
+      brw_eu_inst_set_3src_a16_src2_subreg_nr(devinfo, inst, src2.subnr);
+      brw_eu_inst_set_3src_src2_reg_nr(devinfo, inst, src2.nr);
+      brw_eu_inst_set_3src_src2_abs(devinfo, inst, src2.abs);
+      brw_eu_inst_set_3src_src2_negate(devinfo, inst, src2.negate);
+      brw_eu_inst_set_3src_a16_src2_rep_ctrl(devinfo, inst,
                                           src2.vstride == BRW_VERTICAL_STRIDE_0);
 
       /* Set both the source and destination types based on dest.type,
@@ -711,8 +721,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
        * may send us mixed D and UD types and want us to ignore that and use
        * the destination type.
        */
-      brw_inst_set_3src_a16_src_type(devinfo, inst, dest.type);
-      brw_inst_set_3src_a16_dst_type(devinfo, inst, dest.type);
+      brw_eu_inst_set_3src_a16_src_type(devinfo, inst, dest.type);
+      brw_eu_inst_set_3src_a16_dst_type(devinfo, inst, dest.type);
 
       /* From the Bspec, 3D Media GPGPU, Instruction fields, srcType:
        *
@@ -725,66 +735,66 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
        *     1b = :hf. Half precision Float (16-bit)."
        */
       if (src1.type == BRW_TYPE_HF)
-         brw_inst_set_3src_a16_src1_type(devinfo, inst, 1);
+         brw_eu_inst_set_3src_a16_src1_type(devinfo, inst, 1);
 
       if (src2.type == BRW_TYPE_HF)
-         brw_inst_set_3src_a16_src2_type(devinfo, inst, 1);
+         brw_eu_inst_set_3src_a16_src2_type(devinfo, inst, 1);
    }
 
    return inst;
 }
 
-static brw_inst *
+static brw_eu_inst *
 brw_dpas_three_src(struct brw_codegen *p, enum opcode opcode,
                    enum gfx12_systolic_depth sdepth, unsigned rcount, struct brw_reg dest,
                    struct brw_reg src0, struct brw_reg src1, struct brw_reg src2)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *inst = next_insn(p, opcode);
+   brw_eu_inst *inst = next_insn(p, opcode);
 
    assert(dest.file == FIXED_GRF);
-   brw_inst_set_dpas_3src_dst_reg_file(devinfo, inst,
+   brw_eu_inst_set_dpas_3src_dst_reg_file(devinfo, inst,
                                        FIXED_GRF);
-   brw_inst_set_dpas_3src_dst_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
-   brw_inst_set_dpas_3src_dst_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
+   brw_eu_inst_set_dpas_3src_dst_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
+   brw_eu_inst_set_dpas_3src_dst_subreg_nr(devinfo, inst, phys_subnr(devinfo, dest));
 
    if (brw_type_is_float(dest.type)) {
-      brw_inst_set_dpas_3src_exec_type(devinfo, inst,
+      brw_eu_inst_set_dpas_3src_exec_type(devinfo, inst,
                                        BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT);
    } else {
-      brw_inst_set_dpas_3src_exec_type(devinfo, inst,
+      brw_eu_inst_set_dpas_3src_exec_type(devinfo, inst,
                                        BRW_ALIGN1_3SRC_EXEC_TYPE_INT);
    }
 
-   brw_inst_set_dpas_3src_sdepth(devinfo, inst, sdepth);
-   brw_inst_set_dpas_3src_rcount(devinfo, inst, rcount - 1);
+   brw_eu_inst_set_dpas_3src_sdepth(devinfo, inst, sdepth);
+   brw_eu_inst_set_dpas_3src_rcount(devinfo, inst, rcount - 1);
 
-   brw_inst_set_dpas_3src_dst_type(devinfo, inst, dest.type);
-   brw_inst_set_dpas_3src_src0_type(devinfo, inst, src0.type);
-   brw_inst_set_dpas_3src_src1_type(devinfo, inst, src1.type);
-   brw_inst_set_dpas_3src_src2_type(devinfo, inst, src2.type);
+   brw_eu_inst_set_dpas_3src_dst_type(devinfo, inst, dest.type);
+   brw_eu_inst_set_dpas_3src_src0_type(devinfo, inst, src0.type);
+   brw_eu_inst_set_dpas_3src_src1_type(devinfo, inst, src1.type);
+   brw_eu_inst_set_dpas_3src_src2_type(devinfo, inst, src2.type);
 
    assert(src0.file == FIXED_GRF ||
           (src0.file == ARF &&
            src0.nr == BRW_ARF_NULL));
 
-   brw_inst_set_dpas_3src_src0_reg_file(devinfo, inst, src0.file);
-   brw_inst_set_dpas_3src_src0_reg_nr(devinfo, inst, phys_nr(devinfo, src0));
-   brw_inst_set_dpas_3src_src0_subreg_nr(devinfo, inst, phys_subnr(devinfo, src0));
+   brw_eu_inst_set_dpas_3src_src0_reg_file(devinfo, inst, phys_file(src0));
+   brw_eu_inst_set_dpas_3src_src0_reg_nr(devinfo, inst, phys_nr(devinfo, src0));
+   brw_eu_inst_set_dpas_3src_src0_subreg_nr(devinfo, inst, phys_subnr(devinfo, src0));
 
    assert(src1.file == FIXED_GRF);
 
-   brw_inst_set_dpas_3src_src1_reg_file(devinfo, inst, src1.file);
-   brw_inst_set_dpas_3src_src1_reg_nr(devinfo, inst, phys_nr(devinfo, src1));
-   brw_inst_set_dpas_3src_src1_subreg_nr(devinfo, inst, phys_subnr(devinfo, src1));
-   brw_inst_set_dpas_3src_src1_subbyte(devinfo, inst, BRW_SUB_BYTE_PRECISION_NONE);
+   brw_eu_inst_set_dpas_3src_src1_reg_file(devinfo, inst, phys_file(src1));
+   brw_eu_inst_set_dpas_3src_src1_reg_nr(devinfo, inst, phys_nr(devinfo, src1));
+   brw_eu_inst_set_dpas_3src_src1_subreg_nr(devinfo, inst, phys_subnr(devinfo, src1));
+   brw_eu_inst_set_dpas_3src_src1_subbyte(devinfo, inst, BRW_SUB_BYTE_PRECISION_NONE);
 
    assert(src2.file == FIXED_GRF);
 
-   brw_inst_set_dpas_3src_src2_reg_file(devinfo, inst, src2.file);
-   brw_inst_set_dpas_3src_src2_reg_nr(devinfo, inst, phys_nr(devinfo, src2));
-   brw_inst_set_dpas_3src_src2_subreg_nr(devinfo, inst, phys_subnr(devinfo, src2));
-   brw_inst_set_dpas_3src_src2_subbyte(devinfo, inst, BRW_SUB_BYTE_PRECISION_NONE);
+   brw_eu_inst_set_dpas_3src_src2_reg_file(devinfo, inst, phys_file(src2));
+   brw_eu_inst_set_dpas_3src_src2_reg_nr(devinfo, inst, phys_nr(devinfo, src2));
+   brw_eu_inst_set_dpas_3src_src2_subreg_nr(devinfo, inst, phys_subnr(devinfo, src2));
+   brw_eu_inst_set_dpas_3src_src2_subbyte(devinfo, inst, BRW_SUB_BYTE_PRECISION_NONE);
 
    return inst;
 }
@@ -793,7 +803,7 @@ brw_dpas_three_src(struct brw_codegen *p, enum opcode opcode,
  * Convenience routines.
  */
 #define ALU1(OP)					\
-brw_inst *brw_##OP(struct brw_codegen *p,		\
+brw_eu_inst *brw_##OP(struct brw_codegen *p,		\
 	      struct brw_reg dest,			\
 	      struct brw_reg src0)   			\
 {							\
@@ -801,7 +811,7 @@ brw_inst *brw_##OP(struct brw_codegen *p,		\
 }
 
 #define ALU2(OP)					\
-brw_inst *brw_##OP(struct brw_codegen *p,		\
+brw_eu_inst *brw_##OP(struct brw_codegen *p,		\
 	      struct brw_reg dest,			\
 	      struct brw_reg src0,			\
 	      struct brw_reg src1)   			\
@@ -810,7 +820,7 @@ brw_inst *brw_##OP(struct brw_codegen *p,		\
 }
 
 #define ALU3(OP)					\
-brw_inst *brw_##OP(struct brw_codegen *p,		\
+brw_eu_inst *brw_##OP(struct brw_codegen *p,		\
 	      struct brw_reg dest,			\
 	      struct brw_reg src0,			\
 	      struct brw_reg src1,			\
@@ -828,7 +838,7 @@ brw_inst *brw_##OP(struct brw_codegen *p,		\
 }
 
 #define ALU3F(OP)                                               \
-brw_inst *brw_##OP(struct brw_codegen *p,         \
+brw_eu_inst *brw_##OP(struct brw_codegen *p,         \
                                  struct brw_reg dest,           \
                                  struct brw_reg src0,           \
                                  struct brw_reg src1,           \
@@ -895,7 +905,7 @@ ALU2(SUBB)
 ALU3(ADD3)
 ALU1(MOV)
 
-brw_inst *
+brw_eu_inst *
 brw_ADD(struct brw_codegen *p, struct brw_reg dest,
         struct brw_reg src0, struct brw_reg src1)
 {
@@ -917,7 +927,7 @@ brw_ADD(struct brw_codegen *p, struct brw_reg dest,
    return brw_alu2(p, BRW_OPCODE_ADD, dest, src0, src1);
 }
 
-brw_inst *
+brw_eu_inst *
 brw_AVG(struct brw_codegen *p, struct brw_reg dest,
         struct brw_reg src0, struct brw_reg src1)
 {
@@ -938,7 +948,7 @@ brw_AVG(struct brw_codegen *p, struct brw_reg dest,
    return brw_alu2(p, BRW_OPCODE_AVG, dest, src0, src1);
 }
 
-brw_inst *
+brw_eu_inst *
 brw_MUL(struct brw_codegen *p, struct brw_reg dest,
         struct brw_reg src0, struct brw_reg src1)
 {
@@ -972,7 +982,7 @@ brw_MUL(struct brw_codegen *p, struct brw_reg dest,
    return brw_alu2(p, BRW_OPCODE_MUL, dest, src0, src1);
 }
 
-brw_inst *
+brw_eu_inst *
 brw_LINE(struct brw_codegen *p, struct brw_reg dest,
          struct brw_reg src0, struct brw_reg src1)
 {
@@ -982,7 +992,7 @@ brw_LINE(struct brw_codegen *p, struct brw_reg dest,
    return brw_alu2(p, BRW_OPCODE_LINE, dest, src0, src1);
 }
 
-brw_inst *
+brw_eu_inst *
 brw_PLN(struct brw_codegen *p, struct brw_reg dest,
         struct brw_reg src0, struct brw_reg src1)
 {
@@ -995,7 +1005,7 @@ brw_PLN(struct brw_codegen *p, struct brw_reg dest,
    return brw_alu2(p, BRW_OPCODE_PLN, dest, src0, src1);
 }
 
-brw_inst *
+brw_eu_inst *
 brw_DPAS(struct brw_codegen *p, enum gfx12_systolic_depth sdepth,
          unsigned rcount, struct brw_reg dest, struct brw_reg src0,
          struct brw_reg src1, struct brw_reg src2)
@@ -1006,39 +1016,39 @@ brw_DPAS(struct brw_codegen *p, enum gfx12_systolic_depth sdepth,
 
 void brw_NOP(struct brw_codegen *p)
 {
-   brw_inst *insn = next_insn(p, BRW_OPCODE_NOP);
+   brw_eu_inst *insn = next_insn(p, BRW_OPCODE_NOP);
    memset(insn, 0, sizeof(*insn));
-   brw_inst_set_opcode(p->isa, insn, BRW_OPCODE_NOP);
+   brw_eu_inst_set_opcode(p->isa, insn, BRW_OPCODE_NOP);
 }
 
 void brw_SYNC(struct brw_codegen *p, enum tgl_sync_function func)
 {
-   brw_inst *insn = next_insn(p, BRW_OPCODE_SYNC);
-   brw_inst_set_cond_modifier(p->devinfo, insn, func);
+   brw_eu_inst *insn = next_insn(p, BRW_OPCODE_SYNC);
+   brw_eu_inst_set_cond_modifier(p->devinfo, insn, func);
 }
 
 /***********************************************************************
  * Comparisons, if/else/endif
  */
 
-brw_inst *
+brw_eu_inst *
 brw_JMPI(struct brw_codegen *p, struct brw_reg index,
          unsigned predicate_control)
 {
    const struct intel_device_info *devinfo = p->devinfo;
    struct brw_reg ip = brw_ip_reg();
-   brw_inst *inst = brw_alu2(p, BRW_OPCODE_JMPI, ip, ip, index);
+   brw_eu_inst *inst = brw_alu2(p, BRW_OPCODE_JMPI, ip, ip, index);
 
-   brw_inst_set_exec_size(devinfo, inst, BRW_EXECUTE_1);
-   brw_inst_set_qtr_control(devinfo, inst, BRW_COMPRESSION_NONE);
-   brw_inst_set_mask_control(devinfo, inst, BRW_MASK_DISABLE);
-   brw_inst_set_pred_control(devinfo, inst, predicate_control);
+   brw_eu_inst_set_exec_size(devinfo, inst, BRW_EXECUTE_1);
+   brw_eu_inst_set_qtr_control(devinfo, inst, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_mask_control(devinfo, inst, BRW_MASK_DISABLE);
+   brw_eu_inst_set_pred_control(devinfo, inst, predicate_control);
 
    return inst;
 }
 
 static void
-push_if_stack(struct brw_codegen *p, brw_inst *inst)
+push_if_stack(struct brw_codegen *p, brw_eu_inst *inst)
 {
    p->if_stack[p->if_stack_depth] = inst - p->store;
 
@@ -1050,7 +1060,7 @@ push_if_stack(struct brw_codegen *p, brw_inst *inst)
    }
 }
 
-static brw_inst *
+static brw_eu_inst *
 pop_if_stack(struct brw_codegen *p)
 {
    p->if_stack_depth--;
@@ -1058,7 +1068,7 @@ pop_if_stack(struct brw_codegen *p)
 }
 
 static void
-push_loop_stack(struct brw_codegen *p, brw_inst *inst)
+push_loop_stack(struct brw_codegen *p, brw_eu_inst *inst)
 {
    if (p->loop_stack_array_size <= (p->loop_stack_depth + 1)) {
       p->loop_stack_array_size *= 2;
@@ -1070,7 +1080,7 @@ push_loop_stack(struct brw_codegen *p, brw_inst *inst)
    p->loop_stack_depth++;
 }
 
-static brw_inst *
+static brw_eu_inst *
 get_inner_do_insn(struct brw_codegen *p)
 {
    return &p->store[p->loop_stack[p->loop_stack_depth - 1]];
@@ -1089,11 +1099,11 @@ get_inner_do_insn(struct brw_codegen *p)
  * When the matching 'endif' instruction is reached, the flags are
  * popped off.  If the stack is now empty, normal execution resumes.
  */
-brw_inst *
+brw_eu_inst *
 brw_IF(struct brw_codegen *p, unsigned execute_size)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn;
+   brw_eu_inst *insn;
 
    insn = next_insn(p, BRW_OPCODE_IF);
 
@@ -1102,13 +1112,13 @@ brw_IF(struct brw_codegen *p, unsigned execute_size)
    brw_set_dest(p, insn, vec1(retype(brw_null_reg(), BRW_TYPE_D)));
    if (devinfo->ver < 12)
       brw_set_src0(p, insn, brw_imm_d(0));
-   brw_inst_set_jip(devinfo, insn, 0);
-   brw_inst_set_uip(devinfo, insn, 0);
+   brw_eu_inst_set_jip(devinfo, insn, 0);
+   brw_eu_inst_set_uip(devinfo, insn, 0);
 
-   brw_inst_set_exec_size(devinfo, insn, execute_size);
-   brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_pred_control(devinfo, insn, BRW_PREDICATE_NORMAL);
-   brw_inst_set_mask_control(devinfo, insn, BRW_MASK_ENABLE);
+   brw_eu_inst_set_exec_size(devinfo, insn, execute_size);
+   brw_eu_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_pred_control(devinfo, insn, BRW_PREDICATE_NORMAL);
+   brw_eu_inst_set_mask_control(devinfo, insn, BRW_MASK_ENABLE);
 
    push_if_stack(p, insn);
    return insn;
@@ -1119,31 +1129,31 @@ brw_IF(struct brw_codegen *p, unsigned execute_size)
  */
 static void
 patch_IF_ELSE(struct brw_codegen *p,
-              brw_inst *if_inst, brw_inst *else_inst, brw_inst *endif_inst)
+              brw_eu_inst *if_inst, brw_eu_inst *else_inst, brw_eu_inst *endif_inst)
 {
    const struct intel_device_info *devinfo = p->devinfo;
 
-   assert(if_inst != NULL && brw_inst_opcode(p->isa, if_inst) == BRW_OPCODE_IF);
+   assert(if_inst != NULL && brw_eu_inst_opcode(p->isa, if_inst) == BRW_OPCODE_IF);
    assert(endif_inst != NULL);
-   assert(else_inst == NULL || brw_inst_opcode(p->isa, else_inst) == BRW_OPCODE_ELSE);
+   assert(else_inst == NULL || brw_eu_inst_opcode(p->isa, else_inst) == BRW_OPCODE_ELSE);
 
    unsigned br = brw_jump_scale(devinfo);
 
-   assert(brw_inst_opcode(p->isa, endif_inst) == BRW_OPCODE_ENDIF);
-   brw_inst_set_exec_size(devinfo, endif_inst, brw_inst_exec_size(devinfo, if_inst));
+   assert(brw_eu_inst_opcode(p->isa, endif_inst) == BRW_OPCODE_ENDIF);
+   brw_eu_inst_set_exec_size(devinfo, endif_inst, brw_eu_inst_exec_size(devinfo, if_inst));
 
    if (else_inst == NULL) {
       /* Patch IF -> ENDIF */
-      brw_inst_set_uip(devinfo, if_inst, br * (endif_inst - if_inst));
-      brw_inst_set_jip(devinfo, if_inst, br * (endif_inst - if_inst));
+      brw_eu_inst_set_uip(devinfo, if_inst, br * (endif_inst - if_inst));
+      brw_eu_inst_set_jip(devinfo, if_inst, br * (endif_inst - if_inst));
    } else {
-      brw_inst_set_exec_size(devinfo, else_inst, brw_inst_exec_size(devinfo, if_inst));
+      brw_eu_inst_set_exec_size(devinfo, else_inst, brw_eu_inst_exec_size(devinfo, if_inst));
 
       /* Patch ELSE -> ENDIF */
       /* The IF instruction's JIP should point just past the ELSE */
-      brw_inst_set_jip(devinfo, if_inst, br * (else_inst - if_inst + 1));
+      brw_eu_inst_set_jip(devinfo, if_inst, br * (else_inst - if_inst + 1));
       /* The IF instruction's UIP and ELSE's JIP should point to ENDIF */
-      brw_inst_set_uip(devinfo, if_inst, br * (endif_inst - if_inst));
+      brw_eu_inst_set_uip(devinfo, if_inst, br * (endif_inst - if_inst));
 
       if (devinfo->ver < 11) {
          /* Set the ELSE instruction to use branch_ctrl with a join
@@ -1155,17 +1165,17 @@ patch_IF_ELSE(struct brw_codegen *p,
           * Wa_220160235, which could cause the program to continue
           * running with all channels disabled.
           */
-         brw_inst_set_jip(devinfo, else_inst, br * (endif_inst - else_inst - 1));
-         brw_inst_set_branch_control(devinfo, else_inst, true);
+         brw_eu_inst_set_jip(devinfo, else_inst, br * (endif_inst - else_inst - 1));
+         brw_eu_inst_set_branch_control(devinfo, else_inst, true);
       } else {
-         brw_inst_set_jip(devinfo, else_inst, br * (endif_inst - else_inst));
+         brw_eu_inst_set_jip(devinfo, else_inst, br * (endif_inst - else_inst));
       }
 
       /* Since we don't set branch_ctrl on Gfx11+, the ELSE's
        * JIP and UIP both should point to ENDIF on those
        * platforms.
        */
-      brw_inst_set_uip(devinfo, else_inst, br * (endif_inst - else_inst));
+      brw_eu_inst_set_uip(devinfo, else_inst, br * (endif_inst - else_inst));
    }
 }
 
@@ -1173,18 +1183,18 @@ void
 brw_ELSE(struct brw_codegen *p)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn;
+   brw_eu_inst *insn;
 
    insn = next_insn(p, BRW_OPCODE_ELSE);
 
    brw_set_dest(p, insn, retype(brw_null_reg(), BRW_TYPE_D));
    if (devinfo->ver < 12)
       brw_set_src0(p, insn, brw_imm_d(0));
-   brw_inst_set_jip(devinfo, insn, 0);
-   brw_inst_set_uip(devinfo, insn, 0);
+   brw_eu_inst_set_jip(devinfo, insn, 0);
+   brw_eu_inst_set_uip(devinfo, insn, 0);
 
-   brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_mask_control(devinfo, insn, BRW_MASK_ENABLE);
+   brw_eu_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_mask_control(devinfo, insn, BRW_MASK_ENABLE);
 
    push_if_stack(p, insn);
 }
@@ -1193,15 +1203,15 @@ void
 brw_ENDIF(struct brw_codegen *p)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn = NULL;
-   brw_inst *else_inst = NULL;
-   brw_inst *if_inst = NULL;
-   brw_inst *tmp;
+   brw_eu_inst *insn = NULL;
+   brw_eu_inst *else_inst = NULL;
+   brw_eu_inst *if_inst = NULL;
+   brw_eu_inst *tmp;
 
    assert(p->if_stack_depth > 0);
 
    if (devinfo->ver < 11 &&
-       brw_inst_opcode(p->isa, &p->store[p->if_stack[
+       brw_eu_inst_opcode(p->isa, &p->store[p->if_stack[
                              p->if_stack_depth - 1]]) == BRW_OPCODE_ELSE) {
       /* Insert a NOP to be specified as join instruction within the
        * ELSE block, which is valid for an ELSE instruction with
@@ -1223,7 +1233,7 @@ brw_ENDIF(struct brw_codegen *p)
 
    /* Pop the IF and (optional) ELSE instructions from the stack */
    tmp = pop_if_stack(p);
-   if (brw_inst_opcode(p->isa, tmp) == BRW_OPCODE_ELSE) {
+   if (brw_eu_inst_opcode(p->isa, tmp) == BRW_OPCODE_ELSE) {
       else_inst = tmp;
       tmp = pop_if_stack(p);
    }
@@ -1231,48 +1241,48 @@ brw_ENDIF(struct brw_codegen *p)
 
    brw_set_src0(p, insn, brw_imm_d(0));
 
-   brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_mask_control(devinfo, insn, BRW_MASK_ENABLE);
+   brw_eu_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_mask_control(devinfo, insn, BRW_MASK_ENABLE);
 
-   brw_inst_set_jip(devinfo, insn, 2);
+   brw_eu_inst_set_jip(devinfo, insn, 2);
    patch_IF_ELSE(p, if_inst, else_inst, insn);
 }
 
-brw_inst *
+brw_eu_inst *
 brw_BREAK(struct brw_codegen *p)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn;
+   brw_eu_inst *insn;
 
    insn = next_insn(p, BRW_OPCODE_BREAK);
    brw_set_dest(p, insn, retype(brw_null_reg(), BRW_TYPE_D));
    brw_set_src0(p, insn, brw_imm_d(0x0));
-   brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
+   brw_eu_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
 
    return insn;
 }
 
-brw_inst *
+brw_eu_inst *
 brw_CONT(struct brw_codegen *p)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn;
+   brw_eu_inst *insn;
 
    insn = next_insn(p, BRW_OPCODE_CONTINUE);
    brw_set_dest(p, insn, brw_ip_reg());
    brw_set_src0(p, insn, brw_imm_d(0x0));
 
-   brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
+   brw_eu_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
    return insn;
 }
 
-brw_inst *
+brw_eu_inst *
 brw_HALT(struct brw_codegen *p)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn;
+   brw_eu_inst *insn;
 
    insn = next_insn(p, BRW_OPCODE_HALT);
    brw_set_dest(p, insn, retype(brw_null_reg(), BRW_TYPE_D));
@@ -1280,8 +1290,8 @@ brw_HALT(struct brw_codegen *p)
       brw_set_src0(p, insn, brw_imm_d(0x0));
    }
 
-   brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
-   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
+   brw_eu_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
    return insn;
 }
 
@@ -1297,18 +1307,18 @@ brw_HALT(struct brw_codegen *p)
  * For gfx6, there's no more mask stack, so no need for DO.  WHILE
  * just points back to the first instruction of the loop.
  */
-brw_inst *
+brw_eu_inst *
 brw_DO(struct brw_codegen *p, unsigned execute_size)
 {
    push_loop_stack(p, &p->store[p->nr_insn]);
    return &p->store[p->nr_insn];
 }
 
-brw_inst *
+brw_eu_inst *
 brw_WHILE(struct brw_codegen *p)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn, *do_insn;
+   brw_eu_inst *insn, *do_insn;
    unsigned br = brw_jump_scale(devinfo);
 
    insn = next_insn(p, BRW_OPCODE_WHILE);
@@ -1317,11 +1327,11 @@ brw_WHILE(struct brw_codegen *p)
    brw_set_dest(p, insn, retype(brw_null_reg(), BRW_TYPE_D));
    if (devinfo->ver < 12)
       brw_set_src0(p, insn, brw_imm_d(0));
-   brw_inst_set_jip(devinfo, insn, br * (do_insn - insn));
+   brw_eu_inst_set_jip(devinfo, insn, br * (do_insn - insn));
 
-   brw_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
+   brw_eu_inst_set_exec_size(devinfo, insn, brw_get_default_exec_size(p));
 
-   brw_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
+   brw_eu_inst_set_qtr_control(devinfo, insn, BRW_COMPRESSION_NONE);
 
    p->loop_stack_depth--;
 
@@ -1335,9 +1345,9 @@ void brw_CMP(struct brw_codegen *p,
 	     struct brw_reg src1)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn = next_insn(p, BRW_OPCODE_CMP);
+   brw_eu_inst *insn = next_insn(p, BRW_OPCODE_CMP);
 
-   brw_inst_set_cond_modifier(devinfo, insn, conditional);
+   brw_eu_inst_set_cond_modifier(devinfo, insn, conditional);
    brw_set_dest(p, insn, dest);
    brw_set_src0(p, insn, src0);
    brw_set_src1(p, insn, src1);
@@ -1350,9 +1360,9 @@ void brw_CMPN(struct brw_codegen *p,
               struct brw_reg src1)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn = next_insn(p, BRW_OPCODE_CMPN);
+   brw_eu_inst *insn = next_insn(p, BRW_OPCODE_CMPN);
 
-   brw_inst_set_cond_modifier(devinfo, insn, conditional);
+   brw_eu_inst_set_cond_modifier(devinfo, insn, conditional);
    brw_set_dest(p, insn, dest);
    brw_set_src0(p, insn, src0);
    brw_set_src1(p, insn, src1);
@@ -1369,7 +1379,7 @@ void gfx6_math(struct brw_codegen *p,
 	       struct brw_reg src1)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   brw_inst *insn = next_insn(p, BRW_OPCODE_MATH);
+   brw_eu_inst *insn = next_insn(p, BRW_OPCODE_MATH);
 
    assert(dest.file == FIXED_GRF);
 
@@ -1396,7 +1406,27 @@ void gfx6_math(struct brw_codegen *p,
              (src1.type == BRW_TYPE_HF && devinfo->ver >= 9));
    }
 
-   brw_inst_set_math_function(devinfo, insn, function);
+  /* This workaround says that we cannot use scalar broadcast with HF types.
+   * However, for is_scalar values, all 16 elements contain the same value, so
+   * we can replace a <0,1,0> region with <16,16,1> without ill effect.
+   */
+   if (intel_needs_workaround(devinfo, 22016140776)) {
+      if (src0.is_scalar && src0.type == BRW_TYPE_HF) {
+         src0.vstride = BRW_VERTICAL_STRIDE_16;
+         src0.width = BRW_WIDTH_16;
+         src0.hstride = BRW_HORIZONTAL_STRIDE_1;
+         src0.swizzle = BRW_SWIZZLE_XYZW;
+      }
+
+      if (src1.is_scalar && src1.type == BRW_TYPE_HF) {
+         src1.vstride = BRW_VERTICAL_STRIDE_16;
+         src1.width = BRW_WIDTH_16;
+         src1.hstride = BRW_HORIZONTAL_STRIDE_1;
+         src1.swizzle = BRW_SWIZZLE_XYZW;
+      }
+   }
+
+   brw_eu_inst_set_math_function(devinfo, insn, function);
 
    brw_set_dest(p, insn, dest);
    brw_set_src0(p, insn, src0);
@@ -1409,11 +1439,11 @@ brw_send_indirect_message(struct brw_codegen *p,
                           struct brw_reg dst,
                           struct brw_reg payload,
                           struct brw_reg desc,
-                          unsigned desc_imm,
-                          bool eot)
+                          bool eot,
+                          bool gather)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   struct brw_inst *send;
+   struct brw_eu_inst *send;
 
    dst = retype(dst, BRW_TYPE_UW);
 
@@ -1422,40 +1452,21 @@ brw_send_indirect_message(struct brw_codegen *p,
    if (desc.file == IMM) {
       send = next_insn(p, BRW_OPCODE_SEND);
       brw_set_src0(p, send, retype(payload, BRW_TYPE_UD));
-      brw_set_desc(p, send, desc.ud | desc_imm);
+      brw_set_desc(p, send, desc.ud, gather);
    } else {
-      const struct tgl_swsb swsb = brw_get_default_swsb(p);
-      struct brw_reg addr = retype(brw_address_reg(0), BRW_TYPE_UD);
-
-      brw_push_insn_state(p);
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_default_exec_size(p, BRW_EXECUTE_1);
-      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
-      brw_set_default_flag_reg(p, 0, 0);
-      brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
-
-      /* Load the indirect descriptor to an address register using OR so the
-       * caller can specify additional descriptor bits with the desc_imm
-       * immediate.
-       */
-      brw_OR(p, addr, desc, brw_imm_ud(desc_imm));
-
-      brw_pop_insn_state(p);
-
-      brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
+      assert(desc.file == ADDRESS);
+      assert(desc.subnr == 0);
       send = next_insn(p, BRW_OPCODE_SEND);
       brw_set_src0(p, send, retype(payload, BRW_TYPE_UD));
-
       if (devinfo->ver >= 12)
-         brw_inst_set_send_sel_reg32_desc(devinfo, send, true);
+         brw_eu_inst_set_send_sel_reg32_desc(devinfo, send, true);
       else
-         brw_set_src1(p, send, addr);
+         brw_set_src1(p, send, desc);
    }
 
    brw_set_dest(p, send, dst);
-   brw_inst_set_sfid(devinfo, send, sfid);
-   brw_inst_set_eot(devinfo, send, eot);
+   brw_eu_inst_set_sfid(devinfo, send, sfid);
+   brw_eu_inst_set_eot(devinfo, send, eot);
 }
 
 void
@@ -1465,118 +1476,18 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 struct brw_reg payload0,
                                 struct brw_reg payload1,
                                 struct brw_reg desc,
-                                unsigned desc_imm,
                                 struct brw_reg ex_desc,
-                                unsigned ex_desc_imm,
-                                bool ex_desc_scratch,
+                                unsigned ex_mlen,
                                 bool ex_bso,
-                                bool eot)
+                                bool eot,
+                                bool gather)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   struct brw_inst *send;
+   struct brw_eu_inst *send;
 
    dst = retype(dst, BRW_TYPE_UW);
 
    assert(desc.type == BRW_TYPE_UD);
-
-   if (desc.file == IMM) {
-      desc.ud |= desc_imm;
-   } else {
-      const struct tgl_swsb swsb = brw_get_default_swsb(p);
-      struct brw_reg addr = retype(brw_address_reg(0), BRW_TYPE_UD);
-
-      brw_push_insn_state(p);
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_default_exec_size(p, BRW_EXECUTE_1);
-      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
-      brw_set_default_flag_reg(p, 0, 0);
-      brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
-
-      /* Load the indirect descriptor to an address register using OR so the
-       * caller can specify additional descriptor bits with the desc_imm
-       * immediate.
-       */
-      brw_OR(p, addr, desc, brw_imm_ud(desc_imm));
-
-      brw_pop_insn_state(p);
-      desc = addr;
-
-      brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
-   }
-
-   if (ex_desc.file == IMM &&
-       !ex_desc_scratch &&
-       (devinfo->ver >= 12 ||
-        ((ex_desc.ud | ex_desc_imm) & INTEL_MASK(15, 12)) == 0)) {
-      /* ATS-M PRMs, Volume 2d: Command Reference: Structures,
-       * EU_INSTRUCTION_SEND instruction
-       *
-       *    "ExBSO: Exists If: ([ExDesc.IsReg]==true)"
-       */
-      assert(!ex_bso);
-      ex_desc.ud |= ex_desc_imm;
-   } else {
-      const struct tgl_swsb swsb = brw_get_default_swsb(p);
-      struct brw_reg addr = retype(brw_address_reg(2), BRW_TYPE_UD);
-
-      /* On Xe2+ ExBSO addressing is implicitly enabled for the UGM
-       * shared function.
-       */
-      ex_bso |= (devinfo->ver >= 20 && sfid == GFX12_SFID_UGM);
-
-      brw_push_insn_state(p);
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_default_exec_size(p, BRW_EXECUTE_1);
-      brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
-      brw_set_default_flag_reg(p, 0, 0);
-      brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
-
-      /* Load the indirect extended descriptor to an address register using OR
-       * so the caller can specify additional descriptor bits with the
-       * desc_imm immediate.
-       *
-       * Even though the instruction dispatcher always pulls the SFID and EOT
-       * fields from the instruction itself, actual external unit which
-       * processes the message gets the SFID and EOT from the extended
-       * descriptor which comes from the address register.  If we don't OR
-       * those two bits in, the external unit may get confused and hang.
-       */
-      unsigned imm_part = ex_bso ? 0 : (ex_desc_imm | sfid | eot << 5);
-
-      if (ex_desc_scratch) {
-         assert(devinfo->verx10 >= 125);
-         brw_AND(p, addr,
-                 retype(brw_vec1_grf(0, 5), BRW_TYPE_UD),
-                 brw_imm_ud(INTEL_MASK(31, 10)));
-
-         if (devinfo->ver >= 20 && sfid == GFX12_SFID_UGM) {
-            const unsigned ex_mlen = brw_message_ex_desc_ex_mlen(devinfo, ex_desc_imm);
-            assert(ex_desc_imm == brw_message_ex_desc(devinfo, ex_mlen));
-            brw_SHR(p, addr, addr, brw_imm_ud(4));
-         } else {
-            /* Or the scratch surface offset together with the immediate part
-             * of the extended descriptor.
-             */
-            brw_OR(p, addr, addr, brw_imm_ud(imm_part));
-         }
-
-      } else if (ex_desc.file == IMM) {
-         /* ex_desc bits 15:12 don't exist in the instruction encoding prior
-          * to Gfx12, so we may have fallen back to an indirect extended
-          * descriptor.
-          */
-         brw_MOV(p, addr, brw_imm_ud(ex_desc.ud | imm_part));
-      } else {
-         brw_OR(p, addr, ex_desc, brw_imm_ud(imm_part));
-      }
-
-      brw_pop_insn_state(p);
-      ex_desc = addr;
-
-      brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
-   }
 
    send = next_insn(p, devinfo->ver >= 12 ? BRW_OPCODE_SEND : BRW_OPCODE_SENDS);
    brw_set_dest(p, send, dst);
@@ -1584,29 +1495,25 @@ brw_send_indirect_split_message(struct brw_codegen *p,
    brw_set_src1(p, send, retype(payload1, BRW_TYPE_UD));
 
    if (desc.file == IMM) {
-      brw_inst_set_send_sel_reg32_desc(devinfo, send, 0);
-      brw_inst_set_send_desc(devinfo, send, desc.ud);
+      brw_eu_inst_set_send_sel_reg32_desc(devinfo, send, 0);
+      brw_eu_inst_set_send_desc(devinfo, send, desc.ud);
    } else {
-      assert(desc.file == ARF);
-      assert(desc.nr == BRW_ARF_ADDRESS);
+      assert(desc.file == ADDRESS);
       assert(desc.subnr == 0);
-      brw_inst_set_send_sel_reg32_desc(devinfo, send, 1);
+      brw_eu_inst_set_send_sel_reg32_desc(devinfo, send, 1);
    }
 
    if (ex_desc.file == IMM) {
-      brw_inst_set_send_sel_reg32_ex_desc(devinfo, send, 0);
-      brw_inst_set_sends_ex_desc(devinfo, send, ex_desc.ud);
+      brw_eu_inst_set_send_sel_reg32_ex_desc(devinfo, send, 0);
+      brw_eu_inst_set_sends_ex_desc(devinfo, send, ex_desc.ud, gather);
    } else {
-      assert(ex_desc.file == ARF);
-      assert(ex_desc.nr == BRW_ARF_ADDRESS);
+      assert(ex_desc.file == ADDRESS);
       assert((ex_desc.subnr & 0x3) == 0);
-      brw_inst_set_send_sel_reg32_ex_desc(devinfo, send, 1);
-      brw_inst_set_send_ex_desc_ia_subreg_nr(devinfo, send, phys_subnr(devinfo, ex_desc) >> 2);
+      brw_eu_inst_set_send_sel_reg32_ex_desc(devinfo, send, 1);
+      brw_eu_inst_set_send_ex_desc_ia_subreg_nr(devinfo, send, phys_subnr(devinfo, ex_desc) >> 2);
 
-      if (devinfo->ver >= 20 && sfid == GFX12_SFID_UGM) {
-         const unsigned ex_mlen = brw_message_ex_desc_ex_mlen(devinfo, ex_desc_imm);
-         brw_inst_set_bits(send, 103, 99, ex_mlen / reg_unit(devinfo));
-      }
+      if (devinfo->ver >= 20 && sfid == GFX12_SFID_UGM)
+         brw_eu_inst_set_bits(send, 103, 99, ex_mlen / reg_unit(devinfo));
    }
 
    if (ex_bso) {
@@ -1616,19 +1523,19 @@ brw_send_indirect_split_message(struct brw_codegen *p,
        * BSpec 56890
        */
       if (devinfo->ver < 20 || sfid != GFX12_SFID_UGM)
-         brw_inst_set_send_ex_bso(devinfo, send, true);
-      brw_inst_set_send_src1_len(devinfo, send, GET_BITS(ex_desc_imm, 10, 6));
+         brw_eu_inst_set_send_ex_bso(devinfo, send, true);
+      brw_eu_inst_set_send_src1_len(devinfo, send, ex_mlen / reg_unit(devinfo));
    }
-   brw_inst_set_sfid(devinfo, send, sfid);
-   brw_inst_set_eot(devinfo, send, eot);
+   brw_eu_inst_set_sfid(devinfo, send, sfid);
+   brw_eu_inst_set_eot(devinfo, send, eot);
 }
 
 static bool
 while_jumps_before_offset(const struct intel_device_info *devinfo,
-                          brw_inst *insn, int while_offset, int start_offset)
+                          brw_eu_inst *insn, int while_offset, int start_offset)
 {
    int scale = 16 / brw_jump_scale(devinfo);
-   int jip = brw_inst_jip(devinfo, insn);
+   int jip = brw_eu_inst_jip(devinfo, insn);
    assert(jip < 0);
    return while_offset + jip * scale <= start_offset;
 }
@@ -1643,12 +1550,12 @@ brw_find_next_block_end(struct brw_codegen *p, int start_offset)
 
    int depth = 0;
 
-   for (offset = next_offset(devinfo, store, start_offset);
+   for (offset = next_offset(p, store, start_offset);
         offset < p->next_insn_offset;
-        offset = next_offset(devinfo, store, offset)) {
-      brw_inst *insn = store + offset;
+        offset = next_offset(p, store, offset)) {
+      brw_eu_inst *insn = store + offset;
 
-      switch (brw_inst_opcode(p->isa, insn)) {
+      switch (brw_eu_inst_opcode(p->isa, insn)) {
       case BRW_OPCODE_IF:
          depth++;
          break;
@@ -1691,12 +1598,12 @@ brw_find_loop_end(struct brw_codegen *p, int start_offset)
    /* Always start after the instruction (such as a WHILE) we're trying to fix
     * up.
     */
-   for (offset = next_offset(devinfo, store, start_offset);
+   for (offset = next_offset(p, store, start_offset);
         offset < p->next_insn_offset;
-        offset = next_offset(devinfo, store, offset)) {
-      brw_inst *insn = store + offset;
+        offset = next_offset(p, store, offset)) {
+      brw_eu_inst *insn = store + offset;
 
-      if (brw_inst_opcode(p->isa, insn) == BRW_OPCODE_WHILE) {
+      if (brw_eu_inst_opcode(p->isa, insn) == BRW_OPCODE_WHILE) {
 	 if (while_jumps_before_offset(devinfo, insn, offset, start_offset))
 	    return offset;
       }
@@ -1718,16 +1625,16 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
    void *store = p->store;
 
    for (offset = start_offset; offset < p->next_insn_offset; offset += 16) {
-      brw_inst *insn = store + offset;
-      assert(brw_inst_cmpt_control(devinfo, insn) == 0);
+      brw_eu_inst *insn = store + offset;
+      assert(brw_eu_inst_cmpt_control(devinfo, insn) == 0);
 
-      switch (brw_inst_opcode(p->isa, insn)) {
+      switch (brw_eu_inst_opcode(p->isa, insn)) {
       case BRW_OPCODE_BREAK: {
          int block_end_offset = brw_find_next_block_end(p, offset);
          assert(block_end_offset != 0);
-         brw_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
+         brw_eu_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
 	 /* Gfx7 UIP points to WHILE; Gfx6 points just after it */
-         brw_inst_set_uip(devinfo, insn,
+         brw_eu_inst_set_uip(devinfo, insn,
 	    (brw_find_loop_end(p, offset) - offset) / scale);
 	 break;
       }
@@ -1735,12 +1642,12 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
       case BRW_OPCODE_CONTINUE: {
          int block_end_offset = brw_find_next_block_end(p, offset);
          assert(block_end_offset != 0);
-         brw_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
-         brw_inst_set_uip(devinfo, insn,
+         brw_eu_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
+         brw_eu_inst_set_uip(devinfo, insn,
             (brw_find_loop_end(p, offset) - offset) / scale);
 
-         assert(brw_inst_uip(devinfo, insn) != 0);
-         assert(brw_inst_jip(devinfo, insn) != 0);
+         assert(brw_eu_inst_uip(devinfo, insn) != 0);
+         assert(brw_eu_inst_jip(devinfo, insn) != 0);
 	 break;
       }
 
@@ -1748,7 +1655,7 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
          int block_end_offset = brw_find_next_block_end(p, offset);
          int32_t jump = (block_end_offset == 0) ?
                         1 * br : (block_end_offset - offset) / scale;
-         brw_inst_set_jip(devinfo, insn, jump);
+         brw_eu_inst_set_jip(devinfo, insn, jump);
 	 break;
       }
 
@@ -1766,12 +1673,12 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
 	  */
          int block_end_offset = brw_find_next_block_end(p, offset);
 	 if (block_end_offset == 0) {
-            brw_inst_set_jip(devinfo, insn, brw_inst_uip(devinfo, insn));
+            brw_eu_inst_set_jip(devinfo, insn, brw_eu_inst_uip(devinfo, insn));
 	 } else {
-            brw_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
+            brw_eu_inst_set_jip(devinfo, insn, (block_end_offset - offset) / scale);
 	 }
-         assert(brw_inst_uip(devinfo, insn) != 0);
-         assert(brw_inst_jip(devinfo, insn) != 0);
+         assert(brw_eu_inst_uip(devinfo, insn) != 0);
+         assert(brw_eu_inst_jip(devinfo, insn) != 0);
 	 break;
       }
 
@@ -1783,7 +1690,7 @@ brw_set_uip_jip(struct brw_codegen *p, int start_offset)
 
 static void
 brw_set_memory_fence_message(struct brw_codegen *p,
-                             struct brw_inst *insn,
+                             struct brw_eu_inst *insn,
                              enum brw_message_target sfid,
                              bool commit_enable,
                              unsigned bti)
@@ -1791,31 +1698,31 @@ brw_set_memory_fence_message(struct brw_codegen *p,
    const struct intel_device_info *devinfo = p->devinfo;
 
    brw_set_desc(p, insn, brw_message_desc(
-                   devinfo, 1, (commit_enable ? 1 : 0), true));
+                   devinfo, 1, (commit_enable ? 1 : 0), true), false);
 
-   brw_inst_set_sfid(devinfo, insn, sfid);
+   brw_eu_inst_set_sfid(devinfo, insn, sfid);
 
    switch (sfid) {
    case GFX6_SFID_DATAPORT_RENDER_CACHE:
-      brw_inst_set_dp_msg_type(devinfo, insn, GFX7_DATAPORT_RC_MEMORY_FENCE);
+      brw_eu_inst_set_dp_msg_type(devinfo, insn, GFX7_DATAPORT_RC_MEMORY_FENCE);
       break;
    case GFX7_SFID_DATAPORT_DATA_CACHE:
-      brw_inst_set_dp_msg_type(devinfo, insn, GFX7_DATAPORT_DC_MEMORY_FENCE);
+      brw_eu_inst_set_dp_msg_type(devinfo, insn, GFX7_DATAPORT_DC_MEMORY_FENCE);
       break;
    default:
       unreachable("Not reached");
    }
 
    if (commit_enable)
-      brw_inst_set_dp_msg_control(devinfo, insn, 1 << 5);
+      brw_eu_inst_set_dp_msg_control(devinfo, insn, 1 << 5);
 
    assert(devinfo->ver >= 11 || bti == 0);
-   brw_inst_set_binding_table_index(devinfo, insn, bti);
+   brw_eu_inst_set_binding_table_index(devinfo, insn, bti);
 }
 
 static void
 gfx12_set_memory_fence_message(struct brw_codegen *p,
-                               struct brw_inst *insn,
+                               struct brw_eu_inst *insn,
                                enum brw_message_target sfid,
                                uint32_t desc)
 {
@@ -1823,7 +1730,7 @@ gfx12_set_memory_fence_message(struct brw_codegen *p,
     /* Completion signaled by write to register. No data returned. */
    const unsigned rlen = 1 * reg_unit(p->devinfo);
 
-   brw_inst_set_sfid(p->devinfo, insn, sfid);
+   brw_eu_inst_set_sfid(p->devinfo, insn, sfid);
 
    /* On Gfx12.5 URB is not listed as port usable for fences with the LSC (see
     * BSpec 53578 for Gfx12.5, BSpec 57330 for Gfx20), so we completely ignore
@@ -1831,7 +1738,8 @@ gfx12_set_memory_fence_message(struct brw_codegen *p,
     */
    if (sfid == BRW_SFID_URB && p->devinfo->ver < 20) {
       brw_set_desc(p, insn, brw_urb_fence_desc(p->devinfo) |
-                            brw_message_desc(p->devinfo, mlen, rlen, true));
+                            brw_message_desc(p->devinfo, mlen, rlen, true),
+                   false);
    } else {
       enum lsc_fence_scope scope = lsc_fence_msg_desc_scope(p->devinfo, desc);
       enum lsc_flush_type flush_type = lsc_fence_msg_desc_flush_type(p->devinfo, desc);
@@ -1860,7 +1768,8 @@ gfx12_set_memory_fence_message(struct brw_codegen *p,
 
       brw_set_desc(p, insn, lsc_fence_msg_desc(p->devinfo, scope,
                                                flush_type, false) |
-                            brw_message_desc(p->devinfo, mlen, rlen, false));
+                            brw_message_desc(p->devinfo, mlen, rlen, false),
+                   false);
    }
 }
 
@@ -1882,9 +1791,9 @@ brw_memory_fence(struct brw_codegen *p,
    /* Set dst as destination for dependency tracking, the MEMORY_FENCE
     * message doesn't write anything back.
     */
-   struct brw_inst *insn = next_insn(p, send_op);
-   brw_inst_set_mask_control(devinfo, insn, BRW_MASK_DISABLE);
-   brw_inst_set_exec_size(devinfo, insn, BRW_EXECUTE_1);
+   struct brw_eu_inst *insn = next_insn(p, send_op);
+   brw_eu_inst_set_mask_control(devinfo, insn, BRW_MASK_DISABLE);
+   brw_eu_inst_set_exec_size(devinfo, insn, BRW_EXECUTE_1);
    brw_set_dest(p, insn, dst);
    brw_set_src0(p, insn, src);
 
@@ -2029,7 +1938,7 @@ void
 brw_barrier(struct brw_codegen *p, struct brw_reg src)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   struct brw_inst *inst;
+   struct brw_eu_inst *inst;
 
    brw_push_insn_state(p);
    brw_set_default_access_mode(p, BRW_ALIGN_1);
@@ -2038,13 +1947,13 @@ brw_barrier(struct brw_codegen *p, struct brw_reg src)
    brw_set_src0(p, inst, src);
    brw_set_src1(p, inst, brw_null_reg());
    brw_set_desc(p, inst, brw_message_desc(devinfo,
-                                          1 * reg_unit(devinfo), 0, false));
+                                          1 * reg_unit(devinfo), 0, false), false);
 
-   brw_inst_set_sfid(devinfo, inst, BRW_SFID_MESSAGE_GATEWAY);
-   brw_inst_set_gateway_subfuncid(devinfo, inst,
+   brw_eu_inst_set_sfid(devinfo, inst, BRW_SFID_MESSAGE_GATEWAY);
+   brw_eu_inst_set_gateway_subfuncid(devinfo, inst,
                                   BRW_MESSAGE_GATEWAY_SFID_BARRIER_MSG);
 
-   brw_inst_set_mask_control(devinfo, inst, BRW_MASK_DISABLE);
+   brw_eu_inst_set_mask_control(devinfo, inst, BRW_MASK_DISABLE);
    brw_pop_insn_state(p);
 }
 
@@ -2056,7 +1965,7 @@ void
 brw_WAIT(struct brw_codegen *p)
 {
    const struct intel_device_info *devinfo = p->devinfo;
-   struct brw_inst *insn;
+   struct brw_eu_inst *insn;
 
    struct brw_reg src = brw_notification_reg();
 
@@ -2065,8 +1974,8 @@ brw_WAIT(struct brw_codegen *p)
    brw_set_src0(p, insn, src);
    brw_set_src1(p, insn, brw_null_reg());
 
-   brw_inst_set_exec_size(devinfo, insn, BRW_EXECUTE_1);
-   brw_inst_set_mask_control(devinfo, insn, BRW_MASK_DISABLE);
+   brw_eu_inst_set_exec_size(devinfo, insn, BRW_EXECUTE_1);
+   brw_eu_inst_set_mask_control(devinfo, insn, BRW_MASK_DISABLE);
 }
 
 void
@@ -2086,18 +1995,18 @@ brw_float_controls_mode(struct brw_codegen *p,
     */
    brw_set_default_swsb(p, tgl_swsb_regdist(1));
 
-   brw_inst *inst = brw_AND(p, brw_cr0_reg(0), brw_cr0_reg(0),
+   brw_eu_inst *inst = brw_AND(p, brw_cr0_reg(0), brw_cr0_reg(0),
                             brw_imm_ud(~mask));
-   brw_inst_set_exec_size(p->devinfo, inst, BRW_EXECUTE_1);
+   brw_eu_inst_set_exec_size(p->devinfo, inst, BRW_EXECUTE_1);
    if (p->devinfo->ver < 12)
-      brw_inst_set_thread_control(p->devinfo, inst, BRW_THREAD_SWITCH);
+      brw_eu_inst_set_thread_control(p->devinfo, inst, BRW_THREAD_SWITCH);
 
    if (mode) {
-      brw_inst *inst_or = brw_OR(p, brw_cr0_reg(0), brw_cr0_reg(0),
+      brw_eu_inst *inst_or = brw_OR(p, brw_cr0_reg(0), brw_cr0_reg(0),
                                  brw_imm_ud(mode));
-      brw_inst_set_exec_size(p->devinfo, inst_or, BRW_EXECUTE_1);
+      brw_eu_inst_set_exec_size(p->devinfo, inst_or, BRW_EXECUTE_1);
       if (p->devinfo->ver < 12)
-         brw_inst_set_thread_control(p->devinfo, inst_or, BRW_THREAD_SWITCH);
+         brw_eu_inst_set_thread_control(p->devinfo, inst_or, BRW_THREAD_SWITCH);
    }
 
    if (p->devinfo->ver >= 12)
@@ -2106,19 +2015,19 @@ brw_float_controls_mode(struct brw_codegen *p,
 
 void
 brw_update_reloc_imm(const struct brw_isa_info *isa,
-                     brw_inst *inst,
+                     brw_eu_inst *inst,
                      uint32_t value)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
 
    /* Sanity check that the instruction is a MOV of an immediate */
-   assert(brw_inst_opcode(isa, inst) == BRW_OPCODE_MOV);
-   assert(brw_inst_src0_reg_file(devinfo, inst) == IMM);
+   assert(brw_eu_inst_opcode(isa, inst) == BRW_OPCODE_MOV);
+   assert(brw_eu_inst_src0_reg_file(devinfo, inst) == IMM);
 
    /* If it was compacted, we can't safely rewrite */
-   assert(brw_inst_cmpt_control(devinfo, inst) == 0);
+   assert(brw_eu_inst_cmpt_control(devinfo, inst) == 0);
 
-   brw_inst_set_imm_ud(devinfo, inst, value);
+   brw_eu_inst_set_imm_ud(devinfo, inst, value);
 }
 
 /* A default value for constants that will be patched at run-time.

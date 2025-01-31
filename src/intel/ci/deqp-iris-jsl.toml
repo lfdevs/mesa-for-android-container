@@ -1,7 +1,7 @@
 # Basic test set
 [[deqp]]
-deqp = "/deqp/modules/gles2/deqp-gles2"
-caselists = ["/deqp/mustpass/gles2-main.txt"]
+deqp = "/deqp-gles/modules/gles2/deqp-gles2"
+caselists = ["/deqp-gles/mustpass/gles2-main.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
@@ -12,8 +12,8 @@ version_check = "GL ES 3.2.*git"
 renderer_check = "JSL"
 
 [[deqp]]
-deqp = "/deqp/modules/gles3/deqp-gles3"
-caselists = ["/deqp/mustpass/gles3-main.txt"]
+deqp = "/deqp-gles/modules/gles3/deqp-gles3"
+caselists = ["/deqp-gles/mustpass/gles3-main.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
@@ -22,8 +22,8 @@ deqp_args = [
 ]
 
 [[deqp]]
-deqp = "/deqp/modules/gles31/deqp-gles31"
-caselists = ["/deqp/mustpass/gles31-main.txt"]
+deqp = "/deqp-gles/modules/gles31/deqp-gles31"
+caselists = ["/deqp-gles/mustpass/gles31-main.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
@@ -32,11 +32,11 @@ deqp_args = [
 ]
 
 [[deqp]]
-deqp = "/deqp/external/openglcts/modules/glcts"
+deqp = "/deqp-gles/external/openglcts/modules/glcts"
 caselists = [
-    "/deqp/mustpass/gles2-khr-main.txt",
-    "/deqp/mustpass/gles3-khr-main.txt",
-    "/deqp/mustpass/gles31-khr-main.txt",
+    "/deqp-gles/mustpass/gles2-khr-main.txt",
+    "/deqp-gles/mustpass/gles3-khr-main.txt",
+    "/deqp-gles/mustpass/gles31-khr-main.txt",
 ]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
@@ -50,10 +50,10 @@ timeout = 90.0  # Some tests take a bit over 60 seconds
 # version, so we only need to run one test list (unlike dEQP-GLES,
 # where the test sets are separate).
 [[deqp]]
-deqp = "/deqp/external/openglcts/modules/glcts"
+deqp = "/deqp-gl/external/openglcts/modules/glcts"
 caselists = [
-    "/deqp/mustpass/gl46-main.txt",
-    "/deqp/mustpass/gl46-khr-single.txt",
+    "/deqp-gl/mustpass/gl46-main.txt",
+    "/deqp-gl/mustpass/gl46-khr-single.txt",
 ]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
@@ -65,8 +65,8 @@ timeout = 90.0  # Some tests take a bit over 60 seconds
 
 # 565-nozs
 [[deqp]]
-deqp = "/deqp/modules/gles3/deqp-gles3"
-caselists = ["/deqp/mustpass/gles3-565-no-depth-no-stencil.txt"]
+deqp = "/deqp-gles/modules/gles3/deqp-gles3"
+caselists = ["/deqp-gles/mustpass/gles3-565-no-depth-no-stencil.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
@@ -76,8 +76,8 @@ deqp_args = [
 prefix = "565-nozs-"
 
 [[deqp]]
-deqp = "/deqp/modules/gles31/deqp-gles31"
-caselists = ["/deqp/mustpass/gles31-565-no-depth-no-stencil.txt"]
+deqp = "/deqp-gles/modules/gles31/deqp-gles31"
+caselists = ["/deqp-gles/mustpass/gles31-565-no-depth-no-stencil.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
@@ -88,8 +88,8 @@ prefix = "565-nozs-"
 
 # multisample
 [[deqp]]
-deqp = "/deqp/modules/gles3/deqp-gles3"
-caselists = ["/deqp/mustpass/gles3-multisample.txt"]
+deqp = "/deqp-gles/modules/gles3/deqp-gles3"
+caselists = ["/deqp-gles/mustpass/gles3-multisample.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
@@ -99,8 +99,8 @@ deqp_args = [
 prefix = "multisample-"
 
 [[deqp]]
-deqp = "/deqp/modules/gles31/deqp-gles31"
-caselists = ["/deqp/mustpass/gles31-multisample.txt"]
+deqp = "/deqp-gles/modules/gles31/deqp-gles31"
+caselists = ["/deqp-gles/mustpass/gles31-multisample.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",

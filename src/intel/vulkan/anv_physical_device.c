@@ -140,8 +140,8 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_buffer_device_address             = true,
       .KHR_calibrated_timestamps             = device->has_reg_timestamp,
       .KHR_compute_shader_derivatives        = true,
-      .KHR_copy_commands2                    = true,
       .KHR_cooperative_matrix                = anv_has_cooperative_matrix(device),
+      .KHR_copy_commands2                    = true,
       .KHR_create_renderpass2                = true,
       .KHR_dedicated_allocation              = true,
       .KHR_deferred_host_operations          = true,
@@ -238,6 +238,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_video_decode_queue                = device->video_decode_enabled,
       .KHR_video_decode_h264                 = VIDEO_CODEC_H264DEC && device->video_decode_enabled,
       .KHR_video_decode_h265                 = VIDEO_CODEC_H265DEC && device->video_decode_enabled,
+      .KHR_video_decode_av1                  = device->info.ver >= 12 && VIDEO_CODEC_AV1DEC && device->video_decode_enabled,
       .KHR_video_encode_queue                = device->video_encode_enabled,
       .KHR_video_encode_h264                 = VIDEO_CODEC_H264ENC && device->video_encode_enabled,
       .KHR_video_encode_h265                 = device->info.ver >= 12 && VIDEO_CODEC_H265ENC && device->video_encode_enabled,
@@ -259,11 +260,11 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_conservative_rasterization        = true,
       .EXT_custom_border_color               = true,
       .EXT_depth_bias_control                = true,
-      .EXT_depth_clamp_zero_one              = true,
       .EXT_depth_clamp_control               = true,
+      .EXT_depth_clamp_zero_one              = true,
       .EXT_depth_clip_control                = true,
-      .EXT_depth_range_unrestricted          = device->info.ver >= 20,
       .EXT_depth_clip_enable                 = true,
+      .EXT_depth_range_unrestricted          = device->info.ver >= 20,
       .EXT_descriptor_buffer                 = true,
       .EXT_descriptor_indexing               = true,
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
@@ -290,8 +291,8 @@ get_device_extensions(const struct anv_physical_device *device,
        */
       .EXT_image_compression_control         = device->instance->compression_control_enabled &&
                                                device->info.ver < 20,
-      .EXT_image_robustness                  = true,
       .EXT_image_drm_format_modifier         = true,
+      .EXT_image_robustness                  = true,
       .EXT_image_sliced_view_of_3d           = true,
       .EXT_image_view_min_lod                = true,
       .EXT_index_type_uint8                  = true,
@@ -308,6 +309,7 @@ get_device_extensions(const struct anv_physical_device *device,
                                                 device->vram_mappable.available > 0) &&
                                                device->sys.available,
       .EXT_mesh_shader                       = device->info.has_mesh_shading,
+      .EXT_multi_draw                        = true,
       .EXT_mutable_descriptor_type           = true,
       .EXT_nested_command_buffer             = true,
       .EXT_non_seamless_cube_map             = true,
@@ -319,8 +321,8 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_pipeline_protected_access         = device->has_protected_contexts,
       .EXT_pipeline_robustness               = true,
       .EXT_post_depth_coverage               = true,
-      .EXT_primitives_generated_query        = true,
       .EXT_primitive_topology_list_restart   = true,
+      .EXT_primitives_generated_query        = true,
       .EXT_private_data                      = true,
       .EXT_provoking_vertex                  = true,
       .EXT_queue_family_foreign              = true,
@@ -361,9 +363,8 @@ get_device_extensions(const struct anv_physical_device *device,
       .INTEL_performance_query               = device->perf &&
                                                intel_perf_has_hold_preemption(device->perf),
       .INTEL_shader_integer_functions2       = true,
-      .EXT_multi_draw                        = true,
-      .NV_compute_shader_derivatives         = true,
       .MESA_image_alignment_control          = true,
+      .NV_compute_shader_derivatives         = true,
       .VALVE_mutable_descriptor_type         = true,
    };
 }
@@ -528,6 +529,9 @@ get_features(const struct anv_physical_device *pdevice,
       .shaderIntegerDotProduct = true,
       .maintenance4 = true,
 
+      /* Vulkan 1.4 */
+      .pushDescriptor = true,
+
       /* VK_EXT_4444_formats */
       .formatA4R4G4B4 = true,
       .formatA4B4G4R4 = false,
@@ -563,7 +567,8 @@ get_features(const struct anv_physical_device *pdevice,
 
       /* VK_EXT_custom_border_color */
       .customBorderColors = true,
-      .customBorderColorWithoutFormat = true,
+      .customBorderColorWithoutFormat =
+         pdevice->instance->custom_border_colors_without_format,
 
       /* VK_EXT_depth_clamp_zero_one */
       .depthClampZeroOne = true,
@@ -1003,8 +1008,8 @@ get_properties_1_2(const struct anv_physical_device *pdevice,
 
    p->conformanceVersion = (VkConformanceVersion) {
       .major = 1,
-      .minor = 3,
-      .subminor = 6,
+      .minor = 4,
+      .subminor = 0,
       .patch = 0,
    };
 
@@ -1353,6 +1358,10 @@ get_properties(const struct anv_physical_device *pdevice,
 
       /* VK_KHR_cooperative_matrix */
       .cooperativeMatrixSupportedStages = VK_SHADER_STAGE_COMPUTE_BIT,
+
+      /* Vulkan 1.4 */
+      .dynamicRenderingLocalReadDepthStencilAttachments = true,
+      .dynamicRenderingLocalReadMultisampledAttachments = true,
    };
 
    snprintf(props->deviceName, sizeof(props->deviceName),
@@ -2433,9 +2442,6 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       goto fail_fd;
    }
 
-   if (devinfo.ver == 20 && instance->disable_xe2_ccs)
-      intel_debug |= DEBUG_NO_CCS;
-
    /* Disable Wa_16013994831 on Gfx12.0 because we found other cases where we
     * need to always disable preemption :
     *    - https://gitlab.freedesktop.org/mesa/mesa/-/issues/5963
@@ -2806,6 +2812,8 @@ void anv_GetPhysicalDeviceQueueFamilyProperties2(
                if (queue_family->queueFlags & VK_QUEUE_VIDEO_DECODE_BIT_KHR) {
                   prop->videoCodecOperations = VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR |
                                                VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR;
+                  if (pdevice->info.ver >= 12)
+                     prop->videoCodecOperations |= VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR;
                }
 
                if (queue_family->queueFlags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR) {
@@ -3124,31 +3132,6 @@ VkResult anv_GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
             prop->saturatingAccumulation = VK_TRUE;
             prop->scope = convert_scope(cfg->scope);
          }
-      }
-   }
-
-   return vk_outarray_status(&out);
-}
-
-static const VkTimeDomainKHR anv_time_domains[] = {
-   VK_TIME_DOMAIN_DEVICE_KHR,
-   VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR,
-#ifdef CLOCK_MONOTONIC_RAW
-   VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR,
-#endif
-};
-
-VkResult anv_GetPhysicalDeviceCalibrateableTimeDomainsKHR(
-   VkPhysicalDevice                             physicalDevice,
-   uint32_t                                     *pTimeDomainCount,
-   VkTimeDomainKHR                              *pTimeDomains)
-{
-   int d;
-   VK_OUTARRAY_MAKE_TYPED(VkTimeDomainKHR, out, pTimeDomains, pTimeDomainCount);
-
-   for (d = 0; d < ARRAY_SIZE(anv_time_domains); d++) {
-      vk_outarray_append_typed(VkTimeDomainKHR, &out, i) {
-         *i = anv_time_domains[d];
       }
    }
 

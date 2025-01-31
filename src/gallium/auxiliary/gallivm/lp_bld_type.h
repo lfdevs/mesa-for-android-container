@@ -113,6 +113,12 @@ struct lp_type {
     */
    unsigned norm:1;
 
+   /** Arithmetic operations that use this type can not flust -0 to 0. */
+   unsigned signed_zero_preserve:1;
+
+   /** Arithmetic operations that use this type can not flust nan to 0. */
+   unsigned nan_preserve:1;
+
    /**
     * Element width.
     *

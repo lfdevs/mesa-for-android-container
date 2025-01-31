@@ -485,10 +485,12 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
        * be in R60. Otherwise coverage mask writes do not work with
        * early-ZS with pixel-frequency-shading (this combination of
        * settings is legal if depth/stencil writes are disabled).
+       * Allowing a FAU index also seems to work on Valhall, at least.
        */
       if (ins->op == BI_OPCODE_ATEST) {
-         assert(bi_is_ssa(ins->src[0]));
-         l->solutions[ins->src[0].value] = 60;
+         assert(bi_is_ssa(ins->src[0]) || ins->src[0].type == BI_INDEX_FAU);
+         if (bi_is_ssa(ins->src[0]))
+            l->solutions[ins->src[0].value] = 60;
       }
    }
 
@@ -1081,7 +1083,7 @@ bi_register_allocate(bi_context *ctx)
    struct lcra_state *l = NULL;
    bool success = false;
 
-   unsigned iter_count = 1000; /* max iterations */
+   unsigned iter_count = 2000; /* max iterations */
 
    /* Number of bytes of memory we've spilled into */
    unsigned spill_count = ctx->info.tls_size;

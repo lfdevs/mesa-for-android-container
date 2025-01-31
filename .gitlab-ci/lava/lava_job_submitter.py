@@ -103,19 +103,21 @@ def raise_exception_from_metadata(metadata: dict, job_id: int) -> None:
     if "result" not in metadata or metadata["result"] != "fail":
         return
     if "error_type" in metadata:
-        error_type = metadata["error_type"]
-        if error_type == "Infrastructure":
-            raise MesaCIRetriableException(
-                f"LAVA job {job_id} failed with Infrastructure Error. Retry."
-            )
+        error_type: str = metadata["error_type"]
+        error_msg: str = metadata.get("error_msg", "")
+        full_err_msg: str = error_type if not error_msg else f"{error_type}: {error_msg}"
         if error_type == "Job":
             # This happens when LAVA assumes that the job cannot terminate or
             # with mal-formed job definitions. As we are always validating the
             # jobs, only the former is probable to happen. E.g.: When some LAVA
             # action timed out more times than expected in job definition.
             raise MesaCIRetriableException(
-                f"LAVA job {job_id} failed with JobError "
+                f"LAVA job {job_id} failed with {full_err_msg}. Retry."
                 "(possible LAVA timeout misconfiguration/bug). Retry."
+            )
+        if error_type:
+            raise MesaCIRetriableException(
+                f"LAVA job {job_id} failed with error type: {full_err_msg}. Retry."
             )
     if "case" in metadata and metadata["case"] == "validate":
         raise MesaCIRetriableException(

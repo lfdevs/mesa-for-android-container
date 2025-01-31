@@ -3,6 +3,8 @@
 
 set -uex
 
+uncollapsed_section_start wayland "Building Wayland"
+
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
 # DEBIAN_BUILD_TAG
@@ -30,3 +32,5 @@ meson setup -Dtests=false _build ${EXTRA_MESON_ARGS:-}
 meson install -C _build
 cd ..
 rm -rf wayland-protocols
+
+section_end wayland

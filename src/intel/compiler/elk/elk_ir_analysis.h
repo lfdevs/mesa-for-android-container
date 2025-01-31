@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_IR_ANALYSIS_H
-#define ELK_IR_ANALYSIS_H
+#pragma once
 
 namespace elk {
    /**
@@ -191,5 +190,3 @@ private:
    const C *c;
    T *p;
 };
-
-#endif

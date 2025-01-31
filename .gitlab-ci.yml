@@ -47,6 +47,7 @@ workflow:
     # nightly pipeline
     - if: &is-scheduled-pipeline $CI_PIPELINE_SOURCE == "schedule"
       variables:
+        JOB_PRIORITY: 45
         # (some) nightly builds perform LTO, so they take much longer than the
         # short timeout allowed in other pipelines.
         # Note: 0 = infinity = gitlab's job `timeout:` applies, which is 1h
@@ -67,7 +68,12 @@ variables:
           rm download-git-cache.sh
           set +o xtrace
   S3_JWT_FILE: /s3_jwt
+  S3_JWT_FILE_SCRIPT: |-
+      echo -n '${S3_JWT}' > '${S3_JWT_FILE}' &&
+      unset CI_JOB_JWT S3_JWT  # Unsetting vulnerable env variables
   S3_HOST: s3.freedesktop.org
+  # This bucket is used to fetch ANDROID prebuilts and images
+  S3_ANDROID_BUCKET: mesa-rootfs
   # This bucket is used to fetch the kernel image
   S3_KERNEL_BUCKET: mesa-rootfs
   # Bucket for git cache
@@ -91,13 +97,14 @@ variables:
   ARTIFACTS_BASE_URL: https://${CI_PROJECT_ROOT_NAMESPACE}.${CI_PAGES_DOMAIN}/-/${CI_PROJECT_NAME}/-/jobs/${CI_JOB_ID}/artifacts
   # Python scripts for structured logger
   PYTHONPATH: "$PYTHONPATH:$CI_PROJECT_DIR/install"
-  # Drop once deqp-runner is upgraded to > 0.18.0
+  # No point in continuing once the device is lost
   MESA_VK_ABORT_ON_DEVICE_LOSS: 1
   # Avoid the wall of "Unsupported SPIR-V capability" warnings in CI job log, hiding away useful output
   MESA_SPIRV_LOG_LEVEL: error
   # Default priority for non-merge pipelines
   VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
   JOB_PRIORITY: 50
+  DATA_STORAGE_PATH: data_storage
 
 default:
   id_tokens:
@@ -111,9 +118,8 @@ default:
     - >
       export SCRIPTS_DIR=$(mktemp -d) &&
       curl -L -s --retry 4 -f --retry-all-errors --retry-delay 60 -O --output-dir "${SCRIPTS_DIR}" "${CI_PROJECT_URL}/-/raw/${CI_COMMIT_SHA}/.gitlab-ci/setup-test-env.sh" &&
-      . ${SCRIPTS_DIR}/setup-test-env.sh &&
-      echo -n "${S3_JWT}" > "${S3_JWT_FILE}" &&
-      unset CI_JOB_JWT S3_JWT  # Unsetting vulnerable env variables
+      . ${SCRIPTS_DIR}/setup-test-env.sh
+    - eval "$S3_JWT_FILE_SCRIPT"
 
   after_script:
     # Work around https://gitlab.com/gitlab-org/gitlab/-/issues/20338
@@ -211,6 +217,7 @@ include:
         - bin/git_sha1_gen.py
         - bin/install_megadrivers.py
         - bin/symbols-check.py
+        - bin/ci/**/*
         # GitLab CI
         - .gitlab-ci.yml
         - .gitlab-ci/**/*
@@ -251,7 +258,7 @@ include:
 
 .ci-deqp-artifacts:
   artifacts:
-    name: "mesa_${CI_JOB_NAME}"
+    name: "{CI_PROJECT_NAME}_${CI_JOB_NAME}"
     when: always
     untracked: false
     paths:
@@ -260,6 +267,7 @@ include:
       - artifacts
       - _build/meson-logs/*.txt
       - _build/meson-logs/strace
+      - _build/.ninja_log
 
 # Git archive
 
@@ -350,9 +358,7 @@ mr-label-maker-test:
 # Jobs that need to pass before spending hardware resources on further testing
 .required-for-hardware-jobs:
   needs:
-    - job: clang-format
-      optional: true
     - job: rustfmt
       optional: true
-    - job: toml-lint
+    - job: yaml-toml-shell-py-test
       optional: true

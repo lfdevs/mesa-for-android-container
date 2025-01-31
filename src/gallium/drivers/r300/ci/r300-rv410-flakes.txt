@@ -26,8 +26,9 @@ spec@ext_texture_compression_s3tc@s3tc-errors_gles2
 spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0
 spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0
 spec@glsl-1.20@execution@glsl-fs-frontfacing-not
-spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat3-index-rd
-spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat3-index-row-rd
-spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-col-rd
-spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-col-row-rd
-spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-index-rd
+
+spec@nv_texture_env_combine4@nv_texture_env_combine4-combine
+
+# uprev Piglit in Mesa
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-mat2-mat2
+

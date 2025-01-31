@@ -32,6 +32,7 @@
 #include "vk_util.h"
 #include "compiler/spirv/nir_spirv.h"
 #include "shaders/float64_spv.h"
+#include "util/u_printf.h"
 
 /**
  * Embedded sampler management.
@@ -287,8 +288,8 @@ anv_shader_bin_create(struct anv_device *device,
                       INTEL_DEBUG(DEBUG_SHADER_PRINT) ?
                       brw_stage_prog_data_printf_string_size(prog_data_in) : 0);
 
-   if (!vk_multialloc_alloc(&ma, &device->vk.alloc,
-                            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE))
+   if (!vk_multialloc_zalloc(&ma, &device->vk.alloc,
+                             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE))
       return NULL;
 
    memcpy(obj_key_data, key_data, key_size);
@@ -317,7 +318,7 @@ anv_shader_bin_create(struct anv_device *device,
       prog_data_in->const_data_offset;
 
    int rv_count = 0;
-   struct brw_shader_reloc_value reloc_values[9];
+   struct brw_shader_reloc_value reloc_values[10];
    assert((device->physical->va.dynamic_visible_pool.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_DESCRIPTORS_BUFFER_ADDR_HIGH,
@@ -392,6 +393,10 @@ anv_shader_bin_create(struct anv_device *device,
          .id = BRW_SHADER_RELOC_PRINTF_BUFFER_ADDR_HIGH,
          .value = device->printf.bo->offset >> 32,
       };
+      reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
+         .id = BRW_SHADER_RELOC_PRINTF_BUFFER_SIZE,
+         .value = anv_printf_buffer_size(),
+      };
    } else if (prog_data_in->printf_info_count > 0) {
       unreachable("shader with printf intrinsics requires INTEL_DEBUG=shader-print");
    }
@@ -406,14 +411,13 @@ anv_shader_bin_create(struct anv_device *device,
    typed_memcpy(prog_data_relocs, prog_data_in->relocs,
                 prog_data_in->num_relocs);
    prog_data->relocs = prog_data_relocs;
-   memset(prog_data_param, 0,
-          prog_data->nr_params * sizeof(*prog_data_param));
    prog_data->param = prog_data_param;
    prog_data->printf_info = printf_infos;
    shader->prog_data = prog_data;
    shader->prog_data_size = prog_data_size;
 
    assert(num_stats <= ARRAY_SIZE(shader->stats));
+   assert((stats != NULL) || (num_stats == 0));
    typed_memcpy(shader->stats, stats, num_stats);
    shader->num_stats = num_stats;
 
@@ -475,8 +479,8 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
    blob_write_bytes(blob, shader->prog_data->relocs,
                     shader->prog_data->num_relocs *
                     sizeof(shader->prog_data->relocs[0]));
-   nir_serialize_printf_info(blob, shader->prog_data->printf_info,
-                             shader->prog_data->printf_info_count);
+   u_printf_serialize_info(blob, shader->prog_data->printf_info,
+                           shader->prog_data->printf_info_count);
 
    blob_write_uint32(blob, shader->num_stats);
    blob_write_bytes(blob, shader->stats,
@@ -556,8 +560,8 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
 
    void *mem_ctx = ralloc_context(NULL);
    prog_data.base.printf_info =
-      nir_deserialize_printf_info(mem_ctx, blob,
-                                  &prog_data.base.printf_info_count);
+      u_printf_deserialize_info(mem_ctx, blob,
+                                &prog_data.base.printf_info_count);
 
    uint32_t num_stats = blob_read_uint32(blob);
    const struct brw_compile_stats *stats =
@@ -752,7 +756,6 @@ anv_load_fp64_shader(struct anv_device *device)
    assert(nir != NULL);
 
    nir_validate_shader(nir, "after spirv_to_nir");
-   nir_validate_ssa_dominance(nir, "after spirv_to_nir");
 
    NIR_PASS_V(nir, nir_lower_variable_initializers, nir_var_function_temp);
    NIR_PASS_V(nir, nir_lower_returns);

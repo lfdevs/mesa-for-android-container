@@ -1,28 +1,22 @@
-# Manual test rules for using anholt's shared g33.
-.anholt-g33-test:
-  extends:
-    - .i915g-manual-rules
-    - .test-gl
-  tags:
-    - anholt-g33
-  variables:
-    GPU_VERSION: i915-g33
-    FLAKES_CHANNEL: "#intel-ci"
+include:
+  - local: 'src/intel/ci/gitlab-ci-inc.yml'
 
-# System is dead at the moment. needs maintenance.
-.i915-g33:
+# Manual test rules for using g33 in ondracka r300 farm.
+.ondracka-g33-test:
   extends:
-    - .anholt-g33-test
-    - .deqp-test
+    - .b2c-x86_64-test-gl
+    - .i915g-manual-rules
+  tags:
+    - intelgpu:codename:G33
+  variables:
+    FDO_CI_CONCURRENT: 2
+    GPU_VERSION: i915-g33
+    B2C_KERNEL_URL: https://gitlab.freedesktop.org/gfx-ci/boot2container/-/releases/v0.9.12.3/downloads/linux-x86_64
+
+i915-g33:
+  extends:
+    - .ondracka-g33-test
+    - .b2c-deqp-test
   variables:
     DEQP_SUITE: i915g
     PIGLIT_PLATFORM: gbm
-
-.i915-g33-traces:
-  extends:
-    - .anholt-g33-test
-    - .piglit-traces-test
-  variables:
-    EGL_PLATFORM: "surfaceless"
-    PIGLIT_TRACES_FILE: traces-i915.yml
-    PIGLIT_REPLAY_DEVICE_NAME: "i915-g33"

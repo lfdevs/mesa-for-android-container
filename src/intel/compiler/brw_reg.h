@@ -39,8 +39,7 @@
  * the abstract brw_reg type into the actual hardware instruction encoding.
  */
 
-#ifndef BRW_REG_H
-#define BRW_REG_H
+#pragma once
 
 #include <stdbool.h>
 #include "util/compiler.h"
@@ -60,6 +59,7 @@ struct intel_device_info;
 /** Size of general purpose register space in REG_SIZE units */
 #define BRW_MAX_GRF 128
 #define XE2_MAX_GRF 256
+#define XE3_MAX_GRF 512
 
 /**
  * BRW hardware swizzles.
@@ -183,7 +183,19 @@ typedef struct brw_reg {
          unsigned vstride:4;      /* source only */
          unsigned width:3;        /* src only, align1 only */
          unsigned hstride:2;      /* align1 only */
-         unsigned pad1:1;
+
+         /**
+          * Does this register represent a scalar value?
+          *
+          * Registers are allocated in SIMD8 parcels, but may be used to
+          * represent convergent (i.e., scalar) values. As a destination, it
+          * is written as SIMD8. As a source, it may be read as <8,8,1> in
+          * SIMD8 instructions or <0,1,0> on other execution sizes.
+          *
+          * If the value represents a vector (e.g., a convergent load_uniform
+          * of a vec4), it will be stored as multiple SIMD8 registers.
+          */
+         unsigned is_scalar:1;
       };
 
       double df;
@@ -215,6 +227,9 @@ typedef struct brw_reg {
    bool is_negative_one() const;
    bool is_null() const;
    bool is_accumulator() const;
+   bool is_address() const;
+
+   unsigned address_slot(unsigned byte_offset) const;
 
    /**
     * Return the size in bytes of a single logical component of the
@@ -225,17 +240,38 @@ typedef struct brw_reg {
 } brw_reg;
 
 static inline unsigned
+phys_file(const struct brw_reg reg)
+{
+   switch (reg.file) {
+   case ARF:
+   case FIXED_GRF:
+   case IMM:
+      return reg.file;
+
+   case ADDRESS:
+      return ARF;
+
+   default:
+      unreachable("register type should have been lowered");
+   }
+}
+
+static inline unsigned
 phys_nr(const struct intel_device_info *devinfo, const struct brw_reg reg)
 {
    if (devinfo->ver >= 20) {
       if (reg.file == FIXED_GRF)
          return reg.nr / 2;
+      else if (reg.file == ADDRESS)
+         return BRW_ARF_ADDRESS;
       else if (reg.file == ARF &&
                reg.nr >= BRW_ARF_ACCUMULATOR &&
                reg.nr < BRW_ARF_FLAG)
          return BRW_ARF_ACCUMULATOR + (reg.nr - BRW_ARF_ACCUMULATOR) / 2;
       else
          return reg.nr;
+   } else if (reg.file == ADDRESS) {
+      return BRW_ARF_ADDRESS;
    } else {
       return reg.nr;
    }
@@ -381,7 +417,7 @@ brw_make_reg(enum brw_reg_file file,
 {
    struct brw_reg reg;
    if (file == FIXED_GRF)
-      assert(nr < XE2_MAX_GRF);
+      assert(nr < XE3_MAX_GRF);
    else if (file == ARF)
       assert(nr <= BRW_ARF_TIMESTAMP);
 
@@ -406,7 +442,7 @@ brw_make_reg(enum brw_reg_file file,
    reg.vstride = vstride;
    reg.width = width;
    reg.hstride = hstride;
-   reg.pad1 = 0;
+   reg.is_scalar = 0;
 
    reg.offset = 0;
    reg.stride = 1;
@@ -565,6 +601,7 @@ byte_offset(struct brw_reg reg, unsigned bytes)
    case UNIFORM:
       reg.offset += bytes;
       break;
+   case ADDRESS:
    case ARF:
    case FIXED_GRF: {
       const unsigned suboffset = reg.subnr + bytes;
@@ -886,7 +923,7 @@ brw_null_vec(unsigned width)
 static inline struct brw_reg
 brw_address_reg(unsigned subnr)
 {
-   return brw_uw1_reg(ARF, BRW_ARF_ADDRESS, subnr);
+   return brw_uw1_reg(ADDRESS, 0, subnr);
 }
 
 static inline struct brw_reg
@@ -1291,6 +1328,7 @@ horiz_offset(const brw_reg &reg, unsigned delta)
    case VGRF:
    case ATTR:
       return byte_offset(reg, delta * reg.stride * brw_type_size_bytes(reg.type));
+   case ADDRESS:
    case ARF:
    case FIXED_GRF:
       if (reg.is_null()) {
@@ -1317,6 +1355,7 @@ offset(brw_reg reg, unsigned width, unsigned delta)
    switch (reg.file) {
    case BAD_FILE:
       break;
+   case ADDRESS:
    case ARF:
    case FIXED_GRF:
    case VGRF:
@@ -1367,9 +1406,9 @@ reg_space(const brw_reg &r)
 static inline unsigned
 reg_offset(const brw_reg &r)
 {
-   return (r.file == VGRF || r.file == IMM || r.file == ATTR ? 0 : r.nr) *
+   return (r.file == ADDRESS || r.file == VGRF || r.file == IMM || r.file == ATTR ? 0 : r.nr) *
           (r.file == UNIFORM ? 4 : REG_SIZE) + r.offset +
-          (r.file == ARF || r.file == FIXED_GRF ? r.subnr : 0);
+          (r.file == ADDRESS || r.file == ARF || r.file == FIXED_GRF ? r.subnr : 0);
 }
 
 /**
@@ -1380,7 +1419,9 @@ reg_offset(const brw_reg &r)
 static inline unsigned
 reg_padding(const brw_reg &r)
 {
-   const unsigned stride = ((r.file != ARF && r.file != FIXED_GRF) ? r.stride :
+   const unsigned stride = ((r.file != ADDRESS &&
+                             r.file != ARF &&
+                             r.file != FIXED_GRF) ? r.stride :
                             r.hstride == 0 ? 0 :
                             1 << (r.hstride - 1));
    return (MAX2(1, stride) - 1) * brw_type_size_bytes(r.type);
@@ -1437,7 +1478,7 @@ is_periodic(const brw_reg &reg, unsigned n)
                                1);
       return n % period == 0;
 
-   } else if (reg.file == ARF || reg.file == FIXED_GRF) {
+   } else if (reg.file == ADDRESS || reg.file == ARF || reg.file == FIXED_GRF) {
       const unsigned period = (reg.hstride == 0 && reg.vstride == 0 ? 1 :
                                reg.vstride == 0 ? 1 << reg.width :
                                ~0);
@@ -1488,6 +1529,7 @@ byte_stride(const brw_reg &reg)
    case VGRF:
    case ATTR:
       return reg.stride * brw_type_size_bytes(reg.type);
+   case ADDRESS:
    case ARF:
    case FIXED_GRF:
       if (reg.is_null()) {
@@ -1511,5 +1553,3 @@ byte_stride(const brw_reg &reg)
 }
 
 #endif /* __cplusplus */
-
-#endif

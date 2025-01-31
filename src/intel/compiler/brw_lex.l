@@ -329,6 +329,9 @@ BranchCtrl	{ return BRANCH_CTRL; }
  /* flag registers */
 "f"[0|1] 	{ BEGIN(CHANNEL); yylval.integer = atoi(yytext + 1); return FLAGREG; }
 
+ /* scalar register */
+"s0"		{ return SCALARREG; }
+
  /* state register */
 sr[0-9]+ 	{ yylval.integer = atoi(yytext + 2); return STATEREG; }
 
@@ -416,6 +419,7 @@ sr[0-9]+ 	{ yylval.integer = atoi(yytext + 2); return STATEREG; }
 "L@"[1-7]	{ yylval.integer = atoi(yytext + 2); return REG_DIST_LONG; }
 "A@"[1-7]	{ yylval.integer = atoi(yytext + 2); return REG_DIST_ALL; }
 "M@"[1-7]	{ yylval.integer = atoi(yytext + 2); return REG_DIST_MATH; }
+"S@"[1-7]	{ yylval.integer = atoi(yytext + 2); return REG_DIST_SCALAR; }
 
 "$"[0-9]*	{ yylval.integer = atoi(yytext + 1); return SBID_ALLOC; }
 "$"[0-9]*".src"	{ yylval.integer = atoi(yytext + 1); return SBID_WAIT_SRC; }

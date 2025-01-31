@@ -33,8 +33,8 @@
 #include "pvr_formats.h"
 #include "pvr_pds.h"
 #include "pvr_private.h"
-#include "pvr_shader_factory.h"
-#include "pvr_static_shaders.h"
+#include "usc/programs/pvr_shader_factory.h"
+#include "usc/programs/pvr_static_shaders.h"
 #include "pvr_tex_state.h"
 #include "pvr_types.h"
 #include "vk_alloc.h"
@@ -161,7 +161,7 @@ static VkResult pvr_create_compute_query_program(
    pvr_pds_setup_doutu(&pds_primary_prog.usc_task_control,
                        query_prog->usc_bo->dev_addr.addr,
                        shader_factory_info->temps_required,
-                       PVRX(PDSINST_DOUTU_SAMPLE_RATE_INSTANCE),
+                       ROGUE_PDSINST_DOUTU_SAMPLE_RATE_INSTANCE,
                        false);
 
    result =
@@ -499,13 +499,13 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
    VkResult result;
 
    pvr_csb_pack (&sampler_state[0U], TEXSTATE_SAMPLER, reg) {
-      reg.addrmode_u = PVRX(TEXSTATE_ADDRMODE_CLAMP_TO_EDGE);
-      reg.addrmode_v = PVRX(TEXSTATE_ADDRMODE_CLAMP_TO_EDGE);
-      reg.addrmode_w = PVRX(TEXSTATE_ADDRMODE_CLAMP_TO_EDGE);
-      reg.minfilter = PVRX(TEXSTATE_FILTER_POINT);
-      reg.magfilter = PVRX(TEXSTATE_FILTER_POINT);
+      reg.addrmode_u = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
+      reg.addrmode_v = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
+      reg.addrmode_w = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
+      reg.minfilter = ROGUE_TEXSTATE_FILTER_POINT;
+      reg.magfilter = ROGUE_TEXSTATE_FILTER_POINT;
       reg.non_normalized_coords = true;
-      reg.dadjust = PVRX(TEXSTATE_DADJUST_ZERO_UINT);
+      reg.dadjust = ROGUE_TEXSTATE_DADJUST_ZERO_UINT;
    }
 
    /* clang-format off */

@@ -38,8 +38,7 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 
-#include "intel/compiler/brw_isa_info.h"
-#include "intel/compiler/elk/elk_isa_info.h"
+#include "intel_tools.h"
 #include "util/macros.h"
 
 #include "aub_read.h"
@@ -61,8 +60,6 @@ static enum { COLOR_AUTO, COLOR_ALWAYS, COLOR_NEVER } option_color;
 uint16_t pci_id = 0;
 char *input_file = NULL, *xml_path = NULL;
 struct intel_device_info devinfo;
-struct brw_isa_info brw;
-struct elk_isa_info elk;
 struct intel_batch_decode_ctx batch_ctx;
 struct aub_mem mem;
 
@@ -99,15 +96,8 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
       batch_flags |= INTEL_BATCH_DECODE_OFFSETS;
    batch_flags |= INTEL_BATCH_DECODE_FLOATS;
 
-   if (devinfo.ver >= 9) {
-      brw_init_isa_info(&brw, &devinfo);
-      intel_batch_decode_ctx_init_brw(&batch_ctx, &brw, &devinfo, outfile,
-                                      batch_flags, xml_path, NULL, NULL, NULL);
-   } else {
-      elk_init_isa_info(&elk, &devinfo);
-      intel_batch_decode_ctx_init_elk(&batch_ctx, &elk, &devinfo, outfile,
-                                      batch_flags, xml_path, NULL, NULL, NULL);
-   }
+   intel_decoder_init(&batch_ctx, &devinfo, outfile,
+                      batch_flags, xml_path, NULL, NULL, NULL);
 
    /* Check for valid spec instance, if wrong xml_path is passed then spec
     * instance is not initialized properly

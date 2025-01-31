@@ -68,7 +68,6 @@ etna_compiler_create(const char *renderer, const struct etna_core_info *info)
       .lower_uniforms_to_ubo = info->halti >= 2,
       .force_indirect_unrolling = nir_var_all,
       .max_unroll_iterations = 32,
-      .vectorize_io = true,
       .lower_pack_32_2x16_split = true,
       .lower_pack_64_2x32_split = true,
       .lower_unpack_32_2x16_split = true,
@@ -78,6 +77,8 @@ etna_compiler_create(const char *renderer, const struct etna_core_info *info)
       .lower_ufind_msb = true,
       .has_uclz = true,
       .no_integers = info->halti < 2,
+      .support_indirect_inputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES),
+      .support_indirect_outputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES),
    };
 
    compiler->regs = etna_ra_setup(compiler);

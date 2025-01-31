@@ -48,10 +48,7 @@ rm -rf results
 mkdir -p results/job-rootfs-overlay/
 
 artifacts/ci-common/generate-env.sh > results/job-rootfs-overlay/set-job-env-vars.sh
-cp artifacts/ci-common/capture-devcoredump.sh results/job-rootfs-overlay/
 cp artifacts/ci-common/init-*.sh results/job-rootfs-overlay/
-cp artifacts/ci-common/intel-gpu-freq.sh results/job-rootfs-overlay/
-cp artifacts/ci-common/kdl.sh results/job-rootfs-overlay/
 cp "$SCRIPTS_DIR"/setup-test-env.sh results/job-rootfs-overlay/
 
 tar zcf job-rootfs-overlay.tar.gz -C results/job-rootfs-overlay/ .
@@ -69,7 +66,7 @@ PYTHONPATH=artifacts/ artifacts/lava/lava_job_submitter.py \
 	--farm "${FARM}" \
 	--device-type "${DEVICE_TYPE}" \
 	--boot-method "${BOOT_METHOD}" \
-	--job-timeout-min ${JOB_TIMEOUT:-30} \
+	--job-timeout-min $((CI_JOB_TIMEOUT/60 - 5)) \
 	--dump-yaml \
 	--pipeline-info "$CI_JOB_NAME: $CI_PIPELINE_URL on $CI_COMMIT_REF_NAME ${CI_NODE_INDEX}/${CI_NODE_TOTAL}" \
 	--rootfs-url "${ROOTFS_URL}" \

@@ -55,27 +55,7 @@ static uint8_t si_vectorize_callback(const nir_instr *instr, const void *data)
    }
 }
 
-static unsigned si_lower_bit_size_callback(const nir_instr *instr, void *data)
-{
-   if (instr->type != nir_instr_type_alu)
-      return 0;
-
-   nir_alu_instr *alu = nir_instr_as_alu(instr);
-
-   switch (alu->op) {
-   case nir_op_imul_high:
-   case nir_op_umul_high:
-      if (alu->def.bit_size < 32)
-         return 32;
-      break;
-   default:
-      break;
-   }
-
-   return 0;
-}
-
-void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
+void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool has_array_temps)
 {
    bool use_aco = sscreen->use_aco || nir->info.use_aco_amd;
    bool progress;
@@ -90,7 +70,7 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
                nir->options->lower_to_scalar_filter, (void *)use_aco);
       NIR_PASS(progress, nir, nir_lower_phis_to_scalar, false);
 
-      if (first) {
+      if (has_array_temps) {
          NIR_PASS(progress, nir, nir_split_array_vars, nir_var_function_temp);
          NIR_PASS(lower_alu_to_scalar, nir, nir_shrink_vec_array_vars, nir_var_function_temp);
          NIR_PASS(progress, nir, nir_opt_find_array_copies);
@@ -120,7 +100,6 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       NIR_PASS(progress, nir, nir_opt_peephole_select, 8, true, true);
 
       /* Needed for algebraic lowering */
-      NIR_PASS(progress, nir, nir_lower_bit_size, si_lower_bit_size_callback, NULL);
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_generate_bfi);
       NIR_PASS(progress, nir, nir_opt_constant_folding);
@@ -331,7 +310,7 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
       NIR_PASS_V(nir, nir_lower_gs_intrinsics, flags);
    }
 
-   if (nir->info.stage == MESA_SHADER_COMPUTE) {
+   if (gl_shader_stage_is_compute(nir->info.stage)) {
       nir_lower_compute_system_values_options options = {0};
 
       /* gl_LocalInvocationIndex must be derived from gl_LocalInvocationID.xyz to make it correct
@@ -426,10 +405,9 @@ static bool si_mark_divergent_texture_non_uniform(struct nir_shader *nir)
    return divergence_changed;
 }
 
-char *si_finalize_nir(struct pipe_screen *screen, void *nirptr)
+char *si_finalize_nir(struct pipe_screen *screen, struct nir_shader *nir)
 {
    struct si_screen *sscreen = (struct si_screen *)screen;
-   struct nir_shader *nir = (struct nir_shader *)nirptr;
 
    nir_lower_io_passes(nir, false);
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_in | nir_var_shader_out, NULL);
@@ -437,11 +415,6 @@ char *si_finalize_nir(struct pipe_screen *screen, void *nirptr)
    if (nir->info.stage == MESA_SHADER_FRAGMENT)
       NIR_PASS_V(nir, nir_lower_color_inputs);
 
-   NIR_PASS_V(nir, ac_nir_lower_subdword_loads,
-              (ac_nir_lower_subdword_options) {
-                 .modes_1_comp = nir_var_mem_ubo,
-                 .modes_N_comps = nir_var_mem_ubo | nir_var_mem_ssbo
-              });
    NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_shared, nir_address_format_32bit_offset);
 
    /* Remove dead derefs, so that we can remove uniforms. */

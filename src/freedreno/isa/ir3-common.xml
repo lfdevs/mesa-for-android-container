@@ -284,6 +284,8 @@ SOFTWARE.
 	<value val="3" display="(rpt3)"/>
 	<value val="4" display="(rpt4)"/>
 	<value val="5" display="(rpt5)"/>
+	<value val="6" display="(rpt6)"/>
+	<value val="7" display="(rpt7)"/>
 </enum>
 
 <enum name="#cond">

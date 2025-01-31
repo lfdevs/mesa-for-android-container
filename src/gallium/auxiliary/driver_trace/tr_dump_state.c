@@ -1018,6 +1018,16 @@ void trace_dump_blit_info(const struct pipe_blit_info *info)
    trace_dump_scissor_state(&info->scissor);
    trace_dump_member_end();
 
+   trace_dump_member(bool, info, swizzle_enable);
+   static const char *swiz = "RGBA01";
+   for (unsigned i = 0; i < 4; i++) {
+      unsigned s = (unsigned)info->swizzle[i];
+      mask[i] = s < 6 ? swiz[s] : '?';
+   }
+   trace_dump_member_begin("swizzle");
+   trace_dump_string(mask);
+   trace_dump_member_end();
+
    trace_dump_struct_end();
 }
 
@@ -1153,6 +1163,26 @@ void trace_dump_grid_info(const struct pipe_grid_info *state)
 
    trace_dump_member(ptr, state, indirect);
    trace_dump_member(uint, state, indirect_offset);
+
+   trace_dump_struct_end();
+}
+
+void trace_dump_compute_state_object_info(const struct pipe_compute_state_object_info *state)
+{
+   if (!trace_dumping_enabled_locked())
+      return;
+
+   if (!state) {
+      trace_dump_null();
+      return;
+   }
+
+   trace_dump_struct_begin("pipe_compute_state_object_info");
+
+   trace_dump_member(uint, state, max_threads);
+   trace_dump_member(uint, state, preferred_simd_size);
+   trace_dump_member(uint, state, simd_sizes);
+   trace_dump_member(uint, state, private_memory);
 
    trace_dump_struct_end();
 }

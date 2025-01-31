@@ -75,7 +75,7 @@ struct panfrost_vtable {
    void (*context_cleanup)(struct panfrost_context *ctx);
 
    /* Device-dependent initialization/cleanup of a panfrost_batch */
-   void (*init_batch)(struct panfrost_batch *batch);
+   int (*init_batch)(struct panfrost_batch *batch);
    void (*cleanup_batch)(struct panfrost_batch *batch);
 
    /* Device-dependent submission of a panfrost_batch */
@@ -107,6 +107,12 @@ struct panfrost_vtable {
 
    void (*emit_write_timestamp)(struct panfrost_batch *batch,
                                 struct panfrost_resource *dst, unsigned offset);
+
+   /* Select the tile size and calculate the color buffer allocation size */
+   void (*select_tile_size)(struct pan_fb_info *fb);
+
+   /* Run a compute shader to detile an MTK 16L32 image */
+   void (*mtk_detile)(struct panfrost_context *ctx, struct pipe_blit_info *info);
 };
 
 struct panfrost_screen {

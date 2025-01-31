@@ -1737,9 +1737,11 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
          return;
       }
       break;
+   case nir_op_fsat:
    case nir_op_fmul:
    case nir_op_fmulz:
    case nir_op_f2u32:
+   case nir_op_f2i32:
       if (nir_scalar_chase_alu_src(q.scalar, 0).def->bit_size != 32) {
          /* Only 32bit floats support for now, return max */
          return;
@@ -1838,6 +1840,7 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
       break;
    }
    /* limited floating-point support for f2u32(fmul(load_input(), <constant>)) */
+   case nir_op_f2i32:
    case nir_op_f2u32:
       /* infinity/NaN starts at 0x7f800000u, negative numbers at 0x80000000 */
       if (src[0] < 0x7f800000u) {
@@ -1857,6 +1860,9 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
          float max_f = ceilf(src0_f) * ceilf(src1_f);
          memcpy(result, &max_f, 4);
       }
+      break;
+   case nir_op_fsat:
+      *result = 0x3f800000u;
       break;
    case nir_op_u2u1:
    case nir_op_u2u8:

@@ -789,3 +789,10 @@ void vpe_backend_config_callback(
     vpe_priv->vpe_desc_writer.add_config_desc(
         &vpe_priv->vpe_desc_writer, cfg_base_gpu, false, (uint8_t)vpe_priv->config_writer.buf->tmz);
 }
+
+bool vpe_rec_is_equal(struct vpe_rect rec1, struct vpe_rect rec2)
+{
+    return (rec1.x == rec2.x && rec1.y == rec2.y && rec1.width == rec2.width &&
+            rec1.height == rec2.height);
+}
+

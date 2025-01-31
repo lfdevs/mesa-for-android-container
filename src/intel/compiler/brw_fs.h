@@ -25,8 +25,7 @@
  *
  */
 
-#ifndef BRW_FS_H
-#define BRW_FS_H
+#pragma once
 
 #include "brw_cfg.h"
 #include "brw_compiler.h"
@@ -139,9 +138,7 @@ struct brw_gs_compile
    unsigned control_data_header_size_bits;
 };
 
-namespace brw {
-class fs_builder;
-}
+class brw_builder;
 
 struct brw_shader_stats {
    const char *scheduler_mode;
@@ -206,7 +203,7 @@ struct fs_thread_payload : public thread_payload {
    uint8_t dest_depth_reg[2];
    uint8_t sample_pos_reg[2];
    uint8_t sample_mask_in_reg[2];
-   uint8_t barycentric_coord_reg[BRW_BARYCENTRIC_MODE_COUNT][2];
+   uint8_t barycentric_coord_reg[INTEL_BARYCENTRIC_MODE_COUNT][2];
 
    uint8_t depth_w_coef_reg;
    uint8_t pc_bary_coef_reg;
@@ -217,7 +214,7 @@ struct fs_thread_payload : public thread_payload {
 struct cs_thread_payload : public thread_payload {
    cs_thread_payload(const fs_visitor &v);
 
-   void load_subgroup_id(const brw::fs_builder &bld, brw_reg &dest) const;
+   void load_subgroup_id(const brw_builder &bld, brw_reg &dest) const;
 
    brw_reg local_invocation_id[3];
 
@@ -245,18 +242,8 @@ struct bs_thread_payload : public thread_payload {
    brw_reg global_arg_ptr;
    brw_reg local_arg_ptr;
 
-   void load_shader_type(const brw::fs_builder &bld, brw_reg &dest) const;
+   void load_shader_type(const brw_builder &bld, brw_reg &dest) const;
 };
-
-enum instruction_scheduler_mode {
-   SCHEDULE_PRE,
-   SCHEDULE_PRE_NON_LIFO,
-   SCHEDULE_PRE_LIFO,
-   SCHEDULE_POST,
-   SCHEDULE_NONE,
-};
-
-class instruction_scheduler;
 
 enum brw_shader_phase {
    BRW_SHADER_PHASE_INITIAL = 0,
@@ -313,9 +300,6 @@ public:
    void calculate_payload_ranges(bool allow_spilling,
                                  unsigned payload_node_count,
                                  int *payload_last_use_ip) const;
-   void assign_constant_locations();
-   bool get_pull_locs(const brw_reg &src, unsigned *out_surf_index,
-                      unsigned *out_pull_index);
    void invalidate_analysis(brw::analysis_dependency_class c);
 
    void vfail(const char *msg, va_list args);
@@ -365,12 +349,6 @@ public:
 
    /** Byte-offset for the next available spot in the scratch space buffer. */
    unsigned last_scratch;
-
-   /**
-    * Array mapping UNIFORM register numbers to the push parameter index,
-    * or -1 if this uniform register isn't being uploaded as a push constant.
-    */
-   int *push_constant_loc;
 
    brw_reg frag_depth;
    brw_reg frag_stencil;
@@ -442,7 +420,7 @@ public:
    brw_reg pixel_z;
    brw_reg wpos_w;
    brw_reg pixel_w;
-   brw_reg delta_xy[BRW_BARYCENTRIC_MODE_COUNT];
+   brw_reg delta_xy[INTEL_BARYCENTRIC_MODE_COUNT];
    brw_reg final_gs_vertex_count;
    brw_reg control_data_bits;
    brw_reg invocation_id;
@@ -458,6 +436,8 @@ public:
    /* The API selected subgroup size */
    unsigned api_subgroup_size; /**< 0, 8, 16, 32 */
 
+   unsigned next_address_register_nr;
+
    struct brw_shader_stats shader_stats;
 
    void debug_optimizer(const nir_shader *nir,
@@ -465,14 +445,11 @@ public:
                         int iteration, int pass_num) const;
 };
 
-void brw_print_instruction_to_file(const fs_visitor &s, const fs_inst *inst, FILE *file, const brw::def_analysis *defs);
-void brw_print_instructions_to_file(const fs_visitor &s, FILE *file);
+void brw_print_instructions(const fs_visitor &s, FILE *file = stderr);
 
-/* Convenience functions based on the above. */
-inline void brw_print_instruction(const fs_visitor &s, const fs_inst *inst, FILE *file = stderr, const brw::def_analysis *defs = nullptr) {
-   brw_print_instruction_to_file(s, inst, file, defs);
-}
-void brw_print_instructions(const fs_visitor &s, const char *name = nullptr);
+void brw_print_instruction(const fs_visitor &s, const fs_inst *inst,
+                           FILE *file = stderr,
+                           const brw::def_analysis *defs = nullptr);
 
 void brw_print_swsb(FILE *f, const struct intel_device_info *devinfo, const tgl_swsb swsb);
 
@@ -488,122 +465,19 @@ sample_mask_flag_subreg(const fs_visitor &s)
    return 2;
 }
 
-/**
- * The fragment shader code generator.
- *
- * Translates FS IR to actual i965 assembly code.
- */
-class fs_generator
+inline brw_reg
+brw_dynamic_msaa_flags(const struct brw_wm_prog_data *wm_prog_data)
 {
-public:
-   fs_generator(const struct brw_compiler *compiler,
-                const struct brw_compile_params *params,
-                struct brw_stage_prog_data *prog_data,
-                gl_shader_stage stage);
-   ~fs_generator();
-
-   void enable_debug(const char *shader_name);
-   int generate_code(const cfg_t *cfg, int dispatch_width,
-                     struct brw_shader_stats shader_stats,
-                     const brw::performance &perf,
-                     struct brw_compile_stats *stats,
-                     unsigned max_polygons = 0);
-   void add_const_data(void *data, unsigned size);
-   void add_resume_sbt(unsigned num_resume_shaders, uint64_t *sbt);
-   const unsigned *get_assembly();
-
-private:
-   void generate_send(fs_inst *inst,
-                      struct brw_reg dst,
-                      struct brw_reg desc,
-                      struct brw_reg ex_desc,
-                      struct brw_reg payload,
-                      struct brw_reg payload2);
-   void generate_barrier(fs_inst *inst, struct brw_reg src);
-   void generate_ddx(const fs_inst *inst,
-                     struct brw_reg dst, struct brw_reg src);
-   void generate_ddy(const fs_inst *inst,
-                     struct brw_reg dst, struct brw_reg src);
-   void generate_scratch_header(fs_inst *inst,
-                                struct brw_reg dst, struct brw_reg src);
-
-   void generate_halt(fs_inst *inst);
-
-   void generate_mov_indirect(fs_inst *inst,
-                              struct brw_reg dst,
-                              struct brw_reg reg,
-                              struct brw_reg indirect_byte_offset);
-
-   void generate_shuffle(fs_inst *inst,
-                         struct brw_reg dst,
-                         struct brw_reg src,
-                         struct brw_reg idx);
-
-   void generate_quad_swizzle(const fs_inst *inst,
-                              struct brw_reg dst, struct brw_reg src,
-                              unsigned swiz);
-
-   bool patch_halt_jumps();
-
-   const struct brw_compiler *compiler;
-   const struct brw_compile_params *params;
-
-   const struct intel_device_info *devinfo;
-
-   struct brw_codegen *p;
-   struct brw_stage_prog_data * const prog_data;
-
-   unsigned dispatch_width; /**< 8, 16 or 32 */
-
-   exec_list discard_halt_patches;
-   bool debug_flag;
-   const char *shader_name;
-   gl_shader_stage stage;
-   void *mem_ctx;
-};
-
-namespace brw {
-   brw_reg
-   fetch_payload_reg(const brw::fs_builder &bld, uint8_t regs[2],
-                     brw_reg_type type = BRW_TYPE_F,
-                     unsigned n = 1);
-
-   brw_reg
-   fetch_barycentric_reg(const brw::fs_builder &bld, uint8_t regs[2]);
-
-   inline brw_reg
-   dynamic_msaa_flags(const struct brw_wm_prog_data *wm_prog_data)
-   {
-      return brw_uniform_reg(wm_prog_data->msaa_flags_param, BRW_TYPE_UD);
-   }
-
-   void
-   check_dynamic_msaa_flag(const fs_builder &bld,
-                           const struct brw_wm_prog_data *wm_prog_data,
-                           enum intel_msaa_flags flag);
-
-   bool
-   lower_src_modifiers(fs_visitor *v, bblock_t *block, fs_inst *inst, unsigned i);
+   return brw_uniform_reg(wm_prog_data->msaa_flags_param, BRW_TYPE_UD);
 }
 
-void shuffle_from_32bit_read(const brw::fs_builder &bld,
-                             const brw_reg &dst,
-                             const brw_reg &src,
-                             uint32_t first_component,
-                             uint32_t components);
-
-enum brw_barycentric_mode brw_barycentric_mode(const struct brw_wm_prog_key *key,
-                                               nir_intrinsic_instr *intr);
+enum intel_barycentric_mode brw_barycentric_mode(const struct brw_wm_prog_key *key,
+                                                 nir_intrinsic_instr *intr);
 
 uint32_t brw_fb_write_msg_control(const fs_inst *inst,
                                   const struct brw_wm_prog_data *prog_data);
 
 void brw_compute_urb_setup_index(struct brw_wm_prog_data *wm_prog_data);
-
-bool brw_nir_lower_simd(nir_shader *nir, unsigned dispatch_width);
-
-brw_reg brw_sample_mask_reg(const brw::fs_builder &bld);
-void brw_emit_predicate_on_sample_mask(const brw::fs_builder &bld, fs_inst *inst);
 
 int brw_get_subgroup_id_param_index(const intel_device_info *devinfo,
                                     const brw_stage_prog_data *prog_data);
@@ -613,73 +487,89 @@ void nir_to_brw(fs_visitor *s);
 void brw_shader_phase_update(fs_visitor &s, enum brw_shader_phase phase);
 
 #ifndef NDEBUG
-void brw_fs_validate(const fs_visitor &s);
+void brw_validate(const fs_visitor &s);
 #else
-static inline void brw_fs_validate(const fs_visitor &s) {}
+static inline void brw_validate(const fs_visitor &s) {}
 #endif
 
 void brw_calculate_cfg(fs_visitor &s);
 
-void brw_fs_optimize(fs_visitor &s);
+void brw_optimize(fs_visitor &s);
 
-instruction_scheduler *brw_prepare_scheduler(fs_visitor &s, void *mem_ctx);
-void brw_schedule_instructions_pre_ra(fs_visitor &s, instruction_scheduler *sched,
-                                      instruction_scheduler_mode mode);
+enum brw_instruction_scheduler_mode {
+   BRW_SCHEDULE_PRE,
+   BRW_SCHEDULE_PRE_NON_LIFO,
+   BRW_SCHEDULE_PRE_LIFO,
+   BRW_SCHEDULE_POST,
+   BRW_SCHEDULE_NONE,
+};
+
+class brw_instruction_scheduler;
+
+brw_instruction_scheduler *brw_prepare_scheduler(fs_visitor &s, void *mem_ctx);
+void brw_schedule_instructions_pre_ra(fs_visitor &s, brw_instruction_scheduler *sched,
+                                      brw_instruction_scheduler_mode mode);
 void brw_schedule_instructions_post_ra(fs_visitor &s);
 
 void brw_allocate_registers(fs_visitor &s, bool allow_spilling);
 bool brw_assign_regs(fs_visitor &s, bool allow_spilling, bool spill_all);
 void brw_assign_regs_trivial(fs_visitor &s);
 
-bool brw_fs_lower_3src_null_dest(fs_visitor &s);
-bool brw_fs_lower_alu_restrictions(fs_visitor &s);
-bool brw_fs_lower_barycentrics(fs_visitor &s);
-bool brw_fs_lower_constant_loads(fs_visitor &s);
-bool brw_fs_lower_derivatives(fs_visitor &s);
-bool brw_fs_lower_dpas(fs_visitor &s);
-bool brw_fs_lower_find_live_channel(fs_visitor &s);
-bool brw_fs_lower_integer_multiplication(fs_visitor &s);
-bool brw_fs_lower_load_subgroup_invocation(fs_visitor &s);
-bool brw_fs_lower_indirect_mov(fs_visitor &s);
-bool brw_fs_lower_logical_sends(fs_visitor &s);
-bool brw_fs_lower_pack(fs_visitor &s);
-bool brw_fs_lower_load_payload(fs_visitor &s);
-bool brw_fs_lower_regioning(fs_visitor &s);
-bool brw_fs_lower_scoreboard(fs_visitor &s);
-bool brw_fs_lower_sends_overlapping_payload(fs_visitor &s);
-bool brw_fs_lower_simd_width(fs_visitor &s);
-bool brw_fs_lower_csel(fs_visitor &s);
-bool brw_fs_lower_sub_sat(fs_visitor &s);
-bool brw_fs_lower_subgroup_ops(fs_visitor &s);
-bool brw_fs_lower_uniform_pull_constant_loads(fs_visitor &s);
-void brw_fs_lower_vgrfs_to_fixed_grfs(fs_visitor &s);
+bool brw_lower_3src_null_dest(fs_visitor &s);
+bool brw_lower_alu_restrictions(fs_visitor &s);
+bool brw_lower_barycentrics(fs_visitor &s);
+bool brw_lower_constant_loads(fs_visitor &s);
+bool brw_lower_csel(fs_visitor &s);
+bool brw_lower_derivatives(fs_visitor &s);
+bool brw_lower_dpas(fs_visitor &s);
+bool brw_lower_find_live_channel(fs_visitor &s);
+bool brw_lower_indirect_mov(fs_visitor &s);
+bool brw_lower_integer_multiplication(fs_visitor &s);
+bool brw_lower_load_payload(fs_visitor &s);
+bool brw_lower_load_subgroup_invocation(fs_visitor &s);
+bool brw_lower_logical_sends(fs_visitor &s);
+bool brw_lower_pack(fs_visitor &s);
+bool brw_lower_regioning(fs_visitor &s);
+bool brw_lower_scalar_fp64_MAD(fs_visitor &s);
+bool brw_lower_scoreboard(fs_visitor &s);
+bool brw_lower_send_descriptors(fs_visitor &s);
+bool brw_lower_send_gather(fs_visitor &s);
+bool brw_lower_sends_overlapping_payload(fs_visitor &s);
+bool brw_lower_simd_width(fs_visitor &s);
+bool brw_lower_src_modifiers(fs_visitor &s, bblock_t *block, fs_inst *inst, unsigned i);
+bool brw_lower_sub_sat(fs_visitor &s);
+bool brw_lower_subgroup_ops(fs_visitor &s);
+bool brw_lower_uniform_pull_constant_loads(fs_visitor &s);
+void brw_lower_vgrfs_to_fixed_grfs(fs_visitor &s);
 
-bool brw_constant_fold_instruction(const intel_device_info *devinfo, fs_inst *inst);
-bool brw_fs_opt_algebraic(fs_visitor &s);
-bool brw_fs_opt_bank_conflicts(fs_visitor &s);
-bool brw_fs_opt_cmod_propagation(fs_visitor &s);
-bool brw_fs_opt_combine_constants(fs_visitor &s);
-bool brw_fs_opt_compact_virtual_grfs(fs_visitor &s);
-bool brw_fs_opt_copy_propagation(fs_visitor &s);
-bool brw_fs_opt_copy_propagation_defs(fs_visitor &s);
-bool brw_fs_opt_cse_defs(fs_visitor &s);
-bool brw_fs_opt_dead_code_eliminate(fs_visitor &s);
-bool brw_fs_opt_eliminate_find_live_channel(fs_visitor &s);
-bool brw_fs_opt_register_coalesce(fs_visitor &s);
-bool brw_fs_opt_remove_extra_rounding_modes(fs_visitor &s);
-bool brw_fs_opt_remove_redundant_halts(fs_visitor &s);
-bool brw_fs_opt_saturate_propagation(fs_visitor &s);
-bool brw_fs_opt_split_sends(fs_visitor &s);
-bool brw_fs_opt_split_virtual_grfs(fs_visitor &s);
-bool brw_fs_opt_zero_samples(fs_visitor &s);
+bool brw_opt_address_reg_load(fs_visitor &s);
+bool brw_opt_algebraic(fs_visitor &s);
+bool brw_opt_bank_conflicts(fs_visitor &s);
+bool brw_opt_cmod_propagation(fs_visitor &s);
+bool brw_opt_combine_constants(fs_visitor &s);
+bool brw_opt_combine_convergent_txf(fs_visitor &s);
+bool brw_opt_compact_virtual_grfs(fs_visitor &s);
+bool brw_opt_constant_fold_instruction(const intel_device_info *devinfo, fs_inst *inst);
+bool brw_opt_copy_propagation(fs_visitor &s);
+bool brw_opt_copy_propagation_defs(fs_visitor &s);
+bool brw_opt_cse_defs(fs_visitor &s);
+bool brw_opt_dead_code_eliminate(fs_visitor &s);
+bool brw_opt_eliminate_find_live_channel(fs_visitor &s);
+bool brw_opt_register_coalesce(fs_visitor &s);
+bool brw_opt_remove_extra_rounding_modes(fs_visitor &s);
+bool brw_opt_remove_redundant_halts(fs_visitor &s);
+bool brw_opt_saturate_propagation(fs_visitor &s);
+bool brw_opt_send_gather_to_send(fs_visitor &s);
+bool brw_opt_send_to_send_gather(fs_visitor &s);
+bool brw_opt_split_sends(fs_visitor &s);
+bool brw_opt_split_virtual_grfs(fs_visitor &s);
+bool brw_opt_zero_samples(fs_visitor &s);
 
-bool brw_fs_workaround_emit_dummy_mov_instruction(fs_visitor &s);
-bool brw_fs_workaround_memory_fence_before_eot(fs_visitor &s);
-bool brw_fs_workaround_source_arf_before_eot(fs_visitor &s);
-bool brw_fs_workaround_nomask_control_flow(fs_visitor &s);
+bool brw_workaround_emit_dummy_mov_instruction(fs_visitor &s);
+bool brw_workaround_memory_fence_before_eot(fs_visitor &s);
+bool brw_workaround_nomask_control_flow(fs_visitor &s);
+bool brw_workaround_source_arf_before_eot(fs_visitor &s);
 
 /* Helpers. */
-unsigned brw_fs_get_lowered_simd_width(const fs_visitor *shader,
-                                       const fs_inst *inst);
-
-#endif /* BRW_FS_H */
+unsigned brw_get_lowered_simd_width(const fs_visitor *shader,
+                                    const fs_inst *inst);

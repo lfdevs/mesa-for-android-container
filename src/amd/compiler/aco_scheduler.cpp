@@ -555,7 +555,7 @@ HazardResult
 perform_hazard_query(hazard_query* query, Instruction* instr, bool upwards)
 {
    /* don't schedule discards downwards */
-   if (!upwards && instr->opcode == aco_opcode::p_exit_early_if)
+   if (!upwards && instr->opcode == aco_opcode::p_exit_early_if_not)
       return hazard_fail_unreorderable;
 
    /* In Primitive Ordered Pixel Shading, await overlapped waves as late as possible, and notify
@@ -602,7 +602,7 @@ perform_hazard_query(hazard_query* query, Instruction* instr, bool upwards)
        instr->opcode == aco_opcode::s_sendmsg_rtn_b32 ||
        instr->opcode == aco_opcode::s_sendmsg_rtn_b64 ||
        instr->opcode == aco_opcode::p_end_with_regs || instr->opcode == aco_opcode::s_nop ||
-       instr->opcode == aco_opcode::s_sleep)
+       instr->opcode == aco_opcode::s_sleep || instr->opcode == aco_opcode::s_trap)
       return hazard_fail_unreorderable;
 
    memory_event_set instr_set;
@@ -1271,11 +1271,9 @@ schedule_program(Program* program)
     * Schedule less aggressively when early primitive export is used, and
     * keep the position export at the very bottom when late primitive export is used.
     */
-   if (program->info.has_ngg_culling && program->stage.num_sw_stages() == 1) {
-      if (!program->info.has_ngg_early_prim_export)
-         ctx.schedule_pos_exports = false;
-      else
-         ctx.schedule_pos_export_div = 4;
+   if (program->info.hw_stage == AC_HW_NEXT_GEN_GEOMETRY_SHADER) {
+      ctx.schedule_pos_exports = program->info.schedule_ngg_pos_exports;
+      ctx.schedule_pos_export_div = 4;
    }
 
    for (Block& block : program->blocks)

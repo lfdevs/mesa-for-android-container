@@ -10,8 +10,6 @@ OPT_BOOL(vs_fetch_always_opencode, false,
 OPT_BOOL(no_infinite_interp, false, "Kill PS with infinite interp coeff")
 OPT_BOOL(clamp_div_by_zero, false, "Clamp div by zero (x / 0 becomes FLT_MAX instead of NaN)")
 OPT_BOOL(vrs2x2, false, "Enable 2x2 coarse shading for non-GUI elements")
-OPT_BOOL(enable_sam, false, "Enable Smart Access Memory with Above 4G Decoding for unvalidated platforms.")
-OPT_BOOL(disable_sam, false, "Disable Smart Access Memory.")
 OPT_BOOL(fp16, false, "Enable FP16 for mediump.")
 /* for Maya */
 OPT_INT(tc_max_cpu_storage_size, 2500, "Enable the CPU storage for pipelined buffer uploads in TC.")
@@ -22,7 +20,7 @@ OPT_BOOL(dcc_msaa, true, "Enable DCC for MSAA for GFX10-10.3")
 OPT_BOOL(zerovram, false, "Zero all VRAM allocations")
 OPT_BOOL(clear_lds, false, "Clear LDS at the end of shaders. Might decrease performance.")
 OPT_BOOL(cache_rb_gl2, false, "Enable GL2 caching for CB and DB.")
-OPT_BOOL(optimize_io, true, "Run nir_opt_varyings in the GLSL linker.")
+OPT_BOOL(alt_hiz_logic, true, "Enable alternative HiZ logic")
 
 #undef OPT_BOOL
 #undef OPT_INT

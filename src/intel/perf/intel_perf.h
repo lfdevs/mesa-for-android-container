@@ -367,6 +367,9 @@ struct intel_perf_config {
       uint64_t n_eu_slices;         /** $EuSlicesTotalCount */
       uint64_t n_eu_sub_slices;     /** $EuSubslicesTotalCount */
       uint64_t n_eu_slice0123;      /** $EuDualSubslicesSlice0123Count */
+      uint64_t n_l3_banks;          /** $L3BankTotalCount */
+      uint64_t n_l3_nodes;          /** $L3NodeTotalCount */
+      uint64_t n_sq_idis;           /** $SqidiTotalCount */
       uint64_t slice_mask;          /** $SliceMask */
       uint64_t subslice_mask;       /** $SubsliceMask */
       uint64_t gt_min_freq;         /** $GpuMinFrequency */

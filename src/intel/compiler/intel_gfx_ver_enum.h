@@ -21,8 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef INTEL_GFX_VER_ENUM_H
-#define INTEL_GFX_VER_ENUM_H
+#pragma once
 
 #include "util/macros.h"
 #include "dev/intel_device_info.h"
@@ -70,5 +69,3 @@ gfx_ver_from_devinfo(const struct intel_device_info *devinfo)
       unreachable("not reached");
    }
 }
-
-#endif

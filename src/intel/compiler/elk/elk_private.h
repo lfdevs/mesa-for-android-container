@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_PRIVATE_H
-#define ELK_PRIVATE_H
+#pragma once
 
 #include "elk_compiler.h"
 
@@ -72,5 +71,3 @@ int elk_simd_select_for_workgroup_size(const struct intel_device_info *devinfo,
                                        const unsigned *sizes);
 
 bool elk_should_print_shader(const nir_shader *shader, uint64_t debug_flag);
-
-#endif // ELK_PRIVATE_H

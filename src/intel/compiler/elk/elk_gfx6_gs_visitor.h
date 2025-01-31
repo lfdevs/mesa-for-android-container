@@ -22,8 +22,7 @@
  *
  */
 
-#ifndef ELK_GFX6_GS_VISITOR_H
-#define ELK_GFX6_GS_VISITOR_H
+#pragma once
 
 #include "elk_vec4.h"
 #include "elk_vec4_gs_visitor.h"
@@ -80,5 +79,3 @@ private:
 } /* namespace elk */
 
 #endif /* __cplusplus */
-
-#endif /* ELK_GFX6_GS_VISITOR_H */

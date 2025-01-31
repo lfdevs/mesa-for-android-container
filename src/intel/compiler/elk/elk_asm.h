@@ -22,8 +22,7 @@
  *
  */
 
-#ifndef ELK_ASM_H
-#define ELK_ASM_H
+#pragma once
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -109,5 +108,3 @@ struct target_label {
    char *name;
    int offset;
 };
-
-#endif /* ELK_ASM_H */

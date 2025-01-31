@@ -80,7 +80,8 @@ executor_macro_mov(executor_context *ec, char **src, char *line)
          ralloc_asprintf_append(src, "mov(8) %s<1>F 0x%08xF /* %f */ { align1 1Q };\n", reg, val.u, val.f);
          break;
       }
-      case 200: {
+      case 200:
+      case 300: {
          ralloc_asprintf_append(src, "mov(16) %s<1>F 0x%08xF /* %f */ { align1 1H };\n", reg, val.u, val.f);
          break;
       }
@@ -100,7 +101,8 @@ executor_macro_mov(executor_context *ec, char **src, char *line)
          break;
       }
 
-      case 200: {
+      case 200:
+      case 300: {
          ralloc_asprintf_append(src, "mov(16) %s<1>UD %sUD { align1 1H };\n", reg, value);
          break;
       }
@@ -127,7 +129,8 @@ executor_macro_syncnop(executor_context *ec, char **src, char *line)
    }
 
    case 125:
-   case 200: {
+   case 200:
+   case 300: {
       ralloc_strcat(src, "sync nop(8)  null<0,1,0>UD  { align1 WE_all 1H A@1 $1.dst };\n");
       break;
    }
@@ -165,7 +168,8 @@ executor_macro_eot(executor_context *ec, char **src, char *line)
          break;
    }
 
-   case 200: {
+   case 200:
+   case 300: {
       ralloc_strcat(src,
          "mov(16)         g127<1>UD  g0<1,1,0>UD  { align1 WE_all 1H };\n"
          "send(16)        nullUD     g127UD       nullUD  0x02000000  0x00000000\n"
@@ -199,7 +203,8 @@ executor_macro_id(executor_context *ec, char **src, char *line)
       break;
    }
 
-   case 200: {
+   case 200:
+   case 300: {
       ralloc_asprintf_append(src,
          "mov(8)  g127<1>UW    0x76543210V         { align1 WE_all 1Q };\n"
          "add(8)  g127.8<1>UW  g127<1,1,0>UW  8UW  { align1 WE_all 1Q @1 };\n"
@@ -257,7 +262,8 @@ executor_macro_write(executor_context *ec, char **src, char *line)
       break;
    }
 
-   case 200: {
+   case 200:
+   case 300: {
       ralloc_asprintf_append(src,
          "mul(16)          g127<1>UD  %s<1;1,0>UD    0x4UW     { align1 @1 1Q };\n"
          "add(16)          g127<1>UD  g127<1;1,0>UD  0x%08xUD  { align1 @1 1Q };\n"
@@ -321,11 +327,12 @@ executor_macro_read(executor_context *ec, char **src, char *line)
       break;
    }
 
-   case 200: {
+   case 200:
+   case 300: {
       ralloc_asprintf_append(src,
-         "mul(8)          g127<1>UD  %s<1;1,0>UD    0x4UW     { align1 @1 1Q };\n"
-         "add(8)          g127<1>UD  g127<1;1,0>UD  0x%08xUD  { align1 @1 1Q };\n"
-         "send(8)         %sUD       g127UD         nullUD    0x02100500 0x00000000\n"
+         "mul(16)         g127<1>UD  %s<1;1,0>UD    0x4UW     { align1 @1 1Q };\n"
+         "add(16)         g127<1>UD  g127<1;1,0>UD  0x%08xUD  { align1 @1 1Q };\n"
+         "send(16)        %sUD       g127UD         nullUD    0x02100500 0x00000000\n"
          "    ugm MsgDesc: ( load, a32, d32, x, L1STATE_L3MOCS dst_len = 1, "
          "                   src0_len = 1, flat ) src1_len = 0  base_offset 0 "
          "    { align1 1Q A@1 $1 };\n",

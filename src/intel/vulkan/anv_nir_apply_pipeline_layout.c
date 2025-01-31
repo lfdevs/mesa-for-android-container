@@ -1448,8 +1448,7 @@ try_lower_direct_buffer_intrinsic(nir_builder *b,
    /* If a dynamic has not been assigned a binding table entry, we need to
     * bail here.
     */
-   if ((bind_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-        bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) &&
+   if (vk_descriptor_type_is_dynamic(bind_layout->type) &&
        !descriptor_has_bti(desc, state))
       return false;
 

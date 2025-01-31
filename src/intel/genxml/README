@@ -76,3 +76,6 @@ Keeping genxml files tidy :
 
       3) Sort <struct> tags by dependency so that other scripts have
          everything properly ordered.
+
+   As a convention, a genxml file name includes its version number multiplied
+   by 10 (verx10).

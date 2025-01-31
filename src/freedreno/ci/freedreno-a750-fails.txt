@@ -1,4 +1,3 @@
-KHR-GL46.post_depth_coverage_tests.PostDepthSampleMask,Fail
 KHR-GL46.shader_draw_parameters_tests.MultiDrawElementIndirectCountParameters,Fail
 KHR-GL46.shader_draw_parameters_tests.ShaderMultiDrawElementsIndirectParameters,Fail
 KHR-GL46.shader_image_load_store.basic-allTargets-loadStoreTES,Fail

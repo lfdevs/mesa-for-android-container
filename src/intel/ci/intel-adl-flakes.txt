@@ -6,3 +6,5 @@ program@execute@builtin@builtin-float-sincos-1.0.generated
 program@execute@builtin@builtin-shuffle2-double-ulong
 program@execute@builtin@builtin-shuffle2-long-ulong
 
+# With linux kernel 6.13-rc4 uprev
+gl_degenerate_gradients

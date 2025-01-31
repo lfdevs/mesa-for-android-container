@@ -60,6 +60,37 @@
  *  Default: -2 (both parts of the work around, ONLY if it's required)
  *
  */
+static bool
+copy_primitive_count_write(nir_builder *b,
+                           nir_intrinsic_instr *intrin,
+                           void *data)
+{
+   if (intrin->intrinsic != nir_intrinsic_set_vertex_and_primitive_count)
+      return false;
+
+   b->cursor = nir_after_instr(&intrin->instr);
+
+   nir_variable *primitive_count = (nir_variable *)data;
+   nir_store_var(b, primitive_count, intrin->src[1].ssa, 0x1);
+
+   return true;
+}
+
+static nir_variable *
+copy_primitive_count_writes(nir_shader *nir)
+{
+   nir_variable *primitive_count =
+      nir_local_variable_create(nir_shader_get_entrypoint(nir),
+                                glsl_uint_type(),
+                                "Wa_18019110168_primitive_count");
+
+   nir_shader_intrinsics_pass(nir,
+                              copy_primitive_count_write,
+                              nir_metadata_control_flow,
+                              primitive_count);
+
+   return primitive_count;
+}
 
 static bool
 anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
@@ -114,7 +145,7 @@ anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
              location >= VARYING_SLOT_VAR0);
 
       const struct glsl_type *type = var->type;
-      if (nir_is_arrayed_io(var, MESA_SHADER_MESH) || var->data.per_view) {
+      if (nir_is_arrayed_io(var, MESA_SHADER_MESH)) {
          assert(glsl_type_is_array(type));
          type = glsl_get_array_element(type);
       }
@@ -152,6 +183,8 @@ anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
    unsigned vertices_per_primitive =
          mesa_vertices_per_prim(nir->info.mesh.primitive_type);
 
+   nir_variable *primitive_count_var = copy_primitive_count_writes(nir);
+
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    nir_builder b = nir_builder_at(nir_after_impl(impl));
 
@@ -165,7 +198,6 @@ anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
    nir_def *cmp = nir_ieq(&b, local_invocation_index, zero);
    nir_if *if_stmt = nir_push_if(&b, cmp);
    {
-      nir_variable *primitive_count_var = NULL;
       nir_variable *primitive_indices_var = NULL;
 
       unsigned num_other_variables = 0;
@@ -187,7 +219,6 @@ anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
 
          switch (var->data.location) {
             case VARYING_SLOT_PRIMITIVE_COUNT:
-               primitive_count_var = var;
                break;
             case VARYING_SLOT_PRIMITIVE_INDICES:
                primitive_indices_var = var;

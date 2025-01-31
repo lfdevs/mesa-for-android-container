@@ -99,6 +99,14 @@ extern uint64_t intel_debug;
 #define DEBUG_REG_PRESSURE        (1ull << 51)
 #define DEBUG_SHADER_PRINT        (1ull << 52)
 #define DEBUG_CL_QUIET            (1ull << 53)
+#define DEBUG_BVH_BLAS            (1ull << 54)
+#define DEBUG_BVH_TLAS            (1ull << 55)
+#define DEBUG_BVH_BLAS_IR_HDR     (1ull << 56)
+#define DEBUG_BVH_TLAS_IR_HDR     (1ull << 57)
+#define DEBUG_BVH_BLAS_IR_AS      (1ull << 58)
+#define DEBUG_BVH_TLAS_IR_AS      (1ull << 59)
+#define DEBUG_BVH_NO_BUILD        (1ull << 60)
+#define DEBUG_NO_SEND_GATHER      (1ull << 61)
 
 #define DEBUG_ANY                 (~0ull)
 
@@ -108,7 +116,14 @@ extern uint64_t intel_debug;
 /* These flags may affect program generation */
 #define DEBUG_DISK_CACHE_MASK \
    (DEBUG_NO_DUAL_OBJECT_GS | DEBUG_SPILL_FS | \
-   DEBUG_SPILL_VEC4 | DEBUG_NO_COMPACTION | DEBUG_DO32 | DEBUG_SOFT64)
+   DEBUG_SPILL_VEC4 | DEBUG_NO_COMPACTION | DEBUG_DO32 | DEBUG_SOFT64 | \
+   DEBUG_NO_SEND_GATHER)
+
+/* Flags to determine what bvh to dump out */
+#define DEBUG_BVH_ANV (DEBUG_BVH_BLAS | DEBUG_BVH_TLAS)
+#define DEBUG_BVH_IR_HDR (DEBUG_BVH_BLAS_IR_HDR | DEBUG_BVH_TLAS_IR_HDR)
+#define DEBUG_BVH_IR_AS (DEBUG_BVH_BLAS_IR_AS | DEBUG_BVH_TLAS_IR_AS)
+#define DEBUG_BVH_ANY (DEBUG_BVH_ANV | DEBUG_BVH_IR_HDR | DEBUG_BVH_IR_AS)
 
 extern uint64_t intel_simd;
 extern uint32_t intel_debug_bkp_before_draw_count;

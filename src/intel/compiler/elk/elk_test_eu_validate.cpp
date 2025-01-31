@@ -269,7 +269,9 @@ TEST_P(validation_test, invalid_type_encoding)
        * instructions, so keep a record in a bitset the invalid patterns so
        * they can be verified to be invalid when used.
        */
-      BITSET_DECLARE(invalid_encodings, num_encodings);
+      const int max_bits = 4;
+      assert(max_bits >= num_bits);
+      BITSET_DECLARE(invalid_encodings, 1 << max_bits);
 
       const struct {
          enum elk_reg_type type;
@@ -377,7 +379,9 @@ TEST_P(validation_test, invalid_type_encoding_3src_a16)
     * instructions, so keep a record in a bitset the invalid patterns so
     * they can be verified to be invalid when used.
     */
-   BITSET_DECLARE(invalid_encodings, num_encodings);
+   const int max_bits = 3;
+   assert(max_bits >= num_bits);
+   BITSET_DECLARE(invalid_encodings, 1 << max_bits);
 
    const struct {
       enum elk_reg_type type;

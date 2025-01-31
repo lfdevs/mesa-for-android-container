@@ -78,8 +78,53 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
       draw_count_addr = count_addr;
    }
 
+   const bool wa_16011107343 =
+      intel_needs_workaround(device->info, 16011107343) &&
+      anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_CTRL);
+   const bool wa_22018402687 =
+      intel_needs_workaround(device->info, 22018402687) &&
+      anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL);
+
+   const uint32_t wa_insts_size =
+      ((wa_16011107343 ? GENX(3DSTATE_HS_length) : 0) +
+       (wa_22018402687 ? GENX(3DSTATE_HS_length) : 0)) * 4;
+   UNUSED const bool protected = cmd_buffer->vk.pool->flags &
+                                 VK_COMMAND_POOL_CREATE_PROTECTED_BIT;
+
+   struct anv_state wa_insts_state =
+      wa_insts_size ?
+      anv_cmd_buffer_alloc_temporary_state(cmd_buffer, wa_insts_size, 4) :
+      ANV_STATE_NULL;
+   UNUSED uint32_t wa_insts_offset = 0;
+
+#if INTEL_WA_16011107343_GFX_VER
+   if (wa_16011107343) {
+      memcpy(wa_insts_state.map + wa_insts_offset,
+             &pipeline->batch_data[
+                protected ?
+                pipeline->final.hs_protected.offset :
+                pipeline->final.hs.offset],
+             GENX(3DSTATE_HS_length) * 4);
+      wa_insts_offset += GENX(3DSTATE_HS_length) * 4;
+   }
+#endif
+
+#if INTEL_WA_22018402687_GFX_VER
+   if (wa_22018402687) {
+      memcpy(wa_insts_state.map + wa_insts_offset,
+             &pipeline->batch_data[
+                protected ?
+                pipeline->final.ds_protected.offset :
+                pipeline->final.ds.offset],
+             GENX(3DSTATE_DS_length) * 4);
+      wa_insts_offset += GENX(3DSTATE_DS_length) * 4;
+   }
+#endif
+
    struct anv_gen_indirect_params *push_data = push_data_state.map;
    *push_data = (struct anv_gen_indirect_params) {
+      .wa_insts_addr          = anv_address_physical(
+         anv_cmd_buffer_temporary_state_address(cmd_buffer, wa_insts_state)),
       .draw_id_addr           = anv_address_physical(draw_id_addr),
       .indirect_data_addr     = anv_address_physical(indirect_data_addr),
       .indirect_data_stride   = indirect_data_stride,
@@ -91,12 +136,12 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
                                   vs_prog_data->uses_baseinstance) ?
                                  ANV_GENERATED_FLAG_BASE : 0) |
                                 (vs_prog_data->uses_drawid ? ANV_GENERATED_FLAG_DRAWID : 0) |
-                                (anv_mocs(device, indirect_data_addr.bo,
-                                          ISL_SURF_USAGE_VERTEX_BUFFER_BIT) << 8) |
                                 (!anv_address_is_null(count_addr) ?
                                  ANV_GENERATED_FLAG_COUNT : 0) |
-                                (ring_count != 0 ? ANV_GENERATED_FLAG_RING_MODE : 0) |
-                                ((generated_cmd_stride / 4) << 16),
+                                (ring_count != 0 ? ANV_GENERATED_FLAG_RING_MODE : 0),
+      .mocs                   = anv_mocs(device, indirect_data_addr.bo,
+                                         ISL_SURF_USAGE_VERTEX_BUFFER_BIT),
+      .cmd_primitive_size     = wa_insts_size + generated_cmd_stride,
       .draw_base              = item_base,
       .max_draw_count         = max_count,
       .ring_count             = ring_count,

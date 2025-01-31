@@ -53,7 +53,7 @@ struct nvk_root_descriptor_table {
    struct nvk_buffer_address sets[NVK_MAX_SETS];
 
    /* For each descriptor set, the index in dynamic_buffers where that set's
-    * the dynamic buffers start. This is maintained for every set, regardless
+    * dynamic buffers start. This is maintained for every set, regardless
     * of whether or not anything is bound there.
     */
    uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
@@ -62,7 +62,7 @@ struct nvk_root_descriptor_table {
    union nvk_buffer_descriptor dynamic_buffers[NVK_MAX_DYNAMIC_BUFFERS];
 
    /* enfore alignment to 0x100 as needed pre pascal */
-   uint8_t __padding[0x38];
+   uint8_t __padding[0xb8];
 };
 
 /* helper macro for computing root descriptor byte offsets */
@@ -297,8 +297,7 @@ void nvk_cmd_bind_compute_shader(struct nvk_cmd_buffer *cmd,
 
 void nvk_cmd_dirty_cbufs_for_descriptors(struct nvk_cmd_buffer *cmd,
                                          VkShaderStageFlags stages,
-                                         uint32_t sets_start, uint32_t sets_end,
-                                         uint32_t dyn_start, uint32_t dyn_end);
+                                         uint32_t sets_start, uint32_t sets_end);
 void nvk_cmd_bind_vertex_buffer(struct nvk_cmd_buffer *cmd, uint32_t vb_idx,
                                 struct nvk_addr_range addr_range);
 

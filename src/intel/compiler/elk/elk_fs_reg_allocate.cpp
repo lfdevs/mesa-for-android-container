@@ -47,7 +47,7 @@ assign_reg(const struct intel_device_info *devinfo,
 void
 elk_fs_visitor::assign_regs_trivial()
 {
-   unsigned hw_reg_mapping[this->alloc.count + 1];
+   unsigned *hw_reg_mapping = ralloc_array(NULL, unsigned, this->alloc.count + 1);
    unsigned i;
    int reg_width = dispatch_width / 8;
 
@@ -74,6 +74,7 @@ elk_fs_visitor::assign_regs_trivial()
       this->alloc.count = this->grf_used;
    }
 
+   ralloc_free(hw_reg_mapping);
 }
 
 /**
@@ -840,13 +841,7 @@ void
 elk_fs_reg_alloc::set_spill_costs()
 {
    float block_scale = 1.0;
-   float spill_costs[fs->alloc.count];
-   bool no_spill[fs->alloc.count];
-
-   for (unsigned i = 0; i < fs->alloc.count; i++) {
-      spill_costs[i] = 0.0;
-      no_spill[i] = false;
-   }
+   float *spill_costs = rzalloc_array(NULL, float, fs->alloc.count);
 
    /* Calculate costs for spilling nodes.  Call it a cost of 1 per
     * spill/unspill we'll have to do, and guess that the insides of
@@ -865,10 +860,10 @@ elk_fs_reg_alloc::set_spill_costs()
       if (_mesa_set_search(spill_insts, inst)) {
          for (unsigned int i = 0; i < inst->sources; i++) {
 	    if (inst->src[i].file == VGRF)
-               no_spill[inst->src[i].nr] = true;
+               spill_costs[inst->src[i].nr] = INFINITY;
          }
 	 if (inst->dst.file == VGRF)
-            no_spill[inst->dst.nr] = true;
+            spill_costs[inst->dst.nr] = INFINITY;
       }
 
       switch (inst->opcode) {
@@ -902,7 +897,7 @@ elk_fs_reg_alloc::set_spill_costs()
        * used in SCRATCH_READ/WRITE instructions so they'll always be flagged
        * no_spill.
        */
-      if (no_spill[i])
+      if (isinf(spill_costs[i]))
          continue;
 
       int live_length = live.vgrf_end[i] - live.vgrf_start[i];
@@ -921,6 +916,8 @@ elk_fs_reg_alloc::set_spill_costs()
    }
 
    have_spill_costs = true;
+
+   ralloc_free(spill_costs);
 }
 
 int
@@ -985,7 +982,8 @@ elk_fs_reg_alloc::spill_reg(unsigned spill_reg)
     * SIMD16 mode, because we'd stomp the FB writes.
     */
    if (!fs->spilled_any_registers) {
-      bool mrf_used[ELK_MAX_MRF(devinfo->ver)];
+      bool mrf_used[ELK_MAX_MRF_ALL];
+      assert(ARRAY_SIZE(mrf_used) >= ELK_MAX_MRF(devinfo->ver));
       get_used_mrfs(fs, mrf_used);
 
       for (int i = spill_base_mrf(fs); i < ELK_MAX_MRF(devinfo->ver); i++) {
@@ -1180,7 +1178,7 @@ elk_fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
     * regs in the register classes back down to real hardware reg
     * numbers.
     */
-   unsigned hw_reg_mapping[fs->alloc.count];
+   unsigned *hw_reg_mapping = ralloc_array(NULL, unsigned, fs->alloc.count);
    fs->grf_used = fs->first_non_payload_grf;
    for (unsigned i = 0; i < fs->alloc.count; i++) {
       int reg = ra_get_node_reg(g, first_vgrf_node + i);
@@ -1199,6 +1197,8 @@ elk_fs_reg_alloc::assign_regs(bool allow_spilling, bool spill_all)
    }
 
    fs->alloc.count = fs->grf_used;
+
+   ralloc_free(hw_reg_mapping);
 
    return true;
 }

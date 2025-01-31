@@ -43,12 +43,12 @@ kperfmon_create(struct v3dv_device *device,
              &pool->perfmon.counters[i * DRM_V3D_MAX_PERF_COUNTERS],
              req.ncounters);
 
-      int ret = v3dv_ioctl(device->pdevice->render_fd,
-                           DRM_IOCTL_V3D_PERFMON_CREATE,
-                           &req);
+      int ret = v3d_ioctl(device->pdevice->render_fd,
+                          DRM_IOCTL_V3D_PERFMON_CREATE,
+                          &req);
       if (ret)
-         fprintf(stderr, "Failed to create perfmon for query %d: %s\n", query,
-                 strerror(errno));
+         mesa_loge("Failed to create perfmon for query %d: %s\n", query,
+                   strerror(errno));
 
       pool->queries[query].perf.kperfmon_ids[i] = req.id;
    }
@@ -68,13 +68,13 @@ kperfmon_destroy(struct v3dv_device *device,
          .id = pool->queries[query].perf.kperfmon_ids[i]
       };
 
-      int ret = v3dv_ioctl(device->pdevice->render_fd,
-                           DRM_IOCTL_V3D_PERFMON_DESTROY,
-                           &req);
+      int ret = v3d_ioctl(device->pdevice->render_fd,
+                          DRM_IOCTL_V3D_PERFMON_DESTROY,
+                          &req);
 
       if (ret) {
-         fprintf(stderr, "Failed to destroy perfmon %u: %s\n",
-                 req.id, strerror(errno));
+         mesa_loge("Failed to destroy perfmon %u: %s\n",
+                   req.id, strerror(errno));
       }
    }
 }
@@ -643,6 +643,9 @@ write_performance_query_result(struct v3dv_device *device,
    struct v3dv_query *q = &pool->queries[query];
    uint64_t counter_values[V3D_MAX_PERFCNT];
 
+   assert(pool->perfmon.nperfmons);
+   assert(pool->perfmon.ncounters);
+
    for (uint32_t i = 0; i < pool->perfmon.nperfmons; i++) {
       struct drm_v3d_perfmon_get_values req = {
          .id = q->perf.kperfmon_ids[i],
@@ -650,12 +653,12 @@ write_performance_query_result(struct v3dv_device *device,
                                    DRM_V3D_MAX_PERF_COUNTERS])
       };
 
-      int ret = v3dv_ioctl(device->pdevice->render_fd,
-                           DRM_IOCTL_V3D_PERFMON_GET_VALUES,
-                           &req);
+      int ret = v3d_ioctl(device->pdevice->render_fd,
+                          DRM_IOCTL_V3D_PERFMON_GET_VALUES,
+                          &req);
 
       if (ret) {
-         fprintf(stderr, "failed to get perfmon values: %s\n", strerror(errno));
+         mesa_loge("failed to get perfmon values: %s\n", strerror(errno));
          return vk_error(device, VK_ERROR_DEVICE_LOST);
       }
    }
@@ -1107,7 +1110,7 @@ cmd_buffer_emit_copy_query_pool_results(struct v3dv_cmd_buffer *cmd_buffer,
                &device->queries.copy_pipeline[pipeline_idx]);
       ralloc_free(copy_query_results_cs_nir);
       if (result != VK_SUCCESS) {
-         fprintf(stderr, "Failed to create copy query results pipeline\n");
+         mesa_loge("Failed to create copy query results pipeline\n");
          return;
       }
    }
@@ -1136,8 +1139,8 @@ cmd_buffer_emit_copy_query_pool_results(struct v3dv_cmd_buffer *cmd_buffer,
       allocate_storage_buffer_descriptor_set(cmd_buffer,
                                              &out_buf_descriptor_set);
    if (result != VK_SUCCESS) {
-      fprintf(stderr, "vkCmdCopyQueryPoolResults failed: "
-              "could not allocate descriptor.\n");
+      mesa_loge("vkCmdCopyQueryPoolResults failed: "
+                "could not allocate descriptor.\n");
       return;
    }
 
@@ -1296,7 +1299,7 @@ v3dv_reset_query_pool_cpu(struct v3dv_device *device,
 
       for (uint32_t i = first; i < first + count; i++) {
          if (vk_sync_reset(&device->vk, pool->queries[i].timestamp.sync) != VK_SUCCESS)
-            fprintf(stderr, "Failed to reset sync");
+            mesa_loge("Failed to reset sync");
       }
 
       mtx_unlock(&device->query_mutex);
@@ -1325,7 +1328,7 @@ v3dv_reset_query_pool_cpu(struct v3dv_device *device,
          kperfmon_destroy(device, pool, i);
          kperfmon_create(device, pool, i);
          if (vk_sync_reset(&device->vk, q->perf.last_job_sync) != VK_SUCCESS)
-            fprintf(stderr, "Failed to reset sync");
+            mesa_loge("Failed to reset sync");
          break;
       default:
          unreachable("Unsupported query type");
@@ -1357,10 +1360,38 @@ v3dv_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
 {
    V3DV_FROM_HANDLE(v3dv_physical_device, pDevice, physicalDevice);
 
-   return v3dv_X(pDevice, enumerate_performance_query_counters)(pDevice,
-                                                                pCounterCount,
-                                                                pCounters,
-                                                                pCounterDescriptions);
+   uint32_t desc_count = *pCounterCount;
+   uint8_t ncounters = pDevice->perfcntr->max_perfcnt;
+
+   VK_OUTARRAY_MAKE_TYPED(VkPerformanceCounterKHR,
+                          out, pCounters, pCounterCount);
+   VK_OUTARRAY_MAKE_TYPED(VkPerformanceCounterDescriptionKHR,
+                          out_desc, pCounterDescriptions, &desc_count);
+
+   for (int i = 0; i < ncounters; i++) {
+      const struct v3d_perfcntr_desc *perfcntr_desc = v3d_perfcntrs_get_by_index(pDevice->perfcntr, i);
+
+      vk_outarray_append_typed(VkPerformanceCounterKHR, &out, counter) {
+         counter->unit = VK_PERFORMANCE_COUNTER_UNIT_GENERIC_KHR;
+         counter->scope = VK_PERFORMANCE_COUNTER_SCOPE_COMMAND_KHR;
+         counter->storage = VK_PERFORMANCE_COUNTER_STORAGE_UINT64_KHR;
+
+         unsigned char sha1_result[20];
+         _mesa_sha1_compute(perfcntr_desc->name, strlen(perfcntr_desc->name), sha1_result);
+
+         memcpy(counter->uuid, sha1_result, sizeof(counter->uuid));
+      }
+
+      vk_outarray_append_typed(VkPerformanceCounterDescriptionKHR,
+                               &out_desc, desc) {
+         desc->flags = 0;
+         snprintf(desc->name, sizeof(desc->name), "%s", perfcntr_desc->name);
+         snprintf(desc->category, sizeof(desc->category), "%s", perfcntr_desc->category);
+         snprintf(desc->description, sizeof(desc->description), "%s", perfcntr_desc->description);
+      }
+   }
+
+   return vk_outarray_status(&out);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1507,7 +1538,7 @@ get_reset_occlusion_query_cs(const nir_shader_compiler_options *options)
 static void
 write_query_buffer(nir_builder *b,
                    nir_def *buf,
-                   nir_def **offset,
+                   nir_def *offset,
                    nir_def *value,
                    bool flag_64bit)
 {
@@ -1516,11 +1547,9 @@ write_query_buffer(nir_builder *b,
        * so we can write a 64-bit value in a single store.
        */
       nir_def *value64 = nir_vec2(b, value, nir_imm_int(b, 0));
-      nir_store_ssbo(b, value64, buf, *offset, .write_mask = 0x3, .align_mul = 8);
-      *offset = nir_iadd_imm(b, *offset, 8);
+      nir_store_ssbo(b, value64, buf, offset, .write_mask = 0x3, .align_mul = 8);
    } else {
-      nir_store_ssbo(b, value, buf, *offset, .write_mask = 0x1, .align_mul = 4);
-      *offset = nir_iadd_imm(b, *offset, 4);
+      nir_store_ssbo(b, value, buf, offset, .write_mask = 0x1, .align_mul = 4);
    }
 }
 
@@ -1579,18 +1608,20 @@ get_copy_query_results_cs(const nir_shader_compiler_options *options,
    /* ...if partial is requested, we always write */
    if(flag_partial) {
       nir_def *query_res = nir_read_occlusion_counter(&b, buf, query_idx);
-      write_query_buffer(&b, buf_out, &offset, query_res, flag_64bit);
+      write_query_buffer(&b, buf_out, offset, query_res, flag_64bit);
    } else {
       /*...otherwise, we only write if the query is available */
       nir_if *if_stmt = nir_push_if(&b, nir_ine_imm(&b, avail, 0));
          nir_def *query_res = nir_read_occlusion_counter(&b, buf, query_idx);
-         write_query_buffer(&b, buf_out, &offset, query_res, flag_64bit);
+         write_query_buffer(&b, buf_out, offset, query_res, flag_64bit);
       nir_pop_if(&b, if_stmt);
    }
 
    /* Write query availability */
-   if (flag_avail)
-      write_query_buffer(&b, buf_out, &offset, avail, flag_64bit);
+   if (flag_avail) {
+      offset = nir_iadd_imm(&b, offset, flag_64bit ? 8 : 4);
+      write_query_buffer(&b, buf_out, offset, avail, flag_64bit);
+   }
 
    return b.shader;
 }

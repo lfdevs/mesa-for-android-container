@@ -195,7 +195,7 @@ static void pvr_srv_compute_cmd_ext_stream_load(
       (const uint32_t *)((uint8_t *)stream + ext_stream_offset);
    struct rogue_fwif_cdm_regs *const regs = &cmd->regs;
 
-   struct PVRX(KMD_STREAM_EXTHDR_COMPUTE0) header0;
+   struct ROGUE_KMD_STREAM_EXTHDR_COMPUTE0 header0;
 
    header0 = pvr_csb_unpack(ext_stream_ptr, KMD_STREAM_EXTHDR_COMPUTE0);
    ext_stream_ptr += pvr_cmd_length(KMD_STREAM_EXTHDR_COMPUTE0);

@@ -27,6 +27,128 @@
 #include "nir_builder.h"
 
 static bool
+rebase_const_offset_ubo_loads_instr(nir_builder *b,
+                                    nir_instr *instr,
+                                    void *cb_data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   if (intrin->intrinsic != nir_intrinsic_load_ubo_uniform_block_intel)
+      return false;
+
+   if (!nir_src_is_const(intrin->src[1]))
+      return false;
+
+   const unsigned type_bytes = intrin->def.bit_size / 8;
+   const unsigned cacheline_bytes = 64;
+   const unsigned block_components =
+      MIN2(cacheline_bytes / type_bytes, NIR_MAX_VEC_COMPONENTS);
+
+   const unsigned orig_offset = nir_src_as_uint(intrin->src[1]);
+   const unsigned new_offset = ROUND_DOWN_TO(orig_offset, cacheline_bytes);
+
+   const unsigned orig_def_components = intrin->def.num_components;
+   const unsigned orig_read_components =
+      nir_def_last_component_read(&intrin->def) + 1;
+   const unsigned pad_components = (orig_offset - new_offset) / type_bytes;
+
+   /* Don't round down if we'd have to split a single load into two loads */
+   if (orig_read_components + pad_components > block_components)
+      return false;
+
+   /* Always read a full block so we can CSE reads of different sizes.
+    * The backend will skip reading unused trailing components anyway.
+    */
+   intrin->def.num_components = block_components;
+   intrin->num_components = block_components;
+   nir_intrinsic_set_range_base(intrin, new_offset);
+   nir_intrinsic_set_range(intrin, block_components * type_bytes);
+   nir_intrinsic_set_align_offset(intrin, 0);
+
+   if (pad_components) {
+      /* Change the base of the load to the new lower offset, and emit
+       * moves to read from the now higher vector component locations.
+       */
+      b->cursor = nir_before_instr(instr);
+      nir_src_rewrite(&intrin->src[1], nir_imm_int(b, new_offset));
+   }
+
+   b->cursor = nir_after_instr(instr);
+
+   nir_scalar components[NIR_MAX_VEC_COMPONENTS];
+   nir_scalar undef = nir_get_scalar(nir_undef(b, 1, type_bytes * 8), 0);
+   unsigned i = 0;
+   for (; i < orig_read_components; i++)
+      components[i] = nir_get_scalar(&intrin->def, pad_components + i);
+   for (; i < orig_def_components; i++)
+      components[i] = undef;
+
+   nir_def *rebase = nir_vec_scalars(b, components, orig_def_components);
+   rebase->divergent = false;
+
+   nir_def_rewrite_uses_after(&intrin->def, rebase, rebase->parent_instr);
+
+   return true;
+}
+
+/**
+ * Shaders commonly contain small UBO loads with a constant offset scattered
+ * throughout the program.  Ideally, we want to vectorize those into larger
+ * block loads so we can load whole cachelines at a time, or at least fill
+ * whole 32B registers rather than having empty space.
+ *
+ * nir_opt_load_store_vectorize() is terrific for combining small loads into
+ * nice large block loads.  Unfortunately, it only vectorizes within a single
+ * basic block, and there's a lot of opportunity for optimizing globally.
+ *
+ * In the past, our backend loaded whole 64B cachelines at a time (on pre-Xe2,
+ * two registers) and rounded down constant UBO load offsets to the nearest
+ * multiple of 64B.  This meant multiple loads within the same 64B would be
+ * CSE'd into the same load, and we could even take advantage of global CSE.
+ * However, we didn't have a method for shrinking loads from 64B back to 32B
+ * again, and also didn't have a lot of flexibility in how this interacted
+ * with the NIR load/store vectorization.
+ *
+ * This pass takes a similar approach, but in NIR.  The idea is to:
+ *
+ * 1. Run load/store vectorization to combine access within a basic block
+ *
+ * 2. Find load_ubo_uniform_block_intel intrinsics with constant offsets.
+ *    Round their base down to the nearest multiple of 64B, and also increase
+ *    their returned vector to be a vec16 (64B for 32-bit values).  However,
+ *    only do this if a single vec16 load would cover this additional "pad"
+ *    space at the front, and all used components of the existing load.  That
+ *    way, we don't blindly turn a single load into two loads.
+ *
+ *    If we made any progress, then...
+ *
+ * 3. Run global CSE.  This will coalesce any accesses to the same 64B
+ *    region across subtrees of the CFG.
+ *
+ * 4. Run the load/store vectorizer again for UBOs.  This will clean up
+ *    any overlapping memory access within a block.
+ *
+ * 5. Have the backend only issue loads for components of the vec16 which
+ *    are actually read.  We could also shrink this in NIR, but doing it in
+ *    the backend is pretty straightforward.
+ *
+ * We could probably do better with a fancier sliding-window type pass
+ * which looked across blocks to produce optimal loads.  However, this
+ * simple hack using existing passes does a fairly good job for now.
+ */
+bool
+brw_nir_rebase_const_offset_ubo_loads(nir_shader *shader)
+{
+   return nir_shader_instructions_pass(shader,
+                                       rebase_const_offset_ubo_loads_instr,
+                                       nir_metadata_control_flow |
+                                       nir_metadata_live_defs,
+                                       NULL);
+}
+
+static bool
 intel_nir_blockify_uniform_loads_instr(nir_builder *b,
                                        nir_instr *instr,
                                        void *cb_data)

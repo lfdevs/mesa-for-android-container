@@ -34,7 +34,7 @@ export CUSTOM_XML="$MESA_DIR/$PREFIX_DIR/codegen/xml/vk_gfxstream.xml"
 python3 "$GEN_VK" -registry "$VK_XML" -registryGfxstream "$CUSTOM_XML" cereal -o "$GFXSTREAM_OUTPUT_DIR"
 
 export CEREAL_VARIANT=guest
-export GFXSTREAM_GUEST_ENCODER_DIR="$GFXSTREAM_DIR/guest/vulkan_enc"
+export GFXSTREAM_GUEST_ENCODER_DIR="$MESA_DIR/src/gfxstream/guest/vulkan_enc"
 python3 "$GEN_VK" -registry "$VK_MESA_XML" -registryGfxstream "$CUSTOM_XML" cereal -o /tmp/
 
 # Should have a unified headers dir here:

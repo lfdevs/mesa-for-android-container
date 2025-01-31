@@ -99,7 +99,7 @@ dri_set_background_context(void *loaderPrivate)
 static void
 dri2_gl_flush_get(_glapi_proc *glFlush)
 {
-   *glFlush = _glapi_get_proc_address("glFlush");
+   *glFlush = _mesa_glapi_get_proc_address("glFlush");
 }
 
 static void
@@ -592,7 +592,7 @@ dri2_load_driver(_EGLDisplay *disp)
 
    dri2_dpy->kopper = disp->Options.Zink && !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false);
    dri2_dpy->kopper_without_modifiers = dri2_dpy->kopper && debug_get_bool_option("LIBGL_KOPPER_DRI2", false);
-   dri2_dpy->swrast = (disp->Options.ForceSoftware && !dri2_dpy->kopper) ||
+   dri2_dpy->swrast = (disp->Options.ForceSoftware && !dri2_dpy->kopper && strcmp(dri2_dpy->driver_name, "vmwgfx")) ||
                       !dri2_dpy->driver_name || strstr(dri2_dpy->driver_name, "swrast");
    dri2_dpy->swrast_not_kms = dri2_dpy->swrast && (!dri2_dpy->driver_name || strcmp(dri2_dpy->driver_name, "kms_swrast"));
 
@@ -628,7 +628,7 @@ dri2_setup_screen(_EGLDisplay *disp)
    unsigned int api_mask = screen->api_mask;
 
 #ifdef HAVE_LIBDRM
-   int caps = dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_DMABUF);
+   unsigned caps = pscreen->caps.dmabuf;
    /* set if both import and export are suported */
    if (dri2_dpy->multibuffers_available) {
       dri2_dpy->has_dmabuf_import = (caps & DRM_PRIME_CAP_IMPORT) > 0;
@@ -636,7 +636,7 @@ dri2_setup_screen(_EGLDisplay *disp)
    }
 #endif
 #ifdef HAVE_ANDROID_PLATFORM
-   dri2_dpy->has_native_fence_fd = dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_NATIVE_FENCE_FD);
+   dri2_dpy->has_native_fence_fd = pscreen->caps.native_fence_fd;
 #endif
    dri2_dpy->has_compression_modifiers = pscreen->query_compression_rates &&
                                          (pscreen->query_compression_modifiers || dri2_dpy->kopper);
@@ -673,8 +673,7 @@ dri2_setup_screen(_EGLDisplay *disp)
    disp->Extensions.MESA_query_driver = EGL_TRUE;
 
    /* Report back to EGL the bitmask of priorities supported */
-   disp->Extensions.IMG_context_priority =
-      dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_CONTEXT_PRIORITY_MASK);
+   disp->Extensions.IMG_context_priority = pscreen->caps.context_priority_mask;
 
    /**
     * FIXME: Some drivers currently misreport what context priorities the user
@@ -699,9 +698,8 @@ dri2_setup_screen(_EGLDisplay *disp)
    disp->Extensions.EXT_config_select_group = EGL_TRUE;
 
    disp->Extensions.EXT_create_context_robustness =
-      dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_DEVICE_RESET_STATUS_QUERY);
-   disp->RobustBufferAccess =
-      dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR);
+      pscreen->caps.device_reset_status_query;
+   disp->RobustBufferAccess = pscreen->caps.robust_buffer_access_behavior;
 
    /* EXT_query_reset_notification_strategy complements and requires
     * EXT_create_context_robustness. */
@@ -725,7 +723,7 @@ dri2_setup_screen(_EGLDisplay *disp)
    disp->Extensions.MESA_drm_image = (capabilities & __DRI_IMAGE_CAP_GLOBAL_NAMES) != 0;
 
 #ifdef HAVE_LIBDRM
-   if (dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_DMABUF) & DRM_PRIME_CAP_EXPORT)
+   if (pscreen->caps.dmabuf & DRM_PRIME_CAP_EXPORT)
       disp->Extensions.MESA_image_dma_buf_export = true;
 
    if (dri2_dpy->has_dmabuf_import) {
@@ -740,7 +738,7 @@ dri2_setup_screen(_EGLDisplay *disp)
    disp->Extensions.KHR_gl_texture_2D_image = EGL_TRUE;
    disp->Extensions.KHR_gl_texture_cubemap_image = EGL_TRUE;
 
-   if (dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_MAX_TEXTURE_3D_LEVELS) != 0)
+   if (pscreen->caps.max_texture_3d_levels != 0)
       disp->Extensions.KHR_gl_texture_3D_image = EGL_TRUE;
 
    disp->Extensions.KHR_context_flush_control = EGL_TRUE;
@@ -748,10 +746,8 @@ dri2_setup_screen(_EGLDisplay *disp)
    if (dri_get_pipe_screen(dri2_dpy->dri_screen_render_gpu)->set_damage_region)
       disp->Extensions.KHR_partial_update = EGL_TRUE;
 
-   disp->Extensions.EXT_protected_surface =
-      dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_DEVICE_PROTECTED_SURFACE) != 0;
-   disp->Extensions.EXT_protected_content =
-      dri_get_screen_param(dri2_dpy->dri_screen_render_gpu, PIPE_CAP_DEVICE_PROTECTED_CONTEXT) != 0;
+   disp->Extensions.EXT_protected_surface = pscreen->caps.device_protected_surface;
+   disp->Extensions.EXT_protected_content = pscreen->caps.device_protected_context;
 }
 
 void
@@ -2332,6 +2328,9 @@ dri2_num_fourcc_format_planes(EGLint format)
    case DRM_FORMAT_NV21:
    case DRM_FORMAT_NV16:
    case DRM_FORMAT_NV61:
+   case DRM_FORMAT_NV15:
+   case DRM_FORMAT_NV20:
+   case DRM_FORMAT_NV30:
    case DRM_FORMAT_P010:
    case DRM_FORMAT_P012:
    case DRM_FORMAT_P016:

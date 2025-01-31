@@ -30,12 +30,12 @@ i965_postprocess_labels()
    LIST_FOR_EACH_ENTRY(tlabel, &target_labels, link) {
       LIST_FOR_EACH_ENTRY_SAFE(ilabel, s, &instr_labels, link) {
          if (!strcmp(tlabel->name, ilabel->name)) {
-            brw_inst *inst = store + ilabel->offset;
+            brw_eu_inst *inst = store + ilabel->offset;
 
-            int relative_offset = (tlabel->offset - ilabel->offset) / sizeof(brw_inst);
+            int relative_offset = (tlabel->offset - ilabel->offset) / sizeof(brw_eu_inst);
             relative_offset *= to_bytes_scale;
 
-            unsigned opcode = brw_inst_opcode(p->isa, inst);
+            unsigned opcode = brw_eu_inst_opcode(p->isa, inst);
 
             if (ilabel->type == INSTR_LABEL_JIP) {
                switch (opcode) {
@@ -43,12 +43,12 @@ i965_postprocess_labels()
                case BRW_OPCODE_ELSE:
                case BRW_OPCODE_ENDIF:
                case BRW_OPCODE_WHILE:
-                  brw_inst_set_jip(p->devinfo, inst, relative_offset);
+                  brw_eu_inst_set_jip(p->devinfo, inst, relative_offset);
                   break;
                case BRW_OPCODE_BREAK:
                case BRW_OPCODE_HALT:
                case BRW_OPCODE_CONTINUE:
-                  brw_inst_set_jip(p->devinfo, inst, relative_offset);
+                  brw_eu_inst_set_jip(p->devinfo, inst, relative_offset);
                   break;
                default:
                   fprintf(stderr, "Unknown opcode %d with JIP label\n", opcode);
@@ -58,7 +58,7 @@ i965_postprocess_labels()
                switch (opcode) {
                case BRW_OPCODE_IF:
                case BRW_OPCODE_ELSE:
-                  brw_inst_set_uip(p->devinfo, inst, relative_offset);
+                  brw_eu_inst_set_uip(p->devinfo, inst, relative_offset);
                   break;
                case BRW_OPCODE_WHILE:
                case BRW_OPCODE_ENDIF:
@@ -67,7 +67,7 @@ i965_postprocess_labels()
                case BRW_OPCODE_BREAK:
                case BRW_OPCODE_CONTINUE:
                case BRW_OPCODE_HALT:
-                  brw_inst_set_uip(p->devinfo, inst, relative_offset);
+                  brw_eu_inst_set_uip(p->devinfo, inst, relative_offset);
                   break;
                default:
                   fprintf(stderr, "Unknown opcode %d with UIP label\n", opcode);
@@ -121,10 +121,15 @@ brw_assemble(void *mem_ctx, const struct intel_device_info *devinfo,
       goto end;
    }
 
+   /* Add "inst groups" so validation errors can be recorded. */
+   for (int i = 0; i <= p->next_insn_offset; i += 16)
+      disasm_new_inst_group(disasm_info, i);
+
    if (!brw_validate_instructions(p->isa, p->store, 0,
                                   p->next_insn_offset, disasm_info)) {
+      dump_assembly(p->store, 0, p->next_insn_offset, disasm_info, NULL);
       ralloc_free(disasm_info);
-      fprintf(stderr, "Invalid instructions\n");
+      fprintf(stderr, "Invalid instructions.\n");
       goto end;
    }
 
@@ -138,18 +143,15 @@ brw_assemble(void *mem_ctx, const struct intel_device_info *devinfo,
       /* Adjust bin size to account for compacted instructions. */
       int compacted = 0;
       for (int i = 0; i < result.inst_count; i++) {
-         const brw_inst *inst = result.bin + i;
-         if (brw_inst_cmpt_control(devinfo, inst))
+         const brw_eu_inst *inst = result.bin + i;
+         if (brw_eu_inst_cmpt_control(devinfo, inst))
             compacted++;
       }
       result.bin_size -= compacted * 8;
    }
 
-   if ((flags & BRW_ASSEMBLE_DUMP) != 0) {
-      disasm_new_inst_group(disasm_info, 0);
-      disasm_new_inst_group(disasm_info, p->next_insn_offset);
+   if ((flags & BRW_ASSEMBLE_DUMP) != 0)
       dump_assembly(p->store, 0, p->next_insn_offset, disasm_info, NULL);
-   }
 
    ralloc_free(disasm_info);
 

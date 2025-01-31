@@ -70,8 +70,10 @@ def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
 
 begin_end_tp('cmd_buffer',
     args=[ArgStruct(type='const struct tu_cmd_buffer *', var='cmd')],
-    tp_struct=[Arg(type='VkCommandBufferLevel', name='level', var='cmd->vk.level', c_format='%s', to_prim_type='vk_CommandBufferLevel_to_str({})'),
-               Arg(type='uint8_t', name='render_pass_continue', var='!!(cmd->usage_flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)', c_format='%u')])
+    tp_struct=[Arg(type='const char *',         name='appName',              var='cmd->device->instance->vk.app_info.app_name', c_format='%s'),
+               Arg(type='const char *',         name='engineName',           var='cmd->device->instance->vk.app_info.engine_name', c_format='%s'),
+               Arg(type='VkCommandBufferLevel', name='level',                var='cmd->vk.level', c_format='%s', to_prim_type='vk_CommandBufferLevel_to_str({})'),
+               Arg(type='uint8_t',              name='render_pass_continue', var='!!(cmd->usage_flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)', c_format='%u')])
 
 begin_end_tp('render_pass',
     args=[ArgStruct(type='const struct tu_framebuffer *', var='fb'),
@@ -94,6 +96,7 @@ begin_end_tp('render_pass',
               Arg(type='uint32_t',                              var='avgPerSampleBandwidth',                                c_format='%u'),
               Arg(type='bool',                                  var='lrz',                                                  c_format='%s', to_prim_type='({} ? "true" : "false")'),
               Arg(type='const char *',                          var='lrzDisableReason',                                     c_format='%s'),
+              Arg(type='uint32_t',                              var='lrzDisabledAtDraw',                                    c_format='%u'),
               Arg(type='uint32_t',                              var='lrzStatus', c_format='%s', to_prim_type='(fd_lrz_gpu_dir_to_str((enum fd_lrz_gpu_dir)({} & 0xff)))', is_indirect=True),])
 
 
@@ -140,6 +143,7 @@ begin_end_tp('blit',
 
 begin_end_tp('compute',
     args=[Arg(type='uint8_t',  var='indirect',       c_format='%u'),
+          Arg(type='uint8_t',  var='unaligned',      c_format='%u'),
           Arg(type='uint16_t', var='local_size_x',   c_format='%u'),
           Arg(type='uint16_t', var='local_size_y',   c_format='%u'),
           Arg(type='uint16_t', var='local_size_z',   c_format='%u'),
@@ -148,6 +152,7 @@ begin_end_tp('compute',
           Arg(type='uint16_t', var='num_groups_z',   c_format='%u')])
 
 begin_end_tp('compute_indirect',
+             args=[Arg(type='uint8_t', var='unaligned', c_format='%u')],
              end_args=[ArgStruct(type='VkDispatchIndirectCommand', var='size',
                                       is_indirect=True, c_format="%ux%ux%u",
                                       fields=['x', 'y', 'z'])])

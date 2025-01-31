@@ -26,6 +26,7 @@
 #include "util/mesa-sha1.h"
 #include "vk_descriptors.h"
 #include "vk_util.h"
+#include "vk_acceleration_structure.h"
 
 #include "tu_buffer.h"
 #include "tu_buffer_view.h"
@@ -33,6 +34,7 @@
 #include "tu_image.h"
 #include "tu_formats.h"
 #include "tu_rmv.h"
+#include "bvh/tu_build_interface.h"
 
 static inline uint8_t *
 pool_base(struct tu_descriptor_pool *pool)
@@ -67,16 +69,10 @@ descriptor_size(struct tu_device *dev,
          COND(dev->physical_device->info->a7xx.storage_8bit, 1));
    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
       return binding->descriptorCount;
+   case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
    default:
       return A6XX_TEX_CONST_DWORDS * 4;
    }
-}
-
-static bool
-is_dynamic(VkDescriptorType type)
-{
-   return type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
-          type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 }
 
 static uint32_t
@@ -260,7 +256,7 @@ tu_CreateDescriptorSetLayout(
 
       uint32_t size =
          ALIGN_POT(set_layout->binding[b].array_size * set_layout->binding[b].size, 4 * A6XX_TEX_CONST_DWORDS);
-      if (is_dynamic(binding->descriptorType)) {
+      if (vk_descriptor_type_is_dynamic(binding->descriptorType)) {
          dynamic_offset_size += size;
       } else {
          set_layout->size += size;
@@ -352,7 +348,7 @@ tu_GetDescriptorSetLayoutSupport(
 
       uint64_t descriptor_sz;
 
-      if (is_dynamic(binding->descriptorType)) {
+      if (vk_descriptor_type_is_dynamic(binding->descriptorType)) {
          descriptor_sz = 0;
       } else if (binding->descriptorType == VK_DESCRIPTOR_TYPE_MUTABLE_EXT) {
          const VkMutableDescriptorTypeListEXT *list =
@@ -642,6 +638,9 @@ tu_descriptor_set_create(struct tu_device *device,
          int index;
 
          for (index = 0; index < pool->entry_count; ++index) {
+            if (pool->entries[index].size == 0)
+               continue;
+
             if (pool->entries[index].offset - offset >= layout_size)
                break;
             offset = pool->entries[index].offset + pool->entries[index].size;
@@ -663,6 +662,15 @@ tu_descriptor_set_create(struct tu_device *device,
          pool->entry_count++;
       } else
          return vk_error(device, VK_ERROR_OUT_OF_POOL_MEMORY);
+   } else if (!pool->host_memory_base) {
+      /* Also keep track of zero sized descriptor sets, such as descriptor
+       * sets with just dynamic descriptors, so that we can free the sets on
+       * vkDestroyDescriptorPool().
+       */
+      pool->entries[pool->entry_count].offset = ~0;
+      pool->entries[pool->entry_count].size = 0;
+      pool->entries[pool->entry_count].set = set;
+      pool->entry_count++;
    }
 
    if (layout->has_immutable_samplers) {
@@ -700,11 +708,17 @@ tu_descriptor_set_destroy(struct tu_device *device,
 {
    assert(!pool->host_memory_base);
 
-   if (free_bo && set->size && !pool->host_memory_base) {
-      uint32_t offset = (uint8_t*)set->mapped_ptr - pool_base(pool);
-
+   if (free_bo && !pool->host_memory_base) {
       for (int i = 0; i < pool->entry_count; ++i) {
-         if (pool->entries[i].offset == offset) {
+         if (pool->entries[i].set == set) {
+            if (set->size) {
+               ASSERTED uint32_t offset =
+                  (uint8_t *) set->mapped_ptr - pool_base(pool);
+               assert(pool->entries[i].offset == offset);
+            } else {
+               assert(pool->entries[i].size == 0);
+            }
+
             memmove(&pool->entries[i], &pool->entries[i+1],
                sizeof(pool->entries[i]) * (pool->entry_count - i - 1));
             --pool->entry_count;
@@ -1145,6 +1159,27 @@ write_sampler_descriptor(uint32_t *dst, VkSampler _sampler)
    memcpy(dst, sampler->descriptor, sizeof(sampler->descriptor));
 }
 
+static void
+write_accel_struct(uint32_t *dst, uint64_t va, uint64_t size)
+{
+   dst[0] = A6XX_TEX_CONST_0_TILE_MODE(TILE6_LINEAR) | A6XX_TEX_CONST_0_FMT(FMT6_32_UINT);
+
+   /* The overall range of the entire AS may be more than the max range, but
+    * the SSBO is only used to access the instance descriptors and header.
+    * Make sure that we don't specify a too-large range.
+    */
+   dst[1] = MAX2(DIV_ROUND_UP(size, AS_RECORD_SIZE), MAX_TEXEL_ELEMENTS);
+   dst[2] =
+      A6XX_TEX_CONST_2_STRUCTSIZETEXELS(AS_RECORD_SIZE / 4) |
+      A6XX_TEX_CONST_2_STARTOFFSETTEXELS(0) |
+      A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER);
+   dst[3] = 0;
+   dst[4] = A6XX_TEX_CONST_4_BASE_LO(va);
+   dst[5] = A6XX_TEX_CONST_5_BASE_HI(va >> 32);
+   for (int j = 6; j < A6XX_TEX_CONST_DWORDS; j++)
+      dst[j] = 0;
+}
+
 /* note: this is used with immutable samplers in push descriptors */
 static void
 write_sampler_push(uint32_t *dst, const struct tu_sampler *sampler)
@@ -1192,6 +1227,18 @@ tu_GetDescriptorEXT(
    case VK_DESCRIPTOR_TYPE_SAMPLER:
       write_sampler_descriptor(dest, *pDescriptorInfo->data.pSampler);
       break;
+   case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+      if (pDescriptorInfo->data.accelerationStructure == 0) {
+         write_accel_struct(dest, device->null_accel_struct_bo->iova,
+                            device->null_accel_struct_bo->size);
+      } else {
+         VkDeviceSize size = *(VkDeviceSize *)
+            util_sparse_array_get(&device->accel_struct_ranges,
+                                  pDescriptorInfo->data.accelerationStructure);
+         write_accel_struct(dest, pDescriptorInfo->data.accelerationStructure, size);
+      }
+      break;
+   }
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
       write_image_descriptor(dest, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
                              pDescriptorInfo->data.pInputAttachmentImage);
@@ -1217,14 +1264,15 @@ tu_update_descriptor_sets(const struct tu_device *device,
       const struct tu_descriptor_set_binding_layout *binding_layout =
          set->layout->binding + writeset->dstBinding;
       uint32_t *ptr = set->mapped_ptr;
-      if (writeset->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-          writeset->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
+      if (vk_descriptor_type_is_dynamic(writeset->descriptorType)) {
          ptr = set->dynamic_descriptors;
          ptr += binding_layout->dynamic_offset_offset / 4;
       } else {
          ptr = set->mapped_ptr;
          ptr += binding_layout->offset / 4;
       }
+
+      const VkWriteDescriptorSetAccelerationStructureKHR *accel_structs = NULL;
 
       /* for immutable samplers with push descriptors: */
       const bool copy_immutable_samplers =
@@ -1269,6 +1317,9 @@ tu_update_descriptor_sets(const struct tu_device *device,
          } while (remaining > 0);
 
          continue;
+      } else if (writeset->descriptorType ==
+                 VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
+         accel_structs = vk_find_struct_const(writeset->pNext, WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR);
       }
 
       ptr += binding_layout->size / 4 * writeset->dstArrayElement;
@@ -1306,6 +1357,18 @@ tu_update_descriptor_sets(const struct tu_device *device,
             else if (copy_immutable_samplers)
                write_sampler_push(ptr, &samplers[writeset->dstArrayElement + j]);
             break;
+         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+            VK_FROM_HANDLE(vk_acceleration_structure, accel_struct, accel_structs->pAccelerationStructures[j]);
+            if (accel_struct) {
+               write_accel_struct(ptr,
+                                  vk_acceleration_structure_get_va(accel_struct),
+                                  accel_struct->size);
+            } else {
+               write_accel_struct(ptr, device->null_accel_struct_bo->iova,
+                                  device->null_accel_struct_bo->size);
+            }
+            break;
+         }
          default:
             unreachable("unimplemented descriptor type");
             break;
@@ -1326,8 +1389,7 @@ tu_update_descriptor_sets(const struct tu_device *device,
          dst_set->layout->binding + copyset->dstBinding;
       uint32_t *src_ptr = src_set->mapped_ptr;
       uint32_t *dst_ptr = dst_set->mapped_ptr;
-      if (src_binding_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-          src_binding_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
+      if (vk_descriptor_type_is_dynamic(src_binding_layout->type)) {
          src_ptr = src_set->dynamic_descriptors;
          dst_ptr = dst_set->dynamic_descriptors;
          src_ptr += src_binding_layout->dynamic_offset_offset / 4;
@@ -1637,6 +1699,18 @@ tu_update_descriptor_set_with_template(
             else if (samplers)
                write_sampler_push(ptr, &samplers[j]);
             break;
+         case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+            VK_FROM_HANDLE(vk_acceleration_structure, accel_struct, *(const VkAccelerationStructureKHR *)src);
+            if (accel_struct) {
+               write_accel_struct(ptr,
+                                  vk_acceleration_structure_get_va(accel_struct),
+                                  accel_struct->size);
+            } else {
+               write_accel_struct(ptr, device->null_accel_struct_bo->iova,
+                                  device->null_accel_struct_bo->size);
+            }
+            break;
+         }
          default:
             unreachable("unimplemented descriptor type");
             break;

@@ -140,13 +140,14 @@ if [ "$HWCI_FREQ_MAX" = "true" ]; then
   # and enable throttling detection & reporting.
   # Additionally, set the upper limit for CPU scaling frequency to 65% of the
   # maximum permitted, as an additional measure to mitigate thermal throttling.
-  /intel-gpu-freq.sh -s 70% --cpu-set-max 65% -g all -d
+  /install/common/intel-gpu-freq.sh -s 70% --cpu-set-max 65% -g all -d
 fi
 
 # Start a little daemon to capture sysfs records and produce a JSON file
-if [ -x /kdl.sh ]; then
+KDL_PATH=/install/common/kdl.sh
+if [ -x "$KDL_PATH" ]; then
   echo "launch kdl.sh!"
-  /kdl.sh &
+  $KDL_PATH &
   BACKGROUND_PIDS="$! $BACKGROUND_PIDS"
 else
   echo "kdl.sh not found!"
@@ -160,8 +161,9 @@ fi
 
 # Start a little daemon to capture the first devcoredump we encounter.  (They
 # expire after 5 minutes, so we poll for them).
-if [ -x /capture-devcoredump.sh ]; then
-  /capture-devcoredump.sh &
+CAPTURE_DEVCOREDUMP=/install/common/capture-devcoredump.sh
+if [ -x "$CAPTURE_DEVCOREDUMP" ]; then
+  $CAPTURE_DEVCOREDUMP &
   BACKGROUND_PIDS="$! $BACKGROUND_PIDS"
 fi
 

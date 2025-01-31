@@ -40,7 +40,7 @@ protected:
 };
 
 nir_opt_loop_test::nir_opt_loop_test()
-   : nir_test::nir_test("nir_opt_loop_test")
+   : nir_test::nir_test("nir_opt_loop_test", MESA_SHADER_FRAGMENT)
 {
    nir_variable *var = nir_variable_create(b->shader, nir_var_shader_in, glsl_int_type(), "in");
    in_def = nir_load_var(b, var);
@@ -127,18 +127,116 @@ nir_opt_loop_test::test_merged_if(bool break_in_else)
    ASSERT_TRUE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
-
-   nir_alu_instr *alu = nir_instr_as_alu(term2->condition.ssa->parent_instr);
-   if (break_in_else)
-      ASSERT_TRUE(alu->op == nir_op_iand);
-   else
-      ASSERT_TRUE(alu->op == nir_op_ior);
 }
 
-TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_basic)
+TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_break_in_then)
 {
    test_merged_if(false);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:   // preds:
+          32     %0 = deref_var &in (shader_in int)
+          32     %1 = @load_deref (%0) (access=none)
+                      // succs: b1
+          loop {
+              block b1:   // preds: b0 b7
+              32     %2 = load_const (0x00000001)
+              1      %3 = ieq %1, %2 (0x1)
+                          // succs: b2 b3
+              if %3 {
+                  block b2:   // preds: b1
+                  1      %4 = undefined
+                              // succs: b4
+              } else {
+                  block b3:   // preds: b1
+                  32     %5 = deref_var &ubo1 (ubo int)
+                  32     %6 = @load_deref (%5) (access=none)
+                  32     %7 = load_const (0x00000002)
+                  1      %8 = ieq %6, %7 (0x2)
+                              // succs: b4
+              }
+              block b4:   // preds: b2 b3
+              1      %9 = phi b3: %8, b2: %4
+              1     %10 = ior %9, %3
+                          // succs: b5 b6
+              if %10 {
+                  block b5:// preds: b4
+                  break
+                  // succs: b8
+              } else {
+                  block b6:  // preds: b4, succs: b7
+              }
+              block b7:  // preds: b6, succs: b1
+          }
+          block b8:  // preds: b5, succs: b9
+          block b9:
+      }
+   )"));
+}
+
+TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_break_in_else)
+{
    test_merged_if(true);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:   // preds:
+          32     %0 = deref_var &in (shader_in int)
+          32     %1 = @load_deref (%0) (access=none)
+                      // succs: b1
+          loop {
+              block b1:   // preds: b0 b7
+              32     %2 = load_const (0x00000001)
+              1      %3 = ieq %1, %2 (0x1)
+                          // succs: b2 b3
+              if %3 {
+                  block b2:   // preds: b1
+                  32     %4 = deref_var &ubo1 (ubo int)
+                  32     %5 = @load_deref (%4) (access=none)
+                  32     %6 = load_const (0x00000002)
+                  1      %7 = ieq %5, %6 (0x2)
+                              // succs: b4
+              } else {
+                  block b3:   // preds: b1
+                  1      %8 = undefined
+                              // succs: b4
+              }
+              block b4:   // preds: b2 b3
+              1      %9 = phi b2: %7, b3: %8
+              1     %10 = iand %9, %3
+                          // succs: b5 b6
+              if %10 {
+                  block b5:  // preds: b4, succs: b7
+              } else {
+                  block b6:// preds: b4
+                  break
+                  // succs: b8
+              }
+              block b7:  // preds: b5, succs: b1
+          }
+          block b8:  // preds: b6, succs: b9
+          block b9:
+      }
+   )"));
 }
 
 TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_deref_after_first_if)
@@ -162,6 +260,61 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_deref_after_first_if)
    ASSERT_TRUE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:   // preds:
+          32     %0 = deref_var &in (shader_in int)
+          32     %1 = @load_deref (%0) (access=none)
+                      // succs: b1
+          loop {
+              block b1:   // preds: b0 b7
+              32     %2 = load_const (0x00000001)
+              1      %3 = ieq %1, %2 (0x1)
+                          // succs: b2 b3
+              if %3 {
+                  block b2:   // preds: b1
+                  1      %4 = undefined
+                              // succs: b4
+              } else {
+                  block b3:   // preds: b1
+                  32     %5 = deref_var &ubo1 (ubo int)
+                  32     %6 = @load_deref (%5) (access=none)
+                  32     %7 = load_const (0x00000002)
+                  1      %8 = ieq %6, %7 (0x2)
+                              // succs: b4
+              }
+              block b4:   // preds: b2 b3
+              1      %9 = phi b3: %8, b2: %4
+              1     %10 = ior %9, %3
+                          // succs: b5 b6
+              if %10 {
+                  block b5:// preds: b4
+                  break
+                  // succs: b8
+              } else {
+                  block b6:  // preds: b4, succs: b7
+              }
+              block b7:   // preds: b6
+              32    %11 = deref_var &ubo1 (ubo int)
+              32    %12 = @load_deref (%11) (access=none)
+              32    %13 = deref_var &out (shader_out int)
+                          @store_deref (%13, %12) (wrmask=x, access=none)
+                          // succs: b1
+          }
+          block b8:  // preds: b5, succs: b9
+          block b9:
+      }
+   )"));
 }
 
 TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_deref_phi_index)
@@ -186,6 +339,66 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_deref_phi_index)
    ASSERT_TRUE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:   // preds:
+          32     %0 = deref_var &in (shader_in int)
+          32     %1 = @load_deref (%0) (access=none)
+                      // succs: b1
+          loop {
+              block b1:   // preds: b0 b7
+              32     %2 = load_const (0x00000001)
+              1      %3 = ieq %1, %2 (0x1)
+                          // succs: b2 b3
+              if %3 {
+                  block b2:   // preds: b1
+                  1      %4 = undefined
+                  32     %5 = undefined
+                              // succs: b4
+              } else {
+                  block b3:   // preds: b1
+                  32     %6 = load_const (0x00000003 = 0.000000)
+                  32     %7 = deref_var &ubo_array (ubo int[4])
+                  32     %8 = deref_array &(*%7)[3] (ubo int)  // &ubo_array[3]
+                  32     %9 = @load_deref (%8) (access=none)
+                  32    %10 = load_const (0x00000002)
+                  1     %11 = ieq %9, %10 (0x2)
+                              // succs: b4
+              }
+              block b4:   // preds: b2 b3
+              1     %12 = phi b3: %11, b2: %4
+              32    %13 = phi b3: %6 (0x3), b2: %5
+              1     %14 = ior %12, %3
+                          // succs: b5 b6
+              if %14 {
+                  block b5:// preds: b4
+                  break
+                  // succs: b8
+              } else {
+                  block b6:  // preds: b4, succs: b7
+              }
+              block b7:   // preds: b6
+              32    %15 = deref_var &ubo_array (ubo int[4])
+              32    %16 = deref_array &(*%15)[%13] (ubo int)  // &ubo_array[%13]
+              32    %17 = @load_deref (%16) (access=none)
+              32    %18 = deref_var &out (shader_out int)
+                          @store_deref (%18, %17) (wrmask=x, access=none)
+                          // succs: b1
+          }
+          block b8:  // preds: b5, succs: b9
+          block b9:
+      }
+   )"));
 }
 
 TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_skip_merge_if_phis)
@@ -210,6 +423,57 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_skip_merge_if_phis)
    ASSERT_FALSE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:   // preds:
+          32     %0 = deref_var &in (shader_in int)
+          32     %1 = @load_deref (%0) (access=none)
+          32     %2 = deref_var &ubo1 (ubo int)
+          32     %3 = @load_deref (%2) (access=none)
+                      // succs: b1
+          loop {
+              block b1:   // preds: b0 b7
+              32     %4 = load_const (0x00000001)
+              1      %5 = ieq %1, %4 (0x1)
+                          // succs: b2 b3
+              if %5 {
+                  block b2:// preds: b1
+                  break
+                  // succs: b8
+              } else {
+                  block b3:  // preds: b1, succs: b4
+              }
+              block b4:   // preds: b3
+              32     %6 = deref_var &ubo1 (ubo int)
+              32     %7 = @load_deref (%6) (access=none)
+              32     %8 = load_const (0x00000002)
+              1      %9 = ieq %7, %8 (0x2)
+                          // succs: b5 b6
+              if %9 {
+                  block b5:// preds: b4
+                  break
+                  // succs: b8
+              } else {
+                  block b6:  // preds: b4, succs: b7
+              }
+              block b7:  // preds: b6, succs: b1
+          }
+          block b8:   // preds: b2 b5
+          32    %10 = phi b2: %1, b5: %3
+                      // succs: b9
+          block b9:
+      }
+   )"));
 }
 
 TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_skip_merge_if_phis_nested_loop)
@@ -238,6 +502,61 @@ TEST_F(nir_opt_loop_test, opt_loop_merge_terminators_skip_merge_if_phis_nested_l
    ASSERT_FALSE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:   // preds:
+          32     %0 = deref_var &in (shader_in int)
+          32     %1 = @load_deref (%0) (access=none)
+          32     %2 = deref_var &ubo1 (ubo int)
+          32     %3 = @load_deref (%2) (access=none)
+                      // succs: b1
+          loop {
+              block b1:  // preds: b0 b9, succs: b2
+              loop {
+                  block b2:  // preds: b1 b2, succs: b2
+              }
+              block b3:   // preds:
+              32     %4 = load_const (0x00000001)
+              1      %5 = ieq %1, %4 (0x1)
+                          // succs: b4 b5
+              if %5 {
+                  block b4:// preds: b3
+                  break
+                  // succs: b10
+              } else {
+                  block b5:  // preds: b3, succs: b6
+              }
+              block b6:   // preds: b5
+              32     %6 = deref_var &ubo1 (ubo int)
+              32     %7 = @load_deref (%6) (access=none)
+              32     %8 = load_const (0x00000002)
+              1      %9 = ieq %7, %8 (0x2)
+                          // succs: b7 b8
+              if %9 {
+                  block b7:// preds: b6
+                  break
+                  // succs: b10
+              } else {
+                  block b8:  // preds: b6, succs: b9
+              }
+              block b9:  // preds: b8, succs: b1
+          }
+          block b10:  // preds: b4 b7
+          32    %10 = phi b4: %1, b7: %3
+                      // succs: b11
+          block b11:
+      }
+   )"));
 }
 
 TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_ends_with_jump)
@@ -258,6 +577,51 @@ TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_ends_with_jump)
    ASSERT_FALSE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:  // preds:
+          32    %0 = deref_var &in (shader_in int)
+          32    %1 = @load_deref (%0) (access=none)
+                     // succs: b1
+          loop {
+              block b1:  // preds: b0 b5
+              1     %2 = load_const (true)
+                         // succs: b2 b3
+              if %2 (true) {
+                  block b2:// preds: b1
+                  break
+                  // succs: b8
+              } else {
+                  block b3:  // preds: b1, succs: b4
+              }
+              block b4:  // preds: b3
+              1     %3 = load_const (true)
+                         // succs: b5 b6
+              if %3 (true) {
+                  block b5:// preds: b4
+                  continue
+                  // succs: b1
+              } else {
+                  block b6:  // preds: b4, succs: b7
+              }
+              block b7:// preds: b6
+              return
+              // succs: b9
+          }
+          block b8:  // preds: b2, succs: b9
+          block b9:
+      }
+   )"));
 }
 
 TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_nontrivial_break)
@@ -284,6 +648,60 @@ TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_nontrivial_break)
    ASSERT_FALSE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:  // preds:
+          32    %0 = deref_var &in (shader_in int)
+          32    %1 = @load_deref (%0) (access=none)
+                     // succs: b1
+          loop {
+              block b1:  // preds: b0 b10
+              1     %2 = load_const (true)
+                         // succs: b2 b9
+              if %2 (true) {
+                  block b2:  // preds: b1
+                  1     %3 = load_const (true)
+                             // succs: b3 b7
+                  if %3 (true) {
+                      block b3:  // preds: b2
+                      1     %4 = load_const (true)
+                                 // succs: b4 b5
+                      if %4 (true) {
+                          block b4:// preds: b3
+                          break
+                          // succs: b11
+                      } else {
+                          block b5:  // preds: b3, succs: b6
+                      }
+                      block b6:  // preds: b5, succs: b8
+                  } else {
+                      block b7:  // preds: b2, succs: b8
+                  }
+                  block b8:// preds: b6 b7
+                  @nop
+                  break
+                  // succs: b11
+              } else {
+                  block b9:  // preds: b1, succs: b10
+              }
+              block b10:// preds: b9
+              @nop
+              // succs: b1
+          }
+          block b11:  // preds: b4 b8, succs: b12
+          block b12:
+      }
+   )"));
 }
 
 TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_deref)
@@ -303,4 +721,47 @@ TEST_F(nir_opt_loop_test, opt_loop_peel_initial_break_deref)
    ASSERT_TRUE(nir_opt_loop(b->shader));
 
    nir_validate_shader(b->shader, NULL);
+
+   check_nir_string(NIR_REFERENCE_SHADER(R"(
+      shader: MESA_SHADER_FRAGMENT
+      name: nir_opt_loop_test
+      subgroup_size: 0
+      decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
+      decl_var shader_out INTERP_MODE_NONE none int out (FRAG_RESULT_DEPTH.x, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int ubo1 (0, 0, 0)
+      decl_var ubo INTERP_MODE_NONE none int[4] ubo_array (0, 0, 0)
+      decl_function main () (entrypoint)
+
+      impl main {
+          block b0:  // preds:
+          32    %0 = deref_var &in (shader_in int)
+          32    %1 = @load_deref (%0) (access=none)
+          1     %2 = load_const (true)
+                     // succs: b1 b2
+          if %2 (true) {
+              block b1:  // preds: b0, succs: b8
+          } else {
+              block b2:  // preds: b0, succs: b3
+              loop {
+                  block b3:  // preds: b2 b6
+                  32    %3 = load_const (0x0000002a = 42)
+                  32    %4 = deref_var &out (shader_out int)
+                             @store_deref (%4, %3 (0x2a)) (wrmask=x, access=none)
+                  1     %5 = load_const (true)
+                             // succs: b4 b5
+                  if %5 (true) {
+                      block b4:// preds: b3
+                      break
+                      // succs: b7
+                  } else {
+                      block b5:  // preds: b3, succs: b6
+                  }
+                  block b6:  // preds: b5, succs: b3
+              }
+              block b7:  // preds: b4, succs: b8
+          }
+          block b8:  // preds: b1 b7, succs: b9
+          block b9:
+      }
+   )"));
 }

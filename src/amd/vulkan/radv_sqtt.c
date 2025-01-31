@@ -20,8 +20,6 @@
 #include "vk_command_pool.h"
 #include "vk_common_entrypoints.h"
 
-#define SQTT_BUFFER_ALIGN_SHIFT 12
-
 bool
 radv_is_instruction_timing_enabled(void)
 {
@@ -318,6 +316,7 @@ static bool
 radv_sqtt_init_bo(struct radv_device *device)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   const uint32_t align_shift = ac_sqtt_get_buffer_align_shift(&pdev->info);
    unsigned max_se = pdev->info.max_se;
    struct radeon_winsys *ws = device->ws;
    VkResult result;
@@ -326,10 +325,10 @@ radv_sqtt_init_bo(struct radv_device *device)
    /* The buffer size and address need to be aligned in HW regs. Align the
     * size as early as possible so that we do all the allocation & addressing
     * correctly. */
-   device->sqtt.buffer_size = align64(device->sqtt.buffer_size, 1u << SQTT_BUFFER_ALIGN_SHIFT);
+   device->sqtt.buffer_size = align64(device->sqtt.buffer_size, 1ull << align_shift);
 
    /* Compute total size of the thread trace BO for all SEs. */
-   size = align64(sizeof(struct ac_sqtt_data_info) * max_se, 1 << SQTT_BUFFER_ALIGN_SHIFT);
+   size = align64(sizeof(struct ac_sqtt_data_info) * max_se, 1ull << align_shift);
    size += device->sqtt.buffer_size * (uint64_t)max_se;
 
    struct radeon_winsys_bo *bo = NULL;
@@ -498,7 +497,7 @@ radv_sqtt_resize_bo(struct radv_device *device)
    return radv_sqtt_init_bo(device);
 }
 
-bool
+static bool
 radv_begin_sqtt(struct radv_queue *queue)
 {
    struct radv_device *device = radv_queue_device(queue);
@@ -572,7 +571,7 @@ radv_begin_sqtt(struct radv_queue *queue)
    return radv_queue_internal_submit(queue, cs);
 }
 
-bool
+static bool
 radv_end_sqtt(struct radv_queue *queue)
 {
    struct radv_device *device = radv_queue_device(queue);
@@ -636,6 +635,58 @@ radv_end_sqtt(struct radv_queue *queue)
    device->sqtt.stop_cs[family] = cs;
 
    return radv_queue_internal_submit(queue, cs);
+}
+
+void
+radv_sqtt_start_capturing(struct radv_queue *queue)
+{
+   struct radv_device *device = radv_queue_device(queue);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   if (ac_check_profile_state(&pdev->info)) {
+      fprintf(stderr, "radv: Canceling RGP trace request as a hang condition has been "
+                      "detected. Force the GPU into a profiling mode with e.g. "
+                      "\"echo profile_peak  > "
+                      "/sys/class/drm/card0/device/power_dpm_force_performance_level\"\n");
+      return;
+   }
+
+   /* Sample CPU/GPU clocks before starting the trace. */
+   if (!radv_sqtt_sample_clocks(device)) {
+      fprintf(stderr, "radv: Failed to sample clocks\n");
+   }
+
+   radv_begin_sqtt(queue);
+   assert(!device->sqtt_enabled);
+   device->sqtt_enabled = true;
+}
+
+bool
+radv_sqtt_stop_capturing(struct radv_queue *queue)
+{
+   struct radv_device *device = radv_queue_device(queue);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   struct ac_sqtt_trace sqtt_trace = {0};
+   struct ac_spm_trace spm_trace;
+   bool captured = true;
+
+   radv_end_sqtt(queue);
+   device->sqtt_enabled = false;
+
+   /* TODO: Do something better than this whole sync. */
+   device->vk.dispatch_table.QueueWaitIdle(radv_queue_to_handle(queue));
+
+   if (radv_get_sqtt_trace(queue, &sqtt_trace) && (!device->spm.bo || radv_get_spm_trace(queue, &spm_trace))) {
+      ac_dump_rgp_capture(&pdev->info, &sqtt_trace, device->spm.bo ? &spm_trace : NULL);
+   } else {
+      /* Failed to capture because the buffer was too small. */
+      captured = false;
+   }
+
+   /* Clear resources used for this capture. */
+   radv_reset_sqtt_trace(device);
+
+   return captured;
 }
 
 bool
@@ -709,8 +760,8 @@ radv_get_calibrated_timestamps(struct radv_device *device, uint64_t *cpu_timesta
                                                                .timeDomain = VK_TIME_DOMAIN_DEVICE_KHR,
                                                             }};
 
-   result =
-      radv_GetCalibratedTimestampsKHR(radv_device_to_handle(device), 2, timestamp_infos, timestamps, &max_deviation);
+   result = device->vk.dispatch_table.GetCalibratedTimestampsKHR(radv_device_to_handle(device), 2, timestamp_infos,
+                                                                 timestamps, &max_deviation);
    if (result != VK_SUCCESS)
       return result;
 

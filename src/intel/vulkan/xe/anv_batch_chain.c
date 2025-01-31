@@ -373,7 +373,8 @@ xe_queue_exec_locked(struct anv_queue *queue,
    }
    vk_free(&device->vk.alloc, xe_syncs);
 
-   if (cmd_buffer_count != 0 && cmd_buffers[0]->companion_rcs_cmd_buffer) {
+   if (cmd_buffer_count != 0 && cmd_buffers[0]->companion_rcs_cmd_buffer &&
+       result == VK_SUCCESS) {
       /* not allowed to chain cmd_buffers with companion_rcs_cmd_buffer  */
       assert(cmd_buffer_count == 1);
       result = xe_companion_rcs_queue_exec_locked(queue,

@@ -9,7 +9,9 @@
 #include "nouveau_context.h"
 #include "nouveau_device.h"
 
+#if !defined(ANDROID_STRICT)
 #include <xf86drm.h>
+#endif
 #include "drm-uapi/nouveau_drm.h"
 
 #define DRM_RS_IOCTL(FOO) \

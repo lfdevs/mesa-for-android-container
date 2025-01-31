@@ -1,5 +1,4 @@
 # initial skips
-dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic
 dEQP-VK.reconvergence.subgroup_uniform_control_flow_ballot.compute.nesting4.0.40
 dEQP-VK.reconvergence.subgroup_uniform_control_flow_ballot.compute.nesting4.7.10
 dEQP-VK.reconvergence.subgroup_uniform_control_flow_elect.compute.nesting4.0.40
@@ -7,3 +6,6 @@ dEQP-VK.reconvergence.subgroup_uniform_control_flow_elect.compute.nesting4.7.10
 dEQP-VK.reconvergence.workgroup_uniform_control_flow_ballot.compute.nesting4.7.10
 dEQP-VK.reconvergence.workgroup_uniform_control_flow_elect.compute.nesting4.7.10
 
+# Not supported on ADL
+dEQP-VK.binding_model.descriptor_buffer.sparse_binding_buffer.*
+dEQP-VK.binding_model.descriptor_buffer.sparse_residency_buffer.*

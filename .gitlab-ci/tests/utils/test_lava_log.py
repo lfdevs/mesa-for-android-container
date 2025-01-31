@@ -5,7 +5,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from lava.exceptions import MesaCIKnownIssueException, MesaCITimeoutError
@@ -76,35 +76,35 @@ def test_gitlab_section(method, collapsed, expectation):
 def test_gl_sections():
     lines = [
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "debug",
             "msg": "Received signal: <STARTRUN> 0_setup-ssh-server 10145749_1.3.2.3.1",
         },
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "debug",
             "msg": "Received signal: <STARTRUN> 0_mesa 5971831_1.3.2.3.1",
         },
         # Redundant log message which triggers the same Gitlab Section, it
         # should be ignored, unless the id is different
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "target",
             "msg": "[    7.778836] <LAVA_SIGNAL_STARTRUN 0_mesa 5971831_1.3.2.3.1>",
         },
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "debug",
             "msg": "Received signal: <STARTTC> mesa-ci_iris-kbl-traces",
         },
         # Another redundant log message
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "target",
             "msg": "[   16.997829] <LAVA_SIGNAL_STARTTC mesa-ci_iris-kbl-traces>",
         },
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "target",
             "msg": "<LAVA_SIGNAL_ENDTC mesa-ci_iris-kbl-traces>",
         },
@@ -140,12 +140,12 @@ def test_gl_sections():
 def test_log_follower_flush():
     lines = [
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "debug",
             "msg": "Received signal: <STARTTC> mesa-ci_iris-kbl-traces",
         },
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "target",
             "msg": "<LAVA_SIGNAL_ENDTC mesa-ci_iris-kbl-traces>",
         },
@@ -292,7 +292,7 @@ WATCHDOG_SCENARIOS = {
 def test_log_follower_watchdog(frozen_time, timedelta_kwargs, exception):
     lines = [
         {
-            "dt": datetime.now(),
+            "dt": datetime.now(tz=UTC),
             "lvl": "debug",
             "msg": "Received signal: <STARTTC> mesa-ci_iris-kbl-traces",
         },
@@ -401,7 +401,7 @@ def test_detect_a6xx_gpu_recovery_failure(frozen_time):
     log_follower = LogFollower()
     lava_log_hints = LAVALogHints(log_follower=log_follower)
     failure_message = {
-        "dt": datetime.now().isoformat(),
+        "dt": datetime.now(tz=UTC).isoformat(),
         "msg": A6XX_GPU_RECOVERY_FAILURE_MESSAGE[0],
         "lvl": "feedback",
     }
@@ -410,13 +410,13 @@ def test_detect_a6xx_gpu_recovery_failure(frozen_time):
             lava_log_hints.detect_a6xx_gpu_recovery_failure(failure_message)
             # Simulate the passage of time within the watch period
             frozen_time.tick(1)
-            failure_message["dt"] = datetime.now().isoformat()
+            failure_message["dt"] = datetime.now(tz=UTC).isoformat()
 
 def test_detect_a6xx_gpu_recovery_success(frozen_time):
     log_follower = LogFollower()
     lava_log_hints = LAVALogHints(log_follower=log_follower)
     failure_message = {
-        "dt": datetime.now().isoformat(),
+        "dt": datetime.now(tz=UTC).isoformat(),
         "msg": A6XX_GPU_RECOVERY_FAILURE_MESSAGE[0],
         "lvl": "feedback",
     }
@@ -424,12 +424,12 @@ def test_detect_a6xx_gpu_recovery_success(frozen_time):
     for _ in range(A6XX_GPU_RECOVERY_FAILURE_MAX_COUNT - 1):
         lava_log_hints.detect_a6xx_gpu_recovery_failure(failure_message)
         frozen_time.tick(1)
-        failure_message["dt"] = datetime.now().isoformat()
+        failure_message["dt"] = datetime.now(tz=UTC).isoformat()
 
     # Simulate the passage of time outside of the watch period
     frozen_time.tick(60 * A6XX_GPU_RECOVERY_WATCH_PERIOD_MIN + 1)
     failure_message = {
-        "dt": datetime.now().isoformat(),
+        "dt": datetime.now(tz=UTC).isoformat(),
         "msg": A6XX_GPU_RECOVERY_FAILURE_MESSAGE[1],
         "lvl": "feedback",
     }

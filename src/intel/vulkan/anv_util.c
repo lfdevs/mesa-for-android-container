@@ -27,6 +27,7 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
+#include <sys/stat.h>
 
 #include "anv_private.h"
 #include "vk_enum_to_str.h"
@@ -181,7 +182,7 @@ anv_device_print_init(struct anv_device *device)
 {
    VkResult result =
       anv_device_alloc_bo(device, "printf",
-                          debug_get_num_option("ANV_PRINTF_BUFFER_SIZE", 1024 * 1024),
+                          anv_printf_buffer_size(),
                           ANV_BO_ALLOC_CAPTURE |
                           ANV_BO_ALLOC_MAPPED |
                           ANV_BO_ALLOC_HOST_COHERENT |
@@ -224,4 +225,90 @@ anv_device_print_shader_prints(struct anv_device *device)
    *size = 4;
 
    simple_mtx_unlock(&device->printf.mutex);
+}
+
+
+static void
+create_directory(const char *dir, const char *sub_dir)
+{
+   char full_path[PATH_MAX];
+   snprintf(full_path, sizeof(full_path), "%s/%s", dir, sub_dir);
+
+   if (mkdir(dir, 0777) == -1 && errno != EEXIST) {
+      perror("Error creating directory");
+      return;
+   }
+
+   if (mkdir(full_path, 0777) == -1 && errno != EEXIST) {
+      perror("Error creating sub directory");
+      return;
+   }
+}
+
+static void
+create_bvh_dump_file(struct anv_bvh_dump *bvh)
+{
+   if (bvh == NULL) {
+      fprintf(stderr, "Error: BVH DUMP structure is NULL\n");
+      return;
+   }
+
+   char file_name[256];
+   const char *dump_directory = "bvh_dump";
+   const char *dump_sub_directory = NULL;
+
+   switch (bvh->dump_type) {
+   case BVH_ANV:
+      dump_sub_directory = "BVH_ANV";
+      break;
+   case BVH_IR_HDR:
+      dump_sub_directory = "BVH_IR_HDR";
+      break;
+   case BVH_IR_AS:
+      dump_sub_directory = "BVH_IR_AS";
+      break;
+   default:
+      unreachable("invalid dump type");
+   }
+
+   create_directory(dump_directory, dump_sub_directory);
+
+   snprintf(file_name, sizeof(file_name),
+            bvh->geometry_type == VK_GEOMETRY_TYPE_INSTANCES_KHR
+               ? "%s/%s/tlas_%d.txt"
+               : "%s/%s/blas_%d.txt",
+            dump_directory, dump_sub_directory, bvh->bvh_id);
+
+   FILE *file = fopen(file_name, "w");
+   if (file == NULL) {
+      perror("Error creating file");
+      return;
+   }
+
+   fprintf(stderr, "BVH Dump File created: %s\n", file_name);
+
+   uint8_t *addr = (uint8_t *)(bvh->bo->map);
+   /* Dump every bytes like this: B0 B1 B2 B3 ... B15 */
+   for (uint64_t i = 0; i < bvh->dump_size; i++) {
+      uint8_t result = *(volatile uint8_t *)((uint8_t *)addr + i);
+      fprintf(file, "%02" PRIx8 " ", result);
+      if ((i + 1) % 16 == 0) {
+         fprintf(file, "\n");
+      }
+   }
+
+   fclose(file);
+}
+
+void anv_dump_bvh_to_files(struct anv_device *device)
+{
+   /* device->mutex is acquired in anv_queue_submit, so no need to lock here. */
+   list_for_each_entry_safe(struct anv_bvh_dump, bvh_dump, &device->bvh_dumps,
+                            link) {
+      create_bvh_dump_file(bvh_dump);
+
+      anv_device_release_bo(device, bvh_dump->bo);
+      list_del(&bvh_dump->link);
+      free(bvh_dump);
+   }
 }

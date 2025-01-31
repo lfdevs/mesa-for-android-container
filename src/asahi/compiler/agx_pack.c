@@ -556,7 +556,7 @@ agx_pack_alu(struct util_dynarray *emission, agx_instr *I)
 
 static void
 agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
-               agx_instr *I, bool needs_g13x_coherency)
+               agx_instr *I, enum u_tristate needs_g13x_coherency)
 {
    switch (I->op) {
    case AGX_OPCODE_LD_TILE:
@@ -796,6 +796,16 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
       unsigned R = agx_pack_atomic_dest(I, I->dest[0], &Rt);
       unsigned S = agx_pack_atomic_source(I, I->src[0]);
 
+      /* Due to a hardware quirk, there is a bit in the atomic instruction that
+       * differs based on the target GPU. So, if we're packing an atomic, the
+       * shader must be keyed to a particular GPU (either needs_g13x_coherency
+       * or not needs_g13x_coherency). Assert that here.
+       *
+       * needs_g13x_coherency == U_TRISTATE_UNSET is only allowed for shaders
+       * that do not use atomics and are therefore portable across devices.
+       */
+      assert(needs_g13x_coherency != U_TRISTATE_UNSET);
+
       uint64_t raw =
          agx_opcodes_info[I->op].encoding.exact |
          (((uint64_t)I->atomic_opc) << 6) | ((R & BITFIELD_MASK(6)) << 10) |
@@ -805,7 +815,7 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
          (((uint64_t)((O >> 4) & BITFIELD_MASK(4))) << 32) |
          (((uint64_t)((A >> 4) & BITFIELD_MASK(4))) << 36) |
          (((uint64_t)(R >> 6)) << 40) |
-         (needs_g13x_coherency ? BITFIELD64_BIT(45) : 0) |
+         (needs_g13x_coherency == U_TRISTATE_YES ? BITFIELD64_BIT(45) : 0) |
          (Rt ? BITFIELD64_BIT(47) : 0) | (((uint64_t)S) << 48) |
          (((uint64_t)(O >> 8)) << 56);
 

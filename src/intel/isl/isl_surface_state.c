@@ -639,16 +639,16 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       assert(isl_is_pow2(isl_format_get_layout(info->view->format)->bpb));
       assert(info->surf->levels == 1);
       assert(info->surf->logical_level0_px.array_len == 1);
-      assert(info->aux_usage == ISL_AUX_USAGE_NONE);
 
-      if (GFX_VER >= 8) {
-         /* Broadwell added more rules. */
-         assert(info->surf->samples == 1);
-         if (isl_format_get_layout(info->view->format)->bpb == 8)
-            assert(info->x_offset_sa % 16 == 0);
-         if (isl_format_get_layout(info->view->format)->bpb == 16)
-            assert(info->x_offset_sa % 8 == 0);
-      }
+#if GFX_VER >= 8
+      /* Broadwell added more rules. */
+      assert(info->surf->samples == 1);
+      assert(isl_encode_aux_mode[info->aux_usage] == AUX_NONE);
+      if (isl_format_get_layout(info->view->format)->bpb == 8)
+         assert(info->x_offset_sa % 16 == 0);
+      if (isl_format_get_layout(info->view->format)->bpb == 16)
+         assert(info->x_offset_sa % 8 == 0);
+#endif
 
 #if GFX_VER >= 7
       s.SurfaceArray = false;
@@ -763,7 +763,14 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 #if GFX_VER == 12
       s.MemoryCompressionEnable = info->aux_usage == ISL_AUX_USAGE_MC;
-
+#endif
+#if GFX_VERx10 == 125
+      /* In the ACM PRMs, the programming notes under
+       * RENDER_SURFACE_STATE::MemoryCompressionEnable state that the
+       * following bit must be set for media compression.
+       */
+      s.DecompressInL3 = info->aux_usage == ISL_AUX_USAGE_MC;
+#elif GFX_VERx10 == 120
       /* The Tiger Lake PRM for RENDER_SURFACE_STATE::DecompressInL3 says:
        *
        *    When this field is set to 1h, the associated compressible surface,

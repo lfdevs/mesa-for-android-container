@@ -37,6 +37,16 @@ nir_function_can_inline(nir_function *function)
    bool can_inline = true;
    if (!function->should_inline) {
       if (function->impl) {
+         nir_foreach_block(block, function->impl) {
+            nir_foreach_instr(instr, block) {
+               if (instr->type != nir_instr_type_intrinsic)
+                  continue;
+               nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+               if (intr->intrinsic == nir_intrinsic_barrier)
+                  return true;
+            }
+         }
+
          if (function->impl->num_blocks > 2)
             can_inline = false;
          if (function->impl->ssa_alloc > 45)
@@ -194,7 +204,10 @@ static bool inline_functions_pass(nir_builder *b,
       return false;
 
    nir_call_instr *call = nir_instr_as_call(instr);
-   assert(call->callee->impl);
+   if (!call->callee->impl)
+      return false;
+
+   assert(!call->indirect_callee.ssa);
 
    if (b->shader->options->driver_functions &&
        b->shader->info.stage == MESA_SHADER_KERNEL) {

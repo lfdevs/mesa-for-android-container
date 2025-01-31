@@ -44,7 +44,8 @@ nvk_device_init_meta(struct nvk_device *dev)
    if (result != VK_SUCCESS)
       return result;
 
-   dev->meta.use_gs_for_layer = pdev->info.cls_eng3d < MAXWELL_B,
+   dev->meta.use_gs_for_layer = pdev->info.cls_eng3d < MAXWELL_B;
+   dev->meta.use_rect_list_pipeline = true;
    dev->meta.cmd_bind_map_buffer = nvk_cmd_bind_map_buffer;
    dev->meta.max_bind_map_buffer_size_B = 64 * 1024; /* TODO */
 
@@ -171,7 +172,7 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
    default:
       unreachable("Unknown descriptor set type");
    }
-   nvk_cmd_dirty_cbufs_for_descriptors(cmd, ~0, 0, 1, 0, 0);
+   nvk_cmd_dirty_cbufs_for_descriptors(cmd, ~0, 0, 1);
 
    /* Restore set_dynaic_buffer_start because meta binding set 0 can disturb
     * all dynamic buffers starts for all sets.

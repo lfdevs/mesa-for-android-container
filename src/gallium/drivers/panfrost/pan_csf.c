@@ -28,6 +28,7 @@
 #include "genxml/cs_builder.h"
 #include "panfrost/lib/genxml/cs_builder.h"
 
+#include "gen_macros.h"
 #include "pan_cmdstream.h"
 #include "pan_context.h"
 #include "pan_csf.h"
@@ -92,17 +93,19 @@ csf_update_tiler_oom_ctx(struct cs_builder *b, uint64_t addr)
     (PAN_INCREMENTAL_RENDERING_##_pass##_PASS * sizeof(struct panfrost_ptr)) + \
     offsetof(struct panfrost_ptr, gpu))
 
-static void
+static int
 csf_oom_handler_init(struct panfrost_context *ctx)
 {
+   struct panfrost_bo *cs_bo = NULL, *reg_save_bo = NULL;
    struct panfrost_device *dev = pan_device(ctx->base.screen);
-   struct panfrost_bo *cs_bo =
-      panfrost_bo_create(dev, 4096, 0, "Temporary CS buffer");
-   assert(cs_bo);
 
-   struct panfrost_bo *reg_save_bo =
+   cs_bo =
+      panfrost_bo_create(dev, 4096, 0, "Temporary CS buffer");
+   reg_save_bo =
       panfrost_bo_create(dev, 4096, 0, "reg save bo");
-   assert(reg_save_bo);
+
+   if (!cs_bo || !reg_save_bo)
+      goto fail;
 
    struct cs_buffer queue = {
       .cpu = cs_bo->ptr.cpu,
@@ -110,80 +113,96 @@ csf_oom_handler_init(struct panfrost_context *ctx)
       .capacity = panfrost_bo_size(cs_bo) / sizeof(uint64_t),
    };
    struct cs_builder b;
-   struct cs_exception_handler handler;
    const struct cs_builder_conf conf = {
       .nr_registers = 96,
       .nr_kernel_registers = 4,
       .reg_perm = (dev->debug & PAN_DBG_CS) ? csf_reg_perm_cb : NULL,
    };
    cs_builder_init(&b, &conf, queue);
-   cs_exception_handler_start(&b, &handler, reg_save_bo->ptr.gpu, 0);
 
-   struct cs_index tiler_oom_ctx = cs_reg64(&b, TILER_OOM_CTX_REG);
-   struct cs_index counter = cs_reg32(&b, 47);
-   struct cs_index zero = cs_reg64(&b, 48);
-   struct cs_index flush_id = cs_reg32(&b, 48);
-   struct cs_index tiler_ctx = cs_reg64(&b, 50);
-   struct cs_index completed_top = cs_reg64(&b, 52);
-   struct cs_index completed_bottom = cs_reg64(&b, 54);
-   struct cs_index completed_chunks = cs_reg_tuple(&b, 52, 4);
+   struct cs_exception_handler_ctx handler_ctx = {
+      .ctx_reg = cs_reg64(&b, TILER_OOM_CTX_REG),
+      .dump_addr_offset = offsetof(struct pan_csf_tiler_oom_ctx, dump_addr),
+      .ls_sb_slot = 0,
+   };
+   struct cs_exception_handler handler;
 
-   /* Use different framebuffer descriptor depending on whether incremental
-    * rendering has already been triggered */
-   cs_load32_to(&b, counter, tiler_oom_ctx, FIELD_OFFSET(counter));
-   cs_wait_slot(&b, 0, false);
-   cs_if(&b, MALI_CS_CONDITION_GREATER, counter) {
-      cs_load64_to(&b, cs_reg64(&b, 40), tiler_oom_ctx, FBD_OFFSET(MIDDLE));
+   cs_exception_handler_def(&b, &handler, handler_ctx) {
+      struct cs_index tiler_oom_ctx = cs_reg64(&b, TILER_OOM_CTX_REG);
+      struct cs_index counter = cs_reg32(&b, 47);
+      struct cs_index zero = cs_reg64(&b, 48);
+      struct cs_index flush_id = cs_reg32(&b, 48);
+      struct cs_index tiler_ctx = cs_reg64(&b, 50);
+      struct cs_index completed_top = cs_reg64(&b, 52);
+      struct cs_index completed_bottom = cs_reg64(&b, 54);
+      struct cs_index completed_chunks = cs_reg_tuple(&b, 52, 4);
+
+      /* Use different framebuffer descriptor depending on whether incremental
+       * rendering has already been triggered */
+      cs_load32_to(&b, counter, tiler_oom_ctx, FIELD_OFFSET(counter));
+      cs_wait_slot(&b, 0, false);
+      cs_if(&b, MALI_CS_CONDITION_GREATER, counter) {
+         cs_load64_to(&b, cs_reg64(&b, 40), tiler_oom_ctx, FBD_OFFSET(MIDDLE));
+      }
+      cs_else(&b) {
+         cs_load64_to(&b, cs_reg64(&b, 40), tiler_oom_ctx, FBD_OFFSET(FIRST));
+      }
+
+      cs_load32_to(&b, cs_reg32(&b, 42), tiler_oom_ctx, FIELD_OFFSET(bbox_min));
+      cs_load32_to(&b, cs_reg32(&b, 43), tiler_oom_ctx, FIELD_OFFSET(bbox_max));
+      cs_move64_to(&b, cs_reg64(&b, 44), 0);
+      cs_move32_to(&b, cs_reg32(&b, 46), 0);
+      cs_wait_slot(&b, 0, false);
+
+      /* Run the fragment job and wait */
+      cs_set_scoreboard_entry(&b, 3, 0);
+      cs_run_fragment(&b, false, MALI_TILE_RENDER_ORDER_Z_ORDER, false);
+      cs_wait_slot(&b, 3, false);
+
+      /* Increment counter */
+      cs_add32(&b, counter, counter, 1);
+      cs_store32(&b, counter, tiler_oom_ctx, FIELD_OFFSET(counter));
+
+      /* Load completed chunks */
+      cs_load64_to(&b, tiler_ctx, tiler_oom_ctx, FIELD_OFFSET(tiler_desc));
+      cs_wait_slot(&b, 0, false);
+      cs_load_to(&b, completed_chunks, tiler_ctx, BITFIELD_MASK(4), 10 * 4);
+      cs_wait_slot(&b, 0, false);
+
+      cs_finish_fragment(&b, false, completed_top, completed_bottom, cs_now());
+
+      /* Zero out polygon list, completed_top and completed_bottom */
+      cs_move64_to(&b, zero, 0);
+      cs_store64(&b, zero, tiler_ctx, 0);
+      cs_store64(&b, zero, tiler_ctx, 10 * 4);
+      cs_store64(&b, zero, tiler_ctx, 12 * 4);
+
+      /* We need to flush the texture caches so future preloads see the new
+       * content. */
+      cs_flush_caches(&b, MALI_CS_FLUSH_MODE_NONE, MALI_CS_FLUSH_MODE_NONE,
+                      true, flush_id, cs_defer(0, 0));
+
+      cs_wait_slot(&b, 0, false);
+
+      cs_set_scoreboard_entry(&b, 2, 0);
    }
-   cs_else(&b) {
-      cs_load64_to(&b, cs_reg64(&b, 40), tiler_oom_ctx, FBD_OFFSET(FIRST));
-   }
-
-   cs_load32_to(&b, cs_reg32(&b, 42), tiler_oom_ctx, FIELD_OFFSET(bbox_min));
-   cs_load32_to(&b, cs_reg32(&b, 43), tiler_oom_ctx, FIELD_OFFSET(bbox_max));
-   cs_move64_to(&b, cs_reg64(&b, 44), 0);
-   cs_move32_to(&b, cs_reg32(&b, 46), 0);
-   cs_wait_slot(&b, 0, false);
-
-   /* Run the fragment job and wait */
-   cs_set_scoreboard_entry(&b, 3, 0);
-   cs_run_fragment(&b, false, MALI_TILE_RENDER_ORDER_Z_ORDER, false);
-   cs_wait_slot(&b, 3, false);
-
-   /* Increment counter */
-   cs_add32(&b, counter, counter, 1);
-   cs_store32(&b, counter, tiler_oom_ctx, FIELD_OFFSET(counter));
-
-   /* Load completed chunks */
-   cs_load64_to(&b, tiler_ctx, tiler_oom_ctx, FIELD_OFFSET(tiler_desc));
-   cs_wait_slot(&b, 0, false);
-   cs_load_to(&b, completed_chunks, tiler_ctx, BITFIELD_MASK(4), 10 * 4);
-   cs_wait_slot(&b, 0, false);
-
-   cs_finish_fragment(&b, false, completed_top, completed_bottom, cs_now());
-
-   /* Zero out polygon list, completed_top and completed_bottom */
-   cs_move64_to(&b, zero, 0);
-   cs_store64(&b, zero, tiler_ctx, 0);
-   cs_store64(&b, zero, tiler_ctx, 10 * 4);
-   cs_store64(&b, zero, tiler_ctx, 12 * 4);
-
-   /* We need to flush the texture caches so future preloads see the new
-    * content. */
-   cs_flush_caches(&b, MALI_CS_FLUSH_MODE_NONE, MALI_CS_FLUSH_MODE_NONE, true,
-                   flush_id, cs_defer(0, 0));
-
-   cs_wait_slot(&b, 0, false);
-
-   cs_set_scoreboard_entry(&b, 2, 0);
-
-   cs_exception_handler_end(&b, &handler);
 
    assert(cs_is_valid(&b));
    cs_finish(&b);
    ctx->csf.tiler_oom_handler.cs_bo = cs_bo;
-   ctx->csf.tiler_oom_handler.length = b.root_chunk.size * 8;
+   ctx->csf.tiler_oom_handler.length = handler.length * sizeof(uint64_t);
    ctx->csf.tiler_oom_handler.save_bo = reg_save_bo;
+
+   return 0;
+
+fail:
+   if (cs_bo)
+      panfrost_bo_unreference(cs_bo);
+
+   if (reg_save_bo)
+      panfrost_bo_unreference(reg_save_bo);
+
+   return -1;
 }
 
 #undef FBD_OFFSET
@@ -206,14 +225,15 @@ alloc_fbd(struct panfrost_batch *batch)
       PAN_DESC_ARRAY(MAX2(batch->key.nr_cbufs, 1), RENDER_TARGET));
 }
 
-void
+int
 GENX(csf_init_batch)(struct panfrost_batch *batch)
 {
    struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
 
    /* Initialize the CS chunk pool. */
-   panfrost_pool_init(&batch->csf.cs_chunk_pool, NULL, dev, 0, 32768,
-                      "CS chunk pool", false, true);
+   if (panfrost_pool_init(&batch->csf.cs_chunk_pool, NULL, dev, 0, 32768,
+                          "CS chunk pool", false, true))
+      return -1;
 
    if (dev->debug & PAN_DBG_CS) {
       /* Load/store tracker if extra checks are enabled. */
@@ -224,6 +244,9 @@ GENX(csf_init_batch)(struct panfrost_batch *batch)
 
    /* Allocate and bind the command queue */
    struct cs_buffer queue = csf_alloc_cs_buffer(batch);
+   if (!queue.gpu)
+      return -1;
+
    const struct cs_builder_conf conf = {
       .nr_registers = 96,
       .nr_kernel_registers = 4,
@@ -244,8 +267,14 @@ GENX(csf_init_batch)(struct panfrost_batch *batch)
    cs_set_scoreboard_entry(b, 2, 0);
 
    batch->framebuffer = alloc_fbd(batch);
+   if (!batch->framebuffer.gpu)
+      return -1;
 
    batch->tls = pan_pool_alloc_desc(&batch->pool.base, LOCAL_STORAGE);
+   if (!batch->tls.cpu)
+      return -1;
+
+   return 0;
 }
 
 static void
@@ -295,7 +324,7 @@ csf_submit_gsubmit(struct panfrost_context *ctx,
    return 0;
 }
 
-static void
+static int
 csf_emit_batch_end(struct panfrost_batch *batch)
 {
    struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
@@ -307,6 +336,9 @@ csf_emit_batch_end(struct panfrost_batch *batch)
    if (dev->debug & PAN_DBG_SYNC) {
       /* Get the CS state */
       batch->csf.cs.state = pan_pool_alloc_aligned(&batch->pool.base, 8, 8);
+      if (!batch->csf.cs.state.cpu)
+         return -1;
+
       memset(batch->csf.cs.state.cpu, ~0, 8);
       cs_move64_to(b, cs_reg64(b, 90), batch->csf.cs.state.gpu);
       cs_store_state(b, cs_reg64(b, 90), 0, MALI_CS_STATE_ERROR_STATUS,
@@ -321,8 +353,11 @@ csf_emit_batch_end(struct panfrost_batch *batch)
    cs_wait_slot(b, 0, false);
 
    /* Finish the command stream */
-   assert(cs_is_valid(batch->csf.cs.builder));
+   if (!cs_is_valid(batch->csf.cs.builder))
+      return -1;
+
    cs_finish(batch->csf.cs.builder);
+   return 0;
 }
 
 static int
@@ -541,9 +576,9 @@ csf_submit_wait_and_dump(struct panfrost_batch *batch,
 
       for (unsigned i = 0; i < gsubmit->queue_submits.count; i++) {
          uint32_t regs[256] = {0};
-         pandecode_cs(dev->decode_ctx, qsubmits[i].stream_addr,
-                      qsubmits[i].stream_size, panfrost_device_gpu_id(dev),
-                      regs);
+         pandecode_interpret_cs(dev->decode_ctx, qsubmits[i].stream_addr,
+                                qsubmits[i].stream_size,
+                                panfrost_device_gpu_id(dev), regs);
       }
 
       if (dev->debug & PAN_DBG_DUMP)
@@ -551,8 +586,7 @@ csf_submit_wait_and_dump(struct panfrost_batch *batch,
    }
 
    if (crash) {
-      fprintf(stderr, "Incomplete job or timeout\n");
-      fflush(NULL);
+      mesa_loge("Incomplete job or timeout\n");
       abort();
    }
 }
@@ -560,8 +594,12 @@ csf_submit_wait_and_dump(struct panfrost_batch *batch,
 int
 GENX(csf_submit_batch)(struct panfrost_batch *batch)
 {
+   int ret;
+
    /* Close the batch before submitting. */
-   csf_emit_batch_end(batch);
+   ret = csf_emit_batch_end(batch);
+   if (ret)
+      return ret;
 
    uint64_t cs_start = cs_root_chunk_gpu_addr(batch->csf.cs.builder);
    uint32_t cs_size = cs_root_chunk_size(batch->csf.cs.builder);
@@ -569,7 +607,6 @@ GENX(csf_submit_batch)(struct panfrost_batch *batch)
    struct panfrost_device *dev = pan_device(ctx->base.screen);
    uint32_t vm_sync_handle = panthor_kmod_vm_sync_handle(dev->kmod.vm);
    struct util_dynarray syncops;
-   int ret;
 
    util_dynarray_init(&syncops, NULL);
 
@@ -611,6 +648,59 @@ GENX(csf_submit_batch)(struct panfrost_batch *batch)
 out_free_syncops:
    util_dynarray_fini(&syncops);
    return ret;
+}
+
+static uint64_t
+csf_get_tiler_desc(struct panfrost_batch *batch)
+{
+   if (batch->tiler_ctx.valhall.desc)
+      return batch->tiler_ctx.valhall.desc;
+
+   struct panfrost_ptr t =
+      pan_pool_alloc_desc(&batch->pool.base, TILER_CONTEXT);
+
+   batch->csf.pending_tiler_desc = t.cpu;
+   batch->tiler_ctx.valhall.desc = t.gpu;
+   return batch->tiler_ctx.valhall.desc;
+}
+
+static void
+csf_emit_tiler_desc(struct panfrost_batch *batch, const struct pan_fb_info *fb)
+{
+   struct panfrost_context *ctx = batch->ctx;
+   struct panfrost_device *dev = pan_device(ctx->base.screen);
+
+   if (!batch->csf.pending_tiler_desc)
+      return;
+
+   pan_pack(batch->csf.pending_tiler_desc, TILER_CONTEXT, tiler) {
+      tiler.hierarchy_mask =
+         pan_select_tiler_hierarchy_mask(batch->key.width,
+                                         batch->key.height,
+                                         dev->tiler_features.max_levels);
+
+      /* For effective tile size larger than 16x16, disable first level */
+      if (fb->tile_size > 16 * 16)
+         tiler.hierarchy_mask &= ~1;
+
+      tiler.fb_width = batch->key.width;
+      tiler.fb_height = batch->key.height;
+      tiler.heap = batch->ctx->csf.heap.desc_bo->ptr.gpu;
+      tiler.sample_pattern =
+         pan_sample_pattern(util_framebuffer_get_num_samples(&batch->key));
+      tiler.first_provoking_vertex =
+         batch->first_provoking_vertex == U_TRISTATE_YES;
+      tiler.geometry_buffer = ctx->csf.tmp_geom_bo->ptr.gpu;
+      tiler.geometry_buffer_size = ctx->csf.tmp_geom_bo->kmod_bo->size;
+   }
+
+   batch->csf.pending_tiler_desc = NULL;
+}
+
+void
+GENX(csf_prepare_tiler)(struct panfrost_batch *batch, struct pan_fb_info *fb)
+{
+   csf_emit_tiler_desc(batch, fb);
 }
 
 void
@@ -758,9 +848,9 @@ GENX(csf_emit_fragment_job)(struct panfrost_batch *batch,
 
 static void
 csf_emit_shader_regs(struct panfrost_batch *batch, enum pipe_shader_type stage,
-                     mali_ptr shader)
+                     uint64_t shader)
 {
-   mali_ptr resources = panfrost_emit_resources(batch, stage);
+   uint64_t resources = panfrost_emit_resources(batch, stage);
 
    assert(stage == PIPE_SHADER_VERTEX || stage == PIPE_SHADER_FRAGMENT ||
           stage == PIPE_SHADER_COMPUTE);
@@ -797,8 +887,8 @@ GENX(csf_launch_grid)(struct panfrost_batch *batch,
    cs_move32_to(b, cs_reg32(b, 32), 0);
 
    /* Compute workgroup size */
-   uint32_t wg_size[4];
-   pan_pack(wg_size, COMPUTE_SIZE_WORKGROUP, cfg) {
+   struct mali_compute_size_workgroup_packed wg_size;
+   pan_pack(&wg_size, COMPUTE_SIZE_WORKGROUP, cfg) {
       cfg.workgroup_size_x = info->block[0];
       cfg.workgroup_size_y = info->block[1];
       cfg.workgroup_size_z = info->block[2];
@@ -813,7 +903,7 @@ GENX(csf_launch_grid)(struct panfrost_batch *batch,
                                      (info->variable_shared_mem == 0);
    }
 
-   cs_move32_to(b, cs_reg32(b, 33), wg_size[0]);
+   cs_move32_to(b, cs_reg32(b, 33), wg_size.opaque[0]);
 
    /* Offset */
    for (unsigned i = 0; i < 3; ++i)
@@ -900,8 +990,8 @@ GENX(csf_launch_xfb)(struct panfrost_batch *batch,
    cs_move32_to(b, cs_reg32(b, 32), batch->ctx->offset_start);
 
    /* Compute workgroup size */
-   uint32_t wg_size[4];
-   pan_pack(wg_size, COMPUTE_SIZE_WORKGROUP, cfg) {
+   struct mali_compute_size_workgroup_packed wg_size;
+   pan_pack(&wg_size, COMPUTE_SIZE_WORKGROUP, cfg) {
       cfg.workgroup_size_x = 1;
       cfg.workgroup_size_y = 1;
       cfg.workgroup_size_z = 1;
@@ -911,7 +1001,7 @@ GENX(csf_launch_xfb)(struct panfrost_batch *batch,
        */
       cfg.allow_merging_workgroups = true;
    }
-   cs_move32_to(b, cs_reg32(b, 33), wg_size[0]);
+   cs_move32_to(b, cs_reg32(b, 33), wg_size.opaque[0]);
 
    /* Offset */
    for (unsigned i = 0; i < 3; ++i)
@@ -930,47 +1020,6 @@ GENX(csf_launch_xfb)(struct panfrost_batch *batch,
    cs_run_compute(b, 1, MALI_TASK_AXIS_Z, false, cs_shader_res_sel(0, 0, 0, 0));
 }
 
-static mali_ptr
-csf_get_tiler_desc(struct panfrost_batch *batch)
-{
-   struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_device *dev = pan_device(ctx->base.screen);
-
-   if (batch->tiler_ctx.valhall.desc)
-      return batch->tiler_ctx.valhall.desc;
-
-   struct panfrost_ptr t =
-      pan_pool_alloc_desc(&batch->pool.base, TILER_CONTEXT);
-   pan_pack(t.cpu, TILER_CONTEXT, tiler) {
-      unsigned max_levels = dev->tiler_features.max_levels;
-      assert(max_levels >= 2);
-
-      /* TODO: Select hierarchy mask more effectively */
-      tiler.hierarchy_mask = (max_levels >= 8) ? 0xFF : 0x28;
-
-      /* For large framebuffers, disable the smallest bin size to
-       * avoid pathological tiler memory usage. Required to avoid OOM
-       * on dEQP-GLES31.functional.fbo.no_attachments.maximums.all on
-       * Mali-G57.
-       */
-      if (MAX2(batch->key.width, batch->key.height) >= 4096)
-         tiler.hierarchy_mask &= ~1;
-
-      tiler.fb_width = batch->key.width;
-      tiler.fb_height = batch->key.height;
-      tiler.heap = batch->ctx->csf.heap.desc_bo->ptr.gpu;
-      tiler.sample_pattern =
-         pan_sample_pattern(util_framebuffer_get_num_samples(&batch->key));
-      tiler.first_provoking_vertex =
-         pan_tristate_get(batch->first_provoking_vertex);
-      tiler.geometry_buffer = ctx->csf.tmp_geom_bo->ptr.gpu;
-      tiler.geometry_buffer_size = ctx->csf.tmp_geom_bo->kmod_bo->size;
-   }
-
-   batch->tiler_ctx.valhall.desc = t.gpu;
-   return batch->tiler_ctx.valhall.desc;
-}
-
 static void
 emit_tiler_oom_context(struct cs_builder *b, struct panfrost_batch *batch)
 {
@@ -984,6 +1033,7 @@ emit_tiler_oom_context(struct cs_builder *b, struct panfrost_batch *batch)
    ctx->counter = 0;
    ctx->bbox_min = (batch->miny << 16) | batch->minx;
    ctx->bbox_max = ((batch->maxy - 1) << 16) | (batch->maxx - 1);
+   ctx->dump_addr = batch->ctx->csf.tiler_oom_handler.save_bo->ptr.gpu;
 
    for (unsigned i = 0; i < PAN_INCREMENTAL_RENDERING_PASS_COUNT; ++i)
       ctx->fbds[i] = alloc_fbd(batch);
@@ -1061,7 +1111,7 @@ csf_emit_draw_state(struct panfrost_batch *batch,
 
    struct pipe_rasterizer_state *rast = &ctx->rasterizer->base;
 
-   uint32_t primitive_flags = 0;
+   struct mali_primitive_flags_packed primitive_flags;
    pan_pack(&primitive_flags, PRIMITIVE_FLAGS, cfg) {
       if (panfrost_writes_point_size(ctx))
          cfg.point_size_array_format = MALI_POINT_SIZE_ARRAY_FORMAT_FP16;
@@ -1080,9 +1130,11 @@ csf_emit_draw_state(struct panfrost_batch *batch,
                                     : MALI_FIFO_FORMAT_BASIC;
    }
 
-   cs_move32_to(b, cs_reg32(b, 56), primitive_flags);
+   cs_move32_to(b, cs_reg32(b, 56), primitive_flags.opaque[0]);
 
-   uint32_t dcd_flags0 = 0, dcd_flags1 = 0;
+   struct mali_dcd_flags_0_packed dcd_flags0;
+   struct mali_dcd_flags_1_packed dcd_flags1;
+
    pan_pack(&dcd_flags0, DCD_FLAGS_0, cfg) {
       enum mesa_prim reduced_mode = u_reduced_prim(info->mode);
       bool polygon = reduced_mode == MESA_PRIM_TRIANGLES;
@@ -1187,15 +1239,16 @@ csf_emit_draw_state(struct panfrost_batch *batch,
       }
    }
 
-   cs_move32_to(b, cs_reg32(b, 57), dcd_flags0);
-   cs_move32_to(b, cs_reg32(b, 58), dcd_flags1);
+   cs_move32_to(b, cs_reg32(b, 57), dcd_flags0.opaque[0]);
+   cs_move32_to(b, cs_reg32(b, 58), dcd_flags1.opaque[0]);
 
-   uint64_t primsize = 0;
+   struct mali_primitive_size_packed primsize;
    panfrost_emit_primitive_size(ctx, info->mode == MESA_PRIM_POINTS, 0,
                                 &primsize);
-   cs_move64_to(b, cs_reg64(b, 60), primsize);
+   struct mali_primitive_size_packed *primsize_ptr = &primsize;
+   cs_move64_to(b, cs_reg64(b, 60), *((uint64_t*)primsize_ptr));
 
-   uint32_t flags_override;
+   struct mali_primitive_flags_packed flags_override;
    /* Pack with nodefaults so only explicitly set override fields affect the
     * previously set register values */
    pan_pack_nodefaults(&flags_override, PRIMITIVE_FLAGS, cfg) {
@@ -1204,7 +1257,7 @@ csf_emit_draw_state(struct panfrost_batch *batch,
       cfg.secondary_shader = secondary_shader;
    };
 
-   return flags_override;
+   return flags_override.opaque[0];
 }
 
 static struct cs_index
@@ -1372,7 +1425,7 @@ GENX(csf_init_context)(struct panfrost_context *ctx)
    if (ctx->csf.heap.desc_bo == NULL)
       goto err_tiler_heap_desc_bo;
 
-   pan_pack(ctx->csf.heap.desc_bo->ptr.cpu, TILER_HEAP, heap) {
+   pan_cast_and_pack(ctx->csf.heap.desc_bo->ptr.cpu, TILER_HEAP, heap) {
       heap.size = pan_screen(ctx->base.screen)->csf_tiler_heap.chunk_size;
       heap.base = thc.first_heap_chunk_gpu_va;
       heap.bottom = heap.base + 64;
@@ -1392,7 +1445,8 @@ GENX(csf_init_context)(struct panfrost_context *ctx)
    if (cs_bo == NULL)
       goto err_tiler_heap_cs_bo;
 
-   csf_oom_handler_init(ctx);
+   if (csf_oom_handler_init(ctx))
+      goto err_g_submit;
 
    struct cs_buffer init_buffer = {
       .cpu = cs_bo->ptr.cpu,
@@ -1436,8 +1490,9 @@ GENX(csf_init_context)(struct panfrost_context *ctx)
 
    if (dev->debug & PAN_DBG_TRACE) {
       uint32_t regs[256] = {0};
-      pandecode_cs(dev->decode_ctx, qsubmit.stream_addr, qsubmit.stream_size,
-                   panfrost_device_gpu_id(dev), regs);
+      pandecode_interpret_cs(dev->decode_ctx, qsubmit.stream_addr,
+                             qsubmit.stream_size, panfrost_device_gpu_id(dev),
+                             regs);
    }
 
    if (ret)

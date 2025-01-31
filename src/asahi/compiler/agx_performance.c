@@ -85,6 +85,7 @@ struct alu_timing op_timings[] = {
 
    [AGX_OPCODE_IMAD]          = { IC, 3, 2 },
    [AGX_OPCODE_BFI]           = { IC, 3, 2 },
+   [AGX_OPCODE_BFEIL]         = { IC, 3, 2 },
    [AGX_OPCODE_EXTR]          = { IC, 3, 2 },
    [AGX_OPCODE_ASR]           = { IC, 3, 2 },
    [AGX_OPCODE_FLOOR]         = { IC, 3, 2 },
@@ -126,6 +127,11 @@ agx_estimate_cycles(agx_context *ctx)
 
       if (alu.unit == IC) {
          est.ic += alu.tp * 2;
+
+         /* In addition to the IC work, IC ops appear to be dispatched along
+          * with SCIB.
+          */
+         est.f_scib += 1;
       } else if (alu.unit) {
          est.f_scib += alu.tp;
       } else {

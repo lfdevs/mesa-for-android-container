@@ -465,9 +465,7 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
    const int attributes_per_reg =
       prog_data->dispatch_mode == INTEL_DISPATCH_MODE_4X2_DUAL_OBJECT ? 1 : 2;
    bool progress = false;
-   struct copy_entry entries[alloc.total_size];
-
-   memset(&entries, 0, sizeof(entries));
+   struct copy_entry *entries = rzalloc_array(NULL, copy_entry, alloc.total_size);
 
    foreach_block_and_inst(block, vec4_instruction, inst, cfg) {
       /* This pass only works on basic blocks.  If there's flow
@@ -478,7 +476,7 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
        * src/glsl/opt_copy_propagation.cpp to track available copies.
        */
       if (!is_dominated_by_previous_instruction(inst)) {
-	 memset(&entries, 0, sizeof(entries));
+	 memset(entries, 0, sizeof(copy_entry) * alloc.total_size);
 	 continue;
       }
 
@@ -532,7 +530,7 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 	  * our destination's updated channels, as the two are no longer equal.
 	  */
 	 if (inst->dst.reladdr)
-	    memset(&entries, 0, sizeof(entries));
+	    memset(entries, 0, sizeof(copy_entry) * alloc.total_size);
 	 else {
 	    for (unsigned i = 0; i < alloc.total_size; i++) {
 	       for (int j = 0; j < 4; j++) {
@@ -545,6 +543,8 @@ vec4_visitor::opt_copy_propagation(bool do_constant_prop)
 	 }
       }
    }
+
+   ralloc_free(entries);
 
    if (progress)
       invalidate_analysis(DEPENDENCY_INSTRUCTION_DATA_FLOW |

@@ -19,7 +19,8 @@
 #ifdef ANDROID_STRICT
 #define RADV_API_VERSION VK_MAKE_VERSION(1, 1, VK_HEADER_VERSION)
 #else
-#define RADV_API_VERSION VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)
+#define RADV_API_VERSION     VK_MAKE_VERSION(1, 4, VK_HEADER_VERSION)
+#define RADV_API_VERSION_1_3 VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)
 #endif
 
 enum radv_trace_mode {
@@ -63,7 +64,6 @@ struct radv_instance {
       bool ssbo_non_uniform;
       bool flush_before_timestamp_write;
       bool force_rt_wave64;
-      bool dual_color_blend_by_location;
       bool legacy_sparse_binding;
       bool force_pstate_peak_gfx11_dgpu;
       bool clear_lds;

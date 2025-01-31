@@ -29,31 +29,31 @@
 #endif
 
 #if (GFX_VERx10 == 40)
-#  include "genxml/gen4_pack.h"
+#  include "genxml/gen40_pack.h"
 #elif (GFX_VERx10 == 45)
 #  include "genxml/gen45_pack.h"
 #elif (GFX_VERx10 == 50)
-#  include "genxml/gen5_pack.h"
+#  include "genxml/gen50_pack.h"
 #elif (GFX_VERx10 == 60)
-#  include "genxml/gen6_pack.h"
+#  include "genxml/gen60_pack.h"
 #elif (GFX_VERx10 == 70)
-#  include "genxml/gen7_pack.h"
+#  include "genxml/gen70_pack.h"
 #elif (GFX_VERx10 == 75)
 #  include "genxml/gen75_pack.h"
 #elif (GFX_VERx10 == 80)
-#  include "genxml/gen8_pack.h"
+#  include "genxml/gen80_pack.h"
 #elif (GFX_VERx10 == 90)
-#  include "genxml/gen9_pack.h"
+#  include "genxml/gen90_pack.h"
 #elif (GFX_VERx10 == 110)
-#  include "genxml/gen11_pack.h"
+#  include "genxml/gen110_pack.h"
 #elif (GFX_VERx10 == 120)
-#  include "genxml/gen12_pack.h"
+#  include "genxml/gen120_pack.h"
 #elif (GFX_VERx10 == 125)
 #  include "genxml/gen125_pack.h"
 #elif (GFX_VERx10 == 200)
-#  include "genxml/gen20_pack.h"
+#  include "genxml/gen200_pack.h"
 #elif (GFX_VERx10 == 300)
-#  include "genxml/gen30_pack.h"
+#  include "genxml/gen300_pack.h"
 #else
 #  error "Need to add a pack header include for this gen"
 #endif

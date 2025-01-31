@@ -50,7 +50,7 @@
 #include "i915/anv_device.h"
 #include "xe/anv_device.h"
 
-#include "genxml/gen7_pack.h"
+#include "genxml/gen70_pack.h"
 #include "genxml/genX_bits.h"
 
 static void
@@ -313,6 +313,7 @@ VkResult anv_CreateDevice(
    ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
    VkResult result;
    struct anv_device *device;
+   bool device_has_compute_queue = false;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
 
@@ -323,6 +324,10 @@ VkResult anv_CreateDevice(
    for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       if (pCreateInfo->pQueueCreateInfos[i].flags & ~VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT)
          return vk_error(physical_device, VK_ERROR_INITIALIZATION_FAILED);
+
+      const struct anv_queue_family *family =
+         &physical_device->queue.families[pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex];
+      device_has_compute_queue |= family->engine_class == INTEL_ENGINE_CLASS_COMPUTE;
    }
 
    device = vk_zalloc2(&physical_device->instance->vk.alloc, pAllocator,
@@ -474,6 +479,7 @@ VkResult anv_CreateDevice(
 
    list_inithead(&device->memory_objects);
    list_inithead(&device->image_private_objects);
+   list_inithead(&device->bvh_dumps);
 
    if (pthread_mutex_init(&device->mutex, NULL) != 0) {
       result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
@@ -769,9 +775,21 @@ VkResult anv_CreateDevice(
                                    ray_queries_size,
                                    ANV_BO_ALLOC_INTERNAL,
                                    0 /* explicit_address */,
-                                   &device->ray_query_bo);
+                                   &device->ray_query_bo[0]);
       if (result != VK_SUCCESS)
          goto fail_alloc_device_bo;
+
+      /* We need a separate ray query bo for CCS engine with Wa_14022863161. */
+      if (intel_needs_workaround(device->isl_dev.info, 14022863161) &&
+          device_has_compute_queue) {
+         result = anv_device_alloc_bo(device, "ray queries",
+                                      ray_queries_size,
+                                      ANV_BO_ALLOC_INTERNAL,
+                                      0 /* explicit_address */,
+                                      &device->ray_query_bo[1]);
+         if (result != VK_SUCCESS)
+            goto fail_ray_query_bo;
+      }
    }
 
    result = anv_device_init_trivial_batch(device);
@@ -781,7 +799,7 @@ VkResult anv_CreateDevice(
    /* Emit the CPS states before running the initialization batch as those
     * structures are referenced.
     */
-   if (device->info->ver >= 12) {
+   if (device->info->ver >= 12 && device->info->ver < 30) {
       uint32_t n_cps_states = 3 * 3; /* All combinaisons of X by Y CP sizes (1, 2, 4) */
 
       if (device->info->has_coarse_pixel_primitive_and_cb)
@@ -947,8 +965,13 @@ VkResult anv_CreateDevice(
    }
    if (!device->vk.enabled_extensions.EXT_sample_locations)
       BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_SAMPLE_PATTERN);
-   if (!device->vk.enabled_extensions.KHR_fragment_shading_rate)
-      BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_CPS);
+   if (!device->vk.enabled_extensions.KHR_fragment_shading_rate) {
+      if (device->info->ver >= 30) {
+         BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_COARSE_PIXEL);
+      } else {
+         BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_CPS);
+      }
+   }
    if (!device->vk.enabled_extensions.EXT_mesh_shader) {
       BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_SBE_MESH);
       BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_CLIP_MESH);
@@ -983,14 +1006,22 @@ VkResult anv_CreateDevice(
 
    anv_device_utrace_init(device);
 
-   result = anv_genX(device->info, init_device_state)(device);
+   result = vk_meta_device_init(&device->vk, &device->meta_device);
    if (result != VK_SUCCESS)
       goto fail_utrace;
+
+   result = anv_genX(device->info, init_device_state)(device);
+   if (result != VK_SUCCESS)
+      goto fail_meta_device;
+
+   simple_mtx_init(&device->accel_struct_build.mutex, mtx_plain);
 
    *pDevice = anv_device_to_handle(device);
 
    return VK_SUCCESS;
 
+ fail_meta_device:
+   vk_meta_device_finish(&device->vk, &device->meta_device);
  fail_utrace:
    anv_device_utrace_finish(device);
  fail_queues:
@@ -1024,8 +1055,10 @@ VkResult anv_CreateDevice(
  fail_trivial_batch:
    anv_device_release_bo(device, device->trivial_batch_bo);
  fail_ray_query_bo:
-   if (device->ray_query_bo)
-      anv_device_release_bo(device, device->ray_query_bo);
+   for (unsigned i = 0; i < ARRAY_SIZE(device->ray_query_bo); i++) {
+      if (device->ray_query_bo[i])
+         anv_device_release_bo(device, device->ray_query_bo[i]);
+   }
  fail_alloc_device_bo:
    if (device->mem_fence_bo)
       anv_device_release_bo(device, device->mem_fence_bo);
@@ -1115,6 +1148,12 @@ void anv_DestroyDevice(
    /* Do TRTT batch garbage collection before destroying queues. */
    anv_device_finish_trtt(device);
 
+   if (device->accel_struct_build.radix_sort) {
+      radix_sort_vk_destroy(device->accel_struct_build.radix_sort,
+                            _device, &device->vk.alloc);
+   }
+   vk_meta_device_finish(&device->vk, &device->meta_device);
+
    anv_device_utrace_finish(device);
 
    for (uint32_t i = 0; i < device->queue_count; i++)
@@ -1165,11 +1204,14 @@ void anv_DestroyDevice(
    anv_scratch_pool_finish(device, &device->protected_scratch_pool);
 
    if (device->vk.enabled_extensions.KHR_ray_query) {
-      for (unsigned i = 0; i < ARRAY_SIZE(device->ray_query_shadow_bos); i++) {
-         if (device->ray_query_shadow_bos[i] != NULL)
-            anv_device_release_bo(device, device->ray_query_shadow_bos[i]);
+      for (unsigned i = 0; i < ARRAY_SIZE(device->ray_query_bo); i++) {
+         for (unsigned j = 0; j < ARRAY_SIZE(device->ray_query_shadow_bos[0]); j++) {
+            if (device->ray_query_shadow_bos[i][j] != NULL)
+               anv_device_release_bo(device, device->ray_query_shadow_bos[i][j]);
+         }
+         if (device->ray_query_bo[i])
+            anv_device_release_bo(device, device->ray_query_bo[i]);
       }
-      anv_device_release_bo(device, device->ray_query_bo);
    }
    anv_device_release_bo(device, device->workaround_bo);
    if (device->dummy_aux_bo)
@@ -1213,6 +1255,8 @@ void anv_DestroyDevice(
 
    pthread_cond_destroy(&device->queue_submit);
    pthread_mutex_destroy(&device->mutex);
+
+   simple_mtx_destroy(&device->accel_struct_build.mutex);
 
    ralloc_free(device->fp64_nir);
 
@@ -2090,6 +2134,9 @@ anv_device_get_pat_entry(struct anv_device *device,
    if (alloc_flags & ANV_BO_ALLOC_COMPRESSED)
       return &device->info->pat.compressed;
 
+   if (alloc_flags & (ANV_BO_ALLOC_EXTERNAL | ANV_BO_ALLOC_SCANOUT))
+      return &device->info->pat.scanout;
+
    /* PAT indexes has no actual effect in DG2 and DG1, smem caches will always
     * be snopped by GPU and lmem will always be WC.
     * This might change in future discrete platforms.
@@ -2103,8 +2150,6 @@ anv_device_get_pat_entry(struct anv_device *device,
    /* Integrated platforms handling only */
    if ((alloc_flags & (ANV_BO_ALLOC_HOST_CACHED_COHERENT)) == ANV_BO_ALLOC_HOST_CACHED_COHERENT)
       return &device->info->pat.cached_coherent;
-   else if (alloc_flags & (ANV_BO_ALLOC_EXTERNAL | ANV_BO_ALLOC_SCANOUT))
-      return &device->info->pat.scanout;
    else if (alloc_flags & ANV_BO_ALLOC_HOST_CACHED)
       return &device->info->pat.writeback_incoherent;
    else

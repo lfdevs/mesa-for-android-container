@@ -31,7 +31,6 @@ unsigned
 brw_required_dispatch_width(const struct shader_info *info)
 {
    if ((int)info->subgroup_size >= (int)SUBGROUP_SIZE_REQUIRE_8) {
-      assert(gl_shader_stage_uses_workgroup(info->stage));
       /* These enum values are expressly chosen to be equal to the subgroup
        * size that they require.
        */
@@ -88,20 +87,20 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
    const auto prog_data = get_prog_data(state);
    const unsigned width = 8u << simd;
 
+   if (state.required_width && state.required_width != width) {
+      state.error[simd] = "Different than required dispatch width";
+      return false;
+   }
+
    /* For shaders with variable size workgroup, in most cases we can compile
     * all the variants (exceptions are bindless dispatch & ray queries), since
     * the choice will happen only at dispatch time.
     */
    const bool workgroup_size_variable = cs_prog_data && cs_prog_data->local_size[0] == 0;
 
-   if (!workgroup_size_variable) {
+   if (!workgroup_size_variable && !state.required_width) {
       if (state.spilled[simd]) {
          state.error[simd] = "Would spill";
-         return false;
-      }
-
-      if (state.required_width && state.required_width != width) {
-         state.error[simd] = "Different than required dispatch width";
          return false;
       }
 
@@ -113,8 +112,7 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
          unsigned max_threads = state.devinfo->max_cs_workgroup_threads;
 
          const unsigned min_simd = state.devinfo->ver >= 20 ? 1 : 0;
-         if (simd > min_simd && state.compiled[simd - 1] &&
-            workgroup_size <= (width / 2)) {
+         if (simd > min_simd && workgroup_size <= (width / 2)) {
             state.error[simd] = "Workgroup size already fits in smaller SIMD";
             return false;
          }

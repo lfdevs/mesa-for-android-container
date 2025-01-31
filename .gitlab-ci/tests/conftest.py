@@ -25,7 +25,7 @@ def mock_sleep():
 
 @pytest.fixture
 def frozen_time(mock_sleep):
-    with freeze_time() as frozen_time:
+    with freeze_time("2024-01-01") as frozen_time:
         yield frozen_time
 
 
@@ -34,6 +34,10 @@ RESULT_GET_TESTJOB_RESULTS = [{"metadata": {"result": "test"}}]
 
 @pytest.fixture
 def mock_proxy(frozen_time):
+    def mock_job_state(jid) -> dict[str, str]:
+        frozen_time.tick(1)
+        return {"job_state": "Running"}
+
     def create_proxy_mock(
         job_results=RESULT_GET_TESTJOB_RESULTS,
         testsuite_results=[generate_testsuite_result()],
@@ -53,8 +57,7 @@ def mock_proxy(frozen_time):
         proxy_logs_mock.return_value = jobs_logs_response()
 
         proxy_job_state = proxy_mock.scheduler.job_state
-        proxy_job_state.return_value = {"job_state": "Running"}
-        proxy_job_state.side_effect = frozen_time.tick(1)
+        proxy_job_state.side_effect = mock_job_state
 
         proxy_show_mock = proxy_mock.scheduler.jobs.show
         proxy_show_mock.return_value = defaultdict(

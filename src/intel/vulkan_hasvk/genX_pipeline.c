@@ -849,7 +849,8 @@ write_disabled_blend(uint32_t *state)
 static void
 emit_cb_state(struct anv_graphics_pipeline *pipeline,
               const struct vk_color_blend_state *cb,
-              const struct vk_multisample_state *ms)
+              const struct vk_multisample_state *ms,
+              const struct vk_render_pass_state *rp)
 {
    struct anv_device *device = pipeline->base.device;
    const struct elk_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
@@ -895,12 +896,16 @@ emit_cb_state(struct anv_graphics_pipeline *pipeline,
       const struct vk_color_blend_attachment_state *a =
          &cb->attachments[binding->index];
 
+      VkFormat att_format = rp->color_attachment_formats[binding->index];
+      bool ignore_logic_op =
+         vk_format_is_float(att_format) || vk_format_is_srgb(att_format);
+
       struct GENX(BLEND_STATE_ENTRY) entry = {
 #if GFX_VER < 8
          .AlphaToCoverageEnable = ms && ms->alpha_to_coverage_enable,
          .AlphaToOneEnable = ms && ms->alpha_to_one_enable,
 #endif
-         .LogicOpEnable = cb->logic_op_enable,
+         .LogicOpEnable = cb->logic_op_enable && !ignore_logic_op,
 
          /* Vulkan specification 1.2.168, VkLogicOp:
           *
@@ -1831,7 +1836,7 @@ genX(graphics_pipeline_emit)(struct anv_graphics_pipeline *pipeline,
    emit_rs_state(pipeline, state->ia, state->rs, state->ms, state->rp,
                            urb_deref_block_size);
    emit_ms_state(pipeline, state->ms);
-   emit_cb_state(pipeline, state->cb, state->ms);
+   emit_cb_state(pipeline, state->cb, state->ms, state->rp);
    compute_kill_pixel(pipeline, state->ms, state);
 
    emit_3dstate_clip(pipeline, state->ia, state->vp, state->rs);

@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_IR_H
-#define ELK_IR_H
+#pragma once
 
 #include <assert.h>
 #include "elk_reg.h"
@@ -193,5 +192,3 @@ struct elk_backend_instruction {
    /** The number of hardware registers used for a message header. */
    uint8_t header_size;
 };
-
-#endif

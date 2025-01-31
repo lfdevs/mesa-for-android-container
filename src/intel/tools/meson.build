@@ -1,25 +1,45 @@
 # Copyright © 2017 Intel Corporation
 # SPDX-License-Identifier: MIT
 
-libaub = static_library(
-  'aub',
-  files('aub_read.c', 'aub_mem.c'),
+libintel_tools = static_library(
+  'intel_tools',
+  files(
+    'aub_mem.c',
+    'aub_mem.h',
+    'aub_read.c',
+    'aub_read.h',
+    'intel_tools.c',
+    'intel_tools.h'
+  ),
+  dependencies : [
+    idep_mesautil,
+    idep_intel_dev,
+    idep_intel_decoder_brw,
+    idep_intel_decoder_elk,
+    idep_intel_compiler_brw,
+    idep_intel_compiler_elk,
+    idep_libintel_common,
+  ],
   include_directories : [inc_include, inc_src, inc_intel],
-  dependencies : [idep_mesautil, idep_intel_dev, idep_intel_decoder_brw, idep_intel_decoder_elk],
-  link_with : [libintel_common],
-  c_args : [no_override_init_args],
+  c_args : [intel_common_args, no_override_init_args],
   gnu_symbol_visibility : 'hidden',
-  install : false
+  install : false,
+)
+
+idep_libintel_tools = declare_dependency(
+  link_with : libintel_tools,
+  dependencies : [
+    idep_intel_decoder_brw,
+    idep_intel_decoder_elk,
+  ]
 )
 
 aubinator = executable(
   'aubinator',
   files('aubinator.c'),
   dependencies : [idep_mesautil, dep_expat, dep_zlib, dep_dl, dep_thread, dep_m, idep_intel_dev,
-                  idep_intel_decoder_brw, idep_intel_decoder_elk,
-                  idep_intel_compiler_brw, idep_intel_compiler_elk],
+                  idep_libintel_common, idep_libintel_tools],
   include_directories : [inc_include, inc_src, inc_intel],
-  link_with : [libintel_common, libaub],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   install : true
@@ -37,10 +57,8 @@ aubinator_error_decode = executable(
         'error_decode_xe_lib.c',
         'error_decode_xe_lib.h'),
   dependencies : [idep_mesautil, dep_zlib, dep_thread, idep_intel_dev,
-                  idep_intel_decoder_brw, idep_intel_decoder_elk,
-                  idep_intel_compiler_brw, idep_intel_compiler_elk],
+                  idep_libintel_common, idep_libintel_tools],
   include_directories : [inc_include, inc_src, inc_intel],
-  link_with : [libintel_common],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   install : true
@@ -82,7 +100,7 @@ intel_hang_replay = executable(
   'intel_hang_replay',
   files('intel_hang_replay.c'),
   dependencies : [idep_intel_dev, idep_libintel_common, dep_libdrm, dep_dl, dep_thread, dep_m,
-                  idep_intel_compiler_brw, idep_intel_compiler_elk],
+                  idep_libintel_tools],
   include_directories : [inc_include, inc_src, inc_intel],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
@@ -109,9 +127,9 @@ configure_file(
 libintel_sanitize_gpu = shared_library(
   'intel_sanitize_gpu',
   files('intel_sanitize_gpu.c'),
-  dependencies : [idep_mesautil, dep_dl, dep_thread, idep_intel_dev],
+  dependencies : [idep_mesautil, dep_dl, dep_thread, idep_intel_dev,
+                  idep_libintel_common],
   include_directories : [inc_include, inc_src, inc_intel],
-  link_with : libintel_common,
   c_args : [no_override_init_args, sse2_args],
   gnu_symbol_visibility : 'hidden',
   install_dir : get_option('libexecdir'),
@@ -132,9 +150,8 @@ libintel_dump_gpu = shared_library(
     'intel_context.h', 'gfx8_context.h', 'gfx10_context.h', 'intel_aub.h',
     'aub_write.h', 'aub_write.c', 'intel_dump_gpu.c',
   ),
-  dependencies : [dep_dl, idep_mesautil, idep_intel_dev],
+  dependencies : [dep_dl, idep_mesautil, idep_intel_dev, idep_libintel_common],
   include_directories : [inc_include, inc_src, inc_intel],
-  link_with : [libintel_common],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   install_dir : get_option('libexecdir'),
@@ -167,9 +184,8 @@ if with_tools.contains('intel-ui')
     'aubinator_viewer',
     files('aubinator_viewer.cpp', 'aubinator_viewer_decoder.cpp'),
     dependencies : [idep_mesautil, dep_zlib, dep_dl, dep_thread, dep_m, libintel_imgui_gtk_dep, idep_intel_dev,
-                    idep_intel_compiler_brw, idep_intel_compiler_elk],
+                    idep_libintel_common, idep_libintel_tools],
     include_directories : [inc_include, inc_src, inc_intel],
-    link_with : [libintel_common, libaub],
     c_args : [no_override_init_args],
     gnu_symbol_visibility : 'hidden',
     cpp_args : ['-fpermissive', '-Wno-parentheses'],
@@ -188,10 +204,7 @@ if with_tools.contains('intel-ui')
       libintel_imgui_gtk_dep,
       idep_intel_dev,
       idep_libintel_common,
-      idep_intel_compiler_brw,
-      idep_intel_compiler_elk,
-      idep_intel_decoder_brw,
-      idep_intel_decoder_elk,
+      idep_libintel_tools,
     ],
     include_directories : [inc_include, inc_src, inc_intel],
     c_args : [no_override_init_args],

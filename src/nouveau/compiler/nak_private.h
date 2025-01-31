@@ -226,6 +226,7 @@ enum nak_fs_out {
 
 #define NAK_FS_OUT_COLOR(n) (NAK_FS_OUT_COLOR0 + (n) * 16)
 
+bool nak_nir_mark_lcssa_invariants(nir_shader *nir);
 bool nak_nir_split_64bit_conversions(nir_shader *nir);
 bool nak_nir_lower_non_uniform_ldcx(nir_shader *nir);
 bool nak_nir_add_barriers(nir_shader *nir, const struct nak_compiler *nak);

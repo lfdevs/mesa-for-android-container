@@ -45,16 +45,14 @@
 #include "common/intel_gem.h"
 #include "common/i915/intel_gem.h"
 #include "common/intel_hang_dump.h"
-#include "compiler/elk/elk_disasm.h"
-#include "compiler/elk/elk_isa_info.h"
-#include "compiler/brw_disasm.h"
-#include "compiler/brw_isa_info.h"
 #include "dev/intel_device_info.h"
 
 #include "drm-uapi/i915_drm.h"
 
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
+
+#include "intel_tools.h"
 
 static uint32_t
 gem_create(int drm_fd, uint64_t size)
@@ -517,20 +515,8 @@ main(int argc, char *argv[])
          found = true;
          fprintf(stderr, "shader at 0x%016"PRIx64" file_offset=0%016"PRIx64" addr_offset=%016"PRIx64":\n", *addr,
                  (bo->file_offset - aligned_offset), (*addr - bo->offset));
-         if (devinfo.ver >= 9) {
-            struct brw_isa_info _isa, *isa = &_isa;
-            brw_init_isa_info(isa, &devinfo);
-            brw_disassemble_with_errors(isa,
-                                        map + (bo->file_offset - aligned_offset) + (*addr - bo->offset),
-                                        0, stderr);
-         } else {
-            struct elk_isa_info _isa, *isa = &_isa;
-            elk_init_isa_info(isa, &devinfo);
-            elk_disassemble_with_errors(isa,
-                                        map + (bo->file_offset - aligned_offset) + (*addr - bo->offset),
-                                        0, stderr);
-         }
-
+         intel_disassemble(&devinfo, map + (bo->file_offset - aligned_offset) + (*addr - bo->offset),
+                           0, stderr);
          munmap(map, remaining_length);
       }
 

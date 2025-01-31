@@ -309,5 +309,5 @@ nouveau_ws_bo_wait(struct nouveau_ws_bo *bo, enum nouveau_ws_bo_map_flags flags)
 int
 nouveau_ws_bo_dma_buf(struct nouveau_ws_bo *bo, int *fd)
 {
-   return drmPrimeHandleToFD(bo->dev->fd, bo->handle, DRM_CLOEXEC, fd);
+   return drmPrimeHandleToFD(bo->dev->fd, bo->handle, DRM_CLOEXEC | O_RDWR, fd);
 }

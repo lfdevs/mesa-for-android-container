@@ -3766,7 +3766,7 @@ zink_set_framebuffer_state(struct pipe_context *pctx,
          ctx->rp_changed |= !!zink_transient_surface(psurf) != !!zink_transient_surface(state->cbufs[i]);
       unbind_fb_surface(ctx, psurf, i, i >= state->nr_cbufs || psurf != state->cbufs[i]);
       if (psurf && ctx->needs_present == zink_resource(psurf->texture))
-         ctx->needs_present = NULL;
+         zink_resource_reference(&ctx->needs_present, NULL);
    }
    if (ctx->fb_state.zsbuf) {
       struct pipe_surface *psurf = ctx->fb_state.zsbuf;
@@ -4008,7 +4008,7 @@ zink_flush(struct pipe_context *pctx,
          zink_kopper_readback_update(ctx, ctx->needs_present);
          screen->image_barrier(ctx, ctx->needs_present, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
       }
-      ctx->needs_present = NULL;
+      zink_resource_reference(&ctx->needs_present, NULL);
    }
 
    if (flags & PIPE_FLUSH_FENCE_FD) {
@@ -4296,7 +4296,7 @@ zink_flush_resource(struct pipe_context *pctx,
          zink_screen(ctx->base.screen)->image_barrier(ctx, res, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
          zink_batch_reference_resource_rw(ctx, res, true);
       } else {
-         ctx->needs_present = res;
+         zink_resource_reference(&ctx->needs_present, res);
       }
       ctx->swapchain = res;
    } else if (res->dmabuf)
@@ -4345,7 +4345,8 @@ static void
 zink_set_stream_output_targets(struct pipe_context *pctx,
                                unsigned num_targets,
                                struct pipe_stream_output_target **targets,
-                               const unsigned *offsets)
+                               const unsigned *offsets,
+                               enum mesa_prim output_prim)
 {
    struct zink_context *ctx = zink_context(pctx);
 
@@ -5271,6 +5272,9 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->gfx_pipeline_state.dyn_state2.vertices_per_patch = 1;
    ctx->gfx_pipeline_state.uses_dynamic_stride = screen->info.have_EXT_extended_dynamic_state ||
                                                  screen->info.have_EXT_vertex_input_dynamic_state;
+#if defined(MVK_VERSION)
+   ctx->gfx_pipeline_state.uses_dynamic_stride = ctx->gfx_pipeline_state.uses_dynamic_stride && screen->have_dynamic_state_vertex_input_binding_stride;
+#endif
    ctx->compute_pipeline_state.dirty = true;
    ctx->fb_changed = ctx->rp_changed = true;
    ctx->sample_mask_changed = true;
@@ -5634,17 +5638,53 @@ add_implicit_feedback_loop(struct zink_context *ctx, struct zink_resource *res)
       /* if zsbuf isn't used then it effectively has no fb binds */
       /* if zsbuf isn't written to then it'll be fine with read-only access */
       return false;
+
+   /* build attachment array for miplevel/layer checks */
+   struct pipe_surface *psurfs[PIPE_MAX_COLOR_BUFS];
+   unsigned surf_idx = 0;
+   u_foreach_bit(idx, res->fb_binds) {
+      struct pipe_surface *psurf;
+      if (idx == PIPE_MAX_COLOR_BUFS)
+         psurf = ctx->fb_state.zsbuf;
+      else
+         psurf = ctx->fb_state.cbufs[idx];
+      if (psurf->texture == &res->base.b)
+         psurfs[surf_idx++] = psurf;
+   }
+
    bool is_feedback = false;
    /* avoid false positives when a texture is bound but not used */
    u_foreach_bit(vkstage, res->gfx_barrier) {
       VkPipelineStageFlags vkstagebit = BITFIELD_BIT(vkstage);
       if (vkstagebit < VK_PIPELINE_STAGE_VERTEX_SHADER_BIT || vkstagebit > VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
          continue;
+
       /* in-range VkPipelineStageFlagBits can be converted to VkShaderStageFlags with a bitshift */
       gl_shader_stage stage = vk_to_mesa_shader_stage((VkShaderStageFlagBits)(vkstagebit >> 3));
+      /* check against bound stages */
+      if (!ctx->gfx_stages[stage])
+         continue;
+
       /* check shader texture usage against resource's sampler binds */
-      if ((ctx->gfx_stages[stage] && (res->sampler_binds[stage] & ctx->gfx_stages[stage]->info.textures_used[0])))
-         is_feedback = true;
+      uint32_t texuse = res->sampler_binds[stage] & ctx->gfx_stages[stage]->info.textures_used[0];
+      if (!texuse)
+         continue;
+
+      /* check miplevel/layer: a feedback loop only exists if these overlap between fb and sampler */
+      u_foreach_bit(slot, texuse) {
+         struct pipe_sampler_view *sv = ctx->sampler_views[stage][slot];
+
+         for (unsigned i = 0; i < surf_idx; i++) {
+            if (sv->u.tex.first_level > psurfs[i]->u.tex.level || sv->u.tex.last_level < psurfs[i]->u.tex.level)
+               continue;
+            if (sv->u.tex.first_layer > psurfs[i]->u.tex.last_layer || sv->u.tex.last_layer < psurfs[i]->u.tex.first_layer)
+               continue;
+            is_feedback = true;
+            break;
+         }
+         if (is_feedback)
+            break;
+      }
    }
    if (!is_feedback)
       return false;

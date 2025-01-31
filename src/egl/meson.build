@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 inc_egl = include_directories('.', 'main')
-inc_egl_dri2 = include_directories('drivers/dri2')
 
 c_args_for_egl = [asan_c_args]
 cpp_args_for_egl = []
+link_args_for_egl = []
+link_deps_for_egl = []
 link_for_egl = [libpipe_loader_dynamic]
 if with_dri
   link_for_egl += libgallium_dri
@@ -173,6 +174,20 @@ else
   )
 endif
 
+if with_ld_version_script
+  if with_glvnd
+    link_args_for_egl += [
+      '-Wl,--version-script', join_paths(meson.current_source_dir(), 'egl-glvnd.sym')
+    ]
+    link_deps_for_egl += files('egl-glvnd.sym')
+  else
+    link_args_for_egl += [
+      '-Wl,--version-script', join_paths(meson.current_source_dir(), 'egl.sym')
+    ]
+    link_deps_for_egl += files('egl.sym')
+  endif
+endif
+
 egl_def = custom_target(
   'egl.def',
   input: 'main/egl.def.in',
@@ -190,8 +205,9 @@ libegl = shared_library(
   cpp_args : [cpp_args_for_egl],
   gnu_symbol_visibility : 'hidden',
   include_directories : incs_for_egl,
-  link_with : [link_for_egl, libglapi],
-  link_args : [ld_args_bsymbolic, ld_args_gc_sections],
+  link_with : [link_for_egl],
+  link_args : [ld_args_bsymbolic, ld_args_gc_sections, link_args_for_egl],
+  link_depends : [link_deps_for_egl],
   dependencies : [deps_for_egl, dep_dl, dep_libdrm, dep_clock, dep_thread, idep_mesautil],
   install : true,
   version : egl_lib_version,

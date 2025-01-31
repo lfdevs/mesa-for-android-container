@@ -11,30 +11,9 @@ use acorn::Acorn;
 use compiler::bindings::MESA_SHADER_COMPUTE;
 use compiler::cfg::CFGBuilder;
 use nak_bindings::*;
+use std::mem::offset_of;
 use std::str::FromStr;
 use std::sync::OnceLock;
-
-// from https://internals.rust-lang.org/t/discussion-on-offset-of/7440/2
-macro_rules! offset_of {
-    ($Struct:path, $field:ident) => {{
-        // Using a separate function to minimize unhygienic hazards
-        // (e.g. unsafety of #[repr(packed)] field borrows).
-        // Uncomment `const` when `const fn`s can juggle pointers.
-
-        // const
-        fn offset() -> usize {
-            let u = std::mem::MaybeUninit::<$Struct>::uninit();
-            // Use pattern-matching to avoid accidentally going through Deref.
-            let &$Struct { $field: ref f, .. } = unsafe { &*u.as_ptr() };
-            let o =
-                (f as *const _ as usize).wrapping_sub(&u as *const _ as usize);
-            // Triple check that we are within `u` still.
-            assert!((0..=std::mem::size_of_val(&u)).contains(&o));
-            o
-        }
-        offset()
-    }};
-}
 
 struct RunSingleton {
     sm: Box<dyn ShaderModel + Send + Sync>,
@@ -77,7 +56,7 @@ pub struct TestShaderBuilder<'a> {
 }
 
 impl<'a> TestShaderBuilder<'a> {
-    pub fn new(sm: &'a dyn ShaderModel) -> TestShaderBuilder {
+    pub fn new(sm: &'a dyn ShaderModel) -> Self {
         let mut alloc = SSAValueAllocator::new();
         let mut label_alloc = LabelAllocator::new();
         let mut b = SSAInstrBuilder::new(sm, &mut alloc);

@@ -209,19 +209,6 @@ Multi-Arch: same
 Description: transitional dummy package
  This is a transitional dummy package, it can be safely removed.
 
-Package: libglapi-mesa
-Section: libs
-Architecture: any
-Depends:
- ${shlibs:Depends},
- ${misc:Depends},
-Pre-Depends: ${misc:Pre-Depends}
-Multi-Arch: same
-Description: free implementation of the GL API -- shared library
- The Mesa GL API module is responsible for dispatching all the gl*
- functions. It is intended to be mainly used by both the libgles1-mesa
- and libgles2-mesa packages.
-
 Package: libglx-mesa0
 Section: libs
 Architecture: any
@@ -307,6 +294,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
 Pre-Depends: ${misc:Pre-Depends}
+Provides: libglapi-mesa
 Multi-Arch: same
 Description: shared infrastructure for Mesa drivers
  This package contains libgallium, a private library shared between

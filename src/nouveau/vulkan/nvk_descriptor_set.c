@@ -424,9 +424,7 @@ nvk_UpdateDescriptorSets(VkDevice device,
          }
       }
 
-      switch (src_binding_layout->type) {
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
+      if (vk_descriptor_type_is_dynamic(src_binding_layout->type)) {
          const uint32_t dst_dyn_start =
             dst_binding_layout->dynamic_buffer_index + copy->dstArrayElement;
          const uint32_t src_dyn_start =
@@ -434,10 +432,6 @@ nvk_UpdateDescriptorSets(VkDevice device,
          typed_memcpy(&dst->dynamic_buffers[dst_dyn_start],
                       &src->dynamic_buffers[src_dyn_start],
                       copy->descriptorCount);
-         break;
-      }
-      default:
-         break;
       }
    }
 }

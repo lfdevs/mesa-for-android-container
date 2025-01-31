@@ -1,7 +1,7 @@
 # x11
 [[deqp]]
-deqp = "/deqp/modules/egl/deqp-egl-x11"
-caselists = ["/deqp/mustpass/egl-main.txt"]
+deqp = "/deqp-gles/modules/egl/deqp-egl-x11"
+caselists = ["/deqp-gles/mustpass/egl-main.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
@@ -10,8 +10,8 @@ deqp_args = [
 ]
 
 [[deqp]]
-deqp = "/deqp/modules/egl/deqp-egl-wayland"
-caselists = ["/deqp/mustpass/egl-main.txt"]
+deqp = "/deqp-gles/modules/egl/deqp-egl-wayland"
+caselists = ["/deqp-gles/mustpass/egl-main.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",

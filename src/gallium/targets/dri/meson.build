@@ -17,11 +17,9 @@ if with_gallium_va or with_gallium_vdpau
   gallium_dri_link_with += [libgalliumvlwinsys]
   if with_gallium_va
     gallium_dri_link_whole += [libva_st]
-    sym_config.set('va_driver_init', '__vaDriverInit_*_*;')
   endif
   if with_gallium_vdpau
     gallium_dri_link_whole += [libvdpau_st]
-    sym_config.set('vdp_imp_device_create_x11', 'vdp_imp_device_create_x11;')
   endif
 endif
 
@@ -70,6 +68,8 @@ libgallium_dri = shared_library(
   name_suffix : libname_suffix,
 )
 
+shared_glapi_lib = libgallium_dri
+
 if with_gallium_va or with_gallium_vdpau
   va_drivers = []
   vdpau_drivers = []
@@ -94,7 +94,7 @@ if with_gallium_va or with_gallium_vdpau
       libgallium_dri.full_path(),
       va_drivers_path,
       va_drivers,
-      '--megadriver_libdir', get_option('libdir'),
+      '--megadriver-libdir', get_option('libdir'),
       install_tag : 'runtime',
     )
   endif
@@ -105,7 +105,7 @@ if with_gallium_va or with_gallium_vdpau
       libgallium_dri.full_path(),
       vdpau_drivers_path,
       vdpau_drivers,
-      '--megadriver_libdir', get_option('libdir'),
+      '--megadriver-libdir', get_option('libdir'),
       install_tag : 'runtime',
     )
   endif

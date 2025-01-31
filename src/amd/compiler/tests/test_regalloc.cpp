@@ -179,8 +179,8 @@ BEGIN_TEST(regalloc.branch_def_phis_at_merge_block)
 
    program->blocks[0].kind &= ~block_kind_top_level;
 
-   //! s2: %_:s[2-3] = p_branch
-   bld.branch(aco_opcode::p_branch, bld.def(s2));
+   //! p_branch
+   bld.branch(aco_opcode::p_branch);
 
    //! BB1
    //! /* logical preds: / linear preds: BB0, / kind: uniform, */
@@ -204,8 +204,8 @@ BEGIN_TEST(regalloc.branch_def_phis_at_branch_block)
    //! s2: %tmp:s[0-1] = p_unit_test
    Temp tmp = bld.pseudo(aco_opcode::p_unit_test, bld.def(s2));
 
-   //! s2: %_:s[2-3] = p_cbranch_z %0:scc
-   bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(scc, s1));
+   //! p_cbranch_z %0:scc
+   bld.branch(aco_opcode::p_cbranch_z, Operand(scc, s1));
 
    //! BB1
    //! /* logical preds: / linear preds: BB0, / kind: */
@@ -214,12 +214,12 @@ BEGIN_TEST(regalloc.branch_def_phis_at_branch_block)
 
    //! p_unit_test %tmp:s[0-1]
    bld.pseudo(aco_opcode::p_unit_test, tmp);
-   bld.branch(aco_opcode::p_branch, bld.def(s2));
+   bld.branch(aco_opcode::p_branch);
 
    bld.reset(program->create_and_insert_block());
    program->blocks[2].linear_preds.push_back(0);
 
-   bld.branch(aco_opcode::p_branch, bld.def(s2));
+   bld.branch(aco_opcode::p_branch);
 
    bld.reset(program->create_and_insert_block());
    program->blocks[3].linear_preds.push_back(1);
@@ -522,12 +522,12 @@ BEGIN_TEST(regalloc.linear_vgpr.compact_for_future_def)
       Temp scc_tmp = bld.pseudo(aco_opcode::p_unit_test, bld.def(s1, scc));
 
       //! lv1: %ltmp2_2:v[29] = p_parallelcopy %ltmp2:v[28]
-      //~gfx8_cbranch! s2: %_:s[0-1] = p_cbranch_z %scc_tmp:scc
-      //~gfx8_branch! s2: %_:s[0-1] = p_branch
+      //~gfx8_cbranch! p_cbranch_z %scc_tmp:scc
+      //~gfx8_branch! p_branch
       if (cbr)
-         bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), bld.scc(scc_tmp));
+         bld.branch(aco_opcode::p_cbranch_z, bld.scc(scc_tmp));
       else
-         bld.branch(aco_opcode::p_branch, bld.def(s2));
+         bld.branch(aco_opcode::p_branch);
 
       //! BB1
       //! /* logical preds: BB0, / linear preds: BB0, / kind: */
@@ -536,9 +536,9 @@ BEGIN_TEST(regalloc.linear_vgpr.compact_for_future_def)
       program->blocks[1].logical_preds.push_back(0);
 
       //! v29: %_:v[0-28] = p_unit_test
-      //! s2: %_:s[0-1] = p_branch
+      //! p_branch
       bld.pseudo(aco_opcode::p_unit_test, bld.def(RegClass::get(RegType::vgpr, 29 * 4)));
-      bld.branch(aco_opcode::p_branch, bld.def(s2));
+      bld.branch(aco_opcode::p_branch);
 
       //! BB2
       //! /* logical preds: BB1, / linear preds: BB1, / kind: uniform, top-level, */
@@ -554,12 +554,13 @@ BEGIN_TEST(regalloc.linear_vgpr.compact_for_future_def)
 
       finish_ra_test(ra_test_policy());
 
-      //~gfx8_cbranch>> lv1: %ltmp2_2:v[29] = p_parallelcopy %ltmp2:v[28] scc:1 scratch:s1
-      //~gfx8_branch>> lv1: %ltmp2_2:v[29] = p_parallelcopy %ltmp2:v[28] scc:0 scratch:s253
+      //~gfx8_cbranch>> lv1: %ltmp2_2:v[29] = p_parallelcopy %ltmp2:v[28] needs_scratch:1 scratch:s0
+      //~gfx8_branch>> lv1: %ltmp2_2:v[29] = p_parallelcopy %ltmp2:v[28] needs_scratch:1 scratch:s253
       aco_ptr<Instruction>& parallelcopy = program->blocks[0].instructions[6];
       aco_print_instr(program->gfx_level, parallelcopy.get(), output);
       if (parallelcopy->isPseudo()) {
-         fprintf(output, " scc:%u scratch:s%u\n", parallelcopy->pseudo().tmp_in_scc,
+         fprintf(output, " needs_scratch:%d scratch:s%u\n",
+                 parallelcopy->pseudo().needs_scratch_reg,
                  parallelcopy->pseudo().scratch_sgpr.reg());
       } else {
          fprintf(output, "\n");
@@ -583,12 +584,12 @@ BEGIN_TEST(regalloc.linear_vgpr.compact_for_future_phis)
       end_linear_vgpr(ltmp1);
 
       //! lv1: %ltmp2_2:v[30] = p_parallelcopy %ltmp2:v[29]
-      //~gfx8_cbranch! s2: %_:s[0-1] = p_cbranch_z %_:scc
-      //~gfx8_branch! s2: %_:s[0-1] = p_branch
+      //~gfx8_cbranch! p_cbranch_z %_:scc
+      //~gfx8_branch! p_branch
       if (cbr)
-         bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(scc, s1));
+         bld.branch(aco_opcode::p_cbranch_z, Operand(scc, s1));
       else
-         bld.branch(aco_opcode::p_branch, bld.def(s2));
+         bld.branch(aco_opcode::p_branch);
 
       //! BB1
       //! /* logical preds: BB0, / linear preds: BB0, / kind: */
@@ -596,8 +597,8 @@ BEGIN_TEST(regalloc.linear_vgpr.compact_for_future_phis)
       program->blocks[1].linear_preds.push_back(0);
       program->blocks[1].logical_preds.push_back(0);
 
-      //! s2: %_:s[0-1] = p_branch
-      bld.branch(aco_opcode::p_branch, bld.def(s2));
+      //! p_branch
+      bld.branch(aco_opcode::p_branch);
 
       //! BB2
       //! /* logical preds: BB1, / linear preds: BB1, / kind: uniform, top-level, */

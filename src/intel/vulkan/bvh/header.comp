@@ -1,0 +1,50 @@
+/* Copyright © 2024 Valve Corporation
+ * Copyright © 2024 Intel Corporation
+ * SPDX-License-Identifier: MIT
+ */
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+#include "anv_build_interface.h"
+
+layout(push_constant) uniform CONSTS
+{
+   header_args args;
+};
+
+void
+main(void)
+{
+   uint32_t compacted_size =
+      args.bvh_offset + DEREF(args.src).dst_node_offset * ANV_RT_BLOCK_SIZE;
+
+   uint32_t serialization_size = compacted_size +
+      SIZEOF(vk_accel_struct_serialization_header) + SIZEOF(uint64_t) *
+      args.instance_count;
+
+   DEREF(args.dst).compacted_size = compacted_size;
+   DEREF(args.dst).size = compacted_size;
+   DEREF(args.dst).serialization_size = serialization_size;
+   DEREF(args.dst).self_ptr = uint64_t(args.dst);
+   DEREF(args.dst).instance_count = args.instance_count;
+
+   /* 128 is local_size_x in copy.comp shader, 8 is the amount of data
+    * copied by each iteration of that shader's loop
+    */
+   DEREF(args.dst).copy_dispatch_size[0] = DIV_ROUND_UP(compacted_size, 8 * 128);
+   DEREF(args.dst).copy_dispatch_size[1] = 1;
+   DEREF(args.dst).copy_dispatch_size[2] = 1;
+}

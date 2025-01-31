@@ -882,7 +882,7 @@ elk_fs_instruction_scheduler::setup_liveness(elk_cfg_t *cfg)
       }
    }
 
-   int payload_last_use_ip[hw_reg_count];
+   int *payload_last_use_ip = ralloc_array(NULL, int, hw_reg_count);
    v->calculate_payload_ranges(hw_reg_count, payload_last_use_ip);
 
    for (unsigned i = 0; i < hw_reg_count; i++) {
@@ -897,6 +897,8 @@ elk_fs_instruction_scheduler::setup_liveness(elk_cfg_t *cfg)
             BITSET_SET(hw_liveout[block], i);
       }
    }
+
+   ralloc_free(payload_last_use_ip);
 }
 
 void
@@ -1203,7 +1205,7 @@ elk_fs_instruction_scheduler::calculate_deps()
     * After register allocation, reg_offsets are gone and we track individual
     * GRF registers.
     */
-   elk_schedule_node *last_mrf_write[ELK_MAX_MRF(v->devinfo->ver)];
+   elk_schedule_node *last_mrf_write[ELK_MAX_MRF_ALL];
    elk_schedule_node *last_conditional_mod[8] = {};
    elk_schedule_node *last_accumulator_write = NULL;
    /* Fixed HW registers are assumed to be separate from the virtual
@@ -1470,7 +1472,7 @@ elk_fs_instruction_scheduler::calculate_deps()
 void
 elk_vec4_instruction_scheduler::calculate_deps()
 {
-   elk_schedule_node *last_mrf_write[ELK_MAX_MRF(v->devinfo->ver)];
+   elk_schedule_node *last_mrf_write[ELK_MAX_MRF_ALL];
    elk_schedule_node *last_conditional_mod = NULL;
    elk_schedule_node *last_accumulator_write = NULL;
    /* Fixed HW registers are assumed to be separate from the virtual

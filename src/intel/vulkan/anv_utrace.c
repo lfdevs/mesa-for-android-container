@@ -26,7 +26,7 @@
 
 #include "common/intel_debug_identifier.h"
 #include "ds/intel_tracepoints.h"
-#include "genxml/gen9_pack.h"
+#include "genxml/gen90_pack.h"
 #include "perf/intel_perf.h"
 #include "util/perf/cpu_trace.h"
 
@@ -350,21 +350,36 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
    /* Is this a end of compute trace point? */
    const bool is_end_compute =
       cs == NULL &&
-      (flags & INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE_CS);
-
-   assert(device->info->verx10 < 125 ||
-          !is_end_compute ||
-          cmd_buffer->state.last_indirect_dispatch != NULL ||
-          cmd_buffer->state.last_compute_walker != NULL);
-
-   enum anv_timestamp_capture_type capture_type =
-      (device->info->verx10 >= 125 && is_end_compute) ?
-      (cmd_buffer->state.last_indirect_dispatch != NULL ?
-       ANV_TIMESTAMP_REWRITE_INDIRECT_DISPATCH : ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER) :
-      (flags & (INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE |
-                INTEL_DS_TRACEPOINT_FLAG_END_OF_PIPE_CS)) ?
-      ANV_TIMESTAMP_CAPTURE_END_OF_PIPE : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
-
+      (flags & INTEL_DS_TRACEPOINT_FLAG_END_CS);
+   const bool is_end_compute_or_noop =
+      cs == NULL &&
+      (flags & INTEL_DS_TRACEPOINT_FLAG_END_CS_OR_NOOP);
+   enum anv_timestamp_capture_type capture_type;
+   if (is_end_compute) {
+      assert(device->info->verx10 < 125 ||
+             !is_end_compute ||
+             cmd_buffer->state.last_indirect_dispatch != NULL ||
+             cmd_buffer->state.last_compute_walker != NULL);
+      capture_type =
+         device->info->verx10 >= 125 ?
+         (cmd_buffer->state.last_indirect_dispatch != NULL ?
+          ANV_TIMESTAMP_REWRITE_INDIRECT_DISPATCH :
+          ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER) :
+          ANV_TIMESTAMP_CAPTURE_END_OF_PIPE;
+   } else if (is_end_compute_or_noop) {
+      capture_type =
+         device->info->verx10 >= 125 ?
+         (cmd_buffer->state.last_indirect_dispatch != NULL ?
+          ANV_TIMESTAMP_REWRITE_INDIRECT_DISPATCH :
+          (cmd_buffer->state.last_compute_walker != NULL ?
+           ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER :
+           ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE)) :
+         ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
+   } else {
+      capture_type = (flags & INTEL_DS_TRACEPOINT_FLAG_END_CS) ?
+         ANV_TIMESTAMP_CAPTURE_END_OF_PIPE :
+         ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
+   }
 
    void *addr = capture_type ==  ANV_TIMESTAMP_REWRITE_INDIRECT_DISPATCH ?
                 cmd_buffer->state.last_indirect_dispatch :

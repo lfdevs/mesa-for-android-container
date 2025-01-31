@@ -210,6 +210,10 @@ xe_vm_bind_op(struct anv_device *device,
    struct drm_xe_vm_bind args = {
       .vm_id = device->vm_id,
       .num_binds = submit->binds_len,
+      /* submit->queue will be set for sparse bindings which application is
+       * required to synchronize access.
+       */
+      .exec_queue_id = submit->queue ? submit->queue->bind_queue_id : 0,
       .bind = {},
       .num_syncs = num_syncs,
       .syncs = (uintptr_t)xe_syncs,

@@ -66,9 +66,9 @@ static void _apple_glapi_create_table(void) {
     _glapi_table_patch(__applegl_api, "Viewport", __applegl_glViewport);
 }
 
-void apple_glapi_set_dispatch(void) {
+void apple_mesa_glapi_set_dispatch(void) {
     _apple_glapi_create_table();
-    _glapi_set_dispatch(__applegl_api);
+    _mesa_glapi_set_dispatch(__applegl_api);
 }
 
 void apple_glapi_oglfw_viewport_scissor(GLint x, GLint y, GLsizei width, GLsizei height) {

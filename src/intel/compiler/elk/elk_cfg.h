@@ -25,8 +25,7 @@
  *
  */
 
-#ifndef ELK_CFG_H
-#define ELK_CFG_H
+#pragma once
 
 #include "elk_ir.h"
 #ifdef __cplusplus
@@ -533,5 +532,3 @@ namespace elk {
    };
 }
 #endif
-
-#endif /* ELK_CFG_H */

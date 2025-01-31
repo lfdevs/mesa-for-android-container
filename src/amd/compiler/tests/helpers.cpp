@@ -6,6 +6,7 @@
 #include "helpers.h"
 
 #include "common/amd_family.h"
+#include "common/nir/ac_nir.h"
 #include "vk_format.h"
 
 #include <llvm-c/Target.h>
@@ -147,7 +148,7 @@ setup_nir_cs(enum amd_gfx_level gfx_level, gl_shader_stage stage, enum radeon_fa
    rad_info.family = family;
 
    memset(&nir_options, 0, sizeof(nir_options));
-   ac_set_nir_options(&rad_info, false, &nir_options);
+   ac_nir_set_options(&rad_info, false, &nir_options);
 
    glsl_type_singleton_init_or_ref();
 
@@ -361,7 +362,6 @@ void
 finish_isel_test(enum ac_hw_stage hw_stage, unsigned wave_size)
 {
    nir_validate_shader(nb->shader, "in finish_isel_test");
-   nir_validate_ssa_dominance(nb->shader, "in finish_isel_test");
 
    program.reset(new Program);
    program->debug.func = nullptr;
@@ -382,6 +382,8 @@ finish_isel_test(enum ac_hw_stage hw_stage, unsigned wave_size)
 
    select_program(program.get(), 1, &nb->shader, &config, &options, &info, &args);
    dominator_tree(program.get());
+   if (program->should_repair_ssa)
+      repair_ssa(program.get());
    lower_phis(program.get());
 
    ralloc_free(nb->shader);
@@ -602,32 +604,30 @@ emit_divergent_if_else(Program* prog, aco::Builder& b, Operand cond, std::functi
    b.reset(if_block);
    Temp saved_exec = b.sop1(Builder::s_and_saveexec, b.def(b.lm, saved_exec_reg),
                             Definition(scc, s1), Definition(exec, b.lm), cond, Operand(exec, b.lm));
-   b.branch(aco_opcode::p_cbranch_nz, Definition(vcc, bld.lm), then_logical->index,
-            then_linear->index);
+   b.branch(aco_opcode::p_cbranch_nz, then_logical->index, then_linear->index);
 
    b.reset(then_logical);
    b.pseudo(aco_opcode::p_logical_start);
    then();
    b.pseudo(aco_opcode::p_logical_end);
-   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), invert->index);
+   b.branch(aco_opcode::p_branch, invert->index);
 
    b.reset(then_linear);
-   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), invert->index);
+   b.branch(aco_opcode::p_branch, invert->index);
 
    b.reset(invert);
    b.sop2(Builder::s_andn2, Definition(exec, bld.lm), Definition(scc, s1),
           Operand(saved_exec, saved_exec_reg), Operand(exec, bld.lm));
-   b.branch(aco_opcode::p_cbranch_nz, Definition(vcc, bld.lm), else_logical->index,
-            else_linear->index);
+   b.branch(aco_opcode::p_cbranch_nz, else_logical->index, else_linear->index);
 
    b.reset(else_logical);
    b.pseudo(aco_opcode::p_logical_start);
    els();
    b.pseudo(aco_opcode::p_logical_end);
-   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), endif_block->index);
+   b.branch(aco_opcode::p_branch, endif_block->index);
 
    b.reset(else_linear);
-   b.branch(aco_opcode::p_branch, Definition(vcc, bld.lm), endif_block->index);
+   b.branch(aco_opcode::p_branch, endif_block->index);
 
    b.reset(endif_block);
    b.pseudo(aco_opcode::p_parallelcopy, Definition(exec, bld.lm),

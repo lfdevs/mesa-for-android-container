@@ -1,0 +1,7 @@
+{
+	global:
+		egl*;
+		MesaGLInteropEGL*;
+	local:
+		*;
+};

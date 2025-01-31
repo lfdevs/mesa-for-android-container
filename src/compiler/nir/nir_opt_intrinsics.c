@@ -23,6 +23,7 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "nir_search_helpers.h"
 
 /**
  * \file nir_opt_intrinsics.c
@@ -87,6 +88,22 @@ try_opt_bcsel_of_shuffle(nir_builder *b, nir_alu_instr *alu,
    nir_def *shuffle = nir_shuffle(b, data1, index);
 
    return shuffle;
+}
+
+/* load_front_face ? a : -a -> load_front_face_sign * a */
+static nir_def *
+try_opt_front_face_fsign(nir_builder *b, nir_alu_instr *alu)
+{
+   if (alu->def.bit_size != 32 ||
+       !nir_src_as_intrinsic(alu->src[0].src) ||
+       nir_src_as_intrinsic(alu->src[0].src)->intrinsic != nir_intrinsic_load_front_face ||
+       !is_only_used_as_float(alu) ||
+       !nir_alu_srcs_negative_equal_typed(alu, alu, 1, 2, nir_type_float))
+      return NULL;
+
+   nir_def *src = nir_ssa_for_alu_src(b, alu, 1);
+
+   return nir_fmul(b, nir_load_front_face_fsign(b), src);
 }
 
 static bool
@@ -222,6 +239,8 @@ opt_intrinsics_alu(nir_builder *b, nir_alu_instr *alu,
    switch (alu->op) {
    case nir_op_bcsel:
       replacement = try_opt_bcsel_of_shuffle(b, alu, block_has_discard);
+      if (!replacement && options->optimize_load_front_face_fsign)
+         replacement = try_opt_front_face_fsign(b, alu);
       break;
    case nir_op_iand:
    case nir_op_ior:

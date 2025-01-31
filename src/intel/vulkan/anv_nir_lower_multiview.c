@@ -204,7 +204,11 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask,
     * implement multiview.
     */
    if (use_primitive_replication) {
-      bool progress = nir_lower_multiview(shader, view_mask);
+      nir_lower_multiview_options options = {
+         .view_mask = view_mask,
+         .allowed_per_view_outputs = VARYING_BIT_POS
+      };
+      bool progress = nir_lower_multiview(shader, options);
 
       if (progress) {
          nir_builder b = nir_builder_at(nir_before_impl(entrypoint));
@@ -339,5 +343,9 @@ anv_check_for_primitive_replication(struct anv_device *device,
    if (view_count == 1 || view_count > primitive_replication_max_views)
       return false;
 
-   return nir_can_lower_multiview(shaders[MESA_SHADER_VERTEX]);
+   nir_lower_multiview_options options = {
+      .view_mask = view_mask,
+      .allowed_per_view_outputs = VARYING_BIT_POS
+   };
+   return nir_can_lower_multiview(shaders[MESA_SHADER_VERTEX], options);
 }

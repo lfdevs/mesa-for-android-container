@@ -208,7 +208,8 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->vscreen->pscreen->get_video_param || !drv->vscreen->pscreen->is_video_format_supported)
       goto error_pipe;
 
-   drv->pipe = pipe_create_multimedia_context(drv->vscreen->pscreen);
+   bool compute_only = drv->vscreen->pscreen->caps.prefer_compute_for_multimedia;
+   drv->pipe = pipe_create_multimedia_context(drv->vscreen->pscreen, compute_only);
    if (!drv->pipe)
       goto error_pipe;
 
@@ -216,11 +217,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->htab)
       goto error_htab;
 
-   bool can_init_compositor = (drv->vscreen->pscreen->get_param(drv->vscreen->pscreen, PIPE_CAP_GRAPHICS) ||
-                              drv->vscreen->pscreen->get_param(drv->vscreen->pscreen, PIPE_CAP_COMPUTE));
+   bool can_init_compositor = drv->vscreen->pscreen->caps.graphics ||
+                              drv->vscreen->pscreen->caps.compute;
 
    if (can_init_compositor) {
-      if (!vl_compositor_init(&drv->compositor, drv->pipe))
+      if (!vl_compositor_init(&drv->compositor, drv->pipe, compute_only))
          goto error_compositor;
       if (!vl_compositor_init_state(&drv->cstate, drv->pipe))
          goto error_compositor_state;
@@ -450,6 +451,7 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
    }
 
+   mtx_init(&context->mutex, mtx_plain);
    context->surfaces = _mesa_set_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
    context->buffers = _mesa_set_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
 
@@ -479,6 +481,8 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
+
+   mtx_lock(&context->mutex);
 
    set_foreach(context->surfaces, entry) {
       vlVaSurface *surf = (vlVaSurface *)entry->key;
@@ -550,12 +554,12 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
       }
       context->decoder->destroy(context->decoder);
    }
-   if (context->blit_cs)
-      drv->pipe->delete_compute_state(drv->pipe, context->blit_cs);
    if (context->deint) {
       vl_deint_filter_cleanup(context->deint);
       FREE(context->deint);
    }
+   mtx_unlock(&context->mutex);
+   mtx_destroy(&context->mutex);
    FREE(context->desc.base.decrypt_key);
    FREE(context->bs.buffers);
    FREE(context->bs.sizes);

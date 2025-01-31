@@ -21,8 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_NIR_H
-#define ELK_NIR_H
+#pragma once
 
 #include "compiler/nir/nir.h"
 #include "elk_compiler.h"
@@ -275,8 +274,9 @@ const struct glsl_type *elk_nir_get_var_type(const struct nir_shader *nir,
 
 void elk_nir_adjust_payload(nir_shader *shader);
 
+nir_shader *
+elk_nir_from_spirv(void *mem_ctx, const uint32_t *spirv, size_t spirv_size);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* ELK_NIR_H */

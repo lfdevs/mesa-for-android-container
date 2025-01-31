@@ -8,7 +8,7 @@ if with_platform_wayland
   incs_gbm_dri += inc_wayland_drm
 endif
 
-libgbm_dri = shared_library(
+shared_library(
   'dri_gbm',
   files('gbm_dri.c', 'gbm_driint.h'),
   include_directories : [incs_gbm, incs_gbm_dri, inc_st_dri, inc_gallium_aux],

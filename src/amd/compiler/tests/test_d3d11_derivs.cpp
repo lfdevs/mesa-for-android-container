@@ -83,8 +83,8 @@ BEGIN_TEST(d3d11_derivs.constant)
    //>> p_end_linear_vgpr (kill)%wqm
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 
-   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                                         ; $_
    //>> v_mov_b32_e32 v#ry, -0.5                                                           ; $_
+   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                                         ; $_
    //>> v_mov_b32_e32 v#rx, v#rx_tmp                                                       ; $_
    //>> image_sample v[#_:#_], v[#rx:#ry], s[#_:#_], s[#_:#_] dmask:0xf dim:SQ_RSRC_IMG_2D ; $_ $_
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "Assembly");
@@ -115,8 +115,8 @@ BEGIN_TEST(d3d11_derivs.discard)
    pbld.add_vsfs(vs, fs);
 
    /* The discard gets emitted as demote_if. */
-   //>> s2: %_:exec,  s1: %cond:scc = s_wqm_b64 %_
-   //>> p_exit_early_if (kill)%cond:scc
+   //>> s2: %_:exec,  s1: (kill)%_:scc = s_wqm_b64 %_
+   //! p_exit_early_if_not %_:exec
    //>> v4: %_ = image_sample (kill)%_, (kill)%_, v1: undef, (kill)%_, (kill)%_ 2d
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 END_TEST
@@ -334,8 +334,8 @@ BEGIN_TEST(d3d11_derivs._1d_gfx9)
    //>> p_end_linear_vgpr (kill)%wqm
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 
-   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                ; $_
    //>> v_mov_b32_e32 v#ry, 0.5                                   ; $_
+   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                ; $_
    //>> v_mov_b32_e32 v#rx, v#rx_tmp                              ; $_
    //; success = rx+1 == ry
    //>> image_sample v[#_:#_], v#rx, s[#_:#_], s[#_:#_] dmask:0xf ; $_ $_
@@ -376,10 +376,10 @@ BEGIN_TEST(d3d11_derivs._1d_array_gfx9)
    //>> p_end_linear_vgpr (kill)%wqm
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 
+   //>> v_mov_b32_e32 v#ry, 0.5                                      ; $_
    //>> v_interp_p2_f32_e32 v#rl_tmp, v#_, attr0.y                   ; $_
    //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                   ; $_
    //>> v_rndne_f32_e32 v#rl_tmp, v#rl_tmp                           ; $_
-   //>> v_mov_b32_e32 v#ry, 0.5                                      ; $_
    //>> v_mov_b32_e32 v#rx, v#rx_tmp                                 ; $_
    //>> v_mov_b32_e32 v#rl, v#rl_tmp                                 ; $_
    //>> BB1:
@@ -472,11 +472,11 @@ BEGIN_TEST(d3d11_derivs.cube_array)
 
    //>> v_cubeid_f32 v#rf, v#_, v#_, v#_                                                      ; $_ $_
 
+   //>> v_fmamk_f32 v#rlf_tmp, v#rl, 0x41000000, v#rf                                         ; $_ $_
+   //>> v_mov_b32_e32 v#rlf, v#rlf_tmp                                                        ; $_
    //>> v_fmaak_f32 v#rx_tmp, v#_, v#_, 0x3fc00000                                            ; $_ $_
    //>> v_fmaak_f32 v#ry_tmp, v#_, v#_, 0x3fc00000                                            ; $_ $_
-   //>> v_fmamk_f32 v#rlf_tmp, v#rl, 0x41000000, v#rf                                         ; $_ $_
    //>> v_lshrrev_b64 v[#rx:#ry], 0, v[#rx_tmp:#ry_tmp]                                       ; $_ $_
-   //>> v_mov_b32_e32 v#rlf, v#rlf_tmp                                                        ; $_
 
    //>> BB1:
    //; success = rx+1 == ry and rx+2 == rlf

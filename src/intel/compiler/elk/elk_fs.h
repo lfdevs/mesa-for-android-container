@@ -25,8 +25,7 @@
  *
  */
 
-#ifndef ELK_FS_H
-#define ELK_FS_H
+#pragma once
 
 #include "elk_shader.h"
 #include "elk_ir_fs.h"
@@ -588,5 +587,3 @@ int elk_get_subgroup_id_param_index(const intel_device_info *devinfo,
                                     const elk_stage_prog_data *prog_data);
 
 void nir_to_elk(elk_fs_visitor *s);
-
-#endif /* ELK_FS_H */

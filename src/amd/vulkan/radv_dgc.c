@@ -1399,8 +1399,8 @@ dgc_get_index_type(struct dgc_cmdbuf *cs, nir_def *user_index_type)
    } else {
       nir_def *index_type = nir_bcsel(b, nir_ieq_imm(b, user_index_type, VK_INDEX_TYPE_UINT32),
                                       nir_imm_int(b, V_028A7C_VGT_INDEX_32), nir_imm_int(b, V_028A7C_VGT_INDEX_16));
-      return nir_bcsel(b, nir_ieq_imm(b, user_index_type, VK_INDEX_TYPE_UINT8_KHR),
-                       nir_imm_int(b, V_028A7C_VGT_INDEX_8), index_type);
+      return nir_bcsel(b, nir_ieq_imm(b, user_index_type, VK_INDEX_TYPE_UINT8), nir_imm_int(b, V_028A7C_VGT_INDEX_8),
+                       index_type);
    }
 }
 
@@ -2535,7 +2535,9 @@ build_dgc_prepare_shader(struct radv_device *dev, struct radv_indirect_command_l
 
       if (layout->push_constant_mask) {
          const VkShaderStageFlags stages =
-            VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_MESH_BIT_EXT;
+            (layout->vk.dgc_info & (BITFIELD_BIT(MESA_VK_DGC_RT) | BITFIELD_BIT(MESA_VK_DGC_DISPATCH)))
+               ? VK_SHADER_STAGE_COMPUTE_BIT
+               : (VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_MESH_BIT_EXT);
 
          dgc_emit_push_constant(&cmd_buf, stream_addr, sequence_id, stages);
       }
@@ -2666,72 +2668,59 @@ build_dgc_prepare_shader(struct radv_device *dev, struct radv_indirect_command_l
 }
 
 static VkResult
-create_pipeline_layout(struct radv_device *device)
-{
-   VkResult result = VK_SUCCESS;
-
-   if (!device->meta_state.dgc_prepare.ds_layout) {
-      const VkDescriptorSetLayoutBinding binding = {
-         .binding = 0,
-         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-      };
-
-      result = radv_meta_create_descriptor_set_layout(device, 1, &binding, &device->meta_state.dgc_prepare.ds_layout);
-      if (result != VK_SUCCESS)
-         return result;
-   }
-
-   if (!device->meta_state.dgc_prepare.p_layout) {
-      const VkPushConstantRange pc_range = {
-         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-         .size = sizeof(struct radv_dgc_params),
-      };
-
-      result = radv_meta_create_pipeline_layout(device, &device->meta_state.dgc_prepare.ds_layout, 1, &pc_range,
-                                                &device->meta_state.dgc_prepare.p_layout);
-   }
-
-   return result;
-}
-
-void
-radv_device_finish_dgc_prepare_state(struct radv_device *device)
-{
-   radv_DestroyPipelineLayout(radv_device_to_handle(device), device->meta_state.dgc_prepare.p_layout,
-                              &device->meta_state.alloc);
-   device->vk.dispatch_table.DestroyDescriptorSetLayout(
-      radv_device_to_handle(device), device->meta_state.dgc_prepare.ds_layout, &device->meta_state.alloc);
-}
-
-VkResult
-radv_device_init_dgc_prepare_state(struct radv_device *device, bool on_demand)
-{
-   if (on_demand)
-      return VK_SUCCESS;
-
-   return create_pipeline_layout(device);
-}
-
-static VkResult
 radv_create_dgc_pipeline(struct radv_device *device, struct radv_indirect_command_layout *layout)
 {
-   struct radv_meta_state *state = &device->meta_state;
+   const char *key_data = "radv-dgc-layout";
    VkResult result;
 
-   mtx_lock(&state->mtx);
-   result = create_pipeline_layout(device);
-   mtx_unlock(&state->mtx);
+   const VkDescriptorSetLayoutBinding binding = {
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+   };
 
+   const VkDescriptorSetLayoutCreateInfo desc_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+      .bindingCount = 1,
+      .pBindings = &binding,
+   };
+
+   const VkPushConstantRange pc_range = {
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .size = sizeof(struct radv_dgc_params),
+   };
+
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
+                                        strlen(key_data), &layout->pipeline_layout);
    if (result != VK_SUCCESS)
       return result;
 
    nir_shader *cs = build_dgc_prepare_shader(device, layout);
 
-   result = radv_meta_create_compute_pipeline(device, cs, device->meta_state.dgc_prepare.p_layout, &layout->pipeline);
-   ralloc_free(cs);
+   const VkPipelineShaderStageCreateInfo stage_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+      .module = vk_shader_module_handle_from_nir(cs),
+      .pName = "main",
+      .pSpecializationInfo = NULL,
+   };
 
+   const VkComputePipelineCreateInfo pipeline_info = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = stage_info,
+      .flags = 0,
+      .layout = layout->pipeline_layout,
+   };
+
+   /* DGC pipelines don't go through the vk_meta cache because that would require to compute a
+    * separate key but they are cached on-disk when possible.
+    */
+   result = radv_CreateComputePipelines(vk_device_to_handle(&device->vk), device->meta_state.device.pipeline_cache, 1,
+                                        &pipeline_info, NULL, &layout->pipeline);
+
+   ralloc_free(cs);
    return result;
 }
 
@@ -3096,11 +3085,11 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer, const VkGeneratedCommandsIn
 
    radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE, layout->pipeline);
 
-   vk_common_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.dgc_prepare.p_layout,
+   vk_common_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), layout->pipeline_layout,
                               VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(params), &params);
 
    radv_meta_push_descriptor_set(
-      cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, device->meta_state.dgc_prepare.p_layout, 0, 1,
+      cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, layout->pipeline_layout, 0, 1,
       (VkWriteDescriptorSet[]){{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                                 .dstBinding = 0,
                                 .dstArrayElement = 0,

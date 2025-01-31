@@ -55,13 +55,13 @@ get_compact_params_name(const testing::TestParamInfo<CompactParams> p)
 }
 
 static bool
-test_compact_instruction(struct brw_codegen *p, brw_inst src)
+test_compact_instruction(struct brw_codegen *p, brw_eu_inst src)
 {
-   brw_compact_inst dst;
+   brw_eu_compact_inst dst;
    memset(&dst, 0xd0, sizeof(dst));
 
    if (brw_try_compact_instruction(p->isa, &dst, &src)) {
-      brw_inst uncompacted;
+      brw_eu_inst uncompacted;
 
       brw_uncompact_instruction(p->isa, &uncompacted, &dst);
       if (memcmp(&uncompacted, &src, sizeof(src))) {
@@ -69,7 +69,7 @@ test_compact_instruction(struct brw_codegen *p, brw_inst src)
 	 return false;
       }
    } else {
-      brw_compact_inst unchanged;
+      brw_eu_compact_inst unchanged;
       memset(&unchanged, 0xd0, sizeof(unchanged));
       /* It's not supposed to change dst unless it compacted. */
       if (memcmp(&unchanged, &dst, sizeof(dst))) {
@@ -91,20 +91,20 @@ test_compact_instruction(struct brw_codegen *p, brw_inst src)
  * become meaningless once fuzzing twiddles a related bit.
  */
 static void
-clear_pad_bits(const struct brw_isa_info *isa, brw_inst *inst)
+clear_pad_bits(const struct brw_isa_info *isa, brw_eu_inst *inst)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
 
-   if (brw_inst_opcode(isa, inst) != BRW_OPCODE_SEND &&
-       brw_inst_opcode(isa, inst) != BRW_OPCODE_SENDC &&
-       brw_inst_src0_reg_file(devinfo, inst) != IMM &&
-       brw_inst_src1_reg_file(devinfo, inst) != IMM) {
-      brw_inst_set_bits(inst, 127, 111, 0);
+   if (brw_eu_inst_opcode(isa, inst) != BRW_OPCODE_SEND &&
+       brw_eu_inst_opcode(isa, inst) != BRW_OPCODE_SENDC &&
+       brw_eu_inst_src0_reg_file(devinfo, inst) != IMM &&
+       brw_eu_inst_src1_reg_file(devinfo, inst) != IMM) {
+      brw_eu_inst_set_bits(inst, 127, 111, 0);
    }
 }
 
 static bool
-skip_bit(const struct brw_isa_info *isa, brw_inst *src, int bit)
+skip_bit(const struct brw_isa_info *isa, brw_eu_inst *src, int bit)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
 
@@ -116,7 +116,7 @@ skip_bit(const struct brw_isa_info *isa, brw_inst *src, int bit)
    if (bit == 29)
       return true;
 
-   if (is_3src(isa, brw_inst_opcode(isa, src))) {
+   if (is_3src(isa, brw_eu_inst_opcode(isa, src))) {
       if (bit == 127)
          return true;
    } else {
@@ -131,10 +131,10 @@ skip_bit(const struct brw_isa_info *isa, brw_inst *src, int bit)
    }
 
    /* sometimes these are pad bits. */
-   if (brw_inst_opcode(isa, src) != BRW_OPCODE_SEND &&
-       brw_inst_opcode(isa, src) != BRW_OPCODE_SENDC &&
-       brw_inst_src0_reg_file(devinfo, src) != IMM &&
-       brw_inst_src1_reg_file(devinfo, src) != IMM &&
+   if (brw_eu_inst_opcode(isa, src) != BRW_OPCODE_SEND &&
+       brw_eu_inst_opcode(isa, src) != BRW_OPCODE_SENDC &&
+       brw_eu_inst_src0_reg_file(devinfo, src) != IMM &&
+       brw_eu_inst_src1_reg_file(devinfo, src) != IMM &&
        bit >= 121) {
       return true;
    }
@@ -143,14 +143,14 @@ skip_bit(const struct brw_isa_info *isa, brw_inst *src, int bit)
 }
 
 static bool
-test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
+test_fuzz_compact_instruction(struct brw_codegen *p, brw_eu_inst src)
 {
    for (int bit0 = 0; bit0 < 128; bit0++) {
       if (skip_bit(p->isa, &src, bit0))
 	 continue;
 
       for (int bit1 = 0; bit1 < 128; bit1++) {
-         brw_inst instr = src;
+         brw_eu_inst instr = src;
 	 uint64_t *bits = instr.data;
 
          if (skip_bit(p->isa, &src, bit1))
@@ -161,7 +161,7 @@ test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
 
          clear_pad_bits(p->isa, &instr);
 
-         if (!brw_validate_instruction(p->isa, &instr, 0, sizeof(brw_inst), NULL))
+         if (!brw_validate_instruction(p->isa, &instr, 0, sizeof(brw_eu_inst), NULL))
             continue;
 
 	 if (!test_compact_instruction(p, instr)) {
@@ -215,7 +215,8 @@ INSTANTIATE_TEST_SUITE_P(
       CompactParams{ 110, BRW_ALIGN_1 },
       CompactParams{ 120, BRW_ALIGN_1 },
       CompactParams{ 125, BRW_ALIGN_1 },
-      CompactParams{ 200, BRW_ALIGN_1 }
+      CompactParams{ 200, BRW_ALIGN_1 },
+      CompactParams{ 300, BRW_ALIGN_1 }
    ),
    get_compact_params_name);
 
@@ -283,7 +284,7 @@ TEST_P(Instructions, f0_1_MOV_GRF_GRF)
 
    brw_push_insn_state(p);
    brw_set_default_predicate_control(p, BRW_PREDICATE_NORMAL);
-   brw_inst *mov = brw_MOV(p, g0, g2);
-   brw_inst_set_flag_subreg_nr(p->devinfo, mov, 1);
+   brw_eu_inst *mov = brw_MOV(p, g0, g2);
+   brw_eu_inst_set_flag_subreg_nr(p->devinfo, mov, 1);
    brw_pop_insn_state(p);
 }

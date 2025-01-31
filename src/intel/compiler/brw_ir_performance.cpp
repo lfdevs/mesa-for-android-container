@@ -71,7 +71,7 @@ namespace {
       /* Register part of the GRF. */
       EU_DEPENDENCY_ID_GRF0 = 0,
       /* Address register part of the ARF. */
-      EU_DEPENDENCY_ID_ADDR0 = EU_DEPENDENCY_ID_GRF0 + XE2_MAX_GRF,
+      EU_DEPENDENCY_ID_ADDR0 = EU_DEPENDENCY_ID_GRF0 + XE3_MAX_GRF,
       /* Accumulator register part of the ARF. */
       EU_DEPENDENCY_ID_ACCUM0 = EU_DEPENDENCY_ID_ADDR0 + 1,
       /* Flag register part of the ARF. */
@@ -128,11 +128,18 @@ namespace {
           * messages which require the total size.
           */
          if (inst->opcode == SHADER_OPCODE_SEND) {
-            ss = DIV_ROUND_UP(inst->size_read(2), REG_SIZE) +
-                 DIV_ROUND_UP(inst->size_read(3), REG_SIZE);
+            ss = DIV_ROUND_UP(inst->size_read(devinfo, 2), REG_SIZE) +
+                 DIV_ROUND_UP(inst->size_read(devinfo, 3), REG_SIZE);
+         } else if (inst->opcode == SHADER_OPCODE_SEND_GATHER) {
+            ss = inst->mlen;
+            /* If haven't lowered yet, count the sources. */
+            if (!ss) {
+               for (int i = 3; i < inst->sources; i++)
+                  ss += DIV_ROUND_UP(inst->size_read(devinfo, i), REG_SIZE);
+            }
          } else {
             for (unsigned i = 0; i < inst->sources; i++)
-               ss = MAX2(ss, DIV_ROUND_UP(inst->size_read(i), REG_SIZE));
+               ss = MAX2(ss, DIV_ROUND_UP(inst->size_read(devinfo, i), REG_SIZE));
          }
 
          /* Convert the execution size to GRF units. */
@@ -597,6 +604,7 @@ namespace {
                                0, 0, 0, 0, 0, 0);
 
       case SHADER_OPCODE_SEND:
+      case SHADER_OPCODE_SEND_GATHER:
          switch (info.sfid) {
          case GFX6_SFID_DATAPORT_CONSTANT_CACHE:
             /* See FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD */
@@ -878,7 +886,7 @@ namespace {
 
       /* Stall on any source dependencies. */
       for (unsigned i = 0; i < inst->sources; i++) {
-         for (unsigned j = 0; j < regs_read(inst, i); j++)
+         for (unsigned j = 0; j < regs_read(devinfo, inst, i); j++)
             stall_on_dependency(
                st, reg_dependency_id(devinfo, inst->src[i], j));
       }
@@ -935,7 +943,7 @@ namespace {
       if (inst->is_send_from_grf()) {
          for (unsigned i = 0; i < inst->sources; i++) {
             if (inst->is_payload(i)) {
-               for (unsigned j = 0; j < regs_read(inst, i); j++)
+               for (unsigned j = 0; j < regs_read(devinfo, inst, i); j++)
                   mark_read_dependency(
                      st, perf, reg_dependency_id(devinfo, inst->src[i], j));
             }

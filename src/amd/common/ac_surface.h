@@ -78,12 +78,7 @@ enum radeon_micro_mode
 #define RADEON_SURF_NO_STENCIL_ADJUST     (1ull << 35)
 #define RADEON_SURF_PREFER_4K_ALIGNMENT   (1ull << 36)
 #define RADEON_SURF_PREFER_64K_ALIGNMENT  (1ull << 37)
-
-enum radeon_enc_hevc_surface_alignment
-{
-   RADEON_ENC_HEVC_SURFACE_LOG2_WIDTH_ALIGNMENT = 6,
-   RADEON_ENC_HEVC_SURFACE_LOG2_HEIGHT_ALIGNMENT = 4,
-};
+#define RADEON_SURF_VIDEO_REFERENCE       (1ull << 38)
 
 struct legacy_surf_level {
    uint32_t offset_256B;   /* divided by 256, the hw can only do 40-bit addresses */
@@ -454,7 +449,9 @@ int ac_compute_surface(struct ac_addrlib *addrlib, const struct radeon_info *inf
 void ac_surface_zero_dcc_fields(struct radeon_surf *surf);
 unsigned ac_pipe_config_to_num_pipes(unsigned pipe_config);
 
-void ac_surface_apply_bo_metadata(const struct radeon_info *info, struct radeon_surf *surf,
+#define AC_SURF_METADATA_FLAG_EXTRA_MD_BIT         0
+#define AC_SURF_METADATA_FLAG_FAMILY_OVERRIDEN_BIT 1
+void ac_surface_apply_bo_metadata(enum amd_gfx_level gfx_level, struct radeon_surf *surf,
                                   uint64_t tiling_flags, enum radeon_surf_mode *mode);
 void ac_surface_compute_bo_metadata(const struct radeon_info *info, struct radeon_surf *surf,
                                     uint64_t *tiling_flags);

@@ -1055,10 +1055,3 @@ dri_get_pipe_screen(struct dri_screen *screen)
 {
    return screen->base.screen;
 }
-
-int
-dri_get_screen_param(struct dri_screen *driScreen, enum pipe_cap param)
-{
-   struct pipe_screen *screen = dri_get_pipe_screen(driScreen);
-   return screen->get_param(screen, param);
-}

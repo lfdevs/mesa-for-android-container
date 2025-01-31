@@ -48,6 +48,7 @@ struct blorp_compiler {
    struct blorp_program (*compile_fs)(struct blorp_context *blorp, void *mem_ctx,
                                       struct nir_shader *nir,
                                       bool multisample_fbo,
+                                      bool is_fast_clear,
                                       bool use_repclear);
    struct blorp_program (*compile_vs)(struct blorp_context *blorp, void *mem_ctx,
                                       struct nir_shader *nir);
@@ -443,9 +444,11 @@ static inline struct blorp_program
 blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
                  struct nir_shader *nir,
                  bool multisample_fbo,
+                 bool is_fast_clear,
                  bool use_repclear)
 {
-   return blorp->compiler->compile_fs(blorp, mem_ctx, nir, multisample_fbo, use_repclear);
+   return blorp->compiler->compile_fs(blorp, mem_ctx, nir, multisample_fbo,
+                                      is_fast_clear, use_repclear);
 }
 
 static inline struct blorp_program

@@ -1,5 +1,5 @@
 from contextlib import nullcontext as does_not_raise
-from datetime import datetime
+from datetime import UTC, datetime
 from io import StringIO
 from itertools import cycle
 from typing import Any, Callable, Generator, Iterable, Optional, Tuple, Union
@@ -46,7 +46,7 @@ def generate_testsuite_result(
 def jobs_logs_response(
     finished=False, msg=None, lvl="target", result=None, exit_code=None
 ) -> Tuple[bool, str]:
-    timed_msg = {"dt": str(datetime.now()), "msg": "New message", "lvl": lvl}
+    timed_msg = {"dt": str(datetime.now(tz=UTC)), "msg": "New message", "lvl": lvl}
     if result:
         timed_msg["lvl"] = "target"
         timed_msg["msg"] = f"hwci: mesa: {result}, exit_code: {exit_code}"
@@ -102,7 +102,7 @@ def generate_n_logs(
     else:
         tick_gen = cycle((tick_fn,))
 
-    with freeze_time(datetime.now()) as time_travel:
+    with freeze_time(datetime.now(tz=UTC)) as time_travel:
         tick_sec: int = next(tick_gen)
         while True:
             # Simulate a scenario where the target job is waiting for being started
@@ -128,7 +128,7 @@ def to_iterable(tick_fn):
 def mock_logs(messages=None, result=None, exit_code=None):
     if messages is None:
         messages = {}
-    with freeze_time(datetime.now()) as time_travel:
+    with freeze_time(datetime.now(tz=UTC)) as time_travel:
         # Simulate a complete run given by message_fn
         for msg, tick_list in section_aware_message_generator(messages, result, exit_code):
             for tick_sec in tick_list:

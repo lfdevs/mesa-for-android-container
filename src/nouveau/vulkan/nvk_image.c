@@ -11,6 +11,8 @@
 #include "nvk_physical_device.h"
 #include "nvkmd/nvkmd.h"
 
+#include "util/detect_os.h"
+#include "vk_android.h"
 #include "vk_enum_to_str.h"
 #include "vk_format.h"
 #include "nil.h"
@@ -754,6 +756,20 @@ nvk_image_init(struct nvk_device *dev,
    }
 
    uint32_t explicit_row_stride_B = 0;
+
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      VkImageDrmFormatModifierExplicitCreateInfoEXT eci;
+      VkSubresourceLayout a_plane_layouts[4];
+      VkResult result = vk_android_get_anb_layout(
+         pCreateInfo, &eci, a_plane_layouts, 4);
+      if (result != VK_SUCCESS)
+         return result;
+
+      image->vk.drm_format_mod = eci.drmFormatModifier;
+      explicit_row_stride_B = eci.pPlaneLayouts[0].rowPitch;
+   }
+
    if (image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       /* Modifiers are not supported with YCbCr */
       assert(image->plane_count == 1);
@@ -1011,6 +1027,17 @@ nvk_CreateImage(VkDevice _device,
          return result;
       }
       shadow->addr = image->linear_tiled_shadow_mem->va->addr;
+   }
+
+   /* This section is removed by the optimizer for non-ANDROID builds */
+   if (vk_image_is_android_native_buffer(&image->vk)) {
+      result = vk_android_import_anb(&dev->vk, pCreateInfo, pAllocator,
+                                     &image->vk);
+      if (result != VK_SUCCESS) {
+         nvk_image_finish(dev, image, pAllocator);
+         vk_free2(&dev->vk.alloc, pAllocator, image);
+         return result;
+      }
    }
 
    *pImage = nvk_image_to_handle(image);
@@ -1369,6 +1396,16 @@ nvk_bind_image_memory(struct nvk_device *dev,
    VK_FROM_HANDLE(nvk_device_memory, mem, info->memory);
    VK_FROM_HANDLE(nvk_image, image, info->image);
    VkResult result;
+
+#if DETECT_OS_ANDROID
+   const VkNativeBufferANDROID *anb_info =
+      vk_find_struct_const(info->pNext, NATIVE_BUFFER_ANDROID);
+   if (anb_info != NULL && anb_info->handle != NULL) {
+      /* We do the actual bind the end of CreateImage() */
+      assert(mem == NULL);
+      return VK_SUCCESS;
+   }
+#endif
 
    /* Ignore this struct on Android, we cannot access swapchain structures there. */
 #ifdef NVK_USE_WSI_PLATFORM

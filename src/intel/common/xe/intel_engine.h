@@ -28,6 +28,10 @@
 
 #include "common/intel_engine.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct intel_query_engine_info *
 xe_engine_get_info(int fd);
 
@@ -35,3 +39,7 @@ uint16_t intel_engine_class_to_xe(enum intel_engine_class intel);
 
 bool
 xe_engines_is_guc_semaphore_functional(int fd, const struct intel_device_info *info);
+
+#ifdef __cplusplus
+}
+#endif

@@ -1,5 +1,6 @@
 [[deqp]]
-deqp = "/deqp/external/vulkancts/modules/vulkan/deqp-vk"
-caselists = ["/deqp/mustpass/vk-main.txt"]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 renderer_check = "JSL"
 timeout = 180
+tests_per_group = 5000

@@ -120,7 +120,7 @@ class Field(object):
                 self.default = mod[1]
             elif mod[0] == 'groups':
                 # The zero encoding means "all"
-                self.default = 1 << int(attrs["size"])
+                self.default = (1 << int(attrs["size"])) * mod[1]
             elif mod[0] in ['shr', 'align']:
                 # Zero encodes to zero
                 pass
@@ -292,9 +292,22 @@ class Group(object):
                 if field.exact:
                     value = field.default
 
+                # These types all use util_bitpack_uint
+                pack_as_uint = field.type in ["uint", "hex", "address", "bool"]
+                pack_as_uint |= field.type in self.parser.enums
+                start_adjusted = start
+                value_unshifted = None
+
                 if field.modifier is not None:
                     if field.modifier[0] == "shr":
-                        value = f"{value} >> {field.modifier[1]}"
+                        if pack_as_uint and start >= field.modifier[1]:
+                            # For uint, we fast path.  If we do `(a >> 2) << 2`,
+                            # clang will generate a mask in release builds, even
+                            # though we know we're aligned. So don't generate
+                            # that to avoid the masking.
+                            start_adjusted = start - field.modifier[1]
+                        else:
+                            value = f"{value} >> {field.modifier[1]}"
                     elif field.modifier[0] == "minus":
                         value = f"{value} - {field.modifier[1]}"
                     elif field.modifier[0] == "align":
@@ -305,15 +318,15 @@ class Group(object):
                         value = "__gen_to_groups({}, {}, {})".format(value,
                                 field.modifier[1], end - start + 1)
 
-                if field.type in ["uint", "hex", "address", "bool"] or field.type in self.parser.enums:
-                    bits = (end - start + 1)
+                if pack_as_uint:
+                    bits = (end - start_adjusted + 1)
                     if bits < 64 and not field.exact:
                         # Add some nicer error checking
                         label = f"{self.label}::{name}"
                         bound = hex(1 << bits)
                         print(f"   agx_genxml_validate_bounds(\"{label}\", {value}, {bound}ull);")
 
-                    s = f"util_bitpack_uint({value}, {start}, {end})"
+                    s = f"util_bitpack_uint({value}, {start_adjusted}, {end})"
                 elif field.type == "int":
                     s = "util_bitpack_sint(%s, %d, %d)" % \
                         (value, start, end)
@@ -382,7 +395,7 @@ class Group(object):
             convert = None
 
             args = []
-            args.append('(CONSTANT_ uint32_t *) cl')
+            args.append('(CONST uint32_t *) cl')
             args.append(str(fieldref.start))
             args.append(str(fieldref.end))
 
@@ -560,7 +573,7 @@ class Parser(object):
         print("};\n")
 
     def emit_pack_function(self, name, group):
-        print("static inline void\n%s_pack(GLOBAL_ uint32_t * restrict cl,\n%sconst struct %s * restrict values)\n{" %
+        print("static inline void\n%s_pack(GLOBAL uint32_t * restrict cl,\n%sconst struct %s * restrict values)\n{" %
               (name, ' ' * (len(name) + 6), name))
 
         group.emit_pack_function()
@@ -577,7 +590,7 @@ class Parser(object):
 
     def emit_unpack_function(self, name, group):
         print("static inline bool")
-        print("%s_unpack(FILE_TYPE *fp, CONSTANT_ uint8_t * restrict cl,\n%sstruct %s * restrict values)\n{" %
+        print("%s_unpack(FILE *fp, CONST uint8_t * restrict cl,\n%sstruct %s * restrict values)\n{" %
               (name.upper(), ' ' * (len(name) + 8), name))
 
         group.emit_unpack_function()

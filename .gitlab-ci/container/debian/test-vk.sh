@@ -80,9 +80,9 @@ apt-get install -y --no-remove --no-install-recommends \
 
 . .gitlab-ci/container/container_pre_build.sh
 
-############### Build piglit replayer
+section_end debian_setup
 
-uncollapsed_section_switch piglit "Building Piglit for Vulkan (traces only)"
+############### Build piglit replayer
 
 # We don't run any _piglit_ Vulkan tests in the containers.
 PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
@@ -104,33 +104,33 @@ PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
 
 ############### Build dEQP VK
 
-uncollapsed_section_switch deqp "Building Vulkan CTS (dEQP)"
+DEQP_API=tools \
+DEQP_TARGET=default \
+. .gitlab-ci/container/build-deqp.sh
+
+DEQP_API=VK-main \
+DEQP_TARGET=default \
+. .gitlab-ci/container/build-deqp.sh
 
 DEQP_API=VK \
 DEQP_TARGET=default \
 . .gitlab-ci/container/build-deqp.sh
 
-############### Build apitrace
+rm -rf /VK-GL-CTS
 
-uncollapsed_section_switch apitrace "Building apitrace"
+############### Build apitrace
 
 . .gitlab-ci/container/build-apitrace.sh
 
 ############### Build Fossilize
 
-uncollapsed_section_switch fossilize "Building Fossilize"
-
 . .gitlab-ci/container/build-fossilize.sh
 
 ############### Build gfxreconstruct
 
-uncollapsed_section_switch gfxreconstruct "Building gfxreconstruct"
-
 . .gitlab-ci/container/build-gfxreconstruct.sh
 
 ############### Build VKD3D-Proton
-
-uncollapsed_section_switch proton "Installing Proton (Wine/D3DVK emulation)"
 
 . .gitlab-ci/container/setup-wine.sh "/vkd3d-proton-wine64"
 
@@ -143,3 +143,5 @@ uncollapsed_section_switch debian_cleanup "Cleaning up base Debian system"
 apt-get purge -y "${EPHEMERAL[@]}"
 
 . .gitlab-ci/container/container_post_build.sh
+
+section_end debian_cleanup

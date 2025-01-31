@@ -42,7 +42,7 @@ TEST(GetProcAddress, ABIOffsetByName)
     */
    for (unsigned i = 0; linux_gl_abi[i].name != NULL; i++) {
       EXPECT_EQ(linux_gl_abi[i].offset,
-		_glapi_get_proc_offset(linux_gl_abi[i].name))
+		_mesa_glapi_get_proc_offset(linux_gl_abi[i].name))
 	 << "function name: " << linux_gl_abi[i].name;
    }
 }
@@ -104,11 +104,11 @@ TEST(GetProcAddress, QueriedDispatchSizeBigEnough)
 {
    const unsigned table_entries = sizeof(struct _glapi_table) / sizeof(void *);
 
-   /* _glapi_get_dispatch_table_size returns the size of the extended dispatch
+   /* _mesa_glapi_get_dispatch_table_size returns the size of the extended dispatch
     * table.  This is the size of the static table with some extra entries for
     * drivers to use for extensions that the core does not know about.
     */
-   EXPECT_EQ(table_entries, _glapi_get_dispatch_table_size());
+   EXPECT_EQ(table_entries, _mesa_glapi_get_dispatch_table_size());
 }
 
 TEST(GetProcAddress, KnownDispatchOffsetsAreConsistent)
@@ -123,7 +123,7 @@ TEST(GetProcAddress, KnownDispatchOffsetsAreConsistent)
     */
    for (unsigned i = 0; known_dispatch[i].name != NULL; i++) {
       EXPECT_EQ(known_dispatch[i].offset,
-		_glapi_get_proc_offset(known_dispatch[i].name))
+		_mesa_glapi_get_proc_offset(known_dispatch[i].name))
 	 << "function name: " << known_dispatch[i].name;
    }
 }

@@ -6,6 +6,7 @@
 #include "brw_cfg.h"
 #include "brw_eu.h"
 #include "brw_fs.h"
+#include "brw_generator.h"
 #include "brw_nir.h"
 #include "brw_private.h"
 #include "dev/intel_debug.h"
@@ -42,18 +43,18 @@ run_tes(fs_visitor &s)
 
    brw_calculate_cfg(s);
 
-   brw_fs_optimize(s);
+   brw_optimize(s);
 
    s.assign_curb_setup();
    brw_assign_tes_urb_setup(s);
 
-   brw_fs_lower_3src_null_dest(s);
-   brw_fs_workaround_memory_fence_before_eot(s);
-   brw_fs_workaround_emit_dummy_mov_instruction(s);
+   brw_lower_3src_null_dest(s);
+   brw_workaround_memory_fence_before_eot(s);
+   brw_workaround_emit_dummy_mov_instruction(s);
 
    brw_allocate_registers(s, true /* allow_spilling */);
 
-   brw_fs_workaround_source_arf_before_eot(s);
+   brw_workaround_source_arf_before_eot(s);
 
    return !s.failed;
 }
@@ -67,6 +68,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
    const struct brw_tes_prog_key *key = params->key;
    const struct intel_vue_map *input_vue_map = params->input_vue_map;
    struct brw_tes_prog_data *prog_data = params->prog_data;
+   const unsigned dispatch_width = brw_geometry_stage_dispatch_width(compiler->devinfo);
 
    const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TES);
 
@@ -76,8 +78,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
    nir->info.inputs_read = key->inputs_read;
    nir->info.patch_inputs_read = key->patch_inputs_read;
 
-   brw_nir_apply_key(nir, compiler, &key->base,
-                     brw_geometry_stage_dispatch_width(compiler->devinfo));
+   brw_nir_apply_key(nir, compiler, &key->base, dispatch_width);
    brw_nir_lower_tes_inputs(nir, input_vue_map);
    brw_nir_lower_vue_outputs(nir);
    brw_postprocess_nir(nir, compiler, debug_enabled,
@@ -152,7 +153,6 @@ brw_compile_tes(const struct brw_compiler *compiler,
                         MESA_SHADER_TESS_EVAL);
    }
 
-   const unsigned dispatch_width = devinfo->ver >= 20 ? 16 : 8;
    fs_visitor v(compiler, &params->base, &key->base,
                 &prog_data->base.base, nir, dispatch_width,
                 params->base.stats != NULL, debug_enabled);
@@ -164,10 +164,10 @@ brw_compile_tes(const struct brw_compiler *compiler,
 
    assert(v.payload().num_regs % reg_unit(devinfo) == 0);
    prog_data->base.base.dispatch_grf_start_reg = v.payload().num_regs / reg_unit(devinfo);
-
+   prog_data->base.base.grf_used = v.grf_used;
    prog_data->base.dispatch_mode = INTEL_DISPATCH_MODE_SIMD8;
 
-   fs_generator g(compiler, &params->base,
+   brw_generator g(compiler, &params->base,
                   &prog_data->base.base, MESA_SHADER_TESS_EVAL);
    if (unlikely(debug_enabled)) {
       g.enable_debug(ralloc_asprintf(params->base.mem_ctx,

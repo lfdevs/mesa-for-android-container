@@ -10,16 +10,22 @@
 #include "vulkan/wsi/wsi_common.h"
 
 #include "util/build_id.h"
+#include "util/detect_os.h"
 #include "util/driconf.h"
 #include "util/mesa-sha1.h"
 #include "util/u_debug.h"
+
+#if DETECT_OS_ANDROID
+#include "util/u_gralloc/u_gralloc.h"
+#include "vk_android.h"
+#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL
 nvk_EnumerateInstanceVersion(uint32_t *pApiVersion)
 {
    uint32_t version_override = vk_get_version_override();
    *pApiVersion = version_override ? version_override :
-                  VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION);
+                  VK_MAKE_VERSION(1, 4, VK_HEADER_VERSION);
 
    return VK_SUCCESS;
 }
@@ -180,6 +186,16 @@ nvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
    STATIC_ASSERT(sizeof(instance->driver_build_sha) == SHA1_DIGEST_LENGTH);
    memcpy(instance->driver_build_sha, build_id_data(note), SHA1_DIGEST_LENGTH);
 
+#if DETECT_OS_ANDROID
+   struct u_gralloc *u_gralloc = vk_android_init_ugralloc();
+
+   if (u_gralloc && u_gralloc_get_type(u_gralloc) == U_GRALLOC_TYPE_FALLBACK) {
+      mesa_logw(
+         "nvk: Gralloc is not supported. Android extensions are disabled.");
+      vk_android_destroy_ugralloc();
+   }
+#endif
+
    *pInstance = nvk_instance_to_handle(instance);
    return VK_SUCCESS;
 
@@ -199,6 +215,10 @@ nvk_DestroyInstance(VkInstance _instance,
 
    if (!instance)
       return;
+
+#if DETECT_OS_ANDROID
+   vk_android_destroy_ugralloc();
+#endif
 
    driDestroyOptionCache(&instance->dri_options);
    driDestroyOptionInfo(&instance->available_dri_options);

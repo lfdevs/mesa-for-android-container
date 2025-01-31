@@ -10,6 +10,8 @@
 
 set -uex
 
+uncollapsed_section_start skqp "Building skqp"
+
 SKQP_BRANCH=android-cts-12.1_r5
 
 SCRIPT_DIR="$(pwd)/.gitlab-ci/container"
@@ -66,8 +68,8 @@ cat "${SKQP_PATCH_DIR}"/build-skqp_*.patch |
 
 # hack for skqp see the clang
 pushd /usr/bin/
-ln -s "../lib/llvm-${LLVM_VERSION:-15}/bin/clang" clang
-ln -s "../lib/llvm-${LLVM_VERSION:-15}/bin/clang++" clang++
+ln -s "../lib/llvm-${LLVM_VERSION}/bin/clang" clang
+ln -s "../lib/llvm-${LLVM_VERSION}/bin/clang++" clang++
 popd
 
 # Fetch some needed build tools needed to build skia/skqp.
@@ -98,3 +100,5 @@ popd
 rm -Rf "${SKIA_DIR}"
 
 set +ex
+
+section_end skqp

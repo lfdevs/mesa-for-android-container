@@ -52,6 +52,13 @@ lower_printf_intrinsics(nir_builder *b, nir_instr *instr, void *cb_data)
       nir_instr_remove(instr);
       return true;
 
+   case nir_intrinsic_load_printf_buffer_size:
+      nir_def_rewrite_uses(
+         &intrin->def,
+         nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_PRINTF_BUFFER_SIZE));
+      nir_instr_remove(instr);
+      return true;
+
    default:
       return false;
    }

@@ -34,17 +34,21 @@ idep_intel_blorp = declare_dependency(
   link_with: libblorp,
 )
 
-libblorp_elk = static_library(
-  'blorp_elk',
-  [files_libblorp, files_blorp_elk],
-  include_directories : [inc_include, inc_src, inc_intel],
-  c_args : [no_override_init_args],
-  gnu_symbol_visibility : 'hidden',
-  dependencies : [idep_nir_headers, idep_genxml, idep_mesautil, idep_intel_dev],
-  build_by_default: true, # FIXME XXX
-)
+if with_intel_elk
+  libblorp_elk = static_library(
+    'blorp_elk',
+    [files_libblorp, files_blorp_elk],
+    include_directories : [inc_include, inc_src, inc_intel],
+    c_args : [no_override_init_args],
+    gnu_symbol_visibility : 'hidden',
+    dependencies : [idep_nir_headers, idep_genxml, idep_mesautil, idep_intel_dev],
+    build_by_default: true, # FIXME XXX
+  )
 
-idep_intel_blorp_elk = declare_dependency(
-  dependencies: [idep_intel_dev],
-  link_with: libblorp_elk,
-)
+  idep_intel_blorp_elk = declare_dependency(
+    dependencies: [idep_intel_dev],
+    link_with: libblorp_elk,
+  )
+else
+  idep_intel_blorp_elk = null_dep
+endif

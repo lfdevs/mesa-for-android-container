@@ -8,8 +8,8 @@
 import os
 import xmlrpc.client
 from contextlib import nullcontext as does_not_raise
-from datetime import datetime
-from itertools import islice, repeat
+from datetime import UTC, datetime
+from itertools import cycle, islice, repeat
 from pathlib import Path
 from typing import Generator
 from unittest.mock import MagicMock, patch
@@ -43,11 +43,14 @@ NUMBER_OF_MAX_ATTEMPTS = NUMBER_OF_RETRIES_TIMEOUT_DETECTION + 1
 @pytest.fixture
 def mock_proxy_waiting_time(mock_proxy):
     def update_mock_proxy(frozen_time, **kwargs):
+        def mock_job_state(jid) -> dict[str, str]:
+            frozen_time.tick(wait_time)
+            return {"job_state": "Running"}
+
         wait_time = kwargs.pop("wait_time", 1)
         proxy_mock = mock_proxy(**kwargs)
         proxy_job_state = proxy_mock.scheduler.job_state
-        proxy_job_state.return_value = {"job_state": "Running"}
-        proxy_job_state.side_effect = frozen_time.tick(wait_time)
+        proxy_job_state.side_effect = mock_job_state
 
         return proxy_mock
 
@@ -261,7 +264,7 @@ def test_simulate_a_long_wait_to_start_a_job(
     side_effect,
     mock_proxy_waiting_time,
 ):
-    start_time = datetime.now()
+    start_time = datetime.now(tz=UTC)
     job: LAVAJob = retriable_follow_job(
         mock_proxy_waiting_time(
             frozen_time, side_effect=side_effect, wait_time=wait_time
@@ -271,7 +274,7 @@ def test_simulate_a_long_wait_to_start_a_job(
         None
     )
 
-    end_time = datetime.now()
+    end_time = datetime.now(tz=UTC)
     delta_time = end_time - start_time
 
     assert job.status == "pass"
@@ -292,6 +295,7 @@ LONG_LAVA_QUEUE_SCENARIOS = {
 )
 def test_wait_for_job_get_started_no_time_to_run(monkeypatch, job_timeout, expectation):
     monkeypatch.setattr("lava.lava_job_submitter.CI_JOB_TIMEOUT_SEC", job_timeout)
+    monkeypatch.setattr("lava.lava_job_submitter.CI_JOB_STARTED_AT", datetime.now(tz=UTC))
     job = MagicMock()
     # Make it escape the loop
     job.is_started.side_effect = (False, False, True)
@@ -439,14 +443,14 @@ def test_full_yaml_log(mock_proxy, frozen_time, lava_job_submitter):
     proxy.scheduler.jobs.submit = reset_logs
     try:
         time_travel_to_test_time()
-        start_time = datetime.now()
+        start_time = datetime.now(tz=UTC)
         retriable_follow_job(proxy, "", "", None)
     finally:
         try:
             # If the job fails, maybe there will be no structured log
             print(lava_job_submitter.structured_log_file.read_text())
         finally:
-            end_time = datetime.now()
+            end_time = datetime.now(tz=UTC)
             print("---- Reproduction log stats ----")
             print(f"Start time: {start_time}")
             print(f"End time: {end_time}")
@@ -507,3 +511,42 @@ def test_job_combined_status(
 
         assert STRUCTURAL_LOG["job_combined_status"] == expected_combined_status
         assert STRUCTURAL_LOG["job_exit_code"] == job_exit_code
+
+
+SUBMIT_SCENARIOS = {
+    "submit job pass": (cycle(mock_logs(result="pass", exit_code=0)), does_not_raise(), 0),
+    "submit job fails": (
+        cycle(mock_logs(result="fail", exit_code=1)),
+        pytest.raises(SystemExit),
+        1,
+    ),
+    "user interrupts the script": (
+        (jobs_logs_response(), KeyboardInterrupt, jobs_logs_response()),
+        pytest.raises(SystemExit),
+        1,
+    ),
+    "job finishes without hwci response": (
+        (jobs_logs_response(), jobs_logs_response()),
+        pytest.raises(SystemExit),
+        1,
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "test_log, expectation, exit_code",
+    SUBMIT_SCENARIOS.values(),
+    ids=SUBMIT_SCENARIOS.keys(),
+)
+def test_submission_exit_code(
+    request, mock_proxy, lava_job_submitter, test_log, expectation, exit_code
+):
+    lava_job_submitter._LAVAJobSubmitter__prepare_submission = MagicMock()
+    proxy = mock_proxy(side_effect=test_log)
+    lava_job_submitter.proxy = proxy
+
+    with expectation as e:
+        lava_job_submitter.submit()
+        # If the job fails, there should be a SystemExit exception
+        if e:
+            assert e.value.code == exit_code

@@ -269,8 +269,8 @@
    DRI_CONF_OPT_I(override_vram_size, -1, -1, 2147483647, \
                   "Override the VRAM size advertised to the application in MiB (-1 = default)")
 
-#define DRI_CONF_FORCE_GL_NAMES_REUSE(def) \
-   DRI_CONF_OPT_B(force_gl_names_reuse, def, "Force GL names reuse")
+#define DRI_CONF_FORCE_GL_NAMES_REUSE() \
+   DRI_CONF_OPT_I(reuse_gl_names, -1, -1, 1, "GL names reuse: 1=enable, 0=disable, -1=default")
 
 #define DRI_CONF_FORCE_GL_MAP_BUFFER_SYNCHRONIZED(def) \
    DRI_CONF_OPT_B(force_gl_map_buffer_synchronized, def, "Override GL_MAP_UNSYNCHRONIZED_BIT.")
@@ -491,6 +491,10 @@
 #define DRI_CONF_ALLOW_MULTISAMPLED_COPYTEXIMAGE(def) \
    DRI_CONF_OPT_B(allow_multisampled_copyteximage, def, \
                   "Allow CopyTexSubImage and other to copy sampled framebuffer")
+
+#define DRI_CONF_CUSTOM_BORDER_COLORS_WITHOUT_FORMAT(def) \
+   DRI_CONF_OPT_B(custom_border_colors_without_format, def, \
+                  "Enable custom border colors without format")
 
 #define DRI_CONF_NO_FP16(def) \
    DRI_CONF_OPT_B(no_fp16, def, \
@@ -835,9 +839,9 @@
    DRI_CONF_OPT_B(anv_disable_fcv, def, \
                   "Disable FCV optimization")
 
-#define DRI_CONF_ANV_DISABLE_XE2_CCS(def) \
-   DRI_CONF_OPT_B(anv_disable_xe2_ccs, def, \
-                  "Disable CCS optimization on Xe2")
+#define DRI_CONF_ANV_ENABLE_BUFFER_COMP(def) \
+   DRI_CONF_OPT_B(anv_enable_buffer_comp, def, \
+                  "Enable CCS on buffers where possible")
 
 #define DRI_CONF_ANV_EXTERNAL_MEMORY_IMPLICIT_SYNC(def) \
    DRI_CONF_OPT_B(anv_external_memory_implicit_sync, def, "Implicit sync on external BOs")
@@ -848,6 +852,10 @@
 #define DRI_CONF_ANV_FAKE_NONLOCAL_MEMORY(def) \
    DRI_CONF_OPT_B(anv_fake_nonlocal_memory, def, \
                   "Present host-visible device-local memory types as non device-local")
+
+#define DRI_CONF_ANV_UPPER_BOUND_DESCRIPTOR_POOL_SAMPLER(def) \
+   DRI_CONF_OPT_B(anv_upper_bound_descriptor_pool_sampler, def, \
+                  "Overallocate samplers in descriptor pools to workaround app bug")
 
 /**
  * \brief HASVK specific configuration options

@@ -138,3 +138,12 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-modifiers
 
 spec@arb_timer_query@query gl_timestamp
 spec@egl_chromium_sync_control@conformance
+
+KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup_texture_2d_multisample_*
+
+spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-gs-getuniformdv
+spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-vs-getuniformdv
+dEQP-EGL.functional.sharing.gles2.multithread.random.programs.link.7
+
+# Fails in the pre-merge job and passes in the nightly
+KHR-GL46.shader_viewport_layer_array.ShaderViewportIndexTestCase

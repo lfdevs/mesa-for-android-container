@@ -113,6 +113,11 @@ void
 radv_probe_video_encode(struct radv_physical_device *pdev)
 {
    pdev->video_encode_enabled = false;
+
+   /* TODO: Add VCN 5.0+. */
+   if (pdev->info.vcn_ip_version >= VCN_5_0_0)
+      return;
+
    if (pdev->info.vcn_ip_version >= VCN_4_0_0) {
       if (pdev->info.vcn_enc_major_version != RENCODE_V4_FW_INTERFACE_MAJOR_VERSION)
          return;
@@ -129,11 +134,23 @@ radv_probe_video_encode(struct radv_physical_device *pdev)
          return;
       if (pdev->info.vcn_enc_minor_version < RENCODE_V3_FW_INTERFACE_MINOR_VERSION)
          return;
+
+      /* VCN 3 FW 1.33 has all the necessary pieces to pass CTS */
+      if (pdev->info.vcn_enc_minor_version >= 33) {
+         pdev->video_encode_enabled = true;
+         return;
+      }
    } else if (pdev->info.vcn_ip_version >= VCN_2_0_0) {
       if (pdev->info.vcn_enc_major_version != RENCODE_V2_FW_INTERFACE_MAJOR_VERSION)
          return;
       if (pdev->info.vcn_enc_minor_version < RENCODE_V2_FW_INTERFACE_MINOR_VERSION)
          return;
+
+      /* VCN 2 FW 1.24 has all the necessary pieces to pass CTS */
+      if (pdev->info.vcn_enc_minor_version >= 24) {
+         pdev->video_encode_enabled = true;
+         return;
+      }
    } else {
       if (pdev->info.vcn_enc_major_version != RENCODE_FW_INTERFACE_MAJOR_VERSION)
          return;
@@ -458,15 +475,16 @@ radv_enc_session_init(struct radv_cmd_buffer *cmd_buffer, const struct VkVideoEn
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radv_video_session *vid = cmd_buffer->video.vid;
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
-   unsigned alignment = 16;
+   unsigned alignment_w = 16;
+   unsigned alignment_h = 16;
    if (vid->vk.op == VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR) {
-      alignment = 64;
+      alignment_w = 64;
    }
 
    uint32_t w = enc_info->srcPictureResource.codedExtent.width;
    uint32_t h = enc_info->srcPictureResource.codedExtent.height;
-   uint32_t aligned_picture_width = align(w, alignment);
-   uint32_t aligned_picture_height = align(h, alignment);
+   uint32_t aligned_picture_width = align(w, alignment_w);
+   uint32_t aligned_picture_height = align(h, alignment_h);
    uint32_t padding_width = aligned_picture_width - w;
    uint32_t padding_height = aligned_picture_height - h;
 
@@ -1247,7 +1265,7 @@ radv_enc_bitstream(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buffe
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
-   uint64_t va = radv_buffer_get_va(buffer->bo) + buffer->offset;
+   uint64_t va = radv_buffer_get_va(buffer->bo) + buffer->offset + offset;
    radv_cs_add_buffer(device->ws, cs, buffer->bo);
 
    ENC_BEGIN;
@@ -1256,7 +1274,7 @@ radv_enc_bitstream(struct radv_cmd_buffer *cmd_buffer, struct radv_buffer *buffe
    radeon_emit(cs, va >> 32);
    radeon_emit(cs, va & 0xffffffff);
    radeon_emit(cs, buffer->vk.size);
-   radeon_emit(cs, offset);
+   radeon_emit(cs, 0);
    ENC_END;
 }
 
@@ -1914,6 +1932,9 @@ radv_video_patch_encode_session_parameters(struct vk_video_session_parameters *p
 {
    switch (params->op) {
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
+      for (unsigned i = 0; i < params->h264_enc.h264_pps_count; i++) {
+         params->h264_enc.h264_pps[i].base.pic_init_qp_minus26 = 0;
+      }
       break;
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR: {
       /*
@@ -1924,6 +1945,7 @@ radv_video_patch_encode_session_parameters(struct vk_video_session_parameters *p
       for (unsigned i = 0; i < params->h265_enc.h265_pps_count; i++) {
          params->h265_enc.h265_pps[i].base.flags.cu_qp_delta_enabled_flag = 1;
          params->h265_enc.h265_pps[i].base.diff_cu_qp_delta_depth = 0;
+         params->h265_enc.h265_pps[i].base.init_qp_minus26 = 0;
       }
       break;
    }
@@ -1963,6 +1985,13 @@ radv_GetEncodedVideoSessionParametersKHR(VkDevice device,
          char *data_ptr = pData ? (char *)pData + sps_size : NULL;
          vk_video_encode_h264_pps(pps, templ->vk.h264_enc.profile_idc == STD_VIDEO_H264_PROFILE_IDC_HIGH, size_limit,
                                   &pps_size, data_ptr);
+         if (pFeedbackInfo) {
+            struct VkVideoEncodeH264SessionParametersFeedbackInfoKHR *h264_feedback_info =
+               vk_find_struct(pFeedbackInfo->pNext, VIDEO_ENCODE_H264_SESSION_PARAMETERS_FEEDBACK_INFO_KHR);
+            pFeedbackInfo->hasOverrides = VK_TRUE;
+            if (h264_feedback_info)
+               h264_feedback_info->hasStdPPSOverrides = VK_TRUE;
+         }
       }
       total_size = sps_size + pps_size;
       break;
@@ -2017,7 +2046,7 @@ radv_video_enc_begin_coding(struct radv_cmd_buffer *cmd_buffer)
    radeon_check_space(device->ws, cmd_buffer->cs, 1024);
 
    if (pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_4)
-      radv_vcn_sq_header(cmd_buffer->cs, &cmd_buffer->video.sq, RADEON_VCN_ENGINE_TYPE_ENCODE);
+      radv_vcn_sq_header(cmd_buffer->cs, &cmd_buffer->video.sq, RADEON_VCN_ENGINE_TYPE_ENCODE, false);
 }
 
 void

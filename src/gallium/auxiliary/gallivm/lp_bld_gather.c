@@ -105,9 +105,9 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
     * two >= 32). On x86 it doesn't matter, however.
     * We should be able to guarantee full alignment for any kind of texture
     * fetch (except ARB_texture_buffer_range, oops), but not vertex fetch
-    * (there's PIPE_CAP_VERTEX_INPUT_ALIGNMENT
+    * (there's pipe_caps.vertex_input_alignment
     * but I don't think that's quite what we wanted).
-    * For ARB_texture_buffer_range, PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT
+    * For ARB_texture_buffer_range, pipe_caps.texture_buffer_offset_alignment
     * looks like a good fit, but it seems this cap bit (and OpenGL) aren't
     * enforcing what we want (which is what d3d10 does, the offset needs to
     * be aligned to element size, but GL has bytes regardless of element
@@ -185,9 +185,9 @@ lp_build_gather_elem_vec(struct gallivm_state *gallivm,
     * two >= 32). On x86 it doesn't matter, however.
     * We should be able to guarantee full alignment for any kind of texture
     * fetch (except ARB_texture_buffer_range, oops), but not vertex fetch
-    * (there's PIPE_CAP_VERTEX_INPUT_ALIGNMENT
+    * (there's pipe_caps.vertex_input_alignment
     * but I don't think that's quite what we wanted).
-    * For ARB_texture_buffer_range, PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT
+    * For ARB_texture_buffer_range, pipe_caps.texture_buffer_offset_alignment
     * looks like a good fit, but it seems this cap bit (and OpenGL) aren't
     * enforcing what we want (which is what d3d10 does, the offset needs to
     * be aligned to element size, but GL has bytes regardless of element

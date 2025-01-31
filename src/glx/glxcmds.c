@@ -2374,7 +2374,7 @@ _GLX_PUBLIC void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
       f = (gl_function) get_glx_proc_address((const char *) procName);
 
    if (f == NULL)
-      f = (gl_function) _glapi_get_proc_address((const char *) procName);
+      f = (gl_function) _mesa_glapi_get_proc_address((const char *) procName);
 
 #ifdef GLX_USE_APPLEGL
    if (f == NULL)

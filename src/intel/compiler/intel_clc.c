@@ -23,6 +23,8 @@
 
 #include "brw_compiler.h"
 #include "brw_kernel.h"
+#include "brw_nir.h"
+#include "elk/elk_nir.h"
 #include "compiler/brw_disasm.h"
 #include "compiler/clc/clc.h"
 #include "compiler/glsl_types.h"
@@ -167,6 +169,7 @@ print_cs_prog_data_fields(FILE *fp, const char *prefix, const char *pad,
    PROG_DATA_FIELD("%u", base.const_data_offset);
    PROG_DATA_FIELD("%u", base.num_relocs);
    fprintf(fp, "%s.base.relocs = %s_relocs,\n", pad, prefix);
+   PROG_DATA_FIELD("%u", base.grf_used);
    PROG_DATA_FIELD("%u", base.printf_info_count);
    fprintf(fp, "%s.base.printf_info = (u_printf_info *)%s_printfs,\n", pad, prefix);
    assert(!cs_prog_data->base.has_ubo_pull);
@@ -387,9 +390,13 @@ output_nir(const struct intel_clc_params *params, struct clc_binary *binary)
    spirv_library_to_nir_builder(fp, binary->data, binary->size / 4,
                                 &spirv_options);
 
-   nir_shader *nir = brw_nir_from_spirv(params->mem_ctx, params->gfx_version,
-                                        binary->data, binary->size,
-                                        params->llvm17_wa);
+   nir_shader *nir = params->gfx_version >= 9 ?
+      brw_nir_from_spirv(params->mem_ctx, params->gfx_version,
+                         binary->data, binary->size,
+                         params->llvm17_wa) :
+      elk_nir_from_spirv(params->mem_ctx, params->gfx_version,
+                         binary->data, binary->size,
+                         params->llvm17_wa);
    if (!nir) {
       fprintf(stderr, "Failed to generate NIR out of SPIRV\n");
       fclose(fp);
@@ -635,7 +642,7 @@ int main(int argc, char **argv)
       .allowed_spirv_extensions = allowed_spirv_extensions,
    };
 
-   if (!clc_compile_c_to_spirv(&clc_args, &logger, &spirv_obj)) {
+   if (!clc_compile_c_to_spirv(&clc_args, &logger, &spirv_obj, NULL)) {
       goto fail;
    }
 

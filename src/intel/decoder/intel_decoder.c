@@ -856,9 +856,8 @@ get_embedded_xml_data_by_name(const char *filename,
       free(numstr);
       return false;
    }
-   /* convert ver numbers to verx10 */
-   if (num < 45)
-      num = num * 10;
+
+   assert(num >= 40);
 
    free(numstr);
    return get_embedded_xml_data(num, data, data_len);

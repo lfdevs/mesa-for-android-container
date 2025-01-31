@@ -232,9 +232,9 @@ static const struct pvr_format pvr_format_table[] = {
 #undef FORMAT_COMPRESSED
 
 #define FORMAT(tex_fmt, pipe_fmt_int, pipe_fmt_float) \
-   [PVRX(TEXSTATE_FORMAT_##tex_fmt)] = {                    \
+   [ROGUE_TEXSTATE_FORMAT_##tex_fmt] = {                    \
       .desc = {                                             \
-         .tex_format = PVRX(TEXSTATE_FORMAT_##tex_fmt),     \
+         .tex_format = ROGUE_TEXSTATE_FORMAT_##tex_fmt,     \
          .pipe_format_int = PIPE_FORMAT_##pipe_fmt_int,     \
          .pipe_format_float = PIPE_FORMAT_##pipe_fmt_float, \
       },                                                    \
@@ -284,11 +284,11 @@ static const struct pvr_tex_format_table_entry {
 #undef FORMAT
 
 #define FORMAT(tex_fmt, pipe_fmt, tex_fmt_simple) \
-   [PVRX(TEXSTATE_FORMAT_COMPRESSED_##tex_fmt)] = {                   \
+   [ROGUE_TEXSTATE_FORMAT_COMPRESSED_##tex_fmt] = {                   \
       .desc = {                                                       \
-         .tex_format = PVRX(TEXSTATE_FORMAT_COMPRESSED_##tex_fmt),    \
+         .tex_format = ROGUE_TEXSTATE_FORMAT_COMPRESSED_##tex_fmt,    \
          .pipe_format = PIPE_FORMAT_##pipe_fmt,                       \
-         .tex_format_simple = PVRX(TEXSTATE_FORMAT_##tex_fmt_simple), \
+         .tex_format_simple = ROGUE_TEXSTATE_FORMAT_##tex_fmt_simple, \
       },                                                              \
       .present = true,                                                \
    }
@@ -335,7 +335,7 @@ pvr_get_tex_format_description(const uint32_t tex_format)
       return &pvr_tex_format_table[tex_format].desc;
 
    mesa_logd("Tex format %s (%d) not supported\n",
-             PVRX(TEXSTATE_FORMAT_to_str)(tex_format),
+             ROGUE_TEXSTATE_FORMAT_to_str(tex_format),
              tex_format);
 
    return NULL;
@@ -368,7 +368,7 @@ pvr_get_tex_format_compressed_description(uint32_t tex_format)
       return &pvr_tex_format_compressed_table[tex_format].desc;
 
    mesa_logd("Compressed tex format %s (%d) not supported\n",
-             PVRX(TEXSTATE_FORMAT_COMPRESSED_to_str)(tex_format),
+             ROGUE_TEXSTATE_FORMAT_COMPRESSED_to_str(tex_format),
              tex_format);
 
    return NULL;
@@ -397,7 +397,7 @@ uint32_t pvr_get_tex_format_aspect(VkFormat vk_format,
       return pvr_format->tex_format;
    }
 
-   return PVRX(TEXSTATE_FORMAT_INVALID);
+   return ROGUE_TEXSTATE_FORMAT_INVALID;
 }
 
 uint32_t pvr_get_pbe_packmode(VkFormat vk_format)
@@ -906,7 +906,7 @@ pvr_get_image_format_properties(struct pvr_physical_device *pdevice,
       pImageFormatProperties->maxExtent.depth = PVR_MAX_TEXTURE_EXTENT_Z;
    } else {
       const uint32_t max_texture_extent_xy =
-         PVRX(TEXSTATE_IMAGE_WORD0_WIDTH_MAX_SIZE) + 1U;
+         ROGUE_TEXSTATE_IMAGE_WORD0_WIDTH_MAX_SIZE + 1U;
 
       pImageFormatProperties->maxExtent.width = max_texture_extent_xy;
       pImageFormatProperties->maxExtent.height = max_texture_extent_xy;

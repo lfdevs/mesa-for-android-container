@@ -799,7 +799,7 @@ nak_nir_remove_barriers(nir_shader *nir)
 static bool
 nak_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
                      unsigned bit_size, unsigned num_components,
-                     unsigned hole_size, nir_intrinsic_instr *low,
+                     int64_t hole_size, nir_intrinsic_instr *low,
                      nir_intrinsic_instr *high, void *cb_data)
 {
    /*
@@ -808,7 +808,7 @@ nak_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
     */
    assert(util_is_power_of_two_nonzero(align_mul));
 
-   if (hole_size)
+   if (hole_size > 0)
       return false;
 
    unsigned max_bytes = 128u / 8u;
@@ -825,7 +825,8 @@ static nir_mem_access_size_align
 nak_mem_access_size_align(nir_intrinsic_op intrin,
                           uint8_t bytes, uint8_t bit_size,
                           uint32_t align_mul, uint32_t align_offset,
-                          bool offset_is_const, const void *cb_data)
+                          bool offset_is_const, enum gl_access_qualifier access,
+                          const void *cb_data)
 {
    const uint32_t align = nir_combined_align(align_mul, align_offset);
    assert(util_is_power_of_two_nonzero(align));
@@ -857,6 +858,7 @@ nak_mem_access_size_align(nir_intrinsic_op intrin,
             .bit_size = 32,
             .num_components = 1,
             .align = 4,
+            .shift = nir_mem_access_shift_method_scalar,
          };
       } else {
          assert(align == 1);
@@ -864,6 +866,7 @@ nak_mem_access_size_align(nir_intrinsic_op intrin,
             .bit_size = 8,
             .num_components = 1,
             .align = 1,
+            .shift = nir_mem_access_shift_method_scalar,
          };
       }
    } else if (chunk_bytes < 4) {
@@ -871,12 +874,14 @@ nak_mem_access_size_align(nir_intrinsic_op intrin,
          .bit_size = chunk_bytes * 8,
          .num_components = 1,
          .align = chunk_bytes,
+         .shift = nir_mem_access_shift_method_scalar,
       };
    } else {
       return (nir_mem_access_size_align) {
          .bit_size = 32,
          .num_components = chunk_bytes / 4,
          .align = chunk_bytes,
+         .shift = nir_mem_access_shift_method_scalar,
       };
    }
 }
@@ -997,7 +1002,8 @@ nak_postprocess_nir(nir_shader *nir,
       OPT(nir, nir_lower_indirect_derefs,
           nir_var_shader_in | nir_var_shader_out, UINT32_MAX);
       OPT(nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
-          type_size_vec4, nir_lower_io_lower_64bit_to_32_new);
+          type_size_vec4, nir_lower_io_lower_64bit_to_32_new |
+          nir_lower_io_use_interpolated_input_intrinsics);
       OPT(nir, nir_opt_constant_folding);
       OPT(nir, nak_nir_lower_fs_inputs, nak, fs_key);
       OPT(nir, nak_nir_lower_fs_outputs);
@@ -1039,10 +1045,13 @@ nak_postprocess_nir(nir_shader *nir,
    if (nak->sm < 70)
       OPT(nir, nak_nir_split_64bit_conversions);
 
-   nir_convert_to_lcssa(nir, true, true);
+   bool lcssa_progress = nir_convert_to_lcssa(nir, false, false);
    nir_divergence_analysis(nir);
 
    if (nak->sm >= 75) {
+      if (lcssa_progress) {
+         OPT(nir, nak_nir_mark_lcssa_invariants);
+      }
       if (OPT(nir, nak_nir_lower_non_uniform_ldcx)) {
          OPT(nir, nir_copy_prop);
          OPT(nir, nir_opt_dce);

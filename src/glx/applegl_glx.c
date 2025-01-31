@@ -63,7 +63,7 @@ applegl_bind_context(
    if (error)
       return 1; /* GLXBadContext is the same as Success (0) */
 
-   apple_glapi_set_dispatch();
+   apple_mesa_glapi_set_dispatch();
 
    return Success;
 }

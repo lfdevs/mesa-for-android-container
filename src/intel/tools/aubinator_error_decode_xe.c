@@ -219,7 +219,12 @@ read_xe_data_file(FILE *file,
 
          break;
       }
-      case XE_TOPIC_GUC_CT: {
+      case XE_TOPIC_GUC_CT:
+         /*
+          * Workaround bug in the kernel that would put the exec queue dump
+          * in the wrong place, under "GuC CT" topic.
+          */
+      case XE_TOPIC_CONTEXT: {
          enum xe_vm_topic_type type;
          const char *value_ptr;
          bool is_hw_ctx;

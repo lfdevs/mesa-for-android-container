@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <genxml name="GFX125" gen="12.5">
-  <import name="gen12.xml">
+  <import name="gen120.xml">
     <exclude name="3D_CHICKEN3" />
     <exclude name="GPGPU_WALKER" />
     <exclude name="GT_MODE" />
@@ -211,6 +211,22 @@
     <field name="Mx" start="160" end="191" type="uint" />
     <field name="Rmin" start="192" end="223" type="uint" />
     <field name="Aspect" start="224" end="255" type="uint" />
+  </struct>
+  <struct name="MEMORYADDRESSATTRIBUTES" length="1">
+    <field name="MOCS" start="0" end="6" type="uint" nonzero="true" />
+    <field name="Arbitration Priority Control" start="7" end="8" type="HEVC_ARBITRATION_PRIORITY" />
+    <field name="Memory Compression Enable" start="9" end="9" type="bool" />
+    <field name="Memory Compression Mode" start="10" end="10" type="uint" />
+    <field name="Row Store Scratch Buffer Cache Select" start="12" end="12" type="uint">
+      <value name="LLC" value="0" />
+      <value name="Internal Media Storage" value="1" />
+    </field>
+    <field name="Tiled Resource Mode" start="13" end="14" type="uint">
+      <value name="TRMODE_NONE" value="0" />
+      <value name="TRMODE_TILES" value="1" />
+      <value name="TRMODE_TILEX" value="2" />
+      <value name="TRMODE_TILEF" value="3" />
+    </field>
   </struct>
   <struct name="MI_MATH_ALU_INSTRUCTION" length="1">
     <field name="Operand 2" start="0" end="9" type="uint" prefix="MI_ALU">

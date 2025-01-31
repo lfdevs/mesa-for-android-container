@@ -21,8 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_COMPILER_H
-#define ELK_COMPILER_H
+#pragma once
 
 #include <stdio.h>
 #include "c11/threads.h"
@@ -1762,5 +1761,3 @@ elk_compute_first_urb_slot_required(uint64_t inputs_read,
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* ELK_COMPILER_H */

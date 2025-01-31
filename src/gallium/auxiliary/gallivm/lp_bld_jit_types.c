@@ -201,8 +201,7 @@ lp_build_create_jit_sampler_type(struct gallivm_state *gallivm)
    LLVMTypeRef elem_types[LP_JIT_SAMPLER_NUM_FIELDS];
    elem_types[LP_JIT_SAMPLER_MIN_LOD] =
    elem_types[LP_JIT_SAMPLER_MAX_LOD] =
-   elem_types[LP_JIT_SAMPLER_LOD_BIAS] =
-   elem_types[LP_JIT_SAMPLER_MAX_ANISO] = LLVMFloatTypeInContext(lc);
+   elem_types[LP_JIT_SAMPLER_LOD_BIAS] = LLVMFloatTypeInContext(lc);
    elem_types[LP_JIT_SAMPLER_BORDER_COLOR] =
       LLVMArrayType(LLVMFloatTypeInContext(lc), 4);
 
@@ -221,9 +220,6 @@ lp_build_create_jit_sampler_type(struct gallivm_state *gallivm)
    LP_CHECK_MEMBER_OFFSET(struct lp_jit_sampler, border_color,
                           gallivm->target, sampler_type,
                           LP_JIT_SAMPLER_BORDER_COLOR);
-   LP_CHECK_MEMBER_OFFSET(struct lp_jit_sampler, max_aniso,
-                          gallivm->target, sampler_type,
-                          LP_JIT_SAMPLER_MAX_ANISO);
    LP_CHECK_STRUCT_SIZE(struct lp_jit_sampler,
                         gallivm->target, sampler_type);
    return sampler_type;
@@ -296,7 +292,6 @@ lp_build_jit_resources_type(struct gallivm_state *gallivm)
                                                    PIPE_MAX_SAMPLERS);
    elem_types[LP_JIT_RES_IMAGES] = LLVMArrayType(image_type,
                                                  PIPE_MAX_SHADER_IMAGES);
-   elem_types[LP_JIT_RES_ANISO_FILTER_TABLE] = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
 
    resources_type = LLVMStructTypeInContext(gallivm->context, elem_types,
                                             ARRAY_SIZE(elem_types), 0);
@@ -316,9 +311,6 @@ lp_build_jit_resources_type(struct gallivm_state *gallivm)
    LP_CHECK_MEMBER_OFFSET(struct lp_jit_resources, images,
                           gallivm->target, resources_type,
                           LP_JIT_RES_IMAGES);
-   LP_CHECK_MEMBER_OFFSET(struct lp_jit_resources, aniso_filter_table,
-                          gallivm->target, resources_type,
-                          LP_JIT_RES_ANISO_FILTER_TABLE);
 
    return resources_type;
 }
@@ -570,7 +562,6 @@ LP_BUILD_LLVM_SAMPLER_MEMBER(min_lod,    LP_JIT_SAMPLER_MIN_LOD, true)
 LP_BUILD_LLVM_SAMPLER_MEMBER(max_lod,    LP_JIT_SAMPLER_MAX_LOD, true)
 LP_BUILD_LLVM_SAMPLER_MEMBER(lod_bias,   LP_JIT_SAMPLER_LOD_BIAS, true)
 LP_BUILD_LLVM_SAMPLER_MEMBER(border_color, LP_JIT_SAMPLER_BORDER_COLOR, false)
-LP_BUILD_LLVM_SAMPLER_MEMBER(max_aniso, LP_JIT_SAMPLER_MAX_ANISO, true)
 
 /**
  * Fetch the specified member of the lp_jit_image structure.
@@ -707,7 +698,6 @@ lp_build_jit_fill_sampler_dynamic_state(struct lp_sampler_dynamic_state *state)
    state->max_lod = lp_build_llvm_sampler_max_lod;
    state->lod_bias = lp_build_llvm_sampler_lod_bias;
    state->border_color = lp_build_llvm_sampler_border_color;
-   state->max_aniso = lp_build_llvm_sampler_max_aniso;
 }
 
 void
@@ -801,8 +791,6 @@ lp_build_sample_function_type(struct gallivm_state *gallivm, uint32_t sample_key
 
    arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context);
    arg_types[num_params++] = LLVMInt64TypeInContext(gallivm->context);
-
-   arg_types[num_params++] = LLVMPointerType(LLVMFloatTypeInContext(gallivm->context), 0);
 
    for (unsigned i = 0; i < 4; i++)
       arg_types[num_params++] = coord_type;

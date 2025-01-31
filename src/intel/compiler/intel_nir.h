@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef INTEL_NIR_H
-#define INTEL_NIR_H
+#pragma once
 
 #include "nir.h"
 
@@ -15,6 +14,7 @@ extern "C" {
 struct intel_device_info;
 
 void intel_nir_apply_tcs_quads_workaround(nir_shader *nir);
+bool brw_nir_rebase_const_offset_ubo_loads(nir_shader *shader);
 bool intel_nir_blockify_uniform_loads(nir_shader *shader,
                                       const struct intel_device_info *devinfo);
 bool intel_nir_clamp_image_1d_2d_array_sizes(nir_shader *shader);
@@ -45,5 +45,3 @@ bool intel_nir_lower_printf(nir_shader *nir);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* INTEL_NIR_H */

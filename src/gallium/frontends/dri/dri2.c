@@ -275,101 +275,6 @@ dri_image_drawable_get_buffers(struct dri_drawable *drawable,
                                           images);
 }
 
-static __DRIbuffer *
-dri2_allocate_buffer(struct dri_screen *screen,
-                     unsigned attachment, unsigned format,
-                     int width, int height)
-{
-   struct dri2_buffer *buffer;
-   struct pipe_resource templ;
-   enum pipe_format pf;
-   unsigned bind = 0;
-   struct winsys_handle whandle;
-
-   /* struct pipe_resource height0 is 16-bit, avoid overflow */
-   if (height > 0xffff)
-      return NULL;
-
-   switch (attachment) {
-      case __DRI_BUFFER_FRONT_LEFT:
-      case __DRI_BUFFER_FAKE_FRONT_LEFT:
-         bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;
-         break;
-      case __DRI_BUFFER_BACK_LEFT:
-         bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;
-         break;
-      case __DRI_BUFFER_DEPTH:
-      case __DRI_BUFFER_DEPTH_STENCIL:
-      case __DRI_BUFFER_STENCIL:
-            bind = PIPE_BIND_DEPTH_STENCIL; /* XXX sampler? */
-         break;
-   }
-
-   /* because we get the handle and stride */
-   bind |= PIPE_BIND_SHARED;
-
-   switch (format) {
-      case 64:
-         pf = PIPE_FORMAT_R16G16B16A16_FLOAT;
-         break;
-      case 48:
-         pf = PIPE_FORMAT_R16G16B16X16_FLOAT;
-         break;
-      case 32:
-         pf = PIPE_FORMAT_BGRA8888_UNORM;
-         break;
-      case 30:
-         pf = PIPE_FORMAT_B10G10R10X2_UNORM;
-         break;
-      case 24:
-         pf = PIPE_FORMAT_BGRX8888_UNORM;
-         break;
-      case 16:
-         pf = PIPE_FORMAT_Z16_UNORM;
-         break;
-      default:
-         return NULL;
-   }
-
-   buffer = CALLOC_STRUCT(dri2_buffer);
-   if (!buffer)
-      return NULL;
-
-   memset(&templ, 0, sizeof(templ));
-   templ.bind = bind;
-   templ.format = pf;
-   templ.target = PIPE_TEXTURE_2D;
-   templ.last_level = 0;
-   templ.width0 = width;
-   templ.height0 = height;
-   templ.depth0 = 1;
-   templ.array_size = 1;
-
-   buffer->resource =
-      screen->base.screen->resource_create(screen->base.screen, &templ);
-   if (!buffer->resource) {
-      FREE(buffer);
-      return NULL;
-   }
-
-   memset(&whandle, 0, sizeof(whandle));
-   if (screen->can_share_buffer)
-      whandle.type = WINSYS_HANDLE_TYPE_SHARED;
-   else
-      whandle.type = WINSYS_HANDLE_TYPE_KMS;
-
-   screen->base.screen->resource_get_handle(screen->base.screen, NULL,
-         buffer->resource, &whandle,
-         PIPE_HANDLE_USAGE_EXPLICIT_FLUSH);
-
-   buffer->base.attachment = attachment;
-   buffer->base.name = whandle.handle;
-   buffer->base.cpp = util_format_get_blocksize(pf);
-   buffer->base.pitch = whandle.stride;
-
-   return &buffer->base;
-}
-
 static void
 dri2_release_buffer(__DRIbuffer *bPriv)
 {
@@ -810,6 +715,16 @@ static const struct dri2_format_mapping r8_g8b8_mapping = {
      { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88 } }
 };
 
+static const struct dri2_format_mapping r8_g8b8_mapping_422 = {
+   DRM_FORMAT_NV16,
+   __DRI_IMAGE_FORMAT_NONE,
+   __DRI_IMAGE_COMPONENTS_Y_UV,
+   PIPE_FORMAT_R8_G8B8_422_UNORM,
+   2,
+   { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8 },
+     { 1, 1, 0, __DRI_IMAGE_FORMAT_GR88 } }
+};
+
 static const struct dri2_format_mapping r8_b8g8_mapping = {
    DRM_FORMAT_NV21,
    __DRI_IMAGE_FORMAT_NONE,
@@ -854,6 +769,26 @@ static const struct dri2_format_mapping g8r8_b8r8_mapping = {
    PIPE_FORMAT_G8R8_B8R8_UNORM, 2,
    { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88 },
      { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888 } }
+};
+
+static const struct dri2_format_mapping r10_g10b10_mapping = {
+   DRM_FORMAT_NV15,
+   __DRI_IMAGE_FORMAT_NONE,
+   __DRI_IMAGE_COMPONENTS_Y_UV,
+   PIPE_FORMAT_R10_G10B10_420_UNORM,
+   2,
+   { { 0, 0, 0, __DRI_IMAGE_FORMAT_NONE },
+     { 1, 1, 1, __DRI_IMAGE_FORMAT_NONE } }
+};
+
+static const struct dri2_format_mapping r10_g10b10_mapping_422 = {
+   DRM_FORMAT_NV20,
+   __DRI_IMAGE_FORMAT_NONE,
+   __DRI_IMAGE_COMPONENTS_Y_UV,
+   PIPE_FORMAT_R10_G10B10_422_UNORM,
+   2,
+   { { 0, 0, 0, __DRI_IMAGE_FORMAT_NONE },
+     { 1, 1, 0, __DRI_IMAGE_FORMAT_NONE } }
 };
 
 static enum __DRIFixedRateCompression
@@ -941,6 +876,29 @@ dri_create_image_from_winsys(struct dri_screen *screen,
        pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8_B8G8_420_UNORM,
                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
       map = &r8_b8g8_mapping;
+      tex_usage |= PIPE_BIND_SAMPLER_VIEW;
+   }
+
+   /* For NV16, see if we have support for sampling r8_g8b8 */
+   if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV16 &&
+       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8_G8B8_422_UNORM,
+                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+      map = &r8_g8b8_mapping_422;
+      tex_usage |= PIPE_BIND_SAMPLER_VIEW;
+   }
+
+   /* For NV15, see if we have support for sampling r10_g10b10 */
+   if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV15 &&
+       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R10_G10B10_420_UNORM,
+                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+      map = &r10_g10b10_mapping;
+      tex_usage |= PIPE_BIND_SAMPLER_VIEW;
+   }
+
+   if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV20 &&
+       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R10_G10B10_422_UNORM,
+                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+      map = &r10_g10b10_mapping_422;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 

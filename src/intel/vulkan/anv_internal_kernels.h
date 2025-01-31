@@ -33,10 +33,20 @@ struct PACKED anv_gen_indirect_params {
    /* Indirect data buffer address (only used on Gfx9) */
    uint64_t indirect_data_addr;
 
+   /* Pointers to workaround instructions */
+   uint64_t wa_insts_addr;
+
    /* Stride between each elements of the indirect data buffer */
    uint32_t indirect_data_stride;
 
-   uint32_t flags; /* 0-7: bits, 8-15: mocs, 16-23: cmd_dws */
+   /* Bitfield of ANV_GENERATED_FLAG_* */
+   uint32_t flags;
+
+   /* MOCS to use for VERTEX_BUFFER_STATE (only used on Gfx9) */
+   uint32_t mocs;
+
+   /* 3DPRIMITIVE instruction size (in bytes) */
+   uint32_t cmd_primitive_size;
 
    /* Base number of the draw ID, it is added to the index computed from the
     * gl_FragCoord

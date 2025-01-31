@@ -427,9 +427,7 @@ blorp_exec_on_render(struct blorp_batch *batch,
    anv_cmd_dirty_mask_t dirty = ~(ANV_CMD_DIRTY_INDEX_BUFFER |
                                   ANV_CMD_DIRTY_XFB_ENABLE |
                                   ANV_CMD_DIRTY_OCCLUSION_QUERY_ACTIVE |
-                                  ANV_CMD_DIRTY_FS_MSAA_FLAGS |
-                                  ANV_CMD_DIRTY_RESTART_INDEX |
-                                  ANV_CMD_DIRTY_COARSE_PIXEL_ACTIVE);
+                                  ANV_CMD_DIRTY_RESTART_INDEX);
 
    cmd_buffer->state.gfx.vb_dirty = ~0;
    cmd_buffer->state.gfx.dirty |= dirty;

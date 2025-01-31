@@ -143,6 +143,8 @@ private:
 };
 
 struct acp {
+   DECLARE_LINEAR_ALLOC_CXX_OPERATORS(acp);
+
    struct rb_tree by_dst;
    struct rb_tree by_src;
 
@@ -1350,7 +1352,7 @@ elk_fs_visitor::opt_copy_propagation()
    bool progress = false;
    void *copy_prop_ctx = ralloc_context(NULL);
    linear_ctx *lin_ctx = linear_context(copy_prop_ctx);
-   struct acp out_acp[cfg->num_blocks];
+   struct acp *out_acp = new (lin_ctx) acp[cfg->num_blocks];
 
    const fs_live_variables &live = live_analysis.require();
 

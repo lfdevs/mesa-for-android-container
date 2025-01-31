@@ -574,6 +574,13 @@ public:                                                                  \
       assert(p != NULL);                                                 \
       static_assert(HAS_TRIVIAL_DESTRUCTOR(TYPE));                       \
       return p;                                                          \
+   }                                                                     \
+   static void* operator new[](size_t size, linear_ctx *ctx)             \
+   {                                                                     \
+      void *p = ALLOC_FUNC(ctx, size);                                   \
+      assert(p != NULL);                                                 \
+      static_assert(HAS_TRIVIAL_DESTRUCTOR(TYPE));                       \
+      return p;                                                          \
    }
 
 #define DECLARE_LINEAR_ALLOC_CXX_OPERATORS(type) \

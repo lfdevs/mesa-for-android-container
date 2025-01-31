@@ -12,7 +12,7 @@
 #include "pipebuffer/pb_slab.h"
 #include "util/u_queue.h"
 #include "util/list.h"
-#include <radeon_drm.h>
+#include "drm-uapi/radeon_drm.h"
 
 struct radeon_drm_cs;
 

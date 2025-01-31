@@ -865,7 +865,6 @@ glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 
-glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
 
 glx@glx_ext_import_context@free context,Fail
@@ -1232,8 +1231,6 @@ spec@nv_primitive_restart@primitive-restart-draw-mode-triangle_strip,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-triangles,Fail
 spec@nv_read_depth@read_depth_gles3,Fail
 
-spec@oes_texture_view@rendering-formats,Fail
-spec@oes_texture_view@rendering-formats@clear GL_RGBA8_SNORM as GL_R32F,Fail
 spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail

@@ -1264,8 +1264,8 @@ vec4_visitor::emit_resolve_reladdr(int scratch_loc[], elk_bblock_t *block,
 void
 vec4_visitor::move_grf_array_access_to_scratch()
 {
-   int scratch_loc[this->alloc.count];
-   memset(scratch_loc, -1, sizeof(scratch_loc));
+   int *scratch_loc = ralloc_array(NULL, int, this->alloc.count);
+   memset(scratch_loc, -1, sizeof(int) * this->alloc.count);
 
    /* First, calculate the set of virtual GRFs that need to be punted
     * to scratch due to having any array access on them, and where in
@@ -1333,6 +1333,8 @@ vec4_visitor::move_grf_array_access_to_scratch()
                                              inst->src[i]);
       }
    }
+
+   ralloc_free(scratch_loc);
 }
 
 void

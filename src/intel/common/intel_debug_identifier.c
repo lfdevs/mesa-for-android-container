@@ -117,14 +117,15 @@ intel_debug_get_identifier_block(void *_buffer,
       *end_buffer = _buffer + buffer_size;
 
    while (buffer < end_buffer) {
-      struct intel_debug_block_base *item = buffer;
+      struct intel_debug_block_base item;
+      memcpy(&item, buffer, sizeof(item));
 
-      if (item->type == type)
-         return item;
-      if (item->type == INTEL_DEBUG_BLOCK_TYPE_END)
+      if (item.type == type)
+         return buffer;
+      if (item.type == INTEL_DEBUG_BLOCK_TYPE_END)
          return NULL;
 
-      buffer += item->length;
+      buffer += item.length;
    }
 
    return NULL;

@@ -1508,10 +1508,15 @@ anv_bo_vma_alloc_or_close(struct anv_device *device,
    assert(bo->vma_heap == NULL);
    assert(explicit_address == intel_48b_address(explicit_address));
 
+   const bool is_small_heap =
+      alloc_flags & (ANV_BO_ALLOC_DESCRIPTOR_POOL |
+                     ANV_BO_ALLOC_DYNAMIC_VISIBLE_POOL |
+                     ANV_BO_ALLOC_32BIT_ADDRESS);
+
    uint32_t align = device->physical->info.mem_alignment;
 
    /* If it's big enough to store a tiled resource, we need 64K alignment */
-   if (bo->size >= 64 * 1024)
+   if (bo->size >= 64 * 1024 && !is_small_heap)
       align = MAX2(64 * 1024, align);
 
    /* If we're using the AUX map, make sure we follow the required
@@ -1522,11 +1527,12 @@ anv_bo_vma_alloc_or_close(struct anv_device *device,
 
    /* Opportunistically align addresses to 2Mb when above 1Mb. We do this
     * because this gives an opportunity for the kernel to use Transparent Huge
-    * Pages (the 2MB page table layout) for faster memory access.
+    * Pages (the 2MB page table layout) for faster memory access. Avoid doing
+    * it for small heaps because that could cause fragmentation.
     *
     * Only available on ICL+.
     */
-   if (device->info->ver >= 11 && bo->size >= 1 * 1024 * 1024)
+   if (device->info->ver >= 11 && bo->size >= 1 * 1024 * 1024 && !is_small_heap)
       align = MAX2(2 * 1024 * 1024, align);
 
    if (alloc_flags & ANV_BO_ALLOC_FIXED_ADDRESS) {

@@ -53,7 +53,10 @@ struct pan_csf_tiler_oom_ctx {
    uint32_t bbox_max;
 
    /* Tiler descriptor address */
-   mali_ptr tiler_desc;
+   uint64_t tiler_desc;
+
+   /* Address of the region reserved for saving registers. */
+   uint64_t dump_addr;
 } PACKED;
 
 struct panfrost_csf_batch {
@@ -74,6 +77,8 @@ struct panfrost_csf_batch {
    struct panfrost_pool cs_chunk_pool;
 
    struct panfrost_ptr tiler_oom_ctx;
+
+   struct mali_tiler_context_packed *pending_tiler_desc;
 };
 
 struct panfrost_csf_context {
@@ -110,16 +115,18 @@ struct pipe_draw_start_count_bias;
 int GENX(csf_init_context)(struct panfrost_context *ctx);
 void GENX(csf_cleanup_context)(struct panfrost_context *ctx);
 
-void GENX(csf_init_batch)(struct panfrost_batch *batch);
+int GENX(csf_init_batch)(struct panfrost_batch *batch);
 void GENX(csf_cleanup_batch)(struct panfrost_batch *batch);
 int GENX(csf_submit_batch)(struct panfrost_batch *batch);
 
+void GENX(csf_prepare_tiler)(struct panfrost_batch *batch,
+                             struct pan_fb_info *fb);
 void GENX(csf_preload_fb)(struct panfrost_batch *batch, struct pan_fb_info *fb);
 void GENX(csf_emit_fbds)(struct panfrost_batch *batch, struct pan_fb_info *fb,
                          struct pan_tls_info *tls);
 void GENX(csf_emit_fragment_job)(struct panfrost_batch *batch,
                                  const struct pan_fb_info *pfb);
-void GENX(csf_emit_batch_end)(struct panfrost_batch *batch);
+int GENX(csf_emit_batch_end)(struct panfrost_batch *batch);
 void GENX(csf_launch_xfb)(struct panfrost_batch *batch,
                           const struct pipe_draw_info *info, unsigned count);
 void GENX(csf_launch_grid)(struct panfrost_batch *batch,

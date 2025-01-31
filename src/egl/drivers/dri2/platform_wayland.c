@@ -1224,12 +1224,13 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
          render_modifiers = &linear_mod;
          render_num_modifiers = 1;
       }
-      if (dri2_dpy->dri_screen_display_gpu->base.screen->resource_create_with_modifiers) {
-         display_modifiers = &linear_mod;
-         display_num_modifiers = 1;
-      }
 
       if (dri2_dpy->dri_screen_display_gpu) {
+         if (dri2_dpy->dri_screen_display_gpu->base.screen->resource_create_with_modifiers) {
+            display_modifiers = &linear_mod;
+            display_num_modifiers = 1;
+         }
+
          linear_copy_display_gpu_image = dri_create_image_with_modifiers(
             dri2_dpy->dri_screen_display_gpu,
             dri2_surf->base.Width, dri2_surf->base.Height,

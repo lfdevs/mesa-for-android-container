@@ -29,11 +29,15 @@
 #include <gtest/gtest.h>
 
 #include "c99_compat.h"
+#include "common/xe/intel_engine.h"
 #include "common/intel_gem.h"
+#include "dev/intel_debug.h"
 #include "dev/intel_device_info.h"
+#include "dev/intel_kmd.h"
 #include "intel_gem.h"
 #include "isl/isl.h"
 #include "drm-uapi/i915_drm.h"
+#include "drm-uapi/xe_drm.h"
 #include "genxml/gen_macros.h"
 #include "util/macros.h"
 
@@ -90,10 +94,8 @@ __gen_address_offset(address addr, uint64_t offset)
 
 class mi_builder_test : public ::testing::Test {
 public:
-   mi_builder_test();
-   ~mi_builder_test();
-
-   void SetUp();
+   void SetUp() override;
+   void TearDown() override;
 
    void *emit_dwords(int num_dwords);
    void submit_batch();
@@ -134,26 +136,30 @@ public:
       return mi_mem32(out_addr(offset));
    }
 
-   int fd;
-   uint32_t ctx_id;
+   int fd = -1;
    intel_device_info devinfo;
 
-   uint32_t batch_bo_handle;
-#if GFX_VER >= 8
+   uint32_t batch_bo_handle = 0;
    uint64_t batch_bo_addr;
-#endif
    uint32_t batch_offset;
-   void *batch_map;
+   void *batch_map = NULL;
 
+   struct {
+      uint32_t vm_id = 0;
+      uint32_t queue_id = 0;
+   } xe;
+
+   struct {
+      uint32_t ctx_id = 0;
 #if GFX_VER < 8
-   std::vector<drm_i915_gem_relocation_entry> relocs;
+      std::vector<drm_i915_gem_relocation_entry> relocs;
 #endif
+   } i915;
 
-   uint32_t data_bo_handle;
-#if GFX_VER >= 8
+   uint32_t data_bo_handle = 0;
    uint64_t data_bo_addr;
-#endif
-   void *data_map;
+   void *data_map = NULL;
+
    char *input;
    char *output;
    uint64_t canary;
@@ -162,15 +168,6 @@ public:
 
    mi_builder b;
 };
-
-mi_builder_test::mi_builder_test() :
-  fd(-1)
-{ }
-
-mi_builder_test::~mi_builder_test()
-{
-   close(fd);
-}
 
 // 1 MB of batch should be enough for anyone, right?
 #define BATCH_BO_SIZE (256 * 4096)
@@ -181,6 +178,7 @@ mi_builder_test::SetUp()
 {
    drmDevicePtr devices[8];
    int max_devices = drmGetDevices2(0, devices, 8);
+   ASSERT_GT(max_devices, 0);
 
    int i;
    for (i = 0; i < max_devices; i++) {
@@ -191,14 +189,16 @@ mi_builder_test::SetUp()
          if (fd < 0)
             continue;
 
-         /* We don't really need to do this when running on hardware because
-          * we can just pull it from the drmDevice.  However, without doing
-          * this, intel_dump_gpu gets a bit of heartburn and we can't use the
-          * --device option with it.
-          */
-         int device_id;
-         ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_CHIPSET_ID, &device_id))
-               << strerror(errno);
+         if (intel_get_kmd_type(fd) == INTEL_KMD_TYPE_I915) {
+            /* We don't really need to do this when running on hardware because
+             * we can just pull it from the drmDevice.  However, without doing
+             * this, intel_dump_gpu gets a bit of heartburn and we can't use the
+             * --device option with it.
+             */
+            int device_id;
+            ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_CHIPSET_ID, &device_id))
+                  << strerror(errno);
+         }
 
          ASSERT_TRUE(intel_get_device_info_from_fd(fd, &devinfo, -1, -1));
          if (devinfo.ver != GFX_VER ||
@@ -208,107 +208,195 @@ mi_builder_test::SetUp()
             continue;
          }
 
-
          /* Found a device! */
          break;
       }
    }
+
+   drmFreeDevices(devices, max_devices);
    ASSERT_TRUE(i < max_devices) << "Failed to find a DRM device";
+   drmFreeDevices(devices, max_devices);
 
-   ASSERT_TRUE(intel_gem_create_context(fd, &ctx_id)) << strerror(errno);
+   if (devinfo.kmd_type == INTEL_KMD_TYPE_I915) {
+      ASSERT_TRUE(intel_gem_create_context(fd, &i915.ctx_id)) << strerror(errno);
 
-   if (GFX_VER >= 8) {
-      /* On gfx8+, we require softpin */
-      int has_softpin;
-      ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_SOFTPIN, &has_softpin))
-            << strerror(errno);
-      ASSERT_TRUE(has_softpin);
-   }
+      if (GFX_VER >= 8) {
+         /* On gfx8+, we require softpin */
+         int has_softpin;
+         ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_SOFTPIN, &has_softpin))
+               << strerror(errno);
+         ASSERT_TRUE(has_softpin);
+      }
 
-   // Create the batch buffer
-   drm_i915_gem_create gem_create = drm_i915_gem_create();
-   gem_create.size = BATCH_BO_SIZE;
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_CREATE,
-                      (void *)&gem_create), 0) << strerror(errno);
-   batch_bo_handle = gem_create.handle;
+      // Create the batch buffer
+      drm_i915_gem_create gem_create = drm_i915_gem_create();
+      gem_create.size = BATCH_BO_SIZE;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_CREATE,
+                         (void *)&gem_create), 0) << strerror(errno);
+      batch_bo_handle = gem_create.handle;
 #if GFX_VER >= 8
-   batch_bo_addr = 0xffffffffdff70000ULL;
+      batch_bo_addr = 0xffffffffdff70000ULL;
 #endif
 
-   if (devinfo.has_caching_uapi) {
-      drm_i915_gem_caching gem_caching = drm_i915_gem_caching();
-      gem_caching.handle = batch_bo_handle;
-      gem_caching.caching = I915_CACHING_CACHED;
-      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
-                         (void *)&gem_caching), 0) << strerror(errno);
-   }
+      if (devinfo.has_caching_uapi) {
+         drm_i915_gem_caching gem_caching = drm_i915_gem_caching();
+         gem_caching.handle = batch_bo_handle;
+         gem_caching.caching = I915_CACHING_CACHED;
+         ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
+                            (void *)&gem_caching), 0) << strerror(errno);
+      }
 
-   if (devinfo.has_mmap_offset) {
-      drm_i915_gem_mmap_offset gem_mmap_offset = drm_i915_gem_mmap_offset();
-      gem_mmap_offset.handle = batch_bo_handle;
-      gem_mmap_offset.flags = devinfo.has_local_mem ?
-                              I915_MMAP_OFFSET_FIXED :
-                              I915_MMAP_OFFSET_WC;
-      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET,
-                         &gem_mmap_offset), 0) << strerror(errno);
+      if (devinfo.has_mmap_offset) {
+         drm_i915_gem_mmap_offset gem_mmap_offset = drm_i915_gem_mmap_offset();
+         gem_mmap_offset.handle = batch_bo_handle;
+         gem_mmap_offset.flags = devinfo.has_local_mem ?
+                                 I915_MMAP_OFFSET_FIXED :
+                                 I915_MMAP_OFFSET_WC;
+         ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET,
+                            &gem_mmap_offset), 0) << strerror(errno);
 
-      batch_map = mmap(NULL, BATCH_BO_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                       fd, gem_mmap_offset.offset);
-      ASSERT_NE(batch_map, MAP_FAILED) << strerror(errno);
+         batch_map = mmap(NULL, BATCH_BO_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                          fd, gem_mmap_offset.offset);
+         ASSERT_NE(batch_map, MAP_FAILED) << strerror(errno);
+      } else {
+         drm_i915_gem_mmap gem_mmap = drm_i915_gem_mmap();
+         gem_mmap.handle = batch_bo_handle;
+         gem_mmap.offset = 0;
+         gem_mmap.size = BATCH_BO_SIZE;
+         gem_mmap.flags = 0;
+         ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
+                         (void *)&gem_mmap), 0) << strerror(errno);
+         batch_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
+      }
+
+      // Create the data buffer
+      gem_create = drm_i915_gem_create();
+      gem_create.size = DATA_BO_SIZE;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_CREATE,
+                         (void *)&gem_create), 0) << strerror(errno);
+      data_bo_handle = gem_create.handle;
+#if GFX_VER >= 8
+      data_bo_addr = 0xffffffffefff0000ULL;
+#endif
+
+      if (devinfo.has_caching_uapi) {
+         drm_i915_gem_caching gem_caching = drm_i915_gem_caching();
+         gem_caching.handle = data_bo_handle;
+         gem_caching.caching = I915_CACHING_CACHED;
+         ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
+                            (void *)&gem_caching), 0) << strerror(errno);
+      }
+
+      if (devinfo.has_mmap_offset) {
+         drm_i915_gem_mmap_offset gem_mmap_offset = drm_i915_gem_mmap_offset();
+         gem_mmap_offset.handle = data_bo_handle;
+         gem_mmap_offset.flags = devinfo.has_local_mem ?
+                                 I915_MMAP_OFFSET_FIXED :
+                                 I915_MMAP_OFFSET_WC;
+         ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET,
+                            &gem_mmap_offset), 0) << strerror(errno);
+
+         data_map = mmap(NULL, DATA_BO_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                         fd, gem_mmap_offset.offset);
+         ASSERT_NE(data_map, MAP_FAILED) << strerror(errno);
+      } else {
+         drm_i915_gem_mmap gem_mmap = drm_i915_gem_mmap();
+         gem_mmap.handle = data_bo_handle;
+         gem_mmap.offset = 0;
+         gem_mmap.size = DATA_BO_SIZE;
+         gem_mmap.flags = 0;
+         ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
+                            (void *)&gem_mmap), 0) << strerror(errno);
+         data_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
+      }
    } else {
-      drm_i915_gem_mmap gem_mmap = drm_i915_gem_mmap();
-      gem_mmap.handle = batch_bo_handle;
-      gem_mmap.offset = 0;
-      gem_mmap.size = BATCH_BO_SIZE;
-      gem_mmap.flags = 0;
-      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
-                      (void *)&gem_mmap), 0) << strerror(errno);
-      batch_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
+      assert(devinfo.kmd_type == INTEL_KMD_TYPE_XE);
+
+      int err;
+
+      struct drm_xe_vm_create create = {
+         .flags = DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE,
+      };
+      err = intel_ioctl(fd, DRM_IOCTL_XE_VM_CREATE, &create);
+      ASSERT_EQ(err, 0) << strerror(err);
+      xe.vm_id = create.vm_id;
+
+      struct drm_xe_engine_class_instance instance = {};
+
+      struct intel_query_engine_info *engines_info = xe_engine_get_info(fd);
+      assert(engines_info);
+
+      bool found_engine = false;
+      for (uint32_t i = 0; i < engines_info->num_engines; i++) {
+         struct intel_engine_class_instance *e = &engines_info->engines[i];
+         if (e->engine_class == INTEL_ENGINE_CLASS_RENDER) {
+            instance.engine_class = DRM_XE_ENGINE_CLASS_RENDER;
+            instance.engine_instance = e->engine_instance;
+            instance.gt_id = e->gt_id;
+            found_engine = true;
+            break;
+         }
+      }
+      free(engines_info);
+      ASSERT_TRUE(found_engine);
+
+      struct drm_xe_exec_queue_create queue_create = {
+         .width          = 1,
+         .num_placements = 1,
+         .vm_id          = xe.vm_id,
+         .instances      = (uintptr_t)&instance,
+      };
+      err = intel_ioctl(fd, DRM_IOCTL_XE_EXEC_QUEUE_CREATE, &queue_create);
+      ASSERT_EQ(err, 0) << strerror(err);
+      xe.queue_id = queue_create.exec_queue_id;
+
+      // Create the batch buffer.
+      {
+         struct drm_xe_gem_create gem_create = {
+            .size        = BATCH_BO_SIZE,
+            .placement   = 1u << devinfo.mem.sram.mem.instance,
+            .cpu_caching = DRM_XE_GEM_CPU_CACHING_WB,
+         };
+         err = intel_ioctl(fd, DRM_IOCTL_XE_GEM_CREATE, &gem_create);
+         ASSERT_EQ(err, 0) << strerror(err);
+         batch_bo_handle = gem_create.handle;
+         batch_bo_addr = 0x10000000;
+
+         struct drm_xe_gem_mmap_offset mm = {
+            .handle = batch_bo_handle,
+         };
+         err = intel_ioctl(fd, DRM_IOCTL_XE_GEM_MMAP_OFFSET, &mm);
+         ASSERT_EQ(err, 0) << strerror(err);
+         batch_map = mmap(NULL, BATCH_BO_SIZE, PROT_READ | PROT_WRITE,
+                          MAP_SHARED, fd, mm.offset);
+         ASSERT_NE(batch_map, MAP_FAILED) << strerror(errno);
+      }
+
+      // Create the data buffer.
+      {
+         struct drm_xe_gem_create gem_create = {
+            .size        = DATA_BO_SIZE,
+            .placement   = 1u << devinfo.mem.sram.mem.instance,
+            .cpu_caching = DRM_XE_GEM_CPU_CACHING_WB,
+         };
+         err = intel_ioctl(fd, DRM_IOCTL_XE_GEM_CREATE, &gem_create);
+         ASSERT_EQ(err, 0) << strerror(err);
+         data_bo_handle = gem_create.handle;
+         data_bo_addr = 0x20000000;
+
+         struct drm_xe_gem_mmap_offset mm = {
+            .handle = data_bo_handle,
+         };
+         err = intel_ioctl(fd, DRM_IOCTL_XE_GEM_MMAP_OFFSET, &mm);
+         ASSERT_EQ(err, 0) << strerror(err);
+         data_map = mmap(NULL, DATA_BO_SIZE, PROT_READ | PROT_WRITE,
+                          MAP_SHARED, fd, mm.offset);
+         ASSERT_NE(data_map, MAP_FAILED) << strerror(errno);
+      }
    }
 
    // Start the batch at zero
    batch_offset = 0;
-
-   // Create the data buffer
-   gem_create = drm_i915_gem_create();
-   gem_create.size = DATA_BO_SIZE;
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_CREATE,
-                      (void *)&gem_create), 0) << strerror(errno);
-   data_bo_handle = gem_create.handle;
-#if GFX_VER >= 8
-   data_bo_addr = 0xffffffffefff0000ULL;
-#endif
-
-   if (devinfo.has_caching_uapi) {
-      drm_i915_gem_caching gem_caching = drm_i915_gem_caching();
-      gem_caching.handle = data_bo_handle;
-      gem_caching.caching = I915_CACHING_CACHED;
-      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
-                         (void *)&gem_caching), 0) << strerror(errno);
-   }
-
-   if (devinfo.has_mmap_offset) {
-      drm_i915_gem_mmap_offset gem_mmap_offset = drm_i915_gem_mmap_offset();
-      gem_mmap_offset.handle = data_bo_handle;
-      gem_mmap_offset.flags = devinfo.has_local_mem ?
-                              I915_MMAP_OFFSET_FIXED :
-                              I915_MMAP_OFFSET_WC;
-      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET,
-                         &gem_mmap_offset), 0) << strerror(errno);
-
-      data_map = mmap(NULL, DATA_BO_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                      fd, gem_mmap_offset.offset);
-      ASSERT_NE(data_map, MAP_FAILED) << strerror(errno);
-   } else {
-      drm_i915_gem_mmap gem_mmap = drm_i915_gem_mmap();
-      gem_mmap.handle = data_bo_handle;
-      gem_mmap.offset = 0;
-      gem_mmap.size = DATA_BO_SIZE;
-      gem_mmap.flags = 0;
-      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
-                         (void *)&gem_mmap), 0) << strerror(errno);
-      data_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
-   }
 
    input = (char *)data_map + INPUT_DATA_OFFSET;
    output = (char *)data_map + OUTPUT_DATA_OFFSET;
@@ -324,6 +412,65 @@ mi_builder_test::SetUp()
    mi_builder_init(&b, &devinfo, this);
    const uint32_t mocs = isl_mocs(&isl_dev, 0, false);
    mi_builder_set_mocs(&b, mocs);
+}
+
+void
+mi_builder_test::TearDown()
+{
+   int err;
+
+   if (data_map) {
+      err = munmap(data_map, DATA_BO_SIZE);
+      EXPECT_EQ(err, 0) << "unmap data bo failed";
+   }
+
+   if (data_bo_handle) {
+      struct drm_gem_close gem_close = { .handle = data_bo_handle };
+      err = intel_ioctl(fd, DRM_IOCTL_GEM_CLOSE, &gem_close);
+      EXPECT_EQ(err, 0) << "close data bo failed";
+   }
+
+   if (batch_map) {
+      err = munmap(batch_map, BATCH_BO_SIZE);
+      EXPECT_EQ(err, 0) << "unmmap batch bo failed";
+   }
+
+   if (batch_bo_handle) {
+      struct drm_gem_close gem_close = { .handle = batch_bo_handle };
+      err = intel_ioctl(fd, DRM_IOCTL_GEM_CLOSE, &gem_close);
+      EXPECT_EQ(err, 0) << "close batch bo failed";
+   }
+
+   if (devinfo.kmd_type == INTEL_KMD_TYPE_I915) {
+      if (i915.ctx_id) {
+         struct drm_i915_gem_context_destroy destroy = {
+            .ctx_id = i915.ctx_id,
+         };
+         err = intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_DESTROY, &destroy);
+         EXPECT_EQ(err, 0) << "context destroy failed";
+      }
+   } else {
+      assert(devinfo.kmd_type == INTEL_KMD_TYPE_XE);
+
+      if (xe.queue_id) {
+         struct drm_xe_exec_queue_destroy queue_destroy = {
+            .exec_queue_id = xe.queue_id,
+         };
+         err = intel_ioctl(fd, DRM_IOCTL_XE_EXEC_QUEUE_DESTROY, &queue_destroy);
+         EXPECT_EQ(err, 0) << "queue_destroy failure";
+      }
+
+      if (xe.vm_id) {
+         struct drm_xe_vm_destroy destroy = {
+            .vm_id = xe.vm_id,
+         };
+         err = intel_ioctl(fd, DRM_IOCTL_XE_VM_DESTROY, &destroy);
+         EXPECT_EQ(err, 0) << "vm_destroy failure";
+      }
+   }
+
+   if (fd != -1)
+      close(fd);
 }
 
 void *
@@ -344,52 +491,133 @@ mi_builder_test::submit_batch()
    if (batch_offset & 4)
       mi_builder_emit(&b, GENX(MI_NOOP), noop);
 
-   drm_i915_gem_exec_object2 objects[2];
-   memset(objects, 0, sizeof(objects));
+   if (devinfo.kmd_type == INTEL_KMD_TYPE_I915) {
+      drm_i915_gem_exec_object2 objects[2];
+      memset(objects, 0, sizeof(objects));
 
-   objects[0].handle = data_bo_handle;
-   objects[0].relocation_count = 0;
-   objects[0].relocs_ptr = 0;
+      objects[0].handle = data_bo_handle;
+      objects[0].relocation_count = 0;
+      objects[0].relocs_ptr = 0;
 #if GFX_VER >= 8 /* On gfx8+, we pin everything */
-   objects[0].flags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
-                      EXEC_OBJECT_PINNED |
-                      EXEC_OBJECT_WRITE;
-   objects[0].offset = data_bo_addr;
+      objects[0].flags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
+                         EXEC_OBJECT_PINNED |
+                         EXEC_OBJECT_WRITE;
+      objects[0].offset = data_bo_addr;
 #else
-   objects[0].flags = EXEC_OBJECT_WRITE;
-   objects[0].offset = -1;
+      objects[0].flags = EXEC_OBJECT_WRITE;
+      objects[0].offset = -1;
 #endif
 
-   objects[1].handle = batch_bo_handle;
+      objects[1].handle = batch_bo_handle;
 #if GFX_VER >= 8 /* On gfx8+, we don't use relocations */
-   objects[1].relocation_count = 0;
-   objects[1].relocs_ptr = 0;
-   objects[1].flags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
-                      EXEC_OBJECT_PINNED;
-   objects[1].offset = batch_bo_addr;
+      objects[1].relocation_count = 0;
+      objects[1].relocs_ptr = 0;
+      objects[1].flags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS |
+                         EXEC_OBJECT_PINNED;
+      objects[1].offset = batch_bo_addr;
 #else
-   objects[1].relocation_count = relocs.size();
-   objects[1].relocs_ptr = (uintptr_t)(void *)&relocs[0];
-   objects[1].flags = 0;
-   objects[1].offset = -1;
+      objects[1].relocation_count = i915.relocs.size();
+      objects[1].relocs_ptr = (uintptr_t)(void *)&i915.relocs[0];
+      objects[1].flags = 0;
+      objects[1].offset = -1;
 #endif
 
-   drm_i915_gem_execbuffer2 execbuf = drm_i915_gem_execbuffer2();
-   execbuf.buffers_ptr = (uintptr_t)(void *)objects;
-   execbuf.buffer_count = 2;
-   execbuf.batch_start_offset = 0;
-   execbuf.batch_len = batch_offset;
-   execbuf.flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER;
-   execbuf.rsvd1 = ctx_id;
+      drm_i915_gem_execbuffer2 execbuf = drm_i915_gem_execbuffer2();
+      execbuf.buffers_ptr = (uintptr_t)(void *)objects;
+      execbuf.buffer_count = 2;
+      execbuf.batch_start_offset = 0;
+      execbuf.batch_len = batch_offset;
+      execbuf.flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER;
+      execbuf.rsvd1 = i915.ctx_id;
 
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_EXECBUFFER2,
-                      (void *)&execbuf), 0) << strerror(errno);
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_EXECBUFFER2,
+                         (void *)&execbuf), 0) << strerror(errno);
 
-   drm_i915_gem_wait gem_wait = drm_i915_gem_wait();
-   gem_wait.bo_handle = batch_bo_handle;
-   gem_wait.timeout_ns = INT64_MAX;
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_WAIT,
-                      (void *)&gem_wait), 0) << strerror(errno);
+      drm_i915_gem_wait gem_wait = drm_i915_gem_wait();
+      gem_wait.bo_handle = batch_bo_handle;
+      gem_wait.timeout_ns = INT64_MAX;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_WAIT,
+                         (void *)&gem_wait), 0) << strerror(errno);
+   } else {
+      assert(devinfo.kmd_type == INTEL_KMD_TYPE_XE);
+
+      int err;
+
+      uint32_t sync_handles[2] = {};
+      for (int i = 0; i < 2; i++) {
+         struct drm_syncobj_create sync_create = {};
+         err = intel_ioctl(fd, DRM_IOCTL_SYNCOBJ_CREATE, &sync_create);
+         ASSERT_EQ(err, 0) << strerror(err);
+         sync_handles[i] = sync_create.handle;
+      }
+
+      struct drm_xe_vm_bind_op bind_ops[] = {
+         {
+            .obj       = batch_bo_handle,
+            .pat_index = devinfo.pat.cached_coherent.index,
+            .range     = BATCH_BO_SIZE,
+            .addr      = batch_bo_addr,
+            .op        = DRM_XE_VM_BIND_OP_MAP,
+            .flags     = DRM_XE_VM_BIND_FLAG_READONLY,
+         },
+         {
+            .obj       = data_bo_handle,
+            .pat_index = devinfo.pat.cached_coherent.index,
+            .range     = DATA_BO_SIZE,
+            .addr      = data_bo_addr,
+            .op        = DRM_XE_VM_BIND_OP_MAP,
+         },
+      };
+
+      struct drm_xe_sync bind_syncs[] = {
+         {
+            .type   = DRM_XE_SYNC_TYPE_SYNCOBJ,
+            .flags  = DRM_XE_SYNC_FLAG_SIGNAL,
+            .handle = sync_handles[0],
+         },
+      };
+
+      struct drm_xe_vm_bind bind = {
+         .vm_id           = xe.vm_id,
+         .num_binds       = ARRAY_SIZE(bind_ops),
+         .vector_of_binds = (uintptr_t)bind_ops,
+         .num_syncs       = 1,
+         .syncs           = (uintptr_t)bind_syncs,
+      };
+
+      err = intel_ioctl(fd, DRM_IOCTL_XE_VM_BIND, &bind);
+      ASSERT_EQ(err, 0) << strerror(err);
+
+      struct drm_xe_sync exec_syncs[] = {
+         {
+            .type   = DRM_XE_SYNC_TYPE_SYNCOBJ,
+            .handle = sync_handles[0],
+         },
+         {
+            .type   = DRM_XE_SYNC_TYPE_SYNCOBJ,
+            .flags  = DRM_XE_SYNC_FLAG_SIGNAL,
+            .handle = sync_handles[1],
+         }
+      };
+
+      struct drm_xe_exec exec = {
+         .exec_queue_id    = xe.queue_id,
+         .num_syncs        = 2,
+         .syncs            = (uintptr_t)exec_syncs,
+         .address          = batch_bo_addr,
+         .num_batch_buffer = 1,
+      };
+      err = intel_ioctl(fd, DRM_IOCTL_XE_EXEC, &exec);
+      ASSERT_EQ(err, 0) << strerror(err);
+
+      struct drm_syncobj_wait wait = {
+         .handles       = (uintptr_t)&sync_handles[1],
+         .timeout_nsec  = INT64_MAX,
+         .count_handles = 1,
+      };
+      err = intel_ioctl(fd, DRM_IOCTL_SYNCOBJ_WAIT, &wait);
+      ASSERT_EQ(err, 0) << strerror(err);
+   }
 }
 
 uint64_t
@@ -401,12 +629,13 @@ __gen_combine_address(mi_builder_test *test, void *location,
                        test->data_bo_addr : test->batch_bo_addr;
    return addr_u64 + addr.offset + delta;
 #else
+   assert(test->devinfo.kmd_type == INTEL_KMD_TYPE_I915);
    drm_i915_gem_relocation_entry reloc = drm_i915_gem_relocation_entry();
    reloc.target_handle = addr.gem_handle == test->data_bo_handle ? 0 : 1;
    reloc.delta = addr.offset + delta;
    reloc.offset = (char *)location - (char *)test->batch_map;
    reloc.presumed_offset = -1;
-   test->relocs.push_back(reloc);
+   test->i915.relocs.push_back(reloc);
 
    return reloc.delta;
 #endif

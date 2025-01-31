@@ -10,7 +10,7 @@ set -o xtrace
 uncollapsed_section_start debian_setup "Base Debian system setup"
 
 export DEBIAN_FRONTEND=noninteractive
-export LLVM_VERSION="${LLVM_VERSION:=15}"
+: "${LLVM_VERSION:?llvm version not set!}"
 
 apt-get install -y libelogind0  # this interfere with systemd deps, install separately
 
@@ -82,9 +82,9 @@ apt-get install -y --no-remove "${DEPS[@]}" "${EPHEMERAL[@]}" \
 
 . .gitlab-ci/container/container_pre_build.sh
 
-############### Build piglit
+section_end debian_setup
 
-uncollapsed_section_switch piglit "Building Piglit"
+############### Build piglit
 
 PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
 	     -DPIGLIT_USE_GBM=ON
@@ -104,17 +104,19 @@ PIGLIT_OPTS="-DPIGLIT_USE_WAFFLE=ON
 
 ############### Build dEQP GL
 
-uncollapsed_section_switch piglit_gl "Building dEQP for GL"
+DEQP_API=tools \
+DEQP_TARGET=surfaceless \
+. .gitlab-ci/container/build-deqp.sh
 
 DEQP_API=GL \
 DEQP_TARGET=surfaceless \
 . .gitlab-ci/container/build-deqp.sh
 
-uncollapsed_section_switch piglit_gles "Building dEQP for GLES"
-
 DEQP_API=GLES \
 DEQP_TARGET=surfaceless \
 . .gitlab-ci/container/build-deqp.sh
+
+rm -rf /VK-GL-CTS
 
 ############### Build apitrace
 
@@ -122,13 +124,9 @@ DEQP_TARGET=surfaceless \
 
 ############### Build validation layer for zink
 
-uncollapsed_section_switch vvl "Building Vulkan validation layers"
-
 . .gitlab-ci/container/build-vulkan-validation.sh
 
 ############### Build nine tests
-
-uncollapsed_section_switch nine "Building Nine tests"
 
 . .gitlab-ci/container/build-ninetests.sh
 
@@ -139,3 +137,5 @@ uncollapsed_section_switch debian_cleanup "Cleaning up base Debian system"
 apt-get purge -y "${EPHEMERAL[@]}"
 
 . .gitlab-ci/container/container_post_build.sh
+
+section_end debian_cleanup

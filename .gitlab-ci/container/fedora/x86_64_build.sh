@@ -6,6 +6,9 @@
 # FEDORA_X86_64_BUILD_TAG
 
 set -e
+
+. .gitlab-ci/setup-test-env.sh
+
 set -o xtrace
 
 
@@ -74,13 +77,15 @@ DEPS=(
     python-unversioned-command
     python3-devel
     python3-mako
+    python3-packaging
     python3-ply
     python3-pycparser
     python3-yaml
     rust-packaging
-    vulkan-headers
     spirv-tools-devel
     spirv-llvm-translator-devel
+    vulkan-headers
+    which
 )
 
 dnf install -y --setopt=install_weak_deps=False "${DEPS[@]}" "${EPHEMERAL[@]}"

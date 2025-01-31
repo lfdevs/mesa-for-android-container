@@ -29,6 +29,8 @@
 #include "vk_render_pass.h"
 #include "vk_util.h"
 
+#include "util/format_srgb.h"
+
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
@@ -472,7 +474,7 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
       image->planes[depth_plane].primary_surface.isl.format;
    const struct anv_address clear_color_addr =
       anv_image_get_clear_color_addr(cmd_buffer->device, image, depth_format,
-                                     VK_IMAGE_ASPECT_DEPTH_BIT);
+                                     VK_IMAGE_ASPECT_DEPTH_BIT, true);
    if (!anv_address_is_null(clear_color_addr) &&
        (initial_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
         initial_layout == VK_IMAGE_LAYOUT_PREINITIALIZED)) {
@@ -889,7 +891,7 @@ genX(cmd_buffer_load_clear_color)(struct anv_cmd_buffer *cmd_buffer,
    const struct anv_address entry_addr =
       anv_image_get_clear_color_addr(cmd_buffer->device, iview->image,
                                      iview->planes[0].isl.format,
-                                     VK_IMAGE_ASPECT_COLOR_BIT);
+                                     VK_IMAGE_ASPECT_COLOR_BIT, false);
 
    unsigned copy_size = cmd_buffer->device->isl_dev.ss.clear_value_size;
 
@@ -926,9 +928,20 @@ set_image_clear_color(struct anv_cmd_buffer *cmd_buffer,
       union isl_color_value clear_color;
       isl_color_value_unpack(&clear_color, image->view_formats[i], pixel);
 
+      UNUSED union isl_color_value sample_color = clear_color;
+      if (isl_format_is_srgb(image->view_formats[i])) {
+         sample_color.f32[0] =
+            util_format_linear_to_srgb_float(clear_color.f32[0]);
+         sample_color.f32[1] =
+            util_format_linear_to_srgb_float(clear_color.f32[1]);
+         sample_color.f32[2] =
+            util_format_linear_to_srgb_float(clear_color.f32[2]);
+      }
+
       const struct anv_address addr =
          anv_image_get_clear_color_addr(cmd_buffer->device, image,
-                                        image->view_formats[i], aspect);
+                                        image->view_formats[i], aspect,
+                                        false);
       assert(!anv_address_is_null(addr));
 
 #if GFX_VER >= 11
@@ -945,13 +958,17 @@ set_image_clear_color(struct anv_cmd_buffer *cmd_buffer,
 #else
       assert(cmd_buffer->device->isl_dev.ss.clear_color_state_size == 0);
       assert(cmd_buffer->device->isl_dev.ss.clear_value_size == 16);
-      uint32_t *dw = anv_batch_emitn(&cmd_buffer->batch, 3 + 4,
+      uint32_t *dw = anv_batch_emitn(&cmd_buffer->batch, 3 + 8,
                                      GENX(MI_STORE_DATA_IMM),
                                      .StoreQword = true, .Address = addr);
       dw[3] = clear_color.u32[0];
       dw[4] = clear_color.u32[1];
       dw[5] = clear_color.u32[2];
       dw[6] = clear_color.u32[3];
+      dw[7]  = sample_color.u32[0];
+      dw[8]  = sample_color.u32[1];
+      dw[9]  = sample_color.u32[2];
+      dw[10] = sample_color.u32[3];
 #endif
    }
 }
@@ -960,10 +977,13 @@ void
 genX(set_fast_clear_state)(struct anv_cmd_buffer *cmd_buffer,
                            const struct anv_image *image,
                            const enum isl_format format,
+                           const struct isl_swizzle swizzle,
                            union isl_color_value clear_color)
 {
    uint32_t pixel[4] = {};
-   isl_color_value_pack(&clear_color, format, pixel);
+   union isl_color_value swiz_color =
+      isl_color_value_swizzle_inv(clear_color, swizzle);
+   isl_color_value_pack(&swiz_color, format, pixel);
    set_image_clear_color(cmd_buffer, image, VK_IMAGE_ASPECT_COLOR_BIT, pixel);
 
    if (isl_color_value_is_zero(clear_color, format)) {
@@ -1222,7 +1242,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
 
    if (must_init_fast_clear_state) {
       if (image->planes[plane].aux_usage == ISL_AUX_USAGE_FCV_CCS_E) {
-         assert(!image->planes[plane].can_non_zero_fast_clear);
+         /* Ensure the raw and converted clear colors are in sync. */
          const uint32_t zero_pixel[4] = {};
          set_image_clear_color(cmd_buffer, image, aspect, zero_pixel);
       }
@@ -1900,7 +1920,9 @@ emit_dynamic_buffer_binding_table_entry(struct anv_cmd_buffer *cmd_buffer,
    /* Clamp the range to the buffer size */
    uint32_t range = MIN2(desc->range, desc->buffer->vk.size - offset);
 
-   /* Align the range for consistency */
+   /* Align the range to the reported bounds checking alignment
+    * VkPhysicalDeviceRobustness2PropertiesEXT::robustUniformBufferAccessSizeAlignment
+    */
    if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)
       range = align(range, ANV_UBO_ALIGNMENT);
 
@@ -2564,12 +2586,12 @@ genX(batch_emit_pipe_control_write)(struct anv_batch *batch,
 /* Set preemption on/off. */
 void
 genX(batch_set_preemption)(struct anv_batch *batch,
-                           const struct intel_device_info *devinfo,
+                           struct anv_device *device,
                            uint32_t current_pipeline,
                            bool value)
 {
 #if INTEL_WA_16013994831_GFX_VER
-   if (!intel_needs_workaround(devinfo, 16013994831))
+   if (!intel_needs_workaround(device->info, 16013994831))
       return;
 
    anv_batch_write_reg(batch, GENX(CS_CHICKEN1), cc1) {
@@ -2578,7 +2600,7 @@ genX(batch_set_preemption)(struct anv_batch *batch,
    }
 
    /* Wa_16013994831 - we need to insert CS_STALL and 250 noops. */
-   genx_batch_emit_pipe_control(batch, devinfo, current_pipeline,
+   genx_batch_emit_pipe_control(batch, device->info, current_pipeline,
                                 ANV_PIPE_CS_STALL_BIT);
 
    for (unsigned i = 0; i < 250; i++)
@@ -2593,7 +2615,7 @@ genX(cmd_buffer_set_preemption)(struct anv_cmd_buffer *cmd_buffer, bool value)
    if (cmd_buffer->state.gfx.object_preemption == value)
       return;
 
-   genX(batch_set_preemption)(&cmd_buffer->batch, cmd_buffer->device->info,
+   genX(batch_set_preemption)(&cmd_buffer->batch, cmd_buffer->device,
                               cmd_buffer->state.current_pipeline,
                               value);
    cmd_buffer->state.gfx.object_preemption = value;
@@ -2863,12 +2885,6 @@ genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
        *
        *    Objective of the preamble flushes is to ensure all data is
        *    evicted from L1 caches prior to fast clear.
-       *
-       * From the ACM PRM Vol. 9, "MCS/CCS Buffers for Render Target(s)":
-       *
-       *    Any transition from any value in {Clear, Render, Resolve} to a
-       *    different value in {Clear, Render, Resolve} requires end of pipe
-       *    synchronization.
        */
       add_pending_pipe_bits_for_color_aux_op(
             cmd_buffer, next_aux_op,
@@ -2877,8 +2893,7 @@ genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
             ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
             ANV_PIPE_DATA_CACHE_FLUSH_BIT |
-            ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT |
-            ANV_PIPE_END_OF_PIPE_SYNC_BIT);
+            ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT);
 
 #elif GFX_VERx10 == 120
       /* From the TGL Bspec 47704 (r52663), "Render Target Fast Clear":
@@ -2895,20 +2910,13 @@ genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
        *
        *    Objective of the preamble flushes is to ensure all data is
        *    evicted from L1 caches prior to fast clear.
-       *
-       * From the TGL PRM Vol. 9, "MCS/CCS Buffers for Render Target(s)":
-       *
-       *    Any transition from any value in {Clear, Render, Resolve} to a
-       *    different value in {Clear, Render, Resolve} requires end of pipe
-       *    synchronization.
        */
       add_pending_pipe_bits_for_color_aux_op(
             cmd_buffer, next_aux_op,
             ANV_PIPE_DEPTH_STALL_BIT  |
             ANV_PIPE_TILE_CACHE_FLUSH_BIT |
             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-            ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT |
-            ANV_PIPE_END_OF_PIPE_SYNC_BIT);
+            ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT);
 
 #else
       /* From the Sky Lake PRM Vol. 7, "MCS Buffer for Render Target(s)":
@@ -2940,31 +2948,7 @@ genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
 #endif
 
    } else if (aux_op_clears(last_aux_op) && !aux_op_clears(next_aux_op)) {
-#if GFX_VER >= 20
-      /* From the Xe2 Bspec 57340 (r59562),
-       * "MCS/CCS Buffers, Fast Clear for Render Target(s)":
-       *
-       *    Synchronization:
-       *    Due to interaction of scaled clearing rectangle with pixel
-       *    scoreboard, we require one of the following commands to be
-       *    issued. [...]
-       *
-       *    PIPE_CONTROL
-       *    PSS Stall Sync Enable            [...] 1b (Enable)
-       *       Machine-wide Stall at Pixel Stage, wait for all Prior Pixel
-       *       Work to Reach End of Pipe
-       *    Render Target Cache Flush Enable [...] 1b (Enable)
-       *       Post-Sync Op Flushes Render Cache before Unblocking Stall
-       *
-       *    This synchronization step is required before and after the fast
-       *    clear pass, to ensure correct ordering between pixels.
-       */
-      add_pending_pipe_bits_for_color_aux_op(
-            cmd_buffer, next_aux_op,
-            ANV_PIPE_PSS_STALL_SYNC_BIT |
-            ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT);
-
-#elif GFX_VERx10 == 125
+#if GFX_VERx10 >= 125
       /* From the ACM PRM Vol. 9, "Color Fast Clear Synchronization":
        *
        *    Postamble post fast clear synchronization
@@ -2972,18 +2956,11 @@ genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
        *    PIPE_CONTROL:
        *    PS sync stall = 1
        *    RT flush = 1
-       *
-       * From the ACM PRM Vol. 9, "MCS/CCS Buffers for Render Target(s)":
-       *
-       *    Any transition from any value in {Clear, Render, Resolve} to a
-       *    different value in {Clear, Render, Resolve} requires end of pipe
-       *    synchronization.
        */
       add_pending_pipe_bits_for_color_aux_op(
             cmd_buffer, next_aux_op,
             ANV_PIPE_PSS_STALL_SYNC_BIT |
-            ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-            ANV_PIPE_END_OF_PIPE_SYNC_BIT);
+            ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT);
 
 #elif GFX_VERx10 == 120
       /* From the TGL PRM Vol. 9, "Color Fast Clear Synchronization":
@@ -2995,19 +2972,19 @@ genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
        *    Tile Cache Flush = 1
        *    RT Write Flush = 1
        *
-       * From the TGL PRM Vol. 9, "MCS/CCS Buffers for Render Target(s)":
+       * From the TGL PRM Vol. 2a, "PIPE_CONTROL::L3 Fabric Flush":
        *
-       *    Any transition from any value in {Clear, Render, Resolve} to a
-       *    different value in {Clear, Render, Resolve} requires end of pipe
-       *    synchronization.
+       *    For a sequence of color fast clears. A single PIPE_CONTROL
+       *    command with Render Target Cache Flush, L3 Fabric Flush and Depth
+       *    Stall set at the end of the sequence suffices.
        *
+       * Replace the Tile Cache flush with an L3 fabric flush.
        */
       add_pending_pipe_bits_for_color_aux_op(
             cmd_buffer, next_aux_op,
-            ANV_PIPE_DEPTH_STALL_BIT |
-            ANV_PIPE_TILE_CACHE_FLUSH_BIT |
             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-            ANV_PIPE_END_OF_PIPE_SYNC_BIT);
+            ANV_PIPE_L3_FABRIC_FLUSH_BIT |
+            ANV_PIPE_DEPTH_STALL_BIT);
 
 #else
       /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
@@ -3085,6 +3062,14 @@ genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
        */
    } else {
       cmd_buffer->state.color_aux_op = next_aux_op;
+   }
+
+   if (next_aux_op == ISL_AUX_OP_FAST_CLEAR) {
+      if (aux_op_clears(last_aux_op)) {
+         cmd_buffer->num_dependent_clears++;
+      } else {
+         cmd_buffer->num_independent_clears++;
+      }
    }
 }
 
@@ -3603,8 +3588,8 @@ genX(CmdExecuteCommands)(
          container->perf_query_pool = secondary->perf_query_pool;
 
 #if INTEL_NEEDS_WA_1808121037
-      if (secondary->state.depth_reg_mode != ANV_DEPTH_REG_MODE_UNKNOWN)
-         container->state.depth_reg_mode = secondary->state.depth_reg_mode;
+      if (secondary->state.gfx.depth_reg_mode != ANV_DEPTH_REG_MODE_UNKNOWN)
+         container->state.gfx.depth_reg_mode = secondary->state.gfx.depth_reg_mode;
 #endif
 
       container->state.gfx.viewport_set |= secondary->state.gfx.viewport_set;
@@ -4822,7 +4807,7 @@ genX(cmd_buffer_emit_gfx12_depth_wa)(struct anv_cmd_buffer *cmd_buffer,
    const bool is_d16_1x_msaa = surf->format == ISL_FORMAT_R16_UNORM &&
                                surf->samples == 1;
 
-   switch (cmd_buffer->state.depth_reg_mode) {
+   switch (cmd_buffer->state.gfx.depth_reg_mode) {
    case ANV_DEPTH_REG_MODE_HW_DEFAULT:
       if (!is_d16_1x_msaa)
          return;
@@ -4856,7 +4841,7 @@ genX(cmd_buffer_emit_gfx12_depth_wa)(struct anv_cmd_buffer *cmd_buffer,
       reg.HIZPlaneOptimizationdisablebitMask = true;
    }
 
-   cmd_buffer->state.depth_reg_mode =
+   cmd_buffer->state.gfx.depth_reg_mode =
       is_d16_1x_msaa ? ANV_DEPTH_REG_MODE_D16_1X_MSAA :
                        ANV_DEPTH_REG_MODE_HW_DEFAULT;
 #endif
@@ -5155,7 +5140,7 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
    if (info.depth_surf)
       genX(cmd_buffer_emit_gfx12_depth_wa)(cmd_buffer, info.depth_surf);
 
-   cmd_buffer->state.hiz_enabled = isl_aux_usage_has_hiz(info.hiz_usage);
+   cmd_buffer->state.gfx.hiz_enabled = isl_aux_usage_has_hiz(info.hiz_usage);
 }
 
 static void
@@ -5335,7 +5320,6 @@ void genX(CmdBeginRendering)(
                                      iview->vk.base_mip_level,
                                      &clear_rect, att->imageLayout,
                                      iview->planes[0].isl.format,
-                                     iview->planes[0].isl.swizzle,
                                      clear_color);
 
          if (att->imageLayout != initial_layout) {
@@ -5397,6 +5381,7 @@ void genX(CmdBeginRendering)(
 #if GFX_VER < 20
             genX(set_fast_clear_state)(cmd_buffer, iview->image,
                                        iview->planes[0].isl.format,
+                                       iview->planes[0].isl.swizzle,
                                        clear_color);
 #endif
          }
@@ -6399,12 +6384,23 @@ genX(urb_workaround)(struct anv_cmd_buffer *cmd_buffer,
    if (intel_urb_setup_changed(urb_cfg, current, MESA_SHADER_TESS_EVAL) &&
        current->size[0] != 0) {
       for (int i = 0; i <= MESA_SHADER_GEOMETRY; i++) {
+#if GFX_VER >= 12
+         anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_URB_ALLOC_VS), urb) {
+            urb._3DCommandSubOpcode             += i;
+            urb.VSURBEntryAllocationSize        = current->size[i] - 1;
+            urb.VSURBStartingAddressSlice0      = current->start[i];
+            urb.VSURBStartingAddressSliceN      = current->start[i];
+            urb.VSNumberofURBEntriesSlice0      = i == 0 ? 256 : 0;
+            urb.VSNumberofURBEntriesSliceN      = i == 0 ? 256 : 0;
+         }
+#else
          anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_URB_VS), urb) {
             urb._3DCommandSubOpcode      += i;
             urb.VSURBStartingAddress      = current->start[i];
             urb.VSURBEntryAllocationSize  = current->size[i] - 1;
             urb.VSNumberofURBEntries      = i == 0 ? 256 : 0;
          }
+#endif
       }
       anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
          pc.HDCPipelineFlushEnable = true;
@@ -6673,4 +6669,28 @@ genX(CmdWriteBufferMarker2AMD)(VkCommandBuffer commandBuffer,
                 mi_imm(marker));
 
    trace_intel_end_write_buffer_marker(&cmd_buffer->trace);
+}
+
+void
+genX(cmd_write_buffer_cp)(struct anv_cmd_buffer *cmd_buffer,
+                          VkDeviceAddress dstAddr,
+                          void *data,
+                          uint32_t size)
+{
+   assert(size % 4 == 0);
+   struct anv_address addr = anv_address_from_u64(dstAddr);
+
+   struct mi_builder b;
+   mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);
+
+   for (uint32_t i = 0; i < size; i += 8) {
+      mi_builder_set_write_check(&b, i >= size - 8);
+      if (size - i < 8) {
+         mi_store(&b, mi_mem32(anv_address_add(addr, i)),
+                      mi_imm(*((uint32_t *)((char*)data + i))));
+      } else {
+         mi_store(&b, mi_mem64(anv_address_add(addr, i)),
+                      mi_imm(*((uint64_t *)((char*)data + i))));
+      }
+   }
 }

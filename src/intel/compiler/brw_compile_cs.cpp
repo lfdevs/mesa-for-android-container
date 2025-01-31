@@ -4,8 +4,9 @@
  */
 
 #include "brw_fs.h"
-#include "brw_fs_builder.h"
+#include "brw_builder.h"
 #include "brw_fs_live_variables.h"
+#include "brw_generator.h"
 #include "brw_nir.h"
 #include "brw_cfg.h"
 #include "brw_private.h"
@@ -63,13 +64,13 @@ static bool
 run_cs(fs_visitor &s, bool allow_spilling)
 {
    assert(gl_shader_stage_is_compute(s.stage));
-   const fs_builder bld = fs_builder(&s).at_end();
+   const brw_builder bld = brw_builder(&s).at_end();
 
    s.payload_ = new cs_thread_payload(s);
 
    if (s.devinfo->platform == INTEL_PLATFORM_HSW && s.prog_data->total_shared > 0) {
       /* Move SLM index from g0.0[27:24] to sr0.1[11:8] */
-      const fs_builder abld = bld.exec_all().group(1, 0);
+      const brw_builder abld = bld.exec_all().group(1, 0);
       abld.MOV(retype(brw_sr0_reg(1), BRW_TYPE_UW),
                suboffset(retype(brw_vec1_grf(0, 0), BRW_TYPE_UW), 1));
    }
@@ -83,25 +84,58 @@ run_cs(fs_visitor &s, bool allow_spilling)
 
    brw_calculate_cfg(s);
 
-   brw_fs_optimize(s);
+   brw_optimize(s);
 
    s.assign_curb_setup();
 
-   brw_fs_lower_3src_null_dest(s);
-   brw_fs_workaround_memory_fence_before_eot(s);
-   brw_fs_workaround_emit_dummy_mov_instruction(s);
+   brw_lower_3src_null_dest(s);
+   brw_workaround_memory_fence_before_eot(s);
+   brw_workaround_emit_dummy_mov_instruction(s);
 
    brw_allocate_registers(s, allow_spilling);
 
-   brw_fs_workaround_source_arf_before_eot(s);
+   brw_workaround_source_arf_before_eot(s);
 
    return !s.failed;
+}
+
+static bool
+instr_uses_sampler(nir_builder *b, nir_instr *instr, void *cb_data)
+{
+   if (instr->type != nir_instr_type_tex)
+      return false;
+
+   switch (nir_instr_as_tex(instr)->op) {
+   case nir_texop_tex:
+   case nir_texop_txd:
+   case nir_texop_txf:
+   case nir_texop_txl:
+   case nir_texop_txb:
+   case nir_texop_txf_ms:
+   case nir_texop_txf_ms_mcs_intel:
+   case nir_texop_lod:
+   case nir_texop_tg4:
+   case nir_texop_texture_samples:
+      return true;
+
+   default:
+      return false;
+   }
+}
+
+static bool
+brw_nir_uses_sampler(nir_shader *shader)
+{
+   return nir_shader_instructions_pass(shader, instr_uses_sampler,
+                                       nir_metadata_all,
+                                       NULL);
 }
 
 const unsigned *
 brw_compile_cs(const struct brw_compiler *compiler,
                struct brw_compile_cs_params *params)
 {
+   const struct intel_device_info *devinfo = compiler->devinfo;
    struct nir_shader *nir = params->base.nir;
    const struct brw_cs_prog_key *key = params->key;
    struct brw_cs_prog_data *prog_data = params->prog_data;
@@ -129,9 +163,13 @@ brw_compile_cs(const struct brw_compiler *compiler,
       .required_width = brw_required_dispatch_width(&nir->info),
    };
 
+   prog_data->uses_sampler = brw_nir_uses_sampler(params->base.nir);
+
    std::unique_ptr<fs_visitor> v[3];
 
-   for (unsigned simd = 0; simd < 3; simd++) {
+   for (unsigned i = 0; i < 3; i++) {
+      const unsigned simd = devinfo->ver >= 30 ? 2 - i : i;
+
       if (!brw_simd_should_compile(simd_state, simd))
          continue;
 
@@ -157,16 +195,25 @@ brw_compile_cs(const struct brw_compiler *compiler,
                                              params->base.stats != NULL,
                                              debug_enabled);
 
-      const int first = brw_simd_first_compiled(simd_state);
-      if (first >= 0)
-         v[simd]->import_uniforms(v[first].get());
+      const bool allow_spilling = simd == 0 ||
+         (!simd_state.compiled[simd - 1] && !brw_simd_should_compile(simd_state, simd - 1)) ||
+         nir->info.workgroup_size_variable;
 
-      const bool allow_spilling = first < 0 || nir->info.workgroup_size_variable;
+      if (devinfo->ver < 30 || nir->info.workgroup_size_variable) {
+         const int first = brw_simd_first_compiled(simd_state);
+         if (first >= 0)
+            v[simd]->import_uniforms(v[first].get());
+         assert(allow_spilling == (first < 0 || nir->info.workgroup_size_variable));
+      }
 
       if (run_cs(*v[simd], allow_spilling)) {
          cs_fill_push_const_info(compiler->devinfo, prog_data);
 
          brw_simd_mark_compiled(simd_state, simd, v[simd]->spilled_any_registers);
+
+         if (devinfo->ver >= 30 && !v[simd]->spilled_any_registers &&
+             !nir->info.workgroup_size_variable)
+            break;
       } else {
          simd_state.error[simd] = ralloc_strdup(params->base.mem_ctx, v[simd]->fail_msg);
          if (simd > 0) {
@@ -193,7 +240,7 @@ brw_compile_cs(const struct brw_compiler *compiler,
    if (!nir->info.workgroup_size_variable)
       prog_data->prog_mask = 1 << selected_simd;
 
-   fs_generator g(compiler, &params->base, &prog_data->base,
+   brw_generator g(compiler, &params->base, &prog_data->base,
                   MESA_SHADER_COMPUTE);
    if (unlikely(debug_enabled)) {
       char *name = ralloc_asprintf(params->base.mem_ctx,
@@ -216,6 +263,10 @@ brw_compile_cs(const struct brw_compiler *compiler,
          if (stats)
             stats->max_dispatch_width = max_dispatch_width;
          stats = stats ? stats + 1 : NULL;
+
+         prog_data->base.grf_used = MAX2(prog_data->base.grf_used,
+                                         v[simd]->grf_used);
+
          max_dispatch_width = 8u << simd;
       }
    }

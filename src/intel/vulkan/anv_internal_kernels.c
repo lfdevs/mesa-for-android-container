@@ -48,6 +48,17 @@ lower_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intrin,
    return true;
 }
 
+static nir_shader *
+load_libanv(struct anv_device *device)
+{
+   uint32_t spv_size;
+   const uint32_t *spv_code = anv_genX(device->info, libanv_spv)(&spv_size);
+
+   void *mem_ctx = ralloc_context(NULL);
+
+   return brw_nir_from_spirv(mem_ctx, spv_code, spv_size);
+}
+
 static void
 link_libanv(nir_shader *nir, const nir_shader *libanv)
 {
@@ -62,6 +73,7 @@ link_libanv(nir_shader *nir, const nir_shader *libanv)
               nir_var_shader_temp | nir_var_function_temp | nir_var_mem_shared |
                  nir_var_mem_global,
               nir_address_format_62bit_generic);
+   NIR_PASS_V(nir, nir_lower_scratch_to_var);
 }
 
 static struct anv_shader_bin *
@@ -86,14 +98,6 @@ compile_shader(struct anv_device *device,
    nir_shader *nir = b.shader;
 
    link_libanv(nir, libanv);
-
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
-      nir_lower_printf_options printf_opts = {
-         .ptr_bit_size               = 64,
-         .use_printf_base_identifier = true,
-      };
-      NIR_PASS_V(nir, nir_lower_printf, &printf_opts);
-   }
 
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
    NIR_PASS_V(nir, nir_opt_cse);
@@ -293,7 +297,11 @@ anv_device_get_internal_shader(struct anv_device *device,
                           * 2 * (2 loads + 3 stores) +
                           * 3 stores
                           */
-                         14),
+                         14) +
+         /* 3 loads + 3 stores */
+         (intel_needs_workaround(device->info, 16011107343) ? 6 : 0) +
+         /* 3 loads + 3 stores */
+         (intel_needs_workaround(device->info, 22018402687) ? 6 : 0),
       },
       [ANV_INTERNAL_KERNEL_COPY_QUERY_RESULTS_COMPUTE] = {
          .key        = {
@@ -341,10 +349,7 @@ anv_device_get_internal_shader(struct anv_device *device,
       return VK_SUCCESS;
    }
 
-   void *mem_ctx = ralloc_context(NULL);
-
-   nir_shader *libanv_shaders =
-      anv_genX(device->info, load_libanv_shader)(device, mem_ctx);
+   nir_shader *libanv_shaders = load_libanv(device);
 
    bin = compile_shader(device,
                         libanv_shaders,
@@ -354,6 +359,7 @@ anv_device_get_internal_shader(struct anv_device *device,
                         &internal_kernels[name].key,
                         sizeof(internal_kernels[name].key),
                         internal_kernels[name].send_count);
+   ralloc_free(libanv_shaders);
    if (bin == NULL)
       return vk_errorf(device, VK_ERROR_OUT_OF_HOST_MEMORY,
                        "Unable to compiler internal kernel");

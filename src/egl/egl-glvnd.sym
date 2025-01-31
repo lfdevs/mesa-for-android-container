@@ -1,0 +1,6 @@
+{
+	global:
+		__egl_Main;
+	local:
+		*;
+};

@@ -90,6 +90,9 @@ has_spirv_link_workaround = cpp.has_member(
   ],
   dependencies : dep_spirv_tools,
 )
+if dep_llvm.version().version_compare('>= 17.0') and not has_spirv_link_workaround
+  error('SPIRV-Tools doesn\'t contain https://github.com/KhronosGroup/SPIRV-Tools/pull/5534\n')
+endif
 
 if has_spirv_link_workaround
   _libmesaclc_c_args += ['-DHAS_SPIRV_LINK_LLVM_WORKAROUND=1']
@@ -117,15 +120,22 @@ idep_mesaclc = declare_dependency(
   link_args : _idep_mesaclc_link_args,
 )
 
-prog_mesa_clc = executable(
-  'mesa_clc',
-  ['mesa_clc.c'],
-  include_directories : [inc_include, inc_src],
-  c_args : [pre_args, no_override_init_args],
-  link_args : [ld_args_build_id],
-  dependencies : [idep_mesaclc, dep_llvm, dep_spirv_tools, idep_getopt],
-  # If we can run host binaries directly, just build mesa_clc for the host.
-  # Most commonly this happens when doing a cross compile from an x86_64 build
-  # machine to an x86 host
-  native : not meson.can_run_host_binaries(),
-)
+if get_option('mesa-clc') != 'system' and (with_gallium_asahi or \
+                                           with_asahi_vk or \
+                                           with_intel_vk or \
+                                           with_gallium_iris or \
+                                           get_option('install-mesa-clc'))
+  prog_mesa_clc = executable(
+    'mesa_clc',
+    ['mesa_clc.c'],
+    include_directories : [inc_include, inc_src],
+    c_args : [pre_args, no_override_init_args],
+    link_args : [ld_args_build_id],
+    dependencies : [idep_mesaclc, dep_llvm, dep_spirv_tools, idep_getopt],
+    # If we can run host binaries directly, just build mesa_clc for the host.
+    # Most commonly this happens when doing a cross compile from an x86_64 build
+    # machine to an x86 host
+    native : not meson.can_run_host_binaries(),
+    install : get_option('install-mesa-clc'),
+  )
+endif

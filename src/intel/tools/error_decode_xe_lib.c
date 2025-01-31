@@ -79,6 +79,7 @@ error_decode_xe_decode_topic(const char *line, enum xe_topic *new_topic)
       "**** Job ****",
       "**** HW Engines ****",
       "**** VM state ****",
+      "**** Contexts ****",
    };
    bool topic_changed = false;
 

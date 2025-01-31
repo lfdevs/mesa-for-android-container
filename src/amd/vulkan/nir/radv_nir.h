@@ -63,6 +63,8 @@ void radv_nir_lower_io_to_scalar_early(nir_shader *nir, nir_variable_mode mask);
 
 unsigned radv_map_io_driver_location(unsigned semantic);
 
+bool radv_recompute_fs_input_bases(nir_shader *nir);
+
 void radv_nir_lower_io(struct radv_device *device, nir_shader *nir);
 
 bool radv_nir_lower_io_to_mem(struct radv_device *device, struct radv_shader_stage *stage);

@@ -22,8 +22,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef ELK_IR_VEC4_H
-#define ELK_IR_VEC4_H
+#pragma once
 
 #include "elk_shader.h"
 
@@ -471,5 +470,3 @@ get_exec_type_size(const vec4_instruction *inst)
 }
 
 } /* namespace elk */
-
-#endif

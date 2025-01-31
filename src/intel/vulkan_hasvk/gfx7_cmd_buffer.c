@@ -102,8 +102,8 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          .GlobalDepthOffsetEnableSolid       = dyn->rs.depth_bias.enable,
          .GlobalDepthOffsetEnableWireframe   = dyn->rs.depth_bias.enable,
          .GlobalDepthOffsetEnablePoint       = dyn->rs.depth_bias.enable,
-         .GlobalDepthOffsetConstant          = dyn->rs.depth_bias.constant,
-         .GlobalDepthOffsetScale             = dyn->rs.depth_bias.slope,
+         .GlobalDepthOffsetConstant          = dyn->rs.depth_bias.constant_factor,
+         .GlobalDepthOffsetScale             = dyn->rs.depth_bias.slope_factor,
          .GlobalDepthOffsetClamp             = dyn->rs.depth_bias.clamp,
       };
       GENX(3DSTATE_SF_pack)(NULL, sf_dw, &sf);

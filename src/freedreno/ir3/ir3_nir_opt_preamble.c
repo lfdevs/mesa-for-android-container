@@ -284,11 +284,12 @@ ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
    unsigned max_size;
    if (v->binning_pass) {
       const struct ir3_const_state *const_state = ir3_const_state(v);
-      max_size = const_state->preamble_size * 4;
+      max_size =
+         const_state->allocs.consts[IR3_CONST_ALLOC_PREAMBLE].size_vec4 * 4;
    } else {
-      struct ir3_const_state worst_case_const_state = {};
-      ir3_setup_const_state(nir, v, &worst_case_const_state);
-      max_size = ir3_const_state_get_free_space(v, &worst_case_const_state) * 4;
+      const struct ir3_const_state *const_state = ir3_const_state(v);
+      max_size = ir3_const_state_get_free_space(
+                    v, const_state, v->compiler->const_upload_unit) * 4;
    }
 
    if (max_size == 0)
@@ -312,8 +313,10 @@ ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
    progress |= nir_opt_preamble(nir, &options, &size);
 
    if (!v->binning_pass) {
-      struct ir3_const_state *const_state = ir3_const_state_mut(v);
-      const_state->preamble_size = DIV_ROUND_UP(size, 4);
+      uint32_t preamble_size_vec4 =
+         align(DIV_ROUND_UP(size, 4), v->compiler->const_upload_unit);
+      ir3_const_alloc(&ir3_const_state_mut(v)->allocs, IR3_CONST_ALLOC_PREAMBLE,
+                      preamble_size_vec4, v->compiler->const_upload_unit);
    }
 
    return progress;
@@ -364,6 +367,53 @@ ir3_def_is_rematerializable_for_preamble(nir_def *def,
    }
 }
 
+struct find_insert_block_state {
+   nir_block *insert_block;
+};
+
+static bool
+find_dominated_src(nir_src *src, void *data)
+{
+   struct find_insert_block_state *state = data;
+   nir_block *src_block = src->ssa->parent_instr->block;
+
+   if (!state->insert_block) {
+      state->insert_block = src_block;
+      return true;
+   } else if (nir_block_dominates(state->insert_block, src_block)) {
+      state->insert_block = src_block;
+      return true;
+   } else if (nir_block_dominates(src_block, state->insert_block)) {
+      return true;
+   } else {
+      state->insert_block = NULL;
+      return false;
+   }
+}
+
+/* Find the block where instr can be inserted. This is the block that is
+ * dominated by all its sources. If instr doesn't have any sources, return dflt.
+ */
+static nir_block *
+find_insert_block(nir_instr *instr, nir_block *dflt)
+{
+   struct find_insert_block_state state = {
+      .insert_block = NULL,
+   };
+
+   if (nir_foreach_src(instr, find_dominated_src, &state)) {
+      return state.insert_block ? state.insert_block : dflt;
+   }
+
+   return NULL;
+}
+
+static bool
+dominates(const nir_instr *old_instr, const nir_instr *new_instr)
+{
+   return nir_block_dominates(old_instr->block, new_instr->block);
+}
+
 static nir_def *
 _rematerialize_def(nir_builder *b, struct hash_table *remap_ht,
                    struct set *instr_set, nir_def **preamble_defs,
@@ -402,17 +452,29 @@ _rematerialize_def(nir_builder *b, struct hash_table *remap_ht,
 
    nir_instr *instr = nir_instr_clone_deep(b->shader, def->parent_instr,
                                            remap_ht);
+
+   /* Find a legal place to insert the new instruction. We cannot simply put it
+    * at the end of the preamble since the original instruction and its sources
+    * may be defined inside control flow.
+    */
+   nir_metadata_require(b->impl, nir_metadata_dominance);
+   nir_block *insert_block =
+      find_insert_block(instr, nir_cursor_current_block(b->cursor));
+
+   /* Since the preamble control flow was reconstructed from the original one,
+    * we must be able to find a legal place to insert the instruction.
+    */
+   assert(insert_block);
+   b->cursor = nir_after_block(insert_block);
+   nir_builder_instr_insert(b, instr);
+
    if (instr_set) {
       nir_instr *other_instr =
-         nir_instr_set_add_or_rewrite(instr_set, instr, NULL);
+         nir_instr_set_add_or_rewrite(instr_set, instr, dominates);
       if (other_instr) {
          instr = other_instr;
          _mesa_hash_table_insert(remap_ht, def, nir_instr_def(other_instr));
-      } else {
-         nir_builder_instr_insert(b, instr);
       }
-   } else {
-      nir_builder_instr_insert(b, instr);
    }
 
    return nir_instr_def(instr);
@@ -605,8 +667,9 @@ ir3_nir_opt_prefetch_descriptors(nir_shader *nir, struct ir3_shader_variant *v)
    bool progress = false;
    struct prefetch_state state = {};
 
-   nir_def **preamble_defs = calloc(const_state->preamble_size * 4,
-                                    sizeof(nir_def *));
+   nir_def **preamble_defs =
+      calloc(const_state->allocs.consts[IR3_CONST_ALLOC_PREAMBLE].size_vec4 * 4,
+             sizeof(nir_def *));
 
    /* Collect preamble defs. This is useful if the computation of the offset has
     * already been hoisted to the preamble.
@@ -622,7 +685,9 @@ ir3_nir_opt_prefetch_descriptors(nir_shader *nir, struct ir3_shader_variant *v)
             if (intrin->intrinsic != nir_intrinsic_store_preamble)
                continue;
 
-            assert(nir_intrinsic_base(intrin) < const_state->preamble_size * 4);
+            assert(
+               nir_intrinsic_base(intrin) <
+               const_state->allocs.consts[IR3_CONST_ALLOC_PREAMBLE].size_vec4 * 4);
             preamble_defs[nir_intrinsic_base(intrin)] = intrin->src[0].ssa;
          }
       }
@@ -719,9 +784,10 @@ ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v)
 
    /* First, lower load/store_preamble. */  
    const struct ir3_const_state *const_state = ir3_const_state(v);
-   unsigned preamble_base = v->shader_options.num_reserved_user_consts * 4 +
-      const_state->ubo_state.size / 4 + const_state->global_size * 4;
-   unsigned preamble_size = const_state->preamble_size * 4;
+   unsigned preamble_base =
+      const_state->allocs.consts[IR3_CONST_ALLOC_PREAMBLE].offset_vec4 * 4;
+   unsigned preamble_size =
+      const_state->allocs.consts[IR3_CONST_ALLOC_PREAMBLE].size_vec4 * 4;
 
    BITSET_DECLARE(promoted_to_float, preamble_size);
    memset(promoted_to_float, 0, sizeof(promoted_to_float));

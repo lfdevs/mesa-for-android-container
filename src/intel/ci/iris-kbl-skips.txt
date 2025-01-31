@@ -3,3 +3,6 @@ shaders@glsl-max-varyings >max_varying_components
 shaders@glsl-max-varyings
 spec@arb_compute_shader@local-id-explosion
 spec@ext_transform_feedback@max-varyings
+
+# Random timeout
+KHR-Single-GL46.arrays_of_arrays_gl.SizedDeclarationsPrimitive

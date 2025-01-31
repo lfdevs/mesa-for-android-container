@@ -233,6 +233,7 @@ EXT(EXT_color_buffer_float                  , EXT_color_buffer_float            
 EXT(EXT_color_buffer_half_float             , EXT_color_buffer_half_float            ,  x ,  x ,  x ,  20, 2017)
 EXT(EXT_compiled_vertex_array               , dummy_true                             , GLL,  x ,  x ,  x , 1996)
 EXT(EXT_compressed_ETC1_RGB8_sub_texture    , OES_compressed_ETC1_RGB8_texture       ,  x ,  x , ES1, ES2, 2014)
+EXT(EXT_conservative_depth                  , ARB_conservative_depth                 ,  x ,  x,   x ,  30, 2016)
 EXT(EXT_copy_image                          , OES_copy_image                         ,  x ,  x ,  x ,  30, 2014)
 EXT(EXT_copy_texture                        , dummy_true                             , GLL,  x ,  x ,  x , 1995)
 EXT(EXT_debug_label                         , dummy_true                             , GLL, GLC,  11, ES2, 2013)

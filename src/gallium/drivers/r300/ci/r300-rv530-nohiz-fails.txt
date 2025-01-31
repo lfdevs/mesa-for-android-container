@@ -378,6 +378,9 @@ spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-scissor-offscreen,Fail
 
+# This one started to fail in CI at the turn of 2024 and 2025 but works locally
+spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
+
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=4,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=6,Fail
@@ -437,8 +440,6 @@ spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_draw_pixels,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
-
-spec@arb_clear_texture@arb_clear_texture-supported-formats,Fail
 
 spec@arb_color_buffer_float@gl_rgba32f-render,Fail
 spec@arb_color_buffer_float@gl_rgba32f-render-fog,Fail
@@ -738,7 +739,6 @@ spec@glsl-1.10@execution@interpolation@interpolation-none-other-smooth-vertex,Fa
 # HW limitation (SM3 256 loop iters)
 spec@glsl-1.10@execution@loops@glsl-fs-loop-300,Fail
 spec@glsl-1.10@execution@loops@glsl-vs-loop-300,Fail
-
 spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr-no-unroll,Fail
 
 # HW limitation (no support for gl_ClipVertex)

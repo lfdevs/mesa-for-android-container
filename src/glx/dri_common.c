@@ -482,7 +482,7 @@ dri_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
             dca->reset = __DRI_CTX_RESET_LOSE_CONTEXT;
             break;
          default:
-            return BadValue;
+            return BadMatch;
          }
          break;
       case GLX_CONTEXT_RELEASE_BEHAVIOR_ARB:
@@ -524,14 +524,14 @@ dri_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
       dca->api = __DRI_API_OPENGL;
       break;
    case GLX_CONTEXT_ES_PROFILE_BIT_EXT:
-      if (dca->major_ver >= 3)
+      if (dca->major_ver == 3  && dca->minor_ver <= 2)
          dca->api = __DRI_API_GLES3;
       else if (dca->major_ver == 2 && dca->minor_ver == 0)
          dca->api = __DRI_API_GLES2;
       else if (dca->major_ver == 1 && dca->minor_ver < 2)
          dca->api = __DRI_API_GLES;
       else {
-         return BadValue;
+         return GLXBadProfileARB;
       }
       break;
    default:

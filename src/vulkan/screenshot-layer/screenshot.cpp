@@ -93,6 +93,9 @@ struct instance_data {
    /* Enabling switch for taking screenshot */
    bool screenshot_enabled;
 
+   /* Region switch for enabling region use on a per-frame basis */
+   bool region_enabled;
+
    /* Enabling switch for socket communications */
    bool socket_enabled;
    bool socket_setup;
@@ -404,6 +407,9 @@ static void parse_command(struct instance_data *instance_data,
       } else {
          instance_data->filename = NULL;
       }
+   } else if (!strncmp(cmd, "region", cmdlen)) {
+      instance_data->params.region = getRegionFromInput(param);
+      instance_data->region_enabled = instance_data->params.region.useImageRegion;
    }
 }
 
@@ -435,13 +441,19 @@ static void process_char(struct instance_data *instance_data, char c)
       reading_cmd = true;
       reading_param = false;
       break;
+   case ',':
    case ';':
       if (!reading_cmd)
          break;
       cmd[cmdpos++] = '\0';
       param[parampos++] = '\0';
       parse_command(instance_data, cmd, cmdpos, param, parampos);
-      reading_cmd = false;
+      if (c == ';') {
+         reading_cmd = false;
+      } else {
+         cmdpos = 0;
+         parampos = 0;
+      }
       reading_param = false;
       break;
    case '=':
@@ -852,6 +864,26 @@ static bool write_image(
    uint32_t const height = swapchain_data->imageExtent.height;
    VkFormat const format = swapchain_data->format;
 
+   uint32_t newWidth = width;
+   uint32_t newHeight = height;
+   uint32_t regionStartX = 0;
+   uint32_t regionStartY = 0;
+   uint32_t regionEndX = width;
+   uint32_t regionEndY = height;
+   if (instance_data->region_enabled) {
+      regionStartX = int(instance_data->params.region.startX * width);
+      regionStartY = int(instance_data->params.region.startY * height);
+      regionEndX = int(instance_data->params.region.endX * width);
+      regionEndY = int(instance_data->params.region.endY * height);
+      newWidth = regionEndX - regionStartX;
+      newHeight = regionEndY - regionStartY;
+      LOG(DEBUG, "Using region: startX = %.0f% (%d), startY = %.0f% (%d), endX = %.0f% (%d), endY = %.0f% (%d)\n",
+          instance_data->params.region.startX*100, regionStartX,
+          instance_data->params.region.startY*100, regionStartY,
+          instance_data->params.region.endX*100, regionEndX,
+          instance_data->params.region.endY*100, regionEndY);
+   }
+
    queue_data* queue_data = device_data->graphic_queue;
    VkQueue queue = queue_data->queue;
 
@@ -867,7 +899,7 @@ static bool write_image(
    /* If origin and destination formats are the same, no need to convert */
    bool copyOnly = false;
    bool needs_2_steps = false;
-   if (destination_format == format) {
+   if (destination_format == format && not instance_data->region_enabled) {
       copyOnly = true;
       LOG(DEBUG, "Only copying since the src/dest formats are the same\n");
    } else {
@@ -891,7 +923,7 @@ static bool write_image(
       0,
       VK_IMAGE_TYPE_2D,
       destination_format,
-      {width, height, 1},
+      {newWidth, newHeight, 1},
       1,
       1,
       VK_SAMPLE_COUNT_1_BIT,
@@ -1026,7 +1058,7 @@ static bool write_image(
       {0, 0, 0},
       {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
       {0, 0, 0},
-      {width, height, 1}
+      {newWidth, newHeight, 1}
    };
 
    if (copyOnly) {
@@ -1038,15 +1070,18 @@ static bool write_image(
       imageBlitRegion.srcSubresource.baseArrayLayer = 0;
       imageBlitRegion.srcSubresource.layerCount = 1;
       imageBlitRegion.srcSubresource.mipLevel = 0;
-      imageBlitRegion.srcOffsets[1].x = width;
-      imageBlitRegion.srcOffsets[1].y = height;
+      imageBlitRegion.srcOffsets[0].x = regionStartX;
+      imageBlitRegion.srcOffsets[0].y = regionStartY;
+      imageBlitRegion.srcOffsets[0].z = 1;
+      imageBlitRegion.srcOffsets[1].x = regionEndX;
+      imageBlitRegion.srcOffsets[1].y = regionEndY;
       imageBlitRegion.srcOffsets[1].z = 1;
       imageBlitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
       imageBlitRegion.dstSubresource.baseArrayLayer = 0;
       imageBlitRegion.dstSubresource.layerCount = 1;
       imageBlitRegion.dstSubresource.mipLevel = 0;
-      imageBlitRegion.dstOffsets[1].x = width;
-      imageBlitRegion.dstOffsets[1].y = height;
+      imageBlitRegion.dstOffsets[1].x = newWidth;
+      imageBlitRegion.dstOffsets[1].y = newHeight;
       imageBlitRegion.dstOffsets[1].z = 1;
 
       device_data->vtable.CmdBlitImage(data.commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, data.image2,
@@ -1118,7 +1153,7 @@ static bool write_image(
    // Thread off I/O operations
    pthread_t ioThread;
    pthread_mutex_lock(&ptLock); // Grab lock, we need to wait until thread has copied values of pointers
-   struct ThreadSaveData threadData = {device_data, filename, pFramebuffer, srLayout, copyDone, width, height};
+   struct ThreadSaveData threadData = {device_data, filename, pFramebuffer, srLayout, copyDone, newWidth, newHeight};
 
    // Write the data to a PNG file.
    pthread_create(&ioThread, NULL, writePNG, (void *)&threadData);
@@ -1149,7 +1184,7 @@ static VkResult screenshot_QueuePresentKHR(
       struct swapchain_data *swapchain_data = FIND(struct swapchain_data, swapchain);
 
       /* Run initial setup with client */
-      if(instance_data->params.enabled[SCREENSHOT_PARAM_ENABLED_comms] && instance_data->socket_fd < 0) {
+      if (instance_data->params.enabled[SCREENSHOT_PARAM_ENABLED_comms] && instance_data->socket_fd < 0) {
          int ret = os_socket_listen_abstract(instance_data->params.control, 1);
          if (ret >= 0) {
             os_socket_block(ret, false);
@@ -1160,11 +1195,11 @@ static VkResult screenshot_QueuePresentKHR(
       }
 
       if (instance_data->socket_fd >= 0) {
-         /* Check for input from client */
+         /* Check client commands first */
          control_client_check(device_data);
          process_control_socket(instance_data);
       } else if (instance_data->params.frames) {
-         /* Else check if the frame number is within the given frame list */
+         /* Else check parameters from env variables */
          if (instance_data->params.frames->size > 0) {
             struct frame_list *list = instance_data->params.frames;
             struct frame_node *prev = nullptr;
@@ -1182,8 +1217,11 @@ static VkResult screenshot_QueuePresentKHR(
                   break;
                }
             }
-         } else if(instance_data->params.frames->all_frames) {
+         } else if (instance_data->params.frames->all_frames) {
             instance_data->screenshot_enabled = true;
+         }
+         if (instance_data->params.region.useImageRegion) {
+            instance_data->region_enabled = true;
          }
       }
 
@@ -1247,6 +1285,7 @@ static VkResult screenshot_QueuePresentKHR(
    }
    frame_counter++;
    instance_data->screenshot_enabled = false;
+   instance_data->region_enabled = false;
    loader_platform_thread_unlock_mutex(&globalLock);
    VkResult chain_result = queue_data->device->vtable.QueuePresentKHR(queue, &present_info);
    if (pPresentInfo->pResults)

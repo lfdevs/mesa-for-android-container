@@ -81,8 +81,7 @@ insert_parallelcopies(ssa_elimination_ctx& ctx)
          pc->operands[i] = phi_info.op;
          i++;
       }
-      /* this shouldn't be needed since we're only copying vgprs */
-      pc->pseudo().tmp_in_scc = false;
+      pc->pseudo().needs_scratch_reg = false;
       block.instructions.insert(it, std::move(pc));
    }
 
@@ -93,10 +92,7 @@ insert_parallelcopies(ssa_elimination_ctx& ctx)
          continue;
 
       Block& block = ctx.program->blocks[block_idx];
-      std::vector<aco_ptr<Instruction>>::iterator it = block.instructions.end();
-      --it;
-      assert((*it)->isBranch());
-      PhysReg scratch_sgpr = (*it)->definitions[0].physReg();
+      Block& succ = ctx.program->blocks[block.linear_succs[0]];
       aco_ptr<Instruction> pc{create_instruction(aco_opcode::p_parallelcopy, Format::PSEUDO,
                                                  linear_phi_info.size(), linear_phi_info.size())};
       unsigned i = 0;
@@ -105,9 +101,9 @@ insert_parallelcopies(ssa_elimination_ctx& ctx)
          pc->operands[i] = phi_info.op;
          i++;
       }
-      pc->pseudo().tmp_in_scc = block.scc_live_out;
-      pc->pseudo().scratch_sgpr = scratch_sgpr;
-      pc->pseudo().needs_scratch_reg = true;
+      pc->pseudo().scratch_sgpr = succ.instructions[0]->pseudo().scratch_sgpr;
+      pc->pseudo().needs_scratch_reg = succ.instructions[0]->pseudo().needs_scratch_reg;
+      auto it = std::prev(block.instructions.end());
       block.instructions.insert(it, std::move(pc));
    }
 }

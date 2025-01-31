@@ -5,6 +5,8 @@
  */
 
 #include "compiler/clc/clc.h"
+#include "util/hash_table.h"
+#include "util/set.h"
 #include "util/u_dynarray.h"
 
 #include <getopt.h>
@@ -26,11 +28,10 @@ print_usage(char *exec_name, FILE *f)
 {
    fprintf(
       f,
-      "Usage: %s [options] -- [clang args]\n"
+      "Usage: %s [options] [input files] -- [clang args]\n"
       "Options:\n"
       "  -h  --help              Print this help.\n"
       "  -o, --out <filename>    Specify the output filename.\n"
-      "  -i, --in <filename>     Specify one input filename. Accepted multiple times.\n"
       "  -v, --verbose           Print more information during compilation.\n",
       exec_name);
 }
@@ -58,11 +59,12 @@ main(int argc, char **argv)
       {"help", no_argument, 0, 'h'},
       {"in", required_argument, 0, 'i'},
       {"out", required_argument, 0, 'o'},
+      {"depfile", required_argument, 0, 'd'},
       {"verbose", no_argument, 0, 'v'},
       {0, 0, 0, 0},
    };
 
-   char *outfile = NULL;
+   char *outfile = NULL, *depfile = NULL;
    struct util_dynarray clang_args;
    struct util_dynarray input_files;
    struct util_dynarray spirv_objs;
@@ -75,8 +77,11 @@ main(int argc, char **argv)
    util_dynarray_init(&spirv_objs, mem_ctx);
    util_dynarray_init(&spirv_ptr_objs, mem_ctx);
 
+   struct set *deps =
+      _mesa_set_create(mem_ctx, _mesa_hash_string, _mesa_key_string_equal);
+
    int ch;
-   while ((ch = getopt_long(argc, argv, "he:i:o:v", long_options, NULL)) !=
+   while ((ch = getopt_long(argc, argv, "he:i:o:d:v", long_options, NULL)) !=
           -1) {
       switch (ch) {
       case 'h':
@@ -85,8 +90,8 @@ main(int argc, char **argv)
       case 'o':
          outfile = optarg;
          break;
-      case 'i':
-         util_dynarray_append(&input_files, char *, optarg);
+      case 'd':
+         depfile = optarg;
          break;
       default:
          fprintf(stderr, "Unrecognized option \"%s\".\n", optarg);
@@ -96,8 +101,17 @@ main(int argc, char **argv)
    }
 
    for (int i = optind; i < argc; i++) {
-      util_dynarray_append(&clang_args, char *, argv[i]);
+      char *arg = argv[i];
+      bool option = arg[0] == '-';
+
+      util_dynarray_append(option ? &clang_args : &input_files, char *, arg);
    }
+
+   /* Set the OpenCL standard to CL 2.0, this enables everything at a frontend
+    * level. See comment below about driver support.
+    */
+   util_dynarray_append(&clang_args, char *, "-cl-std=cl2.0");
+   util_dynarray_append(&clang_args, char *, "-D__OPENCL_VERSION__=200");
 
    if (util_dynarray_num_elements(&input_files, char *) == 0) {
       fprintf(stderr, "No input file(s).\n");
@@ -155,11 +169,12 @@ main(int argc, char **argv)
       struct clc_binary *spirv_out =
          util_dynarray_grow(&spirv_objs, struct clc_binary, 1);
 
-      if (!clc_compile_c_to_spirv(&clc_args, &logger, spirv_out)) {
+      if (!clc_compile_c_to_spirv(&clc_args, &logger, spirv_out, deps)) {
          ralloc_free(mem_ctx);
          return 1;
       }
    }
+
 
    util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {
       util_dynarray_append(&spirv_ptr_objs, struct clc_binary *, p);
@@ -204,6 +219,16 @@ main(int argc, char **argv)
    FILE *fp = fopen(outfile, "w");
    fwrite(final_spirv.data, final_spirv.size, 1, fp);
    fclose(fp);
+
+   if (depfile) {
+      FILE *fp = fopen(depfile, "w");
+      fprintf(fp, "%s:", outfile);
+      set_foreach(deps, ent) {
+         fprintf(fp, " %s", (const char *)ent->key);
+      }
+      fprintf(fp, "\n");
+      fclose(fp);
+   }
 
    util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {
       clc_free_spirv(p);

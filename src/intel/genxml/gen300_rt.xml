@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<genxml name="RT" gen="30">
+  <import name="gen200_rt.xml" />
+  <struct name="BINDLESS_SHADER_RECORD" length="2">
+    <field name="Offset To Local Arguments" start="0" end="2" type="uint" />
+    <field name="Bindless Shader Dispatch Mode" start="4" end="4" type="uint">
+      <value name="RT_SIMD16" value="0" />
+    </field>
+    <field name="Kernel Start Pointer" start="6" end="31" type="offset" />
+    <field name="Registers Per Thread" start="60" end="63" type="uint" />
+  </struct>
+</genxml>

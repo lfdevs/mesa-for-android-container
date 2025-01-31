@@ -98,7 +98,6 @@
 #include <mesa/main/queryobj.h>
 #include <mesa/main/rastpos.h>
 #include <mesa/main/readpix.h>
-#include <mesa/main/remap.h>
 #include <mesa/main/renderbuffer.h>
 #include <mesa/main/samplerobj.h>
 #include <mesa/main/scissor.h>

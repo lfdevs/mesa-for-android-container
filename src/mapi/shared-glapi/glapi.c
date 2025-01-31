@@ -34,11 +34,11 @@
 #include "stub.h"
 
 /*
- * _glapi_Dispatch, _glapi_Context
- * _glapi_tls_Dispatch, _glapi_tls_Context,
- * _glapi_set_context, _glapi_get_context,
+ * _mesa_glapi_Dispatch, _glapi_Context
+ * _mesa_glapi_tls_Dispatch, _mesa_glapi_tls_Context,
+ * _mesa_glapi_set_context, _mesa_glapi_get_context,
  * _glapi_destroy_multithread, _glapi_check_multithread
- * _glapi_set_dispatch, and _glapi_get_dispatch
+ * _mesa_glapi_set_dispatch, and _mesa_glapi_get_dispatch
  * are defined in u_current.c.
  */
 
@@ -47,7 +47,7 @@
  * slots).
  */
 unsigned int
-_glapi_get_dispatch_table_size(void)
+_mesa_glapi_get_dispatch_table_size(void)
 {
    return MAPI_TABLE_NUM_SLOTS;
 }
@@ -82,7 +82,7 @@ _glapi_get_stub(const char *name)
  * Return offset of entrypoint for named function within dispatch table.
  */
 int
-_glapi_get_proc_offset(const char *funcName)
+_mesa_glapi_get_proc_offset(const char *funcName)
 {
    const struct mapi_stub *stub = _glapi_get_stub(funcName);
    return (stub) ? stub_get_slot(stub) : -1;
@@ -94,7 +94,7 @@ _glapi_get_proc_offset(const char *funcName)
  * the fly with assembly language.
  */
 _glapi_proc
-_glapi_get_proc_address(const char *funcName)
+_mesa_glapi_get_proc_address(const char *funcName)
 {
    const struct mapi_stub *stub = _glapi_get_stub(funcName);
    return (stub) ? (_glapi_proc) stub_get_addr(stub) : NULL;

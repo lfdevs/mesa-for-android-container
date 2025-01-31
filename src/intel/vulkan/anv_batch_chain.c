@@ -34,7 +34,7 @@
 
 #include "common/intel_debug_identifier.h"
 
-#include "genxml/gen9_pack.h"
+#include "genxml/gen90_pack.h"
 #include "genxml/genX_bits.h"
 
 #include "util/perf/u_trace.h"

@@ -1,3 +1,6 @@
 # Timeouts
 dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
 dEQP-VK.api.external.fence.sync_fd.export_multiple_times_temporary
+
+# Can occasionally time out as of VKCTS 1.4.1.1
+dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic

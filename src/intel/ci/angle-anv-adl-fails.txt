@@ -53,3 +53,33 @@ dEQP-GLES3.functional.fbo.completeness.renderable.renderbuffer.stencil.bgra,Fail
 
 # new failures with ANGLE 2024-10-17
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreVS,Fail
+
+# Validation layer failure:
+# https://docs.vulkan.org/spec/latest/chapters/resources.html#VUID-VkImageViewCreateInfo-pNext-01585
+# https://issues.angleproject.org/issues/382051956
+KHR-GLES31.core.shader_image_load_store.advanced-cast-cs,Crash
+KHR-GLES31.core.shader_image_load_store.advanced-cast-fs,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_rgba8ui,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_rgba8i,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_rgba8ui,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_rgba8ui,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8i,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8ui,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_rgba8i,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_rgba8i,Crash

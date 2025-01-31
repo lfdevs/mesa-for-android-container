@@ -1265,112 +1265,12 @@ amd_varying_expression_max_cost(nir_shader *producer, nir_shader *consumer)
    }
 }
 
-/* from radeonsi */
-static unsigned
-amd_varying_estimate_instr_cost(nir_instr *instr)
-{
-   unsigned dst_bit_size, src_bit_size, num_dst_dwords;
-   nir_op alu_op;
-
-   /* This is a very loose approximation based on gfx10. */
-   switch (instr->type) {
-   case nir_instr_type_alu:
-      dst_bit_size = nir_instr_as_alu(instr)->def.bit_size;
-      src_bit_size = nir_instr_as_alu(instr)->src[0].src.ssa->bit_size;
-      alu_op = nir_instr_as_alu(instr)->op;
-      num_dst_dwords = DIV_ROUND_UP(dst_bit_size, 32);
-
-      switch (alu_op) {
-      case nir_op_mov:
-      case nir_op_vec2:
-      case nir_op_vec3:
-      case nir_op_vec4:
-      case nir_op_vec5:
-      case nir_op_vec8:
-      case nir_op_vec16:
-      case nir_op_fabs:
-      case nir_op_fneg:
-      case nir_op_fsat:
-         return 0;
-
-      case nir_op_imul:
-      case nir_op_umul_low:
-         return dst_bit_size <= 16 ? 1 : 4 * num_dst_dwords;
-
-      case nir_op_imul_high:
-      case nir_op_umul_high:
-      case nir_op_imul_2x32_64:
-      case nir_op_umul_2x32_64:
-         return 4;
-
-      case nir_op_fexp2:
-      case nir_op_flog2:
-      case nir_op_frcp:
-      case nir_op_frsq:
-      case nir_op_fsqrt:
-      case nir_op_fsin:
-      case nir_op_fcos:
-      case nir_op_fsin_amd:
-      case nir_op_fcos_amd:
-         return 4; /* FP16 & FP32. */
-
-      case nir_op_fpow:
-         return 4 + 1 + 4; /* log2 + mul + exp2 */
-
-      case nir_op_fsign:
-         return dst_bit_size == 64 ? 4 : 3; /* See ac_build_fsign. */
-
-      case nir_op_idiv:
-      case nir_op_udiv:
-      case nir_op_imod:
-      case nir_op_umod:
-      case nir_op_irem:
-         return dst_bit_size == 64 ? 80 : 40;
-
-      case nir_op_fdiv:
-         return dst_bit_size == 64 ? 80 : 5; /* FP16 & FP32: rcp + mul */
-
-      case nir_op_fmod:
-      case nir_op_frem:
-         return dst_bit_size == 64 ? 80 : 8;
-
-      default:
-         /* Double opcodes. Comparisons have always full performance. */
-         if ((dst_bit_size == 64 &&
-              nir_op_infos[alu_op].output_type & nir_type_float) ||
-             (dst_bit_size >= 8 && src_bit_size == 64 &&
-              nir_op_infos[alu_op].input_types[0] & nir_type_float))
-            return 16;
-
-         return DIV_ROUND_UP(MAX2(dst_bit_size, src_bit_size), 32);
-      }
-
-   case nir_instr_type_intrinsic:
-      dst_bit_size = nir_instr_as_intrinsic(instr)->def.bit_size;
-      num_dst_dwords = DIV_ROUND_UP(dst_bit_size, 32);
-
-      switch (nir_instr_as_intrinsic(instr)->intrinsic) {
-      case nir_intrinsic_load_deref:
-         /* Uniform or UBO load.
-          * Set a low cost to balance the number of scalar loads and ALUs.
-          */
-         return 3 * num_dst_dwords;
-
-      default:
-         unreachable("unexpected intrinsic");
-      }
-
-   default:
-      unreachable("unexpected instr type");
-   }
-}
-
 void
 zink_screen_init_compiler(struct zink_screen *screen)
 {
    static const struct nir_shader_compiler_options
    default_options = {
-      .io_options = nir_io_has_intrinsics,
+      .io_options = nir_io_has_intrinsics | nir_io_separate_clip_cull_distance_arrays,
       .lower_ffma16 = true,
       .lower_ffma32 = true,
       .lower_ffma64 = true,
@@ -1412,10 +1312,9 @@ zink_screen_init_compiler(struct zink_screen *screen)
       .has_isub = true,
       .lower_mul_2x32_64 = true,
       .support_16bit_alu = true, /* not quite what it sounds like */
-      .support_indirect_inputs = BITFIELD_MASK(MESA_SHADER_COMPUTE),
-      .support_indirect_outputs = BITFIELD_MASK(MESA_SHADER_COMPUTE),
+      .support_indirect_inputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_COMPUTE),
+      .support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_COMPUTE),
       .max_unroll_iterations = 0,
-      .use_interpolated_input_intrinsics = true,
    };
 
    screen->nir_options = default_options;
@@ -1434,20 +1333,18 @@ zink_screen_init_compiler(struct zink_screen *screen)
    }
 
    if (screen->driver_compiler_workarounds.io_opt) {
-      screen->nir_options.io_options |= nir_io_glsl_opt_varyings;
-
       switch (zink_driverid(screen)) {
       case VK_DRIVER_ID_MESA_RADV:
       case VK_DRIVER_ID_AMD_OPEN_SOURCE:
       case VK_DRIVER_ID_AMD_PROPRIETARY:
          screen->nir_options.varying_expression_max_cost = amd_varying_expression_max_cost;
-         screen->nir_options.varying_estimate_instr_cost = amd_varying_estimate_instr_cost;
          break;
       default:
          mesa_logw("zink: instruction costs not implemented for this implementation!");
          screen->nir_options.varying_expression_max_cost = amd_varying_expression_max_cost;
-         screen->nir_options.varying_estimate_instr_cost = amd_varying_estimate_instr_cost;
       }
+   } else {
+      screen->nir_options.io_options |= nir_io_dont_optimize;
    }
 
    /*
@@ -1467,6 +1364,9 @@ zink_screen_init_compiler(struct zink_screen *screen)
 
    if (screen->info.have_EXT_shader_demote_to_helper_invocation)
       screen->nir_options.discard_is_demote = true;
+
+   screen->nir_options.support_indirect_inputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES);
+   screen->nir_options.support_indirect_outputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES);
 }
 
 const void *
@@ -3984,15 +3884,7 @@ compile_module(struct zink_screen *screen, struct zink_shader *zs, nir_shader *n
    struct zink_shader_info *sinfo = &zs->sinfo;
    prune_io(nir);
 
-   switch (nir->info.stage) {
-   case MESA_SHADER_VERTEX:
-   case MESA_SHADER_TESS_EVAL:
-   case MESA_SHADER_GEOMETRY:
-      NIR_PASS_V(nir, nir_divergence_analysis);
-      break;
-   default: break;
-   }
-   NIR_PASS_V(nir, nir_convert_from_ssa, true);
+   NIR_PASS_V(nir, nir_convert_from_ssa, true, false);
 
    if (zink_debug & (ZINK_DEBUG_NIR | ZINK_DEBUG_SPIRV))
       nir_index_ssa_defs(nir_shader_get_entrypoint(nir));
@@ -4129,7 +4021,7 @@ zink_shader_compile(struct zink_screen *screen, bool can_shobj, struct zink_shad
                NIR_PASS_V(nir, lower_line_stipple_fs);
 
          if (zink_fs_key(key)->lower_point_smooth) {
-            NIR_PASS_V(nir, nir_lower_point_smooth);
+            NIR_PASS_V(nir, nir_lower_point_smooth, false);
             NIR_PASS_V(nir, nir_lower_discard_if, nir_lower_discard_if_to_cf);
             nir->info.fs.uses_discard = true;
             need_optimize = true;
@@ -5748,7 +5640,7 @@ static nir_mem_access_size_align
 mem_access_size_align_cb(nir_intrinsic_op intrin, uint8_t bytes,
                          uint8_t bit_size, uint32_t align,
                          uint32_t align_offset, bool offset_is_const,
-                         const void *cb_data)
+                         enum gl_access_qualifier access, const void *cb_data)
 {
    align = nir_combined_align(align, align_offset);
 
@@ -5760,12 +5652,14 @@ mem_access_size_align_cb(nir_intrinsic_op intrin, uint8_t bytes,
          .num_components = MIN2(bytes / align, 4),
          .bit_size = align * 8,
          .align = align,
+         .shift = nir_mem_access_shift_method_scalar,
       };
    } else {
       return (nir_mem_access_size_align){
          .num_components = MIN2(bytes / (bit_size / 8), 4),
          .bit_size = bit_size,
          .align = bit_size / 8,
+         .shift = nir_mem_access_shift_method_scalar,
       };
    }
 }
@@ -5774,7 +5668,7 @@ static nir_mem_access_size_align
 mem_access_scratch_size_align_cb(nir_intrinsic_op intrin, uint8_t bytes,
                                  uint8_t bit_size, uint32_t align,
                                  uint32_t align_offset, bool offset_is_const,
-                                 const void *cb_data)
+                                 enum gl_access_qualifier access, const void *cb_data)
 {
    bit_size = *(const uint8_t *)cb_data;
    align = nir_combined_align(align, align_offset);
@@ -5785,6 +5679,7 @@ mem_access_scratch_size_align_cb(nir_intrinsic_op intrin, uint8_t bytes,
       .num_components = MIN2(bytes / (bit_size / 8), 4),
       .bit_size = bit_size,
       .align = bit_size / 8,
+      .shift = nir_mem_access_shift_method_scalar,
    };
 }
 
@@ -6231,6 +6126,7 @@ zink_shader_create(struct zink_screen *screen, struct nir_shader *nir)
 
    zs->sinfo.have_vulkan_memory_model = screen->info.have_KHR_vulkan_memory_model;
    zs->sinfo.have_workgroup_memory_explicit_layout = screen->info.have_KHR_workgroup_memory_explicit_layout;
+   zs->sinfo.broken_arbitary_type_const = screen->driver_compiler_workarounds.broken_const;
    if (screen->info.have_KHR_shader_float_controls) {
       if (screen->info.props12.shaderDenormFlushToZeroFloat16)
          zs->sinfo.float_controls.flush_denorms |= 0x1;
@@ -6482,10 +6378,9 @@ zink_shader_init(struct zink_screen *screen, struct zink_shader *zs)
 }
 
 char *
-zink_shader_finalize(struct pipe_screen *pscreen, void *nirptr)
+zink_shader_finalize(struct pipe_screen *pscreen, struct nir_shader *nir)
 {
    struct zink_screen *screen = zink_screen(pscreen);
-   nir_shader *nir = nirptr;
 
    nir_lower_tex_options tex_opts = {
       .lower_invalid_implicit_lod = true,
@@ -6726,7 +6621,7 @@ zink_shader_tcs_init(struct zink_screen *screen, struct zink_shader *zs, nir_sha
 
    optimize_nir(nir, NULL, true);
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
-   NIR_PASS_V(nir, nir_convert_from_ssa, true);
+   NIR_PASS_V(nir, nir_convert_from_ssa, true, false);
 
    *nir_ret = nir;
    zink_shader_serialize_blob(nir, &zs->blob);

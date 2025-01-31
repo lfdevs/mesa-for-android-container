@@ -130,8 +130,7 @@ panvk_per_arch(CreateDescriptorSetLayout)(
          }
       }
 
-      if (binding_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-          binding_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
+      if (vk_descriptor_type_is_dynamic(binding_layout->type)) {
          binding_layout->desc_idx = dyn_buf_idx;
          dyn_buf_idx += binding_layout->desc_count;
       } else {
@@ -184,8 +183,7 @@ panvk_per_arch(GetDescriptorSetLayoutSupport)(
       const VkDescriptorSetLayoutBinding *binding = &pCreateInfo->pBindings[i];
       VkDescriptorType type = binding->descriptorType;
 
-      if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-          type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+      if (vk_descriptor_type_is_dynamic(type))
          dyn_buf_count += binding->descriptorCount;
       else
          desc_count += panvk_get_desc_stride(type) * binding->descriptorCount;

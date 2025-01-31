@@ -206,7 +206,7 @@ mod qmd_0_6 {
             } else if smem_size <= (48 << 10) {
                 cla0c0::QMDV00_06_L1_CONFIGURATION_DIRECTLY_ADDRESSABLE_MEMORY_SIZE_48KB
             } else {
-                panic!("Iclalid shared memory size");
+                panic!("Invalid shared memory size");
             };
             set_field!(bv, cla0c0, QMDV00_06, L1_CONFIGURATION, l1_config);
         }

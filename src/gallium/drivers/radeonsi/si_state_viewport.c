@@ -486,6 +486,7 @@ static void si_set_viewport_states(struct pipe_context *pctx, unsigned start_slo
 
    if (start_slot == 0) {
       ctx->viewport0_y_inverted = state->scale[1] < 0;
+      si_update_ngg_cull_face_state(ctx);
 
       /* NGG cull state uses the viewport and quant mode. */
       if (ctx->screen->use_ngg_culling)

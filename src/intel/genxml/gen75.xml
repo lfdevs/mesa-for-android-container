@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <genxml name="HSW" gen="7.5">
-  <import name="gen7.xml" />
+  <import name="gen70.xml" />
   <enum name="Shader Channel Select" prefix="SCS">
     <value name="ZERO" value="0" />
     <value name="ONE" value="1" />

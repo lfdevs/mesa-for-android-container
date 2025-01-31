@@ -134,7 +134,9 @@ static struct ir2_src
 load_const(struct ir2_context *ctx, float *value_f, unsigned ncomp)
 {
    struct fd2_shader_stateobj *so = ctx->so;
-   unsigned imm_ncomp, swiz, idx, i, j;
+   unsigned idx, i, j;
+   unsigned imm_ncomp = 0;
+   unsigned swiz = 0;
    uint32_t *value = (uint32_t *)value_f;
 
    /* try to merge with existing immediate (TODO: try with neg) */
@@ -1129,7 +1131,7 @@ ir2_nir_compile(struct ir2_context *ctx, bool binning)
    OPT_V(ctx->nir, nir_opt_algebraic_late);
    OPT_V(ctx->nir, nir_lower_alu_to_scalar, ir2_alu_to_scalar_filter_cb, NULL);
 
-   OPT_V(ctx->nir, nir_convert_from_ssa, true);
+   OPT_V(ctx->nir, nir_convert_from_ssa, true, false);
 
    OPT_V(ctx->nir, nir_move_vec_src_uses_to_dest, false);
    OPT_V(ctx->nir, nir_lower_vec_to_regs, NULL, NULL);

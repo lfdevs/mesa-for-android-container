@@ -45,7 +45,7 @@ void apple_glx_swap_buffers(void *ptr);
 void apple_glx_waitx(Display * dpy, void *ptr);
 int apple_get_dri_event_base(void);
 
-void apple_glapi_set_dispatch(void);
+void apple_mesa_glapi_set_dispatch(void);
 void apple_glapi_oglfw_viewport_scissor(GLint x, GLint y, GLsizei width, GLsizei height);
 
 #endif

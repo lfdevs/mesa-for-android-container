@@ -86,7 +86,7 @@ kopper_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
    if (!pscreen)
       return NULL;
 
-   assert(pscreen->get_param(pscreen, PIPE_CAP_DEVICE_RESET_STATUS_QUERY));
+   assert(pscreen->caps.device_reset_status_query);
    screen->is_sw = zink_kopper_is_cpu(pscreen);
 
    return pscreen;
@@ -156,8 +156,12 @@ kopper_get_pixmap_buffer(struct dri_drawable *drawable,
     */
    struct dri_screen *screen = drawable->screen;
 
+#ifndef GLX_USE_APPLE
    drawable->image = loader_dri3_get_pixmap_buffer(conn, pixmap, screen,
                                                    fourcc, drawable->screen->dmabuf_import, &width, &height, drawable);
+#else
+   drawable->image = NULL;
+#endif
    if (!drawable->image)
       return NULL;
 

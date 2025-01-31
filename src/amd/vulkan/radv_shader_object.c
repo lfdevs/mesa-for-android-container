@@ -122,12 +122,11 @@ static VkResult
 radv_shader_object_init_graphics(struct radv_shader_object *shader_obj, struct radv_device *device,
                                  const VkShaderCreateInfoEXT *pCreateInfo)
 {
-   const struct radv_physical_device *pdev = radv_device_physical(device);
    gl_shader_stage stage = vk_to_mesa_shader_stage(pCreateInfo->stage);
    struct radv_shader_stage stages[MESA_VULKAN_SHADER_STAGES];
 
    for (unsigned i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
-      stages[i].entrypoint = NULL;
+      stages[i].stage = MESA_SHADER_NONE;
       stages[i].nir = NULL;
       stages[i].spirv.size = 0;
       stages[i].next_stage = MESA_SHADER_NONE;
@@ -143,9 +142,7 @@ radv_shader_object_init_graphics(struct radv_shader_object *shader_obj, struct r
    gfx_state.unknown_rast_prim = true;
    gfx_state.dynamic_provoking_vtx_mode = true;
    gfx_state.dynamic_line_rast_mode = true;
-
-   if (pdev->info.gfx_level >= GFX11)
-      gfx_state.ps.exports_mrtz_via_epilog = true;
+   gfx_state.ps.exports_mrtz_via_epilog = true;
 
    for (uint32_t i = 0; i < MAX_RTS; i++)
       gfx_state.ps.epilog.color_map[i] = i;
@@ -413,11 +410,10 @@ radv_shader_object_create_linked(VkDevice _device, uint32_t createInfoCount, con
                                  const VkAllocationCallbacks *pAllocator, VkShaderEXT *pShaders)
 {
    VK_FROM_HANDLE(radv_device, device, _device);
-   const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radv_shader_stage stages[MESA_VULKAN_SHADER_STAGES];
 
    for (unsigned i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
-      stages[i].entrypoint = NULL;
+      stages[i].stage = MESA_SHADER_NONE;
       stages[i].nir = NULL;
       stages[i].spirv.size = 0;
       stages[i].next_stage = MESA_SHADER_NONE;
@@ -431,9 +427,7 @@ radv_shader_object_create_linked(VkDevice _device, uint32_t createInfoCount, con
    gfx_state.unknown_rast_prim = true;
    gfx_state.dynamic_provoking_vtx_mode = true;
    gfx_state.dynamic_line_rast_mode = true;
-
-   if (pdev->info.gfx_level >= GFX11)
-      gfx_state.ps.exports_mrtz_via_epilog = true;
+   gfx_state.ps.exports_mrtz_via_epilog = true;
 
    for (uint32_t i = 0; i < MAX_RTS; i++)
       gfx_state.ps.epilog.color_map[i] = i;
@@ -447,16 +441,16 @@ radv_shader_object_create_linked(VkDevice _device, uint32_t createInfoCount, con
 
    /* Determine next stage. */
    for (unsigned i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
-      if (!stages[i].entrypoint)
+      if (stages[i].stage == MESA_SHADER_NONE)
          continue;
 
       switch (stages[i].stage) {
       case MESA_SHADER_VERTEX:
-         if (stages[MESA_SHADER_TESS_CTRL].entrypoint) {
+         if (stages[MESA_SHADER_TESS_CTRL].stage != MESA_SHADER_NONE) {
             stages[i].next_stage = MESA_SHADER_TESS_CTRL;
-         } else if (stages[MESA_SHADER_GEOMETRY].entrypoint) {
+         } else if (stages[MESA_SHADER_GEOMETRY].stage != MESA_SHADER_NONE) {
             stages[i].next_stage = MESA_SHADER_GEOMETRY;
-         } else if (stages[MESA_SHADER_FRAGMENT].entrypoint) {
+         } else if (stages[MESA_SHADER_FRAGMENT].stage != MESA_SHADER_NONE) {
             stages[i].next_stage = MESA_SHADER_FRAGMENT;
          }
          break;
@@ -464,15 +458,15 @@ radv_shader_object_create_linked(VkDevice _device, uint32_t createInfoCount, con
          stages[i].next_stage = MESA_SHADER_TESS_EVAL;
          break;
       case MESA_SHADER_TESS_EVAL:
-         if (stages[MESA_SHADER_GEOMETRY].entrypoint) {
+         if (stages[MESA_SHADER_GEOMETRY].stage != MESA_SHADER_NONE) {
             stages[i].next_stage = MESA_SHADER_GEOMETRY;
-         } else if (stages[MESA_SHADER_FRAGMENT].entrypoint) {
+         } else if (stages[MESA_SHADER_FRAGMENT].stage != MESA_SHADER_NONE) {
             stages[i].next_stage = MESA_SHADER_FRAGMENT;
          }
          break;
       case MESA_SHADER_GEOMETRY:
       case MESA_SHADER_MESH:
-         if (stages[MESA_SHADER_FRAGMENT].entrypoint) {
+         if (stages[MESA_SHADER_FRAGMENT].stage != MESA_SHADER_NONE) {
             stages[i].next_stage = MESA_SHADER_FRAGMENT;
          }
          break;

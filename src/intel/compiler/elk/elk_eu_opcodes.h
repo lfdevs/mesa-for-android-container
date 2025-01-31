@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef ELK_EU_OPCODES_H
-#define ELK_EU_OPCODES_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -607,6 +606,3 @@ enum elk_opcode {
 #ifdef __cplusplus
 }
 #endif
-
-#endif
-

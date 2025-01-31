@@ -59,7 +59,7 @@
 #include <machine/cpu.h>
 #endif
 
-#if DETECT_OS_FREEBSD
+#if DETECT_OS_FREEBSD || DETECT_OS_OPENBSD
 #if __has_include(<sys/auxv.h>)
 #include <sys/auxv.h>
 #define HAVE_ELF_AUX_INFO
@@ -139,6 +139,18 @@ check_os_altivec_support(void)
 #endif
 #if defined(__ALTIVEC__) && defined(__VSX__)
 /* Do nothing */
+#elif DETECT_OS_FREEBSD || (DETECT_OS_OPENBSD && HAVE_ELF_AUX_INFO) /* !__ALTIVEC__ || !__VSX__ */
+   unsigned long hwcap = 0;
+#ifdef HAVE_ELF_AUX_INFO
+   elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+#elif DETECT_OS_FREEBSD
+   size_t len = sizeof(hwcap);
+   sysctlbyname("hw.cpu_features", &hwcap, &len, NULL, 0);
+#endif
+   if (hwcap & PPC_FEATURE_HAS_ALTIVEC)
+      util_cpu_caps.has_altivec = 1;
+   if (hwcap & PPC_FEATURE_HAS_VSX)
+      util_cpu_caps.has_vsx = 1;
 #elif DETECT_OS_APPLE || DETECT_OS_NETBSD || DETECT_OS_OPENBSD
 #ifdef HW_VECTORUNIT
    int sels[2] = {CTL_HW, HW_VECTORUNIT};
@@ -156,19 +168,7 @@ check_os_altivec_support(void)
          util_cpu_caps.has_altivec = 1;
       }
    }
-#elif DETECT_OS_FREEBSD /* !DETECT_OS_APPLE && !DETECT_OS_NETBSD && !DETECT_OS_OPENBSD */
-   unsigned long hwcap = 0;
-#ifdef HAVE_ELF_AUX_INFO
-   elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
-#else
-   size_t len = sizeof(hwcap);
-   sysctlbyname("hw.cpu_features", &hwcap, &len, NULL, 0);
-#endif
-   if (hwcap & PPC_FEATURE_HAS_ALTIVEC)
-      util_cpu_caps.has_altivec = 1;
-   if (hwcap & PPC_FEATURE_HAS_VSX)
-      util_cpu_caps.has_vsx = 1;
-#elif DETECT_OS_LINUX /* !DETECT_OS_FREEBSD */
+#elif DETECT_OS_LINUX /* !DETECT_OS_APPLE && !DETECT_OS_NETBSD && !DETECT_OS_OPENBSD */
 #if DETECT_ARCH_PPC_64
     Elf64_auxv_t aux;
 #else
@@ -373,11 +373,12 @@ UTIL_ALIGN_STACK
 static inline bool
 sse2_has_daz(void)
 {
-   alignas(16) struct {
+   struct area_t {
       uint32_t pad1[7];
       uint32_t mxcsr_mask;
       uint32_t pad2[128-8];
-   } fxarea;
+   };
+   alignas(16) struct area_t fxarea;
 
    fxarea.mxcsr_mask = 0;
 #if DETECT_CC_GCC
@@ -406,7 +407,7 @@ check_os_arm_support(void)
     */
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
    util_cpu_caps.has_neon = 1;
-#elif DETECT_OS_FREEBSD && defined(HAVE_ELF_AUX_INFO)
+#elif (DETECT_OS_FREEBSD || DETECT_OS_OPENBSD) && defined(HAVE_ELF_AUX_INFO)
    unsigned long hwcap = 0;
    elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
    if (hwcap & HWCAP_NEON)

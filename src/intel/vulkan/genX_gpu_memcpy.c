@@ -103,7 +103,7 @@ emit_common_so_memcpy(struct anv_memcpy_state *state,
 #if INTEL_WA_16013994831_GFX_VER
    /* Wa_16013994831 - Disable preemption during streamout. */
    if (intel_needs_workaround(device->info, 16013994831))
-      genX(batch_set_preemption)(batch, device->info, _3D, false);
+      genX(batch_set_preemption)(batch, device, _3D, false);
 #endif
 
    anv_batch_emit(batch, GENX(3DSTATE_SBE), sbe) {
@@ -357,7 +357,7 @@ void
 genX(emit_so_memcpy_end)(struct anv_memcpy_state *state)
 {
    if (intel_needs_workaround(state->device->info, 16013994831))
-      genX(batch_set_preemption)(state->batch, state->device->info, _3D, true);
+      genX(batch_set_preemption)(state->batch, state->device, _3D, true);
 
    anv_batch_emit(state->batch, GENX(MI_BATCH_BUFFER_END), end);
 

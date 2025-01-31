@@ -210,6 +210,7 @@ can_do_blit(const struct pipe_blit_info *info)
    /* The blitter can't handle the needed swizzle gymnastics to convert
     * to/from L/A formats:
     */
+   fail_if(info->swizzle_enable);
    if (info->src.format != info->dst.format) {
       fail_if(util_format_is_luminance(info->dst.format));
       fail_if(util_format_is_alpha(info->dst.format));
@@ -563,7 +564,8 @@ emit_blit_dst(struct fd_ringbuffer *ring, struct pipe_resource *prsc,
    enum a6xx_tile_mode tile =
          (enum a6xx_tile_mode)fd_resource_tile_mode(prsc, level);
    enum a3xx_color_swap swap =
-         fd6_color_swap(pfmt, (enum a6xx_tile_mode)dst->layout.tile_mode);
+         fd6_color_swap(pfmt, (enum a6xx_tile_mode)dst->layout.tile_mode,
+                        false);
    uint32_t pitch = fd_resource_pitch(dst, level);
    bool ubwc_enabled = fd_resource_ubwc_enabled(dst, level);
    unsigned off = fd_resource_offset(dst, level, layer);
@@ -602,11 +604,11 @@ emit_blit_src(struct fd_ringbuffer *ring, const struct pipe_blit_info *info,
 {
    struct fd_resource *src = fd_resource(info->src.resource);
    enum a6xx_format sfmt =
-      fd6_texture_format(info->src.format, (enum a6xx_tile_mode)src->layout.tile_mode);
+      fd6_texture_format(info->src.format, (enum a6xx_tile_mode)src->layout.tile_mode, false);
    enum a6xx_tile_mode stile =
       (enum a6xx_tile_mode)fd_resource_tile_mode(info->src.resource, info->src.level);
    enum a3xx_color_swap sswap =
-      fd6_texture_swap(info->src.format, (enum a6xx_tile_mode)src->layout.tile_mode);
+      fd6_texture_swap(info->src.format, (enum a6xx_tile_mode)src->layout.tile_mode, false);
    uint32_t pitch = fd_resource_pitch(src, info->src.level);
    bool subwc_enabled = fd_resource_ubwc_enabled(src, info->src.level);
    unsigned soff = fd_resource_offset(src, info->src.level, layer);
@@ -805,8 +807,8 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf,
 
    OUT_PKT4(ring, REG_A6XX_GRAS_2D_DST_TL, 2);
    OUT_RING(ring, A6XX_GRAS_2D_DST_TL_X(0) | A6XX_GRAS_2D_DST_TL_Y(0));
-   OUT_RING(ring, A6XX_GRAS_2D_DST_BR_X(zsbuf->lrz_width - 1) |
-                     A6XX_GRAS_2D_DST_BR_Y(zsbuf->lrz_height - 1));
+   OUT_RING(ring, A6XX_GRAS_2D_DST_BR_X(zsbuf->lrz_layout.lrz_pitch - 1) |
+                     A6XX_GRAS_2D_DST_BR_Y(zsbuf->lrz_layout.lrz_height - 1));
 
    union pipe_color_union clear_color = { .f = {depth} };
 
@@ -822,7 +824,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf,
            A6XX_RB_2D_DST(
                  .bo = lrz,
            ),
-           A6XX_RB_2D_DST_PITCH(zsbuf->lrz_pitch * 2),
+           A6XX_RB_2D_DST_PITCH(zsbuf->lrz_layout.lrz_pitch * 2),
    );
 
    /*

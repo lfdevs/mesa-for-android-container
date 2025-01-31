@@ -20,8 +20,8 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef BRW_ISA_ENCODING_H
-#define BRW_ISA_ENCODING_H
+
+#pragma once
 
 #include "dev/intel_device_info.h"
 #include "brw_eu_defines.h"
@@ -82,5 +82,4 @@ is_3src(const struct brw_isa_info *isa, enum opcode opcode)
 
 #ifdef __cplusplus
 }
-#endif
 #endif

@@ -34,7 +34,7 @@
 
 #include "common/intel_debug_identifier.h"
 
-#include "genxml/gen8_pack.h"
+#include "genxml/gen80_pack.h"
 #include "genxml/genX_bits.h"
 #include "perf/intel_perf.h"
 

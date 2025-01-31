@@ -7,7 +7,7 @@
 #include "util/half_float.h"
 
 #include "brw_fs.h"
-#include "brw_fs_builder.h"
+#include "brw_builder.h"
 
 using namespace brw;
 
@@ -122,7 +122,7 @@ brw_get_reduction_info(brw_reduce_op red_op, brw_reg_type type)
 }
 
 static void
-brw_emit_scan_step(const fs_builder &bld, enum opcode opcode, brw_conditional_mod mod,
+brw_emit_scan_step(const brw_builder &bld, enum opcode opcode, brw_conditional_mod mod,
                    const brw_reg &tmp,
                    unsigned left_offset, unsigned left_stride,
                    unsigned right_offset, unsigned right_stride)
@@ -187,7 +187,7 @@ brw_emit_scan_step(const fs_builder &bld, enum opcode opcode, brw_conditional_mo
 }
 
 static void
-brw_emit_scan(const fs_builder &bld, enum opcode opcode, const brw_reg &tmp,
+brw_emit_scan(const brw_builder &bld, enum opcode opcode, const brw_reg &tmp,
               unsigned cluster_size, brw_conditional_mod mod)
 {
    unsigned dispatch_width = bld.dispatch_width();
@@ -198,7 +198,7 @@ brw_emit_scan(const fs_builder &bld, enum opcode opcode, const brw_reg &tmp,
     */
    if (dispatch_width * brw_type_size_bytes(tmp.type) > 2 * REG_SIZE) {
       const unsigned half_width = dispatch_width / 2;
-      const fs_builder ubld = bld.exec_all().group(half_width, 0);
+      const brw_builder ubld = bld.exec_all().group(half_width, 0);
       brw_reg left = tmp;
       brw_reg right = horiz_offset(tmp, half_width);
       brw_emit_scan(ubld, opcode, left, cluster_size, mod);
@@ -211,13 +211,13 @@ brw_emit_scan(const fs_builder &bld, enum opcode opcode, const brw_reg &tmp,
    }
 
    if (cluster_size > 1) {
-      const fs_builder ubld = bld.exec_all().group(dispatch_width / 2, 0);
+      const brw_builder ubld = bld.exec_all().group(dispatch_width / 2, 0);
       brw_emit_scan_step(ubld, opcode, mod, tmp, 0, 2, 1, 2);
    }
 
    if (cluster_size > 2) {
       if (brw_type_size_bytes(tmp.type) <= 4) {
-         const fs_builder ubld =
+         const brw_builder ubld =
             bld.exec_all().group(dispatch_width / 4, 0);
          brw_emit_scan_step(ubld, opcode, mod, tmp, 1, 4, 2, 4);
          brw_emit_scan_step(ubld, opcode, mod, tmp, 1, 4, 3, 4);
@@ -228,7 +228,7 @@ brw_emit_scan(const fs_builder &bld, enum opcode opcode, const brw_reg &tmp,
           * 8-wide in that case and it's the same number of
           * instructions.
           */
-         const fs_builder ubld = bld.exec_all().group(2, 0);
+         const brw_builder ubld = bld.exec_all().group(2, 0);
          for (unsigned i = 0; i < dispatch_width; i += 4)
             brw_emit_scan_step(ubld, opcode, mod, tmp, i + 1, 0, i + 2, 1);
       }
@@ -237,7 +237,7 @@ brw_emit_scan(const fs_builder &bld, enum opcode opcode, const brw_reg &tmp,
    for (unsigned i = 4;
         i < MIN2(cluster_size, dispatch_width);
         i *= 2) {
-      const fs_builder ubld = bld.exec_all().group(i, 0);
+      const brw_builder ubld = bld.exec_all().group(i, 0);
       brw_emit_scan_step(ubld, opcode, mod, tmp, i - 1, 0, i, 1);
 
       if (dispatch_width > i * 2)
@@ -253,7 +253,7 @@ brw_emit_scan(const fs_builder &bld, enum opcode opcode, const brw_reg &tmp,
 static bool
 brw_lower_reduce(fs_visitor &s, bblock_t *block, fs_inst *inst)
 {
-   const fs_builder bld(&s, block, inst);
+   const brw_builder bld(&s, block, inst);
 
    assert(inst->dst.type == inst->src[0].type);
    brw_reg dst = inst->dst;
@@ -305,7 +305,7 @@ brw_lower_reduce(fs_visitor &s, bblock_t *block, fs_inst *inst)
 static bool
 brw_lower_scan(fs_visitor &s, bblock_t *block, fs_inst *inst)
 {
-   const fs_builder bld(&s, block, inst);
+   const brw_builder bld(&s, block, inst);
 
    assert(inst->dst.type == inst->src[0].type);
    brw_reg dst = inst->dst;
@@ -320,7 +320,7 @@ brw_lower_scan(fs_visitor &s, bblock_t *block, fs_inst *inst)
     * to reduction operation's identity value.
     */
    brw_reg scan = bld.vgrf(src.type);
-   const fs_builder ubld = bld.exec_all();
+   const brw_builder ubld = bld.exec_all();
    ubld.emit(SHADER_OPCODE_SEL_EXEC, scan, src, info.identity);
 
    if (inst->opcode == SHADER_OPCODE_EXCLUSIVE_SCAN) {
@@ -329,9 +329,15 @@ brw_lower_scan(fs_visitor &s, bblock_t *block, fs_inst *inst)
        * we can't do this with a normal stride; we have to use indirects.
        */
       brw_reg shifted = bld.vgrf(src.type);
-      brw_reg idx = bld.vgrf(BRW_TYPE_W);
+      brw_reg idx = bld.vgrf(BRW_TYPE_UW);
 
-      ubld.ADD(idx, bld.LOAD_SUBGROUP_INVOCATION(), brw_imm_w(-1));
+      /* Set the saturate modifier in the offset index to ensure it's
+       * normalized within the expected range without negative values,
+       * since the situation can cause us to read past the end of the
+       * register file leading to hangs on Xe3.
+       */
+      set_saturate(true, ubld.ADD(idx, bld.LOAD_SUBGROUP_INVOCATION(),
+                                  brw_imm_w(-1)));
       ubld.emit(SHADER_OPCODE_SHUFFLE, shifted, scan, idx);
       ubld.group(1, 0).MOV(horiz_offset(shifted, 0), info.identity);
       scan = shifted;
@@ -346,9 +352,9 @@ brw_lower_scan(fs_visitor &s, bblock_t *block, fs_inst *inst)
 }
 
 static brw_reg
-brw_fill_flag(const fs_builder &bld, unsigned v)
+brw_fill_flag(const brw_builder &bld, unsigned v)
 {
-   const fs_builder ubld1 = bld.exec_all().group(1, 0);
+   const brw_builder ubld1 = bld.exec_all().group(1, 0);
    brw_reg flag = brw_flag_reg(0, 0);
 
    if (bld.shader->dispatch_width == 32) {
@@ -363,7 +369,7 @@ brw_fill_flag(const fs_builder &bld, unsigned v)
 }
 
 static void
-brw_lower_dispatch_width_vote(const fs_builder &bld, enum opcode opcode, brw_reg dst, brw_reg src)
+brw_lower_dispatch_width_vote(const brw_builder &bld, enum opcode opcode, brw_reg dst, brw_reg src)
 {
    const intel_device_info *devinfo = bld.shader->devinfo;
    const unsigned dispatch_width = bld.shader->dispatch_width;
@@ -393,8 +399,8 @@ brw_lower_dispatch_width_vote(const fs_builder &bld, enum opcode opcode, brw_reg
     *
     * TODO: Check if we still need this for newer platforms.
     */
-   const fs_builder ubld = devinfo->ver >= 20 ? bld.exec_all()
-                                              : bld.exec_all().group(1, 0);
+   const brw_builder ubld = devinfo->ver >= 20 ? bld.exec_all()
+                                               : bld.exec_all().group(1, 0);
    brw_reg res1 = ubld.MOV(brw_imm_d(0));
 
    enum brw_predicate pred;
@@ -415,7 +421,7 @@ brw_lower_dispatch_width_vote(const fs_builder &bld, enum opcode opcode, brw_reg
 }
 
 static void
-brw_lower_quad_vote_gfx9(const fs_builder &bld, enum opcode opcode, brw_reg dst, brw_reg src)
+brw_lower_quad_vote_gfx9(const brw_builder &bld, enum opcode opcode, brw_reg dst, brw_reg src)
 {
    assert(opcode == SHADER_OPCODE_VOTE_ANY || opcode == SHADER_OPCODE_VOTE_ALL);
    const bool any = opcode == SHADER_OPCODE_VOTE_ANY;
@@ -437,7 +443,7 @@ brw_lower_quad_vote_gfx9(const fs_builder &bld, enum opcode opcode, brw_reg dst,
 }
 
 static void
-brw_lower_quad_vote_gfx20(const fs_builder &bld, enum opcode opcode, brw_reg dst, brw_reg src)
+brw_lower_quad_vote_gfx20(const brw_builder &bld, enum opcode opcode, brw_reg dst, brw_reg src)
 {
    assert(opcode == SHADER_OPCODE_VOTE_ANY || opcode == SHADER_OPCODE_VOTE_ALL);
    const bool any = opcode == SHADER_OPCODE_VOTE_ANY;
@@ -484,7 +490,7 @@ brw_lower_quad_vote_gfx20(const fs_builder &bld, enum opcode opcode, brw_reg dst
 static bool
 brw_lower_vote(fs_visitor &s, bblock_t *block, fs_inst *inst)
 {
-   const fs_builder bld(&s, block, inst);
+   const brw_builder bld(&s, block, inst);
 
    brw_reg dst = inst->dst;
    brw_reg src = inst->src[0];
@@ -511,8 +517,143 @@ brw_lower_vote(fs_visitor &s, bblock_t *block, fs_inst *inst)
    return true;
 }
 
+static bool
+brw_lower_ballot(fs_visitor &s, bblock_t *block, fs_inst *inst)
+{
+   const brw_builder bld(&s, block, inst);
+
+   brw_reg value = retype(inst->src[0], BRW_TYPE_UD);
+   brw_reg dst = inst->dst;
+
+   const brw_builder xbld = dst.is_scalar ? bld.scalar_group() : bld;
+
+   if (value.file == IMM) {
+      /* Implement a fast-path for ballot(true). */
+      if (!value.is_zero()) {
+         brw_reg tmp = bld.vgrf(BRW_TYPE_UD);
+         bld.exec_all().emit(SHADER_OPCODE_LOAD_LIVE_CHANNELS, tmp);
+         xbld.MOV(dst, brw_reg(component(tmp, 0)));
+      } else {
+         brw_reg zero = retype(brw_imm_uq(0), dst.type);
+         xbld.MOV(dst, zero);
+      }
+   } else {
+      brw_reg flag = brw_fill_flag(bld, 0);
+      bld.CMP(bld.null_reg_ud(), value, brw_imm_ud(0u), BRW_CONDITIONAL_NZ);
+      xbld.MOV(dst, flag);
+   }
+
+   inst->remove(block);
+   return true;
+}
+
+static bool
+brw_lower_quad_swap(fs_visitor &s, bblock_t *block, fs_inst *inst)
+{
+   const brw_builder bld(&s, block, inst);
+
+   assert(inst->dst.type == inst->src[0].type);
+   brw_reg dst = inst->dst;
+   brw_reg value = inst->src[0];
+
+   assert(inst->src[1].file == IMM);
+   enum brw_swap_direction dir = (enum brw_swap_direction)inst->src[1].ud;
+
+   switch (dir) {
+   case BRW_SWAP_HORIZONTAL: {
+      const brw_reg tmp = bld.vgrf(value.type);
+
+      const brw_builder ubld = bld.exec_all().group(s.dispatch_width / 2, 0);
+
+      const brw_reg src_left = horiz_stride(value, 2);
+      const brw_reg src_right = horiz_stride(horiz_offset(value, 1), 2);
+      const brw_reg tmp_left = horiz_stride(tmp, 2);
+      const brw_reg tmp_right = horiz_stride(horiz_offset(tmp, 1), 2);
+
+      ubld.MOV(tmp_left, src_right);
+      ubld.MOV(tmp_right, src_left);
+
+      bld.MOV(retype(dst, value.type), tmp);
+      break;
+   }
+   case BRW_SWAP_VERTICAL:
+   case BRW_SWAP_DIAGONAL: {
+      if (brw_type_size_bits(value.type) == 32) {
+         /* For 32-bit, we can use a SIMD4x2 instruction to do this easily */
+         const unsigned swizzle = dir == BRW_SWAP_VERTICAL ? BRW_SWIZZLE4(2,3,0,1)
+                                                           : BRW_SWIZZLE4(3,2,1,0);
+         const brw_reg tmp = bld.vgrf(value.type);
+         const brw_builder ubld = bld.exec_all();
+         ubld.emit(SHADER_OPCODE_QUAD_SWIZZLE, tmp, value, brw_imm_ud(swizzle));
+         bld.MOV(dst, tmp);
+      } else {
+         /* For larger data types, we have to either emit dispatch_width many
+          * MOVs or else fall back to doing indirects.
+          */
+         const unsigned xor_mask = dir == BRW_SWAP_VERTICAL ? 0x2 : 0x3;
+         brw_reg idx = bld.vgrf(BRW_TYPE_W);
+         bld.XOR(idx, bld.LOAD_SUBGROUP_INVOCATION(), brw_imm_w(xor_mask));
+         bld.emit(SHADER_OPCODE_SHUFFLE, dst, value, idx);
+      }
+      break;
+   }
+   }
+
+   inst->remove(block);
+   return true;
+}
+
+static bool
+brw_lower_read_from_live_channel(fs_visitor &s, bblock_t *block, fs_inst *inst)
+{
+   const brw_builder bld(&s, block, inst);
+
+   assert(inst->sources == 1);
+   assert(inst->dst.type == inst->src[0].type);
+   brw_reg dst = inst->dst;
+   brw_reg value = inst->src[0];
+
+   bld.MOV(dst, bld.emit_uniformize(value));
+
+   inst->remove(block);
+   return true;
+}
+
+static bool
+brw_lower_read_from_channel(fs_visitor &s, bblock_t *block, fs_inst *inst)
+{
+   const brw_builder bld(&s, block, inst);
+
+   assert(inst->sources == 2);
+   assert(inst->dst.type == inst->src[0].type);
+
+   brw_reg dst = inst->dst;
+   brw_reg value = inst->src[0];
+   brw_reg index = retype(inst->src[1], BRW_TYPE_UD);
+
+   /* When for some reason the subgroup_size picked by NIR is larger than
+    * the dispatch size picked by the backend (this could happen in RT,
+    * FS), bound the invocation to the dispatch size.
+    */
+   const unsigned dispatch_width_mask = s.dispatch_width - 1;
+
+   if (index.file == IMM) {
+      /* Always apply mask here since it is cheap. */
+      bld.MOV(dst, component(value, index.ud & dispatch_width_mask));
+   } else {
+      if (s.api_subgroup_size == 0 || s.dispatch_width < s.api_subgroup_size)
+         index = bld.AND(index, brw_imm_ud(dispatch_width_mask));
+
+      brw_reg tmp = bld.BROADCAST(value, bld.emit_uniformize(index));
+      bld.MOV(dst, tmp);
+   }
+
+   inst->remove(block);
+   return true;
+}
+
 bool
-brw_fs_lower_subgroup_ops(fs_visitor &s)
+brw_lower_subgroup_ops(fs_visitor &s)
 {
    bool progress = false;
 
@@ -531,6 +672,22 @@ brw_fs_lower_subgroup_ops(fs_visitor &s)
       case SHADER_OPCODE_VOTE_ALL:
       case SHADER_OPCODE_VOTE_EQUAL:
          progress |= brw_lower_vote(s, block, inst);
+         break;
+
+      case SHADER_OPCODE_BALLOT:
+         progress |= brw_lower_ballot(s, block, inst);
+         break;
+
+      case SHADER_OPCODE_QUAD_SWAP:
+         progress |= brw_lower_quad_swap(s, block, inst);
+         break;
+
+      case SHADER_OPCODE_READ_FROM_LIVE_CHANNEL:
+         progress |= brw_lower_read_from_live_channel(s, block, inst);
+         break;
+
+      case SHADER_OPCODE_READ_FROM_CHANNEL:
+         progress |= brw_lower_read_from_channel(s, block, inst);
          break;
 
       default:

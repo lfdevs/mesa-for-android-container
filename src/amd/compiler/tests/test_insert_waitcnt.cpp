@@ -192,6 +192,7 @@ BEGIN_TEST(insert_waitcnt.waw.vmem_types)
 
       //>> p_unit_test 0
       //! v1: %0:v[4] = buffer_load_dword %0:s[0-3], %0:v[0], 0
+      //~gfx12! s_wait_loadcnt imm:0
       //! v1: %0:v[4] = buffer_load_dword %0:s[0-3], %0:v[0], 0
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
       bld.mubuf(aco_opcode::buffer_load_dword, def_v4, desc_s4, op_v0, Operand::zero(), 0, false);
@@ -220,6 +221,7 @@ BEGIN_TEST(insert_waitcnt.waw.vmem_types)
 
       //>> p_unit_test 3
       //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3],  v1: undef, %0:v[0] 1d
+      //~gfx12! s_wait_samplecnt imm:0
       //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3],  v1: undef, %0:v[0] 1d
       bld.reset(program->create_and_insert_block());
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
@@ -249,6 +251,7 @@ BEGIN_TEST(insert_waitcnt.waw.vmem_types)
 
       //>> p_unit_test 6
       //! v1: %0:v[4] = image_bvh64_intersect_ray %0:s[0-3],  s4: undef,  v1: undef, %0:v[16-26] 1d
+      //~gfx12! s_wait_bvhcnt imm:0
       //! v1: %0:v[4] = image_bvh64_intersect_ray %0:s[0-3],  s4: undef,  v1: undef, %0:v[16-26] 1d
       bld.reset(program->create_and_insert_block());
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
@@ -300,6 +303,7 @@ BEGIN_TEST(insert_waitcnt.waw.vmem_types)
       //>> BB11
       //! /* logical preds: BB9, BB10, / linear preds: BB9, BB10, / kind: uniform, */
       //! p_unit_test 9
+      //~gfx12! s_wait_loadcnt imm:0
       //! v1: %0:v[4] = buffer_load_dword %0:s[0-3], %0:v[0], 0
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
       bld.mubuf(aco_opcode::buffer_load_dword, def_v4, desc_s4, op_v0, Operand::zero(), 0, false);
@@ -326,6 +330,7 @@ BEGIN_TEST(insert_waitcnt.waw.vmem_types)
       //! /* logical preds: BB12, BB13, / linear preds: BB12, BB13, / kind: uniform, */
       //! p_unit_test 10
       //~gfx11! s_waitcnt vmcnt(0)
+      //~gfx12! s_wait_loadcnt imm:0
       //~gfx12! s_wait_samplecnt imm:0
       //! v1: %0:v[4] = buffer_load_dword %0:s[0-3], %0:v[0], 0
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));

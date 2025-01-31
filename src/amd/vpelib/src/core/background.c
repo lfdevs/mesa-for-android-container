@@ -25,7 +25,6 @@
 #include "background.h"
 #include "common.h"
 #include "vpe_priv.h"
-#include "color_bg.h"
 
 void vpe_create_bg_segments(
     struct vpe_priv *vpe_priv, struct vpe_rect *gaps, uint16_t gaps_cnt, enum vpe_cmd_ops ops)
@@ -128,6 +127,10 @@ void vpe_full_bg_gaps(struct vpe_rect *gaps, const struct vpe_rect *target_rect,
     int32_t  last_covered;
     uint32_t gap_width, gap_remainder;
 
+    if (max_gaps == 0) {
+        VPE_ASSERT(0);
+        return;
+    }
     last_covered  = target_rect->x;
     gap_width     = target_rect->width / max_gaps;
     gap_remainder = target_rect->width % max_gaps;

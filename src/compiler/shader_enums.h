@@ -31,8 +31,7 @@
 #include "util/macros.h"
 #include "util/u_debug.h"
 #else
-#define ENUM_PACKED
-#define BITFIELD_BIT(b) (1u << (b))
+#include "libcl/libcl.h"
 #define debug_printf(x, ...)
 #endif
 
@@ -523,6 +522,7 @@ _mesa_varying_slot_in_fs(gl_varying_slot slot)
 #define VARYING_BIT_CULL_DIST0 BITFIELD64_BIT(VARYING_SLOT_CULL_DIST0)
 #define VARYING_BIT_CULL_DIST1 BITFIELD64_BIT(VARYING_SLOT_CULL_DIST1)
 #define VARYING_BIT_PRIMITIVE_ID BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_ID)
+#define VARYING_BIT_PRIMITIVE_COUNT BITFIELD64_BIT(VARYING_SLOT_PRIMITIVE_COUNT)
 #define VARYING_BIT_LAYER BITFIELD64_BIT(VARYING_SLOT_LAYER)
 #define VARYING_BIT_VIEWPORT BITFIELD64_BIT(VARYING_SLOT_VIEWPORT)
 #define VARYING_BIT_FACE BITFIELD64_BIT(VARYING_SLOT_FACE)
@@ -558,9 +558,8 @@ _mesa_varying_slot_in_fs(gl_varying_slot slot)
 /*@}*/
 
 /**
- * If the gl_register_file is PROGRAM_SYSTEM_VALUE, the register index will be
- * one of these values.  If a NIR variable's mode is nir_var_system_value, it
- * will be one of these values.
+ * If a NIR variable's mode is nir_var_system_value, it will be one of these
+ * values.
  */
 typedef enum
 {
@@ -785,6 +784,7 @@ typedef enum
    SYSTEM_VALUE_POINT_COORD,
    SYSTEM_VALUE_LINE_COORD, /**< Coord along axis perpendicular to line */
    SYSTEM_VALUE_FRONT_FACE,
+   SYSTEM_VALUE_FRONT_FACE_FSIGN,
    SYSTEM_VALUE_SAMPLE_ID,
    SYSTEM_VALUE_SAMPLE_POS,
    SYSTEM_VALUE_SAMPLE_POS_OR_CENTER,
@@ -1159,6 +1159,11 @@ enum gl_access_qualifier
     * shader where the API wants to copy all bytes that are resident.
     */
    ACCESS_KEEP_SCALAR = (1 << 15),
+
+   /**
+    * Indicates that this load will use SMEM.
+    */
+   ACCESS_SMEM_AMD = (1 << 16),
 };
 
 /**
@@ -1384,6 +1389,18 @@ u_reduced_prim(enum mesa_prim prim)
    }
 }
 
+static inline bool
+mesa_prim_has_adjacency(enum mesa_prim prim)
+{
+   static_assert(MESA_PRIM_LINE_STRIP_ADJACENCY == MESA_PRIM_LINES_ADJACENCY + 1, "");
+   static_assert(MESA_PRIM_TRIANGLES_ADJACENCY == MESA_PRIM_LINES_ADJACENCY + 2, "");
+   static_assert(MESA_PRIM_TRIANGLE_STRIP_ADJACENCY == MESA_PRIM_LINES_ADJACENCY + 3, "");
+
+   /* Adjacency primitives are together so we can do a simple comparison */
+   return prim >= MESA_PRIM_LINES_ADJACENCY &&
+          prim <= MESA_PRIM_TRIANGLE_STRIP_ADJACENCY;
+}
+
 /**
  * A compare function enum for use in compiler lowering passes.  This is in
  * the same order as GL's compare functions (shifted down by GL_NEVER), and is
@@ -1607,6 +1624,20 @@ typedef enum {
 } mesa_scope;
 
 const char *mesa_scope_name(mesa_scope scope);
+
+/* This is defined here to be available to OpenCL */
+enum glsl_sampler_dim {
+   GLSL_SAMPLER_DIM_1D = 0,
+   GLSL_SAMPLER_DIM_2D,
+   GLSL_SAMPLER_DIM_3D,
+   GLSL_SAMPLER_DIM_CUBE,
+   GLSL_SAMPLER_DIM_RECT,
+   GLSL_SAMPLER_DIM_BUF,
+   GLSL_SAMPLER_DIM_EXTERNAL,
+   GLSL_SAMPLER_DIM_MS,
+   GLSL_SAMPLER_DIM_SUBPASS, /* for vulkan input attachments */
+   GLSL_SAMPLER_DIM_SUBPASS_MS, /* for multisampled vulkan input attachments */
+};
 
 #ifdef __cplusplus
 } /* extern "C" */

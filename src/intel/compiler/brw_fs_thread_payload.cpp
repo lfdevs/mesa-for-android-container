@@ -22,7 +22,7 @@
  */
 
 #include "brw_fs.h"
-#include "brw_fs_builder.h"
+#include "brw_builder.h"
 
 using namespace brw;
 
@@ -104,7 +104,7 @@ gs_thread_payload::gs_thread_payload(fs_visitor &v)
 {
    struct brw_vue_prog_data *vue_prog_data = brw_vue_prog_data(v.prog_data);
    struct brw_gs_prog_data *gs_prog_data = brw_gs_prog_data(v.prog_data);
-   const fs_builder bld = fs_builder(&v).at_end();
+   const brw_builder bld = brw_builder(&v).at_end();
 
    /* R0: thread header. */
    unsigned r = reg_unit(v.devinfo);
@@ -173,12 +173,12 @@ setup_fs_payload_gfx20(fs_thread_payload &payload,
 
    for (unsigned j = 0; j < v.dispatch_width / payload_width; j++) {
       /* R2-13: Barycentric interpolation coordinates.  These appear
-       * in the same order that they appear in the brw_barycentric_mode
+       * in the same order that they appear in the intel_barycentric_mode
        * enum.  Each set of coordinates occupies 2 64B registers per
        * SIMD16 half.  Coordinates only appear if they were enabled
        * using the "Barycentric Interpolation Mode" bits in WM_STATE.
        */
-      for (int i = 0; i < BRW_BARYCENTRIC_MODE_COUNT; ++i) {
+      for (int i = 0; i < INTEL_BARYCENTRIC_MODE_COUNT; ++i) {
          if (prog_data->barycentric_interp_modes & (1 << i)) {
             payload.barycentric_coord_reg[i][j] = payload.num_regs;
             payload.num_regs += payload_width / 4;
@@ -267,13 +267,13 @@ setup_fs_payload_gfx9(fs_thread_payload &payload,
 
    for (unsigned j = 0; j < v.dispatch_width / payload_width; j++) {
       /* R3-26: barycentric interpolation coordinates.  These appear in the
-       * same order that they appear in the brw_barycentric_mode enum.  Each
+       * same order that they appear in the intel_barycentric_mode enum.  Each
        * set of coordinates occupies 2 registers if dispatch width == 8 and 4
        * registers if dispatch width == 16.  Coordinates only appear if they
        * were enabled using the "Barycentric Interpolation Mode" bits in
        * WM_STATE.
        */
-      for (int i = 0; i < BRW_BARYCENTRIC_MODE_COUNT; ++i) {
+      for (int i = 0; i < INTEL_BARYCENTRIC_MODE_COUNT; ++i) {
          if (prog_data->barycentric_interp_modes & (1 << i)) {
             payload.barycentric_coord_reg[i][j] = payload.num_regs;
             payload.num_regs += payload_width / 4;
@@ -390,7 +390,7 @@ cs_thread_payload::cs_thread_payload(const fs_visitor &v)
 }
 
 void
-cs_thread_payload::load_subgroup_id(const fs_builder &bld,
+cs_thread_payload::load_subgroup_id(const brw_builder &bld,
                                     brw_reg &dest) const
 {
    auto devinfo = bld.shader->devinfo;
@@ -430,7 +430,7 @@ task_mesh_thread_payload::task_mesh_thread_payload(fs_visitor &v)
     * the address to descriptors.
     */
 
-   const fs_builder bld = fs_builder(&v).at_end();
+   const brw_builder bld = brw_builder(&v).at_end();
 
    unsigned r = 0;
    assert(subgroup_id_.file != BAD_FILE);
@@ -491,7 +491,7 @@ bs_thread_payload::bs_thread_payload(const fs_visitor &v)
 }
 
 void
-bs_thread_payload::load_shader_type(const fs_builder &bld, brw_reg &dest) const
+bs_thread_payload::load_shader_type(const brw_builder &bld, brw_reg &dest) const
 {
    brw_reg ud_dest = retype(dest, BRW_TYPE_UD);
    bld.MOV(ud_dest, retype(brw_vec1_grf(0, 3), ud_dest.type));

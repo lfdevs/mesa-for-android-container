@@ -9,6 +9,8 @@ KHR-GL46.packed_pixels.varied_rectangle.*
 KHR-GL46.pixelstoragemodes.teximage2d.rg8ui.0_0
 KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor_texture_1d_array_r8i
 KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor_texture_1d_array_rg8_snorm
+KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor_texture_3d_r32f
+KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor_texture_3d_r8ui
 KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_3d_rgba16_snorm
 KHR-GL46.texture_buffer.texture_buffer_max_size
 KHR-GL46.texture_swizzle.functional_format_idx_63_target_idx_4
@@ -40,8 +42,11 @@ dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_srgb8_a
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32i_rgba_astc_4x4_khr.texture2d_array_to_texture2d_array
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32i_srgb8_alpha8_astc_12x10_khr.texture2d_array_to_texture2d_array
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32ui_srgb8_alpha8_astc_10x6_khr.texture2d_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x8_khr_rgba32i.texture2d_array_to_texture3d
+dEQP-GLES31.functional.geometry_shading.instanced.geometry_output_different_32_invocations
 dEQP-GLES31.functional.image_load_store.3d.atomic.or_r32ui_return_value
 dEQP-GLES31.functional.image_load_store.3d.store.rgba16ui
+dEQP-GLES31.functional.program_uniform.by_pointer.render.basic.mat4x3_row_major_fragment
 dEQP-GLES31.functional.texture.format.sized.cube_array.depth_component32f_npot
 
 # All the double tests in this group seem to be flaky
@@ -52,12 +57,14 @@ spec@!opengl 1.1@copypixels-sync
 spec@!opengl 1.1@draw-sync
 spec@!opengl 1.1@getteximage-depth
 spec@!opengl 1.1@polygon-mode
+spec@!opengl 1.1@ppgtt_memory_alignment
 spec@!opengl 1.1@texsubimage
 spec@!opengl 1.2@tex3d
 spec@!opengl 2.0@attribs
 spec@!opengl 2.0@tex3d-npot
 spec@arb_bindless_texture@execution@images@uniform-struct
 spec@arb_color_buffer_float@gl_rgba16f-render
+spec@arb_color_buffer_float@gl_rgba8-render-fog
 spec@arb_color_buffer_float@gl_rgba8-render-sanity
 spec@arb_color_buffer_float@gl_rgba8_snorm-render
 spec@arb_color_buffer_float@gl_rgba8_snorm-render-fog
@@ -75,6 +82,7 @@ spec@arb_copy_image@arb_copy_image-targets gl_texture_cube_map 32 32 6 gl_textur
 spec@arb_copy_image@arb_copy_image-targets gl_texture_cube_map_array 32 32 18 gl_texture_cube_map_array 16 16 18 11 5 2 5 9 7 5 7 11
 spec@arb_copy_image@arb_copy_image-targets gl_texture_cube_map_array 32 32 18 gl_texture_rectangle 32 16 1 11 12 13 5 7 0 14 6 1
 spec@arb_fragment_program_shadow@tex-shadow2dnotdepth
+spec@arb_get_texture_sub_image@arb_get_texture_sub_image-get
 spec@arb_gpu_shader5@execution@sampler_array_indexing@vs-nonuniform-control-flow
 spec@arb_pixel_buffer_object@pbo-drawpixels
 spec@arb_pixel_buffer_object@texsubimage pbo
@@ -179,3 +187,18 @@ spec@nv_half_float@attribs-half-float
 spec@nv_primitive_restart@primitive-restart-draw-mode-lines
 spec@nv_primitive_restart@primitive-restart-draw-mode-polygon
 spec@nv_primitive_restart@primitive-restart-draw-mode-quad_strip
+
+# First seen in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/67817963
+KHR-GL46.constant_expressions.basic_cos_vec2_tess_eval
+KHR-GL46.constant_expressions.basic_degrees_vec3_tess_control
+KHR-GL46.constant_expressions.basic_degrees_vec4_tess_eval
+KHR-GL46.constant_expressions.basic_exp_vec4_tess_control
+KHR-GL46.constant_expressions.basic_log_vec4_vertex
+KHR-GL46.constant_expressions.basic_pow_float_compute
+KHR-GL46.constant_expressions.basic_sin_float_compute
+KHR-GL46.constant_expressions.basic_sin_vec3_geometry
+KHR-GL46.constant_expressions.basic_sin_vec3_tess_eval
+
+KHR-GL46.texture_swizzle.functional_format_idx_63_target_idx_3
+KHR-GL46.texture_swizzle.functional_format_idx_66_target_idx_1
+spec@arb_texture_view@rendering-levels

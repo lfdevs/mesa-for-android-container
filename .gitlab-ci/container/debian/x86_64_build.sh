@@ -6,10 +6,13 @@
 # DEBIAN_BUILD_TAG
 
 set -e
+
+. .gitlab-ci/setup-test-env.sh
+
 set -o xtrace
 
 export DEBIAN_FRONTEND=noninteractive
-export LLVM_VERSION="${LLVM_VERSION:=15}"
+: "${LLVM_VERSION:?llvm version not set!}"
 
 # Ephemeral packages (installed for this script and removed again at the end)
 EPHEMERAL=(
@@ -28,6 +31,7 @@ DEPS=(
     libarchive-dev
     libdrm-dev
     "libclang-cpp${LLVM_VERSION}-dev"
+    "libclang-rt-${LLVM_VERSION}-dev"
     libgbm-dev
     libglvnd-dev
     liblua5.3-dev

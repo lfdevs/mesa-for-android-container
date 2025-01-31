@@ -15,13 +15,15 @@ uncollapsed_section_start debian_setup "Base Debian system setup"
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt-get install -y ca-certificates gnupg2 software-properties-common
+apt-get install -y curl ca-certificates gnupg2 software-properties-common
 
 sed -i -e 's/http:\/\/deb/https:\/\/deb/g' /etc/apt/sources.list.d/*
 
 echo "deb [trusted=yes] https://gitlab.freedesktop.org/gfx-ci/ci-deb-repo/-/raw/${PKG_REPO_REV}/ ${FDO_DISTRIBUTION_VERSION%-*} main" | tee /etc/apt/sources.list.d/gfx-ci_.list
 
-export LLVM_VERSION="${LLVM_VERSION:=15}"
+: "${LLVM_VERSION:?llvm version not set!}"
+
+. .gitlab-ci/container/debian/maybe-add-llvm-repo.sh
 
 # Ephemeral packages (installed for this script and removed again at the end)
 EPHEMERAL=(
@@ -40,6 +42,7 @@ EPHEMERAL=(
     libasound2-dev
     libcap-dev
     "libclang-cpp${LLVM_VERSION}-dev"
+    "libclang-rt-${LLVM_VERSION}-dev"
     libdrm-dev
     libegl-dev
     libelf-dev
@@ -82,6 +85,7 @@ DEPS=(
     liblz4-1
     libpng16-16
     libpython3.11
+    libubsan1
     libvulkan1
     libwayland-client0
     libwayland-server0
@@ -126,53 +130,43 @@ pip3 install --break-system-packages git+http://gitlab.freedesktop.org/freedeskt
 # Needed for manipulation with traces yaml files.
 pip3 install --break-system-packages yq
 
+section_end debian_setup
+
 ############### Download prebuilt kernel
 
 if [ "$DEBIAN_ARCH" = amd64 ]; then
-  uncollapsed_section_switch kernel "Downloading kernel"
+  uncollapsed_section_start kernel "Downloading kernel"
   export KERNEL_IMAGE_NAME=bzImage
   mkdir -p /lava-files/
   . .gitlab-ci/container/download-prebuilt-kernel.sh
+  section_end kernel
 fi
 
 ############### Build mold
-
-uncollapsed_section_switch mold "Building mold linker"
 
 . .gitlab-ci/container/build-mold.sh
 
 ############### Build LLVM-SPIRV translator
 
-uncollapsed_section_switch llvmspv "Building LLVM-SPIRV-Translator"
-
 . .gitlab-ci/container/build-llvm-spirv.sh
 
 ############### Build libclc
-
-uncollapsed_section_switch libclc "Building libclc"
 
 . .gitlab-ci/container/build-libclc.sh
 
 ############### Build Wayland
 
-uncollapsed_section_switch wayland "Building Wayland"
-
 . .gitlab-ci/container/build-wayland.sh
 
 ############### Install Rust toolchain
-
-uncollapsed_section_switch rust "Installing Rust toolchain"
 
 . .gitlab-ci/container/build-rust.sh
 
 ############### Build Crosvm
 
-uncollapsed_section_switch crosvm "Building crosvm"
 . .gitlab-ci/container/build-crosvm.sh
 
 ############### Build dEQP runner
-
-uncollapsed_section_switch deqpr "Building deqp-runner"
 
 . .gitlab-ci/container/build-deqp-runner.sh
 
@@ -185,3 +179,5 @@ apt-get purge -y "${EPHEMERAL[@]}"
 rm -rf /root/.rustup
 
 . .gitlab-ci/container/container_post_build.sh
+
+section_end debian_cleanup

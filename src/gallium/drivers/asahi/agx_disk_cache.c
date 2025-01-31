@@ -109,12 +109,12 @@ read_shader(struct agx_screen *screen, struct blob_reader *blob,
       if (size) {
          binary->bo = agx_bo_create(&screen->dev, size, 0,
                                     AGX_BO_EXEC | AGX_BO_LOW_VA, "Executable");
-         memcpy(binary->bo->map, binary->b.binary, size);
+         memcpy(agx_bo_map(binary->bo), binary->b.binary, size);
       }
    } else if (size) {
       binary->bo = agx_bo_create(&screen->dev, size, 0,
                                  AGX_BO_EXEC | AGX_BO_LOW_VA, "Executable");
-      blob_copy_bytes(blob, binary->bo->map, size);
+      blob_copy_bytes(blob, agx_bo_map(binary->bo), size);
    }
 
    blob_copy_bytes(blob, &binary->uvs, sizeof(binary->uvs));

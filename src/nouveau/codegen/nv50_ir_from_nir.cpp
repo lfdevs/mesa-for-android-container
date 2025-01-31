@@ -138,7 +138,7 @@ private:
                               unsigned align_offset,
                               unsigned bit_size,
                               unsigned num_components,
-                              unsigned hole_size,
+                              int64_t hole_size,
                               nir_intrinsic_instr *low,
                               nir_intrinsic_instr *high,
                               void *cb_data);
@@ -149,6 +149,7 @@ private:
                          uint32_t align_mul,
                          uint32_t align_offset,
                          bool offset_is_const,
+                         enum gl_access_qualifier access,
                          const void *cb_data);
 
    bool isFloatType(nir_alu_type);
@@ -1370,12 +1371,12 @@ Converter::memVectorizeCb(unsigned align_mul,
                           unsigned align_offset,
                           unsigned bit_size,
                           unsigned num_components,
-                          unsigned hole_size,
+                          int64_t hole_size,
                           nir_intrinsic_instr *low,
                           nir_intrinsic_instr *high,
                           void *cb_data)
 {
-   if (hole_size)
+   if (hole_size > 0)
       return false;
 
    /*
@@ -1407,6 +1408,7 @@ Converter::getMemAccessSizeAlign(nir_intrinsic_op intrin,
                                  uint32_t align_mul,
                                  uint32_t align_offset,
                                  bool offset_is_const,
+                                 enum gl_access_qualifier access,
                                  const void *cb_data)
 {
    const Converter* converter = (Converter*) cb_data;
@@ -1437,6 +1439,7 @@ Converter::getMemAccessSizeAlign(nir_intrinsic_op intrin,
       .num_components = (uint8_t) (bytes / (bit_size / 8)),
       .bit_size = (uint8_t) bit_size,
       .align = (uint16_t) bytes,
+      .shift = nir_mem_access_shift_method_scalar,
    };
 }
 
@@ -3427,7 +3430,7 @@ Converter::run()
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
 
    NIR_PASS_V(nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
-              type_size, (nir_lower_io_options)0);
+              type_size, nir_lower_io_use_interpolated_input_intrinsics);
 
    NIR_PASS_V(nir, nir_lower_subgroups, &subgroup_options);
 
@@ -3503,7 +3506,7 @@ Converter::run()
    NIR_PASS_V(nir, nir_lower_bit_size, Converter::lowerBitSizeCB, this);
 
    NIR_PASS_V(nir, nir_divergence_analysis);
-   NIR_PASS_V(nir, nir_convert_from_ssa, true);
+   NIR_PASS_V(nir, nir_convert_from_ssa, true, true);
 
    // Garbage collect dead instructions
    nir_sweep(nir);
@@ -3611,7 +3614,6 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type)
    op.lower_insert_byte = true;
    op.lower_insert_word = true;
    op.lower_all_io_to_temps = false;
-   op.lower_all_io_to_elements = false;
    op.vertex_id_zero_based = false;
    op.lower_base_vertex = false;
    op.lower_helper_invocation = false;
@@ -3624,10 +3626,8 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type)
    op.lower_uadd_sat = true; // TODO
    op.lower_usub_sat = true; // TODO
    op.lower_iadd_sat = true; // TODO
-   op.vectorize_io = false;
    op.lower_to_scalar = false;
    op.unify_interfaces = false;
-   op.use_interpolated_input_intrinsics = true;
    op.lower_mul_2x32_64 = true; // TODO
    op.has_rotate32 = (chipset >= NVISA_GV100_CHIPSET);
    op.has_imul24 = false;
@@ -3674,6 +3674,17 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type)
    op.discard_is_demote = true;
    op.has_ddx_intrinsics = true;
    op.scalarize_ddx = true;
+   op.support_indirect_inputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_GEOMETRY + 1);
+   op.support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_GEOMETRY + 1);
+
+   /* HW doesn't support indirect addressing of fragment program inputs
+    * on Volta.  The binary driver generates a function to handle every
+    * possible indirection, and indirectly calls the function to handle
+    * this instead.
+    */
+   if (chipset < NVISA_GV100_CHIPSET)
+      op.support_indirect_outputs |= BITFIELD_BIT(MESA_SHADER_FRAGMENT);
+
    return op;
 }
 

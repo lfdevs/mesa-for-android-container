@@ -28,8 +28,7 @@
  * get and set various fields.  This is the actual hardware format.
  */
 
-#ifndef ELK_INST_H
-#define ELK_INST_H
+#pragma once
 
 #include <assert.h>
 #include <stdint.h>
@@ -1061,6 +1060,4 @@ elk_inst_opcode(const struct elk_isa_info *isa,
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

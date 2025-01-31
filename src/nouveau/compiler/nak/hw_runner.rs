@@ -275,7 +275,9 @@ impl<'a> Runner {
         // Copy the data from the caller into our BO
         let data_addr = bo.addr + u64::try_from(data_offset).unwrap();
         let data_map = bo.map.byte_offset(data_offset.try_into().unwrap());
-        std::ptr::copy(data, data_map, data_size);
+        if data_size > 0 {
+            std::ptr::copy(data, data_map, data_size);
+        }
 
         // Fill out cb0
         let cb0_addr = bo.addr + u64::try_from(cb0_offset).unwrap();
@@ -397,7 +399,9 @@ impl<'a> Runner {
 
         // Always copy the data back to the caller, even if exec fails
         let data_map = bo.map.byte_offset(data_offset.try_into().unwrap());
-        std::ptr::copy(data_map, data, data_size);
+        if data_size > 0 {
+            std::ptr::copy(data_map, data, data_size);
+        }
 
         res
     }

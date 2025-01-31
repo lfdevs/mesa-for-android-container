@@ -277,6 +277,9 @@ etna_submit_rs_state(struct etna_context *ctx,
       /*20/21*/ EMIT_STATE(RS_KICKER, 0xbeebbeeb);
       etna_coalesce_end(stream, &coalesce);
    }
+
+   if (DBG_ENABLED(ETNA_DBG_DRAW_STALL))
+      etna_stall(stream, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_PE);
 }
 
 /* Generate clear command for a surface (non-fast clear case) */
@@ -359,6 +362,7 @@ etna_blit_clear_color_rs(struct pipe_context *pctx, unsigned idx,
       etna_submit_rs_state(ctx, &surf->ts_clear_command);
 
       etna_resource_level_ts_mark_valid(surf->level);
+      etna_resource_level_mark_unflushed(surf->level);
       ctx->dirty |= ETNA_DIRTY_TS;
    } else { /* Queue normal RS clear for non-TS surfaces */
       /* If clear color changed or no valid command yet (re-)generate
@@ -421,6 +425,7 @@ etna_blit_clear_zs_rs(struct pipe_context *pctx, struct pipe_surface *dst,
       etna_submit_rs_state(ctx, &surf->ts_clear_command);
 
       etna_resource_level_ts_mark_valid(surf->level);
+      etna_resource_level_mark_unflushed(surf->level);
       ctx->dirty |= ETNA_DIRTY_TS;
    } else { /* Queue normal RS clear for non-TS surfaces */
       /* If the level has valid TS state we need to flush it, as the regular
@@ -634,8 +639,11 @@ etna_try_rs_blit(struct pipe_context *pctx,
       return false;
 
    /* RS does not support upscaling */
-   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale))
+   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale)) {
+      DBG("upscaling requested: source %dx%d destination %dx%d",
+          src_xscale, src_yscale, dst_xscale, dst_yscale);
       return false;
+   }
 
    if (src_xscale > dst_xscale)
       downsample_x = true;
@@ -666,8 +674,12 @@ etna_try_rs_blit(struct pipe_context *pctx,
     *  - fail if swizzle needed
     *  - avoid trying to convert between float/int formats?
     */
-   if (blit_info->src.format != blit_info->dst.format)
+   if (blit_info->src.format != blit_info->dst.format) {
+      DBG("non matching formats: %s vs %s",
+          util_format_short_name(blit_info->src.format),
+          util_format_short_name(blit_info->dst.format));
       return false;
+   }
 
    /* try to find a exact format match first */
    uint32_t format = translate_rs_format(blit_info->dst.format);
@@ -676,10 +688,13 @@ etna_try_rs_blit(struct pipe_context *pctx,
     */
    if (format == ETNA_NO_MATCH && !downsample_x && !downsample_y)
       format = etna_compatible_rs_format(blit_info->dst.format);
-   if (format == ETNA_NO_MATCH)
+   if (format == ETNA_NO_MATCH) {
+      DBG("format not supported: %s", util_format_short_name(blit_info->dst.format));
       return false;
+   }
 
    if (blit_info->scissor_enable ||
+       blit_info->swizzle_enable ||
        blit_info->dst.box.depth != blit_info->src.box.depth ||
        blit_info->dst.box.depth != 1) {
       return false;
@@ -688,12 +703,20 @@ etna_try_rs_blit(struct pipe_context *pctx,
    unsigned w_mask, h_mask;
 
    etna_get_rs_alignment_mask(ctx, src->layout, &w_mask, &h_mask);
-   if ((blit_info->src.box.x & w_mask) || (blit_info->src.box.y & h_mask))
+   if ((blit_info->src.box.x & w_mask) || (blit_info->src.box.y & h_mask)) {
+      DBG("src x/y not properly aligned: %d %d",
+          blit_info->src.box.x,
+          blit_info->src.box.y);
       return false;
+   }
 
    etna_get_rs_alignment_mask(ctx, dst->layout, &w_mask, &h_mask);
-   if ((blit_info->dst.box.x & w_mask) || (blit_info->dst.box.y & h_mask))
+   if ((blit_info->dst.box.x & w_mask) || (blit_info->dst.box.y & h_mask)) {
+      DBG("dst x/y not properly aligned: %d %d",
+          blit_info->src.box.x,
+          blit_info->src.box.y);
       return false;
+   }
 
    struct etna_resource_level *src_lev = &src->levels[blit_info->src.level];
    struct etna_resource_level *dst_lev = &dst->levels[blit_info->dst.level];

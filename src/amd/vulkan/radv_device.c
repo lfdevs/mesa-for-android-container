@@ -313,9 +313,9 @@ radv_device_init_vrs_state(struct radv_device *device)
    VkBufferCreateInfo buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .pNext =
-         &(VkBufferUsageFlags2CreateInfoKHR){
-            .sType = VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR,
-            .usage = VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT_KHR,
+         &(VkBufferUsageFlags2CreateInfo){
+            .sType = VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO,
+            .usage = VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT,
          },
       .size = radv_image_from_handle(image)->planes[0].surface.meta_size,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -713,7 +713,7 @@ radv_device_init_tools(struct radv_device *device)
    if (result != VK_SUCCESS)
       return result;
 
-   if ((instance->vk.trace_mode & RADV_TRACE_MODE_RRA) && radv_enable_rt(pdev, false)) {
+   if ((instance->vk.trace_mode & RADV_TRACE_MODE_RRA) && radv_enable_rt(pdev)) {
       result = radv_rra_trace_init(device);
       if (result != VK_SUCCESS)
          return result;
@@ -786,7 +786,7 @@ init_dispatch_tables(struct radv_device *device, struct radv_physical_device *pd
    if (instance->vk.trace_mode & RADV_TRACE_MODE_RGP)
       add_entrypoints(&b, &sqtt_device_entrypoints, RADV_RGP_DISPATCH_TABLE);
 
-   if ((instance->vk.trace_mode & RADV_TRACE_MODE_RRA) && radv_enable_rt(pdev, false))
+   if ((instance->vk.trace_mode & RADV_TRACE_MODE_RRA) && radv_enable_rt(pdev))
       add_entrypoints(&b, &rra_device_entrypoints, RADV_RRA_DISPATCH_TABLE);
 
 #ifndef _WIN32
@@ -800,6 +800,14 @@ init_dispatch_tables(struct radv_device *device, struct radv_physical_device *pd
    add_entrypoints(&b, &radv_device_entrypoints, RADV_DISPATCH_TABLE_COUNT);
    add_entrypoints(&b, &wsi_device_entrypoints, RADV_DISPATCH_TABLE_COUNT);
    add_entrypoints(&b, &vk_common_device_entrypoints, RADV_DISPATCH_TABLE_COUNT);
+}
+
+static VkResult
+get_timestamp(struct vk_device *_device, uint64_t *timestamp)
+{
+   struct radv_device *device = container_of(_device, struct radv_device, vk);
+   *timestamp = device->ws->query_value(device->ws, RADEON_TIMESTAMP);
+   return VK_SUCCESS;
 }
 
 static VkResult
@@ -848,11 +856,14 @@ static void
 radv_device_init_cache_key(struct radv_device *device)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    struct radv_device_cache_key *key = &device->cache_key;
 
+   key->keep_shader_info = device->keep_shader_info;
+   key->trap_excp_flags = device->trap_handler_shader && instance->trap_excp_flags;
    key->disable_trunc_coord = device->disable_trunc_coord;
    key->image_2d_view_of_3d = device->vk.enabled_features.image2DViewOf3D && pdev->info.gfx_level == GFX9;
-   key->mesh_shader_queries = device->vk.enabled_features.meshShaderQueries;
+   key->mesh_shader_queries = device->vk.enabled_features.meshShaderQueries && pdev->emulate_mesh_shader_queries;
    key->primitives_generated_query = radv_uses_primitives_generated_query(device);
 
    /* The Vulkan spec says:
@@ -1056,6 +1067,60 @@ radv_device_init_msaa(struct radv_device *device)
       radv_get_sample_position(device, 8, i, device->sample_locations_8x[i]);
 }
 
+static void
+radv_destroy_device(struct radv_device *device, const VkAllocationCallbacks *pAllocator)
+{
+   radv_device_finish_perf_counter(device);
+
+   if (device->gfx_init)
+      radv_bo_destroy(device, NULL, device->gfx_init);
+
+   radv_device_finish_notifier(device);
+   radv_device_finish_vs_prologs(device);
+   if (device->ps_epilogs.ops)
+      radv_shader_part_cache_finish(device, &device->ps_epilogs);
+   radv_device_finish_border_color(device);
+   radv_device_finish_vrs_image(device);
+
+   for (unsigned i = 0; i < RADV_MAX_QUEUE_FAMILIES; i++) {
+      for (unsigned q = 0; q < device->queue_count[i]; q++)
+         radv_queue_finish(&device->queues[i][q]);
+      if (device->queue_count[i])
+         vk_free(&device->vk.alloc, device->queues[i]);
+   }
+   if (device->private_sdma_queue != VK_NULL_HANDLE) {
+      radv_queue_finish(device->private_sdma_queue);
+      vk_free(&device->vk.alloc, device->private_sdma_queue);
+   }
+
+   _mesa_hash_table_destroy(device->rt_handles, NULL);
+
+   radv_device_finish_meta(device);
+   radv_device_finish_tools(device);
+   radv_device_finish_memory_cache(device);
+
+   radv_destroy_shader_upload_queue(device);
+
+   for (unsigned i = 0; i < RADV_NUM_HW_CTX; i++) {
+      if (device->hw_ctx[i])
+         device->ws->ctx_destroy(device->hw_ctx[i]);
+   }
+
+   mtx_destroy(&device->overallocation_mutex);
+   simple_mtx_destroy(&device->ctx_roll_mtx);
+   simple_mtx_destroy(&device->pstate_mtx);
+   simple_mtx_destroy(&device->trace_mtx);
+   simple_mtx_destroy(&device->rt_handles_mtx);
+   simple_mtx_destroy(&device->pso_cache_stats_mtx);
+
+   radv_destroy_shader_arenas(device);
+   if (device->capture_replay_arena_vas)
+      _mesa_hash_table_u64_destroy(device->capture_replay_arena_vas);
+
+   vk_device_finish(&device->vk);
+   vk_free(&device->vk.alloc, device);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                   const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
@@ -1090,6 +1155,7 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
       return result;
    }
 
+   device->vk.get_timestamp = get_timestamp;
    device->vk.capture_trace = capture_trace;
 
    device->vk.command_buffer_ops = &radv_cmd_buffer_ops;
@@ -1110,14 +1176,17 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    /* With update after bind we can't attach bo's to the command buffer
     * from the descriptor set anymore, so we have to use a global BO list.
     */
-   device->use_global_bo_list =
-      (instance->perftest_flags & RADV_PERFTEST_BO_LIST) || device->vk.enabled_features.bufferDeviceAddress ||
-      device->vk.enabled_features.descriptorIndexing || device->vk.enabled_extensions.EXT_descriptor_indexing ||
-      device->vk.enabled_extensions.EXT_buffer_device_address ||
-      device->vk.enabled_extensions.KHR_buffer_device_address ||
-      device->vk.enabled_extensions.KHR_ray_tracing_pipeline ||
-      device->vk.enabled_extensions.KHR_acceleration_structure ||
-      device->vk.enabled_extensions.VALVE_descriptor_set_host_mapping;
+   device->use_global_bo_list = (instance->perftest_flags & RADV_PERFTEST_BO_LIST) ||
+                                device->vk.enabled_features.bufferDeviceAddress ||
+                                device->vk.enabled_features.descriptorIndexing ||
+                                device->vk.enabled_features.descriptorBindingUniformBufferUpdateAfterBind ||
+                                device->vk.enabled_features.descriptorBindingSampledImageUpdateAfterBind ||
+                                device->vk.enabled_features.descriptorBindingStorageImageUpdateAfterBind ||
+                                device->vk.enabled_features.descriptorBindingStorageBufferUpdateAfterBind ||
+                                device->vk.enabled_features.descriptorBindingUniformTexelBufferUpdateAfterBind ||
+                                device->vk.enabled_features.descriptorBindingStorageTexelBufferUpdateAfterBind ||
+                                device->vk.enabled_features.descriptorBindingUpdateUnusedWhilePending ||
+                                device->vk.enabled_features.descriptorBindingPartiallyBound;
 
    radv_init_shader_arenas(device);
 
@@ -1130,8 +1199,8 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    /* Create one context per queue priority. */
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create = &pCreateInfo->pQueueCreateInfos[i];
-      const VkDeviceQueueGlobalPriorityCreateInfoKHR *global_priority =
-         vk_find_struct_const(queue_create->pNext, DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
+      const VkDeviceQueueGlobalPriorityCreateInfo *global_priority =
+         vk_find_struct_const(queue_create->pNext, DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
       enum radeon_ctx_priority priority = radv_get_queue_global_priority(global_priority);
 
       if (device->hw_ctx[priority])
@@ -1139,20 +1208,20 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
 
       result = device->ws->ctx_create(device->ws, priority, &device->hw_ctx[priority]);
       if (result != VK_SUCCESS)
-         goto fail_queue;
+         goto fail;
    }
 
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create = &pCreateInfo->pQueueCreateInfos[i];
       uint32_t qfi = queue_create->queueFamilyIndex;
-      const VkDeviceQueueGlobalPriorityCreateInfoKHR *global_priority =
-         vk_find_struct_const(queue_create->pNext, DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
+      const VkDeviceQueueGlobalPriorityCreateInfo *global_priority =
+         vk_find_struct_const(queue_create->pNext, DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
 
       device->queues[qfi] = vk_zalloc(&device->vk.alloc, queue_create->queueCount * sizeof(struct radv_queue), 8,
                                       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
       if (!device->queues[qfi]) {
          result = VK_ERROR_OUT_OF_HOST_MEMORY;
-         goto fail_queue;
+         goto fail;
       }
 
       device->queue_count[qfi] = queue_create->queueCount;
@@ -1160,7 +1229,7 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
       for (unsigned q = 0; q < queue_create->queueCount; q++) {
          result = radv_queue_init(device, &device->queues[qfi][q], q, queue_create, global_priority);
          if (result != VK_SUCCESS)
-            goto fail_queue;
+            goto fail;
       }
    }
    device->private_sdma_queue = VK_NULL_HANDLE;
@@ -1291,7 +1360,7 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    if (!device->vk.disable_internal_cache) {
       result = radv_device_init_memory_cache(device);
       if (result != VK_SUCCESS)
-         goto fail_meta;
+         goto fail;
    }
 
    device->force_aniso = MIN2(16, (int)debug_get_num_option("RADV_TEX_ANISO", -1));
@@ -1302,7 +1371,7 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    if (device->vk.enabled_features.performanceCounterQueryPools) {
       result = radv_device_init_perf_counter(device);
       if (result != VK_SUCCESS)
-         goto fail_cache;
+         goto fail;
    }
 
    if (device->vk.enabled_features.rayTracingPipelineShaderGroupHandleCaptureReplay) {
@@ -1317,52 +1386,8 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    *pDevice = radv_device_to_handle(device);
    return VK_SUCCESS;
 
-fail_cache:
-   radv_device_finish_memory_cache(device);
-fail_meta:
-   radv_device_finish_meta(device);
 fail:
-   radv_device_finish_perf_counter(device);
-
-   radv_device_finish_tools(device);
-
-   if (device->gfx_init)
-      radv_bo_destroy(device, NULL, device->gfx_init);
-
-   radv_device_finish_notifier(device);
-   radv_device_finish_vs_prologs(device);
-   if (device->ps_epilogs.ops)
-      radv_shader_part_cache_finish(device, &device->ps_epilogs);
-   radv_device_finish_border_color(device);
-
-   radv_destroy_shader_upload_queue(device);
-
-fail_queue:
-   for (unsigned i = 0; i < RADV_MAX_QUEUE_FAMILIES; i++) {
-      for (unsigned q = 0; q < device->queue_count[i]; q++)
-         radv_queue_finish(&device->queues[i][q]);
-      if (device->queue_count[i])
-         vk_free(&device->vk.alloc, device->queues[i]);
-   }
-
-   for (unsigned i = 0; i < RADV_NUM_HW_CTX; i++) {
-      if (device->hw_ctx[i])
-         device->ws->ctx_destroy(device->hw_ctx[i]);
-   }
-
-   radv_destroy_shader_arenas(device);
-
-   _mesa_hash_table_destroy(device->rt_handles, NULL);
-
-   simple_mtx_destroy(&device->ctx_roll_mtx);
-   simple_mtx_destroy(&device->pstate_mtx);
-   simple_mtx_destroy(&device->trace_mtx);
-   simple_mtx_destroy(&device->rt_handles_mtx);
-   simple_mtx_destroy(&device->pso_cache_stats_mtx);
-   mtx_destroy(&device->overallocation_mutex);
-
-   vk_device_finish(&device->vk);
-   vk_free(&device->vk.alloc, device);
+   radv_destroy_device(device, pAllocator);
    return result;
 }
 
@@ -1374,57 +1399,7 @@ radv_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    if (!device)
       return;
 
-   radv_device_finish_perf_counter(device);
-
-   radv_device_finish_tools(device);
-
-   if (device->gfx_init)
-      radv_bo_destroy(device, NULL, device->gfx_init);
-
-   radv_device_finish_notifier(device);
-   radv_device_finish_vs_prologs(device);
-   if (device->ps_epilogs.ops)
-      radv_shader_part_cache_finish(device, &device->ps_epilogs);
-   radv_device_finish_border_color(device);
-   radv_device_finish_vrs_image(device);
-
-   for (unsigned i = 0; i < RADV_MAX_QUEUE_FAMILIES; i++) {
-      for (unsigned q = 0; q < device->queue_count[i]; q++)
-         radv_queue_finish(&device->queues[i][q]);
-      if (device->queue_count[i])
-         vk_free(&device->vk.alloc, device->queues[i]);
-   }
-   if (device->private_sdma_queue != VK_NULL_HANDLE) {
-      radv_queue_finish(device->private_sdma_queue);
-      vk_free(&device->vk.alloc, device->private_sdma_queue);
-   }
-
-   _mesa_hash_table_destroy(device->rt_handles, NULL);
-
-   radv_device_finish_meta(device);
-
-   radv_device_finish_memory_cache(device);
-
-   radv_destroy_shader_upload_queue(device);
-
-   for (unsigned i = 0; i < RADV_NUM_HW_CTX; i++) {
-      if (device->hw_ctx[i])
-         device->ws->ctx_destroy(device->hw_ctx[i]);
-   }
-
-   mtx_destroy(&device->overallocation_mutex);
-   simple_mtx_destroy(&device->ctx_roll_mtx);
-   simple_mtx_destroy(&device->pstate_mtx);
-   simple_mtx_destroy(&device->trace_mtx);
-   simple_mtx_destroy(&device->rt_handles_mtx);
-   simple_mtx_destroy(&device->pso_cache_stats_mtx);
-
-   radv_destroy_shader_arenas(device);
-   if (device->capture_replay_arena_vas)
-      _mesa_hash_table_u64_destroy(device->capture_replay_arena_vas);
-
-   vk_device_finish(&device->vk);
-   vk_free(&device->vk.alloc, device);
+   radv_destroy_device(device, pAllocator);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1690,11 +1665,10 @@ radv_GetMemoryFdKHR(VkDevice _device, const VkMemoryGetFdInfoKHR *pGetFdInfo, in
     * tiling is VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT, but we set it anyway for foreign consumers.
     */
    if (memory->image) {
-      struct radeon_bo_metadata metadata;
+      struct radv_image *image = memory->image;
 
       assert(memory->image->bindings[0].offset == 0);
-      radv_init_metadata(device, memory->image, &metadata);
-      device->ws->buffer_set_metadata(device->ws, memory->bo, &metadata);
+      radv_image_bo_set_metadata(device, image, memory->bo);
    }
 
    bool ret = device->ws->buffer_get_fd(device->ws, memory->bo, pFD);
@@ -1778,62 +1752,6 @@ radv_GetMemoryFdPropertiesKHR(VkDevice _device, VkExternalMemoryHandleTypeFlagBi
    }
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-radv_GetCalibratedTimestampsKHR(VkDevice _device, uint32_t timestampCount,
-                                const VkCalibratedTimestampInfoKHR *pTimestampInfos, uint64_t *pTimestamps,
-                                uint64_t *pMaxDeviation)
-{
-#ifndef _WIN32
-   VK_FROM_HANDLE(radv_device, device, _device);
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-   uint32_t clock_crystal_freq = pdev->info.clock_crystal_freq;
-   int d;
-   uint64_t begin, end;
-   uint64_t max_clock_period = 0;
-
-#ifdef CLOCK_MONOTONIC_RAW
-   begin = vk_clock_gettime(CLOCK_MONOTONIC_RAW);
-#else
-   begin = vk_clock_gettime(CLOCK_MONOTONIC);
-#endif
-
-   for (d = 0; d < timestampCount; d++) {
-      switch (pTimestampInfos[d].timeDomain) {
-      case VK_TIME_DOMAIN_DEVICE_KHR:
-         pTimestamps[d] = device->ws->query_value(device->ws, RADEON_TIMESTAMP);
-         uint64_t device_period = DIV_ROUND_UP(1000000, clock_crystal_freq);
-         max_clock_period = MAX2(max_clock_period, device_period);
-         break;
-      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR:
-         pTimestamps[d] = vk_clock_gettime(CLOCK_MONOTONIC);
-         max_clock_period = MAX2(max_clock_period, 1);
-         break;
-
-#ifdef CLOCK_MONOTONIC_RAW
-      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR:
-         pTimestamps[d] = begin;
-         break;
-#endif
-      default:
-         pTimestamps[d] = 0;
-         break;
-      }
-   }
-
-#ifdef CLOCK_MONOTONIC_RAW
-   end = vk_clock_gettime(CLOCK_MONOTONIC_RAW);
-#else
-   end = vk_clock_gettime(CLOCK_MONOTONIC);
-#endif
-
-   *pMaxDeviation = vk_time_max_deviation(begin, end, max_clock_period);
-
-   return VK_SUCCESS;
-#else
-   return VK_ERROR_FEATURE_NOT_PRESENT;
-#endif
-}
-
 bool
 radv_device_set_pstate(struct radv_device *device, bool enable)
 {
@@ -1896,8 +1814,8 @@ radv_ReleaseProfilingLockKHR(VkDevice _device)
 }
 
 VKAPI_ATTR void VKAPI_CALL
-radv_GetDeviceImageSubresourceLayoutKHR(VkDevice device, const VkDeviceImageSubresourceInfoKHR *pInfo,
-                                        VkSubresourceLayout2KHR *pLayout)
+radv_GetDeviceImageSubresourceLayout(VkDevice device, const VkDeviceImageSubresourceInfo *pInfo,
+                                     VkSubresourceLayout2 *pLayout)
 {
    UNUSED VkResult result;
    VkImage image;
@@ -1906,7 +1824,7 @@ radv_GetDeviceImageSubresourceLayoutKHR(VkDevice device, const VkDeviceImageSubr
       radv_image_create(device, &(struct radv_image_create_info){.vk_info = pInfo->pCreateInfo}, NULL, &image, true);
    assert(result == VK_SUCCESS);
 
-   radv_GetImageSubresourceLayout2KHR(device, image, pInfo->pSubresource, pLayout);
+   radv_GetImageSubresourceLayout2(device, image, pInfo->pSubresource, pLayout);
 
    radv_DestroyImage(device, image, NULL);
 }

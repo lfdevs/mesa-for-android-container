@@ -92,9 +92,9 @@ anv_queue_init(struct anv_device *device, struct anv_queue *queue,
    }
 
    /* Add a debug fence to wait on submissions if we're using the synchronized
-    * submission feature or the shader-print feature.
+    * submission feature, shader-print feature, or BVH dump.
     */
-   if (INTEL_DEBUG(DEBUG_SYNC | DEBUG_SHADER_PRINT)) {
+   if (INTEL_DEBUG(DEBUG_SYNC | DEBUG_SHADER_PRINT | DEBUG_BVH_ANY)) {
       result = vk_sync_create(&device->vk,
                               &device->physical->sync_syncobj_type,
                               0, 0, &queue->sync);

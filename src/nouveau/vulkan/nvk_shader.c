@@ -482,6 +482,10 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
       };
    }
 
+   nir_opt_access_options opt_access_options = {
+      .is_vulkan = true,
+   };
+   NIR_PASS(_, nir, nir_opt_access, &opt_access_options);
    NIR_PASS(_, nir, nvk_nir_lower_descriptors, pdev, shader_flags, rs,
             set_layout_count, set_layouts, cbuf_map);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_global,
@@ -557,6 +561,10 @@ nvk_compile_nir_with_nak(struct nvk_physical_device *pdev,
       robust2_modes |= nir_var_mem_ssbo;
 
    shader->nak = nak_compile_shader(nir, dump_asm, pdev->nak, robust2_modes, fs_key);
+
+   if (!shader->nak)
+      return vk_errorf(pdev, VK_ERROR_UNKNOWN, "Internal compiler error in NAK");
+
    shader->info = shader->nak->info;
    shader->code_ptr = shader->nak->code;
    shader->code_size = shader->nak->code_size;

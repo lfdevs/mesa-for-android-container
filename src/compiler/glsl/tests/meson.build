@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MIT
 
 general_ir_test_files = files(
-  'array_refcount_test.cpp',
   'builtin_variable_test.cpp',
   'general_ir_test.cpp',
 )
@@ -71,16 +70,6 @@ if meson.can_run_host_binaries()
     ],
     suite : ['compiler', 'glsl'],
     timeout: 60,
-  )
-
-  test(
-    'glsl optimization',
-    prog_python,
-    args : [
-      files('optimization_test.py'),
-      '--test-runner', glsl_test
-    ],
-    suite : ['compiler', 'glsl'],
   )
 endif
 

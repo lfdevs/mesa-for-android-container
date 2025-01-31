@@ -2,10 +2,13 @@
 # shellcheck disable=SC2086 # we want word splitting
 
 set -e
+
+. .gitlab-ci/setup-test-env.sh
+
 set -o xtrace
 
 export DEBIAN_FRONTEND=noninteractive
-export LLVM_VERSION="${LLVM_VERSION:=15}"
+: "${LLVM_VERSION:?llvm version not set!}"
 
 # Ephemeral packages (installed for this script and removed again at the end)
 EPHEMERAL=(

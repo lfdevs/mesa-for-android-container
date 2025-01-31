@@ -33,10 +33,10 @@
 #include "nir.h"
 #include "gl_nir.h"
 #include "gl_nir_linker.h"
+#include "glsl_parser_extras.h"
 #include "glsl_to_nir.h"
 #include "linker_util.h"
 #include "nir_builder.h"
-#include "program.h"
 
 /* The printed-GLSL-IR tests use fmemopen so we can do stdio to memory (or you'd
  * need equivalent tempfiles that you manage).  Just disable this test on those

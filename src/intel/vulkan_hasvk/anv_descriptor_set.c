@@ -1604,8 +1604,7 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
       memcpy(desc_map, &desc_data, sizeof(desc_data));
    }
 
-   if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-       type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+   if (vk_descriptor_type_is_dynamic(type))
       return;
 
    assert(data & ANV_DESCRIPTOR_BUFFER_VIEW);

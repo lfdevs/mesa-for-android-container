@@ -43,7 +43,7 @@ BEGIN_TEST(assembler.branch_3f)
    //! BB0:
    //! s_branch BB1                                                ; bf820040
    //! s_nop 0                                                     ; bf800000
-   bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 1);
+   bld.sopp(aco_opcode::s_branch, 1);
 
    for (unsigned i = 0; i < 0x3f; i++)
       bld.vop1(aco_opcode::v_nop);
@@ -60,21 +60,21 @@ BEGIN_TEST(assembler.long_jump.unconditional_forwards)
       return;
 
    //!BB0:
-   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
-   //! s_getpc_b64 s[0:1]                                          ; be801f00
-   //! s_addc_u32 s0, s0, 0x20014                                  ; 8200ff00 00020014
-   //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
-   //! s_bitset0_b32 s0, 0                                         ; be801b80
-   //! s_setpc_b64 s[0:1]                                          ; be802000
-   bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 2);
+   //! s_branch 16369                                              ; bf823ff1
+   bld.sopp(aco_opcode::s_branch, 2);
 
    bld.reset(program->create_and_insert_block());
 
    //! s_nop 0                                                     ; bf800000
-   //!(then repeated 32767 times)
+   //!(then repeated 16366 times)
    for (unsigned i = 0; i < INT16_MAX + 1; i++)
       bld.sopp(aco_opcode::s_nop, 0);
 
+   //! s_waitcnt_vscnt null, 0x0                                   ; bbfd0000
+   //! s_branch 1                                                  ; bf820001
+   //! s_branch BB2                                                ; bf824011
+   //! s_nop 0                                                     ; bf800000
+   //! (then repeated 16400 times)
    //! BB2:
    //! s_endpgm                                                    ; bf810000
    bld.reset(program->create_and_insert_block());
@@ -91,26 +91,20 @@ BEGIN_TEST(assembler.long_jump.conditional_forwards)
          continue;
 
       //! BB0:
-      //! s_cbranch_scc1 BB1                                          ; $_
-      //~gfx10! s_waitcnt_depctr 0xffe3                               ; $_
-      //! s_getpc_b64 s[0:1]                                          ; $_
-      //~gfx12! s_wait_alu 0xfffe                                     ; $_
-      //~gfx12! s_sext_i32_i16 s1, s1                                 ; $_
-      //~gfx12! s_wait_alu 0xfffe                                     ; $_
-      //~gfx10! s_addc_u32 s0, s0, 0x20014                            ; $_ $_
-      //~gfx12! s_add_co_ci_u32 s0, s0, 0x20028                       ; $_ $_
-      //~gfx12! s_wait_alu 0xfffe                                     ; $_
-      //! s_bitcmp1_b32 s0, 0                                         ; $_
-      //! s_bitset0_b32 s0, 0                                         ; $_
-      //~gfx12! s_wait_alu 0xfffe                                     ; $_
-      //! s_setpc_b64 s[0:1]                                          ; $_
-      bld.sopp(aco_opcode::s_cbranch_scc0, Definition(PhysReg(0), s2), 2);
+      //~gfx10! s_cbranch_scc0 16369                                  ; bf843ff1
+      //~gfx12! s_cbranch_scc0 16368                                  ; bfa13ff0
+      bld.sopp(aco_opcode::s_cbranch_scc0, 2);
 
       bld.reset(program->create_and_insert_block());
 
       //! BB1:
-      //! s_nop 0 ; bf800000
-      //!(then repeated 32767 times)
+      //! s_nop 0                                                     ; bf800000
+      //!(then repeated 16366 times)
+      //~gfx10! s_waitcnt_vscnt null, 0x0                             ; bbfd0000
+      //! s_branch 1                                                  ; $_
+      //! s_branch BB2                                                ; $_
+      //! s_nop 0                                                     ; bf800000
+      //!(then repeated 16400 times)
       for (unsigned i = 0; i < INT16_MAX + 1; i++)
          bld.sopp(aco_opcode::s_nop, 0);
 
@@ -132,17 +126,17 @@ BEGIN_TEST(assembler.long_jump.unconditional_backwards)
 
    //!BB0:
    //! s_nop 0                                                     ; bf800000
-   //!(then repeated 32767 times)
+   //!(then repeated 16367 times)
    for (unsigned i = 0; i < INT16_MAX + 1; i++)
       bld.sopp(aco_opcode::s_nop, 0);
 
-   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
-   //! s_getpc_b64 s[0:1]                                          ; be801f00
-   //! s_addc_u32 s0, s0, 0xfffdfff8                               ; 8200ff00 fffdfff8
-   //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
-   //! s_bitset0_b32 s0, 0                                         ; be801b80
-   //! s_setpc_b64 s[0:1]                                          ; be802000
-   bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 0);
+   //! s_waitcnt_vscnt null, 0x0                                   ; bbfd0000
+   //! s_branch 1                                                  ; bf820001
+   //! s_branch BB0                                                ; bf82c00d
+   //! s_nop 0                                                     ; bf800000
+   //! (then repeated 16399 times)
+   //! s_branch 49134                                              ; bf82bfee
+   bld.sopp(aco_opcode::s_branch, 0);
 
    //! BB1:
    //! s_endpgm                                                    ; bf810000
@@ -160,18 +154,17 @@ BEGIN_TEST(assembler.long_jump.conditional_backwards)
 
    //!BB0:
    //! s_nop 0                                                     ; bf800000
-   //!(then repeated 32767 times)
+   //!(then repeated 16367 times)
    for (unsigned i = 0; i < INT16_MAX + 1; i++)
       bld.sopp(aco_opcode::s_nop, 0);
 
-   //! s_cbranch_execz BB1                                         ; bf880007
-   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
-   //! s_getpc_b64 s[0:1]                                          ; be801f00
-   //! s_addc_u32 s0, s0, 0xfffdfff4                               ; 8200ff00 fffdfff4
-   //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
-   //! s_bitset0_b32 s0, 0                                         ; be801b80
-   //! s_setpc_b64 s[0:1]                                          ; be802000
-   bld.sopp(aco_opcode::s_cbranch_execnz, Definition(PhysReg(0), s2), 0);
+   //! s_waitcnt_vscnt null, 0x0                                   ; bbfd0000
+   //! s_branch 1                                                  ; bf820001
+   //! s_branch BB0                                                ; bf82c00d
+   //! s_nop 0                                                     ; bf800000
+   //!(then repeated 16399 times)
+   //! s_cbranch_execnz 49134                                      ; bf89bfee
+   bld.sopp(aco_opcode::s_cbranch_execnz, 0);
 
    //! BB1:
    //! s_endpgm                                                    ; bf810000
@@ -183,37 +176,12 @@ BEGIN_TEST(assembler.long_jump.conditional_backwards)
    finish_assembler_test();
 END_TEST
 
-BEGIN_TEST(assembler.long_jump._3f)
-   if (!setup_cs(NULL, (amd_gfx_level)GFX10))
-      return;
-
-   //! BB0:
-   //! s_branch BB1                                                ; bf820040
-   //! s_nop 0                                                     ; bf800000
-   bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 1);
-
-   for (unsigned i = 0; i < 0x3f - 7; i++) // an unconditional long jump is 7 dwords
-      bld.vop1(aco_opcode::v_nop);
-   bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 2);
-
-   bld.reset(program->create_and_insert_block());
-   for (unsigned i = 0; i < INT16_MAX + 1; i++)
-      bld.vop1(aco_opcode::v_nop);
-   bld.reset(program->create_and_insert_block());
-
-   program->blocks[1].linear_preds.push_back(0u);
-   program->blocks[2].linear_preds.push_back(0u);
-   program->blocks[2].linear_preds.push_back(1u);
-
-   finish_assembler_test();
-END_TEST
-
 BEGIN_TEST(assembler.long_jump.constaddr)
    if (!setup_cs(NULL, (amd_gfx_level)GFX10))
       return;
 
-   //>> s_getpc_b64 s[0:1]                                          ; be801f00
-   bld.sopp(aco_opcode::s_branch, Definition(PhysReg(0), s2), 2);
+   //>> s_branch 16369                                              ; bf823ff1
+   bld.sopp(aco_opcode::s_branch, 2);
 
    bld.reset(program->create_and_insert_block());
 
@@ -239,20 +207,19 @@ BEGIN_TEST(assembler.long_jump.discard_early_exit)
       return;
 
    //! BB0:
-   //! s_cbranch_scc1 BB1                                          ; bf850007
-   //! s_waitcnt_depctr 0xffe3                                     ; bfa3ffe3
-   //! s_getpc_b64 s[0:1]                                          ; be801f00
-   //! s_addc_u32 s0, s0, 0x20014                                  ; 8200ff00 00020014
-   //! s_bitcmp1_b32 s0, 0                                         ; bf0d8000
-   //! s_bitset0_b32 s0, 0                                         ; be801b80
-   //! s_setpc_b64 s[0:1]                                          ; be802000
+   //! s_cbranch_scc0 16369                                        ; bf843ff1
    bld.sopp(aco_opcode::s_cbranch_scc0, 2);
 
    bld.reset(program->create_and_insert_block());
 
    //! BB1:
    //! s_nop 1                                                     ; bf800001
-   //!(then repeated 32766 times)
+   //! (then repeated 16366 times)
+   //! s_waitcnt_vscnt null, 0x0                                   ; bbfd0000
+   //! s_branch 1                                                  ; bf820001
+   //! s_branch BB2                                                ; bf824011
+   //! s_nop 1                                                     ; bf800001
+   //! (then repeated 16399 times)
    //! s_endpgm                                                    ; bf810000
    for (unsigned i = 0; i < INT16_MAX; i++)
       bld.sopp(aco_opcode::s_nop, 1);

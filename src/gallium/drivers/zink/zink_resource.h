@@ -27,6 +27,7 @@
 #include "zink_types.h"
 
 #define ZINK_MAP_TEMPORARY (PIPE_MAP_DRV_PRV << 0)
+#define ZINK_MAP_QBO (PIPE_MAP_DRV_PRV << 1)
 #define ZINK_BIND_DESCRIPTOR (1u << 27)
 #define ZINK_BIND_MUTABLE (1u << 28)
 #define ZINK_BIND_DMABUF (1u << 29)
@@ -191,6 +192,15 @@ zink_batch_resource_usage_set(struct zink_batch_state *bs, struct zink_resource 
 
 void
 zink_debug_mem_print_stats(struct zink_screen *screen);
+
+static inline void
+zink_resource_reference(struct zink_resource **d, struct zink_resource *s)
+{
+   struct pipe_resource *dst = &(*d)->base.b;
+   struct pipe_resource *src = &s->base.b;
+   pipe_resource_reference(&dst, src);
+   *d = zink_resource(dst);
+}
 
 #ifdef __cplusplus
 }

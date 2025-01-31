@@ -9,13 +9,13 @@
  * profitable.
  *
  * Intel GPUs have a saturate destination modifier, and
- * brw_fs_opt_saturate_propagation tries to replace explicit saturate
+ * brw_opt_saturate_propagation tries to replace explicit saturate
  * operations with this destination modifier. That pass is limited in several
  * ways. If the source of the explicit saturate is in a different block or if
  * the source of the explicit saturate is live after the explicit saturate,
- * brw_fs_opt_saturate_propagation will be unable to make progress.
+ * brw_opt_saturate_propagation will be unable to make progress.
  *
- * This optimization exists to help brw_fs_opt_saturate_propagation make more
+ * This optimization exists to help brw_opt_saturate_propagation make more
  * progress. It tries to move NIR fsat instructions to the same block that
  * contains the definition of its source. It does this only in cases where it
  * will not create additional live values. It also attempts to do this only in
@@ -95,7 +95,7 @@ collect_reaching_defs(nir_alu_instr *fsat, nir_instr_worklist *sources)
    nir_def *def = fsat->src[0].src.ssa;
 
    /* If the source of the fsat is in the same block,
-    * brw_fs_opt_saturate_propagation will already have enough information to
+    * brw_opt_saturate_propagation will already have enough information to
     * do its job. Adding another fsat will not help.
     */
    if (def->parent_instr->type == nir_instr_type_alu &&

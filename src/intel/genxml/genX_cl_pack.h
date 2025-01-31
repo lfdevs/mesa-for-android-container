@@ -10,31 +10,31 @@
 #endif
 
 #if (GFX_VERx10 == 40)
-#  include "genxml/gen4_cl_pack.h"
+#  include "genxml/gen40_cl_pack.h"
 #elif (GFX_VERx10 == 45)
 #  include "genxml/gen45_cl_pack.h"
 #elif (GFX_VERx10 == 50)
-#  include "genxml/gen5_cl_pack.h"
+#  include "genxml/gen50_cl_pack.h"
 #elif (GFX_VERx10 == 60)
-#  include "genxml/gen6_cl_pack.h"
+#  include "genxml/gen60_cl_pack.h"
 #elif (GFX_VERx10 == 70)
-#  include "genxml/gen7_cl_pack.h"
+#  include "genxml/gen70_cl_pack.h"
 #elif (GFX_VERx10 == 75)
 #  include "genxml/gen75_cl_pack.h"
 #elif (GFX_VERx10 == 80)
-#  include "genxml/gen8_cl_pack.h"
+#  include "genxml/gen80_cl_pack.h"
 #elif (GFX_VERx10 == 90)
-#  include "genxml/gen9_cl_pack.h"
+#  include "genxml/gen90_cl_pack.h"
 #elif (GFX_VERx10 == 110)
-#  include "genxml/gen11_cl_pack.h"
+#  include "genxml/gen110_cl_pack.h"
 #elif (GFX_VERx10 == 120)
-#  include "genxml/gen12_cl_pack.h"
+#  include "genxml/gen120_cl_pack.h"
 #elif (GFX_VERx10 == 125)
 #  include "genxml/gen125_cl_pack.h"
 #elif (GFX_VERx10 == 200)
-#  include "genxml/gen20_cl_pack.h"
+#  include "genxml/gen200_cl_pack.h"
 #elif (GFX_VERx10 == 300)
-#  include "genxml/gen30_cl_pack.h"
+#  include "genxml/gen300_cl_pack.h"
 #else
 #  error "Need to add a pack header include for this gen"
 #endif

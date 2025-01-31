@@ -120,7 +120,7 @@ fs_live_variables::setup_def_use()
             if (reg.file != VGRF)
                continue;
 
-            for (unsigned j = 0; j < regs_read(inst, i); j++) {
+            for (unsigned j = 0; j < regs_read(devinfo, inst, i); j++) {
                setup_one_read(bd, ip, reg);
                reg.offset += REG_SIZE;
             }
@@ -342,7 +342,7 @@ fs_live_variables::validate(const fs_visitor *s) const
       for (unsigned i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF &&
              !check_register_live_range(this, ip,
-                                        inst->src[i], regs_read(inst, i)))
+                                        inst->src[i], regs_read(devinfo, inst, i)))
             return false;
       }
 

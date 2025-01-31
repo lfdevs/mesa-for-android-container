@@ -89,6 +89,9 @@ const char *executor_apply_macros(executor_context *ec, const char *original_src
 #  define genX(x) gfx20_##x
 #  include "executor_genx.h"
 #  undef genX
+#  define genX(x) gfx30_##x
+#  include "executor_genx.h"
+#  undef genX
 #endif
 
 #endif /* EXECUTOR_H */

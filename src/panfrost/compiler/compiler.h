@@ -34,6 +34,7 @@
 #include "util/u_worklist.h"
 #include "bi_opcodes.h"
 #include "bifrost.h"
+#include "valhall_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -473,9 +474,11 @@ typedef struct {
       bool format;               /* LEA_TEX */
 
       struct {
-         enum bi_special special; /* FADD_RSCALE, FMA_RSCALE */
-         enum bi_round round;     /* FMA, converts, FADD, _RSCALE, etc */
-         bool ftz;                /* Flush-to-zero for F16_TO_F32 */
+         enum bi_special special;   /* FADD_RSCALE, FMA_RSCALE */
+         enum bi_round round;       /* FMA, converts, FADD, _RSCALE, etc */
+         bool ftz;                  /* Flush-to-zero for F16_TO_F32 and FLUSH */
+         enum va_nan_mode nan_mode; /* NaN flush mode, for FLUSH */
+         bool flush_inf;            /* Flush infinity to finite, for FLUSH */
       };
 
       struct {

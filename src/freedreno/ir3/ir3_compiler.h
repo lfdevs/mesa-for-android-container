@@ -204,6 +204,9 @@ struct ir3_compiler {
     */
    bool has_shfl;
 
+   /* True if the bitwise triops (sh[lr][gm]/andg) are supported. */
+   bool has_bitwise_triops;
+
    /* Number of available predicate registers (p0.c) */
    uint32_t num_predicates;
 
@@ -215,6 +218,8 @@ struct ir3_compiler {
 
    /* True if predt/predf/prede are supported. */
    bool has_predication;
+   bool predtf_nop_quirk;
+   bool prede_nop_quirk;
 
    /* MAX_COMPUTE_VARIABLE_GROUP_INVOCATIONS_ARB */
    uint32_t max_variable_workgroup_size;
@@ -276,6 +281,34 @@ struct ir3_compiler {
 
    /* True if (rptN) is supported for bary.f. */
    bool has_rpt_bary_f;
+
+   /* True if alias.tex is supported. */
+   bool has_alias_tex;
+
+   /* True if alias.rt is supported. */
+   bool has_alias_rt;
+
+   bool reading_shading_rate_requires_smask_quirk;
+
+   struct {
+      /* The number of cycles needed for the result of one ALU operation to be
+       * available to another ALU operation. Only valid when the halfness of the
+       * source and destination match.
+       */
+      unsigned alu_to_alu;
+
+      /* The number of cycles needed for the result of one instruction to be
+       * available to another. Valid for a0.x, a1.x, and p0.c destinations, ALU
+       * to non-ALU dependencies, and ALU to ALU dependencies witch mismatched
+       * halfness.
+       */
+      unsigned non_alu;
+
+      /* The number of cycles from the start of the instruction until a cat3
+       * instruction reads its 3rd src.
+       */
+      unsigned cat3_src2_read;
+   } delay_slots;
 };
 
 void ir3_compiler_destroy(struct ir3_compiler *compiler);
@@ -335,6 +368,8 @@ enum ir3_shader_debug {
    /* MESA_DEBUG-only options: */
    IR3_DBG_SCHEDMSGS = BITFIELD_BIT(20),
    IR3_DBG_RAMSGS = BITFIELD_BIT(21),
+   IR3_DBG_NOALIASTEX = BITFIELD_BIT(22),
+   IR3_DBG_NOALIASRT = BITFIELD_BIT(23),
 };
 
 extern enum ir3_shader_debug ir3_shader_debug;
@@ -376,6 +411,21 @@ ir3_debug_print(struct ir3 *ir, const char *when)
       mesa_logi("%s:", when);
       ir3_print(ir);
    }
+}
+
+/* Return the debug flags that influence shader codegen and should be included
+ * in the hash key. Note that we use a deny list so that we don't accidentally
+ * forget to include new flags.
+ */
+static inline enum ir3_shader_debug
+ir3_shader_debug_hash_key()
+{
+   return (enum ir3_shader_debug)(
+      ir3_shader_debug &
+      ~(IR3_DBG_SHADER_VS | IR3_DBG_SHADER_TCS | IR3_DBG_SHADER_TES |
+        IR3_DBG_SHADER_GS | IR3_DBG_SHADER_FS | IR3_DBG_SHADER_CS |
+        IR3_DBG_DISASM | IR3_DBG_OPTMSGS | IR3_DBG_NOCACHE |
+        IR3_DBG_SHADER_INTERNAL | IR3_DBG_SCHEDMSGS | IR3_DBG_RAMSGS));
 }
 
 ENDC;

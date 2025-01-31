@@ -27,8 +27,7 @@
  * The vec4 mode tessellation evaluation shader compiler backend.
  */
 
-#ifndef ELK_VEC4_TES_H
-#define ELK_VEC4_TES_H
+#pragma once
 
 #include "elk_vec4.h"
 
@@ -61,5 +60,3 @@ private:
 
 } /* namespace elk */
 #endif /* __cplusplus */
-
-#endif /* ELK_VEC4_TES_H */

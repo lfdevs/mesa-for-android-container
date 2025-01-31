@@ -178,6 +178,11 @@
     - .broadcom-test:arm64
     - .baremetal-arm64-asan-test
 
+.broadcom-ubsan-test:arm64:
+  extends:
+    - .broadcom-test:arm64
+    - .baremetal-arm64-ubsan-test
+
 .broadcom-test:arm32:
   extends:
     - .broadcom-test

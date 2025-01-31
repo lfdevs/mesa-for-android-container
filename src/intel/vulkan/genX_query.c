@@ -1052,19 +1052,19 @@ emit_perf_intel_query(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
-static void
-emit_query_clear_flush(struct anv_cmd_buffer *cmd_buffer,
-                       struct anv_query_pool *pool,
-                       const char *reason)
+static bool
+append_query_clear_flush(struct anv_cmd_buffer *cmd_buffer,
+                         struct anv_query_pool *pool,
+                         const char *reason)
 {
    if (cmd_buffer->state.queries.clear_bits == 0)
-      return;
+      return false;
 
    anv_add_pending_pipe_bits(cmd_buffer,
                              ANV_PIPE_QUERY_BITS(
                                 cmd_buffer->state.queries.clear_bits),
                              reason);
-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+   return true;
 }
 
 
@@ -1079,7 +1079,9 @@ void genX(CmdBeginQueryIndexedEXT)(
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
    struct anv_address query_addr = anv_query_address(pool, query);
 
-   emit_query_clear_flush(cmd_buffer, pool, "CmdBeginQuery* flush query clears");
+   if (append_query_clear_flush(cmd_buffer, pool,
+                                "CmdBeginQuery* flush query clears"))
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    struct mi_builder b;
    mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);
@@ -1532,8 +1534,9 @@ void genX(CmdWriteTimestamp2)(
 
    assert(pool->vk.query_type == VK_QUERY_TYPE_TIMESTAMP);
 
-   emit_query_clear_flush(cmd_buffer, pool,
-                          "CmdWriteTimestamp flush query clears");
+   if (append_query_clear_flush(cmd_buffer, pool,
+                                "CmdWriteTimestamp flush query clears"))
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    struct mi_builder b;
    mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);
@@ -2014,8 +2017,12 @@ void genX(CmdCopyQueryPoolResults)(
 
 #if GFX_VERx10 >= 125 && ANV_SUPPORT_RT
 
+#if ANV_SUPPORT_RT_GRL
 #include "grl/include/GRLRTASCommon.h"
 #include "grl/grl_metakernel_postbuild_info.h"
+#else
+#include "bvh/anv_bvh.h"
+#endif
 
 void
 genX(CmdWriteAccelerationStructuresPropertiesKHR)(
@@ -2026,20 +2033,31 @@ genX(CmdWriteAccelerationStructuresPropertiesKHR)(
     VkQueryPool                                 queryPool,
     uint32_t                                    firstQuery)
 {
-   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
-
    assert(queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR ||
           queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR ||
           queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR ||
           queryType == VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR);
 
-   emit_query_clear_flush(cmd_buffer, pool,
-                          "CmdWriteAccelerationStructuresPropertiesKHR flush query clears");
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
+
+#if !ANV_SUPPORT_RT_GRL
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_END_OF_PIPE_SYNC_BIT |
+                             ANV_PIPE_DATA_CACHE_FLUSH_BIT,
+                             "read BVH data using CS");
+#endif
+
+   if (append_query_clear_flush(
+          cmd_buffer, pool,
+          "CmdWriteAccelerationStructuresPropertiesKHR flush query clears") ||
+       !ANV_SUPPORT_RT_GRL)
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    struct mi_builder b;
    mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);
 
+#if ANV_SUPPORT_RT_GRL
    for (uint32_t i = 0; i < accelerationStructureCount; i++) {
       ANV_FROM_HANDLE(vk_acceleration_structure, accel, pAccelerationStructures[i]);
       struct anv_address query_addr =
@@ -2081,5 +2099,47 @@ genX(CmdWriteAccelerationStructuresPropertiesKHR)(
 
    for (uint32_t i = 0; i < accelerationStructureCount; i++)
       emit_query_mi_availability(&b, anv_query_address(pool, firstQuery + i), true);
+
+#else
+   for (uint32_t i = 0; i < accelerationStructureCount; i++) {
+      ANV_FROM_HANDLE(vk_acceleration_structure, accel, pAccelerationStructures[i]);
+      struct anv_address query_addr =
+         anv_address_add(anv_query_address(pool, firstQuery + i), 8);
+      uint64_t va = vk_acceleration_structure_get_va(accel);
+
+      mi_builder_set_write_check(&b, (i == (accelerationStructureCount - 1)));
+
+      switch (queryType) {
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+         va += offsetof(struct anv_accel_struct_header, compacted_size);
+         break;
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
+         va += offsetof(struct anv_accel_struct_header, size);
+         break;
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+         va += offsetof(struct anv_accel_struct_header, serialization_size);
+         break;
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+         va += offsetof(struct anv_accel_struct_header, instance_count);
+         /* To respect current set up tailored for GRL, the numBlasPtrs are
+          * stored at the second slot (third slot, if you count availability)
+          */
+         query_addr = anv_address_add(query_addr, 8);
+         break;
+      default:
+         unreachable("unhandled query type");
+      }
+
+      mi_store(&b, mi_mem64(query_addr), mi_mem64(anv_address_from_u64(va)));
+   }
+
+   struct mi_builder b1;
+   mi_builder_init(&b1, cmd_buffer->device->info, &cmd_buffer->batch);
+
+   for (uint32_t i = 0; i < accelerationStructureCount; i++) {
+      mi_builder_set_write_check(&b1, (i == (accelerationStructureCount - 1)));
+      emit_query_mi_availability(&b1, anv_query_address(pool, firstQuery + i), true);
+   }
+#endif /* ANV_SUPPORT_RT_GRL */
 }
-#endif
+#endif /* GFX_VERx10 >= 125 && ANV_SUPPORT_RT */

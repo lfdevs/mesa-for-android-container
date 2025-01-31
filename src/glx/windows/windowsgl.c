@@ -55,10 +55,10 @@ windows_glapi_create_table(void)
    assert(windows_api);
 }
 
-static void windows_glapi_set_dispatch(void)
+static void windows_mesa_glapi_set_dispatch(void)
 {
    windows_glapi_create_table();
-   _glapi_set_dispatch(windows_api);
+   _mesa_glapi_set_dispatch(windows_api);
 }
 
 windowsContext *
@@ -233,7 +233,7 @@ int windows_bind_context(windowsContext *context, windowsDrawable *draw, windows
 
    draw->callbacks->releasedc(draw, drawDc);
 
-   windows_glapi_set_dispatch();
+   windows_mesa_glapi_set_dispatch();
 
    return true;
 }

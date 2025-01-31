@@ -196,6 +196,7 @@ public:
       s_wqm = (unsigned) aco_opcode::s_wqm_b64,
       s_and_saveexec = (unsigned) aco_opcode::s_and_saveexec_b64,
       s_or_saveexec = (unsigned) aco_opcode::s_or_saveexec_b64,
+      s_andn2_wrexec = (unsigned) aco_opcode::s_andn2_wrexec_b64,
       s_xnor = (unsigned) aco_opcode::s_xnor_b64,
       s_xor = (unsigned) aco_opcode::s_xor_b64,
       s_bcnt1_i32 = (unsigned) aco_opcode::s_bcnt1_i32_b64,
@@ -339,6 +340,8 @@ public:
          return aco_opcode::s_and_saveexec_b32;
       case s_or_saveexec:
          return aco_opcode::s_or_saveexec_b32;
+      case s_andn2_wrexec:
+         return aco_opcode::s_andn2_wrexec_b32;
       case s_xnor:
          return aco_opcode::s_xnor_b32;
       case s_xor:
@@ -555,7 +558,7 @@ formats = [("pseudo", [Format.PSEUDO], list(itertools.product(range(5), range(6)
            ("sop1", [Format.SOP1], [(0, 1), (1, 0), (1, 1), (2, 1), (3, 2)]),
            ("sop2", [Format.SOP2], itertools.product([1, 2], [2, 3])),
            ("sopk", [Format.SOPK], itertools.product([0, 1, 2], [0, 1])),
-           ("sopp", [Format.SOPP], itertools.product([0, 1], [0, 1])),
+           ("sopp", [Format.SOPP], [(0, 0), (0, 1)]),
            ("sopc", [Format.SOPC], [(1, 2)]),
            ("smem", [Format.SMEM], [(0, 4), (0, 3), (1, 0), (1, 3), (1, 2), (1, 1), (0, 0)]),
            ("ds", [Format.DS], [(1, 0), (1, 1), (1, 2), (1, 3), (0, 3), (0, 4)]),
@@ -564,10 +567,10 @@ formats = [("pseudo", [Format.PSEUDO], list(itertools.product(range(5), range(6)
            ("mtbuf", [Format.MTBUF], [(0, 4), (1, 3)]),
            ("mimg", [Format.MIMG], itertools.product([0, 1], [3, 4, 5, 6, 7])),
            ("exp", [Format.EXP], [(0, 4), (0, 5)]),
-           ("branch", [Format.PSEUDO_BRANCH], itertools.product([1], [0, 1])),
+           ("branch", [Format.PSEUDO_BRANCH], [(0, 0), (0, 1)]),
            ("barrier", [Format.PSEUDO_BARRIER], [(0, 0)]),
            ("reduction", [Format.PSEUDO_REDUCTION], [(3, 3)]),
-           ("vop1", [Format.VOP1], [(0, 0), (1, 1), (2, 2)]),
+           ("vop1", [Format.VOP1], [(0, 0), (1, 1), (1, 2), (2, 2)]),
            ("vop1_sdwa", [Format.VOP1, Format.SDWA], [(1, 1)]),
            ("vop2", [Format.VOP2], itertools.product([1, 2], [2, 3])),
            ("vop2_sdwa", [Format.VOP2, Format.SDWA], itertools.product([1, 2], [2, 3])),

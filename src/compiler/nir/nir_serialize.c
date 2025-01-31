@@ -1959,7 +1959,7 @@ write_function(write_ctx *ctx, const nir_function *fxn)
       flags |= 0x1;
    if (fxn->is_preamble)
       flags |= 0x2;
-   if (fxn->name)
+   if (fxn->name && !ctx->strip)
       flags |= 0x4;
    if (fxn->impl)
       flags |= 0x8;
@@ -1971,9 +1971,19 @@ write_function(write_ctx *ctx, const nir_function *fxn)
       flags |= 0x40;
    if (fxn->is_tmp_globals_wrapper)
       flags |= 0x80;
+   if (fxn->workgroup_size[0] || fxn->workgroup_size[1] || fxn->workgroup_size[2])
+      flags |= 0x100;
    blob_write_uint32(ctx->blob, flags);
-   if (fxn->name)
+   if (fxn->name && !ctx->strip)
       blob_write_string(ctx->blob, fxn->name);
+
+   if (flags & 0x100) {
+      blob_write_uint32(ctx->blob, fxn->workgroup_size[0]);
+      blob_write_uint32(ctx->blob, fxn->workgroup_size[1]);
+      blob_write_uint32(ctx->blob, fxn->workgroup_size[2]);
+   }
+
+   blob_write_uint32(ctx->blob, fxn->driver_attributes);
 
    blob_write_uint32(ctx->blob, fxn->subroutine_index);
    blob_write_uint32(ctx->blob, fxn->num_subroutine_types);
@@ -1988,9 +1998,22 @@ write_function(write_ctx *ctx, const nir_function *fxn)
       uint32_t val =
          ((uint32_t)fxn->params[i].num_components) |
          ((uint32_t)fxn->params[i].bit_size) << 8;
+
+      bool has_name = fxn->params[i].name && !ctx->strip;
+      if (has_name)
+         val |= 0x10000;
+
+      if (fxn->params[i].is_return)
+         val |= (1u << 17);
+      if (fxn->params[i].is_uniform)
+         val |= (1u << 18);
       blob_write_uint32(ctx->blob, val);
+      if (has_name)
+         blob_write_string(ctx->blob, fxn->params[i].name);
+
       encode_type_to_blob(ctx->blob, fxn->params[i].type);
       blob_write_uint32(ctx->blob, encode_deref_modes(fxn->params[i].mode));
+      blob_write_uint32(ctx->blob, fxn->params[i].driver_attributes);
    }
 
    /* At first glance, it looks like we should write the function_impl here.
@@ -2010,6 +2033,13 @@ read_function(read_ctx *ctx)
 
    nir_function *fxn = nir_function_create(ctx->nir, name);
 
+   if (flags & 0x100) {
+      fxn->workgroup_size[0] = blob_read_uint32(ctx->blob);
+      fxn->workgroup_size[1] = blob_read_uint32(ctx->blob);
+      fxn->workgroup_size[2] = blob_read_uint32(ctx->blob);
+   }
+
+   fxn->driver_attributes = blob_read_uint32(ctx->blob);
    fxn->subroutine_index = blob_read_uint32(ctx->blob);
    fxn->num_subroutine_types = blob_read_uint32(ctx->blob);
    for (unsigned i = 0; i < fxn->num_subroutine_types; i++) {
@@ -2019,13 +2049,20 @@ read_function(read_ctx *ctx)
    read_add_object(ctx, fxn);
 
    fxn->num_params = blob_read_uint32(ctx->blob);
-   fxn->params = ralloc_array(fxn, nir_parameter, fxn->num_params);
+   fxn->params = rzalloc_array(fxn, nir_parameter, fxn->num_params);
    for (unsigned i = 0; i < fxn->num_params; i++) {
       uint32_t val = blob_read_uint32(ctx->blob);
+      bool has_name = (val & 0x10000);
+      if (has_name)
+         fxn->params[i].name = blob_read_string(ctx->blob);
+
       fxn->params[i].num_components = val & 0xff;
       fxn->params[i].bit_size = (val >> 8) & 0xff;
+      fxn->params[i].is_return = val & (1u << 16);
+      fxn->params[i].is_uniform = val & (1u << 17);
       fxn->params[i].type = decode_type_from_blob(ctx->blob);
       fxn->params[i].mode = decode_deref_modes(blob_read_uint32(ctx->blob));
+      fxn->params[i].driver_attributes = blob_read_uint32(ctx->blob);
    }
 
    fxn->is_entrypoint = flags & 0x1;
@@ -2120,7 +2157,7 @@ nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
    write_xfb_info(&ctx, nir->xfb_info);
 
    if (nir->info.uses_printf)
-      nir_serialize_printf_info(blob, nir->printf_info, nir->printf_info_count);
+      u_printf_serialize_info(blob, nir->printf_info, nir->printf_info_count);
 
    blob_overwrite_uint32(blob, idx_size_offset, ctx.next_idx);
 
@@ -2181,8 +2218,8 @@ nir_deserialize(void *mem_ctx,
 
    if (ctx.nir->info.uses_printf) {
       ctx.nir->printf_info =
-         nir_deserialize_printf_info(ctx.nir, blob,
-                                     &ctx.nir->printf_info_count);
+         u_printf_deserialize_info(ctx.nir, blob,
+                                   &ctx.nir->printf_info_count);
    }
 
    free(ctx.idx_table);
@@ -2216,46 +2253,4 @@ nir_shader_serialize_deserialize(nir_shader *shader)
 
    nir_shader_replace(shader, copy);
    ralloc_free(dead_ctx);
-}
-
-void
-nir_serialize_printf_info(struct blob *blob,
-                          const u_printf_info *printf_info,
-                          unsigned printf_info_count)
-{
-   blob_write_uint32(blob, printf_info_count);
-   for (int i = 0; i < printf_info_count; i++) {
-      const u_printf_info *info = &printf_info[i];
-      blob_write_uint32(blob, info->num_args);
-      blob_write_uint32(blob, info->string_size);
-      blob_write_bytes(blob, info->arg_sizes,
-                       info->num_args * sizeof(info->arg_sizes[0]));
-      /* we can't use blob_write_string, because it contains multiple NULL
-       * terminated strings */
-      blob_write_bytes(blob, info->strings, info->string_size);
-   }
-}
-
-u_printf_info *
-nir_deserialize_printf_info(void *mem_ctx,
-                            struct blob_reader *blob,
-                            unsigned *printf_info_count)
-{
-   *printf_info_count = blob_read_uint32(blob);
-
-   u_printf_info *printf_info =
-      ralloc_array(mem_ctx, u_printf_info, *printf_info_count);
-
-   for (int i = 0; i < *printf_info_count; i++) {
-      u_printf_info *info = &printf_info[i];
-      info->num_args = blob_read_uint32(blob);
-      info->string_size = blob_read_uint32(blob);
-      info->arg_sizes = ralloc_array(mem_ctx, unsigned, info->num_args);
-      blob_copy_bytes(blob, info->arg_sizes,
-                      info->num_args * sizeof(info->arg_sizes[0]));
-      info->strings = ralloc_array(mem_ctx, char, info->string_size);
-      blob_copy_bytes(blob, info->strings, info->string_size);
-   }
-
-   return printf_info;
 }

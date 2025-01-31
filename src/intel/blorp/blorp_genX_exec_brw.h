@@ -285,12 +285,23 @@ emit_urb_config(struct blorp_batch *batch,
    blorp_pre_emit_urb_config(batch, &urb_cfg);
 
    for (int i = 0; i <= MESA_SHADER_GEOMETRY; i++) {
+#if GFX_VER >= 12
+      blorp_emit(batch, GENX(3DSTATE_URB_ALLOC_VS), urb) {
+         urb._3DCommandSubOpcode            += i;
+         urb.VSURBEntryAllocationSize        = urb_cfg.size[i] - 1;
+         urb.VSURBStartingAddressSlice0      = urb_cfg.start[i];
+         urb.VSURBStartingAddressSliceN      = urb_cfg.start[i];
+         urb.VSNumberofURBEntriesSlice0      = urb_cfg.entries[i];
+         urb.VSNumberofURBEntriesSliceN      = urb_cfg.entries[i];
+      }
+#else
       blorp_emit(batch, GENX(3DSTATE_URB_VS), urb) {
          urb._3DCommandSubOpcode      += i;
          urb.VSURBStartingAddress      = urb_cfg.start[i];
          urb.VSURBEntryAllocationSize  = urb_cfg.size[i] - 1;
          urb.VSNumberofURBEntries      = urb_cfg.entries[i];
       }
+#endif
    }
 
    if (batch->blorp->config.use_mesh_shading) {
@@ -683,6 +694,10 @@ blorp_emit_vs_config(struct blorp_batch *batch,
 #if GFX_VER < 20
          vs.SIMD8DispatchEnable = true;
 #endif
+
+#if GFX_VER >= 30
+         vs.RegistersPerThread = ptl_register_blocks(vs_prog_data->base.base.grf_used);
+#endif
       }
    }
 }
@@ -793,30 +808,31 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          ps.RenderTargetResolveType = RESOLVE_PARTIAL;
          break;
       case ISL_AUX_OP_FULL_RESOLVE:
-         /* WA 1406738321:
-          * In-place full resolve of a 3D/Volume surface is not supported.
-          * In order to fully resolve 3D/volume surface, copy operation must be
-          * performed to a new destination (declared as uncompressed) using the
-          * compressed 3D surface as a source.
-          */
-#if GFX_VERx10 == 120
-         assert(params->src.surf.dim != ISL_SURF_DIM_3D);
-#endif
          ps.RenderTargetResolveType = RESOLVE_FULL;
          break;
 #endif /* GFX_VER < 20 */
       case ISL_AUX_OP_FAST_CLEAR:
-         /* WA 1406738321:
-          * 3D/Volumetric surfaces do not support Fast Clear operation.
-          */
-#if GFX_VERx10 == 120
-         assert(params->dst.surf.dim != ISL_SURF_DIM_3D);
-#endif
          ps.RenderTargetFastClearEnable = true;
          break;
       default:
          unreachable("Invalid fast clear op");
       }
+
+#if GFX_VERx10 == 120
+      /* The 3DSTATE_PS_BODY page for TGL says:
+       *
+       *   3D/Volumetric surfaces do not support Fast Clear operation.
+       *
+       *   [...]
+       *
+       *   3D/Volumetric surfaces do not support in-place resolve pass
+       *   operation.
+       *
+       * HSD 1406738321 suggests a more limited scope of restrictions, but
+       * there should be no harm in complying with the Bspec restrictions.
+       */
+      if (params->dst.surf.dim == ISL_SURF_DIM_3D)
+         assert(params->fast_clear_op == ISL_AUX_OP_NONE);
 
       /* The RENDER_SURFACE_STATE page for TGL says:
        *
@@ -829,11 +845,6 @@ blorp_emit_ps_config(struct blorp_batch *batch,
        * Due to the surface layout parameters, if LOD0's width isn't a
        * multiple of 64px, LOD1 and LOD2+ will share CCS elements. Assert that
        * these operations aren't occurring on these LODs.
-       *
-       * We don't explicitly check for TGL+ because the restriction is
-       * technically applicable to all hardware. Platforms prior to TGL don't
-       * support CCS on 8 bpp surfaces. So, these unaligned fast clear
-       * operations shouldn't be occurring prior to TGL as well.
        */
       if (isl_format_get_layout(params->dst.surf.format)->bpb == 8 &&
           params->dst.surf.logical_level0_px.width % 64 != 0 &&
@@ -842,6 +853,24 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          assert(params->num_samples == 1);
          assert(!ps.RenderTargetFastClearEnable);
       }
+
+      /* From the TGL BSpec 44930 (r47128):
+       *
+       *   Compression of 3D Ys surfaces with 64 or 128 bpp is not supported
+       *   in Gen12. Moreover, "Render Target Fast-clear Enable" command is
+       *   not supported for any 3D Ys surfaces. except when Surface is a
+       *   Procdural Texture.
+       *
+       * It's not clear where the exception applies, but either way, we don't
+       * support Procedural Textures.
+       */
+      if (params->dst.surf.dim == ISL_SURF_DIM_3D &&
+          params->dst.surf.tiling == ISL_TILING_ICL_Ys &&
+          isl_format_get_layout(params->dst.surf.format)->bpb >= 64) {
+         assert(params->dst.aux_usage != ISL_AUX_USAGE_CCS_D);
+         assert(!ps.RenderTargetFastClearEnable);
+      }
+#endif
 
       if (prog_data) {
          intel_set_ps_dispatch_state(&ps, devinfo, prog_data,
@@ -864,6 +893,10 @@ blorp_emit_ps_config(struct blorp_batch *batch,
 #if GFX_VER < 20
          ps.KernelStartPointer2 = params->wm_prog_kernel +
                                   brw_wm_prog_data_prog_offset(prog_data, ps, 2);
+#endif
+
+#if GFX_VER >= 30
+         ps.RegistersPerThread = ptl_register_blocks(prog_data->base.grf_used);
 #endif
       }
    }
@@ -1442,6 +1475,18 @@ blorp_emit_gfx8_hiz_op(struct blorp_batch *batch,
    if (params->depth.enabled && params->hiz_op == ISL_AUX_OP_FAST_CLEAR)
       blorp_emit_cc_viewport(batch);
 
+   /* Make sure to disable fragment shader, a previous draw might have enabled
+    * a SIMD32 shader and we could be dispatching threads here with MSAA 16x
+    * which does not support SIMD32.
+    *
+    * dEQP-VK.pipeline.monolithic.multisample.misc.clear_attachments.
+    * r8g8b8a8_unorm_r16g16b16a16_sfloat_r32g32b32a32_uint_d16_unorm.
+    * 16x.ds_resolve_sample_zero.sub_framebuffer
+    * exercises this case.
+    */
+   blorp_emit(batch, GENX(3DSTATE_PS), ps);
+   blorp_emit(batch, GENX(3DSTATE_PS_EXTRA), psx);
+
    /* According to the SKL PRM formula for WM_INT::ThreadDispatchEnable, the
     * 3DSTATE_WM::ForceThreadDispatchEnable field can force WM thread dispatch
     * even when WM_HZ_OP is active.  However, WM thread dispatch is normally
@@ -1674,7 +1719,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
       .ThreadGroupIDXDimension        = group_x1,
       .ThreadGroupIDYDimension        = group_y1,
       .ThreadGroupIDZDimension        = group_z1,
-      .ExecutionMask                  = 0xffffffff,
+      .ExecutionMask                  = dispatch.right_mask,
       .PostSync.MOCS                  = isl_mocs(batch->blorp->isl_dev, 0, false),
 
       .IndirectDataStartAddress       = push_const_offset,
@@ -1703,6 +1748,9 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
                                                          dispatch.group_size,
                                                          dispatch.simd_size),
          .NumberOfBarriers = cs_prog_data->uses_barrier,
+#if GFX_VER >= 30
+         .RegistersPerThread = ptl_register_blocks(prog_data->grf_used),
+#endif
       },
    };
 

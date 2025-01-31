@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef BRW_ASM_H
-#define BRW_ASM_H
+#pragma once
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -25,5 +24,3 @@ typedef enum {
 brw_assemble_result brw_assemble(
    void *mem_ctx, const struct intel_device_info *devinfo,
    FILE *f, const char *filename, brw_assemble_flags flags);
-
-#endif /* BRW_ASM_H */

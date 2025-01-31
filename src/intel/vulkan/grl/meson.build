@@ -1,8 +1,6 @@
 # Copyright © 2021 Intel Corporation
 # SPDX-License-Identifier: MIT
 
-fs = import('fs')
-
 grl_lib_files = [
   'gpu/libs/libraries.grl',
 ]

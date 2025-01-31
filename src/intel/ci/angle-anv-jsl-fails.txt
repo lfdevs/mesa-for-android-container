@@ -68,4 +68,30 @@ dEQP-GLES2.functional.fbo.render.stencil_clear.rbo_bgra_depth_component16_stenci
 dEQP-GLES3.functional.fbo.completeness.renderable.renderbuffer.color0.bgra,Fail
 
 # new with ANGLE 2024-10-17
+KHR-GLES31.core.blend_equation_advanced.test_coherency.multiplySequence,Fail
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreVS,Fail
+KHR-GLES31.core.shader_image_load_store.advanced-cast-cs,Crash
+KHR-GLES31.core.shader_image_load_store.advanced-cast-fs,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8i,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8ui,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_rgba8ui,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_r32f,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_rgba8i,Crash
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_rgba8ui,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32i,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32ui,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_rgba8_snorm,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_rgba8i,Crash
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_rgba8ui,Crash

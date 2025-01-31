@@ -21,8 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef BRW_NIR_RT_H
-#define BRW_NIR_RT_H
+#pragma once
 
 #include "brw_nir.h"
 #include "brw_rt.h"
@@ -72,5 +71,3 @@ brw_nir_create_trivial_return_shader(const struct brw_compiler *compiler,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* BRW_NIR_RT_H */

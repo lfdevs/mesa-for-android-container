@@ -73,14 +73,6 @@ create_kmod_dev(struct panvk_physical_device *device,
 
    drmFreeVersion(version);
 
-   if (!getenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER")) {
-      close(fd);
-      return panvk_errorf(
-         instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-         "WARNING: panvk is not a conformant vulkan implementation, "
-         "pass PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1 if you know what you're doing.");
-   }
-
    if (instance->debug_flags & PANVK_DEBUG_STARTUP)
       vk_logi(VK_LOG_NO_OBJS(instance), "Found compatible device '%s'.", path);
 
@@ -182,14 +174,18 @@ static void
 get_device_extensions(const struct panvk_physical_device *device,
                       struct vk_device_extension_table *ext)
 {
+   const unsigned arch = pan_arch(device->kmod.props.gpu_prod_id);
+
    *ext = (struct vk_device_extension_table){
+      .KHR_8bit_storage = true,
       .KHR_16bit_storage = true,
       .KHR_bind_memory2 = true,
       .KHR_buffer_device_address = true,
       .KHR_copy_commands2 = true,
       .KHR_create_renderpass2 = true,
-      .KHR_device_group = true,
+      .KHR_dedicated_allocation = true,
       .KHR_descriptor_update_template = true,
+      .KHR_device_group = true,
       .KHR_driver_properties = true,
       .KHR_dynamic_rendering = true,
       .KHR_external_fence = true,
@@ -199,16 +195,25 @@ get_device_extensions(const struct panvk_physical_device *device,
       .KHR_external_semaphore = true,
       .KHR_external_semaphore_fd = true,
       .KHR_get_memory_requirements2 = true,
+      .KHR_global_priority = true,
       .KHR_image_format_list = true,
+      .KHR_index_type_uint8 = true,
       .KHR_maintenance1 = true,
       .KHR_maintenance2 = true,
       .KHR_maintenance3 = true,
+      .KHR_map_memory2 = true,
+      .KHR_multiview = arch >= 10,
       .KHR_pipeline_executable_properties = true,
       .KHR_pipeline_library = true,
       .KHR_push_descriptor = true,
       .KHR_relaxed_block_layout = true,
       .KHR_sampler_mirror_clamp_to_edge = true,
+      .KHR_shader_draw_parameters = true,
       .KHR_shader_expect_assume = true,
+      .KHR_shader_float16_int8 = true,
+      .KHR_shader_non_semantic_info = true,
+      .KHR_shader_relaxed_extended_instruction = true,
+      .KHR_shader_subgroup_rotate = true,
       .KHR_storage_buffer_storage_class = true,
 #ifdef PANVK_USE_WSI_PLATFORM
       .KHR_swapchain = true,
@@ -216,19 +221,32 @@ get_device_extensions(const struct panvk_physical_device *device,
       .KHR_synchronization2 = true,
       .KHR_timeline_semaphore = true,
       .KHR_variable_pointers = true,
+      .KHR_vertex_attribute_divisor = true,
+      .KHR_zero_initialize_workgroup_memory = true,
+      .EXT_4444_formats = true,
       .EXT_buffer_device_address = true,
       .EXT_custom_border_color = true,
       .EXT_depth_clip_enable = true,
       .EXT_external_memory_dma_buf = true,
+      .EXT_global_priority = true,
+      .EXT_global_priority_query = true,
       .EXT_graphics_pipeline_library = true,
+      .EXT_host_query_reset = true,
       .EXT_image_drm_format_modifier = true,
+      .EXT_image_robustness = true,
       .EXT_index_type_uint8 = true,
       .EXT_physical_device_drm = true,
       .EXT_pipeline_creation_cache_control = true,
       .EXT_pipeline_creation_feedback = true,
+      .EXT_pipeline_robustness = true,
       .EXT_private_data = true,
+      .EXT_provoking_vertex = true,
+      .EXT_queue_family_foreign = true,
+      .EXT_sampler_filter_minmax = arch >= 10,
+      .EXT_scalar_block_layout = true,
       .EXT_shader_module_identifier = true,
-      .EXT_vertex_attribute_divisor = true,
+      .EXT_subgroup_size_control = arch >= 10, /* requires vk1.1 */
+      .EXT_tooling_info = true,
       .GOOGLE_decorate_string = true,
       .GOOGLE_hlsl_functionality1 = true,
       .GOOGLE_user_type = true,
@@ -243,44 +261,53 @@ get_features(const struct panvk_physical_device *device,
 
    *features = (struct vk_features){
       /* Vulkan 1.0 */
+      .depthClamp = true,
+      .depthBiasClamp = true,
       .robustBufferAccess = true,
       .fullDrawIndexUint32 = true,
+      .imageCubeArray = true,
       .independentBlend = true,
+      .sampleRateShading = true,
       .logicOp = true,
       .wideLines = true,
       .largePoints = true,
+      .occlusionQueryPrecise = true,
+      .samplerAnisotropy = true,
       .textureCompressionETC2 = true,
       .textureCompressionASTC_LDR = true,
-      .samplerAnisotropy = true,
+      .fragmentStoresAndAtomics = arch >= 10,
       .shaderUniformBufferArrayDynamicIndexing = true,
       .shaderSampledImageArrayDynamicIndexing = true,
       .shaderStorageBufferArrayDynamicIndexing = true,
       .shaderStorageImageArrayDynamicIndexing = true,
+      .shaderInt16 = true,
+      .shaderInt64 = true,
+      .drawIndirectFirstInstance = true,
 
       /* Vulkan 1.1 */
-      .storageBuffer16BitAccess = false,
+      .storageBuffer16BitAccess = true,
       .uniformAndStorageBuffer16BitAccess = true,
       .storagePushConstant16 = false,
       .storageInputOutput16 = false,
-      .multiview = false,
+      .multiview = arch >= 10,
       .multiviewGeometryShader = false,
       .multiviewTessellationShader = false,
       .variablePointersStorageBuffer = true,
       .variablePointers = true,
       .protectedMemory = false,
       .samplerYcbcrConversion = false,
-      .shaderDrawParameters = false,
+      .shaderDrawParameters = true,
 
       /* Vulkan 1.2 */
       .samplerMirrorClampToEdge = true,
       .drawIndirectCount = false,
-      .storageBuffer8BitAccess = false,
+      .storageBuffer8BitAccess = true,
       .uniformAndStorageBuffer8BitAccess = false,
       .storagePushConstant8 = false,
       .shaderBufferInt64Atomics = false,
       .shaderSharedInt64Atomics = false,
       .shaderFloat16 = false,
-      .shaderInt8 = false,
+      .shaderInt8 = true,
 
       .descriptorIndexing = false,
       .shaderInputAttachmentArrayDynamicIndexing = false,
@@ -304,13 +331,13 @@ get_features(const struct panvk_physical_device *device,
       .descriptorBindingVariableDescriptorCount = false,
       .runtimeDescriptorArray = false,
 
-      .samplerFilterMinmax = false,
-      .scalarBlockLayout = false,
+      .samplerFilterMinmax = arch >= 10,
+      .scalarBlockLayout = true,
       .imagelessFramebuffer = false,
       .uniformBufferStandardLayout = false,
       .shaderSubgroupExtendedTypes = false,
       .separateDepthStencilLayouts = false,
-      .hostQueryReset = false,
+      .hostQueryReset = true,
       .timelineSemaphore = true,
       .bufferDeviceAddress = true,
       .bufferDeviceAddressCaptureReplay = false,
@@ -320,32 +347,39 @@ get_features(const struct panvk_physical_device *device,
       .vulkanMemoryModelAvailabilityVisibilityChains = false,
       .shaderOutputViewportIndex = false,
       .shaderOutputLayer = false,
-      .subgroupBroadcastDynamicId = false,
+      .subgroupBroadcastDynamicId = true,
 
       /* Vulkan 1.3 */
-      .robustImageAccess = false,
+      .robustImageAccess = true,
       .inlineUniformBlock = false,
       .descriptorBindingInlineUniformBlockUpdateAfterBind = false,
       .pipelineCreationCacheControl = true,
       .privateData = true,
       .shaderDemoteToHelperInvocation = false,
       .shaderTerminateInvocation = false,
-      .subgroupSizeControl = false,
-      .computeFullSubgroups = false,
+      .subgroupSizeControl = true,
+      .computeFullSubgroups = true,
       .synchronization2 = true,
       .textureCompressionASTC_HDR = false,
-      .shaderZeroInitializeWorkgroupMemory = false,
+      .shaderZeroInitializeWorkgroupMemory = true,
       .dynamicRendering = true,
       .shaderIntegerDotProduct = false,
       .maintenance4 = false,
 
+      /* Vulkan 1.4 */
+      .shaderSubgroupRotate = true,
+      .shaderSubgroupRotateClustered = true,
+
       /* VK_EXT_graphics_pipeline_library */
       .graphicsPipelineLibrary = true,
 
-      /* VK_EXT_index_type_uint8 */
+      /* VK_KHR_global_priority */
+      .globalPriorityQuery = true,
+
+      /* VK_KHR_index_type_uint8 */
       .indexTypeUint8 = true,
 
-      /* VK_EXT_vertex_attribute_divisor */
+      /* VK_KHR_vertex_attribute_divisor */
       .vertexAttributeInstanceRateDivisor = true,
       .vertexAttributeInstanceRateZeroDivisor = true,
 
@@ -359,6 +393,10 @@ get_features(const struct panvk_physical_device *device,
       /* VK_EXT_custom_border_color */
       .customBorderColors = true,
 
+      /* VK_EXT_provoking_vertex */
+      .provokingVertexLast = true,
+      .transformFeedbackPreservesProvokingVertex = false,
+
       /* v7 doesn't support AFBC(BGR). We need to tweak the texture swizzle to
        * make it work, which forces us to apply the same swizzle on the border
        * color, meaning we need to know the format when preparing the border
@@ -369,12 +407,31 @@ get_features(const struct panvk_physical_device *device,
       /* VK_KHR_pipeline_executable_properties */
       .pipelineExecutableInfo = true,
 
+      /* VK_EXT_pipeline_robustness */
+      .pipelineRobustness = true,
+
+      /* VK_KHR_shader_relaxed_extended_instruction */
+      .shaderRelaxedExtendedInstruction = true,
+
       /* VK_KHR_shader_expect_assume */
       .shaderExpectAssume = true,
 
       /* VK_EXT_shader_module_identifier */
       .shaderModuleIdentifier = true,
    };
+}
+
+static uint32_t
+get_vk_version(unsigned arch)
+{
+   const uint32_t version_override = vk_get_version_override();
+   if (version_override)
+      return version_override;
+
+   if (arch >= 10)
+      return VK_MAKE_API_VERSION(0, 1, 1, VK_HEADER_VERSION);
+
+   return VK_MAKE_API_VERSION(0, 1, 0, VK_HEADER_VERSION);
 }
 
 static void
@@ -395,7 +452,7 @@ get_device_properties(const struct panvk_instance *instance,
    assert(arch > 8 || device->kmod.props.max_threads_per_wg <= 1024);
 
    *properties = (struct vk_properties){
-      .apiVersion = panvk_get_vk_version(),
+      .apiVersion = get_vk_version(arch),
       .driverVersion = vk_get_driver_version(),
       .vendorID = ARM_VENDOR_ID,
 
@@ -430,10 +487,18 @@ get_device_properties(const struct panvk_instance *instance,
        * requirements.
        */
       .maxPushConstantsSize = 128,
-      /* There's no HW limit here. Should we advertize something smaller? */
+      /* On our kernel drivers we're limited by the available memory rather
+       * than available allocations. This is better expressed through memory
+       * properties and budget queries, and by returning
+       * VK_ERROR_OUT_OF_DEVICE_MEMORY when applicable, rather than
+       * this limit.
+       */
       .maxMemoryAllocationCount = UINT32_MAX,
-      /* Again, no hardware limit, but most drivers seem to advertive 64k. */
-      .maxSamplerAllocationCount = 64 * 1024,
+      /* On Mali, VkSampler objects do not use any resources other than host
+       * memory and host address space, availability of which can change
+       * significantly over time.
+       */
+      .maxSamplerAllocationCount = UINT32_MAX,
       /* A cache line. */
       .bufferImageGranularity = 64,
       /* Sparse binding not supported yet. */
@@ -617,18 +682,33 @@ get_device_properties(const struct panvk_instance *instance,
 
       /* Vulkan 1.1 properties */
       /* XXX: 1.1 support */
-      .subgroupSize = 8,
-      .subgroupSupportedStages = VK_SHADER_STAGE_ALL,
+      .subgroupSize = pan_subgroup_size(arch),
+      /* We only support VS, FS, and CS.
+       *
+       * The HW may spawn VS invocations for non-existing indices, which could
+       * be observed through subgroup ops (though the user can observe them
+       * through infinte loops anyway), so subgroup ops can't be supported in
+       * VS.
+       *
+       * In FS, voting and potentially other subgroup ops are currently broken,
+       * so we don't report support for this stage either.
+       */
+      .subgroupSupportedStages = VK_SHADER_STAGE_COMPUTE_BIT,
       .subgroupSupportedOperations =
-         VK_SUBGROUP_FEATURE_ARITHMETIC_BIT | VK_SUBGROUP_FEATURE_BALLOT_BIT |
-         VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
-         VK_SUBGROUP_FEATURE_QUAD_BIT | VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+         VK_SUBGROUP_FEATURE_BASIC_BIT |
+         VK_SUBGROUP_FEATURE_VOTE_BIT |
+         VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+         VK_SUBGROUP_FEATURE_BALLOT_BIT |
+         VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
          VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
-         VK_SUBGROUP_FEATURE_VOTE_BIT,
+         VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
+         VK_SUBGROUP_FEATURE_QUAD_BIT |
+         VK_SUBGROUP_FEATURE_ROTATE_BIT |
+         VK_SUBGROUP_FEATURE_ROTATE_CLUSTERED_BIT,
       .subgroupQuadOperationsInAllStages = false,
       .pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES,
-      .maxMultiviewViewCount = 0,
-      .maxMultiviewInstanceIndex = 0,
+      .maxMultiviewViewCount = arch >= 10 ? 8 : 0,
+      .maxMultiviewInstanceIndex = arch >= 10 ? UINT32_MAX : 0,
       .protectedNoFault = false,
       .maxPerSetDescriptors = UINT16_MAX,
       /* Our buffer size fields allow only this much */
@@ -677,7 +757,6 @@ get_device_properties(const struct panvk_instance *instance,
       .maxPerStageDescriptorUpdateAfterBindSampledImages = 0,
       .maxPerStageDescriptorUpdateAfterBindStorageImages = 0,
       .maxPerStageDescriptorUpdateAfterBindInputAttachments = 0,
-      .maxPerStageDescriptorUpdateAfterBindInputAttachments = 0,
       .maxPerStageUpdateAfterBindResources = 0,
       .maxDescriptorSetUpdateAfterBindSamplers = 0,
       .maxDescriptorSetUpdateAfterBindUniformBuffers = 0,
@@ -687,19 +766,19 @@ get_device_properties(const struct panvk_instance *instance,
       .maxDescriptorSetUpdateAfterBindSampledImages = 0,
       .maxDescriptorSetUpdateAfterBindStorageImages = 0,
       .maxDescriptorSetUpdateAfterBindInputAttachments = 0,
-      /* XXX: VK_EXT_sampler_filter_minmax */
-      .filterMinmaxSingleComponentFormats = false,
-      .filterMinmaxImageComponentMapping = false,
+      .filterMinmaxSingleComponentFormats = arch >= 10,
+      .filterMinmaxImageComponentMapping = arch >= 10,
       .maxTimelineSemaphoreValueDifference = INT64_MAX,
       .framebufferIntegerColorSampleCounts = sample_counts,
 
       /* Vulkan 1.3 properties */
       /* XXX: 1.3 support */
       /* XXX: VK_EXT_subgroup_size_control */
-      .minSubgroupSize = 8,
-      .maxSubgroupSize = 8,
-      .maxComputeWorkgroupSubgroups = 48,
-      .requiredSubgroupSizeStages = VK_SHADER_STAGE_ALL,
+      .minSubgroupSize = pan_subgroup_size(arch),
+      .maxSubgroupSize = pan_subgroup_size(arch),
+      .maxComputeWorkgroupSubgroups =
+         device->kmod.props.max_threads_per_wg / pan_subgroup_size(arch),
+      .requiredSubgroupSizeStages = VK_SHADER_STAGE_COMPUTE_BIT,
       /* XXX: VK_EXT_inline_uniform_block */
       .maxInlineUniformBlockSize = MAX_INLINE_UNIFORM_BLOCK_SIZE,
       .maxPerStageDescriptorInlineUniformBlocks =
@@ -731,6 +810,20 @@ get_device_properties(const struct panvk_instance *instance,
       /* VK_EXT_graphics_pipeline_library */
       .graphicsPipelineLibraryFastLinking = true,
       .graphicsPipelineLibraryIndependentInterpolationDecoration = true,
+
+      /* VK_EXT_pipeline_robustness */
+      .defaultRobustnessStorageBuffers =
+         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT,
+      .defaultRobustnessUniformBuffers =
+         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT,
+      .defaultRobustnessVertexInputs =
+         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT,
+      .defaultRobustnessImages =
+         VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_EXT,
+
+      /* VK_EXT_provoking_vertex */
+      .provokingVertexModePerPipeline = false,
+      .transformFeedbackPreservesTriangleFanProvokingVertex = false,
 
       /* VK_KHR_vertex_attribute_divisor */
       /* We will have to restrict this a bit for multiview */
@@ -815,6 +908,15 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    switch (arch) {
    case 6:
    case 7:
+      if (!getenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER")) {
+         result = panvk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                               "WARNING: panvk is not well-tested on v%d, "
+                               "pass PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1 "
+                               "if you know what you're doing.", arch);
+         goto fail;
+      }
+      break;
+
    case 10:
       break;
 
@@ -893,17 +995,46 @@ static const VkQueueFamilyProperties panvk_queue_family_properties = {
    .minImageTransferGranularity = {1, 1, 1},
 };
 
+static void
+panvk_fill_global_priority(const struct panvk_physical_device *physical_device,
+                           VkQueueFamilyGlobalPriorityPropertiesKHR *prio)
+{
+   enum pan_kmod_group_allow_priority_flags prio_mask =
+      physical_device->kmod.props.allowed_group_priorities_mask;
+   uint32_t prio_idx = 0;
+
+   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_LOW)
+      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
+
+   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_MEDIUM)
+      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+
+   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_HIGH)
+      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
+
+   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_REALTIME)
+      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
+
+   prio->priorityCount = prio_idx;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_GetPhysicalDeviceQueueFamilyProperties2(
    VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount,
    VkQueueFamilyProperties2 *pQueueFamilyProperties)
 {
+   VK_FROM_HANDLE(panvk_physical_device, physical_device, physicalDevice);
    VK_OUTARRAY_MAKE_TYPED(VkQueueFamilyProperties2, out, pQueueFamilyProperties,
                           pQueueFamilyPropertyCount);
 
    vk_outarray_append_typed(VkQueueFamilyProperties2, &out, p)
    {
       p->queueFamilyProperties = panvk_queue_family_properties;
+
+      VkQueueFamilyGlobalPriorityPropertiesKHR *prio =
+         vk_find_struct(p->pNext, QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR);
+      if (prio)
+         panvk_fill_global_priority(physical_device, prio);
    }
 }
 
@@ -1013,17 +1144,6 @@ get_format_properties(struct panvk_physical_device *physical_device,
    enum pipe_format pfmt = vk_format_to_pipe_format(format);
    unsigned arch = pan_arch(physical_device->kmod.props.gpu_prod_id);
 
-   /* FIXME: Valhall doesn't support interleaved D32_S8X24. Implement it as
-    * a multi-plane format, and we probably want to switch Bifrost to this
-    * layout too, since:
-    * - it's more cache-friendly (you load more samples on a cache-line if you don't
-    *   have those 24 dummy bits)
-    * - it takes less memory (you don't lose those 24bits per texel)
-    * - we can use AFBC
-    */
-   if (arch >= 9 && format == VK_FORMAT_D32_SFLOAT_S8_UINT)
-      goto end;
-
    if (pfmt == PIPE_FORMAT_NONE)
       goto end;
 
@@ -1048,6 +1168,9 @@ get_format_properties(struct panvk_physical_device *physical_device,
              VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
              VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT |
              VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT;
+
+      if (arch >= 10)
+         tex |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
 
       /* Integer formats only support nearest filtering */
       if (!util_format_is_scaled(pfmt) && !util_format_is_pure_integer(pfmt))
@@ -1230,13 +1353,17 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
          }
       }
 
-      if (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
+      if (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
+          ((info->usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) &&
+           !vk_format_is_depth_or_stencil(info->format))) {
          if (!(format_feature_flags & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)) {
             goto unsupported;
          }
       }
 
-      if (info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+      if ((info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
+          ((info->usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) &&
+           vk_format_is_depth_or_stencil(info->format))) {
          if (!(format_feature_flags &
                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
             goto unsupported;
@@ -1250,8 +1377,11 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
       .maxArrayLayers = maxArraySize,
       .sampleCounts = sampleCounts,
 
-      /* FINISHME: Accurately calculate
-       * VkImageFormatProperties::maxResourceSize.
+      /* We need to limit images to 32-bit range, because the maximum
+       * slice-stride is 32-bit wide, meaning that if we allocate an image
+       * with the maximum width and height, we end up overflowing it.
+       *
+       * We get around this by simply limiting the maximum resource size.
        */
       .maxResourceSize = UINT32_MAX,
    };

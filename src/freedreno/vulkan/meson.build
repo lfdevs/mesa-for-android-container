@@ -19,7 +19,10 @@ tu_entrypoints = custom_target(
 
 
 libtu_files = files(
+  'bvh/tu_bvh.h',
+  'bvh/tu_build_interface.h',
   'layers/tu_rmv_layer.cc',
+  'tu_acceleration_structure.cc',
   'tu_autotune.cc',
   'tu_buffer.cc',
   'tu_buffer_view.cc',
@@ -36,15 +39,19 @@ libtu_files = files(
   'tu_knl.cc',
   'tu_lrz.cc',
   'tu_nir_lower_multiview.cc',
+  'tu_nir_lower_ray_query.cc',
   'tu_pass.cc',
   'tu_pipeline.cc',
   'tu_sampler.cc',
   'tu_query_pool.cc',
+  'tu_queue.cc',
   'tu_rmv.cc',
   'tu_shader.cc',
   'tu_suballoc.cc',
   'tu_util.cc',
 )
+
+subdir('bvh')
 
 libtu_includes = [
     inc_include,
@@ -132,6 +139,7 @@ tu_cpp_args += cpp.get_supported_arguments([
   '-fno-rtti',
   '-Wno-address-of-temporary',
   '-Wno-array-bounds',
+  '-Wno-c++11-narrowing',
   '-Wno-c99-designator',
   '-Wno-class-memaccess',
   '-Wno-missing-braces',
@@ -141,25 +149,14 @@ tu_cpp_args += cpp.get_supported_arguments([
   '-Wno-sign-compare',
   '-Wno-switch',
   '-Wno-unused-function',
+  '-Wno-vla-cxx-extension',
   '-Wno-writable-strings',
   '-Wno-write-strings',
-  '-Wno-vla-cxx-extension',
 ])
-
-# HACK compiler.get_supported_arguments()/has_argument() do not seem
-# to be reliable for cross builds (!?!) so just jam in some args we
-# need and hope for the best
-if meson.is_cross_build()
-  tu_cpp_args += '-Wno-array-bounds'
-  tu_cpp_args += '-Wno-c++11-narrowing'
-  tu_cpp_args += '-Wno-missing-braces'
-  tu_cpp_args += '-Wno-unused-function'
-  tu_cpp_args += '-Wno-writable-strings'
-endif
 
 libvulkan_freedreno = shared_library(
   'vulkan_freedreno',
-  [libtu_files, tu_entrypoints, tu_tracepoints, freedreno_xml_header_files, sha1_h, u_format_pack_h],
+  [libtu_files, tu_entrypoints, tu_tracepoints, freedreno_xml_header_files, sha1_h, u_format_pack_h, bvh_spv],
   include_directories : libtu_includes,
   link_with : [
     libfreedreno_ir3,
@@ -208,7 +205,7 @@ freedreno_icd = custom_target(
   output : 'freedreno_icd.@0@.json'.format(host_machine.cpu()),
   command : [
     prog_python, '@INPUT0@',
-    '--api-version', '1.1', '--xml', '@INPUT1@',
+    '--api-version', '1.4', '--xml', '@INPUT1@',
     '--lib-path', join_paths(get_option('prefix'), get_option('libdir'),
                              'libvulkan_freedreno.so'),
     '--out', '@OUTPUT@',
@@ -226,7 +223,7 @@ _dev_icd = custom_target(
   output : _dev_icdname,
   command : [
     prog_python, '@INPUT0@',
-    '--api-version', '1.1', '--xml', '@INPUT1@',
+    '--api-version', '1.4', '--xml', '@INPUT1@',
     '--lib-path', meson.current_build_dir() / 'libvulkan_freedreno.so',
     '--out', '@OUTPUT@',
   ],

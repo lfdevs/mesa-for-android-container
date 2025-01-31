@@ -3,7 +3,6 @@ glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
-glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
 glx@glx_arb_sync_control@waitformsc,Fail
 shaders@point-vertex-id divisor,Fail
@@ -178,7 +177,6 @@ spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
-spec@ext_framebuffer_multisample@blit-mismatched-formats,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 4 centroid-edges,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-clear-and-render,Fail
@@ -236,30 +234,6 @@ spec@glsl-1.10@execution@glsl-fs-inline-explosion,Crash
 spec@glsl-1.10@execution@glsl-vs-inline-explosion,Crash
 spec@glsl-1.10@execution@loops@glsl-fs-unroll-explosion,Crash
 spec@glsl-1.10@execution@loops@glsl-vs-unroll-explosion,Crash
-spec@glsl-1.10@execution@varying-packing@simple int array,Crash
-spec@glsl-1.10@execution@varying-packing@simple int arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple int separate,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec2 array,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec2 arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec2 separate,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec3 array,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec3 arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec3 separate,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec4 array,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec4 arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple ivec4 separate,Crash
-spec@glsl-1.10@execution@varying-packing@simple uint array,Crash
-spec@glsl-1.10@execution@varying-packing@simple uint arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple uint separate,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec2 array,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec2 arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec2 separate,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec3 array,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec3 arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec3 separate,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec4 array,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec4 arrays_of_arrays,Crash
-spec@glsl-1.10@execution@varying-packing@simple uvec4 separate,Crash
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 spec@glsl-1.20@execution@fs-underflow-mul-compare-zero,Fail
@@ -481,65 +455,30 @@ KHR-GL31.transform_feedback3.skip_components,Fail
 KHR-GL31.transform_feedback3.skip_multiple_buffers,Fail
 
 # New fails since uprev VK-CTS 1.3.10.0
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_a8b8g8r8_snorm_pack32,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x10_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x10_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x5_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x5_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x6_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x6_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x8_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_10x8_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_12x10_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_12x10_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_12x12_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_12x12_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_4x4_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_4x4_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_5x4_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_5x4_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_5x5_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_5x5_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_6x5_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_6x5_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_6x6_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_6x6_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_8x5_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_8x5_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_8x6_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_8x6_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_8x8_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_astc_8x8_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc1_rgb_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc1_rgb_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc1_rgba_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc1_rgba_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc2_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc2_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc3_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_bc3_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_e5b9g9r9_ufloat_pack32,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_eac_r11_snorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_eac_r11_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_eac_r11g11_snorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_eac_r11g11_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_etc2_r8g8b8_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_etc2_r8g8b8_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_etc2_r8g8b8a1_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_etc2_r8g8b8a1_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_etc2_r8g8b8a8_srgb_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_etc2_r8g8b8a8_unorm_block,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r16_snorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r16_unorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r16g16_snorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r16g16_unorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r16g16b16a16_snorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r16g16b16a16_unorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r8_snorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r8g8_snorm,Fail
-dEQP-VK.api.info.unsupported_image_usage.optimal.input_attachment_r8g8b8a8_snorm,Fail
 dEQP-VK.draw.renderpass.non_line_with_params.vtx_lines_geom_points_mode_fill_line_raster_smooth,Fail
 dEQP-VK.draw.renderpass.non_line_with_params.vtx_lines_geom_points_mode_line_line_raster_smooth,Fail
 dEQP-VK.draw.renderpass.non_line_with_params.vtx_lines_geom_points_mode_point_line_raster_smooth,Fail
 dEQP-VK.draw.renderpass.non_line_with_params.vtx_lines_geom_triangles_mode_fill_line_raster_smooth,Fail
 dEQP-VK.draw.renderpass.non_line_with_params.vtx_lines_geom_triangles_mode_point_line_raster_smooth,Fail
+
+# New fails in 1.4.1.0
+dEQP-VK.image.concurrent_copy.vk_format_r32g32_sfloat.vk_image_tiling_linear.vk_image_type_3d.multiple.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r32g32_sfloat.vk_image_tiling_linear.vk_image_type_3d.multiple.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r32g32_sfloat.vk_image_tiling_linear.vk_image_type_3d.single.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r32g32_sfloat.vk_image_tiling_optimal.vk_image_type_3d.multiple.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r32g32_sfloat.vk_image_tiling_optimal.vk_image_type_3d.multiple.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r32g32_sfloat.vk_image_tiling_optimal.vk_image_type_3d.single.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r32g32_sfloat.vk_image_tiling_optimal.vk_image_type_3d.single.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8_unorm.vk_image_tiling_linear.vk_image_type_3d.multiple.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8_unorm.vk_image_tiling_linear.vk_image_type_3d.multiple.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8_unorm.vk_image_tiling_linear.vk_image_type_3d.single.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8_unorm.vk_image_tiling_linear.vk_image_type_3d.single.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8g8b8a8_unorm.vk_image_tiling_linear.vk_image_type_3d.multiple.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8g8b8a8_unorm.vk_image_tiling_linear.vk_image_type_3d.single.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8g8b8a8_unorm.vk_image_tiling_linear.vk_image_type_3d.single.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8g8b8a8_unorm.vk_image_tiling_optimal.vk_image_type_3d.multiple.random.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8g8b8a8_unorm.vk_image_tiling_optimal.vk_image_type_3d.single.gradient.device.write,Fail
+dEQP-VK.image.concurrent_copy.vk_format_r8g8b8a8_unorm.vk_image_tiling_optimal.vk_image_type_3d.single.random.device.write,Fail
+
+# New fails in 1.4.1.1
+dEQP-VK.glsl.texture_functions.query.texturequerylevels.usampler1darray_vertex,Fail

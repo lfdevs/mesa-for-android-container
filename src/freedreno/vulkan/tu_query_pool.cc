@@ -13,9 +13,11 @@
 #include "nir/nir_builder.h"
 #include "util/os_time.h"
 
+#include "vk_acceleration_structure.h"
 #include "vk_util.h"
 
 #include "tu_buffer.h"
+#include "bvh/tu_build_interface.h"
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
 #include "tu_device.h"
@@ -90,6 +92,11 @@ struct PACKED primitives_generated_query_slot {
    uint64_t result;
    uint64_t begin;
    uint64_t end;
+};
+
+struct PACKED accel_struct_slot {
+   struct query_slot common;
+   uint64_t result;
 };
 
 /* Returns the IOVA or mapped address of a given uint64_t field
@@ -251,6 +258,12 @@ tu_CreateQueryPool(VkDevice _device,
       pool_size += sizeof(struct tu_perf_query_data) *
                    perf_query_info->counterIndexCount;
       break;
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
+      slot_size = sizeof(struct accel_struct_slot);
+      break;
    }
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
       slot_size = sizeof(struct pipeline_stat_query_slot);
@@ -366,6 +379,10 @@ get_result_count(struct tu_query_pool *pool)
    case VK_QUERY_TYPE_OCCLUSION:
    case VK_QUERY_TYPE_TIMESTAMP:
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
       return 1;
    /* Transform feedback queries write two integer values */
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
@@ -388,14 +405,11 @@ statistics_index(uint32_t *statistics)
 
    switch (1 << stat) {
    case VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT:
-   case VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT:
       return 0;
    case VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT:
       return 1;
-   case VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT:
+   case VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT:
       return 2;
-   case VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT:
-      return 4;
    case VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT:
       return 5;
    case VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT:
@@ -406,6 +420,10 @@ statistics_index(uint32_t *statistics)
       return 8;
    case VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT:
       return 9;
+   case VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT:
+      return 3;
+   case VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT:
+      return 4;
    case VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT:
       return 10;
    default:
@@ -585,6 +603,10 @@ tu_GetQueryPoolResults(VkDevice _device,
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
       return get_query_pool_results(device, pool, firstQuery, queryCount,
                                     dataSize, pData, stride, flags);
    default:
@@ -734,6 +756,10 @@ tu_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
       return emit_copy_query_pool_results<CHIP>(cmdbuf, cs, pool, firstQuery,
                                                 queryCount, buffer, dstOffset,
                                                 stride, flags);
@@ -801,6 +827,10 @@ tu_CmdResetQueryPool(VkCommandBuffer commandBuffer,
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+   case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
       emit_reset_query_pool(cmdbuf, pool, firstQuery, queryCount);
       break;
    default:
@@ -1269,7 +1299,7 @@ template <chip CHIP>
 static void
 emit_stop_primitive_ctrs(struct tu_cmd_buffer *cmdbuf,
                          struct tu_cs *cs,
-                         enum VkQueryType query_type)
+                         VkQueryType query_type)
 {
    bool is_secondary = cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY;
    cmdbuf->state.prim_counters_running--;
@@ -1707,6 +1737,56 @@ tu_CmdWriteTimestamp2(VkCommandBuffer commandBuffer,
     * option, the same as regular queries.
     */
    handle_multiview_queries(cmd, pool, query);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+tu_CmdWriteAccelerationStructuresPropertiesKHR(VkCommandBuffer commandBuffer,
+                                               uint32_t accelerationStructureCount,
+                                               const VkAccelerationStructureKHR *pAccelerationStructures,
+                                               VkQueryType queryType,
+                                               VkQueryPool queryPool,
+                                               uint32_t firstQuery)
+{
+   VK_FROM_HANDLE(tu_cmd_buffer, cmd, commandBuffer);
+   VK_FROM_HANDLE(tu_query_pool, pool, queryPool);
+
+   struct tu_cs *cs = &cmd->cs;
+
+   /* Flush any AS builds */
+   tu_emit_cache_flush<A7XX>(cmd);
+
+   for (uint32_t i = 0; i < accelerationStructureCount; ++i) {
+      uint32_t query = i + firstQuery;
+
+      VK_FROM_HANDLE(vk_acceleration_structure, accel_struct, pAccelerationStructures[i]);
+      uint64_t va = vk_acceleration_structure_get_va(accel_struct);
+
+      switch (queryType) {
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR:
+         va += offsetof(struct tu_accel_struct_header, compacted_size);
+         break;
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR:
+         va += offsetof(struct tu_accel_struct_header, serialization_size);
+         break;
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_BOTTOM_LEVEL_POINTERS_KHR:
+         va += offsetof(struct tu_accel_struct_header, instance_count);
+         break;
+      case VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SIZE_KHR:
+         va += offsetof(struct tu_accel_struct_header, size);
+         break;
+      default:
+         unreachable("Unhandle accel struct query type.");
+      }
+
+      tu_cs_emit_pkt7(cs, CP_MEM_TO_MEM, 5);
+      tu_cs_emit(cs, CP_MEM_TO_MEM_0_DOUBLE);
+      tu_cs_emit_qw(cs, query_result_iova(pool, query, uint64_t, 0));
+      tu_cs_emit_qw(cs, va);
+
+      tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 4);
+      tu_cs_emit_qw(cs, query_available_iova(pool, query));
+      tu_cs_emit_qw(cs, 0x1);
+   }
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL

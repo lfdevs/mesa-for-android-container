@@ -1,1 +1,11 @@
 spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0
+spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY
+spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY12
+spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY16
+spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY4
+spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY8
+spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE
+spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE12
+spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE16
+spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE4
+spec@ext_framebuffer_object@fbo-clear-formats@GL_LUMINANCE8

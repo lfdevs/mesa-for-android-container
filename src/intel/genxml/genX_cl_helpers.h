@@ -5,33 +5,9 @@
 #ifndef __GENX_CL_HELPERS_H__
 #define __GENX_CL_HELPERS_H__
 
-#define ALWAYS_INLINE inline __attribute__((always_inline))
+#include "compiler/libcl/libcl.h"
+
 #define UNUSED
-#define BITFIELD64_MASK(bits) ((1ul << bits) - 1)
-#define CLAMP( X, MIN, MAX )  ( (X)>(MIN) ? ((X)>(MAX) ? (MAX) : (X)) : (MIN) )
-#define INT64_MAX (0x7FFFFFFFFFFFFFFFL)
-
-ALWAYS_INLINE static uint64_t
-u_uintN_max(uint32_t bits)
-{
-   return (1ul << bits) - 1;
-}
-
-ALWAYS_INLINE static int64_t
-u_intN_max(uint32_t bit_size)
-{
-   return INT64_MAX >> (64 - bit_size);
-}
-
-ALWAYS_INLINE static int64_t
-u_intN_min(uint32_t bit_size)
-{
-   /* On 2's compliment platforms, which is every platform Mesa is likely to
-    * every worry about, stdint.h generally calculated INT##_MIN in this
-    * manner.
-    */
-   return (-u_intN_max(bit_size)) - 1;
-}
 
 ALWAYS_INLINE static uint64_t
 util_bitpack_uint(uint64_t v, uint32_t start, UNUSED uint32_t end)

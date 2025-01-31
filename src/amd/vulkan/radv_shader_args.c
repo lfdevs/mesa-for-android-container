@@ -249,7 +249,7 @@ declare_ms_input_vgprs(const struct radv_device *device, struct radv_shader_args
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
    if (pdev->mesh_fast_launch_2) {
-      ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_ids);
+      ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_ids_packed);
    } else {
       ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.vertex_id);
       ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* user vgpr */
@@ -453,6 +453,8 @@ declare_unmerged_vs_tes_gs_args(const enum amd_gfx_level gfx_level, const struct
 
    if (info->is_ngg) {
       add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_state, AC_UD_NGG_STATE);
+      if (gfx_level >= GFX12)
+         add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_query_buf_va, AC_UD_NGG_QUERY_BUF_VA);
    }
    add_ud_arg(args, 1, AC_ARG_INT, &args->vgt_esgs_ring_itemsize, AC_UD_VGT_ESGS_RING_ITEMSIZE);
    add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_lds_layout, AC_UD_NGG_LDS_LAYOUT);
@@ -496,6 +498,8 @@ declare_unmerged_vs_tes_gs_args(const enum amd_gfx_level gfx_level, const struct
    ac_add_preserved(&args->ac, &args->tcs_offchip_layout);
    if (info->is_ngg) {
       ac_add_preserved(&args->ac, &args->ngg_state);
+      if (gfx_level >= GFX12)
+         ac_add_preserved(&args->ac, &args->ngg_query_buf_va);
    }
    ac_add_preserved(&args->ac, &args->vgt_esgs_ring_itemsize);
    ac_add_preserved(&args->ac, &args->ngg_lds_layout);
@@ -616,10 +620,13 @@ declare_shader_args(const struct radv_device *device, const struct radv_graphics
          ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &args->ac.scratch_offset);
       }
 
-      if (gfx_level >= GFX11)
-         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_ids);
-      else
-         ac_add_arg(&args->ac, AC_ARG_VGPR, 3, AC_ARG_INT, &args->ac.local_invocation_ids);
+      if (gfx_level >= GFX11) {
+         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_ids_packed);
+      } else {
+         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_id_x);
+         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_id_y);
+         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_id_z);
+      }
       break;
    case MESA_SHADER_VERTEX:
       /* NGG is handled by the GS case */
@@ -782,6 +789,9 @@ declare_shader_args(const struct radv_device *device, const struct radv_graphics
                   (previous_stage == MESA_SHADER_VERTEX && info->vs.dynamic_num_verts_per_prim);
 
                declare_ngg_sgprs(info, args, ngg_needs_state_sgpr);
+
+               if (pdev->info.gfx_level >= GFX12 && has_shader_query)
+                  add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_query_buf_va, AC_UD_NGG_QUERY_BUF_VA);
             }
 
             if (previous_stage != MESA_SHADER_MESH || !pdev->mesh_fast_launch_2) {

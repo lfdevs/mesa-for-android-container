@@ -275,19 +275,37 @@ ir3_collect_info(struct ir3_shader_variant *v)
    bool in_preamble = false;
    bool has_eq = false;
 
+   /* Track which registers are currently aliases because they shouldn't be
+    * included in the GPR footprint.
+    */
+   regmask_t aliases;
+
+   /* Full and half aliases do not overlap so treat them as !mergedregs. */
+   regmask_init(&aliases, false);
+
    foreach_block (block, &shader->block_list) {
       int sfu_delay = 0, mem_delay = 0;
 
       foreach_instr (instr, &block->instr_list) {
 
          foreach_src (reg, instr) {
-            collect_reg_info(instr, reg, info);
+            if (!is_reg_gpr(reg) || !regmask_get(&aliases, reg)) {
+               collect_reg_info(instr, reg, info);
+            }
          }
 
          foreach_dst (reg, instr) {
-            if (is_dest_gpr(reg)) {
+            if (instr->opc == OPC_ALIAS &&
+                instr->cat7.alias_scope == ALIAS_TEX) {
+               regmask_set(&aliases, instr->dsts[0]);
+            } else if (is_dest_gpr(reg)) {
                collect_reg_info(instr, reg, info);
             }
+         }
+
+         if (is_tex(instr)) {
+            /* All aliases are cleared after they are used. */
+            regmask_init(&aliases, false);
          }
 
          if ((instr->opc == OPC_STP || instr->opc == OPC_LDP)) {
@@ -374,6 +392,9 @@ ir3_collect_info(struct ir3_shader_variant *v)
                int n = MIN2(mem_delay, 1 + instr->repeat + instr->nop);
                mem_delay -= n;
             }
+         } else {
+            unsigned instrs_count = 1 + instr->repeat + instr->nop;
+            info->preamble_instrs_count += instrs_count;
          }
 
          if (instr->opc == OPC_SHPE)
@@ -503,6 +524,18 @@ ir3_block_create(struct ir3 *shader)
    return block;
 }
 
+struct ir3_instruction *
+ir3_find_end(struct ir3 *ir)
+{
+   foreach_block_rev (block, &ir->block_list) {
+      foreach_instr_rev (instr, &block->instr_list) {
+         if (instr->opc == OPC_END || instr->opc == OPC_CHMASK)
+            return instr;
+      }
+   }
+   unreachable("couldn't find end instruction");
+}
+
 static struct ir3_instruction *
 block_get_last_instruction(struct ir3_block *block)
 {
@@ -563,6 +596,94 @@ ir3_block_get_last_phi(struct ir3_block *block)
    }
 
    return last_phi;
+}
+
+struct ir3_instruction *
+ir3_find_shpe(struct ir3 *ir)
+{
+   if (!ir3_has_preamble(ir)) {
+      return NULL;
+   }
+
+   foreach_block (block, &ir->block_list) {
+      struct ir3_instruction *last = ir3_block_get_last_non_terminator(block);
+
+      if (last && last->opc == OPC_SHPE) {
+         return last;
+      }
+   }
+
+   unreachable("preamble without shpe");
+}
+
+struct ir3_instruction *
+ir3_create_empty_preamble(struct ir3 *ir)
+{
+   assert(!ir3_has_preamble(ir));
+
+   struct ir3_block *main_start_block = ir3_start_block(ir);
+
+   /* Create a preamble CFG similar to what the frontend would generate. Note
+    * that the empty else_block is important for ir3_after_preamble to work.
+    *
+    * shps_block:
+    * if (shps) {
+    *    getone_block:
+    *    if (getone) {
+    *       body_block:
+    *       shpe
+    *    }
+    * } else {
+    *    else_block:
+    * }
+    * main_start_block:
+    */
+   struct ir3_block *shps_block = ir3_block_create(ir);
+   struct ir3_block *getone_block = ir3_block_create(ir);
+   struct ir3_block *body_block = ir3_block_create(ir);
+   struct ir3_block *else_block = ir3_block_create(ir);
+   list_add(&else_block->node, &ir->block_list);
+   list_add(&body_block->node, &ir->block_list);
+   list_add(&getone_block->node, &ir->block_list);
+   list_add(&shps_block->node, &ir->block_list);
+
+   struct ir3_builder b = ir3_builder_at(ir3_after_block(shps_block));
+   ir3_SHPS(&b);
+   shps_block->successors[0] = getone_block;
+   ir3_block_add_predecessor(getone_block, shps_block);
+   ir3_block_link_physical(shps_block, getone_block);
+   shps_block->successors[1] = else_block;
+   ir3_block_add_predecessor(else_block, shps_block);
+   ir3_block_link_physical(shps_block, else_block);
+
+   b.cursor = ir3_after_block(getone_block);
+   ir3_GETONE(&b);
+   getone_block->divergent_condition = true;
+   getone_block->successors[0] = body_block;
+   ir3_block_add_predecessor(body_block, getone_block);
+   ir3_block_link_physical(getone_block, body_block);
+   getone_block->successors[1] = main_start_block;
+   ir3_block_add_predecessor(main_start_block, getone_block);
+   ir3_block_link_physical(getone_block, main_start_block);
+
+   b.cursor = ir3_after_block(body_block);
+   struct ir3_instruction *shpe = ir3_SHPE(&b);
+   shpe->barrier_class = shpe->barrier_conflict = IR3_BARRIER_CONST_W;
+   array_insert(body_block, body_block->keeps, shpe);
+   ir3_JUMP(&b);
+   body_block->successors[0] = main_start_block;
+   ir3_block_add_predecessor(main_start_block, body_block);
+   ir3_block_link_physical(body_block, main_start_block);
+
+   b.cursor = ir3_after_block(else_block);
+   ir3_JUMP(&b);
+   else_block->successors[0] = main_start_block;
+   ir3_block_add_predecessor(main_start_block, else_block);
+   ir3_block_link_physical(else_block, main_start_block);
+
+   main_start_block->reconvergence_point = true;
+
+   return shpe;
 }
 
 void
@@ -680,7 +801,20 @@ ir3_build_instr(struct ir3_builder *builder, opc_t opc, int ndst, int nsrc)
 {
    struct ir3_instruction *instr =
       ir3_instr_create_at(builder->cursor, opc, ndst, nsrc);
-   builder->cursor = ir3_after_instr(instr);
+
+   /* During instruction selection, instructions are sometimes emitted to blocks
+    * other than the current one. For example, to predecessor blocks for phi
+    * sources or to the first block for inputs. For those cases, a new builder
+    * is created to emit at the end of the target block. However, if the target
+    * block happens to be the same as the current block, the main builder would
+    * not be updated to point past the new instructions. Therefore, don't update
+    * the cursor when it points to the end of a block to ensure that new
+    * instructions will always be added at the end.
+    */
+   if (builder->cursor.option != IR3_CURSOR_AFTER_BLOCK) {
+      builder->cursor = ir3_after_instr(instr);
+   }
+
    return instr;
 }
 
@@ -1288,7 +1422,7 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
       break;
    case 3:
       valid_flags =
-         ir3_cat3_absneg(instr->opc) | IR3_REG_RELATIV | IR3_REG_SHARED;
+         ir3_cat3_absneg(instr->opc, n) | IR3_REG_RELATIV | IR3_REG_SHARED;
 
       switch (instr->opc) {
       case OPC_SHRM:
@@ -1296,10 +1430,23 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
       case OPC_SHRG:
       case OPC_SHLG:
       case OPC_ANDG: {
-         valid_flags |= IR3_REG_IMMED;
+         if (n != 1) {
+            valid_flags |= IR3_REG_IMMED;
+         }
+
          /* Can be RELATIV+CONST but not CONST: */
          if (flags & IR3_REG_RELATIV)
             valid_flags |= IR3_REG_CONST;
+
+         if (!(instr->dsts[0]->flags & IR3_REG_SHARED) && n < 2) {
+            /* Of the first two sources, only one can be shared. */
+            unsigned m = n ^ 1;
+
+            if ((flags & IR3_REG_SHARED) &&
+                (instr->srcs[m]->flags & IR3_REG_SHARED)) {
+               return false;
+            }
+         }
          break;
       }
       case OPC_WMM:
@@ -1450,7 +1597,7 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
 bool
 ir3_valid_immediate(struct ir3_instruction *instr, int32_t immed)
 {
-   if (instr->opc == OPC_MOV || is_meta(instr))
+   if (instr->opc == OPC_MOV || is_meta(instr) || instr->opc == OPC_ALIAS)
       return true;
 
    if (is_mem(instr)) {
@@ -1477,6 +1624,13 @@ ir3_valid_immediate(struct ir3_instruction *instr, int32_t immed)
          /* most cat6 src immediates can only encode 8 bits: */
          return !(immed & ~0xff);
       }
+   }
+
+   /* The alternative cat3 encoding used for sh[lr][gm]/andg uses 12 bit
+    * immediates that won't be sign-extended.
+    */
+   if (is_cat3_alt(instr->opc)) {
+      return !(immed & ~0xfff);
    }
 
    /* Other than cat1 (mov) we can only encode up to 10 bits, sign-extended: */

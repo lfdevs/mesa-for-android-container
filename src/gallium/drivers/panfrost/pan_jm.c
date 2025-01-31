@@ -38,7 +38,7 @@
 #error "JM helpers are only used for gen < 10"
 #endif
 
-void
+int
 GENX(jm_init_batch)(struct panfrost_batch *batch)
 {
    /* Reserve the framebuffer and local storage descriptors */
@@ -50,6 +50,8 @@ GENX(jm_init_batch)(struct panfrost_batch *batch)
          &batch->pool.base, PAN_DESC(FRAMEBUFFER), PAN_DESC(ZS_CRC_EXTENSION),
          PAN_DESC_ARRAY(MAX2(batch->key.nr_cbufs, 1), RENDER_TARGET));
 #endif
+   if (!batch->framebuffer.gpu)
+      return -1;
 
 #if PAN_ARCH >= 6
    batch->tls = pan_pool_alloc_desc(&batch->pool.base, LOCAL_STORAGE);
@@ -57,21 +59,27 @@ GENX(jm_init_batch)(struct panfrost_batch *batch)
    /* On Midgard, the TLS is embedded in the FB descriptor */
    batch->tls = batch->framebuffer;
 
+   if (!batch->tls.cpu)
+      return -1;
+
 #if PAN_ARCH == 5
    struct mali_framebuffer_pointer_packed ptr;
 
-   pan_pack(ptr.opaque, FRAMEBUFFER_POINTER, cfg) {
+   pan_pack(&ptr, FRAMEBUFFER_POINTER, cfg) {
       cfg.pointer = batch->framebuffer.gpu;
       cfg.render_target_count = 1; /* a necessary lie */
    }
 
+   /* XXX: THIS IS A BUG, FIXME */
    batch->tls.gpu = ptr.opaque[0];
 #endif
 #endif
+
+   return 0;
 }
 
 static int
-jm_submit_jc(struct panfrost_batch *batch, mali_ptr first_job_desc,
+jm_submit_jc(struct panfrost_batch *batch, uint64_t first_job_desc,
              uint32_t reqs, uint32_t out_sync)
 {
    struct panfrost_context *ctx = batch->ctx;
@@ -156,7 +164,7 @@ jm_submit_jc(struct panfrost_batch *batch, mali_ptr first_job_desc,
    bo_handles[submit.bo_handle_count++] =
       panfrost_bo_handle(dev->sample_positions);
 
-   submit.bo_handles = (u64)(uintptr_t)bo_handles;
+   submit.bo_handles = (uint64_t)(uintptr_t)bo_handles;
    if (ctx->is_noop)
       ret = 0;
    else
@@ -283,7 +291,7 @@ GENX(jm_emit_fragment_job)(struct panfrost_batch *batch,
 static void
 jm_emit_shader_env(struct panfrost_batch *batch,
                    struct MALI_SHADER_ENVIRONMENT *cfg,
-                   enum pipe_shader_type stage, mali_ptr shader_ptr)
+                   enum pipe_shader_type stage, uint64_t shader_ptr)
 {
    cfg->resources = panfrost_emit_resources(batch, stage);
    cfg->thread_storage = batch->tls.gpu;
@@ -392,11 +400,11 @@ GENX(jm_launch_grid)(struct panfrost_batch *batch,
 }
 
 #if PAN_ARCH >= 6
-static mali_ptr
+static uint64_t
 jm_emit_tiler_desc(struct panfrost_batch *batch)
 {
    struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
-   mali_ptr tiler_desc = PAN_ARCH >= 9 ? batch->tiler_ctx.bifrost.desc
+   uint64_t tiler_desc = PAN_ARCH >= 9 ? batch->tiler_ctx.bifrost.desc
                                        : batch->tiler_ctx.valhall.desc;
 
    if (tiler_desc)
@@ -404,29 +412,23 @@ jm_emit_tiler_desc(struct panfrost_batch *batch)
 
    struct panfrost_ptr t = pan_pool_alloc_desc(&batch->pool.base, TILER_HEAP);
 
-   pan_pack(t.cpu, TILER_HEAP, heap) {
+   pan_cast_and_pack(t.cpu, TILER_HEAP, heap) {
       heap.size = panfrost_bo_size(dev->tiler_heap);
       heap.base = dev->tiler_heap->ptr.gpu;
       heap.bottom = dev->tiler_heap->ptr.gpu;
       heap.top = dev->tiler_heap->ptr.gpu + panfrost_bo_size(dev->tiler_heap);
    }
 
-   mali_ptr heap = t.gpu;
+   uint64_t heap = t.gpu;
    unsigned max_levels = dev->tiler_features.max_levels;
    assert(max_levels >= 2);
 
    t = pan_pool_alloc_desc(&batch->pool.base, TILER_CONTEXT);
-   pan_pack(t.cpu, TILER_CONTEXT, tiler) {
-      /* TODO: Select hierarchy mask more effectively */
-      tiler.hierarchy_mask = (max_levels >= 8) ? 0xFF : 0x28;
-
-      /* For large framebuffers, disable the smallest bin size to
-       * avoid pathological tiler memory usage. Required to avoid OOM
-       * on dEQP-GLES31.functional.fbo.no_attachments.maximums.all on
-       * Mali-G57.
-       */
-      if (MAX2(batch->key.width, batch->key.height) >= 4096)
-         tiler.hierarchy_mask &= ~1;
+   pan_cast_and_pack(t.cpu, TILER_CONTEXT, tiler) {
+      tiler.hierarchy_mask =
+         pan_select_tiler_hierarchy_mask(batch->key.width,
+                                         batch->key.height,
+                                         dev->tiler_features.max_levels);
 
       tiler.fb_width = batch->key.width;
       tiler.fb_height = batch->key.height;
@@ -435,7 +437,7 @@ jm_emit_tiler_desc(struct panfrost_batch *batch)
          pan_sample_pattern(util_framebuffer_get_num_samples(&batch->key));
 #if PAN_ARCH >= 9
       tiler.first_provoking_vertex =
-         pan_tristate_get(batch->first_provoking_vertex);
+         batch->first_provoking_vertex == U_TRISTATE_YES;
 #endif
    }
 
@@ -464,7 +466,8 @@ jm_emit_draw_descs(struct panfrost_batch *batch, struct MALI_DRAW *d,
 }
 
 static void
-jm_emit_vertex_draw(struct panfrost_batch *batch, void *section)
+jm_emit_vertex_draw(struct panfrost_batch *batch,
+                    struct mali_draw_packed *section)
 {
    pan_pack(section, DRAW, cfg) {
       cfg.state = batch->rsd[PIPE_SHADER_VERTEX];
@@ -500,8 +503,8 @@ jm_emit_vertex_job(struct panfrost_batch *batch,
 #endif /* PAN_ARCH <= 7 */
 
 static void
-jm_emit_tiler_draw(void *out, struct panfrost_batch *batch, bool fs_required,
-                   enum mesa_prim prim)
+jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
+                   bool fs_required, enum mesa_prim prim)
 {
    struct panfrost_context *ctx = batch->ctx;
    struct pipe_rasterizer_state *rast = &ctx->rasterizer->base;
@@ -665,7 +668,7 @@ static void
 jm_emit_primitive(struct panfrost_batch *batch,
                   const struct pipe_draw_info *info,
                   const struct pipe_draw_start_count_bias *draw,
-                  bool secondary_shader, void *out)
+                  bool secondary_shader, struct mali_primitive_packed *out)
 {
    struct panfrost_context *ctx = batch->ctx;
    UNUSED struct pipe_rasterizer_state *rast = &ctx->rasterizer->base;
@@ -883,7 +886,7 @@ GENX(jm_launch_xfb)(struct panfrost_batch *batch,
                                      PAN_ARCH <= 5, false);
 
    /* No varyings on XFB compute jobs. */
-   mali_ptr saved_vs_varyings = batch->varyings.vs;
+   uint64_t saved_vs_varyings = batch->varyings.vs;
 
    batch->varyings.vs = 0;
    jm_emit_vertex_job(batch, info, &invocation, t.cpu);
@@ -963,6 +966,11 @@ GENX(jm_launch_draw)(struct panfrost_batch *batch,
    } else {
       vertex = pan_pool_alloc_desc(&batch->pool.base, COMPUTE_JOB);
       tiler = pan_pool_alloc_desc(&batch->pool.base, TILER_JOB);
+   }
+
+   if ((!idvs && !vertex.cpu) || !tiler.cpu) {
+      mesa_loge("jm_launch_draw failed");
+      return;
    }
 
 #if PAN_ARCH == 9

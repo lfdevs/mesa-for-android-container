@@ -59,7 +59,7 @@
 #include "common/intel_uuid.h"
 #include "perf/intel_perf.h"
 
-#include "genxml/gen7_pack.h"
+#include "genxml/gen70_pack.h"
 #include "genxml/genX_bits.h"
 
 static const driOptionDescription anv_dri_options[] = {
@@ -2332,6 +2332,20 @@ decode_get_bo(void *v_batch, bool ppgtt, uint64_t address)
 
 static VkResult anv_device_check_status(struct vk_device *vk_device);
 
+static VkResult anv_device_get_timestamp(struct vk_device *vk_device, uint64_t *timestamp)
+{
+   struct anv_device *device = container_of(vk_device, struct anv_device, vk);
+
+   if (!intel_gem_read_render_timestamp(device->fd,
+                                        device->info->kmd_type,
+                                        timestamp)) {
+      return vk_device_set_lost(&device->vk,
+                                "Failed to read the TIMESTAMP register: %m");
+   }
+
+   return VK_SUCCESS;
+}
+
 static VkResult
 anv_device_setup_context(struct anv_device *device,
                          const VkDeviceCreateInfo *pCreateInfo,
@@ -2487,6 +2501,7 @@ VkResult anv_CreateDevice(
 
    device->vk.command_buffer_ops = &anv_cmd_buffer_ops;
    device->vk.check_status = anv_device_check_status;
+   device->vk.get_timestamp = anv_device_get_timestamp;
    device->vk.create_sync_for_memory = anv_create_sync_for_memory;
    vk_device_set_drm_fd(&device->vk, device->fd);
 
@@ -3798,31 +3813,6 @@ void anv_DestroySampler(
    vk_object_free(&device->vk, pAllocator, sampler);
 }
 
-static const VkTimeDomainEXT anv_time_domains[] = {
-   VK_TIME_DOMAIN_DEVICE_EXT,
-   VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT,
-#ifdef CLOCK_MONOTONIC_RAW
-   VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT,
-#endif
-};
-
-VkResult anv_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
-   VkPhysicalDevice                             physicalDevice,
-   uint32_t                                     *pTimeDomainCount,
-   VkTimeDomainEXT                              *pTimeDomains)
-{
-   int d;
-   VK_OUTARRAY_MAKE_TYPED(VkTimeDomainEXT, out, pTimeDomains, pTimeDomainCount);
-
-   for (d = 0; d < ARRAY_SIZE(anv_time_domains); d++) {
-      vk_outarray_append_typed(VkTimeDomainEXT, &out, i) {
-         *i = anv_time_domains[d];
-      }
-   }
-
-   return vk_outarray_status(&out);
-}
-
 static uint64_t
 anv_clock_gettime(clockid_t clock_id)
 {
@@ -3838,101 +3828,6 @@ anv_clock_gettime(clockid_t clock_id)
       return 0;
 
    return (uint64_t) current.tv_sec * 1000000000ULL + current.tv_nsec;
-}
-
-VkResult anv_GetCalibratedTimestampsEXT(
-   VkDevice                                     _device,
-   uint32_t                                     timestampCount,
-   const VkCalibratedTimestampInfoEXT           *pTimestampInfos,
-   uint64_t                                     *pTimestamps,
-   uint64_t                                     *pMaxDeviation)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   uint64_t timestamp_frequency = device->info->timestamp_frequency;
-   int d;
-   uint64_t begin, end;
-   uint64_t max_clock_period = 0;
-
-#ifdef CLOCK_MONOTONIC_RAW
-   begin = anv_clock_gettime(CLOCK_MONOTONIC_RAW);
-#else
-   begin = anv_clock_gettime(CLOCK_MONOTONIC);
-#endif
-
-   for (d = 0; d < timestampCount; d++) {
-      switch (pTimestampInfos[d].timeDomain) {
-      case VK_TIME_DOMAIN_DEVICE_EXT:
-         if (!intel_gem_read_render_timestamp(device->fd,
-                                              device->info->kmd_type,
-                                              &pTimestamps[d])) {
-            return vk_device_set_lost(&device->vk, "Failed to read the "
-                                      "TIMESTAMP register: %m");
-         }
-         uint64_t device_period = DIV_ROUND_UP(1000000000, timestamp_frequency);
-         max_clock_period = MAX2(max_clock_period, device_period);
-         break;
-      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT:
-         pTimestamps[d] = anv_clock_gettime(CLOCK_MONOTONIC);
-         max_clock_period = MAX2(max_clock_period, 1);
-         break;
-
-#ifdef CLOCK_MONOTONIC_RAW
-      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT:
-         pTimestamps[d] = begin;
-         break;
-#endif
-      default:
-         pTimestamps[d] = 0;
-         break;
-      }
-   }
-
-#ifdef CLOCK_MONOTONIC_RAW
-   end = anv_clock_gettime(CLOCK_MONOTONIC_RAW);
-#else
-   end = anv_clock_gettime(CLOCK_MONOTONIC);
-#endif
-
-    /*
-     * The maximum deviation is the sum of the interval over which we
-     * perform the sampling and the maximum period of any sampled
-     * clock. That's because the maximum skew between any two sampled
-     * clock edges is when the sampled clock with the largest period is
-     * sampled at the end of that period but right at the beginning of the
-     * sampling interval and some other clock is sampled right at the
-     * beginning of its sampling period and right at the end of the
-     * sampling interval. Let's assume the GPU has the longest clock
-     * period and that the application is sampling GPU and monotonic:
-     *
-     *                               s                 e
-     *			 w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e f
-     *	Raw              -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
-     *
-     *                               g
-     *		  0         1         2         3
-     *	GPU       -----_____-----_____-----_____-----_____
-     *
-     *                                                m
-     *					    x y z 0 1 2 3 4 5 6 7 8 9 a b c
-     *	Monotonic                           -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
-     *
-     *	Interval                     <----------------->
-     *	Deviation           <-------------------------->
-     *
-     *		s  = read(raw)       2
-     *		g  = read(GPU)       1
-     *		m  = read(monotonic) 2
-     *		e  = read(raw)       b
-     *
-     * We round the sample interval up by one tick to cover sampling error
-     * in the interval clock
-     */
-
-   uint64_t sample_interval = end - begin + 1;
-
-   *pMaxDeviation = sample_interval + max_clock_period;
-
-   return VK_SUCCESS;
 }
 
 void anv_GetPhysicalDeviceMultisamplePropertiesEXT(

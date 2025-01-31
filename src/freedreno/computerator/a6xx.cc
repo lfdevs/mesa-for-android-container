@@ -316,7 +316,7 @@ cs_const_emit(struct fd_ringbuffer *ring, struct kernel *kernel,
    struct ir3_shader_variant *v = ir3_kernel->v;
 
    const struct ir3_const_state *const_state = ir3_const_state(v);
-   uint32_t base = const_state->offsets.immediate;
+   uint32_t base = const_state->allocs.max_const_offset_vec4;
    int size = DIV_ROUND_UP(const_state->immediates_count, 4);
 
    if (ir3_kernel->info.numwg != INVALID_REG) {
@@ -499,9 +499,9 @@ a6xx_emit_grid(struct kernel *kernel, uint32_t grid[3],
                     .localsizez = local_size[2] - 1,
                  ));
    if (CHIP == A7XX) {
-      OUT_REG(ring, A7XX_HLSQ_CS_LOCAL_SIZE(.localsizex = local_size[0] - 1,
-                                            .localsizey = local_size[1] - 1,
-                                            .localsizez = local_size[2] - 1, ));
+      OUT_REG(ring, A7XX_HLSQ_CS_LAST_LOCAL_SIZE(.localsizex = local_size[0] - 1,
+                                                 .localsizey = local_size[1] - 1,
+                                                 .localsizez = local_size[2] - 1, ));
    }
 
    OUT_REG(ring, HLSQ_CS_NDRANGE_1(CHIP,

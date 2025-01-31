@@ -872,6 +872,9 @@ opcode("ushr", 0, tuint, [0, 0], [tuint, tuint32], False, "",
        "src0 >> (src1 & (sizeof(src0) * 8 - 1))",
        description = "Unsigned right-shift." + shift_note)
 
+opcode("udiv_aligned_4", 0, tuint, [0], [tuint], False, "",
+       "src0 >> 2", description = "Divide a multiple of 4 by 4")
+
 opcode("urol", 0, tuint, [0, 0], [tuint, tuint32], False, "", """
    uint32_t rotate_mask = sizeof(src0) * 8 - 1;
    dst = (src0 << (src1 & rotate_mask)) |
@@ -1063,6 +1066,8 @@ opcode("b16csel", 0, tuint, [0, 0, 0],
 opcode("b32csel", 0, tuint, [0, 0, 0],
        [tbool32, tuint, tuint], False, selection, "src0 ? src1 : src2",
        description = csel_description.format("a 32-bit", "0 vs ~0"))
+
+triop("icsel_eqz", tint, selection, "(src0 == 0) ? src1 : src2")
 
 triop("i32csel_gt", tint32, selection, "(src0 > 0) ? src1 : src2")
 triop("i32csel_ge", tint32, selection, "(src0 >= 0) ? src1 : src2")
@@ -1267,6 +1272,16 @@ dst = ((((src0 & 0x0000ffff) << 16) * (src1 & 0xffff0000)) >> 16) + src2;
 triop("imad24_ir3", tint32, _2src_commutative,
       "(((int32_t)src0 << 8) >> 8) * (((int32_t)src1 << 8) >> 8) + src2")
 
+def triop_shift_ir3(name, shift_op, bit_op):
+    opcode(name, 0, tuint, [0, 0, 0], [tuint, tuint32, tuint], False, "",
+           f"(src0 {shift_op} (src1 & (sizeof(src0) * 8 - 1))) {bit_op} src2")
+
+triop_shift_ir3("shrm_ir3", ">>", "&")
+triop_shift_ir3("shlm_ir3", "<<", "&")
+triop_shift_ir3("shrg_ir3", ">>", "|")
+triop_shift_ir3("shlg_ir3", "<<", "|")
+triop("andg_ir3", tuint, _2src_commutative, "(src0 & src1) | src2")
+
 # r600/gcn specific instruction that evaluates unnormalized cube texture coordinates
 # and face index
 # The actual texture coordinates are evaluated from this according to
@@ -1307,6 +1322,11 @@ unop_horiz("cube_amd", 4, tfloat32, 3, tfloat32, """
 unop("fsin_amd", tfloat, "sinf(6.2831853 * src0)")
 unop("fcos_amd", tfloat, "cosf(6.2831853 * src0)")
 
+opcode("alignbyte_amd", 0, tuint32, [0, 0, 0], [tuint32, tuint32, tuint32], False, "", """
+   uint64_t src = src1 | ((uint64_t)src0 << 32);
+   dst = src >> ((src2 & 0x3) * 8);
+""")
+
 # Midgard specific sin and cos
 # These expect their inputs to be divided by pi.
 unop("fsin_mdg", tfloat, "sinf(3.141592653589793 * src0)")
@@ -1346,6 +1366,13 @@ opcode("imadshl_agx", 0, tint, [0, 0, 0, 0], [tint, tint, tint, tint], False,
        "", f"(src0 * src1) + (src2 << src3)")
 opcode("imsubshl_agx", 0, tint, [0, 0, 0, 0], [tint, tint, tint, tint], False,
        "", f"(src0 * src1) - (src2 << src3)")
+
+# Address arithmetic instructions: extend, shift, and add
+# Shift must be a small constant.
+opcode("ilea_agx", 0, tuint64, [0, 0, 0], [tuint64, tint32, tuint32], False,
+       "", f"src0 + (((int64_t)src1) << src2)")
+opcode("ulea_agx", 0, tuint64, [0, 0, 0], [tuint64, tuint32, tuint32], False,
+       "", f"src0 + (((uint64_t)src1) << src2)")
 
 # Bounds check instruction.
 #

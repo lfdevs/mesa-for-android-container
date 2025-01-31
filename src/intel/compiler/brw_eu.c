@@ -187,17 +187,17 @@ void brw_set_default_access_mode( struct brw_codegen *p, unsigned access_mode )
  * [group, group + exec_size) to the instruction passed as argument.
  */
 void
-brw_inst_set_group(const struct intel_device_info *devinfo,
-                   brw_inst *inst, unsigned group)
+brw_eu_inst_set_group(const struct intel_device_info *devinfo,
+                   brw_eu_inst *inst, unsigned group)
 {
    if (devinfo->ver >= 20) {
       assert(group % 8 == 0 && group < 32);
-      brw_inst_set_qtr_control(devinfo, inst, group / 8);
+      brw_eu_inst_set_qtr_control(devinfo, inst, group / 8);
 
    } else {
       assert(group % 4 == 0 && group < 32);
-      brw_inst_set_qtr_control(devinfo, inst, group / 8);
-      brw_inst_set_nib_control(devinfo, inst, (group / 4) % 2);
+      brw_eu_inst_set_qtr_control(devinfo, inst, group / 8);
+      brw_eu_inst_set_nib_control(devinfo, inst, (group / 4) % 2);
 
    }
 }
@@ -258,7 +258,7 @@ brw_init_codegen(const struct brw_isa_info *isa,
     * until out of memory.
     */
    p->store_size = 1024;
-   p->store = rzalloc_array(mem_ctx, brw_inst, p->store_size);
+   p->store = rzalloc_array(mem_ctx, brw_eu_inst, p->store_size);
    p->nr_insn = 0;
    p->current = p->stack;
    memset(p->current, 0, sizeof(p->current[0]));
@@ -363,12 +363,12 @@ bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
       return false;
    }
 
-   p->nr_insn -= (p->next_insn_offset - start_offset) / sizeof(brw_inst);
-   p->nr_insn += sb.st_size / sizeof(brw_inst);
+   p->nr_insn -= (p->next_insn_offset - start_offset) / sizeof(brw_eu_inst);
+   p->nr_insn += sb.st_size / sizeof(brw_eu_inst);
 
    p->next_insn_offset = start_offset + sb.st_size;
-   p->store_size = (start_offset + sb.st_size) / sizeof(brw_inst);
-   p->store = (brw_inst *)reralloc_size(p->mem_ctx, p->store, p->next_insn_offset);
+   p->store_size = (start_offset + sb.st_size) / sizeof(brw_eu_inst);
+   p->store = (brw_eu_inst *)reralloc_size(p->mem_ctx, p->store, p->next_insn_offset);
    assert(p->store);
 
    ssize_t ret = read(fd, (char *)p->store + start_offset, sb.st_size);
@@ -442,36 +442,36 @@ brw_label_assembly(const struct brw_isa_info *isa,
 
    struct brw_label *root_label = NULL;
 
-   int to_bytes_scale = sizeof(brw_inst) / brw_jump_scale(devinfo);
+   int to_bytes_scale = sizeof(brw_eu_inst) / brw_jump_scale(devinfo);
 
    for (int offset = start; offset < end;) {
-      const brw_inst *inst = (const brw_inst *) ((const char *) assembly + offset);
-      brw_inst uncompacted;
+      const brw_eu_inst *inst = (const brw_eu_inst *) ((const char *) assembly + offset);
+      brw_eu_inst uncompacted;
 
-      bool is_compact = brw_inst_cmpt_control(devinfo, inst);
+      bool is_compact = brw_eu_inst_cmpt_control(devinfo, inst);
 
       if (is_compact) {
-         brw_compact_inst *compacted = (brw_compact_inst *)inst;
+         brw_eu_compact_inst *compacted = (brw_eu_compact_inst *)inst;
          brw_uncompact_instruction(isa, &uncompacted, compacted);
          inst = &uncompacted;
       }
 
-      if (brw_has_uip(devinfo, brw_inst_opcode(isa, inst))) {
+      if (brw_has_uip(devinfo, brw_eu_inst_opcode(isa, inst))) {
          /* Instructions that have UIP also have JIP. */
          brw_create_label(&root_label,
-            offset + brw_inst_uip(devinfo, inst) * to_bytes_scale, mem_ctx);
+            offset + brw_eu_inst_uip(devinfo, inst) * to_bytes_scale, mem_ctx);
          brw_create_label(&root_label,
-            offset + brw_inst_jip(devinfo, inst) * to_bytes_scale, mem_ctx);
-      } else if (brw_has_jip(devinfo, brw_inst_opcode(isa, inst))) {
-         int jip = brw_inst_jip(devinfo, inst);
+            offset + brw_eu_inst_jip(devinfo, inst) * to_bytes_scale, mem_ctx);
+      } else if (brw_has_jip(devinfo, brw_eu_inst_opcode(isa, inst))) {
+         int jip = brw_eu_inst_jip(devinfo, inst);
 
          brw_create_label(&root_label, offset + jip * to_bytes_scale, mem_ctx);
       }
 
       if (is_compact) {
-         offset += sizeof(brw_compact_inst);
+         offset += sizeof(brw_eu_compact_inst);
       } else {
-         offset += sizeof(brw_inst);
+         offset += sizeof(brw_eu_inst);
       }
    }
 
@@ -501,8 +501,8 @@ brw_disassemble(const struct brw_isa_info *isa,
    bool dump_hex = INTEL_DEBUG(DEBUG_HEX);
 
    for (int offset = start; offset < end;) {
-      const brw_inst *insn = (const brw_inst *)((char *)assembly + offset);
-      brw_inst uncompacted;
+      const brw_eu_inst *insn = (const brw_eu_inst *)((char *)assembly + offset);
+      brw_eu_inst uncompacted;
 
       if (root_label != NULL) {
         const struct brw_label *label = brw_find_label(root_label, offset);
@@ -511,12 +511,12 @@ brw_disassemble(const struct brw_isa_info *isa,
         }
       }
 
-      bool compacted = brw_inst_cmpt_control(devinfo, insn);
+      bool compacted = brw_eu_inst_cmpt_control(devinfo, insn);
       if (0)
          fprintf(out, "0x%08x: ", offset);
 
       if (compacted) {
-         brw_compact_inst *compacted = (brw_compact_inst *)insn;
+         brw_eu_compact_inst *compacted = (brw_eu_compact_inst *)insn;
          if (dump_hex) {
             unsigned char * insn_ptr = ((unsigned char *)&insn[0]);
             const unsigned int blank_spaces = 24;
@@ -551,9 +551,9 @@ brw_disassemble(const struct brw_isa_info *isa,
       brw_disassemble_inst(out, isa, insn, compacted, offset, root_label);
 
       if (compacted) {
-         offset += sizeof(brw_compact_inst);
+         offset += sizeof(brw_eu_compact_inst);
       } else {
-         offset += sizeof(brw_inst);
+         offset += sizeof(brw_eu_inst);
       }
    }
 }
@@ -704,15 +704,15 @@ brw_opcode_desc_from_hw(const struct brw_isa_info *isa, unsigned hw)
 
 unsigned
 brw_num_sources_from_inst(const struct brw_isa_info *isa,
-                          const brw_inst *inst)
+                          const brw_eu_inst *inst)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
    const struct opcode_desc *desc =
-      brw_opcode_desc(isa, brw_inst_opcode(isa, inst));
+      brw_opcode_desc(isa, brw_eu_inst_opcode(isa, inst));
    unsigned math_function;
 
-   if (brw_inst_opcode(isa, inst) == BRW_OPCODE_MATH) {
-      math_function = brw_inst_math_function(devinfo, inst);
+   if (brw_eu_inst_opcode(isa, inst) == BRW_OPCODE_MATH) {
+      math_function = brw_eu_inst_math_function(devinfo, inst);
    } else {
       assert(desc->nsrc < 4);
       return desc->nsrc;

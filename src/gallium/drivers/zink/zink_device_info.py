@@ -75,6 +75,9 @@ EXTENSIONS = [
     Extension("VK_KHR_maintenance7",
               alias="maint7",
               features=True, properties=True),
+    Extension("VK_KHR_maintenance8",
+              alias="maint8",
+              features=True),
     Extension("VK_KHR_external_memory"),
     Extension("VK_KHR_external_memory_fd"),
     Extension("VK_KHR_vulkan_memory_model"),
@@ -582,7 +585,7 @@ zink_get_physical_device_info(struct zink_screen *screen)
 %endif
 %endfor
 
-      if (screen->vk_version < VK_MAKE_VERSION(1,2,0) && screen->instance_info.have_KHR_external_memory_capabilities) {
+      if (screen->vk_version < VK_MAKE_VERSION(1,2,0) && screen->instance_info->have_KHR_external_memory_capabilities) {
          info->deviceid_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
          info->deviceid_props.pNext = props.pNext;
          props.pNext = &info->deviceid_props;

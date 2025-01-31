@@ -122,18 +122,19 @@ agx_fast_link(struct agx_linked_shader *linked, struct agx_device *dev,
 
    linked->bo = agx_bo_create(dev, size, 0, AGX_BO_EXEC | AGX_BO_LOW_VA,
                               "Linked executable");
+   uint8_t *linked_map = agx_bo_map(linked->bo);
 
    size_t offset = 0;
 
    /* FS prolog happens per-pixel, outside the sample loop */
    if (prolog) {
       size_t sz = prolog->info.main_size;
-      memcpy((uint8_t *)linked->bo->map + offset, prolog->binary, sz);
+      memcpy(linked_map + offset, prolog->binary, sz);
       offset += sz;
    }
 
    if (nr_samples_shaded) {
-      memcpy((uint8_t *)linked->bo->map + offset, sample_loop_header,
+      memcpy(linked_map + offset, sample_loop_header,
              sizeof(sample_loop_header));
       offset += sizeof(sample_loop_header);
    }
@@ -147,8 +148,7 @@ agx_fast_link(struct agx_linked_shader *linked, struct agx_device *dev,
          continue;
 
       size_t sz = part->info.main_size;
-      memcpy((uint8_t *)linked->bo->map + offset,
-             part->binary + part->info.main_offset, sz);
+      memcpy(linked_map + offset, part->binary + part->info.main_offset, sz);
       offset += sz;
    }
 
@@ -171,11 +171,11 @@ agx_fast_link(struct agx_linked_shader *linked, struct agx_device *dev,
       *target = branch_offs;
 
       /* Copy in the patched footer */
-      memcpy((uint8_t *)linked->bo->map + offset, footer, sizeof(footer));
+      memcpy(linked_map + offset, footer, sizeof(footer));
       offset += sizeof(footer);
    } else if (nr_samples_shaded) {
       /* Just end after the first sample, no need to loop for a single sample */
-      memcpy((uint8_t *)linked->bo->map + offset, stop, sizeof(stop));
+      memcpy(linked_map + offset, stop, sizeof(stop));
       offset += sizeof(stop);
    }
 

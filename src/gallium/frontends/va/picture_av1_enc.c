@@ -639,8 +639,8 @@ static void av1_render_size(vlVaContext *context, struct vl_vlc *vlc)
 
    av1->enable_render_size = av1_f(vlc, 1);
    if (av1->enable_render_size) {
-      av1->render_width = av1_f(vlc, 16);
-      av1->render_height = av1_f(vlc, 16);
+      av1->render_width_minus_1 = av1_f(vlc, 16);
+      av1->render_height_minus_1 = av1_f(vlc, 16);
    }
 }
 
