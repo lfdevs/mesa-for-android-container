@@ -1,3 +1,9 @@
+mesa (25.0.0~rc1-1) UNRELEASED; urgency=medium
+
+  * New upstream release candidate.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 31 Jan 2025 08:13:18 +0200
+
 mesa (24.3.4-2) unstable; urgency=medium
 
   * Build with gcc-12 and -O1 on ppc64el to workaround segfaults
