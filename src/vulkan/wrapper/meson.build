@@ -74,7 +74,7 @@ wrapper_files = files(
 )
 
 wrapper_deps = [
-  idep_vulkan_runtime,
+  idep_vulkan_lite_runtime,
   idep_vulkan_util,
   idep_vulkan_wsi,
   dep_android,

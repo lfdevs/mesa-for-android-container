@@ -1,10 +1,6 @@
-#define native_handle_t __native_handle_t
-#define buffer_handle_t __buffer_handle_t
 #include "wrapper_private.h"
 #include "wrapper_entrypoints.h"
 #include "vk_common_entrypoints.h"
-#undef native_handle_t
-#undef buffer_handle_t
 #include "util/os_file.h"
 #include "vk_util.h"
 
