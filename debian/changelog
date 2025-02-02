@@ -1,6 +1,7 @@
 mesa (24.3.4-3) UNRELEASED; urgency=medium
 
   * Revert "Build with gcc-12 and -O1 on ppc64el".
+  * Add a patch to disable ppc64el assembly code. (Closes: #1092890)
 
  -- Dmitry Shachnev <mitya57@debian.org>  Sun, 02 Feb 2025 17:20:29 +0300
 
