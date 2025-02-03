@@ -1,2 +1,3 @@
 path_max.diff
 src_glx_dri_common.h.diff
+disable_ppc64el_assembly.diff
