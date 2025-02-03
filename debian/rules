@@ -36,12 +36,6 @@ else ifneq (,$(filter $(DEB_HOST_ARCH), sh4))
   # Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83143
   DEB_CFLAGS_MAINT_APPEND += -freorder-blocks-algorithm=simple
   DEB_CXXFLAGS_MAINT_APPEND += -freorder-blocks-algorithm=simple
-else ifneq (,$(filter $(DEB_HOST_ARCH), ppc64el))
-  # Workaround for https://bugs.debian.org/1092890
-  DEB_CFLAGS_MAINT_APPEND += -O1
-  DEB_CXXFLAGS_MAINT_APPEND += -O1
-  export CC := gcc-12
-  export CXX := g++-12
 endif
 buildflags = $(shell \
 	DEB_CFLAGS_MAINT_APPEND='$(DEB_CFLAGS_MAINT_APPEND)' \
