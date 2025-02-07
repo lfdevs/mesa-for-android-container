@@ -172,6 +172,7 @@ get_preload_shader(struct panvk_device *dev,
    struct panfrost_compile_inputs inputs = {
       .gpu_id = phys_dev->kmod.props.gpu_prod_id,
       .no_ubo_to_push = true,
+      .is_blit = true,
    };
 
    pan_shader_preprocess(nir, inputs.gpu_id);
@@ -374,8 +375,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
       cfg.stencil_back = cfg.stencil_front;
 
       if (key->aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
-         cfg.properties.zs_update_operation = MALI_PIXEL_KILL_WEAK_EARLY;
-         cfg.properties.pixel_kill_operation = MALI_PIXEL_KILL_WEAK_EARLY;
+         /* Skipping ATEST requires forcing Z/S */
+         cfg.properties.zs_update_operation = MALI_PIXEL_KILL_FORCE_EARLY;
+         cfg.properties.pixel_kill_operation = MALI_PIXEL_KILL_FORCE_EARLY;
       } else {
          /* Writing Z/S requires late updates */
          cfg.properties.zs_update_operation = MALI_PIXEL_KILL_FORCE_LATE;
@@ -617,8 +619,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
 
    pan_pack(&dcds[dcd_idx], DRAW, cfg) {
       if (key->aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
-         cfg.zs_update_operation = MALI_PIXEL_KILL_WEAK_EARLY;
-         cfg.pixel_kill_operation = MALI_PIXEL_KILL_WEAK_EARLY;
+         /* Skipping ATEST requires forcing Z/S */
+         cfg.zs_update_operation = MALI_PIXEL_KILL_FORCE_EARLY;
+         cfg.pixel_kill_operation = MALI_PIXEL_KILL_FORCE_EARLY;
 
          cfg.blend = bds.gpu;
          cfg.blend_count = bd_count;

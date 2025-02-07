@@ -2098,7 +2098,7 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
       pic.AllowScreenContentToolsFlag = std_pic_info->flags.allow_screen_content_tools;
       pic.ForceIntegerMVFlag = std_pic_info->flags.force_integer_mv;
       pic.AllowWarpedMotionFlag = std_pic_info->flags.allow_warped_motion;
-      pic.UseCDEFFilterFlag = seq_hdr->flags.enable_cdef;
+      pic.UseCDEFFilterFlag = !frame_lossless && seq_hdr->flags.enable_cdef;
       pic.UseSuperResFlag = std_pic_info->flags.use_superres;
       pic.FrameLevelLoopRestorationFilterEnable = frame_restoration_type[0] || frame_restoration_type[1] || frame_restoration_type[2];
       pic.FrameType = std_pic_info->frame_type;
@@ -2113,7 +2113,7 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
       pic.LastActiveSegmentSegmentID = last_active_segid;
       pic.DeltaQPresentFlag = std_pic_info->flags.delta_q_present;
       pic.DeltaQRes = std_pic_info->delta_q_res;
-      pic.FrameCodedLosslessMode = frame_lossless; /* TODO */
+      pic.FrameCodedLosslessMode = frame_lossless;
       pic.SegmentMapisZeroFlag = 0; /* TODO */
       pic.SegmentIDBufferStreamInEnableFlag = 0; /* TODO */
       pic.SegmentIDBufferStreamOutEnableFlag = 0; /* TODO */

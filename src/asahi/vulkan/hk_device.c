@@ -288,7 +288,7 @@ hk_check_status(struct vk_device *device)
 static VkResult
 hk_get_timestamp(struct vk_device *device, uint64_t *timestamp)
 {
-   struct hk_device *dev = container_of(device, struct hk_device, vk);
+   // struct hk_device *dev = container_of(device, struct hk_device, vk);
    unreachable("todo");
    // *timestamp = agx_get_gpu_timestamp(dev);
    return VK_SUCCESS;

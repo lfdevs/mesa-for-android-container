@@ -905,6 +905,14 @@ panvk_physical_device_init(struct panvk_physical_device *device,
 
    unsigned arch = pan_arch(device->kmod.props.gpu_prod_id);
 
+   if (!device->model) {
+      result = panvk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                            "Unknown gpu_id (%#x) or variant (%#x)",
+                            device->kmod.props.gpu_prod_id,
+                            device->kmod.props.gpu_variant);
+      goto fail;
+   }
+
    switch (arch) {
    case 6:
    case 7:

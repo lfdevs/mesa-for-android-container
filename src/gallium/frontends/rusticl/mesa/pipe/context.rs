@@ -591,6 +591,16 @@ impl PipeContext {
             }
         }
     }
+
+    pub fn device_reset_status(&self) -> pipe_reset_status {
+        unsafe {
+            if let Some(get_device_reset_status) = self.pipe.as_ref().get_device_reset_status {
+                get_device_reset_status(self.pipe.as_ptr())
+            } else {
+                pipe_reset_status::PIPE_NO_RESET
+            }
+        }
+    }
 }
 
 impl Drop for PipeContext {

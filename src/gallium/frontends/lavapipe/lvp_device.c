@@ -304,7 +304,7 @@ min_vertex_pipeline_param(struct pipe_screen *pscreen, enum pipe_shader_cap para
                                      PIPE_SHADER_CAP_MAX_INSTRUCTIONS))
          continue;
 
-      val = MAX2(val, pscreen->get_shader_param(pscreen, i, param));
+      val = MIN2(val, pscreen->get_shader_param(pscreen, i, param));
    }
    return val;
 }

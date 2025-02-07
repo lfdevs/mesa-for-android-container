@@ -258,7 +258,7 @@ include:
 
 .ci-deqp-artifacts:
   artifacts:
-    name: "{CI_PROJECT_NAME}_${CI_JOB_NAME}"
+    name: "${CI_PROJECT_NAME}_${CI_JOB_NAME}"
     when: always
     untracked: false
     paths:

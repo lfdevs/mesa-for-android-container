@@ -525,6 +525,8 @@ if not have_mtls_dialect
   # cross-compiling, but because this is just an optimization we can skip it
   if meson.is_cross_build() and not meson.can_run_host_binaries()
     warning('cannot auto-detect -mtls-dialect when cross-compiling, using compiler default')
+  elif host_machine.system() == 'freebsd'
+    warning('cannot use -mtls-dialect for FreeBSD, using compiler default')
   else
     # The way to specify the TLSDESC dialect is architecture-specific.
     # We probe both because there is not a fallback guaranteed to work for all

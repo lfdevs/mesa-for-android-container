@@ -1250,8 +1250,15 @@ brw_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          assert(inst->force_writemask_all && inst->group == 0);
          assert(inst->dst.file == BAD_FILE);
          brw_set_default_exec_size(p, BRW_EXECUTE_1);
+         brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
          brw_MOV(p, retype(brw_flag_subreg(inst->flag_subreg), BRW_TYPE_UD),
                  retype(brw_mask_reg(0), BRW_TYPE_UD));
+         /* Reading certain ARF registers (like 'ce', the mask register) on
+          * Gfx12+ requires requires a dependency on all pipes on the read
+          * instruction and the next instructions
+          */
+         if (devinfo->ver >= 12)
+            brw_SYNC(p, TGL_SYNC_NOP);
          break;
       }
       case SHADER_OPCODE_BROADCAST:

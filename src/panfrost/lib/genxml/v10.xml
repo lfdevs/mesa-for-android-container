@@ -771,7 +771,7 @@
   </struct>
 
   <struct name="CS PROGRESS_LOAD" size="2">
-    <field name="Destination" size="8" start="40" type="uint"/>
+    <field name="Destination" size="8" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="PROGRESS_LOAD"/>
   </struct>
 

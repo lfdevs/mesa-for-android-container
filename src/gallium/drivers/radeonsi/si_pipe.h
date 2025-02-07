@@ -2005,7 +2005,8 @@ static inline bool util_rast_prim_is_triangles(unsigned prim)
    return ((1 << prim) & UTIL_ALL_PRIM_TRIANGLE_MODES) != 0;
 }
 
-static inline void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_draws)
+static inline void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_draws,
+                                        unsigned extra_dw_per_draw)
 {
    struct radeon_cmdbuf *cs = &ctx->gfx_cs;
    /* Don't count the needed CS space exactly and just use an upper bound.
@@ -2013,7 +2014,8 @@ static inline void si_need_gfx_cs_space(struct si_context *ctx, unsigned num_dra
     * Also reserve space for stopping queries at the end of IB, because
     * the number of active queries is unlimited in theory.
     */
-   unsigned reserve_dw = 2048 + ctx->num_cs_dw_queries_suspend + num_draws * 10;
+   unsigned reserve_dw = 2048 + ctx->num_cs_dw_queries_suspend +
+      num_draws * (10 + extra_dw_per_draw);
 
    if (!ctx->ws->cs_check_space(cs, reserve_dw))
       si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
