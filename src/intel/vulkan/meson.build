@@ -37,6 +37,7 @@ idep_anv_headers = declare_dependency(
   include_directories : inc_anv,
 )
 
+bvh_spv = []
 if with_intel_vk_rt
   if with_intel_bvh_grl
     subdir('grl')
@@ -124,7 +125,7 @@ endif
 foreach _gfx_ver : ['90', '110', '120', '125', '200', '300']
   libanv_per_hw_ver_libs += static_library(
     'anv_per_hw_ver@0@'.format(_gfx_ver),
-    [anv_per_hw_ver_files, anv_entrypoints[0]],
+    [anv_per_hw_ver_files, anv_entrypoints[0]] + bvh_spv,
     include_directories : [
       inc_include, inc_src, inc_intel,
     ],

@@ -29,7 +29,6 @@ anv_bvh_includes = files(
   'anv_bvh.h',
 )
 
-bvh_spv = []
 foreach s : bvh_shaders
   command = [
     prog_glslang, '-V', '-I' + vk_bvh_include_dir, '-I' + anv_bvh_include_dir, '--target-env', 'spirv1.5', '-x', '-o', '@OUTPUT@', '@INPUT@'

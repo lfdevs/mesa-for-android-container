@@ -679,6 +679,9 @@ ddebug_screen_create(struct pipe_screen *screen)
    SCR_INIT(vertex_state_destroy);
    dscreen->base.get_driver_pipe_screen = dd_get_driver_pipe_screen;
 
+   /* copy all caps */
+   *(struct pipe_caps *)&dscreen->base.caps = screen->caps;
+
 #undef SCR_INIT
 
    dscreen->screen = screen;

@@ -3165,6 +3165,7 @@ emit_is_helper_invocation(struct ntv_context *ctx, nir_intrinsic_instr *intr)
 {
    spirv_builder_emit_extension(&ctx->builder,
                                 "SPV_EXT_demote_to_helper_invocation");
+   spirv_builder_emit_cap(&ctx->builder, SpvCapabilityDemoteToHelperInvocation);
    SpvId result = spirv_is_helper_invocation(&ctx->builder);
    store_def(ctx, intr->def.index, result, nir_type_bool);
 }

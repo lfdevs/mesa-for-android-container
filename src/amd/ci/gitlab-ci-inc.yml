@@ -191,6 +191,9 @@
     HWCI_KERNEL_MODULES: amdgpu
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-CM1400CXA-dalboz
+    # Force fixed 6.6 kernel, amdgpu doesn't revcover from GPU resets on 6.13
+    # https://gitlab.freedesktop.org/drm/amd/-/issues/3861
+    EXTERNAL_KERNEL_TAG: "v6.6.21-mesa-f8ea"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/lenovo-TPad-C13-Yoga-zork
 .lava-lenovo-TPad-C13-Yoga-zork:x86_64:
@@ -204,6 +207,9 @@
     HWCI_KERNEL_MODULES: amdgpu
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-lenovo-TPad-C13-Yoga-zork
+    # Force fixed 6.6 kernel, amdgpu doesn't revcover from GPU resets on 6.13
+    # https://gitlab.freedesktop.org/drm/amd/-/issues/3861
+    EXTERNAL_KERNEL_TAG: "v6.6.21-mesa-f8ea"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/hp-x360-14a-cb0001xx-zork
 .lava-hp-x360-14a-cb0001xx-zork:x86_64:
@@ -217,6 +223,9 @@
     HWCI_KERNEL_MODULES: amdgpu
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-x360-14a-cb0001xx-zork
+    # Force fixed 6.6 kernel, amdgpu doesn't revcover from GPU resets on 6.13
+    # https://gitlab.freedesktop.org/drm/amd/-/issues/3861
+    EXTERNAL_KERNEL_TAG: "v6.6.21-mesa-f8ea"
 
 
 ############### LAVA

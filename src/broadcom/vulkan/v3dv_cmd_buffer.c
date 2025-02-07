@@ -2844,6 +2844,7 @@ cmd_buffer_binning_sync_required(struct v3dv_cmd_buffer *cmd_buffer,
 
       /* Texel Buffer read */
       if (buffer_access & (VK_ACCESS_2_SHADER_SAMPLED_READ_BIT |
+                           VK_ACCESS_2_SHADER_READ_BIT |
                            VK_ACCESS_2_MEMORY_READ_BIT)) {
          if (vs_bin_maps->texture_map.num_desc > 0)
             return true;

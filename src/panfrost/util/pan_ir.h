@@ -98,7 +98,7 @@ struct panfrost_compile_inputs {
    struct util_debug_callback *debug;
 
    unsigned gpu_id;
-   bool is_blend;
+   bool is_blend, is_blit;
    struct {
       unsigned nr_samples;
       uint64_t bifrost_blend_desc;

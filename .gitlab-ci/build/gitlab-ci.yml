@@ -16,7 +16,7 @@
   # We don't want to download any previous job's artifacts
   dependencies: []
   artifacts:
-    name: "{CI_PROJECT_NAME}_${CI_JOB_NAME}"
+    name: "${CI_PROJECT_NAME}_${CI_JOB_NAME}"
     when: always
     paths:
       - _build/meson-logs/*.txt
@@ -238,7 +238,6 @@ debian-build-testing:
   extends: .meson-build
   stage: build-for-tests
   variables:
-    BUILDTYPE: debug
     UNWIND: "enabled"
     DRI_LOADERS: >
       -D glx=dri
@@ -255,7 +254,7 @@ debian-build-testing:
       -D gallium-rusticl=false
     GALLIUM_DRIVERS: "i915,iris,nouveau,r300,r600,freedreno,llvmpipe,softpipe,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,asahi,crocus"
     VULKAN_DRIVERS: "intel_hasvk,imagination-experimental,microsoft-experimental,nouveau,swrast"
-    BUILD_TYPE: "debugoptimized"
+    BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
       -D osmesa=true

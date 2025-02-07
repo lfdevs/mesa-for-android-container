@@ -877,12 +877,16 @@ bi_emit_blend_op(bi_builder *b, bi_index rgba, nir_alu_type T, bi_index rgba2,
 }
 
 /* Blend shaders do not need to run ATEST since they are dependent on a
- * fragment shader that runs it. */
+ * fragment shader that runs it. Blit shaders may not need to run ATEST, since
+ * ATEST is not needed if early-z is forced, alpha-to-coverage is disabled, and
+ * there are no writes to the coverage mask. The latter two are satisfied for
+ * all blit shaders, so we just care about early-z, which blit shaders force
+ * iff they do not write depth or stencil */
 
 static bool
-bi_skip_atest(bi_context *ctx)
+bi_skip_atest(bi_context *ctx, bool emit_zs)
 {
-   return ctx->inputs->is_blend;
+   return (ctx->inputs->is_blit && !emit_zs) || ctx->inputs->is_blend;
 }
 
 static void
@@ -946,7 +950,7 @@ bi_emit_fragment_out(bi_builder *b, nir_intrinsic_instr *instr)
     * alpha value is only used for alpha-to-coverage, a stage which is
     * skipped for pure integer framebuffers, so the issue is moot. */
 
-   if (!b->shader->emitted_atest && !bi_skip_atest(b->shader)) {
+   if (!b->shader->emitted_atest && !bi_skip_atest(b->shader, emit_zs)) {
       nir_alu_type T = nir_intrinsic_src_type(instr);
 
       bi_index rgba = bi_src_index(&instr->src[0]);
@@ -1178,7 +1182,13 @@ bi_emit_store_vary(bi_builder *b, nir_intrinsic_instr *instr)
 
       if (index_offset != 0)
          index = bi_iadd_imm_i32(b, index, index_offset);
-      bi_index address = bi_lea_buf_imm(b, index);
+
+      /* On Valhall, with IDVS varying are stored in a hardware-controlled
+       * buffer through table 61 at index 0 */
+      bi_index address = bi_temp(b->shader);
+      bi_instr *I = bi_lea_buf_imm_to(b, address, index);
+      I->table = va_res_fold_table_idx(61);
+      I->index = 0;
       bi_emit_split_i32(b, a, address, 2);
 
       bi_store(b, nr * src_bit_sz, data, a[0], a[1],
@@ -1735,7 +1745,7 @@ bi_emit_derivative(bi_builder *b, bi_index dst, nir_intrinsic_instr *instr,
     */
    if (nir_def_all_uses_ignore_sign_bit(&instr->def) && !coarse) {
       left = s0;
-      right = bi_clper(b, s0, bi_imm_u32(axis), BI_LANE_OP_XOR);
+      right = bi_clper(b, s0, bi_imm_u8(axis), BI_LANE_OP_XOR);
    } else {
       bi_index lane1, lane2;
       if (coarse) {
@@ -1748,8 +1758,8 @@ bi_emit_derivative(bi_builder *b, bi_index dst, nir_intrinsic_instr *instr,
          lane2 = bi_iadd_u32(b, lane1, bi_imm_u32(axis), false);
       }
 
-      left = bi_clper(b, s0, lane1, BI_LANE_OP_NONE);
-      right = bi_clper(b, s0, lane2, BI_LANE_OP_NONE);
+      left = bi_clper(b, s0, bi_byte(lane1, 0), BI_LANE_OP_NONE);
+      right = bi_clper(b, s0, bi_byte(lane2, 0), BI_LANE_OP_NONE);
    }
 
    bi_fadd_to(b, sz, dst, right, bi_neg(left));
@@ -2042,7 +2052,7 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
          bi_subgroup_from_cluster_size(pan_subgroup_size(b->shader->arch));
       bi_clper_i32_to(b, dst,
                       bi_src_index(&instr->src[0]),
-                      bi_src_index(&instr->src[1]),
+                      bi_byte(bi_src_index(&instr->src[1]), 0),
                       inactive_result, lane_op, subgroup);
       break;
    }
@@ -4118,10 +4128,16 @@ bi_emit_tex_valhall(bi_builder *b, nir_tex_instr *instr)
                        !narrow_indices, mask, sr_count);
       break;
    case nir_texop_txf:
-   case nir_texop_txf_ms:
+   case nir_texop_txf_ms: {
+      /* On Valhall, TEX_FETCH doesn't have CUBE support. This is not a problem
+       * as a cube is just a 2D array in any cases. */
+      if (dim == BI_DIMENSION_CUBE)
+         dim = BI_DIMENSION_2D;
+
       bi_tex_fetch_to(b, dest, idx, src0, src1, instr->is_array, dim, regfmt,
                       explicit_offset, !narrow_indices, mask, sr_count);
       break;
+   }
    case nir_texop_tg4:
       bi_tex_gather_to(b, dest, idx, src0, src1, instr->is_array, dim,
                        instr->component, false, regfmt, instr->is_shadow,
@@ -5538,7 +5554,7 @@ bi_compile_variant_nir(nir_shader *nir,
    /* If the shader doesn't write any colour or depth outputs, it may
     * still need an ATEST at the very end! */
    bool need_dummy_atest = (ctx->stage == MESA_SHADER_FRAGMENT) &&
-                           !ctx->emitted_atest && !bi_skip_atest(ctx);
+                           !ctx->emitted_atest && !bi_skip_atest(ctx, false);
 
    if (need_dummy_atest) {
       bi_block *end = list_last_entry(&ctx->blocks, bi_block, link);
