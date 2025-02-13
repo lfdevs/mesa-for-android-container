@@ -316,6 +316,7 @@ is_disjoint(struct panvk_image *image)
 {
    assert((image->plane_count > 1 &&
            image->vk.format != VK_FORMAT_D32_SFLOAT_S8_UINT) ||
+          (image->vk.create_flags & VK_IMAGE_CREATE_ALIAS_BIT) ||
           !(image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT));
    return image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT;
 }

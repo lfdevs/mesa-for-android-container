@@ -306,6 +306,14 @@ struct pipe_shader_state
       struct nir_shader *nir;
    } ir;
    struct pipe_stream_output_info stream_output;
+
+   /* If the caller sets report_compile_error=true, the driver can fail
+    * compilation and should allocate a string with the error message and
+    * store it in the pointer below. The caller is responsible for reading
+    * and freeing the error message.
+    */
+   bool report_compile_error;
+   char *error_message;
 };
 
 static inline void

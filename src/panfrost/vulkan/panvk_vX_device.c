@@ -286,10 +286,6 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       panfrost_clamp_to_usable_va_range(device->kmod.dev, 1ull << 32);
    uint32_t vm_flags = PAN_ARCH <= 7 ? PAN_KMOD_VM_FLAG_AUTO_VA : 0;
 
-   simple_mtx_init(&device->as.lock, mtx_plain);
-   util_vma_heap_init(&device->as.heap, user_va_start,
-                      user_va_end - user_va_start);
-
    device->kmod.vm =
       pan_kmod_vm_create(device->kmod.dev, vm_flags,
                          user_va_start, user_va_end - user_va_start);
@@ -298,6 +294,10 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       result = panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto err_destroy_kdev;
    }
+
+   simple_mtx_init(&device->as.lock, mtx_plain);
+   util_vma_heap_init(&device->as.heap, user_va_start,
+                      user_va_end - user_va_start);
 
    panvk_device_init_mempools(device);
 

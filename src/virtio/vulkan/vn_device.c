@@ -333,6 +333,15 @@ vn_device_fix_create_info(const struct vn_device *dev,
       extra_exts[extra_count++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
    }
 
+   /* see vn_cmd_set_external_acquire_unmodified */
+   if (VN_PRESENT_SRC_INTERNAL_LAYOUT != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
+       physical_dev->renderer_extensions
+          .EXT_external_memory_acquire_unmodified &&
+       !app_exts->EXT_external_memory_acquire_unmodified && has_wsi) {
+      extra_exts[extra_count++] =
+         VK_EXT_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXTENSION_NAME;
+   }
+
    if (app_exts->EXT_device_memory_report) {
       /* see vn_physical_device_get_native_extensions */
       block_exts[block_count++] = VK_EXT_DEVICE_MEMORY_REPORT_EXTENSION_NAME;

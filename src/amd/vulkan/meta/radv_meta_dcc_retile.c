@@ -62,7 +62,7 @@ build_dcc_retile_compute_shader(struct radv_device *dev, struct radeon_surf *sur
 static VkResult
 get_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-dcc-retile";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_DCC_RETILE;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
       {
@@ -92,9 +92,14 @@ get_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
       .size = 16,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
+
+struct radv_dcc_retile_key {
+   enum radv_meta_object_key_type type;
+   uint32_t swizzle;
+};
 
 /*
  * This take a surface, but the only things used are:
@@ -109,16 +114,18 @@ get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *p
              VkPipelineLayout *layout_out)
 {
    const unsigned swizzle_mode = image->planes[0].surface.u.gfx9.swizzle_mode;
-   char key_data[64];
+   struct radv_dcc_retile_key key;
    VkResult result;
 
    result = get_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-dcc-retile-%d", swizzle_mode);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_DCC_RETILE;
+   key.swizzle = swizzle_mode;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -141,8 +148,8 @@ get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *p
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;

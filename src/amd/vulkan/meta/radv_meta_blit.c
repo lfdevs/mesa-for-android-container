@@ -165,7 +165,7 @@ translate_sampler_dim(VkImageType type)
 static VkResult
 get_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-blit";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_BLIT;
 
    const VkDescriptorSetLayoutBinding binding = {
       .binding = 0,
@@ -183,9 +183,16 @@ get_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 
    const VkPushConstantRange pc_range = {VK_SHADER_STAGE_VERTEX_BIT, 0, 20};
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
+
+struct radv_blit_key {
+   enum radv_meta_object_key_type type;
+   VkImageAspectFlags aspects;
+   VkImageType image_type;
+   uint32_t fs_key;
+};
 
 static VkResult
 get_pipeline(struct radv_device *device, const struct radv_image_view *src_iview,
@@ -195,18 +202,26 @@ get_pipeline(struct radv_device *device, const struct radv_image_view *src_iview
    const struct radv_image *src_image = src_iview->image;
    const struct radv_image *dst_image = dst_iview->image;
    const enum glsl_sampler_dim tex_dim = translate_sampler_dim(src_image->vk.image_type);
-   unsigned fs_key = 0;
-   char key_data[64];
+   struct radv_blit_key key;
    VkResult result;
 
    result = get_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   if (src_image->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT)
-      fs_key = radv_format_meta_fs_key(device, dst_image->vk.format);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_BLIT;
+   key.aspects = src_image->vk.aspects;
+   key.image_type = src_image->vk.image_type;
 
-   snprintf(key_data, sizeof(key_data), "radv-blit-%d-%d-%d", src_image->vk.aspects, src_image->vk.image_type, fs_key);
+   if (src_image->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT)
+      key.fs_key = radv_format_meta_fs_key(device, dst_image->vk.format);
+
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
+   if (pipeline_from_cache != VK_NULL_HANDLE) {
+      *pipeline_out = pipeline_from_cache;
+      return VK_SUCCESS;
+   }
 
    nir_shader *fs;
    nir_shader *vs = build_nir_vertex_shader(device);
@@ -331,7 +346,7 @@ get_pipeline(struct radv_device *device, const struct radv_image_view *src_iview
    case VK_IMAGE_ASPECT_COLOR_BIT:
       pipeline_create_info.pColorBlendState = &color_blend_info;
       render.color_attachment_count = 1;
-      render.color_attachment_formats[0] = radv_fs_key_format_exemplars[fs_key];
+      render.color_attachment_formats[0] = radv_fs_key_format_exemplars[key.fs_key];
       break;
    case VK_IMAGE_ASPECT_DEPTH_BIT:
       pipeline_create_info.pDepthStencilState = &depth_info;
@@ -346,7 +361,7 @@ get_pipeline(struct radv_device *device, const struct radv_image_view *src_iview
    }
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs);
    ralloc_free(fs);

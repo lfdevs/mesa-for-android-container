@@ -107,31 +107,12 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
    result.sps_info_flags |= ((dec->dpb_type == DPB_DYNAMIC_TIER_2) ? 0 : 1)
                               << RDECODE_SPS_INFO_H264_EXTENSION_SUPPORT_FLAG_SHIFT;
 
+   result.chroma_format = pic->pps->sps->chroma_format_idc;
    result.bit_depth_luma_minus8 = pic->pps->sps->bit_depth_luma_minus8;
    result.bit_depth_chroma_minus8 = pic->pps->sps->bit_depth_chroma_minus8;
    result.log2_max_frame_num_minus4 = pic->pps->sps->log2_max_frame_num_minus4;
    result.pic_order_cnt_type = pic->pps->sps->pic_order_cnt_type;
    result.log2_max_pic_order_cnt_lsb_minus4 = pic->pps->sps->log2_max_pic_order_cnt_lsb_minus4;
-
-   switch (dec->base.chroma_format) {
-   case PIPE_VIDEO_CHROMA_FORMAT_NONE:
-      break;
-   case PIPE_VIDEO_CHROMA_FORMAT_400:
-      result.chroma_format = 0;
-      break;
-   case PIPE_VIDEO_CHROMA_FORMAT_420:
-      result.chroma_format = 1;
-      break;
-   case PIPE_VIDEO_CHROMA_FORMAT_422:
-      result.chroma_format = 2;
-      break;
-   case PIPE_VIDEO_CHROMA_FORMAT_444:
-      result.chroma_format = 3;
-      break;
-   case PIPE_VIDEO_CHROMA_FORMAT_440:
-      result.chroma_format = 4;
-      break;
-   }
 
    result.pps_info_flags = 0;
    result.pps_info_flags |= pic->pps->transform_8x8_mode_flag << 0;
@@ -1092,7 +1073,7 @@ static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
       fg_params->clip_to_restricted_range =
          pic->picture_parameter.film_grain_info.film_grain_info_fields.clip_to_restricted_range;
 
-      ac_vcn_av1_init_film_grain_buffer(fg_params, fg_buf);
+      ac_vcn_av1_init_film_grain_buffer(dec->av1_version, fg_params, fg_buf);
    }
 
    result.uncompressed_header_size = 0;
@@ -2952,12 +2933,12 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
    case VCN_5_0_0:
       dec->jpg_reg.version = RDECODE_JPEG_REG_VER_V3;
       dec->addr_gfx_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX11;
-      dec->av1_version = RDECODE_AV1_VER_1;
+      dec->av1_version = RDECODE_AV1_VER_2;
       break;
    case VCN_5_0_1:
       dec->jpg_reg.version = RDECODE_JPEG_REG_VER_V3;
       dec->addr_gfx_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX9;
-      dec->av1_version = RDECODE_AV1_VER_1;
+      dec->av1_version = RDECODE_AV1_VER_2;
       break;
    default:
       RADEON_DEC_ERR("VCN is not supported.\n");

@@ -1191,6 +1191,7 @@ shader_desc_info_deserialize(struct blob_reader *blob,
 #else
    shader->desc_info.dyn_bufs.count = blob_read_uint32(blob);
    blob_copy_bytes(blob, shader->desc_info.dyn_bufs.map,
+                   sizeof(*shader->desc_info.dyn_bufs.map) *
                    shader->desc_info.dyn_bufs.count);
 #endif
 
@@ -1291,7 +1292,7 @@ shader_desc_info_serialize(struct blob *blob, const struct panvk_shader *shader)
    blob_write_uint32(blob, shader->desc_info.dyn_bufs.count);
    blob_write_bytes(blob, shader->desc_info.dyn_bufs.map,
                     sizeof(*shader->desc_info.dyn_bufs.map) *
-                       shader->desc_info.dyn_bufs.count);
+                    shader->desc_info.dyn_bufs.count);
 #endif
 }
 

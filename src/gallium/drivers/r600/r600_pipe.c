@@ -625,8 +625,6 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
 
 	rscreen->has_msaa = true;
 
-	r600_init_screen_caps(rscreen);
-
 	/* MSAA support. */
 	switch (rscreen->b.gfx_level) {
 	case R600:
@@ -653,10 +651,13 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
 
 	rscreen->global_pool = compute_memory_pool_new(rscreen);
 
+	rscreen->has_atomics = true;
+
+	r600_init_screen_caps(rscreen);
+
 	/* Create the auxiliary context. This must be done last. */
 	rscreen->b.aux_context = rscreen->b.b.context_create(&rscreen->b.b, NULL, 0);
 
-	rscreen->has_atomics = true;
 #if 0 /* This is for testing whether aux_context and buffer clearing work correctly. */
 	struct pipe_resource templ = {};
 

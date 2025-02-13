@@ -2670,7 +2670,7 @@ build_dgc_prepare_shader(struct radv_device *dev, struct radv_indirect_command_l
 static VkResult
 radv_create_dgc_pipeline(struct radv_device *device, struct radv_indirect_command_layout *layout)
 {
-   const char *key_data = "radv-dgc-layout";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_DGC;
    VkResult result;
 
    const VkDescriptorSetLayoutBinding binding = {
@@ -2692,8 +2692,8 @@ radv_create_dgc_pipeline(struct radv_device *device, struct radv_indirect_comman
       .size = sizeof(struct radv_dgc_params),
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                        strlen(key_data), &layout->pipeline_layout);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key,
+                                        sizeof(key), &layout->pipeline_layout);
    if (result != VK_SUCCESS)
       return result;
 
