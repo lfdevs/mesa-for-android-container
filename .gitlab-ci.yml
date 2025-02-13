@@ -30,6 +30,10 @@ workflow:
     # do not duplicate pipelines on merge pipelines
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"
       when: never
+    # tag pipelines are disabled as it's too late to run all the tests by
+    # then, the release has been made based on the staging pipelines results
+    - if: $CI_COMMIT_TAG
+      when: never
     # merge pipeline
     - if: &is-merge-attempt $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       variables:
@@ -53,7 +57,11 @@ workflow:
         # Note: 0 = infinity = gitlab's job `timeout:` applies, which is 1h
         BUILD_JOB_TIMEOUT_OVERRIDE: 0
     # pipeline for direct pushes that bypassed the CI
-    - if: &is-direct-push $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $GITLAB_USER_LOGIN != "marge-bot"
+    - if: &is-direct-push $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+      variables:
+        JOB_PRIORITY: 70
+    # pipeline for direct pushes from release maintainer
+    - if: &is-staging-push $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME =~ /^staging\//
       variables:
         JOB_PRIORITY: 70
 
@@ -247,6 +255,9 @@ include:
       when: never
     # Build everything after someone bypassed the CI
     - if: *is-direct-push
+      when: on_success
+    # Build everything when pushing to staging branches
+    - if: *is-staging-push
       when: on_success
     # Build everything in scheduled pipelines
     - if: *is-scheduled-pipeline

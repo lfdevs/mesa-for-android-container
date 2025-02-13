@@ -2253,6 +2253,8 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    mesa_bytes_to_hex(buf, pdev->cache_uuid, VK_UUID_SIZE);
    pdev->vk.disk_cache = disk_cache_create(pdev->name, buf, 0);
 
+   pdev->disk_cache_meta = disk_cache_create_custom(pdev->name, buf, 0, "radv_builtin_shaders", 1024 * 32 /* 32MiB */);
+
    radv_get_physical_device_properties(pdev);
 
    if ((instance->debug_flags & RADV_DEBUG_INFO))
@@ -2298,6 +2300,7 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
 fail_perfcounters:
    ac_destroy_perfcounters(&pdev->ac_perfcounters);
    disk_cache_destroy(pdev->vk.disk_cache);
+   disk_cache_destroy(pdev->disk_cache_meta);
 fail_wsi:
    if (pdev->addrlib)
       ac_addrlib_destroy(pdev->addrlib);
@@ -2365,6 +2368,7 @@ radv_physical_device_destroy(struct vk_physical_device *vk_device)
       ac_addrlib_destroy(pdev->addrlib);
    pdev->ws->destroy(pdev->ws);
    disk_cache_destroy(pdev->vk.disk_cache);
+   disk_cache_destroy(pdev->disk_cache_meta);
    if (pdev->local_fd != -1)
       close(pdev->local_fd);
    if (pdev->master_fd != -1)

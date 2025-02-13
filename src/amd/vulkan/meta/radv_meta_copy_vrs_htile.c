@@ -96,7 +96,7 @@ static VkResult
 get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *pipeline_out,
              VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-copy-vrs-htile";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_VRS_HTILE;
    VkResult result;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
@@ -126,12 +126,12 @@ get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *p
       .size = 20,
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key,
+                                        sizeof(key), layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -154,8 +154,8 @@ get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *p
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;

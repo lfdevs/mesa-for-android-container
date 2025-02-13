@@ -80,6 +80,8 @@ struct radv_physical_device {
    uint8_t device_uuid[VK_UUID_SIZE];
    uint8_t cache_uuid[VK_UUID_SIZE];
 
+   struct disk_cache *disk_cache_meta;
+
    struct ac_addrlib *addrlib;
 
    int local_fd;

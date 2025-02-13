@@ -308,7 +308,7 @@ static void scan_instruction(const struct nir_shader *nir, struct si_shader_info
             info->uses_indirect_descriptor = true;
       }
 
-      info->has_non_uniform_tex_access =
+      info->has_non_uniform_tex_access |=
          tex->texture_non_uniform || tex->sampler_non_uniform;
 
       info->has_shadow_comparison |= tex->is_shadow;

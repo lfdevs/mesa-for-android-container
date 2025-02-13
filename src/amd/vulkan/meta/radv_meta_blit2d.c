@@ -446,14 +446,22 @@ build_nir_copy_fragment_shader_stencil(struct radv_device *device, texel_fetch_b
    return b.shader;
 }
 
+struct radv_blit2d_key {
+   enum radv_meta_object_key_type type;
+   uint32_t index;
+};
+
 static VkResult
 create_layout(struct radv_device *device, int idx, VkPipelineLayout *layout_out)
 {
    const VkDescriptorType desc_type =
       (idx == BLIT2D_SRC_TYPE_BUFFER) ? VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-   char key_data[64];
 
-   snprintf(key_data, sizeof(key_data), "radv-blit2d-%d", idx);
+   struct radv_blit2d_key key;
+
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_BLIT2D;
+   key.index = idx;
 
    const VkDescriptorSetLayoutBinding binding = {
       .binding = 0,
@@ -474,16 +482,22 @@ create_layout(struct radv_device *device, int idx, VkPipelineLayout *layout_out)
       .size = 20,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
+
+struct radv_blit2d_color_key {
+   enum radv_meta_object_key_type type;
+   enum blit2d_src_type src_type;
+   uint32_t log2_samples;
+   uint32_t fs_key;
+};
 
 static VkResult
 get_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, VkFormat format, uint32_t log2_samples,
                    VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const unsigned fs_key = radv_format_meta_fs_key(device, format);
-   char key_data[64];
+   struct radv_blit2d_color_key key;
    const char *name;
    VkResult result;
 
@@ -491,7 +505,17 @@ get_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, Vk
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-blit2d-color-%d-%d-%d", src_type, log2_samples, fs_key);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_BLIT2D_COLOR;
+   key.src_type = src_type;
+   key.log2_samples = log2_samples;
+   key.fs_key = radv_format_meta_fs_key(device, format);
+
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
+   if (pipeline_from_cache != VK_NULL_HANDLE) {
+      *pipeline_out = pipeline_from_cache;
+      return VK_SUCCESS;
+   }
 
    texel_fetch_build_func src_func;
    switch (src_type) {
@@ -597,18 +621,24 @@ get_color_pipeline(struct radv_device *device, enum blit2d_src_type src_type, Vk
    };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs_module);
    ralloc_free(fs_module);
    return result;
 }
 
+struct radv_blit2d_ds_key {
+   enum radv_meta_object_key_type type;
+   enum blit2d_src_type src_type;
+   uint32_t log2_samples;
+};
+
 static VkResult
 get_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples,
                         VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   char key_data[64];
+   struct radv_blit2d_ds_key key;
    const char *name;
    VkResult result;
 
@@ -616,7 +646,16 @@ get_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_typ
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-blit2d-depth-%d-%d", src_type, log2_samples);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_BLIT2D_DEPTH;
+   key.src_type = src_type;
+   key.log2_samples = log2_samples;
+
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
+   if (pipeline_from_cache != VK_NULL_HANDLE) {
+      *pipeline_out = pipeline_from_cache;
+      return VK_SUCCESS;
+   }
 
    texel_fetch_build_func src_func;
    switch (src_type) {
@@ -746,7 +785,7 @@ get_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type src_typ
    };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs_module);
    ralloc_free(fs_module);
@@ -757,7 +796,7 @@ static VkResult
 get_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_type, uint32_t log2_samples,
                           VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   char key_data[64];
+   struct radv_blit2d_ds_key key;
    const char *name;
    VkResult result;
 
@@ -765,7 +804,16 @@ get_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_t
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-blit2d-stencil-%d-%d", src_type, log2_samples);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_BLIT2D_STENCIL;
+   key.src_type = src_type;
+   key.log2_samples = log2_samples;
+
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
+   if (pipeline_from_cache != VK_NULL_HANDLE) {
+      *pipeline_out = pipeline_from_cache;
+      return VK_SUCCESS;
+   }
 
    texel_fetch_build_func src_func;
    switch (src_type) {
@@ -890,7 +938,7 @@ get_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_type src_t
    };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs_module);
    ralloc_free(fs_module);

@@ -425,6 +425,8 @@ yaml-toml-shell-py-test:
   extends:
     - .use-debian/x86_64_test-vk
     - .b2c-x86_64-test
+  variables:
+    S3_ARTIFACT_NAME: "debian-build-testing"
   needs:
     - debian/x86_64_test-vk
     - debian-build-testing
@@ -443,6 +445,8 @@ yaml-toml-shell-py-test:
   extends:
     - .use-debian/x86_64_test-gl
     - .b2c-x86_64-test
+  variables:
+    S3_ARTIFACT_NAME: "debian-build-testing"
   needs:
     - debian/x86_64_test-gl
     - debian-build-testing

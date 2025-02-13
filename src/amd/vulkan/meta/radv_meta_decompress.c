@@ -50,20 +50,27 @@ build_expand_depth_stencil_compute_shader(struct radv_device *dev)
    return b.shader;
 }
 
+struct radv_htile_expand_key {
+   enum radv_meta_object_key_type type;
+   uint32_t samples;
+};
+
 static VkResult
 get_pipeline_gfx(struct radv_device *device, struct radv_image *image, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
    const uint32_t samples = image->vk.samples;
-   char key_data[64];
+   struct radv_htile_expand_key key;
    VkResult result;
 
    result = radv_meta_get_noop_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-htile-expand-gfx-%d", samples);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_HTILE_EXPAND_GFX;
+   key.samples = samples;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -174,7 +181,7 @@ get_pipeline_gfx(struct radv_device *device, struct radv_image *image, VkPipelin
     };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs_module);
    ralloc_free(fs_module);
@@ -311,7 +318,7 @@ radv_process_depth_stencil(struct radv_cmd_buffer *cmd_buffer, struct radv_image
 static VkResult
 get_pipeline_cs(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-htile-expand-cs";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_HTILE_EXPAND_CS;
    VkResult result;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
@@ -337,12 +344,12 @@ get_pipeline_cs(struct radv_device *device, VkPipeline *pipeline_out, VkPipeline
       .pBindings = bindings,
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, NULL, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, NULL, &key, sizeof(key),
+                                        layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -365,8 +372,8 @@ get_pipeline_cs(struct radv_device *device, VkPipeline *pipeline_out, VkPipeline
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;

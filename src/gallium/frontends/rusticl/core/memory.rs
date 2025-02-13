@@ -1484,7 +1484,6 @@ impl Image {
         dst_offset: usize,
         region: &CLVec<usize>,
     ) -> CLResult<()> {
-        let dst_offset = dst.apply_offset(dst_offset)?;
         let bpp = self.image_format.pixel_size().unwrap().into();
 
         let src_pitch;

@@ -13,13 +13,6 @@
 #include "vk_pipeline_cache.h"
 #include "vk_util.h"
 
-#include <fcntl.h>
-#include <limits.h>
-#ifndef _WIN32
-#include <pwd.h>
-#endif
-#include <sys/stat.h>
-
 static void
 radv_suspend_queries(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer)
 {
@@ -292,54 +285,11 @@ meta_free(void *_device, void *data)
    device->vk.alloc.pfnFree(device->vk.alloc.pUserData, data);
 }
 
-#ifndef _WIN32
-static bool
-radv_builtin_cache_path(char *path)
-{
-   char *xdg_cache_home = secure_getenv("XDG_CACHE_HOME");
-   const char *suffix = "/radv_builtin_shaders";
-   const char *suffix2 = "/.cache/radv_builtin_shaders";
-   struct passwd pwd, *result;
-   char path2[PATH_MAX + 1]; /* PATH_MAX is not a real max,but suffices here. */
-   int ret;
-
-   if (xdg_cache_home) {
-      ret = snprintf(path, PATH_MAX + 1, "%s%s%zd", xdg_cache_home, suffix, sizeof(void *) * 8);
-      return ret > 0 && ret < PATH_MAX + 1;
-   }
-
-   getpwuid_r(getuid(), &pwd, path2, PATH_MAX - strlen(suffix2), &result);
-   if (!result)
-      return false;
-
-   strcpy(path, pwd.pw_dir);
-   strcat(path, "/.cache");
-   if (mkdir(path, 0755) && errno != EEXIST)
-      return false;
-
-   ret = snprintf(path, PATH_MAX + 1, "%s%s%zd", pwd.pw_dir, suffix2, sizeof(void *) * 8);
-   return ret > 0 && ret < PATH_MAX + 1;
-}
-#endif
-
-static uint32_t
-num_cache_entries(VkPipelineCache cache)
-{
-   struct set *s = vk_pipeline_cache_from_handle(cache)->object_cache;
-   if (!s)
-      return 0;
-   return s->entries;
-}
-
 static void
-radv_load_meta_pipeline(struct radv_device *device)
+radv_init_meta_cache(struct radv_device *device)
 {
-#ifndef _WIN32
-   char path[PATH_MAX + 1];
-   struct stat st;
-   void *data = NULL;
-   int fd = -1;
-   struct vk_pipeline_cache *cache = NULL;
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   struct vk_pipeline_cache *cache;
 
    VkPipelineCacheCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
@@ -347,81 +297,12 @@ radv_load_meta_pipeline(struct radv_device *device)
 
    struct vk_pipeline_cache_create_info info = {
       .pCreateInfo = &create_info,
-      .skip_disk_cache = true,
+      .disk_cache = pdev->disk_cache_meta,
    };
 
-   if (!radv_builtin_cache_path(path))
-      goto fail;
-
-   fd = open(path, O_RDONLY);
-   if (fd < 0)
-      goto fail;
-   if (fstat(fd, &st))
-      goto fail;
-   data = malloc(st.st_size);
-   if (!data)
-      goto fail;
-   if (read(fd, data, st.st_size) == -1)
-      goto fail;
-
-   create_info.initialDataSize = st.st_size;
-   create_info.pInitialData = data;
-
-fail:
    cache = vk_pipeline_cache_create(&device->vk, &info, NULL);
-
-   if (cache) {
+   if (cache)
       device->meta_state.cache = vk_pipeline_cache_to_handle(cache);
-      device->meta_state.initial_cache_entries = num_cache_entries(device->meta_state.cache);
-   }
-
-   free(data);
-   if (fd >= 0)
-      close(fd);
-#endif
-}
-
-static void
-radv_store_meta_pipeline(struct radv_device *device)
-{
-#ifndef _WIN32
-   char path[PATH_MAX + 1], path2[PATH_MAX + 7];
-   size_t size;
-   void *data = NULL;
-
-   if (device->meta_state.cache == VK_NULL_HANDLE)
-      return;
-
-   /* Skip serialization if no entries were added. */
-   if (num_cache_entries(device->meta_state.cache) <= device->meta_state.initial_cache_entries)
-      return;
-
-   if (vk_common_GetPipelineCacheData(radv_device_to_handle(device), device->meta_state.cache, &size, NULL))
-      return;
-
-   if (!radv_builtin_cache_path(path))
-      return;
-
-   strcpy(path2, path);
-   strcat(path2, "XXXXXX");
-   int fd = mkstemp(path2); // open(path, O_WRONLY | O_CREAT, 0600);
-   if (fd < 0)
-      return;
-   data = malloc(size);
-   if (!data)
-      goto fail;
-
-   if (vk_common_GetPipelineCacheData(radv_device_to_handle(device), device->meta_state.cache, &size, data))
-      goto fail;
-   if (write(fd, data, size) == -1)
-      goto fail;
-
-   rename(path2, path);
-fail:
-   free(data);
-   close(fd);
-   unlink(path2);
-#endif
 }
 
 VkResult
@@ -439,7 +320,7 @@ radv_device_init_meta(struct radv_device *device)
       .pfnFree = meta_free,
    };
 
-   radv_load_meta_pipeline(device);
+   radv_init_meta_cache(device);
 
    result = vk_meta_device_init(&device->vk, &device->meta_state.device);
    if (result != VK_SUCCESS)
@@ -488,7 +369,6 @@ radv_device_finish_meta(struct radv_device *device)
 
    radv_device_finish_accel_struct_build_state(device);
 
-   radv_store_meta_pipeline(device);
    vk_common_DestroyPipelineCache(radv_device_to_handle(device), device->meta_state.cache, NULL);
    mtx_destroy(&device->meta_state.mtx);
 
@@ -612,8 +492,8 @@ radv_break_on_count(nir_builder *b, nir_variable *var, nir_def *count)
 VkResult
 radv_meta_get_noop_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-noop";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_NOOP;
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, NULL, NULL, key_data, strlen(key_data),
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, NULL, NULL, &key, sizeof(key),
                                       layout_out);
 }

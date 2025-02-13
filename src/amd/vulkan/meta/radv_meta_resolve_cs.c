@@ -168,7 +168,7 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 static VkResult
 create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-resolve-cs-layout";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_RESOLVE_CS;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
       {
@@ -197,9 +197,16 @@ create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
       .size = 16,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
+
+struct radv_resolve_color_cs_key {
+   enum radv_meta_object_key_type type;
+   bool is_integer;
+   bool is_srgb;
+   uint8_t samples;
+};
 
 static VkResult
 get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *src_iview, VkPipeline *pipeline_out,
@@ -208,16 +215,20 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
    const bool is_integer = vk_format_is_int(src_iview->vk.format);
    const bool is_srgb = vk_format_is_srgb(src_iview->vk.format);
    uint32_t samples = src_iview->image->vk.samples;
-   char key_data[64];
+   struct radv_resolve_color_cs_key key;
    VkResult result;
 
    result = create_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-color-resolve-cs--%d-%d-%d", is_integer, is_srgb, samples);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_RESOLVE_COLOR_CS;
+   key.is_integer = is_integer;
+   key.is_srgb = is_srgb;
+   key.samples = samples;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -240,8 +251,8 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -300,6 +311,13 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_ivi
    radv_unaligned_dispatch(cmd_buffer, resolve_extent->width, resolve_extent->height, 1);
 }
 
+struct radv_resolve_ds_cs_key {
+   enum radv_meta_object_key_type type;
+   uint8_t index;
+   uint8_t samples;
+   VkResolveModeFlagBits resolve_mode;
+};
+
 static VkResult
 get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkImageAspectFlags aspects,
                                    VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out,
@@ -307,16 +325,20 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
 
 {
    const int index = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? DEPTH_RESOLVE : STENCIL_RESOLVE;
-   char key_data[64];
+   struct radv_resolve_ds_cs_key key;
    VkResult result;
 
    result = create_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-ds-resolve-cs-%d-%d-%d", index, resolve_mode, samples);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_RESOLVE_DS_CS;
+   key.index = index;
+   key.samples = samples;
+   key.resolve_mode = resolve_mode;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -339,8 +361,8 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;

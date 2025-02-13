@@ -68,7 +68,7 @@ struct panvk_shader_desc_info {
 struct lower_desc_ctx {
    const struct panvk_descriptor_set_layout *set_layouts[MAX_SETS];
    struct panvk_shader_desc_info desc_info;
-   struct hash_table *ht;
+   struct hash_table_u64 *ht;
    bool add_bounds_checks;
    nir_address_format ubo_addr_format;
    nir_address_format ssbo_addr_format;
@@ -105,37 +105,17 @@ get_binding_layout(uint32_t set, uint32_t binding,
    return &get_set_layout(set, ctx)->bindings[binding];
 }
 
-#define DELETED_KEY (void *)(uintptr_t)1
-
 struct desc_id {
-   uint32_t set;
-   uint32_t binding;
-   uint32_t subdesc;
-};
-
-static void *
-desc_id_to_key(struct desc_id id)
-{
-   assert(id.set <= BITFIELD_MASK(4));
-   assert(id.subdesc <= BITFIELD_MASK(1));
-   assert(id.binding <= BITFIELD_MASK(27));
-
-   uint32_t handle = (id.set << 28) | (id.subdesc << 27) | id.binding;
-   assert(handle < UINT32_MAX - 2);
-   return (void *)(uintptr_t)(handle + 2);
-}
-
-static struct desc_id
-key_to_desc_id(const void *key)
-{
-   uint32_t handle = (uintptr_t)key - 2;
-
-   return (struct desc_id){
-      .set = handle >> 28,
-      .subdesc = (handle & BITFIELD_BIT(27)) ? 1 : 0,
-      .binding = handle & BITFIELD_MASK(27),
+   union {
+      struct {
+         uint32_t binding;
+         uint32_t set : 4;
+         uint32_t subdesc : 1;
+         uint32_t pad : 27;
+      };
+      uint64_t ht_key;
    };
-}
+};
 
 #if PAN_ARCH <= 7
 static enum panvk_bifrost_desc_table_type
@@ -200,13 +180,12 @@ shader_desc_idx(uint32_t set, uint32_t binding, VkDescriptorType subdesc_type,
       .subdesc = subdesc_idx,
       .binding = binding,
    };
-   struct hash_entry *he =
-      _mesa_hash_table_search(ctx->ht, desc_id_to_key(src));
+   uint32_t *entry =
+      _mesa_hash_table_u64_search(ctx->ht, src.ht_key);
 
-   assert(he);
+   assert(entry);
 
    const struct panvk_shader_desc_map *map;
-   uint32_t *entry = he->data;
 
 #if PAN_ARCH <= 7
    if (bind_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
@@ -923,29 +902,24 @@ record_binding(struct lower_desc_ctx *ctx, unsigned set, unsigned binding,
       return;
 
    assert(subdesc_idx < desc_stride);
-   assert(!(binding & BITFIELD_BIT(27)));
 
    struct desc_id src = {
       .set = set,
       .subdesc = subdesc_idx,
       .binding = binding,
    };
-   const void *key = desc_id_to_key(src);
-   struct hash_entry *he = _mesa_hash_table_search(ctx->ht, key);
-   uint32_t old_desc_count = 0;
+   uint32_t *entry = _mesa_hash_table_u64_search(ctx->ht, src.ht_key);
+   uint32_t old_desc_count = (uintptr_t)entry;
    uint32_t new_desc_count =
       max_idx == UINT32_MAX ? binding_layout->desc_count : max_idx + 1;
 
    assert(new_desc_count <= binding_layout->desc_count);
 
-   if (!he)
-      he = _mesa_hash_table_insert(ctx->ht, key,
-                                   (void *)(uintptr_t)new_desc_count);
-   else
-      old_desc_count = (uintptr_t)he->data;
-
    if (old_desc_count >= new_desc_count)
       return;
+
+   _mesa_hash_table_u64_insert(ctx->ht, src.ht_key,
+                               (void *)(uintptr_t)new_desc_count);
 
    uint32_t desc_count_diff = new_desc_count - old_desc_count;
 
@@ -965,8 +939,6 @@ record_binding(struct lower_desc_ctx *ctx, unsigned set, unsigned binding,
 #else
    ctx->desc_info.dyn_bufs.count += desc_count_diff;
 #endif
-
-   he->data = (void *)(uintptr_t)new_desc_count;
 }
 
 static uint32_t *
@@ -1074,16 +1046,19 @@ create_copy_table(nir_shader *nir, struct lower_desc_ctx *ctx)
    assert(desc_info->dyn_bufs.map);
 #endif
 
-   hash_table_foreach(ctx->ht, he) {
+   hash_table_u64_foreach(ctx->ht, he) {
       /* We use the upper binding bit to encode the subdesc index. */
-      uint32_t desc_count = (uintptr_t)he->data;
-      struct desc_id src = key_to_desc_id(he->key);
+      uint32_t desc_count = (uintptr_t)he.data;
+      struct desc_id src = {
+         .ht_key = he.key,
+      };
 
       /* Until now, we were just using the hash table to track descriptors
        * count, but after that point, it's a <set,binding> -> <table_index>
        * map. */
-      he->data = fill_copy_descs_for_binding(ctx, src.set, src.binding,
-                                             src.subdesc, desc_count);
+      void *new_data = fill_copy_descs_for_binding(ctx, src.set, src.binding,
+                                                   src.subdesc, desc_count);
+      _mesa_hash_table_u64_replace(ctx->ht, &he, new_data);
    }
 }
 
@@ -1244,10 +1219,8 @@ panvk_per_arch(nir_lower_descriptors)(
    ctx.ssbo_addr_format = nir_address_format_vec2_index_32bit_offset;
 #endif
 
-   ctx.ht = _mesa_hash_table_create_u32_keys(NULL);
+   ctx.ht = _mesa_hash_table_u64_create(NULL);
    assert(ctx.ht);
-
-   _mesa_hash_table_set_deleted_key(ctx.ht, DELETED_KEY);
 
    for (uint32_t i = 0; i < set_layout_count; i++)
       ctx.set_layouts[i] = to_panvk_descriptor_set_layout(set_layouts[i]);
@@ -1273,5 +1246,5 @@ panvk_per_arch(nir_lower_descriptors)(
             lower_descriptors_instr, nir_metadata_control_flow, &ctx);
 
 out:
-   _mesa_hash_table_destroy(ctx.ht, NULL);
+   _mesa_hash_table_u64_destroy(ctx.ht);
 }

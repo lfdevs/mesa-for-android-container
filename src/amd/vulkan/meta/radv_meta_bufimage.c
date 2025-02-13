@@ -58,7 +58,7 @@ build_nir_itob_compute_shader(struct radv_device *dev, bool is_3d)
 static VkResult
 get_itob_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-itob";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_IMAGE_TO_BUFFER;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
       {
@@ -87,25 +87,32 @@ get_itob_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_ou
       .size = 16,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
+
+struct radv_copy_buffer_image_key {
+   enum radv_meta_object_key_type type;
+   bool is_3d;
+};
 
 static VkResult
 get_itob_pipeline(struct radv_device *device, const struct radv_image *image, VkPipeline *pipeline_out,
                   VkPipelineLayout *layout_out)
 {
    const bool is_3d = image->vk.image_type == VK_IMAGE_TYPE_3D;
-   char key_data[64];
+   struct radv_copy_buffer_image_key key;
    VkResult result;
 
    result = get_itob_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-itob-%d", is_3d);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_COPY_IMAGE_TO_BUFFER;
+   key.is_3d = is_3d;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -128,8 +135,8 @@ get_itob_pipeline(struct radv_device *device, const struct radv_image *image, Vk
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -178,7 +185,7 @@ build_nir_btoi_compute_shader(struct radv_device *dev, bool is_3d)
 static VkResult
 get_btoi_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-btoi";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_BUFFER_TO_IMAGE;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
       {
@@ -207,8 +214,8 @@ get_btoi_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_ou
       .size = 16,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
 
 static VkResult
@@ -216,16 +223,18 @@ get_btoi_pipeline(struct radv_device *device, const struct radv_image *image, Vk
                   VkPipelineLayout *layout_out)
 {
    const bool is_3d = image->vk.image_type == VK_IMAGE_TYPE_3D;
-   char key_data[64];
+   struct radv_copy_buffer_image_key key;
    VkResult result;
 
    result = get_btoi_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-btoi-%d", is_3d);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_COPY_BUFFER_TO_IMAGE;
+   key.is_3d = is_3d;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -248,8 +257,8 @@ get_btoi_pipeline(struct radv_device *device, const struct radv_image *image, Vk
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -306,7 +315,7 @@ build_nir_btoi_r32g32b32_compute_shader(struct radv_device *dev)
 static VkResult
 get_btoi_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-btoi-r32g32b32";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_BUFFER_TO_IMAGE_R32G32B32;
    VkResult result;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
@@ -336,12 +345,12 @@ get_btoi_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_out
       .size = 16,
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key,
+                                        sizeof(key), layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -364,8 +373,8 @@ get_btoi_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_out
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -428,7 +437,7 @@ build_nir_itoi_compute_shader(struct radv_device *dev, bool src_3d, bool dst_3d,
 static VkResult
 get_itoi_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-itoi";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_IMAGE;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
       {
@@ -457,9 +466,16 @@ get_itoi_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_ou
       .size = 24,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
+
+struct radv_copy_image_key {
+   enum radv_meta_object_key_type type;
+   bool src_3d;
+   bool dst_3d;
+   uint8_t samples_log2;
+};
 
 static VkResult
 get_itoi_pipeline(struct radv_device *device, const struct radv_image *src_image, const struct radv_image *dst_image,
@@ -469,15 +485,19 @@ get_itoi_pipeline(struct radv_device *device, const struct radv_image *src_image
    const bool dst_3d = dst_image->vk.image_type == VK_IMAGE_TYPE_3D;
    const uint32_t samples_log2 = ffs(samples) - 1;
    VkResult result;
-   char key_data[64];
+   struct radv_copy_image_key key;
 
    result = get_itoi_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-itoi-%d-%d-%d", src_3d, dst_3d, samples_log2);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_COPY_IMAGE;
+   key.src_3d = src_3d;
+   key.dst_3d = dst_3d;
+   key.samples_log2 = samples_log2;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -500,8 +520,8 @@ get_itoi_pipeline(struct radv_device *device, const struct radv_image *src_image
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -560,7 +580,7 @@ build_nir_itoi_r32g32b32_compute_shader(struct radv_device *dev)
 static VkResult
 get_itoi_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-itoi-r32g32b32";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_IMAGE_R32G32B32;
    VkResult result;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
@@ -590,12 +610,12 @@ get_itoi_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_out
       .size = 24,
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key,
+                                        sizeof(key), layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -618,8 +638,8 @@ get_itoi_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_out
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -665,7 +685,7 @@ build_nir_cleari_compute_shader(struct radv_device *dev, bool is_3d, int samples
 static VkResult
 get_cleari_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-cleari";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_CLEAR_CS;
 
    const VkDescriptorSetLayoutBinding binding = {
       .binding = 0,
@@ -686,9 +706,15 @@ get_cleari_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_
       .size = 20,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
+
+struct radv_clear_key {
+   enum radv_meta_object_key_type type;
+   bool is_3d;
+   uint8_t samples_log2;
+};
 
 static VkResult
 get_cleari_pipeline(struct radv_device *device, const struct radv_image *image, VkPipeline *pipeline_out,
@@ -697,16 +723,19 @@ get_cleari_pipeline(struct radv_device *device, const struct radv_image *image, 
    const bool is_3d = image->vk.image_type == VK_IMAGE_TYPE_3D;
    const uint32_t samples = image->vk.samples;
    const uint32_t samples_log2 = ffs(samples) - 1;
-   char key_data[64];
+   struct radv_clear_key key;
    VkResult result;
 
    result = get_cleari_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-cleari-%d-%d", is_3d, samples_log2);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_CLEAR_CS;
+   key.is_3d = is_3d;
+   key.samples_log2 = samples_log2;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -729,8 +758,8 @@ get_cleari_pipeline(struct radv_device *device, const struct radv_image *image, 
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -774,7 +803,7 @@ build_nir_cleari_r32g32b32_compute_shader(struct radv_device *dev)
 static VkResult
 get_cleari_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-cleari-r32g32b32";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_CLEAR_CS_R32G32B32;
    VkResult result;
 
    const VkDescriptorSetLayoutBinding binding = {
@@ -796,12 +825,12 @@ get_cleari_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_o
       .size = 16,
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key,
+                                        sizeof(key), layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -824,8 +853,8 @@ get_cleari_r32g32b32_pipeline(struct radv_device *device, VkPipeline *pipeline_o
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;

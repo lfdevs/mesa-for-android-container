@@ -49,7 +49,7 @@ build_resolve_fragment_shader(struct radv_device *dev, bool is_integer, int samp
 static VkResult
 create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-resolve-fs";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_RESOLVE_FS;
 
    const VkDescriptorSetLayoutBinding binding = {.binding = 0,
                                                  .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -68,8 +68,8 @@ create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
       .size = 8,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
 
 enum { DEPTH_RESOLVE, STENCIL_RESOLVE };
@@ -154,22 +154,33 @@ build_depth_stencil_resolve_fragment_shader(struct radv_device *dev, int samples
    return b.shader;
 }
 
+struct radv_resolve_ds_fs_key {
+   enum radv_meta_object_key_type type;
+   uint32_t samples;
+   VkImageAspectFlags aspects;
+   VkResolveModeFlagBits resolve_mode;
+};
+
 static VkResult
 get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkImageAspectFlags aspects,
                                    VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out,
                                    VkPipelineLayout *layout_out)
 {
    const int index = aspects == VK_IMAGE_ASPECT_DEPTH_BIT ? DEPTH_RESOLVE : STENCIL_RESOLVE;
-   char key_data[64];
+   struct radv_resolve_ds_fs_key key;
    VkResult result;
 
    result = create_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-ds-resolve-fs-%d-%d-%d", aspects, samples, resolve_mode);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_RESOLVE_DS_FS;
+   key.samples = samples;
+   key.aspects = aspects;
+   key.resolve_mode = resolve_mode;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -289,12 +300,18 @@ get_depth_stencil_resolve_pipeline(struct radv_device *device, int samples, VkIm
    };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs_module);
    ralloc_free(fs_module);
    return result;
 }
+
+struct radv_resolve_color_fs_key {
+   enum radv_meta_object_key_type type;
+   uint32_t samples;
+   uint32_t fs_key;
+};
 
 static VkResult
 get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *src_iview,
@@ -304,16 +321,19 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
    const uint32_t samples = src_iview->image->vk.samples;
    const VkFormat format = radv_fs_key_format_exemplars[fs_key];
    const bool is_integer = vk_format_is_int(format);
-   char key_data[64];
+   struct radv_resolve_color_fs_key key;
    VkResult result;
 
    result = create_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   snprintf(key_data, sizeof(key_data), "radv-color-resolve-fs-%d-%d", samples, fs_key);
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_RESOLVE_COLOR_FS;
+   key.samples = samples;
+   key.fs_key = fs_key;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -403,7 +423,7 @@ get_color_resolve_pipeline(struct radv_device *device, struct radv_image_view *s
    };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs_module);
    ralloc_free(fs_module);

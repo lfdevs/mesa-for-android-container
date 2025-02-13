@@ -1742,7 +1742,7 @@ radv_copy_ms_prim_query_result(struct radv_cmd_buffer *cmd_buffer, struct radv_q
 static VkResult
 create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-query";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_QUERY;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
       {.binding = 0,
@@ -1769,15 +1769,14 @@ create_layout(struct radv_device *device, VkPipelineLayout *layout_out)
       .size = 20,
    };
 
-   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, key_data,
-                                      strlen(key_data), layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, &pc_range, &key, sizeof(key),
+                                      layout_out);
 }
 
 static VkResult
 get_pipeline(struct radv_device *device, VkQueryType query_type, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   char *query_name;
-   char key_data[64];
+   enum radv_meta_object_key_type key = 0;
    VkResult result;
    nir_shader *cs;
 
@@ -1787,30 +1786,28 @@ get_pipeline(struct radv_device *device, VkQueryType query_type, VkPipeline *pip
 
    switch (query_type) {
    case VK_QUERY_TYPE_OCCLUSION:
-      query_name = "occlusion";
+      key = RADV_META_OBJECT_KEY_QUERY_OCCLUSION;
       break;
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
-      query_name = "pipeline-stats";
+      key = RADV_META_OBJECT_KEY_QUERY_PIPELINE_STATS;
       break;
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
-      query_name = "tfb";
+      key = RADV_META_OBJECT_KEY_QUERY_TFB;
       break;
    case VK_QUERY_TYPE_TIMESTAMP:
-      query_name = "timestamp";
+      key = RADV_META_OBJECT_KEY_QUERY_TIMESTAMP;
       break;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
-      query_name = "pg";
+      key = RADV_META_OBJECT_KEY_QUERY_PRIMS_GEN;
       break;
    case VK_QUERY_TYPE_MESH_PRIMITIVES_GENERATED_EXT:
-      query_name = "ms-prim-gen";
+      key = RADV_META_OBJECT_KEY_QUERY_MESH_PRIMS_GEN;
       break;
    default:
       unreachable("invalid query type");
    }
 
-   snprintf(key_data, sizeof(key_data), "radv-query-%s", query_name);
-
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -1854,8 +1851,8 @@ get_pipeline(struct radv_device *device, VkQueryType query_type, VkPipeline *pip
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;

@@ -283,6 +283,7 @@ crocus_lower_storage_image_derefs(nir_shader *nir)
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
    nir_builder b = nir_builder_create(impl);
+   bool progress = false;
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -307,6 +308,7 @@ crocus_lower_storage_image_derefs(nir_shader *nir)
                nir_iadd_imm(&b, get_aoa_deref_offset(&b, deref, 1),
                             var->data.driver_location);
             nir_rewrite_image_intrinsic(intrin, index, false);
+            progress = true;
             break;
          }
 
@@ -314,6 +316,12 @@ crocus_lower_storage_image_derefs(nir_shader *nir)
             break;
          }
       }
+   }
+
+   if (progress) {
+      nir_metadata_preserve(impl, nir_metadata_control_flow);
+   } else {
+      nir_metadata_preserve(impl, nir_metadata_all);
    }
 }
 

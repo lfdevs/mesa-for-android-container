@@ -39,7 +39,7 @@ struct fill_constants {
 static VkResult
 get_fill_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-fill-buffer";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_FILL_BUFFER;
    VkResult result;
 
    const VkPushConstantRange pc_range = {
@@ -47,12 +47,12 @@ get_fill_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipeli
       .size = sizeof(struct fill_constants),
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, NULL, &pc_range, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, NULL, &pc_range, &key, sizeof(key),
+                                        layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -75,8 +75,8 @@ get_fill_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipeli
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -114,7 +114,7 @@ struct copy_constants {
 static VkResult
 get_copy_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-copy-buffer";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_COPY_BUFFER;
    VkResult result;
 
    const VkPushConstantRange pc_range = {
@@ -122,12 +122,12 @@ get_copy_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipeli
       .size = sizeof(struct copy_constants),
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, NULL, &pc_range, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, NULL, &pc_range, &key, sizeof(key),
+                                        layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -150,8 +150,8 @@ get_copy_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipeli
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;

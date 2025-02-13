@@ -1745,9 +1745,12 @@ extract_imm(brw_reg val, brw_reg_type type, unsigned offset)
    if (offset == 0 || bitsize == brw_type_size_bits(val.type))
       return val;
 
-   assert(bitsize < brw_type_size_bits(val.type));
+   /* The whole extracted value must come from bits that acutally exist in the
+    * original immediate value.
+    */
+   assert((8 * offset) + bitsize <= brw_type_size_bits(val.type));
 
-   val.u64 = (val.u64 >> (bitsize * offset)) & ((1ull << bitsize) - 1);
+   val.u64 = (val.u64 >> (8 * offset)) & ((1ull << bitsize) - 1);
 
    return val;
 }

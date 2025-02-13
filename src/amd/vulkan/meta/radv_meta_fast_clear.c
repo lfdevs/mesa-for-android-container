@@ -56,7 +56,7 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
 static VkResult
 get_dcc_decompress_compute_pipeline(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
-   const char *key_data = "radv-dcc-decompress-cs";
+   enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_DCC_DECOMPRESS;
    VkResult result;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
@@ -81,12 +81,12 @@ get_dcc_decompress_compute_pipeline(struct radv_device *device, VkPipeline *pipe
       .pBindings = bindings,
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, NULL, key_data,
-                                        strlen(key_data), layout_out);
+   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, NULL, &key, sizeof(key),
+                                        layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -109,8 +109,8 @@ get_dcc_decompress_compute_pipeline(struct radv_device *device, VkPipeline *pipe
       .layout = *layout_out,
    };
 
-   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, key_data,
-                                            strlen(key_data), pipeline_out);
+   result = vk_meta_create_compute_pipeline(&device->vk, &device->meta_state.device, &pipeline_info, &key, sizeof(key),
+                                            pipeline_out);
 
    ralloc_free(cs);
    return result;
@@ -120,16 +120,26 @@ static VkResult
 get_pipeline(struct radv_device *device, enum radv_color_op op, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   char key_data[64];
+   enum radv_meta_object_key_type key = 0;
    VkResult result;
 
-   snprintf(key_data, sizeof(key_data), "radv-color-op-%d", op);
+   switch (op) {
+   case FAST_CLEAR_ELIMINATE:
+      key = RADV_META_OBJECT_KEY_FAST_CLEAR_ELIMINATE;
+      break;
+   case FMASK_DECOMPRESS:
+      key = RADV_META_OBJECT_KEY_FMASK_DECOMPRESS;
+      break;
+   case DCC_DECOMPRESS:
+      key = RADV_META_OBJECT_KEY_DCC_DECOMPRESS;
+      break;
+   }
 
    result = radv_meta_get_noop_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
 
-   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, key_data, strlen(key_data));
+   VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
       *pipeline_out = pipeline_from_cache;
       return VK_SUCCESS;
@@ -244,7 +254,7 @@ get_pipeline(struct radv_device *device, enum radv_color_op op, VkPipeline *pipe
    };
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
-                                             key_data, strlen(key_data), pipeline_out);
+                                             &key, sizeof(key), pipeline_out);
 
    ralloc_free(vs_module);
    ralloc_free(fs_module);

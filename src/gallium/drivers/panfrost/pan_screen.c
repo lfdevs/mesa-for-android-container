@@ -668,7 +668,8 @@ panfrost_init_screen_caps(struct panfrost_screen *screen)
       dev->kmod.props.gpu_can_query_timestamp &&
       dev->kmod.props.timestamp_frequency != 0;
 
-   caps->timer_resolution = pan_gpu_time_to_ns(dev, 1);
+   if (caps->query_timestamp)
+      caps->timer_resolution = pan_gpu_time_to_ns(dev, 1);
 
    /* The hardware requires element alignment for data conversion to work
     * as expected. If data conversion is not required, this restriction is

@@ -638,45 +638,32 @@ impl CopyPropPass {
                     CBufRule::Yes
                 };
 
-                match &mut instr.op {
-                    Op::IAdd2(add) => {
-                        // Carry-out interacts funny with SrcMod::INeg so we can
-                        // only propagate with modifiers if no carry is written.
-                        use SrcType::{ALU, I32};
-                        let [src0, src1] = &mut add.srcs;
-                        if add.carry_out.is_none() {
-                            self.prop_to_src(I32, &cbuf_rule, src0);
-                            self.prop_to_src(I32, &cbuf_rule, src1);
-                        } else {
-                            self.prop_to_src(ALU, &cbuf_rule, src0);
-                            self.prop_to_src(ALU, &cbuf_rule, src1);
-                        }
-                    }
+                // Carry-out and overflow interact funny with SrcMod::INeg so we
+                // can only propagate with modifiers if no carry/overflow is
+                // written.
+                let force_alu_src_type = match &instr.op {
+                    Op::IAdd2(add) => !add.carry_out.is_none(),
+                    Op::IAdd2X(add) => !add.carry_out.is_none(),
                     Op::IAdd3(add) => {
-                        // Overflow interacts funny with SrcMod::INeg so we can
-                        // only propagate with modifiers if no overflow values
-                        // are written.
-                        use SrcType::{ALU, I32};
-                        let [src0, src1, src2] = &mut add.srcs;
-                        if add.overflow[0].is_none()
-                            && add.overflow[0].is_none()
-                        {
-                            self.prop_to_src(I32, &cbuf_rule, src0);
-                            self.prop_to_src(I32, &cbuf_rule, src1);
-                            self.prop_to_src(I32, &cbuf_rule, src2);
-                        } else {
-                            self.prop_to_src(ALU, &cbuf_rule, src0);
-                            self.prop_to_src(ALU, &cbuf_rule, src1);
-                            self.prop_to_src(ALU, &cbuf_rule, src2);
-                        }
+                        !add.overflow[0].is_none() || !add.overflow[1].is_none()
                     }
-                    _ => {
-                        let src_types = instr.src_types();
-                        for (i, src) in instr.srcs_mut().iter_mut().enumerate()
-                        {
-                            self.prop_to_src(src_types[i], &cbuf_rule, src);
-                        }
+                    Op::IAdd3X(add) => {
+                        !add.overflow[0].is_none() || !add.overflow[1].is_none()
                     }
+                    _ => false,
+                };
+
+                let src_types = instr.src_types();
+                for (i, src) in instr.srcs_mut().iter_mut().enumerate() {
+                    let mut src_type = src_types[i];
+                    if force_alu_src_type {
+                        src_type = match src_type {
+                            SrcType::B32 | SrcType::I32 => SrcType::ALU,
+                            SrcType::Carry | SrcType::Pred => src_type,
+                            _ => panic!("Unhandled src_type"),
+                        };
+                    };
+                    self.prop_to_src(src_type, &cbuf_rule, src);
                 }
             }
         }
