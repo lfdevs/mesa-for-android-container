@@ -350,6 +350,7 @@ Section: libs
 Architecture: linux-any
 Build-Profiles: <!pkg.mesa.nolibva>
 Depends:
+ mesa-libgallium (= ${binary:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Enhances:
