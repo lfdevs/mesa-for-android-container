@@ -2198,8 +2198,12 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context *coord_bld = &bld->coord_bld;
    struct lp_build_context *int_coord_bld = &bld->int_coord_bld;
+   struct lp_build_context uint_coord_bld;
+
    LLVMValueRef size0, row_stride0_vec, img_stride0_vec;
    LLVMValueRef data_ptr0, mipoff0 = NULL;
+
+   lp_build_context_init(&uint_coord_bld, gallivm, lp_uint_type(int_coord_bld->type));
 
    lp_build_mipmap_level_sizes(bld, ilevel0,
                                &size0,
@@ -2243,7 +2247,9 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
 
    /* Number of samples used for averaging. */
    LLVMValueRef N = lp_build_iceil(coord_bld, lp_build_max(coord_bld, rho_x, rho_y));
-   N = lp_build_min(int_coord_bld, N, lp_build_const_int_vec(gallivm, int_coord_bld->type, bld->static_sampler_state->aniso));
+
+   /* Use uint min so in case of NaNs/overflows loop iterations are clamped to max aniso */
+   N = lp_build_min(&uint_coord_bld, N, lp_build_const_int_vec(gallivm, int_coord_bld->type, bld->static_sampler_state->aniso));
    LLVMValueRef wave_max_N = NULL;
    for (uint32_t i = 0; i < coord_bld->type.length; i++) {
       LLVMValueRef invocation_N = LLVMBuildExtractElement(builder, N, lp_build_const_int32(gallivm, i), "");

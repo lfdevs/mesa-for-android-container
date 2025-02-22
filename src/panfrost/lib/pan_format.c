@@ -137,7 +137,7 @@ const struct pan_blendable_format
 #define YUV_NO_SWAP (0)
 #define YUV_SWAP    (1)
 
-#if PAN_ARCH <= 9
+#if PAN_ARCH < 14
 #define MALI_YUV_CR_SITING_CENTER_422 (MALI_YUV_CR_SITING_CENTER_Y)
 #else
 #define MALI_YUV_CR_SITING_CENTER_422 (MALI_YUV_CR_SITING_CENTER_X)

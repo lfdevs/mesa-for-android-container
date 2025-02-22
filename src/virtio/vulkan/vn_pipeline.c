@@ -221,10 +221,10 @@ struct vn_graphics_pipeline_fix_tmp {
    /* Fixing the pNext chain
     *
     * TODO: extend when below or more extensions are supported:
-    * - VK_KHR_maintenance5
     * - VK_EXT_pipeline_robustness
     */
    VkGraphicsPipelineLibraryCreateInfoEXT *gpl_infos;
+   VkPipelineCreateFlags2CreateInfo *flags2_infos;
    VkPipelineCreationFeedbackCreateInfo *feedback_infos;
    VkPipelineFragmentShadingRateStateCreateInfoKHR *fsr_infos;
    VkPipelineLibraryCreateInfoKHR *library_infos;
@@ -626,8 +626,8 @@ vn_destroy_failed_pipeline_handles(struct vn_device *dev,
 }
 
 #define VN_PIPELINE_CREATE_SYNC_MASK                                         \
-   (VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |               \
-    VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT)
+   (VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT |             \
+    VK_PIPELINE_CREATE_2_EARLY_RETURN_ON_FAILURE_BIT)
 
 static struct vn_graphics_pipeline_fix_tmp *
 vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
@@ -641,6 +641,7 @@ vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
 
    /* for pNext */
    VkGraphicsPipelineLibraryCreateInfoEXT *gpl_infos;
+   VkPipelineCreateFlags2CreateInfo *flags2_infos;
    VkPipelineCreationFeedbackCreateInfo *feedback_infos;
    VkPipelineFragmentShadingRateStateCreateInfoKHR *fsr_infos;
    VkPipelineLibraryCreateInfoKHR *library_infos;
@@ -656,6 +657,8 @@ vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
 
    if (alloc_pnext) {
       vk_multialloc_add(&ma, &gpl_infos, __typeof__(*gpl_infos), info_count);
+      vk_multialloc_add(&ma, &flags2_infos, __typeof__(*flags2_infos),
+                        info_count);
       vk_multialloc_add(&ma, &feedback_infos, __typeof__(*feedback_infos),
                         info_count);
       vk_multialloc_add(&ma, &fsr_infos, __typeof__(*fsr_infos), info_count);
@@ -674,6 +677,7 @@ vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
 
    if (alloc_pnext) {
       tmp->gpl_infos = gpl_infos;
+      tmp->flags2_infos = flags2_infos;
       tmp->feedback_infos = feedback_infos;
       tmp->fsr_infos = fsr_infos;
       tmp->library_infos = library_infos;
@@ -702,6 +706,7 @@ vn_graphics_pipeline_fix_tmp_alloc(const VkAllocationCallbacks *alloc,
 static void
 vn_graphics_pipeline_library_state_update(
    const VkGraphicsPipelineCreateInfo *info,
+   VkPipelineCreateFlags2 flags2,
    struct vn_graphics_pipeline_library_state *restrict gpl)
 {
    const VkGraphicsPipelineLibraryCreateInfoEXT *gpl_info =
@@ -713,7 +718,7 @@ vn_graphics_pipeline_library_state_update(
 
    if (gpl_info) {
       gpl->mask |= gpl_info->flags;
-   } else if ((info->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) ||
+   } else if ((flags2 & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR) ||
               lib_count > 0) {
       gpl->mask |= 0;
    } else {
@@ -1019,6 +1024,7 @@ vn_graphics_pipeline_state_merge(
 static void
 vn_graphics_pipeline_state_fill(
    const VkGraphicsPipelineCreateInfo *info,
+   VkPipelineCreateFlags2 flags2,
    struct vn_graphics_pipeline_state *restrict state,
    struct vn_graphics_pipeline_fix_desc *out_fix_desc)
 {
@@ -1066,7 +1072,7 @@ vn_graphics_pipeline_state_fill(
     * directly (without linking).
     */
    struct vn_graphics_pipeline_library_state direct_gpl = { 0 };
-   vn_graphics_pipeline_library_state_update(info, &direct_gpl);
+   vn_graphics_pipeline_library_state_update(info, flags2, &direct_gpl);
 
    /* From the Vulkan 1.3.251 spec:
     *    VUID-VkGraphicsPipelineCreateInfo-pLibraries-06611
@@ -1186,7 +1192,7 @@ vn_graphics_pipeline_state_fill(
             valid.self.depth_stencil_state = true;
          } else if (state->render_pass.attachment_aspects ==
                        VK_IMAGE_ASPECT_METADATA_BIT &&
-                    (info->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) {
+                    (flags2 & VK_PIPELINE_CREATE_2_LIBRARY_BIT_KHR)) {
             /* The app has not yet provided render pass info, neither directly
              * in this VkGraphicsPipelineCreateInfo nor in any linked pipeline
              * libraries. Therefore we do not know if the final complete
@@ -1255,7 +1261,7 @@ vn_graphics_pipeline_state_fill(
     *    basePipelineIndex is -1, basePipelineHandle must be a valid graphics
     *    VkPipeline handle
     */
-   if ((info->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) &&
+   if ((flags2 & VK_PIPELINE_CREATE_2_DERIVATIVE_BIT) &&
        info->basePipelineIndex == -1)
       valid.self.base_pipeline_handle = true;
 
@@ -1393,6 +1399,7 @@ vn_graphics_pipeline_create_info_pnext_init(
    uint32_t index)
 {
    VkGraphicsPipelineLibraryCreateInfoEXT *gpl = &fix_tmp->gpl_infos[index];
+   VkPipelineCreateFlags2CreateInfo *flags2 = &fix_tmp->flags2_infos[index];
    VkPipelineCreationFeedbackCreateInfo *feedback =
       &fix_tmp->feedback_infos[index];
    VkPipelineFragmentShadingRateStateCreateInfoKHR *fsr =
@@ -1409,6 +1416,10 @@ vn_graphics_pipeline_create_info_pnext_init(
       case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT:
          memcpy(gpl, src, sizeof(*gpl));
          next = gpl;
+         break;
+      case VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO:
+         memcpy(flags2, src, sizeof(*flags2));
+         next = flags2;
          break;
       case VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO:
          memcpy(feedback, src, sizeof(*feedback));
@@ -1528,6 +1539,14 @@ vn_invalidate_pipeline_creation_feedback(const VkBaseInStructure *chain)
       feedback_info->pPipelineStageCreationFeedbacks[i].flags = 0;
 }
 
+static inline VkPipelineCreateFlags2
+vn_pipeline_create_flags2(const void *pnext, VkPipelineCreateFlags flags)
+{
+   const VkPipelineCreateFlags2CreateInfo *flags2 =
+      vk_find_struct_const(pnext, PIPELINE_CREATE_FLAGS_2_CREATE_INFO);
+   return flags2 ? flags2->flags : flags;
+}
+
 VkResult
 vn_CreateGraphicsPipelines(VkDevice device,
                            VkPipelineCache pipelineCache,
@@ -1558,8 +1577,14 @@ vn_CreateGraphicsPipelines(VkDevice device,
    for (uint32_t i = 0; i < createInfoCount; i++) {
       struct vn_graphics_pipeline *pipeline =
          vn_graphics_pipeline_from_handle(pPipelines[i]);
-      vn_graphics_pipeline_state_fill(&pCreateInfos[i], &pipeline->state,
-                                      &fix_descs[i]);
+
+      const VkPipelineCreateFlags2 flags2 = vn_pipeline_create_flags2(
+         pCreateInfos[i].pNext, pCreateInfos[i].flags);
+      if (flags2 & VN_PIPELINE_CREATE_SYNC_MASK)
+         want_sync = true;
+
+      vn_graphics_pipeline_state_fill(&pCreateInfos[i], flags2,
+                                      &pipeline->state, &fix_descs[i]);
    }
 
    struct vn_graphics_pipeline_fix_tmp *fix_tmp = NULL;
@@ -1579,9 +1604,6 @@ vn_CreateGraphicsPipelines(VkDevice device,
                      layout->has_push_constant_ranges)) {
          pipeline->layout = vn_pipeline_layout_ref(dev, layout);
       }
-
-      if ((pCreateInfos[i].flags & VN_PIPELINE_CREATE_SYNC_MASK))
-         want_sync = true;
 
       vn_invalidate_pipeline_creation_feedback(
          (const VkBaseInStructure *)pCreateInfos[i].pNext);
@@ -1646,7 +1668,10 @@ vn_CreateComputePipelines(VkDevice device,
           layout->has_push_constant_ranges) {
          pipeline->layout = vn_pipeline_layout_ref(dev, layout);
       }
-      if ((pCreateInfos[i].flags & VN_PIPELINE_CREATE_SYNC_MASK))
+
+      if (vn_pipeline_create_flags2(pCreateInfos[i].pNext,
+                                    pCreateInfos[i].flags) &
+          VN_PIPELINE_CREATE_SYNC_MASK)
          want_sync = true;
 
       vn_invalidate_pipeline_creation_feedback(

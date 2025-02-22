@@ -479,6 +479,7 @@ radv_patch_surface_from_metadata(struct radv_device *device, struct radeon_surf 
       surface->u.gfx9.color.dcc.max_compressed_block_size = md->u.gfx12.dcc_max_compressed_block;
       surface->u.gfx9.color.dcc_data_format = md->u.gfx12.dcc_data_format;
       surface->u.gfx9.color.dcc_number_type = md->u.gfx12.dcc_number_type;
+      surface->u.gfx9.color.dcc_write_compress_disable = md->u.gfx12.dcc_write_compress_disable;
    } else if (pdev->info.gfx_level >= GFX9) {
       if (md->u.gfx9.swizzle_mode > 0)
          surface->flags |= RADEON_SURF_SET(RADEON_SURF_MODE_2D, MODE);
@@ -777,6 +778,7 @@ radv_image_bo_set_metadata(struct radv_device *device, struct radv_image *image,
       md.u.gfx12.dcc_max_compressed_block = surface->u.gfx9.color.dcc.max_compressed_block_size;
       md.u.gfx12.dcc_number_type = surface->u.gfx9.color.dcc_number_type;
       md.u.gfx12.dcc_data_format = surface->u.gfx9.color.dcc_data_format;
+      md.u.gfx12.dcc_write_compress_disable = surface->u.gfx9.color.dcc_write_compress_disable;
       md.u.gfx12.scanout = (surface->flags & RADEON_SURF_SCANOUT) != 0;
    } else if (pdev->info.gfx_level >= GFX9) {
       uint64_t dcc_offset =
@@ -1196,6 +1198,16 @@ radv_image_create_layout(struct radv_device *device, struct radv_image_create_in
       if (plane == 0) {
          if (!radv_use_dcc_for_image_late(device, image))
             ac_surface_zero_dcc_fields(&image->planes[0].surface);
+      }
+
+      if (pdev->info.gfx_level >= GFX12 &&
+          (!radv_surface_has_scanout(device, &create_info) || pdev->info.gfx12_supports_display_dcc)) {
+         const enum pipe_format format = vk_format_to_pipe_format(image->vk.format);
+
+         /* Set DCC tilings for both color and depth/stencil. */
+         image->planes[plane].surface.u.gfx9.color.dcc_number_type = ac_get_cb_number_type(format);
+         image->planes[plane].surface.u.gfx9.color.dcc_data_format = ac_get_cb_format(pdev->info.gfx_level, format);
+         image->planes[plane].surface.u.gfx9.color.dcc_write_compress_disable = false;
       }
 
       if (create_info.bo_metadata && !mod_info &&

@@ -365,6 +365,7 @@ nvk_cmd_buffer_get_cbuf_descriptor_addr(struct nvk_cmd_buffer *cmd,
                                         const struct nvk_cbuf *cbuf);
 
 VkResult nvk_cmd_flush_cs_qmd(struct nvk_cmd_buffer *cmd,
+                              const struct nvk_cmd_state *state,
                               uint32_t global_size[3],
                               uint64_t *qmd_addr_out,
                               uint64_t *root_desc_addr_out);

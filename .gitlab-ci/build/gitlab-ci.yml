@@ -72,6 +72,8 @@
     optional: true
   - job: debian-testing-asan
     optional: true
+  - job: debian-testing-ubsan
+    optional: true
   - job: debian-build-testing
     optional: true
   - job: debian-arm32

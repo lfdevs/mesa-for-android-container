@@ -1078,10 +1078,16 @@ gbm_dri_surface_create(struct gbm_device *gbm,
 		       uint32_t format, uint32_t flags,
                        const uint64_t *modifiers, const unsigned count)
 {
+   struct gbm_dri_device *dri = gbm_dri_device(gbm);
    struct gbm_dri_surface *surf;
 
    if (count)
       assert(modifiers);
+
+   if (count > 0 && !dri->screen->base.screen->resource_create_with_modifiers) {
+      errno = ENOSYS;
+      return NULL;
+   }
 
    /* It's acceptable to create an image with INVALID modifier in the list,
     * but it cannot be on the only modifier (since it will certainly fail

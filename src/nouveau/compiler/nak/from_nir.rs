@@ -1749,6 +1749,13 @@ impl<'a> ShaderFromNir<'a> {
         let mut mask = u8::try_from(mask).unwrap();
         if flags.is_sparse() {
             mask &= !(1 << (tex.def.num_components - 1));
+            if mask == 0 {
+                // This can happen if only the sparse predicate is used.  In
+                // that case, we need at least one result register.
+                mask = 1;
+            }
+        } else {
+            debug_assert!(mask != 0);
         }
 
         let dst_comps = u8::try_from(mask.count_ones()).unwrap();
@@ -2298,6 +2305,15 @@ impl<'a> ShaderFromNir<'a> {
                 let coord = self.get_image_coord(intrin, dim);
                 // let sample = self.get_src(&srcs[2]);
 
+                let mem_order = if intrin.intrinsic
+                    == nir_intrinsic_load_global_constant
+                    || (intrin.access() & ACCESS_CAN_REORDER) != 0
+                {
+                    MemOrder::Constant
+                } else {
+                    MemOrder::Strong(MemScope::System)
+                };
+
                 let comps = intrin.num_components;
                 assert!(intrin.def.bit_size() == 32);
                 assert!(comps == 1 || comps == 2 || comps == 4);
@@ -2308,7 +2324,7 @@ impl<'a> ShaderFromNir<'a> {
                     dst: dst.into(),
                     fault: Dst::None,
                     image_dim: dim,
-                    mem_order: MemOrder::Strong(MemScope::System),
+                    mem_order,
                     mem_eviction_priority: self
                         .get_eviction_priority(intrin.access()),
                     mask: (1 << comps) - 1,
@@ -2323,6 +2339,15 @@ impl<'a> ShaderFromNir<'a> {
                 let coord = self.get_image_coord(intrin, dim);
                 // let sample = self.get_src(&srcs[2]);
 
+                let mem_order = if intrin.intrinsic
+                    == nir_intrinsic_load_global_constant
+                    || (intrin.access() & ACCESS_CAN_REORDER) != 0
+                {
+                    MemOrder::Constant
+                } else {
+                    MemOrder::Strong(MemScope::System)
+                };
+
                 let comps = intrin.num_components;
                 assert!(intrin.def.bit_size() == 32);
                 assert!(comps == 5);
@@ -2334,7 +2359,7 @@ impl<'a> ShaderFromNir<'a> {
                     dst: dst.into(),
                     fault: fault.into(),
                     image_dim: dim,
-                    mem_order: MemOrder::Strong(MemScope::System),
+                    mem_order,
                     mem_eviction_priority: self
                         .get_eviction_priority(intrin.access()),
                     mask: (1 << (comps - 1)) - 1,

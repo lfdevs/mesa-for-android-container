@@ -162,8 +162,8 @@ typedef struct brw_reg {
          unsigned negate:1;             /* source only */
          unsigned abs:1;                /* source only */
          unsigned address_mode:1;       /* relative addressing, hopefully! */
-         unsigned pad0:16;
-         unsigned subnr:5;              /* :1 in align16 */
+         unsigned pad0:15;
+         unsigned subnr:6;              /* :1 in align16 */
       };
       uint32_t bits;
    };

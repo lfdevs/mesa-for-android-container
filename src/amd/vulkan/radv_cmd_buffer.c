@@ -4618,6 +4618,8 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
          const struct radv_image_view *vrs_iview = render->vrs_att.iview;
          struct radv_image *vrs_image = vrs_iview->image;
 
+         radv_cs_add_buffer(device->ws, cmd_buffer->cs, vrs_image->bindings[0].bo);
+
          va = radv_image_get_va(vrs_image, 0);
          va |= vrs_image->planes[0].surface.tile_swizzle << 8;
 

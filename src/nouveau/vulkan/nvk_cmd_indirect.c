@@ -239,6 +239,8 @@ static_assert(sizeof(struct nvk_ies_cs_qmd) % QMD_ALIGN == 0,
               "QMD size is not properly algined");
 static_assert(sizeof(struct nvk_root_descriptor_table) % QMD_ALIGN == 0,
               "Root descriptor table size is not aligned");
+static_assert(NVK_DGC_ALIGN >= QMD_ALIGN,
+              "QMD alignment requirement is a lower bound of DGC alignment");
 
 static void
 copy_repl_global_dw(nir_builder *b, nir_def *dst_addr, nir_def *src_addr,
@@ -945,8 +947,8 @@ nvk_cmd_process_cmds(struct nvk_cmd_buffer *cmd,
    uint64_t qmd_addr = 0;
    if (layout->stages & VK_SHADER_STAGE_COMPUTE_BIT) {
       uint32_t global_size[3] = { 0, 0, 0 };
-      VkResult result = nvk_cmd_flush_cs_qmd(cmd, global_size, &qmd_addr,
-                                             &push.root_addr);
+      VkResult result = nvk_cmd_flush_cs_qmd(cmd, state, global_size,
+                                             &qmd_addr, &push.root_addr);
       if (unlikely(result != VK_SUCCESS)) {
          vk_command_buffer_set_error(&cmd->vk, result);
          return;

@@ -2013,6 +2013,9 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
 static void
 emit_wa_18020335297_dummy_draw(struct anv_cmd_buffer *cmd_buffer)
 {
+   /* For Wa_16012775297, ensure VF_STATISTICS is emitted before 3DSTATE_VF
+    */
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_STATISTICS), zero);
 #if GFX_VERx10 >= 125
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VFG), vfg) {
       vfg.DistributionMode = RR_STRICT;
@@ -2034,7 +2037,6 @@ emit_wa_18020335297_dummy_draw(struct anv_cmd_buffer *cmd_buffer)
       rr.BackFaceFillMode = FILL_MODE_SOLID;
    }
 
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_STATISTICS), zero);
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF_SGVS), zero);
 
 #if GFX_VER >= 11
