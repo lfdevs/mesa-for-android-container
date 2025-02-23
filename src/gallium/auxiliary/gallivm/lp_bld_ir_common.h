@@ -85,7 +85,6 @@ struct lp_exec_mask {
       bool switch_in_default;        /* if switch exec is currently in default */
       unsigned switch_pc;               /* when used points to default or endswitch-1 */
 
-      LLVMValueRef loop_limiter;
       LLVMBasicBlockRef loop_block;
       LLVMValueRef break_var;
       struct {

@@ -233,6 +233,7 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
          /* These should be set for both color and Z/S. */
          surface->u.gfx9.color.dcc_number_type = ac_get_cb_number_type(format);
          surface->u.gfx9.color.dcc_data_format = ac_get_cb_format(sscreen->info.gfx_level, format);
+         surface->u.gfx9.color.dcc_write_compress_disable = false;
       }
 
       if (modifier == DRM_FORMAT_MOD_INVALID &&
@@ -803,10 +804,12 @@ static bool si_texture_get_handle(struct pipe_screen *screen, struct pipe_contex
       }
 
       const bool debug_disable_dcc = sscreen->debug_flags & DBG(NO_EXPORTED_DCC);
-      /* Since shader image stores don't support DCC on GFX9 and older,
-       * disable it for external clients that want write access.
+      /* Disable DCC for external clients that might use shader image stores.
+       * They don't support DCC on GFX9 and older. GFX10/10.3 is also problematic
+       * if the view formats between clients are incompatible or if DCC clear is
+       * used.
        */
-      const bool shader_write = sscreen->info.gfx_level <= GFX9 &&
+      const bool shader_write = sscreen->info.gfx_level < GFX11 &&
                                 usage & PIPE_HANDLE_USAGE_SHADER_WRITE &&
                                 !tex->is_depth &&
                                 tex->surface.meta_offset;

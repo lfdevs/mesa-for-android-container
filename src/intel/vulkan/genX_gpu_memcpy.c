@@ -77,6 +77,7 @@ emit_common_so_memcpy(struct anv_memcpy_state *state,
       vfi.InstancingEnable = false;
       vfi.VertexElementIndex = 0;
    }
+   anv_batch_emit(batch, GENX(3DSTATE_VF_STATISTICS), vfs);
    anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS), sgvs);
 #if GFX_VER >= 11
    anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS_2), sgvs);

@@ -37,7 +37,7 @@ desc_ubo_data(struct nvk_descriptor_set *set, uint32_t binding,
    if (size_out != NULL)
       *size_out = set->size - offset;
 
-   return (char *)set->mapped_ptr + offset;
+   return (char *)set->map + offset;
 }
 
 static void
@@ -173,7 +173,7 @@ ubo_desc(struct nvk_physical_device *pdev,
    assert(addr_range.addr % min_cbuf_alignment == 0);
    assert(addr_range.range <= NVK_MAX_CBUF_SIZE);
 
-   addr_range.addr = align64(addr_range.addr, min_cbuf_alignment);
+   addr_range.addr = ROUND_DOWN_TO(addr_range.addr, min_cbuf_alignment);
    addr_range.range = align(addr_range.range, min_cbuf_alignment);
 
    if (nvk_use_bindless_cbuf(&pdev->info)) {
@@ -225,7 +225,7 @@ ssbo_desc(struct nvk_addr_range addr_range)
    assert(addr_range.addr % NVK_MIN_SSBO_ALIGNMENT == 0);
    assert(addr_range.range <= UINT32_MAX);
 
-   addr_range.addr = align64(addr_range.addr, NVK_MIN_SSBO_ALIGNMENT);
+   addr_range.addr = ROUND_DOWN_TO(addr_range.addr, NVK_MIN_SSBO_ALIGNMENT);
    addr_range.range = align(addr_range.range, NVK_SSBO_BOUNDS_CHECK_ALIGNMENT);
 
    return (union nvk_buffer_descriptor) { .addr = {
@@ -449,7 +449,7 @@ nvk_push_descriptor_set_update(struct nvk_device *dev,
    struct nvk_descriptor_set set = {
       .layout = layout,
       .size = sizeof(push_set->data),
-      .mapped_ptr = push_set->data,
+      .map = push_set->data,
    };
 
    for (uint32_t w = 0; w < write_count; w++) {
@@ -537,8 +537,13 @@ nvk_destroy_descriptor_pool(struct nvk_device *dev,
    if (pool->mem != NULL)
       nvkmd_mem_unref(pool->mem);
 
+   if (pool->host_mem != NULL)
+      vk_free2(&dev->vk.alloc, pAllocator, pool->host_mem);
+
    vk_object_free(&dev->vk, pAllocator, pool);
 }
+
+#define HOST_ONLY_ADDR 0xc0ffee0000000000ull
 
 VKAPI_ATTR VkResult VKAPI_CALL
 nvk_CreateDescriptorPool(VkDevice _device,
@@ -601,23 +606,38 @@ nvk_CreateDescriptorPool(VkDevice _device,
     */
    mem_size += nvk_min_cbuf_alignment(&pdev->info) * pCreateInfo->maxSets;
 
-   if (mem_size) {
-      result = nvkmd_dev_alloc_mapped_mem(dev->nvkmd, &dev->vk.base,
-                                          mem_size, 0, NVKMD_MEM_LOCAL,
-                                          NVKMD_MEM_MAP_WR, &pool->mem);
-      if (result != VK_SUCCESS) {
-         nvk_destroy_descriptor_pool(dev, pAllocator, pool);
-         return result;
-      }
+   if (mem_size > 0) {
+      if (pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT) {
+         pool->host_mem = vk_zalloc2(&dev->vk.alloc, pAllocator, mem_size,
+                                     16, VK_OBJECT_TYPE_DESCRIPTOR_POOL);
+         if (pool->host_mem == NULL) {
+            nvk_destroy_descriptor_pool(dev, pAllocator, pool);
+            return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+         }
 
-      /* The BO may be larger thanks to GPU page alignment.  We may as well
-       * make that extra space available to the client.
-       */
-      assert(pool->mem->size_B >= mem_size);
-      util_vma_heap_init(&pool->heap, pool->mem->va->addr, pool->mem->size_B);
+         util_vma_heap_init(&pool->heap, HOST_ONLY_ADDR, mem_size);
+      } else {
+         result = nvkmd_dev_alloc_mapped_mem(dev->nvkmd, &dev->vk.base,
+                                             mem_size, 0, NVKMD_MEM_LOCAL,
+                                             NVKMD_MEM_MAP_WR, &pool->mem);
+         if (result != VK_SUCCESS) {
+            nvk_destroy_descriptor_pool(dev, pAllocator, pool);
+            return result;
+         }
+
+         /* The BO may be larger thanks to GPU page alignment.  We may as well
+          * make that extra space available to the client.
+          */
+         assert(pool->mem->size_B >= mem_size);
+         mem_size = pool->mem->size_B;
+
+         util_vma_heap_init(&pool->heap, pool->mem->va->addr, mem_size);
+      }
    } else {
       util_vma_heap_init(&pool->heap, 0, 0);
    }
+
+   pool->mem_size_B = mem_size;
 
    *pDescriptorPool = nvk_descriptor_pool_to_handle(pool);
    return VK_SUCCESS;
@@ -638,12 +658,22 @@ nvk_descriptor_pool_alloc(struct nvk_descriptor_pool *pool,
    if (addr == 0)
       return VK_ERROR_FRAGMENTED_POOL;
 
-   assert(addr >= pool->mem->va->addr);
-   assert(addr + size <= pool->mem->va->addr + pool->mem->size_B);
-   uint64_t offset = addr - pool->mem->va->addr;
+   if (pool->host_mem != NULL) {
+      /* In this case, the address is a host address */
+      assert(addr >= HOST_ONLY_ADDR);
+      assert(addr + size <= HOST_ONLY_ADDR + pool->mem_size_B);
+      uint64_t offset = addr - HOST_ONLY_ADDR;
 
-   *addr_out = addr;
-   *map_out = pool->mem->map + offset;
+      *addr_out = addr;
+      *map_out = pool->host_mem + offset;
+   } else {
+      assert(addr >= pool->mem->va->addr);
+      assert(addr + size <= pool->mem->va->addr + pool->mem_size_B);
+      uint64_t offset = addr - pool->mem->va->addr;
+
+      *addr_out = addr;
+      *map_out = pool->mem->map + offset;
+   }
 
    return VK_SUCCESS;
 }
@@ -653,8 +683,13 @@ nvk_descriptor_pool_free(struct nvk_descriptor_pool *pool,
                          uint64_t addr, uint64_t size)
 {
    assert(size > 0);
-   assert(addr >= pool->mem->va->addr);
-   assert(addr + size <= pool->mem->va->addr + pool->mem->size_B);
+   if (pool->host_mem != NULL) {
+      assert(addr >= HOST_ONLY_ADDR);
+      assert(addr + size <= HOST_ONLY_ADDR + pool->mem_size_B);
+   } else {
+      assert(addr >= pool->mem->va->addr);
+      assert(addr + size <= pool->mem->va->addr + pool->mem_size_B);
+   }
    util_vma_heap_free(&pool->heap, addr, size);
 }
 
@@ -691,7 +726,7 @@ nvk_descriptor_set_create(struct nvk_device *dev,
 
    if (set->size > 0) {
       result = nvk_descriptor_pool_alloc(pool, set->size, alignment,
-                                         &set->addr, &set->mapped_ptr);
+                                         &set->addr, &set->map);
       if (result != VK_SUCCESS) {
          vk_object_free(&dev->vk, NULL, set);
          return result;
@@ -952,7 +987,7 @@ nvk_push_descriptor_set_update_template(
    struct nvk_descriptor_set tmp_set = {
       .layout = layout,
       .size = sizeof(push_set->data),
-      .mapped_ptr = push_set->data,
+      .map = push_set->data,
    };
    nvk_descriptor_set_write_template(dev, &tmp_set, template, data);
 }

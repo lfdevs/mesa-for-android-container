@@ -434,6 +434,15 @@ get_vk_version(unsigned arch)
    return VK_MAKE_API_VERSION(0, 1, 0, VK_HEADER_VERSION);
 }
 
+static VkConformanceVersion
+get_conformance_version(unsigned arch)
+{
+   if (arch == 10)
+      return (VkConformanceVersion){1, 4, 1, 2};
+
+   return (VkConformanceVersion){0, 0, 0, 0};
+}
+
 static void
 get_device_properties(const struct panvk_instance *instance,
                       const struct panvk_physical_device *device,
@@ -723,7 +732,7 @@ get_device_properties(const struct panvk_instance *instance,
       .independentResolve = true,
       /* VK_KHR_driver_properties */
       .driverID = VK_DRIVER_ID_MESA_PANVK,
-      .conformanceVersion = (VkConformanceVersion){0, 0, 0, 0},
+      .conformanceVersion = get_conformance_version(arch),
       /* XXX: VK_KHR_shader_float_controls */
       .denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
       .roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,

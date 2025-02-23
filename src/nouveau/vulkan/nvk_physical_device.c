@@ -552,7 +552,7 @@ nvk_get_device_features(const struct nv_device_info *info,
       .descriptorBuffer = true,
       .descriptorBufferCaptureReplay = true,
       .descriptorBufferImageLayoutIgnored = true,
-      .descriptorBufferPushDescriptors = false,
+      .descriptorBufferPushDescriptors = true,
 
       /* VK_EXT_device_generated_commands */
       .deviceGeneratedCommands = true,
@@ -984,7 +984,7 @@ nvk_get_device_properties(const struct nvk_instance *instance,
 
       /* VK_EXT_descriptor_buffer */
       .combinedImageSamplerDescriptorSingleArray = true,
-      .bufferlessPushDescriptors = false,
+      .bufferlessPushDescriptors = true,
       .allowSamplerImageViewPostSubmitCreation = false,
       .descriptorBufferOffsetAlignment = nvk_min_cbuf_alignment(info),
       .maxDescriptorBufferBindings = 32,

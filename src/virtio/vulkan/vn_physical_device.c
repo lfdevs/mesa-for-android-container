@@ -492,6 +492,7 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
       VkPhysicalDeviceTexelBufferAlignmentProperties texel_buffer_alignment;
 
       /* KHR */
+      VkPhysicalDeviceMaintenance5PropertiesKHR maintenance_5;
       VkPhysicalDevicePushDescriptorPropertiesKHR push_descriptor;
       VkPhysicalDeviceFragmentShadingRatePropertiesKHR fragment_shading_rate;
 
@@ -552,6 +553,7 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
    }
 
    /* KHR */
+   VN_ADD_PNEXT_EXT(props2, MAINTENANCE_5_PROPERTIES_KHR, local_props.maintenance_5, exts->KHR_maintenance5);
    VN_ADD_PNEXT_EXT(props2, FRAGMENT_SHADING_RATE_PROPERTIES_KHR, local_props.fragment_shading_rate, exts->KHR_fragment_shading_rate);
    VN_ADD_PNEXT_EXT(props2, PUSH_DESCRIPTOR_PROPERTIES_KHR, local_props.push_descriptor, exts->KHR_push_descriptor);
 
@@ -614,6 +616,7 @@ vn_physical_device_init_properties(struct vn_physical_device *physical_dev)
 
    /* KHR */
    VN_SET_VK_PROPS_EXT(props, &local_props.fragment_shading_rate, exts->KHR_fragment_shading_rate);
+   VN_SET_VK_PROPS_EXT(props, &local_props.maintenance_5, exts->KHR_maintenance5);
    VN_SET_VK_PROPS_EXT(props, &local_props.push_descriptor, exts->KHR_push_descriptor);
 
    /* EXT */

@@ -77,12 +77,6 @@
  */
 #define LP_MAX_TGSI_NESTING 80
 
-/**
- * Maximum iterations before loop termination
- * Shared between every loop in a TGSI shader
- */
-#define LP_MAX_TGSI_LOOP_ITERATIONS 65535
-
 static inline bool
 lp_has_fp16(void)
 {

@@ -152,6 +152,7 @@ struct radeon_bo_metadata {
          unsigned dcc_max_compressed_block : 3;
          unsigned dcc_data_format : 6;
          unsigned dcc_number_type : 3;
+         bool dcc_write_compress_disable;
          bool scanout;
       } gfx12;
    } u;

@@ -985,6 +985,7 @@ radv_amdgpu_winsys_bo_set_metadata(struct radeon_winsys *_ws, struct radeon_wins
       tiling_flags |= AMDGPU_TILING_SET(GFX12_DCC_MAX_COMPRESSED_BLOCK, md->u.gfx12.dcc_max_compressed_block);
       tiling_flags |= AMDGPU_TILING_SET(GFX12_DCC_NUMBER_TYPE, md->u.gfx12.dcc_number_type);
       tiling_flags |= AMDGPU_TILING_SET(GFX12_DCC_DATA_FORMAT, md->u.gfx12.dcc_data_format);
+      tiling_flags |= AMDGPU_TILING_SET(GFX12_DCC_WRITE_COMPRESS_DISABLE, md->u.gfx12.dcc_write_compress_disable);
       tiling_flags |= AMDGPU_TILING_SET(GFX12_SCANOUT, md->u.gfx12.scanout);
    } else if (ws->info.gfx_level >= GFX9) {
       tiling_flags |= AMDGPU_TILING_SET(SWIZZLE_MODE, md->u.gfx9.swizzle_mode);
@@ -1042,6 +1043,7 @@ radv_amdgpu_winsys_bo_get_metadata(struct radeon_winsys *_ws, struct radeon_wins
       md->u.gfx12.dcc_max_compressed_block = AMDGPU_TILING_GET(tiling_flags, GFX12_DCC_MAX_COMPRESSED_BLOCK);
       md->u.gfx12.dcc_data_format = AMDGPU_TILING_GET(tiling_flags, GFX12_DCC_DATA_FORMAT);
       md->u.gfx12.dcc_number_type = AMDGPU_TILING_GET(tiling_flags, GFX12_DCC_NUMBER_TYPE);
+      md->u.gfx12.dcc_write_compress_disable = AMDGPU_TILING_GET(tiling_flags, GFX12_DCC_WRITE_COMPRESS_DISABLE);
       md->u.gfx12.scanout = AMDGPU_TILING_GET(tiling_flags, GFX12_SCANOUT);
    } else if (ws->info.gfx_level >= GFX9) {
       md->u.gfx9.swizzle_mode = AMDGPU_TILING_GET(tiling_flags, SWIZZLE_MODE);

@@ -2544,9 +2544,6 @@ radv_CmdBeginVideoCodingKHR(VkCommandBuffer commandBuffer, const VkVideoBeginCod
 
    cmd_buffer->video.vid = vid;
    cmd_buffer->video.params = params;
-
-   if (vid->encode)
-      radv_video_enc_begin_coding(cmd_buffer);
 }
 
 static void
@@ -2628,12 +2625,6 @@ radv_CmdControlVideoCodingKHR(VkCommandBuffer commandBuffer, const VkVideoCoding
 VKAPI_ATTR void VKAPI_CALL
 radv_CmdEndVideoCodingKHR(VkCommandBuffer commandBuffer, const VkVideoEndCodingInfoKHR *pEndCodingInfo)
 {
-   VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
-
-   if (cmd_buffer->video.vid->encode) {
-      radv_video_enc_end_coding(cmd_buffer);
-      return;
-   }
 }
 
 static void

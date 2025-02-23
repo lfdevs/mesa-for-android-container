@@ -55,19 +55,19 @@ radv_set_mutable_tex_desc_fields(struct radv_device *device, struct radv_image *
                                  bool is_storage_image, bool disable_compression, bool enable_write_compression,
                                  uint32_t *state, const struct ac_surf_nbc_view *nbc_view, uint64_t offset)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radv_image_plane *plane = &image->planes[plane_id];
    const uint32_t bind_idx = image->disjoint ? plane_id : 0;
    struct radv_image_binding *binding = &image->bindings[bind_idx];
    uint64_t gpu_address = binding->bo ? radv_image_get_va(image, bind_idx) + offset : 0;
-   const struct radv_physical_device *pdev = radv_device_physical(device);
+   const bool dcc_enabled = pdev->info.gfx_level >= GFX12 || radv_dcc_enabled(image, first_level);
 
    const struct ac_mutable_tex_state ac_state = {
       .surf = &plane->surface,
       .va = gpu_address,
       .gfx10 =
          {
-            .write_compress_enable =
-               radv_dcc_enabled(image, first_level) && is_storage_image && enable_write_compression,
+            .write_compress_enable = dcc_enabled && is_storage_image && enable_write_compression,
             .iterate_256 = radv_image_get_iterate256(device, image),
          },
       .gfx9 =
@@ -81,7 +81,7 @@ radv_set_mutable_tex_desc_fields(struct radv_device *device, struct radv_image *
             .block_width = block_width,
          },
       .is_stencil = is_stencil,
-      .dcc_enabled = !disable_compression && radv_dcc_enabled(image, first_level),
+      .dcc_enabled = !disable_compression && dcc_enabled,
       .tc_compat_htile_enabled = !disable_compression && radv_image_is_tc_compat_htile(image),
    };
 
