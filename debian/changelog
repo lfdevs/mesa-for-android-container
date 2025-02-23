@@ -1,11 +1,11 @@
-mesa (25.0.0-1) UNRELEASED; urgency=medium
+mesa (25.0.0-1) unstable; urgency=medium
 
   * New upstream release.
   * control: Make mesa-va-drivers depend on the same version of mesa-
     libgallium. (Closes: #1094190)
   * rules: Enable panvk, it's production quality now. (Closes: #1095969)
 
- -- Timo Aaltonen <tjaalton@debian.org>  Thu, 13 Feb 2025 15:01:15 +0200
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 23 Feb 2025 11:22:33 +0200
 
 mesa (25.0.0~rc3-1) experimental; urgency=medium
 
