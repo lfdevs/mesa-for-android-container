@@ -1624,6 +1624,7 @@ struct anv_gfx_dynamic_state {
       uint32_t Kernel0SIMDWidth;
       uint32_t Kernel1SIMDWidth;
       uint32_t Kernel0PolyPackingPolicy;
+      uint32_t Kernel0MaximumPolysperThread;
    } ps;
 
    /* 3DSTATE_PS_EXTRA */

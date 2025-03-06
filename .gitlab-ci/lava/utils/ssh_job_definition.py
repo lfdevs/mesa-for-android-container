@@ -68,7 +68,7 @@ EOF
 ping -c 5 -w 60 $(lava-target-ip)
 
 lava_ssh_test_case() {
-    set -x
+    set -ex
     local test_case="${1}"
     shift
     lava-test-case \"${test_case}\" --shell \\
@@ -170,7 +170,7 @@ def generate_docker_test(
         # maintainers with monitoring
         f"lava_ssh_test_case '{args.project_name}_{args.mesa_job_name}' "
         # Changing directory to /, as the HWCI_SCRIPT expects that
-        "'\"cd / && /init-stage2.sh\"'",
+        "'cd / && /init-stage2.sh'",
     ]
 
     return init_stages_test

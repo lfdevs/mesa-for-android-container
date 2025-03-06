@@ -439,13 +439,6 @@ dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffe
 dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.8,Fail
 dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.9,Fail
 
-# One triangle missing
-dEQP-GLES31.functional.draw_indirect.draw_elements_indirect.indices.index_byte,Fail
-
-# Line is entirely missing
-dEQP-GLES31.functional.draw_indirect.random.35,Fail
-dEQP-GLES31.functional.draw_indirect.random.45,Fail
-
 dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.r32f_rgba8_snorm,Fail
 dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8_snorm,Fail
 dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.r32f_rgba8_snorm,Fail

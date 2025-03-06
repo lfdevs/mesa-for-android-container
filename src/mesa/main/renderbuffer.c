@@ -609,6 +609,9 @@ _mesa_update_renderbuffer_surface(struct gl_context *ctx,
    if (rb->rtt_numviews) {
       first_layer = rb->rtt_slice;
       last_layer = first_layer + rb->rtt_numviews - 1;
+      /* this is an incomplete framebuffer */
+      if (last_layer >= resource->array_size)
+         return;
    } else if (rb->rtt_layered) {
       first_layer = 0;
       last_layer = util_max_layer(rb->texture, level);

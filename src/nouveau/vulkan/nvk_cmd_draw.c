@@ -1153,7 +1153,9 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       P_IMMD(p, NV9097, SET_ZT_SELECT, 0 /* target_count */);
    }
 
-   if (render->fsr_att.iview) {
+   if (nvk_cmd_buffer_3d_cls(cmd) < TURING_A) {
+      assert(render->fsr_att.iview == NULL);
+   } else if (render->fsr_att.iview != NULL) {
       const struct nvk_image_view *iview = render->fsr_att.iview;
       const struct nvk_image *image = (struct nvk_image *)iview->vk.image;
 

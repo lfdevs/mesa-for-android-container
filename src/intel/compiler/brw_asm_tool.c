@@ -136,7 +136,6 @@ int main(int argc, char **argv)
    FILE *output = stdout;
    bool help = false, compact = false;
    uint64_t pci_id = 0;
-   int offset = 0;
    struct intel_device_info *devinfo = NULL;
    int result = EXIT_FAILURE;
 
@@ -237,7 +236,7 @@ int main(int argc, char **argv)
    if (output_type == OPT_OUTPUT_C_LITERAL)
       fprintf(output, "{\n");
 
-   for (int i = 0; i < r.inst_count; i++) {
+   for (int offset = 0; offset < r.bin_size;) {
       const brw_eu_inst *insn = r.bin + offset;
       bool compacted = false;
 

@@ -2475,7 +2475,7 @@ static bool
 bi_nir_is_replicated(nir_alu_src *src)
 {
    for (unsigned i = 1; i < nir_src_num_components(src->src); ++i) {
-      if (src->swizzle[0] == src->swizzle[i])
+      if (src->swizzle[0] != src->swizzle[i])
          return false;
    }
 
@@ -2652,13 +2652,12 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
       return;
    }
 
-   /* While we do not have a direct V2U32_TO_V2F16 instruction, lowering to
-    * MKVEC.v2i16 + V2U16_TO_V2F16 is more efficient on Bifrost than
-    * scalarizing due to scheduling (equal cost on Valhall). Additionally
-    * if the source is replicated the MKVEC.v2i16 can be optimized out.
-    */
-   case nir_op_u2f16:
-   case nir_op_i2f16: {
+   /* Pre-v11, we can get vector i2f32 by lowering 32-bit vector i2f16 to
+    * i2f32 + f2f16 in bifrost_nir_lower_algebraic_late, which runs after
+    * nir_opt_vectorize. We don't scalarize i2f32 earlier because we have
+    * vector V2F16_TO_V2F32. */
+   case nir_op_i2f32:
+   case nir_op_u2f32: {
       if (!(src_sz == 32 && comps == 2))
          break;
 
@@ -2667,15 +2666,16 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
       bi_index s0 = bi_extract(b, idx, src->swizzle[0]);
       bi_index s1 = bi_extract(b, idx, src->swizzle[1]);
 
-      bi_index t =
-         (src->swizzle[0] == src->swizzle[1])
-            ? bi_half(s0, false)
-            : bi_mkvec_v2i16(b, bi_half(s0, false), bi_half(s1, false));
+      bi_index d0, d1;
+      if (instr->op == nir_op_i2f32) {
+         d0 = bi_s32_to_f32(b, s0);
+         d1 = bi_s32_to_f32(b, s1);
+      } else {
+         d0 = bi_u32_to_f32(b, s0);
+         d1 = bi_u32_to_f32(b, s1);
+      }
 
-      if (instr->op == nir_op_u2f16)
-         bi_v2u16_to_v2f16_to(b, dst, t);
-      else
-         bi_v2s16_to_v2f16_to(b, dst, t);
+      bi_collect_v2i32_to(b, dst, d0, d1);
 
       return;
    }
@@ -2969,9 +2969,10 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
       break;
 
    case nir_op_u2f16:
-      if (src_sz == 32)
-         bi_v2u16_to_v2f16_to(b, dst, bi_half(s0, false));
-      else if (src_sz == 16)
+      /* V2I32_TO_V2F16 does not exist */
+      assert((src_sz == 16 || src_sz == 8) && "should be lowered");
+
+      if (src_sz == 16)
          bi_v2u16_to_v2f16_to(b, dst, s0);
       else if (src_sz == 8)
          bi_v2u8_to_v2f16_to(b, dst, s0);
@@ -2987,9 +2988,10 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
       break;
 
    case nir_op_i2f16:
-      if (src_sz == 32)
-         bi_v2s16_to_v2f16_to(b, dst, bi_half(s0, false));
-      else if (src_sz == 16)
+      /* V2I32_TO_V2F16 does not exist */
+      assert((src_sz == 16 || src_sz == 8) && "should be lowered");
+
+      if (src_sz == 16)
          bi_v2s16_to_v2f16_to(b, dst, s0);
       else if (src_sz == 8)
          bi_v2s8_to_v2f16_to(b, dst, s0);
@@ -5358,9 +5360,9 @@ bifrost_preprocess_nir(nir_shader *nir, unsigned gpu_id)
             glsl_type_size, nir_lower_io_use_interpolated_input_intrinsics);
 
    if (nir->info.stage == MESA_SHADER_VERTEX)
-      NIR_PASS_V(nir, pan_nir_lower_noperspective_vs);
+      NIR_PASS(_, nir, pan_nir_lower_noperspective_vs);
    if (nir->info.stage == MESA_SHADER_FRAGMENT)
-      NIR_PASS_V(nir, pan_nir_lower_noperspective_fs);
+      NIR_PASS(_, nir, pan_nir_lower_noperspective_fs);
 
    /* nir_lower[_explicit]_io is lazy and emits mul+add chains even for
     * offsets it could figure out are constant.  Do some constant folding

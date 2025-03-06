@@ -11,3 +11,10 @@ pub fn c_string_to_string(cstr: *const c_char) -> String {
     assert!(res.is_ok());
     String::from(res.unwrap_or(""))
 }
+
+/// # Safety
+///
+/// Same as [`CStr::from_ptr`]
+pub unsafe fn char_arr_to_cstr(c_str: &[c_char]) -> &CStr {
+    unsafe { CStr::from_ptr(c_str.as_ptr()) }
+}

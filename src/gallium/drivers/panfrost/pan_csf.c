@@ -938,8 +938,16 @@ GENX(csf_launch_grid)(struct panfrost_batch *batch,
       /* Wait for the stores */
       cs_wait_slot(b, 0, false);
 
-      cs_run_compute_indirect(b, DIV_ROUND_UP(max_thread_cnt, threads_per_wg),
-                              false, cs_shader_res_sel(0, 0, 0, 0));
+      /* Use run_compute with a set task axis instead of run_compute_indirect as
+       * run_compute_indirect has been found to cause intermittent hangs. This
+       * is safe, as the task increment will be clamped by the job size along
+       * the specified axis.
+       * The chosen task axis is potentially suboptimal, as choosing good
+       * increment/axis parameters requires knowledge of job dimensions, but
+       * this is somewhat offset by run_compute being a native instruction. */
+      unsigned task_axis = MALI_TASK_AXIS_X;
+      cs_run_compute(b, DIV_ROUND_UP(max_thread_cnt, threads_per_wg), task_axis,
+                     false, cs_shader_res_sel(0, 0, 0, 0));
    } else {
       /* Set size in workgroups per dimension immediately */
       for (unsigned i = 0; i < 3; ++i)

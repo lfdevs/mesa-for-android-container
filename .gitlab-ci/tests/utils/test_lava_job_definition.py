@@ -211,7 +211,7 @@ def test_lava_job_definition(
     job_dict = yaml.load(job_definition)
 
     # Uncomment the following to update the expected YAML files
-    # yaml.dump(job_dict, Path(f"../../data/{mode}_force_uart={force_uart}_job_definition.yaml"))
+    # yaml.dump(job_dict, load_data_file(f"{mode}_force_uart={force_uart}_job_definition.yaml"))
 
     # Check that the generated job definition matches the expected one
     assert job_dict == expected_job_dict

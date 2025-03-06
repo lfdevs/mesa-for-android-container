@@ -712,6 +712,15 @@ si_vpe_processor_destroy(struct pipe_video_codec *codec)
       FREE(vpeproc->emb_buffers);
    }
 
+   if (vpeproc->geometric_scaling_ratios)
+      FREE(vpeproc->geometric_scaling_ratios);
+
+   if (vpeproc->geometric_buf[0])
+      vpeproc->geometric_buf[0]->destroy(vpeproc->geometric_buf[0]);
+
+   if (vpeproc->geometric_buf[1])
+      vpeproc->geometric_buf[1]->destroy(vpeproc->geometric_buf[1]);
+
    vpeproc->bufs_num = 0;
    vpeproc->ws->cs_destroy(&vpeproc->cs);
    SIVPE_DBG(vpeproc->log_level, "Success\n");
@@ -836,29 +845,16 @@ si_vpe_show_process_settings(struct vpe_video_processor *vpeproc,
    }
 }
 
-static int
-si_vpe_processor_is_process_supported(struct pipe_video_codec *codec,
-                                      struct pipe_video_buffer *input_texture,
-                                      const struct pipe_vpp_desc *process_properties)
+static enum vpe_status
+si_vpe_processor_check_and_build_settins(struct vpe_video_processor *vpeproc,
+                                         const struct pipe_vpp_desc *process_properties,
+                                         struct pipe_surface **src_surfaces,
+                                         struct pipe_surface **dst_surfaces)
 {
    enum vpe_status result = VPE_STATUS_OK;
-   struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
    struct vpe *vpe_handle = vpeproc->vpe_handle;
    struct vpe_build_param *build_param = vpeproc->vpe_build_param;
-   struct pipe_surface **src_surfaces;
    struct vpe_bufs_req bufs_required;
-
-   assert(codec);
-   assert(process_properties);
-   assert(vpeproc->dst_surfaces);
-
-   /* Get input surface */
-   src_surfaces = input_texture->get_surfaces(input_texture);
-   if (!src_surfaces || !src_surfaces[0]) {
-      SIVPE_ERR("Get source surface failed\n");
-      return 1;
-   }
-   vpeproc->src_surfaces = src_surfaces;
 
    /* Mesa only sends one input frame at one time (one stream pipe).
     * If there is more than one pipe need to be handled, it have to re-locate memory.
@@ -870,12 +866,12 @@ si_vpe_processor_is_process_supported(struct pipe_video_codec *codec,
    /* Init input surface setting */
    result = si_vpe_set_surface_info(vpeproc,
                                     process_properties,
-                                    vpeproc->src_surfaces,
+                                    src_surfaces,
                                     USE_SRC_SURFACE,
                                     &build_param->streams[0].surface_info);
    if (VPE_STATUS_OK != result) {
       SIVPE_ERR("Set Src surface failed with result: %d\n", result);
-      return 1;
+      return result;
    }
 
    /* Init input stream setting */
@@ -887,12 +883,12 @@ si_vpe_processor_is_process_supported(struct pipe_video_codec *codec,
    /* Init output surface setting */
    result = si_vpe_set_surface_info(vpeproc,
                                     process_properties,
-                                    vpeproc->dst_surfaces,
+                                    dst_surfaces,
                                     USE_DST_SURFACE,
                                     &build_param->dst_surface);
    if (VPE_STATUS_OK != result) {
       SIVPE_ERR("Set Dst surface failed with result: %d\n", result);
-      return 1;
+      return result;
    }
 
    /* Init output stream setting */
@@ -915,39 +911,50 @@ si_vpe_processor_is_process_supported(struct pipe_video_codec *codec,
    result = vpe_check_support(vpe_handle, build_param, &bufs_required);
    if (VPE_STATUS_OK != result) {
       SIVPE_WARN(vpeproc->log_level, "Check support failed with result: %d\n", result);
-      return 1;
+      return result;
    }
 
    if (VPE_EMBBUF_SIZE < bufs_required.emb_buf_size) {
       SIVPE_ERR("Required Buffer size is out of allocated: %" PRIu64 "\n", bufs_required.emb_buf_size);
-      return 1;
+      return VPE_STATUS_NO_MEMORY;
    }
 
-   return 0;
+   return result;
 }
 
-static int
-si_vpe_processor_process_frame(struct pipe_video_codec *codec,
-                               struct pipe_video_buffer *input_texture,
-                               const struct pipe_vpp_desc *process_properties)
+static enum vpe_status
+si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
+                     const struct pipe_vpp_desc *process_properties,
+                     struct pipe_surface **src_surfaces,
+                     struct pipe_surface **dst_surfaces)
 {
    enum vpe_status result = VPE_STATUS_OK;
-   struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
    struct vpe *vpe_handle = vpeproc->vpe_handle;
    struct vpe_build_param *build_param = vpeproc->vpe_build_param;
+   struct vpe_build_bufs *build_bufs = vpeproc->vpe_build_bufs;
    struct rvid_buffer *emb_buf;
    uint64_t *vpe_ptr;
 
-   /* Check if the required options are supported */
-   if(si_vpe_processor_is_process_supported(codec, input_texture, process_properties))
-      return 1;
+   assert(process_properties);
+   assert(src_surfaces);
+   assert(dst_surfaces);
 
+   /* Check if the blt operation is supported and build related settings.
+    * Command settings will be is stored in vpeproc->vpe_build_param.
+    */
+   result = si_vpe_processor_check_and_build_settins(vpeproc, process_properties, src_surfaces, dst_surfaces);
+   if (VPE_STATUS_OK != result) {
+      SIVPE_ERR("Failed in checking process operation and build settings(%d)\n", result);
+      return result;
+   }
+
+   /* Prepare cmd_bud and emb_buf for building commands from settings */
    /* Init CmdBuf address and size information */
    vpe_ptr = (uint64_t *)vpeproc->cs.current.buf;
-   vpeproc->vpe_build_bufs->cmd_buf.cpu_va = (uintptr_t)vpe_ptr;
-   vpeproc->vpe_build_bufs->cmd_buf.gpu_va = 0;
-   vpeproc->vpe_build_bufs->cmd_buf.size = vpeproc->cs.current.max_dw;
-   vpeproc->vpe_build_bufs->cmd_buf.tmz = false;
+   build_bufs->cmd_buf.cpu_va = (uintptr_t)vpe_ptr;
+   build_bufs->cmd_buf.gpu_va = 0;
+   build_bufs->cmd_buf.size = vpeproc->cs.current.max_dw;
+   build_bufs->cmd_buf.tmz = false;
 
    /* Init EmbBuf address and size information */
    emb_buf = &vpeproc->emb_buffers[vpeproc->cur_buf];
@@ -960,28 +967,30 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
       SIVPE_ERR("Mapping Embbuf failed\n");
       return 1;
    }
-   vpeproc->vpe_build_bufs->emb_buf.cpu_va = (uintptr_t)vpe_ptr;
-   vpeproc->vpe_build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(emb_buf->res->buf);
-   vpeproc->vpe_build_bufs->emb_buf.size = VPE_EMBBUF_SIZE;
-   vpeproc->vpe_build_bufs->emb_buf.tmz = false;
+   build_bufs->emb_buf.cpu_va = (uintptr_t)vpe_ptr;
+   build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(emb_buf->res->buf);
+   build_bufs->emb_buf.size = VPE_EMBBUF_SIZE;
+   build_bufs->emb_buf.tmz = false;
 
-   result = vpe_build_commands(vpe_handle, build_param, vpeproc->vpe_build_bufs);
-   if (VPE_STATUS_OK != result) {
-      SIVPE_ERR("Build commands failed with result: %d\n", result);
-      goto fail;
-   }
+   result = vpe_build_commands(vpe_handle, build_param, build_bufs);
 
    /* Un-map Emb_buf */
    vpeproc->ws->buffer_unmap(vpeproc->ws, emb_buf->res->buf);
 
+   if (VPE_STATUS_OK != result) {
+      SIVPE_ERR("Build commands failed with result: %d\n", result);
+      return VPE_STATUS_NO_MEMORY;
+   }
+
+
    /* Check buffer size */
    if (vpeproc->vpe_build_bufs->cmd_buf.size == 0 || vpeproc->vpe_build_bufs->cmd_buf.size == vpeproc->cs.current.max_dw) {
       SIVPE_ERR("Cmdbuf size wrong\n");
-      goto fail;
+      return VPE_STATUS_NO_MEMORY;
    }
    if (vpeproc->vpe_build_bufs->emb_buf.size == 0 || vpeproc->vpe_build_bufs->emb_buf.size == VPE_EMBBUF_SIZE) {
       SIVPE_ERR("Embbuf size wrong\n");
-      goto fail;
+      return VPE_STATUS_NO_MEMORY;
    }
    SIVPE_DBG(vpeproc->log_level, "Used buf size: %" PRIu64 ", %" PRIu64 "\n",
               vpeproc->vpe_build_bufs->cmd_buf.size, vpeproc->vpe_build_bufs->emb_buf.size);
@@ -993,14 +1002,123 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    vpeproc->ws->cs_add_buffer(&vpeproc->cs, emb_buf->res->buf, RADEON_USAGE_READ | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_GTT);
 
    /* Add surface buffers into bo_handle list */
-   si_vpe_cs_add_surface_buffer(vpeproc, vpeproc->src_surfaces, RADEON_USAGE_READ);
-   si_vpe_cs_add_surface_buffer(vpeproc, vpeproc->dst_surfaces, RADEON_USAGE_WRITE);
+   si_vpe_cs_add_surface_buffer(vpeproc, src_surfaces, RADEON_USAGE_READ);
+   si_vpe_cs_add_surface_buffer(vpeproc, dst_surfaces, RADEON_USAGE_WRITE);
 
-   return 0;
+   return VPE_STATUS_OK;
+}
 
-fail:
-   vpeproc->ws->buffer_unmap(vpeproc->ws, emb_buf->res->buf);
-   SIVPE_ERR("Process frame failed\n");
+static void
+si_vpe_find_substage_scal_ratios(float *p_scale_ratios,
+                                 float scaling_ratio,
+                                 float max_scale,
+                                 uint32_t num_stages)
+{
+   uint32_t i;
+
+   for (i = 0; i < num_stages; i++) {
+      if (i == num_stages - 1)
+         p_scale_ratios[i] = scaling_ratio/(float)(pow(max_scale, num_stages - 1));
+      else
+         p_scale_ratios[i] = max_scale;
+   }
+}
+
+static enum vpe_status
+si_vpe_decide_substage_scal_ratios(struct vpe_video_processor *vpeproc,
+                                   float *p_target_ratios)
+{
+   uint8_t no_horizontal_passes, no_vertical_passes, no_of_passes;
+   float *pHrSr, *pVtSr;
+   uint32_t idx;
+
+   /* The scaling ratios are the same as pre-processing */
+   if (vpeproc->geometric_scaling_ratios &&
+       vpeproc->scaling_ratios[0] == p_target_ratios[0] &&
+       vpeproc->scaling_ratios[1] == p_target_ratios[1])
+      return VPE_STATUS_OK;
+
+   if (vpeproc->geometric_scaling_ratios) {
+      FREE(vpeproc->geometric_scaling_ratios);
+      vpeproc->geometric_scaling_ratios = NULL;
+   }
+
+   /* How many passes we need */
+   no_horizontal_passes = (p_target_ratios[0] > VPE_MAX_GEOMETRIC_DOWNSCALE) ?
+         (uint8_t)(ceil(log(p_target_ratios[0]) / log(VPE_MAX_GEOMETRIC_DOWNSCALE))) : 1;
+   no_vertical_passes   = (p_target_ratios[1] > VPE_MAX_GEOMETRIC_DOWNSCALE) ?
+         (uint8_t)(ceil(log(p_target_ratios[1]) / log(VPE_MAX_GEOMETRIC_DOWNSCALE))) : 1;
+   no_of_passes = MAX2(no_horizontal_passes, no_vertical_passes);
+
+   /* Allocate ratio array depends on no_of_passes */
+   pHrSr = (float *)CALLOC(2 * no_of_passes, sizeof(float));
+   if (NULL == pHrSr) {
+      SIVPE_ERR("no_of_passes times float of array memory allocation failed\n");
+      return VPE_STATUS_NO_MEMORY;
+   }
+   pVtSr = pHrSr + no_of_passes;
+   for (idx = 0; idx < no_of_passes; idx++) {
+      pHrSr[idx] = 1.0f;
+      pVtSr[idx] = 1.0f;
+   }
+
+   /* Calculate scaling ratios of every pass */
+   if (no_horizontal_passes > 1)
+      si_vpe_find_substage_scal_ratios(pHrSr, p_target_ratios[0], VPE_MAX_GEOMETRIC_DOWNSCALE, no_horizontal_passes);
+   else
+      pHrSr[0] = p_target_ratios[0];
+
+   if (no_vertical_passes > 1)
+      si_vpe_find_substage_scal_ratios(pVtSr, p_target_ratios[1], VPE_MAX_GEOMETRIC_DOWNSCALE, no_vertical_passes);
+   else
+      pVtSr[0] = p_target_ratios[1];
+
+   if (no_vertical_passes < no_horizontal_passes) {
+      pVtSr[no_horizontal_passes - 1] = pVtSr[no_vertical_passes - 1];
+      pVtSr[no_vertical_passes - 1]   = 1.0f;
+   } else if (no_vertical_passes > no_horizontal_passes) {
+      pHrSr[no_vertical_passes - 1]   = pHrSr[no_horizontal_passes - 1];
+      pHrSr[no_horizontal_passes - 1] = 1.0f;
+   }
+
+   /* Store the ratio information in vpeproc */
+   vpeproc->scaling_ratios[0] = p_target_ratios[0];
+   vpeproc->scaling_ratios[1] = p_target_ratios[1];
+   vpeproc->geometric_scaling_ratios = pHrSr;
+   vpeproc->geometric_passes = no_of_passes;
+
+   return VPE_STATUS_OK;
+}
+
+static int
+si_vpe_processor_process_frame(struct pipe_video_codec *codec,
+                               struct pipe_video_buffer *input_texture,
+                               const struct pipe_vpp_desc *process_properties)
+{
+   struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
+   uint32_t src_rect_width, src_rect_height, dst_rect_width, dst_rect_height;
+   float scaling_ratio[2];
+
+   /* Get input surface */
+   vpeproc->src_surfaces = input_texture->get_surfaces(input_texture);
+   if (!vpeproc->src_surfaces || !vpeproc->src_surfaces[0]) {
+      SIVPE_ERR("Get source surface failed\n");
+      return 1;
+   }
+
+   /* Get scaling ratio info */
+   src_rect_width  = process_properties->src_region.x1 - process_properties->src_region.x0;
+   src_rect_height = process_properties->src_region.y1 - process_properties->src_region.y0;
+   dst_rect_width  = process_properties->dst_region.x1 - process_properties->dst_region.x0;
+   dst_rect_height = process_properties->dst_region.y1 - process_properties->dst_region.y0;
+
+   scaling_ratio[0] = src_rect_width  / dst_rect_width;
+   scaling_ratio[1] = src_rect_height / dst_rect_height;
+
+   /* Check if the reduction ratio is within capability */
+   if ((scaling_ratio[0] <= VPE_MAX_GEOMETRIC_DOWNSCALE) && (scaling_ratio[1] <= VPE_MAX_GEOMETRIC_DOWNSCALE))
+      return si_vpe_construct_blt(vpeproc, process_properties, vpeproc->src_surfaces, vpeproc->dst_surfaces);
+
    return 1;
 }
 

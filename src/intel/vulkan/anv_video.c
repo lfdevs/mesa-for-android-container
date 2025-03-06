@@ -344,6 +344,14 @@ anv_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
    const struct VkVideoProfileListInfoKHR *prof_list = (struct VkVideoProfileListInfoKHR *)
       vk_find_struct_const(pVideoFormatInfo->pNext, VIDEO_PROFILE_LIST_INFO_KHR);
 
+   /* We only support VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT with
+    * Y-tiling/Tile4, as supported by the hardware for video decoding.
+    * However, we are unable to determine the tiling without modifiers here.
+    * So just disable them all.
+    */
+   const bool decode_dst = !!(pVideoFormatInfo->imageUsage &
+                              VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR);
+
    if (prof_list) {
       for (unsigned i = 0; i < prof_list->profileCount; i++) {
          const VkVideoProfileInfoKHR *profile = &prof_list->pProfiles[i];
@@ -358,12 +366,14 @@ anv_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
                p->imageUsageFlags = pVideoFormatInfo->imageUsage;
             }
 
-            vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
-               p->format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
-               p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-               p->imageType = VK_IMAGE_TYPE_2D;
-               p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-               p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+            if (!decode_dst) {
+               vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
+                  p->format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+                  p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+                  p->imageType = VK_IMAGE_TYPE_2D;
+                  p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+                  p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+               }
             }
          }
 
@@ -376,12 +386,14 @@ anv_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
                p->imageTiling = VK_IMAGE_TILING_OPTIMAL;
                p->imageUsageFlags = pVideoFormatInfo->imageUsage;
             }
-            vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
-               p->format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
-               p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-               p->imageType = VK_IMAGE_TYPE_2D;
-               p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-               p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+            if (!decode_dst) {
+               vk_outarray_append_typed(VkVideoFormatPropertiesKHR, &out, p) {
+                  p->format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
+                  p->imageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+                  p->imageType = VK_IMAGE_TYPE_2D;
+                  p->imageTiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+                  p->imageUsageFlags = pVideoFormatInfo->imageUsage;
+               }
             }
          }
       }

@@ -799,6 +799,7 @@ update_ps(struct anv_gfx_dynamic_state *hw_state,
    SET(PS, ps.Kernel0SIMDWidth,         ps.Kernel0SIMDWidth);
    SET(PS, ps.Kernel1SIMDWidth,         ps.Kernel1SIMDWidth);
    SET(PS, ps.Kernel0PolyPackingPolicy, ps.Kernel0PolyPackingPolicy);
+   SET(PS, ps.Kernel0MaximumPolysperThread, ps.Kernel0MaximumPolysperThread);
 #endif
 
    SET(PS, ps.PositionXYOffsetSelect,
@@ -2295,6 +2296,7 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
          SET(ps, ps, Kernel0SIMDWidth);
          SET(ps, ps, Kernel1SIMDWidth);
          SET(ps, ps, Kernel0PolyPackingPolicy);
+         SET(ps, ps, Kernel0MaximumPolysperThread);
 #endif
          SET(ps, ps, PositionXYOffsetSelect);
       }

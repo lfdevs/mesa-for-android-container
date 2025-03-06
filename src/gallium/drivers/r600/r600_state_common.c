@@ -2211,30 +2211,16 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 			struct pipe_resource *out_buffer = NULL;
 			unsigned out_offset;
 			void *ptr;
-			unsigned start, count;
+			const unsigned out_size = sizeof(uint16_t);
+			const unsigned start = 0;
+			const unsigned count = likely(!indirect) ?
+				draws[0].count :
+				indexbuf->width0 - index_offset;
+			const unsigned out_width = count * out_size;
 
-			if (likely(!indirect)) {
-				start = 0;
-				count = draws[0].count;
-			}
-			else {
-				/* Have to get start/count from indirect buffer, slow path ahead... */
-				struct r600_resource *indirect_resource = (struct r600_resource *)indirect->buffer;
-				unsigned *data = r600_buffer_map_sync_with_rings(&rctx->b, indirect_resource,
-					PIPE_MAP_READ);
-				if (data) {
-					data += indirect->offset / sizeof(unsigned);
-					start = data[2] * index_size;
-					count = data[0];
-				}
-				else {
-					start = 0;
-					count = 0;
-				}
-			}
-
-			u_upload_alloc(ctx->stream_uploader, start, count * 2,
+			u_upload_alloc(ctx->stream_uploader, start, out_width,
                                        256, &out_offset, &out_buffer, &ptr);
+
 			if (unlikely(!ptr))
 				return;
 
@@ -2243,7 +2229,7 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 
 			indexbuf = out_buffer;
 			index_offset = out_offset;
-			index_size = 2;
+			index_size = out_size;
 			has_user_indices = false;
 		}
 
@@ -2432,7 +2418,10 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
                                                                           RADEON_PRIO_INDEX_BUFFER));
 			}
 			else {
-				uint32_t max_size = (indexbuf->width0 - index_offset) / index_size;
+				const uint32_t max_size =
+					likely(indexbuf == info->index.resource) ?
+					(indexbuf->width0 - index_offset) / index_size :
+					info->index.resource->width0 - draws[0].start;
 
 				radeon_emit(cs, PKT3(EG_PKT3_INDEX_BASE, 1, 0));
 				radeon_emit(cs, va);

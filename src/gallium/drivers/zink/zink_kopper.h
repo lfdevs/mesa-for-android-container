@@ -90,6 +90,8 @@ struct kopper_displaytarget
 
    struct kopper_loader_info info;
 
+   bool async; // True if submits should go through zink_screen::flush_queue
+
    VkSurfaceCapabilitiesKHR caps;
    VkImageFormatListCreateInfo format_list;
    enum kopper_type type;

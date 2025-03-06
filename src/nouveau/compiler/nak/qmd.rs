@@ -18,6 +18,7 @@ trait QMD {
     fn new() -> Self;
     fn set_barrier_count(&mut self, barrier_count: u8);
     fn set_cbuf(&mut self, idx: u8, addr: u64, size: u32);
+    fn cbuf_desc_layout(idx: u8) -> nak_qmd_cbuf_desc_layout;
     fn set_global_size(&mut self, width: u32, height: u32, depth: u32);
     fn set_local_size(&mut self, width: u16, height: u16, depth: u16);
     fn set_prog_addr(&mut self, addr: u64);
@@ -134,6 +135,19 @@ macro_rules! qmd_impl_set_cbuf {
             }
 
             set_array!(bv, $c, $s, CONSTANT_BUFFER_VALID, idx, true);
+        }
+
+        fn cbuf_desc_layout(idx: u8) -> nak_qmd_cbuf_desc_layout {
+            let lo =
+                paste! {$c::[<$s _CONSTANT_BUFFER_ADDR_LOWER>]}(idx.into());
+            let hi =
+                paste! {$c::[<$s _CONSTANT_BUFFER_ADDR_UPPER>]}(idx.into());
+            nak_qmd_cbuf_desc_layout {
+                addr_lo_start: lo.start as u16,
+                addr_lo_end: lo.end as u16,
+                addr_hi_start: hi.start as u16,
+                addr_hi_end: hi.end as u16,
+            }
         }
     };
 }
@@ -432,6 +446,24 @@ pub extern "C" fn nak_get_qmd_dispatch_size_layout(
         Qmd2_1::GLOBAL_SIZE_LAYOUT.try_into().unwrap()
     } else if dev.cls_compute >= cla0c0::KEPLER_COMPUTE_A {
         Qmd0_6::GLOBAL_SIZE_LAYOUT.try_into().unwrap()
+    } else {
+        panic!("Unsupported shader model");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn nak_get_qmd_cbuf_desc_layout(
+    dev: &nv_device_info,
+    idx: u8,
+) -> nak_qmd_cbuf_desc_layout {
+    if dev.cls_compute >= clc6c0::AMPERE_COMPUTE_A {
+        Qmd3_0::cbuf_desc_layout(idx.into())
+    } else if dev.cls_compute >= clc3c0::VOLTA_COMPUTE_A {
+        Qmd2_2::cbuf_desc_layout(idx.into())
+    } else if dev.cls_compute >= clc0c0::PASCAL_COMPUTE_A {
+        Qmd2_1::cbuf_desc_layout(idx.into())
+    } else if dev.cls_compute >= cla0c0::KEPLER_COMPUTE_A {
+        Qmd0_6::cbuf_desc_layout(idx.into())
     } else {
         panic!("Unsupported shader model");
     }

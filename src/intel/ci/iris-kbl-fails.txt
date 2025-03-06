@@ -37,12 +37,6 @@ spec@!opengl 1.1@linestipple@Line strip,Fail
 # Fail: nothing rendered.
 spec@!opengl 2.0@vs-point_size-zero,Fail
 
-spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
-spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
-
 # The textures will be initialized by rendering to them using glDrawPixels.
 # gettextureimage-formats failure: format: GL_RGB10_A2, level 1 at pixel(369, 103)
 #  Expected (0.597386, 0.597386, 0.433987, 0.111111)

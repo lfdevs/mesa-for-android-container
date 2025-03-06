@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "util/vl_vlc.h"
+#include "util/u_handle_table.h"
 #include "va_private.h"
 
 #define AV1_REFS_PER_FRAME 7
@@ -114,11 +115,12 @@ static void tile_info(vlVaContext *context, VADecPictureParameterBufferAV1 *av1)
    }
 }
 
-void vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
+VAStatus vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VADecPictureParameterBufferAV1 *av1 = buf->data;
    int i, j;
    bool use_lr;
+   vlVaSurface *surf;
 
    assert(buf->size >= sizeof(VADecPictureParameterBufferAV1) && buf->num_elements == 1);
 
@@ -134,8 +136,6 @@ void vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, 
    context->desc.av1.picture_parameter.seq_info_fields.enable_intra_edge_filter =
       av1->seq_info_fields.fields.enable_intra_edge_filter;
    context->desc.av1.picture_parameter.order_hint_bits_minus_1 = av1->order_hint_bits_minus_1;
-   context->desc.av1.picture_parameter.max_width = av1->frame_width_minus1 + 1;
-   context->desc.av1.picture_parameter.max_height = av1->frame_height_minus1 + 1;
    context->desc.av1.picture_parameter.seq_info_fields.enable_interintra_compound =
       av1->seq_info_fields.fields.enable_interintra_compound;
    context->desc.av1.picture_parameter.seq_info_fields.enable_masked_compound =
@@ -202,8 +202,19 @@ void vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, 
 
    context->desc.av1.picture_parameter.order_hint = av1->order_hint;
    context->desc.av1.picture_parameter.primary_ref_frame = av1->primary_ref_frame;
+
+   surf = handle_table_get(drv->htab, av1->current_frame);
+   if (!surf)
+      return VA_STATUS_ERROR_INVALID_SURFACE;
+
+   context->desc.av1.picture_parameter.max_width = surf->templat.width;
+   context->desc.av1.picture_parameter.max_height = surf->templat.height;
    context->desc.av1.picture_parameter.frame_width = av1->frame_width_minus1 + 1;
    context->desc.av1.picture_parameter.frame_height = av1->frame_height_minus1 + 1;
+
+   if (context->desc.av1.picture_parameter.frame_width > context->desc.av1.picture_parameter.max_width ||
+       context->desc.av1.picture_parameter.frame_height > context->desc.av1.picture_parameter.max_height)
+      return VA_STATUS_ERROR_INVALID_PARAMETER;
 
    context->desc.av1.picture_parameter.superres_scale_denominator =
       av1->superres_scale_denominator;
@@ -397,7 +408,9 @@ void vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, 
          vlVaGetReferenceFrame(drv, av1->ref_frame_map[i], &context->desc.av1.ref[i]);
    }
 
-  context->desc.av1.slice_parameter.slice_count = 0;
+   context->desc.av1.slice_parameter.slice_count = 0;
+
+   return VA_STATUS_SUCCESS;
 }
 
 void vlVaHandleSliceParameterBufferAV1(vlVaContext *context, vlVaBuffer *buf)
