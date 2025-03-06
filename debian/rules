@@ -119,7 +119,7 @@ else
 	ifneq (,$(filter $(DEB_HOST_ARCH), armel))
 		VULKAN_DRIVERS += amd swrast
 	else
-		VULKAN_DRIVERS += amd swrast virtio
+		VULKAN_DRIVERS += amd swrast virtio gfxstream
 	endif
 
 	VULKAN_LAYERS += device-select intel-nullhw overlay

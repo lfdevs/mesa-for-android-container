@@ -1243,18 +1243,20 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
 
    VkDrmFormatModifierPropertiesListEXT *list = vk_find_struct(
       pFormatProperties->pNext, DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT);
-   if (list && pFormatProperties->formatProperties.linearTilingFeatures) {
+   if (list) {
       VK_OUTARRAY_MAKE_TYPED(VkDrmFormatModifierPropertiesEXT, out,
                              list->pDrmFormatModifierProperties,
                              &list->drmFormatModifierCount);
 
-      vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out,
-                               mod_props)
-      {
-         mod_props->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
-         mod_props->drmFormatModifierPlaneCount = 1;
-         mod_props->drmFormatModifierTilingFeatures =
-            pFormatProperties->formatProperties.linearTilingFeatures;
+      if (pFormatProperties->formatProperties.linearTilingFeatures) {
+         vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out,
+                                  mod_props)
+         {
+            mod_props->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
+            mod_props->drmFormatModifierPlaneCount = 1;
+            mod_props->drmFormatModifierTilingFeatures =
+               pFormatProperties->formatProperties.linearTilingFeatures;
+         }
       }
    }
 }

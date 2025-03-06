@@ -394,7 +394,6 @@ Architecture: @LLVM_ARCHS@
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libvulkan1,
- python3:any,
  ${shlibs:Depends},
  ${misc:Depends}
 Provides: vulkan-icd

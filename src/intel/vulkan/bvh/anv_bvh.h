@@ -252,7 +252,12 @@ struct instance_leaf_part0 {
 };
 
 struct instance_leaf_part1 {
-   /* 48-bits pointer to BVH where start node belongs too */
+   /* 48-bits pointer to BVH where start node belongs to.
+    * Note that this software-defined bvh_ptr has to be in canonical form for
+    * copy.comp to dereference, which means we have to preserve the upper 16
+    * bits. For example, sparse buffer's heaps are located high, so its 63:48
+    * are set to 1.
+    */
    uint64_t bvh_ptr;
 
    /* The instanceCustomIndex in VkAccelerationStructureInstanceKHR */

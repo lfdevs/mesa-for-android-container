@@ -2142,7 +2142,8 @@ static void evergreen_emit_vertex_buffers(struct r600_context *rctx,
 		radeon_emit(cs, PKT3(PKT3_SET_RESOURCE, 8, 0) | pkt_flags);
 		radeon_emit(cs, (resource_offset + buffer_index) * 8);
 		radeon_emit(cs, va); /* RESOURCEi_WORD0 */
-		radeon_emit(cs, rbuffer->b.b.width0 - vb->buffer_offset - 1 + shader->width_correction[buffer_index]); /* RESOURCEi_WORD1 */
+		radeon_emit(cs, rbuffer->b.b.width0 - vb->buffer_offset - 1 +
+			    (shader ? shader->width_correction[buffer_index] : 0)); /* RESOURCEi_WORD1 */
 		radeon_emit(cs, /* RESOURCEi_WORD2 */
 				 S_030008_ENDIAN_SWAP(r600_endian_swap(32)) |
 				 S_030008_STRIDE(stride) |

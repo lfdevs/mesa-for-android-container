@@ -3496,9 +3496,7 @@ iris_create_shader_state(struct pipe_context *ctx,
       break;
 
    case MESA_SHADER_GEOMETRY:
-      /* User clip planes */
-      if (info->clip_distance_array_size == 0)
-         ish->nos |= (1ull << IRIS_NOS_RASTERIZER);
+      ish->nos |= (1ull << IRIS_NOS_RASTERIZER);
 
       key.gs = (struct iris_gs_prog_key) { KEY_INIT(vue.base) };
       key_size = sizeof(key.gs);

@@ -181,6 +181,8 @@ init_scene_texture(struct lp_scene_surface *ssurf, struct pipe_surface *psurf)
       assert(ssurf->map);
       ssurf->format_bytes = util_format_get_blocksize(psurf->format);
       ssurf->nr_samples = util_res_sample_count(psurf->texture);
+      ssurf->base_layer = psurf->u.tex.first_layer;
+      ssurf->layer_count = psurf->u.tex.last_layer - psurf->u.tex.first_layer + 1;
    } else {
       struct llvmpipe_resource *lpr = llvmpipe_resource(psurf->texture);
       unsigned pixstride = util_format_get_blocksize(psurf->format);

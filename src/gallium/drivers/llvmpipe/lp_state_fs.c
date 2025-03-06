@@ -1153,6 +1153,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
          if (!key->multisample) {
             lp_build_alpha_to_coverage(gallivm, type,
                                        &mask, alpha,
+                                       key->blend.alpha_to_coverage_dither,
                                        (depth_mode & LATE_DEPTH_TEST) != 0);
          } else {
             lp_build_sample_alpha_to_coverage(gallivm, type, key->coverage_samples, num_loop,

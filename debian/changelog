@@ -1,3 +1,15 @@
+mesa (25.0.1-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+  * control: Drop python3 dependency from mesa-vulkan-drivers. (Closes:
+    #1061658)
+
+  [ Gurchetan Singh ]
+  * rules: enable gfxstream
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 06 Mar 2025 13:07:00 +0200
+
 mesa (25.0.0-1) unstable; urgency=medium
 
   * New upstream release.

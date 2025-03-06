@@ -16,6 +16,8 @@ timeouts:
       minutes: 1
     depthcharge-action:
       minutes: 15
+    uboot-action:
+      minutes: 5
 actions:
 - deploy:
     timeout:
@@ -90,7 +92,7 @@ actions:
             ping -c 5 -w 60 $(lava-target-ip)
 
             lava_ssh_test_case() {
-                set -x
+                set -ex
                 local test_case="${1}"
                 shift
                 lava-test-case "${test_case}" --shell \
@@ -109,6 +111,6 @@ actions:
             sed -i '/S3_RESULTS_UPLOAD/d' /set-job-env-vars.sh
             EOF
           - export SSH_PTY_ARGS=-tt
-          - lava_ssh_test_case 'test-project_dut' '"cd / && /init-stage2.sh"'
+          - lava_ssh_test_case 'test-project_dut' 'cd / && /init-stage2.sh'
     docker:
       image:

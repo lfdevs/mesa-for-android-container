@@ -329,9 +329,17 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
 
    cs_req_res(b, CS_COMPUTE_RES);
    if (indirect) {
-      cs_trace_run_compute_indirect(b, tracing_ctx,
-                                    cs_scratch_reg_tuple(b, 0, 4), wg_per_task,
-                                    false, cs_shader_res_sel(0, 0, 0, 0));
+      /* Use run_compute with a set task axis instead of run_compute_indirect as
+       * run_compute_indirect has been found to cause intermittent hangs. This
+       * is safe, as the task increment will be clamped by the job size along
+       * the specified axis.
+       * The chosen task axis is potentially suboptimal, as choosing good
+       * increment/axis parameters requires knowledge of job dimensions, but
+       * this is somewhat offset by run_compute being a native instruction. */
+      unsigned task_axis = MALI_TASK_AXIS_X;
+      cs_trace_run_compute(b, tracing_ctx, cs_scratch_reg_tuple(b, 0, 4),
+                           wg_per_task, task_axis, false,
+                           cs_shader_res_sel(0, 0, 0, 0));
    } else {
       unsigned task_axis = MALI_TASK_AXIS_X;
       unsigned task_increment = 0;

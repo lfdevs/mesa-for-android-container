@@ -1,0 +1,250 @@
+Mesa 25.0.1 Release Notes / 2025-03-05
+======================================
+
+Mesa 25.0.1 is a bug fix release which fixes bugs found since the 25.0.0 release.
+
+Mesa 25.0.1 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.0.1 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    TBD.
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Zink: Kopper's present thread causes Wayland protocol races
+- GLmatrix needs aligned malloc
+- Lavapipe crashes if no Position is output in mesh shader
+- [RADV/aco][regression][bisected] - Avowed (2457220) - GPU hangs near Watermill outside of Dawnshore
+- radv/sqtt: assertion "layout transition marker should be only emitted inside a barrier marker"
+- [radv] Glitchy ground geometry regression in Total War Warhammer III on RX 7600
+
+
+Changes
+-------
+
+Benjamin Lee (4):
+
+- panfrost: remove NIR_PASS_V usage for noperspective lowering
+- panfrost: fix large int32->float16 conversions
+- panfrost: fix condition in bi_nir_is_replicated
+- panfrost/va: remove swizzle mod from LDEXP
+
+Caio Oliveira (1):
+
+- brw: Fix size in assembler when compacting
+
+Daniel Schürmann (5):
+
+- aco/scheduler: always respect min_waves on GFX10+
+- aco/insert_exec_mask: Don't immediately set exec to zero in break/continue blocks
+- aco/insert_exec_mask: don't restore exec in continue_or_break blocks
+- aco/ssa_elimination: insert parallelcopies for p_phi immediately before branch
+- aco/assembler: Fix short jumps over chained branches
+
+Dave Airlie (1):
+
+- vulkan/wsi/x11: don't use update_region for damage if not created
+
+David Rosca (2):
+
+- frontends/va: Set AV1 max_width/height to surface size
+- radeonsi/vcn: Set all pic params for H264 encode references
+
+Dylan Baker (2):
+
+- iris: Correctly set NOS for geometry shader state changes
+- iris: fix handling of GL_*_VERTEX_CONVENTION
+
+Emmanuel Gil Peyrot (1):
+
+- panvk: Initialize out array with the correct length
+
+Eric Engestrom (8):
+
+- docs: add sha sum for 25.0.0
+- .pick_status.json: Update to b331713f20148852370a4fae5c2830d46801eb3b
+- .pick_status.json: Update to 55c476efed01121b3a64a58c304aae8ef9a79475
+- .pick_status.json: Mark b85c94fc891fe9d73b3a032aea8a6a71b8e6173b as denominated
+- .pick_status.json: Update to 4348253db5232b7be4db0a0ff47b31d51bc8f534
+- .pick_status.json: Update to fbc55afbdfc93a82c69f1cd6a1f4abbed96cfd19
+- .pick_status.json: Mark 5461ed5808421a8ffb79bdaa1449265f3e8f40a5 as denominated
+- .pick_status.json: Update to 45e771f4fbe4245b252c6360e55776080f0bf458
+
+Erik Faye-Lund (1):
+
+- mesa/main: wire up glapi bits for EXT_multi_draw_indirect
+
+Faith Ekstrand (12):
+
+- nak: Only use suld.constant on Ampere+
+- zink: Use the correct array size for signal_values[]
+- zink: Use persistent semaphores for PIPE_FD_TYPE_SYNCOBJ
+- nvk: Don't bind a fragment shading rate image pre-Turing
+- nvk: Do not set INVALIDATE_SKED_CACHES pre-MaxwellB
+- nak/qmd: Add a nak_get_qmd_cbuf_desc_layout() helper
+- nvk: Handle pre-Turing dispatch indirect commands
+- nvk: Only support deviceGeneratedCommandsMultiDrawIndirectCount on Turing+
+- nvk: Only support compute shader derivatives on Turing+
+- zink: Don't present to Wayland surfaces asynchronously
+- egl/dri2: Rework get_wl_surface_proxy()
+- egl/wayland: Pass the original wl_surface to kopper
+
+Georg Lehmann (1):
+
+- aco/insert_exec: fix continue_or_break on gfx6-7
+
+Gert Wollny (1):
+
+- r600/sfn: gather info and set lowering 64 bit after nir_lower_io
+
+Guilherme Gallo (3):
+
+- ci/lava: Drop the repeating quotes on lava-test-case
+- ci/lava: Propagate errors in SSH tests
+- ci/lava: Add U-Boot action timeout for rockchip DUTs
+
+Hans-Kristian Arntzen (1):
+
+- radv: Always set 0 dispatch offset for indirect CS.
+
+Hyunjun Ko (1):
+
+- anv: Do not support the tiling of DRM modifier if DECODE_DST
+
+Iago Toral Quiroga (1):
+
+- pan/va: fix FAU validation
+
+James Hogan (5):
+
+- mesa: Consider NumViews to reuse FBO attachments
+- mesa: Handle GL_FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR
+- mesa: Check views don't exceed GL_MAX_ARRAY_TEXTURE_LAYERS
+- mesa: OVR_multiview framebuffer attachment parameters
+- mesa: Handle getting GL_MAX_VIEWS_OVR
+
+Job Noorman (1):
+
+- ir3/ra: prevent reusing parent interval of reloaded sources
+
+Juan A. Suarez Romero (2):
+
+- v3dv: duplicate key for texel_buffer cache
+- broadcom/simulator: use string copy instead of memcpy
+
+Karol Herbst (3):
+
+- rusticl/mem: set num_samples and num_mip_levels to 0 when importing from GL
+- rusticl/platform: advertise all extensions supported by all devices
+- intel/brw, lp: enable lower_pack_64_4x16
+
+Kevin Chuang (2):
+
+- anv/bvh: Fix encoder handling sparse buffer
+- anv/bvh: Fix copy shader handling sparse buffer
+
+Konstantin Seurer (1):
+
+- llvmpipe: Skip draw_mesh if the ms did not write gl_Position
+
+Lars-Ivar Hesselberg Simonsen (2):
+
+- panfrost: Use RUN_COMPUTE over RUN_COMPUTE_INDIRECT
+- panvk: Use RUN_COMPUTE over RUN_COMPUTE_INDIRECT
+
+Lionel Landwerlin (2):
+
+- anv: fix missing 3DSTATE_PS:Kernel0MaximumPolysperThread programming
+- vulkan/runtime: ensure robustness state is fully initialized
+
+Lorenzo Rossi (1):
+
+- nvk: Fix MSAA sparse residency lowering crash
+
+Marek Olšák (1):
+
+- mesa: allocate GLmatrix aligned to 16 bytes
+
+Mary Guillemard (1):
+
+- pan/bi: Disallow FAU special page 3 and WARP_ID on message instructions
+
+Mike Blumenkrantz (6):
+
+- zink: wait on tc fence before checking for fd semaphore
+- zink: always fully unwrap contexts
+- zink: clamp UBO sizes instead of asserting
+- llvmpipe: pass layer count to rast clear
+- gallium: fix pipe_framebuffer_state::view_mask
+- mesa: avoid creating incomplete surfaces when multiview goes out of range
+
+Natalie Vock (1):
+
+- radv/rt: Don't allocate the traversal shader in a capture/replay range
+
+Patrick Lerda (3):
+
+- r600: fix evergreen_emit_vertex_buffers() related cl regression
+- r600: fix the indirect draw 8-bits path
+- r600: fix emit_image_size() range base compatibility
+
+Paulo Zanoni (1):
+
+- brw: extend the NOP+WHILE workaround
+
+Peyton Lee (1):
+
+- radeonsi/vpe: check reduction ratio
+
+Pierre-Eric Pelloux-Prayer (2):
+
+- tc: add missing TC_SENTINEL for TC_END_BATCH
+- mesa/st: call _mesa_glthread_finish before _mesa_make_current
+
+Rhys Perry (1):
+
+- ac/nir: fix tess factor optimization when workgroup barriers are reduced
+
+Roland Scheidegger (1):
+
+- llvmpipe: Fix alpha-to-coverage without dithering
+
+Samuel Pitoiset (3):
+
+- radv/video: fix adding the query pool BO to the cmdbuf list
+- radv: fix missing SQTT barriers for fbfetch color/depth decompressions
+- radv: fix re-emitting fragment output state when resetting gfx pipeline state
+
+Tapani Pälli (2):
+
+- iris: wait for imported fences to be available in iris_fence_await
+- iris: remove dead code that cannot get hit anymore
+
+Yiwei Zhang (2):
+
+- venus: fix image format cache miss with AHB usage query
+- venus: relax the requirement for sync2
+
+Yogesh Mohan Marimuthu (1):
+
+- winsys/amdgpu: same_queue variable should be set if there is only one queue

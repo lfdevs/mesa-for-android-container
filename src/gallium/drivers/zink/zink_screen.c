@@ -1815,7 +1815,7 @@ zink_flush_frontbuffer(struct pipe_screen *pscreen,
    if (!zink_is_swapchain(res))
       return;
 
-   ctx = zink_tc_context_unwrap(pctx, screen->threaded);
+   ctx = zink_tc_context_unwrap(pctx);
 
    if (!zink_kopper_acquired(res->obj->dt, res->obj->dt_idx)) {
       /* swapbuffers to an undefined surface: acquire and present garbage */

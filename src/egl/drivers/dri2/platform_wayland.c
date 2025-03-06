@@ -448,16 +448,16 @@ destroy_window_callback(void *data)
 }
 
 static struct wl_surface *
-get_wl_surface_proxy(struct wl_egl_window *window)
+get_wl_surface(struct wl_egl_window *window)
 {
    /* Version 3 of wl_egl_window introduced a version field at the same
     * location where a pointer to wl_surface was stored. Thus, if
     * window->version is dereferenceable, we've been given an older version of
     * wl_egl_window, and window->version points to wl_surface */
    if (_eglPointerIsDereferenceable((void *)(window->version))) {
-      return wl_proxy_create_wrapper((void *)(window->version));
+      return (void *)(window->version);
    }
-   return wl_proxy_create_wrapper(window->surface);
+   return window->surface;
 }
 
 static void
@@ -750,7 +750,8 @@ dri2_wl_create_window_surface(_EGLDisplay *disp, _EGLConfig *conf,
    wl_proxy_set_queue((struct wl_proxy *)dri2_surf->wl_dpy_wrapper,
                       dri2_surf->wl_queue);
 
-   dri2_surf->wl_surface_wrapper = get_wl_surface_proxy(window);
+   dri2_surf->wl_surface_wrapper =
+      wl_proxy_create_wrapper(get_wl_surface(window));
    if (!dri2_surf->wl_surface_wrapper) {
       _eglError(EGL_BAD_ALLOC, "dri2_create_surface");
       goto cleanup_dpy_wrapper;
@@ -2935,7 +2936,13 @@ kopperSetSurfaceCreateInfo(void *_draw, struct kopper_loader_info *out)
    wlsci->pNext = NULL;
    wlsci->flags = 0;
    wlsci->display = dri2_dpy->wl_dpy;
-   wlsci->surface = dri2_surf->wl_surface_wrapper;
+   /* Pass the original wl_surface through to Vulkan WSI.  If we pass the
+    * proxy wrapper, kopper won't be able to properly de-duplicate surfaces
+    * and we may end up creating two VkSurfaceKHRs for the same underlying
+    * wl_surface.  Vulkan WSI (which kopper calls into) will make its own
+    * queues and proxy wrappers.
+    */
+   wlsci->surface = get_wl_surface(dri2_surf->base.NativeSurface);
    out->present_opaque = dri2_surf->base.PresentOpaque;
    /* convert to vulkan constants */
    switch (dri2_surf->base.CompressionRate) {

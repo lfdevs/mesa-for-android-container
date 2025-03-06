@@ -16,6 +16,8 @@ timeouts:
       minutes: 1
     depthcharge-action:
       minutes: 15
+    uboot-action:
+      minutes: 5
 actions:
 - deploy:
     timeout:

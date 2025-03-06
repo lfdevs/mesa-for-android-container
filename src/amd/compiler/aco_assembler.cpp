@@ -1538,6 +1538,8 @@ chain_branches(asm_context& ctx, std::vector<uint32_t>& out, branch_info& branch
    unsigned target = branch.target;
    branch.target = new_block->index;
 
+   unsigned skip_branch_target = 0; /* Target of potentially inserted short jump. */
+
    /* Find suitable insertion point:
     * We define two offset ranges within our new branch instruction should be placed.
     * Then we try to maximize the distance from either the previous branch or the target.
@@ -1604,6 +1606,7 @@ chain_branches(asm_context& ctx, std::vector<uint32_t>& out, branch_info& branch
          bld.reset(&ctx.program->blocks[insertion_block_idx].instructions, it);
       } else {
          bld.reset(&ctx.program->blocks[insertion_block_idx - 1].instructions);
+         skip_branch_target = insertion_block_idx;
       }
 
       /* Since we insert a branch into existing code, mitigate LdsBranchVmemWARHazard on GFX10. */
@@ -1623,6 +1626,11 @@ chain_branches(asm_context& ctx, std::vector<uint32_t>& out, branch_info& branch
    insert_code(ctx, out, insert_at, code.size(), code.data());
 
    new_block->offset = block_offset;
+   if (skip_branch_target) {
+      /* If we insert a short jump over the new branch at the end of a block,
+       * ensure that it gets updated accordingly after additional changes. */
+      ctx.branches.push_back({block_offset - 1, skip_branch_target});
+   }
    ctx.branches.push_back({block_offset, target});
    assert(out[ctx.branches.back().pos] == code.back());
 }

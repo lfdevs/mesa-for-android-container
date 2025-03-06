@@ -355,19 +355,33 @@ build_process_cs_cmd_seq(nir_builder *b, struct nvk_nir_push *p,
             const struct nak_qmd_dispatch_size_layout qmd_layout =
                nak_get_qmd_dispatch_size_layout(&pdev->info);
             assert(qmd_layout.x_start % 32 == 0);
+            assert(qmd_layout.x_end == qmd_layout.x_start + 32);
             assert(qmd_layout.y_start == qmd_layout.x_start + 32);
-            assert(qmd_layout.z_start == qmd_layout.x_start + 64);
 
             nir_def *qmd_repl[sizeof(struct nvk_ies_cs_qmd) / 4] = {};
             qmd_repl[qmd_layout.x_start / 32] = disp_size_x;
-            qmd_repl[qmd_layout.y_start / 32] = disp_size_y;
-            qmd_repl[qmd_layout.z_start / 32] = disp_size_z;
 
-            /* TODO: Get these from NAK? */
-            const uint32_t cb0_lo_start = 1024, cb0_hi_start = 1056;
-            qmd_repl[cb0_lo_start / 32] = nir_unpack_64_2x32_split_x(b, root_addr);
-            qmd_repl[cb0_hi_start / 32] =
-               nir_ior(b, load_global_dw(b, shader_qmd_addr, cb0_hi_start / 32),
+            if (qmd_layout.z_start == qmd_layout.y_start + 32) {
+               qmd_repl[qmd_layout.y_start / 32] = disp_size_y;
+               qmd_repl[qmd_layout.z_start / 32] = disp_size_z;
+            } else {
+               assert(qmd_layout.y_end == qmd_layout.y_start + 16);
+               assert(qmd_layout.z_start == qmd_layout.x_start + 48);
+               assert(qmd_layout.z_end == qmd_layout.z_start + 16);
+               qmd_repl[qmd_layout.y_start / 32] =
+                  nir_pack_32_2x16_split(b, nir_u2u16(b, disp_size_y),
+                                            nir_u2u16(b, disp_size_z));
+            }
+
+            struct nak_qmd_cbuf_desc_layout cb0_layout =
+               nak_get_qmd_cbuf_desc_layout(&pdev->info, 0);
+            assert(cb0_layout.addr_lo_start % 32 == 0);
+            assert(cb0_layout.addr_hi_start == cb0_layout.addr_lo_start + 32);
+            const uint32_t cb0_addr_lo_dw = cb0_layout.addr_lo_start / 32;
+            const uint32_t cb0_addr_hi_dw = cb0_layout.addr_hi_start / 32;
+            qmd_repl[cb0_addr_lo_dw] = nir_unpack_64_2x32_split_x(b, root_addr);
+            qmd_repl[cb0_addr_hi_dw] =
+               nir_ior(b, load_global_dw(b, shader_qmd_addr, cb0_addr_hi_dw),
                           nir_unpack_64_2x32_split_y(b, root_addr));
 
             copy_repl_global_dw(b, qmd_addr, shader_qmd_addr,
@@ -1011,6 +1025,8 @@ nvk_CmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(nvk_indirect_commands_layout, layout,
                   info->indirectCommandsLayout);
+   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
    if (!isPreprocessed) {
       nvk_cmd_flush_process_state(cmd, info);
@@ -1022,7 +1038,8 @@ nvk_CmdExecuteGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
          .constant = CONSTANT_TRUE,
          .flush_data = FLUSH_DATA_TRUE,
       });
-      P_IMMD(p, NVB1C0, INVALIDATE_SKED_CACHES, 0);
+      if (pdev->info.cls_eng3d >= MAXWELL_COMPUTE_B)
+         P_IMMD(p, NVB1C0, INVALIDATE_SKED_CACHES, 0);
       __push_immd(p, SUBC_NV9097, NV906F_SET_REFERENCE, 0);
    }
 

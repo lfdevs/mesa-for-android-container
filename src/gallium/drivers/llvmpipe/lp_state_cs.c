@@ -2066,7 +2066,10 @@ lp_mesh_call_draw(struct llvmpipe_context *lp,
    draw_collect_primitives_generated(lp->draw,
                                      lp->active_primgen_queries &&
                                      !lp->queries_disabled);
-   draw_mesh(lp->draw, &vert_out, &prim_out);
+
+   const unsigned pos = draw_current_shader_position_output(lp->draw);
+   if (pos != UINT32_MAX)
+      draw_mesh(lp->draw, &vert_out, &prim_out);
 
    free(vert_out.verts);
    free(prim_out.primitive_lengths);

@@ -1658,8 +1658,8 @@ static void amdgpu_cs_submit_ib(void *job, void *gdata, int thread_index)
       if (prev_fence) {
          bool same_ctx = queue->last_ctx == acs->ctx;
          /* userqueue submission mode uses a single queue per process. */
-         bool same_queue = aws->info.ip[acs->ip_type].num_queues > 1 &&
-                           queue_type != USERQ;
+         bool same_queue = queue_type == USERQ || aws->info.ip[acs->ip_type].num_queues == 1;
+
          if (!same_ctx || !same_queue)
             add_seq_no_to_list(aws, &seq_no_dependencies, queue_index, prev_seq_no);
       }

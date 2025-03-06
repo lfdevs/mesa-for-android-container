@@ -62,6 +62,7 @@ const struct nir_shader_compiler_options brw_scalar_nir_options = {
    .lower_pack_snorm_4x8 = true,
    .lower_pack_unorm_2x16 = true,
    .lower_pack_unorm_4x8 = true,
+   .lower_pack_64_4x16 = true,
    .lower_scmp = true,
    .lower_to_scalar = true,
    .lower_uadd_carry = true,

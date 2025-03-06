@@ -162,6 +162,16 @@ class LAVAJobDefinition:
                         "minutes": 5
                         * NUMBER_OF_ATTEMPTS_LAVA_BOOT,
                     },
+                    "uboot-action": {
+                        # For rockchip DUTs, U-Boot auto-login action downloads the kernel and
+                        # setup early network. This takes 72 seconds on average.
+                        # The LAVA action that wraps it is `uboot-commands`, but we can't set a
+                        # timeout for it directly, it is overridden by one third of `uboot-action`
+                        # timeout.
+                        # So actually, this timeout is here to enforce that `uboot-commands`
+                        # timeout to be 100 seconds (300 sec / 3), which is more than enough.
+                        "minutes": 5
+                    },
                 },
             },
         }

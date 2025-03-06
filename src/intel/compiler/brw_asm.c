@@ -133,22 +133,11 @@ brw_assemble(void *mem_ctx, const struct intel_device_info *devinfo,
       goto end;
    }
 
-   result.bin = p->store;
-   result.bin_size = p->next_insn_offset;
-   result.inst_count = p->next_insn_offset / 16;
-
-   if ((flags & BRW_ASSEMBLE_COMPACT) != 0) {
+   if ((flags & BRW_ASSEMBLE_COMPACT) != 0)
       brw_compact_instructions(p, 0, disasm_info);
 
-      /* Adjust bin size to account for compacted instructions. */
-      int compacted = 0;
-      for (int i = 0; i < result.inst_count; i++) {
-         const brw_eu_inst *inst = result.bin + i;
-         if (brw_eu_inst_cmpt_control(devinfo, inst))
-            compacted++;
-      }
-      result.bin_size -= compacted * 8;
-   }
+   result.bin = p->store;
+   result.bin_size = p->next_insn_offset;
 
    if ((flags & BRW_ASSEMBLE_DUMP) != 0)
       dump_assembly(p->store, 0, p->next_insn_offset, disasm_info, NULL);

@@ -16,6 +16,8 @@ timeouts:
       minutes: 1
     depthcharge-action:
       minutes: 15
+    uboot-action:
+      minutes: 5
 actions:
 - deploy:
     timeout:
@@ -43,7 +45,8 @@ actions:
         steps:
         - cat Image.gz my_dtb_filename.dtb > Image.gz+dtb
         - mkbootimg --kernel Image.gz+dtb --cmdline "root=/dev/nfs rw nfsroot=$NFS_SERVER_IP:$NFS_ROOTFS,tcp,hard,v3
-          ip=dhcp init=/init rootwait usbcore.quirks=0bda:8153:k" --pagesize 4096 --base 0x80000000 -o boot.img
+          ip=dhcp init=/init rootwait usbcore.quirks=0bda:8153:k" --pagesize 4096
+          --base 0x80000000 -o boot.img
     namespace: dut
 - deploy:
     timeout:
@@ -118,7 +121,7 @@ actions:
             ping -c 5 -w 60 $(lava-target-ip)
 
             lava_ssh_test_case() {
-                set -x
+                set -ex
                 local test_case="${1}"
                 shift
                 lava-test-case "${test_case}" --shell \
@@ -137,6 +140,6 @@ actions:
             sed -i '/S3_RESULTS_UPLOAD/d' /set-job-env-vars.sh
             EOF
           - export SSH_PTY_ARGS=-tt
-          - lava_ssh_test_case 'test-project_dut' '"cd / && /init-stage2.sh"'
+          - lava_ssh_test_case 'test-project_dut' 'cd / && /init-stage2.sh'
     docker:
       image:

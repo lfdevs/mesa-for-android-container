@@ -260,7 +260,7 @@ handlePictureParameterBuffer(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *
       break;
 
    case PIPE_VIDEO_FORMAT_AV1:
-      vlVaHandlePictureParameterBufferAV1(drv, context, buf);
+      vaStatus = vlVaHandlePictureParameterBufferAV1(drv, context, buf);
       break;
 
    default:

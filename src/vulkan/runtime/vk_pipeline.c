@@ -823,7 +823,7 @@ vk_pipeline_precompile_shader(struct vk_device *device,
    const struct vk_device_shader_ops *ops = device->shader_ops;
    VkResult result;
 
-   struct vk_pipeline_robustness_state rs;
+   struct vk_pipeline_robustness_state rs = { 0 };
    vk_pipeline_robustness_state_fill(device, &rs,
                                      pipeline_info_pNext,
                                      info->pNext);

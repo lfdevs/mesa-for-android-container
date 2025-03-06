@@ -153,7 +153,7 @@ encode_leaf_node(uint32_t type, uint64_t src_node, uint64_t dst_node, REF(anv_ac
       }
 
       DEREF(dst_instance).part0.start_node_ptr_and_inst_flags =
-         start_node_ptr |
+         (start_node_ptr & ((1ul << 48) - 1)) |
          (get_instance_flag(instance_flags | (src.sbt_offset_and_flags >> 24)) << 48);
 
       mat4 transform = mat4(src.otw_matrix);

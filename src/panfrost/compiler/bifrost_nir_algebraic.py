@@ -75,6 +75,10 @@ algebraic_late = [
     # XXX: Duplicate of nir_lower_pack
     (('unpack_64_2x32', a), ('vec2', ('unpack_64_2x32_split_x', a),
                                      ('unpack_64_2x32_split_y', a))),
+
+    # We don't have S32_TO_F16 on any arch
+    (('i2f16', 'a@32'), ('f2f16', ('i2f32', a))),
+    (('u2f16', 'a@32'), ('f2f16', ('u2f32', a))),
 ]
 
 # Handling all combinations of boolean and float sizes for b2f is nontrivial.

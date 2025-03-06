@@ -2305,11 +2305,12 @@ impl<'a> ShaderFromNir<'a> {
                 let coord = self.get_image_coord(intrin, dim);
                 // let sample = self.get_src(&srcs[2]);
 
-                let mem_order = if intrin.intrinsic
-                    == nir_intrinsic_load_global_constant
-                    || (intrin.access() & ACCESS_CAN_REORDER) != 0
-                {
-                    MemOrder::Constant
+                let mem_order = if (intrin.access() & ACCESS_CAN_REORDER) != 0 {
+                    if self.sm.sm() >= 80 {
+                        MemOrder::Constant
+                    } else {
+                        MemOrder::Weak
+                    }
                 } else {
                     MemOrder::Strong(MemScope::System)
                 };
@@ -2339,11 +2340,12 @@ impl<'a> ShaderFromNir<'a> {
                 let coord = self.get_image_coord(intrin, dim);
                 // let sample = self.get_src(&srcs[2]);
 
-                let mem_order = if intrin.intrinsic
-                    == nir_intrinsic_load_global_constant
-                    || (intrin.access() & ACCESS_CAN_REORDER) != 0
-                {
-                    MemOrder::Constant
+                let mem_order = if (intrin.access() & ACCESS_CAN_REORDER) != 0 {
+                    if self.sm.sm() >= 80 {
+                        MemOrder::Constant
+                    } else {
+                        MemOrder::Weak
+                    }
                 } else {
                     MemOrder::Strong(MemScope::System)
                 };

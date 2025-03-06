@@ -127,6 +127,8 @@ struct lp_scene_surface {
    unsigned format_bytes;
    unsigned sample_stride;
    unsigned nr_samples;
+   unsigned base_layer;
+   unsigned layer_count;
 };
 
 

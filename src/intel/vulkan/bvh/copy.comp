@@ -126,14 +126,14 @@ main(void)
             /* Indirectly access the anv_instance_leaf, and store the blas_ptrs after ser_header */
             uint64_t instance_leaf_addr = DEREF(REF(uint64_t)(copy_src_addr + offset));
             REF(anv_instance_leaf) instance_leaf = REF(anv_instance_leaf)(instance_leaf_addr);
-            uint64_t blas_ptr = DEREF(instance_leaf).part1.bvh_ptr & 0xfffffffffffful;
+            uint64_t blas_ptr = DEREF(instance_leaf).part1.bvh_ptr;
             DEREF(INDEX(uint64_t, instance_base, idx)) = blas_ptr;
          } else { /* ANV_COPY_MODE_DESERIALIZE */
             /* Indirectly access the anv_instance_leaf, and replace the bvh_ptr with the ones after ser_header */
             uint64_t instance_leaf_addr = DEREF(REF(uint64_t)(copy_dst_addr + offset));
             REF(anv_instance_leaf) instance_leaf = REF(anv_instance_leaf)(instance_leaf_addr);
             uint64_t blas_ptr = DEREF(INDEX(uint64_t, instance_base, idx));
-            DEREF(instance_leaf).part1.bvh_ptr = (blas_ptr & 0xfffffffffffful);
+            DEREF(instance_leaf).part1.bvh_ptr = blas_ptr;
 
             /* set the startNodePtr to blas_ptr + ANV_HEADER_SIZE */
             uint64_t mask = 0x0000fffffffffffful;

@@ -59,20 +59,13 @@ collect_phi_info(ssa_elimination_ctx& ctx)
 void
 insert_parallelcopies(ssa_elimination_ctx& ctx)
 {
-   /* insert the parallelcopies from logical phis before p_logical_end */
+   /* insert the parallelcopies from logical phis before branch */
    for (unsigned block_idx = 0; block_idx < ctx.program->blocks.size(); ++block_idx) {
       auto& logical_phi_info = ctx.logical_phi_info[block_idx];
       if (logical_phi_info.empty())
          continue;
 
       Block& block = ctx.program->blocks[block_idx];
-      unsigned idx = block.instructions.size() - 1;
-      while (block.instructions[idx]->opcode != aco_opcode::p_logical_end) {
-         assert(idx > 0);
-         idx--;
-      }
-
-      std::vector<aco_ptr<Instruction>>::iterator it = std::next(block.instructions.begin(), idx);
       aco_ptr<Instruction> pc{create_instruction(aco_opcode::p_parallelcopy, Format::PSEUDO,
                                                  logical_phi_info.size(), logical_phi_info.size())};
       unsigned i = 0;
@@ -82,6 +75,7 @@ insert_parallelcopies(ssa_elimination_ctx& ctx)
          i++;
       }
       pc->pseudo().needs_scratch_reg = false;
+      auto it = std::prev(block.instructions.end());
       block.instructions.insert(it, std::move(pc));
    }
 
