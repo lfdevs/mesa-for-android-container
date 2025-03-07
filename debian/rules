@@ -119,7 +119,7 @@ else
 	ifneq (,$(filter $(DEB_HOST_ARCH), armel))
 		VULKAN_DRIVERS += amd swrast
 	else
-		VULKAN_DRIVERS += amd swrast virtio gfxstream
+		VULKAN_DRIVERS += amd swrast virtio
 	endif
 
 	VULKAN_LAYERS += device-select intel-nullhw overlay
@@ -139,6 +139,11 @@ else
 	# nine makes sense only on archs that build wine
 	ifneq (,$(filter $(DEB_HOST_ARCH), $(WINE_ARCHS)))
 		confflags_GALLIUM += -Dgallium-nine=true
+	endif
+
+	# gfxstream only builds on 64bit
+	ifeq ($(DEB_HOST_ARCH_BITS),64)
+		VULKAN_DRIVERS += gfxstream
 	endif
   else
 	confflags_GALLIUM += -Dllvm=disabled
