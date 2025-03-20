@@ -23,26 +23,9 @@
 #include "xf86drm.h"
 
 static bool
-radv_is_gpu_supported(const struct radeon_info *info)
-{
-   /* AMD CDNA isn't supported. */
-   if (info->gfx_level == GFX9 && !info->has_graphics)
-      return false;
-
-   /* Unknown GPU generations aren't supported. */
-   if (info->gfx_level > GFX12)
-      return false;
-
-   return true;
-}
-
-static bool
 do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 {
    if (!ac_query_gpu_info(fd, ws->dev, &ws->info, true))
-      return false;
-
-   if (!radv_is_gpu_supported(&ws->info))
       return false;
 
    /*
@@ -234,7 +217,7 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
       goto fail;
    }
 
-   struct hash_entry *entry = _mesa_hash_table_search(winsyses, dev);
+   struct hash_entry *entry = _mesa_hash_table_search(winsyses, (void *)ac_drm_device_get_cookie(dev));
    if (entry) {
       ws = (struct radv_amdgpu_winsys *)entry->data;
       ++ws->refcount;
@@ -325,7 +308,7 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    radv_amdgpu_bo_init_functions(ws);
    radv_amdgpu_cs_init_functions(ws);
 
-   _mesa_hash_table_insert(winsyses, dev, ws);
+   _mesa_hash_table_insert(winsyses, (void *)ac_drm_device_get_cookie(dev), ws);
    simple_mtx_unlock(&winsys_creation_mutex);
 
    return &ws->base;

@@ -122,11 +122,42 @@ fs_visitor::emit_urb_writes(const brw_reg &gs_vertex_count)
       switch (varying) {
       case VARYING_SLOT_PSIZ: {
          /* The point size varying slot is the vue header and is always in the
-          * vue map.  But often none of the special varyings that live there
-          * are written and in that case we can skip writing to the vue
-          * header, provided the corresponding state properly clamps the
-          * values further down the pipeline. */
-         if ((vue_map->slots_valid & psiz_mask) == 0) {
+          * vue map. But often none of the special varyings that live there
+          * are written and for the vertex shaders we can skip writing to the
+          * VUE header because it is setup by the VF fixed function. All other
+          * pre-rasterization stages should setup the VUE header properly as
+          * describe in the SKL PRMs, Volume 7: 3D-Media-GPGPU, Vertex URB
+          * Entry (VUE) Formats:
+          *
+          *    "VUEs are written in two ways:
+          *
+          *       - At the top of the 3D Geometry pipeline, the VF's
+          *         InputAssembly function creates VUEs and initializes them
+          *         from data extracted from Vertex Buffers as well as
+          *         internally generated data.
+          *
+          *       - VS, GS, HS and DS threads can compute, format, and write
+          *         new VUEs as thread output."
+          *
+          *    "Software must ensure that any VUEs subject to readback by the
+          *     3D pipeline start with a valid Vertex Header. This extends to
+          *     all VUEs with the following exceptions:
+          *
+          *       - If the VS function is enabled, the VF-written VUEs are not
+          *         required to have Vertex Headers, as the VS-incoming
+          *         vertices are guaranteed to be consumed by the VS (i.e.,
+          *         the VS thread is responsible for overwriting the input
+          *         vertex data).
+          *
+          *       - If the GS FF is enabled, neither VF-written VUEs nor VS
+          *         thread-generated VUEs are required to have Vertex Headers,
+          *         as the GS will consume all incoming vertices.
+          *
+          *       - If Rendering is disabled, VertexHeaders are not required
+          *         anywhere."
+          */
+         if ((vue_map->slots_valid & psiz_mask) == 0 &&
+             stage == MESA_SHADER_VERTEX) {
             assert(length == 0);
             urb_offset++;
             break;

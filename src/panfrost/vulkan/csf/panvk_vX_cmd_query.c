@@ -257,9 +257,11 @@ panvk_copy_occlusion_query_results(struct panvk_cmd_buffer *cmd,
    struct cs_index scratch_regs = cs_scratch_reg_tuple(b, 0, 11);
    uint32_t queries_per_batch = scratch_regs.size / regs_per_copy;
 
-   /* Store offset is a 16-bit signed integer, so we might be limited by the
-    * stride here. */
-   queries_per_batch = MIN2(((1u << 15) / stride) + 1, queries_per_batch);
+   if (stride > 0) {
+      /* Store offset is a 16-bit signed integer, so we might be limited by the
+       * stride here. */
+      queries_per_batch = MIN2(((1u << 15) / stride) + 1, queries_per_batch);
+   }
 
    /* Stop unrolling the loop when it takes more than 2 steps to copy the
     * queries. */

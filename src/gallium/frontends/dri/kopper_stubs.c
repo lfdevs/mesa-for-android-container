@@ -25,6 +25,12 @@ kopperQueryBufferAge(struct dri_drawable *dPriv)
    return 0;
 }
 
+void
+kopperQuerySurfaceSize(struct dri_drawable *drawable, int *width, int *height)
+{
+   *width = *height = 1;
+}
+
 const struct dri_config **
 kopper_init_screen(struct dri_screen *screen, bool driver_name_is_inferred);
 const struct dri_config **

@@ -592,6 +592,7 @@ struct r600_context {
 	bool cmd_buf_is_compute;
 	struct pipe_resource *append_fence;
 	uint32_t append_fence_id;
+	bool cayman_dealloc_state;
 };
 
 static inline void r600_emit_command_buffer(struct radeon_cmdbuf *cs,

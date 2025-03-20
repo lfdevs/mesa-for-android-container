@@ -472,6 +472,8 @@ init_subqueue(struct panvk_queue *queue, enum panvk_subqueue_id subqueue)
       return panvk_errorf(dev->vk.physical, VK_ERROR_INITIALIZATION_FAILED,
                           "SyncobjWait failed: %m");
 
+   drmSyncobjReset(dev->vk.drm_fd, &queue->syncobj_handle, 1);
+
    if (debug & PANVK_DEBUG_TRACE) {
       pandecode_user_msg(dev->debug.decode_ctx, "Init subqueue %d binary\n\n",
                          subqueue);

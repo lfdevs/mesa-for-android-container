@@ -2083,3 +2083,18 @@ BEGIN_TEST(optimizer.trans_inline_constant)
 
    finish_opt_test();
 END_TEST
+
+BEGIN_TEST(optimizer.trans_no_omod)
+   //>> s1: %a = p_startpgm
+   if (!setup_cs("s1", GFX12))
+      return;
+
+   //! s1: %tmp0 = v_s_log_f32 %a
+   //! v1: %res = v_mul_legacy_f32 %tmp0, 0.5
+   //! p_unit_test 0, %res
+   Temp dst = bld.vop3(aco_opcode::v_s_log_f32, bld.def(s1), inputs[0]);
+   writeout(0, bld.vop2(aco_opcode::v_mul_legacy_f32, bld.def(v1), dst,
+                        bld.copy(bld.def(v1), Operand::c32(0x3f000000))));
+
+   finish_opt_test();
+END_TEST

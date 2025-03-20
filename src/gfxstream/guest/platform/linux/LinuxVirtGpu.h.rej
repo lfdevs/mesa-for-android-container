@@ -1,0 +1,11 @@
+--- src/gfxstream/guest/platform/linux/LinuxVirtGpu.h
++++ src/gfxstream/guest/platform/linux/LinuxVirtGpu.h
+@@ -76,7 +78,7 @@ class LinuxVirtGpuDevice : public VirtGpuDevice {
+     int64_t mDeviceHandle;
+     struct VirtGpuCaps mCaps;
+ 
+-    int openDevice(const drmDevicePtr dev);
++    int openDevice();
+ 
+     bool mHasPrimary;
+     int mPrimaryMajor;

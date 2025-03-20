@@ -123,6 +123,7 @@ struct panfrost_screen {
       struct panfrost_pool desc;
    } mempools;
 
+   char renderer_string[100];
    struct panfrost_vtable vtbl;
    struct disk_cache *disk_cache;
    unsigned max_afbc_packing_ratio;

@@ -811,6 +811,8 @@ vn_ResetCommandPool(VkDevice device,
                                &pool->free_query_records, head)
          vk_free(&pool->allocator, record);
 
+      list_inithead(&pool->free_query_records);
+
       vn_cached_storage_fini(&pool->storage);
       vn_cached_storage_init(&pool->storage, &pool->allocator);
    }

@@ -189,17 +189,22 @@ cl_callback!(
 
 impl SVMFreeCb {
     pub fn call(self, queue: &Queue, svm_pointers: &mut [usize]) {
+        let (num_svm_pointers, svm_pointers) = if !svm_pointers.is_empty() {
+            (
+                svm_pointers.len() as cl_uint,
+                svm_pointers.as_mut_ptr().cast(),
+            )
+        } else {
+            // The specification requires that an empty `svm_pointers` list be
+            // null when passed to enqueue and callbacks may expect it to be
+            // passed back in the same manner.
+            (0, std::ptr::null_mut())
+        };
+
         let cl = cl_command_queue::from_ptr(queue);
         // SAFETY: `cl` must be a valid pointer to an OpenCL queue, which is where we just got it from.
         // All other requirements are covered by this callback's type invariants.
-        unsafe {
-            (self.func)(
-                cl,
-                svm_pointers.len() as u32,
-                svm_pointers.as_mut_ptr().cast(),
-                self.data,
-            )
-        };
+        unsafe { (self.func)(cl, num_svm_pointers, svm_pointers, self.data) };
     }
 }
 

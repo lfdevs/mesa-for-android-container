@@ -409,6 +409,8 @@ radv_encode_as(VkCommandBuffer commandBuffer, const VkAccelerationStructureBuild
       uint32_t dst_offset = layout.internal_nodes_offset - layout.bvh_offset;
       radv_update_buffer_cp(cmd_buffer, intermediate_header_addr + offsetof(struct vk_ir_header, dst_node_offset),
                             &dst_offset, sizeof(uint32_t));
+      if (radv_device_physical(device)->info.cp_sdma_ge_use_system_memory_scope)
+         cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_INV_L2;
    }
 
    const struct encode_args args = {

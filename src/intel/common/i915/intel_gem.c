@@ -176,7 +176,17 @@ i915_gem_create_context_engines(int fd,
                              &low_latency_param.base);
    }
 
-   if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create) == -1)
+   int ret;
+   bool retry;
+   do {
+      ret = intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create);
+      retry = ret == -1 && errno == EIO &&
+              (flags & INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG);
+      if (retry)
+         usleep(1000);
+   } while (retry);
+
+   if (ret)
       return false;
 
    *context_id = create.ctx_id;

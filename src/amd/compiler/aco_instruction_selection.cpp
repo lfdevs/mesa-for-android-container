@@ -8082,24 +8082,8 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
          aco_opcode subrev =
             instr->def.bit_size == 16 ? aco_opcode::v_subrev_f16 : aco_opcode::v_subrev_f32;
 
-         /* v_interp with constant sources only works on GFX11/11.5,
-          * and it's only faster on GFX11.5.
-          */
-         bool use_interp = dpp_ctrl1 == dpp_quad_perm(0, 0, 0, 0) && instr->def.bit_size == 32 &&
-                           ctx->program->gfx_level == GFX11_5;
          if (!nir_src_is_divergent(&instr->src[0])) {
             bld.vop2(subrev, Definition(dst), src, src);
-         } else if (use_interp && dpp_ctrl2 == dpp_quad_perm(1, 1, 1, 1)) {
-            bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, Definition(dst), src,
-                              Operand::c32(0x3f800000), src)
-               ->valu()
-               .neg[2] = true;
-         } else if (use_interp && dpp_ctrl2 == dpp_quad_perm(2, 2, 2, 2)) {
-            Builder::Result tmp = bld.vinterp_inreg(aco_opcode::v_interp_p10_f32_inreg, bld.def(v1),
-                                                    Operand::c32(0), Operand::c32(0), src);
-            tmp->valu().neg = 0x6;
-            bld.vinterp_inreg(aco_opcode::v_interp_p2_f32_inreg, Definition(dst), src,
-                              Operand::c32(0x3f800000), tmp);
          } else if (ctx->program->gfx_level >= GFX8 && dpp_ctrl2 == dpp_quad_perm(0, 1, 2, 3)) {
             bld.vop2_dpp(subrev, Definition(dst), src, src, dpp_ctrl1);
          } else if (ctx->program->gfx_level >= GFX8) {

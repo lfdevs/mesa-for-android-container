@@ -3400,7 +3400,9 @@ tc_fence_server_signal(struct pipe_context *_pipe,
    struct threaded_context *tc = threaded_context(_pipe);
    struct pipe_context *pipe = tc->pipe;
    tc_sync(tc);
+   tc_set_driver_thread(tc);
    pipe->fence_server_signal(pipe, fence);
+   tc_clear_driver_thread(tc);
 }
 
 static struct pipe_video_codec *

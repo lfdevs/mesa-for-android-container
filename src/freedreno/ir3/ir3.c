@@ -683,6 +683,17 @@ ir3_create_empty_preamble(struct ir3 *ir)
 
    main_start_block->reconvergence_point = true;
 
+   /* Inputs are always expected to be in the first block so move them there. */
+   struct ir3_cursor inputs_cursor = ir3_before_terminator(shps_block);
+
+   foreach_instr_safe (instr, &main_start_block->instr_list) {
+      if (instr->opc == OPC_META_INPUT || instr->opc == OPC_META_TEX_PREFETCH) {
+         list_del(&instr->node);
+         insert_instr(inputs_cursor, instr);
+         instr->block = shps_block;
+      }
+   }
+
    return shpe;
 }
 

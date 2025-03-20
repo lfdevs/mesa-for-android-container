@@ -192,6 +192,15 @@ etna_modify_rs_clearbits(struct compiled_rs_state *cs, uint32_t clear_bits)
    cs->RS_CLEAR_CONTROL |= VIVS_RS_CLEAR_CONTROL_BITS(clear_bits);
 }
 
+static void
+etna_modify_rs_fill_value(struct compiled_rs_state *cs, uint64_t clear_value)
+{
+   cs->RS_FILL_VALUE[0] = clear_value;
+   cs->RS_FILL_VALUE[1] = clear_value >> 32;
+   cs->RS_FILL_VALUE[2] = clear_value;
+   cs->RS_FILL_VALUE[3] = clear_value >> 32;
+}
+
 #define EMIT_STATE(state_name, src_value) \
    etna_coalsence_emit(stream, &coalesce, VIVS_##state_name, src_value)
 
@@ -365,11 +374,12 @@ etna_blit_clear_color_rs(struct pipe_context *pctx, unsigned idx,
       etna_resource_level_mark_unflushed(surf->level);
       ctx->dirty |= ETNA_DIRTY_TS;
    } else { /* Queue normal RS clear for non-TS surfaces */
-      /* If clear color changed or no valid command yet (re-)generate
-       * stored command */
-      if (unlikely(new_clear_value != surf->level->clear_value ||
-          !surf->clear_command.valid))
+      /* If no valid command yet generate stored command, otherwise simply
+       * update the clear value. */
+      if (unlikely(!surf->clear_command.valid))
          etna_rs_gen_clear_surface(ctx, surf, new_clear_value);
+      else
+         etna_modify_rs_fill_value(&surf->clear_command, new_clear_value);
 
       etna_submit_rs_state(ctx, &surf->clear_command);
       etna_resource_level_ts_mark_invalid(surf->level);
@@ -433,12 +443,13 @@ etna_blit_clear_zs_rs(struct pipe_context *pctx, struct pipe_surface *dst,
       etna_copy_resource(pctx, surf->base.texture, surf->base.texture,
                          surf->base.u.tex.level, surf->base.u.tex.level);
 
-      if (unlikely(new_clear_value != surf->level->clear_value ||
-          !surf->clear_command.valid)) {
-         /* If clear depth/stencil value changed or no valid command yet
-          * (re)-generate stored command */
+      /* If no valid command yet generate stored command, otherwise simply
+       * update clear value. */
+      if (unlikely(!surf->clear_command.valid))
          etna_rs_gen_clear_surface(ctx, surf, new_clear_value);
-      }
+      else
+         etna_modify_rs_fill_value(&surf->clear_command, new_clear_value);
+
       /* Update the channels to be cleared */
       etna_modify_rs_clearbits(&surf->clear_command, new_clear_bits);
 

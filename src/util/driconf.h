@@ -794,6 +794,10 @@
    DRI_CONF_OPT_B(anv_assume_full_subgroups_with_barrier, def, \
                   "Assume full subgroups requirement for compute shaders that use control barriers")
 
+#define DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS_WITH_SHARED_MEMORY(def) \
+   DRI_CONF_OPT_B(anv_assume_full_subgroups_with_shared_memory, def, \
+                  "Allow assuming full subgroups requirement for shaders using shared memory even when it's not specified explicitly")
+
 #define DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(def) \
    DRI_CONF_OPT_B(anv_sample_mask_out_opengl_behaviour, def, \
                   "Ignore sample mask out when having single sampled target")

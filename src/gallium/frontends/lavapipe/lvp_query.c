@@ -139,10 +139,14 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetQueryPoolResults(
             uint64_t *dst = (uint64_t *)dest;
             uint64_t *src = (uint64_t *)pool->data;
             *dst = src[i];
+            if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+               *(dst + 1) = 1;
          } else {
             uint32_t *dst = (uint32_t *)dest;
             uint64_t *src = (uint64_t *)pool->data;
             *dst = src[i];
+            if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+               *(dst + 1) = 1;
          }
          continue;
       }

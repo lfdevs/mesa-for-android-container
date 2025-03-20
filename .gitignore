@@ -1,7 +1,0 @@
-.cache
-.vscode*
-*.pyc
-*.pyo
-*.out
-/build
-.venv/

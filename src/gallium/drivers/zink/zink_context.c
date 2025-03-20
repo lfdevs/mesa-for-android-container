@@ -1792,6 +1792,9 @@ check_for_layout_update(struct zink_context *ctx, struct zink_resource *res, boo
    if (!is_compute && res->fb_binds && !(ctx->feedback_loops & res->fb_binds)) {
       /* always double check feedback loops */
       ret = !!_mesa_set_add(ctx->need_barriers[0], res);
+   } else if (res->queue != zink_screen(ctx->base.screen)->gfx_queue && res->queue != VK_QUEUE_FAMILY_IGNORED) {
+      /* Check if we need a queue family transfer */
+      ret = !!_mesa_set_add(ctx->need_barriers[0], res);
    } else {
       if (res->bind_count[is_compute] && layout && res->layout != layout)
          ret = !!_mesa_set_add(ctx->need_barriers[is_compute], res);

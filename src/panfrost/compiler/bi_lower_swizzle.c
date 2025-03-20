@@ -211,16 +211,18 @@ bi_instr_replicates(bi_instr *I, BITSET_WORD *replicates_16)
     * sources are identical. Check this case first.
     */
    case BI_OPCODE_MKVEC_V2I16:
+   case BI_OPCODE_V2F32_TO_V2F16:
+      return bi_is_value_equiv(I->src[0], I->src[1]);
+
    case BI_OPCODE_V2F16_TO_V2S16:
    case BI_OPCODE_V2F16_TO_V2U16:
-   case BI_OPCODE_V2F32_TO_V2F16:
    case BI_OPCODE_V2S16_TO_V2F16:
    case BI_OPCODE_V2S8_TO_V2F16:
    case BI_OPCODE_V2S8_TO_V2S16:
    case BI_OPCODE_V2U16_TO_V2F16:
    case BI_OPCODE_V2U8_TO_V2F16:
    case BI_OPCODE_V2U8_TO_V2U16:
-      return bi_is_value_equiv(I->src[0], I->src[1]);
+      return true;
 
    /* 16-bit transcendentals are defined to output zero in their
     * upper half, so they do not replicate

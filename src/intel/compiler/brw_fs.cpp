@@ -482,7 +482,7 @@ fs_visitor::limit_dispatch_width(unsigned n, const char *msg)
  * it.
  */
 bool
-fs_inst::is_partial_write() const
+fs_inst::is_partial_write(unsigned grf_size) const
 {
    if (this->predicate && !this->predicate_trivial &&
        this->opcode != BRW_OPCODE_SEL)
@@ -491,10 +491,10 @@ fs_inst::is_partial_write() const
    if (!this->dst.is_contiguous())
       return true;
 
-   if (this->dst.offset % REG_SIZE != 0)
+   if (this->dst.offset % grf_size != 0)
       return true;
 
-   return this->size_written % REG_SIZE != 0;
+   return this->size_written % grf_size != 0;
 }
 
 unsigned

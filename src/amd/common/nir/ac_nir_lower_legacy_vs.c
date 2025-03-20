@@ -70,9 +70,6 @@ ac_nir_lower_legacy_vs(nir_shader *nir,
    /* This should be after streamout and before exports. */
    ac_nir_clamp_vertex_color_outputs(&b, &out);
 
-   /* This should be after streamout and before exports. */
-   ac_nir_clamp_vertex_color_outputs(&b, &out);
-
    uint64_t export_outputs = nir->info.outputs_written | VARYING_BIT_POS;
    if (kill_pointsize)
       export_outputs &= ~VARYING_BIT_PSIZ;

@@ -304,10 +304,12 @@ impl Image {
 
                 let row_stride_B = if info.explicit_row_stride_B > 0 {
                     assert!(info.modifier == DRM_FORMAT_MOD_LINEAR);
-                    assert!(info.explicit_row_stride_B % 128 == 0);
-                    info.explicit_row_stride_B
+                    // Texture headers require strides to be 32B-aligned
+                    debug_assert!(info.explicit_row_stride_B % 32 == 0);
+                    info.explicit_row_stride_B.next_multiple_of(32)
                 } else {
-                    // Row stride needs to be aligned to 128B for render to work
+                    // If we get to pick the alignment, require 128B so that we
+                    // can render to the image without workarounds.
                     lvl_ext_B.width.next_multiple_of(128)
                 };
 
@@ -369,8 +371,14 @@ impl Image {
                 image.align_B = std::cmp::max(image.align_B, 1 << 16);
             }
         } else {
-            // Linear images need to be aligned to 128B for render to work
-            image.align_B = std::cmp::max(image.align_B, 128);
+            if info.explicit_row_stride_B > 0 {
+                // Linear images need to be aligned to 32B
+                image.align_B = std::cmp::max(image.align_B, 32);
+            } else {
+                // If we get to pick the alignment, require 128B so that we
+                // can render to the image without workarounds.
+                image.align_B = std::cmp::max(image.align_B, 128);
+            }
         }
 
         image.size_B = image.size_B.next_multiple_of(image.align_B.into());

@@ -72,7 +72,7 @@ LinuxVirtGpuDevice::LinuxVirtGpuDevice(enum VirtGpuCapset capset, int32_t descri
 
         ret = drmIoctl(mDeviceHandle, DRM_IOCTL_VIRTGPU_GETPARAM, &get_param);
         if (ret) {
-            mesa_logi("virtgpu backend not enabling %s", params[i].name);
+            mesa_logd("virtgpu backend not enabling %s", params[i].name);
             continue;
         }
 

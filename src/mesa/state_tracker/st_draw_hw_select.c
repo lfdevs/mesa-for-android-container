@@ -391,7 +391,7 @@ update_result_buffer(nir_builder *b, nir_def *dmin, nir_def *dmax,
 {
    nir_def *offset;
    if (offset_from_attribute) {
-      offset = nir_load_per_vertex_input(b, 4, 32, nir_imm_int(b, 0),
+      offset = nir_load_per_vertex_input(b, 1, 32, nir_imm_int(b, 0),
                                          nir_imm_int(b, 0),
                                          .io_semantics.location = VARYING_SLOT_VAR0);
    } else {

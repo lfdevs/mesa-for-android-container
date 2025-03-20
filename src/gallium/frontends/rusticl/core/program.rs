@@ -102,23 +102,42 @@ impl ProgramBuild {
         self.dev_build(d).spirv.as_ref()?.kernel_info(kernel)
     }
 
-    fn args(&self, dev: &Device, kernel: &str) -> Vec<spirv::SPIRVKernelArg> {
-        self.dev_build(dev).spirv.as_ref().unwrap().args(kernel)
+    fn args(&self, dev: &Device, kernel: &str) -> Option<Vec<spirv::SPIRVKernelArg>> {
+        self.dev_build(dev).spirv.as_ref().map(|s| s.args(kernel))
     }
 
-    fn build_nirs(&mut self, is_src: bool) {
-        for kernel_name in &self.kernels.clone() {
-            let kernel_args: HashSet<_> = self
-                .devs_with_build()
+    fn rebuild_kernels(&mut self, devs: &[&'static Device], is_src: bool) {
+        let mut kernels: Vec<_> = self
+            .builds
+            .values()
+            .filter_map(|b| b.spirv.as_ref())
+            .flat_map(|s| s.kernels())
+            .collect();
+
+        kernels.sort();
+        kernels.dedup();
+
+        self.kernels = kernels;
+
+        for kernel_name in &self.kernels {
+            let kernel_args: HashSet<_> = devs
                 .iter()
-                .map(|d| self.args(d, kernel_name))
+                .filter_map(|d| self.args(d, kernel_name))
                 .collect();
 
             let args = kernel_args.into_iter().next().unwrap();
             let mut kernel_info_set = HashSet::new();
 
             // TODO: we could run this in parallel?
-            for dev in self.devs_with_build() {
+            for dev in devs {
+                let Some(build) = self.builds.get_mut(dev) else {
+                    continue;
+                };
+
+                if !build.is_success() {
+                    continue;
+                }
+
                 let build_result = convert_spirv_to_nir(self, kernel_name, &args, dev);
                 kernel_info_set.insert(build_result.kernel_info);
 
@@ -149,14 +168,6 @@ impl ProgramBuild {
 
     fn dev_build_mut(&mut self, dev: &Device) -> &mut ProgramDevBuild {
         self.builds.get_mut(dev).unwrap()
-    }
-
-    fn devs_with_build(&self) -> Vec<&'static Device> {
-        self.builds
-            .iter()
-            .filter(|(_, build)| build.status == CL_BUILD_SUCCESS as cl_build_status)
-            .map(|(&d, _)| d)
-            .collect()
     }
 
     pub fn hash_key(&self, dev: &Device, name: &str) -> Option<cache_key> {
@@ -219,6 +230,10 @@ impl ProgramBuild {
 
         nir.unwrap()
     }
+
+    pub fn has_successful_build(&self) -> bool {
+        self.builds.values().any(|b| b.is_success())
+    }
 }
 
 #[derive(Default)]
@@ -229,6 +244,12 @@ pub struct ProgramDevBuild {
     log: String,
     bin_type: cl_program_binary_type,
     pub kernels: HashMap<String, Arc<NirKernelBuilds>>,
+}
+
+impl ProgramDevBuild {
+    fn is_success(&self) -> bool {
+        self.status == CL_BUILD_SUCCESS as cl_build_status
+    }
 }
 
 fn prepare_options(options: &str, dev: &Device) -> Vec<CString> {
@@ -378,22 +399,14 @@ impl Program {
         bins: &[&[u8]],
     ) -> Result<Arc<Program>, Vec<cl_int>> {
         let mut builds = HashMap::new();
-        let mut kernels = HashSet::new();
-
         let mut errors = vec![CL_SUCCESS as cl_int; devs.len()];
         for (idx, (&d, b)) in devs.iter().zip(bins).enumerate() {
             let build = match Self::spirv_from_bin_for_dev(d, b) {
-                Ok((spirv, bin_type)) => {
-                    for k in spirv.kernels() {
-                        kernels.insert(k);
-                    }
-
-                    ProgramDevBuild {
-                        spirv: Some(spirv),
-                        bin_type: bin_type,
-                        ..Default::default()
-                    }
-                }
+                Ok((spirv, bin_type)) => ProgramDevBuild {
+                    spirv: Some(spirv),
+                    bin_type: bin_type,
+                    ..Default::default()
+                },
                 Err(err) => {
                     errors[idx] = err;
                     ProgramDevBuild {
@@ -413,10 +426,10 @@ impl Program {
         let mut build = ProgramBuild {
             builds: builds,
             spec_constants: HashMap::new(),
-            kernels: kernels.into_iter().collect(),
+            kernels: Vec::new(),
             kernel_info: HashMap::new(),
         };
-        build.build_nirs(false);
+        build.rebuild_kernels(&devs, false);
 
         Ok(Arc::new(Self {
             base: CLObjectBase::new(RusticlTypes::Program),
@@ -542,51 +555,56 @@ impl Program {
             .any(|b| b.kernels.values().any(|b| Arc::strong_count(b) > 1))
     }
 
-    pub fn build(&self, dev: &Device, options: String) -> bool {
+    pub fn build(&self, devs: &[&'static Device], options: &str) -> bool {
         let lib = options.contains("-create-library");
         let mut info = self.build_info();
-        if !self.do_compile(dev, options, &Vec::new(), &mut info) {
-            return false;
-        }
 
-        let d = info.dev_build_mut(dev);
+        let mut res = true;
+        for dev in devs {
+            if !self.do_compile(dev, options, &Vec::new(), &mut info) {
+                res = false;
+                continue;
+            }
 
-        // skip compilation if we already have the right thing.
-        if self.is_bin() {
-            if d.bin_type == CL_PROGRAM_BINARY_TYPE_EXECUTABLE && !lib
-                || d.bin_type == CL_PROGRAM_BINARY_TYPE_LIBRARY && lib
-            {
-                return true;
+            // skip compilation if we already have the right thing.
+            let d = info.dev_build_mut(dev);
+            if self.is_bin() {
+                if d.bin_type == CL_PROGRAM_BINARY_TYPE_EXECUTABLE && !lib
+                    || d.bin_type == CL_PROGRAM_BINARY_TYPE_LIBRARY && lib
+                {
+                    continue;
+                }
+            }
+
+            let spirvs = [d.spirv.as_ref().unwrap()];
+            let (spirv, log) = spirv::SPIRVBin::link(&spirvs, lib);
+
+            d.log.push_str(&log);
+            d.spirv = spirv;
+
+            if d.spirv.is_some() {
+                d.bin_type = if lib {
+                    CL_PROGRAM_BINARY_TYPE_LIBRARY
+                } else {
+                    CL_PROGRAM_BINARY_TYPE_EXECUTABLE
+                };
+                d.status = CL_BUILD_SUCCESS as cl_build_status;
+            } else {
+                d.status = CL_BUILD_ERROR;
+                d.bin_type = CL_PROGRAM_BINARY_TYPE_NONE;
+                res = false;
             }
         }
 
-        let spirvs = [d.spirv.as_ref().unwrap()];
-        let (spirv, log) = spirv::SPIRVBin::link(&spirvs, lib);
+        info.rebuild_kernels(devs, self.is_src());
 
-        d.log.push_str(&log);
-        d.spirv = spirv;
-        if let Some(spirv) = &d.spirv {
-            d.bin_type = if lib {
-                CL_PROGRAM_BINARY_TYPE_LIBRARY
-            } else {
-                CL_PROGRAM_BINARY_TYPE_EXECUTABLE
-            };
-            d.status = CL_BUILD_SUCCESS as cl_build_status;
-            let mut kernels = spirv.kernels();
-            info.kernels.append(&mut kernels);
-            info.build_nirs(self.is_src());
-            true
-        } else {
-            d.status = CL_BUILD_ERROR;
-            d.bin_type = CL_PROGRAM_BINARY_TYPE_NONE;
-            false
-        }
+        res
     }
 
     fn do_compile(
         &self,
         dev: &Device,
-        options: String,
+        options: &str,
         headers: &[spirv::CLCHeader],
         info: &mut MutexGuard<ProgramBuild>,
     ) -> bool {
@@ -602,7 +620,7 @@ impl Program {
                 }
             }
             ProgramSourceType::Src(src) => {
-                let args = prepare_options(&options, dev);
+                let args = prepare_options(options, dev);
 
                 if Platform::dbg().clc {
                     let src = src.to_string_lossy();
@@ -643,7 +661,7 @@ impl Program {
 
         d.spirv = spirv;
         d.log = log;
-        d.options = options;
+        options.clone_into(&mut d.options);
 
         if d.spirv.is_some() {
             d.status = CL_BUILD_SUCCESS as cl_build_status;
@@ -655,7 +673,7 @@ impl Program {
         }
     }
 
-    pub fn compile(&self, dev: &Device, options: String, headers: &[spirv::CLCHeader]) -> bool {
+    pub fn compile(&self, dev: &Device, options: &str, headers: &[spirv::CLCHeader]) -> bool {
         self.do_compile(dev, options, headers, &mut self.build_info())
     }
 
@@ -666,7 +684,6 @@ impl Program {
         options: String,
     ) -> Arc<Program> {
         let mut builds = HashMap::new();
-        let mut kernels = HashSet::new();
         let mut locks: Vec<_> = progs.iter().map(|p| p.build_info()).collect();
         let lib = options.contains("-create-library");
 
@@ -691,10 +708,7 @@ impl Program {
 
             let status;
             let bin_type;
-            if let Some(spirv) = &spirv {
-                for k in spirv.kernels() {
-                    kernels.insert(k);
-                }
+            if spirv.is_some() {
                 status = CL_BUILD_SUCCESS as cl_build_status;
                 bin_type = if lib {
                     CL_PROGRAM_BINARY_TYPE_LIBRARY
@@ -721,12 +735,12 @@ impl Program {
         let mut build = ProgramBuild {
             builds: builds,
             spec_constants: HashMap::new(),
-            kernels: kernels.into_iter().collect(),
+            kernels: Vec::new(),
             kernel_info: HashMap::new(),
         };
 
         // Pre build nir kernels
-        build.build_nirs(false);
+        build.rebuild_kernels(devs, false);
 
         Arc::new(Self {
             base: CLObjectBase::new(RusticlTypes::Program),

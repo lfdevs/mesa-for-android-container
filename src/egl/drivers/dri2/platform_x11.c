@@ -1111,6 +1111,15 @@ dri2_x11_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
        */
       kopperSwapBuffers(dri2_surf->dri_drawable,
                                     __DRI2_FLUSH_INVALIDATE_ANCILLARY);
+
+      /* If the X11 window has been resized, vkQueuePresentKHR() or
+       * vkAcquireNextImageKHR() may return VK_ERROR_SURFACE_LOST or
+       * VK_SUBOPTIMAL_KHR, causing kopper to re-create the swapchain with
+       * a different size.  We need to resize the EGLSurface in that case.
+       */
+      kopperQuerySurfaceSize(dri2_surf->dri_drawable,
+                             &dri2_surf->base.Width,
+                             &dri2_surf->base.Height);
       return EGL_TRUE;
    } else if (dri2_dpy->swrast) {
       /* aka the swrast path, which does the swap in the gallium driver. */
@@ -1181,14 +1190,23 @@ dri2_x11_kopper_swap_buffers_with_damage(_EGLDisplay *disp, _EGLSurface *draw,
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
    /* swrast path unsupported for now */
    assert(dri2_dpy->kopper);
-   if (numRects) {
-      if (dri2_dpy->kopper)
+   if (dri2_dpy->kopper) {
+      if (numRects)
          kopperSwapBuffersWithDamage(dri2_surf->dri_drawable, __DRI2_FLUSH_INVALIDATE_ANCILLARY, numRects, rects);
       else
-         driSwapBuffersWithDamage(dri2_surf->dri_drawable, numRects, rects);
-   } else {
-      if (dri2_dpy->kopper)
          kopperSwapBuffers(dri2_surf->dri_drawable, __DRI2_FLUSH_INVALIDATE_ANCILLARY);
+
+      /* If the X11 window has been resized, vkQueuePresentKHR() or
+       * vkAcquireNextImageKHR() may return VK_ERROR_SURFACE_LOST or
+       * VK_SUBOPTIMAL_KHR, causing kopper to re-create the swapchain with
+       * a different size.  We need to resize the EGLSurface in that case.
+       */
+      kopperQuerySurfaceSize(dri2_surf->dri_drawable,
+                             &dri2_surf->base.Width,
+                             &dri2_surf->base.Height);
+   } else {
+      if (numRects)
+         driSwapBuffersWithDamage(dri2_surf->dri_drawable, numRects, rects);
       else
          driSwapBuffers(dri2_surf->dri_drawable);
    }

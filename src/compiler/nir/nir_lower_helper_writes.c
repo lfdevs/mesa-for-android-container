@@ -53,7 +53,10 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    bool has_dest = nir_intrinsic_infos[intr->intrinsic].has_dest;
    nir_def *undef = NULL;
 
-   nir_def *helper = nir_load_helper_invocation(b, 1);
+   /* We need to use nir_is_helper_invocation instead of
+    * nir_load_helper_invocation, to correctly predicate stores after demote.
+    */
+   nir_def *helper = nir_is_helper_invocation(b, 1);
    nir_push_if(b, nir_inot(b, helper));
    nir_instr_remove(&intr->instr);
    nir_builder_instr_insert(b, &intr->instr);

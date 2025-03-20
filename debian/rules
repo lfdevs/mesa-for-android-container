@@ -312,8 +312,9 @@ override_dh_makeshlibs:
 
 # For maintainer use only, generate a tarball:
 gentarball:
-	git archive --format=tar upstream-experimental --prefix=$(DEB_SOURCE)-$(DEB_VERSION_UPSTREAM)/ \
-		| gzip -9 > ../$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM).orig.tar.gz
+	tar --transform 's,^.\/,$(DEB_SOURCE)-$(DEB_VERSION_UPSTREAM)/,' \
+		--exclude 'debian' --exclude '.git.*' --exclude-vcs \
+		-cJf ../$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM).orig.tar.xz .
 
 regen_control:
 	sed -e"s,@LLVM_VERSION@,$(LLVM_VERSION),g" \

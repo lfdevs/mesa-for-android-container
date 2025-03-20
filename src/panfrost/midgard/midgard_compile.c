@@ -456,11 +456,13 @@ midgard_preprocess_nir(nir_shader *nir, unsigned gpu_id)
    /* Midgard image ops coordinates are 16-bit instead of 32-bit */
    NIR_PASS(_, nir, midgard_nir_lower_image_bitsize);
 
-   if (nir->info.stage == MESA_SHADER_FRAGMENT)
+   if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, nir_lower_helper_writes, true);
+      NIR_PASS(_, nir, nir_lower_is_helper_invocation);
+      NIR_PASS(_, nir, pan_lower_helper_invocation);
+      NIR_PASS(_, nir, pan_lower_sample_pos);
+   }
 
-   NIR_PASS(_, nir, pan_lower_helper_invocation);
-   NIR_PASS(_, nir, pan_lower_sample_pos);
    NIR_PASS(_, nir, midgard_nir_lower_algebraic_early);
    NIR_PASS(_, nir, nir_lower_alu_to_scalar, mdg_should_scalarize, NULL);
    NIR_PASS(_, nir, nir_lower_flrp, 16 | 32 | 64, false /* always_precise */);

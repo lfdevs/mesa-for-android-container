@@ -1390,8 +1390,14 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	}
 
 	if (rscreen->info.gfx_level < CAYMAN) {
-		rscreen->nir_options.lower_doubles_options = nir_lower_fp64_full_software;
 		rscreen->nir_options.lower_atomic_offset_to_range_base = true;
+
+		rscreen->nir_options.lower_doubles_options =
+			nir_lower_fp64_full_software |
+			nir_lower_dceil |
+			nir_lower_dsqrt |
+			nir_lower_drcp |
+			nir_lower_drsq;
 	} else {
 		rscreen->nir_options.lower_doubles_options =
 			nir_lower_ddiv |

@@ -1255,6 +1255,15 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->has_vgt_flush_ngg_legacy_bug = info->gfx_level == GFX10 ||
                                         info->family == CHIP_NAVI21;
 
+   /* GFX10-GFX10.3 (tested on NAVI10, NAVI21 and NAVI24 but likely all) are
+    * affected by a hw bug when primitive restart is updated and no context
+    * registers are written between draws. One workaround is to emit
+    * SQ_NON_EVENT(0) which is a NOP packet that adds a small delay and seems
+    * to fix it reliably.
+    */
+   info->has_prim_restart_sync_bug = info->gfx_level == GFX10 ||
+                                     info->gfx_level == GFX10_3;
+
    /* First Navi2x chips have a hw bug that doesn't allow to write
     * depth/stencil from a FS for multi-pixel fragments.
     */

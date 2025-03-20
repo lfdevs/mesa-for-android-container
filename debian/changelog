@@ -1,3 +1,11 @@
+mesa (25.0.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: Fix spam from gfxstream. (Closes: #1100360)
+  * rules: Update gentarball target to use xz and the current tree.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 20 Mar 2025 16:52:21 +0200
+
 mesa (25.0.1-2) unstable; urgency=medium
 
   * rules: Build gfxstream only on 64bit. (Closes: #1099704)

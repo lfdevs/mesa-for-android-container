@@ -522,7 +522,7 @@ Vulkan 1.4 -- all DONE: anv, lvp, nvk, radv/gfx8+, tu/a7xx+
   VK_KHR_push_descriptor                                DONE (anv, hasvk, lvp, nvk, panvk, radv, tu, vn)
   VK_KHR_shader_expect_assume                           DONE (anv, dzn, hasvk, lvp, nvk, panvk, pvr, radv, tu, v3dv, vn)
   VK_KHR_shader_float_controls2                         DONE (anv, lvp, nvk, radv, tu)
-  VK_KHR_shader_subgroup_rotate                         DONE (anv, lvp, nvk, radv, tu)
+  VK_KHR_shader_subgroup_rotate                         DONE (anv, lvp, nvk, panvk, radv, tu)
   VK_KHR_vertex_attribute_divisor                       DONE (anv, lvp, nvk, panvk, radv, tu, v3dv)
   VK_EXT_host_image_copy                                DONE (anv, lvp, nvk/Turing+, tu)
   VK_EXT_pipeline_protected_access                      DONE (anv/gfx12+)

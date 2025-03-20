@@ -639,5 +639,11 @@ kopperQueryBufferAge(struct dri_drawable *drawable)
    return zink_kopper_query_buffer_age(ctx->st->pipe, ptex);
 }
 
+void
+kopperQuerySurfaceSize(struct dri_drawable *drawable, int *width, int *height)
+{
+   *width = drawable->w;
+   *height = drawable->h;
+}
 
 /* vim: set sw=3 ts=8 sts=3 expandtab: */

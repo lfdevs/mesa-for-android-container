@@ -16,6 +16,19 @@
 /* TODO: Use the interface drm/freedreno_drmif.h instead of calling directly */
 #include <xf86drm.h>
 
+static void
+fence_set_fd(struct pipe_fence_handle *fence, int fence_fd)
+{
+   assert(fence_fd >= 0);
+
+   if (fence->use_fence_fd && fence->fence)
+      fd_fence_del(fence->fence);
+
+   fence->use_fence_fd = true;
+   fence->fence = fd_fence_new(fence->pipe, fence->use_fence_fd);
+   fence->fence->fence_fd = fence_fd;
+}
+
 static bool
 fence_flush(struct pipe_context *pctx, struct pipe_fence_handle *fence,
             uint64_t timeout)
@@ -30,6 +43,8 @@ fence_flush(struct pipe_context *pctx, struct pipe_fence_handle *fence,
    MESA_TRACE_FUNC();
 
    if (!util_queue_fence_is_signalled(&fence->ready)) {
+      assert(!fence->syncobj);
+
       if (fence->tc_token) {
          threaded_context_flush(pctx, fence->tc_token, timeout == 0);
       }
@@ -156,12 +171,10 @@ fence_create(struct fd_context *ctx, struct fd_batch *batch, int fence_fd,
    fd_pipe_fence_set_batch(fence, batch);
    fence->pipe = fd_pipe_ref(ctx->pipe);
    fence->screen = ctx->screen;
-   fence->use_fence_fd = (fence_fd != -1);
    fence->syncobj = syncobj;
 
    if (fence_fd != -1) {
-      fence->fence = fd_fence_new(fence->pipe, fence->use_fence_fd);
-      fence->fence->fence_fd = fence_fd;
+      fence_set_fd(fence, fence_fd);
    }
 
    return fence;
@@ -212,6 +225,37 @@ fd_pipe_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *f
       return;
    }
 
+   /* If the fence was created from an imported syncobj, we need to wait
+    * for the fence to become available to ensure that we can safely
+    * submit a batch with it as an in_fence_fd:
+    */
+    if (fence->syncobj) {
+      int ret, fence_fd, drm_fd = fd_device_fd(fence->screen->dev);
+      struct drm_syncobj_timeline_wait wait_args = {
+         .handles = (uintptr_t) &fence->syncobj,
+         .timeout_nsec = INT64_MAX,
+         .count_handles = 1,
+         /* Wait for fence to materialize. */
+         .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE,
+      };
+
+      ret = drmIoctl(drm_fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &wait_args);
+
+      ret = drmSyncobjExportSyncFile(drm_fd, fence->syncobj, &fence_fd);
+      if (!ret) {
+         fence_set_fd(fence, fence_fd);
+      }
+
+      /*
+       * EXT_external_objects says of semaphore objects:
+       *
+       *    * Their state is reset upon completion of a wait operation.
+       *
+       * So we reset the backing syncobj here:
+       */
+      drmSyncobjReset(drm_fd, &fence->syncobj, 1);
+   }
+
    /* if not an external fence, then nothing more to do without preemption: */
    if (!fence->use_fence_fd)
       return;
@@ -222,17 +266,43 @@ fd_pipe_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *f
    if (sync_accumulate("freedreno", &ctx->in_fence_fd, fence->fence->fence_fd)) {
       /* error */
    }
+
+   /* Reset the fence: */
+   fence->flushed = false;
 }
 
 void
 fd_pipe_fence_server_signal(struct pipe_context *pctx,
                             struct pipe_fence_handle *fence)
+   in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
 
    if (fence->syncobj) {
-      drmSyncobjSignal(fd_device_fd(ctx->screen->dev), &fence->syncobj, 1);
+      /* syncobj (ie. semaphore) fences can be used multiple times, as
+       * opposed to normal fences (imported as an in-fence, or created
+       * via pctx->flush()).
+       */
+      struct fd_batch *batch = fd_bc_last_batch(ctx);
+      if (!batch || batch->flushed) {
+         /* We need something that can be flushed, to get an fd to
+          * import into the syncobj
+          */
+         fd_batch_reference(&batch, NULL);
+         batch = fd_context_batch_nondraw(ctx);
+      }
+      fd_batch_reference(&fence->batch, batch);
+      fd_pipe_fence_ref(&batch->fence, fence);
+      fd_batch_reference(&batch, NULL);
+      fence->flushed = false;
+      fence->use_fence_fd = true;
+      if (fence->fence) {
+         fd_fence_del(fence->fence);
+         fence->fence = NULL;
+      }
    }
+
+   fence_flush(pctx, fence, 0);
 }
 
 int
@@ -290,10 +360,17 @@ void
 fd_pipe_fence_set_submit_fence(struct pipe_fence_handle *fence,
                                struct fd_fence *submit_fence)
 {
+DBG("fence=%p, fence->fence=%p", fence, fence->fence);
    /* Take ownership of the drm fence after batch/submit is flushed: */
    assert(!fence->fence);
    fence->fence = submit_fence;
    fd_pipe_fence_set_batch(fence, NULL);
+
+   if (fence->syncobj) {
+      int drm_fd = fd_device_fd(fence->screen->dev);
+      assert(fence->use_fence_fd);
+      drmSyncobjImportSyncFile(drm_fd, fence->syncobj, submit_fence->fence_fd);
+   }
 }
 
 struct pipe_fence_handle *
