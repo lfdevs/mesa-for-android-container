@@ -163,6 +163,8 @@ PUBLIC void
 kopperSetSwapInterval(struct dri_drawable *drawable, int interval);
 PUBLIC int
 kopperQueryBufferAge(struct dri_drawable *drawable);
+PUBLIC void
+kopperQuerySurfaceSize(struct dri_drawable *drawable, int *width, int *height);
 
 PUBLIC void
 driswCopySubBuffer(struct dri_drawable *drawable, int x, int y, int w, int h);

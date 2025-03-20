@@ -1197,6 +1197,7 @@ get_format_properties(struct panvk_physical_device *physical_device,
          buffer |= VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
 
       tex |= VK_FORMAT_FEATURE_BLIT_SRC_BIT;
+      tex |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
    }
 
    if (fmt.bind & PAN_BIND_RENDER_TARGET) {

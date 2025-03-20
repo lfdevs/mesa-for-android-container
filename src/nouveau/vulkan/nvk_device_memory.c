@@ -157,7 +157,8 @@ nvk_AllocateMemory(VkDevice device,
    if (!mem)
       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   if (fd_info && fd_info->handleType) {
+   const bool is_import = fd_info && fd_info->handleType;
+   if (is_import) {
       assert(fd_info->handleType ==
                VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT ||
              fd_info->handleType ==
@@ -188,7 +189,7 @@ nvk_AllocateMemory(VkDevice device,
          goto fail_alloc;
    }
 
-   if (pdev->debug_flags & NVK_DEBUG_ZERO_MEMORY) {
+   if ((pdev->debug_flags & NVK_DEBUG_ZERO_MEMORY) && !is_import) {
       if (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
          void *map;
          result = nvkmd_mem_map(mem->mem, &dev->vk.base,

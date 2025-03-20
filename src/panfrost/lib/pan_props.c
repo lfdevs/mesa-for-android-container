@@ -40,7 +40,7 @@
               min_rev_anisotropic_, tib_size_, quirks_)                        \
    {                                                                           \
       .gpu_id = gpu_id_, .gpu_variant = gpu_variant_,                          \
-      .name = "Mali-" shortname " (Panfrost)",                                 \
+      .name = "Mali-" shortname,                                               \
       .performance_counters = counters_,                                       \
       .min_rev_anisotropic = min_rev_anisotropic_,                             \
       .tilebuffer_size = tib_size_, .quirks = quirks_,                         \

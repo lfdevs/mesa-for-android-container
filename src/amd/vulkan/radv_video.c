@@ -121,6 +121,10 @@ radv_vcn_write_event(struct radv_cmd_buffer *cmd_buffer, struct radv_event *even
    struct rvcn_sq_var sq;
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
 
+   /* UVD doesn't support events, and probably never will */
+   if (pdev->vid_decode_ip == AMD_IP_UVD)
+      return;
+
    radv_cs_add_buffer(device->ws, cs, event->bo);
    uint64_t va = radv_buffer_get_va(event->bo);
 

@@ -85,7 +85,7 @@ static const struct debug_named_value panfrost_debug_options[] = {
 static const char *
 panfrost_get_name(struct pipe_screen *screen)
 {
-   return pan_device(screen)->model->name;
+   return pan_screen(screen)->renderer_string;
 }
 
 static const char *
@@ -908,6 +908,9 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
       panfrost_destroy_screen(&(screen->base));
       return NULL;
    }
+
+   snprintf(screen->renderer_string, sizeof(screen->renderer_string),
+            "%s (Panfrost)", dev->model->name);
 
    screen->force_afbc_packing = dev->debug & PAN_DBG_FORCE_PACK;
    if (!screen->force_afbc_packing)

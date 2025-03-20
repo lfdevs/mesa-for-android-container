@@ -151,6 +151,7 @@ option(
   choices : ['icd', 'standalone', 'disabled'],
   value : 'disabled',
   description : 'build gallium "clover" OpenCL frontend.',
+  deprecated: true,
 )
 
 option(

@@ -844,6 +844,7 @@ static void compute_emit_cs(struct r600_context *rctx,
 		 */
 		radeon_emit(cs, PKT3C(PKT3_DEALLOC_STATE, 0, 0));
 		radeon_emit(cs, 0);
+		rctx->cayman_dealloc_state = true;
 	}
 	if (rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_TGSI ||
 	    rctx->cs_shader_state.shader->ir_type == PIPE_SHADER_IR_NIR)

@@ -222,6 +222,16 @@ void r600_flush_emit(struct r600_context *rctx)
 		radeon_emit(cs, 0xffffffff);      /* CP_COHER_SIZE */
 		radeon_emit(cs, 0);               /* CP_COHER_BASE */
 		radeon_emit(cs, 0x0000000A);      /* POLL_INTERVAL */
+
+		/* PKT3_CLEAR_STATE below is required on cayman to set the gpu
+		 * in a deterministic state after a compute shader. Otherwise,
+		 * the graphic pipeline could fail in a non-deterministic way.
+		 * See https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/33973 */
+		if (unlikely(rctx->cayman_dealloc_state)) {
+			radeon_emit(cs, PKT3C(PKT3_CLEAR_STATE, 0, 0));
+			radeon_emit(cs, 0);
+			rctx->cayman_dealloc_state = false;
+		}
 	}
 
 	if (rctx->b.flags & R600_CONTEXT_START_PIPELINE_STATS) {

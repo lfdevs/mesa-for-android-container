@@ -1,0 +1,233 @@
+Mesa 25.0.2 Release Notes / 2025-03-20
+======================================
+
+Mesa 25.0.2 is a bug fix release which fixes bugs found since the 25.0.1 release.
+
+Mesa 25.0.2 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.0.2 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    TBD.
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- RADV: logic used to avoid running on CDNA is faulty
+- [LNL/BMG] Assassin's Creed Valhalla trace replay hang
+- X11 + Zink on NVK flickers older frames in Firefox based browsers
+- Vulkan conformanceVersion is reported as 0.0.0.0 in Mesa 25.0.0
+- VRAM Abnormal use on mesa 25.0
+- [radv][regression] Multiple games detect the wrong amount of vram
+- Resident Evil 2 Remake flickers
+- OpConstantNull not supported for OpTypeCooperativeMatrixKHR
+- v3dv: vkcube-wayland crashes on raspberry pi 5 kernel 6.12 and latest mesa
+- GMSH Visualization Fails with radeonsi:can't compile a main shader part,  Fedora 41 AMD 7900xt
+- AMD VDPAU deinterlacing SIGSEGV
+- radv: vkd3d-proton test_primitive_restart_list_topology_stream_output randomly fails on NAVI2X
+- Mesa 24.1 introduced a Vulkan problem with DOOM 2016 on AMD 780M GPU
+- nouveau & zink+nvk: Flashing in Firefox and Thunderbird on Hyprland
+
+
+Changes
+-------
+
+Aaron Ruby (1):
+
+- gfxstream: Downgrade log severity when enabling params in LinuxVirtGpu
+
+Alyssa Rosenzweig (2):
+
+- pan/mdg: call nir_lower_is_helper_invocation
+- nir/lower_helper_writes: fix stores after discard
+
+Ashley Smith (1):
+
+- panfrost: Reset syncobj after use to avoid kernel warnings
+
+Bas Nieuwenhuizen (1):
+
+- radv: Move support check out of winsys.
+
+Dave Airlie (1):
+
+- radv/video: don't try and send events on UVD devices.
+
+David Rosca (4):
+
+- gallium/vl: Fix video buffer supported format check
+- Revert "frontends/vdpau: Alloc interlaced surface for interlaced pics"
+- frontends/vdpau: Fix creating deinterlace filter for interleaved buffers
+- gallium/vl: Return YUV plane order for single plane formats
+
+Eric Engestrom (6):
+
+- docs: add sha sum for 25.0.1
+- .pick_status.json: Mark 61b0955308d720a6fa065e7a414d16999f7ffd03 as denominated
+- .pick_status.json: Mark 534436f8635e63a30e4d7af4837dad35cfa361ad as denominated
+- .pick_status.json: Update to 61feea6954a7526836ccbd30c657e6afc11fb4f5
+- .pick_status.json: Mark 551770ccf8bdb1e5fa45ddac854535edf2b31a22 as denominated
+- meson: announce that clover is deprecated (slated for removal)
+
+Erik Faye-Lund (2):
+
+- docs/features: add missing panvk feature
+- panvk: correct VkPhysicalDeviceProperties::deviceName
+
+Faith Ekstrand (9):
+
+- util/box: Add a intersect_2d helper
+- zink: Use pipe_box helpers for damage calculations
+- zink: Set needs_barrier after transitioning to QUEUE_FAMILY_FOREIGN
+- zink: Check queue families when binding image resources
+- nvk: Allow rendering to linear images with unaligned strides
+- nil: Relax alignment requirements for linear images
+- vtn: Support cooperative matrices in OpConstantNull
+- egl/x11: Re-order an if statement
+- egl/kopper: Update the EGLSurface size after kopperSwapBuffers()
+
+Ganesh Belgur Ramachandra (1):
+
+- amd: use 128B compression for scanout images when drm.minor <63
+
+Georg Lehmann (3):
+
+- radv: enable invariant geom for DOOM(2016)
+- aco/gfx11.5: remove vinterp ddx/ddy path
+- aco/ra: disallow vcc definitions for pseudo scalar trans instrs
+
+Ivan A. Melnikov (1):
+
+- gallium/radeon: Make sure radeonsi PCI IDs are also included
+
+Job Noorman (2):
+
+- ir3: fix false dependencies of rpt instructions
+- ir3: keep inputs at start block when creating empty preamble
+
+John Anthony (1):
+
+- panvk: Avoid division by zero for vkCmdCopyQueryPoolResults
+
+José Roberto de Souza (1):
+
+- intel/common: Retry GEM_CONTEXT_CREATE when PXP have not finished initialization
+
+Karol Herbst (6):
+
+- rusticl/program: implement CL_INVALID_PROGRAM_EXECUTABLE check in clGetProgramInfo
+- rusticl/program: pass options by reference
+- rusticl/program: loop over all devices inside Program::build
+- rusticl/program: rework build_nirs so it only touches devices we care about
+- rusticl/program: fix building kernels
+- nir/serialize: fix decoding of is_return and is_uniform
+
+Lionel Landwerlin (3):
+
+- anv: fix non page aligned descriptor bindings on <Gfx12.0
+- brw: fix spilling for Xe2+
+- brw: ensure VUE header writes in HS/DS/GS stages
+
+Lucas Stach (2):
+
+- etnaviv: rs: fix slow/fast clear transitions
+- etnaviv: fix ETNA_MESA_DEBUG=no_early_z
+
+Marek Olšák (1):
+
+- Revert "ac/nir: clamp vertex color outputs in the right place"
+
+Mary Guillemard (2):
+
+- pan/bi: Fix out of range access in bi_instr_replicates
+- pan/bi: Ensure we select b0 with halfswizzle in va_lower_constants
+
+Matt Turner (1):
+
+- glsl: Add missing break
+
+Maíra Canal (1):
+
+- v3dv: don't overwrite the primary fd if it's already set
+
+Mel Henning (1):
+
+- nvk: Don't zero imported memory
+
+Mike Blumenkrantz (1):
+
+- zink: fix refcounting of zink_surface objects
+
+Natalie Vock (2):
+
+- radv/rt: Guard leaf encoding by leaf node count
+- radv/rt: Flush L2 after writing internal node offset on GFX12
+
+Patrick Lerda (2):
+
+- r600: fix cayman main non-deterministic behavior problem
+- r600: update the software fp64 support
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- st/mesa: fix nir_load_per_vertex_input parameter
+
+Rebecca Mckeever (1):
+
+- panvk: Add STORAGE_IMAGE_BIT feature for formats supporting sampled images
+
+Rhys Perry (1):
+
+- aco: insert dependency waits in certain situations
+
+Rob Clark (2):
+
+- tc: Add missing tc_set_driver_thread()
+- freedreno: Wait for imported syncobj fences to be available
+
+Samuel Pitoiset (6):
+
+- ac,radv: add a workaround for a hw bug with primitive restart on GFX10-GFX10.3
+- radv: fix a GPU hang with inherited rendering and HiZ/HiS on GFX1201
+- radv/amdgpu: fix device deduplication
+- radv: update conformance version
+- aco: do not apply OMOD/CLAMP for pseudo scalar trans instrs
+- radv: emit a dummy PS state for noop FS on GFX12
+
+Seán de Búrca (1):
+
+- rusticl/mem: don't create svm_pointers slice from null raw pointer
+
+Sviatoslav Peleshko (2):
+
+- anv: Add full subgroups workaround for the shaders that use shared memory
+- drirc: Apply assume_full_subgroups_with_shared_memory to Resident Evil 2
+
+Timothy Arceri (1):
+
+- util/u_idalloc: fix util_idalloc_sparse_alloc_range()
+
+Yiwei Zhang (4):
+
+- venus: fix a memory corruption in query records recycle
+- lavapipe: set availability bit for accel struct host queries
+- lavapipe: fix accel struct device query copy
+- venus: fix to ignore dstSet for push descriptor

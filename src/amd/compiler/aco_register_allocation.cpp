@@ -253,6 +253,12 @@ struct DefInfo {
 
          if (imageGather4D16Bug)
             bounds.size -= MAX2(rc.bytes() / 4 - ctx.num_linear_vgprs, 0);
+      } else if (instr_info.classes[(int)instr->opcode] == instr_class::valu_pseudo_scalar_trans) {
+         /* RDNA4 ISA doc, 7.10. Pseudo-scalar Transcendental ALU ops:
+          * - VCC may not be used as a destination
+          */
+         if (bounds.contains(vcc))
+            bounds.size = vcc - bounds.lo();
       }
 
       if (!data_stride)
@@ -1426,6 +1432,14 @@ get_reg_specified(ra_ctx& ctx, const RegisterFile& reg_file, RegClass rc,
    bool is_m0 = info.rc == s1 && reg == m0 && can_write_m0(instr);
    if (!info.bounds.contains(reg_win) && !is_vcc && !is_m0)
       return false;
+
+   if (instr_info.classes[(int)instr->opcode] == instr_class::valu_pseudo_scalar_trans) {
+      /* RDNA4 ISA doc, 7.10. Pseudo-scalar Transcendental ALU ops:
+       * - VCC may not be used as a destination
+       */
+      if (vcc_win.contains(reg_win))
+         return false;
+   }
 
    if (reg_file.test(reg, info.rc.bytes()))
       return false;

@@ -2596,10 +2596,44 @@ radv_emit_ps_inputs(struct radv_cmd_buffer *cmd_buffer)
 }
 
 static void
+radv_emit_fragment_shader_state(struct radv_cmd_buffer *cmd_buffer, const struct radv_shader *ps)
+{
+   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   const uint32_t spi_ps_input_ena = ps ? ps->config.spi_ps_input_ena : 0;
+   const uint32_t spi_ps_input_addr = ps ? ps->config.spi_ps_input_addr : 0;
+   const uint32_t spi_ps_in_control = ps ? ps->info.regs.ps.spi_ps_in_control : 0;
+
+   if (pdev->info.gfx_level >= GFX12) {
+      const uint32_t pa_sc_hisz_control = ps ? ps->info.regs.ps.pa_sc_hisz_control : 0;
+
+      radeon_opt_set_context_reg2(cmd_buffer, R_02865C_SPI_PS_INPUT_ENA, RADV_TRACKED_SPI_PS_INPUT_ENA,
+                                  spi_ps_input_ena, spi_ps_input_addr);
+
+      radeon_opt_set_context_reg(cmd_buffer, R_028640_SPI_PS_IN_CONTROL, RADV_TRACKED_SPI_PS_IN_CONTROL,
+                                 spi_ps_in_control);
+
+      radeon_set_context_reg(cmd_buffer->cs, R_028BBC_PA_SC_HISZ_CONTROL, pa_sc_hisz_control);
+   } else {
+      const uint32_t pa_sc_shader_control = ps ? ps->info.regs.ps.pa_sc_shader_control : 0;
+
+      radeon_opt_set_context_reg2(cmd_buffer, R_0286CC_SPI_PS_INPUT_ENA, RADV_TRACKED_SPI_PS_INPUT_ENA,
+                                  spi_ps_input_ena, spi_ps_input_addr);
+
+      if (pdev->info.gfx_level != GFX10_3) {
+         radeon_opt_set_context_reg(cmd_buffer, R_0286D8_SPI_PS_IN_CONTROL, RADV_TRACKED_SPI_PS_IN_CONTROL,
+                                    spi_ps_in_control);
+      }
+
+      if (pdev->info.gfx_level >= GFX9 && pdev->info.gfx_level < GFX11)
+         radeon_opt_set_context_reg(cmd_buffer, R_028C40_PA_SC_SHADER_CONTROL, RADV_TRACKED_PA_SC_SHADER_CONTROL,
+                                    pa_sc_shader_control);
+   }
+}
+
+static void
 radv_emit_fragment_shader(struct radv_cmd_buffer *cmd_buffer)
 {
-   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
-   const struct radv_physical_device *pdev = radv_device_physical(device);
    const struct radv_shader *ps = cmd_buffer->state.shaders[MESA_SHADER_FRAGMENT];
    const uint64_t va = radv_shader_get_va(ps);
 
@@ -2609,27 +2643,7 @@ radv_emit_fragment_shader(struct radv_cmd_buffer *cmd_buffer)
    radeon_emit(cmd_buffer->cs, ps->config.rsrc1);
    radeon_emit(cmd_buffer->cs, ps->config.rsrc2);
 
-   if (pdev->info.gfx_level >= GFX12) {
-      radeon_opt_set_context_reg2(cmd_buffer, R_02865C_SPI_PS_INPUT_ENA, RADV_TRACKED_SPI_PS_INPUT_ENA,
-                                  ps->config.spi_ps_input_ena, ps->config.spi_ps_input_addr);
-
-      radeon_opt_set_context_reg(cmd_buffer, R_028640_SPI_PS_IN_CONTROL, RADV_TRACKED_SPI_PS_IN_CONTROL,
-                                 ps->info.regs.ps.spi_ps_in_control);
-
-      radeon_set_context_reg(cmd_buffer->cs, R_028BBC_PA_SC_HISZ_CONTROL, ps->info.regs.ps.pa_sc_hisz_control);
-   } else {
-      radeon_opt_set_context_reg2(cmd_buffer, R_0286CC_SPI_PS_INPUT_ENA, RADV_TRACKED_SPI_PS_INPUT_ENA,
-                                  ps->config.spi_ps_input_ena, ps->config.spi_ps_input_addr);
-
-      if (pdev->info.gfx_level != GFX10_3) {
-         radeon_opt_set_context_reg(cmd_buffer, R_0286D8_SPI_PS_IN_CONTROL, RADV_TRACKED_SPI_PS_IN_CONTROL,
-                                    ps->info.regs.ps.spi_ps_in_control);
-      }
-
-      if (pdev->info.gfx_level >= GFX9 && pdev->info.gfx_level < GFX11)
-         radeon_opt_set_context_reg(cmd_buffer, R_028C40_PA_SC_SHADER_CONTROL, RADV_TRACKED_PA_SC_SHADER_CONTROL,
-                                    ps->info.regs.ps.pa_sc_shader_control);
-   }
+   radv_emit_fragment_shader_state(cmd_buffer, ps);
 }
 
 static void
@@ -2843,8 +2857,14 @@ radv_emit_graphics_shaders(struct radv_cmd_buffer *cmd_buffer)
    if (pdev->info.gfx_level >= GFX12) {
       const struct radv_shader *ps = cmd_buffer->state.shaders[MESA_SHADER_FRAGMENT];
       const struct radv_shader *last_vgt_shader = cmd_buffer->state.last_vgt_shader;
-      const uint32_t gs_out_config_ps =
-         last_vgt_shader->info.regs.spi_vs_out_config | (ps ? ps->info.regs.ps.spi_gs_out_config_ps : 0);
+      uint32_t gs_out_config_ps = last_vgt_shader->info.regs.spi_vs_out_config;
+
+      if (ps) {
+         gs_out_config_ps |= ps->info.regs.ps.spi_gs_out_config_ps;
+      } else {
+         /* GFX12 seems to require a dummy FS state otherwise it might just hang. */
+         radv_emit_fragment_shader_state(cmd_buffer, NULL);
+      }
 
       radeon_set_sh_reg(cmd_buffer->cs, R_00B0C4_SPI_SHADER_GS_OUT_CONFIG_PS, gs_out_config_ps);
    }
@@ -3360,6 +3380,11 @@ radv_emit_primitive_restart_enable(struct radv_cmd_buffer *cmd_buffer)
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    const bool en = d->vk.ia.primitive_restart_enable;
 
+   if (pdev->info.has_prim_restart_sync_bug) {
+      radeon_emit(cmd_buffer->cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+      radeon_emit(cmd_buffer->cs, EVENT_TYPE(V_028A90_SQ_NON_EVENT) | EVENT_INDEX(0));
+   }
+
    if (gfx_level >= GFX11) {
       radeon_set_uconfig_reg(cs, R_03092C_GE_MULTI_PRIM_IB_RESET_EN,
                              S_03092C_RESET_EN(en) |
@@ -3617,6 +3642,7 @@ radv_emit_rasterization_samples(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    unsigned rasterization_samples = radv_get_rasterization_samples(cmd_buffer);
    unsigned ps_iter_samples = radv_get_ps_iter_samples(cmd_buffer);
    const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
@@ -3631,6 +3657,12 @@ radv_emit_rasterization_samples(struct radv_cmd_buffer *cmd_buffer)
       if (render->ds_att.iview) {
          const struct radeon_surf *surf = &render->ds_att.iview->image->planes[0].surface;
          has_hiz_his = surf->u.gfx9.zs.hiz.offset || surf->u.gfx9.zs.his.offset;
+      } else if (render->ds_att.format && !(instance->debug_flags & RADV_DEBUG_NO_HIZ)) {
+         /* For inherited rendering with secondary commands buffers, assume HiZ/HiS is enabled if
+          * there is a depth/stencil attachment. This shouldn't hurt and it's required to disable
+          * WALK_ALIGN8 to avoid GPU hangs.
+          */
+         has_hiz_his = true;
       }
 
       walk_align8 = !has_hiz_his && !cmd_buffer->state.uses_vrs_attachment;

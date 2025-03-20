@@ -849,7 +849,7 @@ nvk_GetRenderingAreaGranularityKHR(
 }
 
 static bool
-nvk_rendering_all_linear(const struct nvk_rendering_state *render)
+nvk_rendering_linear(const struct nvk_rendering_state *render)
 {
    /* Depth and stencil are never linear */
    if (render->depth_att.iview || render->stencil_att.iview)
@@ -862,10 +862,18 @@ nvk_rendering_all_linear(const struct nvk_rendering_state *render)
 
       const struct nvk_image *image = (struct nvk_image *)iview->vk.image;
       const uint8_t ip = iview->planes[0].image_plane;
+      const struct nvk_image_plane *plane = &image->planes[ip];
       const struct nil_image_level *level =
-         &image->planes[ip].nil.levels[iview->vk.base_mip_level];
+         &plane->nil.levels[iview->vk.base_mip_level];
 
       if (level->tiling.gob_type != NIL_GOB_TYPE_LINEAR)
+         return false;
+
+      /* We can't render to a linear image unless the address and row stride
+       * are multiples of 128B.  Fall back to tiled shadows in this case.
+       */
+      uint64_t addr = nvk_image_plane_base_address(plane) + level->offset_B;
+      if (addr % 128 != 0 || level->row_stride_B % 128 != 0)
          return false;
    }
 
@@ -914,7 +922,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       };
    }
 
-   render->all_linear = nvk_rendering_all_linear(render);
+   render->linear = nvk_rendering_linear(render);
 
    const VkRenderingAttachmentLocationInfoKHR ral_info = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO_KHR,
@@ -959,7 +967,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          const uint8_t ip = iview->planes[0].image_plane;
          const struct nvk_image_plane *plane = &image->planes[ip];
 
-         if (!render->all_linear &&
+         if (!render->linear &&
              plane->nil.levels[0].tiling.gob_type == NIL_GOB_TYPE_LINEAR)
             plane = &image->linear_tiled_shadow;
 
@@ -1028,7 +1036,12 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
             /* NVIDIA doesn't support linear array images */
             assert(iview->vk.base_array_layer == 0 && layer_count == 1);
 
+            /* The render hardware gets grumpy if things aren't 128B-aligned.
+             */
             uint32_t pitch = level->row_stride_B;
+            assert(addr % 128 == 0);
+            assert(pitch % 128 == 0);
+
             const enum pipe_format p_format =
                nvk_format_to_pipe_format(iview->vk.format);
             /* When memory layout is set to LAYOUT_PITCH, the WIDTH field
@@ -1251,7 +1264,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 
       const VkAttachmentLoadOp load_op =
          pRenderingInfo->pColorAttachments[i].loadOp;
-      if (!render->all_linear &&
+      if (!render->linear &&
           plane->nil.levels[0].tiling.gob_type == NIL_GOB_TYPE_LINEAR &&
           load_op == VK_ATTACHMENT_LOAD_OP_LOAD)
          nvk_linear_render_copy(cmd, iview, render->area, true);
@@ -1327,7 +1340,7 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
          struct nvk_image *image = (struct nvk_image *)iview->vk.image;
          const uint8_t ip = iview->planes[0].image_plane;
          const struct nvk_image_plane *plane = &image->planes[ip];
-         if (!render->all_linear &&
+         if (!render->linear &&
              plane->nil.levels[0].tiling.gob_type == NIL_GOB_TYPE_LINEAR &&
              render->color_att[i].store_op == VK_ATTACHMENT_STORE_OP_STORE)
             nvk_linear_render_copy(cmd, iview, render->area, false);

@@ -642,7 +642,7 @@ ast_type_qualifier::validate_in_qualifier(YYLTYPE *loc,
           valid_in_mask.flags.q.explicit_numviews = 1;
           break;
       }
-
+      break;
    case MESA_SHADER_TESS_EVAL:
       if (this->flags.q.prim_type) {
          /* Make sure this is a valid input primitive type. */

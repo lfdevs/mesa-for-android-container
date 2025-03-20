@@ -3096,6 +3096,9 @@ apply_omod_clamp(opt_ctx& ctx, aco_ptr<Instruction>& instr)
    if (needs_vop3 && !can_vop3)
       return false;
 
+   if (instr_info.classes[(int)instr->opcode] == instr_class::valu_pseudo_scalar_trans)
+      return false;
+
    /* SDWA omod is GFX9+. */
    bool can_use_omod = (can_vop3 || ctx.program->gfx_level >= GFX9) && !instr->isVOP3P() &&
                        (!instr->isVINTERP_INREG() || interp_can_become_fma(ctx, instr));

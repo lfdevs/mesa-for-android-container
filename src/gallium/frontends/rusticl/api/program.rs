@@ -25,6 +25,22 @@ use std::sync::Arc;
 unsafe impl CLInfo<cl_program_info> for cl_program {
     fn query(&self, q: cl_program_info, v: CLInfoValue) -> CLResult<CLInfoRes> {
         let prog = Program::ref_from_raw(*self)?;
+
+        // CL_INVALID_PROGRAM_EXECUTABLE if param_name is CL_PROGRAM_NUM_KERNELS,
+        // CL_PROGRAM_KERNEL_NAMES, CL_PROGRAM_SCOPE_GLOBAL_CTORS_PRESENT, or
+        // CL_PROGRAM_SCOPE_GLOBAL_DTORS_PRESENT and a successful program executable has not been
+        // built for at least one device in the list of devices associated with program.
+        if matches!(
+            q,
+            CL_PROGRAM_NUM_KERNELS
+                | CL_PROGRAM_KERNEL_NAMES
+                | CL_PROGRAM_SCOPE_GLOBAL_CTORS_PRESENT
+                | CL_PROGRAM_SCOPE_GLOBAL_DTORS_PRESENT
+        ) && !prog.build_info().has_successful_build()
+        {
+            return Err(CL_INVALID_PROGRAM_EXECUTABLE);
+        }
+
         match q {
             CL_PROGRAM_BINARIES => {
                 let input = v.input::<*mut u8>()?;
@@ -306,7 +322,6 @@ fn build_program(
     pfn_notify: Option<FuncProgramCB>,
     user_data: *mut ::std::os::raw::c_void,
 ) -> CLResult<()> {
-    let mut res = true;
     let p = Program::ref_from_raw(program)?;
     let devs = validate_devices(device_list, num_devices, &p.devs)?;
 
@@ -321,9 +336,8 @@ fn build_program(
 
     // CL_BUILD_PROGRAM_FAILURE if there is a failure to build the program executable. This error
     // will be returned if clBuildProgram does not return until the build has completed.
-    for dev in &devs {
-        res &= p.build(dev, c_string_to_string(options));
-    }
+    let options = c_string_to_string(options);
+    let res = p.build(&devs, &options);
 
     if let Some(cb) = cb_opt {
         cb.call(p);
@@ -403,8 +417,9 @@ fn compile_program(
 
     // CL_COMPILE_PROGRAM_FAILURE if there is a failure to compile the program source. This error
     // will be returned if clCompileProgram does not return until the compile has completed.
+    let options = c_string_to_string(options);
     for dev in &devs {
-        res &= p.compile(dev, c_string_to_string(options), &headers);
+        res &= p.compile(dev, &options, &headers);
     }
 
     if let Some(cb) = cb_opt {

@@ -192,6 +192,31 @@ u_box_union_2d(struct pipe_box *dst,
 
 /* Aliasing of @dst permitted. */
 static inline void
+u_box_intersect_2d(struct pipe_box *dst,
+                   const struct pipe_box *a, const struct pipe_box *b)
+{
+   int x, y;
+
+   x = MAX2(a->x, b->x);
+   y = MAX2(a->y, b->y);
+
+   dst->width = MIN2(a->x + a->width, b->x + b->width) - x;
+   dst->x = x;
+   if (dst->width <= 0) {
+      dst->x = 0;
+      dst->width = 0;
+   }
+
+   dst->height = MIN2(a->y + a->height, b->y + b->height) - y;
+   dst->y = y;
+   if (dst->height <= 0) {
+      dst->y = 0;
+      dst->height = 0;
+   }
+}
+
+/* Aliasing of @dst permitted. */
+static inline void
 u_box_union_3d(struct pipe_box *dst,
                const struct pipe_box *a, const struct pipe_box *b)
 {

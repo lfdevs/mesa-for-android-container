@@ -884,6 +884,15 @@ zink_end_batch(struct zink_context *ctx)
       }
       res->queue = VK_QUEUE_FAMILY_FOREIGN_EXT;
 
+      /* We just transitioned to VK_QUEUE_FAMILY_FOREIGN_EXT.  We'll need a
+       * barrier to transition back to our queue before we can use this
+       * resource again.  Set need_barriers if bound.
+       */
+      for (unsigned i = 0; i < ARRAY_SIZE(ctx->need_barriers); i++) {
+         if (res->bind_count[i])
+            _mesa_set_add(ctx->need_barriers[i], res);
+      }
+
       for (; res; res = zink_resource(res->base.b.next)) {
          VkSemaphore sem = zink_create_exportable_semaphore(screen);
          if (sem)

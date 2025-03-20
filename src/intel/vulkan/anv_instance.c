@@ -16,6 +16,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_VK_XWAYLAND_WAIT_READY(false)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(0)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS_WITH_BARRIER(false)
+      DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS_WITH_SHARED_MEMORY(false)
       DRI_CONF_ANV_DISABLE_FCV(false)
       DRI_CONF_ANV_ENABLE_BUFFER_COMP(false)
       DRI_CONF_ANV_EXTERNAL_MEMORY_IMPLICIT_SYNC(true)
@@ -141,6 +142,8 @@ anv_init_dri_options(struct anv_instance *instance)
        driQueryOptioni(&instance->dri_options, "anv_assume_full_subgroups");
     instance->assume_full_subgroups_with_barrier =
        driQueryOptionb(&instance->dri_options, "anv_assume_full_subgroups_with_barrier");
+    instance->assume_full_subgroups_with_shared_memory =
+       driQueryOptionb(&instance->dri_options, "anv_assume_full_subgroups_with_shared_memory");
     instance->limit_trig_input_range =
        driQueryOptionb(&instance->dri_options, "limit_trig_input_range");
     instance->sample_mask_out_opengl_behaviour =

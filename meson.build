@@ -768,6 +768,8 @@ endif
 _opencl = get_option('gallium-opencl')
 _rtti = get_option('cpp_rtti')
 if _opencl != 'disabled'
+  warning('Clover will be removed in Mesa 25.2')
+
   if not with_gallium
     error('OpenCL Clover implementation requires at least one gallium driver.')
   endif

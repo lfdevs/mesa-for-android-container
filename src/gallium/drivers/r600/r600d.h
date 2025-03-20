@@ -36,6 +36,7 @@
 #define PKT3_NOP                               0x10
 #define EG_PKT3_SET_BASE                       0x11 /* >= evergreen */
 #define     EG_DRAW_INDEX_INDIRECT_PATCH_TABLE_BASE 1 /* DX11 Draw_Index_Indirect Patch Table Base */
+#define PKT3_CLEAR_STATE                       0x12
 #define EG_PKT3_INDEX_BUFFER_SIZE              0x13
 #define PKT3_INDIRECT_BUFFER_END               0x17
 #define PKT3_SET_PREDICATION                   0x20

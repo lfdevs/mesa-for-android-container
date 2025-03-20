@@ -42,45 +42,47 @@ main()
 
    uint32_t ir_leaf_node_size;
    uint32_t output_leaf_node_size;
-   switch (args.geometry_type) {
-   case VK_GEOMETRY_TYPE_TRIANGLES_KHR: {
-      ir_leaf_node_size = SIZEOF(vk_ir_triangle_node);
-      output_leaf_node_size = SIZEOF(radv_bvh_triangle_node);
+   if (gl_GlobalInvocationID.x < args.leaf_node_count) {
+      switch (args.geometry_type) {
+      case VK_GEOMETRY_TYPE_TRIANGLES_KHR: {
+         ir_leaf_node_size = SIZEOF(vk_ir_triangle_node);
+         output_leaf_node_size = SIZEOF(radv_bvh_triangle_node);
 
-      vk_ir_triangle_node src_node =
-         DEREF(REF(vk_ir_triangle_node)(OFFSET(args.intermediate_bvh, gl_GlobalInvocationID.x * ir_leaf_node_size)));
-      REF(radv_bvh_triangle_node) dst_node =
-         REF(radv_bvh_triangle_node)(OFFSET(args.output_bvh, dst_leaf_offset + gl_GlobalInvocationID.x * output_leaf_node_size));
+         vk_ir_triangle_node src_node =
+            DEREF(REF(vk_ir_triangle_node)(OFFSET(args.intermediate_bvh, gl_GlobalInvocationID.x * ir_leaf_node_size)));
+         REF(radv_bvh_triangle_node) dst_node =
+            REF(radv_bvh_triangle_node)(OFFSET(args.output_bvh, dst_leaf_offset + gl_GlobalInvocationID.x * output_leaf_node_size));
 
-      DEREF(dst_node).coords = src_node.coords;
-      DEREF(dst_node).triangle_id = src_node.triangle_id;
-      DEREF(dst_node).geometry_id_and_flags = src_node.geometry_id_and_flags;
-      DEREF(dst_node).id = 9;
+         DEREF(dst_node).coords = src_node.coords;
+         DEREF(dst_node).triangle_id = src_node.triangle_id;
+         DEREF(dst_node).geometry_id_and_flags = src_node.geometry_id_and_flags;
+         DEREF(dst_node).id = 9;
 
-      break;
-   }
-   case VK_GEOMETRY_TYPE_AABBS_KHR: {
-      ir_leaf_node_size = SIZEOF(vk_ir_aabb_node);
-      output_leaf_node_size = SIZEOF(radv_bvh_aabb_node);
+         break;
+      }
+      case VK_GEOMETRY_TYPE_AABBS_KHR: {
+         ir_leaf_node_size = SIZEOF(vk_ir_aabb_node);
+         output_leaf_node_size = SIZEOF(radv_bvh_aabb_node);
 
-      vk_ir_aabb_node src_node =
-         DEREF(REF(vk_ir_aabb_node)(OFFSET(args.intermediate_bvh, gl_GlobalInvocationID.x * ir_leaf_node_size)));
-      REF(radv_bvh_aabb_node) dst_node =
-         REF(radv_bvh_aabb_node)(OFFSET(args.output_bvh, dst_leaf_offset + gl_GlobalInvocationID.x * output_leaf_node_size));
+         vk_ir_aabb_node src_node =
+            DEREF(REF(vk_ir_aabb_node)(OFFSET(args.intermediate_bvh, gl_GlobalInvocationID.x * ir_leaf_node_size)));
+         REF(radv_bvh_aabb_node) dst_node =
+            REF(radv_bvh_aabb_node)(OFFSET(args.output_bvh, dst_leaf_offset + gl_GlobalInvocationID.x * output_leaf_node_size));
 
-      DEREF(dst_node).primitive_id = src_node.primitive_id;
-      DEREF(dst_node).geometry_id_and_flags = src_node.geometry_id_and_flags;
+         DEREF(dst_node).primitive_id = src_node.primitive_id;
+         DEREF(dst_node).geometry_id_and_flags = src_node.geometry_id_and_flags;
 
-      break;
-   }
-   default:
-      /* instances */
-      ir_leaf_node_size = SIZEOF(vk_ir_instance_node);
-      output_leaf_node_size = SIZEOF(radv_bvh_instance_node);
-      /* Instance nodes have to be emitted inside the loop since encoding them
-       * loads an address from the IR node which is uninitialized for inactive nodes.
-       */
-      break;
+         break;
+      }
+      default:
+         /* instances */
+         ir_leaf_node_size = SIZEOF(vk_ir_instance_node);
+         output_leaf_node_size = SIZEOF(radv_bvh_instance_node);
+         /* Instance nodes have to be emitted inside the loop since encoding them
+          * loads an address from the IR node which is uninitialized for inactive nodes.
+          */
+         break;
+      }
    }
 
    if (gl_GlobalInvocationID.x >= DEREF(args.header).ir_internal_node_count)

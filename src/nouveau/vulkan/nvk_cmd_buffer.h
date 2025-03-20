@@ -163,7 +163,8 @@ struct nvk_rendering_state {
    struct nvk_attachment stencil_att;
    struct nvk_attachment fsr_att;
 
-   bool all_linear;
+   /* True if all the conditions are met to allow rendering to linear */
+   bool linear;
 };
 
 struct nvk_graphics_state {

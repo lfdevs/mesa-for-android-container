@@ -2058,8 +2058,8 @@ read_function(read_ctx *ctx)
 
       fxn->params[i].num_components = val & 0xff;
       fxn->params[i].bit_size = (val >> 8) & 0xff;
-      fxn->params[i].is_return = val & (1u << 16);
-      fxn->params[i].is_uniform = val & (1u << 17);
+      fxn->params[i].is_return = val & (1u << 17);
+      fxn->params[i].is_uniform = val & (1u << 18);
       fxn->params[i].type = decode_type_from_blob(ctx->blob);
       fxn->params[i].mode = decode_deref_modes(blob_read_uint32(ctx->blob));
       fxn->params[i].driver_attributes = blob_read_uint32(ctx->blob);

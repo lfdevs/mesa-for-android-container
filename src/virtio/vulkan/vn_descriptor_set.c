@@ -769,6 +769,11 @@ vn_descriptor_set_get_writes(uint32_t write_count,
             : vn_descriptor_set_from_handle(writes[i].dstSet)->layout;
       VkWriteDescriptorSet *write = &local->writes[i];
       VkDescriptorImageInfo *img_infos = &local->img_infos[img_info_count];
+
+      /* dstSet is ignored for push descriptor */
+      if (pipeline_layout)
+         write->dstSet = VK_NULL_HANDLE;
+
       bool ignore_sampler = true;
       bool ignore_iview = false;
       switch (write->descriptorType) {

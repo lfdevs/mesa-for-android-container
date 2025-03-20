@@ -2410,10 +2410,16 @@ fn enqueue_svm_free_impl(
     }
 
     // The application is allowed to reuse or free the memory referenced by `svm_pointers` after this
-    // function returns so we have to make a copy.
-    // SAFETY: num_svm_pointers specifies the amount of elements in svm_pointers
-    let mut svm_pointers =
-        unsafe { slice::from_raw_parts(svm_pointers.cast(), num_svm_pointers as usize) }.to_vec();
+    // function returns, so we have to make a copy.
+    let mut svm_pointers = if !svm_pointers.is_null() {
+        // SAFETY: num_svm_pointers specifies the amount of elements in svm_pointers
+        unsafe { slice::from_raw_parts(svm_pointers.cast(), num_svm_pointers as usize) }.to_vec()
+    } else {
+        // A slice must not be created from a raw null pointer, so simply create
+        // an empty vec instead.
+        Vec::new()
+    };
+
     // SAFETY: The requirements on `SVMFreeCb::new` match the requirements
     // imposed by the OpenCL specification. It is the caller's duty to uphold them.
     let cb_opt = unsafe { SVMFreeCb::new(pfn_free_func, user_data) }.ok();

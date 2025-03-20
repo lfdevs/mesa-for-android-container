@@ -104,6 +104,7 @@ struct radeon_info {
    bool has_image_load_dcc_bug;
    bool has_two_planes_iterate256_bug;
    bool has_vgt_flush_ngg_legacy_bug;
+   bool has_prim_restart_sync_bug;
    bool has_cs_regalloc_hang_bug;
    bool has_async_compute_threadgroup_bug;
    bool has_async_compute_align32_bug;

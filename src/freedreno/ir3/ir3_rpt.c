@@ -283,6 +283,13 @@ merge_instr(struct ir3_instruction *instr)
 
       instr->repeat++;
 
+      /* The false dependencies of the new repeated instruction should be the
+       * union of the dependencies of its parts.
+       */
+      for (unsigned i = 0; i < rpt->deps_count; i++) {
+         ir3_instr_add_dep(instr, rpt->deps[i]);
+      }
+
       /* We cannot remove the rpt immediately since when it is the instruction
        * after instr, foreach_instr_safe will fail. So mark it instead and
        * remove it in ir3_combine_rpt when we encounter it.
