@@ -1,6 +1,7 @@
 mesa (25.0.2-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * patches: Fix spam from gfxstream. (Closes: #1100360)
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 20 Mar 2025 16:02:06 +0200
 
