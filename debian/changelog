@@ -1,3 +1,9 @@
+mesa (25.0.2-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 20 Mar 2025 16:02:06 +0200
+
 mesa (25.0.1-2) unstable; urgency=medium
 
   * rules: Build gfxstream only on 64bit. (Closes: #1099704)
