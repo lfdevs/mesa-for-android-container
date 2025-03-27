@@ -5,3 +5,4 @@ gfxstream-make-virtgpu-discovery-more-robust.diff
 gfxstream-add-common-interfaces.diff
 gfxstream-check-device-before-using.diff
 gfxstream-refactor-device-init.diff
+gfxstream-follow-the-semantics-desired-by-distro-VK.diff
