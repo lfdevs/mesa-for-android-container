@@ -167,11 +167,21 @@ radv_meta_blit2d_normal_dst(struct radv_cmd_buffer *cmd_buffer, struct radv_meta
          if (vk_format_is_color(src_img->image->vk.format) && vk_format_is_depth_or_stencil(dst->image->vk.format)) {
             assert(src_img->aspect_mask == VK_IMAGE_ASPECT_COLOR_BIT);
             src_aspect_mask = src_img->aspect_mask;
+         } else if (vk_format_is_depth_or_stencil(src_img->image->vk.format) &&
+                    vk_format_is_color(dst->image->vk.format)) {
+            if (src_img->aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT) {
+               depth_format = vk_format_stencil_only(src_img->image->vk.format);
+            } else {
+               assert(src_img->aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT);
+               depth_format = vk_format_depth_only(src_img->image->vk.format);
+            }
          }
       }
 
       struct radv_image_view dst_iview;
-      create_iview(cmd_buffer, dst, &dst_iview, depth_format, aspect_mask);
+      create_iview(cmd_buffer, dst, &dst_iview,
+                   aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) ? depth_format : 0,
+                   aspect_mask);
 
       const VkRenderingAttachmentInfo att_info = {
          .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,

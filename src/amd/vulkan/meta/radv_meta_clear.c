@@ -1350,7 +1350,7 @@ gfx8_get_fast_clear_parameters(struct radv_device *device, const struct radv_ima
       *can_avoid_fast_clear_elim = false;
    }
 
-   const struct util_format_description *desc = vk_format_description(iview->vk.format);
+   const struct util_format_description *desc = radv_format_description(iview->vk.format);
    if (iview->vk.format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 || iview->vk.format == VK_FORMAT_R5G6B5_UNORM_PACK16 ||
        iview->vk.format == VK_FORMAT_B5G6R5_UNORM_PACK16)
       extra_channel = -1;
@@ -1430,7 +1430,7 @@ static bool
 gfx11_get_fast_clear_parameters(struct radv_device *device, const struct radv_image_view *iview,
                                 const VkClearColorValue *clear_value, uint32_t *reset_value)
 {
-   const struct util_format_description *desc = vk_format_description(iview->vk.format);
+   const struct util_format_description *desc = radv_format_description(iview->vk.format);
    unsigned start_bit = UINT_MAX;
    unsigned end_bit = 0;
 

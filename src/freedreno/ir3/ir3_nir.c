@@ -1232,6 +1232,7 @@ bool
 ir3_get_driver_param_info(const nir_shader *shader, nir_intrinsic_instr *intr,
                           struct driver_param_info *param_info)
 {
+   param_info->extra_size = 0;
    switch (intr->intrinsic) {
    case nir_intrinsic_load_base_workgroup_id:
       param_info->offset = IR3_DP_CS(base_group_x);
@@ -1283,9 +1284,11 @@ ir3_get_driver_param_info(const nir_shader *shader, nir_intrinsic_instr *intr,
       break;
    case nir_intrinsic_load_frag_size_ir3:
       param_info->offset = IR3_DP_FS(frag_size);
+      param_info->extra_size = 4 * (nir_intrinsic_range(intr) - 1);
       break;
    case nir_intrinsic_load_frag_offset_ir3:
       param_info->offset = IR3_DP_FS(frag_offset);
+      param_info->extra_size = 4 * (nir_intrinsic_range(intr) - 1);
       break;
    case nir_intrinsic_load_frag_invocation_count:
       param_info->offset = IR3_DP_FS(frag_invocation_count);
@@ -1342,7 +1345,8 @@ ir3_nir_scan_driver_consts(struct ir3_compiler *compiler, nir_shader *shader,
             if (ir3_get_driver_param_info(shader, intr, &param_info)) {
                num_driver_params =
                   MAX2(num_driver_params,
-                       param_info.offset + nir_intrinsic_dest_components(intr));
+                       param_info.offset + param_info.extra_size +
+                       nir_intrinsic_dest_components(intr));
             }
          }
       }

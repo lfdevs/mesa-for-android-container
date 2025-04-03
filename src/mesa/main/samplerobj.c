@@ -265,6 +265,8 @@ delete_samplers(struct gl_context *ctx, GLsizei count, const GLuint *samplers)
                }
             }
 
+            sampObj->DeletePending = true;
+
             /* The ID is immediately freed for re-use */
             _mesa_HashRemoveLocked(&ctx->Shared->SamplerObjects, samplers[i]);
             /* But the object exists until its reference count goes to zero */
@@ -402,7 +404,8 @@ bind_samplers(struct gl_context *ctx, GLuint first, GLsizei count,
          struct gl_sampler_object *sampObj;
 
          if (samplers[i] != 0) {
-            if (currentSampler && currentSampler->Name == samplers[i])
+            if (currentSampler && !currentSampler->DeletePending &&
+                currentSampler->Name == samplers[i])
                sampObj = currentSampler;
             else
                sampObj = lookup_samplerobj_locked(ctx, samplers[i]);

@@ -292,11 +292,12 @@ async def resolve_nomination(commit: 'Commit', version: str) -> 'Commit':
                 commit.nominated = True
                 return commit
 
-    if backport_to := IS_BACKPORT.search(out):
-        if version in backport_to.groups():
-            commit.nominated = True
-            commit.nomination_type = NominationType.BACKPORT
-            return commit
+    if backport_to := IS_BACKPORT.findall(out):
+        for match in backport_to:
+            if version in match:
+                commit.nominated = True
+                commit.nomination_type = NominationType.BACKPORT
+                return commit
 
     if cc_to := IS_CC.search(out):
         if cc_to.groups() == (None, None) or version in cc_to.groups():

@@ -43,8 +43,6 @@ fs_visitor::emit_urb_writes(const brw_reg &gs_vertex_count)
    int starting_urb_offset = 0;
    const struct brw_vue_prog_data *vue_prog_data =
       brw_vue_prog_data(this->prog_data);
-   const GLbitfield64 psiz_mask =
-      VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT | VARYING_BIT_PSIZ | VARYING_BIT_PRIMITIVE_SHADING_RATE;
    const struct intel_vue_map *vue_map = &vue_prog_data->vue_map;
    bool flush;
    brw_reg sources[8];
@@ -122,12 +120,12 @@ fs_visitor::emit_urb_writes(const brw_reg &gs_vertex_count)
       switch (varying) {
       case VARYING_SLOT_PSIZ: {
          /* The point size varying slot is the vue header and is always in the
-          * vue map. But often none of the special varyings that live there
-          * are written and for the vertex shaders we can skip writing to the
-          * VUE header because it is setup by the VF fixed function. All other
-          * pre-rasterization stages should setup the VUE header properly as
-          * describe in the SKL PRMs, Volume 7: 3D-Media-GPGPU, Vertex URB
-          * Entry (VUE) Formats:
+          * vue map. If anything in the header is going to be read back by HW,
+          * we need to initialize it, in particular the viewport & layer
+          * values.
+          *
+          * SKL PRMs, Volume 7: 3D-Media-GPGPU, Vertex URB Entry (VUE)
+          * Formats:
           *
           *    "VUEs are written in two ways:
           *
@@ -156,13 +154,6 @@ fs_visitor::emit_urb_writes(const brw_reg &gs_vertex_count)
           *       - If Rendering is disabled, VertexHeaders are not required
           *         anywhere."
           */
-         if ((vue_map->slots_valid & psiz_mask) == 0 &&
-             stage == MESA_SHADER_VERTEX) {
-            assert(length == 0);
-            urb_offset++;
-            break;
-         }
-
          brw_reg zero = brw_vgrf(alloc.allocate(dispatch_width / 8),
                                 BRW_TYPE_UD);
          bld.MOV(zero, brw_imm_ud(0u));

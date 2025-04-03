@@ -444,8 +444,7 @@ popd
 
 . .gitlab-ci/container/container_post_build.sh
 
-ci-fairy s3cp --token-file "${S3_JWT_FILE}" /lava-files/"${ROOTFSTAR}" \
-      https://${S3_PATH}/"${ROOTFSTAR}"
+s3_upload /lava-files/"${ROOTFSTAR}" "https://${S3_PATH}/"
 
 touch /lava-files/done
-ci-fairy s3cp --token-file "${S3_JWT_FILE}" /lava-files/done https://${S3_PATH}/done
+s3_upload /lava-files/done "https://${S3_PATH}/"

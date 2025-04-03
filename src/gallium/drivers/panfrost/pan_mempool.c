@@ -142,9 +142,9 @@ panfrost_pool_alloc_aligned(struct panfrost_pool *pool, size_t sz,
 #ifdef PAN_DBG_OVERFLOW
    if (unlikely(pool->dev->debug & PAN_DBG_OVERFLOW) &&
        !(pool->create_flags & PAN_BO_INVISIBLE)) {
-      long alignment = sysconf(_SC_PAGESIZE);
-      assert(alignment > 0 && util_is_power_of_two_nonzero(alignment));
-      unsigned aligned = ALIGN_POT(sz, alignment);
+      long page_size = sysconf(_SC_PAGESIZE);
+      assert(page_size > 0 && util_is_power_of_two_nonzero(page_size));
+      unsigned aligned = ALIGN_POT(sz, page_size);
       unsigned bo_size = aligned + PAN_GUARD_SIZE;
 
       bo = panfrost_pool_alloc_backing(pool, bo_size);

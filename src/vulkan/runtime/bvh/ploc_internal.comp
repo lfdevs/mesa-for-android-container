@@ -278,12 +278,12 @@ main(void)
    uint32_t task_index = fetch_task(args.header, false);
 
    for (uint iter = 0;; ++iter) {
-      uint32_t current_task_count = task_count(args.header);
       if (task_index == TASK_INDEX_INVALID)
          break;
 
       /* Find preferred partners and merge them */
       PHASE (args.header) {
+         uint32_t current_task_count = task_count(args.header);
          uint32_t base_index = task_index - gl_LocalInvocationID.x;
          uint32_t neighbourhood_overlap = min(PLOC_NEIGHBOURHOOD, base_index);
          uint32_t double_neighbourhood_overlap = min(2 * PLOC_NEIGHBOURHOOD, base_index);

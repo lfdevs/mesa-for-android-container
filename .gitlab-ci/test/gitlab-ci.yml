@@ -144,6 +144,8 @@ yaml-toml-shell-py-test:
   artifacts:
     paths:
       - results/
+  tags:
+    - kvm
 
 .b2c-vkd3d-proton-test:
   variables:

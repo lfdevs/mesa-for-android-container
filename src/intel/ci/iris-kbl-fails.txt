@@ -13,9 +13,6 @@ glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 
-# X error 167 (GLXBadFBConfig (9)) was generated, but X error 8 was expected.
-glx@glx_arb_create_context_no_error@no error,Fail
-
 # X error 167 (GLXBadFBConfig (9)) was generated, but GLXBadProfileARB (13) was expected.
 # Version = 1.2
 # X error 167 (GLXBadFBConfig (9)) was generated, but GLXBadProfileARB (13) was expected.
@@ -36,16 +33,6 @@ spec@!opengl 1.1@linestipple@Line strip,Fail
 
 # Fail: nothing rendered.
 spec@!opengl 2.0@vs-point_size-zero,Fail
-
-# The textures will be initialized by rendering to them using glDrawPixels.
-# gettextureimage-formats failure: format: GL_RGB10_A2, level 1 at pixel(369, 103)
-#  Expected (0.597386, 0.597386, 0.433987, 0.111111)
-# 	 Found (0.792157, 0.792157, 0.466667, 0.443137)
-spec@arb_direct_state_access@gettextureimage-formats init-by-rendering,Fail
-
-# Invalid index for 'vs_input2[1][0]': expected INVALID_INDEX but got 1
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 
 spec@arb_query_buffer_object@qbo,Fail
 spec@arb_query_buffer_object@qbo@query-GL_TIMESTAMP-ASYNC_CPU_READ_AFTER-GL_INT,Fail

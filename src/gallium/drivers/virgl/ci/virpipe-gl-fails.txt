@@ -61,10 +61,7 @@ glx@glx-visuals-stencil -pixmap,Crash
 
 glx@glx_arb_create_context_no_error@no error,Fail
 
-glx@glx_ext_import_context@free context,Fail
-glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@import context- multi process,Fail
-glx@glx_ext_import_context@import context- single process,Fail
 glx@glx_ext_import_context@imported context has same context id,Fail
 glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
@@ -215,9 +212,7 @@ spec@arb_depth_texture@texwrap formats bordercolor@GL_DEPTH_COMPONENT24- border 
 spec@arb_depth_texture@texwrap formats bordercolor@GL_DEPTH_COMPONENT32- border color only,Fail
 
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
-spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x4-mat2x4,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat3-mat3,Fail
-spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat4x3-mat4x3,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-double-float,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dvec2-vec2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dvec4-vec4,Fail
@@ -229,7 +224,6 @@ spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat3x4-m
 spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat4-mat4,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat4x2-mat4x2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat4x3-mat4x3,Fail
-spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-double-float,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dvec3-vec3,Fail
 
 spec@arb_occlusion_query@occlusion_query_conform,Fail
@@ -313,7 +307,6 @@ spec@arb_shader_texture_image_samples@texturesamples@vs-sampler2dmsarray-2,Fail
 spec@arb_shader_texture_image_samples@texturesamples@vs-usampler2dms-2,Fail
 spec@arb_shader_texture_image_samples@texturesamples@vs-usampler2dmsarray-2,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
-spec@arb_tessellation_shader@execution@gs-primitiveid-instanced,Fail
 
 spec@arb_texture_compression@texwrap formats bordercolor,Fail
 spec@arb_texture_compression@texwrap formats bordercolor-swizzled,Fail
@@ -515,7 +508,6 @@ spec@!opengl 1.1@line-smooth-stipple,Fail
 spec@arb_viewport_array@display-list,Fail
 
 spec@arb_gl_spirv@execution@ssbo@unsized-array,Fail
-spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag,Fail
 spec@!opengl 1.1@line-flat-clip-color,Fail
 spec@glsl-1.40@uniform_buffer@two-stages,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled,Fail
@@ -538,3 +530,25 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SR
 spec@glsl-1.50@execution@geometry@dynamic_input_array_index,Crash
 spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec3-index-wr-before-gs,Crash
 spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec4-index-wr-before-gs,Crash
+
+# since hetzner migration
+spec@arb_tessellation_shader@execution@tcs-output-unmatched,Fail
+spec@arb_texture_compression_bptc@texwrap formats bordercolor,Fail
+spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_BPTC_UNORM- border color only,Fail
+spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT- border color only,Fail
+spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT- border color only,Fail
+spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_R16F- swizzled- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_R32F- swizzled- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_RG16F- swizzled- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_RG32F- swizzled- border color only,Fail
+spec@egl 1.4@eglcreatepbuffersurface and then glclear,Crash
+spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear,Crash
+spec@ext_packed_float@texwrap formats bordercolor-swizzled,Fail
+spec@ext_packed_float@texwrap formats bordercolor-swizzled@GL_R11F_G11F_B10F- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats bordercolor-swizzled,Fail
+spec@ext_texture_srgb@texwrap formats bordercolor-swizzled@GL_SLUMINANCE8- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats bordercolor-swizzled@GL_SLUMINANCE8_ALPHA8- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats bordercolor-swizzled@GL_SRGB8- swizzled- border color only,Fail
+spec@ext_texture_srgb@texwrap formats bordercolor-swizzled@GL_SRGB8_ALPHA8- swizzled- border color only,Fail

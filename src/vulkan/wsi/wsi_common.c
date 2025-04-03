@@ -1527,7 +1527,8 @@ wsi_common_queue_present(const struct wsi_device *wsi,
             has_signal_dma_buf = false;
             mem_signal = (struct wsi_memory_signal_submit_info) {
                .sType = VK_STRUCTURE_TYPE_WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA,
-               .memory = image->memory,
+               .memory = swapchain->blit.type == WSI_SWAPCHAIN_NO_BLIT ?
+                         image->memory : image->blit.memory,
             };
             __vk_append_struct(&submit_info, &mem_signal);
          }

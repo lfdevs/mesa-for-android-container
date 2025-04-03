@@ -2736,7 +2736,7 @@ get_tex_parameteriv(struct gl_context *ctx,
          break;
 
       case GL_TEXTURE_CUBE_MAP_SEAMLESS:
-         if (_mesa_has_AMD_seamless_cubemap_per_texture(ctx))
+         if (!_mesa_has_AMD_seamless_cubemap_per_texture(ctx))
             goto invalid_pname;
          *params = (GLint) obj->Sampler.Attrib.CubeMapSeamless;
          break;

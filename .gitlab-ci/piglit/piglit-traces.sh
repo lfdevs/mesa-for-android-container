@@ -13,7 +13,6 @@ set -ex
 export PAGER=cat  # FIXME: export everywhere
 
 INSTALL=$(realpath -s "$PWD"/install)
-S3_ARGS="--token-file ${S3_JWT_FILE}"
 
 export PIGLIT_REPLAY_DESCRIPTION_FILE="$INSTALL/$PIGLIT_TRACES_FILE"
 
@@ -120,7 +119,7 @@ replay_s3_upload_images() {
             fi
             __S3_PATH="$PIGLIT_REPLAY_REFERENCE_IMAGES_BASE"
             __DESTINATION_FILE_PATH="${line##*-}"
-            if curl -L -s -I "https://${__S3_PATH}/${__DESTINATION_FILE_PATH}" | grep -q "content-type: application/octet-stream" 2>/dev/null; then
+            if curl --fail -L -s -I "https://${__S3_PATH}/${__DESTINATION_FILE_PATH}" | grep -q "content-type: application/octet-stream" 2>/dev/null; then
                 continue
             fi
         else
@@ -128,8 +127,7 @@ replay_s3_upload_images() {
             __DESTINATION_FILE_PATH="$__S3_TRACES_PREFIX/${line##*-}"
         fi
 
-        ci-fairy s3cp $S3_ARGS "$RESULTS_DIR/$__PREFIX/$line" \
-            "https://${__S3_PATH}/${__DESTINATION_FILE_PATH}"
+        s3_upload "$RESULTS_DIR/$__PREFIX/$line" "https://${__S3_PATH}/${__DESTINATION_FILE_PATH%/*}"
     done
 }
 
@@ -169,7 +167,9 @@ rm -rf replayer-db
 if [ -n "$PIGLIT_REPLAY_ANGLE_TAG" ]; then
   ARCH="amd64"
   FILE="angle-bin-${ARCH}-${PIGLIT_REPLAY_ANGLE_TAG}.tar.zst"
-  ci-fairy s3cp $S3_ARGS "https://s3.freedesktop.org/mesa-tracie-private/${FILE}" "${FILE}"
+  curl --location --fail --retry-all-errors --retry 4 --retry-delay 60 \
+    --header "Authorization: Bearer $(cat "${S3_JWT_FILE}")" \
+    "https://s3.freedesktop.org/mesa-tracie-private/${FILE}" --output "${FILE}"
   mkdir -p replayer-db/angle
   tar --zstd -xf ${FILE} -C replayer-db/angle/
 fi

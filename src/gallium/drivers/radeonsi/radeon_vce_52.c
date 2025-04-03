@@ -198,7 +198,7 @@ static void get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_des
    enc->enc_pic.i_remain = pic->i_remain;
    enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
    enc->enc_pic.not_referenced = pic->not_referenced;
-   enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = 0x01000201;
+   enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants = enc->fw_version >= 52 ? 0x01000201 : 0;
    enc->enc_pic.is_idr = (pic->picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR);
    enc->enc_pic.eo.enc_idr_pic_id = pic->idr_pic_id;
    enc->enc_pic.ec.enc_vbaq_mode =
@@ -309,10 +309,12 @@ static void create(struct rvce_encoder *enc)
 
    RVCE_CS(enc->enc_pic.addrmode_arraymode_disrdo_distwoinstants);
 
-   RVCE_CS(enc->enc_pic.ec.enc_pre_encode_context_buffer_offset);
-   RVCE_CS(enc->enc_pic.ec.enc_pre_encode_input_luma_buffer_offset);
-   RVCE_CS(enc->enc_pic.ec.enc_pre_encode_input_chroma_buffer_offset);
-   RVCE_CS(enc->enc_pic.ec.enc_pre_encode_mode_chromaflag_vbaqmode_scenechangesensitivity);
+   if (enc->fw_version >= 52) {
+      RVCE_CS(enc->enc_pic.ec.enc_pre_encode_context_buffer_offset);
+      RVCE_CS(enc->enc_pic.ec.enc_pre_encode_input_luma_buffer_offset);
+      RVCE_CS(enc->enc_pic.ec.enc_pre_encode_input_chroma_buffer_offset);
+      RVCE_CS(enc->enc_pic.ec.enc_pre_encode_mode_chromaflag_vbaqmode_scenechangesensitivity);
+   }
    RVCE_END();
 }
 
@@ -373,7 +375,7 @@ static void encode(struct rvce_encoder *enc)
       enc->enc_pic.eo.enc_input_pic_swizzle_mode = enc->luma->u.gfx9.swizzle_mode;
    }
 
-   enc->enc_pic.eo.enc_disable_two_pipe_mode = !enc->dual_pipe;
+   enc->enc_pic.eo.enc_disable_two_pipe_mode = enc->fw_version >= 50 ? !enc->dual_pipe : 0;
    RVCE_CS(enc->enc_pic.eo.enc_input_pic_addr_array_disable2pipe_disablemboffload);
    RVCE_CS(enc->enc_pic.eo.enc_input_pic_tile_config);
    RVCE_CS(enc->enc_pic.picture_type);                                    // encPicType
@@ -457,17 +459,18 @@ static void encode(struct rvce_encoder *enc)
    RVCE_CS(enc->enc_pic.eo.num_ir_pic_remain_in_rcgop);
    RVCE_CS(enc->enc_pic.eo.enable_intra_refresh);
 
-   RVCE_CS(enc->enc_pic.eo.aq_variance_en);
-   RVCE_CS(enc->enc_pic.eo.aq_block_size);
-   RVCE_CS(enc->enc_pic.eo.aq_mb_variance_sel);
-   RVCE_CS(enc->enc_pic.eo.aq_frame_variance_sel);
-   RVCE_CS(enc->enc_pic.eo.aq_param_a);
-   RVCE_CS(enc->enc_pic.eo.aq_param_b);
-   RVCE_CS(enc->enc_pic.eo.aq_param_c);
-   RVCE_CS(enc->enc_pic.eo.aq_param_d);
-   RVCE_CS(enc->enc_pic.eo.aq_param_e);
-
-   RVCE_CS(enc->enc_pic.eo.context_in_sfb);
+   if (enc->fw_version >= 52) {
+      RVCE_CS(enc->enc_pic.eo.aq_variance_en);
+      RVCE_CS(enc->enc_pic.eo.aq_block_size);
+      RVCE_CS(enc->enc_pic.eo.aq_mb_variance_sel);
+      RVCE_CS(enc->enc_pic.eo.aq_frame_variance_sel);
+      RVCE_CS(enc->enc_pic.eo.aq_param_a);
+      RVCE_CS(enc->enc_pic.eo.aq_param_b);
+      RVCE_CS(enc->enc_pic.eo.aq_param_c);
+      RVCE_CS(enc->enc_pic.eo.aq_param_d);
+      RVCE_CS(enc->enc_pic.eo.aq_param_e);
+      RVCE_CS(enc->enc_pic.eo.context_in_sfb);
+   }
    RVCE_END();
 }
 
@@ -498,8 +501,10 @@ static void rate_control(struct rvce_encoder *enc)
    RVCE_CS(enc->enc_pic.rc.b_pics_delta_qp);
    RVCE_CS(enc->enc_pic.rc.ref_b_pics_delta_qp);
    RVCE_CS(enc->enc_pic.rc.rc_reinit_disable);
-   RVCE_CS(enc->enc_pic.rc.enc_lcvbr_init_qp_flag);
-   RVCE_CS(enc->enc_pic.rc.lcvbrsatd_based_nonlinear_bit_budget_flag);
+   if (enc->fw_version >= 50) {
+      RVCE_CS(enc->enc_pic.rc.enc_lcvbr_init_qp_flag);
+      RVCE_CS(enc->enc_pic.rc.lcvbrsatd_based_nonlinear_bit_budget_flag);
+   }
    RVCE_END();
 }
 

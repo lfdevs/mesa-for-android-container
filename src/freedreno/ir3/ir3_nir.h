@@ -139,6 +139,7 @@ nir_def *ir3_rematerialize_def_for_preamble(nir_builder *b, nir_def *def,
 
 struct driver_param_info {
    uint32_t offset;
+   uint32_t extra_size;
 };
 
 bool ir3_get_driver_param_info(const nir_shader *shader,

@@ -189,7 +189,6 @@ VKAPI_ATTR VkResult VKAPI_CALL
 panvk_per_arch(EndCommandBuffer)(VkCommandBuffer commandBuffer)
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
 
    emit_tls(cmdbuf);
    flush_sync_points(cmdbuf);
@@ -204,8 +203,6 @@ panvk_per_arch(EndCommandBuffer)(VkCommandBuffer commandBuffer)
          finish_cs(cmdbuf, i);
       }
    }
-
-   cmdbuf->flush_id = panthor_kmod_get_flush_id(dev->kmod.dev);
 
    return vk_command_buffer_end(&cmdbuf->vk);
 }

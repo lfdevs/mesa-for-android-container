@@ -144,6 +144,10 @@ vn_watchdog_acquire(struct vn_watchdog *watchdog, bool alive)
        mtx_trylock(&watchdog->mutex) == thrd_success) {
       /* register as the only waiting thread that monitors the ring. */
       watchdog->tid = tid;
+      /* Always set alive to true for new watchdog owner because the
+       * last owner might have just unset the alive bit before release.
+       */
+      alive = true;
    }
 
    if (tid != watchdog->tid)

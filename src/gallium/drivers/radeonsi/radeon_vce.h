@@ -343,6 +343,7 @@ struct rvce_encoder {
 
    bool use_vm;
    bool dual_pipe;
+   unsigned fw_version;
 };
 
 struct rvce_output_unit_segment {

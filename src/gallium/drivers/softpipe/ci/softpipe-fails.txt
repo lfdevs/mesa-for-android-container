@@ -1005,9 +1005,6 @@ spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-atomic@MS4,Fa
 spec@arb_get_program_binary@restore-sso-program,Fail
 spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Fail
 
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
-
 spec@arb_provoking_vertex@arb-provoking-vertex-clipped-geometry-flatshading,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
 
@@ -1266,3 +1263,9 @@ dEQP-GLES31.functional.geometry_shading.query.primitives_generated_no_geometry,F
 dEQP-GLES2.functional.rasterization.interpolation.projected.line_loop_wide,Fail
 dEQP-GLES31.functional.texture.filtering.cube_array.formats.rgba4_nearest_mipmap_linear,Fail
 dEQP-GLES3.functional.rasterization.interpolation.basic.lines_wide,Fail
+
+# since hetzner migration
+spec@!opengl 2.0@vertex-program-two-side enabled front back front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back front2 back2@gs-out and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front2 back2@gs-out and fs,Fail

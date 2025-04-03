@@ -2420,6 +2420,16 @@ scalar_register_restrictions(const struct brw_isa_info *isa,
 }
 
 static unsigned
+DST_STRIDE_3SRC(unsigned hstride)
+{
+   switch (hstride) {
+   case BRW_ALIGN1_3SRC_DST_HORIZONTAL_STRIDE_1: return 1;
+   case BRW_ALIGN1_3SRC_DST_HORIZONTAL_STRIDE_2: return 2;
+   }
+   unreachable("invalid hstride");
+}
+
+static unsigned
 VSTRIDE_3SRC(unsigned vstride)
 {
    switch (vstride) {
@@ -2606,7 +2616,7 @@ brw_hw_decode_inst(const struct brw_isa_info *isa,
          inst->dst.type = brw_eu_inst_3src_a1_dst_type(devinfo, raw);
          inst->dst.nr = brw_eu_inst_3src_dst_reg_nr(devinfo, raw);
          inst->dst.subnr = brw_eu_inst_3src_a1_dst_subreg_nr(devinfo, raw) * 8;
-         inst->dst.hstride = STRIDE(brw_eu_inst_3src_a1_dst_hstride(devinfo, raw));
+         inst->dst.hstride = DST_STRIDE_3SRC(brw_eu_inst_3src_a1_dst_hstride(devinfo, raw));
 
          inst->src[0].file = brw_eu_inst_3src_a1_src0_reg_file(devinfo, raw);
          inst->src[0].type = brw_eu_inst_3src_a1_src0_type(devinfo, raw);

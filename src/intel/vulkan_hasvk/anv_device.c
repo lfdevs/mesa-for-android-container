@@ -971,7 +971,8 @@ get_properties(const struct anv_physical_device *pdevice,
 #if DETECT_OS_ANDROID
       .apiVersion = ANV_API_VERSION,
 #else
-      .apiVersion = pdevice->use_softpin ? ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2,
+      .apiVersion = (pdevice->use_softpin || pdevice->instance->report_vk_1_3) ? 
+         ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2,
 #endif /* DETECT_OS_ANDROID */
       .driverVersion = vk_get_driver_version(),
       .vendorID = 0x8086,

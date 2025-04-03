@@ -836,6 +836,12 @@ llvmpipe_destroy_screen(struct pipe_screen *_screen)
 #if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
    if (screen->udmabuf_fd != -1)
       close(screen->udmabuf_fd);
+   if (screen->dummy_sync_fd != -1)
+      close(screen->dummy_sync_fd);
+   if (screen->dummy_dmabuf) {
+      _screen->free_memory_fd(_screen,
+                              (struct pipe_memory_allocation*)screen->dummy_dmabuf);
+   }
 #endif
 
 #if DETECT_OS_LINUX

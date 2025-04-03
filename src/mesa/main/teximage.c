@@ -3074,9 +3074,12 @@ lookup_texture_ext_dsa(struct gl_context *ctx, GLenum target, GLuint texture,
       texObj = ctx->Shared->DefaultTex[targetIndex];
       assert(texObj);
    } else {
-      texObj = _mesa_lookup_texture(ctx, texture);
+      _mesa_HashLockMutex(&ctx->Shared->TexObjects);
+
+      texObj = _mesa_lookup_texture_locked(ctx, texture);
       if (!texObj && _mesa_is_desktop_gl_core(ctx)) {
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(non-gen name)", caller);
+         _mesa_HashUnlockMutex(&ctx->Shared->TexObjects);
          return NULL;
       }
 
@@ -3084,12 +3087,14 @@ lookup_texture_ext_dsa(struct gl_context *ctx, GLenum target, GLuint texture,
          texObj = _mesa_new_texture_object(ctx, texture, boundTarget);
          if (!texObj) {
             _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
+            _mesa_HashUnlockMutex(&ctx->Shared->TexObjects);
             return NULL;
          }
 
          /* insert into hash table */
-         _mesa_HashInsert(&ctx->Shared->TexObjects, texObj->Name, texObj);
+         _mesa_HashInsertLocked(&ctx->Shared->TexObjects, texObj->Name, texObj);
       }
+      _mesa_HashUnlockMutex(&ctx->Shared->TexObjects);
 
       if (texObj->Target != boundTarget) {
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(%s != %s)",

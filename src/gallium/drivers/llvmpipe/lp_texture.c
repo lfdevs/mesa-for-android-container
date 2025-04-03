@@ -757,7 +757,7 @@ llvmpipe_resource_from_handle(struct pipe_screen *_screen,
           _screen->import_memory_fd(_screen, whandle->handle,
                                     (struct pipe_memory_allocation**)&alloc,
                                     &size, true)) {
-         void *data = alloc->cpu_addr;
+         void *data = (char*)alloc->cpu_addr + whandle->offset;
          lpr->dt = winsys->displaytarget_create_mapped(winsys, template->bind,
                                                        template->format, template->width0, template->height0,
                                                        whandle->stride, data);

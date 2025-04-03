@@ -1280,7 +1280,7 @@ get_reg_impl(ra_ctx& ctx, const RegisterFile& reg_file,
    RegClass rc = info.rc;
 
    /* check how many free regs we have */
-   unsigned regs_free = reg_file.count_zero(bounds);
+   unsigned regs_free = reg_file.count_zero(get_reg_bounds(ctx, rc));
 
    /* mark and count killed operands */
    unsigned killed_ops = 0;
@@ -1849,7 +1849,7 @@ get_reg(ra_ctx& ctx, const RegisterFile& reg_file, Temp temp,
 
    /* We should only fail here because keeping under the limit would require
     * too many moves. */
-   assert(reg_file.count_zero(info.bounds) >= info.size);
+   assert(reg_file.count_zero(get_reg_bounds(ctx, info.rc)) >= info.size);
 
    /* try using more registers */
    if (!increase_register_file(ctx, info.rc)) {

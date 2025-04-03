@@ -4678,10 +4678,7 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
       enum amd_gfx_level gfx_level = pdev->info.gfx_level;
 
       if (pdev->info.gfx_level >= GFX11) {
-         const bool has_dedicated_vram = pdev->info.has_dedicated_vram;
-
-         radeon_set_context_reg(cmd_buffer->cs, R_028424_CB_FDCC_CONTROL,
-                                S_028424_SAMPLE_MASK_TRACKER_WATERMARK(has_dedicated_vram ? 0 : 15));
+         radeon_set_context_reg(cmd_buffer->cs, R_028424_CB_FDCC_CONTROL, 0);
       } else {
          uint8_t watermark = gfx_level >= GFX10 ? 6 : 4;
 

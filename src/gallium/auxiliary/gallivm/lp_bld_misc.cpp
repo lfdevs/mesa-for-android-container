@@ -383,6 +383,7 @@ lp_build_fill_mattrs(std::vector<std::string> &MAttrs)
    MAttrs.push_back(util_get_cpu_caps()->has_avx512bw ? "+avx512bw"  : "-avx512bw");
    MAttrs.push_back(util_get_cpu_caps()->has_avx512dq ? "+avx512dq"  : "-avx512dq");
    MAttrs.push_back(util_get_cpu_caps()->has_avx512vl ? "+avx512vl"  : "-avx512vl");
+   MAttrs.push_back(util_get_cpu_caps()->has_avx512vbmi ? "+avx512vbmi"  : "-avx512vbmi");
 #endif
 #if DETECT_ARCH_ARM
    if (!util_get_cpu_caps()->has_neon) {

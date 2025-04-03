@@ -1560,6 +1560,8 @@ delete_textures(struct gl_context *ctx, GLsizei n, const GLuint *textures)
              */
             _mesa_make_texture_handles_non_resident(ctx, delObj);
 
+            delObj->DeletePending = true;
+
             _mesa_unlock_texture(ctx, delObj);
 
             ctx->NewState |= _NEW_TEXTURE_OBJECT;
@@ -1763,9 +1765,13 @@ _mesa_lookup_or_create_texture(struct gl_context *ctx, GLenum target,
       /* Use a default texture object */
       newTexObj = ctx->Shared->DefaultTex[targetIndex];
    } else {
+      _mesa_HashLockMutex(&ctx->Shared->TexObjects);
+
       /* non-default texture object */
-      newTexObj = _mesa_lookup_texture(ctx, texName);
+      newTexObj = _mesa_lookup_texture_locked(ctx, texName);
       if (newTexObj) {
+         _mesa_HashUnlockMutex(&ctx->Shared->TexObjects);
+
          /* error checking */
          if (!no_error &&
              newTexObj->Target != 0 && newTexObj->Target != target) {
@@ -1783,6 +1789,7 @@ _mesa_lookup_or_create_texture(struct gl_context *ctx, GLenum target,
          if (!no_error && _mesa_is_desktop_gl_core(ctx)) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "%s(non-gen name)", caller);
+            _mesa_HashUnlockMutex(&ctx->Shared->TexObjects);
             return NULL;
          }
 
@@ -1790,11 +1797,13 @@ _mesa_lookup_or_create_texture(struct gl_context *ctx, GLenum target,
          newTexObj = _mesa_new_texture_object(ctx, texName, target);
          if (!newTexObj) {
             _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
+            _mesa_HashUnlockMutex(&ctx->Shared->TexObjects);
             return NULL;
          }
 
          /* and insert it into hash table */
-         _mesa_HashInsert(&ctx->Shared->TexObjects, texName, newTexObj);
+         _mesa_HashInsertLocked(&ctx->Shared->TexObjects, texName, newTexObj);
+         _mesa_HashUnlockMutex(&ctx->Shared->TexObjects);
       }
    }
 
@@ -1985,7 +1994,8 @@ bind_textures(struct gl_context *ctx, GLuint first, GLsizei count,
             struct gl_texture_object *current = texUnit->_Current;
             struct gl_texture_object *texObj;
 
-            if (current && current->Name == textures[i])
+            if (current && !current->DeletePending &&
+                current->Name == textures[i])
                texObj = current;
             else
                texObj = _mesa_lookup_texture_locked(ctx, textures[i]);

@@ -295,11 +295,11 @@ make git archive:
     # Compactify the .git directory
     - git gc --aggressive
     # Download & cache the perfetto subproject as well.
-    - rm -rf subprojects/perfetto ; mkdir -p subprojects/perfetto && curl https://android.googlesource.com/platform/external/perfetto/+archive/$(grep 'revision =' subprojects/perfetto.wrap | cut -d ' ' -f3).tar.gz | tar zxf - -C subprojects/perfetto
+    - rm -rf subprojects/perfetto ; mkdir -p subprojects/perfetto && curl --fail https://android.googlesource.com/platform/external/perfetto/+archive/$(grep 'revision =' subprojects/perfetto.wrap | cut -d ' ' -f3).tar.gz | tar zxf - -C subprojects/perfetto
     # compress the current folder
     - tar -cvzf ../$CI_PROJECT_NAME.tar.gz .
 
-    - ci-fairy s3cp --token-file "${S3_JWT_FILE}" ../$CI_PROJECT_NAME.tar.gz https://$S3_HOST/git-cache/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/$CI_PROJECT_NAME.tar.gz
+    - s3_upload ../$CI_PROJECT_NAME.tar.gz "https://$S3_HOST/git-cache/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/"
 
 # Sanity checks of MR settings and commit logs
 sanity:

@@ -825,10 +825,21 @@ nvk_cmd_set_sample_layout(struct nvk_cmd_buffer *cmd,
       P_INLINE_DATA(p, 0x003a003a);
       P_INLINE_DATA(p, 0x00c500c5);
       P_MTHD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_SAMPLE_MASKS_4PASS_0));
-      P_INLINE_DATA(p, 0x00120081);
-      P_INLINE_DATA(p, 0x00280044);
-      P_INLINE_DATA(p, 0x00280012);
-      P_INLINE_DATA(p, 0x00810044);
+      if (nvk_cmd_buffer_3d_cls(cmd) >= MAXWELL_B) {
+         P_INLINE_DATA(p, 0x00120081);
+         P_INLINE_DATA(p, 0x00280044);
+         P_INLINE_DATA(p, 0x00280012);
+         P_INLINE_DATA(p, 0x00810044);
+      } else {
+         /* The samples map funny on Maxwell A and earlier.  We're not even
+          * guaranteed that pixld.my_index is any of the samples in the mask
+          * so just go with what we see the hardware kicking out.
+          */
+         P_INLINE_DATA(p, 0x00000012);
+         P_INLINE_DATA(p, 0x00280044);
+         P_INLINE_DATA(p, 0x00000000);
+         P_INLINE_DATA(p, 0x00810000);
+      }
       break;
 
    default:

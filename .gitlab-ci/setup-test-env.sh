@@ -140,5 +140,21 @@ function trap_err {
 export -f error
 export -f trap_err
 
+s3_upload() {
+    x_off
+    local file=$1 s3_folder_url=$2
+    if [ ! -f "$file" ] || [[ "$s3_folder_url" != https://* ]]
+    then
+      echo "s3_upload used incorrectly: first argument is the file, second argument is the s3 folder url"
+      exit 1
+    fi
+    curl --fail --retry-all-errors --retry 4 --retry-delay 60 \
+      --header "Authorization: Bearer $(cat "${S3_JWT_FILE}")" \
+      -X PUT --form file=@"$file" \
+      "$s3_folder_url"
+    x_restore
+}
+export -f s3_upload
+
 set -E
 trap 'trap_err $?' ERR

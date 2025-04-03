@@ -21,7 +21,7 @@
 
 #include "clb097.h"
 #include "clb197.h"
-#include "clc097.h"
+#include "clc197.h"
 #include "clc597.h"
 
 static VkFormatFeatureFlags2
@@ -291,7 +291,12 @@ nvk_image_max_dimension(const struct nv_device_info *info,
    switch (image_type) {
    case VK_IMAGE_TYPE_1D:
    case VK_IMAGE_TYPE_2D:
-      return info->cls_eng3d >= PASCAL_A ? 0x8000 : 0x4000;
+      /* The render and texture units can support up to 16K all the way back
+       * to Kepler but the copy engine can't.  We can work around this by
+       * doing offset shenanigans in the copy code but that not currently
+       * implemented.
+       */
+      return info->cls_eng3d >= PASCAL_B ? 0x8000 : 0x4000;
    case VK_IMAGE_TYPE_3D:
       return 0x4000;
    default:

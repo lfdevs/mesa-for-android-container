@@ -166,7 +166,13 @@ mme_fermi_prev_inst_can_emit(struct mme_fermi_builder *b, struct mme_value data)
       return false;
    }
 
-   if ((b->inst_parts & MME_FERMI_INSTR_PART_ASSIGN) == MME_FERMI_INSTR_PART_ASSIGN) {
+   if (b->inst_parts & MME_FERMI_INSTR_PART_OP) {
+      struct mme_fermi_inst *inst = mme_fermi_cur_inst(b);
+      if (inst->op == MME_FERMI_OP_STATE)
+         return false;
+   }
+
+   if (b->inst_parts & MME_FERMI_INSTR_PART_ASSIGN) {
       struct mme_fermi_inst *inst = mme_fermi_cur_inst(b);
 
       if (inst->assign_op == MME_FERMI_ASSIGN_OP_MOVE && data.type == MME_VALUE_TYPE_REG &&

@@ -76,6 +76,9 @@ _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog);
 extern struct gl_program *
 _mesa_lookup_program(struct gl_context *ctx, GLuint id);
 
+extern struct gl_program *
+_mesa_lookup_program_locked(struct gl_context *ctx, GLuint id);
+
 extern void
 _mesa_reference_program_(struct gl_context *ctx,
                          struct gl_program **ptr,

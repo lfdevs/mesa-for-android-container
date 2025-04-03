@@ -19,7 +19,7 @@ git clone \
 
 pushd /va-utils
 # Too old libva in Debian 11. TODO: when this PR gets in, refer to the patch.
-curl -L https://github.com/intel/libva-utils/pull/329.patch | git am
+curl --fail -L https://github.com/intel/libva-utils/pull/329.patch | git am
 
 meson setup build -D tests=true -Dprefix=/va ${EXTRA_MESON_ARGS:-}
 meson install -C build

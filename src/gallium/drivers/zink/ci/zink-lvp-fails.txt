@@ -46,8 +46,6 @@ spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_sample_shading@ignore-centroid-qualifier 2,Fail
 spec@arb_sample_shading@ignore-centroid-qualifier 4,Fail
 spec@arb_sample_shading@interpolate-at-sample-position 2,Fail
@@ -131,7 +129,6 @@ spec@nv_texture_barrier@blending-in-shader,Crash
 spec@arb_viewport_array@display-list,Fail
 
 # passes locally
-KHR-GL46.sparse_buffer_tests.BufferStorageTest_case_b1_tf_type_1_draw_call_indexed,Crash
 KHR-GL46.sparse_buffer_tests.BufferStorageTest_case_b2_tf_type_0_draw_call_instanced_indexed,Crash
 KHR-GL46.sparse_buffer_tests.BufferStorageTest_case_b2_tf_type_0_draw_call_regular_instanced,Crash
 KHR-GL46.sparse_buffer_tests.BufferStorageTest_case_b2_tf_type_1_draw_call_regular_instanced,Crash

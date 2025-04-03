@@ -112,8 +112,6 @@ spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_gpu_shader_fp64@execution@fs-function-inout-array,Crash
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_sample_locations@test,Fail
 spec@arb_sample_locations@test@MSAA: 1- X: 0- Y: 0- Grid: false,Fail
 spec@arb_sample_locations@test@MSAA: 1- X: 0- Y: 0- Grid: true,Fail
@@ -690,3 +688,7 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=2,Fail
 spec@arb_sample_shading@samplemask 6,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-deriv-disabled,Fail
+
+# since hetzner migration
+spec@ovr_multiview@fb_blit_first_view_full_base1,Fail
+spec@ovr_multiview@fb_read_errors,Fail

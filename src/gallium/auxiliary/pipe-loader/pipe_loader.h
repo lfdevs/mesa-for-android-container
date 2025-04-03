@@ -235,6 +235,15 @@ int
 pipe_loader_get_compatible_render_capable_device_fd(int kms_only_fd);
 
 /**
+ * Get the fds of render-capable devices compatible with a given display-only
+ * device fd.
+ *
+ * Caller must close the returned fds and free the array.
+ */
+int *
+pipe_loader_get_compatible_render_capable_device_fds(int kms_only_fd, unsigned int *n_devices);
+
+/**
  * Initialize a DRM device in an already opened fd.
  *
  * This function is platform-specific.

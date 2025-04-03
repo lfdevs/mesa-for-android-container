@@ -1528,8 +1528,7 @@ VkResult anv_AllocateMemory(
       alloc_flags |= ANV_BO_ALLOC_EXTERNAL;
 
       /* wsi has its own way of synchronizing with the compositor */
-      if (pdevice->instance->external_memory_implicit_sync &&
-          !wsi_info && dedicated_info &&
+      if (!wsi_info && dedicated_info &&
           dedicated_info->image != VK_NULL_HANDLE) {
          ANV_FROM_HANDLE(anv_image, image, dedicated_info->image);
 
@@ -1544,7 +1543,8 @@ VkResult anv_AllocateMemory(
           * consumer side relying on implicit fencing can have a fence to
           * wait for render complete.
           */
-         if (image->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+         if (pdevice->instance->external_memory_implicit_sync &&
+             (image->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
             alloc_flags |= ANV_BO_ALLOC_IMPLICIT_WRITE;
       }
    }

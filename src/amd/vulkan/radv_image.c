@@ -602,7 +602,7 @@ radv_image_get_plane_format(const struct radv_physical_device *pdev, const struc
    if (radv_is_format_emulated(pdev, image->vk.format)) {
       if (plane == 0)
          return image->vk.format;
-      if (vk_format_description(image->vk.format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
+      if (radv_format_description(image->vk.format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
          return vk_texcompress_astc_emulation_format(image->vk.format);
       else
          return vk_texcompress_etc2_emulation_format(image->vk.format);
@@ -620,7 +620,7 @@ radv_get_surface_flags(struct radv_device *device, struct radv_image *image, uns
    uint64_t flags;
    unsigned array_mode = radv_choose_tiling(device, pCreateInfo, image_format);
    VkFormat format = radv_image_get_plane_format(pdev, image, plane_id);
-   const struct util_format_description *desc = vk_format_description(format);
+   const struct util_format_description *desc = radv_format_description(format);
    const VkImageAlignmentControlCreateInfoMESA *alignment =
          vk_find_struct_const(pCreateInfo->pNext, IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA);
    bool is_depth, is_stencil;
@@ -1313,7 +1313,7 @@ radv_image_print_info(struct radv_device *device, struct radv_image *image)
    for (unsigned i = 0; i < image->plane_count; ++i) {
       const struct radv_image_plane *plane = &image->planes[i];
       const struct radeon_surf *surf = &plane->surface;
-      const struct util_format_description *desc = vk_format_description(plane->format);
+      const struct util_format_description *desc = radv_format_description(plane->format);
       uint64_t offset = ac_surface_get_plane_offset(pdev->info.gfx_level, &plane->surface, 0, 0);
 
       fprintf(stderr, "  Plane[%u]: vkformat=%s, offset=%" PRIu64 "\n", i, desc->name, offset);
