@@ -1,5 +1,6 @@
-mesa (25.0.2-2) UNRELEASED; urgency=medium
+mesa (25.0.3-1) UNRELEASED; urgency=medium
 
+  * New upstream release.
   * patches: Further fixes for spam caused by gfxstream.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 27 Mar 2025 10:49:59 +0200
