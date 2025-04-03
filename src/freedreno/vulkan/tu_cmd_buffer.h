@@ -648,7 +648,8 @@ tu_attachment_gmem_offset_stencil(struct tu_cmd_buffer *cmd,
 {
    assert(cmd->state.gmem_layout < TU_GMEM_LAYOUT_COUNT);
    return att->gmem_offset_stencil[cmd->state.gmem_layout] +
-      layer * cmd->state.tiling->tile0.width * cmd->state.tiling->tile0.height;
+      layer * cmd->state.tiling->tile0.width * cmd->state.tiling->tile0.height *
+      att->samples;
 }
 
 void tu_render_pass_state_merge(struct tu_render_pass_state *dst,

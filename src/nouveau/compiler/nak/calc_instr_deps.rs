@@ -649,14 +649,17 @@ fn calc_delays(f: &mut Function, sm: &dyn ShaderModel) {
             instr.deps.set_delay(delay);
 
             instr_cycle[ip] = min_start;
+
+            // Set the writes before adding the reads
+            // as we are iterating backwards through instructions.
+            uses.for_each_instr_dst_mut(instr, |i, c| {
+                c.set_write((ip, i));
+            });
             uses.for_each_instr_pred_mut(instr, |c| {
                 c.add_read((ip, usize::MAX));
             });
             uses.for_each_instr_src_mut(instr, |i, c| {
                 c.add_read((ip, i));
-            });
-            uses.for_each_instr_dst_mut(instr, |i, c| {
-                c.set_write((ip, i));
             });
             for (bar, c) in bars.iter_mut().enumerate() {
                 if instr.deps.wt_bar_mask & (1 << bar) != 0 {

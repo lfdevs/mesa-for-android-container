@@ -1,6 +1,5 @@
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
-glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
@@ -151,3 +150,7 @@ spec@arb_fragment_layer_viewport@layer-gs-writes-out-of-range,Fail
 # glcts update
 KHR-GLES3.clip_distance.coverage,Fail
 KHR-GLES3.cull_distance.functional,Fail
+
+# since hetzner migration
+spec@ext_external_objects@vk-ping-pong-multi-sem,Fail
+spec@ext_external_objects@vk-ping-pong-single-sem,Crash

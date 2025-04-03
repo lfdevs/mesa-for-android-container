@@ -114,7 +114,7 @@ static void si_pc_emit_start(struct si_context *sctx, struct si_resource *buffer
    radeon_begin(cs);
    radeon_set_uconfig_reg(R_036020_CP_PERFMON_CNTL,
                           S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_DISABLE_AND_RESET));
-   radeon_event_write(V_028A90_PERFCOUNTER_STOP);
+   radeon_event_write(V_028A90_PERFCOUNTER_START);
    radeon_set_uconfig_reg(R_036020_CP_PERFMON_CNTL,
                           S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_START_COUNTING));
    radeon_end();

@@ -230,7 +230,7 @@ cleanup
 # upload artifacts
 if [ -n "$S3_RESULTS_UPLOAD" ]; then
   tar --zstd -cf results.tar.zst results/;
-  ci-fairy s3cp --token-file "${S3_JWT_FILE}" results.tar.zst https://"$S3_RESULTS_UPLOAD"/results.tar.zst;
+  s3_upload results.tar.zst https://"$S3_RESULTS_UPLOAD"/
 fi
 
 # We still need to echo the hwci: mesa message, as some scripts rely on it, such

@@ -101,7 +101,7 @@ radv_choose_spi_color_format(const struct radv_device *device, VkFormat vk_forma
                              bool blend_need_alpha)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct util_format_description *desc = vk_format_description(vk_format);
+   const struct util_format_description *desc = radv_format_description(vk_format);
    bool use_rbplus = pdev->info.rbplus_allowed;
    struct ac_spi_color_formats formats = {0};
    unsigned format, ntype, swap;
@@ -125,7 +125,7 @@ radv_choose_spi_color_format(const struct radv_device *device, VkFormat vk_forma
 static bool
 format_is_int8(VkFormat format)
 {
-   const struct util_format_description *desc = vk_format_description(format);
+   const struct util_format_description *desc = radv_format_description(format);
    int channel = vk_format_get_first_non_void_channel(format);
 
    return channel >= 0 && desc->channel[channel].pure_integer && desc->channel[channel].size == 8;
@@ -134,7 +134,7 @@ format_is_int8(VkFormat format)
 static bool
 format_is_int10(VkFormat format)
 {
-   const struct util_format_description *desc = vk_format_description(format);
+   const struct util_format_description *desc = radv_format_description(format);
 
    if (desc->nr_channels != 4)
       return false;
@@ -148,7 +148,7 @@ format_is_int10(VkFormat format)
 static bool
 format_is_float32(VkFormat format)
 {
-   const struct util_format_description *desc = vk_format_description(format);
+   const struct util_format_description *desc = radv_format_description(format);
    int channel = vk_format_get_first_non_void_channel(format);
 
    return channel >= 0 && desc->channel[channel].type == UTIL_FORMAT_TYPE_FLOAT && desc->channel[channel].size == 32;

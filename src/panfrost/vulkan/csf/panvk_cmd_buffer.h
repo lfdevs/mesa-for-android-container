@@ -382,8 +382,6 @@ struct panvk_cmd_buffer {
    struct panvk_pool tls_pool;
    struct list_head push_sets;
 
-   uint32_t flush_id;
-
    struct {
       struct u_trace uts[PANVK_SUBQUEUE_COUNT];
    } utrace;

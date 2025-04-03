@@ -432,7 +432,7 @@ panvk_GetImageMemoryRequirements2(VkDevice device,
       vk_find_struct_const(pInfo->pNext, IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO);
    const bool disjoint = is_disjoint(image);
    const VkImageAspectFlags aspects =
-      disjoint ? plane_info->planeAspect : image->vk.aspects;
+      plane_info ? plane_info->planeAspect : image->vk.aspects;
    uint8_t plane = panvk_plane_index(image->vk.format, aspects);
    const uint64_t size =
       disjoint ? image->planes[plane].layout.data_size :

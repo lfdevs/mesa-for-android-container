@@ -34,6 +34,12 @@ radv_format_to_pipe_format(VkFormat vkformat)
    }
 }
 
+static inline const struct util_format_description *
+radv_format_description(VkFormat format)
+{
+   return util_format_description(radv_format_to_pipe_format(format));
+}
+
 /**
  * Return the index of the first non-void channel
  * -1 if no non-void channels

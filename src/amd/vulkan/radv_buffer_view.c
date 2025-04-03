@@ -28,7 +28,7 @@ radv_make_texel_buffer_descriptor(struct radv_device *device, uint64_t va, VkFor
    unsigned stride;
    enum pipe_swizzle swizzle[4];
 
-   desc = vk_format_description(vk_format);
+   desc = radv_format_description(vk_format);
    stride = desc->block.bits / 8;
 
    radv_compose_swizzle(desc, NULL, swizzle);

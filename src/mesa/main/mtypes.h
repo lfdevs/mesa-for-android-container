@@ -889,6 +889,8 @@ struct gl_sampler_object
 
    uint8_t glclamp_mask; /**< mask of GL_CLAMP wraps active */
 
+   bool DeletePending; /**< true if sampler object is removed from the hash */
+
    /** GL_ARB_bindless_texture */
    bool HandleAllocated;
    struct util_dynarray Handles;
@@ -932,6 +934,7 @@ struct gl_texture_object
    GLboolean _IsFloat;         /**< GL_OES_float_texture */
    GLboolean _IsHalfFloat;     /**< GL_OES_half_float_texture */
    bool HandleAllocated;       /**< GL_ARB_bindless_texture */
+   bool DeletePending;         /**< true if texture object is removed from the hash */
 
    /* This should not be restored by glPopAttrib: */
    bool StencilSampling;       /**< Should we sample stencil instead of depth? */

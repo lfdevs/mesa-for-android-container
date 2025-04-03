@@ -1095,7 +1095,7 @@ vn_GetDeviceImageMemoryRequirements(
    if (cacheable) {
       uint32_t plane = 0;
       if (pInfo->pCreateInfo->flags & VK_IMAGE_CREATE_DISJOINT_BIT)
-         vn_image_get_plane(pInfo->planeAspect);
+         plane = vn_image_get_plane(pInfo->planeAspect);
 
       const struct vn_image_memory_requirements *cached_reqs =
          vn_image_get_reqs_from_cache(dev, key, plane);

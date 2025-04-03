@@ -2258,6 +2258,7 @@ vk_video_encode_h264_slice_header(const StdVideoEncodeH264PictureInfo *pic_info,
       assert(is_aligned);
    }
 
+   vl_bitstream_rbsp_trailing(&enc);
    vl_bitstream_flush(&enc);
    *data_size_ptr += vl_bitstream_get_byte_count(&enc);
    vl_bitstream_encoder_free(&enc);

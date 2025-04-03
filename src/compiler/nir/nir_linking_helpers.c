@@ -1171,7 +1171,9 @@ nir_clone_uniform_variable(nir_shader *nir, nir_variable *uniform, bool spirv)
    nir_foreach_variable_with_modes(v, nir, uniform->data.mode) {
       if ((spirv && uniform->data.mode & nir_var_mem_ubo &&
            v->data.binding == uniform->data.binding) ||
-          (!spirv && !strcmp(uniform->name, v->name))) {
+          (!spirv &&
+           ((!strcmp(uniform->name, v->name) && !uniform->data.explicit_binding && !v->data.explicit_binding) ||
+            (uniform->data.explicit_binding && v->data.explicit_binding && v->data.binding == uniform->data.binding)))) {
          new_var = v;
          break;
       }

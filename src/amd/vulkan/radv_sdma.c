@@ -204,7 +204,7 @@ radv_sdma_get_metadata_config(const struct radv_device *const device, const stru
    }
 
    const VkFormat format = vk_format_get_aspect_format(image->vk.format, aspect_mask);
-   const struct util_format_description *desc = vk_format_description(format);
+   const struct util_format_description *desc = radv_format_description(format);
 
    const uint32_t data_format = ac_get_cb_format(pdev->info.gfx_level, radv_format_to_pipe_format(format));
    const uint32_t alpha_is_on_msb = ac_alpha_is_on_msb(&pdev->info, radv_format_to_pipe_format(format));
@@ -212,7 +212,7 @@ radv_sdma_get_metadata_config(const struct radv_device *const device, const stru
    const uint32_t surface_type = radv_sdma_surface_type_from_aspect_mask(aspect_mask);
    const uint32_t max_comp_block_size = surf->u.gfx9.color.dcc.max_compressed_block_size;
    const uint32_t max_uncomp_block_size = radv_get_dcc_max_uncompressed_block_size(device, image);
-   const uint32_t pipe_aligned = surf->u.gfx9.color.dcc.pipe_aligned;
+   const uint32_t pipe_aligned = radv_htile_enabled(image, subresource.mipLevel) || surf->u.gfx9.color.dcc.pipe_aligned;
 
    return data_format | alpha_is_on_msb << 8 | number_type << 9 | surface_type << 12 | max_comp_block_size << 24 |
           max_uncomp_block_size << 26 | pipe_aligned << 31;
@@ -220,10 +220,11 @@ radv_sdma_get_metadata_config(const struct radv_device *const device, const stru
 
 static uint32_t
 radv_sdma_get_tiled_info_dword(const struct radv_device *const device, const struct radv_image *const image,
-                               const struct radeon_surf *const surf, const VkImageSubresourceLayers subresource)
+                               const struct radeon_surf *const surf, const VkImageSubresourceLayers subresource,
+                               const VkImageAspectFlags aspect_mask)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const uint32_t bpe = radv_sdma_get_bpe(image, subresource.aspectMask);
+   const uint32_t bpe = radv_sdma_get_bpe(image, aspect_mask);
    const uint32_t element_size = util_logbase2(bpe);
    const uint32_t swizzle_mode = surf->has_stencil ? surf->u.gfx9.zs.stencil_swizzle_mode : surf->u.gfx9.swizzle_mode;
    const enum gfx9_resource_type dimension = radv_sdma_surface_resource_type(device, surf);
@@ -309,7 +310,7 @@ radv_sdma_get_surf(const struct radv_device *const device, const struct radv_ima
 
       info.va = (va + surf_offset) | surf->tile_swizzle << 8;
 
-      info.info_dword = radv_sdma_get_tiled_info_dword(device, image, surf, subresource);
+      info.info_dword = radv_sdma_get_tiled_info_dword(device, image, surf, subresource, aspect_mask);
       info.header_dword = radv_sdma_get_tiled_header_dword(device, image, subresource);
 
       if (pdev->info.sdma_supports_compression &&

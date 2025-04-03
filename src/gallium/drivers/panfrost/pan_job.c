@@ -789,11 +789,12 @@ panfrost_batch_adjust_stack_size(struct panfrost_batch *batch)
 
    for (unsigned i = 0; i < PIPE_SHADER_TYPES; ++i) {
       struct panfrost_compiled_shader *ss = ctx->prog[i];
+      struct panfrost_compiled_shader *xfb_ss =
+         ctx->uncompiled[i] ? ctx->uncompiled[i]->xfb : NULL;
 
-      if (!ss)
-         continue;
-
-      batch->stack_size = MAX2(batch->stack_size, ss->info.tls_size);
+      batch->stack_size = MAX3(batch->stack_size,
+                               ss ? ss->info.tls_size : 0,
+                               xfb_ss ? xfb_ss->info.tls_size : 0);
    }
 }
 

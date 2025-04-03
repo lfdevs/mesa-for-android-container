@@ -937,7 +937,7 @@ panvk_queue_submit_init_cmdbufs(struct panvk_queue_submit *submit,
                .queue_index = j,
                .stream_size = cs_root_chunk_size(b),
                .stream_addr = cs_root_chunk_gpu_addr(b),
-               .latest_flush = cmdbuf->flush_id,
+               .latest_flush = panthor_kmod_get_flush_id(dev->kmod.dev),
             };
       }
 

@@ -1347,8 +1347,7 @@ bind_buffer_object(struct gl_context *ctx,
 
    /* Get pointer to old buffer object (to be unbound) */
    oldBufObj = *bindTarget;
-   GLuint old_name = oldBufObj && !oldBufObj->DeletePending ? oldBufObj->Name : 0;
-   if (unlikely(old_name == buffer))
+   if (unlikely(_mesa_is_same_buffer_object(oldBufObj, buffer)))
       return;   /* rebinding the same buffer object- no change */
 
    newBufObj = _mesa_lookup_bufferobj(ctx, buffer);
@@ -1588,7 +1587,7 @@ set_buffer_multi_binding(struct gl_context *ctx,
 {
    struct gl_buffer_object *bufObj;
 
-   if (binding->BufferObject && binding->BufferObject->Name == buffers[idx])
+   if (_mesa_is_same_buffer_object(binding->BufferObject, buffers[idx]))
       bufObj = binding->BufferObject;
    else {
       bool error;
@@ -4698,7 +4697,7 @@ bind_xfb_buffers(struct gl_context *ctx,
          size = sizes[i];
       }
 
-      if (boundBufObj && boundBufObj->Name == buffers[i])
+      if (_mesa_is_same_buffer_object(boundBufObj, buffers[i]))
          bufObj = boundBufObj;
       else {
          bool error;

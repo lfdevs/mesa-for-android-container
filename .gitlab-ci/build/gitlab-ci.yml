@@ -298,6 +298,8 @@ shader-db:
     paths:
       - shader-db
   timeout: 15m
+  tags:
+    - kvm  # FIXME: this is a hack, should not be needed
 
 # Test a release build with -Werror so new warnings don't sneak in.
 debian-release:

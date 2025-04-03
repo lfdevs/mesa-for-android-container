@@ -419,6 +419,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
       goto error;
    }
 
+   enc->fw_version = (sscreen->info.vce_fw_version & (0xff << 24)) >> 24;
    si_vce_52_init(enc);
 
    return &enc->base;
@@ -435,17 +436,8 @@ error:
  */
 bool si_vce_is_fw_version_supported(struct si_screen *sscreen)
 {
-   switch (sscreen->info.vce_fw_version) {
-   case FW_52_0_3:
-   case FW_52_4_3:
-   case FW_52_8_3:
-      return true;
-   default:
-      if ((sscreen->info.vce_fw_version & (0xff << 24)) >= FW_53)
-         return true;
-      else
-         return false;
-   }
+   unsigned version = (sscreen->info.vce_fw_version & (0xff << 24)) >> 24;
+   return version >= 40;
 }
 
 /**

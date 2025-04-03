@@ -2763,7 +2763,8 @@ static uint64_t gfx12_estimate_size(const ADDR3_COMPUTE_SURFACE_INFO_INPUT *in,
 static unsigned gfx12_select_swizzle_mode(struct ac_addrlib *addrlib,
                                           const struct radeon_info *info,
                                           const struct radeon_surf *surf,
-                                          const ADDR3_COMPUTE_SURFACE_INFO_INPUT *in)
+                                          const ADDR3_COMPUTE_SURFACE_INFO_INPUT *in,
+                                          uint64_t flags)
 {
    ADDR3_GET_POSSIBLE_SWIZZLE_MODE_INPUT get_in = {0};
    ADDR3_GET_POSSIBLE_SWIZZLE_MODE_OUTPUT get_out = {0};
@@ -2780,9 +2781,9 @@ static unsigned gfx12_select_swizzle_mode(struct ac_addrlib *addrlib,
    get_in.numMipLevels = in->numMipLevels;
    get_in.numSamples = in->numSamples;
 
-   if (surf && surf->flags & RADEON_SURF_PREFER_4K_ALIGNMENT) {
+   if (flags & RADEON_SURF_PREFER_4K_ALIGNMENT) {
       get_in.maxAlign = 4 * 1024;
-   } else if (surf && surf->flags & RADEON_SURF_PREFER_64K_ALIGNMENT) {
+   } else if (flags & RADEON_SURF_PREFER_64K_ALIGNMENT) {
       get_in.maxAlign = 64 * 1024;
    } else {
       get_in.maxAlign = info->has_dedicated_vram ? (256 * 1024) : (64 * 1024);
@@ -3063,7 +3064,7 @@ static bool gfx12_compute_hiz_his_info(struct ac_addrlib *addrlib, const struct 
    /* Compute the HiZ/HiS size. */
    in.width = align(DIV_ROUND_UP(surf_in->width, 8), 2);
    in.height = align(DIV_ROUND_UP(surf_in->height, 8), 2);
-   in.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, NULL, &in);
+   in.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, NULL, &in, surf->flags);
 
    int ret = Addr3ComputeSurfaceInfo(addrlib->handle, &in, &out);
    if (ret != ADDR_OK)
@@ -3265,7 +3266,7 @@ static bool gfx12_compute_surface(struct ac_addrlib *addrlib, const struct radeo
    } else if (surf->flags & RADEON_SURF_VIDEO_REFERENCE) {
       AddrSurfInfoIn.swizzleMode = ADDR3_256B_2D;
    } else {
-      AddrSurfInfoIn.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, surf, &AddrSurfInfoIn);
+      AddrSurfInfoIn.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, surf, &AddrSurfInfoIn, surf->flags);
    }
 
    /* Force the linear pitch from 128B (default) to 256B for multi-GPU interop. This only applies

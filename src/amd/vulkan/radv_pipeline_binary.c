@@ -220,7 +220,8 @@ radv_create_pipeline_binary_from_rt_shader(struct radv_device *device, const VkA
    };
 
    memcpy(header.stage_sha1, stage_sha1, sizeof(header.stage_sha1));
-   memcpy(&header.stage_info, rt_stage_info, sizeof(header.stage_info));
+   if (rt_stage_info)
+      memcpy(&header.stage_info, rt_stage_info, sizeof(header.stage_info));
 
    blob_init(&blob);
    blob_write_bytes(&blob, &header, sizeof(header));

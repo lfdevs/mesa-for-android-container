@@ -6,6 +6,8 @@ zink-lvp:
     - .test-gl
     - .deqp-test
     - .zink-lvp-test
+  tags:
+    - kvm  # FIXME: this is a hack, should not be needed
   variables:
     DEQP_SUITE: zink-lvp
     DEQP_FRACTION: 8

@@ -513,6 +513,6 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
 bool ac_nir_lower_image_opcodes(nir_shader *nir)
 {
    return nir_shader_instructions_pass(nir, lower_image_opcodes,
-                                       nir_metadata_control_flow,
+                                       nir_metadata_none,
                                        NULL);
 }

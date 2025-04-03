@@ -662,6 +662,12 @@ radv_write_buffer_cp(VkCommandBuffer commandBuffer, VkDeviceAddress addr, void *
 static void
 radv_flush_buffer_write_cp(VkCommandBuffer commandBuffer)
 {
+   VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   if (pdev->info.cp_sdma_ge_use_system_memory_scope)
+      cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_INV_L2;
 }
 
 static void

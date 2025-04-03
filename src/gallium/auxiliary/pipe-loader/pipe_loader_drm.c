@@ -310,6 +310,24 @@ pipe_loader_drm_release(struct pipe_loader_device **dev)
 int
 pipe_loader_get_compatible_render_capable_device_fd(int kms_only_fd)
 {
+   unsigned int n_devices = 0;
+   int result = -1;
+   int *gpu_fds = pipe_loader_get_compatible_render_capable_device_fds(kms_only_fd, &n_devices);
+
+   if (n_devices > 0) {
+      result = gpu_fds[0];
+      for(unsigned int i = 1; i < n_devices; i++)
+         close(gpu_fds[i]);
+   }
+
+   free(gpu_fds);
+
+   return result;
+}
+
+int *
+pipe_loader_get_compatible_render_capable_device_fds(int kms_only_fd, unsigned int *n_devices)
+{
    bool is_platform_device;
    struct pipe_loader_device *dev;
    const char * const drivers[] = {
@@ -335,22 +353,22 @@ pipe_loader_get_compatible_render_capable_device_fd(int kms_only_fd)
    };
 
    if (!pipe_loader_drm_probe_fd(&dev, kms_only_fd, false))
-      return -1;
+      return NULL;
    is_platform_device = (dev->type == PIPE_LOADER_DEVICE_PLATFORM);
    pipe_loader_release(&dev, 1);
 
    /* For display-only devices that are not on the platform bus, we can't assume
     * that any of the rendering devices are compatible. */
    if (!is_platform_device)
-      return -1;
+      return NULL;
 
    /* For platform display-only devices, we try to find a render-capable device
     * on the platform bus and that should be compatible with the display-only
     * device. */
    if (ARRAY_SIZE(drivers) == 0)
-      return -1;
+      return NULL;
 
-   return loader_open_render_node_platform_device(drivers, ARRAY_SIZE(drivers));
+   return loader_open_render_node_platform_devices(drivers, ARRAY_SIZE(drivers), n_devices);
 }
 
 static const struct driOptionDescription *

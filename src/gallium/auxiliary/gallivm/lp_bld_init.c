@@ -89,7 +89,8 @@ create_pass_manager(struct gallivm_state *gallivm)
 void
 gallivm_free_ir(struct gallivm_state *gallivm)
 {
-   lp_passmgr_dispose(gallivm->passmgr);
+   if (gallivm->passmgr)
+      lp_passmgr_dispose(gallivm->passmgr);
 
    if (gallivm->engine) {
       /* This will already destroy any associated module */

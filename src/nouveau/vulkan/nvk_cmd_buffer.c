@@ -48,7 +48,7 @@ nvk_destroy_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer)
    nvk_descriptor_state_fini(cmd, &cmd->state.cs.descriptors);
 
    nvk_cmd_pool_free_mem_list(pool, &cmd->owned_mem);
-   nvk_cmd_pool_free_mem_list(pool, &cmd->owned_gart_mem);
+   nvk_cmd_pool_free_gart_mem_list(pool, &cmd->owned_gart_mem);
    util_dynarray_fini(&cmd->pushes);
    vk_command_buffer_finish(&cmd->vk);
    vk_free(&pool->vk.alloc, cmd);

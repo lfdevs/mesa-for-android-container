@@ -1,0 +1,230 @@
+Mesa 25.0.3 Release Notes / 2025-04-02
+======================================
+
+Mesa 25.0.3 is a bug fix release which fixes bugs found since the 25.0.2 release.
+
+Mesa 25.0.3 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.0.3 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    TBD.
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- [RADV][RDNA3][Phoenix3][APU] NARAKA: BLADEPOINT (1203220) gpu hang reproducible (ice/water regression mesa 24.1 bisected SAMPLE_MASK_TRACKER_WATERMARK=15) random (maybe other apps/games)
+- GPU hangs running Octopath Traveler II with 780M
+- GPU crash on Radeon 780M with Tales of Arise
+- brw: Hit unreachable nir_op_fsign case that brw_nir_lower_fsign missed
+- The Last of Us - shadows flickering on gfx1201 without nohiz flag
+- anv: Dark pattern overlayed on objects in Eve Online DX11 mode on BMG
+- Mesa 25 removes VA-API encoding for R9 390
+- Video stuttering / anv: extend implicit fencing support
+- anv, bmg: Visual issues in AC Origins, Odyssey and Fenyx Rising when dxvk doesn't export PointSize
+- [ANV][LNL] - A Game About Digging A Hole (3244220) - Title throws an assertion failure on launch.
+- anv/video: Timestamps are exposed in video encode queue, but it crashes
+- Getting a crash with manually built llvmpipe (OpenGL)
+- [RadeonSI] Blender assetshelf icons are borken in mesa >= 25.0.0
+- radeonsi regression after 24.3.4
+- misc OpenGL CTS failures
+- glBindVertexBuffer regression due to ID reuse
+
+
+Changes
+-------
+
+Caio Oliveira (1):
+
+- brw: Fix decoding of 3-src destination stride in EU validation
+
+Connor Abbott (3):
+
+- tu: Fix GMEM offset for multisample layered separate stencil
+- tu: Fix size of frag_size_ir3 and frag_offset_ir3 driver params
+- tu: Fix reported FDM fragment size with multiview
+
+Daniel Schürmann (1):
+
+- aco: don't assume that demote doesn't cause an empty exec mask
+
+Daniel Stone (1):
+
+- ci: Re-enable trace jobs with updated Piglit
+
+Dave Airlie (2):
+
+- gallivm: check for avx512vbmi and tell LLVM the correct answer.
+- nak: add reads after setting writes
+
+David Rosca (5):
+
+- radeonsi/vce: Support old VCE firmware
+- gallium/vl: Fix rotation with scaling for compute shaders
+- gallium/vl: Fix mirror with rotation for compute shaders
+- frontends/va: Don't ignore rotation and mirror for conversions to RGB
+- radv: Add radv_format_description to remap 10/12bit formats to 16bit
+
+Eric Engestrom (11):
+
+- docs: add sha sum for 25.0.2
+- .pick_status.json: Update to 85983e060ccca163ff5c4aad51c7082b7ae8c4a0
+- ci/piglit: drop usage of s3cp for a simple download
+- ci: always abort if the curl download fails
+- ci: replace broken s3cp command with a simple curl call
+- ci: run shader-db & zink-lvp on kvm runners
+- pick-ui: fix parsing of multiple \`backport-to:` lines
+- .pick_status.json: Update to e3433489f81a75c278ff70cc5700cd028447bf76
+- [25.0 only] update ci expectations
+- .pick_status.json: Update to b60d816d6ee35cc1bfa2d2f6aed59104a09ec11d
+- .pick_status.json: Update to 0d2ebca39fd2a68bfb64dc2196e442e25dc90334
+
+Eric R. Smith (1):
+
+- panfrost: consider xfb shader when calculating thread local storage size
+
+Erik Faye-Lund (3):
+
+- panfrost: avoid accidental aliasing
+- panvk: check for texture-compression support
+- mesa/main: fix regression in extension-checking
+
+Faith Ekstrand (10):
+
+- nak: Insert the annotation in the right spot in assign_regs
+- nak: Always copy sources when handling vec/pack/mov ops
+- nak: Fix a SM check for OpPCnt
+- nvk: Free owned_gart_mem correctly
+- nvk: Fix a Volta check
+- nouveau/mme/fermi: Don't allow STATE and EMIT on the same op
+- nvk: Use the right sample mask for 8x/4pass on Maxwell A
+- vulkan/wsi: Signal buffer memory object when blitting
+- nvk: Use max_image_dimension for maxFramebufferWidth/Height
+- nvk: Disable 32k images on Pascal A
+
+Hyunjun Ko (1):
+
+- vulkan/video: Do byte-alignment when building a h264 slice header
+
+Ian Romanick (1):
+
+- brw/nir: Lower fsign again after last call to brw_nir_optimize
+
+Job Noorman (1):
+
+- ir3/legalize: take wrmask into account for delay updates
+
+Jordan Justen (2):
+
+- intel/dev: Add BMG PCI IDs (0xe210, 0xe215, 0xe216)
+- intel/dev: Add BMG 0xe211 PCI ID
+
+Lionel Landwerlin (4):
+
+- anv: fix end of pipe timestamp query writes
+- anv: disable replication when we don't have both VS/FS stages
+- brw: always write the VUE header
+- anv: limit implict write with drirc
+
+Lucas Stach (1):
+
+- kmsro: look for graphics capable screen as renderonly device
+
+Natalie Vock (2):
+
+- radv/rt: Flush CP writes from the common BVH framework with INV_L2 on GFX12
+- vulkan/bvh: Move first PLOC task_count fetch inside PHASE
+
+Paulo Zanoni (1):
+
+- drirc/anv: DiggingGame.exe needs force_vk_vendor=-1
+
+Pierre-Eric Pelloux-Prayer (2):
+
+- ac/nir: fix nir_metadata value of ac_nir_lower_image_opcodes
+- radeonsi: use composed swizzle in cdna_emu_make_image_descriptor
+
+Rebecca Mckeever (1):
+
+- panvk: Remove lower_tg4_broadcom_swizzle from panvk_preprocess_nir()
+
+Rhys Perry (1):
+
+- aco/ra: fix free register counting when moving variables
+
+Robert Mader (3):
+
+- llvmpipe: Take offset into account when importing dmabufs
+- llvmpipe: Free dummy_dmabuf on shutdown
+- gallivm: Re-add check for passmgr before disposing it
+
+Samuel Pitoiset (8):
+
+- radv: fix creating pipeline binary from the traversal shader
+- radv: fix bpe for the stencil aspect of depth/stencil copies on transfer queue
+- radv: fix compresed depth/stencil copies on transfer queue
+- radv/meta: fix color<->depth/stencil image copies
+- radv: do not trigger FCE or FMASK decompress on compute queue
+- ac/surface: fix selecting preferred alignments for HiZ/HiS on GFX12
+- Revert "radv: program SAMPLE_MASK_TRACKER_WATERMARK optimally for GFX11 APUs"
+- Revert "radeonsi/gfx11: program SAMPLE_MASK_TRACKER_WATERMARK optimally for APUs"
+
+Taras Pisetskyi (1):
+
+- anv,driconf: Add sampler coordinate precision workaround for EVE Online
+
+Timothy Arceri (9):
+
+- mesa: fix reuse of deleted buffer object
+- mesa: fix reuse of deleted texture object
+- mesa: fix potential race condition in with TexObjects
+- mesa: fix reuse of deleted sampler object
+- mesa: fix potential race conditions in with FrameBuffers
+- mesa: fix potential race condition in with RenderBuffers
+- mesa: fix potential race condition in with ATIShaders
+- mesa: fix potential race condition in with Programs
+- nir: fix uniform cloning helper
+
+Tomeu Vizoso (2):
+
+- egl/surfaceless: Only choose drivers that expose the graphics capability
+- kopper: Explicitly choose zink
+
+Trigger Huang (1):
+
+- radeonsi: Fix perfcounter start event in si_pc_emit_start
+
+Valentine Burley (1):
+
+- ci: Add missing kvm runner tags
+
+Yiwei Zhang (6):
+
+- docs: demote VK_KHR_shader_relaxed_extended_instruction
+- venus: fix unexpected ring alive status expire upon owner thread switch
+- venus: fix ahb usage caching
+- venus: fix maint4 multi-planar memory requirements
+- panvk/csf: rework cache flush reduction
+- panvk: fix memory requirement query for aliased disjoint image
+
+irql-notlessorequal (1):
+
+- hasvk: Fix non-functioning version override.

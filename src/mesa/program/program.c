@@ -279,6 +279,14 @@ _mesa_delete_program(struct gl_context *ctx, struct gl_program *prog)
    ralloc_free(prog);
 }
 
+struct gl_program *
+_mesa_lookup_program_locked(struct gl_context *ctx, GLuint id)
+{
+   if (id)
+      return (struct gl_program *) _mesa_HashLookupLocked(&ctx->Shared->Programs, id);
+   else
+      return NULL;
+}
 
 /**
  * Return the gl_program object for a given ID.

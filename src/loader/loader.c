@@ -174,15 +174,45 @@ int
 loader_open_render_node_platform_device(const char * const drivers[],
                                         unsigned int n_drivers)
 {
+   unsigned int n_devices;
+   int *fds = loader_open_render_node_platform_devices(drivers, n_drivers, &n_devices);
+   int fd = -1;
+
+   if (n_devices > 0) {
+      fd = fds[0];
+      free(fds);
+   }
+
+   return fd;
+}
+
+/**
+ * Goes through all the platform devices whose driver is on the given list and
+ * try to open their render node. It returns an array with the fds of all the
+ * devices that it can open.
+ *
+ * Caller must close the returned fds and free the array.
+ */
+int *
+loader_open_render_node_platform_devices(const char * const drivers[],
+                                         unsigned int n_drivers,
+                                         unsigned int *n_devices)
+{
    drmDevicePtr devices[MAX_DRM_DEVICES], device;
    int num_devices, fd = -1;
    int i, j;
    bool found = false;
+   int *result;
 
    num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
-   if (num_devices <= 0)
-      return -ENOENT;
+   if (num_devices <= 0) {
+      *n_devices = 0;
+      return NULL;
+   }
 
+   result = calloc(n_drivers, num_devices);
+
+   *n_devices = 0;
    for (i = 0; i < num_devices; i++) {
       device = devices[i];
 
@@ -206,22 +236,23 @@ loader_open_render_node_platform_device(const char * const drivers[],
                break;
             }
          }
-         if (!found) {
-            drmFreeVersion(version);
-            close(fd);
-            continue;
-         }
 
          drmFreeVersion(version);
-         break;
+
+         if (found)
+            result[(*n_devices)++] = fd;
+         else
+            close(fd);
       }
    }
    drmFreeDevices(devices, num_devices);
 
-   if (i == num_devices)
-      return -ENOENT;
+   if (*n_devices == 0) {
+      free(result);
+      return NULL;
+   }
 
-   return fd;
+   return result;
 }
 
 bool

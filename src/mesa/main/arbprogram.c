@@ -77,22 +77,26 @@ lookup_or_create_program(GLuint id, GLenum target, const char* caller)
    }
    else {
       /* Bind a user program */
-      newProg = _mesa_lookup_program(ctx, id);
+      _mesa_HashLockMutex(&ctx->Shared->Programs);
+      newProg = _mesa_lookup_program_locked(ctx, id);
       if (!newProg || newProg == &_mesa_DummyProgram) {
          /* allocate a new program now */
          newProg = ctx->Driver.NewProgram(ctx, _mesa_program_enum_to_shader_stage(target),
                                           id, true);
          if (!newProg) {
             _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
+            _mesa_HashUnlockMutex(&ctx->Shared->Programs);
             return NULL;
          }
-         _mesa_HashInsert(&ctx->Shared->Programs, id, newProg);
+         _mesa_HashInsertLocked(&ctx->Shared->Programs, id, newProg);
       }
       else if (newProg->Target != target) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "%s(target mismatch)", caller);
+         _mesa_HashUnlockMutex(&ctx->Shared->Programs);
          return NULL;
       }
+      _mesa_HashUnlockMutex(&ctx->Shared->Programs);
    }
    return newProg;
 }

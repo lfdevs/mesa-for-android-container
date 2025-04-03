@@ -223,7 +223,6 @@ vlVaPostProcCompositor(vlVaDriver *drv,
       }
    } else {
       /* YUV/RGB -> RGB */
-      vl_compositor_clear_layers(&drv->cstate);
       vl_compositor_set_buffer_layer(&drv->cstate, &drv->compositor, 0, src,
                                      &src_rect, NULL, deinterlace);
       vl_compositor_set_layer_dst_area(&drv->cstate, 0, &dst_rect);

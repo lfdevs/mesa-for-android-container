@@ -1,3 +1,10 @@
+mesa (25.0.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * patches: Further fixes for spam caused by gfxstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 03 Apr 2025 13:47:45 +0300
+
 mesa (25.0.2-1) unstable; urgency=medium
 
   * New upstream release.
