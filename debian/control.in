@@ -1,7 +1,8 @@
 Source: mesa
 Section: graphics
 Priority: optional
-Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.4
 Build-Depends:
@@ -292,7 +293,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
 Pre-Depends: ${misc:Pre-Depends}
-Provides: libglapi-mesa
 Multi-Arch: same
 Description: shared infrastructure for Mesa drivers
  This package contains libgallium, a private library shared between
