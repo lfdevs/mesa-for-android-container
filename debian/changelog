@@ -1,3 +1,10 @@
+mesa (25.0.3-1ubuntu2) plucky; urgency=medium
+
+  [ Daniel van Vugt ]
+  * Add drisw-Avoid-crashing-when-swrast_loader-NULL.patch (LP: #2101817)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 09 Apr 2025 09:48:08 +0300
+
 mesa (25.0.3-1ubuntu1) plucky; urgency=medium
 
   * Merge from Debian. (LP: #2106126)
