@@ -26,6 +26,28 @@ lower_txs(nir_builder *b, nir_instr *instr, UNUSED void *data)
    return true;
 }
 
+static bool
+legalize_txf_lod(nir_builder *b, nir_instr *instr, UNUSED void *data)
+{
+   if (instr->type != nir_instr_type_tex)
+      return false;
+
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+
+   if (tex->op != nir_texop_txf)
+      return false;
+
+   b->cursor = nir_before_instr(instr);
+
+   int lod_index = nir_tex_instr_src_index(tex, nir_tex_src_lod);
+   assert(lod_index >= 0);
+   nir_def *lod = tex->src[lod_index].src.ssa;
+
+   nir_src_rewrite(&tex->src[lod_index].src, nir_i2f32(b, lod));
+
+   return true;
+}
+
 bool
 etna_nir_lower_texture(nir_shader *s, struct etna_shader_key *key)
 {
@@ -47,6 +69,9 @@ etna_nir_lower_texture(nir_shader *s, struct etna_shader_key *key)
 
    NIR_PASS(progress, s, nir_shader_instructions_pass, lower_txs,
          nir_metadata_control_flow, NULL);
+
+   NIR_PASS(progress, s, nir_shader_instructions_pass, legalize_txf_lod,
+      nir_metadata_control_flow, NULL);
 
    return progress;
 }

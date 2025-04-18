@@ -1350,6 +1350,11 @@ SPDX-License-Identifier: MIT
 	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
 </bitset>
 
+<bitset name="txf" extends="#instruction-tex-src0-src1-src2">
+	<pattern low="0" high="5">001001</pattern> <!-- OPC -->
+	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
+</bitset>
+
 <bitset name="imadlo0" extends="#instruction-alu-src0-src1-src2">
 	<pattern low="0" high="5">001100</pattern> <!-- OPC -->
 	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
