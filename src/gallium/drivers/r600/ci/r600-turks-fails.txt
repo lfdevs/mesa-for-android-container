@@ -1277,14 +1277,6 @@ spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve small dept
 
 spec@ext_framebuffer_multisample@blit-mismatched-formats,Fail
 
-spec@ext_framebuffer_multisample@interpolation 6 centroid-edges,Fail
-spec@ext_framebuffer_multisample@interpolation 8 centroid-edges,Fail
-
-spec@ext_framebuffer_multisample@turn-on-off 2,Fail
-spec@ext_framebuffer_multisample@turn-on-off 4,Fail
-spec@ext_framebuffer_multisample@turn-on-off 6,Fail
-spec@ext_framebuffer_multisample@turn-on-off 8,Fail
-
 spec@ext_framebuffer_object@fbo-blending-formats,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@3,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB,Fail

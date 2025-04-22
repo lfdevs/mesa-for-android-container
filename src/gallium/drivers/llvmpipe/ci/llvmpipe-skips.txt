@@ -32,3 +32,8 @@ spec@arb_timer_query@query gl_timestamp
 # These tests started hitting timeouts when we upgraded LLVM from v11 to 13
 spec@arb_texture_rg@fbo-blending-formats
 spec@ext_framebuffer_object@fbo-blending-formats
+
+# since hetzner migration
+KHR-GL45.tessellation_shader.vertex.vertex_ordering
+KHR-Single-GL45.arrays_of_arrays_gl.SizedDeclarationsPrimitive
+spec@ext_texture_swizzle@ext_texture_swizzle-swizzle

@@ -885,29 +885,6 @@ _get_min_dimensions(GLenum pname)
    }
 }
 
-static bool
-_is_generic_compressed_format(const struct gl_context *ctx,
-                              GLenum intFormat)
-{
-   switch (intFormat) {
-   case GL_COMPRESSED_SRGB:
-   case GL_COMPRESSED_SRGB_ALPHA:
-   case GL_COMPRESSED_SLUMINANCE:
-   case GL_COMPRESSED_SLUMINANCE_ALPHA:
-      return _mesa_has_EXT_texture_sRGB(ctx);
-   case GL_COMPRESSED_RG:
-   case GL_COMPRESSED_RED:
-      return _mesa_is_gles(ctx) ?
-             _mesa_has_EXT_texture_rg(ctx) :
-             _mesa_has_ARB_texture_rg(ctx);
-   case GL_COMPRESSED_RGB:
-   case GL_COMPRESSED_RGBA:
-      return true;
-   default:
-      return false;
-   }
-}
-
 /*
  * Similar to teximage.c:check_multisample_target, but independent of the
  * dimensions.
@@ -1634,7 +1611,7 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
          goto end;
 
       if (_mesa_is_compressed_format(ctx, internalformat) ||
-          _is_generic_compressed_format(ctx, internalformat))
+          _mesa_is_generic_compressed_format(ctx, internalformat))
          goto end;
 
       st_QueryInternalFormat(ctx, target, internalformat, pname,

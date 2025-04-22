@@ -23,6 +23,7 @@
 #ifndef VK_RENDER_PASS_H
 #define VK_RENDER_PASS_H
 
+#include "vk_limits.h"
 #include "vk_object.h"
 
 #ifdef __cplusplus
@@ -170,6 +171,20 @@ struct vk_subpass {
     * This is in the pNext chain of pipeline_info and inheritance_info.
     */
    VkAttachmentSampleCountInfoAMD sample_count_info_amd;
+
+   /** VkRenderingInputAttachmentIndexInfo for this subpass
+    *
+    * This is in the pNext chain of pipeline_info and inheritance_info.
+    *
+    * Also returned by vk_get_pipeline_rendering_ial_info() if
+    * VkGraphicsPipelineCreateInfo::renderPass != VK_NULL_HANDLE.
+    */
+   struct {
+      VkRenderingInputAttachmentIndexInfo info;
+      uint32_t colors[MESA_VK_MAX_COLOR_ATTACHMENTS];
+      uint32_t depth;
+      uint32_t stencil;
+   } ial;
 
    /** VkPipelineRenderingCreateInfo for this subpass
     *
@@ -323,6 +338,22 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vk_render_pass, base, VkRenderPass,
  */
 const VkPipelineRenderingCreateInfo *
 vk_get_pipeline_rendering_create_info(const VkGraphicsPipelineCreateInfo *info);
+
+/** Returns the VkRenderingInputAttachmentIndexInfo for a graphics pipeline
+ *
+ * For render-pass-free drivers, this can be used in the implementation of
+ * vkCreateGraphicsPipelines to get the VkRenderingInputAttachmentIndexInfo.
+ * If VkGraphicsPipelineCreateInfo::renderPass is not VK_NULL_HANDLE, it will
+ * return a representation of the specified subpass as a
+ * VkRenderingInputAttachmentIndexInfo.  If
+ * VkGraphicsPipelineCreateInfo::renderPass
+ * is VK_NULL_HANDLE and there is a VkRenderingInputAttachmentIndexInfo in the
+ * pNext chain of VkGraphicsPipelineCreateInfo, it will return that.
+ *
+ * :param info: |in|  One of the pCreateInfos from vkCreateGraphicsPipelines
+ */
+const VkRenderingInputAttachmentIndexInfo *
+vk_get_pipeline_rendering_ial_info(const VkGraphicsPipelineCreateInfo *info);
 
 /** Returns any extra VkPipelineCreateFlags from the render pass
  *

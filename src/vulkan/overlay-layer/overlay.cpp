@@ -2662,7 +2662,7 @@ static VkResult overlay_CreateInstance(
     * capturing fps data right away.
     */
    instance_data->capture_enabled =
-      instance_data->output_file_fd && instance_data->params.control == NULL;
+      instance_data->params.output_file && instance_data->params.control == NULL;
    instance_data->capture_started = instance_data->capture_enabled;
 
    for (int i = OVERLAY_PARAM_ENABLED_vertices;

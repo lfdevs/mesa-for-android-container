@@ -2130,8 +2130,9 @@ public:
    std::vector<ac_shader_debug_info> debug_info;
 
    std::vector<uint8_t> constant_data;
-   Temp private_segment_buffer;
-   Temp scratch_offset;
+   /* Private segment buffers and scratch offsets. One entry per start/resume block */
+   aco::small_vec<Temp, 2> private_segment_buffers;
+   aco::small_vec<Temp, 2> scratch_offsets;
 
    uint16_t num_waves = 0;
    uint16_t min_waves = 0;

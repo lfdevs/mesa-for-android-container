@@ -47,6 +47,8 @@ enum binding_property {
 struct apply_pipeline_layout_state {
    const struct anv_physical_device *pdevice;
 
+   struct anv_pipeline_bind_map *bind_map;
+
    const struct anv_pipeline_sets_layout *layout;
    nir_address_format desc_addr_format;
    nir_address_format ssbo_addr_format;
@@ -210,6 +212,18 @@ add_tex_src_binding(struct apply_pipeline_layout_state *state,
 
    struct anv_binding_apply_layout *layout =
       add_deref_src_binding(state, tex->src[deref_src_idx].src);
+
+   /* Track input attachments use */
+   nir_variable *var =
+      nir_deref_instr_get_variable(
+         nir_src_as_deref(tex->src[deref_src_idx].src));
+   if (var->data.fb_fetch_output) {
+      assert(var->data.index == NIR_VARIABLE_NO_INDEX ||
+             var->data.index < MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS);
+      const uint32_t index = var->data.index == NIR_VARIABLE_NO_INDEX ?
+         MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS : var->data.index;
+      BITSET_SET(state->bind_map->input_attachments, index);
+   }
 
    /* This is likely a fallout of Wa_14020375314 but hasn't fully be
     * understood by HW people yet.
@@ -2214,6 +2228,7 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
    struct apply_pipeline_layout_state state = {
       .pdevice = pdevice,
       .layout = layout,
+      .bind_map = map,
       .desc_addr_format = bindless_stage ?
                           nir_address_format_64bit_global_32bit_offset :
                           nir_address_format_32bit_index_offset,

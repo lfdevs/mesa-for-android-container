@@ -302,6 +302,41 @@ brw_opt_constant_fold_instruction(const intel_device_info *devinfo, fs_inst *ins
       }
       break;
 
+   case SHADER_OPCODE_BROADCAST:
+      if (inst->src[0].file == IMM) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->force_writemask_all = true;
+         inst->resize_sources(1);
+
+         /* The destination of BROADCAST will always be is_scalar, so the
+          * allocation will always be REG_SIZE * reg_unit. Adjust the
+          * exec_size to match.
+          */
+         inst->exec_size = 8 * reg_unit(devinfo);
+         assert(inst->size_written == inst->dst.component_size(inst->exec_size));
+         progress = true;
+      }
+      break;
+
+   case SHADER_OPCODE_SHUFFLE:
+      if (inst->src[0].file == IMM) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->resize_sources(1);
+         progress = true;
+      }
+      break;
+
+   case FS_OPCODE_DDX_COARSE:
+   case FS_OPCODE_DDX_FINE:
+   case FS_OPCODE_DDY_COARSE:
+   case FS_OPCODE_DDY_FINE:
+      if (is_uniform(inst->src[0]) || inst->src[0].is_scalar) {
+         inst->opcode = BRW_OPCODE_MOV;
+         inst->src[0] = retype(brw_imm_uq(0), inst->dst.type);
+         progress = true;
+      }
+      break;
+
    default:
       break;
    }
@@ -666,6 +701,11 @@ brw_opt_algebraic(fs_visitor &s)
          if (is_uniform(inst->src[0])) {
             inst->opcode = BRW_OPCODE_MOV;
             inst->force_writemask_all = true;
+
+            /* The destination of BROADCAST will always be is_scalar, so the
+             * allocation will always be REG_SIZE * reg_unit. Adjust the
+             * exec_size to match.
+             */
             inst->exec_size = 8 * reg_unit(devinfo);
             assert(inst->size_written == inst->dst.component_size(inst->exec_size));
             inst->resize_sources(1);

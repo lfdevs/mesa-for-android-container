@@ -302,8 +302,11 @@ static VkResult lvp_get_image_format_properties(struct lvp_physical_device *phys
                                              &format_props);
    if (info->tiling == VK_IMAGE_TILING_LINEAR) {
       format_feature_flags = format_props.linearTilingFeatures;
-   } else if (info->tiling == VK_IMAGE_TILING_OPTIMAL ||
-              info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+   } else if (info->tiling == VK_IMAGE_TILING_OPTIMAL) {
+      format_feature_flags = format_props.optimalTilingFeatures;
+   } else if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      if (vk_format_get_plane_count (info->format) > 1)
+        goto unsupported;
       format_feature_flags = format_props.optimalTilingFeatures;
    } else {
       unreachable("bad VkImageTiling");

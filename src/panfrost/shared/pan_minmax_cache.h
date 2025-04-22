@@ -41,14 +41,17 @@ struct panfrost_minmax_cache {
 };
 
 bool panfrost_minmax_cache_get(struct panfrost_minmax_cache *cache,
+                               unsigned index_size,
                                unsigned start, unsigned count,
                                unsigned *min_index, unsigned *max_index);
 
 void panfrost_minmax_cache_add(struct panfrost_minmax_cache *cache,
+                               unsigned index_size,
                                unsigned start, unsigned count,
                                unsigned min_index, unsigned max_index);
 
 void panfrost_minmax_cache_invalidate(struct panfrost_minmax_cache *cache,
+                                      unsigned index_size,
                                       size_t offset, size_t size);
 
 #endif

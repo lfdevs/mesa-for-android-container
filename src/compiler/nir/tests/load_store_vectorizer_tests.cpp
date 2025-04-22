@@ -755,6 +755,20 @@ TEST_F(nir_load_store_vectorize_test, ssbo_store_intersecting)
    ASSERT_EQ(nir_const_value_as_uint(cv[2], 32), 0x21);
 }
 
+TEST_F(nir_load_store_vectorize_test, gitlab_issue_12946)
+{
+   create_store(nir_var_mem_ssbo, 0, 0, 0x1, 32, 2, 0x3);
+   create_store(nir_var_mem_ssbo, 0, 3, 0x2, 32, 1, 0x1);
+
+   nir_validate_shader(b->shader, NULL);
+   ASSERT_EQ(count_intrinsics(nir_intrinsic_store_ssbo), 2);
+
+   /* The original issue was the crash when running the pass. */
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_ssbo));
+
+   EXPECT_EQ(count_intrinsics(nir_intrinsic_store_ssbo), 2);
+}
+
 TEST_F(nir_load_store_vectorize_test, ssbo_store_identical)
 {
    create_store(nir_var_mem_ssbo, 0, 0, 0x1);

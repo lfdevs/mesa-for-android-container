@@ -913,6 +913,7 @@ virtio_queue_submit(struct tu_queue *queue, void *_submit,
       queue->fence = 0;
    uint32_t fence = ++queue->fence;
    int idx = fence % ARRAY_SIZE(fcmds->cmds);
+   fcmds->cmds[idx].fence = fence;
    struct tu_cs_entry fence_cs = {
       .bo = vdev->fence_cmds_mem,
       .size = 5 * 4,

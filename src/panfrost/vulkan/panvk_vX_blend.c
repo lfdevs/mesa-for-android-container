@@ -89,7 +89,6 @@ get_blend_shader(struct panvk_device *dev,
    /* Compile the NIR shader */
    struct panfrost_compile_inputs inputs = {
       .gpu_id = pdev->kmod.props.gpu_prod_id,
-      .no_ubo_to_push = true,
       .is_blend = true,
       .blend = {
          .nr_samples = key.info.nr_samples,

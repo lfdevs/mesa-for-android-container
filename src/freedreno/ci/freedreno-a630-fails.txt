@@ -26,7 +26,6 @@ spec@arb_depth_buffer_float@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32F NPO
 
 spec@arb_point_sprite@arb_point_sprite-interactions 1.0,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2' on GL_PROGRAM_INPUT,Fail
 spec@arb_sample_shading@samplemask 2@0.500000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 2@1.000000 mask_in_one,Fail

@@ -448,6 +448,10 @@ anv_shader_bin_create(struct anv_device *device,
                 bind_map->embedded_sampler_count);
    shader->bind_map.embedded_sampler_to_binding = embedded_sampler_to_binding;
 
+   typed_memcpy(shader->bind_map.input_attachments,
+                bind_map->input_attachments,
+                ARRAY_SIZE(bind_map->input_attachments));
+
    typed_memcpy(kernel_args, bind_map->kernel_args,
                 bind_map->kernel_arg_count);
    shader->bind_map.kernel_args = kernel_args;
@@ -524,6 +528,8 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
    blob_write_bytes(blob, shader->bind_map.embedded_sampler_to_binding,
                     shader->bind_map.embedded_sampler_count *
                     sizeof(*shader->bind_map.embedded_sampler_to_binding));
+   blob_write_bytes(blob, shader->bind_map.input_attachments,
+                    sizeof(shader->bind_map.input_attachments));
    blob_write_bytes(blob, shader->bind_map.kernel_args,
                     shader->bind_map.kernel_arg_count *
                     sizeof(*shader->bind_map.kernel_args));
@@ -600,6 +606,8 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
    bind_map.embedded_sampler_to_binding = (void *)
       blob_read_bytes(blob, bind_map.embedded_sampler_count *
                             sizeof(*bind_map.embedded_sampler_to_binding));
+   blob_copy_bytes(blob, bind_map.input_attachments,
+                   sizeof(bind_map.input_attachments));
    bind_map.kernel_args = (void *)
       blob_read_bytes(blob, bind_map.kernel_arg_count *
                             sizeof(*bind_map.kernel_args));

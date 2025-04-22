@@ -76,8 +76,8 @@ static const char* const kMesaOnlyDeviceExtensions[] = {
 static VkResult SetupInstanceForProcess(void) {
     auto mgr = getConnectionManager();
     if (!mgr) {
-        mesa_loge("vulkan: Failed to get host connection\n");
-        return VK_ERROR_DEVICE_LOST;
+        mesa_logd("vulkan: Failed to get host connection\n");
+        return VK_ERROR_INITIALIZATION_FAILED;
     }
 
     gfxstream::vk::ResourceTracker::get()->setupCaps(gNoRenderControlEnc);
@@ -231,6 +231,11 @@ static void gfxstream_vk_destroy_physical_device(struct vk_physical_device* phys
 static VkResult gfxstream_vk_enumerate_devices(struct vk_instance* vk_instance) {
     VkResult result = VK_SUCCESS;
     gfxstream_vk_instance* gfxstream_instance = (gfxstream_vk_instance*)vk_instance;
+
+    if (gfxstream_instance->init_failed) {
+        return VK_SUCCESS;
+    }
+
     uint32_t deviceCount = 0;
     auto vkEnc = gfxstream::vk::ResourceTracker::getThreadLocalEncoder();
     auto resources = gfxstream::vk::ResourceTracker::get();
@@ -315,22 +320,45 @@ VkResult gfxstream_vk_CreateInstance(const VkInstanceCreateInfo* pCreateInfo,
     MESA_TRACE_SCOPE("vkCreateInstance");
 
     struct gfxstream_vk_instance* instance;
+    VkResult result = VK_SUCCESS;
 
     pAllocator = pAllocator ?: vk_default_allocator();
-    instance = (struct gfxstream_vk_instance*)vk_zalloc(pAllocator, sizeof(*instance), GFXSTREAM_DEFAULT_ALIGN,
-                                                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-    if (NULL == instance) {
+    instance = (struct gfxstream_vk_instance*)vk_zalloc(
+        pAllocator, sizeof(*instance), GFXSTREAM_DEFAULT_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (!instance) {
         return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
     }
 
-    VkResult result = VK_SUCCESS;
+    instance->init_failed = (SetupInstanceForProcess() == VK_ERROR_INITIALIZATION_FAILED);
+    auto extensions = instance->init_failed ? &gfxstream_vk_instance_extensions_supported
+                                            : get_instance_extensions();
+    struct vk_instance_dispatch_table dispatch_table;
+    memset(&dispatch_table, 0, sizeof(struct vk_instance_dispatch_table));
+    vk_instance_dispatch_table_from_entrypoints(&dispatch_table, &gfxstream_vk_instance_entrypoints,
+                                                false);
+#if !DETECT_OS_FUCHSIA
+    vk_instance_dispatch_table_from_entrypoints(&dispatch_table, &wsi_instance_entrypoints, false);
+#endif
+
+    result = vk_instance_init(&instance->vk, extensions, &dispatch_table, pCreateInfo, pAllocator);
+
+    if (result != VK_SUCCESS) {
+        vk_free(pAllocator, instance);
+        return vk_error(NULL, result);
+    }
+
+    // Note: Do not support try_create_for_drm. virtio_gpu DRM device opened in
+    // init_renderer above, which can still enumerate multiple physical devices on the host.
+    instance->vk.physical_devices.enumerate = gfxstream_vk_enumerate_devices;
+    instance->vk.physical_devices.destroy = gfxstream_vk_destroy_physical_device;
+
+    if (instance->init_failed) {
+        goto out;
+    }
+
     /* Encoder call */
     {
-        result = SetupInstanceForProcess();
-        if (VK_SUCCESS != result) {
-            vk_free(pAllocator, instance);
-            return vk_error(NULL, result);
-        }
         uint32_t initialEnabledExtensionCount = pCreateInfo->enabledExtensionCount;
         const char* const* initialPpEnabledExtensionNames = pCreateInfo->ppEnabledExtensionNames;
         std::vector<const char*> filteredExts = filteredInstanceExtensionNames(
@@ -352,26 +380,7 @@ VkResult gfxstream_vk_CreateInstance(const VkInstanceCreateInfo* pCreateInfo,
         mutableCreateInfo->ppEnabledExtensionNames = initialPpEnabledExtensionNames;
     }
 
-    struct vk_instance_dispatch_table dispatch_table;
-    memset(&dispatch_table, 0, sizeof(struct vk_instance_dispatch_table));
-    vk_instance_dispatch_table_from_entrypoints(&dispatch_table, &gfxstream_vk_instance_entrypoints,
-                                                false);
-#if !DETECT_OS_FUCHSIA
-    vk_instance_dispatch_table_from_entrypoints(&dispatch_table, &wsi_instance_entrypoints, false);
-#endif
-
-    result = vk_instance_init(&instance->vk, get_instance_extensions(), &dispatch_table,
-                              pCreateInfo, pAllocator);
-
-    if (result != VK_SUCCESS) {
-        vk_free(pAllocator, instance);
-        return vk_error(NULL, result);
-    }
-
-    instance->vk.physical_devices.enumerate = gfxstream_vk_enumerate_devices;
-    instance->vk.physical_devices.destroy = gfxstream_vk_destroy_physical_device;
-    // TODO: instance->vk.physical_devices.try_create_for_drm (?)
-
+out:
     *pInstance = gfxstream_vk_instance_to_handle(instance);
     return VK_SUCCESS;
 }
@@ -382,8 +391,10 @@ void gfxstream_vk_DestroyInstance(VkInstance _instance, const VkAllocationCallba
 
     VK_FROM_HANDLE(gfxstream_vk_instance, instance, _instance);
 
-    auto vkEnc = gfxstream::vk::ResourceTracker::getThreadLocalEncoder();
-    vkEnc->vkDestroyInstance(instance->internal_object, pAllocator, true /* do lock */);
+    if (!instance->init_failed) {
+        auto vkEnc = gfxstream::vk::ResourceTracker::getThreadLocalEncoder();
+        vkEnc->vkDestroyInstance(instance->internal_object, pAllocator, true /* do lock */);
+    }
 
     vk_instance_finish(&instance->vk);
     vk_free(&instance->vk.alloc, instance);

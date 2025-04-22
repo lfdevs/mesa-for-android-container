@@ -222,12 +222,24 @@ static const uint32_t vk_to_intel_shading_rate_combiner_op[] = {
 #endif
 
 static bool
-has_ds_feedback_loop(const struct vk_dynamic_graphics_state *dyn)
+has_ds_feedback_loop(const struct anv_pipeline_bind_map *bind_map,
+                     const struct vk_dynamic_graphics_state *dyn)
 {
-   return (dyn->feedback_loops & (VK_IMAGE_ASPECT_DEPTH_BIT |
-                                  VK_IMAGE_ASPECT_STENCIL_BIT)) ||
-      dyn->ial.depth_att != MESA_VK_ATTACHMENT_UNUSED ||
-      dyn->ial.stencil_att != MESA_VK_ATTACHMENT_UNUSED;
+   if (BITSET_IS_EMPTY(bind_map->input_attachments))
+      return false;
+
+   const unsigned depth_att = dyn->ial.depth_att == MESA_VK_ATTACHMENT_NO_INDEX ?
+      MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS : dyn->ial.depth_att;
+   const unsigned stencil_att = dyn->ial.stencil_att == MESA_VK_ATTACHMENT_NO_INDEX ?
+      MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS : dyn->ial.stencil_att;
+
+   return
+      (dyn->feedback_loops & (VK_IMAGE_ASPECT_DEPTH_BIT |
+                              VK_IMAGE_ASPECT_STENCIL_BIT)) != 0 ||
+      (dyn->ial.depth_att != MESA_VK_ATTACHMENT_UNUSED &&
+       BITSET_TEST(bind_map->input_attachments, depth_att)) ||
+      (dyn->ial.stencil_att != MESA_VK_ATTACHMENT_UNUSED &&
+       BITSET_TEST(bind_map->input_attachments, stencil_att));
 }
 
 UNUSED static bool
@@ -343,9 +355,10 @@ want_stencil_pma_fix(const struct vk_dynamic_graphics_state *dyn,
     *  3DSTATE_WM_CHROMAKEY::ChromaKeyKillEnable) ||
     * (3DSTATE_PS_EXTRA::Pixel Shader Computed Depth mode != PSCDEPTH_OFF)
     */
+   struct anv_shader_bin *fs_bin = pipeline->base.shaders[MESA_SHADER_FRAGMENT];
+
    return pipeline->kill_pixel ||
-          pipeline->rp_has_ds_self_dep ||
-          has_ds_feedback_loop(dyn) ||
+          has_ds_feedback_loop(&fs_bin->bind_map, dyn) ||
           wm_prog_data->computed_depth_mode != PSCDEPTH_OFF;
 }
 
@@ -873,12 +886,13 @@ update_ps_extra_kills_pixel(struct anv_gfx_dynamic_state *hw_state,
                             const struct anv_cmd_graphics_state *gfx,
                             const struct anv_graphics_pipeline *pipeline)
 {
+   struct anv_shader_bin *fs_bin = pipeline->base.shaders[MESA_SHADER_FRAGMENT];
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
    SET_STAGE(PS_EXTRA, ps_extra.PixelShaderKillsPixel,
-                       wm_prog_data && (pipeline->rp_has_ds_self_dep ||
-                                        has_ds_feedback_loop(dyn) ||
-                                        wm_prog_data->uses_kill),
+                       wm_prog_data &&
+                       (has_ds_feedback_loop(&fs_bin->bind_map, dyn) ||
+                        wm_prog_data->uses_kill),
                        FRAGMENT);
 }
 

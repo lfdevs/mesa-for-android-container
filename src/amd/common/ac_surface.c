@@ -1197,6 +1197,59 @@ static void ac_compute_cmask(const struct radeon_info *info, const struct ac_sur
    surf->cmask_size = surf->cmask_slice_size * num_layers;
 }
 
+static uint64_t ac_estimate_size(const struct ac_surf_config *config,
+                                 unsigned blk_w, unsigned blk_h, unsigned bpp,
+                                 unsigned in_width, unsigned in_height,
+                                 unsigned align_width, unsigned align_height,
+                                 unsigned align_depth)
+{
+   assert(bpp);
+   unsigned num_samples = MAX2(1, config->info.samples);
+   unsigned bpe = bpp / 8;
+   unsigned width = align(in_width, align_width * blk_w);
+   unsigned height = align(in_height , align_height * blk_h);
+   unsigned depth = align(config->is_3d ? config->info.depth :
+                          config->is_cube ? 6 : config->info.array_size, align_depth);
+   unsigned tile_size_bytes = align_width * align_height * align_depth * num_samples * bpe;
+
+   if (config->info.levels > 1 && align_height > 1) {
+      width = util_next_power_of_two(width);
+      height = util_next_power_of_two(height);
+   }
+
+   uint64_t size = 0;
+
+   /* Note: This mipmap size computation is inaccurate. */
+   for (unsigned i = 0; i < config->info.levels; i++) {
+      uint64_t level_size =
+         (uint64_t)DIV_ROUND_UP(width, blk_w) * DIV_ROUND_UP(height, blk_h) * depth *
+         num_samples * bpe;
+
+      size += level_size;
+
+      if (tile_size_bytes >= 4096 && level_size <= tile_size_bytes / 2) {
+         /* We are likely in the mip tail, return. */
+         assert(size);
+         return size;
+      }
+
+      /* Minify the level. */
+      width = u_minify(width, 1);
+      height = u_minify(height, 1);
+      if (config->is_3d)
+         depth = u_minify(depth, 1);
+   }
+
+   /* TODO: check that this is not too different from the correct value */
+   assert(size);
+   return size;
+}
+
+#define SI__GB_TILE_MODE__BANK_WIDTH(x)         (((x) >> 14) & 0x3)
+#define SI__GB_TILE_MODE__BANK_HEIGHT(x)        (((x) >> 16) & 0x3)
+#define SI__GB_TILE_MODE__MACRO_TILE_ASPECT(x)  (((x) >> 18) & 0x3)
+#define SI__GB_TILE_MODE__NUM_BANKS(x)          (((x) >> 20) & 0x3)
+
 /**
  * Fill in the tiling information in \p surf based on the given surface config.
  *
@@ -1259,11 +1312,100 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib, const struct radeon_info *i
          }
       } else {
          if (config->is_3d) {
-            /* GFX6 doesn't have 3D_TILED_XTHICK. */
-            if (info->gfx_level >= GFX7)
-               AddrSurfInfoIn.tileMode = ADDR_TM_3D_TILED_XTHICK;
-            else
-               AddrSurfInfoIn.tileMode = ADDR_TM_2D_TILED_XTHICK;
+            /* Select the best tile mode that doesn't overallocate memory too much.
+             * The tile modes below are sorted from best to worst performance.
+             */
+            struct {
+               unsigned tile_mode;
+               unsigned gfx6_tile_mode_index;
+               unsigned gfx7_tile_mode_index;
+               unsigned microtile_width;
+               unsigned microtile_height;
+               unsigned microtile_depth;
+               bool supported; /* this comes from the tile mode arrays in the kernel */
+               /* Derived fields. */
+               unsigned bank_width;
+               unsigned bank_height;
+               unsigned num_banks;
+               unsigned macro_tile_aspect;
+               unsigned align_width;
+               unsigned align_height;
+               unsigned align_depth;
+            } modes[] = {
+               {ADDR_TM_3D_TILED_XTHICK, 0, 26, 8, 8, 8, info->gfx_level >= GFX7},
+               {ADDR_TM_2D_TILED_XTHICK, 19, 25, 8, 8, 8, true},
+               {ADDR_TM_3D_TILED_THICK, 0, 21, 8, 8, 4, info->gfx_level >= GFX7},
+               {ADDR_TM_2D_TILED_THICK, 20, 20, 8, 8, 4, true},
+               {ADDR_TM_3D_TILED_THIN1, 0, 15, 8, 8, 1, info->gfx_level >= GFX7},
+               {ADDR_TM_2D_TILED_THIN1, 14, 14, 8, 8, 1, true},
+               {ADDR_TM_1D_TILED_THICK, 18, 19, 8, 8, 4, true},
+               {ADDR_TM_1D_TILED_THIN1, 13, 13, 8, 8, 1, true},
+               /* Don't use LINEAR_ALIGNED. It doesn't work with BC formats. */
+            };
+
+            for (unsigned i = 0; i < ARRAY_SIZE(modes); i++) {
+               if (!modes[i].supported)
+                  continue;
+
+               if (modes[i].tile_mode <= ADDR_TM_1D_TILED_THICK) {
+                  modes[i].align_width = modes[i].microtile_width;
+                  modes[i].align_height = modes[i].microtile_height;
+                  modes[i].align_depth = modes[i].microtile_depth;
+                  continue;
+               }
+
+               if (info->gfx_level >= GFX7) {
+                  ADDR_GET_MACROMODEINDEX_INPUT in = {sizeof(in)};
+                  ADDR_GET_MACROMODEINDEX_OUTPUT out = {sizeof(out)};
+
+                  in.tileIndex = modes[i].gfx7_tile_mode_index;
+                  in.bpp = surf->bpe * 8;
+                  in.numFrags = 1;
+
+                  if (AddrGetMacroModeIndex(addrlib, &in, &out) != ADDR_OK) {
+                     fprintf(stderr, "amdgpu: AddrGetMacroModeIndex failed.\n");
+                     return -1;
+                  }
+
+                  uint32_t macro_mode_reg = info->cik_macrotile_mode_array[out.macroModeIndex];
+                  modes[i].bank_width = 1 << G_009990_BANK_WIDTH(macro_mode_reg);
+                  modes[i].bank_height = 1 << G_009990_BANK_HEIGHT(macro_mode_reg);
+                  modes[i].num_banks = 2 << G_009990_NUM_BANKS(macro_mode_reg);
+                  modes[i].macro_tile_aspect = 1 << G_009990_MACRO_TILE_ASPECT(macro_mode_reg);
+               } else {
+                  /* GFX6. */
+                  uint32_t tile_mode_reg = info->si_tile_mode_array[modes[i].gfx6_tile_mode_index];
+                  modes[i].bank_width = 1 << SI__GB_TILE_MODE__BANK_WIDTH(tile_mode_reg);
+                  modes[i].bank_height = 1 << SI__GB_TILE_MODE__BANK_HEIGHT(tile_mode_reg);
+                  modes[i].num_banks = 2 << SI__GB_TILE_MODE__NUM_BANKS(tile_mode_reg);
+                  modes[i].macro_tile_aspect = 1 << SI__GB_TILE_MODE__MACRO_TILE_ASPECT(tile_mode_reg);
+               }
+
+               modes[i].align_width = modes[i].microtile_width * modes[i].bank_width *
+                                      info->num_tile_pipes * modes[i].macro_tile_aspect;
+               modes[i].align_height = modes[i].microtile_height * modes[i].bank_height *
+                                       modes[i].num_banks / modes[i].macro_tile_aspect;
+               modes[i].align_depth = modes[i].microtile_depth;
+            }
+
+            uint64_t ideal_size = ac_estimate_size(config, surf->blk_w, surf->blk_h, surf->bpe * 8,
+                                                   config->info.width, config->info.height, 1, 1, 1);
+            AddrSurfInfoIn.tileMode = ADDR_TM_1D_TILED_THIN1; /* used if everything else fails */
+
+            for (unsigned i = 0; i < ARRAY_SIZE(modes); i++) {
+               if (!modes[i].supported)
+                  continue;
+
+               uint64_t size = ac_estimate_size(config, surf->blk_w, surf->blk_h, surf->bpe * 8,
+                                                config->info.width, config->info.height,
+                                                modes[i].align_width, modes[i].align_height,
+                                                modes[i].align_depth);
+
+               if (size <= ideal_size * 3) {
+                  AddrSurfInfoIn.tileMode = modes[i].tile_mode;
+                  break;
+               }
+            }
          } else {
             AddrSurfInfoIn.tileMode = ADDR_TM_2D_TILED_THIN1;
          }
@@ -2713,55 +2855,9 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
    return 0;
 }
 
-static uint64_t gfx12_estimate_size(const ADDR3_COMPUTE_SURFACE_INFO_INPUT *in,
-                                    const struct radeon_surf *surf,
-                                    unsigned align_width, unsigned align_height,
-                                    unsigned align_depth)
-{
-   unsigned blk_w = surf ? surf->blk_w : 1;
-   unsigned blk_h = surf ? surf->blk_h : 1;
-   unsigned bpe = in->bpp ? in->bpp / 8 : surf->bpe;
-   unsigned width = align(in->width, align_width * blk_w);
-   unsigned height = align(in->height, align_height * blk_h);
-   unsigned depth = align(in->numSlices, align_depth);
-   unsigned tile_size = align_width * align_height * align_depth *
-                        in->numSamples * bpe;
-
-   if (in->numMipLevels > 1 && align_height > 1) {
-      width = util_next_power_of_two(width);
-      height = util_next_power_of_two(height);
-   }
-
-   uint64_t size = 0;
-
-   /* Note: This mipmap size computation is inaccurate. */
-   for (unsigned i = 0; i < in->numMipLevels; i++) {
-      uint64_t level_size =
-         (uint64_t)DIV_ROUND_UP(width, blk_w) * DIV_ROUND_UP(height, blk_h) * depth *
-         in->numSamples * bpe;
-
-      size += level_size;
-
-      if (tile_size >= 4096 && level_size <= tile_size / 2) {
-         /* We are likely in the mip tail, return. */
-         assert(size);
-         return size;
-      }
-
-      /* Minify the level. */
-      width = u_minify(width, 1);
-      height = u_minify(height, 1);
-      if (in->resourceType == ADDR_RSRC_TEX_3D)
-         depth = u_minify(depth, 1);
-   }
-
-   /* TODO: check that this is not too different from the correct value */
-   assert(size);
-   return size;
-}
-
 static unsigned gfx12_select_swizzle_mode(struct ac_addrlib *addrlib,
                                           const struct radeon_info *info,
+                                          const struct ac_surf_config *config,
                                           const struct radeon_surf *surf,
                                           const ADDR3_COMPUTE_SURFACE_INFO_INPUT *in,
                                           uint64_t flags)
@@ -2800,10 +2896,11 @@ static unsigned gfx12_select_swizzle_mode(struct ac_addrlib *addrlib,
 
    assert(get_out.validModes.value);
 
-   unsigned bpe = in->bpp ? in->bpp / 8 : surf->bpe;
-   unsigned log_bpp = util_logbase2(bpe);
+   unsigned log_bpp = util_logbase2(get_in.bpp / 8);
    unsigned log_samples = util_logbase2(in->numSamples);
-   uint64_t ideal_size = gfx12_estimate_size(in, surf, 1, 1, 1);
+   unsigned blk_w = surf ? surf->blk_w : 1;
+   unsigned blk_h = surf ? surf->blk_h : 1;
+   uint64_t ideal_size = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height, 1, 1, 1);
 
    if (in->resourceType == ADDR_RSRC_TEX_3D) {
       static unsigned block3d_size_4K[5][3] = {
@@ -2828,17 +2925,20 @@ static unsigned gfx12_select_swizzle_mode(struct ac_addrlib *addrlib,
          {16, 32, 32},
       };
 
-      uint64_t size_4K = gfx12_estimate_size(in, surf, block3d_size_4K[log_bpp][0],
-                                             block3d_size_4K[log_bpp][1],
-                                             block3d_size_4K[log_bpp][2]);
+      uint64_t size_4K = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                          block3d_size_4K[log_bpp][0],
+                                          block3d_size_4K[log_bpp][1],
+                                          block3d_size_4K[log_bpp][2]);
 
-      uint64_t size_64K = gfx12_estimate_size(in, surf, block3d_size_64K[log_bpp][0],
-                                              block3d_size_64K[log_bpp][1],
-                                              block3d_size_64K[log_bpp][2]);
+      uint64_t size_64K = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                           block3d_size_64K[log_bpp][0],
+                                           block3d_size_64K[log_bpp][1],
+                                           block3d_size_64K[log_bpp][2]);
 
-      uint64_t size_256K = gfx12_estimate_size(in, surf, block3d_size_256K[log_bpp][0],
-                                               block3d_size_256K[log_bpp][1],
-                                               block3d_size_256K[log_bpp][2]);;
+      uint64_t size_256K = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                            block3d_size_256K[log_bpp][0],
+                                            block3d_size_256K[log_bpp][1],
+                                            block3d_size_256K[log_bpp][2]);
 
       float max_3d_overalloc_256K = 1.1;
       float max_3d_overalloc_64K = 1.2;
@@ -2994,19 +3094,24 @@ static unsigned gfx12_select_swizzle_mode(struct ac_addrlib *addrlib,
       },
    };
 
-   uint64_t size_LINEAR = gfx12_estimate_size(in, surf, block_size_LINEAR[log_bpp], 1, 1);
+   uint64_t size_LINEAR = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                           block_size_LINEAR[log_bpp], 1, 1);
 
-   uint64_t size_256B = gfx12_estimate_size(in, surf, block_size_256B[log_samples][log_bpp][0],
-                                            block_size_256B[log_samples][log_bpp][1], 1);
+   uint64_t size_256B = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                         block_size_256B[log_samples][log_bpp][0],
+                                         block_size_256B[log_samples][log_bpp][1], 1);
 
-   uint64_t size_4K = gfx12_estimate_size(in, surf, block_size_4K[log_samples][log_bpp][0],
-                                          block_size_4K[log_samples][log_bpp][1], 1);;
+   uint64_t size_4K = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                       block_size_4K[log_samples][log_bpp][0],
+                                       block_size_4K[log_samples][log_bpp][1], 1);
 
-   uint64_t size_64K = gfx12_estimate_size(in, surf, block_size_64K[log_samples][log_bpp][0],
-                                           block_size_64K[log_samples][log_bpp][1], 1);
+   uint64_t size_64K = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                        block_size_64K[log_samples][log_bpp][0],
+                                        block_size_64K[log_samples][log_bpp][1], 1);
 
-   uint64_t size_256K = gfx12_estimate_size(in, surf, block_size_256K[log_samples][log_bpp][0],
-                                            block_size_256K[log_samples][log_bpp][1], 1);
+   uint64_t size_256K = ac_estimate_size(config, blk_w, blk_h, get_in.bpp, in->width, in->height,
+                                         block_size_256K[log_samples][log_bpp][0],
+                                         block_size_256K[log_samples][log_bpp][1], 1);
 
    float max_2d_overalloc_256K = 1.1;  /* relative to ideal */
    float max_2d_overalloc_64K = 1.3;   /* relative to ideal */
@@ -3037,6 +3142,7 @@ static unsigned gfx12_select_swizzle_mode(struct ac_addrlib *addrlib,
 }
 
 static bool gfx12_compute_hiz_his_info(struct ac_addrlib *addrlib, const struct radeon_info *info,
+                                       const struct ac_surf_config *config,
                                        struct radeon_surf *surf, struct gfx12_hiz_his_layout *hizs,
                                        const ADDR3_COMPUTE_SURFACE_INFO_INPUT *surf_in)
 {
@@ -3064,7 +3170,7 @@ static bool gfx12_compute_hiz_his_info(struct ac_addrlib *addrlib, const struct 
    /* Compute the HiZ/HiS size. */
    in.width = align(DIV_ROUND_UP(surf_in->width, 8), 2);
    in.height = align(DIV_ROUND_UP(surf_in->height, 8), 2);
-   in.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, NULL, &in, surf->flags);
+   in.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, config, NULL, &in, surf->flags);
 
    int ret = Addr3ComputeSurfaceInfo(addrlib->handle, &in, &out);
    if (ret != ADDR_OK)
@@ -3117,7 +3223,7 @@ static bool gfx12_compute_miptree(struct ac_addrlib *addrlib, const struct radeo
       surf->surf_size = surf->u.gfx9.zs.stencil_offset + out.surfSize;
 
       if (info->chip_rev >= 2 &&
-          !gfx12_compute_hiz_his_info(addrlib, info, surf, &surf->u.gfx9.zs.his, in))
+          !gfx12_compute_hiz_his_info(addrlib, info, config, surf, &surf->u.gfx9.zs.his, in))
          return false;
 
       return true;
@@ -3180,7 +3286,7 @@ static bool gfx12_compute_miptree(struct ac_addrlib *addrlib, const struct radeo
    if (in->flags.depth) {
       assert(in->swizzleMode != ADDR3_LINEAR);
 
-      return gfx12_compute_hiz_his_info(addrlib, info, surf, &surf->u.gfx9.zs.hiz, in);
+      return gfx12_compute_hiz_his_info(addrlib, info, config, surf, &surf->u.gfx9.zs.hiz, in);
    }
 
    /* Compute tile swizzle for the color surface. All swizzle modes >= 4K support it. */
@@ -3266,7 +3372,8 @@ static bool gfx12_compute_surface(struct ac_addrlib *addrlib, const struct radeo
    } else if (surf->flags & RADEON_SURF_VIDEO_REFERENCE) {
       AddrSurfInfoIn.swizzleMode = ADDR3_256B_2D;
    } else {
-      AddrSurfInfoIn.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, surf, &AddrSurfInfoIn, surf->flags);
+      AddrSurfInfoIn.swizzleMode = gfx12_select_swizzle_mode(addrlib, info, config, surf,
+                                                             &AddrSurfInfoIn, surf->flags);
    }
 
    /* Force the linear pitch from 128B (default) to 256B for multi-GPU interop. This only applies

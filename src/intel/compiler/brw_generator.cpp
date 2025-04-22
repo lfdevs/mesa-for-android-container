@@ -379,7 +379,8 @@ brw_generator::generate_shuffle(fs_inst *inst,
          /* We use VxH indirect addressing, clobbering a0.0 through a0.7. */
          struct brw_reg addr = vec8(brw_address_reg(0));
 
-         struct brw_reg group_idx = suboffset(idx, group);
+         struct brw_reg group_idx = idx.is_scalar || is_uniform(idx) ?
+            component(idx, 0) : suboffset(idx, group);
 
          if (lower_width == 8 && group_idx.width == BRW_WIDTH_16) {
             /* Things get grumpy if the register is too wide. */

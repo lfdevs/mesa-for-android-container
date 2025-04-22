@@ -118,8 +118,6 @@ spec@arb_texture_rg@fbo-blending-formats@GL_RG,Fail
 spec@arb_texture_view@sampling-2d-array-as-cubemap-array,Fail
 spec@arb_texture_view@sampling-2d-array-as-cubemap,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
-spec@arb_uniform_buffer_object@rendering-dsa-offset,Fail
-spec@arb_uniform_buffer_object@rendering-offset,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_chromium_sync_control@conformance,Fail

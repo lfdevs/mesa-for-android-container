@@ -70,6 +70,11 @@ bool GfxStreamConnectionManager::initialize() {
             // Use kCapsetGfxStreamVulkan for now, Ranchu HWC needs to be modified to pass in
             // right capset.
             auto device = VirtGpuDevice::getInstance(kCapsetGfxStreamVulkan);
+            if (!device) {
+                mesa_logd("Failed to get VirtGpuDevice\n");
+                return false;
+            }
+
             mDescriptor = device->getDeviceHandle();
             mStream = createVirtioGpuAddressSpaceStream(kCapsetGfxStreamVulkan);
             if (!mStream) {

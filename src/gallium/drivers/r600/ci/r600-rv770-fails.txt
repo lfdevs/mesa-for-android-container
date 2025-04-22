@@ -825,10 +825,6 @@ spec@ext_framebuffer_multisample@no-color 8 depth-computed combined,Fail
 spec@ext_framebuffer_multisample@no-color 8 depth-computed single,Fail
 spec@ext_framebuffer_multisample@no-color 8 stencil combined,Fail
 spec@ext_framebuffer_multisample@no-color 8 stencil single,Fail
-spec@ext_framebuffer_multisample@turn-on-off 2,Fail
-spec@ext_framebuffer_multisample@turn-on-off 4,Fail
-spec@ext_framebuffer_multisample@turn-on-off 6,Fail
-spec@ext_framebuffer_multisample@turn-on-off 8,Fail
 
 spec@ext_framebuffer_object@fbo-blending-formats,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@3,Fail

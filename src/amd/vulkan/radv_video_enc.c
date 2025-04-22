@@ -447,7 +447,10 @@ radv_enc_session_info(struct radv_cmd_buffer *cmd_buffer)
    va += cmd_buffer->video.vid->sessionctx.offset;
    radeon_emit(cs, va >> 32);
    radeon_emit(cs, va & 0xffffffff);
-   radeon_emit(cs, RENCODE_ENGINE_TYPE_ENCODE);
+   if (pdev->enc_hw_ver < RADV_VIDEO_ENC_HW_3)
+      radeon_emit(cs, RENCODE_ENGINE_TYPE_ENCODE);
+   else
+      radeon_emit(cs, 0);
    ENC_END;
 }
 

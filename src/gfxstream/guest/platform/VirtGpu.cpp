@@ -29,9 +29,9 @@ VirtGpuDevice* VirtGpuDevice::getInstance(enum VirtGpuCapset capset, int32_t des
     // Otherwise, the created device's capset must match the requested capset.
     // We could support multiple capsets with a map of devices but that case isn't needed
     // currently, and with multiple devices it's unclear how to handle kCapsetNone.
-    if (capset != kCapsetNone && sDevice && sDevice->capset() != capset) {
+    if (capset != kCapsetNone && sDevice && sDevice->getCapset() != capset) {
         mesa_loge("Requested VirtGpuDevice capset %u, already created capset %u", capset,
-                  sDevice->capset());
+                  sDevice->getCapset());
         return nullptr;
     }
     if (!sDevice) {

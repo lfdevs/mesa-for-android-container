@@ -2052,6 +2052,8 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
       unreachable("unknown operation");
    }
 
+   header->total_size += index_codec->size;
+
    if (dpb_update_required)
       assert(frame_info->pSetupReferenceSlot != NULL);
 

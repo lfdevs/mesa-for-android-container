@@ -62,6 +62,7 @@
 struct gfxstream_vk_instance {
     struct vk_instance vk;
     uint32_t api_version;
+    bool init_failed;
     VkInstance internal_object;
 };
 

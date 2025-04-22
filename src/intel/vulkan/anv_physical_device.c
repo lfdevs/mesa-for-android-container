@@ -920,7 +920,6 @@ get_features(const struct anv_physical_device *pdevice,
 #define MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS   64
 
 #define MAX_PER_STAGE_DESCRIPTOR_INPUT_ATTACHMENTS 64
-#define MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS       256
 
 static VkDeviceSize
 anx_get_physical_device_max_heap_size(const struct anv_physical_device *pdevice)

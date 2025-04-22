@@ -857,11 +857,12 @@ nir-stress=dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.unused_attac
 # New fails in 1.4.1.0
 dEQP-VK.pipeline.pipeline_library.multisample.sample_rate_a2c.static_a2c,Fail
 dEQP-VK.pipeline.shader_object_linked_spirv.multisample.sample_rate_a2c.static_a2c,Fail
-dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_20,Fail
 
 # New fails in 1.4.1.1
 dEQP-VK.pipeline.fast_linked_library.multisample.sample_rate_a2c.static_a2c,Fail
 dEQP-VK.pipeline.shader_object_linked_binary.multisample.sample_rate_a2c.static_a2c,Fail
 dEQP-VK.pipeline.shader_object_unlinked_spirv.multisample.sample_rate_a2c.static_a2c,Fail
-dEQP-VK.ray_query.builtin.objectrayorigin.frag.aabbs,Crash
-nir-stress=dEQP-VK.ray_query.builtin.instanceid.frag.aabbs,Crash
+
+# since hetzner migration
+dEQP-VK.sparse_resources.buffer.transfer.rebind.buffer_size_2_20,Crash
+dEQP-VK.synchronization2.timeline_semaphore.device_host.write_image_tess_eval_read_image_fragment.image_128x128_r16g16b16a16_uint,Crash

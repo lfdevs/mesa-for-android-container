@@ -1491,9 +1491,11 @@ radv_graphics_shaders_link_varyings_first(struct radv_shader_stage *producer_sta
    /* Run algebraic optimizations on shaders that changed. */
    if (p & nir_progress_producer) {
       radv_optimize_nir_algebraic(producer, false, false);
+      NIR_PASS(_, producer, nir_opt_undef);
    }
    if (p & nir_progress_consumer) {
       radv_optimize_nir_algebraic(consumer, false, false);
+      NIR_PASS(_, consumer, nir_opt_undef);
    }
 }
 
@@ -1520,9 +1522,11 @@ radv_graphics_shaders_link_varyings_second(struct radv_shader_stage *producer_st
    /* Run algebraic optimizations on shaders that changed. */
    if (p & nir_progress_producer) {
       radv_optimize_nir_algebraic(producer, true, false);
+      NIR_PASS(_, producer, nir_opt_undef);
    }
    if (p & nir_progress_consumer) {
       radv_optimize_nir_algebraic(consumer, true, false);
+      NIR_PASS(_, consumer, nir_opt_undef);
    }
 
    /* Re-vectorize I/O for stages that output to memory (LDS or VRAM).

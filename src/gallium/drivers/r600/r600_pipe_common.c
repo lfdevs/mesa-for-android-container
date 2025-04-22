@@ -115,12 +115,25 @@ void r600_draw_rectangle(struct blitter_context *blitter,
 			 enum blitter_attrib_type type,
 			 const union blitter_attrib *attrib)
 {
-	struct r600_common_context *rctx =
-		(struct r600_common_context*)util_blitter_get_pipe(blitter);
+	struct r600_context *cctx =
+		(struct r600_context*)util_blitter_get_pipe(blitter);
+	struct r600_common_context *rctx = &cctx->b;
 	struct pipe_viewport_state viewport;
 	struct pipe_resource *buf = NULL;
 	unsigned offset = 0;
 	float *vb;
+
+	if (unlikely(MAX2(abs(x1), abs(x2)) > INT16_MAX ||
+		     MAX2(abs(y1), abs(y2)) > INT16_MAX)) {
+		/* Fallback when coordinates can't fit in int16. */
+		util_blitter_save_vertex_elements(cctx->blitter,
+						  cctx->vertex_fetch_shader.cso);
+		util_blitter_draw_rectangle(blitter, vertex_elements_cso, get_vs,
+					    x1, y1, x2, y2,
+					    depth, num_instances,
+					    type, attrib);
+		return;
+	}
 
 	rctx->b.bind_vertex_elements_state(&rctx->b, vertex_elements_cso);
 	rctx->b.bind_vs_state(&rctx->b, get_vs(blitter));

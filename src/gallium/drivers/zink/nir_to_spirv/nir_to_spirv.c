@@ -685,7 +685,8 @@ create_shared_block(struct ntv_context *ctx, unsigned bit_size)
    }
 
    ctx->shared_block_arr_type[idx] = array;
-   spirv_builder_emit_array_stride(&ctx->builder, array, bit_size / 8);
+   if (ctx->sinfo->have_workgroup_memory_explicit_layout)
+      spirv_builder_emit_array_stride(&ctx->builder, array, bit_size / 8);
 
    /* Create wrapper struct for Block, Offset and Aliased decorations. */
    SpvId block = spirv_builder_type_struct(&ctx->builder, &array, 1);
@@ -1201,7 +1202,6 @@ emit_image(struct ntv_context *ctx, struct nir_variable *var, SpvId image_type)
    if (glsl_type_is_array(var->type)) {
       var_type = spirv_builder_type_array(&ctx->builder, var_type,
                                               emit_uint_const(ctx, 32, glsl_get_aoa_size(var->type)));
-      spirv_builder_emit_array_stride(&ctx->builder, var_type, sizeof(void*));
    }
    SpvId pointer_type = spirv_builder_type_pointer(&ctx->builder,
                                                    SpvStorageClassUniformConstant,

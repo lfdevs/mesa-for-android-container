@@ -291,6 +291,27 @@ verify_parameter_modes(_mesa_glsl_parse_state *state,
          var->data.must_be_shader_input = 1;
       }
 
+      /* GLSL spec prohibits using bias with anything else than fragment stage,
+       * this starts already at GLSL 1.30 but here is a quote from latest 4.60
+       * spec, Section 8.9 "Texture Functions":
+       *
+       *    "... the bias parameter is optional for fragment shaders. The bias
+       *     parameter is not accepted in any other shader stage."
+       *
+       * Mesa has drirc "allow_vertex_texture_bias" to allow bias in vertex
+       * stage, additionally GL_NV_compute_shader_derivatives makes it possible
+       * to use bias in compute shaders.
+       */
+      if (sig->is_builtin() &&
+          strcmp(formal->name, "bias") == 0 &&
+          state->stage != MESA_SHADER_FRAGMENT &&
+          !state->NV_compute_shader_derivatives_enable &&
+          (!(state->allow_vertex_texture_bias &&
+             state->stage == MESA_SHADER_VERTEX))) {
+         _mesa_glsl_error(&loc, state,
+                          "bias parameter may only be used in fragment stage");
+      }
+
       /* Verify that 'out' and 'inout' actual parameters are lvalues. */
       if (formal->data.mode == ir_var_function_out
           || formal->data.mode == ir_var_function_inout) {

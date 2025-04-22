@@ -78,14 +78,14 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    /*
     * Map vertex buffers
     */
-   for (i = 0; i < i915->nr_vertex_buffers; i++) {
-      const void *buf = i915->vertex_buffers[i].is_user_buffer
-                           ? i915->vertex_buffers[i].buffer.user
+   for (i = 0; i < draw->pt.nr_vertex_buffers; i++) {
+      const void *buf = draw->pt.vertex_buffer[i].is_user_buffer
+                           ? draw->pt.vertex_buffer[i].buffer.user
                            : NULL;
       if (!buf) {
-         if (!i915->vertex_buffers[i].buffer.resource)
+         if (!draw->pt.vertex_buffer[i].buffer.resource)
             continue;
-         buf = i915_buffer(i915->vertex_buffers[i].buffer.resource)->data;
+         buf = i915_buffer(draw->pt.vertex_buffer[i].buffer.resource)->data;
       }
       draw_set_mapped_vertex_buffer(draw, i, buf, ~0);
    }
@@ -112,13 +112,13 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    /*
     * Do the drawing
     */
-   draw_vbo(i915->draw, info, drawid_offset, NULL, draws, num_draws, 0);
+   draw_vbo(draw, info, drawid_offset, NULL, draws, num_draws, 0);
 
    /*
     * unmap vertex/index buffers
     */
-   for (i = 0; i < i915->nr_vertex_buffers; i++) {
-      draw_set_mapped_vertex_buffer(i915->draw, i, NULL, 0);
+   for (i = 0; i < draw->pt.nr_vertex_buffers; i++) {
+      draw_set_mapped_vertex_buffer(draw, i, NULL, 0);
    }
    if (mapped_indices)
       draw_set_indexes(draw, NULL, 0, 0);
@@ -127,7 +127,7 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
     * Instead of flushing on every state change, we flush once here
     * when we fire the vbo.
     */
-   draw_flush(i915->draw);
+   draw_flush(draw);
 }
 
 /*
@@ -158,6 +158,9 @@ i915_destroy(struct pipe_context *pipe)
    for (i = 0; i < PIPE_SHADER_TYPES; i++) {
       pipe_resource_reference(&i915->constants[i], NULL);
    }
+
+   slab_destroy(&i915->texture_transfer_pool);
+   slab_destroy(&i915->transfer_pool);
 
    FREE(i915);
 }

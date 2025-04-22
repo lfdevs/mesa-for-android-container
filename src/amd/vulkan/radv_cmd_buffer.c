@@ -3642,7 +3642,6 @@ radv_emit_rasterization_samples(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    unsigned rasterization_samples = radv_get_rasterization_samples(cmd_buffer);
    unsigned ps_iter_samples = radv_get_ps_iter_samples(cmd_buffer);
    const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
@@ -3652,20 +3651,8 @@ radv_emit_rasterization_samples(struct radv_cmd_buffer *cmd_buffer)
 
    if (pdev->info.gfx_level >= GFX12) {
       const struct radv_rendering_state *render = &cmd_buffer->state.render;
-      bool has_hiz_his = false;
 
-      if (render->ds_att.iview) {
-         const struct radeon_surf *surf = &render->ds_att.iview->image->planes[0].surface;
-         has_hiz_his = surf->u.gfx9.zs.hiz.offset || surf->u.gfx9.zs.his.offset;
-      } else if (render->ds_att.format && !(instance->debug_flags & RADV_DEBUG_NO_HIZ)) {
-         /* For inherited rendering with secondary commands buffers, assume HiZ/HiS is enabled if
-          * there is a depth/stencil attachment. This shouldn't hurt and it's required to disable
-          * WALK_ALIGN8 to avoid GPU hangs.
-          */
-         has_hiz_his = true;
-      }
-
-      walk_align8 = !has_hiz_his && !cmd_buffer->state.uses_vrs_attachment;
+      walk_align8 = !render->has_hiz_his && !cmd_buffer->state.uses_vrs_attachment;
    } else if (pdev->info.gfx_level >= GFX11) {
       walk_align8 = !cmd_buffer->state.uses_vrs_attachment;
    } else {
@@ -6953,6 +6940,7 @@ radv_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBegi
       if (resume_info) {
          radv_CmdBeginRendering(commandBuffer, resume_info);
       } else {
+         const struct radv_instance *instance = radv_physical_device_instance(pdev);
          const VkCommandBufferInheritanceRenderingInfo *inheritance_info =
             vk_get_command_buffer_inheritance_rendering_info(cmd_buffer->vk.level, pBeginInfo);
 
@@ -6980,6 +6968,14 @@ radv_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBegi
             render->ds_att_aspects |= VK_IMAGE_ASPECT_DEPTH_BIT;
          if (vk_format_has_stencil(render->ds_att.format))
             render->ds_att_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+         if (pdev->info.gfx_level >= GFX12 && render->ds_att.format && !(instance->debug_flags & RADV_DEBUG_NO_HIZ)) {
+            /* For inherited rendering with secondary commands buffers, assume HiZ/HiS is enabled if
+             * there is a depth/stencil attachment. This is required to apply hardware workarounds
+             * on GFX12.
+             */
+            render->has_hiz_his = true;
+         }
       }
 
       cmd_buffer->state.inherited_pipeline_statistics = pBeginInfo->pInheritanceInfo->pipelineStatistics;
@@ -9248,6 +9244,8 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
    VkImageAspectFlags ds_att_aspects = 0;
    const VkRenderingAttachmentInfo *d_att_info = pRenderingInfo->pDepthAttachment;
    const VkRenderingAttachmentInfo *s_att_info = pRenderingInfo->pStencilAttachment;
+   bool has_hiz_his = false;
+
    if ((d_att_info != NULL && d_att_info->imageView != VK_NULL_HANDLE) ||
        (s_att_info != NULL && s_att_info->imageView != VK_NULL_HANDLE)) {
       struct radv_image_view *d_iview = NULL, *s_iview = NULL;
@@ -9288,6 +9286,12 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
          ds_att_aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
       } else {
          ds_att_aspects = VK_IMAGE_ASPECT_STENCIL_BIT;
+      }
+
+      if (pdev->info.gfx_level >= GFX12) {
+         const struct radeon_surf *surf = &ds_att.iview->image->planes[0].surface;
+
+         has_hiz_his = surf->u.gfx9.zs.hiz.offset || surf->u.gfx9.zs.his.offset;
       }
 
       radv_initialise_ds_surface(device, &ds_att.ds, ds_att.iview, ds_att_aspects);
@@ -9342,6 +9346,7 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
    typed_memcpy(render->color_att, color_att, render->color_att_count);
    render->ds_att = ds_att;
    render->ds_att_aspects = ds_att_aspects;
+   render->has_hiz_his = has_hiz_his;
    render->vrs_att = vrs_att;
    render->vrs_texel_size = vrs_texel_size;
    cmd_buffer->state.dirty |= RADV_CMD_DIRTY_FRAMEBUFFER | RADV_CMD_DIRTY_FBFETCH_OUTPUT;
@@ -9516,12 +9521,39 @@ radv_cs_emit_compute_predication(const struct radv_device *device, struct radv_c
    radv_emit_cond_exec(device, cs, va, dwords);
 }
 
+ALWAYS_INLINE static void
+radv_gfx12_emit_hiz_his_wa(const struct radv_device *device, const struct radv_cmd_state *cmd_state,
+                           struct radeon_cmdbuf *cs)
+{
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   const struct radv_rendering_state *render = &cmd_state->render;
+
+   /* On GFX12, HiZ/HiS is buggy and can cause random GPU hangs. There are basically two alternatives:
+    * - disable HiZ/HiS completely which is the safest workaround but this is known to decrease performance
+    * - emit a dummy BOTTOM_OF_PIPE_TS after every draw which should workaround the hang and maintain performance
+    */
+   if (pdev->info.gfx_level == GFX12 && render->has_hiz_his) {
+      radeon_emit(cs, PKT3(PKT3_RELEASE_MEM, 6, 0));
+      radeon_emit(cs, S_490_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) | S_490_EVENT_INDEX(5));
+      radeon_emit(cs, 0); /* DST_SEL, INT_SEL = no write confirm, DATA_SEL = no data */
+      radeon_emit(cs, 0); /* ADDRESS_LO */
+      radeon_emit(cs, 0); /* ADDRESS_HI */
+      radeon_emit(cs, 0); /* DATA_LO */
+      radeon_emit(cs, 0); /* DATA_HI */
+      radeon_emit(cs, 0); /* INT_CTXID */
+   }
+}
+
 static void
 radv_cs_emit_draw_packet(struct radv_cmd_buffer *cmd_buffer, uint32_t vertex_count, uint32_t use_opaque)
 {
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+
    radeon_emit(cmd_buffer->cs, PKT3(PKT3_DRAW_INDEX_AUTO, 1, cmd_buffer->state.predicating));
    radeon_emit(cmd_buffer->cs, vertex_count);
    radeon_emit(cmd_buffer->cs, V_0287F0_DI_SRC_SEL_AUTO_INDEX | use_opaque);
+
+   radv_gfx12_emit_hiz_his_wa(device, &cmd_buffer->state, cmd_buffer->cs);
 }
 
 /**
@@ -9535,16 +9567,21 @@ static void
 radv_cs_emit_draw_indexed_packet(struct radv_cmd_buffer *cmd_buffer, uint64_t index_va, uint32_t max_index_count,
                                  uint32_t index_count, bool not_eop)
 {
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+
    radeon_emit(cmd_buffer->cs, PKT3(PKT3_DRAW_INDEX_2, 4, cmd_buffer->state.predicating));
    radeon_emit(cmd_buffer->cs, max_index_count);
    radeon_emit(cmd_buffer->cs, index_va);
    radeon_emit(cmd_buffer->cs, index_va >> 32);
    radeon_emit(cmd_buffer->cs, index_count);
+
    /* NOT_EOP allows merging multiple draws into 1 wave, but only user VGPRs
     * can be changed between draws and GS fast launch must be disabled.
     * NOT_EOP doesn't work on gfx6-gfx9 and gfx12.
     */
    radeon_emit(cmd_buffer->cs, V_0287F0_DI_SRC_SEL_DMA | S_0287F0_NOT_EOP(not_eop));
+
+   radv_gfx12_emit_hiz_his_wa(device, &cmd_buffer->state, cmd_buffer->cs);
 }
 
 /* MUST inline this function to avoid massive perf loss in drawoverhead */
@@ -9552,6 +9589,7 @@ ALWAYS_INLINE static void
 radv_cs_emit_indirect_draw_packet(struct radv_cmd_buffer *cmd_buffer, bool indexed, uint32_t draw_count,
                                   uint64_t count_va, uint32_t stride)
 {
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    const unsigned di_src_sel = indexed ? V_0287F0_DI_SRC_SEL_DMA : V_0287F0_DI_SRC_SEL_AUTO_INDEX;
    bool draw_id_enable = cmd_buffer->state.uses_drawid;
@@ -9590,6 +9628,9 @@ radv_cs_emit_indirect_draw_packet(struct radv_cmd_buffer *cmd_buffer, bool index
       radeon_emit(cs, stride); /* stride */
       radeon_emit(cs, di_src_sel);
    }
+
+
+   radv_gfx12_emit_hiz_his_wa(device, &cmd_buffer->state, cs);
 
    cmd_buffer->state.uses_draw_indirect = true;
 }
@@ -9632,6 +9673,8 @@ radv_cs_emit_indirect_mesh_draw_packet(struct radv_cmd_buffer *cmd_buffer, uint3
    radeon_emit(cs, count_va >> 32);
    radeon_emit(cs, stride);
    radeon_emit(cs, V_0287F0_DI_SRC_SEL_AUTO_INDEX);
+
+   radv_gfx12_emit_hiz_his_wa(device, &cmd_buffer->state, cs);
 }
 
 ALWAYS_INLINE static void
@@ -9708,6 +9751,8 @@ radv_cs_emit_dispatch_taskmesh_gfx_packet(const struct radv_device *device, cons
    else
       radeon_emit(cs, S_4D1_THREAD_TRACE_MARKER_ENABLE(sqtt_en));
    radeon_emit(cs, V_0287F0_DI_SRC_SEL_AUTO_INDEX);
+
+   radv_gfx12_emit_hiz_his_wa(device, cmd_state, cs);
 }
 
 ALWAYS_INLINE static void
@@ -9982,11 +10027,15 @@ radv_emit_direct_draw_packets(struct radv_cmd_buffer *cmd_buffer, const struct r
 static void
 radv_cs_emit_mesh_dispatch_packet(struct radv_cmd_buffer *cmd_buffer, uint32_t x, uint32_t y, uint32_t z)
 {
+   const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+
    radeon_emit(cmd_buffer->cs, PKT3(PKT3_DISPATCH_MESH_DIRECT, 3, cmd_buffer->state.predicating));
    radeon_emit(cmd_buffer->cs, x);
    radeon_emit(cmd_buffer->cs, y);
    radeon_emit(cmd_buffer->cs, z);
    radeon_emit(cmd_buffer->cs, S_0287F0_SOURCE_SELECT(V_0287F0_DI_SRC_SEL_AUTO_INDEX));
+
+   radv_gfx12_emit_hiz_his_wa(device, &cmd_buffer->state, cmd_buffer->cs);
 }
 
 ALWAYS_INLINE static void

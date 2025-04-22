@@ -62,7 +62,7 @@ static bool do_winsys_init(struct amdgpu_winsys *aws,
       simple_mtx_init(&aws->queues[i].userq.lock, mtx_plain);
 
    /* TODO: Enable this once the kernel handles it efficiently. */
-   if (aws->info.has_dedicated_vram && !aws->info.use_userq)
+   if (!aws->info.use_userq)
       aws->info.has_local_buffers = false;
 
    return true;

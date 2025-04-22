@@ -1696,11 +1696,7 @@ compute_kill_pixel(struct anv_graphics_pipeline *pipeline,
     * 3DSTATE_PS_BLEND::AlphaTestEnable since Vulkan doesn't have a concept
     * of an alpha test.
     */
-   pipeline->rp_has_ds_self_dep =
-      (state->pipeline_flags &
-       VK_PIPELINE_CREATE_2_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT) != 0;
    pipeline->kill_pixel =
-      pipeline->rp_has_ds_self_dep ||
       wm_prog_data->uses_kill ||
       wm_prog_data->uses_omask ||
       (ms && ms->alpha_to_coverage_enable);

@@ -107,7 +107,7 @@ nvkmd_nouveau_alloc_tiled_mem(struct nvkmd_dev *_dev,
     * should but they don't today.  Force everything that may be mapped to
     * use GART for now.
     */
-   if (dev_info->chipset < 0x110 && (flags & NOUVEAU_WS_BO_MAP)) {
+   if (dev_info->chipset < 0x110 && (flags & NVKMD_MEM_CAN_MAP)) {
       assert(domains & NOUVEAU_WS_BO_GART);
       domains = NOUVEAU_WS_BO_GART;
    }

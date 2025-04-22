@@ -2103,7 +2103,7 @@ impl<'a> ShaderFromNir<'a> {
                 let src = self.get_ssa(srcs[0].as_def());
                 let mut dst = Vec::new();
                 for comp in src {
-                    let u = b.alloc_ssa(RegFile::UGPR, 1);
+                    let u = b.alloc_ssa(comp.file().to_uniform().unwrap(), 1);
                     b.push_op(OpR2UR {
                         src: [*comp].into(),
                         dst: u.into(),

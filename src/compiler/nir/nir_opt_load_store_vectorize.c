@@ -659,6 +659,10 @@ new_bitsize_acceptable(struct vectorize_ctx *ctx, unsigned new_bit_size,
 
    unsigned high_offset = high->offset_signed - low->offset_signed;
 
+   /* This can cause issues when combining store data. */
+   if (high_offset % (new_bit_size / 8) != 0)
+      return false;
+
    /* check nir_extract_bits limitations */
    unsigned common_bit_size = MIN2(get_bit_size(low), get_bit_size(high));
    common_bit_size = MIN2(common_bit_size, new_bit_size);

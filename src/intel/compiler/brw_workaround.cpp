@@ -67,7 +67,7 @@ needs_dummy_fence(const intel_device_info *devinfo, fs_inst *inst)
    }
 
    /* Any UGM Atomic message WITHOUT return value */
-   if (lsc_opcode_is_atomic(opcode) && inst->dst.file == BAD_FILE)
+   if (lsc_opcode_is_atomic(opcode) && inst->dst.is_null())
       return true;
 
    return false;
@@ -90,6 +90,11 @@ brw_workaround_memory_fence_before_eot(fs_visitor &s)
    if (!intel_needs_workaround(s.devinfo, 22013689345))
       return false;
 
+   /* Needs to happen after brw_lower_logical_sends & before
+    * brw_lower_send_descriptors.
+    */
+   assert(s.phase == BRW_SHADER_PHASE_AFTER_MIDDLE_LOWERING);
+
    foreach_block_and_inst_safe (block, fs_inst, inst, s.cfg) {
       if (!inst->eot) {
          if (needs_dummy_fence(s.devinfo, inst))
@@ -104,10 +109,15 @@ brw_workaround_memory_fence_before_eot(fs_visitor &s)
       const brw_builder ubld = ibld.exec_all().group(1, 0);
 
       brw_reg dst = ubld.vgrf(BRW_TYPE_UD);
-      fs_inst *dummy_fence = ubld.emit(SHADER_OPCODE_MEMORY_FENCE,
-                                       dst, brw_vec8_grf(0, 0),
-                                       /* commit enable */ brw_imm_ud(1),
-                                       /* bti */ brw_imm_ud(0));
+      fs_inst *dummy_fence = ubld.emit(SHADER_OPCODE_SEND, dst);
+
+      dummy_fence->resize_sources(4);
+      dummy_fence->src[0] = brw_imm_ud(0);
+      dummy_fence->src[1] = brw_imm_ud(0);
+      dummy_fence->src[2] = brw_vec8_grf(0, 0);
+      dummy_fence->src[3] = brw_reg();
+      dummy_fence->mlen = reg_unit(s.devinfo);
+      dummy_fence->ex_mlen = 0;
       dummy_fence->sfid = GFX12_SFID_UGM;
       dummy_fence->desc = lsc_fence_msg_desc(s.devinfo, LSC_FENCE_TILE,
                                              LSC_FLUSH_TYPE_NONE_6, false);

@@ -484,12 +484,25 @@ pan_rt_init_format(const struct pan_image_view *rt,
    cfg->swizzle = panfrost_translate_swizzle_4(swizzle);
 }
 
+/* forward declaration */
+static bool pan_force_clean_write_on(const struct pan_image *img, unsigned tile_size);
+
 static void
 pan_prepare_rt(const struct pan_fb_info *fb, unsigned layer_idx,
                unsigned rt_idx, unsigned cbuf_offset,
                struct MALI_RENDER_TARGET *cfg)
 {
+#if PAN_ARCH >= 6
+   bool force_clean_writes = fb->rts[rt_idx].clear;
+   if (fb->rts[rt_idx].view) {
+      const struct pan_image *img =
+         pan_image_view_get_color_plane(fb->rts[rt_idx].view);
+      force_clean_writes |= pan_force_clean_write_on(img, fb->tile_size);
+   }
+   cfg->clean_pixel_write_enable = force_clean_writes;
+#else
    cfg->clean_pixel_write_enable = fb->rts[rt_idx].clear;
+#endif
    cfg->internal_buffer_offset = cbuf_offset;
    if (fb->rts[rt_idx].clear) {
       cfg->clear.color_0 = fb->rts[rt_idx].clear_value[0];

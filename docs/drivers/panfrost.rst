@@ -9,7 +9,8 @@ and `Mali-G610 <https://www.khronos.org/conformance/adopters/conformant-products
 but **non-conformant** on other GPUs.
 
 PanVK, the Vulkan implementation in the Panfrost driver stack, is currently
-**non-conformant** on all GPUs.
+**conformant** on `Mali-G610 <https://www.khronos.org/conformance/adopters/conformant-products#submission_906>`__,
+but *non-conformant* on other GPUs.
 
 The following hardware is currently supported:
 

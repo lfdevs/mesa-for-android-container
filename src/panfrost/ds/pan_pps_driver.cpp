@@ -35,21 +35,6 @@ PanfrostDriver::get_min_sampling_period_ns()
    return 1000000;
 }
 
-uint32_t
-find_id_within_group(uint32_t counter_id,
-                     const struct panfrost_perf_config *cfg)
-{
-   for (uint32_t cat_id = 0; cat_id < cfg->n_categories; ++cat_id) {
-      const struct panfrost_perf_category *cat = &cfg->categories[cat_id];
-      if (counter_id < cat->n_counters) {
-         break;
-      }
-      counter_id -= cat->n_counters;
-   }
-
-   return counter_id;
-}
-
 std::pair<std::vector<CounterGroup>, std::vector<Counter>>
 PanfrostDriver::create_available_counters(const PanfrostPerf &perf)
 {
@@ -64,24 +49,21 @@ PanfrostDriver::create_available_counters(const PanfrostPerf &perf)
       group.id = gid;
       group.name = category.name;
 
-      for (; cid < category.n_counters; ++cid) {
+      for (size_t id = 0; id < category.n_counters; ++id) {
          Counter counter = {};
          counter.id = cid;
          counter.group = gid;
 
-         uint32_t id_within_group = find_id_within_group(cid, perf.perf->cfg);
-         counter.name = category.counters[id_within_group].name;
+         counter.name = category.counters[id].name;
 
-         counter.set_getter([](const Counter &c, const Driver &d) {
+         counter.set_getter([=](const Counter &c, const Driver &d) {
             auto &pan_driver = PanfrostDriver::into(d);
             struct panfrost_perf *perf = pan_driver.perf->perf;
-            uint32_t id_within_group = find_id_within_group(c.id, perf->cfg);
-            const auto counter =
-               &perf->cfg->categories[c.group].counters[id_within_group];
+            const auto counter = &perf->cfg->categories[gid].counters[id];
             return int64_t(panfrost_perf_counter_read(counter, perf));
          });
 
-         group.counters.push_back(cid);
+         group.counters.push_back(cid++);
 
          counters.emplace_back(counter);
       }

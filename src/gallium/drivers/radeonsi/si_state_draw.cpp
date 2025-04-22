@@ -1146,10 +1146,20 @@ static void si_emit_draw_registers(struct si_context *sctx,
       }
    } else {
       if (primitive_restart != sctx->last_primitive_restart_en) {
-         if (GFX_VERSION >= GFX9)
+         if (GFX_VERSION >= GFX10) {
+            /* GFX10-GFX10.3 (tested on NAVI10, NAVI21 and NAVI24 but likely all) are
+             * affected by a hw bug when primitive restart is updated and no context
+             * registers are written between draws. One workaround is to emit
+             * SQ_NON_EVENT(0) which is a NOP packet that adds a small delay and seems
+             * to fix it reliably.
+             */
+            radeon_event_write(V_028A90_SQ_NON_EVENT);
+            radeon_set_uconfig_reg(R_03092C_GE_MULTI_PRIM_IB_RESET_EN, primitive_restart);
+         } else if (GFX_VERSION >= GFX9) {
             radeon_set_uconfig_reg(R_03092C_VGT_MULTI_PRIM_IB_RESET_EN, primitive_restart);
-         else
+         } else {
             radeon_set_context_reg(R_028A94_VGT_MULTI_PRIM_IB_RESET_EN, primitive_restart);
+         }
          sctx->last_primitive_restart_en = primitive_restart;
       }
       if (si_prim_restart_index_changed<GFX_VERSION>(sctx, index_size, primitive_restart,

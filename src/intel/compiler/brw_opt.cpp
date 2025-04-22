@@ -185,6 +185,9 @@ brw_optimize(fs_visitor &s)
 
    OPT(brw_lower_uniform_pull_constant_loads);
 
+   /* Do this before brw_lower_send_descriptors. */
+   OPT(brw_workaround_memory_fence_before_eot);
+
    if (OPT(brw_lower_send_descriptors)) {
       /* No need for standard copy_propagation since
        * brw_fs_opt_address_reg_load will only optimize defs.

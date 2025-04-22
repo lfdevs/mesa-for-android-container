@@ -130,6 +130,7 @@ panfrost_shader_compile(struct panfrost_screen *screen, const nir_shader *ir,
    struct panfrost_compile_inputs inputs = {
       .debug = dbg,
       .gpu_id = panfrost_device_gpu_id(dev),
+      .push_uniforms = true,
    };
 
    if (dev->arch >= 9)

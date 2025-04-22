@@ -2763,15 +2763,14 @@ deduplicate_outputs(struct linkage_info *linkage,
             /* We also need to set the base to match the duplicate load, so
              * that CSE can eliminate it.
              */
-            if (!list_is_empty(dst_loads)) {
+            if (list_index == 0) {
+               /* Outputs that aren't loaded by the consumer should be already deleted. */
+               assert(!list_is_empty(dst_loads));
                struct list_node *first =
                   list_first_entry(dst_loads, struct list_node, head);
                nir_intrinsic_set_base(loadi, nir_intrinsic_base(first->instr));
             } else {
-               /* Use the base of the found store if there are no loads (it can
-                * only happen with TCS).
-                */
-               assert(list_index == 0);
+               /* The duplicate output may not have any loads, use the base of the found store. */
                nir_intrinsic_set_base(loadi, nir_intrinsic_base(store));
             }
          }

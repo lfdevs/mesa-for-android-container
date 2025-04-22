@@ -173,6 +173,7 @@ struct intel_perf_query_result;
 #define MAX_INLINE_UNIFORM_BLOCK_DESCRIPTORS 32
 #define MAX_EMBEDDED_SAMPLERS 2048
 #define MAX_CUSTOM_BORDER_COLORS 4096
+#define MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS 256
 /* We need 16 for UBO block reads to work and 32 for push UBOs. However, we
  * use 64 here to avoid cache issues. This could most likely bring it back to
  * 32 if we had different virtual addresses for the different views on a given
@@ -4651,6 +4652,7 @@ struct anv_pipeline_bind_map {
    struct anv_pipeline_binding *                surface_to_descriptor;
    struct anv_pipeline_binding *                sampler_to_descriptor;
    struct anv_pipeline_embedded_sampler_binding* embedded_sampler_to_binding;
+   BITSET_DECLARE(input_attachments, MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS + 1);
    struct brw_kernel_arg_desc *                 kernel_args;
 
    struct anv_push_range                        push_ranges[4];
@@ -4896,8 +4898,6 @@ struct anv_graphics_pipeline {
 
    uint32_t                                     view_mask;
    uint32_t                                     instance_multiplier;
-
-   bool                                         rp_has_ds_self_dep;
 
    bool                                         kill_pixel;
    bool                                         uses_xfb;

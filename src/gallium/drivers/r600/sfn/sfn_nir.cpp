@@ -761,6 +761,9 @@ r600_lower_and_optimize_nir(nir_shader *sh,
               (nir_lower_io_lower_64bit_to_32 |
                nir_lower_io_use_interpolated_input_intrinsics));
 
+   if (sh->info.stage == MESA_SHADER_VERTEX || sh->info.stage == MESA_SHADER_TESS_EVAL)
+      NIR_PASS(_, sh, nir_move_output_stores_to_end);
+
    nir_shader_gather_info(sh, nir_shader_get_entrypoint(sh));
 
    bool lower_64bit_io_to_vec2 = (sh->info.bit_sizes_float | sh->info.bit_sizes_int) & 64;

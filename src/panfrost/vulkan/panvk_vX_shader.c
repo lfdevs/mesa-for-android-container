@@ -285,6 +285,7 @@ panvk_get_spirv_options(UNUSED struct vk_physical_device *vk_pdev,
       .ubo_addr_format = panvk_buffer_ubo_addr_format(rs->uniform_buffers),
       .ssbo_addr_format = panvk_buffer_ssbo_addr_format(rs->storage_buffers),
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
+      .shared_addr_format = nir_address_format_32bit_offset,
    };
 }
 
@@ -1050,7 +1051,6 @@ panvk_compile_shader(struct panvk_device *dev,
 
    struct panfrost_compile_inputs inputs = {
       .gpu_id = phys_dev->kmod.props.gpu_prod_id,
-      .no_ubo_to_push = true,
       .view_mask = (state && state->rp) ? state->rp->view_mask : 0,
    };
 
