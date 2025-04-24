@@ -1,3 +1,11 @@
+mesa (25.0.4-2) UNRELEASED; urgency=medium
+
+  [ Simon McVittie ]
+  * Share a single JSON manifest per Vulkan driver between all architectures
+    (Closes: #980148)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 24 Apr 2025 17:25:17 +0300
+
 mesa (25.0.4-1) unstable; urgency=medium
 
   * New upstream release.
