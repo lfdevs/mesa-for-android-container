@@ -1,0 +1,144 @@
+From da90fca6093dd58cc351b0ac624ea8c0d83a81f9 Mon Sep 17 00:00:00 2001
+From: Christian Gmeiner <cgmeiner@igalia.com>
+Date: Fri, 18 Apr 2025 23:35:20 +0200
+Subject: [PATCH 1/3] etnaviv: isa: Add txf instruction
+
+This instruction is used to implement texelfetch.
+
+Blob generates such txf's for
+dEQP-GLES3.functional.shaders.texture_functions.texelfetch.+
+
+Signed-off-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/34685>
+---
+ src/etnaviv/isa/etnaviv.xml      | 5 +++++
+ src/etnaviv/isa/tests/disasm.cpp | 1 +
+ 2 files changed, 6 insertions(+)
+
+diff --git a/src/etnaviv/isa/etnaviv.xml b/src/etnaviv/isa/etnaviv.xml
+index a337c1e9d0762..42f551238bf1b 100644
+--- a/src/etnaviv/isa/etnaviv.xml
++++ b/src/etnaviv/isa/etnaviv.xml
+@@ -1359,6 +1359,11 @@ SPDX-License-Identifier: MIT
+ 	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
+ </bitset>
+ 
++<bitset name="txf" extends="#instruction-tex-src0-src1-src2">
++	<pattern low="0" high="5">001001</pattern> <!-- OPC -->
++	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
++</bitset>
++
+ <bitset name="imadlo0" extends="#instruction-alu-src0-src1-src2">
+ 	<pattern low="0" high="5">001100</pattern> <!-- OPC -->
+ 	<pattern pos="80">1</pattern> <!-- OPCODE_BIT6 -->
+diff --git a/src/etnaviv/isa/tests/disasm.cpp b/src/etnaviv/isa/tests/disasm.cpp
+index aa027618aa40a..3d4ebec8a49be 100644
+--- a/src/etnaviv/isa/tests/disasm.cpp
++++ b/src/etnaviv/isa/tests/disasm.cpp
+@@ -166,6 +166,7 @@ INSTANTIATE_TEST_SUITE_P(Opcodes, DisasmTest,
+       disasm_state{ {0x00801036, 0x15400804, 0x01540050, 0x00000002}, "clamp0_max        t0.x___, u0.yyyy, u0.zzzz, void\n"},
+       disasm_state{ {0x0080103b, 0x00001804, 0x40000000, 0x00400028}, "iaddsat.s32       t0.x___, t1.xxxx, void, -t2.xxxx\n"},
+       disasm_state{ {0x01001008, 0x15400804, 0xd00100c0, 0x00000007}, "imod.u16          t0._y__, t0.yyyy, 1, void\n"},
++      disasm_state{ {0x07811009, 0x15001f20, 0x01ff00c0, 0x78021008}, "txf               t1, tex0.xyzw, t1.xyyy, t1.wwww, 4352\n", FLAG_FAILING_ASM},
+       disasm_state{ {0x0080103c, 0x00001804, 0x40000140, 0x00000000}, "imullo0.s32       t0.x___, t1.xxxx, t2.xxxx, void\n"},
+       disasm_state{ {0x00801000, 0x00001804, 0x40010140, 0x00000000}, "imulhi0.s32       t0.x___, t1.xxxx, t2.xxxx, void\n"},
+       disasm_state{ {0x00801004, 0x00201804, 0x40010040, 0x00000000}, "idiv0.s16         t0.x___, t1.xxxx, t0.xxxx, void\n"},
+-- 
+GitLab
+
+
+From eefe486533eb58d3d1e81daa5abd16e63ee4c7a9 Mon Sep 17 00:00:00 2001
+From: Christian Gmeiner <cgmeiner@igalia.com>
+Date: Fri, 18 Apr 2025 23:37:19 +0200
+Subject: [PATCH 2/3] etnaviv: nir: Legalize txf lod src
+
+The LOD must be a float, unlike the GLSL function, which expects an integer.
+
+Signed-off-by: Christian Gmeiner <cgmeiner@igalia.com>
+Reviewed-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/34685>
+---
+ .../etnaviv/etnaviv_nir_lower_texture.c       | 25 +++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_nir_lower_texture.c b/src/gallium/drivers/etnaviv/etnaviv_nir_lower_texture.c
+index d0462ead016dc..d20d175da79a8 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_nir_lower_texture.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_nir_lower_texture.c
+@@ -26,6 +26,28 @@ lower_txs(nir_builder *b, nir_instr *instr, UNUSED void *data)
+    return true;
+ }
+ 
++static bool
++legalize_txf_lod(nir_builder *b, nir_instr *instr, UNUSED void *data)
++{
++   if (instr->type != nir_instr_type_tex)
++      return false;
++
++   nir_tex_instr *tex = nir_instr_as_tex(instr);
++
++   if (tex->op != nir_texop_txf)
++      return false;
++
++   b->cursor = nir_before_instr(instr);
++
++   int lod_index = nir_tex_instr_src_index(tex, nir_tex_src_lod);
++   assert(lod_index >= 0);
++   nir_def *lod = tex->src[lod_index].src.ssa;
++
++   nir_src_rewrite(&tex->src[lod_index].src, nir_i2f32(b, lod));
++
++   return true;
++}
++
+ bool
+ etna_nir_lower_texture(nir_shader *s, struct etna_shader_key *key)
+ {
+@@ -48,5 +70,8 @@ etna_nir_lower_texture(nir_shader *s, struct etna_shader_key *key)
+    NIR_PASS(progress, s, nir_shader_instructions_pass, lower_txs,
+          nir_metadata_control_flow, NULL);
+ 
++   NIR_PASS(progress, s, nir_shader_instructions_pass, legalize_txf_lod,
++      nir_metadata_control_flow, NULL);
++
+    return progress;
+ }
+-- 
+GitLab
+
+
+From 614b66529de2832575cdb0c97581d0d5f791ed72 Mon Sep 17 00:00:00 2001
+From: Christian Gmeiner <cgmeiner@igalia.com>
+Date: Fri, 18 Apr 2025 23:42:14 +0200
+Subject: [PATCH 3/3] etnaviv: nir: Add support for txf texture operation
+
+The src[2] value 0x1100 is set based on observed behavior of the blob driver,
+though its exact meaning remains to be documented.
+
+Passes all dEQP-GLES3.functional.shaders.texture_functions.texelfetch.*
+tests on GC7000.
+
+Signed-off-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/34685>
+---
+ src/gallium/drivers/etnaviv/etnaviv_compiler_nir_emit.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_compiler_nir_emit.c b/src/gallium/drivers/etnaviv/etnaviv_compiler_nir_emit.c
+index 08a5ab5fb7bc3..708f0788b580d 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_compiler_nir_emit.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_compiler_nir_emit.c
+@@ -212,6 +212,10 @@ etna_emit_tex(struct etna_compile *c, nir_texop op, unsigned texid, unsigned dst
+    case nir_texop_txb: inst.opcode = ISA_OPC_TEXLDB; break;
+    case nir_texop_txd: inst.opcode = ISA_OPC_TEXLDD; break;
+    case nir_texop_txl: inst.opcode = ISA_OPC_TEXLDL; break;
++   case nir_texop_txf:
++      inst.opcode = ISA_OPC_TXF;
++      inst.src[2] = etna_immediate_int(0x1100);
++      break;
+    default:
+       compile_error(c, "Unhandled NIR tex type: %d\n", op);
+    }
+-- 
+GitLab
+

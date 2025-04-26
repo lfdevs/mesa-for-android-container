@@ -2,3 +2,4 @@ path_max.diff
 src_glx_dri_common.h.diff
 disable_ppc64el_assembly.diff
 drisw-Avoid-crashing-when-swrast_loader-NULL.patch
+etnaviv-add-support-for-texelfetch.patch
