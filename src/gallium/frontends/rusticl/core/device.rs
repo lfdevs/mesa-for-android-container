@@ -366,11 +366,14 @@ impl Device {
 
         // if we can't advertize 3d image write ext, we have to disable them all
         if !self.caps.has_3d_image_writes {
-            for f in &mut self.formats.values_mut() {
-                *f.get_mut(&CL_MEM_OBJECT_IMAGE3D).unwrap() &= !cl_mem_flags::from(
-                    CL_MEM_WRITE_ONLY | CL_MEM_READ_WRITE | CL_MEM_KERNEL_READ_AND_WRITE,
-                );
-            }
+            self.formats
+                .values_mut()
+                .filter_map(|f| f.get_mut(&CL_MEM_OBJECT_IMAGE3D))
+                .for_each(|flags| {
+                    *flags &= !cl_mem_flags::from(
+                        CL_MEM_WRITE_ONLY | CL_MEM_READ_WRITE | CL_MEM_KERNEL_READ_AND_WRITE,
+                    )
+                });
         }
 
         // we require formatted loads

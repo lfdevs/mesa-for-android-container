@@ -24,6 +24,10 @@ if cpu_family == 'x86_64'
     else
       files_blake3 += ['blake3_sse2_x86-64_windows_gnu.S', 'blake3_sse41_x86-64_windows_gnu.S', 'blake3_avx2_x86-64_windows_gnu.S', 'blake3_avx512_x86-64_windows_gnu.S']
     endif
+  # Disable blake assembly for x32, x86-64 with 32-bit pointers.
+  # GNU triplet is x86_64-linux-gnux32
+  elif cc.sizeof('void *') == 4
+    blake3_defs += blake3_x86_no_simd_defs
   else
     files_blake3 += ['blake3_sse2_x86-64_unix.S', 'blake3_sse41_x86-64_unix.S', 'blake3_avx2_x86-64_unix.S', 'blake3_avx512_x86-64_unix.S']
   endif

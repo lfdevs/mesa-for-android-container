@@ -2011,7 +2011,12 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
       blt.ColorDepth = xy_color_depth(fmtl);
 
       blt.DestinationPitch = (dst_surf->row_pitch_B / dst_pitch_unit) - 1;
+#if GFX_VERx10 >= 200
+      blt.DestinationMOCSindex = MOCS_GET_INDEX(params->dst.addr.mocs);
+      blt.DestinationEncryptEn = MOCS_GET_ENCRYPT_EN(params->dst.addr.mocs);
+#else
       blt.DestinationMOCS = params->dst.addr.mocs;
+#endif
       blt.DestinationTiling = xy_bcb_tiling(dst_surf);
       blt.DestinationX1 = dst_x0;
       blt.DestinationY1 = dst_y0;
@@ -2056,7 +2061,12 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
       blt.SourceX1 = src_x0;
       blt.SourceY1 = src_y0;
       blt.SourcePitch = (src_surf->row_pitch_B / src_pitch_unit) - 1;
+#if GFX_VERx10 >= 200
+      blt.SourceMOCSindex = MOCS_GET_INDEX(params->src.addr.mocs);
+      blt.SourceEncryptEn = MOCS_GET_ENCRYPT_EN(params->src.addr.mocs);
+#else
       blt.SourceMOCS = params->src.addr.mocs;
+#endif
       blt.SourceTiling = xy_bcb_tiling(src_surf);
       blt.SourceBaseAddress = params->src.addr;
       blt.SourceXOffset = params->src.tile_x_sa;
@@ -2138,6 +2148,12 @@ blorp_xy_fast_color_blit(struct blorp_batch *batch,
 
       blt.DestinationPitch = (dst_surf->row_pitch_B / dst_pitch_unit) - 1;
       blt.DestinationTiling = xy_bcb_tiling(dst_surf);
+#if GFX_VERx10 >= 200
+      blt.DestinationMOCSindex = MOCS_GET_INDEX(params->dst.addr.mocs);
+      blt.DestinationEncryptEn = MOCS_GET_ENCRYPT_EN(params->dst.addr.mocs);
+#else
+      blt.DestinationMOCS = params->dst.addr.mocs;
+#endif
       blt.DestinationX1 = params->x0;
       blt.DestinationY1 = params->y0;
       blt.DestinationX2 = params->x1;
@@ -2178,8 +2194,6 @@ blorp_xy_fast_color_blit(struct blorp_batch *batch,
          blt.DestinationCompressionFormat =
             isl_get_render_compression_format(dst_surf->format);
       }
-
-      blt.DestinationMOCS = params->dst.addr.mocs;
 #endif
    }
 #endif

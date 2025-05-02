@@ -575,7 +575,7 @@ impl SM70Encoder<'_> {
         let bit74_75_are_mod = !is_fp16_alu
             || matches!(src1, ALUSrc::None)
             || matches!(src2, ALUSrc::None);
-        debug_assert!(bit74_75_are_mod || !src0.has_src_mod());
+        debug_assert!(bit74_75_are_mod || !src2.has_src_mod());
 
         self.encode_alu_src0(&src0, RegFile::GPR, is_fp16_alu);
 
@@ -1202,7 +1202,7 @@ impl SM70Op for OpHFma2 {
 
         // HFMA2 doesn't have fabs or fneg on SRC2.
         if !src2.src_mod.is_none() {
-            b.copy_alu_src_and_lower_fmod(src2, SrcType::F16v2);
+            b.copy_alu_src_and_lower_fmod(src2, gpr, SrcType::F16v2);
         }
     }
 

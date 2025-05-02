@@ -585,6 +585,9 @@ typedef unsigned int
 
 /**
  * DRI2 Loader extension.
+ *
+ * These definitions are shared with xcb/dri2.h.
+ * Changing these definitions would break DRI2.
  */
 #define __DRI_BUFFER_FRONT_LEFT		0
 #define __DRI_BUFFER_BACK_LEFT		1
@@ -592,12 +595,14 @@ typedef unsigned int
 #define __DRI_BUFFER_BACK_RIGHT		3
 #define __DRI_BUFFER_DEPTH		4
 #define __DRI_BUFFER_STENCIL		5
-#define __DRI_BUFFER_FAKE_FRONT_LEFT	6
-#define __DRI_BUFFER_FAKE_FRONT_RIGHT	7
-#define __DRI_BUFFER_DEPTH_STENCIL	8  /**< Only available with DRI2 1.1 */
+#define __DRI_BUFFER_ACCUM		6
+#define __DRI_BUFFER_FAKE_FRONT_LEFT	7
+#define __DRI_BUFFER_FAKE_FRONT_RIGHT	8
+#define __DRI_BUFFER_DEPTH_STENCIL	9  /**< Only available with DRI2 1.1 */
+#define __DRI_BUFFER_HIZ		10
 
 /* Inofficial and for internal use. Increase when adding a new buffer token. */
-#define __DRI_BUFFER_COUNT		9
+#define __DRI_BUFFER_COUNT		11
 
 /* Used by the X server. */
 typedef struct {

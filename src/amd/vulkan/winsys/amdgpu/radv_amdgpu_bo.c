@@ -513,7 +513,8 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
       request.flags |= AMDGPU_GEM_CREATE_DISCARDABLE;
 
    if (flags & RADEON_FLAG_GFX12_ALLOW_DCC && ws->info.drm_minor >= 58) {
-      assert(ws->info.gfx_level >= GFX12 && (initial_domain & RADEON_DOMAIN_VRAM));
+      assert(ws->info.gfx_level >= GFX12 && (initial_domain & RADEON_DOMAIN_VRAM) &&
+             (flags & RADEON_FLAG_NO_CPU_ACCESS));
       bo->base.gfx12_allow_dcc = true;
       request.flags |= AMDGPU_GEM_CREATE_GFX12_DCC;
    }

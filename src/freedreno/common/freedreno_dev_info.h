@@ -9,6 +9,7 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -373,6 +374,14 @@ fd_dev_gpu_id(const struct fd_dev_id *id)
 
 /* Unmodified dev info as defined in freedreno_devices.py */
 const struct fd_dev_info *fd_dev_info_raw(const struct fd_dev_id *id);
+
+/* Helper to check if GPU is known before going any further */
+static inline uint8_t
+fd_dev_is_supported(const struct fd_dev_id *id) {
+   assert(id);
+   assert(id->gpu_id || id->chip_id);
+   return fd_dev_info_raw(id) != NULL;
+}
 
 /* Final dev info with dbg options and everything else applied.  */
 const struct fd_dev_info fd_dev_info(const struct fd_dev_id *id);

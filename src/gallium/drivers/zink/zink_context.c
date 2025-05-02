@@ -5660,7 +5660,7 @@ add_implicit_feedback_loop(struct zink_context *ctx, struct zink_resource *res)
          psurf = ctx->fb_state.zsbuf;
       else
          psurf = ctx->fb_state.cbufs[idx];
-      if (psurf->texture == &res->base.b)
+      if (psurf && psurf->texture == &res->base.b)
          psurfs[surf_idx++] = psurf;
    }
 

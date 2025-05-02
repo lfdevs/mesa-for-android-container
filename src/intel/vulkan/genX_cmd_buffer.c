@@ -6358,7 +6358,12 @@ genX(batch_emit_fast_color_dummy_blit)(struct anv_batch *batch,
 #if GFX_VERx10 >= 125
    anv_batch_emit(batch, GENX(XY_FAST_COLOR_BLT), blt) {
       blt.DestinationBaseAddress = device->workaround_address;
+#if GFX_VERx10 >= 200
+      blt.DestinationMOCSindex = MOCS_GET_INDEX(device->isl_dev.mocs.blitter_dst);
+      blt.DestinationEncryptEn = MOCS_GET_ENCRYPT_EN(device->isl_dev.mocs.blitter_dst);
+#else
       blt.DestinationMOCS = device->isl_dev.mocs.blitter_dst;
+#endif
       blt.DestinationPitch = 63;
       blt.DestinationX2 = 1;
       blt.DestinationY2 = 4;

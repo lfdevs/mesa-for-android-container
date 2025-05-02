@@ -634,7 +634,7 @@ gather_shader_info_tcs(struct radv_device *device, const nir_shader *nir,
 
    info->tcs.tcs_outputs_read = nir->info.outputs_read;
    info->tcs.tcs_outputs_written = nir->info.outputs_written;
-   info->tcs.tcs_patch_outputs_read = nir->info.patch_inputs_read;
+   info->tcs.tcs_patch_outputs_read = nir->info.patch_outputs_read;
    info->tcs.tcs_patch_outputs_written = nir->info.patch_outputs_written;
    info->tcs.tcs_vertices_out = nir->info.tess.tcs_vertices_out;
    info->tcs.tes_inputs_read = ~0ULL;

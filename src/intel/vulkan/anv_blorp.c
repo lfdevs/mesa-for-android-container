@@ -533,40 +533,123 @@ anv_blorp_blitter_execute_on_companion(struct anv_cmd_buffer *cmd_buffer,
 }
 
 static bool
+is_image_multisampled(struct anv_image *image)
+{
+   return image->vk.samples > 1;
+}
+
+static bool
+is_image_emulated(struct anv_image *image)
+{
+   return image->emu_plane_format != VK_FORMAT_UNDEFINED;
+}
+
+static bool
+is_image_hiz_compressed(struct anv_image *image)
+{
+   if (!(image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
+      return false;
+
+   const uint32_t plane =
+      anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_DEPTH_BIT);
+   return isl_aux_usage_has_hiz(image->planes[plane].aux_usage);
+}
+
+static bool
+is_image_hiz_non_wt_ccs_compressed(struct anv_image *image)
+{
+   if (!(image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
+      return false;
+
+   const uint32_t plane =
+      anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_DEPTH_BIT);
+   return isl_aux_usage_has_hiz(image->planes[plane].aux_usage) &&
+          image->planes[plane].aux_usage != ISL_AUX_USAGE_HIZ_CCS_WT;
+}
+
+static bool
+is_image_hiz_non_ccs_compressed(struct anv_image *image)
+{
+   if (!(image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
+      return false;
+
+   const uint32_t plane =
+      anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_DEPTH_BIT);
+   return image->planes[plane].aux_usage == ISL_AUX_USAGE_HIZ;
+}
+
+static bool
+is_image_stc_ccs_compressed(struct anv_image *image)
+{
+   /* STC_CCS is used for the CPS surfaces, hence the COLOR_BIT inclusion */
+   if (!(image->vk.aspects & (VK_IMAGE_ASPECT_STENCIL_BIT |
+                              VK_IMAGE_ASPECT_COLOR_BIT)))
+      return false;
+
+   const uint32_t plane =
+      anv_image_aspect_to_plane(image,
+                                image->vk.aspects &
+                                (VK_IMAGE_ASPECT_COLOR_BIT |
+                                 VK_IMAGE_ASPECT_STENCIL_BIT));
+   return image->planes[plane].aux_usage == ISL_AUX_USAGE_STC_CCS;
+}
+
+static bool
 anv_blorp_execute_on_companion(struct anv_cmd_buffer *cmd_buffer,
+                               struct anv_image *src_image,
                                struct anv_image *dst_image)
 {
    const struct intel_device_info *devinfo = cmd_buffer->device->info;
 
+   /* RCS can do everything, it's the Über-engine */
+   if (anv_cmd_buffer_is_render_queue(cmd_buffer))
+      return false;
+
    /* MSAA images have to be dealt with on the companion RCS command buffer
     * for both CCS && BCS engines.
+    *
+    * TODO: relax this for Xe3+ on CCS when we have Blorp MSAA copies.
     */
-   if ((anv_cmd_buffer_is_blitter_queue(cmd_buffer) ||
-        anv_cmd_buffer_is_compute_queue(cmd_buffer)) &&
-       dst_image->vk.samples > 1)
+   if ((src_image && is_image_multisampled(src_image)) ||
+       (dst_image && is_image_multisampled(dst_image)))
       return true;
 
-   /* Emulation of formats is done through a compute shader, so we need
-    * the companion command buffer for the BCS engine.
-    */
-   if (anv_cmd_buffer_is_blitter_queue(cmd_buffer) &&
-       dst_image->emu_plane_format != VK_FORMAT_UNDEFINED)
-      return true;
+   if (anv_cmd_buffer_is_blitter_queue(cmd_buffer)) {
+      /* Emulation of formats is done through a compute shader, so we need the
+       * companion command buffer for the blitter engine.
+       */
+      if ((src_image && is_image_emulated(src_image)) ||
+          (dst_image && is_image_emulated(dst_image)))
+         return false;
 
-   /* HSD 14021541470:
-    * The compression pairing bit on blitter engine is not programmed correctly
-    * for stencil resources. Fallback to RCS engine for performing a copy to
-    * workaround the issue.
-    */
-   if (anv_cmd_buffer_is_blitter_queue(cmd_buffer) &&
-       (devinfo->verx10 == 125) &&
-       (dst_image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT)) {
-      const uint32_t plane =
-         anv_image_aspect_to_plane(dst_image, VK_IMAGE_ASPECT_STENCIL_BIT);
-
-      if (isl_aux_usage_has_compression(dst_image->planes[plane].aux_usage))
+      /* HSD 14021541470: The compression pairing bit on blitter engine is not
+       * programmed correctly for depth/stencil resources. Fallback to RCS
+       * engine for performing a copy to workaround the issue.
+       */
+      if (devinfo->verx10 == 125 &&
+          ((src_image && (is_image_stc_ccs_compressed(src_image) ||
+                          is_image_hiz_compressed(src_image))) ||
+           (dst_image && (is_image_stc_ccs_compressed(dst_image) ||
+                          is_image_hiz_compressed(dst_image)))))
          return true;
    }
+
+   /* HiZ compression without CCS_WT will not work, it would require us to
+    * synchronize the HiZ data with CCS on queue transfer.
+    */
+   if (src_image && is_image_hiz_non_wt_ccs_compressed(src_image))
+      return true;
+
+   /* Pre Gfx20 the only engine that can generate STC_CCS data is RCS through
+    * the stencil output due to the difference in compression pairing bit. On
+    * Gfx20 there is no difference.
+    */
+   if (devinfo->ver < 20 && dst_image && is_image_stc_ccs_compressed(dst_image))
+      return true;
+
+   /* Blitter & compute engine cannot generate HiZ data */
+   if (dst_image && is_image_hiz_compressed(dst_image))
+      return true;
 
    return false;
 }
@@ -582,7 +665,7 @@ void anv_CmdCopyImage2(
    struct anv_cmd_buffer *main_cmd_buffer = cmd_buffer;
    UNUSED struct anv_state rcs_done = ANV_STATE_NULL;
 
-   if (anv_blorp_execute_on_companion(cmd_buffer, dst_image)) {
+   if (anv_blorp_execute_on_companion(cmd_buffer, src_image, dst_image)) {
       rcs_done = record_main_rcs_cmd_buffer_done(cmd_buffer);
       cmd_buffer = cmd_buffer->companion_rcs_cmd_buffer;
    }
@@ -743,7 +826,7 @@ void anv_CmdCopyBufferToImage2(
    UNUSED struct anv_state rcs_done = ANV_STATE_NULL;
 
    bool blorp_execute_on_companion =
-      anv_blorp_execute_on_companion(cmd_buffer, dst_image);
+      anv_blorp_execute_on_companion(cmd_buffer, NULL, dst_image);
 
    /* Check if any one of the aspects is incompatible with the blitter engine,
     * if true, use the companion RCS command buffer for blit operation since 3
@@ -824,7 +907,7 @@ void anv_CmdCopyImageToBuffer2(
    UNUSED struct anv_state rcs_done = ANV_STATE_NULL;
 
    bool blorp_execute_on_companion =
-      anv_blorp_execute_on_companion(cmd_buffer, src_image);
+      anv_blorp_execute_on_companion(cmd_buffer, src_image, NULL);
 
    /* Check if any one of the aspects is incompatible with the blitter engine,
     * if true, use the companion RCS command buffer for blit operation since 3
@@ -1487,7 +1570,7 @@ void anv_CmdClearColorImage(
    struct anv_cmd_buffer *main_cmd_buffer = cmd_buffer;
    UNUSED struct anv_state rcs_done = ANV_STATE_NULL;
 
-   if (anv_blorp_execute_on_companion(cmd_buffer, image)) {
+   if (anv_blorp_execute_on_companion(cmd_buffer, NULL, image)) {
       rcs_done = record_main_rcs_cmd_buffer_done(cmd_buffer);
       cmd_buffer = cmd_buffer->companion_rcs_cmd_buffer;
    }

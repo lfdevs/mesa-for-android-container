@@ -230,8 +230,17 @@ void vlVaHandleSliceParameterBufferHEVC(vlVaContext *context, vlVaBuffer *buf)
    for (uint32_t buffer_idx = 0; buffer_idx < buf->num_elements; buffer_idx++, h265++) {
       uint32_t slice_index = context->desc.h265.slice_parameter.slice_count + buffer_idx;
 
-      ASSERTED const size_t max_pipe_hevc_slices = ARRAY_SIZE(context->desc.h265.slice_parameter.slice_data_offset);
+      const size_t max_pipe_hevc_slices = ARRAY_SIZE(context->desc.h265.slice_parameter.slice_data_offset);
       assert(slice_index < max_pipe_hevc_slices);
+      if (slice_index >= max_pipe_hevc_slices) {
+         static bool warn_once = true;
+         if (warn_once) {
+            fprintf(stderr, "Warning: Number of slices (%d) provided exceed driver's max supported (%d), stop handling remaining slices.\n",
+               slice_index + 1, (int)max_pipe_hevc_slices);
+            warn_once = false;
+         }
+         return;
+      }
 
       switch(h265->LongSliceFlags.fields.slice_type) {
       /* Depending on slice_type, only update relevant reference */

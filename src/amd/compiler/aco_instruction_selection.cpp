@@ -7934,7 +7934,7 @@ visit_cmat_muladd(isel_context* ctx, nir_intrinsic_instr* instr)
    Operand B(as_vgpr(ctx, get_ssa_temp(ctx, instr->src[1].ssa)));
    Operand C(as_vgpr(ctx, get_ssa_temp(ctx, instr->src[2].ssa)));
 
-   VALU_instruction& vop3p = bld.vop3p(opcode, Definition(dst), A, B, C, 0, 0)->valu();
+   VALU_instruction& vop3p = bld.vop3p(opcode, Definition(dst), A, B, C, 0, 0x7)->valu();
    vop3p.neg_lo[0] = (signed_mask & 0x1) != 0;
    vop3p.neg_lo[1] = (signed_mask & 0x2) != 0;
    vop3p.clamp = clamp;

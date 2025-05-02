@@ -396,6 +396,17 @@ class TestResolveNomination:
         assert c.nomination_type is core.NominationType.BACKPORT
 
     @pytest.mark.asyncio
+    async def test_backport_is_nominated_after(self):
+        s = self.FakeSubprocess(b'Backport-to: 16.2')
+        c = core.Commit('abcdef1234567890', 'a commit')
+
+        with mock.patch('bin.pick.core.asyncio.create_subprocess_exec', s.mock):
+            await core.resolve_nomination(c, '16.3')
+
+        assert c.nominated
+        assert c.nomination_type is core.NominationType.BACKPORT
+
+    @pytest.mark.asyncio
     async def test_backport_is_not_nominated(self):
         s = self.FakeSubprocess(b'Backport-to: 16.2')
         c = core.Commit('abcdef1234567890', 'a commit')

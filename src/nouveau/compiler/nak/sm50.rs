@@ -318,9 +318,14 @@ impl SM50Encoder<'_> {
 //
 
 pub trait SM50LegalizeBuildHelpers: LegalizeBuildHelpers {
-    fn copy_alu_src_if_fabs(&mut self, src: &mut Src, src_type: SrcType) {
+    fn copy_alu_src_if_fabs(
+        &mut self,
+        src: &mut Src,
+        reg_file: RegFile,
+        src_type: SrcType,
+    ) {
         if src.src_mod.has_fabs() {
-            self.copy_alu_src_and_lower_fmod(src, src_type);
+            self.copy_alu_src_and_lower_fmod(src, reg_file, src_type);
         }
     }
 
@@ -451,9 +456,9 @@ impl SM50Op for OpFFma {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1, src2] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F32);
-        b.copy_alu_src_if_fabs(src1, SrcType::F32);
-        b.copy_alu_src_if_fabs(src2, SrcType::F32);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F32);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F32);
+        b.copy_alu_src_if_fabs(src2, GPR, SrcType::F32);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F32);
         b.copy_alu_src_if_f20_overflow(src1, GPR, SrcType::F32);
@@ -558,8 +563,8 @@ impl SM50Op for OpFMul {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F32);
-        b.copy_alu_src_if_fabs(src1, SrcType::F32);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F32);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F32);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F32);
     }
@@ -889,9 +894,9 @@ impl SM50Op for OpDFma {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1, src2] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F64);
-        b.copy_alu_src_if_fabs(src1, SrcType::F64);
-        b.copy_alu_src_if_fabs(src2, SrcType::F64);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F64);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F64);
+        b.copy_alu_src_if_fabs(src2, GPR, SrcType::F64);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F64);
         b.copy_alu_src_if_f20_overflow(src1, GPR, SrcType::F64);
@@ -988,8 +993,8 @@ impl SM50Op for OpDMul {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F64);
-        b.copy_alu_src_if_fabs(src1, SrcType::F64);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F64);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F64);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F64);
         b.copy_alu_src_if_f20_overflow(src1, GPR, SrcType::F64);

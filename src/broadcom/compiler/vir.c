@@ -1106,6 +1106,10 @@ v3d_fixup_fs_output_types(struct v3d_compile *c)
                 case FRAG_RESULT_DATA1:
                 case FRAG_RESULT_DATA2:
                 case FRAG_RESULT_DATA3:
+                case FRAG_RESULT_DATA4:
+                case FRAG_RESULT_DATA5:
+                case FRAG_RESULT_DATA6:
+                case FRAG_RESULT_DATA7:
                         mask = 1 << (var->data.location - FRAG_RESULT_DATA0);
                         break;
                 }

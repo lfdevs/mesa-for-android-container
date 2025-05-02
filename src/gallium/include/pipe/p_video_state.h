@@ -45,7 +45,7 @@ extern "C" {
 #define PIPE_H264_MAX_DPB_SIZE        17
 #define PIPE_H265_MAX_NUM_LIST_REF    15
 #define PIPE_H265_MAX_DPB_SIZE        16
-#define PIPE_H265_MAX_SLICES          128
+#define PIPE_H265_MAX_SLICES          600
 #define PIPE_H264_MAX_REFERENCES      16
 #define PIPE_H265_MAX_REFERENCES      15
 #define PIPE_AV1_MAX_REFERENCES       8

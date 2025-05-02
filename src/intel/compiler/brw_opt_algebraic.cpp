@@ -548,10 +548,20 @@ brw_opt_algebraic(fs_visitor &s)
          }
          break;
       case BRW_OPCODE_SEL:
-         if (inst->src[0].equals(inst->src[1])) {
+         /* Floating point SEL.CMOD may flush denorms to zero. We don't have
+          * enough information at this point in compilation to know whether or
+          * not it is safe to remove that.
+          *
+          * Integer SEL or SEL without a conditional modifier is just a fancy
+          * MOV. Those are always safe to eliminate.
+          */
+         if (inst->src[0].equals(inst->src[1]) &&
+             (!brw_type_is_float(inst->dst.type) ||
+              inst->conditional_mod == BRW_CONDITIONAL_NONE)) {
             inst->opcode = BRW_OPCODE_MOV;
             inst->predicate = BRW_PREDICATE_NONE;
             inst->predicate_inverse = false;
+            inst->conditional_mod = BRW_CONDITIONAL_NONE;
             inst->resize_sources(1);
             progress = true;
          } else if (inst->saturate && inst->src[1].file == IMM) {

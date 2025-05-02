@@ -2397,12 +2397,15 @@ elk_fs_visitor::opt_algebraic()
             inst->remove(block);
             progress = true;
          }
-         if (inst->src[0].equals(inst->src[1])) {
+         if (inst->src[0].equals(inst->src[1]) &&
+             (!elk_reg_type_is_floating_point(inst->dst.type) ||
+              inst->conditional_mod == ELK_CONDITIONAL_NONE)) {
             inst->opcode = ELK_OPCODE_MOV;
             inst->sources = 1;
             inst->src[1] = reg_undef;
             inst->predicate = ELK_PREDICATE_NONE;
             inst->predicate_inverse = false;
+            inst->conditional_mod = ELK_CONDITIONAL_NONE;
             progress = true;
          } else if (inst->saturate && inst->src[1].file == IMM) {
             switch (inst->conditional_mod) {

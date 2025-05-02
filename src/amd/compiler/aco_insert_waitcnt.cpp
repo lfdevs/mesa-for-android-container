@@ -319,9 +319,9 @@ perform_barrier(wait_ctx& ctx, wait_imm& imm, memory_sync_info sync, unsigned se
          if (bar_scope_lds <= subgroup_scope)
             events &= ~event_lds;
 
-         /* Until GFX12, in non-WGP, the L1 (L0 on GFX10+) cache keeps all memory operations
+         /* Until GFX11, in non-WGP, the L1 (L0 on GFX10+) cache keeps all memory operations
           * in-order for the same workgroup */
-         if (ctx.gfx_level < GFX12 && !ctx.program->wgp_mode && sync.scope <= scope_workgroup)
+         if (ctx.gfx_level < GFX11 && !ctx.program->wgp_mode && sync.scope <= scope_workgroup)
             events &= ~(event_vmem | event_vmem_store | event_smem);
 
          if (events)

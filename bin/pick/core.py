@@ -29,6 +29,7 @@ import subprocess
 import typing
 
 import attr
+from packaging.version import Version
 
 if typing.TYPE_CHECKING:
     from .ui import UI
@@ -294,7 +295,8 @@ async def resolve_nomination(commit: 'Commit', version: str) -> 'Commit':
 
     if backport_to := IS_BACKPORT.findall(out):
         for match in backport_to:
-            if version in match:
+            if any(Version(version) >= Version(backport_version)
+                   for backport_version in match if backport_version != ''):
                 commit.nominated = True
                 commit.nomination_type = NominationType.BACKPORT
                 return commit

@@ -1163,7 +1163,8 @@
     <field name="Opcode" start="22" end="28" type="uint" default="0x41" />
     <field name="Client" start="29" end="31" type="uint" default="2" />
     <field name="Destination Pitch" start="32" end="49" type="uint" />
-    <field name="Destination MOCS" start="56" end="59" type="uint" nonzero="true" />
+    <field name="Destination Encrypt En" start="53" end="53" type="uint" />
+    <field name="Destination MOCS index" start="56" end="59" type="uint" nonzero="true" />
     <field name="Destination Tiling" start="62" end="63" type="uint" prefix="XY_TILE">
       <value name="LINEAR" value="0" />
       <value name="X" value="1" />
@@ -1185,7 +1186,7 @@
     <field name="Source Y1" start="240" end="255" type="int" />
     <field name="Source Pitch" start="256" end="273" type="uint" />
     <field name="Source Encrypt En" start="277" end="277" type="bool" />
-    <field name="Source MOCS" start="280" end="283" type="uint" />
+    <field name="Source MOCS index" start="280" end="283" type="uint" />
     <field name="Source Tiling" start="286" end="287" type="uint" prefix="XY_TILE">
       <value name="LINEAR" value="0" />
       <value name="X" value="1" />
@@ -1283,7 +1284,7 @@
     </field>
     <field name="Destination Pitch" start="32" end="49" type="uint" />
     <field name="Destination Encrypt En" start="53" end="53" type="bool" />
-    <field name="Destination MOCS" start="56" end="59" type="uint" />
+    <field name="Destination MOCS index" start="56" end="59" type="uint" />
     <field name="Destination Tiling" start="62" end="63" type="uint" prefix="XY_TILE">
       <value name="LINEAR" value="0" />
       <value name="X" value="1" />

@@ -94,8 +94,8 @@ etna_screen_destroy(struct pipe_screen *pscreen)
    if (screen->dummy_bo)
       etna_bo_del(screen->dummy_bo);
 
-   if (screen->dummy_rt_reloc.bo)
-      etna_bo_del(screen->dummy_rt_reloc.bo);
+   if (screen->dummy_desc_reloc.bo)
+      etna_bo_del(screen->dummy_desc_reloc.bo);
 
    if (screen->perfmon)
       etna_perfmon_del(screen->perfmon);

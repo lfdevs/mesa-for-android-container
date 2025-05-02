@@ -239,7 +239,7 @@ lower_mem_load(nir_builder *b, nir_intrinsic_instr *intrin,
          /* In this case, we know how much to adjust the offset */
          uint32_t delta = chunk_align_offset % requested.align;
          nir_def *load_offset =
-            nir_iadd_imm(b, offset, chunk_start - (int)delta);
+            nir_iadd_imm(b, offset, (int64_t)chunk_start - (int64_t)delta);
 
          const uint32_t load_align_offset =
             (chunk_align_offset - delta) % align_mul;

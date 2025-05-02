@@ -446,10 +446,11 @@ valhall_lower_get_ssbo_size(struct nir_builder *b,
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_def *table_idx =
-      nir_ushr_imm(b, nir_channel(b, intr->src[0].ssa, 0), 24);
+   nir_def *res_handle = nir_channel(b, intr->src[0].ssa, 0);
+   nir_def *table_idx = nir_ushr_imm(b, res_handle, 24);
+   nir_def *res_idx = nir_iand_imm(b, res_handle, BITFIELD_MASK(24));
    nir_def *res_table = nir_ior_imm(b, table_idx, pan_res_handle(62, 0));
-   nir_def *buf_idx = nir_channel(b, intr->src[0].ssa, 1);
+   nir_def *buf_idx = nir_iadd(b, res_idx, nir_channel(b, intr->src[0].ssa, 1));
    nir_def *desc_offset = nir_imul_imm(b, buf_idx, PANVK_DESCRIPTOR_SIZE);
    nir_def *size = nir_load_ubo(
       b, 1, 32, res_table, nir_iadd_imm(b, desc_offset, 4), .range = ~0u,

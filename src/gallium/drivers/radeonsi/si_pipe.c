@@ -1007,9 +1007,6 @@ void si_destroy_screen(struct pipe_screen *pscreen)
    pipe_resource_reference(&sscreen->tess_rings, NULL);
    pipe_resource_reference(&sscreen->tess_rings_tmz, NULL);
 
-   util_queue_destroy(&sscreen->shader_compiler_queue);
-   util_queue_destroy(&sscreen->shader_compiler_queue_opt_variants);
-
    for (unsigned i = 0; i < ARRAY_SIZE(sscreen->aux_contexts); i++) {
       if (!sscreen->aux_contexts[i].ctx)
          continue;
@@ -1026,6 +1023,9 @@ void si_destroy_screen(struct pipe_screen *pscreen)
       mtx_unlock(&sscreen->aux_contexts[i].lock);
       mtx_destroy(&sscreen->aux_contexts[i].lock);
    }
+
+   util_queue_destroy(&sscreen->shader_compiler_queue);
+   util_queue_destroy(&sscreen->shader_compiler_queue_opt_variants);
 
    simple_mtx_destroy(&sscreen->async_compute_context_lock);
    if (sscreen->async_compute_context) {

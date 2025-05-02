@@ -62,6 +62,9 @@ static const struct vk_instance_extension_table panvk_instance_extensions = {
 #ifdef PANVK_USE_WSI_PLATFORM
    .KHR_surface = true,
 #endif
+#ifdef VK_USE_PLATFORM_DISPLAY_KHR
+   .EXT_direct_mode_display = true,
+#endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    .KHR_wayland_surface = true,
 #endif
