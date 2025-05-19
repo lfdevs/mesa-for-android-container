@@ -1,10 +1,10 @@
-mesa (25.0.5-1.1) UNRELEASED; urgency=medium
+mesa (25.0.5-2) unstable; urgency=medium
 
-  * Non-maintainer upload.
+  [ Johannes Schauer Marin Rodrigues ]
   * cherry-pick patch from upstream: etnaviv-add-support-for-texelfetch.patch
     (Closes: #1104029)
 
- -- Johannes Schauer Marin Rodrigues <josch@debian.org>  Mon, 05 May 2025 06:50:27 +0200
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 19 May 2025 13:49:49 +0300
 
 mesa (25.0.5-1) unstable; urgency=medium
 
