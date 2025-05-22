@@ -1,3 +1,9 @@
+mesa (25.0.5-3) UNRELEASED; urgency=medium
+
+  * control: Bump rustc dependency to match upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 22 May 2025 11:48:01 +0300
+
 mesa (25.0.5-2) unstable; urgency=medium
 
   [ Johannes Schauer Marin Rodrigues ]
