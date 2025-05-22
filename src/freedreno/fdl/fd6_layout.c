@@ -50,6 +50,12 @@ fdl6_get_ubwc_blockwidth(const struct fdl_layout *layout,
       return;
    }
 
+   if (layout->format == PIPE_FORMAT_X6R10_UNORM) {
+      *blockwidth = 32;
+      *blockheight = 4;
+      return;
+   }
+
    /* special case for 1bpp/2bpp + MSAA (note layout->cpp is already
     * pre-multiplied by nr_samples):
     */
