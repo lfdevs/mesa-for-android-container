@@ -1,3 +1,14 @@
+mesa (25.0.7-0ubuntu0.24.04.1) noble; urgency=medium
+
+  * Backport to noble. (LP: #2111480)
+    - build with meson-1.5
+    - build with rustc-1.78, rustfmt-1.78
+    - bump directx-headers build-dep
+    - bump wayland-protocols build-dep
+    - bump spirv-tools build-dep
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 23 May 2025 18:16:49 +0300
+
 mesa (25.0.7-0ubuntu0.25.04.1) plucky; urgency=medium
 
   * New upstream bugfix release. (LP: #2112461)

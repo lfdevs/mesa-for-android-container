@@ -14,7 +14,7 @@ DEB_HOST_ARCH_CPU  ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 
 # for finding the correct llvm-config when meson doesn't know about it yet
 LLVM_VERSION = 19
-export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:$(PATH)
+export PATH:=/usr/lib/llvm-$(LLVM_VERSION)/bin/:/usr/lib/rust-1.78/bin:$(PATH)
 
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
 
