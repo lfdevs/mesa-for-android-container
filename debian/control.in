@@ -9,6 +9,7 @@ Build-Depends:
  directx-headers-dev (>= 1.614.1) [linux-amd64 linux-arm64],
  flatbuffers-compiler [linux-arm64],
  glslang-tools [@LLVM_ARCHS@],
+ spirv-tools (>= 2024.4~rc1) [@LLVM_ARCHS@],
  meson (>= 1.4.0),
  pkgconf,
  libdrm-dev (>= 2.4.121),
