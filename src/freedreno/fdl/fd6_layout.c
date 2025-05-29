@@ -51,7 +51,8 @@ fdl6_get_ubwc_blockwidth(const struct fdl_layout *layout,
    }
 
    if (layout->format == PIPE_FORMAT_X6R10_UNORM) {
-      *blockwidth = 32;
+      // *blockwidth = 32;
+      *blockwidth = 48; // 48 for TP10
       *blockheight = 4;
       return;
    }
