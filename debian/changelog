@@ -5,6 +5,7 @@ mesa (25.0.7-1) UNRELEASED; urgency=medium
   * control: Bump directx-headers build-dep.
   * control: Bump spirv-tools build dep for Intel shader compiler.
   * New upstream release. (Closes: #1105831)
+  * rules: Drop obsolete removals.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 22 May 2025 11:48:01 +0300
 
