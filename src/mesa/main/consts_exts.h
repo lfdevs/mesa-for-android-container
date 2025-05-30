@@ -925,6 +925,9 @@ struct gl_constants
    /** Override GL_MAP_UNSYNCHRONIZED_BIT */
    bool ForceMapBufferSynchronized;
 
+   /** Override GL_DEPTH_COMPONENT type from unsigned short to unsigned int */
+   bool ForceDepthComponentTypeInt;
+
    /** GL_ARB_get_program_binary */
    GLuint NumProgramBinaryFormats;
 

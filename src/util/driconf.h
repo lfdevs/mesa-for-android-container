@@ -275,6 +275,9 @@
 #define DRI_CONF_FORCE_GL_MAP_BUFFER_SYNCHRONIZED(def) \
    DRI_CONF_OPT_B(force_gl_map_buffer_synchronized, def, "Override GL_MAP_UNSYNCHRONIZED_BIT.")
 
+#define DRI_CONF_FORCE_GL_DEPTH_COMPONENT_TYPE_INT(def) \
+   DRI_CONF_OPT_B(force_gl_depth_component_type_int, def, "Override GL_DEPTH_COMPONENT type from unsigned short to unsigned int")
+
 #define DRI_CONF_TRANSCODE_ETC(def) \
    DRI_CONF_OPT_B(transcode_etc, def, "Transcode ETC formats to DXTC if unsupported")
 
@@ -702,7 +705,7 @@
 
 #define DRI_CONF_RADV_DISABLE_DCC_STORES(def) \
    DRI_CONF_OPT_B(radv_disable_dcc_stores, def, \
-                  "Disable DCC for color storage images")
+                  "Disable DCC for color storage images on GFX10-GFX11.5")
 
 #define DRI_CONF_RADV_LOWER_TERMINATE_TO_DISCARD(def) \
    DRI_CONF_OPT_B(radv_lower_terminate_to_discard, def, \
@@ -781,6 +784,14 @@
 
 #define DRI_CONF_RADV_DISABLE_NGG_GS(def) \
    DRI_CONF_OPT_B(radv_disable_ngg_gs, def, "Disable NGG GS on GFX10/GFX10.3.")
+
+#define DRI_CONF_RADV_FORCE_64K_SPARSE_ALIGNMENT(def) \
+   DRI_CONF_OPT_B(radv_force_64k_sparse_alignment, def, \
+                  "Force the alignment of sparse buffers to 64KiB")
+
+#define DRI_CONF_RADV_DISABLE_HIZ_HIS_GFX12(def) \
+   DRI_CONF_OPT_B(radv_disable_hiz_his_gfx12, def, \
+                  "Disable HiZ/HiS on GFX12 (RDNA4) to workaround a hw bug that causes random GPU hangs")
 
 /**
  * \brief ANV specific configuration options

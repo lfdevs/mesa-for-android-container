@@ -89,13 +89,16 @@ write_image_view_desc(struct panvk_descriptor_set *set,
    if (pImageInfo && pImageInfo->imageView != VK_NULL_HANDLE) {
       VK_FROM_HANDLE(panvk_image_view, view, pImageInfo->imageView);
 
-#if PAN_ARCH <= 7
+#if PAN_ARCH >= 9
+      if (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+         write_desc(set, binding, elem, &view->descs.storage_tex, type);
+      else
+         write_desc(set, binding, elem, &view->descs.tex, type);
+#else
       if (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
          write_desc(set, binding, elem, &view->descs.img_attrib_buf, type);
       else
          write_desc(set, binding, elem, &view->descs.tex, type);
-#else
-      write_desc(set, binding, elem, &view->descs.tex, type);
 #endif
    }
 }

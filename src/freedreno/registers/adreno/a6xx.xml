@@ -5122,8 +5122,15 @@ to upconvert to 32b float internally?
 		<bitfield name="MERGEDREGS" pos="31" type="boolean"/>
 	</reg32>
 
+	<enum name="a6xx_const_ram_mode">
+		<value value="0x0" name="CONSTLEN_128"/>
+		<value value="0x1" name="CONSTLEN_192"/>
+		<value value="0x2" name="CONSTLEN_256"/>
+		<value value="0x3" name="CONSTLEN_512"/> <!-- a7xx only -->
+	</enum>
+
 	<!-- set for compute shaders -->
-	<reg32 offset="0xa9b1" name="SP_CS_UNKNOWN_A9B1" usage="cmd">
+	<reg32 offset="0xa9b1" name="SP_CS_CTRL_REG1" usage="cmd">
 		<bitfield name="SHARED_SIZE" low="0" high="4" type="uint">
 			<doc>
 				If 0 - all 32k of shared storage is enabled, otherwise
@@ -5134,9 +5141,13 @@ to upconvert to 32b float internally?
 				always return 0)
 			</doc>
 		</bitfield>
-		<bitfield name="UNK5" pos="5" type="boolean"/>
-		<!-- always 1 ? -->
-		<bitfield name="UNK6" pos="6" type="boolean"/>
+		<bitfield name="CONSTANTRAMMODE" low="5" high="6" type="a6xx_const_ram_mode">
+			<doc>
+				This defines the split between consts and local
+				memory in the Local Buffer. The programmed value
+				must be at least the actual CONSTLEN.
+			</doc>
+		</bitfield>
 	</reg32>
 	<reg32 offset="0xa9b2" name="SP_CS_BRANCH_COND" type="hex" usage="cmd"/>
 	<reg32 offset="0xa9b3" name="SP_CS_OBJ_FIRST_EXEC_OFFSET" type="uint" usage="cmd"/>
@@ -5747,12 +5758,10 @@ to upconvert to 32b float internally?
 		</reg64>
 	</array>
 
-	<!-- new in a6xx gen4, mirror of SP_CS_UNKNOWN_A9B1? -->
-	<reg32 offset="0xb9d0" name="HLSQ_CS_UNKNOWN_B9D0" variants="A6XX" usage="cmd">
+	<!-- new in a6xx gen4, mirror of SP_CS_CTRL_REG1? -->
+	<reg32 offset="0xb9d0" name="HLSQ_CS_CTRL_REG1" variants="A6XX" usage="cmd">
 		<bitfield name="SHARED_SIZE" low="0" high="4" type="uint"/>
-		<bitfield name="UNK5" pos="5" type="boolean"/>
-		<!-- always 1 ? -->
-		<bitfield name="UNK6" pos="6" type="boolean"/>
+		<bitfield name="CONSTANTRAMMODE" low="5" high="6" type="a6xx_const_ram_mode"/>
 	</reg32>
 
 	<reg32 offset="0xbb00" name="HLSQ_DRAW_CMD" variants="A6XX">

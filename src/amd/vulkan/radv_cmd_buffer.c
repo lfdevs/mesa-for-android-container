@@ -71,11 +71,6 @@ radv_bind_dynamic_state(struct radv_cmd_buffer *cmd_buffer, const struct radv_dy
    dest->sample_location.count = src->sample_location.count;
 
    if (copy_mask & RADV_DYNAMIC_VIEWPORT) {
-      if (dest->vk.vp.viewport_count != src->vk.vp.viewport_count) {
-         dest->vk.vp.viewport_count = src->vk.vp.viewport_count;
-         dest_mask |= RADV_DYNAMIC_VIEWPORT;
-      }
-
       if (memcmp(&dest->vk.vp.viewports, &src->vk.vp.viewports, src->vk.vp.viewport_count * sizeof(VkViewport))) {
          typed_memcpy(dest->vk.vp.viewports, src->vk.vp.viewports, src->vk.vp.viewport_count);
          typed_memcpy(dest->hw_vp.xform, src->hw_vp.xform, src->vk.vp.viewport_count);
@@ -83,14 +78,23 @@ radv_bind_dynamic_state(struct radv_cmd_buffer *cmd_buffer, const struct radv_dy
       }
    }
 
-   if (copy_mask & RADV_DYNAMIC_SCISSOR) {
-      if (dest->vk.vp.scissor_count != src->vk.vp.scissor_count) {
-         dest->vk.vp.scissor_count = src->vk.vp.scissor_count;
-         dest_mask |= RADV_DYNAMIC_SCISSOR;
+   if (copy_mask & RADV_DYNAMIC_VIEWPORT_WITH_COUNT) {
+      if (dest->vk.vp.viewport_count != src->vk.vp.viewport_count) {
+         dest->vk.vp.viewport_count = src->vk.vp.viewport_count;
+         dest_mask |= RADV_DYNAMIC_VIEWPORT;
       }
+   }
 
+   if (copy_mask & RADV_DYNAMIC_SCISSOR) {
       if (memcmp(&dest->vk.vp.scissors, &src->vk.vp.scissors, src->vk.vp.scissor_count * sizeof(VkRect2D))) {
          typed_memcpy(dest->vk.vp.scissors, src->vk.vp.scissors, src->vk.vp.scissor_count);
+         dest_mask |= RADV_DYNAMIC_SCISSOR;
+      }
+   }
+
+   if (copy_mask & RADV_DYNAMIC_SCISSOR_WITH_COUNT) {
+      if (dest->vk.vp.scissor_count != src->vk.vp.scissor_count) {
+         dest->vk.vp.scissor_count = src->vk.vp.scissor_count;
          dest_mask |= RADV_DYNAMIC_SCISSOR;
       }
    }
@@ -6679,10 +6683,11 @@ radv_dst_access_flush(struct radv_cmd_buffer *cmd_buffer, VkPipelineStageFlags2 
     * in the L2 cache in CB/DB mode then they are already usable from all the other L2 clients. */
    image_is_coherent |= can_skip_buffer_l2_flushes(device) && !cmd_buffer->state.rb_noncoherent_dirty;
 
-   if (dst_flags & VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT) {
+   if (dst_flags & (VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_CONDITIONAL_RENDERING_READ_BIT_EXT)) {
       /* SMEM loads are used to read compute dispatch size in shaders */
-      if (!device->load_grid_size_from_user_sgpr)
+      if ((dst_flags & VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT) && !device->load_grid_size_from_user_sgpr) {
          flush_bits |= RADV_CMD_FLAG_INV_SCACHE;
+      }
 
       /* Ensure the DGC meta shader can read the commands. */
       if (device->vk.enabled_features.deviceGeneratedCommands) {
@@ -6940,7 +6945,6 @@ radv_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBegi
       if (resume_info) {
          radv_CmdBeginRendering(commandBuffer, resume_info);
       } else {
-         const struct radv_instance *instance = radv_physical_device_instance(pdev);
          const VkCommandBufferInheritanceRenderingInfo *inheritance_info =
             vk_get_command_buffer_inheritance_rendering_info(cmd_buffer->vk.level, pBeginInfo);
 
@@ -6969,7 +6973,7 @@ radv_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBegi
          if (vk_format_has_stencil(render->ds_att.format))
             render->ds_att_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
-         if (pdev->info.gfx_level >= GFX12 && render->ds_att.format && !(instance->debug_flags & RADV_DEBUG_NO_HIZ)) {
+         if (pdev->info.gfx_level >= GFX12 && pdev->use_hiz && render->ds_att.format) {
             /* For inherited rendering with secondary commands buffers, assume HiZ/HiS is enabled if
              * there is a depth/stencil attachment. This is required to apply hardware workarounds
              * on GFX12.
@@ -8034,9 +8038,6 @@ radv_CmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint3
    assert(firstViewport < MAX_VIEWPORTS);
    assert(total_count >= 1 && total_count <= MAX_VIEWPORTS);
 
-   if (state->dynamic.vk.vp.viewport_count < total_count)
-      state->dynamic.vk.vp.viewport_count = total_count;
-
    memcpy(state->dynamic.vk.vp.viewports + firstViewport, pViewports, viewportCount * sizeof(*pViewports));
    for (unsigned i = 0; i < viewportCount; i++) {
       radv_get_viewport_xform(&pViewports[i], state->dynamic.hw_vp.xform[i + firstViewport].scale,
@@ -8057,9 +8058,6 @@ radv_CmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor, uint32_
 
    assert(firstScissor < MAX_SCISSORS);
    assert(total_count >= 1 && total_count <= MAX_SCISSORS);
-
-   if (state->dynamic.vk.vp.scissor_count < total_count)
-      state->dynamic.vk.vp.scissor_count = total_count;
 
    memcpy(state->dynamic.vk.vp.scissors + firstScissor, pScissors, scissorCount * sizeof(*pScissors));
 
@@ -8233,12 +8231,22 @@ radv_CmdSetPrimitiveTopology(VkCommandBuffer commandBuffer, VkPrimitiveTopology 
 VKAPI_ATTR void VKAPI_CALL
 radv_CmdSetViewportWithCount(VkCommandBuffer commandBuffer, uint32_t viewportCount, const VkViewport *pViewports)
 {
+   VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct radv_cmd_state *state = &cmd_buffer->state;
+
+   state->dynamic.vk.vp.viewport_count = viewportCount;
+
    radv_CmdSetViewport(commandBuffer, 0, viewportCount, pViewports);
 }
 
 VKAPI_ATTR void VKAPI_CALL
 radv_CmdSetScissorWithCount(VkCommandBuffer commandBuffer, uint32_t scissorCount, const VkRect2D *pScissors)
 {
+   VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct radv_cmd_state *state = &cmd_buffer->state;
+
+   state->dynamic.vk.vp.scissor_count = scissorCount;
+
    radv_CmdSetScissor(commandBuffer, 0, scissorCount, pScissors);
 }
 
@@ -9486,7 +9494,7 @@ radv_cs_emit_compute_predication(const struct radv_device *device, struct radv_c
    if (!state->predicating)
       return;
 
-   uint64_t va = state->predication_va;
+   uint64_t va = state->user_predication_va;
 
    if (!state->predication_type) {
       /* Invert the condition the first time it is needed. */
@@ -13251,12 +13259,15 @@ radv_begin_conditional_rendering(struct radv_cmd_buffer *cmd_buffer, uint64_t va
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    unsigned pred_op = PREDICATION_OP_BOOL32;
+   uint64_t emulated_va = 0;
 
    radv_emit_cache_flush(cmd_buffer);
 
    if (cmd_buffer->qf == RADV_QUEUE_GENERAL) {
-      if (!pdev->info.has_32bit_predication) {
-         uint64_t pred_value = 0, pred_va;
+      if (pdev->info.has_32bit_predication) {
+         radv_emit_set_predication_state(cmd_buffer, draw_visible, pred_op, va);
+      } else {
+         uint64_t pred_value = 0;
          unsigned pred_offset;
 
          /* From the Vulkan spec 1.1.107:
@@ -13287,7 +13298,7 @@ radv_begin_conditional_rendering(struct radv_cmd_buffer *cmd_buffer, uint64_t va
           */
          radv_cmd_buffer_upload_data(cmd_buffer, 8, &pred_value, &pred_offset);
 
-         pred_va = radv_buffer_get_va(cmd_buffer->upload.upload_bo) + pred_offset;
+         emulated_va = radv_buffer_get_va(cmd_buffer->upload.upload_bo) + pred_offset;
 
          radeon_check_space(device->ws, cmd_buffer->cs, 8);
 
@@ -13296,17 +13307,16 @@ radv_begin_conditional_rendering(struct radv_cmd_buffer *cmd_buffer, uint64_t va
             cs, COPY_DATA_SRC_SEL(COPY_DATA_SRC_MEM) | COPY_DATA_DST_SEL(COPY_DATA_DST_MEM) | COPY_DATA_WR_CONFIRM);
          radeon_emit(cs, va);
          radeon_emit(cs, va >> 32);
-         radeon_emit(cs, pred_va);
-         radeon_emit(cs, pred_va >> 32);
+         radeon_emit(cs, emulated_va);
+         radeon_emit(cs, emulated_va >> 32);
 
          radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
          radeon_emit(cs, 0);
 
-         va = pred_va;
          pred_op = PREDICATION_OP_BOOL64;
-      }
 
-      radv_emit_set_predication_state(cmd_buffer, draw_visible, pred_op, va);
+         radv_emit_set_predication_state(cmd_buffer, draw_visible, pred_op, emulated_va);
+      }
    } else {
       /* Compute queue doesn't support predication and it's emulated elsewhere. */
    }
@@ -13315,7 +13325,8 @@ radv_begin_conditional_rendering(struct radv_cmd_buffer *cmd_buffer, uint64_t va
    cmd_buffer->state.predicating = true;
    cmd_buffer->state.predication_type = draw_visible;
    cmd_buffer->state.predication_op = pred_op;
-   cmd_buffer->state.predication_va = va;
+   cmd_buffer->state.user_predication_va = va;
+   cmd_buffer->state.emulated_predication_va = emulated_va;
    cmd_buffer->state.mec_inv_pred_emitted = false;
 }
 
@@ -13332,7 +13343,8 @@ radv_end_conditional_rendering(struct radv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.predicating = false;
    cmd_buffer->state.predication_type = -1;
    cmd_buffer->state.predication_op = 0;
-   cmd_buffer->state.predication_va = 0;
+   cmd_buffer->state.user_predication_va = 0;
+   cmd_buffer->state.emulated_predication_va = 0;
    cmd_buffer->state.mec_inv_pred_emitted = false;
 }
 

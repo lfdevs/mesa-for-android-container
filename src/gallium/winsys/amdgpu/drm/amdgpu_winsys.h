@@ -123,8 +123,11 @@ struct amdgpu_screen_winsys {
  * uint8_t wraps around so quickly that some BOs might never become idle because we don't
  * remove idle fences from BOs, so they become "busy" again after a queue sequence number wraps
  * around and they may stay "busy" in pb_cache long enough that we run out of memory.
+ *
+ * High FPS applications also wrap around uint16_t so quickly that 32-bit address space allocations
+ * aren't deallocated soon enough and we run out.
  */
-typedef uint16_t uint_seq_no;
+typedef uint32_t uint_seq_no;
 
 struct amdgpu_queue {
    /* Ring buffer of fences.

@@ -661,7 +661,8 @@ read_i915_data_file(FILE *file, enum intel_batch_decode_flags batch_flags)
    }
 
    struct intel_batch_decode_ctx batch_ctx;
-   intel_decoder_init(&batch_ctx, &devinfo, stdout,
+   struct intel_isa_info isa_info = {};
+   intel_decoder_init(&batch_ctx, &isa_info, &devinfo, stdout,
                       batch_flags, xml_path, get_intel_batch_bo,
                       NULL, NULL);
    batch_ctx.acthd = acthd;

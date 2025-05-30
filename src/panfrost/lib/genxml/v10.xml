@@ -1238,8 +1238,8 @@
   </struct>
 
   <struct name="Two-Plane YUV Chroma Overlay" size="8">
-    <field name="Width" size="16" start="5:0" type="uint"/>
-    <field name="Height" size="16" start="5:16" type="uint"/>
+    <field name="Width" size="16" start="5:0" type="uint" modifier="minus(1)" default="1"/>
+    <field name="Height" size="16" start="5:16" type="uint" modifier="minus(1)" default="1"/>
     <field name="Secondary Pointer" size="64" start="6:0" type="address"/>
   </struct>
 
@@ -1269,8 +1269,8 @@
     <field name="Pointer" size="64" start="2:0" type="address"/>
     <field name="Row stride" size="32" start="4:0" type="uint"/>
     <field name="Slice stride" size="32" start="6:0" type="int"/>
-    <field name="Width" size="16" start="7:0" type="uint"/>
-    <field name="Height" size="16" start="7:16" type="uint"/>
+    <field name="Width" size="16" start="7:0" type="uint" modifier="minus(1)" default="1"/>
+    <field name="Height" size="16" start="7:16" type="uint" modifier="minus(1)" default="1"/>
   </struct>
 
   <struct name="Texture" size="8" align="32">

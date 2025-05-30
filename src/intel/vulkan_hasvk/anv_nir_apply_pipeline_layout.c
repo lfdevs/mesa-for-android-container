@@ -463,9 +463,9 @@ build_buffer_addr_for_res_index(nir_builder *b,
          nir_iadd(b, res.dyn_offset_base, res.array_index);
 
       nir_def *dyn_load =
-         nir_load_push_constant(b, 1, 32, nir_imul_imm(b, dyn_offset_idx, 4),
-                                .base = offsetof(struct anv_push_constants, dynamic_offsets),
-                                .range = MAX_DYNAMIC_BUFFERS * 4);
+         nir_load_uniform(b, 1, 32, nir_imul_imm(b, dyn_offset_idx, 4),
+                          .base = offsetof(struct anv_push_constants, dynamic_offsets),
+                          .range = MAX_DYNAMIC_BUFFERS * 4);
 
       nir_def *dynamic_offset =
          nir_bcsel(b, nir_ieq_imm(b, res.dyn_offset_base, 0xff),

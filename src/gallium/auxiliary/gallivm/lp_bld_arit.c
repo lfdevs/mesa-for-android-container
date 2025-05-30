@@ -2100,7 +2100,7 @@ lp_build_round(struct lp_build_context *bld,
 
    if (type.width == 16) {
       char intrinsic[64];
-      lp_format_intrinsic(intrinsic, 64, "llvm.round", bld->vec_type);
+      lp_format_intrinsic(intrinsic, 64, "llvm.roundeven", bld->vec_type);
       return lp_build_intrinsic_unary(builder, intrinsic, bld->vec_type, a);
    }
 

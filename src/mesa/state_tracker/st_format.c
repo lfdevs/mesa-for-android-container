@@ -1328,6 +1328,11 @@ st_ChooseTextureFormat(struct gl_context *ctx, GLenum target,
    bool is_renderbuffer = false;
    enum pipe_texture_target pTarget;
 
+   if (ctx->Const.ForceDepthComponentTypeInt &&
+       internalFormat == GL_DEPTH_COMPONENT &&
+       type == GL_UNSIGNED_SHORT)
+      type = GL_UNSIGNED_INT;
+
    if (target == GL_RENDERBUFFER) {
       pTarget = PIPE_TEXTURE_2D;
       is_renderbuffer = true;

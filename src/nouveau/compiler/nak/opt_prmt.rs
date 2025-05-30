@@ -103,8 +103,8 @@ impl PrmtPass {
             return;
         };
 
-        debug_assert!(op.srcs[0].src_mod.is_none());
-        debug_assert!(op.srcs[1].src_mod.is_none());
+        debug_assert!(op.srcs[0].is_unmodified());
+        debug_assert!(op.srcs[1].is_unmodified());
         let srcs = [op.srcs[0].src_ref, op.srcs[1].src_ref];
 
         self.ssa_prmt.insert(dst_ssa, PrmtEntry { sel, srcs });
@@ -115,7 +115,7 @@ impl PrmtPass {
     }
 
     fn get_prmt_for_src(&self, src: &Src) -> Option<&PrmtEntry> {
-        debug_assert!(src.src_mod.is_none());
+        debug_assert!(src.is_unmodified());
         if let SrcRef::SSA(vec) = &src.src_ref {
             debug_assert!(vec.comps() == 1);
             self.get_prmt(&vec[0])
@@ -218,7 +218,7 @@ impl PrmtPass {
 
                 new_sel[i] = PrmtSelByte::new(srcs.imm_src, byte_idx, false);
             } else {
-                debug_assert!(src.src_mod.is_none());
+                debug_assert!(src.is_unmodified());
                 let Some(src_idx) = srcs.try_add_src(src.src_ref) else {
                     return false;
                 };

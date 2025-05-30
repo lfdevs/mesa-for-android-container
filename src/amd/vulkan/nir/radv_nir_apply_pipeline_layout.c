@@ -208,16 +208,14 @@ get_sampler_desc(nir_builder *b, apply_layout_state *state, nir_deref_instr *der
     * index or if all samplers in the array are the same. Note that indexing is forbidden with
     * embedded samplers.
     */
-   if (desc_type == AC_DESC_SAMPLER && binding->immutable_samplers_offset &&
-       (!indirect || binding->immutable_samplers_equal)) {
+   if (desc_type == AC_DESC_SAMPLER && binding->immutable_samplers_offset && !indirect) {
       unsigned constant_index = 0;
-      if (!binding->immutable_samplers_equal) {
-         while (deref->deref_type != nir_deref_type_var) {
-            assert(deref->deref_type == nir_deref_type_array);
-            unsigned array_size = MAX2(glsl_get_aoa_size(deref->type), 1);
-            constant_index += nir_src_as_uint(deref->arr.index) * array_size;
-            deref = nir_deref_instr_parent(deref);
-         }
+
+      while (deref->deref_type != nir_deref_type_var) {
+         assert(deref->deref_type == nir_deref_type_array);
+         unsigned array_size = MAX2(glsl_get_aoa_size(deref->type), 1);
+         constant_index += nir_src_as_uint(deref->arr.index) * array_size;
+         deref = nir_deref_instr_parent(deref);
       }
 
       uint32_t dword0_mask =

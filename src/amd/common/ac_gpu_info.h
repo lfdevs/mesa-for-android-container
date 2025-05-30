@@ -329,8 +329,14 @@ struct radeon_info {
    bool has_image_bvh_intersect_ray;
 };
 
-bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
-                       bool require_pci_bus_info);
+enum ac_query_gpu_info_result {
+   AC_QUERY_GPU_INFO_SUCCESS,
+   AC_QUERY_GPU_INFO_FAIL,
+   AC_QUERY_GPU_INFO_UNIMPLEMENTED_HW,
+};
+
+enum ac_query_gpu_info_result ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+                                                bool require_pci_bus_info);
 
 void ac_compute_driver_uuid(char *uuid, size_t size);
 

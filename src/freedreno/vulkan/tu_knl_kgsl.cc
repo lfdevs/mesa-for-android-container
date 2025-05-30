@@ -1296,7 +1296,7 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
    }
 
 fail_submit:
-   if (result != VK_SUCCESS) {
+   if (result != VK_SUCCESS && u_trace_submission_data) {
       mtx_lock(&queue->device->kgsl_profiling_mutex);
       tu_suballoc_bo_free(&queue->device->kgsl_profiling_suballoc,
                           &u_trace_submission_data->kgsl_timestamp_bo);

@@ -55,6 +55,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
                   has_const_ubo = true;
                break;
 
+            case nir_intrinsic_load_uniform:
             case nir_intrinsic_load_push_constant: {
                unsigned base = nir_intrinsic_base(intrin);
                unsigned range = nir_intrinsic_range(intrin);
@@ -131,6 +132,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
                nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
                switch (intrin->intrinsic) {
+               case nir_intrinsic_load_uniform:
                case nir_intrinsic_load_push_constant: {
                   /* With bindless shaders we load uniforms with SEND
                    * messages. All the push constants are located after the
@@ -139,7 +141,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
                    * elk_nir_lower_rt_intrinsics.c).
                    */
                   unsigned base_offset = push_start;
-                  intrin->intrinsic = nir_intrinsic_load_uniform;
                   nir_intrinsic_set_base(intrin,
                                          nir_intrinsic_base(intrin) -
                                          base_offset);

@@ -73,7 +73,7 @@ class LinuxVirtGpuDevice : public VirtGpuDevice {
     virtual bool getPciBusInfo(VirtGpuPciBusInfo* pciBusInfo) override;
 
    private:
-    int64_t mDeviceHandle;
+    int64_t mDeviceHandle = -1;
     struct VirtGpuCaps mCaps;
 
     int openDevice();

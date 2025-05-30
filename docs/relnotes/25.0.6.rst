@@ -1,0 +1,182 @@
+Mesa 25.0.6 Release Notes / 2025-05-14
+======================================
+
+Mesa 25.0.6 is a bug fix release which fixes bugs found since the 25.0.5 release.
+
+Mesa 25.0.6 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.0.6 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 0d179e019e3441f5d957330d7abb3b0ef38e6782cc85a382608cd1a4a77fa2e1  mesa-25.0.6.tar.xz
+    SHA512: 6a0abc8a5bbbb8ffdad7286fc5642f643b1f4183794425ba689c2c9f5c73a4131c8685074241deb1022631b4c1f1c505dbd848190ec60d5d6931e90dd9316e05  mesa-25.0.6.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- In SkinDeep, GL_LINES causes GL_INVALID_OPERATION with radeonsi and llvmpipe
+- radv: UB and artifacts when copying a \`COMBINED_IMAGE_SAMPLER` with an immutable sampler
+- RADV: Dynamic state multiple viewport corruption
+- [drm:amdgpu_uvd_cs_pass2 [amdgpu]] \*ERROR* )Handle 0x48780001 already in use!
+- glGetInternalformativ returns incorrect information for GL_STENCIL_INDEX8
+- RadeonSI: Psychonauts rendering regression since !29895
+- [r600g] Rejected CS when using dolphin's GPU texture decoder
+- radeonsi: Assertion \`src_bit_size == bit_size' failed. when running without MESA_GLSL_DISABLE_IO_OPT=1
+- radeonsi vdpau + Packed YUY2 = assert
+- Indiana Jones and The Great Circle, Graphical corruption on 9070 XT.
+- glPushAttrib/glPopAttrib broken with glColorMaterial and ligthing
+- radv: Flickering in Kingdom Come: Deliverance II
+- RADV regression causes severe glitches in Hunt Showdown 1896 on Polaris
+- Z-Fighting in Tomb Raider IV - VI Remastered Linux
+- RADV:RX 9070:Mesa-25.0.5 GTA 5 Enhanced GPU HANG
+- [anv] VK_ERROR_DEVICE_LOST on Linux 6.13.8 while playing Dota 2 on Intel Graphics
+
+
+Changes
+-------
+
+Connor Abbott (4):
+
+- freedreno: Add compute_lb_size device info
+- freedreno/a6xx: Define CONSTANTRAMMODE
+- freedreno/a6xx, turnip: Set CONSTANTRAMMODE correctly
+- ir3: Take LB restriction on constlen into account on a7xx
+
+David Rosca (3):
+
+- frontends/vdpau: Fix creating surfaces with 422 chroma
+- ac/uvd: Add ac_uvd_alloc_stream_handle
+- radv/video: Use ac_uvd_alloc_stream_handle
+
+Eric Engestrom (4):
+
+- docs: add sha sum for 25.0.5
+- .pick_status.json: Update to e7a7d9ea2e2e48171fad131a7bfa7576e02ea4e0
+- .pick_status.json: Mark eeffb4e674d10db9aefebeca91c2d87c1676b81e as denominated
+- .pick_status.json: Mark 4b76d04f7f3348838239f184e68141df6409b67a as denominated
+
+Faith Ekstrand (1):
+
+- nak: Set lower_pack_64_4x16
+
+Gurchetan Singh (1):
+
+- gfxstream: make sure by default descriptor is negative
+
+José Roberto de Souza (1):
+
+- intel/tools: Fix batch buffer decoder
+
+Karmjit Mahil (1):
+
+- tu: Fix segfault in fail_submit KGSL path
+
+Karol Herbst (4):
+
+- r600: fix r600_buffer_from_user_memory for rusticl
+- iris: parse global bindings for every gen
+- iris/xe: fix compute shader start address
+- iris/xe: take the grids variable_shared_mem into account
+
+Konstantin Seurer (1):
+
+- radv: Return VK_ERROR_INCOMPATIBLE_DRIVER for unsupported devices
+
+Lars-Ivar Hesselberg Simonsen (4):
+
+- pan/texture: Correctly handle slice stride for MSAA
+- pan/texture: Set plane size to slice size
+- pan/genxml/v10: Add minus1 mod for plane width/height
+- pan/texture/v10+: Set width/height in the plane descs
+
+Lionel Landwerlin (3):
+
+- anv: force fragment shader execution when occlusion queries are active
+- intel: fix null render target setup logic
+- vulkan/runtime: fixup assert with link_geom_stages
+
+Marek Olšák (2):
+
+- nir/opt_vectorize_io: fix a failure when vectorizing different bit sizes
+- nir: fix gathering color interp modes in nir_lower_color_inputs
+
+Matthieu Oechslin (1):
+
+- r600: Take dual source blending in account when creating target mask with RATs
+
+Mel Henning (3):
+
+- nak: Remove hfma2 src 1 modifiers
+- nak: Add Src::is_unmodified() helper
+- nak: Check that swizzles are none
+
+Mike Blumenkrantz (2):
+
+- egl: fix sw fallback rejection in non-sw EGL_PLATFORM=device
+- zink: fix broken comparison for dummy pipe surface sizing
+
+Natalie Vock (2):
+
+- radv,driconf: Add radv_force_64k_sparse_alignment config
+- driconf: Add workarounds for DOOM: The Dark Ages
+
+Paul Gofman (1):
+
+- radv/amdgpu: Fix hash key in radv_amdgpu_winsys_destroy().
+
+Rhys Perry (3):
+
+- aco: swap the correct v_mov_b32 if there are two of them
+- ac/llvm: correctly split vector 8/16-bit stores
+- ac/llvm: correctly set alignment of vector global load/store
+
+Robert Mader (1):
+
+- llvmpipe: Fix dmabuf import paths for DRM_FORMAT_YUYV variants
+
+Sagar Ghuge (2):
+
+- intel/compiler: Fix stackIDs on Xe2+
+- anv: Fix untyped data port cache pipe control dump output
+
+Samuel Pitoiset (7):
+
+- radv: do not clear unwritten color attachments with dual-source blending
+- radv: disable SINGLE clear codes to workaround a hw bug with DCC on GFX11
+- radv: fix GPU hangs with image copies for ASTC/ETC2 formats on transfer queue
+- radv: ignore radv_disable_dcc_stores on GFX12
+- radv: fix SDMA copies for linear 96-bits formats
+- radv: fix emitting dynamic viewports/scissors when the count is static
+- radv: remove the optimization for equal immutable samplers
+
+Tapani Pälli (1):
+
+- mesa: add missing stencil formats to _mesa_is_stencil_format
+
+Thomas H.P. Andersen (1):
+
+- driconf: update X4 Foundations executable name
+
+Timothy Arceri (3):
+
+- util/driconf: add force_gl_depth_component_type_int workaround
+- mesa: fix color material tracking
+- mesa: relax EXT_texture_integer validation

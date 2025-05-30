@@ -263,6 +263,14 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
       compiler->has_early_preamble = false;
    }
 
+   if (dev_info->compute_lb_size) {
+      compiler->compute_lb_size = dev_info->compute_lb_size;
+   } else {
+      compiler->compute_lb_size =
+         compiler->max_const_compute * 16 /* bytes/vec4 */ *
+         compiler->wave_granularity + compiler->local_mem_size;
+   }
+
    /* This is just a guess for a4xx. */
    compiler->pvtmem_per_fiber_align = compiler->gen >= 4 ? 512 : 128;
    /* TODO: implement private memory on earlier gen's */

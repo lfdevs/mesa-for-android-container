@@ -61,6 +61,7 @@ uint16_t pci_id = 0;
 char *input_file = NULL, *xml_path = NULL;
 struct intel_device_info devinfo;
 struct intel_batch_decode_ctx batch_ctx;
+struct intel_isa_info isa_info = {};
 struct aub_mem mem;
 
 FILE *outfile;
@@ -96,7 +97,7 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
       batch_flags |= INTEL_BATCH_DECODE_OFFSETS;
    batch_flags |= INTEL_BATCH_DECODE_FLOATS;
 
-   intel_decoder_init(&batch_ctx, &devinfo, outfile,
+   intel_decoder_init(&batch_ctx, &isa_info, &devinfo, outfile,
                       batch_flags, xml_path, NULL, NULL, NULL);
 
    /* Check for valid spec instance, if wrong xml_path is passed then spec

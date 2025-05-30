@@ -272,10 +272,8 @@ radv_dynamic_state_mask(VkDynamicState state)
 {
    switch (state) {
    case VK_DYNAMIC_STATE_VIEWPORT:
-   case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT:
       return RADV_DYNAMIC_VIEWPORT;
    case VK_DYNAMIC_STATE_SCISSOR:
-   case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT:
       return RADV_DYNAMIC_SCISSOR;
    case VK_DYNAMIC_STATE_LINE_WIDTH:
       return RADV_DYNAMIC_LINE_WIDTH;
@@ -377,6 +375,10 @@ radv_dynamic_state_mask(VkDynamicState state)
       return RADV_DYNAMIC_ALPHA_TO_ONE_ENABLE;
    case VK_DYNAMIC_STATE_DEPTH_CLAMP_RANGE_EXT:
       return RADV_DYNAMIC_DEPTH_CLAMP_RANGE;
+   case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT:
+      return RADV_DYNAMIC_VIEWPORT | RADV_DYNAMIC_VIEWPORT_WITH_COUNT;
+   case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT:
+      return RADV_DYNAMIC_SCISSOR | RADV_DYNAMIC_SCISSOR_WITH_COUNT;
    default:
       unreachable("Unhandled dynamic state");
    }
@@ -732,21 +734,24 @@ radv_pipeline_init_dynamic_state(const struct radv_device *device, struct radv_g
    }
 
    /* Viewport. */
-   if (needed_states & RADV_DYNAMIC_VIEWPORT) {
-      dynamic->vk.vp.viewport_count = state->vp->viewport_count;
-      if (states & RADV_DYNAMIC_VIEWPORT) {
-         typed_memcpy(dynamic->vk.vp.viewports, state->vp->viewports, state->vp->viewport_count);
-         for (unsigned i = 0; i < dynamic->vk.vp.viewport_count; i++)
-            radv_get_viewport_xform(&dynamic->vk.vp.viewports[i], dynamic->hw_vp.xform[i].scale,
-                                    dynamic->hw_vp.xform[i].translate);
-      }
+   if (states & RADV_DYNAMIC_VIEWPORT) {
+      typed_memcpy(dynamic->vk.vp.viewports, state->vp->viewports, state->vp->viewport_count);
+      for (unsigned i = 0; i < state->vp->viewport_count; i++)
+         radv_get_viewport_xform(&dynamic->vk.vp.viewports[i], dynamic->hw_vp.xform[i].scale,
+                                 dynamic->hw_vp.xform[i].translate);
    }
 
-   if (needed_states & RADV_DYNAMIC_SCISSOR) {
+   if (states & RADV_DYNAMIC_VIEWPORT_WITH_COUNT) {
+      dynamic->vk.vp.viewport_count = state->vp->viewport_count;
+   }
+
+   /* Scissor. */
+   if (states & RADV_DYNAMIC_SCISSOR) {
+      typed_memcpy(dynamic->vk.vp.scissors, state->vp->scissors, state->vp->scissor_count);
+   }
+
+   if (states & RADV_DYNAMIC_SCISSOR_WITH_COUNT) {
       dynamic->vk.vp.scissor_count = state->vp->scissor_count;
-      if (states & RADV_DYNAMIC_SCISSOR) {
-         typed_memcpy(dynamic->vk.vp.scissors, state->vp->scissors, state->vp->scissor_count);
-      }
    }
 
    if (states & RADV_DYNAMIC_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) {

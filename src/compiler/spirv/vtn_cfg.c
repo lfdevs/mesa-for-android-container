@@ -113,6 +113,8 @@ function_parameter_decoration_cb(struct vtn_builder *b, struct vtn_value *val,
          case SpvFunctionParameterAttributeSext:
          case SpvFunctionParameterAttributeZext:
          case SpvFunctionParameterAttributeSret:
+         case SpvFunctionParameterAttributeNoCapture:
+         case SpvFunctionParameterAttributeNoWrite:
             break;
 
          case SpvFunctionParameterAttributeByVal:
@@ -399,7 +401,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
       struct vtn_ssa_value *ssa = vtn_create_ssa_value(b, type->type);
       struct vtn_value *val = vtn_untyped_value(b, w[2]);
 
-      b->func->nir_func->params[b->func_param_idx].name = val->name;
+      b->func->nir_func->params[b->func_param_idx].name = ralloc_strdup(b->shader, val->name);
 
       vtn_foreach_decoration(b, val, function_parameter_decoration_cb, &arg_info);
       vtn_ssa_value_load_function_param(b, ssa, type, &arg_info, &b->func_param_idx);

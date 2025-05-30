@@ -58,7 +58,7 @@ impl PhiSrcMap {
     }
 
     fn add_phi_src(&mut self, phi_idx: u32, src: Src) {
-        debug_assert!(src.src_mod.is_none());
+        debug_assert!(src.is_unmodified());
         let vec = src.src_ref.as_ssa().expect("Not an SSA source");
         debug_assert!(vec.comps() == 1);
         self.phi_src.insert(phi_idx, vec[0]);
@@ -683,7 +683,7 @@ fn spill_values<S: Spill>(
                         debug_assert!(dst_vec.comps() == 1);
                         let dst_ssa = &dst_vec[0];
 
-                        debug_assert!(src.src_mod.is_none());
+                        debug_assert!(src.is_unmodified());
                         let src_vec = src.src_ref.as_ssa().unwrap();
                         debug_assert!(src_vec.comps() == 1);
                         let src_ssa = &src_vec[0];
@@ -909,7 +909,7 @@ fn spill_values<S: Spill>(
 
         if let Some(phi) = pb.phi_srcs_mut() {
             for (idx, src) in phi.srcs.iter_mut() {
-                debug_assert!(src.src_mod.is_none());
+                debug_assert!(src.is_unmodified());
                 let vec = src.src_ref.as_ssa().unwrap();
                 debug_assert!(vec.comps() == 1);
                 let ssa = &vec[0];

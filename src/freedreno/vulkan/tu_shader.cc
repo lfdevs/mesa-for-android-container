@@ -1484,14 +1484,18 @@ tu6_emit_cs_config(struct tu_cs *cs,
    tu6_emit_xs(cs, MESA_SHADER_COMPUTE, v, pvtmem, binary_iova);
 
    uint32_t shared_size = MAX2(((int)v->shared_size - 1) / 1024, 1);
-   tu_cs_emit_pkt4(cs, REG_A6XX_SP_CS_UNKNOWN_A9B1, 1);
-   tu_cs_emit(cs, A6XX_SP_CS_UNKNOWN_A9B1_SHARED_SIZE(shared_size) |
-                  A6XX_SP_CS_UNKNOWN_A9B1_UNK6);
+   enum a6xx_const_ram_mode mode =
+      v->constlen > 256 ? CONSTLEN_512 :
+      (v->constlen > 192 ? CONSTLEN_256 :
+      (v->constlen > 128 ? CONSTLEN_192 : CONSTLEN_128));
+   tu_cs_emit_pkt4(cs, REG_A6XX_SP_CS_CTRL_REG1, 1);
+   tu_cs_emit(cs, A6XX_SP_CS_CTRL_REG1_SHARED_SIZE(shared_size) |
+                  A6XX_SP_CS_CTRL_REG1_CONSTANTRAMMODE(mode));
 
    if (CHIP == A6XX && cs->device->physical_device->info->a6xx.has_lpac) {
-      tu_cs_emit_pkt4(cs, REG_A6XX_HLSQ_CS_UNKNOWN_B9D0, 1);
-      tu_cs_emit(cs, A6XX_HLSQ_CS_UNKNOWN_B9D0_SHARED_SIZE(shared_size) |
-                     A6XX_HLSQ_CS_UNKNOWN_B9D0_UNK6);
+      tu_cs_emit_pkt4(cs, REG_A6XX_HLSQ_CS_CTRL_REG1, 1);
+      tu_cs_emit(cs, A6XX_HLSQ_CS_CTRL_REG1_SHARED_SIZE(shared_size) |
+                     A6XX_HLSQ_CS_CTRL_REG1_CONSTANTRAMMODE(mode));
    }
 
    uint32_t local_invocation_id =

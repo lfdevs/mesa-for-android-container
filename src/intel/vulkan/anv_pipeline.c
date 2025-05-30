@@ -450,15 +450,6 @@ rp_color_mask(const struct vk_render_pass_state *rp)
          color_mask |= BITFIELD_BIT(i);
    }
 
-   /* If there is depth/stencil attachment, even if the fragment shader
-    * doesn't write the depth/stencil output, we need a valid render target so
-    * that the compiler doesn't use the null-rt which would cull the
-    * depth/stencil output.
-    */
-   if (rp->depth_attachment_format != VK_FORMAT_UNDEFINED ||
-       rp->stencil_attachment_format != VK_FORMAT_UNDEFINED)
-      color_mask |= 1;
-
    return color_mask;
 }
 
@@ -1421,23 +1412,13 @@ anv_pipeline_link_fs(const struct brw_compiler *compiler,
                      const struct vk_render_pass_state *rp)
 {
    /* Initially the valid outputs value is set to all possible render targets
-    * valid (see populate_wm_prog_key()), before we look at the shader
-    * variables. Here we look at the output variables of the shader an compute
-    * a correct number of render target outputs.
+    * valid (see populate_wm_prog_key()), because we're not looking at the
+    * shader code yet. Here we look at the output written to get a correct
+    * number of render target outputs.
     */
-   stage->key.wm.color_outputs_valid = 0;
-   nir_foreach_shader_out_variable_safe(var, stage->nir) {
-      if (var->data.location < FRAG_RESULT_DATA0)
-         continue;
-
-      const unsigned rt = var->data.location - FRAG_RESULT_DATA0;
-      const unsigned array_len =
-         glsl_type_is_array(var->type) ? glsl_get_length(var->type) : 1;
-      assert(rt + array_len <= MAX_RTS);
-
-      stage->key.wm.color_outputs_valid |= BITFIELD_RANGE(rt, array_len);
-   }
-   stage->key.wm.color_outputs_valid &= rp_color_mask(rp);
+   const uint64_t rt_mask =
+      stage->nir->info.outputs_written >> FRAG_RESULT_DATA0;
+   stage->key.wm.color_outputs_valid = rt_mask & rp_color_mask(rp);
    stage->key.wm.nr_color_regions =
       util_last_bit(stage->key.wm.color_outputs_valid);
 
@@ -1467,6 +1448,9 @@ anv_pipeline_link_fs(const struct brw_compiler *compiler,
                  compiler->devinfo, stage->nir,
                  stage->key.wm.multisample_fbo != INTEL_NEVER,
                  stage->key.wm.alpha_to_coverage != INTEL_NEVER)) {
+      /* Ensure the shader doesn't discard the writes */
+      stage->key.wm.color_outputs_valid = 0x1;
+      stage->key.wm.nr_color_regions = 1;
       /* Setup a null render target */
       rt_bindings[0] = (struct anv_pipeline_binding) {
          .set = ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS,

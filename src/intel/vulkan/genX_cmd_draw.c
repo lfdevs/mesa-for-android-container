@@ -905,8 +905,14 @@ genX(cmd_buffer_flush_gfx_state)(struct anv_cmd_buffer *cmd_buffer)
        */
       dirty |= cmd_buffer->state.push_constants_dirty &
                pipeline->base.base.active_stages;
+#if INTEL_NEEDS_WA_1604061319
+      /* Testing shows that all the 3DSTATE_CONSTANT_XS need to be emitted if
+       * any stage has 3DSTATE_CONSTANT_XS emitted.
+       */
+      dirty |= pipeline->base.base.active_stages;
+#endif
       cmd_buffer_flush_gfx_push_constants(cmd_buffer,
-                                      dirty & VK_SHADER_STAGE_ALL_GRAPHICS);
+                                          dirty & VK_SHADER_STAGE_ALL_GRAPHICS);
 #if GFX_VERx10 >= 125
       cmd_buffer_flush_mesh_inline_data(
          cmd_buffer, dirty & (VK_SHADER_STAGE_TASK_BIT_EXT |

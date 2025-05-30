@@ -506,6 +506,7 @@ static void *evergreen_create_rs_state(struct pipe_context *ctx,
 		S_028810_DX_LINEAR_ATTR_CLIP_ENA(1) |
 		S_028810_DX_RASTERIZATION_KILL(state->rasterizer_discard);
 	rs->multisample_enable = state->multisample;
+	rs->line_width = state->line_width;
 
 	/* offset */
 	rs->offset_units = state->offset_units;
@@ -521,6 +522,7 @@ static void *evergreen_create_rs_state(struct pipe_context *ctx,
 		psize_min = state->point_size;
 		psize_max = state->point_size;
 	}
+	rs->max_point_size = psize_max;
 
 	spi_interp = S_0286D4_FLAT_SHADE_ENA(1);
 	spi_interp |= S_0286D4_PNT_SPRITE_ENA(1) |
@@ -2032,7 +2034,7 @@ static void evergreen_emit_cb_misc_state(struct r600_context *rctx, struct r600_
 	struct r600_cb_misc_state *a = (struct r600_cb_misc_state*)atom;
 	unsigned fb_colormask = a->bound_cbufs_target_mask;
 	unsigned ps_colormask = a->ps_color_export_mask;
-	unsigned rat_colormask = evergreen_construct_rat_mask(rctx, a, a->nr_cbufs);
+	unsigned rat_colormask = evergreen_construct_rat_mask(rctx, a, a->nr_cbufs + (a->dual_src_blend ? 1 : 0));
 	radeon_set_context_reg_seq(cs, R_028238_CB_TARGET_MASK, 2);
 	radeon_emit(cs, (a->blend_colormask & fb_colormask) | rat_colormask); /* R_028238_CB_TARGET_MASK */
 	/* This must match the used export instructions exactly.

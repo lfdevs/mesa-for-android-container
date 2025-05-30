@@ -7,9 +7,9 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <xf86drm.h>
-#include <sys/stat.h>
 
 #include <cerrno>
 #include <cstring>
@@ -18,6 +18,7 @@
 
 #include "LinuxVirtGpu.h"
 #include "drm-uapi/virtgpu_drm.h"
+#include "util/detect_os.h"
 #include "util/log.h"
 #include "virtgpu_gfxstream_protocol.h"
 
@@ -191,6 +192,13 @@ int32_t LinuxVirtGpuDevice::init(int32_t descriptor) {
 
         mCaps.params[i] = params[i].value;
     }
+
+#if !DETECT_OS_ANDROID
+    if ((mCaps.params[kParamSupportedCapsetIds] & (1 << VIRTGPU_CAPSET_GFXSTREAM_VULKAN)) ==
+        0) {
+        return -EINVAL;
+    }
+#endif
 
     auto capset = getCapset();
     get_caps.cap_set_id = static_cast<uint32_t>(capset);

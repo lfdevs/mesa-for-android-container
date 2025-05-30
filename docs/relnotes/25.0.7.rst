@@ -1,0 +1,198 @@
+Mesa 25.0.7 Release Notes / 2025-05-28
+======================================
+
+Mesa 25.0.7 is a bug fix release which fixes bugs found since the 25.0.6 release.
+
+Mesa 25.0.7 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.0.7 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    TBD.
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- RX9070 hard crash with Mafia Definitive Edition
+- RADV: Potential bug with vulkan fragment shader interpolation (on outputs from mesh shaders?)
+- In the game "Foundation" a buildings areas of effect is missing
+- ANV: Dota 2 May 22 2025 update crashing in vkCmdBindDescriptorSets with no validation error
+- [RADV][GFX9] Recent Mesa-git broken on AMD Vega 64 with ring sdma0 timeouts when launching DXVK games
+- Vulkan Video engages during playback of format which is not supported by my Fiji GPU
+- ACO: IR Validation error "SDWA operand selection size" triggered by compute shader on VEGA20
+- RADV: Gibberish output with llama.cpp (Vulkan compute) on Radeon VII (Vega20) with Mesa 25.1.0, works on 25.0.5
+- Blending broken in game SkinDeep
+- Radeon R5 (Mullins) H264 VA-API encoding acceleration doesn't work
+- nvk: lib_rs_gen.py requires \`rustfmt`
+- radv: vkd3d-proton test failure with predication + EXT_dgc
+- mesa-25.0.4 aborts Xserver due to ACO "Unsupported opcode" v_lshlrev_b16
+
+
+Changes
+-------
+
+Adam Jackson (2):
+
+- vtn: (Silently) handle FunctionParameterAttributeNo{Capture,Write}
+- vtn/opencl: Handle OpenCLstd_F{Min,Max}_common
+
+Calder Young (2):
+
+- iris: Fix accidental writes to global dirty bit instead of local
+- iris: set dependency between SF_CL and CC states
+
+Christian Gmeiner (1):
+
+- zink: Fix NIR validation error in cubemap-to-array lowering
+
+Dave Airlie (1):
+
+- nvk: Fix compute class comparison in dispatch indirect
+
+David Rosca (4):
+
+- radeonsi/vce: Fix bitstream buffer size
+- radeonsi/vce: Only send one task per IB
+- radeonsi/vce: Fix output quality and performance in speed preset
+- radv/video: Limit 10bit H265 decode support to stoney and newer
+
+Ella Stanforth (1):
+
+- v3d/compiler: Fix ub when using memcmp for texture comparisons.
+
+Eric Engestrom (3):
+
+- docs: add sha sum for 25.0.6
+- .pick_status.json: Mark 29d7b90cfcb67ecc2ff3e422dd7b38898abb1bbe as denominated
+- .pick_status.json: Update to 8965e60118fa17407c5bfcdca1fe2854ad2fb150
+
+Erik Faye-Lund (1):
+
+- mesa/main: remove non-existing function prototype
+
+Faith Ekstrand (2):
+
+- nvk: Allocate the correct VAB size on Kepler
+- nouveau/mme: Don't install the HW tests
+
+Georg Lehmann (2):
+
+- radeonsi: always lower alu bit sizes
+- aco: assume sram ecc is enabled on Vega20
+
+Gurchetan Singh (1):
+
+- gfxstream: get rid of logspam in virtualized case
+
+Hans-Kristian Arntzen (1):
+
+- radv: Consider that DGC might need shader reads of predicated data.
+
+José Roberto de Souza (2):
+
+- anv: Implement missing part of Wa_1604061319
+- anv: Enable preemption due 3DPRIMITIVE in GFX 12
+
+Karol Herbst (2):
+
+- nir: fix use-after-free on function parameter names
+- vtn: fix use-after-free on function parameter names
+
+Lars-Ivar Hesselberg Simonsen (2):
+
+- panvk/v9+: Set up limited texture descs for storage use
+- panvk/v9+: Set up limited texture descs for storage use
+
+LingMan (1):
+
+- entaviv/isa: Silence warnings about non snake case names
+
+Lionel Landwerlin (4):
+
+- anv: enable preemption setting on command/batch correctly
+- anv/brw: stop turning load_push_constants into load_uniform
+- hasvk/elk: stop turning load_push_constants into load_uniform
+- anv: don't use pipeline layout at descriptor bind
+
+Marek Olšák (2):
+
+- winsys/amdgpu: fix running out of 32bit address space with high FPS
+- glsl: fix sampler and image type checking in lower_precision
+
+Matt Turner (1):
+
+- gallivm: Use \`llvm.roundeven` in lp_build_round()
+
+Mel Henning (2):
+
+- nouveau/headers: Run rustfmt after file is closed
+- nouveau/headers: Ignore PermissionError in rustfmt
+
+Mike Blumenkrantz (2):
+
+- llvmpipe: disable conditional rendering mem for blits
+- lavapipe: handle counterOffset in vkCmdDrawIndirectByteCountEXT
+
+Natalie Vock (1):
+
+- driconf: Fix DOOM: The Dark Ages workaround name in 25.0.x
+
+Olivia Lee (1):
+
+- util/u_printf: fix memory leak in u_printf_singleton_add_serialized
+
+Patrick Lerda (1):
+
+- r600: fix pop-free clipping
+
+Paulo Zanoni (1):
+
+- anv/trtt: don't avoid the TR-TT submission when there is stuff to signal
+
+Qiang Yu (1):
+
+- nir/opt_varyings: fix mesh shader miss promote varying to flat
+
+Rhys Perry (1):
+
+- aco/gfx115: consider point sample acceleration
+
+Rob Clark (1):
+
+- ci: Disable fd-farm
+
+Samuel Pitoiset (5):
+
+- radv: fix fetching conditional rendering state for DGC preprocess
+- radv: fix conditional rendering with DGC and non native 32-bit predicate
+- radv: fix missing texel scale for unaligned linear SDMA copies
+- radv: fix capture/replay with sparse images and descriptor buffer
+- radv: add radv_disable_hiz_his_gfx12 and enable for Mafia Definitive Edition
+
+Timothy Arceri (7):
+
+- st/mesa: fix _IntegerBuffers bitfield use
+- mesa/st: fix _BlendForceAlphaToOneDraw bitfield use
+- mesa/st: fix _IsRGBDraw bitfield use
+- mesa: fix _FP32Buffers bitfield use
+- mesa: update validation when draw buffer changes
+- mesa: extend linear_as_nearest work around
+- util: add workaround for the game Foundation

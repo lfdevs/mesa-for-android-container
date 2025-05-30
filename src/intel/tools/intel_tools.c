@@ -42,6 +42,7 @@ intel_disassemble(const struct intel_device_info *devinfo,
 
 void
 intel_decoder_init(struct intel_batch_decode_ctx *ctx,
+                   struct intel_isa_info *isa_info,
                    const struct intel_device_info *devinfo,
                    FILE *fp, enum intel_batch_decode_flags flags,
                    const char *xml_path,
@@ -50,15 +51,15 @@ intel_decoder_init(struct intel_batch_decode_ctx *ctx,
                    void *user_data)
 {
    if (devinfo->ver >= 9) {
-      struct brw_isa_info isa;
-      brw_init_isa_info(&isa, devinfo);
-      intel_batch_decode_ctx_init_brw(ctx, &isa, devinfo, fp,
+      struct brw_isa_info *isa = &isa_info->brw_isa;
+      brw_init_isa_info(isa, devinfo);
+      intel_batch_decode_ctx_init_brw(ctx, isa, devinfo, fp,
                                       flags, xml_path, get_bo, get_state_size, user_data);
    } else {
 #ifdef INTEL_USE_ELK
-      struct elk_isa_info isa;
-      elk_init_isa_info(&isa, devinfo);
-      intel_batch_decode_ctx_init_elk(ctx, &isa, devinfo, fp,
+      struct elk_isa_info *isa = &isa_info->elk_isa;
+      elk_init_isa_info(isa, devinfo);
+      intel_batch_decode_ctx_init_elk(ctx, isa, devinfo, fp,
                                       flags, xml_path, get_bo, get_state_size, user_data);
 #else
       not_supported(devinfo);

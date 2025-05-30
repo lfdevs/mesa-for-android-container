@@ -388,7 +388,21 @@ static void r600_bind_rs_state(struct pipe_context *ctx, void *state)
 		r600_mark_atom_dirty(rctx, &rctx->clip_misc_state.atom);
 	}
 
-	r600_viewport_set_rast_deps(&rctx->b, rs->scissor_enable, rs->clip_halfz);
+	if (r600_prim_is_lines(rctx->current_rast_prim))
+		r600_set_clip_discard_distance(&rctx->b, rs->line_width);
+	else if (rctx->current_rast_prim == MESA_PRIM_POINTS)
+		r600_set_clip_discard_distance(&rctx->b, rs->max_point_size);
+
+	if (rctx->b.scissor_enabled != rs->scissor_enable) {
+		rctx->b.scissor_enabled = rs->scissor_enable;
+		rctx->b.scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+		rctx->b.set_atom_dirty(&rctx->b, &rctx->b.scissors.atom, true);
+	}
+	if (rctx->b.clip_halfz != rs->clip_halfz) {
+		rctx->b.clip_halfz = rs->clip_halfz;
+		rctx->b.viewports.depth_range_dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+		rctx->b.set_atom_dirty(&rctx->b, &rctx->b.viewports.atom, true);
+	}
 
 	/* Re-emit PA_SC_LINE_STIPPLE. */
 	rctx->last_primitive_type = -1;
@@ -2206,9 +2220,23 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 		return;
 	}
 
-	rctx->current_rast_prim = (rctx->gs_shader)? rctx->gs_shader->gs_output_prim
-		: (rctx->tes_shader)? rctx->tes_shader->info.properties[TGSI_PROPERTY_TES_PRIM_MODE]
+	const enum mesa_prim rast_prim = rctx->current_rast_prim;
+
+	rctx->current_rast_prim = rctx->gs_shader ? rctx->gs_shader->gs_output_prim
+		: rctx->tes_shader ? rctx->tes_shader->info.properties[TGSI_PROPERTY_TES_PRIM_MODE]
 		: info->mode;
+
+	if (rast_prim != rctx->current_rast_prim) {
+		if (rctx->current_rast_prim == MESA_PRIM_POINTS) {
+			r600_set_clip_discard_distance(&rctx->b, rctx->rasterizer->max_point_size);
+		} else if (r600_prim_is_lines(rctx->current_rast_prim)) {
+			r600_set_clip_discard_distance(&rctx->b, rctx->rasterizer->line_width);
+		} else if (rctx->current_rast_prim == R600_PRIM_RECTANGLE_LIST) {
+			/* Don't change the clip discard distance for rectangles. */
+		} else {
+			r600_set_clip_discard_distance(&rctx->b, 0);
+		}
+	}
 
 	if (rctx->b.gfx_level >= EVERGREEN) {
 		evergreen_emit_atomic_buffer_setup_count(rctx, NULL, combined_atomics, &atomic_used_mask);

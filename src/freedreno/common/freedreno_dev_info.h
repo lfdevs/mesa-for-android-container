@@ -51,6 +51,18 @@ struct fd_dev_info {
 
    uint32_t max_waves;
 
+   /* Local Memory (i.e. shared memory in GL/Vulkan) and compute shader
+    * const registers, as well as other things not relevant here, share the
+    * same storage space, called the Local Buffer or LB. This is the size of
+    * the part of the LB used for consts and LM. Consts are duplicated
+    * wavesize_granularity times, and the size of duplicated consts + local
+    * memory must not exceed it. If it is left 0, assume that it is
+    * compute constlen + wavesize_granularity * cs_shared_mem_size, which is
+    * enough to hold both the maximum possible compute consts and local
+    * memory at the same time.
+    */
+   uint32_t compute_lb_size;
+
    /* number of CCU is always equal to the number of SP */
    union {
       uint32_t num_sp_cores;

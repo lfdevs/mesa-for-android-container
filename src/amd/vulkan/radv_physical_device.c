@@ -89,8 +89,7 @@ radv_transfer_queue_enabled(const struct radv_physical_device *pdev)
 static bool
 radv_vrs_attachment_enabled(const struct radv_physical_device *pdev)
 {
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
-   return pdev->info.gfx_level >= GFX11 || !(instance->debug_flags & RADV_DEBUG_NO_HIZ);
+   return pdev->info.gfx_level >= GFX11 || pdev->use_hiz;
 }
 
 static bool
@@ -1815,9 +1814,11 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
       .maxSamplerDescriptorBufferBindings = MAX_SETS,
       .maxEmbeddedImmutableSamplerBindings = MAX_SETS,
       .maxEmbeddedImmutableSamplers = radv_max_descriptor_set_size(),
-      /* No data required for capture/replay but these values need to be non-zero. */
+      /* No data required for capture/replay (except for sparse images) but these values need to be
+       * non-zero.
+       */
       .bufferCaptureReplayDescriptorDataSize = 1,
-      .imageCaptureReplayDescriptorDataSize = 1,
+      .imageCaptureReplayDescriptorDataSize = 8,
       .imageViewCaptureReplayDescriptorDataSize = 1,
       .samplerCaptureReplayDescriptorDataSize = 1,
       .accelerationStructureCaptureReplayDescriptorDataSize = 1,
@@ -2035,19 +2036,23 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
 
 #ifdef _WIN32
    pdev->ws = radv_null_winsys_create();
+   if (!pdev->ws)
+      result = VK_ERROR_OUT_OF_HOST_MEMORY;
 #else
    if (drm_device) {
       bool reserve_vmid = instance->vk.trace_mode & RADV_TRACE_MODE_RGP;
 
-      pdev->ws =
-         radv_amdgpu_winsys_create(fd, instance->debug_flags, instance->perftest_flags, reserve_vmid, is_virtio);
+      result = radv_amdgpu_winsys_create(fd, instance->debug_flags, instance->perftest_flags, reserve_vmid, is_virtio,
+                                         &pdev->ws);
    } else {
       pdev->ws = radv_null_winsys_create();
+      if (!pdev->ws)
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 #endif
 
-   if (!pdev->ws) {
-      result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED, "failed to initialize winsys");
+   if (result != VK_SUCCESS) {
+      result = vk_errorf(instance, result, "failed to initialize winsys");
       goto fail_base;
    }
 
@@ -2124,6 +2129,10 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    pdev->dcc_msaa_allowed = (instance->perftest_flags & RADV_PERFTEST_DCC_MSAA);
 
    pdev->use_fmask = pdev->info.gfx_level < GFX11 && !(instance->debug_flags & RADV_DEBUG_NO_FMASK);
+
+   pdev->use_hiz = !(instance->debug_flags & RADV_DEBUG_NO_HIZ);
+   if (pdev->info.gfx_level == GFX12 && instance->drirc.disable_hiz_his_gfx12)
+      pdev->use_hiz = false;
 
    pdev->use_ngg = (pdev->info.gfx_level >= GFX10 && pdev->info.family != CHIP_NAVI14 &&
                     !(instance->debug_flags & RADV_DEBUG_NO_NGG)) ||

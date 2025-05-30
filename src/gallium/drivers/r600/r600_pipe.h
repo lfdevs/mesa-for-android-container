@@ -274,6 +274,8 @@ struct r600_rasterizer_state {
 	unsigned			pa_su_sc_mode_cntl;
 	float				offset_units;
 	float				offset_scale;
+	float				line_width;
+	float				max_point_size;
 	bool				offset_enable;
 	bool				offset_units_unscaled;
 	bool				scissor_enable;

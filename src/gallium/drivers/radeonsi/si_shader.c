@@ -2553,16 +2553,15 @@ static void run_late_optimization_and_lowering_passes(struct si_nir_shader_ctx *
    NIR_PASS(progress, nir, ac_nir_lower_mem_access_bit_sizes,
             sel->screen->info.gfx_level, !nir->info.use_aco_amd);
 
-   if (nir->info.stage == MESA_SHADER_KERNEL) {
+   if (nir->info.stage == MESA_SHADER_KERNEL)
       NIR_PASS(progress, nir, ac_nir_lower_global_access);
 
-      if (nir->info.bit_sizes_int & (8 | 16)) {
-         if (sel->screen->info.gfx_level >= GFX8)
-            nir_divergence_analysis(nir);
+   if (nir->info.bit_sizes_int & (8 | 16)) {
+      if (sel->screen->info.gfx_level >= GFX8)
+         nir_divergence_analysis(nir);
 
-         NIR_PASS(progress, nir, nir_lower_bit_size, ac_nir_lower_bit_size_callback,
-                  &sel->screen->info.gfx_level);
-      }
+      NIR_PASS(progress, nir, nir_lower_bit_size, ac_nir_lower_bit_size_callback,
+               &sel->screen->info.gfx_level);
    }
 
    /* This must be after lowering resources to descriptor loads and before lowering intrinsics

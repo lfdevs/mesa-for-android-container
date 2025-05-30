@@ -76,6 +76,19 @@ compare_is_not_vectorizable(nir_intrinsic_instr *a, nir_intrinsic_instr *b)
        sem0.high_16bits != sem1.high_16bits)
       return sem0.high_16bits > sem1.high_16bits ? 1 : -1;
 
+   /* TODO: vectorize (f32, f32, f16vec2, f16vec2) -> vec4
+    * For now, different bit sizes are not vectorized together.
+    */
+   if (nir_intrinsic_has_src_type(a)) {
+      /* Stores. */
+      if (a->src[0].ssa->bit_size != b->src[0].ssa->bit_size)
+         return a->src[0].ssa->bit_size > b->src[0].ssa->bit_size ? 1 : -1;
+   } else {
+      /* Loads. */
+      if (a->def.bit_size != b->def.bit_size)
+         return a->def.bit_size > b->def.bit_size ? 1 : -1;
+   }
+
    nir_shader *shader =
       nir_cf_node_get_function(&a->instr.block->cf_node)->function->shader;
 

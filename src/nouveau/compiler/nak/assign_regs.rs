@@ -965,7 +965,7 @@ impl AssignRegsBlock {
     }
 
     fn try_coalesce(&mut self, ssa: SSAValue, src: &Src) -> bool {
-        debug_assert!(src.src_mod.is_none());
+        debug_assert!(src.is_unmodified());
         let SrcRef::Reg(src_reg) = src.src_ref else {
             return false;
         };
@@ -1018,7 +1018,7 @@ impl AssignRegsBlock {
             }
             Op::PhiSrcs(phi) => {
                 for (id, src) in phi.srcs.iter() {
-                    assert!(src.src_mod.is_none());
+                    assert!(src.is_unmodified());
                     if let Some(ssa) = src_ssa_ref(src) {
                         assert!(ssa.comps() == 1);
                         let reg = self.get_scalar(ssa[0]);

@@ -600,8 +600,7 @@ r600_buffer_from_user_memory(struct pipe_screen *screen,
 	struct radeon_winsys *ws = rscreen->ws;
 	struct r600_resource *rbuffer;
 
-	if ((templ->bind & PIPE_BIND_GLOBAL) &&
-	    (templ->bind & PIPE_BIND_COMPUTE_RESOURCE)) {
+	if (templ->bind & PIPE_BIND_GLOBAL) {
 		rbuffer = r600_resource(r600_compute_global_buffer_create(screen, templ));
 		((struct r600_resource_global *)rbuffer)->chunk->real_buffer = rbuffer;
 	} else {

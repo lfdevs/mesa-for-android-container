@@ -18,7 +18,7 @@ struct LopPass {
 }
 
 fn src_as_bool(src: &Src) -> Option<bool> {
-    assert!(src.src_mod.is_none());
+    assert!(src.is_unmodified());
     match src.src_ref {
         SrcRef::Zero | SrcRef::False | SrcRef::Imm32(0) => Some(false),
         SrcRef::True | SrcRef::Imm32(u32::MAX) => Some(true),
@@ -104,7 +104,7 @@ impl LopPass {
         src_idx: usize,
     ) {
         loop {
-            assert!(srcs[src_idx].src_mod.is_none());
+            assert!(srcs[src_idx].is_unmodified());
             let ssa = match srcs[src_idx].src_ref {
                 SrcRef::SSA(vec) => {
                     assert!(vec.comps() == 1);
@@ -197,7 +197,7 @@ impl LopPass {
         self.dedup_srcs(&mut op.op, &op.srcs);
 
         for (i, src) in op.srcs.iter_mut().enumerate() {
-            assert!(src.src_mod.is_none());
+            assert!(src.is_unmodified());
 
             if let Some(b) = src_as_bool(src) {
                 op.op.fix_src(i, b);

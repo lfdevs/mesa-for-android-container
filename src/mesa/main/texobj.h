@@ -152,7 +152,8 @@ _mesa_is_texture_complete(const struct gl_texture_object *texObj,
        * but some applications (eg: Grid Autosport) uses the default
        * filtering values.
        */
-      if (texObj->_IsIntegerFormat &&
+      if ((texObj->_IsIntegerFormat ||
+           (texObj->StencilSampling && img->_BaseFormat == GL_DEPTH_STENCIL)) &&
           linear_as_nearest_for_int_tex) {
          /* Skip return */
       } else {

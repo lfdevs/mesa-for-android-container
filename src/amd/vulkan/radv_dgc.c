@@ -205,7 +205,6 @@ radv_get_sequence_size_graphics(const struct radv_indirect_command_layout *layou
 {
    const struct radv_device *device = container_of(layout->vk.base.device, struct radv_device, vk);
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    const VkGeneratedCommandsPipelineInfoEXT *pipeline_info =
       vk_find_struct_const(pNext, GENERATED_COMMANDS_PIPELINE_INFO_EXT);
@@ -287,7 +286,7 @@ radv_get_sequence_size_graphics(const struct radv_indirect_command_layout *layou
       }
    }
 
-   if (pdev->info.gfx_level == GFX12 && !(instance->debug_flags & RADV_DEBUG_NO_HIZ)) {
+   if (pdev->info.gfx_level == GFX12 && pdev->use_hiz) {
       /* HiZ/HiS hw workaround */
       *cmd_size += 8 * 4;
    }
@@ -1140,9 +1139,8 @@ dgc_gfx12_emit_hiz_his_wa(struct dgc_cmdbuf *cs)
 {
    const struct radv_device *device = cs->dev;
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
-   if (pdev->info.gfx_level == GFX12 && !(instance->debug_flags & RADV_DEBUG_NO_HIZ)) {
+   if (pdev->info.gfx_level == GFX12 && pdev->use_hiz) {
       dgc_cs_begin(cs);
       dgc_cs_emit_imm(PKT3(PKT3_RELEASE_MEM, 6, 0));
       dgc_cs_emit_imm(S_490_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) | S_490_EVENT_INDEX(5));
@@ -2803,6 +2801,7 @@ radv_CmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(radv_cmd_buffer, state_cmd_buffer, stateCommandBuffer);
    VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    VK_FROM_HANDLE(radv_indirect_command_layout, layout, pGeneratedCommandsInfo->indirectCommandsLayout);
+   const bool execution_is_predicating = state_cmd_buffer->state.predicating;
 
    assert(layout->vk.usage & VK_INDIRECT_COMMANDS_LAYOUT_USAGE_EXPLICIT_PREPROCESS_BIT_EXT);
 
@@ -2812,7 +2811,7 @@ radv_CmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
    const bool old_predicating = cmd_buffer->state.predicating;
    cmd_buffer->state.predicating = false;
 
-   radv_prepare_dgc(cmd_buffer, pGeneratedCommandsInfo, state_cmd_buffer, old_predicating);
+   radv_prepare_dgc(cmd_buffer, pGeneratedCommandsInfo, state_cmd_buffer, execution_is_predicating);
 
    /* Restore conditional rendering. */
    cmd_buffer->state.predicating = old_predicating;
@@ -2837,8 +2836,8 @@ radv_prepare_dgc_compute(struct radv_cmd_buffer *cmd_buffer, const VkGeneratedCo
 
    if (cond_render_enabled) {
       params->predicating = true;
-      params->predication_va = cmd_buffer->state.predication_va;
-      params->predication_type = cmd_buffer->state.predication_type;
+      params->predication_va = state_cmd_buffer->state.user_predication_va;
+      params->predication_type = state_cmd_buffer->state.predication_type;
    }
 
    if (ies) {

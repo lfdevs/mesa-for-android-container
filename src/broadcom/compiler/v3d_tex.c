@@ -253,14 +253,14 @@ v3d_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                 (components_read & 0xf): (components_read & 0x3);
         assert(p0_unpacked.return_words_of_texture_data != 0);
 
-        struct V3D42_TMU_CONFIG_PARAMETER_2 p2_unpacked = {
-                .op = V3D_TMU_OP_REGULAR,
-                .gather_mode = instr->op == nir_texop_tg4,
-                .gather_component = instr->component,
-                .coefficient_mode = instr->op == nir_texop_txd,
-                .disable_autolod = instr->op == nir_texop_tg4,
-                .lod_query = instr->op == nir_texop_lod,
-        };
+        struct V3D42_TMU_CONFIG_PARAMETER_2 p2_unpacked;
+        memset(&p2_unpacked, 0, sizeof(p2_unpacked));
+        p2_unpacked.op = V3D_TMU_OP_REGULAR;
+        p2_unpacked.gather_mode = instr->op == nir_texop_tg4;
+        p2_unpacked.gather_component = instr->component;
+        p2_unpacked.coefficient_mode = instr->op == nir_texop_txd;
+        p2_unpacked.disable_autolod = instr->op == nir_texop_tg4;
+        p2_unpacked.lod_query = instr->op == nir_texop_lod;
 
         const unsigned tmu_writes = get_required_tex_tmu_writes(c, instr);
 
@@ -565,12 +565,13 @@ v3d_vir_emit_image_load_store(struct v3d_compile *c,
         struct V3D42_TMU_CONFIG_PARAMETER_0 p0_unpacked = {
         };
 
-        struct V3D42_TMU_CONFIG_PARAMETER_1 p1_unpacked = {
-                .per_pixel_mask_enable = true,
-                .output_type_32_bit = v3d_gl_format_is_return_32(format),
-        };
+        struct V3D42_TMU_CONFIG_PARAMETER_1 p1_unpacked;
+        memset(&p1_unpacked, 0, sizeof(p1_unpacked));
+        p1_unpacked.per_pixel_mask_enable = true;
+        p1_unpacked.output_type_32_bit = v3d_gl_format_is_return_32(format);
 
-        struct V3D42_TMU_CONFIG_PARAMETER_2 p2_unpacked = { 0 };
+        struct V3D42_TMU_CONFIG_PARAMETER_2 p2_unpacked;
+        memset(&p2_unpacked, 0, sizeof(p2_unpacked));
 
         /* Limit the number of channels to those that are actually used */
         uint32_t return_channels =

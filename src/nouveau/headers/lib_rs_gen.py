@@ -109,11 +109,6 @@ def main():
     try:
         with open(args.out_rs, 'w', encoding='utf-8') as f:
             f.write(TEMPLATE_RS.render(root=root))
-            try:
-                subprocess.run(['rustfmt', args.out_rs], check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                pass
-
     except Exception:
         # In the event there's an error, this imports some helpers from mako
         # to print a useful stack trace and prints it, then exits with
@@ -123,6 +118,11 @@ def main():
         from mako import exceptions
         print(exceptions.text_error_template().render(), file=sys.stderr)
         sys.exit(1)
+
+    try:
+        subprocess.run(['rustfmt', args.out_rs], check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError, PermissionError):
+        pass
 
 if __name__ == '__main__':
     main()

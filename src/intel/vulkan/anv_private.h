@@ -259,7 +259,14 @@ struct intel_perf_query_result;
 #define ANV_TRTT_L1_NULL_TILE_VAL 0
 #define ANV_TRTT_L1_INVALID_TILE_VAL 1
 
+/* The binding table entry id disabled, the shader can write to it and the
+ * driver should use a null surface state so that writes are discarded.
+ */
 #define ANV_COLOR_OUTPUT_DISABLED (0xff)
+/* The binding table entry id unused, the shader does not write to it and the
+ * driver can leave whatever surface state was used before. Transitioning
+ * to/from this entry does not require render target cache flush.
+ */
 #define ANV_COLOR_OUTPUT_UNUSED   (0xfe)
 
 static inline uint32_t

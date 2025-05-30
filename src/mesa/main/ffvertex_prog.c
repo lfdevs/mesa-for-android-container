@@ -552,7 +552,7 @@ static void set_material_flags( struct tnl_program *p )
    p->color_materials = 0;
    p->materials = 0;
 
-   if (p->state->varying_vp_inputs & VERT_BIT_COLOR0) {
+   if (p->state->light_color_material_mask) {
       p->materials =
          p->color_materials = p->state->light_color_material_mask;
    }

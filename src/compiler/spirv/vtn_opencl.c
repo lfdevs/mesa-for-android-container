@@ -154,6 +154,7 @@ static nir_function *mangle_and_find(struct vtn_builder *b,
          decl->params = ralloc_array(b->shader, nir_parameter, decl->num_params);
          for (unsigned i = 0; i < decl->num_params; i++) {
             decl->params[i] = found->params[i];
+            decl->params[i].name = ralloc_strdup(b->shader, found->params[i].name);
          }
          found = decl;
       }
@@ -266,6 +267,9 @@ nir_alu_op_for_opencl_opcode(struct vtn_builder *b,
    case OpenCLstd_Half_recip: return nir_op_frcp;
    /* uhm... */
    case OpenCLstd_UAbs: return nir_op_mov;
+   // we could do better
+   case OpenCLstd_FMin_common: return nir_op_fmin;
+   case OpenCLstd_FMax_common: return nir_op_fmax;
    default:
       vtn_fail("No NIR equivalent");
    }
@@ -967,6 +971,8 @@ vtn_handle_opencl_instruction(struct vtn_builder *b, SpvOp ext_opcode,
    case OpenCLstd_Rint:
    case OpenCLstd_Half_divide:
    case OpenCLstd_Half_recip:
+   case OpenCLstd_FMin_common:
+   case OpenCLstd_FMax_common:
       handle_instr(b, ext_opcode, w + 5, count - 5, w + 1, handle_alu);
       return true;
    case OpenCLstd_SAbs_diff:

@@ -24,7 +24,7 @@ impl LowerCopySwap {
     fn lower_copy(&mut self, b: &mut impl Builder, copy: OpCopy) {
         let dst_reg = copy.dst.as_reg().unwrap();
         assert!(dst_reg.comps() == 1);
-        assert!(copy.src.src_mod.is_none());
+        assert!(copy.src.is_unmodified());
         assert!(copy.src.is_uniform() || !dst_reg.is_uniform());
 
         match dst_reg.file() {
@@ -177,7 +177,7 @@ impl LowerCopySwap {
     }
 
     fn lower_r2ur(&mut self, b: &mut impl Builder, r2ur: OpR2UR) {
-        assert!(r2ur.src.src_mod.is_none());
+        assert!(r2ur.src.is_unmodified());
         if r2ur.src.is_uniform() {
             let copy = OpCopy {
                 dst: r2ur.dst,
@@ -214,9 +214,9 @@ impl LowerCopySwap {
         assert!(x.file() == y.file());
         assert!(x.file() != RegFile::Mem);
         assert!(x.comps() == 1 && y.comps() == 1);
-        assert!(swap.srcs[0].src_mod.is_none());
+        assert!(swap.srcs[0].is_unmodified());
         assert!(*swap.srcs[0].src_ref.as_reg().unwrap() == y);
-        assert!(swap.srcs[1].src_mod.is_none());
+        assert!(swap.srcs[1].is_unmodified());
         assert!(*swap.srcs[1].src_ref.as_reg().unwrap() == x);
 
         if x == y {

@@ -91,6 +91,7 @@ amd_common_files = files(
   'ac_vcn_av1_default.h',
   'ac_vcn_dec.c',
   'ac_vcn_enc.c',
+  'ac_uvd_dec.c',
   'nir/ac_nir.c',
   'nir/ac_nir.h',
   'nir/ac_nir_helpers.h',

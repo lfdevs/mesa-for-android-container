@@ -482,6 +482,7 @@ static void *r600_create_rs_state(struct pipe_context *ctx,
 			S_028810_DX_RASTERIZATION_KILL(state->rasterizer_discard);
 	}
 	rs->multisample_enable = state->multisample;
+	rs->line_width = state->line_width;
 
 	/* offset */
 	rs->offset_units = state->offset_units;
@@ -497,6 +498,7 @@ static void *r600_create_rs_state(struct pipe_context *ctx,
 		psize_min = state->point_size;
 		psize_max = state->point_size;
 	}
+	rs->max_point_size = psize_max;
 
 	sc_mode_cntl = S_028A4C_MSAA_ENABLE(state->multisample) |
 		       S_028A4C_LINE_STIPPLE_ENABLE(state->line_stipple_enable) |

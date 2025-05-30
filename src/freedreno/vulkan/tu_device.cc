@@ -2323,7 +2323,7 @@ tu_init_cmdbuf_start_a725_quirk(struct tu_device *device)
             .threadmode = MULTI,
             .threadsize = THREAD128,
             .mergedregs = true));
-   tu_cs_emit_regs(&sub_cs, A6XX_SP_CS_UNKNOWN_A9B1(.shared_size = 1));
+   tu_cs_emit_regs(&sub_cs, A6XX_SP_CS_CTRL_REG1(.shared_size = 1));
    tu_cs_emit_regs(&sub_cs, HLSQ_CS_KERNEL_GROUP_X(A7XX, 1),
                      HLSQ_CS_KERNEL_GROUP_Y(A7XX, 1),
                      HLSQ_CS_KERNEL_GROUP_Z(A7XX, 1));

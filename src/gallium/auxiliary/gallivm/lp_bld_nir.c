@@ -776,14 +776,7 @@ do_alu_action(struct lp_build_nir_context *bld_base,
       result = lp_build_rcp(get_flt_bld(bld_base, src_bit_size[0]), src[0]);
       break;
    case nir_op_fround_even:
-      if (src_bit_size[0] == 16) {
-         struct lp_build_context *bld = get_flt_bld(bld_base, 16);
-         char intrinsic[64];
-         lp_format_intrinsic(intrinsic, 64, "llvm.roundeven", bld->vec_type);
-         result = lp_build_intrinsic_unary(builder, intrinsic, bld->vec_type, src[0]);
-      } else {
-         result = lp_build_round(get_flt_bld(bld_base, src_bit_size[0]), src[0]);
-      }
+      result = lp_build_round(get_flt_bld(bld_base, src_bit_size[0]), src[0]);
       break;
    case nir_op_frsq:
       result = lp_build_rsqrt(get_flt_bld(bld_base, src_bit_size[0]), src[0]);

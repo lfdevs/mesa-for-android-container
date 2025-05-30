@@ -287,8 +287,13 @@ check_instr(wait_ctx& ctx, wait_imm& wait, Instruction* instr)
          if (vmem_type && ctx.gfx_level < GFX12) {
             wait_event event = get_vmem_event(ctx, instr, vmem_type);
             wait_type type = (wait_type)(ffs(ctx.info->get_counters_for_event(event)) - 1);
-            if ((it->second.events & ctx.info->events[type]) == event &&
-                (type != wait_type_vm || it->second.vmem_types == vmem_type))
+
+            bool event_matches = (it->second.events & ctx.info->events[type]) == event;
+            /* wait_type_vm/counter_vm can have several different vmem_types */
+            bool type_matches = type != wait_type_vm || (it->second.vmem_types == vmem_type &&
+                                                         util_bitcount(vmem_type) == 1);
+
+            if (event_matches && type_matches)
                reg_imm[type] = wait_imm::unset_counter;
          }
 

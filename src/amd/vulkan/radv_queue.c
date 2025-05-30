@@ -891,6 +891,12 @@ radv_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       radeon_set_context_reg(cs, R_028000_DB_RENDER_CONTROL, 0);
    }
 
+   if (pdev->info.family >= CHIP_NAVI31 && pdev->info.family <= CHIP_GFX1150) {
+      /* Disable SINGLE clear codes on GFX11 (including first GFX11.5 rev) to workaround a hw bug
+       * with DCC. */
+      ac_pm4_set_reg(pm4, R_028424_CB_FDCC_CONTROL, S_028424_DISABLE_CONSTANT_ENCODE_SINGLE(1));
+   }
+
    ac_pm4_finalize(pm4);
    radeon_emit_array(cs, pm4->pm4, pm4->ndw);
    ac_pm4_free_state(pm4);

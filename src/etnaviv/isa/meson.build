@@ -118,6 +118,7 @@ if with_tools.contains('etnaviv')
     rust_abi : 'rust',
     rust_args: [
       '-Anon_camel_case_types',
+      '-Anon_snake_case',
     ],
   )
 

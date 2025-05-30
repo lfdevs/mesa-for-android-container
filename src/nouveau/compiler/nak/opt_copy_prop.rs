@@ -166,7 +166,7 @@ impl CopyPropPass {
                 continue;
             };
 
-            if entry.src.src_mod.is_none() {
+            if entry.src.is_unmodified() {
                 if let SrcRef::SSA(entry_ssa) = entry.src.src_ref {
                     assert!(entry_ssa.comps() == 1);
                     *c_ssa = entry_ssa[0];
@@ -179,7 +179,7 @@ impl CopyPropPass {
     }
 
     fn prop_to_ssa_src(&self, src: &mut Src) {
-        assert!(src.src_mod.is_none());
+        assert!(src.is_unmodified());
         if let SrcRef::SSA(src_ssa) = &mut src.src_ref {
             loop {
                 if !self.prop_to_ssa_ref(src_ssa) {
@@ -245,8 +245,7 @@ impl CopyPropPass {
                     }
 
                     // If there are modifiers, the source types have to match
-                    if !entry.src.src_mod.is_none()
-                        && entry.src_type != src_type
+                    if !entry.src.is_unmodified() && entry.src_type != src_type
                     {
                         return;
                     }
@@ -341,7 +340,7 @@ impl CopyPropPass {
             // source modifiers as needed when propagating the high bits.
             let lo_entry_or_none = self.get_copy(&src_ssa[0]);
             if let Some(CopyPropEntry::Copy(lo_entry)) = lo_entry_or_none {
-                if lo_entry.src.src_mod.is_none() {
+                if lo_entry.src.is_unmodified() {
                     if let SrcRef::SSA(lo_entry_ssa) = lo_entry.src.src_ref {
                         src_ssa[0] = lo_entry_ssa[0];
                         continue;
@@ -351,7 +350,7 @@ impl CopyPropPass {
 
             let hi_entry_or_none = self.get_copy(&src_ssa[1]);
             if let Some(CopyPropEntry::Copy(hi_entry)) = hi_entry_or_none {
-                if hi_entry.src.src_mod.is_none()
+                if hi_entry.src.is_unmodified()
                     || hi_entry.src_type == SrcType::F64
                 {
                     if let SrcRef::SSA(hi_entry_ssa) = hi_entry.src.src_ref {
@@ -370,11 +369,11 @@ impl CopyPropPass {
                 return;
             };
 
-            if !lo_entry.src.src_mod.is_none() {
+            if !lo_entry.src.is_unmodified() {
                 return;
             }
 
-            if !hi_entry.src.src_mod.is_none()
+            if !hi_entry.src.is_unmodified()
                 && hi_entry.src_type != SrcType::F64
             {
                 return;
@@ -599,7 +598,7 @@ impl CopyPropPass {
                 }
             }
             Op::R2UR(r2ur) => {
-                assert!(r2ur.src.src_mod.is_none());
+                assert!(r2ur.src.is_unmodified());
                 if r2ur.src.is_uniform() {
                     let dst = r2ur.dst.as_ssa().unwrap();
                     assert!(dst.comps() == 1);
