@@ -4969,8 +4969,7 @@ fs_nir_emit_intrinsic(nir_to_elk_state &ntb,
       break;
    }
 
-   case nir_intrinsic_load_uniform:
-   case nir_intrinsic_load_push_constant: {
+   case nir_intrinsic_load_uniform: {
       /* Offsets are in bytes but they should always aligned to
        * the type size
        */
@@ -7058,3 +7057,4 @@ nir_to_elk(elk_fs_visitor *s)
 
    ralloc_free(ntb.mem_ctx);
 }
+
