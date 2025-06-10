@@ -8,6 +8,7 @@ mesa (25.0.7-1) UNRELEASED; urgency=medium
   * rules: Drop obsolete removals.
   * patches: Drop a fix for lp2101817, since 25.0.6 carries a separate
     fix for that.
+  * Revert a bad commit which broke Intel Haswell. (LP: #2113508)
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 22 May 2025 11:48:01 +0300
 
