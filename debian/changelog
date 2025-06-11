@@ -6,6 +6,8 @@ mesa (25.0.7-1) UNRELEASED; urgency=medium
   * control: Bump spirv-tools build dep for Intel shader compiler.
   * New upstream release. (Closes: #1105831)
   * rules: Drop obsolete removals.
+  * patches: Drop a fix for lp2101817, since 25.0.6 carries a separate
+    fix for that.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 22 May 2025 11:48:01 +0300
 
