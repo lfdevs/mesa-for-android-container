@@ -1,4 +1,4 @@
-mesa (25.0.7-1) UNRELEASED; urgency=medium
+mesa (25.0.7-1) unstable; urgency=medium
 
   * control: Bump rustc dependency to match upstream.
   * control: Bump wayland-protocols build-dep.
@@ -10,7 +10,7 @@ mesa (25.0.7-1) UNRELEASED; urgency=medium
     fix for that.
   * Revert a bad commit which broke Intel Haswell. (LP: #2113508)
 
- -- Timo Aaltonen <tjaalton@debian.org>  Thu, 22 May 2025 11:48:01 +0300
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 11 Jun 2025 17:14:37 +0300
 
 mesa (25.0.5-2) unstable; urgency=medium
 
