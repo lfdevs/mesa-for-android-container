@@ -352,7 +352,7 @@ impl Function {
                         for (idx, src) in phi.srcs.iter_mut() {
                             let (ps, file) = cg.phi_set_file(idx);
 
-                            debug_assert!(src.src_mod.is_none());
+                            debug_assert!(src.is_unmodified());
                             if let SrcRef::SSA(vec) = &src.src_ref {
                                 debug_assert!(vec.comps() == 1);
                                 if vec[0].file() == file {

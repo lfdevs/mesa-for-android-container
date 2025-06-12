@@ -103,7 +103,7 @@ class GPUInfo(Struct):
                  tile_max_w, tile_max_h, num_vsc_pipes,
                  cs_shared_mem_size, num_sp_cores, wave_granularity, fibers_per_sp,
                  highest_bank_bit = 0, ubwc_swizzle = 0x7, macrotile_mode = 0,
-                 threadsize_base = 64, max_waves = 16):
+                 threadsize_base = 64, max_waves = 16, compute_lb_size = 0):
         self.chip          = chip.value
         self.gmem_align_w  = gmem_align_w
         self.gmem_align_h  = gmem_align_h
@@ -139,9 +139,13 @@ class A6xxGPUInfo(GPUInfo):
         if chip == CHIP.A6XX:
             tile_max_w   = 1024 # max_bitfield_val(5, 0, 5)
             tile_max_h   = max_bitfield_val(14, 8, 4) # 1008
+            compute_lb_size = 0
         else:
             tile_max_w   = 1728
             tile_max_h   = 1728
+            # on a7xx the compute_lb_size is 40KB for all known parts for now.
+            # We have a parameter for it in case some low-end parts cut it down.
+            compute_lb_size = 40 * 1024
 
         super().__init__(chip, gmem_align_w = 16, gmem_align_h = 4,
                          tile_align_w = tile_align_w,
@@ -157,7 +161,8 @@ class A6xxGPUInfo(GPUInfo):
                          ubwc_swizzle = ubwc_swizzle,
                          macrotile_mode = macrotile_mode,
                          threadsize_base    = threadsize_base,
-                         max_waves    = max_waves)
+                         max_waves    = max_waves,
+                         compute_lb_size = compute_lb_size)
 
         self.num_ccu = num_ccu
 

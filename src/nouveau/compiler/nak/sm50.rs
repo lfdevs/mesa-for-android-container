@@ -152,7 +152,7 @@ impl SM50Encoder<'_> {
     }
 
     fn set_reg_src(&mut self, range: Range<usize>, src: Src) {
-        assert!(src.src_mod.is_none());
+        assert!(src.is_unmodified());
         self.set_reg_src_ref(range, src.src_ref);
     }
 
@@ -318,9 +318,14 @@ impl SM50Encoder<'_> {
 //
 
 pub trait SM50LegalizeBuildHelpers: LegalizeBuildHelpers {
-    fn copy_alu_src_if_fabs(&mut self, src: &mut Src, src_type: SrcType) {
+    fn copy_alu_src_if_fabs(
+        &mut self,
+        src: &mut Src,
+        reg_file: RegFile,
+        src_type: SrcType,
+    ) {
         if src.src_mod.has_fabs() {
-            self.copy_alu_src_and_lower_fmod(src, src_type);
+            self.copy_alu_src_and_lower_fmod(src, reg_file, src_type);
         }
     }
 
@@ -428,7 +433,7 @@ impl SM50Op for OpFAdd {
                 SrcRef::Imm32(imm32) => {
                     e.set_opcode(0x3858);
                     e.set_src_imm_f20(20..39, 56, *imm32);
-                    assert!(self.srcs[1].src_mod.is_none());
+                    assert!(self.srcs[1].is_unmodified());
                 }
                 SrcRef::CBuf(_) => {
                     e.set_opcode(0x4c58);
@@ -451,9 +456,9 @@ impl SM50Op for OpFFma {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1, src2] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F32);
-        b.copy_alu_src_if_fabs(src1, SrcType::F32);
-        b.copy_alu_src_if_fabs(src2, SrcType::F32);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F32);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F32);
+        b.copy_alu_src_if_fabs(src2, GPR, SrcType::F32);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F32);
         b.copy_alu_src_if_f20_overflow(src1, GPR, SrcType::F32);
@@ -538,7 +543,7 @@ impl SM50Op for OpFMnMx {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3860);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4c60);
@@ -558,8 +563,8 @@ impl SM50Op for OpFMul {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F32);
-        b.copy_alu_src_if_fabs(src1, SrcType::F32);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F32);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F32);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F32);
     }
@@ -630,7 +635,7 @@ impl SM50Op for OpRro {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3890);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.src.src_mod.is_none());
+                assert!(self.src.is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4c90);
@@ -753,7 +758,7 @@ impl SM50Op for OpFSet {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3000);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4800);
@@ -791,7 +796,7 @@ impl SM50Op for OpFSetP {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x36b0);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4bb0);
@@ -870,7 +875,7 @@ impl SM50Op for OpDAdd {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3870);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4c70);
@@ -889,9 +894,9 @@ impl SM50Op for OpDFma {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1, src2] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F64);
-        b.copy_alu_src_if_fabs(src1, SrcType::F64);
-        b.copy_alu_src_if_fabs(src2, SrcType::F64);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F64);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F64);
+        b.copy_alu_src_if_fabs(src2, GPR, SrcType::F64);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F64);
         b.copy_alu_src_if_f20_overflow(src1, GPR, SrcType::F64);
@@ -969,7 +974,7 @@ impl SM50Op for OpDMnMx {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3850);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4c50);
@@ -988,8 +993,8 @@ impl SM50Op for OpDMul {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
         use RegFile::GPR;
         let [src0, src1] = &mut self.srcs;
-        b.copy_alu_src_if_fabs(src0, SrcType::F64);
-        b.copy_alu_src_if_fabs(src1, SrcType::F64);
+        b.copy_alu_src_if_fabs(src0, GPR, SrcType::F64);
+        b.copy_alu_src_if_fabs(src1, GPR, SrcType::F64);
         swap_srcs_if_not_reg(src0, src1, GPR);
         b.copy_alu_src_if_not_reg(src0, GPR, SrcType::F64);
         b.copy_alu_src_if_f20_overflow(src1, GPR, SrcType::F64);
@@ -1047,7 +1052,7 @@ impl SM50Op for OpDSetP {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3680);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4b80);
@@ -1117,7 +1122,7 @@ impl SM50Op for OpFlo {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3830);
                 e.set_src_imm_i20(20..39, 56, *imm32);
-                assert!(self.src.src_mod.is_none());
+                assert!(self.src.is_unmodified());
             }
             SrcRef::CBuf(cb) => {
                 e.set_opcode(0x4c30);
@@ -1158,9 +1163,7 @@ impl SM50Op for OpIAdd2 {
     fn encode(&self, e: &mut SM50Encoder<'_>) {
         // Hardware requires at least one of these be unmodified.  Otherwise, it
         // encodes as iadd.po which isn't what we want.
-        assert!(
-            self.srcs[0].src_mod.is_none() || self.srcs[1].src_mod.is_none()
-        );
+        assert!(self.srcs[0].is_unmodified() || self.srcs[1].is_unmodified());
 
         let carry_out = match self.carry_out {
             Dst::Reg(reg) if reg.file() == RegFile::Carry => true,
@@ -1186,7 +1189,7 @@ impl SM50Op for OpIAdd2 {
                 SrcRef::Imm32(imm32) => {
                     e.set_opcode(0x3810);
                     e.set_src_imm_i20(20..39, 56, *imm32);
-                    assert!(self.srcs[1].src_mod.is_none());
+                    assert!(self.srcs[1].is_unmodified());
                 }
                 SrcRef::CBuf(_) => {
                     e.set_opcode(0x4c10);
@@ -1242,7 +1245,7 @@ impl SM50Op for OpIAdd2X {
                 SrcRef::Imm32(imm32) => {
                     e.set_opcode(0x3810);
                     e.set_src_imm_i20(20..39, 56, *imm32);
-                    assert!(self.srcs[1].src_mod.is_none());
+                    assert!(self.srcs[1].is_unmodified());
                 }
                 SrcRef::CBuf(_) => {
                     e.set_opcode(0x4c10);
@@ -1329,8 +1332,8 @@ impl SM50Op for OpIMul {
     }
 
     fn encode(&self, e: &mut SM50Encoder<'_>) {
-        assert!(self.srcs[0].src_mod.is_none());
-        assert!(self.srcs[1].src_mod.is_none());
+        assert!(self.srcs[0].is_unmodified());
+        assert!(self.srcs[1].is_unmodified());
 
         if let Some(i) = self.srcs[1].as_imm_not_i20() {
             e.set_opcode(0x1fc0);
@@ -1384,7 +1387,7 @@ impl SM50Op for OpIMnMx {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3820);
                 e.set_src_imm_i20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(cb) => {
                 e.set_opcode(0x4c20);
@@ -1427,7 +1430,7 @@ impl SM50Op for OpISetP {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x3660);
                 e.set_src_imm_i20(20..39, 56, *imm32);
-                assert!(self.srcs[1].src_mod.is_none());
+                assert!(self.srcs[1].is_unmodified());
             }
             SrcRef::CBuf(cb) => {
                 e.set_opcode(0x4b60);
@@ -1502,7 +1505,7 @@ impl SM50Op for OpLop2 {
                 SrcRef::Imm32(imm32) => {
                     e.set_opcode(0x3840);
                     e.set_src_imm_i20(20..39, 56, *imm32);
-                    assert!(self.srcs[1].src_mod.is_none());
+                    assert!(self.srcs[1].is_unmodified());
                 }
                 SrcRef::CBuf(_) => {
                     e.set_opcode(0x4c40);
@@ -1575,7 +1578,7 @@ impl SM50Op for OpShf {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(if self.right { 0x38f8 } else { 0x36f8 });
                 e.set_src_imm_i20(20..39, 56, *imm32);
-                assert!(self.shift.src_mod.is_none());
+                assert!(self.shift.is_unmodified());
             }
             src => panic!("Invalid shf shift: {src}"),
         }
@@ -1684,7 +1687,7 @@ impl SM50Op for OpF2F {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x38a8);
                 e.set_src_imm_i20(20..39, 56, *imm32);
-                assert!(self.src.src_mod.is_none());
+                assert!(self.src.is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4ca8);
@@ -1726,7 +1729,7 @@ impl SM50Op for OpF2I {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x38b0);
                 e.set_src_imm_f20(20..39, 56, *imm32);
-                assert!(self.src.src_mod.is_none());
+                assert!(self.src.is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4cb0);
@@ -1767,7 +1770,7 @@ impl SM50Op for OpI2F {
             SrcRef::Imm32(imm32) => {
                 e.set_opcode(0x38b8);
                 e.set_src_imm_i20(20..39, 56, *imm32);
-                assert!(self.src.src_mod.is_none());
+                assert!(self.src.is_unmodified());
             }
             SrcRef::CBuf(_) => {
                 e.set_opcode(0x4cb8);
@@ -2392,7 +2395,7 @@ impl SM50Op for OpLdc {
     }
 
     fn encode(&self, e: &mut SM50Encoder<'_>) {
-        assert!(self.cb.src_mod.is_none());
+        assert!(self.cb.is_unmodified());
         let SrcRef::CBuf(cb) = &self.cb.src_ref else {
             panic!("Not a CBuf source");
         };

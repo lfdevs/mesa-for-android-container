@@ -36,7 +36,7 @@ static bool do_winsys_init(struct amdgpu_winsys *aws,
                            const struct pipe_screen_config *config,
                            int fd)
 {
-   if (!ac_query_gpu_info(fd, aws->dev, &aws->info, false))
+   if (ac_query_gpu_info(fd, aws->dev, &aws->info, false) != AC_QUERY_GPU_INFO_SUCCESS)
       goto fail;
 
    aws->addrlib = ac_addrlib_create(&aws->info, &aws->info.max_alignment);
@@ -62,7 +62,7 @@ static bool do_winsys_init(struct amdgpu_winsys *aws,
       simple_mtx_init(&aws->queues[i].userq.lock, mtx_plain);
 
    /* TODO: Enable this once the kernel handles it efficiently. */
-   if (aws->info.has_dedicated_vram && !aws->info.use_userq)
+   if (!aws->info.use_userq)
       aws->info.has_local_buffers = false;
 
    return true;

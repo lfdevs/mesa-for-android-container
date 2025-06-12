@@ -17,6 +17,7 @@
 #include "radv_instance.h"
 #include "radv_queue.h"
 #include "radv_radeon_winsys.h"
+#include "ac_uvd_dec.h"
 #include "ac_vcn_enc.h"
 #include "wsi_common.h"
 
@@ -93,6 +94,9 @@ struct radv_physical_device {
 
    /* Whether to enable FMASK compression for MSAA textures (GFX6-GFX10.3) */
    bool use_fmask;
+
+   /* Whether to enable HTILE compression for depth/stencil images. */
+   bool use_hiz;
 
    /* Whether to enable NGG. */
    bool use_ngg;
@@ -173,8 +177,7 @@ struct radv_physical_device {
    } vid_dec_reg;
    enum amd_ip_type vid_decode_ip;
    uint32_t vid_addr_gfx_mode;
-   uint32_t stream_handle_base;
-   uint32_t stream_handle_counter;
+   struct ac_uvd_stream_handle stream_handle;
    uint32_t av1_version;
    rvcn_enc_cmd_t vcn_enc_cmds;
    enum radv_video_enc_hw_ver enc_hw_ver;

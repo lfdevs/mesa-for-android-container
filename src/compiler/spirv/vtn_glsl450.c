@@ -259,7 +259,6 @@ vtn_nir_alu_op_for_spirv_glsl_opcode(struct vtn_builder *b,
    case GLSLstd450SMax:          return nir_op_imax;
    case GLSLstd450FMix:          return nir_op_flrp;
    case GLSLstd450Fma:           return nir_op_ffma;
-   case GLSLstd450Ldexp:         return nir_op_ldexp;
    case GLSLstd450FindILsb:      return nir_op_find_lsb;
    case GLSLstd450FindSMsb:      return nir_op_ifind_msb;
    case GLSLstd450FindUMsb:      return nir_op_ufind_msb;
@@ -609,6 +608,18 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
    case GLSLstd450Atan2:
       dest->def = nir_atan2(nb, src[0], src[1]);
       break;
+
+   case GLSLstd450Ldexp: {
+      nir_def *exp = src[1];
+
+      if (exp->bit_size == 64) {
+         exp = nir_iclamp(nb, exp, nir_imm_intN_t(nb, INT32_MIN, 64),
+                                   nir_imm_intN_t(nb, INT32_MAX, 64));
+      }
+
+      dest->def = nir_ldexp(nb, src[0], nir_i2i32(nb, exp));
+      break;
+   }
 
    case GLSLstd450Frexp: {
       dest->def = nir_frexp_sig(nb, src[0]);

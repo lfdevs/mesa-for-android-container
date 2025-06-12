@@ -1578,11 +1578,14 @@ static void visit_store_ssbo(struct ac_nir_context *ctx, nir_intrinsic_instr *in
          num_bytes = 16;
       }
 
-      /* check alignment of 16 Bit stores */
-      if (elem_size_bytes == 2 && num_bytes > 2 && (start % 2) == 1) {
-         writemask |= ((1u << (count - 1)) - 1u) << (start + 1);
+      /* check alignment of 8/16 Bit stores */
+      uint32_t align_mul = nir_intrinsic_align_mul(instr);
+      uint32_t align_offset = nir_intrinsic_align_offset(instr) + start * elem_size_bytes;
+      uint32_t align = nir_combined_align(align_mul, align_offset & (align_mul - 1));
+      if (align < MIN2(num_bytes, 4) || (ctx->ac.gfx_level == GFX6 && elem_size_bytes < 4)) {
+         writemask |= BITFIELD_RANGE(start + 1, count - 1);
          count = 1;
-         num_bytes = 2;
+         num_bytes = elem_size_bytes;
       }
 
       /* Due to alignment issues, split stores of 8-bit/16-bit
@@ -1882,10 +1885,17 @@ static LLVMValueRef visit_load_global(struct ac_nir_context *ctx,
 
    val = LLVMBuildLoad2(ctx->ac.builder, result_type, addr, "");
 
-   if (nir_intrinsic_access(instr) & (ACCESS_COHERENT | ACCESS_VOLATILE)) {
+   /* From the LLVM 21.0.0 language reference:
+    * > An alignment value higher than the size of the loaded type implies memory up to the
+    * > alignment value bytes can be safely loaded without trapping in the default address space.
+    * So limit the alignment to the access size, since this isn't true in NIR.
+    */
+   uint32_t align = nir_intrinsic_align(instr);
+   uint32_t size = ac_get_type_size(result_type);
+   LLVMSetAlignment(val, MIN2(align, 1 << (ffs(size) - 1)));
+
+   if (nir_intrinsic_access(instr) & (ACCESS_COHERENT | ACCESS_VOLATILE))
       LLVMSetOrdering(val, LLVMAtomicOrderingMonotonic);
-      LLVMSetAlignment(val, ac_get_type_size(result_type));
-   }
 
    return val;
 }
@@ -1904,10 +1914,12 @@ static void visit_store_global(struct ac_nir_context *ctx,
 
    val = LLVMBuildStore(ctx->ac.builder, data, addr);
 
-   if (nir_intrinsic_access(instr) & (ACCESS_COHERENT | ACCESS_VOLATILE)) {
+   uint32_t align = nir_intrinsic_align(instr);
+   uint32_t size = ac_get_type_size(type);
+   LLVMSetAlignment(val, MIN2(align, 1 << (ffs(size) - 1)));
+
+   if (nir_intrinsic_access(instr) & (ACCESS_COHERENT | ACCESS_VOLATILE))
       LLVMSetOrdering(val, LLVMAtomicOrderingMonotonic);
-      LLVMSetAlignment(val, ac_get_type_size(type));
-   }
 }
 
 static LLVMValueRef visit_global_atomic(struct ac_nir_context *ctx,

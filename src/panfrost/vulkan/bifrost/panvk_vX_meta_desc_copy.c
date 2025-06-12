@@ -294,7 +294,6 @@ panvk_meta_desc_copy_rsd(struct panvk_device *dev)
 
    struct panfrost_compile_inputs inputs = {
       .gpu_id = phys_dev->kmod.props.gpu_prod_id,
-      .no_ubo_to_push = true,
    };
 
    pan_shader_preprocess(b.shader, inputs.gpu_id);

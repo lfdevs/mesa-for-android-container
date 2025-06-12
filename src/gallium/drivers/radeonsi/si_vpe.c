@@ -1112,8 +1112,8 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    dst_rect_width  = process_properties->dst_region.x1 - process_properties->dst_region.x0;
    dst_rect_height = process_properties->dst_region.y1 - process_properties->dst_region.y0;
 
-   scaling_ratio[0] = src_rect_width  / dst_rect_width;
-   scaling_ratio[1] = src_rect_height / dst_rect_height;
+   scaling_ratio[0] = (float)src_rect_width  / dst_rect_width;
+   scaling_ratio[1] = (float)src_rect_height / dst_rect_height;
 
    /* Check if the reduction ratio is within capability */
    if ((scaling_ratio[0] <= VPE_MAX_GEOMETRIC_DOWNSCALE) && (scaling_ratio[1] <= VPE_MAX_GEOMETRIC_DOWNSCALE))

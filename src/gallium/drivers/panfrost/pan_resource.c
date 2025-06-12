@@ -1439,7 +1439,9 @@ panfrost_ptr_map(struct pipe_context *pctx, struct pipe_resource *resource,
       if (usage & PIPE_MAP_WRITE) {
          BITSET_SET(rsrc->valid.data, level);
          panfrost_minmax_cache_invalidate(
-            rsrc->index_cache, transfer->base.box.x, transfer->base.box.width);
+            rsrc->index_cache,
+            util_format_get_blocksize(rsrc->base.format),
+            transfer->base.box.x, transfer->base.box.width);
       }
 
       return bo->ptr.cpu + rsrc->image.layout.slices[level].offset +
@@ -1900,7 +1902,9 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
                   transfer->box.x + transfer->box.width);
 
    if (transfer->usage & PIPE_MAP_WRITE) {
-      panfrost_minmax_cache_invalidate(prsrc->index_cache, transfer->box.x,
+      panfrost_minmax_cache_invalidate(prsrc->index_cache,
+                                       util_format_get_blocksize(prsrc->base.format),
+                                       transfer->box.x,
                                        transfer->box.width);
    }
 

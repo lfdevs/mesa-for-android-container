@@ -1,0 +1,185 @@
+Mesa 25.0.5 Release Notes / 2025-04-30
+======================================
+
+Mesa 25.0.5 is a bug fix release which fixes bugs found since the 25.0.4 release.
+
+Mesa 25.0.5 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.0.5 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: c0d245dea0aa4b49f74b3d474b16542e4a8799791cd33d676c69f650ad4378d0  mesa-25.0.5.tar.xz
+    SHA512: d65e027829e3bef60bc0e3e71160e6b3721e797e2157c71dbeef0cd6e202f8f8098b3cd41159cd0e96e520eaf92ea49c2c9bb1af1a54867b6a7c551c2197c068  mesa-25.0.5.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- WWE 2k23 small "artifacts"
+- Variable Rate Shading (VRS) produces very aliased results on RADV with an AMD gpu
+- Vulkan issues after sleeping on 9070 XT
+- ring gfx_0.0.0 timeout after waking from sleep - RX 9070
+- radeonsi: CL conformance test \`vector_swizzle` fails since 177427877bb50ad7ba24abfa13e55a2684d804df
+- Random mesa crashes in kwin_wayland on a 6600XT
+- Patch to fix clinfo on rusticl
+- radv/aco: Ghost of Tsushima hangs and causes gpu resets on RDNA 3 GPU
+- mesa-vulkan-driver-git.x86_64 causes strange colored rectangle artifacts in Final Fantasy XIV
+
+
+Changes
+-------
+
+Connor Abbott (1):
+
+- tu: Fix flushing when using a staging buffer for copies
+
+Danylo Piliaiev (1):
+
+- tu,freedreno: Don't fallback to LINEAR with DRM_FORMAT_MOD_QCOM_COMPRESSED
+
+David Rosca (1):
+
+- radv: Use radv_format_to_pipe_format instead of vk_format_to_pipe_format
+
+Dmitry Baryshkov (1):
+
+- meson: disable SIMD blake optimisations on x32 host
+
+Ella Stanforth (1):
+
+- v3d/compiler: Fixup output types for all 8 outputs
+
+Eric Engestrom (8):
+
+- docs: add sha sum for 25.0.4
+- .pick_status.json: Update to 5f3a3740dcc6d243f2ef14138fb1c09bcbb9b5fd
+- pick-ui: make \`Backport-to: 25.0` backport to 25.0 \*and more recent release branches*
+- aco: help clang 20 do some additions and subtractions
+- .pick_status.json: Update to 091d52965f805d61dd3a8e091ac20869a794e632
+- pick-ui: add missing dependency
+- .pick_status.json: Update to 3493500abb78a4dc22aba14840bba5c777fde745
+- .pick_status.json: Update to 5a55133ce7d5bb2419f2aa99c5296037afb7ba6a
+
+Faith Ekstrand (2):
+
+- nak/legalize: Take a RegFile in copy_alu_src_and_lower_fmod
+- nak/sm70: Fix the bit74_75_ar_mod assert
+
+Georg Lehmann (2):
+
+- nir/opt_algebraic: disable fsat(a + 1.0) opt if a can be NaN
+- aco: set opsel_hi to 1 for WMMA
+
+Ian Romanick (4):
+
+- brw/algebraic: Clear condition modifier on optimized SEL instruction
+- brw/algebraic: Don't optimize float SEL.CMOD to MOV
+- elk/algebraic: Clear condition modifier on optimized SEL instruction
+- elk/algebraic: Don't optimize float SEL.CMOD to MOV
+
+Janne Grunau (2):
+
+- venus: Do not use instance pointer before NULL check
+- venus: virtgpu: Require stable wire format
+
+John Anthony (1):
+
+- panvk: Enable VK_EXT_direct_mode_display
+
+José Roberto de Souza (3):
+
+- intel: Program XY_FAST_COLOR_BLT::Destination Mocs for gfx12
+- intel: Fix the MOCS values in XY_FAST_COLOR_BLT for Xe2+
+- intel: Fix the MOCS values in XY_BLOCK_COPY_BLT for Xe2+
+
+Karol Herbst (2):
+
+- rusticl/device: fix panic when disabling 3D image write support
+- nir_lower_mem_access_bit_sizes: fix negative chunk offsets
+
+Lionel Landwerlin (1):
+
+- anv: use companion batch for operations with HIZ/STC_CCS destination
+
+Loïc Minier (1):
+
+- freedreno: check if GPU supported in fd_pipe_new2
+
+Marek Olšák (1):
+
+- radv: fix incorrect patch_outputs_read for TCS with dynamic state
+
+Mary Guillemard (3):
+
+- panvk: reset dyn_bufs map count to 0 in create_copy_table
+- panvk: Take rasterization sample into account in indirect draw on v10+
+- panvk: Take resource index in valhall_lower_get_ssbo_size
+
+Mel Henning (3):
+
+- nvk: SET_STATISTICS_COUNTER at start of meta_begin
+- nvk: Override render enable for blits and resolves
+- wsi/headless: Override finish_create
+
+Mike Blumenkrantz (1):
+
+- zink: verify that surface exists when adding implicit feedback loop
+
+Olivia Lee (1):
+
+- panfrost: allow promoting sysval UBO to push constants
+
+Patrick Lerda (1):
+
+- mesa_interface: fix legacy dri2 compatibility
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- radeonsi: fix potential use after free in si_set_debug_callback
+
+Rhys Perry (3):
+
+- aco/gfx12: don't use second VALU for VOPD's OPX if there is a WaR
+- aco: combine VALU lanemask hazard into VALUMaskWriteHazard
+- aco/gfx11: create waitcnt for workgroup vmem barriers
+
+Samuel Pitoiset (3):
+
+- radv: only enable DCC for invisible VRAM on GFX12
+- radv: fix re-emitting VRS state when rendering begins
+- radv: set radv_disable_dcc=true for WWE 2k23
+
+Tapani Pälli (2):
+
+- iris: force reallocate on eglCreateImage with GFX >= 20
+- iris: make sure to not mix compressed vs non-compressed
+
+Tomeu Vizoso (1):
+
+- etnaviv: Release screen->dummy_desc_reloc.bo
+
+Yinjie Yao (2):
+
+- gallium/pipe: Increase hevc max slice to 600
+- frontends/va: Handle properly when decoding more slices than limit
+
+Yiwei Zhang (1):
+
+- venus: fix missing renderer destructions

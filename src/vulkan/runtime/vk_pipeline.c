@@ -1188,7 +1188,7 @@ vk_graphics_pipeline_compile_shaders(struct vk_device *device,
       /* Don't try to re-compile any fast-link shaders */
       if (!(pipeline->base.flags &
             VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT)) {
-         assert(partition[p + 1] == partition[p] + 1);
+         assert(ops->link_geom_stages || partition[p + 1] == partition[p] + 1);
          if (stages[partition[p]].shader != NULL)
             continue;
       }

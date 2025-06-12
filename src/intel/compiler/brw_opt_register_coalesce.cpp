@@ -235,10 +235,10 @@ brw_opt_register_coalesce(fs_visitor &s)
    int src_size = 0;
    int channels_remaining = 0;
    unsigned src_reg = ~0u, dst_reg = ~0u;
-   int *dst_reg_offset = new int[MAX_VGRF_SIZE(devinfo)];
-   fs_inst **mov = new fs_inst *[MAX_VGRF_SIZE(devinfo)];
-   int *dst_var = new int[MAX_VGRF_SIZE(devinfo)];
-   int *src_var = new int[MAX_VGRF_SIZE(devinfo)];
+   int *dst_reg_offset = new int[live.max_vgrf_size];
+   fs_inst **mov = new fs_inst *[live.max_vgrf_size];
+   int *dst_var = new int[live.max_vgrf_size];
+   int *src_var = new int[live.max_vgrf_size];
 
    foreach_block_and_inst(block, fs_inst, inst, s.cfg) {
       if (!is_coalesce_candidate(&s, inst))
@@ -254,10 +254,10 @@ brw_opt_register_coalesce(fs_visitor &s)
          src_reg = inst->src[0].nr;
 
          src_size = s.alloc.sizes[inst->src[0].nr];
-         assert(src_size <= MAX_VGRF_SIZE(devinfo));
+         assert(src_size <= (int) live.max_vgrf_size);
 
          channels_remaining = src_size;
-         memset(mov, 0, sizeof(*mov) * MAX_VGRF_SIZE(devinfo));
+         memset(mov, 0, sizeof(*mov) * live.max_vgrf_size);
 
          dst_reg = inst->dst.nr;
       }

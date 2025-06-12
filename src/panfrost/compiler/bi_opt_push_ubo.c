@@ -37,11 +37,16 @@ bi_is_ubo(bi_instr *ins)
 }
 
 static bool
-bi_is_direct_aligned_ubo(bi_instr *ins)
+bi_is_pushable_ubo(bi_context *ctx, bi_instr *ins)
 {
-   return bi_is_ubo(ins) && (ins->src[0].type == BI_INDEX_CONSTANT) &&
-          (ins->src[1].type == BI_INDEX_CONSTANT) &&
-          ((ins->src[0].value & 0x3) == 0);
+   if (!(bi_is_ubo(ins) && (ins->src[0].type == BI_INDEX_CONSTANT) &&
+         (ins->src[1].type == BI_INDEX_CONSTANT)))
+      return false;
+
+   unsigned ubo = pan_res_handle_get_index(ins->src[1].value);
+   unsigned offset = ins->src[0].value;
+
+   return ctx->inputs->pushable_ubos & BITFIELD_BIT(ubo) && (offset & 0x3) == 0;
 }
 
 /* Represents use data for a single UBO */
@@ -69,7 +74,7 @@ bi_analyze_ranges(bi_context *ctx)
    res.blocks = calloc(res.nr_blocks, sizeof(struct bi_ubo_block));
 
    bi_foreach_instr_global(ctx, ins) {
-      if (!bi_is_direct_aligned_ubo(ins))
+      if (!bi_is_pushable_ubo(ctx, ins))
          continue;
 
       unsigned ubo = pan_res_handle_get_index(ins->src[1].value);
@@ -142,7 +147,7 @@ bi_opt_push_ubo(bi_context *ctx)
       unsigned ubo = pan_res_handle_get_index(ins->src[1].value);
       unsigned offset = ins->src[0].value;
 
-      if (!bi_is_direct_aligned_ubo(ins)) {
+      if (!bi_is_pushable_ubo(ctx, ins)) {
          /* The load can't be pushed, so this UBO needs to be
           * uploaded conventionally */
          if (ins->src[1].type == BI_INDEX_CONSTANT)

@@ -1,9 +1,5 @@
 path_max.diff
 src_glx_dri_common.h.diff
 disable_ppc64el_assembly.diff
-gfxstream-make-virtgpu-discovery-more-robust.diff
-gfxstream-add-common-interfaces.diff
-gfxstream-check-device-before-using.diff
-gfxstream-refactor-device-init.diff
-gfxstream-follow-the-semantics-desired-by-distro-VK.diff
-drisw-Avoid-crashing-when-swrast_loader-NULL.patch
+
+Revert-hasvk-elk-stop-turning-load_push_constants-in.patch

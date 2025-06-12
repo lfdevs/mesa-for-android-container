@@ -150,6 +150,13 @@ brw_nir_fs_needs_null_rt(const struct intel_device_info *devinfo,
    if (devinfo->ver < 11)
       return true;
 
+   /* Depth/Stencil needs a valid render target even if there is no color
+    * output.
+    */
+   if (nir->info.outputs_written & (BITFIELD_BIT(FRAG_RESULT_DEPTH) |
+                                    BITFIELD_BIT(FRAG_RESULT_STENCIL)))
+      return true;
+
    uint64_t relevant_outputs = 0;
    if (multisample_fbo)
       relevant_outputs |= BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);

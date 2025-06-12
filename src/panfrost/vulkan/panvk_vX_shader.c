@@ -285,6 +285,7 @@ panvk_get_spirv_options(UNUSED struct vk_physical_device *vk_pdev,
       .ubo_addr_format = panvk_buffer_ubo_addr_format(rs->uniform_buffers),
       .ssbo_addr_format = panvk_buffer_ssbo_addr_format(rs->storage_buffers),
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
+      .shared_addr_format = nir_address_format_32bit_offset,
    };
 }
 
@@ -445,10 +446,11 @@ valhall_lower_get_ssbo_size(struct nir_builder *b,
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_def *table_idx =
-      nir_ushr_imm(b, nir_channel(b, intr->src[0].ssa, 0), 24);
+   nir_def *res_handle = nir_channel(b, intr->src[0].ssa, 0);
+   nir_def *table_idx = nir_ushr_imm(b, res_handle, 24);
+   nir_def *res_idx = nir_iand_imm(b, res_handle, BITFIELD_MASK(24));
    nir_def *res_table = nir_ior_imm(b, table_idx, pan_res_handle(62, 0));
-   nir_def *buf_idx = nir_channel(b, intr->src[0].ssa, 1);
+   nir_def *buf_idx = nir_iadd(b, res_idx, nir_channel(b, intr->src[0].ssa, 1));
    nir_def *desc_offset = nir_imul_imm(b, buf_idx, PANVK_DESCRIPTOR_SIZE);
    nir_def *size = nir_load_ubo(
       b, 1, 32, res_table, nir_iadd_imm(b, desc_offset, 4), .range = ~0u,
@@ -1050,7 +1052,6 @@ panvk_compile_shader(struct panvk_device *dev,
 
    struct panfrost_compile_inputs inputs = {
       .gpu_id = phys_dev->kmod.props.gpu_prod_id,
-      .no_ubo_to_push = true,
       .view_mask = (state && state->rp) ? state->rp->view_mask : 0,
    };
 

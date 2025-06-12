@@ -43,7 +43,7 @@
  *
  * When an output stores an SSA that is convergent and all stores of that
  * output appear in unconditional blocks or conditional blocks with
- * a convergent entry condition and the shader is not GS, it implies that all
+ * a convergent entry condition and the shader is not GS or MS, it implies that all
  * vertices of that output have the same value, therefore the output can be
  * promoted to flat because all interpolation modes lead to the same result
  * as flat. Such outputs are opportunistically compacted with both flat and
@@ -692,9 +692,9 @@ struct linkage_info {
    BITSET_DECLARE(xfb32_only_mask, NUM_SCALAR_SLOTS);
    BITSET_DECLARE(xfb16_only_mask, NUM_SCALAR_SLOTS);
 
-   /* Mask of all TCS inputs using cross-invocation access. */
-   BITSET_DECLARE(tcs_cross_invoc32_mask, NUM_SCALAR_SLOTS);
-   BITSET_DECLARE(tcs_cross_invoc16_mask, NUM_SCALAR_SLOTS);
+   /* Mask of all TCS inputs or MS outputs using cross-invocation access. */
+   BITSET_DECLARE(cross_invoc32_mask, NUM_SCALAR_SLOTS);
+   BITSET_DECLARE(cross_invoc16_mask, NUM_SCALAR_SLOTS);
 
    /* Mask of all TCS->TES slots that are read by TCS, but not TES. */
    BITSET_DECLARE(no_varying32_mask, NUM_SCALAR_SLOTS);
@@ -794,8 +794,8 @@ print_linkage(struct linkage_info *linkage)
           !BITSET_TEST(linkage->indirect_mask, i) &&
           !BITSET_TEST(linkage->xfb32_only_mask, i) &&
           !BITSET_TEST(linkage->xfb16_only_mask, i) &&
-          !BITSET_TEST(linkage->tcs_cross_invoc32_mask, i) &&
-          !BITSET_TEST(linkage->tcs_cross_invoc16_mask, i) &&
+          !BITSET_TEST(linkage->cross_invoc32_mask, i) &&
+          !BITSET_TEST(linkage->cross_invoc16_mask, i) &&
           !BITSET_TEST(linkage->no_varying32_mask, i) &&
           !BITSET_TEST(linkage->no_varying16_mask, i) &&
           !BITSET_TEST(linkage->interp_fp32_mask, i) &&
@@ -827,8 +827,8 @@ print_linkage(struct linkage_info *linkage)
              BITSET_TEST(linkage->indirect_mask, i) ? " indirect" : "",
              BITSET_TEST(linkage->xfb32_only_mask, i) ? " xfb32_only" : "",
              BITSET_TEST(linkage->xfb16_only_mask, i) ? " xfb16_only" : "",
-             BITSET_TEST(linkage->tcs_cross_invoc32_mask, i) ? " tcs_cross_invoc32" : "",
-             BITSET_TEST(linkage->tcs_cross_invoc16_mask, i) ? " tcs_cross_invoc16" : "",
+             BITSET_TEST(linkage->cross_invoc32_mask, i) ? " cross_invoc32" : "",
+             BITSET_TEST(linkage->cross_invoc16_mask, i) ? " cross_invoc16" : "",
              BITSET_TEST(linkage->no_varying32_mask, i) ? " no_varying32" : "",
              BITSET_TEST(linkage->no_varying16_mask, i) ? " no_varying16" : "",
              BITSET_TEST(linkage->interp_fp32_mask, i) ? " interp_fp32" : "",
@@ -887,8 +887,8 @@ slot_disable_optimizations_and_compaction(struct linkage_info *linkage,
    BITSET_CLEAR(linkage->interp_explicit_strict16_mask, i);
    BITSET_CLEAR(linkage->per_primitive32_mask, i);
    BITSET_CLEAR(linkage->per_primitive16_mask, i);
-   BITSET_CLEAR(linkage->tcs_cross_invoc32_mask, i);
-   BITSET_CLEAR(linkage->tcs_cross_invoc16_mask, i);
+   BITSET_CLEAR(linkage->cross_invoc32_mask, i);
+   BITSET_CLEAR(linkage->cross_invoc16_mask, i);
    BITSET_CLEAR(linkage->no_varying32_mask, i);
    BITSET_CLEAR(linkage->no_varying16_mask, i);
    BITSET_CLEAR(linkage->color32_mask, i);
@@ -1468,9 +1468,9 @@ gather_inputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_d
 
          if (!is_sysval(vertex_index_instr, SYSTEM_VALUE_INVOCATION_ID)) {
             if (intr->def.bit_size == 32)
-               BITSET_SET(linkage->tcs_cross_invoc32_mask, slot);
+               BITSET_SET(linkage->cross_invoc32_mask, slot);
             else if (intr->def.bit_size == 16)
-               BITSET_SET(linkage->tcs_cross_invoc16_mask, slot);
+               BITSET_SET(linkage->cross_invoc16_mask, slot);
             else
                unreachable("invalid load_input type");
          }
@@ -1642,6 +1642,21 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
                unreachable("invalid store_output type");
          }
       }
+
+      if (linkage->producer_stage == MESA_SHADER_MESH &&
+          intr->intrinsic == nir_intrinsic_store_per_vertex_output) {
+         nir_src *vertex_index_src = nir_get_io_arrayed_index_src(intr);
+         nir_instr *vertex_index_instr = vertex_index_src->ssa->parent_instr;
+
+         if (!is_sysval(vertex_index_instr, SYSTEM_VALUE_INVOCATION_ID)) {
+            if (value->bit_size == 32)
+               BITSET_SET(linkage->cross_invoc32_mask, slot);
+            else if (value->bit_size == 16)
+               BITSET_SET(linkage->cross_invoc16_mask, slot);
+            else
+               unreachable("invalid store_output type");
+         }
+      }
    } else {
       /* Only TCS output loads can get here.
        *
@@ -1745,7 +1760,7 @@ tidy_up_convergent_varyings(struct linkage_info *linkage)
        * bit and keep the convergent bit, which means that it's interpolated,
        * but can be promoted to flat.
        *
-       * Since the geometry shader is the only shader that can store values
+       * Since the geometry shader and mesh shader can store values
        * in multiple vertices before FS, it's required that all stores are
        * equal to be considered convergent (output_equal_mask), otherwise
        * the promotion to flat would be incorrect.
@@ -1760,7 +1775,9 @@ tidy_up_convergent_varyings(struct linkage_info *linkage)
             BITSET_CLEAR(linkage->convergent32_mask, i);
          } else if ((!linkage->can_mix_convergent_flat_with_interpolated &&
                      BITSET_TEST(linkage->flat32_mask, i)) ||
-                    (linkage->producer_stage == MESA_SHADER_GEOMETRY &&
+                    ((linkage->producer_stage == MESA_SHADER_GEOMETRY ||
+                      (linkage->producer_stage == MESA_SHADER_MESH &&
+                       BITSET_TEST(linkage->cross_invoc32_mask, i))) &&
                      !BITSET_TEST(linkage->output_equal_mask, i))) {
             /* Keep the original qualifier. */
             BITSET_CLEAR(linkage->convergent32_mask, i);
@@ -1784,7 +1801,9 @@ tidy_up_convergent_varyings(struct linkage_info *linkage)
             BITSET_CLEAR(linkage->convergent16_mask, i);
          } else if ((!linkage->can_mix_convergent_flat_with_interpolated &&
                      BITSET_TEST(linkage->flat16_mask, i)) ||
-                    (linkage->producer_stage == MESA_SHADER_GEOMETRY &&
+                    ((linkage->producer_stage == MESA_SHADER_GEOMETRY ||
+                      (linkage->producer_stage == MESA_SHADER_MESH &&
+                       BITSET_TEST(linkage->cross_invoc16_mask, i))) &&
                      !BITSET_TEST(linkage->output_equal_mask, i))) {
             /* Keep the original qualifier. */
             BITSET_CLEAR(linkage->convergent16_mask, i);
@@ -2763,15 +2782,14 @@ deduplicate_outputs(struct linkage_info *linkage,
             /* We also need to set the base to match the duplicate load, so
              * that CSE can eliminate it.
              */
-            if (!list_is_empty(dst_loads)) {
+            if (list_index == 0) {
+               /* Outputs that aren't loaded by the consumer should be already deleted. */
+               assert(!list_is_empty(dst_loads));
                struct list_node *first =
                   list_first_entry(dst_loads, struct list_node, head);
                nir_intrinsic_set_base(loadi, nir_intrinsic_base(first->instr));
             } else {
-               /* Use the base of the found store if there are no loads (it can
-                * only happen with TCS).
-                */
-               assert(list_index == 0);
+               /* The duplicate output may not have any loads, use the base of the found store. */
                nir_intrinsic_set_base(loadi, nir_intrinsic_base(store));
             }
          }
@@ -4965,18 +4983,18 @@ compact_varyings(struct linkage_info *linkage,
                                   : VARYING_SLOT_VAR0) * 8;
 
    if (linkage->consumer_stage == MESA_SHADER_TESS_CTRL) {
-      /* Make tcs_cross_invoc*_mask bits disjoint with flat*_mask bits
-       * because tcs_cross_invoc*_mask is initially a subset of flat*_mask,
+      /* Make cross_invoc*_mask bits disjoint with flat*_mask bits
+       * because cross_invoc*_mask is initially a subset of flat*_mask,
        * but we must assign each scalar slot only once.
        */
       BITSET_ANDNOT(linkage->flat32_mask, linkage->flat32_mask,
-                    linkage->tcs_cross_invoc32_mask);
+                    linkage->cross_invoc32_mask);
       BITSET_ANDNOT(linkage->flat16_mask, linkage->flat16_mask,
-                    linkage->tcs_cross_invoc16_mask);
+                    linkage->cross_invoc16_mask);
 
       /* Put cross-invocation-accessed TCS inputs first. */
-      vs_tcs_tes_gs_assign_slots_2sets(linkage, linkage->tcs_cross_invoc32_mask,
-                                       linkage->tcs_cross_invoc16_mask,
+      vs_tcs_tes_gs_assign_slots_2sets(linkage, linkage->cross_invoc32_mask,
+                                       linkage->cross_invoc16_mask,
                                        &slot_index, NULL, progress);
       /* Remaining TCS inputs. */
       vs_tcs_tes_gs_assign_slots_2sets(linkage, linkage->flat32_mask,

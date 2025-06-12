@@ -2933,6 +2933,7 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
                   layer_count,
                   extent.depth > 1,
                   false,
+                  false,
                   NULL);
 
       struct tu_bo *staging_bo;
@@ -2971,8 +2972,16 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
 
       /* When executed by the user there has to be a pipeline barrier here,
        * but since we're doing it manually we'll have to flush ourselves.
+       * Because we may reuse the staging buffer with different
+       * layouts/formats, we also have to invalidate CCU, which when executed
+       * by the user would be done before the next use of the staging buffer
+       * when transitioning from UNDEFINED. Here it's more optimal to
+       * invalidate right away after flushing instead of before the next copy
+       * using the staging buffer however, because we don't have to insert
+       * another WFI.
        */
       tu_emit_event_write<CHIP>(cmd, cs, FD_CCU_CLEAN_COLOR);
+      tu_emit_event_write<CHIP>(cmd, cs, FD_CCU_INVALIDATE_COLOR);
       tu_emit_event_write<CHIP>(cmd, cs, FD_CACHE_INVALIDATE);
       tu_cs_emit_wfi(cs);
 

@@ -388,7 +388,21 @@ static void r600_bind_rs_state(struct pipe_context *ctx, void *state)
 		r600_mark_atom_dirty(rctx, &rctx->clip_misc_state.atom);
 	}
 
-	r600_viewport_set_rast_deps(&rctx->b, rs->scissor_enable, rs->clip_halfz);
+	if (r600_prim_is_lines(rctx->current_rast_prim))
+		r600_set_clip_discard_distance(&rctx->b, rs->line_width);
+	else if (rctx->current_rast_prim == MESA_PRIM_POINTS)
+		r600_set_clip_discard_distance(&rctx->b, rs->max_point_size);
+
+	if (rctx->b.scissor_enabled != rs->scissor_enable) {
+		rctx->b.scissor_enabled = rs->scissor_enable;
+		rctx->b.scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+		rctx->b.set_atom_dirty(&rctx->b, &rctx->b.scissors.atom, true);
+	}
+	if (rctx->b.clip_halfz != rs->clip_halfz) {
+		rctx->b.clip_halfz = rs->clip_halfz;
+		rctx->b.viewports.depth_range_dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+		rctx->b.set_atom_dirty(&rctx->b, &rctx->b.viewports.atom, true);
+	}
 
 	/* Re-emit PA_SC_LINE_STIPPLE. */
 	rctx->last_primitive_type = -1;
@@ -2072,6 +2086,17 @@ void r600_emit_clip_misc_state(struct r600_context *rctx, struct r600_atom *atom
 {
 	struct radeon_cmdbuf *cs = &rctx->b.gfx.cs;
 	struct r600_clip_misc_state *state = &rctx->clip_misc_state;
+	unsigned clipdist_mask = state->clip_dist_write;
+	unsigned culldist_mask = state->cull_dist_write;
+
+	/* Clip distances on points have no effect, so need to be implemented
+	 * as cull distances. This applies for the clipvertex case as well.
+	 *
+	 * Setting this for primitives other than points should have no adverse
+	 * effects.
+	 */
+	clipdist_mask &= state->clip_plane_enable;
+	culldist_mask |= clipdist_mask;
 
 	radeon_set_context_reg(cs, R_028810_PA_CL_CLIP_CNTL,
 			       state->pa_cl_clip_cntl |
@@ -2079,8 +2104,8 @@ void r600_emit_clip_misc_state(struct r600_context *rctx, struct r600_atom *atom
                                S_028810_CLIP_DISABLE(state->clip_disable));
 	radeon_set_context_reg(cs, R_02881C_PA_CL_VS_OUT_CNTL,
 			       state->pa_cl_vs_out_cntl |
-			       (state->clip_plane_enable & state->clip_dist_write) |
-			       (state->cull_dist_write << 8));
+			       clipdist_mask |
+			       (culldist_mask << 8));
 	/* reuse needs to be set off if we write oViewport */
 	if (rctx->b.gfx_level >= EVERGREEN)
 		radeon_set_context_reg(cs, R_028AB4_VGT_REUSE_OFF,
@@ -2195,9 +2220,23 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 		return;
 	}
 
-	rctx->current_rast_prim = (rctx->gs_shader)? rctx->gs_shader->gs_output_prim
-		: (rctx->tes_shader)? rctx->tes_shader->info.properties[TGSI_PROPERTY_TES_PRIM_MODE]
+	const enum mesa_prim rast_prim = rctx->current_rast_prim;
+
+	rctx->current_rast_prim = rctx->gs_shader ? rctx->gs_shader->gs_output_prim
+		: rctx->tes_shader ? rctx->tes_shader->info.properties[TGSI_PROPERTY_TES_PRIM_MODE]
 		: info->mode;
+
+	if (rast_prim != rctx->current_rast_prim) {
+		if (rctx->current_rast_prim == MESA_PRIM_POINTS) {
+			r600_set_clip_discard_distance(&rctx->b, rctx->rasterizer->max_point_size);
+		} else if (r600_prim_is_lines(rctx->current_rast_prim)) {
+			r600_set_clip_discard_distance(&rctx->b, rctx->rasterizer->line_width);
+		} else if (rctx->current_rast_prim == R600_PRIM_RECTANGLE_LIST) {
+			/* Don't change the clip discard distance for rectangles. */
+		} else {
+			r600_set_clip_discard_distance(&rctx->b, 0);
+		}
+	}
 
 	if (rctx->b.gfx_level >= EVERGREEN) {
 		evergreen_emit_atomic_buffer_setup_count(rctx, NULL, combined_atomics, &atomic_used_mask);
@@ -3103,6 +3142,26 @@ out_word4:
 
 	if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB && !is_srgb_valid)
 		return ~0;
+
+	if (unlikely(swizzle_view &&
+		     swizzle_view[0] >= PIPE_SWIZZLE_0 &&
+		     swizzle_view[1] >= PIPE_SWIZZLE_0 &&
+		     swizzle_view[2] >= PIPE_SWIZZLE_0 &&
+		     swizzle_view[3] >= PIPE_SWIZZLE_0)) {
+		switch (result) {
+		case FMT_32_32_32_32_FLOAT:
+		case FMT_32_32_FLOAT:
+			result = FMT_32_FLOAT;
+			break;
+		case FMT_16_16_16_16:
+		case FMT_16_16:
+			result = FMT_32;
+			break;
+		default:
+			break;
+		}
+	}
+
 	if (word4_p)
 		*word4_p = word4;
 	if (yuv_format_p)

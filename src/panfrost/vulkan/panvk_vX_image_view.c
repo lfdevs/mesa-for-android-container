@@ -113,6 +113,9 @@ prepare_tex_descs(struct panvk_image_view *view)
    if (pview.format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
       pview.format = PIPE_FORMAT_Z32_FLOAT;
 
+   uint32_t tex_payload_size =
+      GENX(panfrost_estimate_texture_payload_size)(&pview);
+
    struct panvk_pool_alloc_info alloc_info = {
 #if PAN_ARCH == 6
       .alignment = pan_alignment(SURFACE_WITH_STRIDE),
@@ -122,9 +125,15 @@ prepare_tex_descs(struct panvk_image_view *view)
       .alignment = pan_alignment(PLANE),
 #endif
 
-      .size = GENX(panfrost_estimate_texture_payload_size)(&pview) *
-              (can_preload_other_aspect ? 2 : 1),
+      .size = tex_payload_size * (can_preload_other_aspect ? 2 : 1),
    };
+
+#if PAN_ARCH >= 9
+   if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+      /* We'll need a second Texture Descriptor for storage use. */
+      alloc_info.size += tex_payload_size;
+   }
+#endif
 
    view->mem = panvk_pool_alloc_mem(&dev->mempools.rw, alloc_info);
    if (!panvk_priv_mem_host_addr(view->mem))
@@ -135,7 +144,21 @@ prepare_tex_descs(struct panvk_image_view *view)
       .cpu = panvk_priv_mem_host_addr(view->mem),
    };
 
+#if PAN_ARCH >= 9
+   struct panfrost_ptr storage_ptr = ptr;
+   if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+      uint32_t storage_payload_offset = alloc_info.size - tex_payload_size;
+      storage_ptr.gpu += storage_payload_offset;
+      storage_ptr.cpu += storage_payload_offset;
+   }
+#endif
+
    GENX(panfrost_new_texture)(&pview, &view->descs.tex, &ptr);
+#if PAN_ARCH >= 9
+   if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+      GENX(panfrost_new_storage_texture)(&pview, &view->descs.storage_tex,
+                                         &storage_ptr);
+#endif
 
    if (!can_preload_other_aspect)
       return VK_SUCCESS;
@@ -158,8 +181,8 @@ prepare_tex_descs(struct panvk_image_view *view)
       assert(!"Invalid format");
    }
 
-   ptr.cpu += alloc_info.size / 2;
-   ptr.gpu += alloc_info.size / 2;
+   ptr.cpu += tex_payload_size;
+   ptr.gpu += tex_payload_size;
 
    GENX(panfrost_new_texture)(&pview, &view->descs.other_aspect_tex, &ptr);
    return VK_SUCCESS;

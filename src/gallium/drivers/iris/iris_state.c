@@ -6253,10 +6253,17 @@ batch_emit_fast_color_dummy_blit(struct iris_batch *batch)
 {
 #if GFX_VERx10 >= 125
    iris_emit_cmd(batch, GENX(XY_FAST_COLOR_BLT), blt) {
+      uint32_t mocs = iris_mocs(batch->screen->workaround_address.bo,
+                                &batch->screen->isl_dev,
+                                ISL_SURF_USAGE_BLITTER_DST_BIT);
+
       blt.DestinationBaseAddress = batch->screen->workaround_address;
-      blt.DestinationMOCS = iris_mocs(batch->screen->workaround_address.bo,
-                                      &batch->screen->isl_dev,
-                                      ISL_SURF_USAGE_BLITTER_DST_BIT);
+#if GFX_VERx10 >= 200
+      blt.DestinationMOCSindex = MOCS_GET_INDEX(mocs);
+      blt.DestinationEncryptEn = MOCS_GET_ENCRYPT_EN(mocs);
+#else
+      blt.DestinationMOCS = mocs;
+#endif
       blt.DestinationPitch = 63;
       blt.DestinationX2 = 1;
       blt.DestinationY2 = 4;
@@ -6901,6 +6908,14 @@ iris_upload_dirty_render_state(struct iris_context *ice,
        ice->shaders.prog[MESA_SHADER_TESS_EVAL])
       ice->state.stage_dirty |= IRIS_STAGE_DIRTY_TES;
 
+   /* Reprogram SF_CLIP & CC_STATE together. This reproduces the windows driver programming.
+    * Since blorp disables 3DSTATE_CLIP::ClipEnable and dirties CC_STATE, this takes care of
+    * Wa_14016820455 which requires SF_CLIP to be reprogrammed whenever
+    * 3DSTATE_CLIP::ClipEnable is enabled.
+    */
+   if (ice->state.dirty & (IRIS_DIRTY_CC_VIEWPORT | IRIS_DIRTY_SF_CL_VIEWPORT))
+      ice->state.dirty |= IRIS_DIRTY_CC_VIEWPORT | IRIS_DIRTY_SF_CL_VIEWPORT;
+
    uint64_t dirty = ice->state.dirty;
    uint64_t stage_dirty = ice->state.stage_dirty;
 
@@ -7117,11 +7132,11 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       /* Blend constants modified for Wa_14018912822. */
       if (ice->state.color_blend_zero != color_blend_zero) {
          ice->state.color_blend_zero = color_blend_zero;
-         ice->state.dirty |= IRIS_DIRTY_COLOR_CALC_STATE;
+         dirty |= IRIS_DIRTY_COLOR_CALC_STATE;
       }
       if (ice->state.alpha_blend_zero != alpha_blend_zero) {
          ice->state.alpha_blend_zero = alpha_blend_zero;
-         ice->state.dirty |= IRIS_DIRTY_COLOR_CALC_STATE;
+         dirty |= IRIS_DIRTY_COLOR_CALC_STATE;
       }
 
       uint32_t blend_state_header;
@@ -9120,14 +9135,16 @@ iris_upload_compute_walker(struct iris_context *ice,
       }
    }
 
+   uint32_t total_shared = shader->total_shared + grid->variable_shared_mem;
    struct GENX(INTERFACE_DESCRIPTOR_DATA) idd = {};
-   idd.KernelStartPointer = KSP(shader);
+   idd.KernelStartPointer =
+      KSP(shader) + iris_cs_data_prog_offset(cs_data, dispatch.simd_size);
    idd.NumberofThreadsinGPGPUThreadGroup = dispatch.threads;
    idd.SharedLocalMemorySize =
-      intel_compute_slm_encode_size(GFX_VER, shader->total_shared);
+      intel_compute_slm_encode_size(GFX_VER, total_shared);
    idd.PreferredSLMAllocationSize =
       intel_compute_preferred_slm_calc_encode_size(devinfo,
-                                                   shader->total_shared,
+                                                   total_shared,
                                                    dispatch.group_size,
                                                    dispatch.simd_size);
    idd.SamplerStatePointer = shs->sampler_table.offset;
@@ -9276,15 +9293,6 @@ iris_upload_gpgpu_walker(struct iris_context *ice,
       }
    }
 
-   for (unsigned i = 0; i < IRIS_MAX_GLOBAL_BINDINGS; i++) {
-      struct pipe_resource *res = ice->state.global_bindings[i];
-      if (!res)
-         break;
-
-      iris_use_pinned_bo(batch, iris_resource_bo(res),
-                         true, IRIS_DOMAIN_NONE);
-   }
-
    if (stage_dirty & (IRIS_STAGE_DIRTY_SAMPLER_STATES_CS |
                       IRIS_STAGE_DIRTY_BINDINGS_CS |
                       IRIS_STAGE_DIRTY_CONSTANTS_CS |
@@ -9340,6 +9348,20 @@ iris_upload_gpgpu_walker(struct iris_context *ice,
 #endif /* #if GFX_VERx10 >= 125 */
 
 static void
+iris_use_global_bindings(struct iris_context *ice,
+                         struct iris_batch *batch)
+{
+   for (unsigned i = 0; i < IRIS_MAX_GLOBAL_BINDINGS; i++) {
+      struct pipe_resource *res = ice->state.global_bindings[i];
+      if (!res)
+         break;
+
+      iris_use_pinned_bo(batch, iris_resource_bo(res),
+                        true, IRIS_DOMAIN_NONE);
+   }
+}
+
+static void
 iris_upload_compute_state(struct iris_context *ice,
                           struct iris_batch *batch,
                           const struct pipe_grid_info *grid)
@@ -9380,6 +9402,8 @@ iris_upload_compute_state(struct iris_context *ice,
    if (ice->state.need_border_colors)
       iris_use_pinned_bo(batch, border_color_pool->bo, false,
                          IRIS_DOMAIN_NONE);
+
+   iris_use_global_bindings(ice, batch);
 
 #if GFX_VER >= 12
    genX(invalidate_aux_map_state)(batch);

@@ -24,6 +24,7 @@
 #include <vndk/hardware_buffer.h>
 #endif
 #include <stdlib.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <chrono>
@@ -2101,6 +2102,42 @@ void ResourceTracker::on_vkGetPhysicalDeviceProperties2(void* context,
                                                         VkPhysicalDeviceProperties2* pProperties) {
     if (pProperties) {
         on_vkGetPhysicalDeviceProperties(context, physicalDevice, &pProperties->properties);
+
+        VkPhysicalDeviceDrmPropertiesEXT* drmProps =
+            vk_find_struct(pProperties, PHYSICAL_DEVICE_DRM_PROPERTIES_EXT);
+        if (drmProps) {
+            VirtGpuDrmInfo drmInfo;
+            if (VirtGpuDevice::getInstance()->getDrmInfo(&drmInfo)) {
+                drmProps->hasPrimary = drmInfo.hasPrimary;
+                drmProps->hasRender = drmInfo.hasRender;
+                drmProps->primaryMajor = drmInfo.primaryMajor;
+                drmProps->primaryMinor = drmInfo.primaryMinor;
+                drmProps->renderMajor = drmInfo.renderMajor;
+                drmProps->renderMinor = drmInfo.renderMinor;
+            } else {
+                mesa_logd(
+                    "%s: encountered VkPhysicalDeviceDrmPropertiesEXT in pProperties::pNext chain, "
+                    "but failed to query DrmInfo from the VirtGpuDevice",
+                    __func__);
+            }
+        }
+
+        VkPhysicalDevicePCIBusInfoPropertiesEXT* pciBusInfoProps =
+            vk_find_struct(pProperties, PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT);
+        if (pciBusInfoProps) {
+            VirtGpuPciBusInfo pciBusInfo;
+            if (VirtGpuDevice::getInstance()->getPciBusInfo(&pciBusInfo)) {
+                pciBusInfoProps->pciDomain = pciBusInfo.domain;
+                pciBusInfoProps->pciBus = pciBusInfo.bus;
+                pciBusInfoProps->pciDevice = pciBusInfo.device;
+                pciBusInfoProps->pciFunction = pciBusInfo.function;
+            } else {
+                mesa_logd(
+                    "%s: encountered VkPhysicalDevicePCIBusInfoPropertiesEXT in pProperties::pNext "
+                    "chain, but failed to query PciBusInfo from the VirtGpuDevice",
+                    __func__);
+            }
+        }
     }
 }
 
@@ -4902,7 +4939,11 @@ VkResult ResourceTracker::on_vkGetFenceStatus(void* context, VkResult input_resu
 
         auto fenceInfoIt = info_VkFence.find(fence);
         if (fenceInfoIt == info_VkFence.end()) {
+#if VK_USE_64_BIT_PTR_DEFINES
             mesa_loge("Failed to find VkFence:%p", fence);
+#else
+            mesa_loge("Failed to find VkFence:0x%" PRIx64, fence);
+#endif
             return VK_NOT_READY;
         }
         auto& fenceInfo = fenceInfoIt->second;

@@ -820,7 +820,8 @@ anv_sparse_bind_trtt(struct anv_device *device,
 
    /* This is not an error, the application is simply trying to reset state
     * that was already there. */
-   if (n_l3l2_binds == 0 && n_l1_binds == 0)
+   if (n_l3l2_binds == 0 && n_l1_binds == 0 &&
+       sparse_submit->wait_count == 0 && sparse_submit->signal_count == 0)
       goto out_dynarrays;
 
    anv_genX(device->info, write_trtt_entries)(&submit->base,

@@ -418,6 +418,12 @@ void GENX(panfrost_texture_afbc_reswizzle)(struct pan_image_view *iview);
 void GENX(panfrost_new_texture)(const struct pan_image_view *iview,
                                 struct mali_texture_packed *out,
                                 const struct panfrost_ptr *payload);
+
+#if PAN_ARCH >= 9
+void GENX(panfrost_new_storage_texture)(const struct pan_image_view *iview,
+                                        struct mali_texture_packed *out,
+                                        const struct panfrost_ptr *payload);
+#endif
 #endif
 
 unsigned panfrost_get_layer_stride(const struct pan_image_layout *layout,

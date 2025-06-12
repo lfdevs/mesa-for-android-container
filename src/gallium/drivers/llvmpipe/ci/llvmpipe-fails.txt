@@ -28,21 +28,14 @@ glx@glx-visuals-stencil -pixmap,Crash
 
 glx@glx_arb_create_context@invalid flag,Fail
 
-glx@glx_arb_create_context_no_error@no error,Fail
-
 shaders@glsl-routing,Fail
 
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
-spec@!opengl 2.0@vertex-program-two-side enabled back back2,Fail
-spec@!opengl 2.0@vertex-program-two-side enabled back back2@vs and fs,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
 spec@arb_post_depth_coverage@arb_post_depth_coverage-multisampling,Fail
-
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
-spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load,Crash
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store,Crash
@@ -102,6 +95,13 @@ spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on right edg
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on top edge,Fail
 
 # since hetzner migration
+dEQP-GLES31.functional.shaders.framebuffer_fetch.basic.last_frag_data,Fail
+spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-z,Fail
 spec@ovr_multiview@compiler@multiple-num-views-in-single-declaration-mismatch.vert,Fail
+spec@ovr_multiview@fb_read_errors,Fail
 spec@ovr_multiview@fb_shader_mismatch_draw_errors_0_2,Fail
+spec@ovr_multiview@fb_shader_mismatch_draw_errors_1_2,Fail
+spec@ovr_multiview@fb_shader_mismatch_draw_errors_2_0,Fail
+spec@ovr_multiview@fb_shader_mismatch_draw_errors_2_1,Fail
+spec@ovr_multiview@fb_shader_mismatch_draw_errors_2_3,Fail
 spec@ovr_multiview@fb_shader_mismatch_draw_errors_3_2,Fail

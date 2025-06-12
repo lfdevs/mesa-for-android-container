@@ -108,7 +108,6 @@ pan_indirect_dispatch_init(struct pan_indirect_dispatch_meta *meta)
 
    struct panfrost_compile_inputs inputs = {
       .gpu_id = meta->gpu_id,
-      .no_ubo_to_push = true,
    };
    struct pan_shader_info shader_info;
    struct util_dynarray binary;

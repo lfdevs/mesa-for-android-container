@@ -212,7 +212,7 @@ zink-radv-vangogh-valve:
     B2C_TIMEOUT_OVERALL_MINUTES: 30
     FDO_CI_CONCURRENT: 6
     ZINK_DEBUG: vvl
-  # Override the list of tags to drop `priority:low`
+  # Override the list of tags to drop `ci-tron:priority:low`
   tags:
     - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:VANGOGH

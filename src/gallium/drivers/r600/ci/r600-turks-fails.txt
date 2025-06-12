@@ -50,14 +50,6 @@ KHR-GLES31.core.texture_cube_map_array.texture_size_tesselation_ev_sh,Fail
 KHR-GLES31.core.vertex_attrib_binding.basic-input-case5,Fail
 KHR-GLES31.core.vertex_attrib_binding.basic-input-case6,Fail
 
-# Wide line near the edge is fully missing instead of partially clipped.  Do we
-# need guardband?
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
-
 # Looks like sub-pixel sampling errors or something.
 dEQP-GLES2.functional.texture.filtering.2d.linear_nearest_clamp_etc1,Fail
 dEQP-GLES2.functional.texture.filtering.2d.linear_nearest_clamp_l8_npot,Fail
@@ -146,14 +138,6 @@ dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_linear_repeat,Fail
 
 dEQP-GLES2.functional.vertex_arrays.single_attribute.strides.buffer_0_32_short3_vec4_dynamic_draw_quads_1,Fail
 dEQP-GLES2.functional.vertex_arrays.single_attribute.strides.buffer_0_32_short3_vec4_dynamic_draw_quads_256,Fail
-
-# Wide line near the edge is fully missing instead of partially clipped.  Do we
-# need guardband?
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 
 # "Attribute 0: position Storage in buffer stride 16 input datatype unsigned_short input component count 3 normalized used as vec3 instance divisor 0 drawElementsInstanced() index type short index storage in buffer index offset 0 instance count 1 1 lines (loop) "
 dEQP-GLES3.functional.draw.random.117,Fail
@@ -1276,14 +1260,6 @@ spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve small depthstencil,Fail
 
 spec@ext_framebuffer_multisample@blit-mismatched-formats,Fail
-
-spec@ext_framebuffer_multisample@interpolation 6 centroid-edges,Fail
-spec@ext_framebuffer_multisample@interpolation 8 centroid-edges,Fail
-
-spec@ext_framebuffer_multisample@turn-on-off 2,Fail
-spec@ext_framebuffer_multisample@turn-on-off 4,Fail
-spec@ext_framebuffer_multisample@turn-on-off 6,Fail
-spec@ext_framebuffer_multisample@turn-on-off 8,Fail
 
 spec@ext_framebuffer_object@fbo-blending-formats,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@3,Fail

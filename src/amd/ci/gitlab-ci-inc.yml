@@ -406,7 +406,7 @@
   tags:
     - farm:$RUNNER_FARM_LOCATION
     - amdgpu:codename:VANGOGH
-    - $VALVE_INFRA_VANGOGH_JOB_PRIORITY
+    - $CI_TRON_JOB_PRIORITY_TAG
 
 .navi31-test-valve:
   variables:

@@ -145,7 +145,7 @@ pub trait SSABuilder: Builder {
 
     fn shl64(&mut self, x: Src, shift: Src) -> SSARef {
         let x = x.as_ssa().unwrap();
-        debug_assert!(shift.src_mod.is_none());
+        debug_assert!(shift.is_unmodified());
 
         let dst = self.alloc_ssa(RegFile::GPR, 2);
         if self.sm() >= 70 {
@@ -219,7 +219,7 @@ pub trait SSABuilder: Builder {
 
     fn shr64(&mut self, x: Src, shift: Src, signed: bool) -> SSARef {
         let x = x.as_ssa().unwrap();
-        debug_assert!(shift.src_mod.is_none());
+        debug_assert!(shift.is_unmodified());
 
         let dst = self.alloc_ssa(RegFile::GPR, 2);
         self.push_op(OpShf {

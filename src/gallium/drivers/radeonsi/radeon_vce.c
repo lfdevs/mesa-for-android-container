@@ -180,6 +180,7 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
 
    if (need_rate_control) {
       enc->session(enc);
+      enc->task_info(enc, 0x00000002, 0xffffffff);
       enc->config(enc);
       flush(enc, PIPE_FLUSH_ASYNC, NULL);
    }

@@ -38,6 +38,9 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 {
    assert(state->cmd_buffer && state->cmd_buffer->state.current_pipeline == _3D);
 
+   /* Wa_16013994831 - Turn preemption on if it was previous left disabled. */
+   genX(cmd_buffer_set_preemption)(state->cmd_buffer, true);
+
    struct anv_batch *batch = state->batch;
    struct anv_device *device = state->device;
    const struct brw_wm_prog_data *prog_data =

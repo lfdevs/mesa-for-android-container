@@ -6,6 +6,7 @@
 #pragma once
 
 #include "VirtGpu.h"
+#include <xf86drm.h>
 
 class LinuxVirtGpuResource : public std::enable_shared_from_this<LinuxVirtGpuResource>,
                              public VirtGpuResource {
@@ -51,7 +52,9 @@ class LinuxVirtGpuResourceMapping : public VirtGpuResourceMapping {
 
 class LinuxVirtGpuDevice : public VirtGpuDevice {
    public:
-    LinuxVirtGpuDevice(enum VirtGpuCapset capset, int fd = -1);
+    LinuxVirtGpuDevice(enum VirtGpuCapset capset);
+    int32_t init(int32_t descriptor);
+
     virtual ~LinuxVirtGpuDevice();
 
     virtual int64_t getDeviceHandle(void);
@@ -66,7 +69,21 @@ class LinuxVirtGpuDevice : public VirtGpuDevice {
     virtual VirtGpuResourcePtr importBlob(const struct VirtGpuExternalHandle& handle);
     virtual int execBuffer(struct VirtGpuExecBuffer& execbuffer, const VirtGpuResource* blob);
 
+    virtual bool getDrmInfo(VirtGpuDrmInfo* drmInfo) override;
+    virtual bool getPciBusInfo(VirtGpuPciBusInfo* pciBusInfo) override;
+
    private:
-    int64_t mDeviceHandle;
+    int64_t mDeviceHandle = -1;
     struct VirtGpuCaps mCaps;
+
+    int openDevice();
+
+    bool mHasPrimary;
+    int mPrimaryMajor;
+    int mPrimaryMinor;
+    int mRenderMajor;
+    int mRenderMinor;
+
+    int mBusType;
+    drmPciBusInfo mPciBusInfo;
 };

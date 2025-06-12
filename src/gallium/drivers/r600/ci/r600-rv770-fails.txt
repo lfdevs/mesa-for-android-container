@@ -8,23 +8,11 @@ KHR-GL33.texture_swizzle.functional,Fail
 
 KHR-GLES3.core.nearest_edge.offset_right,Fail
 
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
-
 dEQP-GLES2.functional.texture.size.cube.15x15_l8,Fail
 dEQP-GLES2.functional.texture.size.cube.15x15_rgb888,Fail
 dEQP-GLES2.functional.texture.size.cube.15x15_rgba4444,Fail
 dEQP-GLES2.functional.texture.size.cube.15x15_rgba8888,Fail
 dEQP-GLES2.functional.texture.wrap.clamp_clamp_nearest_npot_etc1,Fail
-
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 
 dEQP-GLES3.functional.shaders.derivate.dfdx.fastest.fbo_msaa4.float_highp,Fail
 dEQP-GLES3.functional.shaders.derivate.dfdx.fastest.fbo_msaa4.vec2_highp,Fail
@@ -825,10 +813,6 @@ spec@ext_framebuffer_multisample@no-color 8 depth-computed combined,Fail
 spec@ext_framebuffer_multisample@no-color 8 depth-computed single,Fail
 spec@ext_framebuffer_multisample@no-color 8 stencil combined,Fail
 spec@ext_framebuffer_multisample@no-color 8 stencil single,Fail
-spec@ext_framebuffer_multisample@turn-on-off 2,Fail
-spec@ext_framebuffer_multisample@turn-on-off 4,Fail
-spec@ext_framebuffer_multisample@turn-on-off 6,Fail
-spec@ext_framebuffer_multisample@turn-on-off 8,Fail
 
 spec@ext_framebuffer_object@fbo-blending-formats,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@3,Fail

@@ -1,0 +1,256 @@
+Mesa 25.0.4 Release Notes / 2025-04-17
+======================================
+
+Mesa 25.0.4 is a bug fix release which fixes bugs found since the 25.0.3 release.
+
+Mesa 25.0.4 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.0.4 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 76293cf4372ca4e4e73fd6c36c567b917b608a4db9d11bd2e33068199a7df04d  mesa-25.0.4.tar.xz
+    SHA512: 562a97bd0374ff2a76f71c848df4fe542f1fc66c420a9101eb4bb1947d00eee4417d9c6f2d1be19638663753785c19384f8a6dc078c3187448ab79413d906152  mesa-25.0.4.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- RADV: Performance regression in Elden Ring on GFX8/Polaris
+- RADV: Performance regression in Elden Ring on GFX8/Polaris
+- Confidential issue #12324
+- Confidential issue #12946
+- The Last of Us Part I GPU hang on gfx1201
+- brw: new Xe2 CTS failures
+- [NVK] NAK assert in The Last of Us Part 2 shader
+- [ANV][LNL] - Lost Records: Bloom & Rage (1902960) - Title hangs on launch and subsequently crashes to desktop.
+- [BMG] Intel b580 battlemage: Fort Solis (Unreal Engine game) boots to menu, hangs while loading after hitting continue from the main menu
+- [ANV][LNL] -  NINJA GAIDEN 2 Black (3287520) - Environment assets are incorrectly rendered or missing.
+- [ANV][LNL] - The Headliners (3059070) - Title hangs a few minutes after launch.
+- anv, regression: Invisibly blinking cliffs & rocks in Satisfactory DX12 on BMG
+- vk/overlay: output_file option failing
+- [bisected, LNL] brw: 341e5117ecbc ("brw/nir: Treat load_const as convergent") regresses arb_gpu_shader5-interpolateAtOffset on LNL
+- vulkan regression mesa 24.3.4 to 25.0.0.rc3 with broadcom
+- radv: nir_opt_varyings.c:2766: deduplicate_outputs: Assertion \`list_index == 0' failed.
+- vulkan/wsi: memory leak from wsi_CreateSwapchainKHR
+
+
+Changes
+-------
+
+Aaron Ruby (2):
+
+- gfxstream: Make the virtgpu device discovery for LinuxVirtGpu more robust
+- gfxstream: Add common interfaces in the VirtGpuDevice to query DrmInfo and PciBusInfo
+
+Alyssa Rosenzweig (4):
+
+- nir/lower_blend: refactor logicop variables
+- nir/lower_blend: disable logic ops for unsupported formats
+- panfrost: invert and rename no_ubo_to_push flag
+- panfrost: do not push "true" UBOs
+
+Benjamin Lee (2):
+
+- panvk/csf: fix uninitialized read in utrace_clone_init_builder
+- panfrost/pps: fix omitting several counters
+
+Benjamin Otte (1):
+
+- lavapipe: Don't advertise support for multiplane drm formats
+
+Boris Brezillon (2):
+
+- vulkan/state: Fix input attachment map state initialization/copy
+- vk/pass: Add input attachment location info
+
+Caio Oliveira (1):
+
+- nir/load_store_vectorize: Skip new bit-sizes that are unaligned with high_offset
+
+Caterina Shablia (2):
+
+- panfrost: don't overwrite push uniforms and sysvals UBO with user's UBO
+- panfrost: update nr_uniform_buffers before dispatching XFB
+
+Connor Abbott (1):
+
+- tu: Fix layer_count with dynamic rendering + multiview
+
+David Rosca (4):
+
+- radeonsi/vcn: Disable AV1 unidir compound with rate control
+- radv/video: Fix msg header total size
+- radv/video: Fix encode session info for VCN3+
+- radeonsi/vpe: Use float division to get scaling ratio
+
+Eric Engestrom (7):
+
+- docs: add sha sum for 25.0.3
+- [25.0 only] update more ci expectations
+- .pick_status.json: Update to 7c5389695bdf106acaab6ccc69535f25c1d7a8e6
+- ci: rename ci-tron priority tag to avoid conflict with the generic fdo runners
+- .pick_status.json: Update to 2f00daf67a7990da68dfc4a8e5f2019daecb7a59
+- .pick_status.json: Update to 58321cf2e57279079bf742be1063ac2900ea2436
+- .pick_status.json: Update to 555821ff93118d4a6ea441127cd0427a95743d47
+
+Eric R. Smith (2):
+
+- panfrost,lima: use index size in panfrost minmax_cache
+- panfrost: fix transaction elimination crc valid calculation
+
+Erik Faye-Lund (4):
+
+- panfrost: fixup typo in 16x sample-pattern
+- nir/lower_tex: use texture_mask instead of shifting on use
+- panvk: set shared_addr_format
+- panvk: claim official conformance on v10
+
+Faith Ekstrand (3):
+
+- nak: Allow predicates in nir_intrinsic_as_uniform
+- nvk/nvkmd: Check the correct flag for the Kepler GART workaround
+- nil: Multiply by array_stride_B instead of adding
+
+Felix DeGrood (1):
+
+- vk/overlay-layer: fix regression in non-control pathway
+
+Georg Lehmann (2):
+
+- spirv: clamp/sign-extend non 32bit ldexp exponents
+- spirv: fix cooperative matrix by value function params
+
+Gurchetan Singh (3):
+
+- gfxstream: check device exists before using it
+- gfxstream: refactor device initialization
+- gfxstream: follow the semantics desired by distro VK loader
+
+Ian Romanick (4):
+
+- brw/algebraic: Constant folding for BROADCAST and SHUFFLE
+- brw/nir: Fix source handling of nir_intrinsic_load_barycentric_at_offset
+- brw/algebraic: Optimize derivative of convergent value
+- brw/nir: Use offset() for all uses of offs in emit_pixel_interpolater_alu_at_offset
+
+Jan Alexander Steffens (heftig) (1):
+
+- gfxstream: Use proper log format for 32-bit Vulkan
+
+Job Noorman (1):
+
+- ir3/ra: assign interval offsets to new defs after shared RA
+
+Jose Maria Casanova Crespo (1):
+
+- v3dv: avoid TFU reading unmapped pages beyond the end of the buffers
+
+Juan A. Suarez Romero (1):
+
+- v3dv: don't check if DRM device is master
+
+Kenneth Graunke (4):
+
+- brw: Track the largest VGRF size in liveness analysis
+- brw: Use live->max_vgrf_size in register coalescing
+- brw: Use live->max_vgrf_size in pre-RA scheduling
+- brw: Don't assert about MAX_VGRF_SIZE in brw_opt_split_virtual_grfs()
+
+Lars-Ivar Hesselberg Simonsen (2):
+
+- panvk: Add barrier for interleaved ZS copy cmds
+- vk/sync: Fix execution only barriers
+
+Lionel Landwerlin (3):
+
+- brw: fix shuffle with scalar/uniform index
+- anv: fix self dependency computation
+- brw: fix Wa_22013689345 emission
+
+Marek Olšák (5):
+
+- radeonsi: work around a primitive restart bug on gfx10-10.3
+- radeonsi: make si_shader_selector::main_shader_part_* an iterable union
+- radeonsi: add ACO-specific main shader parts
+- ac/surface: make gfx12_estimate_size reusable by gfx6
+- ac/surface: select 3D tile mode without overallocating too much for gfx6-8
+
+Mike Blumenkrantz (4):
+
+- gallium/util: check nr_samples in pipe_surface_equal()
+- tu: check for valid descriptor set when binding descriptors
+- zink: don't set shared block stride without KHR_workgroup_memory_explicit_layout
+- zink: stop setting ArrayStride on image arrays
+
+Natalie Vock (1):
+
+- aco: Make private_segment_buffer/scratch_offset per-resume
+
+Patrick Lerda (9):
+
+- r600: move stores to the end of shader when required
+- r600: fix textures with swizzles limited to zero and one
+- r600: fallback to util_blitter_draw_rectangle when required
+- r600: fix pa_su_vtx_cntl rounding mode
+- r600: fix points clipping
+- i915: fix i915_set_vertex_buffers() related refcnt imbalance and remove redundancies
+- i915: fix slab_create() related memory leaks
+- i915: fix nir_to_tgsi() related memory leak
+- i915: fix draw_create_fragment_shader() related memory leak
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- winsys/amdgpu: disable VM_ALWAYS_VALID
+
+Rob Clark (1):
+
+- tu/vdrm: Fix userspace fence cmds
+
+Ryan Mckeever (1):
+
+- pan/format: Update format flags to follow HW spec
+
+Samuel Pitoiset (4):
+
+- radv: fix ignoring conditional rendering with vkCmdResolveImage()
+- radv: determine if HiZ/HiS is enabled earlier on GFX12
+- radv: add a workaround for buggy HiZ/HiS on GFX12
+- radv: apply the workaround for buggy HiZ/HiS on GFX12 for DGC
+
+Sviatoslav Peleshko (1):
+
+- vulkan/wsi/headless: Remove unnecessary wsi_configure_image()
+
+Tapani Pälli (3):
+
+- compiler/glsl: check that bias is not used outside fragment stage
+- mesa: clamp texbuf query size to MAX_TEXTURE_BUFFER_SIZE
+- mesa: various fixes for ClearTexImage/ClearTexSubImage
+
+Timothy Arceri (1):
+
+- glsl: fix regression in ubo cloning
+
+Timur Kristóf (4):
+
+- nir/xfb: Preserve some xfb information when gathering from intrinsics.
+- nir/opt_varyings: Fix assertion when deduplicating TCS outputs.
+- radv: Use buffers_written mask when gathering XFB info.
+- radv: Call nir_opt_undef too after nir_opt_varyings.

@@ -144,10 +144,6 @@ genX(streamout_prologue)(struct anv_cmd_buffer *cmd_buffer)
 #if INTEL_WA_16013994831_GFX_VER
    /* Wa_16013994831 - Disable preemption during streamout, enable back
     * again if XFB not used by the current pipeline.
-    *
-    * Although this workaround applies to Gfx12+, we already disable object
-    * level preemption for another reason in genX_state.c so we can skip this
-    * for Gfx12.
     */
    if (!intel_needs_workaround(cmd_buffer->device->info, 16013994831))
       return;
@@ -222,12 +218,24 @@ static const uint32_t vk_to_intel_shading_rate_combiner_op[] = {
 #endif
 
 static bool
-has_ds_feedback_loop(const struct vk_dynamic_graphics_state *dyn)
+has_ds_feedback_loop(const struct anv_pipeline_bind_map *bind_map,
+                     const struct vk_dynamic_graphics_state *dyn)
 {
-   return (dyn->feedback_loops & (VK_IMAGE_ASPECT_DEPTH_BIT |
-                                  VK_IMAGE_ASPECT_STENCIL_BIT)) ||
-      dyn->ial.depth_att != MESA_VK_ATTACHMENT_UNUSED ||
-      dyn->ial.stencil_att != MESA_VK_ATTACHMENT_UNUSED;
+   if (BITSET_IS_EMPTY(bind_map->input_attachments))
+      return false;
+
+   const unsigned depth_att = dyn->ial.depth_att == MESA_VK_ATTACHMENT_NO_INDEX ?
+      MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS : dyn->ial.depth_att;
+   const unsigned stencil_att = dyn->ial.stencil_att == MESA_VK_ATTACHMENT_NO_INDEX ?
+      MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS : dyn->ial.stencil_att;
+
+   return
+      (dyn->feedback_loops & (VK_IMAGE_ASPECT_DEPTH_BIT |
+                              VK_IMAGE_ASPECT_STENCIL_BIT)) != 0 ||
+      (dyn->ial.depth_att != MESA_VK_ATTACHMENT_UNUSED &&
+       BITSET_TEST(bind_map->input_attachments, depth_att)) ||
+      (dyn->ial.stencil_att != MESA_VK_ATTACHMENT_UNUSED &&
+       BITSET_TEST(bind_map->input_attachments, stencil_att));
 }
 
 UNUSED static bool
@@ -343,9 +351,10 @@ want_stencil_pma_fix(const struct vk_dynamic_graphics_state *dyn,
     *  3DSTATE_WM_CHROMAKEY::ChromaKeyKillEnable) ||
     * (3DSTATE_PS_EXTRA::Pixel Shader Computed Depth mode != PSCDEPTH_OFF)
     */
+   struct anv_shader_bin *fs_bin = pipeline->base.shaders[MESA_SHADER_FRAGMENT];
+
    return pipeline->kill_pixel ||
-          pipeline->rp_has_ds_self_dep ||
-          has_ds_feedback_loop(dyn) ||
+          has_ds_feedback_loop(&fs_bin->bind_map, dyn) ||
           wm_prog_data->computed_depth_mode != PSCDEPTH_OFF;
 }
 
@@ -844,27 +853,16 @@ update_ps_extra_has_uav(struct anv_gfx_dynamic_state *hw_state,
 {
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
-#if GFX_VERx10 >= 125
-   SET_STAGE(PS_EXTRA, ps_extra.PixelShaderHasUAV,
-                       wm_prog_data && wm_prog_data->has_side_effects,
-                       FRAGMENT);
-#else
-   /* Prior to Gfx12.5 the HW seems to avoid spawning fragment shaders even if
-    * 3DSTATE_PS_EXTRA::PixelShaderKillsPixel=true when
-    * 3DSTATE_PS_BLEND::HasWriteableRT=false. This is causing problems with
-    * occlusion queries with 0 attachments. There are no CTS tests exercising
-    * this but zink+anv fails a bunch of tests like piglit
-    * arb_framebuffer_no_attachments-query.
-    *
-    * Here we choose to tweak the PixelShaderHasUAV to make sure the fragment
-    * shaders are run properly.
+   /* Force fragment shader execution if occlusion queries are active to
+    * ensure PS_DEPTH_COUNT is correct. Otherwise a fragment shader with
+    * discard and no render target setup could be increment PS_DEPTH_COUNT if
+    * the HW internally decides to not run the shader because it has already
+    * established that depth-test is passing.
     */
    SET_STAGE(PS_EXTRA, ps_extra.PixelShaderHasUAV,
                        wm_prog_data && (wm_prog_data->has_side_effects ||
-                                        (gfx->color_att_count == 0 &&
-                                         gfx->n_occlusion_queries > 0)),
+                                        gfx->n_occlusion_queries > 0),
                        FRAGMENT);
-#endif
 }
 
 ALWAYS_INLINE static void
@@ -873,12 +871,13 @@ update_ps_extra_kills_pixel(struct anv_gfx_dynamic_state *hw_state,
                             const struct anv_cmd_graphics_state *gfx,
                             const struct anv_graphics_pipeline *pipeline)
 {
+   struct anv_shader_bin *fs_bin = pipeline->base.shaders[MESA_SHADER_FRAGMENT];
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
    SET_STAGE(PS_EXTRA, ps_extra.PixelShaderKillsPixel,
-                       wm_prog_data && (pipeline->rp_has_ds_self_dep ||
-                                        has_ds_feedback_loop(dyn) ||
-                                        wm_prog_data->uses_kill),
+                       wm_prog_data &&
+                       (has_ds_feedback_loop(&fs_bin->bind_map, dyn) ||
+                        wm_prog_data->uses_kill),
                        FRAGMENT);
 }
 

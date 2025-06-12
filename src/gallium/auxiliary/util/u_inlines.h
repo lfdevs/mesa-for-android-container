@@ -304,6 +304,7 @@ pipe_surface_equal(struct pipe_surface *s1, struct pipe_surface *s2)
 {
    return s1->texture == s2->texture &&
           s1->format == s2->format &&
+          s1->nr_samples == s2->nr_samples &&
           (s1->texture->target != PIPE_BUFFER ||
            (s1->u.buf.first_element == s2->u.buf.first_element &&
             s1->u.buf.last_element == s2->u.buf.last_element)) &&

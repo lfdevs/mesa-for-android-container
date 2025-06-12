@@ -78,7 +78,10 @@ vtn_ssa_value_add_to_call_params(struct vtn_builder *b,
                                  nir_call_instr *call,
                                  unsigned *param_idx)
 {
-   if (glsl_type_is_vector_or_scalar(value->type)) {
+   if (glsl_type_is_cmat(value->type)) {
+      nir_deref_instr *src_deref = vtn_get_deref_for_ssa_value(b, value);
+      call->params[(*param_idx)++] = nir_src_for_ssa(&src_deref->def);
+   } else if (glsl_type_is_vector_or_scalar(value->type)) {
       call->params[(*param_idx)++] = nir_src_for_ssa(value->def);
    } else {
       unsigned elems = glsl_get_length(value->type);
@@ -110,6 +113,8 @@ function_parameter_decoration_cb(struct vtn_builder *b, struct vtn_value *val,
          case SpvFunctionParameterAttributeSext:
          case SpvFunctionParameterAttributeZext:
          case SpvFunctionParameterAttributeSret:
+         case SpvFunctionParameterAttributeNoCapture:
+         case SpvFunctionParameterAttributeNoWrite:
             break;
 
          case SpvFunctionParameterAttributeByVal:
@@ -148,7 +153,17 @@ vtn_ssa_value_load_function_param(struct vtn_builder *b,
                                   struct vtn_func_arg_info *info,
                                   unsigned *param_idx)
 {
-   if (glsl_type_is_vector_or_scalar(value->type)) {
+   if (glsl_type_is_cmat(value->type)) {
+      nir_variable *copy_var =
+         nir_local_variable_create(b->nb.impl, value->type, "cmat_param_by_value");
+
+      nir_def *param = nir_load_param(&b->nb, (*param_idx)++);
+      nir_deref_instr *copy = nir_build_deref_var(&b->nb, copy_var);
+      nir_cmat_copy(&b->nb, &copy->def, param);
+
+      value->is_variable = true;
+      value->var = copy_var;
+   } else if (glsl_type_is_vector_or_scalar(value->type)) {
       /* if the parameter is passed by value, we need to create a local copy if it's a pointer */
       if (info->by_value && type && type->base_type == vtn_base_type_pointer) {
          struct vtn_type *pointee_type = type->pointed;
@@ -386,7 +401,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
       struct vtn_ssa_value *ssa = vtn_create_ssa_value(b, type->type);
       struct vtn_value *val = vtn_untyped_value(b, w[2]);
 
-      b->func->nir_func->params[b->func_param_idx].name = val->name;
+      b->func->nir_func->params[b->func_param_idx].name = ralloc_strdup(b->shader, val->name);
 
       vtn_foreach_decoration(b, val, function_parameter_decoration_cb, &arg_info);
       vtn_ssa_value_load_function_param(b, ssa, type, &arg_info, &b->func_param_idx);

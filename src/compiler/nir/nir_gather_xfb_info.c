@@ -446,6 +446,31 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir)
    for (unsigned i = 0; i < count; i++)
       info->buffers[outputs[i].buffer].varying_count++;
 
+   /* Preserve some info from the pre-existing xfb info if the shader had any. */
+   if (nir->xfb_info) {
+      /* We need to remember which streamout buffers and streams were enabled,
+       * even if the shader doesn't actually write any outputs to them,
+       * because the API requires that we count vertices created by this shader
+       * towards queries against those streams.
+       *
+       * That information can be gathered by nir_gather_xfb_info_with_varyings
+       * from the original NIR I/O variables that we get from the frontend,
+       * but it isn't included in any intrinsics so would be otherwise lost here.
+       *
+       * Illustrated by the following test cases:
+       * dEQP-VK.transform_feedback.simple.multiquery_omit_write_*
+       */
+      const uint32_t buffers_not_written = nir->xfb_info->buffers_written & ~info->buffers_written;
+      u_foreach_bit(buffer, buffers_not_written) {
+         const uint32_t stream = nir->xfb_info->buffer_to_stream[buffer];
+         info->streams_written |= BITFIELD_BIT(stream);
+         info->buffers_written |= BITFIELD_BIT(buffer);
+         info->buffer_to_stream[buffer] = stream;
+         info->buffers[buffer].stride = nir->xfb_info->buffers[buffer].stride;
+         info->buffers[buffer].varying_count = 0;
+      }
+   }
+
    /* Replace original xfb info. */
    ralloc_free(nir->xfb_info);
    nir->xfb_info = info;

@@ -980,7 +980,9 @@ optimizations.extend([
    (('~fmin', ('fsat', a), '#b(is_zero_to_one)'), ('fsat', ('fmin', a, b))),
 
    # If a >= 0 ... 1 + a >= 1 ... so fsat(1 + a) = 1
-   (('fsat', ('fadd', 1.0, 'a(is_ge_zero)')), 1.0),
+   # But 1 + NaN is NaN and fsat(NaN) = 0.
+   (('~fsat', ('fadd', 1.0, 'a(is_not_negative)')), 1.0),
+   (('fsat', ('fadd', 1.0, 'a(is_a_number_not_negative)')), 1.0),
 
    # Let constant folding do its job. This can have emergent behaviour.
    (('fneg', ('bcsel(is_used_once)', a, '#b', '#c')), ('bcsel', a, ('fneg', b), ('fneg', c))),

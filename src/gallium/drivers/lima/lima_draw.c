@@ -1091,14 +1091,16 @@ lima_draw_vbo_indexed(struct pipe_context *pctx,
    else {
       ctx->index_res = lima_resource(info->index.resource);
       ctx->index_offset = 0;
-      needs_indices = !panfrost_minmax_cache_get(ctx->index_res->index_cache, draw->start,
-                                                 draw->count, &ctx->min_index, &ctx->max_index);
+      needs_indices = !panfrost_minmax_cache_get(ctx->index_res->index_cache, info->index_size,
+                                                 draw->start, draw->count,
+                                                 &ctx->min_index, &ctx->max_index);
    }
 
    if (needs_indices) {
       u_vbuf_get_minmax_index(pctx, info, draw, &ctx->min_index, &ctx->max_index);
       if (!info->has_user_indices)
-         panfrost_minmax_cache_add(ctx->index_res->index_cache, draw->start, draw->count,
+         panfrost_minmax_cache_add(ctx->index_res->index_cache, info->index_size,
+                                   draw->start, draw->count,
                                    ctx->min_index, ctx->max_index);
    }
 

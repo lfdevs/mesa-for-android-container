@@ -191,7 +191,12 @@ lp_blit(struct pipe_context *pipe,
    util_blitter_save_render_condition(lp->blitter, lp->render_cond_query,
                                       lp->render_cond_cond,
                                       lp->render_cond_mode);
+
+   void *render_cond_buffer = lp->render_cond_buffer;
+   if (!blit_info->render_condition_enable)
+      lp->render_cond_buffer = NULL;
    util_blitter_blit(lp->blitter, &info, NULL);
+   lp->render_cond_buffer = render_cond_buffer;
 }
 
 

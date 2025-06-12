@@ -196,6 +196,18 @@ panfrost_shader_compile(struct panfrost_screen *screen, const nir_shader *ir,
 
    NIR_PASS(_, s, panfrost_nir_lower_sysvals, dev->arch, &out->sysvals);
 
+   /* For now, we only allow pushing the default UBO 0, and the sysval UBO (if
+    * present). Both of these are mapped on the CPU, but other UBOs are not.
+    * When we switch to pushing UBOs with a compute kernel (or CSF instructions)
+    * we can relax this. */
+   assert(s->info.first_ubo_is_default_ubo);
+   inputs.pushable_ubos = BITFIELD_BIT(0);
+
+   if (out->sysvals.sysval_count != 0) {
+      unsigned sysval_ubo = s->info.num_ubos - 1;
+      inputs.pushable_ubos |= BITFIELD_BIT(sysval_ubo);
+   }
+
    /* Lower resource indices */
    NIR_PASS(_, s, panfrost_nir_lower_res_indices, &inputs);
 

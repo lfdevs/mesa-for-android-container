@@ -172,16 +172,6 @@ radv_vcn_sq_start(struct radv_cmd_buffer *cmd_buffer)
    memset(cmd_buffer->video.decode_buffer, 0, sizeof(struct rvcn_decode_buffer_s));
 }
 
-/* generate an stream handle */
-static unsigned
-radv_vid_alloc_stream_handle(struct radv_physical_device *pdev)
-{
-   unsigned stream_handle = pdev->stream_handle_base;
-
-   stream_handle ^= ++pdev->stream_handle_counter;
-   return stream_handle;
-}
-
 static void
 init_uvd_decoder(struct radv_physical_device *pdev)
 {
@@ -261,10 +251,7 @@ radv_init_physical_device_decoder(struct radv_physical_device *pdev)
       pdev->vid_decode_ip = AMD_IP_VCN_DEC;
    pdev->av1_version = RDECODE_AV1_VER_0;
 
-   pdev->stream_handle_counter = 0;
-   pdev->stream_handle_base = 0;
-
-   pdev->stream_handle_base = util_bitreverse(getpid());
+   ac_uvd_init_stream_handle(&pdev->stream_handle);
 
    pdev->vid_addr_gfx_mode = RDECODE_ARRAY_MODE_LINEAR;
 
@@ -508,7 +495,7 @@ radv_CreateVideoSessionKHR(VkDevice _device, const VkVideoSessionCreateInfoKHR *
       return VK_ERROR_FEATURE_NOT_PRESENT;
    }
 
-   vid->stream_handle = radv_vid_alloc_stream_handle(pdev);
+   vid->stream_handle = ac_uvd_alloc_stream_handle(&pdev->stream_handle);
    vid->dbg_frame_cnt = 0;
    vid->db_alignment = radv_video_get_db_alignment(
       pdev, vid->vk.max_coded.width,
@@ -674,6 +661,7 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
       break;
    }
    case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR: {
+      const bool have_10bit = pdev->info.family >= CHIP_STONEY;
       /* H265 allows different luma and chroma bit depths */
       if (pVideoProfile->lumaBitDepth != pVideoProfile->chromaBitDepth)
          return VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR;
@@ -685,12 +673,12 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
          vk_find_struct_const(pVideoProfile->pNext, VIDEO_DECODE_H265_PROFILE_INFO_KHR);
 
       if (h265_profile->stdProfileIdc != STD_VIDEO_H265_PROFILE_IDC_MAIN &&
-          h265_profile->stdProfileIdc != STD_VIDEO_H265_PROFILE_IDC_MAIN_10 &&
+          (!have_10bit || h265_profile->stdProfileIdc != STD_VIDEO_H265_PROFILE_IDC_MAIN_10) &&
           h265_profile->stdProfileIdc != STD_VIDEO_H265_PROFILE_IDC_MAIN_STILL_PICTURE)
          return VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR;
 
       if (pVideoProfile->lumaBitDepth != VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR &&
-          pVideoProfile->lumaBitDepth != VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR)
+          (!have_10bit || pVideoProfile->lumaBitDepth != VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR))
          return VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR;
 
       pCapabilities->maxDpbSlots = NUM_H2645_REFS + 1;
@@ -2051,6 +2039,8 @@ rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer, struct radv_video_se
    default:
       unreachable("unknown operation");
    }
+
+   header->total_size += index_codec->size;
 
    if (dpb_update_required)
       assert(frame_info->pSetupReferenceSlot != NULL);

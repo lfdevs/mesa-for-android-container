@@ -2648,6 +2648,9 @@ isl_swizzle_compose(struct isl_swizzle first, struct isl_swizzle second);
 struct isl_swizzle
 isl_swizzle_invert(struct isl_swizzle swizzle);
 
+#define MOCS_GET_INDEX(mocs) ((mocs) >> 1)
+#define MOCS_GET_ENCRYPT_EN(mocs) ((mocs) & (1 << 0))
+
 uint32_t isl_mocs(const struct isl_device *dev, isl_surf_usage_flags_t usage,
                   bool external);
 

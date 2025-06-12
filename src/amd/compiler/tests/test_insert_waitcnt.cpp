@@ -340,6 +340,81 @@ BEGIN_TEST(insert_waitcnt.waw.vmem_types)
    }
 END_TEST
 
+BEGIN_TEST(insert_waitcnt.waw.point_sample_accel)
+   if (!setup_cs(NULL, GFX11_5))
+      return;
+
+   Definition def_v4(PhysReg(260), v1);
+   Operand op_v0(PhysReg(256), v1);
+   Operand desc_s4(PhysReg(0), s4);
+   Operand desc_s8(PhysReg(8), s8);
+
+   /* image_sample has point sample acceleration, but image_sample_b does not. Both are VMEM sample
+    * instructions. */
+
+   //>> p_unit_test 0
+   //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   //! s_waitcnt vmcnt(0)
+   //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+   bld.mimg(aco_opcode::image_sample, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+   bld.mimg(aco_opcode::image_sample, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+
+   //>> p_unit_test 1
+   //! v1: %0:v[4] = image_sample_b %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   //! s_waitcnt vmcnt(0)
+   //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   bld.reset(program->create_and_insert_block());
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+   bld.mimg(aco_opcode::image_sample_b, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+   bld.mimg(aco_opcode::image_sample, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+
+   //>> p_unit_test 2
+   //! v1: %0:v[4] = image_load %0:s[8-15], s4: undef, v1: undef, %0:v[0] 1d
+   //! s_waitcnt vmcnt(0)
+   //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   bld.reset(program->create_and_insert_block());
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+   bld.mimg(aco_opcode::image_load, def_v4, desc_s8, Operand(s4), Operand(v1), op_v0);
+   bld.mimg(aco_opcode::image_sample, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+
+   //>> p_unit_test 3
+   //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   //! s_waitcnt vmcnt(0)
+   //! v1: %0:v[4] = image_sample_b %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   bld.reset(program->create_and_insert_block());
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+   bld.mimg(aco_opcode::image_sample, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+   bld.mimg(aco_opcode::image_sample_b, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+
+   //>> p_unit_test 4
+   //! v1: %0:v[4] = image_sample %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   //! s_waitcnt vmcnt(0)
+   //! v1: %0:v[4] = image_load %0:s[8-15], s4: undef, v1: undef, %0:v[0] 1d
+   bld.reset(program->create_and_insert_block());
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+   bld.mimg(aco_opcode::image_sample, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+   bld.mimg(aco_opcode::image_load, def_v4, desc_s8, Operand(s4), Operand(v1), op_v0);
+
+   //>> p_unit_test 5
+   //! v1: %0:v[4] = image_sample_b %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   //! v1: %0:v[4] = image_sample_b %0:s[8-15], %0:s[0-3], v1: undef, %0:v[0] 1d
+   bld.reset(program->create_and_insert_block());
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+   bld.mimg(aco_opcode::image_sample_b, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+   bld.mimg(aco_opcode::image_sample_b, def_v4, desc_s8, desc_s4, Operand(v1), op_v0);
+
+   //>> p_unit_test 5
+   //! v1: %0:v[4] = image_load %0:s[8-15], s4: undef, v1: undef, %0:v[0] 1d
+   //! v1: %0:v[4] = image_load %0:s[8-15], s4: undef, v1: undef, %0:v[0] 1d
+   bld.reset(program->create_and_insert_block());
+   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+   bld.mimg(aco_opcode::image_load, def_v4, desc_s8, Operand(s4), Operand(v1), op_v0);
+   bld.mimg(aco_opcode::image_load, def_v4, desc_s8, Operand(s4), Operand(v1), op_v0);
+
+   finish_waitcnt_test();
+END_TEST
+
 BEGIN_TEST(insert_waitcnt.vmem)
    if (!setup_cs(NULL, GFX12))
       return;

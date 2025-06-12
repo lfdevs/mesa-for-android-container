@@ -1,2 +1,3 @@
 attrs==23.1.0
+packaging==25.0
 urwid==2.1.2

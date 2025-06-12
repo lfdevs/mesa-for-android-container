@@ -133,6 +133,9 @@ sweep_function(nir_shader *nir, nir_function *f)
    ralloc_steal(nir, f);
    ralloc_steal(nir, f->params);
 
+   for (unsigned i = 0; i < f->num_params; i++)
+      ralloc_steal(nir, (char *)f->params[i].name);
+
    if (f->impl)
       sweep_impl(nir, f->impl);
 }

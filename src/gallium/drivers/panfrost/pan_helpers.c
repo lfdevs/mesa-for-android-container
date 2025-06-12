@@ -140,7 +140,8 @@ panfrost_get_index_buffer_bounded(struct panfrost_batch *batch,
    } else if (!info->has_user_indices) {
       /* Check the cache */
       needs_indices = !panfrost_minmax_cache_get(
-         rsrc->index_cache, draw->start, draw->count, min_index, max_index);
+         rsrc->index_cache, info->index_size, draw->start, draw->count,
+         min_index, max_index);
    }
 
    if (needs_indices) {
@@ -148,7 +149,8 @@ panfrost_get_index_buffer_bounded(struct panfrost_batch *batch,
       u_vbuf_get_minmax_index(&ctx->base, info, draw, min_index, max_index);
 
       if (!info->has_user_indices)
-         panfrost_minmax_cache_add(rsrc->index_cache, draw->start, draw->count,
+         panfrost_minmax_cache_add(rsrc->index_cache, info->index_size,
+                                   draw->start, draw->count,
                                    *min_index, *max_index);
    }
 

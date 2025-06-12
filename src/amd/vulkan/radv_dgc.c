@@ -6,6 +6,7 @@
 
 #include "radv_dgc.h"
 #include "meta/radv_meta.h"
+#include "radv_debug.h"
 #include "radv_entrypoints.h"
 #include "radv_pipeline_rt.h"
 
@@ -283,6 +284,11 @@ radv_get_sequence_size_graphics(const struct radv_indirect_command_layout *layou
             *cmd_size += (5 + 2 + 3) * 4;
          }
       }
+   }
+
+   if (pdev->info.gfx_level == GFX12 && pdev->use_hiz) {
+      /* HiZ/HiS hw workaround */
+      *cmd_size += 8 * 4;
    }
 
    if (device->sqtt.bo) {
@@ -1129,6 +1135,26 @@ build_dgc_buffer_preamble_ace(nir_builder *b, nir_def *sequence_count, const str
  * Draw
  */
 static void
+dgc_gfx12_emit_hiz_his_wa(struct dgc_cmdbuf *cs)
+{
+   const struct radv_device *device = cs->dev;
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   if (pdev->info.gfx_level == GFX12 && pdev->use_hiz) {
+      dgc_cs_begin(cs);
+      dgc_cs_emit_imm(PKT3(PKT3_RELEASE_MEM, 6, 0));
+      dgc_cs_emit_imm(S_490_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) | S_490_EVENT_INDEX(5));
+      dgc_cs_emit_imm(0); /* DST_SEL, INT_SEL = no write confirm, DATA_SEL = no data */
+      dgc_cs_emit_imm(0); /* ADDRESS_LO */
+      dgc_cs_emit_imm(0); /* ADDRESS_HI */
+      dgc_cs_emit_imm(0); /* DATA_LO */
+      dgc_cs_emit_imm(0); /* DATA_HI */
+      dgc_cs_emit_imm(0); /* INT_CTXID */
+      dgc_cs_end();
+   }
+}
+
+static void
 dgc_emit_userdata_vertex(struct dgc_cmdbuf *cs, nir_def *first_vertex, nir_def *first_instance, nir_def *drawid)
 {
    nir_builder *b = cs->b;
@@ -1270,6 +1296,7 @@ dgc_emit_draw_indirect(struct dgc_cmdbuf *cs, nir_def *stream_addr, nir_def *seq
    dgc_emit_pkt3_set_base(cs, va);
    dgc_emit_pkt3_draw_indirect(cs, indexed);
 
+   dgc_gfx12_emit_hiz_his_wa(cs);
    dgc_emit_sqtt_thread_trace_marker(cs);
    dgc_emit_sqtt_end_api_marker(cs, indexed ? ApiCmdDrawIndexedIndirect : ApiCmdDrawIndirect);
 }
@@ -1296,6 +1323,7 @@ dgc_emit_draw(struct dgc_cmdbuf *cs, nir_def *stream_addr, nir_def *sequence_id)
       dgc_emit_instance_count(cs, instance_count);
       dgc_emit_draw_index_auto(cs, vertex_count);
 
+      dgc_gfx12_emit_hiz_his_wa(cs);
       dgc_emit_sqtt_thread_trace_marker(cs);
       dgc_emit_sqtt_end_api_marker(cs, ApiCmdDraw);
    }
@@ -1328,6 +1356,7 @@ dgc_emit_draw_indexed(struct dgc_cmdbuf *cs, nir_def *stream_addr, nir_def *sequ
       dgc_emit_instance_count(cs, instance_count);
       dgc_emit_draw_index_offset_2(cs, first_index, index_count, max_index_count);
 
+      dgc_gfx12_emit_hiz_his_wa(cs);
       dgc_emit_sqtt_thread_trace_marker(cs);
       dgc_emit_sqtt_end_api_marker(cs, ApiCmdDrawIndexed);
    }
@@ -1378,6 +1407,7 @@ dgc_emit_draw_with_count(struct dgc_cmdbuf *cs, nir_def *stream_addr, nir_def *s
    dgc_cs_emit(di_src_sel);
    dgc_cs_end();
 
+   dgc_gfx12_emit_hiz_his_wa(cs);
    dgc_emit_sqtt_thread_trace_marker(cs);
    dgc_emit_sqtt_end_api_marker(cs, indexed ? ApiCmdDrawIndexedIndirectCount : ApiCmdDrawIndirectCount);
 }
@@ -2074,6 +2104,7 @@ dgc_emit_dispatch_taskmesh_gfx(struct dgc_cmdbuf *cs, nir_def *sequence_id)
    dgc_cs_emit_imm(V_0287F0_DI_SRC_SEL_AUTO_INDEX);
    dgc_cs_end();
 
+   dgc_gfx12_emit_hiz_his_wa(cs);
    dgc_emit_sqtt_thread_trace_marker(cs);
    dgc_emit_sqtt_end_api_marker(cs, ApiCmdDrawMeshTasksEXT);
 }
@@ -2113,6 +2144,7 @@ dgc_emit_draw_mesh_tasks_gfx(struct dgc_cmdbuf *cs, nir_def *stream_addr, nir_de
             dgc_emit_draw_index_auto(cs, vertex_count);
          }
 
+         dgc_gfx12_emit_hiz_his_wa(cs);
          dgc_emit_sqtt_thread_trace_marker(cs);
          dgc_emit_sqtt_end_api_marker(cs, ApiCmdDrawMeshTasksEXT);
       }
@@ -2185,6 +2217,7 @@ dgc_emit_draw_mesh_tasks_with_count_gfx(struct dgc_cmdbuf *cs, nir_def *stream_a
       dgc_cs_emit_imm(V_0287F0_DI_SRC_SEL_AUTO_INDEX);
       dgc_cs_end();
 
+      dgc_gfx12_emit_hiz_his_wa(cs);
       dgc_emit_sqtt_thread_trace_marker(cs);
       dgc_emit_sqtt_end_api_marker(cs, ApiCmdDrawMeshTasksIndirectCountEXT);
    }
@@ -2768,6 +2801,7 @@ radv_CmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(radv_cmd_buffer, state_cmd_buffer, stateCommandBuffer);
    VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    VK_FROM_HANDLE(radv_indirect_command_layout, layout, pGeneratedCommandsInfo->indirectCommandsLayout);
+   const bool execution_is_predicating = state_cmd_buffer->state.predicating;
 
    assert(layout->vk.usage & VK_INDIRECT_COMMANDS_LAYOUT_USAGE_EXPLICIT_PREPROCESS_BIT_EXT);
 
@@ -2777,7 +2811,7 @@ radv_CmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
    const bool old_predicating = cmd_buffer->state.predicating;
    cmd_buffer->state.predicating = false;
 
-   radv_prepare_dgc(cmd_buffer, pGeneratedCommandsInfo, state_cmd_buffer, old_predicating);
+   radv_prepare_dgc(cmd_buffer, pGeneratedCommandsInfo, state_cmd_buffer, execution_is_predicating);
 
    /* Restore conditional rendering. */
    cmd_buffer->state.predicating = old_predicating;
@@ -2802,8 +2836,8 @@ radv_prepare_dgc_compute(struct radv_cmd_buffer *cmd_buffer, const VkGeneratedCo
 
    if (cond_render_enabled) {
       params->predicating = true;
-      params->predication_va = cmd_buffer->state.predication_va;
-      params->predication_type = cmd_buffer->state.predication_type;
+      params->predication_va = state_cmd_buffer->state.user_predication_va;
+      params->predication_type = state_cmd_buffer->state.predication_type;
    }
 
    if (ies) {

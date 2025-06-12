@@ -191,6 +191,7 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
                                     VkBufferUsageFlags2 usage, VkMemoryRequirements2 *pMemoryRequirements)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    pMemoryRequirements->memoryRequirements.memoryTypeBits =
       ((1u << pdev->memory_properties.memoryTypeCount) - 1u) & ~pdev->memory_types_32bit;
@@ -203,7 +204,10 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
       pMemoryRequirements->memoryRequirements.memoryTypeBits = pdev->memory_types_32bit;
 
    if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
-      pMemoryRequirements->memoryRequirements.alignment = 4096;
+      if (instance->drirc.force_64k_sparse_alignment)
+         pMemoryRequirements->memoryRequirements.alignment = 65536;
+      else
+         pMemoryRequirements->memoryRequirements.alignment = 4096;
    } else {
       if (usage & VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT)
          pMemoryRequirements->memoryRequirements.alignment = radv_dgc_get_buffer_alignment(device);

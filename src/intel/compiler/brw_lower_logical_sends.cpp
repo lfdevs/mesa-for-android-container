@@ -2348,9 +2348,17 @@ lower_trace_ray_logical_send(const brw_builder &bld, fs_inst *inst)
     * payload register.
     */
    if (!synchronous) {
+      /* For Xe2+, Bspec 64643:
+       * "StackID": The maximum number of StackIDs can be 2^12- 1.
+       *
+       * For platforms < Xe2, The maximum number of StackIDs can be 2^11 - 1.
+       */
+      brw_reg stack_id_mask = devinfo->ver >= 20 ?
+                              brw_imm_uw(0xfff) :
+                              brw_imm_uw(0x7ff);
       bld.AND(subscript(payload, BRW_TYPE_UW, 1),
               retype(brw_vec8_grf(1 * unit, 0), BRW_TYPE_UW),
-              brw_imm_uw(0x7ff));
+              stack_id_mask);
    }
 
    /* Update the original instruction. */

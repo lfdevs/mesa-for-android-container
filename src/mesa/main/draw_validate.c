@@ -155,7 +155,7 @@ _mesa_update_valid_to_render_state(struct gl_context *ctx)
          /* If drawing to integer-valued color buffers, there must be an
           * active fragment shader (GL_EXT_texture_integer).
           */
-         if (ctx->DrawBuffer->_IntegerBuffers)
+         if (ctx->DrawBuffer->_IntegerDrawBuffers)
             return;
       }
    }
@@ -214,7 +214,7 @@ _mesa_update_valid_to_render_state(struct gl_context *ctx)
        * However GL_EXT_float_blend removes this text.
        */
       if (!ctx->Extensions.EXT_float_blend &&
-          (ctx->DrawBuffer->_FP32Buffers & ctx->Color.BlendEnabled))
+          (ctx->DrawBuffer->_FP32DrawBuffers & ctx->Color.BlendEnabled))
          return;
       break;
 

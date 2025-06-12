@@ -1035,6 +1035,12 @@ alloc_bo_from_cache(struct iris_bufmgr *bufmgr,
       if (cur->real.capture != !!(flags & BO_ALLOC_CAPTURE))
          continue;
 
+      /* Make sure we don't recycle compressed vs non-compressed. */
+      if ((iris_heap_is_compressed(flags_to_heap(bufmgr, flags))) !=
+          iris_heap_is_compressed(cur->real.heap)) {
+            continue;
+      }
+
       /* If the last BO in the cache is busy, there are no idle BOs.  Bail,
        * either falling back to a non-matching memzone, or if that fails,
        * allocating a fresh buffer.

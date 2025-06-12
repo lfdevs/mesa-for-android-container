@@ -43,10 +43,16 @@ mir_is_ubo(midgard_instruction *ins)
 }
 
 static bool
-mir_is_direct_aligned_ubo(midgard_instruction *ins)
+mir_is_pushable_ubo(compiler_context *ctx, midgard_instruction *ins)
 {
-   return mir_is_ubo(ins) && !(ins->constants.u32[0] & 0xF) &&
-          (ins->src[1] == ~0) && (ins->src[2] == ~0);
+   if (!mir_is_ubo(ins))
+      return false;
+
+   unsigned ubo = midgard_unpack_ubo_index_imm(ins->load_store);
+
+   return !(ins->constants.u32[0] & 0xF) &&
+          (ins->src[1] == ~0) && (ins->src[2] == ~0) &&
+          (ctx->inputs->pushable_ubos & BITFIELD_BIT(ubo));
 }
 
 /* Represents use data for a single UBO */
@@ -74,7 +80,7 @@ mir_analyze_ranges(compiler_context *ctx)
    res.blocks = calloc(res.nr_blocks, sizeof(struct mir_ubo_block));
 
    mir_foreach_instr_global(ctx, ins) {
-      if (!mir_is_direct_aligned_ubo(ins))
+      if (!mir_is_pushable_ubo(ctx, ins))
          continue;
 
       unsigned ubo = midgard_unpack_ubo_index_imm(ins->load_store);
@@ -265,7 +271,7 @@ mir_special_indices(compiler_context *ctx)
 void
 midgard_promote_uniforms(compiler_context *ctx)
 {
-   if (ctx->inputs->no_ubo_to_push) {
+   if (!ctx->inputs->pushable_ubos) {
       /* If nothing is pushed, all UBOs need to be uploaded
        * conventionally */
       ctx->ubo_mask = ~0;
@@ -293,7 +299,7 @@ midgard_promote_uniforms(compiler_context *ctx)
       unsigned ubo = midgard_unpack_ubo_index_imm(ins->load_store);
       unsigned qword = ins->constants.u32[0] / 16;
 
-      if (!mir_is_direct_aligned_ubo(ins)) {
+      if (!mir_is_pushable_ubo(ctx, ins)) {
          if (ins->src[1] == ~0)
             ctx->ubo_mask |= BITSET_BIT(ubo);
          else

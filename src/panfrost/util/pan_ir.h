@@ -104,8 +104,10 @@ struct panfrost_compile_inputs {
       uint64_t bifrost_blend_desc;
    } blend;
    bool no_idvs;
-   bool no_ubo_to_push;
    uint32_t view_mask;
+
+   /* Mask of UBOs that may be moved to push constants */
+   uint32_t pushable_ubos;
 
    /* Used on Valhall.
     *

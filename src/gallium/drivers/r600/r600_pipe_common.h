@@ -498,6 +498,23 @@ struct r600_common_context {
 	bool				vs_writes_viewport_index;
 	bool				vs_disables_clipping_viewport;
 
+	/* The number of pixels outside the viewport that are not culled by the clipper.
+	 * Normally, the clipper clips everything outside the viewport, however, points and lines
+	 * can have vertices outside the viewport, but their edges can be inside the viewport. Those
+	 * shouldn't be culled. The problem is that the register setting (PA_CL_GB_*_DISC_ADJ) that
+	 * controls the discard distance, which depends on the point size and line width, applies to
+	 * all primitive types, and we would have to set 0 distance for triangles and non-zero for
+	 * points and lines whenever the primitive type changes, which would add overhead and cause
+	 * context rolls.
+	 *
+	 * To reduce that, whenever the discard distance changes for points and lines, we keep it
+	 * at that higher value up to a certain small number for all primitive types including all
+	 * points and lines within a specific size. This is slightly inefficient, but it eliminates
+	 * a lot of guardband state updates and context register changes.
+	 */
+	float min_clip_discard_distance_watermark;
+	float current_clip_discard_distance;
+
 	/* Additional context states. */
 	unsigned flags; /* flush flags */
 
@@ -593,6 +610,39 @@ struct r600_common_context {
 				struct radeon_saved_cs *saved,
 				enum amd_ip_type ring);
 };
+
+#define R600_ALL_PRIM_LINE_MODES                                                                   \
+	((1 << MESA_PRIM_LINES) | (1 << MESA_PRIM_LINE_LOOP) | (1 << MESA_PRIM_LINE_STRIP) |       \
+	 (1 << MESA_PRIM_LINES_ADJACENCY) | (1 << MESA_PRIM_LINE_STRIP_ADJACENCY))
+
+static inline bool r600_prim_is_lines(unsigned prim)
+{
+	return ((1 << prim) & R600_ALL_PRIM_LINE_MODES) != 0;
+}
+
+static inline void r600_set_clip_discard_distance(struct r600_common_context *rctx,
+						  float distance)
+{
+	/* Determine whether the guardband registers change.
+	 *
+	 * When we see a value greater than min_clip_discard_distance_watermark, we increase it
+	 * up to a certain number to eliminate those state changes next time they happen.
+	 * See the comment at min_clip_discard_distance_watermark.
+	 */
+	if (distance > rctx->min_clip_discard_distance_watermark) {
+		/* The maximum number was determined from Viewperf. The number is in units of half-pixels. */
+		rctx->min_clip_discard_distance_watermark = MIN2(distance, 6);
+
+		float old_distance = rctx->current_clip_discard_distance;
+		float new_distance = MAX2(distance, rctx->min_clip_discard_distance_watermark);
+
+		if (old_distance != new_distance) {
+			rctx->current_clip_discard_distance = new_distance;
+			rctx->scissors.dirty_mask = (1 << R600_MAX_VIEWPORTS) - 1;
+			rctx->set_atom_dirty(rctx, &rctx->scissors.atom, true);
+		}
+	}
+}
 
 /* r600_buffer_common.c */
 bool r600_rings_is_buffer_referenced(struct r600_common_context *ctx,
@@ -765,8 +815,6 @@ void r600_texture_transfer_unmap(struct pipe_context *ctx,
 /* r600_viewport.c */
 void evergreen_apply_scissor_bug_workaround(struct r600_common_context *rctx,
 					    struct pipe_scissor_state *scissor);
-void r600_viewport_set_rast_deps(struct r600_common_context *rctx,
-				 bool scissor_enable, bool clip_halfz);
 void r600_update_vs_writes_viewport_index(struct r600_common_context *rctx,
 					  struct tgsi_shader_info *info);
 void r600_init_viewport_functions(struct r600_common_context *rctx);

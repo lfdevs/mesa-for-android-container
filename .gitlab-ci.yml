@@ -38,7 +38,7 @@ workflow:
     - if: &is-merge-attempt $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       variables:
         MESA_CI_PERFORMANCE_ENABLED: 1
-        VALVE_INFRA_VANGOGH_JOB_PRIORITY: ""  # Empty tags are ignored by gitlab
+        CI_TRON_JOB_PRIORITY_TAG: ""  # Empty tags are ignored by gitlab
         JOB_PRIORITY: 75
         # fast-fail in merge pipelines: stop early if we get this many unexpected fails/crashes
         DEQP_RUNNER_MAX_FAILS: 40
@@ -110,7 +110,7 @@ variables:
   # Avoid the wall of "Unsupported SPIR-V capability" warnings in CI job log, hiding away useful output
   MESA_SPIRV_LOG_LEVEL: error
   # Default priority for non-merge pipelines
-  VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
+  CI_TRON_JOB_PRIORITY_TAG: ci-tron:priority:low
   JOB_PRIORITY: 50
   DATA_STORAGE_PATH: data_storage
 

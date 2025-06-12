@@ -1524,7 +1524,6 @@ run_fs(fs_visitor &s, bool allow_spilling, bool do_rep_send)
       brw_assign_urb_setup(s);
 
       brw_lower_3src_null_dest(s);
-      brw_workaround_memory_fence_before_eot(s);
       brw_workaround_emit_dummy_mov_instruction(s);
 
       brw_allocate_registers(s, allow_spilling);

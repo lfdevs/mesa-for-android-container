@@ -116,7 +116,6 @@ brw_opt_split_virtual_grfs(fs_visitor &s)
          if (split_points[reg]) {
             has_splits = true;
             vgrf_has_split[i] = true;
-            assert(offset <= MAX_VGRF_SIZE(s.devinfo));
             unsigned grf = s.alloc.allocate(offset);
             for (unsigned k = reg - offset; k < reg; k++)
                new_virtual_grf[k] = grf;
@@ -128,7 +127,6 @@ brw_opt_split_virtual_grfs(fs_visitor &s)
       }
 
       /* The last one gets the original register number */
-      assert(offset <= MAX_VGRF_SIZE(s.devinfo));
       s.alloc.sizes[i] = offset;
       for (unsigned k = reg - offset; k < reg; k++)
          new_virtual_grf[k] = i;

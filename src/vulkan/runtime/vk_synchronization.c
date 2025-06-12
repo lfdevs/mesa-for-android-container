@@ -209,6 +209,21 @@ vk_common_CmdPipelineBarrier(
       .pImageMemoryBarriers = image_barriers,
    };
 
+   VkMemoryBarrier2 exec_barrier = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+      .pNext = NULL,
+      .srcStageMask = src_stage_mask2,
+      .srcAccessMask = 0x0,
+      .dstStageMask = dst_stage_mask2,
+      .dstAccessMask = 0x0,
+   };
+
+   if (memoryBarrierCount == 0 && bufferMemoryBarrierCount == 0 &&
+       imageMemoryBarrierCount == 0) {
+      dep_info.memoryBarrierCount = 1;
+      dep_info.pMemoryBarriers = &exec_barrier;
+   }
+
    device->dispatch_table.CmdPipelineBarrier2(commandBuffer, &dep_info);
 
    STACK_ARRAY_FINISH(memory_barriers);

@@ -1935,6 +1935,22 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
    cmdbuf->state.gfx.fs.required =
       fs_required(&cmdbuf->state.gfx, &cmdbuf->vk.dynamic_graphics_state);
 
+   if (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable) {
+      struct pan_fb_info *fbinfo = &cmdbuf->state.gfx.render.fb.info;
+      uint32_t rasterization_samples =
+         cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples;
+
+      /* If there's no attachment, we patch nr_samples to match
+       * rasterization_samples, otherwise, we make sure those two numbers match.
+       */
+      if (!cmdbuf->state.gfx.render.bound_attachments) {
+         assert(rasterization_samples > 0);
+         fbinfo->nr_samples = rasterization_samples;
+      } else {
+         assert(rasterization_samples == fbinfo->nr_samples);
+      }
+   }
+
    /* Layered indirect draw (VK_EXT_shader_viewport_index_layer) needs
     * additional changes. We allow layer_count == 0 because that happens
     * when mixing dynamic rendering and secondary command buffers. Once

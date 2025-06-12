@@ -288,7 +288,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R10G10B10X2_SNORM,       RGB10_A2_SNORM,  RGB1, L, VT__),
    FMT(R10G10B10A2_SNORM,       RGB10_A2_SNORM,  RGBA, L, VT__),
    FMT(B10G10R10A2_SNORM,       RGB10_A2_SNORM,  BGRA, L, VT__),
-   FMT(R3G3B2_UNORM,            RGB332_UNORM,    RGB1, L, VT__),
+   FMT(R3G3B2_UNORM,            RGB332_UNORM,    RGB1, L, _T__),
 #else
    FMT(R10G10B10X2_SNORM,       RGB10_A2_SNORM,  RGB1, L, V___),
    FMT(R10G10B10A2_SNORM,       RGB10_A2_SNORM,  RGBA, L, V___),
@@ -335,7 +335,11 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R32G32B32_FIXED,         RGB32_FIXED,     RGB1, L, V___),
    FMT(R32G32B32A32_FIXED,      RGBA32_FIXED,    RGBA, L, V___),
    FMT(R11G11B10_FLOAT,         R11F_G11F_B10F,  RGB1, L, VTR_),
-   FMT(R9G9B9E5_FLOAT,          R9F_G9F_B9F_E5F, RGB1, L, VT__),
+#if PAN_ARCH < 7
+   FMT(R9G9B9E5_FLOAT,          R9F_G9F_B9F_E5F, RGB1, L, _T__),
+#else
+   FMT(R9G9B9E5_FLOAT,          R9F_G9F_B9F_E5F, RGB1, L, VTR_),
+#endif
 #if PAN_ARCH >= 6
    /* SNORM is renderable on Bifrost (with blend shaders) */
    FMT(R8_SNORM,                R8_SNORM,        R001, L, VTR_),

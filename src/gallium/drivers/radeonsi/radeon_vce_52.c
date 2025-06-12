@@ -84,7 +84,7 @@ static void get_motion_estimation_param(struct rvce_encoder *enc,
       enc->enc_pic.me.enc_search1_range_x = 16;
       enc->enc_pic.me.enc_search1_range_y = 16;
       enc->enc_pic.me.enable_amd = 0;
-      enc->enc_pic.me.enc_disable_sub_mode = 126;
+      enc->enc_pic.me.enc_disable_sub_mode = 254;
       enc->enc_pic.me.enc_en_ime_overw_dis_subm = 0;
       enc->enc_pic.me.enc_ime_overw_dis_subm_no = 0;
       break;
@@ -332,7 +332,7 @@ static void encode(struct rvce_encoder *enc)
 
    RVCE_BEGIN(0x05000004);                                   // video bitstream buffer
    RVCE_WRITE(enc->bs_handle, RADEON_DOMAIN_GTT, enc->bs_offset); // videoBitstreamRingAddressHi/Lo
-   RVCE_CS(enc->bs_size);                                    // videoBitstreamRingSize
+   RVCE_CS(enc->bs_size - enc->bs_offset);                   // videoBitstreamRingSize
    RVCE_END();
 
    if (enc->dual_pipe) {
@@ -510,7 +510,6 @@ static void rate_control(struct rvce_encoder *enc)
 
 static void config(struct rvce_encoder *enc)
 {
-   enc->task_info(enc, 0x00000002, 0xffffffff);
    enc->rate_control(enc);
    enc->config_extension(enc);
    enc->motion_estimation(enc);

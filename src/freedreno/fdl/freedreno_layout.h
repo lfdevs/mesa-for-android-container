@@ -241,6 +241,7 @@ bool fdl6_layout(struct fdl_layout *layout, const struct fd_dev_info *info,
                  enum pipe_format format, uint32_t nr_samples, uint32_t width0,
                  uint32_t height0, uint32_t depth0, uint32_t mip_levels,
                  uint32_t array_size, bool is_3d, bool is_mutable,
+                 bool force_ubwc,
                  struct fdl_explicit_layout *plane_layout);
 
 static inline void

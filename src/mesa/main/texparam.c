@@ -1977,8 +1977,15 @@ get_tex_level_parameter_buffer(struct gl_context *ctx,
          *params = bo->Name;
          break;
       case GL_TEXTURE_WIDTH:
-         *params = ((texObj->BufferSize == -1) ? bo->Size : texObj->BufferSize)
-            / bytes;
+         /* From OpenGL 4.6 spec "8.9 Buffer Textures":
+          *
+          *    "The number of texels in the texture image is then clamped to an
+          *     implementation-dependent limit, the value of
+          *     MAX_TEXTURE_BUFFER_SIZE."
+          */
+         *params = CLAMP(((texObj->BufferSize == -1) ?
+                           bo->Size : texObj->BufferSize) / bytes,
+                         0, ctx->Const.MaxTextureBufferSize);
          break;
       case GL_TEXTURE_HEIGHT:
       case GL_TEXTURE_DEPTH:

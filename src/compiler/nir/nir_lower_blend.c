@@ -296,15 +296,11 @@ nir_logicop_func(
 }
 
 static nir_def *
-nir_blend_logicop(
-   nir_builder *b,
-   const nir_lower_blend_options *options,
-   unsigned rt,
-   nir_def *src, nir_def *dst)
+nir_blend_logicop(nir_builder *b,
+                  enum pipe_format format, enum pipe_logicop func,
+                  nir_def *src, nir_def *dst)
 {
    unsigned bit_size = src->bit_size;
-
-   enum pipe_format format = options->format[rt];
    const struct util_format_description *format_desc =
       util_format_description(format);
 
@@ -348,7 +344,7 @@ nir_blend_logicop(
    for (int i = 0; i < 4; ++i)
       mask[i] = nir_const_value_for_uint(BITFIELD_MASK(bits[i]), 32);
 
-   nir_def *out = nir_logicop_func(b, options->logicop_func, src, dst,
+   nir_def *out = nir_logicop_func(b, func, src, dst,
                                    nir_build_imm(b, 4, 32, mask));
 
    if (util_format_is_unorm(format)) {
@@ -528,9 +524,31 @@ nir_lower_blend_instr(nir_builder *b, nir_intrinsic_instr *store, void *data)
     */
    b->cursor = nir_after_block(store->instr.block);
 
+   const enum pipe_format format = options->format[rt];
+   enum pipe_logicop logicop_func = options->logicop_func;
+
+   /* From the Vulkan spec ("Logical operations"):
+    *
+    *    Logical operations are not applied to floating-point or sRGB format
+    *    color attachments...
+    *
+    *    If logicOpEnable is VK_TRUE... blending of all attachments is treated
+    *    as if it were disabled. Any attachments using color formats for which
+    *    logical operations are not supported simply pass through the color
+    *    values unmodified.
+    *
+    * The semantic for unsupported formats is equivalent to a logicop of COPY.
+    * It is /not/ equivalent to disabled logicops (which would incorrectly apply
+    * blending). To implement this spec text with minimal special casing, we
+    * override the logicop func to COPY for unsupported formats.
+    */
+   if (util_format_is_float(format) || util_format_is_srgb(format)) {
+      logicop_func = PIPE_LOGICOP_COPY;
+   }
+
    /* Don't bother copying the destination to the source for disabled RTs */
    if (options->rt[rt].colormask == 0 ||
-       (options->logicop_enable && options->logicop_func == PIPE_LOGICOP_NOOP)) {
+       (options->logicop_enable && logicop_func == PIPE_LOGICOP_NOOP)) {
 
       nir_instr_remove(&store->instr);
       return true;
@@ -573,10 +591,10 @@ nir_lower_blend_instr(nir_builder *b, nir_intrinsic_instr *store, void *data)
    nir_def *blended = src;
 
    if (options->logicop_enable) {
-      blended = nir_blend_logicop(b, options, rt, src, dst);
-   } else if (!util_format_is_pure_integer(options->format[rt]) &&
+      blended = nir_blend_logicop(b, format, logicop_func, src, dst);
+   } else if (!util_format_is_pure_integer(format) &&
               !nir_blend_replace_rt(&options->rt[rt])) {
-      assert(!util_format_is_scaled(options->format[rt]));
+      assert(!util_format_is_scaled(format));
       blended = nir_blend(b, options, rt, src, ctx->src1[rt], dst);
    }
 
@@ -584,10 +602,8 @@ nir_lower_blend_instr(nir_builder *b, nir_intrinsic_instr *store, void *data)
    if (options->rt[rt].colormask != BITFIELD_MASK(4))
       blended = nir_color_mask(b, options->rt[rt].colormask, blended, dst);
 
-   const unsigned num_components =
-      util_format_get_nr_components(options->format[rt]);
-
    /* Shave off any components we don't want to store */
+   const unsigned num_components = util_format_get_nr_components(format);
    blended = nir_trim_vector(b, blended, num_components);
 
    /* Grow or shrink the store destination as needed */

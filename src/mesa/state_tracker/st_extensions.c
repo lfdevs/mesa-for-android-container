@@ -1208,6 +1208,8 @@ void st_init_extensions(struct pipe_screen *screen,
 
    consts->ForceMapBufferSynchronized = options->force_gl_map_buffer_synchronized;
 
+   consts->ForceDepthComponentTypeInt = options->force_gl_depth_component_type_int;
+
    consts->PrimitiveRestartFixedIndex =
       screen->caps.primitive_restart_fixed_index;
 

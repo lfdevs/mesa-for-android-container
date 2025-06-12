@@ -32,6 +32,7 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 
+#include "draw/draw_private.h"
 #include "draw/draw_vertex.h"
 
 #include "tgsi/tgsi_scan.h"
@@ -272,8 +273,6 @@ struct i915_context {
    void *vs;
 
    struct i915_velems_state *velems;
-   unsigned nr_vertex_buffers;
-   struct pipe_vertex_buffer vertex_buffers[PIPE_MAX_ATTRIBS];
 
    struct pipe_blend_color blend_color;
    struct pipe_stencil_ref stencil_ref;

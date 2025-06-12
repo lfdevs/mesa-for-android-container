@@ -530,6 +530,7 @@ nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
       P_MTHD(p, NV9097, SET_VAB_MEMORY_AREA_A);
       P_NV9097_SET_VAB_MEMORY_AREA_A(p, vab_addr >> 32);
       P_NV9097_SET_VAB_MEMORY_AREA_B(p, vab_addr);
+      assert(dev->vab_memory->va->size_B == 256 * 1024);
       P_NV9097_SET_VAB_MEMORY_AREA_C(p, SIZE_BYTES_256K);
    }
 

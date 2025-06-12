@@ -406,4 +406,12 @@ struct ruvd_msg {
    } body;
 };
 
+struct ac_uvd_stream_handle {
+   uint32_t base;
+   uint32_t counter;
+};
+
+void ac_uvd_init_stream_handle(struct ac_uvd_stream_handle *handle);
+unsigned ac_uvd_alloc_stream_handle(struct ac_uvd_stream_handle *handle);
+
 #endif

@@ -1490,6 +1490,14 @@ virtgpu_init_capset(struct virtgpu *gpu)
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
+   if (gpu->capset.data.wire_format_version == 0) {
+      if (VN_DEBUG(INIT)) {
+         vn_log(gpu->instance, "Unsupported wire format version %u",
+                gpu->capset.data.wire_format_version);
+      }
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
    return VK_SUCCESS;
 }
 

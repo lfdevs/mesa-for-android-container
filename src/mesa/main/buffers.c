@@ -33,6 +33,7 @@
 #include "util/glheader.h"
 #include "buffers.h"
 #include "context.h"
+#include "draw_validate.h"
 #include "enums.h"
 #include "fbobject.h"
 #include "framebuffer.h"
@@ -739,6 +740,34 @@ updated_drawbuffers(struct gl_context *ctx, struct gl_framebuffer *fb)
    }
 }
 
+static void
+update_drawbuffer_mask(struct gl_context *ctx, struct gl_framebuffer *fb,
+                       GLbitfield *buffers, GLbitfield *draw_buffers)
+{
+   *draw_buffers = 0;
+   for (unsigned i = 0; i < fb->_NumColorDrawBuffers; i++) {
+      gl_buffer_index buf = fb->_ColorDrawBufferIndexes[i];
+      if (buf < BUFFER_COLOR0)
+         continue;
+
+      if (*buffers & (1 << (buf - BUFFER_COLOR0)))
+         *draw_buffers |= (1 << i);
+   }
+}
+
+void
+_mesa_update_drawbuffer_masks(struct gl_context *ctx,
+                              struct gl_framebuffer *fb)
+{
+   update_drawbuffer_mask(ctx, fb, &ctx->DrawBuffer->_IntegerBuffers,
+                          &ctx->DrawBuffer->_IntegerDrawBuffers);
+   update_drawbuffer_mask(ctx, fb, &ctx->DrawBuffer->_BlendForceAlphaToOne,
+                          &ctx->DrawBuffer->_BlendForceAlphaToOneDraw);
+   update_drawbuffer_mask(ctx, fb, &ctx->DrawBuffer->_IsRGB,
+                          &ctx->DrawBuffer->_IsRGBDraw);
+   update_drawbuffer_mask(ctx, fb, &ctx->DrawBuffer->_FP32Buffers,
+                          &ctx->DrawBuffer->_FP32DrawBuffers);
+}
 
 /**
  * Helper function to set the GL_DRAW_BUFFER state for the given context and
@@ -817,6 +846,8 @@ _mesa_drawbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
       fb->_NumColorDrawBuffers = count;
    }
 
+   _mesa_update_drawbuffer_masks(ctx, fb);
+
    /* set remaining outputs to BUFFER_NONE */
    for (buf = fb->_NumColorDrawBuffers; buf < ctx->Const.MaxDrawBuffers; buf++) {
       if (fb->_ColorDrawBufferIndexes[buf] != BUFFER_NONE) {
@@ -837,6 +868,8 @@ _mesa_drawbuffers(struct gl_context *ctx, struct gl_framebuffer *fb,
          }
       }
    }
+
+   _mesa_update_valid_to_render_state(ctx);
 }
 
 

@@ -2053,8 +2053,10 @@ read_function(read_ctx *ctx)
    for (unsigned i = 0; i < fxn->num_params; i++) {
       uint32_t val = blob_read_uint32(ctx->blob);
       bool has_name = (val & 0x10000);
-      if (has_name)
-         fxn->params[i].name = blob_read_string(ctx->blob);
+      if (has_name) {
+         char *name = blob_read_string(ctx->blob);
+         fxn->params[i].name = ralloc_strdup(ctx->nir, name);
+      }
 
       fxn->params[i].num_components = val & 0xff;
       fxn->params[i].bit_size = (val >> 8) & 0xff;

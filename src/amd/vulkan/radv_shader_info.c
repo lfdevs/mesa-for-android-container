@@ -375,14 +375,10 @@ gather_xfb_info(const nir_shader *nir, struct radv_shader_info *info)
    assert(xfb->output_count <= MAX_SO_OUTPUTS);
    so->num_outputs = xfb->output_count;
 
-   for (unsigned i = 0; i < xfb->output_count; i++) {
-      unsigned output_buffer = xfb->outputs[i].buffer;
-      unsigned stream = xfb->buffer_to_stream[xfb->outputs[i].buffer];
+   u_foreach_bit(output_buffer, xfb->buffers_written) {
+      unsigned stream = xfb->buffer_to_stream[output_buffer];
       so->enabled_stream_buffers_mask |= (1 << output_buffer) << (stream * 4);
-   }
-
-   for (unsigned i = 0; i < NIR_MAX_XFB_BUFFERS; i++) {
-      so->strides[i] = xfb->buffers[i].stride / 4;
+      so->strides[output_buffer] = xfb->buffers[output_buffer].stride / 4;
    }
 }
 
@@ -638,7 +634,7 @@ gather_shader_info_tcs(struct radv_device *device, const nir_shader *nir,
 
    info->tcs.tcs_outputs_read = nir->info.outputs_read;
    info->tcs.tcs_outputs_written = nir->info.outputs_written;
-   info->tcs.tcs_patch_outputs_read = nir->info.patch_inputs_read;
+   info->tcs.tcs_patch_outputs_read = nir->info.patch_outputs_read;
    info->tcs.tcs_patch_outputs_written = nir->info.patch_outputs_written;
    info->tcs.tcs_vertices_out = nir->info.tess.tcs_vertices_out;
    info->tcs.tes_inputs_read = ~0ULL;
@@ -1001,7 +997,8 @@ gather_shader_info_fs(const struct radv_device *device, const nir_shader *nir,
       info->ps.spi_shader_col_format = gfx_state->ps.epilog.spi_shader_col_format;
 
       /* Clear color attachments that aren't exported by the FS to match IO shader arguments. */
-      info->ps.spi_shader_col_format &= info->ps.colors_written;
+      if (!info->ps.mrt0_is_dual_src)
+         info->ps.spi_shader_col_format &= info->ps.colors_written;
 
       info->ps.cb_shader_mask = ac_get_cb_shader_mask(info->ps.spi_shader_col_format);
    }

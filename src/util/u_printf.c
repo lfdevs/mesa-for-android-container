@@ -335,10 +335,10 @@ u_printf_deserialize_info(void *mem_ctx,
       u_printf_info *info = &printf_info[i];
       info->num_args = blob_read_uint32(blob);
       info->string_size = blob_read_uint32(blob);
-      info->arg_sizes = ralloc_array(mem_ctx, unsigned, info->num_args);
+      info->arg_sizes = ralloc_array(printf_info, unsigned, info->num_args);
       blob_copy_bytes(blob, info->arg_sizes,
                       info->num_args * sizeof(info->arg_sizes[0]));
-      info->strings = ralloc_array(mem_ctx, char, info->string_size);
+      info->strings = ralloc_array(printf_info, char, info->string_size);
       blob_copy_bytes(blob, info->strings, info->string_size);
    }
 

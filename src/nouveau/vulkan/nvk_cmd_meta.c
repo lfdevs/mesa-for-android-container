@@ -77,6 +77,28 @@ nvk_meta_begin(struct nvk_cmd_buffer *cmd,
 {
    const struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
 
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
+
+   P_IMMD(p, NV9097, SET_RENDER_ENABLE_OVERRIDE, MODE_ALWAYS_RENDER);
+
+   P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {
+      .da_vertices_generated_enable = false,
+      .da_primitives_generated_enable = false,
+      .vs_invocations_enable = false,
+      .gs_invocations_enable = false,
+      .gs_primitives_generated_enable = false,
+      .streaming_primitives_succeeded_enable = false,
+      .streaming_primitives_needed_enable = false,
+      .clipper_invocations_enable = false,
+      .clipper_primitives_generated_enable = false,
+      .ps_invocations_enable = false,
+      .ti_invocations_enable = false,
+      .ts_invocations_enable = false,
+      .ts_primitives_generated_enable = false,
+      .total_streaming_primitives_needed_succeeded_enable = false,
+      .vtg_primitives_out_enable = false,
+   });
+
    save->dynamic = cmd->vk.dynamic_graphics_state;
    save->_dynamic_vi = cmd->state.gfx._dynamic_vi;
    save->_dynamic_sl = cmd->state.gfx._dynamic_sl;
@@ -96,25 +118,6 @@ nvk_meta_begin(struct nvk_cmd_buffer *cmd,
                                        save->set_dynamic_buffer_start);
    nvk_descriptor_state_get_root_array(desc, push, 0, NVK_MAX_PUSH_SIZE,
                                        save->push);
-
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
-   P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {
-      .da_vertices_generated_enable = false,
-      .da_primitives_generated_enable = false,
-      .vs_invocations_enable = false,
-      .gs_invocations_enable = false,
-      .gs_primitives_generated_enable = false,
-      .streaming_primitives_succeeded_enable = false,
-      .streaming_primitives_needed_enable = false,
-      .clipper_invocations_enable = false,
-      .clipper_primitives_generated_enable = false,
-      .ps_invocations_enable = false,
-      .ti_invocations_enable = false,
-      .ts_invocations_enable = false,
-      .ts_primitives_generated_enable = false,
-      .total_streaming_primitives_needed_succeeded_enable = false,
-      .vtg_primitives_out_enable = false,
-   });
 }
 
 static void
@@ -203,7 +206,8 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
    nvk_descriptor_state_set_root_array(cmd, desc, push, 0, sizeof(save->push),
                                        save->push);
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
+
    P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {
       .da_vertices_generated_enable = true,
       .da_primitives_generated_enable = true,
@@ -221,6 +225,8 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
       .total_streaming_primitives_needed_succeeded_enable = true,
       .vtg_primitives_out_enable = true,
    });
+
+   P_IMMD(p, NV9097, SET_RENDER_ENABLE_OVERRIDE, MODE_USE_RENDER_ENABLE);
 }
 
 VKAPI_ATTR void VKAPI_CALL

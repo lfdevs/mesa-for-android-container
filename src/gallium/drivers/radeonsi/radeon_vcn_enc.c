@@ -1013,6 +1013,9 @@ static void radeon_vcn_enc_av1_get_param(struct radeon_encoder *enc,
    enc_pic->enc_params.reconstructed_picture_index = pic->dpb_curr_pic;
 
    if (sscreen->info.vcn_ip_version >= VCN_5_0_0) {
+      bool allow_unidir =
+         pic->rc[0].rate_ctrl_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_DISABLE;
+
       for (uint32_t i = 0; i < RENCODE_AV1_REFS_PER_FRAME; i++)
          enc_pic->av1_enc_params.ref_frames[i] = pic->dpb_ref_frame_idx[i];
 
@@ -1024,7 +1027,7 @@ static void radeon_vcn_enc_av1_get_param(struct radeon_encoder *enc,
       if (pic->ref_list1[0] != PIPE_H2645_LIST_REF_INVALID_ENTRY) {
          enc_pic->av1.compound = true; /* BIDIR_COMP */
          enc_pic->av1_enc_params.lsm_reference_frame_index[1] = pic->ref_list1[0];
-      } else if (pic->ref_list0[1] != PIPE_H2645_LIST_REF_INVALID_ENTRY) {
+      } else if (allow_unidir && pic->ref_list0[1] != PIPE_H2645_LIST_REF_INVALID_ENTRY) {
          enc_pic->av1.compound = true; /* UNIDIR_COMP */
          enc_pic->av1_enc_params.lsm_reference_frame_index[1] = pic->ref_list0[1];
       }

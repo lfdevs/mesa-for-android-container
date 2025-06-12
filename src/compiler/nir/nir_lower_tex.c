@@ -1633,17 +1633,17 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
          progress = true;
       }
 
-      if ((1 << tex->texture_index) & options->lower_yu_yv_external) {
+      if (texture_mask & options->lower_yu_yv_external) {
          lower_yu_yv_external(b, tex, options, texture_index);
          progress = true;
       }
 
-      if ((1 << tex->texture_index) & options->lower_yv_yu_external) {
+      if (texture_mask & options->lower_yv_yu_external) {
          lower_yv_yu_external(b, tex, options, texture_index);
          progress = true;
       }
 
-      if ((1 << tex->texture_index) & options->lower_y41x_external) {
+      if (texture_mask & options->lower_y41x_external) {
          lower_y41x_external(b, tex, options, texture_index);
          progress = true;
       }

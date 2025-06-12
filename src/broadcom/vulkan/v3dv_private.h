@@ -591,6 +591,11 @@ struct v3dv_device {
    struct util_dynarray device_address_bo_list; /* Array of struct v3dv_bo * */
 };
 
+/* TFU has readhead of 64 bytes. So to avoid the unit reading unmaped memory
+ * it is needed to overallocate buffers that could be read by the TFU
+ */
+#define V3D_TFU_READAHEAD_SIZE 64
+
 struct v3dv_device_memory {
    struct vk_device_memory vk;
 

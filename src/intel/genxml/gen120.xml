@@ -2142,6 +2142,7 @@
     <field name="Opcode" start="22" end="28" type="uint" default="0x44" />
     <field name="Client" start="29" end="31" type="uint" default="2" />
     <field name="Destination Pitch" start="32" end="49" type="uint" />
+    <field name="Destination MOCS" start="53" end="59" type="uint" />
     <field name="Destination Tiling" start="62" end="63" type="int" prefix="XY_TILE">
       <value name="LINEAR" value="0" />
       <value name="Y" value="1" />

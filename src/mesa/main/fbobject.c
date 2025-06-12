@@ -1732,6 +1732,8 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
       return;
    }
 
+   _mesa_update_drawbuffer_masks(ctx, fb);
+
    /* Provisionally set status = COMPLETE ... */
    fb->_Status = GL_FRAMEBUFFER_COMPLETE_EXT;
 

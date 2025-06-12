@@ -920,7 +920,6 @@ get_features(const struct anv_physical_device *pdevice,
 #define MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS   64
 
 #define MAX_PER_STAGE_DESCRIPTOR_INPUT_ATTACHMENTS 64
-#define MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS       256
 
 static VkDeviceSize
 anx_get_physical_device_max_heap_size(const struct anv_physical_device *pdevice)
@@ -2441,14 +2440,6 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
                          "Vulkan not yet supported on %s", devinfo.name);
       goto fail_fd;
    }
-
-   /* Disable Wa_16013994831 on Gfx12.0 because we found other cases where we
-    * need to always disable preemption :
-    *    - https://gitlab.freedesktop.org/mesa/mesa/-/issues/5963
-    *    - https://gitlab.freedesktop.org/mesa/mesa/-/issues/5662
-    */
-   if (devinfo.verx10 == 120)
-      BITSET_CLEAR(devinfo.workarounds, INTEL_WA_16013994831);
 
    if (!devinfo.has_context_isolation) {
       result = vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,

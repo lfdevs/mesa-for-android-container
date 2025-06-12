@@ -631,7 +631,8 @@ radv_get_modifier_flags(struct radv_physical_device *pdev, VkFormat format, uint
        * do not support DCC image stores or when explicitly disabled.
        */
       if (!ac_modifier_supports_dcc_image_stores(pdev->info.gfx_level, modifier) ||
-          radv_is_atomic_format_supported(format) || instance->drirc.disable_dcc_stores)
+          radv_is_atomic_format_supported(format) ||
+          (instance->drirc.disable_dcc_stores && pdev->info.gfx_level < GFX12))
          features &= ~VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
 
       if (instance->debug_flags & (RADV_DEBUG_NO_DCC | RADV_DEBUG_NO_DISPLAY_DCC))
@@ -1254,9 +1255,8 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
       image_compression_props->imageCompressionFixedRateFlags = VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
 
       if (vk_format_is_depth_or_stencil(format)) {
-         image_compression_props->imageCompressionFlags = (instance->debug_flags & RADV_DEBUG_NO_HIZ)
-                                                             ? VK_IMAGE_COMPRESSION_DISABLED_EXT
-                                                             : VK_IMAGE_COMPRESSION_DEFAULT_EXT;
+         image_compression_props->imageCompressionFlags =
+            pdev->use_hiz ? VK_IMAGE_COMPRESSION_DEFAULT_EXT : VK_IMAGE_COMPRESSION_DISABLED_EXT;
       } else {
          image_compression_props->imageCompressionFlags =
             ((instance->debug_flags & RADV_DEBUG_NO_DCC) || pdev->info.gfx_level < GFX8)

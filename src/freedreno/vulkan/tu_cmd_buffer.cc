@@ -2976,7 +2976,8 @@ tu_bind_descriptor_sets(struct tu_cmd_buffer *cmd,
 
    unsigned dynamic_offset_offset = 0;
    for (unsigned i = 0; i < info->firstSet; i++) {
-      dynamic_offset_offset += layout->set[i].layout->dynamic_offset_size;
+      if (layout->set[i].layout)
+         dynamic_offset_offset += layout->set[i].layout->dynamic_offset_size;
    }
 
    for (unsigned i = 0; i < info->descriptorSetCount; ++i) {
@@ -3066,7 +3067,8 @@ tu_bind_descriptor_sets(struct tu_cmd_buffer *cmd,
          }
       }
 
-      dynamic_offset_offset += layout->set[idx].layout->dynamic_offset_size;
+      if (layout->set[idx].layout)
+         dynamic_offset_offset += layout->set[idx].layout->dynamic_offset_size;
    }
    assert(dyn_idx == info->dynamicOffsetCount);
 
@@ -7550,4 +7552,3 @@ tu_flush_buffer_write_cp(VkCommandBuffer commandBuffer)
    struct tu_cache_state *cache = &cmd->state.cache;
    tu_flush_for_access(cache, TU_ACCESS_CP_WRITE, (enum tu_cmd_access_mask)0);
 }
-

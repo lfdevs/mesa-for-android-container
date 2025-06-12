@@ -500,9 +500,11 @@ tu_image_update_layout(struct tu_device *device, struct tu_image *image,
     * but gralloc doesn't know this.  So if we are explicitly told that it is
     * UBWC, then override how the image was created.
     */
+   bool force_ubwc = false;
    if (modifier == DRM_FORMAT_MOD_QCOM_COMPRESSED) {
       assert(!image->force_linear_tile);
       image->ubwc_enabled = true;
+      force_ubwc = true;
    }
 
    /* R8G8 images have a special tiled layout which we don't implement yet in
@@ -548,6 +550,7 @@ tu_image_update_layout(struct tu_device *device, struct tu_image *image,
                        image->vk.array_layers,
                        image->vk.image_type == VK_IMAGE_TYPE_3D,
                        image->is_mutable,
+                       force_ubwc,
                        plane_layouts ? &plane_layout : NULL)) {
          assert(plane_layouts); /* can only fail with explicit layout */
          return vk_error(device, VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);

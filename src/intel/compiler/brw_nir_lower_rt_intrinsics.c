@@ -152,7 +152,8 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
             nir_instr_remove(instr);
             break;
 
-         case nir_intrinsic_load_uniform: {
+         case nir_intrinsic_load_uniform:
+         case nir_intrinsic_load_push_constant:
             /* We don't want to lower this in the launch trampoline. */
             if (stage == MESA_SHADER_COMPUTE)
                break;
@@ -162,7 +163,6 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
                         BRW_RT_PUSH_CONST_OFFSET);
 
             break;
-         }
 
          case nir_intrinsic_load_ray_launch_id:
             sysval = nir_channels(b, hotzone, 0xe);

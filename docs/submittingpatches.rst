@@ -136,7 +136,9 @@ following example::
 
     Backport-to: 21.0
 
-Multiple ``Backport-to:`` lines are allowed.
+This will backport the commit to the 21.0 branch, as well as any more recent
+stable branch. Multiple ``Backport-to:`` lines are allowed, but only the
+lowest number mentioned actually matters, so for clarity, please only use one.
 
 The last option is deprecated and mostly here for historical reasons
 dating back to when patch submission was done via emails: using a ``Cc:``

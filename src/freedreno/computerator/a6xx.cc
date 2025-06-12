@@ -180,14 +180,18 @@ cs_program_emit(struct fd_ringbuffer *ring, struct kernel *kernel)
    }
 
    uint32_t shared_size = MAX2(((int)v->shared_size - 1) / 1024, 1);
-   OUT_PKT4(ring, REG_A6XX_SP_CS_UNKNOWN_A9B1, 1);
-   OUT_RING(ring, A6XX_SP_CS_UNKNOWN_A9B1_SHARED_SIZE(shared_size) |
-                  A6XX_SP_CS_UNKNOWN_A9B1_UNK6);
+   enum a6xx_const_ram_mode mode =
+      v->constlen > 256 ? CONSTLEN_512 :
+      (v->constlen > 192 ? CONSTLEN_256 :
+      (v->constlen > 128 ? CONSTLEN_192 : CONSTLEN_128));
+   OUT_PKT4(ring, REG_A6XX_SP_CS_CTRL_REG1, 1);
+   OUT_RING(ring, A6XX_SP_CS_CTRL_REG1_SHARED_SIZE(shared_size) |
+                  A6XX_SP_CS_CTRL_REG1_CONSTANTRAMMODE(mode));
 
    if (CHIP == A6XX && a6xx_backend->info->a6xx.has_lpac) {
-      OUT_PKT4(ring, REG_A6XX_HLSQ_CS_UNKNOWN_B9D0, 1);
-      OUT_RING(ring, A6XX_HLSQ_CS_UNKNOWN_B9D0_SHARED_SIZE(1) |
-                        A6XX_HLSQ_CS_UNKNOWN_B9D0_UNK6);
+      OUT_PKT4(ring, REG_A6XX_HLSQ_CS_CTRL_REG1, 1);
+      OUT_RING(ring, A6XX_HLSQ_CS_CTRL_REG1_SHARED_SIZE(1) |
+                     A6XX_HLSQ_CS_CTRL_REG1_CONSTANTRAMMODE(mode));
    }
 
    uint32_t local_invocation_id, work_group_id;

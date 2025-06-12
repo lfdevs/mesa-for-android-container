@@ -1016,7 +1016,7 @@ create_copy_table(nir_shader *nir, struct lower_desc_ctx *ctx)
    }
    desc_info->dummy_sampler_handle = pan_res_handle(0, dummy_sampler_idx);
 
-   copy_count = desc_info->dyn_bufs.count + desc_info->dyn_bufs.count;
+   copy_count = desc_info->dyn_bufs.count;
 #endif
 
    if (copy_count == 0)
@@ -1043,6 +1043,7 @@ create_copy_table(nir_shader *nir, struct lower_desc_ctx *ctx)
    desc_info->dyn_bufs_start = dummy_sampler_idx + 1;
 
    desc_info->dyn_bufs.map = rzalloc_array(ctx->ht, uint32_t, copy_count);
+   desc_info->dyn_bufs.count = 0;
    assert(desc_info->dyn_bufs.map);
 #endif
 

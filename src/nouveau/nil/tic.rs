@@ -274,8 +274,7 @@ fn nv9097_fill_tic(
 
     // There's no base layer field in the texture header
     let layer_address = base_address
-        + u64::from(view.base_array_layer)
-        + u64::from(image.array_stride_B);
+        + u64::from(view.base_array_layer) * u64::from(image.array_stride_B);
 
     th.set_field(cl9097::TEXHEADV2_OFFSET_LOWER, layer_address as u32);
     th.set_field(cl9097::TEXHEADV2_OFFSET_UPPER, (layer_address >> 32) as u32);

@@ -1101,6 +1101,11 @@ spec@nv_copy_image@nv_copy_image-formats@Source: GL_ALPHA16/Destination: GL_ALPH
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
 
+# Failing after bugfix https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/35014
+# when we stopped skipping the blend code when an inactive integer buffer was attached
+dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.9,Fail
+dEQP-GLES3.functional.draw_buffers_indexed.random.max_required_draw_buffers.2,Fail
+
 # glcts update
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_dst_x,Fail

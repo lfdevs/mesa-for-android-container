@@ -388,9 +388,11 @@ lower_cube_coords(nir_builder *b, nir_def *coord, bool is_array)
 static void
 rewrite_cube_var_type(nir_builder *b, nir_tex_instr *tex)
 {
-   nir_variable *sampler = nir_deref_instr_get_variable(nir_instr_as_deref(tex->src[nir_tex_instr_src_index(tex, nir_tex_src_texture_deref)].src.ssa->parent_instr));
+   nir_deref_instr *texture_deref = nir_instr_as_deref(tex->src[nir_tex_instr_src_index(tex, nir_tex_src_texture_deref)].src.ssa->parent_instr);
+   nir_variable *sampler = nir_deref_instr_get_variable(texture_deref);
    assert(sampler);
    sampler->type = make_2darray_from_cubemap_with_array(sampler->type);
+   texture_deref->type = sampler->type;
 }
 
 /* txb(s, coord, bias) = txl(s, coord, lod(s, coord).y + bias) */

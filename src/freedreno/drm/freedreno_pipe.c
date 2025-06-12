@@ -45,6 +45,13 @@ fd_pipe_new2(struct fd_device *dev, enum fd_pipe_id id, uint32_t prio)
    fd_pipe_get_param(pipe, FD_CHIP_ID, &val);
    pipe->dev_id.chip_id = val;
 
+   if (!fd_dev_is_supported(&pipe->dev_id)) {
+      ERROR_MSG("unsupported GPU id 0x%" PRIx32 " / chip id 0x%" PRIx64,
+                pipe->dev_id.gpu_id,
+                pipe->dev_id.chip_id);
+      return NULL;
+   }
+
    pipe->is_64bit = fd_dev_64b(&pipe->dev_id);
 
    /* Use the _NOSYNC flags because we don't want the control_mem bo to hold

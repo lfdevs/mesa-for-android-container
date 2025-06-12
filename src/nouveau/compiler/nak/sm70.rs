@@ -174,7 +174,7 @@ impl SM70Encoder<'_> {
     }
 
     fn set_reg_src(&mut self, range: Range<usize>, src: Src) {
-        assert!(src.src_mod.is_none());
+        assert!(src.is_unmodified());
         match src.src_ref {
             SrcRef::Zero => self.set_reg(range, RegRef::zero(RegFile::GPR, 1)),
             SrcRef::Reg(reg) => self.set_reg(range, reg),
@@ -282,7 +282,7 @@ impl SM70Encoder<'_> {
     }
 
     fn set_bar_src(&mut self, range: Range<usize>, src: Src) {
-        assert!(src.src_mod.is_none());
+        assert!(src.is_unmodified());
         self.set_bar_reg(range, *src.src_ref.as_reg().unwrap());
     }
 
@@ -575,7 +575,7 @@ impl SM70Encoder<'_> {
         let bit74_75_are_mod = !is_fp16_alu
             || matches!(src1, ALUSrc::None)
             || matches!(src2, ALUSrc::None);
-        debug_assert!(bit74_75_are_mod || !src0.has_src_mod());
+        debug_assert!(bit74_75_are_mod || !src2.has_src_mod());
 
         self.encode_alu_src0(&src0, RegFile::GPR, is_fp16_alu);
 
@@ -1200,15 +1200,17 @@ impl SM70Op for OpHFma2 {
         b.copy_alu_src_if_not_reg(src1, gpr, SrcType::F16v2);
         b.copy_alu_src_if_both_not_reg(src1, src2, gpr, SrcType::F16v2);
 
-        // HFMA2 doesn't have fabs or fneg on SRC2.
-        if !src2.src_mod.is_none() {
-            b.copy_alu_src_and_lower_fmod(src2, SrcType::F16v2);
+        if !src1.is_unmodified() {
+            b.copy_alu_src_and_lower_fmod(src1, gpr, SrcType::F16v2);
+        }
+        if !src2.is_unmodified() {
+            b.copy_alu_src_and_lower_fmod(src2, gpr, SrcType::F16v2);
         }
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
-        // HFMA2 doesn't have fneg and fabs on SRC2.
-        assert!(self.srcs[2].src_mod.is_none());
+        assert!(self.srcs[1].is_unmodified());
+        assert!(self.srcs[2].is_unmodified());
 
         e.encode_fp16_alu(
             0x031,
@@ -1446,7 +1448,7 @@ impl SM70Op for OpIAdd3 {
         let [src0, src1, src2] = &mut self.srcs;
         swap_srcs_if_not_reg(src0, src1, gpr);
         swap_srcs_if_not_reg(src2, src1, gpr);
-        if !src0.src_mod.is_none() && !src1.src_mod.is_none() {
+        if !src0.is_unmodified() && !src1.is_unmodified() {
             assert!(self.overflow[0].is_none());
             assert!(self.overflow[1].is_none());
             let val = b.alloc_ssa(gpr, 1);
@@ -1467,9 +1469,7 @@ impl SM70Op for OpIAdd3 {
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
         // Hardware requires at least one of these be unmodified
-        assert!(
-            self.srcs[0].src_mod.is_none() || self.srcs[1].src_mod.is_none()
-        );
+        assert!(self.srcs[0].is_unmodified() || self.srcs[1].is_unmodified());
 
         if self.is_uniform() {
             e.encode_ualu(
@@ -1503,7 +1503,7 @@ impl SM70Op for OpIAdd3X {
         let [src0, src1, src2] = &mut self.srcs;
         swap_srcs_if_not_reg(src0, src1, gpr);
         swap_srcs_if_not_reg(src2, src1, gpr);
-        if !src0.src_mod.is_none() && !src1.src_mod.is_none() {
+        if !src0.is_unmodified() && !src1.is_unmodified() {
             let val = b.alloc_ssa(gpr, 1);
             b.push_op(OpIAdd3X {
                 srcs: [Src::new_zero(), *src0, Src::new_zero()],
@@ -1523,9 +1523,7 @@ impl SM70Op for OpIAdd3X {
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
         // Hardware requires at least one of these be unmodified
-        assert!(
-            self.srcs[0].src_mod.is_none() || self.srcs[1].src_mod.is_none()
-        );
+        assert!(self.srcs[0].is_unmodified() || self.srcs[1].is_unmodified());
 
         if self.is_uniform() {
             e.encode_ualu(
@@ -2131,8 +2129,8 @@ impl SM70Op for OpShfl {
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
-        assert!(self.lane.src_mod.is_none());
-        assert!(self.c.src_mod.is_none());
+        assert!(self.lane.is_unmodified());
+        assert!(self.c.is_unmodified());
 
         match &self.lane.src_ref {
             SrcRef::Zero | SrcRef::Reg(_) => match &self.c.src_ref {

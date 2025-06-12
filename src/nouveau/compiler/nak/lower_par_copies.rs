@@ -109,7 +109,7 @@ fn lower_par_copy(pc: OpParCopy, sm: &dyn ShaderModel) -> MappedInstrs {
     }
 
     for (dst_idx, (_, src)) in pc.dsts_srcs.iter().enumerate() {
-        assert!(src.src_mod.is_none());
+        assert!(src.is_unmodified());
         let src = src.src_ref;
 
         let src_idx = if let SrcRef::Reg(reg) = src {

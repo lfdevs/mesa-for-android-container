@@ -5206,7 +5206,7 @@ zink_get_dummy_pipe_surface(struct zink_context *ctx, int samples_index)
    if (ctx->dummy_surface[samples_index]) {
       /* delete old surface if ETOOSMALL */
       struct zink_resource *res = zink_resource(ctx->dummy_surface[samples_index]->texture);
-      if (res->base.b.width0 > size || res->base.b.height0 > size) {
+      if (res->base.b.width0 < size || res->base.b.height0 < size) {
          pipe_surface_release(&ctx->base, &ctx->dummy_surface[samples_index]);
          needs_null_init = !samples_index && ctx->di.null_fbfetch_init;
          if (!samples_index)
@@ -5660,7 +5660,7 @@ add_implicit_feedback_loop(struct zink_context *ctx, struct zink_resource *res)
          psurf = ctx->fb_state.zsbuf;
       else
          psurf = ctx->fb_state.cbufs[idx];
-      if (psurf->texture == &res->base.b)
+      if (psurf && psurf->texture == &res->base.b)
          psurfs[surf_idx++] = psurf;
    }
 

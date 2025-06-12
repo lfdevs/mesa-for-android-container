@@ -423,7 +423,7 @@ handle_call(ir_call *ir, const struct set *lowerable_rvalues)
       ir_variable *resource = param->variable_referenced();
 
       assert(ir->callee->return_precision == GLSL_PRECISION_HIGH);
-      assert(glsl_type_is_image(glsl_without_array(resource->type)));
+      assert(glsl_type_is_image(param->type));
 
       /* GLSL ES 3.20 requires that images have a precision modifier, but if
        * you set one, it doesn't do anything, because all intrinsics are
@@ -466,7 +466,7 @@ handle_call(ir_call *ir, const struct set *lowerable_rvalues)
        * We should lower the type of the return value if the sampler type
        * uses lower precision. The function parameters don't matter.
        */
-      if (var && glsl_type_is_sampler(glsl_without_array(var->type))) {
+      if (var && glsl_type_is_sampler(param->type)) {
          /* textureGatherOffsets always takes a highp array of constants. As
           * per the discussion https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/16547#note_1393704
           * trying to lower the precision results in segfault later on

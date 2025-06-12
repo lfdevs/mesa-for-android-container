@@ -1876,6 +1876,12 @@ texture_formats_agree(GLenum internalFormat,
    if (_mesa_is_ycbcr_format(internalFormat) != _mesa_is_ycbcr_format(format))
       return false;
 
+   if ((_mesa_is_depth_format(internalFormat) ||
+        _mesa_is_stencil_format(internalFormat)) &&
+       _mesa_is_color_format(format)) {
+      return false;
+   }
+
    return true;
 }
 
@@ -5255,9 +5261,23 @@ check_clear_tex_image(struct gl_context *ctx,
       return false;
    }
 
-   if (_mesa_is_compressed_format(ctx, internalFormat)) {
+   if (_mesa_is_compressed_format(ctx, internalFormat) ||
+       _mesa_is_generic_compressed_format(ctx, internalFormat)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "%s(compressed texture)", function);
+      return false;
+   }
+
+   /* This is a special case where we might throw GL_INVALID_ENUM
+    * below but should do GL_INVALID_OPERATION with glClearTexImage.
+    */
+   if (_mesa_is_color_format(internalFormat) &&
+       _mesa_is_depthstencil_format(format)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(incompatible internalFormat = %s, format = %s)",
+                  function,
+                  _mesa_enum_to_string(internalFormat),
+                  _mesa_enum_to_string(format));
       return false;
    }
 
@@ -5408,12 +5428,19 @@ _mesa_ClearTexSubImage(GLuint texture, GLint level,
       maxDepth = numImages;
    }
 
+   /* Nothing to clear, skip. */
+   if (width == 0 || height == 0 || depth == 0)
+      goto out;
+
+   if (width < 0 || height < 0 || depth < 0) {
+      _mesa_error(ctx, GL_INVALID_VALUE,
+                  "glClearSubTexImage(invalid dimensions)");
+      goto out;
+   }
+
    if (xoffset < -(GLint) texImages[0]->Border ||
        yoffset < -(GLint) texImages[0]->Border ||
        zoffset < minDepth ||
-       width < 0 ||
-       height < 0 ||
-       depth < 0 ||
        xoffset + width > texImages[0]->Width ||
        yoffset + height > texImages[0]->Height ||
        zoffset + depth > maxDepth) {

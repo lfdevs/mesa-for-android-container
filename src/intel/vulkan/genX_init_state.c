@@ -499,11 +499,6 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
    anv_batch_write_reg(batch, GENX(CS_CHICKEN1), cc1) {
       cc1.ReplayMode = MidcmdbufferPreemption;
       cc1.ReplayModeMask = true;
-
-#if GFX_VERx10 == 120
-      cc1.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommand = true;
-      cc1.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommandMask = true;
-#endif
    }
 
 #if INTEL_NEEDS_WA_1806527549

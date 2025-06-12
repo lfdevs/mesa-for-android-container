@@ -1493,5 +1493,10 @@ ir3_ra_shared(struct ir3_shader_variant *v, struct ir3_liveness **live_ptr)
    ralloc_free(live);
    *live_ptr = ir3_calc_liveness(live_mem_ctx, v->ir);
    (*live_ptr)->interval_offset = interval_offset;
+
+   /* We've created instructions that will be handled by regular RA (e.g.,
+    * shared spills) so make sure they have their interval offsets assigned.
+    */
+   ir3_update_merge_sets_index(*live_ptr, v->ir);
 }
 

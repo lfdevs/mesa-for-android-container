@@ -2323,7 +2323,7 @@ tu_init_cmdbuf_start_a725_quirk(struct tu_device *device)
             .threadmode = MULTI,
             .threadsize = THREAD128,
             .mergedregs = true));
-   tu_cs_emit_regs(&sub_cs, A6XX_SP_CS_UNKNOWN_A9B1(.shared_size = 1));
+   tu_cs_emit_regs(&sub_cs, A6XX_SP_CS_CTRL_REG1(.shared_size = 1));
    tu_cs_emit_regs(&sub_cs, HLSQ_CS_KERNEL_GROUP_X(A7XX, 1),
                      HLSQ_CS_KERNEL_GROUP_Y(A7XX, 1),
                      HLSQ_CS_KERNEL_GROUP_Z(A7XX, 1));
@@ -3319,7 +3319,8 @@ tu_setup_dynamic_framebuffer(struct tu_cmd_buffer *cmd_buffer,
       pRenderingInfo->renderArea.extent.width;
    framebuffer->height = pRenderingInfo->renderArea.offset.y +
       pRenderingInfo->renderArea.extent.height;
-   framebuffer->layers = pRenderingInfo->layerCount;
+   framebuffer->layers =
+      pRenderingInfo->viewMask != 0 ? 1 : pRenderingInfo->layerCount;
 
    tu_framebuffer_tiling_config(framebuffer, cmd_buffer->device, pass);
 }

@@ -1229,7 +1229,7 @@ bi_emit_load_ubo(bi_builder *b, nir_intrinsic_instr *instr)
 static void
 bi_emit_load_push_constant(bi_builder *b, nir_intrinsic_instr *instr)
 {
-   assert(b->shader->inputs->no_ubo_to_push && "can't mix push constant forms");
+   assert(!b->shader->inputs->pushable_ubos && "can't mix push constant forms");
 
    nir_src *offset = &instr->src[0];
    assert(!nir_intrinsic_base(instr) && "base must be zero");
@@ -5571,7 +5571,7 @@ bi_compile_variant_nir(nir_shader *nir,
    bi_validate(ctx, "Early lowering");
 
    /* Runs before copy prop */
-   if (optimize && !ctx->inputs->no_ubo_to_push) {
+   if (optimize && ctx->inputs->pushable_ubos) {
       bi_opt_push_ubo(ctx);
    }
 
@@ -5596,7 +5596,7 @@ bi_compile_variant_nir(nir_shader *nir,
       bi_opt_dce(ctx, false);
       bi_opt_cse(ctx);
       bi_opt_dce(ctx, false);
-      if (!ctx->inputs->no_ubo_to_push)
+      if (ctx->inputs->pushable_ubos)
          bi_opt_reorder_push(ctx);
       bi_validate(ctx, "Optimization passes");
    }

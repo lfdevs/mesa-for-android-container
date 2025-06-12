@@ -88,13 +88,16 @@ struct spill_ctx {
    unsigned vgpr_spill_slots;
    Temp scratch_rsrc;
 
+   unsigned resume_idx;
+
    spill_ctx(const RegisterDemand target_pressure_, Program* program_)
        : target_pressure(target_pressure_), program(program_), memory(),
          renames(program->blocks.size(), aco::map<Temp, Temp>(memory)),
          spills_entry(program->blocks.size(), aco::unordered_map<Temp, uint32_t>(memory)),
          spills_exit(program->blocks.size(), aco::unordered_map<Temp, uint32_t>(memory)),
          processed(program->blocks.size(), false), ssa_infos(program->peekAllocationId()),
-         remat(memory), wave_size(program->wave_size), sgpr_spill_slots(0), vgpr_spill_slots(0)
+         remat(memory), wave_size(program->wave_size), sgpr_spill_slots(0), vgpr_spill_slots(0),
+         resume_idx(0)
    {}
 
    void add_affinity(uint32_t first, uint32_t second)
@@ -1088,7 +1091,10 @@ spill_block(spill_ctx& ctx, unsigned block_idx)
 Temp
 load_scratch_resource(spill_ctx& ctx, Builder& bld, bool apply_scratch_offset)
 {
-   Temp private_segment_buffer = ctx.program->private_segment_buffer;
+   Temp private_segment_buffer;
+   if (!ctx.program->private_segment_buffers.empty())
+      private_segment_buffer = ctx.program->private_segment_buffers[ctx.resume_idx];
+
    if (!private_segment_buffer.bytes()) {
       Temp addr_lo =
          bld.sop1(aco_opcode::p_load_symbol, bld.def(s1), Operand::c32(aco_symbol_scratch_addr_lo));
@@ -1109,7 +1115,7 @@ load_scratch_resource(spill_ctx& ctx, Builder& bld, bool apply_scratch_offset)
 
       Temp carry = bld.tmp(s1);
       addr_lo = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.scc(Definition(carry)), addr_lo,
-                         ctx.program->scratch_offset);
+                         ctx.program->scratch_offsets[ctx.resume_idx]);
       addr_hi = bld.sop2(aco_opcode::s_addc_u32, bld.def(s1), bld.def(s1, scc), addr_hi,
                          Operand::c32(0), bld.scc(carry));
 
@@ -1218,7 +1224,9 @@ spill_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& inst
    uint32_t spill_id = spill->operands[1].constantValue();
    uint32_t spill_slot = slots[spill_id];
 
-   Temp scratch_offset = ctx.program->scratch_offset;
+   Temp scratch_offset;
+   if (!ctx.program->scratch_offsets.empty())
+      scratch_offset = ctx.program->scratch_offsets[ctx.resume_idx];
    unsigned offset;
    setup_vgpr_spill_reload(ctx, block, instructions, spill_slot, scratch_offset, &offset);
 
@@ -1264,7 +1272,9 @@ reload_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& ins
    uint32_t spill_id = reload->operands[0].constantValue();
    uint32_t spill_slot = slots[spill_id];
 
-   Temp scratch_offset = ctx.program->scratch_offset;
+   Temp scratch_offset;
+   if (!ctx.program->scratch_offsets.empty())
+      scratch_offset = ctx.program->scratch_offsets[ctx.resume_idx];
    unsigned offset;
    setup_vgpr_spill_reload(ctx, block, instructions, spill_slot, scratch_offset, &offset);
 
@@ -1488,6 +1498,8 @@ assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr)
           * we cannot reuse the current scratch_rsrc temp because its definition is unreachable */
          if (block.linear_preds.empty())
             ctx.scratch_rsrc = Temp();
+         if (block.kind & block_kind_resume)
+            ++ctx.resume_idx;
       }
 
       std::vector<aco_ptr<Instruction>>::iterator it;

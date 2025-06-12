@@ -832,8 +832,8 @@ emit_mimg_instruction_gfx12(asm_context& ctx, std::vector<uint32_t>& out, const 
    uint8_t vaddr[5] = {0, 0, 0, 0, 0};
    for (unsigned i = 3; i < instr->operands.size(); i++)
       vaddr[i - 3] = reg(ctx, instr->operands[i], 8);
-   unsigned num_vaddr = instr->operands.size() - 3;
-   for (unsigned i = 0; i < MIN2(instr->operands.back().size() - 1, 5 - num_vaddr); i++)
+   int num_vaddr = instr->operands.size() - 3;
+   for (int i = 0; i < (int)MIN2(instr->operands.back().size() - 1, ARRAY_SIZE(vaddr) - num_vaddr); i++)
       vaddr[num_vaddr + i] = reg(ctx, instr->operands.back(), 8) + i + 1;
 
    encoding = 0;
