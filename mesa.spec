@@ -45,6 +45,7 @@
 %global with_etnaviv   1
 %global with_tegra     1
 %global with_asahi     1
+%global with_d3d12     1
 %endif
 %global with_freedreno 1
 %global with_panfrost  1
@@ -180,6 +181,9 @@ BuildRequires:  vulkan-headers
 BuildRequires:  glslang
 %if 0%{?with_vulkan_hw}
 BuildRequires:  pkgconfig(vulkan)
+%endif
+%if 0%{?with_d3d12}
+BuildRequires:  pkgconfig(DirectX-Headers) >= 1.614.1
 %endif
 
 %description
@@ -386,7 +390,7 @@ export MESON_PACKAGE_CACHE_DIR="%{cargo_registry}/"
   -Dplatforms=x11,wayland \
   -Dosmesa=true \
 %if 0%{?with_hardware}
-  -Dgallium-drivers=llvmpipe,virgl,nouveau%{?with_r300:,r300}%{?with_crocus:,crocus}%{?with_i915:,i915}%{?with_iris:,iris}%{?with_vmware:,svga}%{?with_radeonsi:,radeonsi}%{?with_r600:,r600}%{?with_asahi:,asahi}%{?with_freedreno:,freedreno}%{?with_etnaviv:,etnaviv}%{?with_tegra:,tegra}%{?with_vc4:,vc4}%{?with_v3d:,v3d}%{?with_lima:,lima}%{?with_panfrost:,panfrost}%{?with_vulkan_hw:,zink} \
+  -Dgallium-drivers=llvmpipe,virgl,nouveau%{?with_r300:,r300}%{?with_crocus:,crocus}%{?with_i915:,i915}%{?with_iris:,iris}%{?with_vmware:,svga}%{?with_radeonsi:,radeonsi}%{?with_r600:,r600}%{?with_asahi:,asahi}%{?with_freedreno:,freedreno}%{?with_etnaviv:,etnaviv}%{?with_tegra:,tegra}%{?with_vc4:,vc4}%{?with_v3d:,v3d}%{?with_lima:,lima}%{?with_panfrost:,panfrost}%{?with_vulkan_hw:,zink}%{?with_d3d12:,d3d12} \
 %else
   -Dgallium-drivers=llvmpipe,virgl \
 %endif
@@ -562,6 +566,9 @@ popd
 %{_libdir}/dri/apple_dri.so
 %{_libdir}/dri/asahi_dri.so
 %endif
+%if 0%{?with_d3d12}
+%{_libdir}/dri/d3d12_dri.so
+%endif
 %{_libdir}/dri/ingenic-drm_dri.so
 %{_libdir}/dri/imx-drm_dri.so
 %{_libdir}/dri/imx-lcdif_dri.so
@@ -642,6 +649,9 @@ popd
 %if 0%{?with_radeonsi}
 %{_libdir}/dri/radeonsi_drv_video.so
 %endif
+%if 0%{?with_d3d12}
+%{_libdir}/dri/d3d12_drv_video.so
+%endif
 %{_libdir}/dri/virtio_gpu_drv_video.so
 %endif
 
@@ -654,6 +664,9 @@ popd
 %endif
 %if 0%{?with_radeonsi}
 %{_libdir}/vdpau/libvdpau_radeonsi.so.1*
+%endif
+%if 0%{?with_d3d12}
+%{_libdir}/vdpau/libvdpau_d3d12.so.1*
 %endif
 %{_libdir}/vdpau/libvdpau_virtio_gpu.so.1*
 %endif
