@@ -3,3 +3,4 @@ src_glx_dri_common.h.diff
 disable_ppc64el_assembly.diff
 etnaviv-add-support-for-texelfetch.patch
 Revert-hasvk-elk-stop-turning-load_push_constants-in.patch
+kopper-Revert-kopper-Explicitly-choose-zink.patch
