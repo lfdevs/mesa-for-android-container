@@ -1,8 +1,8 @@
-mesa (25.0.7-2) UNRELEASED; urgency=medium
+mesa (25.0.7-2) unstable; urgency=medium
 
   * patches: Revert a commit to fix mobian vm's. (Closes: #1107895)
 
- -- Timo Aaltonen <tjaalton@debian.org>  Tue, 17 Jun 2025 12:05:31 +0300
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 17 Jun 2025 12:07:43 +0300
 
 mesa (25.0.7-1) unstable; urgency=medium
 
