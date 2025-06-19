@@ -44,6 +44,7 @@
 %if !0%{?rhel}
 %global with_lima      1
 %global with_vc4       1
+%global with_v3d       1
 %global with_etnaviv   1
 %global with_tegra     1
 %global with_asahi     1
@@ -51,7 +52,6 @@
 %endif
 %global with_freedreno 1
 %global with_panfrost  1
-%global with_v3d       1
 %global with_xa        1
 %if 0%{?with_asahi}
 %global asahi_platform_vulkan %{?with_vulkan_hw:,asahi}%{!?with_vulkan_hw:%{nil}}
