@@ -245,6 +245,7 @@ Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{rel
 Recommends:     %{name}-va-drivers%{?_isa}
 %endif
 Obsoletes:      %{name}-libglapi < 25.0.0~rc2-1
+Provides:       %{name}-libglapi >= 25.0.0~rc2-1
 
 %description dri-drivers
 %{summary}.
