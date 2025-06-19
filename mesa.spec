@@ -40,17 +40,17 @@
 %endif
 
 %ifarch aarch64 x86_64 %{ix86}
-%global with_kmsro     1
 %if !0%{?rhel}
-%global with_lima      1
-%global with_vc4       1
-%global with_v3d       1
-%global with_etnaviv   1
-%global with_tegra     1
 %global with_asahi     1
 %global with_d3d12     1
+%global with_etnaviv   1
+%global with_lima      1
+%global with_tegra     1
+%global with_vc4       1
+%global with_v3d       1
 %endif
 %global with_freedreno 1
+%global with_kmsro     1
 %global with_panfrost  1
 %global with_xa        1
 %if 0%{?with_asahi}
