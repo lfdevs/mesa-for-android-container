@@ -131,6 +131,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_NOP
 %token <tok> T_EOLM
 %token <tok> T_EOGM
+%token <tok> T_EOSTSC
 
 /* category 0: */
 %token <tok> T_OP_NOP
@@ -607,6 +608,7 @@ iflag:             T_SY   { iflags.flags |= IR3_INSTR_SY; }
 |                  T_NOP  { iflags.nop = $1; }
 |                  T_EOLM { iflags.flags |= IR3_INSTR_EOLM; }
 |                  T_EOGM { iflags.flags |= IR3_INSTR_EOGM; }
+|                  T_EOSTSC { iflags.flags |= IR3_INSTR_EOSTSC; }
 
 iflags:
 |                  iflag iflags

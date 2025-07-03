@@ -52,13 +52,14 @@ SOFTWARE.
 		<map name="EQ">!!(src->flags &amp; IR3_INSTR_EQ)</map>
 		<map name="EOLM">!!(src->flags &amp; IR3_INSTR_EOLM)</map>
 		<map name="EOGM">!!(src->flags &amp; IR3_INSTR_EOGM)</map>
+		<map name="EOSTSC">!!(src->flags &amp; IR3_INSTR_EOSTSC)</map>
 	</encode>
 </bitset>
 
 
 <bitset name="#instruction-cat0-0src" extends="#instruction-cat0">
 	<display>
-		{SY}{SS}{EQ}{JP}{EOLM}{EOGM}{REPEAT}{NAME}
+		{SY}{SS}{EQ}{JP}{EOLM}{EOGM}{EOSTSC}{REPEAT}{NAME}
 	</display>
 	<field name="EOLM" pos="32" type="bool" display="(eolm)">
 		<doc>
@@ -72,7 +73,8 @@ SOFTWARE.
 			of control flow including preambles. Doesn't seem to affect correctness.
 		</doc>
 	</field>
-	<pattern low="34" high="36">000</pattern>
+	<field name="EOSTSC" pos="34" type="bool" display="(eostsc)"/>
+	<pattern low="35" high="36">00</pattern>
 	<pattern low="37" high="39">000</pattern>  <!-- BRTYPE -->
 	<pattern low="45" high="47">000</pattern>  <!-- src1 -->
 	<pattern low="52" high="54">000</pattern>  <!-- src0 -->

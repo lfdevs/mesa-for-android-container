@@ -418,6 +418,8 @@ typedef enum ir3_instruction_flags {
 
    /* Clamp computed LOD using the given minimum. Only for cat5. */
    IR3_INSTR_CLP = BIT(25),
+
+   IR3_INSTR_EOSTSC = BIT(26),
 } ir3_instruction_flags;
 
 struct ir3_instruction {

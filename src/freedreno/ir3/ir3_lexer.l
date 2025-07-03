@@ -173,6 +173,7 @@ static int parse_reg(const char *str)
 "(sat)"                           return TOKEN(T_SAT);
 "(eolm)"                          return TOKEN(T_EOLM);
 "(eogm)"                          return TOKEN(T_EOGM);
+"(eostsc)"                        return TOKEN(T_EOSTSC);
 "(rpt"[0-7]")"                    ir3_yylval.num = strtol(yytext+4, NULL, 10); return T_RPT;
 "(nop"[0-7]")"                    ir3_yylval.num = strtol(yytext+4, NULL, 10); return T_NOP;
 "("[x]?[y]?[z]?[w]?")"            ir3_yylval.num = parse_wrmask(yytext); return T_WRMASK;

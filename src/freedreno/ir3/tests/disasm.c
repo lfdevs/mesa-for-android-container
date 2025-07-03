@@ -71,6 +71,7 @@ static const struct test {
 
    INSTR_7XX(00000003_00000000, "(eolm)(eogm)nop"),
    INSTR_7XX(00000001_00000000, "(eolm)nop"),
+   INSTR_8XX(00001004_00000000, "(ss)(eostsc)nop"),
 
    /* cat1 */
    INSTR_6XX(20244000_00000020, "mov.f32f32 r0.x, c8.x"),
