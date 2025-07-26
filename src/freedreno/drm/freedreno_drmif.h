@@ -50,6 +50,13 @@ enum fd_param_id {
    FD_UCHE_TRAP_BASE,
 };
 
+enum fd_reset_status {
+   FD_RESET_NO_ERROR,
+   FD_RESET_GUILTY,
+   FD_RESET_INNOCENT,
+   FD_RESET_UNKNOWN,
+};
+
 /**
  * Helper for fence/seqno comparisions which deals properly with rollover.
  * Returns true if fence 'a' is before fence 'b'
@@ -180,6 +187,12 @@ enum fd_version {
 };
 enum fd_version fd_device_version(struct fd_device *dev);
 
+enum fd_features {
+   FD_FEATURE_DIRECT_RESET = 1,
+   FD_FEATURE_IMPORT_DMABUF = 2,
+};
+
+uint32_t fd_get_features(struct fd_device *dev);
 bool fd_has_syncobj(struct fd_device *dev);
 
 /* pipe functions:
@@ -201,6 +214,7 @@ int fd_pipe_wait(struct fd_pipe *pipe, const struct fd_fence *fence);
 /* timeout in nanosec */
 int fd_pipe_wait_timeout(struct fd_pipe *pipe, const struct fd_fence *fence,
                          uint64_t timeout);
+int fd_pipe_get_reset_status(struct fd_pipe *pipe, enum fd_reset_status *status);
 
 /* buffer-object functions:
  */

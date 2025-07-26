@@ -26,11 +26,9 @@
 #include <unistd.h>
 #include <string.h>
 
-#include <X11/xshmfence.h>
 #include <xcb/xcb.h>
 #include <xcb/dri3.h>
 #include <xcb/present.h>
-#include <xcb/xfixes.h>
 
 #include <X11/Xlib-xcb.h>
 
@@ -247,19 +245,16 @@ loader_dri3_blit_image(struct loader_dri3_drawable *draw,
 static inline void
 dri3_fence_reset(xcb_connection_t *c, struct loader_dri3_buffer *buffer)
 {
-   xshmfence_reset(buffer->shm_fence);
 }
 
 static inline void
 dri3_fence_set(struct loader_dri3_buffer *buffer)
 {
-   xshmfence_trigger(buffer->shm_fence);
 }
 
 static inline void
 dri3_fence_trigger(xcb_connection_t *c, struct loader_dri3_buffer *buffer)
 {
-   xcb_sync_trigger_fence(c, buffer->sync_fence);
 }
 
 static inline void
@@ -267,7 +262,6 @@ dri3_fence_await(xcb_connection_t *c, struct loader_dri3_drawable *draw,
                  struct loader_dri3_buffer *buffer)
 {
    xcb_flush(c);
-   xshmfence_await(buffer->shm_fence);
    if (draw) {
       mtx_lock(&draw->mtx);
       dri3_flush_present_events(draw);
@@ -343,8 +337,6 @@ dri3_free_render_buffer(struct loader_dri3_drawable *draw,
 
    if (buffer->own_pixmap)
       xcb_free_pixmap(draw->conn, buffer->pixmap);
-   xcb_sync_destroy_fence(draw->conn, buffer->sync_fence);
-   xshmfence_unmap_shm(buffer->shm_fence);
    dri2_destroy_image(buffer->image);
    if (buffer->linear_buffer)
       dri2_destroy_image(buffer->linear_buffer);
@@ -1141,26 +1133,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
       back->busy = 1;
       back->last_swap = draw->send_sbc;
 
-      if (!draw->region) {
-         draw->region = xcb_generate_id(draw->conn);
-         xcb_xfixes_create_region(draw->conn, draw->region, 0, NULL);
-      }
-
       xcb_xfixes_region_t region = 0;
-      xcb_rectangle_t xcb_rects[64];
-
-      if (n_rects > 0 && n_rects <= ARRAY_SIZE(xcb_rects)) {
-         for (int i = 0; i < n_rects; i++) {
-            const int *rect = &rects[i * 4];
-            xcb_rects[i].x = rect[0];
-            xcb_rects[i].y = draw->height - rect[1] - rect[3];
-            xcb_rects[i].width = rect[2];
-            xcb_rects[i].height = rect[3];
-         }
-
-         region = draw->region;
-         xcb_xfixes_set_region(draw->conn, region, n_rects, xcb_rects);
-      }
 
       xcb_present_pixmap(draw->conn,
                          draw->drawable,
@@ -1388,26 +1361,12 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
    struct dri_image *pixmap_buffer = NULL, *linear_buffer_display_gpu = NULL;
    enum pipe_format format = loader_fourcc_to_pipe_format(fourcc);
    xcb_pixmap_t pixmap;
-   xcb_sync_fence_t sync_fence;
-   struct xshmfence *shm_fence;
-   int buffer_fds[4], fence_fd;
+   int buffer_fds[4];
    int num_planes = 0;
    uint64_t *modifiers = NULL;
    uint32_t count = 0;
    int i, mod;
    int ret;
-
-   /* Create an xshmfence object and
-    * prepare to send that to the X server
-    */
-
-   fence_fd = xshmfence_alloc_shm();
-   if (fence_fd < 0)
-      return NULL;
-
-   shm_fence = xshmfence_map_shm(fence_fd);
-   if (shm_fence == NULL)
-      goto no_shm_fence;
 
    /* Allocate the image from the driver
     */
@@ -1605,7 +1564,7 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
                                                         buffer->strides[2], buffer->offsets[2],
                                                         buffer->strides[3], buffer->offsets[3],
                                                         depth, buffer->cpp * 8,
-                                                        buffer->modifier,
+                                                        buffer->modifier ? buffer->modifier : 1274,
                                                         buffer_fds);
    } else {
       cookie_pix = xcb_dri3_pixmap_from_buffer_checked(draw->conn,
@@ -1616,21 +1575,13 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
                                                        depth, buffer->cpp * 8,
                                                        buffer_fds[0]);
    }
-   cookie_fence = xcb_dri3_fence_from_fd_checked(draw->conn,
-                                                 pixmap,
-                                                 (sync_fence = xcb_generate_id(draw->conn)),
-                                                 false,
-                                                 fence_fd);
+
    /* Group error checking to limit round-trips. */
    if (!check_xcb_error(cookie_pix, "xcb_dri3_pixmap_from_buffer[s]"))
-      goto no_buffer_attrib;
-   if (!check_xcb_error(cookie_fence, "xcb_dri3_fence_from_fd"))
       goto no_buffer_attrib;
 
    buffer->pixmap = pixmap;
    buffer->own_pixmap = true;
-   buffer->sync_fence = sync_fence;
-   buffer->shm_fence = shm_fence;
    buffer->width = width;
    buffer->height = height;
 
@@ -1652,9 +1603,6 @@ no_linear_buffer:
 no_image:
    free(buffer);
 no_buffer:
-   xshmfence_unmap_shm(shm_fence);
-no_shm_fence:
-   close(fence_fd);
    return NULL;
 }
 
@@ -1919,11 +1867,8 @@ dri3_get_pixmap_buffer(struct dri_drawable *driDrawable, unsigned int fourcc,
    struct loader_dri3_buffer            *buffer = draw->buffers[buf_id];
    xcb_drawable_t                       pixmap;
    xcb_void_cookie_t                    cookie;
-   xcb_sync_fence_t                     sync_fence;
-   struct xshmfence                     *shm_fence;
    int                                  width;
    int                                  height;
-   int                                  fence_fd;
    struct dri_screen                          *cur_screen;
 
    if (buffer)
@@ -1935,15 +1880,6 @@ dri3_get_pixmap_buffer(struct dri_drawable *driDrawable, unsigned int fourcc,
    if (!buffer)
       goto no_buffer;
 
-   fence_fd = xshmfence_alloc_shm();
-   if (fence_fd < 0)
-      goto no_fence;
-   shm_fence = xshmfence_map_shm(fence_fd);
-   if (shm_fence == NULL) {
-      close (fence_fd);
-      goto no_fence;
-   }
-
    /* Get the currently-bound screen or revert to using the drawable's screen if
     * no contexts are currently bound. The latter case is at least necessary for
     * obs-studio, when using Window Capture (Xcomposite) as a Source.
@@ -1952,14 +1888,6 @@ dri3_get_pixmap_buffer(struct dri_drawable *driDrawable, unsigned int fourcc,
    if (!cur_screen) {
        cur_screen = draw->dri_screen_render_gpu;
    }
-
-   cookie = xcb_dri3_fence_from_fd_checked(draw->conn,
-                                           pixmap,
-                                           (sync_fence = xcb_generate_id(draw->conn)),
-                                           false,
-                                           fence_fd);
-   if (!check_xcb_error(cookie, "xcb_dri3_fence_from_fd"))
-      goto no_image;
 
    buffer->image = loader_dri3_get_pixmap_buffer(draw->conn, pixmap, cur_screen, fourcc,
                                                  draw->multiplanes_available, &width, &height, buffer);
@@ -1971,17 +1899,12 @@ dri3_get_pixmap_buffer(struct dri_drawable *driDrawable, unsigned int fourcc,
    buffer->own_pixmap = false;
    buffer->width = width;
    buffer->height = height;
-   buffer->shm_fence = shm_fence;
-   buffer->sync_fence = sync_fence;
 
    dri3_set_render_buffer(draw, buf_id, buffer);
 
    return buffer;
 
 no_image:
-   xcb_sync_destroy_fence(draw->conn, sync_fence);
-   xshmfence_unmap_shm(shm_fence);
-no_fence:
    free(buffer);
 no_buffer:
    return NULL;

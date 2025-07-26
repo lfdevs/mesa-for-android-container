@@ -794,6 +794,9 @@ dri2_setup_device(_EGLDisplay *disp, EGLBoolean software)
    _EGLDevice *dev;
    int render_fd;
 
+   if (disp->Options.Kgsl || disp->Options.Zink)
+      software = true;
+
    /* If we're not software, we need a DRM node FD */
    assert(software || dri2_dpy->fd_render_gpu >= 0);
 

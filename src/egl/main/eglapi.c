@@ -684,6 +684,7 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
 
       const char *env = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
       disp->Options.Zink = env && !strcmp(env, "zink");
+      disp->Options.Kgsl = env && !strcmp(env, "kgsl");
 
       const char *gallium_hud_env = os_get_option("GALLIUM_HUD");
       disp->Options.GalliumHudWarn =

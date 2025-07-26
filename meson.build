@@ -309,6 +309,10 @@ with_vdrm = [
   with_asahi_vk,
 ].contains(true)
 
+if freedreno_kmds.contains('kgsl')
+  pre_args += '-DHAVE_FREEDRENO_KGSL'
+endif
+
 with_dri = false
 if with_gallium and system_has_kms_drm
   _glx = get_option('glx')

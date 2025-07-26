@@ -2335,6 +2335,10 @@ zink_screen_export_dmabuf_semaphore(struct zink_screen *screen, struct zink_reso
 {
    VkSemaphore sem = VK_NULL_HANDLE;
 #if defined(HAVE_LIBDRM) && (DETECT_OS_LINUX || DETECT_OS_BSD)
+   static bool no_dma_buf_sync_file = false;
+   if (no_dma_buf_sync_file)
+      return sem;
+
    struct dma_buf_export_sync_file export = {
       .flags = DMA_BUF_SYNC_RW,
       .fd = -1,
@@ -2350,7 +2354,7 @@ zink_screen_export_dmabuf_semaphore(struct zink_screen *screen, struct zink_reso
    close(fd);
    if (ret) {
       if (errno == ENOTTY || errno == EBADF || errno == ENOSYS) {
-         assert(!"how did this fail?");
+         no_dma_buf_sync_file = true;
          return VK_NULL_HANDLE;
       } else {
          mesa_loge("MESA: failed to import sync file '%s'", strerror(errno));
@@ -2381,6 +2385,10 @@ bool
 zink_screen_import_dmabuf_semaphore(struct zink_screen *screen, struct zink_resource *res, VkSemaphore sem)
 {
 #if defined(HAVE_LIBDRM) && (DETECT_OS_LINUX || DETECT_OS_BSD)
+   static bool no_dma_buf_sync_file = false;
+   if (no_dma_buf_sync_file)
+      return sem;
+
    const VkSemaphoreGetFdInfoKHR get_fd_info = {
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
       .semaphore = sem,
@@ -2402,7 +2410,8 @@ zink_screen_import_dmabuf_semaphore(struct zink_screen *screen, struct zink_reso
       int ioctl_ret = drmIoctl(fd, DMA_BUF_IOCTL_IMPORT_SYNC_FILE, &import);
       if (ioctl_ret) {
          if (errno == ENOTTY || errno == EBADF || errno == ENOSYS) {
-            assert(!"how did this fail?");
+            no_dma_buf_sync_file = true;
+            ret = true;
          } else {
             ret = true;
          }

@@ -227,6 +227,10 @@ typedef void *kvaddr_t;
 
 #endif /* DETECT_OS_DRAGONFLY || DETECT_OS_FREEBSD */
 
+#ifdef __TERMUX__
+#undef SYS_kcmp
+#endif
+
 int
 os_same_file_description(int fd1, int fd2)
 {

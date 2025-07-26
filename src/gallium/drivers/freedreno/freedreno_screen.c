@@ -633,7 +633,7 @@ fd_init_screen_caps(struct fd_screen *screen)
    caps->query_timestamp =
    caps->query_time_elapsed =
       /* only a4xx, requires new enough kernel so we know max_freq: */
-      (screen->max_freq > 0) && (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen));
+      (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen));
    caps->timer_resolution = ticks_to_ns(1);
    caps->query_buffer_object =
    caps->query_so_overflow =

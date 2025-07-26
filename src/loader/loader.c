@@ -706,6 +706,12 @@ loader_get_linux_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
 bool
 loader_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
 {
+#ifdef __TERMUX__
+   const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
+   if (env && strcmp(env, "kgsl") == 0) {
+      return false;
+   }
+#endif
 #ifdef __linux__
    /* Implementation without causing full enumeration of DRM devices. */
    if (loader_get_linux_pci_id_for_fd(fd, vendor_id, chip_id))
