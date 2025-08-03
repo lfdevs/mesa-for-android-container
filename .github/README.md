@@ -22,12 +22,28 @@ A [Mesa](https://gitlab.freedesktop.org/mesa/mesa) build for containers on Andro
 1.  Go to the [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) page to download an installation package. Please note the Linux distribution suffix in the filename, such as `debian_arm64`. You can only install the package that matches your distribution.  
 2.  Extract the installation package directly to the root directory.  
 ```shell
-sudo tar -zxvf mesa-for-android-container_25.3.0-devel- 20250725_debian_arm64.tar.gz -C /
+sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /
 ```
 3.  Refresh the dynamic linker cache.  
 ```shell
 sudo ldconfig
 ```
+## Usage
+### Adreno GPU
+Specify the environment variables `MESA_LOADER_DRIVER_OVERRIDE` and `TU_DEBUG` when running a specific program, as follows:  
+```shell
+MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
+```
+Alternatively, add them to the `/etc/environment` file so they are loaded automatically when the container starts:  
+```plaintext
+MESA_LOADER_DRIVER_OVERRIDE=kgsl
+TU_DEBUG=noconform
+```
+### Mali GPU
+ℹ️**Note**: This driver has not yet been tested on Mali GPUs, so the following methods may not work.  
+
++ For newer Mali GPUs (based on the Midgard and Bifrost microarchitectures), specify the environment variable `GALLIUM_DRIVER=panfrost`.
++ For older Mali GPUs (based on the Utgard architecture), specify the environment variable `GALLIUM_DRIVER=lima`.
 ## Building
 This project is built in a Debian 13 arm64 environment. For detailed building procedures, please refer to the official Mesa documentation ([Compilation and Installation Using Meson — The Mesa 3D Graphics Library latest documentation](https://docs.mesa3d.org/meson.html)). The key steps are as follows:  
 
@@ -88,7 +104,7 @@ chmod 644 mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz
 sudo rm -rf /tmp/mesa-install-tmp
 ```
 ## Benchmarks
-Detailed test results: [benchmark-result](../common/benchmark-result.md)  
+Detailed test results: [benchmark-result](docs/common/benchmark-result.md)  
 
 |      Device      |   Model    |             SoC              |    GPU     | glmark2 | glmark2-es2 |      vkmark |
 | :--------------: | :--------: | :--------------------------: | :--------: | ------: | ----------: | ----------: |

@@ -22,12 +22,27 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 1. 前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下载一个安装包。请注意文件名中的 Linux 发行版后缀，如`debian_arm64`，只能安装发行版匹配的安装包。  
 2. 直接将安装包解压到根目录。  
 ```shell
-sudo tar -zxvf mesa-for-android-container_25.3.0-devel-    20250725_debian_arm64.tar.gz -C /
+sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /
 ```
 3. 刷新动态链接器缓存。  
 ```shell
 sudo ldconfig
 ```
+## 使用
+### Adreno GPU
+在运行特定程序时指定环境变量`MESA_LOADER_DRIVER_OVERRIDE`和`TU_DEBUG`，如：  
+```shell
+MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
+```
+或者将其添加到`/etc/environment`文件中以便在开启容器时自动加载：  
+```plaintext
+MESA_LOADER_DRIVER_OVERRIDE=kgsl
+TU_DEBUG=noconform
+```
+### Mali GPU
+ℹ️**注意**：目前本驱动未在 Mali GPU 上进行测试，以下方法不一定可行。  
+  - 对于较新的 Mali GPU （基于 Midgard 和 Bifrost 微架构），指定环境变量`GALLIUM_DRIVER=panfrost`。  
+  - 对于较老的 Mali GPU （基于 Utgard 架构），指定环境变量`GALLIUM_DRIVER=lima`。  
 ## 构建
 本项目在 Debian 13 arm64 环境下构建，详细构建过程请参照 Mesa 官方说明（[Compilation and Installation Using Meson — The Mesa 3D Graphics Library latest documentation](https://docs.mesa3d.org/meson.html)），以下为关键步骤：  
 
@@ -93,7 +108,7 @@ sudo rm -rf /tmp/mesa-install-tmp
 |        设备        |     型号     |      SoC      |    GPU     | glmark2 | glmark2-es2 | vkmark |
 | :--------------: | :--------: | :-----------: | :--------: | ------: | ----------: | -----: |
 |  Redmi K40 Pro   | M2012K11G  |   高通骁龙 888    | Adreno 660 |     842 |         771 |   1170 |
-| Xiaomi Pad 6 Pro | 23046RP50C | 高通骁龙 8+ Gen 1 | Adreno 730 |    1169 |        1143 |    不工作 |
+| Xiaomi Pad 6 Pro | 23046RP50C | 高通骁龙 8+ Gen 1 | Adreno 730 |    1169 |        1143 |    无法运行 |
 ## 感谢
   - [Lucas Fryzek](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/21570)：Mesa Freedreno 驱动的 KGSL 后端代码的作者。  
   - [xMeM](https://github.com/xMeM/termux-packages/commit/401982b8d9eaef70669762bfff2a963341c65e52)：将 Freedreno 驱动的 KGSL 后端移植到了 Termux:X11。  

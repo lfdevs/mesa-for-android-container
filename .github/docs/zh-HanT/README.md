@@ -22,12 +22,27 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 1.  前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下載一個安裝包。請注意檔案名稱中的 Linux 發行版後綴，如 `debian_arm64`，只能安裝發行版相符的安裝包。  
 2.  直接將安裝包解壓縮到根目錄。  
 ```shell
-sudo tar -zxvf mesa-for-android-container_25.3.0-devel- 20250725_debian_arm64.tar.gz -C /
+sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /
 ```
 3.  更新動態連結器快取。  
 ```shell
 sudo ldconfig
 ```
+## 使用
+### Adreno GPU
+在執行特定程式時指定環境變數`MESA_LOADER_DRIVER_OVERRIDE`和`TU_DEBUG`，例如：  
+```shell
+MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
+```
+或者將其新增至`/etc/environment`檔案中，以便在開啟容器時自動載入：  
+```plaintext
+MESA_LOADER_DRIVER_OVERRIDE=kgsl
+TU_DEBUG=noconform
+```
+### Mali GPU
+ℹ️**注意**：目前本驅動程式未在 Mali GPU 上進行測試，以下方法不一定可行。  
+  - 對於較新的 Mali GPU （基於 Midgard 和 Bifrost 微架構），指定環境變數`GALLIUM_DRIVER=panfrost`。  
+  - 對於較舊的 Mali GPU （基於 Utgard 架構），指定環境變數`GALLIUM_DRIVER=lima`。  
 ## 建置
 
 本專案在 Debian 13 arm64 環境下建置，詳細的建置流程請參照 Mesa 官方說明（[Compilation and Installation Using Meson — The Mesa 3D Graphics Library latest documentation](https://docs.mesa3d.org/meson.html)），以下為關鍵步驟：  
