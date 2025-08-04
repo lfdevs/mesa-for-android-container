@@ -67,6 +67,8 @@ struct wsi_drm_image_params {
    bool same_gpu;
    /* See wsi_image_info.explicit_sync. */
    bool explicit_sync;
+   /* See wsi_image_info.explicit_sync_image_fence_in. */
+   bool explicit_sync_image_fence_in;
 
    uint32_t num_modifier_lists;
    const uint32_t *num_modifiers;
@@ -105,6 +107,15 @@ struct wsi_image_info {
     * or the scanned-out frame being flipped away from).
     */
    bool explicit_sync;
+
+   /**
+    * If set, the WSI backend will take the image's chain->fences[image_index]
+    * and synchronize on that before presentation.  No release fence will be
+    * associated with the image (as in direct-scanout-only environments where
+    * AcquireNextImage implies that the original in-fence for the image has
+    * passed).
+    */
+   bool explicit_sync_image_fence_in;
 
    bool prime_use_linear_modifier;
 

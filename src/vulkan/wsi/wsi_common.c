@@ -214,6 +214,7 @@ wsi_device_init(struct wsi_device *wsi,
    WSI_GET_CB(FreeMemory);
    WSI_GET_CB(FreeCommandBuffers);
    WSI_GET_CB(GetBufferMemoryRequirements);
+   WSI_GET_CB(GetFenceFdKHR);
    WSI_GET_CB(GetFenceStatus);
    WSI_GET_CB(GetImageDrmFormatModifierPropertiesEXT);
    WSI_GET_CB(GetImageMemoryRequirements);
@@ -2471,7 +2472,17 @@ wsi_common_queue_present(const struct wsi_device *wsi,
                                        &swapchain->fences[image_index]);
          if (results[i] != VK_SUCCESS)
             continue;
-      } else {
+      } else if (!swapchain->image_info.explicit_sync_image_fence_in) {
+         /* Throttle on the fence for the previous presentation of this image,
+          * since you can't reset while the fence is outstanding on the queue.
+          * This is unlikely to trigger in practice, since it's unlikely that
+          * you managed to AcquireNextImage() the image back until the previous
+          * present had completed.
+          *
+          * We don't need to bother with this step if this very fence was
+          * blocked on in the presentation process and we're guaranteed to not
+          * acquire the image again until it's done.
+          */
          MESA_TRACE_SCOPE("throttle");
          results[i] = wsi->WaitForFences(vk_device_to_handle(dev),
                                          1, &swapchain->fences[image_index],
@@ -3136,7 +3147,7 @@ wsi_create_buffer_blit_context(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA,
       .pNext = NULL,
       .implicit_sync = info->image_type == WSI_IMAGE_TYPE_DRM &&
-                       !info->explicit_sync && !chain->dma_buf_semaphore,
+                       !info->explicit_sync && !info->explicit_sync_image_fence_in && !chain->dma_buf_semaphore,
       .dma_buf_sync_file = chain->dma_buf_semaphore,
    };
    VkMemoryDedicatedAllocateInfo buf_mem_dedicated_info = {

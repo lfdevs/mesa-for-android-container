@@ -147,6 +147,7 @@ enum plane_property {
    SRC_W,
    SRC_H,
    FB_ID,
+   IN_FENCE_FD,
    PLANE_PROPERTY_MAX,
 };
 
@@ -383,6 +384,7 @@ find_properties(struct wsi_display_connector *connector, uint32_t count_props, u
          PROPERTY(CTM);
          break;
       case DRM_MODE_OBJECT_PLANE:
+         PROPERTY(IN_FENCE_FD);
          PROPERTY(FB_ID);
          PROPERTY(CRTC_ID);
          PROPERTY(CRTC_X);
@@ -2921,7 +2923,7 @@ _wsi_display_convert_hdr_metadata(VkHdrMetadataEXT *pMetadata, uint8_t hdmi_eotf
 }
 
 static int
-drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *image, bool test_only)
+drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *image, bool test_only, int fence_fd)
 {
    const drmModeModeInfo *mode = &connector->current_drm_mode;
    int fd = connector->wsi->fd;
@@ -2997,6 +2999,13 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
    }
 
    const uint32_t *prop = connector->plane_property;
+
+   /* If explicit fencing is being used, pass it in as the IN_FENCE_FD.
+    * Otherwise DRM will do implicit sync on the image's object.
+    */
+   if (fence_fd != -1)
+      drmModeAtomicAddProperty(req, plane_id, prop[IN_FENCE_FD], fence_fd);
+
    drmModeAtomicAddProperty(req, plane_id, prop[FB_ID], image->fb_id);
    drmModeAtomicAddProperty(req, plane_id, prop[CRTC_ID], crtc_id);
    drmModeAtomicAddProperty(req, plane_id, prop[SRC_X], 0);
@@ -3043,7 +3052,7 @@ _wsi_display_cleanup_state(struct wsi_display_swapchain *chain)
    if (chain->color_outcome_serial) {
       chain->color_outcome_serial = 0;
       chain->base.image_info.color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-      drm_atomic_commit(connector, &chain->images[0], false);
+      drm_atomic_commit(connector, &chain->images[0], false, -1);
    }
 }
 
@@ -3077,6 +3086,7 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
 
       struct wsi_display_image *image = NULL;
 
+      uint32_t image_index = 0;
       for (uint32_t i = 0; i < chain->base.image_count; i++) {
          struct wsi_display_image *tmp_image = &chain->images[i];
 
@@ -3088,8 +3098,10 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
          case WSI_IMAGE_QUEUED:
          case WSI_IMAGE_QUEUED_AFTER_WAIT:
             /* find the oldest queued */
-            if (!image || tmp_image->flip_sequence < image->flip_sequence)
+            if (!image || tmp_image->flip_sequence < image->flip_sequence) {
                image = tmp_image;
+               image_index = i;
+            }
             break;
          default:
             break;
@@ -3219,6 +3231,23 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
          }
       }
 
+      int fence_fd = -1;
+
+      if (chain->base.image_info.explicit_sync_image_fence_in) {
+         VkResult result = chain->base.wsi->GetFenceFdKHR(chain->base.device, &(VkFenceGetFdInfoKHR) {
+            .sType = VK_STRUCTURE_TYPE_FENCE_GET_FD_INFO_KHR,
+            .fence = chain->base.fences[image_index],
+            .handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
+         }, &fence_fd);
+         if (result != VK_SUCCESS) {
+            mesa_loge("Failed to get fd for IN_FENCE_FD.");
+            connector->active = false;
+            image->state = WSI_IMAGE_IDLE;
+            wsi_display_surface_error(chain, VK_ERROR_SURFACE_LOST_KHR);
+            return VK_ERROR_SURFACE_LOST_KHR;
+         }
+      }
+
       image->state = WSI_IMAGE_QUEUED;
 
       /* Some kms drivers (e.g., amdgpu) send too early pageflip events with all-zero completion
@@ -3232,7 +3261,11 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
       if (!connector->active && !image->minimum_ns)
          image->minimum_ns = os_time_get_nano();
 
-      int ret = drm_atomic_commit(connector, image, false);
+      int ret = drm_atomic_commit(connector, image, false, fence_fd);
+
+      /* We can close the fd now, it gets latched at drmModeAtomicCommit(). */
+      close(fence_fd);
+
       if (ret == 0) {
          image->state = WSI_IMAGE_FLIPPING;
          connector->active = true;
@@ -3439,6 +3472,25 @@ wsi_display_surface_create_swapchain(
 
    struct wsi_drm_image_params image_params = {
       .base.image_type = WSI_IMAGE_TYPE_DRM,
+
+      /* Tell the core that we will handle explicit synchronization using the
+       * image's fence.
+       *
+       * Unlike X11 and Wayland, our explicit fence for KMS is a binary
+       * semaphore syncobj, not a timeline.  So we just take the image's fence
+       * (set by the wsi common present code) and pass that as the plane's
+       * fence.
+       *
+       * Note that OUT_FENCE_PTR sounds on the surface like a release fence we
+       * might need to use, but it's not. That's a release fence for the
+       * previous atomic commit, after this one completes.  We don't need to pay
+       * attention to it, because we don't return the image through
+       * AcquireNextImage until the next present has occurred to flip away from
+       * it.
+       */
+      .explicit_sync_image_fence_in = (wsi_device->semaphore_export_handle_types &
+         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT),
+
       .same_gpu = true,
    };
 
@@ -3532,7 +3584,7 @@ wsi_display_surface_create_swapchain(
        * what the CTS expects to find for unsupported swapchains.
        */
       if (result == VK_SUCCESS) {
-         ret = drm_atomic_commit(display_mode->connector, &chain->images[image], true);
+         ret = drm_atomic_commit(display_mode->connector, &chain->images[image], true, -1);
          if (ret != 0) {
             wsi_display_debug("Atomic commit check for %dx%d %s, failed: %s\n",
                create_info->imageExtent.width,
