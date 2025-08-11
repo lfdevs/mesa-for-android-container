@@ -204,6 +204,12 @@ BuildRequires:  pkgconfig(DirectX-Headers) >= 1.614.1
 Summary:        Mesa driver filesystem
 Provides:       mesa-dri-filesystem = %{?epoch:%{epoch}:}%{version}-%{release}
 Obsoletes:      mesa-omx-drivers < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      libxatracker < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libxatracker < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      libxatracker-devel < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libxatracker-devel < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libd3d < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libd3d-devel < %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description filesystem
 %{summary}.
