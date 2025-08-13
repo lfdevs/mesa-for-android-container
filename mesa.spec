@@ -3,15 +3,13 @@
 %global with_radeonsi 1
 %global with_vmware 1
 %global with_vulkan_hw 1
+%global with_nvk 1
 %global with_vdpau 1
 %global with_va 1
 %if !0%{?rhel}
 %global with_r300 1
 %global with_r600 1
 %global with_nine 1
-%if 0%{?with_vulkan_hw}
-%global with_nvk %{with_vulkan_hw}
-%endif
 %global with_opencl 1
 %endif
 %global base_vulkan %{?with_vulkan_hw:,amd}%{!?with_vulkan_hw:%{nil}}
@@ -73,6 +71,10 @@
 
 %global vulkan_drivers swrast%{?base_vulkan}%{?intel_platform_vulkan}%{?asahi_platform_vulkan}%{?extra_platform_vulkan}%{?with_nvk:,nouveau}%{?with_virtio:,virtio}
 
+%if 0%{?with_nvk} && 0%{?rhel}
+%global vendor_nvk_crates 1
+%endif
+
 Name:           mesa
 Summary:        Mesa graphics libraries
 %global ver 25.1.4
@@ -86,6 +88,20 @@ Source0:        https://archive.mesa3d.org/mesa-%{ver}.tar.xz
 # Source1 contains email correspondence clarifying the license terms.
 # Fedora opts to ignore the optional part of clause 2 and treat that code as 2 clause BSD.
 Source1:        Mesa-MLAA-License-Clarification-Email.txt
+# In CentOS/RHEL, Rust crates required to build NVK are vendored.
+# The minimum target versions are obtained from the .wrap files
+# https://gitlab.freedesktop.org/mesa/mesa/-/tree/main/subprojects
+# but we generally want the latest compatible versions
+%global rust_paste_ver 1.0.15
+%global rust_proc_macro2_ver 1.0.97
+%global rust_quote_ver 1.0.40
+%global rust_syn_ver 2.0.104
+%global rust_unicode_ident_ver 1.0.18
+Source10:       https://crates.io/api/v1/crates/paste/%{rust_paste_ver}/download#/paste-%{rust_paste_ver}.tar.gz
+Source11:       https://crates.io/api/v1/crates/proc-macro2/%{rust_proc_macro2_ver}/download#/proc-macro2-%{rust_proc_macro2_ver}.tar.gz
+Source12:       https://crates.io/api/v1/crates/quote/%{rust_quote_ver}/download#/quote-%{rust_quote_ver}.tar.gz
+Source13:       https://crates.io/api/v1/crates/syn/%{rust_syn_ver}/download#/syn-%{rust_syn_ver}.tar.gz
+Source14:       https://crates.io/api/v1/crates/unicode-ident/%{rust_unicode_ident_ver}/download#/unicode-ident-%{rust_unicode_ident_ver}.tar.gz
 
 Patch10:        gnome-shell-glthread-disable.patch
 
@@ -157,15 +173,14 @@ BuildRequires:  pkgconfig(LLVMSPIRVLib)
 %endif
 %if 0%{?with_opencl} || 0%{?with_nvk}
 BuildRequires:  bindgen
-BuildRequires:  rust-packaging
+%if 0%{?rhel}
+BuildRequires:  rust-toolset
+%else
+BuildRequires:  cargo-rpm-macros
+%endif
 %endif
 %if 0%{?with_nvk}
 BuildRequires:  cbindgen
-BuildRequires:  (crate(paste) >= 1.0.14 with crate(paste) < 2)
-BuildRequires:  (crate(proc-macro2) >= 1.0.56 with crate(proc-macro2) < 2)
-BuildRequires:  (crate(quote) >= 1.0.25 with crate(quote) < 2)
-BuildRequires:  (crate(syn/clone-impls) >= 2.0.15 with crate(syn/clone-impls) < 3)
-BuildRequires:  (crate(unicode-ident) >= 1.0.6 with crate(unicode-ident) < 2)
 %endif
 %if %{with valgrind}
 BuildRequires:  pkgconfig(valgrind)
@@ -365,21 +380,63 @@ The drivers with support for the Vulkan API.
 %autosetup -n %{name}-%{ver} -p1
 cp %{SOURCE1} docs/
 
+# Extract Rust crates meson cache directory
+%if 0%{?vendor_nvk_crates}
+mkdir subprojects/packagecache/
+tar -xvf %{SOURCE10} -C subprojects/packagecache/
+tar -xvf %{SOURCE11} -C subprojects/packagecache/
+tar -xvf %{SOURCE12} -C subprojects/packagecache/
+tar -xvf %{SOURCE13} -C subprojects/packagecache/
+tar -xvf %{SOURCE14} -C subprojects/packagecache/
+for d in subprojects/packagecache/*-*; do
+    echo '{"files":{}}' > $d/.cargo-checksum.json
+done
+%endif
+
+%if 0%{?with_nvk}
+cat > Cargo.toml <<_EOF
+[package]
+name = "mesa"
+version = "%{version}"
+edition = "2021"
+
+[lib]
+path = "src/nouveau/nil/lib.rs"
+
+# only direct dependencies need to be listed here
+[dependencies]
+paste = "$(grep ^directory subprojects/paste.wrap | sed 's|.*-||')"
+syn = { version = "$(grep ^directory subprojects/syn.wrap | sed 's|.*-||')", features = ["clone-impls"] }
+_EOF
+%if 0%{?vendor_nvk_crates}
+%cargo_prep -v subprojects/packagecache
+%else
+%cargo_prep
+
+%generate_buildrequires
+%cargo_generate_buildrequires
+%endif
+%endif
+
+
 %build
 # ensure standard Rust compiler flags are set
 export RUSTFLAGS="%build_rustflags"
 
 %if 0%{?with_nvk}
-export MESON_PACKAGE_CACHE_DIR="%{cargo_registry}/"
 # So... Meson can't actually find them without tweaks
-%define inst_crate_nameversion() %(basename %{cargo_registry}/%{1}-*)
-%define rewrite_wrap_file() sed -e "/source.*/d" -e "s/%{1}-.*/%{inst_crate_nameversion %{1}}/" -i subprojects/%{1}.wrap
+%if !0%{?vendor_nvk_crates}
+export MESON_PACKAGE_CACHE_DIR="%{cargo_registry}/"
+%endif
+rewrite_wrap_file() {
+   sed -e "/source.*/d" -e "s/${1}-.*/$(basename ${MESON_PACKAGE_CACHE_DIR:-subprojects/packagecache}/${1}-*)/" -i subprojects/${1}.wrap
+}
 
-%rewrite_wrap_file proc-macro2
-%rewrite_wrap_file quote
-%rewrite_wrap_file syn
-%rewrite_wrap_file unicode-ident
-%rewrite_wrap_file paste
+rewrite_wrap_file proc-macro2
+rewrite_wrap_file quote
+rewrite_wrap_file syn
+rewrite_wrap_file unicode-ident
+rewrite_wrap_file paste
 %endif
 
 # We've gotten a report that enabling LTO for mesa breaks some games. See
@@ -436,6 +493,14 @@ export MESON_PACKAGE_CACHE_DIR="%{cargo_registry}/"
 %endif
   %{nil}
 %meson_build
+
+%if 0%{?with_nvk}
+%cargo_license_summary
+%{cargo_license} > LICENSE.dependencies
+%if 0%{?vendor_nvk_crates}
+%cargo_vendor_manifest
+%endif
+%endif
 
 %install
 %meson_install
@@ -675,6 +740,12 @@ popd
 %endif
 
 %files vulkan-drivers
+%if 0%{?with_nvk}
+%license LICENSE.dependencies
+%if 0%{?vendor_nvk_crates}
+%license cargo-vendor.txt
+%endif
+%endif
 %{_libdir}/libvulkan_lvp.so
 %{_datadir}/vulkan/icd.d/lvp_icd.*.json
 %{_libdir}/libVkLayer_MESA_device_select.so

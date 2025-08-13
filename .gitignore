@@ -6,3 +6,8 @@
 x86_64/
 results_mesa/
 mesa-*/
+/paste-*.tar.gz
+/proc-macro2-*.tar.gz
+/quote-*.tar.gz
+/syn-*.tar.gz
+/unicode-ident-*.tar.gz
