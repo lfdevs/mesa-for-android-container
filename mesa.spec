@@ -3,13 +3,15 @@
 %global with_radeonsi 1
 %global with_vmware 1
 %global with_vulkan_hw 1
-%global with_nvk 1
 %global with_vdpau 1
 %global with_va 1
 %if !0%{?rhel}
 %global with_r300 1
 %global with_r600 1
 %global with_nine 1
+%if 0%{?with_vulkan_hw}
+%global with_nvk %{with_vulkan_hw}
+%endif
 %global with_opencl 1
 %endif
 %global base_vulkan %{?with_vulkan_hw:,amd}%{!?with_vulkan_hw:%{nil}}
