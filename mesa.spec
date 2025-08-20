@@ -9,10 +9,10 @@
 %global with_r300 1
 %global with_r600 1
 %global with_nine 1
-%if 0%{?with_vulkan_hw}
-%global with_nvk %{with_vulkan_hw}
-%endif
 %global with_opencl 1
+%endif
+%if !0%{?rhel} || 0%{?rhel} >= 10
+%global with_nvk %{with_vulkan_hw}
 %endif
 %global base_vulkan %{?with_vulkan_hw:,amd}%{!?with_vulkan_hw:%{nil}}
 %endif
