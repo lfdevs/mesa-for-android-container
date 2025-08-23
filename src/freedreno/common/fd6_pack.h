@@ -88,7 +88,7 @@ public:
    friend class fd_pkt;
    friend class fd_pkt4;
    friend class fd_pkt7;
-   template <chip CHIP> friend class fd_ncrb;
+   template <chip CHIP, typename Enable> friend class fd_ncrb;
 };
 
 class fd_pkt;
@@ -422,7 +422,7 @@ private:
  * A builder for writing non-context regs, which is implemented differently
  * depending on generation (A6XX doesn't have CP_NON_CONTEXT_REG_BUNCH)
  */
-template <chip CHIP>
+template <chip_range_support>
 class fd_ncrb {
 public:
    fd_ncrb(fd_cs &cs, unsigned nregs);
@@ -441,8 +441,8 @@ public:
  * A6XX does not have CP_NON_CONTEXT_REG_BUNCH, so the builder is implemented
  * as a sequence of pkt4's
  */
-template <>
-class fd_ncrb<A6XX> : fd_pkt4 {
+template <chip CHIP>
+class fd_ncrb<chip_range(CHIP == A6XX)> : fd_pkt4 {
 public:
    fd_ncrb(fd_cs &cs, unsigned nregs) : fd_pkt4(cs.ring_) {
       /* worst case, one pkt4 per reg: */
@@ -476,10 +476,10 @@ private:
 };
 
 /**
- * Builder to write non-context regs for A7XX, which uses CP_NON_CONTEXT_REG_BUNCH
+ * Builder to write non-context regs for A7XX+, which uses CP_NON_CONTEXT_REG_BUNCH
  */
-template <>
-class fd_ncrb<A7XX> : fd_crb {
+template <chip CHIP>
+class fd_ncrb<chip_range(CHIP >= A7XX)> : fd_crb {
 public:
    fd_ncrb(fd_cs &cs, unsigned nregs) : fd_crb(cs.ring_) {
       init(cs, CP_NON_CONTEXT_REG_BUNCH, 2 + (nregs * 2));
