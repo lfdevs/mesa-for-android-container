@@ -935,6 +935,15 @@ tu6_emit_render_cntl<A7XX>(struct tu_cmd_buffer *cmd,
 {
 }
 
+template <>
+void
+tu6_emit_render_cntl<A8XX>(struct tu_cmd_buffer *cmd,
+                     const struct tu_subpass *subpass,
+                     struct tu_cs *cs,
+                     bool binning)
+{
+}
+
 static void
 tu6_emit_blit_scissor(struct tu_cmd_buffer *cmd, struct tu_cs *cs, bool align,
                       bool used_by_sysmem)

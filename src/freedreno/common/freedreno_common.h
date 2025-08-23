@@ -13,7 +13,8 @@
 
 #include <tuple>
 
-#define __FD_GPU_GENS A6XX, A7XX
+#define __FD_GPU_GENS A6XX, A7XX, A8XX
+
 #define FD_GENX(FUNC_NAME)                                                   \
    template <chip... CHIPs> constexpr auto FUNC_NAME##instantiate()          \
    {                                                                         \
@@ -39,6 +40,9 @@
          break;                                                              \
       case 7:                                                                \
          genX_thing = &thing<A7XX>;                                          \
+         break;                                                              \
+      case 8:                                                                \
+         genX_thing = &thing<A8XX>;                                          \
          break;                                                              \
       default:                                                               \
          UNREACHABLE("Unknown hardware generation");                         \
