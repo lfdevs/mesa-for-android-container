@@ -7,6 +7,7 @@
 #define __FREEDRENO_LRZ_H__
 
 #include "adreno_common.xml.h"
+#include "freedreno_common.h"
 
 enum fd_lrz_gpu_dir : uint8_t {
    FD_LRZ_GPU_DIR_DISABLED = 0,
@@ -42,11 +43,11 @@ fd_lrz_gpu_dir_to_str(enum fd_lrz_gpu_dir dir)
  * - metadata: Metadata buffer for LRZ fast-clear. The contents are not
  *             always known, since they're handled by the hardware.
  */
-template <chip CHIP>
+template <chip_range_support>
 struct fd_lrzfc_layout;
 
-template <>
-struct PACKED fd_lrzfc_layout<A6XX> {
+template <chip CHIP>
+struct PACKED fd_lrzfc_layout<chip_range(CHIP == A6XX)> {
    static const bool HAS_BIDIR = false;
    static const bool HAS_CB = false;
    static const size_t FC_SIZE = 512;
@@ -64,8 +65,8 @@ struct PACKED fd_lrzfc_layout<A6XX> {
    };
 };
 
-template <>
-struct PACKED fd_lrzfc_layout<A7XX> {
+template <chip CHIP>
+struct PACKED fd_lrzfc_layout<chip_range(CHIP >= A7XX)> {
    static const bool HAS_BIDIR = true;
    static const bool HAS_CB = true;
    static const size_t FC_SIZE = 1024;
