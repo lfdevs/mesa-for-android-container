@@ -7,6 +7,7 @@
 #define __FREEDRENO_GPU_EVENT_H__
 
 #include "adreno_pm4.xml.h"
+#include "freedreno_common.h"
 
 /* On terminology:
  * - CLEAN events write dirty cache lines to memory.
@@ -59,11 +60,11 @@ struct fd_gpu_event_info {
     bool needs_seqno;
 };
 
-template <chip CHIP>
+template <chip_range_support>
 constexpr struct fd_gpu_event_info fd_gpu_events[FD_GPU_EVENT_MAX] = {};
 
-template <>
-constexpr inline struct fd_gpu_event_info fd_gpu_events<A6XX>[FD_GPU_EVENT_MAX] = {
+template <chip CHIP>
+constexpr inline struct fd_gpu_event_info fd_gpu_events<chip_range(CHIP == A6XX)>[FD_GPU_EVENT_MAX] = {
     {WRITE_PRIMITIVE_COUNTS, false},  /* FD_WRITE_PRIMITIVE_COUNTS */
     {START_PRIMITIVE_CTRS, false},    /* FD_START_PRIMITIVE_CTRS */
     {STOP_PRIMITIVE_CTRS, false},     /* FD_STOP_PRIMITIVE_CTRS */
@@ -94,8 +95,8 @@ constexpr inline struct fd_gpu_event_info fd_gpu_events<A6XX>[FD_GPU_EVENT_MAX] 
     {DEBUG_LABEL, false},             /* FD_LABEL */
 };
 
-template <>
-constexpr inline struct fd_gpu_event_info fd_gpu_events<A7XX>[FD_GPU_EVENT_MAX] = {
+template <chip CHIP>
+constexpr inline struct fd_gpu_event_info fd_gpu_events<chip_range(CHIP >= A7XX)>[FD_GPU_EVENT_MAX] = {
     {WRITE_PRIMITIVE_COUNTS, false},  /* FD_WRITE_PRIMITIVE_COUNTS */
     {START_PRIMITIVE_CTRS, false},    /* FD_START_PRIMITIVE_CTRS */
     {STOP_PRIMITIVE_CTRS, false},     /* FD_STOP_PRIMITIVE_CTRS */
