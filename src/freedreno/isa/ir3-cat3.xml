@@ -52,6 +52,20 @@ SOFTWARE.
 	</encode>
 </bitset>
 
+<bitset name="#cat3-src-flut" extends="#cat3-src">
+	<gen min="800"/>
+	<display>
+		{HALF}{IMMED}
+	</display>
+	<pattern low="8" high="12">00111</pattern>
+	<field name="HALF" pos="7" type="bool" display="h"/>
+	<assert low="4" high="6">000</assert>
+	<field name="IMMED" low="0" high="3" type="#flut"/>
+	<encode>
+		<map name="IMMED">extract_reg_uim(src)</map>
+		<map name="HALF">!!(src->flags &amp; IR3_REG_HALF)</map>
+	</encode>
+</bitset>
 
 <!-- Alternate immed encoding for the !${IMMED_ENCODING} instructions -->
 <bitset name="#cat3-src-alt-immed" extends="#cat3-src">

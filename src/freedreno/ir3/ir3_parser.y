@@ -839,7 +839,11 @@ cat3_wmm:          T_OP_WMM       { new_instr(OPC_WMM); }
 cat3_dp:           T_OP_DP2ACC    { new_instr(OPC_DP2ACC); }
 |                  T_OP_DP4ACC    { new_instr(OPC_DP4ACC); }
 
-cat3_instr:        cat3_opc dst_reg ',' src_reg_or_const_or_rel ',' src_reg_or_const ',' src_reg_or_const_or_rel
+src_reg_or_const_or_rel_or_flut: src_reg_or_const_or_rel
+|                  flut_immed     { new_src(0, IR3_REG_IMMED)->uim_val = $1; }
+|                  'h' flut_immed { new_src(0, IR3_REG_IMMED | IR3_REG_HALF)->uim_val = $2; }
+
+cat3_instr:        cat3_opc dst_reg ',' src_reg_or_const_or_rel_or_flut ',' src_reg_or_const ',' src_reg_or_const_or_rel_or_flut
 |                  cat3_reg_or_const_or_rel_opc dst_reg ',' src_reg_or_const_or_rel_or_imm ',' src_reg_or_const ',' src_reg_or_const_or_rel_or_imm
 |                  cat3_imm_reg_opc dst_reg ',' src_reg_or_rel_or_imm ',' src_reg_or_const ',' src_reg_or_rel_or_imm
 |                  cat3_wmm         dst_reg ',' src_reg_gpr ',' src_reg ',' immediate

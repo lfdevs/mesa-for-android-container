@@ -1738,6 +1738,41 @@ unsigned ir3_cat2_absneg(opc_t opc);
 unsigned ir3_cat3_absneg(struct ir3_compiler *compiler, opc_t opc,
                          unsigned src_n);
 
+static inline bool
+ir3_cat3_int(opc_t opc)
+{
+   switch (opc) {
+   case OPC_MAD_F16:
+   case OPC_MAD_F32:
+   case OPC_SEL_F16:
+   case OPC_SEL_F32:
+      return false;
+   case OPC_MAD_U16:
+   case OPC_MADSH_U16:
+   case OPC_MAD_S16:
+   case OPC_MADSH_M16:
+   case OPC_MAD_U24:
+   case OPC_MAD_S24:
+   case OPC_SEL_B16:
+   case OPC_SEL_B32:
+   case OPC_SEL_S16:
+   case OPC_SEL_S32:
+   case OPC_SAD_S16:
+   case OPC_SAD_S32:
+   case OPC_SHRM:
+   case OPC_SHLM:
+   case OPC_SHRG:
+   case OPC_SHLG:
+   case OPC_ANDG:
+   case OPC_DP2ACC:
+   case OPC_DP4ACC:
+   case OPC_WMM:
+   case OPC_WMM_ACCU:
+   default:
+      return true;
+   }
+}
+
 /* Return the type (float, int, or uint) the op uses when converting from the
  * internal result of the op (which is assumed to be the same size as the
  * sources) to the destination when they are not the same size. If F32 it does
