@@ -67,7 +67,7 @@
 %bcond_with valgrind
 %endif
 
-%global vulkan_drivers swrast%{?base_vulkan}%{?intel_platform_vulkan}%{?asahi_platform_vulkan}%{?extra_platform_vulkan}%{?with_nvk:,nouveau}%{?with_virtio:,virtio}
+%global vulkan_drivers swrast%{?base_vulkan}%{?intel_platform_vulkan}%{?asahi_platform_vulkan}%{?extra_platform_vulkan}%{?with_nvk:,nouveau}%{?with_virtio:,virtio}%{?with_d3d12:,microsoft-experimental}
 
 %if 0%{?with_nvk} && 0%{?rhel}
 %global vendor_nvk_crates 1
@@ -333,6 +333,15 @@ Summary:        Mesa TensorFlow Lite delegate
 
 %description libTeflon
 %{summary}.
+%endif
+
+%if 0%{?with_d3d12}
+%package dxil-devel
+Summary:        Mesa SPIR-V to DXIL binary
+Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
+
+%description dxil-devel
+Development tools for translating SPIR-V shader code to DXIL for Direct3D 12
 %endif
 
 %package vulkan-drivers
@@ -674,6 +683,13 @@ popd
 %{_libdir}/vdpau/libvdpau_virtio_gpu.so.1*
 %endif
 
+%if 0%{?with_d3d12}
+%files dxil-devel
+%{_bindir}/spirv2dxil
+%{_libdir}/libspirv_to_dxil.a
+%{_libdir}/libspirv_to_dxil.so
+%endif
+
 %files vulkan-drivers
 %if 0%{?with_nvk}
 %license LICENSE.dependencies
@@ -696,6 +712,10 @@ popd
 %if 0%{?with_nvk}
 %{_libdir}/libvulkan_nouveau.so
 %{_datadir}/vulkan/icd.d/nouveau_icd.*.json
+%endif
+%if 0%{?with_d3d12}
+%{_libdir}/libvulkan_dzn.so
+%{_datadir}/vulkan/icd.d/dzn_icd.*.json
 %endif
 %ifarch %{ix86} x86_64
 %{_libdir}/libvulkan_intel.so
