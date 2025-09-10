@@ -111,6 +111,7 @@ BuildRequires:  gcc-c++
 BuildRequires:  gettext
 %if 0%{?with_hardware}
 BuildRequires:  kernel-headers
+BuildRequires:  systemd-devel
 %endif
 # We only check for the minimum version of pkgconfig(libdrm) needed so that the
 # SRPMs for each arch still have the same build dependencies. See:
