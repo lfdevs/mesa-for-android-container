@@ -67,7 +67,7 @@
 %bcond_with valgrind
 %endif
 
-%global vulkan_drivers swrast%{?base_vulkan}%{?intel_platform_vulkan}%{?asahi_platform_vulkan}%{?extra_platform_vulkan}%{?with_nvk:,nouveau}%{?with_virtio:,virtio}
+%global vulkan_drivers swrast%{?base_vulkan}%{?intel_platform_vulkan}%{?asahi_platform_vulkan}%{?extra_platform_vulkan}%{?with_nvk:,nouveau}%{?with_virtio:,virtio}%{?with_d3d12:,microsoft-experimental}
 
 %if 0%{?with_nvk} && 0%{?rhel}
 %global vendor_nvk_crates 1
@@ -75,7 +75,7 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-%global ver 25.2.1
+%global ver 25.2.2
 Version:        %{lua:ver = string.gsub(rpm.expand("%{ver}"), "-", "~"); print(ver)}
 Release:        %autorelease
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
@@ -103,12 +103,15 @@ Source13:       https://crates.io/api/v1/crates/syn/%{rust_syn_ver}/download#/sy
 Source14:       https://crates.io/api/v1/crates/unicode-ident/%{rust_unicode_ident_ver}/download#/unicode-ident-%{rust_unicode_ident_ver}.tar.gz
 Source15:       https://crates.io/api/v1/crates/rustc-hash/%{rustc_hash_ver}/download#/rustc-hash-%{rustc_hash_ver}.tar.gz
 
+Patch10:        gnome-shell-glthread-disable.patch
+
 BuildRequires:  meson >= 1.3.0
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
 BuildRequires:  gettext
 %if 0%{?with_hardware}
 BuildRequires:  kernel-headers
+BuildRequires:  systemd-devel
 %endif
 # We only check for the minimum version of pkgconfig(libdrm) needed so that the
 # SRPMs for each arch still have the same build dependencies. See:
@@ -202,6 +205,12 @@ BuildRequires:  pkgconfig(DirectX-Headers) >= 1.614.1
 Summary:        Mesa driver filesystem
 Provides:       mesa-dri-filesystem = %{?epoch:%{epoch}:}%{version}-%{release}
 Obsoletes:      mesa-omx-drivers < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      libxatracker < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libxatracker < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      libxatracker-devel < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libxatracker-devel < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libd3d < %{?epoch:%{epoch}:}%{version}-%{release}
+Obsoletes:      mesa-libd3d-devel < %{?epoch:%{epoch}:}%{version}-%{release}
 
 %description filesystem
 %{summary}.
@@ -325,6 +334,15 @@ Summary:        Mesa TensorFlow Lite delegate
 
 %description libTeflon
 %{summary}.
+%endif
+
+%if 0%{?with_d3d12}
+%package dxil-devel
+Summary:        Mesa SPIR-V to DXIL binary
+Requires:       %{name}-filesystem%{?_isa} = %{?epoch:%{epoch}:}%{version}-%{release}
+
+%description dxil-devel
+Development tools for translating SPIR-V shader code to DXIL for Direct3D 12
 %endif
 
 %package vulkan-drivers
@@ -666,6 +684,13 @@ popd
 %{_libdir}/vdpau/libvdpau_virtio_gpu.so.1*
 %endif
 
+%if 0%{?with_d3d12}
+%files dxil-devel
+%{_bindir}/spirv2dxil
+%{_libdir}/libspirv_to_dxil.a
+%{_libdir}/libspirv_to_dxil.so
+%endif
+
 %files vulkan-drivers
 %if 0%{?with_nvk}
 %license LICENSE.dependencies
@@ -688,6 +713,10 @@ popd
 %if 0%{?with_nvk}
 %{_libdir}/libvulkan_nouveau.so
 %{_datadir}/vulkan/icd.d/nouveau_icd.*.json
+%endif
+%if 0%{?with_d3d12}
+%{_libdir}/libvulkan_dzn.so
+%{_datadir}/vulkan/icd.d/dzn_icd.*.json
 %endif
 %ifarch %{ix86} x86_64
 %{_libdir}/libvulkan_intel.so
