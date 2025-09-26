@@ -1,0 +1,30 @@
+From: Mary Guillemard <mary.guillemard@collabora.com>
+Date: Mon, 21 Jul 2025 16:17:34 +0200
+Subject: [PATCH] pan/genxml: Add missing parenthesis on pan_cast_and_pack
+ macros
+
+We were missing parenthesis on pan_cast_and_pack macros causing various
+issues.
+
+Signed-off-by: Mary Guillemard <mary.guillemard@collabora.com>
+Fixes: 410e5a36ec88 ("pan/genxml: Rework gen_pack.py to support OpenCL")
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/36261>
+Origin: https://gitlab.freedesktop.org/mesa/mesa/-/commit/455b93601a19536bed7195b3fde8d7cf13a48e6a
+Bug-Debian: https://bugs.debian.org/1116427
+
+--- a/src/panfrost/lib/genxml/pan_pack_helpers.h
++++ b/src/panfrost/lib/genxml/pan_pack_helpers.h
+@@ -98,10 +98,10 @@ __gen_padded(uint32_t v, uint32_t start,
+         }))
+ 
+ #define pan_cast_and_pack(dst, T, name)                                        \
+-   pan_pack((PREFIX2(T, PACKED_T) *)dst, T, name)
++   pan_pack((PREFIX2(T, PACKED_T) *)(dst), T, name)
+ 
+ #define pan_cast_and_pack_nodefaults(dst, T, name)                             \
+-   pan_pack_nodefaults((PREFIX2(T, PACKED_T) *)dst, T, name)
++   pan_pack_nodefaults((PREFIX2(T, PACKED_T) *)(dst), T, name)
+ 
+ #define pan_unpack(src, T, name)                                               \
+    UNUSED struct PREFIX1(T) name;                                              \

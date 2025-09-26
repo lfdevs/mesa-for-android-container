@@ -1,3 +1,10 @@
+mesa (25.0.7-2+deb13u1) UNRELEASED; urgency=medium
+
+  * Non-maintainer upload.
+  * panfrost: backport fix for segmentation fault on G52 (Closes: #1116427)
+
+ -- Johannes Schauer Marin Rodrigues <josch@debian.org>  Sat, 27 Sep 2025 02:04:13 +0200
+
 mesa (25.0.7-2) unstable; urgency=medium
 
   * patches: Revert a commit to fix mobian vm's. (Closes: #1107895)
