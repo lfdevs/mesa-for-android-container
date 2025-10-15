@@ -422,6 +422,52 @@ valid_header(uint32_t pkt)
    }
 }
 
+/**
+ * Simplified version of the parsing loop in dump_commands(), which simply
+ * looks for "IB" type packets and logs the target cmdstream buffers.
+ */
+static void
+parse_ibs(uint32_t *dwords, uint32_t sizedwords)
+{
+   int dwords_left = sizedwords;
+   uint32_t count = 0; /* dword count including packet header */
+   uint32_t val;
+
+   while (dwords_left > 0) {
+      if (pkt_is_regwrite(dwords[0], &val, &count)) {
+         /* ignore */
+      } else if (pkt_is_opcode(dwords[0], &val, &count)) {
+         const char *name = pktname(val);
+         if (!strcmp(name, "CP_INDIRECT_BUFFER")) {
+            uint64_t ibaddr;
+            uint32_t ibsize;
+
+            parse_cp_indirect(&dwords[1], count - 1, &ibaddr, &ibsize);
+
+            /* map gpuaddr back to hostptr: */
+            void *ptr = hostptr(ibaddr);
+            snapshot_ib(ibaddr, ptr, ibsize);
+         }
+         // TODO CP_SET_DRAW_STATE and others?
+      } else if (pkt_is_type2(dwords[0])) {
+         /* no-op */
+         count = 1;
+      } else {
+         printf("bad type! %08x\n", dwords[0]);
+         /* for 5xx+ we can do a passable job of looking for start of next valid
+          * packet: */
+         if (options.info->chip >= 5) {
+            count = find_next_packet(dwords, dwords_left);
+         } else {
+            return;
+         }
+      }
+
+      dwords += count;
+      dwords_left -= count;
+   }
+}
+
 static void
 dump_cmdstream(void)
 {
@@ -522,7 +568,13 @@ dump_cmdstream(void)
       options.ibs[0].size = cmdszdw;
 
       handle_prefetch(buf, cmdszdw);
-      dump_commands(buf, cmdszdw, 0);
+
+      if (snapshot) {
+         parse_ibs(buf, cmdszdw);
+      } else {
+         dump_commands(buf, cmdszdw, 0);
+      }
+
       free(buf);
    }
 }
@@ -1136,11 +1188,12 @@ decode(void)
 static void
 decode_finalize(void)
 {
+   snapshot_linux.ptbase = ptbase;
+
    /* Dump cmdstream at the end after we know we've decoded all sections that might
     * contain reg vals needed for locating the cmdstream:
     */
-   if (!snapshot)
-      dump_cmdstream();
+   dump_cmdstream();
 
    /* If we are exporting snapshot, finalize it now: */
    do_snapshot();
@@ -1249,6 +1302,7 @@ main(int argc, char **argv)
 
    if (snapshot) {
       freopen("/dev/null", "w", stdout);
+      verbose = false;
    } else if (interactive) {
       pager_open();
    }

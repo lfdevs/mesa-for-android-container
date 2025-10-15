@@ -327,6 +327,7 @@ struct snapshot_gmu_version {
  */
 
 static FILE *snapshot;
+static uint64_t ptbase = 0x43210000;  /* We don't always have a real ttbr0, so fake it */
 
 static inline void
 snapshot_write(void *data, size_t sz)
@@ -556,6 +557,36 @@ snapshot_gpu_object(uint64_t gpuaddr, uint32_t size, uint32_t *buf)
    snapshot_write(buf, size);
 }
 
+static struct {
+   struct snapshot_ib_v2 ib;
+   uint32_t *dwords;
+} ibs[512];
+static unsigned nibs;
+
+static inline void
+snapshot_ib(uint64_t gpuaddr, uint32_t *dwords, uint32_t sizedwords)
+{
+   int idx;
+
+   if (!snapshot || !dwords)
+      return;
+
+   for (idx = 0; idx < nibs; idx++) {
+      if (ibs[idx].ib.gpuaddr == gpuaddr) {
+         ibs[idx].ib.size = MAX2(ibs[idx].ib.size, sizedwords);
+         return;
+      }
+   }
+
+   assert(idx < ARRAY_SIZE(ibs));
+   ibs[idx].ib.gpuaddr = gpuaddr;
+   ibs[idx].ib.size = sizedwords;
+   ibs[idx].ib.ptbase = ptbase;
+   ibs[idx].dwords = dwords;
+
+   nibs++;
+}
+
 static inline void
 do_snapshot(void)
 {
@@ -580,6 +611,16 @@ do_snapshot(void)
       void *buf = ringbuffers[id].buf;
 
       snapshot_write(buf, snapshot_rb[i].rbsize * 4);
+   }
+
+   for (unsigned i = 0; i < nibs; i++) {
+      snapshot_write_sect_header(
+         SNAPSHOT_SECTION_IB_V2,
+         sizeof(ibs[i].ib) + (4 * ibs[i].ib.size)
+      );
+      snapshot_write(&ibs[i].ib, sizeof(ibs[i].ib));
+      snapshot_write(ibs[i].dwords, ibs[i].ib.size * 4);
+
    }
 
    snapshot_write_sect_header(SNAPSHOT_SECTION_END, 0);
