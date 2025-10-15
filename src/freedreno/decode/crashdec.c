@@ -85,6 +85,8 @@ replacestr(char *line, const char *find, const char *replace)
 static char *lastline;
 static char *pushedline;
 
+static void decode_finalize(void);
+
 static const char *
 popline(void)
 {
@@ -98,8 +100,10 @@ popline(void)
    free(lastline);
 
    size_t n = 0;
-   if (getline(&r, &n, in) < 0)
+   if (getline(&r, &n, in) < 0) {
+      decode_finalize();
       exit(0);
+   }
 
    /* Handle section name typo's from earlier kernels: */
    r = replacestr(r, "CP_MEMPOOOL", "CP_MEMPOOL");
@@ -1115,12 +1119,6 @@ decode(void)
          decode_gmu_hfi();
       } else if (startswith(line, "registers:")) {
          decode_registers();
-
-         /* after we've recorded buffer contents, and CP register values,
-          * we can take a stab at decoding the cmdstream:
-          */
-         if (!snapshot)
-            dump_cmdstream();
       } else if (startswith(line, "registers-gmu:")) {
          decode_gmu_registers();
       } else if (startswith(line, "indexed-registers:")) {
@@ -1131,9 +1129,21 @@ decode(void)
          decode_clusters();
       } else if (startswith(line, "debugbus:")) {
          decode_debugbus();
-         do_snapshot();
       }
    }
+}
+
+static void
+decode_finalize(void)
+{
+   /* Dump cmdstream at the end after we know we've decoded all sections that might
+    * contain reg vals needed for locating the cmdstream:
+    */
+   if (!snapshot)
+      dump_cmdstream();
+
+   /* If we are exporting snapshot, finalize it now: */
+   do_snapshot();
 }
 
 /*
