@@ -352,8 +352,8 @@ cmdstream[0]: 265 dwords
  +	00000000		HLSQ_DBG_ECO_CNTL: 0
 00000000010582dc:		0000: 702c0001 00000003
 		opcode: CP_EVENT_WRITE (46) (2 dwords)
-			{ EVENT = LRZ_FLUSH }
-		event LRZ_FLUSH
+			{ EVENT = LRZ_FLUSH_INVALIDATE }
+		event LRZ_FLUSH_INVALIDATE
 00000000010582e4:		0000: 70460001 00000026
 		opcode: CP_SKIP_IB2_ENABLE_GLOBAL (1d) (2 dwords)
 00000000010582ec:		0000: 709d0001 00000000
@@ -459,8 +459,8 @@ cmdstream[0]: 265 dwords
 				RB_RESOLVE_GMEM_BUFFER_BASE: 0
 000000000115e04c:			0000: 4088d601 00000000
 			opcode: CP_EVENT_WRITE (46) (2 dwords)
-				{ EVENT = BLIT }
-			event BLIT
+				{ EVENT = CCU_RESOLVE }
+			event CCU_RESOLVE
 			mode: RM6_BIN_RENDER_START
 			skip_ib2: g=0, l=0
 			draw[1] register values
@@ -1495,8 +1495,8 @@ cmdstream[0]: 265 dwords
 				RB_RESOLVE_GMEM_BUFFER_BASE: 0
 000000000115c060:			0000: 4088d601 00000000
 			opcode: CP_EVENT_WRITE (46) (2 dwords)
-				{ EVENT = BLIT }
-			event BLIT
+				{ EVENT = CCU_RESOLVE }
+			event CCU_RESOLVE
 			mode: RM6_BIN_RESOLVE
 			skip_ib2: g=0, l=0
 			draw[3] register values
@@ -1516,8 +1516,8 @@ cmdstream[0]: 265 dwords
 			GRAS_LRZ_CNTL: { DIR = 0 }
 00000000010583d8:		0000: 48810001 00000000
 		opcode: CP_EVENT_WRITE (46) (2 dwords)
-			{ EVENT = LRZ_FLUSH }
-		event LRZ_FLUSH
+			{ EVENT = LRZ_FLUSH_INVALIDATE }
+		event LRZ_FLUSH_INVALIDATE
 00000000010583e0:		0000: 70460001 00000026
 		opcode: CP_EVENT_WRITE (46) (5 dwords)
 			{ EVENT = PC_CCU_RESOLVE_TS }

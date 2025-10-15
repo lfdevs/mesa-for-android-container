@@ -47,7 +47,7 @@ enum fd_gpu_event : uint32_t {
     FD_LRZ_INVALIDATE,
     FD_VSC_BINNING_START,
     FD_VSC_BINNING_END,
-    FD_BLIT,
+    FD_CCU_RESOLVE,
     FD_LABEL,
     FD_DUMMY_EVENT,
 
@@ -85,13 +85,13 @@ constexpr inline struct fd_gpu_event_info fd_gpu_events<A6XX>[FD_GPU_EVENT_MAX] 
     {PC_CCU_FLUSH_DEPTH_TS, true},    /* FD_CCU_CLEAN_DEPTH */
     {PC_CCU_FLUSH_COLOR_TS, true},    /* FD_CCU_CLEAN_COLOR */
     {LRZ_CLEAR, false},               /* FD_LRZ_CLEAR */
-    {LRZ_FLUSH, false},               /* FD_LRZ_FLIP */
-    {LRZ_FLUSH, false},               /* FD_LRZ_FLUSH */
-    {LRZ_CACHE_INVALIDATE, false},    /* FD_LRZ_INVALIDATE */
+    {DEBUG_LABEL, false},             /* FD_LRZ_FLIP */
+    {LRZ_FLUSH_INVALIDATE, false},    /* FD_LRZ_FLUSH */
+    {DEBUG_LABEL, false},             /* FD_LRZ_INVALIDATE */
     {VSC_BINNING_START, false},       /* FD_VSC_BINNING_START */
     {VSC_BINNING_END, false},         /* FD_VSC_BINNING_END */
-    {BLIT, false},                    /* FD_BLIT */
-    {LABEL, false},                   /* FD_LABEL */
+    {CCU_RESOLVE, false},             /* FD_CCU_RESOLVE */
+    {DEBUG_LABEL, false},             /* FD_LABEL */
 };
 
 template <>
@@ -118,12 +118,12 @@ constexpr inline struct fd_gpu_event_info fd_gpu_events<A7XX>[FD_GPU_EVENT_MAX] 
     {CCU_CLEAN_COLOR, false},         /* FD_CCU_CLEAN_COLOR */
     {LRZ_CLEAR, false},               /* FD_LRZ_CLEAR */
     {LRZ_FLIP_BUFFER, false},         /* FD_LRZ_FLIP */
-    {LRZ_FLUSH, false},               /* FD_LRZ_FLUSH */
+    {LRZ_CACHE_FLUSH, false},         /* FD_LRZ_FLUSH */
     {LRZ_CACHE_INVALIDATE, false},    /* FD_LRZ_INVALIDATE */
     {VSC_BINNING_START, false},       /* FD_VSC_BINNING_START */
     {VSC_BINNING_END, false},         /* FD_VSC_BINNING_END */
-    {BLIT, false},                    /* FD_BLIT */
-    {LABEL, false},                   /* FD_LABEL */
+    {CCU_RESOLVE, false},             /* FD_CCU_RESOLVE */
+    {DEBUG_LABEL, false},             /* FD_LABEL */
     {DUMMY_EVENT, false},             /* FD_DUMMY_EVENT */
 };
 

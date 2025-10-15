@@ -8271,8 +8271,8 @@ got cmdszdw=38
 					{ DWORDS = 54 }
 0000000100227000:				0000: 70c70002 34000000 00000036
 				opcode: CP_EVENT_WRITE (46) (2 dwords)
-					{ EVENT = BLIT }
-				event BLIT
+					{ EVENT = CCU_RESOLVE }
+				event CCU_RESOLVE
 				mode: RM6_DIRECT_RENDER
 				skip_ib2: g=0, l=0
 				draw[8] register values
@@ -8356,8 +8356,8 @@ got cmdszdw=38
  +	00080000				HLSQ_DBG_ECO_CNTL: 0x80000
 0000000100227054:				0000: 70460001 0000001e
 				opcode: CP_EVENT_WRITE (46) (2 dwords)
-					{ EVENT = BLIT }
-				event BLIT
+					{ EVENT = CCU_RESOLVE }
+				event CCU_RESOLVE
 				mode: RM6_DIRECT_RENDER
 				skip_ib2: g=0, l=0
 				draw[9] register values
@@ -8371,8 +8371,8 @@ got cmdszdw=38
  +	00000003				RB_RESOLVE_OPERATION: { TYPE = BLIT_EVENT_LOAD | CLEAR_MASK = 0 | LAST = 0 | BUFFER_ID = 0 }
 0000000100227098:				0000: 70460001 0000001e
 				opcode: CP_EVENT_WRITE (46) (2 dwords)
-					{ EVENT = BLIT }
-				event BLIT
+					{ EVENT = CCU_RESOLVE }
+				event CCU_RESOLVE
 				mode: RM6_DIRECT_RENDER
 				skip_ib2: g=0, l=0
 				draw[10] register values
@@ -8981,8 +8981,8 @@ got cmdszdw=38
 					{ DWORDS = 17 }
 0000000100227250:				0000: 70c70002 10000000 00000011
 				opcode: CP_EVENT_WRITE (46) (2 dwords)
-					{ EVENT = BLIT }
-				event BLIT
+					{ EVENT = CCU_RESOLVE }
+				event CCU_RESOLVE
 				mode: RM6_DIRECT_RENDER
 				skip_ib2: g=0, l=0
 				draw[12] register values
@@ -9002,8 +9002,8 @@ got cmdszdw=38
 					{ DWORDS = 20 }
 00000001002272a0:				0000: 70c70002 34000000 00000014
 				opcode: CP_EVENT_WRITE (46) (2 dwords)
-					{ EVENT = BLIT }
-				event BLIT
+					{ EVENT = CCU_RESOLVE }
+				event CCU_RESOLVE
 				mode: RM6_DIRECT_RENDER
 				skip_ib2: g=0, l=0
 				draw[13] register values
@@ -9666,8 +9666,8 @@ got cmdszdw=38
 					{ DWORDS = 17 }
 0000000100227524:				0000: 70c70002 10000000 00000011
 				opcode: CP_EVENT_WRITE (46) (2 dwords)
-					{ EVENT = BLIT }
-				event BLIT
+					{ EVENT = CCU_RESOLVE }
+				event CCU_RESOLVE
 				mode: RM6_DIRECT_RENDER
 				skip_ib2: g=0, l=0
 				draw[16] register values
@@ -9687,8 +9687,8 @@ got cmdszdw=38
 					{ DWORDS = 20 }
 0000000100227574:				0000: 70c70002 34000000 00000014
 				opcode: CP_EVENT_WRITE (46) (2 dwords)
-					{ EVENT = BLIT }
-				event BLIT
+					{ EVENT = CCU_RESOLVE }
+				event CCU_RESOLVE
 				mode: RM6_DIRECT_RENDER
 				skip_ib2: g=0, l=0
 				draw[17] register values
@@ -10974,8 +10974,8 @@ ESTIMATED CRASH LOCATION!
 			opcode: CP_SKIP_IB2_ENABLE_GLOBAL (1d) (2 dwords)
 000000010022332c:			0000: 709d0001 00000000
 			opcode: CP_EVENT_WRITE (46) (2 dwords)
-				{ EVENT = LRZ_FLUSH }
-			event LRZ_FLUSH
+				{ EVENT = LRZ_FLUSH_INVALIDATE }
+			event LRZ_FLUSH_INVALIDATE
 0000000100223334:			0000: 70460001 00000026
 			opcode: CP_SET_DRAW_STATE (43) (4 dwords)
 				{ COUNT = 0 | DISABLE_ALL_GROUPS | GROUP_ID = 0 }

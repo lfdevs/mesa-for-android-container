@@ -136,7 +136,7 @@ static inline void
 fd5_emit_blit(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
    emit_marker5(ring, 7);
-   fd5_event_write(batch, ring, BLIT, true);
+   fd5_event_write(batch, ring, CCU_RESOLVE, true);
    emit_marker5(ring, 7);
 }
 
@@ -177,7 +177,7 @@ fd5_emit_lrz_flush(struct fd_batch *batch, struct fd_ringbuffer *ring)
    OUT_PKT4(ring, REG_A5XX_GRAS_LRZ_CNTL, 1);
    OUT_RING(ring, A5XX_GRAS_LRZ_CNTL_ENABLE);
 
-   fd5_event_write(batch, ring, LRZ_FLUSH, false);
+   fd5_event_write(batch, ring, LRZ_FLUSH_INVALIDATE, false);
 
    OUT_PKT4(ring, REG_A5XX_GRAS_LRZ_CNTL, 1);
    OUT_RING(ring, 0x0);

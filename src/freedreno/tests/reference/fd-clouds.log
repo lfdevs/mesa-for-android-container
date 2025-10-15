@@ -232,8 +232,8 @@ cmdstream[0]: 1023 dwords
 			RB_LRZ_CNTL: { 0 }
 0000000001d91258:		0000: 40889801 00000000
 		opcode: CP_EVENT_WRITE (46) (2 dwords)
-			{ EVENT = LRZ_FLUSH }
-		event LRZ_FLUSH
+			{ EVENT = LRZ_FLUSH_INVALIDATE }
+		event LRZ_FLUSH_INVALIDATE
 0000000001d91260:		0000: 70460001 00000026
 		opcode: CP_EVENT_WRITE (46) (2 dwords)
 			{ EVENT = CACHE_INVALIDATE }
@@ -1577,8 +1577,8 @@ cmdstream[0]: 1023 dwords
 				:0,1,15,5
 0000000001116114:			0000: 48088a01 00000005
 			opcode: CP_EVENT_WRITE (46) (2 dwords)
-				{ EVENT = BLIT }
-			event BLIT
+				{ EVENT = CCU_RESOLVE }
+			event CCU_RESOLVE
 			mode: RM6_BIN_RENDER_START
 			skip_ib2: g=1, l=0
 			draw[1] register values
@@ -6733,8 +6733,8 @@ cmdstream[0]: 1023 dwords
 				:0,1,21,7
 0000000001116168:			0000: 48088a01 00000007
 			opcode: CP_EVENT_WRITE (46) (2 dwords)
-				{ EVENT = BLIT }
-			event BLIT
+				{ EVENT = CCU_RESOLVE }
+			event CCU_RESOLVE
 			mode: RM6_BIN_RESOLVE
 			skip_ib2: g=1, l=0
 			draw[3] register values

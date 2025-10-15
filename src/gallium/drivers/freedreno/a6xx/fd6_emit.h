@@ -286,7 +286,7 @@ static inline void
 fd6_emit_blit(struct fd_context *ctx, fd_cs &cs)
 {
    emit_marker6<CHIP>(cs, 7);
-   fd6_event_write<CHIP>(ctx, cs, FD_BLIT);
+   fd6_event_write<CHIP>(ctx, cs, FD_CCU_RESOLVE);
    emit_marker6<CHIP>(cs, 7);
 }
 

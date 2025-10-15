@@ -2036,7 +2036,7 @@ event_blit_run(struct tu_cmd_buffer *cmd,
       }
    }
 
-   tu_emit_event_write<CHIP>(cmd, cs, FD_BLIT);
+   tu_emit_event_write<CHIP>(cmd, cs, FD_CCU_RESOLVE);
 }
 
 static void
@@ -4317,7 +4317,7 @@ clear_gmem_attachment(struct tu_cmd_buffer *cmd,
    tu_cs_emit_pkt4(cs, REG_A6XX_RB_RESOLVE_CLEAR_COLOR_DW0, 4);
    tu_cs_emit_array(cs, clear_vals, 4);
 
-   tu_emit_event_write<CHIP>(cmd, cs, FD_BLIT);
+   tu_emit_event_write<CHIP>(cmd, cs, FD_CCU_RESOLVE);
 }
 
 struct apply_gmem_clear_coords_state {
