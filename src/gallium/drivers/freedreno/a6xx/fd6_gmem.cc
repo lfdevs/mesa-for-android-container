@@ -896,7 +896,7 @@ struct bin_size_params {
    enum a6xx_lrz_feedback_mask lrz_feedback_zmode_mask;
 };
 
-/* nregs: 3 */
+/* nregs: 4 */
 template <chip CHIP>
 static void
 set_bin_size(fd_crb &crb, const struct fd_gmem_stateobj *gmem, struct bin_size_params p)
@@ -928,6 +928,7 @@ set_bin_size(fd_crb &crb, const struct fd_gmem_stateobj *gmem, struct bin_size_p
          .buffers_location = p.buffers_location,
          .lrz_feedback_zmode_mask = p.lrz_feedback_zmode_mask,
    ));
+   crb.add(A6XX_VFD_RENDER_MODE(p.render_mode));
    /* no flag for RB_RESOLVE_CNTL_3... */
    crb.add(RB_RESOLVE_CNTL_3(CHIP, .binw = w, .binh = h));
 }
@@ -1135,7 +1136,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
 
    if (use_hw_binning(batch)) {
       /* enable stream-out during binning pass: */
-      with_crb (cs, 4) {
+      with_crb (cs, 5) {
          crb.add(VPC_SO_OVERRIDE(CHIP, false));
 
          set_bin_size<CHIP>(crb, gmem, {
@@ -1166,8 +1167,6 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
                                              ? LRZ_FEEDBACK_EARLY_Z_LATE_Z
                                              : LRZ_FEEDBACK_NONE,
          });
-
-         crb.add(A6XX_VFD_RENDER_MODE(RENDERING_PASS));
       }
 
       fd_pkt7(cs, CP_SKIP_IB2_ENABLE_GLOBAL, 1)
@@ -1185,7 +1184,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
             control_ptr(fd6_context(batch->ctx), vsc_state)
          ));
    } else {
-      with_crb (cs, 4) {
+      with_crb (cs, 5) {
          /* no binning pass, so enable stream-out for draw pass: */
          crb.add(VPC_SO_OVERRIDE(CHIP, false));
 
@@ -1299,8 +1298,6 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
                                              ? LRZ_FEEDBACK_EARLY_Z_LATE_Z
                                              : LRZ_FEEDBACK_NONE,
          });
-
-         crb.add(A6XX_VFD_RENDER_MODE(RENDERING_PASS));
       }
 
       fd_pkt7(cs, CP_SKIP_IB2_ENABLE_GLOBAL, 1)
@@ -1314,7 +1311,7 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
          .add(VPC_SO_OVERRIDE(CHIP, false));
    }
 
-   with_crb (cs, 7) {
+   with_crb (cs, 8) {
       set_window_offset<CHIP>(crb, x1, y1);
 
       set_bin_size<CHIP>(crb, gmem, {
@@ -2019,7 +2016,7 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
          .add(GRAS_MODE_CNTL(CHIP, 0x2));
    }
 
-   with_crb (cs, 10) {
+   with_crb (cs, 11) {
       set_window_offset<CHIP>(crb, 0, 0);
 
       set_bin_size<CHIP>(crb, NULL, {
