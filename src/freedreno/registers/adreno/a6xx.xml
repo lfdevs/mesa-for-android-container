@@ -3526,8 +3526,6 @@ by a particular renderpass/blit.
 	<bitset name="a6xx_sp_xs_output_cntl" inline="yes">
 		<!-- # of VS outputs including pos/psize -->
 		<bitfield name="OUT" low="0" high="5" type="uint"/>
-		<!-- FLAGS_REGID only for GS -->
-		<bitfield name="FLAGS_REGID" low="6" high="13" type="a3xx_regid"/>
 	</bitset>
 
 	<reg32 offset="0xa800" name="SP_VS_CNTL_0" type="a6xx_sp_xs_cntl_0" usage="rp_blit">
@@ -3750,7 +3748,10 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa872" name="SP_GS_BOOLEAN_CF_MASK" type="hex" usage="rp_blit"/>
 
 	<!-- TODO: exact same layout as 0xa802-0xa81a -->
-	<reg32 offset="0xa873" name="SP_GS_OUTPUT_CNTL" type="a6xx_sp_xs_output_cntl" usage="rp_blit"/>
+	<reg32 offset="0xa873" name="SP_GS_OUTPUT_CNTL" type="a6xx_sp_xs_output_cntl" usage="rp_blit">
+		<!-- FLAGS_REGID only for GS -->
+		<bitfield name="FLAGS_REGID" low="6" high="13" type="a3xx_regid"/>
+	</reg32>
 	<array offset="0xa874" name="SP_GS_OUTPUT" stride="1" length="16" usage="rp_blit">
 		<reg32 offset="0x0" name="REG">
 			<bitfield name="A_REGID" low="0" high="7" type="a3xx_regid"/>

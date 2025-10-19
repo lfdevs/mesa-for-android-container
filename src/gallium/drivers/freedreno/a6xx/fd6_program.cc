@@ -861,7 +861,7 @@ emit_vpc(fd_crb &crb, const struct program_builder *b)
 
    switch (last_shader->type) {
    case MESA_SHADER_VERTEX:
-      crb.add(A6XX_SP_VS_OUTPUT_CNTL(.out = linkage.cnt, .flags_regid = flags_regid));
+      crb.add(A6XX_SP_VS_OUTPUT_CNTL(.out = linkage.cnt));
       crb.add(VPC_VS_SIV_CNTL(CHIP,
          .layerloc = layer_loc,
          .viewloc = view_loc,
@@ -880,7 +880,7 @@ emit_vpc(fd_crb &crb, const struct program_builder *b)
       ));
       break;
    case MESA_SHADER_TESS_EVAL:
-      crb.add(A6XX_SP_DS_OUTPUT_CNTL(.out = linkage.cnt, .flags_regid = flags_regid));
+      crb.add(A6XX_SP_DS_OUTPUT_CNTL(.out = linkage.cnt));
       crb.add(VPC_DS_SIV_CNTL(CHIP,
          .layerloc = layer_loc,
          .viewloc = view_loc,
