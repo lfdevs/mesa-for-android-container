@@ -46,6 +46,9 @@
       genX_thing;                                                            \
    })
 
+/* Helpers to deal with things that support ranges of chipsets: */
+#define chip_range_support chip CHIP, typename Enable = void
+#define chip_range(range) CHIP, typename std::enable_if<(range)>::type
 
 template<typename E>
 struct BitmaskEnum {
