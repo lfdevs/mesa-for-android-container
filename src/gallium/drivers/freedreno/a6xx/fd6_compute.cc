@@ -144,7 +144,7 @@ cs_program_emit(struct fd_context *ctx, fd_crb &crb, struct ir3_shader_variant *
             v->cs.force_linear_dispatch ? WORKITEMRASTORDER_LINEAR
                                           : WORKITEMRASTORDER_TILED,
       ));
-      crb.add(SP_CS_UNKNOWN_A9BE(CHIP, 0)); // Sometimes is 0x08000000
+      crb.add(SP_CS_HYSTERESIS(CHIP, 0)); // Sometimes is 0x08000000
    }
 
    if (!v->local_size_variable)

@@ -265,11 +265,11 @@ tu_emit_rt_workaround(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
    tu_cs_emit_pkt7(cs, CP_SET_MARKER, 1);
    tu_cs_emit(cs, A6XX_CP_SET_MARKER_0_RT_WA_START);
 
-   tu_cs_emit_regs(cs, SP_CS_UNKNOWN_A9BE(CHIP, .dword = 0x10000));
-   tu_cs_emit_regs(cs, SP_PS_UNKNOWN_A9AB(CHIP, .dword = 0x10000));
+   tu_cs_emit_regs(cs, SP_CS_HYSTERESIS(CHIP, .dword = 0x10000));
+   tu_cs_emit_regs(cs, SP_PS_HYSTERESIS(CHIP, .dword = 0x10000));
    tu_emit_event_write<A7XX>(cmd, cs, FD_DUMMY_EVENT);
-   tu_cs_emit_regs(cs, SP_CS_UNKNOWN_A9BE(CHIP, .dword = 0));
-   tu_cs_emit_regs(cs, SP_PS_UNKNOWN_A9AB(CHIP, .dword = 0));
+   tu_cs_emit_regs(cs, SP_CS_HYSTERESIS(CHIP, .dword = 0));
+   tu_cs_emit_regs(cs, SP_PS_HYSTERESIS(CHIP, .dword = 0));
    tu_emit_event_write<A7XX>(cmd, cs, FD_DUMMY_EVENT);
    tu_emit_event_write<A7XX>(cmd, cs, FD_DUMMY_EVENT);
    tu_emit_event_write<A7XX>(cmd, cs, FD_DUMMY_EVENT);

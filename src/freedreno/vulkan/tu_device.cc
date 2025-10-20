@@ -2574,7 +2574,7 @@ tu_init_cmdbuf_start_a725_quirk(struct tu_device *device)
             .linearlocalidregid = regid(63, 0),
             .threadsize = THREAD128,
             .workitemrastorder = WORKITEMRASTORDER_TILED));
-   tu_cs_emit_regs(&sub_cs, SP_CS_UNKNOWN_A9BE(A7XX, 0));
+   tu_cs_emit_regs(&sub_cs, SP_CS_HYSTERESIS(A7XX, 0));
 
    tu_cs_emit_regs(&sub_cs,
                   SP_CS_NDRANGE_0(A7XX, .kerneldim = 3,

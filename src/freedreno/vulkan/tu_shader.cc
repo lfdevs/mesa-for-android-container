@@ -1821,7 +1821,7 @@ tu6_emit_cs_config(struct tu_cs *cs,
                            WORKITEMRASTORDER_LINEAR :
                            WORKITEMRASTORDER_TILED, ));
 
-      tu_cs_emit_regs(cs, SP_CS_UNKNOWN_A9BE(CHIP, 0)); // Sometimes is 0x08000000
+      tu_cs_emit_regs(cs, SP_CS_HYSTERESIS(CHIP, 0)); // Sometimes is 0x08000000
    }
 }
 

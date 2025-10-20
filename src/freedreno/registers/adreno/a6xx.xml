@@ -3653,6 +3653,10 @@ by a particular renderpass/blit.
 		<bitfield name="OFFSET" low="0" high="18" shr="11"/>
 	</bitset>
 
+	<bitset name="a6xx_sp_xs_hysteresis" inline="yes">
+		<doc>Same on a6xx/a7xx, UMD should not need to write this</doc>
+	</bitset>
+
 	<reg32 offset="0xa81b" name="SP_VS_PROGRAM_COUNTER_OFFSET" type="uint" usage="rp_blit"/>
 	<reg64 offset="0xa81c" name="SP_VS_BASE" type="address" align="32" usage="rp_blit"/>
 	<reg32 offset="0xa81e" name="SP_VS_PVT_MEM_PARAM" type="a6xx_sp_xs_pvt_mem_param" usage="rp_blit"/>
@@ -3662,7 +3666,7 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa823" name="SP_VS_CONFIG" type="a6xx_sp_xs_config" usage="rp_blit"/>
 	<reg32 offset="0xa824" name="SP_VS_INSTR_SIZE" low="0" high="27" type="uint" usage="rp_blit"/>
 	<reg32 offset="0xa825" name="SP_VS_PVT_MEM_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_stack_offset" usage="rp_blit"/>
-	<reg32 offset="0xa826" name="SP_UNKNOWN_A826"/>
+	<reg32 offset="0xa826" name="SP_VS_HYSTERESIS" type="a6xx_sp_xs_hysteresis" variants="A6XX-A7XX"/>
 	<reg32 offset="0xa82d" name="SP_VS_VGS_CNTL" variants="A7XX-" usage="cmd"/>
 
 	<reg32 offset="0xa830" name="SP_HS_CNTL_0" type="a6xx_sp_xs_cntl_0" usage="rp_blit">
@@ -3688,7 +3692,7 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa83b" name="SP_HS_CONFIG" type="a6xx_sp_xs_config" usage="rp_blit"/>
 	<reg32 offset="0xa83c" name="SP_HS_INSTR_SIZE" low="0" high="27" type="uint" usage="rp_blit"/>
 	<reg32 offset="0xa83d" name="SP_HS_PVT_MEM_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_stack_offset" usage="rp_blit"/>
-	<reg32 offset="0xa83e" name="SP_HS_UNKNOWN_A83E"/>
+	<reg32 offset="0xa83e" name="SP_HS_HYSTERESIS" type="a6xx_sp_xs_hysteresis" variants="A6XX-A7XX"/>
 	<reg32 offset="0xa82f" name="SP_HS_VGS_CNTL" variants="A7XX-" usage="cmd"/>
 
 	<reg32 offset="0xa840" name="SP_DS_CNTL_0" type="a6xx_sp_xs_cntl_0" usage="rp_blit">
@@ -3726,7 +3730,7 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa863" name="SP_DS_CONFIG" type="a6xx_sp_xs_config" usage="rp_blit"/>
 	<reg32 offset="0xa864" name="SP_DS_INSTR_SIZE" low="0" high="27" type="uint" usage="rp_blit"/>
 	<reg32 offset="0xa865" name="SP_DS_PVT_MEM_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_stack_offset" usage="rp_blit"/>
-	<reg32 offset="0xa866" name="SP_DS_UNKNOWN_A866"/>
+	<reg32 offset="0xa866" name="SP_DS_HYSTERESIS" type="a6xx_sp_xs_hysteresis" variants="A6XX-A7XX"/>
 	<reg32 offset="0xa868" name="SP_DS_VGS_CNTL" variants="A7XX-" usage="cmd"/>
 
 	<reg32 offset="0xa870" name="SP_GS_CNTL_0" type="a6xx_sp_xs_cntl_0" usage="rp_blit">
@@ -3782,7 +3786,7 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa894" name="SP_GS_CONFIG" type="a6xx_sp_xs_config" usage="rp_blit"/>
 	<reg32 offset="0xa895" name="SP_GS_INSTR_SIZE" low="0" high="27" type="uint" usage="rp_blit"/>
 	<reg32 offset="0xa896" name="SP_GS_PVT_MEM_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_stack_offset" usage="rp_blit"/>
-	<reg32 offset="0xa897" name="SP_GS_UNKNOWN_A897"/>
+	<reg32 offset="0xa897" name="SP_GS_HYSTERESIS" type="a6xx_sp_xs_hysteresis" variants="A6XX-A7XX"/>
 	<reg32 offset="0xa899" name="SP_GS_VGS_CNTL" variants="A7XX-" usage="cmd"/>
 
 	<reg64 offset="0xa8a0" name="SP_VS_SAMPLER_BASE" type="address" align="16" usage="cmd"/>
@@ -3933,7 +3937,7 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa9a7" name="SP_PS_TSIZE" low="0" high="7" type="uint" usage="rp_blit"/>
 	<reg32 offset="0xa9a8" name="SP_UNKNOWN_A9A8" low="0" high="16" usage="cmd"/> <!-- always 0x0 ? -->
 	<reg32 offset="0xa9a9" name="SP_PS_PVT_MEM_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_stack_offset" usage="rp_blit"/>
-	<reg32 offset="0xa9ab" name="SP_PS_UNKNOWN_A9AB" variants="A7XX-" usage="cmd"/>
+	<reg32 offset="0xa9ab" name="SP_PS_HYSTERESIS" type="a6xx_sp_xs_hysteresis" variants="A6XX-A7XX"/>
 
 	<!-- TODO: unknown bool register at 0xa9aa, likely same as 0xa8c0-0xa8c3 but for FS -->
 
@@ -3985,7 +3989,7 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa9bb" name="SP_CS_CONFIG" type="a6xx_sp_xs_config" usage="cmd"/>
 	<reg32 offset="0xa9bc" name="SP_CS_INSTR_SIZE" low="0" high="27" type="uint" usage="cmd"/>
 	<reg32 offset="0xa9bd" name="SP_CS_PVT_MEM_STACK_OFFSET" type="a6xx_sp_xs_pvt_mem_stack_offset" usage="cmd"/>
-	<reg32 offset="0xa9be" name="SP_CS_UNKNOWN_A9BE" variants="A7XX-" usage="cmd"/>
+	<reg32 offset="0xa9be" name="SP_CS_HYSTERESIS" type="a6xx_sp_xs_hysteresis" variants="A6XX-A7XX"/>
 	<reg32 offset="0xa9c5" name="SP_CS_VGS_CNTL" variants="A7XX-" usage="cmd"/>
 
 	<!-- new in a6xx gen4, matches SP_CS_CONST_CONFIG_0 -->
