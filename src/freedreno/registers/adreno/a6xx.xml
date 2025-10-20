@@ -2202,7 +2202,7 @@ by a particular renderpass/blit.
 		<bitfield name="IJ_LINEAR_CENTROID" pos="4" type="boolean"/>
 		<bitfield name="IJ_LINEAR_SAMPLE" pos="5" type="boolean"/>
 		<bitfield name="COORD_MASK" low="6" high="9" type="hex"/>
-		<bitfield name="UNK10" pos="10" type="boolean"/>
+		<bitfield name="INTERP_EN" pos="10" type="boolean"/>
 	</reg32>
 	<reg32 offset="0x880a" name="RB_PS_INPUT_CNTL" usage="rp_blit">
 		<!-- enable bits for various FS sysvalue regs: -->
@@ -2299,8 +2299,8 @@ by a particular renderpass/blit.
 	<!-- 0x881f invalid -->
 	<array offset="0x8820" name="RB_MRT" stride="8" length="8" usage="rp_blit">
 		<reg32 offset="0x0" name="CONTROL">
-			<bitfield name="BLEND" pos="0" type="boolean"/>
-			<bitfield name="BLEND2" pos="1" type="boolean"/>
+			<bitfield name="COLOR_BLEND_EN" pos="0" type="boolean"/>
+			<bitfield name="ALPHA_BLEND_EN" pos="1" type="boolean"/>
 			<bitfield name="ROP_ENABLE" pos="2" type="boolean"/>
 			<bitfield name="ROP_CODE" low="3" high="6" type="a3xx_rop_code"/>
 			<bitfield name="COMPONENT_ENABLE" low="7" high="10" type="hex"/>
@@ -3827,7 +3827,7 @@ by a particular renderpass/blit.
 	<reg32 offset="0xa989" name="SP_BLEND_CNTL" usage="rp_blit">
 		<!-- per-mrt enable bit -->
 		<bitfield name="ENABLE_BLEND" low="0" high="7"/>
-		<bitfield name="UNK8" pos="8" type="boolean"/>
+		<bitfield name="INDEPENDENT_BLEND_EN" pos="8" type="boolean"/>
 		<bitfield name="DUAL_COLOR_IN_ENABLE" pos="9" type="boolean"/>
 		<bitfield name="ALPHA_TO_COVERAGE" pos="10" type="boolean"/>
 	</reg32>

@@ -1139,7 +1139,7 @@ emit_fs_inputs(fd_crb &crb, const struct program_builder *b)
       .ij_linear_centroid    = VALIDREG(ij_regid[IJ_LINEAR_CENTROID]),
       .ij_linear_sample      = VALIDREG(ij_regid[IJ_LINEAR_SAMPLE]) || need_size_persamp,
       .coord_mask            = fs->fragcoord_compmask,
-      .unk10                 = enable_varyings,
+      .interp_en             = enable_varyings,
    ));
    crb.add(A6XX_RB_PS_INPUT_CNTL(
       .samplemask            = VALIDREG(smask_in_regid),

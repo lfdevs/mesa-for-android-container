@@ -80,8 +80,8 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
                  .alpha_dest_factor = fd_blend_factor(rt->alpha_dst_factor),
                ))
         .add(A6XX_RB_MRT_CONTROL(i,
-                 .blend = rt->blend_enable,
-                 .blend2 = rt->blend_enable,
+                 .color_blend_en = rt->blend_enable,
+                 .alpha_blend_en = rt->blend_enable,
                  .rop_enable = cso->logicop_enable,
                  .rop_code = rop,
                  .component_enable = rt->colormask,
@@ -111,7 +111,7 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
       ))
      .add(A6XX_SP_BLEND_CNTL(
             .enable_blend = mrt_blend,
-            .unk8 = true,
+            .independent_blend_en = cso->independent_blend_enable,
             .dual_color_in_enable = blend->use_dual_src_blend,
             .alpha_to_coverage = cso->alpha_to_coverage,
        ))

@@ -3161,7 +3161,7 @@ tu6_emit_blend(struct tu_cs *cs,
    bool dual_src_blend = tu_blend_state_is_dual_src(cb);
 
    tu_cs_emit_regs(cs, A6XX_SP_BLEND_CNTL(.enable_blend = blend_enable_mask,
-                                          .unk8 = true,
+                                          .independent_blend_en = true,
                                           .dual_color_in_enable =
                                              dual_src_blend,
                                           .alpha_to_coverage =
@@ -3212,8 +3212,8 @@ tu6_emit_blend(struct tu_cs *cs,
 
          tu_cs_emit_regs(cs,
                          A6XX_RB_MRT_CONTROL(remapped_idx,
-                                             .blend = blend_enable,
-                                             .blend2 = blend_enable,
+                                             .color_blend_en = blend_enable,
+                                             .alpha_blend_en = blend_enable,
                                              .rop_enable = logic_op_enable,
                                              .rop_code = rop,
                                              .component_enable = att->write_mask),
