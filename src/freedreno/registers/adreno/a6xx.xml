@@ -4130,11 +4130,13 @@ by a particular renderpass/blit.
 	  -->
 		<bitfield name="CONSTANT_DEMOTION_ENABLE" pos="0" type="boolean"/>
 		<bitfield name="ISAMMODE" low="1" high="2" type="a6xx_isam_mode"/>
-		<bitfield name="SHARED_CONSTS_ENABLE" pos="3" type="boolean"/> <!-- see HLSQ_SHARED_CONSTS -->
+		<bitfield name="SHARED_CONSTS_ENABLE" pos="3" type="boolean"/> <!-- see SP_SHARED_CONSTANT -->
 	</reg32>
 
 	<reg32 offset="0xab01" name="SP_UNKNOWN_AB01" variants="A7XX-" usage="cmd"/>
-	<reg32 offset="0xab02" name="SP_UNKNOWN_AB02" variants="A7XX-" usage="cmd"/>
+	<reg32 offset="0xab02" name="SP_HLSQ_MODE_CNTL" variants="A7XX-" usage="cmd">
+		<bitfield name="SHARED_CONSTS_ENABLE" pos="0" type="boolean"/> <!-- see SP_SHARED_CONSTANT -->
+	</reg32>
 
 	<reg32 offset="0xab04" name="SP_PS_CONFIG" type="a6xx_sp_xs_config" usage="rp_blit"/>
 	<reg32 offset="0xab05" name="SP_PS_INSTR_SIZE" low="0" high="27" type="uint" usage="rp_blit"/>
