@@ -440,9 +440,7 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
       ctx->batch->tessellation = true;
    }
 
-   {
-      fd_crb crb(cs, 3);
-
+   with_crb (cs, 3) {
       uint32_t index_start = is_indexed(DRAW) ? draws[0].index_bias : draws[0].start;
       if (ctx->last.dirty || (ctx->last.index_start != index_start)) {
          crb.add(A6XX_VFD_INDEX_OFFSET(index_start));
