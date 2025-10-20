@@ -2454,7 +2454,9 @@ by a particular renderpass/blit.
 	<reg32 offset="0x8898" name="RB_LRZ_CNTL" usage="rp_blit">
 		<bitfield name="ENABLE" pos="0" type="boolean"/>
 	</reg32>
-	<reg32 offset="0x8899" name="RB_UNKNOWN_8899" variants="A7XX-" usage="cmd"/>
+	<reg32 offset="0x8899" name="RB_LRZ_CNTL2" variants="A7XX-" usage="cmd">
+		<bitfield name="ENABLE_BIDIRECTIONAL_LRZ" pos="0" type="boolean"/>
+	</reg32>
 	<!-- 0x8899-0x88bf invalid -->
 	<!-- clamps depth value for depth test/write -->
 	<reg32 offset="0x88c0" name="RB_VIEWPORT_ZCLAMP_MIN" type="float" usage="rp_blit" variants="A6XX-A7XX"/>
