@@ -335,7 +335,7 @@ emit_user_consts(const struct ir3_shader_variant *v, fd_cs &cs,
    ir3_emit_user_consts(v, cs.ring(), constbuf);
 }
 
-template <chip CHIP, fd6_pipeline_type PIPELINE>
+template <fd6_pipeline_type PIPELINE, chip CHIP>
 struct fd_ringbuffer *
 fd6_build_user_consts(struct fd6_emit *emit)
 {
@@ -359,10 +359,10 @@ fd6_build_user_consts(struct fd6_emit *emit)
 
    return constobj.ring();
 }
-template struct fd_ringbuffer * fd6_build_user_consts<A6XX, HAS_TESS_GS>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_user_consts<A7XX, HAS_TESS_GS>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_user_consts<A6XX, NO_TESS_GS>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_user_consts<A7XX, NO_TESS_GS>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_user_consts<HAS_TESS_GS, A6XX>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_user_consts<HAS_TESS_GS, A7XX>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_user_consts<NO_TESS_GS, A6XX>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_user_consts<NO_TESS_GS, A7XX>(struct fd6_emit *emit);
 
 template <chip CHIP>
 static inline void
@@ -401,7 +401,7 @@ emit_hs_driver_params(const struct ir3_shader_variant *v, fd_cs &dpconstobj,
    }
 }
 
-template <chip CHIP, fd6_pipeline_type PIPELINE>
+template <fd6_pipeline_type PIPELINE, chip CHIP>
 struct fd_ringbuffer *
 fd6_build_driver_params(struct fd6_emit *emit)
 {
@@ -467,10 +467,10 @@ fd6_build_driver_params(struct fd6_emit *emit)
    return dpconstobj.ring();
 }
 
-template struct fd_ringbuffer * fd6_build_driver_params<A6XX, HAS_TESS_GS>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_driver_params<A7XX, HAS_TESS_GS>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_driver_params<A6XX, NO_TESS_GS>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_driver_params<A7XX, NO_TESS_GS>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_driver_params<HAS_TESS_GS, A6XX>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_driver_params<HAS_TESS_GS, A7XX>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_driver_params<NO_TESS_GS, A6XX>(struct fd6_emit *emit);
+template struct fd_ringbuffer * fd6_build_driver_params<NO_TESS_GS, A7XX>(struct fd6_emit *emit);
 
 template <chip CHIP>
 void

@@ -552,7 +552,7 @@ build_prim_mode(struct fd6_emit *emit, struct fd_context *ctx, bool gmem)
       .ring();
 }
 
-template <chip CHIP, fd6_pipeline_type PIPELINE>
+template <fd6_pipeline_type PIPELINE, chip CHIP>
 void
 fd6_emit_3d_state(fd_cs &cs, struct fd6_emit *emit)
 {
@@ -655,11 +655,11 @@ fd6_emit_3d_state(fd_cs &cs, struct fd6_emit *emit)
          fd6_state_take_group(&emit->state, state, FD6_GROUP_FS_BINDLESS);
          break;
       case FD6_GROUP_CONST:
-         state = fd6_build_user_consts<CHIP, PIPELINE>(emit);
+         state = fd6_build_user_consts<PIPELINE, CHIP>(emit);
          fd6_state_take_group(&emit->state, state, FD6_GROUP_CONST);
          break;
       case FD6_GROUP_DRIVER_PARAMS:
-         state = fd6_build_driver_params<CHIP, PIPELINE>(emit);
+         state = fd6_build_driver_params<PIPELINE, CHIP>(emit);
          fd6_state_take_group(&emit->state, state, FD6_GROUP_DRIVER_PARAMS);
          break;
       case FD6_GROUP_PRIMITIVE_PARAMS:
@@ -710,10 +710,10 @@ fd6_emit_3d_state(fd_cs &cs, struct fd6_emit *emit)
    fd6_state_emit(&emit->state, cs);
 }
 
-template void fd6_emit_3d_state<A6XX, NO_TESS_GS>(fd_cs &cs, struct fd6_emit *emit);
-template void fd6_emit_3d_state<A7XX, NO_TESS_GS>(fd_cs &cs, struct fd6_emit *emit);
-template void fd6_emit_3d_state<A6XX, HAS_TESS_GS>(fd_cs &cs, struct fd6_emit *emit);
-template void fd6_emit_3d_state<A7XX, HAS_TESS_GS>(fd_cs &cs, struct fd6_emit *emit);
+template void fd6_emit_3d_state<NO_TESS_GS, A6XX>(fd_cs &cs, struct fd6_emit *emit);
+template void fd6_emit_3d_state<NO_TESS_GS, A7XX>(fd_cs &cs, struct fd6_emit *emit);
+template void fd6_emit_3d_state<HAS_TESS_GS, A6XX>(fd_cs &cs, struct fd6_emit *emit);
+template void fd6_emit_3d_state<HAS_TESS_GS, A7XX>(fd_cs &cs, struct fd6_emit *emit);
 
 template <chip CHIP>
 void

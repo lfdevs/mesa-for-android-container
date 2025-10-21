@@ -14,10 +14,10 @@ struct fd_ringbuffer *fd6_build_tess_consts(struct fd6_emit *emit) assert_dt;
 template <chip CHIP>
 unsigned fd6_user_consts_cmdstream_size(const struct ir3_shader_variant *v);
 
-template <chip CHIP, fd6_pipeline_type PIPELINE>
+template <fd6_pipeline_type PIPELINE, chip CHIP>
 struct fd_ringbuffer *fd6_build_user_consts(struct fd6_emit *emit) assert_dt;
 
-template <chip CHIP, fd6_pipeline_type PIPELINE>
+template <fd6_pipeline_type PIPELINE, chip CHIP>
 struct fd_ringbuffer *
 fd6_build_driver_params(struct fd6_emit *emit) assert_dt;
 

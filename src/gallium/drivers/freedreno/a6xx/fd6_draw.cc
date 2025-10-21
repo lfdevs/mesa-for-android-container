@@ -461,7 +461,7 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
    }
 
    if (emit.dirty_groups)
-      fd6_emit_3d_state<CHIP, PIPELINE>(cs, &emit);
+      fd6_emit_3d_state<PIPELINE, CHIP>(cs, &emit);
 
    /* All known firmware versions do not wait for WFI's with CP_DRAW_AUTO.
     * Plus, for the common case where the counter buffer is written by
@@ -539,7 +539,7 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
                emit.state.num_groups = 0;
                emit.draw = &draws[i];
                emit.draw_id = info->increment_draw_id ? i : 0;
-               fd6_emit_3d_state<CHIP, PIPELINE>(cs, &emit);
+               fd6_emit_3d_state<PIPELINE, CHIP>(cs, &emit);
             }
 
             assert(!index_offset); /* handled by util_draw_multi() */

@@ -353,7 +353,7 @@ fd6_gl2spacing(enum gl_tess_spacing spacing)
    }
 }
 
-template <chip CHIP, fd6_pipeline_type PIPELINE>
+template <fd6_pipeline_type PIPELINE, chip CHIP>
 void fd6_emit_3d_state(fd_cs &cs, struct fd6_emit *emit) assert_dt;
 
 struct fd6_compute_state;
