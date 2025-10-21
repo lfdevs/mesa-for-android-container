@@ -268,8 +268,9 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
       compiler->mergedregs = true;
       compiler->has_sel_b_fneg = dev_info->props.has_sel_b_fneg;
 
-      if (compiler->gen >= 7) {
-         compiler->has_alias_tex = true;
+      compiler->has_alias_tex = (compiler->gen >= 7);
+
+      if (compiler->gen == 7) {
          compiler->delay_slots.alu_to_alu = 2;
          compiler->delay_slots.non_alu = 5;
          compiler->delay_slots.cat3_src2_read = 1;
