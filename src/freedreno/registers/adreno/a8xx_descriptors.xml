@@ -97,7 +97,7 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 		<bitfield name="UV_OFFSET_V" low="26" high="27" type="ufixed" radix="2"/> <!-- CHROMA_MIDPOINT_Y -->
 	</reg32>
 	<reg32 offset="8" name="8">
-		<bitfield name="FLAG_ARRAY_PITCH" low="0" high="14" shr="4" type="uint"/> <!-- FLAG_BUFFER_ARRAY_PITCH -->
+		<bitfield name="FLAG_ARRAY_PITCH" low="0" high="14" shr="12" type="uint"/> <!-- FLAG_BUFFER_ARRAY_PITCH -->
 		<!-- log2 size of the first level, required for mipmapping -->
 		<bitfield name="FLAG_BUFFER_LOGW" low="24" high="27" type="uint"/>
 		<bitfield name="FLAG_BUFFER_LOGH" low="28" high="31" type="uint"/>

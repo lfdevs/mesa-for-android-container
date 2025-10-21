@@ -389,7 +389,7 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
                           A8XX_TEX_MEMOBJ_4_FLAG_LO(ubwc_addr);
          descriptor[5] |= A8XX_TEX_MEMOBJ_5_FLAG_HI(ubwc_addr >> 32) |
                           A8XX_TEX_MEMOBJ_5_FLAG_BUFFER_PITCH(ubwc_pitch);
-         descriptor[8] |= A8XX_TEX_MEMOBJ_8_FLAG_ARRAY_PITCH(layout->ubwc_layer_size >> 2) |
+         descriptor[8] |= A8XX_TEX_MEMOBJ_8_FLAG_ARRAY_PITCH(layout->ubwc_layer_size) |
                           A8XX_TEX_MEMOBJ_8_FLAG_BUFFER_LOGW(util_logbase2_ceil(DIV_ROUND_UP(width, block_width))) |
                           A8XX_TEX_MEMOBJ_8_FLAG_BUFFER_LOGH(util_logbase2_ceil(DIV_ROUND_UP(height, block_height)));
       }
