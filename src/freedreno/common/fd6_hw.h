@@ -11,6 +11,7 @@
 
 #include "a6xx_enums.xml.h"
 #include "a7xx_enums.xml.h"
+#include "a8xx_enums.xml.h"
 #include "a6xx_perfcntrs.xml.h"
 #include "a7xx_perfcntrs.xml.h"
 #include "a6xx_descriptors.xml.h"

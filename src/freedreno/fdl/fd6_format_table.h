@@ -33,6 +33,20 @@ fdl6_swiz(unsigned char swiz)
    return (enum a6xx_tex_swiz) swiz;
 }
 
+static inline enum a8xx_tex_swiz
+fdl8_swiz(unsigned char swiz)
+{
+   switch (swiz) {
+   case PIPE_SWIZZLE_X: return A8XX_SWIZ_X;
+   case PIPE_SWIZZLE_Y: return A8XX_SWIZ_Y;
+   case PIPE_SWIZZLE_Z: return A8XX_SWIZ_Z;
+   case PIPE_SWIZZLE_W: return A8XX_SWIZ_W;
+   case PIPE_SWIZZLE_0: return A8XX_SWIZ_ZERO;
+   case PIPE_SWIZZLE_1: return A8XX_SWIZ_ONE;
+   default:             return A8XX_SWIZ_IDENTITY;
+   }
+}
+
 enum a6xx_depth_format fd6_pipe2depth(enum pipe_format format);
 
 enum a6xx_format fd6_vertex_format(enum pipe_format format) ATTRIBUTE_CONST;

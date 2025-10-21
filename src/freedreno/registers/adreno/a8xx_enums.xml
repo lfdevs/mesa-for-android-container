@@ -286,4 +286,14 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 	<value value="15" name="A8XX_SPTOP"/>
 </enum>
 
+<enum name="a8xx_tex_swiz">
+	<value name="A8XX_SWIZ_IDENTITY" value="0"/>
+	<value name="A8XX_SWIZ_ZERO" value="1"/>
+	<value name="A8XX_SWIZ_ONE" value="2"/>
+	<value name="A8XX_SWIZ_X" value="3"/>
+	<value name="A8XX_SWIZ_Y" value="4"/>
+	<value name="A8XX_SWIZ_Z" value="5"/>
+	<value name="A8XX_SWIZ_W" value="6"/>
+</enum>
+
 </database>

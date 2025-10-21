@@ -6,6 +6,7 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 <import file="adreno/adreno_common.xml"/>
 <import file="adreno/adreno_pm4.xml"/>
 <import file="adreno/a6xx_enums.xml"/>
+<import file="adreno/a8xx_enums.xml"/>
 
 <domain name="A8XX_TEX_SAMP" width="32">
 	<doc>Texture sampler dwords</doc>
@@ -56,10 +57,10 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 	<reg32 offset="3" name="3">
 		<bitfield name="FMT" low="0" high="7" type="a6xx_format"/>
 		<bitfield name="SWAP" low="8" high="9" type="a3xx_color_swap"/>
-		<bitfield name="SWIZ_X" low="10" high="12" type="a6xx_tex_swiz"/>
-		<bitfield name="SWIZ_Y" low="13" high="15" type="a6xx_tex_swiz"/>
-		<bitfield name="SWIZ_Z" low="16" high="18" type="a6xx_tex_swiz"/>
-		<bitfield name="SWIZ_W" low="19" high="21" type="a6xx_tex_swiz"/>
+		<bitfield name="SWIZ_X" low="10" high="12" type="a8xx_tex_swiz"/>
+		<bitfield name="SWIZ_Y" low="13" high="15" type="a8xx_tex_swiz"/>
+		<bitfield name="SWIZ_Z" low="16" high="18" type="a8xx_tex_swiz"/>
+		<bitfield name="SWIZ_W" low="19" high="21" type="a8xx_tex_swiz"/>
 	</reg32>
 	<reg32 offset="4" name="4">
 		<bitfield name="TILE_MODE" low="0" high="1" type="a6xx_tile_mode"/>

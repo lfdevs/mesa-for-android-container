@@ -139,10 +139,10 @@ fdl6_texswiz(const struct fdl_view_args *args, bool has_z24uint_s8uint)
              A6XX_TEX_CONST_0_SWIZ_Z(fdl6_swiz(swiz[2])) |
              A6XX_TEX_CONST_0_SWIZ_W(fdl6_swiz(swiz[3]));
    } else if (CHIP >= A8XX) {
-      return A8XX_TEX_MEMOBJ_3_SWIZ_X(fdl6_swiz(swiz[0])) |
-             A8XX_TEX_MEMOBJ_3_SWIZ_Y(fdl6_swiz(swiz[1])) |
-             A8XX_TEX_MEMOBJ_3_SWIZ_Z(fdl6_swiz(swiz[2])) |
-             A8XX_TEX_MEMOBJ_3_SWIZ_W(fdl6_swiz(swiz[3]));
+      return A8XX_TEX_MEMOBJ_3_SWIZ_X(fdl8_swiz(swiz[0])) |
+             A8XX_TEX_MEMOBJ_3_SWIZ_Y(fdl8_swiz(swiz[1])) |
+             A8XX_TEX_MEMOBJ_3_SWIZ_Z(fdl8_swiz(swiz[2])) |
+             A8XX_TEX_MEMOBJ_3_SWIZ_W(fdl8_swiz(swiz[3]));
    }
 }
 
