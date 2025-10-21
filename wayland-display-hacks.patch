@@ -1,0 +1,17 @@
+diff -up mesa-25.1.9/src/vulkan/device-select-layer/device_select_layer.c.dma mesa-25.1.9/src/vulkan/device-select-layer/device_select_layer.c
+--- mesa-25.1.9/src/vulkan/device-select-layer/device_select_layer.c.dma	2025-10-22 05:56:08.362350907 +1000
++++ mesa-25.1.9/src/vulkan/device-select-layer/device_select_layer.c	2025-10-22 05:56:25.724490868 +1000
+@@ -152,11 +152,11 @@ static VkResult device_select_CreateInst
+    for (unsigned i = 0; i < pCreateInfo->enabledExtensionCount; i++) {
+ #ifdef VK_USE_PLATFORM_WAYLAND_KHR
+       if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME) && has_wayland)
+-         info->has_wayland = true;
++         info->has_wayland = !info->zink;
+ #endif
+ #ifdef VK_USE_PLATFORM_XCB_KHR
+       if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_XCB_SURFACE_EXTENSION_NAME) && has_xcb)
+-         info->has_xcb = !info->xserver || !info->zink;
++         info->has_xcb = !info->xserver && !info->zink;
+ #endif
+    }
+ 

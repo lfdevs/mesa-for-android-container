@@ -86,6 +86,7 @@ Source0:        https://archive.mesa3d.org/mesa-%{ver}.tar.xz
 # Source1 contains email correspondence clarifying the license terms.
 # Fedora opts to ignore the optional part of clause 2 and treat that code as 2 clause BSD.
 Source1:        Mesa-MLAA-License-Clarification-Email.txt
+
 # In CentOS/RHEL, Rust crates required to build NVK are vendored.
 # The minimum target versions are obtained from the .wrap files
 # https://gitlab.freedesktop.org/mesa/mesa/-/tree/main/subprojects
@@ -104,6 +105,10 @@ Source14:       https://crates.io/api/v1/crates/unicode-ident/%{rust_unicode_ide
 Source15:       https://crates.io/api/v1/crates/rustc-hash/%{rustc_hash_ver}/download#/rustc-hash-%{rustc_hash_ver}.tar.gz
 
 Patch10:        gnome-shell-glthread-disable.patch
+
+# zink + nvk + hotplug fails
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/14148
+Patch15:        wayland-display-hacks.patch
 
 BuildRequires:  meson >= 1.3.0
 BuildRequires:  gcc
