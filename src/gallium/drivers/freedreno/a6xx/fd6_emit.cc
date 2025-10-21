@@ -709,11 +709,8 @@ fd6_emit_3d_state(fd_cs &cs, struct fd6_emit *emit)
 
    fd6_state_emit(&emit->state, cs);
 }
-
-template void fd6_emit_3d_state<NO_TESS_GS, A6XX>(fd_cs &cs, struct fd6_emit *emit);
-template void fd6_emit_3d_state<NO_TESS_GS, A7XX>(fd_cs &cs, struct fd6_emit *emit);
-template void fd6_emit_3d_state<HAS_TESS_GS, A6XX>(fd_cs &cs, struct fd6_emit *emit);
-template void fd6_emit_3d_state<HAS_TESS_GS, A7XX>(fd_cs &cs, struct fd6_emit *emit);
+FD_GENX2(fd6_emit_3d_state, fd6_pipeline_type, NO_TESS_GS);
+FD_GENX2(fd6_emit_3d_state, fd6_pipeline_type, HAS_TESS_GS);
 
 template <chip CHIP>
 void

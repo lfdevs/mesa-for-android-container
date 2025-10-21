@@ -359,10 +359,8 @@ fd6_build_user_consts(struct fd6_emit *emit)
 
    return constobj.ring();
 }
-template struct fd_ringbuffer * fd6_build_user_consts<HAS_TESS_GS, A6XX>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_user_consts<HAS_TESS_GS, A7XX>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_user_consts<NO_TESS_GS, A6XX>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_user_consts<NO_TESS_GS, A7XX>(struct fd6_emit *emit);
+FD_GENX2(fd6_build_user_consts, fd6_pipeline_type, NO_TESS_GS);
+FD_GENX2(fd6_build_user_consts, fd6_pipeline_type, HAS_TESS_GS);
 
 template <chip CHIP>
 static inline void
@@ -466,11 +464,8 @@ fd6_build_driver_params(struct fd6_emit *emit)
 
    return dpconstobj.ring();
 }
-
-template struct fd_ringbuffer * fd6_build_driver_params<HAS_TESS_GS, A6XX>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_driver_params<HAS_TESS_GS, A7XX>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_driver_params<NO_TESS_GS, A6XX>(struct fd6_emit *emit);
-template struct fd_ringbuffer * fd6_build_driver_params<NO_TESS_GS, A7XX>(struct fd6_emit *emit);
+FD_GENX2(fd6_build_driver_params, fd6_pipeline_type, NO_TESS_GS);
+FD_GENX2(fd6_build_driver_params, fd6_pipeline_type, HAS_TESS_GS);
 
 template <chip CHIP>
 void

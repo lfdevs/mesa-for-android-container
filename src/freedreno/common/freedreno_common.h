@@ -22,6 +22,14 @@
    static constexpr auto FUNC_NAME##tmpl __attribute__((used)) =             \
       FUNC_NAME##instantiate<__FD_GPU_GENS>();
 
+#define FD_GENX2(FUNC_NAME, EXT_TYPE, EXT)                                   \
+   template <chip... CHIPs> constexpr auto FUNC_NAME##inst##EXT()            \
+   {                                                                         \
+      return std::tuple_cat(std::make_tuple(FUNC_NAME<EXT, CHIPs>)...);      \
+   }                                                                         \
+   static constexpr auto FUNC_NAME##tmpl##EXT __attribute__((used)) =        \
+      FUNC_NAME##inst##EXT<__FD_GPU_GENS>();
+
 #define FD_CALLX(info, thing)                                                \
    ({                                                                        \
       decltype(&thing<A6XX>) genX_thing;                                     \
