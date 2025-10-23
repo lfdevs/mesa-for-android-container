@@ -2979,24 +2979,13 @@ cp_blit(uint32_t *dwords, uint32_t sizedwords, int level)
 static void
 cp_context_reg_bunch(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-   int i;
-
-   /* NOTE: seems to write same reg multiple times.. not sure if different parts
-    * of these are triggered by the FLUSH_SO_n events?? (if that is what they
-    * actually are?)
-    */
-   bool saved_summary = summary;
-   summary = false;
-
    struct regacc r = regacc(NULL);
 
-   for (i = 0; i < sizedwords; i += 2) {
+   for (int i = 0; i < sizedwords; i += 2) {
       if (regacc_push(&r, dwords[i + 0], dwords[i + 1]))
          dump_register(&r, level + 1);
       reg_set(dwords[i + 0], dwords[i + 1]);
    }
-
-   summary = saved_summary;
 }
 
 static void
