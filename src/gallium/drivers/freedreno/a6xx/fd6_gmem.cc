@@ -305,15 +305,7 @@ emit_lrz_clears(struct fd_batch *batch)
 
          fd6_emit_flushes<CHIP>(ctx, cs, FD6_FLUSH_CACHE);
 
-         if (ctx->screen->info->magic.RB_DBG_ECO_CNTL_blit !=
-             ctx->screen->info->magic.RB_DBG_ECO_CNTL) {
-            /* This a non-context register, so we have to WFI before changing. */
-            fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
-            fd_pkt4(cs, 1)
-               .add(A6XX_RB_DBG_ECO_CNTL(
-                  .dword = ctx->screen->info->magic.RB_DBG_ECO_CNTL_blit
-               ));
-         }
+         fd6_set_rb_dbg_eco_mode<CHIP>(ctx, cs, true);
       }
 
       fd6_clear_lrz<CHIP>(batch, zsbuf, subpass->lrz, subpass->clear_depth);
@@ -325,14 +317,7 @@ emit_lrz_clears(struct fd_batch *batch)
    if (count > 0) {
       fd_cs cs(fd_batch_get_prologue(batch));
 
-      if (ctx->screen->info->magic.RB_DBG_ECO_CNTL_blit !=
-          ctx->screen->info->magic.RB_DBG_ECO_CNTL) {
-         fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
-         fd_pkt4(cs, 1)
-            .add(A6XX_RB_DBG_ECO_CNTL(
-               .dword = ctx->screen->info->magic.RB_DBG_ECO_CNTL
-            ));
-      }
+      fd6_set_rb_dbg_eco_mode<CHIP>(ctx, cs, false);
 
       /* Clearing writes via CCU color in the PS stage, and LRZ is read via
        * UCHE in the earlier GRAS stage.

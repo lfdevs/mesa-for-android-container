@@ -275,24 +275,14 @@ template <chip CHIP>
 static void
 emit_blit_fini(struct fd_context *ctx, fd_cs &cs)
 {
-   const struct fd_dev_info *info = ctx->screen->info;
-
    fd6_event_write<CHIP>(ctx, cs, FD_LABEL);
 
-   if (info->magic.RB_DBG_ECO_CNTL != info->magic.RB_DBG_ECO_CNTL_blit) {
-      fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
-      fd_pkt4(cs, 1)
-         .add(A6XX_RB_DBG_ECO_CNTL(.dword = info->magic.RB_DBG_ECO_CNTL_blit));
-   }
+   fd6_set_rb_dbg_eco_mode<CHIP>(ctx, cs, true);
 
    fd_pkt7(cs, CP_BLIT, 1)
       .add(CP_BLIT_0(.op = BLIT_OP_SCALE));
 
-   if (info->magic.RB_DBG_ECO_CNTL != info->magic.RB_DBG_ECO_CNTL_blit) {
-      fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
-      fd_pkt4(cs, 1)
-         .add(A6XX_RB_DBG_ECO_CNTL(.dword = info->magic.RB_DBG_ECO_CNTL));
-   }
+   fd6_set_rb_dbg_eco_mode<CHIP>(ctx, cs, false);
 }
 
 /* nregs: 5 */

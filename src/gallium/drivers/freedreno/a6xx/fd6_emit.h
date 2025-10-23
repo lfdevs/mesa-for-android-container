@@ -290,6 +290,27 @@ fd6_emit_blit(struct fd_context *ctx, fd_cs &cs)
    emit_marker6<CHIP>(cs, 7);
 }
 
+template <chip CHIP>
+static inline void
+fd6_set_rb_dbg_eco_mode(struct fd_context *ctx, fd_cs &cs, bool blit)
+{
+   /* Later things do not make this accessible to UMD: */
+   if (CHIP >= A7XX)
+      return;
+
+   const struct fd_dev_info *info = ctx->screen->info;
+
+   if (info->magic.RB_DBG_ECO_CNTL == info->magic.RB_DBG_ECO_CNTL_blit)
+      return;
+
+   uint32_t dword = blit ? info->magic.RB_DBG_ECO_CNTL_blit :
+                           info->magic.RB_DBG_ECO_CNTL;
+
+   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   fd_pkt4(cs, 1)
+      .add(A6XX_RB_DBG_ECO_CNTL(.dword = dword));
+}
+
 static inline bool
 fd6_geom_stage(mesa_shader_stage type)
 {
