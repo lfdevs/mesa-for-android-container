@@ -68,7 +68,7 @@ SOFTWARE.
 </enum>
 
 <bitset name="#instruction-cat1" extends="#instruction">
-	<pattern pos="42">0</pattern>
+	<field name="DM" pos="42" type="bool" display="(sat)"/>
 	<field name="SS" pos="44" type="bool" display="(ss)"/>
 	<field name="UL" pos="45" type="bool" display="(ul)"/>
 	<field name="ROUND" low="55" high="56" type="#round"/>
@@ -81,6 +81,7 @@ SOFTWARE.
 		<map name="UL">!!(src->flags &amp; IR3_INSTR_UL)</map>
 		<map name="DST_REL">!!(src->dsts[0]->flags &amp; IR3_REG_RELATIV)</map>
 		<map name="ROUND">src->cat1.round</map>
+		<map name="DM">src->cat1.sat</map>
 	</encode>
 </bitset>
 
@@ -118,7 +119,7 @@ SOFTWARE.
 			({DST} == 0xf4 /* a0.x */) &amp;&amp; ({SRC_TYPE} == 4 /* s16 */) &amp;&amp; ({DST_TYPE} == 4)
 		</expr>
 		<display>
-			{SY}{SS}{JP}{REPEAT}{UL}mova {ROUND}a0.x, {SRC_R}{SRC}
+			{SY}{SS}{JP}{REPEAT}{UL}mova {ROUND}{DM}a0.x, {SRC_R}{SRC}
 		</display>
 		<assert low="32" high="39">11110100</assert>  <!-- DST==a0.x -->
 		<assert low="46" high="48">100</assert>       <!-- DST_TYPE==s16 -->
@@ -129,7 +130,7 @@ SOFTWARE.
 			({DST} == 0xf5 /* a0.y */) &amp;&amp; ({SRC_TYPE} == 2 /* u16 */) &amp;&amp; ({DST_TYPE} == 2)
 		</expr>
 		<display>
-			{SY}{SS}{JP}{REPEAT}{UL}mova1 {ROUND}a1.x, {SRC_R}{SRC}
+			{SY}{SS}{JP}{REPEAT}{UL}mova1 {ROUND}{DM}a1.x, {SRC_R}{SRC}
 		</display>
 		<assert low="32" high="39">11110101</assert>  <!-- DST==a0.y -->
 		<assert low="46" high="48">010</assert>       <!-- DST_TYPE==u16 -->
@@ -140,11 +141,11 @@ SOFTWARE.
 			{SRC_TYPE} != {DST_TYPE}
 		</expr>
 		<display>
-			{SY}{SS}{JP}{REPEAT}{UL}cov.{SRC_TYPE}{DST_TYPE} {ROUND}{DST_HALF}{DST}, {SRC}
+			{SY}{SS}{JP}{REPEAT}{UL}cov.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST_HALF}{DST}, {SRC}
 		</display>
 	</override>
 	<display>
-		{SY}{SS}{JP}{REPEAT}{UL}mov.{SRC_TYPE}{DST_TYPE} {ROUND}{DST_HALF}{DST}, {SRC}
+		{SY}{SS}{JP}{REPEAT}{UL}mov.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST_HALF}{DST}, {SRC}
 	</display>
 	<field name="DST" low="32" high="39" type="#cat1-dst">
 		<param name="DST_REL"/>
@@ -316,7 +317,7 @@ SOFTWARE.
 
 <bitset name="movs-immed" extends="#instruction-cat1-movs">
 	<display>
-		{SY}{SS}{JP}{REPEAT}{UL}movs.{SRC_TYPE}{DST_TYPE} {ROUND}{DST_HALF}{DST}, {SRC}, {INVOCATION}
+		{SY}{SS}{JP}{REPEAT}{UL}movs.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST_HALF}{DST}, {SRC}, {INVOCATION}
 	</display>
 
 	<field name="INVOCATION" low="23" high="29" type="uint"/>
@@ -329,7 +330,7 @@ SOFTWARE.
 
 <bitset name="movs-a0" extends="#instruction-cat1-movs">
 	<display>
-		{SY}{SS}{JP}{REPEAT}{UL}movs.{SRC_TYPE}{DST_TYPE} {ROUND}{DST_HALF}{DST}, {SRC}, a0.x
+		{SY}{SS}{JP}{REPEAT}{UL}movs.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST_HALF}{DST}, {SRC}, a0.x
 	</display>
 
 	<pattern low="23" high="29">0000000</pattern>
@@ -419,7 +420,7 @@ SOFTWARE.
                 particular this can be used to swap two registers.
 	</doc>
 	<display>
-		{SY}{SS}{JP}{UL}swz.{SRC_TYPE}{DST_TYPE} {ROUND}{DST0}, {DST1}, {SRC0}, {SRC1}
+		{SY}{SS}{JP}{UL}swz.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST0}, {DST1}, {SRC0}, {SRC1}
 	</display>
 	<field name="SRC1" low="8" high="15" type="#cat1-multi-src">
 		<param name="HALF"/>
@@ -443,7 +444,7 @@ SOFTWARE.
 		GATher. Move SRC0 to DST0, SRC1 to DST0 + 1, SRC2 to DST0 + 2, and SRC3 to DST0 + 3.
 	</doc>
 	<display>
-		{SY}{SS}{JP}{UL}gat.{SRC_TYPE}{DST_TYPE} {ROUND}{DST0}, {SRC0}, {SRC1}, {SRC2}, {SRC3}
+		{SY}{SS}{JP}{UL}gat.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST0}, {SRC0}, {SRC1}, {SRC2}, {SRC3}
 	</display>
 	<field name="SRC1" low="8" high="15" type="#cat1-multi-src">
 		<param name="HALF"/>
@@ -469,7 +470,7 @@ SOFTWARE.
 		SCaTter. Move SRC0 to DST0, SRC0 + 1 to DST1, SRC0 + 2 to DST2 + 3, and SRC0 + 3 to DST3.
 	</doc>
 	<display>
-		{SY}{SS}{JP}{UL}sct.{SRC_TYPE}{DST_TYPE} {ROUND}{DST0}, {DST1}, {DST2}, {DST3}, {SRC0}
+		{SY}{SS}{JP}{UL}sct.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST0}, {DST1}, {DST2}, {DST3}, {SRC0}
 	</display>
 	<field name="DST1" low="8" high="15" type="#cat1-multi-dst">
 		<param name="DST_HALF"/>

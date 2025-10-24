@@ -446,6 +446,7 @@ struct ir3_instruction {
          type_t src_type, dst_type;
          round_t round;
          reduce_op_t reduce_op;
+         bool sat;
       } cat1;
       struct {
          enum {
