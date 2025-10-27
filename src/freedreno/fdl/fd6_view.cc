@@ -337,7 +337,7 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
                       /* A8XX_TEX_MEMOBJ_4_PRT_EN ? */
                       COND(layout->tile_all, A8XX_TEX_MEMOBJ_4_TILE_ALL) |
                       COND(util_format_is_srgb(args->format), A8XX_TEX_MEMOBJ_4_SRGB);
-      descriptor[6] = A8XX_TEX_MEMOBJ_6_TEX_LINE_OFFSET(pitch) |
+      descriptor[6] = A8XX_TEX_MEMOBJ_6_TEX_LINE_OFFSET(pitch * 8) |   /* in bits */
                       A8XX_TEX_MEMOBJ_6_MIN_LINE_OFFSET(layout->pitchalign - 6) |
                       A8XX_TEX_MEMOBJ_6_MIPLVLS(args->level_count - 1);
 
