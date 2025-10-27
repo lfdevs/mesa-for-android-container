@@ -77,7 +77,8 @@ SOFTWARE.
 	<pattern low="61" high="63">001</pattern>  <!-- cat1 -->
 	<encode>
 		<map name="SRC">src->srcs[0]</map>
-		<map name="SRC_R">!!(src->srcs[0]->flags &amp; IR3_REG_R)</map>
+		<!-- SRC_R doubles as the .u bit for mova/mova1: -->
+		<map name="SRC_R">!!(src->srcs[0]->flags &amp; IR3_REG_R) || !!(src->flags &amp; IR3_INSTR_U)</map>
 		<map name="UL">!!(src->flags &amp; IR3_INSTR_UL)</map>
 		<map name="DST_REL">!!(src->dsts[0]->flags &amp; IR3_REG_RELATIV)</map>
 		<map name="ROUND">src->cat1.round</map>
@@ -119,7 +120,7 @@ SOFTWARE.
 			({DST} == 0xf4 /* a0.x */) &amp;&amp; ({SRC_TYPE} == 4 /* s16 */) &amp;&amp; ({DST_TYPE} == 4)
 		</expr>
 		<display>
-			{SY}{SS}{JP}{REPEAT}{UL}mova {ROUND}{DM}a0.x, {SRC_R}{SRC}
+			{SY}{SS}{JP}{REPEAT}{UL}mova{U} {ROUND}{DM}a0.x, {SRC}
 		</display>
 		<assert low="32" high="39">11110100</assert>  <!-- DST==a0.x -->
 		<assert low="46" high="48">100</assert>       <!-- DST_TYPE==s16 -->
@@ -130,7 +131,7 @@ SOFTWARE.
 			({DST} == 0xf5 /* a0.y */) &amp;&amp; ({SRC_TYPE} == 2 /* u16 */) &amp;&amp; ({DST_TYPE} == 2)
 		</expr>
 		<display>
-			{SY}{SS}{JP}{REPEAT}{UL}mova1 {ROUND}{DM}a1.x, {SRC_R}{SRC}
+			{SY}{SS}{JP}{REPEAT}{UL}mova1{U} {ROUND}{DM}a1.x, {SRC}
 		</display>
 		<assert low="32" high="39">11110101</assert>  <!-- DST==a0.y -->
 		<assert low="46" high="48">010</assert>       <!-- DST_TYPE==u16 -->
@@ -147,6 +148,9 @@ SOFTWARE.
 	<display>
 		{SY}{SS}{JP}{REPEAT}{UL}mov.{SRC_TYPE}{DST_TYPE} {ROUND}{DM}{DST_HALF}{DST}, {SRC}
 	</display>
+	<derived name="U" type="bool" display=".u">
+		<expr>{SRC_R}</expr>
+	</derived>
 	<field name="DST" low="32" high="39" type="#cat1-dst">
 		<param name="DST_REL"/>
 	</field>

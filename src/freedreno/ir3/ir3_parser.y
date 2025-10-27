@@ -705,14 +705,17 @@ mova_src:          src_reg_or_const_or_rel
 |                  immediate_cat1
 |                  src_reg_flags immediate_cat1
 
-cat1_mova1:        T_OP_MOVA1 T_A1 ',' {
+cat1_mova_flags:
+|                  '.' 'u' { iflags.flags |= IR3_INSTR_U; }
+
+cat1_mova1:        T_OP_MOVA1 cat1_mova_flags T_A1 ',' {
                        new_instr(OPC_MOV);
                        instr->cat1.src_type = TYPE_U16;
                        instr->cat1.dst_type = TYPE_U16;
                        new_dst((61 << 3) + 2, IR3_REG_HALF);
                    } mova_src
 
-cat1_mova:         T_OP_MOVA T_A0 ',' {
+cat1_mova:         T_OP_MOVA cat1_mova_flags T_A0 ',' {
                        new_instr(OPC_MOV);
                        instr->cat1.src_type = TYPE_S16;
                        instr->cat1.dst_type = TYPE_S16;
