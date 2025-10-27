@@ -153,6 +153,7 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 	<value name="CACHE_FLUSH7" value="0x32" variants="A7XX-"/>
 	<value name="CACHE_INVALIDATE7" value="0x33" variants="A7XX-"/>
 	<value name="DEPTH_BUFFER_FLIP" value="0x3d" variants="A8XX-"/>
+	<value name="CCH_FAST_CLEAR_CLEAN" value="0x1b" variants="A8XX-"/>
 </enum>
 
 <enum name="pc_di_primtype">
@@ -662,6 +663,12 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 	<value name="CP_CCHE_INVALIDATE" value="0x3a" variants="A7XX-"/>
 
 	<value name="CP_SCOPE_CNTL" value="0x6c" variants="A7XX-"/>
+
+	<value name="CP_SKIP_IB_MODE" value="0x27" variants="A7XX-"/>
+
+	<value name="CP_MEMORY_MAP_UPDATE" value="0x58" variants="A8XX-"/>
+
+	<value name="CP_BARRIER" value="0x59" variants="A8XX-"/>
 </enum>
 
 
@@ -1820,6 +1827,9 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		<!-- new in a8xx: -->
 		<value value="32" name="RM8_DEPTH_PASS_START"/>
 		<value value="33" name="RM8_DEPTH_PASS_END"/>
+		<value value="34" name="RM8_SET_RENDER_TARGET"/>
+		<value value="35" name="RM8_PGMEM_ON"/>
+		<value value="36" name="RM8_PGMEM_OFF"/>
 	</enum>
 	<stripe varset="chip" variants="A6XX-A7XX">
 		<reg32 offset="0" name="0">
@@ -1865,8 +1875,8 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		<reg32 offset="0" name="0">
 			<!-- if b8 is set, the low bits are interpreted differently (and b4 ignored) -->
 			<bitfield name="MARKER_MODE" pos="8" type="set_marker_mode" addvariant="yes"/>
-			<bitfield name="USES_GMEM" pos="7" type="boolean" varset="set_marker_mode" variants="SET_RENDER_MODE"/>
 			<bitfield name="MODE" low="0" high="6" type="a6xx_marker" varset="set_marker_mode" variants="SET_RENDER_MODE"/>
+			<bitfield name="USES_GMEM" pos="7" type="boolean" varset="set_marker_mode" variants="SET_RENDER_MODE"/>
 			<bitfield name="IFPC_MODE" pos="0" type="a6xx_ifpc_mode" varset="set_marker_mode" variants="SET_IFPC_MODE"/>
 			<!-- idk if the RT w/a fields apply to a8xx as well -->
 		</reg32>
