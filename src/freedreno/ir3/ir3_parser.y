@@ -722,6 +722,17 @@ cat1_mova:         T_OP_MOVA cat1_mova_flags T_A0 ',' {
                        new_dst((61 << 3), IR3_REG_HALF);
                    } mova_src
 
+cat1_mova_dst_flags:
+|                  T_SAT { instr->cat1.sat = true; }
+
+cat1_mova_r:       T_OP_MOVA cat1_mova_flags '.' 'r' { new_instr(OPC_MOV); } cat1_mova_dst_flags T_A0 ',' mova_src ',' integer ',' integer {
+                       instr->cat1.src_type = TYPE_S16;
+                       instr->cat1.dst_type = TYPE_S16;
+                       new_dst((61 << 3), IR3_REG_HALF);
+                       instr->cat1.r[0] = $11;
+                       instr->cat1.r[1] = $13;
+                   }
+
 cat1_swz:          T_OP_SWZ '.' T_CAT1_TYPE_TYPE { parse_type_type(new_instr(OPC_SWZ), $3); } dst_reg ',' dst_reg ',' src_reg ',' src_reg
 
 cat1_gat:          T_OP_GAT '.' T_CAT1_TYPE_TYPE { parse_type_type(new_instr(OPC_GAT), $3); } dst_reg ',' src_reg ',' src_reg ',' src_reg ',' src_reg
@@ -737,6 +748,7 @@ cat1_movs: T_OP_MOVS '.' T_CAT1_TYPE_TYPE { parse_type_type(new_instr(OPC_MOVS),
 cat1_instr:        cat1_movmsk
 |                  cat1_mova1
 |                  cat1_mova
+|                  cat1_mova_r
 |                  cat1_swz
 |                  cat1_gat
 |                  cat1_sct

@@ -66,7 +66,14 @@ __instruction_case(struct encode_state *s, const struct ir3_instruction *instr)
 	 */
 	if (instr->opc == OPC_MOV) {
 		struct ir3_register *src = instr->srcs[0];
-		if (src->flags & IR3_REG_IMMED) {
+		if ((instr->dsts[0]->num == regid(REG_A0, 0)) &&
+				(instr->cat1.r[0] || instr->cat1.r[1])) {
+			if (src->flags & IR3_REG_IMMED) {
+				return OPC_MOVA_R_IMMED;
+			} else {
+				return OPC_MOVA_R_GPR;
+			}
+		} else if (src->flags & IR3_REG_IMMED) {
 			return OPC_MOV_IMMED;
 		} if (src->flags & IR3_REG_RELATIV) {
 			if (src->flags & IR3_REG_CONST) {

@@ -101,6 +101,8 @@ typedef enum {
    OPC_MOV_RELCONST    = _OPC(1, 44),
    OPC_MOVS_IMMED      = _OPC(1, 45),
    OPC_MOVS_A0         = _OPC(1, 46),
+   OPC_MOVA_R_IMMED    = _OPC(1, 47),
+   OPC_MOVA_R_GPR      = _OPC(1, 48),
 
    /* Macros that expand to an if statement + move */
    OPC_BALLOT_MACRO    = _OPC(1, 50),

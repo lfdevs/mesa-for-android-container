@@ -98,6 +98,7 @@ static const struct test {
 
    INSTR_6XX(201108f4_00000000, "mova.u a0.x, (r)hr0.x"),
    INSTR_6XX(204888f5_00000000, "mova1.u a1.x, 0"),
+   INSTR_8XX(20130cf4_008000c0, "mova.u.r (sat)a0.x, hr48.x, 0, 1"),
 
    INSTR_7XX(2004c005_00000405, "cov.f32u32 r1.y, (last)r1.y"),
 

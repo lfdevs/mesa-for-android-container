@@ -485,6 +485,11 @@ print_instr(struct log_stream *stream, struct ir3_instruction *instr, int lvl)
       first = false;
    }
 
+   if ((opc_cat(instr->opc) == 1) && (instr->cat1.r[0] || instr->cat1.r[1])) {
+      mesa_log_stream_printf(stream, ", %u, %u",
+                             instr->cat1.r[0], instr->cat1.r[1]);
+   }
+
    if (is_tex(instr) && !(instr->flags & IR3_INSTR_S2EN) &&
        !is_tex_shuffle(instr)) {
       if (!!(instr->flags & IR3_INSTR_B) && !!(instr->flags & IR3_INSTR_A1EN)) {
