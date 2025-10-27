@@ -21,6 +21,7 @@
 #include "freedreno_state.h"
 #include "freedreno_stompable_regs.h"
 #include "freedreno_tracepoints.h"
+#include "freedreno_vrs.h"
 
 #include "fd6_blend.h"
 #include "fd6_const.h"
@@ -464,7 +465,7 @@ fd6_emit_non_group(fd_cs &cs, struct fd6_emit *emit) assert_dt
    const enum fd_dirty_3d_state dirty = ctx->dirty;
    unsigned num_viewports = emit->prog->num_viewports;
 
-   fd_crb crb(cs, 324);
+   fd_crb crb(cs, 2 + (12 * num_viewports));
 
    if (dirty & FD_DIRTY_STENCIL_REF) {
       struct pipe_stencil_ref *sr = &ctx->stencil_ref;
@@ -506,8 +507,11 @@ fd6_emit_non_group(fd_cs &cs, struct fd6_emit *emit) assert_dt
          crb.add(GRAS_CL_VIEWPORT_ZCLAMP_MIN(CHIP, i, zmin));
          crb.add(GRAS_CL_VIEWPORT_ZCLAMP_MAX(CHIP, i, zmax));
 
-         /* TODO: what to do about this and multi viewport ? */
-         if (i == 0) {
+         if (CHIP >= A8XX) {
+            crb.add(RB_VIEWPORT_ZCLAMP_MIN_REG(CHIP, i, zmin));
+            crb.add(RB_VIEWPORT_ZCLAMP_MAX_REG(CHIP, i, zmax));
+         } else if (i == 0) {
+            /* TODO: what to do about this and multi viewport ? */
             crb.add(RB_VIEWPORT_ZCLAMP_MIN(CHIP, zmin));
             crb.add(RB_VIEWPORT_ZCLAMP_MAX(CHIP, zmax));
          }
@@ -764,7 +768,24 @@ fd6_emit_gmem_cache_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem)
    uint32_t depth_offset = cfg->depth_ccu_offset & 0x1fffff;
    uint32_t depth_offset_hi = cfg->depth_ccu_offset >> 21;
 
-   if (CHIP == A7XX) {
+   if (CHIP == A8XX) {
+      fd_crb(cs, 10)
+         .add(RB_CCU_CACHE_CNTL(CHIP,
+               .depth_cache_size = (enum a6xx_ccu_cache_size)cfg->depth_cache_fraction,
+               .depth_offset = cfg->depth_ccu_offset,
+               .color_cache_size = (enum a6xx_ccu_cache_size)cfg->color_cache_fraction,
+               .color_offset = cfg->color_ccu_offset,
+         ))
+         .add(VPC_ATTR_BUF_GMEM_SIZE(CHIP, cfg->vpc_attr_buf_size))
+         .add(VPC_ATTR_BUF_GMEM_BASE(CHIP, cfg->vpc_attr_buf_offset))
+         .add(PC_ATTR_BUF_GMEM_SIZE(CHIP, cfg->vpc_attr_buf_size))
+         .add(VPC_POS_BUF_GMEM_SIZE(CHIP, cfg->vpc_pos_buf_size))
+         .add(VPC_POS_BUF_GMEM_BASE(CHIP, cfg->vpc_pos_buf_offset))
+         .add(PC_POS_BUF_GMEM_SIZE(CHIP, cfg->vpc_pos_buf_size))
+         .add(VPC_BV_POS_BUF_GMEM_BASE(CHIP, cfg->vpc_bv_pos_buf_offset))
+         .add(VPC_BV_POS_BUF_GMEM_SIZE(CHIP, cfg->vpc_bv_pos_buf_size))
+         .add(PC_BV_POS_BUF_GMEM_SIZE(CHIP, cfg->vpc_bv_pos_buf_size));
+   } else if (CHIP == A7XX) {
       fd_pkt4(cs, 1)
          .add(RB_CCU_CACHE_CNTL(CHIP,
             .depth_offset_hi = depth_offset_hi,
@@ -821,7 +842,7 @@ fd6_emit_static_non_context_regs(struct fd_context *ctx, fd_cs &cs)
 
    fd_ncrb<CHIP> ncrb(cs, 28 + ARRAY_SIZE(screen->info->magic_raw));
 
-   if (CHIP >= A7XX) {
+   if (CHIP == A7XX) {
       /* On A7XX, RB_CCU_CNTL was broken into two registers, RB_CCU_CNTL which has
        * static properties that can be set once, this requires a WFI to take effect.
        * While the newly introduced register RB_CCU_CACHE_CNTL has properties that may
@@ -858,12 +879,19 @@ fd6_emit_static_non_context_regs(struct fd_context *ctx, fd_cs &cs)
       ncrb.add({ .reg = magic_reg.reg, .value = value });
    }
 
-   ncrb.add(A6XX_RB_DBG_ECO_CNTL(.dword = screen->info->magic.RB_DBG_ECO_CNTL));
-   ncrb.add(A6XX_SP_NC_MODE_CNTL_2(.f16_no_inf = true));
+   /* gen8 moves magic reg setup to KMD and blocks access from UMD:
+    */
+   if (CHIP < A8XX) {
+      ncrb.add(A6XX_RB_DBG_ECO_CNTL(.dword = screen->info->magic.RB_DBG_ECO_CNTL));
+      ncrb.add(A6XX_SP_NC_MODE_CNTL_2(.f16_no_inf = true));
+      ncrb.add(VPC_LB_MODE_CNTL(CHIP));
+      ncrb.add(PC_CONTEXT_SWITCH_GFX_PREEMPTION_MODE(CHIP));
+   }
 
    ncrb.add(A6XX_SP_PERFCTR_SHADER_MASK(.dword = 0x3f));
    if (CHIP == A6XX && !screen->info->props.is_a702)
       ncrb.add(TPL1_UNKNOWN_B605(CHIP, .dword = 0x44));
+
    if (CHIP == A6XX) {
       ncrb.add(HLSQ_UNKNOWN_BE00(CHIP, .dword = 0x80));
       ncrb.add(HLSQ_UNKNOWN_BE01(CHIP));
@@ -875,10 +903,9 @@ fd6_emit_static_non_context_regs(struct fd_context *ctx, fd_cs &cs)
    }
 
    ncrb.add(GRAS_SC_SCREEN_SCISSOR_CNTL(CHIP));
-   ncrb.add(VPC_LB_MODE_CNTL(CHIP));
 
-   /* These regs are blocked (CP_PROTECT) on a6xx: */
-   if (CHIP >= A7XX) {
+   /* These regs are blocked (CP_PROTECT) on a6xx, written by KMD on a8xx: */
+   if (CHIP == A7XX) {
       ncrb.add(TPL1_BICUBIC_WEIGHTS_TABLE_REG(CHIP, 0, 0));
       ncrb.add(TPL1_BICUBIC_WEIGHTS_TABLE_REG(CHIP, 1, 0x3fe05ff4));
       ncrb.add(TPL1_BICUBIC_WEIGHTS_TABLE_REG(CHIP, 2, 0x3fa0ebee));
@@ -890,8 +917,6 @@ fd6_emit_static_non_context_regs(struct fd_context *ctx, fd_cs &cs)
       ncrb.add(GRAS_BIN_FOVEAT(CHIP));
       ncrb.add(RB_BIN_FOVEAT(CHIP));
    }
-
-   ncrb.add(PC_CONTEXT_SWITCH_GFX_PREEMPTION_MODE(CHIP));
 
    if (CHIP == A7XX)
       ncrb.add(RB_UNKNOWN_8E09(CHIP, 0x7));
@@ -913,7 +938,11 @@ fd6_emit_static_context_regs(struct fd_context *ctx, fd_cs &cs)
    crb.add(SP_GFX_USIZE(CHIP));
    crb.add(A6XX_TPL1_PS_ROTATION_CNTL());
 
-   crb.add(A6XX_RB_RBP_CNTL(.dword = screen->info->magic.RB_RBP_CNTL));
+   /* gen8 moves magic reg programming to KMD and blocks access for UMD: */
+   if (CHIP < A8XX) {
+      crb.add(A6XX_RB_RBP_CNTL(.dword = screen->info->magic.RB_RBP_CNTL));
+   }
+
    crb.add(A6XX_SP_UNKNOWN_A9A8());
 
    crb.add(A6XX_SP_MODE_CNTL(
@@ -1010,6 +1039,12 @@ fd6_emit_static_context_regs(struct fd_context *ctx, fd_cs &cs)
        * so we play safe and don't add it.
        */
       crb.add(PC_TF_BUFFER_SIZE(CHIP, FD6_TESS<CHIP>::FACTOR_SIZE));
+
+      if (screen->info->props.has_attachment_shading_rate) {
+         for (int i = 0; i < 2; i++) {
+            crb.add(GRAS_LRZ_QUALITY_LOOKUP_TABLE_REG(CHIP, i, fd_gras_shading_rate_lut(i)));
+         }
+      }
    }
 
    /* There is an optimization to skip executing draw states for draws with no
@@ -1076,9 +1111,17 @@ fd6_emit_restore(fd_cs &cs, struct fd_batch *batch)
             .concurrent_bin_disable = true,
          ));
 
+      if (CHIP == A8XX) {
+         fd6_lrz_inv<CHIP>(ctx, cs);
+      }
+
       fd6_event_write<CHIP>(ctx, cs, FD_CCU_INVALIDATE_COLOR);
       fd6_event_write<CHIP>(ctx, cs, FD_CCU_INVALIDATE_DEPTH);
-      fd6_event_write<CHIP>(ctx, cs, FD_LRZ_INVALIDATE);
+      if (CHIP == A8XX) {
+         fd_pkt7(cs, CP_CCHE_INVALIDATE, 0);
+      } else {
+         fd6_event_write<CHIP>(ctx, cs, FD_LRZ_INVALIDATE);
+      }
       fd6_event_write<CHIP>(ctx, cs, FD_CACHE_INVALIDATE);
 
       fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);

@@ -60,6 +60,18 @@ struct fd6_gmem_config {
    /* Vertex attrib cache (a750+): */
    uint32_t vpc_attr_buf_size;
    uint32_t vpc_attr_buf_offset;
+
+   /* Vertex position cache (a8xx+): */
+   uint32_t vpc_pos_buf_size;
+   uint32_t vpc_pos_buf_offset;
+   uint32_t vpc_bv_pos_buf_size;
+   uint32_t vpc_bv_pos_buf_offset;
+
+   /* see enum a6xx_ccu_cache_size */
+   uint32_t depth_cache_fraction;
+   uint32_t color_cache_fraction;
+   uint32_t depth_cache_size;
+   uint32_t color_cache_size;
 };
 
 struct fd_screen {

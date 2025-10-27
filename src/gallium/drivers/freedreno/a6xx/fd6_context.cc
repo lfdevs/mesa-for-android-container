@@ -313,8 +313,10 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    fd_crb crb(fd6_ctx->base.pipe, 3);
 
    crb.add(GRAS_SC_MSAA_SAMPLE_POS_CNTL(CHIP))
-      .add(A6XX_RB_MSAA_SAMPLE_POS_CNTL())
-      .add(TPL1_MSAA_SAMPLE_POS_CNTL(CHIP));
+      .add(A6XX_RB_MSAA_SAMPLE_POS_CNTL());
+
+   if (CHIP < A8XX)
+      crb.add(TPL1_MSAA_SAMPLE_POS_CNTL(CHIP));
 
    fd6_ctx->sample_locations_disable_stateobj = crb;
 

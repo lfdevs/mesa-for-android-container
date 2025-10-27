@@ -435,6 +435,10 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
       /* convert from # of patches to draw count */
       subdraw_size *= ctx->patch_vertices;
 
+      /* For gen8 tess_bo is sized for two draws, adjust subdraw size accordingly: */
+      if (CHIP >= A8XX)
+         subdraw_size /= 2;
+
       fd_pkt7(cs, CP_SET_SUBDRAW_SIZE, 1)
          .add(subdraw_size);
 

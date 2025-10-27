@@ -20,9 +20,11 @@ enum fd6_flush {
    FD6_INVALIDATE_CCU_DEPTH = BIT(3),
    FD6_FLUSH_CACHE          = BIT(4),
    FD6_INVALIDATE_CACHE     = BIT(5),
-   FD6_WAIT_MEM_WRITES      = BIT(6),
-   FD6_WAIT_FOR_IDLE        = BIT(7),
-   FD6_WAIT_FOR_ME          = BIT(8),
+   FD6_INVALIDATE_CCHE      = BIT(6),
+
+   FD6_WAIT_MEM_WRITES      = BIT(16),
+   FD6_WAIT_FOR_IDLE        = BIT(17),
+   FD6_WAIT_FOR_ME          = BIT(18),
 };
 
 template <chip CHIP>

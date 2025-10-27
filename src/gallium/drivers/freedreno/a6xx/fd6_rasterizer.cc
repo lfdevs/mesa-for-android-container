@@ -36,7 +36,10 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
       psize_max = cso->point_size;
    }
 
-   unsigned nreg = (CHIP >= A7XX) ? 46 : 15;
+   unsigned nreg = (CHIP >= A7XX) ? 76 : 15;
+   if (CHIP >= A8XX)
+      nreg++;
+
    fd_crb crb(ctx->pipe, nreg);
 
    crb.add(GRAS_CL_CNTL(CHIP,
@@ -94,7 +97,10 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
    crb.add(VPC_RAST_CNTL(CHIP, mode));
    crb.add(PC_DGEN_RAST_CNTL(CHIP, mode));
 
-   if (CHIP == A7XX ||
+   if (CHIP >= A8XX)
+      crb.add(GRAS_RAST_CNTL(CHIP, mode));
+
+   if (CHIP >= A7XX ||
        (CHIP == A6XX && ctx->screen->info->props.is_a702)) {
       crb.add(VPC_PS_RAST_CNTL(CHIP, mode));
    }
@@ -113,10 +119,17 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
       for (unsigned i = 0; i < num_viewports; i++) {
          crb.add(GRAS_CL_VIEWPORT_ZCLAMP_MIN(CHIP, i, 0.0f));
          crb.add(GRAS_CL_VIEWPORT_ZCLAMP_MAX(CHIP, i, 1.0f));
+
+         if (CHIP >= A8XX) {
+            crb.add(RB_VIEWPORT_ZCLAMP_MIN_REG(CHIP, i, 0.0f));
+            crb.add(RB_VIEWPORT_ZCLAMP_MAX_REG(CHIP, i, 1.0f));
+         }
       }
 
-      crb.add(RB_VIEWPORT_ZCLAMP_MIN(CHIP, 0.0f));
-      crb.add(RB_VIEWPORT_ZCLAMP_MAX(CHIP, 1.0f));
+      if (CHIP <= A7XX) {
+         crb.add(RB_VIEWPORT_ZCLAMP_MIN(CHIP, 0.0f));
+         crb.add(RB_VIEWPORT_ZCLAMP_MAX(CHIP, 1.0f));
+      }
    }
 
    if (CHIP == A6XX && ctx->screen->info->props.has_legacy_pipeline_shading_rate) {

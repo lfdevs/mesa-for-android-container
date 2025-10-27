@@ -92,6 +92,10 @@ template <chip CHIP>
 static inline bool
 fd6_load_shader_consts_via_preamble(const struct ir3_shader_variant *v)
 {
+   if (CHIP == A8XX) {
+      assert(v->compiler->load_shader_consts_via_preamble);
+      return true;
+   }
    return (CHIP == A7XX) && v->compiler->load_shader_consts_via_preamble;
 }
 
@@ -99,6 +103,10 @@ template <chip CHIP>
 static inline bool
 fd6_load_inline_uniforms_via_preamble_ldgk(const struct ir3_shader_variant *v)
 {
+   if (CHIP == A8XX) {
+      assert(v->compiler->load_inline_uniforms_via_preamble_ldgk);
+      return true;
+   }
    return (CHIP == A7XX) && v->compiler->load_inline_uniforms_via_preamble_ldgk;
 }
 

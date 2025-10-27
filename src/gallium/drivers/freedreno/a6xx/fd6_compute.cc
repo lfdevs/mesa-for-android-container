@@ -38,7 +38,7 @@ cs_program_emit_local_size(struct fd_context *ctx, fd_crb &crb,
    enum a6xx_threadsize thrsz_cs = ctx->screen->info->props
       .supports_double_threadsize ? thrsz : THREAD128;
 
-   if (CHIP == A7XX) {
+   if (CHIP >= A7XX) {
       unsigned tile_height = (local_size[1] % 8 == 0)   ? 3
                              : (local_size[1] % 4 == 0) ? 5
                              : (local_size[1] % 2 == 0) ? 9

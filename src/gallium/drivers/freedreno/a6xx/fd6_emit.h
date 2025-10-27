@@ -214,7 +214,7 @@ __event_write(fd_cs &cs, enum fd_gpu_event event,
    struct fd_gpu_event_info info = fd_gpu_events<CHIP>[event];
    unsigned len = info.needs_seqno ? 4 : 1;
 
-   if ((CHIP == A7XX) && (event == FD_RB_DONE))
+   if ((CHIP >= A7XX) && (event == FD_RB_DONE))
       len--;
 
    fd_pkt7 pkt(cs, CP_EVENT_WRITE, len);
@@ -222,7 +222,7 @@ __event_write(fd_cs &cs, enum fd_gpu_event event,
    if (CHIP == A6XX) {
       pkt.add(CP_EVENT_WRITE_0_EVENT(info.raw_event) |
                COND(info.needs_seqno, CP_EVENT_WRITE_0_TIMESTAMP));
-   } else if (CHIP == A7XX) {
+   } else if (CHIP >= A7XX) {
       pkt.add(CP_EVENT_WRITE7_0_EVENT(info.raw_event) |
               CP_EVENT_WRITE7_0_WRITE_SRC(esrc) |
               CP_EVENT_WRITE7_0_WRITE_DST(edst) |
@@ -283,6 +283,28 @@ fd6_cache_inv(struct fd_context *ctx, fd_cs &cs)
 
 template <chip CHIP>
 static inline void
+fd6_lrz_inv(struct fd_context *ctx, fd_cs &cs)
+{
+   with_crb (cs, 3) {
+      crb.add(GRAS_LRZ_CNTL(CHIP, .enable = true));
+      crb.add(GRAS_LRZ_CNTL2(CHIP,
+         .disable_on_wrong_dir = true,
+         .fc_enable = true,
+      ));
+      crb.add(RB_LRZ_CNTL2(CHIP));
+   }
+
+   fd6_event_write<CHIP>(ctx, cs, FD_LRZ_FLUSH);
+
+   with_crb (cs, 3) {
+      crb.add(GRAS_LRZ_CNTL(CHIP));
+      crb.add(GRAS_LRZ_CNTL2(CHIP));
+      crb.add(RB_LRZ_CNTL2(CHIP));
+   }
+}
+
+template <chip CHIP>
+static inline void
 fd6_set_rb_dbg_eco_mode(struct fd_context *ctx, fd_cs &cs, bool blit)
 {
    /* Later things do not make this accessible to UMD: */
@@ -311,8 +333,13 @@ template <chip CHIP>
 static inline void
 fd6_set_render_mode(fd_cs &cs, struct fd6_set_render_mode args)
 {
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0(.mode = args.mode, .uses_gmem = args.uses_gmem));
+   if (CHIP >= A8XX) {
+      fd_pkt7(cs, CP_SET_MARKER, 1)
+         .add(A8XX_CP_SET_MARKER_0(.mode = args.mode, .uses_gmem = args.uses_gmem));
+   } else {
+      fd_pkt7(cs, CP_SET_MARKER, 1)
+         .add(A6XX_CP_SET_MARKER_0(.mode = args.mode, .uses_gmem = args.uses_gmem));
+   }
 }
 
 static inline bool
