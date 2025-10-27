@@ -152,6 +152,8 @@ static const struct test {
 
    INSTR_7XX(61808000_04020400, "madsh.m16 r0.x, (last)r0.x, r0.y, (last)r0.z"),
    INSTR_7XX(64838806_04088406, "(nop3) sel.b32 r1.z, (last)r1.z, r1.w, (last)r2.x"),
+   INSTR_8XX(6206000a_040a0610, "mad.u24 r2.z, 16, r3.x, (last)r2.z"),
+   INSTR_8XX(62000800_06030402, "(nop1) mad.u24 r0.x, (last)r0.z, r0.x, 3"),
 
    /* cat4 */
    INSTR_6XX(8010000a_00000003, "rcp r2.z, r0.w"),

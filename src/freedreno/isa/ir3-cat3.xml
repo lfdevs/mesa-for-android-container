@@ -53,6 +53,19 @@ SOFTWARE.
 </bitset>
 
 
+<!-- Alternate immed encoding for the !${IMMED_ENCODING} instructions -->
+<bitset name="#cat3-src-alt-immed" extends="#cat3-src">
+	<gen min="800"/>
+	<display>
+		{IMMED}
+	</display>
+	<pattern low="8" high="12">00110</pattern>
+	<field name="IMMED" low="0" high="7" type="int"/>
+	<encode>
+		<map name="IMMED">extract_reg_uim(src)</map>
+	</encode>
+</bitset>
+
 <bitset name="#cat3-src-const-or-immed" extends="#cat3-src">
 	<override>
 		<expr>{IMMED_ENCODING}</expr>
