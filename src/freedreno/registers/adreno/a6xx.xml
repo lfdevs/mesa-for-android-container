@@ -4310,13 +4310,17 @@ by a particular renderpass/blit.
 	<enum name="a6xx_nearest_mode">
 		<value value="0" name="ROUND_CLAMP_TRUNCATE"/>
 		<value value="1" name="CLAMP_ROUND_TRUNCATE"/>
+		<value value="2" name="ROUND_FLOAT_TO_INT"/> <!-- only ARRAYCOORDROUNDMODE -->
 	</enum>
 
 	<reg32 offset="0xb309" name="TPL1_MODE_CNTL" usage="cmd">
 		<bitfield name="ISAMMODE" low="0" high="1" type="a6xx_isam_mode"/>
 		<bitfield name="TEXCOORDROUNDMODE" pos="2" type="a6xx_coord_round"/>
+		<bitfield name="ARRAYCOORDROUNDMODE" low="3" high="4" type="a6xx_coord_round"/>
 		<bitfield name="NEARESTMIPSNAP" pos="5" type="a6xx_nearest_mode"/>
+		<bitfield name="SAMPLEREPLICATE" pos="6" type="boolean"/>
 		<bitfield name="DESTDATATYPEOVERRIDE" pos="7" type="boolean"/>
+		<bitfield name="PACK_SAMP_REDUCED_PRECISION" pos="8" type="boolean"/>
 	</reg32>
 	<reg32 offset="0xb310" name="SP_UNKNOWN_B310" variants="A7XX-" usage="cmd"/>
 
