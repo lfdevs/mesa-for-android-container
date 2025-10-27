@@ -109,7 +109,7 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
             .dither_mode_mrt6 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
             .dither_mode_mrt7 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
       ))
-     .add(A6XX_SP_BLEND_CNTL(
+     .add(SP_BLEND_CNTL(CHIP,
             .enable_blend = mrt_blend,
             .independent_blend_en = cso->independent_blend_enable,
             .dual_color_in_enable = blend->use_dual_src_blend,

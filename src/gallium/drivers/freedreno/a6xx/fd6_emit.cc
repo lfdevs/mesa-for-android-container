@@ -352,13 +352,18 @@ build_sample_locations(struct fd6_emit *emit)
           A6XX_RB_PROGRAMMABLE_MSAA_POS_0_SAMPLE_0_Y(y)) << i*8;
    }
 
-   return fd_crb(ctx->batch->submit, 6)
-      .add(GRAS_SC_MSAA_SAMPLE_POS_CNTL(CHIP, .location_enable = true))
+   fd_crb crb(ctx->batch->submit, 6);
+
+   crb.add(GRAS_SC_MSAA_SAMPLE_POS_CNTL(CHIP, .location_enable = true))
       .add(GRAS_SC_PROGRAMMABLE_MSAA_POS_0(CHIP, .dword = sample_locations))
       .add(A6XX_RB_MSAA_SAMPLE_POS_CNTL(.location_enable = true))
       .add(A6XX_RB_PROGRAMMABLE_MSAA_POS_0(.dword = sample_locations))
-      .add(TPL1_MSAA_SAMPLE_POS_CNTL(CHIP, .location_enable = true))
-      .add(A6XX_TPL1_PROGRAMMABLE_MSAA_POS_0(.dword = sample_locations));
+      .add(TPL1_MSAA_SAMPLE_POS_CNTL(CHIP, .location_enable = true));
+
+   if (CHIP <= A7XX)
+      crb.add(TPL1_PROGRAMMABLE_MSAA_POS_0(CHIP, .dword = sample_locations));
+
+   return crb;
 }
 
 template <chip CHIP>
@@ -529,9 +534,10 @@ build_prim_mode(struct fd6_emit *emit, struct fd_context *ctx, bool gmem)
 
    return fd_crb(ctx->batch->submit, 1)
       .add(GRAS_SC_CNTL(CHIP,
+         .single_prim_mode = (enum a6xx_single_prim_mode)prim_mode,
          .ccusinglecachelinesize = 2,
-         .single_prim_mode = (enum a6xx_single_prim_mode)prim_mode)
-      );
+      )
+   );
 }
 
 template <fd6_pipeline_type PIPELINE, chip CHIP>
@@ -934,9 +940,10 @@ fd6_emit_static_context_regs(struct fd_context *ctx, fd_cs &cs)
       crb.add(A6XX_RB_UNKNOWN_881C());
       crb.add(A6XX_RB_UNKNOWN_881D());
       crb.add(A6XX_RB_UNKNOWN_881E());
+
+      crb.add(RB_UNKNOWN_88F0(CHIP));
    }
 
-   crb.add(A6XX_RB_UNKNOWN_88F0());
    crb.add(VPC_REPLACE_MODE_CNTL(CHIP));
    crb.add(VPC_ROTATION_CNTL(CHIP));
    crb.add(VPC_SO_OVERRIDE(CHIP, true));

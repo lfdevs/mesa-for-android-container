@@ -3160,7 +3160,7 @@ tu6_emit_blend(struct tu_cs *cs,
 
    bool dual_src_blend = tu_blend_state_is_dual_src(cb);
 
-   tu_cs_emit_regs(cs, A6XX_SP_BLEND_CNTL(.enable_blend = blend_enable_mask,
+   tu_cs_emit_regs(cs, SP_BLEND_CNTL(CHIP, .enable_blend = blend_enable_mask,
                                           .independent_blend_en = true,
                                           .dual_color_in_enable =
                                              dual_src_blend,
@@ -3580,8 +3580,10 @@ tu6_emit_prim_mode_sysmem(struct tu_cs *cs,
    if (sysmem_prim_mode == FLUSH_PER_OVERLAP_AND_OVERWRITE)
       *sysmem_single_prim_mode = true;
 
-   tu_cs_emit_regs(cs, GRAS_SC_CNTL(CHIP, .ccusinglecachelinesize = 2,
-                                    .single_prim_mode = sysmem_prim_mode));
+   tu_cs_emit_regs(cs, GRAS_SC_CNTL(CHIP,
+      .single_prim_mode = sysmem_prim_mode,
+      .ccusinglecachelinesize = 2,
+   ));
 }
 
 static const enum mesa_vk_dynamic_graphics_state tu_fragment_shading_rate_state[] = {
@@ -4199,8 +4201,10 @@ tu_pipeline_builder_parse_rasterization_order(
    struct tu_cs cs;
 
    pipeline->prim_order.state_gmem = tu_cs_draw_state(&pipeline->cs, &cs, 2);
-   tu_cs_emit_regs(&cs, GRAS_SC_CNTL(CHIP, .ccusinglecachelinesize = 2,
-                                     .single_prim_mode = gmem_prim_mode));
+   tu_cs_emit_regs(&cs, GRAS_SC_CNTL(CHIP,
+      .single_prim_mode = gmem_prim_mode,
+      .ccusinglecachelinesize = 2,
+   ));
 }
 
 static void

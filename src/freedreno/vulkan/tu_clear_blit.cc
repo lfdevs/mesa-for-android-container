@@ -1622,7 +1622,7 @@ r3d_setup(struct tu_cmd_buffer *cmd,
 
    tu_cs_emit_regs(cs, A6XX_SP_PS_MRT_CNTL(.mrt = 1));
    tu_cs_emit_regs(cs, A6XX_RB_PS_MRT_CNTL(.mrt = 1));
-   tu_cs_emit_regs(cs, A6XX_SP_BLEND_CNTL());
+   tu_cs_emit_regs(cs, SP_BLEND_CNTL(CHIP));
    tu_cs_emit_regs(cs, A6XX_RB_BLEND_CNTL(.sample_mask = 0xffff));
 
    tu_cs_emit_regs(cs, A6XX_RB_DEPTH_PLANE_CNTL());
@@ -4184,7 +4184,7 @@ tu_clear_sysmem_attachments(struct tu_cmd_buffer *cmd,
    tu_cs_emit_regs(cs,
                    A6XX_RB_PS_MRT_CNTL(.mrt = mrt_count));
 
-   tu_cs_emit_regs(cs, A6XX_SP_BLEND_CNTL());
+   tu_cs_emit_regs(cs, SP_BLEND_CNTL(CHIP));
    tu_cs_emit_regs(cs, A6XX_RB_BLEND_CNTL(.independent_blend = 1, .sample_mask = 0xffff));
    for (uint32_t i = 0; i < mrt_count; i++) {
       tu_cs_emit_regs(cs, A6XX_RB_MRT_CONTROL(i,
