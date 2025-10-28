@@ -33,6 +33,7 @@
 #define INSTR_6XX_RAW(i, d, ...) { .gpu_id = 630, .instr = NULL, .instr_raw = i, .expected = d, __VA_ARGS__ }
 #define INSTR_7XX(i, d, ...) { .chip_id = 0x07030001, .instr = #i, .instr_raw = 0, .expected = d, __VA_ARGS__ }
 #define INSTR_7XX_RAW(i, d, ...) { .chip_id = 0x07030001, .instr = NULL, .instr_raw = i, .expected = d, __VA_ARGS__ }
+#define INSTR_8XX(i, d, ...) { .chip_id = 0x44050000, .instr = #i, .instr_raw = 0, .expected = d, __VA_ARGS__ }
 /* clang-format on */
 
 static const struct test {
