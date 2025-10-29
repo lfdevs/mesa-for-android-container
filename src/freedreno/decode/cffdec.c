@@ -1620,25 +1620,20 @@ dump_bindless_descriptors(bool is_compute, int level)
       } else {
          sprintf(reg_name, "SP_GFX_BINDLESS_BASE[%u].DESCRIPTOR", i);
       }
-      const unsigned base_reg = regbase(reg_name);
-      if (!base_reg)
+      const unsigned reg = regbase(reg_name);
+      if (!reg)
          break;
 
       printl(2, "%sset[%u]:\n", levels[level + 1], i);
 
+      if (!reg_written(reg))
+         continue;
+
       uint64_t ext_src_addr;
       if (is_64b()) {
-         const unsigned reg = base_reg + i * 2;
-         if (!reg_written(reg))
-            continue;
-
          ext_src_addr = reg_val(reg) & 0xfffffffc;
          ext_src_addr |= ((uint64_t)reg_val(reg + 1)) << 32;
       } else {
-         const unsigned reg = base_reg + i;
-         if (!reg_written(reg))
-            continue;
-
          ext_src_addr = reg_val(reg) & 0xfffffffc;
       }
 
