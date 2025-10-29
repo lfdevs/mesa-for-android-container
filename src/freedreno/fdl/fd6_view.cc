@@ -569,7 +569,7 @@ fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
       descriptor[0] = A8XX_TEX_MEMOBJ_0_BASE_LO(base_iova);
       descriptor[1] = A8XX_TEX_MEMOBJ_1_BASE_HI(base_iova >> 32) |
                       A8XX_TEX_MEMOBJ_1_TYPE(A6XX_TEX_BUFFER) |
-                      A8XX_TEX_MEMOBJ_1_DEPTH(0);
+                      A8XX_TEX_MEMOBJ_1_DEPTH(1);
       descriptor[2] = A8XX_TEX_MEMOBJ_2_WIDTH(elements & ((1 << 15) - 1)) |
                       A8XX_TEX_MEMOBJ_2_HEIGHT(elements >> 15) |
                       A8XX_TEX_MEMOBJ_2_SAMPLES(MSAA_ONE);
