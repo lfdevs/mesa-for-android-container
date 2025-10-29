@@ -128,6 +128,7 @@ static const struct test {
    INSTR_7XX(42930000_04000406, "cmps.u.ge r0.x, (last)r1.z, (last)r0.x"),
 
    INSTR_7XX(429000f5_100600c1, "cmps.u.lt up0.y, r48.y, c1.z"),
+   INSTR_7XX(4490000c_10534007, "add.f.mul2.lt r3.x, (neg)r1.w, c20.w"),
 
    /* cat3 */
    INSTR_6XX(66000000_10421041, "sel.f16 hr0.x, hc16.y, hr0.x, hc16.z"),

@@ -177,6 +177,9 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_OP_SCT
 %token <tok> T_OP_MOVS
 
+%token <tok> T_MUL2
+%token <tok> T_DIV2
+
 /* category 2: */
 %token <tok> T_OP_ADD_F
 %token <tok> T_OP_MIN_F
@@ -777,6 +780,10 @@ cat2_opc_2src_cnd: T_OP_CMPS_F    { new_instr(OPC_CMPS_F); }
 |                  T_OP_CMPV_F    { new_instr(OPC_CMPV_F); }
 |                  T_OP_CMPV_U    { new_instr(OPC_CMPV_U); }
 |                  T_OP_CMPV_S    { new_instr(OPC_CMPV_S); }
+|                  T_OP_ADD_F T_DIV2 { new_instr(OPC_ADD_F_DIV2); }
+|                  T_OP_ADD_F T_MUL2 { new_instr(OPC_ADD_F_MUL2); }
+|                  T_OP_MUL_F T_DIV2 { new_instr(OPC_MUL_F_DIV2); }
+|                  T_OP_MUL_F T_MUL2 { new_instr(OPC_MUL_F_MUL2); }
 
 cat2_opc_2src:     T_OP_ADD_F     { new_instr(OPC_ADD_F); }
 |                  T_OP_MIN_F     { new_instr(OPC_MIN_F); }

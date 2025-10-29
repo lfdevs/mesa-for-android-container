@@ -347,6 +347,26 @@ SOFTWARE.
 	<pattern low="53" high="58">100010</pattern>
 </bitset>
 
+<bitset name="mul.f.mul2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100011</pattern>
+</bitset>
+
+<bitset name="add.f.mul2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100100</pattern>
+</bitset>
+
+<bitset name="mul.f.div2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100101</pattern>
+</bitset>
+
+<bitset name="add.f.div2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100110</pattern>
+</bitset>
+
 <bitset name="mul.u24" extends="#instruction-cat2-2src">
 	<pattern low="53" high="58">110000</pattern>
 </bitset>

@@ -153,6 +153,10 @@ typedef enum {
    /* 32 - invalid */
    OPC_CMPV_U          = _OPC(2, 33),
    OPC_CMPV_S          = _OPC(2, 34),
+   OPC_MUL_F_MUL2      = _OPC(2, 35),
+   OPC_ADD_F_MUL2      = _OPC(2, 36),
+   OPC_MUL_F_DIV2      = _OPC(2, 37),
+   OPC_ADD_F_DIV2      = _OPC(2, 38),
    /* 35-47 - invalid */
    OPC_MUL_U24         = _OPC(2, 48), /* 24b mul into 32b result */
    OPC_MUL_S24         = _OPC(2, 49), /* 24b mul into 32b result with sign extension */
