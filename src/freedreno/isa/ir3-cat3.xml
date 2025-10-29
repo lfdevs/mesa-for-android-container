@@ -405,6 +405,7 @@ SOFTWARE.
 </bitset>
 
 <bitset name="dp2acc" extends="#instruction-cat3-dp">
+	<gen max="799"/>
 	<doc>
 		Given:
 			SRC1 is a i8vec2 or u8vec2
