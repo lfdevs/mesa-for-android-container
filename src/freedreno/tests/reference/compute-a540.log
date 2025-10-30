@@ -709,6 +709,8 @@ cmdstream[0]: 207 dwords
 				{ NGROUPS_X = 1 }
 				{ NGROUPS_Y = 2 }
 				{ NGROUPS_Z = 3 }
+			mode: BYPASS
+			skip_ib2: g=0, l=0
 			draw[0] register values
 !+	00000001			CP_SCRATCH[0].REG: 1
 !+	00100000			RB_DBG_ECO_CNTL: 0x100000

@@ -2808,6 +2808,7 @@ static void
 cp_exec_cs(uint32_t *dwords, uint32_t sizedwords, int level)
 {
    do_query("compute", 0);
+   print_mode(level);
    dump_bindless_descriptors(true, level);
    dump_register_summary(level);
 }
@@ -2827,6 +2828,7 @@ cp_exec_cs_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
    dump_gpuaddr_size(addr, level, 0x10, 2);
 
    do_query("compute", 0);
+   print_mode(level);
    dump_bindless_descriptors(true, level);
    dump_register_summary(level);
 }
