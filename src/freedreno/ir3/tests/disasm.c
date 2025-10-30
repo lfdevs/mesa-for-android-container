@@ -425,6 +425,7 @@ static const struct test {
    INSTR_6XX(c0260000_00478200, "ldc.offset1.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
    INSTR_6XX(c0260000_00478400, "ldc.offset2.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
    INSTR_6XX(c0260000_00478600, "ldc.offset3.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
+   INSTR_8XX(c0260000_00678600, "ldc.offset3.1.imm r0.x, r0.x, 0"),
 
    /* dEQP-VK.glsl.arrays.length.float_fragment */
    INSTR_6XX(c02600c1_00c7a900, "ldc.u.offset0.3.imm.base0 r48.y, 0, 0"), /* ldc.u.3.mode4.base0 sr48.y, 0, 0 */

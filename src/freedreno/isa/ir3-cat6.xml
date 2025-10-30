@@ -1116,19 +1116,26 @@ SOFTWARE.
 <bitset name="#cat6-ldc-common" extends="#instruction-cat6-a6xx">
 	<pattern pos="0"           >x</pattern>
 	<pattern low="14" high="19">011110</pattern>   <!-- OPC -->
-	<pattern low="20" high="22">1xx</pattern>
+	<pattern pos="20">x</pattern>
+	<field   pos="21" name="SP" type="bool"/>
+	<derived name="SH" type="bool" display="h">
+		<expr>!{SP} &amp;&amp; (ISA_GPU_ID() &gt;= 800)</expr>
+	</derived>
+	<pattern pos="22">1</pattern>
 	<field   pos="23"           name="SRC1_IM" type="bool"/>
 	<derived name="SRC2_IM" expr="#cat6-direct" type="bool"/>
 	<field   low="41" high="48" name="SRC2" type="#cat6-src">
 		<param name="SRC2_IM" as="SRC_IM"/>
 	</field>
-	<field   low="24" high="31" name="SRC1" type="#cat6-src">
+	<field   low="24" high="31" name="SRC1" type="#cat6-src-sp">
 		<param name="SRC1_IM" as="SRC_IM"/>
+		<param name="SH"/>
 	</field>
 	<pattern low="49" high="51">x11</pattern>      <!-- TYPE -->
 	<encode>
 		<map name="SRC1_IM">!!(src->srcs[1]->flags &amp; IR3_REG_IMMED)</map>
 		<map name="SRC1">src->srcs[1]</map>
+		<map name="SP">ISA_GPU_ID() &gt;= 800</map>
 		<map name="SRC2">src->srcs[0]</map>
 	</encode>
 </bitset>
@@ -1542,6 +1549,29 @@ SOFTWARE.
 	</override>
 	<display>
 		r{GPR}.{SWIZ}
+	</display>
+	<field name="SWIZ" low="0" high="1" type="#swiz"/>
+	<field name="GPR" low="2"  high="7" type="uint"/>
+	<encode type="struct ir3_register *">
+		<map name="GPR">src->num >> 2</map>
+		<map name="SWIZ">src->num &amp; 0x3</map>
+		<map name="IMMED">extract_reg_iim(src)</map>
+	</encode>
+</bitset>
+
+<bitset name="#cat6-src-sp" size="8">
+	<doc>
+		Source value that can be either immed or gpr
+	</doc>
+	<override>
+		<expr>{SRC_IM}</expr>
+		<display>
+			{IMMED}
+		</display>
+		<field name="IMMED" low="0" high="7" type="uint"/>
+	</override>
+	<display>
+		{SH}r{GPR}.{SWIZ}
 	</display>
 	<field name="SWIZ" low="0" high="1" type="#swiz"/>
 	<field name="GPR" low="2"  high="7" type="uint"/>
