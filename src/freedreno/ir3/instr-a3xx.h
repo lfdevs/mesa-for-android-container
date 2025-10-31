@@ -202,6 +202,10 @@ typedef enum {
    OPC_DP4ACC          = _OPC(3, 22),
    OPC_WMM             = _OPC(3, 23),
    OPC_WMM_ACCU        = _OPC(3, 24),
+   OPC_MAD_F16_MUL2    = _OPC(3, 25),
+   OPC_MAD_F32_MUL2    = _OPC(3, 26),
+   OPC_MAD_F16_DIV2    = _OPC(3, 27),
+   OPC_MAD_F32_DIV2    = _OPC(3, 28),
 
    /* category 4: */
    OPC_RCP             = _OPC(4, 0),

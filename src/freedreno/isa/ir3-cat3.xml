@@ -170,8 +170,6 @@ SOFTWARE.
 	</field>
 	<field name="SRC1_NEG" pos="14" type="bool" display="(neg)"/>
 
-	<pattern pos="13">0</pattern>
-
 	<field name="SRC3" low="16" high="28" type="#cat3-src">
 		<param name="HALF"/>
 		<param name="IMMED_ENCODING"/>
@@ -216,7 +214,7 @@ SOFTWARE.
 	</field>
 	<field name="SRC1_NEG" pos="14" type="bool" display="(neg)"/>
 
-	<pattern pos="13">1</pattern>
+	<pattern pos="13">1</pattern>  <!-- AL OP -->
 
 	<field name="SRC3" low="16" high="28" type="#cat3-src">
 		<param name="HALF"/>
@@ -239,82 +237,126 @@ SOFTWARE.
 </bitset>
 
 <bitset name="mad.u16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0000</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#false" type="bool"/>
 </bitset>
 
 <bitset name="madsh.u16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0001</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="mad.s16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0010</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#false" type="bool"/>
 </bitset>
 
 <bitset name="madsh.m16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0011</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="mad.u24" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0100</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="mad.s24" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0101</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="mad.f16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0110</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#false" type="bool"/>
 </bitset>
 
 <bitset name="mad.f32" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">0111</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="sel.b16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1000</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#false" type="bool"/>
 </bitset>
 
 <bitset name="sel.b32" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1001</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="sel.s16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1010</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#false" type="bool"/>
 </bitset>
 
 <bitset name="sel.s32" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1011</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="sel.f16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1100</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#false" type="bool"/>
 </bitset>
 
 <bitset name="sel.f32" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1101</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 
 <bitset name="sad.s16" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1110</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#false" type="bool"/>
 </bitset>
 
 <bitset name="sad.s32" extends="#instruction-cat3">
+	<pattern pos="13">0</pattern>  <!-- AL OP -->
 	<pattern low="55" high="58">1111</pattern>   <!-- OPC -->
+	<derived name="FULL" expr="#true" type="bool"/>
+</bitset>
+
+<bitset name="mad.f16.mul2" extends="#instruction-cat3">
+	<gen min="700"/>
+	<pattern pos="13">1</pattern>  <!-- AL OP -->
+	<pattern low="55" high="58">0100</pattern>   <!-- OPC -->
+	<derived name="FULL" expr="#false" type="bool"/>
+</bitset>
+
+<bitset name="mad.f32.mul2" extends="#instruction-cat3">
+	<gen min="700"/>
+	<pattern pos="13">1</pattern>  <!-- AL OP -->
+	<pattern low="55" high="58">0101</pattern>   <!-- OPC -->
+	<derived name="FULL" expr="#true" type="bool"/>
+</bitset>
+
+<bitset name="mad.f16.div2" extends="#instruction-cat3">
+	<gen min="700"/>
+	<pattern pos="13">1</pattern>  <!-- AL OP -->
+	<pattern low="55" high="58">0110</pattern>   <!-- OPC -->
+	<derived name="FULL" expr="#false" type="bool"/>
+</bitset>
+
+<bitset name="mad.f32.div2" extends="#instruction-cat3">
+	<gen min="700"/>
+	<pattern pos="13">1</pattern>  <!-- AL OP -->
+	<pattern low="55" high="58">0111</pattern>   <!-- OPC -->
 	<derived name="FULL" expr="#true" type="bool"/>
 </bitset>
 

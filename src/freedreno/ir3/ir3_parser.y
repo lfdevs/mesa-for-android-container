@@ -830,7 +830,11 @@ cat3_dp_signedness:'.' T_MIXED   { instr->cat3.signedness = IR3_SRC_MIXED; }
 cat3_dp_pack:      '.' T_LOW     { instr->cat3.packed = IR3_SRC_PACKED_LOW; }
 |                  '.' T_HIGH    { instr->cat3.packed = IR3_SRC_PACKED_HIGH; }
 
-cat3_opc:          T_OP_MAD_F16   { new_instr(OPC_MAD_F16); }
+cat3_opc:          T_OP_MAD_F16 T_MUL2 { new_instr(OPC_MAD_F16_MUL2); }
+|                  T_OP_MAD_F32 T_MUL2 { new_instr(OPC_MAD_F32_MUL2); }
+|                  T_OP_MAD_F16 T_DIV2 { new_instr(OPC_MAD_F16_DIV2); }
+|                  T_OP_MAD_F32 T_DIV2 { new_instr(OPC_MAD_F32_DIV2); }
+|                  T_OP_MAD_F16   { new_instr(OPC_MAD_F16); }
 |                  T_OP_MAD_F32   { new_instr(OPC_MAD_F32); }
 |                  T_OP_SEL_F16   { new_instr(OPC_SEL_F16); }
 |                  T_OP_SEL_F32   { new_instr(OPC_SEL_F32); }
