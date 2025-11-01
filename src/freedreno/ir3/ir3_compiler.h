@@ -210,6 +210,9 @@ struct ir3_compiler {
    /* Whether half register shared->non-shared moves are broken. */
    bool mov_half_shared_quirk;
 
+   /* Is lock/unlock sequence needed for CS? */
+   bool cs_lock_unlock_quirk;
+
    /* Whether movs is supported for subgroupBroadcast. */
    bool has_movs;
 

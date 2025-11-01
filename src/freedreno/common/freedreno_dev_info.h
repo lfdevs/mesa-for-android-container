@@ -375,6 +375,9 @@ struct fd_dev_info {
        */
       bool reading_shading_rate_requires_smask_quirk;
 
+      /* Is lock/unlock sequence needed at end of compute shader? */
+      bool cs_lock_unlock_quirk;
+
       /* Whether the ray_intersection instruction is present. */
       bool has_ray_intersection;
 
