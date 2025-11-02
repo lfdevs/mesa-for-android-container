@@ -1022,15 +1022,30 @@ static void prepare_tile_fini(struct fd_batch *batch);
 
 template <chip CHIP>
 static void
-fd7_emit_static_binning_regs(fd_cs &cs)
+fd7_emit_static_binning_regs(fd_cs &cs, bool gmem)
 {
-   fd_ncrb<CHIP> ncrb(cs, 5);
+   bool sysmem = !gmem;
+   fd_ncrb<CHIP> ncrb(cs, 4);
 
-   ncrb.add(RB_BUFFER_CNTL(CHIP));
-   ncrb.add(RB_CCU_DBG_ECO_CNTL(CHIP, 0x0));
+   assert(CHIP >= A7XX);
+
+   ncrb.add(RB_BUFFER_CNTL(CHIP,
+      .z_sysmem = sysmem,
+      .s_sysmem = sysmem,
+      .rt0_sysmem = sysmem,
+      .rt1_sysmem = sysmem,
+      .rt2_sysmem = sysmem,
+      .rt3_sysmem = sysmem,
+      .rt4_sysmem = sysmem,
+      .rt5_sysmem = sysmem,
+      .rt6_sysmem = sysmem,
+      .rt7_sysmem = sysmem,
+   ));
    ncrb.add(GRAS_LRZ_CB_CNTL(CHIP, 0x0));
    ncrb.add(GRAS_MODE_CNTL(CHIP, 0x2));
-   ncrb.add(RB_CLEAR_TARGET(CHIP, .clear_mode = CLEAR_MODE_GMEM));
+   ncrb.add(RB_CLEAR_TARGET(CHIP,
+      .clear_mode = gmem ? CLEAR_MODE_GMEM : CLEAR_MODE_SYSMEM,
+   ));
 }
 
 template <chip CHIP>
@@ -1045,7 +1060,7 @@ fd6_build_preemption_preamble(struct fd_context *ctx)
    fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, true);
 
    if (CHIP >= A7XX) {
-      fd7_emit_static_binning_regs<CHIP>(cs);
+      fd7_emit_static_binning_regs<CHIP>(cs, true);
    }
 
    /* TODO use CP_MEM_TO_SCRATCH_MEM on a7xx. The VSC scratch mem should be
@@ -1110,7 +1125,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
    patch_fb_read_gmem(batch);
 
    if (CHIP >= A7XX) {
-      fd7_emit_static_binning_regs<CHIP>(cs);
+      fd7_emit_static_binning_regs<CHIP>(cs, true);
    }
 
    if (use_hw_binning(batch)) {
@@ -2050,6 +2065,10 @@ fd6_emit_sysmem(struct fd_batch *batch)
    fd_cs cs(batch->gmem);
 
    fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, false);
+
+   if (CHIP >= A7XX) {
+      fd7_emit_static_binning_regs<CHIP>(cs, false);
+   }
 
    foreach_subpass (subpass, batch) {
       if (subpass->fast_cleared) {
