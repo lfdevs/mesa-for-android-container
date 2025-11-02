@@ -268,7 +268,7 @@ emit_setup(struct fd_context *ctx, fd_cs &cs)
                           FD6_INVALIDATE_CCU_DEPTH);
 
    /* normal BLIT_OP_SCALE operation needs bypass RB_CCU_CNTL */
-   fd6_emit_ccu_cntl<CHIP>(cs, ctx->screen, false);
+   fd6_emit_gmem_cache_cntl<CHIP>(cs, ctx->screen, false);
 }
 
 template <chip CHIP>

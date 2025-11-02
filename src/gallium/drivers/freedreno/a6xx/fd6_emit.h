@@ -374,7 +374,7 @@ void fd6_emit_cs_state(struct fd_context *ctx, fd_cs &cs,
                        struct fd6_compute_state *cp) assert_dt;
 
 template <chip CHIP>
-void fd6_emit_ccu_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem);
+void fd6_emit_gmem_cache_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem);
 
 template <chip CHIP>
 void fd6_emit_static_regs(fd_cs &cs, struct fd_context *ctx);

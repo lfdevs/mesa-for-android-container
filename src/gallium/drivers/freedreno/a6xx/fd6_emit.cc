@@ -756,9 +756,13 @@ fd6_emit_cs_state(struct fd_context *ctx, fd_cs &cs, struct fd6_compute_state *c
 }
 FD_GENX(fd6_emit_cs_state);
 
+/**
+ * Configure RB_CCU_CNTL and various caches that reside in GMEM for either
+ * GMEM or sysmem mode.
+ */
 template <chip CHIP>
 void
-fd6_emit_ccu_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem)
+fd6_emit_gmem_cache_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem)
 {
    const struct fd6_gmem_config *cfg = gmem ? &screen->config_gmem : &screen->config_sysmem;
    enum a6xx_ccu_cache_size color_cache_size = !gmem ? CCU_CACHE_SIZE_FULL :
@@ -806,7 +810,7 @@ fd6_emit_ccu_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem)
       );
    }
 }
-FD_GENX(fd6_emit_ccu_cntl);
+FD_GENX(fd6_emit_gmem_cache_cntl);
 
 template <chip CHIP>
 static void
@@ -1103,7 +1107,7 @@ fd6_emit_restore(fd_cs &cs, struct fd_batch *batch)
    fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
 
    fd6_emit_ib<CHIP>(cs, fd6_context(ctx)->restore);
-   fd6_emit_ccu_cntl<CHIP>(cs, screen, false);
+   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, false);
 
    uint32_t dwords;
 

@@ -298,7 +298,7 @@ emit_lrz_clears(struct fd_batch *batch)
 
       /* prep before first clear: */
       if (count == 0) {
-         fd6_emit_ccu_cntl<CHIP>(cs, ctx->screen, false);
+         fd6_emit_gmem_cache_cntl<CHIP>(cs, ctx->screen, false);
 
          fd_pkt7(cs, CP_SET_MARKER, 1)
             .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
@@ -984,7 +984,7 @@ emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
    fd_pkt7(cs, CP_SET_MODE, 1)
       .add(0x0);
 
-   fd6_emit_ccu_cntl<CHIP>(cs, screen, true);
+   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, true);
 }
 
 /* nregs: 7 */
@@ -1042,7 +1042,7 @@ fd6_build_preemption_preamble(struct fd_context *ctx)
    fd_cs cs(ctx->pipe, 0x1000);
 
    fd6_emit_static_regs<CHIP>(cs, ctx);
-   fd6_emit_ccu_cntl<CHIP>(cs, screen, false);
+   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, true);
 
    if (CHIP >= A7XX) {
       fd7_emit_static_binning_regs<CHIP>(cs);
@@ -1099,7 +1099,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
    fd_pkt7(cs, CP_SKIP_IB2_ENABLE_LOCAL, 1)
       .add(0x1);
 
-   fd6_emit_ccu_cntl<CHIP>(cs, screen, true);
+   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, true);
 
    with_crb (cs, 150) {
       emit_zs<CHIP>(crb, &pfb->zsbuf, batch->gmem_state);
@@ -1218,8 +1218,6 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
 
    set_scissor<CHIP>(cs, x1, y1, x2, y2);
    set_tessfactor_bo<CHIP>(cs, batch);
-
-   fd6_emit_ccu_cntl<CHIP>(cs, screen, true);
 
    with_crb (cs, 150) {
       emit_zs<CHIP>(crb, &pfb->zsbuf, batch->gmem_state);
@@ -2051,6 +2049,8 @@ fd6_emit_sysmem(struct fd_batch *batch)
    struct fd_screen *screen = batch->ctx->screen;
    fd_cs cs(batch->gmem);
 
+   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, false);
+
    foreach_subpass (subpass, batch) {
       if (subpass->fast_cleared) {
          unsigned flushes = 0;
@@ -2062,8 +2062,6 @@ fd6_emit_sysmem(struct fd_batch *batch)
          fd6_emit_flushes<CHIP>(batch->ctx, cs, flushes);
          emit_sysmem_clears<CHIP>(cs, batch, subpass);
       }
-
-      fd6_emit_ccu_cntl<CHIP>(cs, screen, false);
 
       struct pipe_framebuffer_state *pfb = &batch->framebuffer;
       update_render_cntl<CHIP>(cs, screen, pfb, false);
