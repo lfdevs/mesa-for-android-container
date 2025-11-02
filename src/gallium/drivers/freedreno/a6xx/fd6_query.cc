@@ -236,7 +236,7 @@ occlusion_predicate_result_resource(struct fd_acc_query *aq, struct fd_ringbuffe
       .add(1)
       .add(0);
 
-   copy_result(cs.ring(), result_type, dst, offset, fd_resource(aq->prsc),
+   copy_result(cs, result_type, dst, offset, fd_resource(aq->prsc),
                offsetof(struct fd6_query_sample, result));
 }
 

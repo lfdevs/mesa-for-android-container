@@ -142,7 +142,7 @@ public:
    }
 
    /* bridge back to the legacy world: */
-   struct fd_ringbuffer *ring() {
+   operator struct fd_ringbuffer *() {
       check_flush();
       return ring_;
    }
@@ -176,7 +176,7 @@ private:
  */
 class fd_pkt4 : public fd_ringbuffer_builder {
 public:
-   fd_pkt4(fd_cs &cs, unsigned nregs) : fd_ringbuffer_builder(cs.ring()) {
+   fd_pkt4(fd_cs &cs, unsigned nregs) : fd_ringbuffer_builder(cs) {
       init(nregs);
    }
 
@@ -308,7 +308,7 @@ protected:
 
 public:
    /* Bridge to the legacy world, ideally we can remove this eventually: */
-   struct fd_ringbuffer *ring() {
+   operator struct fd_ringbuffer *() {
       return ring_;
    }
 

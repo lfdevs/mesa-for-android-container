@@ -232,7 +232,7 @@ fd6_zsa_state_create(struct pipe_context *pctx,
          crb.add(A6XX_RB_DEPTH_BOUND_MAX(cso->depth_bounds_max));
       }
 
-      so->stateobj[i] = crb.ring();
+      so->stateobj[i] = crb;
    }
 
    return so;

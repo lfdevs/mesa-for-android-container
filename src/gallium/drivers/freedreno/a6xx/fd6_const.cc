@@ -256,7 +256,7 @@ fd6_build_tess_consts(struct fd6_emit *emit)
                                    gs_params, ARRAY_SIZE(gs_params));
    }
 
-   return constobj.ring();
+   return constobj;
 }
 FD_GENX(fd6_build_tess_consts);
 
@@ -332,7 +332,7 @@ emit_user_consts(const struct ir3_shader_variant *v, fd_cs &cs,
    if (CHIP == A7XX && v->compiler->load_shader_consts_via_preamble)
       return;
 
-   ir3_emit_user_consts(v, cs.ring(), constbuf);
+   ir3_emit_user_consts(v, cs, constbuf);
 }
 
 template <fd6_pipeline_type PIPELINE, chip CHIP>
@@ -357,7 +357,7 @@ fd6_build_user_consts(struct fd6_emit *emit)
    }
    emit_user_consts<CHIP>(emit->fs, constobj, &ctx->constbuf[MESA_SHADER_FRAGMENT]);
 
-   return constobj.ring();
+   return constobj;
 }
 FD_GENX2(fd6_build_user_consts, fd6_pipeline_type, NO_TESS_GS);
 FD_GENX2(fd6_build_user_consts, fd6_pipeline_type, HAS_TESS_GS);
@@ -377,7 +377,7 @@ emit_driver_params(const struct ir3_shader_variant *v, fd_cs &dpconstobj,
                                  dword_sizeof(*vertex_params),
                                  vertex_params);
    } else {
-      ir3_emit_driver_params(v, dpconstobj.ring(), ctx, info, indirect, vertex_params);
+      ir3_emit_driver_params(v, dpconstobj, ctx, info, indirect, vertex_params);
    }
 }
 
@@ -395,7 +395,7 @@ emit_hs_driver_params(const struct ir3_shader_variant *v, fd_cs &dpconstobj,
                                  dword_sizeof(hs_params),
                                  &hs_params);
    } else {
-      ir3_emit_hs_driver_params(v, dpconstobj.ring(), ctx);
+      ir3_emit_hs_driver_params(v, dpconstobj, ctx);
    }
 }
 
@@ -440,7 +440,7 @@ fd6_build_driver_params(struct fd6_emit *emit)
 
    /* VS still works the old way*/
    if (emit->vs->need_driver_params) {
-      ir3_emit_driver_params(emit->vs, dpconstobj.ring(), ctx, emit->info, emit->indirect, &p);
+      ir3_emit_driver_params(emit->vs, dpconstobj, ctx, emit->info, emit->indirect, &p);
    }
 
    if (PIPELINE == HAS_TESS_GS) {
@@ -462,7 +462,7 @@ fd6_build_driver_params(struct fd6_emit *emit)
 
    fd6_ctx->has_dp_state = true;
 
-   return dpconstobj.ring();
+   return dpconstobj;
 }
 FD_GENX2(fd6_build_driver_params, fd6_pipeline_type, NO_TESS_GS);
 FD_GENX2(fd6_build_driver_params, fd6_pipeline_type, HAS_TESS_GS);
@@ -490,7 +490,7 @@ fd6_emit_cs_driver_params(struct fd_context *ctx, fd_cs &cs,
 
       if (info->indirect) {
          /* Copy indirect params into UBO: */
-         ctx->screen->mem_to_mem(cs.ring(), buffer, buffer_offset, info->indirect,
+         ctx->screen->mem_to_mem(cs, buffer, buffer_offset, info->indirect,
                                  info->indirect_offset, 3);
 
          wait_mem_writes(ctx);
@@ -503,7 +503,7 @@ fd6_emit_cs_driver_params(struct fd_context *ctx, fd_cs &cs,
 
       pipe_resource_reference(&buffer, NULL);
    } else {
-      ir3_emit_cs_driver_params(v, cs.ring(), ctx, info);
+      ir3_emit_cs_driver_params(v, cs, ctx, info);
       if (info->indirect)
          wait_mem_writes(ctx);
    }
@@ -535,7 +535,7 @@ fd6_emit_immediates(const struct ir3_shader_variant *v, fd_cs &cs)
    if (CHIP == A7XX && v->compiler->load_inline_uniforms_via_preamble_ldgk)
       return;
 
-   ir3_emit_immediates(v, cs.ring());
+   ir3_emit_immediates(v, cs);
 }
 FD_GENX(fd6_emit_immediates);
 
@@ -552,7 +552,7 @@ fd6_emit_link_map(struct fd_context *ctx, fd_cs &cs,
 
       fd6_upload_emit_driver_ubo(ctx, cs, consumer, base, size, producer->output_loc);
    } else {
-      ir3_emit_link_map(producer, consumer, cs.ring());
+      ir3_emit_link_map(producer, consumer, cs);
    }
 }
 FD_GENX(fd6_emit_link_map);

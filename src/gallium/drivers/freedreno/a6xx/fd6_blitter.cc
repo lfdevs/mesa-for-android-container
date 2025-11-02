@@ -1275,7 +1275,7 @@ handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 
    DBG_BLIT(info, batch);
 
-   trace_start_blit(&batch->trace, cs.ring(), info->src.resource->target,
+   trace_start_blit(&batch->trace, cs, info->src.resource->target,
                     info->dst.resource->target);
 
    if ((info->src.resource->target == PIPE_BUFFER) &&
@@ -1290,7 +1290,7 @@ handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
       emit_blit_texture<CHIP>(ctx, cs, info);
    }
 
-   trace_end_blit(&batch->trace, cs.ring());
+   trace_end_blit(&batch->trace, cs);
 
    fd6_emit_flushes<CHIP>(batch->ctx, cs,
                           FD6_FLUSH_CCU_COLOR |

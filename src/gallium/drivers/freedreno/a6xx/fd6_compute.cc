@@ -173,7 +173,7 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
       fd6_emit_shader<CHIP>(ctx, cs, cp->v);
    }
 
-   trace_start_compute(&ctx->batch->trace, cs.ring(), !!info->indirect, info->work_dim,
+   trace_start_compute(&ctx->batch->trace, cs, !!info->indirect, info->work_dim,
                        info->block[0], info->block[1], info->block[2],
                        info->grid[0],  info->grid[1],  info->grid[2],
                        cp->v->shader_id);
@@ -289,7 +289,7 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
          .add(CP_EXEC_CS_3(info->grid[2]));
    }
 
-   trace_end_compute(&ctx->batch->trace, cs.ring());
+   trace_end_compute(&ctx->batch->trace, cs);
 
    fd_context_all_clean(ctx);
 }

@@ -228,7 +228,7 @@ fd6_emit_shader(struct fd_context *ctx, fd_cs &cs, const struct ir3_shader_varia
    /* Name should generally match what you get with MESA_SHADER_CAPTURE_PATH: */
    const char *name = so->name;
    if (name)
-      fd_emit_string5(cs.ring(), name, strlen(name));
+      fd_emit_string5(cs, name, strlen(name));
 #endif
 
    emit_shader_regs<CHIP>(ctx, cs, so);
@@ -273,7 +273,7 @@ setup_stream_out_disable(struct fd_context *ctx)
       crb.add(PC_DGEN_SO_CNTL(CHIP));
    }
 
-   fd6_context(ctx)->streamout_disable_stateobj = crb.ring();
+   fd6_context(ctx)->streamout_disable_stateobj = crb;
 }
 
 template <chip CHIP>
@@ -371,7 +371,7 @@ setup_stream_out(struct fd_context *ctx, struct fd6_program_state *state,
       crb.add(PC_DGEN_SO_CNTL(CHIP, .stream_enable = true));
    }
 
-   state->streamout_stateobj = crb.ring();
+   state->streamout_stateobj = crb;
 }
 
 static uint32_t
@@ -434,7 +434,7 @@ setup_config_stateobj(struct fd_context *ctx, struct fd6_program_state *state)
 
    crb.add(SP_GFX_USIZE(CHIP, ir3_shader_num_uavs(state->fs)));
 
-   state->config_stateobj = crb.ring();
+   state->config_stateobj = crb;
 }
 
 static inline uint32_t
@@ -1317,7 +1317,7 @@ create_interp_stateobj(struct fd_context *ctx, struct fd6_program_state *state)
 
    emit_interp_state<CHIP>(crb, state, false, false, 0);
 
-   return crb.ring();
+   return crb;
 }
 
 /* build the program streaming state which is not part of the pre-
@@ -1339,7 +1339,7 @@ fd6_program_interp_state(struct fd6_emit *emit)
       emit_interp_state<CHIP>(crb, state, emit->rasterflat,
                               emit->sprite_coord_mode, emit->sprite_coord_enable);
 
-      return crb.ring();
+      return crb;
    }
 }
 FD_GENX(fd6_program_interp_state);

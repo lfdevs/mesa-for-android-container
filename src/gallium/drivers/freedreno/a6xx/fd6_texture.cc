@@ -711,7 +711,7 @@ build_texture_state(struct fd_context *ctx, mesa_shader_stage type,
          fd_bo_del(tex_desc);
    }
 
-   return cs.ring();
+   return cs;
 }
 
 /**

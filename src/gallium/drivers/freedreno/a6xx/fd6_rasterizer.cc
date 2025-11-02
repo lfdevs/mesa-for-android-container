@@ -126,7 +126,7 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
       crb.add(RB_UNKNOWN_8A30(CHIP));
    }
 
-   return crb.ring();
+   return crb;
 }
 FD_GENX(__fd6_setup_rasterizer_stateobj);
 

@@ -362,7 +362,7 @@ fd6_build_bindless_state(struct fd_context *ctx, mesa_shader_stage shader,
       }
    }
 
-   return cs.ring();
+   return cs;
 }
 FD_GENX(fd6_build_bindless_state);
 

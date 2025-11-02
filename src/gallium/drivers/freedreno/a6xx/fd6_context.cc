@@ -102,7 +102,7 @@ fd6_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
       crb.add(A6XX_VFD_VERTEX_BUFFER_STRIDE(elem->vertex_buffer_index, elem->src_stride));
    }
 
-   state->stateobj = crb.ring();
+   state->stateobj = crb;
 
    return state;
 }
@@ -313,13 +313,13 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
       .add(A6XX_RB_MSAA_SAMPLE_POS_CNTL())
       .add(TPL1_MSAA_SAMPLE_POS_CNTL(CHIP));
 
-   fd6_ctx->sample_locations_disable_stateobj = crb.ring();
+   fd6_ctx->sample_locations_disable_stateobj = crb;
 
    fd6_ctx->preamble = fd6_build_preemption_preamble<CHIP>(&fd6_ctx->base);
 
    fd_cs restore(fd6_ctx->base.pipe, 0x1000);
    fd6_emit_static_regs<CHIP>(restore, &fd6_ctx->base);
-   fd6_ctx->restore = restore.ring();
+   fd6_ctx->restore = restore;
 
    return fd_context_init_tc(pctx, flags);
 }

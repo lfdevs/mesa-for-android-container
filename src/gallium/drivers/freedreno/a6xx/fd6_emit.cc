@@ -72,7 +72,7 @@ build_vbo_state(struct fd6_emit *emit) assert_dt
       }
    }
 
-   return crb.ring();
+   return crb;
 }
 
 static enum a6xx_ztest_mode
@@ -257,7 +257,7 @@ build_lrz(struct fd6_emit *emit) assert_dt
       .add(A6XX_RB_DEPTH_PLANE_CNTL(.z_mode = lrz.z_mode, ))
       .add(GRAS_SU_DEPTH_PLANE_CNTL(CHIP, .z_mode = lrz.z_mode, ));
 
-   return crb.ring();
+   return crb;
 }
 
 template <chip CHIP>
@@ -275,7 +275,7 @@ build_scissor(struct fd6_emit *emit) assert_dt
          .add(GRAS_SC_SCREEN_SCISSOR_BR(CHIP, i, .x = scissors[i].maxx, .y = scissors[i].maxy));
    }
 
-   return crb.ring();
+   return crb;
 }
 
 /* Combination of FD_DIRTY_FRAMEBUFFER | FD_DIRTY_RASTERIZER_DISCARD |
@@ -326,7 +326,7 @@ build_prog_fb_rast(struct fd6_emit *emit) assert_dt
    crb.add(A6XX_SP_PS_OUTPUT_MASK(.dword = mrt_components))
       .add(A6XX_RB_PS_OUTPUT_MASK(.dword = mrt_components));
 
-   return crb.ring();
+   return crb;
 }
 
 static struct fd_ringbuffer *
@@ -339,8 +339,7 @@ build_blend_color(struct fd6_emit *emit) assert_dt
       .add(A6XX_RB_BLEND_CONSTANT_RED_FP32(bcolor->color[0]))
       .add(A6XX_RB_BLEND_CONSTANT_GREEN_FP32(bcolor->color[1]))
       .add(A6XX_RB_BLEND_CONSTANT_BLUE_FP32(bcolor->color[2]))
-      .add(A6XX_RB_BLEND_CONSTANT_ALPHA_FP32(bcolor->color[3]))
-      .ring();
+      .add(A6XX_RB_BLEND_CONSTANT_ALPHA_FP32(bcolor->color[3]));
 }
 
 template <chip CHIP>
@@ -374,8 +373,7 @@ build_sample_locations(struct fd6_emit *emit)
       .add(A6XX_RB_MSAA_SAMPLE_POS_CNTL(.location_enable = true))
       .add(A6XX_RB_PROGRAMMABLE_MSAA_POS_0(.dword = sample_locations))
       .add(TPL1_MSAA_SAMPLE_POS_CNTL(CHIP, .location_enable = true))
-      .add(A6XX_TPL1_PROGRAMMABLE_MSAA_POS_0(.dword = sample_locations))
-      .ring();
+      .add(A6XX_TPL1_PROGRAMMABLE_MSAA_POS_0(.dword = sample_locations));
 }
 
 template <chip CHIP>
@@ -548,8 +546,7 @@ build_prim_mode(struct fd6_emit *emit, struct fd_context *ctx, bool gmem)
       .add(GRAS_SC_CNTL(CHIP,
          .ccusinglecachelinesize = 2,
          .single_prim_mode = (enum a6xx_single_prim_mode)prim_mode)
-      )
-      .ring();
+      );
 }
 
 template <fd6_pipeline_type PIPELINE, chip CHIP>
@@ -1065,7 +1062,7 @@ fd6_emit_restore(fd_cs &cs, struct fd_batch *batch)
    struct fd_screen *screen = ctx->screen;
 
    if (!batch->nondraw) {
-      trace_start_state_restore(&batch->trace, cs.ring());
+      trace_start_state_restore(&batch->trace, cs);
    }
 
    if (FD_DBG(STOMP)) {
@@ -1125,7 +1122,7 @@ fd6_emit_restore(fd_cs &cs, struct fd_batch *batch)
       .add(CP_SET_AMBLE_2(.type = POSTAMBLE_AMBLE_TYPE));
 
    if (!batch->nondraw) {
-      trace_end_state_restore(&batch->trace, cs.ring());
+      trace_end_state_restore(&batch->trace, cs);
    }
 }
 FD_GENX(fd6_emit_restore);

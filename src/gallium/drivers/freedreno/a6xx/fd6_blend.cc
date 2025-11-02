@@ -124,7 +124,7 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
             .sample_mask = sample_mask,
        ));
 
-   so->stateobj = crb.ring();
+   so->stateobj = crb;
    so->sample_mask = sample_mask;
 
    util_dynarray_append(&blend->variants, so);

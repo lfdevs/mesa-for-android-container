@@ -813,7 +813,7 @@ emit_conditional_ib(fd_cs &cs, struct fd_batch *batch, const struct fd_tile *til
 
    unsigned count = fd_ringbuffer_cmd_count(target);
 
-   BEGIN_RING(cs.ring(), 5 + 4 * count); /* ensure conditional doesn't get split */
+   BEGIN_RING(cs, 5 + 4 * count); /* ensure conditional doesn't get split */
 
    fd_pkt7(cs, CP_REG_TEST, 1)
       .add(A6XX_CP_REG_TEST_0(
@@ -954,12 +954,12 @@ emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
       .add(A6XX_TPL1_WINDOW_OFFSET(.x = 0, .y = 0));
 
    /* emit IB to binning drawcmds: */
-   trace_start_binning_ib(&batch->trace, cs.ring());
+   trace_start_binning_ib(&batch->trace, cs);
    foreach_subpass (subpass, batch) {
       emit_lrz<CHIP>(cs, batch, subpass);
       fd6_emit_ib<CHIP>(cs, subpass->draw);
    }
-   trace_end_binning_ib(&batch->trace, cs.ring());
+   trace_end_binning_ib(&batch->trace, cs);
 
    fd_pkt7(cs, CP_SET_DRAW_STATE, 3)
       .add(CP_SET_DRAW_STATE__0(0, .disable_all_groups = true))
@@ -980,9 +980,9 @@ emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
                           FD6_WAIT_FOR_IDLE |
                           FD6_WAIT_FOR_ME);
 
-   trace_start_vsc_overflow_test(&batch->trace, cs.ring());
+   trace_start_vsc_overflow_test(&batch->trace, cs);
    emit_vsc_overflow_test(batch);
-   trace_end_vsc_overflow_test(&batch->trace, cs.ring());
+   trace_end_vsc_overflow_test(&batch->trace, cs);
 
    fd_pkt7(cs, CP_SET_VISIBILITY_OVERRIDE, 1)
       .add(0x0);
@@ -1067,7 +1067,7 @@ fd6_build_preemption_preamble(struct fd_context *ctx)
          control_ptr(fd6_context(ctx), vsc_state),
       ));
 
-   return cs.ring();
+   return cs;
 }
 FD_GENX(fd6_build_preemption_preamble);
 
@@ -1088,9 +1088,9 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
    fd6_event_write<CHIP>(batch->ctx, cs, FD_LRZ_FLUSH);
 
    if (batch->prologue) {
-      trace_start_prologue(&batch->trace, cs.ring());
+      trace_start_prologue(&batch->trace, cs);
       fd6_emit_ib<CHIP>(cs, batch->prologue);
-      trace_end_prologue(&batch->trace, cs.ring());
+      trace_end_prologue(&batch->trace, cs);
    }
 
    fd6_cache_inv<CHIP>(batch->ctx, cs);
@@ -1655,9 +1655,9 @@ fd6_emit_tile_renderprep(struct fd_batch *batch, const struct fd_tile *tile)
 {
    if (batch->tile_loads) {
       fd_cs cs(batch->gmem);
-      trace_start_tile_loads(&batch->trace, cs.ring(), batch->restore);
+      trace_start_tile_loads(&batch->trace, cs, batch->restore);
       emit_conditional_ib<CHIP>(cs, batch, tile, batch->tile_loads);
-      trace_end_tile_loads(&batch->trace, cs.ring());
+      trace_end_tile_loads(&batch->trace, cs);
    }
 }
 
@@ -1829,9 +1829,9 @@ fd6_emit_tile(struct fd_batch *batch, const struct fd_tile *tile)
 
    foreach_subpass (subpass, batch) {
       if (subpass->subpass_clears) {
-         trace_start_clears(&batch->trace, cs.ring(), subpass->fast_cleared);
+         trace_start_clears(&batch->trace, cs, subpass->fast_cleared);
          emit_conditional_ib<CHIP>(cs, batch, tile, subpass->subpass_clears);
-         trace_end_clears(&batch->trace, cs.ring());
+         trace_end_clears(&batch->trace, cs);
       }
 
       emit_lrz<CHIP>(cs, batch, subpass);
@@ -1870,9 +1870,9 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
    emit_marker6<CHIP>(cs, 7);
 
    if (batch->tile_store) {
-      trace_start_tile_stores(&batch->trace, cs.ring(), batch->resolve);
+      trace_start_tile_stores(&batch->trace, cs, batch->resolve);
       emit_conditional_ib<CHIP>(cs, batch, tile, batch->tile_store);
-      trace_end_tile_stores(&batch->trace, cs.ring());
+      trace_end_tile_stores(&batch->trace, cs);
    }
 
    fd_pkt7(cs, CP_SET_MARKER, 1)
@@ -1914,7 +1914,7 @@ emit_sysmem_clears(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *s
    struct pipe_box box2d;
    u_box_2d(0, 0, pfb->width, pfb->height, &box2d);
 
-   trace_start_clears(&batch->trace, cs.ring(), buffers);
+   trace_start_clears(&batch->trace, cs, buffers);
 
    if (buffers & PIPE_CLEAR_COLOR) {
       for (int i = 0; i < pfb->nr_cbufs; i++) {
@@ -1958,7 +1958,7 @@ emit_sysmem_clears(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *s
 
    fd6_emit_flushes<CHIP>(ctx, cs, FD6_FLUSH_CCU_COLOR | FD6_INVALIDATE_CCU_COLOR);
 
-   trace_end_clears(&batch->trace, cs.ring());
+   trace_end_clears(&batch->trace, cs);
 }
 
 template <chip CHIP>
@@ -1974,11 +1974,11 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
 
    if (batch->prologue) {
       if (!batch->nondraw) {
-         trace_start_prologue(&batch->trace, cs.ring());
+         trace_start_prologue(&batch->trace, cs);
       }
       fd6_emit_ib<CHIP>(cs, batch->prologue);
       if (!batch->nondraw) {
-         trace_end_prologue(&batch->trace, cs.ring());
+         trace_end_prologue(&batch->trace, cs);
       }
    }
 
