@@ -1050,17 +1050,17 @@ fd7_emit_static_binning_regs(fd_cs &cs, bool gmem)
 
 template <chip CHIP>
 struct fd_ringbuffer *
-fd6_build_preemption_preamble(struct fd_context *ctx)
+fd6_build_preemption_preamble(struct fd_context *ctx, bool gmem)
 {
    struct fd_screen *screen = ctx->screen;
 
    fd_cs cs(ctx->pipe, 0x1000);
 
    fd6_emit_static_regs<CHIP>(cs, ctx);
-   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, true);
+   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, gmem);
 
    if (CHIP >= A7XX) {
-      fd7_emit_static_binning_regs<CHIP>(cs, true);
+      fd7_emit_static_binning_regs<CHIP>(cs, gmem);
    }
 
    /* TODO use CP_MEM_TO_SCRATCH_MEM on a7xx. The VSC scratch mem should be
@@ -1080,6 +1080,26 @@ fd6_build_preemption_preamble(struct fd_context *ctx)
 }
 FD_GENX(fd6_build_preemption_preamble);
 
+static void
+emit_preamble(struct fd_context *ctx, fd_cs &cs, bool gmem)
+{
+   struct fd6_context *fd6_ctx = fd6_context(ctx);
+   struct fd_ringbuffer *preamble = gmem ? fd6_ctx->gmem_preamble : fd6_ctx->sysmem_preamble;
+   uint32_t dwords;
+
+   fd_pkt7(cs, CP_SET_AMBLE, 3)
+      .add(preamble, 0, &dwords)
+      .add(CP_SET_AMBLE_2(.dwords = dwords, .type = BIN_PREAMBLE_AMBLE_TYPE));
+
+   fd_pkt7(cs, CP_SET_AMBLE, 3)
+      .add(CP_SET_AMBLE_ADDR())
+      .add(CP_SET_AMBLE_2(.type = PREAMBLE_AMBLE_TYPE));
+
+   fd_pkt7(cs, CP_SET_AMBLE, 3)
+      .add(CP_SET_AMBLE_ADDR())
+      .add(CP_SET_AMBLE_2(.type = POSTAMBLE_AMBLE_TYPE));
+}
+
 /* before first tile */
 template <chip CHIP>
 static void
@@ -1093,6 +1113,7 @@ fd6_emit_tile_init(struct fd_batch *batch) assert_dt
    emit_lrz_clears<CHIP>(batch);
 
    fd6_emit_restore<CHIP>(cs, batch);
+   emit_preamble(batch->ctx, cs, true);
 
    fd6_event_write<CHIP>(batch->ctx, cs, FD_LRZ_FLUSH);
 
@@ -1973,6 +1994,7 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
    emit_lrz_clears<CHIP>(batch);
 
    fd6_emit_restore<CHIP>(cs, batch);
+   emit_preamble(batch->ctx, cs, true);
    fd6_event_write<CHIP>(batch->ctx, cs, FD_LRZ_FLUSH);
 
    if (batch->prologue) {

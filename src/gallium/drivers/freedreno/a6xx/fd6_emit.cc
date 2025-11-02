@@ -1109,20 +1109,6 @@ fd6_emit_restore(fd_cs &cs, struct fd_batch *batch)
    fd6_emit_ib<CHIP>(cs, fd6_context(ctx)->restore);
    fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, false);
 
-   uint32_t dwords;
-
-   fd_pkt7(cs, CP_SET_AMBLE, 3)
-      .add(fd6_context(ctx)->preamble, 0, &dwords)
-      .add(CP_SET_AMBLE_2(.dwords = dwords, .type = BIN_PREAMBLE_AMBLE_TYPE));
-
-   fd_pkt7(cs, CP_SET_AMBLE, 3)
-      .add(CP_SET_AMBLE_ADDR())
-      .add(CP_SET_AMBLE_2(.type = PREAMBLE_AMBLE_TYPE));
-
-   fd_pkt7(cs, CP_SET_AMBLE, 3)
-      .add(CP_SET_AMBLE_ADDR())
-      .add(CP_SET_AMBLE_2(.type = POSTAMBLE_AMBLE_TYPE));
-
    if (!batch->nondraw) {
       trace_end_state_restore(&batch->trace, cs);
    }

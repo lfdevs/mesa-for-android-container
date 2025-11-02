@@ -44,8 +44,11 @@ fd6_context_destroy(struct pipe_context *pctx) in_dt
    if (fd6_ctx->sample_locations_disable_stateobj)
       fd_ringbuffer_del(fd6_ctx->sample_locations_disable_stateobj);
 
-   if (fd6_ctx->preamble)
-      fd_ringbuffer_del(fd6_ctx->preamble);
+   if (fd6_ctx->sysmem_preamble)
+      fd_ringbuffer_del(fd6_ctx->sysmem_preamble);
+
+   if (fd6_ctx->gmem_preamble)
+      fd_ringbuffer_del(fd6_ctx->gmem_preamble);
 
    if (fd6_ctx->restore)
       fd_ringbuffer_del(fd6_ctx->restore);
@@ -315,7 +318,8 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
 
    fd6_ctx->sample_locations_disable_stateobj = crb;
 
-   fd6_ctx->preamble = fd6_build_preemption_preamble<CHIP>(&fd6_ctx->base);
+   fd6_ctx->sysmem_preamble = fd6_build_preemption_preamble<CHIP>(&fd6_ctx->base, false);
+   fd6_ctx->gmem_preamble = fd6_build_preemption_preamble<CHIP>(&fd6_ctx->base, true);
 
    fd_cs restore(fd6_ctx->base.pipe, 0x1000);
    fd6_emit_static_regs<CHIP>(restore, &fd6_ctx->base);

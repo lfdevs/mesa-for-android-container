@@ -94,7 +94,8 @@ struct fd6_context {
    struct fd_ringbuffer *sample_locations_disable_stateobj;
 
    /* pre-baked stateobj for preamble: */
-   struct fd_ringbuffer *preamble, *restore;
+   struct fd_ringbuffer *sysmem_preamble, *gmem_preamble;
+   struct fd_ringbuffer *restore;
 
    /* storage for ctx->last.key: */
    struct ir3_shader_key last_key;
