@@ -294,10 +294,10 @@ emit_lrz_clears(struct fd_batch *batch)
 
       subpass->fast_cleared &= ~FD_BUFFER_LRZ;
 
+      fd_cs cs(fd_batch_get_prologue(batch));
+
       /* prep before first clear: */
       if (count == 0) {
-         fd_cs cs(fd_batch_get_prologue(batch));
-
          fd6_emit_ccu_cntl<CHIP>(cs, ctx->screen, false);
 
          fd_pkt7(cs, CP_SET_MARKER, 1)
@@ -308,7 +308,7 @@ emit_lrz_clears(struct fd_batch *batch)
          fd6_set_rb_dbg_eco_mode<CHIP>(ctx, cs, true);
       }
 
-      fd6_clear_lrz<CHIP>(batch, zsbuf, subpass->lrz, subpass->clear_depth);
+      fd6_clear_lrz<CHIP>(cs, zsbuf, subpass->lrz, subpass->clear_depth);
 
       count++;
    }

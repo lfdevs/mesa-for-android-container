@@ -27,7 +27,7 @@ unsigned fd6_tile_mode(const struct pipe_resource *tmpl);
  */
 
 template <chip CHIP>
-void fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf,
+void fd6_clear_lrz(fd_cs &cs, struct fd_resource *zsbuf,
                    struct fd_bo *lrz, double depth) assert_dt;
 template <chip CHIP>
 void fd6_clear_surface(struct fd_context *ctx, fd_cs &cs,

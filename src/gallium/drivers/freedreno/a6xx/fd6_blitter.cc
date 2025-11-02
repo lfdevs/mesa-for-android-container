@@ -823,11 +823,9 @@ clear_lrz_setup(fd_cs &cs, struct fd_resource *zsbuf, struct fd_bo *lrz, double 
 
 template <chip CHIP>
 void
-fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf,
+fd6_clear_lrz(fd_cs &cs, struct fd_resource *zsbuf,
               struct fd_bo *lrz, double depth)
 {
-   fd_cs cs(fd_batch_get_prologue(batch));
-
    if (DEBUG_BLIT) {
       fprintf(stderr, "lrz clear:\ndst resource: ");
       util_dump_resource(stderr, &zsbuf->b.b);
