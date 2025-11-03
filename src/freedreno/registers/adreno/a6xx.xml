@@ -1927,7 +1927,6 @@ by a particular renderpass/blit.
 			- 0.0 if GREATER
 			- 1.0 if LESS
 		</doc>
-		<bitfield name="FC_ENABLE" pos="3" type="boolean" variants="A6XX"/>
 		<!-- set when depth-test + depth-write enabled -->
 		<bitfield name="Z_WRITE_ENABLE" pos="4" type="boolean"/>
 		<bitfield name="Z_BOUNDS_ENABLE" pos="5" type="boolean"/>
@@ -1941,11 +1940,14 @@ by a particular renderpass/blit.
 			Disable LRZ based on previous direction and the current one.
 			If DIR_WRITE is not enabled - there is no write to direction buffer.
 		</doc>
-		<bitfield name="DISABLE_ON_WRONG_DIR" pos="9" type="boolean" variants="A6XX"/>
 		<bitfield name="Z_FUNC" low="11" high="13" type="adreno_compare_func" variants="A7XX-"/>
 	</bitset>
 
-	<reg32 offset="0x8100" name="GRAS_LRZ_CNTL" type="a6xx_gras_lrz_cntl" usage="rp_blit" variants="A6XX-A7XX"/>
+	<reg32 offset="0x8100" name="GRAS_LRZ_CNTL" type="a6xx_gras_lrz_cntl" usage="rp_blit" variants="A6XX">
+		<bitfield name="FC_ENABLE" pos="3" type="boolean" variants="A6XX"/>
+		<bitfield name="DISABLE_ON_WRONG_DIR" pos="9" type="boolean" variants="A6XX"/>
+	</reg32>
+	<reg32 offset="0x8100" name="GRAS_LRZ_CNTL" type="a6xx_gras_lrz_cntl" usage="rp_blit" variants="A7XX"/>
 	<reg32 offset="0x8212" name="GRAS_LRZ_CNTL" type="a6xx_gras_lrz_cntl" usage="rp_blit" variants="A8XX-"/>
 
 	<reg32 offset="0x8007" name="GRAS_LRZ_CB_CNTL" variants="A7XX" usage="rp_blit">

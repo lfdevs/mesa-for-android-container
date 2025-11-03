@@ -232,9 +232,9 @@ build_lrz(struct fd6_emit *emit) assert_dt
                .enable = lrz.enable,
                .lrz_write = lrz.write,
                .greater = lrz.direction == FD_LRZ_GREATER,
-               .fc_enable = false,   /* a6xx only */
                .z_write_enable = lrz.test,
                .z_bounds_enable = lrz.z_bounds_enable,
+               .fc_enable = false,   /* a6xx only */
                .disable_on_wrong_dir = false,  /* a6xx only */
       ))
       .add(A6XX_RB_LRZ_CNTL(.enable = lrz.enable, ))
