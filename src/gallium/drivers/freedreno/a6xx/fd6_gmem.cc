@@ -919,7 +919,6 @@ static void
 emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
 {
    const struct fd_gmem_stateobj *gmem = batch->gmem_state;
-   struct fd_screen *screen = batch->ctx->screen;
 
    assert(!batch->tessellation);
 
@@ -984,7 +983,10 @@ emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
    fd_pkt7(cs, CP_SET_MODE, 1)
       .add(0x0);
 
-   fd6_emit_gmem_cache_cntl<CHIP>(cs, screen, true);
+   if (CHIP >= A7XX) {
+      fd_pkt7(cs, CP_SET_MARKER, 1)
+         .add(A6XX_CP_SET_MARKER_0_MODE(RM7_BIN_VISIBILITY_END));
+   }
 }
 
 /* nregs: 7 */
@@ -1940,6 +1942,9 @@ emit_sysmem_clears(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *s
 
    trace_start_clears(&batch->trace, cs, buffers);
 
+   fd_pkt7(cs, CP_SET_MARKER, 1)
+      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
+
    if (buffers & PIPE_CLEAR_COLOR) {
       for (int i = 0; i < pfb->nr_cbufs; i++) {
          union pipe_color_union color = subpass->clear_color[i];
@@ -1953,6 +1958,7 @@ emit_sysmem_clears(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *s
          fd6_clear_surface<CHIP>(ctx, cs, &pfb->cbufs[i], &box2d, &color, 0);
       }
    }
+
    if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) {
       union pipe_color_union value = {};
 
@@ -2010,6 +2016,9 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
    /* remaining setup below here does not apply to blit/compute: */
    if (batch->nondraw)
       return;
+
+   fd_pkt7(cs, CP_SET_MARKER, 1)
+      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_DIRECT_RENDER));
 
    struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 

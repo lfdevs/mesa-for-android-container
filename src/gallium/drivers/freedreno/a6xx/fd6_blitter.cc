@@ -267,6 +267,9 @@ emit_setup(struct fd_context *ctx, fd_cs &cs)
                           FD6_FLUSH_CCU_DEPTH |
                           FD6_INVALIDATE_CCU_DEPTH);
 
+   fd_pkt7(cs, CP_SET_MARKER, 1)
+      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
+
    /* normal BLIT_OP_SCALE operation needs bypass RB_CCU_CNTL */
    fd6_emit_gmem_cache_cntl<CHIP>(cs, ctx->screen, false);
 }
@@ -501,6 +504,9 @@ static void
 fd6_clear_ubwc(struct fd_batch *batch, struct fd_resource *rsc) assert_dt
 {
    fd_cs cs(fd_batch_get_prologue(batch));
+
+   fd_pkt7(cs, CP_SET_MARKER, 1)
+      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
 
    clear_ubwc_setup<CHIP>(cs);
 

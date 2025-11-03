@@ -156,7 +156,6 @@ static void
 fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
 {
    struct fd6_compute_state *cp = (struct fd6_compute_state *)ctx->compute;
-   fd_cs cs(ctx->batch->draw);
 
    if (unlikely(!cp->v)) {
       struct ir3_shader_state *hwcso = (struct ir3_shader_state *)cp->hwcso;
@@ -172,6 +171,11 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
          cs_program_emit<CHIP>(ctx, crb, cp->v);
       fd6_emit_shader<CHIP>(ctx, cs, cp->v);
    }
+
+   fd_cs cs(ctx->batch->draw);
+
+   fd_pkt7(cs, CP_SET_MARKER, 1)
+      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_COMPUTE));
 
    trace_start_compute(&ctx->batch->trace, cs, !!info->indirect, info->work_dim,
                        info->block[0], info->block[1], info->block[2],
@@ -212,9 +216,6 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
 
    if (cp->v->need_driver_params)
       fd6_emit_cs_driver_params<CHIP>(ctx, cs, cp->v, info);
-
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_COMPUTE));
 
    const unsigned *local_size =
       info->block; // v->shader->nir->info->workgroup_size;
