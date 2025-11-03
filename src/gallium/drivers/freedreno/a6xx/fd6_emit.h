@@ -283,13 +283,6 @@ fd6_cache_inv(struct fd_context *ctx, fd_cs &cs)
 
 template <chip CHIP>
 static inline void
-fd6_emit_blit(struct fd_context *ctx, fd_cs &cs)
-{
-   fd6_event_write<CHIP>(ctx, cs, FD_CCU_RESOLVE);
-}
-
-template <chip CHIP>
-static inline void
 fd6_set_rb_dbg_eco_mode(struct fd_context *ctx, fd_cs &cs, bool blit)
 {
    /* Later things do not make this accessible to UMD: */

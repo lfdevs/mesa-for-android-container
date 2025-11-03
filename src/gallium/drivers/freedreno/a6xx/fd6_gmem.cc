@@ -1402,7 +1402,7 @@ emit_restore_blit(struct fd_batch *batch, fd_cs &cs, uint32_t base,
       emit_blit<CHIP>(batch, crb, base, psurf, stencil);
    }
 
-   fd6_emit_blit<CHIP>(batch->ctx, cs);
+   fd6_event_write<CHIP>(batch->ctx, cs, FD_CCU_RESOLVE);
 }
 
 template <chip CHIP>
@@ -1484,7 +1484,7 @@ emit_subpass_clears(struct fd_batch *batch, fd_cs &cs, struct fd_batch_subpass *
                crb.add(RB_CLEAR_TARGET(CHIP, .clear_mode = CLEAR_MODE_GMEM));
          }
 
-         fd6_emit_blit<CHIP>(batch->ctx, cs);
+         fd6_event_write<CHIP>(batch->ctx, cs, FD_CCU_RESOLVE);
       }
    }
 
@@ -1536,7 +1536,7 @@ emit_subpass_clears(struct fd_batch *batch, fd_cs &cs, struct fd_batch_subpass *
             crb.add(RB_CLEAR_TARGET(CHIP, .clear_mode = CLEAR_MODE_GMEM));
       }
 
-      fd6_emit_blit<CHIP>(batch->ctx, cs);
+      fd6_event_write<CHIP>(batch->ctx, cs, FD_CCU_RESOLVE);
    }
 
    /* Then clear the separate stencil buffer in case of 32 bit depth
@@ -1564,7 +1564,7 @@ emit_subpass_clears(struct fd_batch *batch, fd_cs &cs, struct fd_batch_subpass *
             crb.add(RB_CLEAR_TARGET(CHIP, .clear_mode = CLEAR_MODE_GMEM));
       }
 
-      fd6_emit_blit<CHIP>(batch->ctx, cs);
+      fd6_event_write<CHIP>(batch->ctx, cs, FD_CCU_RESOLVE);
    }
 }
 
@@ -1765,7 +1765,7 @@ emit_resolve_blit(struct fd_batch *batch, fd_cs &cs,
       emit_blit<CHIP>(batch, crb, base, psurf, stencil);
    }
 
-   fd6_emit_blit<CHIP>(batch->ctx, cs);
+   fd6_event_write<CHIP>(batch->ctx, cs, FD_CCU_RESOLVE);
 }
 
 /*
