@@ -558,8 +558,6 @@ fd6_emit_3d_state(fd_cs &cs, struct fd6_emit *emit)
    const struct fd6_program_state *prog = fd6_emit_get_prog(emit);
    const struct ir3_shader_variant *fs = emit->fs;
 
-   emit_marker6<CHIP>(cs, 5);
-
    /* Special case, we need to re-emit bindless FS state w/ the
     * fb-read state appended:
     */

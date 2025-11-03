@@ -285,9 +285,7 @@ template <chip CHIP>
 static inline void
 fd6_emit_blit(struct fd_context *ctx, fd_cs &cs)
 {
-   emit_marker6<CHIP>(cs, 7);
    fd6_event_write<CHIP>(ctx, cs, FD_CCU_RESOLVE);
-   emit_marker6<CHIP>(cs, 7);
 }
 
 template <chip CHIP>
@@ -402,8 +400,6 @@ fd6_emit_ib(fd_cs &cs, struct fd_ringbuffer *target)
 
    unsigned count = fd_ringbuffer_cmd_count(target);
 
-   emit_marker6<CHIP>(cs, 6);
-
    for (unsigned i = 0; i < count; i++) {
       uint32_t dwords;
 
@@ -413,8 +409,6 @@ fd6_emit_ib(fd_cs &cs, struct fd_ringbuffer *target)
 
       assert(dwords > 0);
    }
-
-   emit_marker6<CHIP>(cs, 6);
 }
 
 #endif /* FD6_EMIT_H */

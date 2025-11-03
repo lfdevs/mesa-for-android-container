@@ -809,8 +809,6 @@ emit_conditional_ib(fd_cs &cs, struct fd_batch *batch, const struct fd_tile *til
    if (target->cur == target->start)
       return;
 
-   emit_marker6<CHIP>(cs, 6);
-
    unsigned count = fd_ringbuffer_cmd_count(target);
 
    BEGIN_RING(cs, 5 + 4 * count); /* ensure conditional doesn't get split */
@@ -835,8 +833,6 @@ emit_conditional_ib(fd_cs &cs, struct fd_batch *batch, const struct fd_tile *til
 
       assert(dwords > 0);
    }
-
-   emit_marker6<CHIP>(cs, 6);
 }
 
 template <chip CHIP>
@@ -929,10 +925,8 @@ emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
 
    set_scissor<CHIP>(cs, 0, 0, gmem->width - 1, gmem->height - 1);
 
-   emit_marker6<CHIP>(cs, 7);
    fd_pkt7(cs, CP_SET_MARKER, 1)
       .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BIN_VISIBILITY));
-   emit_marker6<CHIP>(cs, 7);
 
    fd_pkt7(cs, CP_SET_VISIBILITY_OVERRIDE, 1)
       .add(0x1);
@@ -1213,11 +1207,9 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
    struct fd6_context *fd6_ctx = fd6_context(ctx);
    fd_cs cs(batch->gmem);
 
-   emit_marker6<CHIP>(cs, 7);
    fd_pkt7(cs, CP_SET_MARKER, 1)
       .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BIN_RENDER_START) |
                   A6XX_CP_SET_MARKER_0_USES_GMEM);
-   emit_marker6<CHIP>(cs, 7);
 
    uint32_t x1 = tile->xoff;
    uint32_t y1 = tile->yoff;
@@ -1864,10 +1856,8 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
    fd_pkt7(cs, CP_SKIP_IB2_ENABLE_LOCAL, 1)
       .add(0x0);
 
-   emit_marker6<CHIP>(cs, 7);
    fd_pkt7(cs, CP_SET_MARKER, 1)
       .add(A6XX_CP_SET_MARKER_0(.mode = RM6_BIN_RESOLVE, .uses_gmem = true));
-   emit_marker6<CHIP>(cs, 7);
 
    if (batch->tile_store) {
       trace_start_tile_stores(&batch->trace, cs, batch->resolve);
@@ -2029,10 +2019,8 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
       crb.add(VPC_SO_OVERRIDE(CHIP, false));
    }
 
-   emit_marker6<CHIP>(cs, 7);
    fd_pkt7(cs, CP_SET_MARKER, 1)
       .add(A6XX_CP_SET_MARKER_0_MODE(RM6_DIRECT_RENDER));
-   emit_marker6<CHIP>(cs, 7);
 
    fd_pkt7(cs, CP_SKIP_IB2_ENABLE_GLOBAL, 1)
       .add(0x0);

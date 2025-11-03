@@ -479,14 +479,6 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
 
    fd6_barrier_flush<CHIP>(cs, ctx->batch);
 
-   /* for debug after a lock up, write a unique counter value
-    * to scratch7 for each draw, to make it easier to match up
-    * register dumps to cmdstream.  The combination of IB
-    * (scratch6) and DRAW is enough to "triangulate" the
-    * particular draw that caused lockup.
-    */
-   emit_marker6<CHIP>(cs, 7);
-
    if (is_indirect(DRAW)) {
       assert(num_draws == 1);  /* only >1 for direct draws */
       if (DRAW == DRAW_INDIRECT_OP_XFB) {
@@ -550,8 +542,6 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
          ctx->last.index_start = last_index_start;
       }
    }
-
-   emit_marker6<CHIP>(cs, 7);
 
    flush_streamout<CHIP>(ctx, cs, &emit);
 
