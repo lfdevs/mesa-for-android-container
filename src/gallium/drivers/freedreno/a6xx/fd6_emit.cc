@@ -225,35 +225,19 @@ build_lrz(struct fd6_emit *emit) assert_dt
 
    fd6_ctx->last.lrz = lrz;
 
-   unsigned nregs = (CHIP >= A7XX) ? 5 : 4;
+   unsigned nregs = 4;
    fd_crb crb(ctx->batch->submit, nregs);
 
-   if (CHIP >= A7XX) {
-      crb.add(GRAS_LRZ_CNTL(CHIP,
-                  .enable = lrz.enable,
-                  .lrz_write = lrz.write,
-                  .greater = lrz.direction == FD_LRZ_GREATER,
-                  .z_write_enable = lrz.test,
-                  .z_bounds_enable = lrz.z_bounds_enable,
-         ))
-         .add(GRAS_LRZ_CNTL2(CHIP,
-                  .disable_on_wrong_dir = false,
-                  .fc_enable = false,
-         ));
-   } else {
-      crb.add(GRAS_LRZ_CNTL(CHIP,
-                  .enable = lrz.enable,
-                  .lrz_write = lrz.write,
-                  .greater = lrz.direction == FD_LRZ_GREATER,
-                  .fc_enable = false,
-                  .z_write_enable = lrz.test,
-                  .z_bounds_enable = lrz.z_bounds_enable,
-                  .disable_on_wrong_dir = false,
-         )
-      );
-   }
-
-   crb.add(A6XX_RB_LRZ_CNTL(.enable = lrz.enable, ))
+   crb.add(GRAS_LRZ_CNTL(CHIP,
+               .enable = lrz.enable,
+               .lrz_write = lrz.write,
+               .greater = lrz.direction == FD_LRZ_GREATER,
+               .fc_enable = false,   /* a6xx only */
+               .z_write_enable = lrz.test,
+               .z_bounds_enable = lrz.z_bounds_enable,
+               .disable_on_wrong_dir = false,  /* a6xx only */
+      ))
+      .add(A6XX_RB_LRZ_CNTL(.enable = lrz.enable, ))
       .add(A6XX_RB_DEPTH_PLANE_CNTL(.z_mode = lrz.z_mode, ))
       .add(GRAS_SU_DEPTH_PLANE_CNTL(CHIP, .z_mode = lrz.z_mode, ));
 

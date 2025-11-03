@@ -222,19 +222,32 @@ emit_zs(fd_crb &crb, struct pipe_surface *zsbuf, const struct fd_gmem_stateobj *
 }
 
 template <chip CHIP>
+static inline bool
+lrzfc_enabled(struct fd_resource *zsbuf)
+{
+   if ((CHIP < A7XX) || FD_DBG(NOLRZFC) || !zsbuf)
+      return false;
+   return zsbuf->lrz_layout.lrz_fc_size > 0;
+}
+
+template <chip CHIP>
 static void
 emit_lrz(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *subpass)
 {
    struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
    if (!subpass->lrz) {
-      fd_crb crb(cs, 6);
+      fd_crb crb(cs, 7);
 
       crb.add(GRAS_LRZ_BUFFER_BASE(CHIP));
       crb.add(GRAS_LRZ_BUFFER_PITCH(CHIP));
       crb.add(A6XX_GRAS_LRZ_FAST_CLEAR_BUFFER_BASE());
-      if (CHIP >= A7XX)
+
+      if (CHIP >= A7XX) {
          crb.add(GRAS_LRZ_DEPTH_BUFFER_INFO(CHIP));
+         crb.add(GRAS_LRZ_CNTL2(CHIP));
+      }
+
       return;
    }
 
@@ -246,7 +259,7 @@ emit_lrz(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *subpass)
     */
    fd6_event_write<CHIP>(batch->ctx, cs, FD_LRZ_FLUSH);
 
-   fd_crb crb(cs, 6);
+   fd_crb crb(cs, 7);
 
    struct fd_resource *zsbuf = fd_resource(pfb->zsbuf.texture);
 
@@ -262,6 +275,10 @@ emit_lrz(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *subpass)
    if (CHIP >= A7XX) {
       crb.add(GRAS_LRZ_DEPTH_BUFFER_INFO(CHIP,
          .depth_format = fd6_pipe2depth(pfb->zsbuf.format),
+      ));
+      crb.add(GRAS_LRZ_CNTL2(CHIP,
+         .disable_on_wrong_dir = false,
+         .fc_enable = lrzfc_enabled<CHIP>(zsbuf),
       ));
    }
 }
@@ -308,7 +325,14 @@ emit_lrz_clears(struct fd_batch *batch)
          fd6_set_rb_dbg_eco_mode<CHIP>(ctx, cs, true);
       }
 
-      fd6_clear_lrz<CHIP>(cs, zsbuf, subpass->lrz, subpass->clear_depth);
+      if (lrzfc_enabled<CHIP>(zsbuf)) {
+         emit_lrz<CHIP>(cs, batch, subpass);
+         fd_pkt4(cs, 1)
+            .add(GRAS_LRZ_DEPTH_CLEAR(CHIP, subpass->clear_depth));
+         fd6_event_write<CHIP>(ctx, cs, FD_LRZ_CLEAR);
+      } else {
+         fd6_clear_lrz<CHIP>(cs, zsbuf, subpass->lrz, subpass->clear_depth);
+      }
 
       count++;
    }
