@@ -127,6 +127,8 @@ static const char *levels[] = {
    "\t\t\t\t\t\t\t",
    "\t\t\t\t\t\t\t\t",
    "\t\t\t\t\t\t\t\t\t",
+   "\t\t\t\t\t\t\t\t\t\t",
+   "\t\t\t\t\t\t\t\t\t\t\t",
    "x",
    "x",
    "x",
