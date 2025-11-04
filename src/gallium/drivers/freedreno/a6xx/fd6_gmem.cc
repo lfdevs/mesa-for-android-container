@@ -548,7 +548,7 @@ update_vsc_pipe(fd_cs &cs, struct fd_batch *batch)
        * frame:
        */
       fd6_ctx->vsc_draw_strm_pitch = align(batch->draw_strm_bits / 8, 0x4000);
-      mesa_logd("pre-resize  to: 0x%x",
+      mesa_logd("pre-resize VSC_DRAW_STRM_PITCH to: 0x%x",
                 fd6_ctx->vsc_draw_strm_pitch);
    }
 
