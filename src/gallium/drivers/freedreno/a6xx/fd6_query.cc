@@ -466,30 +466,6 @@ stats_counter_index(struct fd_acc_query *aq)
    }
 }
 
-static void
-log_pipeline_stats(struct fd6_pipeline_stats_sample *ps, unsigned idx)
-{
-#ifdef DEBUG_COUNTERS
-   const char *labels[] = {
-      "IA_VERTICES",
-      "IA_PRIMITIVES",
-      "VS_INVOCATIONS",
-      "HS_INVOCATIONS",
-      "DS_INVOCATIONS",
-      "GS_INVOCATIONS",
-      "GS_PRIMITIVES",
-      "C_INVOCATIONS",
-      "C_PRIMITIVES",
-      "PS_INVOCATIONS",
-      "CS_INVOCATIONS",
-   };
-
-   mesa_logd("  counter\t\tstart\t\t\tstop\t\t\tdiff");
-   mesa_logd("  RBBM_PRIMCTR_%d\t0x%016" PRIx64 "\t0x%016" PRIx64 "\t%" PRIi64 "\t%s",
-             idx, ps->start, ps->stop, ps->stop - ps->start, labels[idx]);
-#endif
-}
-
 template <chip CHIP>
 static void
 pipeline_stats_resume(struct fd_acc_query *aq, struct fd_batch *batch)
@@ -557,8 +533,6 @@ pipeline_stats_result(struct fd_acc_query *aq,
                       union pipe_query_result *result)
 {
    struct fd6_pipeline_stats_sample *ps = fd6_pipeline_stats_sample(s);
-
-   log_pipeline_stats(ps, stats_counter_index(aq));
 
    result->u64 = ps->result;
 }
