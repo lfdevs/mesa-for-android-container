@@ -20,6 +20,17 @@
 
 #include "fd6_pack.h"
 
+template <chip CHIP>
+static void
+emit_counter_barrier(fd_cs &cs)
+{
+   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+
+   if (CHIP >= A8XX) {
+      fd_pkt7(cs, CP_BARRIER, 1).add(1);
+   }
+}
+
 /* g++ is a picky about offsets that cannot be resolved at compile time, so
  * roll our own __offsetof()
  */
@@ -443,27 +454,31 @@ get_stats_type(struct fd_acc_query *aq)
    }
 }
 
+template <chip CHIP>
 static unsigned
-stats_counter_index(struct fd_acc_query *aq)
+stats_counter_reg(struct fd_acc_query *aq)
 {
+#define COUNTER_REG(name) __RBBM_PIPESTAT_ ## name <CHIP>({}).reg
+
    if (aq->provider->query_type == PIPE_QUERY_PRIMITIVES_GENERATED)
-      return 7;
+      return COUNTER_REG(CINVOCATIONS);
 
    switch (aq->base.index) {
-   case PIPE_STAT_QUERY_IA_VERTICES:    return 0;
-   case PIPE_STAT_QUERY_IA_PRIMITIVES:  return 1;
-   case PIPE_STAT_QUERY_VS_INVOCATIONS: return 2;
-   case PIPE_STAT_QUERY_GS_INVOCATIONS: return 5;
-   case PIPE_STAT_QUERY_GS_PRIMITIVES:  return 6;
-   case PIPE_STAT_QUERY_C_INVOCATIONS:  return 7;
-   case PIPE_STAT_QUERY_C_PRIMITIVES:   return 8;
-   case PIPE_STAT_QUERY_PS_INVOCATIONS: return 9;
-   case PIPE_STAT_QUERY_HS_INVOCATIONS: return 3;
-   case PIPE_STAT_QUERY_DS_INVOCATIONS: return 4;
-   case PIPE_STAT_QUERY_CS_INVOCATIONS: return 10;
+   case PIPE_STAT_QUERY_IA_VERTICES:    return COUNTER_REG(IAVERTICES);
+   case PIPE_STAT_QUERY_IA_PRIMITIVES:  return COUNTER_REG(IAPRIMITIVES);
+   case PIPE_STAT_QUERY_VS_INVOCATIONS: return COUNTER_REG(VSINVOCATIONS);
+   case PIPE_STAT_QUERY_GS_INVOCATIONS: return COUNTER_REG(GSINVOCATIONS);
+   case PIPE_STAT_QUERY_GS_PRIMITIVES:  return COUNTER_REG(GSPRIMITIVES);
+   case PIPE_STAT_QUERY_C_INVOCATIONS:  return COUNTER_REG(CINVOCATIONS);
+   case PIPE_STAT_QUERY_C_PRIMITIVES:   return COUNTER_REG(CPRIMITIVES);
+   case PIPE_STAT_QUERY_PS_INVOCATIONS: return COUNTER_REG(PSINVOCATIONS);
+   case PIPE_STAT_QUERY_HS_INVOCATIONS: return COUNTER_REG(HSINVOCATIONS);
+   case PIPE_STAT_QUERY_DS_INVOCATIONS: return COUNTER_REG(DSINVOCATIONS);
+   case PIPE_STAT_QUERY_CS_INVOCATIONS: return COUNTER_REG(CSINVOCATIONS);
    default:
       return 0;
    }
+#undef COUNTER_REG
 }
 
 template <chip CHIP>
@@ -472,11 +487,10 @@ pipeline_stats_resume(struct fd_acc_query *aq, struct fd_batch *batch)
    assert_dt
 {
    enum stats_type type = get_stats_type(aq);
-   unsigned idx = stats_counter_index(aq);
-   unsigned reg = REG_A6XX_RBBM_PIPESTAT_IAVERTICES + (2 * idx);
+   unsigned reg = stats_counter_reg<CHIP>(aq);
    fd_cs cs(batch->draw);
 
-   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   emit_counter_barrier<CHIP>(cs);
 
    /* snapshot the start value: */
    fd_pkt7(cs, CP_REG_TO_MEM, 3)
@@ -496,11 +510,10 @@ pipeline_stats_pause(struct fd_acc_query *aq, struct fd_batch *batch)
    assert_dt
 {
    enum stats_type type = get_stats_type(aq);
-   unsigned idx = stats_counter_index(aq);
-   unsigned reg = REG_A6XX_RBBM_PIPESTAT_IAVERTICES + (2 * idx);
+   unsigned reg = stats_counter_reg<CHIP>(aq);
    fd_cs cs(batch->draw);
 
-   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   emit_counter_barrier<CHIP>(cs);
 
    /* snapshot the end values: */
    fd_pkt7(cs, CP_REG_TO_MEM, 3)
@@ -611,7 +624,7 @@ primitives_emitted_resume(struct fd_acc_query *aq,
 {
    fd_cs cs(batch->draw);
 
-   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   emit_counter_barrier<CHIP>(cs);
 
    ASSERT_ALIGNED(struct fd6_primitives_sample, start[0], 32);
 
@@ -652,7 +665,7 @@ primitives_emitted_pause(struct fd_acc_query *aq,
 {
    fd_cs cs(batch->draw);
 
-   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   emit_counter_barrier<CHIP>(cs);
 
    ASSERT_ALIGNED(struct fd6_primitives_sample, stop[0], 32);
 
