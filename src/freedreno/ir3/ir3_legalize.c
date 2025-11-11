@@ -688,6 +688,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
    struct ir3_legalize_state *state = &bd->begin_state;
    bool last_input_needs_ss = false;
    struct ir3_builder build = ir3_builder_at(ir3_after_block(block));
+   bool has_ldc_u = false;
 
    ir3_merge_pred_legalize_states(state, block, get_block_legalize_state);
 
@@ -753,6 +754,12 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
        */
       if (writes_addr1(n) && block->in_early_preamble)
          n->srcs[0]->flags |= IR3_REG_R;
+
+      if ((n->opc == OPC_LDC) && (n->flags & IR3_INSTR_U)) {
+         has_ldc_u = true;
+      } else if ((n->opc == OPC_SHPE) && has_ldc_u && (ctx->compiler->gen >= 8)) {
+         last_n = insert_nop_flags(ctx, state, last_n, &build, IR3_INSTR_SY);
+      }
 
       /* cat5+ does not have an (ss) bit, if needed we need to
        * insert a nop to carry the sync flag.  Would be kinda
