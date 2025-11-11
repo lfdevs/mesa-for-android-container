@@ -631,6 +631,34 @@ ir3_update_legalize_state(struct ir3_legalize_state *state,
       state->cycle += n->repeat + n->nop;
 }
 
+static struct ir3_instruction *
+insert_nop_flags(struct ir3_legalize_ctx *ctx,
+                 struct ir3_legalize_state *state,
+                 struct ir3_instruction *last_n,
+                 struct ir3_builder *build,
+                 enum ir3_instruction_flags flags)
+{
+   if (last_n && last_n->opc == OPC_NOP) {
+      /* Note that reusing the previous nop isn't just an optimization
+       * but prevents infinitely adding nops when this block is in a loop
+       * and needs to be legalized more than once.
+       */
+      last_n->flags |= flags;
+
+      /* If we reuse the last nop, we shouldn't do a full state update as
+       * its delay has already been taken into account.
+       */
+      sync_update(state, ctx->compiler, last_n);
+   } else {
+      struct ir3_instruction *nop = ir3_NOP(build);
+      nop->flags |= flags;
+      ir3_update_legalize_state(state, ctx->compiler, nop);
+      last_n = nop;
+   }
+
+   return last_n;
+}
+
 /* We want to evaluate each block from the position of any other
  * predecessor block, in order that the flags set are the union of
  * all possible program paths.
@@ -732,24 +760,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
        * this should be a pretty rare case:
        */
       if ((n->flags & IR3_INSTR_SS) && !supports_ss(n)) {
-         if (last_n && last_n->opc == OPC_NOP) {
-            /* Note that reusing the previous nop isn't just an optimization
-             * but prevents infinitely adding nops when this block is in a loop
-             * and needs to be legalized more than once.
-             */
-            last_n->flags |= IR3_INSTR_SS;
-
-            /* If we reuse the last nop, we shouldn't do a full state update as
-             * its delay has already been taken into account.
-             */
-            sync_update(state, ctx->compiler, last_n);
-         } else {
-            struct ir3_instruction *nop = ir3_NOP(&build);
-            nop->flags |= IR3_INSTR_SS;
-            ir3_update_legalize_state(state, ctx->compiler, nop);
-            last_n = nop;
-         }
-
+         last_n = insert_nop_flags(ctx, state, last_n, &build, IR3_INSTR_SS);
          n->flags &= ~IR3_INSTR_SS;
       }
 
