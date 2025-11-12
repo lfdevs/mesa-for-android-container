@@ -521,6 +521,12 @@ struct wsi_display_image {
    uint64_t                        minimum_ns;
 };
 
+struct wsi_valve_vblank_timestamp {
+   uint64_t  sequence;
+   uint32_t  tv_sec;
+   uint32_t  tv_usec;
+};
+
 struct wsi_display_swapchain {
    struct wsi_swapchain            base;
    struct wsi_display              *wsi;
@@ -537,11 +543,12 @@ struct wsi_display_swapchain {
    uint64_t                        color_outcome_serial;
    VkHdrMetadataEXT                hdr_metadata;
 
+   struct wsi_valve_vblank_timestamp last_vblank_timestamp;
    struct wsi_image_timing_request timing_request;
    uint64_t                        last_presented_vblank;
    uint64_t                        last_presented_nsec;
 
-   struct wsi_display_image        images[0];
+   struct wsi_display_image     images[0];
 };
 
 struct wsi_display_fence {
@@ -2131,6 +2138,9 @@ wsi_display_page_flip_handler2(int fd,
                      image - &(image->chain->images[0]), frame);
    image->state = WSI_IMAGE_DISPLAYING;
    wsi_display_present_complete(chain, image);
+   chain->last_vblank_timestamp.sequence = frame;
+   chain->last_vblank_timestamp.tv_sec = sec;
+   chain->last_vblank_timestamp.tv_usec = usec;
 
    wsi_display_idle_old_displaying(image);
 
@@ -4884,6 +4894,13 @@ wsi_GetSwapchainCounterEXT(VkDevice _device,
       (struct wsi_display_swapchain *) wsi_swapchain_from_handle(_swapchain);
    struct wsi_display_connector *connector =
       wsi_display_mode_from_handle(swapchain->surface->displayMode)->connector;
+
+   if (counter == VK_SURFACE_COUNTER_VBLANK_TIMESTAMP_VALVE) {
+      *(struct wsi_valve_vblank_timestamp *)pCounterValue = swapchain->last_vblank_timestamp;
+      return VK_SUCCESS;
+   } else if (counter != VK_SURFACE_COUNTER_VBLANK_EXT) {
+      return VK_ERROR_FEATURE_NOT_PRESENT;
+   }
 
    if (wsi->fd < 0)
       return VK_ERROR_INITIALIZATION_FAILED;
