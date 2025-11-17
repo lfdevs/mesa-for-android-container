@@ -106,9 +106,9 @@ Source15:       https://crates.io/api/v1/crates/rustc-hash/%{rustc_hash_ver}/dow
 
 Patch10:        gnome-shell-glthread-disable.patch
 
-# zink + nvk + hotplug fails
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/14148
-Patch15:        wayland-display-hacks.patch
+# fix zink/device-select bug
+Patch11:        0001-device-select-add-a-layer-setting-to-disable-device-.patch
+Patch12:        0002-zink-use-device-select-layer-settings-to-disable-dev.patch
 
 BuildRequires:  meson >= 1.3.0
 BuildRequires:  gcc
