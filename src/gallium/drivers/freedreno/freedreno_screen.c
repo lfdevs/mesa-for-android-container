@@ -570,8 +570,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUERY_TIMESTAMP:
    case PIPE_CAP_QUERY_TIME_ELAPSED:
       /* only a4xx, requires new enough kernel so we know max_freq: */
-      return (screen->max_freq > 0) &&
-             (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen));
+      return (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen));
    case PIPE_CAP_TIMER_RESOLUTION:
       return ticks_to_ns(1);
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
@@ -608,6 +607,11 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 0;
    case PIPE_CAP_THROTTLE:
       return screen->driconf.enable_throttling;
+   case PIPE_CAP_DMABUF:
+      if (fd_get_features(screen->dev) & FD_FEATURE_IMPORT_DMABUF)
+         return DRM_PRIME_CAP_IMPORT;
+      /* Fallthough to default case */
+      FALLTHROUGH;
    default:
       return u_pipe_screen_get_param_defaults(pscreen, param);
    }

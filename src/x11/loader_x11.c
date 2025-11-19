@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 #include <xcb/xcb.h>
 #include <xcb/dri3.h>
 #include <xcb/present.h>
@@ -45,6 +46,10 @@ x11_dri3_open(xcb_connection_t *conn,
    xcb_xfixes_query_version_reply_t *fixes_reply;
    int                          fd;
    const xcb_query_extension_reply_t *extension;
+
+   const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
+   if (env && !strcmp(env, "kgsl"))
+      return open("/dev/kgsl-3d0", O_RDWR);
 
    xcb_prefetch_extension_data(conn, &xcb_dri3_id);
    extension = xcb_get_extension_data(conn, &xcb_dri3_id);
