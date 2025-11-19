@@ -174,10 +174,6 @@ struct fd_dev_info {
       bool has_per_view_viewport;
       bool has_gmem_fast_clear;
 
-      /* Per CCU GMEM amount reserved for each of DEPTH and COLOR caches
-       * in sysmem rendering. */
-      uint32_t sysmem_per_ccu_depth_cache_size;
-      uint32_t sysmem_per_ccu_color_cache_size;
       /* Per CCU GMEM amount reserved for color cache used by GMEM resolves
        * which require color cache (non-BLIT event case).
        * The size is expressed as a fraction of ccu cache used by sysmem
@@ -187,6 +183,21 @@ struct fd_dev_info {
        */
       /* see enum a6xx_ccu_cache_size */
       uint32_t gmem_ccu_color_cache_fraction;
+      uint32_t gmem_per_ccu_color_cache_size;
+      uint32_t gmem_ccu_depth_cache_fraction;
+      uint32_t gmem_per_ccu_depth_cache_size;
+      uint32_t sysmem_ccu_color_cache_fraction;
+      uint32_t sysmem_per_ccu_color_cache_size;
+      uint32_t sysmem_ccu_depth_cache_fraction;
+      uint32_t sysmem_per_ccu_depth_cache_size;
+
+      /* Size of various in-gmem caches: */
+      uint32_t sysmem_vpc_attr_buf_size;
+      uint32_t sysmem_vpc_pos_buf_size;
+      uint32_t sysmem_vpc_bv_pos_buf_size;
+      uint32_t gmem_vpc_attr_buf_size;
+      uint32_t gmem_vpc_pos_buf_size;
+      uint32_t gmem_vpc_bv_pos_buf_size;
 
       /* Corresponds to SP_LB_PARAM_LIMIT::PRIMALLOCTHRESHOLD */
       uint32_t prim_alloc_threshold;
@@ -295,9 +306,6 @@ struct fd_dev_info {
       bool load_shader_consts_via_preamble;
 
       bool has_gmem_vpc_attr_buf;
-      /* Size of buffer in gmem for VPC attributes */
-      uint32_t sysmem_vpc_attr_buf_size;
-      uint32_t gmem_vpc_attr_buf_size;
 
       /* Whether UBWC is supported on all UAVs. Prior to this, only readonly
        * or writeonly UAVs could use UBWC and mixing reads and writes was not

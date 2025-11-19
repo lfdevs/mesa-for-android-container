@@ -27,12 +27,14 @@ class CHIP(Enum):
     A5XX = 5
     A6XX = 6
     A7XX = 7
+    A8XX = 8
 
 class CCUColorCacheFraction(Enum):
     FULL = 0
     HALF = 1
     QUARTER = 2
     EIGHTH = 3
+    THREE_QUARTER = 3  # a8xx_gen2 and later
 
 
 class State(object):
