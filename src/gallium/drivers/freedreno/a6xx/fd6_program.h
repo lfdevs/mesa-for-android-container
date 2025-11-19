@@ -89,6 +89,20 @@ fd6_last_shader(const struct fd6_program_state *state)
 }
 
 template <chip CHIP>
+static inline bool
+fd6_load_shader_consts_via_preamble(const struct ir3_shader_variant *v)
+{
+   return (CHIP == A7XX) && v->compiler->load_shader_consts_via_preamble;
+}
+
+template <chip CHIP>
+static inline bool
+fd6_load_inline_uniforms_via_preamble_ldgk(const struct ir3_shader_variant *v)
+{
+   return (CHIP == A7XX) && v->compiler->load_inline_uniforms_via_preamble_ldgk;
+}
+
+template <chip CHIP>
 void fd6_emit_shader(struct fd_context *ctx, fd_cs &cs,
                      const struct ir3_shader_variant *so) assert_dt;
 

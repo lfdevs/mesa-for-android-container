@@ -1555,7 +1555,7 @@ fd6_program_create(void *data, const struct ir3_shader_variant *bs,
    if (ds && ds->need_driver_params)
       num_ubo_dp++;
 
-   if (!(CHIP == A7XX && vs->compiler->load_inline_uniforms_via_preamble_ldgk)) {
+   if (!fd6_load_inline_uniforms_via_preamble_ldgk<CHIP>(vs)) {
       /* On a6xx all shader stages use driver params pushed in cmdstream: */
       num_dp += num_ubo_dp;
       num_ubo_dp = 0;

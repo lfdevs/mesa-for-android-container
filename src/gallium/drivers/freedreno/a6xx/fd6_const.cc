@@ -44,7 +44,7 @@ fd6_upload_emit_driver_ubo(struct fd_context *ctx, fd_cs &cs,
 {
    struct pipe_context *pctx = &ctx->base;
 
-   assert(ctx->screen->info->chip >= 7 && ctx->screen->info->props.load_shader_consts_via_preamble);
+   assert(FD_CALLX(ctx->screen->info, fd6_load_shader_consts_via_preamble)(v));
 
    if (!sizedwords || (base < 0))
       return;
@@ -162,7 +162,7 @@ emit_stage_tess_consts(fd_cs &cs, const struct ir3_shader_variant *v,
 {
    const struct ir3_const_state *const_state = ir3_const_state(v);
 
-   if (CHIP == A7XX && ctx->screen->info->props.load_shader_consts_via_preamble) {
+   if (fd6_load_shader_consts_via_preamble<CHIP>(v)) {
       int base = const_state->primitive_param_ubo.idx;
 
       fd6_upload_emit_driver_ubo(ctx, cs, v, base, num_params, params);
@@ -305,7 +305,7 @@ fd6_user_consts_cmdstream_size(const struct ir3_shader_variant *v)
    const struct ir3_ubo_analysis_state *ubo_state = &const_state->ubo_state;
    unsigned packets, size;
 
-   if (CHIP == A7XX && v->compiler->load_shader_consts_via_preamble) {
+   if (fd6_load_shader_consts_via_preamble<CHIP>(v)) {
       packets = 0;
       size = 0;
    } else {
@@ -329,7 +329,7 @@ emit_user_consts(const struct ir3_shader_variant *v, fd_cs &cs,
 {
    fd6_emit_ubos(v, cs, constbuf);
 
-   if (CHIP == A7XX && v->compiler->load_shader_consts_via_preamble)
+   if (fd6_load_shader_consts_via_preamble<CHIP>(v))
       return;
 
    ir3_emit_user_consts(v, cs, constbuf);
@@ -369,7 +369,7 @@ emit_driver_params(const struct ir3_shader_variant *v, fd_cs &dpconstobj,
                    const struct pipe_draw_indirect_info *indirect,
                    const struct ir3_driver_params_vs *vertex_params)
 {
-   if (CHIP == A7XX && ctx->screen->info->props.load_shader_consts_via_preamble) {
+   if (fd6_load_shader_consts_via_preamble<CHIP>(v)) {
       const struct ir3_const_state *const_state = ir3_const_state(v);
       int base = const_state->driver_params_ubo.idx;
 
@@ -386,7 +386,7 @@ static inline void
 emit_hs_driver_params(const struct ir3_shader_variant *v, fd_cs &dpconstobj,
                       struct fd_context *ctx)
 {
-   if (CHIP == A7XX && ctx->screen->info->props.load_shader_consts_via_preamble) {
+   if (fd6_load_shader_consts_via_preamble<CHIP>(v)) {
       const struct ir3_const_state *const_state = ir3_const_state(v);
       struct ir3_driver_params_tcs hs_params = ir3_build_driver_params_tcs(ctx);
       int base = const_state->driver_params_ubo.idx;
@@ -473,7 +473,7 @@ fd6_emit_cs_driver_params(struct fd_context *ctx, fd_cs &cs,
                           const struct ir3_shader_variant *v,
                           const struct pipe_grid_info *info)
 {
-   if (CHIP == A7XX && ctx->screen->info->props.load_shader_consts_via_preamble) {
+   if (fd6_load_shader_consts_via_preamble<CHIP>(v)) {
       const struct ir3_const_state *const_state = ir3_const_state(v);
       struct ir3_driver_params_cs compute_params =
          ir3_build_driver_params_cs(v, info);
@@ -532,7 +532,7 @@ fd6_emit_immediates(const struct ir3_shader_variant *v, fd_cs &cs)
                           v->info.constant_data_offset, v->bo);
    }
 
-   if (CHIP == A7XX && v->compiler->load_inline_uniforms_via_preamble_ldgk)
+   if (fd6_load_inline_uniforms_via_preamble_ldgk<CHIP>(v))
       return;
 
    ir3_emit_immediates(v, cs);
@@ -545,7 +545,7 @@ fd6_emit_link_map(struct fd_context *ctx, fd_cs &cs,
                   const struct ir3_shader_variant *producer,
                   const struct ir3_shader_variant *consumer)
 {
-   if (CHIP == A7XX && producer->compiler->load_shader_consts_via_preamble) {
+   if (fd6_load_inline_uniforms_via_preamble_ldgk<CHIP>(producer)) {
       const struct ir3_const_state *const_state = ir3_const_state(consumer);
       int base = const_state->primitive_map_ubo.idx;
       uint32_t size = align(consumer->input_size, 4);
