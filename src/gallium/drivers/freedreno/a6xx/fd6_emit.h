@@ -302,6 +302,19 @@ fd6_set_rb_dbg_eco_mode(struct fd_context *ctx, fd_cs &cs, bool blit)
       .add(A6XX_RB_DBG_ECO_CNTL(.dword = dword));
 }
 
+struct fd6_set_render_mode {
+   enum a6xx_marker mode;
+   bool uses_gmem;
+};
+
+template <chip CHIP>
+static inline void
+fd6_set_render_mode(fd_cs &cs, struct fd6_set_render_mode args)
+{
+   fd_pkt7(cs, CP_SET_MARKER, 1)
+      .add(A6XX_CP_SET_MARKER_0(.mode = args.mode, .uses_gmem = args.uses_gmem));
+}
+
 static inline bool
 fd6_geom_stage(mesa_shader_stage type)
 {

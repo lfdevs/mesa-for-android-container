@@ -174,8 +174,7 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
 
    fd_cs cs(ctx->batch->draw);
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_COMPUTE));
+   fd6_set_render_mode<CHIP>(cs, {RM6_COMPUTE});
 
    trace_start_compute(&ctx->batch->trace, cs, !!info->indirect, info->work_dim,
                        info->block[0], info->block[1], info->block[2],

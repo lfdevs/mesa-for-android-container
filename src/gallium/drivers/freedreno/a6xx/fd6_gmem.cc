@@ -316,12 +316,8 @@ emit_lrz_clears(struct fd_batch *batch)
       /* prep before first clear: */
       if (count == 0) {
          fd6_emit_gmem_cache_cntl<CHIP>(cs, ctx->screen, false);
-
-         fd_pkt7(cs, CP_SET_MARKER, 1)
-            .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
-
+         fd6_set_render_mode<CHIP>(cs, {RM6_BLIT2DSCALE});
          fd6_emit_flushes<CHIP>(ctx, cs, FD6_FLUSH_CACHE);
-
          fd6_set_rb_dbg_eco_mode<CHIP>(ctx, cs, true);
       }
 
@@ -948,8 +944,7 @@ emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
 
    set_scissor<CHIP>(cs, 0, 0, gmem->width - 1, gmem->height - 1);
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BIN_VISIBILITY));
+   fd6_set_render_mode<CHIP>(cs, {RM6_BIN_VISIBILITY});
 
    fd_pkt7(cs, CP_SET_VISIBILITY_OVERRIDE, 1)
       .add(0x1);
@@ -1008,8 +1003,7 @@ emit_binning_pass(fd_cs &cs, struct fd_batch *batch) assert_dt
       .add(0x0);
 
    if (CHIP >= A7XX) {
-      fd_pkt7(cs, CP_SET_MARKER, 1)
-         .add(A6XX_CP_SET_MARKER_0_MODE(RM7_BIN_VISIBILITY_END));
+      fd6_set_render_mode<CHIP>(cs, {RM7_BIN_VISIBILITY_END});
    }
 }
 
@@ -1269,9 +1263,7 @@ fd6_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
    struct fd6_context *fd6_ctx = fd6_context(ctx);
    fd_cs cs(batch->gmem);
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BIN_RENDER_START) |
-                  A6XX_CP_SET_MARKER_0_USES_GMEM);
+   fd6_set_render_mode<CHIP>(cs, {.mode = RM6_BIN_RENDER_START, .uses_gmem = true});
 
    uint32_t x1 = tile->xoff;
    uint32_t y1 = tile->yoff;
@@ -1905,8 +1897,7 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
       fd6_emit_ib<CHIP>(cs, batch->epilogue);
 
    if (use_hw_binning(batch)) {
-      fd_pkt7(cs, CP_SET_MARKER, 1)
-         .add(A6XX_CP_SET_MARKER_0(.mode = RM6_BIN_END_OF_DRAWS, .uses_gmem = true));
+      fd6_set_render_mode<CHIP>(cs, {.mode = RM6_BIN_END_OF_DRAWS, .uses_gmem = true});
    }
 
    fd_pkt7(cs, CP_SET_DRAW_STATE, 3)
@@ -1916,8 +1907,7 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
    fd_pkt7(cs, CP_SKIP_IB2_ENABLE_LOCAL, 1)
       .add(0x0);
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0(.mode = RM6_BIN_RESOLVE, .uses_gmem = true));
+   fd6_set_render_mode<CHIP>(cs, {.mode = RM6_BIN_RESOLVE, .uses_gmem = true});
 
    if (batch->tile_store) {
       trace_start_tile_stores(&batch->trace, cs, batch->resolve);
@@ -1925,8 +1915,7 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
       trace_end_tile_stores(&batch->trace, cs);
    }
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0(.mode = RM6_BIN_RENDER_END));
+   fd6_set_render_mode<CHIP>(cs, {.mode = RM6_BIN_RENDER_END});
 }
 
 template <chip CHIP>
@@ -1966,8 +1955,7 @@ emit_sysmem_clears(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *s
 
    trace_start_clears(&batch->trace, cs, buffers);
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
+   fd6_set_render_mode<CHIP>(cs, {RM6_BLIT2DSCALE});
 
    if (buffers & PIPE_CLEAR_COLOR) {
       for (int i = 0; i < pfb->nr_cbufs; i++) {
@@ -2041,8 +2029,7 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
    if (batch->nondraw)
       return;
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_DIRECT_RENDER));
+   fd6_set_render_mode<CHIP>(cs, {RM6_DIRECT_RENDER});
 
    struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
@@ -2087,8 +2074,7 @@ fd6_emit_sysmem_prep(struct fd_batch *batch) assert_dt
       crb.add(VPC_SO_OVERRIDE(CHIP, false));
    }
 
-   fd_pkt7(cs, CP_SET_MARKER, 1)
-      .add(A6XX_CP_SET_MARKER_0_MODE(RM6_DIRECT_RENDER));
+   fd6_set_render_mode<CHIP>(cs, {RM6_DIRECT_RENDER});
 
    fd_pkt7(cs, CP_SKIP_IB2_ENABLE_GLOBAL, 1)
       .add(0x0);
@@ -2135,6 +2121,7 @@ fd6_emit_sysmem(struct fd_batch *batch)
 
          fd6_emit_flushes<CHIP>(batch->ctx, cs, flushes);
          emit_sysmem_clears<CHIP>(cs, batch, subpass);
+         fd6_set_render_mode<CHIP>(cs, {RM6_DIRECT_RENDER});
       }
 
       struct pipe_framebuffer_state *pfb = &batch->framebuffer;
