@@ -1428,6 +1428,32 @@ add_gpus([
         ],
     ))
 
+a8xx_base = GPUProps(
+        has_dp2acc = False,
+    )
+
+# Totally fake, just to get cffdump to work:
+add_gpus([
+        GPUId(chip_id=0x44050000, name="FD830"),
+    ], A6xxGPUInfo(
+        CHIP.A8XX,
+        [a7xx_base, a7xx_gen3, a8xx_base],
+        num_ccu = 6,
+        tile_align_w = 64,
+        tile_align_h = 32,
+        tile_max_w = 16384,
+        tile_max_h = 16384,
+        num_vsc_pipes = 32,
+        cs_shared_mem_size = 32 * 1024,
+        wave_granularity = 2,
+        fibers_per_sp = 128 * 2 * 16,
+        highest_bank_bit = 16,
+        magic_regs = dict(
+        ),
+        raw_magic_regs = [
+        ],
+    ))
+
 template = """\
 /* Copyright © 2021 Google, Inc.
  *
