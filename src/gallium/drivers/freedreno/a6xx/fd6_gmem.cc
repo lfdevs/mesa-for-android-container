@@ -583,7 +583,7 @@ update_vsc_pipe(fd_cs &cs, struct fd_batch *batch)
 
    fd_ncrb<CHIP> ncrb(cs, 12 + max_vsc_pipes);
 
-   ncrb.add(A6XX_VSC_BIN_SIZE(.width = gmem->bin_w, .height = gmem->bin_h));
+   ncrb.add(VSC_BIN_SIZE(CHIP, .binw = gmem->bin_w, .binh = gmem->bin_h));
    ncrb.add(A6XX_VSC_SIZE_BASE(
       .bo = fd6_ctx->vsc_draw_strm,
       .bo_offset = max_vsc_pipes * fd6_ctx->vsc_draw_strm_pitch

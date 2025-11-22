@@ -410,8 +410,8 @@ function draw(primtype, nindx)
 	-- TODO should also check for stencil buffer for z32+s8 case
 
 	if m == "RM6_BIN_RENDER_START" then
-		binw = r.VSC_BIN_SIZE.WIDTH
-		binh = r.VSC_BIN_SIZE.HEIGHT
+		binw = r.VSC_BIN_SIZE.BINW
+		binh = r.VSC_BIN_SIZE.BINH
 		nbins = r.VSC_EXPANDED_BIN_CNTL.NX * r.VSC_EXPANDED_BIN_CNTL.NY
 	end
 

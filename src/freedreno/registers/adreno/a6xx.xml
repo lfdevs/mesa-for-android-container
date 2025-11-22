@@ -1318,10 +1318,17 @@ by a particular renderpass/blit.
 
 	<reg32 offset="0x0c00" name="VSC_DBG_ECO_CNTL"/>
 	<reg32 offset="0x0df0" name="VSC_KMD_DBG_ECO_CNTL" variants="A8XX-"/>
-	<reg32 offset="0x0c02" name="VSC_BIN_SIZE" usage="rp_blit">
-		<bitfield name="WIDTH" low="0" high="7" shr="5" type="uint"/>
-		<bitfield name="HEIGHT" low="8" high="16" shr="4" type="uint"/>
+	<reg32 offset="0x0c02" name="VSC_BIN_SIZE" usage="rp_blit" variants="A6XX-A7XX">
+		<bitfield name="BINW" low="0" high="7" shr="5" type="uint"/>
+		<bitfield name="BINH" low="8" high="16" shr="4" type="uint"/>
 	</reg32>
+
+	<bitset name="a8xx_bin_size" inline="yes">
+		<bitfield name="BINW" low="0" high="9" shr="5" type="uint"/>
+		<bitfield name="BINH" low="16" high="26" shr="4" type="uint"/>
+	</bitset>
+
+	<reg32 offset="0x0c02" name="VSC_BIN_SIZE" type="a8xx_bin_size" usage="rp_blit" variants="A8XX"/>
 	<reg64 offset="0x0c03" name="VSC_SIZE_BASE" type="waddress" usage="cmd"/>
 	<reg32 offset="0x0c06" name="VSC_EXPANDED_BIN_CNTL" usage="rp_blit">
 		<bitfield name="NX" low="1" high="10" type="uint"/>
@@ -2511,11 +2518,6 @@ by a particular renderpass/blit.
 		<bitfield name="BINW" low="0" high="5" shr="5" type="uint"/>
 		<bitfield name="BINH" low="8" high="14" shr="4" type="uint"/>
 	</reg32>
-
-	<bitset name="a8xx_bin_size" inline="yes">
-		<bitfield name="BINW" low="0" high="9" shr="5" type="uint"/>
-		<bitfield name="BINH" low="16" high="26" shr="4" type="uint"/>
-	</bitset>
 
 	<reg32 offset="0x88d3" name="RB_RESOLVE_CNTL_3" type="a8xx_bin_size" variants="A8XX-" usage="rp_blit"/>
 	<reg32 offset="0x88f0" name="RB_RESOLVE_CNTL_4" variants="A8XX-" usage="rp_blit"/>
