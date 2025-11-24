@@ -4,7 +4,7 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 [English](../../README.md) | **简体中文** | [繁體中文](../zh-HanT/README.md)  
 
 ---  
-一个适用于 Android 容器（Proot、Chroot、LXC 等）的 [Mesa](https://gitlab.freedesktop.org/mesa/mesa) 构建，支持 Adreno、Mali GPU 的硬件加速。  
+一个适用于 Android 容器（Proot、Chroot、LXC 等）的 [Mesa](https://gitlab.freedesktop.org/mesa/mesa) 构建，支持 Adreno GPU 的硬件加速。  
 
 ## 特性
   - 直接使用修改后的 Mesa 官方仓库源码在 Debian 13 的 Linux arm64 Chroot 容器下编译，向下兼容 Debian 12，以 Android 为宿主机的 Proot、Chroot、LXC 容器均可使用本项目编译的 Mesa 驱动。  
@@ -15,21 +15,19 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 |      GPU       | OpenGL | OpenGL ES | Vulkan |
 | :------------: | :----: | :-------: | :----: |
 | **Adreno GPU** |  ✅支持   |    ✅支持    |  ✅支持   |
-|  **Mali GPU**  |  ❔未测试  |   ❔未测试    |  ❔未测试  |
 ## 安装
 ℹ️**注意**：目前本项目的 Releases 只有`.tar.gz`格式的安装包，只能覆盖原来的 Mesa 驱动，不能直接卸载，仅供测试使用。  
 
-1. 前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下载一个安装包。请注意文件名中的 Linux 发行版后缀，如`debian_arm64`，只能安装发行版匹配的安装包。  
+1. 前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下载一个安装包。请注意文件名中的 Linux 发行版后缀，如`debian_trixie_arm64`，只能安装发行版匹配的安装包。  
 2. 直接将安装包解压到根目录。  
 ```shell
-sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /
+sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_trixie_arm64.tar.gz -C /
 ```
 3. 刷新动态链接器缓存。  
 ```shell
 sudo ldconfig
 ```
 ## 使用
-### Adreno GPU
 在运行特定程序时指定环境变量`MESA_LOADER_DRIVER_OVERRIDE`和`TU_DEBUG`，如：  
 ```shell
 MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
@@ -39,10 +37,6 @@ MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
 MESA_LOADER_DRIVER_OVERRIDE=kgsl
 TU_DEBUG=noconform
 ```
-### Mali GPU
-ℹ️**注意**：目前本驱动未在 Mali GPU 上进行测试，以下方法不一定可行。  
-  - 对于较新的 Mali GPU （基于 Midgard 和 Bifrost 微架构），指定环境变量`GALLIUM_DRIVER=panfrost`。  
-  - 对于较老的 Mali GPU （基于 Utgard 架构），指定环境变量`GALLIUM_DRIVER=lima`。  
 ## 构建
 本项目在 Debian 13 arm64 环境下构建，详细构建过程请参照 Mesa 官方说明（[Compilation and Installation Using Meson — The Mesa 3D Graphics Library latest documentation](https://docs.mesa3d.org/meson.html)），以下为关键步骤：  
 
@@ -63,17 +57,13 @@ git clone https://github.com/lfdevs/mesa-for-android-container.git
 cd mesa-for-android-container
 git checkout adreno-main
 ```
-5. 初始化构建目录。  
+5. 初始化构建目录。可以参照 [meson.options](https://github.com/lfdevs/mesa-for-android-container/blob/main/meson.options) 文件查看所有的构建选项。  
 ```shell
-meson setup build/
-```
-6. 修改构建选项。可以参照 [meson.options](https://github.com/lfdevs/mesa-for-android-container/blob/main/meson.options) 文件查看所有的构建选项。  
-```shell
-meson configure build/ \
+meson setup build/ \
     --prefix=/usr \
     -Dplatforms=x11,wayland \
-    -Dgallium-drivers=freedreno,panfrost,lima,virgl,zink,llvmpipe \
-    -Dvulkan-drivers=freedreno,panfrost \
+    -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
+    -Dvulkan-drivers=freedreno \
     -Degl=enabled \
     -Dgles2=enabled \
     -Dglvnd=enabled \
@@ -85,21 +75,22 @@ meson configure build/ \
     -Dfreedreno-kmds=kgsl \
     -Dbuildtype=release
 ```
-7. 开始构建。  
+6. 开始构建。  
 ```shell
 ninja -C build/
 ```
-8. 若直接在编译设备上安装，可运行以下命令：  
+7. 若直接在编译设备上安装，可运行以下命令：  
 ```shell
 ninja -C build/ install
 ```
-9. 若需打包构建好的 Mesa 驱动，并在相同发行版的其他设备上安装，可参考以下命令：  
+8. 若需打包构建好的 Mesa 驱动，并在相同发行版的其他设备上安装，可参考以下命令：  
 ```shell
+export MESA_RELEASE_NAME_SUFFIX=25.3.0-devel-20250725_debian_trixie_arm64
 sudo mkdir /tmp/mesa-install-tmp
 sudo DESTDIR=/tmp/mesa-install-tmp meson install -C build/
-sudo tar -zcvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /tmp/mesa-install-tmp .
-sudo chown $USER:$USER mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz
-chmod 644 mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz
+sudo tar -zcvf mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
+sudo chown $USER:$USER mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz
+chmod 644 mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz
 sudo rm -rf /tmp/mesa-install-tmp
 ```
 ## 基准测试

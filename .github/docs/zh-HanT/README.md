@@ -4,7 +4,7 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 [English](../../README.md) | [简体中文](../zh-HanS/README.md) | **繁體中文**  
 
 ---  
-一個適用於 Android 容器（Proot、Chroot、LXC 等）的 [Mesa](https://gitlab.freedesktop.org/mesa/mesa) 建置版本，支援 Adreno、Mali GPU 的硬體加速。  
+一個適用於 Android 容器（Proot、Chroot、LXC 等）的 [Mesa](https://gitlab.freedesktop.org/mesa/mesa) 建置版本，支援 Adreno GPU 的硬體加速。  
 
 ## 特性
   - 直接使用修改後的 Mesa 官方儲存庫原始碼，在 Debian 13 的 Linux arm64 Chroot 容器下編譯，向下相容 Debian 12。以 Android 為宿主機的 Proot、Chroot、LXC 容器均可使用本專案編譯的 Mesa 驅動程式。  
@@ -12,24 +12,22 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
   - 只編譯與絕大部分 Android 裝置相關的驅動程式，減小套件大小。  
 ## 相容性
 
-| GPU | OpenGL | OpenGL ES | Vulkan |
+|      GPU       | OpenGL | OpenGL ES | Vulkan |
 | :------------: | :----: | :-------: | :----: |
-| **Adreno GPU** | ✅支援 | ✅支援 | ✅支援 |
-| **Mali GPU** | ❔未測試 | ❔未測試 | ❔未測試 |
+| **Adreno GPU** |  ✅支援   |    ✅支援    |  ✅支援   |
 ## 安裝
-ℹ️**注意**：目前本專案的「發行版本 (Releases)」僅提供 `.tar.gz` 格式的安裝包，只能用來覆蓋原有的 Mesa 驅動程式，無法直接解除安裝，僅供測試使用。  
+ℹ️**注意**：目前本專案的 Releases 僅提供 `.tar.gz` 格式的安裝包，只能用來覆蓋原有的 Mesa 驅動程式，無法直接解除安裝，僅供測試使用。  
 
-1.  前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下載一個安裝包。請注意檔案名稱中的 Linux 發行版後綴，如 `debian_arm64`，只能安裝發行版相符的安裝包。  
+1.  前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下載一個安裝包。請注意檔案名稱中的 Linux 發行版後綴，如 `debian_trixie_arm64`，只能安裝發行版相符的安裝包。  
 2.  直接將安裝包解壓縮到根目錄。  
 ```shell
-sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /
+sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_trixie_arm64.tar.gz -C /
 ```
 3.  更新動態連結器快取。  
 ```shell
 sudo ldconfig
 ```
 ## 使用
-### Adreno GPU
 在執行特定程式時指定環境變數`MESA_LOADER_DRIVER_OVERRIDE`和`TU_DEBUG`，例如：  
 ```shell
 MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
@@ -39,10 +37,6 @@ MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
 MESA_LOADER_DRIVER_OVERRIDE=kgsl
 TU_DEBUG=noconform
 ```
-### Mali GPU
-ℹ️**注意**：目前本驅動程式未在 Mali GPU 上進行測試，以下方法不一定可行。  
-  - 對於較新的 Mali GPU （基於 Midgard 和 Bifrost 微架構），指定環境變數`GALLIUM_DRIVER=panfrost`。  
-  - 對於較舊的 Mali GPU （基於 Utgard 架構），指定環境變數`GALLIUM_DRIVER=lima`。  
 ## 建置
 
 本專案在 Debian 13 arm64 環境下建置，詳細的建置流程請參照 Mesa 官方說明（[Compilation and Installation Using Meson — The Mesa 3D Graphics Library latest documentation](https://docs.mesa3d.org/meson.html)），以下為關鍵步驟：  
@@ -64,17 +58,13 @@ git clone https://github.com/lfdevs/mesa-for-android-container.git
 cd mesa-for-android-container
 git checkout adreno-main
 ```
-5.  初始化建置目錄。  
+5.  初始化建置目錄。可以參照 [meson.options](https://github.com/lfdevs/mesa-for-android-container/blob/main/meson.options) 檔案來查看所有的建置選項。  
 ```shell
-meson setup build/
-```
-6.  修改建置選項。可以參照 [meson.options](https://github.com/lfdevs/mesa-for-android-container/blob/main/meson.options) 檔案來查看所有的建置選項。  
-```shell
-meson configure build/ \
+meson setup build/ \
     --prefix=/usr \
     -Dplatforms=x11,wayland \
-    -Dgallium-drivers=freedreno,panfrost,lima,virgl,zink,llvmpipe \
-    -Dvulkan-drivers=freedreno,panfrost \
+    -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
+    -Dvulkan-drivers=freedreno \
     -Degl=enabled \
     -Dgles2=enabled \
     -Dglvnd=enabled \
@@ -86,21 +76,22 @@ meson configure build/ \
     -Dfreedreno-kmds=kgsl \
     -Dbuildtype=release
 ```
-7.  開始建置。  
+6.  開始建置。  
 ```shell
 ninja -C build/
 ```
-8.  若要直接在編譯裝置上安裝，可執行以下指令：  
+7.  若要直接在編譯裝置上安裝，可執行以下指令：  
 ```shell
 ninja -C build/ install
 ```
-9.  若需打包建置好的 Mesa 驅動程式，並在相同發行版的其他裝置上安裝，可參考以下指令：  
+8.  若需打包建置好的 Mesa 驅動程式，並在相同發行版的其他裝置上安裝，可參考以下指令：  
 ```shell
+export MESA_RELEASE_NAME_SUFFIX=25.3.0-devel-20250725_debian_trixie_arm64
 sudo mkdir /tmp/mesa-install-tmp
 sudo DESTDIR=/tmp/mesa-install-tmp meson install -C build/
-sudo tar -zcvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /tmp/mesa-install-tmp .
-sudo chown $USER:$USER mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz
-chmod 644 mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz
+sudo tar -zcvf mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
+sudo chown $USER:$USER mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz
+chmod 644 mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz
 sudo rm -rf /tmp/mesa-install-tmp
 ```
 ## 基準測試

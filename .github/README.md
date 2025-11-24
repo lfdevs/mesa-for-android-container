@@ -4,7 +4,7 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 **English** | [简体中文](docs/zh-HanS/README.md) | [繁體中文](docs/zh-HanT/README.md)  
 
 ---  
-A [Mesa](https://gitlab.freedesktop.org/mesa/mesa) build for containers on Android (Proot, Chroot, LXC, etc.), to support hardware acceleration with Adreno or Mali GPU.  
+A [Mesa](https://gitlab.freedesktop.org/mesa/mesa) build for containers on Android (Proot, Chroot, LXC, etc.), to support hardware acceleration with Adreno GPU.  
 
 ## Features
   - Directly compiled from the modified official Mesa repository source code in a Debian 13 Linux arm64 Chroot container, it is backward compatible with Debian 12. The Mesa drivers compiled by this project can be used in Proot, Chroot, and LXC containers hosted on Android.  
@@ -12,24 +12,22 @@ A [Mesa](https://gitlab.freedesktop.org/mesa/mesa) build for containers on Andro
   - Only drivers relevant to the vast majority of Android devices are compiled to reduce the package size.  
 ## Compatibility
 
-| GPU | OpenGL | OpenGL ES | Vulkan |
-| :------------: | :----: | :-------: | :----: |
+|      GPU       |   OpenGL   | OpenGL ES  |   Vulkan   |
+| :------------: | :--------: | :--------: | :--------: |
 | **Adreno GPU** | ✅Supported | ✅Supported | ✅Supported |
-| **Mali GPU** | ❔Untested | ❔Untested | ❔Untested |
 ## Installation
 ℹ️**Note**: Currently, the releases for this project only provide `.tar.gz` installation packages. These can only overwrite existing Mesa drivers and cannot be uninstalled directly. They are intended for testing purposes only.  
 
-1.  Go to the [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) page to download an installation package. Please note the Linux distribution suffix in the filename, such as `debian_arm64`. You can only install the package that matches your distribution.  
+1.  Go to the [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) page to download an installation package. Please note the Linux distribution suffix in the filename, such as `debian_trixie_arm64`. You can only install the package that matches your distribution.  
 2.  Extract the installation package directly to the root directory.  
 ```shell
-sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /
+sudo tar -zxvf mesa-for-android-container_25.3.0-devel-20250725_debian_trixie_arm64.tar.gz -C /
 ```
 3.  Refresh the dynamic linker cache.  
 ```shell
 sudo ldconfig
 ```
 ## Usage
-### Adreno GPU
 Specify the environment variables `MESA_LOADER_DRIVER_OVERRIDE` and `TU_DEBUG` when running a specific program, as follows:  
 ```shell
 MESA_LOADER_DRIVER_OVERRIDE=kgsl TU_DEBUG=noconform glmark2
@@ -39,11 +37,6 @@ Alternatively, add them to the `/etc/environment` file so they are loaded automa
 MESA_LOADER_DRIVER_OVERRIDE=kgsl
 TU_DEBUG=noconform
 ```
-### Mali GPU
-ℹ️**Note**: This driver has not yet been tested on Mali GPUs, so the following methods may not work.  
-
-+ For newer Mali GPUs (based on the Midgard and Bifrost microarchitectures), specify the environment variable `GALLIUM_DRIVER=panfrost`.
-+ For older Mali GPUs (based on the Utgard architecture), specify the environment variable `GALLIUM_DRIVER=lima`.
 ## Building
 This project is built in a Debian 13 arm64 environment. For detailed building procedures, please refer to the official Mesa documentation ([Compilation and Installation Using Meson — The Mesa 3D Graphics Library latest documentation](https://docs.mesa3d.org/meson.html)). The key steps are as follows:  
 
@@ -64,17 +57,13 @@ git clone https://github.com/lfdevs/mesa-for-android-container.git
 cd mesa-for-android-container
 git checkout adreno-main
 ```
-5.  Initialize the build directory.  
+5.  Initialize the build directory. You can refer to the [meson.options](https://github.com/lfdevs/mesa-for-android-container/blob/main/meson.options) file to see all available build options.  
 ```shell
-meson setup build/
-```
-6.  Modify the build options. You can refer to the [meson.options](https://github.com/lfdevs/mesa-for-android-container/blob/main/meson.options) file to see all available build options.  
-```shell
-meson configure build/ \
+meson setup build/ \
     --prefix=/usr \
     -Dplatforms=x11,wayland \
-    -Dgallium-drivers=freedreno,panfrost,lima,virgl,zink,llvmpipe \
-    -Dvulkan-drivers=freedreno,panfrost \
+    -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
+    -Dvulkan-drivers=freedreno \
     -Degl=enabled \
     -Dgles2=enabled \
     -Dglvnd=enabled \
@@ -86,21 +75,22 @@ meson configure build/ \
     -Dfreedreno-kmds=kgsl \
     -Dbuildtype=release
 ```
-7.  Start the build.  
+6.  Start the build.  
 ```shell
 ninja -C build/
 ```
-8.  To install directly on the build device, run the following command:  
+7.  To install directly on the build device, run the following command:  
 ```shell
 ninja -C build/ install
 ```
-9.  If you need to package the built Mesa drivers for installation on other devices with the same distribution, refer to the following commands:  
+8.  If you need to package the built Mesa drivers for installation on other devices with the same distribution, refer to the following commands:  
 ```shell
+export MESA_RELEASE_NAME_SUFFIX=25.3.0-devel-20250725_debian_trixie_arm64
 sudo mkdir /tmp/mesa-install-tmp
 sudo DESTDIR=/tmp/mesa-install-tmp meson install -C build/
-sudo tar -zcvf mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz -C /tmp/mesa-install-tmp .
-sudo chown $USER:$USER mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz
-chmod 644 mesa-for-android-container_25.3.0-devel-20250725_debian_arm64.tar.gz
+sudo tar -zcvf mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
+sudo chown $USER:$USER mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz
+chmod 644 mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz
 sudo rm -rf /tmp/mesa-install-tmp
 ```
 ## Benchmarks
