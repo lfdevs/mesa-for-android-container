@@ -201,6 +201,7 @@ struct _egl_display {
 
    /* options that affect how the driver initializes the display */
    struct {
+      EGLBoolean Kgsl;           /**< Use kgsl only */
       EGLBoolean Zink;           /**< Use kopper only */
       EGLBoolean FallbackZink;   /**< True if zink is tried as fallback */
       EGLBoolean ForceSoftware;  /**< Use software path only */
