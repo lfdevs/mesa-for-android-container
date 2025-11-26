@@ -42,6 +42,10 @@
 #define PATH_MAX _MAX_PATH
 #endif
 
+#if !defined(PATH_MAX) && defined(__GNU__)
+#define PATH_MAX (4096)
+#endif
+
 #define MODULE_PREFIX "pipe_"
 
 static int (*backends[])(struct pipe_loader_device **, int) = {
