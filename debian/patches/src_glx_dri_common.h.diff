@@ -1,6 +1,16 @@
+From: Debian X Strike Force <debian-x@lists.debian.org>
+Date: Wed, 26 Nov 2025 20:56:04 +0800
+Subject: src_glx_dri_common.h
+
+---
+ src/glx/dri_common.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/glx/dri_common.h b/src/glx/dri_common.h
+index ff7fce9..e26f247 100644
 --- a/src/glx/dri_common.h
 +++ b/src/glx/dri_common.h
-@@ -56,6 +56,10 @@ extern struct glx_config *driConvertConf
+@@ -56,6 +56,10 @@ extern struct glx_config *driConvertConfigs(struct glx_config * modes,
  
  extern void driDestroyConfigs(const struct dri_config **configs);
  

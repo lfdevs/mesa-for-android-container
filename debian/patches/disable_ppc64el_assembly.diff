@@ -1,11 +1,18 @@
-Description: disable use of ppc64el assembly code
-Author: Dmitry Shachnev <mitya57@debian.org>
+From: Dmitry Shachnev <mitya57@debian.org>
+Date: Wed, 26 Nov 2025 20:56:04 +0800
+Subject: disable use of ppc64el assembly code
+
 Bug-Debian: https://bugs.debian.org/1092890
 Last-Update: 2025-02-02
+---
+ meson.build | 5 -----
+ 1 file changed, 5 deletions(-)
 
+diff --git a/meson.build b/meson.build
+index 095aec5..38292d8 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -1319,11 +1319,6 @@ elif host_machine.cpu_family() == 'sparc
+@@ -1356,11 +1356,6 @@ elif host_machine.cpu_family() == 'sparc64'
      with_asm_arch = 'sparc'
      pre_args += ['-DUSE_SPARC_ASM']
    endif
