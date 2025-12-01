@@ -2220,6 +2220,9 @@ dri2_initialize_wayland_drm_extensions(struct dri2_egl_display *dri2_dpy)
       dmabuf_feedback_format_table_fini(&dri2_dpy->format_table);
    }
 
+   if (dri2_dpy->kopper)
+      return true;
+
    /* We couldn't retrieve a render node from the dma-buf feedback (or the
     * feedback was not advertised at all), so we must fallback to wl_drm. */
    if (dri2_dpy->fd_render_gpu == -1) {
@@ -2281,8 +2284,12 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
    if (roundtrip(dri2_dpy) < 0)
       goto cleanup;
 
-   if (!dri2_initialize_wayland_drm_extensions(dri2_dpy))
-      goto cleanup;
+   if (!dri2_initialize_wayland_drm_extensions(dri2_dpy)) {
+      if (disp->Options.Kgsl)
+         dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
+      else
+         goto cleanup;
+   }
 
    loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
                                 &dri2_dpy->fd_display_gpu);
