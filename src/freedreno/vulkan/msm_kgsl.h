@@ -544,6 +544,11 @@ struct kgsl_cmdbatch_profiling_buffer {
 /* ioctls */
 #define KGSL_IOC_TYPE 0x09
 
+/* user space structures */
+#ifndef __user
+#define __user
+#endif
+
 /*
  * get misc info about the GPU
  * type should be a value from enum kgsl_property_type
