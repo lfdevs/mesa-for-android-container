@@ -6,3 +6,4 @@ Revert-hasvk-elk-stop-turning-load_push_constants-in.patch
 kopper-Revert-kopper-Explicitly-choose-zink.patch
 pan-genxml-Add-missing-parenthesis-on-pan_cast_and_p.patch
 0008-Add-experimental-KGSL-support.patch
+0009-Fix-build-errors.patch
