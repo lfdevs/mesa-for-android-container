@@ -31,6 +31,7 @@
 #include "fd6_pack.h"
 #include "fd6_program.h"
 #include "fd6_rasterizer.h"
+#include "fd6_screen.h"
 #include "fd6_texture.h"
 #include "fd6_zsa.h"
 
@@ -996,12 +997,12 @@ fd6_emit_static_context_regs(struct fd_context *ctx, fd_cs &cs)
 
    if (CHIP >= A7XX) {
       /* Blob sets these two per draw. */
-      crb.add(PC_HS_BUFFER_SIZE(CHIP, FD6_TESS_PARAM_SIZE));
+      crb.add(PC_HS_BUFFER_SIZE(CHIP, FD6_TESS<CHIP>::PARAM_SIZE));
       /* Blob adds a bit more space ({0x10, 0x20, 0x30, 0x40} bytes)
        * but the meaning of this additional space is not known,
        * so we play safe and don't add it.
        */
-      crb.add(PC_TF_BUFFER_SIZE(CHIP, FD6_TESS_FACTOR_SIZE));
+      crb.add(PC_TF_BUFFER_SIZE(CHIP, FD6_TESS<CHIP>::FACTOR_SIZE));
    }
 
    /* There is an optimization to skip executing draw states for draws with no

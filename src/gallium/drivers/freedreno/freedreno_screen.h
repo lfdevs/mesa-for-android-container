@@ -165,10 +165,6 @@ struct fd_screen {
 
    struct renderonly *ro;
 
-   /* the blob seems to always use 8K factor and 128K param sizes, copy them */
-#define FD6_TESS_FACTOR_SIZE (8 * 1024)
-#define FD6_TESS_PARAM_SIZE (128 * 1024)
-#define FD6_TESS_BO_SIZE (FD6_TESS_FACTOR_SIZE + FD6_TESS_PARAM_SIZE)
    struct fd_bo *tess_bo;
 
    /* table with MESA_PRIM_COUNT+1 entries mapping MESA_PRIM_x to

@@ -24,6 +24,7 @@
 #include "fd6_emit.h"
 #include "fd6_pack.h"
 #include "fd6_program.h"
+#include "fd6_screen.h"
 #include "fd6_texture.h"
 
 /**
@@ -1464,7 +1465,7 @@ fd6_program_create(void *data, const struct ir3_shader_variant *bs,
       fd_screen_lock(screen);
       if (!screen->tess_bo)
          screen->tess_bo =
-            fd_bo_new(screen->dev, FD6_TESS_BO_SIZE, FD_BO_NOMAP, "tessfactor");
+            fd_bo_new(screen->dev, FD6_TESS<CHIP>::BO_SIZE, FD_BO_NOMAP, "tessfactor");
       fd_screen_unlock(screen);
    }
 

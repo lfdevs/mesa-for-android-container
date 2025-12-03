@@ -25,6 +25,7 @@
 #include "fd6_draw.h"
 #include "fd6_emit.h"
 #include "fd6_program.h"
+#include "fd6_screen.h"
 #include "fd6_vsc.h"
 #include "fd6_zsa.h"
 
@@ -429,8 +430,8 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
       draw0.tess_enable = true;
 
       /* maximum number of patches that can fit in tess factor/param buffers */
-      uint32_t subdraw_size = MIN2(FD6_TESS_FACTOR_SIZE / factor_stride,
-                                   FD6_TESS_PARAM_SIZE / (emit.hs->output_size * 4));
+      uint32_t subdraw_size = MIN2(FD6_TESS<CHIP>::FACTOR_SIZE / factor_stride,
+                                   FD6_TESS<CHIP>::PARAM_SIZE / (emit.hs->output_size * 4));
       /* convert from # of patches to draw count */
       subdraw_size *= ctx->patch_vertices;
 

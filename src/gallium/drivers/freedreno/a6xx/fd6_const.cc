@@ -10,6 +10,7 @@
 #include "fd6_const.h"
 #include "fd6_compute.h"
 #include "fd6_pack.h"
+#include "fd6_screen.h"
 
 #include "ir3_const.h"
 
@@ -201,7 +202,7 @@ fd6_build_tess_consts(struct fd6_emit *emit)
    if (emit->hs) {
       struct fd_bo *tess_bo = ctx->screen->tess_bo;
       int64_t tess_factor_iova = fd_bo_get_iova(tess_bo);
-      int64_t tess_param_iova = tess_factor_iova + FD6_TESS_FACTOR_SIZE;
+      int64_t tess_param_iova = tess_factor_iova + FD6_TESS<CHIP>::FACTOR_SIZE;
 
       constobj.attach_bo(tess_bo);
 
