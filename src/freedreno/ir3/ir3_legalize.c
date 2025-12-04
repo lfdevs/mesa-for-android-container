@@ -749,11 +749,11 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
          last_input_needs_ss = false;
       }
 
-      /* I'm not exactly what this is for, but it seems we need this on every
-       * mova1 in early preambles.
-       */
-      if (writes_addr1(n) && block->in_early_preamble)
-         n->srcs[0]->flags |= IR3_REG_R;
+      /* In earlypreamble we need to use mova.u/ldc.u: */
+      if (block->in_early_preamble) {
+         if (writes_addr1(n) || (n->opc == OPC_LDC))
+            n->flags |= IR3_INSTR_U;
+      }
 
       if ((n->opc == OPC_LDC) && (n->flags & IR3_INSTR_U)) {
          has_ldc_u = true;

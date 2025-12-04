@@ -504,8 +504,10 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
       case OPC_LDC:
          validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));
          validate_assert(ctx, !(instr->srcs[1]->flags & IR3_REG_HALF));
-         validate_assert(ctx, !!(instr->dsts[0]->flags & IR3_REG_SHARED) ==
-                              !!(instr->flags & IR3_INSTR_U));
+         if (instr->dsts[0]->num != INVALID_REG) {
+            validate_assert(ctx, !!(instr->dsts[0]->flags & IR3_REG_SHARED) ==
+                                 !!(instr->flags & IR3_INSTR_U));
+         }
          break;
       case OPC_LDC_K:
          validate_assert(ctx, !(instr->srcs[0]->flags & IR3_REG_HALF));
