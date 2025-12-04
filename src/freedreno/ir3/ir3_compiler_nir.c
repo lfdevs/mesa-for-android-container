@@ -3412,6 +3412,8 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       break;
    }
    case nir_intrinsic_prefetch_ubo_ir3: {
+      if (!ir3_bindless_resource(intr->src[0]))
+         break;
       struct ir3_instruction *offset = create_immed(b, 0);
       struct ir3_instruction *idx = ir3_get_src(ctx, &intr->src[0])[0];
       struct ir3_instruction *ldc = ir3_LDC(b, idx, 0, offset, 0);
