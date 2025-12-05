@@ -28,6 +28,7 @@
 #include "fd6_hw.h"
 
 #include "common/freedreno_dev_info.h"
+#include "fdl/freedreno_layout.h"
 
 #include "ir3_asm.h"
 #include "main.h"
@@ -116,7 +117,10 @@ cs_restore_emit(fd_cs &cs, struct a6xx_backend *a6xx_backend)
    fd_ncrb<CHIP> ncrb(cs, 2 + ARRAY_SIZE(a6xx_backend->info->magic_raw));
 
    ncrb.add(A6XX_SP_PERFCTR_SHADER_MASK(.cs = true));
-   ncrb.add(A6XX_SP_NC_MODE_CNTL_2());
+
+   /* KMD programs this (and blocks UMD access) on gen8+: */
+   if (CHIP < A8XX)
+      ncrb.add(A6XX_SP_NC_MODE_CNTL_2());
 
    for (size_t i = 0; i < ARRAY_SIZE(a6xx_backend->info->magic_raw); i++) {
       auto magic_reg = a6xx_backend->info->magic_raw[i];
@@ -175,7 +179,7 @@ cs_program_emit_regs(fd_cs &cs, struct kernel *kernel)
       .mergedregs = v->mergedregs,
    ));
 
-   if (CHIP == A7XX) {
+   if (CHIP >= A7XX) {
       crb.add(SP_PS_WAVE_CNTL(CHIP, .threadsize = THREAD64));
 
       crb.add(SP_REG_PROG_ID_0(CHIP, .dword = 0xfcfcfcfc));
@@ -226,7 +230,7 @@ cs_program_emit_regs(fd_cs &cs, struct kernel *kernel)
       ));
    }
 
-   if (CHIP == A7XX || a6xx_backend->info->props.has_lpac) {
+   if (CHIP >= A7XX || a6xx_backend->info->props.has_lpac) {
       crb.add(A6XX_SP_CS_WIE_CNTL_0(
          .wgidconstid = work_group_id,
          .wgsizeconstid = INVALID_REG,
@@ -234,7 +238,7 @@ cs_program_emit_regs(fd_cs &cs, struct kernel *kernel)
          .localidregid = local_invocation_id,
       ));
 
-      if (CHIP == A7XX) {
+      if (CHIP >= A7XX) {
          /* TODO allow the shader to control the tiling */
          crb.add(SP_CS_WIE_CNTL_1(CHIP,
             .linearlocalidregid = INVALID_REG,
@@ -393,6 +397,7 @@ cs_uav_emit(fd_cs &cs, struct fd_device *dev, struct kernel *kernel)
    struct fd_bo *state = fd_bo_new(dev, kernel->num_bufs * 16 * 4,
                                    FD_BO_GPUREADONLY | FD_BO_HINT_COMMAND,
                                    "tex_desc");
+   fd_bo_mark_for_dump(state);
 
    cs.attach_bo(state);
 
@@ -405,24 +410,16 @@ cs_uav_emit(fd_cs &cs, struct fd_device *dev, struct kernel *kernel)
 
       cs.attach_bo(kernel->bufs[i]);
 
-      /* size is encoded with low 15b in WIDTH and high bits in HEIGHT,
-       * in units of elements:
-       */
-      unsigned sz = kernel->buf_sizes[i];
-      unsigned width = sz & MASK(15);
-      unsigned height = sz >> 15;
       uint64_t iova = fd_bo_get_iova(kernel->bufs[i]);
+      uint32_t descriptor[16];
 
-      uint32_t descriptor[16] = {
-         A6XX_TEX_CONST_0_FMT(FMT6_32_UINT) | A6XX_TEX_CONST_0_TILE_MODE(TILE6_LINEAR),
-         A6XX_TEX_CONST_1_WIDTH(width) | A6XX_TEX_CONST_1_HEIGHT(height),
-         A6XX_TEX_CONST_2_PITCH(0) |
-                      A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
-                      A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER),
-         A6XX_TEX_CONST_3_ARRAY_PITCH(0),
-         (uint32_t)iova,
-         (uint32_t)(iova >> 32),
+      static const uint8_t swiz_identity[4] = {
+         PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y,
+         PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W,
       };
+
+      fdl6_buffer_view_init<CHIP>(descriptor, PIPE_FORMAT_R32_UINT, swiz_identity,
+                                  iova, kernel->buf_sizes[i]);
 
       memcpy(buf, descriptor, 16 * 4);
       buf += 16;
@@ -574,7 +571,7 @@ a6xx_emit_grid(struct kernel *kernel, uint32_t grid[3],
          .localsizez = local_size[2] - 1,
       ));
 
-      if (CHIP == A7XX) {
+      if (CHIP >= A7XX) {
          crb.add(SP_CS_NDRANGE_7(CHIP,
             .localsizex = local_size[0] - 1,
             .localsizey = local_size[1] - 1,
@@ -715,9 +712,4 @@ a6xx_init(struct fd_device *dev, const struct fd_dev_id *dev_id)
 
    return &a6xx_backend->base;
 }
-
-template
-struct backend *a6xx_init<A6XX>(struct fd_device *dev, const struct fd_dev_id *dev_id);
-
-template
-struct backend *a6xx_init<A7XX>(struct fd_device *dev, const struct fd_dev_id *dev_id);
+FD_GENX(a6xx_init);

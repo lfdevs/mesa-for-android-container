@@ -266,6 +266,9 @@ main(int argc, char **argv)
    case 7:
       backend = a6xx_init<A7XX>(dev, dev_id);
       break;
+   case 8:
+      backend = a6xx_init<A8XX>(dev, dev_id);
+      break;
    default:
       err(1, "unsupported gpu generation: a%uxx", fd_dev_gen(dev_id));
    }
