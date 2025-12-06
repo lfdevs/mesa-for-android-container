@@ -88,8 +88,8 @@ check_directories_created(void *mem_ctx, const char *cache_dir)
 {
    bool sub_dirs_created = false;
 
-   char buf[PATH_MAX];
-   if (getcwd(buf, PATH_MAX)) {
+   char *buf = getcwd(NULL, 0);
+   if (buf) {
       char *full_path = ralloc_asprintf(mem_ctx, "%s%s", buf, ++cache_dir);
       struct stat sb;
       if (stat(full_path, &sb) != -1 && S_ISDIR(sb.st_mode))

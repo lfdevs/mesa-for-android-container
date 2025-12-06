@@ -36,6 +36,10 @@
 #define PATH_MAX MAX_PATH
 #endif
 
+#if !defined(PATH_MAX) && defined(__GNU__)
+#define PATH_MAX (4096)
+#endif
+
 static bool error = false;
 
 static void
