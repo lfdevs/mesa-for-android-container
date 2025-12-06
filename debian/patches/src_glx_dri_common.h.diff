@@ -1,6 +1,16 @@
+From: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+Date: Sat, 6 Dec 2025 21:10:34 +0800
+Subject: src_glx_dri_common.h
+
+---
+ src/glx/dri_common.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/glx/dri_common.h b/src/glx/dri_common.h
+index ff7fce9..e26f247 100644
 --- a/src/glx/dri_common.h
 +++ b/src/glx/dri_common.h
-@@ -56,6 +56,10 @@ extern struct glx_config *driConvertConf
+@@ -56,6 +56,10 @@ extern struct glx_config *driConvertConfigs(struct glx_config * modes,
  
  extern void driDestroyConfigs(const struct dri_config **configs);
  

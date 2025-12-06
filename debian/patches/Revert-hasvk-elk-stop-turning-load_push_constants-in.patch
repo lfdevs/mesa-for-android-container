@@ -1,4 +1,3 @@
-From 37438a83a748f591c8ecdf20390a90312eebbff8 Mon Sep 17 00:00:00 2001
 From: Dave Airlie <airlied@redhat.com>
 Date: Mon, 9 Jun 2025 09:19:28 +1000
 Subject: [PATCH] Revert "hasvk/elk: stop turning load_push_constants into
@@ -21,7 +20,7 @@ Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/35407>
  3 files changed, 6 insertions(+), 7 deletions(-)
 
 diff --git a/src/intel/compiler/elk/elk_fs_nir.cpp b/src/intel/compiler/elk/elk_fs_nir.cpp
-index 459e2d966b7..6b78d6cf9f8 100644
+index 459e2d9..6b78d6c 100644
 --- a/src/intel/compiler/elk/elk_fs_nir.cpp
 +++ b/src/intel/compiler/elk/elk_fs_nir.cpp
 @@ -4969,8 +4969,7 @@ fs_nir_emit_intrinsic(nir_to_elk_state &ntb,
@@ -40,7 +39,7 @@ index 459e2d966b7..6b78d6cf9f8 100644
  }
 +
 diff --git a/src/intel/vulkan_hasvk/anv_nir_apply_pipeline_layout.c b/src/intel/vulkan_hasvk/anv_nir_apply_pipeline_layout.c
-index 2bedf9017ed..1c613a9ebe7 100644
+index 2bedf90..1c613a9 100644
 --- a/src/intel/vulkan_hasvk/anv_nir_apply_pipeline_layout.c
 +++ b/src/intel/vulkan_hasvk/anv_nir_apply_pipeline_layout.c
 @@ -463,9 +463,9 @@ build_buffer_addr_for_res_index(nir_builder *b,
@@ -57,7 +56,7 @@ index 2bedf9017ed..1c613a9ebe7 100644
        nir_def *dynamic_offset =
           nir_bcsel(b, nir_ieq_imm(b, res.dyn_offset_base, 0xff),
 diff --git a/src/intel/vulkan_hasvk/anv_nir_compute_push_layout.c b/src/intel/vulkan_hasvk/anv_nir_compute_push_layout.c
-index ed314af8b98..8a3f83f2c26 100644
+index ed314af..8a3f83f 100644
 --- a/src/intel/vulkan_hasvk/anv_nir_compute_push_layout.c
 +++ b/src/intel/vulkan_hasvk/anv_nir_compute_push_layout.c
 @@ -55,7 +55,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
@@ -84,6 +83,3 @@ index ed314af8b98..8a3f83f2c26 100644
                    nir_intrinsic_set_base(intrin,
                                           nir_intrinsic_base(intrin) -
                                           base_offset);
--- 
-2.48.1
-
