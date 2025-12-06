@@ -56,6 +56,10 @@ extern struct glx_config *driConvertConfigs(struct glx_config * modes,
 
 extern void driDestroyConfigs(const struct dri_config **configs);
 
+#ifndef __GLXDRIdrawable
+typedef struct __GLXDRIdrawableRec __GLXDRIdrawable;
+#endif
+
 extern __GLXDRIdrawable *
 driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable);
 
