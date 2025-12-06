@@ -1356,11 +1356,6 @@ elif host_machine.cpu_family() == 'sparc64'
     with_asm_arch = 'sparc'
     pre_args += ['-DUSE_SPARC_ASM']
   endif
-elif host_machine.cpu_family() == 'ppc64' and host_machine.endian() == 'little'
-  if system_has_kms_drm
-    with_asm_arch = 'ppc64le'
-    pre_args += ['-DUSE_PPC64LE_ASM']
-  endif
 elif host_machine.cpu_family() == 'mips64' and host_machine.endian() == 'little'
   if system_has_kms_drm
     with_asm_arch = 'mips64el'
