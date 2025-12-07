@@ -151,7 +151,6 @@ else
 
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
 	confflags_GALLIUM += -Dgallium-va=enabled
-	confflags_GALLIUM += -Dvideo-codecs="all"
   endif
 
   # Teflon only supports arm64
@@ -163,6 +162,11 @@ endif
 ifeq ($(DEB_HOST_ARCH), i386)
 	confflags_SSE2 = -Dsse2=false
 endif
+
+EGL_PLATFORMS = x11 wayland
+GALLIUM_DRIVERS = freedreno zink virgl llvmpipe
+VULKAN_DRIVERS = freedreno
+VULKAN_LAYERS =
 
 empty:=
 space := $(empty) $(empty)
@@ -177,7 +181,16 @@ VULKAN_LAYERS := $(patsubst %,'%',$(VULKAN_LAYERS))
 VULKAN_LAYERS_LIST := $(subst $(space),$(comma),$(VULKAN_LAYERS))
 
 confflags_GLES = -Dgles1=disabled -Dgles2=enabled
-confflags_GALLIUM += -Dgallium-drivers="[$(GALLIUM_DRIVERS_LIST)]"
+confflags_GALLIUM := -Dgallium-drivers="[$(GALLIUM_DRIVERS_LIST)]"
+confflags_GALLIUM += -Dllvm=enabled
+confflags_GALLIUM += -Dgallium-vdpau=enabled
+confflags_GALLIUM += -Dgallium-va=enabled
+confflags_GALLIUM += -Dgallium-xa=enabled
+confflags_GALLIUM += -Dgallium-extra-hud=true
+confflags_GALLIUM += -Dlmsensors=enabled
+confflags_GALLIUM += -Dgallium-rusticl=true
+confflags_GALLIUM += -Dgallium-opencl=disabled
+confflags_GALLIUM += -Dgallium-nine=false
 
 confflags += \
 	-Ddri-drivers-path=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
@@ -187,16 +200,21 @@ confflags += \
 	-Dglvnd=enabled \
 	-Dshared-glapi=enabled \
 	-Db_ndebug=true \
-	-Dbuild-tests=true \
-	-Dtools=drm-shim \
+	-Dbuild-tests=false \
+	-Dglx=dri \
+	-Dlibunwind=disabled \
+	-Dmicrosoft-clc=disabled \
+	-Dvalgrind=disabled \
+	-Dfreedreno-kmds=kgsl \
+	-Dtools=[] \
+    -Dteflon=false \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_GBM) \
 	$(confflags_GALLIUM) \
 	$(confflags_GLES) \
 	$(confflags_OSMESA) \
 	$(confflags_SSE2) \
-	$(confflags_VALGRIND) \
-	$(confflags_TEFLON)
+	$(confflags_VALGRIND)
 
 
 rewrite_wrap_files:
@@ -297,6 +315,9 @@ override_dh_install:
 		install -m 644 debian/local/control debian/$$p/usr/share/bug/$$p && \
 		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
 	done
+
+override_dh_shlibdeps:
+	dh_shlibdeps -- --ignore-missing-info
 
 override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4
