@@ -1,0 +1,24 @@
+From: lfdevs <109842948+lfdevs@users.noreply.github.com>
+Date: Sun, 7 Dec 2025 21:48:56 +0800
+Subject: Fix build errors
+
+---
+ src/freedreno/vulkan/msm_kgsl.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/freedreno/vulkan/msm_kgsl.h b/src/freedreno/vulkan/msm_kgsl.h
+index 361d3b7..3247907 100644
+--- a/src/freedreno/vulkan/msm_kgsl.h
++++ b/src/freedreno/vulkan/msm_kgsl.h
+@@ -544,6 +544,11 @@ struct kgsl_cmdbatch_profiling_buffer {
+ /* ioctls */
+ #define KGSL_IOC_TYPE 0x09
+ 
++/* user space structures */
++#ifndef __user
++#define __user
++#endif
++
+ /*
+  * get misc info about the GPU
+  * type should be a value from enum kgsl_property_type
