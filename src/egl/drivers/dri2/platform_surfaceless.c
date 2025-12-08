@@ -394,6 +394,21 @@ dri2_initialize_surfaceless(_EGLDisplay *disp)
       driver_loaded = surfaceless_probe_device_sw(disp);
    }
 
+   if (!driver_loaded && disp->Options.Kgsl) {
+      dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
+      dri2_dpy->driver_name = strdup("kgsl");
+      dri2_detect_swrast_kopper(disp);
+      driver_loaded = true;
+      if (driver_loaded) {
+         dri2_dpy->loader_extensions = image_loader_extensions;
+      } else {
+         free(dri2_dpy->driver_name);
+         dri2_dpy->driver_name = NULL;
+         close(dri2_dpy->fd_render_gpu);
+         dri2_dpy->fd_render_gpu = -1;
+      }
+   }
+
    if (!driver_loaded) {
       err = "DRI2: failed to load driver";
       goto cleanup;

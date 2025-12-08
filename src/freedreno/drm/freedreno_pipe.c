@@ -215,6 +215,12 @@ fd_pipe_emit_fence(struct fd_pipe *pipe, struct fd_ringbuffer *ring)
    return fence;
 }
 
+int
+fd_pipe_get_reset_status(struct fd_pipe *pipe, enum fd_reset_status *status)
+{
+   return pipe->funcs->reset_status(pipe, status);
+}
+
 struct fd_fence *
 fd_fence_new(struct fd_pipe *pipe, bool use_fence_fd)
 {
