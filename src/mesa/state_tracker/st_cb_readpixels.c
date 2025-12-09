@@ -372,10 +372,10 @@ try_cached_readpixels(struct st_context *st, struct gl_renderbuffer *rb,
          /* Heuristic: If previous successive calls read at least a fraction
           * of the surface _and_ we read again, trigger the cache.
           */
-         unsigned threshold = MAX2(1, rb->Width * rb->Height / 8);
+         size_t threshold = MAX2(1, (size_t)rb->Width * rb->Height / 8);
 
          if (st->readpix_cache.hits < threshold) {
-            st->readpix_cache.hits += width * height;
+            st->readpix_cache.hits += (size_t)width * height;
             return NULL;
          }
 
@@ -552,7 +552,7 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
                                          type, 0, 0);
 
       if (tex_xfer->stride == bytesPerRow && destStride == bytesPerRow) {
-         memcpy(dest, map, bytesPerRow * height);
+         memcpy(dest, map, (size_t)bytesPerRow * height);
       } else {
          GLuint row;
 

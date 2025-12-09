@@ -3350,6 +3350,13 @@ regmask_get(regmask_t *regmask, struct ir3_register *reg)
    }
    return false;
 }
+
+static inline bool
+regmask_get_any_gpr(regmask_t *regmask)
+{
+   return BITSET_TEST_RANGE(regmask->full, 0, GPR_REG_SIZE * 2) ||
+      BITSET_TEST_RANGE(regmask->half, 0, GPR_REG_SIZE);
+}
 /* ************************************************************************* */
 
 struct ir3_nop_state {

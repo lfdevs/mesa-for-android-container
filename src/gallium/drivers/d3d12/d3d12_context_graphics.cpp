@@ -2091,7 +2091,7 @@ d3d12_clear(struct pipe_context *pctx,
       for (int i = 0; i < ctx->fb.nr_cbufs; ++i) {
          if (buffers & (PIPE_CLEAR_COLOR0 << i)) {
             struct pipe_surface *psurf = &ctx->fb.cbufs[i];
-            uint16_t width, height;
+            unsigned width, height;
             pipe_surface_size(psurf, &width, &height);
             d3d12_clear_render_target(pctx, psurf, color,
                                       0, 0, width, height,
@@ -2102,7 +2102,7 @@ d3d12_clear(struct pipe_context *pctx,
 
    if (buffers & PIPE_CLEAR_DEPTHSTENCIL && ctx->fb.zsbuf.texture) {
       struct pipe_surface *psurf = &ctx->fb.zsbuf;
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(psurf, &width, &height);
       d3d12_clear_depth_stencil(pctx, psurf,
                                 buffers & PIPE_CLEAR_DEPTHSTENCIL,

@@ -373,7 +373,7 @@ vc4_yuv_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         vc4_set_blit_surface(&dst_surf, pctx, info->dst.resource,
                              info->dst.level, info->dst.box.z);
         dst_surf.format = PIPE_FORMAT_RGBA8888_UNORM;
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(&dst_surf, &width, &height);
         width = align(width, 8) / 2;
         if (dst->cpp == 1)

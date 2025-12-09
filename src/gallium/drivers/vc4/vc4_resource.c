@@ -777,7 +777,7 @@ vc4_dump_surface_non_msaa(struct pipe_surface *psurf)
         struct vc4_resource *rsc = vc4_resource(prsc);
         uint32_t *map = vc4_bo_map(rsc->bo);
         uint32_t stride = rsc->slices[0].stride / 4;
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(psurf, &width, &height);
         uint32_t chunk_w = width / 79;
         uint32_t chunk_h = height / 40;
@@ -872,7 +872,7 @@ vc4_surface_msaa_get_sample(struct pipe_surface *psurf,
 {
         struct pipe_resource *prsc = psurf->texture;
         struct vc4_resource *rsc = vc4_resource(prsc);
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(psurf, &width, &height);
         uint32_t tile_w = 32, tile_h = 32;
         uint32_t tiles_w = DIV_ROUND_UP(width, 32);
@@ -946,7 +946,7 @@ static void
 vc4_dump_surface_msaa(struct pipe_surface *psurf)
 {
         uint32_t tile_w = 32, tile_h = 32;
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(psurf, &width, &height);
         uint32_t tiles_w = DIV_ROUND_UP(width, tile_w);
         uint32_t tiles_h = DIV_ROUND_UP(height, tile_h);

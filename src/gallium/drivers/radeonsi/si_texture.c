@@ -1059,6 +1059,18 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
       return NULL;
    }
 
+   /* Fail to allocate or import textures greater than 4GB on 32-bit CPU targets because Mesa
+    * uses size_t for all image addressing and size computations, which doesn't work with
+    * textures bigger than 4GB.
+    *
+    * Due to a limitation in glCompressedTex* functions, compressed textures can only occupy
+    * at most 2GB on all CPU targets because the maximum value of the imageSize parameter is
+    * INT_MAX. Bigger textures are automatically rejected by the imageSize checking in the GL
+    * frontend. This could be fixed with a new GL extension.
+    */
+   if (alloc_size > SIZE_MAX)
+      return NULL;
+
    tex = CALLOC_STRUCT_CL(si_texture);
    if (!tex)
       goto error;

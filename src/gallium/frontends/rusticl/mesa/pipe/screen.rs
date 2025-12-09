@@ -294,7 +294,7 @@ impl PipeScreen {
     pub fn resource_create_texture(
         &self,
         width: u32,
-        height: u16,
+        height: u32,
         depth: u16,
         array_size: u16,
         target: pipe_texture_target,
@@ -324,7 +324,7 @@ impl PipeScreen {
     pub fn resource_create_texture_from_user(
         &self,
         width: u32,
-        height: u16,
+        height: u32,
         depth: u16,
         array_size: u16,
         target: pipe_texture_target,
@@ -357,7 +357,7 @@ impl PipeScreen {
         format: pipe_format,
         stride: u32,
         width: u32,
-        height: u16,
+        height: u32,
         depth: u16,
         array_size: u16,
         support_image: bool,

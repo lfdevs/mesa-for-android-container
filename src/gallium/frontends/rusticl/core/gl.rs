@@ -344,7 +344,7 @@ impl GLCtxManager {
 
 #[derive(Clone)]
 pub struct GLMemProps {
-    pub height: u16,
+    pub height: u32,
     pub depth: u16,
     pub width: u32,
     pub offset: u32,
@@ -379,7 +379,7 @@ impl GLExportManager {
                 .unwrap()
         };
 
-        let mut height = self.export_out.height as u16;
+        let mut height = self.export_out.height;
         let mut depth = self.export_out.depth as u16;
         let mut width = self.export_out.width;
         let mut array_size = 1;
@@ -388,7 +388,7 @@ impl GLExportManager {
         // some fixups
         match self.export_in.target {
             GL_TEXTURE_1D_ARRAY => {
-                array_size = height;
+                array_size = height as u16;
                 height = 1;
                 depth = 1;
             }

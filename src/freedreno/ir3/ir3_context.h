@@ -104,7 +104,7 @@ struct ir3_context {
     * src used for an array of vec1 cannot be also used for an
     * array of vec4.
     */
-   struct hash_table *addr0_ht[4];
+   struct hash_table *addr0_ht[8];
 
    struct hash_table *sel_cond_conversions;
    struct hash_table *predicate_conversions;

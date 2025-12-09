@@ -305,10 +305,14 @@ void amdgpu_bo_destroy(struct amdgpu_winsys *aws, struct pb_buffer_lean *_buf)
 
    amdgpu_bo_remove_fences(&bo->b);
 
+   simple_mtx_lock(&aws->stats_lock);
    if (bo->b.base.placement & RADEON_DOMAIN_VRAM)
       aws->allocated_vram -= align64(bo->b.base.size, aws->info.gart_page_size);
    else if (bo->b.base.placement & RADEON_DOMAIN_GTT)
       aws->allocated_gtt -= align64(bo->b.base.size, aws->info.gart_page_size);
+   else if (bo->b.base.placement & RADEON_DOMAIN_OA)
+      aws->allocated_oa -= bo->b.base.size;
+   simple_mtx_unlock(&aws->stats_lock);
 
    simple_mtx_destroy(&bo->map_lock);
    FREE(bo);
@@ -351,11 +355,13 @@ static bool amdgpu_bo_do_map(struct radeon_winsys *rws, struct amdgpu_bo_real *b
    }
 
    if (p_atomic_inc_return(&bo->map_count) == 1) {
+      simple_mtx_lock(&aws->stats_lock);
       if (bo->b.base.placement & RADEON_DOMAIN_VRAM)
          aws->mapped_vram += bo->b.base.size;
       else if (bo->b.base.placement & RADEON_DOMAIN_GTT)
          aws->mapped_gtt += bo->b.base.size;
       aws->num_mapped_buffers++;
+      simple_mtx_unlock(&aws->stats_lock);
    }
 
    return true;
@@ -450,7 +456,11 @@ void *amdgpu_bo_map(struct radeon_winsys *rws,
                            RADEON_USAGE_READWRITE);
          }
 
-         aws->buffer_wait_time += os_time_get_nano() - time;
+         uint64_t end_time = os_time_get_nano();
+
+         simple_mtx_lock(&aws->stats_lock);
+         aws->buffer_wait_time += end_time - time;
+         simple_mtx_unlock(&aws->stats_lock);
       }
    }
 
@@ -511,11 +521,13 @@ void amdgpu_bo_unmap(struct radeon_winsys *rws, struct pb_buffer_lean *buf)
       assert(!real->cpu_ptr &&
              "too many unmaps or forgot RADEON_MAP_TEMPORARY flag");
 
+      simple_mtx_lock(&aws->stats_lock);
       if (real->b.base.placement & RADEON_DOMAIN_VRAM)
          aws->mapped_vram -= real->b.base.size;
       else if (real->b.base.placement & RADEON_DOMAIN_GTT)
          aws->mapped_gtt -= real->b.base.size;
       aws->num_mapped_buffers--;
+      simple_mtx_unlock(&aws->stats_lock);
    }
 
    assert(aws->dev);
@@ -712,10 +724,14 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *aws,
    bo->kms_handle = kms_handle;
    bo->vm_always_valid = request.flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
 
+   simple_mtx_lock(&aws->stats_lock);
    if (initial_domain & RADEON_DOMAIN_VRAM)
       aws->allocated_vram += align64(size, aws->info.gart_page_size);
    else if (initial_domain & RADEON_DOMAIN_GTT)
       aws->allocated_gtt += align64(size, aws->info.gart_page_size);
+   else if (initial_domain & RADEON_DOMAIN_OA)
+      aws->allocated_oa += size;
+   simple_mtx_unlock(&aws->stats_lock);
 
    amdgpu_add_buffer_to_global_list(aws, bo);
 
@@ -758,10 +774,12 @@ static void amdgpu_bo_slab_destroy(struct radeon_winsys *rws, struct pb_buffer_l
    struct amdgpu_winsys *aws = amdgpu_winsys(rws);
    struct amdgpu_bo_slab_entry *bo = get_slab_entry_bo(amdgpu_winsys_bo(_buf));
 
+   simple_mtx_lock(&aws->stats_lock);
    if (bo->b.base.placement & RADEON_DOMAIN_VRAM)
       aws->slab_wasted_vram -= get_slab_wasted_size(aws, bo);
    else
       aws->slab_wasted_gtt -= get_slab_wasted_size(aws, bo);
+   simple_mtx_unlock(&aws->stats_lock);
 
    pb_slab_free(&aws->bo_slabs, &bo->entry);
 }
@@ -864,10 +882,13 @@ struct pb_slab *amdgpu_bo_slab_alloc(void *priv, unsigned heap, unsigned entry_s
 
    /* Wasted alignment due to slabs with 3/4 allocations being aligned to a power of two. */
    assert(slab_bo->slab.num_entries * entry_size <= slab_size);
+
+   simple_mtx_lock(&aws->stats_lock);
    if (domains & RADEON_DOMAIN_VRAM)
       aws->slab_wasted_vram += slab_size - slab_bo->slab.num_entries * entry_size;
    else
       aws->slab_wasted_gtt += slab_size - slab_bo->slab.num_entries * entry_size;
+   simple_mtx_unlock(&aws->stats_lock);
 
    return &slab_bo->slab;
 
@@ -882,10 +903,13 @@ void amdgpu_bo_slab_free(struct amdgpu_winsys *aws, struct pb_slab *slab)
    unsigned slab_size = bo->b.b.b.base.size;
 
    assert(bo->slab.num_entries * bo->slab.entry_size <= slab_size);
+
+   simple_mtx_lock(&aws->stats_lock);
    if (bo->b.b.b.base.placement & RADEON_DOMAIN_VRAM)
       aws->slab_wasted_vram -= slab_size - bo->slab.num_entries * bo->slab.entry_size;
    else
       aws->slab_wasted_gtt -= slab_size - bo->slab.num_entries * bo->slab.entry_size;
+   simple_mtx_unlock(&aws->stats_lock);
 
    for (unsigned i = 0; i < bo->slab.num_entries; ++i)
       amdgpu_bo_remove_fences(&bo->entries[i].b);
@@ -1521,10 +1545,12 @@ amdgpu_bo_create(struct amdgpu_winsys *aws,
       slab_bo->b.unique_id = __sync_fetch_and_add(&aws->next_bo_unique_id, 1);
       assert(alignment <= 1 << slab_bo->b.base.alignment_log2);
 
+      simple_mtx_lock(&aws->stats_lock);
       if (domain & RADEON_DOMAIN_VRAM)
          aws->slab_wasted_vram += get_slab_wasted_size(aws, slab_bo);
       else
          aws->slab_wasted_gtt += get_slab_wasted_size(aws, slab_bo);
+      simple_mtx_unlock(&aws->stats_lock);
 
       return &slab_bo->b.base;
    }
@@ -1712,15 +1738,17 @@ static struct pb_buffer_lean *amdgpu_bo_from_handle(struct radeon_winsys *rws,
    bo->kms_handle = kms_handle;
    bo->is_shared = true;
 
-   if (bo->b.base.placement & RADEON_DOMAIN_VRAM)
-      aws->allocated_vram += align64(bo->b.base.size, aws->info.gart_page_size);
-   else if (bo->b.base.placement & RADEON_DOMAIN_GTT)
-      aws->allocated_gtt += align64(bo->b.base.size, aws->info.gart_page_size);
-
    amdgpu_add_buffer_to_global_list(aws, bo);
 
    _mesa_hash_table_insert(aws->bo_export_table, bo->bo.abo, bo);
    simple_mtx_unlock(&aws->bo_export_table_lock);
+
+   simple_mtx_lock(&aws->stats_lock);
+   if (bo->b.base.placement & RADEON_DOMAIN_VRAM)
+      aws->allocated_vram += align64(bo->b.base.size, aws->info.gart_page_size);
+   else if (bo->b.base.placement & RADEON_DOMAIN_GTT)
+      aws->allocated_gtt += align64(bo->b.base.size, aws->info.gart_page_size);
+   simple_mtx_unlock(&aws->stats_lock);
 
    return &bo->b.base;
 
@@ -1880,7 +1908,9 @@ static struct pb_buffer_lean *amdgpu_bo_from_ptr(struct radeon_winsys *rws,
     bo->va.handle = va_handle;
     bo->kms_handle = kms_handle;
 
+    simple_mtx_lock(&aws->stats_lock);
     aws->allocated_gtt += aligned_size;
+    simple_mtx_unlock(&aws->stats_lock);
 
     amdgpu_add_buffer_to_global_list(aws, bo);
 

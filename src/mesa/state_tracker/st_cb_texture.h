@@ -84,10 +84,10 @@ void st_CompressedTexSubImage(struct gl_context *ctx, GLuint dims,
                               struct gl_texture_image *texImage,
                               GLint x, GLint y, GLint z,
                               GLsizei w, GLsizei h, GLsizei d,
-                              GLenum format, GLsizei imageSize, const void *data);
+                              GLenum format, size_t imageSize, const void *data);
 void st_CompressedTexImage(struct gl_context *ctx, GLuint dims,
                            struct gl_texture_image *texImage,
-                           GLsizei imageSize, const void *data);
+                           size_t imageSize, const void *data);
 void st_GetTexSubImage(struct gl_context * ctx,
                        GLint xoffset, GLint yoffset, GLint zoffset,
                        GLsizei width, GLsizei height, GLint depth,

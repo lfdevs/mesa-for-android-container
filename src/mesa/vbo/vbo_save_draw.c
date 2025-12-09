@@ -231,7 +231,7 @@ vbo_save_playback_vertex_list_gallium(struct gl_context *ctx,
     */
    struct gl_program *vp = ctx->VertexProgram._Current;
 
-   if (vp->info.inputs_read & ~enabled || vp->DualSlotInputs)
+   if ((vp->info.inputs_read & ~(uint64_t)enabled) || vp->DualSlotInputs)
       return USE_SLOW_PATH;
 
    struct pipe_vertex_state *state = node->state[mode];

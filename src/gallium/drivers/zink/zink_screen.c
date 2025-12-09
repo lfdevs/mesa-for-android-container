@@ -913,9 +913,10 @@ zink_init_screen_caps(struct zink_screen *screen)
          quirk |= PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50;
       caps->texture_border_color_quirk = quirk;
    }
+   /* TODO: 32K textures are broken */
    caps->max_texture_2d_size =
-      MIN2(screen->info.props.limits.maxImageDimension1D,
-           screen->info.props.limits.maxImageDimension2D);
+      MIN3(screen->info.props.limits.maxImageDimension1D,
+           screen->info.props.limits.maxImageDimension2D, 16384);
    caps->max_texture_3d_levels =
       1 + util_logbase2(screen->info.props.limits.maxImageDimension3D);
    caps->max_texture_cube_levels =
@@ -2203,7 +2204,7 @@ retry:
       }
    }
    if (zink_format_is_emulated_alpha(pformat)) {
-      VkFormatFeatureFlags blocked = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+      VkFormatFeatureFlags2 blocked = VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
       screen->format_props[pformat].linearTilingFeatures &= ~blocked;
       screen->format_props[pformat].optimalTilingFeatures &= ~blocked;
       screen->format_props[pformat].bufferFeatures = 0;

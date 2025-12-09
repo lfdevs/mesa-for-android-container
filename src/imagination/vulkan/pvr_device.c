@@ -643,12 +643,12 @@ err_free_nop_usc_bo:
 static VkResult
 pvr_device_init_view_index_init_programs(struct pvr_device *device)
 {
+   uint32_t staging_buffer_size = 0;
    uint32_t *staging_buffer = NULL;
    VkResult result;
    unsigned i;
 
    for (i = 0; i < PVR_MAX_MULTIVIEW; ++i) {
-      uint32_t staging_buffer_size;
       struct pvr_pds_view_index_init_program *program =
          &device->view_index_init_info[i];
 
@@ -658,17 +658,19 @@ pvr_device_init_view_index_init_programs(struct pvr_device *device)
                                                NULL,
                                                PDS_GENERATE_SIZES);
 
-      staging_buffer_size = program->data_size + program->code_size;
+      if (program->data_size + program->code_size > staging_buffer_size) {
+         staging_buffer_size = program->data_size + program->code_size;
 
-      staging_buffer = vk_realloc(&device->vk.alloc,
-                                  staging_buffer,
-                                  staging_buffer_size,
-                                  8U,
-                                  VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+         staging_buffer = vk_realloc(&device->vk.alloc,
+                                     staging_buffer,
+                                     staging_buffer_size,
+                                     8U,
+                                     VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
-      if (!staging_buffer) {
-         result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         break;
+         if (!staging_buffer) {
+            result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+            break;
+         }
       }
 
       pvr_pds_generate_view_index_init_program(program,

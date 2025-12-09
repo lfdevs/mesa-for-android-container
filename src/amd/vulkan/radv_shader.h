@@ -492,17 +492,6 @@ void radv_optimize_nir_algebraic_late(nir_shader *shader);
 void radv_optimize_nir_algebraic(nir_shader *shader, bool opt_offsets, bool opt_mqsad,
                                  enum amd_gfx_level gfx_level);
 
-void radv_nir_lower_rt_io(nir_shader *shader, bool monolithic, uint32_t payload_offset);
-
-struct radv_ray_tracing_stage_info;
-
-void radv_nir_lower_rt_abi(nir_shader *shader, const VkRayTracingPipelineCreateInfoKHR *pCreateInfo,
-                           const struct radv_shader_args *args, const struct radv_shader_info *info,
-                           uint32_t *stack_size, bool resume_shader, struct radv_device *device,
-                           struct radv_ray_tracing_pipeline *pipeline, bool monolithic, bool has_position_fetch,
-                           const struct radv_ray_tracing_stage_info *traversal_info);
-
-void radv_gather_unused_args(struct radv_ray_tracing_stage_info *info, nir_shader *nir);
 
 struct radv_shader_stage;
 
@@ -658,11 +647,6 @@ bool radv_consider_culling(const struct radv_physical_device *pdev, struct nir_s
 
 void radv_get_nir_options(struct radv_physical_device *pdev);
 
-struct radv_ray_tracing_stage_info;
-
-nir_shader *radv_build_traversal_shader(struct radv_device *device, struct radv_ray_tracing_pipeline *pipeline,
-                                        const VkRayTracingPipelineCreateInfoKHR *pCreateInfo,
-                                        struct radv_ray_tracing_stage_info *info);
 
 enum radv_rt_priority {
    radv_rt_priority_raygen = 0,

@@ -525,7 +525,7 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
       return VPE_STATUS_NOT_SUPPORTED;
 
    /* 1st plane ret setting */
-   uint16_t width, height;
+   unsigned width, height;
    pipe_surface_size(&surfaces[0], &width, &height);
    plane_size->surface_size.x         = 0;
    plane_size->surface_size.y         = 0;

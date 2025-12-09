@@ -244,10 +244,10 @@ struct pipe_viewport_state
 
 struct pipe_scissor_state
 {
-   unsigned minx:16;
-   unsigned miny:16;
-   unsigned maxx:16;
-   unsigned maxy:16;
+   unsigned minx;
+   unsigned miny;
+   unsigned maxx;
+   unsigned maxy;
 };
 
 
@@ -429,7 +429,7 @@ struct pipe_surface
  */
 struct pipe_framebuffer_state
 {
-   uint16_t width, height;
+   uint32_t width, height;
    uint16_t layers;  /**< Number of layers  in a no-attachment framebuffer */
    uint8_t samples; /**< Number of samples in a no-attachment framebuffer */
 
@@ -473,6 +473,7 @@ struct pipe_sampler_state
 };
 
 struct pipe_tex2d_from_buf {
+   /* Only 32K x 32K textures are supported. */
    unsigned offset;  /**< offset in pixels */
    uint16_t row_stride; /**< size of the image row_stride in pixels */
    uint16_t width;      /**< width of image provided by application */
@@ -553,7 +554,7 @@ struct pipe_resource
    EXCLUSIVE_CACHELINE(struct pipe_reference reference);
 
    uint32_t width0; /**< Used by both buffers and textures. */
-   uint16_t height0; /* Textures: The maximum height/depth/array_size is 16k. */
+   uint32_t height0;    /* textures >= 64K are possible */
    uint16_t depth0;
    uint16_t array_size;
 

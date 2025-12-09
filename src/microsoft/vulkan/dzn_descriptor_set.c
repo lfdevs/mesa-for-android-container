@@ -1157,7 +1157,7 @@ need_custom_buffer_descriptor(struct dzn_device *device, const struct dzn_buffer
 {
    *out_desc = *info;
    uint32_t upper_bound_default_descriptor;
-   uint32_t size_align, offset_align;
+   uint64_t size_align, offset_align;
    /* Canonicalize descriptor types for hash/compare, and get size/align info */
    switch (info->type) {
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:

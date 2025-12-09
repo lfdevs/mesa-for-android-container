@@ -270,6 +270,7 @@ get_device_extensions(const struct tu_physical_device *device,
       .EXT_conditional_rendering = true,
       .EXT_conservative_rasterization = device->info->chip >= 7,
       .EXT_custom_border_color = true,
+      .EXT_custom_resolve = true,
       .EXT_depth_clamp_zero_one = true,
       .EXT_depth_clip_control = true,
       .EXT_depth_clip_enable = true,
@@ -350,6 +351,7 @@ get_device_extensions(const struct tu_physical_device *device,
       .IMG_filter_cubic = device->info->props.has_tex_filter_cubic,
       .NV_compute_shader_derivatives = device->info->chip >= 7,
       .QCOM_fragment_density_map_offset = true,
+      .QCOM_render_pass_shader_resolve = true,
       .VALVE_fragment_density_map_layered = true,
       .VALVE_mutable_descriptor_type = true,
    } };
@@ -820,6 +822,9 @@ tu_get_features(struct tu_physical_device *pdevice,
 
    /* VK_EXT_multisampled_render_to_single_sampled */
    features->multisampledRenderToSingleSampled = true;
+
+   /* VK_EXT_custom_resolve */
+   features->customResolve = true;
 }
 
 static void
@@ -954,8 +959,12 @@ tu_get_physical_device_properties_1_2(struct tu_physical_device *pdevice,
    p->maxDescriptorSetUpdateAfterBindStorageImages       = max_descriptor_set_size;
    p->maxDescriptorSetUpdateAfterBindInputAttachments    = MAX_RTS;
 
-   p->supportedDepthResolveModes    = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
-   p->supportedStencilResolveModes  = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+   p->supportedDepthResolveModes    =
+      VK_RESOLVE_MODE_SAMPLE_ZERO_BIT |
+      VK_RESOLVE_MODE_CUSTOM_BIT_EXT;
+   p->supportedStencilResolveModes  =
+      VK_RESOLVE_MODE_SAMPLE_ZERO_BIT |
+      VK_RESOLVE_MODE_CUSTOM_BIT_EXT;
    p->independentResolveNone  = false;
    p->independentResolve      = false;
 
@@ -1177,7 +1186,8 @@ tu_get_properties(struct tu_physical_device *pdevice,
             VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION))
          : VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION);
    props->driverVersion = vk_get_driver_version();
-   props->vendorID = 0x5143;
+   props->vendorID = pdevice->instance->force_vk_vendor != 0 ?
+                     pdevice->instance->force_vk_vendor : 0x5143;
    props->deviceID = pdevice->dev_id.chip_id;
    props->deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
 
@@ -1770,6 +1780,7 @@ static const driOptionDescription tu_dri_options[] = {
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
+      DRI_CONF_FORCE_VK_VENDOR()
       DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST(false)
       DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
       DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(false)
@@ -1796,6 +1807,8 @@ tu_init_dri_options(struct tu_instance *instance)
                        instance->vk.app_info.app_name, instance->vk.app_info.app_version,
                        instance->vk.app_info.engine_name, instance->vk.app_info.engine_version);
 
+   instance->force_vk_vendor =
+         driQueryOptioni(&instance->dri_options, "force_vk_vendor");
    instance->dont_care_as_load =
          driQueryOptionb(&instance->dri_options, "vk_dont_care_as_load");
    instance->conservative_lrz =

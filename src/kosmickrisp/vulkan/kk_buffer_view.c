@@ -35,8 +35,11 @@ kk_get_buffer_format_features(struct kk_physical_device *pdev,
       if (format->texel_buffer.read)
          features |= VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT;
 
-      if (format->texel_buffer.write)
+      if (format->texel_buffer.write) {
          features |= VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT;
+         features |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
+         features |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
+      }
 
       /* Only these formats allow atomics for texel buffers */
       if (vk_format == VK_FORMAT_R32_UINT || vk_format == VK_FORMAT_R32_SINT)

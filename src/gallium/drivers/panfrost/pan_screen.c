@@ -729,7 +729,8 @@ panfrost_init_screen_caps(struct panfrost_screen *screen)
    caps->shader_clock = dev->arch >= 6 &&
       dev->kmod.props.gpu_can_query_timestamp;
    caps->shader_realtime_clock = dev->arch >= 6 &&
-      dev->kmod.props.gpu_can_query_timestamp;
+      dev->kmod.props.gpu_can_query_timestamp &&
+      dev->kmod.props.timestamp_device_coherent;
 
    /* pixel_local_storage is initially for valhall and bifrost only */
    caps->shader_pixel_local_storage_fast_size =

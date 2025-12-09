@@ -2944,10 +2944,14 @@ lower_to_hw_instr(Program* program)
          } else if (instr->isCall()) {
             unsigned extra_param_count = 2;
             PhysReg stack_reg = instr->operands[0].physReg();
+            unsigned scratch_size = ctx.program->config->scratch_bytes_per_wave;
+            if (ctx.program->gfx_level >= GFX9)
+               scratch_size /= ctx.program->wave_size;
 
-            if (instr->operands[1].constantValue()) {
+            if (instr->operands[1].constantValue() || scratch_size) {
                bld.sop2(aco_opcode::s_add_u32, Definition(stack_reg, s1), Definition(scc, s1),
-                        Operand(stack_reg, s1), instr->operands[1]);
+                        Operand(stack_reg, s1),
+                        Operand::c32(instr->operands[1].constantValue() + scratch_size));
                if (program->gfx_level < GFX9) {
                   /* The callee's VGPR spill buffer resource needs to be based at the
                    * start of callee scratch.
@@ -2961,9 +2965,10 @@ lower_to_hw_instr(Program* program)
             bld.sop1(aco_opcode::s_swappc_b64, Definition(instr->definitions[0].physReg(), s2),
                      Operand(instr->operands[extra_param_count + 1].physReg(), s2));
 
-            if (instr->operands[1].constantValue()) {
+            if (instr->operands[1].constantValue() || scratch_size) {
                bld.sop2(aco_opcode::s_sub_u32, Definition(stack_reg, s1), Definition(scc, s1),
-                        Operand(stack_reg, s1), instr->operands[1]);
+                        Operand(stack_reg, s1),
+                        Operand::c32(instr->operands[1].constantValue() + scratch_size));
                if (program->gfx_level < GFX9) {
                   PhysReg rsrc_dword1 = stack_reg.advance(4);
                   bld.sop2(aco_opcode::s_subb_u32, Definition(rsrc_dword1, s1), Definition(scc, s1),

@@ -82,6 +82,7 @@ enum tu_stage_id {
    GMEM_LOAD_STAGE_ID,
    GMEM_STORE_STAGE_ID,
    SYSMEM_RESOLVE_STAGE_ID,
+   CUSTOM_RESOLVE_STAGE_ID,
    // TODO add the rest from fd_stage_id
 };
 
@@ -117,6 +118,7 @@ static const struct {
    [GMEM_LOAD_STAGE_ID]      = { "GMEM Load", "Per tile system memory to GMEM load" },
    [GMEM_STORE_STAGE_ID]     = { "GMEM Store", "Per tile GMEM to system memory store" },
    [SYSMEM_RESOLVE_STAGE_ID] = { "SysMem Resolve", "System memory MSAA resolve" },
+   [CUSTOM_RESOLVE_STAGE_ID] = { "Custom Resolve", "Custom resolve via shader" },
    // TODO add the rest
 };
 
@@ -605,6 +607,7 @@ CREATE_EVENT_CALLBACK(sysmem_clear_all, CLEAR_SYSMEM_STAGE_ID)
 CREATE_EVENT_CALLBACK(gmem_load, GMEM_LOAD_STAGE_ID)
 CREATE_EVENT_CALLBACK(gmem_store, GMEM_STORE_STAGE_ID)
 CREATE_EVENT_CALLBACK(sysmem_resolve, SYSMEM_RESOLVE_STAGE_ID)
+CREATE_EVENT_CALLBACK(custom_resolve, CUSTOM_RESOLVE_STAGE_ID)
 
 void
 tu_perfetto_start_cmd_buffer_annotation(

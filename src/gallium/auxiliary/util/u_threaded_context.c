@@ -1009,10 +1009,10 @@ tc_rebind_buffer(struct threaded_context *tc, uint32_t old_id, uint32_t new_id, 
 }
 
 static bool
-tc_is_buffer_bound_with_mask(uint32_t id, uint32_t *bindings, unsigned binding_mask)
+tc_is_buffer_bound_with_mask(uint32_t id, uint32_t *bindings, uint64_t binding_mask)
 {
    while (binding_mask) {
-      if (bindings[u_bit_scan(&binding_mask)] == id)
+      if (bindings[u_bit_scan64(&binding_mask)] == id)
          return true;
    }
    return false;
@@ -2043,7 +2043,7 @@ tc_set_shader_images(struct pipe_context *_pipe,
    struct tc_shader_images *p =
       tc_add_slot_based_call(tc, TC_CALL_set_shader_images, tc_shader_images,
                              images ? count : 0);
-   unsigned writable_buffers = 0;
+   uint64_t writable_buffers = 0;
 
    p->shader = shader;
    p->start = start;
@@ -2070,7 +2070,7 @@ tc_set_shader_images(struct pipe_context *_pipe,
                   util_range_add(&tres->b, &tres->valid_buffer_range,
                                  images[i].u.buf.offset,
                                  images[i].u.buf.offset + images[i].u.buf.size);
-                  writable_buffers |= BITFIELD_BIT(start + i);
+                  writable_buffers |= BITFIELD64_BIT(start + i);
                }
             } else {
                tc_set_resource_batch_usage(tc, resource);
@@ -2092,7 +2092,7 @@ tc_set_shader_images(struct pipe_context *_pipe,
                         count + unbind_num_trailing_slots);
    }
 
-   tc->image_buffers_writeable_mask[shader] &= ~BITFIELD_RANGE(start, count);
+   tc->image_buffers_writeable_mask[shader] &= ~BITFIELD64_RANGE(start, count);
    tc->image_buffers_writeable_mask[shader] |= writable_buffers;
 }
 

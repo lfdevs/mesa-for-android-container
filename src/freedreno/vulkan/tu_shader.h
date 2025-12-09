@@ -128,6 +128,7 @@ struct tu_shader_key {
    bool robust_storage_access2;
    bool robust_uniform_access2;
    bool lower_view_index_to_device_index;
+   bool custom_resolve;
    enum ir3_wavesize_option api_wavesize, real_wavesize;
 };
 

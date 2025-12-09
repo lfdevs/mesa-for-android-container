@@ -419,7 +419,7 @@ static void
 set_clear_fb(struct pipe_context *pctx, struct pipe_surface *psurf, struct pipe_surface *zsurf)
 {
    struct pipe_framebuffer_state fb_state = {0};
-   uint16_t width, height;
+   unsigned width, height;
    if (psurf)
       pipe_surface_size(psurf, &width, &height);
    else

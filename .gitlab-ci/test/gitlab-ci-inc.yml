@@ -41,7 +41,6 @@
     - job: debian/x86_64_test-gl
       optional: true
     - job: debian-x86_64
-    - !reference [.required-for-hardware-jobs, needs]
   variables:
     DEBIAN_ARCH: amd64
     S3_ARTIFACT_NAME: mesa-x86_64-default-debugoptimized
@@ -54,7 +53,6 @@
     - job: debian-x86_64
     - job: debian/x86_64_test-vk
       optional: true
-    - !reference [.required-for-hardware-jobs, needs]
   variables:
     DEBIAN_ARCH: amd64
     S3_ARTIFACT_NAME: mesa-x86_64-default-debugoptimized
@@ -66,7 +64,6 @@
   needs:
     - job: debian/x86_64_test-gl
       optional: true
-    - !reference [.required-for-hardware-jobs, needs]
   variables:
     S3_ARTIFACT_NAME: mesa-x86_64-default-debugoptimized
 
@@ -91,7 +88,6 @@
     - job: debian/x86_64_test-android
       artifacts: false
       optional: true
-    - !reference [.required-for-hardware-jobs, needs]
   timeout: 20m
   script:
     - ./install/cuttlefish-runner.sh
@@ -182,13 +178,3 @@
     - rm -rf install
     - (set -x; curl -L --retry 4 -f --retry-all-errors --retry-delay 60 ${FDO_HTTP_CACHE_URI:-}https://${PIPELINE_ARTIFACTS_BASE}/${S3_ARTIFACT_NAME}.tar.zst | tar --zstd -x)
     - section_end artifacts_download
-
-# Jobs that need to pass before spending hardware resources on further testing
-.required-for-hardware-jobs:
-  needs:
-    - job: rustfmt
-      optional: true
-      artifacts: false
-    - job: yaml-toml-shell-py-test
-      optional: true
-      artifacts: false

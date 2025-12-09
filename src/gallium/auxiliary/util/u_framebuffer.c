@@ -155,7 +155,7 @@ util_framebuffer_min_size(const struct pipe_framebuffer_state *fb,
       if (!fb->cbufs[i].texture)
          continue;
 
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(&fb->cbufs[i], &width, &height);
 
       w = MIN2(w, width);
@@ -163,7 +163,7 @@ util_framebuffer_min_size(const struct pipe_framebuffer_state *fb,
    }
 
    if (fb->zsbuf.texture) {
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(&fb->zsbuf, &width, &height);
       w = MIN2(w, width);
       h = MIN2(h, height);

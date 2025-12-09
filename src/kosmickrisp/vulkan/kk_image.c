@@ -81,6 +81,8 @@ kk_get_image_plane_format_features(struct kk_physical_device *pdev,
 
    if (va_format->write) {
       features |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
+      features |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
+      features |= VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
    }
 
    if (va_format->atomic)

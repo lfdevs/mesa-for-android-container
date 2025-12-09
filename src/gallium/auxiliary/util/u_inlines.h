@@ -356,7 +356,7 @@ pipe_surface_init(struct pipe_context *ctx, struct pipe_surface* ps,
 static inline unsigned
 pipe_surface_width(const struct pipe_surface *ps)
 {
-   unsigned width = (uint16_t)u_minify(ps->texture->width0, ps->level);
+   unsigned width = u_minify(ps->texture->width0, ps->level);
 
    /* adjust texture view size to get full blocksize on compressed formats */
    if (!util_format_is_depth_or_stencil(ps->texture->format) && ps->format != ps->texture->format) {
@@ -395,13 +395,13 @@ pipe_surface_height(const struct pipe_surface *ps)
 }
 
 static inline void
-pipe_surface_size(const struct pipe_surface *ps, uint16_t *width, uint16_t *height)
+pipe_surface_size(const struct pipe_surface *ps, unsigned *width, unsigned *height)
 {
    if (width)
-      *width = (uint16_t)pipe_surface_width(ps);
+      *width = pipe_surface_width(ps);
 
    if (height)
-      *height = (uint16_t)pipe_surface_height(ps);
+      *height = pipe_surface_height(ps);
 }
 
 /* Return true if the surfaces are equal. */

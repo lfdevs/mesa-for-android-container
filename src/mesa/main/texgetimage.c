@@ -333,7 +333,7 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
    uint8_t rebaseSwizzle[4];
 
    /* Decompress into temp float buffer, then pack into user buffer */
-   tempImage = malloc(width * height * depth * 4 * sizeof(GLfloat));
+   tempImage = malloc((size_t)width * height * depth * 4 * sizeof(GLfloat));
    if (!tempImage) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage()");
       return;
@@ -344,7 +344,7 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
       GLubyte *srcMap;
       GLint srcRowStride;
 
-      tempSlice = tempImage + slice * 4 * width * height;
+      tempSlice = tempImage + slice * 4 * (size_t)width * height;
 
       st_MapTextureImage(ctx, texImage, zoffset + slice,
                          xoffset, yoffset, width, height,
@@ -385,7 +385,7 @@ get_tex_rgba_compressed(struct gl_context *ctx, GLuint dimensions,
                                    width, height, dest, dest);
       }
 
-      tempSlice += 4 * width * height;
+      tempSlice += 4 * (size_t)width * height;
    }
 
    free(tempImage);
@@ -508,7 +508,7 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
          } else {
             need_convert = true;
             if (rgba == NULL) { /* Allocate the RGBA buffer only once */
-               rgba = malloc(height * rgba_stride);
+               rgba = malloc((size_t)height * rgba_stride);
                if (!rgba) {
                   _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetTexImage()");
                   st_UnmapTextureImage(ctx, texImage, img);
@@ -523,7 +523,8 @@ get_tex_rgba_uncompressed(struct gl_context *ctx, GLuint dimensions,
                               needsRebase ? rebaseSwizzle : NULL);
 
          /* Handle transfer ops now */
-         _mesa_apply_rgba_transfer_ops(ctx, transferOps, width * height, rgba);
+         _mesa_apply_rgba_transfer_ops(ctx, transferOps,
+                                       (size_t)width * height, rgba);
 
          /* If we had to rebase, we have already handled that */
          needsRebase = false;
@@ -664,7 +665,7 @@ get_tex_memcpy(struct gl_context *ctx,
 
       if (src) {
          if (bytesPerRow == dstRowStride && bytesPerRow == srcRowStride) {
-            memcpy(dst, src, bytesPerRow * height);
+            memcpy(dst, src, (size_t)bytesPerRow * height);
          }
          else {
             GLuint row;
@@ -828,8 +829,8 @@ get_compressed_texsubimage_sw(struct gl_context *ctx,
          st_UnmapTextureImage(ctx, texImage, zoffset + slice);
 
          /* Advance to next slice */
-         dest += store.TotalBytesPerRow * (store.TotalRowsPerSlice -
-                                           store.CopyRowsPerSlice);
+         dest += (size_t)store.TotalBytesPerRow *
+                 (store.TotalRowsPerSlice - store.CopyRowsPerSlice);
 
       } else {
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "glGetCompresssedTexImage");
@@ -1641,21 +1642,21 @@ _mesa_GetTextureSubImage(GLuint texture, GLint level,
  * Compute the number of bytes which will be written when retrieving
  * a sub-region of a compressed texture.
  */
-static GLsizei
+static size_t
 packed_compressed_size(GLuint dimensions, mesa_format format,
                        GLsizei width, GLsizei height, GLsizei depth,
                        const struct gl_pixelstore_attrib *packing)
 {
    struct compressed_pixelstore st;
-   GLsizei totalBytes;
+   size_t totalBytes;
 
    _mesa_compute_compressed_pixelstore(dimensions, format,
                                        width, height, depth,
                                        packing, &st);
    totalBytes =
-      (st.CopySlices - 1) * st.TotalRowsPerSlice * st.TotalBytesPerRow +
+      (size_t)(st.CopySlices - 1) * st.TotalRowsPerSlice * st.TotalBytesPerRow +
       st.SkipBytes +
-      (st.CopyRowsPerSlice - 1) * st.TotalBytesPerRow +
+      (size_t)(st.CopyRowsPerSlice - 1) * st.TotalBytesPerRow +
       st.CopyBytesPerRow;
 
    return totalBytes;
@@ -1672,12 +1673,12 @@ getcompressedteximage_error_check(struct gl_context *ctx,
                                   GLenum target, GLint level,
                                   GLint xoffset, GLint yoffset, GLint zoffset,
                                   GLsizei width, GLsizei height, GLsizei depth,
-                                  GLsizei bufSize, GLvoid *pixels,
+                                  size_t bufSize, GLvoid *pixels,
                                   const char *caller)
 {
    struct gl_texture_image *texImage;
    GLint maxLevels;
-   GLsizei totalBytes;
+   size_t totalBytes;
    GLuint dimensions;
 
    assert(texObj);
@@ -1742,7 +1743,7 @@ getcompressedteximage_error_check(struct gl_context *ctx,
       /* do bounds checking on writing to client memory */
       if (totalBytes > bufSize) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
-                     "%s(out of bounds access: bufSize (%d) is too small)",
+                     "%s(out of bounds access: bufSize (%zu) is too small)",
                      caller, bufSize);
          return true;
       }
@@ -1770,7 +1771,8 @@ get_compressed_texture_image(struct gl_context *ctx,
                              const char *caller)
 {
    struct gl_texture_image *texImage;
-   unsigned firstFace, numFaces, i, imageStride;
+   unsigned firstFace, numFaces, i;
+   size_t imageStride;
 
    FLUSH_VERTICES(ctx, 0, 0);
 
@@ -1795,7 +1797,7 @@ get_compressed_texture_image(struct gl_context *ctx,
       _mesa_compute_compressed_pixelstore(2, texImage->TexFormat,
                                           width, height, depth,
                                           &ctx->Pack, &store);
-      imageStride = store.TotalBytesPerRow * store.TotalRowsPerSlice;
+      imageStride = (size_t)store.TotalBytesPerRow * store.TotalRowsPerSlice;
 
       firstFace = zoffset;
       numFaces = depth;

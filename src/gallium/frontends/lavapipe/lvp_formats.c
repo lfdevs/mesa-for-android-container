@@ -247,17 +247,38 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceFormatProperties2(
       perf->optimal = VK_FALSE;
 
 #if DETECT_OS_LINUX
-   VkDrmFormatModifierPropertiesListEXT *modlist = (void*)vk_find_struct_const(pFormatProperties->pNext, DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT);
-   if (modlist) {
-      modlist->drmFormatModifierCount = 0;
-      if (pFormatProperties->formatProperties.optimalTilingFeatures) {
-         modlist->drmFormatModifierCount = 1;
-         VkDrmFormatModifierPropertiesEXT *mods = &modlist->pDrmFormatModifierProperties[0];
-         if (mods) {
-            mods->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
-            mods->drmFormatModifierPlaneCount = util_format_get_num_planes(lvp_vk_format_to_pipe_format(format));
-            mods->drmFormatModifierTilingFeatures = pFormatProperties->formatProperties.optimalTilingFeatures;
+   vk_foreach_struct(ext, pFormatProperties->pNext) {
+      switch ((unsigned)ext->sType) {
+      case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT: {
+         struct VkDrmFormatModifierPropertiesListEXT *modlist = (void *)ext;
+         modlist->drmFormatModifierCount = 0;
+         if (pFormatProperties->formatProperties.optimalTilingFeatures) {
+            modlist->drmFormatModifierCount = 1;
+            VkDrmFormatModifierPropertiesEXT *mods = &modlist->pDrmFormatModifierProperties[0];
+            if (mods) {
+               mods->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
+               mods->drmFormatModifierPlaneCount = util_format_get_num_planes(lvp_vk_format_to_pipe_format(format));
+               mods->drmFormatModifierTilingFeatures = pFormatProperties->formatProperties.optimalTilingFeatures;
+            }
          }
+         break;
+      }
+      case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT: {
+         struct VkDrmFormatModifierPropertiesList2EXT *modlist = (void *)ext;
+         modlist->drmFormatModifierCount = 0;
+         if (format_props.optimalTilingFeatures) {
+            modlist->drmFormatModifierCount = 1;
+            VkDrmFormatModifierProperties2EXT *mods = &modlist->pDrmFormatModifierProperties[0];
+            if (mods) {
+               mods->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
+               mods->drmFormatModifierPlaneCount = util_format_get_num_planes(lvp_vk_format_to_pipe_format(format));
+               mods->drmFormatModifierTilingFeatures = format_props.optimalTilingFeatures;
+            }
+         }
+         break;
+      }
+      default: 
+         break;
       }
    }
 #endif

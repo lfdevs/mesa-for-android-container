@@ -332,6 +332,8 @@ pvr_border_color_table_init(struct pvr_device *const device)
    return VK_SUCCESS;
 
 err_out:
+   vk_free(&device->vk.alloc, table);
+
    return result;
 }
 

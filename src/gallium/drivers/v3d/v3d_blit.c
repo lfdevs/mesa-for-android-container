@@ -572,9 +572,9 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
          * This should be fine because we only get here if the src and dst boxes
          * match, so we know the blit involves the same tiles on both surfaces.
          */
-        uint16_t dst_width, dst_height;
+        unsigned dst_width, dst_height;
         pipe_surface_size(&dst_surf, &dst_width, &dst_height);
-        uint16_t src_width, src_height;
+        unsigned src_width, src_height;
         pipe_surface_size(&src_surf, &src_width, &src_height);
         job->draw_width = MIN2(dst_width, src_width);
         job->draw_height = MIN2(dst_height, src_height);
@@ -838,7 +838,7 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
          * size now we are using a cpp=4 format. Next dimension take into
          * account the UIF microtile layouts.
          */
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(&dst_surf, &width, &height);
         width = align(width, 8) / 2;
         if (src->cpp == 1)
@@ -1146,7 +1146,7 @@ v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
          * size now we are using a cpp=8 format. Next dimension take into
          * account the UIF microtile layouts.
          */
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(&dst_surf, &width, &height);
         height /= 2;
         width = align(width, 8);

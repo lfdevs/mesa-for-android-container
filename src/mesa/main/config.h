@@ -95,14 +95,11 @@
 /** Line width granularity */
 #define LINE_WIDTH_GRANULARITY 0.1
 
-/** Max memory to allow for a single texture image (in megabytes) */
-#define MAX_TEXTURE_MBYTES 1024
-
 /** Number of texture mipmap levels */
-#define MAX_TEXTURE_LEVELS 15
+#define MAX_TEXTURE_LEVELS 17
 
 /** Maximum rectangular texture size - GL_NV_texture_rectangle */
-#define MAX_TEXTURE_RECT_SIZE 16384
+#define MAX_TEXTURE_RECT_SIZE 65536
 
 /**
  * Maximum number of layers in a 1D or 2D array texture - GL_MESA_texture_array
@@ -217,7 +214,7 @@
 /** For GL_EXT_framebuffer_object */
 /*@{*/
 #define MAX_COLOR_ATTACHMENTS 8
-#define MAX_RENDERBUFFER_SIZE 16384
+#define MAX_RENDERBUFFER_SIZE 65536
 /*@}*/
 
 /** For GL_ATI_envmap_bump - support bump mapping on first 8 units */

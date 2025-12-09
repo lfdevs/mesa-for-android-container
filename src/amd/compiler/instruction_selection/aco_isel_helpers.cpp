@@ -51,8 +51,7 @@ append_logical_end(isel_context* ctx, bool append_reload_preserved)
          stack_ptr_op = Operand(ctx->callee_info.stack_ptr.def.getTemp());
       else
          stack_ptr_op = Operand(load_scratch_resource(ctx->program, bld, -1u, false));
-      bld.pseudo(aco_opcode::p_reload_preserved, bld.def(s1), bld.def(bld.lm), bld.def(s1, scc),
-                 stack_ptr_op);
+      bld.pseudo(aco_opcode::p_reload_preserved, bld.def(bld.lm), bld.def(s1, scc), stack_ptr_op);
    }
 
    bld.pseudo(aco_opcode::p_logical_end);

@@ -546,7 +546,7 @@ lp_build_sample_image_nearest(struct lp_build_sample_context *bld,
 
 /**
  * Fetch texels for image with linear sampling.
- * Return filtered color as two vectors of 16-bit fixed point values.
+ * Return filtered color as one vectors of 8-bit unorm values.
  */
 static void
 lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
@@ -581,7 +581,7 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
     *
     * where each value is between 0 and 0xff,
     *
-    * into one 16 x i20
+    * into one 16 x i8
     *
     *   s_fpart = {s0, s0, s0, s0, s1, s1, s1, s1, s2, s2, s2, s2, s3, s3, s3, s3}
     *
@@ -628,13 +628,6 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
     * bit cast them into 16 x u8
     *
     *   r0 g0 b0 a0 r1 g1 b1 a1 r2 g2 b2 a2 r3 g3 b3 a3
-    *
-    * unpack them into two 8 x i16:
-    *
-    *   r0 g0 b0 a0 r1 g1 b1 a1
-    *   r2 g2 b2 a2 r3 g3 b3 a3
-    *
-    * The higher 8 bits of the resulting elements will be zero.
     */
    numj = 1 + (dims >= 2);
    numk = 1 + (dims >= 3);
@@ -677,7 +670,7 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
    }
 
    /*
-    * Linear interpolation with 8.8 fixed point.
+    * Linear interpolation with 8-bit unorm.
     */
 
    /* general 1/2/3-D lerping */
@@ -726,7 +719,7 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
 
 /**
  * Sample a single texture image with (bi-)(tri-)linear sampling.
- * Return filtered color as two vectors of 16-bit fixed point values.
+ * Return filtered color as a vector of 8-bit unorm values.
  */
 static void
 lp_build_sample_image_linear(struct lp_build_sample_context *bld,

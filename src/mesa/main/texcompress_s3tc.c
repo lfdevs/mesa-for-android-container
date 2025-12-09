@@ -66,7 +66,7 @@ _mesa_texstore_rgb_dxt1(TEXSTORE_PARAMS)
       /* convert image to RGB/GLubyte */
       GLubyte *tempImageSlices[1];
       int rgbRowStride = 3 * srcWidth * sizeof(GLubyte);
-      tempImage = malloc(srcWidth * srcHeight * 3 * sizeof(GLubyte));
+      tempImage = malloc((size_t)srcWidth * srcHeight * 3 * sizeof(GLubyte));
       if (!tempImage)
          return GL_FALSE; /* out of memory */
       tempImageSlices[0] = (GLubyte *) tempImage;
@@ -119,7 +119,7 @@ _mesa_texstore_rgba_dxt1(TEXSTORE_PARAMS)
        srcPacking->SwapBytes) {
       /* convert image to RGBA/GLubyte */
       GLubyte *tempImageSlices[1];
-      tempImage = malloc(srcWidth * srcHeight * 4 * sizeof(GLubyte));
+      tempImage = malloc((size_t)srcWidth * srcHeight * 4 * sizeof(GLubyte));
       if (!tempImage)
          return GL_FALSE; /* out of memory */
       tempImageSlices[0] = (GLubyte *) tempImage;
@@ -174,7 +174,7 @@ _mesa_texstore_rgba_dxt3(TEXSTORE_PARAMS)
        srcPacking->SwapBytes) {
       /* convert image to RGBA/GLubyte */
       GLubyte *tempImageSlices[1];
-      tempImage = malloc(srcWidth * srcHeight * 4 * sizeof(GLubyte));
+      tempImage = malloc((size_t)srcWidth * srcHeight * 4 * sizeof(GLubyte));
       if (!tempImage)
          return GL_FALSE; /* out of memory */
       tempImageSlices[0] = (GLubyte *) tempImage;
@@ -228,7 +228,7 @@ _mesa_texstore_rgba_dxt5(TEXSTORE_PARAMS)
        srcPacking->SwapBytes) {
       /* convert image to RGBA/GLubyte */
       GLubyte *tempImageSlices[1];
-      tempImage = malloc(srcWidth * srcHeight * 4 * sizeof(GLubyte));
+      tempImage = malloc((size_t)srcWidth * srcHeight * 4 * sizeof(GLubyte));
       if (!tempImage)
          return GL_FALSE; /* out of memory */
       tempImageSlices[0] = (GLubyte *) tempImage;

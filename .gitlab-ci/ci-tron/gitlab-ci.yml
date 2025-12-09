@@ -36,8 +36,6 @@
 
     # Keep the job script in the artifacts
     CI_TRON_JOB_SCRIPT_PATH: results/job_script.sh
-  needs:
-    - !reference [.required-for-hardware-jobs, needs]
   tags:
     - farm:$RUNNER_FARM_LOCATION
     - ci-tron:priority:$CI_TRON_JOB_PRIORITY
@@ -97,7 +95,6 @@
       optional: true
     - job: debian-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-x86_64-test-vk-manual:
   extends:
@@ -111,7 +108,6 @@
       optional: true
     - job: debian-build-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-x86_64-test-gl:
   extends:
@@ -123,7 +119,6 @@
       optional: true
     - job: debian-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-x86_64-test-gl-manual:
   extends:
@@ -137,7 +132,6 @@
       optional: true
     - job: debian-build-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test:
   extends:
@@ -157,7 +151,6 @@
       optional: true
     - job: debian-arm64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-asan-vk:
   extends:
@@ -172,7 +165,6 @@
       optional: true
     - job: debian-arm64-asan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-ubsan-vk:
   extends:
@@ -186,7 +178,6 @@
       optional: true
     - job: debian-arm64-ubsan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-gl:
   extends:
@@ -198,7 +189,6 @@
       optional: true
     - job: debian-arm64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-asan-gl:
   extends:
@@ -213,7 +203,6 @@
       optional: true
     - job: debian-arm64-asan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-ubsan-gl:
   extends:
@@ -227,7 +216,6 @@
       optional: true
     - job: debian-arm64-ubsan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm32-test:
   extends:
@@ -247,7 +235,6 @@
       optional: true
     - job: debian-arm32
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm32-test-gl:
   extends:
@@ -259,7 +246,6 @@
       optional: true
     - job: debian-arm32
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm32-test-asan-gl:
   extends:
@@ -274,4 +260,3 @@
       optional: true
     - job: debian-arm32-asan
       artifacts: false
-    - !reference [.ci-tron-test, needs]

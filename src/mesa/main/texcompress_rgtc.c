@@ -91,7 +91,7 @@ _mesa_texstore_red_rgtc1(TEXSTORE_PARAMS)
    assert(dstFormat == MESA_FORMAT_R_RGTC1_UNORM ||
           dstFormat == MESA_FORMAT_L_LATC1_UNORM);
 
-   tempImage = malloc(srcWidth * srcHeight * 1 * sizeof(GLubyte));
+   tempImage = malloc((size_t)srcWidth * srcHeight * 1 * sizeof(GLubyte));
    if (!tempImage)
       return GL_FALSE; /* out of memory */
    redRowStride = 1 * srcWidth * sizeof(GLubyte);
@@ -145,7 +145,7 @@ _mesa_texstore_signed_red_rgtc1(TEXSTORE_PARAMS)
           dstFormat == MESA_FORMAT_L_LATC1_SNORM);
 
    redRowStride = 1 * srcWidth * sizeof(GLbyte);
-   tempImage = malloc(srcWidth * srcHeight * 1 * sizeof(GLbyte));
+   tempImage = malloc((size_t)srcWidth * srcHeight * 1 * sizeof(GLbyte));
    if (!tempImage)
       return GL_FALSE; /* out of memory */
    tempImageSlices[0] = (GLbyte *) tempImage;
@@ -204,7 +204,7 @@ _mesa_texstore_rg_rgtc2(TEXSTORE_PARAMS)
       tempFormat = MESA_FORMAT_LA_UNORM8;
 
    rgRowStride = 2 * srcWidth * sizeof(GLubyte);
-   tempImage = malloc(srcWidth * srcHeight * 2 * sizeof(GLubyte));
+   tempImage = malloc((size_t)srcWidth * srcHeight * 2 * sizeof(GLubyte));
    if (!tempImage)
       return GL_FALSE; /* out of memory */
    tempImageSlices[0] = (GLubyte *) tempImage;
@@ -269,7 +269,7 @@ _mesa_texstore_signed_rg_rgtc2(TEXSTORE_PARAMS)
       tempFormat = MESA_FORMAT_LA_SNORM8;
 
    rgRowStride = 2 * srcWidth * sizeof(GLbyte);
-   tempImage = malloc(srcWidth * srcHeight * 2 * sizeof(GLbyte));
+   tempImage = malloc((size_t)srcWidth * srcHeight * 2 * sizeof(GLbyte));
    if (!tempImage)
       return GL_FALSE; /* out of memory */
    tempImageSlices[0] = (GLbyte *) tempImage;

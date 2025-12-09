@@ -5021,7 +5021,7 @@ bi_emit_phi_deferred(bi_context *ctx, bi_block *block, bi_instr *I)
    nir_phi_instr *phi = I->phi;
 
    /* Guaranteed by lower_phis_to_scalar */
-   assert(phi->def.num_components == 1);
+   assert(phi->def.bit_size * phi->def.num_components <= 32);
 
    nir_foreach_phi_src(src, phi) {
       bi_block *pred = bi_from_nir_block(ctx, src->pred);
@@ -5502,7 +5502,16 @@ bi_vectorize_filter(const nir_instr *instr, const void *data)
 {
    unsigned gpu_id = *((unsigned *)data);
 
-   /* Defaults work for everything else */
+   if (instr->type == nir_instr_type_phi) {
+      unsigned bit_size = nir_instr_as_phi(instr)->def.bit_size;
+      if (bit_size == 8)
+         return 4;
+      if (bit_size == 16)
+         return 2;
+      return 1;
+   }
+
+   /* Do not vectorize all non-ALU instruction */
    if (instr->type != nir_instr_type_alu)
       return 0;
 
@@ -6355,7 +6364,7 @@ bifrost_postprocess_nir(nir_shader *nir, unsigned gpu_id)
 
    NIR_PASS(_, nir, nir_lower_alu_width, bi_vectorize_filter, &gpu_id);
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
-   NIR_PASS(_, nir, nir_lower_all_phis_to_scalar);
+   NIR_PASS(_, nir, nir_lower_phis_to_scalar, bi_vectorize_filter, &gpu_id);
    NIR_PASS(_, nir, nir_lower_flrp, 16 | 32 | 64, false /* always_precise */);
    NIR_PASS(_, nir, nir_lower_var_copies);
    NIR_PASS(_, nir, nir_lower_alu);

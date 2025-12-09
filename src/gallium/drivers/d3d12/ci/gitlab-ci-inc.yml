@@ -9,7 +9,6 @@
     - job: windows-msvc
     - job: windows_test_msvc
       optional: true
-    - !reference [.required-for-hardware-jobs, needs]
   variables:
     GIT_STRATEGY: none # testing doesn't build anything from source
     GALLIUM_DRIVER: d3d12

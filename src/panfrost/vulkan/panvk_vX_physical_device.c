@@ -493,7 +493,7 @@ panvk_per_arch(get_physical_device_features)(
 
       /* VK_KHR_shader_clock */
       .shaderSubgroupClock = device->kmod.props.gpu_can_query_timestamp,
-      .shaderDeviceClock = device->kmod.props.gpu_can_query_timestamp,
+      .shaderDeviceClock = device->kmod.props.timestamp_device_coherent,
 
       /* VK_KHR_shader_quad_control */
       .shaderQuadControl = true,

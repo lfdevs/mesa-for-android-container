@@ -173,12 +173,17 @@ void
 process_live_temps_per_block(live_ctx& ctx, Block* block)
 {
    RegisterDemand new_demand;
+   unsigned num_linear_vgprs = 0;
    block->register_demand = RegisterDemand();
+   block->call_spills = RegisterDemand();
    IDSet live = compute_live_out(ctx, block);
 
    /* initialize register demand */
-   for (unsigned t : live)
+   for (unsigned t : live) {
       new_demand += Temp(t, ctx.program->temp_rc[t]);
+      if (ctx.program->temp_rc[t].is_linear_vgpr())
+         num_linear_vgprs += ctx.program->temp_rc[t].size();
+   }
 
    /* traverse the instructions backwards */
    int idx;
@@ -209,6 +214,8 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
 
          if (n) {
             new_demand -= temp;
+            if (temp.regClass().is_linear_vgpr())
+               num_linear_vgprs -= temp.size();
             definition.setKill(false);
          } else {
             insn->register_demand += temp;
@@ -370,6 +377,8 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
             if (operand.isLateKill())
                insn->register_demand += temp;
             new_demand += temp;
+            if (temp.regClass().is_linear_vgpr())
+               num_linear_vgprs += temp.size();
          } else if (operand.isClobbered()) {
             operand_demand += temp;
          }
@@ -389,15 +398,6 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
 
          BITSET_DECLARE(preserved_regs, 512);
          insn->call().abi.preservedRegisters(preserved_regs, limit);
-         for (auto& op : insn->operands) {
-            if (!op.isTemp() || !op.isPrecolored() || op.isClobbered())
-               continue;
-
-            if (op.isKill())
-               insn->call().callee_preserved_limit -= op.getTemp();
-            for (unsigned i = 0; i < op.size(); ++i)
-               BITSET_SET(preserved_regs, op.physReg().reg() + i);
-         }
 
          RegisterDemand preserved_reg_demand;
          preserved_reg_demand.sgpr =
@@ -406,12 +406,50 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
                                                          limit.vgpr, 256 / BITSET_WORDBITS);
          insn->call().callee_preserved_limit += preserved_reg_demand;
 
+         /* Killed operands effectively make a preserved register unusable for temporaries which we
+          * want to preserve (those included in caller_preserved_demand).
+          */
+         for (auto& op : insn->operands) {
+            if (!op.isTemp() || !op.isPrecolored() || !op.isKill())
+               continue;
+
+            for (unsigned i = 0; i < op.size(); ++i) {
+               if (BITSET_TEST(preserved_regs, op.physReg().reg() + i))
+                  insn->call().callee_preserved_limit -= Temp(0, RegClass(op.regClass().type(), 1));
+            }
+         }
+
+         /* TODO: the spiller can't handle linear VGPRs. For now, the post-RA preserved register
+          * spilling pass makes sure that all live linear VGPRs are preserved across calls.
+          * Therefore, ignore linear VGPRs in the demand calculation here.
+          */
+         insn->call().callee_preserved_limit.vgpr =
+            MAX2(insn->call().callee_preserved_limit.vgpr - (int16_t)num_linear_vgprs, 0);
+
          insn->call().caller_preserved_demand = demand_after_instr;
+         insn->call().caller_preserved_demand.vgpr -= num_linear_vgprs;
+
+         /* Non-clobbered (neither discardable nor return) parameters are preserved by the callee
+          * if they are placed in clobbered registers.
+          */
+         for (auto& op : insn->operands) {
+            if (!op.isTemp() || !op.isPrecolored() || op.isClobbered() || op.isKill())
+               continue;
+
+            for (unsigned i = 0; i < op.size(); ++i) {
+               if (!BITSET_TEST(preserved_regs, op.physReg().reg() + i))
+                  insn->call().caller_preserved_demand -=
+                     Temp(0, RegClass(op.regClass().type(), 1));
+            }
+         }
 
          for (unsigned i = 0; i < insn->definitions.size(); ++i) {
             if (!insn->definitions[i].isKill())
                insn->call().caller_preserved_demand -= insn->definitions[i].getTemp();
          }
+
+         block->call_spills.update(insn->call().caller_preserved_demand -
+                                   insn->call().callee_preserved_limit);
       }
 
       operand_demand += new_demand;
@@ -473,6 +511,7 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
    block->live_in_demand = new_demand;
    block->register_demand.update(block->live_in_demand);
    ctx.program->max_reg_demand.update(block->register_demand);
+   ctx.program->max_call_spills.update(block->call_spills);
    ctx.handled_once = std::min(ctx.handled_once, block->index);
 
    assert(!block->linear_preds.empty() || (new_demand == RegisterDemand() && live.empty()));
@@ -614,7 +653,7 @@ update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
    RegisterDemand limit = get_addr_regs_from_waves(program, program->min_waves);
 
    /* this won't compile, register pressure reduction necessary */
-   if (new_demand.exceeds(limit)) {
+   if (new_demand.exceeds(limit) || program->max_call_spills != RegisterDemand()) {
       program->num_waves = 0;
       program->max_reg_demand = new_demand;
    } else {
@@ -638,6 +677,7 @@ live_var_analysis(Program* program)
    program->live.memory.release();
    program->live.live_in.resize(program->blocks.size(), IDSet(program->live.memory));
    program->max_reg_demand = RegisterDemand();
+   program->max_call_spills = RegisterDemand();
    program->needs_vcc = program->gfx_level >= GFX10;
 
    live_ctx ctx;

@@ -408,6 +408,12 @@ is_dest_factor(enum pipe_blendfactor factor, bool alpha)
           (factor == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE && !alpha);
 }
 
+static inline bool
+is_min_max(enum pipe_blend_func func)
+{
+   return func == PIPE_BLEND_MIN || func == PIPE_BLEND_MAX;
+}
+
 /* Determines if a blend equation reads back the destination. This can occur by
  * explicitly referencing the destination in the blend equation, or by using a
  * partial writemask. */
@@ -421,7 +427,8 @@ pan_blend_reads_dest(const struct pan_blend_equation equation)
    if (!equation.blend_enable)
       return false;
 
-   return is_dest_factor(equation.rgb_src_factor, false) ||
+   return is_min_max(equation.rgb_func) || is_min_max(equation.alpha_func) ||
+          is_dest_factor(equation.rgb_src_factor, false) ||
           is_dest_factor(equation.alpha_src_factor, true) ||
           equation.rgb_dst_factor != PIPE_BLENDFACTOR_ZERO ||
           equation.alpha_dst_factor != PIPE_BLENDFACTOR_ZERO;

@@ -736,13 +736,9 @@ _mesa_is_format_color_format(mesa_format format);
 bool
 _mesa_is_format_srgb(mesa_format format);
 
-extern uint32_t
+extern size_t
 _mesa_format_image_size(mesa_format format, int width,
                         int height, int depth);
-
-extern uint64_t
-_mesa_format_image_size64(mesa_format format, int width,
-                          int height, int depth);
 
 extern int32_t
 _mesa_format_row_stride(mesa_format format, int width);

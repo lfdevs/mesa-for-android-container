@@ -980,7 +980,7 @@ vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface,
          if (i > !!surface->buffer->interlaced)
             c.f[0] = c.f[1] = c.f[2] = c.f[3] = 0.5f;
 
-         uint16_t width, height;
+         unsigned width, height;
          pipe_surface_size(&surfaces[i], &width, &height);
          drv->pipe->clear_render_target(drv->pipe, &surfaces[i], &c, 0, 0,
                   width, height,

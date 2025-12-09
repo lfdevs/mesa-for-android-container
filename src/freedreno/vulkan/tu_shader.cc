@@ -643,20 +643,37 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
       return true;
 
    case nir_intrinsic_load_frag_size_ir3:
-   case nir_intrinsic_load_frag_offset_ir3: {
+   case nir_intrinsic_load_frag_offset_ir3:
+   case nir_intrinsic_load_gmem_frag_scale_ir3:
+   case nir_intrinsic_load_gmem_frag_offset_ir3: {
       if (!dev->compiler->load_shader_consts_via_preamble)
          return false;
 
-      unsigned param =
-         instr->intrinsic == nir_intrinsic_load_frag_size_ir3 ?
-         IR3_DP_FS(frag_size) : IR3_DP_FS(frag_offset);
+      unsigned param;
+      switch (instr->intrinsic) {
+      case nir_intrinsic_load_frag_size_ir3:
+         param = IR3_DP_FS(frag_size);
+         break;
+      case nir_intrinsic_load_frag_offset_ir3:
+         param = IR3_DP_FS(frag_offset);
+         break;
+      case nir_intrinsic_load_gmem_frag_scale_ir3:
+         param = IR3_DP_FS(gmem_frag_scale);
+         break;
+      case nir_intrinsic_load_gmem_frag_offset_ir3:
+         param = IR3_DP_FS(gmem_frag_offset);
+         break;
+      default:
+         UNREACHABLE("bad intrinsic");
+      }
 
-      unsigned offset = param - IR3_DP_FS_DYNAMIC;
+      unsigned base = param - IR3_DP_FS_DYNAMIC;
 
       nir_def *view = instr->src[0].ssa;
+      nir_def *offset = nir_imul_imm(b, view, 2);
       nir_def *result =
          ir3_load_driver_ubo_indirect(b, 2, &shader->const_state.fdm_ubo,
-                                      offset, view, nir_intrinsic_range(instr));
+                                      base, offset, nir_intrinsic_range(instr) * 2);
 
       nir_def_replace(&instr->def, result);
       return true;
@@ -1147,6 +1164,7 @@ struct lower_fdm_options {
    unsigned num_views;
    bool adjust_fragcoord;
    bool use_layer;
+   bool adjust_gmem_fragcoord;
 };
 
 static bool
@@ -1160,6 +1178,7 @@ lower_fdm_filter(const nir_instr *instr, const void *data)
 
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    return intrin->intrinsic == nir_intrinsic_load_frag_size ||
+      intrin->intrinsic == nir_intrinsic_load_frag_coord_gmem_ir3 ||
       (intrin->intrinsic == nir_intrinsic_load_frag_coord &&
        options->adjust_fragcoord);
 }
@@ -1202,6 +1221,25 @@ lower_fdm_instr(struct nir_builder *b, nir_instr *instr, void *data)
       nir_def *unscaled_coord = nir_load_frag_coord_unscaled_ir3(b);
       nir_def *xy = nir_trim_vector(b, unscaled_coord, 2);
       xy = nir_fmul(b, nir_fsub(b, xy, frag_offset), nir_i2f32(b, frag_size));
+      return nir_vec4(b,
+                      nir_channel(b, xy, 0),
+                      nir_channel(b, xy, 1),
+                      nir_channel(b, unscaled_coord, 2),
+                      nir_channel(b, unscaled_coord, 3));
+   }
+
+   if (intrin->intrinsic == nir_intrinsic_load_frag_coord_gmem_ir3) {
+      nir_def *unscaled_coord = nir_load_frag_coord_unscaled_ir3(b);
+
+      if (!options->adjust_gmem_fragcoord)
+         return unscaled_coord;
+
+      nir_def *frag_offset =
+         nir_load_gmem_frag_offset_ir3(b, view, .range = options->num_views);
+      nir_def *frag_scale =
+         nir_load_gmem_frag_scale_ir3(b, view, .range = options->num_views);
+      nir_def *xy = nir_trim_vector(b, unscaled_coord, 2);
+      xy = nir_fadd(b, nir_fmul(b, xy, frag_scale), frag_offset);
       return nir_vec4(b,
                       nir_channel(b, xy, 0),
                       nir_channel(b, xy, 1),
@@ -2771,9 +2809,9 @@ tu_shader_create(struct tu_device *dev,
           * multiview is enabled.
           */
          .use_view_id_for_layer = key->multiview_mask != 0,
-         .unscaled_depth_stencil_ir3 =
+         .gmem_depth_stencil_ir3 =
             key->dynamic_renderpass && !(key->read_only_input_attachments & 1),
-         .unscaled_input_attachment_ir3 =
+         .gmem_input_attachment_ir3 =
             key->dynamic_renderpass ?
             ~(key->read_only_input_attachments >> 1) :
             key->unscaled_input_fragcoord,
@@ -2797,6 +2835,7 @@ tu_shader_create(struct tu_device *dev,
                         key->max_fdm_layers, 1),
       .adjust_fragcoord = key->fragment_density_map,
       .use_layer = !key->multiview_mask,
+      .adjust_gmem_fragcoord = key->fragment_density_map && key->custom_resolve,
    };
    NIR_PASS(_, nir, tu_nir_lower_fdm, &fdm_options);
 

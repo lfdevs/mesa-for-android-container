@@ -2034,6 +2034,8 @@ prepare_dcd(struct panvk_cmd_buffer *cmdbuf,
                !(rt_read & rt_written) && !alpha_to_coverage &&
                !cmdbuf->state.gfx.cb.info.any_dest_read;
 
+            cfg.allow_forward_pixel_to_be_killed = !fs->info.writes_global;
+
             bool writes_zs = writes_z || writes_s;
             bool zs_always_passes = ds_test_always_passes(cmdbuf);
             bool oq = cmdbuf->state.gfx.occlusion_query.mode !=

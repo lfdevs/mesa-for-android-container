@@ -177,14 +177,8 @@ kk_get_device_features(
       .shaderStorageBufferArrayDynamicIndexing = true,
       .shaderStorageImageArrayDynamicIndexing = true,
       .shaderStorageImageExtendedFormats = true,
-      /* TODO_KOSMICKRISP
-       * Disabled because the following test
-       * dEQP-VK.api.format_feature_flags2.r8_unorm and similars fail, need to
-       * set VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT and
-       * VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT for those formats.
-       * This may trigger more tests that haven't been run yet */
-      .shaderStorageImageReadWithoutFormat = false,
-      .shaderStorageImageWriteWithoutFormat = false,
+      .shaderStorageImageReadWithoutFormat = true,
+      .shaderStorageImageWriteWithoutFormat = true,
       .shaderUniformBufferArrayDynamicIndexing = true,
       .textureCompressionASTC_LDR = true,
       .textureCompressionBC = true,

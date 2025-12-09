@@ -61,11 +61,9 @@ static void
 update_framebuffer_size(struct pipe_framebuffer_state *framebuffer,
                         struct pipe_surface *surface)
 {
-   uint16_t width, height;
+   unsigned width, height;
    assert(surface);
    pipe_surface_size(surface, &width, &height);
-   assert(width  < USHRT_MAX);
-   assert(height < USHRT_MAX);
    framebuffer->width  = MIN2(framebuffer->width,  width);
    framebuffer->height = MIN2(framebuffer->height, height);
 }
@@ -214,11 +212,6 @@ st_update_framebuffer_state( struct st_context *st )
       assert(framebuffer.zsbuf.texture->bind & PIPE_BIND_DEPTH_STENCIL);
    }
 #endif
-
-   if (framebuffer.width == USHRT_MAX)
-      framebuffer.width = 0;
-   if (framebuffer.height == USHRT_MAX)
-      framebuffer.height = 0;
 
    cso_set_framebuffer(st->cso_context, &framebuffer);
 

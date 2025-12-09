@@ -117,7 +117,7 @@ impl PipeResourceOwned {
         self.as_ref().width0
     }
 
-    pub fn height(&self) -> u16 {
+    pub fn height(&self) -> u32 {
         self.as_ref().height0
     }
 

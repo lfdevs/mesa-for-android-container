@@ -433,7 +433,7 @@ ac_nir_mem_vectorize_callback(unsigned align_mul, unsigned align_offset, unsigne
                               nir_intrinsic_instr *low, nir_intrinsic_instr *high, void *data);
 
 bool
-ac_nir_scalarize_overfetching_loads_callback(const nir_instr *instr, const void *data);
+ac_nir_scalarize_overfetching_loads_callback(const nir_intrinsic_instr *intr, const void *data);
 
 bool
 ac_nir_store_may_be_subdword(const nir_intrinsic_instr *instr);

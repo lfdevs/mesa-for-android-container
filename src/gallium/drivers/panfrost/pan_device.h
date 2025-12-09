@@ -63,8 +63,11 @@ extern "C" {
 #define PAN_MAX_CONST_BUFFERS 16
 
 /* TODO: Mali hardware can texture up to 64k textures, but the
- * Gallium interface limits us to 32k at the moment */
-#define PAN_MAX_MIP_LEVELS 16
+ * Gallium interface limits us to 32k at the moment
+ * Also dEQP-GLES31.functional.fbo.no_attachments.maximums.all crashes with
+ * 32k textures.
+ */
+#define PAN_MAX_MIP_LEVELS 15
 
 /* How many power-of-two levels in the BO cache do we want? 2^12
  * minimum chosen as it is the page size that all allocations are

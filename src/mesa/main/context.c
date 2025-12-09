@@ -376,7 +376,6 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    assert(consts);
 
    /* Constants, may be overriden (usually only reduced) by device drivers */
-   consts->MaxTextureMbytes = MAX_TEXTURE_MBYTES;
    consts->MaxTextureSize = 1 << (MAX_TEXTURE_LEVELS - 1);
    consts->Max3DTextureLevels = MAX_TEXTURE_LEVELS;
    consts->MaxCubeTextureLevels = MAX_TEXTURE_LEVELS;

@@ -231,7 +231,7 @@ i915_clear_blitter(struct pipe_context *pipe, unsigned buffers,
          struct pipe_surface *ps = &framebuffer->cbufs[i];
 
          if (ps->texture) {
-            uint16_t width, height;
+            unsigned width, height;
             pipe_surface_size(ps, &width, &height);
             pipe->clear_render_target(pipe, ps, color, 0, 0, width,
                                       height, true);
@@ -241,7 +241,7 @@ i915_clear_blitter(struct pipe_context *pipe, unsigned buffers,
 
    if (buffers & PIPE_CLEAR_DEPTHSTENCIL) {
       struct pipe_surface *ps = &framebuffer->zsbuf;
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(ps, &width, &height);
       pipe->clear_depth_stencil(pipe, ps, buffers & PIPE_CLEAR_DEPTHSTENCIL,
                                 depth, stencil, 0, 0, width, height,

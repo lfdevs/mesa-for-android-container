@@ -1773,6 +1773,12 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
          ~attachments_referenced;
    }
 
+   if (builder->state &
+       VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
+      keys[MESA_SHADER_FRAGMENT].custom_resolve =
+         builder->graphics_state.rp->custom_resolve;
+   }
+
    if (builder->create_flags &
        VK_PIPELINE_CREATE_2_LINK_TIME_OPTIMIZATION_BIT_EXT) {
       for (unsigned i = 0; i < builder->num_libraries; i++) {
@@ -2578,6 +2584,7 @@ struct apply_viewport_state {
    bool share_scale;
    /* See tu_pipeline::fake_single_viewport */
    bool fake_single_viewport;
+   bool custom_resolve;
 };
 
 /* It's a hardware restriction that the window offset (i.e. common_bin_offset)
@@ -2624,7 +2631,8 @@ fdm_apply_viewports(struct tu_cmd_buffer *cmd, struct tu_cs *cs, void *data,
                     VkOffset2D common_bin_offset,
                     const VkOffset2D *hw_viewport_offsets,
                     unsigned views,
-                    const VkExtent2D *frag_areas, const VkRect2D *bins)
+                    const VkExtent2D *frag_areas, const VkRect2D *bins,
+                    bool binning)
 {
    const struct apply_viewport_state *state =
       (const struct apply_viewport_state *)data;
@@ -2653,9 +2661,16 @@ fdm_apply_viewports(struct tu_cmd_buffer *cmd, struct tu_cs *cs, void *data,
        */
       VkViewport viewport =
          state->fake_single_viewport ? state->vp.viewports[0] : state->vp.viewports[i];
-      if (frag_area.width == 1 && frag_area.height == 1 &&
-          common_bin_offset.x == bin.offset.x &&
-          common_bin_offset.y == bin.offset.y) {
+      if ((frag_area.width == 1 && frag_area.height == 1 &&
+           common_bin_offset.x == bin.offset.x &&
+           common_bin_offset.y == bin.offset.y) ||
+          /* When in a custom resolve operation (TODO: and using
+           * non-subsampled images) we switch to framebuffer coordinates so we
+           * shouldn't apply the transform.  However the binning pass isn't
+           * aware of this, so we have to keep applying the transform for
+           * binning.
+           */
+          (state->custom_resolve && !binning)) {
          vp.viewports[i] = viewport;
          continue;
       }
@@ -2692,6 +2707,7 @@ tu6_emit_viewport_fdm(struct tu_cs *cs, struct tu_cmd_buffer *cmd,
       .share_scale = !cmd->state.per_view_viewport &&
          !cmd->state.per_layer_viewport,
       .fake_single_viewport = cmd->state.fake_single_viewport,
+      .custom_resolve = cmd->state.subpass->custom_resolve,
    };
    if (cmd->state.per_view_viewport)
       state.vp.viewport_count = num_views;
@@ -2753,7 +2769,8 @@ fdm_apply_scissors(struct tu_cmd_buffer *cmd, struct tu_cs *cs, void *data,
                    VkOffset2D common_bin_offset,
                    const VkOffset2D *hw_viewport_offsets,
                    unsigned views,
-                   const VkExtent2D *frag_areas, const VkRect2D *bins)
+                   const VkExtent2D *frag_areas, const VkRect2D *bins,
+                   bool binning)
 {
    const struct apply_viewport_state *state =
       (const struct apply_viewport_state *)data;
@@ -2781,6 +2798,19 @@ fdm_apply_scissors(struct tu_cmd_buffer *cmd, struct tu_cs *cs, void *data,
                                                 common_bin_offset);
       offset.x -= hw_viewport_offset.x;
       offset.y -= hw_viewport_offset.y;
+
+      /* Disable scaling and offset when doing a custom resolve to a
+       * non-subsampled image and not in the binning pass, because we
+       * use framebuffer coordinates.
+       *
+       * TODO: When we support subsampled images, only do this for
+       * non-subsampled images.
+       */
+      if (state->custom_resolve && !binning) {
+         offset = (VkOffset2D) {};
+         frag_area = (VkExtent2D) {1, 1};
+      }
+
       VkOffset2D min = {
          scissor.offset.x / frag_area.width + offset.x,
          scissor.offset.y / frag_area.width + offset.y,
@@ -2791,12 +2821,20 @@ fdm_apply_scissors(struct tu_cmd_buffer *cmd, struct tu_cs *cs, void *data,
       };
 
       /* Intersect scissor with the scaled bin, this essentially replaces the
-       * window scissor.
+       * window scissor. With custom resolve (TODO: and non-subsampled images)
+       * we have to use the unscaled bin instead.
        */
       uint32_t scaled_width = bin.extent.width / frag_area.width;
       uint32_t scaled_height = bin.extent.height / frag_area.height;
-      uint32_t bin_x = common_bin_offset.x - hw_viewport_offset.x;
-      uint32_t bin_y = common_bin_offset.y - hw_viewport_offset.y;
+      int32_t bin_x;
+      int32_t bin_y;
+      if (state->custom_resolve && !binning) {
+         bin_x = bin.offset.x;
+         bin_y = bin.offset.y;
+      } else {
+         bin_x = common_bin_offset.x - hw_viewport_offset.x;
+         bin_y = common_bin_offset.y - hw_viewport_offset.y;
+      }
       vp.scissors[i].offset.x = MAX2(min.x, bin_x);
       vp.scissors[i].offset.y = MAX2(min.y, bin_y);
       vp.scissors[i].extent.width =
@@ -2818,6 +2856,7 @@ tu6_emit_scissor_fdm(struct tu_cs *cs, struct tu_cmd_buffer *cmd,
       .share_scale = !cmd->state.per_view_viewport &&
          !cmd->state.per_layer_viewport,
       .fake_single_viewport = cmd->state.fake_single_viewport,
+      .custom_resolve = cmd->state.subpass->custom_resolve,
    };
    if (cmd->state.per_view_viewport)
       state.vp.scissor_count = num_views;
@@ -4430,6 +4469,8 @@ tu_fill_render_pass_state(struct vk_render_pass_state *rp,
       rp->color_attachment_formats[i] = pass->attachments[a].format;
       rp->attachments |= MESA_VK_RP_ATTACHMENT_COLOR_BIT(i);
    }
+
+   rp->custom_resolve = subpass->custom_resolve;
 }
 
 static void

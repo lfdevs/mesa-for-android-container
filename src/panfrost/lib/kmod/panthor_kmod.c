@@ -286,6 +286,10 @@ panthor_dev_query_props(const struct pan_kmod_dev *dev,
          panthor_dev->props.group_priorities.allowed_mask),
    };
 
+   if (dev->driver.version.major > 1 || dev->driver.version.minor >= 6) {
+      props->timestamp_device_coherent = true;
+   }
+
    static_assert(sizeof(props->texture_features) ==
                     sizeof(panthor_dev->props.gpu.texture_features),
                  "Mismatch in texture_features array size");

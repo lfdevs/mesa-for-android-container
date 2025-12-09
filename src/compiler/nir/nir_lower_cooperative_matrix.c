@@ -620,6 +620,8 @@ split_cmat_call_reduce(nir_builder *b,
                   idx = r % (src_split ? src_split->num_row_splits : 1);
                else if (reduce & NIR_CMAT_REDUCE_COLUMN)
                   idx = c % (src_split ? src_split->num_col_splits : 1);
+               else
+                  UNREACHABLE("Unknown NIR_CMAT_REDUCE_*");
 
                nir_deref_instr *deref = recreate_derefs(b, &call->params[0], dst_split->split_vars[didx]);
                b->cursor = nir_before_instr(instr);

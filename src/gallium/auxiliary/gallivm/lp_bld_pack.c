@@ -482,7 +482,10 @@ lp_build_unpack2_native(struct gallivm_state *gallivm,
 
    /* Interleave bits */
 #if UTIL_ARCH_LITTLE_ENDIAN
-   if (src_type.length * src_type.width == 256 && util_get_cpu_caps()->has_avx2) {
+   if (src_type.length * src_type.width == 256 &&
+       (dst_type.width == 16 || dst_type.width == 32) &&
+       util_get_cpu_caps()->has_avx2) {
+      /* This has to match the intrinsics in lp_build_pack2_native() */
       *dst_lo = lp_build_interleave2_half(gallivm, src_type, src, msb, 0);
       *dst_hi = lp_build_interleave2_half(gallivm, src_type, src, msb, 1);
    } else {

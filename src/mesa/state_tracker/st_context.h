@@ -315,7 +315,7 @@ struct st_context
       enum pipe_format dst_format;
       unsigned level;
       unsigned layer;
-      unsigned hits;
+      size_t hits;
    } readpix_cache;
 
    /** for glClear */

@@ -726,60 +726,6 @@ _mesa_get_tex_max_num_levels(GLenum target, GLsizei width, GLsizei height,
 }
 
 
-#if 000 /* not used anymore */
-/*
- * glTexImage[123]D can accept a NULL image pointer.  In this case we
- * create a texture image with unspecified image contents per the OpenGL
- * spec.
- */
-static GLubyte *
-make_null_texture(GLint width, GLint height, GLint depth, GLenum format)
-{
-   const GLint components = _mesa_components_in_format(format);
-   const GLint numPixels = width * height * depth;
-   GLubyte *data = (GLubyte *) malloc(numPixels * components * sizeof(GLubyte));
-
-#if MESA_DEBUG
-   /*
-    * Let's see if anyone finds this.  If glTexImage2D() is called with
-    * a NULL image pointer then load the texture image with something
-    * interesting instead of leaving it indeterminate.
-    */
-   if (data) {
-      static const char message[8][32] = {
-         "   X   X  XXXXX   XXX     X    ",
-         "   XX XX  X      X   X   X X   ",
-         "   X X X  X      X      X   X  ",
-         "   X   X  XXXX    XXX   XXXXX  ",
-         "   X   X  X          X  X   X  ",
-         "   X   X  X      X   X  X   X  ",
-         "   X   X  XXXXX   XXX   X   X  ",
-         "                               "
-      };
-
-      GLubyte *imgPtr = data;
-      GLint h, i, j, k;
-      for (h = 0; h < depth; h++) {
-         for (i = 0; i < height; i++) {
-            GLint srcRow = 7 - (i % 8);
-            for (j = 0; j < width; j++) {
-               GLint srcCol = j % 32;
-               GLubyte texel = (message[srcRow][srcCol]=='X') ? 255 : 70;
-               for (k = 0; k < components; k++) {
-                  *imgPtr++ = texel;
-               }
-            }
-         }
-      }
-   }
-#endif
-
-   return data;
-}
-#endif
-
-
-
 /**
  * Set the size and format-related fields of a gl_texture_image struct
  * to zero.  This is used when a proxy texture test fails.
@@ -1396,7 +1342,7 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target,
       for (l = 0; l < numLevels; l++) {
          GLint nextWidth, nextHeight, nextDepth;
 
-         bytes += _mesa_format_image_size64(format, width, height, depth);
+         bytes += _mesa_format_image_size(format, width, height, depth);
 
          if (_mesa_next_mipmap_level_size(target, 0, width, height, depth,
                                           &nextWidth, &nextHeight,
@@ -1412,7 +1358,7 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target,
       /* We just compute the size of one mipmap level.  This is the path
        * taken for glTexImage(GL_PROXY_TEXTURE_x).
        */
-      bytes = _mesa_format_image_size64(format, width, height, depth);
+      bytes = _mesa_format_image_size(format, width, height, depth);
    }
 
    bytes *= _mesa_num_tex_faces(target);
@@ -1423,7 +1369,7 @@ _mesa_test_proxy_teximage(struct gl_context *ctx, GLenum target,
    /* We just check if the image size is less than MaxTextureMbytes.
     * Some drivers may do more specific checks.
     */
-   return mbytes <= (uint64_t) ctx->Const.MaxTextureMbytes;
+   return mbytes <= (uint64_t) ctx->screen->caps.max_texture_mb;
 }
 
 
@@ -1773,7 +1719,7 @@ mutable_tex_object(struct gl_texture_object *texObj)
 /**
  * Return expected size of a compressed texture.
  */
-static GLuint
+static size_t
 compressed_tex_size(const struct gl_context *ctx, GLsizei width, GLsizei height,
                     GLsizei depth, GLenum glformat)
 {
@@ -2130,10 +2076,10 @@ compressed_texture_error_check(struct gl_context *ctx, GLint dimensions,
                                GLenum target, struct gl_texture_object* texObj,
                                GLint level, GLenum internalFormat, GLsizei width,
                                GLsizei height, GLsizei depth, GLint border,
-                               GLsizei imageSize, const GLvoid *data)
+                               size_t imageSize, const GLvoid *data)
 {
    const GLint maxLevels = _mesa_max_texture_levels(ctx, target);
-   GLint expectedSize;
+   size_t expectedSize;
    GLenum error = GL_NO_ERROR;
    char *reason = ""; /* no error */
 
@@ -3234,7 +3180,7 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
       case GL_PALETTE8_RGBA4_OES:
       case GL_PALETTE8_RGB5_A1_OES:
          _mesa_cpal_compressed_teximage2d(target, level, internalFormat,
-                                          width, height, imageSize, pixels);
+                                          width, height, pixels);
          return;
       }
    }
@@ -5717,11 +5663,11 @@ compressed_subtexture_error_check(struct gl_context *ctx, GLint dims,
                                   GLenum target, GLint level,
                                   GLint xoffset, GLint yoffset, GLint zoffset,
                                   GLsizei width, GLsizei height, GLsizei depth,
-                                  GLenum format, GLsizei imageSize,
+                                  GLenum format, size_t imageSize,
                                   const GLvoid *data, const char *callerName)
 {
    struct gl_texture_image *texImage;
-   GLint expectedSize;
+   size_t expectedSize;
 
    GLenum is_generic_compressed_token =
       _mesa_generic_compressed_format_to_uncompressed_format(format) !=
@@ -5765,7 +5711,7 @@ compressed_subtexture_error_check(struct gl_context *ctx, GLint dims,
 
    expectedSize = compressed_tex_size(ctx, width, height, depth, format);
    if (expectedSize != imageSize) {
-      _mesa_error(ctx, GL_INVALID_VALUE, "%s(size=%d)", callerName, imageSize);
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s(size=%zu)", callerName, imageSize);
       return GL_TRUE;
    }
 
@@ -6000,7 +5946,7 @@ compressed_texture_sub_image(struct gl_context *ctx, GLuint dims,
                              GLenum target, GLint level, GLint xoffset,
                              GLint yoffset, GLint zoffset, GLsizei width,
                              GLsizei height, GLsizei depth, GLenum format,
-                             GLsizei imageSize, const GLvoid *data)
+                             size_t imageSize, const GLvoid *data)
 {
    FLUSH_VERTICES(ctx, 0, 0);
 
@@ -6041,7 +5987,7 @@ static void
 compressed_tex_sub_image(unsigned dim, GLenum target, GLuint textureOrIndex,
                          GLint level, GLint xoffset, GLint yoffset,
                          GLint zoffset, GLsizei width, GLsizei height,
-                         GLsizei depth, GLenum format, GLsizei imageSize,
+                         GLsizei depth, GLenum format, size_t imageSize,
                          const GLvoid *data, enum tex_mode mode,
                          const char *caller)
 {
@@ -6111,7 +6057,7 @@ compressed_tex_sub_image(unsigned dim, GLenum target, GLuint textureOrIndex,
        (mode == TEX_MODE_DSA_ERROR || mode == TEX_MODE_DSA_NO_ERROR) &&
        texObj->Target == GL_TEXTURE_CUBE_MAP) {
       const char *pixels = data;
-      GLint image_stride;
+      size_t image_stride;
 
       /* Make sure the texture object is a proper cube.
        * (See texturesubimage in teximage.c for details on why this check is
@@ -6139,6 +6085,7 @@ compressed_tex_sub_image(unsigned dim, GLenum target, GLuint textureOrIndex,
                                                 texImage->Height, 1);
 
          pixels += image_stride;
+         assert(imageSize >= image_stride);
          imageSize -= image_stride;
       }
    } else {

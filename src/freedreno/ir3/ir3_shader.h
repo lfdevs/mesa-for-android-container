@@ -107,7 +107,11 @@ struct ir3_driver_params_fs {
    uint32_t frag_size;
    uint32_t __pad_09;
    uint32_t frag_offset;
-   uint32_t __pad_11_12[2];
+   uint32_t __pad_11;
+   uint32_t gmem_frag_scale;
+   uint32_t __pad_13;
+   uint32_t gmem_frag_offset;
+   uint32_t __pad_15;
 };
 #define IR3_DP_FS(name) dword_offsetof(struct ir3_driver_params_fs, name)
 

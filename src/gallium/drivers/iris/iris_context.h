@@ -832,6 +832,10 @@ enum iris_context_priority {
    IRIS_CONTEXT_HIGH_PRIORITY
 };
 
+struct iris_scissor_state {
+   uint16_t minx, miny, maxx, maxy;
+};
+
 /**
  * The API context (derived from pipe_context).
  *
@@ -1005,7 +1009,7 @@ struct iris_context {
       struct pipe_blend_color blend_color;
       struct pipe_poly_stipple poly_stipple;
       struct pipe_viewport_state viewports[IRIS_MAX_VIEWPORTS];
-      struct pipe_scissor_state scissors[IRIS_MAX_VIEWPORTS];
+      struct iris_scissor_state scissors[IRIS_MAX_VIEWPORTS];
       struct pipe_stencil_ref stencil_ref;
       PIPE_FB_SURFACES; //STOP USING THIS
       struct pipe_framebuffer_state framebuffer;

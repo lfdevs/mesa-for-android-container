@@ -477,6 +477,8 @@ struct r600_viewports {
 struct r600_window_rectangles {
 	unsigned			number;
 	bool				include;
+	bool				fbo_cayman_workaround;
+	bool				viewport_cayman_workaround;
 	struct pipe_scissor_state	states[R600_MAX_WINDOW_RECTANGLES];
 	struct r600_atom		atom;
 };
@@ -849,6 +851,8 @@ void r600_texture_transfer_unmap(struct pipe_context *ctx,
 /* r600_viewport.c */
 void evergreen_apply_scissor_bug_workaround(struct r600_common_context *rctx,
 					    struct pipe_scissor_state *scissor);
+void cayman_apply_scissor_workaround_1x1(struct r600_common_context *rctx,
+					 struct radeon_cmdbuf *cs);
 void r600_update_vs_writes_viewport_index(struct r600_common_context *rctx,
 					  struct tgsi_shader_info *info);
 void r600_init_viewport_functions(struct r600_common_context *rctx);

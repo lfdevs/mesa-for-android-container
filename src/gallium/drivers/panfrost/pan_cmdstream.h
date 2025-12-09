@@ -225,6 +225,11 @@ panfrost_fs_required(struct panfrost_compiled_shader *fs,
    if (fs->info.fs.sidefx)
       return true;
 
+   /* If alpha to coverage is enabled we need to execute, as
+    * writing the pixel can modify occlusion query results. */
+   if (blend->base.alpha_to_coverage)
+      return true;
+
    /* Using an empty FS requires early-z to be enabled, but alpha test
     * needs it disabled. Alpha test is only native on Midgard, so only
     * check there.

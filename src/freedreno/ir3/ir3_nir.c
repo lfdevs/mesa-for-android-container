@@ -137,10 +137,9 @@ ir3_load_driver_ubo_indirect(nir_builder *b, unsigned components,
 }
 
 static bool
-ir3_nir_should_scalarize_mem(const nir_instr *instr, const void *data)
+ir3_nir_should_scalarize_mem(const nir_intrinsic_instr *intrin, const void *data)
 {
    const struct ir3_compiler *compiler = data;
-   const nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
    /* Scalarize load_ssbo's that we could otherwise lower to isam,
     * as the tex cache benefit outweighs the benefit of vectorizing
@@ -1435,11 +1434,19 @@ ir3_get_driver_param_info(const nir_shader *shader, nir_intrinsic_instr *intr,
       break;
    case nir_intrinsic_load_frag_size_ir3:
       param_info->offset = IR3_DP_FS(frag_size);
-      param_info->extra_size = 4 * (nir_intrinsic_range(intr) - 1);
+      param_info->extra_size = 8 * (nir_intrinsic_range(intr) - 1);
       break;
    case nir_intrinsic_load_frag_offset_ir3:
       param_info->offset = IR3_DP_FS(frag_offset);
-      param_info->extra_size = 4 * (nir_intrinsic_range(intr) - 1);
+      param_info->extra_size = 8 * (nir_intrinsic_range(intr) - 1);
+      break;
+   case nir_intrinsic_load_gmem_frag_scale_ir3:
+      param_info->offset = IR3_DP_FS(gmem_frag_scale);
+      param_info->extra_size = 8 * (nir_intrinsic_range(intr) - 1);
+      break;
+   case nir_intrinsic_load_gmem_frag_offset_ir3:
+      param_info->offset = IR3_DP_FS(gmem_frag_offset);
+      param_info->extra_size = 8 * (nir_intrinsic_range(intr) - 1);
       break;
    case nir_intrinsic_load_frag_invocation_count:
       param_info->offset = IR3_DP_FS(frag_invocation_count);

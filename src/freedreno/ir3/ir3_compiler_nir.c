@@ -3113,26 +3113,42 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       dst[0] = create_driver_param(ctx, IR3_DP_FS(frag_invocation_count));
       break;
    case nir_intrinsic_load_frag_size_ir3:
-   case nir_intrinsic_load_frag_offset_ir3: {
-      unsigned param =
-         intr->intrinsic == nir_intrinsic_load_frag_size_ir3 ?
-         IR3_DP_FS(frag_size) : IR3_DP_FS(frag_offset);
+   case nir_intrinsic_load_frag_offset_ir3:
+   case nir_intrinsic_load_gmem_frag_scale_ir3:
+   case nir_intrinsic_load_gmem_frag_offset_ir3: {
+      unsigned param;
+      switch (intr->intrinsic) {
+      case nir_intrinsic_load_frag_size_ir3:
+         param = IR3_DP_FS(frag_size);
+         break;
+      case nir_intrinsic_load_frag_offset_ir3:
+         param = IR3_DP_FS(frag_offset);
+         break;
+      case nir_intrinsic_load_gmem_frag_scale_ir3:
+         param = IR3_DP_FS(gmem_frag_scale);
+         break;
+      case nir_intrinsic_load_gmem_frag_offset_ir3:
+         param = IR3_DP_FS(gmem_frag_offset);
+         break;
+      default:
+         UNREACHABLE("bad intrinsic");
+      }
       if (nir_src_is_const(intr->src[0])) {
          uint32_t view = nir_src_as_uint(intr->src[0]);
          for (int i = 0; i < dest_components; i++) {
-            dst[i] = create_driver_param(ctx, param + 4 * view + i);
+            dst[i] = create_driver_param(ctx, param + 8 * view + i);
          }
          create_rpt = true;
       } else {
          struct ir3_instruction *view = ir3_get_src(ctx, &intr->src[0])[0];
          for (int i = 0; i < dest_components; i++) {
             dst[i] = create_driver_param_indirect(ctx, param + i,
-                                                  ir3_get_addr0(ctx, view, 4));
+                                                  ir3_get_addr0(ctx, view, 8));
          }
          ctx->so->constlen =
             MAX2(ctx->so->constlen,
                  const_state->allocs.consts[IR3_CONST_ALLOC_DRIVER_PARAMS].offset_vec4 +
-                    param / 4 + nir_intrinsic_range(intr));
+                    param / 4 + nir_intrinsic_range(intr) * 2);
       }
       break;
    }

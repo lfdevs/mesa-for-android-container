@@ -47,10 +47,8 @@ def was_good():
 
 
 def bisect(args):
-    lo = 0
-    hi = (1 << (8 * 32)) - 1
-    lo = f'{lo:064x}'
-    hi = f'{hi:064x}'
+    lo = f'{args.lo:064x}'
+    hi = f'{args.hi:064x}'
 
     # Do an initial run to sanity check that the user has actually made
     # nir_shader_bisect_select() select some broken behavior.
@@ -68,7 +66,7 @@ def bisect(args):
             for shader in bad:
                 print(f"Bisected to source_blake3 {shader}")
                 print(
-                    f"You can now replace nir_shader_bisect_select() with _mesa_printed_blake3_equal(s->info.source_blake3, (uint32_t[]){shader})")
+                    f"You can now replace nir_shader_bisect_select() with _mesa_printed_blake3_equal(s->info.source_blake3, (uint32_t[]){shader[0]})")
             exit(0)
         else:
             num = len(bad)
@@ -95,6 +93,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('--lo', type=lambda x: int(x, base=16),
+                        default=0,
+                        help="NIR_SHADER_BISECT_LO from a bad range, to continue a cancelled run")
+    parser.add_argument('--hi', type=lambda x: int(x, base=16),
+                        default=(1 << (8 * 32)) - 1,
+                        help="NIR_SHADER_BISECT_HI from a bad range, to continue a cancelled run")
     parser.add_argument('cmd')
     parser.add_argument('cmd_args', nargs=argparse.REMAINDER)
     args = parser.parse_args()

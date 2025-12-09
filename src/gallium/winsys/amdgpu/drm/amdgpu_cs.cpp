@@ -1392,12 +1392,7 @@ static int amdgpu_cs_submit_ib_kernelq(struct amdgpu_cs *acs,
 
    assert(num_chunks <= 8);
 
-   /* Submit the command buffer.
-    *
-    * The kernel returns -ENOMEM with many parallel processes using GDS such as test suites
-    * quite often, but it eventually succeeds after enough attempts. This happens frequently
-    * with dEQP using NGG streamout.
-    */
+   /* Submit the command buffer. */
    int r = 0;
 
    do {
@@ -1406,7 +1401,12 @@ static int amdgpu_cs_submit_ib_kernelq(struct amdgpu_cs *acs,
          os_time_sleep(1000);
 
       r = ac_drm_cs_submit_raw2(aws->dev, acs->ctx->ctx_handle, 0, num_chunks, chunks, seq_no);
-   } while (r == -ENOMEM);
+
+      /* The kernel returns -ENOMEM with many parallel processes using GDS such as test suites
+       * quite often, but it eventually succeeds after enough attempts. This happens frequently
+       * with dEQP using NGG streamout.
+       */
+   } while (r == -ENOMEM && aws->allocated_oa);
 
    return r;
 }
@@ -2048,21 +2048,7 @@ static void amdgpu_cs_submit_ib(void *job, void *gdata, int thread_index)
       r = 0;
    } else {
       if (queue_type != USERQ) {
-         /* Submit the command buffer.
-          *
-          * The kernel returns -ENOMEM with many parallel processes using GDS such as test suites
-          * quite often, but it eventually succeeds after enough attempts. This happens frequently
-          * with dEQP using NGG streamout.
-          */
-         r = 0;
-
-         do {
-            /* Wait 1 ms and try again. */
-            if (r == -ENOMEM)
-               os_time_sleep(1000);
-
-            r = amdgpu_cs_submit_ib_kernelq(acs, num_submit_real_buffers, bo_list, &seq_no);
-         } while (r == -ENOMEM);
+         r = amdgpu_cs_submit_ib_kernelq(acs, num_submit_real_buffers, bo_list, &seq_no);
 
          if (!r) {
             /* Success. */
@@ -2315,10 +2301,12 @@ static int amdgpu_cs_flush(struct radeon_cmdbuf *rcs,
                            RADEON_USAGE_READ | RADEON_PRIO_IB, (radeon_bo_domain)0);
    }
 
+   simple_mtx_lock(&aws->stats_lock);
    if (acs->ip_type == AMD_IP_GFX)
       aws->num_gfx_IBs++;
    else if (acs->ip_type == AMD_IP_SDMA)
       aws->num_sdma_IBs++;
+   simple_mtx_unlock(&aws->stats_lock);
 
    return error_code;
 }

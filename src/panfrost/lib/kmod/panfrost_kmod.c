@@ -211,6 +211,9 @@ panfrost_dev_query_props(const struct pan_kmod_dev *dev,
          fd, DRM_PANFROST_PARAM_SYSTEM_TIMESTAMP_FREQUENCY, true, 0);
    }
 
+   /* Device coherent timestamps are always enabled on panfrost */
+   props->timestamp_device_coherent = true;
+
    /* Support for priorities was added in panfrost 1.5, assumes default
     * priority as medium if the param doesn't exist. */
    uint64_t prios =

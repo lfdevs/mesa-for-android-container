@@ -49,32 +49,32 @@ _mesa_pack_bitmap(GLint width, GLint height, const GLubyte *source,
 
 
 extern void
-_mesa_unpack_stencil_span(struct gl_context *ctx, GLuint n,
+_mesa_unpack_stencil_span(struct gl_context *ctx, size_t n,
                           GLenum dstType, GLvoid *dest,
                           GLenum srcType, const GLvoid *source,
                           const struct gl_pixelstore_attrib *srcPacking,
                           GLbitfield transferOps);
 
 extern void
-_mesa_pack_stencil_span(struct gl_context *ctx, GLuint n,
+_mesa_pack_stencil_span(struct gl_context *ctx, size_t n,
                         GLenum dstType, GLvoid *dest, const GLubyte *source,
                         const struct gl_pixelstore_attrib *dstPacking);
 
 
 extern void
-_mesa_unpack_depth_span(struct gl_context *ctx, GLuint n,
+_mesa_unpack_depth_span(struct gl_context *ctx, size_t n,
                         GLenum dstType, GLvoid *dest, GLuint depthMax,
                         GLenum srcType, const GLvoid *source,
                         const struct gl_pixelstore_attrib *srcPacking);
 
 extern void
-_mesa_pack_depth_span(struct gl_context *ctx, GLuint n, GLvoid *dest,
+_mesa_pack_depth_span(struct gl_context *ctx, size_t n, GLvoid *dest,
                       GLenum dstType, const GLfloat *depthSpan,
                       const struct gl_pixelstore_attrib *dstPacking);
 
 
 extern void
-_mesa_pack_depth_stencil_span(struct gl_context *ctx,GLuint n,
+_mesa_pack_depth_stencil_span(struct gl_context *ctx, size_t n,
                               GLenum dstType, GLuint *dest,
                               const GLfloat *depthVals,
                               const GLubyte *stencilVals,
@@ -88,12 +88,12 @@ _mesa_unpack_image(GLuint dimensions,
                    const struct gl_pixelstore_attrib *unpack);
 
 extern void
-_mesa_pack_luminance_from_rgba_float(GLuint n, GLfloat rgba[][4],
+_mesa_pack_luminance_from_rgba_float(size_t n, GLfloat rgba[][4],
                                      GLvoid *dstAddr, GLenum dst_format,
                                      GLbitfield transferOps);
 
 extern void
-_mesa_pack_luminance_from_rgba_integer(GLuint n, GLuint rgba[][4], bool rgba_is_signed,
+_mesa_pack_luminance_from_rgba_integer(size_t n, GLuint rgba[][4], bool rgba_is_signed,
                                        GLvoid *dstAddr, GLenum dst_format,
                                        GLenum dst_type);
 

@@ -2685,7 +2685,7 @@ static void *get_custom_vs(struct blitter_context *blitter)
  */
 void util_blitter_custom_shader(struct blitter_context *blitter,
                                 struct pipe_surface *dstsurf,
-                                uint16_t width, uint16_t height,
+                                unsigned width, unsigned height,
                                 void *custom_vs, void *custom_fs)
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;

@@ -82,6 +82,8 @@ struct tu_subpass
    bool depth_used;
    bool stencil_used;
 
+   bool custom_resolve;
+
    VkSampleCountFlagBits samples;
 
    uint32_t srgb_cntl;

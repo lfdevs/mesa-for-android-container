@@ -171,6 +171,8 @@ begin_end_tp('gmem_store',
 begin_end_tp('sysmem_resolve',
     args=[Arg(type='enum VkFormat',  var='format',   c_format='%s', to_prim_type='vk_format_description({})->short_name')])
 
+begin_end_tp('custom_resolve')
+
 begin_end_tp('blit',
     # TODO: add source megapixels count and target megapixels count arguments
     args=[Arg(type='uint8_t',        var='uses_3d_blit', c_format='%u'),

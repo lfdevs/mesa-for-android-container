@@ -839,45 +839,54 @@ lp_build_mul_norm(struct gallivm_state *gallivm,
                   LLVMValueRef a, LLVMValueRef b)
 {
    LLVMBuilderRef builder = gallivm->builder;
-   struct lp_build_context bld;
-   unsigned n;
-   LLVMValueRef half;
-   LLVMValueRef ab;
 
    assert(!wide_type.floating);
    assert(lp_check_value(wide_type, a));
    assert(lp_check_value(wide_type, b));
 
+   struct lp_build_context bld;
    lp_build_context_init(&bld, gallivm, wide_type);
 
-   n = wide_type.width / 2;
+   unsigned n = wide_type.width / 2;
    if (wide_type.sign) {
       --n;
    }
 
    /*
-    * TODO: for 16bits normalized SSE2 vectors we could consider using PMULHUW
-    * http://ssp.impulsetrain.com/2011/07/03/multiplying-normalized-16-bit-numbers-with-sse2/
+    * Normalize the -2^n case to -2^n - 1 by doing: x += (x == -2^n - 1).
+    * This is because -2^n doesn't actually exist with signed normalized values,
+    * it maps to the same float as -2^n - 1.
     */
-
-   /*
-    * a*b / (2**n - 1) ~= (a*b + (a*b >> n) + half) >> n
-    */
-
-   ab = LLVMBuildMul(builder, a, b, "");
-   ab = LLVMBuildAdd(builder, ab, lp_build_shr_imm(&bld, ab, n), "");
-
-   /*
-    * half = sgn(ab) * 0.5 * (2 ** n) = sgn(ab) * (1 << (n - 1))
-    */
-
-   half = lp_build_const_int_vec(gallivm, wide_type, 1LL << (n - 1));
    if (wide_type.sign) {
-      LLVMValueRef minus_half = LLVMBuildNeg(builder, half, "");
-      LLVMValueRef sign = lp_build_shr_imm(&bld, ab, wide_type.width - 1);
-      half = lp_build_select(&bld, sign, minus_half, half);
+      LLVMValueRef min_value = lp_build_const_int_vec(gallivm, wide_type, 1LL << n);
+      a = LLVMBuildAdd(builder, a, LLVMBuildZExt(builder,
+         LLVMBuildICmp(builder, LLVMIntEQ, a, min_value, ""),
+         bld.int_vec_type, ""), "");
+      b = LLVMBuildAdd(builder, b, LLVMBuildZExt(builder,
+         LLVMBuildICmp(builder, LLVMIntEQ, a, min_value, ""),
+         bld.int_vec_type, ""), "");
    }
-   ab = LLVMBuildAdd(builder, ab, half, "");
+
+   LLVMValueRef ab = LLVMBuildMul(builder, a, b, "");
+
+   /*
+    * It's critical that we round correctly for accuracy against hardware.
+    * Since there is no integer x such that x / (2^n - 1) == 0.5, we don't need
+    * to worry about the even rounding case. For positive values we round with
+    * the next possible value: 2^(n - 1) / (2^n - 1), and for negative with the
+    * previous: (2^(n - 1) - 1) / (2^n - 1).
+    */
+   LLVMValueRef round_positive = lp_build_const_int_vec(gallivm, wide_type, 1LL << (n - 1));
+   LLVMValueRef rounding_term = round_positive;
+   if (wide_type.sign) {
+      LLVMValueRef round_negative = lp_build_const_int_vec(gallivm, wide_type, (1LL << (n - 1)) - 1);
+      rounding_term = lp_build_select(&bld, lp_build_cmp(&bld, PIPE_FUNC_GEQUAL, ab, bld.zero),
+         round_positive, round_negative);
+   }
+   ab = LLVMBuildAdd(builder, ab, rounding_term, "");
+
+   /* Necessary second geometric series term to refine the approximation */
+   ab = LLVMBuildAdd(builder, ab, lp_build_shr_imm(&bld, ab, n), "");
 
    /* Final division */
    ab = lp_build_shr_imm(&bld, ab, n);
@@ -930,19 +939,20 @@ lp_build_mul(struct lp_build_context *bld,
       return ab;
    }
 
-   LLVMValueRef shift = type.fixed
-      ? lp_build_const_int_vec(bld->gallivm, type, type.width/2) : NULL;
-
    LLVMValueRef res;
    if (type.floating)
       res = LLVMBuildFMul(builder, a, b, "");
    else
       res = LLVMBuildMul(builder, a, b, "");
-   if (shift) {
-      if (type.sign)
-         res = LLVMBuildAShr(builder, res, shift, "");
-      else
-         res = LLVMBuildLShr(builder, res, shift, "");
+
+   if (type.fixed) {
+      /* Round half-even */
+      const unsigned half_width = type.width / 2;
+      LLVMValueRef is_odd = lp_build_shr_imm(bld,lp_build_and(bld, res,
+         lp_build_const_int_vec(bld->gallivm, bld->type, 1ll << half_width)), half_width);
+      res = lp_build_add(bld, res, lp_build_const_int_vec(bld->gallivm, type, (1ll << (half_width - 1)) - 1));
+      res = lp_build_add(bld, res, is_odd);
+      res = lp_build_shr_imm(bld, res, half_width);
    }
 
    return res;
@@ -1132,8 +1142,9 @@ lp_build_div(struct lp_build_context *bld,
 /**
  * Linear interpolation helper.
  *
- * @param normalized whether we are interpolating normalized values,
- *        encoded in normalized integers, twice as wide.
+ * @param flags
+ *        LP_BLD_LERP_WIDE_NORMALIZED: whether we are interpolating normalized
+ *        values, encoded in normalized integers, twice as wide.
  *
  * @sa http://www.stereopsis.com/doubleblend.html
  */
@@ -1160,84 +1171,81 @@ lp_build_lerp_simple(struct lp_build_context *bld,
       return lp_build_mad(bld, x, delta, v0);
    }
 
-   if (flags & LP_BLD_LERP_WIDE_NORMALIZED) {
-      if (!bld->type.sign) {
-         if (!(flags & LP_BLD_LERP_PRESCALED_WEIGHTS)) {
-            /*
-             * Scale x from [0, 2**n - 1] to [0, 2**n] by adding the
-             * most-significant-bit to the lowest-significant-bit, so that
-             * later we can just divide by 2**n instead of 2**n - 1.
-             */
-
-            x = lp_build_add(bld, x, lp_build_shr_imm(bld, x, half_width - 1));
-         }
-
-         /* (x * delta) >> n */
-         /*
-          * For this multiply, higher internal precision is required to pass
-          * CTS, the most efficient path to that is pmulhrsw on ssse3 and
-          * above.  This could be opencoded on other arches if conformance was
-          * required.
-          */
-         if (bld->type.width == 16 && bld->type.length == 8 && util_get_cpu_caps()->has_ssse3) {
-            res = lp_build_intrinsic_binary(builder, "llvm.x86.ssse3.pmul.hr.sw.128", bld->vec_type, x, lp_build_shl_imm(bld, delta, 7));
-            res = lp_build_and(bld, res, lp_build_const_int_vec(bld->gallivm, bld->type, 0xff));
-         } else if (bld->type.width == 16 && bld->type.length == 16 && util_get_cpu_caps()->has_avx2) {
-            res = lp_build_intrinsic_binary(builder, "llvm.x86.avx2.pmul.hr.sw", bld->vec_type, x, lp_build_shl_imm(bld, delta, 7));
-            res = lp_build_and(bld, res, lp_build_const_int_vec(bld->gallivm, bld->type, 0xff));
-         } else {
-            res = lp_build_mul(bld, x, delta);
-            res = lp_build_shr_imm(bld, res, half_width);
-         }
-      } else {
-         /*
-          * The rescaling trick above doesn't work for signed numbers, so
-          * use the 2**n - 1 divison approximation in lp_build_mul_norm
-          * instead.
-          */
-         assert(!(flags & LP_BLD_LERP_PRESCALED_WEIGHTS));
-         res = lp_build_mul_norm(bld->gallivm, bld->type, x, delta);
-      }
-   } else {
-      assert(!(flags & LP_BLD_LERP_PRESCALED_WEIGHTS));
-      res = lp_build_mul(bld, x, delta);
-   }
-
    if ((flags & LP_BLD_LERP_WIDE_NORMALIZED) && !bld->type.sign) {
+      if (!(flags & LP_BLD_LERP_PRESCALED_WEIGHTS)) {
+         /*
+          * Scale x from [0, 2**n - 1] to [0, 2**n] by adding the
+          * most-significant-bit to the lowest-significant-bit, so that
+          * later we can just divide by 2**n instead of 2**n - 1.
+          */
+         x = lp_build_add(bld, x, lp_build_shr_imm(bld, x, half_width - 1));
+      }
+
+      /*
+       * To have correct rounding, we must implement (example for 8 bits):
+       *   uint16_t lerp_round_half_even(uint16_t x, uint16_t v0, uint16_t v1)
+       *   {
+       *      uint16_t delta = v1 - v0;
+       *      uint16_t m = x * delta;
+       *      uint16_t is_odd = (m & 0x100) >> 8;
+       *      m += 0x7F + is_odd; // + 0.5 for odd, + ~0.498 for even
+       *      m >>= 8;
+       *      return (uint8_t)v0 + (uint8_t)m;
+       *   }
+       */
+      res = lp_build_mul(bld, x, delta);
+      LLVMValueRef is_odd = lp_build_shr_imm(bld,lp_build_and(bld, res,
+         lp_build_const_int_vec(bld->gallivm, bld->type, 1ll << half_width)), half_width);
+      res = lp_build_add(bld, res, lp_build_const_int_vec(bld->gallivm, bld->type, (1ll << (half_width - 1)) - 1));
+      res = lp_build_add(bld, res, is_odd);
+      res = lp_build_shr_imm(bld, res, half_width);
+
       /*
        * At this point both res and v0 only use the lower half of the bits,
        * the rest is zero. Instead of add / mask, do add with half wide type.
        */
       struct lp_type narrow_type;
-      struct lp_build_context narrow_bld;
-
       memset(&narrow_type, 0, sizeof narrow_type);
       narrow_type.sign   = bld->type.sign;
       narrow_type.width  = bld->type.width/2;
       narrow_type.length = bld->type.length*2;
-
+      struct lp_build_context narrow_bld;
       lp_build_context_init(&narrow_bld, bld->gallivm, narrow_type);
+
       res = LLVMBuildBitCast(builder, res, narrow_bld.vec_type, "");
       v0 = LLVMBuildBitCast(builder, v0, narrow_bld.vec_type, "");
       res = lp_build_add(&narrow_bld, v0, res);
       res = LLVMBuildBitCast(builder, res, bld->vec_type, "");
-   } else {
-      res = lp_build_add(bld, v0, res);
+      return res;
+   }
 
-      if (bld->type.fixed) {
-         /*
-          * We need to mask out the high order bits when lerping 8bit
-          * normalized colors stored on 16bits
-          */
-         /* XXX: This step is necessary for lerping 8bit colors stored on
-          * 16bits, but it will be wrong for true fixed point use cases.
-          * Basically we need a more powerful lp_type, capable of further
-          * distinguishing the values interpretation from the value storage.
-          */
-         LLVMValueRef low_bits;
-         low_bits = lp_build_const_int_vec(bld->gallivm, bld->type, (1 << half_width) - 1);
-         res = LLVMBuildAnd(builder, res, low_bits, "");
-      }
+   assert(!(flags & LP_BLD_LERP_PRESCALED_WEIGHTS));
+   if (flags & LP_BLD_LERP_WIDE_NORMALIZED) {
+      /*
+       * The rescaling trick above doesn't work for signed numbers, so
+       * use the 2**n - 1 divison approximation in lp_build_mul_norm
+       * instead.
+       */
+      res = lp_build_mul_norm(bld->gallivm, bld->type, x, delta);
+   } else {
+      res = lp_build_mul(bld, x, delta);
+   }
+
+   res = lp_build_add(bld, v0, res);
+
+   if (bld->type.fixed) {
+      /*
+       * We need to mask out the high order bits when lerping 8bit
+       * normalized colors stored on 16bits
+       *
+       * XXX: This step is necessary for lerping 8bit colors stored on
+       * 16bits, but it will be wrong for true fixed point use cases.
+       * Basically we need a more powerful lp_type, capable of further
+       * distinguishing the values interpretation from the value storage.
+       */
+      LLVMValueRef low_bits;
+      low_bits = lp_build_const_int_vec(bld->gallivm, bld->type, (1ll << half_width) - 1);
+      res = LLVMBuildAnd(builder, res, low_bits, "");
    }
 
    return res;

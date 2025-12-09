@@ -3726,11 +3726,11 @@ iris_set_scissor_states(struct pipe_context *ctx,
           * a min > max scissor inside the bounds, which produces the expected
           * no rendering.
           */
-         ice->state.scissors[start_slot + i] = (struct pipe_scissor_state) {
+         ice->state.scissors[start_slot + i] = (struct iris_scissor_state) {
             .minx = 1, .maxx = 0, .miny = 1, .maxy = 0,
          };
       } else {
-         ice->state.scissors[start_slot + i] = (struct pipe_scissor_state) {
+         ice->state.scissors[start_slot + i] = (struct iris_scissor_state) {
             .minx = rects[i].minx,     .miny = rects[i].miny,
             .maxx = rects[i].maxx - 1, .maxy = rects[i].maxy - 1,
          };
@@ -10784,7 +10784,7 @@ genX(init_state)(struct iris_context *ice)
 
    /* Default all scissor rectangles to be empty regions. */
    for (int i = 0; i < IRIS_MAX_VIEWPORTS; i++) {
-      ice->state.scissors[i] = (struct pipe_scissor_state) {
+      ice->state.scissors[i] = (struct iris_scissor_state) {
          .minx = 1, .maxx = 0, .miny = 1, .maxy = 0,
       };
    }

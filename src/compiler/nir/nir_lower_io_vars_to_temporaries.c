@@ -48,7 +48,7 @@ struct lower_io_state {
 
 static void
 emit_copies(nir_builder *b, struct exec_list *dest_vars,
-            struct exec_list *src_vars)
+            struct exec_list *src_vars, unsigned stream)
 {
    assert(exec_list_length(dest_vars) == exec_list_length(src_vars));
 
@@ -71,6 +71,29 @@ emit_copies(nir_builder *b, struct exec_list *dest_vars,
        */
       if (src->data.mode == nir_var_mem_pixel_local_out ||
           dest->data.mode == nir_var_mem_pixel_local_in)
+         continue;
+
+      /* Don't copy those variables before emit_vertex that are not emitted
+       * by that emit_vertex instruction.
+       */
+      unsigned stream_mask = 0;
+
+      if (dest->data.stream & NIR_STREAM_PACKED) {
+         unsigned slots = glsl_count_dword_slots(src->type, false);
+
+         assert(slots && slots <= 4);
+
+         for (unsigned i = 0; i < slots; i++) {
+            unsigned stream = (dest->data.stream >> (i * 2)) & 0x3;
+
+            stream_mask |= BITFIELD_BIT(stream);
+         }
+      } else {
+         assert(dest->data.stream < 4);
+         stream_mask = BITFIELD_BIT(dest->data.stream);
+      }
+
+      if (!(BITFIELD_BIT(stream) & stream_mask))
          continue;
 
       /* Can't copy the contents of the temporary back to a read-only
@@ -102,13 +125,14 @@ emit_output_copies_impl(struct lower_io_state *state, nir_function_impl *impl)
             if (intrin->intrinsic == nir_intrinsic_emit_vertex ||
                 intrin->intrinsic == nir_intrinsic_emit_vertex_with_counter) {
                b.cursor = nir_before_instr(&intrin->instr);
-               emit_copies(&b, &state->new_outputs, &state->old_outputs);
+               emit_copies(&b, &state->new_outputs, &state->old_outputs,
+                           nir_intrinsic_stream_id(intrin));
             }
          }
       }
    } else if (impl == state->entrypoint) {
       b.cursor = nir_before_impl(impl);
-      emit_copies(&b, &state->old_outputs, &state->new_outputs);
+      emit_copies(&b, &state->old_outputs, &state->new_outputs, 0);
 
       /* For all other shader types, we need to do the copies right before
        * the jumps to the end block.
@@ -116,7 +140,7 @@ emit_output_copies_impl(struct lower_io_state *state, nir_function_impl *impl)
       set_foreach(&impl->end_block->predecessors, block_entry) {
          struct nir_block *block = (void *)block_entry->key;
          b.cursor = nir_after_block_before_jump(block);
-         emit_copies(&b, &state->new_outputs, &state->old_outputs);
+         emit_copies(&b, &state->new_outputs, &state->old_outputs, 0);
       }
    }
 }
@@ -297,7 +321,7 @@ emit_input_copies_impl(struct lower_io_state *state, nir_function_impl *impl)
 {
    if (impl == state->entrypoint) {
       nir_builder b = nir_builder_at(nir_before_impl(impl));
-      emit_copies(&b, &state->old_inputs, &state->new_inputs);
+      emit_copies(&b, &state->old_inputs, &state->new_inputs, 0);
       if (state->shader->info.stage == MESA_SHADER_FRAGMENT)
          fixup_interpolation(state, impl, &b);
    }

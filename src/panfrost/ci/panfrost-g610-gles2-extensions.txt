@@ -46,7 +46,6 @@ GL_EXT_shader_implicit_conversions
 GL_EXT_shader_integer_mix
 GL_EXT_shader_io_blocks
 GL_EXT_shader_pixel_local_storage
-GL_EXT_shader_realtime_clock
 GL_EXT_shadow_samplers
 GL_EXT_sRGB
 GL_EXT_sRGB_write_control

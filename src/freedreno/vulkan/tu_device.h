@@ -189,6 +189,7 @@ struct tu_instance
    struct driOptionCache dri_options;
    struct driOptionCache available_dri_options;
 
+   uint32_t force_vk_vendor;
    bool dont_care_as_load;
 
    /* Conservative LRZ (default true) invalidates LRZ on draws with

@@ -366,11 +366,11 @@ make_2d_mipmap(enum pipe_format format, GLint border,
       memcpy(dstPtr + (dstWidth - 1) * bpt,
              srcPtr + (srcWidth - 1) * bpt, bpt);
       /* upper-left border pixel */
-      memcpy(dstPtr + dstWidth * (dstHeight - 1) * bpt,
-             srcPtr + srcWidth * (srcHeight - 1) * bpt, bpt);
+      memcpy(dstPtr + (size_t)dstWidth * (dstHeight - 1) * bpt,
+             srcPtr + (size_t)srcWidth * (srcHeight - 1) * bpt, bpt);
       /* upper-right border pixel */
-      memcpy(dstPtr + (dstWidth * dstHeight - 1) * bpt,
-             srcPtr + (srcWidth * srcHeight - 1) * bpt, bpt);
+      memcpy(dstPtr + (size_t)(dstWidth * dstHeight - 1) * bpt,
+             srcPtr + (size_t)(srcWidth * srcHeight - 1) * bpt, bpt);
       /* lower border */
       do_row(format, srcWidthNB,
              srcPtr + bpt,
@@ -378,10 +378,10 @@ make_2d_mipmap(enum pipe_format format, GLint border,
              dstWidthNB, dstPtr + bpt);
       /* upper border */
       do_row(format, srcWidthNB,
-             srcPtr + (srcWidth * (srcHeight - 1) + 1) * bpt,
-             srcPtr + (srcWidth * (srcHeight - 1) + 1) * bpt,
+             srcPtr + (size_t)(srcWidth * (srcHeight - 1) + 1) * bpt,
+             srcPtr + (size_t)(srcWidth * (srcHeight - 1) + 1) * bpt,
              dstWidthNB,
-             dstPtr + (dstWidth * (dstHeight - 1) + 1) * bpt);
+             dstPtr + (size_t)(dstWidth * (dstHeight - 1) + 1) * bpt);
       /* left and right borders */
       if (srcHeight == dstHeight) {
          /* copy border pixel from src to dst */
@@ -423,13 +423,13 @@ make_3d_mipmap(enum pipe_format format, GLint border,
    const GLint dstHeightNB = dstHeight - 2 * border;
    const GLint dstDepthNB = dstDepth - 2 * border;
    GLint img, row;
-   GLint bytesPerSrcImage, bytesPerDstImage;
+   size_t bytesPerSrcImage, bytesPerDstImage;
    GLint srcImageOffset, srcRowOffset;
 
    (void) srcDepthNB; /* silence warnings */
 
-   bytesPerSrcImage = srcRowStride * srcHeight * bpt;
-   bytesPerDstImage = dstRowStride * dstHeight * bpt;
+   bytesPerSrcImage = (size_t)srcRowStride * srcHeight * bpt;
+   bytesPerDstImage = (size_t)dstRowStride * dstHeight * bpt;
 
    /* Offset between adjacent src images to be averaged together */
    srcImageOffset = (srcDepth == dstDepth) ? 0 : 1;
@@ -509,8 +509,8 @@ make_3d_mipmap(enum pipe_format format, GLint border,
             memcpy(dst, src, bpt);
 
             /* do border along [img][row=dstHeight-1][col=0] */
-            src = srcPtr[img * 2] + (srcHeight - 1) * srcRowStride;
-            dst = dstPtr[img] + (dstHeight - 1) * dstRowStride;
+            src = srcPtr[img * 2] + (size_t)(srcHeight - 1) * srcRowStride;
+            dst = dstPtr[img] + (size_t)(dstHeight - 1) * dstRowStride;
             memcpy(dst, src, bpt);
 
             /* do border along [img][row=0][col=dstWidth-1] */
@@ -539,10 +539,10 @@ make_3d_mipmap(enum pipe_format format, GLint border,
 
             /* do border along [img][row=dstHeight-1][col=0] */
             srcA = srcPtr[img * 2 + 0]
-               + (srcHeight - 1) * srcRowStride;
+               + (size_t)(srcHeight - 1) * srcRowStride;
             srcB = srcPtr[img * 2 + srcImageOffset]
-               + (srcHeight - 1) * srcRowStride;
-            dst = dstPtr[img] + (dstHeight - 1) * dstRowStride;
+               + (size_t)(srcHeight - 1) * srcRowStride;
+            dst = dstPtr[img] + (size_t)(dstHeight - 1) * dstRowStride;
             do_row(format, 1, srcA, srcB, 1, dst);
 
             /* do border along [img][row=0][col=dstWidth-1] */
@@ -921,7 +921,8 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
 {
    GLuint level;
    mesa_format temp_format;
-   GLuint temp_src_row_stride, temp_src_img_stride; /* in bytes */
+   GLuint temp_src_row_stride; /* in bytes */
+   size_t temp_src_img_stride; /* in bytes */
    GLubyte *temp_src = NULL, *temp_dst = NULL;
    GLenum temp_datatype;
    GLenum temp_base_format;
@@ -996,7 +997,8 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
       GLint srcWidth, srcHeight, srcDepth;
       GLint dstWidth, dstHeight, dstDepth;
       GLint border;
-      GLuint temp_dst_row_stride, temp_dst_img_stride; /* in bytes */
+      GLuint temp_dst_row_stride; /* in bytes */
+      size_t temp_dst_img_stride; /* in bytes */
       GLint i;
 
       /* get src image parameters */

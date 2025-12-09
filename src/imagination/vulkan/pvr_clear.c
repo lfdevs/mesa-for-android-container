@@ -499,7 +499,7 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
                                   cache_line_size,
                                   &state->usc_multi_layer_vertex_shader_bo);
       if (result != VK_SUCCESS)
-         return result;
+         goto err_free_static_clear_state;
    } else {
       state->usc_multi_layer_vertex_shader_bo = NULL;
    }
@@ -597,6 +597,9 @@ err_free_usc_shader:
 
 err_free_usc_multi_layer_shader:
    pvr_bo_suballoc_free(state->usc_multi_layer_vertex_shader_bo);
+
+err_free_static_clear_state:
+   vk_free(&device->vk.alloc, state);
 
    return result;
 }

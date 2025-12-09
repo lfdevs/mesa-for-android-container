@@ -100,6 +100,17 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
       }
 
       if (non_const >= 0) {
+         nir_instr *parent = nir_def_instr(alu->src[non_const].src.ssa);
+         if (parent->type == nir_instr_type_intrinsic) {
+            /* Don't sink alu that uses ballot(true), as that can be a local system value
+             * and moving the alu then requires a mov in the old location.
+             */
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(parent);
+            if (intrin->intrinsic == nir_intrinsic_ballot &&
+                nir_src_is_const(intrin->src[0]))
+               return false;
+         }
+
          unsigned src_bits = nir_ssa_alu_instr_src_components(alu, non_const) *
                              alu->src[non_const].src.ssa->bit_size;
          unsigned dest_bits = alu->def.num_components * alu->def.bit_size;

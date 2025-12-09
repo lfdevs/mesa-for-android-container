@@ -4043,6 +4043,7 @@ struct apply_sysmem_clear_coords_state {
    unsigned layer;
    float z_clear_val;
    VkRect2D rect;
+   bool custom_resolve;
 };
 
 static void
@@ -4053,7 +4054,8 @@ fdm_apply_sysmem_clear_coords(struct tu_cmd_buffer *cmd,
                               const VkOffset2D *hw_viewport_offsets,
                               unsigned views,
                               const VkExtent2D *frag_areas,
-                              const VkRect2D *bins)
+                              const VkRect2D *bins,
+                              bool binning)
 {
    const struct apply_sysmem_clear_coords_state *state =
       (const struct apply_sysmem_clear_coords_state *)data;
@@ -4064,8 +4066,14 @@ fdm_apply_sysmem_clear_coords(struct tu_cmd_buffer *cmd,
       hw_viewport_offsets[MIN2(state->view, views - 1)];
 
    VkOffset2D offset = tu_fdm_per_bin_offset(frag_area, bin, common_bin_offset);
+
    offset.x -= hw_viewport_offset.x;
    offset.y -= hw_viewport_offset.y;
+
+   if (state->custom_resolve && !binning) {
+      offset = (VkOffset2D) {};
+      frag_area = (VkExtent2D) { 1, 1 };
+   }
 
    unsigned x1 = state->rect.offset.x / frag_area.width + offset.x;
    unsigned x2 = DIV_ROUND_UP(state->rect.offset.x + state->rect.extent.width,
@@ -4251,6 +4259,7 @@ tu_clear_sysmem_attachments(struct tu_cmd_buffer *cmd,
                .layer = rects[i].baseArrayLayer + layer,
                .z_clear_val = z_clear_val,
                .rect = rects[i].rect,
+               .custom_resolve = subpass->custom_resolve,
             };
             tu_create_fdm_bin_patchpoint(cmd, cs, 4, TU_FDM_NONE,
                                          fdm_apply_sysmem_clear_coords,
@@ -4323,6 +4332,7 @@ clear_gmem_attachment(struct tu_cmd_buffer *cmd,
 struct apply_gmem_clear_coords_state {
    unsigned view;
    VkRect2D rect;
+   bool custom_resolve;
 };
 
 static void
@@ -4333,7 +4343,8 @@ fdm_apply_gmem_clear_coords(struct tu_cmd_buffer *cmd,
                             const VkOffset2D *hw_viewport_offsets,
                             unsigned views,
                             const VkExtent2D *frag_areas,
-                            const VkRect2D *bins)
+                            const VkRect2D *bins,
+                            bool binning)
 {
    const struct apply_gmem_clear_coords_state *state =
       (const struct apply_gmem_clear_coords_state *)data;
@@ -4342,6 +4353,11 @@ fdm_apply_gmem_clear_coords(struct tu_cmd_buffer *cmd,
    VkRect2D bin = bins[MIN2(state->view, views - 1)];
 
    VkOffset2D offset = tu_fdm_per_bin_offset(frag_area, bin, common_bin_offset);
+
+   if (state->custom_resolve) {
+      offset = (VkOffset2D) {};
+      frag_area = (VkExtent2D) { 1, 1 };
+   }
 
    unsigned x1 = state->rect.offset.x / frag_area.width + offset.x;
    unsigned x2 = DIV_ROUND_UP(state->rect.offset.x + state->rect.extent.width,
@@ -4491,6 +4507,7 @@ tu_clear_attachments(struct tu_cmd_buffer *cmd,
                      const VkClearRect *pRects)
 {
    struct tu_cs *cs = &cmd->draw_cs;
+   const struct tu_subpass *subpass = cmd->state.subpass;
 
    /* sysmem path behaves like a draw, note we don't have a way of using different
     * flushes for sysmem/gmem, so this needs to be outside of the cond_exec
@@ -4504,8 +4521,11 @@ tu_clear_attachments(struct tu_cmd_buffer *cmd,
     *
     * Similarly, we also use the 3D path when in a secondary command buffer that
     * doesn't know the GMEM layout that will be chosen by the primary.
+    *
+    * Don't use the GMEM path if we are in a custom resolve.
     */
-   if (cmd->state.predication_active || cmd->state.gmem_layout == TU_GMEM_LAYOUT_COUNT) {
+   if (cmd->state.predication_active || cmd->state.gmem_layout == TU_GMEM_LAYOUT_COUNT ||
+       subpass->custom_resolve) {
       tu_clear_sysmem_attachments<CHIP>(cmd, attachmentCount, pAttachments, rectCount, pRects);
       return;
    }
@@ -4514,7 +4534,6 @@ tu_clear_attachments(struct tu_cmd_buffer *cmd,
     * binning time, then emit the clear as a 3D draw so that it contributes to
     * that visibility.
    */
-   const struct tu_subpass *subpass = cmd->state.subpass;
    for (uint32_t i = 0; i < attachmentCount; i++) {
       uint32_t a;
       if (pAttachments[i].aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) {
@@ -4561,6 +4580,7 @@ tu7_clear_attachment_generic_single_rect(
             struct apply_gmem_clear_coords_state state = {
                .view = 0,
                .rect = rect->rect,
+               .custom_resolve = subpass->custom_resolve,
             };
             tu_create_fdm_bin_patchpoint(cmd, cs, 3, TU_FDM_SKIP_BINNING,
                                          fdm_apply_gmem_clear_coords, state);
@@ -4589,6 +4609,7 @@ tu7_clear_attachment_generic_single_rect(
             struct apply_gmem_clear_coords_state state = {
                .view = layer,
                .rect = rect->rect,
+               .custom_resolve = subpass->custom_resolve,
             };
             tu_create_fdm_bin_patchpoint(cmd, cs, 3, TU_FDM_SKIP_BINNING,
                                          fdm_apply_gmem_clear_coords, state);
@@ -4970,7 +4991,8 @@ fdm_apply_load_coords(struct tu_cmd_buffer *cmd,
                       const VkOffset2D *hw_viewport_offsets,
                       unsigned views,
                       const VkExtent2D *frag_areas,
-                      const VkRect2D *bins)
+                      const VkRect2D *bins,
+                      bool binning)
 {
    const struct apply_load_coords_state *state =
       (const struct apply_load_coords_state *)data;
@@ -5435,6 +5457,8 @@ tu_choose_gmem_layout(struct tu_cmd_buffer *cmd)
                subpass->color_attachments[j].attachment;
          if (tu_attachment_store_mismatched_mutability(cmd, a, gmem_a))
             cmd->state.gmem_layout = TU_GMEM_LAYOUT_AVOID_CCU;
+         if (subpass->custom_resolve)
+            cmd->state.gmem_layout = TU_GMEM_LAYOUT_AVOID_CCU;
       }
    }
 
@@ -5454,7 +5478,8 @@ fdm_apply_store_coords(struct tu_cmd_buffer *cmd,
                        const VkOffset2D *hw_viewport_offsets,
                        unsigned views,
                        const VkExtent2D *frag_areas,
-                       const VkRect2D *bins)
+                       const VkRect2D *bins,
+                       bool binning)
 {
    const struct apply_store_coords_state *state =
       (const struct apply_store_coords_state *)data;

@@ -148,10 +148,10 @@ st_texture_create(struct st_context *st,
 extern void
 st_gl_texture_dims_to_pipe_dims(GLenum texture,
                                 unsigned widthIn,
-                                uint16_t heightIn,
+                                unsigned heightIn,
                                 uint16_t depthIn,
                                 unsigned *widthOut,
-                                uint16_t *heightOut,
+                                unsigned *heightOut,
                                 uint16_t *depthOut,
                                 uint16_t *layersOut);
 

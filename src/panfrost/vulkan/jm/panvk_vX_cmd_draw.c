@@ -323,6 +323,11 @@ panvk_draw_prepare_fs_rsd(struct panvk_cmd_buffer *cmdbuf,
             pan_earlyzs_get(fs->fs.earlyzs_lut, writes_zs || oq,
                             alpha_to_coverage, zs_always_passes, zs_read);
 
+         /* early ZS check for FPK is performed by HW on v7+ */
+         cfg.properties.allow_forward_pixel_to_be_killed =
+            !fs->info.writes_global &&
+            ((PAN_ARCH > 6) || earlyzs.kill != MALI_PIXEL_KILL_FORCE_LATE);
+
          cfg.properties.pixel_kill_operation = earlyzs.kill;
          cfg.properties.zs_update_operation = earlyzs.update;
          cfg.multisample_misc.evaluate_per_sample =

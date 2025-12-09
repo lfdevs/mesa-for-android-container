@@ -652,10 +652,8 @@ ac_nir_mem_vectorize_callback(unsigned align_mul, unsigned align_offset, unsigne
    return false;
 }
 
-bool ac_nir_scalarize_overfetching_loads_callback(const nir_instr *instr, const void *data)
+bool ac_nir_scalarize_overfetching_loads_callback(const nir_intrinsic_instr *intr, const void *data)
 {
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
    /* Reject opcodes we don't scalarize. */
    switch (intr->intrinsic) {
    case nir_intrinsic_load_ubo:

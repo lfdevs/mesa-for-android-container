@@ -27,7 +27,7 @@
 #ifndef PBO_H
 #define PBO_H
 
-
+#include <stddef.h>
 #include "util/glheader.h"
 
 struct gl_context;
@@ -84,7 +84,7 @@ _mesa_validate_pbo_teximage(struct gl_context *ctx, GLuint dimensions,
 
 extern const GLvoid *
 _mesa_validate_pbo_compressed_teximage(struct gl_context *ctx,
-                                    GLuint dimensions, GLsizei imageSize,
+                                    GLuint dimensions, size_t imageSize,
                                     const GLvoid *pixels,
                                     const struct gl_pixelstore_attrib *packing,
                                     const char *funcName);
@@ -105,7 +105,7 @@ _mesa_validate_pbo_source(struct gl_context *ctx, GLuint dimensions,
 extern bool
 _mesa_validate_pbo_source_compressed(struct gl_context *ctx, GLuint dimensions,
                                      const struct gl_pixelstore_attrib *unpack,
-                                     GLsizei imageSize, const GLvoid *ptr,
+                                     size_t imageSize, const GLvoid *ptr,
                                      const char *where);
 
 #endif

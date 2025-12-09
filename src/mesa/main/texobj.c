@@ -1137,64 +1137,6 @@ _mesa_get_fallback_texture(struct gl_context *ctx, gl_texture_index tex, bool is
 
 
 /**
- * Compute the size of the given texture object, in bytes.
- */
-static GLuint
-texture_size(const struct gl_texture_object *texObj)
-{
-   const GLuint numFaces = _mesa_num_tex_faces(texObj->Target);
-   GLuint face, level, size = 0;
-
-   for (face = 0; face < numFaces; face++) {
-      for (level = 0; level < MAX_TEXTURE_LEVELS; level++) {
-         const struct gl_texture_image *img = texObj->Image[face][level];
-         if (img) {
-            GLuint sz = _mesa_format_image_size(img->TexFormat, img->Width,
-                                                img->Height, img->Depth);
-            size += sz;
-         }
-      }
-   }
-
-   return size;
-}
-
-
-/**
- * Callback called from _mesa_HashWalk()
- */
-static void
-count_tex_size(void *data, void *userData)
-{
-   const struct gl_texture_object *texObj =
-      (const struct gl_texture_object *) data;
-   GLuint *total = (GLuint *) userData;
-
-   *total = *total + texture_size(texObj);
-}
-
-
-/**
- * Compute total size (in bytes) of all textures for the given context.
- * For debugging purposes.
- */
-GLuint
-_mesa_total_texture_memory(struct gl_context *ctx)
-{
-   GLuint tgt, total = 0;
-
-   _mesa_HashWalk(&ctx->Shared->TexObjects, count_tex_size, &total);
-
-   /* plus, the default texture objects */
-   for (tgt = 0; tgt < NUM_TEXTURE_TARGETS; tgt++) {
-      total += texture_size(ctx->Shared->DefaultTex[tgt]);
-   }
-
-   return total;
-}
-
-
-/**
  * Return the base format for the given texture object by looking
  * at the base texture image.
  * \return base format (such as GL_RGBA) or GL_NONE if it can't be determined

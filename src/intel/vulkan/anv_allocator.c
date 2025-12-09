@@ -1381,10 +1381,12 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    if (per_thread_scratch == 0)
       return NULL;
 
-   unsigned scratch_size_log2 = ffs(per_thread_scratch / 2048);
-   assert(scratch_size_log2 < 16);
+   unsigned scratch_size_log2 =
+      per_thread_scratch < 2048 ? 11 : util_logbase2_ceil(per_thread_scratch);
+   unsigned bucket = scratch_size_log2 - 11;
+   assert(bucket < 16);
 
-   assert(stage < ARRAY_SIZE(pool->bos));
+   assert(stage < ARRAY_SIZE(pool->bos[0]));
 
    const struct intel_device_info *devinfo = device->info;
 
@@ -1396,13 +1398,13 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    if (devinfo->verx10 >= 125)
       stage = MESA_SHADER_COMPUTE;
 
-   struct anv_bo *bo = p_atomic_read(&pool->bos[scratch_size_log2][stage]);
+   struct anv_bo *bo = p_atomic_read(&pool->bos[bucket][stage]);
 
    if (bo != NULL)
       return bo;
 
    assert(stage < ARRAY_SIZE(devinfo->max_scratch_ids));
-   uint32_t size = per_thread_scratch * devinfo->max_scratch_ids[stage];
+   uint64_t size = (uint64_t) devinfo->max_scratch_ids[stage] << scratch_size_log2;
 
    /* Even though the Scratch base pointers in 3DSTATE_*S are 64 bits, they
     * are still relative to the general state base address.  When we emit
@@ -1429,7 +1431,7 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
       return NULL; /* TODO */
 
    struct anv_bo *current_bo =
-      p_atomic_cmpxchg(&pool->bos[scratch_size_log2][stage], NULL, bo);
+      p_atomic_cmpxchg(&pool->bos[bucket][stage], NULL, bo);
    if (current_bo) {
       anv_device_release_bo(device, bo);
       return current_bo;
@@ -1448,16 +1450,18 @@ anv_scratch_pool_get_surf(struct anv_device *device,
    if (per_thread_scratch == 0)
       return 0;
 
-   unsigned scratch_size_log2 = ffs(per_thread_scratch / 2048);
-   assert(scratch_size_log2 < 16);
+   unsigned scratch_size_log2 =
+      per_thread_scratch < 2048 ? 11 : util_logbase2_ceil(per_thread_scratch);
+   unsigned bucket = scratch_size_log2 - 11;
+   assert(bucket < 16);
 
-   uint32_t surf = p_atomic_read(&pool->surfs[scratch_size_log2]);
+   uint32_t surf = p_atomic_read(&pool->surfs[bucket]);
    if (surf > 0)
       return surf;
 
    struct anv_bo *bo =
       anv_scratch_pool_alloc(device, pool, MESA_SHADER_COMPUTE,
-                             per_thread_scratch);
+                             1u << scratch_size_log2);
    struct anv_address addr = { .bo = bo };
 
    struct anv_state state =
@@ -1474,17 +1478,16 @@ anv_scratch_pool_get_surf(struct anv_device *device,
                          .mocs = anv_mocs(device, bo, usage),
                          .format = ISL_FORMAT_RAW,
                          .swizzle = ISL_SWIZZLE_IDENTITY,
-                         .stride_B = per_thread_scratch,
+                         .stride_B = 1u << scratch_size_log2,
                          .is_scratch = true,
                          .usage = usage);
 
-   uint32_t current = p_atomic_cmpxchg(&pool->surfs[scratch_size_log2],
-                                       0, state.offset);
+   uint32_t current = p_atomic_cmpxchg(&pool->surfs[bucket], 0, state.offset);
    if (current) {
       anv_state_pool_free(&device->scratch_surface_state_pool, state);
       return current;
    } else {
-      pool->surf_states[scratch_size_log2] = state;
+      pool->surf_states[bucket] = state;
       return state.offset;
    }
 }

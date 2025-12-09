@@ -144,12 +144,10 @@ static uint8_t vectorize_filter(const nir_instr *instr, UNUSED const void *data)
  * \param[in] data User data.
  * \return True if the instruction was found.
  */
-static bool frag_in_scalar_filter(const nir_instr *instr, const void *data)
+static bool frag_in_scalar_filter(const nir_intrinsic_instr *intr, const void *data)
 {
-   assert(instr->type == nir_instr_type_intrinsic);
    nir_shader *nir = (nir_shader *)data;
 
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_input &&
        intr->intrinsic != nir_intrinsic_load_interpolated_input) {
       return false;

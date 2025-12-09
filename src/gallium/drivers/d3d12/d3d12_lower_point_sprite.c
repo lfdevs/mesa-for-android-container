@@ -166,11 +166,11 @@ lower_emit_vertex(nir_intrinsic_instr *instr, nir_builder *b, struct lower_state
 {
    unsigned stream_id = nir_intrinsic_stream_id(instr);
 
-   nir_def *point_width, *point_height;
-   get_scaled_point_size(b, state, &point_width, &point_height);
-
-   nir_instr_remove(&instr->instr);
+   b->cursor = nir_instr_remove(&instr->instr);
    if (stream_id == 0) {
+      nir_def *point_width, *point_height;
+      get_scaled_point_size(b, state, &point_width, &point_height);
+
       for (unsigned i = 0; i < 4; i++) {
          /* All outputs need to be emitted for each vertex */
          util_dynarray_foreach(&state->output_writes, struct output_writes, data) {

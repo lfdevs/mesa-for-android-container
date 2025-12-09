@@ -1854,12 +1854,14 @@ compact_linear_vgprs(ra_ctx& ctx, const RegisterFile& reg_file,
  */
 PhysReg
 alloc_linear_vgpr(ra_ctx& ctx, const RegisterFile& reg_file, aco_ptr<Instruction>& instr,
+                  Definition& def,
                   std::vector<parallelcopy>& parallelcopies)
 {
-   assert(instr->opcode == aco_opcode::p_start_linear_vgpr);
-   assert(instr->definitions.size() == 1 && instr->definitions[0].bytes() % 4 == 0);
+   assert(instr->opcode == aco_opcode::p_start_linear_vgpr || instr->opcode == aco_opcode::p_startpgm);
+   if (instr->opcode == aco_opcode::p_start_linear_vgpr)
+      assert(instr->definitions.size() == 1 && instr->definitions[0].bytes() % 4 == 0);
 
-   RegClass rc = instr->definitions[0].regClass();
+   RegClass rc = def.regClass();
 
    /* Try to choose an unused space in the linear VGPR bounds. */
    for (unsigned i = rc.size(); i <= ctx.num_linear_vgprs; i++) {
@@ -3908,9 +3910,11 @@ register_allocation(Program* program, ra_test_policy policy)
                continue;
 
             /* find free reg */
-            if (instr->opcode == aco_opcode::p_start_linear_vgpr) {
+            if (instr->opcode == aco_opcode::p_start_linear_vgpr ||
+                (instr->opcode == aco_opcode::p_startpgm &&
+                 definition->regClass().is_linear_vgpr())) {
                /* Allocation of linear VGPRs is special. */
-               definition->setFixed(alloc_linear_vgpr(ctx, register_file, instr, parallelcopy));
+               definition->setFixed(alloc_linear_vgpr(ctx, register_file, instr, *definition, parallelcopy));
                update_renames(ctx, register_file, parallelcopy, instr);
             } else if (instr->opcode == aco_opcode::p_split_vector) {
                PhysReg reg = instr->operands[0].physReg();

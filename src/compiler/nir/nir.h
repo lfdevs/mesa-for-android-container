@@ -5596,7 +5596,7 @@ bool nir_lower_all_phis_to_scalar(nir_shader *shader);
 void nir_lower_io_array_vars_to_elements(nir_shader *producer, nir_shader *consumer);
 bool nir_lower_io_array_vars_to_elements_no_indirects(nir_shader *shader,
                                                       bool outputs_only);
-bool nir_lower_io_to_scalar(nir_shader *shader, nir_variable_mode mask, nir_instr_filter_cb filter, void *filter_data);
+bool nir_lower_io_to_scalar(nir_shader *shader, nir_variable_mode mask, nir_intrin_filter_cb filter, void *filter_data);
 bool nir_lower_io_vars_to_scalar(nir_shader *shader, nir_variable_mode mask);
 bool nir_opt_vectorize_io_vars(nir_shader *shader, nir_variable_mode mask);
 bool nir_lower_tess_level_array_vars_to_vec(nir_shader *shader);
@@ -6043,8 +6043,8 @@ bool nir_lower_idiv(nir_shader *shader, const nir_lower_idiv_options *options);
 typedef struct nir_input_attachment_options {
    bool use_ia_coord_intrin;
    bool use_view_id_for_layer;
-   bool unscaled_depth_stencil_ir3;
-   uint32_t unscaled_input_attachment_ir3;
+   bool gmem_depth_stencil_ir3;
+   uint32_t gmem_input_attachment_ir3;
 } nir_input_attachment_options;
 
 bool nir_lower_input_attachments(nir_shader *shader,

@@ -374,6 +374,11 @@ create_addr0(struct ir3_builder *build, struct ir3_instruction *src, int align)
       immed = create_immed_typed_shared(build, 2, TYPE_S16, shared);
       instr = ir3_SHL_B(build, instr, 0, immed, 0);
       break;
+   case 8:
+      /* src *= 8 => src <<= 3: */
+      immed = create_immed_typed_shared(build, 3, TYPE_S16, shared);
+      instr = ir3_SHL_B(build, instr, 0, immed, 0);
+      break;
    default:
       UNREACHABLE("bad align");
       return NULL;

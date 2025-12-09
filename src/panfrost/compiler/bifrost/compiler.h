@@ -1229,11 +1229,18 @@ bi_def_index(nir_def *def)
 static inline bi_index
 bi_src_index(nir_src *src)
 {
-   if (nir_src_is_const(*src) && nir_src_bit_size(*src) <= 32) {
-      return bi_imm_u32(nir_src_as_uint(*src));
-   } else {
-      return bi_def_index(src->ssa);
+   if (nir_src_is_const(*src)) {
+      unsigned bit_size = nir_src_bit_size(*src);
+      unsigned num_comps = nir_src_num_components(*src);
+      if (bit_size * num_comps <= 32) {
+         uint32_t imm = 0;
+         for (uint32_t i = 0; i < num_comps; i++)
+            imm |= nir_src_comp_as_uint(*src, i) << (i * bit_size);
+         return bi_imm_u32(imm);
+      }
    }
+
+   return bi_def_index(src->ssa);
 }
 
 /* Iterators for Bifrost IR */

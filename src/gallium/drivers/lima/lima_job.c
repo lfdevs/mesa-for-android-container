@@ -66,7 +66,7 @@ lima_get_fb_info(struct lima_job *job)
       fb->width = ctx->framebuffer.base.width;
       fb->height =  ctx->framebuffer.base.height;
    } else {
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(psurf, &width, &height);
       fb->width = width;
       fb->height = height;

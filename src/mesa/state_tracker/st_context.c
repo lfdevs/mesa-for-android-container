@@ -93,7 +93,7 @@ st_vp_uses_current_values(const struct gl_context *ctx)
 
    const uint64_t inputs = ctx->VertexProgram._Current->info.inputs_read;
 
-   return ~_mesa_get_enabled_vertex_arrays(ctx) & inputs;
+   return ~(uint64_t)_mesa_get_enabled_vertex_arrays(ctx) & inputs;
 }
 
 

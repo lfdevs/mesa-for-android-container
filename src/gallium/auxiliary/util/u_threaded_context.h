@@ -655,8 +655,8 @@ struct threaded_context {
    unsigned fb_layers;
 
 #if TC_RESOLVE_STRICT
-   uint16_t fb_width;
-   uint16_t fb_height;
+   unsigned fb_width;
+   unsigned fb_height;
 #endif
 
    unsigned last, next, next_buf_list;

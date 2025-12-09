@@ -389,7 +389,7 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
       if (bufs[i].texture) {
          struct fd_resource *rsc = fd_resource(bufs[i].texture);
          enum pipe_format format = fd_gmem_restore_format(bufs[i].format);
-         uint16_t width, height;
+         unsigned width, height;
          pipe_surface_size(&bufs[i], &width, &height);
          /* The restore blit_zs shader expects stencil in sampler 0,
           * and depth in sampler 1

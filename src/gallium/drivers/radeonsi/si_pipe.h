@@ -447,8 +447,8 @@ struct si_surface {
    struct pipe_surface base;
 
    /* These can vary with block-compressed textures. */
-   uint16_t width0;
-   uint16_t height0;
+   unsigned width0;
+   unsigned height0;
 
    bool color_initialized : 1;
    bool depth_initialized : 1;

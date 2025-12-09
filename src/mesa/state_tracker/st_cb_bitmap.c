@@ -153,7 +153,7 @@ st_make_bitmap_texture(struct gl_context *ctx, GLsizei width, GLsizei height,
                             0, 0, width, height, &transfer);
 
    /* Put image into texture transfer */
-   memset(dest, 0xff, height * transfer->stride);
+   memset(dest, 0xff, height * (size_t)transfer->stride);
    unpack_bitmap(st, 0, 0, width, height, unpack, bitmap,
                  dest, transfer->stride);
 

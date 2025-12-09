@@ -402,7 +402,7 @@ void util_blitter_custom_resolve_color(struct blitter_context *blitter,
 /* Used by vc4 for 8/16-bit linear-to-tiled blits */
 void util_blitter_custom_shader(struct blitter_context *blitter,
                                 struct pipe_surface *dstsurf,
-                                uint16_t width, uint16_t height,
+                                unsigned width, unsigned height,
                                 void *custom_vs, void *custom_fs);
 
 /* Used by D3D12 for non-MSAA -> MSAA stencil blits */

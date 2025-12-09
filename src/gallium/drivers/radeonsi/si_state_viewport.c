@@ -9,7 +9,7 @@
 #include "util/u_viewport.h"
 
 #define GFX6_MAX_VIEWPORT_SIZE   16384
-#define GFX12_MAX_VIEWPORT_SIZE  32768 /* TODO: this should be 64K, but maxx/maxy doesn't have enough bits */
+#define GFX12_MAX_VIEWPORT_SIZE  65536
 
 static void si_get_small_prim_cull_info(struct si_context *sctx, struct si_small_prim_cull_info *out)
 {
@@ -278,7 +278,7 @@ static void si_emit_guardband(struct si_context *sctx, unsigned index)
    const unsigned hw_screen_offset_alignment =
       sctx->gfx_level >= GFX11 ? 32 :
       sctx->gfx_level >= GFX8 ? 16 : MAX2(sctx->screen->se_tile_repeat, 16);
-   const unsigned max_hw_screen_offset = sctx->gfx_level >= GFX12 ? 32752 : 8176;
+   const unsigned max_hw_screen_offset = sctx->gfx_level >= GFX12 ? 32768 : 8176;
 
    /* Indexed by quantization modes */
    static int max_viewport_size[] = {65536, 16384, 4096};

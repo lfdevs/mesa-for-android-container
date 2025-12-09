@@ -112,7 +112,7 @@ apply_view_usage_for_format(struct zink_screen *screen, struct pipe_resource *pr
    VkFormatFeatureFlags feats = res->linear ?
                                 zink_get_format_props(screen, format)->linearTilingFeatures :
                                 zink_get_format_props(screen, format)->optimalTilingFeatures;
-   VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+   uint64_t attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
    usage_info->usage = res->obj->vkusage & ~attachment;
    if (res->obj->modifier_aspect) {
       feats = res->obj->vkfeats;

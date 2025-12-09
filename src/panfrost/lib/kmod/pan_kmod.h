@@ -205,6 +205,9 @@ struct pan_kmod_dev_props {
    /* Support cycle count and timestamp propagation as job requirement */
    bool gpu_can_query_timestamp;
 
+   /* Cycle counter and timestamp device coherent propogation is enabled */
+   bool timestamp_device_coherent;
+
    /* GPU Timestamp frequency */
    uint64_t timestamp_frequency;
 
