@@ -54,6 +54,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <vulkan/vulkan_core.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
@@ -3337,8 +3338,12 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
       return VK_ERROR_SURFACE_LOST_KHR;
    }
 
-   if (display_mode != connector->current_mode)
+   if (display_mode != connector->current_mode) {
       connector->active = false;
+      VkResult result = wsi_display_setup_connector(connector, display_mode);
+      if (result != VK_SUCCESS)
+         return result;
+   }
 
    for (;;) {
 
@@ -3622,6 +3627,16 @@ wsi_display_cac_plane_adjust(struct wsi_swapchain *drv_chain,
    return VK_SUCCESS;
 }
 
+static void
+wsi_display_set_display_mode(struct wsi_swapchain *drv_chain, VkDisplayModeKHR display_mode)
+{
+   struct wsi_display_swapchain *chain =
+      (struct wsi_display_swapchain *) drv_chain;
+   VkIcdSurfaceDisplay *surface = chain->surface;
+
+   surface->displayMode = display_mode;
+}
+
 static VkResult
 wsi_display_queue_present(struct wsi_swapchain *drv_chain,
                           uint32_t image_index,
@@ -3846,6 +3861,7 @@ wsi_display_surface_create_swapchain(
    chain->base.acquire_next_image = wsi_display_acquire_next_image;
    chain->base.release_images = wsi_display_release_images;
    chain->base.cac_plane_adjust = wsi_display_cac_plane_adjust;
+   chain->base.set_display_mode = wsi_display_set_display_mode;
    chain->base.queue_present = wsi_display_queue_present;
    chain->base.set_timing_request = wsi_display_set_timing_request;
    chain->base.poll_early_refresh = wsi_display_poll_refresh_duration;

@@ -2867,6 +2867,8 @@ wsi_common_queue_present(const struct wsi_device *wsi,
       vk_find_struct_const(pPresentInfo->pNext, SWAPCHAIN_PRESENT_MODE_INFO_KHR);
    const struct queue_present_cac_plane_adjust_info_valve *cacplaneadjust =
       vk_find_struct_const(pPresentInfo->pNext, QUEUE_PRESENT_CAC_PLANE_ADJUST_INFO_VALVE);
+   const struct VkQueuePresentSetModeVALVE *mode_info =
+      vk_find_struct_const(pPresentInfo->pNext, QUEUE_PRESENT_SET_MODE_INFO_VALVE);
 
    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
       VK_FROM_HANDLE(wsi_swapchain, swapchain, pPresentInfo->pSwapchains[i]);
@@ -2926,6 +2928,10 @@ wsi_common_queue_present(const struct wsi_device *wsi,
                                                   cacplaneadjust->dst_y,
                                                   cacplaneadjust->dst_width,
                                                   cacplaneadjust->dst_height);
+      }
+
+      if (mode_info) {
+         swapchain->set_display_mode(swapchain, mode_info->displayMode);
       }
 
       results[i] = swapchain->queue_present(swapchain, image_index,

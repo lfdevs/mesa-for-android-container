@@ -25,6 +25,7 @@
 
 #include "wsi_common.h"
 #include "util/perf/cpu_trace.h"
+#include <vulkan/vulkan_core.h>
 #include "vk_object.h"
 #include "vk_sync.h"
 
@@ -365,6 +366,7 @@ struct wsi_swapchain {
                              uint32_t dst_y,
                              uint32_t dst_width,
                              uint32_t dst_height);
+   void (*set_display_mode)(struct wsi_swapchain *swap_chain, VkDisplayModeKHR display_mode);
 };
 
 bool
