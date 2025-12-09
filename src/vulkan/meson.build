@@ -55,7 +55,7 @@ if with_platform_wayland
   vulkan_wsi_list += '-DVK_USE_PLATFORM_WAYLAND_KHR'
 endif
 if system_has_kms_drm and not with_platform_android
-  vulkan_wsi_deps += [dep_libdrm]
+  vulkan_wsi_deps += [dep_libdrm, dep_display_info]
   vulkan_wsi_list += '-DVK_USE_PLATFORM_DISPLAY_KHR'
 endif
 if with_xlib_lease

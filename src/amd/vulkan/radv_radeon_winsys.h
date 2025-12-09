@@ -20,9 +20,11 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include <vulkan/vulkan.h>
+#include "ac_cmdbuf.h"
 #include "amd_family.h"
 
 struct radeon_info;
+struct vk_device;
 struct vk_sync_type;
 struct vk_sync_wait;
 struct vk_sync_signal;
@@ -50,6 +52,7 @@ enum radeon_bo_flag { /* bitfield */
                       RADEON_FLAG_REPLAYABLE = (1 << 11),
                       RADEON_FLAG_DISCARDABLE = (1 << 12),
                       RADEON_FLAG_GFX12_ALLOW_DCC = (1 << 13),
+                      RADEON_FLAG_VM_UPDATE_WAIT = (1 << 14),
 };
 
 enum radeon_ctx_priority {
@@ -82,13 +85,6 @@ enum radeon_value_id {
    RADEON_GPU_TEMPERATURE,
    RADEON_CURRENT_SCLK,
    RADEON_CURRENT_MCLK,
-};
-
-struct radeon_cmdbuf {
-   uint32_t cdw;         /* Number of used dwords. */
-   uint32_t max_dw;      /* Maximum number of dwords. */
-   uint32_t reserved_dw; /* Number of dwords reserved through radeon_check_space() */
-   uint32_t *buf;        /* The base pointer of the chunk. */
 };
 
 #define RADEON_SURF_TYPE_MASK     0xFF
@@ -185,10 +181,10 @@ struct radv_winsys_submit_info {
    unsigned initial_preamble_count;
    unsigned continue_preamble_count;
    unsigned postamble_count;
-   struct radeon_cmdbuf **cs_array;
-   struct radeon_cmdbuf **initial_preamble_cs;
-   struct radeon_cmdbuf **continue_preamble_cs;
-   struct radeon_cmdbuf **postamble_cs;
+   struct ac_cmdbuf **cs_array;
+   struct ac_cmdbuf **initial_preamble_cs;
+   struct ac_cmdbuf **continue_preamble_cs;
+   struct ac_cmdbuf **postamble_cs;
    bool uses_shadow_regs;
 };
 
@@ -221,7 +217,9 @@ struct radv_winsys_gpuvm_fault_info {
 };
 
 enum radv_cs_dump_type {
-   RADV_CS_DUMP_TYPE_IBS,
+   RADV_CS_DUMP_TYPE_PREAMBLE_IBS,
+   RADV_CS_DUMP_TYPE_MAIN_IBS,
+   RADV_CS_DUMP_TYPE_POSTAMBLE_IBS,
    RADV_CS_DUMP_TYPE_CTX_ROLLS,
 };
 
@@ -233,8 +231,6 @@ struct radeon_winsys {
    uint64_t (*query_value)(struct radeon_winsys *ws, enum radeon_value_id value);
 
    bool (*read_registers)(struct radeon_winsys *ws, unsigned reg_offset, unsigned num_registers, uint32_t *out);
-
-   const char *(*get_chip_name)(struct radeon_winsys *ws);
 
    bool (*query_gpuvm_fault)(struct radeon_winsys *ws, struct radv_winsys_gpuvm_fault_info *fault_info);
 
@@ -269,46 +265,47 @@ struct radeon_winsys {
    VkResult (*ctx_create)(struct radeon_winsys *ws, enum radeon_ctx_priority priority, struct radeon_winsys_ctx **ctx);
    void (*ctx_destroy)(struct radeon_winsys_ctx *ctx);
 
+   VkResult (*ctx_is_priority_permitted)(struct radeon_winsys *_ws, enum radeon_ctx_priority priority);
+
    bool (*ctx_wait_idle)(struct radeon_winsys_ctx *ctx, enum amd_ip_type amd_ip_type, int ring_index);
 
    int (*ctx_set_pstate)(struct radeon_winsys_ctx *ctx, uint32_t pstate);
 
    enum radeon_bo_domain (*cs_domain)(const struct radeon_winsys *ws);
 
-   struct radeon_cmdbuf *(*cs_create)(struct radeon_winsys *ws, enum amd_ip_type amd_ip_type, bool is_secondary);
+   struct ac_cmdbuf *(*cs_create)(struct radeon_winsys *ws, enum amd_ip_type amd_ip_type, bool is_secondary);
 
-   void (*cs_destroy)(struct radeon_cmdbuf *cs);
+   void (*cs_destroy)(struct ac_cmdbuf *cs);
 
-   void (*cs_reset)(struct radeon_cmdbuf *cs);
+   void (*cs_reset)(struct ac_cmdbuf *cs);
 
-   bool (*cs_chain)(struct radeon_cmdbuf *cs, struct radeon_cmdbuf *next_cs, bool pre_en);
+   bool (*cs_chain)(struct ac_cmdbuf *cs, struct ac_cmdbuf *next_cs, bool pre_en);
 
-   void (*cs_unchain)(struct radeon_cmdbuf *cs);
+   void (*cs_unchain)(struct ac_cmdbuf *cs);
 
-   VkResult (*cs_finalize)(struct radeon_cmdbuf *cs);
+   VkResult (*cs_finalize)(struct ac_cmdbuf *cs);
 
-   void (*cs_grow)(struct radeon_cmdbuf *cs, size_t min_size);
+   void (*cs_grow)(struct ac_cmdbuf *cs, size_t min_size);
 
    VkResult (*cs_submit)(struct radeon_winsys_ctx *ctx, const struct radv_winsys_submit_info *submit,
                          uint32_t wait_count, const struct vk_sync_wait *waits, uint32_t signal_count,
                          const struct vk_sync_signal *signals);
 
-   void (*cs_add_buffer)(struct radeon_cmdbuf *cs, struct radeon_winsys_bo *bo);
+   void (*cs_add_buffer)(struct ac_cmdbuf *cs, struct radeon_winsys_bo *bo);
 
-   void (*cs_execute_secondary)(struct radeon_cmdbuf *parent, struct radeon_cmdbuf *child, bool allow_ib2);
+   void (*cs_execute_secondary)(struct ac_cmdbuf *parent, struct ac_cmdbuf *child, bool allow_ib2);
 
-   void (*cs_execute_ib)(struct radeon_cmdbuf *cs, struct radeon_winsys_bo *bo, const uint64_t va, const uint32_t cdw,
+   void (*cs_execute_ib)(struct ac_cmdbuf *cs, struct radeon_winsys_bo *bo, const uint64_t va, const uint32_t cdw,
                          const bool predicate);
 
-   void (*cs_chain_dgc_ib)(struct radeon_cmdbuf *cs, uint64_t va, uint32_t cdw, uint64_t trailer_va,
-                           const bool predicate);
+   void (*cs_chain_dgc_ib)(struct ac_cmdbuf *cs, uint64_t va, uint32_t cdw, uint64_t trailer_va, const bool predicate);
 
-   void (*cs_dump)(struct radeon_cmdbuf *cs, FILE *file, const int *trace_ids, int trace_id_count,
+   void (*cs_dump)(struct ac_cmdbuf *cs, FILE *file, const int *trace_ids, int trace_id_count,
                    enum radv_cs_dump_type type);
 
-   void (*cs_annotate)(struct radeon_cmdbuf *cs, const char *marker);
+   void (*cs_annotate)(struct ac_cmdbuf *cs, const char *marker);
 
-   void (*cs_pad)(struct radeon_cmdbuf *cs, unsigned leave_dw_space);
+   void (*cs_pad)(struct ac_cmdbuf *cs, unsigned leave_dw_space);
 
    void (*dump_bo_ranges)(struct radeon_winsys *ws, FILE *file);
 
@@ -319,6 +316,15 @@ struct radeon_winsys {
    const struct vk_sync_type *const *(*get_sync_types)(struct radeon_winsys *ws);
 
    struct util_sync_provider *(*get_sync_provider)(struct radeon_winsys *ws);
+
+   VkResult (*copy_sync_payloads)(struct vk_device *device,
+                                  uint32_t wait_count,
+                                  const struct vk_sync_wait *waits,
+                                  uint32_t signal_count,
+                                  const struct vk_sync_signal *signals);
+
+   int (*reserve_vmid)(struct radeon_winsys *ws);
+   void (*unreserve_vmid)(struct radeon_winsys *ws);
 };
 
 static inline uint64_t
@@ -334,7 +340,7 @@ radv_buffer_is_resident(const struct radeon_winsys_bo *bo)
 }
 
 static inline void
-radv_cs_add_buffer(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, struct radeon_winsys_bo *bo)
+radv_cs_add_buffer(struct radeon_winsys *ws, struct ac_cmdbuf *cs, struct radeon_winsys_bo *bo)
 {
    if (radv_buffer_is_resident(bo))
       return;

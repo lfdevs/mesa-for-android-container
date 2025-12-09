@@ -1,3 +1,6 @@
+// Copyright 2022 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use mesa_rust_gen::*;
 use mesa_rust_util::bitset;
 
@@ -45,35 +48,47 @@ impl<'a, T: 'a> Iterator for ExecListIter<'a, T> {
 macro_rules! nir_pass_impl {
     ($nir:ident, $pass:ident, $func:ident $(,$arg:expr)* $(,)?) => {
         {
+            // SAFETY: mutable static can't be read safely, but this value isn't going to change
+            let debug_opts = unsafe { nir_debug };
+
             let func_str = ::std::stringify!($func);
             let func_cstr = ::std::ffi::CString::new(func_str).unwrap();
             let res = if unsafe { should_skip_nir(func_cstr.as_ptr()) } {
                 println!("skipping {}", func_str);
                 false
             } else {
+                if debug_opts & NIR_DEBUG_INVALIDATE_METADATA != 0 {
+                    $nir.metadata_invalidate();
+                } else if debug_opts & NIR_DEBUG_EXTENDED_VALIDATION != 0 {
+                    $nir.metadata_require_most();
+                }
                 $nir.metadata_set_validation_flag();
                 if $nir.should_print() {
                     println!("{}", func_str);
                 }
-                if $nir.$pass($func $(,$arg)*) {
-                    $nir.validate(&format!("after {} in {}:{}", func_str, file!(), line!()));
+                let when = format!("after {} in {}:{}", func_str, file!(), line!());
+                let blob_before = $nir.validate_progress_setup();
+                let progress = $nir.$pass($func $(,$arg)*);
+                if progress {
+                    $nir.validate(&when);
                     if $nir.should_print() {
                         $nir.print();
                     }
                     $nir.metadata_check_validation_flag();
-                    true
                 } else {
-                    false
+                    if debug_opts & NIR_DEBUG_EXTENDED_VALIDATION != 0 {
+                        $nir.validate(&when);
+                    }
                 }
+                $nir.validate_progress_finish(blob_before, progress, &when);
+                progress
             };
 
-            // SAFETY: mutable static can't be read safely, but this value isn't going to change
-            let ndebug = unsafe { nir_debug };
-            if ndebug & NIR_DEBUG_CLONE != 0 {
+            if debug_opts & NIR_DEBUG_CLONE != 0 {
                 $nir.validate_clone();
             }
 
-            if ndebug & NIR_DEBUG_SERIALIZE != 0 {
+            if debug_opts & NIR_DEBUG_SERIALIZE != 0 {
                 $nir.validate_serialize_deserialize();
             }
 
@@ -228,9 +243,37 @@ impl NirShader {
     }
 
     #[cfg(debug_assertions)]
+    pub fn metadata_invalidate(&self) {
+        unsafe { nir_metadata_invalidate(self.nir.as_ptr()) }
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn metadata_require_most(&self) {
+        unsafe { nir_metadata_require_most(self.nir.as_ptr()) }
+    }
+
+    #[cfg(debug_assertions)]
     pub fn validate(&self, when: &str) {
         let cstr = std::ffi::CString::new(when).unwrap();
         unsafe { nir_validate_shader(self.nir.as_ptr(), cstr.as_ptr()) }
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn validate_progress_setup(&self) -> blob {
+        unsafe { nir_validate_progress_setup(self.nir.as_ptr()) }
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn validate_progress_finish(&self, mut setup_blob: blob, progress: bool, when: &str) {
+        let cstr = std::ffi::CString::new(when).unwrap();
+        unsafe {
+            nir_validate_progress_finish(
+                self.nir.as_ptr(),
+                &mut setup_blob,
+                progress,
+                cstr.as_ptr(),
+            )
+        };
     }
 
     pub fn should_print(&self) -> bool {
@@ -276,7 +319,7 @@ impl NirShader {
         unsafe { nir_cleanup_functions(self.nir.as_ptr()) };
     }
 
-    pub fn variables(&mut self) -> ExecListIter<nir_variable> {
+    pub fn variables(&mut self) -> ExecListIter<'_, nir_variable> {
         ExecListIter::new(
             &mut unsafe { self.nir.as_mut() }.variables,
             offset_of!(nir_variable, node),
@@ -310,38 +353,20 @@ impl NirShader {
         unsafe { (*self.nir.as_ptr()).info.shared_size }
     }
 
+    pub fn uniform_size(&self) -> u32 {
+        unsafe { (*self.nir.as_ptr()).num_uniforms }
+    }
+
     pub fn workgroup_size(&self) -> [u16; 3] {
         unsafe { (*self.nir.as_ptr()).info.workgroup_size }
     }
 
     pub fn subgroup_size(&self) -> u8 {
-        let subgroup_size = unsafe { (*self.nir.as_ptr()).info.subgroup_size };
-        let valid_subgroup_sizes = [
-            gl_subgroup_size::SUBGROUP_SIZE_REQUIRE_8,
-            gl_subgroup_size::SUBGROUP_SIZE_REQUIRE_16,
-            gl_subgroup_size::SUBGROUP_SIZE_REQUIRE_32,
-            gl_subgroup_size::SUBGROUP_SIZE_REQUIRE_64,
-            gl_subgroup_size::SUBGROUP_SIZE_REQUIRE_128,
-        ];
-
-        if valid_subgroup_sizes.contains(&subgroup_size) {
-            subgroup_size as u8
-        } else {
-            0
-        }
+        unsafe { (*self.nir.as_ptr()).info.api_subgroup_size }
     }
 
     pub fn num_subgroups(&self) -> u8 {
         unsafe { (*self.nir.as_ptr()).info.num_subgroups }
-    }
-
-    pub fn set_workgroup_size_variable_if_zero(&mut self) {
-        let nir = self.nir.as_ptr();
-        unsafe {
-            (*nir)
-                .info
-                .set_workgroup_size_variable((*nir).info.workgroup_size[0] == 0);
-        }
     }
 
     pub fn set_workgroup_size(&mut self, size: [u16; 3]) {

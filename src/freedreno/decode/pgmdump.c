@@ -268,7 +268,7 @@ next_sect(struct state *state, int *sect_size)
    *sect_size = end - state->buf;
 
    /* copy the section to keep things nicely 32b aligned: */
-   sect = malloc(ALIGN(*sect_size, 4));
+   sect = malloc(align(*sect_size, 4));
    memcpy(sect, state->buf, *sect_size);
 
    state->sz -= *sect_size + 4;
@@ -584,8 +584,8 @@ dump_shaders_a3xx(struct state *state)
 
       if (!compact) {
          if (state->hdr->revision >= 7) {
-            instrs += ALIGN(instrs_size, 8) - instrs_size;
-            instrs_size = ALIGN(instrs_size, 8);
+            instrs += align(instrs_size, 8) - instrs_size;
+            instrs_size = align(instrs_size, 8);
          }
          instrs += 32;
          instrs_size -= 32;
@@ -1000,7 +1000,7 @@ main(int argc, char **argv)
 
    /* figure out what sort of input we are dealing with: */
    if (!(check_extension(infile, ".rd") || check_extension(infile, ".rd.gz"))) {
-      gl_shader_stage shader = ~0;
+      mesa_shader_stage shader = ~0;
       int ret;
       if (check_extension(infile, ".vo")) {
          shader = MESA_SHADER_VERTEX;

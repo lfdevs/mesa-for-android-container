@@ -98,7 +98,7 @@ float_to_half_impl(nir_builder *b, nir_def *src, nir_rounding_mode mode)
          overflowed_fp16 = nir_bcsel(b, nir_i2b(b, sign), nir_imm_int(b, 0x7C00), nir_imm_int(b, 0x7BFF));
          break;
       default:
-         unreachable("Should've been handled already");
+         UNREACHABLE("Should've been handled already");
       }
       nir_push_else(b, NULL);
    }
@@ -316,7 +316,7 @@ lower_fp16_cast_impl(nir_builder *b, nir_instr *instr, void *data)
       /* Otherwise assume the backend can handle f2f16 with undef rounding */
       break;
    default:
-      unreachable("Invalid rounding mode");
+      UNREACHABLE("Invalid rounding mode");
    }
    if (!(options & req_option))
       return progress;

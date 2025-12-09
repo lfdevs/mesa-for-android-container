@@ -165,6 +165,8 @@ st_update_rasterizer(struct st_context *st)
 
    raster->poly_stipple_enable = ctx->Polygon.StippleFlag;
 
+   raster->representative_fragment_test = ctx->RepresentativeFragmentTest;
+
    /* Multisampling disables point, line, and polygon smoothing.
     *
     * GL_ARB_multisample says:

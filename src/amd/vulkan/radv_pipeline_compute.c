@@ -74,16 +74,17 @@ radv_get_compute_shader_metadata(const struct radv_device *device, const struct 
    metadata->push_const_sgpr = upload_sgpr | (inline_sgpr << 16);
    metadata->inline_push_const_mask = cs->info.inline_push_constant_mask;
 
-   metadata->indirect_desc_sets_sgpr = radv_get_user_sgpr(cs, AC_UD_INDIRECT_DESCRIPTOR_SETS);
+   metadata->indirect_descriptors_sgpr = radv_get_user_sgpr(cs, AC_UD_INDIRECT_DESCRIPTORS);
 }
 
 void
 radv_compute_pipeline_init(struct radv_compute_pipeline *pipeline, const struct radv_pipeline_layout *layout,
                            struct radv_shader *shader)
 {
-   pipeline->base.need_indirect_descriptor_sets |= radv_shader_need_indirect_descriptor_sets(shader);
+   pipeline->base.need_indirect_descriptors |= radv_shader_need_indirect_descriptors(shader);
+   pipeline->base.need_push_constants_upload |= radv_shader_need_push_constants_upload(shader);
 
-   pipeline->base.push_constant_size = layout->push_constant_size;
+   pipeline->base.push_constant_size = align(shader->info.push_constant_size, 4);
    pipeline->base.dynamic_offset_count = layout->dynamic_offset_count;
 }
 

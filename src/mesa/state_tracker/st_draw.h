@@ -75,7 +75,7 @@ pointer_to_offset(const void *ptr)
 }
 
 void
-st_prepare_draw(struct gl_context *ctx, uint64_t state_mask);
+st_prepare_draw(struct gl_context *ctx, const st_state_bitset state_mask);
 
 void
 st_draw_gallium(struct gl_context *ctx,

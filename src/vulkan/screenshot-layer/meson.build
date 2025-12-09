@@ -34,11 +34,21 @@ vklayer_mesa_screenshot = shared_library(
   install : true
 )
 
-install_data(
-  files('VkLayer_MESA_screenshot.json'),
+configure_file(
+  configuration : {'library_path' : 'libVkLayer_MESA_screenshot.so'},
+  input : 'VkLayer_MESA_screenshot.json.in',
+  output : '@BASENAME@',
+  install : true,
   install_dir : join_paths(get_option('datadir'), 'vulkan', 'explicit_layer.d'),
   install_tag : 'runtime',
 )
+
+configure_file(
+  configuration : {'library_path' : vklayer_mesa_screenshot.full_path()},
+  input : 'VkLayer_MESA_screenshot.json.in',
+  output : '@PLAINNAME@_dev.json',
+)
+devenv.append('VK_ADD_LAYER_PATH', meson.current_build_dir())
 
 install_data(
   'mesa-screenshot-control.py',

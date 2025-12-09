@@ -361,7 +361,7 @@ struct HevcAccessUnitDelimiter {
 class d3d12_video_nalu_writer_hevc
 {
 public:
-   d3d12_video_nalu_writer_hevc() { }
+   d3d12_video_nalu_writer_hevc();
    ~d3d12_video_nalu_writer_hevc() { }
    
    // Writes the HEVC VPS structure into a bitstream passed in headerBitstream
@@ -430,6 +430,9 @@ private:
    write_bytes_from_struct(d3d12_video_encoder_bitstream *pBitstream, void *pData, uint8_t nal_unit_type);
 
    void write_rps(d3d12_video_encoder_bitstream* rbsp, HevcSeqParameterSet* sps, int stRpsIdx, bool sliceRPS);
+
+   d3d12_video_encoder_bitstream m_rbsp_buffer;
+   d3d12_video_encoder_bitstream m_nalu_buffer;
 };
 
 #endif

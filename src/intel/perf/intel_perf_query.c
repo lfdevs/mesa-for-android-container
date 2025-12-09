@@ -160,7 +160,7 @@
  * free_sample_buffers list before allocating a new buffer.
  */
 struct oa_sample_buf {
-   struct exec_node link;
+   struct brw_exec_node link;
    int refcount;
    int len;
    uint32_t last_timestamp;
@@ -211,7 +211,7 @@ struct intel_perf_query_object
           *
           * (See struct brw_oa_sample_buf description for more details)
           */
-         struct exec_node *samples_head;
+         struct brw_exec_node *samples_head;
 
          /**
           * false while in the unaccumulated_elements list, and set to
@@ -259,10 +259,10 @@ struct intel_perf_context {
    int current_oa_format;
 
    /* List of buffers containing OA reports */
-   struct exec_list sample_buffers;
+   struct brw_exec_list sample_buffers;
 
    /* Cached list of empty sample buffers */
-   struct exec_list free_sample_buffers;
+   struct brw_exec_list free_sample_buffers;
 
    int n_active_oa_queries;
    int n_active_pipeline_stats_queries;
@@ -414,15 +414,15 @@ get_metric_id(struct intel_perf_config *perf,
 static struct oa_sample_buf *
 get_free_sample_buf(struct intel_perf_context *perf_ctx)
 {
-   struct exec_node *node = exec_list_pop_head(&perf_ctx->free_sample_buffers);
+   struct brw_exec_node *node = brw_exec_list_pop_head(&perf_ctx->free_sample_buffers);
    struct oa_sample_buf *buf;
 
    if (node)
-      buf = exec_node_data(struct oa_sample_buf, node, link);
+      buf = brw_exec_node_data(struct oa_sample_buf, node, link);
    else {
       buf = ralloc_size(perf_ctx->perf, sizeof(*buf) + oa_sample_buf_buf_length(perf_ctx->perf));
 
-      exec_node_init(&buf->link);
+      brw_exec_node_init(&buf->link);
       buf->refcount = 0;
    }
    buf->len = 0;
@@ -433,22 +433,22 @@ get_free_sample_buf(struct intel_perf_context *perf_ctx)
 static void
 reap_old_sample_buffers(struct intel_perf_context *perf_ctx)
 {
-   struct exec_node *tail_node =
-      exec_list_get_tail(&perf_ctx->sample_buffers);
+   struct brw_exec_node *tail_node =
+      brw_exec_list_get_tail(&perf_ctx->sample_buffers);
    struct oa_sample_buf *tail_buf =
-      exec_node_data(struct oa_sample_buf, tail_node, link);
+      brw_exec_node_data(struct oa_sample_buf, tail_node, link);
 
    /* Remove all old, unreferenced sample buffers walking forward from
     * the head of the list, except always leave at least one node in
     * the list so we always have a node to reference when we Begin
     * a new query.
     */
-   foreach_list_typed_safe(struct oa_sample_buf, buf, link,
+   brw_foreach_list_typed_safe(struct oa_sample_buf, buf, link,
                            &perf_ctx->sample_buffers)
    {
       if (buf->refcount == 0 && buf != tail_buf) {
-         exec_node_remove(&buf->link);
-         exec_list_push_head(&perf_ctx->free_sample_buffers, &buf->link);
+         brw_exec_node_remove(&buf->link);
+         brw_exec_list_push_head(&perf_ctx->free_sample_buffers, &buf->link);
       } else
          return;
    }
@@ -457,11 +457,11 @@ reap_old_sample_buffers(struct intel_perf_context *perf_ctx)
 static void
 free_sample_bufs(struct intel_perf_context *perf_ctx)
 {
-   foreach_list_typed_safe(struct oa_sample_buf, buf, link,
+   brw_foreach_list_typed_safe(struct oa_sample_buf, buf, link,
                            &perf_ctx->free_sample_buffers)
       ralloc_free(buf);
 
-   exec_list_make_empty(&perf_ctx->free_sample_buffers);
+   brw_exec_list_make_empty(&perf_ctx->free_sample_buffers);
 }
 
 
@@ -510,7 +510,7 @@ intel_perf_active_queries(struct intel_perf_context *perf_ctx,
       break;
 
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 }
@@ -564,8 +564,8 @@ intel_perf_init_context(struct intel_perf_context *perf_ctx,
    perf_ctx->unaccumulated_elements = 0;
    perf_ctx->unaccumulated_array_size = 2;
 
-   exec_list_make_empty(&perf_ctx->sample_buffers);
-   exec_list_make_empty(&perf_ctx->free_sample_buffers);
+   brw_exec_list_make_empty(&perf_ctx->sample_buffers);
+   brw_exec_list_make_empty(&perf_ctx->free_sample_buffers);
 
    /* It's convenient to guarantee that this linked list of sample
     * buffers is never empty so we add an empty head so when we
@@ -573,7 +573,7 @@ intel_perf_init_context(struct intel_perf_context *perf_ctx,
     * in this list.
     */
    struct oa_sample_buf *buf = get_free_sample_buf(perf_ctx);
-   exec_list_push_head(&perf_ctx->sample_buffers, &buf->link);
+   brw_exec_list_push_head(&perf_ctx->sample_buffers, &buf->link);
 
    perf_ctx->oa_stream_fd = -1;
    perf_ctx->next_query_start_report_id = 1000;
@@ -711,7 +711,7 @@ snapshot_query_layout(struct intel_perf_context *perf_ctx,
                                            offset + field->location);
          break;
       default:
-         unreachable("Invalid field type");
+         UNREACHABLE("Invalid field type");
       }
    }
 }
@@ -831,11 +831,11 @@ intel_perf_begin_query(struct intel_perf_context *perf_ctx,
        * easily ignore earlier samples when processing this query after
        * completion.
        */
-      assert(!exec_list_is_empty(&perf_ctx->sample_buffers));
-      query->oa.samples_head = exec_list_get_tail(&perf_ctx->sample_buffers);
+      assert(!brw_exec_list_is_empty(&perf_ctx->sample_buffers));
+      query->oa.samples_head = brw_exec_list_get_tail(&perf_ctx->sample_buffers);
 
       struct oa_sample_buf *buf =
-         exec_node_data(struct oa_sample_buf, query->oa.samples_head, link);
+         brw_exec_node_data(struct oa_sample_buf, query->oa.samples_head, link);
 
       /* This reference will ensure that future/following sample
        * buffers (that may relate to this query) can't be freed until
@@ -868,7 +868,7 @@ intel_perf_begin_query(struct intel_perf_context *perf_ctx,
       break;
 
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 
@@ -916,7 +916,7 @@ intel_perf_end_query(struct intel_perf_context *perf_ctx,
       break;
 
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 }
@@ -960,10 +960,10 @@ read_oa_samples_until(struct intel_perf_context *perf_ctx,
                       uint32_t start_timestamp,
                       uint32_t end_timestamp)
 {
-   struct exec_node *tail_node =
-      exec_list_get_tail(&perf_ctx->sample_buffers);
+   struct brw_exec_node *tail_node =
+      brw_exec_list_get_tail(&perf_ctx->sample_buffers);
    struct oa_sample_buf *tail_buf =
-      exec_node_data(struct oa_sample_buf, tail_node, link);
+      brw_exec_node_data(struct oa_sample_buf, tail_node, link);
    uint32_t last_timestamp =
       tail_buf->len == 0 ? start_timestamp : tail_buf->last_timestamp;
    bool sample_read = false;
@@ -979,7 +979,7 @@ read_oa_samples_until(struct intel_perf_context *perf_ctx,
                                            oa_sample_buf_buf_length(perf_ctx->perf));
 
       if (len <= 0) {
-         exec_list_push_tail(&perf_ctx->free_sample_buffers, &buf->link);
+         brw_exec_list_push_tail(&perf_ctx->free_sample_buffers, &buf->link);
 
          if (len == 0) {
             if (sample_read)
@@ -1008,7 +1008,7 @@ read_oa_samples_until(struct intel_perf_context *perf_ctx,
       }
 
       buf->len = len;
-      exec_list_push_tail(&perf_ctx->sample_buffers, &buf->link);
+      brw_exec_list_push_tail(&perf_ctx->sample_buffers, &buf->link);
 
       /* Go through the reports and update the last timestamp. */
       offset = 0;
@@ -1027,7 +1027,7 @@ read_oa_samples_until(struct intel_perf_context *perf_ctx,
       buf->last_timestamp = last_timestamp;
    }
 
-   unreachable("not reached");
+   UNREACHABLE("not reached");
    return OA_READ_STATUS_ERROR;
 }
 
@@ -1077,7 +1077,7 @@ read_oa_samples_for_query(struct intel_perf_context *perf_ctx,
       return false;
    }
 
-   unreachable("invalid read status");
+   UNREACHABLE("invalid read status");
    return false;
 }
 
@@ -1100,7 +1100,7 @@ intel_perf_wait_query(struct intel_perf_context *perf_ctx,
       break;
 
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 
@@ -1137,7 +1137,7 @@ intel_perf_is_query_ready(struct intel_perf_context *perf_ctx,
               !perf_cfg->vtbl.bo_busy(query->pipeline_stats.bo));
 
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 
@@ -1175,7 +1175,7 @@ drop_from_unaccumulated_query_list(struct intel_perf_context *perf_ctx,
     */
 
    struct oa_sample_buf *buf =
-      exec_node_data(struct oa_sample_buf, query->oa.samples_head, link);
+      brw_exec_node_data(struct oa_sample_buf, query->oa.samples_head, link);
 
    assert(buf->refcount > 0);
    buf->refcount--;
@@ -1240,7 +1240,7 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
    uint32_t *start;
    uint32_t *last;
    uint32_t *end;
-   struct exec_node *first_samples_node;
+   struct brw_exec_node *first_samples_node;
    bool last_report_ctx_match = true;
    int out_duration = 0;
 
@@ -1277,7 +1277,7 @@ accumulate_oa_reports(struct intel_perf_context *perf_ctx,
     */
    first_samples_node = query->oa.samples_head->next;
 
-   foreach_list_typed_from(struct oa_sample_buf, buf, link,
+   brw_foreach_list_typed_from(struct oa_sample_buf, buf, link,
                            &perf_ctx->sample_buffers,
                            first_samples_node)
    {
@@ -1428,7 +1428,7 @@ intel_perf_delete_query(struct intel_perf_context *perf_ctx,
       break;
 
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 
@@ -1477,7 +1477,7 @@ get_oa_counter_data(struct intel_perf_context *perf_ctx,
             break;
          default:
             /* So far we aren't using uint32, double or bool32... */
-            unreachable("unexpected counter data type");
+            UNREACHABLE("unexpected counter data type");
          }
 
          if (counter->offset + counter_size > written)
@@ -1577,7 +1577,7 @@ intel_perf_get_query_data(struct intel_perf_context *perf_ctx,
       break;
 
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 
@@ -1610,7 +1610,7 @@ intel_perf_dump_query(struct intel_perf_context *ctx,
           obj->pipeline_stats.bo ? "yes" : "no");
       break;
    default:
-      unreachable("Unknown query type");
+      UNREACHABLE("Unknown query type");
       break;
    }
 }

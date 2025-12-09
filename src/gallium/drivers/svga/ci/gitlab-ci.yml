@@ -11,7 +11,6 @@ include:
     VISIBILITY_GROUP: "mesa-ci"
     EGL_PLATFORM: "surfaceless"
     PIGLIT_TRACES_FILE: traces-vmware.yml
-    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=${FDO_HTTP_CACHE_URI}"
     PIGLIT_REPLAY_DEVICE_NAME: "gl-vmware-llvmpipe"
     PIGLIT_RESULTS: "llvmpipe-replay"
     FARM: vmware

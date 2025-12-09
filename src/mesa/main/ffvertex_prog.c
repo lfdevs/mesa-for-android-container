@@ -310,8 +310,8 @@ register_state_var(struct tnl_program *p,
    if (var)
       return var;
 
-   var = st_nir_state_variable_create(p->b->shader, type, tokens);
-   var->data.driver_location = _mesa_add_state_reference(p->state_params, tokens);
+   var = st_nir_state_variable_create(p->b->shader, type, p->state_params,
+                                      tokens, NULL, false);
 
    return var;
 }
@@ -531,7 +531,7 @@ static GLuint material_attrib( GLuint side, GLuint property )
    case STATE_SHININESS:
       return MAT_ATTRIB_FRONT_SHININESS + side;
    default:
-      unreachable("invalid value");
+      UNREACHABLE("invalid value");
    }
 }
 
@@ -1063,7 +1063,7 @@ static void build_fog( struct tnl_program *p )
       fog = load_input(p, VERT_ATTRIB_FOG, 1);
       break;
    default:
-      unreachable("Bad fog mode in build_fog()");
+      UNREACHABLE("Bad fog mode in build_fog()");
    }
 
    store_output_float(p, VARYING_SLOT_FOGC, fog);
@@ -1305,7 +1305,7 @@ static void build_tnl_program( struct tnl_program *p )
 
 
 static nir_shader *
-create_new_program( const struct state_key *key,
+create_new_program(struct gl_context *ctx, const struct state_key *key,
                     struct gl_program *program,
                     const nir_shader_compiler_options *options)
 {
@@ -1333,7 +1333,8 @@ create_new_program( const struct state_key *key,
    nir_validate_shader(b.shader, "after generating ff-vertex shader");
 
    /* Emit the MVP position transformation */
-   NIR_PASS(_, b.shader, st_nir_lower_position_invariant, p.state_params);
+   NIR_PASS(_, b.shader, st_nir_lower_position_invariant, p.state_params,
+            ctx->Const.PackedDriverUniformStorage);
 
    _mesa_add_separate_state_parameters(program, p.state_params);
    _mesa_free_parameter_list(p.state_params);
@@ -1377,8 +1378,7 @@ _mesa_get_fixed_func_vertex_program(struct gl_context *ctx)
          ctx->screen->nir_options[MESA_SHADER_VERTEX];
 
       nir_shader *s =
-         create_new_program( &key, prog,
-                             options);
+         create_new_program(ctx, &key, prog, options);
 
       prog->state.type = PIPE_SHADER_IR_NIR;
       prog->nir = s;

@@ -47,10 +47,10 @@ TEST_F(misc, invariant_pipeline_cache_uuid)
 }
 
 /**
- * This test verifies that the pipeline hash returned when shader stats are captured (eg. Fossilize)
- * matches the pipeline hash returned when RGP is enabled.
+ * This test verifies that the pipeline key returned when shader stats are captured (eg. Fossilize)
+ * matches the pipeline key returned when RGP is enabled.
  */
-TEST_F(misc, pipeline_hash_rgp_fossilize)
+TEST_F(misc, pipeline_key_rgp_fossilize)
 {
 
    create_device();
@@ -92,13 +92,11 @@ TEST_F(misc, pipeline_hash_rgp_fossilize)
       0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0xf8, 0x00,
       0x02, 0x00, 0x05, 0x00, 0x00, 0x00, 0xfd, 0x00, 0x01, 0x00, 0x38, 0x00, 0x01, 0x00};
 
-   uint64_t pipeline_hash;
+   VkPipelineBinaryKeyKHR pipeline_keys[2];
 
-   /* Create a simple compute pipeline that captures shader statistics (like Fossilize) and get the pipeline hash. */
-   create_compute_pipeline(ARRAY_SIZE(code), (uint32_t *)code, VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
-   pipeline_hash = get_pipeline_hash(VK_SHADER_STAGE_COMPUTE_BIT);
-   EXPECT_NE(pipeline_hash, 0);
-   destroy_pipeline();
+   /* Get the pipeline key for a simple compute pipeline that captures shader statistics (like Fossilize). */
+   get_pipeline_key(ARRAY_SIZE(code), (uint32_t *)code, &pipeline_keys[0],
+                    VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
 
    destroy_device();
 
@@ -108,10 +106,10 @@ TEST_F(misc, pipeline_hash_rgp_fossilize)
 
    create_device();
 
-   /* Verify the pipeline hash matches. */
-   create_compute_pipeline(ARRAY_SIZE(code), (uint32_t *)code);
-   EXPECT_EQ(pipeline_hash, get_pipeline_hash(VK_SHADER_STAGE_COMPUTE_BIT));
-   destroy_pipeline();
+   /* Verify the pipeline keys match. */
+   get_pipeline_key(ARRAY_SIZE(code), (uint32_t *)code, &pipeline_keys[1]);
+   EXPECT_EQ(pipeline_keys[0].keySize, pipeline_keys[1].keySize);
+   EXPECT_FALSE(memcmp(pipeline_keys[0].key, pipeline_keys[1].key, pipeline_keys[0].keySize));
 
    destroy_device();
 }

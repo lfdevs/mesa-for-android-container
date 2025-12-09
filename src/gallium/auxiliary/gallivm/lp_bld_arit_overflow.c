@@ -37,23 +37,12 @@
 
 #include "lp_bld_arit_overflow.h"
 
-#include "lp_bld_type.h"
-#include "lp_bld_const.h"
 #include "lp_bld_init.h"
 #include "lp_bld_intr.h"
-#include "lp_bld_logic.h"
-#include "lp_bld_pack.h"
-#include "lp_bld_debug.h"
-#include "lp_bld_bitarit.h"
 
-#include "util/u_memory.h"
-#include "util/u_debug.h"
-#include "util/u_math.h"
-#include "util/u_string.h"
-#include "util/u_cpu_detect.h"
+#include "util/macros.h"
 
 #include <float.h>
-
 
 static LLVMValueRef
 build_binary_int_overflow(struct gallivm_state *gallivm,
@@ -103,7 +92,7 @@ build_binary_int_overflow(struct gallivm_state *gallivm,
 }
 
 /**
- * Performs unsigned addition of two integers and reports 
+ * Performs unsigned addition of two integers and reports
  * overflow if detected.
  *
  * The values @a and @b must be of the same integer type. If
@@ -113,7 +102,7 @@ build_binary_int_overflow(struct gallivm_state *gallivm,
  * - if it's pointing to a valid value, then that variable,
  *   which must be of i1 type, is ORed with the newly detected
  *   overflow bit. This is done to allow chaining of a number of
- *   overflow functions together without having to test the 
+ *   overflow functions together without having to test the
  *   overflow bit after every single one.
  */
 LLVMValueRef
@@ -127,7 +116,7 @@ lp_build_uadd_overflow(struct gallivm_state *gallivm,
 }
 
 /**
- * Performs unsigned subtraction of two integers and reports 
+ * Performs unsigned subtraction of two integers and reports
  * overflow if detected.
  *
  * The values @a and @b must be of the same integer type. If
@@ -137,7 +126,7 @@ lp_build_uadd_overflow(struct gallivm_state *gallivm,
  * - if it's pointing to a valid value, then that variable,
  *   which must be of i1 type, is ORed with the newly detected
  *   overflow bit. This is done to allow chaining of a number of
- *   overflow functions together without having to test the 
+ *   overflow functions together without having to test the
  *   overflow bit after every single one.
  */
 LLVMValueRef
@@ -151,7 +140,7 @@ lp_build_usub_overflow(struct gallivm_state *gallivm,
 }
 
 /**
- * Performs unsigned multiplication of  two integers and 
+ * Performs unsigned multiplication of  two integers and
  * reports overflow if detected.
  *
  * The values @a and @b must be of the same integer type. If
@@ -161,7 +150,7 @@ lp_build_usub_overflow(struct gallivm_state *gallivm,
  * - if it's pointing to a valid value, then that variable,
  *   which must be of i1 type, is ORed with the newly detected
  *   overflow bit. This is done to allow chaining of a number of
- *   overflow functions together without having to test the 
+ *   overflow functions together without having to test the
  *   overflow bit after every single one.
  */
 LLVMValueRef

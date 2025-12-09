@@ -367,6 +367,9 @@
    DRI_CONF_OPT_B(intel_sampler_route_to_lsc, def, \
                   "Intel specific toggle to enable sampler route to LSC")
 
+#define DRI_CONF_INTEL_DISABLE_THREADED_CONTEXT(def) \
+   DRI_CONF_OPT_B(intel_disable_threaded_context, def, "Disable threaded context")
+
 #define DRI_CONF_VK_REQUIRE_ETC2(def) \
   DRI_CONF_OPT_B(vk_require_etc2, def, \
                  "Implement emulated ETC2 on HW that does not support it")
@@ -449,6 +452,10 @@
    DRI_CONF_OPT_B(vk_wsi_force_swapchain_to_current_extent, def, \
                   "Force VkSwapchainCreateInfoKHR::imageExtent to be VkSurfaceCapabilities2KHR::currentExtent")
 
+#define DRI_CONF_VK_WSI_DISABLE_UNORDERED_SUBMITS(def) \
+   DRI_CONF_OPT_B(vk_wsi_disable_unordered_submits, def, \
+                  "Disable unordered WSI submits to workaround application synchronization bugs")
+
 #define DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(def) \
    DRI_CONF_OPT_I(vk_x11_override_min_image_count, def, 0, 999, \
                   "Override the VkSurfaceCapabilitiesKHR::minImageCount (0 = no override)")
@@ -464,10 +471,6 @@
 #define DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(def) \
    DRI_CONF_OPT_B(vk_x11_ignore_suboptimal, def, \
                   "Force the X11 WSI to never report VK_SUBOPTIMAL_KHR")
-
-#define DRI_CONF_VK_KHR_PRESENT_WAIT(def) \
-   DRI_CONF_OPT_B(vk_khr_present_wait, def, \
-                  "Expose VK_KHR_present_wait and id extensions despite them not being implemented for all supported surface types")
 
 #define DRI_CONF_VK_XWAYLAND_WAIT_READY(def) \
    DRI_CONF_OPT_B(vk_xwayland_wait_ready, def, \
@@ -523,6 +526,10 @@
 #define DRI_CONF_ALLOW_MULTISAMPLED_COPYTEXIMAGE(def) \
    DRI_CONF_OPT_B(allow_multisampled_copyteximage, def, \
                   "Allow CopyTexSubImage and other to copy sampled framebuffer")
+
+#define DRI_CONF_VERTEX_PROGRAM_DEFAULT_OUT(def) \
+   DRI_CONF_OPT_B(vertex_program_default_out, def, \
+                  "Initialize outputs of vertex program to a default value vec4(0, 0, 0, 1)")
 
 #define DRI_CONF_CUSTOM_BORDER_COLORS_WITHOUT_FORMAT(def) \
    DRI_CONF_OPT_B(custom_border_colors_without_format, def, \
@@ -595,6 +602,10 @@
    DRI_CONF_OPT_B(disable_conservative_lrz, def, \
                   "Disable conservative LRZ")
 
+#define DRI_CONF_DISABLE_EXPLICIT_SYNC_HEURISTIC(def) \
+   DRI_CONF_OPT_B(disable_explicit_sync_heuristic, def, \
+                  "Disable Explicit-sync heuristic")
+
 /**
  * \brief panfrost specific configuration options
  */
@@ -639,6 +650,10 @@
    DRI_CONF_OPT_B(tu_ignore_frag_depth_direction, def, \
                   "Ignore direction specified for gl_FragDepth output")
 
+#define DRI_CONF_TU_ENABLE_SOFTFLOAT32(def) \
+   DRI_CONF_OPT_B(tu_enable_softfloat32, def, \
+                  "Enable softfloat emulation for float32 denormals")
+
 /**
  * \brief Honeykrisp specific configuration options
  */
@@ -650,6 +665,10 @@
 #define DRI_CONF_HK_FAKE_MINMAX(def) \
    DRI_CONF_OPT_B(hk_fake_minmax, def, \
                   "Fake support for min/max filtering")
+
+#define DRI_CONF_HK_IMAGE_VIEW_MIN_LOD(def) \
+   DRI_CONF_OPT_B(hk_image_view_min_lod, def, \
+                  "Emulate VK_EXT_image_view_min_lod (conformant but slower)")
 
 /**
  * \brief venus specific configuration options
@@ -704,11 +723,11 @@
 
 #define DRI_CONF_RADV_DISABLE_DCC(def) \
    DRI_CONF_OPT_B(radv_disable_dcc, def, \
-                  "Disable DCC for color images")
+                  "Disable DCC for color images on GFX8-GFX11.5")
 
 #define DRI_CONF_RADV_DISABLE_DCC_MIPS(def) \
    DRI_CONF_OPT_B(radv_disable_dcc_mips, def, \
-                  "Disable DCC for color images with mips")
+                  "Disable DCC for color images with mips on GFX8-GFX11.5")
 
 #define DRI_CONF_RADV_DISABLE_DCC_STORES(def) \
    DRI_CONF_OPT_B(radv_disable_dcc_stores, def, \
@@ -755,6 +774,14 @@
    DRI_CONF_OPT_B(radv_rt_wave64, def, \
                   "Force wave64 in RT shaders")
 
+#define DRI_CONF_RADV_WAIT_FOR_VM_MAP_UPDATES(def) \
+   DRI_CONF_OPT_B(radv_wait_for_vm_map_updates, def, \
+                  "Wait for VM MAP updates at allocation time to mitigate use-before-alloc")
+
+#define DRI_CONF_RADV_NO_IMPLICIT_VARYING_SUBGROUP_SIZE(def) \
+   DRI_CONF_OPT_B(radv_no_implicit_varying_subgroup_size, def, \
+                  "Do not assume VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE for SPIR-V 1.6.")
+
 /**
  * Overrides for forcing re-compilation of pipelines when RADV_BUILD_ID_OVERRIDE is enabled.
  * These need to be bumped every time a compiler bugfix is backported (up to 8 shader
@@ -788,13 +815,18 @@
    DRI_CONF_OPT_B(radv_enable_float16_gfx8, def, \
                   "Expose float16 on GFX8, where it's supported but usually not beneficial.")
 
-#define DRI_CONF_RADV_DISABLE_HIZ_HIS_GFX12(def) \
-   DRI_CONF_OPT_B(radv_disable_hiz_his_gfx12, def, \
-                  "Disable HiZ/HiS on GFX12 (RDNA4) to workaround a hw bug that causes random GPU hangs")
-
 #define DRI_CONF_RADV_COOPERATIVE_MATRIX2_NV(def) \
    DRI_CONF_OPT_B(radv_cooperative_matrix2_nv, def, \
                   "Expose VK_NV_cooperative_matrix2 on supported hardware.")
+
+#define DRI_CONF_RADV_GFX12_HIZ_WA() \
+   DRI_CONF_OPT_S_NODEF(radv_gfx12_hiz_wa, \
+                        "Choose the specific HiZ workaround to apply on GFX12 (RDNA4). " \
+                        "Accepted values are: disabled, partial or full")
+
+#define DRI_CONF_RADV_HIDE_REBAR_ON_DGPU(def) \
+   DRI_CONF_OPT_B(radv_hide_rebar_on_dgpu, def, \
+                  "Hide resizable bar on dGPUs by exposing a fake carveout of 256MiB.")
 
 /**
  * \brief ANV specific configuration options
@@ -874,6 +906,14 @@
    DRI_CONF_OPT_B(anv_vf_component_packing, def, \
                   "Vertex fetching component packing")
 
+#define DRI_CONF_ANV_LARGE_WORKGROUP_NON_COHERENT_IMAGE_WORKAROUND(def) \
+   DRI_CONF_OPT_B(anv_large_workgroup_non_coherent_image_workaround, def, \
+                  "Fixup image coherency qualifier for certain shaders.")
+
+#define DRI_CONF_ANV_FORCE_GUC_LOW_LATENCY(def) \
+   DRI_CONF_OPT_B(force_guc_low_latency, def, \
+                  "Enable low latency GuC strategy.")
+
 /**
  * \brief HASVK specific configuration options
  */
@@ -881,10 +921,6 @@
 #define DRI_CONF_HASVK_OVERRIDE_API_VERSION(def) \
    DRI_CONF_OPT_B(hasvk_report_vk_1_3_version, def, \
                   "Override intel_hasvk API version")
-
-#define DRI_CONF_ANV_FORCE_GUC_LOW_LATENCY(def) \
-   DRI_CONF_OPT_B(force_guc_low_latency, def, \
-                  "Enable low latency GuC strategy. Only supported on i915.")
 
 /**
  * \brief DZN specific configuration options

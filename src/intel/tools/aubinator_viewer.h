@@ -3,7 +3,7 @@
 
 #include "imgui/imgui.h"
 
-#include "compiler/brw_disasm.h"
+#include "compiler/brw/brw_disasm.h"
 #include "decoder/intel_decoder.h"
 
 struct aub_viewer_cfg {

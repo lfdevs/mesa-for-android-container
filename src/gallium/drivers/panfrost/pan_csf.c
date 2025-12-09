@@ -423,7 +423,7 @@ csf_submit_collect_wait_ops(struct panfrost_batch *batch,
          .timeline_value = bo_sync_point,
       };
 
-      util_dynarray_append(syncops, struct drm_panthor_sync_op, waitop);
+      util_dynarray_append(syncops, waitop);
    }
 
    if (vm_sync_wait_point > 0) {
@@ -434,7 +434,7 @@ csf_submit_collect_wait_ops(struct panfrost_batch *batch,
          .timeline_value = vm_sync_wait_point,
       };
 
-      util_dynarray_append(syncops, struct drm_panthor_sync_op, waitop);
+      util_dynarray_append(syncops, waitop);
    }
 
    if (ctx->in_sync_fd >= 0) {
@@ -449,7 +449,7 @@ csf_submit_collect_wait_ops(struct panfrost_batch *batch,
          .handle = ctx->in_sync_obj,
       };
 
-      util_dynarray_append(syncops, struct drm_panthor_sync_op, waitop);
+      util_dynarray_append(syncops, waitop);
 
       close(ctx->in_sync_fd);
       ctx->in_sync_fd = -1;
@@ -615,10 +615,8 @@ csf_submit_wait_and_dump(struct panfrost_batch *batch,
 
    /* Jobs won't be complete if blackhole rendering, that's ok */
    if (!ctx->is_noop && (dev->debug & PAN_DBG_SYNC) &&
-       *((uint64_t *)batch->csf.cs.state.cpu) != 0) {
+       *((uint64_t *)batch->csf.cs.state.cpu) != 0)
       crash = true;
-      dump = true;
-   }
 
    if (dump) {
       const struct drm_panthor_queue_submit *qsubmits =
@@ -658,7 +656,7 @@ GENX(csf_submit_batch)(struct panfrost_batch *batch)
    uint32_t vm_sync_handle = panthor_kmod_vm_sync_handle(dev->kmod.vm);
    struct util_dynarray syncops;
 
-   util_dynarray_init(&syncops, NULL);
+   syncops = UTIL_DYNARRAY_INIT;
 
    ret = csf_submit_collect_wait_ops(batch, &syncops, vm_sync_handle);
    if (ret)
@@ -674,7 +672,7 @@ GENX(csf_submit_batch)(struct panfrost_batch *batch)
       .timeline_value = vm_sync_signal_point,
    };
 
-   util_dynarray_append(&syncops, struct drm_panthor_sync_op, signalop);
+   util_dynarray_append(&syncops, signalop);
 
    struct drm_panthor_queue_submit qsubmit;
    struct drm_panthor_group_submit gsubmit;
@@ -900,18 +898,18 @@ GENX(csf_emit_fragment_job)(struct panfrost_batch *batch,
 }
 
 static void
-csf_emit_shader_regs(struct panfrost_batch *batch, enum pipe_shader_type stage,
+csf_emit_shader_regs(struct panfrost_batch *batch, mesa_shader_stage stage,
                      uint64_t shader)
 {
    uint64_t resources = panfrost_emit_resources(batch, stage);
 
-   assert(stage == PIPE_SHADER_VERTEX || stage == PIPE_SHADER_FRAGMENT ||
-          stage == PIPE_SHADER_COMPUTE);
+   assert(stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_FRAGMENT ||
+          stage == MESA_SHADER_COMPUTE);
 
 #if PAN_ARCH >= 12
-   unsigned offset = (stage == PIPE_SHADER_FRAGMENT) ? 2 : 0;
+   unsigned offset = (stage == MESA_SHADER_FRAGMENT) ? 2 : 0;
 #else
-   unsigned offset = (stage == PIPE_SHADER_FRAGMENT) ? 4 : 0;
+   unsigned offset = (stage == MESA_SHADER_FRAGMENT) ? 4 : 0;
 #endif
 
    unsigned fau_count = DIV_ROUND_UP(batch->nr_push_uniforms[stage], 2);
@@ -928,16 +926,16 @@ GENX(csf_launch_grid)(struct panfrost_batch *batch,
                       const struct pipe_grid_info *info)
 {
    /* Empty compute programs are invalid and don't make sense */
-   if (batch->rsd[PIPE_SHADER_COMPUTE] == 0)
+   if (batch->rsd[MESA_SHADER_COMPUTE] == 0)
       return;
 
    struct panfrost_context *ctx = batch->ctx;
    struct panfrost_device *dev = pan_device(ctx->base.screen);
-   struct panfrost_compiled_shader *cs = ctx->prog[PIPE_SHADER_COMPUTE];
+   struct panfrost_compiled_shader *cs = ctx->prog[MESA_SHADER_COMPUTE];
    struct cs_builder *b = batch->csf.cs.builder;
 
-   csf_emit_shader_regs(batch, PIPE_SHADER_COMPUTE,
-                        batch->rsd[PIPE_SHADER_COMPUTE]);
+   csf_emit_shader_regs(batch, MESA_SHADER_COMPUTE,
+                        batch->rsd[MESA_SHADER_COMPUTE]);
 
    cs_move64_to(b, cs_sr_reg64(b, COMPUTE, TSD_0), batch->tls.gpu);
 
@@ -1079,8 +1077,8 @@ GENX(csf_launch_xfb)(struct panfrost_batch *batch,
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Y), info->instance_count);
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Z), 1);
 
-   csf_emit_shader_regs(batch, PIPE_SHADER_VERTEX,
-                        batch->rsd[PIPE_SHADER_VERTEX]);
+   csf_emit_shader_regs(batch, MESA_SHADER_VERTEX,
+                        batch->rsd[MESA_SHADER_VERTEX]);
    /* force a barrier to avoid read/write sync issues with buffers */
    cs_wait_slot(b, 2);
 
@@ -1114,8 +1112,8 @@ csf_emit_draw_state(struct panfrost_batch *batch,
                     const struct pipe_draw_info *info, unsigned drawid_offset)
 {
    struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
-   struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
+   struct panfrost_compiled_shader *vs = ctx->prog[MESA_SHADER_VERTEX];
+   struct panfrost_compiled_shader *fs = ctx->prog[MESA_SHADER_FRAGMENT];
 
    bool idvs = vs->info.vs.idvs;
    bool fs_required = panfrost_fs_required(
@@ -1131,12 +1129,12 @@ csf_emit_draw_state(struct panfrost_batch *batch,
       cs_vt_start(batch->csf.cs.builder, cs_now());
    }
 
-   csf_emit_shader_regs(batch, PIPE_SHADER_VERTEX,
+   csf_emit_shader_regs(batch, MESA_SHADER_VERTEX,
       panfrost_get_position_shader(batch, info));
 
    if (fs_required) {
-      csf_emit_shader_regs(batch, PIPE_SHADER_FRAGMENT,
-                           batch->rsd[PIPE_SHADER_FRAGMENT]);
+      csf_emit_shader_regs(batch, MESA_SHADER_FRAGMENT,
+                           batch->rsd[MESA_SHADER_FRAGMENT]);
    } else {
       cs_move64_to(b, cs_sr_reg64(b, IDVS, FRAGMENT_SRT), 0);
       cs_move64_to(b, cs_sr_reg64(b, IDVS, FRAGMENT_FAU), 0);
@@ -1180,7 +1178,7 @@ csf_emit_draw_state(struct panfrost_batch *batch,
    if (ctx->occlusion_query && ctx->active_queries) {
       struct panfrost_resource *rsrc = pan_resource(ctx->occlusion_query->rsrc);
       cs_move64_to(b, cs_sr_reg64(b, IDVS, OQ), rsrc->plane.base);
-      panfrost_batch_write_rsrc(ctx->batch, rsrc, PIPE_SHADER_FRAGMENT);
+      panfrost_batch_write_rsrc(ctx->batch, rsrc, MESA_SHADER_FRAGMENT);
    }
 
    cs_move32_to(b, cs_sr_reg32(b, IDVS, VARY_SIZE),
@@ -1357,7 +1355,7 @@ csf_emit_draw_id_register(struct panfrost_batch *batch, unsigned offset)
 {
    struct cs_builder *b = batch->csf.cs.builder;
    struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_uncompiled_shader *vs = ctx->uncompiled[PIPE_SHADER_VERTEX];
+   struct panfrost_uncompiled_shader *vs = ctx->uncompiled[MESA_SHADER_VERTEX];
 
    if (!BITSET_TEST(vs->nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID))
       return cs_undef();
@@ -1695,5 +1693,5 @@ GENX(csf_emit_write_timestamp)(struct panfrost_batch *batch,
    cs_move64_to(b, address, dst->plane.base + offset);
    cs_store_state(b, address, 0, MALI_CS_STATE_TIMESTAMP, cs_now());
 
-   panfrost_batch_write_rsrc(batch, dst, PIPE_SHADER_VERTEX);
+   panfrost_batch_write_rsrc(batch, dst, MESA_SHADER_VERTEX);
 }

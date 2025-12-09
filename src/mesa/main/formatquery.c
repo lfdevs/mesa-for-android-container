@@ -430,7 +430,7 @@ _set_default_response(GLenum pname, GLint buffer[16])
       break;
 
    default:
-      unreachable("invalid 'pname'");
+      UNREACHABLE("invalid 'pname'");
    }
 }
 
@@ -473,7 +473,7 @@ _is_target_supported(struct gl_context *ctx, GLenum target)
       break;
 
    case GL_TEXTURE_BUFFER:
-      if (!_mesa_has_ARB_texture_buffer_object(ctx))
+      if (!_mesa_has_texture_buffer_object(ctx))
          return false;
       break;
 
@@ -494,7 +494,7 @@ _is_target_supported(struct gl_context *ctx, GLenum target)
       break;
 
    default:
-      unreachable("invalid target");
+      UNREACHABLE("invalid target");
    }
 
    return true;
@@ -584,7 +584,7 @@ _is_resource_supported(struct gl_context *ctx, GLenum target,
 
       break;
    default:
-      unreachable("bad target");
+      UNREACHABLE("bad target");
    }
 
    return true;
@@ -1674,7 +1674,7 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
       break;
 
    default:
-      unreachable("bad param");
+      UNREACHABLE("bad param");
    }
 
  end:

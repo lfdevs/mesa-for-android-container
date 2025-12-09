@@ -60,7 +60,7 @@ create_vert_shader(struct vl_compositor *c)
    struct ureg_dst o_vpos, o_vtex, o_color;
    struct ureg_dst o_vtop, o_vbottom;
 
-   shader = ureg_create(PIPE_SHADER_VERTEX);
+   shader = ureg_create(MESA_SHADER_VERTEX);
    if (!shader)
       return NULL;
 
@@ -268,7 +268,7 @@ create_frag_shader_video_buffer(struct vl_compositor *c)
    struct ureg_dst texel;
    struct ureg_dst fragment;
 
-   shader = ureg_create(PIPE_SHADER_FRAGMENT);
+   shader = ureg_create(MESA_SHADER_FRAGMENT);
    if (!shader)
       return NULL;
 
@@ -290,7 +290,7 @@ create_frag_shader_weave_rgb(struct vl_compositor *c)
    struct ureg_program *shader;
    struct ureg_dst texel, fragment;
 
-   shader = ureg_create(PIPE_SHADER_FRAGMENT);
+   shader = ureg_create(MESA_SHADER_FRAGMENT);
    if (!shader)
       return NULL;
 
@@ -313,7 +313,7 @@ create_frag_shader_deint_yuv(struct vl_compositor *c, bool y, bool w)
    struct ureg_program *shader;
    struct ureg_dst texel, fragment;
 
-   shader = ureg_create(PIPE_SHADER_FRAGMENT);
+   shader = ureg_create(MESA_SHADER_FRAGMENT);
    if (!shader)
       return NULL;
 
@@ -351,7 +351,7 @@ create_frag_shader_palette(struct vl_compositor *c, bool include_cc)
    struct ureg_dst fragment;
    unsigned i;
 
-   shader = ureg_create(PIPE_SHADER_FRAGMENT);
+   shader = ureg_create(MESA_SHADER_FRAGMENT);
    if (!shader)
       return NULL;
 
@@ -405,7 +405,7 @@ create_frag_shader_rgba(struct vl_compositor *c)
    struct ureg_src tc, color, sampler;
    struct ureg_dst texel, fragment;
 
-   shader = ureg_create(PIPE_SHADER_FRAGMENT);
+   shader = ureg_create(MESA_SHADER_FRAGMENT);
    if (!shader)
       return NULL;
 
@@ -440,7 +440,7 @@ create_frag_shader_rgb_yuv(struct vl_compositor *c, bool y)
    struct ureg_src csc[3];
    unsigned i;
 
-   shader = ureg_create(PIPE_SHADER_FRAGMENT);
+   shader = ureg_create(MESA_SHADER_FRAGMENT);
    if (!shader)
       return NULL;
 
@@ -599,7 +599,7 @@ calc_drawn_area(struct vl_compositor_state *s, struct vl_compositor_layer *layer
 }
 
 static void
-gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rect *dirty)
+gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rect *dirty, struct pipe_resource **releasebuf)
 {
    struct vertex2f *vb;
    unsigned i;
@@ -611,6 +611,7 @@ gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u
                   VL_COMPOSITOR_VB_STRIDE * VL_COMPOSITOR_MAX_LAYERS * 4, /* size */
                   4, /* alignment */
                   &c->vertex_buf.buffer_offset, &c->vertex_buf.buffer.resource,
+                  releasebuf,
                   (void **)&vb);
 
    for (i = 0; i < VL_COMPOSITOR_MAX_LAYERS; i++) {
@@ -660,8 +661,8 @@ set_csc_matrix(struct vl_compositor_state *s)
    memcpy(ptr, &s->csc_matrix, sizeof(vl_csc_matrix));
 
    ptr += sizeof(vl_csc_matrix) / sizeof(float);
-   *ptr++ = s->luma_min;
-   *ptr++ = s->luma_max;
+   *ptr++ = 0.0f; /* luma_min */
+   *ptr++ = 1.0f; /* luma_max */
 
    pipe_buffer_unmap(s->pipe, buf_transfer);
 }
@@ -683,9 +684,9 @@ draw_layers(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rec
          c->pipe->bind_blend_state(c->pipe, blend);
          c->pipe->set_viewport_states(c->pipe, 0, 1, &layer->viewport);
          c->pipe->bind_fs_state(c->pipe, layer->fs);
-         c->pipe->bind_sampler_states(c->pipe, PIPE_SHADER_FRAGMENT, 0,
+         c->pipe->bind_sampler_states(c->pipe, MESA_SHADER_FRAGMENT, 0,
                                       num_sampler_views, layer->samplers);
-         c->pipe->set_sampler_views(c->pipe, PIPE_SHADER_FRAGMENT, 0,
+         c->pipe->set_sampler_views(c->pipe, MESA_SHADER_FRAGMENT, 0,
                                     num_sampler_views, 0, samplers);
 
          util_draw_arrays(c->pipe, MESA_PRIM_QUADS, vb_index * 4, 4);
@@ -724,7 +725,8 @@ vl_compositor_gfx_render(struct vl_compositor_state *s,
    }
    c->pipe->set_scissor_states(c->pipe, 0, 1, &s->scissor);
 
-   gen_vertex_data(c, s, dirty_area);
+   struct pipe_resource *releasebuf = NULL;
+   gen_vertex_data(c, s, dirty_area, &releasebuf);
    set_csc_matrix(s);
 
    if (clear_dirty && dirty_area &&
@@ -739,9 +741,10 @@ vl_compositor_gfx_render(struct vl_compositor_state *s,
    c->pipe->set_framebuffer_state(c->pipe, &c->fb_state);
    c->pipe->bind_vs_state(c->pipe, c->vs);
    c->pipe->bind_vertex_elements_state(c->pipe, c->vertex_elems_state);
-   util_set_vertex_buffers(c->pipe, 1, false, &c->vertex_buf);
-   pipe_set_constant_buffer(c->pipe, PIPE_SHADER_FRAGMENT, 0, s->shader_params);
+   c->pipe->set_vertex_buffers(c->pipe, 1, &c->vertex_buf);
+   pipe_set_constant_buffer(c->pipe, MESA_SHADER_FRAGMENT, 0, s->shader_params);
    c->pipe->bind_rasterizer_state(c->pipe, c->rast);
 
    draw_layers(c, s, dirty_area);
+   pipe_resource_release(c->pipe, releasebuf);
 }

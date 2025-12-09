@@ -30,6 +30,10 @@ pipe_shader_from_nir(struct pipe_context *pipe, nir_shader *nir)
       return pipe->create_gs_state(pipe, &state);
    case MESA_SHADER_FRAGMENT:
       return pipe->create_fs_state(pipe, &state);
+   case MESA_SHADER_TASK:
+      return pipe->create_ts_state(pipe, &state);
+   case MESA_SHADER_MESH:
+      return pipe->create_ms_state(pipe, &state);
 
    case MESA_SHADER_COMPUTE:
    case MESA_SHADER_KERNEL: {
@@ -43,7 +47,7 @@ pipe_shader_from_nir(struct pipe_context *pipe, nir_shader *nir)
    }
 
    default:
-      unreachable("unexpected shader stage");
+      UNREACHABLE("unexpected shader stage");
    }
 }
 

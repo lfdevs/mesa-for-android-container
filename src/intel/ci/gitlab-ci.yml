@@ -16,6 +16,7 @@ anv-jsl-vk-full:
     - .anv-manual-rules
   variables:
     DEQP_SUITE: anv-jsl-full
+    FDO_CI_CONCURRENT: 2
   parallel: 4
   timeout: 2h
 
@@ -26,7 +27,6 @@ anv-adl-vk:
     - .lava-acer-cbv514-1h-34uz-brya:x86_64
   variables:
     DEQP_SUITE: anv-adl
-  timeout: 30m
   parallel: 4
 
 anv-adl-vk-full:
@@ -35,6 +35,7 @@ anv-adl-vk-full:
     - .anv-manual-rules
   variables:
     DEQP_SUITE: anv-adl-full
+    FDO_CI_CONCURRENT: 6
   timeout: 1h 40m
   parallel: 3
 
@@ -99,16 +100,23 @@ anv-adl-angle:
   variables:
     DEQP_SUITE: anv-adl-angle
     GPU_VERSION: angle-anv-adl
-  timeout: 30m
-  parallel: 4
+  parallel: 5
 
-anv-adl-angle-full:
+anv-adl-traces-restricted:
   extends:
-    - anv-adl-angle
-    - .anv-manual-rules
+    - .lava-x86_64-piglit-traces
+    - .anv-test
+    - .lava-acer-chromebox-cxi5-brask:x86_64
+    - .anv-restricted-rules
   variables:
-    DEQP_SUITE: anv-adl-angle-full
-  timeout: 30m
+    HWCI_START_WESTON: 1
+    ANGLE_TRACE_FILES_TAG: "2025-03-28"
+    PIGLIT_REPLAY_ANGLE_ARCH: x64
+    PIGLIT_TRACES_FILE: restricted-traces-intel.yml
+    PIGLIT_REPLAY_DEVICE_NAME: "vk-${GPU_VERSION}"
+    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image --minio_bucket=${S3_TRACIE_PRIVATE_BUCKET} --jwt-file=${S3_JWT_FILE}
+    FDO_CI_CONCURRENT: 5  # Run the 10 traces in 2 sets of 5 to avoid OOMs
+  allow_failure: true
 
 anv-tgl-angle:
   extends:
@@ -150,7 +158,6 @@ iris-apl-egl:
     - .iris-apl-test
   variables:
     PIGLIT_NO_WINDOW: 0
-    HWCI_START_XORG: 1
     HWCI_START_WESTON: 1
     DEQP_SUITE: iris-apl-egl
 
@@ -165,7 +172,6 @@ iris-glk-egl:
     - .iris-glk-test
   variables:
     PIGLIT_NO_WINDOW: 0
-    HWCI_START_XORG: 1
     HWCI_START_WESTON: 1
     DEQP_SUITE: iris-glk-egl
 
@@ -202,12 +208,19 @@ iris-jsl-deqp:
     DEQP_FRACTION: 8
   parallel: 2
 
+iris-adl-deqp:
+  extends:
+    - .iris-adl-test
+  variables:
+    DEQP_SUITE: iris-adl
+    GPU_VERSION: iris-adl
+  parallel: 5
+
 iris-amly-egl:
   extends:
     - .iris-amly-test
   variables:
     PIGLIT_NO_WINDOW: 0
-    HWCI_START_XORG: 1
     HWCI_START_WESTON: 1
     DEQP_SUITE: iris-amly-egl
 
@@ -252,7 +265,6 @@ iris-kbl-traces:
 iris-cml-traces:
   variables:
     GPU_VERSION: intel-cml
-    FDO_CI_CONCURRENT: 6  # Higher leads to OOMs
   extends:
     - .iris-cml-test
     - .iris-traces
@@ -309,7 +321,6 @@ intel-adl-cl:
     GPU_VERSION: intel-adl
     VK_DRIVER: intel
     HWCI_START_WESTON: 1
-  timeout: 20m
 
 intel-adl-skqp:
   extends:
@@ -319,7 +330,6 @@ intel-adl-skqp:
     DEQP_SUITE: intel-adl-skqp
     VK_DRIVER: intel
     HWCI_START_XORG: 1
-  timeout: 30m
 
 intel-tgl-skqp:
   extends:

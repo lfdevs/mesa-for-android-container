@@ -1,0 +1,249 @@
+Mesa 25.2.8 Release Notes / 2025-12-04
+======================================
+
+Mesa 25.2.8 is a bug fix release which fixes bugs found since the 25.2.7 release.
+
+Mesa 25.2.8 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.8 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 097842f3e49d996868b38688db87b006f7d4541e93ce86d2f341d8b3e7be7c93  mesa-25.2.8.tar.xz
+    SHA512: a238965ee235bd9178d26b210fc3996b77927dab31964b76cd1e1e72cfffbefbd96e4a57ec4f5018205a58354cd41d6cf99bbc712b275a7518710a34511dfb13  mesa-25.2.8.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- FurMark gets glitchi graphics when using Vulkan API on UHD 620 (mesa 25.2.6 and 26.0)
+- tu: resource leak
+- [ANV][LNL] - Detroit: Become Human (1222140) - Flickering horizontal artifacts across the screen
+- Zink on Android: failed to create dri2 screen
+- Amnesia: The Bunker (2023) OpenGL graphics glitch on Intel graphics
+- meson: When building radeonsi without llvm, it fails without setting amd_with_llvm to false explicitly
+- venus: synchronization tests sometimes get stuck in semaphore/fence wait
+- GNOME freeze, Nautilus crash and purple flickering on Intel Arc B580 with Mesa 25.2.2  (openSUSE Tumbleweed)
+- Texture matrix stack pops do not seem to always update the texture matrix
+- [BMG] Metro Exodus Enhanced Edition (1449560) - Crash
+- Polaris, amdgpu: Application using VCE wedges GPU
+- radv vulkan video encode does not process used_by_curr_pic_lt_flag correctly
+- venus: random failures in dEQP.api.info.image_format_properties2.1d
+- zink/radv: new cts fails on rdna3
+- RADV Vulkan video encode isn't available on 25.2.7
+
+
+Changes
+-------
+
+Aitor Camacho (2):
+
+- vulkan/cmd_queue: Use vk_strdup and free allocated string memory
+- vulkan/wsi: Fix double destroy of present_id_timeline at swapchain create
+
+Anna Maniscalco (1):
+
+- radv: recalculate legacy_gs_info on bind
+
+Benjamin Cheng (4):
+
+- radv/video: Align each layer of encode DPB to 256
+- radv/video: Fix num_ref_idx_l{0,1} related overrides
+- radv/video: Fix H264/H265 reference selection
+- radv/video: Override direct_spatial_mv_pred to 1
+
+Calder Young (3):
+
+- brw: fix SIMD lowering of fp16 sampler message data with multiple components
+- anv: Fix ray query shadow stack buffer size
+- intel: Fix calculation of max_scratch_ids on fused devices
+
+Christian Gmeiner (1):
+
+- meson: require sysprof-capture-4 >= 4.49.0
+
+Christoph Pillmayer (1):
+
+- nir: Fix preseved metadata in sort_unstructured_blocks
+
+Daniel Schürmann (2):
+
+- nir/opt_large_constants: Fix dead deref instructions accessing lowered variables
+- radv/shader_info: rename gs_ring_info -> legacy_gs_info and use union with ngg_info
+
+Dave Airlie (1):
+
+- dozen: return INCOMPATIBLE_DRIVER on instance create failure
+
+David Rosca (6):
+
+- radv/video: Fix enabling video encode
+- vulkan/video: Fix coding AV1 seq_choose_screen_content_tools = 1
+- radv/video: Fix coding allow_screen_content_tools and force_integer_mv
+- radv/video: Fix coding used_by_curr_pic_lt_flag
+- radeonsi/vce: Add workaround for unaligned input surface
+- radeonsi/vcn: Reduce allocated size for pre-encode recon pics
+
+Emma Anholt (1):
+
+- tu: Fix leak of compute shader pipeline->base.executables_mem_ctx;
+
+Eric Engestrom (6):
+
+- docs: add sha sum for 25.2.7
+- .pick_status.json: Update to df19ec302093b5e47c0d7556ea41af47d2b7af67
+- .pick_status.json: Mark fa1fd2413f5a8a24959664e284372135b3deac83 as denominated
+- .pick_status.json: Mark b2b5e83894a4e1dec0cd62f73f5598dd4e50c264 as denominated
+- meson: auto-disable \`amd-use-llvm` when \`llvm=disabled`
+- meson: auto-disable \`draw-use-llvm` when \`llvm=disabled`
+
+Eric R. Smith (1):
+
+- pan: fix a bifrost disassembly assert failure
+
+Erik Faye-Lund (2):
+
+- mesa/main: correct formatquery error-handling
+- mesa/st: do not enable EXT_texture_buffer_object with rgba only
+
+Faith Ekstrand (1):
+
+- vulkan/drm-syncobj: Stop returning early waiting for sync files
+
+Gert Wollny (1):
+
+- r600/sfn: Don't start a new ALU-CF if LDS pipeline loads are pending
+
+Ian Forbes (1):
+
+- svga: Check if Stencil buffer is NULL
+
+Ian Romanick (2):
+
+- brw: Force allow_spilling when spill_all is set
+- lavapipe: fp16 flrp must also be lowered
+
+Jianxun Zhang (1):
+
+- isl: Disable BMG Modifier (xe2)
+
+Joshua Simmons (1):
+
+- vtn: Fix OpCopyLogical destination type
+
+Karol Herbst (2):
+
+- rusticl/kernel: fix clGetKernelSuggestedLocalWorkSizeKHR implementation
+- rusticl/kernel: Do not run kernels with a workgroup size beyond work_dim
+
+Lionel Landwerlin (12):
+
+- brw: fix workaround fence rlen field
+- brw: fix SIMD lowering of sampler messages with fp16 data
+- anv: ensure slab allocated memory matches image requirements
+- anv: fixup load_ubo lowering
+- brw: fixup 64bit atomics emulation on 2D array images
+- anv: consider 64bit atomics on similar formats with mutable images
+- anv: Wa_18040903259 only applies to RCS when in GPGPU mode
+- brw: compute final copy propagation resulting source
+- nir: fix lower_printf with no arguments
+- spirv: fix printf generation
+- nir/lower_printf: fix array alignment
+- nir/lower_printf: fix missing singleton add
+
+Mario Kleiner (1):
+
+- wsi/wayland: Zero min_luminance, max_luminance HDR light levels are valid.
+
+Matt Turner (1):
+
+- meson: Fix sysprof-capture-4 dependency
+
+Mel Henning (5):
+
+- zink: Return zink_device in create_logical_device
+- zink: Make screen->queue_lock a pointer
+- zink: Create one queue lock per device
+- zink: Lock queue_lock in zink_destroy_screen
+- zink: Lock around screen_debug_marker_{begin,end}
+
+Natalie Vock (4):
+
+- aco/insert_nops: Consider s_setpc target susceptible to VALUReadSGPRHazard
+- radv/rt: Keep updated nodes always active
+- radv/rt: Correctly copy culling flags when updating to separate AS
+- radv: Move VMID reservation to vkCreateDevice
+
+Olivia Lee (2):
+
+- panvk/csf: fix uninitialized read in draw context
+- panvk/csf: explicitly set ls_sb_slot in set_fbds_provoking_vertex
+
+Patrick Lerda (2):
+
+- r600: fix rv770 read scratch compatibility
+- r600: fix error filters compatibility
+
+Paulo Zanoni (1):
+
+- anv/sparse: we can support R64 and other atomics emulated formats
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- radeonsi/sqtt: clear out sqtt bo on resize
+
+Rob Clark (1):
+
+- freedreno/a6xx: Fix UB in convert_color()
+
+Samuel Pitoiset (2):
+
+- radv: fix per-submit RGP captures on video queues
+- radv: reduce maxTexelBufferElements to 1<<29
+
+Sushma Venkatesh Reddy (1):
+
+- drirc: Add anv_assume_full_subgroups for Detroit: Become Human
+
+Tapani Pälli (3):
+
+- drirc/iris: add drirc to disable threaded context
+- drirc: set intel_disable_threaded_context for Amnesia The Bunker
+- anv: add furmark workaround layer
+
+Timothy Arceri (2):
+
+- mesa: fix _mesa_update_texture_matrices()
+- util/driconf: Add linux version of Penumbra fixes
+
+Timur Kristóf (3):
+
+- ac/nir/ngg: Fix scratch space for NGG GS streamout
+- radv: Disable sparse mapping when unsupported by VM
+- ac/gpu_info: Disable sparse VM mappings pre-Polaris, for now
+
+Valentine Burley (2):
+
+- intel/ci: Drop timeout overrides for pre-merge jobs
+- egl: Disable kopper on Android
+
+Yiwei Zhang (2):
+
+- venus: use seq_cst for ring cs and tail update ordering
+- venus: fix racy semaphore feedback counter update

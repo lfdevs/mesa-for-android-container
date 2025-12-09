@@ -27,7 +27,7 @@ libagx_helper(void)
    global struct agx_helper_header *hdr =
       (global struct agx_helper_header *)arg;
 
-   uint32_t core_index = nir_load_core_id_agx();
+   uint32_t core_index = nir_load_core_id();
    uint32_t subgroups = hdr->subgroups;
    global struct agx_helper_core *core = &hdr->cores[core_index];
 

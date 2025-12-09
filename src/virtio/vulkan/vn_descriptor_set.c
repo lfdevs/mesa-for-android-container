@@ -84,7 +84,7 @@ vn_descriptor_type(VkDescriptorType type)
       break;
    }
 
-   unreachable("bad VkDescriptorType");
+   UNREACHABLE("bad VkDescriptorType");
 }
 
 /* descriptor set layout commands */
@@ -447,7 +447,7 @@ vn_get_mutable_state(const struct vn_descriptor_pool *pool,
       if (BITSET_EQUAL(shared_types, binding->mutable_descriptor_types))
          return mutable_state;
    }
-   unreachable("bad mutable descriptor binding");
+   UNREACHABLE("bad mutable descriptor binding");
 }
 
 static inline void
@@ -953,7 +953,7 @@ vn_descriptor_update_template_init(
       case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
          break;
       default:
-         unreachable("unhandled descriptor type");
+         UNREACHABLE("unhandled descriptor type");
          break;
       }
    }
@@ -1120,7 +1120,7 @@ vn_descriptor_set_fill_update_with_template(
       case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
          break;
       default:
-         unreachable("unhandled descriptor type");
+         UNREACHABLE("unhandled descriptor type");
          break;
       }
       update->writes[i] = (VkWriteDescriptorSet){

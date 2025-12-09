@@ -179,6 +179,8 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
       desc.max_lod = max_lod;
       desc.lod_bias = sampler->base.lod_bias;
 
+      desc.max_anisotropy = sampler->base.max_anisotropy;
+
       switch (sampler->base.min_mip_filter) {
          case PIPE_TEX_MIPFILTER_LINEAR:
             desc.mipfilter = LIMA_MIPFILTER_LINEAR;

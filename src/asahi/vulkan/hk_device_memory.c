@@ -71,9 +71,8 @@ hk_add_ext_bo_locked(struct hk_device *dev, struct agx_bo *bo)
       .res_id = id,
       .flags = ASAHI_EXTRES_READ | ASAHI_EXTRES_WRITE,
    };
-   util_dynarray_append(&dev->external_bos.list, struct asahi_ccmd_submit_res,
-                        res);
-   util_dynarray_append(&dev->external_bos.counts, unsigned, 1);
+   util_dynarray_append(&dev->external_bos.list, res);
+   util_dynarray_append_typed(&dev->external_bos.counts, unsigned, 1);
 }
 
 static void
@@ -109,7 +108,7 @@ hk_remove_ext_bo_locked(struct hk_device *dev, struct agx_bo *bo)
       }
    }
 
-   unreachable("BO not found");
+   UNREACHABLE("BO not found");
 }
 
 static void
@@ -211,6 +210,8 @@ hk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
       enum agx_bo_flags flags = 0;
       if (handle_types)
          flags |= AGX_BO_SHAREABLE;
+      if (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
+         flags |= AGX_BO_WRITEBACK;
 
       mem->bo = agx_bo_create(&dev->dev, aligned_size, 0, flags, "App memory");
       if (!mem->bo) {
@@ -410,9 +411,9 @@ hk_GetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo,
 
 VKAPI_ATTR uint64_t VKAPI_CALL
 hk_GetDeviceMemoryOpaqueCaptureAddress(
-   UNUSED VkDevice device, const VkDeviceMemoryOpaqueCaptureAddressInfo *pInfo)
+   UNUSED VkDevice device,
+   UNUSED const VkDeviceMemoryOpaqueCaptureAddressInfo *pInfo)
 {
-   VK_FROM_HANDLE(hk_device_memory, mem, pInfo->memory);
-
-   return mem->bo->va->addr;
+   /* Addresses are replayed at buffer and image creation, not memory. */
+   return 0;
 }

@@ -137,7 +137,7 @@ struct elk_codegen {
    int loop_stack_depth;
    int loop_stack_array_size;
 
-   struct elk_shader_reloc *relocs;
+   struct intel_shader_reloc *relocs;
    int num_relocs;
    int reloc_array_size;
 };
@@ -174,7 +174,7 @@ void elk_init_codegen(const struct elk_isa_info *isa,
 bool elk_has_jip(const struct intel_device_info *devinfo, enum elk_opcode opcode);
 bool elk_has_uip(const struct intel_device_info *devinfo, enum elk_opcode opcode);
 bool elk_has_branch_ctrl(const struct intel_device_info *devinfo, enum elk_opcode opcode);
-const struct elk_shader_reloc *elk_get_shader_relocs(struct elk_codegen *p,
+const struct intel_shader_reloc *elk_get_shader_relocs(struct elk_codegen *p,
                                                      unsigned *num_relocs);
 const unsigned *elk_get_program( struct elk_codegen *p, unsigned *sz );
 
@@ -190,7 +190,7 @@ int elk_append_data(struct elk_codegen *p, void *data,
                     unsigned size, unsigned alignment);
 elk_inst *elk_next_insn(struct elk_codegen *p, unsigned opcode);
 void elk_add_reloc(struct elk_codegen *p, uint32_t id,
-                   enum elk_shader_reloc_type type,
+                   enum intel_shader_reloc_type type,
                    uint32_t offset, uint32_t delta);
 void elk_set_dest(struct elk_codegen *p, elk_inst *insn, struct elk_reg dest);
 void elk_set_src0(struct elk_codegen *p, elk_inst *insn, struct elk_reg reg);
@@ -359,7 +359,7 @@ elk_urb_desc(const struct intel_device_info *devinfo,
               SET_BITS(global_offset, 13, 3) |
               SET_BITS(msg_type, 3, 0));
    } else {
-      unreachable("unhandled URB write generation");
+      UNREACHABLE("unhandled URB write generation");
    }
 }
 
@@ -723,7 +723,7 @@ elk_mdc_ds(unsigned bit_size)
    case 32:
       return GFX7_BYTE_SCATTERED_DATA_ELEMENT_DWORD;
    default:
-      unreachable("Unsupported bit_size for byte scattered messages");
+      UNREACHABLE("Unsupported bit_size for byte scattered messages");
    }
 }
 
@@ -858,7 +858,7 @@ elk_mdc_a64_ds(unsigned elems)
    case 4:  return 2;
    case 8:  return 3;
    default:
-      unreachable("Unsupported elmeent count for A64 scattered message");
+      UNREACHABLE("Unsupported elmeent count for A64 scattered message");
    }
 }
 
@@ -1233,16 +1233,16 @@ lsc_op_to_legacy_atomic(unsigned _op)
    /* No LSC op maps to ELK_AOP_PREDEC */
    case LSC_OP_ATOMIC_LOAD:
    case LSC_OP_ATOMIC_FSUB:
-      unreachable("no corresponding legacy atomic operation");
+      UNREACHABLE("no corresponding legacy atomic operation");
    case LSC_OP_LOAD:
    case LSC_OP_LOAD_CMASK:
    case LSC_OP_STORE:
    case LSC_OP_STORE_CMASK:
    case LSC_OP_FENCE:
-      unreachable("not an atomic op");
+      UNREACHABLE("not an atomic op");
    }
 
-   unreachable("invalid LSC op");
+   UNREACHABLE("invalid LSC op");
 }
 
 static inline uint32_t
@@ -1261,7 +1261,7 @@ lsc_data_size_bytes(enum lsc_data_size data_size)
    case LSC_DATA_SIZE_D64:
       return 8;
    default:
-      unreachable("Unsupported data payload size.");
+      UNREACHABLE("Unsupported data payload size.");
    }
 }
 
@@ -1273,7 +1273,7 @@ lsc_addr_size_bytes(enum lsc_addr_size addr_size)
    case LSC_ADDR_SIZE_A32: return 4;
    case LSC_ADDR_SIZE_A64: return 8;
    default:
-      unreachable("Unsupported address size.");
+      UNREACHABLE("Unsupported address size.");
    }
 }
 
@@ -1290,7 +1290,7 @@ lsc_vector_length(enum lsc_vect_size vect_size)
    case LSC_VECT_SIZE_V32: return 32;
    case LSC_VECT_SIZE_V64: return 64;
    default:
-      unreachable("Unsupported size of vector");
+      UNREACHABLE("Unsupported size of vector");
    }
 }
 
@@ -1307,7 +1307,7 @@ lsc_vect_size(unsigned vect_size)
    case 32: return LSC_VECT_SIZE_V32;
    case 64: return LSC_VECT_SIZE_V64;
    default:
-      unreachable("Unsupported vector size for dataport");
+      UNREACHABLE("Unsupported vector size for dataport");
    }
 }
 

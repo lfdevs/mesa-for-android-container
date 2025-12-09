@@ -80,7 +80,7 @@ enum vk_sync_features {
    /** Set if this sync supports GPU waits */
    VK_SYNC_FEATURE_GPU_WAIT            = (1 << 2),
 
-   /** Set if a sync type supports multiple GPU waits on one signal state
+   /** Set if a non-timeline sync type supports multiple GPU waits on one signal state
     *
     * The Vulkan spec for VkSemaphore requires GPU wait and signal operations
     * to have a one-to-one relationship.  This formally described by saying
@@ -129,6 +129,7 @@ enum vk_sync_features {
    VK_SYNC_FEATURE_WAIT_BEFORE_SIGNAL  = (1 << 9),
 };
 
+struct vk_sync_signal;
 struct vk_sync_wait;
 
 enum vk_sync_wait_flags {
@@ -184,6 +185,14 @@ struct vk_sync_type {
                       struct vk_sync *sync,
                       uint64_t value);
 
+   /** Signal many vk_sync
+    *
+    * For non-timeline sync types, value == 0.
+    */
+   VkResult (*signal_many)(struct vk_device *device,
+                           uint32_t signal_count,
+                           const struct vk_sync_signal *signals);
+
    /** Get the timeline value for a vk_sync */
    VkResult (*get_value)(struct vk_device *device,
                          struct vk_sync *sync,
@@ -192,6 +201,11 @@ struct vk_sync_type {
    /** Reset a non-timeline vk_sync */
    VkResult (*reset)(struct vk_device *device,
                      struct vk_sync *sync);
+
+   /** Reset many non-timeline vk_sync */
+   VkResult (*reset_many)(struct vk_device *device,
+                          uint32_t sync_count,
+                          struct vk_sync *const *syncs);
 
    /** Moves the guts of one binary vk_sync to another
     *
@@ -349,12 +363,20 @@ VkResult MUST_CHECK vk_sync_signal(struct vk_device *device,
                                    struct vk_sync *sync,
                                    uint64_t value);
 
+VkResult MUST_CHECK vk_sync_signal_many(struct vk_device *device,
+                                        uint32_t signal_count,
+                                        const struct vk_sync_signal *signals);
+
 VkResult MUST_CHECK vk_sync_get_value(struct vk_device *device,
                                       struct vk_sync *sync,
                                       uint64_t *value);
 
 VkResult MUST_CHECK vk_sync_reset(struct vk_device *device,
                                   struct vk_sync *sync);
+
+VkResult MUST_CHECK vk_sync_reset_many(struct vk_device *device,
+                                       uint32_t sync_count,
+                                       struct vk_sync *const *syncs);
 
 VkResult MUST_CHECK vk_sync_wait(struct vk_device *device,
                                  struct vk_sync *sync,
@@ -402,6 +424,16 @@ VkResult MUST_CHECK vk_sync_set_win32_export_params(struct vk_device *device,
 VkResult MUST_CHECK vk_sync_move(struct vk_device *device,
                                  struct vk_sync *dst,
                                  struct vk_sync *src);
+
+struct vk_sync_timeline_point;
+
+VkResult MUST_CHECK vk_sync_wait_unwrap(struct vk_device *device,
+                                        struct vk_sync_wait *wait,
+                                        struct vk_sync_timeline_point **point_out);
+
+VkResult MUST_CHECK vk_sync_signal_unwrap(struct vk_device *device,
+                                          struct vk_sync_signal *signal,
+                                          struct vk_sync_timeline_point **point_out);
 
 #ifdef __cplusplus
 }

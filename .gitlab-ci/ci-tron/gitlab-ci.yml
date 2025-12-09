@@ -4,9 +4,7 @@
     - .ci-tron-b2c-job-v1
   variables:
     GIT_STRATEGY: none
-    B2C_VERSION: v0.9.15.1  # Linux 6.13.7
-
-    SCRIPTS_DIR: install
+    B2C_VERSION: v0.9.17  # Linux 6.16.3
 
     CI_TRON_PATTERN__JOB_SUCCESS__REGEX: 'hwci: mesa: exit_code: 0\r$'
     CI_TRON_PATTERN__SESSION_END__REGEX: '^.*It''s now safe to turn off your computer\r$'
@@ -15,23 +13,32 @@
     CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__RETRIES: 3
     CI_TRON_TIMEOUT__CONSOLE_ACTIVITY__MINUTES: 5
 
-    CI_TRON__B2C_ARTIFACT_EXCLUSION: "*.shader_cache,install/*,*/install/*,*/vkd3d-proton.cache*,vkd3d-proton.cache*,*.qpa"
+    DEQP_RUNNER_SHADER_CACHE_DIR: /cache
+    VKD3D_SHADER_CACHE_PATH: /cache
+    PIGLIT_CACHE_DIR: /cache
+
+    CI_TRON__B2C_ARTIFACT_EXCLUSION: "install/*"
     CI_TRON_HTTP_ARTIFACT__INSTALL__PATH: "/install.tar.zst"
     CI_TRON_HTTP_ARTIFACT__INSTALL__URL: "https://$PIPELINE_ARTIFACTS_BASE/$S3_ARTIFACT_NAME.tar.zst"
 
     CI_TRON__B2C_MACHINE_REGISTRATION_CMD: "setup --tags $CI_TRON_DUT_SETUP_TAGS"
+
     CI_TRON__B2C_IMAGE_UNDER_TEST: $MESA_IMAGE
-    CI_TRON__B2C_EXEC_CMD: "curl --silent --fail-with-body {{ job.http.url }}$CI_TRON_HTTP_ARTIFACT__INSTALL__PATH | tar --zstd --extract && $SCRIPTS_DIR/common/init-stage2.sh"
+    CI_TRON__B2C_EXEC_SHELL: bash
+    CI_TRON__B2C_EXEC_SHELL_FLAGS: "-euc -o pipefail"
+    CI_TRON__B2C_EXEC_CMD: "curl --silent --fail-with-body {{ job.http.url }}$CI_TRON_HTTP_ARTIFACT__INSTALL__PATH | tar --zstd --extract && export SCRIPTS_DIR=$$PWD/install && $$SCRIPTS_DIR/common/init-stage2.sh"
 
     # Assume by default this is running deqp, as that's almost always true
     HWCI_TEST_SCRIPT: install/deqp-runner.sh
 
+    # Per-job files need to be in CI_PROJECT_DIR
+    S3_JWT_FILE: $CI_PROJECT_DIR/s3_jwt
+
     # Keep the job script in the artifacts
     CI_TRON_JOB_SCRIPT_PATH: results/job_script.sh
-  needs:
-    - !reference [.required-for-hardware-jobs, needs]
   tags:
     - farm:$RUNNER_FARM_LOCATION
+    - ci-tron:priority:$CI_TRON_JOB_PRIORITY
     - $CI_TRON_DUT_SETUP_TAGS
 
   # Override the default before_script, as it is not compatible with the CI-tron environment. We just keep the clearing
@@ -50,7 +57,7 @@
       done
 
       # Open a section that will be closed by b2c
-      echo -e "\n\e[0Ksection_start:`date +%s`:b2c_kernel_boot[collapsed=true]\r\e[0K\e[0;36m[$(cut -d ' ' -f1 /proc/uptime)]: Submitting the CI-tron job and booting the DUT\e[0m\n"
+      echo -e "\n\e[0Ksection_start:`date +%s`:b2c_kernel_boot[collapsed=true]\r\e[0K\e[0;36mSubmitting the CI-tron job and booting the DUT\e[0m\n"
 
   # Anything our job places in results/ will be collected by the
   # Gitlab coordinator for status presentation. results/junit.xml
@@ -88,7 +95,6 @@
       optional: true
     - job: debian-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-x86_64-test-vk-manual:
   extends:
@@ -102,7 +108,6 @@
       optional: true
     - job: debian-build-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-x86_64-test-gl:
   extends:
@@ -114,7 +119,6 @@
       optional: true
     - job: debian-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-x86_64-test-gl-manual:
   extends:
@@ -128,7 +132,6 @@
       optional: true
     - job: debian-build-x86_64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test:
   extends:
@@ -148,7 +151,6 @@
       optional: true
     - job: debian-arm64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-asan-vk:
   extends:
@@ -163,7 +165,6 @@
       optional: true
     - job: debian-arm64-asan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-ubsan-vk:
   extends:
@@ -177,7 +178,6 @@
       optional: true
     - job: debian-arm64-ubsan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-gl:
   extends:
@@ -189,7 +189,6 @@
       optional: true
     - job: debian-arm64
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-asan-gl:
   extends:
@@ -204,7 +203,6 @@
       optional: true
     - job: debian-arm64-asan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm64-test-ubsan-gl:
   extends:
@@ -218,7 +216,6 @@
       optional: true
     - job: debian-arm64-ubsan
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm32-test:
   extends:
@@ -238,7 +235,6 @@
       optional: true
     - job: debian-arm32
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm32-test-gl:
   extends:
@@ -250,7 +246,6 @@
       optional: true
     - job: debian-arm32
       artifacts: false
-    - !reference [.ci-tron-test, needs]
 
 .ci-tron-arm32-test-asan-gl:
   extends:
@@ -265,4 +260,3 @@
       optional: true
     - job: debian-arm32-asan
       artifacts: false
-    - !reference [.ci-tron-test, needs]

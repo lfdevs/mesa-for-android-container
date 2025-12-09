@@ -197,6 +197,7 @@
 #define RENCODE_REC_SWIZZLE_MODE_256B_S                                             1
 #define RENCODE_REC_SWIZZLE_MODE_256B_D                                             2
 #define RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP                               0x10000001
+#define RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP_VCN4                          0x10000000
 #define RENCODE_REC_SWIZZLE_MODE_256B_D_VCN5                                        1
 
 #define RENCODE_VIDEO_BITSTREAM_BUFFER_MODE_LINEAR                                  0
@@ -215,10 +216,12 @@
 #define PIPE_H264_MB_SIZE                                                           16
 
 #define RENCODE_COLOR_VOLUME_G22_BT709                                              0
+#define RENCODE_COLOR_VOLUME_G2084_BT2020                                           514
 
 #define RENCODE_COLOR_RANGE_FULL                                                    0
 #define RENCODE_COLOR_RANGE_STUDIO                                                  1
 #define RENCODE_CHROMA_LOCATION_INTERSTITIAL                                        0
+#define RENCODE_CHROMA_LOCATION_CO_SITE                                             1
 
 #define RENCODE_COLOR_BIT_DEPTH_8_BIT                                               0
 #define RENCODE_COLOR_BIT_DEPTH_10_BIT                                              1
@@ -495,6 +498,7 @@ typedef struct rvcn_enc_hevc_encode_params_s {
 typedef struct rvcn_enc_av1_encode_params_s {
    uint32_t ref_frames[RENCODE_AV1_REFS_PER_FRAME];
    uint32_t lsm_reference_frame_index[2];
+   uint32_t cur_order_hint;
 } rvcn_enc_av1_encode_params_t;
 
 typedef struct rvcn_enc_h264_deblocking_filter_s {

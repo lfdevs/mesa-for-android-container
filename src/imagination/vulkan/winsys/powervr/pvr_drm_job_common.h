@@ -39,7 +39,7 @@ pvr_drm_from_winsys_priority(enum pvr_winsys_ctx_priority priority)
    case PVR_WINSYS_CTX_PRIORITY_LOW:
       return DRM_PVR_CTX_PRIORITY_LOW;
    default:
-      unreachable("Invalid winsys context priority.");
+      UNREACHABLE("Invalid winsys context priority.");
    }
 }
 

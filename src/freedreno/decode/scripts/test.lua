@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MIT
+
 io.write("HELLO WORLD\n")
 
 r = rnn.init("a630")

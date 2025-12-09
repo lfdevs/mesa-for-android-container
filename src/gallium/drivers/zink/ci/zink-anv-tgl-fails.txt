@@ -1,10 +1,3 @@
-dEQP-EGL.functional.query_context.get_current_context.rgba8888_window,Crash
-
-wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail
-wayland-dEQP-EGL.functional.resize.surface_size.shrink,Fail
-wayland-dEQP-EGL.functional.resize.surface_size.stretch_width,Fail
-wayland-dEQP-EGL.functional.resize.surface_size.stretch_height,Fail
-
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_ust_test,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_chromium_sync_control@conformance,Fail
@@ -449,89 +442,6 @@ spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 
 # "../src/gallium/drivers/zink/zink_compiler.c:2071: assign_producer_var_io: Assertion `*reserved < MAX_VARYING' failed."
 
-
-spec@arb_texture_buffer_object@formats (fs- arb),Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA16,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16_ALPHA16,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE8_ALPHA8,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE8,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY16,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY8,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb),Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA16,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16_ALPHA16,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8_ALPHA8,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY8,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY8UI_EXT,Fail
-
-
 spec@egl 1.4@eglterminate then unbind context,Fail
 
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
@@ -579,9 +489,12 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
 
 # since Debian 12 (bookworm) uprev
-spec@arb_viewport_array@display-list,Fail
 glx@glx-multi-window-single-context,Fail
 spec@arb_timer_query@timestamp-get,Fail
+
+# uprev Piglit in Mesa
+spec@arb_shader_storage_buffer_object@max-ssbo-size@fs,Crash
+spec@arb_shader_storage_buffer_object@max-ssbo-size@vs,Crash
 
 # glcts: ../../src/intel/vulkan/anv_sparse.c:970: vk_bind_to_anv_vm_bind: Assertion `vk_bind->memoryOffset + vk_bind->size <= anv_bind.bo->size' failed.
 # Also related to https://gitlab.freedesktop.org/mesa/mesa/-/issues/11073
@@ -591,10 +504,6 @@ KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor,Crash
 KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment,Fail
 
 KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup,Fail
-
-# uprev Piglit in Mesa
-spec@arb_shader_storage_buffer_object@max-ssbo-size@fs,Crash
-spec@arb_shader_storage_buffer_object@max-ssbo-size@vs,Crash
 
 KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment_texture_2d_multisample_array_rg8i,Fail
 KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment_texture_2d_multisample_array_rg16i,Fail
@@ -694,3 +603,131 @@ glx@glx_arb_sync_control@swapbuffersmsc-return swap_interval 1,Fail
 
 # New failures with GL CTS 4.6.6.0 & ES CTS 3.2.12.0
 KHR-GLES31.core.texture_stencil8.multisample,Crash
+
+# glcts doesn't check for unsupported formats. See discussion in !35524
+KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup_texture_2d_array_depth_component16,Fail
+KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup_texture_2d_depth_component16,Fail
+KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup_texture_cube_map_array_depth_component16,Fail
+KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup_texture_cube_map_depth_component16,Fail
+KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup_texture_rectangle_depth_component16,Fail
+KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency_texture_2d_array_depth_component16,Fail
+KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency_texture_2d_depth_component16,Fail
+KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency_texture_cube_map_array_depth_component16,Fail
+KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency_texture_cube_map_depth_component16,Fail
+
+# EGL
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_render_even_clear_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_none_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_clear_even_clear_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_clear_even_render_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_clear_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_clear_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_render_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_clear_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_render_even_clear_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_clear_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_none_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_clear_even_clear_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_clear_even_render_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_clear_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_clear_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_after_swap.odd_render_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_clear_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_render_even_clear_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_none_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_clear_even_clear_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_clear_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_clear_even_render_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_clear_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_clear_even_render_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_render_even_clear,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_render_even_none,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_render_even_render,Fail
+wayland-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_clear_even_none,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_clear_even_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_even_none,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_render_even_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_render_even_clear_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_render_even_none,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_render_even_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_clear_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_clear_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_clear_even_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_clear_even_clear_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_clear_even_none,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_clear_even_render_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_clear_even_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_clear_even_render_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_even_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_even_none,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_even_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_render_even_clear_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_render_even_clear,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_render_even_none,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_render_even_render,Fail
+wayland-dEQP-EGL.functional.partial_update.odd_render_render_even_render_render,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.shrink,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_height,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_width,Fail

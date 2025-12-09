@@ -56,6 +56,9 @@ struct v3d_device_info {
         /** If the hw has accumulator registers */
         bool has_accumulators;
 
+        /** If kernel supports GPU reset counter */
+        bool has_reset_counter;
+
         /** Granularity for the Clipper XY Scaling */
         float clipper_xy_granularity;
 

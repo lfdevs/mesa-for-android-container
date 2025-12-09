@@ -11,6 +11,10 @@ KHR-GL46.gpu_shader_fp64.fp64.varyings
 dEQP-VK.memory.mapping.*.full.variable.implicit_unmap*
 dEQP-VK.spirv_assembly.instruction.graphics.16bit_storage.struct_mixed_types.uniform_buffer_block_vert
 dEQP-VK.spirv_assembly.instruction.*.spirv_ids_abuse.lots_ids*
+dEQP-VK.api.buffer_memory_requirements.create_sparse_binding_sparse_residency.ext_mem_flags_excluded.method1.size_req_storage_usage_bits
+dEQP-VK.api.buffer_memory_requirements.create_sparse_binding_sparse_residency.ext_mem_flags_excluded.method2.size_req_storage_usage_bits
+dEQP-VK.api.buffer_memory_requirements.create_sparse_binding_sparse_residency_sparse_aliased.ext_mem_flags_excluded.method1.size_req_storage_usage_bits
+dEQP-VK.api.buffer_memory_requirements.create_sparse_binding_sparse_residency_sparse_aliased.ext_mem_flags_excluded.method2.size_req_storage_usage_bits
 
 # Slow tests that may hit 60s timeout pre-merge, but pass otherwise
 spec@arb_gpu_shader_fp64@execution@built-in-functions@fs-op-div-dmat3-dmat3
@@ -55,3 +59,8 @@ spec@glsl-4.00@execution@built-in-functions@fs-refract-dvec4-dvec4-double
 spec@glsl-4.10@execution@conversion@frag-conversion-implicit-mat3x4-dmat3x4-zero-sign
 spec@glsl-4.20@execution@conversion@frag-conversion-implicit-mat3x4-dmat3x4-zero-sign
 spec@glsl-4.20@execution@conversion@frag-conversion-implicit-mat4-dmat4-zero-sign
+
+# Slow tests that may hit 60s timeout pre-merge, but pass otherwise.  94% CPU
+# used in ir3 create_variant, but no single pass there dominating its time.
+# Just use the scalar/vec2 cases, which are fast enough for CI.
+dEQP-VK.subgroups.clustered.compute.subgroupclustered(min|max|mul)_[iu]64vec[34].*

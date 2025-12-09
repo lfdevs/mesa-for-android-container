@@ -35,7 +35,7 @@
 #include <GL/glx.h>
 #include "main/errors.h"
 #include "dispatch.h"
-#include "mapi/glapi/glapi.h"
+#include "mesa/glapi/glapi/glapi.h"
 
 
 /* Some debugging info.  */

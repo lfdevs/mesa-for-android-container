@@ -275,17 +275,21 @@ static int compare_wave(const void *p1, const void *p2)
 #define AC_UMR_REGISTERS_LINE "Main Registers"
 
 static bool
-ac_read_umr_register(const char **_scan, const char *name, uint32_t *value)
+ac_read_umr_register(const char **_scan, size_t *remaining_scan, const char *name, uint32_t *value)
 {
    const char *scan = *_scan;
-   if (strncmp(scan, name, MIN2(strlen(scan), strlen(name))))
+   if (strncmp(scan, name, MIN2(*remaining_scan, strlen(name))))
       return false;
 
+   *remaining_scan -= strlen(name);
+   *remaining_scan -= strlen(": ");
    scan += strlen(name);
    scan += strlen(": ");
 
    *value = strtoul(scan, NULL, 16);
    *_scan = scan + 8;
+   *remaining_scan -= 8;
+
    return true;
 }
 
@@ -328,26 +332,33 @@ unsigned ac_get_wave_info(enum amd_gfx_level gfx_level, const struct radeon_info
             break;
 
          const char *scan = wave_dump;
+
+         /* Tracks how many characters are left inside 'scan', used to avoid costly strlen calls */
+         size_t remaining_scan = strlen(scan);
+
          while (scan < end2) {
-            if (strncmp(scan, "ix", MIN2(strlen(scan), strlen("ix")))) {
+            assert(strlen(scan) == remaining_scan);
+            if (strncmp(scan, "ix", MIN2(remaining_scan, strlen("ix")))) {
                scan++;
+               remaining_scan--;
                continue;
             }
 
             scan += strlen("ix");
+            remaining_scan -= strlen("ix");
 
             bool progress = false;
 
-            progress |= ac_read_umr_register(&scan, "SQ_WAVE_STATUS", &w->status);
-            progress |= ac_read_umr_register(&scan, "SQ_WAVE_PC_LO", &w->pc_lo);
-            progress |= ac_read_umr_register(&scan, "SQ_WAVE_PC_HI", &w->pc_hi);
-            progress |= ac_read_umr_register(&scan, "SQ_WAVE_EXEC_LO", &w->exec_lo);
-            progress |= ac_read_umr_register(&scan, "SQ_WAVE_EXEC_HI", &w->exec_hi);
-            progress |= ac_read_umr_register(&scan, "SQ_WAVE_INST_DW0", &w->inst_dw0);
-            progress |= ac_read_umr_register(&scan, "SQ_WAVE_INST_DW1", &w->inst_dw1);
+            progress |= ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_STATUS", &w->status);
+            progress |= ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_PC_LO", &w->pc_lo);
+            progress |= ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_PC_HI", &w->pc_hi);
+            progress |= ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_EXEC_LO", &w->exec_lo);
+            progress |= ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_EXEC_HI", &w->exec_hi);
+            progress |= ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_INST_DW0", &w->inst_dw0);
+            progress |= ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_INST_DW1", &w->inst_dw1);
 
             uint32_t wave;
-            if (ac_read_umr_register(&scan, "SQ_WAVE_HW_ID", &wave)) {
+            if (ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_HW_ID", &wave)) {
                w->se = G_000050_SE_ID(wave);
                w->sh = G_000050_SH_ID(wave);
                w->cu = G_000050_CU_ID(wave);
@@ -357,7 +368,7 @@ unsigned ac_get_wave_info(enum amd_gfx_level gfx_level, const struct radeon_info
                progress = true;
             }
 
-            if (ac_read_umr_register(&scan, "SQ_WAVE_HW_ID1", &wave)) {
+            if (ac_read_umr_register(&scan, &remaining_scan, "SQ_WAVE_HW_ID1", &wave)) {
                w->se = G_00045C_SE_ID(wave);
                w->sh = G_00045C_SA_ID(wave);
                w->cu = G_00045C_WGP_ID(wave);
@@ -375,6 +386,7 @@ unsigned ac_get_wave_info(enum amd_gfx_level gfx_level, const struct radeon_info
                      break;
                   }
                   scan++;
+                  remaining_scan--;
                }
             }
 

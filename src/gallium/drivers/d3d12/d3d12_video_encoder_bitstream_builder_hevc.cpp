@@ -45,7 +45,7 @@ convert_profile12_to_stdprofile(D3D12_VIDEO_ENCODER_PROFILE_HEVC profile)
       } break;
       default:
       {
-         unreachable("Unsupported D3D12_VIDEO_ENCODER_PROFILE_HEVC value");
+         UNREACHABLE("Unsupported D3D12_VIDEO_ENCODER_PROFILE_HEVC value");
       } break;
    }
 }
@@ -55,7 +55,7 @@ dxgi_format_to_pix_bits(DXGI_FORMAT fmt)
 {
    switch (fmt) {
       default:
-         unreachable("Unsupported DXGI_FORMAT");
+         UNREACHABLE("Unsupported DXGI_FORMAT");
       case DXGI_FORMAT_AYUV:
       case DXGI_FORMAT_NV12:
       case DXGI_FORMAT_YUY2:
@@ -160,7 +160,7 @@ d3d12_video_encoder_convert_from_d3d12_level_hevc(D3D12_VIDEO_ENCODER_LEVELS_HEV
       } break;
       default:
       {
-         unreachable("Unsupported D3D12_VIDEO_ENCODER_LEVELS_HEVC value");
+         UNREACHABLE("Unsupported D3D12_VIDEO_ENCODER_LEVELS_HEVC value");
       } break;        
    }
 }
@@ -225,7 +225,7 @@ d3d12_video_encoder_convert_level_hevc(uint32_t hevcSpecLevel)
       } break;
       default:
       {
-         unreachable("Unsupported D3D12_VIDEO_ENCODER_LEVELS_HEVC value");
+         UNREACHABLE("Unsupported D3D12_VIDEO_ENCODER_LEVELS_HEVC value");
       } break;        
    }
 }
@@ -253,7 +253,7 @@ d3d12_video_encoder_convert_12cusize_to_pixel_size_hevc(const D3D12_VIDEO_ENCODE
         } break;
         default:
         {
-            unreachable(L"Not a supported cu size");
+            UNREACHABLE(L"Not a supported cu size");
             return 0u;
         } break;            
     }
@@ -282,7 +282,7 @@ d3d12_video_encoder_convert_pixel_size_hevc_to_12cusize(const uint32_t& cuSize)
         } break;
         default:
         {
-            unreachable(L"Not a supported cu size");
+            UNREACHABLE(L"Not a supported cu size");
         } break;            
     }
 }
@@ -310,7 +310,7 @@ d3d12_video_encoder_convert_12tusize_to_pixel_size_hevc(const D3D12_VIDEO_ENCODE
         } break;        
         default:
         {
-            unreachable(L"Not a supported TU size");
+            UNREACHABLE(L"Not a supported TU size");
         } break;            
     }
 }
@@ -338,7 +338,7 @@ d3d12_video_encoder_convert_pixel_size_hevc_to_12tusize(const uint32_t& TUSize)
         } break;        
         default:
         {
-            unreachable(L"Not a supported TU size");
+            UNREACHABLE(L"Not a supported TU size");
         } break;            
     }
 }
@@ -479,8 +479,8 @@ d3d12_video_bitstream_builder_hevc::build_sps(const HevcVideoParameterSet& paren
    viewport.Width = crop_window_upper_layer.front /* passes width */ - ((crop_window_upper_layer.left + crop_window_upper_layer.right) * SubWidthC);
    viewport.Height = crop_window_upper_layer.back /* passes height */- ((crop_window_upper_layer.top + crop_window_upper_layer.bottom) * SubHeightC);
 
-   m_latest_sps.pic_width_in_luma_samples = ALIGN(encodeResolution.Width, picDimensionMultipleRequirement);
-   m_latest_sps.pic_height_in_luma_samples = ALIGN(encodeResolution.Height, picDimensionMultipleRequirement);
+   m_latest_sps.pic_width_in_luma_samples = align(encodeResolution.Width, picDimensionMultipleRequirement);
+   m_latest_sps.pic_height_in_luma_samples = align(encodeResolution.Height, picDimensionMultipleRequirement);
    m_latest_sps.conf_win_right_offset = (m_latest_sps.pic_width_in_luma_samples - viewport.Width) / SubWidthC;
    m_latest_sps.conf_win_bottom_offset = (m_latest_sps.pic_height_in_luma_samples - viewport.Height) / SubHeightC;
 
@@ -587,7 +587,7 @@ d3d12_video_bitstream_builder_hevc::build_pps(const struct pipe_h265_enc_pic_par
          const HevcSeqParameterSet& parentSPS,
          uint8_t pic_parameter_set_id,
          const D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC& codecConfig,
-         const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC& pictureControl,
+         const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2& pictureControl,
          std::vector<BYTE> &headerBitstream,
          std::vector<BYTE>::iterator placingPositionStart,
          size_t &writtenBytes)

@@ -219,7 +219,7 @@ opt_cmod_propagation_local(elk_bblock_t *block, vec4_visitor *v)
                      src1_chan = ELK_GET_SWZ(scan_inst->src[1].swizzle, 3);
                      break;
                   default:
-                     unreachable("Impossible writemask");
+                     UNREACHABLE("Impossible writemask");
                   }
 
                   scan_inst->src[0].swizzle = ELK_SWIZZLE4(src0_chan,

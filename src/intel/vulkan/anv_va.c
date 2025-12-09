@@ -44,9 +44,9 @@ va_at(struct anv_va_range *range, uint64_t addr, uint64_t size)
 static void
 anv_device_print_vas(struct anv_physical_device *device)
 {
-   fprintf(stderr, "Driver heaps:\n");
+   mesa_logi("Driver heaps:\n");
 #define PRINT_HEAP(name) \
-   fprintf(stderr, "   0x%016"PRIx64"-0x%016"PRIx64": %s\n", \
+   mesa_logi("   0x%016"PRIx64"-0x%016"PRIx64": %s\n", \
            device->va.name.addr, \
            device->va.name.addr + device->va.name.size, \
            #name);

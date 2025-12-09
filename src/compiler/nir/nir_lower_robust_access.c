@@ -125,7 +125,7 @@ lower_image(nir_builder *b, nir_intrinsic_instr *instr, bool deref)
                                   instr->src[0].ssa, nir_imm_int(b, 0),
                                   .image_array = is_array, .image_dim = dim);
    if (deref) {
-      nir_instr_as_intrinsic(size->parent_instr)->intrinsic =
+      nir_def_as_intrinsic(size)->intrinsic =
          nir_intrinsic_image_deref_size;
    }
 
@@ -143,7 +143,7 @@ lower_image(nir_builder *b, nir_intrinsic_instr *instr, bool deref)
       nir_def *samples = nir_image_samples(b, 32, instr->src[0].ssa,
                                            .image_array = is_array, .image_dim = dim);
       if (deref) {
-         nir_instr_as_intrinsic(samples->parent_instr)->intrinsic =
+         nir_def_as_intrinsic(samples)->intrinsic =
             nir_intrinsic_image_deref_samples;
       }
 
@@ -207,7 +207,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *_opts)
       return true;
 
    default:
-      unreachable("driver requested lowering for unsupported intrinsic");
+      UNREACHABLE("driver requested lowering for unsupported intrinsic");
    }
 }
 

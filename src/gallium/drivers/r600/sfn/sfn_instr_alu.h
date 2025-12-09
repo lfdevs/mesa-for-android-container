@@ -35,6 +35,12 @@ public:
       mod_neg = 2
    };
 
+   enum OutputMod {
+      omod_none = 0,
+      omod_mul2 = 1,
+      omod_mul4 = 2,
+      omod_div2 = 3,
+   };
 
    static constexpr const AluBankSwizzle bs[6] = {
       alu_vec_012, alu_vec_021, alu_vec_120, alu_vec_102, alu_vec_201, alu_vec_210};
@@ -45,6 +51,10 @@ public:
 
    AluInstr(EAluOp opcode);
    AluInstr(EAluOp opcode, int chan);
+   AluInstr(EAluOp opcode,
+            int chan,
+            SrcValues src,
+            const std::set<AluModifiers>& flags);
    AluInstr(EAluOp opcode,
             PRegister dest,
             SrcValues src0,
@@ -102,6 +112,8 @@ public:
 
    int dest_chan() const { return m_dest ? m_dest->chan() : m_fallback_chan; }
 
+   void pin_dest_to_chan() override;
+
    const VirtualValue *psrc(unsigned i) const { return i < m_src.size() ? m_src[i] : nullptr; }
    PVirtualValue psrc(unsigned i) { return i < m_src.size() ? m_src[i] : nullptr; }
    VirtualValue& src(unsigned i)
@@ -117,7 +129,6 @@ public:
 
    void set_sources(SrcValues src);
    const SrcValues& sources() const { return m_src; }
-   void pin_sources_to_chan();
 
    int register_priority() const;
 
@@ -146,20 +157,21 @@ public:
    static bool from_nir(nir_alu_instr *alu, Shader& shader);
 
    int alu_slots() const { return m_alu_slots; }
+   void set_alu_slots(unsigned slots) { m_alu_slots = slots; }
 
-   AluGroup *split(ValueFactory& vf);
+   bool split(AluGroup& dest_group);
 
    bool end_group() const override { return m_alu_flags.test(alu_last_instr); }
 
    static const std::set<AluModifiers> empty;
    static const std::set<AluModifiers> write;
-   static const std::set<AluModifiers> last;
-   static const std::set<AluModifiers> last_write;
 
    std::tuple<PRegister, bool, PRegister> indirect_addr() const;
    void update_indirect_addr(PRegister old_reg, PRegister reg) override;
 
    void add_extra_dependency(PVirtualValue reg);
+
+   int required_channels_mask() const;
 
    void set_required_slots(int nslots) { m_required_slots = nslots; }
    unsigned required_slots() const { return m_required_slots; }
@@ -175,6 +187,7 @@ public:
 
    uint8_t allowed_src_chan_mask() const override;
    uint8_t allowed_dest_chan_mask() const {return m_allowed_dest_mask;}
+   void set_allowed_dest_chan_mask(uint8_t mask);
 
    void inc_ar_uses() { ++m_num_ar_uses;}
    auto num_ar_uses() const {return m_num_ar_uses;}
@@ -191,6 +204,12 @@ public:
    void reset_source_mod(int src, SourceMod mod) {
       m_source_modifiers &= ~(mod << (2 * src));
    }
+
+   auto set_output_modifier(const OutputMod m) { m_output_modifier = m; }
+   auto output_modifier() const { return m_output_modifier; }
+   auto has_output_modifier() const { return m_output_modifier != omod_none; }
+
+   void override_or_clear_dest(PRegister dummy_reg);
 
 private:
    friend class AluGroup;
@@ -229,6 +248,7 @@ private:
    unsigned m_allowed_dest_mask{0xf};
    unsigned m_num_ar_uses{0};
    uint32_t m_source_modifiers{0};
+   OutputMod m_output_modifier{omod_none};
 };
 
 class AluInstrVisitor : public InstrVisitor {

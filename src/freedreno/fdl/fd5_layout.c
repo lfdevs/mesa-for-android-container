@@ -32,6 +32,7 @@ fdl5_layout_image(struct fdl_layout *layout, const struct fdl_image_params *para
    layout->layer_first = !params->is_3d;
 
    layout->tile_mode = params->tile_mode;
+   layout->linear_fallback_threshold_texels = FDL_LINEAR_FALLBACK_THRESHOLD;
 
    uint32_t heightalign = layout->cpp == 1 ? 32 : 16;
    /* in layer_first layout, the level (slice) contains just one

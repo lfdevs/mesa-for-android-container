@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 #![allow(non_snake_case)]
 
 use crate::api::context::*;
@@ -9,6 +12,7 @@ use crate::api::platform;
 use crate::api::platform::*;
 use crate::api::program::*;
 use crate::api::queue::*;
+use crate::api::semaphore::*;
 use crate::api::types::*;
 use crate::api::util::*;
 use crate::core::platform::*;
@@ -31,7 +35,7 @@ const CL_ICD2_TAG_KHR: isize = 0x434C3331;
 const CL_ICD2_TAG_KHR: isize = 0x4F50454E434C3331;
 
 const fn cl_icd_dispatch_default() -> cl_icd_dispatch {
-    const ELEMS: usize = mem::size_of::<cl_icd_dispatch>() / mem::size_of::<Option<fn()>>();
+    const ELEMS: usize = size_of::<cl_icd_dispatch>() / size_of::<Option<fn()>>();
 
     // SAFETY: cl_icd_dispatch is a list of function pointers and we set them all to None
     unsafe { mem::transmute([None::<fn()>; ELEMS]) }
@@ -225,6 +229,7 @@ pub enum RusticlTypes {
     Program,
     Queue,
     Sampler,
+    Semaphore,
 }
 
 impl RusticlTypes {
@@ -243,6 +248,7 @@ impl RusticlTypes {
             0xec4cf9af => Self::Program,
             0xec4cf9b0 => Self::Queue,
             0xec4cf9b1 => Self::Sampler,
+            0xec4cf9b2 => Self::Semaphore,
             _ => return None,
         };
         debug_assert!(result.u32() == val);
@@ -405,14 +411,14 @@ pub trait ArcedCLObject<'a, const ERR: i32, CL: ReferenceCountedAPIPointer<Self,
 macro_rules! impl_cl_type_trait_base {
     (@BASE $cl: ident, $t: ident, [$($types: ident),+], $err: ident, $($field:ident).+) => {
         impl $crate::api::icd::ReferenceCountedAPIPointer<$t, $err> for $cl {
-            fn get_ptr(&self) -> CLResult<*const $t> {
+            fn get_ptr(&self) -> $crate::api::icd::CLResult<*const $t> {
                 type Base = $crate::api::icd::CLObjectBase<$err>;
                 let t = Base::check_ptr(self.cast())?;
                 if ![$($crate::api::icd::RusticlTypes::$types),+].contains(&t) {
                     return Err($err);
                 }
 
-                let offset = ::mesa_rust_util::offset_of!($t, $($field).+);
+                let offset = ::std::mem::offset_of!($t, $($field).+);
                 // SAFETY: We offset the pointer back from the ICD specified base type to our
                 //         internal type.
                 let obj_ptr: *const $t = unsafe { self.byte_sub(offset) }.cast();
@@ -427,7 +433,7 @@ macro_rules! impl_cl_type_trait_base {
                 if ptr.is_null() {
                     return std::ptr::null_mut();
                 }
-                let offset = ::mesa_rust_util::offset_of!($t, $($field).+);
+                let offset = ::std::mem::offset_of!($t, $($field).+);
                 // SAFETY: The resulting pointer is safe as we simply offset into the ICD specified
                 //         base type.
                 unsafe { ptr.byte_add(offset) as Self }
@@ -481,10 +487,9 @@ macro_rules! impl_cl_type_trait {
     };
 }
 
-// We need those functions exported
-
-#[no_mangle]
-unsafe extern "C" fn clGetPlatformInfo(
+// SAFETY: The OpenCL spec demands this function to be exported with its plain C name
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn clGetPlatformInfo(
     platform: cl_platform_id,
     param_name: cl_platform_info,
     param_value_size: usize,
@@ -502,8 +507,9 @@ unsafe extern "C" fn clGetPlatformInfo(
     }
 }
 
-#[no_mangle]
-unsafe extern "C" fn clIcdGetPlatformIDsKHR(
+// SAFETY: The OpenCL spec demands this function to be exported with its plain C name
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn clIcdGetPlatformIDsKHR(
     num_entries: cl_uint,
     platforms: *mut cl_platform_id,
     num_platforms: *mut cl_uint,
@@ -519,8 +525,9 @@ macro_rules! cl_ext_func {
 }
 
 #[rustfmt::skip]
-#[no_mangle]
-extern "C" fn clGetExtensionFunctionAddress(
+// SAFETY: The OpenCL spec demands this function to be exported with its plain C name
+#[unsafe(no_mangle)]
+pub extern "C" fn clGetExtensionFunctionAddress(
     function_name: *const c_char,
 ) -> *mut c_void {
     if function_name.is_null() {
@@ -530,14 +537,15 @@ extern "C" fn clGetExtensionFunctionAddress(
         // cl_khr_create_command_queue
         "clCreateCommandQueueWithPropertiesKHR" => cl_ext_func!(clCreateCommandQueueWithProperties: clCreateCommandQueueWithPropertiesKHR_fn),
 
-        // cl_khr_icd
-        "clGetPlatformInfo" => cl_ext_func!(clGetPlatformInfo: clGetPlatformInfo_fn),
-        "clIcdGetPlatformIDsKHR" => cl_ext_func!(clIcdGetPlatformIDsKHR: clIcdGetPlatformIDsKHR_fn),
-        "clIcdGetFunctionAddressForPlatformKHR" => cl_ext_func!(clIcdGetFunctionAddressForPlatformKHR: clIcdGetFunctionAddressForPlatformKHR_fn),
-        "clIcdSetPlatformDispatchDataKHR" => cl_ext_func!(clIcdSetPlatformDispatchDataKHR: clIcdSetPlatformDispatchDataKHR_fn),
+        // cl_khr_external_memory
+        "clEnqueueAcquireExternalMemObjectsKHR" => cl_ext_func!(clEnqueueAcquireExternalMemObjectsKHR: clEnqueueAcquireExternalMemObjectsKHR_fn),
+        "clEnqueueReleaseExternalMemObjectsKHR" => cl_ext_func!(clEnqueueReleaseExternalMemObjectsKHR: clEnqueueReleaseExternalMemObjectsKHR_fn),
 
-        // cl_khr_il_program
-        "clCreateProgramWithILKHR" => cl_ext_func!(clCreateProgramWithIL: clCreateProgramWithILKHR_fn),
+        // cl_khr_external_semaphore
+        "clGetSemaphoreHandleForTypeKHR" => cl_ext_func!(clGetSemaphoreHandleForTypeKHR: clGetSemaphoreHandleForTypeKHR_fn),
+
+        // cl_khr_external_semaphore_sync_fd
+        "clReImportSemaphoreSyncFdKHR" => cl_ext_func!(clReImportSemaphoreSyncFdKHR: clReImportSemaphoreSyncFdKHR_fn),
 
         // cl_khr_gl_sharing
         "clCreateFromGLBuffer" => cl_ext_func!(clCreateFromGLBuffer: clCreateFromGLBuffer_fn),
@@ -551,8 +559,28 @@ extern "C" fn clGetExtensionFunctionAddress(
         "clGetGLObjectInfo" => cl_ext_func!(clGetGLObjectInfo: clGetGLObjectInfo_fn),
         "clGetGLTextureInfo" => cl_ext_func!(clGetGLTextureInfo: clGetGLTextureInfo_fn),
 
+        // cl_khr_icd
+        "clGetPlatformInfo" => cl_ext_func!(clGetPlatformInfo: clGetPlatformInfo_fn),
+        "clIcdGetPlatformIDsKHR" => cl_ext_func!(clIcdGetPlatformIDsKHR: clIcdGetPlatformIDsKHR_fn),
+        "clIcdGetFunctionAddressForPlatformKHR" => cl_ext_func!(clIcdGetFunctionAddressForPlatformKHR: clIcdGetFunctionAddressForPlatformKHR_fn),
+        "clIcdSetPlatformDispatchDataKHR" => cl_ext_func!(clIcdSetPlatformDispatchDataKHR: clIcdSetPlatformDispatchDataKHR_fn),
+
+        // cl_khr_il_program
+        "clCreateProgramWithILKHR" => cl_ext_func!(clCreateProgramWithIL: clCreateProgramWithILKHR_fn),
+
+        // cl_khr_semaphore
+        "clCreateSemaphoreWithPropertiesKHR" => cl_ext_func!(clCreateSemaphoreWithPropertiesKHR: clCreateSemaphoreWithPropertiesKHR_fn),
+        "clEnqueueSignalSemaphoresKHR" => cl_ext_func!(clEnqueueSignalSemaphoresKHR: clEnqueueSignalSemaphoresKHR_fn),
+        "clEnqueueWaitSemaphoresKHR" => cl_ext_func!(clEnqueueWaitSemaphoresKHR: clEnqueueWaitSemaphoresKHR_fn),
+        "clGetSemaphoreInfoKHR" => cl_ext_func!(clGetSemaphoreInfoKHR: clGetSemaphoreInfoKHR_fn),
+        "clReleaseSemaphoreKHR" => cl_ext_func!(clReleaseSemaphoreKHR: clReleaseSemaphoreKHR_fn),
+        "clRetainSemaphoreKHR" => cl_ext_func!(clRetainSemaphoreKHR: clRetainSemaphoreKHR_t),
+
         // cl_khr_suggested_local_work_size
         "clGetKernelSuggestedLocalWorkSizeKHR" => cl_ext_func!(clGetKernelSuggestedLocalWorkSizeKHR: clGetKernelSuggestedLocalWorkSizeKHR_fn),
+
+        // cl_ext_buffer_device_address
+        "clSetKernelArgDevicePointerEXT" => cl_ext_func!(clSetKernelArgDevicePointerEXT: clSetKernelArgDevicePointerEXT_fn),
 
         // cl_arm_shared_virtual_memory
         "clEnqueueSVMFreeARM" => cl_ext_func!(clEnqueueSVMFreeARM: clEnqueueSVMFreeARM_fn),
@@ -564,9 +592,6 @@ extern "C" fn clGetExtensionFunctionAddress(
         "clSetKernelExecInfoARM" => cl_ext_func!(clSetKernelExecInfo: clSetKernelExecInfoARM_fn),
         "clSVMAllocARM" => cl_ext_func!(clSVMAlloc: clSVMAllocARM_fn),
         "clSVMFreeARM" => cl_ext_func!(clSVMFree: clSVMFreeARM_fn),
-
-        // cl_ext_buffer_device_address
-        "clSetKernelArgDevicePointerEXT" => cl_ext_func!(clSetKernelArgDevicePointerEXT: clSetKernelArgDevicePointerEXT_fn),
 
         // DPCPP bug https://github.com/intel/llvm/issues/9964
         "clSetProgramSpecializationConstant" => cl_ext_func!(clSetProgramSpecializationConstant: clSetProgramSpecializationConstant_fn),

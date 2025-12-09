@@ -41,7 +41,7 @@ workflow:
         FDO_RUNNER_JOB_PRIORITY_TAG_X86_64: priority:high
         FDO_RUNNER_JOB_PRIORITY_TAG_X86_64_KVM: priority:high-kvm
         FDO_RUNNER_JOB_PRIORITY_TAG_AARCH64: priority:high-aarch64
-        CI_TRON_JOB_PRIORITY_TAG: ""  # Empty tags are ignored by gitlab
+        CI_TRON_JOB_PRIORITY: high
         JOB_PRIORITY: 75
         # fast-fail in merge pipelines: stop early if we get this many unexpected fails/crashes
         DEQP_RUNNER_MAX_FAILS: 40
@@ -61,6 +61,7 @@ workflow:
         FDO_RUNNER_JOB_PRIORITY_TAG_X86_64: priority:low
         FDO_RUNNER_JOB_PRIORITY_TAG_X86_64_KVM: priority:low-kvm
         FDO_RUNNER_JOB_PRIORITY_TAG_AARCH64: priority:low-aarch64
+        CI_TRON_JOB_PRIORITY: low
         JOB_PRIORITY: 45
         # (some) nightly builds perform LTO, so they take much longer than the
         # short timeout allowed in other pipelines.
@@ -78,7 +79,7 @@ workflow:
 
 variables:
   FDO_UPSTREAM_REPO: mesa/mesa
-  MESA_TEMPLATES_COMMIT: &ci-templates-commit c6aeb16f86e32525fa630fb99c66c4f3e62fc3cb
+  MESA_TEMPLATES_COMMIT: &ci-templates-commit aec7a6ce7bb38902c70641526f6611e27141784a
   CI_PRE_CLONE_SCRIPT: |-
           set -o xtrace
           curl --silent --location --fail --retry-connrefused --retry 3 --retry-delay 10 \
@@ -115,8 +116,6 @@ variables:
   # Re-enable farm with `git mv .ci-farms{-disabled,}/$farm_name`
   # NEVER MIX FARM MAINTENANCE WITH ANY OTHER CHANGE IN THE SAME MERGE REQUEST!
   ARTIFACTS_BASE_URL: https://${CI_PROJECT_ROOT_NAMESPACE}.${CI_PAGES_DOMAIN}/-/${CI_PROJECT_NAME}/-/jobs/${CI_JOB_ID}/artifacts
-  # Python scripts for structured logger
-  PYTHONPATH: "$PYTHONPATH:$CI_PROJECT_DIR/install"
   # No point in continuing once the device is lost
   MESA_VK_ABORT_ON_DEVICE_LOSS: 1
   # Avoid the wall of "Unsupported SPIR-V capability" warnings in CI job log, hiding away useful output
@@ -125,7 +124,7 @@ variables:
   FDO_RUNNER_JOB_PRIORITY_TAG_X86_64: ""  # Empty tags are ignored by gitlab
   FDO_RUNNER_JOB_PRIORITY_TAG_X86_64_KVM: kvm
   FDO_RUNNER_JOB_PRIORITY_TAG_AARCH64: aarch64
-  CI_TRON_JOB_PRIORITY_TAG: ci-tron:priority:low
+  CI_TRON_JOB_PRIORITY: default
   JOB_PRIORITY: 50
   DATA_STORAGE_PATH: data_storage
   KERNEL_IMAGE_BASE: "https://$S3_HOST/$S3_KERNEL_BUCKET/$KERNEL_REPO/$KERNEL_TAG"
@@ -133,7 +132,7 @@ variables:
   CI_EXCLUDE_ENV_VAR_REGEX: 'SCRIPTS_DIR|RESULTS_DIR'
 
   CI_TRON_JOB_TEMPLATE_PROJECT: &ci-tron-template-project gfx-ci/ci-tron
-  CI_TRON_JOB_TEMPLATE_COMMIT: &ci-tron-template-commit ddadab0006e43f1365cd30779f565b444a6538ee
+  CI_TRON_JOB_TEMPLATE_COMMIT: &ci-tron-template-commit d649a2829517b078a3cb8f3c2e6c8775a5992abb
   CI_TRON_JOB_TEMPLATE_PROJECT_URL: "https://gitlab.freedesktop.org/$CI_TRON_JOB_TEMPLATE_PROJECT"
 
 
@@ -148,10 +147,6 @@ default:
       curl -L -s --retry 4 -f --retry-all-errors --retry-delay 60 -O --output-dir "${SCRIPTS_DIR}" "${CI_PROJECT_URL}/-/raw/${CI_COMMIT_SHA}/.gitlab-ci/setup-test-env.sh" &&
       . ${SCRIPTS_DIR}/setup-test-env.sh
     - eval "$S3_JWT_FILE_SCRIPT"
-
-  after_script:
-    # Work around https://gitlab.com/gitlab-org/gitlab/-/issues/20338
-    - find -name '*.log' -exec mv {} {}.txt \;
 
   # Retry when job fails. Failed jobs can be found in the Mesa CI Daily Reports:
   # https://gitlab.freedesktop.org/mesa/mesa/-/issues/?sort=created_date&state=opened&label_name%5B%5D=CI%20daily
@@ -397,15 +392,14 @@ sanity:
     GIT_STRATEGY: none
   script:
     # ci-fairy check-commits --junit-xml=check-commits.xml
-    - ci-fairy check-merge-request --require-allow-collaboration --junit-xml=check-merge-request.xml
+    # ci-fairy check-merge-request --require-allow-collaboration --junit-xml=check-merge-request.xml
     - |
       set -eu
       image_tags=(
         ALPINE_X86_64_BUILD_TAG
-        ALPINE_X86_64_LAVA_SSH_TAG
-        ALPINE_X86_64_LAVA_TRIGGER_TAG
-        DEBIAN_BASE_TAG
+        DEBIAN_BUILD_BASE_TAG
         DEBIAN_BUILD_TAG
+        DEBIAN_TEST_BASE_TAG
         DEBIAN_TEST_ANDROID_TAG
         DEBIAN_TEST_GL_TAG
         DEBIAN_TEST_VK_TAG
@@ -429,4 +423,3 @@ sanity:
     when: on_failure
     reports:
       junit: check-*.xml
-

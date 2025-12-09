@@ -122,4 +122,11 @@
     <value name="I16" value="4"/>
     <value name="U16" value="5"/>
   </enum>
+
+  <!-- v6+ -->
+  <enum name="Pixel Kill">
+    <value name="Force Early" value="0"/>
+    <value name="Weak Early" value="2"/>
+    <value name="Force Late" value="3"/>
+  </enum>
 </panxml>

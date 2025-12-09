@@ -149,6 +149,9 @@ enum blorp_batch_flags {
     * Mostly for debug
     */
    BLORP_BATCH_DISABLE_VF_DISTRIBUTION = BITFIELD_BIT(6),
+
+   /* Blorp is running on compute engine. */
+   BLORP_BATCH_COMPUTE_ENGINE = BITFIELD_BIT(7),
 };
 
 struct blorp_batch {

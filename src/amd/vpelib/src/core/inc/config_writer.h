@@ -93,7 +93,9 @@ struct config_writer {
     enum vpe_status   status;
 
 #ifdef VPE_REGISTER_PROFILE
-    uint64_t register_count;
+    uint64_t total_register_count;
+    uint64_t burstMode_register_count;
+    uint64_t nonBurstMode_register_count;
     uint64_t total_config_count;
     uint64_t reused_config_count;
 #endif

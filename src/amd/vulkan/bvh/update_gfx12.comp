@@ -6,22 +6,6 @@
 
 #version 460
 
-#extension GL_GOOGLE_include_directive : require
-
-#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
-#extension GL_EXT_scalar_block_layout : require
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_buffer_reference2 : require
-#extension GL_KHR_memory_scope_semantics : require
-#extension GL_KHR_shader_subgroup_basic : require
-#extension GL_KHR_shader_subgroup_shuffle : require
-#extension GL_KHR_shader_subgroup_ballot : require
-#extension GL_KHR_shader_subgroup_clustered : require
-
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #include "build_interface.h"
@@ -157,6 +141,7 @@ main()
          if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_UPDATE_IN_PLACE)) {
             DEREF(dst_node).primitive_base_id = src_node.primitive_base_id;
             DEREF(dst_node).internal_base_id = src_node.internal_base_id;
+            DEREF(dst_node).parent_id = src_node.parent_id;
          }
          DEREF(dst_node).origin = origin;
          DEREF(dst_node).child_count_exponents = extent_exponents.x | (extent_exponents.y << 8) |

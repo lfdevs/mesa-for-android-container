@@ -109,7 +109,7 @@ vc4_screen_destroy(struct pipe_screen *pscreen)
                 screen->ro->destroy(screen->ro);
 
 #ifdef USE_VC4_SIMULATOR
-        vc4_simulator_destroy(screen);
+        vc4_simulator_destroy(screen->sim_file);
 #endif
 
         u_transfer_helper_destroy(pscreen->transfer_helper);
@@ -135,11 +135,11 @@ vc4_has_feature(struct vc4_screen *screen, uint32_t feature)
 static void
 vc4_init_shader_caps(struct vc4_screen *screen)
 {
-        for (unsigned i = 0; i <= PIPE_SHADER_FRAGMENT; i++) {
+        for (unsigned i = 0; i <= MESA_SHADER_FRAGMENT; i++) {
                 struct pipe_shader_caps *caps =
                         (struct pipe_shader_caps *)&screen->base.shader_caps[i];
 
-                if (i != PIPE_SHADER_VERTEX && i != PIPE_SHADER_FRAGMENT)
+                if (i != MESA_SHADER_VERTEX && i != MESA_SHADER_FRAGMENT)
                         continue;
 
                 caps->max_instructions =
@@ -149,7 +149,7 @@ vc4_init_shader_caps(struct vc4_screen *screen)
 
                 caps->max_control_flow_depth = screen->has_control_flow;
                 caps->max_inputs = 8;
-                caps->max_outputs = i == PIPE_SHADER_FRAGMENT ? 1 : 8;
+                caps->max_outputs = i == MESA_SHADER_FRAGMENT ? 1 : 8;
                 caps->max_temps = 256; /* GL_MAX_PROGRAM_TEMPORARIES_ARB */
                 caps->max_const_buffer0_size = 16 * 1024 * sizeof(float);
                 caps->max_const_buffers = 1;
@@ -466,8 +466,6 @@ vc4_screen_create(int fd, const struct pipe_screen_config *config,
         struct pipe_screen *pscreen;
         int err;
 
-        util_cpu_trace_init();
-
         pscreen = &screen->base;
 
         pscreen->destroy = vc4_screen_destroy;
@@ -507,7 +505,7 @@ vc4_screen_create(int fd, const struct pipe_screen_config *config,
         vc4_mesa_debug = debug_get_option_vc4_debug();
 
 #ifdef USE_VC4_SIMULATOR
-        vc4_simulator_init(screen);
+        screen->sim_file = vc4_simulator_init(screen);
 #endif
 
         vc4_resource_screen_init(pscreen);

@@ -17,7 +17,12 @@ public:
    AluReadportReservation(const AluReadportReservation& orig) = default;
    AluReadportReservation& operator=(const AluReadportReservation& orig) = default;
 
-   bool schedule_vec_src(PVirtualValue src[3], int nsrc, AluBankSwizzle swz);
+   bool update_from_sources(const std::array<PVirtualValue, 3>& src,
+                            const unsigned int nsrc);
+
+   unsigned schedule_vec_src(const std::array<PVirtualValue, 3>& src,
+                             int nsrc,
+                             AluBankSwizzle swz);
 
    bool schedule_vec_instruction(const AluInstr& alu, AluBankSwizzle swz);
    bool schedule_trans_instruction(const AluInstr& alu, AluBankSwizzle swz);

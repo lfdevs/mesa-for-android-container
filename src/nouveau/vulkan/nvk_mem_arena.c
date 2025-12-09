@@ -138,7 +138,7 @@ nvk_mem_arena_find_mem_by_addr(const struct nvk_mem_arena *arena, uint64_t addr)
             return mem_idx;
       }
 
-      unreachable("Not an arena address");
+      UNREACHABLE("Not an arena address");
    }
 }
 
@@ -158,8 +158,33 @@ nvk_mem_arena_map(const struct nvk_mem_arena *arena,
    return mem->mem->map + mem_offset_B;
 }
 
+static void
+nvk_mem_arena_flush_map_locked(struct nvk_device *dev,
+                               struct nvk_mem_arena *arena)
+{
+   if (p_atomic_xchg(&arena->map_dirty, 0) == 0)
+      return;
+
+   const uint32_t mem_count = nvk_mem_arena_mem_count(arena);
+
+   for (uint32_t mem_idx = 0; mem_idx < mem_count; mem_idx++) {
+      const struct nvk_arena_mem *mem = &arena->mem[mem_idx];
+      const uint64_t mem_size_B = nvk_mem_arena_mem_size_B(mem_idx);
+      nvkmd_mem_sync_map_to_gpu(mem->mem, 0, mem_size_B);
+   }
+}
+
 void
-nvk_mem_arena_copy_to_gpu(const struct nvk_mem_arena *arena,
+nvk_mem_arena_flush_map(struct nvk_device *dev,
+                        struct nvk_mem_arena *arena)
+{
+   simple_mtx_lock(&arena->mutex);
+   nvk_mem_arena_flush_map_locked(dev, arena);
+   simple_mtx_unlock(&arena->mutex);
+}
+
+void
+nvk_mem_arena_copy_to_gpu(struct nvk_mem_arena *arena,
                           uint64_t dst_addr, const void *src, size_t size_B)
 {
    assert(nvk_mem_arena_is_mapped(arena));
@@ -182,4 +207,6 @@ nvk_mem_arena_copy_to_gpu(const struct nvk_mem_arena *arena,
       src += copy_size_B;
       size_B -= copy_size_B;
    }
+
+   nvk_mem_arena_set_map_dirty(arena);
 }

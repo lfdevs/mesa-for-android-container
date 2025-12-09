@@ -314,7 +314,7 @@ GetChromaFormatIdc( enum pipe_format pipeFormat )
          return 3;
       default:
       {
-         unreachable( "Unsupported pipe video format" );
+         UNREACHABLE( "Unsupported pipe video format" );
       }
       break;
    }
@@ -349,7 +349,7 @@ ConvertProfileToFormat( enum pipe_video_profile profile )
          return PIPE_FORMAT_Y410;
       default:
       {
-         unreachable( "Unsupported pipe video profile" );
+         UNREACHABLE( "Unsupported pipe video profile" );
       }
       break;
    }
@@ -383,7 +383,7 @@ ConvertProfileToSubtype( enum pipe_video_profile profile )
          return MFVideoFormat_Y410;
       default:
       {
-         unreachable( "Unsupported pipe video profile" );
+         UNREACHABLE( "Unsupported pipe video profile" );
       }
       break;
    }
@@ -434,7 +434,7 @@ ConvertPipeH2645FrameTypeToString( pipe_h2645_enc_picture_type picType )
       break;
       default:
       {
-         unreachable( "Unsupported pipe_h2645_enc_picture_type" );
+         UNREACHABLE( "Unsupported pipe_h2645_enc_picture_type" );
       }
       break;
    }

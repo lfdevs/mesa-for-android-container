@@ -46,8 +46,7 @@ public:
 
    operand(ir_variable *var)
    {
-      void *mem_ctx = ralloc_parent(var);
-      val = new(mem_ctx) ir_dereference_variable(var);
+      val = new(var->node_linalloc) ir_dereference_variable(var);
    }
 
    ir_rvalue *val;
@@ -66,8 +65,7 @@ public:
 
    deref(ir_variable *var)
    {
-      void *mem_ctx = ralloc_parent(var);
-      val = new(mem_ctx) ir_dereference_variable(var);
+      val = new(var->node_linalloc) ir_dereference_variable(var);
    }
 
 
@@ -76,9 +74,9 @@ public:
 
 class ir_factory {
 public:
-   ir_factory(exec_list *instructions = NULL, void *mem_ctx = NULL)
+   ir_factory(ir_exec_list *instructions = NULL, linear_ctx *linalloc = NULL)
       : instructions(instructions),
-        mem_ctx(mem_ctx)
+        linalloc(linalloc)
    {
       return;
    }
@@ -89,29 +87,29 @@ public:
    ir_constant*
    constant(float f)
    {
-      return new(mem_ctx) ir_constant(f);
+      return new(linalloc) ir_constant(f);
    }
 
    ir_constant*
    constant(int i)
    {
-      return new(mem_ctx) ir_constant(i);
+      return new(linalloc) ir_constant(i);
    }
 
    ir_constant*
    constant(unsigned u)
    {
-      return new(mem_ctx) ir_constant(u);
+      return new(linalloc) ir_constant(u);
    }
 
    ir_constant*
    constant(bool b)
    {
-      return new(mem_ctx) ir_constant(b);
+      return new(linalloc) ir_constant(b);
    }
 
-   exec_list *instructions;
-   void *mem_ctx;
+   ir_exec_list *instructions;
+   linear_ctx *linalloc;
 };
 
 ir_assignment *assign(deref lhs, operand rhs);

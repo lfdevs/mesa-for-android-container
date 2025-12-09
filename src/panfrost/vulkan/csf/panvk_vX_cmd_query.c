@@ -368,6 +368,31 @@ panvk_cmd_reset_timestamp_queries(struct panvk_cmd_buffer *cmd,
    cs_flush_stores(b);
 }
 
+static uint32_t
+vk_stage_to_timestamp_subqueue_mask(VkPipelineStageFlagBits2 vk_stage)
+{
+   assert(util_bitcount64(vk_stage) == 1);
+
+   /* Handle special stages. */
+   if (vk_stage == VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT)
+      return BITFIELD_BIT(PANVK_SUBQUEUE_VERTEX_TILER) |
+             BITFIELD_BIT(PANVK_SUBQUEUE_COMPUTE);
+   if (vk_stage == VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
+      return BITFIELD_BIT(PANVK_SUBQUEUE_FRAGMENT) |
+             BITFIELD_BIT(PANVK_SUBQUEUE_COMPUTE);
+   if (vk_stage == VK_PIPELINE_STAGE_2_HOST_BIT)
+      /* We need to map host to something, so map it to compute to not interfer
+       * with drawing. */
+      return BITFIELD_BIT(PANVK_SUBQUEUE_COMPUTE);
+
+   uint32_t result = vk_stages_to_subqueue_mask(vk_stage, SYNC_SCOPE_FIRST);
+
+   /* All stages should map to at least one subqueue. */
+   assert(util_bitcount(result) > 0);
+
+   return result;
+}
+
 static void
 panvk_cs_write_ts_info(struct panvk_cmd_buffer *cmd,
                        VkPipelineStageFlags2 stage,
@@ -386,7 +411,7 @@ panvk_cs_write_ts_info(struct panvk_cmd_buffer *cmd,
    uint64_t ts_info = panvk_timestamp_info_encode(
       stage == VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT ? PANVK_QUERY_TS_OP_MIN
                                                    : PANVK_QUERY_TS_OP_MAX,
-      vk_stage_to_subqueue_mask(stage));
+      vk_stage_to_timestamp_subqueue_mask(stage));
 
    cs_move64_to(b, info, ts_info);
    for (uint32_t query = first_query; query < first_query + n_views; ++query) {
@@ -431,7 +456,7 @@ panvk_cs_defer_timestamp(struct panvk_cmd_buffer *cmd,
    /* Deferring top of pipe doesn't make sense. */
    assert(VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT != stage);
 
-   const uint32_t write_sq_mask = vk_stage_to_subqueue_mask(stage);
+   const uint32_t write_sq_mask = vk_stage_to_timestamp_subqueue_mask(stage);
    const uint32_t n_views =
       MAX2(1, util_bitcount(cmd->state.gfx.render.view_mask));
 
@@ -480,7 +505,7 @@ panvk_cs_write_timestamp(struct panvk_cmd_buffer *cmd,
 {
    struct panvk_device *dev = to_panvk_device(cmd->vk.base.device);
 
-   const uint32_t write_sq_mask = vk_stage_to_subqueue_mask(stage);
+   const uint32_t write_sq_mask = vk_stage_to_timestamp_subqueue_mask(stage);
    const uint32_t n_views =
       MAX2(1, util_bitcount(cmd->state.gfx.render.view_mask));
 
@@ -512,7 +537,7 @@ panvk_cmd_write_timestamp_query(struct panvk_cmd_buffer *cmd,
                                 struct panvk_query_pool *pool, uint32_t query)
 {
    /* Store the actual timestamp values per subqueue. */
-   const uint32_t write_sq_mask = vk_stage_to_subqueue_mask(stage);
+   const uint32_t write_sq_mask = vk_stage_to_timestamp_subqueue_mask(stage);
 
    /* The timestamp has to be written after RUN_FRAGMENT if we are inside
     * a renderpass at the moment and cover the F subqueue.
@@ -610,7 +635,7 @@ panvk_copy_timestamp_query_results(struct panvk_cmd_buffer *cmd,
 
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmd);
    panlib_copy_ts_query_result_struct(&precomp_ctx, panlib_1d(query_count),
-                                      PANLIB_BARRIER_NONE, push);
+                                      PANLIB_BARRIER_CSF_SYNC, push);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -634,7 +659,7 @@ panvk_per_arch(CmdResetQueryPool)(VkCommandBuffer commandBuffer,
       break;
    }
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -656,7 +681,7 @@ panvk_per_arch(CmdBeginQueryIndexedEXT)(VkCommandBuffer commandBuffer,
       break;
    }
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -677,7 +702,7 @@ panvk_per_arch(CmdEndQueryIndexedEXT)(VkCommandBuffer commandBuffer,
       break;
    }
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -718,6 +743,6 @@ panvk_per_arch(CmdCopyQueryPoolResults)(
    }
 #endif
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }

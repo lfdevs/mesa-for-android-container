@@ -138,6 +138,10 @@ radv_is_cache_disabled(const struct radv_device *device, const struct vk_pipelin
    if (device->printf.buffer_addr)
       return true;
 
+   /* The buffer address used for validating VAs is hardcoded. */
+   if (device->valid_vas_addr)
+      return true;
+
    /* Pipeline caches can be disabled with RADV_DEBUG=nocache, with MESA_GLSL_CACHE_DISABLE=1 and
     * when ACO_DEBUG is used. MESA_GLSL_CACHE_DISABLE is done elsewhere.
     */
@@ -335,7 +339,7 @@ radv_pipeline_cache_object_search(struct radv_device *device, struct vk_pipeline
    *found_in_application_cache = false;
 
    if (radv_is_cache_disabled(device, cache))
-      return false;
+      return NULL;
 
    bool *found = found_in_application_cache;
    if (!cache) {
@@ -349,7 +353,7 @@ radv_pipeline_cache_object_search(struct radv_device *device, struct vk_pipeline
    radv_report_pso_cache_stats(device, pipeline, !!object);
 
    if (!object)
-      return false;
+      return NULL;
 
    return container_of(object, struct radv_pipeline_cache_object, base);
 }
@@ -365,7 +369,7 @@ radv_graphics_pipeline_cache_search(struct radv_device *device, struct vk_pipeli
       return false;
 
    for (unsigned i = 0; i < pipeline_obj->num_shaders; i++) {
-      gl_shader_stage s = pipeline_obj->shaders[i]->info.stage;
+      mesa_shader_stage s = pipeline_obj->shaders[i]->info.stage;
       if (s == MESA_SHADER_VERTEX && i > 0) {
          /* The GS copy-shader is a VS placed after all other stages */
          assert(i == pipeline_obj->num_shaders - 1 && pipeline->base.shaders[MESA_SHADER_GEOMETRY]);
@@ -539,7 +543,7 @@ radv_ray_tracing_pipeline_cache_insert(struct radv_device *device, struct vk_pip
 }
 
 nir_shader *
-radv_pipeline_cache_lookup_nir(struct radv_device *device, struct vk_pipeline_cache *cache, gl_shader_stage stage,
+radv_pipeline_cache_lookup_nir(struct radv_device *device, struct vk_pipeline_cache *cache, mesa_shader_stage stage,
                                const blake3_hash key)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
@@ -653,7 +657,7 @@ radv_pipeline_cache_get_binaries(struct radv_device *device, const VkAllocationC
    bool complete = true;
    bool is_rt = false;
    for (unsigned i = 0; i < pipeline_obj->num_shaders; i++) {
-      if (gl_shader_stage_is_rt(pipeline_obj->shaders[i]->info.stage)) {
+      if (mesa_shader_stage_is_rt(pipeline_obj->shaders[i]->info.stage)) {
          is_rt = true;
          break;
       }
@@ -704,7 +708,7 @@ radv_pipeline_cache_get_binaries(struct radv_device *device, const VkAllocationC
 
       for (unsigned i = 0; i < pipeline_obj->num_shaders; i++) {
          struct radv_shader *shader = pipeline_obj->shaders[i];
-         gl_shader_stage s = shader->info.stage;
+         mesa_shader_stage s = shader->info.stage;
 
          if (s == MESA_SHADER_VERTEX && i > 0) {
             /* The GS copy-shader is a VS placed after all other stages */

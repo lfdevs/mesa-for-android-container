@@ -368,7 +368,7 @@ _mesa_make_extension_string(struct gl_context *ctx)
 
    /* Check if the MESA_EXTENSION_MAX_YEAR env var is set */
    {
-      const char *env = getenv("MESA_EXTENSION_MAX_YEAR");
+      const char *env = os_get_option("MESA_EXTENSION_MAX_YEAR");
       if (env) {
          maxYear = atoi(env);
          _mesa_debug(ctx, "Note: limiting GL extensions to %u or earlier\n",

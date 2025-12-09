@@ -83,7 +83,7 @@
       gfx4_##func(__VA_ARGS__);                         \
       break;                                            \
    default:                                             \
-      unreachable("Unknown hardware generation");       \
+      UNREACHABLE("Unknown hardware generation");       \
    }
 
 static const char *
@@ -139,19 +139,19 @@ crocus_init_shader_caps(struct crocus_screen *screen)
 {
    const struct intel_device_info *devinfo = &screen->devinfo;
 
-   for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
       struct pipe_shader_caps *caps =
          (struct pipe_shader_caps *)&screen->base.shader_caps[i];
 
       if (devinfo->ver < 6 &&
-          i != PIPE_SHADER_VERTEX &&
-          i != PIPE_SHADER_FRAGMENT)
+          i != MESA_SHADER_VERTEX &&
+          i != MESA_SHADER_FRAGMENT)
          continue;
 
       if (devinfo->ver == 6 &&
-          i != PIPE_SHADER_VERTEX &&
-          i != PIPE_SHADER_FRAGMENT &&
-          i != PIPE_SHADER_GEOMETRY)
+          i != MESA_SHADER_VERTEX &&
+          i != MESA_SHADER_FRAGMENT &&
+          i != MESA_SHADER_GEOMETRY)
          continue;
 
       caps->max_instructions = i == MESA_SHADER_FRAGMENT ? 1024 : 16384;
@@ -170,7 +170,8 @@ crocus_init_shader_caps(struct crocus_screen *screen)
 
       /* Lie about these to avoid st/mesa's GLSL IR lowering of indirects,
        * which we don't want.  Our compiler backend will check elk_compiler's
-       * options and call nir_lower_indirect_derefs appropriately anyway.
+       * options and call nir_lower_indirect_derefs_to_if_else_trees
+       * appropriately anyway.
        */
       caps->indirect_temp_addr = true;
       caps->indirect_const_addr = true;
@@ -181,7 +182,7 @@ crocus_init_shader_caps(struct crocus_screen *screen)
          (devinfo->verx10 >= 75) ? CROCUS_MAX_TEXTURE_SAMPLERS : 16;
 
       if (devinfo->ver >= 7 &&
-          (i == PIPE_SHADER_FRAGMENT || i == PIPE_SHADER_COMPUTE))
+          (i == MESA_SHADER_FRAGMENT || i == MESA_SHADER_COMPUTE))
          caps->max_shader_images = CROCUS_MAX_TEXTURE_SAMPLERS;
 
       caps->max_shader_buffers =
@@ -235,6 +236,7 @@ crocus_init_screen_caps(struct crocus_screen *screen)
 
    u_init_pipe_screen_caps(&screen->base, 1);
 
+   caps->prefer_real_buffer_in_constbuf0 = true;
    caps->npot_textures = true;
    caps->anisotropic_filter = true;
    caps->occlusion_query = true;
@@ -280,6 +282,7 @@ crocus_init_screen_caps(struct crocus_screen *screen)
    caps->fs_position_is_sysval = true;
    caps->fs_face_is_integer_sysval = true;
    caps->invalidate_buffer = true;
+   caps->surface_no_compress = true;
    caps->surface_reinterpret_blocks = true;
    caps->fence_signal = true;
    caps->demote_to_helper_invocation = true;
@@ -381,15 +384,10 @@ crocus_init_screen_caps(struct crocus_screen *screen)
    const unsigned gpu_mappable_megabytes =
       (screen->aperture_threshold) / (1024 * 1024);
 
-   const long system_memory_pages = sysconf(_SC_PHYS_PAGES);
-   const long system_page_size = sysconf(_SC_PAGE_SIZE);
-
-   if (system_memory_pages <= 0 || system_page_size <= 0) {
+   uint64_t system_memory_bytes;
+   if (!os_get_total_physical_memory(&system_memory_bytes)) {
       caps->video_memory = -1;
    } else {
-      const uint64_t system_memory_bytes =
-         (uint64_t) system_memory_pages * (uint64_t) system_page_size;
-
       const unsigned system_memory_megabytes =
          (unsigned) (system_memory_bytes / (1024 * 1024));
 
@@ -412,6 +410,9 @@ crocus_init_screen_caps(struct crocus_screen *screen)
       PIPE_CONTEXT_PRIORITY_LOW |
       PIPE_CONTEXT_PRIORITY_MEDIUM |
       PIPE_CONTEXT_PRIORITY_HIGH;
+
+   /* Let mesa/st lower for us */
+   caps->flatshade = false;
 
    caps->frontend_noop = true;
    // XXX: don't hardcode 00:00:02.0 PCI here
@@ -559,7 +560,7 @@ crocus_screen_create(int fd, const struct pipe_screen_config *config)
    if (screen->devinfo.ver == 8) {
       /* bind to cherryview or bdw if forced */
       if (screen->devinfo.platform != INTEL_PLATFORM_CHV &&
-          !getenv("CROCUS_GEN8"))
+          !os_get_option("CROCUS_GEN8"))
          return NULL;
    }
 

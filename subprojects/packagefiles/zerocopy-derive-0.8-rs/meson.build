@@ -21,5 +21,5 @@ lib = rust.proc_macro(
 )
 
 dep_zerocopy_derive = declare_dependency(
-  link_with : [lib, syn, quote, proc_macro2]
+  link_with : [lib]
 )

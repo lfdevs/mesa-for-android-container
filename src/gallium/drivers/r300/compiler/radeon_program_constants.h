@@ -103,9 +103,9 @@ is_swizzle_inline_constant(rc_swizzle swizzle)
 #define RC_MAKE_SWIZZLE_SMEAR(a)    RC_MAKE_SWIZZLE((a), (a), (a), (a))
 #define GET_SWZ(swz, idx)           (((swz) >> ((idx) * 3)) & 0x7)
 #define GET_BIT(msk, idx)           (((msk) >> (idx)) & 0x1)
-#define SET_SWZ(swz, idx, newv)                                                                    \
-   do {                                                                                            \
-      (swz) = ((swz) & ~(7 << ((idx) * 3))) | ((newv) << ((idx) * 3));                             \
+#define SET_SWZ(swz, idx, newv)                                        \
+   do {                                                                \
+      (swz) = ((swz) & ~(7 << ((idx) * 3))) | ((newv) << ((idx) * 3)); \
    } while (0)
 
 #define RC_SWIZZLE_XYZW RC_MAKE_SWIZZLE(RC_SWIZZLE_X, RC_SWIZZLE_Y, RC_SWIZZLE_Z, RC_SWIZZLE_W)
@@ -138,7 +138,9 @@ is_swizzle_inline_constant(rc_swizzle swizzle)
 #define RC_MASK_XYZW (RC_MASK_X | RC_MASK_Y | RC_MASK_Z | RC_MASK_W)
 /*@}*/
 
-typedef enum { RC_ALURESULT_NONE = 0, RC_ALURESULT_X, RC_ALURESULT_W } rc_write_aluresult;
+typedef enum { RC_ALURESULT_NONE = 0,
+               RC_ALURESULT_X,
+               RC_ALURESULT_W } rc_write_aluresult;
 
 typedef enum {
    RC_PRESUB_NONE = 0,
@@ -186,6 +188,8 @@ rc_presubtract_src_reg_count(rc_presubtract_op op)
 #define RC_SOURCE_RGB   0x1
 #define RC_SOURCE_ALPHA 0x2
 
-typedef enum { RC_PRED_DISABLED, RC_PRED_SET, RC_PRED_INV } rc_predicate_mode;
+typedef enum { RC_PRED_DISABLED,
+               RC_PRED_SET,
+               RC_PRED_INV } rc_predicate_mode;
 
 #endif /* RADEON_PROGRAM_CONSTANTS_H */

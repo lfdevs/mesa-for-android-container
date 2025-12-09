@@ -4,7 +4,7 @@
 libvirglcommon = static_library(
   'virglcommon',
   'virgl_resource_cache.c',
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_gallium_drivers],
+  include_directories : [inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_drivers],
   gnu_symbol_visibility : 'hidden',
   dependencies: idep_mesautil,
 )

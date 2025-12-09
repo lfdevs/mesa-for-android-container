@@ -24,7 +24,7 @@ r600_create_so_target(struct pipe_context *ctx,
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 	struct r600_so_target *t;
-	struct r600_resource *rbuffer = (struct r600_resource*)buffer;
+	struct r600_resource *rbuffer = r600_as_resource(buffer);
 
 	t = CALLOC_STRUCT(r600_so_target);
 	if (!t) {
@@ -174,7 +174,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 
 		t[i]->stride_in_dw = stride_in_dw[i];
 
-		uint64_t va = r600_resource(t[i]->b.buffer)->gpu_address;
+		uint64_t va = r600_as_resource(t[i]->b.buffer)->gpu_address;
 
 		update_flags |= SURFACE_BASE_UPDATE_STRMOUT(i);
 
@@ -184,7 +184,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 		radeon_emit(cs, stride_in_dw[i]);		/* VTX_STRIDE (in DW) */
 		radeon_emit(cs, va >> 8);			/* BUFFER_BASE */
 
-		r600_emit_reloc(rctx, &rctx->gfx, r600_resource(t[i]->b.buffer),
+		r600_emit_reloc(rctx, &rctx->gfx, r600_as_resource(t[i]->b.buffer),
 				RADEON_USAGE_WRITE | RADEON_PRIO_SHADER_RW_BUFFER);
 
 		/* R7xx requires this packet after updating BUFFER_BASE.
@@ -194,7 +194,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 			radeon_emit(cs, i);
 			radeon_emit(cs, va >> 8);
 
-			r600_emit_reloc(rctx, &rctx->gfx, r600_resource(t[i]->b.buffer),
+			r600_emit_reloc(rctx, &rctx->gfx, r600_as_resource(t[i]->b.buffer),
 					RADEON_USAGE_WRITE | RADEON_PRIO_SHADER_RW_BUFFER);
 		}
 

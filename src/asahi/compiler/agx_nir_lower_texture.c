@@ -190,7 +190,7 @@ lower_buffer_texture(nir_builder *b, nir_tex_instr *tex)
    /* Put it together with a phi */
    nir_def *phi = nir_if_phi(b, rgb32, &tex->def);
    nir_def_rewrite_uses(&tex->def, phi);
-   nir_phi_instr *phi_instr = nir_instr_as_phi(phi->parent_instr);
+   nir_phi_instr *phi_instr = nir_def_as_phi(phi);
    nir_phi_src *else_src = nir_phi_get_src_from_block(phi_instr, else_block);
    nir_src_rewrite(&else_src->src, &tex->def);
    return true;
@@ -602,7 +602,7 @@ lower_images(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
 
    case nir_intrinsic_image_size:
    case nir_intrinsic_image_texel_address:
-      unreachable("should've been lowered");
+      UNREACHABLE("should've been lowered");
 
    default:
       return false;

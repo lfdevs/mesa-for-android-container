@@ -103,20 +103,20 @@ fd2_sampler_state_create(struct pipe_context *pctx,
 }
 
 static void
-fd2_sampler_states_bind(struct pipe_context *pctx, enum pipe_shader_type shader,
+fd2_sampler_states_bind(struct pipe_context *pctx, mesa_shader_stage shader,
                         unsigned start, unsigned nr, void **hwcso) in_dt
 {
    if (!hwcso)
       nr = 0;
 
-   if (shader == PIPE_SHADER_FRAGMENT) {
+   if (shader == MESA_SHADER_FRAGMENT) {
       struct fd_context *ctx = fd_context(pctx);
 
       /* on a2xx, since there is a flat address space for textures/samplers,
        * a change in # of fragment textures/samplers will trigger patching and
        * re-emitting the vertex shader:
        */
-      if (nr != ctx->tex[PIPE_SHADER_FRAGMENT].num_samplers)
+      if (nr != ctx->tex[MESA_SHADER_FRAGMENT].num_samplers)
          ctx->dirty |= FD_DIRTY_TEXSTATE;
    }
 
@@ -128,7 +128,7 @@ tex_dimension(unsigned target)
 {
    switch (target) {
    default:
-      unreachable("Unsupported target");
+      UNREACHABLE("Unsupported target");
    case PIPE_TEXTURE_1D:
       assert(0); /* TODO */
       return SQ_TEX_DIMENSION_1D;
@@ -183,19 +183,19 @@ fd2_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 }
 
 static void
-fd2_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
+fd2_set_sampler_views(struct pipe_context *pctx, mesa_shader_stage shader,
                       unsigned start, unsigned nr,
                       unsigned unbind_num_trailing_slots,
                       struct pipe_sampler_view **views) in_dt
 {
-   if (shader == PIPE_SHADER_FRAGMENT) {
+   if (shader == MESA_SHADER_FRAGMENT) {
       struct fd_context *ctx = fd_context(pctx);
 
       /* on a2xx, since there is a flat address space for textures/samplers,
        * a change in # of fragment textures/samplers will trigger patching and
        * re-emitting the vertex shader:
        */
-      if (nr != ctx->tex[PIPE_SHADER_FRAGMENT].num_textures)
+      if (nr != ctx->tex[MESA_SHADER_FRAGMENT].num_textures)
          ctx->dirty |= FD_DIRTY_TEXSTATE;
    }
 
@@ -218,9 +218,9 @@ unsigned
 fd2_get_const_idx(struct fd_context *ctx, struct fd_texture_stateobj *tex,
                   unsigned samp_id) assert_dt
 {
-   if (tex == &ctx->tex[PIPE_SHADER_FRAGMENT])
+   if (tex == &ctx->tex[MESA_SHADER_FRAGMENT])
       return samp_id;
-   return samp_id + ctx->tex[PIPE_SHADER_FRAGMENT].num_samplers;
+   return samp_id + ctx->tex[MESA_SHADER_FRAGMENT].num_samplers;
 }
 
 void

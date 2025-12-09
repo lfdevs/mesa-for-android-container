@@ -43,7 +43,7 @@ compute_timestamp_query_result(global uint64_t *report_addr,
       break;
    }
    default:
-      unreachable("Invalid timestamp op");
+      UNREACHABLE("Invalid timestamp op");
       break;
    }
 
@@ -131,7 +131,7 @@ panlib_copy_query_result(uint64_t pool_addr, global uint32_t *available_addr,
          write_occlusion_query_result(dst, 0, flags, report_addr, report_count);
          break;
       default:
-         unreachable("Unsupported query type");
+         UNREACHABLE("Unsupported query type");
          break;
       }
    }

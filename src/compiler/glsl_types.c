@@ -432,7 +432,7 @@ glsl_get_bare_type(const glsl_type *t)
       return t;
    }
 
-   unreachable("Invalid base type");
+   UNREACHABLE("Invalid base type");
 }
 
 const glsl_type *
@@ -564,7 +564,7 @@ glsl_cmat_use_to_string(enum glsl_cmat_use use)
    case GLSL_CMAT_USE_B:           return "B";
    case GLSL_CMAT_USE_ACCUMULATOR: return "ACCUMULATOR";
    default:
-      unreachable("invalid cooperative matrix use");
+      UNREACHABLE("invalid cooperative matrix use");
    }
 };
 
@@ -949,7 +949,7 @@ glsl_sampler_type(enum glsl_sampler_dim dim, bool shadow,
       return &glsl_type_builtin_error;
    }
 
-   unreachable("switch statement above should be complete");
+   UNREACHABLE("switch statement above should be complete");
 }
 
 const glsl_type *
@@ -1080,7 +1080,7 @@ glsl_texture_type(enum glsl_sampler_dim dim, bool array, enum glsl_base_type typ
       return &glsl_type_builtin_error;
    }
 
-   unreachable("switch statement above should be complete");
+   UNREACHABLE("switch statement above should be complete");
 }
 
 const glsl_type *
@@ -1252,7 +1252,7 @@ glsl_image_type(enum glsl_sampler_dim dim, bool array, enum glsl_base_type type)
       return &glsl_type_builtin_error;
    }
 
-   unreachable("switch statement above should be complete");
+   UNREACHABLE("switch statement above should be complete");
 }
 
 struct PACKED array_key {
@@ -1505,6 +1505,9 @@ glsl_record_compare(const glsl_type *a, const glsl_type *b, bool match_name,
          return false;
       if (a->fields.structure[i].xfb_stride
           != b->fields.structure[i].xfb_stride)
+         return false;
+      if (a->fields.structure[i].per_primitive
+          != b->fields.structure[i].per_primitive)
          return false;
    }
 
@@ -2323,7 +2326,7 @@ glsl_get_explicit_std140_type(const glsl_type *t, bool row_major)
       free(fields);
       return type;
    } else {
-      unreachable("Invalid type for UBO or SSBO");
+      UNREACHABLE("Invalid type for UBO or SSBO");
    }
 }
 
@@ -2687,7 +2690,7 @@ glsl_get_explicit_std430_type(const glsl_type *t, bool row_major)
       free(fields);
       return type;
    } else {
-      unreachable("Invalid type for SSBO");
+      UNREACHABLE("Invalid type for SSBO");
    }
 }
 
@@ -2800,7 +2803,7 @@ glsl_get_explicit_type_for_size_align(const glsl_type *t,
                                        t->matrix_columns, stride, false,
                                        *alignment);
    } else {
-      unreachable("Unhandled type.");
+      UNREACHABLE("Unhandled type.");
    }
 }
 
@@ -2863,7 +2866,7 @@ glsl_type_replace_vec3_with_vec4(const glsl_type *t)
       free(fields);
       return type;
    } else {
-      unreachable("Unhandled type.");
+      UNREACHABLE("Unhandled type.");
    }
 }
 
@@ -3005,7 +3008,7 @@ glsl_count_dword_slots(const glsl_type *t, bool is_bindless)
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
    default:
-      unreachable("invalid type in st_glsl_type_dword_size()");
+      UNREACHABLE("invalid type in st_glsl_type_dword_size()");
    }
 
    return 0;
@@ -3234,6 +3237,7 @@ decode_type_from_blob(struct blob_reader *blob)
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_FLOAT16:
+   case GLSL_TYPE_BFLOAT16:
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_UINT8:
    case GLSL_TYPE_INT8:
@@ -3426,7 +3430,7 @@ glsl_get_sampler_dim_coordinate_components(enum glsl_sampler_dim dim)
    case GLSL_SAMPLER_DIM_CUBE:
       return 3;
    default:
-      unreachable("Unknown sampler dim");
+      UNREACHABLE("Unknown sampler dim");
    }
 }
 
@@ -3690,7 +3694,7 @@ glsl_replace_vector_type(const glsl_type *t, unsigned components)
    } else if (glsl_type_is_vector_or_scalar(t)) {
       return glsl_vector_type(t->base_type, components);
    } else {
-      unreachable("Unhandled base type glsl_replace_vector_type()");
+      UNREACHABLE("Unhandled base type glsl_replace_vector_type()");
    }
 }
 
@@ -3715,7 +3719,7 @@ glsl_channel_type(const glsl_type *t)
    case GLSL_TYPE_BOOL:
       return glsl_simple_type(t->base_type, 1, 1);
    default:
-      unreachable("Unhandled base type glsl_channel_type()");
+      UNREACHABLE("Unhandled base type glsl_channel_type()");
    }
 }
 
@@ -3798,7 +3802,7 @@ glsl_get_natural_size_align_bytes(const glsl_type *type,
    case GLSL_TYPE_SUBROUTINE:
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
-      unreachable("type does not have a natural size");
+      UNREACHABLE("type does not have a natural size");
    }
 }
 
@@ -3860,7 +3864,7 @@ glsl_get_word_size_align_bytes(const glsl_type *type,
    case GLSL_TYPE_SUBROUTINE:
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
-      unreachable("type does not have a natural size");
+      UNREACHABLE("type does not have a natural size");
    }
 }
 
@@ -3917,7 +3921,7 @@ glsl_get_vec4_size_align_bytes(const glsl_type *type,
    case GLSL_TYPE_SUBROUTINE:
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
-      unreachable("type does not make sense for glsl_get_vec4_size_align_bytes()");
+      UNREACHABLE("type does not make sense for glsl_get_vec4_size_align_bytes()");
    }
 }
 

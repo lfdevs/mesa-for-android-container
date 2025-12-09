@@ -18,10 +18,9 @@ lib = static_library(
   'src/lib.rs',
   override_options : ['rust_std=2021', 'build.rust_std=2021'],
   rust_abi : 'rust',
-  native : true,
-  link_with : [thiserror_impl, syn, quote, proc_macro2]
+  link_with : [thiserror_impl]
 )
 
 dep_thiserror = declare_dependency(
-  link_with : [lib, thiserror_impl, syn, quote, proc_macro2]
+  link_with : [lib, thiserror_impl]
 )

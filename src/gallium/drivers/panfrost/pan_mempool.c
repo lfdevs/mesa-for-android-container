@@ -57,8 +57,9 @@ panfrost_pool_alloc_backing(struct panfrost_pool *pool, size_t bo_sz)
    if (!bo)
       return NULL;
 
-   if (pool->owned)
-      util_dynarray_append(&pool->bos, struct panfrost_bo *, bo);
+   if (pool->owned) {
+      util_dynarray_append(&pool->bos, bo);
+   }
    else
       panfrost_bo_unreference(pool->transient_bo);
 
@@ -142,8 +143,11 @@ panfrost_pool_alloc_aligned(struct panfrost_pool *pool, size_t sz,
 #ifdef PAN_DBG_OVERFLOW
    if (unlikely(pool->dev->debug & PAN_DBG_OVERFLOW) &&
        !(pool->create_flags & PAN_BO_INVISIBLE)) {
-      long page_size = sysconf(_SC_PAGESIZE);
-      assert(page_size > 0 && util_is_power_of_two_nonzero(page_size));
+      uint64_t page_size = 0;
+      if (!os_get_page_size(&page_size))
+         return (struct pan_ptr){0};
+
+      assert(util_is_power_of_two_nonzero(page_size));
       size_t aligned = ALIGN_POT(sz, page_size);
       size_t bo_size = aligned + PAN_GUARD_SIZE;
 

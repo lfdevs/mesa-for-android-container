@@ -17,6 +17,9 @@ ac_nir_create_gs_copy_shader(const nir_shader *gs_nir, ac_nir_lower_legacy_gs_op
    nir_builder b = nir_builder_init_simple_shader(
       MESA_SHADER_VERTEX, gs_nir->options, "gs_copy");
 
+   b.shader->info.api_subgroup_size = 64;
+   b.shader->info.max_subgroup_size = 64;
+   b.shader->info.min_subgroup_size = 64;
    b.shader->info.outputs_written = gs_nir->info.outputs_written;
    b.shader->info.outputs_written_16bit = gs_nir->info.outputs_written_16bit;
 

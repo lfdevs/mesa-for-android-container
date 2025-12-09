@@ -45,111 +45,12 @@ amdvgpu_query_info(amdvgpu_device_handle dev, struct drm_amdgpu_info *info)
    return 0;
 }
 
-static int
-amdvgpu_query_info_simple(amdvgpu_device_handle dev, unsigned info_id, unsigned size, void *out)
-{
-   if (info_id == AMDGPU_INFO_DEV_INFO) {
-      assert(size == sizeof(dev->dev_info));
-      memcpy(out, &dev->dev_info, size);
-      return 0;
-   }
-   struct drm_amdgpu_info info;
-   info.return_pointer = (uintptr_t)out;
-   info.query = info_id;
-   info.return_size = size;
-   return amdvgpu_query_info(dev, &info);
-}
-
-static int
-amdvgpu_query_heap_info(amdvgpu_device_handle dev, unsigned heap, unsigned flags, struct amdgpu_heap_info *info)
-{
-   struct amdvgpu_shmem *shmem = to_amdvgpu_shmem(dev->vdev->shmem);
-   /* Get heap information from shared memory */
-   switch (heap) {
-   case AMDGPU_GEM_DOMAIN_VRAM:
-      if (flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED)
-         memcpy(info, &shmem->vis_vram, sizeof(*info));
-      else
-         memcpy(info, &shmem->vram, sizeof(*info));
-      break;
-   case AMDGPU_GEM_DOMAIN_GTT:
-      memcpy(info, &shmem->gtt, sizeof(*info));
-      break;
-   default:
-      return -EINVAL;
-   }
-
-   return 0;
-}
-
-static int
-amdvgpu_query_hw_ip_count(amdvgpu_device_handle dev, unsigned type, uint32_t *count)
-{
-   struct drm_amdgpu_info request;
-   request.return_pointer = (uintptr_t) count;
-   request.return_size = sizeof(*count);
-   request.query = AMDGPU_INFO_HW_IP_COUNT;
-   request.query_hw_ip.type = type;
-   return amdvgpu_query_info(dev, &request);
-}
-
-static int
-amdvgpu_query_video_caps_info(amdvgpu_device_handle dev, unsigned cap_type,
-                              unsigned size, void *value)
-{
-   struct drm_amdgpu_info request;
-   request.return_pointer = (uintptr_t)value;
-   request.return_size = size;
-   request.query = AMDGPU_INFO_VIDEO_CAPS;
-   request.sensor_info.type = cap_type;
-
-   return amdvgpu_query_info(dev, &request);
-}
-
 int
 amdvgpu_query_sw_info(amdvgpu_device_handle dev, enum amdgpu_sw_info info, void *value)
 {
    if (info != amdgpu_sw_info_address32_hi)
       return -EINVAL;
    memcpy(value, &dev->vdev->caps.u.amdgpu.address32_hi, 4);
-   return 0;
-}
-
-static int
-amdvgpu_query_firmware_version(amdvgpu_device_handle dev, unsigned fw_type, unsigned ip_instance, unsigned index,
-                               uint32_t *version, uint32_t *feature)
-{
-   struct drm_amdgpu_info request;
-   struct drm_amdgpu_info_firmware firmware = {};
-   int r;
-
-   memset(&request, 0, sizeof(request));
-   request.return_pointer = (uintptr_t)&firmware;
-   request.return_size = sizeof(firmware);
-   request.query = AMDGPU_INFO_FW_VERSION;
-   request.query_fw.fw_type = fw_type;
-   request.query_fw.ip_instance = ip_instance;
-   request.query_fw.index = index;
-
-   r = amdvgpu_query_info(dev, &request);
-
-   *version = firmware.ver;
-   *feature = firmware.feature;
-   return r;
-}
-
-static int
-amdvgpu_query_buffer_size_alignment(amdvgpu_device_handle dev,
-                                    struct amdgpu_buffer_size_alignments *info)
-{
-   memcpy(info, &dev->vdev->caps.u.amdgpu.alignments, sizeof(*info));
-   return 0;
-}
-
-static int
-amdvgpu_query_gpu_info(amdvgpu_device_handle dev, struct amdgpu_gpu_info *info)
-{
-   memcpy(info, &dev->vdev->caps.u.amdgpu.gpu_info, sizeof(*info));
    return 0;
 }
 
@@ -406,7 +307,7 @@ amdvgpu_cs_submit_raw2(amdvgpu_device_handle dev, uint32_t ctx_id,
 
 
          *syncobjs = realloc(*syncobjs, (*count + new_syncobj_count) * sizeof(struct drm_virtgpu_execbuffer_syncobj));
-         if (syncobjs == NULL) {
+         if (*syncobjs == NULL) {
             ret = -ENOMEM;
             goto error;
          }
@@ -620,4 +521,9 @@ amdvgpu_va_range_alloc(amdvgpu_device_handle dev,
                                  va_base_alignment, va_base_required,
                                  va_base_allocated, va_range_handle,
                                  flags);
+}
+
+bool amdvgpu_has_vm_always_valid(amdvgpu_device_handle dev)
+{
+   return dev->vdev->caps.u.amdgpu.has_vm_always_valid;
 }

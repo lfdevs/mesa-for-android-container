@@ -2950,7 +2950,7 @@ CodeEmitterGM107::emitTEXS()
       emitField(0x32, 1, insn->tex.target.isShadow());
       break;
    default:
-      unreachable("unknown op in emitTEXS()");
+      UNREACHABLE("unknown op in emitTEXS()");
       break;
    }
 

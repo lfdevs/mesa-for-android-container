@@ -28,7 +28,7 @@
 #include "util/macros.h"
 #include "util/u_qsort.h"
 #include "util/vl_rbsp.h"
-#include "vl/vl_zscan.h"
+#include "util/vl_zscan_data.h"
 #include "va_private.h"
 
 struct ref_cmp {

@@ -815,7 +815,7 @@ nv50_blitter_make_vp(struct nv50_blitter *blit)
       0x10000811, 0x0423c789, /* mov b32 o[0x10] s[0x10] */ /* TEXC.z */
    };
 
-   blit->vp.type = PIPE_SHADER_VERTEX;
+   blit->vp.type = MESA_SHADER_VERTEX;
    blit->vp.translated = true;
    blit->vp.code = (uint32_t *)code; /* const_cast */
    blit->vp.code_size = sizeof(code);
@@ -867,7 +867,7 @@ nv50_blitter_make_fp(struct pipe_context *pipe,
 
    const int chipset = nouveau_screen(pipe->screen)->device->chipset;
    const nir_shader_compiler_options *options =
-      nv50_ir_nir_shader_compiler_options(chipset, PIPE_SHADER_FRAGMENT);
+      nv50_ir_nir_shader_compiler_options(chipset, MESA_SHADER_FRAGMENT);
 
    struct nir_builder b =
       nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,

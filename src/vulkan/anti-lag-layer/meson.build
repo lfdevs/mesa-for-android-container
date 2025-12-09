@@ -6,7 +6,7 @@ vklayer_files = files(
   'anti_lag_layer_interface.c',
 )
 
-shared_library(
+vklayer_mesa_anti_lag = shared_library(
   'VkLayer_MESA_anti_lag',
   vklayer_files,
   c_args : [no_override_init_args],
@@ -19,8 +19,18 @@ shared_library(
   install : true
 )
 
-install_data(
-  files('VkLayer_MESA_anti_lag.json'),
+configure_file(
+  configuration : {'library_path' : 'libVkLayer_MESA_anti_lag.so'},
+  input : 'VkLayer_MESA_anti_lag.json.in',
+  output : '@BASENAME@',
+  install : true,
   install_dir : join_paths(get_option('datadir'), 'vulkan', 'implicit_layer.d'),
   install_tag : 'runtime',
 )
+
+configure_file(
+  configuration : {'library_path' : vklayer_mesa_anti_lag.full_path()},
+  input : 'VkLayer_MESA_anti_lag.json.in',
+  output : '@PLAINNAME@_dev.json',
+)
+devenv.append('VK_ADD_IMPLICIT_LAYER_PATH', meson.current_build_dir())

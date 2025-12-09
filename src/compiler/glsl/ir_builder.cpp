@@ -39,7 +39,7 @@ ir_factory::make_temp(const glsl_type *type, const char *name)
 {
    ir_variable *var;
 
-   var = new(mem_ctx) ir_variable(type, name, ir_var_temporary);
+   var = new(linalloc) ir_variable(type, name, ir_var_temporary);
    emit(var);
 
    return var;
@@ -54,9 +54,9 @@ assign(deref lhs, operand rhs)
 ir_assignment *
 assign(deref lhs, operand rhs, int writemask)
 {
-   void *mem_ctx = ralloc_parent(lhs.val);
+   linear_ctx *linalloc = lhs.val->node_linalloc;
 
-   ir_assignment *assign = new(mem_ctx) ir_assignment(lhs.val,
+   ir_assignment *assign = new(linalloc) ir_assignment(lhs.val,
                                                       rhs.val,
                                                       writemask);
 
@@ -66,16 +66,16 @@ assign(deref lhs, operand rhs, int writemask)
 ir_return *
 ret(operand retval)
 {
-   void *mem_ctx = ralloc_parent(retval.val);
-   return new(mem_ctx) ir_return(retval.val);
+   linear_ctx *linalloc = retval.val->node_linalloc;
+   return new(linalloc) ir_return(retval.val);
 }
 
 ir_swizzle *
 swizzle(operand a, int swizzle, int components)
 {
-   void *mem_ctx = ralloc_parent(a.val);
+   linear_ctx *linalloc = a.val->node_linalloc;
 
-   return new(mem_ctx) ir_swizzle(a.val,
+   return new(linalloc) ir_swizzle(a.val,
                                   GET_SWZ(swizzle, 0),
                                   GET_SWZ(swizzle, 1),
                                   GET_SWZ(swizzle, 2),
@@ -86,7 +86,7 @@ swizzle(operand a, int swizzle, int components)
 ir_swizzle *
 swizzle_for_size(operand a, unsigned components)
 {
-   void *mem_ctx = ralloc_parent(a.val);
+   linear_ctx *linalloc = a.val->node_linalloc;
 
    if (a.val->type->vector_elements < components)
       components = a.val->type->vector_elements;
@@ -95,7 +95,7 @@ swizzle_for_size(operand a, unsigned components)
    for (int i = components; i < 4; i++)
       s[i] = components - 1;
 
-   return new(mem_ctx) ir_swizzle(a.val, s, components);
+   return new(linalloc) ir_swizzle(a.val, s, components);
 }
 
 ir_swizzle *
@@ -125,25 +125,25 @@ swizzle_w(operand a)
 ir_expression *
 expr(ir_expression_operation op, operand a)
 {
-   void *mem_ctx = ralloc_parent(a.val);
+   linear_ctx *linalloc = a.val->node_linalloc;
 
-   return new(mem_ctx) ir_expression(op, a.val);
+   return new(linalloc) ir_expression(op, a.val);
 }
 
 ir_expression *
 expr(ir_expression_operation op, operand a, operand b)
 {
-   void *mem_ctx = ralloc_parent(a.val);
+   linear_ctx *linalloc = a.val->node_linalloc;
 
-   return new(mem_ctx) ir_expression(op, a.val, b.val);
+   return new(linalloc) ir_expression(op, a.val, b.val);
 }
 
 ir_expression *
 expr(ir_expression_operation op, operand a, operand b, operand c)
 {
-   void *mem_ctx = ralloc_parent(a.val);
+   linear_ctx *linalloc = a.val->node_linalloc;
 
-   return new(mem_ctx) ir_expression(op, a.val, b.val, c.val);
+   return new(linalloc) ir_expression(op, a.val, b.val, c.val);
 }
 
 ir_expression *add(operand a, operand b)
@@ -510,8 +510,8 @@ bitfield_extract(operand a, operand b, operand c)
 ir_expression *
 bitfield_insert(operand a, operand b, operand c, operand d)
 {
-   void *mem_ctx = ralloc_parent(a.val);
-   return new(mem_ctx) ir_expression(ir_quadop_bitfield_insert,
+   linear_ctx *linalloc = a.val->node_linalloc;
+   return new(linalloc) ir_expression(ir_quadop_bitfield_insert,
                                      a.val->type, a.val, b.val, c.val, d.val);
 }
 
@@ -521,9 +521,9 @@ if_tree(operand condition,
 {
    assert(then_branch != NULL);
 
-   void *mem_ctx = ralloc_parent(condition.val);
+   linear_ctx *linalloc = condition.val->node_linalloc;
 
-   ir_if *result = new(mem_ctx) ir_if(condition.val);
+   ir_if *result = new(linalloc) ir_if(condition.val);
    result->then_instructions.push_tail(then_branch);
    return result;
 }
@@ -536,9 +536,9 @@ if_tree(operand condition,
    assert(then_branch != NULL);
    assert(else_branch != NULL);
 
-   void *mem_ctx = ralloc_parent(condition.val);
+   linear_ctx *linalloc = condition.val->node_linalloc;
 
-   ir_if *result = new(mem_ctx) ir_if(condition.val);
+   ir_if *result = new(linalloc) ir_if(condition.val);
    result->then_instructions.push_tail(then_branch);
    result->else_instructions.push_tail(else_branch);
    return result;

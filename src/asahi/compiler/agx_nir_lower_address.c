@@ -27,7 +27,7 @@ format_for_bitsize(unsigned bitsize)
    case 32:
       return PIPE_FORMAT_R32_UINT;
    default:
-      unreachable("should have been lowered");
+      UNREACHABLE("should have been lowered");
    }
 }
 

@@ -512,7 +512,6 @@ draw_vbo(struct draw_context *draw,
          unsigned num_draws,
          uint8_t patch_vertices)
 {
-   unsigned fpstate = util_fpstate_get();
    struct pipe_draw_info resolved_info;
    struct pipe_draw_start_count_bias resolved_draw;
    const struct pipe_draw_info *use_info;
@@ -524,7 +523,8 @@ draw_vbo(struct draw_context *draw,
    /* Make sure that denorms are treated like zeros. This is
     * the behavior required by D3D10. OpenGL doesn't care.
     */
-   util_fpstate_set_denorms_to_zero(fpstate);
+   draw->fpstate = util_fpstate_get();
+   util_fpstate_set_denorms_to_zero(draw->fpstate);
 
    if (indirect && indirect->count_from_stream_output) {
       resolve_draw_info(info, indirect, &draws[0], &resolved_info,
@@ -602,7 +602,7 @@ draw_vbo(struct draw_context *draw,
       if (index_limit == 0) {
          /* one of the buffers is too small to do any valid drawing */
          debug_warning("draw: VBO too small to draw anything\n");
-         util_fpstate_set(fpstate);
+         util_fpstate_set(draw->fpstate);
          return;
       }
    }
@@ -632,7 +632,7 @@ draw_vbo(struct draw_context *draw,
    if (draw->collect_statistics) {
       draw->render->pipeline_statistics(draw->render, &draw->statistics);
    }
-   util_fpstate_set(fpstate);
+   util_fpstate_set(draw->fpstate);
 }
 
 /* to be called after a mesh shader is run */

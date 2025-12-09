@@ -78,7 +78,8 @@ nvk_queue_state_update(struct nvk_queue *queue,
 
    uint32_t push_data[64];
    struct nv_push push;
-   nv_push_init(&push, push_data, 64);
+   nv_push_init(&push, push_data, 64,
+                nvk_queue_subchannels_from_engines(queue->engines));
    struct nv_push *p = &push;
 
    if (qs->images.alloc_count > 0) {
@@ -209,12 +210,14 @@ nvk_queue_submit_exec(struct nvk_queue *queue,
                       struct vk_queue_submit *submit)
 {
    struct nvk_device *dev = nvk_queue_device(queue);
-   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VkResult result;
 
-   const bool sync = pdev->debug_flags & NVK_DEBUG_PUSH_SYNC;
-
    if (submit->command_buffer_count > 0) {
+      nvk_descriptor_table_flush_map(dev, &dev->images);
+      nvk_descriptor_table_flush_map(dev, &dev->samplers);
+      nvk_heap_flush_maps(dev, &dev->shader_heap);
+      assert(dev->event_heap.arena.mem_flags & NVKMD_MEM_COHERENT);
+
       result = nvk_queue_state_update(queue, &queue->state);
       if (result != VK_SUCCESS)
          return result;
@@ -276,23 +279,7 @@ nvk_queue_submit_exec(struct nvk_queue *queue,
    if (result != VK_SUCCESS)
       goto fail;
 
-   if (sync) {
-      result = nvkmd_ctx_sync(queue->exec_ctx, &queue->vk.base);
-      if (result != VK_SUCCESS)
-         goto fail;
-   }
-
 fail:
-   if ((sync && result != VK_SUCCESS) ||
-       (pdev->debug_flags & NVK_DEBUG_PUSH_DUMP)) {
-      for (unsigned i = 0; i < submit->command_buffer_count; i++) {
-         struct nvk_cmd_buffer *cmd =
-            container_of(submit->command_buffers[i], struct nvk_cmd_buffer, vk);
-
-         nvk_cmd_buffer_dump(cmd, stderr);
-      }
-   }
-
    return result;
 }
 
@@ -326,24 +313,15 @@ static VkResult
 nvk_queue_push(struct nvk_queue *queue, const struct nv_push *push)
 {
    struct nvk_device *dev = nvk_queue_device(queue);
-   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
-   VkResult result;
 
    if (vk_queue_is_lost(&queue->vk))
       return VK_ERROR_DEVICE_LOST;
 
-   const bool sync = pdev->debug_flags & NVK_DEBUG_PUSH_SYNC;
+   if (nv_push_dw_count(push) == 0)
+      return VK_SUCCESS;
 
-   result = nvk_mem_stream_push(dev, &queue->push_stream, queue->exec_ctx,
-                                push->start, nv_push_dw_count(push), NULL);
-   if (result == VK_SUCCESS && sync)
-      result = nvkmd_ctx_sync(queue->exec_ctx, &queue->vk.base);
-
-   if ((sync && result != VK_SUCCESS) ||
-       (pdev->debug_flags & NVK_DEBUG_PUSH_DUMP))
-      vk_push_print(stderr, push, &pdev->info);
-
-   return result;
+   return nvk_mem_stream_push(dev, &queue->push_stream, queue->exec_ctx,
+                              push->start, nv_push_dw_count(push), NULL);
 }
 
 static VkResult
@@ -355,7 +333,8 @@ nvk_queue_init_context_state(struct nvk_queue *queue)
 
    uint32_t push_data[4096];
    struct nv_push push;
-   nv_push_init(&push, push_data, ARRAY_SIZE(push_data));
+   nv_push_init(&push, push_data, ARRAY_SIZE(push_data),
+                nvk_queue_subchannels_from_engines(queue->engines));
    struct nv_push *p = &push;
 
    /* M2MF state */
@@ -398,9 +377,9 @@ get_queue_global_priority(const VkDeviceQueueCreateInfo *pCreateInfo)
 }
 
 VkResult
-nvk_queue_init(struct nvk_device *dev, struct nvk_queue *queue,
-               const VkDeviceQueueCreateInfo *pCreateInfo,
-               uint32_t index_in_family)
+nvk_queue_create(struct nvk_device *dev,
+                 const VkDeviceQueueCreateInfo *pCreateInfo,
+                 uint32_t index_in_family)
 {
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VkResult result;
@@ -427,25 +406,19 @@ nvk_queue_init(struct nvk_device *dev, struct nvk_queue *queue,
    if (global_priority > VK_QUEUE_GLOBAL_PRIORITY_MEDIUM)
       return VK_ERROR_NOT_PERMITTED;
 
+   struct nvk_queue *queue = vk_zalloc(&dev->vk.alloc, sizeof(struct nvk_queue),
+                                       8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!queue)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
    result = vk_queue_init(&queue->vk, &dev->vk, pCreateInfo, index_in_family);
    if (result != VK_SUCCESS)
-      return result;
+      goto fail_alloc;
 
    nvk_queue_state_init(&queue->state);
 
-   queue->engines = 0;
-   if (queue_family->queue_flags & VK_QUEUE_GRAPHICS_BIT) {
-      queue->engines |= NVKMD_ENGINE_3D;
-      /* We rely on compute shaders for queries */
-      queue->engines |= NVKMD_ENGINE_COMPUTE;
-   }
-   if (queue_family->queue_flags & VK_QUEUE_COMPUTE_BIT) {
-      queue->engines |= NVKMD_ENGINE_COMPUTE;
-      /* We currently rely on 3D engine MMEs for indirect dispatch */
-      queue->engines |= NVKMD_ENGINE_3D;
-   }
-   if (queue_family->queue_flags & VK_QUEUE_TRANSFER_BIT)
-      queue->engines |= NVKMD_ENGINE_COPY;
+   queue->engines =
+      nvk_queue_engines_from_queue_flags(queue_family->queue_flags);
 
    if (queue->engines) {
       result = nvkmd_dev_create_ctx(dev->nvkmd, &dev->vk.base,
@@ -500,12 +473,14 @@ fail_exec_ctx:
 fail_init:
    nvk_queue_state_finish(dev, &queue->state);
    vk_queue_finish(&queue->vk);
+fail_alloc:
+   vk_free(&dev->vk.alloc, queue);
 
    return result;
 }
 
 void
-nvk_queue_finish(struct nvk_device *dev, struct nvk_queue *queue)
+nvk_queue_destroy(struct nvk_device *dev, struct nvk_queue *queue)
 {
    nvk_mem_stream_sync(dev, &queue->push_stream, queue->exec_ctx);
    nvk_mem_stream_finish(dev, &queue->push_stream);
@@ -519,4 +494,5 @@ nvk_queue_finish(struct nvk_device *dev, struct nvk_queue *queue)
    if (queue->exec_ctx != NULL)
       nvkmd_ctx_destroy(queue->exec_ctx);
    vk_queue_finish(&queue->vk);
+   vk_free(&dev->vk.alloc, queue);
 }

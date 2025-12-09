@@ -350,7 +350,7 @@ emit_binning_pass(struct fd_batch *batch) assert_dt
    OUT_PKT4(ring, REG_A5XX_VPC_MODE_CNTL, 1);
    OUT_RING(ring, A5XX_VPC_MODE_CNTL_BINNING_PASS);
 
-   fd5_event_write(batch, ring, UNK_2C, false);
+   fd5_event_write(batch, ring, VSC_BINNING_START, false);
 
    OUT_PKT4(ring, REG_A5XX_RB_WINDOW_OFFSET, 1);
    OUT_RING(ring, A5XX_RB_WINDOW_OFFSET_X(0) | A5XX_RB_WINDOW_OFFSET_Y(0));
@@ -360,7 +360,7 @@ emit_binning_pass(struct fd_batch *batch) assert_dt
 
    fd_reset_wfi(batch);
 
-   fd5_event_write(batch, ring, UNK_2D, false);
+   fd5_event_write(batch, ring, VSC_BINNING_END, false);
 
    fd5_event_write(batch, ring, CACHE_FLUSH_TS, true);
 

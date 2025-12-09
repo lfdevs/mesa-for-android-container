@@ -23,14 +23,8 @@ enum ac_arg_regfile
 
 enum ac_arg_type
 {
-   AC_ARG_INVALID = -1,
-   AC_ARG_FLOAT,
-   AC_ARG_INT,
-   AC_ARG_CONST_PTR,       /* Pointer to i8 array */
-   AC_ARG_CONST_FLOAT_PTR, /* Pointer to f32 array */
-   AC_ARG_CONST_PTR_PTR,   /* Pointer to pointer to i8 array */
-   AC_ARG_CONST_DESC_PTR,  /* Pointer to v4i32 array */
-   AC_ARG_CONST_IMAGE_PTR, /* Pointer to v8i32 array */
+   AC_ARG_VALUE,
+   AC_ARG_CONST_ADDR,
 };
 
 struct ac_arg {
@@ -188,6 +182,7 @@ struct ac_shader_args {
    struct ac_arg push_constants;
    struct ac_arg inline_push_consts[AC_MAX_INLINE_PUSH_CONSTS];
    uint64_t inline_push_const_mask;
+   struct ac_arg dynamic_descriptors;
    struct ac_arg view_index;
    struct ac_arg force_vrs_rates;
 

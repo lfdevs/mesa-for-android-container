@@ -414,6 +414,12 @@ static bool noop_is_resource_busy(struct pipe_screen *screen,
    return false;
 }
 
+static void
+noop_resource_release(struct pipe_context *ctx, struct pipe_resource *resource)
+{
+   pipe_resource_reference(&resource, NULL);
+}
+
 static struct pipe_context *noop_create_context(struct pipe_screen *screen,
                                                 void *priv, unsigned flags)
 {
@@ -458,6 +464,7 @@ static struct pipe_context *noop_create_context(struct pipe_screen *screen,
    ctx->invalidate_resource = noop_invalidate_resource;
    ctx->set_context_param = noop_set_context_param;
    ctx->set_frontend_noop = noop_set_frontend_noop;
+   ctx->resource_release = noop_resource_release;
    noop_init_state_functions(ctx);
 
    p_atomic_inc(&screen->num_contexts);
@@ -571,11 +578,12 @@ static struct disk_cache *noop_get_disk_shader_cache(struct pipe_screen *pscreen
    return screen->get_disk_shader_cache(screen);
 }
 
-static void noop_finalize_nir(struct pipe_screen *pscreen, struct nir_shader *nir)
+static void noop_finalize_nir(struct pipe_screen *pscreen, struct nir_shader *nir,
+                              bool optimize)
 {
    struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
 
-   screen->finalize_nir(screen, nir);
+   screen->finalize_nir(screen, nir,  optimize);
 }
 
 static bool noop_check_resource_capability(struct pipe_screen *screen,
@@ -603,7 +611,7 @@ static void noop_set_max_shader_compiler_threads(struct pipe_screen *screen,
 
 static bool noop_is_parallel_shader_compilation_finished(struct pipe_screen *screen,
                                                          void *shader,
-                                                         enum pipe_shader_type shader_type)
+                                                         mesa_shader_stage shader_type)
 {
    return true;
 }
@@ -736,6 +744,14 @@ static void noop_vertex_state_destroy(struct pipe_screen *screen,
    FREE(state);
 }
 
+static struct pipe_fence_handle *
+noop_semaphore_create(struct pipe_screen *screen)
+{
+   struct pipe_reference *f = MALLOC_STRUCT(pipe_reference);
+   f->count = 1;
+   return (struct pipe_fence_handle*)f;
+}
+
 static struct pipe_screen * noop_get_driver_pipe_screen(struct pipe_screen *_screen)
 {
    struct pipe_screen * screen = ((struct noop_pipe_screen*)_screen)->oscreen;
@@ -800,6 +816,8 @@ struct pipe_screen *noop_screen_create(struct pipe_screen *oscreen)
    screen->query_compression_rates = noop_query_compression_rates;
    screen->query_compression_modifiers = noop_query_compression_modifiers;
    screen->get_driver_pipe_screen = noop_get_driver_pipe_screen;
+   if (oscreen->semaphore_create)
+      screen->semaphore_create = noop_semaphore_create;
 
    /* copy all caps */
    *(struct pipe_caps *)&screen->caps = oscreen->caps;

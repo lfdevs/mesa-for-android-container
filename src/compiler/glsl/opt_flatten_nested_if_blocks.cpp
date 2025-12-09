@@ -72,7 +72,7 @@ nested_if_flattener::visit_enter(ir_assignment *ir)
 }
 
 bool
-opt_flatten_nested_if_blocks(exec_list *instructions)
+opt_flatten_nested_if_blocks(ir_exec_list *instructions)
 {
    nested_if_flattener v;
 

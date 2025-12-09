@@ -105,13 +105,22 @@ struct pipe_video_codec
     *
     * num_slice_objects indicates the number of elements in the input
     * array slice_destinations and indicates the number of outputs expected
-    * in slice_fences
+    * in slice_fences. For PIPE_VIDEO_SLICE_MODE_AUTO where slice count is
+    * unknown, num_slice_objects must be PIPE_VIDEO_CAP_ENC_MAX_SLICES_PER_FRAME
     *
     * The frame NALs are attached to the first slice buffer
     * Any packed slice header (e.g SVC NAL prefix) is attached to each slice buffer
     *
     * get_feedback information/stats is still only available after full frame
-    * completion is signaled (e.g pipe_picture_desc::fence)
+    * completion is signaled (e.g pipe_picture_desc::out_fence)
+    *
+    * last_slice_completion_fence signals when all slices complete, which may happen
+    * before pipe_picture_desc::out_fence signals, given that includes all GPU work
+    * submitted for the frame including get_feedback information/stats processing.
+    * For PIPE_VIDEO_SLICE_MODE_AUTO where num_slice_objects is equal to the
+    * PIPE_VIDEO_CAP_ENC_MAX_SLICES_PER_FRAME, this fence tells the frontend
+    * when to stop waiting for slice_fences[] without needing to wait for
+    * full frame completion.
     *
     *  Driver reports support for this function used with different codecs/profiles
     *  in PIPE_VIDEO_CAP_ENC_SLICED_NOTIFICATIONS, frontend must check before using it.
@@ -121,6 +130,7 @@ struct pipe_video_codec
                                    unsigned num_slice_objects,
                                    struct pipe_resource **slice_destinations,
                                    struct pipe_fence_handle **slice_fences,
+                                   struct pipe_fence_handle **last_slice_completion_fence,
                                    void **feedback);
 
 

@@ -1,18 +1,22 @@
 .docs-base:
   timeout: 10m
   extends:
-    - .build-linux
+    - .build-common
     - .use-alpine/x86_64_build
   artifacts:
     expose_as: 'Documentation preview'
     paths:
       - public/
+  variables:
+    BUILDTYPE: release
+    UNWIND: disabled
+    EXTRA_OPTION:
+      --auto-features=disabled
+      -D platforms=
+      -D glx=disabled
+      -D html-docs=enabled
+      -D html-docs-path=$CI_PROJECT_DIR/public
+    RUN_MESON_TESTS: "false"
   script:
-    - meson setup _build -D prefix=$(pwd) --auto-features=disabled
-      -D vulkan-drivers="" -D gallium-drivers="" -D platforms=[] -D glx=disabled
-      -D video-codecs="" -D html-docs=enabled -D html-docs-path=public
-      -D werror=true
-    - meson compile -C _build
-    - meson install -C _build
+    - !reference [.meson-build-only, script]
     - echo "Documentation website preview is available at $ARTIFACTS_BASE_URL/public/index.html"
-

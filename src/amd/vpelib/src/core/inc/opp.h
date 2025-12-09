@@ -24,6 +24,7 @@
 
 #pragma once
 #include "vpe_types.h"
+#include "color.h"
 
 #ifdef __cplusplus
 extern "C" {

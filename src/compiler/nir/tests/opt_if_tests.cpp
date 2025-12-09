@@ -138,7 +138,7 @@ TEST_F(nir_opt_if_test, opt_if_alu_of_phi_progress)
       nir_def_init(&phi->instr, &phi->def,
                    x->num_components, x->bit_size);
 
-      nir_phi_instr_add_src(phi, x->parent_instr->block, x);
+      nir_phi_instr_add_src(phi, nir_def_block(x), x);
 
       nir_def *y = nir_iadd(b, &phi->def, two);
       nir_store_var(b, out_var,

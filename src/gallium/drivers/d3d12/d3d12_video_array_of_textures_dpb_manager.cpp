@@ -54,7 +54,7 @@ d3d12_array_of_textures_dpb_manager::create_reconstructed_picture_allocations(ID
                                                        nullptr,
                                                        IID_PPV_ARGS(ppResource));
    if (FAILED(hr)) {
-      debug_printf("CreateCommittedResource failed with HR %x\n", hr);
+      debug_printf("CreateCommittedResource failed with HR %x\n", (unsigned)hr);
       assert(false);
    }
 }

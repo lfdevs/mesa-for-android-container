@@ -67,8 +67,10 @@ evaluate_frame(device_context *ctx, frame *frame, bool force_wait)
       while (num_timestamps > 0) {
          /* Retreive timestamp results from this queue. */
          ctx->vtable.GetQueryPoolResults(ctx->device, queue_ctx->queryPool, query_idx,
-                                         num_timestamps, sizeof(uint64_t), &query->begin_gpu_ts,
-                                         sizeof(struct query), query_flags);
+                                         num_timestamps,
+                                         sizeof(struct query) * num_timestamps,
+                                         &query->begin_gpu_ts, sizeof(struct query),
+                                         query_flags);
 
          ringbuffer_lock(queue_ctx->queries);
          for (unsigned j = 0; j < num_timestamps; j++) {
@@ -516,7 +518,7 @@ queue_submit2(device_context *ctx, VkQueue queue, uint32_t submitCount,
    memcpy(semaphores, submit_info->pSignalSemaphoreInfos,
           sizeof(VkSemaphoreSubmitInfo) * submit_info->signalSemaphoreInfoCount);
    semaphores[submit_info->signalSemaphoreInfoCount] = (VkSemaphoreSubmitInfo){
-      .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
       .semaphore = queue_ctx->semaphore,
       .value = queue_ctx->semaphore_value,
       .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,

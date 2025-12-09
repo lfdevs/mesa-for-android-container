@@ -40,32 +40,6 @@ struct lima_gp_frame_reg {
    uint32_t tile_heap_end;
 };
 
-struct lima_pp_frame_reg {
-   uint32_t plbu_array_address;
-   uint32_t render_address;
-   uint32_t unused_0;
-   uint32_t flags;
-   uint32_t clear_value_depth;
-   uint32_t clear_value_stencil;
-   uint32_t clear_value_color;
-   uint32_t clear_value_color_1;
-   uint32_t clear_value_color_2;
-   uint32_t clear_value_color_3;
-   uint32_t width;
-   uint32_t height;
-   uint32_t fragment_stack_address;
-   uint32_t fragment_stack_size;
-   uint32_t unused_1;
-   uint32_t unused_2;
-   uint32_t one;
-   uint32_t supersampled_height;
-   uint32_t dubya;
-   uint32_t onscreen;
-   uint32_t blocking;
-   uint32_t scale;
-   uint32_t channel_layout;
-};
-
 struct lima_pp_wb_reg {
    uint32_t type;
    uint32_t address;
@@ -79,25 +53,6 @@ struct lima_pp_wb_reg {
    uint32_t unused0;
    uint32_t unused1;
    uint32_t unused2;
-};
-
-struct lima_render_state {
-   uint32_t blend_color_bg;
-   uint32_t blend_color_ra;
-   uint32_t alpha_blend;
-   uint32_t depth_test;
-   uint32_t depth_range;
-   uint32_t stencil_front;
-   uint32_t stencil_back;
-   uint32_t stencil_test;
-   uint32_t multi_sample;
-   uint32_t shader_address;
-   uint32_t varying_types;
-   uint32_t uniforms_address;
-   uint32_t textures_address;
-   uint32_t aux0;
-   uint32_t aux1;
-   uint32_t varyings_address;
 };
 
 /* plbu commands */

@@ -34,7 +34,7 @@ class Opcode(object):
    """
    def __init__(self, name, output_size, output_type, input_sizes,
                 input_types, is_conversion, algebraic_properties, const_expr,
-                description):
+                description, needs_dest_type):
       """Parameters:
 
       - name is the name of the opcode (prepend nir_op_ for the enum name)
@@ -46,6 +46,8 @@ class Opcode(object):
       - const_expr is an expression or series of statements that computes the
         constant value of the opcode given the constant values of its inputs.
       - Optional description of the opcode for documentation.
+      - needs_dest_type means const_expr depends on the destination type and
+        needs a formatting step.
 
       Constant expressions are formed from the variables src0, src1, ...,
       src(N-1), where N is the number of arguments.  The output of the
@@ -93,6 +95,12 @@ class Opcode(object):
       self.algebraic_properties = algebraic_properties
       self.const_expr = const_expr
       self.description = description
+      self.needs_dest_type = needs_dest_type
+
+   def render(self, dest_type):
+      if self.needs_dest_type:
+         return self.const_expr.format(dest_type=dest_type)
+      return self.const_expr
 
 # helper variables for strings
 tfloat = "float"
@@ -157,11 +165,12 @@ selection = "selection "
 opcodes = {}
 
 def opcode(name, output_size, output_type, input_sizes, input_types,
-           is_conversion, algebraic_properties, const_expr, description = ""):
+           is_conversion, algebraic_properties, const_expr, description = "",
+           needs_dest_type=False):
    assert name not in opcodes
    opcodes[name] = Opcode(name, output_size, output_type, input_sizes,
                           input_types, is_conversion, algebraic_properties,
-                          const_expr, description)
+                          const_expr, description, needs_dest_type)
 
 def unop_convert(name, out_type, in_type, const_expr, description = ""):
    opcode(name, 0, out_type, [0], [in_type], False, "", const_expr, description)
@@ -327,6 +336,21 @@ unop_numeric_convert_mp("f2i", tint16, tfloat32)
 unop_numeric_convert_mp("f2u", tuint16, tfloat32)
 unop_numeric_convert_mp("i2f", tfloat16, tint32)
 unop_numeric_convert_mp("u2f", tfloat16, tuint32)
+
+unop_numeric_convert("f2i32_rtne", tint32, tfloat32, "(int32_t)_mesa_roundevenf(src0)")
+
+# Note: 64-bit integers are intentionally not supported. Casting u_uintN_max
+# (and related signed values) to double is precisely representable for upto
+# 32-bit integers. To support these opcodes for 64-bit integers would require
+# a more complex implementation.
+for bits in (8, 16, 32):
+    unop_numeric_convert(f"f2u{bits}_sat", f"uint{bits}", tfloat,
+                         f"(uint{bits}_t)fmin(fmax(src0, 0.0), (double)u_uintN_max({bits}))",
+                         "Convert float to uint with clamping to uint range. NaN becomes zero.")
+
+    unop_numeric_convert(f"f2i{bits}_sat", f"int{bits}", tfloat,
+                         f"(int{bits}_t) isnan(src0) ? 0.0 : fmin(fmax(src0, (double)u_intN_min({bits})), (double)u_intN_max({bits}))",
+                         "Convert float to int with clamping to int range. NaN becomes zero.")
 
 # Unary floating-point rounding operations.
 
@@ -543,14 +567,14 @@ for (unsigned bit = 0; bit < bit_size; bit++) {
 unop_reduce("fsum", 1, tfloat, tfloat, "{src}", "{src0} + {src1}", "{src}",
             description = "Sum of vector components")
 
-def binop_convert(name, out_type, in_type1, alg_props, const_expr, description="", in_type2=None):
+def binop_convert(name, out_type, in_type1, alg_props, const_expr, description="", in_type2=None, needs_dest_type=False):
    if in_type2 is None:
       in_type2 = in_type1
    opcode(name, 0, out_type, [0, 0], [in_type1, in_type2],
-          False, alg_props, const_expr, description)
+          False, alg_props, const_expr, description, needs_dest_type)
 
-def binop(name, ty, alg_props, const_expr, description = ""):
-   binop_convert(name, ty, ty, alg_props, const_expr, description)
+def binop(name, ty, alg_props, const_expr, description = "", needs_dest_type=False):
+   binop_convert(name, ty, ty, alg_props, const_expr, description, needs_dest_type=needs_dest_type)
 
 def binop_compare(name, ty, alg_props, const_expr, description = "", ty2=None):
    binop_convert(name, tbool1, ty, alg_props, const_expr, description, ty2)
@@ -624,18 +648,29 @@ if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
 """)
 binop("iadd", tint, _2src_commutative + associative, "(uint64_t)src0 + (uint64_t)src1")
 binop("iadd_sat", tint, _2src_commutative, """
-      src1 > 0 ?
-         (src0 + src1 < src0 ? u_intN_max(bit_size) : src0 + src1) :
-         (src0 < src0 + src1 ? u_intN_min(bit_size) : src0 + src1)
-""")
+      util_add_check_overflow({dest_type}, src0, src1) ?
+         (src1 < 0 ? u_intN_max(bit_size) : u_uintN_max(bit_size)) : (src0 + src1)
+""", "", True)
 binop("uadd_sat", tuint, _2src_commutative,
-      "(src0 + src1) < src0 ? u_uintN_max(sizeof(src0) * 8) : (src0 + src1)")
+      "util_add_check_overflow({dest_type}, src0, src1) ? u_uintN_max(sizeof(src0) * 8) : (src0 + src1)",
+      "", True)
 binop("isub_sat", tint, "", """
-      src1 < 0 ?
-         (src0 - src1 < src0 ? u_intN_max(bit_size) : src0 - src1) :
-         (src0 < src0 - src1 ? u_intN_min(bit_size) : src0 - src1)
-""")
+      util_sub_check_overflow({dest_type}, src0, src1) ?
+         (src1 < 0 ? u_intN_max(bit_size) : u_intN_min(bit_size)) : (src0 - src1)
+""", "", True)
 binop("usub_sat", tuint, "", "src0 < src1 ? 0 : src0 - src1")
+
+opcode("uadd64_32", 2, tuint32, [1, 1, 1], [tuint32, tuint32, tuint32], False, "", """
+uint64_t sum = ((uint64_t)src1.x << 32 | (uint64_t)src0.x) + (uint64_t)src2.x;
+dst.x = sum & 0xffffffff;
+dst.y = sum >> 32;
+""")
+
+opcode("umad64_32", 2, tuint32, [1, 1, 1, 1], [tuint32, tuint32, tuint32, tuint32], False, "", """
+uint64_t sum = ((uint64_t)src0.x * (uint64_t)src1.x) + ((uint64_t)src3.x << 32 | (uint64_t)src2.x);
+dst.x = sum & 0xffffffff;
+dst.y = sum >> 32;
+""")
 
 binop("fsub", tfloat, "", """
 if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
@@ -733,10 +768,12 @@ if (bit_size == 64) {
 }
 """, description = "High 32-bits of unsigned integer multiply")
 
-binop("umul_low", tuint32, _2src_commutative, """
-uint64_t mask = (1 << (bit_size / 2)) - 1;
-dst = ((uint64_t)src0 & mask) * ((uint64_t)src1 & mask);
-""", description = "Low 32-bits of unsigned integer multiply")
+binop("umul_16x16", tuint32, _2src_commutative,
+      "(uint32_t)(uint16_t)src0 * (uint32_t)(uint16_t)src1",
+      description = """
+Multiply low 16-bits of the sources, with zero extension, producing a 32-bit
+result
+      """)
 
 binop("imul_32x16", tint32, "", "src0 * (int16_t) src1",
       description = "Multiply 32-bits with low 16-bits, with sign extension")
@@ -748,11 +785,11 @@ binop("idiv", tint, "", "src1 == 0 ? 0 : (src0 / src1)")
 binop("udiv", tuint, "", "src1 == 0 ? 0 : (src0 / src1)")
 
 binop_convert("uadd_carry", tuint, tuint, _2src_commutative,
-              "src0 + src1 < src0",
+              "util_add_check_overflow({dest_type}, src0, src1)",
               description = """
 Return an integer (1 or 0) representing the carry resulting from the
 addition of the two unsigned arguments.
-              """)
+              """, needs_dest_type = True)
 
 binop_convert("usub_borrow", tuint, tuint, "", "src0 < src1", description = """
 Return an integer (1 or 0) representing the borrow resulting from the
@@ -978,6 +1015,8 @@ dst = (bit_size == 64) ? ldexp(src0, src1) : ldexpf(src0, src1);
 if (!isnormal(dst))
    dst = copysignf(0.0f, src0);
 """)
+
+binop("fcopysign_pco", tfloat, "", "bit_size == 64 ? copysign(src0, src1) : copysignf(src0, src1)")
 
 binop_horiz("vec2", 2, tuint, 1, tuint, 1, tuint, """
 dst.x = src0.x;
@@ -1405,7 +1444,7 @@ opcode("bounds_agx", 0, tint, [0, 0, 0],
        [tint, tint, tint], False,
        "", "src1 <= src2 ? src0 : 0")
 
-binop_convert("interleave_agx", tuint32, tuint16, "", """
+binop_convert("interleave", tuint32, tuint16, "", """
       dst = 0;
       for (unsigned bit = 0; bit < 16; bit++) {
           dst |= (src0 & (1 << bit)) << bit;
@@ -1560,9 +1599,11 @@ unop("pack_2x16_to_unorm_2x8_v3d", tuint32,
 unop("pack_2x16_to_snorm_2x8_v3d", tuint32,
      "_mesa_half_to_snorm(src0 & 0xffff, 8) | ((uint32_t)(_mesa_half_to_snorm(src0 >> 16, 8)) << 16)")
 
-# v3d-specific (v71) instructions to convert 32-bit floating point to 16 bit unorm/snorm
+# v3d-specific (v71) instructions to convert between 32-bit float and 16-bit unorm/snorm
 unop("f2unorm_16_v3d", tuint32, "_mesa_float_to_unorm16(src0)")
 unop("f2snorm_16_v3d", tuint32, "_mesa_float_to_snorm16(src0)")
+unop("unorm2f_16_v3d", tuint32, "_mesa_unorm_to_float(src0, 16)")
+unop("snorm2f_16_v3d", tuint32, "_mesa_snorm_to_float(src0, 16)")
 
 # v3d-specific (v71) instructions to convert 2x16 bit floating points to 2x10 bit unorm
 unop("pack_2x16_to_unorm_2x10_v3d", tuint32, "pack_2x16_to_unorm_2x10(src0)")

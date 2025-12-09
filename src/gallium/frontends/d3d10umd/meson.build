@@ -30,4 +30,5 @@ libd3d10umd = static_library(
   include_directories : [
     inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_winddk,
   ],
+  dependencies: idep_mesautilformat,
 )

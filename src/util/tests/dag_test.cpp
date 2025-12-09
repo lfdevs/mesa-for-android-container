@@ -72,7 +72,7 @@ static void output_cb(struct dag_node *dag_node, void *data)
 {
    struct node *node = static_cast<struct node *>(dag_node);
    struct util_dynarray *output = (struct util_dynarray *)data;
-   util_dynarray_append(output, int, node->val);
+   util_dynarray_append_typed(output, int, node->val);
 }
 
 static void
@@ -91,7 +91,7 @@ init_nodes(struct dag *dag, struct node *nodes, unsigned num_nodes)
 
 #define SET_EXPECTED(...) do {                           \
 	result_type res = {{ __VA_ARGS__ }};             \
-	util_dynarray_append(&expect, result_type, res); \
+	util_dynarray_append(&expect, res); \
 } while (0)
 
 static bool

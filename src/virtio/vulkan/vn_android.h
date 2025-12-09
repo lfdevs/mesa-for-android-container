@@ -17,7 +17,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
 
 VkResult
 vn_android_image_from_anb(struct vn_device *dev,
@@ -30,25 +30,12 @@ struct vn_device_memory *
 vn_android_get_wsi_memory_from_bind_info(
    struct vn_device *dev, const VkBindImageMemoryInfo *bind_info);
 
-const VkFormat *
-vn_android_format_to_view_formats(VkFormat format, uint32_t *out_count);
-
-uint64_t
-vn_android_get_ahb_usage(const VkImageUsageFlags usage,
-                         const VkImageCreateFlags flags);
-
 VkResult
 vn_android_device_import_ahb(struct vn_device *dev,
                              struct vn_device_memory *mem,
                              const struct VkMemoryAllocateInfo *alloc_info);
 
-VkFormat
-vn_android_drm_format_to_vk_format(uint32_t format);
-
-uint32_t
-vn_android_get_ahb_buffer_memory_type_bits(struct vn_device *dev);
-
-#else
+#else /* VK_USE_PLATFORM_ANDROID_KHR */
 
 static inline VkResult
 vn_android_image_from_anb(UNUSED struct vn_device *dev,
@@ -68,20 +55,6 @@ vn_android_get_wsi_memory_from_bind_info(
    return NULL;
 }
 
-static inline const VkFormat *
-vn_android_format_to_view_formats(UNUSED VkFormat format,
-                                  UNUSED uint32_t *out_count)
-{
-   return NULL;
-}
-
-static inline uint64_t
-vn_android_get_ahb_usage(UNUSED const VkImageUsageFlags usage,
-                         UNUSED const VkImageCreateFlags flags)
-{
-   return 0;
-}
-
 static inline VkResult
 vn_android_device_import_ahb(
    UNUSED struct vn_device *dev,
@@ -91,18 +64,6 @@ vn_android_device_import_ahb(
    return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
-static inline VkFormat
-vn_android_drm_format_to_vk_format(UNUSED uint32_t format)
-{
-   return VK_FORMAT_UNDEFINED;
-}
-
-static inline uint32_t
-vn_android_get_ahb_buffer_memory_type_bits(UNUSED struct vn_device *dev)
-{
-   return 0;
-}
-
-#endif /* DETECT_OS_ANDROID */
+#endif /* VK_USE_PLATFORM_ANDROID_KHR */
 
 #endif /* VN_ANDROID_H */

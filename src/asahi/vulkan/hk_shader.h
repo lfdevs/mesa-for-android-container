@@ -8,9 +8,9 @@
 #pragma once
 
 #include "asahi/compiler/agx_compile.h"
+#include "poly/nir/poly_nir.h"
 #include "util/macros.h"
 #include "agx_linker.h"
-#include "agx_nir_lower_gs.h"
 #include "agx_nir_lower_vbo.h"
 #include "agx_pack.h"
 #include "agx_usc.h"
@@ -94,7 +94,7 @@ struct hk_shader_info {
          struct hk_tess_info info;
       } tess;
 
-      struct agx_gs_info gs;
+      struct poly_gs_info gs;
 
       /* Used to initialize the union for other stages */
       uint8_t _pad[32];
@@ -105,7 +105,7 @@ struct hk_shader_info {
    /* Transform feedback buffer strides */
    uint8_t xfb_stride[MAX_XFB_BUFFERS];
 
-   gl_shader_stage stage : 8;
+   mesa_shader_stage stage : 8;
    uint8_t clip_distance_array_size;
    uint8_t cull_distance_array_size;
    uint8_t set_count;
@@ -204,7 +204,7 @@ static const char *hk_gs_variant_name[] = {
 /* clang-format on */
 
 static inline unsigned
-hk_num_variants(gl_shader_stage stage)
+hk_num_variants(mesa_shader_stage stage)
 {
    switch (stage) {
    case MESA_SHADER_VERTEX:
@@ -338,11 +338,12 @@ hk_buffer_addr_format(VkPipelineRobustnessBufferBehaviorEXT robustness)
    case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT:
       return nir_address_format_64bit_bounded_global;
    default:
-      unreachable("Invalid robust buffer access behavior");
+      UNREACHABLE("Invalid robust buffer access behavior");
    }
 }
 
-bool hk_lower_uvs_index(nir_shader *s, unsigned vs_uniform_base);
+bool
+hk_lower_uvs_index(nir_shader *s, mesa_shader_stage sw_stage, unsigned nr_vbos);
 
 bool
 hk_nir_lower_descriptors(nir_shader *nir,
@@ -365,7 +366,7 @@ void hk_api_shader_destroy(struct vk_device *vk_dev,
                            const VkAllocationCallbacks *pAllocator);
 
 const nir_shader_compiler_options *
-hk_get_nir_options(struct vk_physical_device *vk_pdev, gl_shader_stage stage,
+hk_get_nir_options(struct vk_physical_device *vk_pdev, mesa_shader_stage stage,
                    UNUSED const struct vk_pipeline_robustness_state *rs);
 
 struct hk_api_shader *hk_meta_shader(struct hk_device *dev,

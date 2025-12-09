@@ -60,7 +60,7 @@ elk_negate_cmod(enum elk_conditional_mod cmod)
    case ELK_CONDITIONAL_LE:
       return ELK_CONDITIONAL_G;
    default:
-      unreachable("Can't negate this cmod");
+      UNREACHABLE("Can't negate this cmod");
    }
 }
 
@@ -198,7 +198,7 @@ elk_set_default_compression_control(struct elk_codegen *p,
       p->current->group = 0;
       break;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 
    if (p->devinfo->ver <= 6) {
@@ -355,7 +355,7 @@ const unsigned *elk_get_program( struct elk_codegen *p,
    return (const unsigned *)p->store;
 }
 
-const struct elk_shader_reloc *
+const struct intel_shader_reloc *
 elk_get_shader_relocs(struct elk_codegen *p, unsigned *num_relocs)
 {
    *num_relocs = p->num_relocs;
@@ -409,7 +409,7 @@ void elk_dump_shader_bin(void *assembly, int start_offset, int end_offset,
 bool elk_try_override_assembly(struct elk_codegen *p, int start_offset,
                                const char *identifier)
 {
-   const char *read_path = getenv("INTEL_SHADER_ASM_READ_PATH");
+   const char *read_path = os_get_option("INTEL_SHADER_ASM_READ_PATH");
    if (!read_path) {
       return false;
    }
@@ -826,6 +826,6 @@ elk_num_sources_from_inst(const struct elk_isa_info *isa,
    case ELK_MATH_FUNCTION_INT_DIV_REMAINDER:
       return 2;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }

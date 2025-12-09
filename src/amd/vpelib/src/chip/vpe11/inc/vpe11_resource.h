@@ -39,6 +39,10 @@ enum vpe_status vpe11_set_num_segments(struct vpe_priv *vpe_priv, struct stream_
 
 bool vpe11_validate_cached_param(struct vpe_priv *vpe_priv, const struct vpe_build_param *param);
 
+const struct vpe_caps *vpe11_get_capability(void);
+
+void vpe11_setup_check_funcs(struct vpe_check_support_funcs *funcs);
+
 #ifdef __cplusplus
 }
 #endif

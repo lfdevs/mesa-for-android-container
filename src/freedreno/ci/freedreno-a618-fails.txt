@@ -107,24 +107,6 @@ spec@ext_framebuffer_multisample@sample-alpha-to-coverage 4 depth,Fail
 spec@ext_framebuffer_object@fbo-alphatest-nocolor,Fail
 spec@ext_framebuffer_object@fbo-alphatest-nocolor-ff,Fail
 
-# These failures go away with FD_MESA_DEBUG=noblit, but don't seem to be related
-# to the actual mipmap generation blits (which we do fall back on)
-spec@ext_texture_snorm@fbo-generatemipmap-formats,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_ALPHA16_SNORM,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_ALPHA16_SNORM NPOT,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY_SNORM,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY_SNORM NPOT,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY8_SNORM,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY8_SNORM NPOT,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY16_SNORM,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY16_SNORM NPOT,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_ALPHA16_SNORM,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_ALPHA16_SNORM NPOT,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_SNORM,Fail
-spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_SNORM NPOT,Fail
-
-spec@ext_texture_snorm@multisample-formats 2 gl_ext_texture_snorm,Fail
-spec@ext_texture_snorm@multisample-formats 4 gl_ext_texture_snorm,Fail
 spec@ext_transform_feedback@tessellation triangle_fan flat_first,Fail
 spec@ext_transform_feedback@tessellation triangle_strip flat_first,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 1x129x9-98x129x9,Fail
@@ -216,6 +198,7 @@ spec@glsl-4.00@execution@built-in-functions@fs-op-div-dmat4-dmat4,Fail
 
 # uprev Piglit in Mesa
 glx@glx-swap-pixmap-bad,Fail
+spec@!opengl 1.0@rasterpos@glsl_vs_ssbo,Fail
 spec@arb_occlusion_query@occlusion_query_order,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail
@@ -226,24 +209,9 @@ spec@arb_base_instance@arb_base_instance-drawarrays,Fail
 spec@ext_base_instance@arb_base_instance-baseinstance-doesnt-affect-gl-instance-id_gles3,Fail
 spec@ext_base_instance@arb_base_instance-drawarrays_gles3,Fail
 
-# Bad assumptions in piglit about layout of multiplanar formats,
-# it should use separate buffers per plane:
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv21,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
-
-# This is a piglit bug: The tests use more GS input components than GL reports.
-# This started to fail (correctly) when the GLSL linker started checking whether
-# the max GS input component limit is exceeded with 08b522d21e1 ("glsl: check
-# against varying limits using NIR shader_info after nir_opt_varyings").
-spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec2-index-wr-before-gs,Fail
-spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec3-index-wr-before-gs,Fail
-spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec4-index-wr-before-gs,Fail
+# New failures appeared after Piglit uprev to 28d1349844eacda869f0f82f551bcd4ac0c4edfe
+spec@arb_gl_spirv@execution@vs-instance-id,Fail
+spec@arb_gl_spirv@execution@xfb@vs_two_sets_mixing_order,Fail
 
 # glcts update
 dEQP-GLES2.functional.texture.mipmap.cube.projected.nearest_linear,Fail
@@ -256,13 +224,35 @@ KHR-GL46.texture_lod_basic.lod_selection,Fail
 KHR-GL46.shading_language_420pack.binding_images_texture_type_1D,Fail
 KHR-GLES3.framebuffer_blit.multisampled_to_singlesampled_blit_depth_config_test,Fail
 
-dEQP-EGL.functional.image.modify.tex_rgb5_a1_renderbuffer_clear_color,Fail
+x11-dEQP-EGL.functional.image.modify.tex_rgb5_a1_renderbuffer_clear_color,Fail
 wayland-dEQP-EGL.functional.image.modify.tex_rgb5_a1_renderbuffer_clear_color,Fail
 
 # GL tests above, Vulkan tests below
 
-# New fails in 1.3.10.0
-dEQP-VK.dynamic_rendering.primary_cmd_buff.local_read.max_input_attachments,Fail
+# New fails in 1.4.3.3
+dEQP-VK.memory.concurrent_access.shader_and_host,Fail
+dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unused_binding_dynamic,Crash
+dEQP-VK.pipeline.monolithic.vertex_input.misc.unused_binding_dynamic,Crash
+dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_508,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_508,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_508,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_counter_offset_508,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_508,Fail
+gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
+nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
 
 # OpenCL tests below
 #
@@ -462,57 +452,5 @@ vk_xfermodes2,Fail
 vk_xfermodes3,Fail
 
 # Initial ANGLE failures
-angle-KHR-GLES3.clip_distance.coverage,Fail
-angle-KHR-GLES3.cull_distance.functional,Fail
 angle-dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_vertex,Fail
 angle-dEQP-GLES2.functional.texture.mipmap.cube.projected.nearest_linear,Fail
-
-# New failures with ES CTS 3.2.12.0
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_0,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_1,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_2,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_3,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_4,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_5,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_6,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_lines_max_culldist_7,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_0,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_1,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_2,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_3,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_4,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_5,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_6,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist_7,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_0,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_1,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_2,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_3,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_4,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_5,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_6,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_5_primitive_mode_triangles_max_culldist_7,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_0,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_1,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_2,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_3,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_4,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_5,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_6,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_lines_max_culldist_7,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_0,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_1,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_2,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_3,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_4,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_5,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_6,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_points_max_culldist_7,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_0,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_1,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_2,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_3,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_4,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_5,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_6,Fail
-angle-KHR-GLES3.cull_distance.functional_test_item_6_primitive_mode_triangles_max_culldist_7,Fail

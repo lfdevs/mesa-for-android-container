@@ -72,6 +72,26 @@ CMFD3DManager::Shutdown( bool bReleaseDeviceManager )
       m_spVideoSampleAllocator = nullptr;
    }
 
+   if( m_spSatdStatsBufferPool )
+   {
+      m_spSatdStatsBufferPool.Reset();
+   }
+
+   if( m_spBitsUsedStatsBufferPool )
+   {
+      m_spBitsUsedStatsBufferPool.Reset();
+   }
+
+   if( m_spQPMapStatsBufferPool )
+   {
+      m_spQPMapStatsBufferPool.Reset();
+   }
+
+   if( m_spReconstructedPictureBufferPool )
+   {
+      m_spReconstructedPictureBufferPool.Reset();
+   }
+
    if( m_spDeviceManager != nullptr )
    {
       if( m_hDevice != NULL )
@@ -103,6 +123,11 @@ CMFD3DManager::Shutdown( bool bReleaseDeviceManager )
    {
       m_pWinsys->destroy( this->m_pWinsys );
       m_pWinsys = nullptr;
+   }
+   if( m_ContextPriorityMgr.base.register_work_queue )
+   {
+      mtx_destroy( &m_ContextPriorityMgr.m_lock );
+      m_ContextPriorityMgr.base.register_work_queue = nullptr;
    }
 
    return hr;
@@ -139,12 +164,22 @@ CMFD3DManager::xReopenDeviceManager( bool bNewDevice )
       ComPtr<IDXGIDevice> spDXGIDevice;
       ComPtr<IDXGIAdapter> spDXGIAdapter;
       ComPtr<IUnknown> spAdapter;
+      ComPtr<ID3D11DeviceContext> spImmediaContext;
+      ComPtr<ID3D11Multithread> spMultithread;
       CHECKHR_GOTO( m_spDeviceManager->GetVideoService( m_hDevice, IID_ID3D11Device, &m_spDevice11 ), done );
       CHECKHR_GOTO( m_spDevice11.As( &spDXGIDevice ), done );
       CHECKHR_GOTO( spDXGIDevice->GetAdapter( &spDXGIAdapter ), done );
       CHECKHR_GOTO( spDXGIAdapter.As( &spAdapter ), done );
       // Create a D3D12 device off of the same adapter this 11 device is on
       CHECKHR_GOTO( CreateD3D12DeviceWithMinimumSupportedFeatureLevel( spAdapter.Get(), m_spDevice ), done );
+
+      // check if the D3D11 device is multithread protected and issue warning
+      m_spDevice11->GetImmediateContext( &spImmediaContext );
+      CHECKHR_GOTO( spImmediaContext.As( &spMultithread ), done );
+      if( !spMultithread->GetMultithreadProtected() )
+      {
+         MFE_WARNING( "[dx12 hmft 0x%p] D3D11 device was created without multithread protected\n", m_logId );
+      }
    }
    // Create a staging queue for MF to signal on input texture GPU completion
    CHECKHR_GOTO( m_spDevice->CreateCommandQueue( &commandQueueDesc, IID_PPV_ARGS( &m_spStagingQueue ) ), done );
@@ -248,6 +283,59 @@ CMFD3DManager::UpdateGPUFeatureFlags()
    */
 }
 
+int
+MFTRegisterWorkQueue( struct d3d12_context_queue_priority_manager *manager, ID3D12CommandQueue *queue )
+{
+   mft_context_queue_priority_manager *mft_mgr = (mft_context_queue_priority_manager *) manager;
+   mtx_lock( &mft_mgr->m_lock );
+
+   ComPtr<IUnknown> queue_unknown;
+   if( FAILED( queue->QueryInterface( IID_PPV_ARGS( &queue_unknown ) ) ) )
+   {
+      mtx_unlock( &mft_mgr->m_lock );
+      return -1;
+   }
+
+   // Only register the queue if not already registered
+   auto it = std::find( mft_mgr->m_registeredQueues.begin(), mft_mgr->m_registeredQueues.end(), queue );
+   if( it == mft_mgr->m_registeredQueues.end() )
+   {
+      //
+      // Register the queue_unknown with the MFT.
+      //
+
+      mft_mgr->m_registeredQueues.push_back( queue );
+   }
+
+   mtx_unlock( &mft_mgr->m_lock );
+   return 0;
+}
+
+int
+MFTUnregisterWorkQueue( struct d3d12_context_queue_priority_manager *manager, ID3D12CommandQueue *queue )
+{
+   mft_context_queue_priority_manager *mft_mgr = (mft_context_queue_priority_manager *) manager;
+   mtx_lock( &mft_mgr->m_lock );
+
+   ComPtr<IUnknown> queue_unknown;
+   if( FAILED( queue->QueryInterface( IID_PPV_ARGS( &queue_unknown ) ) ) )
+   {
+      mtx_unlock( &mft_mgr->m_lock );
+      return -1;
+   }
+
+   //
+   // Unregister the queue_unknown with the MFT.
+   //
+
+   auto it = std::find( mft_mgr->m_registeredQueues.begin(), mft_mgr->m_registeredQueues.end(), queue );
+   if( it != mft_mgr->m_registeredQueues.end() )
+      mft_mgr->m_registeredQueues.erase( it );
+
+   mtx_unlock( &mft_mgr->m_lock );
+   return 0;
+}
+
 HRESULT
 CMFD3DManager::xOnSetD3DManager( ULONG_PTR ulParam )
 {
@@ -273,7 +361,29 @@ CMFD3DManager::xOnSetD3DManager( ULONG_PTR ulParam )
    CHECKNULL_GOTO( m_pPipeContext = pipe_create_multimedia_context( m_pVlScreen->pscreen, false ),
                    MF_E_DXGI_DEVICE_NOT_INITIALIZED,
                    done );
-   CHECKHR_GOTO( MFCreateVideoSampleAllocatorEx( IID_PPV_ARGS( &m_spVideoSampleAllocator ) ), done );
+
+   m_pVlScreen->pscreen->interop_query_device_info( m_pVlScreen->pscreen,
+                                                    sizeof( d3d12_interop_device_info1 ),
+                                                    &m_ScreenInteropInfo );
+   assert( m_ScreenInteropInfo.set_context_queue_priority_manager != NULL );
+
+   {
+      CHECKBOOL_GOTO( thrd_success == mtx_init( &m_ContextPriorityMgr.m_lock, mtx_plain ), MF_E_DXGI_DEVICE_NOT_INITIALIZED, done );
+
+      m_ContextPriorityMgr.base.register_work_queue = MFTRegisterWorkQueue;
+      m_ContextPriorityMgr.base.unregister_work_queue = MFTUnregisterWorkQueue;
+
+      CHECKBOOL_GOTO( m_ScreenInteropInfo.set_context_queue_priority_manager( m_pPipeContext, &m_ContextPriorityMgr.base ) == 0,
+                      MF_E_DXGI_DEVICE_NOT_INITIALIZED,
+                      done );
+
+      //
+      // Verify that the callbacks have been filled by the driver
+      //
+      CHECKNULL_GOTO( m_ContextPriorityMgr.base.context, MF_E_DXGI_DEVICE_NOT_INITIALIZED, done );
+      CHECKNULL_GOTO( m_ContextPriorityMgr.base.set_queue_priority, MF_E_DXGI_DEVICE_NOT_INITIALIZED, done );
+      CHECKNULL_GOTO( m_ContextPriorityMgr.base.get_queue_priority, MF_E_DXGI_DEVICE_NOT_INITIALIZED, done );
+   }
 
    CHECKHR_GOTO( GetDeviceInfo(), done );
 

@@ -160,7 +160,8 @@ radv_CreateDescriptorSetLayout(VkDevice _device, const VkDescriptorSetLayoutCrea
             set_layout->binding[b].size = radv_get_sampled_image_desc_size(pdev);
             break;
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-            set_layout->binding[b].size = max_sampled_image_descriptors * RADV_COMBINED_IMAGE_SAMPLER_DESC_SIZE;
+            set_layout->binding[b].size =
+               max_sampled_image_descriptors * radv_get_combined_image_sampler_desc_size(pdev);
             break;
          case VK_DESCRIPTOR_TYPE_SAMPLER:
             set_layout->binding[b].size = RADV_SAMPLER_DESC_SIZE;
@@ -318,7 +319,7 @@ radv_GetDescriptorSetLayoutSupport(VkDevice _device, const VkDescriptorSetLayout
             descriptor_size = radv_get_sampled_image_desc_size(pdev);
             break;
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-            descriptor_size = RADV_COMBINED_IMAGE_SAMPLER_DESC_SIZE;
+            descriptor_size = radv_get_combined_image_sampler_desc_size(pdev);
             break;
          case VK_DESCRIPTOR_TYPE_SAMPLER:
             descriptor_size = RADV_SAMPLER_DESC_SIZE;
@@ -372,10 +373,45 @@ radv_GetDescriptorSetLayoutSupport(VkDevice _device, const VkDescriptorSetLayout
 }
 
 static VkResult
+radv_alloc_descriptor_pool_entry(struct radv_device *device, struct radv_descriptor_pool *pool,
+                                 struct radv_descriptor_set *set)
+{
+   uint64_t current_offset = pool->current_offset;
+
+   if (!pool->host_memory_base) {
+      if (set->header.size) {
+         uint64_t pool_vma_offset = util_vma_heap_alloc(&pool->bo_heap, set->header.size, 32);
+         if (!pool_vma_offset)
+            return VK_ERROR_FRAGMENTED_POOL;
+
+         assert(pool_vma_offset >= RADV_POOL_HEAP_OFFSET && pool_vma_offset <= pool->size + RADV_POOL_HEAP_OFFSET);
+         set->header.offset = pool_vma_offset - RADV_POOL_HEAP_OFFSET;
+         current_offset = set->header.offset;
+      }
+   } else {
+      if (current_offset + set->header.size > pool->size)
+         return VK_ERROR_OUT_OF_POOL_MEMORY;
+
+      pool->current_offset += set->header.size;
+   }
+
+   set->header.bo = pool->bo;
+   set->header.mapped_ptr = (uint32_t *)(pool->mapped_ptr + current_offset);
+   set->header.va = pool->bo ? (radv_buffer_get_va(set->header.bo) + current_offset) : 0;
+
+   list_addtail(&set->link, &pool->sets);
+   pool->entry_count++;
+   return VK_SUCCESS;
+}
+
+static VkResult
 radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_pool *pool,
                            struct radv_descriptor_set_layout *layout, const uint32_t variable_count,
                            struct radv_descriptor_set **out_set)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   VkResult result;
+
    if (pool->entry_count == pool->max_entry_count)
       return VK_ERROR_OUT_OF_POOL_MEMORY;
 
@@ -385,7 +421,8 @@ radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_po
       unsigned stride = radv_descriptor_type_buffer_count(layout->binding[layout->binding_count - 1].type);
       buffer_count = layout->binding[layout->binding_count - 1].buffer_offset + variable_count * stride;
    }
-   unsigned range_offset = sizeof(struct radv_descriptor_set_header) + sizeof(struct radeon_winsys_bo *) * buffer_count;
+   unsigned range_offset =
+      offsetof(struct radv_descriptor_set, descriptors) + sizeof(struct radeon_winsys_bo *) * buffer_count;
    const unsigned dynamic_offset_count = layout->dynamic_offset_count;
    unsigned mem_size = range_offset + sizeof(struct radv_descriptor_range) * dynamic_offset_count;
 
@@ -420,49 +457,12 @@ radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_po
 
       layout_size = layout->binding[layout->binding_count - 1].offset + variable_count * stride;
    }
-   layout_size = align(layout_size, 32);
-   set->header.size = layout_size;
 
-   /* try to allocate linearly first, so that we don't spend
-    * time looking for gaps if the app only allocates &
-    * resets via the pool. */
-   if (pool->current_offset + layout_size <= pool->size) {
-      set->header.bo = pool->bo;
-      set->header.mapped_ptr = (uint32_t *)(pool->mapped_ptr + pool->current_offset);
-      set->header.va = pool->bo ? (radv_buffer_get_va(set->header.bo) + pool->current_offset) : 0;
+   set->header.size = align(layout_size, 32);
 
-      if (!pool->host_memory_base) {
-         pool->entries[pool->entry_count].offset = pool->current_offset;
-         pool->entries[pool->entry_count].size = layout_size;
-         pool->entries[pool->entry_count].set = set;
-      } else {
-         pool->sets[pool->entry_count] = set;
-      }
-
-      pool->current_offset += layout_size;
-   } else if (!pool->host_memory_base) {
-      uint64_t offset = 0;
-      int index;
-
-      for (index = 0; index < pool->entry_count; ++index) {
-         if (pool->entries[index].offset - offset >= layout_size)
-            break;
-         offset = pool->entries[index].offset + pool->entries[index].size;
-      }
-
-      if (pool->size - offset < layout_size) {
-         vk_free2(&device->vk.alloc, NULL, set);
-         return VK_ERROR_OUT_OF_POOL_MEMORY;
-      }
-      set->header.bo = pool->bo;
-      set->header.mapped_ptr = (uint32_t *)(pool->mapped_ptr + offset);
-      set->header.va = pool->bo ? (radv_buffer_get_va(set->header.bo) + offset) : 0;
-      memmove(&pool->entries[index + 1], &pool->entries[index], sizeof(pool->entries[0]) * (pool->entry_count - index));
-      pool->entries[index].offset = offset;
-      pool->entries[index].size = layout_size;
-      pool->entries[index].set = set;
-   } else
-      return VK_ERROR_OUT_OF_POOL_MEMORY;
+   result = radv_alloc_descriptor_pool_entry(device, pool, set);
+   if (result != VK_SUCCESS)
+      return result;
 
    if (layout->has_immutable_samplers) {
       for (unsigned i = 0; i < layout->binding_count; ++i) {
@@ -471,7 +471,7 @@ radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_po
 
          unsigned offset = layout->binding[i].offset / 4;
          if (layout->binding[i].type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-            offset += RADV_COMBINED_IMAGE_SAMPLER_DESC_SAMPLER_OFFSET / 4;
+            offset += radv_get_combined_image_sampler_offset(pdev) / 4;
 
          const uint32_t *samplers =
             (const uint32_t *)((const char *)layout + layout->binding[i].immutable_samplers_offset);
@@ -482,7 +482,6 @@ radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_po
       }
    }
 
-   pool->entry_count++;
    vk_descriptor_set_layout_ref(&layout->vk);
    *out_set = set;
    return VK_SUCCESS;
@@ -490,21 +489,17 @@ radv_descriptor_set_create(struct radv_device *device, struct radv_descriptor_po
 
 void
 radv_descriptor_set_destroy(struct radv_device *device, struct radv_descriptor_pool *pool,
-                            struct radv_descriptor_set *set, bool free_bo)
+                            struct radv_descriptor_set *set)
 {
    assert(!pool->host_memory_base);
 
+   list_del(&set->link);
    vk_descriptor_set_layout_unref(&device->vk, &set->header.layout->vk);
 
-   if (free_bo && !pool->host_memory_base) {
-      for (int i = 0; i < pool->entry_count; ++i) {
-         if (pool->entries[i].set == set) {
-            memmove(&pool->entries[i], &pool->entries[i + 1], sizeof(pool->entries[i]) * (pool->entry_count - i - 1));
-            --pool->entry_count;
-            break;
-         }
-      }
-   }
+   if (set->header.size)
+      util_vma_heap_free(&pool->bo_heap, (uint64_t)set->header.offset + RADV_POOL_HEAP_OFFSET, set->header.size);
+   pool->entry_count--;
+
    vk_object_base_finish(&set->header.base);
    vk_free2(&device->vk.alloc, NULL, set);
 }
@@ -561,7 +556,7 @@ radv_FreeDescriptorSets(VkDevice _device, VkDescriptorPool descriptorPool, uint3
       VK_FROM_HANDLE(radv_descriptor_set, set, pDescriptorSets[i]);
 
       if (set && !pool->host_memory_base)
-         radv_descriptor_set_destroy(device, pool, set, true);
+         radv_descriptor_set_destroy(device, pool, set);
    }
    return VK_SUCCESS;
 }
@@ -639,7 +634,7 @@ radv_update_descriptor_sets_impl(struct radv_device *device, struct radv_cmd_buf
             }
 
             if (copy_immutable_samplers) {
-               const uint32_t sampler_offset = RADV_COMBINED_IMAGE_SAMPLER_DESC_SAMPLER_OFFSET;
+               const uint32_t sampler_offset = radv_get_combined_image_sampler_offset(pdev);
                const unsigned idx = writeset->dstArrayElement + j;
 
                memcpy((char *)ptr + sampler_offset, samplers + 4 * idx, RADV_SAMPLER_DESC_SIZE);

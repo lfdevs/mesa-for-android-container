@@ -43,7 +43,7 @@ typedef struct {
    struct blob *blob;
 
    /* maps pointer to index */
-   struct hash_table *remap_table;
+   struct hash_table remap_table;
 
    /* the next index to assign to a NIR in-memory object */
    uint32_t next_idx;
@@ -90,7 +90,7 @@ typedef struct {
    const struct glsl_type *last_interface_type;
    struct nir_variable_data last_var_data;
 
-   struct hash_table *strings;
+   struct hash_table strings;
 } read_ctx;
 
 static void
@@ -98,13 +98,13 @@ write_add_object(write_ctx *ctx, const void *obj)
 {
    uint32_t index = ctx->next_idx++;
    assert(index != MAX_OBJECT_IDS);
-   _mesa_hash_table_insert(ctx->remap_table, obj, (void *)(uintptr_t)index);
+   _mesa_hash_table_insert(&ctx->remap_table, obj, (void *)(uintptr_t)index);
 }
 
 static uint32_t
 write_lookup_object(write_ctx *ctx, const void *obj)
 {
-   struct hash_entry *entry = _mesa_hash_table_search(ctx->remap_table, obj);
+   struct hash_entry *entry = _mesa_hash_table_search(&ctx->remap_table, obj);
    assert(entry);
    return (uint32_t)(uintptr_t)entry->data;
 }
@@ -173,7 +173,7 @@ decode_num_components_in_3bits(uint8_t value)
    if (value == 6)
       return 16;
 
-   unreachable("invalid num_components encoding");
+   UNREACHABLE("invalid num_components encoding");
    return 0;
 }
 
@@ -187,18 +187,23 @@ write_constant(write_ctx *ctx, const nir_constant *c)
 }
 
 static nir_constant *
-read_constant(read_ctx *ctx, nir_variable *nvar)
+read_constant(read_ctx *ctx, void *mem_ctx)
 {
-   nir_constant *c = ralloc(nvar, nir_constant);
+   nir_constant *c = ralloc(mem_ctx, nir_constant);
 
    static const nir_const_value zero_vals[ARRAY_SIZE(c->values)] = { 0 };
    blob_copy_bytes(ctx->blob, (uint8_t *)c->values, sizeof(c->values));
    c->is_null_constant = memcmp(c->values, zero_vals, sizeof(c->values)) == 0;
    c->num_elements = blob_read_uint32(ctx->blob);
-   c->elements = ralloc_array(nvar, nir_constant *, c->num_elements);
-   for (unsigned i = 0; i < c->num_elements; i++) {
-      c->elements[i] = read_constant(ctx, nvar);
-      c->is_null_constant &= c->elements[i]->is_null_constant;
+
+   if (c->num_elements) {
+      c->elements = ralloc_array(c, nir_constant *, c->num_elements);
+      for (unsigned i = 0; i < c->num_elements; i++) {
+         c->elements[i] = read_constant(ctx, c);
+         c->is_null_constant &= c->elements[i]->is_null_constant;
+      }
+   } else {
+      c->elements = NULL;
    }
 
    return c;
@@ -337,7 +342,7 @@ write_variable(write_ctx *ctx, const nir_variable *var)
 static nir_variable *
 read_variable(read_ctx *ctx)
 {
-   nir_variable *var = rzalloc(ctx->nir, nir_variable);
+   nir_variable *var = nir_variable_create_zeroed(ctx->nir);
    read_add_object(ctx, var);
 
    union packed_var flags;
@@ -361,7 +366,7 @@ read_variable(read_ctx *ctx)
 
    if (flags.u.has_name) {
       const char *name = blob_read_string(ctx->blob);
-      var->name = ralloc_strdup(var, name);
+      nir_variable_set_name(ctx->nir, var, name);
    } else {
       var->name = NULL;
    }
@@ -385,7 +390,7 @@ read_variable(read_ctx *ctx)
 
    var->num_state_slots = flags.u.num_state_slots;
    if (var->num_state_slots != 0) {
-      var->state_slots = ralloc_array(var, nir_state_slot,
+      var->state_slots = ralloc_array(ctx->nir, nir_state_slot,
                                       var->num_state_slots);
       for (unsigned i = 0; i < var->num_state_slots; i++) {
          blob_copy_bytes(ctx->blob, &var->state_slots[i],
@@ -393,7 +398,7 @@ read_variable(read_ctx *ctx)
       }
    }
    if (flags.u.has_constant_initializer)
-      var->constant_initializer = read_constant(ctx, var);
+      var->constant_initializer = read_constant(ctx, ctx->nir);
    else
       var->constant_initializer = NULL;
 
@@ -404,7 +409,7 @@ read_variable(read_ctx *ctx)
 
    var->num_members = flags.u.num_members;
    if (var->num_members > 0) {
-      var->members = ralloc_array(var, struct nir_variable_data,
+      var->members = ralloc_array(ctx->nir, struct nir_variable_data,
                                   var->num_members);
       blob_copy_bytes(ctx->blob, (uint8_t *)var->members,
                       var->num_members * sizeof(*var->members));
@@ -746,9 +751,12 @@ write_alu(write_ctx *ctx, const nir_alu_instr *alu)
 
          if (packed) {
             src.alu.swizzle_x = alu->src[i].swizzle[0];
-            src.alu.swizzle_y = alu->src[i].swizzle[1];
-            src.alu.swizzle_z = alu->src[i].swizzle[2];
-            src.alu.swizzle_w = alu->src[i].swizzle[3];
+            if (src_channels >= 2)
+               src.alu.swizzle_y = alu->src[i].swizzle[1];
+            if (src_channels >= 3)
+               src.alu.swizzle_z = alu->src[i].swizzle[2];
+            if (src_channels >= 4)
+               src.alu.swizzle_w = alu->src[i].swizzle[3];
          }
 
          write_src_full(ctx, &alu->src[i].src, src);
@@ -805,9 +813,12 @@ read_alu(read_ctx *ctx, union packed_instr header)
 
          if (packed) {
             alu->src[i].swizzle[0] = src.alu.swizzle_x;
-            alu->src[i].swizzle[1] = src.alu.swizzle_y;
-            alu->src[i].swizzle[2] = src.alu.swizzle_z;
-            alu->src[i].swizzle[3] = src.alu.swizzle_w;
+            if (src_channels >= 2)
+               alu->src[i].swizzle[1] = src.alu.swizzle_y;
+            if (src_channels >= 3)
+               alu->src[i].swizzle[2] = src.alu.swizzle_z;
+            if (src_channels >= 4)
+               alu->src[i].swizzle[3] = src.alu.swizzle_w;
          } else {
             /* Load swizzles for vec8 and vec16. */
             for (unsigned o = 0; o < src_channels; o += 8) {
@@ -953,7 +964,7 @@ write_deref(write_ctx *ctx, const nir_deref_instr *deref)
       break;
 
    default:
-      unreachable("Invalid deref type");
+      UNREACHABLE("Invalid deref type");
    }
 }
 
@@ -1023,7 +1034,7 @@ read_deref(read_ctx *ctx, union packed_instr header)
       break;
 
    default:
-      unreachable("Invalid deref type");
+      UNREACHABLE("Invalid deref type");
    }
 
    if (deref_type == nir_deref_type_var) {
@@ -1031,7 +1042,7 @@ read_deref(read_ctx *ctx, union packed_instr header)
    } else if (deref->deref_type == nir_deref_type_cast) {
       deref->modes = decode_deref_modes(header.deref.modes);
    } else {
-      deref->modes = nir_instr_as_deref(deref->parent.ssa->parent_instr)->modes;
+      deref->modes = nir_def_as_deref(deref->parent.ssa)->modes;
    }
 
    return deref;
@@ -1213,7 +1224,7 @@ write_load_const(write_ctx *ctx, const nir_load_const_instr *lc)
          header.load_const.packed_value = lc->value[0].b;
          break;
       default:
-         unreachable("invalid bit_size");
+         UNREACHABLE("invalid bit_size");
       }
    }
 
@@ -1264,7 +1275,7 @@ read_load_const(read_ctx *ctx, union packed_instr header)
          lc->value[0].u32 = (uint64_t)header.load_const.packed_value << 13;
          break;
       default:
-         unreachable("invalid bit_size");
+         UNREACHABLE("invalid bit_size");
       }
       break;
 
@@ -1290,7 +1301,7 @@ read_load_const(read_ctx *ctx, union packed_instr header)
          lc->value[0].b = header.load_const.packed_value;
          break;
       default:
-         unreachable("invalid bit_size");
+         UNREACHABLE("invalid bit_size");
       }
       break;
 
@@ -1483,7 +1494,7 @@ write_phi(write_ctx *ctx, const nir_phi_instr *phi)
          .src = src->src.ssa,
          .block = src->pred,
       };
-      util_dynarray_append(&ctx->phi_fixups, write_phi_fixup, fixup);
+      util_dynarray_append(&ctx->phi_fixups, fixup);
    }
 }
 
@@ -1601,6 +1612,36 @@ read_call(read_ctx *ctx)
    return call;
 }
 
+static void
+write_cmat_call(write_ctx *ctx, const nir_cmat_call_instr *call)
+{
+   blob_write_uint32(ctx->blob, write_lookup_object(ctx, call->callee));
+
+   blob_write_uint32(ctx->blob, call->op);
+
+   for (unsigned i = 0; i < call->num_params; i++)
+      write_src(ctx, &call->params[i]);
+
+   for (unsigned i = 0; i < NIR_CMAT_CALL_MAX_CONST_INDEX; i++)
+      blob_write_uint32(ctx->blob, call->const_index[i]);
+}
+
+static nir_cmat_call_instr *
+read_cmat_call(read_ctx *ctx)
+{
+   nir_function *callee = read_object(ctx);
+   nir_cmat_call_op op = blob_read_uint32(ctx->blob);
+   nir_cmat_call_instr *call = nir_cmat_call_instr_create(ctx->nir, op, callee);
+
+   for (unsigned i = 0; i < call->num_params; i++)
+      read_src(ctx, &call->params[i]);
+
+   for (unsigned i = 0; i < NIR_CMAT_CALL_MAX_CONST_INDEX; i++)
+      call->const_index[i] = blob_read_uint32(ctx->blob);
+
+   return call;
+}
+
 enum nir_serialize_debug_info_flags {
    NIR_SERIALIZE_FILENAME = 1 << 0,
    NIR_SERIALIZE_VARIABLE_NAME = 1 << 1,
@@ -1646,24 +1687,24 @@ read_debug_info(read_ctx *ctx, nir_instr_debug_info *debug_info)
    if (flags & NIR_SERIALIZE_FILENAME) {
       const char *filename = blob_read_string(ctx->blob);
 
-      struct hash_entry *entry = _mesa_hash_table_search(ctx->strings, filename);
+      struct hash_entry *entry = _mesa_hash_table_search(&ctx->strings, filename);
       if (entry) {
          debug_info->filename = entry->data;
       } else {
          debug_info->filename = ralloc_strdup(ctx->nir, filename);
-         _mesa_hash_table_insert(ctx->strings, filename, debug_info->filename);
+         _mesa_hash_table_insert(&ctx->strings, filename, debug_info->filename);
       }
    }
 
    if (flags & NIR_SERIALIZE_VARIABLE_NAME) {
       const char *variable_name = blob_read_string(ctx->blob);
 
-      struct hash_entry *entry = _mesa_hash_table_search(ctx->strings, variable_name);
+      struct hash_entry *entry = _mesa_hash_table_search(&ctx->strings, variable_name);
       if (entry) {
          debug_info->variable_name = entry->data;
       } else {
          debug_info->variable_name = ralloc_strdup(ctx->nir, variable_name);
-         _mesa_hash_table_insert(ctx->strings, variable_name, debug_info->variable_name);
+         _mesa_hash_table_insert(&ctx->strings, variable_name, debug_info->variable_name);
       }
    }
 }
@@ -1706,10 +1747,12 @@ write_instr(write_ctx *ctx, const nir_instr *instr)
       blob_write_uint32(ctx->blob, instr->type);
       write_call(ctx, nir_instr_as_call(instr));
       break;
-   case nir_instr_type_parallel_copy:
-      unreachable("Cannot write parallel copies");
+   case nir_instr_type_cmat_call:
+      blob_write_uint32(ctx->blob, instr->type);
+      write_cmat_call(ctx, nir_instr_as_cmat_call(instr));
+      break;
    default:
-      unreachable("bad instr type");
+      UNREACHABLE("bad instr type");
    }
 }
 
@@ -1760,10 +1803,11 @@ read_instr(read_ctx *ctx, nir_block *block)
    case nir_instr_type_call:
       instr = &read_call(ctx)->instr;
       break;
-   case nir_instr_type_parallel_copy:
-      unreachable("Cannot read parallel copies");
+   case nir_instr_type_cmat_call:
+      instr = &read_cmat_call(ctx)->instr;
+      break;
    default:
-      unreachable("bad instr type");
+      UNREACHABLE("bad instr type");
    }
 
    if (unlikely(ctx->nir->has_debug_info)) {
@@ -1883,7 +1927,7 @@ write_cf_node(write_ctx *ctx, nir_cf_node *cf)
       write_loop(ctx, nir_cf_node_as_loop(cf));
       break;
    default:
-      unreachable("bad cf type");
+      UNREACHABLE("bad cf type");
    }
 }
 
@@ -1903,7 +1947,7 @@ read_cf_node(read_ctx *ctx, struct exec_list *list)
       read_loop(ctx, list);
       break;
    default:
-      unreachable("bad cf type");
+      UNREACHABLE("bad cf type");
    }
 }
 
@@ -1982,6 +2026,8 @@ write_function(write_ctx *ctx, const nir_function *fxn)
       flags |= 0x80;
    if (fxn->workgroup_size[0] || fxn->workgroup_size[1] || fxn->workgroup_size[2])
       flags |= 0x100;
+   if (fxn->cmat_call)
+      flags |= 0x200;
    blob_write_uint32(ctx->blob, flags);
    if (fxn->name && !ctx->strip)
       blob_write_string(ctx->blob, fxn->name);
@@ -2084,6 +2130,7 @@ read_function(read_ctx *ctx)
    fxn->dont_inline = flags & 0x20;
    fxn->is_subroutine = flags & 0x40;
    fxn->is_tmp_globals_wrapper = flags & 0x80;
+   fxn->cmat_call = flags & 0x200;
    return fxn;
 }
 
@@ -2123,11 +2170,11 @@ void
 nir_serialize_function(struct blob *blob, const nir_function *fxn)
 {
    write_ctx ctx = { 0 };
-   ctx.remap_table = _mesa_pointer_hash_table_create(NULL);
+   _mesa_pointer_hash_table_init(&ctx.remap_table, NULL);
    ctx.blob = blob;
    ctx.nir = fxn->shader;
    ctx.strip = true;
-   util_dynarray_init(&ctx.phi_fixups, NULL);
+   ctx.phi_fixups = UTIL_DYNARRAY_INIT;
 
    size_t idx_size_offset = blob_reserve_uint32(blob);
 
@@ -2136,31 +2183,26 @@ nir_serialize_function(struct blob *blob, const nir_function *fxn)
 
    blob_overwrite_uint32(blob, idx_size_offset, ctx.next_idx);
 
-   _mesa_hash_table_destroy(ctx.remap_table, NULL);
+   _mesa_hash_table_fini(&ctx.remap_table, NULL);
    util_dynarray_fini(&ctx.phi_fixups);
 }
 
-/**
- * Serialize NIR into a binary blob.
- *
- * \param strip  Don't serialize information only useful for debugging,
- *               such as variable names, making cache hits from similar
- *               shaders more likely.
- */
-void
-nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
+static void
+serialize_internal(struct blob *blob, const nir_shader *nir, bool strip, bool serialize_info)
 {
    write_ctx ctx = { 0 };
-   ctx.remap_table = _mesa_pointer_hash_table_create(NULL);
+   _mesa_pointer_hash_table_init(&ctx.remap_table, NULL);
    ctx.blob = blob;
    ctx.nir = nir;
    ctx.strip = strip;
    ctx.debug_info = nir->has_debug_info && !strip;
-   util_dynarray_init(&ctx.phi_fixups, NULL);
+   ctx.phi_fixups = UTIL_DYNARRAY_INIT;
 
    size_t idx_size_offset = blob_reserve_uint32(blob);
 
    struct shader_info info = nir->info;
+   if (!serialize_info)
+      memset(&info, 0, sizeof(info));
 
    enum nir_serialize_shader_flags flags = 0;
    if (!strip && info.name)
@@ -2205,8 +2247,21 @@ nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
 
    blob_overwrite_uint32(blob, idx_size_offset, ctx.next_idx);
 
-   _mesa_hash_table_destroy(ctx.remap_table, NULL);
+   _mesa_hash_table_fini(&ctx.remap_table, NULL);
    util_dynarray_fini(&ctx.phi_fixups);
+}
+
+/**
+ * Serialize NIR into a binary blob.
+ *
+ * \param strip  Don't serialize information only useful for debugging,
+ *               such as variable names, making cache hits from similar
+ *               shaders more likely.
+ */
+void
+nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
+{
+   serialize_internal(blob, nir, strip, true);
 }
 
 nir_shader *
@@ -2227,11 +2282,11 @@ nir_deserialize(void *mem_ctx,
    struct shader_info info;
    blob_copy_bytes(blob, (uint8_t *)&info, sizeof(info));
 
-   ctx.nir = nir_shader_create(mem_ctx, info.stage, options, NULL);
+   ctx.nir = nir_shader_create(mem_ctx, info.stage, options);
 
    ctx.nir->has_debug_info = !!(flags & NIR_SERIALIZE_DEBUG_INFO);
    if (ctx.nir->has_debug_info)
-      ctx.strings = _mesa_hash_table_create(NULL, _mesa_hash_string, _mesa_key_string_equal);
+      _mesa_hash_table_init(&ctx.strings, NULL, _mesa_hash_string, _mesa_key_string_equal);
 
    info.name = name ? ralloc_strdup(ctx.nir, name) : NULL;
    info.label = label ? ralloc_strdup(ctx.nir, label) : NULL;
@@ -2271,7 +2326,7 @@ nir_deserialize(void *mem_ctx,
    }
 
    free(ctx.idx_table);
-   _mesa_hash_table_destroy(ctx.strings, NULL);
+   _mesa_hash_table_fini(&ctx.strings, NULL);
 
    nir_validate_shader(ctx.nir, "after deserialize");
 
@@ -2289,7 +2344,7 @@ nir_deserialize_function(void *mem_ctx,
    ctx.idx_table_len = blob_read_uint32(blob);
    ctx.idx_table = calloc(ctx.idx_table_len, sizeof(uintptr_t));
 
-   ctx.nir = nir_shader_create(mem_ctx, 0 /* stage */, options, NULL);
+   ctx.nir = nir_shader_create(mem_ctx, 0 /* stage */, options);
 
    nir_function *fxn = read_function(&ctx);
    nir_function_set_impl(fxn, read_function_impl(&ctx));
@@ -2324,3 +2379,37 @@ nir_shader_serialize_deserialize(nir_shader *shader)
    nir_shader_replace(shader, copy);
    ralloc_free(dead_ctx);
 }
+
+#ifndef NDEBUG
+struct blob
+nir_validate_progress_setup(nir_shader *shader)
+{
+   if (!NIR_DEBUG(PROGRESS_VALIDATION))
+      return (struct blob){0};
+
+   struct blob blob_before;
+   blob_init(&blob_before);
+   serialize_internal(&blob_before, shader, false, false);
+   return blob_before;
+}
+
+void
+nir_validate_progress_finish(nir_shader *shader, struct blob *setup_blob, bool progress, const char *when)
+{
+   if (!NIR_DEBUG(PROGRESS_VALIDATION))
+      return;
+
+   if (!progress) {
+      struct blob blob_after;
+      blob_init(&blob_after);
+      serialize_internal(&blob_after, shader, false, false);
+      if (setup_blob->size != blob_after.size ||
+          memcmp(setup_blob->data, blob_after.data, setup_blob->size)) {
+         fprintf(stderr, "NIR changed but no progress reported %s\n", when);
+         abort();
+      }
+      blob_finish(&blob_after);
+   }
+   blob_finish(setup_blob);
+}
+#endif

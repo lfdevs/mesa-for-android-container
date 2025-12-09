@@ -68,3 +68,10 @@ spec@!opengl 1.1@dlist-fdo3129-01
 shaders@point-vertex-id.*
 # uses stipple:
 spec@!opengl 1.0@gl-1.0-no-op-paths
+
+# Times out
+glx@glx-visuals-depth
+glx@glx-visuals-stencil
+shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges
+spec@arb_point_parameters@arb_point_parameters-point-attenuation
+spec@glsl-1.30@execution@texelfetch fs sampler2d 281x1-281x281

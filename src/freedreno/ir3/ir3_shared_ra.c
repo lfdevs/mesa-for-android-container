@@ -352,7 +352,7 @@ reg_file_size(struct ir3_register *reg)
 
 static physreg_t
 find_best_gap(struct ra_ctx *ctx, struct ir3_register *dst, unsigned size,
-              unsigned align)
+              unsigned alignment)
 {
    unsigned file_size = reg_file_size(dst);
 
@@ -362,7 +362,9 @@ find_best_gap(struct ra_ctx *ctx, struct ir3_register *dst, unsigned size,
    if (size > file_size)
       return (physreg_t) ~0;
 
-   unsigned start = ALIGN(ctx->start, align) % (file_size - size + align);
+   unsigned start = align(ctx->start, alignment);
+   if (start + size > file_size)
+      start = 0;
    unsigned candidate = start;
    do {
       bool is_available = true;
@@ -378,7 +380,7 @@ find_best_gap(struct ra_ctx *ctx, struct ir3_register *dst, unsigned size,
          return candidate;
       }
 
-      candidate += align;
+      candidate += alignment;
       if (candidate + size > file_size)
          candidate = 0;
    } while (candidate != start);
@@ -388,12 +390,14 @@ find_best_gap(struct ra_ctx *ctx, struct ir3_register *dst, unsigned size,
 
 static physreg_t
 find_best_spill_reg(struct ra_ctx *ctx, struct ir3_register *reg,
-                    unsigned size, unsigned align)
+                    unsigned size, unsigned alignment)
 {
    unsigned file_size = reg_file_size(reg);
    unsigned min_cost = UINT_MAX;
 
-   unsigned start = ALIGN(ctx->start, align) % (file_size - size + align);
+   unsigned start = align(ctx->start, alignment);
+   if (start + size > file_size)
+      start = 0;
    physreg_t candidate = start;
    physreg_t best_reg = (physreg_t)~0;
    do {
@@ -423,7 +427,7 @@ find_best_spill_reg(struct ra_ctx *ctx, struct ir3_register *reg,
          best_reg = candidate;
       }
 
-      candidate += align;
+      candidate += alignment;
       if (candidate + size > file_size)
          candidate = 0;
    } while (candidate != start);
@@ -615,7 +619,7 @@ try_demote_instruction(struct ra_ctx *ctx, struct ir3_instruction *instr)
     * skipped reloading and just demoted sources directly, so we should never
     * get here.
     */
-   assert(instr->dsts[0]->flags & IR3_REG_SHARED);
+   assert(instr->dsts[0]->flags & (IR3_REG_SHARED | IR3_REG_UNIFORM));
 
    /* Now we actually demote the instruction */
    ra_foreach_src (src, instr) {
@@ -631,6 +635,13 @@ try_demote_instruction(struct ra_ctx *ctx, struct ir3_instruction *instr)
             interval = ir3_reg_interval_to_ra_interval(interval->interval.parent);
          interval->src = false;
       }
+   }
+
+   if (instr->dsts[0]->flags & IR3_REG_UNIFORM) {
+      instr->dsts[0]->flags &= ~IR3_REG_UNIFORM;
+
+      /* Uniform registers are always predicates which we don't handle here. */
+      return true;
    }
 
    struct ra_interval *dst_interval = ra_interval_get(ctx, instr->dsts[0]);
@@ -657,8 +668,45 @@ free_space(struct ra_ctx *ctx, physreg_t start, unsigned size)
 }
 
 static physreg_t
+try_allocate_src_subreg(struct ra_ctx *ctx, struct ir3_register *reg,
+                        enum ir3_subreg_move subreg_move)
+{
+   assert(subreg_move != IR3_SUBREG_MOVE_NONE);
+
+   /* Subreg moves always write a half register. */
+   assert(reg_elem_size(reg) == 1);
+
+   struct ir3_register *src = reg->instr->srcs[0];
+   if (!ra_reg_is_src(src) || !(src->flags & IR3_REG_SHARED))
+      return ~0;
+
+   unsigned offset = subreg_move == IR3_SUBREG_MOVE_LOWER ? 0 : 1;
+   struct ra_interval *src_interval = ra_interval_get(ctx, src->def);
+   physreg_t src_physreg = ra_interval_get_physreg(src_interval) + offset;
+   unsigned file_size = reg_file_size(reg);
+   unsigned size = reg_size(reg);
+
+   if (src_physreg + size <= file_size &&
+       get_reg_specified(ctx, reg, src_physreg)) {
+      return src_physreg;
+   }
+
+   return ~0;
+}
+
+static physreg_t
 get_reg(struct ra_ctx *ctx, struct ir3_register *reg, bool src)
 {
+   /* For subreg moves (see ir3_is_subreg_move), try to allocate half of their
+    * full src for their dst. If this succeeds, the instruction can be removed.
+    */
+   enum ir3_subreg_move subreg_move = ir3_is_subreg_move(reg->instr);
+   if (subreg_move != IR3_SUBREG_MOVE_NONE) {
+      physreg_t src_reg = try_allocate_src_subreg(ctx, reg, subreg_move);
+      if (src_reg != (physreg_t)~0)
+         return src_reg;
+   }
+
    if (reg->merge_set && reg->merge_set->preferred_reg != (physreg_t)~0) {
       physreg_t preferred_reg =
          reg->merge_set->preferred_reg + reg->merge_set_offset;
@@ -666,6 +714,8 @@ get_reg(struct ra_ctx *ctx, struct ir3_register *reg, bool src)
           preferred_reg % reg_elem_size(reg) == 0 &&
           get_reg_specified(ctx, reg, preferred_reg))
          return preferred_reg;
+
+      ir3_ra_handle_unavailable_merge_set(reg);
    }
 
    /* If this register is a subset of a merge set which we have not picked a
@@ -692,6 +742,12 @@ get_reg(struct ra_ctx *ctx, struct ir3_register *reg, bool src)
       for (unsigned i = 0; i < reg->instr->srcs_count; i++) {
          struct ir3_register *src = reg->instr->srcs[i];
          if (!ra_reg_is_src(src))
+            continue;
+         /* When src and dst are overlapping registers with different halfness,
+          * a (ss) sync is necessary. Avoid this to not unnecessarily increase
+          * ss-stall.
+          */
+         if ((reg->flags & IR3_REG_HALF) != (src->flags & IR3_REG_HALF))
             continue;
          if ((src->flags & IR3_REG_SHARED) && reg_size(src) >= size) {
             struct ra_interval *src_interval = ra_interval_get(ctx, src->def);
@@ -802,7 +858,7 @@ can_demote_src(struct ir3_instruction *instr)
                  full_type(instr->cat1.dst_type) == TYPE_S32)));
    default:
       return (!is_alu(instr) && !is_sfu(instr)) ||
-         !(instr->dsts[0]->flags & IR3_REG_SHARED);
+         !(instr->dsts[0]->flags & (IR3_REG_SHARED | IR3_REG_UNIFORM));
    }
 }
 
@@ -1219,8 +1275,7 @@ record_pred_live_outs(struct ra_ctx *ctx, struct ir3_block *block)
       if (state->visited)
          continue;
 
-      state->live_out = rzalloc_array(NULL, BITSET_WORD,
-                                      BITSET_WORDS(ctx->live->definitions_count));
+      state->live_out = BITSET_RZALLOC(NULL, ctx->live->definitions_count);
 
 
       rb_tree_foreach (struct ra_interval, interval,
@@ -1481,8 +1536,7 @@ ir3_ra_shared(struct ir3_shader_variant *v, struct ir3_liveness **live_ptr)
    lower_pcopy(v->ir, &ctx);
 
    for (unsigned i = 0; i < live->block_count; i++) {
-      if (ctx.blocks[i].live_out)
-         ralloc_free(ctx.blocks[i].live_out);
+      ralloc_free(ctx.blocks[i].live_out);
    }
 
    ralloc_free(ctx.intervals);

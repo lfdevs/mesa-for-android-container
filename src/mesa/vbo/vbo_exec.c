@@ -350,7 +350,7 @@ vbo_copy_vertices(struct gl_context *ctx,
    case GL_TRIANGLE_STRIP_ADJACENCY:
       /* TODO: Splitting tri strips with adjacency is too complicated. */
    default:
-      unreachable("Unexpected primitive type");
+      UNREACHABLE("Unexpected primitive type");
       return 0;
    }
 

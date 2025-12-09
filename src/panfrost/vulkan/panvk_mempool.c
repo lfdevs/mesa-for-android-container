@@ -23,6 +23,7 @@
  *
  */
 
+#include "panvk_device.h"
 #include "panvk_mempool.h"
 #include "panvk_priv_bo.h"
 
@@ -55,7 +56,8 @@ panvk_bo_pool_cleanup(struct panvk_bo_pool *bo_pool)
 static struct panvk_priv_bo *
 panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
 {
-   size_t bo_sz = ALIGN_POT(MAX2(pool->base.slab_size, sz), 4096);
+   size_t bo_sz = ALIGN_POT(MAX2(pool->base.slab_size, sz),
+                            panvk_get_gpu_page_size(pool->dev));
    struct panvk_priv_bo *bo = NULL;
 
    /* If there's a free BO in our BO pool, let's pick it. */
@@ -65,25 +67,42 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
          list_first_entry(&pool->bo_pool->free_bos, struct panvk_priv_bo, node);
       list_del(&bo->node);
    } else {
-      /* We don't know what the BO will be used for, so let's flag it
-       * RW and attach it to both the fragment and vertex/tiler jobs.
-       * TODO: if we want fine grained BO assignment we should pass
-       * flags to this function and keep the read/write,
-       * fragment/vertex+tiler pools separate.
-       */
-      VkResult result =
-         panvk_priv_bo_create(pool->dev, bo_sz, pool->props.create_flags,
-                              VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+      if (pool->big_bo_pool) {
+         list_for_each_entry_safe(struct panvk_priv_bo, pooled_bo,
+                                  &pool->big_bo_pool->free_bos, node) {
+            const size_t picked_bo_sz = pan_kmod_bo_size(pooled_bo->bo);
+            /* check if we have any sufficient match */
+            if (picked_bo_sz >= bo_sz) {
+               bo = pooled_bo;
+               list_del(&bo->node);
+               break;
+            }
+         }
+      }
 
-      /* Pool allocations are indirect, meaning there's no VkResult returned
-       * and no way for the caller to know why the device memory allocation
-       * failed. We want to propagate host allocation failures, so set
-       * errno to -ENOMEM if panvk_priv_bo_create() returns
-       * VK_ERROR_OUT_OF_HOST_MEMORY.
-       * We expect the caller to check the returned pointer and catch the
-       * host allocation failure with a call to panvk_error(). */
-      if (result == VK_ERROR_OUT_OF_HOST_MEMORY)
-         errno = -ENOMEM;
+      if (bo == NULL) {
+         /* We don't know what the BO will be used for, so let's flag it
+          * RW and attach it to both the fragment and vertex/tiler jobs.
+          * TODO: if we want fine grained BO assignment we should pass
+          * flags to this function and keep the read/write,
+          * fragment/vertex+tiler pools separate.
+          */
+         VkResult result =
+            panvk_priv_bo_create(pool->dev, bo_sz, pool->props.create_flags,
+                                 VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+
+         /* Pool allocations are indirect, meaning there's no VkResult returned
+          * and no way for the caller to know why the device memory allocation
+          * failed. We want to propagate host allocation failures, so set
+          * errno to -ENOMEM if panvk_priv_bo_create() returns
+          * VK_ERROR_OUT_OF_HOST_MEMORY.
+          * We expect the caller to check the returned pointer and catch the
+          * host allocation failure with a call to panvk_error(). */
+         if (result == VK_ERROR_OUT_OF_HOST_MEMORY) {
+            assert(bo == NULL);
+            errno = -ENOMEM;
+         }
+      }
    }
 
    if (bo == NULL)
@@ -132,7 +151,7 @@ panvk_pool_alloc_mem(struct panvk_pool *pool, struct panvk_pool_alloc_info info)
    unsigned offset = ALIGN_POT(pool->transient_offset, info.alignment);
 
    /* If we don't fit, allocate a new backing */
-   if (unlikely(bo == NULL || (offset + info.size) >= pool->base.slab_size)) {
+   if (unlikely(bo == NULL || offset + info.size > pan_kmod_bo_size(bo->bo))) {
       bo = panvk_pool_alloc_backing(pool, info.size);
       offset = 0;
    }
@@ -185,6 +204,7 @@ PAN_POOL_ALLOCATOR(struct panvk_pool, panvk_pool_alloc_aligned)
 void
 panvk_pool_init(struct panvk_pool *pool, struct panvk_device *dev,
                 struct panvk_bo_pool *bo_pool,
+                struct panvk_bo_pool *big_bo_pool,
                 const struct panvk_pool_properties *props)
 {
    memset(pool, 0, sizeof(*pool));
@@ -193,6 +213,7 @@ panvk_pool_init(struct panvk_pool *pool, struct panvk_device *dev,
    pan_pool_init(&pool->base, pool->props.slab_size);
    pool->dev = dev;
    pool->bo_pool = bo_pool;
+   pool->big_bo_pool = big_bo_pool;
 
    list_inithead(&pool->bos);
    list_inithead(&pool->big_bos);
@@ -214,9 +235,14 @@ panvk_pool_reset(struct panvk_pool *pool)
       }
    }
 
-   list_for_each_entry_safe(struct panvk_priv_bo, bo, &pool->big_bos, node) {
-      list_del(&bo->node);
-      panvk_priv_bo_unref(bo);
+   if (pool->big_bo_pool) {
+      list_splicetail(&pool->big_bos, &pool->big_bo_pool->free_bos);
+      list_inithead(&pool->big_bos);
+   } else {
+      list_for_each_entry_safe(struct panvk_priv_bo, bo, &pool->big_bos, node) {
+         list_del(&bo->node);
+         panvk_priv_bo_unref(bo);
+      }
    }
 
    if (!pool->props.owns_bos)

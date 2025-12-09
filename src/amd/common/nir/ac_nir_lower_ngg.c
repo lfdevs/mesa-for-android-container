@@ -390,17 +390,17 @@ remove_culling_shader_outputs(nir_shader *culling_shader, lower_ngg_nogs_state *
    /* Remove dead code resulting from the deleted outputs. */
    bool progress;
    do {
-      progress = false;
-      NIR_PASS(progress, culling_shader, nir_opt_dead_write_vars);
-      NIR_PASS(progress, culling_shader, nir_opt_dce);
-      NIR_PASS(progress, culling_shader, nir_opt_dead_cf);
+      /* These can't use NIR_PASS because NIR_DEBUG=serialize,clone invalidates pointers. */
+      progress = nir_opt_dead_write_vars(culling_shader);
+      progress |= nir_opt_dce(culling_shader);
+      progress |= nir_opt_dead_cf(culling_shader);
    } while (progress);
 }
 
 static void
 replace_scalar_component_uses(nir_builder *b, nir_scalar old, nir_scalar rep)
 {
-   if (old.def->parent_instr->type == nir_instr_type_load_const)
+   if (nir_def_is_const(old.def))
       return;
 
    assert(old.def->bit_size == rep.def->bit_size);
@@ -413,7 +413,7 @@ replace_scalar_component_uses(nir_builder *b, nir_scalar old, nir_scalar rep)
    }
 
    nir_def *replacement = nir_vec(b, dst, old.def->num_components);
-   nir_def_rewrite_uses_after(old.def, replacement, replacement->parent_instr);
+   nir_def_rewrite_uses_after(old.def, replacement);
 }
 
 static bool
@@ -437,7 +437,7 @@ apply_repacked_pos_output(nir_builder *b, nir_intrinsic_instr *intrin, void *sta
 
    for (unsigned comp = 0; comp < store_val->num_components; ++comp) {
       nir_scalar val = nir_scalar_chase_movs(nir_get_scalar(store_val, comp));
-      b->cursor = nir_after_instr_and_phis(val.def->parent_instr);
+      b->cursor = nir_after_instr_and_phis(nir_def_instr(val.def));
       nir_def *reloaded = nir_load_var(b, s->position_value_var);
 
       replace_scalar_component_uses(b, val, nir_get_scalar(reloaded, store_pos_component + comp));
@@ -604,7 +604,7 @@ analyze_shader_before_culling_walk(nir_def *ssa,
                                    uint8_t flag,
                                    lower_ngg_nogs_state *s)
 {
-   nir_instr *instr = ssa->parent_instr;
+   nir_instr *instr = nir_def_instr(ssa);
    uint8_t old_pass_flags = instr->pass_flags;
    instr->pass_flags |= flag;
 
@@ -795,7 +795,7 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *s)
                      : nir_after_instr(instr);
          nir_store_var(b, saved->var, saved->ssa, BITFIELD_MASK(ssa->num_components));
          nir_def *reloaded = nir_load_var(b, saved->var);
-         nir_def_rewrite_uses_after(ssa, reloaded, reloaded->parent_instr);
+         nir_def_rewrite_uses_after(ssa, reloaded);
       }
 
       /* Look at the next CF node. */
@@ -907,7 +907,7 @@ clipdist_culling_es_part(nir_builder *b, lower_ngg_nogs_state *s,
 }
 
 static unsigned
-ngg_nogs_get_culling_pervertex_lds_size(gl_shader_stage stage,
+ngg_nogs_get_culling_pervertex_lds_size(mesa_shader_stage stage,
                                         bool uses_instance_id,
                                         bool uses_primitive_id,
                                         unsigned *num_repacked_variables)
@@ -957,11 +957,11 @@ prepare_shader_for_culling(nir_shader *shader, nir_function_impl *impl,
    /* Cleanup. This is done so that we can accurately gather info from the deferred part. */
    bool progress;
    do {
-      progress = false;
-      NIR_PASS(progress, shader, nir_opt_undef);
-      NIR_PASS(progress, shader, nir_copy_prop);
-      NIR_PASS(progress, shader, nir_opt_dce);
-      NIR_PASS(progress, shader, nir_opt_dead_cf);
+      /* These can't use NIR_PASS because NIR_DEBUG=serialize,clone invalidates pointers. */
+      progress = nir_opt_undef(shader);
+      progress |= nir_opt_copy_prop(shader);
+      progress |= nir_opt_dce(shader);
+      progress |= nir_opt_dead_cf(shader);
    } while (progress);
 
    s->deferred.uses_tess_primitive_id = s->options->export_primitive_id;
@@ -1087,7 +1087,7 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
          if (s->deferred.uses_tess_primitive_id)
             nir_store_var(b, repacked_variables[2], nir_load_primitive_id(b), 0x1u);
       } else {
-         unreachable("Should be VS or TES.");
+         UNREACHABLE("Should be VS or TES.");
       }
    }
    nir_pop_if(b, if_es_thread);
@@ -1283,7 +1283,7 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
 
       nir_overwrite_tes_arguments_amd(b, u, v, prim_id, rel_patch_id);
    } else {
-      unreachable("Should be VS or TES.");
+      UNREACHABLE("Should be VS or TES.");
    }
 }
 
@@ -1404,7 +1404,7 @@ ngg_nogs_build_streamout(nir_builder *b, lower_ngg_nogs_state *s)
 
 static unsigned
 ngg_nogs_get_pervertex_lds_size(lower_ngg_nogs_state *s,
-                                gl_shader_stage stage,
+                                mesa_shader_stage stage,
                                 bool streamout_enabled,
                                 bool export_prim_id,
                                 bool has_user_edgeflags)
@@ -1455,7 +1455,7 @@ ngg_nogs_gather_outputs(nir_builder *b, struct exec_list *cf_list, lower_ngg_nog
 
 static unsigned
 ac_ngg_nogs_get_pervertex_lds_size(lower_ngg_nogs_state *s,
-                                   gl_shader_stage stage,
+                                   mesa_shader_stage stage,
                                    bool streamout_enabled,
                                    bool export_prim_id,
                                    bool has_user_edgeflags,
@@ -1778,11 +1778,11 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
 
    bool progress;
    do {
-      progress = false;
-      NIR_PASS(progress, shader, nir_opt_undef);
-      NIR_PASS(progress, shader, nir_copy_prop);
-      NIR_PASS(progress, shader, nir_opt_dce);
-      NIR_PASS(progress, shader, nir_opt_dead_cf);
+      /* These can't use NIR_PASS because NIR_DEBUG=serialize,clone invalidates pointers. */
+      progress = nir_opt_undef(shader);
+      progress |= nir_opt_copy_prop(shader);
+      progress |= nir_opt_dce(shader);
+      progress |= nir_opt_dead_cf(shader);
    } while (progress);
 
    *out_lds_vertex_size =
@@ -1795,7 +1795,7 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
 }
 
 unsigned
-ac_ngg_get_scratch_lds_size(gl_shader_stage stage,
+ac_ngg_get_scratch_lds_size(mesa_shader_stage stage,
                             unsigned workgroup_size,
                             unsigned wave_size,
                             bool streamout_enabled,
@@ -1812,15 +1812,30 @@ ac_ngg_get_scratch_lds_size(gl_shader_stage stage,
       } else if (can_cull) {
          /* 1 byte per wave per repack, max 8 waves */
          unsigned num_rep = compact_primitives ? 2 : 1;
-         scratch_lds_size = ALIGN(max_num_waves, 4u) * num_rep;
+         scratch_lds_size = align(max_num_waves, 4u) * num_rep;
       }
    } else {
       assert(stage == MESA_SHADER_GEOMETRY);
 
-      scratch_lds_size = ALIGN(max_num_waves, 4u);
-      /* streamout take 8 dwords for buffer offset and emit vertex per stream */
-      if (streamout_enabled)
-         scratch_lds_size = MAX2(scratch_lds_size, 32);
+      /* Repacking output vertices at the end in ngg_gs_finale() uses 1 dword per 4 waves */
+      scratch_lds_size = align(max_num_waves, 4u);
+
+      /* For streamout:
+       * - Repacking streamout vertices takes 1 dword per 4 waves per stream
+       *   (max 16 bytes for Wave64, 32 bytes for Wave32)
+       * - 1 dword per stream for buffer info
+       *   (16 bytes)
+       * - 1 dword per buffer for buffer info
+       *   (16 bytes)
+       */
+      if (streamout_enabled) {
+         const unsigned num_streams = 4;
+         const unsigned num_so_buffers = 4;
+         const unsigned streamout_scratch_size =
+            num_streams * align(max_num_waves, 4u) + num_streams * 4 + num_so_buffers * 4;
+
+         scratch_lds_size += streamout_scratch_size;
+      }
    }
 
    return scratch_lds_size;

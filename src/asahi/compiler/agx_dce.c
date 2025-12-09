@@ -12,7 +12,7 @@
 void
 agx_dce(agx_context *ctx, bool partial)
 {
-   BITSET_WORD *seen = calloc(BITSET_WORDS(ctx->alloc), sizeof(BITSET_WORD));
+   BITSET_WORD *seen = BITSET_CALLOC(ctx->alloc);
 
    agx_foreach_block(ctx, block) {
       if (block->loop_header) {

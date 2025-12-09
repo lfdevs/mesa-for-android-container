@@ -341,7 +341,7 @@ BEGIN_TEST(insert_waitcnt.waw.vmem_types)
 END_TEST
 
 BEGIN_TEST(insert_waitcnt.waw.point_sample_accel)
-   for (radeon_family family : {CHIP_GFX1150, CHIP_GFX1153}) {
+   for (radeon_family family : {CHIP_STRIX1, CHIP_GFX1153}) {
       if (!setup_cs(NULL, GFX11_5, family, family == CHIP_GFX1153 ? "_3" : "_0"))
          continue;
 
@@ -610,7 +610,8 @@ BEGIN_TEST(insert_waitcnt.vmem_ds)
 
    //! s_wait_storecnt_dscnt dscnt(0) storecnt(0)
    bld.barrier(aco_opcode::p_barrier,
-               memory_sync_info(storage_buffer | storage_shared, semantic_acqrel, scope_workgroup));
+               memory_sync_info(storage_buffer | storage_shared, semantic_acqrel, scope_workgroup),
+               scope_workgroup);
 
    finish_waitcnt_test();
 END_TEST
@@ -1119,7 +1120,7 @@ BEGIN_TEST(insert_waitcnt.flat.barrier)
                  memory_sync_info(storage_buffer));
       bld.flat(aco_opcode::flat_load_dword, dest1, addr, Operand(s1)).instr->flat().may_use_lds = true;
       bld.barrier(aco_opcode::p_barrier,
-                  memory_sync_info(storage_buffer, semantic_acqrel, scope_device));
+                  memory_sync_info(storage_buffer, semantic_acqrel, scope_device), scope_workgroup);
 
       //>> p_unit_test 1
       //! v1: %0:v[5] = flat_load_dword %0:v[0-1], s1: undef may_use_lds storage:buffer
@@ -1132,7 +1133,7 @@ BEGIN_TEST(insert_waitcnt.flat.barrier)
                memory_sync_info(storage_buffer)).instr->flat().may_use_lds = true;
       bld.global(aco_opcode::global_load_dword, dest0, addr, Operand(s1), 0);
       bld.barrier(aco_opcode::p_barrier,
-                  memory_sync_info(storage_buffer, semantic_acqrel, scope_device));
+                  memory_sync_info(storage_buffer, semantic_acqrel, scope_device), scope_workgroup);
 
       //>> p_unit_test 2
       //! flat_store_dword %0:v[0-1], s1: undef, %0:v[0] may_use_lds storage:buffer
@@ -1144,7 +1145,412 @@ BEGIN_TEST(insert_waitcnt.flat.barrier)
       bld.flat(aco_opcode::flat_store_dword, addr, Operand(s1), data, 0,
                memory_sync_info(storage_buffer)).instr->flat().may_use_lds = true;
       bld.barrier(aco_opcode::p_barrier,
-                  memory_sync_info(storage_buffer, semantic_acqrel, scope_device));
+                  memory_sync_info(storage_buffer, semantic_acqrel, scope_device), scope_workgroup);
+
+      finish_waitcnt_test();
+   }
+END_TEST
+
+static void
+barrier(unsigned storage, unsigned semantics, sync_scope scope,
+        sync_scope exec_scope = scope_invocation)
+{
+   bld.barrier(aco_opcode::p_barrier, memory_sync_info(storage, semantics, scope), exec_scope);
+}
+
+static Definition&
+load_global(unsigned semantics = 0, sync_scope scope = scope_invocation)
+{
+   Definition dest0(PhysReg(260), v1);
+   Operand addr(PhysReg(256), v2);
+   return bld
+      .global(aco_opcode::global_load_dword, dest0, addr, Operand(s1), 0,
+              memory_sync_info(storage_buffer, semantics, scope))
+      .def(0);
+}
+
+static void
+store_global(unsigned semantics = 0, sync_scope scope = scope_invocation)
+{
+   Operand addr(PhysReg(256), v2);
+   Operand data(PhysReg(256), v1);
+   bld.global(aco_opcode::global_store_dword, addr, Operand(s1), data, 0,
+              memory_sync_info(storage_buffer, semantics, scope));
+}
+
+static Definition&
+load_shared(unsigned semantics = 0, sync_scope scope = scope_invocation)
+{
+   Definition dest0(PhysReg(260), v1);
+   Operand offset(PhysReg(256), v1);
+   Builder::Result res = bld.ds(aco_opcode::ds_read_b32, dest0, offset);
+   res.instr->ds().sync = memory_sync_info(storage_shared, semantics, scope);
+   return res.def(0);
+}
+
+static void
+store_shared(unsigned semantics = 0, sync_scope scope = scope_invocation)
+{
+   Operand offset(PhysReg(256), v1);
+   Operand data(PhysReg(256), v1);
+   bld.ds(aco_opcode::ds_write_b32, offset, data).instr->ds().sync =
+      memory_sync_info(storage_shared, semantics, scope);
+}
+
+struct barrier_test_variant {
+   unsigned workgroup_size;
+   bool wgp;
+   const char* name;
+};
+
+static const barrier_test_variant barrier_test_variants[] = {
+   {64, false, "_wg64cu"},
+   {128, false, "_wg128cu"},
+   {64, true, "_wg64wgp"},
+   {128, true, "_wg128wgp"},
+};
+
+BEGIN_TEST(insert_waitcnt.barrier.release)
+   for (barrier_test_variant var : barrier_test_variants) {
+      if (!setup_cs(NULL, GFX10, CHIP_UNKNOWN, var.name))
+         continue;
+
+      program->workgroup_size = var.workgroup_size;
+      program->wgp_mode = var.wgp;
+
+      Definition dest0(PhysReg(260), v1);
+      Definition dest1(PhysReg(261), v1);
+      Operand addr(PhysReg(256), v2);
+      Operand offset(PhysReg(256), v1);
+      Operand data(PhysReg(256), v1);
+
+      /* global->global, device scope */
+      //>> p_unit_test 0
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //! s_waitcnt_vscnt %0:null imm:0
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+      store_global();
+      barrier(storage_buffer, semantic_release, scope_device);
+      store_global(semantic_atomic);
+
+      //>> p_unit_test 1
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      //! s_waitcnt vmcnt(0)
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+      load_global();
+      barrier(storage_buffer, semantic_release, scope_device);
+      store_global(semantic_atomic);
+
+      /* global->global, workgroup scope */
+      //>> p_unit_test 2
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //~gfx10_wg128wgp! s_waitcnt_vscnt %0:null imm:0
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+      store_global();
+      barrier(storage_buffer, semantic_release, scope_workgroup);
+      store_global(semantic_atomic);
+
+      //>> p_unit_test 3
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      //~gfx10_wg128wgp! s_waitcnt vmcnt(0)
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+      load_global();
+      barrier(storage_buffer, semantic_release, scope_workgroup);
+      store_global(semantic_atomic);
+
+      /* shared->shared */
+      //>> p_unit_test 4
+      //! ds_write_b32 %0:v[0], %0:v[0] storage:shared
+      //! ds_write_b32 %0:v[0], %0:v[0] storage:shared semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+      store_shared();
+      barrier(storage_shared, semantic_release, scope_workgroup);
+      store_shared(semantic_atomic);
+
+      //>> p_unit_test 5
+      //! v1: %0:v[4] = ds_read_b32 %0:v[0] storage:shared
+      //! ds_write_b32 %0:v[0], %0:v[0] storage:shared semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+      load_shared();
+      barrier(storage_shared, semantic_release, scope_workgroup);
+      store_shared(semantic_atomic);
+
+      /* shared->global */
+      //>> p_unit_test 6
+      //! ds_write_b32 %0:v[0], %0:v[0] storage:shared
+      //~gfx10_wg128(cu|wgp)! s_waitcnt lgkmcnt(0)
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+      store_shared();
+      barrier(storage_buffer | storage_shared, semantic_release, scope_workgroup);
+      store_global(semantic_atomic);
+
+      /* global->shared */
+      //>> p_unit_test 7
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //~gfx10_wg128(cu|wgp)! s_waitcnt_vscnt %0:null imm:0
+      //! ds_write_b32 %0:v[0], %0:v[0] storage:shared semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+      store_global();
+      barrier(storage_buffer | storage_shared, semantic_release, scope_workgroup);
+      store_shared(semantic_atomic);
+
+      /* global->global, device scope, release in the atomic */
+      //>> p_unit_test 8
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //! s_waitcnt_vscnt %0:null imm:0
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:release,atomic scope:device
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+      store_global();
+      store_global(semantic_atomic | semantic_release, scope_device);
+
+      /* global->global, workgroup scope, control barrier */
+      //>> p_unit_test 9
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //~gfx10_wg128wgp! s_waitcnt_vscnt %0:null imm:0
+      //~gfx10_wg128cu! s_waitcnt_depctr vm_vsrc(0)
+      //! s_barrier
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+      store_global();
+      barrier(storage_buffer, semantic_release, scope_workgroup);
+      barrier(0, 0, scope_invocation, scope_workgroup);
+      bld.sopp(aco_opcode::s_barrier);
+
+      /* shared->shared, workgroup scope, control barrier */
+      //>> p_unit_test 10
+      //! ds_write_b32 %0:v[0], %0:v[0] storage:shared
+      //~gfx10_wg128cu! s_waitcnt_depctr vm_vsrc(0)
+      //~gfx10_wg128wgp! s_waitcnt lgkmcnt(0)
+      //! s_barrier
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
+      store_shared();
+      barrier(storage_shared, semantic_release, scope_workgroup);
+      barrier(0, 0, scope_invocation, scope_workgroup);
+      bld.sopp(aco_opcode::s_barrier);
+
+      /* global->global, device scope, delayed waitcnt */
+      //>> p_unit_test 11
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //! v_nop
+      //! s_waitcnt_vscnt %0:null imm:0
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
+      store_global();
+      barrier(storage_buffer, semantic_release, scope_device);
+      bld.vop1(aco_opcode::v_nop);
+      store_global(semantic_atomic);
+
+      //>> p_unit_test 12
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //! v_nop
+      //! s_waitcnt_vscnt %0:null imm:0
+      //! v_nop
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(12));
+      store_global();
+      barrier(storage_buffer, semantic_release, scope_device);
+      bld.vop1(aco_opcode::v_nop);
+      wait_imm vs_imm;
+      vs_imm.vs = 0;
+      vs_imm.build_waitcnt(bld);
+      bld.vop1(aco_opcode::v_nop);
+      store_global(semantic_atomic);
+
+      //>> p_unit_test 13
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:private
+      //! v_nop
+      //! s_waitcnt_vscnt %0:null imm:1
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer semantics:atomic
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(13));
+      store_global();
+      barrier(storage_buffer, semantic_release, scope_device);
+      store_global(semantic_private);
+      bld.vop1(aco_opcode::v_nop); /* break up clause */
+      store_global(semantic_atomic);
+
+      finish_waitcnt_test();
+   }
+END_TEST
+
+BEGIN_TEST(insert_waitcnt.barrier.acquire)
+   for (barrier_test_variant var : barrier_test_variants) {
+      if (!setup_cs(NULL, GFX10, CHIP_UNKNOWN, var.name))
+         continue;
+
+      program->workgroup_size = var.workgroup_size;
+      program->wgp_mode = var.wgp;
+
+      Definition dest0(PhysReg(260), v1);
+      Definition dest1(PhysReg(261), v1);
+      Definition dest2(PhysReg(262), v1);
+      Operand addr(PhysReg(256), v2);
+      Operand offset(PhysReg(256), v1);
+      Operand data(PhysReg(256), v1);
+
+      /* global->global, device scope */
+      //>> p_unit_test 0
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //! s_waitcnt vmcnt(0)
+      //! v1: %0:v[5] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
+      load_global(semantic_atomic);
+      barrier(storage_buffer, semantic_acquire, scope_device);
+      load_global() = dest1;
+
+      //>> p_unit_test 1
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //! s_waitcnt vmcnt(0)
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
+      load_global(semantic_atomic);
+      barrier(storage_buffer, semantic_acquire, scope_device);
+      store_global();
+
+      /* global->global, workgroup scope */
+      //>> p_unit_test 2
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //~gfx10_wg128wgp! s_waitcnt vmcnt(0)
+      //! v1: %0:v[5] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
+      load_global(semantic_atomic);
+      barrier(storage_buffer, semantic_acquire, scope_workgroup);
+      load_global() = dest1;
+
+      //>> p_unit_test 3
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //~gfx10_wg128wgp! s_waitcnt vmcnt(0)
+      //! global_store_dword %0:v[0-1], s1: undef, %0:v[0] storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
+      load_global(semantic_atomic);
+      barrier(storage_buffer, semantic_acquire, scope_workgroup);
+      store_global();
+
+      /* shared->shared */
+      //>> p_unit_test 4
+      //! v1: %0:v[4] = ds_read_b32 %0:v[0] storage:shared semantics:atomic
+      //! v1: %0:v[5] = ds_read_b32 %0:v[0] storage:shared
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
+      load_shared(semantic_atomic);
+      barrier(storage_shared, semantic_acquire, scope_workgroup);
+      load_shared() = dest1;
+
+      //>> p_unit_test 5
+      //! v1: %0:v[4] = ds_read_b32 %0:v[0] storage:shared semantics:atomic
+      //! ds_write_b32 %0:v[0], %0:v[0] storage:shared
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
+      load_shared(semantic_atomic);
+      barrier(storage_shared, semantic_acquire, scope_workgroup);
+      store_shared();
+
+      /* shared->global */
+      //>> p_unit_test 6
+      //! v1: %0:v[4] = ds_read_b32 %0:v[0] storage:shared semantics:atomic
+      //~gfx10_wg128(cu|wgp)! s_waitcnt lgkmcnt(0)
+      //! v1: %0:v[5] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
+      load_shared(semantic_atomic);
+      barrier(storage_buffer | storage_shared, semantic_acquire, scope_workgroup);
+      load_global() = dest1;
+
+      /* global->shared */
+      //>> p_unit_test 7
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //~gfx10_wg128(cu|wgp)! s_waitcnt vmcnt(0)
+      //! v1: %0:v[5] = ds_read_b32 %0:v[0] storage:shared
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
+      load_global(semantic_atomic);
+      barrier(storage_buffer | storage_shared, semantic_acquire, scope_workgroup);
+      load_shared() = dest1;
+
+      /* global->global, device scope, acquire in the atomic */
+      //>> p_unit_test 8
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:acquire,atomic scope:device
+      //! s_waitcnt vmcnt(0)
+      //! v1: %0:v[5] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8));
+      load_global(semantic_atomic | semantic_acquire, scope_device);
+      load_global() = dest1;
+
+      /* global->global, workgroup scope, control barrier */
+      //>> p_unit_test 9
+      //! s_barrier
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9));
+      barrier(0, 0, scope_invocation, scope_workgroup);
+      bld.sopp(aco_opcode::s_barrier);
+      barrier(storage_buffer, semantic_acquire, scope_workgroup);
+      load_global();
+
+      /* global->global, device scope, delayed waitcnt */
+      //>> p_unit_test 10
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //! v_nop
+      //! s_waitcnt vmcnt(0)
+      //! v1: %0:v[5] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
+      load_global(semantic_atomic);
+      barrier(storage_buffer, semantic_acquire, scope_device);
+      bld.vop1(aco_opcode::v_nop);
+      load_global() = dest1;
+
+      //>> p_unit_test 11
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //! v_nop
+      //! s_waitcnt vmcnt(0)
+      //! v_nop
+      //! v1: %0:v[5] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(11));
+      load_global(semantic_atomic);
+      barrier(storage_buffer, semantic_acquire, scope_device);
+      bld.vop1(aco_opcode::v_nop);
+      wait_imm vm_imm;
+      vm_imm.vm = 0;
+      vm_imm.build_waitcnt(bld);
+      bld.vop1(aco_opcode::v_nop);
+      load_global() = dest1;
+
+      //>> p_unit_test 12
+      //! v1: %0:v[4] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:atomic
+      //! v1: %0:v[5] = global_load_dword %0:v[0-1], s1: undef storage:buffer semantics:private
+      //! v_nop
+      //! s_waitcnt vmcnt(1)
+      //! v1: %0:v[6] = global_load_dword %0:v[0-1], s1: undef storage:buffer
+      bld.reset(program->create_and_insert_block());
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(12));
+      load_global(semantic_atomic);
+      barrier(storage_buffer, semantic_acquire, scope_device);
+      load_global(semantic_private) = dest1;
+      bld.vop1(aco_opcode::v_nop); /* break up clause */
+      load_global() = dest2;
 
       finish_waitcnt_test();
    }

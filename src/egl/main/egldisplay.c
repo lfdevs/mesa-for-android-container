@@ -43,6 +43,7 @@
 #include "c11/threads.h"
 #include "util/macros.h"
 #include "util/os_file.h"
+#include "util/os_misc.h"
 #include "util/u_atomic.h"
 
 #include "eglcontext.h"
@@ -98,10 +99,10 @@ _eglGetNativePlatformFromEnv(void)
    static_assert(ARRAY_SIZE(egl_platforms) == _EGL_NUM_PLATFORMS,
                  "Missing platform");
 
-   plat_name = getenv("EGL_PLATFORM");
+   plat_name = os_get_option("EGL_PLATFORM");
    /* try deprecated env variable */
    if (!plat_name || !plat_name[0])
-      plat_name = getenv("EGL_DISPLAY");
+      plat_name = os_get_option("EGL_DISPLAY");
    if (!plat_name || !plat_name[0])
       return _EGL_INVALID_PLATFORM;
 

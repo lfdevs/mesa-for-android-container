@@ -1,10 +1,14 @@
 test_fence_wait_robustness,Crash
-test_sampler_feedback_min_mip_level_array,Fail
-test_sampler_rounding,Fail
-test_sm67_dynamic_texture_offset,Fail
+
 # Undefined behavior not supported unless EXT_descriptor_buffer is
 # used or running on Gfx12.5+ where we don't do descriptor indirection
 # (prior generations have a descriptor heap too small 64MB)
-test_undefined_read_typed_buffer_as_untyped_dxbc,Fail
-test_undefined_read_typed_buffer_as_untyped_dxil,Fail
-test_line_rasterization,Fail
+test_undefined_read_typed_buffer_as_untyped_simple_dxbc,Fail
+test_undefined_read_typed_buffer_as_untyped_simple_dxil,Fail
+test_undefined_structured_raw_read_typed_dxbc,Fail
+test_undefined_structured_raw_read_typed_dxil,Fail
+test_undefined_typed_read_structured_raw_dxbc,Fail
+test_undefined_typed_read_structured_raw_dxil,Fail
+
+# xe 0000:00:02.0: [drm] GT0: Timedout job: seqno=4294967172, lrc_seqno=4294967172, guc_id=2, flags=0x0 in d3d12 [871]
+test_fence_pending_signal_cpu_rewind_plain,Crash

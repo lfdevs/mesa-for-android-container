@@ -42,7 +42,7 @@ public:
    ir_mat_op_to_vec_visitor()
    {
       this->made_progress = false;
-      this->mem_ctx = NULL;
+      this->linalloc = NULL;
    }
 
    ir_visitor_status visit_leave(ir_assignment *);
@@ -61,7 +61,7 @@ public:
    void do_equal_mat_mat(ir_dereference *result, ir_dereference *a,
                          ir_dereference *b, bool test_equal);
 
-   void *mem_ctx;
+   linear_ctx *linalloc;
    bool made_progress;
 };
 
@@ -85,7 +85,7 @@ mat_op_to_vec_predicate(ir_instruction *ir)
 }
 
 bool
-do_mat_op_to_vec(exec_list *instructions)
+do_mat_op_to_vec(ir_exec_list *instructions)
 {
    ir_mat_op_to_vec_visitor v;
 
@@ -105,17 +105,17 @@ ir_mat_op_to_vec_visitor::get_element(ir_dereference *val, int col, int row)
 {
    val = get_column(val, col);
 
-   return new(mem_ctx) ir_swizzle(val, row, 0, 0, 0, 1);
+   return new(linalloc) ir_swizzle(val, row, 0, 0, 0, 1);
 }
 
 ir_dereference *
 ir_mat_op_to_vec_visitor::get_column(ir_dereference *val, int row)
 {
-   val = val->clone(mem_ctx, NULL);
+   val = val->clone(linalloc, NULL);
 
    if (glsl_type_is_matrix(val->type)) {
-      val = new(mem_ctx) ir_dereference_array(val,
-                                              new(mem_ctx) ir_constant(row));
+      val = new(linalloc) ir_dereference_array(val,
+                                              new(linalloc) ir_constant(row));
    }
 
    return val;
@@ -132,7 +132,7 @@ ir_mat_op_to_vec_visitor::do_mul_mat_mat(ir_dereference *result,
 
    for (b_col = 0; b_col < b->type->matrix_columns; b_col++) {
       /* first column */
-      expr = new(mem_ctx) ir_expression(ir_binop_mul,
+      expr = new(linalloc) ir_expression(ir_binop_mul,
                                         get_column(a, 0),
                                         get_element(b, b_col, 0));
 
@@ -140,15 +140,15 @@ ir_mat_op_to_vec_visitor::do_mul_mat_mat(ir_dereference *result,
       for (i = 1; i < a->type->matrix_columns; i++) {
          ir_expression *mul_expr;
 
-         mul_expr = new(mem_ctx) ir_expression(ir_binop_mul,
+         mul_expr = new(linalloc) ir_expression(ir_binop_mul,
                                                get_column(a, i),
                                                get_element(b, b_col, i));
-         expr = new(mem_ctx) ir_expression(ir_binop_add,
+         expr = new(linalloc) ir_expression(ir_binop_add,
                                            expr,
                                            mul_expr);
       }
 
-      assign = new(mem_ctx) ir_assignment(get_column(result, b_col), expr);
+      assign = new(linalloc) ir_assignment(get_column(result, b_col), expr);
       base_ir->insert_before(assign);
    }
 }
@@ -163,7 +163,7 @@ ir_mat_op_to_vec_visitor::do_mul_mat_vec(ir_dereference *result,
    ir_expression *expr;
 
    /* first column */
-   expr = new(mem_ctx) ir_expression(ir_binop_mul,
+   expr = new(linalloc) ir_expression(ir_binop_mul,
                                      get_column(a, 0),
                                      get_element(b, 0, 0));
 
@@ -171,14 +171,14 @@ ir_mat_op_to_vec_visitor::do_mul_mat_vec(ir_dereference *result,
    for (i = 1; i < a->type->matrix_columns; i++) {
       ir_expression *mul_expr;
 
-      mul_expr = new(mem_ctx) ir_expression(ir_binop_mul,
+      mul_expr = new(linalloc) ir_expression(ir_binop_mul,
                                             get_column(a, i),
                                             get_element(b, 0, i));
-      expr = new(mem_ctx) ir_expression(ir_binop_add, expr, mul_expr);
+      expr = new(linalloc) ir_expression(ir_binop_add, expr, mul_expr);
    }
 
-   result = result->clone(mem_ctx, NULL);
-   assign = new(mem_ctx) ir_assignment(result, expr);
+   result = result->clone(linalloc, NULL);
+   assign = new(linalloc) ir_assignment(result, expr);
    base_ir->insert_before(assign);
 }
 
@@ -194,14 +194,14 @@ ir_mat_op_to_vec_visitor::do_mul_vec_mat(ir_dereference *result,
       ir_expression *column_expr;
       ir_assignment *column_assign;
 
-      column_result = result->clone(mem_ctx, NULL);
-      column_result = new(mem_ctx) ir_swizzle(column_result, i, 0, 0, 0, 1);
+      column_result = result->clone(linalloc, NULL);
+      column_result = new(linalloc) ir_swizzle(column_result, i, 0, 0, 0, 1);
 
-      column_expr = new(mem_ctx) ir_expression(ir_binop_dot,
-                                               a->clone(mem_ctx, NULL),
+      column_expr = new(linalloc) ir_expression(ir_binop_dot,
+                                               a->clone(linalloc, NULL),
                                                get_column(b, i));
 
-      column_assign = new(mem_ctx) ir_assignment(column_result,
+      column_assign = new(linalloc) ir_assignment(column_result,
                                                  column_expr);
       base_ir->insert_before(column_assign);
    }
@@ -218,11 +218,11 @@ ir_mat_op_to_vec_visitor::do_mul_mat_scalar(ir_dereference *result,
       ir_expression *column_expr;
       ir_assignment *column_assign;
 
-      column_expr = new(mem_ctx) ir_expression(ir_binop_mul,
+      column_expr = new(linalloc) ir_expression(ir_binop_mul,
                                                get_column(a, i),
-                                               b->clone(mem_ctx, NULL));
+                                               b->clone(linalloc, NULL));
 
-      column_assign = new(mem_ctx) ir_assignment(get_column(result, i),
+      column_assign = new(linalloc) ir_assignment(get_column(result, i),
                                                  column_expr);
       base_ir->insert_before(column_assign);
    }
@@ -257,37 +257,37 @@ ir_mat_op_to_vec_visitor::do_equal_mat_mat(ir_dereference *result,
       glsl_simple_type(GLSL_TYPE_BOOL, columns, 1);
 
    ir_variable *const tmp_bvec =
-      new(this->mem_ctx) ir_variable(bvec_type, "mat_cmp_bvec",
+      new(this->linalloc) ir_variable(bvec_type, "mat_cmp_bvec",
                                      ir_var_temporary);
    this->base_ir->insert_before(tmp_bvec);
 
    for (unsigned i = 0; i < columns; i++) {
       ir_expression *const cmp =
-         new(this->mem_ctx) ir_expression(ir_binop_any_nequal,
+         new(this->linalloc) ir_expression(ir_binop_any_nequal,
                                           get_column(a, i),
                                           get_column(b, i));
 
       ir_dereference *const lhs =
-         new(this->mem_ctx) ir_dereference_variable(tmp_bvec);
+         new(this->linalloc) ir_dereference_variable(tmp_bvec);
 
       ir_assignment *const assign =
-         new(this->mem_ctx) ir_assignment(lhs, cmp, 1U << i);
+         new(this->linalloc) ir_assignment(lhs, cmp, 1U << i);
 
       this->base_ir->insert_before(assign);
    }
 
-   ir_rvalue *const val = new(this->mem_ctx) ir_dereference_variable(tmp_bvec);
+   ir_rvalue *const val = new(this->linalloc) ir_dereference_variable(tmp_bvec);
    uint8_t vec_elems = val->type->vector_elements;
    ir_expression *any =
-      new(this->mem_ctx) ir_expression(ir_binop_any_nequal, val,
-                                       new(this->mem_ctx) ir_constant(false,
+      new(this->linalloc) ir_expression(ir_binop_any_nequal, val,
+                                       new(this->linalloc) ir_constant(false,
                                                                       vec_elems));
 
    if (test_equal)
-      any = new(this->mem_ctx) ir_expression(ir_unop_logic_not, any);
+      any = new(this->linalloc) ir_expression(ir_unop_logic_not, any);
 
    ir_assignment *const assign =
-      new(mem_ctx) ir_assignment(result->clone(mem_ctx, NULL), any);
+      new(linalloc) ir_assignment(result->clone(linalloc, NULL), any);
    base_ir->insert_before(assign);
 }
 
@@ -320,7 +320,7 @@ ir_mat_op_to_vec_visitor::visit_leave(ir_assignment *orig_assign)
 
    assert(orig_expr->num_operands <= 2);
 
-   mem_ctx = ralloc_parent(orig_assign);
+   linalloc = orig_assign->node_linalloc;
 
    ir_dereference_variable *result =
       orig_assign->lhs->as_dereference_variable();
@@ -343,7 +343,7 @@ ir_mat_op_to_vec_visitor::visit_leave(ir_assignment *orig_assign)
       /* Otherwise, store the operand in a temporary generally if it's
        * not a dereference.
        */
-      ir_variable *var = new(mem_ctx) ir_variable(orig_expr->operands[i]->type,
+      ir_variable *var = new(linalloc) ir_variable(orig_expr->operands[i]->type,
                                                   "mat_op_to_vec",
                                                   ir_var_temporary);
       base_ir->insert_before(var);
@@ -351,8 +351,8 @@ ir_mat_op_to_vec_visitor::visit_leave(ir_assignment *orig_assign)
       /* Note that we use this dereference for the assignment.  That means
        * that others that want to use op[i] have to clone the deref.
        */
-      op[i] = new(mem_ctx) ir_dereference_variable(var);
-      assign = new(mem_ctx) ir_assignment(op[i], orig_expr->operands[i]);
+      op[i] = new(linalloc) ir_dereference_variable(var);
+      assign = new(linalloc) ir_assignment(op[i], orig_expr->operands[i]);
       base_ir->insert_before(assign);
    }
 
@@ -369,10 +369,10 @@ ir_mat_op_to_vec_visitor::visit_leave(ir_assignment *orig_assign)
          ir_expression *column_expr;
          ir_assignment *column_assign;
 
-         column_expr = new(mem_ctx) ir_expression(orig_expr->operation,
+         column_expr = new(linalloc) ir_expression(orig_expr->operation,
                                                   get_column(op[0], i));
 
-         column_assign = new(mem_ctx) ir_assignment(get_column(result, i),
+         column_assign = new(linalloc) ir_assignment(get_column(result, i),
                                                     column_expr);
          assert(column_assign->write_mask != 0);
          base_ir->insert_before(column_assign);
@@ -391,11 +391,11 @@ ir_mat_op_to_vec_visitor::visit_leave(ir_assignment *orig_assign)
          ir_expression *column_expr;
          ir_assignment *column_assign;
 
-         column_expr = new(mem_ctx) ir_expression(orig_expr->operation,
+         column_expr = new(linalloc) ir_expression(orig_expr->operation,
                                                   get_column(op[0], i),
                                                   get_column(op[1], i));
 
-         column_assign = new(mem_ctx) ir_assignment(get_column(result, i),
+         column_assign = new(linalloc) ir_assignment(get_column(result, i),
                                                     column_expr);
          assert(column_assign->write_mask != 0);
          base_ir->insert_before(column_assign);

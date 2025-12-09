@@ -48,8 +48,14 @@ draw_texture(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
    if (ctx->NewState)
       _mesa_update_state(ctx);
 
+   if (!ctx->DrawPixValid) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "glDrawPixels");
+      goto end;
+   }
+
    st_DrawTex(ctx, x, y, z, width, height);
 
+end:
    _mesa_set_vp_override(ctx, GL_FALSE);
 }
 

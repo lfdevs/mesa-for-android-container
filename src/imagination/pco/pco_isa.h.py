@@ -42,7 +42,7 @@ static unsigned ${bit_set.name}_bytes(enum ${bit_set.name}_variant variant)
    default: break;
    }
 
-   unreachable();
+   UNREACHABLE("");
 }
 
 static unsigned ${bit_set.name}_encode_field(uint8_t *bin, enum ${bit_set.name}_field field, uint64_t val)
@@ -71,7 +71,7 @@ static unsigned ${bit_set.name}_encode_field(uint8_t *bin, enum ${bit_set.name}_
       break;
    }
 
-   unreachable();
+   UNREACHABLE("");
 }
 
    % for bit_struct in bit_set.bit_structs.values():

@@ -90,23 +90,23 @@ virgl_has_scanout_format(struct virgl_screen *vscreen,
                          bool may_emulate_bgra);
 
 static inline enum virgl_shader_stage
-virgl_shader_stage_convert(enum pipe_shader_type type)
+virgl_shader_stage_convert(mesa_shader_stage type)
 {
    switch (type) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       return VIRGL_SHADER_VERTEX;
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       return VIRGL_SHADER_TESS_CTRL;
-   case PIPE_SHADER_TESS_EVAL:
+   case MESA_SHADER_TESS_EVAL:
       return VIRGL_SHADER_TESS_EVAL;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       return VIRGL_SHADER_GEOMETRY;
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       return VIRGL_SHADER_FRAGMENT;
-   case PIPE_SHADER_COMPUTE:
+   case MESA_SHADER_COMPUTE:
       return VIRGL_SHADER_COMPUTE;
    default:
-      unreachable("virgl: unknown shader stage.\n");
+      UNREACHABLE("virgl: unknown shader stage.\n");
    }
 }
 

@@ -613,8 +613,10 @@ uint16_t vpe_get_num_segments(struct vpe_priv *vpe_priv, const struct vpe_rect *
     return (uint16_t)(max(max(num_seg_src, num_seg_dst), 1));
 }
 
-bool should_generate_cmd_info(enum vpe_stream_type stream_type)
+bool should_generate_cmd_info(struct stream_ctx *stream_ctx)
 {
+    enum vpe_stream_type stream_type = stream_ctx->stream_type;
+
     switch (stream_type) {
     case VPE_STREAM_TYPE_INPUT:
     case VPE_STREAM_TYPE_BG_GEN:
@@ -634,6 +636,9 @@ void vpe_clip_stream(
 
     struct vpe_rect clipped_dst_rect, clipped_src_rect;
     uint32_t        clipped_pixels;
+
+    if (dst_rect->height == 0 && dst_rect->width == 0)
+        return;
 
     clipped_dst_rect = *dst_rect;
     clipped_src_rect = *src_rect;
@@ -822,3 +827,34 @@ bool vpe_rec_is_equal(struct vpe_rect rec1, struct vpe_rect rec2)
             rec1.height == rec2.height);
 }
 
+const struct vpe_caps *vpe_get_capability(enum vpe_ip_level ip_level)
+{
+    const struct vpe_caps *caps;
+    switch (ip_level) {
+    case VPE_IP_LEVEL_1_0:
+        caps = vpe10_get_capability();
+        break;
+    case VPE_IP_LEVEL_1_1:
+        caps = vpe11_get_capability();
+        break;
+
+    default:
+        caps = NULL;
+    }
+    return caps;
+}
+
+void vpe_setup_check_funcs(struct vpe_check_support_funcs *funcs, enum vpe_ip_level ip_level)
+{
+    switch (ip_level) {
+    case VPE_IP_LEVEL_1_0:
+        vpe10_setup_check_funcs(funcs);
+        break;
+    case VPE_IP_LEVEL_1_1:
+        vpe11_setup_check_funcs(funcs);
+        break;
+    default:
+        break;
+    }
+    return;
+}

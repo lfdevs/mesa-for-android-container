@@ -45,7 +45,7 @@ if with_tests
     'test_wgl',
     files('tests/wgl_tests.cpp'),
     cpp_args : [cpp_msvc_compat_args, extra_test_defs],
-    dependencies : [idep_gtest, dep_dxheaders, extra_test_deps],
+    dependencies : [idep_gtest, idep_mesautil, dep_dxheaders, extra_test_deps],
   )
 
   wgl_test_env = environment()

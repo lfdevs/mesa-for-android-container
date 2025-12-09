@@ -280,7 +280,7 @@ create_new_io_vars(nir_shader *shader, nir_variable_mode mode,
          for (unsigned i = first; i < frac; i++) {
             new_vars[loc][i] = var;
             if (old_vars[loc][i]) {
-               util_dynarray_append(demote_vars, nir_variable *, old_vars[loc][i]);
+               util_dynarray_append(demote_vars, old_vars[loc][i]);
                old_vars[loc][i] = NULL;
             }
          }
@@ -356,7 +356,7 @@ build_array_index(nir_builder *b, nir_deref_instr *deref, nir_def *base,
          nir_amul_imm(b, index, glsl_count_attribute_slots(deref->type, vs_in)));
    }
    default:
-      unreachable("Invalid deref instruction type");
+      UNREACHABLE("Invalid deref instruction type");
    }
 }
 
@@ -398,8 +398,7 @@ nir_opt_vectorize_io_vars_impl(nir_function_impl *impl, nir_variable_mode modes)
 
    nir_metadata_require(impl, nir_metadata_dominance);
 
-   struct util_dynarray demote_vars;
-   util_dynarray_init(&demote_vars, NULL);
+   struct util_dynarray demote_vars = UTIL_DYNARRAY_INIT;
 
    nir_shader *shader = impl->function->shader;
    nir_variable *new_inputs[MAX_SLOTS][4] = { { 0 } };
@@ -494,9 +493,7 @@ nir_opt_vectorize_io_vars_impl(nir_function_impl *impl, nir_variable_mode modes)
 
             nir_def *new_vec = nir_channels(&b, &intrin->def,
                                             vec4_comp_mask >> new_frac);
-            nir_def_rewrite_uses_after(&intrin->def,
-                                       new_vec,
-                                       new_vec->parent_instr);
+            nir_def_rewrite_uses_after(&intrin->def, new_vec);
 
             progress = true;
             break;

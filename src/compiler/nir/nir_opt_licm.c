@@ -9,7 +9,7 @@ static bool
 defined_before_loop(nir_src *src, void *state)
 {
    unsigned *loop_preheader_idx = state;
-   return src->ssa->parent_instr->block->index <= *loop_preheader_idx;
+   return nir_def_block(src->ssa)->index <= *loop_preheader_idx;
 }
 
 static bool
@@ -57,7 +57,7 @@ static bool
 should_optimize_loop(nir_loop *loop)
 {
    /* Ignore loops without back-edge */
-   if (nir_loop_first_block(loop)->predecessors->entries == 1)
+   if (nir_loop_first_block(loop)->predecessors.entries == 1)
       return false;
 
    nir_foreach_block_in_cf_node(block, &loop->cf_node) {
@@ -115,7 +115,7 @@ visit_cf_list(struct exec_list *list, nir_block *preheader, nir_block *exit)
          break;
       }
       case nir_cf_node_function:
-         unreachable("NIR LICM: Unsupported cf_node type.");
+         UNREACHABLE("NIR LICM: Unsupported cf_node type.");
       }
    }
 

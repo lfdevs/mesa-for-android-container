@@ -115,7 +115,7 @@ SOURCES = [
         'api': 'gl',
         'inc_folder': 'GL',
         'sources': [
-            Source('src/mapi/glapi/registry/gl.xml', 'https://github.com/KhronosGroup/OpenGL-Registry/raw/main/xml/gl.xml'),
+            Source('src/mesa/glapi/glapi/registry/gl.xml', 'https://github.com/KhronosGroup/OpenGL-Registry/raw/main/xml/gl.xml'),
             Source('include/GL/glcorearb.h',         'https://github.com/KhronosGroup/OpenGL-Registry/raw/main/api/GL/glcorearb.h'),
             Source('include/GL/glext.h',             'https://github.com/KhronosGroup/OpenGL-Registry/raw/main/api/GL/glext.h'),
             Source('include/GL/glxext.h',            'https://github.com/KhronosGroup/OpenGL-Registry/raw/main/api/GL/glxext.h'),

@@ -61,7 +61,7 @@ _mesa_texstore_fxt1(TEXSTORE_PARAMS)
       /* convert image to RGBA/uint8_t */
       uint8_t *tempImageSlices[1];
       int rgbaRowStride = 4 * srcWidth * sizeof(uint8_t);
-      tempImage = malloc(srcWidth * srcHeight * 4 * sizeof(uint8_t));
+      tempImage = malloc((size_t)srcWidth * srcHeight * 4 * sizeof(uint8_t));
       if (!tempImage)
          return GL_FALSE; /* out of memory */
       tempImageSlices[0] = (uint8_t *) tempImage;

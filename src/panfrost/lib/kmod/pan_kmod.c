@@ -80,7 +80,7 @@ pan_kmod_dev_destroy(struct pan_kmod_dev *dev)
 
 struct pan_kmod_bo *
 pan_kmod_bo_alloc(struct pan_kmod_dev *dev, struct pan_kmod_vm *exclusive_vm,
-                  size_t size, uint32_t flags)
+                  uint64_t size, uint32_t flags)
 {
    struct pan_kmod_bo *bo;
 

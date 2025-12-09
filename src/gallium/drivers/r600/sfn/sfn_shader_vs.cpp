@@ -133,8 +133,8 @@ VertexExportForFs::finalize()
 {
    if (m_vs_as_gs_a) {
       auto primid = m_parent->value_factory().temp_vec4(pin_group, {2, 7, 7, 7});
-      m_parent->emit_instruction(new AluInstr(
-         op1_mov, primid[0], m_parent->primitive_id(), AluInstr::last_write));
+      m_parent->emit_instruction(
+         new AluInstr(op1_mov, primid[0], m_parent->primitive_id(), AluInstr::write));
       int param = m_last_param_export ? m_last_param_export->location() + 1 : 0;
 
       m_last_param_export = new ExportInstr(ExportInstr::param, param, primid);
@@ -167,7 +167,7 @@ VertexExportForFs::finalize()
 void
 VertexShader::do_get_shader_info(r600_shader *sh_info)
 {
-   sh_info->processor_type = PIPE_SHADER_VERTEX;
+   sh_info->processor_type = MESA_SHADER_VERTEX;
    sh_info->vs_draw_parameters_enabled =
       m_vertex_id != nullptr || m_draw_parameters_enabled;
    m_export_stage->get_shader_info(sh_info);
@@ -202,9 +202,8 @@ VertexExportForFs::emit_varying_pos(const store_loc& store_info,
       auto src = m_parent->value_factory().src(intr.src[0], 0);
       auto clamped = m_parent->value_factory().temp_register();
       m_parent->emit_instruction(
-         new AluInstr(op1_mov, clamped, src, {alu_write, alu_dst_clamp, alu_last_instr}));
-      auto alu =
-         new AluInstr(op1_flt_to_int, out_value[1], clamped, AluInstr::last_write);
+         new AluInstr(op1_mov, clamped, src, {alu_write, alu_dst_clamp}));
+      auto alu = new AluInstr(op1_flt_to_int, out_value[1], clamped, AluInstr::write);
       if (m_parent->chip_class() < ISA_CC_EVERGREEN)
          alu->set_alu_flag(alu_is_trans);
       m_parent->emit_instruction(alu);
@@ -277,8 +276,6 @@ VertexExportForFs::emit_varying_param(const store_loc& store_info,
          m_parent->emit_instruction(alu);
       }
    }
-   if (alu)
-      alu->set_alu_flag(alu_last_instr);
 
    m_last_param_export = new ExportInstr(ExportInstr::param, export_slot, value);
    m_output_registers[nir_intrinsic_base(&intr)] = &m_last_param_export->value();
@@ -352,8 +349,6 @@ VertexExportForFs::emit_stream(int stream)
             alu = new AluInstr(op1_mov, tmp[i][j], (*so_gpr[i])[j + sc], {alu_write});
             m_parent->emit_instruction(alu);
          }
-         if (alu)
-            alu->set_alu_flag(alu_last_instr);
 
          start_comp[i] = 0;
          so_gpr[i] = &tmp[i];
@@ -657,8 +652,6 @@ VertexExportForGS::do_store_output(const store_loc& store_info,
                         AluInstr::write);
       m_parent->emit_instruction(ir);
    }
-   if (ir)
-      ir->set_alu_flag(alu_last_instr);
 
    m_parent->emit_instruction(new MemRingOutInstr(
       cf_mem_ring, MemRingOutInstr::mem_write, value, ring_offset >> 2, 4, nullptr));

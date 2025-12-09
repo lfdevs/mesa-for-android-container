@@ -1,0 +1,399 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://nouveau.freedesktop.org/"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
+
+<copyright year="2024">
+
+<author name="Tomeu Vizoso" email="tomeu@tomeuvizoso.net"><nick name="tomeu"/>
+Initial Author.
+</author>
+
+<license>
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice (including the
+next paragraph) shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE COPYRIGHT OWNER(S) AND/OR ITS SUPPLIERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+</license>
+
+</copyright>
+
+<domain name="CMD0" width="32">
+   <reg32 offset="0x0" name="NPU_OP_STOP">
+      <bitfield name="mask" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x1" name="NPU_OP_IRQ">
+      <bitfield name="mask" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x2" name="NPU_OP_CONV">
+      <bitfield name="reserved0" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x3" name="NPU_OP_DEPTHWISE">
+      <bitfield name="reserved0" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x5" name="NPU_OP_POOL">
+      <bitfield name="mode" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x6" name="NPU_OP_ELEMENTWISE">
+      <bitfield name="mode" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x10" name="NPU_OP_DMA_START">
+      <bitfield name="channel_mode" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x11" name="NPU_OP_DMA_WAIT">
+      <bitfield name="reserved0" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x12" name="NPU_OP_KERNEL_WAIT">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x13" name="NPU_OP_PMU_MASK">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x100" name="NPU_SET_IFM_PAD_TOP">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x101" name="NPU_SET_IFM_PAD_LEFT">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x102" name="NPU_SET_IFM_PAD_RIGHT">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x103" name="NPU_SET_IFM_PAD_BOTTOM">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x104" name="NPU_SET_IFM_DEPTH_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x105" name="NPU_SET_IFM_PRECISION">
+      <bitfield name="round_mode" low="14" high="15" type="uint"/>
+      <bitfield name="reserved2" low="10" high="13" type="uint"/>
+      <bitfield name="scale_mode" low="8" high="9" type="uint"/>
+      <bitfield name="format" low="6" high="7" type="uint"/>
+      <bitfield name="reserved1" low="4" high="5" type="uint"/>
+      <bitfield name="precision" low="2" high="3" type="uint"/>
+      <bitfield name="reserved0" low="1" high="1" type="uint"/>
+      <bitfield name="activation" low="0" high="0" type="uint"/>
+   </reg32>
+   <reg32 offset="0x107" name="NPU_SET_IFM_UPSCALE">
+      <bitfield name="reserved0" low="2" high="15" type="uint"/>
+      <bitfield name="mode" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x109" name="NPU_SET_IFM_ZERO_POINT">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x10a" name="NPU_SET_IFM_WIDTH0_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x10b" name="NPU_SET_IFM_HEIGHT0_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x10c" name="NPU_SET_IFM_HEIGHT1_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x10d" name="NPU_SET_IFM_IB_END">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x10f" name="NPU_SET_IFM_REGION">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x111" name="NPU_SET_OFM_WIDTH_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x112" name="NPU_SET_OFM_HEIGHT_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x113" name="NPU_SET_OFM_DEPTH_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x114" name="NPU_SET_OFM_PRECISION">
+      <bitfield name="round_mode" low="14" high="15" type="uint"/>
+      <bitfield name="reserved1" low="9" high="13" type="uint"/>
+      <bitfield name="scale_mode" low="8" high="8" type="uint"/>
+      <bitfield name="format" low="6" high="7" type="uint"/>
+      <bitfield name="reserved0" low="3" high="5" type="uint"/>
+      <bitfield name="precision" low="1" high="2" type="uint"/>
+      <bitfield name="activation" low="0" high="0" type="uint"/>
+   </reg32>
+   <reg32 offset="0x115" name="NPU_SET_OFM_BLK_WIDTH_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x116" name="NPU_SET_OFM_BLK_HEIGHT_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x117" name="NPU_SET_OFM_BLK_DEPTH_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x118" name="NPU_SET_OFM_ZERO_POINT">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x11a" name="NPU_SET_OFM_WIDTH0_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x11b" name="NPU_SET_OFM_HEIGHT0_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x11c" name="NPU_SET_OFM_HEIGHT1_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x11f" name="NPU_SET_OFM_REGION">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x120" name="NPU_SET_KERNEL_WIDTH_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x121" name="NPU_SET_KERNEL_HEIGHT_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x122" name="NPU_SET_KERNEL_STRIDE">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x123" name="NPU_SET_PARALLEL_MODE">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x124" name="NPU_SET_ACC_FORMAT">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x125" name="NPU_SET_ACTIVATION">
+      <bitfield name="act_clip_range" low="12" high="15" type="uint"/>
+      <bitfield name="type" low="0" high="11" type="uint"/>
+   </reg32>
+   <reg32 offset="0x126" name="NPU_SET_ACTIVATION_MIN">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x127" name="NPU_SET_ACTIVATION_MAX">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x128" name="NPU_SET_WEIGHT_REGION">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x129" name="NPU_SET_SCALE_REGION">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x12d" name="NPU_SET_AB_START">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x12f" name="NPU_SET_BLOCKDEP">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x130" name="NPU_SET_DMA0_SRC_REGION">
+      <bitfield name="reserved0" low="11" high="15" type="uint"/>
+      <bitfield name="stride_mode" low="9" high="10" type="uint"/>
+      <bitfield name="internal" low="8" high="8" type="uint"/>
+      <bitfield name="region" low="0" high="7" type="uint"/>
+   </reg32>
+   <reg32 offset="0x131" name="NPU_SET_DMA0_DST_REGION">
+      <bitfield name="reserved0" low="11" high="15" type="uint"/>
+      <bitfield name="stride_mode" low="9" high="10" type="uint"/>
+      <bitfield name="internal" low="8" high="8" type="uint"/>
+      <bitfield name="region" low="0" high="7" type="uint"/>
+   </reg32>
+   <reg32 offset="0x132" name="NPU_SET_DMA0_SIZE0">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x133" name="NPU_SET_DMA0_SIZE1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x180" name="NPU_SET_IFM2_BROADCAST">
+      <bitfield name="reserved1" low="8" high="15" type="uint"/>
+      <bitfield name="broadcast_scalar" low="7" high="7" type="uint"/>
+      <bitfield name="operand_order" low="6" high="6" type="uint"/>
+      <bitfield name="reserved0" low="3" high="5" type="uint"/>
+      <bitfield name="broadcast_depth" low="2" high="2" type="uint"/>
+      <bitfield name="broadcast_width" low="1" high="1" type="uint"/>
+      <bitfield name="broadcast_height" low="0" high="0" type="uint"/>
+   </reg32>
+   <reg32 offset="0x181" name="NPU_SET_IFM2_SCALAR">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x185" name="NPU_SET_IFM2_PRECISION">
+      <bitfield name="reserved1" low="8" high="15" type="uint"/>
+      <bitfield name="format" low="6" high="7" type="uint"/>
+      <bitfield name="reserved0" low="4" high="5" type="uint"/>
+      <bitfield name="precision" low="0" high="3" type="uint"/>
+   </reg32>
+   <reg32 offset="0x189" name="NPU_SET_IFM2_ZERO_POINT">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x18a" name="NPU_SET_IFM2_WIDTH0_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x18b" name="NPU_SET_IFM2_HEIGHT0_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x18c" name="NPU_SET_IFM2_HEIGHT1_M1">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x18d" name="NPU_SET_IFM2_IB_START">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+   <reg32 offset="0x18f" name="NPU_SET_IFM2_REGION">
+      <bitfield name="param" low="0" high="15" type="uint"/>
+   </reg32>
+</domain>
+<domain name="CMD1" width="32">
+   <reg32 offset="0x0" name="NPU_SET_IFM_BASE0">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x1" name="NPU_SET_IFM_BASE1">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x2" name="NPU_SET_IFM_BASE2">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x3" name="NPU_SET_IFM_BASE3">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x4" name="NPU_SET_IFM_STRIDE_X">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x5" name="NPU_SET_IFM_STRIDE_Y">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x6" name="NPU_SET_IFM_STRIDE_C">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x10" name="NPU_SET_OFM_BASE0">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x11" name="NPU_SET_OFM_BASE1">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x12" name="NPU_SET_OFM_BASE2">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x13" name="NPU_SET_OFM_BASE3">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x14" name="NPU_SET_OFM_STRIDE_X">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x15" name="NPU_SET_OFM_STRIDE_Y">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x16" name="NPU_SET_OFM_STRIDE_C">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x20" name="NPU_SET_WEIGHT_BASE">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x21" name="NPU_SET_WEIGHT_LENGTH">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x22" name="NPU_SET_SCALE_BASE">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x23" name="NPU_SET_SCALE_LENGTH">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x24" name="NPU_SET_OFM_SCALE">
+      <bitfield name="shift" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x25" name="NPU_SET_OPA_SCALE">
+      <bitfield name="shift" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x26" name="NPU_SET_OPB_SCALE">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x30" name="NPU_SET_DMA0_SRC">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x31" name="NPU_SET_DMA0_DST">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x32" name="NPU_SET_DMA0_LEN">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x33" name="NPU_SET_DMA0_SKIP0">
+      <bitfield name="param" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x34" name="NPU_SET_DMA0_SKIP1">
+      <bitfield name="param" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x80" name="NPU_SET_IFM2_BASE0">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x81" name="NPU_SET_IFM2_BASE1">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x82" name="NPU_SET_IFM2_BASE2">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x83" name="NPU_SET_IFM2_BASE3">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x84" name="NPU_SET_IFM2_STRIDE_X">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x85" name="NPU_SET_IFM2_STRIDE_Y">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x86" name="NPU_SET_IFM2_STRIDE_C">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x90" name="NPU_SET_WEIGHT1_BASE">
+      <bitfield name="param" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x91" name="NPU_SET_WEIGHT1_LENGTH">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x92" name="NPU_SET_SCALE1_BASE">
+      <bitfield name="param" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+   <reg32 offset="0x93" name="NPU_SET_SCALE1_LENGTH">
+      <bitfield name="reserved0" low="2" high="17" type="uint"/>
+      <bitfield name="payload_size" low="0" high="1" type="uint"/>
+   </reg32>
+</domain>
+
+</database>

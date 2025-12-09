@@ -208,7 +208,7 @@ pan_pack_work_groups_compute(struct mali_invocation_packed *out, unsigned num_x,
                              bool quirk_graphics, bool indirect_dispatch)
 {
    /* The values needing packing, in order, and the corresponding shifts.
-    * Indicies into shift are off-by-one to make the logic easier */
+    * Indices into shift are off-by-one to make the logic easier */
 
    unsigned values[6] = {size_x, size_y, size_z, num_x, num_y, num_z};
    unsigned shifts[7] = {0};
@@ -269,12 +269,13 @@ pan_get_z_internal_format(enum pipe_format fmt)
       return MALI_Z_INTERNAL_FORMAT_D16;
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
    case PIPE_FORMAT_Z24X8_UNORM:
+   case PIPE_FORMAT_Z24_UNORM_PACKED:
       return MALI_Z_INTERNAL_FORMAT_D24;
    case PIPE_FORMAT_Z32_FLOAT:
    case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
       return MALI_Z_INTERNAL_FORMAT_D32;
    default:
-      unreachable("Unsupported depth/stencil format.");
+      UNREACHABLE("Unsupported depth/stencil format.");
    }
 }
 #endif

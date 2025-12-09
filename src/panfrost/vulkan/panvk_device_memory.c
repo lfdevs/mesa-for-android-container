@@ -7,11 +7,49 @@
 
 #include "vulkan/util/vk_util.h"
 
+#include "panvk_android.h"
 #include "panvk_device.h"
 #include "panvk_device_memory.h"
 #include "panvk_entrypoints.h"
 
+#include "pan_props.h"
+
+#include "vk_debug_utils.h"
 #include "vk_log.h"
+
+static void
+panvk_memory_emit_report(struct panvk_device *device,
+                         const struct panvk_device_memory *mem,
+                         const VkMemoryAllocateInfo *alloc_info,
+                         VkResult result)
+{
+   if (likely(!device->vk.memory_reports))
+      return;
+
+   if (result != VK_SUCCESS) {
+      vk_emit_device_memory_report(
+         &device->vk, VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_ALLOCATION_FAILED_EXT,
+         /* mem_obj_id */ 0, alloc_info->allocationSize,
+         VK_OBJECT_TYPE_DEVICE_MEMORY,
+         /* obj_handle */ 0, alloc_info->memoryTypeIndex);
+      return;
+   }
+
+   VkDeviceMemoryReportEventTypeEXT type;
+   if (alloc_info) {
+      type = mem->vk.import_handle_type
+                ? VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_IMPORT_EXT
+                : VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_ALLOCATE_EXT;
+   } else {
+      type = mem->vk.import_handle_type
+                ? VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_UNIMPORT_EXT
+                : VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_FREE_EXT;
+   }
+
+   vk_emit_device_memory_report(&device->vk, type, mem->bo->handle,
+                                mem->bo->size, VK_OBJECT_TYPE_DEVICE_MEMORY,
+                                (uintptr_t)(mem), mem->vk.memory_type_index);
+}
 
 static void *
 panvk_memory_mmap(struct panvk_device_memory *mem)
@@ -46,9 +84,12 @@ panvk_AllocateMemory(VkDevice _device,
                      const VkAllocationCallbacks *pAllocator,
                      VkDeviceMemory *pMem)
 {
+   if (panvk_android_is_ahb_memory(pAllocateInfo)) {
+      return panvk_android_allocate_ahb_memory(_device, pAllocateInfo,
+                                               pAllocator, pMem);
+   }
+
    VK_FROM_HANDLE(panvk_device, device, _device);
-   struct panvk_instance *instance =
-      to_panvk_instance(device->vk.physical->instance);
    struct panvk_device_memory *mem;
    bool can_be_exported = false;
    VkResult result;
@@ -112,9 +153,8 @@ panvk_AllocateMemory(VkDevice _device,
    };
 
    if (!(device->kmod.vm->flags & PAN_KMOD_VM_FLAG_AUTO_VA)) {
-      op.va.start =
-         panvk_as_alloc(device, op.va.size,
-                        op.va.size > 0x200000 ? 0x200000 : 0x1000);
+      op.va.start = panvk_as_alloc(device, op.va.size,
+         pan_choose_gpu_va_alignment(device->kmod.vm, op.va.size));
       if (!op.va.start) {
          result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
          goto err_put_bo;
@@ -144,7 +184,7 @@ panvk_AllocateMemory(VkDevice _device,
    }
 
    if (device->debug.decode_ctx) {
-      if (instance->debug_flags & (PANVK_DEBUG_DUMP | PANVK_DEBUG_TRACE)) {
+      if (PANVK_DEBUG(DUMP) || PANVK_DEBUG(TRACE)) {
          void *cpu = pan_kmod_bo_mmap(mem->bo, 0, pan_kmod_bo_size(mem->bo),
                                       PROT_READ | PROT_WRITE, MAP_SHARED, NULL);
          if (cpu != MAP_FAILED)
@@ -158,6 +198,8 @@ panvk_AllocateMemory(VkDevice _device,
                             mem->debug.host_mapping, pan_kmod_bo_size(mem->bo),
                             NULL);
    }
+
+   panvk_memory_emit_report(device, mem, pAllocateInfo, VK_SUCCESS);
 
    *pMem = panvk_device_memory_to_handle(mem);
 
@@ -173,6 +215,8 @@ err_put_bo:
 
 err_destroy_mem:
    vk_device_memory_destroy(&device->vk, pAllocator, &mem->vk);
+   panvk_memory_emit_report(device, /* mem */ NULL, pAllocateInfo, result);
+
    return result;
 }
 
@@ -211,6 +255,8 @@ panvk_FreeMemory(VkDevice _device, VkDeviceMemory _mem,
    if (!(device->kmod.vm->flags & PAN_KMOD_VM_FLAG_AUTO_VA)) {
       panvk_as_free(device, op.va.start, op.va.size);
    }
+
+   panvk_memory_emit_report(device, mem, /* alloc_info */ NULL, VK_SUCCESS);
 
    pan_kmod_bo_put(mem->bo);
    vk_device_memory_destroy(&device->vk, pAllocator, &mem->vk);

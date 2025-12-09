@@ -55,6 +55,12 @@ enum mesa_log_control {
    MESA_LOG_CONTROL_WAIT = 1 << 8,
 };
 
+enum logger_vasnprintf_affix {
+   LOGGER_VASNPRINTF_AFFIX_TAG = 1 << 0,
+   LOGGER_VASNPRINTF_AFFIX_LEVEL = 1 << 1,
+   LOGGER_VASNPRINTF_AFFIX_NEWLINE = 1 << 2,
+};
+
 static const struct debug_control mesa_log_control_options[] = {
    /* loggers */
    { "null", MESA_LOG_CONTROL_NULL },
@@ -67,8 +73,42 @@ static const struct debug_control mesa_log_control_options[] = {
    { NULL, 0 },
 };
 
+static inline const char *
+level_to_str(enum mesa_log_level l)
+{
+   switch (l) {
+   case MESA_LOG_ERROR: return "error";
+   case MESA_LOG_WARN: return "warning";
+   case MESA_LOG_INFO: return "info";
+   case MESA_LOG_DEBUG: return "debug";
+   case MESA_NUM_LOG_LEVELS:
+      break;
+   }
+
+   UNREACHABLE("bad mesa_log_level");
+}
+
+static enum mesa_log_level
+level_from_str(const char *str)
+{
+   for (unsigned l = 0; l < MESA_NUM_LOG_LEVELS; l++) {
+      if (strcmp(level_to_str(l), str) == 0)
+         return l;
+   }
+
+   return MESA_NUM_LOG_LEVELS;
+}
+
 static uint32_t mesa_log_control;
 static FILE *mesa_log_file;
+static enum mesa_log_level mesa_max_log_level;
+static int mesa_log_file_affixes;
+
+static const struct debug_named_value log_prefix_options[] = {
+   {"tag",     LOGGER_VASNPRINTF_AFFIX_TAG,     "include log tag"},
+   {"level",   LOGGER_VASNPRINTF_AFFIX_LEVEL,   "include log level"},
+   DEBUG_NAMED_VALUE_END
+};
 
 static void
 mesa_log_init_once(void)
@@ -90,6 +130,15 @@ mesa_log_init_once(void)
       mesa_log_control |= MESA_LOG_CONTROL_WINDBG;
 #endif
    }
+
+   mesa_max_log_level = MESA_DEFAULT_LOG_LEVEL;
+   const char *log_level = os_get_option("MESA_LOG_LEVEL");
+   if (log_level != NULL)
+      mesa_max_log_level = level_from_str(log_level);
+
+   mesa_log_file_affixes =
+      debug_get_flags_option("MESA_LOG_PREFIX", log_prefix_options,
+                             LOGGER_VASNPRINTF_AFFIX_TAG | LOGGER_VASNPRINTF_AFFIX_LEVEL);
 
    mesa_log_file = stderr;
 
@@ -119,6 +168,20 @@ mesa_log_init(void)
    call_once(&once, mesa_log_init_once);
 }
 
+static void
+mesa_warn_invalid_level_once(void)
+{
+   const char *log_level = os_get_option("MESA_LOG_LEVEL");
+   mesa_logw("Invalid log level: \"%s\"", log_level);
+}
+
+static void
+mesa_warn_invalid_level(void)
+{
+   static once_flag once = ONCE_FLAG_INIT;
+   call_once(&once, mesa_warn_invalid_level_once);
+}
+
 void
 mesa_log_if_debug(enum mesa_log_level level, const char *outputString)
 {
@@ -126,7 +189,7 @@ mesa_log_if_debug(enum mesa_log_level level, const char *outputString)
 
    /* Init the local 'debug' var once. */
    if (debug == -1) {
-      const char *env = getenv("MESA_DEBUG");
+      const char *env = os_get_option("MESA_DEBUG");
       bool silent = env && strstr(env, "silent") != NULL;
 #ifndef NDEBUG
       /* in debug builds, print messages unless MESA_DEBUG="silent" */
@@ -146,25 +209,6 @@ mesa_log_if_debug(enum mesa_log_level level, const char *outputString)
    if (debug)
       mesa_log(level, "Mesa", "%s", outputString);
 }
-
-static inline const char *
-level_to_str(enum mesa_log_level l)
-{
-   switch (l) {
-   case MESA_LOG_ERROR: return "error";
-   case MESA_LOG_WARN: return "warning";
-   case MESA_LOG_INFO: return "info";
-   case MESA_LOG_DEBUG: return "debug";
-   }
-
-   unreachable("bad mesa_log_level");
-}
-
-enum logger_vasnprintf_affix {
-   LOGGER_VASNPRINTF_AFFIX_TAG = 1 << 0,
-   LOGGER_VASNPRINTF_AFFIX_LEVEL = 1 << 1,
-   LOGGER_VASNPRINTF_AFFIX_NEWLINE = 1 << 2,
-};
 
 /* Try vsnprintf first and fall back to vasprintf if buf is too small.  This
  * function handles all errors and never fails.
@@ -248,8 +292,7 @@ logger_file(enum mesa_log_level level,
    FILE *fp = mesa_log_file;
    char local_msg[1024];
    char *msg = logger_vasnprintf(local_msg, sizeof(local_msg),
-         LOGGER_VASNPRINTF_AFFIX_TAG |
-         LOGGER_VASNPRINTF_AFFIX_LEVEL |
+         mesa_log_file_affixes |
          LOGGER_VASNPRINTF_AFFIX_NEWLINE,
          level, tag, format, va);
 
@@ -270,9 +313,11 @@ level_to_syslog(enum mesa_log_level l)
    case MESA_LOG_WARN: return LOG_WARNING;
    case MESA_LOG_INFO: return LOG_INFO;
    case MESA_LOG_DEBUG: return LOG_DEBUG;
+   case MESA_NUM_LOG_LEVELS:
+      break;
    }
 
-   unreachable("bad mesa_log_level");
+   UNREACHABLE("bad mesa_log_level");
 }
 
 static void
@@ -303,9 +348,11 @@ level_to_android(enum mesa_log_level l)
    case MESA_LOG_WARN: return ANDROID_LOG_WARN;
    case MESA_LOG_INFO: return ANDROID_LOG_INFO;
    case MESA_LOG_DEBUG: return ANDROID_LOG_DEBUG;
+   case MESA_NUM_LOG_LEVELS:
+      break;
    }
 
-   unreachable("bad mesa_log_level");
+   UNREACHABLE("bad mesa_log_level");
 }
 
 static void
@@ -404,6 +451,17 @@ mesa_log_v(enum mesa_log_level level, const char *tag, const char *format,
    };
 
    mesa_log_init();
+
+   if (unlikely(mesa_max_log_level >= MESA_NUM_LOG_LEVELS)) {
+      /* Set to the default since this function will call back into mesa_log()
+       * and we don't want to recurse back into the once.
+       */
+      mesa_max_log_level = MESA_DEFAULT_LOG_LEVEL;
+      mesa_warn_invalid_level();
+   }
+
+   if (level > mesa_max_log_level)
+      return;
 
    for (uint32_t i = 0; i < ARRAY_SIZE(loggers); i++) {
       if (mesa_log_control & loggers[i].bit) {

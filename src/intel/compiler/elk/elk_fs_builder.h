@@ -87,7 +87,7 @@ namespace elk {
        * from this.
        */
       fs_builder
-      at(elk_bblock_t *block, exec_node *cursor) const
+      at(elk_bblock_t *block, brw_exec_node *cursor) const
       {
          fs_builder bld = *this;
          bld.block = block;
@@ -103,7 +103,7 @@ namespace elk {
       fs_builder
       at_end() const
       {
-         return at(NULL, (exec_node *)&shader->instructions.tail_sentinel);
+         return at(NULL, (brw_exec_node *)&shader->instructions.tail_sentinel);
       }
 
       /**
@@ -499,7 +499,7 @@ namespace elk {
             }
 
             default:
-               unreachable("Unsupported 64-bit scan op");
+               UNREACHABLE("Unsupported 64-bit scan op");
             }
          } else {
             set_condmod(mod, emit(opcode, right, left, right));
@@ -916,7 +916,7 @@ namespace elk {
       }
 
       elk_bblock_t *block;
-      exec_node *cursor;
+      brw_exec_node *cursor;
 
       unsigned _dispatch_width;
       unsigned _group;

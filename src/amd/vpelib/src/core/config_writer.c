@@ -208,7 +208,12 @@ void config_writer_fill_direct_config_packet_header(
     }
 
 #ifdef VPE_REGISTER_PROFILE
-    writer->register_count += packet->bits.VPEP_CONFIG_DATA_SIZE + 1;
+    writer->total_register_count += packet->bits.VPEP_CONFIG_DATA_SIZE + 1;
+    if (packet->bits.VPEP_CONFIG_DATA_SIZE == 0) {
+        writer->nonBurstMode_register_count++;
+    } else {
+        writer->burstMode_register_count += packet->bits.VPEP_CONFIG_DATA_SIZE + 1;
+    }
 #endif
     cmd_space    = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
     *cmd_space++ = packet->u32all;
@@ -245,7 +250,8 @@ void config_writer_fill_direct_config_packet(
     }
 
 #ifdef VPE_REGISTER_PROFILE
-    writer->register_count++;
+    writer->total_register_count++;
+    writer->nonBurstMode_register_count++;
 #endif
     cmd_space    = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
     *cmd_space++ = packet->u32all; // Write header

@@ -7,8 +7,11 @@
 #include "nir_builtin_builder.h"
 #include "st_nir.h"
 
+
 static nir_def *
-fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode, struct gl_program_parameter_list *paramList)
+fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode,
+           struct gl_program_parameter_list *paramList,
+           bool packed_driver_uniform_storage)
 {
    nir_shader *s = b->shader;
    nir_def *baryc = nir_load_barycentric_pixel(b, 32,
@@ -19,12 +22,14 @@ fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode, struct gl_
    static const gl_state_index16 fog_params_tokens[STATE_LENGTH] = {STATE_FOG_PARAMS_OPTIMIZED};
    static const gl_state_index16 fog_color_tokens[STATE_LENGTH] = {STATE_FOG_COLOR};
 
-   nir_variable *fog_params_var = st_nir_state_variable_create(s, glsl_vec4_type(), fog_params_tokens);
-   fog_params_var->data.driver_location = _mesa_add_state_reference(paramList, fog_params_tokens);
+   nir_variable *fog_params_var =
+      st_nir_state_variable_create(s, glsl_vec4_type(), paramList, fog_params_tokens,
+                                   NULL, packed_driver_uniform_storage);
    nir_def *params = nir_load_var(b, fog_params_var);
 
-   nir_variable *fog_color_var = st_nir_state_variable_create(s, glsl_vec4_type(), fog_color_tokens);
-   fog_color_var->data.driver_location = _mesa_add_state_reference(paramList, fog_color_tokens);
+   nir_variable *fog_color_var =
+      st_nir_state_variable_create(s, glsl_vec4_type(), paramList, fog_color_tokens,
+                                   NULL, packed_driver_uniform_storage);
    nir_def *fog_color = nir_load_var(b, fog_color_var);
 
    /* compute the 1 component fog factor f */
@@ -62,7 +67,7 @@ fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode, struct gl_
       f = nir_fexp2(b, nir_fneg(b, f));
       break;
    default:
-      unreachable("unsupported fog mode");
+      UNREACHABLE("unsupported fog mode");
    }
    f = nir_fsat(b, f);
 
@@ -75,6 +80,7 @@ fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode, struct gl_
 struct lower_fog_state {
    enum gl_fog_mode fog_mode;
    struct gl_program_parameter_list *paramList;
+   bool packed_driver_uniform_storage;
 };
 
 static bool
@@ -97,7 +103,8 @@ st_nir_lower_fog_instr(nir_builder *b, nir_instr *instr, void *_state)
    nir_def *color = intr->src[0].ssa;
    color = nir_resize_vector(b, color, 4);
 
-   nir_def *fog = fog_result(b, color, state->fog_mode, state->paramList);
+   nir_def *fog = fog_result(b, color, state->fog_mode, state->paramList,
+                             state->packed_driver_uniform_storage);
 
    /* retain the non-fog-blended alpha value for color */
    color = nir_vector_insert_imm(b, fog, nir_channel(b, color, 3), 3);
@@ -109,13 +116,16 @@ st_nir_lower_fog_instr(nir_builder *b, nir_instr *instr, void *_state)
 }
 
 bool
-st_nir_lower_fog(nir_shader *s, enum gl_fog_mode fog_mode, struct gl_program_parameter_list *paramList)
+st_nir_lower_fog(nir_shader *s, enum gl_fog_mode fog_mode,
+                 struct gl_program_parameter_list *paramList,
+                 bool packed_driver_uniform_storage)
 {
    assert(s->info.io_lowered);
 
    struct lower_fog_state state = {
       .fog_mode = fog_mode,
-            .paramList = paramList,
+      .paramList = paramList,
+      .packed_driver_uniform_storage = packed_driver_uniform_storage,
    };
    return nir_shader_instructions_pass(s, st_nir_lower_fog_instr,
                                        nir_metadata_control_flow,

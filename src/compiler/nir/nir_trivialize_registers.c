@@ -101,7 +101,7 @@ trivialize_load(nir_intrinsic_instr *load)
    nir_builder b = nir_builder_at(nir_after_instr(&load->instr));
    nir_def *copy = nir_mov(&b, &load->def);
    copy->divergent = load->def.divergent;
-   nir_def_rewrite_uses_after(&load->def, copy, copy->parent_instr);
+   nir_def_rewrite_uses_after(&load->def, copy);
 
    assert(list_is_singular(&load->def.uses));
 }
@@ -116,7 +116,7 @@ trivialize_src(nir_src *src, void *state_)
 {
    struct trivialize_src_state *state = state_;
 
-   nir_instr *parent = src->ssa->parent_instr;
+   nir_instr *parent = nir_def_instr(src->ssa);
    if (parent->type != nir_instr_type_intrinsic)
       return true;
 
@@ -136,8 +136,7 @@ trivialize_loads(nir_function_impl *impl, nir_block *block)
 {
    struct trivialize_src_state state = {
       .block = block,
-      .trivial_loads = calloc(BITSET_WORDS(impl->ssa_alloc),
-                              sizeof(BITSET_WORD)),
+      .trivial_loads = BITSET_CALLOC(impl->ssa_alloc),
    };
 
    nir_foreach_instr_safe(instr, block) {
@@ -345,7 +344,7 @@ clear_def(nir_def *def, void *state)
          continue;
 
       /* Anything global has already been trivialized and can be ignored */
-      if (parent->block != def->parent_instr->block)
+      if (parent->block != nir_def_block(def))
          continue;
 
       if (def == store->src[0].ssa) {
@@ -430,7 +429,7 @@ trivialize_stores(nir_function_impl *impl, nir_block *block)
             nontrivial |= !list_is_singular(&value->uses);
 
             /* SSA-only instruction types */
-            nir_instr *parent = value->parent_instr;
+            nir_instr *parent = nir_def_instr(value);
             nontrivial |= (parent->type == nir_instr_type_load_const) ||
                           (parent->type == nir_instr_type_undef);
 

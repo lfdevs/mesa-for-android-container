@@ -901,7 +901,7 @@ static void radeon_bo_get_metadata(struct radeon_winsys *rws,
 static void radeon_bo_set_metadata(struct radeon_winsys *rws,
                                    struct pb_buffer_lean *_buf,
                                    struct radeon_bo_metadata *md,
-                                   struct radeon_surf *surf)
+                                   const struct radeon_surf *surf)
 {
    struct radeon_bo *bo = radeon_bo(_buf);
    struct drm_radeon_gem_set_tiling args;
@@ -1327,7 +1327,7 @@ static bool radeon_winsys_bo_get_handle(struct radeon_winsys *rws,
    } else if (whandle->type == WINSYS_HANDLE_TYPE_KMS) {
       whandle->handle = bo->handle;
    } else if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
-      if (drmPrimeHandleToFD(ws->fd, bo->handle, DRM_CLOEXEC, (int*)&whandle->handle))
+      if (drmPrimeHandleToFD(ws->fd, bo->handle, DRM_CLOEXEC | DRM_RDWR, (int*)&whandle->handle))
          return false;
    }
 

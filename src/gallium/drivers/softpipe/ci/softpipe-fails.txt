@@ -497,8 +497,6 @@ dEQP-GLES31.functional.state_query.texture.texture_2d_multisample_array.texture_
 dEQP-GLES31.functional.state_query.texture.texture_2d_multisample_array.texture_immutable_levels_integer,Fail
 dEQP-GLES31.functional.state_query.texture.texture_2d_multisample_array.texture_immutable_levels_pure_int,Fail
 dEQP-GLES31.functional.state_query.texture.texture_2d_multisample_array.texture_immutable_levels_pure_uint,Fail
-dEQP-GLES31.functional.texture.border_clamp.depth_compare_mode.depth32f_stencil8.linear_size_npot,Fail
-dEQP-GLES31.functional.texture.border_clamp.depth_compare_mode.depth32f_stencil8.linear_size_pot,Fail
 dEQP-GLES31.functional.texture.filtering.cube_array.formats.rgb10_a2_linear_mipmap_linear,Fail
 dEQP-GLES31.functional.texture.filtering.cube_array.formats.rgb10_a2_nearest_mipmap_linear,Fail
 dEQP-GLES31.functional.texture.filtering.cube_array.sizes.128x128x12_linear,Fail
@@ -865,14 +863,9 @@ glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 
-glx@glx_arb_create_context_no_error@no error,Fail
 
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
-glx@glx_ext_import_context@get current display,Fail
-glx@glx_ext_import_context@import context- multi process,Fail
-glx@glx_ext_import_context@import context- single process,Fail
-glx@glx_ext_import_context@imported context has same context id,Fail
 glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
 glx@glx_ext_import_context@query context info,Fail
@@ -1237,7 +1230,6 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail
 
 spec@nv_shader_atomic_float@execution@ssbo-atomicexchange-float,Fail
 
-spec@arb_viewport_array@display-list,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_image,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_sampler,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_size_via_image,Fail
@@ -1329,3 +1321,13 @@ KHR-GLES31.core.texture_stencil8.multisample,Fail
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
 dEQP-GLES31.functional.geometry_shading.query.primitives_generated_instanced,Fail
 dEQP-GLES31.functional.geometry_shading.query.primitives_generated_no_amplification,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_size pname checks,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_size pname checks@GL_INTERNALFORMAT_ALPHA_SIZE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_size pname checks@GL_INTERNALFORMAT_BLUE_SIZE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_size pname checks@GL_INTERNALFORMAT_DEPTH_SIZE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_size pname checks@GL_INTERNALFORMAT_GREEN_SIZE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_size pname checks@GL_INTERNALFORMAT_RED_SIZE,Fail
+spec@arb_occlusion_query@occlusion_query_meta_save,Fail
+shaders@glsl-fs-fogscale@vs and fs,Fail
+spec@arb_texture_rectangle@texwrap rect proj bordercolor,Fail
+spec@arb_texture_rectangle@texwrap rect proj bordercolor@GL_RGBA8- projected- border color only,Fail

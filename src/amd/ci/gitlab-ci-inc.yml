@@ -138,6 +138,18 @@
         *radeon_vcn_file_list
       when: manual
 
+.radeonsi-vaapi-fluster-rules:
+  stage: amd
+  extends:
+    - .test-fluster
+  rules:
+    - !reference [.radeonsi-vaapi-rules, rules]
+    - changes:
+        - src/amd/ci/$GPU_VERSION-fluster-fails.txt
+        - src/amd/ci/$GPU_VERSION-fluster-flakes.txt
+        - src/amd/ci/$GPU_VERSION-fluster-skips.txt
+      when: on_success
+
 .radeonsi-valve-rules:
   stage: amd
   rules:
@@ -324,15 +336,27 @@
     VK_DRIVER: radeon
     LAVA_FIRMWARE: amdgpu-lava
 
+.radv-cezanne-test:x86_64:
+  extends:
+    - .lava-acer-cp514-3wh-r0qs-guybrush:x86_64
+  variables:
+    DRIVER_NAME: radv
+    GPU_VERSION: radv-cezanne
+
 ############### CI-tron
 .ci-tron-test-amdgpu:
   variables:
-    CI_TRON_PATTERN__JOB_WARN__REGEX: '\*ERROR\* ring .* timeout'
-    CI_TRON_KERNEL__URL: "https://fs.mupuf.org/linux/v6.15.3/linux-x86_64"
-    CI_TRON_INITRAMFS__DEPMOD__URL: "https://fs.mupuf.org/linux/v6.15.3/linux-x86_64.depmod.cpio.xz"
-    CI_TRON_INITRAMFS__GPU__URL: "https://fs.mupuf.org/linux/v6.15.3/linux-x86_64.gpu.cpio"
+    CI_TRON_PATTERN__JOB_WARN__REGEX: 'ring .* timeout'
+    CI_TRON_KERNEL__URL: "https://fs.mupuf.org/radv/linux-6.17.3_w_buddy_fixes/linux-x86_64"
+    CI_TRON_INITRAMFS__DEPMOD__URL: "https://fs.mupuf.org/radv/linux-6.17.3_w_buddy_fixes/linux-x86_64.depmod.cpio.xz"
+    CI_TRON_INITRAMFS__GPU__URL: "https://fs.mupuf.org/radv/linux-6.17.3_w_buddy_fixes/linux-x86_64.gpu_amdgpu.cpio"
     CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__KEEP__0__PATH: "(lib/(modules|firmware/amdgpu)/.*)"
     CI_TRON_KERNEL_CMDLINE__LOAD_MODULES: 'modules_load=amdgpu'
+  tags:
+    - farm:$RUNNER_FARM_LOCATION
+    - $CI_TRON_DUT_SETUP_TAGS
+    - amdgpu:$INTEGRATED_OR_DISCRETE
+    - ci-tron:priority:$CI_TRON_JOB_PRIORITY
 
 .ci-tron-test-radv:
   extends: .ci-tron-test-amdgpu
@@ -356,6 +380,8 @@
     - .ci-tron-x86_64-test-vk
     - .radv-valve-rules
     - .ci-tron-test-radv
+  variables:
+    DEQP_SUITE: radv
 
 
 .tahiti-test-valve:
@@ -363,27 +389,35 @@
     FDO_CI_CONCURRENT: 24
     RUNNER_FARM_LOCATION: mupuf
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:TAHITI
+    INTEGRATED_OR_DISCRETE: discrete
     CI_TRON_KERNEL_CMDLINE__AMDGPU_FORCE_SI_SUPPORT: amdgpu.si_support=1
+    GPU_VERSION: radv-tahiti
 
 .hawaii-test-valve:
   variables:
     FDO_CI_CONCURRENT: 24
     RUNNER_FARM_LOCATION: mupuf
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:HAWAII
+    INTEGRATED_OR_DISCRETE: discrete
     CI_TRON_KERNEL_CMDLINE__AMDGPU_FORCE_CIK_SUPPORT: amdgpu.cik_support=1
+    GPU_VERSION: radv-hawaii
 
 .kabini-test-valve:
   variables:
     RUNNER_FARM_LOCATION: mupuf
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:KABINI
+    INTEGRATED_OR_DISCRETE: integrated
+    GPU_VERSION: radv-kabini
 
 .polaris10-test-valve:
   variables:
     FDO_CI_CONCURRENT: 16
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:POLARIS10
+    INTEGRATED_OR_DISCRETE: discrete
     # (2022-01) tsc=unstable was added in response to this message in kmsg,
     #    TSC found unstable after boot, most likely due to broken BIOS. Use 'tsc=unstable'.
     CI_TRON_KERNEL_CMDLINE__TSC_WORKAROUND: 'tsc=unstable'
+    GPU_VERSION: radv-polaris10
 
 .polaris10-test-valve-mupuf:
   extends: .polaris10-test-valve
@@ -399,12 +433,16 @@
   variables:
     RUNNER_FARM_LOCATION: keywords
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:VEGA10
+    INTEGRATED_OR_DISCRETE: discrete
+    GPU_VERSION: radv-vega10
     FDO_CI_CONCURRENT: 16
 
 .renoir-test-valve:
   variables:
     RUNNER_FARM_LOCATION: mupuf
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:RENOIR
+    INTEGRATED_OR_DISCRETE: integrated
+    GPU_VERSION: radv-renoir
     FDO_CI_CONCURRENT: 16
 
 .navi10-test-valve:
@@ -415,6 +453,8 @@
     # MSI IRQs leading to GPU hangs on amdgpu.
     CI_TRON_KERNEL_CMDLINE__APIC_WORKAROUND: 'noapic'
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:NAVI10
+    INTEGRATED_OR_DISCRETE: discrete
+    GPU_VERSION: radv-navi10
 
 .navi10-test-valve-mupuf:
   extends:
@@ -434,55 +474,38 @@
   variables:
     RUNNER_FARM_LOCATION: keywords
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:NAVI21
+    INTEGRATED_OR_DISCRETE: discrete
+    GPU_VERSION: radv-navi21
     FDO_CI_CONCURRENT: 32
-    # FIXME: drop everything below to use the same kernel as the rest of the amdgpu jobs
-    CI_TRON_KERNEL__URL: https://fs.mupuf.org/linux-6.6-b2c-radv-ci
-    CI_TRON_INITRAMFS__DEPMOD__URL: null
-    CI_TRON_INITRAMFS__GPU__URL: null
-    CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__KEEP__0__PATH: null
 
 .vangogh-test-valve:
   variables:
     RUNNER_FARM_LOCATION: mupuf
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:VANGOGH
+    INTEGRATED_OR_DISCRETE: integrated
+    GPU_VERSION: radv-vangogh
     FDO_CI_CONCURRENT: 8
-  tags:
-    - farm:$RUNNER_FARM_LOCATION
-    - $CI_TRON_DUT_SETUP_TAGS
-    - $CI_TRON_JOB_PRIORITY_TAG
 
 .raphael-test-valve:
   variables:
     RUNNER_FARM_LOCATION: keywords
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:RAPHAEL
+    INTEGRATED_OR_DISCRETE: integrated
+    GPU_VERSION: radv-raphael
     FDO_CI_CONCURRENT: 32
 
 .navi31-test-valve:
   variables:
     RUNNER_FARM_LOCATION: keywords
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:NAVI31
+    INTEGRATED_OR_DISCRETE: discrete
+    GPU_VERSION: radv-navi31
     FDO_CI_CONCURRENT: 32
-    # FIXME: drop everything below to use the same kernel as the rest of the amdgpu jobs
-    CI_TRON_KERNEL__URL: https://fs.mupuf.org/linux-6.6-b2c-radv-ci
-    CI_TRON_INITRAMFS__DEPMOD__URL: null
-    CI_TRON_INITRAMFS__GPU__URL: null
-    CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__KEEP__0__PATH: null
-
 
 .gfx1201-test-valve:
   variables:
     RUNNER_FARM_LOCATION: keywords
     CI_TRON_DUT_SETUP_TAGS: amdgpu:codename:NAVI48
-    FDO_CI_CONCURRENT: 16  # FIXME: Replace with 32 when the zerovram regression is addressed
-
-############### Fluster tests ###############
-.radeonsi-vaapi-fluster-rules:
-  extends:
-    - .test-fluster
-  rules:
-    - !reference [.radeonsi-vaapi-rules, rules]
-    - changes:
-        - src/amd/ci/$GPU_VERSION-fluster-fails.txt
-        - src/amd/ci/$GPU_VERSION-fluster-flakes.txt
-        - src/amd/ci/$GPU_VERSION-fluster-skips.txt
-      when: on_success
+    INTEGRATED_OR_DISCRETE: discrete
+    GPU_VERSION: radv-gfx1201
+    FDO_CI_CONCURRENT: 32

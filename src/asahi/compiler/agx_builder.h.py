@@ -7,6 +7,7 @@ template = """/*
 #define _AGX_BUILDER_
 
 #include "agx_compiler.h"
+#include "util/lut.h"
 
 static inline agx_instr *
 agx_alloc_instr(agx_builder *b, enum agx_opcode op, uint8_t nr_dests, uint8_t nr_srcs)
@@ -113,27 +114,11 @@ agx_${opcode}(agx_builder *b
 % endfor
 
 /* Convenience methods */
-
-enum agx_bitop_table {
-   AGX_BITOP_NOR   = 0x1,
-   AGX_BITOP_ANDN2 = 0x2,
-   AGX_BITOP_ANDN1 = 0x4,
-   AGX_BITOP_NOT   = 0x5,
-   AGX_BITOP_XOR   = 0x6,
-   AGX_BITOP_NAND  = 0x7,
-   AGX_BITOP_AND   = 0x8,
-   AGX_BITOP_XNOR  = 0x9,
-   AGX_BITOP_MOV   = 0xA,
-   AGX_BITOP_ORN2  = 0xB,
-   AGX_BITOP_ORN1  = 0xD,
-   AGX_BITOP_OR    = 0xE
-};
-
-#define BINOP_BITOP(name, table)                                                     \
+#define BINOP_BITOP(name, expr)                                                      \
    static inline agx_instr *                                                         \
    agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1) \
    {                                                                                 \
-      return agx_bitop_to(b, dst0, src0, src1, AGX_BITOP_ ## table);                 \
+      return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                     \
    }                                                                                 \
                                                                                      \
    static inline agx_index                                                           \
@@ -144,16 +129,16 @@ enum agx_bitop_table {
       return tmp;                                                                    \
    }
 
-BINOP_BITOP(nor, NOR)
-BINOP_BITOP(andn2, ANDN2)
-BINOP_BITOP(andn1, ANDN1)
-BINOP_BITOP(xor, XOR)
-BINOP_BITOP(nand, NAND)
-BINOP_BITOP(and, AND)
-BINOP_BITOP(xnor, XNOR)
-BINOP_BITOP(orn2, ORN2)
-BINOP_BITOP(orn1, ORN1)
-BINOP_BITOP(or, OR)
+BINOP_BITOP(nor, ~(a | b))
+BINOP_BITOP(andn2, a & ~b)
+BINOP_BITOP(andn1, ~a & b)
+BINOP_BITOP(xor, a ^ b)
+BINOP_BITOP(nand, ~(a & b))
+BINOP_BITOP(and, a & b)
+BINOP_BITOP(xnor, ~a ^ b)
+BINOP_BITOP(orn2, a | ~b)
+BINOP_BITOP(orn1, ~a | b)
+BINOP_BITOP(or, a | b)
 
 #undef BINOP_BITOP
 

@@ -1,4 +1,4 @@
-/* Copyright 2022 Advanced Micro Devices, Inc.
+/* Copyright 2022-2025 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -430,7 +430,7 @@ enum vpe_status vpe_check_output_support(struct vpe *vpe, const struct vpe_build
         params.format              = surface_info->format;
         params.swizzle_mode        = surface_info->swizzle;
         params.scan                = VPE_SCAN_PATTERN_0_DEGREE;
-        support = vpe->cap_funcs->get_dcc_compression_output_cap(vpe, &params, &cap);
+        support = vpe_priv->pub.check_funcs.get_dcc_compression_output_cap(&params, &cap);
         if (!support) {
             vpe_log("output dcc not supported\n");
             return VPE_STATUS_OUTPUT_DCC_NOT_SUPPORTED;
@@ -438,15 +438,15 @@ enum vpe_status vpe_check_output_support(struct vpe *vpe, const struct vpe_build
     }
 
     // pixel format
-    support = cdc_be->funcs->check_output_format(cdc_be, surface_info->format);
+    support = vpe_priv->pub.check_funcs.check_output_format(surface_info->format);
     if (!support) {
         vpe_log("output pixel format not supported %d\n", (int)surface_info->format);
         return VPE_STATUS_PIXEL_FORMAT_NOT_SUPPORTED;
     }
 
     // color space value
-    support = vpe_priv->resource.check_output_color_space(
-        vpe_priv, surface_info->format, &surface_info->cs);
+    support =
+        vpe_priv->pub.check_funcs.check_output_color_space(surface_info->format, &surface_info->cs);
     if (!support) {
         vpe_log("output color space not supported fmt: %d, "
                 "encoding: %d, cositing: %d, gamma: %d, range: %d, primaries: %d\n",
@@ -533,7 +533,7 @@ enum vpe_status vpe_check_input_support(struct vpe *vpe, const struct vpe_stream
         params.format              = surface_info->format;
         params.swizzle_mode        = surface_info->swizzle;
 
-        support = vpe->cap_funcs->get_dcc_compression_input_cap(vpe, &params, &cap);
+        support = vpe_priv->pub.check_funcs.get_dcc_compression_input_cap(&params, &cap);
         //only support non dual plane formats
         if (!support) {
             vpe_log("input internal dcc not supported\n");
@@ -542,15 +542,15 @@ enum vpe_status vpe_check_input_support(struct vpe *vpe, const struct vpe_stream
     }
 
     // pixel format
-    support = cdc_fe->funcs->check_input_format(cdc_fe, surface_info->format);
+    support = vpe_priv->pub.check_funcs.check_input_format(surface_info->format);
     if (!support) {
         vpe_log("input pixel format not supported %d\n", (int)surface_info->format);
         return VPE_STATUS_PIXEL_FORMAT_NOT_SUPPORTED;
     }
 
     // color space value
-    support = vpe_priv->resource.check_input_color_space(
-        vpe_priv, surface_info->format, &surface_info->cs);
+    support =
+        vpe_priv->pub.check_funcs.check_input_color_space(surface_info->format, &surface_info->cs);
     if (!support) {
         vpe_log("input color space not supported fmt: %d, "
                 "encoding: %d, cositing: %d, gamma: %d, range: %d, primaries: %d\n",

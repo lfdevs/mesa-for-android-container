@@ -149,7 +149,8 @@ try_pbo_readpixels(struct st_context *st, struct gl_renderbuffer *rb,
                         CSO_BIT_SAMPLE_MASK |
                         CSO_BIT_MIN_SAMPLES |
                         CSO_BIT_RENDER_CONDITION |
-                        CSO_BITS_ALL_SHADERS));
+                        CSO_BIT_MESH_SHADER |
+                        CSO_BITS_VERTEX_PIPE_SHADERS));
 
    cso_set_sample_mask(cso, ~0);
    cso_set_min_samples(cso, 1);
@@ -189,14 +190,14 @@ try_pbo_readpixels(struct st_context *st, struct gl_renderbuffer *rb,
       if (sampler_view == NULL)
          goto fail;
 
-      pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, 1, 0,
+      pipe->set_sampler_views(pipe, MESA_SHADER_FRAGMENT, 0, 1, 0,
                               &sampler_view);
-      st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] =
-         MAX2(st->state.num_sampler_views[PIPE_SHADER_FRAGMENT], 1);
+      st->state.num_sampler_views[MESA_SHADER_FRAGMENT] =
+         MAX2(st->state.num_sampler_views[MESA_SHADER_FRAGMENT], 1);
 
       pipe_sampler_view_release(sampler_view);
 
-      cso_set_samplers(cso, PIPE_SHADER_FRAGMENT, 1, samplers);
+      cso_set_samplers(cso, MESA_SHADER_FRAGMENT, 1, samplers);
    }
 
    /* Set up destination image */
@@ -212,7 +213,7 @@ try_pbo_readpixels(struct st_context *st, struct gl_renderbuffer *rb,
       image.u.buf.size = (addr.last_element - addr.first_element + 1) *
                          addr.bytes_per_pixel;
 
-      pipe->set_shader_images(pipe, PIPE_SHADER_FRAGMENT, 0, 1, 0, &image);
+      pipe->set_shader_images(pipe, MESA_SHADER_FRAGMENT, 0, 1, 0, &image);
    }
 
    /* Set up no-attachment framebuffer */
@@ -257,13 +258,12 @@ fail:
     * use them.
     */
    cso_restore_state(cso, CSO_UNBIND_FS_SAMPLERVIEWS | CSO_UNBIND_FS_IMAGE0);
-   st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
+   st->state.num_sampler_views[MESA_SHADER_FRAGMENT] = 0;
 
    st->ctx->Array.NewVertexElements = true;
-   st->ctx->NewDriverState |= ST_NEW_FS_CONSTANTS |
-                              ST_NEW_FS_IMAGES |
-                              ST_NEW_FS_SAMPLER_VIEWS |
-                              ST_NEW_VERTEX_ARRAYS;
+   ST_SET_STATE4(st->ctx->NewDriverState, ST_NEW_FS_CONSTANTS,
+                 ST_NEW_FS_IMAGES, ST_NEW_FS_SAMPLER_VIEWS,
+                 ST_NEW_VERTEX_ARRAYS);
 
    return success;
 }
@@ -372,10 +372,10 @@ try_cached_readpixels(struct st_context *st, struct gl_renderbuffer *rb,
          /* Heuristic: If previous successive calls read at least a fraction
           * of the surface _and_ we read again, trigger the cache.
           */
-         unsigned threshold = MAX2(1, rb->Width * rb->Height / 8);
+         size_t threshold = MAX2(1, (size_t)rb->Width * rb->Height / 8);
 
          if (st->readpix_cache.hits < threshold) {
-            st->readpix_cache.hits += width * height;
+            st->readpix_cache.hits += (size_t)width * height;
             return NULL;
          }
 
@@ -433,7 +433,8 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
 
    /* Validate state (to be sure we have up-to-date framebuffer surfaces)
     * and flush the bitmap cache prior to reading. */
-   st_validate_state(st, ST_PIPELINE_UPDATE_FB_STATE_MASK);
+   ST_PIPELINE_UPDATE_FB_STATE_MASK(mask);
+   st_validate_state(st, mask);
    st_flush_bitmap_cache(st);
 
    if (rb->TexImage && st->force_compute_based_texture_transfer)
@@ -551,7 +552,7 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
                                          type, 0, 0);
 
       if (tex_xfer->stride == bytesPerRow && destStride == bytesPerRow) {
-         memcpy(dest, map, bytesPerRow * height);
+         memcpy(dest, map, (size_t)bytesPerRow * height);
       } else {
          GLuint row;
 

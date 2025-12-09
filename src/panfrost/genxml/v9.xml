@@ -498,21 +498,6 @@
     <field name="Divisor D" size="32" start="5:0" type="uint"/>
   </struct>
 
-  <struct name="Buffer" size="8" align="32">
-    <field name="Type" size="4" start="0:0" type="Descriptor Type" default="Buffer"/>
-    <field name="Buffer type" size="4" start="0:4" type="Buffer Type" default="Simple"/>
-    <field name="Size" size="32" start="1:0" type="uint"/>
-    <field name="Address" size="64" start="2:0" type="address"/>
-
-    <!-- Structured buffer only -->
-    <field name="Stride" size="32" start="4:0" type="uint"/>
-
-    <!-- Vertex packet buffer only -->
-    <field name="Packet stride" size="16" start="4:0" type="uint" modifier="shr(6)"/>
-    <field name="Attribute stride" size="16" start="4:16" type="uint"/>
-
-  </struct>
-
   <enum name="Blend Operand A">
     <value name="Zero" value="1"/>
     <value name="Src" value="2"/>
@@ -575,7 +560,6 @@
   <struct name="Internal Conversion" size="1" align="4">
     <field name="Memory Format" size="22" start="0" type="Pixel Format"/>
     <field name="Raw" size="1" start="22" type="bool"/>
-    <field name="Register Format" size="3" start="24" type="Register File Format"/>
   </struct>
 
   <struct name="Blend Fixed-Function" size="2">
@@ -603,6 +587,23 @@
     <field name="Internal" size="64" start="2:0" type="Internal Blend"/>
   </struct>
 
+  <struct name="Buffer" size="8" align="32">
+    <field name="Type" size="4" start="0:0" type="Descriptor Type" default="Buffer"/>
+    <field name="Buffer type" size="4" start="0:4" type="Buffer Type" default="Simple"/>
+    <field name="Size" size="32" start="1:0" type="uint"/>
+    <field name="Address" size="64" start="2:0" type="address"/>
+
+    <!-- Structured buffer only -->
+    <field name="Stride" size="32" start="4:0" type="uint"/>
+
+    <!-- Vertex packet buffer only -->
+    <field name="Packet stride" size="16" start="4:0" type="uint" modifier="shr(6)"/>
+    <field name="Attribute stride" size="16" start="4:16" type="uint"/>
+
+    <!-- Texel buffer only, this is not interpreted by HW -->
+    <field name="Conversion" size="32" start="7:0" type="Internal Conversion"/>
+  </struct>
+
   <enum name="Point Size Array Format">
     <value name="None" value="0"/>
     <value name="FP16" value="2"/>
@@ -614,7 +615,7 @@
     <field name="Index type" size="3" start="0:8" type="Index Type" default="None"/>
     <field name="Point size array format" size="2" start="0:11" type="Point Size Array Format"/>
     <field name="Primitive Index Enable" size="1" start="0:13" type="bool"/>
-    <field name="Primitive Index Writeback" size="1" start="0:14" type="bool"/>
+    <field name="Primitive Index Override" size="1" start="0:14" type="bool"/>
     <field name="Allow rotating primitives" size="1" start="0:15" type="bool" default="true"/>
     <field name="Low Depth Cull" size="1" start="0:16" type="bool" default="true"/>
     <field name="High Depth Cull" size="1" start="0:17" type="bool" default="true"/>

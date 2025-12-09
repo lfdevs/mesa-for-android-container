@@ -73,6 +73,8 @@ xe_query_config(int fd, struct intel_device_info *devinfo)
 
    if (config->info[DRM_XE_QUERY_CONFIG_FLAGS] & DRM_XE_QUERY_CONFIG_FLAG_HAS_VRAM)
       devinfo->has_local_mem = true;
+   if (config->info[DRM_XE_QUERY_CONFIG_FLAGS] & DRM_XE_QUERY_CONFIG_FLAG_HAS_LOW_LATENCY)
+      devinfo->supports_low_latency_hint = true;
 
    if (!has_gmd_ip_version(devinfo))
       devinfo->revision = (config->info[DRM_XE_QUERY_CONFIG_REV_AND_DEVICE_ID] >> 16) & 0xFFFF;

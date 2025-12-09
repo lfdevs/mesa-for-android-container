@@ -24,6 +24,7 @@
 #ifndef VK_PIPELINE_H
 #define VK_PIPELINE_H
 
+#include "vk_internal_exts.h"
 #include "vk_object.h"
 #include "vk_util.h"
 
@@ -39,18 +40,6 @@ struct vk_device;
 extern "C" {
 #endif
 
-#define VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NIR_CREATE_INFO_MESA \
-   (VkStructureType)1000290001
-
-#define VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_NIR_CREATE_INFO_MESA_cast \
-   VkPipelineShaderStageNirCreateInfoMESA
-
-typedef struct VkPipelineShaderStageNirCreateInfoMESA {
-   VkStructureType sType;
-   const void *pNext;
-   struct nir_shader *nir;
-} VkPipelineShaderStageNirCreateInfoMESA;
-
 bool
 vk_pipeline_shader_stage_is_null(const VkPipelineShaderStageCreateInfo *info);
 
@@ -65,13 +54,19 @@ vk_pipeline_shader_stage_to_nir(struct vk_device *device,
                                 const struct nir_shader_compiler_options *nir_options,
                                 void *mem_ctx, struct nir_shader **nir_out);
 
-enum gl_subgroup_size
-vk_get_subgroup_size(uint32_t spirv_version,
-                     gl_shader_stage stage,
+typedef struct nir_shader nir_shader;
+
+void
+vk_set_subgroup_size(struct vk_device *device,
+                     nir_shader *shader,
+                     uint32_t spirv_version,
                      const void *info_pNext,
                      bool allow_varying,
                      bool require_full);
 
+/* This struct needs to be hashable mem-comparable */
+PRAGMA_DIAGNOSTIC_PUSH
+PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct vk_pipeline_robustness_state {
    VkPipelineRobustnessBufferBehaviorEXT storage_buffers;
    VkPipelineRobustnessBufferBehaviorEXT uniform_buffers;
@@ -79,7 +74,9 @@ struct vk_pipeline_robustness_state {
    VkPipelineRobustnessImageBehaviorEXT images;
    bool null_uniform_buffer_descriptor;
    bool null_storage_buffer_descriptor;
+   bool _pad[2];
 };
+PRAGMA_DIAGNOSTIC_POP
 
 /** Hash VkPipelineShaderStageCreateInfo info
  *
@@ -196,7 +193,7 @@ struct vk_pipeline_ops {
                     struct vk_pipeline *pipeline);
 
    struct vk_shader *(*get_shader)(struct vk_pipeline *pipeline,
-                                   gl_shader_stage stage);
+                                   mesa_shader_stage stage);
 };
 
 void *vk_pipeline_zalloc(struct vk_device *device,
@@ -219,7 +216,7 @@ void vk_pipeline_free(struct vk_device *device,
 
 static inline struct vk_shader *
 vk_pipeline_get_shader(struct vk_pipeline *pipeline,
-                       gl_shader_stage stage)
+                       mesa_shader_stage stage)
 {
    if (pipeline->ops->get_shader == NULL)
       return NULL;

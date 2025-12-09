@@ -59,6 +59,101 @@
     <value name="2x2" value="1"/>
     <value name="4x4" value="2"/>
   </enum>
+  <enum name="Blend Func">
+    <value name="Subtract" value="0"/>
+    <value name="Reverse Subtract" value="1"/>
+    <value name="Add" value="2"/>
+    <value name="Logicop" value="3"/>
+    <value name="Min" value="4"/>
+    <value name="Max" value="5"/>
+  </enum>
+  <enum name="Blend Factor Color">
+    <value name="SRC Color" value="0"/>
+    <value name="DST Color" value="1"/>
+    <value name="Const Color" value="2"/>
+    <value name="Zero" value="3"/>
+    <value name="SRC Alpha SAT" value="4"/>
+    <value name="SRC1 Color" value="5"/>
+    <value name="INV SRC Color" value="8"/>
+    <value name="INV DST Color" value="9"/>
+    <value name="INV Const Color" value="10"/>
+    <value name="One" value="11"/>
+    <value name="INV SRC1 Color" value="13"/>
+    <value name="SRC Alpha" value="16"/>
+    <value name="DST Alpha" value="17"/>
+    <value name="Const Alpha" value="18"/>
+    <value name="SRC1 Alpha" value="21"/>
+    <value name="INV SRC Alpha" value="24"/>
+    <value name="INV DST Alpha" value="25"/>
+    <value name="INV Const Alpha" value="26"/>
+    <value name="INV SRC1 Alpha" value="29"/>
+  </enum>
+  <enum name="Blend Factor Alpha">
+    <value name="SRC Alpha" value="0"/>
+    <value name="DST Alpha" value="1"/>
+    <value name="Const Alpha" value="2"/>
+    <value name="Zero" value="3"/>
+    <value name="SRC Alpha SAT" value="4"/>
+    <value name="SRC1 Alpha" value="5"/>
+    <value name="INV SRC Alpha" value="8"/>
+    <value name="INV DST Alpha" value="9"/>
+    <value name="INV Const Alpha" value="10"/>
+    <value name="One" value="11"/>
+    <value name="INV SRC1 Alpha" value="13"/>
+  </enum>
+  <enum name="Logic Op">
+    <value name="CLEAR" value="0"/>
+    <value name="NOR" value="1"/>
+    <value name="AND Inverted" value="2"/>
+    <value name="COPY Inverted" value="3"/>
+    <value name="AND Reverse" value="4"/>
+    <value name="INVERT" value="5"/>
+    <value name="XOR" value="6"/>
+    <value name="NAND" value="7"/>
+    <value name="AND" value="8"/>
+    <value name="EQUIV" value="9"/>
+    <value name="NOOP" value="10"/>
+    <value name="OR Inverted" value="11"/>
+    <value name="COPY" value="12"/>
+    <value name="OR Reverse" value="13"/>
+    <value name="OR" value="14"/>
+    <value name="SET" value="15"/>
+  </enum>
+  <enum name="Draw mode">
+    <value name="Points" value="0"/>
+    <value name="Lines" value="1"/>
+    <value name="Triangles" value="2"/>
+  </enum>
+  <enum name="Varying Type">
+    <value name="Vec4 FP32" value="0"/>
+    <value name="Vec2 FP32" value="1"/>
+    <value name="Vec4 FP16" value="2"/>
+    <value name="Vec2 FP16" value="3"/>
+    <value name="Vec2 SNORM16" value="4"/>
+    <value name="Vec2 UNORM16" value="5"/>
+    <value name="Vec3 LOWP" value="6"/>
+    <value name="Vec4 UNORM8" value="7"/>
+  </enum>
+  <enum name="Stencil OP">
+    <value name="Keep" value="0"/>
+    <value name="Replace" value="1"/>
+    <value name="Zero" value="2"/>
+    <value name="Invert" value="3"/>
+    <value name="Incr Wrap" value="4"/>
+    <value name="Decr Wrap" value="5"/>
+    <value name="Incr" value="6"/>
+    <value name="Decr" value="7"/>
+  </enum>
+  <enum name="Compare Func">
+    <value name="Never" value="0"/>
+    <value name="Less" value="1"/>
+    <value name="Equal" value="2"/>
+    <value name="Lequal" value="3"/>
+    <value name="Greater" value="4"/>
+    <value name="Notequal" value="5"/>
+    <value name="Gequal" value="6"/>
+    <value name="Always" value="7"/>
+  </enum>
   <struct name="Texture Descriptor" size="64">
     <field name="Texel Format" start="0:0" size="6" type="Texel Format"/>
     <field name="Reverse Component Order" start="0:6" size="1" type="bool"/>
@@ -75,7 +170,7 @@
     <field name="Min Lod" start="1:12" size="8" type="ulod"/>
     <field name="Max Lod" start="1:20" size="8" type="ulod"/>
     <field name="Lod Bias" start="1:28" size="9" type="slod"/>
-    <field name="Unknown 3" start="2:5" size="3" type="hex"/>
+    <field name="Max Anisotropy" start="2:5" size="3" type="uint" modifier="log2"/>
     <field name="Has Stride" start="2:8" size="1" type="bool"/>
     <field name="Mipfilter" start="2:9" size="2" type="Mipfilter"/>
     <field name="Min Img Filter Nearest" start="2:11" size="1" type="bool"/>
@@ -165,5 +260,98 @@
     <field name="Scale Factor X" start="21:16" size="3" type="uint"/>
     <field name="Scale Factor Y" start="21:20" size="3" type="uint"/>
     <field name="Tilebuffer Channel Layout" start="22:0" size="16" type="Tilebuffer Channel Layout"/>
+  </struct>
+  <struct name="Stencil" size="4">
+    <field name="Compare Function" start="0" size="3" type="Compare Func"/>
+    <field name="Stencil Fail" start="3" size="3" type="Stencil OP"/>
+    <field name="Depth Fail" start="6" size="3" type="Stencil OP"/>
+    <field name="Depth Pass" start="9" size="3" type="Stencil OP"/>
+    <field name="Unknown" start="12" size="4" type="hex"/>
+    <field name="Reference Value" start="16" size="8" type="hex"/>
+    <field name="Mask" start="24" size="8" type="hex"/>
+  </struct>
+  <struct name="Render State" size="64">
+    <field name="Blend Color B" start="0:0" size="8" type="unorm8"/>
+    <field name="Blend Color G" start="0:16" size="8" type="unorm8"/>
+    <field name="Blend Color R" start="1:0" size="8" type="unorm8"/>
+    <field name="Blend Color A" start="1:16" size="8" type="unorm8"/>
+    <field name="Blend Func RGB" start="2:0" size="3" type="Blend Func"/>
+    <field name="Blend Func A" start="2:3" size="3" type="Blend Func"/>
+    <field name="Logicop RGB" start="2:6" size="4" type="Logic Op"/>
+    <field name="Blend Factor SRC RGB" start="2:6" size="5" type="Blend Factor Color"/>
+    <field name="Blend Factor DST RGB" start="2:11" size="5" type="Blend Factor Color"/>
+    <field name="Logicop A" start="2:16" size="4" type="Logic Op"/>
+    <field name="Blend Factor SRC A" start="2:16" size="4" type="Blend Factor Alpha"/>
+    <field name="Blend Factor DST A" start="2:20" size="4" type="Blend Factor Alpha"/>
+    <!-- 0xC for normal drawcalls, 0x0 for blits -->
+    <field name="Unknown 0" start="2:24" size="4" type="hex"/>
+    <field name="Color Mask" start="2:28" size="4" type="hex"/>
+    <field name="Depth Test" start="3:0" size="1" type="bool"/>
+    <field name="Depth Compare Func" start="3:1" size="3" type="Compare Func"/>
+    <field name="Depth Test Near Clip Disable" start="3:4" size="1" type="bool"/>
+    <field name="Depth Test Far Clip Disable" start="3:5" size="1" type="bool"/>
+    <field name="Frag Depth Register" start="3:6" size="4" type="hex"/>
+    <field name="Shader Writes Depth Stencil" start="3:10" size="1" type="bool"/>
+    <field name="Shader Writes Depth" start="3:11" size="1" type="bool"/>
+    <field name="Shader Writes Stencil" start="3:12" size="1" type="bool"/>
+    <field name="Unknown 1" start="3:13" size="3" type="hex"/>
+    <field name="Depth Offset Scale" start="3:16" size="8" type="hex"/>
+    <field name="Depth Offset Units" start="3:24" size="8" type="hex"/>
+    <field name="Viewport Near" start="4:0" size="16" type="unorm16"/>
+    <field name="Viewport Far" start="4:16" size="16" type="unorm16"/>
+    <field name="Stencil Front" start="5:0" size="32" type="Stencil"/>
+    <field name="Stencil Back" start="6:0" size="32" type="Stencil"/>
+    <field name="Stencil Write Mask Front" start="7:0" size="8" type="hex"/>
+    <field name="Stencil Write Mask Back" start="7:8" size="8" type="hex"/>
+    <field name="Alpha Reference Value" start="7:16" size="8" type="unorm8"/>
+    <field name="Unknown 2" start="7:24" size="8" type="hex"/>
+    <field name="Alpha Test Func" start="8:0" size="3" type="Compare Func"/>
+    <field name="MSAA" start="8:3" size="4" type="hex"/>
+    <field name="Alpha To Coverage" start="8:7" size="1" type="bool"/>
+    <field name="Alpha To One" start="8:8" size="1" type="bool"/>
+    <field name="Unknown 3" start="8:9" size="1" type="bool"/>
+    <field name="Draw mode" start="8:10" size="2" type="Draw mode"/>
+    <field name="Sample Mask" start="8:12" size="4" type="hex"/>
+    <field name="Frag Color Register 0" start="8:16" size="4" type="hex"/>
+    <field name="Frag Color Register 1" start="8:20" size="4" type="hex"/>
+    <field name="Frag Color Register 2" start="8:24" size="4" type="hex"/>
+    <field name="Frag Color Register 3" start="8:28" size="4" type="hex"/>
+    <field name="FS First Instr Length" start="9:0" size="5" type="uint"/>
+    <field name="Shader Address" start="9:5" size="27" type="hex" modifier="shr(5)"/>
+    <field name="Varying Type 0" start="10:0" size="3" type="Varying Type"/>
+    <field name="Varying Type 1" start="10:3" size="3" type="Varying Type"/>
+    <field name="Varying Type 2" start="10:6" size="3" type="Varying Type"/>
+    <field name="Varying Type 3" start="10:9" size="3" type="Varying Type"/>
+    <field name="Varying Type 4" start="10:12" size="3" type="Varying Type"/>
+    <field name="Varying Type 5" start="10:15" size="3" type="Varying Type"/>
+    <field name="Varying Type 6" start="10:18" size="3" type="Varying Type"/>
+    <field name="Varying Type 7" start="10:21" size="3" type="Varying Type"/>
+    <field name="Varying Type 8" start="10:24" size="3" type="Varying Type"/>
+    <field name="Varying Type 9" start="10:27" size="3" type="Varying Type"/>
+    <field name="Varying Type 10 Low" start="10:30" size="2" type="uint"/>
+    <field name="Uniform Count" start="11:0" size="4" type="hex"/>
+    <field name="Uniforms Address" start="11:4" size="28" type="hex" modifier="shr(4)"/>
+    <field name="Unknown 4" start="11:0" size="4" type="hex"/>
+    <field name="Textures Address" start="12:4" size="28" type="hex" modifier="shr(4)"/>
+    <field name="Varying Stride" start="13:0" size="5" type="uint" modifier="shr(3)"/>
+    <field name="Has Samplers" start="13:5" size="1" type="bool"/>
+    <field name="Unknown 5" start="13:6" size="1" type="bool"/>
+    <field name="Has Uniforms" start="13:7" size="1" type="bool"/>
+    <field name="Unknown 6" start="13:8" size="1" type="bool"/>
+    <field name="Early Z" start="13:9" size="1" type="bool"/>
+    <field name="Unknown 7" start="13:10" size="2" type="hex"/>
+    <field name="Pixel Kill" start="13:12" size="1" type="bool"/>
+    <field name="Unknown 8" start="13:13" size="1" type="bool"/>
+    <field name="Sampler Count" start="13:14" size="14" type="uint"/>
+    <field name="Frag Color 1 Register" start="13:28" size="4" type="hex"/>
+    <field name="Unknown 9" start="14:0" size="12" type="hex"/>
+    <field name="Front face CCW" start="14:12" size="1" type="bool"/>
+    <field name="Dithering" start="14:13" size="1" type="bool"/>
+    <field name="Unknown 10" start="14:14" size="2" type="hex"/>
+    <field name="Uniform Bit" start="14:16" size="1" type="bool"/>
+    <field name="Unknown 11" start="14:17" size="15" type="hex"/>
+    <field name="Varying Type 10 High" start="15:0" size="1" type="uint"/>
+    <field name="Varying Type 11" start="15:1" size="3" type="Varying Type"/>
+    <field name="Varyings Address" start="15:4" size="28" type="hex" modifier="shr(4)"/>
   </struct>
 </genxml>

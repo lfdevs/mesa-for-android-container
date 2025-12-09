@@ -36,7 +36,7 @@
 #ifdef GLX_DIRECT_RENDERING
 
 #include "glxclient.h"
-#include "mapi/glapi/glapi.h"
+#include "mesa/glapi/glapi/glapi.h"
 #include "dispatch.h"
 
 /* Implementation.  */

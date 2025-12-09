@@ -7779,6 +7779,178 @@ static inline void vn_decode_vkCmdDrawIndirectByteCountEXT_reply(struct vn_cs_de
     /* skip vertexStride */
 }
 
+static inline size_t vn_sizeof_vkCmdDrawMeshTasksEXT(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksEXT_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_uint32_t(&groupCountX);
+    cmd_size += vn_sizeof_uint32_t(&groupCountY);
+    cmd_size += vn_sizeof_uint32_t(&groupCountZ);
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdDrawMeshTasksEXT(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksEXT_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_uint32_t(enc, &groupCountX);
+    vn_encode_uint32_t(enc, &groupCountY);
+    vn_encode_uint32_t(enc, &groupCountZ);
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMeshTasksEXT_reply(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksEXT_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip groupCountX */
+    /* skip groupCountY */
+    /* skip groupCountZ */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdDrawMeshTasksEXT_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdDrawMeshTasksEXT_EXT);
+
+    /* skip commandBuffer */
+    /* skip groupCountX */
+    /* skip groupCountY */
+    /* skip groupCountZ */
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMeshTasksIndirectEXT(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectEXT_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_VkBuffer(&buffer);
+    cmd_size += vn_sizeof_VkDeviceSize(&offset);
+    cmd_size += vn_sizeof_uint32_t(&drawCount);
+    cmd_size += vn_sizeof_uint32_t(&stride);
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdDrawMeshTasksIndirectEXT(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectEXT_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_VkBuffer(enc, &buffer);
+    vn_encode_VkDeviceSize(enc, &offset);
+    vn_encode_uint32_t(enc, &drawCount);
+    vn_encode_uint32_t(enc, &stride);
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMeshTasksIndirectEXT_reply(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectEXT_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip buffer */
+    /* skip offset */
+    /* skip drawCount */
+    /* skip stride */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdDrawMeshTasksIndirectEXT_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectEXT_EXT);
+
+    /* skip commandBuffer */
+    /* skip buffer */
+    /* skip offset */
+    /* skip drawCount */
+    /* skip stride */
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectCountEXT_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_VkBuffer(&buffer);
+    cmd_size += vn_sizeof_VkDeviceSize(&offset);
+    cmd_size += vn_sizeof_VkBuffer(&countBuffer);
+    cmd_size += vn_sizeof_VkDeviceSize(&countBufferOffset);
+    cmd_size += vn_sizeof_uint32_t(&maxDrawCount);
+    cmd_size += vn_sizeof_uint32_t(&stride);
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdDrawMeshTasksIndirectCountEXT(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectCountEXT_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_VkBuffer(enc, &buffer);
+    vn_encode_VkDeviceSize(enc, &offset);
+    vn_encode_VkBuffer(enc, &countBuffer);
+    vn_encode_VkDeviceSize(enc, &countBufferOffset);
+    vn_encode_uint32_t(enc, &maxDrawCount);
+    vn_encode_uint32_t(enc, &stride);
+}
+
+static inline size_t vn_sizeof_vkCmdDrawMeshTasksIndirectCountEXT_reply(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectCountEXT_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip buffer */
+    /* skip offset */
+    /* skip countBuffer */
+    /* skip countBufferOffset */
+    /* skip maxDrawCount */
+    /* skip stride */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdDrawMeshTasksIndirectCountEXT_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectCountEXT_EXT);
+
+    /* skip commandBuffer */
+    /* skip buffer */
+    /* skip offset */
+    /* skip countBuffer */
+    /* skip countBufferOffset */
+    /* skip maxDrawCount */
+    /* skip stride */
+}
+
 static inline size_t vn_sizeof_vkCmdCopyAccelerationStructureKHR(VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureInfoKHR* pInfo)
 {
     const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdCopyAccelerationStructureKHR_EXT;
@@ -13016,6 +13188,69 @@ static inline void vn_submit_vkCmdDrawIndirectByteCountEXT(struct vn_ring *vn_ri
     }
 }
 
+static inline void vn_submit_vkCmdDrawMeshTasksEXT(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, struct vn_ring_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdDrawMeshTasksEXT(commandBuffer, groupCountX, groupCountY, groupCountZ);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdDrawMeshTasksEXT_reply(commandBuffer, groupCountX, groupCountY, groupCountZ) : 0;
+
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdDrawMeshTasksEXT(enc, cmd_flags, commandBuffer, groupCountX, groupCountY, groupCountZ);
+        vn_ring_submit_command(vn_ring, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
+static inline void vn_submit_vkCmdDrawMeshTasksIndirectEXT(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride, struct vn_ring_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdDrawMeshTasksIndirectEXT(commandBuffer, buffer, offset, drawCount, stride);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdDrawMeshTasksIndirectEXT_reply(commandBuffer, buffer, offset, drawCount, stride) : 0;
+
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdDrawMeshTasksIndirectEXT(enc, cmd_flags, commandBuffer, buffer, offset, drawCount, stride);
+        vn_ring_submit_command(vn_ring, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
+static inline void vn_submit_vkCmdDrawMeshTasksIndirectCountEXT(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride, struct vn_ring_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdDrawMeshTasksIndirectCountEXT(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdDrawMeshTasksIndirectCountEXT_reply(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) : 0;
+
+    struct vn_cs_encoder *enc = vn_ring_submit_command_init(vn_ring, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdDrawMeshTasksIndirectCountEXT(enc, cmd_flags, commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+        vn_ring_submit_command(vn_ring, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
 static inline void vn_submit_vkCmdCopyAccelerationStructureKHR(struct vn_ring *vn_ring, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureInfoKHR* pInfo, struct vn_ring_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
@@ -15025,6 +15260,24 @@ static inline void vn_async_vkCmdDrawIndirectByteCountEXT(struct vn_ring *vn_rin
 {
     struct vn_ring_submit_command submit;
     vn_submit_vkCmdDrawIndirectByteCountEXT(vn_ring, 0, commandBuffer, instanceCount, firstInstance, counterBuffer, counterBufferOffset, counterOffset, vertexStride, &submit);
+}
+
+static inline void vn_async_vkCmdDrawMeshTasksEXT(struct vn_ring *vn_ring, VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+{
+    struct vn_ring_submit_command submit;
+    vn_submit_vkCmdDrawMeshTasksEXT(vn_ring, 0, commandBuffer, groupCountX, groupCountY, groupCountZ, &submit);
+}
+
+static inline void vn_async_vkCmdDrawMeshTasksIndirectEXT(struct vn_ring *vn_ring, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+{
+    struct vn_ring_submit_command submit;
+    vn_submit_vkCmdDrawMeshTasksIndirectEXT(vn_ring, 0, commandBuffer, buffer, offset, drawCount, stride, &submit);
+}
+
+static inline void vn_async_vkCmdDrawMeshTasksIndirectCountEXT(struct vn_ring *vn_ring, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+{
+    struct vn_ring_submit_command submit;
+    vn_submit_vkCmdDrawMeshTasksIndirectCountEXT(vn_ring, 0, commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride, &submit);
 }
 
 static inline void vn_async_vkCmdCopyAccelerationStructureKHR(struct vn_ring *vn_ring, VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureInfoKHR* pInfo)

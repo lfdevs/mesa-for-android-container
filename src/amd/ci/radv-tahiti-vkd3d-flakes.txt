@@ -1,0 +1,2 @@
+test_quad_tessellation_dxil
+test_quad_tessellation_wrong_pso_topology_dxil

@@ -641,7 +641,7 @@ d3d12_convert_pipe_video_profile_to_dxgi_format(enum pipe_video_profile profile)
          return DXGI_FORMAT_Y210;
       default:
       {
-         unreachable("Unsupported pipe video profile");
+         UNREACHABLE("Unsupported pipe video profile");
       } break;
    }
 }

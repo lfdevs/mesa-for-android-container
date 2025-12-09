@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -34,6 +35,11 @@ static const struct debug_control fd_rd_dump_options[] = {
 };
 
 struct fd_rd_dump_env fd_rd_dump_env;
+
+struct fd_rd_dump_range {
+   unsigned range_begin;
+   unsigned range_end;
+};
 
 static void
 fd_rd_dump_env_init_once(void)
@@ -69,6 +75,81 @@ fd_rd_output_sanitize_name(char *name)
    }
 }
 
+static void
+fd_rd_parse_dump_range(const char *option_name, struct util_dynarray *range_array)
+{
+   *range_array = UTIL_DYNARRAY_INIT;
+   const char *range_value = os_get_option(option_name);
+   if (!range_value)
+      return;
+
+   const char *p = range_value;
+   while (p && *p) {
+      char *ep = NULL;
+
+      struct fd_rd_dump_range range;
+      range.range_begin = strtol(p, &ep, 0);
+      if (ep == p)
+         break;
+      p = ep;
+
+      range.range_end = range.range_begin;
+      if (*p == '-') {
+         ep = NULL;
+         range.range_end = strtol(++p, &ep, 0);
+         if (ep == p)
+            break;
+         p = ep;
+      }
+
+      util_dynarray_append(range_array, range);
+
+      if (*p == ',')
+         ++p;
+      if (!isdigit(*p) && !!*p)
+         break;
+   }
+
+   if (*p == '\0') {
+      mesa_logi("[fd_rd_output] %s specified %" PRIuPTR " dump ranges:",
+                option_name, util_dynarray_num_elements(range_array, struct fd_rd_dump_range));
+      util_dynarray_foreach(range_array, struct fd_rd_dump_range, range) {
+         mesa_logi("[fd_rd_output]   [%u, %u]", range->range_begin, range->range_end);
+      }
+   } else {
+      mesa_logi("[fd_rd_output] failed to parse dump range '%s' for %s",
+                range_value, option_name);
+
+      util_dynarray_clear(range_array);
+      struct fd_rd_dump_range invalid_range = {
+         .range_begin = UINT_MAX,
+         .range_end = UINT_MAX,
+      };
+      util_dynarray_append(range_array, invalid_range);
+   }
+}
+
+static bool
+fd_rd_output_allowed(struct fd_rd_output *output, uint32_t frame, uint32_t submit)
+{
+   /* Allow output if no ranges were specified. */
+   if (!util_dynarray_num_elements(&output->frame_ranges, struct fd_rd_dump_range) &&
+       !util_dynarray_num_elements(&output->submit_ranges, struct fd_rd_dump_range))
+      return true;
+
+   util_dynarray_foreach(&output->frame_ranges, struct fd_rd_dump_range, range) {
+      if (frame >= range->range_begin && frame <= range->range_end)
+         return true;
+   }
+
+   util_dynarray_foreach(&output->submit_ranges, struct fd_rd_dump_range, range) {
+      if (submit >= range->range_begin && submit <= range->range_end)
+         return true;
+   }
+
+   return false;
+}
+
 void
 fd_rd_output_init(struct fd_rd_output *output, const char* output_name)
 {
@@ -101,13 +182,15 @@ fd_rd_output_init(struct fd_rd_output *output, const char* output_name)
                fd_rd_output_base_path, output->name);
       output->trigger_fd = open(file_path, O_RDWR | O_CREAT | O_TRUNC, 0600);
    }
+
+   fd_rd_parse_dump_range("FD_RD_DUMP_FRAMES", &output->frame_ranges);
+   fd_rd_parse_dump_range("FD_RD_DUMP_SUBMITS", &output->submit_ranges);
 }
 
 void
 fd_rd_output_fini(struct fd_rd_output *output)
 {
-   if (output->name != NULL)
-      free(output->name);
+   free(output->name);
 
    if (output->file != NULL) {
       assert(output->combine);
@@ -125,6 +208,9 @@ fd_rd_output_fini(struct fd_rd_output *output)
                fd_rd_output_base_path, output->name);
       unlink(file_path);
    }
+
+   util_dynarray_fini(&output->frame_ranges);
+   util_dynarray_fini(&output->submit_ranges);
 }
 
 static void
@@ -193,7 +279,7 @@ fd_rd_output_update_trigger_count(struct fd_rd_output *output)
 }
 
 bool
-fd_rd_output_begin(struct fd_rd_output *output, uint32_t submit_idx)
+fd_rd_output_begin(struct fd_rd_output *output, uint32_t frame, uint32_t submit)
 {
    assert(output->combine ^ (output->file == NULL));
 
@@ -207,12 +293,20 @@ fd_rd_output_begin(struct fd_rd_output *output, uint32_t submit_idx)
           --output->trigger_count;
    }
 
+   if (!fd_rd_output_allowed(output, frame, submit))
+      return false;
+
    if (output->combine)
       return true;
 
    char file_path[PATH_MAX];
-   snprintf(file_path, sizeof(file_path), "%s/%s_%.5d.rd",
-            fd_rd_output_base_path, output->name, submit_idx);
+   if (frame != UINT_MAX) {
+      snprintf(file_path, sizeof(file_path), "%s/%s_frame%.5d_submit%.5d.rd",
+               fd_rd_output_base_path, output->name, frame, submit);
+   } else {
+      snprintf(file_path, sizeof(file_path), "%s/%s_submit%.5d.rd",
+               fd_rd_output_base_path, output->name, submit);
+   }
    output->file = gzopen(file_path, "w");
    return true;
 }

@@ -116,7 +116,7 @@ agx_batch_get_so_address(struct agx_batch *batch, unsigned buffer,
                           target->buffer_size);
 
    *size = target->buffer_size;
-   return rsrc->bo->va->addr + target->buffer_offset;
+   return agx_map_gpu(rsrc) + target->buffer_offset;
 }
 
 void
@@ -167,7 +167,7 @@ agx_primitives_update_direct(struct agx_context *ctx,
                              const struct pipe_draw_start_count_bias *draw)
 {
    assert(ctx->active_queries && ctx->prims_generated[0] && "precondition");
-   assert(!ctx->stage[PIPE_SHADER_GEOMETRY].shader &&
+   assert(!ctx->stage[MESA_SHADER_GEOMETRY].shader &&
           "Geometry shaders use their own counting");
 
    agx_query_increment_cpu(ctx, ctx->prims_generated[0],

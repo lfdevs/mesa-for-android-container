@@ -12,9 +12,8 @@ void
 panvk_per_arch(cmd_prepare_dispatch_sysvals)(
    struct panvk_cmd_buffer *cmdbuf, const struct panvk_dispatch_info *info)
 {
-   const struct panvk_shader_variant *shader =
+   const struct panvk_shader_variant *cs =
       panvk_shader_only_variant(cmdbuf->state.compute.shader);
-   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
 
    BITSET_DECLARE(dirty_sysvals, MAX_SYSVAL_FAUS) = {0};
 
@@ -38,13 +37,11 @@ panvk_per_arch(cmd_prepare_dispatch_sysvals)(
    set_compute_sysval(cmdbuf, dirty_sysvals, base.y, info->wg_base.y);
    set_compute_sysval(cmdbuf, dirty_sysvals, base.z, info->wg_base.z);
    set_compute_sysval(cmdbuf, dirty_sysvals, local_group_size.x,
-                      shader->cs.local_size.x);
+                      cs->cs.local_size.x);
    set_compute_sysval(cmdbuf, dirty_sysvals, local_group_size.y,
-                      shader->cs.local_size.y);
+                      cs->cs.local_size.y);
    set_compute_sysval(cmdbuf, dirty_sysvals, local_group_size.z,
-                      shader->cs.local_size.z);
-   set_compute_sysval(cmdbuf, dirty_sysvals, printf_buffer_address,
-                      dev->printf.bo->addr.dev);
+                      cs->cs.local_size.z);
 
 #if PAN_ARCH < 9
    struct panvk_descriptor_state *desc_state =
@@ -60,7 +57,7 @@ panvk_per_arch(cmd_prepare_dispatch_sysvals)(
    }
 
    for (uint32_t i = 0; i < MAX_SETS; i++) {
-      if (shader->desc_info.used_set_mask & BITFIELD_BIT(i)) {
+      if (cs->desc_info.used_set_mask & BITFIELD_BIT(i)) {
          set_compute_sysval(cmdbuf, dirty_sysvals, desc.sets[i],
                             desc_state->sets[i]->descs.dev);
       }
@@ -68,7 +65,7 @@ panvk_per_arch(cmd_prepare_dispatch_sysvals)(
 #endif
 
    /* Dirty push_uniforms if the used_sysvals/dirty_sysvals overlap. */
-   BITSET_AND(dirty_sysvals, dirty_sysvals, shader->fau.used_sysvals);
+   BITSET_AND(dirty_sysvals, dirty_sysvals, cs->fau.used_sysvals);
    if (!BITSET_IS_EMPTY(dirty_sysvals))
       compute_state_set_dirty(cmdbuf, PUSH_UNIFORMS);
 }

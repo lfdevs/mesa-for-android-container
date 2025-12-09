@@ -130,6 +130,11 @@ struct mesa_trace_flow {
  *
  * to work.
  */
+#define _MESA_TRACE_SCOPE_NAME(name)                                         \
+   void *_MESA_TRACE_SCOPE_VAR(__LINE__)                                     \
+      __attribute__((cleanup(_mesa_trace_scope_end), unused)) =              \
+         _mesa_trace_scope_begin_name(name)
+
 #define _MESA_TRACE_SCOPE(format, ...)                                       \
    void *_MESA_TRACE_SCOPE_VAR(__LINE__)                                     \
       __attribute__((cleanup(_mesa_trace_scope_end), unused)) =              \
@@ -140,12 +145,22 @@ struct mesa_trace_flow {
       __attribute__((cleanup(_mesa_trace_scope_end), unused)) =              \
          _mesa_trace_scope_flow_begin(name, id)
 
+
+static inline void *
+_mesa_trace_scope_begin_name(const char *name)
+{
+   void *scope = NULL;
+   _MESA_TRACE_BEGIN(name);
+   _MESA_GPUVIS_TRACE_BEGIN(name);
+   scope = _MESA_SYSPROF_TRACE_BEGIN(name);
+   return scope;
+}
+
 __attribute__((format(printf, 1, 2)))
 static inline void *
 _mesa_trace_scope_begin(const char *format, ...)
 {
    char name[_MESA_TRACE_SCOPE_MAX_NAME_LENGTH];
-   void *scope = NULL;
    va_list args;
 
    va_start(args, format);
@@ -154,10 +169,7 @@ _mesa_trace_scope_begin(const char *format, ...)
    va_end(args);
    assert(len < _MESA_TRACE_SCOPE_MAX_NAME_LENGTH);
 
-   _MESA_TRACE_BEGIN(name);
-   _MESA_GPUVIS_TRACE_BEGIN(name);
-   scope = _MESA_SYSPROF_TRACE_BEGIN(name);
-   return scope;
+   return _mesa_trace_scope_begin_name(name);
 }
 
 static inline void *
@@ -188,12 +200,14 @@ _mesa_trace_scope_end(UNUSED void **scope)
 #else
 
 #define _MESA_TRACE_SCOPE(format, ...)
+#define _MESA_TRACE_SCOPE_FLOW(func, id)
+#define _MESA_TRACE_SCOPE_NAME(name)
 
 #endif /* __has_attribute(cleanup) && __has_attribute(unused) */
 
 #define MESA_TRACE_SCOPE(format, ...) _MESA_TRACE_SCOPE(format, ##__VA_ARGS__)
 #define MESA_TRACE_SCOPE_FLOW(name, id) _MESA_TRACE_SCOPE_FLOW(name, id)
-#define MESA_TRACE_FUNC() _MESA_TRACE_SCOPE("%s", __func__)
+#define MESA_TRACE_FUNC() _MESA_TRACE_SCOPE_NAME(__func__)
 #define MESA_TRACE_FUNC_FLOW(id) _MESA_TRACE_SCOPE_FLOW(__func__, id)
 #define MESA_TRACE_SET_COUNTER(name, value) _MESA_TRACE_SET_COUNTER(name, value)
 #define MESA_TRACE_TIMESTAMP_BEGIN(name, track_id, flow_id, clock, timestamp) \
@@ -204,7 +218,12 @@ _mesa_trace_scope_end(UNUSED void **scope)
 static inline void
 util_cpu_trace_init()
 {
+#if defined(HAVE_PERFETTO)
    util_perfetto_init();
+#elif DETECT_OS_ANDROID && !defined(__cplusplus)
+   atrace_init();
+#endif /* HAVE_PERFETTO */
+
    util_gpuvis_init();
 }
 

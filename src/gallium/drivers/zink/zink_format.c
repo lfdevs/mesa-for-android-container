@@ -258,7 +258,7 @@ zink_format_clamp_channel_color(const struct util_format_description *desc, unio
 
    switch (desc->channel[channel].type) {
    case UTIL_FORMAT_TYPE_VOID:
-      unreachable("handled above");
+      UNREACHABLE("handled above");
       break;
    case UTIL_FORMAT_TYPE_SIGNED:
       if (desc->channel[channel].normalized)

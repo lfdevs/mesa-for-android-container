@@ -121,7 +121,7 @@ pan_get_interleave_zs(enum pipe_format format, bool depth, bool stencil)
       } else if (!depth && stencil) {
          return PAN_INTERLEAVE_STENCIL;
       } else if (!depth && !stencil) {
-         unreachable("at least one aspect must be specified");
+         UNREACHABLE("at least one aspect must be specified");
       }
    }
    return PAN_INTERLEAVE_NONE;

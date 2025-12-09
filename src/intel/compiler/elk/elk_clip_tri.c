@@ -30,7 +30,7 @@
   */
 
 #include "elk_clip.h"
-#include "elk_prim.h"
+#include "compiler/intel_prim.h"
 
 static void release_tmps( struct elk_clip_compile *c )
 {

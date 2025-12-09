@@ -33,7 +33,7 @@
 #include <GL/wglext.h>
 #include <GL/mesa_glinterop.h>
 
-#include "glapi/glapi.h"
+#include "glapi/glapi/glapi.h"
 #include "stw_device.h"
 #include "stw_gdishim.h"
 #include "gldrv.h"

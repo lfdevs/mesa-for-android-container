@@ -40,6 +40,7 @@
 #include "bufferobj.h"
 #include "externalobjects.h"
 #include "mtypes.h"
+#include "shared.h"
 #include "teximage.h"
 #include "glformats.h"
 #include "texstore.h"
@@ -255,6 +256,13 @@ buffer_usage(GLenum target, GLboolean immutable,
    }
 }
 
+static void
+_mesa_bufferobj_release_buffer(struct gl_context *ctx, struct gl_buffer_object *obj)
+{
+   if (obj->buffer)
+      _mesa_release_pending_resource(ctx, obj->buffer, true);
+   obj->buffer = NULL;
+}
 
 static ALWAYS_INLINE GLboolean
 bufferobj_data(struct gl_context *ctx,
@@ -312,7 +320,7 @@ bufferobj_data(struct gl_context *ctx,
    obj->Usage = usage;
    obj->StorageFlags = storageFlags;
 
-   _mesa_bufferobj_release_buffer(obj);
+   _mesa_bufferobj_release_buffer(ctx, obj);
 
    unsigned bindings = buffer_target_to_bind_flags(target);
 
@@ -352,7 +360,9 @@ bufferobj_data(struct gl_context *ctx,
          obj->buffer = screen->resource_create(screen, &buffer);
 
          if (obj->buffer && data)
-            pipe_buffer_write(pipe, obj->buffer, 0, size, data);
+            pipe->buffer_subdata(pipe, obj->buffer,
+                                 PIPE_MAP_WRITE | PIPE_MAP_DISCARD_WHOLE_RESOURCE | PIPE_MAP_UNSYNCHRONIZED,
+                                 0, size, data);
       }
 
       if (!obj->buffer) {
@@ -360,23 +370,23 @@ bufferobj_data(struct gl_context *ctx,
          obj->Size = 0;
          return GL_FALSE;
       }
-
-      obj->private_refcount_ctx = ctx;
    }
 
    /* The current buffer may be bound, so we have to revalidate all atoms that
     * might be using it.
     */
    if (obj->UsageHistory & USAGE_ARRAY_BUFFER)
-      ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_VERTEX_ARRAYS);
    if (obj->UsageHistory & USAGE_UNIFORM_BUFFER)
-      ctx->NewDriverState |= ST_NEW_UNIFORM_BUFFER;
+      ST_SET_SHADER_STATES(ctx->NewDriverState, UBOS);
    if (obj->UsageHistory & USAGE_SHADER_STORAGE_BUFFER)
-      ctx->NewDriverState |= ST_NEW_STORAGE_BUFFER;
-   if (obj->UsageHistory & USAGE_TEXTURE_BUFFER)
-      ctx->NewDriverState |= ST_NEW_SAMPLER_VIEWS | ST_NEW_IMAGE_UNITS;
+      ST_SET_SHADER_STATES(ctx->NewDriverState, SSBOS);
+   if (obj->UsageHistory & USAGE_TEXTURE_BUFFER) {
+      ST_SET_SHADER_STATES(ctx->NewDriverState, SAMPLER_VIEWS);
+      ST_SET_SHADER_STATES(ctx->NewDriverState, IMAGES);
+   }
    if (obj->UsageHistory & USAGE_ATOMIC_COUNTER_BUFFER)
-      ctx->NewDriverState |= ctx->DriverFlags.NewAtomicBuffer;
+      ST_SET_STATES(ctx->NewDriverState, ctx->DriverFlags.NewAtomicBuffer);
 
    return GL_TRUE;
 }
@@ -718,9 +728,7 @@ get_buffer_target(struct gl_context *ctx, GLenum target, bool no_error)
       }
       break;
    case GL_TEXTURE_BUFFER:
-      if (no_error ||
-          _mesa_has_ARB_texture_buffer_object(ctx) ||
-          _mesa_has_OES_texture_buffer(ctx)) {
+      if (no_error || _mesa_has_texture_buffer_object(ctx)) {
          return &ctx->Texture.BufferObject;
       }
       break;
@@ -1008,26 +1016,6 @@ convert_clear_buffer_data(struct gl_context *ctx,
    }
 }
 
-void
-_mesa_bufferobj_release_buffer(struct gl_buffer_object *obj)
-{
-   if (!obj->buffer)
-      return;
-
-   /* Subtract the remaining private references before unreferencing
-    * the buffer. See the header file for explanation.
-    */
-   if (obj->private_refcount) {
-      assert(obj->private_refcount > 0);
-      p_atomic_add(&obj->buffer->reference.count,
-                   -obj->private_refcount);
-      obj->private_refcount = 0;
-   }
-   obj->private_refcount_ctx = NULL;
-
-   pipe_resource_reference(&obj->buffer, NULL);
-}
-
 /**
  * Delete a buffer object.
  *
@@ -1039,7 +1027,7 @@ _mesa_delete_buffer_object(struct gl_context *ctx,
 {
    assert(bufObj->RefCount == 0);
    _mesa_buffer_unmap_all_mappings(ctx, bufObj);
-   _mesa_bufferobj_release_buffer(bufObj);
+   _mesa_bufferobj_release_buffer(ctx, bufObj);
 
    vbo_delete_minmax_cache(bufObj);
 
@@ -1162,6 +1150,13 @@ unreference_zombie_buffers_for_ctx(struct gl_context *ctx)
          detach_ctx_from_buffer(ctx, buf);
       }
    }
+
+   set_foreach(&ctx->Shared->ReleaseResources, entry) {
+      struct pipe_resource *releasebuf = (void*)entry->key;
+      if (_mesa_release_pending_resource(ctx, releasebuf, false))
+         _mesa_set_remove(&ctx->Shared->ReleaseResources, entry);
+   }
+   _mesa_clear_releasebufs(ctx);
 }
 
 /**
@@ -1610,7 +1605,6 @@ bind_buffer(struct gl_context *ctx,
             GLintptr offset,
             GLsizeiptr size,
             GLboolean autoSize,
-            uint64_t driver_state,
             gl_buffer_usage usage)
 {
    if (binding->BufferObject == bufObj &&
@@ -1621,7 +1615,20 @@ bind_buffer(struct gl_context *ctx,
    }
 
    FLUSH_VERTICES(ctx, 0, 0);
-   ctx->NewDriverState |= driver_state;
+
+   switch (usage) {
+   case USAGE_UNIFORM_BUFFER:
+      ST_SET_SHADER_STATES(ctx->NewDriverState, UBOS);
+      break;
+   case USAGE_SHADER_STORAGE_BUFFER:
+      ST_SET_SHADER_STATES(ctx->NewDriverState, SSBOS);
+      break;
+   case USAGE_ATOMIC_COUNTER_BUFFER:
+      ST_SET_STATES(ctx->NewDriverState, ctx->DriverFlags.NewAtomicBuffer);
+      break;
+   default:
+      UNREACHABLE("invalid usage");
+   }
 
    set_buffer_binding(ctx, binding, bufObj, offset, size, autoSize, usage);
 }
@@ -1643,7 +1650,6 @@ bind_uniform_buffer(struct gl_context *ctx,
 {
    bind_buffer(ctx, &ctx->UniformBufferBindings[index],
                bufObj, offset, size, autoSize,
-               ST_NEW_UNIFORM_BUFFER,
                USAGE_UNIFORM_BUFFER);
 }
 
@@ -1664,7 +1670,6 @@ bind_shader_storage_buffer(struct gl_context *ctx,
 {
    bind_buffer(ctx, &ctx->ShaderStorageBufferBindings[index],
                bufObj, offset, size, autoSize,
-               ST_NEW_STORAGE_BUFFER,
                USAGE_SHADER_STORAGE_BUFFER);
 }
 
@@ -1682,7 +1687,6 @@ bind_atomic_buffer(struct gl_context *ctx, unsigned index,
 {
    bind_buffer(ctx, &ctx->AtomicBufferBindings[index],
                bufObj, offset, size, autoSize,
-               ctx->DriverFlags.NewAtomicBuffer,
                USAGE_ATOMIC_COUNTER_BUFFER);
 }
 
@@ -4349,7 +4353,7 @@ bind_uniform_buffers(struct gl_context *ctx, GLuint first, GLsizei count,
 
    /* Assume that at least one binding will be changed */
    FLUSH_VERTICES(ctx, 0, 0);
-   ctx->NewDriverState |= ST_NEW_UNIFORM_BUFFER;
+   ST_SET_SHADER_STATES(ctx->NewDriverState, UBOS);
 
    if (!buffers) {
       /* The ARB_multi_bind spec says:
@@ -4452,7 +4456,7 @@ bind_shader_storage_buffers(struct gl_context *ctx, GLuint first,
 
    /* Assume that at least one binding will be changed */
    FLUSH_VERTICES(ctx, 0, 0);
-   ctx->NewDriverState |= ST_NEW_STORAGE_BUFFER;
+   ST_SET_SHADER_STATES(ctx->NewDriverState, SSBOS);
 
    if (!buffers) {
       /* The ARB_multi_bind spec says:
@@ -4780,7 +4784,7 @@ bind_atomic_buffers(struct gl_context *ctx,
 
    /* Assume that at least one binding will be changed */
    FLUSH_VERTICES(ctx, 0, 0);
-   ctx->NewDriverState |= ctx->DriverFlags.NewAtomicBuffer;
+   ST_SET_STATES(ctx->NewDriverState, ctx->DriverFlags.NewAtomicBuffer);
 
    if (!buffers) {
       /* The ARB_multi_bind spec says:
@@ -4906,7 +4910,7 @@ bind_buffer_range(GLenum target, GLuint index, GLuint buffer, GLintptr offset,
          bind_buffer_range_atomic_buffer(ctx, index, bufObj, offset, size);
          return;
       default:
-         unreachable("invalid BindBufferRange target with KHR_no_error");
+         UNREACHABLE("invalid BindBufferRange target with KHR_no_error");
       }
    } else {
       if (buffer != 0) {

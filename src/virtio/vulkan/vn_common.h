@@ -308,9 +308,6 @@ void
 vn_env_init(void);
 
 void
-vn_trace_init(void);
-
-void
 vn_log(struct vn_instance *instance, const char *format, ...)
    PRINTFLIKE(2, 3);
 
@@ -617,6 +614,8 @@ vn_gettid(void)
 {
 #if DETECT_OS_ANDROID
    return gettid();
+#elif defined(__FreeBSD__)
+   return syscall(SYS_thr_self);
 #else
    return syscall(SYS_gettid);
 #endif

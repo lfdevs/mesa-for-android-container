@@ -53,6 +53,7 @@ static bool gfx11_alloc_query_buffer(struct si_context *sctx)
       return true;
 
    struct gfx11_sh_query_buffer *qbuf = NULL;
+   struct pipe_shader_buffer sbuf;
 
    if (!list_is_empty(&sctx->shader_query_buffers)) {
       qbuf = list_last_entry(&sctx->shader_query_buffers, struct gfx11_sh_query_buffer, list);
@@ -95,21 +96,19 @@ static bool gfx11_alloc_query_buffer(struct si_context *sctx)
    for (unsigned i = 0, e = qbuf->buf->b.b.width0 / sizeof(struct gfx11_sh_query_buffer_mem); i < e;
         ++i) {
       for (unsigned j = 0; j < 16; ++j)
-         results[32 * i + j] = (uint64_t)1 << 63;
+         results[32 * i + j] = BITFIELD64_BIT(63);
       results[32 * i + 16] = 0;
    }
 
    list_addtail(&qbuf->list, &sctx->shader_query_buffers);
    qbuf->head = 0;
-   qbuf->refcount = sctx->num_active_shader_queries;
+   qbuf->refcount = sctx->streamout.num_ngg_queries;
 
-success:;
-   struct pipe_shader_buffer sbuf;
+success:
    sbuf.buffer = &qbuf->buf->b.b;
    sbuf.buffer_offset = qbuf->head;
    sbuf.buffer_size = sizeof(struct gfx11_sh_query_buffer_mem);
    si_set_internal_shader_buffer(sctx, SI_GS_QUERY_BUF, &sbuf);
-   SET_FIELD(sctx->current_gs_state, GS_STATE_STREAMOUT_QUERY_ENABLED, 1);
 
    si_mark_atom_dirty(sctx, &sctx->atoms.s.shader_query);
    return true;
@@ -135,8 +134,14 @@ static bool gfx11_sh_query_begin(struct si_context *sctx, struct si_query *rquer
    query->first = list_last_entry(&sctx->shader_query_buffers, struct gfx11_sh_query_buffer, list);
    query->first_begin = query->first->head;
 
-   sctx->num_active_shader_queries++;
    query->first->refcount++;
+   si_update_prims_generated_query_state(sctx, query->b.type, 1);
+
+   /* Update num_ngg_streamout_queries. */
+   bool old_streamout_query_enable_state = si_get_streamout_enable_state(sctx);
+   sctx->streamout.num_ngg_queries++;
+   if (old_streamout_query_enable_state != si_get_streamout_enable_state(sctx))
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
 
    return true;
 }
@@ -161,11 +166,16 @@ static bool gfx11_sh_query_end(struct si_context *sctx, struct si_query *rquery)
                         0xffffffff, PIPE_QUERY_GPU_FINISHED);
    }
 
-   sctx->num_active_shader_queries--;
+   si_update_prims_generated_query_state(sctx, query->b.type, -1);
 
-   if (sctx->num_active_shader_queries <= 0 || !si_is_atom_dirty(sctx, &sctx->atoms.s.shader_query)) {
+   /* Update num_ngg_streamout_queries. */
+   bool old_streamout_query_enable_state = si_get_streamout_enable_state(sctx);
+   sctx->streamout.num_ngg_queries--;
+   if (old_streamout_query_enable_state != si_get_streamout_enable_state(sctx))
+      si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
+
+   if (sctx->streamout.num_ngg_queries <= 0 || !si_is_atom_dirty(sctx, &sctx->atoms.s.shader_query)) {
       si_set_internal_shader_buffer(sctx, SI_GS_QUERY_BUF, NULL);
-      SET_FIELD(sctx->current_gs_state, GS_STATE_STREAMOUT_QUERY_ENABLED, 0);
 
       /* If a query_begin is followed by a query_end without a draw
        * in-between, we need to clear the atom to ensure that the
@@ -180,20 +190,18 @@ static void gfx11_sh_query_add_result(struct gfx11_sh_query *query,
                                       struct gfx11_sh_query_buffer_mem *qmem,
                                       union pipe_query_result *result)
 {
-   static const uint64_t mask = ((uint64_t)1 << 63) - 1;
-
    switch (query->b.type) {
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      result->u64 += qmem->stream[query->stream].emitted_primitives & mask;
+      result->u64 += qmem->stream[query->stream].emitted_primitives & ~BITFIELD64_BIT(63);
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
-      result->u64 += qmem->stream[query->stream].generated_primitives & mask;
+      result->u64 += qmem->stream[query->stream].generated_primitives & ~BITFIELD64_BIT(63);
       break;
    case PIPE_QUERY_SO_STATISTICS:
       result->so_statistics.num_primitives_written +=
-         qmem->stream[query->stream].emitted_primitives & mask;
+         qmem->stream[query->stream].emitted_primitives & ~BITFIELD64_BIT(63);
       result->so_statistics.primitives_storage_needed +=
-         qmem->stream[query->stream].generated_primitives & mask;
+         qmem->stream[query->stream].generated_primitives & ~BITFIELD64_BIT(63);
       break;
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
       result->b |= qmem->stream[query->stream].emitted_primitives !=
@@ -312,7 +320,7 @@ static void gfx11_sh_query_get_result_resource(struct si_context *sctx, struct s
          consts.config = 3;
          break;
       default:
-         unreachable("bad query type");
+         UNREACHABLE("bad query type");
       }
    } else {
       /* Check result availability. */
@@ -374,7 +382,7 @@ static void gfx11_sh_query_get_result_resource(struct si_context *sctx, struct s
          ssbo[2].buffer_size = is_result_64bit ? 8 : 4;
       }
 
-      sctx->b.set_constant_buffer(&sctx->b, PIPE_SHADER_COMPUTE, 0, false, &constant_buffer);
+      sctx->b.set_constant_buffer(&sctx->b, MESA_SHADER_COMPUTE, 0, &constant_buffer);
 
       if (flags & PIPE_QUERY_WAIT) {
          uint64_t va;

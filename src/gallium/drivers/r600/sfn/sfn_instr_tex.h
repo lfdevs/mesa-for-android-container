@@ -134,7 +134,7 @@ public:
 
    uint32_t slots() const override { return 1; };
 
-   auto prepare_instr() const { return m_prepare_instr; }
+   Block::Instructions prepare_instr() const override { return m_prepare_instr; }
 
    bool replace_source(PRegister old_src, PVirtualValue new_src) override;
    void update_indirect_addr(PRegister old_reg, PRegister addr) override;
@@ -183,7 +183,7 @@ private:
    int m_inst_mode;
 
    static const std::map<Opcode, std::string> s_opcode_map;
-   std::list<TexInstr *, Allocator<TexInstr *>> m_prepare_instr;
+   Block::Instructions m_prepare_instr;
 
    Resource m_sampler;
 };

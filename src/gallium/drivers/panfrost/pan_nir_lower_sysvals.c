@@ -246,7 +246,7 @@ panfrost_nir_lower_sysvals(nir_shader *shader, unsigned arch,
    do {
       progress = false;
 
-      NIR_PASS(progress, shader, nir_copy_prop);
+      NIR_PASS(progress, shader, nir_opt_copy_prop);
       NIR_PASS(progress, shader, nir_opt_constant_folding);
       NIR_PASS(progress, shader, nir_opt_dce);
    } while (progress);

@@ -109,6 +109,16 @@ nvk_get_image_plane_format_features(const struct nvk_physical_device *pdev,
       features |= VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
       if (!vk_format_is_depth_or_stencil(vk_format))
          features |= VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT;
+
+      /* The copy engine handles depth and stencil just fine */
+      if (vk_format_has_depth(vk_format)) {
+         features |= VK_FORMAT_FEATURE_2_DEPTH_COPY_ON_COMPUTE_QUEUE_BIT_KHR |
+                     VK_FORMAT_FEATURE_2_DEPTH_COPY_ON_TRANSFER_QUEUE_BIT_KHR;
+      }
+      if (vk_format_has_stencil(vk_format)) {
+         features |= VK_FORMAT_FEATURE_2_STENCIL_COPY_ON_COMPUTE_QUEUE_BIT_KHR |
+                     VK_FORMAT_FEATURE_2_STENCIL_COPY_ON_TRANSFER_QUEUE_BIT_KHR;
+      }
    }
 
    return features;
@@ -266,7 +276,7 @@ nvk_get_drm_format_modifier_properties_list(const struct nvk_physical_device *pd
    }
 
    default:
-      unreachable("Invalid structure type");
+      UNREACHABLE("Invalid structure type");
    }
 }
 
@@ -315,7 +325,7 @@ nvk_image_max_dimension(const struct nv_device_info *info,
    case VK_IMAGE_TYPE_3D:
       return 0x4000;
    default:
-      unreachable("Invalid image type");
+      UNREACHABLE("Invalid image type");
    }
 }
 
@@ -477,7 +487,7 @@ nvk_GetPhysicalDeviceImageFormatProperties2(
       maxArraySize = 1;
       break;
    default:
-      unreachable("Invalid image type");
+      UNREACHABLE("Invalid image type");
    }
    if (pImageFormatInfo->tiling == VK_IMAGE_TILING_LINEAR)
       maxArraySize = 1;
@@ -540,7 +550,7 @@ nvk_GetPhysicalDeviceImageFormatProperties2(
          tiling_has_explicit_layout = false;
          break;
       default:
-         unreachable("Unsupported VkImageTiling");
+         UNREACHABLE("Unsupported VkImageTiling");
       }
 
       switch (external_info->handleType) {
@@ -673,7 +683,7 @@ vk_image_type_to_nil_dim(VkImageType type)
    case VK_IMAGE_TYPE_2D:  return NIL_IMAGE_DIM_2D;
    case VK_IMAGE_TYPE_3D:  return NIL_IMAGE_DIM_3D;
    default:
-      unreachable("Invalid image type");
+      UNREACHABLE("Invalid image type");
    }
 }
 
@@ -768,18 +778,6 @@ nvk_image_init(struct nvk_device *dev,
 
    vk_image_init(&dev->vk, &image->vk, pCreateInfo);
 
-   if ((image->vk.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
-       image->vk.samples > 1) {
-      image->vk.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-      image->vk.stencil_usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-   }
-
-   if (image->vk.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
-      image->vk.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-   if (image->vk.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-      image->vk.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
    nil_image_usage_flags usage = 0;
    if (image->vk.tiling == VK_IMAGE_TILING_LINEAR)
       usage |= NIL_IMAGE_USAGE_LINEAR_BIT;
@@ -818,6 +816,9 @@ nvk_image_init(struct nvk_device *dev,
                           VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR |
                           VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR))
       usage |= NIL_IMAGE_USAGE_VIDEO_BIT;
+
+   if (!image->can_compress)
+      usage |= NIL_IMAGE_USAGE_UNCOMPRESSED_BIT;
 
    uint32_t explicit_row_stride_B = 0;
 
@@ -916,10 +917,10 @@ nvk_image_init(struct nvk_device *dev,
          ycbcr_info->planes[plane].denominator_scales[1] : 1;
 
       if (image->separate_zs) {
-	 if (plane == 0)
-	    format = vk_format_depth_only(format);
-	 else if (plane == 1)
-	    format = vk_format_stencil_only(format);
+         if (plane == 0)
+            format = vk_format_depth_only(format);
+         else if (plane == 1)
+            format = vk_format_stencil_only(format);
       }
 
       nil_info[plane] = (struct nil_image_init_info) {
@@ -1081,7 +1082,7 @@ nvk_CreateImage(VkDevice _device,
                 VkImage *pImage)
 {
    VK_FROM_HANDLE(nvk_device, dev, _device);
-   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   UNUSED const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    struct nvk_image *image;
    VkResult result;
 
@@ -1111,21 +1112,18 @@ nvk_CreateImage(VkDevice _device,
       return result;
    }
 
-   for (uint8_t plane = 0; plane < image->plane_count; plane++) {
-      result = nvk_image_plane_alloc_va(dev, image, &image->planes[plane]);
-      if (result != VK_SUCCESS) {
-         nvk_image_finish(dev, image, pAllocator);
-         vk_free2(&dev->vk.alloc, pAllocator, image);
-         return result;
+   if (image->vk.create_flags & (VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+                                 VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)) {
+      for (uint8_t plane = 0; plane < image->plane_count; plane++) {
+         result = nvk_image_plane_alloc_va(dev, image, &image->planes[plane]);
+         if (result != VK_SUCCESS)
+            goto fail;
       }
-   }
 
-   if (image->stencil_copy_temp.nil.size_B > 0) {
-      result = nvk_image_plane_alloc_va(dev, image, &image->stencil_copy_temp);
-      if (result != VK_SUCCESS) {
-         nvk_image_finish(dev, image, pAllocator);
-         vk_free2(&dev->vk.alloc, pAllocator, image);
-         return result;
+      if (image->stencil_copy_temp.nil.size_B > 0) {
+         result = nvk_image_plane_alloc_va(dev, image, &image->stencil_copy_temp);
+         if (result != VK_SUCCESS)
+            goto fail;
       }
    }
 
@@ -1136,11 +1134,9 @@ nvk_CreateImage(VkDevice _device,
                                          shadow->nil.pte_kind, shadow->nil.tile_mode,
                                          NVKMD_MEM_LOCAL,
                                          &image->linear_tiled_shadow_mem);
-      if (result != VK_SUCCESS) {
-         nvk_image_finish(dev, image, pAllocator);
-         vk_free2(&dev->vk.alloc, pAllocator, image);
-         return result;
-      }
+      if (result != VK_SUCCESS)
+         goto fail;
+
       shadow->addr = image->linear_tiled_shadow_mem->va->addr;
    }
 
@@ -1148,16 +1144,18 @@ nvk_CreateImage(VkDevice _device,
    if (vk_image_is_android_native_buffer(&image->vk)) {
       result = vk_android_import_anb(&dev->vk, pCreateInfo, pAllocator,
                                      &image->vk);
-      if (result != VK_SUCCESS) {
-         nvk_image_finish(dev, image, pAllocator);
-         vk_free2(&dev->vk.alloc, pAllocator, image);
-         return result;
-      }
+      if (result != VK_SUCCESS)
+         goto fail;
    }
 
    *pImage = nvk_image_to_handle(image);
 
    return VK_SUCCESS;
+
+fail:
+   nvk_image_finish(dev, image, pAllocator);
+   vk_free2(&dev->vk.alloc, pAllocator, image);
+   return result;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1201,17 +1199,16 @@ nvk_get_image_memory_requirements(struct nvk_device *dev,
    uint32_t memory_types = (1 << pdev->mem_type_count) - 1;
 
    /* Remove non host visible heaps from the types for host image copy in case
-    * of potential issues. This should be removed when we get ReBAR.
+    * of potential issues when we do not have ReBAR.
     */
-   if (image->vk.usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) {
+   if (pdev->info.bar_size_B < pdev->info.vram_size_B &&
+       image->vk.usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) {
       for (uint32_t i = 0; i < pdev->mem_type_count; i++) {
          if (!(pdev->mem_types[i].propertyFlags &
              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
             memory_types &= ~BITFIELD_BIT(i);
       }
    }
-
-   // TODO hope for the best?
 
    uint64_t size_B = 0;
    uint32_t align_B = 0;
@@ -1482,14 +1479,16 @@ nvk_image_plane_bind(struct nvk_device *dev,
                                 &plane_size_B, &plane_align_B);
    *offset_B = align64(*offset_B, plane_align_B);
 
-   if (plane->va != NULL) {
-      VkResult result = nvkmd_va_bind_mem(plane->va, &image->vk.base, 0,
-                                          mem->mem, *offset_B,
-                                          plane->va->size_B);
+   if (plane->nil.pte_kind != 0) {
+      VkResult result = nvk_image_plane_alloc_va(dev, image, plane);
+      if (result != VK_SUCCESS)
+         return result;
+      result = nvkmd_va_bind_mem(plane->va, &image->vk.base, 0,
+                                 mem->mem, *offset_B,
+                                 plane->va->size_B);
       if (result != VK_SUCCESS)
          return result;
    } else {
-      assert(plane->nil.pte_kind == 0);
       plane->addr = mem->mem->va->addr + *offset_B;
    }
 
@@ -1509,6 +1508,7 @@ nvk_bind_image_memory(struct nvk_device *dev,
 {
    VK_FROM_HANDLE(nvk_device_memory, mem, info->memory);
    VK_FROM_HANDLE(nvk_image, image, info->image);
+   uint64_t offset_B = info->memoryOffset;
    VkResult result;
 
 #if DETECT_OS_ANDROID
@@ -1529,11 +1529,11 @@ nvk_bind_image_memory(struct nvk_device *dev,
       assert(swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE);
       mem = nvk_device_memory_from_handle(
          wsi_common_get_memory(swapchain_info->swapchain, swapchain_info->imageIndex));
+      offset_B = 0;
    }
 #endif
 
    assert(mem != NULL);
-   uint64_t offset_B = info->memoryOffset;
    if (image->disjoint) {
       const VkBindImagePlaneMemoryInfo *plane_info =
          vk_find_struct_const(info->pNext, BIND_IMAGE_PLANE_MEMORY_INFO);

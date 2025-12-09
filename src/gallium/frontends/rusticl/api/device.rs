@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::*;
 use crate::api::types::IdpAccelProps;
 use crate::api::util::*;
@@ -14,7 +17,6 @@ use rusticl_proc_macros::cl_info_entrypoint;
 use std::cmp::min;
 use std::ffi::c_char;
 use std::ffi::CStr;
-use std::mem::size_of;
 use std::ptr;
 
 const SPIRV_SUPPORT_STRING: &CStr =
@@ -271,6 +273,23 @@ unsafe impl CLInfo<cl_device_info> for cl_device_id {
                 (CL_QUEUE_PROFILING_ENABLE | CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE).into(),
             ),
             CL_DEVICE_REFERENCE_COUNT => v.write::<cl_uint>(1),
+            CL_DEVICE_SEMAPHORE_EXPORT_HANDLE_TYPES_KHR
+                if dev.are_external_semaphores_supported() =>
+            {
+                v.write::<&[cl_external_semaphore_handle_type_khr]>(&[
+                    CL_SEMAPHORE_HANDLE_SYNC_FD_KHR,
+                ])
+            }
+            CL_DEVICE_SEMAPHORE_IMPORT_HANDLE_TYPES_KHR
+                if dev.are_external_semaphores_supported() =>
+            {
+                v.write::<&[cl_external_semaphore_handle_type_khr]>(&[
+                    CL_SEMAPHORE_HANDLE_SYNC_FD_KHR,
+                ])
+            }
+            CL_DEVICE_SEMAPHORE_TYPES_KHR if dev.are_semaphores_supported() => {
+                v.write::<&[cl_semaphore_type_khr]>(&[CL_SEMAPHORE_TYPE_BINARY_KHR])
+            }
             CL_DEVICE_SHARED_SYSTEM_MEM_CAPABILITIES_INTEL => {
                 v.write::<cl_device_unified_shared_memory_capabilities_intel>(0)
             }
@@ -391,12 +410,14 @@ fn get_device_ids(
 }
 
 #[cl_entrypoint(clRetainDevice)]
-fn retain_device(_device: cl_device_id) -> CLResult<()> {
+fn retain_device(device: cl_device_id) -> CLResult<()> {
+    let _ = Device::ref_from_raw(device)?;
     Ok(())
 }
 
 #[cl_entrypoint(clReleaseDevice)]
-fn release_device(_device: cl_device_id) -> CLResult<()> {
+fn release_device(device: cl_device_id) -> CLResult<()> {
+    let _ = Device::ref_from_raw(device)?;
     Ok(())
 }
 

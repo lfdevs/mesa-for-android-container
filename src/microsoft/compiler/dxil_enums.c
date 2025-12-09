@@ -64,7 +64,7 @@ enum dxil_component_type dxil_get_comp_type_from_prog_sig_type(enum dxil_prog_si
    case DXIL_PROG_SIG_COMP_TYPE_FLOAT16: return DXIL_COMP_TYPE_F16;
    default:
       debug_printf("unexpected signature type\n");
-      unreachable("unexpected signature type");
+      UNREACHABLE("unexpected signature type");
    }
 }
 
@@ -90,7 +90,7 @@ enum dxil_component_type dxil_get_comp_type(const struct glsl_type *type)
 
    default:
       debug_printf("type: %s\n", glsl_get_type_name(type));
-      unreachable("unexpected glsl type");
+      UNREACHABLE("unexpected glsl type");
    }
 }
 
@@ -122,7 +122,7 @@ enum dxil_resource_kind dxil_sampler_dim_to_resource_kind(enum glsl_sampler_dim 
          return DXIL_RESOURCE_KIND_TEXTURE2DMS_ARRAY;
 
       default:
-         unreachable("unexpected sampler type");
+         UNREACHABLE("unexpected sampler type");
    }
 }
 
@@ -138,7 +138,7 @@ enum dxil_resource_kind dxil_get_resource_kind(const struct glsl_type *type)
       return dxil_sampler_dim_to_resource_kind(glsl_get_sampler_dim(type), is_array);
 
    debug_printf("type: %s\n", glsl_get_type_name(type));
-   unreachable("unexpected glsl type");
+   UNREACHABLE("unexpected glsl type");
 }
 
 enum dxil_input_primitive dxil_get_input_primitive(enum mesa_prim primitive)
@@ -155,7 +155,7 @@ enum dxil_input_primitive dxil_get_input_primitive(enum mesa_prim primitive)
    case MESA_PRIM_TRIANGLES_ADJACENCY:
       return DXIL_INPUT_PRIMITIVE_TRIANGLES_ADJENCY;
    default:
-      unreachable("unhandled primitive topology");
+      UNREACHABLE("unhandled primitive topology");
    }
 }
 
@@ -171,7 +171,7 @@ enum dxil_primitive_topology dxil_get_primitive_topology(enum mesa_prim topology
    case MESA_PRIM_TRIANGLE_STRIP:
       return DXIL_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
    default:
-      unreachable("unhandled primitive topology");
+      UNREACHABLE("unhandled primitive topology");
    }
 }
 

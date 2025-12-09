@@ -13,7 +13,7 @@
 #include "pipe/p_context.h"
 
 template <chip CHIP>
-struct fd_ringbuffer *fd6_build_preemption_preamble(struct fd_context *ctx);
+struct fd_ringbuffer *fd6_build_preemption_preamble(struct fd_context *ctx, bool gmem);
 
 template <chip CHIP>
 void fd6_gmem_init(struct pipe_context *pctx);

@@ -1222,7 +1222,7 @@ queue_handle_job(struct v3dv_queue *queue,
    case V3DV_JOB_TYPE_CPU_TIMESTAMP_QUERY:
       return handle_timestamp_query_cpu_job(queue, job, sync_info, signal_syncs);
    default:
-      unreachable("Unhandled job type");
+      UNREACHABLE("Unhandled job type");
    }
 }
 

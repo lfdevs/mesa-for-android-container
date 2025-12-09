@@ -338,10 +338,11 @@ struct dri2_egl_surface {
 
 #ifdef HAVE_DRM_PLATFORM
    struct gbm_dri_surface *gbm_surf;
+   unsigned excess_bo_frames;
 #endif
 
 #if defined(HAVE_WAYLAND_PLATFORM) || defined(HAVE_DRM_PLATFORM)
-   struct {
+   struct dri2_egl_buffer {
 #ifdef HAVE_WAYLAND_PLATFORM
       struct loader_wayland_buffer wayland_buffer;
       bool wl_release;

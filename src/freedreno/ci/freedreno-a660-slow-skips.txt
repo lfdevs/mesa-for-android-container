@@ -7,6 +7,15 @@ dEQP-VK.memory.mapping.*.full.variable.implicit_unmap*
 dEQP-VK.spirv_assembly.instruction.graphics.16bit_storage.struct_mixed_types.uniform_buffer_block_vert
 dEQP-VK.spirv_assembly.instruction.*.spirv_ids_abuse.lots_ids*
 dEQP-VK.subgroups.arithmetic.compute.subgroupmul_i64vec4_requiredsubgroupsize
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmax_u64vec4
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmin_u64vec2_requiredsubgroupsize
 dEQP-VK.subgroups.clustered.compute.subgroupclusteredmin_uint64_t_requiredsubgroupsize
+
+# Slow tests that may hit 60s timeout pre-merge, but pass otherwise.  94% CPU
+# used in ir3 create_variant, but no single pass there dominating its time.
+# Just use the scalar cases, which are fast enough for CI.
+dEQP-VK.subgroups.clustered.compute.subgroupclustered(min|max|mul)_[iu]64vec[234].*
+
+# Speed up pre-merge testing by removing redundant coverage in force-gmem mode
+gmem-dEQP-VK.api.*
+gmem-dEQP-VK.renderpass\..*
+gmem-dEQP-VK.synchronization\..*
+gmem-dEQP-VK.wsi.*

@@ -18,11 +18,34 @@ extern "C" {
 struct pan_fb_info;
 struct pan_image;
 struct pan_image_view;
+struct pan_image_usage;
+struct pan_kmod_dev_props;
 struct pan_mod_handler;
+
+enum pan_mod_support {
+   PAN_MOD_NOT_SUPPORTED = 0,
+   PAN_MOD_NOT_OPTIMAL,
+   PAN_MOD_OPTIMAL,
+};
 
 struct pan_mod_handler {
    bool (*match)(uint64_t mod);
-   bool (*supports_format)(uint64_t mod, enum pipe_format format);
+
+   /* Used to check if a set of image properties is valid. Passing a NULL iusage
+    * is valid and means "optimal set of usage for this mod". This implies
+    * that some non-supported cases can't be detected or can be reported as
+    * optimal when specific usage flags would report it non-optimal.
+    */
+   enum pan_mod_support (*test_props)(const struct pan_kmod_dev_props *dprops,
+                                      const struct pan_image_props *iprops,
+                                      const struct pan_image_usage *iusage);
+
+   /* Optional method used to initialize modifier-specific per-plane layout
+    * data. This is called before init_slice_layout().
+    */
+   bool (*init_plane_layout)(const struct pan_image_props *props,
+                             unsigned plane_idx,
+                             struct pan_image_layout *plane_layout);
 
    bool (*init_slice_layout)(
       const struct pan_image_props *props, unsigned plane_idx,
@@ -47,6 +70,13 @@ struct pan_mod_handler {
 
 #ifdef PAN_ARCH
 const struct pan_mod_handler *GENX(pan_mod_get_handler)(uint64_t modifier);
+
+static inline const struct pan_mod_handler *
+pan_mod_get_handler(unsigned arch, uint64_t modifier)
+{
+   assert(arch == PAN_ARCH);
+   return GENX(pan_mod_get_handler)(modifier);
+}
 #else
 const struct pan_mod_handler *pan_mod_get_handler_v4(uint64_t modifier);
 const struct pan_mod_handler *pan_mod_get_handler_v5(uint64_t modifier);
@@ -78,7 +108,7 @@ pan_mod_get_handler(unsigned arch, uint64_t modifier)
    case 13:
       return pan_mod_get_handler_v13(modifier);
    default:
-      unreachable("Unsupported arch");
+      UNREACHABLE("Unsupported arch");
    }
 }
 #endif

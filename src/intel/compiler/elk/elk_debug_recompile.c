@@ -160,11 +160,9 @@ debug_fs_recompile(const struct elk_compiler *c, void *log,
    found |= check("alphatest, computed depth, depth test, or depth write",
                   iz_lookup);
    found |= check("depth statistics", stats_wm);
-   found |= check("flat shading", flat_shade);
    found |= check("number of color buffers", nr_color_regions);
    found |= check("MRT alpha test", alpha_test_replicate_alpha);
    found |= check("alpha to coverage", alpha_to_coverage);
-   found |= check("fragment color clamping", clamp_fragment_color);
    found |= check("per-sample interpolation", persample_interp);
    found |= check("multisampled FBO", multisample_fbo);
    found |= check("line smoothing", line_aa);
@@ -197,7 +195,7 @@ debug_cs_recompile(const struct elk_compiler *c, void *log,
 
 void
 elk_debug_key_recompile(const struct elk_compiler *c, void *log,
-                        gl_shader_stage stage,
+                        mesa_shader_stage stage,
                         const struct elk_base_prog_key *old_key,
                         const struct elk_base_prog_key *key)
 {

@@ -589,7 +589,7 @@ fn nvcb97_fill_image_view_desc(
             view.base_array_layer + view.array_len <= image.extent_px.array_len
         );
         layer_address +=
-            u64::from(view.base_array_layer) * u64::from(image.array_stride_B);
+            u64::from(view.base_array_layer) * image.array_stride_B;
     }
 
     if tiling.is_tiled() {

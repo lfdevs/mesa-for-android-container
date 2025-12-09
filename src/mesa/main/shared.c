@@ -48,6 +48,8 @@
 #include "util/set.h"
 #include "util/u_memory.h"
 #include "util/u_process.h"
+#include "util/u_threaded_context.h"
+#include "state_tracker/st_context.h"
 
 static void
 free_shared_state(struct gl_context *ctx, struct gl_shared_state *shared);
@@ -77,6 +79,8 @@ _mesa_alloc_shared_state(struct gl_context *ctx,
    _mesa_InitHashTable(&shared->DisplayList);
    _mesa_InitHashTable(&shared->TexObjects);
    _mesa_InitHashTable(&shared->Programs);
+   list_inithead(&shared->Contexts);
+   _mesa_set_init(&shared->ReleaseResources, NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
 
    shared->DefaultVertexProgram =
       ctx->Driver.NewProgram(ctx, MESA_SHADER_VERTEX, 0, true);
@@ -414,6 +418,10 @@ free_shared_state(struct gl_context *ctx, struct gl_shared_state *shared)
    _mesa_DeinitHashTable(&shared->SemaphoreObjects,
                          delete_semaphore_object_cb, ctx);
 
+   /* these should all be deleted by now */
+   assert(!shared->ReleaseResources.entries);
+   _mesa_set_fini(&shared->ReleaseResources, NULL);
+
    simple_mtx_destroy(&shared->Mutex);
    simple_mtx_destroy(&shared->TexMutex);
 
@@ -458,4 +466,66 @@ _mesa_reference_shared_state(struct gl_context *ctx,
       *ptr = state;
       simple_mtx_unlock(&state->Mutex);
    }
+}
+
+static bool
+_mesa_check_shared_resource_usage(struct gl_context *ctx, struct pipe_resource *resource, struct gl_context **only_user)
+{
+   unsigned busy_count = 0;
+   /* iterate over all the shared contexts and check tc for resource usage */
+   list_for_each_entry(struct gl_context, shared_ctx, &ctx->Shared->Contexts, SharedLink) {
+      bool is_busy = threaded_context_is_buffer_on_busy_list(shared_ctx->st->pipe, resource);
+      if (!is_busy)
+         continue;
+      *only_user = shared_ctx;
+      busy_count++;
+   }
+   /* if there is only one active user, return it */
+   if (busy_count != 1)
+      *only_user = NULL;
+   return busy_count > 0;
+}
+
+/* Pending resources cannot be released immediately in the case where there are multiple contexts and TC is used.
+ * Instead:
+ * - if there is only one context, it gets released to the driver
+ * - if there are multiple shared contexts, mesa iterates over all of them and checks the tc bufferlist to see whether the buffer is in use:
+ *   - if the buffer is in use by multiple contexts, mesa will store the buffer to the shared data and check back later with normal zombie buffer prunes
+ *   - if the buffer is in use by a single context, mesa will store the buffer onto that context, where it will be pruned naturally with zombie buffer prunes
+ *   - if the buffer is not in use, it will be released to the driver
+ */
+bool
+_mesa_release_pending_resource(struct gl_context *ctx, struct pipe_resource *resource, bool frontend_released)
+{
+   assert(resource);
+   assert(resource->target == PIPE_BUFFER);
+
+   /* if tc is not in use or no contexts are shared with this one, just release */
+   if (ctx->st->is_threaded_context && ctx->Shared->RefCount > 1) {
+      simple_mtx_lock(&ctx->Shared->Mutex);
+
+      struct gl_context *only_user = NULL;
+      bool is_busy = _mesa_check_shared_resource_usage(ctx, resource, &only_user);
+      if (is_busy) {
+         if (only_user) {
+            if (only_user == ctx)
+               pipe_resource_release(ctx->pipe, resource);
+            else {
+               /* this is an array of resources that the user context can immediately release next time it prunes */
+               util_dynarray_append(&only_user->ReleaseResources, resource);
+            }
+         } else if (frontend_released) {
+            /* this is reached when the frontend object is destroyed and the pipe_resource is released */
+            _mesa_set_add(&ctx->Shared->ReleaseResources, resource);
+         }
+      }
+      simple_mtx_unlock(&ctx->Shared->Mutex);
+
+      /* returning true here indicates that the caller should remove the entry from Shared->ReleaseResources */
+      if (is_busy)
+         return !!only_user;
+   }
+
+   pipe_resource_release(ctx->pipe, resource);
+   return true;
 }

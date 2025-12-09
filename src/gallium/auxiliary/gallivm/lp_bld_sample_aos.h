@@ -36,9 +36,9 @@
 #ifndef LP_BLD_SAMPLE_AOS_H
 #define LP_BLD_SAMPLE_AOS_H
 
+#include <llvm-c/Core.h>
 
-#include "lp_bld_sample.h"
-
+struct lp_build_sample_context;
 
 void
 lp_build_sample_aos(struct lp_build_sample_context *bld,

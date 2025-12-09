@@ -24,6 +24,9 @@ import typing
 
 import pytest
 
+if typing.TYPE_CHECKING:
+    import aiohttp
+
 # AsyncMock is new in 3.8, so if we're using an older version we need the
 # backported version of mock
 if sys.version_info >= (3, 8):
@@ -199,7 +202,25 @@ async def test_parse_issues(content: str, bugs: typing.List[str]) -> None:
         ids = await parse_issues('1234 not used')
         assert set(ids) == set(bugs)
 
+
 @pytest.mark.asyncio
 async def test_rst_escape():
     out = inliner.quoteInline('foo@bar')
     assert out == 'foo\@bar'
+
+
+@pytest.mark.asyncio
+async def test_gather_bugs_duplicates():
+    mock_gc = mock.AsyncMock(return_value='something')
+    mock_pi = mock.AsyncMock(return_value=['a', 'b', 'a', 'a', 'c', 'b'])
+
+    async def get_bug(session: 'aiohttp.ClientSession', bug_id: str) -> str:
+        return bug_id
+
+    with mock.patch('bin.gen_release_notes.gather_commits', mock_gc), \
+            mock.patch('bin.gen_release_notes.parse_issues', mock_pi), \
+            mock.patch('bin.gen_release_notes.get_bug', get_bug):
+        bugs = await gather_bugs('')
+
+    assert bugs == ['a', 'b', 'c']
+

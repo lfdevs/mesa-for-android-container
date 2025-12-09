@@ -15,11 +15,11 @@ libloader_x11 = static_library(
   'loader_x11',
   loader_x11_files,
   gnu_symbol_visibility : 'hidden',
-  include_directories : [inc_include, inc_src, inc_gallium],
+  include_directories : [inc_include, inc_src],
   dependencies : [
     idep_mesautil,
     dep_libdrm, dep_xcb_dri3, dep_xcb_present, dep_xcb_sync, dep_xshmfence,
-    dep_xcb_xfixes,
+    dep_xcb_xfixes, dep_x11
   ],
   build_by_default : false,
 )

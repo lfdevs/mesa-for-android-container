@@ -11,13 +11,15 @@
 
 #include <vulkan/vulkan.h>
 
-struct radv_descriptor_set;
+#include "util/list.h"
+#include "util/vma.h"
 
-struct radv_descriptor_pool_entry {
-   uint32_t offset;
-   uint32_t size;
-   struct radv_descriptor_set *set;
-};
+/* The vma heap reserves 0 to mean NULL; we have to offset by some amount to ensure we can allocate
+ * the entire BO without hitting zero. The actual amount doesn't matter.
+ */
+#define RADV_POOL_HEAP_OFFSET 32
+
+struct radv_descriptor_set;
 
 struct radv_descriptor_pool {
    struct vk_object_base base;
@@ -31,13 +33,12 @@ struct radv_descriptor_pool {
    uint8_t *host_memory_ptr;
    uint8_t *host_memory_end;
 
+   struct list_head sets;
+
+   struct util_vma_heap bo_heap;
+
    uint32_t entry_count;
    uint32_t max_entry_count;
-
-   union {
-      struct radv_descriptor_set *sets[0];
-      struct radv_descriptor_pool_entry entries[0];
-   };
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(radv_descriptor_pool, base, VkDescriptorPool, VK_OBJECT_TYPE_DESCRIPTOR_POOL)

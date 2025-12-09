@@ -49,7 +49,7 @@ _load_image_param(nir_builder *b, nir_deref_instr *deref, unsigned offset)
       load->num_components = 4;
       break;
    default:
-      unreachable("Invalid param offset");
+      UNREACHABLE("Invalid param offset");
    }
    nir_def_init(&load->instr, &load->def, load->num_components, 32);
 
@@ -333,7 +333,7 @@ convert_color_for_load(nir_builder *b, const struct intel_device_info *devinfo,
       break;
 
    default:
-      unreachable("Invalid image channel type");
+      UNREACHABLE("Invalid image channel type");
    }
 
 expand_vec:
@@ -412,8 +412,7 @@ lower_image_load_instr(nir_builder *b,
          color = nir_vec(b, sparse_color, dest_components + 1);
       }
 
-      nir_def_rewrite_uses(placeholder, color);
-      nir_instr_remove(placeholder->parent_instr);
+      nir_def_replace(placeholder, color);
    } else {
       /* This code part is only useful prior to Gfx9, we do not have plans to
        * enable sparse there.
@@ -514,7 +513,7 @@ convert_color_for_store(nir_builder *b, const struct intel_device_info *devinfo,
       break;
 
    default:
-      unreachable("Invalid image channel type");
+      UNREACHABLE("Invalid image channel type");
    }
 
    if (image.bits[0] < 32 &&

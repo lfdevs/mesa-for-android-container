@@ -31,8 +31,8 @@
 extern void
 _mesa_update_allow_draw_out_of_order(struct gl_context *ctx);
 
-extern uint64_t
-_mesa_get_active_states(struct gl_context *ctx);
+extern void
+_mesa_set_active_states(struct gl_context *ctx);
 
 extern void
 _mesa_update_state(struct gl_context *ctx);

@@ -37,9 +37,10 @@
 #define LP_BLD_CONV_H
 
 
-#include "gallivm/lp_bld.h"
+#include "gallivm/lp_bld_type.h"
 
 
+struct gallivm_state;
 struct lp_type;
 
 LLVMValueRef

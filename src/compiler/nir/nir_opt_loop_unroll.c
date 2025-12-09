@@ -56,7 +56,7 @@ loop_prepare_for_unroll(nir_loop *loop)
    /* Lower phis at the top level of the loop body */
    foreach_list_typed_safe(nir_cf_node, node, node, &loop->body) {
       if (nir_cf_node_block == node->type) {
-         nir_lower_phis_to_regs_block(nir_cf_node_as_block(node));
+         nir_lower_phis_to_regs_block(nir_cf_node_as_block(node), false);
       }
    }
 
@@ -64,7 +64,7 @@ loop_prepare_for_unroll(nir_loop *loop)
    nir_block *block_after_loop =
       nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
 
-   nir_lower_phis_to_regs_block(block_after_loop);
+   nir_lower_phis_to_regs_block(block_after_loop, false);
 
    /* Remove jump if it's the last instruction in the loop */
    nir_instr *last_instr = nir_block_last_instr(nir_loop_last_block(loop));
@@ -557,9 +557,9 @@ wrapper_unroll(nir_loop *loop)
        * statements that are converted to a loop to take advantage of
        * exiting jump instruction handling. In this case we could make
        * use of a binary seach pattern like we do in
-       * nir_lower_indirect_derefs(), this should allow us to unroll the
-       * loops in an optimal way and should also avoid some of the
-       * register pressure that comes from simply nesting the
+       * nir_lower_indirect_derefs_to_if_else_trees(), this should allow us
+       * to unroll the loops in an optimal way and should also avoid some of
+       * the register pressure that comes from simply nesting the
        * terminators one after the other.
        */
       if (list_length(&loop->info->loop_terminator_list) > 3)
@@ -642,9 +642,9 @@ comparison_contains_instr(nir_scalar cond_scalar, nir_instr *instr)
 {
    if (nir_is_terminator_condition_with_two_inputs(cond_scalar)) {
       nir_alu_instr *comparison =
-         nir_instr_as_alu(cond_scalar.def->parent_instr);
-      return comparison->src[0].src.ssa->parent_instr == instr ||
-             comparison->src[1].src.ssa->parent_instr == instr;
+         nir_def_as_alu(cond_scalar.def);
+      return nir_def_instr(comparison->src[0].src.ssa) == instr ||
+             nir_def_instr(comparison->src[1].src.ssa) == instr;
    }
 
    return false;
@@ -691,8 +691,8 @@ remove_out_of_bounds_induction_use(nir_shader *shader, nir_loop *loop,
                                         trip_count)) {
                if (intrin->intrinsic == nir_intrinsic_load_deref) {
                   nir_alu_instr *term_alu =
-                     nir_instr_as_alu(term->nif->condition.ssa->parent_instr);
-                  b.cursor = nir_before_instr(term->nif->condition.ssa->parent_instr);
+                     nir_def_as_alu(term->nif->condition.ssa);
+                  b.cursor = nir_before_def(term->nif->condition.ssa);
 
                   /* If the out of bounds load is used in the comparison of the
                    * loop terminator replace the condition with true so that the
@@ -1006,7 +1006,7 @@ process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *has_nested_loop_out,
       break;
    }
    default:
-      unreachable("unknown cf node type");
+      UNREACHABLE("unknown cf node type");
    }
 
    const bool unrolled_child_block = progress;

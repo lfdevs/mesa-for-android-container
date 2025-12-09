@@ -68,12 +68,12 @@ public:
     * List of either elk_fs_inst or vec4_instruction (inheriting from
     * elk_backend_instruction)
     */
-   exec_list instructions;
+   brw_exec_list instructions;
 
    elk_cfg_t *cfg;
    elk_analysis<elk::idom_tree, elk_backend_shader> idom_analysis;
 
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
    bool debug_enabled;
 
    elk::simple_allocator alloc;
@@ -130,7 +130,7 @@ elk_get_scratch_size(int size)
 
 static inline nir_variable_mode
 elk_nir_no_indirect_mask(const struct elk_compiler *compiler,
-                         gl_shader_stage stage)
+                         mesa_shader_stage stage)
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    const bool is_scalar = compiler->scalar_stage[stage];

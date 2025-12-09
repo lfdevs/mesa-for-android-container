@@ -79,6 +79,9 @@ util_framebuffer_state_equal(const struct pipe_framebuffer_state *dst,
    if (dst->viewmask != src->viewmask)
       return false;
 
+   if (dst->pls_enabled != src->pls_enabled)
+      return false;
+
    return true;
 }
 
@@ -111,6 +114,7 @@ util_copy_framebuffer_state(struct pipe_framebuffer_state *dst,
       }
 
       dst->nr_cbufs = src->nr_cbufs;
+      dst->pls_enabled = src->pls_enabled;
 
       dst->viewmask = src->viewmask;
       pipe_resource_reference(&dst->zsbuf.texture, src->zsbuf.texture);
@@ -151,7 +155,7 @@ util_framebuffer_min_size(const struct pipe_framebuffer_state *fb,
       if (!fb->cbufs[i].texture)
          continue;
 
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(&fb->cbufs[i], &width, &height);
 
       w = MIN2(w, width);
@@ -159,7 +163,7 @@ util_framebuffer_min_size(const struct pipe_framebuffer_state *fb,
    }
 
    if (fb->zsbuf.texture) {
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(&fb->zsbuf, &width, &height);
       w = MIN2(w, width);
       h = MIN2(h, height);

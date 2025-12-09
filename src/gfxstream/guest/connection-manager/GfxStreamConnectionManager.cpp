@@ -31,7 +31,7 @@ static void gfxstream_connection_manager_tls_key_create_once(void) {
         tss_create(&gfxstream_connection_manager_tls_key, gfxstream_connection_manager_tls_free) ==
         thrd_success;
     if (!gfxstream_connection_manager_tls_key_valid) {
-        mesa_loge("WARNING: failed to create gfxstream_connection_manager_tls_key");
+        mesa_logd("WARNING: failed to create gfxstream_connection_manager_tls_key");
     }
 }
 
@@ -65,6 +65,22 @@ GfxStreamConnectionManager* GfxStreamConnectionManager::getThreadLocalInstance(
     }
 
     return tls;
+}
+
+void GfxStreamConnectionManager::resetThreadLocalInstance() {
+    if (unlikely(!gfxstream_connection_manager_tls_key_valid)) {
+        return;
+    }
+
+    GfxStreamConnectionManager* tls =
+        (GfxStreamConnectionManager*)tss_get(gfxstream_connection_manager_tls_key);
+    if (unlikely(!tls)) {
+        return;
+    }
+
+    delete tls;
+    void* null_ptr = nullptr;
+    tss_set(gfxstream_connection_manager_tls_key, null_ptr);
 }
 
 GfxStreamConnectionManager::GfxStreamConnectionManager(GfxStreamTransportType type,

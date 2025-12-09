@@ -106,7 +106,7 @@ apply_swizzle_channel(nir_builder *b, nir_def *vec, unsigned swizzle,
       return is_int ? nir_imm_intN_t(b, 1, vec->bit_size)
                     : nir_imm_floatN_t(b, 1.0, vec->bit_size);
    default:
-      unreachable("Invalid swizzle channel");
+      UNREACHABLE("Invalid swizzle channel");
    }
 }
 

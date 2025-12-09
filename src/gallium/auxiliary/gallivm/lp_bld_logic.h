@@ -40,12 +40,13 @@
 extern "C" {
 #endif
 
-#include "gallivm/lp_bld.h"
+#include <llvm-c/Core.h>
 
 #include "pipe/p_defines.h" /* For PIPE_FUNC_xxx */
 
 
 struct lp_type;
+struct gallivm_state;
 struct lp_build_context;
 
 

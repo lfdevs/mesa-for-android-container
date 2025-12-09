@@ -42,6 +42,9 @@ v3d_get_device_info(int fd, struct v3d_device_info* devinfo, v3d_ioctl_fun drm_i
     struct drm_v3d_get_param max_perfcnt = {
             .param = DRM_V3D_PARAM_MAX_PERF_COUNTERS,
     };
+    struct drm_v3d_get_param reset_counter = {
+            .param = DRM_V3D_PARAM_GLOBAL_RESET_COUNTER,
+    };
     int ret;
 
     ret = drm_ioctl(fd, DRM_IOCTL_V3D_GET_PARAM, &ident0);
@@ -100,14 +103,16 @@ v3d_get_device_info(int fd, struct v3d_device_info* devinfo, v3d_ioctl_fun drm_i
    devinfo->compat_rev = (hub_ident3.value >> 16) & 0xff;
 
     ret = drm_ioctl(fd, DRM_IOCTL_V3D_GET_PARAM, &max_perfcnt);
-    if (ret != 0) {
-            /* Kernel doesn't have support to return the maximum number of
-             * performance counters.
-             */
+    if (ret != 0)
             devinfo->max_perfcnt = 0;
-    } else {
+    else
             devinfo->max_perfcnt = max_perfcnt.value;
-    }
+
+    ret = drm_ioctl(fd, DRM_IOCTL_V3D_GET_PARAM, &reset_counter);
+    if (ret != 0)
+            devinfo->has_reset_counter = false;
+    else
+            devinfo->has_reset_counter = true;
 
    return true;
 }

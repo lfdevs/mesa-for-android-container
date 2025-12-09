@@ -92,8 +92,7 @@ lower_shading_rate_output_instr(nir_builder *b, nir_intrinsic_instr *intrin,
          nir_ior(b, nir_ishl_imm(b, nir_ushr_imm(b, u32_x, 1), 2),
                     nir_ushr_imm(b, u32_y, 1));
 
-      nir_def_rewrite_uses_after(packed_fp16_xy, bit_field,
-                                     bit_field->parent_instr);
+      nir_def_rewrite_uses_after(packed_fp16_xy, bit_field);
    }
 
    return true;

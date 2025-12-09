@@ -35,6 +35,32 @@ extern "C" {
 struct nir_shader;
 struct nir_variable;
 
+typedef struct nir_lower_drawpixels_options {
+   gl_state_index16 texcoord_state_tokens[STATE_LENGTH];
+   gl_state_index16 scale_state_tokens[STATE_LENGTH];
+   gl_state_index16 bias_state_tokens[STATE_LENGTH];
+   unsigned drawpix_sampler;
+   unsigned pixelmap_sampler;
+   bool pixel_maps : 1;
+   bool scale_and_bias : 1;
+} nir_lower_drawpixels_options;
+
+bool st_nir_lower_alpha_test(struct nir_shader *shader, enum compare_func func,
+                             bool alpha_to_one,
+                             const gl_state_index16 *alpha_ref_state_tokens,
+                             struct gl_program_parameter_list *paramList,
+                             bool packed_driver_uniform_storage);
+
+bool st_nir_lower_drawpixels(struct nir_shader *shader,
+                             const nir_lower_drawpixels_options *options,
+                             struct gl_program_parameter_list *paramList,
+                             bool packed_driver_uniform_storage);
+
+bool st_nir_lower_point_size_mov(struct nir_shader *shader,
+                                 const gl_state_index16 *pointsize_state_tokens,
+                                 struct gl_program_parameter_list *paramList,
+                                 bool packed_driver_uniform_storage);
+
 bool st_nir_lower_builtin(struct nir_shader *shader);
 bool st_nir_lower_tex_src_plane(struct nir_shader *shader, unsigned free_slots,
                                 unsigned lower_2plane, unsigned lower_3plane);
@@ -73,14 +99,17 @@ st_nir_make_clearcolor_shader(struct st_context *st);
 struct nir_variable *
 st_nir_state_variable_create(struct nir_shader *shader,
                              const struct glsl_type *type,
-                             const gl_state_index16 state[STATE_LENGTH]);
+                             struct gl_program_parameter_list *param_list,
+                             const gl_state_index16 state[STATE_LENGTH],
+                             char *var_name,
+                             bool packed_driver_uniform_storage);
 
 bool st_nir_lower_fog(struct nir_shader *s, enum gl_fog_mode fog_mode,
-                      struct gl_program_parameter_list *paramList);
+                      struct gl_program_parameter_list *paramList,
+                      bool packed_driver_uniform_storage);
 bool st_nir_lower_position_invariant(struct nir_shader *s,
-                                     struct gl_program_parameter_list *paramList);
-
-bool st_nir_unlower_io_to_vars(struct nir_shader *nir);
+                                     struct gl_program_parameter_list *paramList,
+                                     bool packed_driver_uniform_storage);
 
 #ifdef __cplusplus
 }

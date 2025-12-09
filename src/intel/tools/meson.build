@@ -200,7 +200,7 @@ if with_tools.contains('intel-ui')
     include_directories : [inc_include, inc_src, inc_intel],
     c_args : [no_override_init_args],
     gnu_symbol_visibility : 'hidden',
-    cpp_args : ['-fpermissive', '-Wno-parentheses'],
+    cpp_args : cpp.get_supported_arguments('-fpermissive', '-Wno-parentheses', '-Wno-error=stringop-overflow'),
     install : true
   )
 
@@ -221,7 +221,7 @@ if with_tools.contains('intel-ui')
     include_directories : [inc_include, inc_src, inc_intel],
     c_args : [no_override_init_args],
     gnu_symbol_visibility : 'hidden',
-    cpp_args : ['-fpermissive', '-Wno-parentheses'],
+    cpp_args : cpp.get_supported_arguments('-fpermissive', '-Wno-parentheses', '-Wno-error=stringop-overflow'),
     install : true
   )
 endif

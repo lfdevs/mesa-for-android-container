@@ -1,12 +1,13 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::*;
 use crate::api::types::*;
 use crate::api::util::*;
 use crate::core::context::*;
 use crate::core::device::*;
-use crate::core::platform::*;
 use crate::core::program::*;
 
-use mesa_rust::compiler::clc::*;
 use mesa_rust_util::string::*;
 use rusticl_opencl_gen::*;
 use rusticl_proc_macros::cl_entrypoint;
@@ -302,17 +303,6 @@ fn release_program(program: cl_program) -> CLResult<()> {
     Program::release(program)
 }
 
-fn debug_logging(p: &Program, devs: &[&Device]) {
-    if Platform::dbg().program {
-        for dev in devs {
-            let msg = p.log(dev);
-            if !msg.is_empty() {
-                eprintln!("{}", msg);
-            }
-        }
-    }
-}
-
 #[cl_entrypoint(clBuildProgram)]
 fn build_program(
     program: cl_program,
@@ -322,38 +312,31 @@ fn build_program(
     pfn_notify: Option<FuncProgramCB>,
     user_data: *mut ::std::os::raw::c_void,
 ) -> CLResult<()> {
-    let p = Program::ref_from_raw(program)?;
-    let devs = validate_devices(device_list, num_devices, &p.devs)?;
+    let program = Program::arc_from_raw(program)?;
+    let devices = validate_devices(device_list, num_devices, &program.devs)?;
 
     // SAFETY: The requirements on `ProgramCB::try_new` match the requirements
     // imposed by the OpenCL specification. It is the caller's duty to uphold them.
-    let cb_opt = unsafe { ProgramCB::try_new(pfn_notify, user_data)? };
+    let callback = unsafe { ProgramCB::try_new(pfn_notify, user_data)? };
 
     // CL_INVALID_OPERATION if there are kernel objects attached to program.
-    if p.active_kernels() {
+    if program.active_kernels() {
         return Err(CL_INVALID_OPERATION);
     }
 
-    // CL_BUILD_PROGRAM_FAILURE if there is a failure to build the program executable. This error
-    // will be returned if clBuildProgram does not return until the build has completed.
-    let options = c_string_to_string(options);
-    let res = p.build(&devs, &options);
-
-    if let Some(cb) = cb_opt {
-        cb.call(p);
+    if program.any_device_in_progress(&devices) {
+        // CL_INVALID_OPERATION if the build of a program executable for any of
+        // the devices listed in device_list by a previous call to
+        // clBuildProgram for program has not completed.
+        return Err(CL_INVALID_OPERATION);
     }
+
+    let options = c_string_to_string(options);
+    program.build(devices, options, callback)
 
     //• CL_INVALID_BINARY if program is created with clCreateProgramWithBinary and devices listed in device_list do not have a valid program binary loaded.
     //• CL_INVALID_BUILD_OPTIONS if the build options specified by options are invalid.
-    //• CL_INVALID_OPERATION if the build of a program executable for any of the devices listed in device_list by a previous call to clBuildProgram for program has not completed.
     //• CL_INVALID_OPERATION if program was not created with clCreateProgramWithSource, clCreateProgramWithIL or clCreateProgramWithBinary.
-
-    debug_logging(p, &devs);
-    if res {
-        Ok(())
-    } else {
-        Err(CL_BUILD_PROGRAM_FAILURE)
-    }
 }
 
 #[cl_entrypoint(clCompileProgram)]
@@ -368,13 +351,12 @@ fn compile_program(
     pfn_notify: Option<FuncProgramCB>,
     user_data: *mut ::std::os::raw::c_void,
 ) -> CLResult<()> {
-    let mut res = true;
-    let p = Program::ref_from_raw(program)?;
-    let devs = validate_devices(device_list, num_devices, &p.devs)?;
+    let program = Program::arc_from_raw(program)?;
+    let devices = validate_devices(device_list, num_devices, &program.devs)?;
 
     // SAFETY: The requirements on `ProgramCB::try_new` match the requirements
     // imposed by the OpenCL specification. It is the caller's duty to uphold them.
-    let cb_opt = unsafe { ProgramCB::try_new(pfn_notify, user_data)? };
+    let callback = unsafe { ProgramCB::try_new(pfn_notify, user_data)? };
 
     // CL_INVALID_VALUE if num_input_headers is zero and header_include_names or input_headers are
     // not NULL or if num_input_headers is not zero and header_include_names or input_headers are
@@ -389,52 +371,52 @@ fn compile_program(
 
     // If program was created using clCreateProgramWithIL, then num_input_headers, input_headers,
     // and header_include_names are ignored.
-    if !p.is_il() {
+    if !program.is_il() {
         for h in 0..num_input_headers as usize {
-            // SAFETY: have to trust the application here
-            let header = Program::ref_from_raw(unsafe { *input_headers.add(h) })?;
-            match &header.src {
-                ProgramSourceType::Src(src) => headers.push(spirv::CLCHeader {
-                    // SAFETY: have to trust the application here
-                    name: unsafe { CStr::from_ptr(*header_include_names.add(h)).to_owned() },
-                    source: src,
-                }),
-                _ => return Err(CL_INVALID_OPERATION),
+            // SAFETY: The OpenCL spec requires that num_input_headers give the
+            // number of `cl_program` objects in input_headers. It is up to the
+            // caller to ensure that this requirement is met.
+            let header = Program::arc_from_raw(unsafe { *input_headers.add(h) })?;
+            if !header.is_src() {
+                // The OpenCL spec specifies that headers must be created with
+                // clCreateProgramWithSource, but does not specify an error code
+                // to return if they are not.
+                return Err(CL_INVALID_OPERATION);
             }
+
+            headers.push(HeaderProgram {
+                // SAFETY: The OpenCL spec requires that there be a
+                // one-to-one correspondence between input_headers and
+                // header_include_names, containing valid C strings.
+                name: unsafe { CStr::from_ptr(*header_include_names.add(h)).to_owned() },
+                program: header,
+            });
         }
     }
 
     // CL_INVALID_OPERATION if program has no source or IL available, i.e. it has not been created
     // with clCreateProgramWithSource or clCreateProgramWithIL.
-    if !(p.is_src() || p.is_il()) {
+    if !(program.is_src() || program.is_il()) {
         return Err(CL_INVALID_OPERATION);
     }
 
     // CL_INVALID_OPERATION if there are kernel objects attached to program.
-    if p.active_kernels() {
+    if program.active_kernels() {
         return Err(CL_INVALID_OPERATION);
     }
 
-    // CL_COMPILE_PROGRAM_FAILURE if there is a failure to compile the program source. This error
-    // will be returned if clCompileProgram does not return until the compile has completed.
-    let options = c_string_to_string(options);
-    for dev in &devs {
-        res &= p.compile(dev, &options, &headers);
+    if program.any_device_in_progress(&devices) {
+        // CL_INVALID_OPERATION if the compilation or build of a program
+        // executable for any of the devices listed in device_list by a previous
+        // call to clCompileProgram or clBuildProgram for program has not
+        // completed.
+        return Err(CL_INVALID_OPERATION);
     }
 
-    if let Some(cb) = cb_opt {
-        cb.call(p);
-    }
+    let options = c_string_to_string(options);
+    program.compile(devices, options, headers, callback)
 
     // • CL_INVALID_COMPILER_OPTIONS if the compiler options specified by options are invalid.
-    // • CL_INVALID_OPERATION if the compilation or build of a program executable for any of the devices listed in device_list by a previous call to clCompileProgram or clBuildProgram for program has not completed.
-
-    debug_logging(p, &devs);
-    if res {
-        Ok(())
-    } else {
-        Err(CL_COMPILE_PROGRAM_FAILURE)
-    }
 }
 
 pub fn link_program(
@@ -447,55 +429,43 @@ pub fn link_program(
     pfn_notify: Option<FuncProgramCB>,
     user_data: *mut ::std::os::raw::c_void,
 ) -> CLResult<(cl_program, cl_int)> {
-    let c = Context::arc_from_raw(context)?;
-    let devs = validate_devices(device_list, num_devices, &c.devs)?;
-    let progs = Program::arcs_from_arr(input_programs, num_input_programs)?;
+    let context = Context::arc_from_raw(context)?;
+    let devices = validate_devices(device_list, num_devices, &context.devs)?;
+    let input_programs = Program::arcs_from_arr(input_programs, num_input_programs)?;
 
     // SAFETY: The requirements on `ProgramCB::try_new` match the requirements
     // imposed by the OpenCL specification. It is the caller's duty to uphold them.
-    let cb_opt = unsafe { ProgramCB::try_new(pfn_notify, user_data)? };
+    let callback = unsafe { ProgramCB::try_new(pfn_notify, user_data)? };
 
     // CL_INVALID_VALUE if num_input_programs is zero and input_programs is NULL
-    if progs.is_empty() {
+    if input_programs.is_empty() {
         return Err(CL_INVALID_VALUE);
     }
 
     // CL_INVALID_DEVICE if any device in device_list is not in the list of devices associated with
     // context.
-    if !devs.iter().all(|d| c.devs.contains(d)) {
+    if !devices.iter().all(|device| context.devs.contains(device)) {
         return Err(CL_INVALID_DEVICE);
     }
 
     // CL_INVALID_OPERATION if the compilation or build of a program executable for any of the
     // devices listed in device_list by a previous call to clCompileProgram or clBuildProgram for
     // program has not completed.
-    for d in &devs {
-        if progs
-            .iter()
-            .map(|p| p.status(d))
-            .any(|s| s != CL_BUILD_SUCCESS as cl_build_status)
-        {
-            return Err(CL_INVALID_OPERATION);
-        }
-    }
-
-    // CL_LINK_PROGRAM_FAILURE if there is a failure to link the compiled binaries and/or libraries.
-    let res = Program::link(c, &devs, &progs, c_string_to_string(options));
-    let code = if devs
+    if input_programs
         .iter()
-        .map(|d| res.status(d))
-        .all(|s| s == CL_BUILD_SUCCESS as cl_build_status)
+        .any(|program| !program.all_devices_succeeded(&devices))
     {
-        CL_SUCCESS as cl_int
-    } else {
-        CL_LINK_PROGRAM_FAILURE
-    };
-
-    if let Some(cb) = cb_opt {
-        cb.call(&res);
+        return Err(CL_INVALID_OPERATION);
     }
 
-    debug_logging(&res, &devs);
+    let (res, code) = Program::link(
+        context,
+        devices,
+        input_programs,
+        c_string_to_string(options),
+        callback,
+    )?;
+
     Ok((res.into_cl(), code))
 
     //• CL_INVALID_LINKER_OPTIONS if the linker options specified by options are invalid.

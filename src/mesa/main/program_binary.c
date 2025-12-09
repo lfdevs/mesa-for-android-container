@@ -173,7 +173,7 @@ static void
 write_program_payload(struct gl_context *ctx, struct blob *blob,
                       struct gl_shader_program *sh_prog)
 {
-   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+   for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
       struct gl_linked_shader *shader = sh_prog->_LinkedShaders[stage];
       if (shader)
          ctx->Driver.ProgramBinarySerializeDriverBlob(ctx, sh_prog,
@@ -184,7 +184,7 @@ write_program_payload(struct gl_context *ctx, struct blob *blob,
 
    serialize_glsl_program(blob, ctx, sh_prog);
 
-   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+   for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
       struct gl_linked_shader *shader = sh_prog->_LinkedShaders[stage];
       if (shader) {
          struct gl_program *prog = sh_prog->_LinkedShaders[stage]->Program;
@@ -291,7 +291,7 @@ _mesa_program_binary(struct gl_context *ctx, struct gl_shader_program *sh_prog,
 
    unsigned programs_in_use = 0;
    if (ctx->_Shader)
-      for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+      for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
          if (ctx->_Shader->CurrentProgram[stage] &&
              ctx->_Shader->CurrentProgram[stage]->Id == sh_prog->Name) {
             programs_in_use |= 1 << stage;

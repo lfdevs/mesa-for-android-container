@@ -56,10 +56,6 @@ enum nir_spirv_execution_environment {
 struct spirv_to_nir_options {
    enum nir_spirv_execution_environment environment;
 
-   /* Whether to keep ViewIndex as an input instead of rewriting to a sysval.
-    */
-   bool view_index_is_input;
-
    /* Create a nir library. */
    bool create_library;
 
@@ -67,9 +63,6 @@ struct spirv_to_nir_options {
     * indicates hardware requirements rather than shader author intent
     */
    uint32_t float_controls_execution_mode;
-
-   /* Initial subgroup size.  This may be overwritten for CL kernels */
-   enum gl_subgroup_size subgroup_size;
 
    /* True if RelaxedPrecision-decorated ALU result values should be performed
     * with 16-bit math.
@@ -152,6 +145,8 @@ struct spirv_to_nir_options {
    /* Shader index provided by VkPipelineShaderStageNodeCreateInfoAMDX */
    uint32_t shader_index;
 
+   /* If GroupNonUniform capability is used, set this api subgroup size. */
+   uint8_t group_non_uniform_subgroup_size;
 };
 
 enum spirv_verify_result {
@@ -164,12 +159,12 @@ enum spirv_verify_result {
 enum spirv_verify_result spirv_verify_gl_specialization_constants(
    const uint32_t *words, size_t word_count,
    struct nir_spirv_specialization *spec, unsigned num_spec,
-   gl_shader_stage stage, const char *entry_point_name);
+   mesa_shader_stage stage, const char *entry_point_name);
 
 nir_shader *spirv_to_nir(const uint32_t *words, size_t word_count,
                          struct nir_spirv_specialization *specializations,
                          unsigned num_specializations,
-                         gl_shader_stage stage, const char *entry_point_name,
+                         mesa_shader_stage stage, const char *entry_point_name,
                          const struct spirv_to_nir_options *options,
                          const nir_shader_compiler_options *nir_options);
 

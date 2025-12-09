@@ -56,32 +56,32 @@ public:
 protected:
    virtual dst_reg *make_reg_for_system_value(int /* location */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void setup_payload()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_prolog()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_thread_end()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_urb_write_header(int /* mrf */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual vec4_instruction *emit_urb_write_opcode(bool /* complete */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 };
 
@@ -97,8 +97,7 @@ void dead_code_eliminate_vec4_test::SetUp()
    params.mem_ctx = ctx;
 
    prog_data = ralloc(ctx, struct elk_vue_prog_data);
-   nir_shader *shader =
-      nir_shader_create(ctx, MESA_SHADER_VERTEX, NULL, NULL);
+   nir_shader *shader = nir_shader_create(ctx, MESA_SHADER_VERTEX, NULL);
 
   v = new dead_code_eliminate_vec4_visitor(compiler, &params, shader, prog_data);
 
@@ -118,7 +117,7 @@ void dead_code_eliminate_vec4_test::TearDown()
 static void
 dead_code_eliminate(vec4_visitor *v)
 {
-   const bool print = getenv("TEST_DEBUG");
+   const bool print = os_get_option("TEST_DEBUG");
 
    if (print) {
       fprintf(stderr, "instructions before:\n");

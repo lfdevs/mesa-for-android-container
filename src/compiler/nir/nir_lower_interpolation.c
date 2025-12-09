@@ -49,10 +49,10 @@ nir_lower_interpolation_instr(nir_builder *b, nir_instr *instr, void *cb_data)
       return false;
 
    nir_intrinsic_instr *bary_intrinsic =
-      nir_instr_as_intrinsic(intr->src[0].ssa->parent_instr);
+      nir_def_as_intrinsic(intr->src[0].ssa);
 
    /* Leave VARYING_SLOT_POS alone */
-   if (nir_intrinsic_base(intr) == VARYING_SLOT_POS)
+   if (nir_intrinsic_io_semantics(intr).location == VARYING_SLOT_POS)
       return false;
 
    const enum glsl_interp_mode interp_mode =

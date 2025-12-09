@@ -967,10 +967,8 @@ isa_disasm(void *bin, int sz, FILE *out, const struct isa_decode_options *option
 	state->num_instr = sz / (BITMASK_WORDS * sizeof(BITSET_WORD));
 
 	if (state->options->branch_labels) {
-		state->branch_targets = rzalloc_size(state,
-				sizeof(BITSET_WORD) * BITSET_WORDS(state->num_instr));
-		state->call_targets = rzalloc_size(state,
-				sizeof(BITSET_WORD) * BITSET_WORDS(state->num_instr));
+		state->branch_targets = BITSET_RZALLOC(state, state->num_instr);
+		state->call_targets = BITSET_RZALLOC(state, state->num_instr);
 
 		/* Do a pre-pass to find all the branch targets: */
 		state->print.out = fopen("/dev/null", "w");

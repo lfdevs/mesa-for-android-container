@@ -80,33 +80,38 @@ def has_access(format):
     # pack/unpack functions for softpipe/llvmpipe.
     noaccess_formats = [
         'r1_unorm',
-        'yv12',
-        'yv16',
-        'iyuv',
-        'nv12',
-        'nv16',
-        'nv21',
-        'nv15',
-        'nv20',
-        'p010',
-        'p012',
-        'p016',
-        'p030',
-        'y210',
-        'y212',
-        'y216',
-        'y410',
-        'y412',
-        'y416',
-        'xyuv',
-        'ayuv',
-        'r8g8_r8b8_unorm',
-        'r8b8_r8g8_unorm',
-        'g8r8_b8r8_unorm',
-        'b8r8_g8r8_unorm',
-        'g8r8_g8b8_unorm',
-        'g8b8_g8r8_unorm',
-        'b8g8_r8g8_unorm',
+        'y8_v8_u8_420_unorm',
+        'y8_v8_u8_422_unorm',
+        'y8_u8_v8_420_unorm',
+        'y8_u8v8_420_unorm',
+        'y8_u8v8_422_unorm',
+        'y8_u8v8_444_unorm',
+        'y8_v8u8_420_unorm',
+        'y8_v8u8_422_unorm',
+        'y8_v8u8_444_unorm',
+        'y10_u10v10_420_unorm',
+        'y10_u10v10_422_unorm',
+        'x6y10_x6u10x6v10_420_unorm',
+        'x4y12_x4u12x4v12_420_unorm',
+        'y16_u16v16_420_unorm',
+        'y10y10y10x2_u10v10u10x2v10u10v10x2_420_unorm',
+        'x6y10x6u10x6y10x6v10_422_unorm',
+        'x4y12x4u12x4y12x4v12_422_unorm',
+        'y16u16y16v16_422_unorm',
+        'u10y10v10a2_444_unorm',
+        'x4u12x4y12x4v12x4a12_444_unorm',
+        'u16y16v16a16_444_unorm',
+        'x8y8u8v8_444_unorm',
+        'a8y8u8v8_444_unorm',
+        'r8g8_r8b8_422_unorm',
+        'r8b8_r8g8_422_unorm',
+        'g8r8_b8r8_422_unorm',
+        'b8r8_g8r8_422_unorm',
+        'g8r8_g8b8_422_unorm',
+        'g8b8_g8r8_422_unorm',
+        'b8g8_r8g8_422_unorm',
+        'r16g16_r16b16_422_unorm',
+        'x6r10x6g10_x6r10x6b10_422_unorm',
         'x6g10_x6b10x6r10_420_unorm',
         'x4g12_x4b12x4r12_420_unorm',
         'y8_400_unorm',
@@ -134,12 +139,16 @@ def has_access(format):
         'r8_g8_b8_420_unorm',
         'r8_b8_g8_420_unorm',
         'g8_b8_r8_420_unorm',
-        'r8_g8_b8_unorm',
+        'r8_g8_b8_444_unorm',
         'r8g8b8_420_unorm_packed',
         'r10g10b10_420_unorm_packed',
         'y8_unorm',
         'y8u8v8_420_unorm_packed',
         'y10u10v10_420_unorm_packed',
+        'g8_b8r8_444_unorm',
+        'x6g10_x6b10x6r10_444_unorm',
+        'x4g12_x4b12x4r12_444_unorm',
+        'y16_u16v16_444_unorm',
     ]
     if format.short_name() in noaccess_formats:
         return False
@@ -156,7 +165,134 @@ def write_format_table_header(file):
     print(CopyRight.strip(), file=file)
     print(file=file)
 
+def write_format_enum_section(formats, type_name=None, max_formats=None):
+    assert(max_formats == None or len(formats) <= max_formats)
+    for idx, f in enumerate(formats):
+        # Vertex formats must be first and must be <= 255.
+        if idx == 0 and type_name != None:
+            print('   PIPE_FORMAT_%s_START,' % (type_name), file=sys.stdout3)
+            print('   %s = PIPE_FORMAT_%s_START,' % (f, type_name), file=sys.stdout3)
+        elif idx == len(formats) - 1 and type_name != None:
+            print('   %s,' % (f), file=sys.stdout3)
+            print('   PIPE_FORMAT_%s_END = %s,' % (type_name, f), file=sys.stdout3)
+        else:
+            print('   %s,' % (f), file=sys.stdout3)
+
+def collect_vertex_formats(formats):
+    vertex_formats = []
+    all_comp_types = [
+        'UINT', 'SINT', 'FLOAT', 'UNORM', 'SNORM',
+        'USCALED', 'SSCALED', 'FIXED'
+    ]
+
+    # RxGxBxAx_<type> first, then we'll deal with custom formats
+    for bitsz in [64, 32, 16, 8]:
+        for comp_type in all_comp_types:
+            comp_suffix = ''
+            for comp_name in ['R', 'G', 'B', 'A']:
+                comp_suffix += comp_name + str(bitsz)
+                format_name = 'PIPE_FORMAT_' + comp_suffix + '_' + comp_type
+                f = formats.pop(format_name, None)
+                if f != None:
+                    vertex_formats.append(f.name)
+
+    other_comp_suffixes = {
+        # [A8]B8G8R8 variants
+        'B8G8R8': all_comp_types,
+        'B8G8R8A8': all_comp_types,
+        'A8B8G8R8': ['USCALED', 'SSCALED'],
+        # A8R8G8B8
+        'A8R8G8B8': ['UNORM'],
+        # R10G10B10A2/B10G10R10A2 variants
+        'R10G10B10A2': all_comp_types,
+        'B10G10R10A2': all_comp_types,
+        # R11G11B10 variants
+        'R11G11B10': ['FLOAT'],
+    }
+    for comp_suffix, comp_types in other_comp_suffixes.items():
+        for comp_type in comp_types:
+            format_name = 'PIPE_FORMAT_' + comp_suffix + '_' + comp_type
+            f = formats.pop(format_name, None)
+            if f != None:
+                    vertex_formats.append(f.name)
+
+    return vertex_formats
+
+def collect_yuv_formats(formats):
+    yuv_formats = []
+    for name, f in formats.items():
+        if f.colorspace == 'YUV':
+            yuv_formats.append(f.name)
+    for f in yuv_formats:
+        formats.pop(f)
+    return yuv_formats
+
+def collect_compr_formats(formats):
+    compr_formats = []
+    for compr_type in ['s3tc', 'rgtc', 'etc', 'bptc', 'astc', 'atc', 'fxt1']:
+        for cs in ['RGB', 'SRGB']:
+            for name, f in formats.items():
+                if f.layout == compr_type and f.colorspace == cs:
+                    compr_formats.append(f.name)
+    for f in compr_formats:
+        formats.pop(f)
+    return compr_formats
+
+def collect_zs_formats(formats):
+    zs_formats = []
+    for name, f in formats.items():
+        if f.colorspace == 'ZS':
+            zs_formats.append(f.name)
+    for f in zs_formats:
+        formats.pop(f)
+    return zs_formats
+
+def write_format_enum(formats):
+    remaining_formats = {}
+    for f in formats:
+        if f.name != 'PIPE_FORMAT_NONE':
+            remaining_formats[f.name] = f
+
+    vertex_formats = collect_vertex_formats(remaining_formats)
+    yuv_formats = collect_yuv_formats(remaining_formats)
+    compr_formats = collect_compr_formats(remaining_formats)
+    zs_formats = collect_zs_formats(remaining_formats)
+
+    print('/**', file=sys.stdout3)
+    print(' * Formats for textures, surfaces and vertex data', file=sys.stdout3)
+    print(' */', file=sys.stdout3)
+    print("enum pipe_format {", file=sys.stdout3)
+    print('   PIPE_FORMAT_NONE,', file=sys.stdout3)
+
+    print(file=sys.stdout3)
+    print('   /* Vertex formats must be first and must be <= 255 */', file=sys.stdout3)
+    write_format_enum_section(vertex_formats, "VERTEX", max_formats=255)
+
+    print(file=sys.stdout3)
+    print('   /* YUV formats. */', file=sys.stdout3)
+    write_format_enum_section(yuv_formats, "YUV")
+
+    print(file=sys.stdout3)
+    print('   /* Compressed formats. */', file=sys.stdout3)
+    write_format_enum_section(compr_formats, "COMPR")
+
+    print(file=sys.stdout3)
+    print('   /* Depth/stencil formats. */', file=sys.stdout3)
+    write_format_enum_section(zs_formats, "ZS")
+
+    print(file=sys.stdout3)
+    print('   /* Other formats. */', file=sys.stdout3)
+    write_format_enum_section(remaining_formats)
+
+    print('   PIPE_FORMAT_COUNT,', file=sys.stdout3)
+    print('};', file=sys.stdout3)
+
 def write_format_aliases(formats):
+    for f in formats:
+        if f.colorspace and f.alias != None:
+            print("#define %s %s" % (f.alias, f.name), file=sys.stdout3)
+
+    print(file=sys.stdout3)
     print("#if UTIL_ARCH_LITTLE_ENDIAN", file=sys.stdout3)
     for f in formats:
         if f.le_alias:
@@ -167,6 +303,248 @@ def write_format_aliases(formats):
             print("#define %s %s" % (f.be_alias, f.name), file=sys.stdout3)
     print("#endif", file=sys.stdout3)
 
+CHROMA_SUBSAMP = ['400', '420', '422', '444', '440']
+
+def write_to_chroma_format(formats):
+    print('enum pipe_video_chroma_format {', file=sys.stdout3)
+    for subsamp in CHROMA_SUBSAMP:
+        print('   PIPE_VIDEO_CHROMA_FORMAT_%s,' % subsamp, file=sys.stdout3)
+    print('   PIPE_VIDEO_CHROMA_FORMAT_NONE,', file=sys.stdout3)
+    print('};', file=sys.stdout3)
+    print(file=sys.stdout3)
+    print('static inline enum pipe_video_chroma_format', file=sys.stdout3)
+    print('pipe_format_to_chroma_format(enum pipe_format format)', file=sys.stdout3)
+    print('{', file=sys.stdout3)
+    print('   switch(format) {', file=sys.stdout3)
+    for subsamp in CHROMA_SUBSAMP:
+        format_count = 0
+        for f in formats:
+            if f.colorspace == 'YUV':
+                yuv_split_name = f.name.split('_')
+                if yuv_split_name[-2] == subsamp:
+                    print('   case %s:' % f.name, file=sys.stdout3)
+                    format_count += 1
+        if format_count > 0:
+            print('      return PIPE_VIDEO_CHROMA_FORMAT_%s;' % subsamp, file=sys.stdout3)
+    print('   default:', file=sys.stdout3)
+    print('      return PIPE_VIDEO_CHROMA_FORMAT_NONE;', file=sys.stdout3)
+    print('   }', file=sys.stdout3)
+    print('}', file=sys.stdout3)
+
+def chroma_horizontal_subsample_factor(subsample_name):
+    assert(subsample_name in CHROMA_SUBSAMP)
+    if subsample_name in ['420', '422']:
+        return 2
+    return 1
+
+def chroma_vertical_subsample_factor(subsample_name):
+    assert(subsample_name in CHROMA_SUBSAMP)
+    if subsample_name in ['420', '440']:
+        return 2
+    return 1
+
+def write_get_plane_width_height(formats):
+    print('static inline unsigned', file=sys.stdout3)
+    print('util_format_get_plane_width(enum pipe_format format, unsigned plane,', file=sys.stdout3)
+    print('                            unsigned width)', file=sys.stdout3)
+    print('{', file=sys.stdout3)
+    print('   if (!plane)', file=sys.stdout3)
+    print('      return width;', file=sys.stdout3)
+    print(file=sys.stdout3)
+    print('   switch (format) {', file=sys.stdout3)
+    for factor in [2]:
+        format_count = 0
+        for f in formats:
+            if f.layout in ['planar2', 'planar3']:
+                split_name = f.name.split('_')
+                subsamp = split_name[-2]
+                if subsamp not in CHROMA_SUBSAMP:
+                    continue
+                if chroma_horizontal_subsample_factor(subsamp) != factor:
+                    continue
+                print('   case %s:' % f.name, file=sys.stdout3)
+                format_count += 1
+        if format_count > 0:
+            print('      return DIV_ROUND_UP(width, %d);' % factor, file=sys.stdout3)
+    print('   default:', file=sys.stdout3)
+    print('      return width;', file=sys.stdout3)
+    print('   }', file=sys.stdout3)
+    print('}', file=sys.stdout3)
+    print(file=sys.stdout3)
+    print('static inline unsigned', file=sys.stdout3)
+    print('util_format_get_plane_height(enum pipe_format format, unsigned plane,', file=sys.stdout3)
+    print('                             unsigned height)', file=sys.stdout3)
+    print('{', file=sys.stdout3)
+    print('   if (!plane)', file=sys.stdout3)
+    print('      return height;', file=sys.stdout3)
+    print(file=sys.stdout3)
+    print('   switch (format) {', file=sys.stdout3)
+    for factor in [2]:
+        format_count = 0
+        for f in formats:
+            if f.layout in ['planar2', 'planar3']:
+                split_name = f.name.split('_')
+                subsamp = split_name[-2]
+                if subsamp not in CHROMA_SUBSAMP:
+                    continue
+                if chroma_vertical_subsample_factor(subsamp) != factor:
+                    continue
+                print('   case %s:' % f.name, file=sys.stdout3)
+                format_count += 1
+        if format_count > 0:
+            print('      return DIV_ROUND_UP(height, %d);' % factor, file=sys.stdout3)
+    print('   default:', file=sys.stdout3)
+    print('      return height;', file=sys.stdout3)
+    print('   }', file=sys.stdout3)
+    print('}', file=sys.stdout3)
+
+def write_get_plane_format(formats):
+    to_rgb_plane_format = {
+        'Y8': 'R8',
+        'U8': 'R8',
+        'V8': 'R8',
+        'X6Y10': 'X6R10',
+        'X6U10': 'X6R10',
+        'X6V10': 'X6R10',
+        'Y10X6': 'R16',
+        'U10X6': 'R16',
+        'V10X6': 'R16',
+        'X6U10X6V10': 'X6R10X6G10',
+        'X6V10X6U10': 'X6R10X6G10',
+        'X4Y12': 'X4R12',
+        'X4U12': 'X4R12',
+        'X4V12': 'X4R12',
+        'Y12X4': 'R16',
+        'U12X4': 'R16',
+        'V12X4': 'R16',
+        'X4U12X4V12': 'X4R12X4G12',
+        'X4V12X4U12': 'X4R12X4G12',
+        'Y16': 'R16',
+        'U16': 'R16',
+        'V16': 'R16',
+        'U16V16': 'R16G16',
+        'U8V8': 'RG88',
+        'V8U8': 'GR88',
+        'R8': 'R8',
+        'G8': 'R8',
+        'B8': 'R8',
+        'G8B8': 'RG88',
+        'B8G8': 'GR88',
+        'B8R8': 'GR88',
+        'X6G10': 'X6R10',
+        'X6B10X6R10': 'X6R10X6G10',
+        'X4G12': 'X4R12',
+        'X4B12X4R12': 'X4R12X4G12',
+    }
+
+    # On some YUV formats, we don't want RGB lowering
+    no_rgb_lowering = ['Y8_UNORM']
+
+    print('static inline enum pipe_format', file=sys.stdout3)
+    print('util_format_get_plane_format(enum pipe_format format, unsigned plane)', file=sys.stdout3)
+    print('{', file=sys.stdout3)
+    print('   switch (format) {', file=sys.stdout3)
+    unhandled_formats = []
+    for f in formats:
+        if f.layout not in ['planar2', 'planar3'] and f.colorspace != 'YUV':
+            continue
+
+        if f.short_name().upper() in no_rgb_lowering:
+            unhandled_formats += [f.name]
+            continue
+
+        nplanes = int(f.layout[-1]) if f.layout.startswith('planar') else 1
+        planes = f.short_name().upper().split('_')
+        if planes[-1] == 'PACKED':
+            planes.pop(-1)
+
+        assert(planes[-1] == 'UNORM')
+        planes.pop(-1)
+        if planes[-1] in CHROMA_SUBSAMP:
+            planes.pop(-1)
+        rgb_formats = [None, None, None]
+        no_match = False
+        same_format_on_all_planes = True
+        for i in range(nplanes):
+            if planes[i] not in to_rgb_plane_format:
+                no_match = True
+                break
+            rgb_formats[i] = to_rgb_plane_format[planes[i]]
+            if i > 0 and rgb_formats[i] != rgb_formats[i - 1]:
+                same_format_on_all_planes = False
+
+        if no_match:
+            unhandled_formats += [f.name]
+            continue
+
+        print('   case %s:' % f.name, file=sys.stdout3)
+        if same_format_on_all_planes:
+            print('      return PIPE_FORMAT_%s_UNORM;' % rgb_formats[0], file=sys.stdout3)
+        else:
+            if nplanes == 3:
+                assert(rgb_formats[1] == rgb_formats[2])
+            print('      return !plane ? PIPE_FORMAT_%s_UNORM : PIPE_FORMAT_%s_UNORM;' % (rgb_formats[0], rgb_formats[1]), file=sys.stdout3)
+
+    print(file=sys.stdout3)
+    if len(unhandled_formats) > 0:
+        print('   /* No matching per-plane RGB format, we return the original format in that case. */', file=sys.stdout3)
+    for f in unhandled_formats:
+        print('   case %s:' % f, file=sys.stdout3)
+    print('   default:', file=sys.stdout3)
+    print('      return format;', file=sys.stdout3)
+    print('   }', file=sys.stdout3)
+    print('}', file=sys.stdout3)
+    print(file=sys.stdout3)
+
+def write_type_conv_helper(formats, in_type, out_type):
+    print('static inline enum pipe_format', file=sys.stdout3)
+    print('util_format_%s_to_%s(enum pipe_format format)' % (in_type, out_type), file=sys.stdout3)
+    print('{', file=sys.stdout3)
+    print('   switch (format) {', file=sys.stdout3)
+    for out_fmt in formats:
+        if out_fmt.colorspace != 'RGB':
+            continue
+        if out_type not in out_fmt.short_name():
+            continue
+
+        match = []
+        if in_type != 'any':
+            match += [out_fmt.short_name().replace(out_type, in_type)]
+        else:
+            for fmt_type in ['unorm', 'snorm', 'uint', 'sint', 'float']:
+                if fmt_type != in_type:
+                    match += [out_fmt.short_name().replace(out_type, fmt_type)]
+
+        found_match = False
+        for in_fmt in formats:
+            if in_fmt.short_name() in match:
+                print('   case %s:' % in_fmt.name, file=sys.stdout3)
+                found_match = True
+
+        if found_match:
+            print('      return %s;' % out_fmt.name, file=sys.stdout3)
+    print('   default:', file=sys.stdout3)
+    print('      return format;', file=sys.stdout3)
+    print('   }', file=sys.stdout3)
+    print('}', file=sys.stdout3)
+
+def write_type_conv_helpers(formats):
+    out_types = ['unorm', 'snorm', 'uint', 'sint', 'float']
+    in_types = out_types + ['any']
+    for in_type in in_types:
+        for out_type in out_types:
+            if in_type != out_type:
+                write_type_conv_helper(formats, in_type, out_type)
+                print(file=sys.stdout3)
+
+def write_format_inline_helpers(formats):
+    write_to_chroma_format(formats)
+    print(file=sys.stdout3)
+    write_get_plane_format(formats)
+    print(file=sys.stdout3)
+    write_get_plane_width_height(formats)
+    print(file=sys.stdout3)
+    write_type_conv_helpers(formats)
 
 def write_format_table(formats):
     write_format_table_header(sys.stdout)
@@ -196,12 +574,21 @@ def write_format_table(formats):
 
     write_format_table_header(sys.stdout3)
 
+    print('#include "util/macros.h"', file=sys.stdout3)
+    print('#include "util/u_endian.h"', file=sys.stdout3)
+    print(file=sys.stdout3)
+
     print('#ifdef __cplusplus', file=sys.stdout3)
     print('extern "C" {', file=sys.stdout3)
     print('#endif', file=sys.stdout3)
     print(file=sys.stdout3)
 
+    write_format_enum(formats)
+    print(file=sys.stdout3)
     write_format_aliases(formats)
+    print(file=sys.stdout3)
+    write_format_inline_helpers(formats)
+    print(file=sys.stdout3)
 
     print('#ifdef __cplusplus', file=sys.stdout3)
     print('} /* extern "C" */', file=sys.stdout3)

@@ -101,7 +101,7 @@ static void si_alpha_test(struct si_shader_context *ctx, LLVMValueRef alpha)
       LLVMRealPredicate cond = cond_map[ctx->shader->key.ps.part.epilog.alpha_func];
       assert(cond);
 
-      LLVMValueRef alpha_ref = ac_get_arg(&ctx->ac, ctx->args->alpha_reference);
+      LLVMValueRef alpha_ref = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args->alpha_reference));
       if (LLVMTypeOf(alpha) == ctx->ac.f16)
          alpha_ref = LLVMBuildFPTrunc(ctx->ac.builder, alpha_ref, ctx->ac.f16, "");
 
@@ -465,9 +465,15 @@ static void si_llvm_emit_polygon_stipple(struct si_shader_context *ctx)
 static LLVMValueRef insert_ret_of_arg(struct si_shader_context *ctx, LLVMValueRef ret,
                                       LLVMValueRef data, unsigned arg_index)
 {
-   unsigned base = ctx->args->ac.args[arg_index].file == AC_ARG_VGPR ?
-      ctx->args->ac.num_sgprs_used : 0;
+   bool is_vgpr = ctx->args->ac.args[arg_index].file == AC_ARG_VGPR;
+   unsigned base = is_vgpr ? ctx->args->ac.num_sgprs_used : 0;
    unsigned index = base + ctx->args->ac.args[arg_index].offset;
+
+   /* i32 is always an SGPR and f32 is always a VGPR. LLVM uses the type to determine
+    * the register class, so only VGPRs use float.
+    */
+   if (is_vgpr)
+      data = ac_to_float(&ctx->ac, data);
 
    if (ctx->args->ac.args[arg_index].size == 1) {
       return LLVMBuildInsertValue(ctx->ac.builder, ret, data, index, "");
@@ -539,15 +545,15 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
       bc_optimize = LLVMBuildTrunc(ctx->ac.builder, bc_optimize, ctx->ac.i1, "");
 
       if (key->ps_prolog.states.bc_optimize_for_persp) {
-         center = ac_get_arg(&ctx->ac, args->ac.persp_center);
-         centroid = ac_get_arg(&ctx->ac, args->ac.persp_centroid);
+         center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_center));
+         centroid = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_centroid));
          /* Select PERSP_CENTROID. */
          tmp = LLVMBuildSelect(ctx->ac.builder, bc_optimize, center, centroid, "");
          ret = insert_ret_of_arg(ctx, ret, tmp, args->ac.persp_centroid.arg_index);
       }
       if (key->ps_prolog.states.bc_optimize_for_linear) {
-         center = ac_get_arg(&ctx->ac, args->ac.linear_center);
-         centroid = ac_get_arg(&ctx->ac, args->ac.linear_centroid);
+         center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_center));
+         centroid = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_centroid));
          /* Select PERSP_CENTROID. */
          tmp = LLVMBuildSelect(ctx->ac.builder, bc_optimize, center, centroid, "");
          ret = insert_ret_of_arg(ctx, ret, tmp, args->ac.linear_centroid.arg_index);
@@ -556,14 +562,14 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
 
    /* Force per-sample interpolation. */
    if (key->ps_prolog.states.force_persp_sample_interp) {
-      LLVMValueRef persp_sample = ac_get_arg(&ctx->ac, args->ac.persp_sample);
+      LLVMValueRef persp_sample = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_sample));
       /* Overwrite PERSP_CENTER. */
       ret = insert_ret_of_arg(ctx, ret, persp_sample, args->ac.persp_center.arg_index);
       /* Overwrite PERSP_CENTROID. */
       ret = insert_ret_of_arg(ctx, ret, persp_sample, args->ac.persp_centroid.arg_index);
    }
    if (key->ps_prolog.states.force_linear_sample_interp) {
-      LLVMValueRef linear_sample = ac_get_arg(&ctx->ac, args->ac.linear_sample);
+      LLVMValueRef linear_sample = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_sample));
       /* Overwrite LINEAR_CENTER. */
       ret = insert_ret_of_arg(ctx, ret, linear_sample, args->ac.linear_center.arg_index);
       /* Overwrite LINEAR_CENTROID. */
@@ -572,14 +578,14 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
 
    /* Force center interpolation. */
    if (key->ps_prolog.states.force_persp_center_interp) {
-      LLVMValueRef persp_center = ac_get_arg(&ctx->ac, args->ac.persp_center);
+      LLVMValueRef persp_center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_center));
       /* Overwrite PERSP_SAMPLE. */
       ret = insert_ret_of_arg(ctx, ret, persp_center, args->ac.persp_sample.arg_index);
       /* Overwrite PERSP_CENTROID. */
       ret = insert_ret_of_arg(ctx, ret, persp_center, args->ac.persp_centroid.arg_index);
    }
    if (key->ps_prolog.states.force_linear_center_interp) {
-      LLVMValueRef linear_center = ac_get_arg(&ctx->ac, args->ac.linear_center);
+      LLVMValueRef linear_center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_center));
       /* Overwrite LINEAR_SAMPLE. */
       ret = insert_ret_of_arg(ctx, ret, linear_center, args->ac.linear_sample.arg_index);
       /* Overwrite LINEAR_CENTROID. */
@@ -613,7 +619,7 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
 
       LLVMValueRef face = NULL;
       if (key->ps_prolog.states.color_two_side)
-         face = ac_get_arg(&ctx->ac, args->ac.front_face);
+         face = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.front_face));
 
       LLVMValueRef color[4];
       interp_fs_color(ctx, key->ps_prolog.color_attr_index[i], i, key->ps_prolog.num_interp_inputs,
@@ -732,7 +738,7 @@ void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part
    while (colors_written) {
       int write_i = u_bit_scan(&colors_written);
       unsigned color_type = (key->ps_epilog.color_types >> (write_i * 2)) & 0x3;
-      LLVMValueRef arg = ac_get_arg(&ctx->ac, color_args[write_i]);
+      LLVMValueRef arg = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, color_args[write_i]));
 
       if (color_type != SI_TYPE_ANY32)
          arg = LLVMBuildBitCast(ctx->ac.builder, arg, LLVMVectorType(ctx->ac.f16, 8), "");
@@ -754,7 +760,7 @@ void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part
       LLVMValueRef depth = NULL, stencil = NULL, samplemask = NULL;
 
       if (writes_z)
-         depth = ac_get_arg(&ctx->ac, depth_arg);
+         depth = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, depth_arg));
       if (writes_stencil)
          stencil = ac_get_arg(&ctx->ac, stencil_arg);
       if (writes_samplemask)

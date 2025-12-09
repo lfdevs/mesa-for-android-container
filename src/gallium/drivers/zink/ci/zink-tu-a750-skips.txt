@@ -33,3 +33,11 @@ spec@.*double.*
 spec@arb_sample_locations@test
 spec@arb_shader_image_load_store@semantics
 spec@ext_texture_env_combine@texture-env-combine
+
+# 3d sparse textures aren't implemented yet, and multisample tests use
+# multisample storage images which aren't supported, so don't bother
+# testing them.
+KHR-GL46\.sparse_texture_tests.*3d.*
+KHR-GL46\.sparse_texture2_tests.*3d.*
+KHR-GL46\.sparse_texture_clamp_tests.*3d.*
+KHR-GL46\.sparse_texture2_tests.*multisample.*

@@ -1,5 +1,7 @@
 -- BFI seems available on Gfx9, need to fix the emission code for that.
-check_verx10(110, 120, 125, 200)
+if devinfo.verx10 < 110 then
+  error("BFI instruction requires Gfx11+")
+end
 
 function BFI_simulation(a, b, c, d)
   local width  = a & 0x1F

@@ -33,15 +33,15 @@
 
 #define AGX_ABI_VUNI_DRAW_ID(nr_vbos) (AGX_ABI_VUNI_FIRST_VERTEX(nr_vbos) + 4)
 
-#define AGX_ABI_VUNI_INPUT_ASSEMBLY(nr_vbos)                                   \
+#define AGX_ABI_VUNI_VERTEX_PARAMS(nr_vbos)                                    \
    (AGX_ABI_VUNI_FIRST_VERTEX(nr_vbos) + 8)
 
 #define AGX_ABI_VUNI_COUNT_GL(nr_vbos, sw)                                     \
-   (sw ? (AGX_ABI_VUNI_INPUT_ASSEMBLY(nr_vbos) + 4)                            \
+   (sw ? (AGX_ABI_VUNI_VERTEX_PARAMS(nr_vbos) + 4)                             \
        : (AGX_ABI_VUNI_BASE_INSTANCE(nr_vbos) + 2))
 
 #define AGX_ABI_VUNI_COUNT_VK(nr_vbos)                                         \
-   ALIGN_POT(AGX_ABI_VUNI_INPUT_ASSEMBLY(nr_vbos) + 4, 4)
+   ALIGN_POT(AGX_ABI_VUNI_VERTEX_PARAMS(nr_vbos) + 4, 4)
 
 #define AGX_ABI_FUNI_EMRT_HEAP (0)
 #define AGX_ABI_FUNI_BLEND_R   (AGX_ABI_FUNI_EMRT_HEAP + 4)

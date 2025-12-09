@@ -517,7 +517,7 @@ vk_common_GetSemaphoreWin32HandleKHR(VkDevice _device,
       break;
 
    default:
-      unreachable("Invalid semaphore export handle type");
+      UNREACHABLE("Invalid semaphore export handle type");
    }
 
    /* From the Vulkan 1.2.194 spec:
@@ -705,7 +705,7 @@ vk_common_GetSemaphoreFdKHR(VkDevice _device,
       break;
 
    default:
-      unreachable("Invalid semaphore export handle type");
+      UNREACHABLE("Invalid semaphore export handle type");
    }
 
    /* From the Vulkan 1.2.194 spec:

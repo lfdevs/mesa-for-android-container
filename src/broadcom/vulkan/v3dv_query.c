@@ -331,7 +331,7 @@ v3dv_CreateQueryPool(VkDevice _device,
       break;
    }
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 
    /* Initialize queries in the pool */
@@ -363,7 +363,7 @@ v3dv_CreateQueryPool(VkDevice _device,
          break;
          }
       default:
-         unreachable("Unsupported query type");
+         UNREACHABLE("Unsupported query type");
       }
    }
 
@@ -688,7 +688,7 @@ write_query_result(struct v3dv_device *device,
       return write_performance_query_result(device, pool, query, do_64bit,
                                             data, slot);
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -702,7 +702,7 @@ get_query_result_count(struct v3dv_query_pool *pool)
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
       return pool->perfmon.ncounters;
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -1331,7 +1331,7 @@ v3dv_reset_query_pool_cpu(struct v3dv_device *device,
             mesa_loge("Failed to reset sync");
          break;
       default:
-         unreachable("Unsupported query type");
+         UNREACHABLE("Unsupported query type");
       }
    }
 

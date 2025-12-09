@@ -1611,6 +1611,13 @@ struct isl_surf_init_info {
     */
    uint32_t row_pitch_B;
 
+   /**
+    * Exact value to compute :c:member:`isl_surf.array_pitch_el_rows`. Ignored
+    * if zero. isl_surf_init() will fail if this is misaligned or out of
+    * bounds.
+    */
+   uint64_t array_pitch_B;
+
    isl_surf_usage_flags_t usage;
 
    /** Flags that alter how ISL selects isl_surf::tiling.  */
@@ -2197,10 +2204,10 @@ isl_format_has_bc_compression(enum isl_format fmt)
    case ISL_TXC_HIZ:
    case ISL_TXC_MCS:
    case ISL_TXC_CCS:
-      unreachable("Should not be called on an aux surface");
+      UNREACHABLE("Should not be called on an aux surface");
    }
 
-   unreachable("bad texture compression mode");
+   UNREACHABLE("bad texture compression mode");
    return false;
 }
 
@@ -2740,6 +2747,27 @@ bool
 isl_surf_init_s(const struct isl_device *dev,
                 struct isl_surf *surf,
                 const struct isl_surf_init_info *restrict info);
+
+/* Maximum number of interleaved surfaces that can be created using
+ * isl_surf_init_interleaved_arrays
+ */
+#define ISL_SURF_MAX_INTERLEAVED_ARRAYS 3
+
+/* Initializes multiple 2D array surfaces in a layout where the array
+ * slices of the surface are interleaved. The memory ranges of the
+ * resulting surfaces overlap, however the individual slices all occupy
+ * discrete tiles and should not conflict. If the surfaces have video
+ * usage bits set, the offsets of each will also be aligned to 16x the
+ * row pitch of the first surface. All of this is done so that
+ * multi-planar YCbCr array textures can be created with individual
+ * slices that are addressable to the media engine. GFX 8+ only.
+ */
+bool
+isl_surf_init_interleaved_arrays(const struct isl_device *dev,
+                                 uint32_t total_surf,
+                                 struct isl_surf **surfs,
+                                 uint32_t *surfs_offsets,
+                                 const struct isl_surf_init_info *infos);
 
 /* Return the largest surface possible for the specified memory range. */
 void
@@ -3300,7 +3328,7 @@ isl_get_tile_dims(enum isl_tiling tiling, uint32_t cpp,
       *tile_h = 1;
       break;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 

@@ -63,7 +63,7 @@ bool setup_cs(const char* input_spec, enum amd_gfx_level gfx_level,
               enum radeon_family family = CHIP_UNKNOWN, const char* subvariant = "",
               unsigned wave_size = 64);
 bool
-setup_nir_cs(enum amd_gfx_level gfx_level, gl_shader_stage stage = MESA_SHADER_COMPUTE,
+setup_nir_cs(enum amd_gfx_level gfx_level, mesa_shader_stage stage = MESA_SHADER_COMPUTE,
              enum radeon_family family = CHIP_UNKNOWN, const char* subvariant = "");
 
 void finish_program(aco::Program* program, bool endpgm = true, bool dominance = false);

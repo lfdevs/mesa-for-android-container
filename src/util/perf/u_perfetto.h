@@ -52,6 +52,8 @@ util_perfetto_is_tracing_enabled(void)
    return p_atomic_read_relaxed(&util_perfetto_tracing_state);
 }
 
+void util_perfetto_set_default_clock(perfetto_clock_id default_clock);
+
 void util_perfetto_trace_begin(const char *name);
 
 void util_perfetto_trace_end(void);
@@ -79,6 +81,11 @@ static inline bool
 util_perfetto_is_tracing_enabled(void)
 {
    return false;
+}
+
+static inline void
+util_perfetto_set_default_clock(perfetto_clock_id clock)
+{
 }
 
 static inline void

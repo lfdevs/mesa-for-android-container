@@ -99,7 +99,7 @@ svga_destroy(struct pipe_context *pipe)
    svga_texture_transfer_map_upload_destroy(svga);
 
    /* free user's constant buffers */
-   for (shader = 0; shader < PIPE_SHADER_TYPES; ++shader) {
+   for (shader = 0; shader < MESA_SHADER_STAGES; ++shader) {
       for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[shader]); ++i) {
          pipe_resource_reference(&svga->curr.constbufs[shader][i].buffer, NULL);
       }
@@ -309,7 +309,7 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    svga->state.hw_draw.const0_handle = NULL;
 
    if (svga_have_gl43(svga)) {
-      for (unsigned shader = 0; shader < PIPE_SHADER_TYPES; ++shader) {
+      for (unsigned shader = 0; shader < MESA_SHADER_STAGES; ++shader) {
          for (unsigned i = 0;
               i < ARRAY_SIZE(svga->state.hw_draw.rawbufs[shader]); i++) {
             svga->state.hw_draw.rawbufs[shader][i].srvid = SVGA3D_INVALID_ID;

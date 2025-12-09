@@ -5,16 +5,16 @@
 
 #include "blorp_priv.h"
 #include "blorp_nir_builder.h"
-#include "compiler/brw_compiler.h"
-#include "compiler/brw_nir.h"
+#include "brw/brw_compiler.h"
+#include "brw/brw_nir.h"
 #include "dev/intel_debug.h"
 
 static const nir_shader_compiler_options *
 blorp_nir_options_brw(struct blorp_context *blorp,
-                      gl_shader_stage stage)
+                      mesa_shader_stage stage)
 {
    const struct brw_compiler *compiler = blorp->compiler->brw;
-   return compiler->nir_options[stage];
+   return &compiler->nir_options[stage];
 }
 
 static struct blorp_program
@@ -36,8 +36,11 @@ blorp_compile_fs_brw(struct blorp_context *blorp, void *mem_ctx,
    brw_preprocess_nir(compiler, nir, &opts);
    nir_remove_dead_variables(nir, nir_var_shader_in, NULL);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
-   if (is_fast_clear || use_repclear)
-      nir->info.subgroup_size = SUBGROUP_SIZE_REQUIRE_16;
+   if (is_fast_clear || use_repclear) {
+      nir->info.api_subgroup_size = 16;
+      nir->info.max_subgroup_size = 16;
+      nir->info.min_subgroup_size = 16;
+   }
 
    struct brw_wm_prog_key wm_key;
    memset(&wm_key, 0, sizeof(wm_key));

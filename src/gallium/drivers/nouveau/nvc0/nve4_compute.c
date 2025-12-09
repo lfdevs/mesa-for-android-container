@@ -315,7 +315,7 @@ nve4_compute_set_tex_handles(struct nvc0_context *nvc0)
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_screen *screen = nvc0->screen;
    uint64_t address;
-   const unsigned s = nvc0_shader_stage(PIPE_SHADER_COMPUTE);
+   const unsigned s = nvc0_shader_stage(MESA_SHADER_COMPUTE);
    unsigned i, n;
    uint32_t dirty = nvc0->textures_dirty[s] | nvc0->samplers_dirty[s];
 

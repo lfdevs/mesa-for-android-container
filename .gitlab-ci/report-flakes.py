@@ -118,7 +118,6 @@ def main():
     # before we make it to 9-digit jobs (we're at 7 so far).
     nick = args.runner
     nick = nick.replace('mesa-', '')
-    nick = nick.replace('google-freedreno-', '')
     nick += f'-{args.job}'
     irc.send_line(f"NICK {nick}")
     irc.send_line(f"USER {nick} unused unused: Gitlab CI Notifier")

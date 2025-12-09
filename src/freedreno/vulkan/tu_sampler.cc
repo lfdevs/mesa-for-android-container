@@ -73,7 +73,7 @@ tu_CreateSampler(VkDevice _device,
             fast_border_color = A6XX_BORDER_COLOR_1_1_1_1;
             break;
          default:
-            unreachable("unknown border color");
+            UNREACHABLE("unknown border color");
       }
    }
 

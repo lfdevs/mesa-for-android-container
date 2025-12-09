@@ -527,18 +527,22 @@ bool vpe10_cm_helper_translate_curve_to_degamma_hw_format(
 
 #define REG_SET_CM(reg_offset, init_val, field, val)                                               \
     do {                                                                                           \
-        config_writer_fill(                                                                        \
-            config_writer, VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_DATA_SIZE, 0) |                        \
-                               VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_REGISTER_OFFSET, reg_offset));     \
+        struct vpep_direct_config_packet packet;                                                   \
+        packet.bits.INC                         = 0;                                               \
+        packet.bits.VPEP_CONFIG_DATA_SIZE       = 0;                                               \
+        packet.bits.VPEP_CONFIG_REGISTER_OFFSET = reg_offset;                                      \
+        config_writer_fill_direct_config_packet_header(config_writer, &packet);                    \
         config_writer_fill(config_writer,                                                          \
             ((init_val & ~(REG_FIELD_MASK_CM(field))) | REG_FIELD_VALUE_CM(field, val)));          \
     } while (0)
 
 #define REG_SET_2_CM(reg_offset, init_val, f1, v1, f2, v2)                                         \
     do {                                                                                           \
-        config_writer_fill(                                                                        \
-            config_writer, VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_DATA_SIZE, 0) |                        \
-                               VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_REGISTER_OFFSET, reg_offset));     \
+        struct vpep_direct_config_packet packet;                                                   \
+        packet.bits.INC                         = 0;                                               \
+        packet.bits.VPEP_CONFIG_DATA_SIZE       = 0;                                               \
+        packet.bits.VPEP_CONFIG_REGISTER_OFFSET = reg_offset;                                      \
+        config_writer_fill_direct_config_packet_header(config_writer, &packet);                    \
         config_writer_fill(                                                                        \
             config_writer, ((init_val & ~(REG_FIELD_MASK_CM(f1)) & ~(REG_FIELD_MASK_CM(f2))) |     \
                                REG_FIELD_VALUE_CM(f1, v1) | REG_FIELD_VALUE_CM(f2, v2)));          \
@@ -546,9 +550,11 @@ bool vpe10_cm_helper_translate_curve_to_degamma_hw_format(
 
 #define REG_SET_4_CM(reg_offset, init_val, f1, v1, f2, v2, f3, v3, f4, v4)                         \
     do {                                                                                           \
-        config_writer_fill(                                                                        \
-            config_writer, VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_DATA_SIZE, 0) |                        \
-                               VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_REGISTER_OFFSET, reg_offset));     \
+        struct vpep_direct_config_packet packet;                                                   \
+        packet.bits.INC                         = 0;                                               \
+        packet.bits.VPEP_CONFIG_DATA_SIZE       = 0;                                               \
+        packet.bits.VPEP_CONFIG_REGISTER_OFFSET = reg_offset;                                      \
+        config_writer_fill_direct_config_packet_header(config_writer, &packet);                    \
         config_writer_fill(                                                                        \
             config_writer, ((init_val & ~(REG_FIELD_MASK_CM(f1)) & ~(REG_FIELD_MASK_CM(f2)) &      \
                                 ~(REG_FIELD_MASK_CM(f3)) & ~(REG_FIELD_MASK_CM(f4))) |             \
@@ -611,10 +617,12 @@ void vpe10_cm_helper_program_gamcor_xfer_func(struct config_writer *config_write
 
     // program all the *GAM_RAM?_REGION_start ~ region_end regs in one VPEP_DIRECT_CONFIG packet
     // with auto inc
-    config_writer_fill(
-        config_writer, VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_DATA_SIZE, packet_data_size - 1) |
-                           VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_REGISTER_OFFSET, reg->region_start) |
-                           0x01); // auto increase on
+    struct vpep_direct_config_packet packet;
+
+    packet.bits.INC                         = 1;
+    packet.bits.VPEP_CONFIG_DATA_SIZE       = packet_data_size - 1;
+    packet.bits.VPEP_CONFIG_REGISTER_OFFSET = reg->region_start;
+    config_writer_fill_direct_config_packet_header(config_writer, &packet);
 
     for (reg_region_cur = reg->region_start; reg_region_cur <= reg->region_end; reg_region_cur++) {
 
@@ -644,9 +652,12 @@ void vpe10_cm_helper_program_pwl(struct config_writer *config_writer,
     uint32_t lut_data = 0;
 
     // For LUT, we keep write the same address with entire LUT data, so do not set INC bit
-    config_writer_fill(
-        config_writer, VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_DATA_SIZE, num) |
-                           VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_REGISTER_OFFSET, lut_data_reg_offset));
+    struct vpep_direct_config_packet packet;
+
+    packet.bits.INC                         = 0;
+    packet.bits.VPEP_CONFIG_DATA_SIZE       = num;
+    packet.bits.VPEP_CONFIG_REGISTER_OFFSET = lut_data_reg_offset;
+    config_writer_fill_direct_config_packet_header(config_writer, &packet);
 
     for (i = 0; i < num; i++) {
         switch (channel) {
@@ -673,11 +684,12 @@ void vpe10_cm_helper_program_color_matrices(struct config_writer *config_writer,
     uint32_t     cur_csc_reg;
     unsigned int i                = 0;
     uint16_t     packet_data_size = (uint16_t)((reg->csc_c33_c34 - reg->csc_c11_c12 + 1));
+    struct vpep_direct_config_packet packet;
 
-    config_writer_fill(
-        config_writer, VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_DATA_SIZE, packet_data_size - 1) |
-                           VPEC_FIELD_VALUE(VPE_DIR_CFG_PKT_REGISTER_OFFSET, reg->csc_c11_c12) |
-                           0x01); // auto increase on
+    packet.bits.INC                         = 1;
+    packet.bits.VPEP_CONFIG_DATA_SIZE       = packet_data_size - 1;
+    packet.bits.VPEP_CONFIG_REGISTER_OFFSET = reg->csc_c11_c12;
+    config_writer_fill_direct_config_packet_header(config_writer, &packet);
 
     for (cur_csc_reg = reg->csc_c11_c12; cur_csc_reg <= reg->csc_c33_c34; cur_csc_reg++) {
 

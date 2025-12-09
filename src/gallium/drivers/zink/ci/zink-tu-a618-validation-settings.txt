@@ -1,0 +1,91 @@
+# Please include a comment with the log message and a testcase triggering each
+# VUID at the bottom of the file.
+khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-vkDestroyDevice-device-05137,UNASSIGNED-Draw-primitiveTopologyPatchListRestart,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,UNASSIGNED-Threading-MultipleThreads-Read,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-VkSwapchainCreateInfoKHR-imageFormat-01273,VUID-VkRectLayerKHR-offset-04864,UNASSIGNED-Threading-MultipleThreads-Write,VUID-vkCmdDrawMultiIndexedEXT-None-10909
+khronos_validation.report_flags = error
+khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG,VK_DBG_LAYER_ACTION_BREAK
+VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
+khronos_validation.printf_buffer_size = 40960
+khronos_validation.printf_to_stdout = true
+khronos_validation.log_filename = stdout
+
+# VUID-VkPhysicalDeviceProperties2-pNext-pNext
+# VUID-VkDeviceCreateInfo-pNext-pNext
+# never error due to unrecognized extensions
+
+
+# dEQP-GLES3.info.*
+#
+# Validation Error: [ VUID-vkDestroyDevice-device-05137 ] | MessageID = 0x4872eaa0
+# vkDestroyDevice(): Object Tracking - For VkDevice 0xaaab09ea5e50, VkImage 0x210000000021 has not been destroyed.
+# The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device
+# (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
+# Objects: 1
+#     [0] VkImage 0x210000000021
+
+# KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.gl_InvocationID_PatchVerticesIn_PrimitiveID
+#
+# Validation Error: [ UNASSIGNED-Draw-primitiveTopologyPatchListRestart ] | MessageID = 0x32df3971
+# vkCmdDrawMultiIndexedEXT(): the last call to vkCmdSetPrimitiveTopology is VK_PRIMITIVE_TOPOLOGY_PATCH_LIST, the primitiveTopologyPatchListRestart feature was not enabled, but vkCmdSetPrimitiveRestartEnable last set primitiveRestartEnable to VK_TRUE.
+# Objects: 1
+#     [0] VkCommandBuffer 0xaaaae80aa250[zink cmdbuf]
+#
+# CTS bug
+
+# dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_clear_even_render
+#
+# Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+# vkQueueSubmit(): pSubmits[1].pSignalSemaphores[1] (VkSemaphore 0x300000000030) is being signaled by VkQueue 0xaaaadb20d8e0, but it may still be in use by VkSwapchainKHR 0x220000000022.
+# Here are the most recently acquired image indices: 1, 2, 0, 1, 2, [0], 1, 2.
+# (brackets mark the last use of VkSemaphore 0x300000000030 in a presentation operation)
+# Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x300000000030 may still be in use and cannot be safely reused with image index 2.
+# Vulkan insight: One solution is to assign each image its own semaphore. Here are some common methods to ensure that a semaphore passed to vkQueuePresentKHR is not in use and can be safely reused:
+#     a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+#     b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+# The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+# Objects: 2
+#     [0] VkSemaphore 0x300000000030
+#     [1] VkQueue 0xaaaadb20d8e0
+#
+# Validation Error: [ VUID-VkImageMemoryBarrier2-srcAccessMask-07454 ] | MessageID = 0x3fac578b
+# vkCmdPipelineBarrier2(): pDependencyInfo->pImageMemoryBarriers[0].srcAccessMask (VK_ACCESS_SHADER_READ_BIT) is not supported by stage mask (VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT).
+# The Vulkan spec states: If srcAccessMask includes VK_ACCESS_2_SHADER_READ_BIT, srcStageMask must include VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT, or one of the VK_PIPELINE_STAGE_*_SHADER_BIT stages (https://docs.vulkan.org/spec/latest/chapters/synchronization.html#VUID-VkImageMemoryBarrier2-srcAccessMask-07454)
+# Objects: 1
+#     [0] VkCommandBuffer 0xaaaadb3dc670[zink barrier cmdbuf]
+
+# dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.images.copytexsubimage2d.9
+#
+# Validation Error: [ UNASSIGNED-Threading-MultipleThreads-Read ] | MessageID = 0x3c39afb8
+# vkBindImageMemory(): THREADING ERROR : object of type VkDeviceMemory is simultaneously used in current thread 281473121812768 and thread 281473138721056
+# Objects: 1
+#     [0] VkDeviceMemory 0xa700000000a7
+
+# dEQP-EGL.functional.swap_buffers_with_damage.resize_after_swap.clear_render
+#
+# Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+# vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+# The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+# Objects: 1
+#     [0] VkSemaphore 0x310000000031
+
+# dEQP-EGL.functional.query_context.get_current_surface.rgba5551_window
+#
+# Validation Error: [ VUID-VkSwapchainCreateInfoKHR-imageFormat-01273 ] | MessageID = 0x9cf8f42b
+# vkCreateSwapchainKHR(): pCreateInfo->imageFormat is VK_FORMAT_A1R5G5B5_UNORM_PACK16.
+# The Vulkan spec states: imageFormat and imageColorSpace must match the format and colorSpace members, respectively, of one of the VkSurfaceFormatKHR structures returned by vkGetPhysicalDeviceSurfaceFormatsKHR for the surface (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkSwapchainCreateInfoKHR-imageFormat-01273)
+
+# dEQP-EGL.functional.swap_buffers_with_damage.resize_after_swap.buffer_age_render_render
+#
+# Validation Error: [ VUID-VkRectLayerKHR-offset-04864 ] | MessageID = 0xa3aae54b
+# vkQueuePresentKHR(): pPresentInfo->pNext<VkPresentRegionsKHR>.pRegions[0].pRectangles[25] sum of offset.y (-20) and extent.height (10) after applying preTransform (VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) is greater than the corresponding swapchain's imageExtent.height (240).
+# The Vulkan spec states: The sum of offset and extent, after being transformed according to the preTransform member of the VkSwapchainCreateInfoKHR structure, must be no greater than the imageExtent member of the VkSwapchainCreateInfoKHR structure passed to vkCreateSwapchainKHR (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkRectLayerKHR-offset-04864)
+# Objects: 1
+#     [0] VkSwapchainKHR 0x8b000000008b
+
+# dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.images.texsubimage2d.9
+#
+# Validation Error: [ UNASSIGNED-Threading-MultipleThreads-Write ] | MessageID = 0xa05b236e
+# vkMapMemory(): THREADING ERROR : object of type VkDeviceMemory is simultaneously used in current thread 281472932675872 and thread 281472426570016
+# Objects: 1
+#     [0] VkDeviceMemory 0x750000000075
+#
+# This can happen intermittently

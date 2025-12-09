@@ -1,10 +1,14 @@
 # The following files are opted into `ninja clang-format` and
 # enforcement in the CI.
 
+src/gallium/drivers/ethosu/**/*
 src/gallium/drivers/i915
 src/gallium/drivers/r300/compiler/*
+src/gallium/drivers/rocket/**/*
 src/gallium/targets/teflon/**/*
+src/gallium/frontends/teflon/**/*
 src/amd/vulkan/**/*
 src/amd/compiler/**/*
 src/egl/**/*
 src/etnaviv/isa/**/*
+src/imagination/**/*

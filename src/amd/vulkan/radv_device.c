@@ -31,10 +31,10 @@
 #include "util/u_debug.h"
 #include "radv_cs.h"
 #include "radv_debug.h"
+#include "radv_debug_nir.h"
 #include "radv_entrypoints.h"
 #include "radv_formats.h"
 #include "radv_physical_device.h"
-#include "radv_printf.h"
 #include "radv_rmv.h"
 #include "radv_shader.h"
 #include "radv_spm.h"
@@ -47,7 +47,6 @@
 typedef void *drmDevicePtr;
 #include <io.h>
 #else
-#include <amdgpu.h>
 #include <xf86drm.h>
 #include "drm-uapi/amdgpu_drm.h"
 #include "winsys/amdgpu/radv_amdgpu_winsys_public.h"
@@ -60,7 +59,6 @@ typedef void *drmDevicePtr;
 #include "util/u_atomic.h"
 #include "util/u_process.h"
 #include "vulkan/vk_icd.h"
-#include "winsys/null/radv_null_winsys_public.h"
 #include "git_sha1.h"
 #include "sid.h"
 #include "vk_format.h"
@@ -80,7 +78,7 @@ radv_spm_trace_enabled(const struct radv_instance *instance)
 static bool
 radv_trap_handler_enabled()
 {
-   return !!getenv("RADV_TRAP_HANDLER");
+   return !!os_get_option("RADV_TRAP_HANDLER");
 }
 
 bool
@@ -90,7 +88,7 @@ radv_device_should_clear_vram(const struct radv_device *device)
    const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    /* Ignore drirc radv_zero_vram=true if the feature is enabled to let applications take control. */
-   return instance->drirc.zero_vram && !device->vk.enabled_features.zeroInitializeDeviceMemory;
+   return instance->drirc.debug.zero_vram && !device->vk.enabled_features.zeroInitializeDeviceMemory;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -191,8 +189,7 @@ radv_device_init_vs_prologs(struct radv_device *device)
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const struct radv_instance *instance = radv_physical_device_instance(pdev);
 
-   if (!radv_shader_part_cache_init(&device->vs_prologs, &vs_prolog_ops))
-      return vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+   radv_shader_part_cache_init(&device->vs_prologs, &vs_prolog_ops);
 
    /* don't pre-compile prologs if we want to print them */
    if (instance->debug_flags & RADV_DEBUG_DUMP_PROLOGS)
@@ -407,7 +404,7 @@ radv_parse_vrs_rates(const char *str)
 static const char *
 radv_get_force_vrs_config_file(void)
 {
-   return getenv("RADV_FORCE_VRS_CONFIG_FILE");
+   return os_get_option("RADV_FORCE_VRS_CONFIG_FILE");
 }
 
 static enum radv_force_vrs
@@ -537,7 +534,7 @@ radv_device_init_perf_counter(struct radv_device *device)
    if (result != VK_SUCCESS)
       return result;
 
-   device->perf_counter_lock_cs = calloc(sizeof(struct radeon_winsys_cs *), 2 * PERF_CTR_MAX_PASSES);
+   device->perf_counter_lock_cs = calloc(sizeof(struct radv_cmd_stream *), 2 * PERF_CTR_MAX_PASSES);
    if (!device->perf_counter_lock_cs)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
@@ -558,7 +555,7 @@ radv_device_finish_perf_counter(struct radv_device *device)
 
    for (unsigned i = 0; i < 2 * PERF_CTR_MAX_PASSES; ++i) {
       if (device->perf_counter_lock_cs[i])
-         device->ws->cs_destroy(device->perf_counter_lock_cs[i]);
+         radv_destroy_cmd_stream(device, device->perf_counter_lock_cs[i]);
    }
 
    free(device->perf_counter_lock_cs);
@@ -610,7 +607,7 @@ radv_device_init_rgp(struct radv_device *device)
            radv_sqtt_queue_events_enabled() ? "enabled" : "disabled");
 
    if (radv_spm_trace_enabled(instance)) {
-      if (pdev->info.gfx_level >= GFX10 && pdev->info.gfx_level < GFX11_5) {
+      if (pdev->info.gfx_level >= GFX10 && pdev->info.gfx_level <= GFX12 && pdev->info.gfx_level != GFX11_5) {
          if (!radv_spm_init(device))
             return VK_ERROR_INITIALIZATION_FAILED;
       } else {
@@ -709,6 +706,12 @@ radv_device_init_tools(struct radv_device *device)
    if (result != VK_SUCCESS)
       return result;
 
+   if (instance->debug_flags & RADV_DEBUG_VALIDATE_VAS) {
+      result = radv_init_va_validation(device);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
    result = radv_device_init_rgp(device);
    if (result != VK_SUCCESS)
       return result;
@@ -740,6 +743,7 @@ radv_device_finish_tools(struct radv_device *device)
    radv_trap_handler_finish(device);
    radv_memory_trace_finish(device);
    radv_device_finish_rgp(device);
+   radv_finish_va_validation(device);
    radv_device_finish_device_fault_detection(device);
 }
 
@@ -781,12 +785,14 @@ init_dispatch_tables(struct radv_device *device, struct radv_physical_device *pd
    if (radv_device_fault_detection_enabled(device) || gather_ctx_rolls)
       add_entrypoints(&b, &annotate_device_entrypoints, RADV_ANNOTATE_DISPATCH_TABLE);
 
-   if (!strcmp(instance->drirc.app_layer, "metroexodus")) {
+   if (!strcmp(instance->drirc.debug.app_layer, "metroexodus")) {
       add_entrypoints(&b, &metro_exodus_device_entrypoints, RADV_APP_DISPATCH_TABLE);
-   } else if (!strcmp(instance->drirc.app_layer, "rage2")) {
+   } else if (!strcmp(instance->drirc.debug.app_layer, "rage2")) {
       add_entrypoints(&b, &rage2_device_entrypoints, RADV_APP_DISPATCH_TABLE);
-   } else if (!strcmp(instance->drirc.app_layer, "quanticdream")) {
+   } else if (!strcmp(instance->drirc.debug.app_layer, "quanticdream")) {
       add_entrypoints(&b, &quantic_dream_device_entrypoints, RADV_APP_DISPATCH_TABLE);
+   } else if (!strcmp(instance->drirc.debug.app_layer, "no_mans_sky")) {
+      add_entrypoints(&b, &no_mans_sky_device_entrypoints, RADV_APP_DISPATCH_TABLE);
    }
 
    if (instance->vk.trace_mode & RADV_TRACE_MODE_RGP)
@@ -862,12 +868,9 @@ static void
 radv_device_init_cache_key(struct radv_device *device)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    struct radv_device_cache_key *key = &device->cache_key;
    struct mesa_blake3 ctx;
 
-   key->keep_shader_info = device->keep_shader_info;
-   key->trap_excp_flags = device->trap_handler_shader && instance->trap_excp_flags;
    key->image_2d_view_of_3d = device->vk.enabled_features.image2DViewOf3D && pdev->info.gfx_level == GFX9;
    key->mesh_shader_queries = device->vk.enabled_features.meshShaderQueries && pdev->emulate_mesh_shader_queries;
    key->primitives_generated_query = radv_uses_primitives_generated_query(device);
@@ -894,18 +897,21 @@ radv_device_init_cache_key(struct radv_device *device)
 static void
 radv_create_gfx_preamble(struct radv_device *device)
 {
-   struct radeon_cmdbuf *cs = device->ws->cs_create(device->ws, AMD_IP_GFX, false);
-   if (!cs)
+   struct radv_cmd_stream *cs;
+   VkResult result;
+
+   result = radv_create_cmd_stream(device, AMD_IP_GFX, false, &cs);
+   if (result != VK_SUCCESS)
       return;
 
-   radeon_check_space(device->ws, cs, 512);
+   radeon_check_space(device->ws, cs->b, 512);
 
    radv_emit_graphics(device, cs);
 
-   device->ws->cs_pad(cs, 0);
+   device->ws->cs_pad(cs->b, 0);
 
-   VkResult result = radv_bo_create(
-      device, NULL, cs->cdw * 4, 4096, device->ws->cs_domain(device->ws),
+   result = radv_bo_create(
+      device, NULL, cs->b->cdw * 4, 4096, device->ws->cs_domain(device->ws),
       RADEON_FLAG_CPU_ACCESS | RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_READ_ONLY | RADEON_FLAG_GTT_WC,
       RADV_BO_PRIORITY_CS, 0, true, &device->gfx_init);
    if (result != VK_SUCCESS)
@@ -917,12 +923,12 @@ radv_create_gfx_preamble(struct radv_device *device)
       device->gfx_init = NULL;
       goto fail;
    }
-   memcpy(map, cs->buf, cs->cdw * 4);
+   memcpy(map, cs->b->buf, cs->b->cdw * 4);
 
    device->ws->buffer_unmap(device->ws, device->gfx_init, false);
-   device->gfx_init_size_dw = cs->cdw;
+   device->gfx_init_size_dw = cs->b->cdw;
 fail:
-   device->ws->cs_destroy(cs);
+   radv_destroy_cmd_stream(device, cs);
 }
 
 /* For MSAA sample positions. */
@@ -977,7 +983,7 @@ radv_get_default_max_sample_dist(int log_samples)
 }
 
 void
-radv_emit_default_sample_locations(const struct radv_physical_device *pdev, struct radeon_cmdbuf *cs, int nr_samples)
+radv_emit_default_sample_locations(const struct radv_physical_device *pdev, struct radv_cmd_stream *cs, int nr_samples)
 {
    uint64_t centroid_priority;
 
@@ -1024,7 +1030,7 @@ radv_emit_default_sample_locations(const struct radv_physical_device *pdev, stru
     * pixel boundary (-8 sample offset). It's currently always TRUE because the driver doesn't
     * support 16 samples.
     */
-   if (pdev->info.gfx_level >= GFX7) {
+   if (pdev->info.gfx_level >= GFX7 && pdev->info.gfx_level < GFX12) {
       radeon_set_context_reg(R_02882C_PA_SU_PRIM_FILTER_CNTL,
                              S_02882C_XMAX_RIGHT_EXCLUSION(1) | S_02882C_YMAX_BOTTOM_EXCLUSION(1));
    }
@@ -1118,6 +1124,8 @@ radv_destroy_device(struct radv_device *device, const VkAllocationCallbacks *pAl
       if (device->hw_ctx[i])
          device->ws->ctx_destroy(device->hw_ctx[i]);
    }
+   if (device->hw_vcn_enc_ctx)
+      device->ws->ctx_destroy(device->hw_vcn_enc_ctx);
 
    mtx_destroy(&device->overallocation_mutex);
    simple_mtx_destroy(&device->ctx_roll_mtx);
@@ -1175,6 +1183,8 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
 
    init_dispatch_tables(device, pdev);
 
+   /* Initialize everything required for compilation, first. */
+
    simple_mtx_init(&device->ctx_roll_mtx, mtx_plain);
    simple_mtx_init(&device->trace_mtx, mtx_plain);
    simple_mtx_init(&device->pstate_mtx, mtx_plain);
@@ -1183,25 +1193,74 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
 
    device->rt_handles = _mesa_hash_table_create(NULL, _mesa_hash_u32, _mesa_key_u32_equal);
 
+   radv_init_shader_arenas(device);
+
+   /* Initialize the per-device cache key. */
+   radv_device_init_cache_key(device);
+
+   if (!device->vk.disable_internal_cache) {
+      result = radv_device_init_memory_cache(device);
+      if (result != VK_SUCCESS)
+         goto fail;
+   }
+
+   if (pdev->info.gfx_level == GFX10_3) {
+      if (os_get_option("RADV_FORCE_VRS_CONFIG_FILE")) {
+         const char *file = radv_get_force_vrs_config_file();
+
+         device->force_vrs = radv_parse_force_vrs_config_file(file);
+
+         if (radv_device_init_notifier(device)) {
+            device->force_vrs_enabled = true;
+         } else {
+            fprintf(stderr, "radv: Failed to initialize the notifier for RADV_FORCE_VRS_CONFIG_FILE!\n");
+         }
+      } else if (os_get_option("RADV_FORCE_VRS")) {
+         const char *vrs_rates = os_get_option("RADV_FORCE_VRS");
+
+         device->force_vrs = radv_parse_vrs_rates(vrs_rates);
+         device->force_vrs_enabled = device->force_vrs != RADV_FORCE_VRS_1x1;
+      }
+   }
+
+   device->force_aniso = MIN2(16, (int)debug_get_num_option("RADV_TEX_ANISO", -1));
+   if (device->force_aniso >= 0) {
+      fprintf(stderr, "radv: Forcing anisotropy filter to %ix\n", 1 << util_logbase2(device->force_aniso));
+   }
+
+   /* PKT3_LOAD_SH_REG_INDEX is supported on GFX8+, but it hangs with compute queues until GFX10.3. */
+   device->load_grid_size_from_user_sgpr = pdev->info.gfx_level >= GFX10_3;
+
+   /* If this is a NULL device, we are done here. */
+   if (pdev->info.family_overridden) {
+      *pDevice = radv_device_to_handle(device);
+      return VK_SUCCESS;
+   }
+
    device->ws = pdev->ws;
    device->vk.sync = device->ws->get_sync_provider(device->ws);
+   device->vk.copy_sync_payloads = pdev->ws->copy_sync_payloads;
 
-   /* With update after bind we can't attach bo's to the command buffer
-    * from the descriptor set anymore, so we have to use a global BO list.
-    */
-   device->use_global_bo_list = (instance->perftest_flags & RADV_PERFTEST_BO_LIST) ||
-                                device->vk.enabled_features.bufferDeviceAddress ||
-                                device->vk.enabled_features.descriptorIndexing ||
-                                device->vk.enabled_features.descriptorBindingUniformBufferUpdateAfterBind ||
-                                device->vk.enabled_features.descriptorBindingSampledImageUpdateAfterBind ||
-                                device->vk.enabled_features.descriptorBindingStorageImageUpdateAfterBind ||
-                                device->vk.enabled_features.descriptorBindingStorageBufferUpdateAfterBind ||
-                                device->vk.enabled_features.descriptorBindingUniformTexelBufferUpdateAfterBind ||
-                                device->vk.enabled_features.descriptorBindingStorageTexelBufferUpdateAfterBind ||
-                                device->vk.enabled_features.descriptorBindingUpdateUnusedWhilePending ||
-                                device->vk.enabled_features.descriptorBindingPartiallyBound;
+   /* Enable the global BO list by default. */
+   /* TODO: Remove the per cmdbuf BO list tracking after few Mesa releases if no blockers. */
+   device->use_global_bo_list = pdev->info.has_vm_always_valid;
 
-   radv_init_shader_arenas(device);
+   /* Disable it for debugging purposes if no features require it. */
+   if (instance->debug_flags & RADV_DEBUG_NO_BO_LIST) {
+      if (!device->vk.enabled_features.bufferDeviceAddress && !device->vk.enabled_features.descriptorIndexing &&
+          !device->vk.enabled_features.descriptorBindingUniformBufferUpdateAfterBind &&
+          !device->vk.enabled_features.descriptorBindingSampledImageUpdateAfterBind &&
+          !device->vk.enabled_features.descriptorBindingStorageImageUpdateAfterBind &&
+          !device->vk.enabled_features.descriptorBindingStorageBufferUpdateAfterBind &&
+          !device->vk.enabled_features.descriptorBindingUniformTexelBufferUpdateAfterBind &&
+          !device->vk.enabled_features.descriptorBindingStorageTexelBufferUpdateAfterBind &&
+          !device->vk.enabled_features.descriptorBindingUpdateUnusedWhilePending &&
+          !device->vk.enabled_features.descriptorBindingPartiallyBound) {
+         device->use_global_bo_list = false;
+      } else {
+         fprintf(stderr, "radv: Can't disable the global BO list because some features require it!\n");
+      }
+   }
 
    device->overallocation_disallowed = overallocation_disallowed;
    mtx_init(&device->overallocation_mutex, mtx_plain);
@@ -1209,12 +1268,21 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    if (pdev->info.has_kernelq_reg_shadowing || instance->debug_flags & RADV_DEBUG_SHADOW_REGS)
       device->uses_shadow_regs = true;
 
+   bool video_dec_queue = false;
+   bool video_enc_queue = false;
+
    /* Create one context per queue priority. */
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create = &pCreateInfo->pQueueCreateInfos[i];
       const VkDeviceQueueGlobalPriorityCreateInfo *global_priority =
          vk_find_struct_const(queue_create->pNext, DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
       enum radeon_ctx_priority priority = radv_get_queue_global_priority(global_priority);
+      enum radv_queue_family qf = vk_queue_to_radv(pdev, queue_create->queueFamilyIndex);
+
+      if (qf == RADV_QUEUE_VIDEO_DEC)
+         video_dec_queue = true;
+      else if (qf == RADV_QUEUE_VIDEO_ENC)
+         video_enc_queue = true;
 
       if (device->hw_ctx[priority])
          continue;
@@ -1222,6 +1290,13 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
       result = device->ws->ctx_create(device->ws, priority, &device->hw_ctx[priority]);
       if (result != VK_SUCCESS)
          goto fail;
+   }
+
+   /* Use extra context to allow use of both VCN instances for transcoding. */
+   if (video_dec_queue && video_enc_queue && pdev->info.ip[AMD_IP_VCN_ENC].num_instances > 1) {
+      result = device->ws->ctx_create(device->ws, RADEON_CTX_PRIORITY_MEDIUM, &device->hw_vcn_enc_ctx);
+      if (result != VK_SUCCESS)
+         return result;
    }
 
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
@@ -1293,33 +1368,8 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
     */
    device->dispatch_initiator_task = device->dispatch_initiator | S_00B800_DISABLE_DISP_PREMPT_EN(1);
 
-   if (pdev->info.gfx_level == GFX10_3) {
-      if (getenv("RADV_FORCE_VRS_CONFIG_FILE")) {
-         const char *file = radv_get_force_vrs_config_file();
-
-         device->force_vrs = radv_parse_force_vrs_config_file(file);
-
-         if (radv_device_init_notifier(device)) {
-            device->force_vrs_enabled = true;
-         } else {
-            fprintf(stderr, "radv: Failed to initialize the notifier for RADV_FORCE_VRS_CONFIG_FILE!\n");
-         }
-      } else if (getenv("RADV_FORCE_VRS")) {
-         const char *vrs_rates = getenv("RADV_FORCE_VRS");
-
-         device->force_vrs = radv_parse_vrs_rates(vrs_rates);
-         device->force_vrs_enabled = device->force_vrs != RADV_FORCE_VRS_1x1;
-      }
-   }
-
-   /* PKT3_LOAD_SH_REG_INDEX is supported on GFX8+, but it hangs with compute queues until GFX10.3. */
-   device->load_grid_size_from_user_sgpr = pdev->info.gfx_level >= GFX10_3;
-
    /* Keep shader info for GPU hangs debugging. */
    device->keep_shader_info = radv_device_fault_detection_enabled(device) || radv_trap_handler_enabled();
-
-   /* Initialize the per-device cache key before compiling meta shaders. */
-   radv_device_init_cache_key(device);
 
    result = radv_device_init_tools(device);
    if (result != VK_SUCCESS)
@@ -1349,26 +1399,11 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
        device->vk.enabled_features.extendedDynamicState3ColorBlendEnable ||
        device->vk.enabled_features.extendedDynamicState3ColorWriteMask ||
        device->vk.enabled_features.extendedDynamicState3AlphaToCoverageEnable ||
-       device->vk.enabled_features.extendedDynamicState3ColorBlendEquation) {
-      if (!radv_shader_part_cache_init(&device->ps_epilogs, &ps_epilog_ops)) {
-         result = VK_ERROR_OUT_OF_HOST_MEMORY;
-         goto fail;
-      }
-   }
+       device->vk.enabled_features.extendedDynamicState3ColorBlendEquation)
+      radv_shader_part_cache_init(&device->ps_epilogs, &ps_epilog_ops);
 
-   if (pdev->info.has_graphics && !(instance->debug_flags & RADV_DEBUG_NO_IBS))
+   if (pdev->info.has_graphics && !(instance->debug_flags & RADV_DEBUG_NO_IB_CHAINING))
       radv_create_gfx_preamble(device);
-
-   if (!device->vk.disable_internal_cache) {
-      result = radv_device_init_memory_cache(device);
-      if (result != VK_SUCCESS)
-         goto fail;
-   }
-
-   device->force_aniso = MIN2(16, (int)debug_get_num_option("RADV_TEX_ANISO", -1));
-   if (device->force_aniso >= 0) {
-      fprintf(stderr, "radv: Forcing anisotropy filter to %ix\n", 1 << util_logbase2(device->force_aniso));
-   }
 
    if (device->vk.enabled_features.performanceCounterQueryPools) {
       result = radv_device_init_perf_counter(device);

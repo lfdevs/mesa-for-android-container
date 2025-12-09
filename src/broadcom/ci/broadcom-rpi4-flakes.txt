@@ -3,9 +3,12 @@ x11-dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_none_even_none
 x11-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_clear_even_clear_clear
 x11-dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_clear_even_clear
 x11-dEQP-EGL.functional.sharing.gles2.multithread.random.programs.link.7
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random.programs.link.7
 
+KHR-GLES31.core.constant_expressions.array_mod_vec2_float_compute
 KHR-GLES31.core.shader_atomic_counters.basic-usage-no-offset
 KHR-GLES31.core.shader_image_load_store.basic-allFormats-load-cs
+KHR-GLES31.core.shader_image_load_store.basic-allFormats-loadStoreComputeStage
 KHR-GLES31.core.shader_image_load_store.basic-allFormats-store-fs
 KHR-GLES31.core.shader_image_load_store.basic-glsl-earlyFragTests
 KHR-GLES31.core.shader_storage_buffer_object.advanced-indirectAddressing-case1-cs
@@ -15,6 +18,8 @@ KHR-GLES31.core.texture_cube_map_array.image_op_compute_sh
 arm32-KHR-GLES31.core.shader_image_load_store.advanced-copyImage-cs
 dEQP-GLES3.functional.buffer.write.recreate_store.random_4
 dEQP-GLES3.functional.texture.specification.teximage2d_pbo.rgba32i_cube
+dEQP-GLES31.functional.atomic_counter.get_dec_branch.1_counter_1_call_10_threads
+dEQP-GLES31.functional.atomic_counter.inc_dec_branch.1_counter_1_call_5000_threads
 dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_10x6_rgba.rgba_astc_10x6_khr_rgba_astc_10x6_khr.cubemap_to_texture3d
 dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_8x5_rgba.rgba_astc_8x5_khr_srgb8_alpha8_astc_8x5_khr.cubemap_to_texture3d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_10x6_khr_rgba32f.cubemap_to_texture3d
@@ -27,8 +32,10 @@ dEQP-GLES31.functional.ssbo.layout.instance_array_basic_type.std430.mat3x2
 dEQP-GLES31.functional.ssbo.layout.instance_array_basic_type.std430.row_major_mat3x2
 dEQP-GLES31.functional.ssbo.layout.random.nested_structs_instance_arrays.17
 dEQP-GLES31.functional.ssbo.layout.single_basic_type.shared.column_major_lowp_mat3x4
+dEQP-GLES31.functional.synchronization.inter_invocation.image_atomic_alias_write
 dEQP-GLES31.functional.synchronization.inter_invocation.image_atomic_overwrite
 dEQP-GLES31.functional.synchronization.inter_invocation.image_overwrite
+dEQP-GLES31.functional.synchronization.inter_invocation.image_read_write
 dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_atomic_read_write
 
 fast_color_clear@fcc-front-buffer-distraction
@@ -60,12 +67,6 @@ spec@amd_performance_monitor@vc4@test_counter_string_single_character_buffer
 spec@amd_performance_monitor@vc4@test_counter_string_small_buffer
 spec@arb_occlusion_query@occlusion_query_order
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection \*gradarb cube
-spec@arb_texture_buffer_object@formats \(fs- arb\)
-spec@arb_texture_buffer_object@formats \(fs- arb\)@GL_ALPHA16F_ARB
-spec@arb_texture_buffer_object@formats \(fs- arb\)@GL_ALPHA32F_ARB
-spec@arb_texture_buffer_object@formats \(vs- arb\)
-spec@arb_texture_buffer_object@formats \(vs- arb\)@GL_ALPHA16F_ARB
-spec@arb_texture_buffer_object@formats \(vs- arb\)@GL_ALPHA32F_ARB
 spec@arb_texture_multisample@large-float-texture
 spec@arb_timer_query@timestamp-get
 spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear
@@ -118,6 +119,7 @@ dEQP-VK.draw.renderpass.multiple_interpolation.separate.no_sample_decoration.4_s
 dEQP-VK.draw.renderpass.multiple_interpolation.structured.no_sample_decoration.4_samples
 dEQP-VK.draw\..*\.multi_draw\.mosaic\..*\.max_draws\..*no_draw_id
 dEQP-VK.fragment_operations.occlusion_query.precise_test_depth_write_stencil_clear
+dEQP-VK.fragment_operations.occlusion_query.precise_test_scissors_depth_clear
 dEQP-VK.fragment_operations.occlusion_query.precise_test_scissors_depth_write_stencil_clear
 dEQP-VK.fragment_operations.occlusion_query.precise_test_scissors_depth_write_stencil_clear_stencil_write
 dEQP-VK.glsl.builtin.function.integer.findlsb.uvec2_highp_geometry
@@ -143,6 +145,10 @@ dEQP-VK.robustness.image_robustness.bind.notemplate.rg32f.unroll.volatile.storag
 dEQP-VK.spirv_assembly.instruction.graphics.float_controls2.fp32.input_args.ord_gt_testedWithout_NotInf_arg1_inf_arg2_one_res_one_deco_vert
 dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat2x4_store_cols
 dEQP-VK.ssbo.phys.layout.random.basic_types.15
+dEQP-VK.synchronization.cross_instance.suballocated.write_copy_image_to_buffer_read_vertex_input.buffer_262144_binary_semaphore_dma_buf
+dEQP-VK.synchronization.signal_order.shared_binary_semaphore.write_ssbo_compute_read_vertex_input.buffer_262144_opaque_fd
+dEQP-VK.synchronization.signal_order.shared_binary_semaphore.write_ssbo_vertex_read_vertex_input.buffer_262144_opaque_fd
+dEQP-VK.synchronization2.timeline_semaphore.device_host.write_ssbo_fragment_read_vertex_input.buffer_262144
 dEQP-VK.tessellation.invariance.one_minus_tess_coord_component.isolines_fractional_odd_spacing_ccw
 dEQP-VK.tessellation.invariance.tess_coord_component_range.isolines_fractional_even_spacing_cw
 dEQP-VK.tessellation.user_defined_io.per_patch_block_array.vertex_io_array_size_implicit.triangles

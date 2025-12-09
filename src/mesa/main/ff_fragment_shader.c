@@ -365,7 +365,7 @@ register_state_var(struct texenv_fragment_program *p,
    free(name);
 
    var->num_state_slots = 1;
-   var->state_slots = ralloc_array(var, nir_state_slot, 1);
+   var->state_slots = ralloc_array(p->b->shader, nir_state_slot, 1);
    var->data.driver_location = loc;
    memcpy(var->state_slots[0].tokens, tokens,
           sizeof(var->state_slots[0].tokens));
@@ -392,7 +392,7 @@ load_input(struct texenv_fragment_program *p, gl_varying_slot slot)
    nir_def *baryc = nir_load_barycentric_pixel(p->b, 32);
 
    if (slot != VARYING_SLOT_COL0 && slot != VARYING_SLOT_COL1) {
-      nir_intrinsic_set_interp_mode(nir_instr_as_intrinsic(baryc->parent_instr),
+      nir_intrinsic_set_interp_mode(nir_def_as_intrinsic(baryc),
                                     INTERP_MODE_SMOOTH);
    }
 
@@ -925,7 +925,7 @@ emit_instructions(struct texenv_fragment_program *p)
  * current texture env/combine mode.
  */
 static nir_shader *
-create_new_program(struct state_key *key,
+create_new_program(struct gl_context *ctx, struct state_key *key,
                    struct gl_program *program,
                    const nir_shader_compiler_options *options)
 {
@@ -944,7 +944,7 @@ create_new_program(struct state_key *key,
    nir_shader *s = b.shader;
 
    s->info.separate_shader = true;
-   s->info.subgroup_size = SUBGROUP_SIZE_UNIFORM;
+   s->info.api_subgroup_size_draw_uniform = true;
    s->info.io_lowered = true;
 
    p.b = &b;
@@ -954,8 +954,10 @@ create_new_program(struct state_key *key,
 
    nir_validate_shader(b.shader, "after generating ff-vertex shader");
 
-   if (key->fog_mode)
-      NIR_PASS(_, b.shader, st_nir_lower_fog, key->fog_mode, p.state_params);
+   if (key->fog_mode) {
+      NIR_PASS(_, b.shader, st_nir_lower_fog, key->fog_mode, p.state_params,
+               ctx->Const.PackedDriverUniformStorage);
+   }
 
    _mesa_add_separate_state_parameters(program, p.state_params);
    _mesa_free_parameter_list(p.state_params);
@@ -989,7 +991,7 @@ _mesa_get_fixed_func_fragment_program(struct gl_context *ctx)
          ctx->screen->nir_options[MESA_SHADER_FRAGMENT];
 
       nir_shader *s =
-         create_new_program(&key, prog, options);
+         create_new_program(ctx, &key, prog, options);
 
       prog->state.type = PIPE_SHADER_IR_NIR;
       prog->nir = s;

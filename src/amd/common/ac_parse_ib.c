@@ -881,6 +881,25 @@ static void parse_sdma_ib(FILE *f, struct ac_ib_parser *ib)
 
          break;
       }
+      case SDMA_OPCODE_POLL_REGMEM:{
+         fprintf(f, "POLL_REGMEM\n");
+
+         /* VA */
+         uint32_t va_lo = ac_ib_get(ib);
+         fprintf(f, "    va lo = %08x\n", va_lo);
+         uint32_t va_hi = ac_ib_get(ib);
+         fprintf(f, "    va hi = %08x\n", va_hi);
+
+         uint32_t ref = ac_ib_get(ib);
+         fprintf(f, "    ref = %08x\n", ref);
+         uint32_t mask = ac_ib_get(ib);
+         fprintf(f, "    mask = %08x\n", mask);
+
+         uint32_t flags = ac_ib_get(ib);
+         fprintf(f, "    interval = %08x, retry_count = %08x\n",
+                 (flags & 0xffff), (flags >> 16) & 0xfff);
+         break;
+      }
       case SDMA_OPCODE_COPY: {
          switch (sub_op) {
          case SDMA_COPY_SUB_OPCODE_LINEAR: {
@@ -1091,7 +1110,391 @@ static const char *vcn_color_bit_depth(uint32_t bit_depth)
    }
 }
 
-static void print_vcn_addr(FILE *f, struct ac_ib_parser *ib, const char *prefix_format, ...)
+static void print_vcn_msg_buffer_contents(FILE *f, struct ac_ib_parser *ib, uint64_t msg_buffer_va)
+{
+   if (!ib->addr_callback)
+      return;
+
+   struct ac_addr_info addr_info;
+   ib->addr_callback(ib->addr_callback_data, msg_buffer_va, &addr_info);
+
+   if (!addr_info.cpu_addr || !addr_info.valid) {
+      fprintf(f, "        %s(unable to read message buffer contents)%s\n", O_COLOR_RED, O_COLOR_RESET);
+      return;
+   }
+
+   rvcn_dec_message_header_t *header = (rvcn_dec_message_header_t *)addr_info.cpu_addr;
+
+   fprintf(f, "    %sMESSAGE BUFFER CONTENTS:%s\n", O_COLOR_CYAN, O_COLOR_RESET);
+   fprintf(f, "        header_size = %u\n", header->header_size);
+   fprintf(f, "        total_size = %u\n", header->total_size);
+   fprintf(f, "        num_buffers = %u\n", header->num_buffers);
+   fprintf(f, "        msg_type = %s (0x%x)\n",
+           header->msg_type == RDECODE_MSG_CREATE ? "CREATE" :
+           header->msg_type == RDECODE_MSG_DECODE ? "DECODE" :
+           header->msg_type == RDECODE_MSG_DESTROY ? "DESTROY" :
+           "UNKNOWN",
+           header->msg_type);
+   fprintf(f, "        stream_handle = 0x%x\n", header->stream_handle);
+   fprintf(f, "        status_report_feedback_number = %u\n", header->status_report_feedback_number);
+
+   for (unsigned i = 0; i < header->num_buffers && i < 16; i++) {
+      rvcn_dec_message_index_t *index = &header->index[i];
+      fprintf(f, "        index[%u]:\n", i);
+      fprintf(f, "            message_id = %s (0x%x)\n",
+              index->message_id == RDECODE_MESSAGE_CREATE ? "CREATE" :
+              index->message_id == RDECODE_MESSAGE_DECODE ? "DECODE" :
+              index->message_id == RDECODE_MESSAGE_AVC ? "AVC" :
+              index->message_id == RDECODE_MESSAGE_HEVC ? "HEVC" :
+              index->message_id == RDECODE_MESSAGE_VP9 ? "VP9" :
+              index->message_id == RDECODE_MESSAGE_AV1 ? "AV1" :
+              index->message_id == RDECODE_MESSAGE_DYNAMIC_DPB ? "DYNAMIC_DPB" :
+              "UNKNOWN",
+              index->message_id);
+      fprintf(f, "            offset = %u\n", index->offset);
+      fprintf(f, "            size = %u\n", index->size);
+      fprintf(f, "            filled = %u\n", index->filled);
+
+      if (index->message_id == RDECODE_MESSAGE_CREATE &&
+          index->size >= sizeof(rvcn_dec_message_create_t)) {
+         rvcn_dec_message_create_t *create = (rvcn_dec_message_create_t *)((char *)header + index->offset);
+         fprintf(f, "            %sCREATE message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                stream_type = 0x%x\n", create->stream_type);
+         fprintf(f, "                session_flags = 0x%x\n", create->session_flags);
+         fprintf(f, "                width_in_samples = %u\n", create->width_in_samples);
+         fprintf(f, "                height_in_samples = %u\n", create->height_in_samples);
+      } else if (index->message_id == RDECODE_MESSAGE_DECODE &&
+                 index->size >= sizeof(rvcn_dec_message_decode_t)) {
+         rvcn_dec_message_decode_t *decode = (rvcn_dec_message_decode_t *)((char *)header + index->offset);
+         fprintf(f, "            %sDECODE message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                stream_type = 0x%x\n", decode->stream_type);
+         fprintf(f, "                decode_flags = 0x%x\n", decode->decode_flags);
+         fprintf(f, "                width_in_samples = %u\n", decode->width_in_samples);
+         fprintf(f, "                height_in_samples = %u\n", decode->height_in_samples);
+         fprintf(f, "                bsd_size = %u\n", decode->bsd_size);
+         fprintf(f, "                dpb_size = %u\n", decode->dpb_size);
+         fprintf(f, "                dt_size = %u\n", decode->dt_size);
+         fprintf(f, "                sct_size = %u\n", decode->sct_size);
+         fprintf(f, "                sc_coeff_size = %u\n", decode->sc_coeff_size);
+         fprintf(f, "                hw_ctxt_size = %u\n", decode->hw_ctxt_size);
+         fprintf(f, "                sw_ctxt_size = %u\n", decode->sw_ctxt_size);
+         fprintf(f, "                pic_param_size = %u\n", decode->pic_param_size);
+         fprintf(f, "                mb_cntl_size = %u\n", decode->mb_cntl_size);
+         fprintf(f, "                decode_buffer_flags = 0x%x\n", decode->decode_buffer_flags);
+         fprintf(f, "                db_pitch = %u\n", decode->db_pitch);
+         fprintf(f, "                db_aligned_height = %u\n", decode->db_aligned_height);
+         fprintf(f, "                db_tiling_mode = %u\n", decode->db_tiling_mode);
+         fprintf(f, "                db_swizzle_mode = %u\n", decode->db_swizzle_mode);
+         fprintf(f, "                db_array_mode = %u\n", decode->db_array_mode);
+         fprintf(f, "                db_field_mode = %u\n", decode->db_field_mode);
+         fprintf(f, "                db_surf_tile_config = 0x%x\n", decode->db_surf_tile_config);
+         fprintf(f, "                dt_pitch = %u\n", decode->dt_pitch);
+         fprintf(f, "                dt_uv_pitch = %u\n", decode->dt_uv_pitch);
+         fprintf(f, "                dt_tiling_mode = %u\n", decode->dt_tiling_mode);
+         fprintf(f, "                dt_swizzle_mode = %u\n", decode->dt_swizzle_mode);
+         fprintf(f, "                dt_array_mode = %u\n", decode->dt_array_mode);
+         fprintf(f, "                dt_field_mode = %u\n", decode->dt_field_mode);
+         fprintf(f, "                dt_out_format = %u\n", decode->dt_out_format);
+         fprintf(f, "                dt_surf_tile_config = 0x%x\n", decode->dt_surf_tile_config);
+         fprintf(f, "                dt_uv_surf_tile_config = 0x%x\n", decode->dt_uv_surf_tile_config);
+         fprintf(f, "                dt_luma_top_offset = %u\n", decode->dt_luma_top_offset);
+         fprintf(f, "                dt_luma_bottom_offset = %u\n", decode->dt_luma_bottom_offset);
+         fprintf(f, "                dt_chroma_top_offset = %u\n", decode->dt_chroma_top_offset);
+         fprintf(f, "                dt_chroma_bottom_offset = %u\n", decode->dt_chroma_bottom_offset);
+         fprintf(f, "                dt_chromaV_top_offset = %u\n", decode->dt_chromaV_top_offset);
+         fprintf(f, "                dt_chromaV_bottom_offset = %u\n", decode->dt_chromaV_bottom_offset);
+         fprintf(f, "                mif_wrc_en = %u\n", decode->mif_wrc_en);
+         fprintf(f, "                db_pitch_uv = %u\n", decode->db_pitch_uv);
+      } else if (index->message_id == RDECODE_MESSAGE_AVC &&
+                 index->size >= sizeof(rvcn_dec_message_avc_t)) {
+         rvcn_dec_message_avc_t *avc = (rvcn_dec_message_avc_t *)((char *)header + index->offset);
+         fprintf(f, "            %sAVC message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                profile = %u\n", avc->profile);
+         fprintf(f, "                level = %u\n", avc->level);
+         fprintf(f, "                sps_info_flags = 0x%x\n", avc->sps_info_flags);
+         fprintf(f, "                pps_info_flags = 0x%x\n", avc->pps_info_flags);
+         fprintf(f, "                chroma_format = %u\n", avc->chroma_format);
+         fprintf(f, "                bit_depth_luma_minus8 = %u\n", avc->bit_depth_luma_minus8);
+         fprintf(f, "                bit_depth_chroma_minus8 = %u\n", avc->bit_depth_chroma_minus8);
+         fprintf(f, "                log2_max_frame_num_minus4 = %u\n", avc->log2_max_frame_num_minus4);
+         fprintf(f, "                pic_order_cnt_type = %u\n", avc->pic_order_cnt_type);
+         fprintf(f, "                log2_max_pic_order_cnt_lsb_minus4 = %u\n", avc->log2_max_pic_order_cnt_lsb_minus4);
+         fprintf(f, "                num_ref_frames = %u\n", avc->num_ref_frames);
+         fprintf(f, "                pic_init_qp_minus26 = %d\n", avc->pic_init_qp_minus26);
+         fprintf(f, "                pic_init_qs_minus26 = %d\n", avc->pic_init_qs_minus26);
+         fprintf(f, "                chroma_qp_index_offset = %d\n", avc->chroma_qp_index_offset);
+         fprintf(f, "                second_chroma_qp_index_offset = %d\n", avc->second_chroma_qp_index_offset);
+         fprintf(f, "                num_slice_groups_minus1 = %u\n", avc->num_slice_groups_minus1);
+         fprintf(f, "                slice_group_map_type = %u\n", avc->slice_group_map_type);
+         fprintf(f, "                num_ref_idx_l0_active_minus1 = %u\n", avc->num_ref_idx_l0_active_minus1);
+         fprintf(f, "                num_ref_idx_l1_active_minus1 = %u\n", avc->num_ref_idx_l1_active_minus1);
+         fprintf(f, "                slice_group_change_rate_minus1 = %u\n", avc->slice_group_change_rate_minus1);
+         fprintf(f, "                frame_num = %u\n", avc->frame_num);
+         fprintf(f, "                frame_num_list = [");
+         for (unsigned j = 0; j < 16; j++) {
+            fprintf(f, "%u%s", avc->frame_num_list[j], j < 15 ? ", " : "]\n");
+         }
+         fprintf(f, "                curr_field_order_cnt_list = [%d, %d]\n",
+                 avc->curr_field_order_cnt_list[0], avc->curr_field_order_cnt_list[1]);
+         fprintf(f, "                field_order_cnt_list = [");
+         for (unsigned j = 0; j < 16; j++) {
+            fprintf(f, "[%d, %d]%s", avc->field_order_cnt_list[j][0], avc->field_order_cnt_list[j][1], j < 15 ? ", " : "]\n");
+         }
+         fprintf(f, "                decoded_pic_idx = %u\n", avc->decoded_pic_idx);
+         fprintf(f, "                curr_pic_ref_frame_num = %u\n", avc->curr_pic_ref_frame_num);
+         fprintf(f, "                ref_frame_list = [");
+         for (unsigned j = 0; j < 16; j++) {
+            fprintf(f, "0x%02x%s", avc->ref_frame_list[j], j < 15 ? ", " : "]\n");
+         }
+         fprintf(f, "                non_existing_frame_flags = 0x%x\n", avc->non_existing_frame_flags);
+         fprintf(f, "                used_for_reference_flags = 0x%x\n", avc->used_for_reference_flags);
+      } else if (index->message_id == RDECODE_MESSAGE_HEVC &&
+                 index->size >= sizeof(rvcn_dec_message_hevc_t)) {
+         rvcn_dec_message_hevc_t *hevc = (rvcn_dec_message_hevc_t *)((char *)header + index->offset);
+         fprintf(f, "            %sHEVC message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                sps_info_flags = 0x%x\n", hevc->sps_info_flags);
+         fprintf(f, "                pps_info_flags = 0x%x\n", hevc->pps_info_flags);
+         fprintf(f, "                chroma_format = %u\n", hevc->chroma_format);
+         fprintf(f, "                bit_depth_luma_minus8 = %u\n", hevc->bit_depth_luma_minus8);
+         fprintf(f, "                bit_depth_chroma_minus8 = %u\n", hevc->bit_depth_chroma_minus8);
+         fprintf(f, "                log2_max_pic_order_cnt_lsb_minus4 = %u\n", hevc->log2_max_pic_order_cnt_lsb_minus4);
+         fprintf(f, "                sps_max_dec_pic_buffering_minus1 = %u\n", hevc->sps_max_dec_pic_buffering_minus1);
+         fprintf(f, "                log2_min_luma_coding_block_size_minus3 = %u\n", hevc->log2_min_luma_coding_block_size_minus3);
+         fprintf(f, "                log2_diff_max_min_luma_coding_block_size = %u\n", hevc->log2_diff_max_min_luma_coding_block_size);
+         fprintf(f, "                log2_min_transform_block_size_minus2 = %u\n", hevc->log2_min_transform_block_size_minus2);
+         fprintf(f, "                log2_diff_max_min_transform_block_size = %u\n", hevc->log2_diff_max_min_transform_block_size);
+         fprintf(f, "                max_transform_hierarchy_depth_inter = %u\n", hevc->max_transform_hierarchy_depth_inter);
+         fprintf(f, "                max_transform_hierarchy_depth_intra = %u\n", hevc->max_transform_hierarchy_depth_intra);
+         fprintf(f, "                pcm_sample_bit_depth_luma_minus1 = %u\n", hevc->pcm_sample_bit_depth_luma_minus1);
+         fprintf(f, "                pcm_sample_bit_depth_chroma_minus1 = %u\n", hevc->pcm_sample_bit_depth_chroma_minus1);
+         fprintf(f, "                log2_min_pcm_luma_coding_block_size_minus3 = %u\n", hevc->log2_min_pcm_luma_coding_block_size_minus3);
+         fprintf(f, "                log2_diff_max_min_pcm_luma_coding_block_size = %u\n", hevc->log2_diff_max_min_pcm_luma_coding_block_size);
+         fprintf(f, "                num_extra_slice_header_bits = %u\n", hevc->num_extra_slice_header_bits);
+         fprintf(f, "                num_short_term_ref_pic_sets = %u\n", hevc->num_short_term_ref_pic_sets);
+         fprintf(f, "                num_long_term_ref_pic_sps = %u\n", hevc->num_long_term_ref_pic_sps);
+         fprintf(f, "                num_ref_idx_l0_default_active_minus1 = %u\n", hevc->num_ref_idx_l0_default_active_minus1);
+         fprintf(f, "                num_ref_idx_l1_default_active_minus1 = %u\n", hevc->num_ref_idx_l1_default_active_minus1);
+         fprintf(f, "                pps_cb_qp_offset = %d\n", hevc->pps_cb_qp_offset);
+         fprintf(f, "                pps_cr_qp_offset = %d\n", hevc->pps_cr_qp_offset);
+         fprintf(f, "                pps_beta_offset_div2 = %d\n", hevc->pps_beta_offset_div2);
+         fprintf(f, "                pps_tc_offset_div2 = %d\n", hevc->pps_tc_offset_div2);
+         fprintf(f, "                diff_cu_qp_delta_depth = %u\n", hevc->diff_cu_qp_delta_depth);
+         fprintf(f, "                num_tile_columns_minus1 = %u\n", hevc->num_tile_columns_minus1);
+         fprintf(f, "                num_tile_rows_minus1 = %u\n", hevc->num_tile_rows_minus1);
+         fprintf(f, "                log2_parallel_merge_level_minus2 = %u\n", hevc->log2_parallel_merge_level_minus2);
+         fprintf(f, "                column_width_minus1 = [");
+         for (unsigned j = 0; j < 19; j++) {
+            fprintf(f, "%u%s", hevc->column_width_minus1[j], j < 18 ? ", " : "]\n");
+         }
+         fprintf(f, "                row_height_minus1 = [");
+         for (unsigned j = 0; j < 21; j++) {
+            fprintf(f, "%u%s", hevc->row_height_minus1[j], j < 20 ? ", " : "]\n");
+         }
+         fprintf(f, "                init_qp_minus26 = %d\n", hevc->init_qp_minus26);
+         fprintf(f, "                num_delta_pocs_ref_rps_idx = %u\n", hevc->num_delta_pocs_ref_rps_idx);
+         fprintf(f, "                curr_idx = %u\n", hevc->curr_idx);
+         fprintf(f, "                curr_poc = %d\n", hevc->curr_poc);
+         fprintf(f, "                ref_pic_list = [");
+         for (unsigned j = 0; j < 16; j++) {
+            fprintf(f, "0x%02x%s", hevc->ref_pic_list[j], j < 15 ? ", " : "]\n");
+         }
+         fprintf(f, "                poc_list = [");
+         for (unsigned j = 0; j < 16; j++) {
+            fprintf(f, "%d%s", hevc->poc_list[j], j < 15 ? ", " : "]\n");
+         }
+         fprintf(f, "                ref_pic_set_st_curr_before = [");
+         for (unsigned j = 0; j < 8; j++) {
+            fprintf(f, "0x%02x%s", hevc->ref_pic_set_st_curr_before[j], j < 7 ? ", " : "]\n");
+         }
+         fprintf(f, "                ref_pic_set_st_curr_after = [");
+         for (unsigned j = 0; j < 8; j++) {
+            fprintf(f, "0x%02x%s", hevc->ref_pic_set_st_curr_after[j], j < 7 ? ", " : "]\n");
+         }
+         fprintf(f, "                ref_pic_set_lt_curr = [");
+         for (unsigned j = 0; j < 8; j++) {
+            fprintf(f, "0x%02x%s", hevc->ref_pic_set_lt_curr[j], j < 7 ? ", " : "]\n");
+         }
+         fprintf(f, "                ucScalingListDCCoefSizeID2 = [");
+         for (unsigned j = 0; j < 6; j++) {
+            fprintf(f, "%u%s", hevc->ucScalingListDCCoefSizeID2[j], j < 5 ? ", " : "]\n");
+         }
+         fprintf(f, "                ucScalingListDCCoefSizeID3 = [%u, %u]\n",
+                 hevc->ucScalingListDCCoefSizeID3[0], hevc->ucScalingListDCCoefSizeID3[1]);
+         fprintf(f, "                highestTid = %u\n", hevc->highestTid);
+         fprintf(f, "                isNonRef = %u\n", hevc->isNonRef);
+         fprintf(f, "                p010_mode = %u\n", hevc->p010_mode);
+         fprintf(f, "                msb_mode = %u\n", hevc->msb_mode);
+         fprintf(f, "                luma_10to8 = %u\n", hevc->luma_10to8);
+         fprintf(f, "                chroma_10to8 = %u\n", hevc->chroma_10to8);
+         fprintf(f, "                direct_reflist[0] = [");
+         for (unsigned j = 0; j < 15; j++) {
+            fprintf(f, "0x%02x%s", hevc->direct_reflist[0][j], j < 14 ? ", " : "]\n");
+         }
+         fprintf(f, "                direct_reflist[1] = [");
+         for (unsigned j = 0; j < 15; j++) {
+            fprintf(f, "0x%02x%s", hevc->direct_reflist[1][j], j < 14 ? ", " : "]\n");
+         }
+         fprintf(f, "                st_rps_bits = %u\n", hevc->st_rps_bits);
+      } else if (index->message_id == RDECODE_MESSAGE_AV1 &&
+                 index->size >= sizeof(rvcn_dec_message_av1_t)) {
+         rvcn_dec_message_av1_t *av1 = (rvcn_dec_message_av1_t *)((char *)header + index->offset);
+         fprintf(f, "            %sAV1 message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                frame_header_flags = 0x%x\n", av1->frame_header_flags);
+         fprintf(f, "                current_frame_id = %u\n", av1->current_frame_id);
+         fprintf(f, "                frame_offset = %u\n", av1->frame_offset);
+         fprintf(f, "                profile = %u\n", av1->profile);
+         fprintf(f, "                is_annexb = %u\n", av1->is_annexb);
+         fprintf(f, "                frame_type = %u\n", av1->frame_type);
+         fprintf(f, "                primary_ref_frame = %u\n", av1->primary_ref_frame);
+         fprintf(f, "                curr_pic_idx = %u\n", av1->curr_pic_idx);
+         fprintf(f, "                sb_size = %u\n", av1->sb_size);
+         fprintf(f, "                interp_filter = %u\n", av1->interp_filter);
+         fprintf(f, "                filter_level = [%u, %u]\n", av1->filter_level[0], av1->filter_level[1]);
+         fprintf(f, "                filter_level_u = %u\n", av1->filter_level_u);
+         fprintf(f, "                filter_level_v = %u\n", av1->filter_level_v);
+         fprintf(f, "                sharpness_level = %u\n", av1->sharpness_level);
+         fprintf(f, "                ref_deltas = [");
+         for (unsigned j = 0; j < 8; j++) {
+            fprintf(f, "%d%s", av1->ref_deltas[j], j < 7 ? ", " : "]\n");
+         }
+         fprintf(f, "                mode_deltas = [%d, %d]\n", av1->mode_deltas[0], av1->mode_deltas[1]);
+         fprintf(f, "                base_qindex = %u\n", av1->base_qindex);
+         fprintf(f, "                y_dc_delta_q = %d\n", av1->y_dc_delta_q);
+         fprintf(f, "                u_dc_delta_q = %d\n", av1->u_dc_delta_q);
+         fprintf(f, "                v_dc_delta_q = %d\n", av1->v_dc_delta_q);
+         fprintf(f, "                u_ac_delta_q = %d\n", av1->u_ac_delta_q);
+         fprintf(f, "                v_ac_delta_q = %d\n", av1->v_ac_delta_q);
+         fprintf(f, "                qm_y = %d\n", av1->qm_y);
+         fprintf(f, "                qm_u = %d\n", av1->qm_u);
+         fprintf(f, "                qm_v = %d\n", av1->qm_v);
+         fprintf(f, "                delta_q_res = %d\n", av1->delta_q_res);
+         fprintf(f, "                delta_lf_res = %d\n", av1->delta_lf_res);
+         fprintf(f, "                tile_cols = %u\n", av1->tile_cols);
+         fprintf(f, "                tile_rows = %u\n", av1->tile_rows);
+         fprintf(f, "                tx_mode = %u\n", av1->tx_mode);
+         fprintf(f, "                reference_mode = %u\n", av1->reference_mode);
+         fprintf(f, "                chroma_format = %u\n", av1->chroma_format);
+         fprintf(f, "                tile_size_bytes = %u\n", av1->tile_size_bytes);
+         fprintf(f, "                context_update_tile_id = %u\n", av1->context_update_tile_id);
+         fprintf(f, "                max_width = %u\n", av1->max_width);
+         fprintf(f, "                max_height = %u\n", av1->max_height);
+         fprintf(f, "                width = %u\n", av1->width);
+         fprintf(f, "                height = %u\n", av1->height);
+         fprintf(f, "                superres_upscaled_width = %u\n", av1->superres_upscaled_width);
+         fprintf(f, "                superres_scale_denominator = %u\n", av1->superres_scale_denominator);
+         fprintf(f, "                order_hint_bits = %u\n", av1->order_hint_bits);
+         fprintf(f, "                ref_frame_map = [");
+         for (unsigned j = 0; j < 8; j++) {
+            fprintf(f, "%u%s", av1->ref_frame_map[j], j < 7 ? ", " : "]\n");
+         }
+         fprintf(f, "                frame_refs = [");
+         for (unsigned j = 0; j < 7; j++) {
+            fprintf(f, "%u%s", av1->frame_refs[j], j < 6 ? ", " : "]\n");
+         }
+         fprintf(f, "                bit_depth_luma_minus8 = %u\n", av1->bit_depth_luma_minus8);
+         fprintf(f, "                bit_depth_chroma_minus8 = %u\n", av1->bit_depth_chroma_minus8);
+         fprintf(f, "                cdef_damping = %u\n", av1->cdef_damping);
+         fprintf(f, "                cdef_bits = %u\n", av1->cdef_bits);
+         fprintf(f, "                frame_restoration_type = [%u, %u, %u]\n",
+                 av1->frame_restoration_type[0], av1->frame_restoration_type[1], av1->frame_restoration_type[2]);
+         fprintf(f, "                log2_restoration_unit_size_minus5 = [%u, %u, %u]\n",
+                 av1->log2_restoration_unit_size_minus5[0], av1->log2_restoration_unit_size_minus5[1],
+                 av1->log2_restoration_unit_size_minus5[2]);
+         fprintf(f, "                p010_mode = %u\n", av1->p010_mode);
+         fprintf(f, "                msb_mode = %u\n", av1->msb_mode);
+         fprintf(f, "                luma_10to8 = %u\n", av1->luma_10to8);
+         fprintf(f, "                chroma_10to8 = %u\n", av1->chroma_10to8);
+         fprintf(f, "                preskip_segid = %u\n", av1->preskip_segid);
+         fprintf(f, "                last_active_segid = %u\n", av1->last_active_segid);
+         fprintf(f, "                seg_lossless_flag = %u\n", av1->seg_lossless_flag);
+         fprintf(f, "                coded_lossless = %u\n", av1->coded_lossless);
+         fprintf(f, "                uncompressed_header_size = %u\n", av1->uncompressed_header_size);
+         fprintf(f, "                av1_intrabc_workaround = %u\n", av1->av1_intrabc_workaround);
+      } else if (index->message_id == RDECODE_MESSAGE_VP9 &&
+                 index->size >= sizeof(rvcn_dec_message_vp9_t)) {
+         rvcn_dec_message_vp9_t *vp9 = (rvcn_dec_message_vp9_t *)((char *)header + index->offset);
+         fprintf(f, "            %sVP9 message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                frame_header_flags = 0x%x\n", vp9->frame_header_flags);
+         fprintf(f, "                frame_context_idx = %u\n", vp9->frame_context_idx);
+         fprintf(f, "                reset_frame_context = %u\n", vp9->reset_frame_context);
+         fprintf(f, "                curr_pic_idx = %u\n", vp9->curr_pic_idx);
+         fprintf(f, "                interp_filter = %u\n", vp9->interp_filter);
+         fprintf(f, "                filter_level = %u\n", vp9->filter_level);
+         fprintf(f, "                sharpness_level = %u\n", vp9->sharpness_level);
+         fprintf(f, "                lf_adj_level[0][0] = [%u, %u]\n", vp9->lf_adj_level[0][0][0], vp9->lf_adj_level[0][0][1]);
+         fprintf(f, "                lf_adj_level[0][1] = [%u, %u]\n", vp9->lf_adj_level[0][1][0], vp9->lf_adj_level[0][1][1]);
+         fprintf(f, "                lf_adj_level[0][2] = [%u, %u]\n", vp9->lf_adj_level[0][2][0], vp9->lf_adj_level[0][2][1]);
+         fprintf(f, "                lf_adj_level[0][3] = [%u, %u]\n", vp9->lf_adj_level[0][3][0], vp9->lf_adj_level[0][3][1]);
+         fprintf(f, "                base_qindex = %u\n", vp9->base_qindex);
+         fprintf(f, "                y_dc_delta_q = %d\n", vp9->y_dc_delta_q);
+         fprintf(f, "                uv_ac_delta_q = %d\n", vp9->uv_ac_delta_q);
+         fprintf(f, "                uv_dc_delta_q = %d\n", vp9->uv_dc_delta_q);
+         fprintf(f, "                log2_tile_cols = %u\n", vp9->log2_tile_cols);
+         fprintf(f, "                log2_tile_rows = %u\n", vp9->log2_tile_rows);
+         fprintf(f, "                tx_mode = %u\n", vp9->tx_mode);
+         fprintf(f, "                reference_mode = %u\n", vp9->reference_mode);
+         fprintf(f, "                chroma_format = %u\n", vp9->chroma_format);
+         fprintf(f, "                ref_frame_map = [");
+         for (unsigned j = 0; j < 8; j++) {
+            fprintf(f, "%u%s", vp9->ref_frame_map[j], j < 7 ? ", " : "]\n");
+         }
+         fprintf(f, "                frame_refs = [%u, %u, %u]\n",
+                 vp9->frame_refs[0], vp9->frame_refs[1], vp9->frame_refs[2]);
+         fprintf(f, "                ref_frame_sign_bias = [%u, %u, %u]\n",
+                 vp9->ref_frame_sign_bias[0], vp9->ref_frame_sign_bias[1], vp9->ref_frame_sign_bias[2]);
+         fprintf(f, "                frame_to_show = %u\n", vp9->frame_to_show);
+         fprintf(f, "                bit_depth_luma_minus8 = %u\n", vp9->bit_depth_luma_minus8);
+         fprintf(f, "                bit_depth_chroma_minus8 = %u\n", vp9->bit_depth_chroma_minus8);
+         fprintf(f, "                p010_mode = %u\n", vp9->p010_mode);
+         fprintf(f, "                msb_mode = %u\n", vp9->msb_mode);
+         fprintf(f, "                luma_10to8 = %u\n", vp9->luma_10to8);
+         fprintf(f, "                chroma_10to8 = %u\n", vp9->chroma_10to8);
+         fprintf(f, "                vp9_frame_size = %u\n", vp9->vp9_frame_size);
+         fprintf(f, "                compressed_header_size = %u\n", vp9->compressed_header_size);
+         fprintf(f, "                uncompressed_header_size = %u\n", vp9->uncompressed_header_size);
+      } else if (index->message_id == RDECODE_MESSAGE_DYNAMIC_DPB &&
+                 index->size == sizeof(rvcn_dec_message_dynamic_dpb_t)) {
+         rvcn_dec_message_dynamic_dpb_t *dpb = (rvcn_dec_message_dynamic_dpb_t *)((char *)header + index->offset);
+         fprintf(f, "            %sDYNAMIC_DPB (tier1) message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                dpbConfigFlags = 0x%x\n", dpb->dpbConfigFlags);
+         fprintf(f, "                dpbLumaPitch = %u\n", dpb->dpbLumaPitch);
+         fprintf(f, "                dpbLumaAlignedHeight = %u\n", dpb->dpbLumaAlignedHeight);
+         fprintf(f, "                dpbLumaAlignedSize = %u\n", dpb->dpbLumaAlignedSize);
+         fprintf(f, "                dpbChromaPitch = %u\n", dpb->dpbChromaPitch);
+         fprintf(f, "                dpbChromaAlignedHeight = %u\n", dpb->dpbChromaAlignedHeight);
+         fprintf(f, "                dpbChromaAlignedSize = %u\n", dpb->dpbChromaAlignedSize);
+         fprintf(f, "                dpbArraySize = %u\n", dpb->dpbArraySize);
+         fprintf(f, "                dpbCurArraySlice = %u\n", dpb->dpbCurArraySlice);
+         fprintf(f, "                dpbRefArraySlice = [");
+         for (unsigned j = 0; j < 16; j++) {
+            fprintf(f, "%u%s", dpb->dpbRefArraySlice[j], j < 15 ? ", " : "]\n");
+         }
+         fprintf(f, "                dpbCurrOffset = %u\n", dpb->dpbCurrOffset);
+         fprintf(f, "                dpbAddrOffset = [");
+         for (unsigned j = 0; j < 16; j++) {
+            fprintf(f, "%u%s", dpb->dpbAddrOffset[j], j < 15 ? ", " : "]\n");
+         }
+      } else if (index->message_id == RDECODE_MESSAGE_DYNAMIC_DPB &&
+                 index->size == sizeof(rvcn_dec_message_dynamic_dpb_t2_t)) {
+         rvcn_dec_message_dynamic_dpb_t2_t *dpb = (rvcn_dec_message_dynamic_dpb_t2_t *)((char *)header + index->offset);
+         fprintf(f, "            %sDYNAMIC_DPB (tier2) message contents:%s\n", O_COLOR_YELLOW, O_COLOR_RESET);
+         fprintf(f, "                dpbConfigFlags = 0x%x\n", dpb->dpbConfigFlags);
+         fprintf(f, "                dpbLumaPitch = %u\n", dpb->dpbLumaPitch);
+         fprintf(f, "                dpbLumaAlignedHeight = %u\n", dpb->dpbLumaAlignedHeight);
+         fprintf(f, "                dpbLumaAlignedSize = %u\n", dpb->dpbLumaAlignedSize);
+         fprintf(f, "                dpbChromaPitch = %u\n", dpb->dpbChromaPitch);
+         fprintf(f, "                dpbChromaAlignedHeight = %u\n", dpb->dpbChromaAlignedHeight);
+         fprintf(f, "                dpbChromaAlignedSize = %u\n", dpb->dpbChromaAlignedSize);
+         fprintf(f, "                dpbArraySize = %u\n", dpb->dpbArraySize);
+         fprintf(f, "                dpbCurr VA = 0x%x%08x\n", dpb->dpbCurrHi, dpb->dpbCurrLo);
+         for (unsigned j = 0; j < dpb->dpbArraySize && j < 16; j++) {
+            fprintf(f, "                dpbAddr[%u] VA = 0x%x%08x\n", j, dpb->dpbAddrHi[j], dpb->dpbAddrLo[j]);
+         }
+      }
+   }
+}
+
+static uint64_t print_vcn_addr(FILE *f, struct ac_ib_parser *ib, const char *prefix_format, ...)
 {
    uint32_t high = ac_ib_get(ib);
    fprintf(f, "\n");
@@ -1102,7 +1505,10 @@ static void print_vcn_addr(FILE *f, struct ac_ib_parser *ib, const char *prefix_
    vfprintf(f, prefix_format, args);
    va_end(args);
 
-   fprintf(f, " VA = 0x%"PRIx64"\n", ((uint64_t)high << 32) | low);
+   uint64_t va = ((uint64_t)high << 32) | low;
+   fprintf(f, " VA = 0x%"PRIx64"\n", va);
+
+   return va;
 }
 
 static void print_vcn_ref_pic_info(FILE *f, struct ac_ib_parser *ib, const char *prefix)
@@ -1180,12 +1586,14 @@ static void print_vcn_preencode_input_picture(FILE *f, struct ac_ib_parser *ib, 
    fprintf(f, "%s blue offset = %u\n", prefix, b_offset);
 }
 
-static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib)
+static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
 {
-   rvcn_enc_cmd_t cmd = {};
+   rvcn_enc_cmd_t cmd = { 0 };
    ac_vcn_enc_init_cmds(&cmd, ib->vcn_version);
 
-   while (ib->cur_dw < ib->num_dw) {
+   uint32_t last_dw = num_dw ? ib->cur_dw + num_dw : ib->num_dw;
+
+   while (ib->cur_dw < last_dw) {
       const uint32_t start_dw = ib->cur_dw;
       const uint32_t size = ac_ib_get(ib);
       const uint32_t op = ac_ib_get(ib);
@@ -1558,6 +1966,8 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib)
                     instruction == RENCODE_HEVC_HEADER_INSTRUCTION_SLICE_QP_DELTA ? "SLICE QP DELTA" :
                     instruction == RENCODE_HEVC_HEADER_INSTRUCTION_SAO_ENABLE ? "SAO ENABLE" :
                     instruction == RENCODE_HEVC_HEADER_INSTRUCTION_LOOP_FILTER_ACROSS_SLICES_ENABLE ? "LOOP FILTER ACROSS SLICES ENABLE" :
+                    instruction == RENCODE_HEVC_HEADER_INSTRUCTION_SLICE_SEGMENT_ADDRESS ? "SLICE SEGMENT ADDRESS" :
+                    instruction == RENCODE_HEVC_HEADER_INSTRUCTION_DEPENDENT_SLICE_SEGMENT_FLAG ? "DEPENDENT SLICE SEGMENT FLAG" :
                     instruction == RENCODE_H264_HEADER_INSTRUCTION_FIRST_MB ? "FIRST MB" :
                     instruction == RENCODE_H264_HEADER_INSTRUCTION_SLICE_QP_DELTA ? "SLICE QP DELTA" :
                     "???");
@@ -1931,6 +2341,7 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib)
 static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
 {
    uint32_t engine = 0;
+   uint32_t total_size = 0;
 
    if (ib->vcn_version >= VCN_4_0_0) {
       while (ib->cur_dw < ib->num_dw) {
@@ -1947,7 +2358,7 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
                     engine == RADEON_VCN_ENGINE_TYPE_ENCODE ? "ENCODE" :
                     engine == RADEON_VCN_ENGINE_TYPE_DECODE ? "DECODE" :
                     "???");
-            uint32_t total_size = ac_ib_get(ib);
+            total_size = ac_ib_get(ib);
             fprintf(f, "    size of all packages = %u\n", total_size);
             break;
          }
@@ -1964,6 +2375,22 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
             print_vcn_addr(f, ib, "    dest");
             uint32_t data = ac_ib_get(ib);
             fprintf(f, "    data = %u\n", data);
+            break;
+         }
+         case RADEON_VCN_IB_COMMON_OP_RESOLVEINPUTPARAMLAYOUT: {
+            fprintf(f, "%sOP_RESOLVEINPUTPARAMLAYOUT%s\n", O_COLOR_CYAN, O_COLOR_RESET);
+            uint32_t type = ac_ib_get(ib);
+            fprintf(f, "    map type = %u\n", type);
+            uint32_t width = ac_ib_get(ib);
+            fprintf(f, "    map width = %u\n", width);
+            uint32_t height = ac_ib_get(ib);
+            fprintf(f, "    map height = %u\n", height);
+            print_vcn_addr(f, ib, "    input");
+            uint32_t pitch = ac_ib_get(ib);
+            fprintf(f, "    input pitch = %u\n", pitch);
+            uint32_t swizzle = ac_ib_get(ib);
+            fprintf(f, "    input swizzle = %u\n", swizzle);
+            print_vcn_addr(f, ib, "    output");
             break;
          }
          case RDECODE_IB_PARAM_DECODE_BUFFER: {
@@ -2047,7 +2474,8 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
                   break;
                }
             }
-            print_vcn_addr(f, ib, "    msg buffer");
+            uint64_t msg_buffer_va = print_vcn_addr(f, ib, "    msg buffer");
+            print_vcn_msg_buffer_contents(f, ib, msg_buffer_va);
             print_vcn_addr(f, ib, "    dpb buffer");
             print_vcn_addr(f, ib, "    target buffer");
             print_vcn_addr(f, ib, "    session context buffer");
@@ -2102,16 +2530,17 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
             fprintf(f, "%sUNRECOGNIZED%s\n", O_COLOR_RED, O_COLOR_RESET);
             break;
          }
-         print_vcn_unrecognized_params(f, ib, start_dw, size);
-
          if (engine == RADEON_VCN_ENGINE_TYPE_ENCODE) {
-            parse_vcn_enc_ib(f, ib);
-            return;
+            engine = 0;
+            /* total_size also includes signature size (4 dwords) */
+            parse_vcn_enc_ib(f, ib, (total_size / 4) - 4);
+         } else {
+            print_vcn_unrecognized_params(f, ib, start_dw, size);
          }
       }
    } else {
       if (ib->ip_type == AMD_IP_VCN_ENC) {
-         parse_vcn_enc_ib(f, ib);
+         parse_vcn_enc_ib(f, ib, 0);
          return;
       }
    }
@@ -2152,7 +2581,7 @@ void ac_parse_ib_chunk(struct ac_ib_parser *ib)
    else if (ib->ip_type == AMD_IP_VCN_DEC || ib->ip_type == AMD_IP_VCN_ENC)
       parse_vcn_ib(memf, &tmp_ib);
    else
-      unreachable("unsupported IP type");
+      UNREACHABLE("unsupported IP type");
 
    u_memstream_close(&mem);
 

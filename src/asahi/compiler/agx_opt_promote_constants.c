@@ -84,8 +84,7 @@ pass(agx_context *ctx, void *memctx)
    uint64_t *values = rzalloc_array(memctx, uint64_t, ctx->alloc);
 
    /* Set of SSA indices that map to immediate values */
-   BITSET_WORD *is_immediate =
-      rzalloc_array(memctx, BITSET_WORD, BITSET_WORDS(ctx->alloc));
+   BITSET_WORD *is_immediate = BITSET_RZALLOC(memctx, ctx->alloc);
 
    /* Gather constant definitions and use */
    agx_foreach_instr_global(ctx, I) {

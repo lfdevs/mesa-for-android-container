@@ -24,6 +24,7 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "nir_softfloat.h"
 
 #include <float.h>
 #include <math.h>
@@ -692,37 +693,7 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
       assert(func);
    }
 
-   nir_def *params[4] = {
-      NULL,
-   };
-
-   nir_variable *ret_tmp =
-      nir_local_variable_create(b->impl, return_type, "return_tmp");
-   nir_deref_instr *ret_deref = nir_build_deref_var(b, ret_tmp);
-   params[0] = &ret_deref->def;
-
-   assert(nir_op_infos[instr->op].num_inputs + 1 == func->num_params);
-   for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++) {
-      nir_alu_type n_type =
-         nir_alu_type_get_base_type(nir_op_infos[instr->op].input_types[i]);
-      /* Add bitsize */
-      n_type = n_type | instr->src[0].src.ssa->bit_size;
-
-      const struct glsl_type *param_type =
-         glsl_scalar_type(nir_get_glsl_base_type_for_nir_type(n_type));
-
-      nir_variable *param =
-         nir_local_variable_create(b->impl, param_type, "param");
-      nir_deref_instr *param_deref = nir_build_deref_var(b, param);
-      nir_store_deref(b, param_deref, nir_mov_alu(b, instr->src[i], 1), ~0);
-
-      assert(i + 1 < ARRAY_SIZE(params));
-      params[i + 1] = &param_deref->def;
-   }
-
-   nir_inline_function_impl(b, func->impl, params, NULL);
-
-   return nir_load_deref(b, ret_deref);
+   return nir_lower_softfloat_func(b, instr, func, return_type);
 }
 
 nir_lower_doubles_options
@@ -853,11 +824,11 @@ lower_doubles_instr(nir_builder *b, nir_instr *instr, void *_data)
       case nir_op_fmax:
          return lower_minmax(b, nir_op_fge, src, src1);
       default:
-         unreachable("unhandled opcode");
+         UNREACHABLE("unhandled opcode");
       }
    }
    default:
-      unreachable("unhandled opcode");
+      UNREACHABLE("unhandled opcode");
    }
 }
 

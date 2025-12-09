@@ -156,10 +156,10 @@ radeonTransformALU(struct radeon_compiler *c, struct rc_instruction *inst, void 
    case RC_OPCODE_DP2: transform_DP2(c, inst); return 1;
    case RC_OPCODE_KILP: transform_KILP(c, inst); return 1;
    case RC_OPCODE_RSQ: transform_RSQ(c, inst); return 1;
-   case RC_OPCODE_SEQ: unreachable();
-   case RC_OPCODE_SGE: unreachable();
-   case RC_OPCODE_SLT: unreachable();
-   case RC_OPCODE_SNE: unreachable();
+   case RC_OPCODE_SEQ: UNREACHABLE("");
+   case RC_OPCODE_SGE: UNREACHABLE("");
+   case RC_OPCODE_SLT: UNREACHABLE("");
+   case RC_OPCODE_SNE: UNREACHABLE("");
    default: return 0;
    }
 }
@@ -172,7 +172,7 @@ transform_r300_vertex_CMP(struct radeon_compiler *c, struct rc_instruction *inst
    if (c->is_r500 && !rc_inst_has_three_diff_temp_srcs(inst))
       return;
 
-   unreachable();
+   UNREACHABLE("");
 }
 
 static void

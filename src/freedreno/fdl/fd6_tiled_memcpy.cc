@@ -25,6 +25,8 @@
 
 #if DETECT_ARCH_AARCH64
 #include <arm_neon.h>
+#elif (DETECT_ARCH_X86 || DETECT_ARCH_X86_64) && defined(__AVX2__)
+#include <immintrin.h>
 #endif
 
 /* The tiling scheme on Qualcomm consists of four levels:
@@ -174,7 +176,7 @@ block_y_xormask(uint32_t y, uint32_t cpp, uint32_t bank_mask, uint32_t bank_shif
 template<>
 uint32_t
 block_y_xormask<FDL_MACROTILE_4_CHANNEL>(uint32_t y, uint32_t cpp,
-                                         uint32_t bank_mask, 
+                                         uint32_t bank_mask,
                                          uint32_t bank_shift)
 {
    return ((((y & 1) * 0b110) ^ (((y >> 1) & 1) * 0b011)) << 8) |
@@ -184,7 +186,7 @@ block_y_xormask<FDL_MACROTILE_4_CHANNEL>(uint32_t y, uint32_t cpp,
 template<>
 uint32_t
 block_y_xormask<FDL_MACROTILE_8_CHANNEL>(uint32_t y, uint32_t cpp,
-                                         uint32_t bank_mask, 
+                                         uint32_t bank_mask,
                                          uint32_t bank_shift)
 {
    return ((((y & 1) * 0b110) ^ (((y >> 1) & 1) * 0b011) ^
@@ -192,44 +194,67 @@ block_y_xormask<FDL_MACROTILE_8_CHANNEL>(uint32_t y, uint32_t cpp,
       ((y & bank_mask) << bank_shift);
 }
 
-/* Figure out how y is swizzled into x based on the UBWC config and block
- * stride and return values to be plugged into block_y_xormask().
+/* Figure out how y is swizzled into x based on the UBWC config and macrotile
+ * stride. get_bank_mask() returns a mask to be applied to the macrotile y
+ * offset, which is then shifted by get_bank_shift() to get the value to xor
+ * into the *byte* x offset.
  */
 
-static uint32_t
-get_bank_mask(uint32_t block_stride, uint32_t cpp,
-              const struct fdl_ubwc_config *config)
+uint32_t
+fdl6_get_bank_mask(const struct fdl_layout *layout, unsigned miplevel,
+                   const struct fdl_ubwc_config *config)
 {
    /* For some reason, for cpp=1 (or R8G8 media formats) the alignment
     * required is doubled.
     */
-   unsigned offset = cpp == 1 ? 1 : 0;
+   unsigned offset = (fdl6_is_r8g8_layout(layout) || layout->cpp == 1) ? 1 : 0;
+   uint32_t macrotile_width, macrotile_height;
+   fdl6_get_ubwc_macrotile_size(layout, &macrotile_width, &macrotile_height);
+   uint32_t macrotile_stride =
+      fdl_pitch(layout, miplevel) / (macrotile_width * layout->cpp);
    uint32_t mask = 0;
    if ((config->bank_swizzle_levels & 0x2) &&
-       (block_stride & ((1u << (config->highest_bank_bit - 10 + offset)) - 1)) == 0)
-      mask |= 0b100;
+       (macrotile_stride & ((1u << (config->highest_bank_bit - 12 + offset)) - 1)) == 0)
+      mask |= 0b1;
    if ((config->bank_swizzle_levels & 0x4) &&
-       (block_stride & ((1u << (config->highest_bank_bit - 9 + offset)) - 1)) == 0)
-      mask |= 0b1000;
+       (macrotile_stride & ((1u << (config->highest_bank_bit - 11 + offset)) - 1)) == 0)
+      mask |= 0b10;
    if ((config->bank_swizzle_levels & 0x1) &&
-       (block_stride & ((1u << (config->highest_bank_bit - 8 + offset)) - 1)) == 0)
-      mask |= 0b10000;
+       (macrotile_stride & ((1u << (config->highest_bank_bit - 10 + offset)) - 1)) == 0)
+      mask |= 0b100;
    return mask;
+}
+
+uint32_t
+fdl6_get_bank_shift(const struct fdl_ubwc_config *config)
+{
+   return config->highest_bank_bit - 1;
+}
+
+
+/* We compute the macrotile and block offset at once in block_y_xormask(), and
+ * work in terms of the block offset, so provide wrappers that work with a y
+ * block offset instead of macrotile offset to avoid extra instructions in a
+ * tight loop.
+ */
+static uint32_t
+get_bank_mask(const struct fdl_layout *layout, unsigned miplevel,
+              const struct fdl_ubwc_config *config)
+{
+   return fdl6_get_bank_mask(layout, miplevel, config) << 2;
 }
 
 static uint32_t
 get_bank_shift(const struct fdl_ubwc_config *config)
 {
-   return config->highest_bank_bit - 3;
+   return fdl6_get_bank_shift(config) - 2;
 }
 
 #if USE_SLOW_PATH
 static uint32_t
-get_block_offset(uint32_t x, uint32_t y, unsigned block_stride, unsigned cpp,
-                 const struct fdl_ubwc_config *config)
+get_block_offset(uint32_t x, uint32_t y, unsigned macrotile_stride,
+                 uint32_t bank_mask, uint32_t bank_shift)
 {
-   uint32_t bank_mask = get_bank_mask(block_stride, cpp, config);
-   unsigned bank_shift = get_bank_shift(config);
    uint32_t x_mask, y_mask;
    if (config->macrotile_mode == FDL_MACROTILE_4_CHANNEL) {
       x_mask = block_x_xormask<FDL_MACROTILE_4_CHANNEL>(x, cpp);
@@ -241,13 +266,13 @@ get_block_offset(uint32_t x, uint32_t y, unsigned block_stride, unsigned cpp,
                                                         bank_shift);
    }
    uint32_t macrotile_y = y >> 2;
-   uint32_t macrotile_stride = block_stride / 2;
-   return ((x_mask ^ y_mask) >> 8) + ((macrotile_y * macrotile_stride) << 3);
+   uint32_t half_macrotile_stride = macrotile_stride * 2;
+   return ((x_mask ^ y_mask) >> 8) + ((macrotile_y * half_macrotile_stride) << 3);
 }
 #endif
 
 static void
-get_block_size(unsigned cpp, uint32_t *block_width,
+get_block_size(unsigned cpp, bool r8g8, uint32_t *block_width,
                uint32_t *block_height)
 {
    switch (cpp) {
@@ -256,8 +281,13 @@ get_block_size(unsigned cpp, uint32_t *block_width,
       *block_height = 8;
       break;
    case 2:
-      *block_width = 32;
-      *block_height = 4;
+      if (r8g8) {
+         *block_width = 16;
+         *block_height = 8;
+      } else {
+         *block_width = 32;
+         *block_height = 4;
+      }
       break;
    case 4:
       *block_width = 16;
@@ -271,9 +301,28 @@ get_block_size(unsigned cpp, uint32_t *block_width,
       *block_width = 4;
       *block_height = 4;
       break;
+   case 32:
+      *block_width = 4;
+      *block_height = 2;
+      break;
+   case 64:
+      *block_width = 2;
+      *block_height = 2;
+      break;
    default:
-      unreachable("unknown cpp");
+      UNREACHABLE("unknown cpp");
    }
+}
+
+void
+fdl6_get_ubwc_macrotile_size(const struct fdl_layout *layout,
+                             uint32_t *macrotile_width,
+                             uint32_t *macrotile_height)
+{
+   uint32_t block_width, block_height;
+   get_block_size(layout->cpp, fdl6_is_r8g8_layout(layout), &block_width, &block_height);
+   *macrotile_width = block_width * 4;
+   *macrotile_height = block_height * 4;
 }
 
 enum copy_dir {
@@ -287,20 +336,21 @@ static void
 memcpy_small(uint32_t x_start, uint32_t y_start,
              uint32_t width, uint32_t height,
              char *tiled, char *linear,
-             uint32_t linear_pitch, uint32_t block_stride,
-             const struct fdl_ubwc_config *config)
+             uint32_t linear_pitch, uint32_t macrotile_stride,
+             uint32_t bank_mask, uint32_t bank_shift)
 {
    unsigned block_width, block_height;
-   get_block_size(cpp, &block_width, &block_height);
+   get_block_size(cpp, false, &block_width, &block_height);
    const uint32_t block_size = 256;
 
-   uint32_t bank_mask = get_bank_mask(block_stride, cpp, config);
-   uint32_t bank_shift = get_bank_shift(config);
    uint32_t x_mask = (get_pixel_offset(~0u, 0)) & (block_size / cpp - 1);
    uint32_t y_mask = (get_pixel_offset(0, ~0u)) & (block_size / cpp - 1);
 
-   /* The pitch between vertically adjacent 2K macrotiles. */
-   uint32_t macrotile_pitch = (block_stride / 2) * 2048;
+   /* The pitch between vertically adjacent macrotiles. Note that this is the
+    * same for 4K macrotiles and the 2K half-macrotiles we use to simplify the
+    * address calculations, because they have the same height.
+    */
+   uint32_t macrotile_pitch = macrotile_stride * 4096;
 
    uint32_t x_block_start = x_start / block_width;
    uint32_t y_block_start = y_start / block_height;
@@ -362,15 +412,6 @@ typedef uint8_t pixel8a1_t __attribute__((vector_size(8), aligned(1)));
 typedef uint8_t pixel16_t __attribute__((vector_size(16), aligned(16)));
 typedef uint8_t pixel16a1_t __attribute__((vector_size(16), aligned(1)));
 
-/* We use memcpy_small as a fallback for copying a tile when there isn't
- * optimized assembly, which requires a config, but because we're just copying
- * a tile it doesn't matter which config we pass. Just pass an arbitrary valid
- * config.
- */
-static const struct fdl_ubwc_config dummy_config = {
-   .highest_bank_bit = 13,
-};
-
 /* We use handwritten assembly for the smaller cpp's because gcc is too dumb
  * to register allocate the vector registers without inserting extra moves,
  * and it can't use the post-increment register mode so it emits too many add
@@ -410,9 +451,45 @@ linear_to_tiled_1cpp(char *_tiled, char *_linear, uint32_t linear_pitch)
           : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
             "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15");
    }
+#elif (DETECT_ARCH_X86 || DETECT_ARCH_X86_64) && defined(__AVX2__)
+   __m256i *tiled = (__m256i *)_tiled;
+   for (unsigned y = 0; y < 2; y++, _linear += 4 * linear_pitch) {
+      auto linear0 = _mm256_loadu_ps((float const*)(_linear));
+      auto linear1 = _mm256_loadu_ps((float const*)(_linear + linear_pitch));
+      auto linear2 = _mm256_loadu_ps((float const*)(_linear + 2 * linear_pitch));
+      auto linear3 = _mm256_loadu_ps((float const*)(_linear + 3 * linear_pitch));
+
+      auto linear_0_1_low = _mm256_unpacklo_epi16(linear0, linear1);
+      auto linear_2_3_low = _mm256_unpacklo_epi16(linear2, linear3);
+      auto linear_0_1_high = _mm256_unpackhi_epi16(linear0, linear1);
+      auto linear_2_3_high = _mm256_unpackhi_epi16(linear2, linear3);
+
+      // Effectively 256-bit zip1 ARM equivalent
+      auto r1_zip1 = _mm256_permute4x64_epi64(linear_2_3_low, 0x60);
+      auto r1_zip2 = _mm256_permute4x64_epi64(linear_0_1_low, 0xd4);
+      auto r1 = _mm256_blend_epi32(r1_zip2, r1_zip1, 0xcc);
+
+      auto r2_zip1 = _mm256_permute4x64_epi64(linear_2_3_high, 0x60);
+      auto r2_zip2 = _mm256_permute4x64_epi64(linear_0_1_high, 0xd4);
+      auto r2 = _mm256_blend_epi32(r2_zip2, r2_zip1, 0xcc);
+
+      // Effectively 256-bit zip2 ARM equivalent
+      auto r3_zip1 = _mm256_permute4x64_epi64(linear_2_3_low, 0xe8);
+      auto r3_zip2 = _mm256_permute4x64_epi64(linear_0_1_low, 0xf6);
+      auto r3 = _mm256_blend_epi32(r3_zip2, r3_zip1, 0xcc);
+
+      auto r4_zip1 = _mm256_permute4x64_epi64(linear_2_3_high, 0xe8);
+      auto r4_zip2 = _mm256_permute4x64_epi64(linear_0_1_high, 0xf6);
+      auto r4 = _mm256_blend_epi32(r4_zip2, r4_zip1, 0xcc);
+
+      _mm256_storeu_ps((float*)tiled, r1); tiled++;
+      _mm256_storeu_ps((float*)tiled, r2); tiled++;
+      _mm256_storeu_ps((float*)tiled, r3); tiled++;
+      _mm256_storeu_ps((float*)tiled, r4); tiled++;
+   }
 #else
    memcpy_small<1, LINEAR_TO_TILED, FDL_MACROTILE_4_CHANNEL>(
-      0, 0, 32, 8, _tiled, _linear, linear_pitch, 0, &dummy_config);
+      0, 0, 32, 8, _tiled, _linear, linear_pitch, 0, 0, 0);
 #endif
 }
 
@@ -450,7 +527,7 @@ tiled_to_linear_1cpp(char *_tiled, char *_linear, uint32_t linear_pitch)
    }
 #else
    memcpy_small<1, TILED_TO_LINEAR, FDL_MACROTILE_4_CHANNEL>(
-      0, 0, 32, 8, _tiled, _linear, linear_pitch, 0, &dummy_config);
+      0, 0, 32, 8, _tiled, _linear, linear_pitch, 0, 0, 0);
 #endif
 }
 
@@ -486,9 +563,32 @@ linear_to_tiled_2cpp(char *_tiled, char *_linear, uint32_t linear_pitch)
           : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
             "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15");
    }
+#elif (DETECT_ARCH_X86 || DETECT_ARCH_X86_64) && defined(__AVX2__)
+   __m256i *tiled = (__m256i *)_tiled;
+   for (unsigned x = 0; x < 2; x++, _linear += 32) {
+      auto linear0 = _mm256_loadu_ps((float const*)(_linear));
+      auto linear1 = _mm256_loadu_ps((float const*)(_linear + linear_pitch));
+      auto linear2 = _mm256_loadu_ps((float const*)(_linear + 2 * linear_pitch));
+      auto linear3 = _mm256_loadu_ps((float const*)(_linear + 3 * linear_pitch));
+
+      auto linear_0_1_low = _mm256_unpacklo_epi32(linear0, linear1);
+      auto linear_2_3_low = _mm256_unpacklo_epi32(linear2, linear3);
+      auto linear_0_1_high = _mm256_unpackhi_epi32(linear0, linear1);
+      auto linear_2_3_high = _mm256_unpackhi_epi32(linear2, linear3);
+
+      auto r1 = _mm256_inserti128_si256(linear_0_1_low, _mm256_castsi256_si128(linear_2_3_low), 1);
+      auto r2 = _mm256_inserti128_si256(linear_0_1_high, _mm256_castsi256_si128(linear_2_3_high), 1);
+      auto r3 = _mm256_permute2f128_si256(linear_0_1_low, linear_2_3_low, 0x31);
+      auto r4 = _mm256_permute2f128_si256(linear_0_1_high, linear_2_3_high, 0x31);
+
+      _mm256_storeu_ps((float*)tiled, r1); tiled++;
+      _mm256_storeu_ps((float*)tiled, r2); tiled++;
+      _mm256_storeu_ps((float*)tiled, r3); tiled++;
+      _mm256_storeu_ps((float*)tiled, r4); tiled++;
+   }
 #else
    memcpy_small<2, LINEAR_TO_TILED, FDL_MACROTILE_4_CHANNEL>(
-      0, 0, 32, 4, _tiled, _linear, linear_pitch, 0, &dummy_config);
+      0, 0, 32, 4, _tiled, _linear, linear_pitch, 0, 0, 0);
 #endif
 }
 
@@ -525,8 +625,8 @@ tiled_to_linear_2cpp(char *_tiled, char *_linear, uint32_t linear_pitch)
             "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15");
    }
 #else
-   memcpy_small<2, LINEAR_TO_TILED, FDL_MACROTILE_4_CHANNEL>(
-      0, 0, 32, 4, _tiled, _linear, linear_pitch, 0, &dummy_config);
+   memcpy_small<2, TILED_TO_LINEAR, FDL_MACROTILE_4_CHANNEL>(
+      0, 0, 32, 4, _tiled, _linear, linear_pitch, 0, 0, 0);
 #endif
 }
 
@@ -561,6 +661,25 @@ linear_to_tiled_4cpp(char *_tiled, char *_linear, uint32_t linear_pitch)
        : "0"(tiled), "r"(linear0), "r"(linear1), "r"(linear2), "r"(linear3)
        : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
          "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15");
+
+#elif (DETECT_ARCH_X86 || DETECT_ARCH_X86_64) && defined(__AVX2__)
+   __m256i *tiled = (__m256i *)_tiled;
+   for (unsigned x = 0; x < 2; x++, _linear += 32) {
+      auto linear0 = _mm256_loadu_ps((float const*)(_linear));
+      auto linear1 = _mm256_loadu_ps((float const*)(_linear + 1 * linear_pitch));
+      auto linear2 = _mm256_loadu_ps((float const*)(_linear + 2 * linear_pitch));
+      auto linear3 = _mm256_loadu_ps((float const*)(_linear + 3 * linear_pitch));
+
+      auto r1 = _mm256_blend_ps(_mm256_permute4x64_pd(linear0, 0xd4), _mm256_permute4x64_pd(linear1, 0x60), 0xcc);
+      auto r2 = _mm256_blend_ps(_mm256_permute4x64_pd(linear2, 0xd4), _mm256_permute4x64_pd(linear3, 0x60), 0xcc);
+      auto r3 = _mm256_blend_ps(_mm256_permute4x64_pd(linear0, 0xf6), _mm256_permute4x64_pd(linear1, 0xe8), 0xcc);
+      auto r4 = _mm256_blend_ps(_mm256_permute4x64_pd(linear2, 0xf6), _mm256_permute4x64_pd(linear3, 0xe8), 0xcc);
+
+      _mm256_storeu_ps((float*)tiled, r1); tiled++;
+      _mm256_storeu_ps((float*)tiled, r2); tiled++;
+      _mm256_storeu_ps((float*)tiled, r3); tiled++;
+      _mm256_storeu_ps((float*)tiled, r4); tiled++;
+   }
 #else
    pixel8_t *tiled = (pixel8_t *)_tiled;
    for (unsigned x = 0; x < 4; x++, _linear += 4 * 4, tiled += 8) {
@@ -736,11 +855,11 @@ static void
 memcpy_large(uint32_t x_start, uint32_t y_start,
              uint32_t width, uint32_t height,
              char *tiled, char *linear,
-             uint32_t linear_pitch, uint32_t block_stride,
-             const fdl_ubwc_config *config)
+             uint32_t linear_pitch, uint32_t macrotile_stride,
+             uint32_t bank_mask, uint32_t bank_shift)
 {
    unsigned block_width, block_height;
-   get_block_size(cpp, &block_width, &block_height);
+   get_block_size(cpp, false, &block_width, &block_height);
 
    /* The region to copy is divided into 9 parts:
     *
@@ -773,7 +892,7 @@ memcpy_large(uint32_t x_start, uint32_t y_start,
    if (x_aligned_end <= x_aligned_start || y_aligned_end <= y_aligned_start) {
       memcpy_small<cpp, direction, macrotile_mode>(
          x_start, y_start, width, height, tiled, linear, linear_pitch,
-         block_stride, config);
+         macrotile_stride, bank_mask, bank_shift);
       return;
    }
 
@@ -781,7 +900,7 @@ memcpy_large(uint32_t x_start, uint32_t y_start,
    if (y_start != y_aligned_start) {
       memcpy_small<cpp, direction, macrotile_mode>(
          x_start, y_start, width, y_aligned_start - y_start, tiled, linear,
-         linear_pitch, block_stride, config);
+         linear_pitch, macrotile_stride, bank_mask, bank_shift);
       linear += (y_aligned_start - y_start) * linear_pitch;
    }
 
@@ -791,14 +910,12 @@ memcpy_large(uint32_t x_start, uint32_t y_start,
       memcpy_small<cpp, direction, macrotile_mode>(
          x_start, y_aligned_start, x_aligned_start - x_start,
          y_aligned_end - y_aligned_start, tiled, linear, linear_pitch,
-         block_stride, config);
+         macrotile_stride, bank_mask, bank_shift);
       linear_aligned = linear + (x_aligned_start - x_start) * cpp;
    }
 
    /* Handle the main part */
-   uint32_t macrotile_pitch = (block_stride / 2) * 2048;
-   uint32_t bank_mask = get_bank_mask(block_stride, cpp, config);
-   uint32_t bank_shift = get_bank_shift(config);
+   uint32_t macrotile_pitch = macrotile_stride * 4096;
    char *tiled_aligned =
       tiled + macrotile_pitch * (y_aligned_start / (block_height * 4));
 
@@ -830,7 +947,7 @@ memcpy_large(uint32_t x_start, uint32_t y_start,
       memcpy_small<cpp, direction, macrotile_mode>(
          x_aligned_end, y_aligned_start, x_end - x_aligned_end,
          y_aligned_end - y_aligned_start, tiled, linear_end, linear_pitch,
-         block_stride, config);
+         macrotile_stride, bank_mask, bank_shift);
    }
 
    /* Handle the bottom third */
@@ -838,8 +955,8 @@ memcpy_large(uint32_t x_start, uint32_t y_start,
    if (y_end != y_aligned_end) {
       memcpy_small<cpp, direction, macrotile_mode>(
          x_start, y_aligned_end, width, y_end - y_aligned_end,
-         tiled, linear, linear_pitch, block_stride,
-         config);
+         tiled, linear, linear_pitch, macrotile_stride,
+         bank_mask, bank_shift);
    }
 }
 
@@ -854,9 +971,11 @@ fdl6_memcpy_linear_to_tiled(uint32_t x_start, uint32_t y_start,
 {
    unsigned block_width, block_height;
    uint32_t cpp = dst_layout->cpp;
-   get_block_size(cpp, &block_width, &block_height);
-   uint32_t block_stride =
-      fdl_pitch(dst_layout, dst_miplevel) / (block_width * dst_layout->cpp);
+   get_block_size(cpp, false, &block_width, &block_height);
+   uint32_t macrotile_stride =
+      fdl_pitch(dst_layout, dst_miplevel) / (4 * block_width * dst_layout->cpp);
+   uint32_t bank_mask = get_bank_mask(dst_layout, dst_miplevel, config);
+   uint32_t bank_shift = get_bank_shift(config);
    uint32_t block_size = 256;
    assert(block_size == block_width * block_height * dst_layout->cpp);
    assert(config->macrotile_mode != FDL_MACROTILE_INVALID);
@@ -869,9 +988,9 @@ fdl6_memcpy_linear_to_tiled(uint32_t x_start, uint32_t y_start,
          uint32_t x_block = (x + x_start) / block_width;
          uint32_t x_pixel = (x + x_start) % block_width;
 
-         uint32_t block_offset = 
-            get_block_offset(x_block, y_block, block_stride, cpp,
-                             config);
+         uint32_t block_offset =
+            get_block_offset(x_block, y_block, macrotile_stride, bank_mask,
+                             bank_shift);
          uint32_t pixel_offset = get_pixel_offset(x_pixel, y_pixel);
 
          memcpy(dst + block_size * block_offset + cpp * pixel_offset,
@@ -886,12 +1005,12 @@ fdl6_memcpy_linear_to_tiled(uint32_t x_start, uint32_t y_start,
          memcpy_large<case_cpp, LINEAR_TO_TILED,                              \
             linear_to_tiled_##case_cpp##cpp, FDL_MACROTILE_4_CHANNEL>(        \
             x_start, y_start, width, height, dst, (char *)src, src_pitch,     \
-            block_stride, config);                                            \
+            macrotile_stride, bank_mask, bank_shift);                         \
       } else {                                                                \
          memcpy_large<case_cpp, LINEAR_TO_TILED,                              \
             linear_to_tiled_##case_cpp##cpp,  FDL_MACROTILE_8_CHANNEL>(       \
             x_start, y_start, width, height, dst, (char *)src, src_pitch,     \
-            block_stride, config);                                            \
+            macrotile_stride, bank_mask, bank_shift);                         \
       }                                                                       \
       break;
    CASE(1)
@@ -901,7 +1020,7 @@ fdl6_memcpy_linear_to_tiled(uint32_t x_start, uint32_t y_start,
    CASE(16)
 #undef CASE
    default:
-      unreachable("unknown cpp");
+      UNREACHABLE("unknown cpp");
    }
 #endif
 }
@@ -917,9 +1036,11 @@ fdl6_memcpy_tiled_to_linear(uint32_t x_start, uint32_t y_start,
 {
    unsigned block_width, block_height;
    unsigned cpp = src_layout->cpp;
-   get_block_size(cpp, &block_width, &block_height);
-   uint32_t block_stride =
-      fdl_pitch(src_layout, src_miplevel) / (block_width * src_layout->cpp);
+   get_block_size(cpp, false, &block_width, &block_height);
+   uint32_t macrotile_stride =
+      fdl_pitch(src_layout, src_miplevel) / (4 * block_width * src_layout->cpp);
+   uint32_t bank_mask = get_bank_mask(src_layout, src_miplevel, config);
+   uint32_t bank_shift = get_bank_shift(config);
    uint32_t block_size = 256;
    assert(block_size == block_width * block_height * src_layout->cpp);
    assert(config->macrotile_mode != FDL_MACROTILE_INVALID);
@@ -933,8 +1054,8 @@ fdl6_memcpy_tiled_to_linear(uint32_t x_start, uint32_t y_start,
          uint32_t x_pixel = (x + x_start) % block_width;
 
 	 uint32_t block_offset =
-            get_block_offset(x_block, y_block, block_stride, src_layout->cpp,
-                             config);
+            get_block_offset(x_block, y_block, macrotile_stride,
+                             src_layout->cpp, bank_mask, bank_shift);
 	 uint32_t pixel_offset = get_pixel_offset(x_pixel, y_pixel);
 
          memcpy(dst + y * dst_pitch + x * src_layout->cpp,
@@ -950,12 +1071,12 @@ fdl6_memcpy_tiled_to_linear(uint32_t x_start, uint32_t y_start,
          memcpy_large<case_cpp, TILED_TO_LINEAR,                              \
             tiled_to_linear_##case_cpp##cpp, FDL_MACROTILE_4_CHANNEL>(        \
             x_start, y_start, width, height, (char *)src, dst, dst_pitch,     \
-            block_stride, config);                                            \
+            macrotile_stride, bank_mask, bank_shift);                         \
       } else {                                                                \
          memcpy_large<case_cpp, TILED_TO_LINEAR,                              \
             tiled_to_linear_##case_cpp##cpp, FDL_MACROTILE_8_CHANNEL>(        \
             x_start, y_start, width, height, (char *)src, dst, dst_pitch,     \
-            block_stride, config);                                            \
+            macrotile_stride, bank_mask, bank_shift);                         \
       }                                                                       \
       break;
    CASE(1)
@@ -965,7 +1086,7 @@ fdl6_memcpy_tiled_to_linear(uint32_t x_start, uint32_t y_start,
    CASE(16)
 #undef CASE
    default:
-      unreachable("unknown cpp");
+      UNREACHABLE("unknown cpp");
    }
 #endif
 }

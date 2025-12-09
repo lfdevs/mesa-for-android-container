@@ -40,20 +40,20 @@ elk_dump_assembly(void *assembly, int start_offset, int end_offset,
    const struct elk_label *root_label =
       elk_label_assembly(isa, assembly, start_offset, end_offset, mem_ctx);
 
-   foreach_list_typed(struct inst_group, group, link, &disasm->group_list) {
-      struct exec_node *next_node = exec_node_get_next(&group->link);
-      if (exec_node_is_tail_sentinel(next_node))
+   brw_foreach_list_typed(struct inst_group, group, link, &disasm->group_list) {
+      struct brw_exec_node *next_node = brw_exec_node_get_next(&group->link);
+      if (brw_exec_node_is_tail_sentinel(next_node))
          break;
 
       struct inst_group *next =
-         exec_node_data(struct inst_group, next_node, link);
+         brw_exec_node_data(struct inst_group, next_node, link);
 
       int start_offset = group->offset;
       int end_offset = next->offset;
 
       if (group->block_start) {
          fprintf(stderr, "   START B%d", group->block_start->num);
-         foreach_list_typed(struct elk_bblock_link, predecessor_link, link,
+         brw_foreach_list_typed(struct elk_bblock_link, predecessor_link, link,
                             &group->block_start->parents) {
             struct elk_bblock_t *predecessor_block = predecessor_link->block;
             fprintf(stderr, " <-B%d", predecessor_block->num);
@@ -88,7 +88,7 @@ elk_dump_assembly(void *assembly, int start_offset, int end_offset,
 
       if (group->block_end) {
          fprintf(stderr, "   END B%d", group->block_end->num);
-         foreach_list_typed(struct elk_bblock_link, successor_link, link,
+         brw_foreach_list_typed(struct elk_bblock_link, successor_link, link,
                             &group->block_end->children) {
             struct elk_bblock_t *successor_block = successor_link->block;
             fprintf(stderr, " ->B%d", successor_block->num);
@@ -106,7 +106,7 @@ elk_disasm_initialize(const struct elk_isa_info *isa,
                   const struct elk_cfg_t *cfg)
 {
    struct elk_disasm_info *disasm = ralloc(NULL, struct elk_disasm_info);
-   exec_list_make_empty(&disasm->group_list);
+   brw_exec_list_make_empty(&disasm->group_list);
    disasm->isa = isa;
    disasm->cfg = cfg;
    disasm->cur_block = 0;
@@ -119,7 +119,7 @@ elk_disasm_new_inst_group(struct elk_disasm_info *disasm, unsigned next_inst_off
 {
    struct inst_group *tail = rzalloc(disasm, struct inst_group);
    tail->offset = next_inst_offset;
-   exec_list_push_tail(&disasm->group_list, &tail->link);
+   brw_exec_list_push_tail(&disasm->group_list, &tail->link);
    return tail;
 }
 
@@ -135,8 +135,8 @@ elk_disasm_annotate(struct elk_disasm_info *disasm,
       group = elk_disasm_new_inst_group(disasm, offset);
    } else {
       disasm->use_tail = false;
-      group = exec_node_data(struct inst_group,
-                             exec_list_get_tail_raw(&disasm->group_list), link);
+      group = brw_exec_node_data(struct inst_group,
+                             brw_exec_list_get_tail_raw(&disasm->group_list), link);
    }
 
    if (INTEL_DEBUG(DEBUG_ANNOTATION)) {
@@ -170,13 +170,13 @@ void
 elk_disasm_insert_error(struct elk_disasm_info *disasm, unsigned offset,
                     unsigned inst_size, const char *error)
 {
-   foreach_list_typed(struct inst_group, cur, link, &disasm->group_list) {
-      struct exec_node *next_node = exec_node_get_next(&cur->link);
-      if (exec_node_is_tail_sentinel(next_node))
+   brw_foreach_list_typed(struct inst_group, cur, link, &disasm->group_list) {
+      struct brw_exec_node *next_node = brw_exec_node_get_next(&cur->link);
+      if (brw_exec_node_is_tail_sentinel(next_node))
          break;
 
       struct inst_group *next =
-         exec_node_data(struct inst_group, next_node, link);
+         brw_exec_node_data(struct inst_group, next_node, link);
 
       if (next->offset <= offset)
          continue;
@@ -192,7 +192,7 @@ elk_disasm_insert_error(struct elk_disasm_info *disasm, unsigned offset,
          new->offset = offset + inst_size;
          new->block_start = NULL;
 
-         exec_node_insert_after(&cur->link, &new->link);
+         brw_exec_node_insert_after(&cur->link, &new->link);
       }
 
       if (cur->error)

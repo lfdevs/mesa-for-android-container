@@ -42,33 +42,29 @@
  * Apply scale and bias factors to an array of RGBA pixels.
  */
 void
-_mesa_scale_and_bias_rgba(GLuint n, GLfloat rgba[][4],
+_mesa_scale_and_bias_rgba(size_t n, GLfloat rgba[][4],
                           GLfloat rScale, GLfloat gScale,
                           GLfloat bScale, GLfloat aScale,
                           GLfloat rBias, GLfloat gBias,
                           GLfloat bBias, GLfloat aBias)
 {
    if (rScale != 1.0F || rBias != 0.0F) {
-      GLuint i;
-      for (i = 0; i < n; i++) {
+      for (size_t i = 0; i < n; i++) {
          rgba[i][RCOMP] = rgba[i][RCOMP] * rScale + rBias;
       }
    }
    if (gScale != 1.0F || gBias != 0.0F) {
-      GLuint i;
-      for (i = 0; i < n; i++) {
+      for (size_t i = 0; i < n; i++) {
          rgba[i][GCOMP] = rgba[i][GCOMP] * gScale + gBias;
       }
    }
    if (bScale != 1.0F || bBias != 0.0F) {
-      GLuint i;
-      for (i = 0; i < n; i++) {
+      for (size_t i = 0; i < n; i++) {
          rgba[i][BCOMP] = rgba[i][BCOMP] * bScale + bBias;
       }
    }
    if (aScale != 1.0F || aBias != 0.0F) {
-      GLuint i;
-      for (i = 0; i < n; i++) {
+      for (size_t i = 0; i < n; i++) {
          rgba[i][ACOMP] = rgba[i][ACOMP] * aScale + aBias;
       }
    }
@@ -79,7 +75,7 @@ _mesa_scale_and_bias_rgba(GLuint n, GLfloat rgba[][4],
  * Apply pixel mapping to an array of floating point RGBA pixels.
  */
 void
-_mesa_map_rgba( const struct gl_context *ctx, GLuint n, GLfloat rgba[][4] )
+_mesa_map_rgba( const struct gl_context *ctx, size_t n, GLfloat rgba[][4] )
 {
    const GLfloat rscale = (GLfloat) (ctx->PixelMaps.RtoR.Size - 1);
    const GLfloat gscale = (GLfloat) (ctx->PixelMaps.GtoG.Size - 1);
@@ -89,8 +85,8 @@ _mesa_map_rgba( const struct gl_context *ctx, GLuint n, GLfloat rgba[][4] )
    const GLfloat *gMap = ctx->PixelMaps.GtoG.Map;
    const GLfloat *bMap = ctx->PixelMaps.BtoB.Map;
    const GLfloat *aMap = ctx->PixelMaps.AtoA.Map;
-   GLuint i;
-   for (i=0;i<n;i++) {
+
+   for (size_t i=0;i<n;i++) {
       GLfloat r = CLAMP(rgba[i][RCOMP], 0.0F, 1.0F);
       GLfloat g = CLAMP(rgba[i][GCOMP], 0.0F, 1.0F);
       GLfloat b = CLAMP(rgba[i][BCOMP], 0.0F, 1.0F);
@@ -106,7 +102,7 @@ _mesa_map_rgba( const struct gl_context *ctx, GLuint n, GLfloat rgba[][4] )
  * Map color indexes to float rgba values.
  */
 void
-_mesa_map_ci_to_rgba( const struct gl_context *ctx, GLuint n,
+_mesa_map_ci_to_rgba( const struct gl_context *ctx, size_t n,
                       const GLuint index[], GLfloat rgba[][4] )
 {
    GLuint rmask = ctx->PixelMaps.ItoR.Size - 1;
@@ -117,8 +113,8 @@ _mesa_map_ci_to_rgba( const struct gl_context *ctx, GLuint n,
    const GLfloat *gMap = ctx->PixelMaps.ItoG.Map;
    const GLfloat *bMap = ctx->PixelMaps.ItoB.Map;
    const GLfloat *aMap = ctx->PixelMaps.ItoA.Map;
-   GLuint i;
-   for (i=0;i<n;i++) {
+
+   for (size_t i=0;i<n;i++) {
       rgba[i][RCOMP] = rMap[index[i] & rmask];
       rgba[i][GCOMP] = gMap[index[i] & gmask];
       rgba[i][BCOMP] = bMap[index[i] & bmask];
@@ -128,13 +124,13 @@ _mesa_map_ci_to_rgba( const struct gl_context *ctx, GLuint n,
 
 
 void
-_mesa_scale_and_bias_depth(const struct gl_context *ctx, GLuint n,
+_mesa_scale_and_bias_depth(const struct gl_context *ctx, size_t n,
                            GLfloat depthValues[])
 {
    const GLfloat scale = ctx->Pixel.DepthScale;
    const GLfloat bias = ctx->Pixel.DepthBias;
-   GLuint i;
-   for (i = 0; i < n; i++) {
+
+   for (size_t i = 0; i < n; i++) {
       GLfloat d = depthValues[i] * scale + bias;
       depthValues[i] = CLAMP(d, 0.0F, 1.0F);
    }
@@ -142,14 +138,14 @@ _mesa_scale_and_bias_depth(const struct gl_context *ctx, GLuint n,
 
 
 void
-_mesa_scale_and_bias_depth_uint(const struct gl_context *ctx, GLuint n,
+_mesa_scale_and_bias_depth_uint(const struct gl_context *ctx, size_t n,
                                 GLuint depthValues[])
 {
    const GLdouble max = (double) 0xffffffff;
    const GLdouble scale = ctx->Pixel.DepthScale;
    const GLdouble bias = ctx->Pixel.DepthBias * max;
-   GLuint i;
-   for (i = 0; i < n; i++) {
+
+   for (size_t i = 0; i < n; i++) {
       GLdouble d = (GLdouble) depthValues[i] * scale + bias;
       d = CLAMP(d, 0.0, max);
       depthValues[i] = (GLuint) d;
@@ -162,7 +158,7 @@ _mesa_scale_and_bias_depth_uint(const struct gl_context *ctx, GLuint n,
  */
 void
 _mesa_apply_rgba_transfer_ops(struct gl_context *ctx, GLbitfield transferOps,
-                              GLuint n, GLfloat rgba[][4])
+                              size_t n, GLfloat rgba[][4])
 {
    /* scale & bias */
    if (transferOps & IMAGE_SCALE_BIAS_BIT) {
@@ -179,8 +175,7 @@ _mesa_apply_rgba_transfer_ops(struct gl_context *ctx, GLbitfield transferOps,
 
    /* clamping to [0,1] */
    if (transferOps & IMAGE_CLAMP_BIT) {
-      GLuint i;
-      for (i = 0; i < n; i++) {
+      for (size_t i = 0; i < n; i++) {
          rgba[i][RCOMP] = CLAMP(rgba[i][RCOMP], 0.0F, 1.0F);
          rgba[i][GCOMP] = CLAMP(rgba[i][GCOMP], 0.0F, 1.0F);
          rgba[i][BCOMP] = CLAMP(rgba[i][BCOMP], 0.0F, 1.0F);
@@ -195,24 +190,24 @@ _mesa_apply_rgba_transfer_ops(struct gl_context *ctx, GLbitfield transferOps,
  */
 void
 _mesa_shift_and_offset_ci(const struct gl_context *ctx,
-                          GLuint n, GLuint indexes[])
+                          size_t n, GLuint indexes[])
 {
    GLint shift = ctx->Pixel.IndexShift;
    GLint offset = ctx->Pixel.IndexOffset;
-   GLuint i;
+
    if (shift > 0) {
-      for (i=0;i<n;i++) {
+      for (size_t i=0;i<n;i++) {
          indexes[i] = (indexes[i] << shift) + offset;
       }
    }
    else if (shift < 0) {
       shift = -shift;
-      for (i=0;i<n;i++) {
+      for (size_t i=0;i<n;i++) {
          indexes[i] = (indexes[i] >> shift) + offset;
       }
    }
    else {
-      for (i=0;i<n;i++) {
+      for (size_t i=0;i<n;i++) {
          indexes[i] = indexes[i] + offset;
       }
    }
@@ -225,34 +220,33 @@ _mesa_shift_and_offset_ci(const struct gl_context *ctx,
  * of stencil values.
  */
 void
-_mesa_apply_stencil_transfer_ops(const struct gl_context *ctx, GLuint n,
+_mesa_apply_stencil_transfer_ops(const struct gl_context *ctx, size_t n,
                                  GLubyte stencil[])
 {
    if (ctx->Pixel.IndexShift != 0 || ctx->Pixel.IndexOffset != 0) {
       const GLint offset = ctx->Pixel.IndexOffset;
       GLint shift = ctx->Pixel.IndexShift;
-      GLuint i;
+
       if (shift > 0) {
-         for (i = 0; i < n; i++) {
+         for (size_t i = 0; i < n; i++) {
             stencil[i] = (stencil[i] << shift) + offset;
          }
       }
       else if (shift < 0) {
          shift = -shift;
-         for (i = 0; i < n; i++) {
+         for (size_t i = 0; i < n; i++) {
             stencil[i] = (stencil[i] >> shift) + offset;
          }
       }
       else {
-         for (i = 0; i < n; i++) {
+         for (size_t i = 0; i < n; i++) {
             stencil[i] = stencil[i] + offset;
          }
       }
    }
    if (ctx->Pixel.MapStencilFlag) {
       GLuint mask = ctx->PixelMaps.StoS.Size - 1;
-      GLuint i;
-      for (i = 0; i < n; i++) {
+      for (size_t i = 0; i < n; i++) {
          stencil[i] = (GLubyte) ctx->PixelMaps.StoS.Map[ stencil[i] & mask ];
       }
    }

@@ -135,7 +135,7 @@ memcpy_small(void *_tiled, void *_linear, const struct ail_layout *tiled_layout,
                                          linear_pitch_B, sx_px, sy_px,         \
                                          swidth_px, sheight_px);               \
    } else {                                                                    \
-      unreachable("Invalid block size");                                       \
+      UNREACHABLE("Invalid block size");                                       \
    }
 
 void

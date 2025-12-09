@@ -399,7 +399,7 @@ dump_constants(struct dxil_dumper *d, struct list_head *list)
             _mesa_string_buffer_append(d->buf, "}\n");
             break;
          default:
-            unreachable("Unsupported const type");
+            UNREACHABLE("Unsupported const type");
          }
       } else
          _mesa_string_buffer_append(d->buf, " undef\n");

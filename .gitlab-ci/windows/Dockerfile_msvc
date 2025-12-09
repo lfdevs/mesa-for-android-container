@@ -15,13 +15,20 @@ RUN Write-Output $PSVersionTable $ErrorActionPreference
 COPY mesa_deps_msvc.ps1 C:\
 RUN C:\mesa_deps_msvc.ps1
 
-COPY mesa_deps_choco.ps1 C:\
-RUN C:\mesa_deps_choco.ps1
+COPY mesa_deps_winget.ps1 C:\
+RUN C:\mesa_deps_winget.ps1
+COPY mesa_deps_winget_settings.json C:\Users\ContainerAdministrator\AppData\Local\Microsoft\WinGet\Settings\defaultState\settings.json
+
+COPY mesa_deps_packages.ps1 C:\
+RUN C:\mesa_deps_packages.ps1
 
 # Example usage:
 # `base_image` should use windows image that can be run with `--isolation=process` option,
 # since the resulting container will want to be used that way be later containers in the build process.
 # Only --isolation=hyperv can succeed building this container locally,
 #   --isolation=process have network issue when installing Visual Studio and choco will crash
-# docker build --isolation=hyperv -f .\Dockerfile_msvc -t mesa_vs --build-arg base_image="mcr.microsoft.com/windows:10.0.19041.1415" .
+# docker build --isolation=hyperv -f .\Dockerfile_msvc -t mesa_msvc --build-arg base_image="mcr.microsoft.com/windows:10.0.19041.1415" .
 
+# Example run:
+# docker run --isolation=hyperv -it --rm -v ${PWD}:${PWD} mesa_msvc pwsh -ExecutionPolicy RemoteSigned
+# docker run --isolation=process -it --rm -v ${PWD}:${PWD} mesa_msvc pwsh -ExecutionPolicy RemoteSigned

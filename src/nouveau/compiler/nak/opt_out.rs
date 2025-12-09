@@ -45,12 +45,12 @@ impl Shader<'_> {
 
         for f in &mut self.functions {
             for b in &mut f.blocks {
-                let mut instrs: Vec<Box<Instr>> = Vec::new();
+                let mut instrs = Vec::new();
                 for instr in b.instrs.drain(..) {
                     if let Some(prev) = instrs.last_mut() {
                         if try_combine_outs(prev, &instr) {
                             if DEBUG.annotate() {
-                                instrs.push(Instr::new_boxed(OpAnnotate {
+                                instrs.push(Instr::new(OpAnnotate {
                                     annotation: "combined by opt_out".into(),
                                 }));
                             }

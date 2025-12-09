@@ -48,17 +48,17 @@
 static inline void
 block_add_pred(nir_block *block, nir_block *pred)
 {
-   _mesa_set_add(block->predecessors, pred);
+   _mesa_set_add(&block->predecessors, pred);
 }
 
 static inline void
 block_remove_pred(nir_block *block, nir_block *pred)
 {
-   struct set_entry *entry = _mesa_set_search(block->predecessors, pred);
+   struct set_entry *entry = _mesa_set_search(&block->predecessors, pred);
 
    assert(entry);
 
-   _mesa_set_remove(block->predecessors, entry);
+   _mesa_set_remove(&block->predecessors, entry);
 }
 
 static void
@@ -188,7 +188,7 @@ split_block_beginning(nir_block *block)
    new_block->cf_node.parent = block->cf_node.parent;
    exec_node_insert_node_before(&block->cf_node.node, &new_block->cf_node.node);
 
-   set_foreach(block->predecessors, entry) {
+   set_foreach(&block->predecessors, entry) {
       nir_block *pred = (nir_block *)entry->key;
       replace_successor(pred, block, new_block);
    }
@@ -392,7 +392,7 @@ split_block_cursor(nir_cursor cursor,
       break;
 
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 
    if (_before)
@@ -438,7 +438,7 @@ nir_loop_add_continue_construct(nir_loop *loop)
    /* change predecessors and successors */
    nir_block *header = nir_loop_first_block(loop);
    nir_block *preheader = nir_block_cf_tree_prev(header);
-   set_foreach(header->predecessors, entry) {
+   set_foreach(&header->predecessors, entry) {
       nir_block *pred = (nir_block *)entry->key;
       if (pred != preheader)
          replace_successor(pred, header, cont);
@@ -455,7 +455,7 @@ nir_loop_remove_continue_construct(nir_loop *loop)
    /* change predecessors and successors */
    nir_block *header = nir_loop_first_block(loop);
    nir_block *cont = nir_loop_first_continue_block(loop);
-   set_foreach(cont->predecessors, entry) {
+   set_foreach(&cont->predecessors, entry) {
       nir_block *pred = (nir_block *)entry->key;
       replace_successor(pred, cont, header);
    }
@@ -527,7 +527,7 @@ nir_handle_add_jump(nir_block *block)
       break;
 
    default:
-      unreachable("Invalid jump type");
+      UNREACHABLE("Invalid jump type");
    }
 }
 
@@ -701,7 +701,7 @@ cleanup_cf_node(nir_cf_node *node, nir_function_impl *impl)
       break;
    }
    default:
-      unreachable("Invalid CF node type");
+      UNREACHABLE("Invalid CF node type");
    }
 }
 
@@ -813,10 +813,10 @@ relink_jump_halt_cf_node(nir_cf_node *node, nir_block *end_block)
    }
 
    case nir_cf_node_function:
-      unreachable("Cannot insert a function in a function");
+      UNREACHABLE("Cannot insert a function in a function");
 
    default:
-      unreachable("Invalid CF node type");
+      UNREACHABLE("Invalid CF node type");
    }
 }
 
@@ -968,7 +968,7 @@ nir_sort_unstructured_blocks(nir_function_impl *impl)
 
    ralloc_free(blocks);
 
-   /* Dominance is toast but we indexed blocks as part of this pass. */
-   impl->valid_metadata &= nir_metadata_dominance;
+   /* Most metadata is toast but we indexed blocks as part of this pass. */
+   nir_progress(true, impl, nir_metadata_live_defs);
    impl->valid_metadata |= nir_metadata_block_index;
 }

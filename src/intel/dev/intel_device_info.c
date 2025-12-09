@@ -78,6 +78,7 @@ static const struct {
    { "lnl", 0x64a0 },
    { "bmg", 0xe202 },
    { "ptl", 0xb080 },
+   { "nvl-u", 0xd740 },
 };
 
 /**
@@ -552,7 +553,6 @@ static const struct intel_device_info intel_device_info_chv = {
    CMAT_PRE_XEHP_CONFIGURATIONS,                    \
    .ver = 9,                                        \
    .has_sample_with_hiz = true,                     \
-   .has_illegal_ccs_values = true,                  \
    .timestamp_frequency = 12000000
 
 #define GFX9_MAX_THREADS                            \
@@ -595,7 +595,6 @@ static const struct intel_device_info intel_device_info_chv = {
    .has_integer_dword_mul = false,                 \
    .has_llc = false,                               \
    .has_sample_with_hiz = true,                    \
-   .has_illegal_ccs_values = true,                 \
    .num_slices = 1,                                \
    .num_thread_per_eu = 6,                         \
    .max_eus_per_subslice = 6,                      \
@@ -917,7 +916,6 @@ static const struct intel_device_info intel_device_info_ehl_2x4 = {
 #define GFX12_FEATURES                              \
    GFX11_FEATURES,                                  \
    .ver = 12,                                       \
-   .has_illegal_ccs_values = false,                 \
    .has_aux_map = true
 
 #define GFX12_MAX_THREADS                           \
@@ -1235,6 +1233,17 @@ static const struct intel_device_info intel_device_info_wcl = {
    .has_ray_tracing = false,
 };
 
+static const struct intel_device_info intel_device_info_nvl_s_hx_ul = {
+   XE3_CONFIG(NVL_U),
+   .has_local_mem = false,
+   .has_ray_tracing = false,
+};
+
+static const struct intel_device_info intel_device_info_nvl_u_h = {
+   XE3_CONFIG(NVL_U),
+   .has_local_mem = false,
+};
+
 void
 intel_device_info_topology_reset_masks(struct intel_device_info *devinfo)
 {
@@ -1441,7 +1450,7 @@ scan_for_force_probe(int pci_id, bool *force_on, bool *force_off)
    *force_on = false;
    *force_off = false;
 
-   const char *env = getenv("INTEL_FORCE_PROBE");
+   const char *env = os_get_option("INTEL_FORCE_PROBE");
    if (env == NULL)
       return;
 
@@ -1689,37 +1698,10 @@ intel_device_info_adjust_memory(struct intel_device_info *devinfo)
 static void
 init_max_scratch_ids(struct intel_device_info *devinfo)
 {
-   /* Determine the max number of subslices that potentially might be used in
+   /* Determine the max subslice that potentially might be used in
     * scratch space ids.
-    *
-    * For, Gfx11+, scratch space allocation is based on the number of threads
-    * in the base configuration.
-    *
-    * For Gfx9, devinfo->subslice_total is the TOTAL number of subslices and
-    * we wish to view that there are 4 subslices per slice instead of the
-    * actual number of subslices per slice. The documentation for 3DSTATE_PS
-    * "Scratch Space Base Pointer" says:
-    *
-    *    "Scratch Space per slice is computed based on 4 sub-slices.  SW
-    *     must allocate scratch space enough so that each slice has 4
-    *     slices allowed."
-    *
-    * According to the other driver team, this applies to compute shaders
-    * as well.  This is not currently documented at all.
-    *
-    * For Gfx8 and older we user devinfo->subslice_total.
     */
-   unsigned subslices;
-   if (devinfo->verx10 == 125)
-      subslices = 32;
-   else if (devinfo->ver == 12)
-      subslices = (devinfo->platform == INTEL_PLATFORM_DG1 || devinfo->gt == 2 ? 6 : 2);
-   else if (devinfo->ver == 11)
-      subslices = 8;
-   else if (devinfo->ver >= 9 && devinfo->ver < 11)
-      subslices = 4 * devinfo->num_slices;
-   else
-      subslices = devinfo->subslice_total;
+   unsigned subslices = intel_device_info_dual_subslice_id_bound(devinfo);
    assert(subslices >= devinfo->subslice_total);
 
    unsigned scratch_ids_per_subslice;
@@ -1860,7 +1842,7 @@ intel_device_info_update_after_hwconfig(struct intel_device_info *devinfo)
 bool
 intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo, int min_ver, int max_ver)
 {
-   if (NULL != getenv("INTEL_STUB_GPU_JSON")) {
+   if (NULL != os_get_option("INTEL_STUB_GPU_JSON")) {
       /* This call will succeed when shim-drm has been initialized with a
        * serialized intel_device_info structure.
        */
@@ -1938,7 +1920,7 @@ intel_get_device_info_from_fd(int fd, struct intel_device_info *devinfo, int min
       break;
    default:
       ret = false;
-      unreachable("Missing");
+      UNREACHABLE("Missing");
    }
    if (!ret) {
       mesa_logw("Could not get intel_device_info.");

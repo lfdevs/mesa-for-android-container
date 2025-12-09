@@ -47,7 +47,7 @@
  * don't get returned, nor do the assignments that will be generated
  * for ir_call parameters.
  */
-void call_for_basic_blocks(exec_list *instructions,
+void call_for_basic_blocks(ir_exec_list *instructions,
 			   void (*callback)(ir_instruction *first,
 					    ir_instruction *last,
 					    void *data),
@@ -56,7 +56,7 @@ void call_for_basic_blocks(exec_list *instructions,
    ir_instruction *leader = NULL;
    ir_instruction *last = NULL;
 
-   foreach_in_list(ir_instruction, ir, instructions) {
+   ir_foreach_in_list(ir_instruction, ir, instructions) {
       ir_if *ir_if;
       ir_loop *ir_loop;
       ir_function *ir_function;
@@ -87,7 +87,7 @@ void call_for_basic_blocks(exec_list *instructions,
 	  * and the body of main().  Perhaps those instructions ought
 	  * to live inside of main().
 	  */
-	 foreach_in_list(ir_function_signature, ir_sig, &ir_function->signatures) {
+	 ir_foreach_in_list(ir_function_signature, ir_sig, &ir_function->signatures) {
 	    call_for_basic_blocks(&ir_sig->body, callback, data);
 	 }
       }

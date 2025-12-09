@@ -37,5 +37,6 @@ struct gl_shared_state *
 _mesa_alloc_shared_state(struct gl_context *ctx,
                          const struct st_config_options *options);
 
-
+bool
+_mesa_release_pending_resource(struct gl_context *ctx, struct pipe_resource *resource, bool frontend_released);
 #endif

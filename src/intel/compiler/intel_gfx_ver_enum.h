@@ -66,6 +66,6 @@ gfx_ver_from_devinfo(const struct intel_device_info *devinfo)
    case 200: return XE2;
    case 300: return XE3;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }

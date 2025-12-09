@@ -37,7 +37,7 @@ struct u_gralloc;
 struct vk_device;
 struct vk_image;
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
 
 struct u_gralloc *vk_android_get_ugralloc(void);
 
@@ -79,7 +79,7 @@ vk_android_get_anb_layout(
 
 #endif
 
-#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
+#if defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26
 
 struct AHardwareBuffer;
 
@@ -110,7 +110,10 @@ void vk_android_get_ahb_buffer_properties(
    const VkPhysicalDeviceExternalBufferInfo *info,
    VkExternalBufferProperties *props);
 
-#else /* DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26 */
+bool vk_android_rp_attachment_has_external_format(
+   const VkAttachmentDescription2 *desc);
+
+#else /* defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26 */
 
 static inline uint64_t
 vk_android_get_front_buffer_usage(void)
@@ -167,6 +170,13 @@ vk_android_get_ahb_buffer_properties(
    const VkPhysicalDeviceExternalBufferInfo *info,
    VkExternalBufferProperties *props)
 {
+}
+
+static bool
+vk_android_rp_attachment_has_external_format(
+   const VkAttachmentDescription2 *desc)
+{
+   return false;
 }
 
 #endif /* ANDROID_API_LEVEL >= 26 */

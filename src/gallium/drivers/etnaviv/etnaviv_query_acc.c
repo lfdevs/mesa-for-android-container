@@ -38,11 +38,13 @@
 
 extern const struct etna_acc_sample_provider occlusion_provider;
 extern const struct etna_acc_sample_provider perfmon_provider;
+extern const struct etna_acc_sample_provider xfb_provider;
 
 static const struct etna_acc_sample_provider *acc_sample_provider[] =
 {
    &occlusion_provider,
    &perfmon_provider,
+   &xfb_provider,
 };
 
 static void
@@ -161,7 +163,7 @@ etna_acc_create_query(struct etna_context *ctx, unsigned query_type)
    for (unsigned i = 0; i < ARRAY_SIZE(acc_sample_provider); i++) {
       p = acc_sample_provider[i];
 
-      if (p->supports(query_type))
+      if (p->supports(ctx, query_type))
          break;
       else
          p = NULL;

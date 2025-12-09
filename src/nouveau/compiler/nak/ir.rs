@@ -13,6 +13,7 @@ use crate::sph::{OutputTopology, PixelImap};
 pub use crate::ssa_value::*;
 use compiler::as_slice::*;
 use compiler::cfg::CFG;
+use compiler::dataflow::ForwardDataflow;
 use compiler::smallvec::SmallVec;
 use nak_ir_proc::*;
 use std::cmp::{max, min};
@@ -236,6 +237,19 @@ pub trait HasRegFile {
     }
 }
 
+impl HasRegFile for &[SSAValue] {
+    fn file(&self) -> RegFile {
+        let comps = self.len();
+        let file = self[0].file();
+        for i in 1..comps {
+            if self[i].file() != file {
+                panic!("Illegal mix of RegFiles")
+            }
+        }
+        file
+    }
+}
+
 #[derive(Clone)]
 pub struct RegFileSet {
     bits: u8,
@@ -337,12 +351,12 @@ impl<T> PerRegFile<T> {
     }
 
     /// Iterates over the values in this container.
-    pub fn values(&self) -> slice::Iter<T> {
+    pub fn values(&self) -> slice::Iter<'_, T> {
         self.per_file.iter()
     }
 
     /// Iterates over the mutable values in this container.
-    pub fn values_mut(&mut self) -> slice::IterMut<T> {
+    pub fn values_mut(&mut self) -> slice::IterMut<'_, T> {
         self.per_file.iter_mut()
     }
 }
@@ -522,7 +536,7 @@ pub enum CBuf {
     Binding(u8),
 
     #[allow(dead_code)]
-    BindlessSSA(SSARef),
+    BindlessSSA([SSAValue; 2]),
 
     #[allow(dead_code)]
     BindlessUGPR(RegRef),
@@ -532,7 +546,7 @@ impl fmt::Display for CBuf {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CBuf::Binding(idx) => write!(f, "c[{:#x}]", idx),
-            CBuf::BindlessSSA(v) => write!(f, "cx[{}]", v),
+            CBuf::BindlessSSA(v) => write!(f, "cx[{{{}, {}}}]", v[0], v[1]),
             CBuf::BindlessUGPR(r) => write!(f, "cx[{}]", r),
         }
     }
@@ -601,7 +615,7 @@ impl SrcRef {
 
     pub fn is_carry(&self) -> bool {
         match self {
-            SrcRef::SSA(ssa) => ssa.file() == Some(RegFile::Carry),
+            SrcRef::SSA(ssa) => ssa.file() == RegFile::Carry,
             SrcRef::Reg(reg) => reg.file() == RegFile::Carry,
             _ => false,
         }
@@ -610,7 +624,7 @@ impl SrcRef {
     #[allow(dead_code)]
     pub fn is_barrier(&self) -> bool {
         match self {
-            SrcRef::SSA(ssa) => ssa.file() == Some(RegFile::Bar),
+            SrcRef::SSA(ssa) => ssa.file() == RegFile::Bar,
             SrcRef::Reg(reg) => reg.file() == RegFile::Bar,
             _ => false,
         }
@@ -670,7 +684,7 @@ impl SrcRef {
             | SrcRef::Reg(_) => &[],
             SrcRef::CBuf(cb) => match &cb.buf {
                 CBuf::Binding(_) | CBuf::BindlessUGPR(_) => &[],
-                CBuf::BindlessSSA(ssa) => ssa.deref(),
+                CBuf::BindlessSSA(ssa) => &ssa[..],
             },
             SrcRef::SSA(ssa) => ssa.deref(),
         }
@@ -686,7 +700,7 @@ impl SrcRef {
             | SrcRef::Reg(_) => &mut [],
             SrcRef::CBuf(cb) => match &mut cb.buf {
                 CBuf::Binding(_) | CBuf::BindlessUGPR(_) => &mut [],
-                CBuf::BindlessSSA(ssa) => ssa.deref_mut(),
+                CBuf::BindlessSSA(ssa) => &mut ssa[..],
             },
             SrcRef::SSA(ssa) => ssa.deref_mut(),
         }
@@ -741,6 +755,16 @@ impl From<RegRef> for SrcRef {
 impl<T: Into<SSARef>> From<T> for SrcRef {
     fn from(ssa: T) -> SrcRef {
         SrcRef::SSA(ssa.into())
+    }
+}
+
+impl From<PredRef> for SrcRef {
+    fn from(value: PredRef) -> Self {
+        match value {
+            PredRef::None => SrcRef::True,
+            PredRef::Reg(reg) => SrcRef::Reg(reg),
+            PredRef::SSA(ssa) => SrcRef::SSA(ssa.into()),
+        }
     }
 }
 
@@ -1095,6 +1119,14 @@ impl Src {
         self.src_ref.is_bindless_cbuf()
     }
 
+    pub fn is_upred_reg(&self) -> bool {
+        match &self.src_ref {
+            SrcRef::SSA(ssa) => ssa.file() == RegFile::UPred,
+            SrcRef::Reg(reg) => reg.file() == RegFile::UPred,
+            _ => false,
+        }
+    }
+
     pub fn is_predicate(&self) -> bool {
         self.src_ref.is_predicate()
     }
@@ -1115,6 +1147,10 @@ impl Src {
     pub fn is_nonzero(&self) -> bool {
         assert!(self.is_unmodified());
         matches!(self.src_ref, SrcRef::Imm32(x) if x != 0)
+    }
+
+    pub fn is_true(&self) -> bool {
+        self.as_bool() == Some(true)
     }
 
     pub fn is_fneg_zero(&self, src_type: SrcType) -> bool {
@@ -1200,6 +1236,20 @@ impl<T: Into<SrcRef>> From<T> for Src {
     }
 }
 
+impl From<Pred> for Src {
+    fn from(value: Pred) -> Self {
+        Src {
+            src_ref: value.pred_ref.into(),
+            src_mod: if value.pred_inv {
+                SrcMod::BNot
+            } else {
+                SrcMod::None
+            },
+            src_swizzle: SrcSwizzle::None,
+        }
+    }
+}
+
 impl fmt::Display for Src {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.src_mod {
@@ -1266,7 +1316,7 @@ fn all_dsts_uniform(dsts: &[Dst]) -> bool {
         let dst_uniform = match dst {
             Dst::None => continue,
             Dst::Reg(r) => r.is_uniform(),
-            Dst::SSA(r) => r.file().unwrap().is_uniform(),
+            Dst::SSA(r) => r.file().is_uniform(),
         };
         assert!(uniform.is_none() || uniform == Some(dst_uniform));
         uniform = Some(dst_uniform);
@@ -1368,6 +1418,7 @@ pub struct OpFoldData<'a> {
 }
 
 impl OpFoldData<'_> {
+    #[allow(dead_code)]
     pub fn get_pred_src(&self, op: &impl SrcsAsSlice, src: &Src) -> bool {
         let i = op.src_idx(src);
         let b = match src.src_ref {
@@ -1401,6 +1452,7 @@ impl OpFoldData<'_> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_u32_bnot_src(&self, op: &impl SrcsAsSlice, src: &Src) -> u32 {
         let x = self.get_u32_src(op, src);
         if src.src_mod.is_bnot() {
@@ -1410,6 +1462,7 @@ impl OpFoldData<'_> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_carry_src(&self, op: &impl SrcsAsSlice, src: &Src) -> bool {
         assert!(src.src_ref.as_ssa().is_some());
         let i = op.src_idx(src);
@@ -1443,10 +1496,12 @@ impl OpFoldData<'_> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_pred_dst(&mut self, op: &impl DstsAsSlice, dst: &Dst, b: bool) {
         self.dsts[op.dst_idx(dst)] = FoldData::Pred(b);
     }
 
+    #[allow(dead_code)]
     pub fn set_carry_dst(&mut self, op: &impl DstsAsSlice, dst: &Dst, b: bool) {
         self.dsts[op.dst_idx(dst)] = FoldData::Carry(b);
     }
@@ -1520,6 +1575,7 @@ pub enum PredSetOp {
 }
 
 impl PredSetOp {
+    #[allow(dead_code)]
     pub fn eval(&self, a: bool, b: bool) -> bool {
         match self {
             PredSetOp::And => a & b,
@@ -4864,6 +4920,23 @@ impl DisplayOp for OpMov {
 }
 impl_display_for_op!(OpMov);
 
+#[repr(C)]
+#[derive(SrcsAsSlice, DstsAsSlice)]
+pub struct OpMovm {
+    pub dst: Dst,
+
+    #[src_type(GPR)]
+    pub src: Src,
+}
+
+impl DisplayOp for OpMovm {
+    fn fmt_op(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "movm.16.m8n8.trans {}", self.src)
+    }
+}
+
+impl_display_for_op!(OpMovm);
+
 #[derive(Copy, Clone)]
 pub struct PrmtSelByte(u8);
 
@@ -5056,6 +5129,52 @@ impl DisplayOp for OpSel {
     }
 }
 impl_display_for_op!(OpSel);
+
+#[repr(C)]
+#[derive(Clone, SrcsAsSlice, DstsAsSlice)]
+pub struct OpSgxt {
+    #[dst_type(GPR)]
+    pub dst: Dst,
+
+    #[src_type(ALU)]
+    pub a: Src,
+
+    #[src_type(ALU)]
+    pub bits: Src,
+
+    pub signed: bool,
+}
+
+impl DisplayOp for OpSgxt {
+    fn fmt_op(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let modifier = if self.signed { "" } else { ".u32" };
+        write!(f, "sgxt{} {} {}", modifier, self.a, self.bits)
+    }
+}
+impl_display_for_op!(OpSgxt);
+
+impl Foldable for OpSgxt {
+    fn fold(&self, _sm: &dyn ShaderModel, f: &mut OpFoldData<'_>) {
+        let a = f.get_u32_src(self, &self.a);
+        let bits = f.get_u32_src(self, &self.bits);
+
+        let dst = if bits >= 32 {
+            a
+        } else if bits == 0 {
+            0
+        } else {
+            let shift = 32 - bits;
+            let a = a << shift;
+            if self.signed {
+                let a = a as i32;
+                (a >> shift) as u32
+            } else {
+                a >> shift
+            }
+        };
+        f.set_u32_dst(self, &self.dst, dst);
+    }
+}
 
 #[repr(C)]
 #[derive(SrcsAsSlice, DstsAsSlice)]
@@ -5622,6 +5741,7 @@ impl SuClampRound {
         }
     }
 
+    #[allow(dead_code)]
     pub fn to_mask(&self) -> u32 {
         !(self.to_int() as u32 - 1)
     }
@@ -6038,6 +6158,7 @@ impl IMadSpSrcType {
         }
     }
 
+    #[allow(dead_code)]
     fn cast(&self, v: u32) -> i64 {
         use IMadSpSrcType::*;
         match self {
@@ -6329,6 +6450,53 @@ impl DisplayOp for OpLdc {
     }
 }
 impl_display_for_op!(OpLdc);
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+#[allow(dead_code)]
+pub enum LdsmSize {
+    M8N8,
+    MT8N8,
+}
+
+impl fmt::Display for LdsmSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LdsmSize::M8N8 => write!(f, "m8n8"),
+            LdsmSize::MT8N8 => write!(f, "m8n8.trans"),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(SrcsAsSlice, DstsAsSlice)]
+pub struct OpLdsm {
+    #[dst_type(Vec)]
+    pub dst: Dst,
+
+    pub mat_size: LdsmSize,
+    pub mat_count: u8,
+
+    #[src_type(SSA)]
+    pub addr: Src,
+
+    pub offset: i32,
+}
+
+impl DisplayOp for OpLdsm {
+    fn fmt_op(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ldsm.16.{}.x{} [{}",
+            self.mat_size, self.mat_count, self.addr,
+        )?;
+        if self.offset > 0 {
+            write!(f, "+{:#x}", self.offset)?;
+        }
+        write!(f, "]")
+    }
+}
+
+impl_display_for_op!(OpLdsm);
 
 /// Used for Kepler to implement shared atomics.
 /// In addition to the load, it tries to lock the address,
@@ -6810,15 +6978,21 @@ impl DisplayOp for OpBSync {
 }
 impl_display_for_op!(OpBSync);
 
+/// Takes the branch when the guard predicate and all sources evaluate to true.
 #[repr(C)]
 #[derive(Clone, SrcsAsSlice, DstsAsSlice)]
 pub struct OpBra {
     pub target: Label,
+
+    /// Can be a UPred if uniform
+    // TODO: actually .u has another form with an additional UPred input.
+    #[src_type(Pred)]
+    pub cond: Src,
 }
 
 impl DisplayOp for OpBra {
     fn fmt_op(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "bra {}", self.target)
+        write!(f, "bra {} {}", self.cond, self.target)
     }
 }
 impl_display_for_op!(OpBra);
@@ -7729,100 +7903,103 @@ impl fmt::Display for OpAnnotate {
 
 #[derive(DisplayOp, DstsAsSlice, SrcsAsSlice, FromVariants)]
 pub enum Op {
-    FAdd(OpFAdd),
-    FFma(OpFFma),
-    FMnMx(OpFMnMx),
-    FMul(OpFMul),
-    Rro(OpRro),
-    MuFu(OpMuFu),
-    FSet(OpFSet),
-    FSetP(OpFSetP),
-    FSwzAdd(OpFSwzAdd),
-    FSwz(OpFSwz),
-    DAdd(OpDAdd),
-    DFma(OpDFma),
-    DMnMx(OpDMnMx),
-    DMul(OpDMul),
-    DSetP(OpDSetP),
-    HAdd2(OpHAdd2),
-    HFma2(OpHFma2),
-    HMul2(OpHMul2),
-    HSet2(OpHSet2),
-    HSetP2(OpHSetP2),
-    Imma(OpImma),
-    Hmma(OpHmma),
-    HMnMx2(OpHMnMx2),
-    BMsk(OpBMsk),
-    BRev(OpBRev),
-    Bfe(OpBfe),
-    Flo(OpFlo),
-    IAbs(OpIAbs),
-    IAdd2(OpIAdd2),
-    IAdd2X(OpIAdd2X),
-    IAdd3(OpIAdd3),
-    IAdd3X(OpIAdd3X),
-    IDp4(OpIDp4),
-    IMad(OpIMad),
-    IMad64(OpIMad64),
-    IMul(OpIMul),
-    IMnMx(OpIMnMx),
-    ISetP(OpISetP),
-    Lea(OpLea),
-    LeaX(OpLeaX),
-    Lop2(OpLop2),
-    Lop3(OpLop3),
-    PopC(OpPopC),
-    Shf(OpShf),
-    Shl(OpShl),
-    Shr(OpShr),
-    F2F(OpF2F),
-    F2FP(OpF2FP),
-    F2I(OpF2I),
-    I2F(OpI2F),
-    I2I(OpI2I),
-    FRnd(OpFRnd),
-    Mov(OpMov),
-    Prmt(OpPrmt),
-    Sel(OpSel),
-    Shfl(OpShfl),
-    PLop3(OpPLop3),
-    PSetP(OpPSetP),
-    R2UR(OpR2UR),
-    Redux(OpRedux),
-    Tex(OpTex),
-    Tld(OpTld),
-    Tld4(OpTld4),
-    Tmml(OpTmml),
-    Txd(OpTxd),
-    Txq(OpTxq),
-    SuLd(OpSuLd),
-    SuSt(OpSuSt),
-    SuAtom(OpSuAtom),
-    SuClamp(OpSuClamp),
-    SuBfm(OpSuBfm),
-    SuEau(OpSuEau),
-    IMadSp(OpIMadSp),
-    SuLdGa(OpSuLdGa),
-    SuStGa(OpSuStGa),
-    Ld(OpLd),
-    Ldc(OpLdc),
-    LdSharedLock(OpLdSharedLock),
-    St(OpSt),
-    StSCheckUnlock(OpStSCheckUnlock),
-    Atom(OpAtom),
-    AL2P(OpAL2P),
-    ALd(OpALd),
-    ASt(OpASt),
-    Ipa(OpIpa),
-    LdTram(OpLdTram),
-    CCtl(OpCCtl),
-    MemBar(OpMemBar),
-    BClear(OpBClear),
-    BMov(OpBMov),
-    Break(OpBreak),
-    BSSy(OpBSSy),
-    BSync(OpBSync),
-    Bra(OpBra),
+    FAdd(Box<OpFAdd>),
+    FFma(Box<OpFFma>),
+    FMnMx(Box<OpFMnMx>),
+    FMul(Box<OpFMul>),
+    Rro(Box<OpRro>),
+    MuFu(Box<OpMuFu>),
+    FSet(Box<OpFSet>),
+    FSetP(Box<OpFSetP>),
+    FSwzAdd(Box<OpFSwzAdd>),
+    FSwz(Box<OpFSwz>),
+    DAdd(Box<OpDAdd>),
+    DFma(Box<OpDFma>),
+    DMnMx(Box<OpDMnMx>),
+    DMul(Box<OpDMul>),
+    DSetP(Box<OpDSetP>),
+    HAdd2(Box<OpHAdd2>),
+    HFma2(Box<OpHFma2>),
+    HMul2(Box<OpHMul2>),
+    HSet2(Box<OpHSet2>),
+    HSetP2(Box<OpHSetP2>),
+    Imma(Box<OpImma>),
+    Hmma(Box<OpHmma>),
+    Ldsm(Box<OpLdsm>),
+    HMnMx2(Box<OpHMnMx2>),
+    BMsk(Box<OpBMsk>),
+    BRev(Box<OpBRev>),
+    Bfe(Box<OpBfe>),
+    Flo(Box<OpFlo>),
+    IAbs(Box<OpIAbs>),
+    IAdd2(Box<OpIAdd2>),
+    IAdd2X(Box<OpIAdd2X>),
+    IAdd3(Box<OpIAdd3>),
+    IAdd3X(Box<OpIAdd3X>),
+    IDp4(Box<OpIDp4>),
+    IMad(Box<OpIMad>),
+    IMad64(Box<OpIMad64>),
+    IMul(Box<OpIMul>),
+    IMnMx(Box<OpIMnMx>),
+    ISetP(Box<OpISetP>),
+    Lea(Box<OpLea>),
+    LeaX(Box<OpLeaX>),
+    Lop2(Box<OpLop2>),
+    Lop3(Box<OpLop3>),
+    PopC(Box<OpPopC>),
+    Shf(Box<OpShf>),
+    Shl(Box<OpShl>),
+    Shr(Box<OpShr>),
+    F2F(Box<OpF2F>),
+    F2FP(Box<OpF2FP>),
+    F2I(Box<OpF2I>),
+    I2F(Box<OpI2F>),
+    I2I(Box<OpI2I>),
+    FRnd(Box<OpFRnd>),
+    Mov(Box<OpMov>),
+    Movm(Box<OpMovm>),
+    Prmt(Box<OpPrmt>),
+    Sel(Box<OpSel>),
+    Sgxt(Box<OpSgxt>),
+    Shfl(Box<OpShfl>),
+    PLop3(Box<OpPLop3>),
+    PSetP(Box<OpPSetP>),
+    R2UR(Box<OpR2UR>),
+    Redux(Box<OpRedux>),
+    Tex(Box<OpTex>),
+    Tld(Box<OpTld>),
+    Tld4(Box<OpTld4>),
+    Tmml(Box<OpTmml>),
+    Txd(Box<OpTxd>),
+    Txq(Box<OpTxq>),
+    SuLd(Box<OpSuLd>),
+    SuSt(Box<OpSuSt>),
+    SuAtom(Box<OpSuAtom>),
+    SuClamp(Box<OpSuClamp>),
+    SuBfm(Box<OpSuBfm>),
+    SuEau(Box<OpSuEau>),
+    IMadSp(Box<OpIMadSp>),
+    SuLdGa(Box<OpSuLdGa>),
+    SuStGa(Box<OpSuStGa>),
+    Ld(Box<OpLd>),
+    Ldc(Box<OpLdc>),
+    LdSharedLock(Box<OpLdSharedLock>),
+    St(Box<OpSt>),
+    StSCheckUnlock(Box<OpStSCheckUnlock>),
+    Atom(Box<OpAtom>),
+    AL2P(Box<OpAL2P>),
+    ALd(Box<OpALd>),
+    ASt(Box<OpASt>),
+    Ipa(Box<OpIpa>),
+    LdTram(Box<OpLdTram>),
+    CCtl(Box<OpCCtl>),
+    MemBar(Box<OpMemBar>),
+    BClear(Box<OpBClear>),
+    BMov(Box<OpBMov>),
+    Break(Box<OpBreak>),
+    BSSy(Box<OpBSSy>),
+    BSync(Box<OpBSync>),
+    Bra(Box<OpBra>),
     SSy(OpSSy),
     Sync(OpSync),
     Brk(OpBrk),
@@ -7830,33 +8007,38 @@ pub enum Op {
     Cont(OpCont),
     PCnt(OpPCnt),
     Exit(OpExit),
-    WarpSync(OpWarpSync),
-    Bar(OpBar),
-    TexDepBar(OpTexDepBar),
-    CS2R(OpCS2R),
-    Isberd(OpIsberd),
-    ViLd(OpViLd),
-    Kill(OpKill),
+    WarpSync(Box<OpWarpSync>),
+    Bar(Box<OpBar>),
+    TexDepBar(Box<OpTexDepBar>),
+    CS2R(Box<OpCS2R>),
+    Isberd(Box<OpIsberd>),
+    ViLd(Box<OpViLd>),
+    Kill(Box<OpKill>),
     Nop(OpNop),
-    PixLd(OpPixLd),
-    S2R(OpS2R),
-    Vote(OpVote),
-    Match(OpMatch),
-    Undef(OpUndef),
-    SrcBar(OpSrcBar),
-    PhiSrcs(OpPhiSrcs),
-    PhiDsts(OpPhiDsts),
-    Copy(OpCopy),
-    Pin(OpPin),
-    Unpin(OpUnpin),
-    Swap(OpSwap),
-    ParCopy(OpParCopy),
-    RegOut(OpRegOut),
-    Out(OpOut),
-    OutFinal(OpOutFinal),
-    Annotate(OpAnnotate),
+    PixLd(Box<OpPixLd>),
+    S2R(Box<OpS2R>),
+    Vote(Box<OpVote>),
+    Match(Box<OpMatch>),
+    Undef(Box<OpUndef>),
+    SrcBar(Box<OpSrcBar>),
+    PhiSrcs(Box<OpPhiSrcs>),
+    PhiDsts(Box<OpPhiDsts>),
+    Copy(Box<OpCopy>),
+    Pin(Box<OpPin>),
+    Unpin(Box<OpUnpin>),
+    Swap(Box<OpSwap>),
+    ParCopy(Box<OpParCopy>),
+    RegOut(Box<OpRegOut>),
+    Out(Box<OpOut>),
+    OutFinal(Box<OpOutFinal>),
+    Annotate(Box<OpAnnotate>),
 }
 impl_display_for_op!(Op);
+
+#[cfg(target_arch = "x86_64")]
+const _: () = {
+    debug_assert!(size_of::<Op>() == 16);
+};
 
 impl Op {
     pub fn is_branch(&self) -> bool {
@@ -7918,7 +8100,7 @@ impl Op {
             | Op::DSetP(_) => false,
 
             // Matrix Multiply Add
-            Op::Imma(_) | Op::Hmma(_) => false,
+            Op::Imma(_) | Op::Hmma(_) | Op::Ldsm(_) | Op::Movm(_) => false,
 
             // Integer ALU
             Op::BRev(_) | Op::Flo(_) | Op::PopC(_) => false,
@@ -7952,7 +8134,7 @@ impl Op {
             }
 
             // Move ops
-            Op::Mov(_) | Op::Prmt(_) | Op::Sel(_) => true,
+            Op::Mov(_) | Op::Prmt(_) | Op::Sel(_) | Op::Sgxt(_) => true,
             Op::Shfl(_) => false,
 
             // Predicate ops
@@ -8293,16 +8475,12 @@ pub struct Instr {
 }
 
 impl Instr {
-    pub fn new(op: impl Into<Op>) -> Instr {
-        Instr {
+    pub fn new(op: impl Into<Op>) -> Self {
+        Self {
             op: op.into(),
             pred: true.into(),
             deps: InstrDeps::new(),
         }
-    }
-
-    pub fn new_boxed(op: impl Into<Op>) -> Box<Self> {
-        Box::new(Instr::new(op))
     }
 
     pub fn dsts(&self) -> &[Dst] {
@@ -8365,6 +8543,19 @@ impl Instr {
 
     pub fn is_branch(&self) -> bool {
         self.op.is_branch()
+    }
+
+    /// Returns true if `self`` is a branch instruction that is always taken.
+    /// It returns false for non branch instructions.
+    pub fn is_branch_always_taken(&self) -> bool {
+        if self.pred.is_true() {
+            match &self.op {
+                Op::Bra(bra) => bra.cond.is_true(),
+                _ => self.is_branch(),
+            }
+        } else {
+            false
+        }
     }
 
     pub fn uses_global_mem(&self) -> bool {
@@ -8456,7 +8647,7 @@ impl<T: Into<Op>> From<T> for Instr {
     }
 }
 
-pub type MappedInstrs = SmallVec<Box<Instr>>;
+pub type MappedInstrs = SmallVec<Instr>;
 
 pub struct BasicBlock {
     pub label: Label,
@@ -8467,14 +8658,11 @@ pub struct BasicBlock {
     /// are guaranteed to execute it together
     pub uniform: bool,
 
-    pub instrs: Vec<Box<Instr>>,
+    pub instrs: Vec<Instr>,
 }
 
 impl BasicBlock {
-    pub fn map_instrs(
-        &mut self,
-        mut map: impl FnMut(Box<Instr>) -> MappedInstrs,
-    ) {
+    pub fn map_instrs(&mut self, mut map: impl FnMut(Instr) -> MappedInstrs) {
         let mut instrs = Vec::new();
         for i in self.instrs.drain(..) {
             match map(i) {
@@ -8503,7 +8691,7 @@ impl BasicBlock {
 
     pub fn phi_dsts(&self) -> Option<&OpPhiDsts> {
         self.phi_dsts_ip().map(|ip| match &self.instrs[ip].op {
-            Op::PhiDsts(phi) => phi,
+            Op::PhiDsts(phi) => phi.deref(),
             _ => panic!("Expected to find the phi"),
         })
     }
@@ -8511,7 +8699,7 @@ impl BasicBlock {
     #[allow(dead_code)]
     pub fn phi_dsts_mut(&mut self) -> Option<&mut OpPhiDsts> {
         self.phi_dsts_ip().map(|ip| match &mut self.instrs[ip].op {
-            Op::PhiDsts(phi) => phi,
+            Op::PhiDsts(phi) => phi.deref_mut(),
             _ => panic!("Expected to find the phi"),
         })
     }
@@ -8529,14 +8717,14 @@ impl BasicBlock {
     }
     pub fn phi_srcs(&self) -> Option<&OpPhiSrcs> {
         self.phi_srcs_ip().map(|ip| match &self.instrs[ip].op {
-            Op::PhiSrcs(phi) => phi,
+            Op::PhiSrcs(phi) => phi.deref(),
             _ => panic!("Expected to find the phi"),
         })
     }
 
     pub fn phi_srcs_mut(&mut self) -> Option<&mut OpPhiSrcs> {
         self.phi_srcs_ip().map(|ip| match &mut self.instrs[ip].op {
-            Op::PhiSrcs(phi) => phi,
+            Op::PhiSrcs(phi) => phi.deref_mut(),
             _ => panic!("Expected to find the phi"),
         })
     }
@@ -8580,9 +8768,27 @@ impl BasicBlock {
 
     pub fn falls_through(&self) -> bool {
         if let Some(i) = self.branch() {
-            !i.pred.is_true()
+            !i.is_branch_always_taken()
         } else {
             true
+        }
+    }
+}
+
+/// Stores the index of an instruction in a given Function
+///
+/// The block and instruction indices are stored in a memory-efficient way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct InstrIdx {
+    pub block_idx: u32,
+    pub instr_idx: u32,
+}
+
+impl InstrIdx {
+    pub fn new(bi: usize, ii: usize) -> Self {
+        Self {
+            block_idx: bi.try_into().expect("Block index overflow"),
+            instr_idx: ii.try_into().expect("Instruction index overflow"),
         }
     }
 }
@@ -8596,7 +8802,7 @@ pub struct Function {
 impl Function {
     pub fn map_instrs(
         &mut self,
-        mut map: impl FnMut(Box<Instr>, &mut SSAValueAllocator) -> MappedInstrs,
+        mut map: impl FnMut(Instr, &mut SSAValueAllocator) -> MappedInstrs,
     ) {
         let alloc = &mut self.ssa_alloc;
         for b in &mut self.blocks {
@@ -8678,10 +8884,26 @@ impl fmt::Display for Function {
     }
 }
 
+impl Index<InstrIdx> for Function {
+    type Output = Instr;
+
+    fn index(&self, index: InstrIdx) -> &Self::Output {
+        // Removed at compile time (except for 16-bit targets)
+        let block_idx: usize = index.block_idx.try_into().unwrap();
+        let instr_idx: usize = index.instr_idx.try_into().unwrap();
+        &self.blocks[block_idx].instrs[instr_idx]
+    }
+}
+
 #[derive(Debug)]
 pub struct ComputeShaderInfo {
     pub local_size: [u16; 3],
     pub smem_size: u16,
+}
+
+#[derive(Debug)]
+pub struct VertexShaderInfo {
+    pub isbe_space_sharing_enable: bool,
 }
 
 #[derive(Debug)]
@@ -8755,7 +8977,7 @@ pub struct TessellationShaderInfo {
 #[derive(Debug)]
 pub enum ShaderStageInfo {
     Compute(ComputeShaderInfo),
-    Vertex,
+    Vertex(VertexShaderInfo),
     Fragment(FragmentShaderInfo),
     Geometry(GeometryShaderInfo),
     TessellationInit(TessellationInitShaderInfo),
@@ -8907,7 +9129,7 @@ pub struct ShaderInfo {
     pub num_gprs: u8,
     pub num_control_barriers: u8,
     pub num_instrs: u32,
-    pub num_static_cycles: u32,
+    pub num_static_cycles: u64,
     pub num_spills_to_mem: u32,
     pub num_fills_from_mem: u32,
     pub num_spills_to_reg: u32,
@@ -9046,6 +9268,14 @@ pub trait ShaderModel {
     /// Worst-case access-after-write latency
     fn worst_latency(&self, write: &Op, dst_idx: usize) -> u32;
 
+    /// Upper bound on latency
+    ///
+    /// Every '*_latency' function must return latencies that are
+    /// bounded.  Ex: self.war_latency() <= self.latency_upper_bound().
+    /// This is only used for compile-time optimization.  If unsure, be
+    /// conservative.
+    fn latency_upper_bound(&self) -> u32;
+
     /// Maximum encodable instruction delay
     fn max_instr_delay(&self) -> u8;
 
@@ -9091,6 +9321,98 @@ pub struct Shader<'a> {
     pub functions: Vec<Function>,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct IsbeSpaceSharingStateTracker {
+    has_attribute_store: bool,
+    has_attribute_load: bool,
+    can_overlap_io: bool,
+}
+
+impl IsbeSpaceSharingStateTracker {
+    pub const fn new() -> Self {
+        Self {
+            has_attribute_store: false,
+            has_attribute_load: false,
+            can_overlap_io: true,
+        }
+    }
+
+    pub fn visit_instr(&mut self, instr: &Instr) {
+        // Track attribute store. (XXX: ISBEWR)
+        self.has_attribute_store |= matches!(instr.op, Op::ASt(_));
+
+        // Track attribute load.
+        if matches!(instr.op, Op::ALd(_) | Op::Isberd(_)) {
+            self.has_attribute_load = true;
+
+            // If we have any attribute load after an attribute store,
+            // we cannot overlap IO.
+            if self.has_attribute_store {
+                self.can_overlap_io = false;
+            }
+        }
+    }
+
+    fn merge(&mut self, other: &Self) {
+        // Propagate details on attribute store and overlap IO.
+        self.has_attribute_store |= other.has_attribute_store;
+        self.can_overlap_io &= other.can_overlap_io;
+
+        // If a previous block has any attribute store and we found an attribute load,
+        // we cannot overlap IO.
+        if other.has_attribute_store && self.has_attribute_load {
+            self.can_overlap_io = false;
+        }
+    }
+}
+
+fn can_isbe_space_sharing_be_enabled(f: &Function) -> bool {
+    let mut state_in = Vec::new();
+    for block in &f.blocks {
+        let mut sim = IsbeSpaceSharingStateTracker::new();
+
+        for instr in block.instrs.iter() {
+            sim.visit_instr(&instr);
+        }
+
+        if !sim.can_overlap_io {
+            return false;
+        }
+
+        state_in.push(sim);
+    }
+
+    let mut state_out: Vec<_> = (0..f.blocks.len())
+        .map(|_| IsbeSpaceSharingStateTracker::new())
+        .collect();
+
+    ForwardDataflow {
+        cfg: &f.blocks,
+        block_in: &mut state_in[..],
+        block_out: &mut state_out[..],
+        transfer: |_block_idx, _block, sim_out, sim_in| {
+            if sim_out == sim_in {
+                false
+            } else {
+                *sim_out = *sim_in;
+                true
+            }
+        },
+        join: |sim_in, pred_sim_out| {
+            sim_in.merge(pred_sim_out);
+        },
+    }
+    .solve();
+
+    for state in state_in {
+        if !state.can_overlap_io {
+            return false;
+        }
+    }
+
+    true
+}
+
 impl Shader<'_> {
     pub fn for_each_instr(&self, f: &mut impl FnMut(&Instr)) {
         for func in &self.functions {
@@ -9104,7 +9426,7 @@ impl Shader<'_> {
 
     pub fn map_instrs(
         &mut self,
-        mut map: impl FnMut(Box<Instr>, &mut SSAValueAllocator) -> MappedInstrs,
+        mut map: impl FnMut(Instr, &mut SSAValueAllocator) -> MappedInstrs,
     ) {
         for f in &mut self.functions {
             f.map_instrs(&mut map);
@@ -9113,7 +9435,7 @@ impl Shader<'_> {
 
     /// Remove all annotations, presumably before encoding the shader.
     pub fn remove_annotations(&mut self) {
-        self.map_instrs(|instr: Box<Instr>, _| -> MappedInstrs {
+        self.map_instrs(|instr: Instr, _| -> MappedInstrs {
             if matches!(instr.op, Op::Annotate(_)) {
                 MappedInstrs::None
             } else {
@@ -9152,6 +9474,16 @@ impl Shader<'_> {
         self.info.max_warps_per_sm = max_warps_per_sm(
             self.info.num_gprs as u32 + self.sm.hw_reserved_gprs(),
         );
+
+        if self.sm.sm() >= 50 {
+            if let ShaderStageInfo::Vertex(vertex_info) = &mut self.info.stage {
+                assert!(self.functions.len() == 1);
+                vertex_info.isbe_space_sharing_enable =
+                    can_isbe_space_sharing_be_enabled(
+                        self.functions.get(0).unwrap(),
+                    );
+            }
+        }
     }
 }
 

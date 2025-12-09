@@ -205,6 +205,7 @@ struct st_config_options
    char *force_gl_renderer;
    char *mesa_extension_override;
    bool allow_multisampled_copyteximage;
+   bool vertex_program_default_out;
 
    unsigned char config_options_sha1[20];
 };

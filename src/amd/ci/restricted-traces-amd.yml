@@ -4,10 +4,10 @@
 traces:
   angle/libangle_restricted_traces_among_us.so:
     vk-radv-raven:
-      checksum: 07c152c22822f5a961873966066288f4
+      checksum: 585cd5d19a7c562b1eae61740d5a1a30
   angle/libangle_restricted_traces_asphalt_9.so:
     vk-radv-raven:
-      checksum: be931afca12c20809a43e5358221ae11
+      checksum: 1f367de5b7c00abaf666a0ade04dd0d9
   angle/libangle_restricted_traces_brawl_starts.so:
     vk-radv-raven:
       checksum: c2264076c2f0ca6b48c3bab152a65a36
@@ -19,7 +19,7 @@ traces:
       checksum: 62307dd7a10d656733bca7e0f065ac99
   angle/libangle_restricted_traces_google_maps.so:
     vk-radv-raven:
-      checksum: 9016da5b61ea1966b8486491a1a899d5
+      checksum: b14a53a8ccd4fa9dbfe94a0c0edb1f4f
   angle/libangle_restricted_traces_minetest.so:
     vk-radv-raven:
       checksum: 63969c1f61a6d25e4f68af9e80e69007

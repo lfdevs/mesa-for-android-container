@@ -52,7 +52,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "x11_dri3.h"
-#include "x11_display.h"
 #include "kopper_interface.h"
 #include "loader.h"
 #include "platform_x11.h"
@@ -706,9 +705,9 @@ dri2_x11_kopper_swap_buffers_with_damage(_EGLDisplay *disp, _EGLSurface *draw,
 
    /* swrast path unsupported for now */
    if (numRects)
-      kopperSwapBuffersWithDamage(dri2_surf->dri_drawable, __DRI2_FLUSH_INVALIDATE_ANCILLARY, numRects, rects);
+      kopperSwapBuffersWithDamage(dri2_surf->dri_drawable, __DRI2_FLUSH_CONTEXT | __DRI2_FLUSH_INVALIDATE_ANCILLARY, numRects, rects);
    else
-      kopperSwapBuffers(dri2_surf->dri_drawable, __DRI2_FLUSH_INVALIDATE_ANCILLARY);
+      kopperSwapBuffers(dri2_surf->dri_drawable, __DRI2_FLUSH_CONTEXT | __DRI2_FLUSH_INVALIDATE_ANCILLARY);
 
    /* If the X11 window has been resized, vkQueuePresentKHR() or
     * vkAcquireNextImageKHR() may return VK_ERROR_SURFACE_LOST or
@@ -1069,8 +1068,6 @@ dri2_get_xcb_connection(_EGLDisplay *disp, struct dri2_egl_display *dri2_dpy)
       screen = dri2_find_screen_for_display(disp, screen);
    } else if (disp->Platform == _EGL_PLATFORM_X11) {
       Display *dpy = disp->PlatformDisplay;
-      if (!x11_xlib_display_is_thread_safe(dpy))
-         return EGL_FALSE;
       dri2_dpy->conn = XGetXCBConnection(dpy);
       screen = DefaultScreen(dpy);
    } else {

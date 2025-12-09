@@ -270,7 +270,7 @@ bool ac_nir_optimize_outputs(nir_shader *nir, bool sprite_tex_disallowed,
          /* nir_lower_io_to_scalar is required before this */
          assert(intr->src[0].ssa->num_components == 1);
          /* No intrinsic should store undef. */
-         assert(intr->src[0].ssa->parent_instr->type != nir_instr_type_undef);
+         assert(!nir_src_is_undef(intr->src[0]));
 
          /* Gather the output. */
          struct ac_out_info *out_info = &outputs[sem.location];
@@ -283,7 +283,7 @@ bool ac_nir_optimize_outputs(nir_shader *nir, bool sprite_tex_disallowed,
 
          unsigned chan = sem.high_16bits * 4 + nir_intrinsic_component(intr);
          out_info->chan[chan].store_intr = intr;
-         out_info->chan[chan].value = intr->src[0].ssa->parent_instr;
+         out_info->chan[chan].value = nir_def_instr(intr->src[0].ssa);
       }
    }
 

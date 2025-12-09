@@ -244,10 +244,8 @@ nvkmd_nouveau_exec_ctx_sync(struct nvkmd_ctx *_ctx,
    if (result != VK_SUCCESS)
       return result;
 
-   int err = drmSyncobjWait(ctx->ws_dev->fd,
-                            &ctx->syncobj, 1, INT64_MAX,
-                            DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT,
-                            NULL);
+   int err = drmSyncobjWait(ctx->ws_dev->fd, &ctx->syncobj, 1,
+                            INT64_MAX, 0, NULL);
    if (err) {
       return vk_errorf(log_obj, VK_ERROR_UNKNOWN,
                        "DRM_SYNCOBJ_WAIT failed: %m");

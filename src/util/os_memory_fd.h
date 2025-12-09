@@ -41,6 +41,12 @@ bool
 os_import_memory_fd(int fd, void **ptr, uint64_t *size, char const *driver_id);
 
 /**
+ * Map memory from a file descriptor at placed address
+ */
+bool
+os_map_memory_fd_placed(int fd, void *addr, uint64_t size, uint64_t offset, char const *driver_id);
+
+/**
  * Return memory on given byte alignment
  */
 void *

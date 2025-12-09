@@ -233,6 +233,8 @@ translate_depth_format(enum pipe_format fmt)
       return VIVS_PE_DEPTH_CONFIG_DEPTH_FORMAT_D24S8;
    case PIPE_FORMAT_S8_UINT_Z24_UNORM:
       return VIVS_PE_DEPTH_CONFIG_DEPTH_FORMAT_D24S8;
+   case PIPE_FORMAT_S8_UINT:
+      return VIVS_PE_DEPTH_CONFIG_DEPTH_FORMAT_D24S8;
    default:
       return ETNA_NO_MATCH;
    }
@@ -329,6 +331,20 @@ translate_blt_format(enum pipe_format fmt)
    case PIPE_FORMAT_R10G10B10A2_UNORM:
    case PIPE_FORMAT_R10G10B10X2_UNORM:
       return BLT_FORMAT_A2R10G10B10;
+   case PIPE_FORMAT_R8_UNORM:
+      return BLT_FORMAT_R8;
+   case PIPE_FORMAT_R8G8_UNORM:
+      return BLT_FORMAT_R8G8;
+   case PIPE_FORMAT_A8_UNORM:
+      return BLT_FORMAT_A8;
+   case PIPE_FORMAT_L8_UNORM:
+      return BLT_FORMAT_L8;
+   case PIPE_FORMAT_L8A8_UNORM:
+      return BLT_FORMAT_A8L8;
+   case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+      return BLT_FORMAT_X24S8;
+   case PIPE_FORMAT_Z16_UNORM:
+      return BLT_FORMAT_D16;
    default:
       return ETNA_NO_MATCH;
    }
@@ -535,7 +551,7 @@ translate_texture_compare(enum pipe_compare_func compare_func)
    case PIPE_FUNC_ALWAYS:
       return TEXTURE_COMPARE_FUNC_ALWAYS;
    default:
-      unreachable("Invalid compare func");
+      UNREACHABLE("Invalid compare func");
    }
 }
 

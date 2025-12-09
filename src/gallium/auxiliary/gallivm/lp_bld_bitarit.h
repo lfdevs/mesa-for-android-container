@@ -37,7 +37,7 @@
 #define LP_BLD_BITARIT_H
 
 
-#include "gallivm/lp_bld.h"
+#include <llvm-c/Core.h>
 
 
 struct lp_type;

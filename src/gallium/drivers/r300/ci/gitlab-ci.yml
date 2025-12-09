@@ -53,6 +53,16 @@ r300-rv410-deqp-piglit:
     PIGLIT_PLATFORM: gbm
     CI_TRON_DUT_SETUP_TAGS: radeon:codename:RV410
 
+r300-rs740-deqp-piglit:
+  extends:
+    - .ondracka-generic
+    - .test-piglit
+  variables:
+    DEQP_SUITE: r300-rs740
+    GPU_VERSION: r300-rs740
+    PIGLIT_PLATFORM: gbm
+    CI_TRON_DUT_SETUP_TAGS: radeon:codename:RS740
+
 r300-rv530-piglit:
   extends:
     - .ondracka-rv530

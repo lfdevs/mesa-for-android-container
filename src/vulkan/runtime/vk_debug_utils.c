@@ -305,7 +305,7 @@ vk_common_SetDebugUtilsObjectNameEXT(
 {
    VK_FROM_HANDLE(vk_device, device, _device);
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
    if (pNameInfo->objectType == VK_OBJECT_TYPE_SWAPCHAIN_KHR ||
        pNameInfo->objectType == VK_OBJECT_TYPE_SURFACE_KHR) {
 #else
@@ -352,7 +352,7 @@ vk_common_append_debug_label(struct vk_device *device,
                              struct util_dynarray *labels,
                              const VkDebugUtilsLabelEXT *pLabelInfo)
 {
-   util_dynarray_append(labels, VkDebugUtilsLabelEXT, *pLabelInfo);
+   util_dynarray_append(labels, *pLabelInfo);
    VkDebugUtilsLabelEXT *current_label =
       util_dynarray_top_ptr(labels, VkDebugUtilsLabelEXT);
    current_label->pLabelName =

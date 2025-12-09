@@ -901,7 +901,7 @@ static void si_fast_clear(struct si_context *sctx, unsigned *buffers,
       unsigned level = fb->zsbuf.level;
       bool update_db_depth_clear = false;
       bool update_db_stencil_clear = false;
-      bool fb_too_small = num_pixels * zs_num_layers <= 512 * 512;
+      bool fb_too_small = (uint64_t)num_pixels * zs_num_layers <= 512 * 512;
 
       /* Transition from TC-incompatible to TC-compatible HTILE if requested.
        * (the transition applies to the whole buffer, so make sure we're clearing
@@ -1083,7 +1083,7 @@ static void si_fb_clear_via_compute(struct si_context *sctx, unsigned *buffers,
       if (vi_dcc_enabled(tex, surf->level))
          continue;
 
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(surf, &width, &height);
       /* Clears of thick and linear layouts are fastest with compute. */
       if (tex->surface.thick_tiling ||
@@ -1264,7 +1264,7 @@ static bool si_try_normal_clear(struct si_context *sctx, struct pipe_surface *ds
                                 const union pipe_color_union *color,
                                 float depth, unsigned stencil)
 {
-   uint16_t surf_width, surf_height;
+   unsigned surf_width, surf_height;
    pipe_surface_size(dst, &surf_width, &surf_height);
    /* This is worth it only if it's a whole image clear. */
    if (dstx == 0 && dsty == 0 &&

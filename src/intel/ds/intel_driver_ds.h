@@ -116,14 +116,6 @@ struct intel_ds_device {
    /* Clock identifier for this device. */
    uint32_t gpu_clock_id;
 
-   /* The timestamp at the point where we first emitted the clock_sync..
-    * this  will be a *later* timestamp that the first GPU traces (since
-    * we capture the first clock_sync from the CPU *after* the first GPU
-    * tracepoints happen).  To avoid confusing perfetto we need to drop
-    * the GPU traces with timestamps before this.
-    */
-   uint64_t sync_gpu_ts;
-
    /* Next timestamp after which we should resend a clock correlation. */
    uint64_t next_clock_sync_ns;
 

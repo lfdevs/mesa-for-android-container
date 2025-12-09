@@ -31,7 +31,7 @@
 #include "pipe/p_defines.h"
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_init.h"
- 
+
 #include "util/format/u_formats.h"
 
 

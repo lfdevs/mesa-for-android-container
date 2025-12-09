@@ -1,3 +1,9 @@
+/*
+ * Copyright 2020 Red Hat.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "rusticl_system_bindings.h"
 
 #include "compiler/clc/nir_clc_helpers.h"
@@ -20,9 +26,11 @@
 #include "util/hex.h"
 #include "util/os_time.h"
 #include "util/sha1/sha1.h"
+#include "util/u_cpu_detect.h"
 #include "util/u_inlines.h"
 #include "util/u_upload_mgr.h"
 #include "util/u_printf.h"
+#include "util/u_queue.h"
 #include "util/u_sampler.h"
 #include "util/u_screen.h"
 #include "util/u_surface.h"

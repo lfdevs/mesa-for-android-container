@@ -207,7 +207,7 @@ calc_dominance(struct nir_use_dominance_state *state,
       if (!has_use)
          update_imm_dom(state, &state->dom_nodes[0], &new_idom);
    } else {
-      unreachable("TODO: only post-dominance implemented, not dominance");
+      UNREACHABLE("TODO: only post-dominance implemented, not dominance");
    }
 
    if (new_idom && node->imm_dom != new_idom->index) {

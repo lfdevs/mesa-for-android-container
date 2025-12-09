@@ -66,7 +66,7 @@ radv_swizzle_conv(VkComponentSwizzle component, const unsigned char chan[4], VkC
    case VK_COMPONENT_SWIZZLE_A:
       return (enum pipe_swizzle)chan[vk_swiz - VK_COMPONENT_SWIZZLE_R];
    default:
-      unreachable("Illegal swizzle");
+      UNREACHABLE("Illegal swizzle");
    }
 }
 

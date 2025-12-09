@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::{icd::CLResult, types::CLVec};
 
 use mesa_rust_gen::*;

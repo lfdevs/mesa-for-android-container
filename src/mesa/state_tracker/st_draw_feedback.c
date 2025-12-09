@@ -185,7 +185,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
       _mesa_load_state_parameters(st->ctx, params);
 
    draw_set_constant_buffer_stride(draw, sizeof(float));
-   draw_set_mapped_constant_buffer(draw, PIPE_SHADER_VERTEX, 0,
+   draw_set_mapped_constant_buffer(draw, MESA_SHADER_VERTEX, 0,
                                    params->ParameterValues,
                                    params->NumParameterValues * 4);
 
@@ -198,10 +198,11 @@ st_feedback_draw_vbo(struct gl_context *ctx,
       struct gl_buffer_binding *binding =
          &st->ctx->UniformBufferBindings[prog->sh.UniformBlocks[i]->Binding];
       struct gl_buffer_object *st_obj = binding->BufferObject;
-      struct pipe_resource *buf = st_obj->buffer;
 
-      if (!buf)
+      if (!st_obj || !st_obj->buffer)
          continue;
+
+      struct pipe_resource *buf = st_obj->buffer;
 
       unsigned offset = binding->Offset;
       unsigned size = buf->width0 - offset;
@@ -215,7 +216,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
       void *ptr = pipe_buffer_map_range(pipe, buf, offset, size,
                                         PIPE_MAP_READ, &ubo_transfer[i]);
 
-      draw_set_mapped_constant_buffer(draw, PIPE_SHADER_VERTEX, 1 + i, ptr,
+      draw_set_mapped_constant_buffer(draw, MESA_SHADER_VERTEX, 1 + i, ptr,
                                       size);
    }
 
@@ -245,7 +246,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
       void *ptr = pipe_buffer_map_range(pipe, buf, offset, size,
                                         PIPE_MAP_READ, &ssbo_transfer[i]);
 
-      draw_set_mapped_shader_buffer(draw, PIPE_SHADER_VERTEX,
+      draw_set_mapped_shader_buffer(draw, MESA_SHADER_VERTEX,
                                     i, ptr, size);
    }
 
@@ -254,16 +255,16 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    for (unsigned i = 0; i < st->state.num_vert_samplers; i++)
       samplers[i] = &st->state.vert_samplers[i];
 
-   draw_set_samplers(draw, PIPE_SHADER_VERTEX, samplers,
+   draw_set_samplers(draw, MESA_SHADER_VERTEX, samplers,
                      st->state.num_vert_samplers);
 
    /* sampler views */
    struct pipe_sampler_view *views[PIPE_MAX_SAMPLERS];
-   unsigned num_owned_views = 0;
+   unsigned extra_sampler_views = 0;
    unsigned num_views =
-      st_get_sampler_views(st, PIPE_SHADER_VERTEX, prog, views, &num_owned_views);
+      st_get_sampler_views(st, MESA_SHADER_VERTEX, prog, views, &extra_sampler_views);
 
-   draw_set_sampler_views(draw, PIPE_SHADER_VERTEX, views, num_views);
+   draw_set_sampler_views(draw, MESA_SHADER_VERTEX, views, num_views);
 
    struct pipe_transfer *sv_transfer[PIPE_MAX_SAMPLERS][PIPE_MAX_TEXTURE_LEVELS];
 
@@ -333,7 +334,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
                                            &sv_transfer[i][0]);
       }
 
-      draw_set_mapped_texture(draw, PIPE_SHADER_VERTEX, i, width0,
+      draw_set_mapped_texture(draw, MESA_SHADER_VERTEX, i, width0,
                               res->height0, num_layers, first_level,
                               last_level, 0, 0, (void*)base_addr, row_stride,
                               img_stride, mip_offset);
@@ -381,10 +382,10 @@ st_feedback_draw_vbo(struct gl_context *ctx,
                                       &img_transfer[i]);
       }
 
-      draw_set_mapped_image(draw, PIPE_SHADER_VERTEX, i, width, height,
+      draw_set_mapped_image(draw, MESA_SHADER_VERTEX, i, width, height,
                             num_layers, addr, row_stride, img_stride, 0, 0);
    }
-   draw_set_images(draw, PIPE_SHADER_VERTEX, images, prog->info.num_images);
+   draw_set_images(draw, MESA_SHADER_VERTEX, images, prog->info.num_images);
 
    /* draw here */
    for (i = 0; i < num_draws; i++) {
@@ -395,7 +396,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    /* unmap images */
    for (unsigned i = 0; i < prog->info.num_images; i++) {
       if (img_transfer[i]) {
-         draw_set_mapped_image(draw, PIPE_SHADER_VERTEX, i, 0, 0, 0, NULL, 0, 0, 0, 0);
+         draw_set_mapped_image(draw, MESA_SHADER_VERTEX, i, 0, 0, 0, NULL, 0, 0, 0, 0);
          if (img_transfer[i]->resource->target == PIPE_BUFFER)
             pipe_buffer_unmap(pipe, img_transfer[i]);
          else
@@ -419,17 +420,17 @@ st_feedback_draw_vbo(struct gl_context *ctx,
       }
    }
 
-   draw_set_samplers(draw, PIPE_SHADER_VERTEX, NULL, 0);
-   draw_set_sampler_views(draw, PIPE_SHADER_VERTEX, NULL, 0);
+   draw_set_samplers(draw, MESA_SHADER_VERTEX, NULL, 0);
+   draw_set_sampler_views(draw, MESA_SHADER_VERTEX, NULL, 0);
 
    /* release YUV views back to driver */
-   unsigned base_idx = num_views - num_owned_views;
-   for (unsigned i = 0; i < num_owned_views; i++)
-      pipe->sampler_view_release(pipe, views[base_idx + i]);
+   u_foreach_bit (i, extra_sampler_views) {
+      pipe->sampler_view_release(pipe, views[i]);
+   }
 
    for (unsigned i = 0; i < prog->info.num_ssbos; i++) {
       if (ssbo_transfer[i]) {
-         draw_set_mapped_constant_buffer(draw, PIPE_SHADER_VERTEX, 1 + i,
+         draw_set_mapped_constant_buffer(draw, MESA_SHADER_VERTEX, 1 + i,
                                          NULL, 0);
          pipe_buffer_unmap(pipe, ssbo_transfer[i]);
       }
@@ -437,7 +438,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
 
    for (unsigned i = 0; i < prog->info.num_ubos; i++) {
       if (ubo_transfer[i]) {
-         draw_set_mapped_constant_buffer(draw, PIPE_SHADER_VERTEX, 1 + i,
+         draw_set_mapped_constant_buffer(draw, MESA_SHADER_VERTEX, 1 + i,
                                          NULL, 0);
          pipe_buffer_unmap(pipe, ubo_transfer[i]);
       }
@@ -456,8 +457,6 @@ st_feedback_draw_vbo(struct gl_context *ctx,
       if (vb_transfer[buf])
          pipe_buffer_unmap(pipe, vb_transfer[buf]);
       draw_set_mapped_vertex_buffer(draw, buf, NULL, 0);
-      if (!vbuffers[buf].is_user_buffer)
-         pipe_resource_reference(&vbuffers[buf].buffer.resource, NULL);
    }
    draw_set_vertex_buffers(draw, 0, NULL);
 

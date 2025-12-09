@@ -38,6 +38,7 @@
 #include "draw/draw_context.h"
 #include "gallivm/lp_bld_type.h"
 #include "gallivm/lp_bld_nir.h"
+#include "gallivm/lp_bld_init.h"
 #include "util/disk_cache.h"
 #include "util/hex.h"
 #include "util/os_misc.h"
@@ -127,16 +128,16 @@ llvmpipe_init_shader_caps(struct pipe_screen *screen)
       struct pipe_shader_caps *caps = (struct pipe_shader_caps *)&screen->shader_caps[i];
 
       switch (i) {
-      case PIPE_SHADER_FRAGMENT:
-      case PIPE_SHADER_COMPUTE:
-      case PIPE_SHADER_MESH:
-      case PIPE_SHADER_TASK:
+      case MESA_SHADER_FRAGMENT:
+      case MESA_SHADER_COMPUTE:
+      case MESA_SHADER_MESH:
+      case MESA_SHADER_TASK:
          gallivm_init_shader_caps(caps);
          break;
-      case PIPE_SHADER_TESS_CTRL:
-      case PIPE_SHADER_TESS_EVAL:
-      case PIPE_SHADER_VERTEX:
-      case PIPE_SHADER_GEOMETRY:
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
+      case MESA_SHADER_VERTEX:
+      case MESA_SHADER_GEOMETRY:
          draw_init_shader_caps(caps);
 
          if (debug_get_bool_option("DRAW_USE_LLVM", true)) {
@@ -360,6 +361,7 @@ llvmpipe_init_screen_caps(struct pipe_screen *screen)
    caps->memobj = true;
 #endif
    caps->sampler_reduction_minmax = true;
+   caps->programmable_sample_locations = true;
    caps->texture_query_samples = true;
    caps->shader_group_vote = true;
    caps->shader_ballot = true;
@@ -368,6 +370,7 @@ llvmpipe_init_screen_caps(struct pipe_screen *screen)
    caps->texture_multisample = true;
    caps->sample_shading = true;
    caps->gl_spirv = true;
+   caps->depth_bounds_test = true;
    caps->post_depth_coverage = true;
    caps->shader_clock = true;
    caps->packed_uniforms = true;
@@ -388,6 +391,26 @@ llvmpipe_init_screen_caps(struct pipe_screen *screen)
    caps->max_point_size_aa = LP_MAX_POINT_WIDTH; /* arbitrary */
    caps->max_texture_anisotropy = 16.0; /* not actually signficant at this time */
    caps->max_texture_lod_bias = 16.0; /* arbitrary */
+}
+
+
+static void
+llvmpipe_get_sample_pixel_grid(struct pipe_screen *pscreen,
+                               unsigned sample_count,
+                               unsigned *width, unsigned *height)
+{
+   switch (sample_count) {
+   case 0:
+   case 1:
+   case 2:
+   case 4:
+   case 8:
+      *width = 1;
+      *height = 1;
+      break;
+   default:
+      UNREACHABLE("illegal sample count");
+   }
 }
 
 
@@ -468,14 +491,14 @@ static const struct nir_shader_compiler_options gallivm_nir_options = {
    .lower_fminmax_signed_zero = true,
    .driver_functions = true,
    .scalarize_ddx = true,
-   .support_indirect_inputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES),
-   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES),
+   .support_indirect_inputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES),
+   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES),
 };
 
 
 static void
 llvmpipe_finalize_nir(struct pipe_screen *screen,
-                      struct nir_shader *nir)
+                      struct nir_shader *nir, bool optimize)
 {
    lp_build_opt_nir(nir);
 }
@@ -598,8 +621,16 @@ llvmpipe_is_format_supported(struct pipe_screen *_screen,
           target == PIPE_TEXTURE_CUBE ||
           target == PIPE_TEXTURE_CUBE_ARRAY);
 
-   if (sample_count != 0 && sample_count != 1 && sample_count != 4)
+   static_assert(LP_MAX_SAMPLES == 8, "Code below assumes support up to 8x");
+   switch (sample_count) {
+   case 0:
+   case 1:
+   case 4:
+   case 8:
+      break;
+   default:
       return false;
+   }
 
    if (bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_SHADER_IMAGE))
       if (!lp_storage_render_image_format_supported(format))
@@ -959,6 +990,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    screen->base.get_device_vendor = llvmpipe_get_vendor; // TODO should be the CPU vendor
    screen->base.get_screen_fd = llvmpipe_screen_get_fd;
    screen->base.is_format_supported = llvmpipe_is_format_supported;
+   screen->base.get_sample_pixel_grid = llvmpipe_get_sample_pixel_grid;
 
    screen->base.context_create = llvmpipe_create_context;
    screen->base.flush_frontbuffer = llvmpipe_flush_frontbuffer;
@@ -983,7 +1015,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
                                               screen->num_threads);
    screen->num_threads = MIN2(screen->num_threads, LP_MAX_THREADS);
 
-   for (unsigned i = 0; i < PIPE_SHADER_MESH_TYPES; i++)
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++)
       screen->base.nir_options[i] = &gallivm_nir_options;
 
 #if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)
@@ -1001,6 +1033,11 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    util_vma_heap_init(&screen->mem_heap, alignment, UINT64_MAX - alignment);
    screen->mem_heap.alloc_high = false;
    screen->fd_mem_alloc = os_create_anonymous_file(0, "allocation fd");
+   if (screen->fd_mem_alloc == -1) {
+      mesa_loge("Failed to create anonymous file for memory allocations\n");
+      llvmpipe_destroy_screen(&screen->base);
+      return NULL;
+   }
 #endif
 
    snprintf(screen->renderer_string, sizeof(screen->renderer_string),

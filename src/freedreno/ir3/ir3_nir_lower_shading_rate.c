@@ -5,20 +5,7 @@
 
 #include "compiler/nir/nir_builder.h"
 #include "ir3_nir.h"
-
-/* Values written in VS/GS to gl_PrimitiveShadingRateEXT have to
- * be translated into HW internal representation.
- */
-static const uint32_t vk_to_hw_shading_rate_lut[] = {
-   0, 4, 8, 11, 1, 5, 9, 11, 2, 6, 10, 11, 11, 11, 11, 11,
-   0, 1, 2, 11, 4, 5, 6, 11, 8, 9, 10, 11, 11, 11, 11, 11};
-
-/* Values read from gl_ShadingRateEXT in FS have to be translated from
- * HW representation.
- */
-static const uint32_t hw_to_vk_shading_rate_lut[] = {
-   0, 4, 8, 0, 1, 5, 9, 0, 2, 6, 10, 11, 11, 11, 11, 11,
-   0, 1, 2, 0, 4, 5, 6, 0, 8, 9, 10, 11, 11, 11, 11, 11};
+#include "common/freedreno_vrs.h"
 
 static nir_deref_instr *
 create_lut(nir_builder *b, const uint32_t *lut, uint32_t lut_size,
@@ -52,7 +39,7 @@ nir_lower_frag_shading_rate(nir_builder *b, nir_intrinsic_instr *intr,
    nir_deref_instr *result = nir_build_deref_array(b, lut, &intr->def);
    nir_def *r = nir_build_load_deref(b, 1, 32, &result->def, 0);
 
-   nir_def_rewrite_uses_after(&intr->def, r, r->parent_instr);
+   nir_def_rewrite_uses_after(&intr->def, r);
    return true;
 }
 

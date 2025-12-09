@@ -174,7 +174,7 @@ radv_update_descriptor_set_with_template_impl(struct radv_device *device, struct
             }
 
             if (cmd_buffer && templ->entry[i].immutable_samplers) {
-               const uint32_t sampler_offset = RADV_COMBINED_IMAGE_SAMPLER_DESC_SAMPLER_OFFSET;
+               const uint32_t sampler_offset = radv_get_combined_image_sampler_offset(pdev);
 
                memcpy((char *)pDst + sampler_offset, templ->entry[i].immutable_samplers + 4 * j,
                       RADV_SAMPLER_DESC_SIZE);

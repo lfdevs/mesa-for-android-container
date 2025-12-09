@@ -1,10 +1,10 @@
 // Copyright © 2022 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-use crate::dataflow::BackwardDataflow;
 use crate::ir::*;
 
 use compiler::bitset::BitSet;
+use compiler::dataflow::BackwardDataflow;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::{max, min, Ord, Ordering};
 

@@ -76,6 +76,7 @@ u_driconf_fill_st_options(struct st_config_options *options,
    query_string_option(force_gl_renderer);
    query_string_option(mesa_extension_override);
    query_bool_option(allow_multisampled_copyteximage);
+   query_bool_option(vertex_program_default_out);
 
    driComputeOptionsSha1(optionCache, options->config_options_sha1);
 }

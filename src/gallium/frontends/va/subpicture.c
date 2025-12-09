@@ -240,7 +240,7 @@ vlVaAssociateSubpicture(VADriverContextP ctx, VASubpictureID subpicture,
          mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_INVALID_SURFACE;
       }
-      util_dynarray_append(&surf->subpics, vlVaSubpicture *, sub);
+      util_dynarray_append(&surf->subpics, sub);
    }
    mtx_unlock(&drv->mutex);
 

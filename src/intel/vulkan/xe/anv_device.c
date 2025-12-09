@@ -73,7 +73,7 @@ drm_sched_priority_to_vk_priority(enum drm_sched_priority drm_sched_priority)
    case DRM_SCHED_PRIORITY_HIGH:
       return VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
    default:
-      unreachable("Invalid drm_sched_priority");
+      UNREACHABLE("Invalid drm_sched_priority");
       return VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
    }
 }
@@ -88,7 +88,6 @@ anv_xe_physical_device_get_parameters(struct anv_physical_device *device)
       return vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
                        "unable to query device config");
 
-   device->has_exec_timeline = true;
    device->has_vm_control = true;
    device->max_context_priority =
          drm_sched_priority_to_vk_priority(config->info[DRM_XE_QUERY_CONFIG_MAX_EXEC_QUEUE_PRIORITY]);
@@ -199,21 +198,25 @@ anv_xe_device_check_status(struct vk_device *vk_device)
    for (uint32_t i = 0; i < device->queue_count; i++) {
       result = anv_xe_get_device_status(device, device->queues[i].exec_queue_id);
       if (result != VK_SUCCESS)
-         return result;
+         goto done;
 
       if (device->queues[i].companion_rcs_id != 0) {
          uint32_t exec_queue_id = device->queues[i].companion_rcs_id;
          result = anv_xe_get_device_status(device, exec_queue_id);
          if (result != VK_SUCCESS)
-            return result;
+            goto done;
       }
    }
 
-   if (result != VK_SUCCESS)
-      return result;
-
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT))
-      result = vk_check_printf_status(vk_device, &device->printf);
+ done:
+   if (INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+      VkResult print_result =
+         vk_check_printf_status(vk_device, &device->printf);
+      /* Report the device error if there is one, only report the printf error
+       * if no device error.
+       */
+      result = result != VK_SUCCESS ? result : print_result;
+   }
 
    return result;
 }

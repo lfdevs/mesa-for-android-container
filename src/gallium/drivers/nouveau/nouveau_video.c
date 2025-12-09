@@ -20,7 +20,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 
 #include "nouveau_screen.h"
@@ -514,11 +513,11 @@ nouveau_create_decoder(struct pipe_context *context,
                                             templ->entrypoint == PIPE_VIDEO_ENTRYPOINT_IDCT ? "IDCT" : "MC");
 
    if (u_reduce_video_profile(templ->profile) != PIPE_VIDEO_FORMAT_MPEG12)
-      goto vl;
+      return NULL;
    if (screen->device->chipset >= 0x98 && screen->device->chipset != 0xa0)
-      goto vl;
+      return NULL;
    if (screen->device->chipset < 0x40)
-      goto vl;
+      return NULL;
 
    dec = CALLOC_STRUCT(nouveau_decoder);
    if (!dec)
@@ -633,10 +632,6 @@ nouveau_create_decoder(struct pipe_context *context,
 fail:
    nouveau_decoder_destroy(&dec->base);
    return NULL;
-
-vl:
-   debug_printf("Using g3dvl renderer\n");
-   return vl_create_decoder(context, templ);
 }
 
 static void
@@ -844,14 +839,18 @@ nouveau_screen_get_video_param(struct pipe_screen *pscreen,
       return vl_video_buffer_max_size(pscreen);
    case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
       return PIPE_FORMAT_NV12;
-   case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-      return false;
-   case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-      return false;
    case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
       return true;
    case PIPE_VIDEO_CAP_MAX_LEVEL:
-      return vl_level_supported(pscreen, profile);
+      switch (profile) {
+      case PIPE_VIDEO_PROFILE_MPEG1:
+         return 0;
+      case PIPE_VIDEO_PROFILE_MPEG2_SIMPLE:
+      case PIPE_VIDEO_PROFILE_MPEG2_MAIN:
+         return 3;
+      default:
+         return 0;
+      }
    default:
       debug_printf("unknown video param: %d\n", param);
       return 0;

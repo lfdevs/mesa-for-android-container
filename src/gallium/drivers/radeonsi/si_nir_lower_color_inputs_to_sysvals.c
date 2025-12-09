@@ -44,7 +44,7 @@ bool si_nir_lower_color_inputs_to_sysvals(nir_shader *nir)
 
          if (intrin->intrinsic == nir_intrinsic_load_interpolated_input) {
             nir_intrinsic_instr *baryc =
-               nir_instr_as_intrinsic(intrin->src[0].ssa->parent_instr);
+               nir_def_as_intrinsic(intrin->src[0].ssa);
 
             centroid =
                baryc->intrinsic == nir_intrinsic_load_barycentric_centroid;

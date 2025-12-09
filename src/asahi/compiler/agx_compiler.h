@@ -8,6 +8,7 @@
 
 #include "asahi/isa/agx_minifloat.h"
 #include "compiler/nir/nir.h"
+#include "util/bitset.h"
 #include "util/half_float.h"
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
@@ -55,7 +56,7 @@ agx_size_align_16(enum agx_size size)
       return 4;
    }
 
-   unreachable("Invalid size");
+   UNREACHABLE("Invalid size");
 }
 
 /* Keep synced with hash_index */
@@ -452,9 +453,15 @@ typedef struct agx_block {
    struct util_dynarray predecessors;
    bool unconditional_jumps;
 
+   /* Could there be masked execution? */
+   bool divergent;
+
    /* Liveness analysis results */
-   BITSET_WORD *live_in;
-   BITSET_WORD *live_out;
+   struct u_sparse_bitset live_in;
+   struct u_sparse_bitset live_out;
+
+   BITSET_DECLARE(reg_live_in, AGX_NUM_REGS);
+   BITSET_DECLARE(reg_live_out, AGX_NUM_REGS);
 
    /* For visited blocks during register assignment and live-out registers, the
     * mapping of registers to SSA names at the end of the block. This is dense,
@@ -476,7 +483,7 @@ typedef struct agx_block {
 
 typedef struct {
    nir_shader *nir;
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
    bool is_preamble;
    unsigned scratch_size_B;
 
@@ -586,7 +593,7 @@ agx_size_for_bits(unsigned bits)
    case 64:
       return AGX_SIZE_64;
    default:
-      unreachable("Invalid bitsize");
+      UNREACHABLE("Invalid bitsize");
    }
 }
 
@@ -728,6 +735,10 @@ void agx_block_add_successor(agx_block *block, agx_block *successor);
    agx_foreach_src_rev(ins, v)                                                 \
       if (ins->src[v].type == AGX_INDEX_NORMAL)
 
+#define agx_foreach_reg_src(ins, v)                                            \
+   agx_foreach_src(ins, v)                                                     \
+      if (ins->src[v].type == AGX_INDEX_REGISTER)
+
 #define agx_foreach_ssa_dest(ins, v)                                           \
    agx_foreach_dest(ins, v)                                                    \
       if (ins->dest[v].type == AGX_INDEX_NORMAL)
@@ -735,6 +746,10 @@ void agx_block_add_successor(agx_block *block, agx_block *successor);
 #define agx_foreach_ssa_dest_rev(ins, v)                                       \
    agx_foreach_dest_rev(ins, v)                                                \
       if (ins->dest[v].type == AGX_INDEX_NORMAL)
+
+#define agx_foreach_reg_dest(ins, v)                                           \
+   agx_foreach_dest(ins, v)                                                    \
+      if (ins->dest[v].type == AGX_INDEX_REGISTER)
 
 /* Phis only come at the start (after else instructions) so we stop as soon as
  * we hit a non-phi
@@ -770,7 +785,7 @@ agx_predecessor_index(agx_block *succ, agx_block *pred)
       index++;
    }
 
-   unreachable("Invalid predecessor");
+   UNREACHABLE("Invalid predecessor");
 }
 
 static inline agx_block *
@@ -998,7 +1013,7 @@ agx_builder_insert(agx_cursor *cursor, agx_instr *I)
       return;
    }
 
-   unreachable("Invalid cursor option");
+   UNREACHABLE("Invalid cursor option");
 }
 
 bool agx_instr_accepts_uniform(enum agx_opcode op, unsigned src_index,
@@ -1020,13 +1035,14 @@ void agx_opt_compact_constants(agx_context *ctx);
 void agx_opt_promote_constants(agx_context *ctx);
 void agx_dce(agx_context *ctx, bool partial);
 void agx_pressure_schedule(agx_context *ctx);
-void agx_spill(agx_context *ctx, unsigned k);
+void agx_spill(agx_context *ctx, unsigned k, bool remat_only);
 void agx_repair_ssa(agx_context *ctx);
 void agx_reindex_ssa(agx_context *ctx);
 void agx_ra(agx_context *ctx);
 void agx_lower_64bit_postra(agx_context *ctx);
 void agx_insert_waits(agx_context *ctx);
 void agx_opt_empty_else(agx_context *ctx);
+void agx_opt_register_cache(agx_context *ctx);
 void agx_opt_break_if(agx_context *ctx);
 void agx_opt_jmp_none(agx_context *ctx);
 void agx_pack_binary(agx_context *ctx, struct util_dynarray *emission);
@@ -1078,7 +1094,7 @@ void agx_emit_parallel_copies(agx_builder *b, struct agx_copy *copies,
                               unsigned n);
 
 void agx_compute_liveness(agx_context *ctx);
-void agx_liveness_ins_update(BITSET_WORD *live, agx_instr *I);
+void agx_liveness_ins_update(struct u_sparse_bitset *live, agx_instr *I);
 
 bool agx_nir_opt_preamble(nir_shader *s, unsigned *sizes);
 bool agx_nir_lower_load_mask(nir_shader *shader);
@@ -1100,6 +1116,8 @@ struct agx_cycle_estimate {
 };
 
 struct agx_cycle_estimate agx_estimate_cycles(agx_context *ctx);
+
+bool agx_is_alu(const agx_instr *I);
 
 extern int agx_compiler_debug;
 

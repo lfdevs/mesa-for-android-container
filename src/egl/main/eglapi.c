@@ -86,7 +86,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "c11/threads.h"
-#include "mapi/glapi/glapi.h"
+#include "mesa/glapi/glapi/glapi.h"
 #include "util/detect_os.h"
 #include "util/macros.h"
 #include "util/perf/cpu_trace.h"
@@ -670,6 +670,7 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL);
 
    _eglDeviceRefreshList();
+   _eglRegisterAtExit();
 
    if (!disp)
       RETURN_EGL_ERROR(NULL, EGL_BAD_DISPLAY, EGL_FALSE);
@@ -699,7 +700,7 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
             RETURN_EGL_ERROR(disp, EGL_NOT_INITIALIZED, EGL_FALSE);
          else {
             bool success = false;
-            if (!disp->Options.Zink && !getenv("GALLIUM_DRIVER")) {
+            if (!disp->Options.Zink && !os_get_option("GALLIUM_DRIVER")) {
                disp->Options.Zink = EGL_TRUE;
                success = _eglDriver.Initialize(disp);
             }

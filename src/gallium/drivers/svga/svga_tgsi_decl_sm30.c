@@ -312,7 +312,7 @@ ps30_output(struct svga_shader_emitter *emit,
 {
    switch (semantic.Name) {
    case TGSI_SEMANTIC_COLOR:
-      if (emit->unit == PIPE_SHADER_FRAGMENT) {
+      if (emit->unit == MESA_SHADER_FRAGMENT) {
          if (emit->key.fs.white_fragments) {
             /* Used for XOR logicop mode */
             emit->output_map[idx] = dst_register(SVGA3DREG_TEMP,
@@ -565,7 +565,7 @@ svga_translate_decl_sm30(struct svga_shader_emitter *emit,
 
       switch (decl->Declaration.File) {
       case TGSI_FILE_SAMPLER:
-         assert (emit->unit == PIPE_SHADER_FRAGMENT);
+         assert (emit->unit == MESA_SHADER_FRAGMENT);
          /* just keep track of the number of samplers here.
           * Will emit the declaration in the helpers function.
           */
@@ -573,14 +573,14 @@ svga_translate_decl_sm30(struct svga_shader_emitter *emit,
          break;
 
       case TGSI_FILE_INPUT:
-         if (emit->unit == PIPE_SHADER_VERTEX)
+         if (emit->unit == MESA_SHADER_VERTEX)
             ok = vs30_input(emit, decl->Semantic, idx);
          else
             ok = ps30_input(emit, decl->Semantic, idx);
          break;
 
       case TGSI_FILE_OUTPUT:
-         if (emit->unit == PIPE_SHADER_VERTEX)
+         if (emit->unit == MESA_SHADER_VERTEX)
             ok = vs30_output(emit, decl->Semantic, idx);
          else
             ok = ps30_output(emit, decl->Semantic, idx);

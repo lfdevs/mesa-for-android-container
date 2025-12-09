@@ -83,7 +83,7 @@ anv_physical_device_init_perf(struct anv_physical_device *device, int fd)
          device->n_perf_query_commands += field->size / 4;
          break;
       default:
-         unreachable("Unhandled register type");
+         UNREACHABLE("Unhandled register type");
       }
    }
    device->n_perf_query_commands *= 2; /* Begin & End */
@@ -434,12 +434,12 @@ anv_perf_write_pass_results(struct intel_perf_config *perf,
             break;
          default:
             /* So far we aren't using uint32, double or bool32... */
-            unreachable("unexpected counter data type");
+            UNREACHABLE("unexpected counter data type");
          }
          break;
 
       default:
-         unreachable("invalid query type");
+         UNREACHABLE("invalid query type");
       }
 
       /* The Vulkan extension only has nanoseconds as a unit */

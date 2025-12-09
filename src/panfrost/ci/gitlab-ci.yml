@@ -81,7 +81,6 @@ panfrost-g52-gl:arm64:
   variables:
     FDO_CI_CONCURRENT: 6
     DEQP_SUITE: panfrost-g52
-    PAN_MESA_DEBUG: "deqp,sync,indirect"
 
 panfrost-g52-vk:arm64:
   parallel: 8
@@ -157,18 +156,19 @@ panfrost-g610-gl:arm64:
     - .lava-rk3588-rock-5b:arm64
   variables:
     DEQP_SUITE: panfrost-g610
-    PAN_MESA_DEBUG: "deqp,sync,indirect"
     LAVA_TAGS: 4gb
 
-# Disable this for now until it gets more stable
-.panfrost-g610-piglit:arm64:
+panfrost-g610-piglit:arm64:
   extends:
-    - panfrost-g610-gl:arm64
+    - .lava-arm64-test-gl
+    - .panfrost-valhall-gl-rules
+    - .panfrost-test
     - .test-piglit
-    - .panfrost-valhall-gl-manual-rules
+    - .lava-rk3588-rock-5b:arm64
   variables:
     DEQP_SUITE: panfrost-g610-piglit
     HWCI_START_WESTON: 1
+    LAVA_TAGS: 4gb
 
 panfrost-g610-vk:arm64:
   parallel: 5
@@ -195,3 +195,30 @@ panfrost-g610-vk-full:arm64:
   timeout: 1h 35m
   variables:
     DEQP_FRACTION: 1
+
+panfrost-g925-vk:arm64:
+  parallel: 4
+  extends:
+    - .lava-arm64-test-vk
+    - .panfrost-test
+    - .lava-mt8196-rauru-navi-sku0:arm64
+    - .panfrost-vk-rules
+  variables:
+    DRIVER_NAME: panvk
+    MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
+    PANVK_DEBUG: "no_known_warn,sync,cs"
+    DEQP_SUITE: panfrost-g925-vk
+    HWCI_START_WESTON: 1
+
+panfrost-g925-angle:arm64:
+  extends:
+    - .lava-arm64-test-gl
+    - .panfrost-test
+    - .test-angle
+    - .lava-mt8196-rauru-navi-sku0:arm64
+    - .panfrost-vk-rules
+  variables:
+    MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
+    DEQP_SUITE: panvk-angle
+    # Disable max-fails feature in deqp-runner since it seems to be broken in this specific job
+    DEQP_RUNNER_MAX_FAILS: null

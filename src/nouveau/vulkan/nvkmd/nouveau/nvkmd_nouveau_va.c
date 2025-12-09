@@ -125,12 +125,15 @@ nvkmd_nouveau_alloc_va(struct nvkmd_dev *_dev,
    if (va == NULL)
       return vk_error(log_obj, VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   /* Not all callers care about alignment and call this function with zero
+    * for align_B, so enforce a minimum alignment of 4K here, and then align
+    * the given range to the given alignment (or the minimum if none is given).
+    */
    const uint32_t min_align_B = _dev->pdev->bind_align_B;
-   size_B = align64(size_B, min_align_B);
-
    assert(util_is_power_of_two_or_zero64(align_B));
    align_B = MAX2(align_B, min_align_B);
-
+   size_B = align64(size_B, align_B);
+   
    assert((fixed_addr == 0) == !(flags & NVKMD_VA_ALLOC_FIXED));
 
    result = alloc_heap_addr(dev, log_obj, flags, size_B, align_B,

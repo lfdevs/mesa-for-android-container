@@ -28,20 +28,14 @@
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
 
+#include "pvr_common.h"
 #include "pvr_csb.h"
 #include "pvr_device_info.h"
 #include "util/macros.h"
 
 #define PVR_CLEAR_VERTEX_COUNT 4
 #define PVR_CLEAR_VERTEX_COORDINATES 3
-
-#define PVR_STATIC_CLEAR_PDS_STATE_COUNT          \
-   (pvr_cmd_length(TA_STATE_PDS_SHADERBASE) +     \
-    pvr_cmd_length(TA_STATE_PDS_TEXUNICODEBASE) + \
-    pvr_cmd_length(TA_STATE_PDS_SIZEINFO1) +      \
-    pvr_cmd_length(TA_STATE_PDS_SIZEINFO2) +      \
-    pvr_cmd_length(TA_STATE_PDS_VARYINGBASE) +    \
-    pvr_cmd_length(TA_STATE_PDS_TEXTUREDATABASE))
+#define PVR_NUM_CLEAR_ATTACH_SHADERS 20U
 
 /* These can be used as offsets within a PVR_STATIC_CLEAR_PDS_STATE_COUNT dwords
  * sized array to get the respective state word.
@@ -62,9 +56,7 @@ enum pvr_static_clear_ppp_pds_state_type {
    PVR_STATIC_CLEAR_PPP_PDS_TYPE_TEXTUREDATABASE = 5,
 };
 
-static_assert(PVR_STATIC_CLEAR_PPP_PDS_TYPE_TEXTUREDATABASE + 1 ==
-                 PVR_STATIC_CLEAR_PDS_STATE_COUNT,
-              "pvr_static_clear_ppp_pds_state_type might require fixing.");
+#define PVR_PDS_STATE_LENGTH (PVR_STATIC_CLEAR_PPP_PDS_TYPE_TEXTUREDATABASE + 1)
 
 #define PVR_STATIC_CLEAR_VARIANT_COUNT (VK_IMAGE_ASPECT_STENCIL_BIT << 1U)
 
@@ -101,13 +93,44 @@ struct pvr_static_clear_ppp_template {
        * Note: this is a pointer to an array of const uint32_t and not an array
        * of pointers or a function pointer.
        */
-      const uint32_t (*pds_state)[PVR_STATIC_CLEAR_PDS_STATE_COUNT];
+      const uint32_t (*pds_state)[PVR_PDS_STATE_LENGTH];
 
       struct ROGUE_TA_REGION_CLIP0 region_clip0;
       struct ROGUE_TA_REGION_CLIP1 region_clip1;
 
       struct ROGUE_TA_OUTPUT_SEL output_sel;
    } config;
+};
+
+struct pvr_device_static_clear_state {
+   struct pvr_suballoc_bo *usc_vertex_shader_bo;
+   struct pvr_suballoc_bo *vertices_bo;
+   struct pvr_pds_upload pds;
+
+   /* Only valid if PVR_HAS_FEATURE(dev_info, gs_rta_support). */
+   struct pvr_suballoc_bo *usc_multi_layer_vertex_shader_bo;
+
+   struct pvr_static_clear_ppp_base ppp_base;
+   /* Indexable using VkImageAspectFlags. */
+   struct pvr_static_clear_ppp_template
+      ppp_templates[PVR_STATIC_CLEAR_VARIANT_COUNT];
+
+   const uint32_t *vdm_words;
+   const uint32_t *large_clear_vdm_words;
+
+   struct pvr_suballoc_bo *usc_clear_attachment_programs;
+   struct pvr_suballoc_bo *pds_clear_attachment_programs;
+   /* TODO: See if we can use PVR_CLEAR_ATTACHMENT_PROGRAM_COUNT to save some
+    * memory.
+    */
+   struct pvr_pds_clear_attachment_program_info {
+      pvr_dev_addr_t texture_program_offset;
+      pvr_dev_addr_t pixel_program_offset;
+
+      uint32_t texture_program_pds_temps_count;
+      /* Size in dwords. */
+      uint32_t texture_program_data_size;
+   } pds_clear_attachment_program_info[PVR_NUM_CLEAR_ATTACH_SHADERS];
 };
 
 VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device);

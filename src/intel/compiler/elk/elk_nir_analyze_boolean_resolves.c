@@ -40,7 +40,7 @@
 static uint8_t
 get_resolve_status_for_src(nir_src *src)
 {
-   nir_instr *src_instr = src->ssa->parent_instr;
+   nir_instr *src_instr = nir_def_instr(src->ssa);
    uint8_t resolve_status = src_instr->pass_flags & ELK_NIR_BOOLEAN_MASK;
 
    /* If the source instruction needs resolve, then from the perspective
@@ -59,7 +59,7 @@ get_resolve_status_for_src(nir_src *src)
 static bool
 src_mark_needs_resolve(nir_src *src, void *void_state)
 {
-   nir_instr *src_instr = src->ssa->parent_instr;
+   nir_instr *src_instr = nir_def_instr(src->ssa);
    uint8_t resolve_status = src_instr->pass_flags & ELK_NIR_BOOLEAN_MASK;
 
    /* If the source instruction is unresolved, then mark it as needing
@@ -199,7 +199,7 @@ analyze_boolean_resolves_block(nir_block *block)
             break;
 
          default:
-            unreachable("Invalid boolean flag");
+            UNREACHABLE("Invalid boolean flag");
          }
 
          break;

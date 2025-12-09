@@ -36,4 +36,10 @@ radv_ballot(radv_invocation_cluster cluster, bool value)
    return uint32_t((ballot64 >> cluster_shift) & ((1u << cluster.cluster_size) - 1));
 }
 
+uint32_t
+radv_first_active_invocation(radv_invocation_cluster cluster)
+{
+   return findLSB(radv_ballot(cluster, true));
+}
+
 #endif

@@ -45,7 +45,7 @@ get_dummy_fragment_shader(void)
    struct ureg_src src;
    struct ureg_dst dst;
 
-   ureg = ureg_create(PIPE_SHADER_FRAGMENT);
+   ureg = ureg_create(MESA_SHADER_FRAGMENT);
    if (!ureg)
       return NULL;
 
@@ -101,7 +101,7 @@ make_fs_key(const struct svga_context *svga,
             struct svga_fragment_shader *fs,
             struct svga_compile_key *key)
 {
-   const enum pipe_shader_type shader = PIPE_SHADER_FRAGMENT;
+   const mesa_shader_stage shader = MESA_SHADER_FRAGMENT;
    unsigned i;
 
    memset(key, 0, sizeof *key);

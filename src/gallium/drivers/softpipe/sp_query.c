@@ -292,7 +292,7 @@ is_result_nonzero(struct pipe_query *q,
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
    case PIPE_QUERY_SO_STATISTICS:
    case PIPE_QUERY_PIPELINE_STATISTICS:
-      unreachable("unpossible");
+      UNREACHABLE("unpossible");
       break;
    case PIPE_QUERY_GPU_FINISHED:
    case PIPE_QUERY_OCCLUSION_PREDICATE:

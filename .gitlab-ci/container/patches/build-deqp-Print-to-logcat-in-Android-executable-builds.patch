@@ -1,0 +1,64 @@
+From 2826f97e5e78a76a61bf7e18e320feee727fb982 Mon Sep 17 00:00:00 2001
+From: Valentine Burley <valentine.burley@collabora.com>
+Date: Fri, 17 Oct 2025 08:11:11 +0200
+Subject: [PATCH] Print to logcat in Android executable builds.
+
+Print to both stdout and logcat for debugging.
+
+Signed-off-by: Valentine Burley <valentine.burley@collabora.com>
+---
+ framework/qphelper/qpDebugOut.c | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/framework/qphelper/qpDebugOut.c b/framework/qphelper/qpDebugOut.c
+index 1e88371..dd87f8c 100644
+--- a/framework/qphelper/qpDebugOut.c
++++ b/framework/qphelper/qpDebugOut.c
+@@ -98,7 +98,7 @@ void qpDiev(const char *format, va_list args)
+ }
+ 
+ /* print() implementation. */
+-#if defined(DEQP_IS_ANDROID_APP)
++#if (DE_OS == DE_OS_ANDROID)
+ 
+ #include <android/log.h>
+ 
+@@ -115,6 +115,10 @@ static android_LogPriority getLogPriority(MessageType type)
+     }
+ }
+ 
++#endif
++
++#if defined(DEQP_IS_ANDROID_APP)
++
+ void printRaw(MessageType type, const char *message)
+ {
+     if (writeRedirect && !writeRedirect(type, message))
+@@ -146,6 +150,10 @@ void printRaw(MessageType type, const char *message)
+     if (writeRedirect && !writeRedirect(type, message))
+         return;
+ 
++#if (DE_OS == DE_OS_ANDROID)
++    __android_log_write(getLogPriority(type), "dEQP", message);
++#endif
++
+     FILE *out = getOutFile(type);
+ 
+     if (type == MESSAGETYPE_ERROR)
+@@ -165,6 +173,13 @@ void printFmt(MessageType type, const char *format, va_list args)
+     if (writeFtmRedirect && !writeFtmRedirect(type, format, args))
+         return;
+ 
++#if (DE_OS == DE_OS_ANDROID)
++    va_list args_copy;
++    va_copy(args_copy, args);
++    __android_log_vprint(getLogPriority(type), "dEQP", format, args_copy);
++    va_end(args_copy);
++#endif
++
+     FILE *out = getOutFile(type);
+ 
+     if (type == MESSAGETYPE_ERROR)
+-- 
+2.48.1
+

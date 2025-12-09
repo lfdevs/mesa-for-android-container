@@ -111,9 +111,9 @@ GENX(pan_select_crc_rt)(const struct pan_fb_info *fb, unsigned tile_size)
          continue;
 
       bool valid = *(fb->rts[i].crc_valid);
-      bool full = !fb->extent.minx && !fb->extent.miny &&
-                  fb->extent.maxx == (fb->width - 1) &&
-                  fb->extent.maxy == (fb->height - 1);
+      bool full = !fb->draw_extent.minx && !fb->draw_extent.miny &&
+                  fb->draw_extent.maxx == (fb->width - 1) &&
+                  fb->draw_extent.maxy == (fb->height - 1);
       if (!full && !valid)
          continue;
 
@@ -140,6 +140,8 @@ translate_zs_format(enum pipe_format in)
       return MALI_ZS_FORMAT_D24S8;
    case PIPE_FORMAT_Z24X8_UNORM:
       return MALI_ZS_FORMAT_D24X8;
+   case PIPE_FORMAT_Z24_UNORM_PACKED:
+      return MALI_ZS_FORMAT_D24;
    case PIPE_FORMAT_Z32_FLOAT:
       return MALI_ZS_FORMAT_D32;
 #if PAN_ARCH < 9
@@ -147,7 +149,7 @@ translate_zs_format(enum pipe_format in)
       return MALI_ZS_FORMAT_D32_S8X24;
 #endif
    default:
-      unreachable("Unsupported depth/stencil format.");
+      UNREACHABLE("Unsupported depth/stencil format.");
    }
 }
 
@@ -172,7 +174,7 @@ translate_s_format(enum pipe_format in)
 #endif
 
    default:
-      unreachable("Unsupported stencil format.");
+      UNREACHABLE("Unsupported stencil format.");
    }
 }
 
@@ -274,7 +276,7 @@ GENX(pan_emit_afbc_s_attachment)(const struct pan_fb_info *fb,
                           &body_offset, &hdr_row_stride);
    pan_cast_and_pack(payload, AFBC_S_TARGET, cfg) {
       cfg.msaa = mali_sampling_mode(s);
-      cfg.write_format = translate_zs_format(s->format);
+      cfg.write_format = translate_s_format(s->format);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
       cfg.header = header;
       cfg.body_offset = body_offset;
@@ -369,7 +371,8 @@ GENX(pan_emit_afbc_zs_attachment)(const struct pan_fb_info *fb,
 
 #if PAN_ARCH >= 6
       cfg.header_row_stride =
-         pan_afbc_stride_blocks(pref.image->props.modifier, hdr_row_stride);
+         pan_afbc_stride_blocks(pref.image->props.format,
+                                pref.image->props.modifier, hdr_row_stride);
 #else
       cfg.body_size = 0x1000;
       cfg.chunk_size = 9;
@@ -487,6 +490,11 @@ pan_cbuf_bytes_per_pixel(const struct pan_fb_info *fb)
       sum += rt_size;
    }
 
+   if (fb->pls_enabled) {
+      /* need at least 16 bytes per pixel for pixel local storage */
+      sum = MAX2(sum, 16);
+   }
+
    return sum;
 }
 
@@ -586,7 +594,7 @@ pan_mfbd_raw_format(unsigned bits)
    case 1024: return MALI_COLOR_FORMAT_RAW1024;
    case 1536: return MALI_COLOR_FORMAT_RAW1536;
    case 2048: return MALI_COLOR_FORMAT_RAW2048;
-   default: unreachable("invalid raw bpp");
+   default: UNREACHABLE("invalid raw bpp");
    }
    /* clang-format on */
 }
@@ -636,7 +644,7 @@ static bool pan_force_clean_write_on(const struct pan_image *img, unsigned tile_
 static struct MALI_RT_CLEAR
 rt_clear(const struct pan_fb_color_attachment *rt)
 {
-   if (!rt->clear)
+   if (!rt || !rt->clear)
       return (struct MALI_RT_CLEAR){0};
 
    return (struct MALI_RT_CLEAR){
@@ -698,6 +706,13 @@ GENX(pan_emit_afbc_color_attachment)(const struct pan_fb_info *fb,
       cfg.write_enable = true;
       get_rt_formats(iview->format, &cfg.writeback_format, &cfg.internal_format,
                      &cfg.swizzle);
+
+      /* AFBC+RAW24 is not supported on v9+. Use RAW32 instead, and let the AFBC
+       * compression mode select the actual size.
+       */
+      if (PAN_ARCH >= 9 && cfg.writeback_format == MALI_COLOR_FORMAT_RAW24)
+         cfg.writeback_format = MALI_COLOR_FORMAT_RAW32;
+
       cfg.srgb = util_format_is_srgb(iview->format);
       cfg.writeback_block_format = get_afbc_block_format(image->props.modifier);
       cfg.yuv_transform = image->props.modifier & AFBC_FORMAT_MOD_YTR;
@@ -710,14 +725,16 @@ GENX(pan_emit_afbc_color_attachment)(const struct pan_fb_info *fb,
       cfg.header = header;
       cfg.body_offset = body_offset;
       cfg.row_stride = hdr_row_stride;
-      cfg.compression_mode = pan_afbc_compression_mode(iview->format, 0);
+      cfg.compression_mode = pan_afbc_compression_mode(
+         image->planes[pref.plane_idx]->layout.afbc.mode);
 #else
       cfg.header = header;
       cfg.body = header + body_offset;
 
 #if PAN_ARCH >= 6
       cfg.row_stride =
-         pan_afbc_stride_blocks(image->props.modifier, hdr_row_stride);
+         pan_afbc_stride_blocks(image->props.format,
+                                image->props.modifier, hdr_row_stride);
 #else
       const struct pan_image_plane *plane = image->planes[pref.plane_idx];
       const struct pan_image_slice_layout *slayout =
@@ -915,10 +932,8 @@ pan_emit_rt(const struct pan_fb_info *fb, unsigned layer_idx, unsigned idx,
          cfg.clear = rt_clear(&fb->rts[idx]);
          cfg.dithering_enable = true;
          cfg.internal_format = MALI_COLOR_BUFFER_INTERNAL_FORMAT_R8G8B8A8;
-         cfg.internal_buffer_offset = cbuf_offset;
 #if PAN_ARCH >= 7
          cfg.writeback_block_format = MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED;
-         cfg.dithering_enable = true;
 #endif
       }
 
@@ -1020,13 +1035,16 @@ check_fb_attachments(const struct pan_fb_info *fb)
 {
 #ifndef NDEBUG
    for (unsigned i = 0; i < fb->rt_count; i++) {
-      if (fb->rts[i].view)
+      if (fb->rts[i].view) {
          pan_image_view_check(fb->rts[i].view);
+         assert(fb->rts[i].view->nr_samples == fb->nr_samples);
+      }
    }
 
-   if (fb->zs.view.zs)
+   if (fb->zs.view.zs) {
       pan_image_view_check(fb->zs.view.zs);
-
+      assert(fb->zs.view.zs->nr_samples == fb->nr_samples);
+   }
    if (fb->zs.view.s)
       pan_image_view_check(fb->zs.view.s);
 #endif
@@ -1076,9 +1094,10 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
 #endif
       cfg.width = fb->width;
       cfg.height = fb->height;
-      cfg.bound_max_x = fb->width - 1;
-      cfg.bound_max_y = fb->height - 1;
-
+      cfg.bound_min_x = fb->frame_bounding_box.minx;
+      cfg.bound_min_y = fb->frame_bounding_box.miny;
+      cfg.bound_max_x = fb->frame_bounding_box.maxx;
+      cfg.bound_max_y = fb->frame_bounding_box.maxy;
       cfg.effective_tile_size = fb->tile_size;
       /* Ensure we cover the samples on the edge for 16x MSAA */
       cfg.tie_break_rule = fb->nr_samples == 16 ?
@@ -1105,7 +1124,10 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
        * This can be used to read SYSTEM_VALUE_SAMPLE_MASK_IN from the
        * fragment shader, even when performing single-sampled rendering.
        */
-      if (!fb->force_samples) {
+      if (fb->pls_enabled) {
+         cfg.sample_count = 4;
+         cfg.sample_pattern = pan_sample_pattern(1);
+      } else if (!fb->force_samples) {
          cfg.sample_count = fb->nr_samples;
          cfg.sample_pattern = pan_sample_pattern(fb->nr_samples);
       } else if (fb->force_samples == 1) {
@@ -1122,9 +1144,9 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
 
       if (crc_rt >= 0) {
          bool *valid = fb->rts[crc_rt].crc_valid;
-         bool full = !fb->extent.minx && !fb->extent.miny &&
-                     fb->extent.maxx == (fb->width - 1) &&
-                     fb->extent.maxy == (fb->height - 1);
+         bool full = !fb->draw_extent.minx && !fb->draw_extent.miny &&
+                     fb->draw_extent.maxx == (fb->width - 1) &&
+                     fb->draw_extent.maxy == (fb->height - 1);
          bool clean_tile_write = fb->rts[crc_rt].clear;
 
 #if PAN_ARCH >= 6
@@ -1219,7 +1241,7 @@ pan_sfbd_raw_format(unsigned bits)
    case   64: return MALI_COLOR_FORMAT_2_32B_CHANNELS;
    case   96: return MALI_COLOR_FORMAT_3_32B_CHANNELS;
    case  128: return MALI_COLOR_FORMAT_4_32B_CHANNELS;
-   default: unreachable("invalid raw bpp");
+   default: UNREACHABLE("invalid raw bpp");
    }
    /* clang-format on */
 }
@@ -1373,10 +1395,10 @@ GENX(pan_emit_fragment_job_payload)(const struct pan_fb_info *fb, uint64_t fbd,
                                     void *out)
 {
    pan_section_pack(out, FRAGMENT_JOB, PAYLOAD, payload) {
-      payload.bound_min_x = fb->extent.minx >> MALI_TILE_SHIFT;
-      payload.bound_min_y = fb->extent.miny >> MALI_TILE_SHIFT;
-      payload.bound_max_x = fb->extent.maxx >> MALI_TILE_SHIFT;
-      payload.bound_max_y = fb->extent.maxy >> MALI_TILE_SHIFT;
+      payload.bound_min_x = fb->draw_extent.minx >> MALI_TILE_SHIFT;
+      payload.bound_min_y = fb->draw_extent.miny >> MALI_TILE_SHIFT;
+      payload.bound_max_x = fb->draw_extent.maxx >> MALI_TILE_SHIFT;
+      payload.bound_max_y = fb->draw_extent.maxy >> MALI_TILE_SHIFT;
       payload.framebuffer = fbd;
 
 #if PAN_ARCH >= 5

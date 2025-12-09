@@ -54,17 +54,3 @@ alpine/x86_64_build:
       optional: true
     - job: alpine/x86_64_build
       optional: true
-
-# Alpine based x86_64 image for LAVA SSH dockerized client
-alpine/x86_64_lava_ssh_client:
-  extends:
-    - .alpine/x86_64_build-base
-  variables:
-    MESA_IMAGE_TAG: &alpine-x86_64_lava_ssh_client ${ALPINE_X86_64_LAVA_SSH_TAG}
-
-# Alpine based x86_64 image to run LAVA jobs
-alpine/x86_64_lava-trigger:
-  extends:
-    - .alpine/x86_64_build-base
-  variables:
-    MESA_IMAGE_TAG: &alpine-x86_64_lava_trigger ${ALPINE_X86_64_LAVA_TRIGGER_TAG}

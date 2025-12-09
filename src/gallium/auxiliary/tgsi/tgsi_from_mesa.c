@@ -296,7 +296,7 @@ tgsi_get_sysval_semantic(unsigned sysval)
       return TGSI_SEMANTIC_SUBGROUP_LT_MASK;
 
    default:
-      unreachable("Unexpected system value to TGSI");
+      UNREACHABLE("Unexpected system value to TGSI");
    }
 }
 
@@ -313,6 +313,6 @@ tgsi_get_interp_mode(enum glsl_interp_mode mode, bool color)
    case INTERP_MODE_SMOOTH:
       return TGSI_INTERPOLATE_PERSPECTIVE;
    default:
-      unreachable("unknown interpolation mode");
+      UNREACHABLE("unknown interpolation mode");
    }
 }

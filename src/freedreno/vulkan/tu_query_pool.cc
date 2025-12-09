@@ -310,7 +310,7 @@ tu_CreateQueryPool(VkDevice _device,
       slot_size = sizeof(struct pipeline_stat_query_slot);
       break;
    default:
-      unreachable("Invalid query type");
+      UNREACHABLE("Invalid query type");
    }
 
    struct tu_query_pool *pool = (struct tu_query_pool *)
@@ -598,8 +598,6 @@ get_query_pool_results(struct tu_device *device,
                        VkDeviceSize stride,
                        VkQueryResultFlags flags)
 {
-   assert(dataSize >= stride * queryCount);
-
    char *result_base = (char *) pData;
    VkResult result = VK_SUCCESS;
    for (uint32_t i = 0; i < queryCount; i++) {
@@ -842,7 +840,7 @@ emit_copy_query_pool_results(struct tu_cmd_buffer *cmdbuf,
             tu_cs_emit_pkt7(cs, CP_COND_EXEC, 6);
             tu_cs_emit_qw(cs, available_iova);
             tu_cs_emit_qw(cs, available_iova);
-            tu_cs_emit(cs, CP_COND_EXEC_4_REF(0x2));
+            tu_cs_emit(cs, CP_COND_EXEC_ACTIVE_TIMESTAMP(0x2).reg);
             tu_cs_emit(cs, 6); /* Cond execute the next 6 DWORDS */
 
             /* Start of conditional execution */
@@ -890,7 +888,7 @@ tu_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
                                                 queryCount, buffer, dstOffset,
                                                 stride, flags);
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
-      unreachable("allowCommandBufferQueryCopies is false");
+      UNREACHABLE("allowCommandBufferQueryCopies is false");
    default:
       assert(!"Invalid query type");
    }
@@ -1047,7 +1045,7 @@ emit_begin_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_regs(cs,
                    A6XX_RB_SAMPLE_COUNTER_CNTL(.copy = true));
 
-   if (!cmdbuf->device->physical_device->info->a7xx.has_event_write_sample_count) {
+   if (!cmdbuf->device->physical_device->info->props.has_event_write_sample_count) {
       tu_cs_emit_regs(cs,
                         A6XX_RB_SAMPLE_COUNTER_BASE(.qword = begin_iova));
       tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
@@ -1099,6 +1097,9 @@ emit_begin_stat_query(struct tu_cmd_buffer *cmdbuf,
       bool need_cond_exec = cmdbuf->state.pass && cmdbuf->state.prim_counters_running;
       cmdbuf->state.prim_counters_running++;
 
+      if (cmdbuf->state.pass)
+         cmdbuf->state.rp.has_vtx_stats_query_in_rp = true;
+
       /* Prevent starting primitive counters when it is supposed to be stopped
        * for outer VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT query.
        */
@@ -1110,9 +1111,25 @@ emit_begin_stat_query(struct tu_cmd_buffer *cmdbuf,
 
       tu_emit_event_write<CHIP>(cmdbuf, cs, FD_START_PRIMITIVE_CTRS);
 
-      tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 3);
-      tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
-      tu_cs_emit(cs, 0);
+      if (CHIP >= A7XX) {
+         /* We need the predicate for determining whether to enable CB, so set
+          * it for both BR and BV.
+          */
+         if (!cmdbuf->state.pass) {
+            tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
+            tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BOTH));
+         }
+         tu7_set_pred_mask(cs, (1u << TU_PREDICATE_VTX_STATS_RUNNING) |
+                               (1u << TU_PREDICATE_VTX_STATS_NOT_RUNNING),
+                               (1u << TU_PREDICATE_VTX_STATS_RUNNING));
+         if (!cmdbuf->state.pass) {
+            tu7_set_thread_br_patchpoint(cmdbuf, cs, false);
+         }
+      } else {
+         tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 3);
+         tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+         tu_cs_emit(cs, 0);
+      }
 
       if (need_cond_exec) {
          tu_cond_exec_end(cs);
@@ -1137,14 +1154,18 @@ emit_begin_stat_query(struct tu_cmd_buffer *cmdbuf,
 }
 
 static void
-emit_perfcntrs_pass_start(struct tu_cs *cs, uint32_t pass)
+emit_perfcntrs_pass_start(bool has_pred_bit, struct tu_cs *cs, uint32_t pass)
 {
    tu_cs_emit_pkt7(cs, CP_REG_TEST, 1);
    tu_cs_emit(cs, A6XX_CP_REG_TEST_0_REG(
-                        REG_A6XX_CP_SCRATCH_REG(PERF_CNTRS_REG)) |
+                        REG_A6XX_CP_SCRATCH(PERF_CNTRS_REG)) |
                   A6XX_CP_REG_TEST_0_BIT(pass) |
+                  (has_pred_bit ?
+                     A6XX_CP_REG_TEST_0_PRED_BIT(TU_PREDICATE_PERFCNTRS) : 0) |
                   A6XX_CP_REG_TEST_0_SKIP_WAIT_FOR_ME);
-   tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(PRED_TEST));
+   tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(PRED_TEST) |
+                      (has_pred_bit ?
+                       CP_COND_REG_EXEC_0_PRED_BIT(TU_PREDICATE_PERFCNTRS) : 0));
 }
 
 template <chip CHIP>
@@ -1156,8 +1177,10 @@ emit_begin_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
    struct tu_perf_query_raw *perf_query = &pool->perf_query.raw;
    uint32_t last_pass = ~0;
+   bool has_pred_bit =
+      cmdbuf->device->physical_device->info->props.has_pred_bit;
 
-   if (cmdbuf->state.pass) {
+   if (cmdbuf->state.pass && !has_pred_bit) {
       cmdbuf->state.rp.draw_cs_writes_to_cond_pred = true;
    }
 
@@ -1198,7 +1221,7 @@ emit_begin_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
 
          if (data->pass != 0)
             tu_cond_exec_end(cs);
-         emit_perfcntrs_pass_start(cs, data->pass);
+         emit_perfcntrs_pass_start(has_pred_bit, cs, data->pass);
       }
 
       const struct fd_perfcntr_counter *counter =
@@ -1222,7 +1245,7 @@ emit_begin_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
 
          if (data->pass != 0)
             tu_cond_exec_end(cs);
-         emit_perfcntrs_pass_start(cs, data->pass);
+         emit_perfcntrs_pass_start(has_pred_bit, cs, data->pass);
       }
 
       const struct fd_perfcntr_counter *counter =
@@ -1304,8 +1327,11 @@ emit_begin_xfb_query(struct tu_cmd_buffer *cmdbuf,
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
    uint64_t begin_iova = primitive_query_iova(pool, query, begin, 0, 0);
 
-   tu_cs_emit_regs(cs, A6XX_VPC_SO_QUERY_BASE(.qword = begin_iova));
+   tu_cs_emit_regs(cs, VPC_SO_QUERY_BASE(CHIP, .qword = begin_iova));
    tu_emit_event_write<CHIP>(cmdbuf, cs, FD_WRITE_PRIMITIVE_COUNTS);
+
+   if (!cmdbuf->state.pass)
+      cmdbuf->state.xfb_query_running_before_rp = true;
 }
 
 template <chip CHIP>
@@ -1386,7 +1412,7 @@ tu_CmdBeginQueryIndexedEXT(VkCommandBuffer commandBuffer,
       emit_begin_stat_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_TIMESTAMP:
-      unreachable("Unimplemented query type");
+      UNREACHABLE("Unimplemented query type");
    default:
       assert(!"Invalid query type");
    }
@@ -1431,7 +1457,7 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t result_iova = occlusion_query_iova(pool, query, result);
    uint64_t end_iova = occlusion_query_iova(pool, query, end);
 
-   if (!cmdbuf->device->physical_device->info->a7xx.has_event_write_sample_count) {
+   if (!cmdbuf->device->physical_device->info->props.has_event_write_sample_count) {
       tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 4);
       tu_cs_emit_qw(cs, end_iova);
       tu_cs_emit_qw(cs, 0xffffffffffffffffull);
@@ -1442,7 +1468,7 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_regs(cs,
                    A6XX_RB_SAMPLE_COUNTER_CNTL(.copy = true));
 
-   if (!cmdbuf->device->physical_device->info->a7xx.has_event_write_sample_count) {
+   if (!cmdbuf->device->physical_device->info->props.has_event_write_sample_count) {
       tu_cs_emit_regs(cs,
                         A6XX_RB_SAMPLE_COUNTER_BASE(.qword = end_iova));
       tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 1);
@@ -1494,7 +1520,7 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
 
       tu_cs_emit_wfi(cs);
 
-      if (cmdbuf->device->physical_device->info->a7xx.has_generic_clear) {
+      if (cmdbuf->device->physical_device->info->props.has_generic_clear) {
          /* If the next renderpass uses the same depth attachment, clears it
           * with generic clear - ZPASS_DONE may somehow read stale values that
           * are apparently invalidated by CCU_INVALIDATE_DEPTH.
@@ -1539,24 +1565,39 @@ emit_stop_primitive_ctrs(struct tu_cmd_buffer *cmdbuf,
       if (!need_cond_exec) {
          tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_PRIMITIVE_CTRS);
       } else {
-         tu_cs_reserve(cs, 7 + 2);
          /* Check that pipeline stats query is not running, only then
           * we count stop the counter.
           */
-         tu_cs_emit_pkt7(cs, CP_COND_EXEC, 6);
-         tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
-         tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
-         tu_cs_emit(cs, CP_COND_EXEC_4_REF(0x2));
-         tu_cs_emit(cs, 2); /* Cond execute the next 2 DWORDS */
+         if (CHIP >= A7XX) {
+            tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(PRED_TEST) |
+                                   CP_COND_REG_EXEC_0_PRED_BIT(TU_PREDICATE_VTX_STATS_NOT_RUNNING));
+            tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_PRIMITIVE_CTRS);
+            tu_cond_exec_end(cs);
+         } else {
+            tu_cs_reserve(cs, 7 + 2);
 
-         tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_PRIMITIVE_CTRS);
+            tu_cs_emit_pkt7(cs, CP_COND_EXEC, 6);
+            tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+            tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+            tu_cs_emit(cs, CP_COND_EXEC_ACTIVE_TIMESTAMP(0x2).reg);
+            tu_cs_emit(cs, 2); /* Cond execute the next 2 DWORDS */
+
+            tu_emit_event_write<CHIP>(cmdbuf, cs, FD_STOP_PRIMITIVE_CTRS);
+         }
+
       }
    }
 
    if (query_type == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
-      tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 3);
-      tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
-      tu_cs_emit(cs, 1);
+      if (CHIP >= A7XX) {
+         tu7_set_pred_mask(cs, (1u << TU_PREDICATE_VTX_STATS_RUNNING) |
+                               (1u << TU_PREDICATE_VTX_STATS_NOT_RUNNING),
+                               (1u << TU_PREDICATE_VTX_STATS_NOT_RUNNING));
+      } else {
+         tu_cs_emit_pkt7(cs, CP_MEM_WRITE, 3);
+         tu_cs_emit_qw(cs, global_iova(cmdbuf, vtx_stats_query_not_running));
+         tu_cs_emit(cs, 1);
+      }
    }
 }
 
@@ -1637,6 +1678,8 @@ emit_end_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
    uint64_t begin_iova;
    uint64_t result_iova;
    uint32_t last_pass = ~0;
+   bool has_pred_bit =
+      cmdbuf->device->physical_device->info->props.has_pred_bit;
 
    /* Wait for the profiled work to finish so that collected counter values
     * are as accurate as possible.
@@ -1651,7 +1694,7 @@ emit_end_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
 
          if (data->pass != 0)
             tu_cond_exec_end(cs);
-         emit_perfcntrs_pass_start(cs, data->pass);
+         emit_perfcntrs_pass_start(has_pred_bit, cs, data->pass);
       }
 
       const struct fd_perfcntr_counter *counter =
@@ -1678,7 +1721,7 @@ emit_end_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
 
          if (data->pass != 0)
             tu_cond_exec_end(cs);
-         emit_perfcntrs_pass_start(cs, data->pass);
+         emit_perfcntrs_pass_start(has_pred_bit, cs, data->pass);
       }
 
       result_iova = query_result_iova(pool, query, struct perfcntr_query_slot,
@@ -1814,7 +1857,10 @@ emit_end_xfb_query(struct tu_cmd_buffer *cmdbuf,
    uint64_t end_generated_iova = primitive_query_iova(pool, query, end, stream_id, 1);
    uint64_t available_iova = query_available_iova(pool, query);
 
-   tu_cs_emit_regs(cs, A6XX_VPC_SO_QUERY_BASE(.qword = end_iova));
+   if (!cmdbuf->state.pass)
+      cmdbuf->state.xfb_query_running_before_rp = false;
+
+   tu_cs_emit_regs(cs, VPC_SO_QUERY_BASE(CHIP, .qword = end_iova));
    tu_emit_event_write<CHIP>(cmdbuf, cs, FD_WRITE_PRIMITIVE_COUNTS);
 
    tu_cs_emit_wfi(cs);
@@ -1976,7 +2022,7 @@ tu_CmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer,
       emit_end_stat_query<CHIP>(cmdbuf, pool, query);
       break;
    case VK_QUERY_TYPE_TIMESTAMP:
-      unreachable("Unimplemented query type");
+      UNREACHABLE("Unimplemented query type");
    default:
       assert(!"Invalid query type");
    }
@@ -2099,7 +2145,7 @@ tu_CmdWriteAccelerationStructuresPropertiesKHR(VkCommandBuffer commandBuffer,
          va += offsetof(struct tu_accel_struct_header, size);
          break;
       default:
-         unreachable("Unhandle accel struct query type.");
+         UNREACHABLE("Unhandle accel struct query type.");
       }
 
       tu_cs_emit_pkt7(cs, CP_MEM_TO_MEM, 5);

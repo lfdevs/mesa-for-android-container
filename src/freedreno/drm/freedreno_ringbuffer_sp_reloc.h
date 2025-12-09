@@ -28,77 +28,36 @@ static void X(fd_ringbuffer_sp_emit_reloc_nonobj)(struct fd_ringbuffer *ring,
                                                   const struct fd_reloc *reloc)
 {
    X(emit_reloc_common)(ring, reloc->iova);
-   fd_ringbuffer_sp_emit_bo_nonobj(ring, reloc->bo);
+   fd_ringbuffer_sp_attach_bo_nonobj(ring, reloc->bo);
 }
 
 static void X(fd_ringbuffer_sp_emit_reloc_obj)(struct fd_ringbuffer *ring,
                                                const struct fd_reloc *reloc)
 {
    X(emit_reloc_common)(ring, reloc->iova);
-   fd_ringbuffer_sp_emit_bo_obj(ring, reloc->bo);
+   fd_ringbuffer_sp_attach_bo_obj(ring, reloc->bo);
 }
 
-static uint32_t X(fd_ringbuffer_sp_emit_reloc_ring)(
+static uint32_t X(fd_ringbuffer_sp_emit_reloc_ring_nonobj)(
    struct fd_ringbuffer *ring, struct fd_ringbuffer *target, uint32_t cmd_idx)
 {
-   struct fd_ringbuffer_sp *fd_target = to_fd_ringbuffer_sp(target);
-   struct fd_bo *bo;
+   uint64_t iova;
    uint32_t size;
 
-   if ((target->flags & FD_RINGBUFFER_GROWABLE) &&
-       (cmd_idx < fd_target->u.nr_cmds)) {
-      bo = fd_target->u.cmds[cmd_idx].ring_bo;
-      size = fd_target->u.cmds[cmd_idx].size;
-   } else {
-      bo = fd_target->ring_bo;
-      size = offset_bytes(target->cur, target->start);
-   }
+   size = fd_ringbuffer_sp_attach_ring_nonobj(ring, target, cmd_idx, &iova);
+   X(emit_reloc_common)(ring, iova);
 
-   if (ring->flags & _FD_RINGBUFFER_OBJECT) {
-      X(fd_ringbuffer_sp_emit_reloc_obj)(ring, &(struct fd_reloc){
-                .bo = bo,
-                .iova = bo->iova + fd_target->offset,
-                .offset = fd_target->offset,
-             });
-   } else {
-      X(fd_ringbuffer_sp_emit_reloc_nonobj)(ring, &(struct fd_reloc){
-                .bo = bo,
-                .iova = bo->iova + fd_target->offset,
-                .offset = fd_target->offset,
-             });
-   }
+   return size;
+}
 
-   if (!(target->flags & _FD_RINGBUFFER_OBJECT))
-      return size;
+static uint32_t X(fd_ringbuffer_sp_emit_reloc_ring_obj)(
+   struct fd_ringbuffer *ring, struct fd_ringbuffer *target, uint32_t cmd_idx)
+{
+   uint64_t iova;
+   uint32_t size;
 
-   struct fd_ringbuffer_sp *fd_ring = to_fd_ringbuffer_sp(ring);
-
-   if (ring->flags & _FD_RINGBUFFER_OBJECT) {
-      for (unsigned i = 0; i < fd_target->u.nr_reloc_bos; i++) {
-         struct fd_bo *target_bo = fd_target->u.reloc_bos[i];
-         if (!fd_ringbuffer_references_bo(ring, target_bo))
-            APPEND(&fd_ring->u, reloc_bos, fd_bo_ref(target_bo));
-      }
-   } else {
-      struct fd_submit_sp *fd_submit = to_fd_submit_sp(fd_ring->u.submit);
-
-      if (fd_submit->seqno != fd_target->u.last_submit_seqno) {
-         for (unsigned i = 0; i < fd_target->u.nr_reloc_bos; i++) {
-            fd_submit_append_bo(fd_submit, fd_target->u.reloc_bos[i]);
-         }
-         fd_target->u.last_submit_seqno = fd_submit->seqno;
-      }
-
-#ifndef NDEBUG
-      /* Dealing with assert'd BOs is deferred until the submit is known,
-       * since the batch resource tracking attaches BOs directly to
-       * the submit instead of the long lived stateobj
-       */
-      for (unsigned i = 0; i < fd_target->u.nr_assert_bos; i++) {
-         fd_ringbuffer_sp_assert_attached_nonobj(ring, fd_target->u.assert_bos[i]);
-      }
-#endif
-   }
+   size = fd_ringbuffer_sp_attach_ring_obj(ring, target, cmd_idx, &iova);
+   X(emit_reloc_common)(ring, iova);
 
    return size;
 }

@@ -242,7 +242,7 @@ lower_vri_instr(struct nir_builder *b, nir_instr *instr, void *data_cb)
       case nir_intrinsic_image_deref_samples:
          lower_image_intrinsic(b, intrin, data_cb);
          return true;
-      
+
       case nir_intrinsic_load_push_constant:
          lower_push_constant(b, intrin, data_cb);
          return true;

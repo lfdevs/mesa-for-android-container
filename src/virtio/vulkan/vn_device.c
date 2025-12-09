@@ -57,9 +57,13 @@ vn_queue_init(struct vn_device *dev,
       assert(queue_index > 0);
       queue->emulated = true;
       queue->base.id = shared_queue->base.id;
+      queue->can_feedback = shared_queue->can_feedback;
       queue->ring_idx = shared_queue->ring_idx;
       return VK_SUCCESS;
    }
+
+   queue->can_feedback = vn_queue_family_can_feedback(
+      dev->physical_device, queue_info->queueFamilyIndex);
 
    const int ring_idx = vn_instance_acquire_ring_idx(dev->instance);
    if (ring_idx < 0) {
@@ -229,7 +233,7 @@ vn_device_fix_create_info(const struct vn_device *dev,
       &physical_dev->renderer_extensions;
    /* extra_exts and block_exts must not overlap */
    const char *extra_exts[16];
-   const char *block_exts[16];
+   const char *block_exts[32];
    uint32_t extra_count = 0;
    uint32_t block_count = 0;
 
@@ -258,7 +262,13 @@ vn_device_fix_create_info(const struct vn_device *dev,
 
       if (app_exts->KHR_swapchain) {
          /* see vn_physical_device_get_native_extensions */
+         block_exts[block_count++] = VK_KHR_PRESENT_ID_EXTENSION_NAME;
+         block_exts[block_count++] = VK_KHR_PRESENT_ID_2_EXTENSION_NAME;
+         block_exts[block_count++] = VK_KHR_PRESENT_WAIT_EXTENSION_NAME;
+         block_exts[block_count++] = VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME;
          block_exts[block_count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+         block_exts[block_count++] =
+            VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
          block_exts[block_count++] =
             VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME;
          block_exts[block_count++] =
@@ -318,6 +328,11 @@ vn_device_fix_create_info(const struct vn_device *dev,
    if (app_exts->KHR_map_memory2) {
       /* see vn_physical_device_get_native_extensions */
       block_exts[block_count++] = VK_KHR_MAP_MEMORY_2_EXTENSION_NAME;
+   }
+
+   if (app_exts->EXT_map_memory_placed) {
+      /* see vn_physical_device_get_native_extensions */
+      block_exts[block_count++] = VK_EXT_MAP_MEMORY_PLACED_EXTENSION_NAME;
    }
 
    if (app_exts->EXT_device_memory_report) {
@@ -395,7 +410,7 @@ vn_device_update_shader_cache_id(struct vn_device *dev)
     * The shader cache is destroyed after creating the necessary files
     * and not utilized by venus.
     */
-#if !DETECT_OS_ANDROID && defined(ENABLE_SHADER_CACHE)
+#if !defined(VK_USE_PLATFORM_ANDROID_KHR) && defined(ENABLE_SHADER_CACHE)
    const uint8_t *device_uuid =
       dev->physical_device->base.vk.properties.pipelineCacheUUID;
 
@@ -499,6 +514,9 @@ vn_device_init(struct vn_device *dev,
     * cache is no longer up to date.
     */
    vn_device_update_shader_cache_id(dev);
+
+   dev->has_sync2 = physical_dev->renderer_version >= VK_API_VERSION_1_3 ||
+                    dev->base.vk.enabled_extensions.KHR_synchronization2;
 
    return VK_SUCCESS;
 

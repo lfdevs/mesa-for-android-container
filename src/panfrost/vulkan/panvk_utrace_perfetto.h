@@ -24,6 +24,8 @@ enum panvk_utrace_perfetto_stage {
    PANVK_UTRACE_PERFETTO_STAGE_RENDER,
    PANVK_UTRACE_PERFETTO_STAGE_DISPATCH,
    PANVK_UTRACE_PERFETTO_STAGE_BARRIER,
+   PANVK_UTRACE_PERFETTO_STAGE_FLUSH_CACHE,
+   PANVK_UTRACE_PERFETTO_STAGE_SYNC_ADD,
    PANVK_UTRACE_PERFETTO_STAGE_SYNC_WAIT,
 
    PANVK_UTRACE_PERFETTO_STAGE_COUNT,
@@ -48,6 +50,10 @@ struct panvk_utrace_perfetto {
 
    uint64_t next_clock_snapshot;
    uint64_t event_id;
+
+   /* Use this to reject unwritten timestamps with leftover data from previous
+    * submissions. */
+   uint64_t base_ts_ns;
 
    struct panvk_utrace_perfetto_queue queues[PANVK_UTRACE_PERFETTO_QUEUE_COUNT];
 };

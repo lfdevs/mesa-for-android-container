@@ -511,7 +511,7 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
 
    case MALI_CS_OPCODE_SYNC_SET32: {
       cs_unpack(instr, CS_SYNC_SET32, I);
-      fprintf(fp, "SYNC_SET32.%s%s [d%u], r%u, #%x, #%u",
+      fprintf(fp, "SYNC_SET32%s%s [d%u], r%u, #%x, #%u",
               I.error_propagate ? ".error_propagate" : "",
               I.scope == MALI_CS_SYNC_SCOPE_CSG ? ".csg" : ".system", I.address,
               I.data, I.wait_mask, I.signal_slot);
@@ -760,8 +760,9 @@ pandecode_run_tiling(struct pandecode_context *ctx, FILE *fp,
       GENX(pandecode_fau)(ctx, lo, hi, "Fragment FAU");
    }
 
+   uint64_t fs_bin_addr = 0;
    if (spd) {
-      GENX(pandecode_shader)
+      fs_bin_addr = GENX(pandecode_shader)
       (ctx, spd, "Fragment shader", qctx->gpu_id);
    }
 
@@ -791,7 +792,8 @@ pandecode_run_tiling(struct pandecode_context *ctx, FILE *fp,
                  cs_get_u64(qctx, 48));
 
    uint64_t blend = cs_get_u64(qctx, 50);
-   GENX(pandecode_blend_descs)(ctx, blend & ~15, blend & 15, 0, qctx->gpu_id);
+   GENX(pandecode_blend_descs)(ctx, blend & ~15, blend & 15,
+                               fs_bin_addr, qctx->gpu_id);
 
    DUMP_ADDR(ctx, DEPTH_STENCIL, cs_get_u64(qctx, 52), "Depth/stencil");
 
@@ -872,8 +874,9 @@ pandecode_run_idvs2(struct pandecode_context *ctx, FILE *fp,
       (ctx, vertex_spd, "Vertex shader", qctx->gpu_id);
    }
 
+   uint64_t fs_bin_addr = 0;
    if (fragment_spd) {
-      GENX(pandecode_shader)
+      fs_bin_addr = GENX(pandecode_shader)
       (ctx, fragment_spd, "Fragment shader", qctx->gpu_id);
    }
 
@@ -912,7 +915,8 @@ pandecode_run_idvs2(struct pandecode_context *ctx, FILE *fp,
 
    DUMP_ADDR(ctx, DEPTH_STENCIL, zsd_pointer, "Depth/stencil");
 
-   GENX(pandecode_blend_descs)(ctx, blend & ~15, blend & 15, 0, qctx->gpu_id);
+   GENX(pandecode_blend_descs)(ctx, blend & ~15, blend & 15,
+                               fs_bin_addr, qctx->gpu_id);
 
    if (tiler_flags.index_type) {
       pandecode_log(ctx, "Indices: %" PRIx64 "\n", vertex_index_array_pointer);
@@ -1012,8 +1016,9 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
       GENX(pandecode_shader)(ctx, ptr, "Varying shader", qctx->gpu_id);
    }
 
+   uint64_t fs_bin_addr = 0;
    if (cs_get_u64(qctx, MALI_IDVS_SR_FRAGMENT_SPD)) {
-      GENX(pandecode_shader)
+      fs_bin_addr = GENX(pandecode_shader)
       (ctx, cs_get_u64(qctx, MALI_IDVS_SR_FRAGMENT_SPD), "Fragment shader",
        qctx->gpu_id);
    }
@@ -1066,7 +1071,8 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
                     cs_get_u32(qctx, MALI_IDVS_SR_VARY_SIZE));
 
    uint64_t blend = cs_get_u64(qctx, MALI_IDVS_SR_BLEND_DESC);
-   GENX(pandecode_blend_descs)(ctx, blend & ~15, blend & 15, 0, qctx->gpu_id);
+   GENX(pandecode_blend_descs)(ctx, blend & ~15, blend & 15,
+                               fs_bin_addr, qctx->gpu_id);
 
    DUMP_ADDR(ctx, DEPTH_STENCIL, cs_get_u64(qctx, MALI_IDVS_SR_ZSD),
              "Depth/stencil");
@@ -2058,8 +2064,7 @@ record_indirect_branch_target(struct cs_code_cfg *cfg,
       .length = reg_file.u32[I.length],
    };
 
-   util_dynarray_append(&ibranch->targets, struct cs_indirect_branch_target,
-                        target);
+   util_dynarray_append(&ibranch->targets, target);
 }
 
 static void
@@ -2287,7 +2292,7 @@ get_cs_cfg(struct pandecode_context *ctx, struct hash_table_u64 *symbols,
             block->successors[0] = i;
 
          block = cfg->blk_map[i];
-         util_dynarray_append(&block->predecessors, unsigned, i - 1);
+         util_dynarray_append(&block->predecessors, i - 1);
       }
 
       cs_unpack(instr, CS_BASE, base);
@@ -2298,8 +2303,7 @@ get_cs_cfg(struct pandecode_context *ctx, struct hash_table_u64 *symbols,
             .instr_idx = i,
          };
 
-         util_dynarray_append(&cfg->indirect_branches,
-                              struct cs_indirect_branch, ibranch);
+         util_dynarray_append(&cfg->indirect_branches, ibranch);
       }
 
       if (base.opcode != MALI_CS_OPCODE_BRANCH)
@@ -2319,7 +2323,7 @@ get_cs_cfg(struct pandecode_context *ctx, struct hash_table_u64 *symbols,
          struct cs_code_block *new =
             cs_code_block_alloc(cfg, target, old->start + old->size - target);
 
-         util_dynarray_append(&new->predecessors, unsigned, target - 1);
+         util_dynarray_append(&new->predecessors, target - 1);
          memcpy(&new->successors, &old->successors, sizeof(new->successors));
 
          old->successors[0] = target;
@@ -2334,7 +2338,7 @@ get_cs_cfg(struct pandecode_context *ctx, struct hash_table_u64 *symbols,
          struct cs_code_block *new = cs_code_block_alloc(cfg, target, 1);
 
          cfg->blk_map[target] = new;
-         util_dynarray_append(&new->predecessors, unsigned, i);
+         util_dynarray_append(&new->predecessors, i);
       }
 
       block->successors[0] = target;
@@ -2343,8 +2347,9 @@ get_cs_cfg(struct pandecode_context *ctx, struct hash_table_u64 *symbols,
 
       block = cs_code_block_alloc(cfg, i + 1, 0);
 
-      if (target == i + 1 || I.condition != MALI_CS_CONDITION_ALWAYS)
-         util_dynarray_append(&block->predecessors, unsigned, i);
+      if (target == i + 1 || I.condition != MALI_CS_CONDITION_ALWAYS) {
+         util_dynarray_append(&block->predecessors, i);
+      }
    }
 
    util_dynarray_foreach(&cfg->indirect_branches, struct cs_indirect_branch,

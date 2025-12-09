@@ -46,6 +46,7 @@
 #include "util/perf/cpu_trace.h"
 #include "util/ralloc.h"
 #include "util/compiler.h"
+#include "util/log.h"
 
 #include "disk_cache.h"
 #include "disk_cache_os.h"
@@ -122,8 +123,8 @@ disk_cache_type_create(const char *gpu_name,
    if (!disk_cache_enabled())
       goto path_fail;
 
-   char *path = disk_cache_generate_cache_dir(local, gpu_name, driver_id,
-                                              cache_dir_name, cache_type, true);
+   const char *path =
+      disk_cache_generate_cache_dir(local, gpu_name, driver_id, cache_dir_name, cache_type, true);
    if (!path)
       goto path_fail;
 
@@ -146,7 +147,7 @@ disk_cache_type_create(const char *gpu_name,
          goto path_fail;
    }
 
-   if (!getenv("MESA_SHADER_CACHE_DIR") && !getenv("MESA_GLSL_CACHE_DIR"))
+   if (!os_get_option("MESA_SHADER_CACHE_DIR") && !os_get_option("MESA_GLSL_CACHE_DIR"))
       disk_cache_touch_cache_user_marker(cache->path);
 
    cache->type = cache_type;
@@ -154,7 +155,7 @@ disk_cache_type_create(const char *gpu_name,
    cache->stats.enabled = debug_get_bool_option("MESA_SHADER_CACHE_SHOW_STATS",
                                                 false);
 
-   if (!disk_cache_mmap_cache_index(local, cache, path))
+   if (!disk_cache_mmap_cache_index(local, cache))
       goto path_fail;
 
    cache->max_size = max_size;
@@ -207,8 +208,7 @@ disk_cache_type_create(const char *gpu_name,
    return cache;
 
  fail:
-   if (cache)
-      ralloc_free(cache);
+   ralloc_free(cache);
    ralloc_free(local);
 
    return NULL;
@@ -221,7 +221,7 @@ disk_cache_create(const char *gpu_name, const char *driver_id,
    enum disk_cache_type cache_type;
    struct disk_cache *cache;
    uint64_t max_size = 0;
-   char *max_size_str;
+   const char *max_size_str;
 
    if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false)) {
       cache_type = DISK_CACHE_SINGLE_FILE;
@@ -230,7 +230,8 @@ disk_cache_create(const char *gpu_name, const char *driver_id,
       /* Since switching the default cache to <mesa_shader_cache_db>, remove the
        * old cache folder if it hasn't been modified for more than 7 days.
        */
-      if (!getenv("MESA_SHADER_CACHE_DIR") && !getenv("MESA_GLSL_CACHE_DIR") && disk_cache_enabled())
+      if (!os_get_option("MESA_SHADER_CACHE_DIR") && !os_get_option("MESA_GLSL_CACHE_DIR") &&
+          disk_cache_enabled())
          disk_cache_delete_old_cache();
    } else if (debug_get_bool_option("MESA_DISK_CACHE_MULTI_FILE", true)) {
       cache_type = DISK_CACHE_MULTI_FILE;
@@ -238,10 +239,10 @@ disk_cache_create(const char *gpu_name, const char *driver_id,
       return NULL;
    }
 
-   max_size_str = getenv("MESA_SHADER_CACHE_MAX_SIZE");
+   max_size_str = os_get_option("MESA_SHADER_CACHE_MAX_SIZE");
 
    if (!max_size_str) {
-      max_size_str = getenv("MESA_GLSL_CACHE_MAX_SIZE");
+      max_size_str = os_get_option("MESA_GLSL_CACHE_MAX_SIZE");
       if (max_size_str)
          fprintf(stderr,
                  "*** MESA_GLSL_CACHE_MAX_SIZE is deprecated; "
@@ -324,9 +325,9 @@ void
 disk_cache_destroy(struct disk_cache *cache)
 {
    if (unlikely(cache && cache->stats.enabled)) {
-      printf("disk shader cache:  hits = %u, misses = %u\n",
-             cache->stats.hits,
-             cache->stats.misses);
+      mesa_logi("disk shader cache:  hits = %u, misses = %u\n",
+                cache->stats.hits,
+                cache->stats.misses);
    }
 
    if (cache && util_queue_is_initialized(&cache->cache_queue)) {

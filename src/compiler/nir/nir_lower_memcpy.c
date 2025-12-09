@@ -45,7 +45,7 @@ copy_type_for_byte_size(unsigned size)
    case 16:
       return glsl_vector_type(GLSL_TYPE_UINT, 4);
    default:
-      unreachable("Unsupported size");
+      UNREACHABLE("Unsupported size");
    }
 }
 

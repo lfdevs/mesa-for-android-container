@@ -653,7 +653,7 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
     * it for the list of shader storage extended formats [1]. Before that,
     * this applies to all VkFormats.
     *
-    * [1] : https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#features-shaderStorageImageExtendedFormats
+    * [1] : https://docs.vulkan.org/spec/latest/chapters/features.html#features-shaderStorageImageExtendedFormats
     */
    if (flags & VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT)
       flags |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
@@ -1011,7 +1011,7 @@ anv_get_image_format_properties(
 
    switch (info->type) {
    default:
-      unreachable("bad VkImageType");
+      UNREACHABLE("bad VkImageType");
    case VK_IMAGE_TYPE_1D:
       maxExtent.width = 16384;
       maxExtent.height = 1;
@@ -1418,7 +1418,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
 
       switch (base_info->tiling) {
       default:
-         unreachable("bad VkImageTiling");
+         UNREACHABLE("bad VkImageTiling");
       case VK_IMAGE_TILING_LINEAR:
          /* The app can query the image's memory layout with
           * vkGetImageSubresourceLayout.

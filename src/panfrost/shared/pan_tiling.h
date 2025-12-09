@@ -130,7 +130,7 @@ void *assume_pixel_aligned(void *ptr, const unsigned pixel_size)
     else if (pixel_size == 16)
         return __builtin_assume_aligned(ptr, 16);
     else
-        unreachable("unexpected pixel size");
+        UNREACHABLE("unexpected pixel size");
 }
 
 static inline

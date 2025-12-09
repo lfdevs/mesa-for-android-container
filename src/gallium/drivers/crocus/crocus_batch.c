@@ -872,7 +872,7 @@ submit_batch(struct crocus_batch *batch)
       .buffer_count = batch->exec_count,
       .batch_start_offset = 0,
       /* This must be QWord aligned. */
-      .batch_len = ALIGN(batch->primary_batch_size, 8),
+      .batch_len = align(batch->primary_batch_size, 8),
       .flags = I915_EXEC_RENDER |
                I915_EXEC_NO_RELOC |
                I915_EXEC_BATCH_FIRST |

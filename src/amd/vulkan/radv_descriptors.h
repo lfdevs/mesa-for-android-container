@@ -42,10 +42,12 @@ radv_write_texel_buffer_descriptor(struct radv_device *device, struct radv_cmd_b
    if (device->use_global_bo_list)
       return;
 
-   if (cmd_buffer)
-      radv_cs_add_buffer(device->ws, cmd_buffer->cs, buffer_view->bo);
-   else
+   if (cmd_buffer) {
+      struct radv_cmd_stream *cs = cmd_buffer->cs;
+      radv_cs_add_buffer(device->ws, cs->b, buffer_view->bo);
+   } else {
       *buffer_list = buffer_view->bo;
+   }
 }
 
 static ALWAYS_INLINE void
@@ -90,10 +92,12 @@ radv_write_buffer_descriptor_impl(struct radv_device *device, struct radv_cmd_bu
       return;
    }
 
-   if (cmd_buffer)
-      radv_cs_add_buffer(device->ws, cmd_buffer->cs, buffer->bo);
-   else
+   if (cmd_buffer) {
+      struct radv_cmd_stream *cs = cmd_buffer->cs;
+      radv_cs_add_buffer(device->ws, cs->b, buffer->bo);
+   } else {
       *buffer_list = buffer->bo;
+   }
 }
 
 static ALWAYS_INLINE void
@@ -165,7 +169,7 @@ radv_write_image_descriptor(unsigned *dst, unsigned size, VkDescriptorType descr
       memcpy(dst, descriptor, 64);
       break;
    default:
-      unreachable("Invalid size");
+      UNREACHABLE("Invalid size");
    }
 }
 
@@ -190,8 +194,9 @@ radv_write_image_descriptor_impl(struct radv_device *device, struct radv_cmd_buf
    const uint32_t max_bindings = sizeof(iview->image->bindings) / sizeof(iview->image->bindings[0]);
    for (uint32_t b = 0; b < max_bindings; b++) {
       if (cmd_buffer) {
+         struct radv_cmd_stream *cs = cmd_buffer->cs;
          if (iview->image->bindings[b].bo)
-            radv_cs_add_buffer(device->ws, cmd_buffer->cs, iview->image->bindings[b].bo);
+            radv_cs_add_buffer(device->ws, cs->b, iview->image->bindings[b].bo);
       } else {
          *buffer_list = iview->image->bindings[b].bo;
          buffer_list++;
@@ -200,8 +205,9 @@ radv_write_image_descriptor_impl(struct radv_device *device, struct radv_cmd_buf
 }
 
 static ALWAYS_INLINE void
-radv_write_image_descriptor_ycbcr(unsigned *dst, const VkDescriptorImageInfo *image_info)
+radv_write_image_descriptor_ycbcr(struct radv_device *device, unsigned *dst, const VkDescriptorImageInfo *image_info)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radv_image_view *iview = NULL;
 
    if (image_info)
@@ -213,10 +219,12 @@ radv_write_image_descriptor_ycbcr(unsigned *dst, const VkDescriptorImageInfo *im
    }
 
    const uint32_t plane_count = vk_format_get_plane_count(iview->vk.format);
+   const uint32_t stride = radv_get_combined_image_sampler_desc_size(pdev) / 4;
 
    for (uint32_t i = 0; i < plane_count; i++) {
       memcpy(dst, iview->descriptor.plane_descriptors[i], 32);
-      dst += RADV_COMBINED_IMAGE_SAMPLER_DESC_SIZE / 4;
+
+      dst += stride;
    }
 }
 
@@ -226,7 +234,7 @@ radv_write_image_descriptor_ycbcr_impl(struct radv_device *device, struct radv_c
 {
    VK_FROM_HANDLE(radv_image_view, iview, image_info->imageView);
 
-   radv_write_image_descriptor_ycbcr(dst, image_info);
+   radv_write_image_descriptor_ycbcr(device, dst, image_info);
 
    if (device->use_global_bo_list)
       return;
@@ -239,8 +247,9 @@ radv_write_image_descriptor_ycbcr_impl(struct radv_device *device, struct radv_c
 
    for (uint32_t b = 0; b < ARRAY_SIZE(iview->image->bindings); b++) {
       if (cmd_buffer) {
+         struct radv_cmd_stream *cs = cmd_buffer->cs;
          if (iview->image->bindings[b].bo)
-            radv_cs_add_buffer(device->ws, cmd_buffer->cs, iview->image->bindings[b].bo);
+            radv_cs_add_buffer(device->ws, cs->b, iview->image->bindings[b].bo);
       } else {
          *buffer_list = iview->image->bindings[b].bo;
          buffer_list++;
@@ -249,26 +258,28 @@ radv_write_image_descriptor_ycbcr_impl(struct radv_device *device, struct radv_c
 }
 
 static ALWAYS_INLINE void
+radv_write_sampler_descriptor(unsigned *dst, VkSampler _sampler)
+{
+   VK_FROM_HANDLE(radv_sampler, sampler, _sampler);
+   memcpy(dst, sampler->state, RADV_SAMPLER_DESC_SIZE);
+}
+
+static ALWAYS_INLINE void
 radv_write_combined_image_sampler_descriptor(struct radv_device *device, struct radv_cmd_buffer *cmd_buffer,
                                              unsigned *dst, struct radeon_winsys_bo **buffer_list,
                                              VkDescriptorType descriptor_type, const VkDescriptorImageInfo *image_info,
                                              bool has_sampler)
 {
-   radv_write_image_descriptor_impl(device, cmd_buffer, 64, dst, buffer_list, descriptor_type, image_info);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   const uint32_t desc_size = radv_get_sampled_image_desc_size(pdev);
+
+   radv_write_image_descriptor_impl(device, cmd_buffer, desc_size, dst, buffer_list, descriptor_type, image_info);
    /* copy over sampler state */
    if (has_sampler) {
-      VK_FROM_HANDLE(radv_sampler, sampler, image_info->sampler);
-      const uint32_t sampler_offset = RADV_COMBINED_IMAGE_SAMPLER_DESC_SAMPLER_OFFSET;
+      const uint32_t sampler_offset = radv_get_combined_image_sampler_offset(pdev);
 
-      memcpy(dst + sampler_offset / sizeof(*dst), sampler->state, RADV_SAMPLER_DESC_SIZE);
+      radv_write_sampler_descriptor(dst + sampler_offset / sizeof(*dst), image_info->sampler);
    }
-}
-
-static ALWAYS_INLINE void
-radv_write_sampler_descriptor(unsigned *dst, VkSampler _sampler)
-{
-   VK_FROM_HANDLE(radv_sampler, sampler, _sampler);
-   memcpy(dst, sampler->state, RADV_SAMPLER_DESC_SIZE);
 }
 
 static ALWAYS_INLINE void

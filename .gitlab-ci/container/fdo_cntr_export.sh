@@ -49,6 +49,7 @@ buildah_export() {
     # so remove them from the core rootfs
     rm -rf "${mountpoint}/android-cts"
     rm -rf "${mountpoint}/cuttlefish"
+    rm -rf "${mountpoint}/fluster/resources"
     rm -rf "${mountpoint}/vkd3d-proton-tests"
     rm -rf "${mountpoint}/vkd3d-proton-wine64"
 

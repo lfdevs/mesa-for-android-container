@@ -55,7 +55,7 @@ tu_suballoc_bo_alloc(struct tu_suballoc_bo *suballoc_bo,
 {
    struct tu_bo *bo = suballoc->bo;
    if (bo) {
-      uint32_t offset = ALIGN(suballoc->next_offset, alignment);
+      uint32_t offset = align(suballoc->next_offset, alignment);
       if (offset + size <= bo->size) {
          suballoc_bo->bo = tu_bo_get_ref(bo);
          suballoc_bo->iova = bo->iova + offset;

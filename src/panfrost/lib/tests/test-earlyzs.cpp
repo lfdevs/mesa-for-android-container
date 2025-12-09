@@ -21,8 +21,9 @@
  * SOFTWARE.
  */
 
-#include "util/pan_ir.h"
+#include "compiler/pan_compiler.h"
 #include "pan_earlyzs.h"
+#include "genxml/gen_macros.h"
 
 #include <gtest/gtest.h>
 
@@ -48,7 +49,7 @@
 #define ARCH_HAS_STATE_TRACK_OPT BITFIELD_BIT(11)
 
 static void
-test(enum pan_earlyzs expected_update, enum pan_earlyzs expected_kill,
+test(enum mali_pixel_kill expected_update, enum mali_pixel_kill expected_kill,
      bool expected_shader_readonly_zs, uint32_t flags)
 {
    enum pan_earlyzs_zs_tilebuf_read zs_read = PAN_EARLYZS_ZS_TILEBUF_NOT_READ;
@@ -84,11 +85,11 @@ test(enum pan_earlyzs expected_update, enum pan_earlyzs expected_kill,
 }
 
 #define CASE(expected_update, expected_kill, flags)                            \
-   test(PAN_EARLYZS_##expected_update, PAN_EARLYZS_##expected_kill, false,     \
+   test(MALI_PIXEL_KILL_##expected_update, MALI_PIXEL_KILL_##expected_kill, false,     \
         flags)
 
 #define CASE_RO_ZS(expected_update, expected_kill, expected_ro_zs, flags)      \
-   test(PAN_EARLYZS_##expected_update, PAN_EARLYZS_##expected_kill,            \
+   test(MALI_PIXEL_KILL_##expected_update, MALI_PIXEL_KILL_##expected_kill,            \
         expected_ro_zs, flags)
 
 TEST(EarlyZS, APIForceEarly)

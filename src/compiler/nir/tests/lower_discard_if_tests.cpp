@@ -36,7 +36,8 @@ TEST_F(nir_lower_discard_if_test, move_single_terminate_out_of_loop)
    check_nir_string(NIR_REFERENCE_SHADER(R"(
       shader: MESA_SHADER_FRAGMENT
       name: nir_lower_discard_if_test
-      subgroup_size: 0
+      max_subgroup_size: 128
+      min_subgroup_size: 1
       decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
       decl_function main () (entrypoint)
 
@@ -94,7 +95,8 @@ TEST_F(nir_lower_discard_if_test, move_multiple_terminate_out_of_loop)
    check_nir_string(NIR_REFERENCE_SHADER(R"(
       shader: MESA_SHADER_FRAGMENT
       name: nir_lower_discard_if_test
-      subgroup_size: 0
+      max_subgroup_size: 128
+      min_subgroup_size: 1
       decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
       decl_function main () (entrypoint)
 
@@ -165,7 +167,8 @@ TEST_F(nir_lower_discard_if_test, move_terminate_out_of_nested_loop)
    check_nir_string(NIR_REFERENCE_SHADER(R"(
       shader: MESA_SHADER_FRAGMENT
       name: nir_lower_discard_if_test
-      subgroup_size: 0
+      max_subgroup_size: 128
+      min_subgroup_size: 1
       decl_var shader_in INTERP_MODE_SMOOTH none int in (VARYING_SLOT_POS.x, 0, 0)
       decl_function main () (entrypoint)
 

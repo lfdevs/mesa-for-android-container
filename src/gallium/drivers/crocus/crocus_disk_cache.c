@@ -86,7 +86,7 @@ crocus_disk_cache_store(struct disk_cache *cache,
    if (!cache)
       return;
 
-   gl_shader_stage stage = ish->nir->info.stage;
+   mesa_shader_stage stage = ish->nir->info.stage;
    const struct elk_stage_prog_data *prog_data = shader->prog_data;
 
    cache_key cache_key;
@@ -137,7 +137,7 @@ crocus_disk_cache_retrieve(struct crocus_context *ice,
 #ifdef ENABLE_SHADER_CACHE
    struct crocus_screen *screen = (void *) ice->ctx.screen;
    struct disk_cache *cache = screen->disk_cache;
-   gl_shader_stage stage = ish->nir->info.stage;
+   mesa_shader_stage stage = ish->nir->info.stage;
 
    if (!cache)
       return NULL;

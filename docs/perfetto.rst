@@ -43,6 +43,9 @@ The exact supported features vary per driver:
    * - Panfrost
      - ``gpu.counters.panfrost``
      -
+   * - PanVK
+     - ``gpu.counters.panfrost``
+     - ``gpu.renderstages.panfrost``
    * - V3D
      - ``gpu.counters.v3d``
      -
@@ -55,39 +58,7 @@ Run
 
 To capture a trace with Perfetto you need to take the following steps:
 
-1. Build Perfetto from sources available at ``subprojects/perfetto`` following
-   `this guide <https://perfetto.dev/docs/quickstart/linux-tracing>`__.
-
-2. Create a `trace config <https://perfetto.dev/docs/concepts/config>`__, which is
-   a json formatted text file with extension ``.cfg``, or use one of the config
-   files under the ``src/tool/pps/cfg`` directory. More examples of config files
-   can be found in ``subprojects/perfetto/test/configs``.
-
-3. Change directory to ``subprojects/perfetto`` and run a
-   `convenience script <https://perfetto.dev/docs/getting-started/system-tracing#recording-your-first-system-trace>`__
-   to start the tracing service:
-
-   .. code-block:: sh
-
-      cd subprojects/perfetto
-      CONFIG=<path/to/gpu.cfg> OUT=out/linux_clang_release ./tools/tmux -n
-
-4. Start other producers you may need, e.g. ``pps-producer``.
-
-5. Start ``perfetto`` under the tmux session initiated in step 3.
-
-6. Once tracing has finished, you can detach from tmux with :kbd:`Ctrl+b`,
-   :kbd:`d`, and the convenience script should automatically copy the trace
-   files into ``$HOME/Downloads``.
-
-7. Go to `ui.perfetto.dev <https://ui.perfetto.dev>`__ and upload
-   ``$HOME/Downloads/trace.protobuf`` by clicking on **Open trace file**.
-
-8. Alternatively you can open the trace in `AGI <https://gpuinspector.dev/>`__
-   (which despite the name can be used to view non-android traces).
-
-To be a bit more explicit, here is a listing of commands reproducing
-the steps above :
+1. Build Mesa with perfetto enabled.
 
 .. code-block:: sh
 
@@ -96,19 +67,52 @@ the steps above :
    # Build mesa
    mesa $ meson compile -C build
 
+2. Build Perfetto from sources available at ``subprojects/perfetto``.
+
+.. code-block:: sh
+
    # Within the Mesa repo, build perfetto
    mesa $ cd subprojects/perfetto
    perfetto $ ./tools/install-build-deps
    perfetto $ ./tools/gn gen --args='is_debug=false' out/linux
    perfetto $ ./tools/ninja -C out/linux
 
-   # Start perfetto
-   perfetto $ CONFIG=../../src/tool/pps/cfg/gpu.cfg OUT=out/linux/ ./tools/tmux -n
+   # Example arm64 cross compile instead
+   perfetto $ ./tools/install-build-deps --linux-arm
+   perfetto $ ./tools/gn gen --args='is_debug=false target_cpu="arm64"' out/linux-arm64
 
-   # In parallel from the Mesa repo, start the PPS producer
-   mesa $ ./build/src/tool/pps/pps-producer
+More build options can be found in `this guide <https://perfetto.dev/docs/quickstart/linux-tracing>`__.
 
-   # Back in the perfetto tmux, press enter to start the capture
+3. Select a `trace config <https://perfetto.dev/docs/concepts/config>`__, likely
+   ``src/tool/pps/cfg/system.cfg`` which does whole-system including GPU
+   profiling for any supported GPUs).  Other configs are available in that
+   directory for CPU-only or GPU-only tracing, and more examples of config files
+   can be found in ``subprojects/perfetto/test/configs``.
+
+4. Start the PPS producer to capture GPU performance counters.
+
+.. code-block:: sh
+
+   mesa $ sudo meson devenv -C build pps-producer
+
+5. Start your application (and any other GPU-using system components) you want
+   to trace using the perfetto-enabled Mesa build.
+
+.. code-block:: sh
+
+   mesa $ meson devenv -C build vkcube
+
+6. Capture a perfetto trace using ``tracebox``.
+
+.. code-block:: sh
+
+   mesa $ sudo ./subprojects/perfetto/out/linux/tracebox --system-sockets --txt -c src/tool/pps/cfg/system.cfg -o vkcube.trace
+
+7.  Go to `ui.perfetto.dev <https://ui.perfetto.dev>`__ and upload
+    ``vkcube.trace`` by clicking on **Open trace file**.
+
+8.  Alternatively you can open the trace in `AGI <https://gpuinspector.dev/>`__
+    (which despite the name can be used to view non-android traces).
 
 CPU Tracing
 ~~~~~~~~~~~
@@ -125,17 +129,20 @@ Currently, only EGL and the following drivers have CPU tracepoints.
 - VC4
 - V3DV
 
-Vulkan data sources
-~~~~~~~~~~~~~~~~~~~
+Render stage data sources
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Vulkan API gives the application control over recording of command
-buffers as well as when they are submitted to the hardware. As a
-consequence, we need to ensure command buffers are properly
-instrumented for the Perfetto driver data sources prior to Perfetto
-actually collecting traces.
+The render stage data sources are the driver-specific traces of command buffer
+execution on the GPU.
 
-This can be achieved by setting the :envvar:`MESA_GPU_TRACES`
-environment variable before starting a Vulkan application :
+The Vulkan API gives the application control over recording of command buffers
+as well as when they are submitted to the hardware, and command buffers can be
+recorded once and reused repeatedly.  Trace commands are normally only recorded
+into a command buffer when a perfetto trace is active.  Most applications don't
+reuse command buffers, so you'll see traces appear shortly after the trace was
+started, but if you have one of the rare applications that reuses command
+buffers, you'll need to set the :envvar:`MESA_GPU_TRACES` environment variable
+before starting a Vulkan application :
 
 .. code-block:: sh
 
@@ -214,7 +221,7 @@ To run the producer, follow these two simple steps:
       ./build/pps-producer
 
 V3D / V3DV
-----------
+^^^^^^^^^^
 
 As we can only have one performance monitor active at a given time, we can only monitor
 32 performance counters. There is a need to define the performance counters of interest
@@ -226,17 +233,6 @@ for pps_producer using the environment variable ``V3D_DS_COUNTER``.
 
 Troubleshooting
 ---------------
-
-Tmux
-~~~~
-
-If the convenience script ``tools/tmux`` keeps copying artifacts to your
-``SSH_TARGET`` without starting the tmux session, make sure you have ``tmux``
-installed in your system.
-
-.. code-block:: sh
-
-   apt install tmux
 
 Missing counter names
 ~~~~~~~~~~~~~~~~~~~~~

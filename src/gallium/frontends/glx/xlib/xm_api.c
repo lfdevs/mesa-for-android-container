@@ -667,7 +667,7 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
     * which can help Brian figure out what's going on when a user
     * reports bugs.
     */
-   if (getenv("MESA_INFO")) {
+   if (os_get_option("MESA_INFO")) {
       printf("X/Mesa visual = %p\n", (void *) v);
       printf("X/Mesa depth = %d\n", v->visinfo->depth);
       printf("X/Mesa bits per pixel = %d\n", v->BitsPerPixel);
@@ -763,7 +763,7 @@ XMesaVisual XMesaCreateVisual( Display *display,
       return NULL;
 
    /* For debugging only */
-   if (getenv("MESA_XSYNC")) {
+   if (os_get_option("MESA_XSYNC")) {
       /* This makes debugging X easier.
        * In your debugger, set a breakpoint on _XError to stop when an
        * X protocol error is generated.

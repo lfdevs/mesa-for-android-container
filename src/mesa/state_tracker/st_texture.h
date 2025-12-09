@@ -139,6 +139,7 @@ st_texture_create(struct st_context *st,
                   GLuint depth0,
                   GLuint layers,
                   GLuint nr_samples,
+                  unsigned flags,
                   GLuint tex_usage,
                   bool sparse,
                   uint32_t compression);
@@ -147,10 +148,10 @@ st_texture_create(struct st_context *st,
 extern void
 st_gl_texture_dims_to_pipe_dims(GLenum texture,
                                 unsigned widthIn,
-                                uint16_t heightIn,
+                                unsigned heightIn,
                                 uint16_t depthIn,
                                 unsigned *widthOut,
-                                uint16_t *heightOut,
+                                unsigned *heightOut,
                                 uint16_t *depthOut,
                                 uint16_t *layersOut);
 
@@ -254,10 +255,10 @@ st_update_single_texture(struct st_context *st,
 
 unsigned
 st_get_sampler_views(struct st_context *st,
-                     enum pipe_shader_type shader_stage,
+                     mesa_shader_stage shader_stage,
                      const struct gl_program *prog,
                      struct pipe_sampler_view **sampler_views,
-                     unsigned *num_owned_views);
+                     unsigned *extra_sampler_views);
 
 void
 st_make_bound_samplers_resident(struct st_context *st,

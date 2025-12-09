@@ -30,7 +30,7 @@
 #include <xf86drm.h>
 
 #include "fw-api/pvr_rogue_fwif_shared.h"
-#include "pvr_private.h"
+#include "pvr_macros.h"
 #include "pvr_srv.h"
 #include "pvr_srv_bridge.h"
 #include "pvr_types.h"
@@ -242,7 +242,7 @@ VkResult pvr_srv_get_multicore_info(int fd,
                            ret);
    }
 
-   if (!num_cores)
+   if (num_cores)
       *num_cores = ret.num_cores;
 
    return VK_SUCCESS;

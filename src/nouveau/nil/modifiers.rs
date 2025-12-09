@@ -35,6 +35,8 @@ impl TryFrom<u64> for GOBKindVersion {
 pub enum SectorLayout {
     TegraK1 = 0,
     Desktop = 1,
+    Blackwell8Bpp = 2,
+    Blackwell16Bpp = 3,
 }
 
 impl TryFrom<u64> for SectorLayout {
@@ -44,38 +46,74 @@ impl TryFrom<u64> for SectorLayout {
         match sector_layout {
             0 => Ok(SectorLayout::TegraK1),
             1 => Ok(SectorLayout::Desktop),
+            2 => Ok(SectorLayout::Blackwell8Bpp),
+            3 => Ok(SectorLayout::Blackwell16Bpp),
             _ => Err("Invalid gob/kind version"),
         }
     }
 }
 
-impl GOBType {
-    fn supports_modifiers(&self) -> bool {
-        matches!(
-            self,
-            GOBType::Linear | GOBType::FermiColor | GOBType::TuringColor2D
-        )
-    }
+struct GOBTypeModifierInfo {
+    gob_type: GOBType,
+    gob_kind_version: GOBKindVersion,
+    sector_layout: SectorLayout,
+}
 
-    fn kind_version(&self) -> GOBKindVersion {
-        match self {
-            GOBType::Linear => {
-                panic!("Linear modifierss are handled elsewhere");
-            }
-            GOBType::FermiZS | GOBType::BlackwellZ24 => {
-                panic!("Modifiers are not supported for Z/S images");
-            }
-            GOBType::FermiColor => GOBKindVersion::Fermi,
-            GOBType::TuringColor2D => GOBKindVersion::Turing,
-            GOBType::Blackwell8Bit | GOBType::Blackwell16Bit => {
-                todo!("We need new modifiers for Blackwell+")
+const GOB_TYPE_MODIFIER_INFOS: [GOBTypeModifierInfo; 5] = [
+    GOBTypeModifierInfo {
+        gob_type: GOBType::FermiColor,
+        gob_kind_version: GOBKindVersion::Fermi,
+        sector_layout: SectorLayout::Desktop,
+    },
+    GOBTypeModifierInfo {
+        gob_type: GOBType::TegraColor,
+        gob_kind_version: GOBKindVersion::Fermi,
+        sector_layout: SectorLayout::TegraK1,
+    },
+    GOBTypeModifierInfo {
+        gob_type: GOBType::TuringColor2D,
+        gob_kind_version: GOBKindVersion::Turing,
+        sector_layout: SectorLayout::Desktop,
+    },
+    GOBTypeModifierInfo {
+        gob_type: GOBType::Blackwell8Bit,
+        gob_kind_version: GOBKindVersion::Turing,
+        sector_layout: SectorLayout::Blackwell8Bpp,
+    },
+    GOBTypeModifierInfo {
+        gob_type: GOBType::Blackwell16Bit,
+        gob_kind_version: GOBKindVersion::Turing,
+        sector_layout: SectorLayout::Blackwell16Bpp,
+    },
+];
+
+impl GOBType {
+    fn modifier_info(&self) -> Option<&GOBTypeModifierInfo> {
+        let mut info = None;
+        for entry in &GOB_TYPE_MODIFIER_INFOS {
+            if entry.gob_type == *self {
+                let old = info.replace(entry);
+                debug_assert!(old.is_none());
             }
         }
+        info
+    }
+
+    fn supports_modifiers(&self) -> bool {
+        self.modifier_info().is_some()
+    }
+
+    fn gob_kind_version(&self) -> GOBKindVersion {
+        self.modifier_info()
+            .expect("Unsupported modifier")
+            .gob_kind_version
     }
 
     // For now, this always returns desktop, but will be different for Tegra
     fn sector_layout(&self) -> SectorLayout {
-        SectorLayout::Desktop
+        self.modifier_info()
+            .expect("Unsupported modifier")
+            .sector_layout
     }
 }
 
@@ -125,7 +163,7 @@ impl TryFrom<u64> for BlockLinearModifier {
         } else if !bv.get_bit(4) {
             Err("modifier is not block linear")
         } else if bv.get_bit_range_u64(5..12) != 0
-            || bv.get_bit_range_u64(26..56) != 0
+            || bv.get_bit_range_u64(28..56) != 0
         {
             Err("unknown reserved bits")
         } else {
@@ -148,7 +186,7 @@ impl BlockLinearModifier {
         bv.set_bit(4, true); // Must be 1, to indicate block-linear layout.
         bv.set_field(12..20, pte_kind);
         bv.set_field(20..22, gob_kind_version as u8);
-        bv.set_field(22..23, sector_layout as u8);
+        bv.set_field2(22..23, 26..28, sector_layout as u8);
         bv.set_field(23..26, compression_type as u8);
         bv.set_field(56..64, DRM_FORMAT_MOD_VENDOR_NVIDIA);
         BlockLinearModifier { drm_modifier }
@@ -171,7 +209,9 @@ impl BlockLinearModifier {
 
     pub fn sector_layout(&self) -> SectorLayout {
         let bv = BitView::new(&self.drm_modifier);
-        bv.get_bit_range_u64(22..23).try_into().unwrap()
+        (bv.get_bit_range_u64(22..23) | (bv.get_bit_range_u64(26..28) << 1))
+            .try_into()
+            .unwrap()
     }
 
     pub fn compression_type(&self) -> CompressionType {
@@ -180,12 +220,20 @@ impl BlockLinearModifier {
     }
 
     pub fn gob_type(&self) -> GOBType {
-        assert!(self.sector_layout() == SectorLayout::Desktop);
-        match self.gob_kind_version() {
-            GOBKindVersion::Fermi => GOBType::FermiColor,
-            GOBKindVersion::G80 => todo!("Unsupported GOB kind"),
-            GOBKindVersion::Turing => GOBType::TuringColor2D,
+        let gob_kind_version = self.gob_kind_version();
+        let sector_layout = self.sector_layout();
+
+        let mut info = None;
+        for entry in &GOB_TYPE_MODIFIER_INFOS {
+            if entry.gob_kind_version == gob_kind_version
+                && entry.sector_layout == sector_layout
+            {
+                let old = info.replace(entry);
+                debug_assert!(old.is_none());
+            }
         }
+
+        info.expect("Unsupported modifier").gob_type
     }
 
     pub fn tiling(&self) -> Tiling {
@@ -248,7 +296,7 @@ pub fn drm_format_mods_for_format(
         let bl_mod = BlockLinearModifier::block_linear_2d(
             compression_type,
             gob_type.sector_layout(),
-            gob_type.kind_version(),
+            gob_type.gob_kind_version(),
             pte_kind,
             height_log2,
         );
@@ -285,7 +333,7 @@ pub fn drm_format_mod_is_supported(
         return false;
     }
 
-    if bl_mod.gob_kind_version() != gob_type.kind_version() {
+    if bl_mod.gob_kind_version() != gob_type.gob_kind_version() {
         return false;
     }
 

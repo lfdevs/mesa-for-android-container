@@ -36,6 +36,38 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420
 
+asmparsertest@arbfp1.0@size_specifier-30
+glslparsertest@glsl2@bit-logic-02.frag
+glslparsertest@shaders@varying1.frag
 glslparsertest@shaders@vector.frag
+spec@!opengl 3.2@layered-rendering@clear-color-all-types cube_map_array single_level
+spec@arb_gpu_shader_fp64@compiler@built-in-functions@op-add-double-dvec2.vert
 spec@arb_gpu_shader_fp64@compiler@built-in-functions@op-add-double-dvec3.vert
+spec@arb_gpu_shader_int64@compiler@built-in-functions@min-i64vec3-int64_t.geom
+spec@arb_gpu_shader_int64@execution@built-in-functions@fs-op-rshift-u64vec3-uint
+spec@arb_gpu_shader_int64@execution@conversion@vert-conversion-implicit-int-uint64_t
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-min-uvec2-uint
+spec@arb_texture_query_levels@preprocessor@disabled-undefined-core.comp
+spec@ext_gpu_shader4@compiler@mod-ivec4-int.vert
+spec@ext_gpu_shader4@compiler@texel_fetchoffset-sampler2drect-ivec2.vert
+spec@ext_gpu_shader4@compiler@texture_size-isampler2darray-ivec3.vert
+spec@glsl-1.10@execution@variable-indexing@vs-temp-array-mat4-rd
+spec@glsl-1.20@compiler@built-in-functions@ceil-float.vert
+spec@glsl-1.20@execution@built-in-functions@vs-transpose-mat4x3
+spec@glsl-1.20@execution@variable-indexing@vs-temp-mat2-row-wr
+spec@glsl-1.30@compiler@built-in-functions@asinh-vec2.vert
+spec@glsl-1.30@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-distance
+spec@glsl-1.30@execution@tex-miplevel-selection textureoffset\(bias\) 2d
+spec@glsl-1.30@execution@texelfetch@vs-texelfetch-usampler2darray
+spec@glsl-1.30@linker@interpolation-qualifiers@noperspective-gl_frontsecondarycolor-default-gl_secondarycolor
+spec@glsl-1.50@compiler@built-in-functions@ceil-vec4.geom
+spec@glsl-1.50@execution@built-in-functions@gs-acos-float
+spec@glsl-1.50@execution@built-in-functions@gs-op-bitor-int-int
+spec@glsl-1.50@execution@built-in-functions@gs-op-bitxor-neg-abs-int-ivec2
+spec@glsl-1.50@linker@intrastage-unsized-interface-array-mismatch
+spec@glsl-4.00@compiler@built-in-functions@inversesqrt-dvec4.vert
+spec@glsl-4.00@compiler@built-in-functions@op-mult-dmat3-double.vert
 spec@glsl-4.00@compiler@built-in-functions@op-mult-dmat3-dvec3.vert
+spec@glsl-4.00@execution@built-in-functions@vs-refract-dvec4-dvec4-double
+spec@glsl-4.30@execution@built-in-functions@cs-dot-vec2-vec2
+spec@glsl-es-3.20@compiler@flat_interpolation@flat-interface_block-uvec3.frag

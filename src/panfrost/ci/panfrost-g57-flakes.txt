@@ -32,8 +32,4 @@ afbcp-spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear
 
 # Initial flakes on mt8195-cherry-tomato-r2
 glx@glx-visuals-stencil
-spec@arb_texture_float@texwrap formats bordercolor
-spec@arb_texture_float@texwrap formats bordercolor@GL_INTENSITY16F_ARB- border color only
 afbcp-glx@glx-visuals-stencil
-afbcp-spec@arb_texture_float@texwrap formats bordercolor
-afbcp-spec@arb_texture_float@texwrap formats bordercolor@GL_INTENSITY16F_ARB- border color only

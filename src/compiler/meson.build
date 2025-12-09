@@ -25,10 +25,12 @@ builtin_types_c = custom_target(
 float64_glsl_file = files('glsl/float64.glsl')
 
 astc_decoder_glsl_file = files('glsl/astc_decoder.glsl')
+float32_glsl_file = files('glsl/float32.glsl')
 
 files_libcompiler = files(
   'glsl_types.c',
   'glsl_types.h',
+  'list.h',
   'shader_enums.c',
   'shader_enums.h',
   'shader_info.h',

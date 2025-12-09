@@ -23,7 +23,6 @@
 #ifndef NV84_VIDEO_H_
 #define NV84_VIDEO_H_
 
-#include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 #include "vl/vl_types.h"
 

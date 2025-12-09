@@ -795,7 +795,7 @@ depth_bounds_test_quads(struct quad_stage *qs,
             imin = ((unsigned) (min * 16777215.0)) & 0xffffff;
             imax = ((unsigned) (max * 16777215.0)) & 0xffffff;
          } else {
-            unreachable("Unknown depth buffer format");
+            UNREACHABLE("Unknown depth buffer format");
          }
 
          for (j = 0; j < TGSI_QUAD_SIZE; j++) {

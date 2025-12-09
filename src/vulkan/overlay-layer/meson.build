@@ -28,7 +28,7 @@ vklayer_files = files(
 vklayer_mesa_overlay = shared_library(
   'VkLayer_MESA_overlay',
   vklayer_files, overlay_spv, sha1_h,
-  c_args : [no_override_init_args],
+  c_args : no_override_init_args + cc.get_supported_arguments('-Wno-error=stringop-overflow'),
   gnu_symbol_visibility : 'hidden',
   dependencies : [idep_vulkan_util, idep_mesautil, vulkan_wsi_deps, libimgui_core_dep, dep_dl],
   include_directories : [inc_include, inc_src],

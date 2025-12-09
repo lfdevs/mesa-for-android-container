@@ -98,11 +98,11 @@ ir_vec_index_to_cond_assign_visitor::convert_vector_extract_to_cond_assign(ir_rv
 
       ir_rvalue *vec_input = interpolant->operands[0];
       ir_expression *const vec_interpolate =
-         new(base_ir) ir_expression(expr->operation, vec_input->type,
+         new(ir->node_linalloc) ir_expression(expr->operation, vec_input->type,
                                     vec_input, expr->operands[1]);
 
       this->progress = true;
-      return new(base_ir) ir_expression(ir_binop_vector_extract, ir->type,
+      return new(ir->node_linalloc) ir_expression(ir_binop_vector_extract, ir->type,
                                         vec_interpolate,
                                         interpolant->operands[1]);
    }
@@ -142,7 +142,7 @@ ir_vec_index_to_cond_assign_visitor::visit_leave(ir_assignment *ir)
 ir_visitor_status
 ir_vec_index_to_cond_assign_visitor::visit_enter(ir_call *ir)
 {
-   foreach_in_list_safe(ir_rvalue, param, &ir->actual_parameters) {
+   ir_foreach_in_list_safe(ir_rvalue, param, &ir->actual_parameters) {
       ir_rvalue *new_param = convert_vector_extract_to_cond_assign(param);
 
       if (new_param != param) {
@@ -171,7 +171,7 @@ ir_vec_index_to_cond_assign_visitor::visit_enter(ir_if *ir)
 }
 
 bool
-do_vec_index_to_cond_assign(exec_list *instructions)
+do_vec_index_to_cond_assign(ir_exec_list *instructions)
 {
    ir_vec_index_to_cond_assign_visitor v;
 

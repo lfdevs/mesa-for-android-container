@@ -26,7 +26,6 @@
 
 #include "gallivm/lp_bld_limits.h"
 #include "gallivm/lp_bld_sample.h"
-#include "gallivm/lp_bld_struct.h"
 
 struct lp_sampler_dynamic_state;
 

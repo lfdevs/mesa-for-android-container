@@ -90,11 +90,11 @@ static void sp_blit(struct pipe_context *pipe,
    /*util_blitter_save_sample_mask(sp->blitter, sp->sample_mask);*/
    util_blitter_save_framebuffer(sp->blitter, &sp->framebuffer);
    util_blitter_save_fragment_sampler_states(sp->blitter,
-                     sp->num_samplers[PIPE_SHADER_FRAGMENT],
-                     (void**)sp->samplers[PIPE_SHADER_FRAGMENT]);
+                     sp->num_samplers[MESA_SHADER_FRAGMENT],
+                     (void**)sp->samplers[MESA_SHADER_FRAGMENT]);
    util_blitter_save_fragment_sampler_views(sp->blitter,
-                     sp->num_sampler_views[PIPE_SHADER_FRAGMENT],
-                     sp->sampler_views[PIPE_SHADER_FRAGMENT]);
+                     sp->num_sampler_views[MESA_SHADER_FRAGMENT],
+                     sp->sampler_views[MESA_SHADER_FRAGMENT]);
    util_blitter_save_render_condition(sp->blitter, sp->render_cond_query,
                                       sp->render_cond_cond, sp->render_cond_mode);
    util_blitter_blit(sp->blitter, info, NULL);

@@ -1028,7 +1028,7 @@ tx_compress_dxtn(GLint srccomps, GLint width, GLint height,
                        dest, dstRowStride);
       break;
    default:
-      unreachable("unknown DXTn format");
+      UNREACHABLE("unknown DXTn format");
    }
 }
 

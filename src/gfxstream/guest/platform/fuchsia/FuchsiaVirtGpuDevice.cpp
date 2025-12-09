@@ -32,7 +32,7 @@ FuchsiaVirtGpuDevice::FuchsiaVirtGpuDevice(enum VirtGpuCapset capset, magma_devi
     mCaps.params[kParamCreateGuestHandle] = 0;
 
     if (capset == kCapsetGfxStreamVulkan) {
-        uint64_t query_id = kMagmaVirtioGpuQueryCapset;
+        uint64_t query_id = 0;
         query_id |= static_cast<uint64_t>(kCapsetGfxStreamVulkan) << 32;
         constexpr uint16_t kVersion = 0;
         query_id |= static_cast<uint64_t>(kVersion) << 16;

@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::event::create_and_queue;
 use crate::api::icd::*;
 use crate::api::util::*;
@@ -16,7 +19,6 @@ use rusticl_proc_macros::cl_info_entrypoint;
 
 use std::cmp;
 use std::ffi::CStr;
-use std::mem;
 use std::os::raw::c_void;
 use std::ptr;
 use std::slice;
@@ -164,7 +166,7 @@ unsafe impl CLInfoObj<cl_kernel_sub_group_info, (cl_device_id, usize, *const c_v
             return Err(CL_INVALID_OPERATION);
         }
 
-        let usize_byte = mem::size_of::<usize>();
+        let usize_byte = size_of::<usize>();
         // first we have to convert the input to a proper thing
         let input: &[usize] = match q {
             CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE | CL_KERNEL_SUB_GROUP_COUNT_FOR_NDRANGE => {
@@ -362,7 +364,12 @@ fn set_kernel_arg(
     arg_size: usize,
     arg_value: *const ::std::os::raw::c_void,
 ) -> CLResult<()> {
-    let k = Kernel::ref_from_raw(kernel)?;
+    // SAFETY: Per spec, "OpenCL calls that modify the state of `cl_kernel`
+    // objects are not thread-safe: clSetKernelArg, ...", so no other threads
+    // must hold a reference to this `cl_kernel`. Additionally, we may require
+    // callers to pass either null or a valid CL object, satisfying validity
+    // constraints.
+    let k = unsafe { Kernel::mut_ref_from_raw(kernel) }?;
     let arg_index = arg_index as usize;
 
     // CL_INVALID_ARG_INDEX if arg_index is not a valid argument index.
@@ -382,13 +389,13 @@ fn set_kernel_arg(
             | KernelArgType::Image
             | KernelArgType::RWImage
             | KernelArgType::Texture => {
-                if arg_size != std::mem::size_of::<cl_mem>() {
+                if arg_size != size_of::<cl_mem>() {
                     return Err(CL_INVALID_ARG_SIZE);
                 }
             }
 
             KernelArgType::Sampler => {
-                if arg_size != std::mem::size_of::<cl_sampler>() {
+                if arg_size != size_of::<cl_sampler>() {
                     return Err(CL_INVALID_ARG_SIZE);
                 }
             }
@@ -409,11 +416,16 @@ fn set_kernel_arg(
                     return Err(CL_INVALID_ARG_VALUE);
                 }
             }
-            // If the argument is of type sampler_t, the arg_value entry must be a pointer to the
-            // sampler object.
-            KernelArgType::Constant(_) | KernelArgType::Sampler => {
+            KernelArgType::Constant(_) => {
                 if arg_value.is_null() {
                     return Err(CL_INVALID_ARG_VALUE);
+                }
+            }
+            KernelArgType::Sampler => {
+                // CL_INVALID_SAMPLER for an argument declared to be of type sampler_t when the
+                // specified arg_value is not a valid sampler object.
+                if arg_value.is_null() {
+                    return Err(CL_INVALID_SAMPLER);
                 }
             }
             _ => {}
@@ -433,6 +445,14 @@ fn set_kernel_arg(
                 } else {
                     // SAFETY: as above
                     let buffer = Buffer::arc_from_raw(unsafe { *ptr })?;
+                    // We are required to prevent mutable access to immutable memory objects,
+                    // however no explicit error code has been specified yet.
+                    if arg.kind == KernelArgType::MemGlobal
+                        && bit_check(buffer.flags, CL_MEM_IMMUTABLE_EXT)
+                    {
+                        return Err(CL_INVALID_ARG_VALUE);
+                    }
+
                     KernelArgValue::Buffer(Arc::downgrade(&buffer))
                 }
             }
@@ -447,8 +467,13 @@ fn set_kernel_arg(
                 // of CL_MEM_WRITE_ONLY or if the image argument is declared with the write_only
                 // qualifier and arg_value refers to an image object created with cl_mem_flags
                 // of CL_MEM_READ_ONLY.
+                // We are required to prevent mutable access to immutable memory objects, however no
+                // explicit error code has been specified yet.
                 if arg.kind == KernelArgType::Texture && bit_check(img.flags, CL_MEM_WRITE_ONLY)
-                    || arg.kind == KernelArgType::Image && bit_check(img.flags, CL_MEM_READ_ONLY)
+                    || arg.kind == KernelArgType::Image
+                        && bit_check(img.flags, CL_MEM_READ_ONLY | CL_MEM_IMMUTABLE_EXT)
+                    || arg.kind == KernelArgType::RWImage
+                        && bit_check(img.flags, CL_MEM_IMMUTABLE_EXT)
                 {
                     return Err(CL_INVALID_ARG_VALUE);
                 }
@@ -486,7 +511,12 @@ fn set_kernel_arg_svm_pointer(
     arg_index: cl_uint,
     arg_value: *const ::std::os::raw::c_void,
 ) -> CLResult<()> {
-    let kernel = Kernel::ref_from_raw(kernel)?;
+    // SAFETY: Per spec, "OpenCL calls that modify the state of `cl_kernel`
+    // objects are not thread-safe: ..., clSetKernelArgSVMPointer, ...", so no
+    // other threads must hold a reference to this `cl_kernel`. Additionally, we
+    // may require callers to pass either null or a valid CL object, satisfying
+    // validity constraints.
+    let kernel = unsafe { Kernel::mut_ref_from_raw(kernel) }?;
     let arg_index = arg_index as usize;
     let arg_value = arg_value as usize;
 
@@ -517,7 +547,11 @@ fn set_kernel_arg_device_pointer(
     arg_index: cl_uint,
     arg_value: cl_mem_device_address_ext,
 ) -> CLResult<()> {
-    let kernel = Kernel::ref_from_raw(kernel)?;
+    // SAFETY: Per spec, "OpenCL calls that modify the state of `cl_kernel`
+    // objects are not thread-safe...", so no other threads must hold a
+    // reference to this `cl_kernel`. Additionally, we may require callers to
+    // pass either null or a valid CL object, satisfying validity constraints.
+    let kernel = unsafe { Kernel::mut_ref_from_raw(kernel) }?;
     let arg_index = arg_index as usize;
     let devs = &kernel.prog.context.devs;
 
@@ -550,7 +584,12 @@ fn set_kernel_exec_info(
     param_value_size: usize,
     param_value: *const ::std::os::raw::c_void,
 ) -> CLResult<()> {
-    let k = Kernel::ref_from_raw(kernel)?;
+    // SAFETY: Per spec, "OpenCL calls that modify the state of `cl_kernel`
+    // objects are not thread-safe: ..., clSetKernelExecInfo, ...", so no other
+    // threads must hold a reference to this `cl_kernel`. Additionally, we may
+    // require callers to pass either null or a valid CL object, satisfying
+    // validity constraints.
+    let k = unsafe { Kernel::mut_ref_from_raw(kernel) }?;
     let devs = &k.prog.devs;
 
     // CL_INVALID_OPERATION for CL_KERNEL_EXEC_INFO_DEVICE_PTRS_EXT if no device in the context
@@ -585,19 +624,16 @@ fn set_kernel_exec_info(
                 )?
             };
 
-            handles.clone_into(&mut k.bdas.lock().unwrap());
+            handles.clone_into(&mut k.bdas);
         }
         CL_KERNEL_EXEC_INFO_SVM_PTRS | CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM => {
             check_svm_support()?;
-
-            // reuse the existing container so we avoid reallocations
-            let mut svms = k.svms.lock().unwrap();
 
             // To specify that no SVM allocations will be accessed by a kernel other than those set
             // as kernel arguments, specify an empty set by passing param_value_size equal to zero
             // and param_value equal to NULL.
             if param_value_size == 0 && param_value.is_null() {
-                svms.clear();
+                k.svms.clear();
             } else {
                 let pointers = unsafe {
                     cl_slice::from_raw_parts_bytes_len::<*const c_void>(
@@ -608,7 +644,7 @@ fn set_kernel_exec_info(
 
                 // We need to clear _after_ the error checking above. We could just assign a new
                 // container, however we also want to reuse the allocations.
-                svms.clear();
+                k.svms.clear();
                 pointers
                     .iter()
                     // Each of the pointers can be the pointer returned by clSVMAlloc or can be a
@@ -618,7 +654,7 @@ fn set_kernel_exec_info(
                     // So we'll simply fetch the base and store that one.
                     .filter_map(|&handle| k.prog.context.find_svm_alloc(handle as usize))
                     .for_each(|(base, _)| {
-                        svms.insert(base as usize);
+                        k.svms.insert(base as usize);
                     });
             }
         }
@@ -819,10 +855,6 @@ fn get_kernel_suggested_local_work_size_khr(
     // global_work_size are 0.
     if global_work_size.is_null() {
         return Err(CL_INVALID_GLOBAL_WORK_SIZE);
-    }
-
-    if global_work_offset.is_null() {
-        return Err(CL_INVALID_GLOBAL_OFFSET);
     }
 
     // CL_INVALID_VALUE if suggested_local_work_size is NULL.

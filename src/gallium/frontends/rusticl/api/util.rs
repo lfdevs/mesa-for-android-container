@@ -1,18 +1,21 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::{ArcedCLObject, CLResult};
 use crate::api::types::*;
 use crate::core::event::*;
 use crate::core::queue::*;
 
-use mesa_rust_util::properties::Properties;
+use mesa_rust_util::properties::{MultiValProperties, Properties};
 use rusticl_opencl_gen::*;
 
+use std::cmp;
 use std::convert::TryInto;
 use std::ffi::{c_void, CStr};
 use std::iter::zip;
 use std::mem::MaybeUninit;
 use std::ops::BitAnd;
 use std::sync::Arc;
-use std::{cmp, mem};
 
 // TODO: use MaybeUninit::copy_from_slice once stable
 pub fn maybe_uninit_copy_from_slice<T>(this: &mut [MaybeUninit<T>], src: &[T])
@@ -81,7 +84,7 @@ impl CLInfoValue<'_> {
     /// Used to read from the application provided data.
     pub fn input<T>(&self) -> CLResult<&[MaybeUninit<T>]> {
         if let Some(param_value) = &self.param_value {
-            let count = param_value.len() / mem::size_of::<T>();
+            let count = param_value.len() / size_of::<T>();
             unsafe { cl_slice::from_raw_parts(param_value.as_ptr().cast(), count) }
         } else {
             Ok(&[])
@@ -106,7 +109,7 @@ impl CLInfoValue<'_> {
     /// All types implementing [CLProp] are supported.
     pub fn write<T: CLProp>(self, t: T) -> CLResult<CLInfoRes> {
         let count = t.count();
-        let bytes = count * mem::size_of::<T::Output>();
+        let bytes = count * size_of::<T::Output>();
 
         // param_value is a pointer to memory where the appropriate result being queried is
         // returned. If param_value is NULL, it is ignored.
@@ -143,7 +146,7 @@ impl CLInfoValue<'_> {
     /// `CL_PROGRAM_BINARIES`. In that case it's meaningless to write back the same pointers. This
     /// function can be used to skip those writes.
     pub fn write_len_only<T: CLProp>(self, len: usize) -> CLResult<CLInfoRes> {
-        let bytes = len * mem::size_of::<T::Output>();
+        let bytes = len * size_of::<T::Output>();
 
         // param_value_size_ret returns the actual size in bytes of data being queried by
         // param_name. If param_value_size_ret is NULL, it is ignored.
@@ -166,7 +169,7 @@ impl CLInfoValue<'_> {
         iter: impl ExactSizeIterator<Item = T>,
     ) -> CLResult<CLInfoRes> {
         let count = iter.len();
-        let bytes = count * mem::size_of::<T::Output>();
+        let bytes = count * size_of::<T::Output>();
 
         // param_value is a pointer to memory where the appropriate result being queried is
         // returned. If param_value is NULL, it is ignored.
@@ -409,6 +412,21 @@ where
     }
 }
 
+impl<T> CLProp for &MultiValProperties<T>
+where
+    T: CLProp + Copy,
+{
+    type Output = T;
+
+    fn count(&self) -> usize {
+        self.as_raw_slice().count()
+    }
+
+    fn write_to(&self, out: &mut [MaybeUninit<T>]) {
+        self.as_raw_slice().write_to(out);
+    }
+}
+
 impl<T> CLProp for Option<T>
 where
     T: CLProp + Copy,
@@ -437,7 +455,7 @@ const CL_DEVICE_TYPES: u32 = CL_DEVICE_TYPE_ACCELERATOR
 
 pub fn check_cl_device_type(val: cl_device_type) -> CLResult<()> {
     let v: u32 = val.try_into().or(Err(CL_INVALID_DEVICE_TYPE))?;
-    if v == CL_DEVICE_TYPE_ALL || v & CL_DEVICE_TYPES == v {
+    if v != 0 && (v == CL_DEVICE_TYPE_ALL || v & CL_DEVICE_TYPES == v) {
         return Ok(());
     }
     Err(CL_INVALID_DEVICE_TYPE)
@@ -461,7 +479,7 @@ pub fn check_cl_bool<T: PartialEq + TryInto<cl_uint>>(val: T) -> Option<bool> {
 }
 
 pub fn event_list_from_cl(
-    q: &Arc<Queue>,
+    q: &Queue,
     num_events_in_wait_list: cl_uint,
     event_wait_list: *const cl_event,
 ) -> CLResult<Vec<Arc<Event>>> {
@@ -554,14 +572,13 @@ pub mod cl_slice {
     use mesa_rust_util::ptr::addr;
     use rusticl_opencl_gen::CL_INVALID_VALUE;
     use std::ffi::c_void;
-    use std::mem;
     use std::slice;
 
     /// Wrapper around [`std::slice::from_raw_parts`] that returns `Err(CL_INVALID_VALUE)` if any of these conditions is met:
     /// - `data` is null
     /// - `data` is not correctly aligned for `T`
-    /// - `len * std::mem::size_of::<T>()` is larger than `isize::MAX`
-    /// - `data` + `len * std::mem::size_of::<T>()` wraps around the address space
+    /// - `len * size_of::<T>()` is larger than `isize::MAX`
+    /// - `data` + `len * size_of::<T>()` wraps around the address space
     ///
     /// # Safety
     /// The behavior is undefined if any of the other requirements imposed by
@@ -587,7 +604,7 @@ pub mod cl_slice {
         data: *const c_void,
         len: usize,
     ) -> CLResult<&'a [T]> {
-        let size = mem::size_of::<T>();
+        let size = size_of::<T>();
         if len % size != 0 {
             return Err(CL_INVALID_VALUE);
         }
@@ -599,8 +616,8 @@ pub mod cl_slice {
     /// Wrapper around [`std::slice::from_raw_parts_mut`] that returns `Err(CL_INVALID_VALUE)` if any of these conditions is met:
     /// - `data` is null
     /// - `data` is not correctly aligned for `T`
-    /// - `len * std::mem::size_of::<T>()` is larger than `isize::MAX`
-    /// - `data` + `len * std::mem::size_of::<T>()` wraps around the address space
+    /// - `len * size_of::<T>()` is larger than `isize::MAX`
+    /// - `data` + `len * size_of::<T>()` wraps around the address space
     ///
     /// # Safety
     /// The behavior is undefined if any of the other requirements imposed by
@@ -621,11 +638,11 @@ pub mod cl_slice {
 
     #[must_use]
     fn allocation_obviously_invalid<T>(data: *const T, len: usize) -> bool {
-        let Some(total_size) = mem::size_of::<T>().checked_mul(len) else {
+        let Some(total_size) = size_of::<T>().checked_mul(len) else {
             return true;
         };
         data.is_null()
-            || !mesa_rust_util::ptr::is_aligned(data)
+            || !data.is_aligned()
             || total_size > isize::MAX as usize
             || addr(data).checked_add(total_size).is_none()
     }

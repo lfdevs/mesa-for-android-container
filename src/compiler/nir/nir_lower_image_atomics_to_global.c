@@ -76,8 +76,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       .format = format,
       .access = nir_intrinsic_access(intr));
 
-   nir_instr *address_instr = address->parent_instr;
-   nir_intrinsic_instr *address_intr = nir_instr_as_intrinsic(address_instr);
+   nir_intrinsic_instr *address_intr = nir_def_as_intrinsic(address);
 
    address_intr->intrinsic = address_op;
    if (address_op == nir_intrinsic_image_texel_address) {
@@ -100,8 +99,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    /* Replace the image atomic with the global atomic. Remove the image
     * explicitly because it has side effects so is not DCE'd.
     */
-   nir_def_rewrite_uses(&intr->def, global);
-   nir_instr_remove(&intr->instr);
+   nir_def_replace(&intr->def, global);
    return true;
 }
 

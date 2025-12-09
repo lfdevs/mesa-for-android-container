@@ -63,7 +63,7 @@ get_dxgi_factory()
    IDXGIFactory4 *factory = NULL;
    HRESULT hr = CreateDXGIFactory2(flags, IID_IDXGIFactory4, (void **)&factory);
    if (FAILED(hr)) {
-      debug_printf("D3D12: CreateDXGIFactory2 failed: %08x\n", hr);
+      debug_printf("D3D12: CreateDXGIFactory2 failed: %08x\n", (unsigned)hr);
       return NULL;
    }
 

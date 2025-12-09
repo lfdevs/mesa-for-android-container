@@ -82,9 +82,22 @@ bool pco_index(pco_shader *shader, bool skip_ssa)
          }
       }
 
-      /* TODO: */
-      /* pco_foreach_if_in_func */
-      /* pco_foreach_loop_in_func */
+      func->next_if = 0;
+      pco_foreach_if_in_func (pif, func) {
+         pif->index = func->next_if++;
+
+         if (!skip_ssa) {
+            if (!pco_ref_is_ssa(pif->cond))
+               continue;
+
+            pif->cond.val = ssa_idx_map[pif->cond.val];
+         }
+      }
+
+      func->next_loop = 0;
+      pco_foreach_loop_in_func (loop, func) {
+         loop->index = func->next_loop++;
+      }
 
       if (!skip_ssa) {
          _mesa_hash_table_u64_destroy(func->vec_infos);

@@ -122,7 +122,7 @@ struct pipe_screen *vc4_screen_create(int fd,
 
 const struct nir_shader_compiler_options *
 vc4_screen_get_compiler_options(struct pipe_screen *pscreen,
-                                enum pipe_shader_type shader);
+                                mesa_shader_stage shader);
 
 void
 vc4_fence_screen_init(struct vc4_screen *screen);

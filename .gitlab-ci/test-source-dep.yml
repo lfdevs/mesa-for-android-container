@@ -60,6 +60,8 @@
         - subprojects/**/*
         - .gitattributes
         - src/*
+        - src/android_stub/**/*
+        - src/c11/**/*
         - src/compiler/**/*
         - src/drm-shim/**/*
         - src/gtest/**/*
@@ -68,6 +70,7 @@
         - src/mesa/**/*.h
         - src/tool/**/*
         - src/util/**/*
+        - src/x11/**/*
       when: on_success
 
 # Same core dependencies for doing manual runs.
@@ -163,18 +166,13 @@
         - src/gbm/**/*
         - src/glx/**/*
         - src/loader/**/*
-        - src/mapi/**/*
         - src/mesa/*
+        - src/mesa/glapi/**/*
         - src/mesa/main/**/*
         - src/mesa/math/**/*
         - src/mesa/program/**/*
-        - src/mesa/sparc/**/*
         - src/mesa/state_tracker/**/*
-        - src/mesa/swrast/**/*
-        - src/mesa/swrast_setup/**/*
         - src/mesa/vbo/**/*
-        - src/mesa/x86/**/*
-        - src/mesa/x86-64/**/*
       when: on_success
     - !reference [.gallium-core-rules, rules]
 

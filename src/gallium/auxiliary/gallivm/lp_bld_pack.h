@@ -36,12 +36,12 @@
 #ifndef LP_BLD_PACK_H
 #define LP_BLD_PACK_H
 
+#include <stdbool.h>
 
-#include "util/compiler.h"
-
-#include "gallivm/lp_bld.h"
+#include <llvm-c/Core.h>
 
 
+struct gallivm_state;
 struct lp_type;
 
 LLVMValueRef

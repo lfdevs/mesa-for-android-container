@@ -1060,7 +1060,7 @@ gbm_dri_bo_map(struct gbm_bo *_bo,
       dri->context = driCreateContextAttribs(dri->screen,
                                              __DRI_API_OPENGL,
                                              NULL, NULL, 0, NULL,
-                                             &error, NULL);
+                                             &error, NULL, true);
    }
    assert(dri->context);
    mtx_unlock(&dri->mutex);

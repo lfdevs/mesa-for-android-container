@@ -35,12 +35,13 @@
 #define LP_BLD_FLOW_H
 
 
-#include "gallivm/lp_bld.h"
+#include "gallivm/lp_bld_type.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct gallivm_state;
 struct lp_type;
 
 

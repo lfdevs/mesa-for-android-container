@@ -55,6 +55,13 @@ void nvk_descriptor_table_remove(struct nvk_device *dev,
                                  struct nvk_descriptor_table *table,
                                  uint32_t index);
 
+static void
+nvk_descriptor_table_flush_map(struct nvk_device *dev,
+                               struct nvk_descriptor_table *table)
+{
+   nvk_mem_arena_flush_map(dev, &table->arena);
+}
+
 static inline uint64_t
 nvk_descriptor_table_base_address(struct nvk_descriptor_table *table)
 {

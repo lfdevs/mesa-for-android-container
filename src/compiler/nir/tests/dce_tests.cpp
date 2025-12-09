@@ -85,8 +85,8 @@ TEST_F(nir_opt_dce_test, return_before_loop)
 
    nir_def *one = nir_imm_int(b, 1);
 
-   nir_phi_instr *phi = create_one_source_phi(b->shader, one->parent_instr->block, one);
-   nir_instr_insert_before_block(one->parent_instr->block, &phi->instr);
+   nir_phi_instr *phi = create_one_source_phi(b->shader, nir_def_block(one), one);
+   nir_instr_insert_before_block(nir_def_block(one), &phi->instr);
 
    nir_store_var(b, var, &phi->def, 0x1);
 

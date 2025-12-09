@@ -7,9 +7,6 @@
 #ifndef SFN_NIR_H
 #define SFN_NIR_H
 
-#include "gallium/include/pipe/p_state.h"
-
-#include "amd_family.h"
 #include "nir.h"
 #include "nir_builder.h"
 
@@ -46,7 +43,7 @@ bool
 r600_nir_split_64bit_io(nir_shader *sh);
 
 bool
-r600_nir_64_to_vec2(nir_shader *sh);
+r600_nir_64_to_vec2(nir_shader *sh, bool support_fp64);
 
 bool
 r600_merge_vec2_stores(nir_shader *shader);
@@ -119,8 +116,12 @@ r600_lower_and_optimize_nir(nir_shader *sh,
 void
 r600_finalize_nir_common(nir_shader *nir, enum amd_gfx_level gfx_level);
 
+bool
+r600_sfn_lower_alu(nir_shader *shader);
+
 #ifdef __cplusplus
 }
 #endif
+
 
 #endif // SFN_NIR_H

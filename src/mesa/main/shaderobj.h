@@ -83,7 +83,7 @@ _mesa_reference_shader_program(struct gl_context *ctx,
 }
 
 extern struct gl_shader *
-_mesa_new_shader(GLuint name, gl_shader_stage type);
+_mesa_new_shader(GLuint name, mesa_shader_stage type);
 
 extern void
 _mesa_delete_shader(struct gl_context *ctx, struct gl_shader *sh);
@@ -121,7 +121,7 @@ extern void
 _mesa_delete_shader_program(struct gl_context *ctx,
                             struct gl_shader_program *shProg);
 
-static inline gl_shader_stage
+static inline mesa_shader_stage
 _mesa_shader_enum_to_shader_stage(GLenum v)
 {
    switch (v) {
@@ -137,15 +137,19 @@ _mesa_shader_enum_to_shader_stage(GLenum v)
       return MESA_SHADER_TESS_EVAL;
    case GL_COMPUTE_SHADER:
       return MESA_SHADER_COMPUTE;
+   case GL_TASK_SHADER_EXT:
+      return MESA_SHADER_TASK;
+   case GL_MESH_SHADER_EXT:
+      return MESA_SHADER_MESH;
    default:
-      unreachable("bad value in _mesa_shader_enum_to_shader_stage()");
+      UNREACHABLE("bad value in _mesa_shader_enum_to_shader_stage()");
    }
 }
 
 /* 8 bytes + another underscore */
 #define MESA_SUBROUTINE_PREFIX_LEN 9
 static inline const char *
-_mesa_shader_stage_to_subroutine_prefix(gl_shader_stage stage)
+_mesa_shader_stage_to_subroutine_prefix(mesa_shader_stage stage)
 {
   switch (stage) {
   case MESA_SHADER_VERTEX:
@@ -160,12 +164,16 @@ _mesa_shader_stage_to_subroutine_prefix(gl_shader_stage stage)
     return "__subu_t";
   case MESA_SHADER_TESS_EVAL:
     return "__subu_e";
+  case MESA_SHADER_TASK:
+    return "__subu_s";
+  case MESA_SHADER_MESH:
+    return "__subu_m";
   default:
-    unreachable("bad value in _mesa_shader_stage_to_subroutine_prefix()");
+    UNREACHABLE("bad value in _mesa_shader_stage_to_subroutine_prefix()");
   }
 }
 
-static inline gl_shader_stage
+static inline mesa_shader_stage
 _mesa_shader_stage_from_subroutine_uniform(GLenum subuniform)
 {
    switch (subuniform) {
@@ -181,11 +189,15 @@ _mesa_shader_stage_from_subroutine_uniform(GLenum subuniform)
       return MESA_SHADER_TESS_CTRL;
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
       return MESA_SHADER_TESS_EVAL;
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+      return MESA_SHADER_TASK;
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
+      return MESA_SHADER_MESH;
    }
-   unreachable("not reached");
+   UNREACHABLE("not reached");
 }
 
-static inline gl_shader_stage
+static inline mesa_shader_stage
 _mesa_shader_stage_from_subroutine(GLenum subroutine)
 {
    switch (subroutine) {
@@ -201,13 +213,17 @@ _mesa_shader_stage_from_subroutine(GLenum subroutine)
       return MESA_SHADER_TESS_CTRL;
    case GL_TESS_EVALUATION_SUBROUTINE:
       return MESA_SHADER_TESS_EVAL;
+   case GL_TASK_SUBROUTINE_EXT:
+      return MESA_SHADER_TASK;
+   case GL_MESH_SUBROUTINE_EXT:
+      return MESA_SHADER_MESH;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
 static inline GLenum
-_mesa_shader_stage_to_subroutine(gl_shader_stage stage)
+_mesa_shader_stage_to_subroutine(mesa_shader_stage stage)
 {
    switch (stage) {
    case MESA_SHADER_VERTEX:
@@ -222,13 +238,17 @@ _mesa_shader_stage_to_subroutine(gl_shader_stage stage)
       return GL_TESS_CONTROL_SUBROUTINE;
    case MESA_SHADER_TESS_EVAL:
       return GL_TESS_EVALUATION_SUBROUTINE;
+   case MESA_SHADER_TASK:
+      return GL_TASK_SUBROUTINE_EXT;
+   case MESA_SHADER_MESH:
+      return GL_MESH_SUBROUTINE_EXT;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
 static inline GLenum
-_mesa_shader_stage_to_subroutine_uniform(gl_shader_stage stage)
+_mesa_shader_stage_to_subroutine_uniform(mesa_shader_stage stage)
 {
    switch (stage) {
    case MESA_SHADER_VERTEX:
@@ -243,8 +263,12 @@ _mesa_shader_stage_to_subroutine_uniform(gl_shader_stage stage)
       return GL_TESS_CONTROL_SUBROUTINE_UNIFORM;
    case MESA_SHADER_TESS_EVAL:
       return GL_TESS_EVALUATION_SUBROUTINE_UNIFORM;
+   case MESA_SHADER_TASK:
+      return GL_TASK_SUBROUTINE_UNIFORM_EXT;
+   case MESA_SHADER_MESH:
+      return GL_MESH_SUBROUTINE_UNIFORM_EXT;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 

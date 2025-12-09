@@ -114,7 +114,7 @@ ir_invariance_propagation_visitor::visit(ir_dereference_variable *ir)
 }
 
 bool
-propagate_invariance(exec_list *instructions)
+propagate_invariance(ir_exec_list *instructions)
 {
    ir_invariance_propagation_visitor visitor;
    bool progress = false;

@@ -67,16 +67,16 @@ i965_disasm_read_c_literal_file(FILE *fp, size_t *end)
    }
 
    if (fscanf(fp, "0x%x , 0x%x", &temp[0], &temp[1]) == 2) {
-      util_dynarray_append(&assembly, uint32_t, temp[0]);
-      util_dynarray_append(&assembly, uint32_t, temp[1]);
+      util_dynarray_append(&assembly, temp[0]);
+      util_dynarray_append(&assembly, temp[1]);
    } else {
       fprintf(stderr, "Couldn't read hex values\n");
       return NULL;
    }
 
    while (fscanf(fp, " , 0x%x , 0x%x ", &temp[0], &temp[1]) == 2) {
-      util_dynarray_append(&assembly, uint32_t, temp[0]);
-      util_dynarray_append(&assembly, uint32_t, temp[1]);
+      util_dynarray_append(&assembly, temp[0]);
+      util_dynarray_append(&assembly, temp[1]);
    }
 
    if (fscanf(fp, "}") == EOF) {

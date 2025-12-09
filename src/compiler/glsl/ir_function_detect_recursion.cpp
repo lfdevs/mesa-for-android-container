@@ -126,7 +126,7 @@
 
 namespace {
 
-struct call_node : public exec_node {
+struct call_node : public ir_exec_node {
    class function *func;
 };
 
@@ -143,10 +143,10 @@ public:
    ir_function_signature *sig;
 
    /** List of functions called by this function. */
-   exec_list callees;
+   ir_exec_list callees;
 
    /** List of functions that call this function. */
-   exec_list callers;
+   ir_exec_list callers;
 };
 
 class has_recursion_visitor : public ir_hierarchical_visitor {
@@ -208,13 +208,13 @@ public:
 
       /* Create a link from the caller to the callee.
        */
-      call_node *node = new(mem_ctx) call_node;
+      call_node *node = new(call->node_linalloc) call_node;
       node->func = target;
       this->current->callees.push_tail(node);
 
       /* Create a link from the callee to the caller.
        */
-      node = new(mem_ctx) call_node;
+      node = new(call->node_linalloc) call_node;
       node->func = this->current;
       target->callers.push_tail(node);
       return visit_continue;
@@ -229,9 +229,9 @@ public:
 } /* anonymous namespace */
 
 static void
-destroy_links(exec_list *list, function *f)
+destroy_links(ir_exec_list *list, function *f)
 {
-   foreach_in_list_safe(call_node, node, list) {
+   ir_foreach_in_list_safe(call_node, node, list) {
       /* If this is the right function, remove it.  Note that the loop cannot
        * terminate now.  There can be multiple links to a function if it is
        * either called multiple times or calls multiple times.
@@ -293,7 +293,7 @@ emit_errors_unlinked(const void *key, void *data, void *closure)
 
 void
 detect_recursion_unlinked(struct _mesa_glsl_parse_state *state,
-			  exec_list *instructions)
+			  ir_exec_list *instructions)
 {
    has_recursion_visitor v;
 

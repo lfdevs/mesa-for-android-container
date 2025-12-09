@@ -28,8 +28,38 @@ SOFTWARE.
 	Cat2 Instructions: one and two src ALU instructions
  -->
 
+<bitset name="#dst-gpr-cat2" size="8">
+	<override expr="#reg-gpr-a0">
+		<doc>
+			Predicate registers can be written from the scalar
+			ALU by using a special cat2 encoding: if the dst is
+			encoded as a0.c, the instruction will execute on the
+			scalar ALU and write to p0.c.
+		</doc>
+		<display>
+			up0.{SWIZ}
+		</display>
+		<assert low="2" high="7">111101</assert>
+	</override>
+	<override expr="#reg-gpr-p0">
+		<display>
+			p0.{SWIZ}
+		</display>
+		<assert low="2" high="7">111110</assert>
+	</override>
+	<display>
+		r{GPR}.{SWIZ}
+	</display>
+	<field name="SWIZ" low="0" high="1" type="#swiz"/>
+	<field name="GPR" low="2"  high="7" type="uint"/>
+	<encode type="struct ir3_register *">
+		<map name="GPR">extract_dst_num(src)</map>
+		<map name="SWIZ">src->num &amp; 0x3</map>
+	</encode>
+</bitset>
+
 <bitset name="#instruction-cat2" extends="#instruction">
-	<field name="DST" low="32" high="39" type="#reg-gpr"/>
+	<field name="DST" low="32" high="39" type="#dst-gpr-cat2"/>
 	<field name="REPEAT" low="40" high="41" type="#rptN"/>
 	<field name="SAT" pos="42" type="bool" display="(sat)"/>
 	<field name="SS" pos="44" type="bool" display="(ss)"/>
@@ -315,6 +345,26 @@ SOFTWARE.
 
 <bitset name="cmpv.s" extends="#instruction-cat2-2src-cond">
 	<pattern low="53" high="58">100010</pattern>
+</bitset>
+
+<bitset name="mul.f.mul2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100011</pattern>
+</bitset>
+
+<bitset name="add.f.mul2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100100</pattern>
+</bitset>
+
+<bitset name="mul.f.div2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100101</pattern>
+</bitset>
+
+<bitset name="add.f.div2" extends="#instruction-cat2-2src-cond">
+	<gen min="700"/>
+	<pattern low="53" high="58">100110</pattern>
 </bitset>
 
 <bitset name="mul.u24" extends="#instruction-cat2-2src">

@@ -37,19 +37,29 @@ enum vpe_status vpe10_set_num_segments(struct vpe_priv *vpe_priv, struct stream_
     struct scaler_data *scl_data, struct vpe_rect *src_rect, struct vpe_rect *dst_rect,
     uint32_t *max_seg_width, uint32_t recout_width_alignment);
 
-bool vpe10_get_dcc_compression_output_cap(const struct vpe *vpe, const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
+bool vpe10_get_dcc_compression_output_cap(
+    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
 
-bool vpe10_get_dcc_compression_input_cap(const struct vpe *vpe, const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
+bool vpe10_get_dcc_compression_input_cap(
+    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
 
-bool vpe10_check_input_color_space(struct vpe_priv *vpe_priv, enum vpe_surface_pixel_format format,
-    const struct vpe_color_space *vcs);
+bool vpe10_check_input_format(enum vpe_surface_pixel_format format);
 
-bool vpe10_check_output_color_space(struct vpe_priv *vpe_priv, enum vpe_surface_pixel_format format,
-    const struct vpe_color_space *vcs);
+bool vpe10_check_output_format(enum vpe_surface_pixel_format format);
+
+bool vpe10_check_input_color_space(
+    enum vpe_surface_pixel_format format, const struct vpe_color_space *vcs);
+
+bool vpe10_check_output_color_space(
+    enum vpe_surface_pixel_format format, const struct vpe_color_space *vcs);
 
 bool vpe10_check_h_mirror_support(bool *input_mirror, bool *output_mirror);
 
 enum vpe_status vpe10_check_bg_color_support(struct vpe_priv* vpe_priv, struct vpe_color* bg_color);
+
+void vpe10_bg_color_convert(enum color_space output_cs, struct transfer_func *output_tf,
+    enum vpe_surface_pixel_format pixel_format, struct vpe_color *mpc_bg_color,
+    struct vpe_color *opp_bg_color, bool enable_3dlut);
 
 uint16_t vpe10_get_bg_stream_idx(struct vpe_priv *vpe_priv);
 
@@ -92,6 +102,9 @@ struct cdc_be *vpe10_cdc_be_create(struct vpe_priv *vpe_priv, int inst);
 
 bool vpe10_validate_cached_param(struct vpe_priv *vpe_priv, const struct vpe_build_param *param);
 
+void vpe10_setup_check_funcs(struct vpe_check_support_funcs *funcs);
+
+const struct vpe_caps *vpe10_get_capability(void);
 #ifdef __cplusplus
 }
 #endif

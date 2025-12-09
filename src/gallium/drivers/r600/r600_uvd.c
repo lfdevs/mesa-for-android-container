@@ -16,7 +16,6 @@
 #include "util/u_video.h"
 
 #include "vl/vl_defines.h"
-#include "vl/vl_mpeg12_decoder.h"
 
 #include "r600_pipe.h"
 #include "radeon_video.h"
@@ -58,8 +57,7 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 									 PIPE_USAGE_DEFAULT, 0, chroma_format);
 	if (ctx->b.gfx_level < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 		templ.bind = PIPE_BIND_LINEAR;
-	resources[0] = (struct r600_texture *)
-		pipe->screen->resource_create(pipe->screen, &templ);
+	resources[0] = r600_as_texture(pipe->screen->resource_create(pipe->screen, &templ));
 	if (!resources[0])
 		goto error;
 
@@ -68,8 +66,7 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 										 PIPE_USAGE_DEFAULT, 1, chroma_format);
 		if (ctx->b.gfx_level < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 			templ.bind = PIPE_BIND_LINEAR;
-		resources[1] = (struct r600_texture *)
-			pipe->screen->resource_create(pipe->screen, &templ);
+		resources[1] = r600_as_texture(pipe->screen->resource_create(pipe->screen, &templ));
 		if (!resources[1])
 			goto error;
 	}
@@ -79,8 +76,7 @@ struct pipe_video_buffer *r600_video_buffer_create(struct pipe_context *pipe,
 										 PIPE_USAGE_DEFAULT, 2, chroma_format);
 		if (ctx->b.gfx_level < EVERGREEN || tmpl->interlaced || !R600_UVD_ENABLE_TILING)
 			templ.bind = PIPE_BIND_LINEAR;
-		resources[2] = (struct r600_texture *)
-			pipe->screen->resource_create(pipe->screen, &templ);
+		resources[2] = r600_as_texture(pipe->screen->resource_create(pipe->screen, &templ));
 		if (!resources[2])
 			goto error;
 	}
@@ -134,8 +130,8 @@ static uint32_t eg_num_banks(uint32_t nbanks)
 static struct pb_buffer_lean* r600_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_buffer *buf)
 {
 	struct r600_screen *rscreen = (struct r600_screen*)buf->base.context->screen;
-	struct r600_texture *luma = (struct r600_texture *)buf->resources[0];
-	struct r600_texture *chroma = (struct r600_texture *)buf->resources[1];
+	struct r600_texture *luma = r600_as_texture(buf->resources[0]);
+	struct r600_texture *chroma = r600_as_texture(buf->resources[1]);
 
 	msg->body.decode.dt_field_mode = buf->base.interlaced;
 	msg->body.decode.dt_surf_tile_config |= RUVD_NUM_BANKS(eg_num_banks(rscreen->b.info.r600_num_banks));
@@ -150,7 +146,7 @@ static void r600_vce_get_buffer(struct pipe_resource *resource,
 				struct pb_buffer_lean **handle,
 				struct radeon_surf **surface)
 {
-	struct r600_texture *res = (struct r600_texture *)resource;
+	struct r600_texture *res = r600_as_texture(resource);
 
 	if (handle)
 		*handle = res->resource.buf;

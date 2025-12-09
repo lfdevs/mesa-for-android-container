@@ -28,8 +28,7 @@ GeometryShader::do_scan_instruction(nir_instr *instr)
    switch (ii->intrinsic) {
    case nir_intrinsic_store_output:
       return process_store_output(ii);
-   case nir_intrinsic_load_per_vertex_input:
-   case nir_intrinsic_load_r600_indirect_per_vertex_input:
+   case nir_intrinsic_load_r600_per_vertex_input:
       return process_load_input(ii);
    case nir_intrinsic_r600_indirect_vertex_at_index:
       return true;
@@ -88,11 +87,8 @@ GeometryShader::process_store_output(nir_intrinsic_instr *instr)
 bool
 GeometryShader::process_load_input(nir_intrinsic_instr *instr)
 {
-   auto location = static_cast<gl_varying_slot>(nir_intrinsic_io_semantics(instr).location);
-   auto index = nir_src_as_const_value(instr->src[1]);
-   assert(index);
-
-   auto driver_location = nir_intrinsic_base(instr) + index->u32;
+   auto location =
+      static_cast<gl_varying_slot>(nir_intrinsic_io_semantics(instr).location);
 
    if (location == VARYING_SLOT_POS || location == VARYING_SLOT_PSIZ ||
        location == VARYING_SLOT_FOGC || location == VARYING_SLOT_CLIP_VERTEX ||
@@ -103,17 +99,33 @@ GeometryShader::process_load_input(nir_intrinsic_instr *instr)
        (location >= VARYING_SLOT_VAR0 && location <= VARYING_SLOT_VAR31) ||
        (location >= VARYING_SLOT_TEX0 && location <= VARYING_SLOT_TEX7)) {
 
-      uint64_t bit = 1ull << location;
-      if (!(bit & m_input_mask)) {
-         ShaderInput input(driver_location, location);
-         input.set_ring_offset(16 * driver_location);
-         add_input(input);
-         m_next_input_ring_offset += 16;
-         m_input_mask |= bit;
+      if (nir_intrinsic_io_semantics(instr).num_slots == 1) {
+         add_input_at(location, nir_intrinsic_base(instr));
+      } else {
+         auto base = nir_intrinsic_base(instr);
+         unsigned range = nir_intrinsic_range(instr);
+         for (unsigned i = 0; i < range; ++i) {
+            auto driver_location = base + i;
+            auto array_location = static_cast<gl_varying_slot>(location + i);
+            add_input_at(array_location, driver_location);
+         }
       }
       return true;
    }
    return false;
+}
+
+void
+GeometryShader::add_input_at(gl_varying_slot location, unsigned driver_location)
+{
+   uint64_t bit = 1ull << location;
+   if (!(bit & m_input_mask)) {
+      ShaderInput input(driver_location, location);
+      input.set_ring_offset(16 * driver_location);
+      add_input(input);
+      m_next_input_ring_offset += 16;
+      m_input_mask |= bit;
+   }
 }
 
 int
@@ -137,8 +149,7 @@ GeometryShader::do_allocate_reserved_registers()
 
    for (int i = 0; i < 4; ++i) {
       m_export_base[i] = value_factory().temp_register(0, false);
-      emit_instruction(
-         new AluInstr(op1_mov, m_export_base[i], zero, AluInstr::last_write));
+      emit_instruction(new AluInstr(op1_mov, m_export_base[i], zero, AluInstr::write));
    }
 
    m_ring_item_sizes[0] = m_next_input_ring_offset;
@@ -167,10 +178,8 @@ GeometryShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
       return emit_simple_mov(intr->def, 0, m_primitive_id);
    case nir_intrinsic_load_invocation_id:
       return emit_simple_mov(intr->def, 0, m_invocation_id);
-   case nir_intrinsic_load_per_vertex_input:
-      return emit_load_per_vertex_input_direct(intr);
-   case nir_intrinsic_load_r600_indirect_per_vertex_input:
-      return emit_load_per_vertex_input_indirect(intr);
+   case nir_intrinsic_load_r600_per_vertex_input:
+      return emit_load_per_vertex_input(intr);
    case nir_intrinsic_r600_indirect_vertex_at_index:
       return emit_indirect_vertex_at_index(intr);
    default:;
@@ -204,7 +213,7 @@ GeometryShader::emit_vertex(nir_intrinsic_instr *instr, bool cut)
                              m_export_base[stream],
                              m_export_base[stream],
                              value_factory().literal(m_noutputs),
-                             AluInstr::last_write);
+                             AluInstr::write);
       emit_instruction(ir);
    }
 
@@ -278,7 +287,6 @@ GeometryShader::store_output(nir_intrinsic_instr *instr)
                emit_instruction(ir);
             }
          }
-         ir->set_alu_flag(alu_last_instr);
          m_streamout_data[location] = new MemRingOutInstr(cf_mem_ring,
                                                           MemRingOutInstr::mem_write_ind,
                                                           tmp,
@@ -318,28 +326,11 @@ GeometryShader::emit_indirect_vertex_at_index(nir_intrinsic_instr *instr)
 }
 
 bool
-GeometryShader::emit_load_per_vertex_input_direct(nir_intrinsic_instr *instr)
-{
-   auto literal_index = nir_src_as_const_value(instr->src[0]);
-   assert(literal_index);
-   assert(literal_index->u32 < R600_GS_VERTEX_INDIRECT_TOTAL);
-   assert(nir_intrinsic_io_semantics(instr).num_slots == 1);
-
-   return load_per_vertex_input_at_addr(instr, m_per_vertex_offsets[literal_index->u32]);
-}
-
-bool
-GeometryShader::emit_load_per_vertex_input_indirect(nir_intrinsic_instr *instr)
-{
-   return load_per_vertex_input_at_addr(
-      instr,
-      value_factory().src(instr->src[0], 0)->as_register());
-}
-
-bool
-GeometryShader::load_per_vertex_input_at_addr(nir_intrinsic_instr *instr, PRegister addr)
+GeometryShader::emit_load_per_vertex_input(nir_intrinsic_instr *instr)
 {
    auto dest = value_factory().dest_vec4(instr->def, pin_group);
+   auto addr = value_factory().src(instr->src[0], 0)->as_register();
+   assert(addr);
 
    RegisterVec4::Swizzle dest_swz{7, 7, 7, 7};
    for (unsigned i = 0; i < instr->def.num_components; ++i) {
@@ -375,7 +366,7 @@ GeometryShader::do_finalize()
 void
 GeometryShader::do_get_shader_info(r600_shader *sh_info)
 {
-   sh_info->processor_type = PIPE_SHADER_GEOMETRY;
+   sh_info->processor_type = MESA_SHADER_GEOMETRY;
    sh_info->ring_item_sizes[0] = m_ring_item_sizes[0];
    sh_info->cc_dist_mask = m_cc_dist_mask;
    sh_info->clip_dist_write = m_clip_dist_write;
@@ -403,7 +394,7 @@ GeometryShader::emit_adj_fix()
                                  adjhelp0,
                                  m_primitive_id,
                                  value_factory().one_i(),
-                                 AluInstr::last_write));
+                                 AluInstr::write));
 
    int reg_indices[R600_GS_VERTEX_INDIRECT_TOTAL];
    int rotate_indices[R600_GS_VERTEX_INDIRECT_TOTAL] = {4, 5, 0, 1, 2, 3};
@@ -425,7 +416,6 @@ GeometryShader::emit_adj_fix()
 
       emit_instruction(ir);
    }
-   ir->set_alu_flag(alu_last_instr);
 
    for (int i = 0; i < R600_GS_VERTEX_INDIRECT_TOTAL; i++)
       m_per_vertex_offsets[i] = adjhelp[i];

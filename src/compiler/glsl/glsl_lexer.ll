@@ -450,6 +450,9 @@ flat		KEYWORD_WITH_ALT(130, 100, 130, 300, yyextra->EXT_gpu_shader4_enable, FLAT
 smooth		KEYWORD(130, 300, 130, 300, SMOOTH);
 noperspective	KEYWORD_WITH_ALT(130, 300, 130, 0, yyextra->EXT_gpu_shader4_enable || yyextra->NV_shader_noperspective_interpolation_enable, NOPERSPECTIVE);
 patch		KEYWORD_WITH_ALT(0, 300, 400, 320, yyextra->has_tessellation_shader(), PATCH);
+__pixel_localEXT    KEYWORD_WITH_ALT(0, 0,   0,  300, yyextra->EXT_shader_pixel_local_storage_enable, PIXEL_LOCAL);
+__pixel_local_inEXT  KEYWORD_WITH_ALT(0, 0,   0,  300, yyextra->EXT_shader_pixel_local_storage_enable, PIXEL_LOCAL_IN);
+__pixel_local_outEXT KEYWORD_WITH_ALT(0, 0,   0,  300, yyextra->EXT_shader_pixel_local_storage_enable, PIXEL_LOCAL_OUT);
 
 sampler1D	DEPRECATED_ES_TYPE(&glsl_type_builtin_sampler1D);
 sampler2D	{ yylval->type = &glsl_type_builtin_sampler2D; return BASIC_TYPE_TOK; }
@@ -550,6 +553,20 @@ writeonly      KEYWORD_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_image_lo
 atomic_uint     TYPE_WITH_ALT(420, 300, 420, 310, yyextra->ARB_shader_atomic_counters_enable, &glsl_type_builtin_atomic_uint);
 
 shared          KEYWORD_WITH_ALT(430, 310, 430, 310, yyextra->ARB_compute_shader_enable, SHARED);
+
+taskPayloadSharedEXT {
+		    if (yyextra->EXT_mesh_shader_enable)
+		         return TASKPAYLOAD;
+		    else
+		         return classify_identifier(yyextra, yytext, yyleng, yylval);
+		}
+
+perprimitiveEXT {
+		    if (yyextra->EXT_mesh_shader_enable)
+		         return PERPRIMITIVE;
+		    else
+		         return classify_identifier(yyextra, yytext, yyleng, yylval);
+		}
 
 struct		return STRUCT;
 void		return VOID_TOK;

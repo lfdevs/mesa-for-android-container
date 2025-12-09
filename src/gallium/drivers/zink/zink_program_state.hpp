@@ -98,88 +98,125 @@ check_vertex_strides(struct zink_context *ctx)
  * in theory, zink supports many feature levels,
  * but it's important to provide a more optimized codepath for drivers that support all the best features
  */
-template <zink_dynamic_state DYNAMIC_STATE, bool HAVE_LIB>
+template <zink_dynamic_state DYNAMIC_STATE, bool HAVE_LIB, bool IS_MESH>
 VkPipeline
 zink_get_gfx_pipeline(struct zink_context *ctx,
                       struct zink_gfx_program *prog,
                       struct zink_gfx_pipeline_state *state,
                       enum mesa_prim mode)
 {
+   MESA_TRACE_FUNC();
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    bool uses_dynamic_stride = state->uses_dynamic_stride;
 
-   VkPrimitiveTopology vkmode = zink_primitive_topology(mode);
-   const unsigned idx = screen->info.dynamic_state3_props.dynamicPrimitiveTopologyUnrestricted ?
+   VkPrimitiveTopology vkmode = IS_MESH ? VK_PRIMITIVE_TOPOLOGY_MAX_ENUM : zink_primitive_topology(mode);
+   const unsigned idx = IS_MESH || screen->info.dynamic_state3_props.dynamicPrimitiveTopologyUnrestricted ?
                         0 :
                         get_pipeline_idx<DYNAMIC_STATE >= ZINK_DYNAMIC_STATE>(mode, vkmode);
    assert(idx <= ARRAY_SIZE(prog->pipelines));
-   if (!state->dirty && !state->modules_changed &&
-       ((DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT || DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT2) && !ctx->vertex_state_changed) &&
-       idx == state->idx)
-      return state->pipeline;
+   if (IS_MESH) {
+      if (!state->mesh_dirty && !state->mesh_modules_changed)
+         return state->mesh_pipeline;
+   } else {
+      if (!state->dirty && !state->modules_changed && idx == state->idx && !ctx->vertex_state_changed &&
+          ((DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT || DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT2)))
+         return state->pipeline;
+   }
 
    struct hash_entry *entry = NULL;
 
    /* recalc the base pipeline state hash */
-   if (state->dirty) {
-      if (state->pipeline) //avoid on first hash
+   if (IS_MESH) {
+      if (state->mesh_dirty) {
+         if (state->mesh_pipeline) //avoid on first hash
+            state->mesh_final_hash ^= state->mesh_hash;
+         state->mesh_hash = hash_gfx_pipeline_state<DYNAMIC_STATE>(state, screen);
+         state->mesh_final_hash ^= state->mesh_hash;
+         state->mesh_dirty = false;
+      }
+   } else {
+      if (state->dirty) {
+         if (state->pipeline) //avoid on first hash
+            state->final_hash ^= state->hash;
+         state->hash = hash_gfx_pipeline_state<DYNAMIC_STATE>(state, screen);
          state->final_hash ^= state->hash;
-      state->hash = hash_gfx_pipeline_state<DYNAMIC_STATE>(state, screen);
-      state->final_hash ^= state->hash;
-      state->dirty = false;
+         state->dirty = false;
+      }
    }
    /* extra safety asserts for optimal path to catch refactoring bugs */
    if (prog->optimal_keys) {
       ASSERTED const union zink_shader_key_optimal *opt = (union zink_shader_key_optimal*)&prog->last_variant_hash;
       ASSERTED union zink_shader_key_optimal sanitized = {};
-      sanitized.val = zink_sanitize_optimal_key(ctx->gfx_stages, ctx->gfx_pipeline_state.shader_keys_optimal.key.val);
+      if (IS_MESH) {
+         sanitized.val = zink_sanitize_optimal_key_mesh(ctx->gfx_stages, ctx->gfx_pipeline_state.shader_keys_optimal.key.val);
+         assert(state->mesh_optimal_key == sanitized.val);
+      } else {
+         sanitized.val = zink_sanitize_optimal_key(ctx->gfx_stages, ctx->gfx_pipeline_state.shader_keys_optimal.key.val);
+         assert(state->optimal_key == sanitized.val);
+      }
       assert(opt->val == sanitized.val);
-      assert(state->optimal_key == sanitized.val);
    }
-   /* recalc vertex state if missing optimal extensions */
-   if (DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT2 && DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT && ctx->vertex_state_changed) {
-      if (state->pipeline)
-         state->final_hash ^= state->vertex_hash;
-      /* even if dynamic stride is available, it may not be usable with the current pipeline */
-      if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE)
+
+   if (IS_MESH) {
+      state->mesh_modules_changed = false;
+
+      if (prog->last_finalized_hash[idx] == state->mesh_final_hash &&
+         !prog->inline_variants && likely(prog->last_pipeline[idx]) &&
+         /* this data is too big to compare in the fast-path */
+         likely(!prog->shaders[MESA_SHADER_FRAGMENT]->fs.legacy_shadow_mask)) {
+         state->mesh_pipeline = prog->last_pipeline[idx]->pipeline;
+         return state->mesh_pipeline;
+      }
+   } else {
+      if (DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT2 && DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT && ctx->vertex_state_changed) {
+         /* recalc vertex state if missing optimal extensions */
+         if (state->pipeline)
+            state->final_hash ^= state->vertex_hash;
+         /* even if dynamic stride is available, it may not be usable with the current pipeline */
+         if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE)
 #if defined(MVK_VERSION)
-         if (screen->have_dynamic_state_vertex_input_binding_stride)
+            if (screen->have_dynamic_state_vertex_input_binding_stride)
 #endif
-         uses_dynamic_stride = check_vertex_strides(ctx);
-      if (!uses_dynamic_stride) {
-         uint32_t hash = 0;
-         /* if we don't have dynamic states, we have to hash the enabled vertex buffer bindings */
-         uint32_t vertex_buffers_enabled_mask = state->vertex_buffers_enabled_mask;
-         hash = XXH32(&vertex_buffers_enabled_mask, sizeof(uint32_t), hash);
+            uses_dynamic_stride = check_vertex_strides(ctx);
+         if (!uses_dynamic_stride) {
+            uint32_t hash = 0;
+            /* if we don't have dynamic states, we have to hash the enabled vertex buffer bindings */
+            uint32_t vertex_buffers_enabled_mask = state->vertex_buffers_enabled_mask;
+            hash = XXH32(&vertex_buffers_enabled_mask, sizeof(uint32_t), hash);
 
-         for (unsigned i = 0; i < state->element_state->num_bindings; i++) {
-            const unsigned buffer_id = ctx->element_state->hw_state.binding_map[i];
-            struct pipe_vertex_buffer *vb = ctx->vertex_buffers + buffer_id;
-            state->vertex_strides[buffer_id] = vb->buffer.resource ? state->element_state->b.strides[i] : 0;
-            hash = XXH32(&state->vertex_strides[buffer_id], sizeof(uint32_t), hash);
+            for (unsigned i = 0; i < state->element_state->num_bindings; i++) {
+               const unsigned buffer_id = ctx->element_state->hw_state.binding_map[i];
+               struct pipe_vertex_buffer *vb = ctx->vertex_buffers + buffer_id;
+               state->vertex_strides[buffer_id] = vb->buffer.resource ? state->element_state->b.strides[i] : 0;
+               hash = XXH32(&state->vertex_strides[buffer_id], sizeof(uint32_t), hash);
+            }
+            state->vertex_hash = hash ^ state->element_state->hash;
+         } else
+            state->vertex_hash = state->element_state->hash;
+         state->final_hash ^= state->vertex_hash;
+      }
+
+      state->modules_changed = false;
+      state->uses_dynamic_stride = uses_dynamic_stride;
+      state->idx = idx;
+
+      /* shortcut for reusing previous pipeline across program changes */
+      if (DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT || DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT2) {
+         if (prog->last_finalized_hash[idx] == state->final_hash &&
+            !prog->inline_variants && likely(prog->last_pipeline[idx]) &&
+            /* this data is too big to compare in the fast-path */
+            likely(!prog->shaders[MESA_SHADER_FRAGMENT]->fs.legacy_shadow_mask)) {
+            state->pipeline = prog->last_pipeline[idx]->pipeline;
+            return state->pipeline;
          }
-         state->vertex_hash = hash ^ state->element_state->hash;
-      } else
-         state->vertex_hash = state->element_state->hash;
-      state->final_hash ^= state->vertex_hash;
-   }
-   state->modules_changed = false;
-   state->uses_dynamic_stride = uses_dynamic_stride;
-   state->idx = idx;
-
-   /* shortcut for reusing previous pipeline across program changes */
-   if (DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT || DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT2) {
-      if (prog->last_finalized_hash[idx] == state->final_hash &&
-          !prog->inline_variants && likely(prog->last_pipeline[idx]) &&
-          /* this data is too big to compare in the fast-path */
-          likely(!prog->shaders[MESA_SHADER_FRAGMENT]->fs.legacy_shadow_mask)) {
-         state->pipeline = prog->last_pipeline[idx]->pipeline;
-         return state->pipeline;
       }
    }
-   entry = _mesa_hash_table_search_pre_hashed(&prog->pipelines[idx], state->final_hash, state);
+
+   unsigned final_hash = IS_MESH ? state->mesh_final_hash : state->final_hash;
+   entry = _mesa_hash_table_search_pre_hashed(&prog->pipelines[idx], final_hash, state);
 
    if (!entry) {
+      bool can_gpl = IS_MESH ? zink_can_use_pipeline_libs_mesh(ctx) : zink_can_use_pipeline_libs(ctx);
       /* always wait on async precompile/cache fence */
       util_queue_fence_wait(&prog->base.cache_fence);
       struct zink_gfx_pipeline_cache_entry *pc_entry = CALLOC_STRUCT(zink_gfx_pipeline_cache_entry);
@@ -193,14 +230,15 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
       pc_entry->prog = prog;
       /* init the optimized background compile fence */
       util_queue_fence_init(&pc_entry->fence);
-      entry = _mesa_hash_table_insert_pre_hashed(&prog->pipelines[idx], state->final_hash, pc_entry, pc_entry);
+      entry = _mesa_hash_table_insert_pre_hashed(&prog->pipelines[idx], final_hash, pc_entry, pc_entry);
       if (prog->base.uses_shobj && !prog->is_separable) {
          memcpy(pc_entry->shobjs, prog->objs, sizeof(prog->objs));
          zink_gfx_program_compile_queue(ctx, pc_entry);
-      } else if (HAVE_LIB && zink_can_use_pipeline_libs(ctx)) {
+      } else if (HAVE_LIB && can_gpl) {
+         uint32_t optimal_key = IS_MESH ? ctx->gfx_pipeline_state.mesh_optimal_key : ctx->gfx_pipeline_state.optimal_key;
          /* this is the graphics pipeline library path: find/construct all partial pipelines */
          simple_mtx_lock(&prog->libs->lock);
-         struct set_entry *he = _mesa_set_search(&prog->libs->libs, &ctx->gfx_pipeline_state.optimal_key);
+         struct set_entry *he = _mesa_set_search(&prog->libs->libs, &optimal_key);
          struct zink_gfx_library_key *gkey;
          if (he) {
             gkey = (struct zink_gfx_library_key *)he->key;
@@ -209,7 +247,8 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
             gkey = zink_create_pipeline_lib(screen, prog, &ctx->gfx_pipeline_state);
          }
          simple_mtx_unlock(&prog->libs->lock);
-         struct zink_gfx_input_key *ikey = DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT ?
+         struct zink_gfx_input_key *ikey = IS_MESH ? NULL :
+                                             DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT ?
                                              zink_find_or_create_input_dynamic(ctx, vkmode) :
                                              zink_find_or_create_input(ctx, vkmode);
          struct zink_gfx_output_key *okey = DYNAMIC_STATE >= ZINK_DYNAMIC_STATE3 && screen->have_full_ds3 ?
@@ -221,17 +260,17 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
          pc_entry->gpl.okey = okey;
          /* try to hit optimized compile cache first if possible */
          if (!prog->is_separable)
-            pc_entry->pipeline = zink_create_gfx_pipeline_combined(screen, prog, ikey->pipeline, &gkey->pipeline, 1, okey->pipeline, true, true);
+            pc_entry->pipeline = zink_create_gfx_pipeline_combined(screen, prog, ikey ? ikey->pipeline : VK_NULL_HANDLE, &gkey->pipeline, 1, okey->pipeline, true, true);
          if (!pc_entry->pipeline) {
             /* create the non-optimized pipeline first using fast-linking to avoid stuttering */
-            pc_entry->pipeline = zink_create_gfx_pipeline_combined(screen, prog, ikey->pipeline, &gkey->pipeline, 1, okey->pipeline, false, false);
+            pc_entry->pipeline = zink_create_gfx_pipeline_combined(screen, prog, ikey ? ikey->pipeline : VK_NULL_HANDLE, &gkey->pipeline, 1, okey->pipeline, false, false);
             if (!prog->is_separable)
                /* trigger async optimized pipeline compile if this was the fast-linked unoptimized pipeline */
                zink_gfx_program_compile_queue(ctx, pc_entry);
          }
       } else {
          /* optimize by default only when expecting precompiles in order to reduce stuttering */
-         if (DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT2 && DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT)
+         if (DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT2 && DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT && !IS_MESH)
             pc_entry->pipeline = zink_create_gfx_pipeline(screen, prog, prog->objs, state, state->element_state->binding_map, vkmode, !HAVE_LIB);
          else
             pc_entry->pipeline = zink_create_gfx_pipeline(screen, prog, prog->objs, state, NULL, vkmode, !HAVE_LIB);
@@ -246,13 +285,16 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
    }
 
    struct zink_gfx_pipeline_cache_entry *cache_entry = (struct zink_gfx_pipeline_cache_entry *)entry->data;
-   state->pipeline = cache_entry->pipeline;
+   if (IS_MESH)
+      state->mesh_pipeline = cache_entry->pipeline;
+   else
+      state->pipeline = cache_entry->pipeline;
    /* update states for fastpath */
    if (DYNAMIC_STATE >= ZINK_DYNAMIC_VERTEX_INPUT) {
-      prog->last_finalized_hash[idx] = state->final_hash;
+      prog->last_finalized_hash[idx] = final_hash;
       prog->last_pipeline[idx] = cache_entry;
    }
-   return state->pipeline;
+   return IS_MESH ? state->mesh_pipeline : state->pipeline;
 }
 
 /* runtime-optimized pipeline state comparisons */
@@ -395,6 +437,8 @@ get_gfx_pipeline_stage_eq_func(struct zink_gfx_program *prog, bool optimal_keys)
 equals_gfx_pipeline_state_func
 zink_get_gfx_pipeline_eq_func(struct zink_screen *screen, struct zink_gfx_program *prog)
 {
+   if (prog->shaders[MESA_SHADER_MESH])
+      return get_gfx_pipeline_stage_eq_func<ZINK_PIPELINE_DYNAMIC_VERTEX_INPUT_PCP>(prog, screen->optimal_keys);
    if (screen->info.have_EXT_extended_dynamic_state) {
       if (screen->info.have_EXT_extended_dynamic_state2) {
          if (screen->info.have_EXT_extended_dynamic_state3) {

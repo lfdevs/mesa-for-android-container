@@ -11,10 +11,10 @@
 #ifndef RADV_AMDGPU_WINSYS_H
 #define RADV_AMDGPU_WINSYS_H
 
-#include <amdgpu.h>
 #include <pthread.h>
 #include "util/list.h"
 #include "util/rwlock.h"
+#include "util/simple_mtx.h"
 #include "ac_gpu_info.h"
 #include "ac_linux_drm.h"
 #include "radv_radeon_winsys.h"
@@ -31,9 +31,10 @@ struct radv_amdgpu_winsys {
 
    bool debug_all_bos;
    bool debug_log_bos;
-   bool use_ib_bos;
+   bool dump_ibs;
+   FILE *bo_history_logfile;
+   bool chain_ib;
    bool zero_all_vram_allocs;
-   bool reserve_vmid;
    uint64_t perftest;
 
    alignas(8) uint64_t allocated_vram;
@@ -55,6 +56,10 @@ struct radv_amdgpu_winsys {
    const struct vk_sync_type *sync_types[3];
    struct vk_sync_type syncobj_sync_type;
    struct vk_sync_timeline_type emulated_timeline_sync_type;
+
+   simple_mtx_t vm_ioctl_lock;
+   uint32_t vm_timeline_syncobj;
+   uint64_t vm_timeline_seq_num;
 
    uint32_t refcount;
 };

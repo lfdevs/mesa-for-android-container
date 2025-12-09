@@ -66,19 +66,29 @@ struct virgl_shader_binding_state {
    uint32_t image_enabled_mask;
 };
 
+/*
+ * Subclass of pipe_framebuffer_state which has resource handles.
+ */
+struct virgl_framebuffer_state
+{
+   struct pipe_framebuffer_state base;
+
+   uint32_t cbufs_handles[PIPE_MAX_COLOR_BUFS];
+   uint32_t zsbuf_handle;
+};
+
 struct virgl_context {
    struct pipe_context base;
    struct virgl_cmd_buf *cbuf;
    unsigned cbuf_initial_cdw;
 
-   struct virgl_shader_binding_state shader_bindings[PIPE_SHADER_TYPES];
+   struct virgl_shader_binding_state shader_bindings[MESA_SHADER_STAGES];
    struct pipe_shader_buffer atomic_buffers[PIPE_MAX_HW_ATOMIC_BUFFERS];
    uint32_t atomic_buffer_enabled_mask;
 
    struct virgl_vertex_elements_state *vertex_elements;
 
-   PIPE_FB_SURFACES; //STOP USING THIS
-   struct pipe_framebuffer_state framebuffer;
+   struct virgl_framebuffer_state framebuffer;
 
    struct slab_child_pool transfer_pool;
    struct virgl_transfer_queue queue;

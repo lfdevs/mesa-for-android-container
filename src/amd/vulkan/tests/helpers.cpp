@@ -13,14 +13,11 @@ PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, con
 
 radv_test::radv_test()
 {
-   /* Force the driver to create a noop device that doesn't require AMDGPU. */
-   setenv("RADV_FORCE_FAMILY", "navi21", 1);
 }
 
 radv_test::~radv_test()
 {
    assert(envvars.size() == 0);
-   unsetenv("RADV_FORCE_FAMILY");
 }
 
 void
@@ -202,5 +199,54 @@ radv_test::get_pipeline_hash(VkShaderStageFlags stage)
          return stats[i].value.u64;
    }
 
-   unreachable("Driver pipeline hash not found");
+   UNREACHABLE("Driver pipeline hash not found");
+}
+
+void
+radv_test::get_pipeline_key(uint32_t code_size, const uint32_t *code, VkPipelineBinaryKeyKHR *pipeline_key,
+                            VkPipelineCreateFlags flags)
+{
+   VkResult result;
+
+   VkShaderModuleCreateInfo shader_module_create_info = {
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = code_size,
+      .pCode = code,
+   };
+   VkShaderModule shader_module;
+
+   result = CreateShaderModule(device, &shader_module_create_info, NULL, &shader_module);
+   assert(result == VK_SUCCESS);
+
+   VkPipelineLayoutCreateInfo pipeline_layout_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+   };
+
+   result = CreatePipelineLayout(device, &pipeline_layout_info, NULL, &pipeline_layout);
+   assert(result == VK_SUCCESS);
+
+   VkPipelineShaderStageCreateInfo stage_create_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+      .module = shader_module,
+      .pName = "main",
+   };
+
+   VkComputePipelineCreateInfo compute_pipeline_create_info = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .flags = flags,
+      .stage = stage_create_info,
+      .layout = pipeline_layout,
+   };
+
+   VkPipelineCreateInfoKHR pipeline_create_info = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_CREATE_INFO_KHR,
+      .pNext = &compute_pipeline_create_info,
+   };
+
+   result = GetPipelineKeyKHR(device, &pipeline_create_info, pipeline_key);
+   assert(result == VK_SUCCESS);
+
+   DestroyPipelineLayout(device, pipeline_layout, NULL);
+   DestroyShaderModule(device, shader_module, NULL);
 }

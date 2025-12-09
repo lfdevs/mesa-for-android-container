@@ -32,8 +32,9 @@ select_rt_prolog(Program* program, ac_shader_config* config,
     * Ring offsets:                s[0-1]
     * Indirect descriptor sets:    s[2]
     * Push constants pointer:      s[3]
-    * SBT descriptors:             s[4-5]
-    * Traversal shader address:    s[6-7]
+    * Dynamic descriptors:         s[4]
+    * Traversal shader address:    s[5]
+    * SBT descriptors:             s[6-7]
     * Ray launch size address:     s[8-9]
     * Dynamic callable stack base: s[10]
     * Workgroup IDs (xyz):         s[11], s[12], s[13]
@@ -69,8 +70,9 @@ select_rt_prolog(Program* program, ac_shader_config* config,
     * Callee shader PC:            s[0-1]
     * Indirect descriptor sets:    s[2]
     * Push constants pointer:      s[3]
-    * SBT descriptors:             s[4-5]
-    * Traversal shader address:    s[6-7]
+    * Dynamic descriptors:         s[4]
+    * Traversal shader address:    s[5]
+    * SBT descriptors:             s[6-7]
     * Ray launch sizes (xyz):      s[8], s[9], s[10]
     * Scratch offset (<GFX9 only): s[11]
     * Ring offsets (<GFX9 only):   s[12-13]
@@ -104,8 +106,12 @@ select_rt_prolog(Program* program, ac_shader_config* config,
    assert(in_ring_offsets == out_uniform_shader_addr);
    assert(get_arg_reg(in_args, in_args->push_constants) ==
           get_arg_reg(out_args, out_args->push_constants));
+   assert(get_arg_reg(in_args, in_args->dynamic_descriptors) ==
+          get_arg_reg(out_args, out_args->dynamic_descriptors));
    assert(get_arg_reg(in_args, in_args->rt.sbt_descriptors) ==
           get_arg_reg(out_args, out_args->rt.sbt_descriptors));
+   assert(get_arg_reg(in_args, in_args->rt.traversal_shader_addr) ==
+          get_arg_reg(out_args, out_args->rt.traversal_shader_addr));
    assert(in_launch_size_addr == out_launch_size_x);
    assert(in_stack_base == out_launch_size_z);
    assert(in_local_ids[0] == out_launch_ids[0]);
@@ -208,6 +214,8 @@ select_rt_prolog(Program* program, ac_shader_config* config,
    bld.sop2(Builder::s_cselect, Definition(vcc, bld.lm),
             Operand::c32_or_c64(-1u, program->wave_size == 64),
             Operand::c32_or_c64(0, program->wave_size == 64), Operand(scc, s1));
+   bld.sop2(aco_opcode::s_cselect_b32, Definition(out_launch_size_y, s1),
+            Operand(out_launch_size_y, s1), Operand::c32(1), Operand(scc, s1));
    bld.vop2(aco_opcode::v_cndmask_b32, Definition(out_launch_ids[0], v1),
             Operand(tmp_invocation_idx, v1), Operand(out_launch_ids[0], v1), Operand(vcc, bld.lm));
    bld.vop2(aco_opcode::v_cndmask_b32, Definition(out_launch_ids[1], v1), Operand::zero(),

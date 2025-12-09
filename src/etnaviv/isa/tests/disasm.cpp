@@ -198,8 +198,10 @@ INSTANTIATE_TEST_SUITE_P(Opcodes, DisasmTest,
       disasm_state{ {0x00811034, 0x15c01804, 0x00010000, 0x00000000}, "norm_dp2          t1.x___, t1.wyyy, void, void\n"},
       disasm_state{ {0x04011035, 0x14801804, 0x00010000, 0x00000000}, "norm_dp3          t1.___w, t1.zxyy, void, void\n"},
       disasm_state{ {0x00821036, 0x0e401804, 0x00010000, 0x00000000}, "norm_dp4          t2.x___, t1.yzwx, void, void\n"},
+      disasm_state{ {0x0b801037, 0x29000804, 0x01ff0040, 0x00000000}, "norm_mul.unk      t0.xyz_, t0.xyzz, t0.wwww, void\n"},
       disasm_state{ {0x07801039, 0x39204c00, 0x80a90050, 0x00000000}, "img_load.denorm.u32.pack t0, u4.xyzw, t0.xyyy, void\n"},
       disasm_state{ {0x0780083a, 0x39200c00, 0x80a90050, 0x00390018}, "img_store.sat.denorm.u32.pack mem, u0.xyzw, t0.xyyy, t1.xyzw\n"},
+      disasm_state{ {0x0781103d, 0x15001f20, 0x100101c0, 0x00000007}, "tg4               t1, tex0.xyzw, t1.xyyy, 3, void\n"},
       disasm_state{ {0x0381103f, 0x29201804, 0x80010000, 0x780000b8}, "bit_findlsb.u32   t1.xyz_, t1.xyzz, void, void\n"},
       disasm_state{ {0x0081103f, 0x00001804, 0x40010000, 0x780000c8}, "bit_findmsb.s32   t1.x___, t1.xxxx, void, void\n"}
    )
@@ -359,6 +361,17 @@ INSTANTIATE_TEST_SUITE_P(texldgpcf, DisasmTest,
       disasm_state{ {0x04011809, 0x00000004, 0x00000000, 0x003fc018}, "mov.sat           t1.___w, void, void, t1.wwww\n"},
       disasm_state{ {0x00811030, 0x39001800, 0x01490140, 0x00290038}, "texldgpcf         t1.x___, tex0.xxxx, t1.xyzw, t2.xyzz, t3.xyzz\n"},
       disasm_state{ {0x07011009, 0x00000004, 0x00000000, 0x20390018}, "mov               t1._yzw, void, void, u1.xyzw\n"}
+   )
+);
+// clang-format on
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(texldthreaded, DisasmTest,
+   testing::Values(
+      // taken from "glmark2 -b texture:texture-filter=linear (GC8000)
+      disasm_state{ {0x07831018, 0x15001f20, 0x00000020, 0x00002000}, "texld.t0          t3, tex0.xyzw, th1.xyyy, void, void\n"},
+      disasm_state{ {0x07831018, 0x3f801f20, 0x00000020, 0x01000000}, "texld.t1          t3, tex0.xyzw, th1.zwww, void, void\n"},
+      disasm_state{ {0x07811003, 0x39003805, 0x01c80140, 0x00000000}, "mul.rtz           t1, t3.xyzw, t2.xyzw, void\n"}
    )
 );
 // clang-format on

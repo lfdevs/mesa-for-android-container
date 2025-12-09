@@ -14,6 +14,6 @@
 struct ir3_shader_variant;
 
 void fd4_emit_images(struct fd_context *ctx, struct fd_ringbuffer *ring,
-      enum pipe_shader_type shader, const struct ir3_shader_variant *v);
+      mesa_shader_stage shader, const struct ir3_shader_variant *v);
 
 #endif /* FD4_IMAGE_H_ */

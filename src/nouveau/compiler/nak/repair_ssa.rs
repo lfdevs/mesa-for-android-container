@@ -115,7 +115,7 @@ fn get_or_insert_phi_dsts(bb: &mut BasicBlock) -> &mut OpPhiDsts {
     let ip = if let Some(ip) = bb.phi_dsts_ip() {
         ip
     } else {
-        bb.instrs.insert(0, Instr::new_boxed(OpPhiDsts::new()));
+        bb.instrs.insert(0, Instr::new(OpPhiDsts::new()));
         0
     };
     match &mut bb.instrs[ip].op {
@@ -128,10 +128,10 @@ fn get_or_insert_phi_srcs(bb: &mut BasicBlock) -> &mut OpPhiSrcs {
     let ip = if let Some(ip) = bb.phi_srcs_ip() {
         ip
     } else if let Some(ip) = bb.branch_ip() {
-        bb.instrs.insert(ip, Instr::new_boxed(OpPhiSrcs::new()));
+        bb.instrs.insert(ip, Instr::new(OpPhiSrcs::new()));
         ip
     } else {
-        bb.instrs.push(Instr::new_boxed(OpPhiSrcs::new()));
+        bb.instrs.push(Instr::new(OpPhiSrcs::new()));
         bb.instrs.len() - 1
     };
     match &mut bb.instrs[ip].op {

@@ -61,6 +61,11 @@ supported_interface_enum(struct gl_context *ctx, GLenum iface)
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
       return _mesa_has_tessellation(ctx) && _mesa_has_ARB_shader_subroutine(ctx);
+   case GL_TASK_SUBROUTINE_EXT:
+   case GL_MESH_SUBROUTINE_EXT:
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
+      return _mesa_has_EXT_mesh_shader(ctx);
    default:
       return false;
    }
@@ -188,6 +193,10 @@ _mesa_GetProgramResourceIndex(GLuint program, GLenum programInterface,
    case GL_FRAGMENT_SUBROUTINE:
    case GL_VERTEX_SUBROUTINE_UNIFORM:
    case GL_FRAGMENT_SUBROUTINE_UNIFORM:
+   case GL_TASK_SUBROUTINE_EXT:
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
    case GL_PROGRAM_INPUT:
    case GL_PROGRAM_OUTPUT:
    case GL_UNIFORM:
@@ -317,6 +326,11 @@ _mesa_GetProgramResourceLocation(GLuint program, GLenum programInterface,
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
       if (!_mesa_has_tessellation(ctx) || !_mesa_has_ARB_shader_subroutine(ctx))
+         goto fail;
+      break;
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
+      if (!_mesa_has_EXT_mesh_shader(ctx))
          goto fail;
       break;
    default:

@@ -417,7 +417,7 @@ draw_set_vertex_buffers(struct draw_context *draw,
 
    util_set_vertex_buffers_count(draw->pt.vertex_buffer,
                                  &draw->pt.nr_vertex_buffers,
-                                 buffers, count, false);
+                                 buffers, count);
 }
 
 
@@ -454,15 +454,15 @@ draw_set_mapped_vertex_buffer(struct draw_context *draw,
 
 void
 draw_set_mapped_constant_buffer(struct draw_context *draw,
-                                enum pipe_shader_type shader_type,
+                                mesa_shader_stage shader_type,
                                 unsigned slot,
                                 const void *buffer,
                                 unsigned size)
 {
-   assert(shader_type == PIPE_SHADER_VERTEX ||
-                shader_type == PIPE_SHADER_GEOMETRY ||
-                shader_type == PIPE_SHADER_TESS_CTRL ||
-                shader_type == PIPE_SHADER_TESS_EVAL);
+   assert(shader_type == MESA_SHADER_VERTEX ||
+                shader_type == MESA_SHADER_GEOMETRY ||
+                shader_type == MESA_SHADER_TESS_CTRL ||
+                shader_type == MESA_SHADER_TESS_EVAL);
    assert(slot < PIPE_MAX_CONSTANT_BUFFERS);
 
    draw_do_flush(draw, DRAW_FLUSH_PARAMETER_CHANGE);
@@ -473,15 +473,15 @@ draw_set_mapped_constant_buffer(struct draw_context *draw,
 
 void
 draw_set_mapped_shader_buffer(struct draw_context *draw,
-                              enum pipe_shader_type shader_type,
+                              mesa_shader_stage shader_type,
                               unsigned slot,
                               const void *buffer,
                               unsigned size)
 {
-   assert(shader_type == PIPE_SHADER_VERTEX ||
-                shader_type == PIPE_SHADER_GEOMETRY ||
-                shader_type == PIPE_SHADER_TESS_CTRL ||
-                shader_type == PIPE_SHADER_TESS_EVAL);
+   assert(shader_type == MESA_SHADER_VERTEX ||
+                shader_type == MESA_SHADER_GEOMETRY ||
+                shader_type == MESA_SHADER_TESS_CTRL ||
+                shader_type == MESA_SHADER_TESS_EVAL);
    assert(slot < PIPE_MAX_SHADER_BUFFERS);
 
    draw_do_flush(draw, DRAW_FLUSH_PARAMETER_CHANGE);
@@ -756,14 +756,14 @@ draw_total_tes_outputs(const struct draw_context *draw)
  */
 void
 draw_texture_sampler(struct draw_context *draw,
-                     enum pipe_shader_type shader,
+                     mesa_shader_stage shader,
                      struct tgsi_sampler *sampler)
 {
    switch (shader) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       draw->vs.tgsi.sampler = sampler;
       break;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       draw->gs.tgsi.sampler = sampler;
       break;
    default:
@@ -780,14 +780,14 @@ draw_texture_sampler(struct draw_context *draw,
  */
 void
 draw_image(struct draw_context *draw,
-           enum pipe_shader_type shader,
+           mesa_shader_stage shader,
            struct tgsi_image *image)
 {
    switch (shader) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       draw->vs.tgsi.image = image;
       break;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       draw->gs.tgsi.image = image;
       break;
    default:
@@ -804,14 +804,14 @@ draw_image(struct draw_context *draw,
  */
 void
 draw_buffer(struct draw_context *draw,
-            enum pipe_shader_type shader,
+            mesa_shader_stage shader,
             struct tgsi_buffer *buffer)
 {
    switch (shader) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       draw->vs.tgsi.buffer = buffer;
       break;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       draw->gs.tgsi.buffer = buffer;
       break;
    default:
@@ -1051,7 +1051,7 @@ draw_set_mapped_so_targets(struct draw_context *draw,
 
 void
 draw_set_sampler_views(struct draw_context *draw,
-                       enum pipe_shader_type shader_stage,
+                       mesa_shader_stage shader_stage,
                        struct pipe_sampler_view **views,
                        unsigned num)
 {
@@ -1071,7 +1071,7 @@ draw_set_sampler_views(struct draw_context *draw,
 
 void
 draw_set_samplers(struct draw_context *draw,
-                  enum pipe_shader_type shader_stage,
+                  mesa_shader_stage shader_stage,
                   struct pipe_sampler_state **samplers,
                   unsigned num)
 {
@@ -1096,7 +1096,7 @@ draw_set_samplers(struct draw_context *draw,
 
 void
 draw_set_images(struct draw_context *draw,
-                enum pipe_shader_type shader_stage,
+                mesa_shader_stage shader_stage,
                 struct pipe_image_view *views,
                 unsigned num)
 {
@@ -1116,7 +1116,7 @@ draw_set_images(struct draw_context *draw,
 
 void
 draw_set_mapped_texture(struct draw_context *draw,
-                        enum pipe_shader_type shader_stage,
+                        mesa_shader_stage shader_stage,
                         unsigned sview_idx,
                         uint32_t width, uint32_t height, uint32_t depth,
                         uint32_t first_level, uint32_t last_level,
@@ -1141,7 +1141,7 @@ draw_set_mapped_texture(struct draw_context *draw,
 
 void
 draw_set_mapped_image(struct draw_context *draw,
-                      enum pipe_shader_type shader_stage,
+                      mesa_shader_stage shader_stage,
                       unsigned idx,
                       uint32_t width, uint32_t height, uint32_t depth,
                       const void *base_ptr,

@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::compiler::nir::*;
 use crate::pipe::screen::*;
 use crate::util::disk_cache::*;
@@ -41,7 +44,7 @@ pub struct SPIRVKernelArg {
 }
 
 pub struct CLCHeader<'a> {
-    pub name: CString,
+    pub name: &'a CString,
     pub source: &'a CString,
 }
 
@@ -300,13 +303,13 @@ impl SPIRVBin {
             private_data: ptr::from_mut(log).cast(),
         });
 
+        let float_controls = float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32 as u32
+            | float_controls::FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE as u32;
         spirv_to_nir_options {
             create_library: library,
             environment: nir_spirv_execution_environment::NIR_SPIRV_OPENCL,
             clc_shader: clc_shader,
-            float_controls_execution_mode: float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32
-                as u32,
-
+            float_controls_execution_mode: float_controls,
             printf: true,
             capabilities: caps,
             constant_addr_format: global_addr_format,
@@ -339,7 +342,7 @@ impl SPIRVBin {
                 self.spirv.size / 4,
                 spec_constants.as_mut_ptr(),
                 spec_constants.len() as u32,
-                gl_shader_stage::MESA_SHADER_KERNEL,
+                mesa_shader_stage::MESA_SHADER_KERNEL,
                 c_entry.as_ptr(),
                 &spirv_options,
                 nir_options,
@@ -350,7 +353,8 @@ impl SPIRVBin {
     }
 
     pub fn get_lib_clc(screen: &PipeScreen, spirv_caps: &spirv_capabilities) -> Option<NirShader> {
-        let nir_options = screen.nir_shader_compiler_options(pipe_shader_type::PIPE_SHADER_COMPUTE);
+        let nir_options =
+            screen.nir_shader_compiler_options(mesa_shader_stage::MESA_SHADER_COMPUTE);
         let address_bits = screen.compute_caps().address_bits;
         let spirv_options =
             Self::get_spirv_options(false, ptr::null(), address_bits, spirv_caps, None);

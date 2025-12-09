@@ -418,7 +418,7 @@ agx_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
       return true;
 
    default:
-      unreachable("Other queries not yet supported");
+      UNREACHABLE("Other queries not yet supported");
    }
 }
 
@@ -503,7 +503,7 @@ agx_get_query_result_resource_gpu(struct agx_context *ctx,
                                                          : 0;
 
    libagx_copy_query_gl(batch, agx_1d(1), AGX_BARRIER_ALL, query->ptr.gpu,
-                        rsrc->bo->va->addr + offset, result_type, bool_size);
+                        agx_map_gpu(rsrc) + offset, result_type, bool_size);
    return true;
 }
 
@@ -550,7 +550,7 @@ agx_batch_add_timestamp_query(struct agx_batch *batch, struct agx_query *q)
 {
    if (q) {
       agx_add_query_to_batch(batch, q);
-      util_dynarray_append(&batch->timestamps, struct agx_ptr, q->ptr);
+      util_dynarray_append(&batch->timestamps, q->ptr);
    }
 }
 

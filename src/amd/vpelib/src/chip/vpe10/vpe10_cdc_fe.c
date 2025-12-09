@@ -38,7 +38,6 @@ enum mux_sel {
 };
 
 static struct cdc_fe_funcs cdc_fe_func = {
-    .check_input_format      = vpe10_cdc_check_input_format,
     .program_surface_config  = vpe10_cdc_program_surface_config,
     .program_crossbar_config = vpe10_cdc_program_crossbar_config,
     .program_viewport        = vpe10_cdc_program_viewport,
@@ -48,22 +47,6 @@ void vpe10_construct_cdc_fe(struct vpe_priv *vpe_priv, struct cdc_fe *cdc_fe)
 {
     cdc_fe->vpe_priv = vpe_priv;
     cdc_fe->funcs    = &cdc_fe_func;
-}
-
-bool vpe10_cdc_check_input_format(struct cdc_fe *cdc_fe, enum vpe_surface_pixel_format format)
-{
-    if (vpe_is_32bit_packed_rgb(format))
-        return true;
-
-    if (format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr ||
-        format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb)
-        return true;
-
-    if (format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr ||
-        format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb)
-        return true;
-
-    return false;
 }
 
 void vpe10_cdc_program_surface_config(struct cdc_fe *cdc_fe, enum vpe_surface_pixel_format format,

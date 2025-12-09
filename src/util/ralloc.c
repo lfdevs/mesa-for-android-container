@@ -1383,14 +1383,19 @@ ralloc_print_info_helper(ralloc_print_info_state *state, const ralloc_header *in
    const linear_ctx *lin_ctx = ptr;
    const gc_ctx *gc_ctx = ptr;
 
-   if (lin_ctx->magic == LMAGIC_CONTEXT) {
+   const bool is_linear = info->size >= sizeof(*lin_ctx) &&
+                          lin_ctx->magic == LMAGIC_CONTEXT;
+   const bool is_gc = info->size >= sizeof(*gc_ctx) &&
+                      gc_ctx->canary == GC_CONTEXT_CANARY;
+
+   if (is_linear) {
       if (f) fprintf(f, " (linear context)");
       assert(!state->inside_gc && !state->inside_linear);
       state->inside_linear = true;
       state->linear_metadata_bytes += sizeof(linear_ctx);
       state->content_bytes -= sizeof(linear_ctx);
       state->linear_count++;
-   } else if (gc_ctx->canary == GC_CONTEXT_CANARY) {
+   } else if (is_gc) {
       if (f) fprintf(f, " (gc context)");
       assert(!state->inside_gc && !state->inside_linear);
       state->inside_gc = true;
@@ -1421,8 +1426,8 @@ ralloc_print_info_helper(ralloc_print_info_state *state, const ralloc_header *in
    state->indent -= 2;
 
 #ifndef NDEBUG
-   if (lin_ctx->magic == LMAGIC_CONTEXT) state->inside_linear = false;
-   else if (gc_ctx->canary == GC_CONTEXT_CANARY) state->inside_gc = false;
+   if (is_linear) state->inside_linear = false;
+   else if (is_gc) state->inside_gc = false;
 #endif
 }
 

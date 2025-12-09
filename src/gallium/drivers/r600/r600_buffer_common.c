@@ -185,7 +185,7 @@ bool r600_alloc_resource(struct r600_common_screen *rscreen,
 void r600_buffer_destroy(struct pipe_screen *screen, struct pipe_resource *buf)
 {
 	struct r600_screen *rscreen = (struct r600_screen*)screen;
-	struct r600_resource *rbuffer = r600_resource(buf);
+	struct r600_resource *rbuffer = r600_as_resource(buf);
 
 	threaded_resource_deinit(buf);
 	util_range_destroy(&rbuffer->valid_buffer_range);
@@ -229,8 +229,8 @@ void r600_replace_buffer_storage(struct pipe_context *ctx,
 				 struct pipe_resource *src)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
-	struct r600_resource *rdst = r600_resource(dst);
-	struct r600_resource *rsrc = r600_resource(src);
+	struct r600_resource *rdst = r600_as_resource(dst);
+	struct r600_resource *rsrc = r600_as_resource(src);
 	uint64_t old_gpu_address = rdst->gpu_address;
 
 	radeon_bo_reference(rctx->ws, &rdst->buf, rsrc->buf);
@@ -251,7 +251,7 @@ void r600_invalidate_resource(struct pipe_context *ctx,
 			      struct pipe_resource *resource)
 {
 	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
-	struct r600_resource *rbuffer = r600_resource(resource);
+	struct r600_resource *rbuffer = r600_as_resource(resource);
 
 	/* We currently only do anything here for buffers */
 	if (resource->target == PIPE_BUFFER)
@@ -303,10 +303,10 @@ void *r600_buffer_transfer_map(struct pipe_context *ctx,
 {
 	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)ctx->screen;
-	struct r600_resource *rbuffer = r600_resource(resource);
+	struct r600_resource *rbuffer = r600_as_resource(resource);
 	uint8_t *data;
 
-	if (r600_resource(resource)->compute_global_bo) {
+	if (r600_as_resource(resource)->compute_global_bo) {
 		if ((data = r600_compute_global_transfer_map(ctx, resource, level, usage, box, ptransfer)))
 			return data;
 	}
@@ -374,7 +374,7 @@ void *r600_buffer_transfer_map(struct pipe_context *ctx,
 			unsigned offset;
 			struct r600_resource *staging = NULL;
 
-			u_upload_alloc(ctx->stream_uploader, 0,
+			u_upload_alloc_ref(ctx->stream_uploader, 0,
                                        box->width + (box->x % R600_MAP_BUFFER_ALIGNMENT),
 				       rctx->screen->info.tcc_cache_line_size,
 				       &offset, (struct pipe_resource**)&staging,
@@ -402,9 +402,9 @@ void *r600_buffer_transfer_map(struct pipe_context *ctx,
 		struct r600_resource *staging;
 
 		assert(!(usage & TC_TRANSFER_MAP_THREADED_UNSYNC));
-		staging = (struct r600_resource*) pipe_buffer_create(
-				ctx->screen, 0, PIPE_USAGE_STAGING,
-				box->width + (box->x % R600_MAP_BUFFER_ALIGNMENT));
+		staging = r600_as_resource(pipe_buffer_create(
+						ctx->screen, 0, PIPE_USAGE_STAGING,
+						box->width + (box->x % R600_MAP_BUFFER_ALIGNMENT)));
 		if (staging) {
 			/* Copy the VRAM buffer to the staging buffer. */
 			rctx->dma_copy(ctx, &staging->b.b, 0,
@@ -441,7 +441,7 @@ static void r600_buffer_do_flush_region(struct pipe_context *ctx,
 				        const struct pipe_box *box)
 {
 	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
-	struct r600_resource *rbuffer = r600_resource(transfer->resource);
+	struct r600_resource *rbuffer = r600_as_resource(transfer->resource);
 
 	if (rtransfer->staging) {
 		struct pipe_resource *dst, *src;
@@ -469,7 +469,7 @@ void r600_buffer_flush_region(struct pipe_context *ctx,
 	unsigned required_usage = PIPE_MAP_WRITE |
 				  PIPE_MAP_FLUSH_EXPLICIT;
 
-	if (r600_resource(transfer->resource)->compute_global_bo)
+	if (r600_as_resource(transfer->resource)->compute_global_bo)
 		return;
 
 	if ((transfer->usage & required_usage) == required_usage) {
@@ -485,7 +485,7 @@ void r600_buffer_transfer_unmap(struct pipe_context *ctx,
 {
 	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
 	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
-	struct r600_resource *rtransferr = r600_resource(transfer->resource);
+	struct r600_resource *rtransferr = r600_as_resource(transfer->resource);
 
 	if (rtransferr->compute_global_bo && !rtransferr->b.is_user_ptr) {
 		r600_compute_global_transfer_unmap(ctx, transfer);
@@ -570,7 +570,7 @@ struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 	return &rbuffer->b.b;
 }
 
-struct pipe_resource *r600_aligned_buffer_create(struct pipe_screen *screen,
+struct r600_resource *r600_aligned_buffer_create(struct pipe_screen *screen,
 						 unsigned flags,
 						 unsigned usage,
 						 unsigned size,
@@ -588,7 +588,7 @@ struct pipe_resource *r600_aligned_buffer_create(struct pipe_screen *screen,
 	buffer.height0 = 1;
 	buffer.depth0 = 1;
 	buffer.array_size = 1;
-	return r600_buffer_create(screen, &buffer, alignment);
+	return r600_as_resource(r600_buffer_create(screen, &buffer, alignment));
 }
 
 struct pipe_resource *
@@ -601,7 +601,7 @@ r600_buffer_from_user_memory(struct pipe_screen *screen,
 	struct r600_resource *rbuffer;
 
 	if (templ->bind & PIPE_BIND_GLOBAL) {
-		rbuffer = r600_resource(r600_compute_global_buffer_create(screen, templ));
+		rbuffer = r600_as_resource(r600_compute_global_buffer_create(screen, templ));
 		((struct r600_resource_global *)rbuffer)->chunk->real_buffer = rbuffer;
 	} else {
 		rbuffer = r600_alloc_buffer_struct(screen, templ);

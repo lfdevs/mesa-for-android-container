@@ -152,7 +152,7 @@ get_bool_cap(struct svga_winsys_screen *sws, SVGA3dDevCapIndex cap,
    .support_indirect_inputs = BITFIELD_BIT(MESA_SHADER_TESS_CTRL) |           \
                               BITFIELD_BIT(MESA_SHADER_TESS_EVAL) |           \
                               BITFIELD_BIT(MESA_SHADER_FRAGMENT),             \
-   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES)
+   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES)
 
 static const nir_shader_compiler_options svga_vgpu9_fragment_compiler_options = {
    COMMON_OPTIONS,
@@ -185,7 +185,7 @@ static const nir_shader_compiler_options svga_gl4_compiler_options = {
 
 static const struct nir_shader_compiler_options *
 svga_get_compiler_options(struct pipe_screen *pscreen,
-                          enum pipe_shader_type shader)
+                          mesa_shader_stage shader)
 {
    struct svga_screen *svgascreen = svga_screen(pscreen);
    struct svga_winsys_screen *sws = svgascreen->sws;
@@ -195,7 +195,7 @@ svga_get_compiler_options(struct pipe_screen *pscreen,
    else if (sws->have_vgpu10)
       return &svga_vgpu10_compiler_options;
    else {
-      if (shader == PIPE_SHADER_FRAGMENT)
+      if (shader == MESA_SHADER_FRAGMENT)
          return &svga_vgpu9_fragment_compiler_options;
       else
          return &svga_vgpu9_vertex_compiler_options;
@@ -210,7 +210,7 @@ vgpu9_init_shader_caps(struct svga_screen *svgascreen)
    assert(!sws->have_vgpu10);
 
    struct pipe_shader_caps *caps =
-      (struct pipe_shader_caps *)&svgascreen->screen.shader_caps[PIPE_SHADER_VERTEX];
+      (struct pipe_shader_caps *)&svgascreen->screen.shader_caps[MESA_SHADER_VERTEX];
 
    caps->max_instructions =
    caps->max_alu_instructions =
@@ -228,7 +228,7 @@ vgpu9_init_shader_caps(struct svga_screen *svgascreen)
    caps->indirect_const_addr = true;
    caps->supported_irs = (1 << PIPE_SHADER_IR_TGSI) | (1 << PIPE_SHADER_IR_NIR);
 
-   caps = (struct pipe_shader_caps *)&svgascreen->screen.shader_caps[PIPE_SHADER_FRAGMENT];
+   caps = (struct pipe_shader_caps *)&svgascreen->screen.shader_caps[MESA_SHADER_FRAGMENT];
 
    caps->max_instructions =
    caps->max_alu_instructions =
@@ -256,17 +256,17 @@ vgpu10_init_shader_caps(struct svga_screen *svgascreen)
 
    assert(sws->have_vgpu10);
 
-    for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+    for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
        struct pipe_shader_caps *caps =
           (struct pipe_shader_caps *)&svgascreen->screen.shader_caps[i];
 
        switch (i) {
-       case PIPE_SHADER_TESS_CTRL:
-       case PIPE_SHADER_TESS_EVAL:
+       case MESA_SHADER_TESS_CTRL:
+       case MESA_SHADER_TESS_EVAL:
           if (!sws->have_sm5)
              continue;
           break;
-       case PIPE_SHADER_COMPUTE:
+       case MESA_SHADER_COMPUTE:
           if (!sws->have_gl43)
              continue;
           break;
@@ -284,19 +284,19 @@ vgpu10_init_shader_caps(struct svga_screen *svgascreen)
        caps->max_control_flow_depth = 64;
 
        switch (i) {
-       case PIPE_SHADER_FRAGMENT:
+       case MESA_SHADER_FRAGMENT:
           caps->max_inputs = VGPU10_MAX_PS_INPUTS;
           caps->max_outputs = VGPU10_MAX_PS_OUTPUTS;
           break;
-       case PIPE_SHADER_GEOMETRY:
+       case MESA_SHADER_GEOMETRY:
           caps->max_inputs = svgascreen->max_gs_inputs;
           caps->max_outputs = VGPU10_MAX_GS_OUTPUTS;
           break;
-       case PIPE_SHADER_TESS_CTRL:
+       case MESA_SHADER_TESS_CTRL:
           caps->max_inputs = VGPU11_MAX_HS_INPUT_CONTROL_POINTS;
           caps->max_outputs = VGPU11_MAX_HS_OUTPUTS;
           break;
-       case PIPE_SHADER_TESS_EVAL:
+       case MESA_SHADER_TESS_EVAL:
           caps->max_inputs = VGPU11_MAX_DS_INPUT_CONTROL_POINTS;
           caps->max_outputs = VGPU11_MAX_DS_OUTPUTS;
           break;

@@ -113,8 +113,7 @@ set_clearcolor_fs(struct st_context *st, union pipe_color_union *color)
       .user_buffer = color->f,
       .buffer_size = 4 * sizeof(float),
    };
-   st->pipe->set_constant_buffer(st->pipe, PIPE_SHADER_FRAGMENT, 0,
-                                false, &cb);
+   pipe_upload_constant_buffer0(st->pipe, MESA_SHADER_FRAGMENT, &cb);
 
    if (!st->clear.fs) {
       st->clear.fs = st_nir_make_clearcolor_shader(st);
@@ -226,7 +225,8 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
                         CSO_BIT_STREAM_OUTPUTS |
                         CSO_BIT_VERTEX_ELEMENTS |
                         (st->active_queries ? CSO_BIT_PAUSE_QUERIES : 0) |
-                        CSO_BITS_ALL_SHADERS));
+                        CSO_BIT_MESH_SHADER |
+                        CSO_BITS_VERTEX_PIPE_SHADERS));
 
    /* blend state: RGBA masking */
    {
@@ -297,6 +297,7 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
    set_clearcolor_fs(st, (union pipe_color_union*)&ctx->Color.ClearColor);
    cso_set_tessctrl_shader_handle(cso, NULL);
    cso_set_tesseval_shader_handle(cso, NULL);
+   cso_set_mesh_shader_handle(cso, NULL);
 
    if (num_layers > 1)
       set_vertex_shader_layered(st);
@@ -322,8 +323,7 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
    /* Restore pipe state */
    cso_restore_state(cso, 0);
    ctx->Array.NewVertexElements = true;
-   ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS |
-                          ST_NEW_FS_CONSTANTS;
+   ST_SET_STATE2(ctx->NewDriverState, ST_NEW_VERTEX_ARRAYS, ST_NEW_FS_CONSTANTS);
 }
 
 
@@ -397,7 +397,8 @@ st_Clear(struct gl_context *ctx, GLbitfield mask)
    st_invalidate_readpix_cache(st);
 
    /* This makes sure the pipe has the latest scissor, etc values */
-   st_validate_state(st, ST_PIPELINE_CLEAR_STATE_MASK);
+   ST_PIPELINE_CLEAR_STATE_MASK(pipeline_mask);
+   st_validate_state(st, pipeline_mask);
 
    if (mask & BUFFER_BITS_COLOR) {
       for (i = 0; i < ctx->DrawBuffer->_NumColorDrawBuffers; i++) {

@@ -30,6 +30,7 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
    util_blitter_save_tessctrl_shader(sctx->blitter, sctx->shader.tcs.cso);
    util_blitter_save_tesseval_shader(sctx->blitter, sctx->shader.tes.cso);
    util_blitter_save_geometry_shader(sctx->blitter, sctx->shader.gs.cso);
+   util_blitter_save_mesh_shader(sctx->blitter, sctx->ms_shader_state.cso);
    util_blitter_save_so_targets(sctx->blitter, sctx->streamout.num_targets,
                                 (struct pipe_stream_output_target **)sctx->streamout.targets,
                                 sctx->streamout.output_prim);
@@ -37,7 +38,7 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
 
    if (op & SI_SAVE_FRAGMENT_STATE) {
       struct pipe_constant_buffer fs_cb = {};
-      si_get_pipe_constant_buffer(sctx, PIPE_SHADER_FRAGMENT, 0, &fs_cb);
+      si_get_pipe_constant_buffer(sctx, MESA_SHADER_FRAGMENT, 0, &fs_cb);
 
       if (op & SI_SAVE_FRAGMENT_CONSTANT)
          util_blitter_save_fragment_constant_buffer_slot(sctx->blitter, &fs_cb);
@@ -58,10 +59,10 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
 
    if (op & SI_SAVE_TEXTURES) {
       util_blitter_save_fragment_sampler_states(
-         sctx->blitter, 2, (void **)sctx->samplers[PIPE_SHADER_FRAGMENT].sampler_states);
+         sctx->blitter, 2, (void **)sctx->samplers[MESA_SHADER_FRAGMENT].sampler_states);
 
       util_blitter_save_fragment_sampler_views(sctx->blitter, 2,
-                                               sctx->samplers[PIPE_SHADER_FRAGMENT].views);
+                                               sctx->samplers[MESA_SHADER_FRAGMENT].views);
    }
 
    if (op & SI_DISABLE_RENDER_COND)
@@ -757,12 +758,12 @@ static void si_check_render_feedback(struct si_context *sctx)
    if (!si_any_colorbuffer_written(sctx))
       return;
 
-   if (sctx->shaders[PIPE_SHADER_FRAGMENT].cso) {
-      struct si_shader_info *info = &sctx->shaders[PIPE_SHADER_FRAGMENT].cso->info;
+   if (sctx->shaders[MESA_SHADER_FRAGMENT].cso) {
+      struct si_shader_info *info = &sctx->shaders[MESA_SHADER_FRAGMENT].cso->info;
 
-      si_check_render_feedback_images(sctx, &sctx->images[PIPE_SHADER_FRAGMENT],
+      si_check_render_feedback_images(sctx, &sctx->images[MESA_SHADER_FRAGMENT],
                                       BITFIELD_MASK(info->base.num_images));
-      si_check_render_feedback_textures(sctx, &sctx->samplers[PIPE_SHADER_FRAGMENT],
+      si_check_render_feedback_textures(sctx, &sctx->samplers[MESA_SHADER_FRAGMENT],
                                         info->base.textures_used);
    }
 
@@ -863,7 +864,7 @@ void gfx6_decompress_textures(struct si_context *sctx, unsigned shader_mask)
    if (sctx->uses_bindless_images & shader_mask)
       si_decompress_resident_images(sctx);
 
-   if (shader_mask & BITFIELD_BIT(PIPE_SHADER_FRAGMENT)) {
+   if (shader_mask & BITFIELD_BIT(MESA_SHADER_FRAGMENT)) {
       if (sctx->ps_uses_fbfetch) {
          struct pipe_surface *cb0 = &sctx->framebuffer.state.cbufs[0];
          si_decompress_color_texture(sctx, (struct si_texture *)cb0->texture,
@@ -890,7 +891,7 @@ void gfx11_decompress_textures(struct si_context *sctx, unsigned shader_mask)
    if (sctx->uses_bindless_samplers & shader_mask)
       si_decompress_resident_depth_textures(sctx);
 
-   if (shader_mask & BITFIELD_BIT(PIPE_SHADER_FRAGMENT))
+   if (shader_mask & BITFIELD_BIT(MESA_SHADER_FRAGMENT))
       si_check_render_feedback(sctx);
 }
 
@@ -1141,7 +1142,7 @@ bool si_msaa_resolve_blit_via_CB(struct pipe_context *ctx, const struct pipe_bli
          break;
 
       default:
-         unreachable("unexpected gfx version");
+         UNREACHABLE("unexpected gfx version");
       }
    }
 
@@ -1337,7 +1338,7 @@ void si_gfx_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       fs = _mesa_hash_table_u64_search(sctx->ps_resolve_shaders, key.key);
       if (!fs) {
          struct ac_ps_resolve_options options = {
-            .nir_options = sctx->b.screen->nir_options[PIPE_SHADER_FRAGMENT],
+            .nir_options = sctx->b.screen->nir_options[MESA_SHADER_FRAGMENT],
             .info = &sctx->screen->info,
             .use_aco = sctx->screen->use_aco,
             .no_fmask = sctx->screen->debug_flags & DBG(NO_FMASK),

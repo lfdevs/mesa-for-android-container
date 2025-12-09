@@ -15,8 +15,6 @@
 
 #include "ac_vcn_enc.h"
 
-#define PIPE_ALIGN_IN_BLOCK_SIZE(value, alignment) DIV_ROUND_UP(value, alignment)
-
 #define RADEON_ENC_CS(value) (enc->cs.current.buf[enc->cs.current.cdw++] = (value))
 #define RADEON_ENC_BEGIN(cmd)                                                                    \
    {                                                                                             \
@@ -41,15 +39,6 @@
       *high = temp;                                                                              \
    } while(0)
 
-#define RADEON_ENC_DESTROY_VIDEO_BUFFER(buf)                                                     \
-   do {                                                                                          \
-      if (buf) {                                                                                 \
-         si_vid_destroy_buffer(buf);                                                             \
-         FREE(buf);                                                                              \
-         (buf) = NULL;                                                                           \
-      }                                                                                          \
-   } while(0)
-
 #define RADEON_ENC_ERR(fmt, args...)                                                             \
    do {                                                                                          \
       enc->error = true;                                                                         \
@@ -69,10 +58,15 @@ struct radeon_enc_dpb_buffer {
 
    struct si_texture *luma;      /* recon luma */
    struct si_texture *chroma;    /* recon chroma */
-   struct rvid_buffer *fcb;      /* frame context buffer*/
+   struct si_resource *fcb;      /* frame context buffer*/
    struct si_texture *pre_luma;  /* preenc recon luma */
    struct si_texture *pre_chroma;/* preenc recon chroma */
-   struct rvid_buffer *pre_fcb;  /* preenc frame context buffer */
+   struct si_resource *pre_fcb;  /* preenc frame context buffer */
+};
+
+struct radeon_enc_fb_buffer {
+   struct si_resource *res;
+   void *data;
 };
 
 struct radeon_enc_pic {
@@ -92,6 +86,7 @@ struct radeon_enc_pic {
          struct pipe_av1_enc_picture_desc *desc;
          uint32_t coded_width;
          uint32_t coded_height;
+         uint32_t primary_ref_frame;
          bool compound;
          bool skip_mode_allowed;
       } av1;
@@ -110,6 +105,7 @@ struct radeon_enc_pic {
    bool use_rc_per_pic_ex;
    bool av1_tile_splitting_legacy_flag;
    bool has_dependent_slice_instructions;
+   bool av1_unidir_rc_available;
 
    struct {
       union {
@@ -128,15 +124,7 @@ struct radeon_enc_pic {
    struct radeon_enc_dpb_buffer *dpb_bufs[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
 
    struct {
-      struct {
-         struct {
-            uint32_t enable_error_resilient_mode:1;
-            uint32_t force_integer_mv:1;
-            uint32_t disable_screen_content_tools:1;
-            uint32_t is_obu_frame:1;
-         };
-         uint32_t *copy_start;
-      };
+      uint32_t *copy_start;
       rvcn_enc_av1_spec_misc_t av1_spec_misc;
       rvcn_enc_av1_cdf_default_table_t av1_cdf_default_table;
    };
@@ -177,7 +165,6 @@ struct radeon_encoder {
    struct pipe_video_codec base;
 
    void (*begin)(struct radeon_encoder *enc);
-   void (*before_encode)(struct radeon_encoder *enc);
    void (*encode)(struct radeon_encoder *enc);
    void (*destroy)(struct radeon_encoder *enc);
    void (*session_info)(struct radeon_encoder *enc);
@@ -231,17 +218,23 @@ struct radeon_encoder {
    struct radeon_surf *luma;
    struct radeon_surf *chroma;
    struct pipe_video_buffer *source;
+   struct pipe_video_buffer *efc_source;
+   unsigned input_color_volume;
+   unsigned input_color_range;
+   unsigned output_color_volume;
+   unsigned output_color_range;
+   unsigned output_chroma_location;
 
    struct pb_buffer_lean *bs_handle;
    unsigned bs_size;
    unsigned bs_offset;
 
-   struct rvid_buffer *si;
-   struct rvid_buffer *fb;
-   struct rvid_buffer *dpb;
-   struct rvid_buffer *cdf;
-   struct rvid_buffer *roi;
-   struct rvid_buffer *meta;
+   struct si_resource *si;
+   struct radeon_enc_fb_buffer *fb;
+   struct si_resource *dpb;
+   struct si_resource *cdf;
+   struct si_resource *roi;
+   struct si_resource *meta;
    struct radeon_enc_pic enc_pic;
    struct pb_buffer_lean *stats;
    rvcn_enc_cmd_t cmd;
@@ -254,13 +247,13 @@ struct radeon_encoder {
    bool need_feedback;
    bool need_rate_control;
    bool need_rc_per_pic;
-   bool need_spec_misc;
    unsigned dpb_size;
    unsigned dpb_slots;
    unsigned roi_size;
    unsigned metadata_size;
 
    bool error;
+   bool first_frame;
 
    enum {
       DPB_LEGACY = 0,

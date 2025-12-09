@@ -127,7 +127,7 @@ d3d12_get_video_mem(struct pipe_screen *pscreen)
 static void
 d3d12_init_shader_caps(struct d3d12_screen *screen)
 {
-   for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
       struct pipe_shader_caps *caps =
          (struct pipe_shader_caps *)&screen->base.shader_caps[i];
 
@@ -138,23 +138,23 @@ d3d12_init_shader_caps(struct d3d12_screen *screen)
       caps->max_control_flow_depth = INT_MAX;
 
       switch (i) {
-      case PIPE_SHADER_VERTEX:
+      case MESA_SHADER_VERTEX:
          caps->max_inputs = D3D12_VS_INPUT_REGISTER_COUNT;
          caps->max_outputs = D3D12_VS_OUTPUT_REGISTER_COUNT;
          break;
-      case PIPE_SHADER_FRAGMENT:
+      case MESA_SHADER_FRAGMENT:
          caps->max_inputs = D3D12_PS_INPUT_REGISTER_COUNT;
          caps->max_outputs = D3D12_PS_OUTPUT_REGISTER_COUNT;
          break;
-      case PIPE_SHADER_GEOMETRY:
+      case MESA_SHADER_GEOMETRY:
          caps->max_inputs = D3D12_GS_INPUT_REGISTER_COUNT;
          caps->max_outputs = D3D12_GS_OUTPUT_REGISTER_COUNT;
          break;
-      case PIPE_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_CTRL:
          caps->max_inputs = D3D12_HS_CONTROL_POINT_PHASE_INPUT_REGISTER_COUNT;
          caps->max_outputs = D3D12_HS_CONTROL_POINT_PHASE_OUTPUT_REGISTER_COUNT;
          break;
-      case PIPE_SHADER_TESS_EVAL:
+      case MESA_SHADER_TESS_EVAL:
          caps->max_inputs = D3D12_DS_INPUT_CONTROL_POINT_REGISTER_COUNT;
          caps->max_outputs = D3D12_DS_OUTPUT_REGISTER_COUNT;
          break;
@@ -232,6 +232,7 @@ d3d12_init_screen_caps(struct d3d12_screen *screen)
 
    u_init_pipe_screen_caps(&screen->base, caps->accelerated);
 
+   caps->prefer_real_buffer_in_constbuf0 = true;
    caps->npot_textures = true;
 
    /* D3D12 only supports dual-source blending for a single
@@ -512,7 +513,7 @@ d3d12_is_format_supported(struct pipe_screen *pscreen,
       dim_support = D3D12_FORMAT_SUPPORT1_BUFFER;
       break;
    default:
-      unreachable("Unknown target");
+      UNREACHABLE("Unknown target");
    }
 
    if (bind & PIPE_BIND_DISPLAY_TARGET) {
@@ -1156,6 +1157,15 @@ d3d12_interop_query_device_info(struct pipe_screen *pscreen, uint32_t data_size,
    memcpy(&info->adapter_luid, &screen->adapter_luid, sizeof(screen->adapter_luid));
    info->device = screen->dev;
    info->queue = screen->cmdqueue;
+
+   if (data_size >= sizeof(d3d12_interop_device_info1)) {
+      d3d12_interop_device_info1 *info1 = (d3d12_interop_device_info1 *)data;
+      info1->set_context_queue_priority_manager = d3d12_context_set_queue_priority_manager;
+      info1->set_video_encoder_max_async_queue_depth = d3d12_video_encoder_set_max_async_queue_depth;
+      info1->get_video_enc_last_slice_completion_fence = d3d12_video_encoder_get_last_slice_completion_fence;
+      return sizeof(*info1);
+   }
+
    return sizeof(*info);
 }
 
@@ -1265,10 +1275,10 @@ d3d12_init_screen_base(struct d3d12_screen *screen, struct sw_winsys *winsys, LU
 #ifdef HAVE_GALLIUM_D3D12_GRAPHICS
    d3d12_varying_cache_init(screen);
    mtx_init(&screen->varying_info_mutex, mtx_plain);
-#endif // HAVE_GALLIUM_D3D12_GRAPHICS
 
    for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++)
       screen->base.nir_options[i] = &screen->nir_options;
+#endif // HAVE_GALLIUM_D3D12_GRAPHICS
 
    slab_create_parent(&screen->transfer_pool, sizeof(struct d3d12_transfer), 16);
 
@@ -1411,11 +1421,13 @@ try_create_device_factory(util_dl_library *d3d12_mod)
       /* It's possible there's a D3D12Core.dll next to the .exe, for development/testing purposes. If so, we'll be notified
        * by environment variables what the relative path is and the version to use.
        */
-      const char *d3d12core_relative_path = getenv("D3D12_AGILITY_RELATIVE_PATH");
-      const char *d3d12core_sdk_version = getenv("D3D12_AGILITY_SDK_VERSION");
+      char *d3d12core_relative_path = os_get_option_dup("D3D12_AGILITY_RELATIVE_PATH");
+      char *d3d12core_sdk_version = os_get_option_dup("D3D12_AGILITY_SDK_VERSION");
       if (d3d12core_relative_path && d3d12core_sdk_version) {
          (void)sdk_config->SetSDKVersion(atoi(d3d12core_sdk_version), d3d12core_relative_path);
       }
+      free(d3d12core_relative_path);
+      free(d3d12core_sdk_version);
       sdk_config->Release();
    }
 #endif
@@ -1424,6 +1436,32 @@ try_create_device_factory(util_dl_library *d3d12_mod)
    return factory;
 }
 #endif
+
+static bool
+d3d12_init_screen_command_queue(struct d3d12_screen *screen, D3D12_COMMAND_QUEUE_FLAGS queue_flags)
+{
+   D3D12_COMMAND_QUEUE_DESC queue_desc = {};
+   queue_desc.Type = screen->queue_type;
+   queue_desc.Flags = queue_flags;
+
+#ifndef _GAMING_XBOX
+   ID3D12Device9 *device9 = NULL;
+   if (SUCCEEDED(screen->dev->QueryInterface(&device9))) {
+      if (FAILED(device9->CreateCommandQueue1(&queue_desc, OpenGLOn12CreatorID,
+                                              IID_PPV_ARGS(&screen->cmdqueue)))) {
+         device9->Release();
+         return false;
+      }
+      device9->Release();
+   } else
+#endif
+   {
+      if (FAILED(screen->dev->CreateCommandQueue(&queue_desc,
+                                                 IID_PPV_ARGS(&screen->cmdqueue))))
+         return false;
+   }
+   return true;
+}
 
 bool
 d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
@@ -1577,25 +1615,15 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
    }
 #endif // HAVE_GALLIUM_D3D12_GRAPHICS
 
-   D3D12_COMMAND_QUEUE_DESC queue_desc;
-   queue_desc.Type = screen->queue_type;
-   queue_desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-   queue_desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-   queue_desc.NodeMask = 0;
-
-#ifndef _GAMING_XBOX
-   ID3D12Device9 *device9;
-   if (SUCCEEDED(screen->dev->QueryInterface(&device9))) {
-      if (FAILED(device9->CreateCommandQueue1(&queue_desc, OpenGLOn12CreatorID,
-                                              IID_PPV_ARGS(&screen->cmdqueue))))
-         return false;
-      device9->Release();
+   if (d3d12_init_screen_command_queue(screen, D3D12_COMMAND_QUEUE_FLAG_ALLOW_DYNAMIC_PRIORITY)) {
+      screen->supports_dynamic_queue_priority = true;
    } else
-#endif
    {
-      if (FAILED(screen->dev->CreateCommandQueue(&queue_desc,
-                                                 IID_PPV_ARGS(&screen->cmdqueue))))
+      screen->supports_dynamic_queue_priority = false;
+      if (!d3d12_init_screen_command_queue(screen, D3D12_COMMAND_QUEUE_FLAG_NONE)) {
+         debug_printf("D3D12: failed to create command queue\n");
          return false;
+      }
    }
 
    if (FAILED(screen->dev->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&screen->fence))))

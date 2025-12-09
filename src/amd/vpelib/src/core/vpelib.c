@@ -180,9 +180,11 @@ static void free_output_ctx(struct vpe_priv *vpe_priv)
 {
     if (vpe_priv->output_ctx.gamut_remap)
         vpe_free(vpe_priv->output_ctx.gamut_remap);
+    vpe_priv->output_ctx.gamut_remap = NULL;
 
     if (vpe_priv->output_ctx.output_tf)
         vpe_free(vpe_priv->output_ctx.output_tf);
+    vpe_priv->output_ctx.output_tf = NULL;
 
     destroy_output_config_vector(vpe_priv);
 }
@@ -201,7 +203,7 @@ static enum vpe_status vpe_build_set_predication(uint64_t buf_cpu_va,
     uint32_t high_condition_addr =
         (condition_address & VPE_PREDICATION_HIGH_ADDR_MASK) >> VPE_PREDICATION_ADDR_SHIFT;
 
-    uint32_t number_of_dwords = (execution_count + sizeof(uint32_t) - 1) / sizeof(uint32_t);
+    uint32_t number_of_dwords = int_divide_with_ceil(execution_count, sizeof(uint32_t));
 
     *buffer = header;
     buffer++;
@@ -218,28 +220,48 @@ struct vpe *vpe_create(const struct vpe_init_data *params)
 {
     struct vpe_priv *vpe_priv;
     enum vpe_status  status;
+    struct vpe_engine_priv *engine_priv = NULL;
 
     if (!params || (params->funcs.zalloc == NULL) || (params->funcs.free == NULL) ||
-        (params->funcs.log == NULL))
+        (params->funcs.log == (vpe_log_func_t)NULL))
         return NULL;
 
-    vpe_priv =
-        (struct vpe_priv *)params->funcs.zalloc(params->funcs.mem_ctx, sizeof(struct vpe_priv));
+    if (!params->engine_handle) {
+        vpe_priv =
+            (struct vpe_priv *)params->funcs.zalloc(params->funcs.mem_ctx, sizeof(struct vpe_priv));
+    } else {
+        engine_priv = container_of(params->engine_handle, struct vpe_engine_priv, pub);
+        vpe_priv    = (struct vpe_priv *)engine_priv->init.funcs.zalloc(
+            engine_priv->init.funcs.mem_ctx, sizeof(struct vpe_priv));
+    }
+
     if (!vpe_priv)
         return NULL;
 
     vpe_priv->init = *params;
 
-    // Make sys event an optional feature but hooking up to dummy function if no callback is
+    if (!params->engine_handle) {
+        vpe_priv->engine_handle = NULL;
+        vpe_priv->pub.level =
+            vpe_resource_parse_ip_version(params->ver_major, params->ver_minor, params->ver_rev);
+
+        vpe_priv->pub.version = (VPELIB_API_VERSION_MAJOR << VPELIB_API_VERSION_MAJOR_SHIFT) |
+                                (VPELIB_API_VERSION_MINOR << VPELIB_API_VERSION_MINOR_SHIFT);
+        vpe_setup_check_funcs(&vpe_priv->pub.check_funcs, vpe_priv->pub.level);
+    } else if (engine_priv) {
+        /* use ip level, api version, check functions and init functions from vpe_engine */
+        vpe_priv->pub.level       = params->engine_handle->ip_level;
+        vpe_priv->pub.version     = params->engine_handle->api_version;
+        vpe_priv->pub.check_funcs = params->engine_handle->check_funcs;
+        vpe_priv->engine_handle   = params->engine_handle;
+        vpe_priv->init.funcs      = engine_priv->init.funcs;
+    }
+
+    // Make sys event an optional feature but hooking up to dummy function if no
+    // callback is
     // provided
-    if (vpe_priv->init.funcs.sys_event == NULL)
+    if (vpe_priv->init.funcs.sys_event == (vpe_sys_event_func_t)NULL)
         vpe_priv->init.funcs.sys_event = dummy_sys_event;
-
-    vpe_priv->pub.level =
-        vpe_resource_parse_ip_version(params->ver_major, params->ver_minor, params->ver_rev);
-
-    vpe_priv->pub.version = (VPELIB_API_VERSION_MAJOR << VPELIB_API_VERSION_MAJOR_SHIFT) |
-                            (VPELIB_API_VERSION_MINOR << VPELIB_API_VERSION_MINOR_SHIFT);
 
     status = vpe_construct_resource(vpe_priv, vpe_priv->pub.level, &vpe_priv->resource);
     if (status != VPE_STATUS_OK) {
@@ -288,14 +310,20 @@ void vpe_destroy(struct vpe **vpe)
 
     vpe_free_stream_ctx(vpe_priv);
 
-    if (vpe_priv->vpe_cmd_vector)
+    if (vpe_priv->vpe_cmd_vector) {
         vpe_vector_free(vpe_priv->vpe_cmd_vector);
+        vpe_priv->vpe_cmd_vector = NULL;
+    }
 
-    if (vpe_priv->dummy_input_param)
+    if (vpe_priv->dummy_input_param) {
         vpe_free(vpe_priv->dummy_input_param);
+        vpe_priv->dummy_input_param = NULL;
+    }
 
-    if (vpe_priv->dummy_stream)
+    if (vpe_priv->dummy_stream) {
         vpe_free(vpe_priv->dummy_stream);
+        vpe_priv->dummy_stream = NULL;
+    }
 
     vpe_free(vpe_priv);
 
@@ -440,16 +468,6 @@ static enum vpe_status populate_input_streams(struct vpe_priv *vpe_priv, const s
             stream_ctx->flip_horizonal_output = false;
 
         memcpy(&stream_ctx->stream, &param->streams[i], sizeof(struct vpe_stream));
-
-        /* if top-bottom blending is not supported,
-         * the 1st stream still can support blending with background,
-         * however, the 2nd stream and onward can not enable blending.
-         */
-        if (i && param->streams[i].blend_info.blending &&
-            !vpe_priv->pub.caps->color_caps.mpc.top_bottom_blending) {
-            result = VPE_STATUS_ALPHA_BLENDING_NOT_SUPPORTED;
-            break;
-        }
     }
 
     return result;
@@ -487,6 +505,27 @@ static enum vpe_status populate_virtual_streams(struct vpe_priv* vpe_priv, const
             stream_ctx->flip_horizonal_output = true;
         else
             stream_ctx->flip_horizonal_output = false;
+    }
+
+    return result;
+}
+
+static enum vpe_status check_blending_support(
+    struct vpe_priv *vpe_priv, const struct vpe_build_param *param)
+{
+    enum vpe_status result = VPE_STATUS_OK;
+    uint32_t        i;
+
+    for (i = 0; i < vpe_priv->num_input_streams; i++) {
+        /* if top-bottom blending is not supported,
+         * the 1st stream still can support blending with background,
+         * however, the 2nd stream and onward can not enable blending.
+         */
+        if (i && param->streams[i].blend_info.blending &&
+            !vpe_priv->pub.caps->color_caps.mpc.top_bottom_blending) {
+            result = VPE_STATUS_ALPHA_BLENDING_NOT_SUPPORTED;
+            break;
+        }
     }
 
     return result;
@@ -594,6 +633,12 @@ enum vpe_status vpe_check_support(
 
     if (status == VPE_STATUS_OK) {
         // blending support check
+        status = check_blending_support(vpe_priv, param);
+        if (status != VPE_STATUS_OK)
+            vpe_log("fail input stream population. status %d\n", (int)status);
+    }
+
+    if (status == VPE_STATUS_OK) {
         status = populate_input_streams(vpe_priv, param, vpe_priv->stream_ctx);
         if (status != VPE_STATUS_OK)
             vpe_log("fail input stream population. status %d\n", (int)status);
@@ -635,8 +680,10 @@ enum vpe_status vpe_check_support(
         status = vpe_validate_geometric_scaling_support(param);
     }
 
-    if (vpe_priv->init.debug.assert_when_not_support)
-        VPE_ASSERT(status == VPE_STATUS_OK);
+    if (vpe_priv->init.debug.assert_when_not_support && status != VPE_STATUS_OK) {
+        vpe_log("vpe_check_support failed with status %d\n", (int)status);
+        VPE_EXIT(1);
+    }
 
     vpe_event(VPE_EVENT_CHECK_SUPPORT, vpe_priv->num_streams, param->target_rect.width,
         param->target_rect.height, status);
@@ -683,7 +730,9 @@ enum vpe_status vpe_build_commands(
     vpe_priv = container_of(vpe, struct vpe_priv, pub);
 
 #ifdef VPE_REGISTER_PROFILE
-    vpe_priv->config_writer.register_count = 0;
+    vpe_priv->config_writer.total_register_count        = 0;
+    vpe_priv->config_writer.burstMode_register_count    = 0;
+    vpe_priv->config_writer.nonBurstMode_register_count = 0;
     vpe_priv->config_writer.total_config_count = 0;
     vpe_priv->config_writer.reused_config_count = 0;
 #endif
@@ -708,10 +757,6 @@ enum vpe_status vpe_build_commands(
              */
             bufs->cmd_buf.size = vpe_priv->bufs_required.cmd_buf_size;
             bufs->emb_buf.size = vpe_priv->bufs_required.emb_buf_size;
-
-            if (param->predication_info.enable == true) {
-                bufs->cmd_buf.size += VPE_PREDICATION_CMD_SIZE;
-            }
 
             return VPE_STATUS_OK;
         } else if ((bufs->cmd_buf.size < vpe_priv->bufs_required.cmd_buf_size) ||
@@ -786,7 +831,7 @@ enum vpe_status vpe_build_commands(
          * the 3dlut enablement for the background color conversion
          * is used based on the information of the first stream.
          */
-        vpe_bg_color_convert(vpe_priv->output_ctx.cs, vpe_priv->output_ctx.output_tf,
+        vpe_priv->resource.bg_color_convert(vpe_priv->output_ctx.cs, vpe_priv->output_ctx.output_tf,
             vpe_priv->output_ctx.surface.format, &vpe_priv->output_ctx.mpc_bg_color,
             &vpe_priv->output_ctx.opp_bg_color, vpe_priv->stream_ctx[0].enable_3dlut);
 
@@ -837,7 +882,11 @@ enum vpe_status vpe_build_commands(
 #endif
         }
 #ifdef VPE_REGISTER_PROFILE
-        vpe_log("Total Registers Accessed: % d\n", vpe_priv->config_writer.register_count);
+        vpe_log("Total Registers Accessed: % d\n", vpe_priv->config_writer.total_register_count);
+        vpe_log("Burst Mode Registers Accessed: % d\n",
+            vpe_priv->config_writer.burstMode_register_count);
+        vpe_log("Non-Burst Mode Registers Accessed: % d\n",
+            vpe_priv->config_writer.nonBurstMode_register_count);
         vpe_log("Total Config Descriptors: % d\n", vpe_priv->config_writer.total_config_count);
         vpe_log("Total Re-used Config Descriptors: % d\n", vpe_priv->config_writer.reused_config_count);
 #endif
@@ -872,8 +921,10 @@ enum vpe_status vpe_build_commands(
 
     vpe_priv->ops_support = false;
 
-    if (vpe_priv->init.debug.assert_when_not_support)
-        VPE_ASSERT(status == VPE_STATUS_OK);
+    if (vpe_priv->init.debug.assert_when_not_support && status != VPE_STATUS_OK) {
+        vpe_log("vpe_check_support failed with status %d\n", (int)status);
+        VPE_EXIT(1);
+    }
 
     return status;
 }
@@ -958,4 +1009,45 @@ enum vpe_status vpe_build_resolve_query(
     }
 
     return result;
+}
+
+const struct vpe_engine *vpe_create_engine(struct vpe_init_data *params)
+{
+    struct vpe_engine_priv *engine_priv;
+    struct vpe_engine      *engine_handle;
+    if (!params)
+        return NULL;
+    engine_priv = (struct vpe_engine_priv *)params->funcs.zalloc(
+        params->funcs.mem_ctx, sizeof(struct vpe_engine_priv));
+    if (engine_priv == NULL)
+        return NULL;
+    /* setup public data */
+    engine_handle = &engine_priv->pub;
+    engine_handle->ip_level =
+        vpe_resource_parse_ip_version(params->ver_major, params->ver_minor, params->ver_rev);
+    engine_handle->api_version = (VPELIB_API_VERSION_MAJOR << VPELIB_API_VERSION_MAJOR_SHIFT) |
+                                 (VPELIB_API_VERSION_MINOR << VPELIB_API_VERSION_MINOR_SHIFT);
+    engine_handle->caps = vpe_get_capability(engine_handle->ip_level);
+
+    /* setup internal data */
+    engine_priv->init      = *params;
+    engine_priv->ver_major = params->ver_major;
+    engine_priv->ver_minor = params->ver_minor;
+    engine_priv->ver_rev   = params->ver_rev;
+    vpe_setup_check_funcs(&engine_handle->check_funcs, engine_handle->ip_level);
+    return engine_handle;
+}
+
+/**
+ * destroy the vpe engine instance.
+ * @param[in] engine  vpe engine instance created by vpe_create_engine()
+ */
+void vpe_destroy_engine(struct vpe_engine **engine)
+{
+    struct vpe_engine_priv *engine_priv;
+    if (!engine || ((*engine) == NULL))
+        return;
+    engine_priv = container_of(*engine, struct vpe_engine_priv, pub);
+    engine_priv->init.funcs.free(engine_priv->init.funcs.mem_ctx, engine_priv);
+    *engine = NULL;
 }

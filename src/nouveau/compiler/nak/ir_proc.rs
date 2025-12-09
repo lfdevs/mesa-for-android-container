@@ -59,6 +59,32 @@ pub fn enum_derive_display_op(input: TokenStream) -> TokenStream {
     }
 }
 
+fn into_box_inner_type<'a>(from_type: &'a syn::Type) -> Option<&'a syn::Type> {
+    let last = match from_type {
+        Type::Path(TypePath { path, .. }) => path.segments.last()?,
+        _ => return None,
+    };
+
+    if last.ident != "Box" {
+        return None;
+    }
+
+    let PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+        args,
+        ..
+    }) = &last.arguments
+    else {
+        panic!("Expected Box<T> (with angle brackets)");
+    };
+
+    for arg in args {
+        if let GenericArgument::Type(inner_type) = arg {
+            return Some(inner_type);
+        }
+    }
+    panic!("Expected Box to use a type argument");
+}
+
 #[proc_macro_derive(FromVariants)]
 pub fn derive_from_variants(input: TokenStream) -> TokenStream {
     let DeriveInput { ident, data, .. } = parse_macro_input!(input);
@@ -74,6 +100,9 @@ pub fn derive_from_variants(input: TokenStream) -> TokenStream {
                 _ => panic!("Expected Op(OpFoo)"),
             };
 
+            assert!(from_type.len() == 1, "Expected Op(OpFoo)");
+            let from_type = &from_type.first().unwrap().ty;
+
             let quote = quote! {
                 impl From<#from_type> for #enum_type {
                     fn from (op: #from_type) -> #enum_type {
@@ -83,6 +112,18 @@ pub fn derive_from_variants(input: TokenStream) -> TokenStream {
             };
 
             impls.extend(quote);
+
+            if let Some(inner_type) = into_box_inner_type(from_type) {
+                let quote = quote! {
+                    impl From<#inner_type> for #enum_type {
+                        fn from(value: #inner_type) -> Self {
+                            From::from(Box::new(value))
+                        }
+                    }
+                };
+
+                impls.extend(quote);
+            }
         }
     }
 

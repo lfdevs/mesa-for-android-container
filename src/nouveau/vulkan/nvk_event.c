@@ -9,8 +9,12 @@
 #include "nvk_entrypoints.h"
 #include "nvk_mme.h"
 
+#include "vk_synchronization.h"
+
 #include "nv_push_cl906f.h"
 #include "nv_push_cl9097.h"
+#include "nv_push_cl90b5.h"
+#include "nv_push_cl90c0.h"
 
 #define NVK_EVENT_MEM_SIZE sizeof(VkResult)
 
@@ -148,15 +152,58 @@ vk_stage_flags_to_nv9097_pipeline_location(VkPipelineStageFlags2 flags)
                         VK_PIPELINE_STAGE_2_HOST_BIT |
                         VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT);
 
-   /* TODO: Doing this on 3D will likely cause a WFI which is probably ok but,
-    * if we tracked which subchannel we've used most recently, we can probably
-    * do better than that.
-    */
    clear_bits64(&flags, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
    assert(flags == 0);
 
    return NV9097_SET_REPORT_SEMAPHORE_D_PIPELINE_LOCATION_NONE;
+}
+
+static void
+nvk_event_report_semaphore(struct nvk_cmd_buffer *cmd,
+                           VkPipelineStageFlags2 stages,
+                           uint64_t addr, uint32_t value)
+{
+   uint8_t subc = nvk_cmd_buffer_last_subchannel(cmd);
+   if (subc == SUBC_NV9097) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 7);
+      P_IMMD(p, NV9097, FLUSH_PENDING_WRITES, 0);
+      P_MTHD(p, NV9097, SET_REPORT_SEMAPHORE_A);
+      P_NV9097_SET_REPORT_SEMAPHORE_A(p, addr >> 32);
+      P_NV9097_SET_REPORT_SEMAPHORE_B(p, addr);
+      P_NV9097_SET_REPORT_SEMAPHORE_C(p, value);
+      P_NV9097_SET_REPORT_SEMAPHORE_D(p, {
+         .operation = OPERATION_RELEASE,
+         .release = RELEASE_AFTER_ALL_PRECEEDING_WRITES_COMPLETE,
+         .pipeline_location = vk_stage_flags_to_nv9097_pipeline_location(stages),
+         .structure_size = STRUCTURE_SIZE_ONE_WORD,
+      });
+   } else if (subc == SUBC_NV90C0) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
+      P_MTHD(p, NV90C0, SET_REPORT_SEMAPHORE_A);
+      P_NV90C0_SET_REPORT_SEMAPHORE_A(p, addr >> 32);
+      P_NV90C0_SET_REPORT_SEMAPHORE_B(p, addr);
+      P_NV90C0_SET_REPORT_SEMAPHORE_C(p, value);
+      P_NV90C0_SET_REPORT_SEMAPHORE_D(p, {
+         .operation = OPERATION_RELEASE,
+         .structure_size = STRUCTURE_SIZE_ONE_WORD,
+      });
+   } else {
+      assert(subc == SUBC_NV90B5);
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 6);
+
+      P_MTHD(p, NV90B5, SET_SEMAPHORE_A);
+      P_NV90B5_SET_SEMAPHORE_A(p, addr >> 32);
+      P_NV90B5_SET_SEMAPHORE_B(p, addr);
+      P_NV90B5_SET_SEMAPHORE_PAYLOAD(p, value);
+
+      P_IMMD(p, NV90B5, LAUNCH_DMA, {
+         .data_transfer_type = DATA_TRANSFER_TYPE_NONE,
+         .semaphore_type = SEMAPHORE_TYPE_RELEASE_ONE_WORD_SEMAPHORE,
+         .flush_enable = FLUSH_ENABLE_TRUE,
+         /* Note: FLUSH_TYPE=SYS implicitly for NVC3B5+ */
+      });
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -169,25 +216,10 @@ nvk_CmdSetEvent2(VkCommandBuffer commandBuffer,
 
    nvk_cmd_flush_wait_dep(cmd, pDependencyInfo, false);
 
-   VkPipelineStageFlags2 stages = 0;
-   for (uint32_t i = 0; i < pDependencyInfo->memoryBarrierCount; i++)
-      stages |= pDependencyInfo->pMemoryBarriers[i].srcStageMask;
-   for (uint32_t i = 0; i < pDependencyInfo->bufferMemoryBarrierCount; i++)
-      stages |= pDependencyInfo->pBufferMemoryBarriers[i].srcStageMask;
-   for (uint32_t i = 0; i < pDependencyInfo->imageMemoryBarrierCount; i++)
-      stages |= pDependencyInfo->pImageMemoryBarriers[i].srcStageMask;
+   VkPipelineStageFlags2 stages =
+      vk_collect_dependency_info_src_stages(pDependencyInfo);
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
-   P_MTHD(p, NV9097, SET_REPORT_SEMAPHORE_A);
-   P_NV9097_SET_REPORT_SEMAPHORE_A(p, event->addr >> 32);
-   P_NV9097_SET_REPORT_SEMAPHORE_B(p, event->addr);
-   P_NV9097_SET_REPORT_SEMAPHORE_C(p, VK_EVENT_SET);
-   P_NV9097_SET_REPORT_SEMAPHORE_D(p, {
-      .operation = OPERATION_RELEASE,
-      .release = RELEASE_AFTER_ALL_PRECEEDING_WRITES_COMPLETE,
-      .pipeline_location = vk_stage_flags_to_nv9097_pipeline_location(stages),
-      .structure_size = STRUCTURE_SIZE_ONE_WORD,
-   });
+   nvk_event_report_semaphore(cmd, stages, event->addr, VK_EVENT_SET);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -198,18 +230,7 @@ nvk_CmdResetEvent2(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(nvk_event, event, _event);
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
-   P_MTHD(p, NV9097, SET_REPORT_SEMAPHORE_A);
-   P_NV9097_SET_REPORT_SEMAPHORE_A(p, event->addr >> 32);
-   P_NV9097_SET_REPORT_SEMAPHORE_B(p, event->addr);
-   P_NV9097_SET_REPORT_SEMAPHORE_C(p, VK_EVENT_RESET);
-   P_NV9097_SET_REPORT_SEMAPHORE_D(p, {
-      .operation = OPERATION_RELEASE,
-      .release = RELEASE_AFTER_ALL_PRECEEDING_WRITES_COMPLETE,
-      .pipeline_location =
-         vk_stage_flags_to_nv9097_pipeline_location(stageMask),
-      .structure_size = STRUCTURE_SIZE_ONE_WORD,
-   });
+   nvk_event_report_semaphore(cmd, stageMask, event->addr, VK_EVENT_RESET);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -224,7 +245,7 @@ nvk_CmdWaitEvents2(VkCommandBuffer commandBuffer,
       VK_FROM_HANDLE(nvk_event, event, pEvents[i]);
 
       struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
-      __push_mthd(p, SUBC_NV9097, NV906F_SEMAPHOREA);
+      __push_mthd(p, nvk_cmd_buffer_last_subchannel(cmd), NV906F_SEMAPHOREA);
       P_NV906F_SEMAPHOREA(p, event->addr >> 32);
       P_NV906F_SEMAPHOREB(p, (event->addr & UINT32_MAX) >> 2);
       P_NV906F_SEMAPHOREC(p, VK_EVENT_SET);

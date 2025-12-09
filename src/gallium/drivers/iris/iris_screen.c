@@ -84,12 +84,12 @@
       gfx8_##func(__VA_ARGS__);                   \
       break;                                      \
    default:                                       \
-      unreachable("Unknown hardware generation"); \
+      UNREACHABLE("Unknown hardware generation"); \
    }
 
 #ifndef INTEL_USE_ELK
-static inline void gfx8_init_screen_state(struct iris_screen *screen) { unreachable("no elk support"); }
-static inline void gfx8_init_screen_gen_state(struct iris_screen *screen) { unreachable("no elk support"); }
+static inline void gfx8_init_screen_state(struct iris_screen *screen) { UNREACHABLE("no elk support"); }
+static inline void gfx8_init_screen_gen_state(struct iris_screen *screen) { UNREACHABLE("no elk support"); }
 #endif
 
 static const char *
@@ -182,14 +182,9 @@ iris_get_video_memory(struct iris_screen *screen)
       const unsigned gpu_mappable_megabytes =
          (devinfo->aperture_bytes * 3 / 4) / (1024 * 1024);
 
-      const long system_memory_pages = sysconf(_SC_PHYS_PAGES);
-      const long system_page_size = sysconf(_SC_PAGE_SIZE);
-
-      if (system_memory_pages <= 0 || system_page_size <= 0)
+      uint64_t system_memory_bytes;
+      if (!os_get_total_physical_memory(&system_memory_bytes))
          return -1;
-
-      const uint64_t system_memory_bytes =
-         (uint64_t) system_memory_pages * (uint64_t) system_page_size;
 
       const unsigned system_memory_megabytes =
          (unsigned) (system_memory_bytes / (1024 * 1024));
@@ -201,18 +196,18 @@ iris_get_video_memory(struct iris_screen *screen)
 static void
 iris_init_shader_caps(struct iris_screen *screen)
 {
-   for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
       struct pipe_shader_caps *caps =
          (struct pipe_shader_caps *)&screen->base.shader_caps[i];
 
-      caps->max_instructions = i == PIPE_SHADER_FRAGMENT ? 1024 : 16384;
+      caps->max_instructions = i == MESA_SHADER_FRAGMENT ? 1024 : 16384;
       caps->max_alu_instructions =
       caps->max_tex_instructions =
-      caps->max_tex_indirections = i == PIPE_SHADER_FRAGMENT ? 1024 : 0;
+      caps->max_tex_indirections = i == MESA_SHADER_FRAGMENT ? 1024 : 0;
 
       caps->max_control_flow_depth = UINT_MAX;
 
-      caps->max_inputs = i == PIPE_SHADER_VERTEX ? 16 : 32;
+      caps->max_inputs = i == MESA_SHADER_VERTEX ? 16 : 32;
       caps->max_outputs = 32;
       caps->max_const_buffer0_size = 16 * 1024 * sizeof(float);
       caps->max_const_buffers = 16;
@@ -220,7 +215,8 @@ iris_init_shader_caps(struct iris_screen *screen)
 
       /* Lie about these to avoid st/mesa's GLSL IR lowering of indirects,
        * which we don't want.  Our compiler backend will check brw_compiler's
-       * options and call nir_lower_indirect_derefs appropriately anyway.
+       * options and call nir_lower_indirect_derefs_to_if_else_trees
+       * appropriately anyway.
        */
       caps->indirect_temp_addr = true;
       caps->indirect_const_addr = true;
@@ -290,6 +286,7 @@ iris_init_screen_caps(struct iris_screen *screen)
 
    const struct intel_device_info *devinfo = screen->devinfo;
 
+   caps->prefer_real_buffer_in_constbuf0 = true;
    caps->npot_textures = true;
    caps->anisotropic_filter = true;
    caps->occlusion_query = true;
@@ -320,6 +317,7 @@ iris_init_screen_caps(struct iris_screen *screen)
    caps->texture_multisample = true;
    caps->cube_map_array = true;
    caps->texture_buffer_objects = true;
+   caps->sampler_reduction_minmax_arb = devinfo->ver > 8;
    caps->query_pipeline_statistics_single = true;
    caps->texture_query_lod = true;
    caps->sample_shading = true;
@@ -413,7 +411,7 @@ iris_init_screen_caps(struct iris_screen *screen)
    caps->constant_buffer_offset_alignment = 32;
    caps->min_map_buffer_alignment = IRIS_MAP_BUFFER_ALIGNMENT;
    caps->shader_buffer_offset_alignment = 4;
-   caps->max_shader_buffer_size = 1 << 27;
+   caps->max_shader_buffer_size = (unsigned)MIN2(screen->isl_dev.max_buffer_size, INT32_MAX); // INT32_MAX is correct.
    caps->texture_buffer_offset_alignment = 16; // XXX: u_screen says 256 is the minimum value...
    caps->linear_image_pitch_alignment = 1;
    caps->linear_image_base_address_alignment = 1;
@@ -450,6 +448,9 @@ iris_init_screen_caps(struct iris_screen *screen)
       PIPE_CONTEXT_PRIORITY_LOW |
       PIPE_CONTEXT_PRIORITY_MEDIUM |
       PIPE_CONTEXT_PRIORITY_HIGH;
+
+   /* Let mesa/st lower for us */
+   caps->flatshade = false;
 
    caps->frontend_noop = true;
 
@@ -499,6 +500,20 @@ iris_init_screen_caps(struct iris_screen *screen)
     * shift it right by one, so the highest valid address bit gets unset.
     */
    caps->max_vma = intel_48b_address(UINT64_MAX) >> 1;
+
+   if (devinfo->ver >= 9) {
+      caps->shader_subgroup_size = 32;
+      caps->shader_subgroup_supported_stages = BITFIELD_MASK(MESA_SHADER_STAGES);
+      caps->shader_subgroup_supported_features =
+         devinfo->has_64bit_float ? BITFIELD_MASK(PIPE_SHADER_SUBGROUP_NUM_FEATURES)
+                                  : (PIPE_SHADER_SUBGROUP_FEATURE_BASIC |
+                                     PIPE_SHADER_SUBGROUP_FEATURE_VOTE |
+                                     PIPE_SHADER_SUBGROUP_FEATURE_BALLOT |
+                                     PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE |
+                                     PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE_RELATIVE |
+                                     PIPE_SHADER_SUBGROUP_FEATURE_QUAD);
+      caps->shader_subgroup_quad_all_stages = true;
+   }
 }
 
 static uint64_t
@@ -603,7 +618,7 @@ iris_init_identifier_bo(struct iris_screen *screen)
 
    screen->workaround_address = (struct iris_address) {
       .bo = screen->workaround_bo,
-      .offset = ALIGN(
+      .offset = align(
          intel_debug_write_identifiers(bo_map, 4096, "Iris"), 32),
    };
 
@@ -737,6 +752,8 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
       driQueryOptionb(config->options, "intel_te_distribution");
    screen->driconf.generated_indirect_threshold =
       driQueryOptioni(config->options, "generated_indirect_threshold");
+   screen->driconf.disable_threaded_context =
+      driQueryOptionb(config->options, "intel_disable_threaded_context");
 
    screen->precompile = debug_get_bool_option("shader_precompile", true);
 

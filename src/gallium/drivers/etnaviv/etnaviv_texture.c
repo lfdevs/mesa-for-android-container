@@ -40,7 +40,7 @@
 #include "drm-uapi/drm_fourcc.h"
 
 static void
-etna_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type shader,
+etna_bind_sampler_states(struct pipe_context *pctx, mesa_shader_stage shader,
                          unsigned start_slot, unsigned num_samplers,
                          void **samplers)
 {
@@ -50,11 +50,11 @@ etna_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type shader
    int offset;
 
    switch (shader) {
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       offset = 0;
       ctx->num_fragment_samplers = num_samplers;
       break;
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       offset = screen->specs.vertex_sampler_offset;
       break;
    default:
@@ -320,7 +320,7 @@ etna_vertex_set_sampler_views(struct etna_context *ctx, unsigned nr,
 }
 
 static void
-etna_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
+etna_set_sampler_views(struct pipe_context *pctx, mesa_shader_stage shader,
                        unsigned start_slot, unsigned num_views,
                        unsigned unbind_num_trailing_slots,
                        struct pipe_sampler_view **views)
@@ -331,10 +331,10 @@ etna_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
    ctx->dirty |= ETNA_DIRTY_SAMPLER_VIEWS | ETNA_DIRTY_TEXTURE_CACHES;
 
    switch (shader) {
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       etna_fragtex_set_sampler_views(ctx, num_views, views);
       break;
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       etna_vertex_set_sampler_views(ctx, num_views, views);
       break;
    default:;

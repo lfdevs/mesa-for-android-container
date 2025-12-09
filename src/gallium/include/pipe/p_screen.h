@@ -93,9 +93,9 @@ struct pipe_screen {
    void *winsys_priv;
 
    const struct pipe_caps caps;
-   const struct pipe_shader_caps shader_caps[PIPE_SHADER_MESH_TYPES];
+   const struct pipe_shader_caps shader_caps[MESA_SHADER_MESH_STAGES];
    const struct pipe_compute_caps compute_caps;
-   const struct nir_shader_compiler_options *nir_options[PIPE_SHADER_MESH_TYPES];
+   const struct nir_shader_compiler_options *nir_options[MESA_SHADER_MESH_STAGES];
 
    /**
     * Get the fd associated with the screen
@@ -346,15 +346,6 @@ struct pipe_screen {
                               uint64_t *value);
 
    /**
-    * Get stride and offset for the given pipe resource without the need to get
-    * a winsys_handle.
-    */
-   void (*resource_get_info)(struct pipe_screen *screen,
-                             struct pipe_resource *resource,
-                             unsigned *stride,
-                             unsigned *offset);
-
-   /**
     * Mark the resource as changed so derived internal resources will be
     * recreated on next use.
     *
@@ -387,6 +378,14 @@ struct pipe_screen {
    void (*fence_reference)(struct pipe_screen *screen,
                            struct pipe_fence_handle **ptr,
                            struct pipe_fence_handle *fence);
+
+   /**
+    * Creates a semaphore that can be signaled and waited on through
+    * fence_server_sync and fence_server_signal.
+    *
+    * Drivers are required to not flush or wait on anything in this call.
+    */
+   struct pipe_fence_handle* (*semaphore_create)(struct pipe_screen *screen);
 
    /**
     * Wait for the fence to finish.
@@ -583,7 +582,7 @@ struct pipe_screen {
     */
    bool (*is_parallel_shader_compilation_finished)(struct pipe_screen *screen,
                                                    void *shader,
-                                                   enum pipe_shader_type shader_type);
+                                                   mesa_shader_stage shader_type);
 
    void (*driver_thread_add_job)(struct pipe_screen *screen,
                                  void *job,
@@ -614,8 +613,11 @@ struct pipe_screen {
     *
     * gallium frontends should call this before passing shaders to drivers,
     * and ideally also before shader caching.
+    *
+    * \param optimize  If false, the driver doesn't have to optimize NIR.
     */
-   void (*finalize_nir)(struct pipe_screen *screen, struct nir_shader *nir);
+   void (*finalize_nir)(struct pipe_screen *screen, struct nir_shader *nir,
+                        bool optimize);
 
    /*Separated memory/resource allocations interfaces for Vulkan */
 
@@ -797,24 +799,6 @@ struct pipe_screen {
    void (*query_compression_modifiers)(struct pipe_screen *screen,
                                        enum pipe_format format, uint32_t rate,
                                        int max, uint64_t *modifiers, int *count);
-
-   /**
-    * Check if the given \p target buffer is supported as output (or input for
-    * encode) for this \p profile and \p entrypoint.
-    *
-    * If \p format is different from target->buffer_format this function
-    * checks if the \p target buffer can be converted to \p format as part
-    * of the given operation (eg. encoder accepts RGB input and converts
-    * it to YUV).
-    *
-    * \return true if the buffer is supported for given operation, false
-    *         otherwise.
-    */
-   bool (*is_video_target_buffer_supported)(struct pipe_screen *screen,
-                                            enum pipe_format format,
-                                            struct pipe_video_buffer *target,
-                                            enum pipe_video_profile profile,
-                                            enum pipe_video_entrypoint entrypoint);
 
    /**
     * Allocates a cut-out in the GPU's VM space.

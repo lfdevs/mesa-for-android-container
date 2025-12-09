@@ -203,7 +203,7 @@ glsl_base_type_get_bit_size(const enum glsl_base_type base_type)
       return 64;
 
    default:
-      unreachable("unknown base type");
+      UNREACHABLE("unknown base type");
    }
 
    return 0;
@@ -286,6 +286,13 @@ enum {
    GLSL_PRECISION_HIGH,
    GLSL_PRECISION_MEDIUM,
    GLSL_PRECISION_LOW
+};
+
+enum {
+   GLSL_PIXEL_LOCAL_STORAGE_NONE = 0,
+   GLSL_PIXEL_LOCAL_STORAGE_IN,
+   GLSL_PIXEL_LOCAL_STORAGE_OUT,
+   GLSL_PIXEL_LOCAL_STORAGE_INOUT
 };
 
 enum glsl_cmat_use {
@@ -467,6 +474,11 @@ struct glsl_struct_field {
          unsigned precision:2;
 
          /**
+          * Pixel local storage qualifier
+          */
+         unsigned pixel_local_storage:2;
+
+         /**
           * Memory qualifiers, applicable to buffer variables defined in shader
           * storage buffer objects (SSBOs)
           */
@@ -484,6 +496,12 @@ struct glsl_struct_field {
          unsigned explicit_xfb_buffer:1;
 
          unsigned implicit_sized_array:1;
+
+         /**
+          * For interface blocks, 1 if this variable is a per-primitive input or output
+          * (as in ir_variable::patch). 0 otherwise.
+          */
+         unsigned per_primitive:1;
       };
       unsigned flags;
    };
@@ -986,7 +1004,7 @@ glsl_floatN_t_type(unsigned bit_size)
    case 32: return &glsl_type_builtin_float;
    case 64: return &glsl_type_builtin_double;
    default:
-      unreachable("Unsupported bit size");
+      UNREACHABLE("Unsupported bit size");
    }
 }
 
@@ -996,7 +1014,7 @@ glsl_bfloatN_t_type(unsigned bit_size)
    switch (bit_size) {
    case 16: return &glsl_type_builtin_bfloat16_t;
    default:
-      unreachable("Unsupported bit size");
+      UNREACHABLE("Unsupported bit size");
    }
 }
 
@@ -1009,7 +1027,7 @@ glsl_intN_t_type(unsigned bit_size)
    case 32: return &glsl_type_builtin_int;
    case 64: return &glsl_type_builtin_int64_t;
    default:
-      unreachable("Unsupported bit size");
+      UNREACHABLE("Unsupported bit size");
    }
 }
 
@@ -1022,7 +1040,7 @@ glsl_uintN_t_type(unsigned bit_size)
    case 32: return &glsl_type_builtin_uint;
    case 64: return &glsl_type_builtin_uint64_t;
    default:
-      unreachable("Unsupported bit size");
+      UNREACHABLE("Unsupported bit size");
    }
 }
 

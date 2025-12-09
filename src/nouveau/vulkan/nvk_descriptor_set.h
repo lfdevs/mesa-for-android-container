@@ -36,13 +36,15 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_descriptor_pool, base, VkDescriptorPool,
 struct nvk_descriptor_set {
    struct vk_object_base base;
 
+   struct nvk_descriptor_pool *pool;
+
    /* Link in nvk_descriptor_pool::sets */
    struct list_head link;
 
    struct nvk_descriptor_set_layout *layout;
    void *map;
-   uint64_t addr;
-   uint32_t size;
+   uint64_t mem_offset_B;
+   uint32_t size_B;
 
    union nvk_buffer_descriptor dynamic_buffers[];
 };
@@ -54,8 +56,8 @@ static inline struct nvk_buffer_address
 nvk_descriptor_set_addr(const struct nvk_descriptor_set *set)
 {
    return (struct nvk_buffer_address) {
-      .base_addr = set->addr,
-      .size = set->size,
+      .base_addr = set->pool->mem->va->addr + set->mem_offset_B,
+      .size = set->size_B,
    };
 }
 

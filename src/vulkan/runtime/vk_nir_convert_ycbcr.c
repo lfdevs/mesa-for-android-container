@@ -47,7 +47,7 @@ y_range(nir_builder *b,
                           1.0f / (219.0f * pow(2, bpc - 8)));
 
    default:
-      unreachable("missing Ycbcr range");
+      UNREACHABLE("missing Ycbcr range");
       return NULL;
    }
 }
@@ -70,7 +70,7 @@ chroma_range(nir_builder *b,
                                        -128.0f * pow(2, bpc - 8)),
                           1.0f / (224.0f * pow(2, bpc - 8)));
    default:
-      unreachable("missing Ycbcr range");
+      UNREACHABLE("missing Ycbcr range");
       return NULL;
    }
 }
@@ -111,7 +111,7 @@ ycbcr_model_to_rgb_matrix(VkSamplerYcbcrModelConversion model)
       return &bt2020;
    }
    default:
-      unreachable("missing Ycbcr model");
+      UNREACHABLE("missing Ycbcr model");
       return NULL;
    }
 }
@@ -271,7 +271,7 @@ swizzle_to_component(VkComponentSwizzle swizzle)
    case VK_COMPONENT_SWIZZLE_A:
       return 3;
    default:
-      unreachable("invalid channel");
+      UNREACHABLE("invalid channel");
       return 0;
    }
 }

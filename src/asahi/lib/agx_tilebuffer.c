@@ -42,7 +42,7 @@ agx_select_tile_size(unsigned bytes_per_pixel)
          return size;
    }
 
-   unreachable("No supported tile size meets the bytes per pixel requirement");
+   UNREACHABLE("No supported tile size meets the bytes per pixel requirement");
 }
 
 static unsigned
@@ -55,7 +55,7 @@ agx_shared_layout_from_tile_size(struct agx_tile_size t)
    else if (t.width == 16 && t.height == 16)
       return AGX_SHARED_LAYOUT_16X16;
    else
-      unreachable("Invalid tile size");
+      UNREACHABLE("Invalid tile size");
 }
 
 struct agx_tilebuffer_layout

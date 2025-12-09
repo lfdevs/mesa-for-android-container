@@ -392,17 +392,14 @@ glx@glx_arb_sync_control@waitformsc,Fail
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
-spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -scan 1 50,Fail
 spec@arb_texture_multisample@sample-position@4,Fail
-spec@arb_viewport_array@display-list,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
-spec@ext_external_objects@vk-ping-pong-multi-sem,Crash
 spec@ext_external_objects@vk-ping-pong-single-sem,Crash
 spec@glsl-es-1.00@linker@glsl-mismatched-uniform-precision-unused,Fail
 spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16,Fail

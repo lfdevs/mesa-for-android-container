@@ -1,9 +1,9 @@
 
 $MyPath = $MyInvocation.MyCommand.Path | Split-Path -Parent
-. "$MyPath\mesa_init_msvc.ps1"
+. "$MyPath\mesa_init_msvc.ps1" "-vcvars_ver=14.29"
 
 # we want more secure TLS 1.2 for most things, but it breaks SourceForge
-# downloads so must be done after Chocolatey use
+# downloads so must be done after winget use
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13;
 
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "deps" | Out-Null
@@ -12,7 +12,7 @@ $depsInstallPath="C:\mesa-deps"
 
 Get-Date
 Write-Host "Cloning DirectX-Headers"
-git clone -b v1.614.1 --depth=1 https://github.com/microsoft/DirectX-Headers deps/DirectX-Headers
+git clone -b v1.618.1 --depth=1 https://github.com/microsoft/DirectX-Headers deps/DirectX-Headers
 if (!$?) {
   Write-Host "Failed to clone DirectX-Headers repository"
   Exit 1
@@ -56,8 +56,8 @@ if (!$buildstatus) {
 }
 
 Get-Date
-Write-Host "Cloning LLVM release/15.x"
-git clone -b llvmorg-19.1.6 --depth=1 https://github.com/llvm/llvm-project deps/llvm-project
+Write-Host "Cloning LLVM"
+git clone -b llvmorg-19.1.7 --depth=1 https://github.com/llvm/llvm-project deps/llvm-project
 if (!$?) {
   Write-Host "Failed to clone LLVM repository"
   Exit 1
@@ -65,7 +65,7 @@ if (!$?) {
 
 Get-Date
 Write-Host "Cloning SPIRV-LLVM-Translator"
-git clone -b v19.1.3 https://github.com/KhronosGroup/SPIRV-LLVM-Translator deps/llvm-project/llvm/projects/SPIRV-LLVM-Translator
+git clone -b v19.1.10 https://github.com/KhronosGroup/SPIRV-LLVM-Translator deps/llvm-project/llvm/projects/SPIRV-LLVM-Translator
 if (!$?) {
   Write-Host "Failed to clone SPIRV-LLVM-Translator repository"
   Exit 1
@@ -82,6 +82,7 @@ cmake ../llvm `
 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
 -DCMAKE_PREFIX_PATH="$depsInstallPath" `
 -DCMAKE_INSTALL_PREFIX="$depsInstallPath" `
+-DCMAKE_CXX_FLAGS="/utf-8" `
 -DLLVM_ENABLE_PROJECTS="clang" `
 -DLLVM_TARGETS_TO_BUILD="AMDGPU;X86" `
 -DLLVM_OPTIMIZED_TABLEGEN=TRUE `

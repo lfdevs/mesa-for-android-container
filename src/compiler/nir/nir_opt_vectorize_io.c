@@ -555,8 +555,7 @@ nir_opt_vectorize_io(nir_shader *shader, nir_variable_mode modes,
    }
 
    /* Initialize dynamic arrays. */
-   struct util_dynarray io_instructions;
-   util_dynarray_init(&io_instructions, NULL);
+   struct util_dynarray io_instructions = UTIL_DYNARRAY_INIT;
    bool global_progress = false;
 
    nir_foreach_function_impl(impl, shader) {
@@ -648,7 +647,7 @@ nir_opt_vectorize_io(nir_shader *shader, nir_variable_mode modes,
             assert(value->num_components == 1);
             assert(value->bit_size == 16 || value->bit_size == 32);
 
-            util_dynarray_append(&io_instructions, void *, intr);
+            util_dynarray_append(&io_instructions, intr);
             if (is_output)
                BITSET_SET(is_load ? has_output_loads : has_output_stores, index);
          }

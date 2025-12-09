@@ -458,9 +458,6 @@ can_fast_clear_depth(struct iris_context *ice,
                      float depth)
 {
    struct pipe_resource *p_res = (void *) res;
-   struct pipe_context *ctx = (void *) ice;
-   struct iris_screen *screen = (void *) ctx->screen;
-   const struct intel_device_info *devinfo = screen->devinfo;
 
    if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
       return false;
@@ -481,7 +478,7 @@ can_fast_clear_depth(struct iris_context *ice,
       return false;
    }
 
-   if (!iris_resource_level_has_hiz(devinfo, res, level))
+   if (res->aux.usage == ISL_AUX_USAGE_NONE)
       return false;
 
    /* From the TGL PRM, Vol 9, "Compressed Depth Buffers" (under the
@@ -826,7 +823,7 @@ iris_clear_texture(struct pipe_context *ctx,
          case 96:  format = ISL_FORMAT_R32G32B32_UINT;    break;
          case 128: format = ISL_FORMAT_R32G32B32A32_UINT; break;
          default:
-            unreachable("Unknown format bpb");
+            UNREACHABLE("Unknown format bpb");
          }
 
          /* No aux surfaces for non-renderable surfaces */

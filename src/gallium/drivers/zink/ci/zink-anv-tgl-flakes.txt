@@ -5,26 +5,6 @@ spec@arb_query_buffer_object@qbo@query-GL_PRIMITIVES_SUBMITTED-ASYNC_CPU_READ_BE
 
 dEQP-GLES31.functional.image_load_store.buffer.atomic.comp_swap_r32i_return_value
 
-# "../src/gallium/drivers/zink/zink_fence.c:130: fence_wait: Assertion `fence->batch_id' failed."
-.*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.4
-.*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.texsubimage2d.4
-
-# deqp-egl: ../src/intel/vulkan/anv_batch_chain.c:520: cmd_buffer_chain_to_batch_bo: Assertion `batch->end == current_bbo->bo->map + current_bbo->bo->size' failed.
-dEQP-EGL.functional.swap_buffers_with_damage.resize.*
-
-# around the time of kernel warnings about dma_resv
-# "ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
-#  ../src/vulkan/runtime/vk_object.h:101: vk_object_base_assert_valid: Assertion `base == NULL || base->type == obj_type' failed."
-dEQP-EGL.functional.query_context.get_current_display.*
-dEQP-EGL.functional.query_context.get_current_.*_window
-dEQP-EGL.functional.query_context.query_context.*_window
-
-# Probably more of the above.
-dEQP-EGL.functional.color_clears.*_window
-
-# MESA: error: ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
-dEQP-EGL.functional.render.*_window
-
 # ../../src/xcb_in.c:746: xcb_request_check: Assertion `!reply' failed.
 glx@glx-make-current
 
@@ -58,54 +38,6 @@ spec@!opengl 1.1@depthstencil-default_fb-blit samples=.*
 spec@arb_shader_image_load_store@coherency
 
 spec@glsl-4.00@execution@built-in-functions@fs-inverse-dmat4
-
-# Around the time of running these tests there are some warnings from the kernel in dma_resv.c, and at least
-# some failures look like not waiting for rendering to complete.
-# Because those tests sometimes pass, keep them here
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb565_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb888_pbuffer
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb565_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb888_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb565_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb888_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb565_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb888_pbuffer
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgb565_pbuffer
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgb888_pbuffer
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgba8888_pbuffer
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgb565_pbuffer
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgb888_pbuffer
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgba8888_pbuffer
-
-# Everything in wayland EGL is flaking with crashes since at least early 2023-09
-# Possibly https://gitlab.freedesktop.org/mesa/mesa/-/issues/9577
-wayland-dEQP-EGL.functional.*
 
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-index-wr
 
@@ -141,9 +73,26 @@ spec@egl_chromium_sync_control@conformance
 
 KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup_texture_2d_multisample_*
 
+spec@amd_pinned_memory@offset=0
+spec@amd_pinned_memory@map-buffer offset=0
+
+spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-fs-getuniformdv
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-gs-getuniformdv
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-vs-getuniformdv
-dEQP-EGL.functional.sharing.gles2.multithread.random.programs.link.7
+spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-wrong-type-setter
 
 # Fails in the pre-merge job and passes in the nightly
 KHR-GL46.shader_viewport_layer_array.ShaderViewportIndexTestCase
+
+# CTS bug, depends on the caselists
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/5941
+KHR-GL46.direct_state_access.vertex_arrays_vertex_buffers_errors
+
+# Found an i915 error state at /sys/devices/pci0000:00/0000:00:02.0/drm/card0/error size=27622.
+# Saved to the job artifacts at /first.i915_error_state
+# https://gitlab.freedesktop.org/mesa/mesa/-/jobs/82125802#L5135
+glx@glx-context-flush-control
+glx@glx-multithread-buffer-busy-tracking-bug
+glx@glx-query-drawable-glx_width
+glx@glx-query-drawable-glxpixmap-glx_width
+glx@glx-swap-pixmap

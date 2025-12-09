@@ -246,7 +246,7 @@ private:
       auto intr = nir_instr_as_intrinsic(instr);
       assert(intr->intrinsic == nir_intrinsic_load_ubo_vec4);
 
-      auto parent = intr->src[0].ssa->parent_instr;
+      auto parent = nir_def_instr(intr->src[0].ssa);
 
       if (parent->type != nir_instr_type_alu)
          return nullptr;
@@ -275,6 +275,53 @@ private:
    }
 };
 
+class LowerGSArrayInput : public NirLowerInstruction {
+   bool filter(const nir_instr *instr) const override
+   {
+      if (instr->type != nir_instr_type_intrinsic)
+         return false;
+
+      auto intr = nir_instr_as_intrinsic(instr);
+      return intr->intrinsic == nir_intrinsic_load_per_vertex_input;
+   }
+
+   nir_def *lower(nir_instr *instr) override
+   {
+      auto intr = nir_instr_as_intrinsic(instr);
+
+      bool const_vertex_index = nir_src_as_const_value(intr->src[0]) != NULL;
+
+      if (!const_vertex_index && !m_base_array) {
+         auto nvtx = b->shader->info.gs.vertices_in;
+         m_base_array = nir_decl_reg(b, 1, 32, nvtx);
+         for (int i = 0; i < nvtx; ++i) {
+            auto idx = nir_imm_int(b, i);
+            auto base = nir_r600_indirect_vertex_at_index(b, 32, idx);
+            nir_store_reg_indirect(b, base, m_base_array, idx);
+         }
+      }
+
+      /* If the input indices were stored in the array for indirect access
+       * always use this to reduce the live range of the registers that are
+       * initialized with these values before the shader is run
+       */
+      auto vbase = (const_vertex_index && !m_base_array)
+                      ? nir_r600_indirect_vertex_at_index(b, 32, intr->src[0].ssa)
+                      : nir_load_reg_indirect(b, 1, 32, m_base_array, intr->src[0].ssa);
+      ;
+      auto new_addr =
+         nir_iadd(b, vbase, nir_ishl(b, intr->src[1].ssa, nir_imm_int(b, 2)));
+      auto io_semantics = nir_intrinsic_io_semantics(intr);
+      return nir_load_r600_per_vertex_input(b,
+                                            intr->num_components,
+                                            intr->def.bit_size,
+                                            new_addr,
+                                            .base = nir_intrinsic_base(intr),
+                                            .range = nir_intrinsic_range(intr),
+                                            .io_semantics = io_semantics);
+   }
+   nir_def *m_base_array{nullptr};
+};
 } // namespace r600
 
 static nir_intrinsic_op
@@ -368,6 +415,13 @@ r600_lower_clipvertex_to_clipdist(nir_shader *sh, pipe_stream_output_info& so_in
 }
 
 static bool
+r600_lower_gs_input_array(nir_shader *sh)
+{
+   assert(sh->info.stage == MESA_SHADER_GEOMETRY);
+   return r600::LowerGSArrayInput().run(sh);
+}
+
+static bool
 r600_nir_lower_atomics(nir_shader *shader)
 {
    /* In Hardware we start at a zero index for each new
@@ -393,7 +447,7 @@ r600_nir_lower_atomics(nir_shader *shader)
          var->data.index = iindex->second;
          iindex->second += offset_update;
       }
-      shader->variables.push_tail(&var->node);
+      exec_list_push_tail(&shader->variables, &var->node);
    }
 
    return nir_shader_intrinsics_pass(shader, r600_lower_deref_instr,
@@ -565,7 +619,7 @@ optimize_once(nir_shader *shader)
    bool progress = false;
    NIR_PASS(progress, shader, nir_lower_alu_to_scalar, r600_lower_to_scalar_instr_filter, NULL);
    NIR_PASS(progress, shader, nir_lower_vars_to_ssa);
-   NIR_PASS(progress, shader, nir_copy_prop);
+   NIR_PASS(progress, shader, nir_opt_copy_prop);
    NIR_PASS(progress, shader, nir_opt_dce);
    NIR_PASS(progress, shader, nir_opt_algebraic);
    if (shader->options->has_bitfield_select)
@@ -576,7 +630,7 @@ optimize_once(nir_shader *shader)
 
    if (nir_opt_loop(shader)) {
       progress = true;
-      NIR_PASS(progress, shader, nir_copy_prop);
+      NIR_PASS(progress, shader, nir_opt_copy_prop);
       NIR_PASS(progress, shader, nir_opt_dce);
    }
 
@@ -599,6 +653,7 @@ optimize_once(nir_shader *shader)
    NIR_PASS(progress, shader, nir_opt_dce);
    NIR_PASS(progress, shader, nir_opt_undef);
    NIR_PASS(progress, shader, nir_opt_loop_unroll);
+   NIR_PASS(progress, shader, r600_sfn_lower_alu);
    return progress;
 }
 
@@ -625,14 +680,6 @@ r600_lower_to_scalar_instr_filter(const nir_instr *instr, const void *)
 
    auto alu = nir_instr_as_alu(instr);
    switch (alu->op) {
-   case nir_op_bany_fnequal3:
-   case nir_op_bany_fnequal4:
-   case nir_op_ball_fequal3:
-   case nir_op_ball_fequal4:
-   case nir_op_bany_inequal3:
-   case nir_op_bany_inequal4:
-   case nir_op_ball_iequal3:
-   case nir_op_ball_iequal4:
    case nir_op_fdot2:
    case nir_op_fdot3:
    case nir_op_fdot4:
@@ -642,168 +689,10 @@ r600_lower_to_scalar_instr_filter(const nir_instr *instr, const void *)
    }
 }
 
-struct indirect_per_vertex {
-   nir_deref_instr *array_indirect_deref;
-   uint32_t mask;
-   nir_instr *saved_for_removal[R600_GS_VERTEX_INDIRECT_TOTAL][4];
-   unsigned obsolete_deref_count;
-   nir_instr *obsolete_deref[32];
-};
-
-static bool
-r600_nir_gs_load_deref_io_to_indirect_per_vertex_input(nir_builder *b,
-                                                       nir_intrinsic_instr *intrin,
-                                                       void *cb_data)
-{
-   struct indirect_per_vertex *indirect_per_vertex =
-      (struct indirect_per_vertex *)cb_data;
-   unsigned j;
-
-   if (intrin->intrinsic != nir_intrinsic_load_deref)
-      return false;
-
-   nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
-
-   if (!nir_deref_mode_is_one_of(deref, nir_var_shader_in))
-      return false;
-
-   nir_variable *var = nir_deref_instr_get_variable(deref);
-   const bool is_arrayed = nir_is_arrayed_io(var, b->shader->info.stage);
-
-   if (!is_arrayed || var->data.location != VARYING_SLOT_POS)
-      return false;
-
-   nir_def *array_index = deref->arr.index.ssa;
-
-   if (!array_index)
-      return false;
-
-   assert(intrin->def.num_components == 4);
-
-   nir_deref_instr *original_array = nir_instr_as_deref(
-      nir_instr_as_deref(intrin->src[0].ssa->parent_instr)->parent.ssa->parent_instr);
-
-   if (!original_array || original_array->deref_type != nir_deref_type_var ||
-       !glsl_type_is_array(original_array->type))
-      return false;
-
-   auto element_type = glsl_without_array(original_array->type);
-
-   if (element_type != &glsl_type_builtin_vec4)
-      return false;
-
-   const unsigned array_length = glsl_get_length(original_array->type);
-
-   assert(array_length <= R600_GS_VERTEX_INDIRECT_TOTAL);
-
-   for (j = 0; j < indirect_per_vertex->obsolete_deref_count &&
-               j < ARRAY_SIZE(indirect_per_vertex->obsolete_deref);
-        j++)
-      if (intrin->src[0].ssa->parent_instr == indirect_per_vertex->obsolete_deref[j])
-         break;
-
-   if (j == indirect_per_vertex->obsolete_deref_count &&
-       j != ARRAY_SIZE(indirect_per_vertex->obsolete_deref)) {
-      indirect_per_vertex->obsolete_deref[j] = intrin->src[0].ssa->parent_instr;
-      indirect_per_vertex->obsolete_deref_count++;
-   }
-
-   /* The next block generates a global array which is required
-    * for the indirect access. This array is located at the
-    * beginning. All the possible elements are generated. At the
-    * end, the elements which are not referenced are removed. */
-   if (!indirect_per_vertex->array_indirect_deref) {
-      static const char array_indirect_name[] = "r600_indirect_vertex_at_index";
-
-      b->cursor = nir_before_block(nir_start_block(b->impl));
-
-      nir_variable *array_indirect_var = nir_local_variable_create(
-         b->impl,
-         glsl_array_type(glsl_int_type(), R600_GS_VERTEX_INDIRECT_TOTAL, 0),
-         array_indirect_name);
-      indirect_per_vertex->array_indirect_deref =
-         nir_build_deref_var(b, array_indirect_var);
-
-      for (unsigned k = 0; k < R600_GS_VERTEX_INDIRECT_TOTAL; k++) {
-         nir_def *build_count = nir_imm_int(b, k);
-         nir_deref_instr *build_array =
-            nir_build_deref_array(b,
-                                  indirect_per_vertex->array_indirect_deref,
-                                  build_count);
-         nir_def *build_store =
-            nir_r600_indirect_vertex_at_index(b, intrin->def.bit_size, build_count);
-         nir_store_deref(b, build_array, build_store, 1);
-         indirect_per_vertex->saved_for_removal[k][0] = build_count->parent_instr;
-         indirect_per_vertex->saved_for_removal[k][1] = &build_array->instr;
-         indirect_per_vertex->saved_for_removal[k][2] = build_store->parent_instr;
-         indirect_per_vertex->saved_for_removal[k][3] =
-            nir_instr_next(build_store->parent_instr); // nir_store_deref
-      }
-   }
-
-   b->cursor = nir_before_instr(&intrin->instr);
-
-   for (unsigned k = 0; k < array_length; k++)
-      indirect_per_vertex->mask |= (1 << k);
-
-   nir_def *zero = nir_imm_int(b, 0);
-   nir_def *array_indirect_def = nir_load_deref(
-      b,
-      nir_build_deref_array(b, indirect_per_vertex->array_indirect_deref, array_index));
-   nir_def *load = nir_load_r600_indirect_per_vertex_input(b,
-                                                           intrin->def.num_components,
-                                                           intrin->def.bit_size,
-                                                           array_indirect_def,
-                                                           zero);
-
-   nir_intrinsic_set_base(nir_instr_as_intrinsic(load->parent_instr),
-                          var->data.driver_location);
-
-   nir_def_rewrite_uses(&intrin->def, load);
-   nir_instr_remove(&intrin->instr);
-
-   return true;
-}
-
-static bool
-r600_gs_load_deref_io_to_indirect_per_vertex_input(nir_shader *shader)
-{
-   struct indirect_per_vertex indirect_per_vertex = {nullptr};
-   bool ret =
-      nir_shader_intrinsics_pass(shader,
-                                 r600_nir_gs_load_deref_io_to_indirect_per_vertex_input,
-                                 nir_metadata_control_flow,
-                                 &indirect_per_vertex);
-
-   if (indirect_per_vertex.array_indirect_deref) {
-      for (unsigned k = 0; k < R600_GS_VERTEX_INDIRECT_TOTAL; k++)
-         if ((indirect_per_vertex.mask & (1 << k)) == 0) {
-            nir_instr_remove(indirect_per_vertex.saved_for_removal[k][3]);
-            nir_instr_remove(indirect_per_vertex.saved_for_removal[k][2]);
-            nir_instr_remove(indirect_per_vertex.saved_for_removal[k][1]);
-            nir_instr_remove(indirect_per_vertex.saved_for_removal[k][0]);
-         }
-
-      for (unsigned k = 0; k < indirect_per_vertex.obsolete_deref_count; k++)
-         nir_instr_remove(indirect_per_vertex.obsolete_deref[k]);
-   }
-
-   return ret;
-}
-
 void
 r600_finalize_nir_common(nir_shader *nir, enum amd_gfx_level gfx_level)
 {
    const int nir_lower_flrp_mask = 16 | 32 | 64;
-
-   if (nir->info.stage == MESA_SHADER_GEOMETRY) {
-      NIR_PASS(_, nir, r600_gs_load_deref_io_to_indirect_per_vertex_input);
-      NIR_PASS(_,
-               nir,
-               nir_lower_indirect_derefs,
-               nir_var_shader_in,
-               R600_GS_VERTEX_INDIRECT_TOTAL);
-   }
 
    NIR_PASS(_, nir, nir_lower_flrp, nir_lower_flrp_mask, false);
 
@@ -850,6 +739,8 @@ r600_finalize_nir_common(nir_shader *nir, enum amd_gfx_level gfx_level)
 
 DEBUG_GET_ONCE_NUM_OPTION(skip_opt_start, "R600_SFN_SKIP_OPT_START", -1);
 DEBUG_GET_ONCE_NUM_OPTION(skip_opt_end, "R600_SFN_SKIP_OPT_END", -1);
+DEBUG_GET_ONCE_NUM_OPTION(skip_ra_start, "R600_SFN_SKIP_RA_START", -1);
+DEBUG_GET_ONCE_NUM_OPTION(skip_ra_end, "R600_SFN_SKIP_RA_END", -1);
 
 void
 r600_lower_and_optimize_nir(nir_shader *sh,
@@ -901,10 +792,11 @@ r600_lower_and_optimize_nir(nir_shader *sh,
 
    /**/
    if (lower_64bit)
-      NIR_PASS(_, sh, nir_lower_indirect_derefs, nir_var_function_temp, 10);
+      NIR_PASS(_, sh, nir_lower_indirect_derefs_to_if_else_trees,
+               nir_var_function_temp, 10);
 
+   /* Fold constant offset srcs for IO. */
    NIR_PASS(_, sh, nir_opt_constant_folding);
-   NIR_PASS(_, sh, nir_io_add_const_offset_to_base, io_modes);
 
    NIR_PASS(_, sh, nir_lower_alu_to_scalar, r600_lower_to_scalar_instr_filter, NULL);
    NIR_PASS(_, sh, nir_lower_phis_to_scalar, NULL, NULL);
@@ -913,12 +805,14 @@ r600_lower_and_optimize_nir(nir_shader *sh,
    NIR_PASS(_, sh, nir_lower_alu_to_scalar, r600_lower_to_scalar_instr_filter, NULL);
    NIR_PASS(_, sh, nir_lower_phis_to_scalar, NULL, NULL);
    NIR_PASS(_, sh, nir_lower_alu_to_scalar, r600_lower_to_scalar_instr_filter, NULL);
-   NIR_PASS(_, sh, nir_copy_prop);
+   NIR_PASS(_, sh, nir_opt_copy_prop);
    NIR_PASS(_, sh, nir_opt_dce);
 
    if (r600_is_last_vertex_stage(sh, *key))
       r600_lower_clipvertex_to_clipdist(sh, *so_info);
 
+   if (sh->info.stage == MESA_SHADER_GEOMETRY)
+      NIR_PASS(_, sh, r600_lower_gs_input_array);
    if (sh->info.stage == MESA_SHADER_TESS_CTRL ||
        sh->info.stage == MESA_SHADER_TESS_EVAL ||
        (sh->info.stage == MESA_SHADER_VERTEX && key->vs.as_ls)) {
@@ -946,7 +840,6 @@ r600_lower_and_optimize_nir(nir_shader *sh,
 
    if (lower_64bit_io_to_vec2) {
       NIR_PASS(_, sh, r600::r600_nir_split_64bit_io);
-      NIR_PASS(_, sh, r600::r600_split_64bit_alu_and_phi);
       NIR_PASS(_, sh, nir_split_64bit_vec3_and_vec4);
       NIR_PASS(_, sh, nir_lower_int64);
    }
@@ -954,11 +847,14 @@ r600_lower_and_optimize_nir(nir_shader *sh,
    NIR_PASS(_, sh, nir_lower_ubo_vec4);
    NIR_PASS(_, sh, r600_opt_indirect_fbo_loads);
 
-   if (lower_64bit)
-      NIR_PASS(_, sh, r600::r600_nir_64_to_vec2);
-
-   if (lower_64bit_io_to_vec2)
+   if (lower_64bit_io_to_vec2) {
       NIR_PASS(_, sh, r600::r600_split_64bit_uniforms_and_ubo);
+      NIR_PASS(_, sh, nir_lower_alu_to_scalar, r600_lower_to_scalar_instr_filter, NULL);
+      NIR_PASS(_, sh, nir_lower_phis_to_scalar, NULL, NULL);
+      while (optimize_once(sh))
+         ;
+      NIR_PASS(_, sh, r600::r600_nir_64_to_vec2, gfx_level >= CAYMAN);
+   }
 
    /* Lower to scalar to let some optimization work out better */
    while (optimize_once(sh))
@@ -974,7 +870,7 @@ r600_lower_and_optimize_nir(nir_shader *sh,
             sh,
             nir_lower_vars_to_scratch,
             nir_var_function_temp,
-            40,
+            64,
             r600_get_scratch_size_align,
             r600_get_scratch_size_align);
 
@@ -987,9 +883,10 @@ r600_lower_and_optimize_nir(nir_shader *sh,
    bool late_algebraic_progress;
    do {
       late_algebraic_progress = false;
+      NIR_PASS(late_algebraic_progress, sh, r600_sfn_lower_alu);
       NIR_PASS(late_algebraic_progress, sh, nir_opt_algebraic_late);
       NIR_PASS(late_algebraic_progress, sh, nir_opt_constant_folding);
-      NIR_PASS(late_algebraic_progress, sh, nir_copy_prop);
+      NIR_PASS(late_algebraic_progress, sh, nir_opt_copy_prop);
       NIR_PASS(late_algebraic_progress, sh, nir_opt_dce);
       NIR_PASS(late_algebraic_progress, sh, nir_opt_cse);
    } while (late_algebraic_progress);
@@ -1051,7 +948,13 @@ r600_schedule_shader(r600::Shader *shader)
       scheduled_shader->print(std::cerr);
    }
 
-   if (!r600::sfn_log.has_debug_flag(r600::SfnLog::nomerge)) {
+   auto sfn_skip_ra_start = debug_get_option_skip_ra_start();
+   auto sfn_skip_ra_end = debug_get_option_skip_ra_end();
+   bool skip_shader_opt_per_id = sfn_skip_ra_start >= 0 &&
+                                 sfn_skip_ra_start <= shader->shader_id() &&
+                                 sfn_skip_ra_end >= shader->shader_id();
+
+   if (!r600::sfn_log.has_debug_flag(r600::SfnLog::nomerge) && !skip_shader_opt_per_id) {
 
       if (r600::sfn_log.has_debug_flag(r600::SfnLog::merge)) {
          r600::sfn_log << r600::SfnLog::merge << "Shader before RA\n";

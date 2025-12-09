@@ -70,7 +70,7 @@ bool si_nir_lower_ps_color_inputs(nir_shader *nir, const union si_shader_key *ke
             op = nir_intrinsic_load_barycentric_sample;
             break;
          default:
-            unreachable("invalid color interpolate location");
+            UNREACHABLE("invalid color interpolate location");
             break;
          }
 

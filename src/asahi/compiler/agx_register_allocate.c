@@ -5,6 +5,7 @@
 
 #include "util/bitset.h"
 #include "util/macros.h"
+#include "util/sparse_bitset.h"
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
@@ -199,7 +200,7 @@ agx_split_width(const agx_instr *I)
  * linear-time. Depends on liveness information.
  */
 static unsigned
-agx_calc_register_demand(agx_context *ctx)
+agx_calc_register_demand(agx_context *ctx, bool remat)
 {
    /* Print detailed demand calculation, helpful to debug spilling */
    bool debug = false;
@@ -212,6 +213,9 @@ agx_calc_register_demand(agx_context *ctx)
    enum ra_class *classes = calloc(ctx->alloc, sizeof(enum ra_class));
 
    agx_foreach_instr_global(ctx, I) {
+      if (I->op == AGX_OPCODE_MOV_IMM && remat)
+         continue;
+
       agx_foreach_ssa_dest(I, d) {
          unsigned v = I->dest[d].value;
          assert(widths[v] == 0 && "broken SSA");
@@ -230,12 +234,9 @@ agx_calc_register_demand(agx_context *ctx)
       unsigned demand = reserved_size(ctx);
 
       /* Everything live-in */
-      {
-         int i;
-         BITSET_FOREACH_SET(i, block->live_in, ctx->alloc) {
-            if (classes[i] == RA_GPR)
-               demand += widths[i];
-         }
+      U_SPARSE_BITSET_FOREACH_SET(&block->live_in, i) {
+         if (classes[i] == RA_GPR)
+            demand += widths[i];
       }
 
       max_demand = MAX2(demand, max_demand);
@@ -254,6 +255,9 @@ agx_calc_register_demand(agx_context *ctx)
           * set, just skip them so we don't double count.
           */
          if (I->op == AGX_OPCODE_PHI)
+            continue;
+
+         if (I->op == AGX_OPCODE_MOV_IMM && remat)
             continue;
 
          if (debug) {
@@ -448,7 +452,7 @@ insert_copy(struct ra_ctx *rctx, struct util_dynarray *copies, unsigned new_reg,
 
       assert((copy.dest % align) == 0 && "new dest must be aligned");
       assert((copy.src.value % align) == 0 && "src must be aligned");
-      util_dynarray_append(copies, struct agx_copy, copy);
+      util_dynarray_append(copies, copy);
    }
 }
 
@@ -609,8 +613,7 @@ find_regs(struct ra_ctx *rctx, agx_instr *I, unsigned dest_idx, unsigned count,
       assert(!rctx->early_killed && "no live range splits with early kill");
       assert(cls == RA_GPR && "no memory live range splits");
 
-      struct util_dynarray copies = {0};
-      util_dynarray_init(&copies, NULL);
+      struct util_dynarray copies = UTIL_DYNARRAY_INIT;
 
       reg = assign_regs_by_copying(rctx, I->dest[dest_idx], I, &copies);
 
@@ -645,7 +648,7 @@ search_ssa_to_reg_out(struct ra_ctx *ctx, struct agx_block *blk,
          return reg;
    }
 
-   unreachable("variable not defined in block");
+   UNREACHABLE("variable not defined in block");
 }
 
 /*
@@ -669,8 +672,7 @@ reserve_live_in(struct ra_ctx *rctx)
    agx_builder b =
       agx_init_builder(rctx->shader, agx_before_block(rctx->block));
 
-   int i;
-   BITSET_FOREACH_SET(i, rctx->block->live_in, rctx->shader->alloc) {
+   U_SPARSE_BITSET_FOREACH_SET(&rctx->block->live_in, i) {
       /* Skip values defined in loops when processing the loop header */
       if (!BITSET_TEST(rctx->visited, i))
          continue;
@@ -1186,8 +1188,7 @@ agx_ra_assign_local(struct ra_ctx *rctx)
              rctx->bound[i] * sizeof(*block->reg_to_ssa_out[i]));
    }
 
-   int i;
-   BITSET_FOREACH_SET(i, block->live_out, rctx->shader->alloc) {
+   U_SPARSE_BITSET_FOREACH_SET(&block->live_out, i) {
       block->reg_to_ssa_out[rctx->classes[i]][rctx->ssa_to_reg[i]] = i;
    }
 
@@ -1310,6 +1311,11 @@ lower_exports(agx_context *ctx)
          .src = I->src[0],
       };
 
+      /* The export itself is now trivial, reflect that for correct last-use
+       * tracking later.
+       */
+      I->src[0] = agx_register_like(I->imm, I->src[0]);
+
       /* We cannot use fewer registers than we export */
       ctx->max_reg =
          MAX2(ctx->max_reg, I->imm + agx_size_align_16(I->src[0].size));
@@ -1331,7 +1337,7 @@ agx_ra(agx_context *ctx)
    /* Compute shaders need to have their entire workgroup together, so our
     * register usage is bounded by the workgroup size.
     */
-   if (gl_shader_stage_is_compute(ctx->stage)) {
+   if (mesa_shader_stage_is_compute(ctx->stage)) {
       unsigned threads_per_workgroup;
 
       /* If we don't know the workgroup size, worst case it. TODO: Optimize
@@ -1388,16 +1394,41 @@ agx_ra(agx_context *ctx)
     * bound register assignment.
     */
    agx_compute_liveness(ctx);
-   unsigned effective_demand = agx_calc_register_demand(ctx);
+   unsigned effective_demand = agx_calc_register_demand(ctx, false);
    bool spilling = (effective_demand > max_possible_regs);
+   bool remat = false;
 
-   if (spilling) {
-      assert(ctx->key->has_scratch && "internal shaders are unspillable");
-      agx_spill(ctx, max_possible_regs);
+   /* If we need multiple waves, see if we can rematerialize constants to save
+    * waves. If we only have a single wave regardless, this is pointless.
+    */
+   if (effective_demand > agx_round_registers(1) && !spilling) {
+      unsigned effective_demand_remat = agx_calc_register_demand(ctx, true);
+
+      /* Worst-case assume we need 6 16-bit registers for constants, for a
+       * four-source cmpsel where 3 sources are 32-bit constants. Rounded to
+       * ensure live-range splitting works.
+       */
+      if ((effective_demand_remat + 6) < effective_demand) {
+         unsigned l = agx_round_registers(
+            align(agx_round_registers(effective_demand_remat + 6), 16));
+
+         /* Only rematerialize if it actually lets us save a wave */
+         if (l < agx_round_registers(effective_demand)) {
+            remat = true;
+            max_possible_regs = l;
+         }
+      }
+   }
+
+   if (spilling || remat) {
+      assert((remat || ctx->key->has_scratch) &&
+             "internal shaders are unspillable");
+
+      agx_spill(ctx, max_possible_regs, remat);
 
       /* After spilling, recalculate liveness and demand */
       agx_compute_liveness(ctx);
-      effective_demand = agx_calc_register_demand(ctx);
+      effective_demand = agx_calc_register_demand(ctx, false);
 
       /* The resulting program can now be assigned registers */
       assert(effective_demand <= max_possible_regs && "spiller post-condition");
@@ -1425,7 +1456,7 @@ agx_ra(agx_context *ctx)
    enum ra_class *classes = calloc(ctx->alloc, sizeof(enum ra_class));
    agx_instr **src_to_collect_phi = calloc(ctx->alloc, sizeof(agx_instr *));
    enum agx_size *sizes = calloc(ctx->alloc, sizeof(enum agx_size));
-   BITSET_WORD *visited = calloc(BITSET_WORDS(ctx->alloc), sizeof(BITSET_WORD));
+   BITSET_WORD *visited = BITSET_CALLOC(ctx->alloc);
    unsigned max_ncomps = 1;
 
    agx_foreach_instr_global(ctx, I) {
@@ -1459,6 +1490,7 @@ agx_ra(agx_context *ctx)
     */
    unsigned reg_file_alignment = MAX2(max_ncomps, 8);
    assert(util_is_power_of_two_nonzero(reg_file_alignment));
+   assert(reg_file_alignment <= 16 && "max size");
 
    unsigned demand = ALIGN_POT(effective_demand, reg_file_alignment);
    assert(demand <= max_possible_regs && "Invariant");

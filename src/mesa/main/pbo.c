@@ -220,7 +220,7 @@ _mesa_validate_pbo_source(struct gl_context *ctx, GLuint dimensions,
 bool
 _mesa_validate_pbo_source_compressed(struct gl_context *ctx, GLuint dimensions,
                                      const struct gl_pixelstore_attrib *unpack,
-                                     GLsizei imageSize, const GLvoid *pixels,
+                                     size_t imageSize, const GLvoid *pixels,
                                      const char *where)
 {
    if (!unpack->BufferObj) {
@@ -435,7 +435,7 @@ _mesa_validate_pbo_teximage(struct gl_context *ctx, GLuint dimensions,
  */
 const GLvoid *
 _mesa_validate_pbo_compressed_teximage(struct gl_context *ctx,
-                                 GLuint dimensions, GLsizei imageSize,
+                                 GLuint dimensions, size_t imageSize,
                                  const GLvoid *pixels,
                                  const struct gl_pixelstore_attrib *packing,
                                  const char *funcName)

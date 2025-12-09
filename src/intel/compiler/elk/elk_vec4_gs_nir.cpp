@@ -57,7 +57,7 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    }
 
    case nir_intrinsic_load_input:
-      unreachable("nir_lower_io should have produced per_vertex intrinsics");
+      UNREACHABLE("nir_lower_io should have produced per_vertex intrinsics");
 
    case nir_intrinsic_emit_vertex_with_counter:
       this->vertex_count =

@@ -232,7 +232,7 @@ ubo_deref_to_cbuf(nir_deref_instr *deref,
 
       switch (deref->deref_type) {
       case nir_deref_type_var:
-         unreachable("Buffers don't use variables in Vulkan");
+         UNREACHABLE("Buffers don't use variables in Vulkan");
 
       case nir_deref_type_array:
       case nir_deref_type_array_wildcard: {
@@ -251,7 +251,7 @@ ubo_deref_to_cbuf(nir_deref_instr *deref,
           * anyway, even with variable pointers.
           */
          offset_valid = false;
-         unreachable("Variable pointers aren't allowed on UBOs");
+         UNREACHABLE("Variable pointers aren't allowed on UBOs");
          break;
 
       case nir_deref_type_struct: {
@@ -261,7 +261,7 @@ ubo_deref_to_cbuf(nir_deref_instr *deref,
       }
 
       default:
-         unreachable("Unknown deref type");
+         UNREACHABLE("Unknown deref type");
       }
 
       deref = parent;
@@ -388,7 +388,7 @@ record_cbuf_uses_instr(UNUSED nir_builder *b, nir_instr *instr, void *_ctx)
       default:
          return false;
       }
-      unreachable("All cases return false");
+      UNREACHABLE("All cases return false");
    }
 
    case nir_instr_type_tex:
@@ -998,7 +998,7 @@ lower_edb_buffer_image_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
          nir_def *res = &intrin->def;
          res = fixup_edb_buffer_view_result(b, desc, in_bounds, res,
                                             nir_intrinsic_dest_type(intrin));
-         nir_def_rewrite_uses_after(&intrin->def, res, res->parent_instr);
+         nir_def_rewrite_uses_after(&intrin->def, res);
       }
 
       nir_rewrite_image_intrinsic(intrin, index, true);
@@ -1013,7 +1013,7 @@ lower_edb_buffer_image_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    default:
-      unreachable("Unknown image intrinsic");
+      UNREACHABLE("Unknown image intrinsic");
    }
 }
 
@@ -1047,7 +1047,7 @@ lower_image_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       nir_def *zero = nir_imm_zero(b, intrin->def.num_components,
                                       intrin->def.bit_size);
       nir_def *res = nir_bcsel(b, is_null, zero, &intrin->def);
-      nir_def_rewrite_uses_after(&intrin->def, res, res->parent_instr);
+      nir_def_rewrite_uses_after(&intrin->def, res);
    }
 
    return true;
@@ -1105,7 +1105,7 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       return try_lower_load_vulkan_descriptor(b, intrin, ctx);
 
    case nir_intrinsic_load_workgroup_size:
-      unreachable("Should have been lowered by nir_lower_cs_intrinsics()");
+      UNREACHABLE("Should have been lowered by nir_lower_cs_intrinsics()");
 
    case nir_intrinsic_load_num_workgroups:
       return lower_sysval_to_root_table(b, intrin, cs.group_count, ctx);
@@ -1193,7 +1193,7 @@ lower_edb_buffer_tex_instr(nir_builder *b, nir_tex_instr *tex,
                                                        ACCESS_CAN_REORDER,
                                              .dest_type = tex->dest_type);
       if (tex->is_sparse) {
-         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(res->parent_instr);
+         nir_intrinsic_instr *intr = nir_def_as_intrinsic(res);
          intr->intrinsic = nir_intrinsic_bindless_image_sparse_load;
       }
 
@@ -1212,7 +1212,7 @@ lower_edb_buffer_tex_instr(nir_builder *b, nir_tex_instr *tex,
    }
 
    default:
-      unreachable("Invalid buffer texture op");
+      UNREACHABLE("Invalid buffer texture op");
    }
 }
 
@@ -1346,7 +1346,7 @@ lower_ssbo_resource_index(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    default:
-      unreachable("Not an SSBO descriptor");
+      UNREACHABLE("Not an SSBO descriptor");
    }
 
    /* Tuck the stride in the top 8 bits of the binding address */
@@ -1369,7 +1369,7 @@ lower_ssbo_resource_index(nir_builder *b, nir_intrinsic_instr *intrin,
       break;
 
    default:
-      unreachable("Unknown address mode");
+      UNREACHABLE("Unknown address mode");
    }
 
    nir_def_rewrite_uses(&intrin->def, addr);
@@ -1397,7 +1397,7 @@ lower_ssbo_resource_reindex(nir_builder *b, nir_intrinsic_instr *intrin,
       break;
 
    default:
-      unreachable("Unknown address mode");
+      UNREACHABLE("Unknown address mode");
    }
 
    nir_def *stride = nir_ushr_imm(b, addr_high32, 24);
@@ -1437,7 +1437,7 @@ lower_load_ssbo_descriptor(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    default:
-      unreachable("Unknown address mode");
+      UNREACHABLE("Unknown address mode");
    }
 
    /* Mask off the binding stride */

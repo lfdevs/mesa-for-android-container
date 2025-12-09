@@ -16,7 +16,7 @@ libgallium_wgl = shared_library(
   ['wgl.c'],
   vs_module_defs : wgl_def,
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_wgl, inc_gallium_winsys, inc_gallium_winsys_sw, inc_gallium_drivers,
+    inc_include, inc_src, inc_mesa, inc_gallium, inc_gallium_aux, inc_wgl, inc_gallium_winsys, inc_gallium_winsys_sw, inc_gallium_drivers,
   ],
   link_whole : [libwgl],
   link_with : [

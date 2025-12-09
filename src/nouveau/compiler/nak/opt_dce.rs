@@ -123,7 +123,7 @@ impl DeadCodePass {
         }
     }
 
-    fn map_instr(&self, mut instr: Box<Instr>) -> MappedInstrs {
+    fn map_instr(&self, mut instr: Instr) -> MappedInstrs {
         let is_live = match &mut instr.op {
             Op::PhiSrcs(phi) => {
                 phi.srcs.retain(|phi, _| self.is_phi_live(*phi));
@@ -144,7 +144,7 @@ impl DeadCodePass {
             MappedInstrs::One(instr)
         } else {
             if DEBUG.annotate() {
-                MappedInstrs::One(Instr::new_boxed(OpAnnotate {
+                MappedInstrs::One(Instr::new(OpAnnotate {
                     annotation: "killed by dce".into(),
                 }))
             } else {

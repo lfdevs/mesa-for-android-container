@@ -90,4 +90,6 @@ int amdvgpu_vm_reserve_vmid(amdvgpu_device_handle dev, int reserve);
 int
 amdvgpu_query_sw_info(amdvgpu_device_handle dev, enum amdgpu_sw_info info, void *value);
 
+bool amdvgpu_has_vm_always_valid(amdvgpu_device_handle dev);
+
 #endif

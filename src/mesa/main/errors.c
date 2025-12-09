@@ -120,7 +120,7 @@ should_output(struct gl_context *ctx, GLenum error, const char *fmtString)
    /* Check debug environment variable only once:
     */
    if (debug == -1) {
-      const char *debugEnv = getenv("MESA_DEBUG");
+      const char *debugEnv = os_get_option("MESA_DEBUG");
 
 #ifndef NDEBUG
       if (debugEnv && strstr(debugEnv, "silent"))

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::ir::*;
+use compiler::cfg::CFG;
 use std::cmp::max;
 use std::cmp::Reverse;
 
@@ -144,7 +145,7 @@ pub fn side_effect_type(op: &Op) -> SideEffect {
         }
 
         // Move ops
-        Op::Mov(_) | Op::Prmt(_) | Op::Sel(_) => SideEffect::None,
+        Op::Mov(_) | Op::Prmt(_) | Op::Sel(_) | Op::Sgxt(_) => SideEffect::None,
         Op::Shfl(_) => SideEffect::None,
 
         // Predicate ops
@@ -171,6 +172,7 @@ pub fn side_effect_type(op: &Op) -> SideEffect {
         // Memory ops
         Op::Ipa(_) | Op::Ldc(_) => SideEffect::None,
         Op::Ld(_)
+        | Op::Ldsm(_)
         | Op::LdSharedLock(_)
         | Op::St(_)
         | Op::StSCheckUnlock(_)
@@ -183,7 +185,7 @@ pub fn side_effect_type(op: &Op) -> SideEffect {
         | Op::MemBar(_) => SideEffect::Memory,
 
         // Matrix ops
-        Op::Imma(_) | Op::Hmma(_) => SideEffect::None,
+        Op::Imma(_) | Op::Hmma(_) | Op::Movm(_) => SideEffect::None,
 
         // Control-flow ops
         Op::BClear(_)
@@ -239,6 +241,11 @@ pub fn side_effect_type(op: &Op) -> SideEffect {
     }
 }
 
+pub fn estimate_block_weight(cfg: &CFG<BasicBlock>, block_idx: usize) -> u64 {
+    let loop_depth = cfg.loop_depth(block_idx) as f32;
+    10_f32.powf((loop_depth + 1.0).log2()) as u64
+}
+
 /// Try to guess how many cycles a variable latency instruction will take
 ///
 /// These values are based on the cycle estimates from ["Dissecting the NVidia
@@ -290,6 +297,8 @@ pub fn estimate_variable_latency(sm: u8, op: &Op) -> u32 {
         Op::Ldc(_) => 4,
 
         Op::Ld(_)
+        | Op::Ldsm(_)
+        | Op::Movm(_)
         | Op::LdSharedLock(_)
         | Op::St(_)
         | Op::StSCheckUnlock(_)

@@ -174,7 +174,7 @@ get_reg_addr(struct emu *emu)
    case DATA_ADDR:    return REG_ADDR;
    case DATA_USRADDR: return REG_USRADDR;
    default:
-      unreachable("bad data_mode");
+      UNREACHABLE("bad data_mode");
       return 0;
    }
 }
@@ -268,7 +268,7 @@ emu_get_fifo_reg(struct emu *emu, unsigned n, bool peek)
          emu_main_prompt(emu);
       } while (true);
    } else {
-      unreachable("not a FIFO reg");
+      UNREACHABLE("not a FIFO reg");
       return 0;
    }
 }

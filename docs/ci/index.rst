@@ -23,8 +23,15 @@ The CI runs a number of tests, from trivial build-testing to complex GPU renderi
 A typical run takes between 20 and 30 minutes, although it can go up very quickly
 if the GitLab runners are overwhelmed, which happens sometimes. When it does happen,
 not much can be done besides waiting it out, or cancel it.
-You can do your part by only running the jobs you care about by using `our
-tool <#running-specific-ci-jobs>`__.
+
+It is a good practice to check the ``Marge`` 
+`queue <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests?assignee_username=marge-bot>`__ 
+to evaluate if it is the right moment to trigger some testing jobs. ``Marge`` 
+is configured to pick the MRs by assignment time, and this sort option is not 
+available in the Web UI. The `marge_queue <#marge-queue>`__ CLI tool 
+provides the list sorted by assignment time. The recommended way to manage the 
+trigger of those jobs is using our :abbr:`crnm (bin/ci/ci_run_n_monitor.sh)` 
+`cli tool <#running-specific-ci-jobs>`__.
 
 Due to limited resources, we currently do not run the CI automatically
 on every push; instead, we only run it automatically once the MR has
@@ -37,7 +44,7 @@ If the GitLab CI doesn't seem to be running on your fork (or MRs, as they run
 in the context of your fork), you should check the "Settings" of your fork.
 Under "CI / CD" → "General pipelines", make sure "Custom CI config path" is
 empty (or set to the default ``.gitlab-ci.yml``), and that the
-"Public pipelines" box is checked.
+"Project-based pipeline visibility" box is checked.
 
 If a specific CI farm is failing for reasons unrelated to your changes, make an
 MR to disable the farm following the `farm management <#farm-management>`__
@@ -337,6 +344,24 @@ scope permissions.
     `create-a-personal-access-token <https://docs.gitlab.com/user/profile/personal_access_tokens/#create-a-personal-access-token>`_
     and select the ``api`` scope. The token will only be shown once after creation,
     so make sure you store it securely.
+
+Marge queue
+-----------
+
+You can use ``bin/ci/marge_queue.sh`` to check how long the Marge queue is. As
+mentioned, the merge flow is to assign MR to the ``Marge`` bot, to serialize
+the verification and merge. Looking at the
+`merge requests assigned to Marge <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests?assignee_username=marge-bot>`__
+you can evaluate the size of the queue, since the ``marge_queue`` tool provides
+sorted and summarized information about those MR in queue.
+
+The tool requires a GitLab token as described in the
+`crnm <#running-specific-ci-jobs>`__ section. It outputs the current queue
+sorted by the ``assigned at`` to ``Marge``. It can also be used as an active
+wait for another action in a pipe, using the ``--wait`` until the queue is
+empty. The return code corresponds to the number of MRs in the queue, so when
+it returns ``0``, one can, for example, start the ``crnm`` tool on a certain
+pipeline.
 
 Conformance Tests
 -----------------

@@ -339,10 +339,10 @@ static inline bool
 ail_is_level_allocated_compressed(const struct ail_layout *layout,
                                   unsigned level)
 {
-   unsigned width_sa = ALIGN(
+   unsigned width_sa = align(
       ail_effective_width_sa(layout->width_px, layout->sample_count_sa), 16);
 
-   unsigned height_sa = ALIGN(
+   unsigned height_sa = align(
       ail_effective_height_sa(layout->height_px, layout->sample_count_sa), 16);
 
    return layout->compressed &&
@@ -485,7 +485,7 @@ ail_subtile_uncompressed_mode(enum pipe_format format)
    case  4: return AIL_COMP_UNCOMPRESSED_4;
    case  8:
    case 16: return AIL_COMP_UNCOMPRESSED_8_16;
-   default: unreachable("invalid block size");
+   default: UNREACHABLE("invalid block size");
    }
    /* clang-format on */
 }
@@ -500,7 +500,7 @@ ail_subtile_solid_mode(enum pipe_format format)
    case  4: return AIL_COMP_SOLID_4;
    case  8:
    case 16: return AIL_COMP_SOLID_8_16;
-   default: unreachable("invalid block size");
+   default: UNREACHABLE("invalid block size");
    }
    /* clang-format on */
 }
@@ -566,7 +566,7 @@ ail_drm_modifier_to_tiling(uint64_t modifier)
    case DRM_FORMAT_MOD_APPLE_GPU_TILED_COMPRESSED:
       return AIL_TILING_GPU;
    default:
-      unreachable("Unsupported modifier");
+      UNREACHABLE("Unsupported modifier");
    }
 }
 
@@ -580,7 +580,7 @@ ail_is_drm_modifier_compressed(uint64_t modifier)
    case DRM_FORMAT_MOD_APPLE_GPU_TILED_COMPRESSED:
       return true;
    default:
-      unreachable("Unsupported modifier");
+      UNREACHABLE("Unsupported modifier");
    }
 }
 

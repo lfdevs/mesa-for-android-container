@@ -46,13 +46,9 @@ namespace {
 
 class ir_algebraic_visitor : public ir_rvalue_visitor {
 public:
-   ir_algebraic_visitor(bool native_integers,
-                        const struct gl_shader_compiler_options *options)
-      : options(options)
+   ir_algebraic_visitor()
    {
       this->progress = false;
-      this->mem_ctx = NULL;
-      this->native_integers = native_integers;
    }
 
    virtual ~ir_algebraic_visitor()
@@ -74,10 +70,6 @@ public:
    ir_rvalue *swizzle_if_required(ir_expression *expr,
 				  ir_rvalue *operand);
 
-   const struct gl_shader_compiler_options *options;
-   void *mem_ctx;
-
-   bool native_integers;
    bool progress;
 };
 
@@ -194,11 +186,9 @@ ir_algebraic_visitor::reassociate_constant(ir_expression *ir1, int const_index,
        glsl_type_is_matrix(ir2->operands[1]->type))
       return false;
 
-   void *mem_ctx = ralloc_parent(ir2);
-
    ir_constant *ir2_const[2];
-   ir2_const[0] = ir2->operands[0]->constant_expression_value(mem_ctx);
-   ir2_const[1] = ir2->operands[1]->constant_expression_value(mem_ctx);
+   ir2_const[0] = ir2->operands[0]->constant_expression_value(ir2->node_linalloc);
+   ir2_const[1] = ir2->operands[1]->constant_expression_value(ir2->node_linalloc);
 
    if (ir2_const[0] && ir2_const[1])
       return false;
@@ -235,7 +225,7 @@ ir_algebraic_visitor::swizzle_if_required(ir_expression *expr,
 					  ir_rvalue *operand)
 {
    if (glsl_type_is_vector(expr->type) && glsl_type_is_scalar(operand->type)) {
-      return new(mem_ctx) ir_swizzle(operand, 0, 0, 0, 0,
+      return new(expr->node_linalloc) ir_swizzle(operand, 0, 0, 0, 0,
 				     expr->type->vector_elements);
    } else
       return operand;
@@ -267,12 +257,9 @@ ir_algebraic_visitor::handle_expression(ir_expression *ir)
 	 return ir;
 
       op_const[i] =
-         ir->operands[i]->constant_expression_value(ralloc_parent(ir));
+         ir->operands[i]->constant_expression_value(ir->node_linalloc);
       op_expr[i] = ir->operands[i]->as_expression();
    }
-
-   if (this->mem_ctx == NULL)
-      this->mem_ctx = ralloc_parent(ir);
 
    switch (ir->operation) {
    case ir_binop_add:
@@ -410,10 +397,9 @@ ir_algebraic_visitor::handle_rvalue(ir_rvalue **rvalue)
 }
 
 bool
-do_algebraic(exec_list *instructions, bool native_integers,
-             const struct gl_shader_compiler_options *options)
+do_algebraic(ir_exec_list *instructions)
 {
-   ir_algebraic_visitor v(native_integers, options);
+   ir_algebraic_visitor v;
 
    visit_list_elements(&v, instructions);
 

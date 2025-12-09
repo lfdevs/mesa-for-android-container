@@ -151,6 +151,9 @@ typedef struct {
    /** Replacement contracts an expression */
    bool contract : 1;
 
+   /** Whether the second source is a nir_search_value_constant */
+   bool src1_is_const : 1;
+
    /** Whether the use of the instruction should have a swizzle. */
    int16_t swizzle : 5;
 
@@ -201,8 +204,13 @@ typedef union {
    nir_search_expression expression;
 } nir_search_value_union;
 
+typedef struct {
+   struct hash_table *range_ht;
+   struct hash_table *numlsb_ht;
+} nir_search_state;
+
 typedef bool (*nir_search_expression_cond)(const nir_alu_instr *instr);
-typedef bool (*nir_search_variable_cond)(struct hash_table *range_ht,
+typedef bool (*nir_search_variable_cond)(const nir_search_state *state,
                                          const nir_alu_instr *instr,
                                          unsigned src, unsigned num_components,
                                          const uint8_t *swizzle);

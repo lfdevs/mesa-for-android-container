@@ -4,6 +4,11 @@ dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
 dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgb_half_float_oes,Fail
+
+# Two regressions from 60e115dedfa29dd4353b2608b7f226f8f7cfa9bd
+dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgb_unsigned_int_2_10_10_10_rev,Fail
+dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgba_unsigned_int_2_10_10_10_rev,Fail
+
 dEQP-GLES2.functional.fbo.render.repeated_clear.tex2d_rgb,Fail
 dEQP-GLES2.functional.fbo.render.repeated_clear.tex2d_rgba,Fail
 
@@ -497,7 +502,6 @@ dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_struct
 
 shaders@glsl-arb-fragment-coord-conventions,Fail
 shaders@glsl-derivs,Fail
-shaders@glsl-fs-bug25902,Fail
 shaders@glsl-fs-fogscale@vs and fs,Fail
 shaders@glsl-fs-loop,Fail
 shaders@glsl-fs-loop-nested,Fail
@@ -519,7 +523,6 @@ spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth24,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth24_stencil8,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
-spec@!opengl 1.0@gl-1.0-blend-func,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
@@ -543,7 +546,6 @@ spec@!opengl 1.1@depthstencil-default_fb-readpixels-24_8 samples=6,Fail
 spec@!opengl 1.1@depthstencil-default_fb-readpixels-float-and-ushort samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-readpixels-float-and-ushort samples=4,Fail
 spec@!opengl 1.1@depthstencil-default_fb-readpixels-float-and-ushort samples=6,Fail
-spec@!opengl 1.1@draw-pixel-with-texture,Fail
 spec@!opengl 1.1@getteximage-formats,Fail
 spec@!opengl 1.1@getteximage-simple,Fail
 spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 varray gl_line_loop,Fail
@@ -587,11 +589,9 @@ spec@!opengl 1.2@texwrap 3d proj@GL_RGBA8- NPOT- projected,Fail
 spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
 spec@!opengl 1.4@tex-miplevel-selection,Fail
 spec@!opengl 1.4@tex-miplevel-selection-lod,Fail
-spec@!opengl 1.4@tex-miplevel-selection-lod-bias,Fail
 spec@!opengl 1.4@triangle-rasterization,Fail
 spec@!opengl 1.4@triangle-rasterization-fbo,Fail
 
-spec@!opengl 1.5@depth-tex-compare,Fail
 
 spec@!opengl 2.0@depth-tex-modes-glsl,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail
@@ -641,8 +641,6 @@ spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small,Fail
 spec@arb_pixel_buffer_object@pbo-getteximage,Fail
 
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
-
-spec@arb_sampler_objects@sampler-incomplete,Fail
 
 spec@arb_texture_compression_bptc@texwrap formats bordercolor,Fail
 spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled,Fail
@@ -701,11 +699,8 @@ spec@arb_texture_rectangle@1-1-linear-texture,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=2,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=4,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=6,Fail
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drect,Fail
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drectshadow,Fail
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect,Fail
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec4,Fail
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow,Fail
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture\(\) 2drect,Fail
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture\(\) 2drectshadow,Fail
 
 spec@arb_texture_rg@fbo-alphatest-formats,Fail
 spec@arb_texture_rg@fbo-alphatest-formats@GL_R16,Fail
@@ -728,10 +723,6 @@ spec@arb_texture_rg@texwrap formats-float bordercolor@GL_RG32F- border color onl
 
 spec@arb_vertex_program@big-param,Fail
 
-spec@ati_fragment_shader@ati_fragment_shader-render-notexture,Fail
-spec@ati_fragment_shader@ati_fragment_shader-render-sources,Fail
-spec@ati_fragment_shader@ati_fragment_shader-render-textargets,Fail
-
 spec@egl 1.4@eglterminate then unbind context,Fail
 
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
@@ -741,8 +732,6 @@ spec@ext_direct_state_access@multi-texture,Fail
 spec@ext_direct_state_access@multi-texture@CopyMultiTexImage1DEXT + display list GL_COMPILE,Fail
 spec@ext_direct_state_access@multi-texture@CopyMultiTexSubImage1DEXT + display list GL_COMPILE,Fail
 spec@ext_direct_state_access@textures,Fail
-spec@ext_direct_state_access@textures@CopyTextureImage1DEXT + display list GL_COMPILE,Fail
-spec@ext_direct_state_access@textures@CopyTextureSubImage1DEXT + display list GL_COMPILE,Fail
 
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 
@@ -754,10 +743,6 @@ spec@ext_framebuffer_multisample@accuracy all_samples depth_draw depthstencil,Fa
 spec@ext_framebuffer_multisample@accuracy all_samples depth_draw small depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples depth_resolve depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples depth_resolve small depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil linear,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw small depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve depthstencil,Fail
@@ -791,7 +776,6 @@ spec@ext_occlusion_query_boolean@any-samples,Fail
 spec@ext_packed_depth_stencil@depth_stencil texture,Fail
 
 spec@ext_texture_compression_s3tc@s3tc-errors,Fail
-spec@ext_texture_compression_s3tc@s3tc-errors_gles2,Fail
 
 spec@ext_texture_format_bgra8888@api-errors,Fail
 
@@ -1119,8 +1103,6 @@ spec@glsl-1.10@execution@vs-nested-return-sibling-loop2,Fail
 
 
 
-spec@glsl-1.10@execution@glsl-1.10-built-in-uniform-state,Fail
-
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-vertex,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-smooth-vertex,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-vertex,Fail
@@ -1160,22 +1142,15 @@ spec@glsl-1.20@execution@vs-loop-uint-induction-var-3,Fail
 spec@glsl-1.20@execution@vs-loop-uint-induction-var-4,Fail
 
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() cube,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) cube,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1d_projvec4,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 1dshadow,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d_projvec4,Fail
 
@@ -1289,8 +1264,6 @@ spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec4,Fail
 spec@glsl-1.20@execution@fs-underflow-mul-compare-zero,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
 spec@glsl-1.20@execution@glsl-fs-frontfacing,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2dshadow,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat4-array,Fail
 
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
@@ -1310,47 +1283,12 @@ spec@nv_conditional_render@vertex_array,Fail
 
 spec@nv_texture_env_combine4@nv_texture_env_combine4-combine,Fail
 
-spec@oes_texture_float@oes_texture_float,Fail
 spec@oes_texture_float@oes_texture_float half,Fail
-
-# Remaining fallout from 9d359c6d10adb1cd2978a0e13714a3f98544aae8
-spec@arb_texture_compression@fbo-generatemipmap-formats,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_RGB,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_RGB NPOT,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA,Fail
-spec@arb_texture_compression@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA NPOT,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgb_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt3_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt5_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt3_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt5_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT NPOT,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT NPOT,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT5_EXT NPOT,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGB_S3TC_DXT1_EXT,Fail
-spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGB_S3TC_DXT1_EXT NPOT,Fail
-spec@ext_texture_compression_s3tc@gen-compressed-teximage,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB NPOT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA NPOT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT NPOT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT NPOT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT NPOT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT,Fail
-spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT NPOT,Fail
 
 # uprev Piglit in Mesa
 spec@!opengl 1.1@teximage-scale-bias,Fail
-
+spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-01,Fail
+spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-04,Fail
+spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-05,Fail
+shaders@glsl-max-varyings,Fail
+spec@!opengl 1.5@depth-tex-compare,Fail

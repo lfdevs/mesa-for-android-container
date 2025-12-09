@@ -228,9 +228,9 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
    if (!!sctx->streamout.enabled_mask != !!enabled_mask) {
       /* to keep/remove streamout shader code as an optimization */
       sctx->dirty_shaders_mask |=
-         BITFIELD_BIT(PIPE_SHADER_VERTEX) |
-         BITFIELD_BIT(PIPE_SHADER_TESS_EVAL) |
-         BITFIELD_BIT(PIPE_SHADER_GEOMETRY);
+         BITFIELD_BIT(MESA_SHADER_VERTEX) |
+         BITFIELD_BIT(MESA_SHADER_TESS_EVAL) |
+         BITFIELD_BIT(MESA_SHADER_GEOMETRY);
    }
 
    sctx->streamout.output_prim = output_prim;
@@ -259,36 +259,8 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
 static void si_flush_vgt_streamout(struct si_context *sctx)
 {
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
-   unsigned reg_strmout_cntl;
 
-   radeon_begin(cs);
-
-   /* The register is at different places on different ASICs. */
-   if (sctx->gfx_level >= GFX9) {
-      reg_strmout_cntl = R_0300FC_CP_STRMOUT_CNTL;
-      radeon_emit(PKT3(PKT3_WRITE_DATA, 3, 0));
-      radeon_emit(S_370_DST_SEL(V_370_MEM_MAPPED_REGISTER) | S_370_ENGINE_SEL(V_370_ME));
-      radeon_emit(R_0300FC_CP_STRMOUT_CNTL >> 2);
-      radeon_emit(0);
-      radeon_emit(0);
-   } else if (sctx->gfx_level >= GFX7) {
-      reg_strmout_cntl = R_0300FC_CP_STRMOUT_CNTL;
-      radeon_set_uconfig_reg(reg_strmout_cntl, 0);
-   } else {
-      reg_strmout_cntl = R_0084FC_CP_STRMOUT_CNTL;
-      radeon_set_config_reg(reg_strmout_cntl, 0);
-   }
-
-   radeon_event_write(V_028A90_SO_VGTSTREAMOUT_FLUSH);
-
-   radeon_emit(PKT3(PKT3_WAIT_REG_MEM, 5, 0));
-   radeon_emit(WAIT_REG_MEM_EQUAL); /* wait until the register is equal to the reference value */
-   radeon_emit(reg_strmout_cntl >> 2); /* register */
-   radeon_emit(0);
-   radeon_emit(S_0084FC_OFFSET_UPDATE_DONE(1)); /* reference value */
-   radeon_emit(S_0084FC_OFFSET_UPDATE_DONE(1)); /* mask */
-   radeon_emit(4);                              /* poll interval */
-   radeon_end();
+   ac_cmdbuf_flush_vgt_streamout(&cs->current, sctx->gfx_level);
 }
 
 static void si_emit_streamout_begin(struct si_context *sctx, unsigned index)
@@ -447,56 +419,60 @@ void si_emit_streamout_end(struct si_context *sctx)
 
 static void si_emit_streamout_enable(struct si_context *sctx, unsigned index)
 {
-   assert(sctx->gfx_level < GFX11);
-
-   radeon_begin(&sctx->gfx_cs);
-   radeon_set_context_reg_seq(R_028B94_VGT_STRMOUT_CONFIG, 2);
-   radeon_emit(S_028B94_STREAMOUT_0_EN(si_get_strmout_en(sctx)) |
-               S_028B94_RAST_STREAM(0) |
-               S_028B94_STREAMOUT_1_EN(si_get_strmout_en(sctx)) |
-               S_028B94_STREAMOUT_2_EN(si_get_strmout_en(sctx)) |
-               S_028B94_STREAMOUT_3_EN(si_get_strmout_en(sctx)));
-   radeon_emit(sctx->streamout.hw_enabled_mask & sctx->streamout.enabled_stream_buffers_mask);
-   radeon_end();
+   if (sctx->gfx_level >= GFX11) {
+      SET_FIELD(sctx->current_gs_state, GS_STATE_STREAMOUT_QUERY_ENABLED,
+                si_get_streamout_enable_state(sctx));
+   } else {
+      radeon_begin(&sctx->gfx_cs);
+      radeon_set_context_reg_seq(R_028B94_VGT_STRMOUT_CONFIG, 2);
+      radeon_emit(S_028B94_STREAMOUT_0_EN(si_get_streamout_enable_state(sctx)) |
+                  S_028B94_RAST_STREAM(0) |
+                  S_028B94_STREAMOUT_1_EN(si_get_streamout_enable_state(sctx)) |
+                  S_028B94_STREAMOUT_2_EN(si_get_streamout_enable_state(sctx)) |
+                  S_028B94_STREAMOUT_3_EN(si_get_streamout_enable_state(sctx)));
+      radeon_emit(sctx->streamout.hw_enabled_mask & sctx->streamout.enabled_stream_buffers_mask);
+      radeon_end();
+   }
 }
 
 static void si_set_streamout_enable(struct si_context *sctx, bool enable)
 {
-   if (sctx->gfx_level >= GFX11)
-      return;
-
-   bool old_strmout_en = si_get_strmout_en(sctx);
+   bool old_strmout_en = si_get_streamout_enable_state(sctx);
    unsigned old_hw_enabled_mask = sctx->streamout.hw_enabled_mask;
 
    sctx->streamout.streamout_enabled = enable;
 
-   sctx->streamout.hw_enabled_mask =
-      sctx->streamout.enabled_mask | (sctx->streamout.enabled_mask << 4) |
-      (sctx->streamout.enabled_mask << 8) | (sctx->streamout.enabled_mask << 12);
-
-   if ((old_strmout_en != si_get_strmout_en(sctx)) ||
-       (old_hw_enabled_mask != sctx->streamout.hw_enabled_mask))
+   if (old_strmout_en != si_get_streamout_enable_state(sctx))
       si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
+
+   if (sctx->gfx_level < GFX11) {
+      sctx->streamout.hw_enabled_mask =
+         sctx->streamout.enabled_mask | (sctx->streamout.enabled_mask << 4) |
+         (sctx->streamout.enabled_mask << 8) | (sctx->streamout.enabled_mask << 12);
+
+      if (old_hw_enabled_mask != sctx->streamout.hw_enabled_mask)
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
+   }
 }
 
 void si_update_prims_generated_query_state(struct si_context *sctx, unsigned type, int diff)
 {
-   if (sctx->gfx_level < GFX11 && type == PIPE_QUERY_PRIMITIVES_GENERATED) {
-      bool old_strmout_en = si_get_strmout_en(sctx);
+   if (type == PIPE_QUERY_PRIMITIVES_GENERATED) {
+      bool old_strmout_en = si_get_streamout_enable_state(sctx);
 
       sctx->streamout.num_prims_gen_queries += diff;
       assert(sctx->streamout.num_prims_gen_queries >= 0);
 
       sctx->streamout.prims_gen_query_enabled = sctx->streamout.num_prims_gen_queries != 0;
 
-      if (old_strmout_en != si_get_strmout_en(sctx))
+      if (old_strmout_en != si_get_streamout_enable_state(sctx))
          si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
 
       if (si_update_ngg(sctx)) {
          si_shader_change_notify(sctx);
          sctx->dirty_shaders_mask |=
-            (sctx->shader.gs.cso ? BITFIELD_BIT(PIPE_SHADER_GEOMETRY) :
-               (sctx->shader.tes.cso ? BITFIELD_BIT(PIPE_SHADER_TESS_EVAL) : BITFIELD_BIT(PIPE_SHADER_VERTEX)));
+            (sctx->shader.gs.cso ? BITFIELD_BIT(MESA_SHADER_GEOMETRY) :
+               (sctx->shader.tes.cso ? BITFIELD_BIT(MESA_SHADER_TESS_EVAL) : BITFIELD_BIT(MESA_SHADER_VERTEX)));
       }
    }
 }
@@ -507,7 +483,5 @@ void si_init_streamout_functions(struct si_context *sctx)
    sctx->b.stream_output_target_destroy = si_so_target_destroy;
    sctx->b.set_stream_output_targets = si_set_streamout_targets;
    sctx->atoms.s.streamout_begin.emit = si_emit_streamout_begin;
-
-   if (sctx->gfx_level < GFX11)
-      sctx->atoms.s.streamout_enable.emit = si_emit_streamout_enable;
+   sctx->atoms.s.streamout_enable.emit = si_emit_streamout_enable;
 }

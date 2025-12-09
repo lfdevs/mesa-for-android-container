@@ -29,9 +29,6 @@
 #include <inttypes.h>
 
 #include "util/compiler.h"
-#include "util/u_debug.h"
-#include "util/u_memory.h"
-#include "util/u_string.h"
 #include "lp_bld_const.h"
 #include "lp_bld_init.h"
 #include "lp_bld_const.h"

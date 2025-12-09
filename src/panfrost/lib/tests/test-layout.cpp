@@ -173,10 +173,10 @@ TEST(BlockSize, AFBCSuperblock64x4)
  * stride calculations.
  */
 static uint32_t
-pan_afbc_line_stride(uint64_t modifier, uint32_t width)
+pan_afbc_line_stride(enum pipe_format format, uint64_t modifier, uint32_t width)
 {
-   return pan_afbc_stride_blocks(modifier,
-                                 pan_afbc_row_stride(modifier, width));
+   return pan_afbc_stride_blocks(format, modifier,
+                                 pan_afbc_row_stride(format, modifier, width));
 }
 
 /* Which form of the stride we specify is hardware specific (row stride for
@@ -196,17 +196,17 @@ TEST(AFBCStride, Linear)
 
    for (unsigned m = 0; m < ARRAY_SIZE(modifiers); ++m) {
       uint64_t modifier = modifiers[m];
-
+      enum pipe_format format = PIPE_FORMAT_R8G8B8A8_UNORM;
       uint32_t sw = pan_afbc_superblock_width(modifier);
       uint32_t cases[] = {1, 4, 17, 39};
 
       for (unsigned i = 0; i < ARRAY_SIZE(cases); ++i) {
          uint32_t width = sw * cases[i];
 
-         EXPECT_EQ(pan_afbc_row_stride(modifier, width),
+         EXPECT_EQ(pan_afbc_row_stride(format, modifier, width),
                    16 * DIV_ROUND_UP(width, sw));
 
-         EXPECT_EQ(pan_afbc_line_stride(modifier, width),
+         EXPECT_EQ(pan_afbc_line_stride(format, modifier, width),
                    DIV_ROUND_UP(width, sw));
       }
    }
@@ -225,17 +225,17 @@ TEST(AFBCStride, Tiled)
 
    for (unsigned m = 0; m < ARRAY_SIZE(modifiers); ++m) {
       uint64_t modifier = modifiers[m];
-
+      enum pipe_format format = PIPE_FORMAT_R8_UNORM;
       uint32_t sw = pan_afbc_superblock_width(modifier);
       uint32_t cases[] = {1, 4, 17, 39};
 
       for (unsigned i = 0; i < ARRAY_SIZE(cases); ++i) {
          uint32_t width = sw * 8 * cases[i];
 
-         EXPECT_EQ(pan_afbc_row_stride(modifier, width),
+         EXPECT_EQ(pan_afbc_row_stride(format, modifier, width),
                    16 * DIV_ROUND_UP(width, (sw * 8)) * 8 * 8);
 
-         EXPECT_EQ(pan_afbc_line_stride(modifier, width),
+         EXPECT_EQ(pan_afbc_line_stride(format, modifier, width),
                    DIV_ROUND_UP(width, sw * 8) * 8);
       }
    }
@@ -734,7 +734,7 @@ TEST(WSI, Import)
 {
    /* We don't want to spam stderr with failure messages caused by our
     * EXPECT_FALSE() cases. */
-   setenv("MESA_LOG", "null", 0);
+   os_set_option("MESA_LOG", "null", false);
 
    struct pan_image_layout layout;
    for (unsigned i = 0; i < ARRAY_SIZE(archs); i++) {

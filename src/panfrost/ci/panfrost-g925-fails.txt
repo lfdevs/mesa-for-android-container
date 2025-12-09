@@ -1,0 +1,25 @@
+# CTS bug, see https://github.com/KhronosGroup/VK-GL-CTS/issues/523
+dEQP-VK.image.load_store.without_any_format.buffer.b8g8r8_srgb_minalign_uniform,Fail
+dEQP-VK.image.load_store.without_any_format.buffer.b8g8r8_srgb_minalign_uniform_linear,Fail
+dEQP-VK.image.load_store.without_any_format.buffer.r8g8b8_srgb_minalign_uniform,Fail
+dEQP-VK.image.load_store.without_any_format.buffer.r8g8b8_srgb_minalign_uniform_linear,Fail
+
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/5926
+dEQP-VK.pipeline.pipeline_library.pipeline_binary.graphics_tests.vertex_stage_fragment_stage,Crash
+dEQP-VK.pipeline.pipeline_library.pipeline_binary.creation_feedback.graphics_tests.vertex_stage_fragment_stage,Crash
+dEQP-VK.pipeline.pipeline_library.pipeline_binary.pipeline_from_get_data.vertex_stage_fragment_stage,Crash
+dEQP-VK.pipeline.pipeline_library.pipeline_binary.creation_feedback.graphics_tests.vertex_stage_fragment_stage_zero_out_feedback_cout,Crash
+dEQP-VK.pipeline.pipeline_library.pipeline_binary.creation_feedback.graphics_tests.vertex_stage_fragment_stage_delayed_destroy,Crash
+
+# deqp-vk: ../src/panfrost/vulkan/panvk_image.c:346: panvk_image_get_mod_from_list: Assertion `!"Invalid modifier"' failed.
+dEQP-VK.wsi.wayland.swapchain.create.image_extent,Crash
+
+dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent,Crash
+
+angle-KHR-GLES3.framebuffer_blit.scissor_blit,Fail
+angle-KHR-GLES3.packed_depth_stencil.verify_read_pixels.depth24_stencil8,Fail
+angle-KHR-GLES3.packed_depth_stencil.verify_read_pixels.depth32f_stencil8,Fail
+angle-KHR-GLES31.core.shader_atomic_counters.advanced-usage-multi-stage,Fail
+angle-KHR-GLES31.core.shader_storage_buffer_object.advanced-matrix-vsfs,Fail
+angle-KHR-GLES31.core.shader_storage_buffer_object.advanced-usage-sync-vsfs,Fail
+angle-KHR-GLES31.core.texture_cube_map_array.sampling,Fail

@@ -76,21 +76,15 @@ void nir_block_worklist_add_all(nir_block_worklist *w, nir_function_impl *impl);
 
 typedef struct {
    struct u_vector instr_vec;
+   bool initialized;
 } nir_instr_worklist;
 
-static inline nir_instr_worklist *
-nir_instr_worklist_create()
+static inline bool
+nir_instr_worklist_init(nir_instr_worklist *wl)
 {
-   nir_instr_worklist *wl = malloc(sizeof(nir_instr_worklist));
-   if (!wl)
-      return NULL;
-
-   if (!u_vector_init_pow2(&wl->instr_vec, 8, sizeof(struct nir_instr *))) {
-      free(wl);
-      return NULL;
-   }
-
-   return wl;
+   wl->initialized =
+      u_vector_init_pow2(&wl->instr_vec, 8, sizeof(struct nir_instr *)) != 0;
+   return wl->initialized;
 }
 
 static inline uint32_t
@@ -106,23 +100,22 @@ nir_instr_worklist_is_empty(nir_instr_worklist *wl)
 }
 
 static inline void
-nir_instr_worklist_destroy(nir_instr_worklist *wl)
+nir_instr_worklist_fini(nir_instr_worklist *wl)
 {
    u_vector_finish(&wl->instr_vec);
-   free(wl);
 }
 
 static inline void
 nir_instr_worklist_push_tail(nir_instr_worklist *wl, nir_instr *instr)
 {
-   struct nir_instr **vec_instr = u_vector_add(&wl->instr_vec);
+   nir_instr **vec_instr = (nir_instr **)u_vector_add(&wl->instr_vec);
    *vec_instr = instr;
 }
 
 static inline nir_instr *
 nir_instr_worklist_pop_head(nir_instr_worklist *wl)
 {
-   struct nir_instr **vec_instr = u_vector_remove(&wl->instr_vec);
+   nir_instr **vec_instr = (nir_instr **)u_vector_remove(&wl->instr_vec);
 
    if (vec_instr == NULL)
       return NULL;

@@ -99,9 +99,10 @@
 /* This is the unreachable macro from macros.h that uses __builtin_unreachable,
  * which is a clang builtin available in OpenCL C.
  */
-#define unreachable(str)                                                       \
+#define UNREACHABLE(str)                                                       \
    do {                                                                        \
-      assert(!"" str);                                                         \
+      (void)"" str; /* str must be a string literal */                         \
+      assert(!str);                                                            \
       __builtin_unreachable();                                                 \
    } while (0)
 

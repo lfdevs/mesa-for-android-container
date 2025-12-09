@@ -137,11 +137,12 @@ typedef uint32_t mali_pixel_format;
 #define PAN_BIND_SAMPLER_VIEW  BITFIELD_BIT(2)
 #define PAN_BIND_VERTEX_BUFFER BITFIELD_BIT(3)
 #define PAN_BIND_STORAGE_IMAGE BITFIELD_BIT(4)
+#define PAN_BIND_TEXEL_BUFFER  BITFIELD_BIT(5)
 
 struct pan_format {
-   uint32_t hw : 22;
+   uint32_t hw          : 21;
    uint32_t texfeat_bit : 5;
-   uint32_t bind        : 5;
+   uint32_t bind        : 6;
 };
 
 struct pan_blendable_format {
@@ -238,7 +239,7 @@ pan_get_default_swizzle(unsigned components)
    case 4:
       return PAN_V6_SWIZZLE(R, G, B, A);
    default:
-      unreachable("Invalid number of components");
+      UNREACHABLE("Invalid number of components");
    }
 }
 

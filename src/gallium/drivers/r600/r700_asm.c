@@ -139,7 +139,9 @@ int r700_bytecode_fetch_mem_build(struct r600_bytecode *bc, struct r600_bytecode
 
 	bc->bytecode[id++] = S_SQ_MEM_RD_WORD2_ARRAY_BASE(mem->array_base) |
 		S_SQ_MEM_RD_WORD2_ENDIAN_SWAP(0) |
-		S_SQ_MEM_RD_WORD2_ARRAY_SIZE(mem->array_size);
+		S_SQ_MEM_RD_WORD2_ARRAY_SIZE(mem->array_size) |
+		(bc->gfx_level == R700 && opcode == 0 ?
+		 S_SQ_VTX_WORD2_MEGA_FETCH(1) : 0);
 
 
 	bc->bytecode[id++] = 0; /* MEM ops are 4 word aligned */

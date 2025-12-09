@@ -144,7 +144,7 @@ spirv_capabilities_set(struct spirv_capabilities *caps,
    case SpvCapability${names[0]}: caps->${names[0]} = enabled; break;
     % endfor
    default:
-      unreachable("Unknown capability");
+      UNREACHABLE("Unknown capability");
    }
 }
 % endif

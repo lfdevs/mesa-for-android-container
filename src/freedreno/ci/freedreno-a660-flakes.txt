@@ -2,9 +2,6 @@ KHR-GL46.buffer_storage.map_persistent_dispatch
 KHR-GL46.buffer_storage.map_persistent_flush
 KHR-GL46.shader_subroutine.control_flow_and_returned_subroutine_values_used_as_subroutine_input
 
-# Updated by ci-collate, found in this job run: https://gitlab.freedesktop.org/mesa/mesa/-/jobs/56164989
-bypass-dEQP-VK.renderpass2.fragment_density_map.2_views.render.non_divisible_density_size.2_samples.static_subsampled_2_1_multiviewport
-
 # a618 and a660 seem to have some general instability in tesselation and GS.
 # Some tess tests also use the GS (tesselation.invariance), but others
 # don't (spirv_assembly).  They don't appear to be correlated to any GPU
@@ -16,49 +13,31 @@ dEQP-VK.clipping.user_defined.clip_cull_distance.*geom.*
 dEQP-VK.clipping.user_defined.clip_cull_distance.*tess.*
 dEQP-VK.clipping.user_defined.clip_distance.*geom.*
 dEQP-VK.clipping.user_defined.clip_distance.*tess.*
-dEQP-VK.draw.dynamic_rendering.complete_secondary_cmd_buff.multi_draw.mosaic.normal.one_draw.stride_extra_12.1_instance.with_geom.single_view.no_offset_no_draw_id
+dEQP-VK.draw.dynamic_rendering.*multi_draw.*geom.*
+dEQP-VK.draw.dynamic_rendering.*multi_draw.*tess.*
 dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.instanced.dynamic_state_draw_vk_primitive_topology_triangle_strip_attrib_divisor_2
-dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.multi_draw.mosaic.indexed_mixed.16_draws.stride_extra_4.1_instance.tess_geom.single_view.offset_6_no_draw_id
-dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.multi_draw.mosaic.indexed_random.16_draws.stride_extra_4.10_instances.with_tess.single_view.no_offset
 dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.shader_layer.tessellation_shader_4
 dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed46_geometry
 dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed88_geometry
-dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.layers_3.a8b8g8r8_unorm_pack32.samples_2_resolve_level_2
-dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.layers_3.r16g16_sfloat.samples_4
-dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.layers_6.a8b8g8r8_srgb_pack32.samples_2_resolve_level_2
+dEQP-VK..*.suballocation.multisample_resolve.layers_[36].*
 dEQP-VK.fragment_operations.scissor.multi_viewport.*
 dEQP-VK.glsl.builtin.function.integer.bitfieldinsert.uvec3_mediump_geometry
 dEQP-VK.glsl.builtin.function.integer.bitfieldreverse.uint_mediump_geometry
 dEQP-VK.glsl.builtin.function.integer.umulextended.uvec4_highp_tess_eval
-dEQP-VK.pipeline.monolithic.interface_matching.vector_length.out_ivec3_in_ivec3_loose_variable_vert_tesc_tese_out_geom_in_frag
+dEQP-VK.pipeline.*.interface_matching.vector_length.*tesc.*
 dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.after_pipelines.rasterization_stream_none_to_one
 dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.before_draw.2_scissors_switch
-dEQP-VK.pipeline.pipeline_library.interface_matching.vector_length.out_ivec3_in_ivec3_member_of_structure_vert_tesc_out_tese_in_frag
-dEQP-VK.renderpass.suballocation.multisample_resolve.layers_6.r32g32b32a32_uint.samples_2_resolve_level_2
-dEQP-VK.renderpass2.suballocation.multisample_resolve.layers_3.r32g32b32a32_sint.samples_4_resolve_level_2
-dEQP-VK.renderpass2.suballocation.multisample_resolve.layers_6.r16g16b16a16_uint.samples_4_resolve_level_3
-dEQP-VK.renderpass2.suballocation.multisample_resolve.layers_6.r32g32_sfloat.samples_4
 dEQP-VK.spirv_assembly.instruction.graphics.*geom.*
 dEQP-VK.spirv_assembly.instruction.graphics.*tess.*
 dEQP-VK.spirv_assembly.type.*geom.*
 dEQP-VK.spirv_assembly.type.*tess.*
 dEQP-VK.synchronization.*_geometry.*
 dEQP-VK.synchronization.*_tess_ctrl.*
+dEQP-VK.synchronization.*_tess_control.*
 dEQP-VK.synchronization.*_tess_eval.*
 dEQP-VK.tessellation.invariance.*
 
-# Intermittent timeouts.  94% CPU used in ir3 create_variant, but no single pass there dominating its time.
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmax_i64vec4_requiredsubgroupsize
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmin_u64vec4_requiredsubgroupsize
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmul_i64vec4_requiredsubgroupsize
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmul_u64vec3_requiredsubgroupsize
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmul_u64vec4_requiredsubgroupsize
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmax_i64vec3
-dEQP-VK.subgroups.clustered.graphics.subgroupclusteredmul_u64vec4
-
 # Updated by ci-collate
-bypass-dEQP-VK.renderpass2.fragment_density_map.2_views.render.non_divisible_density_size.2_samples.static_subsampled_2_2_multiviewport
-dEQP-VK.renderpass2.fragment_density_map.2_views.render.divisible_density_size.2_samples.static_subsampled_1_2_multiviewport
 dEQP-VK.reconvergence.workgroup_uniform_control_flow_ballot.compute.nesting4.7.38
 dEQP-VK.query_pool.statistics_query.host_query_reset.geometry_shader_primitives.secondary.64bits_cmdcopyquerypoolresults_triangle_list_clear_depth
 
@@ -69,18 +48,10 @@ dEQP-GLES31.functional.image_load_store.3d.load_store.rgba8_snorm_single_layer
 KHR-GL46.texture_view.view_classes
 
 # Appeared after decreasing the fraction
-dEQP-VK.renderpass2.fragment_density_map.2_views.render.non_divisible_density_size.2_samples.static_subsampled_1_2_multiviewport
-dEQP-VK.renderpass2.fragment_density_map.2_views.render.divisible_density_size.2_samples.static_subsampled_2_1_multiviewport
-dEQP-VK.renderpass2.fragment_density_map.2_views.render.divisible_density_size.2_samples.static_subsampled_2_2_multiviewport
-bypass-dEQP-VK.renderpass2.fragment_density_map.2_views.render.divisible_density_size.2_samples.static_subsampled_2_2_multiviewportg
-gmem-dEQP-VK.renderpass2.fragment_density_map.2_views.render.divisible_density_size.2_samples.static_subsampled_2_2_multiviewport
-gmem-dEQP-VK.renderpass2.fragment_density_map.2_views.render.non_divisible_density_size.2_samples.static_subsampled_2_1_multiviewport
 
 # Random flakes, unkown when they started appearing
 dEQP-VK.subgroups.shuffle.graphics.subgroupshufflexor_int64_t_constant
 dEQP-VK.subgroups.shuffle.framebuffer.subgroupshuffle_bool_tess_control
-bypass-dEQP-VK.renderpass2.fragment_density_map.2_views.render.divisible_density_size.2_samples.static_subsampled_1_2_multiviewport
-bypass-dEQP-VK.renderpass2.fragment_density_map.2_views.render.divisible_density_size.2_samples.static_subsampled_2_1_multiviewport
 
 # New flake with GL CTS 4.6.6.0
 KHR-GL46.gpu_shader_fp64.builtin.smoothstep_dvec4

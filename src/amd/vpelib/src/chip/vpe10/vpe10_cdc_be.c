@@ -38,7 +38,6 @@ enum mux_sel {
 };
 
 static struct cdc_be_funcs cdc_be_func = {
-    .check_output_format = vpe10_cdc_check_output_format,
     .program_global_sync = vpe10_cdc_program_global_sync,
     .program_p2b_config  = vpe10_cdc_program_p2b_config,
 };
@@ -47,16 +46,6 @@ void vpe10_construct_cdc_be(struct vpe_priv *vpe_priv, struct cdc_be *cdc_be)
 {
     cdc_be->vpe_priv = vpe_priv;
     cdc_be->funcs    = &cdc_be_func;
-}
-
-bool vpe10_cdc_check_output_format(struct cdc_be *cdc_be, enum vpe_surface_pixel_format format)
-{
-    if (vpe_is_32bit_packed_rgb(format))
-        return true;
-    if (vpe_is_fp16(format))
-        return true;
-
-    return false;
 }
 
 void vpe10_cdc_program_global_sync(

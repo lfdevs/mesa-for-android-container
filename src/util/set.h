@@ -53,13 +53,32 @@ struct set {
    uint32_t size_index;
    uint32_t entries;
    uint32_t deleted_entries;
+
+   /* "table" points to here at first. A bigger storage is allocated separately
+    * when a bigger size is needed.
+    */
+   struct set_entry _initial_storage[19]; /* hash_sizes[0].size */
+
+   /* Don't insert any new fields here. All other fields must be before
+    * _initial_storage.
+    */
 };
 
-bool
+void
 _mesa_set_init(struct set *ht, void *mem_ctx,
                  uint32_t (*key_hash_function)(const void *key),
                  bool (*key_equals_function)(const void *a,
                                              const void *b));
+
+void
+_mesa_set_fini(struct set *ht,
+               void (*delete_function)(struct set_entry *entry));
+
+void
+_mesa_pointer_set_init(struct set *ht, void *mem_ctx);
+
+void
+_mesa_u32_set_init(struct set *ht, void *mem_ctx);
 
 struct set *
 _mesa_set_create(void *mem_ctx,
@@ -68,6 +87,9 @@ _mesa_set_create(void *mem_ctx,
                                              const void *b));
 struct set *
 _mesa_set_create_u32_keys(void *mem_ctx);
+
+bool
+_mesa_set_copy(struct set *dst, struct set *src, void *dst_mem_ctx);
 
 struct set *
 _mesa_set_clone(struct set *set, void *dst_mem_ctx);

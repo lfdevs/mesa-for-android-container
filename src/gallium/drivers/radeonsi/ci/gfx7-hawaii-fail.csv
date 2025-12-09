@@ -1,10 +1,9 @@
 # piglit failures
-glx@glx-make-current,Fail
-glx@glx-multithread-makecurrent-1,Fail
 glx@glx-multithread-texture,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-event_interval,Fail
-glx@glx_arb_create_context_no_error@no error,Fail
+glx@glx-visuals-depth -pixmap,Fail
+glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@get current display,Fail
@@ -15,6 +14,18 @@ glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
 glx@glx_ext_import_context@query context info,Fail
 glx@glx_ext_no_config_context@no fbconfig,Fail
+spec@!opengl 1.0@rasterpos,Fail
+spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
+spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
+spec@!opengl 1.1@getteximage-depth,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_1D_ARRAY-GL_DEPTH_COMPONENT16,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_1D_ARRAY-GL_STENCIL_INDEX8,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_2D_ARRAY-GL_DEPTH_COMPONENT16,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_2D_ARRAY-GL_STENCIL_INDEX8,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_CUBE_MAP-GL_DEPTH_COMPONENT16,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_CUBE_MAP-GL_STENCIL_INDEX8,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_CUBE_MAP_ARRAY-GL_DEPTH_COMPONENT16,Fail
+spec@!opengl 1.1@getteximage-depth@GL_TEXTURE_CUBE_MAP_ARRAY-GL_STENCIL_INDEX8,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled,Fail
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_R3_G3_B2- swizzled- border color only,Fail
@@ -31,12 +42,14 @@ spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA16- swizzled- borde
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA2- swizzled- border color only,Fail
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA4- swizzled- border color only,Fail
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA8- swizzled- border color only,Fail
+spec@!opengl 2.1@pbo,Fail
+spec@!opengl 2.1@pbo@test_tex_sub_image,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
-spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
+spec@arb_bindless_texture@compiler@images@arith-bound-image.frag,Crash
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizzled- border color only,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
@@ -82,6 +95,7 @@ spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG8I- swizzled- 
 spec@arb_texture_rg@texwrap formats-int bordercolor-swizzled@GL_RG8UI- swizzled- border color only,Fail
 spec@arb_texture_rgb10_a2ui@texwrap formats bordercolor-swizzled,Fail
 spec@arb_texture_rgb10_a2ui@texwrap formats bordercolor-swizzled@GL_RGB10_A2UI- swizzled- border color only,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-tex-modifier,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216,Fail
@@ -131,12 +145,15 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SR
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT- swizzled- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT- swizzled- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
-spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
+spec@glsl-1.30@execution@fs-large-local-array,Fail
+spec@glsl-1.30@execution@fs-large-local-array-vec2,Fail
+spec@glsl-1.30@execution@fs-large-local-array-vec3,Fail
+spec@glsl-1.30@execution@fs-large-local-array-vec4,Fail
+spec@glsl-1.30@execution@fs-multiple-large-local-arrays,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency ffs,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency other,Fail
 spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16,Fail
 spec@glsl-es-3.00@execution@built-in-functions@vs-packhalf2x16,Fail
-spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
@@ -155,13 +172,343 @@ KHR-GL46.shader_image_load_store.basic-allTargets-atomic,Fail
 KHR-GL46.texture_cube_map_array.sampling,Fail
 
 # escts failures
-KHR-GLES31.core.geometry_shader.layered_rendering_fbo_no_attachment.layered_rendering_fbo_no_attachment,Fail
-KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreCS,Fail
-KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreVS,Fail
 KHR-GLES31.core.texture_cube_map_array.sampling,Fail
+KHR-GLES32.core.ext_texture_shadow_lod.texture.sampler2darrayshadow_bias_fragment,Fail
+KHR-GLES32.core.ext_texture_shadow_lod.texturelod.sampler2darrayshadow_fragment,Fail
+KHR-GLES32.core.ext_texture_shadow_lod.texturelod.sampler2darrayshadow_vertex,Fail
 KHR-GLES32.core.ext_texture_shadow_lod.texturelod.samplercubeshadow_fragment,Fail
-KHR-GLES32.core.geometry_shader.layered_rendering_fbo_no_attachment.layered_rendering_fbo_no_attachment,Fail
+KHR-GLES32.core.ext_texture_shadow_lod.texturelod.samplercubeshadow_vertex,Fail
+KHR-GLES32.core.ext_texture_shadow_lod.texturelodoffset.sampler2darrayshadow_fragment,Fail
+KHR-GLES32.core.ext_texture_shadow_lod.texturelodoffset.sampler2darrayshadow_vertex,Fail
+KHR-GLES32.core.ext_texture_shadow_lod.textureoffset.sampler2darrayshadow_bias_fragment,Fail
 KHR-GLES32.core.texture_cube_map_array.sampling,Fail
 
 # deqp failures
-dEQP-GLES3.functional.shaders.texture_functions.texture.samplercubeshadow_bias_fragment
+dEQP-GLES2.functional.texture.mipmap.2d.generate.a8_non_square_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.generate.a8_non_square_nicest,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.generate.l8_non_square_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.generate.l8_non_square_nicest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.a8_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.a8_nicest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.l8_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.l8_nicest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.la88_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.la88_nicest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.rgb565_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.rgb565_nicest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.rgba4444_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.rgba4444_nicest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.rgba5551_fastest,Fail
+dEQP-GLES2.functional.texture.mipmap.cube.generate.rgba5551_nicest,Fail
+dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_luminance_alpha,Fail
+dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_luminance_alpha,Fail
+dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb565_cube,Fail
+dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba5551_cube,Fail
+dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb565_cube,Fail
+dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba5551_cube,Fail
+dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_7,Fail
+dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb565_cube,Fail
+dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba5551_cube,Fail
+dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component16,Fail
+dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_fragment,Fail
+dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_vertex,Fail
+dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_fragment,Fail
+dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_vertex,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_linear_mipmap_linear,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_linear_mipmap_nearest,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_nearest_mipmap_linear,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb565_nearest_mipmap_nearest,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_linear_mipmap_linear,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_linear_mipmap_nearest,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_nearest_mipmap_linear,Fail
+dEQP-GLES3.functional.texture.filtering.3d.formats.rgb5_a1_nearest_mipmap_nearest,Fail
+dEQP-GLES3.functional.texture.filtering.cube.formats.rgb565_nearest_mipmap_linear,Fail
+dEQP-GLES3.functional.texture.mipmap.2d.generate.a8_non_square_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.2d.generate.a8_non_square_nicest,Fail
+dEQP-GLES3.functional.texture.mipmap.2d.generate.l8_non_square_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.2d.generate.l8_non_square_nicest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.a8_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.a8_nicest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.l8_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.l8_nicest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.la88_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.la88_nicest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.rgb565_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.rgb565_nicest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.rgba4444_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.rgba4444_nicest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.rgba5551_fastest,Fail
+dEQP-GLES3.functional.texture.mipmap.cube.generate.rgba5551_nicest,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth_component16,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth_component16,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth_component16,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.equal_depth_component16,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_depth_component16,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.greater_or_equal_depth_component16,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_depth_component16,Fail
+dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.less_or_equal_depth_component16,Fail
+dEQP-GLES3.functional.texture.specification.basic_copyteximage2d.cube_luminance_alpha,Fail
+dEQP-GLES3.functional.texture.specification.basic_copytexsubimage2d.cube_luminance_alpha,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage2d.rgb565_cube,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage2d.rgb5_a1_cube,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.r16f_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.r16i_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.r16ui_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.rg8_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.rg8_snorm_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.rg8i_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.rg8ui_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.rgb565_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.rgb5_a1_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_teximage3d.rgba4_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.basic_texsubimage2d.rgb565_cube,Fail
+dEQP-GLES3.functional.texture.specification.basic_texsubimage2d.rgb5_a1_cube,Fail
+dEQP-GLES3.functional.texture.specification.random_teximage2d.cube_5,Fail
+dEQP-GLES3.functional.texture.specification.teximage3d_depth.depth_component16_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.texstorage2d.format.depth_component16_cube,Fail
+dEQP-GLES3.functional.texture.specification.texstorage2d.format.rgb565_cube,Fail
+dEQP-GLES3.functional.texture.specification.texstorage2d.format.rgb5_a1_cube,Fail
+dEQP-GLES3.functional.texture.specification.texstorage3d.format.depth_component16_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb565_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.texstorage3d.format.rgb5_a1_2d_array,Fail
+dEQP-GLES3.functional.texture.specification.texsubimage2d_empty_tex.rgb_unsigned_short_5_6_5_cube,Fail
+dEQP-GLES3.functional.texture.specification.texsubimage2d_empty_tex.rgba_unsigned_short_5_5_5_1_cube,Fail
+dEQP-GLES3.functional.texture.specification.texsubimage3d_depth.depth_component16_2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16f.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16f.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16f.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16f.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8_snorm.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8_snorm.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8_snorm.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8_snorm.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16f.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16f.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16f.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16f.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16f.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8_snorm.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8_snorm.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8_snorm.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8_snorm.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8_snorm.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16f.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16f.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16f.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16f.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16f.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8_snorm.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8_snorm.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8_snorm.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8_snorm.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8_snorm.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16f.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16f.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16f.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16f.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16f.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8_snorm.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8_snorm.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8_snorm.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8_snorm.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8_snorm.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_rg8ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16f.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16f.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16f.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16f.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8_snorm.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8_snorm.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8_snorm.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8_snorm.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_rg8ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16f.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16f.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16f.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16f.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16f.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8_snorm.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8_snorm.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8_snorm.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8_snorm.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8_snorm.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_rg8ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16f.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16f.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16f.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16f.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16f.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8_snorm.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8_snorm.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8_snorm.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8_snorm.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8_snorm.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8i.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8i.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8i.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8i.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8i.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8ui.cubemap_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8ui.renderbuffer_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8ui.texture2d_array_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8ui.texture2d_to_texture2d_array,Fail
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_rg8ui.texture3d_to_texture2d_array,Fail
+dEQP-GLES31.functional.texture.filtering.cube_array.formats.rgb565_nearest_mipmap_linear,Fail
+dEQP-GLES31.functional.texture.specification.basic_teximage3d.rgb565_cube_array,Fail
+dEQP-GLES31.functional.texture.specification.basic_teximage3d.rgb5_a1_cube_array,Fail
+dEQP-GLES31.functional.texture.specification.teximage3d_depth.depth_component16_cube_array,Fail
+dEQP-GLES31.functional.texture.specification.texstorage3d.format.rgb565_cube_array,Fail
+dEQP-GLES31.functional.texture.specification.texstorage3d.format.rgb5_a1_cube_array,Fail
+dEQP-GLES31.functional.texture.specification.texsubimage3d_depth.depth_component16_cube_array,Fail

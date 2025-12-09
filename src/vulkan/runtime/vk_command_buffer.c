@@ -46,7 +46,7 @@ vk_command_buffer_init(struct vk_command_pool *pool,
    command_buffer->record_result = VK_SUCCESS;
    vk_cmd_queue_init(&command_buffer->cmd_queue, &pool->alloc);
    vk_meta_object_list_init(&command_buffer->meta_objects);
-   util_dynarray_init(&command_buffer->labels, NULL);
+   command_buffer->labels = UTIL_DYNARRAY_INIT;
    command_buffer->region_begin = true;
 
    list_add(&command_buffer->pool_link, &pool->command_buffers);
@@ -221,7 +221,7 @@ vk_shader_stages_from_bind_point(VkPipelineBindPoint pipelineBindPoint)
              VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
              VK_SHADER_STAGE_CALLABLE_BIT_KHR;
    default:
-      unreachable("unknown bind point!");
+      UNREACHABLE("unknown bind point!");
    }
    return 0;
 }

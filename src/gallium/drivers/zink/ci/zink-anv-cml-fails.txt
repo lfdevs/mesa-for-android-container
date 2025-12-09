@@ -1,0 +1,13 @@
+# ../src/intel/common/intel_urb_config.c:173: intel_get_urb_config: Assertion `total_needs <= urb_chunks' failed.
+dEQP-GLES31.functional.geometry_shading.basic.output_0_and_128,Crash
+dEQP-GLES31.functional.geometry_shading.basic.output_128_and_0,Crash
+dEQP-GLES31.functional.geometry_shading.basic.output_128,Crash
+dEQP-GLES31.functional.geometry_shading.basic.output_max,Crash
+dEQP-GLES31.functional.geometry_shading.basic.output_vary_by_attribute,Crash
+dEQP-GLES31.functional.geometry_shading.basic.output_vary_by_texture,Crash
+dEQP-GLES31.functional.geometry_shading.basic.output_vary_by_uniform,Crash
+dEQP-GLES31.functional.geometry_shading.instanced.invocation_output_vary_by_attribute,Crash
+dEQP-GLES31.functional.geometry_shading.instanced.invocation_output_vary_by_texture,Crash
+dEQP-GLES31.functional.geometry_shading.instanced.invocation_output_vary_by_uniform,Crash
+dEQP-GLES31.functional.tessellation_geometry_interaction.render.limits.output_implementation_max_geometry,Crash
+dEQP-GLES31.functional.tessellation_geometry_interaction.render.limits.output_required_max_geometry,Crash

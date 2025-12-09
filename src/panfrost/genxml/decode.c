@@ -34,9 +34,6 @@
 #include <genxml/gen_macros.h>
 #include <sys/mman.h>
 
-#include "compiler/bifrost/disassemble.h"
-#include "compiler/valhall/disassemble.h"
-#include "midgard/disassemble.h"
 #include "util/set.h"
 #include "pan_format.h"
 
@@ -91,7 +88,7 @@ pandecode_rt(struct pandecode_context *ctx, unsigned index, uint64_t gpu_va)
                     "AFRC YUV Color Render Target %d:\n", index);
       break;
    default:
-      unreachable("Invalid writeback mode");
+      UNREACHABLE("Invalid writeback mode");
    }
 #endif
 
@@ -180,7 +177,7 @@ pandecode_zs_crc_ext(struct pandecode_context *ctx, uint64_t gpu_va)
       break;
 
    default:
-      unreachable("Invalid block format");
+      UNREACHABLE("Invalid block format");
    }
 
    switch (zs_crc.s.block_format) {
@@ -201,7 +198,7 @@ pandecode_zs_crc_ext(struct pandecode_context *ctx, uint64_t gpu_va)
 #endif
 
    default:
-      unreachable("Invalid block format");
+      UNREACHABLE("Invalid block format");
    }
 
    pandecode_log(ctx, "\n");
@@ -465,7 +462,7 @@ pandecode_tex_plane(struct pandecode_context *ctx, uint64_t u, unsigned idx)
       break;
 #endif
    default:
-      unreachable("Unknown plane type");
+      UNREACHABLE("Unknown plane type");
    }
 }
 #endif
@@ -565,14 +562,16 @@ GENX(pandecode_shader)(struct pandecode_context *ctx, uint64_t addr,
 
 static unsigned
 pandecode_buffer(struct pandecode_context *ctx,
-                 const struct mali_buffer_packed *cl, uint64_t addr)
+                 const struct mali_buffer_packed *cl, uint64_t addr,
+                 uint64_t end_of_entry_addr)
 {
    pan_unpack(cl, BUFFER, buffer)
       ;
    DUMP_UNPACKED(ctx, BUFFER, buffer, "Buffer @%" PRIx64 ":\n", addr);
 
-   /* If the address is the following descriptor, this descriptor is an IUB. */
-   if (buffer.address == (addr + 0x20)) {
+   /* If the address is the following descriptor and is within the resource
+    * entry, this descriptor is an IUB. */
+   if (buffer.address == (addr + 0x20) && buffer.address < end_of_entry_addr) {
       assert((buffer.size % 0x20) == 0);
 
       const uint8_t *cl_bytes = (uint8_t *)cl;
@@ -621,7 +620,7 @@ pandecode_resources(struct pandecode_context *ctx, uint64_t addr, unsigned size)
          break;
       case MALI_DESCRIPTOR_TYPE_BUFFER:
          i += pandecode_buffer(ctx, (const struct mali_buffer_packed *)&cl[i],
-                               addr + i);
+                               addr + i, addr + size);
          break;
       default:
          fprintf(ctx->dump_stream, "Unknown descriptor type %X\n", header.type);

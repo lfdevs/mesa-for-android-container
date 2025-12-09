@@ -63,6 +63,21 @@ util_format_z16_unorm_pack_z_32unorm(uint8_t *restrict dst_row, unsigned dst_str
 
 
 void
+util_format_z24_unorm_packed_unpack_z_float(float *restrict dst_row, unsigned dst_stride, const uint8_t *restrict src_row, unsigned src_stride, unsigned width, unsigned height);
+
+
+void
+util_format_z24_unorm_packed_pack_z_float(uint8_t *restrict dst_row, unsigned dst_stride, const float *restrict src_row, unsigned src_stride, unsigned width, unsigned height);
+
+
+void
+util_format_z24_unorm_packed_unpack_z_32unorm(uint32_t *restrict dst_row, unsigned dst_stride, const uint8_t *restrict src_row, unsigned src_stride, unsigned width, unsigned height);
+
+
+void
+util_format_z24_unorm_packed_pack_z_32unorm(uint8_t *restrict dst_row, unsigned dst_stride, const uint32_t *restrict src_row, unsigned src_stride, unsigned width, unsigned height);
+
+void
 util_format_z32_unorm_unpack_z_float(float *restrict dst_row, unsigned dst_stride, const uint8_t *restrict src_row, unsigned src_stride, unsigned width, unsigned height);
 
 

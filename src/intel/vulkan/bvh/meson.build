@@ -34,6 +34,7 @@ foreach shader : bvh_shaders
       '-DGFX_VERx10=' + define_ver # so that we can use this macro inside shaders
     ]
     command += glslang_quiet
+    command += vk_glsl_shader_preamble
 
     shader_name = shader.split('.')[0]
     output_name = 'gfx' + file_name_ver + '_' + shader_name + '.spv.h'

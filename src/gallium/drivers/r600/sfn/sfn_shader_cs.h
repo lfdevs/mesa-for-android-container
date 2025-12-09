@@ -26,11 +26,11 @@ private:
 
    bool load_input(UNUSED nir_intrinsic_instr *intr) override
    {
-      unreachable("compute shaders  have bno inputs");
+      UNREACHABLE("compute shaders  have bno inputs");
    };
    bool store_output(UNUSED nir_intrinsic_instr *intr) override
    {
-      unreachable("compute shaders have no outputs");
+      UNREACHABLE("compute shaders have no outputs");
    };
 
    bool read_prop(std::istream& is) override;

@@ -70,8 +70,17 @@ opt_uniform_subgroup_filter(const nir_instr *instr, const void *_state)
 }
 
 static nir_def *
+ballot_bit_count(nir_builder *b, nir_def *ballot)
+{
+   return ballot->num_components == 1
+             ? nir_bit_count(b, ballot)
+             : nir_ballot_bit_count_reduce(b, ballot);
+}
+
+static nir_def *
 count_active_invocations(nir_builder *b, nir_def *value, bool inclusive,
-                         bool has_mbcnt_amd)
+                         bool has_mbcnt_amd,
+                         const nir_lower_subgroups_options *options)
 {
    /* For the non-inclusive case, the two paths are functionally the same.
     * For the inclusive case, the are similar but very subtly different.
@@ -91,11 +100,13 @@ count_active_invocations(nir_builder *b, nir_def *value, bool inclusive,
    if (has_mbcnt_amd) {
       return nir_mbcnt_amd(b, value, nir_imm_int(b, (int)inclusive));
    } else {
-      nir_def *mask = inclusive
-                         ? nir_load_subgroup_le_mask(b, 1, 32)
-                         : nir_load_subgroup_lt_mask(b, 1, 32);
+      nir_def *mask =
+         inclusive ? nir_load_subgroup_le_mask(b, options->ballot_components,
+                                               options->ballot_bit_size)
+                   : nir_load_subgroup_lt_mask(b, options->ballot_components,
+                                               options->ballot_bit_size);
 
-      return nir_bit_count(b, nir_iand(b, value, mask));
+      return ballot_bit_count(b, nir_iand(b, value, mask));
    }
 }
 
@@ -119,11 +130,11 @@ opt_uniform_subgroup_instr(nir_builder *b, nir_instr *instr, void *_state)
                                       options->ballot_bit_size, nir_imm_true(b));
 
          if (intrin->intrinsic == nir_intrinsic_reduce) {
-            count = nir_bit_count(b, ballot);
+            count = ballot_bit_count(b, ballot);
          } else {
             count = count_active_invocations(b, ballot,
                                              intrin->intrinsic == nir_intrinsic_inclusive_scan,
-                                             false);
+                                             false, options);
          }
 
          const unsigned bit_size = intrin->src[0].ssa->bit_size;

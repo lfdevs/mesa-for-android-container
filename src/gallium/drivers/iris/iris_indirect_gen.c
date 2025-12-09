@@ -34,7 +34,7 @@
 #include "iris_genx_macros.h"
 
 #if GFX_VER >= 9
-#include "intel/compiler/brw_compiler.h"
+#include "intel/compiler/brw/brw_compiler.h"
 #include "intel/common/intel_genX_state_brw.h"
 #else
 #include "intel/compiler/elk/elk_compiler.h"
@@ -116,7 +116,7 @@ upload_state(struct iris_batch *batch,
              unsigned alignment)
 {
    void *p = NULL;
-   u_upload_alloc(uploader, 0, size, alignment, &ref->offset, &ref->res, &p);
+   u_upload_alloc_ref(uploader, 0, size, alignment, &ref->offset, &ref->res, &p);
    iris_use_pinned_bo(batch, iris_resource_bo(ref->res), false, IRIS_DOMAIN_NONE);
    return p;
 }
@@ -131,7 +131,7 @@ stream_state(struct iris_batch *batch,
 {
    void *ptr = NULL;
 
-   u_upload_alloc(uploader, 0, size, alignment, out_offset, out_res, &ptr);
+   u_upload_alloc_ref(uploader, 0, size, alignment, out_offset, out_res, &ptr);
 
    struct iris_bo *bo = iris_resource_bo(*out_res);
    iris_use_pinned_bo(batch, bo, false, IRIS_DOMAIN_NONE);
@@ -248,7 +248,7 @@ emit_indirect_generate_draw(struct iris_batch *batch,
 
    iris_emit_cmd(batch, GENX(3DSTATE_SF), sf) {
 #if GFX_VER >= 12
-      sf.DerefBlockSize = ice->state.urb_deref_block_size;
+      sf.DerefBlockSize = ice->shaders.urb.cfg.deref_block_size;
 #endif
    }
 
@@ -398,7 +398,7 @@ emit_indirect_generate_draw(struct iris_batch *batch,
    float *vertices =
       upload_state(batch, ice->state.dynamic_uploader,
                    &ice->draw.generation.vertices,
-                   ALIGN(9 * sizeof(float), 8), 8);
+                   align(9 * sizeof(float), 8), 8);
 
    vertices[0] = x1; vertices[1] = y1; vertices[2] = z; /* v0 */
    vertices[3] = x0; vertices[4] = y1; vertices[5] = z; /* v1 */

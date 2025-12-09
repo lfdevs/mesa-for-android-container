@@ -65,14 +65,6 @@ struct v3d_bo *v3d_bo_open_dmabuf(struct v3d_screen *screen, int fd);
 bool v3d_bo_flink(struct v3d_bo *bo, uint32_t *name);
 int v3d_bo_get_dmabuf(struct v3d_bo *bo);
 
-static inline void
-v3d_bo_set_reference(struct v3d_bo **old_bo, struct v3d_bo *new_bo)
-{
-        if (pipe_reference(&(*old_bo)->reference, &new_bo->reference))
-                v3d_bo_last_unreference(*old_bo);
-        *old_bo = new_bo;
-}
-
 static inline struct v3d_bo *
 v3d_bo_reference(struct v3d_bo *bo)
 {
@@ -107,17 +99,6 @@ v3d_bo_unreference(struct v3d_bo **bo)
         *bo = NULL;
 }
 
-static inline void
-v3d_bo_unreference_locked_timed(struct v3d_bo **bo, time_t time)
-{
-        if (!*bo)
-                return;
-
-        if (pipe_reference(&(*bo)->reference, NULL))
-                v3d_bo_last_unreference_locked_timed(*bo, time);
-        *bo = NULL;
-}
-
 void *
 v3d_bo_map(struct v3d_bo *bo);
 
@@ -126,10 +107,6 @@ v3d_bo_map_unsynchronized(struct v3d_bo *bo);
 
 bool
 v3d_bo_wait(struct v3d_bo *bo, uint64_t timeout_ns, const char *reason);
-
-bool
-v3d_wait_seqno(struct v3d_screen *screen, uint64_t seqno, uint64_t timeout_ns,
-               const char *reason);
 
 void
 v3d_bufmgr_destroy(struct pipe_screen *pscreen);

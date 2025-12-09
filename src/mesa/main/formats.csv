@@ -99,6 +99,9 @@ MESA_FORMAT_RB_RG_UNORM8                  , other , 2, 1, 1, x16 ,     ,     ,  
 MESA_FORMAT_GR_BR_UNORM8                  , other , 2, 1, 1, x16 ,     ,     ,     , xyz1, rgb
 MESA_FORMAT_BR_GR_UNORM8                  , other , 2, 1, 1, x16 ,     ,     ,     , xyz1, rgb
 
+MESA_FORMAT_RG_RB_UNORM10                 , other , 2, 1, 1, x32 ,     ,     ,     , xyz1, rgb
+MESA_FORMAT_RG_RB_UNORM16                 , other , 2, 1, 1, x32 ,     ,     ,     , xyz1, rgb
+
 # Array normalized formats
 MESA_FORMAT_A_UNORM8                      , array , 1, 1, 1, un8 ,     ,     ,     , 000x, rgb
 MESA_FORMAT_A_UNORM16                     , array , 1, 1, 1, un16,     ,     ,     , 000x, rgb

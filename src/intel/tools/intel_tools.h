@@ -9,7 +9,7 @@
 
 #include "intel/decoder/intel_decoder.h"
 
-#include "compiler/brw_isa_info.h"
+#include "compiler/brw/brw_isa_info.h"
 #ifdef INTEL_USE_ELK
 #include "compiler/elk/elk_isa_info.h"
 #endif

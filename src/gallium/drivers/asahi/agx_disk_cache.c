@@ -34,10 +34,10 @@ agx_disk_cache_compute_key(struct disk_cache *cache,
    uint8_t data[sizeof(uncompiled->nir_sha1) + sizeof(*shader_key)];
    int hash_size = sizeof(uncompiled->nir_sha1);
    int key_size;
-   if (uncompiled->type == PIPE_SHADER_VERTEX ||
-       uncompiled->type == PIPE_SHADER_TESS_EVAL)
+   if (uncompiled->type == MESA_SHADER_VERTEX ||
+       uncompiled->type == MESA_SHADER_TESS_EVAL)
       key_size = sizeof(shader_key->vs);
-   else if (uncompiled->type == PIPE_SHADER_FRAGMENT)
+   else if (uncompiled->type == MESA_SHADER_FRAGMENT)
       key_size = sizeof(shader_key->fs);
    else
       key_size = 0;
@@ -93,9 +93,9 @@ read_shader(struct agx_screen *screen, struct blob_reader *blob,
    blob_copy_bytes(blob, &binary->b.info, sizeof(binary->b.info));
    size_t size = binary->b.info.binary_size;
 
-   if (uncompiled->type == PIPE_SHADER_VERTEX ||
-       uncompiled->type == PIPE_SHADER_TESS_EVAL ||
-       uncompiled->type == PIPE_SHADER_FRAGMENT) {
+   if (uncompiled->type == MESA_SHADER_VERTEX ||
+       uncompiled->type == MESA_SHADER_TESS_EVAL ||
+       uncompiled->type == MESA_SHADER_FRAGMENT) {
 
       binary->b.binary = malloc(size);
       blob_copy_bytes(blob, binary->b.binary, size);
@@ -119,7 +119,7 @@ read_shader(struct agx_screen *screen, struct blob_reader *blob,
    blob_copy_bytes(blob, binary->push,
                    sizeof(binary->push[0]) * binary->push_range_count);
 
-   if (is_root && uncompiled->type == PIPE_SHADER_GEOMETRY) {
+   if (is_root && uncompiled->type == MESA_SHADER_GEOMETRY) {
       blob_copy_bytes(blob, &binary->gs, sizeof(binary->gs));
       binary->pre_gs = read_shader(screen, blob, uncompiled, false);
 
@@ -155,7 +155,7 @@ agx_disk_cache_store(struct disk_cache *cache,
    struct blob blob;
    blob_init(&blob);
 
-   write_shader(&blob, binary, uncompiled->type == PIPE_SHADER_GEOMETRY);
+   write_shader(&blob, binary, uncompiled->type == MESA_SHADER_GEOMETRY);
 
    disk_cache_put(cache, cache_key, blob.data, blob.size, NULL);
    blob_finish(&blob);

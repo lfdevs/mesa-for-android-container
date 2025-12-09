@@ -244,7 +244,7 @@ lima_bo_cache_get(struct lima_screen *screen, uint32_t size, uint32_t flags)
 
    if (!bucket) {
       mtx_unlock(&screen->bo_cache_lock);
-      return false;
+      return NULL;
    }
 
    list_for_each_entry_safe(struct lima_bo, entry, bucket, size_list) {
@@ -395,7 +395,7 @@ bool lima_bo_export(struct lima_bo *bo, struct winsys_handle *handle)
       return true;
 
    case WINSYS_HANDLE_TYPE_FD:
-      if (drmPrimeHandleToFD(screen->fd, bo->handle, DRM_CLOEXEC,
+      if (drmPrimeHandleToFD(screen->fd, bo->handle, DRM_CLOEXEC | DRM_RDWR,
                              (int*)&handle->handle))
          return false;
 

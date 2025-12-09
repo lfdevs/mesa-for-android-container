@@ -30,11 +30,11 @@
 #include <xf86drm.h>
 
 #include "drm-uapi/pvr_drm.h"
+#include "pvr_csb.h"
 #include "pvr_drm.h"
 #include "pvr_drm_bo.h"
 #include "pvr_drm_job_common.h"
 #include "pvr_drm_job_render.h"
-#include "pvr_private.h"
 #include "pvr_winsys.h"
 #include "pvr_winsys_helper.h"
 #include "util/macros.h"

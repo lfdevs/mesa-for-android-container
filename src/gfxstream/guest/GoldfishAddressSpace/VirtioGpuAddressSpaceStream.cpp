@@ -8,20 +8,18 @@
 #include <errno.h>
 
 #include "util/log.h"
+#include "util/os_misc.h"
 
 static bool GetRingParamsFromCapset(enum VirtGpuCapset capset, const VirtGpuCaps& caps,
                                     uint32_t& ringSize, uint32_t& bufferSize,
                                     uint32_t& blobAlignment) {
+    uint64_t guest_page_size = 4096;
+    os_get_page_size(&guest_page_size);
     switch (capset) {
         case kCapsetGfxStreamVulkan:
             ringSize = caps.vulkanCapset.ringSize;
             bufferSize = caps.vulkanCapset.bufferSize;
             blobAlignment = caps.vulkanCapset.blobAlignment;
-            break;
-        case kCapsetGfxStreamMagma:
-            ringSize = caps.magmaCapset.ringSize;
-            bufferSize = caps.magmaCapset.bufferSize;
-            blobAlignment = caps.magmaCapset.blobAlignment;
             break;
         case kCapsetGfxStreamGles:
             ringSize = caps.glesCapset.ringSize;
@@ -37,18 +35,19 @@ static bool GetRingParamsFromCapset(enum VirtGpuCapset capset, const VirtGpuCaps
             return false;
     }
 
+    blobAlignment = std::max(blobAlignment, (uint32_t)guest_page_size);
     return true;
 }
 
-address_space_handle_t virtgpu_address_space_open() {
+static address_space_handle_t virtgpu_address_space_open() {
     return (address_space_handle_t)(-EINVAL);
 }
 
-void virtgpu_address_space_close(address_space_handle_t) {
+static void virtgpu_address_space_close(address_space_handle_t) {
     // Handle opened by VirtioGpuDevice wrapper
 }
 
-bool virtgpu_address_space_ping(address_space_handle_t, struct address_space_ping* info) {
+static bool virtgpu_address_space_ping(address_space_handle_t, struct address_space_ping* info) {
     int ret;
     struct VirtGpuExecBuffer exec = {};
     VirtGpuDevice* instance = VirtGpuDevice::getInstance();
@@ -83,6 +82,15 @@ AddressSpaceStream* createVirtioGpuAddressSpaceStream(enum VirtGpuCapset capset)
 
     VirtGpuDevice* instance = VirtGpuDevice::getInstance();
     auto caps = instance->getCaps();
+
+    if (!caps.params[kParamResourceBlob]) {
+        mesa_loge("VirtGpuDevice does not support blob-resources!");
+        return nullptr;
+    }
+    if (!caps.params[kParamHostVisible] && !caps.params[kParamCreateGuestHandle]) {
+        mesa_loge("VirtGpuDevice must support at least one of: 1) host-visible memory (kParamHostVisible) or 2) host handles created from guest memory (kParamCreateGuestHandle).");
+        return nullptr;
+    }
 
     if (!GetRingParamsFromCapset(capset, caps, ringSize, bufferSize, blobAlignment)) {
         mesa_loge("Failed to get ring parameters");

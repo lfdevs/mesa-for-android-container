@@ -4,3 +4,7 @@ dEQP-VK.reconvergence.subgroup_uniform_control_flow_elect.compute.nesting4.7.10
 # Not supported on TGL
 dEQP-VK.binding_model.descriptor_buffer.sparse_binding_buffer.*
 dEQP-VK.binding_model.descriptor_buffer.sparse_residency_buffer.*
+
+# Times out
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap_map2

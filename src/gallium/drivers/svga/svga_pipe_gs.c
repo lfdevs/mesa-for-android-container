@@ -27,7 +27,7 @@ svga_create_gs_state(struct pipe_context *pipe,
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_CREATEGS);
 
    gs = (struct svga_geometry_shader *)
-            svga_create_shader(pipe, templ, PIPE_SHADER_GEOMETRY,
+            svga_create_shader(pipe, templ, MESA_SHADER_GEOMETRY,
                                sizeof(struct svga_geometry_shader));
 
    if (!gs)
@@ -60,7 +60,7 @@ svga_bind_gs_state(struct pipe_context *pipe, void *shader)
    svga->dirty |= SVGA_NEW_GS;
 
    /* Check if the shader uses samplers */
-   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_GEOMETRY,
+   svga_set_curr_shader_use_samplers_flag(svga, MESA_SHADER_GEOMETRY,
                                           svga_shader_use_samplers(&gs->base));
 }
 

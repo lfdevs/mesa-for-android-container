@@ -148,7 +148,7 @@ genX(emit_l3_config)(struct anv_batch *batch,
 
    anv_batch_write_reg(batch, L3_ALLOCATION_REG, l3cr) {
       if (cfg == NULL) {
-         unreachable("Invalid L3$ config");
+         UNREACHABLE("Invalid L3$ config");
       } else {
          l3cr.SLMEnable = cfg->n[INTEL_L3P_SLM];
          assert(cfg->n[INTEL_L3P_IS] == 0);
@@ -306,11 +306,11 @@ genX(emit_sample_pattern)(struct anv_batch *batch,
       for (uint32_t i = 1; i <= 8; i *= 2) {
          switch (i) {
          case VK_SAMPLE_COUNT_1_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_1X_ARRAY(sp._1xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_1X(sp._1xSample);
-            }
+            /* We don't do 1x MSAA, and we can't support custom sample
+             * positions without MSAA, so always program the default for this
+             * case.
+             */
+            INTEL_SAMPLE_POS_1X(sp._1xSample);
             break;
          case VK_SAMPLE_COUNT_2_BIT:
             if (sl && sl->per_pixel == i) {
@@ -334,7 +334,7 @@ genX(emit_sample_pattern)(struct anv_batch *batch,
             }
             break;
          default:
-            unreachable("Invalid sample count");
+            UNREACHABLE("Invalid sample count");
          }
       }
    }
@@ -346,7 +346,7 @@ vk_to_intel_tex_filter(VkFilter filter, bool anisotropyEnable)
 {
    switch (filter) {
    default:
-      unreachable("Invalid filter");
+      UNREACHABLE("Invalid filter");
    case VK_FILTER_NEAREST:
       return anisotropyEnable ? MAPFILTER_ANISOTROPIC : MAPFILTER_NEAREST;
    case VK_FILTER_LINEAR:

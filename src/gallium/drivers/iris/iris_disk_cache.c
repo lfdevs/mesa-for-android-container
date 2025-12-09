@@ -36,7 +36,7 @@
 #include "util/build_id.h"
 #include "util/disk_cache.h"
 #include "util/mesa-sha1.h"
-#include "intel/compiler/brw_compiler.h"
+#include "intel/compiler/brw/brw_compiler.h"
 #ifdef INTEL_USE_ELK
 #include "intel/compiler/elk/elk_compiler.h"
 #endif
@@ -59,7 +59,7 @@ iris_disk_cache_compute_key(struct disk_cache *cache,
     * It's essentially random data which we don't want to include in our
     * hashing and comparisons.  We'll set a proper value on a cache hit.
     */
-   union brw_any_prog_key prog_key;
+   union iris_any_prog_key prog_key;
    memcpy(&prog_key, orig_prog_key, prog_key_size);
    prog_key.base.program_string_id = 0;
 
@@ -89,7 +89,7 @@ iris_disk_cache_store(struct disk_cache *cache,
    if (!cache)
       return;
 
-   gl_shader_stage stage = ish->nir->info.stage;
+   mesa_shader_stage stage = ish->nir->info.stage;
    const struct brw_stage_prog_data *brw = shader->brw_prog_data;
 #ifdef INTEL_USE_ELK
    const struct elk_stage_prog_data *elk = shader->elk_prog_data;
@@ -141,7 +141,7 @@ iris_disk_cache_store(struct disk_cache *cache,
       serializable.base.relocs = NULL;
       blob_write_bytes(&blob, &serializable, prog_data_s);
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 
@@ -151,17 +151,17 @@ iris_disk_cache_store(struct disk_cache *cache,
                     shader->num_system_values * sizeof(uint32_t));
    if (brw) {
       blob_write_bytes(&blob, brw->relocs,
-                       brw->num_relocs * sizeof(struct brw_shader_reloc));
+                       brw->num_relocs * sizeof(struct intel_shader_reloc));
       blob_write_bytes(&blob, brw->param,
                        brw->nr_params * sizeof(uint32_t));
    } else {
 #ifdef INTEL_USE_ELK
       blob_write_bytes(&blob, elk->relocs,
-                       elk->num_relocs * sizeof(struct elk_shader_reloc));
+                       elk->num_relocs * sizeof(struct intel_shader_reloc));
       blob_write_bytes(&blob, elk->param,
                        elk->nr_params * sizeof(uint32_t));
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
    blob_write_bytes(&blob, &shader->bt, sizeof(shader->bt));
@@ -194,7 +194,7 @@ iris_disk_cache_retrieve(struct iris_screen *screen,
 {
 #ifdef ENABLE_SHADER_CACHE
    struct disk_cache *cache = screen->disk_cache;
-   gl_shader_stage stage = ish->nir->info.stage;
+   mesa_shader_stage stage = ish->nir->info.stage;
 
    if (!cache)
       return false;
@@ -259,10 +259,10 @@ iris_disk_cache_retrieve(struct iris_screen *screen,
    if (brw) {
       brw->relocs = NULL;
       if (brw->num_relocs) {
-         struct brw_shader_reloc *relocs =
-            ralloc_array(NULL, struct brw_shader_reloc, brw->num_relocs);
+         struct intel_shader_reloc *relocs =
+            ralloc_array(NULL, struct intel_shader_reloc, brw->num_relocs);
          blob_copy_bytes(&blob, relocs,
-                         brw->num_relocs * sizeof(struct brw_shader_reloc));
+                         brw->num_relocs * sizeof(struct intel_shader_reloc));
          brw->relocs = relocs;
       }
 
@@ -275,10 +275,10 @@ iris_disk_cache_retrieve(struct iris_screen *screen,
 #ifdef INTEL_USE_ELK
       elk->relocs = NULL;
       if (elk->num_relocs) {
-         struct elk_shader_reloc *relocs =
-            ralloc_array(NULL, struct elk_shader_reloc, elk->num_relocs);
+         struct intel_shader_reloc *relocs =
+            ralloc_array(NULL, struct intel_shader_reloc, elk->num_relocs);
          blob_copy_bytes(&blob, relocs,
-                         elk->num_relocs * sizeof(struct elk_shader_reloc));
+                         elk->num_relocs * sizeof(struct intel_shader_reloc));
          elk->relocs = relocs;
       }
 
@@ -289,7 +289,7 @@ iris_disk_cache_retrieve(struct iris_screen *screen,
                          elk->nr_params * sizeof(uint32_t));
       }
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 
@@ -325,7 +325,7 @@ iris_disk_cache_retrieve(struct iris_screen *screen,
 #ifdef INTEL_USE_ELK
       iris_apply_elk_prog_data(shader, elk);
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
 
    iris_finalize_program(shader, so_decls, system_values,

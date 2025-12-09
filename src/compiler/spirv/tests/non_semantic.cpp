@@ -116,5 +116,5 @@ TEST_F(NonSemantic, printf)
 
    nir_intrinsic_instr *intrinsic = find_intrinsic(nir_intrinsic_printf, 0);
    ASSERT_NE(intrinsic, nullptr);
-   ASSERT_TRUE(intrinsic->src[0].ssa->parent_instr->type == nir_instr_type_deref);
+   ASSERT_TRUE(nir_def_instr(intrinsic->src[0].ssa)->type == nir_instr_type_deref);
 }

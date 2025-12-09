@@ -67,6 +67,7 @@ ra_add_transitive_reg_pair_conflict(struct ra_regs *regs,
 
 void ra_make_reg_conflicts_transitive(struct ra_regs *regs, unsigned int reg);
 void ra_class_add_reg(struct ra_class *c, unsigned int reg);
+void ra_class_override_p(struct ra_class *c, unsigned int p);
 struct ra_class *ra_get_class_from_index(struct ra_regs *regs, unsigned int c);
 void ra_set_finalize(struct ra_regs *regs, unsigned int **conflicts);
 

@@ -104,7 +104,7 @@ lima_disasm = executable(
     'standalone/lima_disasm.c',
   ),
   include_directories : [
-    inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_mesa, inc_mapi,
+    inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
   ],
   dependencies : [
     idep_mesautil,

@@ -608,6 +608,5 @@ ir3_lower_copies(struct ir3_shader_variant *v)
       }
    }
 
-   if (copies)
-      ralloc_free(copies);
+   ralloc_free(copies);
 }

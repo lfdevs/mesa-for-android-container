@@ -1,0 +1,3 @@
+## This test mostly times out
+ahb-dEQP-VK.api.external.memory.android_hardware_buffer.dedicated.host_visible.import_multiple_times
+ahb-dEQP-VK.api.external.memory.android_hardware_buffer.suballocated.device_only.import_multiple_times

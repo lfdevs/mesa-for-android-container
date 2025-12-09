@@ -113,6 +113,11 @@ pan_image_layout_init(
    if (plane_idx >= util_format_get_num_planes(props->format))
       return false;
 
+   /* Init plane layout data. */
+   if (mod_handler->init_plane_layout &&
+       !mod_handler->init_plane_layout(props, plane_idx, layout))
+      return false;
+
    /* MSAA is implemented as a 3D texture with z corresponding to the
     * sample #, horrifyingly enough */
 
@@ -155,6 +160,12 @@ pan_image_layout_init(
    /* Arrays and cubemaps have the entire miptree duplicated */
    layout->array_stride_B =
       ALIGN_POT(layout_constraints.offset_B - layout->slices[0].offset_B, 64);
+
+   if (layout_constraints.array_align_B) {
+      layout->array_stride_B =
+         ALIGN_POT(layout->array_stride_B, layout_constraints.array_align_B);
+   }
+
    if (use_explicit_layout) {
       layout->data_size_B =
          layout_constraints.offset_B - explicit_layout_constraints->offset_B;

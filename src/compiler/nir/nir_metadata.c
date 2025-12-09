@@ -38,6 +38,8 @@ nir_metadata_require(nir_function_impl *impl, nir_metadata required, ...)
       nir_index_instrs(impl);
    if (NEEDS_UPDATE(nir_metadata_dominance))
       nir_calc_dominance_impl(impl);
+   if (NEEDS_UPDATE(nir_metadata_dominance_lca))
+      nir_calc_dominance_lca_impl(impl);
    if (NEEDS_UPDATE(nir_metadata_live_defs))
       nir_live_defs_impl(impl);
    if (NEEDS_UPDATE(nir_metadata_divergence))
@@ -73,6 +75,11 @@ nir_progress(bool progress, nir_function_impl *impl, nir_metadata preserved)
    if (!progress)
       preserved = nir_metadata_all;
 
+   if (!(preserved & nir_metadata_block_index))
+      assert(!(preserved & nir_metadata_dominance));
+   if (!(preserved & nir_metadata_dominance))
+      assert(!(preserved & nir_metadata_dominance_lca));
+
    /* If we discard valid liveness information, immediately free the
     * liveness information for each block. For large shaders, it can
     * consume a huge amount of memory, and it's usually not immediately
@@ -80,9 +87,8 @@ nir_progress(bool progress, nir_function_impl *impl, nir_metadata preserved)
     */
    if ((impl->valid_metadata & ~preserved) & nir_metadata_live_defs) {
       nir_foreach_block(block, impl) {
-         ralloc_free(block->live_in);
-         ralloc_free(block->live_out);
-         block->live_in = block->live_out = NULL;
+         u_sparse_bitset_free(&block->live_in);
+         u_sparse_bitset_free(&block->live_out);
       }
    }
 
@@ -110,17 +116,19 @@ nir_metadata_invalidate(nir_shader *shader)
          block->index = (block_idx-- & 0xf) + 0xfffffff0;
 
          if (impl->valid_metadata & nir_metadata_live_defs) {
-            ralloc_free(block->live_in);
-            ralloc_free(block->live_out);
+            u_sparse_bitset_free(&block->live_in);
+            u_sparse_bitset_free(&block->live_out);
          }
-         block->live_in = block->live_out = NULL;
+         u_sparse_bitset_init(&block->live_in, impl->ssa_alloc, NULL);
+         u_sparse_bitset_init(&block->live_out, impl->ssa_alloc, NULL);
 
-         if (impl->valid_metadata & nir_metadata_dominance)
+         if (impl->valid_metadata & nir_metadata_dominance &&
+             block->dom_children != block->_dom_children_storage)
             ralloc_free(block->dom_children);
          block->dom_children = NULL;
          block->num_dom_children = 1;
          block->dom_pre_index = block->dom_post_index = 0;
-         _mesa_set_clear(block->dom_frontier, NULL);
+         _mesa_set_clear(&block->dom_frontier, NULL);
 
          if (block->cf_node.parent->type == nir_cf_node_loop &&
              nir_cf_node_is_first(&block->cf_node)) {
@@ -174,12 +182,24 @@ nir_metadata_check_validation_flag(nir_shader *shader)
 }
 
 void
-nir_metadata_require_all(nir_shader *shader)
+nir_metadata_require_most(nir_shader *shader)
 {
    bool force_unroll_sampler_indirect = shader->options->force_indirect_unrolling_sampler;
    nir_variable_mode indirect_mask = shader->options->force_indirect_unrolling;
    nir_foreach_function_impl(impl, shader) {
-      nir_metadata_require(impl, nir_metadata_all, indirect_mask,
+      nir_metadata md = nir_metadata_all;
+
+      /* We don't know if divergence analysis supports this shader. */
+      md &= ~nir_metadata_divergence;
+
+      if (!impl->structured) {
+         /* These don't support unstructured control flow. */
+         md &= ~nir_metadata_instr_index;
+         md &= ~nir_metadata_loop_analysis;
+         md &= ~nir_metadata_live_defs;
+      }
+
+      nir_metadata_require(impl, md, indirect_mask,
                            (int)force_unroll_sampler_indirect);
    }
 }

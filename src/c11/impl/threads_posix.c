@@ -46,12 +46,13 @@ impl_thrd_routine(void *p)
 
 /*--------------- 7.25.2 Initialization functions ---------------*/
 // 7.25.2.1
+#ifndef __once_flag_defined
 void
 call_once(once_flag *flag, void (*func)(void))
 {
     pthread_once(flag, func);
 }
-
+#endif
 
 /*------------- 7.25.3 Condition variable functions -------------*/
 // 7.25.3.1

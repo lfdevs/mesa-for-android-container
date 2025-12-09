@@ -39,6 +39,9 @@ enum nvk_debug {
 
    /* Force all memory allocations to go to GART */
    NVK_DEBUG_FORCE_GART = 1ull << 7,
+
+   /* Force all memory allocations to go to GART */
+   NVK_DEBUG_FORCE_COHERENT = 1ull << 8,
 };
 
 #endif /* NVK_DEBUG_H */

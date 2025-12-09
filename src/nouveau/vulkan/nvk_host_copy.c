@@ -68,6 +68,11 @@ nvk_image_plane_map(const struct nvk_image_plane *plane,
    if (result != VK_SUCCESS)
       return result;
 
+   /* TODO: This should be a lot more granular */
+   nvkmd_mem_sync_map_from_gpu(plane->host_mem->mem,
+                               plane->host_offset,
+                               plane->nil.size_B);
+
    *map_out += plane->host_offset;
 
    return VK_SUCCESS;
@@ -76,6 +81,11 @@ nvk_image_plane_map(const struct nvk_image_plane *plane,
 static void
 nvk_image_plane_unmap(const struct nvk_image_plane *plane)
 {
+   /* TODO: This should be a lot more granular */
+   nvkmd_mem_sync_map_to_gpu(plane->host_mem->mem,
+                             plane->host_offset,
+                             plane->nil.size_B);
+
    nvkmd_mem_unmap(plane->host_mem->mem, 0);
 }
 

@@ -205,6 +205,13 @@ agx_fast_link(struct agx_linked_shader *linked, struct agx_device *dev,
          cfg.unk_5 = 0x0;
       }
 
+      /* If we skip the fragment shader, we can optimize the pass type */
+      if (tag_write_disable) {
+         reads_tib = false;
+         writes_sample_mask = false;
+         linked->no_op = true;
+      }
+
       agx_pack(&linked->fragment_control, FRAGMENT_CONTROL, cfg) {
          cfg.tag_write_disable = tag_write_disable;
          cfg.disable_tri_merging = disable_tri_merging;

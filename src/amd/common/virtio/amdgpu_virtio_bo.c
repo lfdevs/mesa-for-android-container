@@ -64,6 +64,10 @@ struct amdvgpu_host_blob *create_host_blob(uint32_t kms_handle,
 
 static
 void destroy_host_blob(amdvgpu_device_handle dev, struct amdvgpu_host_blob *hb) {
+   if (hb->cpu_addr) {
+      int r = os_munmap(hb->cpu_addr, hb->alloc_size);
+      assert(r == 0);
+   }
    simple_mtx_destroy(&hb->cpu_access_mutex);
 
    vdrm_bo_close(dev->vdev, hb->handle);

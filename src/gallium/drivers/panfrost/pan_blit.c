@@ -43,7 +43,7 @@ panfrost_blitter_save(struct panfrost_context *ctx,
                                     util_last_bit(ctx->vb_mask));
    util_blitter_save_vertex_elements(blitter, ctx->vertex);
    util_blitter_save_vertex_shader(blitter,
-                                   ctx->uncompiled[PIPE_SHADER_VERTEX]);
+                                   ctx->uncompiled[MESA_SHADER_VERTEX]);
    util_blitter_save_rasterizer(blitter, ctx->rasterizer);
    util_blitter_save_viewport(blitter, &ctx->pipe_viewport);
    util_blitter_save_so_targets(blitter, 0, NULL, 0);
@@ -51,13 +51,13 @@ panfrost_blitter_save(struct panfrost_context *ctx,
    if (blitter_op & PAN_SAVE_FRAGMENT_STATE) {
       if (blitter_op & PAN_SAVE_FRAGMENT_CONSTANT)
          util_blitter_save_fragment_constant_buffer_slot(
-            blitter, ctx->constant_buffer[PIPE_SHADER_FRAGMENT].cb);
+            blitter, ctx->constant_buffer[MESA_SHADER_FRAGMENT].cb);
 
       util_blitter_save_blend(blitter, ctx->blend);
       util_blitter_save_depth_stencil_alpha(blitter, ctx->depth_stencil);
       util_blitter_save_stencil_ref(blitter, &ctx->stencil_ref);
       util_blitter_save_fragment_shader(blitter,
-                                        ctx->uncompiled[PIPE_SHADER_FRAGMENT]);
+                                        ctx->uncompiled[MESA_SHADER_FRAGMENT]);
       util_blitter_save_sample_mask(blitter, ctx->sample_mask,
                                     ctx->min_samples);
       util_blitter_save_scissor(blitter, &ctx->scissor);
@@ -68,11 +68,11 @@ panfrost_blitter_save(struct panfrost_context *ctx,
 
    if (blitter_op & PAN_SAVE_TEXTURES) {
       util_blitter_save_fragment_sampler_states(
-         blitter, ctx->sampler_count[PIPE_SHADER_FRAGMENT],
-         (void **)(&ctx->samplers[PIPE_SHADER_FRAGMENT]));
+         blitter, ctx->sampler_count[MESA_SHADER_FRAGMENT],
+         (void **)(&ctx->samplers[MESA_SHADER_FRAGMENT]));
       util_blitter_save_fragment_sampler_views(
-         blitter, ctx->sampler_view_count[PIPE_SHADER_FRAGMENT],
-         (struct pipe_sampler_view **)&ctx->sampler_views[PIPE_SHADER_FRAGMENT]);
+         blitter, ctx->sampler_view_count[MESA_SHADER_FRAGMENT],
+         (struct pipe_sampler_view **)&ctx->sampler_views[MESA_SHADER_FRAGMENT]);
    }
 
    if (!(blitter_op & PAN_DISABLE_RENDER_COND)) {
@@ -107,7 +107,7 @@ panfrost_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
       return;
 
    if (!util_blitter_is_blit_supported(ctx->blitter, info))
-      unreachable("Unsupported blit\n");
+      UNREACHABLE("Unsupported blit\n");
 
    /* Legalize here because it could trigger a recursive blit otherwise */
    struct panfrost_resource *src = pan_resource(info->src.resource);

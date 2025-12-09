@@ -120,7 +120,7 @@ get_linear_array_offset(nir_builder *b, nir_deref_instr *deref)
          break;
       }
       default:
-         unreachable("Not part of the path");
+         UNREACHABLE("Not part of the path");
       }
    }
    nir_deref_path_finish(&path);
@@ -273,28 +273,28 @@ nir_split_64bit_vec3_and_vec4_impl(nir_builder *b, nir_instr *instr, void *d)
 
       case nir_intrinsic_load_deref: {
          nir_deref_instr *deref =
-            nir_instr_as_deref(intr->src[0].ssa->parent_instr);
+            nir_def_as_deref(intr->src[0].ssa);
          if (deref->deref_type == nir_deref_type_var)
             return split_load_deref(b, intr, NULL, split_vars);
          else if (deref->deref_type == nir_deref_type_array) {
             return split_load_deref(b, intr, get_linear_array_offset(b, deref), split_vars);
          } else
-            unreachable("Only splitting of loads from vars and arrays");
+            UNREACHABLE("Only splitting of loads from vars and arrays");
       }
 
       case nir_intrinsic_store_deref: {
          nir_deref_instr *deref =
-            nir_instr_as_deref(intr->src[0].ssa->parent_instr);
+            nir_def_as_deref(intr->src[0].ssa);
          if (deref->deref_type == nir_deref_type_var)
             return split_store_deref(b, intr, NULL, split_vars);
          else if (deref->deref_type == nir_deref_type_array)
             return split_store_deref(b, intr, get_linear_array_offset(b, deref), split_vars);
          else
-            unreachable("Only splitting of stores to vars and arrays");
+            UNREACHABLE("Only splitting of stores to vars and arrays");
       }
 
       default:
-         unreachable("Only splitting load_deref and store_deref");
+         UNREACHABLE("Only splitting load_deref and store_deref");
       }
    }
 
@@ -304,7 +304,7 @@ nir_split_64bit_vec3_and_vec4_impl(nir_builder *b, nir_instr *instr, void *d)
    }
 
    default:
-      unreachable("Only splitting load_deref/store_deref and phi");
+      UNREACHABLE("Only splitting load_deref/store_deref and phi");
    }
 
    return NULL;

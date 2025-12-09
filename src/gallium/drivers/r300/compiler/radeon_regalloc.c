@@ -9,10 +9,10 @@
 
 #define VERBOSE 0
 
-#define DBG(...)                                                                                   \
-   do {                                                                                            \
-      if (VERBOSE)                                                                                 \
-         fprintf(stderr, __VA_ARGS__);                                                             \
+#define DBG(...)                       \
+   do {                                \
+      if (VERBOSE)                     \
+         fprintf(stderr, __VA_ARGS__); \
    } while (0)
 
 const struct rc_class rc_class_list_vp[] = {
@@ -477,10 +477,13 @@ rc_init_regalloc_state(struct rc_regalloc_state *s, enum rc_program_type prog)
    for (i = 0; i < class_count; i++) {
       ra_q_values[i] = MALLOC(class_count * sizeof(unsigned));
       for (j = 0; j < class_count; j++) {
-         if (prog == RC_FRAGMENT_PROGRAM)
+         if (prog == RC_FRAGMENT_PROGRAM) {
+            assume(j < RC_REG_CLASS_FP_COUNT);
             ra_q_values[i][j] = q_values_fp[i][j];
-         else
+         } else {
+            assume(j < RC_REG_CLASS_VP_COUNT);
             ra_q_values[i][j] = q_values_vp[i][j];
+         }
       }
    }
 

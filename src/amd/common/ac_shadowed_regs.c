@@ -2872,7 +2872,7 @@ struct ac_pm4_state *ac_emulate_clear_state(const struct radeon_info *info)
    } else if (info->gfx_level == GFX9) {
       gfx9_emulate_clear_state(pm4);
    } else {
-      unreachable("unimplemented");
+      UNREACHABLE("unimplemented");
    }
 
    ac_pm4_finalize(pm4);
@@ -2929,10 +2929,8 @@ void ac_print_nonshadowed_regs(enum amd_gfx_level gfx_level, enum radeon_family 
    }
 }
 
-static void ac_build_load_reg(const struct radeon_info *info,
-                              struct ac_pm4_state *pm4,
-                              enum ac_reg_range_type type,
-                              uint64_t gpu_address)
+void ac_build_load_reg(const struct radeon_info *info, struct ac_pm4_state *pm4,
+                       enum ac_reg_range_type type, uint64_t gpu_address)
 {
    unsigned packet, num_ranges, offset;
    const struct ac_reg_range *ranges;
@@ -3015,8 +3013,8 @@ struct ac_pm4_state *ac_create_shadowing_ib_preamble(const struct radeon_info *i
       ac_pm4_cmd_add(pm4, 0); /* INT_CTXID */
 
       unsigned gcr_cntl = S_586_GL2_INV(1) | S_586_GL2_WB(1) |
-                          S_586_GLM_INV(1) | S_586_GLM_WB(1) |
-                          S_586_GL1_INV(1) | S_586_GLV_INV(1) |
+                          (info->gfx_level >= GFX12 ? 0 : S_586_GLM_INV(1) | S_586_GLM_WB(1) | S_586_GL1_INV(1)) |
+                          S_586_GLV_INV(1) |
                           S_586_GLK_INV(1) | S_586_GLI_INV(V_586_GLI_ALL);
 
       /* Wait for the PWS counter. */
@@ -3066,7 +3064,7 @@ struct ac_pm4_state *ac_create_shadowing_ib_preamble(const struct radeon_info *i
       ac_pm4_cmd_add(pm4, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
       ac_pm4_cmd_add(pm4, 0);
    } else {
-      unreachable("invalid chip");
+      UNREACHABLE("invalid chip");
    }
 
    ac_pm4_cmd_add(pm4, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
@@ -3084,10 +3082,8 @@ struct ac_pm4_state *ac_create_shadowing_ib_preamble(const struct radeon_info *i
                   CC1_SHADOW_GLOBAL_UCONFIG(1) |
                   CC1_SHADOW_GLOBAL_CONFIG(1));
 
-   if (!info->has_fw_based_shadowing) {
-      for (unsigned i = 0; i < SI_NUM_REG_RANGES; i++)
-         ac_build_load_reg(info, pm4, i, gpu_address);
-   }
+   for (unsigned i = 0; i < SI_NUM_REG_RANGES; i++)
+      ac_build_load_reg(info, pm4, i, gpu_address);
 
    ac_pm4_finalize(pm4);
 

@@ -91,7 +91,7 @@ interp_fs_input(nir_builder *b, unsigned num_components, uint32_t addr,
       }
       return nir_vec(b, comps, num_components);
    } else {
-      unreachable("Unsupported shader model");
+      UNREACHABLE("Unsupported shader model");
    }
 }
 
@@ -263,7 +263,7 @@ lower_fs_input_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
          interp_loc = NAK_INTERP_LOC_DEFAULT;
          break;
       default:
-         unreachable("Unknown intrinsic");
+         UNREACHABLE("Unknown intrinsic");
       }
 
       nir_def *inv_w = NULL;
@@ -307,7 +307,7 @@ lower_fs_input_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
          break;
 
       default:
-         unreachable("Unsupported barycentric");
+         UNREACHABLE("Unsupported barycentric");
       }
 
       nir_def *inv_w = NULL;
@@ -333,7 +333,7 @@ lower_fs_input_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
          nir_def *sample = nir_load_sample_id(b);
          nir_def *mask = nir_ishl(b, nir_imm_int(b, 1), sample);
          mask = nir_iand(b, &intrin->def, mask);
-         nir_def_rewrite_uses_after(&intrin->def, mask, mask->parent_instr);
+         nir_def_rewrite_uses_after(&intrin->def, mask);
 
          return true;
       } else if (ctx->fs_key && ctx->fs_key->force_sample_shading) {
@@ -344,7 +344,7 @@ lower_fs_input_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
          nir_def *sample = nir_load_sample_id(b);
          nir_def *mask = load_pass_sample_mask_at(b, sample, ctx->fs_key);
          mask = nir_iand(b, &intrin->def, nir_u2u32(b, mask));
-         nir_def_rewrite_uses_after(&intrin->def, mask, mask->parent_instr);
+         nir_def_rewrite_uses_after(&intrin->def, mask);
 
          return true;
       } else {

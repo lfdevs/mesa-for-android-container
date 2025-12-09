@@ -23,11 +23,12 @@ struct ac_shader_config {
    unsigned num_shared_vgprs; /* GFX10: number of VGPRs shared between half-waves */
    unsigned spilled_sgprs;
    unsigned spilled_vgprs;
-   unsigned lds_size; /* in HW allocation units; i.e 256 bytes on SI, 512 bytes on CI+ */
+   unsigned lds_size; /* in bytes */
    unsigned spi_ps_input_ena;
    unsigned spi_ps_input_addr;
    unsigned float_mode;
    unsigned scratch_bytes_per_wave;
+   bool wgp_mode;
    unsigned rsrc1;
    unsigned rsrc2;
    unsigned rsrc3;

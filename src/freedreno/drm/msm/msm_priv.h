@@ -121,7 +121,7 @@ msm_dump_rd(struct fd_pipe *pipe, struct drm_msm_gem_submit *req)
    struct fd_rd_output *rd = &pipe->dev->rd;
 
    if (!fd_rd_dump_env.flags || !req->nr_cmds ||
-       !fd_rd_output_begin(rd, req->fence))
+       !fd_rd_output_begin(rd, UINT_MAX, req->fence))
       return;
 
    if (FD_RD_DUMP(FULL)) {

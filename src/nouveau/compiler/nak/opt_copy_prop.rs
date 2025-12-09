@@ -495,7 +495,7 @@ impl<'a> CopyPropPass<'a> {
                 assert!(dst.comps() == 1);
                 let dst = dst[0];
 
-                if !add.saturate {
+                if !add.saturate && !add.ftz {
                     if add.srcs[0].is_fneg_zero(SrcType::F16v2) {
                         self.add_copy(
                             bi,
@@ -518,7 +518,7 @@ impl<'a> CopyPropPass<'a> {
                 assert!(dst.comps() == 1);
                 let dst = dst[0];
 
-                if !add.saturate {
+                if !add.saturate && !add.ftz {
                     if add.srcs[0].is_fneg_zero(SrcType::F32) {
                         self.add_copy(
                             bi,

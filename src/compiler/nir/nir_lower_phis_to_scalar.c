@@ -55,7 +55,7 @@ static bool
 is_phi_src_scalarizable(nir_phi_src *src)
 {
 
-   nir_instr *src_instr = src->src.ssa->parent_instr;
+   nir_instr *src_instr = nir_def_instr(src->src.ssa);
    switch (src_instr->type) {
    case nir_instr_type_alu: {
       nir_alu_instr *src_alu = nir_instr_as_alu(src_instr);

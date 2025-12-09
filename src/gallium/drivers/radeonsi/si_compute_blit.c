@@ -62,17 +62,17 @@ void si_launch_grid_internal_ssbos(struct si_context *sctx, struct pipe_grid_inf
    /* Save states. */
    struct pipe_shader_buffer saved_sb[3] = {};
    assert(num_buffers <= ARRAY_SIZE(saved_sb));
-   si_get_shader_buffers(sctx, PIPE_SHADER_COMPUTE, 0, num_buffers, saved_sb);
+   si_get_shader_buffers(sctx, MESA_SHADER_COMPUTE, 0, num_buffers, saved_sb);
 
    unsigned saved_writable_mask = 0;
    for (unsigned i = 0; i < num_buffers; i++) {
-      if (sctx->const_and_shader_buffers[PIPE_SHADER_COMPUTE].writable_mask &
+      if (sctx->const_and_shader_buffers[MESA_SHADER_COMPUTE].writable_mask &
           (1u << si_get_shaderbuf_slot(i)))
          saved_writable_mask |= 1 << i;
    }
 
    /* Bind buffers and launch compute. */
-   si_set_shader_buffers(&sctx->b, PIPE_SHADER_COMPUTE, 0, num_buffers, buffers,
+   si_set_shader_buffers(&sctx->b, MESA_SHADER_COMPUTE, 0, num_buffers, buffers,
                          writeable_bitmask,
                          true /* don't update bind_history to prevent unnecessary syncs later */);
 
@@ -81,7 +81,7 @@ void si_launch_grid_internal_ssbos(struct si_context *sctx, struct pipe_grid_inf
    si_compute_end_internal(sctx);
 
    /* Restore states. */
-   sctx->b.set_shader_buffers(&sctx->b, PIPE_SHADER_COMPUTE, 0, num_buffers, saved_sb,
+   sctx->b.set_shader_buffers(&sctx->b, MESA_SHADER_COMPUTE, 0, num_buffers, saved_sb,
                               saved_writable_mask);
    for (int i = 0; i < num_buffers; i++)
       pipe_resource_reference(&saved_sb[i].buffer, NULL);
@@ -323,19 +323,19 @@ static void si_compute_save_and_bind_images(struct si_context *sctx, unsigned nu
       }
 
       /* Save the image. */
-      util_copy_image_view(&saved_images[i], &sctx->images[PIPE_SHADER_COMPUTE].views[i]);
+      util_copy_image_view(&saved_images[i], &sctx->images[MESA_SHADER_COMPUTE].views[i]);
    }
 
    /* This must be before the barrier and si_compute_begin_internal because it might invoke DCC
     * decompression.
     */
-   sctx->b.set_shader_images(&sctx->b, PIPE_SHADER_COMPUTE, 0, num_images, 0, images);
+   sctx->b.set_shader_images(&sctx->b, MESA_SHADER_COMPUTE, 0, num_images, 0, images);
 }
 
 static void si_compute_restore_images(struct si_context *sctx, unsigned num_images,
                                       struct pipe_image_view *saved_images)
 {
-   sctx->b.set_shader_images(&sctx->b, PIPE_SHADER_COMPUTE, 0, num_images, 0, saved_images);
+   sctx->b.set_shader_images(&sctx->b, MESA_SHADER_COMPUTE, 0, num_images, 0, saved_images);
    for (unsigned i = 0; i < num_images; i++)
       pipe_resource_reference(&saved_images[i].resource, NULL);
 }
@@ -449,7 +449,7 @@ void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex
 
    /* Save states. */
    struct pipe_image_view saved_image = {0};
-   util_copy_image_view(&saved_image, &sctx->images[PIPE_SHADER_COMPUTE].views[0]);
+   util_copy_image_view(&saved_image, &sctx->images[MESA_SHADER_COMPUTE].views[0]);
 
    /* Bind the image. */
    struct pipe_image_view image = {0};
@@ -461,7 +461,7 @@ void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex
    if (is_array)
       image.u.tex.last_layer = tex->array_size - 1;
 
-   ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, 0, &image);
+   ctx->set_shader_images(ctx, MESA_SHADER_COMPUTE, 0, 1, 0, &image);
 
    /* Bind the shader. */
    void **shader = &sctx->cs_fmask_expand[log_samples - 1][is_array];
@@ -479,7 +479,7 @@ void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex
    si_barrier_after_internal_op(sctx, 0, 0, NULL, 0, 1, &image);
 
    /* Restore previous states. */
-   ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, 0, &saved_image);
+   ctx->set_shader_images(ctx, MESA_SHADER_COMPUTE, 0, 1, 0, &saved_image);
    pipe_resource_reference(&saved_image.resource, NULL);
 
    /* Array of fully expanded FMASK values, arranged by [log2(fragments)][log2(samples)-1]. */

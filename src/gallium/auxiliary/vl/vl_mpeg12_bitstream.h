@@ -31,6 +31,8 @@
 #include "vl_defines.h"
 #include "util/vl_vlc.h"
 
+struct pipe_video_buffer;
+
 struct vl_mpg12_bs
 {
    struct pipe_video_codec *decoder;

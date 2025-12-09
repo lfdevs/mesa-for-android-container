@@ -122,7 +122,7 @@ virgl_tgsi_transform_declaration(struct tgsi_transform_context *ctx,
          break;
       case TGSI_SEMANTIC_COLOR:
          /* Vertex front/backface color output also has issues with writemasking */
-         if (vtctx->base.processor != PIPE_SHADER_FRAGMENT)
+         if (vtctx->base.processor != MESA_SHADER_FRAGMENT)
             vtctx->writemask_fixup_outs[vtctx->num_writemask_fixups++] = decl->Range.First;
          break;
       }

@@ -165,7 +165,7 @@ fs_live_variables::compute_live_variables()
       foreach_block (block, cfg) {
          const struct block_data *bd = &block_data[block->num];
 
-         foreach_list_typed(elk_bblock_link, child_link, link, &block->children) {
+         brw_foreach_list_typed(elk_bblock_link, child_link, link, &block->children) {
             struct block_data *child_bd = &block_data[child_link->block->num];
 
             for (int i = 0; i < bitset_words; i++) {
@@ -185,7 +185,7 @@ fs_live_variables::compute_live_variables()
          struct block_data *bd = &block_data[block->num];
 
          /* Update liveout */
-         foreach_list_typed(elk_bblock_link, child_link, link, &block->children) {
+         brw_foreach_list_typed(elk_bblock_link, child_link, link, &block->children) {
             struct block_data *child_bd = &block_data[child_link->block->num];
 
             for (int i = 0; i < bitset_words; i++) {

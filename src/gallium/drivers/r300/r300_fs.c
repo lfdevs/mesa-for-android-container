@@ -204,7 +204,7 @@ static void r300_dummy_fragment_shader(
     struct ureg_src imm;
 
     /* Make a simple fragment shader which outputs (0, 0, 0, 1) */
-    ureg = ureg_create(PIPE_SHADER_FRAGMENT);
+    ureg = ureg_create(MESA_SHADER_FRAGMENT);
     out = ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0);
     imm = ureg_imm4f(ureg, 0, 0, 0, 1);
 

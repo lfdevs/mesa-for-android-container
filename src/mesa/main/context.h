@@ -484,6 +484,21 @@ _mesa_has_texture_cube_map_array(const struct gl_context *ctx)
 }
 
 static inline bool
+_mesa_has_texture_buffer_object(const struct gl_context *ctx)
+{
+   return _mesa_has_ARB_texture_buffer_object(ctx) ||
+          _mesa_has_OES_texture_buffer(ctx) ||
+          (_mesa_is_desktop_gl(ctx) && ctx->Version >= 31);
+}
+
+static inline bool
+_mesa_has_texture_buffer_range(const struct gl_context *ctx)
+{
+   return _mesa_has_ARB_texture_buffer_range(ctx) ||
+          _mesa_has_OES_texture_buffer(ctx);
+}
+
+static inline bool
 _mesa_has_texture_view(const struct gl_context *ctx)
 {
    return _mesa_has_ARB_texture_view(ctx) ||
@@ -541,6 +556,8 @@ _mesa_has_internalformat_query(const struct gl_context *ctx)
           _mesa_is_gles3(ctx);
 }
 
+void
+_mesa_clear_releasebufs(struct gl_context *ctx);
 #ifdef __cplusplus
 }
 #endif

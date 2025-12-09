@@ -82,7 +82,8 @@ bool gl_nir_link_uniforms(const struct gl_constants *consts,
                           struct gl_shader_program *prog,
                           bool fill_parameters);
 
-bool gl_nir_link_varyings(const struct gl_constants *consts,
+bool gl_nir_link_varyings(const struct pipe_screen *screen,
+                          const struct gl_constants *consts,
                           const struct gl_extensions *exts,
                           gl_api api, struct gl_shader_program *prog);
 

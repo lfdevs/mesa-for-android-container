@@ -38,8 +38,6 @@
 
 #include "pipe/p_state.h"
 #include "util/format/u_formats.h"
-#include "util/u_debug.h"
-#include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_type.h"
 #include "gallivm/lp_bld_swizzle.h"
 

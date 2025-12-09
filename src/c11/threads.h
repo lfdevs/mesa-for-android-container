@@ -118,8 +118,10 @@ typedef pthread_cond_t  cnd_t;
 typedef pthread_t       thrd_t;
 typedef pthread_key_t   tss_t;
 typedef pthread_mutex_t mtx_t;
+#ifndef __once_flag_defined
 typedef pthread_once_t  once_flag;
 #  define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
+#endif
 #  ifdef PTHREAD_DESTRUCTOR_ITERATIONS
 #    define TSS_DTOR_ITERATIONS PTHREAD_DESTRUCTOR_ITERATIONS
 #  else

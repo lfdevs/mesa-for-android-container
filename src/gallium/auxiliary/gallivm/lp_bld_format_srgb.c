@@ -67,8 +67,7 @@
  */
 
 
-#include "util/u_debug.h"
-#include "util/u_math.h"
+#include <math.h>
 
 #include "lp_bld_type.h"
 #include "lp_bld_const.h"

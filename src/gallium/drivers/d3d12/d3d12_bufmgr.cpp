@@ -197,7 +197,7 @@ d3d12_bo_unreference(struct d3d12_bo *bo)
       typedef struct d3d12_context d3d12_context_type;
       list_for_each_entry(d3d12_context_type, ctx, &bo->screen->context_list, context_list_entry)
          if (ctx->id == D3D12_CONTEXT_NO_ID)
-            util_dynarray_append(&ctx->recently_destroyed_bos, uint64_t, bo->unique_id);
+            util_dynarray_append_typed(&ctx->recently_destroyed_bos, uint64_t, bo->unique_id);
 
       mtx_unlock(&bo->screen->submit_mutex);
 

@@ -25,7 +25,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "pvr_bo.h"
-#include "pvr_private.h"
+#include "pvr_device.h"
 #include "pvr_robustness.h"
 #include "util/u_math.h"
 
@@ -61,7 +61,7 @@ VkResult pvr_init_robustness_buffer(struct pvr_device *device)
    VkResult result;
 
 #define ROBUSTNESS_BUFFER_OFFSET_ALIGN16(cur_offset, add) \
-   ((uint16_t)ALIGN((cur_offset + (uint16_t)(add)), 16))
+   ((uint16_t)align((cur_offset + (uint16_t)(add)), 16))
 
    robustness_buffer_offsets[PVR_ROBUSTNESS_BUFFER_FORMAT_UINT64] = offset;
    offset = ROBUSTNESS_BUFFER_OFFSET_ALIGN16(offset, sizeof(uint64_t) * 4);

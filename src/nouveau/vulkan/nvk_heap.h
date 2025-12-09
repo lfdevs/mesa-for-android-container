@@ -35,6 +35,12 @@ VkResult nvk_heap_upload(struct nvk_device *dev, struct nvk_heap *heap,
 void nvk_heap_free(struct nvk_device *dev, struct nvk_heap *heap,
                    uint64_t addr, uint64_t size);
 
+static void
+nvk_heap_flush_maps(struct nvk_device *dev, struct nvk_heap *heap)
+{
+   nvk_mem_arena_flush_map(dev, &heap->arena);
+}
+
 static inline uint64_t
 nvk_heap_contiguous_base_address(struct nvk_heap *heap)
 {

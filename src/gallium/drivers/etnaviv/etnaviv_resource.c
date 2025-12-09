@@ -28,6 +28,7 @@
 
 #include "etnaviv_context.h"
 #include "etnaviv_debug.h"
+#include "etnaviv_format.h"
 #include "etnaviv_rs.h"
 #include "etnaviv_screen.h"
 #include "etnaviv_translate.h"
@@ -51,7 +52,7 @@ static enum etna_surface_layout modifier_to_layout(uint64_t modifier)
    case DRM_FORMAT_MOD_LINEAR:
       return ETNA_LAYOUT_LINEAR;
    default:
-      unreachable("unhandled modifier");
+      UNREACHABLE("unhandled modifier");
    }
 }
 
@@ -156,6 +157,10 @@ etna_resource_can_use_ts(struct etna_screen *screen,
 
    /* Can be handled by the resolve engine */
    if (!etna_resource_hw_tileable(screen->specs.use_blt, prsc))
+      return false;
+
+   /* Do not use TS for emulated 128 bit formats */
+   if (format_is_128bit(prsc->format))
       return false;
 
    return true;
@@ -304,6 +309,7 @@ setup_miptree(struct etna_resource *rsc, unsigned paddingX, unsigned paddingY,
               unsigned msaa_xscale, unsigned msaa_yscale)
 {
    struct pipe_resource *prsc = &rsc->base;
+   enum pipe_format fmt = translate_format_128bit_to_64bit(prsc->format);
    unsigned level, size = 0;
    unsigned width = prsc->width0;
    unsigned height = prsc->height0;
@@ -317,10 +323,13 @@ setup_miptree(struct etna_resource *rsc, unsigned paddingX, unsigned paddingY,
       mip->depth = depth;
       mip->padded_width = align(width * msaa_xscale, paddingX);
       mip->padded_height = align(height * msaa_yscale, paddingY);
-      mip->stride = util_format_get_stride(prsc->format, mip->padded_width);
+      mip->stride = util_format_get_stride(fmt, mip->padded_width);
       mip->offset = size;
-      mip->layer_stride = mip->stride * util_format_get_nblocksy(prsc->format, mip->padded_height);
+      mip->layer_stride = mip->stride * util_format_get_nblocksy(fmt, mip->padded_height);
       mip->size = prsc->array_size * mip->layer_stride;
+
+      if (format_is_128bit(prsc->format))
+         mip->size *= 2;
 
       /* align levels to 64 bytes to be able to render to them */
       size += align(mip->size, ETNA_PE_ALIGNMENT) * depth;
@@ -390,7 +399,7 @@ etna_layout_multiple(const struct etna_screen *screen,
       *halign = TEXTURE_HALIGN_SPLIT_SUPER_TILED;
       break;
    default:
-      unreachable("Unhandled layout");
+      UNREACHABLE("Unhandled layout");
    }
 }
 
@@ -575,6 +584,10 @@ etna_resource_create(struct pipe_screen *pscreen,
       if (screen->specs.can_supertile)
          layout |= ETNA_LAYOUT_BIT_SUPER;
    }
+
+   /* 128 bit format needs to be CPU tiled specially */
+   if (format_is_128bit(templat->format))
+      layout = ETNA_LAYOUT_TILED;
 
    if (/* linear base or scanout without modifier requested */
        (templat->bind & (PIPE_BIND_LINEAR | PIPE_BIND_SCANOUT)) ||

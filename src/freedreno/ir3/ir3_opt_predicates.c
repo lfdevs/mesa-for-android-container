@@ -30,6 +30,26 @@ struct opt_predicates_ctx {
    struct hash_table *predicate_clones;
 };
 
+static bool
+cat2_all_srcs_have_flag(struct ir3_instruction *instr, unsigned flags)
+{
+   return (instr->srcs[0]->flags & flags) &&
+          (instr->srcs_count == 1 || (instr->srcs[1]->flags & flags));
+}
+
+static bool
+cat2_needs_scalar_alu(struct ir3_instruction *instr)
+{
+   return cat2_all_srcs_have_flag(instr, IR3_REG_CONST | IR3_REG_SHARED);
+}
+
+static bool
+cat2_may_use_scalar_alu(struct ir3_instruction *instr)
+{
+   return cat2_all_srcs_have_flag(
+      instr, IR3_REG_CONST | IR3_REG_SHARED | IR3_REG_IMMED);
+}
+
 static struct ir3_instruction *
 clone_with_predicate_dst(struct opt_predicates_ctx *ctx,
                          struct ir3_instruction *instr)
@@ -45,21 +65,14 @@ clone_with_predicate_dst(struct opt_predicates_ctx *ctx,
    ir3_instr_move_after(clone, instr);
    clone->dsts[0]->flags |= IR3_REG_PREDICATE;
    clone->dsts[0]->flags &= ~(IR3_REG_HALF | IR3_REG_SHARED);
+
+   if (ctx->ir->compiler->has_scalar_predicates && opc_cat(instr->opc) == 2 &&
+       cat2_may_use_scalar_alu(instr)) {
+      clone->dsts[0]->flags |= IR3_REG_UNIFORM;
+   }
+
    _mesa_hash_table_insert(ctx->predicate_clones, instr, clone);
    return clone;
-}
-
-static bool
-is_shared_or_const(struct ir3_register *reg)
-{
-   return reg->flags & (IR3_REG_CONST | IR3_REG_SHARED);
-}
-
-static bool
-cat2_needs_scalar_alu(struct ir3_instruction *instr)
-{
-   return is_shared_or_const(instr->srcs[0]) &&
-          (instr->srcs_count == 1 || is_shared_or_const(instr->srcs[1]));
 }
 
 static bool
@@ -70,14 +83,16 @@ can_write_predicate(struct opt_predicates_ctx *ctx,
    case OPC_CMPS_S:
    case OPC_CMPS_U:
    case OPC_CMPS_F:
-      return !cat2_needs_scalar_alu(instr);
+      return !cat2_needs_scalar_alu(instr) ||
+             ctx->ir->compiler->has_scalar_predicates;
    case OPC_AND_B:
    case OPC_OR_B:
    case OPC_NOT_B:
    case OPC_XOR_B:
    case OPC_GETBIT_B:
       return ctx->ir->compiler->bitops_can_write_predicates &&
-             !cat2_needs_scalar_alu(instr);
+             (!cat2_needs_scalar_alu(instr) ||
+              ctx->ir->compiler->has_scalar_predicates);
    default:
       return false;
    }

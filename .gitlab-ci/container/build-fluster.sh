@@ -18,7 +18,7 @@ section_start fluster "Installing Fluster"
 # setting up the environment variables locally
 ci_tag_build_time_check "FLUSTER_TAG"
 
-FLUSTER_REVISION="e997402978f62428fffc8e5a4a709690d9ca9bc5"
+FLUSTER_REVISION="3dad9c71f4d5eacbb692be6b328a645822b591d6"
 
 git clone https://github.com/fluendo/fluster.git --single-branch --no-checkout
 
@@ -38,7 +38,7 @@ else
     # When updating FLUSTER_REVISION, make sure to update the vectors if necessary or
     # fluster-runner will report Missing results.
     fluster/fluster.py download -j ${FDO_CI_CONCURRENT:-4} \
-	JVT-AVC_V1 JVT-FR-EXT JVT-MVC JVT-SVC_V1 \
+	JVT-AVC_V1 JVT-FR-EXT JVT-MVC JVT-Professional_profiles JVT-SVC \
 	JCT-VC-3D-HEVC JCT-VC-HEVC_V1 JCT-VC-MV-HEVC JCT-VC-RExt JCT-VC-SCC JCT-VC-SHVC \
 	VP9-TEST-VECTORS-HIGH VP9-TEST-VECTORS
 

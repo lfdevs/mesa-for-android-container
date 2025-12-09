@@ -64,6 +64,11 @@ struct radv_image {
     */
    uint64_t tc_compat_zrange_offset;
 
+   /* Metadata for the HiZ workaround on GFX12 with both depth and stencil planes. It's used to
+    * track whether HiZ metadata are in-sync with main image data, per-level.
+    */
+   uint64_t hiz_valid_offset;
+
    /* For VK_ANDROID_native_buffer, the WSI image owns the memory, */
    VkDeviceMemory owned_memory;
 
@@ -194,16 +199,32 @@ radv_tc_compat_htile_enabled(const struct radv_image *image, unsigned level)
 static inline bool
 radv_image_tile_stencil_disabled(const struct radv_device *device, const struct radv_image *image)
 {
+   if (vk_format_has_stencil(image->vk.format))
+      return false;
+
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (pdev->info.gfx_level >= GFX9) {
-      return !vk_format_has_stencil(image->vk.format) && !radv_image_has_vrs_htile(device, image);
-   } else {
-      /* Due to a hw bug, TILE_STENCIL_DISABLE must be set to 0 for
-       * the TC-compat ZRANGE issue even if no stencil is used.
-       */
-      return !vk_format_has_stencil(image->vk.format) && !radv_image_is_tc_compat_htile(image);
-   }
+   /* Need to use the base and delta Z encoding for the workaround. */
+   if (pdev->info.has_htile_tc_z_clear_bug_without_stencil && radv_image_is_tc_compat_htile(image))
+      return false;
+
+   return !radv_image_has_vrs_htile(device, image);
+}
+
+/**
+ * Return whether the image requires setting ZRANGE_PRECISION based on the last depth clear value to work around the
+ * hardware bug that may cause the HTILE depth clear value used by the TC to be changed.
+ */
+static inline bool
+radv_image_has_tc_compat_zrange_metadata(const struct radv_device *device, const struct radv_image *image)
+{
+   if (!radv_image_is_tc_compat_htile(image))
+      return false;
+
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   return radv_image_tile_stencil_disabled(device, image) ? pdev->info.has_htile_tc_z_clear_bug_without_stencil
+                                                          : pdev->info.has_htile_tc_z_clear_bug_with_stencil;
 }
 
 static inline bool
@@ -262,6 +283,16 @@ radv_get_ds_clear_value_va(const struct radv_image *image, uint32_t base_level)
    return va;
 }
 
+static inline uint64_t
+radv_get_hiz_valid_va(const struct radv_image *image, uint32_t base_level)
+{
+   assert(image->hiz_valid_offset != 0);
+
+   uint64_t va = image->bindings[0].addr;
+   va += image->hiz_valid_offset + base_level * 4;
+   return va;
+}
+
 static inline uint32_t
 radv_get_htile_initial_value(const struct radv_device *device, const struct radv_image *image)
 {
@@ -299,6 +330,31 @@ radv_get_htile_initial_value(const struct radv_device *device, const struct radv
    }
 
    return initial_value;
+}
+
+static inline uint32_t
+radv_gfx12_get_hiz_initial_value(void)
+{
+   const uint16_t zmin = 0;
+   const uint16_t zmax = 0xffff;
+
+   /* The first component is the minimum value accross the s-tile, and the second component is the
+    * maximum value.
+    */
+   return zmin | (zmax << 16);
+}
+
+static inline uint32_t
+radv_gfx12_get_hiz_clear_value(VkClearDepthStencilValue value)
+{
+   const uint32_t max_zval = UINT16_MAX;
+   uint32_t zmin, zmax;
+
+   zmin = lroundf(value.depth * max_zval);
+   zmin &= max_zval;
+   zmax = zmin;
+
+   return zmin | (zmax << 16);
 }
 
 static inline bool

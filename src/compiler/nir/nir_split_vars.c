@@ -95,7 +95,10 @@ num_array_levels_in_array_of_vector_type(const struct glsl_type *type)
 {
    int num_levels = 0;
    while (true) {
-      if (glsl_type_is_array_or_matrix(type)) {
+      if (glsl_type_is_interface(type)) {
+         /* Don't bother with aliased shared memory. */
+         return -1;
+      } else if (glsl_type_is_array_or_matrix(type)) {
          num_levels++;
          type = glsl_get_array_element(type);
       } else if (glsl_type_is_vector_or_scalar(type) &&
@@ -120,25 +123,31 @@ gather_constant_initializers(nir_constant *src,
                              nir_variable *var,
                              const struct glsl_type *type,
                              struct field *field,
-                             struct split_var_state *state)
+                             void *mem_ctx)
 {
    if (!src)
       return NULL;
    if (glsl_type_is_array(type)) {
       const struct glsl_type *element = glsl_get_array_element(type);
       assert(src->num_elements == glsl_get_length(type));
-      nir_constant *dst = rzalloc(var, nir_constant);
+      nir_constant *dst = rzalloc(mem_ctx, nir_constant);
       dst->num_elements = src->num_elements;
-      dst->elements = rzalloc_array(var, nir_constant *, src->num_elements);
-      for (unsigned i = 0; i < src->num_elements; ++i) {
-         dst->elements[i] = gather_constant_initializers(src->elements[i], var, element, field, state);
+      if (dst->num_elements) {
+         dst->elements = rzalloc_array(dst, nir_constant *, src->num_elements);
+         for (unsigned i = 0; i < src->num_elements; ++i) {
+            dst->elements[i] = gather_constant_initializers(src->elements[i], var,
+                                                            element, field, dst);
+         }
       }
       return dst;
    } else if (glsl_type_is_struct(type)) {
       const struct glsl_type *element = glsl_get_struct_field(type, field->current_index);
-      return gather_constant_initializers(src->elements[field->current_index], var, element, &field->fields[field->current_index], state);
+      return gather_constant_initializers(src->elements[field->current_index],
+                                          var, element,
+                                          &field->fields[field->current_index],
+                                          mem_ctx);
    } else {
-      return nir_constant_clone(src, var);
+      return nir_constant_clone(src, mem_ctx);
    }
 }
 
@@ -190,7 +199,7 @@ init_field_for_type(struct field *field, struct field *parent,
       field->var->data.ray_query = state->base_var->data.ray_query;
       field->var->constant_initializer = gather_constant_initializers(state->base_var->constant_initializer,
                                                                       field->var, state->base_var->type,
-                                                                      root, state);
+                                                                      root, state->shader);
    }
 }
 
@@ -326,7 +335,7 @@ split_struct_derefs_impl(nir_function_impl *impl,
                break;
 
             default:
-               unreachable("Invalid deref type in path");
+               UNREACHABLE("Invalid deref type in path");
             }
          }
 
@@ -348,8 +357,8 @@ bool
 nir_split_struct_vars(nir_shader *shader, nir_variable_mode modes)
 {
    void *mem_ctx = ralloc_context(NULL);
-   struct hash_table *var_field_map =
-      _mesa_pointer_hash_table_create(mem_ctx);
+   struct hash_table var_field_map;
+   _mesa_pointer_hash_table_init(&var_field_map, mem_ctx);
    struct set *complex_vars = NULL;
 
    bool has_global_splits = false;
@@ -358,7 +367,7 @@ nir_split_struct_vars(nir_shader *shader, nir_variable_mode modes)
       has_global_splits = split_var_list_structs(shader, NULL,
                                                  &shader->variables,
                                                  global_modes,
-                                                 var_field_map,
+                                                 &var_field_map,
                                                  &complex_vars,
                                                  mem_ctx);
    }
@@ -370,13 +379,13 @@ nir_split_struct_vars(nir_shader *shader, nir_variable_mode modes)
          has_local_splits = split_var_list_structs(shader, impl,
                                                    &impl->locals,
                                                    nir_var_function_temp,
-                                                   var_field_map,
+                                                   &var_field_map,
                                                    &complex_vars,
                                                    mem_ctx);
       }
 
       if (has_global_splits || has_local_splits) {
-         split_struct_derefs_impl(impl, var_field_map,
+         split_struct_derefs_impl(impl, &var_field_map,
                                   modes, mem_ctx);
 
          progress = nir_progress(true, impl, nir_metadata_control_flow);
@@ -909,15 +918,17 @@ bool
 nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
 {
    void *mem_ctx = ralloc_context(NULL);
-   struct hash_table *var_info_map = _mesa_pointer_hash_table_create(mem_ctx);
+   struct hash_table var_info_map;
    struct set *complex_vars = NULL;
+
+   _mesa_pointer_hash_table_init(&var_info_map, mem_ctx);
 
    bool has_global_array = false;
    if (modes & (~nir_var_function_temp)) {
       has_global_array = init_var_list_array_infos(shader,
                                                    &shader->variables,
                                                    modes,
-                                                   var_info_map,
+                                                   &var_info_map,
                                                    &complex_vars,
                                                    mem_ctx);
    }
@@ -929,14 +940,14 @@ nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
          has_local_array = init_var_list_array_infos(shader,
                                                      &impl->locals,
                                                      nir_var_function_temp,
-                                                     var_info_map,
+                                                     &var_info_map,
                                                      &complex_vars,
                                                      mem_ctx);
       }
 
       if (has_global_array || has_local_array) {
          has_any_array = true;
-         mark_array_usage_impl(impl, var_info_map, modes, mem_ctx);
+         mark_array_usage_impl(impl, &var_info_map, modes, mem_ctx);
       }
    }
 
@@ -952,7 +963,7 @@ nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
       has_global_splits = split_var_list_arrays(shader, NULL,
                                                 &shader->variables,
                                                 modes,
-                                                var_info_map, mem_ctx);
+                                                &var_info_map, mem_ctx);
    }
 
    bool progress = false;
@@ -962,12 +973,12 @@ nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
          has_local_splits = split_var_list_arrays(shader, impl,
                                                   &impl->locals,
                                                   nir_var_function_temp,
-                                                  var_info_map, mem_ctx);
+                                                  &var_info_map, mem_ctx);
       }
 
       if (has_global_splits || has_local_splits) {
-         split_array_copies_impl(impl, var_info_map, modes, mem_ctx);
-         split_array_access_impl(impl, var_info_map, modes, mem_ctx);
+         split_array_copies_impl(impl, &var_info_map, modes, mem_ctx);
+         split_array_access_impl(impl, &var_info_map, modes, mem_ctx);
 
          progress = nir_progress(true, impl, nir_metadata_control_flow);
       } else {
@@ -980,12 +991,32 @@ nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
    return progress;
 }
 
+static nir_constant *
+create_null_constant(void *ctx, const struct glsl_type *type)
+{
+   nir_constant *c = rzalloc(ctx, nir_constant);
+   c->is_null_constant = true;
+   if (glsl_type_is_array_or_matrix(type)) {
+      c->num_elements = glsl_get_length(type);
+      c->elements = ralloc_array(ctx, nir_constant *, c->num_elements);
+
+      c->elements[0] = create_null_constant(ctx, glsl_get_array_element(type));
+      for (unsigned i = 1; i < c->num_elements; i++)
+         c->elements[i] = c->elements[0];
+   } else {
+      assert(glsl_type_is_vector_or_scalar(type));
+   }
+
+   return c;
+}
+
 struct array_level_usage {
    unsigned array_len;
 
-   /* The value UINT_MAX will be used to indicate an indirect */
-   unsigned max_read;
-   unsigned max_written;
+   unsigned max_read_constant;
+   unsigned max_read_indirect;
+   unsigned max_written_constant;
+   unsigned max_written_indirect;
 
    /* True if there is a copy that isn't to/from a shrinkable array */
    bool has_external_copy;
@@ -1099,6 +1130,7 @@ mark_deref_used(nir_deref_instr *deref,
                 nir_component_mask_t comps_written,
                 nir_deref_instr *copy_deref,
                 struct hash_table *var_usage_map,
+                struct hash_table *range_ht,
                 nir_variable_mode modes,
                 void *mem_ctx)
 {
@@ -1153,8 +1185,11 @@ mark_deref_used(nir_deref_instr *deref,
              deref->deref_type == nir_deref_type_array_wildcard);
 
       unsigned max_used;
+      bool indirect = false;
       if (deref->deref_type == nir_deref_type_array) {
-         max_used = nir_src_is_const(deref->arr.index) ? nir_src_as_uint(deref->arr.index) : UINT_MAX;
+         indirect = !nir_src_is_const(deref->arr.index);
+         nir_shader *shader = nir_cf_node_get_function(&deref->instr.block->cf_node)->function->shader;
+         max_used = nir_unsigned_upper_bound(shader, range_ht, nir_get_scalar(deref->arr.index.ssa, 0));
       } else {
          /* For wildcards, we read or wrote the whole thing. */
          assert(deref->deref_type == nir_deref_type_array_wildcard);
@@ -1182,10 +1217,18 @@ mark_deref_used(nir_deref_instr *deref,
          }
       }
 
-      if (comps_written)
-         level->max_written = MAX2(level->max_written, max_used);
-      if (comps_read)
-         level->max_read = MAX2(level->max_read, max_used);
+      if (comps_written) {
+         if (indirect)
+            level->max_written_indirect = MAX2(level->max_written_indirect, max_used);
+         else
+            level->max_written_constant = MAX2(level->max_written_constant, max_used);
+      }
+      if (comps_read) {
+         if (indirect)
+            level->max_read_indirect = MAX2(level->max_read_indirect, max_used);
+         else
+            level->max_read_constant = MAX2(level->max_read_constant, max_used);
+      }
    }
 }
 
@@ -1215,7 +1258,7 @@ get_non_self_referential_store_comps(nir_intrinsic_instr *store)
 {
    nir_component_mask_t comps = nir_intrinsic_write_mask(store);
 
-   nir_instr *src_instr = store->src[1].ssa->parent_instr;
+   nir_instr *src_instr = nir_def_instr(store->src[1].ssa);
    if (src_instr->type != nir_instr_type_alu)
       return comps;
 
@@ -1248,6 +1291,7 @@ get_non_self_referential_store_comps(nir_intrinsic_instr *store)
 static void
 find_used_components_impl(nir_function_impl *impl,
                           struct hash_table *var_usage_map,
+                          struct hash_table *range_ht,
                           nir_variable_mode modes,
                           void *mem_ctx)
 {
@@ -1266,23 +1310,30 @@ find_used_components_impl(nir_function_impl *impl,
          case nir_intrinsic_load_deref:
             mark_deref_used(nir_src_as_deref(intrin->src[0]),
                             nir_def_components_read(&intrin->def), 0,
-                            NULL, var_usage_map, modes, mem_ctx);
+                            NULL, var_usage_map, range_ht, modes, mem_ctx);
             break;
 
          case nir_intrinsic_store_deref:
             mark_deref_used(nir_src_as_deref(intrin->src[0]),
                             0, get_non_self_referential_store_comps(intrin),
-                            NULL, var_usage_map, modes, mem_ctx);
+                            NULL, var_usage_map, range_ht, modes, mem_ctx);
             break;
 
          case nir_intrinsic_copy_deref: {
             /* Just mark everything used for copies. */
             nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
             nir_deref_instr *src = nir_src_as_deref(intrin->src[1]);
-            mark_deref_used(dst, 0, ~0, src, var_usage_map, modes, mem_ctx);
-            mark_deref_used(src, ~0, 0, dst, var_usage_map, modes, mem_ctx);
+            mark_deref_used(dst, 0, ~0, src, var_usage_map, range_ht, modes, mem_ctx);
+            mark_deref_used(src, ~0, 0, dst, var_usage_map, range_ht, modes, mem_ctx);
             break;
          }
+
+         case nir_intrinsic_deref_atomic:
+         case nir_intrinsic_deref_atomic_swap:
+            mark_deref_used(nir_src_as_deref(intrin->src[0]),
+                            1, 1,
+                            NULL, var_usage_map, range_ht, modes, mem_ctx);
+            break;
 
          default:
             break;
@@ -1292,8 +1343,9 @@ find_used_components_impl(nir_function_impl *impl,
 }
 
 static bool
-shrink_vec_var_list(struct exec_list *vars,
-                    nir_variable_mode mode,
+shrink_vec_var_list(nir_shader *shader,
+                    struct exec_list *vars,
+                    nir_variable_mode modes,
                     struct hash_table *var_usage_map)
 {
    /* Initialize the components kept field of each variable.  This is the
@@ -1313,7 +1365,7 @@ shrink_vec_var_list(struct exec_list *vars,
     * to leave components and array_len of any wildcards alone.
     */
    nir_foreach_variable_in_list(var, vars) {
-      if (var->data.mode != mode)
+      if (!(var->data.mode & modes))
          continue;
 
       struct vec_var_usage *usage =
@@ -1321,21 +1373,33 @@ shrink_vec_var_list(struct exec_list *vars,
       if (!usage)
          continue;
 
+      /* Zero inited shared memory is always written.
+       * All other initializer should be lowered before this pass.
+       */
+      assert(!var->constant_initializer || var->constant_initializer->is_null_constant);
+      bool zero_init = var->constant_initializer;
       assert(usage->comps_kept == 0);
       if (usage->has_external_copy || usage->has_complex_use)
          usage->comps_kept = usage->all_comps;
+      else if (zero_init)
+         usage->comps_kept = usage->comps_read;
       else
          usage->comps_kept = usage->comps_read & usage->comps_written;
 
       for (unsigned i = 0; i < usage->num_levels; i++) {
          struct array_level_usage *level = &usage->levels[i];
-         assert(level->array_len > 0);
 
-         if (level->max_written == UINT_MAX || level->has_external_copy ||
-             usage->has_complex_use)
+         if (level->has_external_copy || usage->has_complex_use)
             continue; /* Can't shrink */
 
-         unsigned max_used = MIN2(level->max_read, level->max_written);
+         /* XXX: This assumes out of bounds reads only give an undefined result,
+          * but do not cause full undefined behavior, for example a gpu hang.
+          */
+         unsigned max_read = MAX2(level->max_read_indirect, level->max_read_constant);
+         unsigned max_writen_constant = zero_init ? UINT_MAX : level->max_written_constant;
+
+         /* Constant OOB writes will be removed, but indirect writes must remain in bounds. */
+         unsigned max_used = MAX2(MIN2(max_read, max_writen_constant), level->max_written_indirect);
          level->array_len = MIN2(max_used, level->array_len - 1) + 1;
       }
    }
@@ -1349,7 +1413,7 @@ shrink_vec_var_list(struct exec_list *vars,
    do {
       fp_progress = false;
       nir_foreach_variable_in_list(var, vars) {
-         if (var->data.mode != mode)
+         if (!(var->data.mode & modes))
             continue;
 
          struct vec_var_usage *var_usage =
@@ -1389,7 +1453,7 @@ shrink_vec_var_list(struct exec_list *vars,
 
    bool vars_shrunk = false;
    nir_foreach_variable_in_list_safe(var, vars) {
-      if (var->data.mode != mode)
+      if (!(var->data.mode & modes))
          continue;
 
       struct vec_var_usage *usage =
@@ -1413,7 +1477,6 @@ shrink_vec_var_list(struct exec_list *vars,
             shrunk = true;
          vec_type = glsl_get_array_element(vec_type);
       }
-      assert(glsl_type_is_vector_or_scalar(vec_type));
 
       assert(usage->comps_kept == (usage->comps_kept & usage->all_comps));
       if (usage->comps_kept != usage->all_comps)
@@ -1425,6 +1488,7 @@ shrink_vec_var_list(struct exec_list *vars,
          exec_node_remove(&var->node);
          continue;
       }
+      assert(glsl_type_is_vector_or_scalar(vec_type));
 
       if (!shrunk) {
          /* This variable doesn't need to be shrunk.  Remove it from the
@@ -1454,6 +1518,10 @@ shrink_vec_var_list(struct exec_list *vars,
          }
       }
       var->type = new_type;
+      if (var->constant_initializer) {
+         assert(var->constant_initializer->is_null_constant);
+         var->constant_initializer = create_null_constant(shader, new_type);
+      }
 
       vars_shrunk = true;
    }
@@ -1607,9 +1675,7 @@ shrink_vec_var_access_impl(nir_function_impl *impl,
                }
                nir_def *vec = nir_vec(&b, vec_srcs, intrin->num_components);
 
-               nir_def_rewrite_uses_after(&intrin->def,
-                                          vec,
-                                          vec->parent_instr);
+               nir_def_rewrite_uses_after(&intrin->def, vec);
 
                /* The SSA def is now only used by the swizzle.  It's safe to
                 * shrink the number of components.
@@ -1683,12 +1749,15 @@ function_impl_has_vars_with_modes(nir_function_impl *impl,
 bool
 nir_shrink_vec_array_vars(nir_shader *shader, nir_variable_mode modes)
 {
-   assert((modes & (nir_var_shader_temp | nir_var_function_temp)) == modes);
+   assert((modes & (nir_var_shader_temp | nir_var_function_temp | nir_var_mem_shared)) == modes);
 
    void *mem_ctx = ralloc_context(NULL);
 
-   struct hash_table *var_usage_map =
-      _mesa_pointer_hash_table_create(mem_ctx);
+   struct hash_table var_usage_map;
+   _mesa_pointer_hash_table_init(&var_usage_map, mem_ctx);
+
+   struct hash_table range_ht;
+   _mesa_pointer_hash_table_init(&range_ht, mem_ctx);
 
    bool has_vars_to_shrink = false;
    nir_foreach_function_impl(impl, shader) {
@@ -1698,7 +1767,7 @@ nir_shrink_vec_array_vars(nir_shader *shader, nir_variable_mode modes)
        */
       if (function_impl_has_vars_with_modes(impl, modes)) {
          has_vars_to_shrink = true;
-         find_used_components_impl(impl, var_usage_map,
+         find_used_components_impl(impl, &var_usage_map, &range_ht,
                                    modes, mem_ctx);
       }
    }
@@ -1709,23 +1778,26 @@ nir_shrink_vec_array_vars(nir_shader *shader, nir_variable_mode modes)
    }
 
    bool globals_shrunk = false;
-   if (modes & nir_var_shader_temp) {
-      globals_shrunk = shrink_vec_var_list(&shader->variables,
-                                           nir_var_shader_temp,
-                                           var_usage_map);
+   nir_variable_mode global_modes = modes & ~nir_var_function_temp;
+   if (global_modes) {
+      globals_shrunk = shrink_vec_var_list(shader,
+                                           &shader->variables,
+                                           global_modes,
+                                           &var_usage_map);
    }
 
    bool progress = false;
    nir_foreach_function_impl(impl, shader) {
       bool locals_shrunk = false;
       if (modes & nir_var_function_temp) {
-         locals_shrunk = shrink_vec_var_list(&impl->locals,
+         locals_shrunk = shrink_vec_var_list(shader,
+                                             &impl->locals,
                                              nir_var_function_temp,
-                                             var_usage_map);
+                                             &var_usage_map);
       }
 
       if (globals_shrunk || locals_shrunk) {
-         shrink_vec_var_access_impl(impl, var_usage_map, modes);
+         shrink_vec_var_access_impl(impl, &var_usage_map, modes);
 
          progress = nir_progress(true, impl, nir_metadata_control_flow);
       } else {

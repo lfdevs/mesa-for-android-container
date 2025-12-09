@@ -28,7 +28,7 @@
 void
 ast_array_specifier::print(void) const
 {
-   foreach_list_typed (ast_node, array_dimension, link, &this->array_dimensions) {
+   ir_foreach_list_typed (ast_node, array_dimension, link, &this->array_dimensions) {
       printf("[ ");
       if (((ast_expression*)array_dimension)->oper != ast_unsized_array_dim)
          array_dimension->print();
@@ -140,8 +140,7 @@ get_implicit_array_size(struct _mesa_glsl_parse_state *state,
 
 
 ir_rvalue *
-_mesa_ast_array_index_to_hir(void *mem_ctx,
-                             struct _mesa_glsl_parse_state *state,
+_mesa_ast_array_index_to_hir(struct _mesa_glsl_parse_state *state,
                              ir_rvalue *array, ir_rvalue *idx,
                              YYLTYPE &loc, YYLTYPE &idx_loc)
 {
@@ -167,7 +166,7 @@ _mesa_ast_array_index_to_hir(void *mem_ctx,
     * index is not a constant expression, ensure that the array has a
     * declared size.
     */
-   ir_constant *const const_index = idx->constant_expression_value(mem_ctx);
+   ir_constant *const const_index = idx->constant_expression_value(state->linalloc);
    if (const_index != NULL && glsl_type_is_integer_32(idx->type)) {
       const int idx = const_index->value.i[0];
       const char *type_name = "error";
@@ -229,6 +228,9 @@ _mesa_ast_array_index_to_hir(void *mem_ctx,
              * "gl_InvocationID"). The array size will be determined
              * by the linker.
              */
+         } else if (state->stage == MESA_SHADER_MESH &&
+                    array->variable_referenced()->data.mode == ir_var_shader_out) {
+            /* Mesh shader output arrays are initially unsized. */
          }
          else if (array->variable_referenced()->data.mode !=
                   ir_var_shader_storage) {
@@ -352,11 +354,11 @@ _mesa_ast_array_index_to_hir(void *mem_ctx,
    if (glsl_type_is_array(array->type)
        || glsl_type_is_matrix(array->type)
        || glsl_type_is_vector(array->type)) {
-      return new(mem_ctx) ir_dereference_array(array, idx);
+      return new(state->linalloc) ir_dereference_array(array, idx);
    } else if (glsl_type_is_error(array->type)) {
       return array;
    } else {
-      ir_rvalue *result = new(mem_ctx) ir_dereference_array(array, idx);
+      ir_rvalue *result = new(state->linalloc) ir_dereference_array(array, idx);
       result->type = &glsl_type_builtin_error;
 
       return result;

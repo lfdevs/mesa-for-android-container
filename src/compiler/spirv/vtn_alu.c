@@ -149,7 +149,7 @@ vtn_mediump_downconvert(struct vtn_builder *b, enum glsl_base_type base_type, ni
    case GLSL_TYPE_BOOL:
       return def;
    default:
-      unreachable("bad relaxed precision input type");
+      UNREACHABLE("bad relaxed precision input type");
    }
 }
 
@@ -252,7 +252,7 @@ vtn_convert_op_src_type(SpvOp opcode)
    case SpvOpSatConvertUToS:
       return nir_type_uint;
    default:
-      unreachable("Unhandled conversion op");
+      UNREACHABLE("Unhandled conversion op");
    }
 }
 
@@ -273,7 +273,7 @@ vtn_convert_op_dst_type(SpvOp opcode)
    case SpvOpSatConvertSToU:
       return nir_type_uint;
    default:
-      unreachable("Unhandled conversion op");
+      UNREACHABLE("Unhandled conversion op");
    }
 }
 
@@ -455,24 +455,6 @@ vtn_handle_fp_fast_math(struct vtn_builder *b, struct vtn_value *val)
 #undef FLOAT_CONTROLS2_BITS
 }
 
-static void
-handle_no_contraction(struct vtn_builder *b, UNUSED struct vtn_value *val,
-                      UNUSED int member, const struct vtn_decoration *dec,
-                      UNUSED void *_void)
-{
-   vtn_assert(dec->scope == VTN_DEC_DECORATION);
-   if (dec->decoration != SpvDecorationNoContraction)
-      return;
-
-   b->nb.exact = true;
-}
-
-void
-vtn_handle_no_contraction(struct vtn_builder *b, struct vtn_value *val)
-{
-   vtn_foreach_decoration(b, val, handle_no_contraction, NULL);
-}
-
 nir_rounding_mode
 vtn_rounding_mode_to_nir(struct vtn_builder *b, SpvFPRoundingMode mode)
 {
@@ -524,54 +506,11 @@ handle_conversion_opts(struct vtn_builder *b, UNUSED struct vtn_value *val,
    }
 }
 
-static void
-handle_no_wrap(UNUSED struct vtn_builder *b, UNUSED struct vtn_value *val,
-               UNUSED int member,
-               const struct vtn_decoration *dec, void *_alu)
-{
-   nir_alu_instr *alu = _alu;
-   switch (dec->decoration) {
-   case SpvDecorationNoSignedWrap:
-      alu->no_signed_wrap = true;
-      break;
-   case SpvDecorationNoUnsignedWrap:
-      alu->no_unsigned_wrap = true;
-      break;
-   default:
-      /* Do nothing. */
-      break;
-   }
-}
-
-static void
-vtn_value_is_relaxed_precision_cb(struct vtn_builder *b,
-                          struct vtn_value *val, int member,
-                          const struct vtn_decoration *dec, void *void_ctx)
-{
-   bool *relaxed_precision = void_ctx;
-   switch (dec->decoration) {
-   case SpvDecorationRelaxedPrecision:
-      *relaxed_precision = true;
-      break;
-
-   default:
-      break;
-   }
-}
-
-bool
-vtn_value_is_relaxed_precision(struct vtn_builder *b, struct vtn_value *val)
-{
-   bool result = false;
-   vtn_foreach_decoration(b, val,
-                          vtn_value_is_relaxed_precision_cb, &result);
-   return result;
-}
-
 static bool
 vtn_alu_op_mediump_16bit(struct vtn_builder *b, SpvOp opcode, struct vtn_value *dest_val)
 {
-   if (!b->options->mediump_16bit_alu || !vtn_value_is_relaxed_precision(b, dest_val))
+   if (!b->options->mediump_16bit_alu ||
+       !vtn_has_decoration(b, dest_val, SpvDecorationRelaxedPrecision))
       return false;
 
    switch (opcode) {
@@ -608,7 +547,7 @@ vtn_mediump_upconvert(struct vtn_builder *b, enum glsl_base_type base_type, nir_
    case GLSL_TYPE_UINT:
       return nir_u2u32(&b->nb, def);
    default:
-      unreachable("bad relaxed precision output type");
+      UNREACHABLE("bad relaxed precision output type");
    }
 }
 
@@ -664,7 +603,7 @@ vtn_handle_deriv(struct vtn_builder *b, SpvOp opcode, nir_def *src)
       return nir_fadd(&b->nb,
                       nir_fabs(&b->nb, nir_ddx_coarse(&b->nb, src)),
                       nir_fabs(&b->nb, nir_ddy_coarse(&b->nb, src)));
-   default: unreachable("Not a derivative opcode");
+   default: UNREACHABLE("Not a derivative opcode");
    }
 }
 
@@ -790,7 +729,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
       return;
    }
 
-   vtn_handle_no_contraction(b, dest_val);
+   b->nb.exact |= vtn_has_decoration(b, dest_val, SpvDecorationNoContraction);
    vtn_handle_fp_fast_math(b, dest_val);
    bool mediump_16bit = vtn_alu_op_mediump_16bit(b, opcode, dest_val);
 
@@ -990,7 +929,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
       switch (op) {
       case nir_op_fge: op = nir_op_flt; break;
       case nir_op_flt: op = nir_op_fge; break;
-      default: unreachable("Impossible opcode.");
+      default: UNREACHABLE("Impossible opcode.");
       }
 
       dest->def =
@@ -1103,7 +1042,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    case SpvOpSDotAccSatKHR:
    case SpvOpUDotAccSatKHR:
    case SpvOpSUDotAccSatKHR:
-      unreachable("Should have called vtn_handle_integer_dot instead.");
+      UNREACHABLE("Should have called vtn_handle_integer_dot instead.");
 
    default: {
       bool swap;
@@ -1147,8 +1086,11 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    case SpvOpISub:
    case SpvOpShiftLeftLogical:
    case SpvOpSNegate: {
-      nir_alu_instr *alu = nir_instr_as_alu(dest->def->parent_instr);
-      vtn_foreach_decoration(b, dest_val, handle_no_wrap, alu);
+      nir_alu_instr *alu = nir_def_as_alu(dest->def);
+      if (alu) {
+         alu->no_signed_wrap |= vtn_has_decoration(b, dest_val, SpvDecorationNoSignedWrap);
+         alu->no_unsigned_wrap |= vtn_has_decoration(b, dest_val, SpvDecorationNoUnsignedWrap);
+      }
       break;
    }
    default:
@@ -1171,7 +1113,7 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
    const struct glsl_type *dest_type = vtn_get_type(b, w[1])->type;
    const unsigned dest_size = glsl_get_bit_size(dest_type);
 
-   vtn_handle_no_contraction(b, dest_val);
+   b->nb.exact |= vtn_has_decoration(b, dest_val, SpvDecorationNoContraction);
 
    /* Collect the various SSA sources.
     *
@@ -1289,7 +1231,7 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
          break;
 
       default:
-         unreachable("Invalid opcode.");
+         UNREACHABLE("Invalid opcode.");
       }
 
       /* The SPV_KHR_integer_dot_product spec says:
@@ -1367,7 +1309,7 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
                dest = nir_udot_2x16_uadd(&b->nb, src[0], src[1], zero);
             break;
          default:
-            unreachable("Invalid opcode.");
+            UNREACHABLE("Invalid opcode.");
          }
       } else {
          switch (opcode) {
@@ -1399,7 +1341,7 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
                dest = nir_sudot_4x8_iadd(&b->nb, src[0], src[1], zero);
             break;
          default:
-            unreachable("Invalid opcode.");
+            UNREACHABLE("Invalid opcode.");
          }
       }
 

@@ -26,7 +26,7 @@
  *
  * Lower image operations by turning the image_deref_* into a image_* on an
  * index number or bindless_image_* intrinsic on a load_deref of the previous
- * deref source. All applicable indicies are also set so that fetching the
+ * deref source. All applicable indices are also set so that fetching the
  * variable in the backend wouldn't be needed anymore.
  */
 

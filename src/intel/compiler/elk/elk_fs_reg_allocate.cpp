@@ -52,7 +52,7 @@ elk_fs_visitor::assign_regs_trivial()
    int reg_width = dispatch_width / 8;
 
    /* Note that compressed instructions require alignment to 2 registers. */
-   hw_reg_mapping[0] = ALIGN(this->first_non_payload_grf, reg_width);
+   hw_reg_mapping[0] = align(this->first_non_payload_grf, reg_width);
    for (i = 1; i <= this->alloc.count; i++) {
       hw_reg_mapping[i] = (hw_reg_mapping[i - 1] +
                            DIV_ROUND_UP(this->alloc.sizes[i - 1],
@@ -205,7 +205,7 @@ count_to_loop_end(const elk_bblock_t *block)
             return block->end_ip;
       }
    }
-   unreachable("not reached");
+   UNREACHABLE("not reached");
 }
 
 void elk_fs_visitor::calculate_payload_ranges(unsigned payload_node_count,
@@ -325,7 +325,7 @@ public:
        */
       int reg_width = fs->dispatch_width / 8;
       rsi = util_logbase2(reg_width);
-      payload_node_count = ALIGN(fs->first_non_payload_grf, reg_width);
+      payload_node_count = align(fs->first_non_payload_grf, reg_width);
 
       /* Get payload IP information */
       payload_last_use_ip = ralloc_array(mem_ctx, int, payload_node_count);
@@ -576,10 +576,13 @@ elk_fs_reg_alloc::setup_inst_interference(const elk_fs_inst *inst)
        * This node has a fixed assignment to grf127.
        *
        * We don't apply it to SIMD16 instructions because previous code avoids
-       * any register overlap between sources and destination.
+       * any register overlap between sources and destination. Some care is
+       * taken to detect when interference may not have been added between
+       * source and destination. This can occur in SIMD16 with UW
+       * destination. See also gitlab issue #14171.
        */
-      if (inst->exec_size < 16 && inst->is_send_from_grf() &&
-          inst->dst.file == VGRF)
+      if (inst->is_send_from_grf() && inst->dst.file == VGRF &&
+          (inst->exec_size < 16 || type_sz(inst->dst.type) < 4))
          ra_add_node_interference(g, first_vgrf_node + inst->dst.nr,
                                      grf127_send_hack_node);
 
@@ -937,7 +940,7 @@ elk_fs_reg_alloc::choose_spill_reg()
 elk_fs_reg
 elk_fs_reg_alloc::alloc_spill_reg(unsigned size, int ip)
 {
-   int vgrf = fs->alloc.allocate(ALIGN(size, reg_unit(devinfo)));
+   int vgrf = fs->alloc.allocate(align(size, reg_unit(devinfo)));
    int class_idx = DIV_ROUND_UP(size, reg_unit(devinfo)) - 1;
    int n = ra_add_node(g, compiler->fs_reg_sets[rsi].classes[class_idx]);
    assert(n == first_vgrf_node + vgrf);
@@ -972,7 +975,7 @@ elk_fs_reg_alloc::spill_reg(unsigned spill_reg)
 {
    int size = fs->alloc.sizes[spill_reg];
    unsigned int spill_offset = fs->last_scratch;
-   assert(ALIGN(spill_offset, 16) == spill_offset); /* oword read/write req. */
+   assert(align(spill_offset, 16) == spill_offset); /* oword read/write req. */
 
    /* Spills may use MRFs 13-15 in the SIMD16 case.  Our texturing is done
     * using up to 11 MRFs starting from either m1 or m2, and fb writes can use
@@ -1012,8 +1015,8 @@ elk_fs_reg_alloc::spill_reg(unsigned spill_reg)
    int ip = 0;
    foreach_block_and_inst (block, elk_fs_inst, inst, fs->cfg) {
       const fs_builder ibld = fs_builder(fs, block, inst);
-      exec_node *before = inst->prev;
-      exec_node *after = inst->next;
+      brw_exec_node *before = inst->prev;
+      brw_exec_node *after = inst->next;
 
       for (unsigned int i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file == VGRF &&

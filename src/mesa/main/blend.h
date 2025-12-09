@@ -88,7 +88,7 @@ static inline void
 _mesa_flush_vertices_for_blend_state(struct gl_context *ctx)
 {
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
 }
 
 static inline void
@@ -101,7 +101,7 @@ _mesa_flush_vertices_for_blend_adv(struct gl_context *ctx,
        _mesa_advanded_blend_sh_constant_changed(ctx, new_blend_enabled,
                                                 new_mode)) {
       FLUSH_VERTICES(ctx, _NEW_COLOR, GL_COLOR_BUFFER_BIT);
-      ctx->NewDriverState |= ST_NEW_BLEND;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
       return;
    }
    _mesa_flush_vertices_for_blend_state(ctx);

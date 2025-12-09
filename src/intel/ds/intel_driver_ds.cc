@@ -127,6 +127,10 @@ sync_timestamp(IntelRenderpassDataSource::TraceContext &ctx,
                struct intel_ds_device *device)
 {
    uint64_t cpu_ts, gpu_ts;
+   uint64_t boottime = perfetto::base::GetBootTimeNs().count();
+
+   if (boottime < device->next_clock_sync_ns)
+      return;
 
    if (!intel_gem_read_correlate_cpu_gpu_timestamp(device->fd,
                                                    device->info.kmd_type,
@@ -137,18 +141,16 @@ sync_timestamp(IntelRenderpassDataSource::TraceContext &ctx,
       intel_gem_read_render_timestamp(device->fd, device->info.kmd_type,
                                       &gpu_ts);
    }
-   gpu_ts = intel_device_info_timebase_scale(&device->info, gpu_ts);
 
-   if (cpu_ts < device->next_clock_sync_ns)
-      return;
+   uint32_t cpu_clock_id = perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME;
+   gpu_ts = intel_device_info_timebase_scale(&device->info, gpu_ts);
 
    PERFETTO_LOG("sending clocks gpu=0x%08x", device->gpu_clock_id);
 
-   device->sync_gpu_ts = gpu_ts;
-   device->next_clock_sync_ns = cpu_ts + 1000000000ull;
+   device->next_clock_sync_ns = boottime + 1000000000ull;
 
    MesaRenderpassDataSource<IntelRenderpassDataSource, IntelRenderpassTraits>::EmitClockSync(ctx,
-      cpu_ts, gpu_ts, device->gpu_clock_id);
+      cpu_ts, gpu_ts, cpu_clock_id, device->gpu_clock_id);
 }
 
 static void
@@ -228,7 +230,6 @@ setup_incremental_state(IntelRenderpassDataSource::TraceContext &ctx,
    }
 
    device->next_clock_sync_ns = 0;
-   sync_timestamp(ctx, device);
 }
 
 static void
@@ -236,14 +237,6 @@ begin_event(struct intel_ds_queue *queue, uint64_t ts_ns,
             enum intel_ds_queue_stage stage_id)
 {
    uint32_t level = queue->stages[stage_id].level;
-   /* If we haven't managed to calibrate the alignment between GPU and CPU
-    * timestamps yet, then skip this trace, otherwise perfetto won't know
-    * what to do with it.
-    */
-   if (!queue->device->sync_gpu_ts) {
-      queue->stages[stage_id].start_ns[level] = 0;
-      return;
-   }
 
    if (level >= (ARRAY_SIZE(queue->stages[stage_id].start_ns) - 1))
       return;
@@ -264,13 +257,6 @@ end_event(struct intel_ds_queue *queue, uint64_t ts_ns,
 {
    struct intel_ds_device *device = queue->device;
 
-   /* If we haven't managed to calibrate the alignment between GPU and CPU
-    * timestamps yet, then skip this trace, otherwise perfetto won't know
-    * what to do with it.
-    */
-   if (!device->sync_gpu_ts)
-      return;
-
    if (queue->stages[stage_id].level == 0)
       return;
 
@@ -282,9 +268,9 @@ end_event(struct intel_ds_queue *queue, uint64_t ts_ns,
       return;
 
    IntelRenderpassDataSource::Trace([=](IntelRenderpassDataSource::TraceContext tctx) {
-      setup_incremental_state(tctx, queue->device);
+      setup_incremental_state(tctx, device);
 
-      sync_timestamp(tctx, queue->device);
+      sync_timestamp(tctx, device);
 
       uint64_t evt_id = device->event_id++;
 
@@ -299,16 +285,16 @@ end_event(struct intel_ds_queue *queue, uint64_t ts_ns,
       auto packet = tctx.NewTracePacket();
 
       packet->set_timestamp(start_ns);
-      packet->set_timestamp_clock_id(queue->device->gpu_clock_id);
+      packet->set_timestamp_clock_id(device->gpu_clock_id);
 
       assert(ts_ns >= start_ns);
 
       auto event = packet->set_gpu_render_stage_event();
-      event->set_gpu_id(queue->device->gpu_id);
+      event->set_gpu_id(device->gpu_id);
 
       event->set_hw_queue_iid(stage->queue_iid);
       event->set_stage_iid(stage_iid);
-      event->set_context(queue->device->iid);
+      event->set_context(device->iid);
       event->set_event_id(evt_id);
       event->set_duration(ts_ns - start_ns);
       event->set_submission_id(submission_id);
@@ -409,6 +395,7 @@ extern "C" {
 CREATE_DUAL_EVENT_CALLBACK(frame, INTEL_DS_QUEUE_STAGE_FRAME)
 CREATE_DUAL_EVENT_CALLBACK(batch, INTEL_DS_QUEUE_STAGE_CMD_BUFFER)
 CREATE_DUAL_EVENT_CALLBACK(cmd_buffer, INTEL_DS_QUEUE_STAGE_CMD_BUFFER)
+CREATE_DUAL_EVENT_CALLBACK(sba, INTEL_DS_QUEUE_STAGE_CMD_BUFFER)
 CREATE_DUAL_EVENT_CALLBACK(render_pass, INTEL_DS_QUEUE_STAGE_RENDER_PASS)
 CREATE_DUAL_EVENT_CALLBACK(blorp, INTEL_DS_QUEUE_STAGE_BLORP)
 CREATE_DUAL_EVENT_CALLBACK(draw, INTEL_DS_QUEUE_STAGE_DRAW)
@@ -537,20 +524,13 @@ void
 intel_ds_end_submit(struct intel_ds_queue *queue,
                     uint64_t start_ts)
 {
-   if (!u_trace_should_process(&queue->device->trace_context)) {
-      queue->device->sync_gpu_ts = 0;
-      queue->device->next_clock_sync_ns = 0;
+   if (!u_trace_should_process(&queue->device->trace_context))
       return;
-   }
 
    uint64_t end_ts = perfetto::base::GetBootTimeNs().count();
    uint32_t submission_id = queue->submission_id++;
 
    IntelRenderpassDataSource::Trace([=](IntelRenderpassDataSource::TraceContext tctx) {
-      setup_incremental_state(tctx, queue->device);
-
-      sync_timestamp(tctx, queue->device);
-
       auto packet = tctx.NewTracePacket();
 
       packet->set_timestamp(start_ts);
@@ -558,8 +538,6 @@ intel_ds_end_submit(struct intel_ds_queue *queue,
       auto event = packet->set_vulkan_api_event();
       auto submit = event->set_vk_queue_submit();
 
-      // submit->set_pid(os_get_pid());
-      // submit->set_tid(os_get_tid());
       submit->set_duration_ns(end_ts - start_ts);
       submit->set_vk_queue((uintptr_t) queue);
       submit->set_submission_id(submission_id);
@@ -570,9 +548,6 @@ void intel_ds_perfetto_set_debug_utils_object_name(struct intel_ds_device *devic
    const VkDebugUtilsObjectNameInfoEXT *pNameInfo)
 {
    IntelRenderpassDataSource::Trace([=](auto tctx) {
-      /* Do we need this for SEQ_INCREMENTAL_STATE_CLEARED for the object name to stick? */
-      setup_incremental_state(tctx, device);
-
       tctx.GetDataSourceLocked()->SetDebugUtilsObjectNameEXT(tctx, pNameInfo);
    });
 }
@@ -581,9 +556,6 @@ void intel_ds_perfetto_refresh_debug_utils_object_name(struct intel_ds_device *d
    const struct vk_object_base *object)
 {
    IntelRenderpassDataSource::Trace([=](auto tctx) {
-      /* Do we need this for SEQ_INCREMENTAL_STATE_CLEARED for the object name to stick? */
-      setup_incremental_state(tctx, device);
-
       tctx.GetDataSourceLocked()->RefreshSetDebugUtilsObjectNameEXT(tctx, object);
    });
 }
@@ -594,7 +566,6 @@ static void
 intel_driver_ds_init_once(void)
 {
 #ifdef HAVE_PERFETTO
-   util_perfetto_init();
    perfetto::DataSourceDescriptor dsd;
 #if DETECT_OS_ANDROID
    // Android tooling expects this data source name

@@ -28,7 +28,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "pvr_csb.h"
-#include "pvr_private.h"
+#include "pvr_common.h"
 #include "util/macros.h"
 
 static const char *
@@ -66,7 +66,7 @@ pvr_cr_isp_aa_mode_type(uint32_t samples)
    case 8:
       return ROGUE_CR_ISP_AA_MODE_TYPE_AA_8X;
    default:
-      unreachable("Unsupported number of samples");
+      UNREACHABLE("Unsupported number of samples");
    }
 }
 
@@ -85,7 +85,7 @@ pvr_zls_format_type_is_packed(enum ROGUE_CR_ZLS_FORMAT_TYPE type)
       return false;
 
    default:
-      unreachable("Invalid ZLS format type");
+      UNREACHABLE("Invalid ZLS format type");
    }
 }
 
@@ -104,7 +104,7 @@ pvr_zls_format_type_is_int(enum ROGUE_CR_ZLS_FORMAT_TYPE type)
       return false;
 
    default:
-      unreachable("Invalid ZLS format type");
+      UNREACHABLE("Invalid ZLS format type");
    }
 }
 
@@ -147,7 +147,7 @@ pvr_pbestate_source_pos(enum pvr_pbe_source_start_pos pos)
       return ROGUE_PBESTATE_SOURCE_POS_START_BIT96;
 
    default:
-      unreachable("Undefined PBE source pos.");
+      UNREACHABLE("Undefined PBE source pos.");
    }
 }
 
@@ -190,7 +190,7 @@ pvr_ta_objtype(VkPrimitiveTopology topology)
       return ROGUE_TA_OBJTYPE_TRIANGLE;
 
    default:
-      unreachable("Invalid topology.");
+      UNREACHABLE("Invalid topology.");
       return 0;
    }
 }
@@ -237,7 +237,7 @@ pvr_vdmctrl_index_size_from_type(VkIndexType type)
    case VK_INDEX_TYPE_UINT8_KHR:
       return ROGUE_VDMCTRL_INDEX_SIZE_B8;
    default:
-      unreachable("Invalid index type");
+      UNREACHABLE("Invalid index type");
    }
 }
 

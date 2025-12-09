@@ -31,7 +31,7 @@
 #include "common/intel_sample_positions.h"
 #include "common/intel_l3_config.h"
 #include "genxml/gen_macros.h"
-#include "intel/compiler/brw_compiler.h"
+#include "compiler/brw/brw_compiler.h"
 
 /**
  * This file provides the blorp pipeline setup and execution functionality.
@@ -252,7 +252,7 @@ _blorp_combine_address(struct blorp_batch *batch, void *location,
 static void
 emit_urb_config(struct blorp_batch *batch,
                 const struct blorp_params *params,
-                UNUSED enum intel_urb_deref_block_size *deref_block_size)
+                struct intel_urb_config *urb_cfg)
 {
    /* Once vertex fetcher has written full VUE entries with complete
     * header the space requirement is as follows per vertex (in bytes):
@@ -272,35 +272,34 @@ emit_urb_config(struct blorp_batch *batch,
    /* The URB size is expressed in units of 64 bytes (512 bits) */
    const unsigned vs_entry_size = DIV_ROUND_UP(total_needed, 64);
 
-   struct intel_urb_config urb_cfg = {
+   *urb_cfg = (struct intel_urb_config) {
       .size = { vs_entry_size, 1, 1, 1 },
    };
 
    bool constrained;
    intel_get_urb_config(batch->blorp->compiler->brw->devinfo,
                         blorp_get_l3_config(batch),
-                        false, false, &urb_cfg,
-                        deref_block_size, &constrained);
+                        false, false, urb_cfg, &constrained);
 
    /* Tell drivers about the config. */
-   blorp_pre_emit_urb_config(batch, &urb_cfg);
+   blorp_pre_emit_urb_config(batch, urb_cfg);
 
    for (int i = 0; i <= MESA_SHADER_GEOMETRY; i++) {
 #if GFX_VER >= 12
       blorp_emit(batch, GENX(3DSTATE_URB_ALLOC_VS), urb) {
          urb._3DCommandSubOpcode            += i;
-         urb.VSURBEntryAllocationSize        = urb_cfg.size[i] - 1;
-         urb.VSURBStartingAddressSlice0      = urb_cfg.start[i];
-         urb.VSURBStartingAddressSliceN      = urb_cfg.start[i];
-         urb.VSNumberofURBEntriesSlice0      = urb_cfg.entries[i];
-         urb.VSNumberofURBEntriesSliceN      = urb_cfg.entries[i];
+         urb.VSURBEntryAllocationSize        = urb_cfg->size[i] - 1;
+         urb.VSURBStartingAddressSlice0      = urb_cfg->start[i];
+         urb.VSURBStartingAddressSliceN      = urb_cfg->start[i];
+         urb.VSNumberofURBEntriesSlice0      = urb_cfg->entries[i];
+         urb.VSNumberofURBEntriesSliceN      = urb_cfg->entries[i];
       }
 #else
       blorp_emit(batch, GENX(3DSTATE_URB_VS), urb) {
          urb._3DCommandSubOpcode      += i;
-         urb.VSURBStartingAddress      = urb_cfg.start[i];
-         urb.VSURBEntryAllocationSize  = urb_cfg.size[i] - 1;
-         urb.VSNumberofURBEntries      = urb_cfg.entries[i];
+         urb.VSURBStartingAddress      = urb_cfg->start[i];
+         urb.VSURBEntryAllocationSize  = urb_cfg->size[i] - 1;
+         urb.VSNumberofURBEntries      = urb_cfg->entries[i];
       }
 #endif
    }
@@ -720,7 +719,7 @@ blorp_emit_vs_config(struct blorp_batch *batch,
 static void
 blorp_emit_sf_config(struct blorp_batch *batch,
                      const struct blorp_params *params,
-                     UNUSED enum intel_urb_deref_block_size urb_deref_block_size)
+                     const struct intel_urb_config *urb_cfg)
 {
    const struct brw_wm_prog_data *prog_data = params->wm_prog_data;
 
@@ -745,7 +744,7 @@ blorp_emit_sf_config(struct blorp_batch *batch,
 
    blorp_emit(batch, GENX(3DSTATE_SF), sf) {
 #if GFX_VER >= 12
-      sf.DerefBlockSize = urb_deref_block_size;
+      sf.DerefBlockSize = urb_cfg->deref_block_size;
 #endif
    }
 
@@ -830,7 +829,7 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          ps.RenderTargetFastClearEnable = true;
          break;
       default:
-         unreachable("Invalid fast clear op");
+         UNREACHABLE("Invalid fast clear op");
       }
 
 #if GFX_VERx10 == 120
@@ -1059,7 +1058,7 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
             ds.DepthTestEnable = false;
             break;
          case ISL_AUX_OP_PARTIAL_RESOLVE:
-            unreachable("Invalid HIZ op");
+            UNREACHABLE("Invalid HIZ op");
          }
       }
 
@@ -1099,8 +1098,8 @@ static void
 blorp_emit_pipeline(struct blorp_batch *batch,
                     const struct blorp_params *params)
 {
-   enum intel_urb_deref_block_size urb_deref_block_size;
-   emit_urb_config(batch, params, &urb_deref_block_size);
+   struct intel_urb_config urb_cfg;
+   emit_urb_config(batch, params, &urb_cfg);
 
    if (params->wm_prog_data) {
       blorp_emit_blend_state(batch, params);
@@ -1154,7 +1153,7 @@ blorp_emit_pipeline(struct blorp_batch *batch,
       clip.PerspectiveDivideDisable = true;
    }
 
-   blorp_emit_sf_config(batch, params, urb_deref_block_size);
+   blorp_emit_sf_config(batch, params, &urb_cfg);
    blorp_emit_ps_config(batch, params);
 
    blorp_emit_cc_viewport(batch);
@@ -1266,7 +1265,7 @@ blorp_emit_surface_state(struct blorp_batch *batch,
 
    if (aux_usage != ISL_AUX_USAGE_NONE && surface->clear_color_addr.buffer) {
 #if GFX_VER >= 10
-      assert((surface->clear_color_addr.offset & 0x3f) == 0);
+      assert(util_is_aligned(surface->clear_color_addr.offset, 64));
       uint32_t *clear_addr = state + isl_dev->ss.clear_color_state_offset;
       blorp_surface_reloc(batch, state_offset +
                           isl_dev->ss.clear_color_state_offset,
@@ -1560,7 +1559,7 @@ blorp_emit_gfx8_hiz_op(struct blorp_batch *batch,
          break;
       case ISL_AUX_OP_PARTIAL_RESOLVE:
       case ISL_AUX_OP_NONE:
-         unreachable("Invalid HIZ op");
+         UNREACHABLE("Invalid HIZ op");
       }
 
       hzp.NumberofMultisamples = ffs(params->num_samples) - 1;
@@ -1587,6 +1586,20 @@ blorp_emit_gfx8_hiz_op(struct blorp_batch *batch,
    }
 
    blorp_emit(batch, GENX(3DSTATE_WM_HZ_OP), hzp);
+
+#if GFX_VER >= 20
+   /* Xe2-3 Bspec 56469 (r52926):
+    *
+    *  "8. 3DSTATE_WM_HZ_OP w/ none of the clear/resolve bits set
+    *  followed by similar PC as 7 to commit this state."
+    *
+    * "7" refers to step 7 of the WM_HZ_OP command sequence.
+    */
+   blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
+      pc.PostSyncOperation = WriteImmediateData;
+      pc.Address = blorp_get_workaround_address(batch);
+   }
+#endif
 
    blorp_measure_end(batch, params);
 }
@@ -1643,7 +1656,7 @@ blorp_get_compute_push_const(struct blorp_batch *batch,
 {
    const struct brw_cs_prog_data *cs_prog_data = params->cs_prog_data;
    const unsigned push_const_size =
-      ALIGN(brw_cs_push_const_total_size(cs_prog_data, threads), 64);
+      align(brw_cs_push_const_total_size(cs_prog_data, threads), 64);
    assert(cs_prog_data->push.cross_thread.size +
           cs_prog_data->push.per_thread.size == sizeof(params->wm_inputs));
 
@@ -1818,7 +1831,6 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
    blorp_emit(batch, GENX(COMPUTE_WALKER), cw) {
       cw.body = body;
    }
-
 #else
 
    /* The MEDIA_VFE_STATE documentation for Gfx8+ says:
@@ -1848,7 +1860,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
       vfe.URBEntryAllocationSize = 2;
 
       const uint32_t vfe_curbe_allocation =
-         ALIGN(cs_prog_data->push.per_thread.regs * dispatch.threads +
+         align(cs_prog_data->push.per_thread.regs * dispatch.threads +
                cs_prog_data->push.cross_thread.regs, 2);
       vfe.CURBEAllocationSize = vfe_curbe_allocation;
    }
@@ -1942,7 +1954,7 @@ xy_bcb_tiling(const struct isl_surf *surf)
       return XY_TILE_Y;
 #endif
    default:
-      unreachable("Invalid tiling for XY_BLOCK_COPY_BLT");
+      UNREACHABLE("Invalid tiling for XY_BLOCK_COPY_BLT");
    }
 }
 
@@ -1957,7 +1969,7 @@ xy_color_depth(const struct isl_format_layout *fmtl)
    case  16: return XY_BPP_16_BIT;
    case   8: return XY_BPP_8_BIT;
    default:
-      unreachable("Invalid bpp");
+      UNREACHABLE("Invalid bpp");
    }
 }
 #endif
@@ -1978,7 +1990,7 @@ xy_bcb_surf_dim(const struct isl_surf *surf)
    case ISL_SURF_DIM_3D:
       return XY_SURFTYPE_3D;
    default:
-      unreachable("Invalid dimensionality for XY_BLOCK_COPY_BLT");
+      UNREACHABLE("Invalid dimensionality for XY_BLOCK_COPY_BLT");
    }
 }
 
@@ -2001,7 +2013,7 @@ xy_aux_mode(const struct blorp_surface_info *info)
    case ISL_AUX_USAGE_NONE:
       return XY_NONE;
    default:
-      unreachable("Unsupported aux mode");
+      UNREACHABLE("Unsupported aux mode");
    }
 }
 #endif // GFX_VER < 20
@@ -2012,7 +2024,7 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
                         const struct blorp_params *params)
 {
 #if GFX_VER < 12
-   unreachable("Blitter is only supported on Gfx12+");
+   UNREACHABLE("Blitter is only supported on Gfx12+");
 #else
    UNUSED const struct isl_device *isl_dev = batch->blorp->isl_dev;
 
@@ -2172,7 +2184,7 @@ blorp_xy_fast_color_blit(struct blorp_batch *batch,
                          const struct blorp_params *params)
 {
 #if GFX_VER < 12
-   unreachable("Blitter is only supported on Gfx12+");
+   UNREACHABLE("Blitter is only supported on Gfx12+");
 #else
    UNUSED const struct isl_device *isl_dev = batch->blorp->isl_dev;
    const struct isl_surf *dst_surf = &params->dst.surf;

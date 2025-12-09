@@ -11,7 +11,7 @@ section_start vkd3d-proton "Building vkd3d-proton"
 # setting up the environment variables locally
 ci_tag_build_time_check "VKD3D_PROTON_TAG"
 
-VKD3D_PROTON_COMMIT="6be781076617cb2cb3038710618acc3b57a674db"
+VKD3D_PROTON_COMMIT="33a41f9d14460f998c5ce8a4aab42ca1cce8dcc6"
 
 VKD3D_PROTON_DST_DIR="/vkd3d-proton-tests"
 VKD3D_PROTON_SRC_DIR="/vkd3d-proton-src"
@@ -30,12 +30,13 @@ git checkout "$VKD3D_PROTON_COMMIT"
 git submodule update --init --recursive
 git submodule update --recursive
 
-meson setup                              \
-      -D enable_tests=true               \
-      --buildtype release                \
-      --prefix "$VKD3D_PROTON_DST_DIR"   \
-      --strip                            \
-      --libdir "lib"                     \
+meson setup                                           \
+      -D c_args=-Wno-error=incompatible-pointer-types \
+      -D enable_tests=true                            \
+      --buildtype release                             \
+      --prefix "$VKD3D_PROTON_DST_DIR"                \
+      --strip                                         \
+      --libdir "lib"                                  \
       "$VKD3D_PROTON_BUILD_DIR/build"
 
 ninja -C "$VKD3D_PROTON_BUILD_DIR/build" install

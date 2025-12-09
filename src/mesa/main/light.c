@@ -245,7 +245,7 @@ do_light(struct gl_context *ctx, GLuint lnum, GLenum pname, const GLfloat *param
       break;
    }
    default:
-      unreachable("Unexpected pname in do_light()");
+      UNREACHABLE("Unexpected pname in do_light()");
    }
 }
 

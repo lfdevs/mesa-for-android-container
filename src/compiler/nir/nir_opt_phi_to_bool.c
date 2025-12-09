@@ -30,7 +30,7 @@ enum bool_type {
 static inline uint8_t
 src_pass_flags(nir_src *src)
 {
-   return src->ssa->parent_instr->pass_flags;
+   return nir_def_instr(src->ssa)->pass_flags;
 }
 
 static inline nir_block *
@@ -185,11 +185,11 @@ phi_to_bool(nir_builder *b, nir_phi_instr *phi, void *unused)
    else if (type == bool_type_float)
       res = nir_b2fN(b, res, bit_size);
    else
-      unreachable("invalid bool_type");
+      UNREACHABLE("invalid bool_type");
 
    nir_foreach_use_safe(src, &phi->def) {
       if (nir_src_parent_instr(src) == &phi->instr ||
-          nir_src_parent_instr(src) == res->parent_instr)
+          nir_src_parent_instr(src) == nir_def_instr(res))
          continue;
       nir_src_rewrite(src, res);
    }
@@ -200,7 +200,8 @@ phi_to_bool(nir_builder *b, nir_phi_instr *phi, void *unused)
 bool
 nir_opt_phi_to_bool(nir_shader *shader)
 {
-   nir_instr_worklist *worklist = nir_instr_worklist_create();
+   nir_instr_worklist worklist;
+   nir_instr_worklist_init(&worklist);
 
    nir_foreach_function_impl(impl, shader) {
       nir_foreach_block(block, impl) {
@@ -213,7 +214,7 @@ nir_opt_phi_to_bool(nir_shader *shader)
                 * so we need to revisit it later if nessecary.
                 */
                if (instr->pass_flags)
-                  nir_instr_worklist_push_tail(worklist, instr);
+                  nir_instr_worklist_push_tail(&worklist, instr);
             } else {
                instr->pass_flags = get_bool_types(instr);
             }
@@ -221,16 +222,16 @@ nir_opt_phi_to_bool(nir_shader *shader)
       }
    }
 
-   nir_foreach_instr_in_worklist(instr, worklist) {
+   nir_foreach_instr_in_worklist(instr, &worklist) {
       uint8_t bool_types = get_bool_types(instr);
       if (instr->pass_flags != bool_types) {
          instr->pass_flags = bool_types;
          nir_foreach_use(use, nir_instr_def(instr))
-            nir_instr_worklist_push_tail(worklist, nir_src_parent_instr(use));
+            nir_instr_worklist_push_tail(&worklist, nir_src_parent_instr(use));
       }
    }
 
-   nir_instr_worklist_destroy(worklist);
+   nir_instr_worklist_fini(&worklist);
 
    return nir_shader_phi_pass(shader, phi_to_bool, nir_metadata_control_flow, NULL);
 }

@@ -286,6 +286,9 @@ interstage_member_mismatch(struct gl_shader_program *prog,
       if (c->fields.structure[i].patch !=
           p->fields.structure[i].patch)
          return true;
+      if (c->fields.structure[i].per_primitive !=
+          p->fields.structure[i].per_primitive)
+         return true;
 
       /* From Section 4.5 (Interpolation Qualifiers) of the GLSL 4.40 spec:
        *
@@ -401,13 +404,15 @@ intrastage_match(nir_variable *a,
  * Check if two interfaces match, according to interstage (in/out) interface
  * matching rules.
  *
- * If \c extra_array_level is true, the consumer interface is required to be
- * an array and the producer interface is required to be a non-array.
- * This is used for tessellation control and geometry shader consumers.
+ * If \c producer_extra_array_level and/or \c consumer_extra_array_level is true,
+ * the producer and/or consumer interface is required to be an array.
+ * This is used for tessellation control and geometry shader consumers,
+ * or mesh shader producers.
  */
 static bool
 interstage_match(struct gl_shader_program *prog, nir_variable *producer,
-                 nir_variable *consumer, bool extra_array_level)
+                 nir_variable *consumer, bool producer_extra_array_level,
+                 bool consumer_extra_array_level)
 {
    /* Types must match. */
    if (consumer->interface_type != producer->interface_type) {
@@ -429,10 +434,18 @@ interstage_match(struct gl_shader_program *prog, nir_variable *producer,
 
    /* Ignore outermost array if geom shader */
    const glsl_type *consumer_instance_type;
-   if (extra_array_level) {
+   if (consumer_extra_array_level) {
       consumer_instance_type = glsl_get_array_element(consumer->type);
    } else {
       consumer_instance_type = consumer->type;
+   }
+
+   /* Ignore outermost array if mesh shader */
+   const glsl_type *producer_instance_type;
+   if (producer_extra_array_level) {
+      producer_instance_type = glsl_get_array_element(producer->type);
+   } else {
+      producer_instance_type = producer->type;
    }
 
    /* If a block is an array then it must match across shaders.
@@ -442,8 +455,8 @@ interstage_match(struct gl_shader_program *prog, nir_variable *producer,
    if ((is_interface_instance(consumer) &&
         glsl_type_is_array(consumer_instance_type)) ||
        (is_interface_instance(producer) &&
-        glsl_type_is_array(producer->type))) {
-      if (consumer_instance_type != producer->type)
+        glsl_type_is_array(producer_instance_type))) {
+      if (consumer_instance_type != producer_instance_type)
          return false;
    }
 
@@ -561,6 +574,13 @@ gl_nir_validate_intrastage_interface_blocks(struct gl_shader_program *prog,
          case nir_var_mem_ssbo:
             definitions = buffer_interfaces;
             break;
+         case nir_var_mem_pixel_local_in:
+         case nir_var_mem_pixel_local_out:
+         case nir_var_mem_pixel_local_inout:
+            /* These aren't intrastage, they're fragment shader
+             * only, so they don't need to be checked here.
+             */
+            continue;
          default:
             /* Only in, out, and uniform interfaces are legal, so we should
              * never get here.
@@ -611,9 +631,13 @@ gl_nir_validate_interstage_inout_blocks(struct gl_shader_program *prog,
                                                    _mesa_key_string_equal);
 
    /* VS -> GS, VS -> TCS, VS -> TES, TES -> GS */
-   const bool extra_array_level = (producer->Stage == MESA_SHADER_VERTEX &&
-                                   consumer->Stage != MESA_SHADER_FRAGMENT) ||
-                                  consumer->Stage == MESA_SHADER_GEOMETRY;
+   const bool consumer_extra_array_level =
+      (producer->Stage == MESA_SHADER_VERTEX &&
+       consumer->Stage != MESA_SHADER_FRAGMENT) ||
+      consumer->Stage == MESA_SHADER_GEOMETRY;
+
+   /* MS -> FS */
+   const bool producer_extra_array_level = producer->Stage == MESA_SHADER_MESH;
 
    /* Check that block re-declarations of gl_PerVertex are compatible
     * across shaders: From OpenGL Shading Language 4.5, section
@@ -736,7 +760,8 @@ gl_nir_validate_interstage_inout_blocks(struct gl_shader_program *prog,
       }
 
       if (producer_def &&
-          !interstage_match(prog, producer_def, var, extra_array_level)) {
+          !interstage_match(prog, producer_def, var, producer_extra_array_level,
+                            consumer_extra_array_level)) {
          linker_error(prog, "definitions of interface block `%s' do not "
                       "match\n", glsl_get_type_name(var->interface_type));
          ralloc_free(mem_ctx);
@@ -757,7 +782,7 @@ gl_nir_validate_interstage_uniform_blocks(struct gl_shader_program *prog,
    struct hash_table *ht = _mesa_hash_table_create(mem_ctx, _mesa_hash_string,
                                                    _mesa_key_string_equal);
 
-   for (int i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (int i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (stages[i] == NULL)
          continue;
 

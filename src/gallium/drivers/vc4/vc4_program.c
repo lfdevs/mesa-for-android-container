@@ -433,7 +433,7 @@ ntq_emit_tex(struct vc4_compile *c, nir_tex_instr *instr)
                         compare = ntq_get_src(c, instr->src[i].src, 0);
                         break;
                 default:
-                        unreachable("unknown texture source");
+                        UNREACHABLE("unknown texture source");
                 }
         }
 
@@ -828,10 +828,10 @@ ntq_emit_pack_unorm_4x8(struct vc4_compile *c, nir_alu_instr *instr)
         /* If packing from a vec4 op (as expected), identify it so that we can
          * peek back at what generated its sources.
          */
-        if (instr->src[0].src.ssa->parent_instr->type == nir_instr_type_alu &&
-            nir_instr_as_alu(instr->src[0].src.ssa->parent_instr)->op ==
+        if (nir_src_is_alu(instr->src[0].src) &&
+            nir_def_as_alu(instr->src[0].src.ssa)->op ==
             nir_op_vec4) {
-                vec4 = nir_instr_as_alu(instr->src[0].src.ssa->parent_instr);
+                vec4 = nir_def_as_alu(instr->src[0].src.ssa);
         }
 
         /* If the pack is replicating the same channel 4 times, use the 8888
@@ -997,10 +997,10 @@ static struct qreg ntq_emit_bcsel(struct vc4_compile *c, nir_alu_instr *instr,
 {
         if (nir_load_reg_for_def(instr->src[0].src.ssa))
                 goto out;
-        if (instr->src[0].src.ssa->parent_instr->type != nir_instr_type_alu)
+        if (!nir_src_is_alu(instr->src[0].src))
                 goto out;
         nir_alu_instr *compare =
-                nir_instr_as_alu(instr->src[0].src.ssa->parent_instr);
+                nir_def_as_alu(instr->src[0].src.ssa);
         if (!compare)
                 goto out;
 
@@ -1486,10 +1486,6 @@ static void
 vc4_optimize_nir(struct nir_shader *s)
 {
         bool progress;
-        unsigned lower_flrp =
-                (s->options->lower_flrp16 ? 16 : 0) |
-                (s->options->lower_flrp32 ? 32 : 0) |
-                (s->options->lower_flrp64 ? 64 : 0);
 
         do {
                 progress = false;
@@ -1497,7 +1493,7 @@ vc4_optimize_nir(struct nir_shader *s)
                 NIR_PASS(_, s, nir_lower_vars_to_ssa);
                 NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL, NULL);
                 NIR_PASS(progress, s, nir_lower_phis_to_scalar, NULL, NULL);
-                NIR_PASS(progress, s, nir_copy_prop);
+                NIR_PASS(progress, s, nir_opt_copy_prop);
                 NIR_PASS(progress, s, nir_opt_remove_phis);
                 NIR_PASS(progress, s, nir_opt_dce);
                 NIR_PASS(progress, s, nir_opt_dead_cf);
@@ -1511,23 +1507,6 @@ vc4_optimize_nir(struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_peephole_select, &peephole_select_options);
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
-                if (lower_flrp != 0) {
-                        bool lower_flrp_progress = false;
-
-                        NIR_PASS(lower_flrp_progress, s, nir_lower_flrp,
-                                 lower_flrp,
-                                 false /* always_precise */);
-                        if (lower_flrp_progress) {
-                                NIR_PASS(progress, s, nir_opt_constant_folding);
-                                progress = true;
-                        }
-
-                        /* Nothing should rematerialize any flrps, so we only
-                         * need to do this lowering once.
-                         */
-                        lower_flrp = 0;
-                }
-
                 NIR_PASS(progress, s, nir_opt_undef);
                 NIR_PASS(progress, s, nir_opt_loop_unroll);
         } while (progress);
@@ -1975,7 +1954,7 @@ ntq_emit_jump(struct vc4_compile *c, nir_jump_instr *jump)
                 jump_block = c->loop_cont_block;
                 break;
         default:
-                unreachable("Unsupported jump type\n");
+                UNREACHABLE("Unsupported jump type\n");
         }
 
         qir_SF(c, c->execute);
@@ -2187,7 +2166,7 @@ static const nir_shader_compiler_options nir_options = {
 
 const struct nir_shader_compiler_options *
 vc4_screen_get_compiler_options(struct pipe_screen *pscreen,
-                                enum pipe_shader_type shader)
+                                mesa_shader_stage shader)
 {
         return &nir_options;
 }
@@ -2312,7 +2291,7 @@ vc4_shader_ntq(struct vc4_context *vc4, enum qstage stage,
                 more_late_algebraic = false;
                 NIR_PASS(more_late_algebraic, c->s, nir_opt_algebraic_late);
                 NIR_PASS(_, c->s, nir_opt_constant_folding);
-                NIR_PASS(_, c->s, nir_copy_prop);
+                NIR_PASS(_, c->s, nir_opt_copy_prop);
                 NIR_PASS(_, c->s, nir_opt_dce);
                 NIR_PASS(_, c->s, nir_opt_cse);
         }
@@ -2516,11 +2495,12 @@ vc4_shader_state_create(struct pipe_context *pctx,
         }
 
         if (s->info.stage == MESA_SHADER_VERTEX)
-                NIR_PASS(_, s, nir_lower_point_size, 1.0f, 0.0f);
+                NIR_PASS(_, s, nir_lower_point_size, 1.0f, 0.0f, nir_type_invalid);
 
         NIR_PASS(_, s, nir_lower_io,
                  nir_var_shader_in | nir_var_shader_out | nir_var_uniform,
                  type_size, (nir_lower_io_options)0);
+        s->info.disable_output_offset_src_constant_folding = true;
 
         NIR_PASS(_, s, nir_normalize_cubemap_coords);
 
@@ -2538,7 +2518,7 @@ vc4_shader_state_create(struct pipe_context *pctx,
 
         if (VC4_DBG(NIR)) {
                 fprintf(stderr, "%s prog %d NIR:\n",
-                        gl_shader_stage_name(s->info.stage),
+                        mesa_shader_stage_name(s->info.stage),
                         so->program_id);
                 nir_print_shader(s, stderr);
                 fprintf(stderr, "\n");
@@ -2801,7 +2781,7 @@ vc4_update_compiled_fs(struct vc4_context *vc4, uint8_t prim_mode)
                          PIPE_SPRITE_COORD_UPPER_LEFT);
         }
 
-        key->ubo_1_size = vc4->constbuf[PIPE_SHADER_FRAGMENT].cb[1].buffer_size;
+        key->ubo_1_size = vc4->constbuf[MESA_SHADER_FRAGMENT].cb[1].buffer_size;
 
         struct vc4_compiled_shader *old_fs = vc4->prog.fs;
         vc4->prog.fs = vc4_get_compiled_shader(vc4, QSTAGE_FRAG, &key->base);

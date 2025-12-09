@@ -19,6 +19,7 @@
 #include "ir3/ir3_descriptor.h"
 
 #include "fd6_hw.h"
+#include "fd6_pack.h"
 
 struct fd6_lrz_state {
    union {
@@ -93,7 +94,8 @@ struct fd6_context {
    struct fd_ringbuffer *sample_locations_disable_stateobj;
 
    /* pre-baked stateobj for preamble: */
-   struct fd_ringbuffer *preamble, *restore;
+   struct fd_ringbuffer *sysmem_preamble, *gmem_preamble;
+   struct fd_ringbuffer *restore;
 
    /* storage for ctx->last.key: */
    struct ir3_shader_key last_key;
@@ -162,19 +164,7 @@ struct fd6_control {
 };
 
 #define control_ptr(fd6_ctx, member)                                           \
-   (fd6_ctx)->control_mem, offsetof(struct fd6_control, member), 0, 0
-
-static inline void
-emit_marker6(struct fd_ringbuffer *ring, int scratch_idx)
-{
-   extern int32_t marker_cnt;
-   unsigned reg = REG_A6XX_CP_SCRATCH_REG(scratch_idx);
-   if (__EMIT_MARKER) {
-      OUT_WFI5(ring);
-      OUT_PKT4(ring, reg, 1);
-      OUT_RING(ring, p_atomic_inc_return(&marker_cnt));
-   }
-}
+   (fd6_ctx)->control_mem, offsetof(struct fd6_control, member)
 
 struct fd6_vertex_stateobj {
    struct fd_vertex_stateobj base;

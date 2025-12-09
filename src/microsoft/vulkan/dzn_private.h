@@ -66,7 +66,7 @@
 #include "spirv_to_dxil.h"
 #include "dzn_abi_helper.h"
 
-#define dzn_stub() unreachable("Unsupported feature")
+#define dzn_stub() UNREACHABLE("Unsupported feature")
 
 #if defined(VK_USE_PLATFORM_WIN32_KHR) || \
     defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
@@ -102,7 +102,7 @@ dzn_index_type_from_size(uint8_t index_size)
    case 0: return DZN_NO_INDEX;
    case 2: return DZN_INDEX_2B;
    case 4: return DZN_INDEX_4B;
-   default: unreachable("Invalid index size");
+   default: UNREACHABLE("Invalid index size");
    }
 }
 
@@ -115,7 +115,7 @@ dzn_index_type_from_dxgi_format(DXGI_FORMAT format, bool prim_restart)
       return prim_restart ? DZN_INDEX_2B_WITH_PRIM_RESTART : DZN_INDEX_2B;
    case DXGI_FORMAT_R32_UINT:
       return prim_restart ? DZN_INDEX_4B_WITH_PRIM_RESTART : DZN_INDEX_4B;
-   default: unreachable("Invalid index format");
+   default: UNREACHABLE("Invalid index format");
    }
 }
 
@@ -131,7 +131,7 @@ dzn_index_size(enum dzn_index_type type)
    case DZN_INDEX_4B_WITH_PRIM_RESTART:
    case DZN_INDEX_4B:
       return 4;
-   default: unreachable("Invalid index type");
+   default: UNREACHABLE("Invalid index type");
    }
 }
 

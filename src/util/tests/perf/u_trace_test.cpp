@@ -4,6 +4,7 @@
 
 #include "c11/threads.h"
 #include "util/perf/u_trace.h"
+#include "util/os_misc.h"
 
 #define NUM_DEBUG_TEST_THREAD 8
 
@@ -20,9 +21,8 @@ test_thread(void *_state)
 
 TEST(UtilPerfTraceTest, Multithread)
 {
-   static char env_tracefile[] = "MESA_GPU_TRACEFILE=tracefile_for_test-b5ba5a0c-6ed1-4901-a38d-755991182663";
    thrd_t threads[NUM_DEBUG_TEST_THREAD];
-   putenv(env_tracefile);
+   os_set_option("MESA_GPU_TRACEFILE", "tracefile_for_test-b5ba5a0c-6ed1-4901-a38d-755991182663", true);
    for (unsigned i = 0; i < NUM_DEBUG_TEST_THREAD; i++) {
         thrd_create(&threads[i], test_thread, NULL);
    }

@@ -259,7 +259,7 @@ nv40_fp_if(struct nvfx_fpc *fpc, struct nvfx_src src)
          (NVFX_FP_OP_COND_NE << NVFX_FP_OP_COND_SHIFT);
    hw[2] = 0; /* | NV40_FP_OP_OPCODE_IS_BRANCH | else_offset */
    hw[3] = 0; /* | endif_offset */
-   util_dynarray_append(&fpc->if_stack, unsigned, fpc->inst_offset);
+   util_dynarray_append(&fpc->if_stack, fpc->inst_offset);
 }
 
 /* IF src.x != 0, as TGSI specifies */
@@ -280,7 +280,7 @@ nv40_fp_cal(struct nvfx_fpc *fpc, unsigned target)
         hw[3] = 0;
         reloc.target = target;
         reloc.location = fpc->inst_offset + 2;
-        util_dynarray_append(&fpc->label_relocs, struct nvfx_relocation, reloc);
+        util_dynarray_append(&fpc->label_relocs, reloc);
 }
 
 static void
@@ -321,8 +321,8 @@ nv40_fp_rep(struct nvfx_fpc *fpc, unsigned count, unsigned target)
         hw[3] = 0; /* | end_offset */
         reloc.target = target;
         reloc.location = fpc->inst_offset + 3;
-        util_dynarray_append(&fpc->label_relocs, struct nvfx_relocation, reloc);
-        //util_dynarray_append(&fpc->loop_stack, unsigned, target);
+        util_dynarray_append(&fpc->label_relocs, reloc);
+        //util_dynarray_append_typed(&fpc->loop_stack, unsigned, target);
 }
 
 #if 0
@@ -347,10 +347,10 @@ nv40_fp_bra(struct nvfx_fpc *fpc, unsigned target)
         hw[3] = 0; /* | endif_offset */
         reloc.target = target;
         reloc.location = fpc->inst_offset + 2;
-        util_dynarray_append(&fpc->label_relocs, struct nvfx_relocation, reloc);
+        util_dynarray_append_typed(&fpc->label_relocs, struct nvfx_relocation, reloc);
         reloc.target = target;
         reloc.location = fpc->inst_offset + 3;
-        util_dynarray_append(&fpc->label_relocs, struct nvfx_relocation, reloc);
+        util_dynarray_append_typed(&fpc->label_relocs, struct nvfx_relocation, reloc);
 }
 #endif
 
@@ -1090,7 +1090,7 @@ _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
       goto out_err;
 
    tgsi_parse_init(&parse, fp->pipe.tokens);
-   util_dynarray_init(&insns, NULL);
+   insns = UTIL_DYNARRAY_INIT;
 
    while (!tgsi_parse_end_of_tokens(&parse)) {
       tgsi_parse_token(&parse);
@@ -1100,7 +1100,7 @@ _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
       {
          const struct tgsi_full_instruction *finst;
 
-         util_dynarray_append(&insns, unsigned, fp->insn_len);
+         util_dynarray_append(&insns, fp->insn_len);
          finst = &parse.FullToken.FullInstruction;
          if (!nvfx_fragprog_parse_instruction(fpc, finst))
             goto out_err;
@@ -1110,7 +1110,7 @@ _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
          break;
       }
    }
-   util_dynarray_append(&insns, unsigned, fp->insn_len);
+   util_dynarray_append(&insns, fp->insn_len);
 
    for(unsigned i = 0; i < fpc->label_relocs.size; i += sizeof(struct nvfx_relocation))
    {

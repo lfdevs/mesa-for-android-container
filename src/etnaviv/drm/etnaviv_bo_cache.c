@@ -151,7 +151,7 @@ struct etna_bo *etna_bo_cache_alloc(struct etna_bo_cache *cache, uint32_t *size,
 	struct etna_bo *bo;
 	struct etna_bo_bucket *bucket;
 
-	*size = ALIGN(*size, 4096);
+	*size = align(*size, 4096);
 	bucket = get_bucket(cache, *size);
 
 	/* see if we can be green and recycle: */

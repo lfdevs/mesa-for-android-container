@@ -28,18 +28,26 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
+#include "common/pvr_iface.h"
 #include "hwdef/rogue_hw_utils.h"
+#include "pco_uscgen_programs.h"
 #include "pvr_bo.h"
+#include "pvr_buffer.h"
+#include "pvr_cmd_buffer.h"
+#include "pvr_device.h"
 #include "pvr_formats.h"
+#include "pvr_macros.h"
 #include "pvr_pds.h"
-#include "pvr_private.h"
-#include "usc/programs/pvr_shader_factory.h"
-#include "usc/programs/pvr_static_shaders.h"
+#include "pvr_physical_device.h"
+#include "pvr_pipeline.h"
+#include "pvr_query.h"
 #include "pvr_tex_state.h"
 #include "pvr_types.h"
 #include "vk_alloc.h"
 #include "vk_command_pool.h"
 #include "vk_util.h"
+
+/* TODO: multicore support/awareness. */
 
 static inline void pvr_init_primary_compute_pds_program(
    struct pvr_pds_compute_shader_program *program)
@@ -52,10 +60,10 @@ static inline void pvr_init_primary_compute_pds_program(
    program->kick_usc = true;
 }
 
-static VkResult pvr_create_compute_secondary_prog(
-   struct pvr_device *device,
-   const struct pvr_shader_factory_info *shader_factory_info,
-   struct pvr_compute_query_shader *query_prog)
+static VkResult
+pvr_create_compute_secondary_prog(struct pvr_device *device,
+                                  unsigned const_shared_regs,
+                                  struct pvr_compute_query_shader *query_prog)
 {
    const size_t size =
       pvr_pds_get_max_descriptor_upload_const_map_size_in_bytes();
@@ -66,7 +74,7 @@ static VkResult pvr_create_compute_secondary_prog(
    VkResult result;
 
    info->entries =
-      vk_alloc(&device->vk.alloc, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+      vk_zalloc(&device->vk.alloc, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (!info->entries)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -79,8 +87,8 @@ static VkResult pvr_create_compute_secondary_prog(
             .buffer_id = 0,
             .source_offset = 0,
             .type = PVR_BUFFER_TYPE_COMPILE_TIME,
-            .size_in_dwords = shader_factory_info->const_shared_regs,
-            .destination = shader_factory_info->explicit_const_start_offset,
+            .size_in_dwords = const_shared_regs,
+            .destination = 0,
          }
       },
    };
@@ -133,24 +141,24 @@ pvr_destroy_compute_secondary_prog(struct pvr_device *device,
    vk_free(&device->vk.alloc, program->info.entries);
 }
 
-static VkResult pvr_create_compute_query_program(
+static VkResult pvr_create_compute_query_precomp_program(
    struct pvr_device *device,
-   const struct pvr_shader_factory_info *shader_factory_info,
+   enum pco_usclib_program common_program_index,
+   unsigned const_shared_regs,
    struct pvr_compute_query_shader *query_prog)
 {
    const uint32_t cache_line_size =
-      rogue_get_slc_cache_line_size(&device->pdevice->dev_info);
-   struct pvr_pds_compute_shader_program pds_primary_prog;
+      pvr_get_slc_cache_line_size(&device->pdevice->dev_info);
+   struct pvr_pds_compute_shader_program pds_primary_prog = { 0 };
+   const pco_precomp_data *precomp_data;
    VkResult result;
 
-   /* No support for query constant calc program. */
-   assert(shader_factory_info->const_calc_prog_inst_bytes == 0);
-   /* No support for query coefficient update program. */
-   assert(shader_factory_info->coeff_update_prog_start == PVR_INVALID_INST);
+   memset(query_prog, 0, sizeof(*query_prog));
 
+   precomp_data = (pco_precomp_data *)pco_usclib_common[common_program_index];
    result = pvr_gpu_upload_usc(device,
-                               shader_factory_info->shader_code,
-                               shader_factory_info->code_size,
+                               precomp_data->binary,
+                               precomp_data->size_dwords * sizeof(uint32_t),
                                cache_line_size,
                                &query_prog->usc_bo);
    if (result != VK_SUCCESS)
@@ -160,7 +168,7 @@ static VkResult pvr_create_compute_query_program(
 
    pvr_pds_setup_doutu(&pds_primary_prog.usc_task_control,
                        query_prog->usc_bo->dev_addr.addr,
-                       shader_factory_info->temps_required,
+                       precomp_data->temps,
                        ROGUE_PDSINST_DOUTU_SAMPLE_RATE_INSTANCE,
                        false);
 
@@ -174,9 +182,8 @@ static VkResult pvr_create_compute_query_program(
    query_prog->primary_data_size_dw = pds_primary_prog.data_size;
    query_prog->primary_num_temps = pds_primary_prog.temps_used;
 
-   result = pvr_create_compute_secondary_prog(device,
-                                              shader_factory_info,
-                                              query_prog);
+   result =
+      pvr_create_compute_secondary_prog(device, const_shared_regs, query_prog);
    if (result != VK_SUCCESS)
       goto err_free_pds_prim_code_bo;
 
@@ -222,7 +229,9 @@ static VkResult pvr_write_compute_query_pds_data_section(
     * not needed. If it's needed we should probably be using LITERAL entries for
     * this instead.
     */
+#if !defined(NDEBUG)
    memset(dword_buffer, 0xFE, PVR_DW_TO_BYTES(info->data_size_in_dwords));
+#endif /* !defined(NDEBUG) */
 
    pipeline->pds_shared_update_data_size_dw = info->data_size_in_dwords;
 
@@ -289,14 +298,14 @@ static VkResult pvr_write_compute_query_pds_data_section(
          }
 
          default:
-            unreachable("Unsupported special buffer type.");
+            UNREACHABLE("Unsupported special buffer type.");
          }
 
          entries += sizeof(*special_buff_entry);
          break;
       }
       default:
-         unreachable("Unsupported data section map");
+         UNREACHABLE("Unsupported data section map");
       }
    }
 
@@ -319,7 +328,7 @@ static void pvr_write_private_compute_dispatch(
       1,
    };
 
-   assert(sub_cmd->type == PVR_SUB_CMD_TYPE_OCCLUSION_QUERY);
+   assert(sub_cmd->type == PVR_SUB_CMD_TYPE_QUERY);
 
    pvr_compute_update_shared_private(cmd_buffer, &sub_cmd->compute, pipeline);
    pvr_compute_update_kernel_private(cmd_buffer,
@@ -338,90 +347,41 @@ pvr_destroy_compute_query_program(struct pvr_device *device,
    pvr_bo_suballoc_free(program->usc_bo);
 }
 
-static VkResult pvr_create_multibuffer_compute_query_program(
-   struct pvr_device *device,
-   const struct pvr_shader_factory_info *const *shader_factory_info,
-   struct pvr_compute_query_shader *query_programs)
-{
-   const uint32_t core_count = device->pdevice->dev_runtime_info.core_count;
-   VkResult result;
-   uint32_t i;
-
-   for (i = 0; i < core_count; i++) {
-      result = pvr_create_compute_query_program(device,
-                                                shader_factory_info[i],
-                                                &query_programs[i]);
-      if (result != VK_SUCCESS)
-         goto err_destroy_compute_query_program;
-   }
-
-   return VK_SUCCESS;
-
-err_destroy_compute_query_program:
-   for (uint32_t j = 0; j < i; j++)
-      pvr_destroy_compute_query_program(device, &query_programs[j]);
-
-   return result;
-}
-
 VkResult pvr_device_create_compute_query_programs(struct pvr_device *device)
 {
-   const uint32_t core_count = device->pdevice->dev_runtime_info.core_count;
    VkResult result;
 
-   result = pvr_create_compute_query_program(device,
-                                             &availability_query_write_info,
-                                             &device->availability_shader);
+   result = pvr_create_compute_query_precomp_program(
+      device,
+      CS_QUERY_AVAILABILITY_COMMON,
+      _PVR_QUERY_AVAILABILITY_DATA_COUNT,
+      &device->availability_shader);
+
    if (result != VK_SUCCESS)
       return result;
 
-   device->copy_results_shaders =
-      vk_alloc(&device->vk.alloc,
-               sizeof(*device->copy_results_shaders) * core_count,
-               8,
-               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!device->copy_results_shaders) {
-      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   result =
+      pvr_create_compute_query_precomp_program(device,
+                                               CS_QUERY_COPY_COMMON,
+                                               _PVR_QUERY_COPY_DATA_COUNT,
+                                               &device->copy_results_shader);
+
+   if (result != VK_SUCCESS)
       goto err_destroy_availability_query_program;
-   }
 
-   result = pvr_create_multibuffer_compute_query_program(
-      device,
-      copy_query_results_collection,
-      device->copy_results_shaders);
+   result =
+      pvr_create_compute_query_precomp_program(device,
+                                               CS_QUERY_RESET_COMMON,
+                                               _PVR_QUERY_RESET_DATA_COUNT,
+                                               &device->reset_queries_shader);
+
    if (result != VK_SUCCESS)
-      goto err_vk_free_copy_results_shaders;
-
-   device->reset_queries_shaders =
-      vk_alloc(&device->vk.alloc,
-               sizeof(*device->reset_queries_shaders) * core_count,
-               8,
-               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!device->reset_queries_shaders) {
-      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-      goto err_destroy_copy_results_query_programs;
-   }
-
-   result = pvr_create_multibuffer_compute_query_program(
-      device,
-      reset_query_collection,
-      device->reset_queries_shaders);
-   if (result != VK_SUCCESS)
-      goto err_vk_free_reset_queries_shaders;
+      goto err_destroy_copy_results_query_program;
 
    return VK_SUCCESS;
 
-err_vk_free_reset_queries_shaders:
-   vk_free(&device->vk.alloc, device->reset_queries_shaders);
-
-err_destroy_copy_results_query_programs:
-   for (uint32_t i = 0; i < core_count; i++) {
-      pvr_destroy_compute_query_program(device,
-                                        &device->copy_results_shaders[i]);
-   }
-
-err_vk_free_copy_results_shaders:
-   vk_free(&device->vk.alloc, device->copy_results_shaders);
+err_destroy_copy_results_query_program:
+   pvr_destroy_compute_query_program(device, &device->copy_results_shader);
 
 err_destroy_availability_query_program:
    pvr_destroy_compute_query_program(device, &device->availability_shader);
@@ -431,53 +391,9 @@ err_destroy_availability_query_program:
 
 void pvr_device_destroy_compute_query_programs(struct pvr_device *device)
 {
-   const uint32_t core_count = device->pdevice->dev_runtime_info.core_count;
-
    pvr_destroy_compute_query_program(device, &device->availability_shader);
-
-   for (uint32_t i = 0; i < core_count; i++) {
-      pvr_destroy_compute_query_program(device,
-                                        &device->copy_results_shaders[i]);
-      pvr_destroy_compute_query_program(device,
-                                        &device->reset_queries_shaders[i]);
-   }
-
-   vk_free(&device->vk.alloc, device->copy_results_shaders);
-   vk_free(&device->vk.alloc, device->reset_queries_shaders);
-}
-
-static void pvr_init_tex_info(const struct pvr_device_info *dev_info,
-                              struct pvr_texture_state_info *tex_info,
-                              uint32_t width,
-                              pvr_dev_addr_t addr)
-{
-   const VkFormat vk_format = VK_FORMAT_R32_UINT;
-   const uint8_t *swizzle_arr = pvr_get_format_swizzle(vk_format);
-   bool is_view_1d = !PVR_HAS_FEATURE(dev_info, tpu_extended_integer_lookup) &&
-                     !PVR_HAS_FEATURE(dev_info, tpu_image_state_v2);
-
-   *tex_info = (struct pvr_texture_state_info){
-      .format = vk_format,
-      .mem_layout = PVR_MEMLAYOUT_LINEAR,
-      .flags = PVR_TEXFLAGS_INDEX_LOOKUP,
-      .type = is_view_1d ? VK_IMAGE_VIEW_TYPE_1D : VK_IMAGE_VIEW_TYPE_2D,
-      .is_cube = false,
-      .tex_state_type = PVR_TEXTURE_STATE_SAMPLE,
-      .extent = { .width = width, .height = 1, .depth = 0 },
-      .array_size = 1,
-      .base_level = 0,
-      .mip_levels = 1,
-      .mipmaps_present = false,
-      .sample_count = 1,
-      .stride = width,
-      .offset = 0,
-      .swizzle = { [0] = swizzle_arr[0],
-                   [1] = swizzle_arr[1],
-                   [2] = swizzle_arr[2],
-                   [3] = swizzle_arr[3] },
-      .addr = addr,
-
-   };
+   pvr_destroy_compute_query_program(device, &device->copy_results_shader);
+   pvr_destroy_compute_query_program(device, &device->reset_queries_shader);
 }
 
 /* TODO: Split this function into per program type functions. */
@@ -485,32 +401,16 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
                                const struct pvr_query_info *query_info)
 {
    struct pvr_device *device = cmd_buffer->device;
-   const uint32_t core_count = device->pdevice->dev_runtime_info.core_count;
-   const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
-   const struct pvr_shader_factory_info *shader_factory_info;
-   struct pvr_sampler_descriptor sampler_state;
    const struct pvr_compute_query_shader *query_prog;
    struct pvr_private_compute_pipeline pipeline;
-   const uint32_t buffer_count = core_count;
-   struct pvr_texture_state_info tex_info;
    uint32_t num_query_indices;
    uint32_t *const_buffer;
    struct pvr_suballoc_bo *pvr_bo;
    VkResult result;
 
-   pvr_csb_pack (&sampler_state.words[0], TEXSTATE_SAMPLER_WORD0, reg) {
-      reg.addrmode_u = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
-      reg.addrmode_v = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
-      reg.addrmode_w = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
-      reg.minfilter = ROGUE_TEXSTATE_FILTER_POINT;
-      reg.magfilter = ROGUE_TEXSTATE_FILTER_POINT;
-      reg.non_normalized_coords = true;
-      reg.dadjust = ROGUE_TEXSTATE_DADJUST_ZERO_UINT;
-   }
-
-   /* clang-format off */
-   pvr_csb_pack (&sampler_state.words[1], TEXSTATE_SAMPLER_WORD1, sampler_word1) {}
-   /* clang-format on */
+   result = pvr_cmd_buffer_start_sub_cmd(cmd_buffer, PVR_SUB_CMD_TYPE_QUERY);
+   if (result != VK_SUCCESS)
+      return result;
 
    switch (query_info->type) {
    case PVR_QUERY_TYPE_AVAILABILITY_WRITE:
@@ -518,32 +418,27 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
        * value in availability_bo at every index in index_bo.
        */
       query_prog = &device->availability_shader;
-      shader_factory_info = &availability_query_write_info;
       num_query_indices = query_info->availability_write.num_query_indices;
+      pipeline.const_shared_regs_count = _PVR_QUERY_AVAILABILITY_DATA_COUNT;
       break;
 
    case PVR_QUERY_TYPE_COPY_QUERY_RESULTS:
       /* Adds a compute shader to copy availability and query value data. */
-      query_prog = &device->copy_results_shaders[buffer_count - 1];
-      shader_factory_info = copy_query_results_collection[buffer_count - 1];
+      query_prog = &device->copy_results_shader;
       num_query_indices = query_info->copy_query_results.query_count;
+      pipeline.const_shared_regs_count = _PVR_QUERY_COPY_DATA_COUNT;
       break;
 
    case PVR_QUERY_TYPE_RESET_QUERY_POOL:
       /* Adds a compute shader to reset availability and query value data. */
-      query_prog = &device->reset_queries_shaders[buffer_count - 1];
-      shader_factory_info = reset_query_collection[buffer_count - 1];
+      query_prog = &device->reset_queries_shader;
       num_query_indices = query_info->reset_query_pool.query_count;
+      pipeline.const_shared_regs_count = _PVR_QUERY_RESET_DATA_COUNT;
       break;
 
    default:
-      unreachable("Invalid query type");
+      UNREACHABLE("Invalid query type");
    }
-
-   result = pvr_cmd_buffer_start_sub_cmd(cmd_buffer,
-                                         PVR_SUB_CMD_TYPE_OCCLUSION_QUERY);
-   if (result != VK_SUCCESS)
-      return result;
 
    pipeline.pds_code_offset = query_prog->pds_prim_code.code_offset;
    pipeline.pds_data_offset = query_prog->pds_prim_code.data_offset;
@@ -553,266 +448,120 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
    pipeline.pds_data_size_dw = query_prog->primary_data_size_dw;
    pipeline.pds_temps_used = query_prog->primary_num_temps;
 
-   pipeline.coeff_regs_count = shader_factory_info->coeff_regs;
-   pipeline.unified_store_regs_count = shader_factory_info->input_regs;
-   pipeline.const_shared_regs_count = shader_factory_info->const_shared_regs;
+   /* TODO: set properly. */
+   pipeline.coeff_regs_count = 3;
+   pipeline.unified_store_regs_count = 8;
 
-   const_buffer =
-      vk_alloc(&cmd_buffer->vk.pool->alloc,
-               PVR_DW_TO_BYTES(shader_factory_info->const_shared_regs),
-               8,
-               VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   const_buffer = vk_alloc(&cmd_buffer->vk.pool->alloc,
+                           PVR_DW_TO_BYTES(pipeline.const_shared_regs_count),
+                           8,
+                           VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    if (!const_buffer) {
       return vk_command_buffer_set_error(&cmd_buffer->vk,
                                          VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
-   /* clang-format off */
-#define DRIVER_CONST(index)                                            \
-   assert(shader_factory_info->driver_const_location_map[index] <      \
-          shader_factory_info->const_shared_regs);                     \
-   const_buffer[shader_factory_info->driver_const_location_map[index]]
-   /* clang-format on */
-
    switch (query_info->type) {
    case PVR_QUERY_TYPE_AVAILABILITY_WRITE: {
-      struct pvr_image_descriptor image_sampler_state[4];
-      uint32_t image_sampler_idx = 0;
+      uint64_t index_addr =
+         query_info->availability_write.index_bo->dev_addr.addr;
 
-      memcpy(&image_sampler_state[image_sampler_idx],
-             &sampler_state,
-             sizeof(sampler_state));
-      image_sampler_idx++;
+      uint64_t avail_addr =
+         query_info->availability_write.availability_bo->dev_addr.addr;
 
-      pvr_init_tex_info(dev_info,
-                        &tex_info,
-                        num_query_indices,
-                        query_info->availability_write.index_bo->dev_addr);
+      const_buffer[PVR_QUERY_AVAILABILITY_DATA_INDEX_COUNT] = num_query_indices;
+      const_buffer[PVR_QUERY_AVAILABILITY_DATA_INDEX_BO_LO] = index_addr &
+                                                              0xffffffff;
+      const_buffer[PVR_QUERY_AVAILABILITY_DATA_INDEX_BO_HI] = index_addr >> 32;
+      const_buffer[PVR_QUERY_AVAILABILITY_DATA_BO_LO] = avail_addr & 0xffffffff;
+      const_buffer[PVR_QUERY_AVAILABILITY_DATA_BO_HI] = avail_addr >> 32;
 
-      result = pvr_pack_tex_state(device,
-                                  &tex_info,
-                                  &image_sampler_state[image_sampler_idx]);
-      if (result != VK_SUCCESS) {
-         vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
-         return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
-      }
-
-      image_sampler_idx++;
-
-      pvr_init_tex_info(
-         dev_info,
-         &tex_info,
-         query_info->availability_write.num_queries,
-         query_info->availability_write.availability_bo->dev_addr);
-
-      result = pvr_pack_tex_state(device,
-                                  &tex_info,
-                                  &image_sampler_state[image_sampler_idx]);
-      if (result != VK_SUCCESS) {
-         vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
-         return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
-      }
-
-      image_sampler_idx++;
-
-      memcpy(&const_buffer[0],
-             &image_sampler_state[image_sampler_idx],
-             sizeof(image_sampler_state[image_sampler_idx]));
-
-      /* Only PVR_QUERY_AVAILABILITY_WRITE_COUNT driver consts allowed. */
-      assert(shader_factory_info->num_driver_consts ==
-             PVR_QUERY_AVAILABILITY_WRITE_COUNT);
-
-      DRIVER_CONST(PVR_QUERY_AVAILABILITY_WRITE_INDEX_COUNT) =
-         num_query_indices;
       break;
    }
 
    case PVR_QUERY_TYPE_COPY_QUERY_RESULTS: {
-      PVR_FROM_HANDLE(pvr_query_pool,
+      VK_FROM_HANDLE(pvr_query_pool,
                       pool,
                       query_info->copy_query_results.query_pool);
-      PVR_FROM_HANDLE(pvr_buffer,
+      VK_FROM_HANDLE(pvr_buffer,
                       buffer,
                       query_info->copy_query_results.dst_buffer);
-      const uint32_t image_sampler_state_arr_size = buffer_count + 2;
-      uint32_t image_sampler_idx = 0;
-      pvr_dev_addr_t addr;
-      uint64_t offset;
 
-      STACK_ARRAY(struct pvr_image_descriptor,
-                  image_sampler_state,
-                  image_sampler_state_arr_size);
-      if (!image_sampler_state) {
-         vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
-
-         return vk_command_buffer_set_error(&cmd_buffer->vk,
-                                            VK_ERROR_OUT_OF_HOST_MEMORY);
-      }
-
-      memcpy(&image_sampler_state[image_sampler_idx],
-             &sampler_state,
-             sizeof(sampler_state));
-      image_sampler_idx++;
-
-      offset = query_info->copy_query_results.first_query * sizeof(uint32_t);
-
-      addr = PVR_DEV_ADDR_OFFSET(pool->availability_buffer->dev_addr, offset);
-
-      pvr_init_tex_info(dev_info, &tex_info, num_query_indices, addr);
-
-      result = pvr_pack_tex_state(device,
-                                  &tex_info,
-                                  &image_sampler_state[image_sampler_idx]);
-      if (result != VK_SUCCESS) {
-         vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
-         return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
-      }
-
-      image_sampler_idx++;
-
-      for (uint32_t i = 0; i < buffer_count; i++) {
-         addr = PVR_DEV_ADDR_OFFSET(pool->result_buffer->dev_addr,
-                                    offset + i * pool->result_stride);
-
-         pvr_init_tex_info(dev_info, &tex_info, num_query_indices, addr);
-
-         result = pvr_pack_tex_state(device,
-                                     &tex_info,
-                                     &image_sampler_state[image_sampler_idx]);
-         if (result != VK_SUCCESS) {
-            vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
-            return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
-         }
-
-         image_sampler_idx++;
-      }
-
-      memcpy(&const_buffer[0],
-             image_sampler_state,
-             image_sampler_state_arr_size * sizeof(*image_sampler_state));
-
-      STACK_ARRAY_FINISH(image_sampler_state);
-
-      /* Only PVR_COPY_QUERY_POOL_RESULTS_COUNT driver consts allowed. */
-      assert(shader_factory_info->num_driver_consts ==
-             PVR_COPY_QUERY_POOL_RESULTS_COUNT);
+      pvr_dev_addr_t dev_addr;
 
       /* Assert if no memory is bound to destination buffer. */
       assert(buffer->dev_addr.addr);
 
-      addr = buffer->dev_addr;
-      addr.addr += query_info->copy_query_results.dst_offset;
-      addr.addr += query_info->copy_query_results.first_query *
-                   query_info->copy_query_results.stride;
+      uint64_t offset =
+         query_info->copy_query_results.first_query * sizeof(uint32_t);
 
-      DRIVER_CONST(PVR_COPY_QUERY_POOL_RESULTS_INDEX_COUNT) = num_query_indices;
-      DRIVER_CONST(PVR_COPY_QUERY_POOL_RESULTS_BASE_ADDRESS_LOW) = addr.addr &
-                                                                   0xFFFFFFFF;
-      DRIVER_CONST(PVR_COPY_QUERY_POOL_RESULTS_BASE_ADDRESS_HIGH) = addr.addr >>
-                                                                    32;
-      DRIVER_CONST(PVR_COPY_QUERY_POOL_RESULTS_DEST_STRIDE) =
+      dev_addr = PVR_DEV_ADDR_OFFSET(buffer->dev_addr,
+                                     query_info->copy_query_results.dst_offset);
+      uint64_t dest_addr = dev_addr.addr;
+
+      dev_addr =
+         PVR_DEV_ADDR_OFFSET(pool->availability_buffer->dev_addr, offset);
+      uint64_t avail_addr = dev_addr.addr;
+
+      dev_addr = PVR_DEV_ADDR_OFFSET(pool->result_buffer->dev_addr, offset);
+      uint64_t result_addr = dev_addr.addr;
+
+      const_buffer[PVR_QUERY_COPY_DATA_INDEX_COUNT] = num_query_indices;
+
+      const_buffer[PVR_QUERY_COPY_DATA_DEST_BO_LO] = dest_addr & 0xffffffff;
+      const_buffer[PVR_QUERY_COPY_DATA_DEST_BO_HI] = dest_addr >> 32;
+
+      const_buffer[PVR_QUERY_COPY_DATA_AVAILABILITY_BO_LO] = avail_addr &
+                                                             0xffffffff;
+      const_buffer[PVR_QUERY_COPY_DATA_AVAILABILITY_BO_HI] = avail_addr >> 32;
+
+      const_buffer[PVR_QUERY_COPY_DATA_RESULT_BO_LO] = result_addr & 0xffffffff;
+      const_buffer[PVR_QUERY_COPY_DATA_RESULT_BO_HI] = result_addr >> 32;
+
+      const_buffer[PVR_QUERY_COPY_DATA_DEST_STRIDE] =
          query_info->copy_query_results.stride;
-      DRIVER_CONST(PVR_COPY_QUERY_POOL_RESULTS_PARTIAL_RESULT_FLAG) =
-         query_info->copy_query_results.flags & VK_QUERY_RESULT_PARTIAL_BIT;
-      DRIVER_CONST(PVR_COPY_QUERY_POOL_RESULTS_64_BIT_FLAG) =
-         query_info->copy_query_results.flags & VK_QUERY_RESULT_64_BIT;
-      DRIVER_CONST(PVR_COPY_QUERY_POOL_RESULTS_WITH_AVAILABILITY_FLAG) =
-         query_info->copy_query_results.flags &
-         VK_QUERY_RESULT_WITH_AVAILABILITY_BIT;
+
+      const_buffer[PVR_QUERY_COPY_DATA_FLAGS] =
+         query_info->copy_query_results.flags;
+
       break;
    }
 
    case PVR_QUERY_TYPE_RESET_QUERY_POOL: {
-      PVR_FROM_HANDLE(pvr_query_pool,
+      VK_FROM_HANDLE(pvr_query_pool,
                       pool,
                       query_info->reset_query_pool.query_pool);
-      const uint32_t image_sampler_state_arr_size = buffer_count + 2;
-      uint32_t image_sampler_idx = 0;
-      pvr_dev_addr_t addr;
-      uint64_t offset;
 
-      STACK_ARRAY(struct pvr_image_descriptor,
-                  image_sampler_state,
-                  image_sampler_state_arr_size);
-      if (!image_sampler_state) {
-         vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
+      uint64_t offset =
+         query_info->reset_query_pool.first_query * sizeof(uint32_t);
 
-         return vk_command_buffer_set_error(&cmd_buffer->vk,
-                                            VK_ERROR_OUT_OF_HOST_MEMORY);
-      }
+      pvr_dev_addr_t dev_addr =
+         PVR_DEV_ADDR_OFFSET(pool->result_buffer->dev_addr, offset);
+      uint64_t result_addr = dev_addr.addr;
 
-      memcpy(&image_sampler_state[image_sampler_idx],
-             &sampler_state,
-             sizeof(sampler_state));
-      image_sampler_idx++;
+      dev_addr =
+         PVR_DEV_ADDR_OFFSET(pool->availability_buffer->dev_addr, offset);
+      uint64_t avail_addr = dev_addr.addr;
 
-      offset = query_info->reset_query_pool.first_query * sizeof(uint32_t);
+      const_buffer[PVR_QUERY_RESET_DATA_INDEX_COUNT] = num_query_indices;
+      const_buffer[PVR_QUERY_RESET_DATA_RESULT_BO_LO] = result_addr &
+                                                        0xffffffff;
+      const_buffer[PVR_QUERY_RESET_DATA_RESULT_BO_HI] = result_addr >> 32;
+      const_buffer[PVR_QUERY_RESET_DATA_AVAILABILITY_BO_LO] = avail_addr &
+                                                              0xffffffff;
+      const_buffer[PVR_QUERY_RESET_DATA_AVAILABILITY_BO_HI] = avail_addr >> 32;
 
-      for (uint32_t i = 0; i < buffer_count; i++) {
-         addr = PVR_DEV_ADDR_OFFSET(pool->result_buffer->dev_addr,
-                                    offset + i * pool->result_stride);
-
-         pvr_init_tex_info(dev_info, &tex_info, num_query_indices, addr);
-
-         result = pvr_pack_tex_state(device,
-                                     &tex_info,
-                                     &image_sampler_state[image_sampler_idx]);
-         if (result != VK_SUCCESS) {
-            vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
-            return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
-         }
-
-         image_sampler_idx++;
-      }
-
-      addr = PVR_DEV_ADDR_OFFSET(pool->availability_buffer->dev_addr, offset);
-
-      pvr_init_tex_info(dev_info, &tex_info, num_query_indices, addr);
-
-      result = pvr_pack_tex_state(device,
-                                  &tex_info,
-                                  &image_sampler_state[image_sampler_idx]);
-      if (result != VK_SUCCESS) {
-         vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
-         return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
-      }
-
-      image_sampler_idx++;
-
-      memcpy(&const_buffer[0],
-             image_sampler_state,
-             image_sampler_state_arr_size * sizeof(*image_sampler_state));
-
-      STACK_ARRAY_FINISH(image_sampler_state);
-
-      /* Only PVR_RESET_QUERY_POOL_COUNT driver consts allowed. */
-      assert(shader_factory_info->num_driver_consts ==
-             PVR_RESET_QUERY_POOL_COUNT);
-
-      DRIVER_CONST(PVR_RESET_QUERY_POOL_INDEX_COUNT) = num_query_indices;
       break;
    }
 
    default:
-      unreachable("Invalid query type");
-   }
-
-#undef DRIVER_CONST
-
-   for (uint32_t i = 0; i < shader_factory_info->num_static_const; i++) {
-      const struct pvr_static_buffer *load =
-         &shader_factory_info->static_const_buffer[i];
-
-      /* Assert if static const is out of range. */
-      assert(load->dst_idx < shader_factory_info->const_shared_regs);
-      const_buffer[load->dst_idx] = load->value;
+      UNREACHABLE("Invalid query type");
    }
 
    result = pvr_cmd_buffer_upload_general(
       cmd_buffer,
       const_buffer,
-      PVR_DW_TO_BYTES(shader_factory_info->const_shared_regs),
+      PVR_DW_TO_BYTES(pipeline.const_shared_regs_count),
       &pvr_bo);
    if (result != VK_SUCCESS) {
       vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);

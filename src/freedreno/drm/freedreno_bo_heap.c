@@ -205,7 +205,7 @@ fd_bo_heap_alloc(struct fd_bo_heap *heap, uint32_t size, uint32_t flags)
     */
    size = MAX2(size, SUBALLOC_ALIGNMENT);
 
-   size = ALIGN(size, SUBALLOC_ALIGNMENT);
+   size = align(size, SUBALLOC_ALIGNMENT);
 
    simple_mtx_lock(&heap->lock);
    /* Allocate larger buffers from the bottom, and smaller buffers from top

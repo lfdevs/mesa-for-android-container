@@ -391,6 +391,8 @@ typedef enum pipe_format mesa_format;
 #define MESA_FORMAT_RB_RG_UNORM8                 PIPE_FORMAT_R8B8_R8G8_UNORM
 #define MESA_FORMAT_GR_BR_UNORM8                 PIPE_FORMAT_G8R8_B8R8_UNORM
 #define MESA_FORMAT_BR_GR_UNORM8                 PIPE_FORMAT_B8R8_G8R8_UNORM
+#define MESA_FORMAT_RG_RB_UNORM10                PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM
+#define MESA_FORMAT_RG_RB_UNORM16                PIPE_FORMAT_R16G16_R16B16_422_UNORM
 #define MESA_FORMAT_A_UNORM8                     PIPE_FORMAT_A8_UNORM
 #define MESA_FORMAT_A_UNORM16                    PIPE_FORMAT_A16_UNORM
 #define MESA_FORMAT_L_UNORM8                     PIPE_FORMAT_L8_UNORM
@@ -734,13 +736,9 @@ _mesa_is_format_color_format(mesa_format format);
 bool
 _mesa_is_format_srgb(mesa_format format);
 
-extern uint32_t
+extern size_t
 _mesa_format_image_size(mesa_format format, int width,
                         int height, int depth);
-
-extern uint64_t
-_mesa_format_image_size64(mesa_format format, int width,
-                          int height, int depth);
 
 extern int32_t
 _mesa_format_row_stride(mesa_format format, int width);

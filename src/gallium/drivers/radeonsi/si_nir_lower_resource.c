@@ -65,16 +65,19 @@ static nir_def *load_ubo_desc(nir_builder *b, nir_def *index,
 {
    struct si_shader_selector *sel = s->shader->selector;
 
-   nir_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
 
-   if (b->shader->info.num_ubos == 1 && b->shader->info.num_ssbos == 0)
+   if (b->shader->info.num_ubos == 1 && b->shader->info.num_ssbos == 0) {
+      nir_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
       return load_ubo_desc_fast_path(b, addr, sel);
+   }
 
+   nir_def *addr = si_nir_load_addr32_arg(s->shader->selector->screen, s->args,
+                                          b, s->args->const_and_shader_buffers);
    index = clamp_index(b, index, b->shader->info.num_ubos);
    index = nir_iadd_imm(b, index, SI_NUM_SHADER_BUFFERS);
 
    nir_def *offset = nir_ishl_imm(b, index, 4);
-   return nir_load_smem_amd(b, 4, addr, offset, .access = ACCESS_CAN_SPECULATE);
+   return ac_nir_load_smem(b, 4, addr, offset, 16, ACCESS_CAN_SPECULATE);
 }
 
 static nir_def *load_ssbo_desc(nir_builder *b, nir_src *index,
@@ -89,12 +92,13 @@ static nir_def *load_ssbo_desc(nir_builder *b, nir_src *index,
          return ac_nir_load_arg(b, &s->args->ac, s->args->cs_shaderbuf[slot]);
    }
 
-   nir_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
+   nir_def *addr = si_nir_load_addr32_arg(s->shader->selector->screen, s->args,
+                                          b, s->args->const_and_shader_buffers);
    nir_def *slot = clamp_index(b, index->ssa, b->shader->info.num_ssbos);
    slot = nir_isub_imm(b, SI_NUM_SHADER_BUFFERS - 1, slot);
 
    nir_def *offset = nir_ishl_imm(b, slot, 4);
-   return nir_load_smem_amd(b, 4, addr, offset, .access = ACCESS_CAN_SPECULATE);
+   return ac_nir_load_smem(b, 4, addr, offset, 16, ACCESS_CAN_SPECULATE);
 }
 
 static nir_def *fixup_image_desc(nir_builder *b, nir_def *rsrc, bool uses_store,
@@ -151,8 +155,8 @@ static nir_def *load_image_desc(nir_builder *b, nir_def *list, nir_def *index,
       num_channels = 8;
    }
 
-   nir_def *rsrc = nir_load_smem_amd(b, num_channels, list, offset,
-                                     .access = bindless ? 0 : ACCESS_CAN_SPECULATE);
+   nir_def *rsrc = ac_nir_load_smem(b, num_channels, list, offset, 16,
+                                    bindless ? 0 : ACCESS_CAN_SPECULATE);
 
    if (desc_type == AC_DESC_IMAGE)
       rsrc = fixup_image_desc(b, rsrc, uses_store, s);
@@ -237,7 +241,8 @@ static nir_def *load_deref_image_desc(nir_builder *b, nir_deref_instr *deref,
 
       index = nir_isub_imm(b, SI_NUM_IMAGE_SLOTS - 1, index);
 
-      nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->samplers_and_images);
+      nir_def *list = si_nir_load_addr32_arg(s->shader->selector->screen, s->args,
+                                             b, s->args->samplers_and_images);
       desc = load_image_desc(b, list, index, desc_type, !is_load, false, s);
    }
 
@@ -255,7 +260,8 @@ static nir_def *load_bindless_image_desc(nir_builder *b, nir_def *index,
    if (desc_type == AC_DESC_FMASK)
       index = nir_iadd_imm(b, index, 1);
 
-   nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->bindless_samplers_and_images);
+   nir_def *list = si_nir_load_addr32_arg(s->shader->selector->screen, s->args,
+                                          b, s->args->bindless_samplers_and_images);
    return load_image_desc(b, list, index, desc_type, !is_load, true, s);
 }
 
@@ -307,12 +313,9 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
       nir_instr_remove(&intrin->instr);
       break;
    }
-   case nir_intrinsic_get_ssbo_size: {
+   case nir_intrinsic_ssbo_descriptor_amd: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
-
-      nir_def *desc = load_ssbo_desc(b, &intrin->src[0], s);
-      nir_def *size = nir_channel(b, desc, 2);
-      nir_def_replace(&intrin->def, size);
+      nir_def_replace(&intrin->def, load_ssbo_desc(b, &intrin->src[0], s));
       break;
    }
    case nir_intrinsic_image_deref_load:
@@ -424,12 +427,12 @@ static nir_def *load_sampler_desc(nir_builder *b, nir_def *list, nir_def *index,
       num_channels = 4;
       break;
    default:
-      unreachable("invalid desc type");
+      UNREACHABLE("invalid desc type");
       break;
    }
 
-   return nir_load_smem_amd(b, num_channels, list, offset,
-                            .access = bindless ? 0 : ACCESS_CAN_SPECULATE);
+   return ac_nir_load_smem(b, num_channels, list, offset, 16,
+                           bindless ? 0 : ACCESS_CAN_SPECULATE);
 }
 
 static nir_def *load_deref_sampler_desc(nir_builder *b, nir_deref_instr *deref,
@@ -443,7 +446,8 @@ static nir_def *load_deref_sampler_desc(nir_builder *b, nir_deref_instr *deref,
 
    /* return actual desc when required by caller */
    if (return_descriptor) {
-      nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->samplers_and_images);
+      nir_def *list = si_nir_load_addr32_arg(s->shader->selector->screen, s->args,
+                                             b, s->args->samplers_and_images);
       return load_sampler_desc(b, list, index, desc_type, false);
    }
 
@@ -458,7 +462,8 @@ static nir_def *load_bindless_sampler_desc(nir_builder *b, nir_def *index,
                                                enum ac_descriptor_type desc_type,
                                                struct lower_resource_state *s)
 {
-   nir_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->bindless_samplers_and_images);
+   nir_def *list = si_nir_load_addr32_arg(s->shader->selector->screen, s->args,
+                                          b, s->args->bindless_samplers_and_images);
 
    /* 64 bit to 32 bit */
    index = nir_u2u32(b, index);

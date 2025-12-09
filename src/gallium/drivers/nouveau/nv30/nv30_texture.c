@@ -188,14 +188,14 @@ nv30_sampler_state_delete(struct pipe_context *pipe, void *hwcso)
 
 static void
 nv30_bind_sampler_states(struct pipe_context *pipe,
-                         enum pipe_shader_type shader, unsigned start_slot,
+                         mesa_shader_stage shader, unsigned start_slot,
                          unsigned num_samplers, void **samplers)
 {
    switch (shader) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       nv40_verttex_sampler_states_bind(pipe, num_samplers, samplers);
       break;
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       nv30_fragtex_sampler_states_bind(pipe, num_samplers, samplers);
       break;
    default:
@@ -325,4 +325,5 @@ nv30_texture_init(struct pipe_context *pipe)
    pipe->create_sampler_view = nv30_sampler_view_create;
    pipe->sampler_view_destroy = nv30_sampler_view_destroy;
    pipe->sampler_view_release = u_default_sampler_view_release;
+   pipe->resource_release = u_default_resource_release;
 }

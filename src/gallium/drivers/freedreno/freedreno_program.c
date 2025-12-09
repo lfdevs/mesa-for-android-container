@@ -15,7 +15,7 @@
 #include "freedreno_program.h"
 
 static void
-update_bound_stage(struct fd_context *ctx, enum pipe_shader_type shader,
+update_bound_stage(struct fd_context *ctx, mesa_shader_stage shader,
                    bool bound) assert_dt
 {
    uint32_t bound_shader_stages = ctx->bound_shader_stages;
@@ -63,7 +63,7 @@ fd_set_patch_vertices(struct pipe_context *pctx, uint8_t patch_vertices) in_dt
     * stage as TCS could be NULL (passthrough)
     */
    if (ctx->prog.ds || ctx->prog.hs) {
-      fd_context_dirty_shader(ctx, PIPE_SHADER_TESS_CTRL, FD_DIRTY_SHADER_PROG);
+      fd_context_dirty_shader(ctx, MESA_SHADER_TESS_CTRL, FD_DIRTY_SHADER_PROG);
    }
 }
 
@@ -72,8 +72,8 @@ fd_vs_state_bind(struct pipe_context *pctx, void *hwcso) in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
    ctx->prog.vs = hwcso;
-   fd_context_dirty_shader(ctx, PIPE_SHADER_VERTEX, FD_DIRTY_SHADER_PROG);
-   update_bound_stage(ctx, PIPE_SHADER_VERTEX, !!hwcso);
+   fd_context_dirty_shader(ctx, MESA_SHADER_VERTEX, FD_DIRTY_SHADER_PROG);
+   update_bound_stage(ctx, MESA_SHADER_VERTEX, !!hwcso);
 }
 
 static void
@@ -81,8 +81,8 @@ fd_tcs_state_bind(struct pipe_context *pctx, void *hwcso) in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
    ctx->prog.hs = hwcso;
-   fd_context_dirty_shader(ctx, PIPE_SHADER_TESS_CTRL, FD_DIRTY_SHADER_PROG);
-   update_bound_stage(ctx, PIPE_SHADER_TESS_CTRL, !!hwcso);
+   fd_context_dirty_shader(ctx, MESA_SHADER_TESS_CTRL, FD_DIRTY_SHADER_PROG);
+   update_bound_stage(ctx, MESA_SHADER_TESS_CTRL, !!hwcso);
 }
 
 static void
@@ -90,8 +90,8 @@ fd_tes_state_bind(struct pipe_context *pctx, void *hwcso) in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
    ctx->prog.ds = hwcso;
-   fd_context_dirty_shader(ctx, PIPE_SHADER_TESS_EVAL, FD_DIRTY_SHADER_PROG);
-   update_bound_stage(ctx, PIPE_SHADER_TESS_EVAL, !!hwcso);
+   fd_context_dirty_shader(ctx, MESA_SHADER_TESS_EVAL, FD_DIRTY_SHADER_PROG);
+   update_bound_stage(ctx, MESA_SHADER_TESS_EVAL, !!hwcso);
 }
 
 static void
@@ -99,8 +99,8 @@ fd_gs_state_bind(struct pipe_context *pctx, void *hwcso) in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
    ctx->prog.gs = hwcso;
-   fd_context_dirty_shader(ctx, PIPE_SHADER_GEOMETRY, FD_DIRTY_SHADER_PROG);
-   update_bound_stage(ctx, PIPE_SHADER_GEOMETRY, !!hwcso);
+   fd_context_dirty_shader(ctx, MESA_SHADER_GEOMETRY, FD_DIRTY_SHADER_PROG);
+   update_bound_stage(ctx, MESA_SHADER_GEOMETRY, !!hwcso);
 }
 
 static void
@@ -108,8 +108,8 @@ fd_fs_state_bind(struct pipe_context *pctx, void *hwcso) in_dt
 {
    struct fd_context *ctx = fd_context(pctx);
    ctx->prog.fs = hwcso;
-   fd_context_dirty_shader(ctx, PIPE_SHADER_FRAGMENT, FD_DIRTY_SHADER_PROG);
-   update_bound_stage(ctx, PIPE_SHADER_FRAGMENT, !!hwcso);
+   fd_context_dirty_shader(ctx, MESA_SHADER_FRAGMENT, FD_DIRTY_SHADER_PROG);
+   update_bound_stage(ctx, MESA_SHADER_FRAGMENT, !!hwcso);
 }
 
 static const char *solid_fs = "FRAG                                        \n"
@@ -160,7 +160,7 @@ fd_prog_blit_vs(struct pipe_context *pctx)
 {
    struct ureg_program *ureg;
 
-   ureg = ureg_create(PIPE_SHADER_VERTEX);
+   ureg = ureg_create(MESA_SHADER_VERTEX);
    if (!ureg)
       return NULL;
 
@@ -187,7 +187,7 @@ fd_prog_blit_fs(struct pipe_context *pctx, int rts, bool depth)
 
    assert(rts <= MAX_RENDER_TARGETS);
 
-   ureg = ureg_create(PIPE_SHADER_FRAGMENT);
+   ureg = ureg_create(MESA_SHADER_FRAGMENT);
    if (!ureg)
       return NULL;
 

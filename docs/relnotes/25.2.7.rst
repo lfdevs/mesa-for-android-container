@@ -1,0 +1,210 @@
+Mesa 25.2.7 Release Notes / 2025-11-12
+======================================
+
+Mesa 25.2.7 is a bug fix release which fixes bugs found since the 25.2.6 release.
+
+Mesa 25.2.7 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.7 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: b40232a642011820211aab5a9cdf754e106b0bce15044bc4496b0ac9615892ad  mesa-25.2.7.tar.xz
+    SHA512: 87dd815e0d11d6ec0eb969ee93d3f376103bb899d90599e0b7902394e41c58139384df79f89633e132ca969348d3320f55308a74651d409b454d51f1bcda27bc  mesa-25.2.7.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Penumbra: Overture OpenGL game has graphical glitch for ice
+- RustiCL: fence fd leak on CL-GL interop
+- Uniform variable not updated correctly with shared contexts
+- [radv] Borderlands 4 triggers a consistent GPU page fault on RDNA2
+- radv: RE4 Separate Ways DLC hangs RDNA2 GPU
+- ACO: fix a hazard when the number of attributes loaded/consumed don't match with VS prologs
+- ACO: loading 64-bit attributes can override the fetch index in VS prologs
+- nvk, nak: Broken icons in ENDLESS Legend 2 on a RTX 4080
+- LLVMPipe's \`VkPhysicalDeviceAccelerationStructurePropertiesKHR::maxPrimitiveCount` is lower than Vulkan requires.
+- asahi: DMABuf import of multi-plane YCbCr (NV12 from ISP) not renderer correctly
+- asahi: DMABuf import of multi-plane YCbCr (NV12 from ISP) not renderer correctly
+- brw: Gfx9 sampler messages violate r127 rule
+- radv: No Man's Sky XESS page fault GPU reset
+- r600/sfn: Assertion \`cir.alu_vec.empty()` failed
+
+
+Changes
+-------
+
+Alyssa Rosenzweig (1):
+
+- asahi,ail: fix multi-plane imports
+
+Benjamin Cheng (2):
+
+- vulkan/video: NULL check codec-specific chain
+- radv/video: Fix dummy DPB addresses
+
+Daniel Schürmann (1):
+
+- radv/null_device: set more options which affect compilation
+
+Danylo Piliaiev (2):
+
+- vulkan: Always fill DS state for EXT_dynamic_rendering_unused_attachments
+- tu: Use cmd->rp_trace u_trace for draw calls
+
+Dave Airlie (1):
+
+- c11/threads: fix build on c23
+
+David Rosca (6):
+
+- radeonsi/vcn: Fix AV1 bidir compound encode with order_hint disabled
+- radv/video: Don't require encode FW version >= interface version
+- radv/video: Fix AV1 bidir compound encode with order_hint disabled
+- vulkan/video: Avoid NULL pointers in session parameters
+- radv/video: Correctly handle no feedback query for encode
+- radv/video: Add NULL checks for picture parameters
+
+Dmitry Osipenko (1):
+
+- virtio/vdrm: Fix varying offsets of struct vdrm_device members
+
+Eric Engestrom (7):
+
+- docs: add sha sum for 25.2.6
+- .pick_status.json: Update to 2705d8bd8bb0cd049b4e91ac4e15ccc798abeda1
+- .pick_status.json: Mark b2badb2b241b3f5637133634b6bb48ebb90e4fed as denominated
+- .pick_status.json: Mark ff57c316964a73a7f763e2ff3ddfda99542813e1 as denominated
+- asahi/virtio: fix memleak
+- ci: track src/c11/ changes
+- ci: track src/android_stub/ changes
+
+Faith Ekstrand (3):
+
+- drm-uapi: Import the new NVIDIA modifiers
+- nil: Add support for Blackwell 8 and 16-bit modifiers
+- nir: Add a couple panfrost sysvals to divergence analysis
+
+Georg Lehmann (1):
+
+- aco/gfx10_3: work around NSA hazard
+
+Gert Wollny (1):
+
+- r600/sfn: AR loads are not dependend on the future and other code blocks
+
+Ian Romanick (2):
+
+- brw: Apply Gfx9 vgrf127 workaround in more cases
+- elk: Apply vgrf127 workaround in more cases
+
+Janne Grunau (1):
+
+- hk: Report the correct plane count in VkDrmFormatModifierProperties2?EXT
+
+Karol Herbst (6):
+
+- st/interop: fix fence leak
+- rusticl/queue: fix error code for invalid queue properties part 1
+- rusticl/queue: fix error code for invalid queue properties part 2
+- rusticl/queue: fix error code for invalid sampler kernel arg
+- rusticl/kernel: take no kernel_info reference inside the launch closure
+- rusticl/spirv: preserve signed zeroes by default
+
+Konstantin Seurer (5):
+
+- lavapipe: Bump maxPrimitiveCount
+- lavapipe: Zero image null descriptors
+- lavapipe: Bump MAX_DESCRIPTOR_UNIFORM_BLOCK_SIZE
+- gallivm/nir/soa: Use the sign of src1 for imod
+- llvmpipe: Always recompute 1/w
+
+Lars-Ivar Hesselberg Simonsen (3):
+
+- panvk: Fix IUB decode
+- pan/format: Fix mapping for I16F
+- pan/format: Disable PAN_BIND_STORAGE_IMAGE for RGBA4/BGRA4
+
+Lionel Landwerlin (3):
+
+- u_trace: reserve chunk space before emitting copies
+- anv: avoid invalid timestamp generation due to skipped commands
+- vulkan/runtime: simplify robustness state hashing
+
+Ludvig Lindau (1):
+
+- panfrost: Make instrs_equal check res table/index
+
+Marek Olšák (1):
+
+- Revert ABI breakage "amd: Add user queue HQD count to hw_ip info"
+
+Mel Henning (1):
+
+- nak/opt_lop: Don't handle modifiers in dedup_srcs
+
+Mike Blumenkrantz (1):
+
+- zink: don't destroy old push layout when enabling fbfetch descriptor
+
+Natalie Vock (1):
+
+- radv: Fix PSO history with RT pipelines
+
+Paul Gofman (1):
+
+- driconf: add a workaround for Investigation Stories : gunsound
+
+Ryan Houdek (1):
+
+- freedreno/fdl: Fix typo in tiled_to_linear_2cpp
+
+Sagar Ghuge (2):
+
+- anv: Drop unwanted untyped flush for AS query
+- intel/common: Consider 0 threads while setting TG
+
+Samuel Pitoiset (3):
+
+- radv: add a workaround for illegal depth/stencil descriptors with No Man's Sky
+- aco: fix reserving VGPRs for 64-bit attributes in VS prologs
+- radv,aco: wait for all VMEM loads when the prolog loads large 64-bit attributes
+
+Sviatoslav Peleshko (2):
+
+- mesa,driconf: Add WA to initialize vertex program outputs to vec4(0,0,0,1)
+- driconf: Add vertex_program_default_out option for Penumbra: Overture
+
+Tapani Pälli (1):
+
+- anv: fix issues found with indirect data stride
+
+Timothy Arceri (1):
+
+- mesa: skip redundant uniform update optimisation if unsafe
+
+Yiwei Zhang (6):
+
+- panvk: fix sample shading of internal blend shader for MSAA
+- llvmpipe: zero is also a valid fd
+- llvmpipe: fix udmabuf mmap error check
+- llvmpipe: add a missing alloc error handling in fd import
+- llvmpipe: misc fixes for sparse binding
+- glcpp/meson: fix libglcpp generated header dependency

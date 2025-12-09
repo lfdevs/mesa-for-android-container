@@ -116,7 +116,6 @@ libr300 = static_library(
   files_r300, r300_nir_algebraic_c,
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
-    inc_mesa,
   ],
   gnu_symbol_visibility : 'hidden',
   dependencies : [dep_llvm, idep_mesautil, idep_nir, idep_xmlconfig],

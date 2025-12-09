@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "http://caching-proxy/cache/?uri=https://s3.freedesktop.org/mesa-tracie-private/"
+  download-url: "https://s3.freedesktop.org/mesa-tracie-private/"
 
 traces:
   AmnesiaTDD/Amnesia-f700-v2.trace:
@@ -192,13 +192,19 @@ traces:
     gl-zink-anv-tgl:
       checksum: 35397140d1fe2cc92146a4e3474df08b
 
+  minecraft/minecraft-loading.trace:
+    gl-zink-anv-adl:
+      checksum: 31e922dc761aeffd6674b78706228f79
+    gl-zink-anv-tgl:
+      checksum: 31e922dc761aeffd6674b78706228f79
+
   overcooked2/Overcooked2-trim--f3301-v20201203-v2.trace:
     gl-zink-anv-adl:
       label: [skip, flakes]
       checksum: 5007fd6184cccf9d5d009aeefbdbea90
       text: "looks good but checksum keeps changing"
     gl-zink-anv-tgl:
-      checksum: 5007fd6184cccf9d5d009aeefbdbea90
+      checksum: 6e3323f5cf728a0101fc028e17054874
 
   plague-inc-evolved/PlagueIncEvolved-trim--f1200-v20201203-v2.trace:
     gl-zink-anv-adl:

@@ -60,7 +60,7 @@ pan_astc_dim_2d(unsigned dim)
    case 12:
       return MALI_ASTC_2D_DIMENSION_12;
    default:
-      unreachable("Invalid ASTC dimension");
+      UNREACHABLE("Invalid ASTC dimension");
    }
 }
 
@@ -77,7 +77,7 @@ pan_astc_dim_3d(unsigned dim)
    case 6:
       return MALI_ASTC_3D_DIMENSION_6;
    default:
-      unreachable("Invalid ASTC dimension");
+      UNREACHABLE("Invalid ASTC dimension");
    }
 }
 #endif
@@ -281,9 +281,10 @@ pan_clump_format(enum pipe_format format)
       case PIPE_FORMAT_R10G10B10_420_UNORM_PACKED:
          return MALI_CLUMP_FORMAT_Y10_UV10_420;
       case PIPE_FORMAT_R10_G10B10_422_UNORM:
+      case PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM:
          return MALI_CLUMP_FORMAT_Y10_UV10_422;
       default:
-         unreachable("unhandled clump format");
+         UNREACHABLE("unhandled clump format");
       }
    }
 
@@ -306,7 +307,7 @@ pan_clump_format(enum pipe_format format)
    case 16:
       return MALI_CLUMP_FORMAT_RAW128;
    default:
-      unreachable("Invalid bpp");
+      UNREACHABLE("Invalid bpp");
    }
 }
 
@@ -323,7 +324,7 @@ translate_superblock_size(uint64_t modifier)
    case AFBC_FORMAT_MOD_BLOCK_SIZE_64x4:
       return MALI_AFBC_SUPERBLOCK_SIZE_64X4;
    default:
-      unreachable("Invalid superblock size");
+      UNREACHABLE("Invalid superblock size");
    }
 }
 
@@ -355,59 +356,6 @@ translate_superblock_size(uint64_t modifier)
 #define PLANE_SET_SLICE_STRIDE(cfg__, size__)                                  \
    (cfg__).slice_stride = size__
 #endif
-
-static void
-pan_emit_bview_plane(const struct pan_buffer_view *bview, void *payload)
-{
-   const struct util_format_description *desc =
-      util_format_description(bview->format);
-   uint64_t size =
-      (uint64_t)util_format_get_blocksize(bview->format) * bview->width_el;
-
-   if (desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
-      bool srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);
-      /* sRGB formats decode to RGBA8 sRGB, which is narrow.
-       *
-       * Non-sRGB formats decode to RGBA16F which is wide except if decode
-       * precision is set to GL_RGBA8 for that texture.
-       */
-      bool wide = !srgb && !bview->astc.narrow;
-
-      if (desc->block.depth > 1) {
-         pan_cast_and_pack(payload, ASTC_3D_PLANE, cfg) {
-            cfg.clump_ordering = MALI_CLUMP_ORDERING_LINEAR;
-            cfg.decode_hdr = bview->astc.hdr;
-            cfg.decode_wide = wide;
-            cfg.block_width = pan_astc_dim_3d(desc->block.width);
-            cfg.block_height = pan_astc_dim_3d(desc->block.height);
-            cfg.block_depth = pan_astc_dim_3d(desc->block.depth);
-            cfg.pointer = bview->base;
-            PLANE_SET_SIZE(cfg, size);
-            PLANE_SET_EXTENT(cfg, bview->width_el, 1);
-         }
-      } else {
-         pan_cast_and_pack(payload, ASTC_2D_PLANE, cfg) {
-            cfg.clump_ordering = MALI_CLUMP_ORDERING_LINEAR;
-            cfg.decode_hdr = bview->astc.hdr;
-            cfg.decode_wide = wide;
-            cfg.block_width = pan_astc_dim_2d(desc->block.width);
-            cfg.block_height = pan_astc_dim_2d(desc->block.height);
-            PLANE_SET_SIZE(cfg, size);
-            cfg.pointer = bview->base;
-            PLANE_SET_EXTENT(cfg, bview->width_el, 1);
-         }
-      }
-   } else {
-      pan_cast_and_pack(payload, GENERIC_PLANE, cfg) {
-         cfg.clump_ordering = MALI_CLUMP_ORDERING_LINEAR;
-         cfg.clump_format = pan_clump_format(bview->format);
-         PLANE_SET_SIZE(cfg, size);
-         cfg.pointer = bview->base;
-         cfg.clump_ordering = MALI_CLUMP_ORDERING_LINEAR;
-         PLANE_SET_EXTENT(cfg, bview->width_el, 1);
-      }
-   }
-}
 
 static void
 get_linear_or_u_tiled_plane_props(const struct pan_image_view *iview,
@@ -683,8 +631,8 @@ emit_afbc_plane(const struct pan_image_view *iview, int plane_idx,
       cfg.split_block = (props->modifier & AFBC_FORMAT_MOD_SPLIT);
       cfg.tiled_header = (props->modifier & AFBC_FORMAT_MOD_TILED);
       cfg.prefetch = true;
-      cfg.compression_mode =
-         pan_afbc_compression_mode(iview->format, plane_idx);
+      cfg.compression_mode = pan_afbc_decompression_mode(
+         iview->format, image->planes[pref.plane_idx]->layout.afbc.mode);
       PLANE_SET_SIZE(cfg, plane_size);
       cfg.pointer = header_addr;
       cfg.header_row_stride = header_row_stride;
@@ -705,7 +653,7 @@ emit_afbc_chroma_2p_plane(const struct pan_image_view *iview,
                           unsigned mip_level, unsigned layer_or_z_slice,
                           void *payload)
 {
-   unreachable("AFBC chroma 2p plane not supported");
+   UNREACHABLE("AFBC chroma 2p plane not supported");
 }
 
 #if PAN_ARCH >= 10
@@ -1147,7 +1095,7 @@ pan_modifier_to_layout(uint64_t modifier)
    else if (modifier == DRM_FORMAT_MOD_LINEAR)
       return MALI_TEXTURE_LAYOUT_LINEAR;
    else
-      unreachable("Invalid modifer");
+      UNREACHABLE("Invalid modifer");
 }
 #endif
 
@@ -1380,6 +1328,30 @@ GENX(pan_storage_texture_emit)(const struct pan_image_view *iview,
 }
 #endif
 
+#if PAN_ARCH >= 9
+
+void
+GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
+                              struct mali_buffer_packed *out)
+{
+   unsigned stride = util_format_get_blocksize(bview->format);
+   struct MALI_INTERNAL_CONVERSION conv = {
+      .memory_format = GENX(pan_format_from_pipe_format)(bview->format)->hw,
+      .raw = false,
+   };
+
+   pan_pack(out, BUFFER, cfg) {
+      cfg.type = MALI_DESCRIPTOR_TYPE_BUFFER;
+      cfg.buffer_type = MALI_BUFFER_TYPE_STRUCTURE;
+      cfg.size = bview->width_el * stride;
+      cfg.address = bview->base;
+      cfg.stride = stride;
+      cfg.conversion = conv;
+   }
+}
+
+#else
+
 void
 GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
                               struct mali_texture_packed *out,
@@ -1393,11 +1365,7 @@ GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
       PIPE_SWIZZLE_W,
    };
 
-#if PAN_ARCH >= 9
-   pan_emit_bview_plane(bview, payload->cpu);
-#else
    pan_emit_bview_surface_with_stride(bview, payload->cpu);
-#endif
 
    pan_pack(out, TEXTURE, cfg) {
       cfg.dimension = MALI_TEXTURE_DIMENSION_1D;
@@ -1406,11 +1374,7 @@ GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
       cfg.height = 1;
       cfg.sample_count = 1;
       cfg.swizzle = pan_translate_swizzle_4(rgba_swizzle);
-#if PAN_ARCH >= 9
-      cfg.texel_interleave = false;
-#else
       cfg.texel_ordering = MALI_TEXTURE_LAYOUT_LINEAR;
-#endif
       cfg.levels = 1;
       cfg.array_size = 1;
 
@@ -1421,3 +1385,5 @@ GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
 #endif
    }
 }
+
+#endif

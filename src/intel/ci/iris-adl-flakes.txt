@@ -1,0 +1,5 @@
+dEQP-GLES31.functional.primitive_bounding_box.lines.tessellation_set_per_draw.vertex_tessellation_fragment.fbo_bbox_smaller
+
+# Occasional GPU hang, devcore dump in the following job:
+# https://gitlab.freedesktop.org/mesa/mesa/-/jobs/82888653
+dEQP-GLES31.functional.fbo.no_attachments.maximums.all

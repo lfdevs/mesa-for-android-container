@@ -7,7 +7,7 @@
 #include "sfn_nir.h"
 
 bool
-r600_lower_tess_io_filter(const nir_instr *instr, gl_shader_stage stage)
+r600_lower_tess_io_filter(const nir_instr *instr, mesa_shader_stage stage)
 {
    if (instr->type != nir_instr_type_intrinsic)
       return false;
@@ -142,7 +142,7 @@ load_offset_group(nir_builder *b, int ncomponents)
       return nir_imm_ivec2(b, 16, 20);
    default:
       debug_printf("Got %d components\n", ncomponents);
-      unreachable("Unsupported component count");
+      UNREACHABLE("Unsupported component count");
    }
 }
 
@@ -469,7 +469,7 @@ r600_append_tcs_TF_emission(nir_shader *shader, enum mesa_prim prim_type)
    }
 
    assert(exec_list_length(&shader->functions) == 1);
-   nir_function *f = (nir_function *)shader->functions.get_head();
+   nir_function *f = (nir_function *)exec_list_get_head(&shader->functions);
    nir_builder builder = nir_builder_create(f->impl);
    nir_builder *b = &builder;
 

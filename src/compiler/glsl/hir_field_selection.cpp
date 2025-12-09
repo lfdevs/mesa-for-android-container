@@ -28,10 +28,9 @@
 
 ir_rvalue *
 _mesa_ast_field_selection_to_hir(const ast_expression *expr,
-				 exec_list *instructions,
+				 ir_exec_list *instructions,
 				 struct _mesa_glsl_parse_state *state)
 {
-   void *ctx = state;
    ir_rvalue *result = NULL;
    ir_rvalue *op;
 
@@ -47,7 +46,7 @@ _mesa_ast_field_selection_to_hir(const ast_expression *expr,
    if (glsl_type_is_error(op->type)) {
       /* silently propagate the error */
    } else if (glsl_type_is_struct(op->type) || glsl_type_is_interface(op->type)) {
-      result = new(ctx) ir_dereference_record(op,
+      result = new(state->linalloc) ir_dereference_record(op,
 					      expr->primary_expression.identifier);
 
       if (glsl_type_is_error(result->type)) {
@@ -76,5 +75,5 @@ _mesa_ast_field_selection_to_hir(const ast_expression *expr,
 		       expr->primary_expression.identifier);
    }
 
-   return result ? result : ir_rvalue::error_value(ctx);
+   return result ? result : ir_rvalue::error_value(state->linalloc);
 }

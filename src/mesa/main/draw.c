@@ -115,7 +115,7 @@ _mesa_set_draw_vao(struct gl_context *ctx, struct gl_vertex_array_object *vao)
    if (*ptr != vao) {
       _mesa_reference_vao_(ctx, ptr, vao);
       _mesa_update_edgeflag_state_vao(ctx);
-      ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_VERTEX_ARRAYS);
       ctx->Array.NewVertexElements = true;
    }
 }
@@ -163,7 +163,7 @@ _mesa_restore_draw_vao(struct gl_context *ctx,
    ctx->VertexProgram._VPModeInputFilter = saved_vp_input_filter;
 
    /* Update states. */
-   ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_VERTEX_ARRAYS);
    ctx->Array.NewVertexElements = true;
 
    /* Restore original states. */
@@ -1041,7 +1041,7 @@ check_draw_elements_data(struct gl_context *ctx, GLsizei count,
          j = ((const GLuint *) elements)[i];
          break;
       default:
-         unreachable("Unexpected index buffer type");
+         UNREACHABLE("Unexpected index buffer type");
       }
 
       /* check element j of each enabled array */
@@ -1162,7 +1162,6 @@ _mesa_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
    info.index_bounds_valid = true;
    info.increment_draw_id = false;
    info.was_line_loop = false;
-   info.take_index_buffer_ownership = false;
    info.index_bias_varies = false;
    /* Packed section end. */
    info.start_instance = baseInstance;
@@ -1173,7 +1172,8 @@ _mesa_draw_arrays(struct gl_context *ctx, GLenum mode, GLint start,
    draw.start = start;
    draw.count = count;
 
-   st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+   ST_PIPELINE_RENDER_STATE_MASK(mask);
+   st_prepare_draw(ctx, mask);
 
    ctx->Driver.DrawGallium(ctx, &info, ctx->DrawID, NULL, &draw, 1);
 
@@ -1468,7 +1468,6 @@ _mesa_MultiDrawArrays(GLenum mode, const GLint *first,
    info.index_bounds_valid = false;
    info.increment_draw_id = primcount > 1;
    info.was_line_loop = false;
-   info.take_index_buffer_ownership = false;
    info.index_bias_varies = false;
    /* Packed section end. */
    info.start_instance = 0;
@@ -1479,7 +1478,8 @@ _mesa_MultiDrawArrays(GLenum mode, const GLint *first,
       draw[i].count = count[i];
    }
 
-   st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+   ST_PIPELINE_RENDER_STATE_MASK(mask);
+   st_prepare_draw(ctx, mask);
 
    ctx->Driver.DrawGallium(ctx, &info, 0, NULL, draw, primcount);
 
@@ -1611,7 +1611,8 @@ _mesa_validated_drawrangeelements(struct gl_context *ctx,
       }
    }
 
-   st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+   ST_PIPELINE_RENDER_STATE_MASK(mask);
+   st_prepare_draw(ctx, mask);
 
    /* Fast path for a very common DrawElements case:
     * - there are no user indices here (always true with glthread)
@@ -1627,8 +1628,7 @@ _mesa_validated_drawrangeelements(struct gl_context *ctx,
    if (index_bo && ctx->Driver.DrawGallium == st_draw_gallium &&
        st->cso_context->draw_vbo == tc_draw_vbo && ctx->DrawID == 0) {
       assert(!st->draw_needs_minmax_index);
-      struct pipe_resource *index_buffer =
-         _mesa_get_bufferobj_reference(ctx, index_bo);
+      struct pipe_resource *index_buffer = index_bo->buffer;
       struct tc_draw_single *draw =
          tc_add_draw_single_call(st->pipe, index_buffer);
       bool primitive_restart = ctx->Array._PrimitiveRestart[index_size_shift];
@@ -1643,7 +1643,6 @@ _mesa_validated_drawrangeelements(struct gl_context *ctx,
       draw->info.has_user_indices = false;
       draw->info.index_bounds_valid = false;
       draw->info.increment_draw_id = false;
-      draw->info.take_index_buffer_ownership = false;
       draw->info.index_bias_varies = false;
       draw->info.was_line_loop = false;
       draw->info._pad = 0;
@@ -1672,7 +1671,6 @@ _mesa_validated_drawrangeelements(struct gl_context *ctx,
    info.index_bounds_valid = index_bounds_valid;
    info.increment_draw_id = false;
    info.was_line_loop = false;
-   info.take_index_buffer_ownership = false;
    info.index_bias_varies = false;
    /* Packed section end. */
    info.start_instance = baseInstance;
@@ -1684,14 +1682,7 @@ _mesa_validated_drawrangeelements(struct gl_context *ctx,
       draw.start = 0;
    } else {
       draw.start = (uintptr_t)indices >> index_size_shift;
-
-      if (ctx->pipe->draw_vbo == tc_draw_vbo) {
-         /* Fast path for u_threaded_context to eliminate atomics. */
-         info.index.resource = _mesa_get_bufferobj_reference(ctx, index_bo);
-         info.take_index_buffer_ownership = true;
-      } else {
-         info.index.resource = index_bo->buffer;
-      }
+      info.index.resource = index_bo->buffer;
    }
    draw.index_bias = basevertex;
 
@@ -2062,7 +2053,6 @@ _mesa_validated_multidrawelements(struct gl_context *ctx,
    info.index_bounds_valid = false;
    info.increment_draw_id = primcount > 1;
    info.was_line_loop = false;
-   info.take_index_buffer_ownership = false;
    info.index_bias_varies = !!basevertex;
    /* Packed section end. */
    info.start_instance = 0;
@@ -2072,13 +2062,7 @@ _mesa_validated_multidrawelements(struct gl_context *ctx,
    if (info.has_user_indices) {
       info.index.user = (void*)min_index_ptr;
    } else {
-      if (ctx->pipe->draw_vbo == tc_draw_vbo) {
-         /* Fast path for u_threaded_context to eliminate atomics. */
-         info.index.resource = _mesa_get_bufferobj_reference(ctx, index_bo);
-         info.take_index_buffer_ownership = true;
-      } else {
-         info.index.resource = index_bo->buffer;
-      }
+      info.index.resource = index_bo->buffer;
 
       /* No index buffer storage allocated - nothing to do. */
       if (!info.index.resource)
@@ -2115,7 +2099,8 @@ _mesa_validated_multidrawelements(struct gl_context *ctx,
          }
       }
 
-      st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+      ST_PIPELINE_RENDER_STATE_MASK(mask);
+      st_prepare_draw(ctx, mask);
       if (!validate_index_bounds(ctx, &info, draw, primcount))
          return;
 
@@ -2125,7 +2110,8 @@ _mesa_validated_multidrawelements(struct gl_context *ctx,
       assert(info.has_user_indices);
       info.increment_draw_id = false;
 
-      st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+      ST_PIPELINE_RENDER_STATE_MASK(mask);
+      st_prepare_draw(ctx, mask);
 
       for (int i = 0; i < primcount; i++) {
          struct pipe_draw_start_count_bias draw;
@@ -2288,7 +2274,8 @@ _mesa_DrawTransformFeedbackStreamInstanced(GLenum mode, GLuint name,
                                              primcount))
       return;
 
-   st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+   ST_PIPELINE_RENDER_STATE_MASK(mask);
+   st_prepare_draw(ctx, mask);
 
    struct pipe_draw_indirect_info indirect;
    memset(&indirect, 0, sizeof(indirect));
@@ -2451,11 +2438,11 @@ _mesa_MultiDrawArraysIndirect(GLenum mode, const GLvoid *indirect,
       info.index_bounds_valid = false;
       info.increment_draw_id = primcount > 1;
       info.was_line_loop = false;
-      info.take_index_buffer_ownership = false;
       info.index_bias_varies = false;
       /* Packed section end. */
 
-      st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+      ST_PIPELINE_RENDER_STATE_MASK(mask);
+      st_prepare_draw(ctx, mask);
 
       const uint8_t *ptr = (const uint8_t *) indirect;
       for (unsigned i = 0; i < primcount; i++) {
@@ -2545,31 +2532,20 @@ _mesa_MultiDrawElementsIndirect(GLenum mode, GLenum type,
       info.index_bounds_valid = false;
       info.increment_draw_id = primcount > 1;
       info.was_line_loop = false;
-      info.take_index_buffer_ownership = false;
       info.index_bias_varies = false;
       /* Packed section end. */
       info.restart_index = ctx->Array._RestartIndex[index_size_shift];
 
       struct gl_buffer_object *index_bo = ctx->Array.VAO->IndexBufferObj;
 
-      if (ctx->pipe->draw_vbo == tc_draw_vbo) {
-         /* Fast path for u_threaded_context to eliminate atomics. */
-         info.index.resource = _mesa_get_bufferobj_reference(ctx, index_bo);
-         info.take_index_buffer_ownership = true;
-         /* Increase refcount so be able to use take_index_buffer_ownership with
-          * multiple draws.
-          */
-         if (primcount > 1 && info.index.resource)
-            p_atomic_add(&info.index.resource->reference.count, primcount - 1);
-      } else {
-         info.index.resource = index_bo->buffer;
-      }
+      info.index.resource = index_bo->buffer;
 
       /* No index buffer storage allocated - nothing to do. */
       if (!info.index.resource)
          return;
 
-      st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+      ST_PIPELINE_RENDER_STATE_MASK(mask);
+      st_prepare_draw(ctx, mask);
 
       const uint8_t *ptr = (const uint8_t *) indirect;
       for (unsigned i = 0; i < primcount; i++) {

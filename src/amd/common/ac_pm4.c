@@ -5,6 +5,7 @@
  */
 
 #include "ac_debug.h"
+#include "ac_cmdbuf.h"
 #include "ac_gpu_info.h"
 #include "ac_pm4.h"
 
@@ -56,7 +57,7 @@ pairs_packed_opcode_to_regular(unsigned opcode)
    case PKT3_SET_SH_REG_PAIRS_PACKED:
       return PKT3_SET_SH_REG;
    default:
-      unreachable("invalid packed opcode");
+      UNREACHABLE("invalid packed opcode");
    }
 }
 
@@ -446,4 +447,12 @@ ac_pm4_free_state(struct ac_pm4_state *state)
       return;
 
    free(state);
+}
+
+void
+ac_pm4_emit_commands(struct ac_cmdbuf *cs, const struct ac_pm4_state *state)
+{
+   ac_cmdbuf_begin(cs);
+   ac_cmdbuf_emit_array(state->pm4, state->ndw);
+   ac_cmdbuf_end();
 }

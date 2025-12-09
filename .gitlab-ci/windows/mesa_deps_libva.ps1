@@ -2,7 +2,7 @@
 
 $ProgressPreference = "SilentlyContinue"
 $MyPath = $MyInvocation.MyCommand.Path | Split-Path -Parent
-. "$MyPath\mesa_init_msvc.ps1"
+. "$MyPath\mesa_init_msvc.ps1" "-vcvars_ver=14.29"
 
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "deps" | Out-Null
 $depsInstallPath="C:\mesa-deps"
@@ -74,6 +74,12 @@ if (!$buildstatus) {
   Write-Host "Failed to compile libva-utils"
   Exit 1
 }
+
+function Remove-Symlinks {
+  Get-ChildItem -Force -ErrorAction SilentlyContinue @Args | Where-Object { if($_.Attributes -match "ReparsePoint"){$_.Delete()} }
+}
+Remove-Symlinks -Path "deps" -Recurse
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path "deps" | Out-Null
 
 Write-Host "Building libva-utils finished at:"
 Get-Date

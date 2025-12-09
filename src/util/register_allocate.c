@@ -283,6 +283,21 @@ ra_class_add_reg(struct ra_class *class, unsigned int r)
 }
 
 /**
+ * Overrides the P value of a register class to be below the
+ * automatically calculated one in order to force optimistic
+ * allocation above this threshold even for nodes that are trivially
+ * colorable, which can be used to reduce the register requirement of
+ * programs on platforms where increasing register use imposes limits
+ * on thread parallelism.
+ */
+void
+ra_class_override_p(struct ra_class *class, unsigned int p)
+{
+   assert(p <= class->p);
+   class->p = p;
+}
+
+/**
  * Returns true if the register belongs to the given class.
  */
 static bool
@@ -886,7 +901,7 @@ ra_compute_available_regs(struct ra_graph *g, unsigned int n, BITSET_WORD *regs)
    struct ra_class *c = g->regs->classes[g->nodes[n].class];
 
    /* Populate with the set of regs that are in the node's class. */
-   memcpy(regs, c->regs, BITSET_WORDS(g->regs->count) * sizeof(BITSET_WORD));
+   memcpy(regs, c->regs, BITSET_BYTES(g->regs->count));
 
    /* Remove any regs that conflict with nodes that we're adjacent to and have
     * already colored.
@@ -931,7 +946,7 @@ ra_select(struct ra_graph *g)
    BITSET_WORD *select_regs = NULL;
 
    if (g->select_reg_callback)
-      select_regs = malloc(BITSET_WORDS(g->regs->count) * sizeof(BITSET_WORD));
+      select_regs = malloc(BITSET_BYTES(g->regs->count));
 
    while (g->tmp.stack_count != 0) {
       unsigned int ri;

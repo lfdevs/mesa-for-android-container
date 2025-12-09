@@ -68,6 +68,8 @@ try_remove_simple_block(branch_ctx& ctx, Block& block)
          pred.linear_succs[1] = pred.linear_succs.back(); /* In case of discard */
          pred.linear_succs.pop_back();
          branch->opcode = aco_opcode::p_branch;
+         branch->branch().never_taken = false;
+         branch->branch().rarely_taken = false;
       } else if (pred.linear_succs[1] == block.index) {
          /* The predecessor jumps to this block. Redirect to successor. */
          pred.linear_succs[1] = succ_idx;
@@ -105,6 +107,8 @@ try_remove_simple_block(branch_ctx& ctx, Block& block)
             branch->opcode = aco_opcode::p_cbranch_z;
          else
             branch->opcode = aco_opcode::p_cbranch_nz;
+         branch->branch().never_taken = false;
+         branch->branch().rarely_taken = false;
       }
 
       /* Update the branch target. */
@@ -483,7 +487,7 @@ lower_branch_instruction(branch_ctx& ctx, Block& block)
          bld.sopp(aco_opcode::s_cbranch_scc0, target);
       }
       break;
-   default: unreachable("Unknown Pseudo branch instruction!");
+   default: UNREACHABLE("Unknown Pseudo branch instruction!");
    }
 }
 

@@ -1,7 +1,6 @@
 [[deqp]]
 deqp = "/deqp-gles/modules/gles2/deqp-gles2"
 caselists = ["/deqp-gles/mustpass/gles2-main.txt"]
-skips = ["install/all-skips.txt", "install/nouveau-gm20b-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256",
     "--deqp-surface-height=256",
@@ -15,7 +14,6 @@ version_check = "GL ES 3.2"
 [[deqp]]
 deqp = "/deqp-gles/modules/gles3/deqp-gles3"
 caselists = ["/deqp-gles/mustpass/gles3-main.txt"]
-skips = ["install/all-skips.txt", "install/nouveau-gm20b-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256",
     "--deqp-surface-height=256",
@@ -27,7 +25,6 @@ deqp_args = [
 [[deqp]]
 deqp = "/deqp-gles/modules/gles31/deqp-gles31"
 caselists = ["/deqp-gles/mustpass/gles31-main.txt"]
-skips = ["install/all-skips.txt", "install/nouveau-gm20b-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256",
     "--deqp-surface-height=256",
@@ -43,7 +40,6 @@ caselists = [
 	  "/deqp-gles/mustpass/gles3-khr-main.txt",
 	  "/deqp-gles/mustpass/gles31-khr-main.txt"
 ]
-skips = ["install/all-skips.txt", "install/nouveau-gm20b-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256",
     "--deqp-surface-height=256",

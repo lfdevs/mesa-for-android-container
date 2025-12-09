@@ -99,7 +99,7 @@ svga_create_uav_image(struct svga_context *svga,
  */
 static void
 svga_set_shader_images(struct pipe_context *pipe,
-                       enum pipe_shader_type shader,
+                       mesa_shader_stage shader,
                        unsigned start,
                        unsigned num,
                        unsigned unbind_num_trailing_slots,
@@ -207,7 +207,7 @@ svga_init_shader_image_functions(struct svga_context *svga)
    }
 
    /* Initialize shader image views */
-   for (unsigned shader = 0; shader < PIPE_SHADER_TYPES; ++shader) {
+   for (unsigned shader = 0; shader < MESA_SHADER_STAGES; ++shader) {
       struct svga_image_view *hw_image_views =
          &svga->state.hw_draw.image_views[shader][0];
       struct svga_image_view *cur_image_views =

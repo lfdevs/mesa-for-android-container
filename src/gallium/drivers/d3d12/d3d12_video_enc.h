@@ -120,6 +120,7 @@ d3d12_video_encoder_encode_bitstream_sliced(struct pipe_video_codec *codec,
                                             unsigned num_slice_objects,
                                             struct pipe_resource **slice_destinations,
                                             struct pipe_fence_handle **slice_fences,
+                                            struct pipe_fence_handle **last_slice_completion_fence,
                                             void **feedback);
 
 void
@@ -128,6 +129,7 @@ d3d12_video_encoder_encode_bitstream_impl(struct pipe_video_codec *codec,
                                           unsigned num_slice_objects,
                                           struct pipe_resource **slice_destinations,
                                           struct pipe_fence_handle **slice_fences,
+                                          struct pipe_fence_handle **last_slice_completion_fence,
                                           void **feedback);
 
 void
@@ -175,11 +177,7 @@ struct D3D12EncodeCapabilities
 
    D3D12_VIDEO_ENCODER_SUPPORT_FLAGS                          m_SupportFlags = {};
    D3D12_VIDEO_ENCODER_VALIDATION_FLAGS                       m_ValidationFlags = {};
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
    D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLUTION_SUPPORT_LIMITS1 m_currentResolutionSupportCaps = {};
-#else
-   D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLUTION_SUPPORT_LIMITS m_currentResolutionSupportCaps = {};
-#endif
    union
    {
       D3D12_VIDEO_ENCODER_PROFILE_H264 m_H264Profile;
@@ -208,11 +206,7 @@ struct D3D12EncodeCapabilities
    // The maximum number of slices that the output of the current frame to be encoded will contain
    uint32_t m_MaxSlicesInOutput = 0;
 
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
    D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOURCE_REQUIREMENTS1 m_ResourceRequirementsCaps = {};
-#else
-   D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOURCE_REQUIREMENTS m_ResourceRequirementsCaps = {};
-#endif
 };
 
 struct D3D12EncodeRateControlState
@@ -232,6 +226,35 @@ struct D3D12EncodeRateControlState
       D3D12_VIDEO_ENCODER_RATE_CONTROL_VBR1  m_Configuration_VBR1;
       D3D12_VIDEO_ENCODER_RATE_CONTROL_QVBR1 m_Configuration_QVBR1;  
    } m_Config;
+
+   bool CompareEqual(D3D12EncodeRateControlState& other)
+   {
+      if (m_Mode != other.m_Mode)
+         return false;
+      {
+         // Ignore differences in the ENABLE_FRAME_ANALYSIS flag when comparing rate control flags.
+         const uint32_t ignoreFlagMask =
+         static_cast<uint32_t>(D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_FRAME_ANALYSIS);
+         if ((static_cast<uint32_t>(m_Flags) & ~ignoreFlagMask) !=
+          (static_cast<uint32_t>(other.m_Flags) & ~ignoreFlagMask))
+         return false;
+      }
+      if (max_frame_size != other.max_frame_size)
+         return false;
+      if (memcmp(&m_FrameRate, &other.m_FrameRate, sizeof(m_FrameRate)) != 0)
+         return false;
+      if (memcmp(&m_Config, &other.m_Config, sizeof(m_Config)) != 0)
+         return false;
+      return true;
+   }
+};
+
+enum d3d12_video_encoder_input_qp_mode
+{
+   d3d12_video_encoder_input_disable = 0,
+   d3d12_video_encoder_input8_cpu_mode = 1,
+   d3d12_video_encoder_input16_cpu_mode = 2,
+   d3d12_video_encoder_input_gpu_mode = 3,
 };
 
 struct D3D12EncodeConfiguration
@@ -296,11 +319,7 @@ struct D3D12EncodeConfiguration
    union
    {
       D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_H264 m_H264PicData;
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
       D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2 m_HEVCPicData;
-#else
-      D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC m_HEVCPicData;
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
       D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_CODEC_DATA m_AV1PicData;
    } m_encoderPicParamsDesc = {};
 
@@ -322,10 +341,9 @@ struct D3D12EncodeConfiguration
 
    bool m_bUsedAsReference; // Set if frame will be used as reference frame
 
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
    struct{
       D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE MapSource;
-      union {
+      struct {
          // D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE_CPU_BUFFER
          D3D12_VIDEO_ENCODER_DIRTY_RECT_INFO RectsInfo;
          // D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE_GPU_TEXTURE
@@ -346,32 +364,41 @@ struct D3D12EncodeConfiguration
          struct d3d12_resource* InputMap;
          D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLVE_INPUT_PARAM_LAYOUT capInputLayoutQPMap;
       } GPUInput;
+      // ROI map provided in CPU memory
       struct {
          bool AppRequested;
          // AV1 uses 16 bit integers, H26x uses 8 bit integers
          std::vector<int8_t> m_pRateControlQPMap8Bit;
          std::vector<int16_t> m_pRateControlQPMap16Bit;
       } CPUInput;
+      // When app provides a QP Map with handle and size
+      struct
+      {
+         bool AppRequested;
+         enum d3d12_video_encoder_input_qp_mode m_input_qp_mode;
+         void *m_p_qp_map_cpu;
+         uint32_t m_qp_map_count;
+      } CPUInputBuffer;
    } m_QuantizationMatrixDesc = {};
    struct{
       D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE MapSource;
-      struct { // union doesn't play well with std::vector
-         // D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE_CPU_BUFFER
-         D3D12_VIDEO_ENCODER_MOVEREGION_INFO RectsInfo;
-         // D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE_GPU_TEXTURE
-         struct
-         {
-            D3D12_VIDEO_ENCODER_FRAME_MOTION_SEARCH_MODE_CONFIG MotionSearchModeConfiguration;
-            UINT NumHintsPerPixel;
-            std::vector<ID3D12Resource*> ppMotionVectorMaps;
-            UINT*            pMotionVectorMapsSubresources;
-            std::vector<ID3D12Resource*> ppMotionVectorMapsMetadata;
-            UINT*            pMotionVectorMapsMetadataSubresources;
-            D3D12_VIDEO_ENCODER_FRAME_INPUT_MOTION_UNIT_PRECISION MotionUnitPrecision;
-            D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 PictureControlConfiguration;
-            D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLVE_INPUT_PARAM_LAYOUT capInputLayoutMotionVectors;
-         } MapInfo;
-      };
+      // D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE_CPU_BUFFER
+      D3D12_VIDEO_ENCODER_MOVEREGION_INFO RectsInfo;
+      // D3D12_VIDEO_ENCODER_INPUT_MAP_SOURCE_GPU_TEXTURE
+      struct
+      {
+         D3D12_VIDEO_ENCODER_FRAME_MOTION_SEARCH_MODE_CONFIG MotionSearchModeConfiguration;
+         UINT NumHintsPerPixel;
+         std::vector<ID3D12Resource*> ppMotionVectorMaps;
+         UINT*            pMotionVectorMapsSubresources;
+         std::vector<ID3D12Resource*> ppMotionVectorMapsMetadata;
+         UINT*            pMotionVectorMapsMetadataSubresources;
+         D3D12_VIDEO_ENCODER_FRAME_INPUT_MOTION_UNIT_PRECISION MotionUnitPrecision;
+         D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 PictureControlConfiguration;
+         D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLVE_INPUT_PARAM_LAYOUT capInputLayoutMotionVectors;
+         std::vector<struct d3d12_resource *> pMotionVectorMapsGalliumResources;
+         std::vector<struct d3d12_resource *> pMotionVectorMapsMetadataGalliumResources;
+      } MapInfo;
    } m_MoveRectsDesc = {};
    std::vector<RECT> m_DirtyRectsArray;
    std::vector<D3D12_VIDEO_ENCODER_MOVE_RECT> m_MoveRectsArray;
@@ -423,7 +450,6 @@ struct D3D12EncodeConfiguration
          D3D12_VIDEO_ENCODER_RECONSTRUCTED_PICTURE FrameAnalysisReconstructedPictureOutput;
 
    } m_TwoPassEncodeDesc = {};
-#endif
 };
 
 struct EncodedBitstreamResolvedMetadata
@@ -478,9 +504,7 @@ struct EncodedBitstreamResolvedMetadata
    * stream from EncodeFrame.
    */
    std::vector<ComPtr<ID3D12Resource>> spStagingBitstreams;
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
    D3D12_VIDEO_ENCODER_COMPRESSED_BITSTREAM_NOTIFICATION_MODE SubregionNotificationMode;
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
    std::vector<ComPtr<ID3D12Resource>> pspSubregionSizes;
    std::vector<ComPtr<ID3D12Resource>> pspSubregionOffsets;
    std::vector<ComPtr<ID3D12Fence>> pspSubregionFences;
@@ -515,7 +539,7 @@ struct EncodedBitstreamResolvedMetadata
    */
    std::vector<uint8_t> m_StagingBitstreamConstruction;
 
-   /* Stores encode result for get_feedback readback in the D3D12_VIDEO_ENC_METADATA_BUFFERS_COUNT slots */
+   /* Stores encode result for get_feedback readback in the m_MaxMetadataBuffersCount slots */
    enum pipe_video_feedback_encode_result_flags encode_result = PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_OK;
 
    /* Expected max frame, slice sizes */
@@ -524,6 +548,7 @@ struct EncodedBitstreamResolvedMetadata
 
    /* Pending fence data for this frame */
    d3d12_unique_fence m_fence;
+   d3d12_unique_fence m_LastSliceFence;
 };
 
 enum d3d12_video_encoder_driver_workarounds
@@ -542,6 +567,7 @@ struct d3d12_video_encoder
    struct d3d12_screen *   m_pD3D12Screen = nullptr;
    UINT max_quality_levels = 1;
    UINT max_num_ltr_frames = 0;
+   UINT screen_max_slices_per_frame = 0;
 
    union pipe_enc_cap_sliced_notifications supports_sliced_fences = {};
 
@@ -553,17 +579,29 @@ struct d3d12_video_encoder
 
    const uint m_NodeMask  = 0u;
    const uint m_NodeIndex = 0u;
+   UINT m_MaxOutputBitstreamSize  = 0;
+   size_t m_MaxQueueAsyncDepth = 0;
+   size_t m_MaxMetadataBuffersCount = 0;
 
    ComPtr<ID3D12Fence> m_spFence;
+   ComPtr<ID3D12Fence> m_spResidencyFence;
+   ComPtr<ID3D12Fence> m_spLastSliceFence;
    uint64_t            m_fenceValue = 1u;
+   uint64_t            m_LastSliceFenceValue = 1u;
+   uint64_t            m_ResidencyFenceValue = 0u;
    bool                m_bPendingWorkNotFlushed = false;
 
    ComPtr<ID3D12VideoDevice3>            m_spD3D12VideoDevice;
+   ComPtr<ID3D12VideoDevice4>            m_spD3D12VideoDevice4;
    ComPtr<ID3D12VideoEncoder>            m_spVideoEncoder;
    ComPtr<ID3D12VideoEncoderHeap>        m_spVideoEncoderHeap;
+   ComPtr<ID3D12VideoEncoderHeap1>       m_spVideoEncoderHeap1;
    ComPtr<ID3D12CommandQueue>            m_spEncodeCommandQueue;
+   ComPtr<ID3D12CommandQueue>            m_spResolveCommandQueue;
    ComPtr<ID3D12VideoEncodeCommandList2> m_spEncodeCommandList;
-   std::vector<D3D12_RESOURCE_BARRIER>   m_transitionsBeforeCloseCmdList;
+   ComPtr<ID3D12VideoEncodeCommandList2> m_spResolveCommandList;
+   ComPtr<ID3D12VideoEncodeCommandList4> m_spEncodeCommandList4;
+   ComPtr<ID3D12VideoEncodeCommandList4> m_spResolveCommandList4;
 
    std::unique_ptr<d3d12_video_encoder_references_manager_interface> m_upDPBManager;
    std::shared_ptr<d3d12_video_dpb_storage_manager_interface>        m_upDPBStorageManager;
@@ -572,7 +610,21 @@ struct d3d12_video_encoder
    pipe_resource* m_SliceHeaderRepackBuffer = NULL;
    std::vector<uint8_t> m_BitstreamHeadersBuffer;
    std::vector<uint8_t> m_StagingHeadersBuffer;
+   std::vector<int> m_TempSliceSizesBuffer;  // Temporary buffer to avoid per-frame allocations in slice configuration
    std::vector<EncodedBitstreamResolvedMetadata> m_spEncodedFrameMetadata;
+
+   // Reusable barrier vectors to avoid per-frame allocations
+   std::vector<D3D12_RESOURCE_BARRIER> m_rgCurrentFrameStateTransitions;
+   std::vector<D3D12_RESOURCE_BARRIER> m_rgReferenceTransitions;
+   std::vector<D3D12_RESOURCE_BARRIER> m_pResolveInputDataBarriers;
+   std::vector<D3D12_RESOURCE_BARRIER> m_pTwoPassExtraBarriers;
+   std::vector<D3D12_RESOURCE_BARRIER> m_pSlicedEncodingExtraBarriers;
+   std::vector<D3D12_RESOURCE_BARRIER> m_rgResolveMetadataStateTransitions;
+   std::vector<D3D12_RESOURCE_BARRIER> m_outputStatsBarriers;
+
+   // Reusable resource vectors to avoid per-frame allocations
+   std::vector<struct d3d12_resource *> m_pOutputBitstreamBuffers;
+   std::vector<ID3D12Resource*> m_pOutputBufferD3D12Resources;
 
    struct D3D12EncodeCapabilities m_currentEncodeCapabilities = {};
    struct D3D12EncodeConfiguration m_currentEncodeConfig = {};
@@ -589,14 +641,16 @@ struct d3d12_video_encoder
       std::shared_ptr<d3d12_video_dpb_storage_manager_interface> m_References;
 
       ComPtr<ID3D12CommandAllocator> m_spCommandAllocator;
+      ComPtr<ID3D12CommandAllocator> m_spResolveCommandAllocator;
 
       struct d3d12_fence* m_InputSurfaceFence = NULL;
       uint64_t m_InputSurfaceFenceValue = 0;
       d3d12_unique_fence m_CompletionFence;
 
-      /* Stores encode result for submission error control in the D3D12_VIDEO_ENC_ASYNC_DEPTH slots */
+      /* Stores encode result for submission error control in the m_MaxQueueAsyncDepth slots */
       enum pipe_video_feedback_encode_result_flags encode_result = PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_OK;
-
+      pipe_fence_handle *context_completion_fence = NULL;
+      pipe_fence_handle *headers_upload_completion_fence = NULL;
       ComPtr<ID3D12Resource> m_spDirtyRectsResolvedOpaqueMap; // output of ID3D12VideoEncodeCommandList::ResolveInputParamLayout
       ComPtr<ID3D12Resource> m_spQPMapResolvedOpaqueMap; // output of ID3D12VideoEncodeCommandList::ResolveInputParamLayout
       ComPtr<ID3D12Resource> m_spMotionVectorsResolvedOpaqueMap; // output of ID3D12VideoEncodeCommandList::ResolveInputParamLayout
@@ -626,18 +680,16 @@ d3d12_video_encoder_reconfigure_session(struct d3d12_video_encoder *pD3D12Enc,
                                         struct pipe_picture_desc *  picture);
 bool
 d3d12_video_encoder_update_current_encoder_config_state(struct d3d12_video_encoder *pD3D12Enc,
-                                                        D3D12_VIDEO_SAMPLE srcTextureDesc,
+                                                        const D3D12_VIDEO_SAMPLE& srcTextureDesc,
                                                         struct pipe_picture_desc *  picture);
 bool
 d3d12_video_encoder_reconfigure_encoder_objects(struct d3d12_video_encoder *pD3D12Enc,
                                                 struct pipe_video_buffer *  srcTexture,
                                                 struct pipe_picture_desc *  picture);
-D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA
-d3d12_video_encoder_get_current_picture_param_settings(struct d3d12_video_encoder *pD3D12Enc);
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
 D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1
-d3d12_video_encoder_get_current_picture_param_settings1(struct d3d12_video_encoder *pD3D12Enc);
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
+d3d12_video_encoder_get_current_picture_param_settings(struct d3d12_video_encoder *pD3D12Enc);
+D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA
+d3d12_video_encoder_get_current_picture_param_settings_legacy(struct d3d12_video_encoder *pD3D12Enc);
 D3D12_VIDEO_ENCODER_LEVEL_SETTING
 d3d12_video_encoder_get_current_level_desc(struct d3d12_video_encoder *pD3D12Enc);
 D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION
@@ -665,7 +717,7 @@ d3d12_video_encoder_calculate_max_slices_count_in_output(
    D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE                          slicesMode,
    const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_SLICES *slicesConfig,
    uint32_t                                                                 MaxSubregionsNumberFromCaps,
-   D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC                              sequenceTargetResolution,
+   const D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC&                       sequenceTargetResolution,
    uint32_t                                                                 SubregionBlockPixelsSize);
 bool
 d3d12_video_encoder_prepare_output_buffers(struct d3d12_video_encoder *pD3D12Enc,
@@ -676,7 +728,7 @@ d3d12_video_encoder_build_pre_encode_codec_headers(struct d3d12_video_encoder *p
                                                    bool &postEncodeHeadersNeeded,
                                                    uint64_t &preEncodeGeneratedHeadersByteSize,
                                                    std::vector<uint64_t> &pWrittenCodecUnitsSizes);
-void
+bool
 d3d12_video_encoder_extract_encode_metadata(
    struct d3d12_video_encoder *                               pD3D12Dec,
    void                                                       *feedback,
@@ -689,18 +741,10 @@ d3d12_video_encoder_get_current_codec(struct d3d12_video_encoder *pD3D12Enc);
 
 bool
 d3d12_video_encoder_negotiate_requested_features_and_d3d12_driver_caps(struct d3d12_video_encoder *pD3D12Enc,
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
                                                                        D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT2 &capEncoderSupportData);
-#else
-                                                                       D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1 &capEncoderSupportData);
-#endif
 bool
 d3d12_video_encoder_query_d3d12_driver_caps(struct d3d12_video_encoder *pD3D12Enc,
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
                                             D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT2 &capEncoderSupportData);
-#else
-                                            D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1 &capEncoderSupportData);
-#endif
 bool
 d3d12_video_encoder_check_subregion_mode_support(struct d3d12_video_encoder *pD3D12Enc,
                                                  D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE requestedSlicesMode);
@@ -748,7 +792,7 @@ d3d12_video_encoder_prepare_input_buffers(struct d3d12_video_encoder *pD3D12Enc)
 
 void
 d3d12_video_encoder_update_qpmap_input(struct d3d12_video_encoder *pD3D12Enc,
-                                       struct pipe_resource* qpmap,
+                                       struct pipe_enc_qpmap_input_info &qp_info,
                                        struct pipe_enc_roi roi,
                                        uint32_t temporal_id);
 void

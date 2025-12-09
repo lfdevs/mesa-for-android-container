@@ -39,8 +39,10 @@ ctx_roll_QueueSubmit2(VkQueue _queue, uint32_t submitCount, const VkSubmitInfo2 
          const VkSubmitInfo2 *submit = pSubmits + submit_index;
          for (uint32_t i = 0; i < submit->commandBufferInfoCount; i++) {
             VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, submit->pCommandBufferInfos[i].commandBuffer);
+            struct radv_cmd_stream *cs = cmd_buffer->cs;
+
             fprintf(device->ctx_roll_file, "\n%s:\n", vk_object_base_name(&cmd_buffer->vk.base));
-            device->ws->cs_dump(cmd_buffer->cs, device->ctx_roll_file, NULL, 0, RADV_CS_DUMP_TYPE_CTX_ROLLS);
+            device->ws->cs_dump(cs->b, device->ctx_roll_file, NULL, 0, RADV_CS_DUMP_TYPE_CTX_ROLLS);
          }
       }
    }

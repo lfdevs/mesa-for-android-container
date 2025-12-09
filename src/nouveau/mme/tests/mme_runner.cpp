@@ -12,6 +12,7 @@
 #include "mme_tu104_sim.h"
 
 #include "nv_push_clc597.h"
+#include "nv_push_cl90c0.h"
 
 #include "nouveau_bo.h"
 #include "nouveau_context.h"
@@ -134,12 +135,18 @@ mme_hw_runner::set_up_hw(uint16_t min_cls, uint16_t max_cls)
 void
 mme_hw_runner::reset_push()
 {
-   nv_push_init(&push, (uint32_t *)push_map, PUSH_SIZE / 4);
+   nv_push_init(&push, (uint32_t *)push_map, PUSH_SIZE / 4, SUBC_MASK_ALL);
    p = &push;
 
    P_MTHD(p, NV9097, SET_OBJECT);
    P_NV9097_SET_OBJECT(p, {
       .class_id = dev->info.cls_eng3d,
+      .engine_id = 0,
+   });
+
+   P_MTHD(p, NV90C0, SET_OBJECT);
+   P_NV90C0_SET_OBJECT(p, {
+      .class_id = dev->info.cls_compute,
       .engine_id = 0,
    });
 }

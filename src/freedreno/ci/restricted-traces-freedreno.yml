@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "http://10.42.0.1:8888/cache/?uri=https://s3.freedesktop.org/mesa-tracie-private/"
+  download-url: "https://s3.freedesktop.org/mesa-tracie-private/"
 
 traces:
   stellaris/Stellaris-trim--f722-v20201203-v2.trace:

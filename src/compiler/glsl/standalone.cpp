@@ -265,7 +265,7 @@ initialize_context(struct gl_context *ctx, gl_api api)
 
    /* GL_ARB_explicit_uniform_location, GL_MAX_UNIFORM_LOCATIONS */
    ctx->Const.MaxUserAssignableUniformLocations =
-      4 * MESA_SHADER_STAGES * MAX_UNIFORMS;
+      4 * MESA_SHADER_MESH_STAGES * MAX_UNIFORMS;
 }
 
 /* Returned string will have 'ctx' as its ralloc owner. */
@@ -365,14 +365,12 @@ standalone_compile_shader(const struct standalone_options *_options,
 
    if (options->lower_precision) {
       for (unsigned i = MESA_SHADER_VERTEX; i <= MESA_SHADER_COMPUTE; i++) {
-         struct gl_shader_compiler_options *options =
-            &ctx->Const.ShaderCompilerOptions[i];
-         options->LowerPrecisionFloat16 = true;
-         options->LowerPrecisionInt16 = true;
-         options->LowerPrecisionDerivatives = true;
-         options->LowerPrecisionConstants = true;
-         options->LowerPrecisionFloat16Uniforms = true;
-         options->LowerPrecision16BitLoadDst = true;
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->fp16 = true;
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->int16 = true;
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->fp16_derivatives = true;
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->fp16_const_buffers = true;
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->glsl_16bit_load_dst = true;
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->glsl_16bit_consts = true;
       }
    }
 
@@ -448,7 +446,7 @@ standalone_compile_shader(const struct standalone_options *_options,
    return whole_program;
 
 fail:
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (whole_program->_LinkedShaders[i])
          _mesa_delete_linked_shader(ctx, whole_program->_LinkedShaders[i]);
    }

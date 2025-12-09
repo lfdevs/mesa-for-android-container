@@ -107,6 +107,11 @@ pub extern "C" fn nak_should_print_nir() -> bool {
     DEBUG.print()
 }
 
+#[no_mangle]
+pub extern "C" fn nak_debug_no_ugpr() -> bool {
+    DEBUG.no_ugpr()
+}
+
 fn nir_options(dev: &nv_device_info) -> nir_shader_compiler_options {
     let mut op: nir_shader_compiler_options = Default::default();
 
@@ -118,7 +123,9 @@ fn nir_options(dev: &nv_device_info) -> nir_shader_compiler_options {
     op.lower_flrp32 = true;
     op.lower_flrp64 = true;
     op.lower_fsqrt = dev.sm < 52;
-    op.lower_bitfield_extract = dev.sm >= 70;
+    op.lower_bitfield_extract = false;
+    op.lower_bitfield_extract8 = true;
+    op.lower_bitfield_extract16 = true;
     op.lower_bitfield_insert = true;
     op.lower_pack_half_2x16 = true;
     op.lower_pack_unorm_2x16 = true;
@@ -245,7 +252,7 @@ impl ShaderBin {
         let c_info = nak_shader_info {
             stage: match info.stage {
                 ShaderStageInfo::Compute(_) => MESA_SHADER_COMPUTE,
-                ShaderStageInfo::Vertex => MESA_SHADER_VERTEX,
+                ShaderStageInfo::Vertex(_) => MESA_SHADER_VERTEX,
                 ShaderStageInfo::Fragment(_) => MESA_SHADER_FRAGMENT,
                 ShaderStageInfo::Geometry(_) => MESA_SHADER_GEOMETRY,
                 ShaderStageInfo::TessellationInit(_) => MESA_SHADER_TESS_CTRL,
@@ -259,6 +266,7 @@ impl ShaderBin {
             },
             num_control_barriers: info.num_control_barriers,
             _pad0: Default::default(),
+            _pad1: Default::default(),
             max_warps_per_sm: info.max_warps_per_sm,
             num_instrs: info.num_instrs,
             num_static_cycles: info.num_static_cycles,
@@ -453,6 +461,7 @@ fn nak_compile_shader_internal(
     pass!(s, opt_dce);
     pass!(s, opt_out);
     pass!(s, legalize);
+    pass!(s, opt_dce);
     pass!(s, assign_regs);
     pass!(s, lower_par_copies);
     pass!(s, lower_copy_swap);

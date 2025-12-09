@@ -127,7 +127,7 @@ agx_genxml_validate_bounds(const char *name, uint64_t value, uint64_t bound)
       fprintf(stderr, "%s out-of-bounds, got 0x%" PRIx64 ", max %" PRIx64 "\n",
               name, value, bound);
 
-      unreachable("Out-of-bounds pack");
+      UNREACHABLE("Out-of-bounds pack");
    }
 }
 

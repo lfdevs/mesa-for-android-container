@@ -32,7 +32,7 @@ public:
 void
 PredicatedBreakTest::SetUp()
 {
-   debug = getenv("TEST_DEBUG");
+   debug = os_get_option("TEST_DEBUG");
 
    mem_ctx = ralloc_context(NULL);
 
@@ -48,8 +48,7 @@ PredicatedBreakTest::SetUp()
    params.mem_ctx = mem_ctx;
 
    prog_data = {};
-   nir_shader *nir =
-      nir_shader_create(mem_ctx, MESA_SHADER_FRAGMENT, NULL, NULL);
+   nir_shader *nir = nir_shader_create(mem_ctx, MESA_SHADER_FRAGMENT, NULL);
 
    shader_a = new elk_fs_visitor(&compiler, &params, NULL,
                              &prog_data.base, nir, 8, false, false);
@@ -70,7 +69,7 @@ PredicatedBreakTest::TearDown()
 bool
 PredicatedBreakTest::elk_opt_predicated_break(elk_fs_visitor *s)
 {
-   const bool print = getenv("TEST_DEBUG");
+   const bool print = os_get_option("TEST_DEBUG");
 
    if (print) {
       fprintf(stderr, "= Before =\n");

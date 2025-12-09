@@ -95,6 +95,9 @@ static int parse_reg(const char *str)
 		str++;
 		num++;
 	}
+	if (str[0] == 'u') {
+		str++;
+	}
 	str++;
 	if (str[0] == 't') {
 		str++;
@@ -168,6 +171,9 @@ static int parse_reg(const char *str)
 "(jp)"                            return TOKEN(T_JP);
 "(eq)"                            return TOKEN(T_EQ_FLAG);
 "(sat)"                           return TOKEN(T_SAT);
+"(eolm)"                          return TOKEN(T_EOLM);
+"(eogm)"                          return TOKEN(T_EOGM);
+"(eostsc)"                        return TOKEN(T_EOSTSC);
 "(rpt"[0-7]")"                    ir3_yylval.num = strtol(yytext+4, NULL, 10); return T_RPT;
 "(nop"[0-7]")"                    ir3_yylval.num = strtol(yytext+4, NULL, 10); return T_NOP;
 "("[x]?[y]?[z]?[w]?")"            ir3_yylval.num = parse_wrmask(yytext); return T_WRMASK;
@@ -178,6 +184,7 @@ static int parse_reg(const char *str)
 "a0.x"                            return T_A0;
 "a1.x"                            return T_A1;
 "p0."[xyzw]                       ir3_yylval.num = parse_reg(yytext); return T_P0;
+"up0."[xyzw]                      ir3_yylval.num = parse_reg(yytext); return T_UP0;
 "w"[0-9]+                         ir3_yylval.num = strtol(yytext+1, NULL, 10); return T_W;
 "s#"[0-9]+                        ir3_yylval.num = strtol(yytext+2, NULL, 10); return T_SAMP;
 "t#"[0-9]+                        ir3_yylval.num = strtol(yytext+2, NULL, 10); return T_TEX;
@@ -227,6 +234,9 @@ static int parse_reg(const char *str)
 "movs"                            return TOKEN(T_OP_MOVS);
 
 ("f16"|"f32"|"u16"|"u32"|"s16"|"s32"|"u8"|"u8_32"|"u64"){2} ir3_yylval.str = yytext; return T_CAT1_TYPE_TYPE;
+
+".mul2"                           return TOKEN(T_MUL2);
+".div2"                           return TOKEN(T_DIV2);
                                   /* category 2: */
 "add.f"                           return TOKEN(T_OP_ADD_F);
 "min.f"                           return TOKEN(T_OP_MIN_F);
@@ -487,6 +497,8 @@ static int parse_reg(const char *str)
 "k"                               return 'k';
 "u"                               return 'u';
 "v"                               return 'v';
+"rck"                             return T_RCK;
+"clp"                             return T_CLP;
 "base"[0-9]+                      ir3_yylval.num = strtol(yytext+4, NULL, 10); return T_BASE;
 "offset"[0-9]+                    ir3_yylval.num = strtol(yytext+6, NULL, 10); return T_OFFSET;
 "uniform"                         return T_UNIFORM;

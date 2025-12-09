@@ -129,7 +129,7 @@ intel_perf_query_result_write_mdapi(void *data, uint32_t data_size,
       return sizeof(*mdapi_data);
    }
    default:
-      unreachable("unexpected gen");
+      UNREACHABLE("unexpected gen");
    }
 }
 
@@ -339,7 +339,7 @@ intel_perf_register_mdapi_oa_query(struct intel_perf_config *perf,
       break;
    }
    default:
-      unreachable("Unsupported gen");
+      UNREACHABLE("Unsupported gen");
       break;
    }
 

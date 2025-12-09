@@ -7,7 +7,7 @@ import argparse
 import sys
 
 imul_lowering = [
-	(('imul', 'a@32', 'b@32'), ('imadsh_mix16', 'b', 'a', ('imadsh_mix16', 'a', 'b', ('umul_low', 'a', 'b')))),
+	(('imul', 'a@32', 'b@32'), ('imadsh_mix16', 'b', 'a', ('imadsh_mix16', 'a', 'b', ('umul_16x16', 'a', 'b')))),
         # We want to run the imad24 rule late so that it doesn't fight
         # with constant folding the (imul24, a, b).  Since this pass is
         # run late, and this is kinda imul related, this seems like a

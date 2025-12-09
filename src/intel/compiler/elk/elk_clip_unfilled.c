@@ -30,7 +30,7 @@
   */
 
 #include "elk_clip.h"
-#include "elk_prim.h"
+#include "compiler/intel_prim.h"
 
 
 /* This is performed against the original triangles, so no indirection
@@ -410,7 +410,7 @@ static void emit_primitives( struct elk_clip_compile *c,
       break;
 
    case ELK_CLIP_FILL_MODE_CULL:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 

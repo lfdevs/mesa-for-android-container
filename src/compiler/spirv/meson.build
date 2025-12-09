@@ -52,7 +52,7 @@ libvtn = static_library(
    vtn_gather_types_c,
    vtn_generator_ids_h,
   ],
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa],
+  include_directories : [inc_include, inc_src],
   c_args : [c_msvc_compat_args, no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : [dep_spirv_tools, idep_nir, dep_valgrind],

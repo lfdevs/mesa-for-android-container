@@ -154,16 +154,13 @@ anv_measure_start_snapshot(struct anv_cmd_buffer *cmd_buffer,
    snapshot->renderpass = (type == INTEL_SNAPSHOT_COMPUTE) ? 0
                             : measure->base.renderpass;
 
-   if (type == INTEL_SNAPSHOT_COMPUTE && cmd_buffer->state.compute.base.pipeline) {
-      const struct anv_compute_pipeline *pipeline =
-         anv_pipeline_to_compute(cmd_buffer->state.compute.base.pipeline);
-      snapshot->cs = pipeline->cs->prog_data->source_hash;
-   } else if (type == INTEL_SNAPSHOT_DRAW && cmd_buffer->state.gfx.base.pipeline) {
-      const struct anv_graphics_pipeline *pipeline =
-         anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
-#define SHADER_SOURCE_HASH(_name) \
-      (pipeline->base.shaders[MESA_SHADER_##VERTEX] ? \
-       pipeline->base.shaders[MESA_SHADER_##VERTEX]->prog_data->source_hash : 0)
+   if (type == INTEL_SNAPSHOT_COMPUTE && cmd_buffer->state.compute.shader) {
+      snapshot->cs = cmd_buffer->state.compute.shader->prog_data->source_hash;
+   } else if (type == INTEL_SNAPSHOT_DRAW) {
+      const struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
+#define SHADER_SOURCE_HASH(_name)         \
+      (gfx->shaders[MESA_SHADER_##_name] ? \
+       gfx->shaders[MESA_SHADER_##_name]->prog_data->source_hash : 0)
       snapshot->vs = SHADER_SOURCE_HASH(VERTEX);
       snapshot->tcs = SHADER_SOURCE_HASH(TESS_CTRL);
       snapshot->tes = SHADER_SOURCE_HASH(TESS_EVAL);
@@ -220,17 +217,12 @@ state_changed(struct anv_cmd_buffer *cmd_buffer,
       return false;
 
    if (type == INTEL_SNAPSHOT_COMPUTE) {
-      const struct anv_compute_pipeline *cs_pipe =
-         anv_pipeline_to_compute(cmd_buffer->state.compute.base.pipeline);
-      assert(cs_pipe);
-      cs = cs_pipe->cs->prog_data->source_hash;
+      cs = cmd_buffer->state.compute.shader->prog_data->source_hash;
    } else if (type == INTEL_SNAPSHOT_DRAW) {
-      const struct anv_graphics_pipeline *gfx =
-         anv_pipeline_to_graphics(cmd_buffer->state.gfx.base.pipeline);
-      assert(gfx);
+      const struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
 #define SHADER_SOURCE_HASH(_name) \
-      (gfx->base.shaders[MESA_SHADER_##VERTEX] ? \
-       gfx->base.shaders[MESA_SHADER_##VERTEX]->prog_data->source_hash : 0)
+      (gfx->shaders[MESA_SHADER_##_name] ? \
+       gfx->shaders[MESA_SHADER_##_name]->prog_data->source_hash : 0)
       vs = SHADER_SOURCE_HASH(VERTEX);
       tcs = SHADER_SOURCE_HASH(TESS_CTRL);
       tes = SHADER_SOURCE_HASH(TESS_EVAL);

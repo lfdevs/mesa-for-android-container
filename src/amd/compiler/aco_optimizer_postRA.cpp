@@ -478,7 +478,7 @@ try_optimize_scc_nocompare(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
             cselect->operands[0] = Operand::c32(0);
             cselect->operands[1] = instr->operands[!scc_op_idx];
          } else {
-            unreachable("invalid op");
+            UNREACHABLE("invalid op");
          }
          scc_op_idx = 2;
          instr.reset(cselect);
@@ -953,6 +953,30 @@ fixup_reg_writes(pr_opt_ctx& ctx, unsigned start)
 }
 
 bool
+is_nop_copy(Instruction* instr)
+{
+   if (instr->opcode == aco_opcode::p_split_vector) {
+      PhysReg op_reg = instr->operands[0].physReg();
+      for (const Definition& def : instr->definitions) {
+         if (def.physReg() != op_reg)
+            return false;
+         op_reg = op_reg.advance(def.bytes());
+      }
+      return true;
+   } else if (instr->opcode == aco_opcode::p_create_vector) {
+      PhysReg def_reg = instr->definitions[0].physReg();
+      for (const Operand& op : instr->operands) {
+         if (op.physReg() != def_reg)
+            return false;
+         def_reg = def_reg.advance(op.bytes());
+      }
+      return true;
+   } else {
+      return false;
+   }
+}
+
+bool
 try_optimize_branching_sequence(pr_opt_ctx& ctx, aco_ptr<Instruction>& exec_copy)
 {
    /* Try to optimize the branching sequence at the end of a block.
@@ -1076,7 +1100,7 @@ try_optimize_branching_sequence(pr_opt_ctx& ctx, aco_ptr<Instruction>& exec_copy
    /* Ensure that nothing needs a previous exec between exec_val_idx and the current exec write. */
    for (unsigned i = exec_val_idx.instr + 1; i < ctx.current_instr_idx; i++) {
       Instruction* instr = ctx.current_block->instructions[i].get();
-      if (instr && needs_exec_mask(instr))
+      if (instr && needs_exec_mask(instr) && !is_nop_copy(instr))
          return false;
 
       /* If the successor has phis, copies might have to be inserted at p_logical_end. */

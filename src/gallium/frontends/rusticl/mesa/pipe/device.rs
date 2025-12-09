@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::pipe::screen::*;
 
 use mesa_rust_gen::*;
@@ -21,9 +24,9 @@ impl PipeLoaderDevice {
         })
     }
 
-    fn load_screen(self) -> Option<PipeScreen> {
+    fn load_screen(self) -> Option<PipeScreenWithLdev> {
         let s = unsafe { pipe_loader_create_screen(self.ldev.as_ptr(), false) };
-        PipeScreen::new(self, s)
+        PipeScreenWithLdev::new(self, s)
     }
 
     pub fn driver_name(&self) -> &CStr {
@@ -112,7 +115,7 @@ fn get_enabled_devs() -> HashMap<String, u32> {
     res
 }
 
-pub fn load_screens() -> impl Iterator<Item = PipeScreen> {
+pub fn load_screens() -> impl Iterator<Item = PipeScreenWithLdev> {
     let devs = load_devs();
     let mut enabled_devs = get_enabled_devs();
 

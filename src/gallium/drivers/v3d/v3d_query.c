@@ -223,9 +223,7 @@ multisync_set(struct v3d_context *v3d, struct drm_v3d_multi_sync *ms,
 
 out:
         fprintf(stderr, "Multisync Set Failed\n");
-        if (in_syncs) {
-           free(in_syncs);
-        }
+        free(in_syncs);
 }
 
 static void

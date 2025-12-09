@@ -26,7 +26,7 @@
 
 #include "util/bitset.h"
 #include "util/glheader.h"
-#include "compiler/glsl/list.h"
+#include "compiler/glsl/ir_list.h"
 #include "compiler/glsl_types.h"
 #include "main/mtypes.h"
 #include "main/shader_types.h"
@@ -61,7 +61,7 @@ extern "C" {
  * continouous block of empty slots in UniformRemapTable.
  */
 struct empty_uniform_block {
-   struct exec_node link;
+   struct ir_exec_node link;
    /* The start location of the block */
    unsigned start;
    /* The number of slots in the block */
@@ -116,7 +116,8 @@ link_util_find_empty_block(struct gl_shader_program *prog,
                            struct gl_uniform_storage *uniform);
 
 void
-link_util_update_empty_uniform_locations(struct gl_shader_program *prog);
+link_util_update_empty_uniform_locations(const struct gl_constants *consts,
+                                         struct gl_shader_program *prog);
 
 void
 link_util_check_subroutine_resources(struct gl_shader_program *prog);
@@ -127,11 +128,6 @@ link_util_check_uniform_resources(const struct gl_constants *consts,
 
 void
 link_util_calculate_subroutine_compat(struct gl_shader_program *prog);
-
-void
-link_util_mark_array_elements_referenced(const struct array_deref_range *dr,
-                                         unsigned count, unsigned array_depth,
-                                         BITSET_WORD *bits);
 
 void
 resource_name_updated(struct gl_resource_name *name);

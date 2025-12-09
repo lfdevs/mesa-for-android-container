@@ -851,6 +851,7 @@ compile_vertex_list(struct gl_context *ctx)
                            node->cold->ib.obj);
    save->current_bo_bytes_used += total_vert_count * save->vertex_size * sizeof(fi_type);
    node->cold->bo_bytes_used = save->current_bo_bytes_used;
+   ctx->ListState.Current.NeedsFlush = true;
 
   if (vertex_to_index) {
       _mesa_hash_table_destroy(vertex_to_index, _free_entry);
@@ -1108,7 +1109,7 @@ copy_from_current(struct gl_context *ctx)
          save->attrptr[i][0] = save->current[i][0];
          break;
       case 0:
-         unreachable("Unexpected vertex attribute size");
+         UNREACHABLE("Unexpected vertex attribute size");
       }
    }
 }

@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use std::{
     alloc::Layout,
     collections::{
@@ -11,7 +14,8 @@ use std::{
 };
 
 /// A wrapper around pointers to C data type which are considered thread safe.
-#[derive(Eq)]
+#[derive(Copy, Clone, Eq)]
+#[repr(transparent)]
 pub struct ThreadSafeCPtr<T>(NonNull<T>);
 
 impl<T> ThreadSafeCPtr<T> {
@@ -56,6 +60,23 @@ unsafe impl<T> Send for ThreadSafeCPtr<T> {}
 // SAFETY: safety requierements of Sync fullfilled at [ThreadSafeCPtr::new] time
 unsafe impl<T> Sync for ThreadSafeCPtr<T> {}
 
+pub trait BetterPointer<T> {
+    /// Reads the pointer and advances it by 1 element.
+    ///
+    /// # Safety
+    ///
+    /// `self` needs to be valid for reading.
+    unsafe fn read_and_advance(&mut self) -> T;
+}
+
+impl<T> BetterPointer<T> for *const T {
+    unsafe fn read_and_advance(&mut self) -> T {
+        let val = unsafe { self.read() };
+        *self = unsafe { self.add(1) };
+        val
+    }
+}
+
 pub trait CheckedPtr<T> {
     /// Copies `count * size_of::<T>()` bytes from `src` to `self`. The source
     /// and destination may overlap.
@@ -96,39 +117,6 @@ impl<T> CheckedPtr<T> for *mut T {
             }
         }
     }
-}
-
-// While std::mem::offset_of!() is stable from 1.77.0, support for nested fields
-// (required in some rusticl cases) wasn't stabilized until 1.82.0.
-// from https://internals.rust-lang.org/t/discussion-on-offset-of/7440/2
-#[macro_export]
-macro_rules! offset_of {
-    ($Struct:path, $($field:ident).+ $(,)?) => {{
-        // Using a separate function to minimize unhygienic hazards
-        // (e.g. unsafety of #[repr(packed)] field borrows).
-        // Uncomment `const` when `const fn`s can juggle pointers.
-        /*const*/
-        fn offset() -> usize {
-            let u = std::mem::MaybeUninit::<$Struct>::uninit();
-            let f = unsafe { &(*u.as_ptr()).$($field).+ };
-            let o = (f as *const _ as usize).wrapping_sub(&u as *const _ as usize);
-            // Triple check that we are within `u` still.
-            assert!((0..=std::mem::size_of_val(&u)).contains(&o));
-            o
-        }
-        offset()
-    }};
-}
-
-// Adapted from libstd since std::ptr::is_aligned isn't stable until 1.79.0
-// See https://github.com/rust-lang/rust/issues/96284
-#[must_use]
-#[inline]
-pub fn is_aligned<T>(ptr: *const T) -> bool
-where
-    T: Sized,
-{
-    is_aligned_to(ptr, mem::align_of::<T>())
 }
 
 // Adapted from libstd since std::ptr::is_aligned_to is still unstable
@@ -196,7 +184,7 @@ where
         self.ptrs.contains_key(&ptr)
     }
 
-    pub fn entry(&mut self, ptr: P) -> Entry<P, T> {
+    pub fn entry(&mut self, ptr: P) -> Entry<'_, P, T> {
         self.ptrs.entry(ptr)
     }
 

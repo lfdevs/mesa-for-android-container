@@ -93,7 +93,7 @@ extern uint32_t v3d_mesa_debug;
 #define dbg_printf(...)	fprintf(stderr, __VA_ARGS__)
 #endif /* HAVE_ANDROID_PLATFORM */
 
-extern bool v3d_debug_flag_for_shader_stage(gl_shader_stage stage);
+extern bool v3d_debug_flag_for_shader_stage(mesa_shader_stage stage);
 
 extern void v3d_process_debug_variable(void);
 

@@ -68,7 +68,7 @@ cull_face(struct gl_context *ctx, GLenum mode, bool no_error)
 
    FLUSH_VERTICES(ctx, 0,
                   GL_POLYGON_BIT);
-   ctx->NewDriverState |= ST_NEW_RASTERIZER;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
    ctx->Polygon.CullFaceMode = mode;
    _mesa_update_edgeflag_state_vao(ctx);
 }
@@ -118,7 +118,7 @@ front_face(struct gl_context *ctx, GLenum mode, bool no_error)
 
    FLUSH_VERTICES(ctx, 0,
                   GL_POLYGON_BIT);
-   ctx->NewDriverState |= ST_NEW_RASTERIZER;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
    ctx->Polygon.FrontFace = mode;
 }
 
@@ -193,7 +193,7 @@ polygon_mode(struct gl_context *ctx, GLenum face, GLenum mode, bool no_error)
          return;
       FLUSH_VERTICES(ctx, 0,
                      GL_POLYGON_BIT);
-      ctx->NewDriverState |= ST_NEW_RASTERIZER;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
       ctx->Polygon.FrontMode = mode;
       _mesa_update_edgeflag_state_vao(ctx);
       break;
@@ -202,7 +202,7 @@ polygon_mode(struct gl_context *ctx, GLenum face, GLenum mode, bool no_error)
          return;
       FLUSH_VERTICES(ctx, 0,
                      GL_POLYGON_BIT);
-      ctx->NewDriverState |= ST_NEW_RASTERIZER;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
       ctx->Polygon.FrontMode = mode;
       ctx->Polygon.BackMode = mode;
       _mesa_update_edgeflag_state_vao(ctx);
@@ -216,7 +216,7 @@ polygon_mode(struct gl_context *ctx, GLenum face, GLenum mode, bool no_error)
          return;
       FLUSH_VERTICES(ctx, 0,
                      GL_POLYGON_BIT);
-      ctx->NewDriverState |= ST_NEW_RASTERIZER;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
       ctx->Polygon.BackMode = mode;
       _mesa_update_edgeflag_state_vao(ctx);
       break;
@@ -260,7 +260,7 @@ _mesa_PolygonStipple(const GLubyte *pattern)
       _mesa_debug(ctx, "glPolygonStipple\n");
 
    FLUSH_VERTICES(ctx, 0, GL_POLYGON_STIPPLE_BIT);
-   ctx->NewDriverState |= ST_NEW_POLY_STIPPLE;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_POLY_STIPPLE);
 
    pattern = _mesa_map_validate_pbo_source(ctx, 2,
                                            &ctx->Unpack, 32, 32, 1,
@@ -320,7 +320,7 @@ _mesa_polygon_offset_clamp(struct gl_context *ctx,
 
    FLUSH_VERTICES(ctx, 0,
                   GL_POLYGON_BIT);
-   ctx->NewDriverState |= ST_NEW_RASTERIZER;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
    ctx->Polygon.OffsetFactor = factor;
    ctx->Polygon.OffsetUnits = units;
    ctx->Polygon.OffsetClamp = clamp;

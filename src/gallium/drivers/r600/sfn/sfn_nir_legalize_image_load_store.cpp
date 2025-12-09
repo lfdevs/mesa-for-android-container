@@ -66,7 +66,7 @@ r600_legalize_image_load_store_impl(nir_builder *b,
          num_components = 3;
          break;
       default:
-         unreachable("Unexpected image size");
+         UNREACHABLE("Unexpected image size");
       }
 
       if (num_components < 3 && nir_intrinsic_image_array(ir))

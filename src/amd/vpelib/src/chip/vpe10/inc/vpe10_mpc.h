@@ -1404,7 +1404,7 @@ void vpe10_construct_mpc(struct vpe_priv *vpe_priv, struct mpc *mpc);
 
 void vpe10_mpc_program_mpcc_mux(struct mpc *mpc, enum mpc_mpccid mpcc_idx,
     enum mpc_mux_topsel topsel, enum mpc_mux_botsel botsel, enum mpc_mux_outmux outmux,
-    enum mpc_mux_oppid oppid);
+    enum mpc_mux_oppid oppid, enum mpcc_blend_mode blend_mode);
 
 void vpe10_mpc_program_mpcc_blending(
     struct mpc *mpc, enum mpc_mpccid mpcc_idx, struct mpcc_blnd_cfg *blnd_cfg);

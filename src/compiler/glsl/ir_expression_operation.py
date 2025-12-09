@@ -107,7 +107,7 @@ constant_template_common = mako.template.Template("""\
             break;
     % endfor
          default:
-            unreachable("invalid type");
+            UNREACHABLE("invalid type");
          }
       }
       break;""")
@@ -128,7 +128,7 @@ constant_template_vector_scalar = mako.template.Template("""\
             break;
     % endfor
          default:
-            unreachable("invalid type");
+            UNREACHABLE("invalid type");
          }
       }
       break;""")
@@ -163,7 +163,7 @@ constant_template_vector_scalar_mixed = mako.template.Template("""\
                     op[1]->type->base_type == ${last_sig_src_types[1].glsl_type}) {
             data.${last_sig_dst_type.union_field}[c] = ${op.get_c_expression(last_sig_src_types, ("c0", "c1", "c2"))};
          } else {
-            unreachable("invalid types");
+            UNREACHABLE("invalid types");
          }
       }
       break;""")
@@ -186,7 +186,7 @@ constant_template_mul = mako.template.Template("""\
                break;
     % endfor
             default:
-               unreachable("invalid type");
+               UNREACHABLE("invalid type");
             }
          }
       } else {
@@ -244,7 +244,7 @@ constant_template_horizontal = mako.template.Template("""\
          break;
     % endfor
       default:
-         unreachable("invalid type");
+         UNREACHABLE("invalid type");
       }
       break;""")
 
@@ -261,7 +261,7 @@ constant_template_vector_extract = mako.template.Template("""\
          break;
     % endfor
       default:
-         unreachable("invalid type");
+         UNREACHABLE("invalid type");
       }
       break;
    }""")
@@ -280,7 +280,7 @@ constant_template_vector_insert = mako.template.Template("""\
          break;
     % endfor
       default:
-         unreachable("invalid type");
+         UNREACHABLE("invalid type");
       }
       break;
    }""")
@@ -296,7 +296,7 @@ constant_template_vector = mako.template.Template("""\
             break;
     % endfor
          default:
-            unreachable("invalid type");
+            UNREACHABLE("invalid type");
          }
       }
       break;""")
@@ -317,7 +317,7 @@ constant_template_lrp = mako.template.Template("""\
             break;
     % endfor
          default:
-            unreachable("invalid type");
+            UNREACHABLE("invalid type");
          }
       }
       break;
@@ -336,7 +336,7 @@ constant_template_csel = mako.template.Template("""\
             break;
     % endfor
          default:
-            unreachable("invalid type");
+            UNREACHABLE("invalid type");
          }
       }
       break;""")

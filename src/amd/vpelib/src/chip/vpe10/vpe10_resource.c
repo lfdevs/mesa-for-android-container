@@ -1,4 +1,4 @@
-/* Copyright 2022 Advanced Micro Devices, Inc.
+/* Copyright 2022-2025 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -121,6 +121,26 @@ static const struct vpe10_opp_shift opp_shift = {OPP_FIELD_LIST_VPE10(__SHIFT)};
 static const struct vpe10_opp_mask opp_mask = {OPP_FIELD_LIST_VPE10(_MASK)};
 
 static struct vpe_caps caps = {
+    .max_input_size =
+        {
+            .width  = 16384,
+            .height = 16384,
+        },
+    .max_output_size =
+        {
+            .width  = 16384,
+            .height = 16384,
+        },
+    .min_input_size =
+        {
+            .width  = 1,
+            .height = 1,
+        },
+    .min_output_size =
+        {
+            .width  = 1,
+            .height = 1,
+        },
     .lut_size               = LUT_BUFFER_SIZE,
     .rotation_support       = 0,
     .h_mirror_support       = 1,
@@ -269,23 +289,19 @@ enum vpe_status vpe10_set_num_segments(struct vpe_priv *vpe_priv, struct stream_
     return res;
 }
 
-bool vpe10_get_dcc_compression_output_cap(const struct vpe *vpe, const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
+bool vpe10_get_dcc_compression_output_cap(
+    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
 {
     cap->capable = false;
     return cap->capable;
 }
 
-bool vpe10_get_dcc_compression_input_cap(const struct vpe *vpe, const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
+bool vpe10_get_dcc_compression_input_cap(
+    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
 {
     cap->capable = false;
     return cap->capable;
 }
-
-static struct vpe_cap_funcs cap_funcs =
-{
-    .get_dcc_compression_output_cap = vpe10_get_dcc_compression_output_cap,
-    .get_dcc_compression_input_cap  = vpe10_get_dcc_compression_input_cap
-};
 
 struct cdc_fe *vpe10_cdc_fe_create(struct vpe_priv *vpe_priv, int inst)
 {
@@ -372,7 +388,6 @@ enum vpe_status vpe10_construct_resource(struct vpe_priv *vpe_priv, struct resou
     struct vpe *vpe = &vpe_priv->pub;
 
     vpe->caps      = &caps;
-    vpe->cap_funcs = &cap_funcs;
 
     vpe10_construct_vpec(vpe_priv, &res->vpec);
 
@@ -405,8 +420,6 @@ enum vpe_status vpe10_construct_resource(struct vpe_priv *vpe_priv, struct resou
 
     res->internal_hdr_normalization = 1;
 
-    res->check_input_color_space           = vpe10_check_input_color_space;
-    res->check_output_color_space          = vpe10_check_output_color_space;
     res->check_h_mirror_support            = vpe10_check_h_mirror_support;
     res->calculate_segments                = vpe10_calculate_segments;
     res->set_num_segments                  = vpe10_set_num_segments;
@@ -420,6 +433,7 @@ enum vpe_status vpe10_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->program_backend                   = vpe10_program_backend;
     res->get_bufs_req                      = vpe10_get_bufs_req;
     res->check_bg_color_support            = vpe10_check_bg_color_support;
+    res->bg_color_convert                  = vpe10_bg_color_convert;
     res->check_mirror_rotation_support     = vpe10_check_mirror_rotation_support;
     res->update_blnd_gamma                 = vpe10_update_blnd_gamma;
     res->update_output_gamma               = vpe10_update_output_gamma;
@@ -459,8 +473,34 @@ void vpe10_destroy_resource(struct vpe_priv *vpe_priv, struct resource *res)
     }
 }
 
-bool vpe10_check_input_color_space(struct vpe_priv *vpe_priv, enum vpe_surface_pixel_format format,
-    const struct vpe_color_space *vcs)
+bool vpe10_check_input_format(enum vpe_surface_pixel_format format)
+{
+    if (vpe_is_32bit_packed_rgb(format))
+        return true;
+
+    if (format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr ||
+        format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb)
+        return true;
+
+    if (format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr ||
+        format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb)
+        return true;
+
+    return false;
+}
+
+bool vpe10_check_output_format(enum vpe_surface_pixel_format format)
+{
+    if (vpe_is_32bit_packed_rgb(format))
+        return true;
+    if (vpe_is_fp16(format))
+        return true;
+
+    return false;
+}
+
+bool vpe10_check_input_color_space(
+    enum vpe_surface_pixel_format format, const struct vpe_color_space *vcs)
 {
     enum color_space         cs;
     enum color_transfer_func tf;
@@ -472,8 +512,8 @@ bool vpe10_check_input_color_space(struct vpe_priv *vpe_priv, enum vpe_surface_p
     return true;
 }
 
-bool vpe10_check_output_color_space(struct vpe_priv *vpe_priv, enum vpe_surface_pixel_format format,
-    const struct vpe_color_space *vcs)
+bool vpe10_check_output_color_space(
+    enum vpe_surface_pixel_format format, const struct vpe_color_space *vcs)
 {
     enum color_space         cs;
     enum color_transfer_func tf;
@@ -629,6 +669,11 @@ enum vpe_status vpe10_calculate_segments(
         if (stream_ctx->stream_type == VPE_STREAM_TYPE_BG_GEN)
             continue;
 
+        if (dst_rect->width == 0 && dst_rect->height == 0) {
+            stream_ctx->num_segments = 0;
+            continue;
+        }
+
         if (src_rect->width < VPE_MIN_VIEWPORT_SIZE || src_rect->height < VPE_MIN_VIEWPORT_SIZE ||
             dst_rect->width < VPE_MIN_VIEWPORT_SIZE || dst_rect->height < VPE_MIN_VIEWPORT_SIZE) {
             return VPE_STATUS_VIEWPORT_SIZE_NOT_SUPPORTED;
@@ -775,11 +820,34 @@ static void build_clamping_params(
     }
 }
 
+static enum mpcc_blend_mode get_blend_mode(
+    enum mpc_mux_topsel topsel, enum mpc_mux_botsel botsel, bool bypass)
+{
+    enum mpcc_blend_mode blend_mode;
+    /* program mux and MPCC_MODE */
+    if (bypass) {
+        blend_mode = MPCC_BLEND_MODE_BYPASS;
+    } else if (botsel != MPC_MUX_BOTSEL_DISABLE) {
+        // ERROR: Actually VPE10 only supports 1 MPCC so botsel should always disable
+        VPE_ASSERT(0);
+        blend_mode = MPCC_BLEND_MODE_TOP_BOT_BLENDING;
+    } else {
+        // single layer, use Top layer bleneded with background color
+        if (topsel != MPC_MUX_TOPSEL_DISABLE)
+            blend_mode = MPCC_BLEND_MODE_TOP_LAYER_ONLY;
+        else // both layer disabled, pure bypass mode
+            blend_mode = MPCC_BLEND_MODE_BYPASS;
+    }
+    return blend_mode;
+}
+
 int32_t vpe10_program_frontend(struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx,
     uint32_t cmd_input_idx, bool seg_only)
 {
     struct vpe_cmd_info *cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
     VPE_ASSERT(cmd_info);
+    if (!cmd_info)
+        return -1;
 
     struct vpe_cmd_input      *cmd_input    = &cmd_info->inputs[cmd_input_idx];
     struct stream_ctx         *stream_ctx   = &vpe_priv->stream_ctx[cmd_input->stream_idx];
@@ -827,9 +895,12 @@ int32_t vpe10_program_frontend(struct vpe_priv *vpe_priv, uint32_t pipe_idx, uin
         dpp->funcs->program_input_transfer_func(dpp, stream_ctx->input_tf);
         dpp->funcs->program_gamut_remap(dpp, stream_ctx->gamut_remap);
 
+        enum mpcc_blend_mode blend_mode = get_blend_mode(
+            MPC_MUX_TOPSEL_DPP0, MPC_MUX_BOTSEL_DISABLE, vpe_priv->init.debug.mpc_bypass == 1);
+
         // for not bypass mode, we always are in single layer coming from DPP and output to OPP
         mpc->funcs->program_mpcc_mux(mpc, MPC_MPCCID_0, MPC_MUX_TOPSEL_DPP0, MPC_MUX_BOTSEL_DISABLE,
-            MPC_MUX_OUTMUX_MPCC0, MPC_MUX_OPPID_OPP0);
+            MPC_MUX_OUTMUX_MPCC0, MPC_MUX_OPPID_OPP0, blend_mode);
 
         // program shaper, 3dlut and 1dlut in MPC for stream before blend
         mpc->funcs->program_movable_cm(
@@ -1039,15 +1110,17 @@ void vpe10_create_stream_ops_config(struct vpe_priv *vpe_priv, uint32_t pipe_idx
     dpp->funcs->set_frame_scaler(dpp, &cmd_input->scaler_data);
 
     if (ops == VPE_CMD_OPS_BG_VSCF_INPUT) {
-        blndcfg.bg_color = vpe_get_visual_confirm_color(stream_ctx->stream.surface_info.format,
-            stream_ctx->stream.surface_info.cs, vpe_priv->output_ctx.cs,
-            vpe_priv->output_ctx.output_tf, vpe_priv->output_ctx.surface.format,
+        blndcfg.bg_color = vpe_get_visual_confirm_color(vpe_priv,
+            stream_ctx->stream.surface_info.format, stream_ctx->stream.surface_info.cs,
+            vpe_priv->output_ctx.cs, vpe_priv->output_ctx.output_tf,
+            vpe_priv->output_ctx.surface.format,
             (stream_ctx->stream.tm_params.UID != 0 || stream_ctx->stream.tm_params.enable_3dlut));
     } else if (ops == VPE_CMD_OPS_BG_VSCF_OUTPUT) {
-        blndcfg.bg_color = vpe_get_visual_confirm_color(vpe_priv->output_ctx.surface.format,
-            vpe_priv->output_ctx.surface.cs, vpe_priv->output_ctx.cs,
-            vpe_priv->output_ctx.output_tf, vpe_priv->output_ctx.surface.format,
-            false); // 3DLUT should only affect input visual confirm
+        blndcfg.bg_color =
+            vpe_get_visual_confirm_color(vpe_priv, vpe_priv->output_ctx.surface.format,
+                vpe_priv->output_ctx.surface.cs, vpe_priv->output_ctx.cs,
+                vpe_priv->output_ctx.output_tf, vpe_priv->output_ctx.surface.format,
+                false); // 3DLUT should only affect input visual confirm
     } else {
         blndcfg.bg_color = vpe_priv->output_ctx.mpc_bg_color;
     }
@@ -1121,9 +1194,8 @@ void vpe10_create_stream_ops_config(struct vpe_priv *vpe_priv, uint32_t pipe_idx
 #define VPE10_GENERAL_VPE_DESC_SIZE                144   // 4 * (4 + (2 * MAX_NUM_SAVED_CONFIG))
 #define VPE10_GENERAL_EMB_USAGE_FRAME_SHARED       6000  // currently max 4804 is recorded
 #define VPE10_GENERAL_EMB_USAGE_3DLUT_FRAME_SHARED 40960 // currently max 35192 is recorded
-#define VPE10_GENERAL_EMB_USAGE_BG_SHARED          3600 // currently max 52 + 128 + 1356 +1020 +92 + 60 + 116 = 2824 is recorded
-#define VPE10_GENERAL_EMB_USAGE_SEG_NON_SHARED                                                     \
-    240 // segment specific config + plane descripor size. currently max 92 + 72 = 164 is recorded.
+#define VPE10_GENERAL_EMB_USAGE_BG_SHARED          5000
+#define VPE10_GENERAL_EMB_USAGE_SEG_NON_SHARED     300
 
 void vpe10_get_bufs_req(struct vpe_priv *vpe_priv, struct vpe_bufs_req *req)
 {
@@ -1140,6 +1212,8 @@ void vpe10_get_bufs_req(struct vpe_priv *vpe_priv, struct vpe_bufs_req *req)
     for (i = 0; i < vpe_priv->vpe_cmd_vector->num_elements; i++) {
         cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, i);
         VPE_ASSERT(cmd_info);
+        if (!cmd_info)
+            continue;
 
         // each cmd consumes one VPE descriptor
         req->cmd_buf_size += VPE10_GENERAL_VPE_DESC_SIZE;
@@ -1172,6 +1246,8 @@ void vpe10_get_bufs_req(struct vpe_priv *vpe_priv, struct vpe_bufs_req *req)
 
         req->emb_buf_size += emb_req;
     }
+
+    req->cmd_buf_size += VPE_PREDICATION_CMD_SIZE;
 }
 
 enum vpe_status vpe10_check_mirror_rotation_support(const struct vpe_stream *stream)
@@ -1328,6 +1404,8 @@ bool vpe10_validate_cached_param(struct vpe_priv *vpe_priv, const struct vpe_bui
 
     for (i = 0; i < vpe_priv->num_input_streams; i++) {
         struct vpe_stream stream = param->streams[i];
+        struct vpe_rect  *src_rect = &stream.scaling_info.src_rect;
+        struct vpe_rect  *dst_rect = &stream.scaling_info.dst_rect;
 
         vpe_clip_stream(
             &stream.scaling_info.src_rect, &stream.scaling_info.dst_rect, &param->target_rect);
@@ -1415,4 +1493,39 @@ enum vpe_status vpe10_check_bg_color_support(struct vpe_priv *vpe_priv, struct v
         status = bg_color_outside_cs_gamut(vpe_priv, bg_color);
 
     return status;
+}
+
+// To understand the logic for background color conversion,
+// please refer to vpe_update_output_gamma_sequence in color.c
+void vpe10_bg_color_convert(enum color_space output_cs, struct transfer_func *output_tf,
+    enum vpe_surface_pixel_format pixel_format, struct vpe_color *mpc_bg_color,
+    struct vpe_color *opp_bg_color, bool enable_3dlut)
+{
+    if (mpc_bg_color->is_ycbcr)
+        vpe_inverse_output_csc(output_cs, mpc_bg_color);
+
+    if (output_tf->type != TF_TYPE_BYPASS) {
+        // inverse degam
+        if (output_tf->tf == TRANSFER_FUNC_PQ2084 && !vpe_is_limited_cs(output_cs))
+            vpe_bg_degam(output_tf, mpc_bg_color);
+        // inverse gamut remap
+        if (enable_3dlut)
+            vpe_bg_inverse_gamut_remap(output_cs, output_tf, mpc_bg_color);
+    }
+    // for TF_TYPE_BYPASS, bg color should be programmed to mpc as linear
+}
+
+const struct vpe_caps *vpe10_get_capability(void)
+{
+    return &caps;
+}
+
+void vpe10_setup_check_funcs(struct vpe_check_support_funcs *funcs)
+{
+    funcs->check_input_format             = vpe10_check_input_format;
+    funcs->check_output_format            = vpe10_check_output_format;
+    funcs->check_input_color_space        = vpe10_check_input_color_space;
+    funcs->check_output_color_space       = vpe10_check_output_color_space;
+    funcs->get_dcc_compression_input_cap  = vpe10_get_dcc_compression_input_cap;
+    funcs->get_dcc_compression_output_cap = vpe10_get_dcc_compression_output_cap;
 }

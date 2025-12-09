@@ -10,164 +10,6 @@
 #include "nir_intrinsics.h"
 
 /*
- * Lowering for 64b intrinsics generated with OpenCL or with
- * VK_KHR_buffer_device_address. All our intrinsics from a hw
- * standpoint are 32b, so we just need to combine in zero for
- * the upper 32bits and let the other nir passes clean up the mess.
- */
-
-static bool
-lower_64b_intrinsics_filter(const nir_instr *instr, const void *unused)
-{
-   (void)unused;
-
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-   if (intr->intrinsic == nir_intrinsic_load_deref ||
-       intr->intrinsic == nir_intrinsic_store_deref)
-      return false;
-
-   if (is_intrinsic_store(intr->intrinsic))
-      return nir_src_bit_size(intr->src[0]) == 64;
-
-   /* skip over ssbo atomics, we'll lower them later */
-   if (intr->intrinsic == nir_intrinsic_ssbo_atomic ||
-       intr->intrinsic == nir_intrinsic_ssbo_atomic_swap ||
-       intr->intrinsic == nir_intrinsic_global_atomic ||
-       intr->intrinsic == nir_intrinsic_global_atomic_swap)
-      return false;
-
-   if (nir_intrinsic_dest_components(intr) == 0)
-      return false;
-
-   return intr->def.bit_size == 64;
-}
-
-static nir_def *
-lower_64b_intrinsics(nir_builder *b, nir_instr *instr, void *unused)
-{
-   (void)unused;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-   /* We could be *slightly* more clever and, for ex, turn a 64b vec4
-    * load into two 32b vec4 loads, rather than 4 32b vec2 loads.
-    */
-
-   if (is_intrinsic_store(intr->intrinsic)) {
-      unsigned offset_src_idx;
-      switch (intr->intrinsic) {
-      case nir_intrinsic_store_ssbo:
-      case nir_intrinsic_store_global_ir3:
-      case nir_intrinsic_store_per_view_output:
-         offset_src_idx = 2;
-         break;
-      default:
-         offset_src_idx = 1;
-      }
-
-      unsigned num_comp = nir_intrinsic_src_components(intr, 0);
-      unsigned wrmask = nir_intrinsic_has_write_mask(intr) ?
-         nir_intrinsic_write_mask(intr) : BITSET_MASK(num_comp);
-      nir_def *val = intr->src[0].ssa;
-      nir_def *off = intr->src[offset_src_idx].ssa;
-
-      for (unsigned i = 0; i < num_comp; i++) {
-         if (!(wrmask & BITFIELD_BIT(i)))
-            continue;
-
-         nir_def *c64 = nir_channel(b, val, i);
-         nir_def *c32 = nir_unpack_64_2x32(b, c64);
-
-         nir_intrinsic_instr *store =
-            nir_instr_as_intrinsic(nir_instr_clone(b->shader, &intr->instr));
-         store->num_components = 2;
-         store->src[0] = nir_src_for_ssa(c32);
-         store->src[offset_src_idx] = nir_src_for_ssa(off);
-
-         if (nir_intrinsic_has_write_mask(intr))
-            nir_intrinsic_set_write_mask(store, 0x3);
-         nir_builder_instr_insert(b, &store->instr);
-
-         off = nir_iadd_imm(b, off, 8);
-      }
-
-      return NIR_LOWER_INSTR_PROGRESS_REPLACE;
-   }
-
-   unsigned num_comp = nir_intrinsic_dest_components(intr);
-
-   nir_def *def = &intr->def;
-   def->bit_size = 32;
-
-   /* load_kernel_input is handled specially, lowering to two 32b inputs:
-    */
-   if (intr->intrinsic == nir_intrinsic_load_kernel_input) {
-      assert(num_comp == 1);
-
-      nir_def *offset = nir_iadd_imm(b,
-            intr->src[0].ssa, 4);
-
-      nir_def *upper = nir_load_kernel_input(b, 1, 32, offset);
-
-      return nir_pack_64_2x32_split(b, def, upper);
-   }
-
-   nir_def *components[num_comp];
-
-   if (is_intrinsic_load(intr->intrinsic)) {
-      unsigned offset_src_idx;
-      switch(intr->intrinsic) {
-      case nir_intrinsic_load_ssbo:
-      case nir_intrinsic_load_ubo:
-      case nir_intrinsic_load_global_ir3:
-      case nir_intrinsic_load_per_view_output:
-         offset_src_idx = 1;
-         break;
-      default:
-         offset_src_idx = 0;
-      }
-
-      nir_def *off = intr->src[offset_src_idx].ssa;
-
-      for (unsigned i = 0; i < num_comp; i++) {
-         nir_intrinsic_instr *load =
-            nir_instr_as_intrinsic(nir_instr_clone(b->shader, &intr->instr));
-         load->num_components = 2;
-         load->src[offset_src_idx] = nir_src_for_ssa(off);
-
-         nir_def_init(&load->instr, &load->def, 2, 32);
-         nir_builder_instr_insert(b, &load->instr);
-
-         components[i] = nir_pack_64_2x32(b, &load->def);
-
-         off = nir_iadd_imm(b, off, 8);
-      }
-   } else {
-      /* The remaining (non load/store) intrinsics just get zero-
-       * extended from 32b to 64b:
-       */
-      for (unsigned i = 0; i < num_comp; i++) {
-         nir_def *c = nir_channel(b, def, i);
-         components[i] = nir_pack_64_2x32_split(b, c, nir_imm_zero(b, 1, 32));
-      }
-   }
-
-   return nir_build_alu_src_arr(b, nir_op_vec(num_comp), components);
-}
-
-bool
-ir3_nir_lower_64b_intrinsics(nir_shader *shader)
-{
-   return nir_shader_lower_instructions(
-         shader, lower_64b_intrinsics_filter,
-         lower_64b_intrinsics, NULL);
-}
-
-/*
  * Lowering for 64b undef instructions, splitting into a two 32b undefs
  */
 
@@ -209,8 +51,10 @@ ir3_nir_lower_64b_undef(nir_shader *shader)
 }
 
 /*
- * Lowering for load_global/store_global with 64b addresses to ir3
- * variants, which instead take a uvec2_32
+ * Lowering for load_global/store_global with 64b addresses to ir3 variants,
+ * which have an additional arg that is a 32-bit offset to the 64-bit base
+ * address.  It's stuffed with a 0 in this path currently, but other generators
+ * of global loads in the backend will have nonzero values.
  */
 
 static bool
@@ -238,47 +82,23 @@ lower_64b_global(nir_builder *b, nir_instr *instr, void *unused)
    (void)unused;
 
    nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   bool load = intr->intrinsic != nir_intrinsic_store_global;
-
-   nir_def *addr = intr->src[load ? 0 : 1].ssa;
-
-   /*
-    * Note that we can get vec8/vec16 with OpenCL.. we need to split
-    * those up into max 4 components per load/store.
-    */
-
-   enum gl_access_qualifier access = nir_intrinsic_access(intr);
-
-   if (load) {
+   if (intr->intrinsic != nir_intrinsic_store_global) {
       unsigned num_comp = nir_intrinsic_dest_components(intr);
-      nir_def *components[num_comp];
 
       /* load_global_constant is redundant and should be removed, because we can
        * express the same thing with extra access flags, but for now translate
        * it to load_global_ir3 with those extra flags.
        */
+      enum gl_access_qualifier access = nir_intrinsic_access(intr);
       if (intr->intrinsic == nir_intrinsic_load_global_constant)
          access |= ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER;
 
-      for (unsigned off = 0; off < num_comp;) {
-         unsigned c = MIN2(num_comp - off, 4);
-         nir_def *val = nir_load_global_ir3(
-               b, c, intr->def.bit_size,
-               addr, nir_imm_int(b, off),
-               .access = access);
-         for (unsigned i = 0; i < c; i++) {
-            components[off++] = nir_channel(b, val, i);
-         }
-      }
-      return nir_build_alu_src_arr(b, nir_op_vec(num_comp), components);
+      return nir_load_global_ir3(b, num_comp, intr->def.bit_size,
+                                 intr->src[0].ssa, nir_imm_int(b, 0),
+                                 .access = access);
    } else {
-      unsigned num_comp = nir_intrinsic_src_components(intr, 0);
-      nir_def *value = intr->src[0].ssa;
-      for (unsigned off = 0; off < num_comp; off += 4) {
-         unsigned c = MIN2(num_comp - off, 4);
-         nir_def *v = nir_channels(b, value, BITFIELD_MASK(c) << off);
-         nir_store_global_ir3(b, v, addr, nir_imm_int(b, off));
-      }
+      nir_store_global_ir3(b, intr->src[0].ssa, intr->src[1].ssa,
+                           nir_imm_int(b, 0));
       return NIR_LOWER_INSTR_PROGRESS_REPLACE;
    }
 }

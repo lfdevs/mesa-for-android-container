@@ -45,7 +45,7 @@ find_identical_inline_sampler(nir_shader *nir,
       exec_list_push_tail(inline_samplers, &var->node);
       return var;
    }
-   unreachable("Should have at least found the input sampler");
+   UNREACHABLE("Should have at least found the input sampler");
 }
 
 static bool
@@ -264,7 +264,7 @@ nir_lower_cl_images(nir_shader *shader, bool lower_image_derefs, bool lower_samp
                   intrin->num_components = 4;
                   intrin->def.num_components = 4;
                   nir_def *scalar = nir_channel(&b, &intrin->def, 0);
-                  nir_def_rewrite_uses_after(&intrin->def, scalar, scalar->parent_instr);
+                  nir_def_rewrite_uses_after(&intrin->def, scalar);
                   progress = true;
                }
 

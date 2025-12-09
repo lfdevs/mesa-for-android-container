@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 use crate::api::{GetDebugFlags, DEBUG};
-use crate::dataflow::ForwardDataflow;
 use crate::ir::*;
-use crate::reg_tracker::RegTracker;
+use crate::opt_instr_sched_common::estimate_block_weight;
+use crate::reg_tracker::{RegRefIterable, RegTracker, SparseRegTracker};
 
+use compiler::dataflow::{BackwardDataflow, ForwardDataflow};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::max;
+use std::hash::Hash;
 use std::ops::Range;
-use std::{slice, u32, u8};
+use std::slice;
+use std::{u16, u32, u8};
 
 #[derive(Clone)]
 enum RegUse<T: Clone> {
@@ -57,6 +60,79 @@ impl<T: Clone> RegUse<T> {
 
     pub fn set_write(&mut self, dep: T) -> Self {
         std::mem::replace(self, RegUse::Write(dep))
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum RegReadWrite {
+    Read,
+    Write,
+}
+
+/// Maps each register read/write to a value
+/// a register can have multiple reads AND multiple writes at the same
+/// point in time if it comes from a merge.
+/// For edits inside a CFG block, a RegUseMap will never contain multiple
+/// writes.
+///
+/// We need to track multiple reads as we don't know which one can cause
+/// the highest latency for the interfering instruction (in RaW).  For the
+/// same reason we might need to track both reads and writes in the case of
+/// a CFG block with multiple successors.
+/// We cannot flush writes after a read operation since we can still
+/// encounter other, slower reads that could interfere with the write.
+#[derive(Clone, PartialEq, Eq, Default)]
+struct RegUseMap<K: Hash + Eq, V> {
+    map: FxHashMap<(RegReadWrite, K), V>,
+}
+
+impl<K, V> RegUseMap<K, V>
+where
+    K: Copy + Default + Hash + Eq,
+    V: Clone,
+{
+    pub fn add_read(&mut self, k: K, v: V) {
+        self.map.insert((RegReadWrite::Read, k), v);
+    }
+
+    pub fn set_write(&mut self, k: K, v: V) {
+        // Writes wait on all previous Reads and writes
+        self.map.clear();
+        self.map.insert((RegReadWrite::Write, k), v);
+    }
+
+    pub fn iter_reads(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.map
+            .iter()
+            .filter(|(k, _v)| k.0 == RegReadWrite::Read)
+            .map(|(k, v)| (&k.1, v))
+    }
+
+    pub fn iter_writes(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.map
+            .iter()
+            .filter(|(k, _v)| k.0 == RegReadWrite::Write)
+            .map(|(k, v)| (&k.1, v))
+    }
+
+    /// Merge two instances using a custom merger for value conflicts
+    pub fn merge_with(
+        &mut self,
+        other: &Self,
+        mut merger: impl FnMut(&V, &V) -> V,
+    ) {
+        use std::collections::hash_map::Entry;
+        for (k, v) in other.map.iter() {
+            match self.map.entry(*k) {
+                Entry::Vacant(vacant_entry) => {
+                    vacant_entry.insert(v.clone());
+                }
+                Entry::Occupied(mut occupied_entry) => {
+                    let orig = occupied_entry.get_mut();
+                    *orig = merger(&orig, v);
+                }
+            }
+        }
     }
 }
 
@@ -549,8 +625,8 @@ fn insert_texture_barriers(f: &mut Function, sm: &dyn ShaderModel) {
                 true
             }
         },
-        join: |sim_out, pred_sim_in| {
-            sim_out.merge(pred_sim_in);
+        join: |sim_in, pred_sim_out| {
+            sim_in.merge(pred_sim_out);
         },
     }
     .solve();
@@ -558,7 +634,7 @@ fn insert_texture_barriers(f: &mut Function, sm: &dyn ShaderModel) {
     for (block, mut sim) in f.blocks.iter_mut().zip(state_in.into_iter()) {
         block.map_instrs(|instr| {
             if let Some(textures_left) = sim.visit_instr(&instr) {
-                let bar = Instr::new_boxed(OpTexDepBar { textures_left });
+                let bar = Instr::new(OpTexDepBar { textures_left });
                 MappedInstrs::Many(vec![bar, instr])
             } else {
                 MappedInstrs::One(instr)
@@ -669,111 +745,288 @@ fn assign_barriers(f: &mut Function, sm: &dyn ShaderModel) {
     }
 }
 
-fn calc_delays(f: &mut Function, sm: &dyn ShaderModel) -> u32 {
-    let mut min_num_static_cycles = 0;
-    for b in f.blocks.iter_mut().rev() {
-        let mut cycle = 0_u32;
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct RegOrigin {
+    loc: InstrIdx,
+    // Index of the src (for reads) or dst (for writes) in the instruction.
+    src_dst_idx: u16,
+}
 
-        // Vector mapping IP to start cycle
-        let mut instr_cycle = vec![0; b.instrs.len()];
-
-        // Maps registers to RegUse<ip, src_dst_idx>.  Predicates are
-        // represented by  src_idx = usize::MAX.
-        let mut uses: Box<RegTracker<RegUse<(usize, usize)>>> =
-            Box::new(RegTracker::new_with(&|| RegUse::None));
-
-        // Map from barrier to last waited cycle
-        let mut bars = [0_u32; 6];
-
-        for ip in (0..b.instrs.len()).rev() {
-            let instr = &b.instrs[ip];
-            let mut min_start = cycle + sm.exec_latency(&instr.op);
-            if let Some(bar) = instr.deps.rd_bar() {
-                min_start = max(min_start, bars[usize::from(bar)] + 2);
-            }
-            if let Some(bar) = instr.deps.wr_bar() {
-                min_start = max(min_start, bars[usize::from(bar)] + 2);
-            }
-            uses.for_each_instr_dst_mut(instr, |i, u| match u {
-                RegUse::None => {
-                    // We don't know how it will be used but it may be used in
-                    // the next block so we need at least assume the maximum
-                    // destination latency from the end of the block.
-                    let s = sm.worst_latency(&instr.op, i);
-                    min_start = max(min_start, s);
-                }
-                RegUse::Write((w_ip, w_dst_idx)) => {
-                    let s = instr_cycle[*w_ip]
-                        + sm.waw_latency(
-                            &instr.op,
-                            i,
-                            !instr.pred.pred_ref.is_none(),
-                            &b.instrs[*w_ip].op,
-                            *w_dst_idx,
-                        );
-                    min_start = max(min_start, s);
-                }
-                RegUse::Reads(reads) => {
-                    for (r_ip, r_src_idx) in reads {
-                        let c = instr_cycle[*r_ip];
-                        let s = if *r_src_idx == usize::MAX {
-                            c + sm.paw_latency(&instr.op, i)
-                        } else {
-                            c + sm.raw_latency(
-                                &instr.op,
-                                i,
-                                &b.instrs[*r_ip].op,
-                                *r_src_idx,
-                            )
-                        };
-                        min_start = max(min_start, s);
-                    }
-                }
-            });
-            uses.for_each_instr_src_mut(instr, |i, u| match u {
-                RegUse::None => (),
-                RegUse::Write((w_ip, w_dst_idx)) => {
-                    let s = instr_cycle[*w_ip]
-                        + sm.war_latency(
-                            &instr.op,
-                            i,
-                            &b.instrs[*w_ip].op,
-                            *w_dst_idx,
-                        );
-                    min_start = max(min_start, s);
-                }
-                RegUse::Reads(_) => (),
-            });
-
-            let instr = &mut b.instrs[ip];
-
-            let delay = min_start - cycle;
-            let delay = delay.max(MIN_INSTR_DELAY.into()).try_into().unwrap();
-            instr.deps.set_delay(delay);
-
-            instr_cycle[ip] = min_start;
-
-            // Set the writes before adding the reads
-            // as we are iterating backwards through instructions.
-            uses.for_each_instr_dst_mut(instr, |i, c| {
-                c.set_write((ip, i));
-            });
-            uses.for_each_instr_pred_mut(instr, |c| {
-                c.add_read((ip, usize::MAX));
-            });
-            uses.for_each_instr_src_mut(instr, |i, c| {
-                c.add_read((ip, i));
-            });
-            for (bar, c) in bars.iter_mut().enumerate() {
-                if instr.deps.wt_bar_mask & (1 << bar) != 0 {
-                    *c = min_start;
-                }
-            }
-
-            cycle = min_start;
+impl Default for RegOrigin {
+    fn default() -> Self {
+        // Lower bound
+        Self {
+            loc: InstrIdx::new(0, 0),
+            src_dst_idx: 0,
         }
-        min_num_static_cycles += cycle;
     }
+}
+
+// Delay accumulated from the blocks it passed, used to check for cross-block hazards.
+type AccumulatedDelay = u8;
+type DelayRegTracker = SparseRegTracker<RegUseMap<RegOrigin, AccumulatedDelay>>;
+
+struct BlockDelayScheduler<'a> {
+    sm: &'a dyn ShaderModel,
+    f: &'a Function,
+    // Map from barrier to last waited cycle
+    bars: [u32; 6],
+    // Current cycle count until end-of-block.
+    current_cycle: u32,
+    // Map from idx (block, instr) to block-relative cycle
+    instr_cycles: &'a mut Vec<Vec<u32>>,
+}
+
+impl BlockDelayScheduler<'_> {
+    /// Compute the starting cycle for an instruction to avoid a dependency hazard.
+    fn dependency_to_cycle(
+        &self,
+        curr_loc: InstrIdx, // Location of the current instruction
+        reg: &RegOrigin, // Register and location of instruction that will be executed later
+        delay: AccumulatedDelay, // Delay between the end of the current block and the later instruction
+        latency: u32, // Latency between current and later instruction
+    ) -> u32 {
+        debug_assert!(latency <= self.sm.latency_upper_bound());
+
+        let same_block = reg.loc.block_idx == curr_loc.block_idx
+            && reg.loc.instr_idx > curr_loc.instr_idx;
+
+        if same_block {
+            // Created this transfer pass
+            self.instr_cycles[reg.loc.block_idx as usize]
+                [reg.loc.instr_idx as usize]
+                + latency
+        } else {
+            // Remember that cycles are always counted from the end of a block.
+            // The next instruction happens after `delay` cycles after the
+            // current block is complete, so it is effectively executed at cycle
+            // `0 - delay`, adding the latency we get `latency - delay`
+            // Underflow means that the instruction is already done (delay > latency).
+            latency.checked_sub(delay.into()).unwrap_or(0)
+        }
+    }
+
+    fn process_instr(&mut self, loc: InstrIdx, reg_uses: &mut DelayRegTracker) {
+        let instr = &self.f[loc];
+
+        let mut min_start =
+            self.current_cycle + self.sm.exec_latency(&instr.op);
+
+        // Wait on rd/wr barriers
+        if let Some(bar) = instr.deps.rd_bar() {
+            min_start = max(min_start, self.bars[usize::from(bar)] + 2);
+        }
+        if let Some(bar) = instr.deps.wr_bar() {
+            min_start = max(min_start, self.bars[usize::from(bar)] + 2);
+        }
+
+        reg_uses.for_each_instr_dst_mut(instr, |i, u| {
+            for (orig, delay) in u.iter_writes() {
+                let l = self.sm.waw_latency(
+                    &instr.op,
+                    i,
+                    !instr.pred.pred_ref.is_none(),
+                    &self.f[orig.loc].op,
+                    orig.src_dst_idx as usize,
+                );
+                let s = self.dependency_to_cycle(loc, orig, *delay, l);
+                min_start = max(min_start, s);
+            }
+            for (orig, delay) in u.iter_reads() {
+                let l = if orig.src_dst_idx == u16::MAX {
+                    self.sm.paw_latency(&instr.op, i)
+                } else {
+                    self.sm.raw_latency(
+                        &instr.op,
+                        i,
+                        &self.f[orig.loc].op,
+                        orig.src_dst_idx as usize,
+                    )
+                };
+                let s = self.dependency_to_cycle(loc, orig, *delay, l);
+                min_start = max(min_start, s);
+            }
+
+            u.set_write(
+                RegOrigin {
+                    loc,
+                    src_dst_idx: i as u16,
+                },
+                0,
+            );
+        });
+
+        reg_uses.for_each_instr_pred_mut(instr, |c| {
+            // WaP does not exist
+            c.add_read(
+                RegOrigin {
+                    loc,
+                    src_dst_idx: u16::MAX,
+                },
+                0,
+            );
+        });
+        reg_uses.for_each_instr_src_mut(instr, |i, u| {
+            for (orig, delay) in u.iter_writes() {
+                let l = self.sm.war_latency(
+                    &instr.op,
+                    i,
+                    &self.f[orig.loc].op,
+                    orig.src_dst_idx as usize,
+                );
+                let s = self.dependency_to_cycle(loc, orig, *delay, l);
+                min_start = max(min_start, s);
+            }
+
+            u.add_read(
+                RegOrigin {
+                    loc,
+                    src_dst_idx: i as u16,
+                },
+                0,
+            );
+        });
+
+        self.instr_cycles[loc.block_idx as usize][loc.instr_idx as usize] =
+            min_start;
+
+        // Kepler A membar conflicts with predicate writes
+        if self.sm.is_kepler_a() && matches!(&instr.op, Op::MemBar(_)) {
+            let read_origin = RegOrigin {
+                loc,
+                src_dst_idx: u16::MAX,
+            };
+            reg_uses.for_each_pred(|c| {
+                c.add_read(read_origin.clone(), 0);
+            });
+            reg_uses.for_each_carry(|c| {
+                c.add_read(read_origin.clone(), 0);
+            });
+        }
+
+        // "Issue" barriers other instructions will wait on.
+        for (bar, c) in self.bars.iter_mut().enumerate() {
+            if instr.deps.wt_bar_mask & (1 << bar) != 0 {
+                *c = min_start;
+            }
+        }
+
+        self.current_cycle = min_start;
+    }
+}
+
+fn calc_delays(f: &mut Function, sm: &dyn ShaderModel) -> u64 {
+    let mut instr_cycles: Vec<Vec<u32>> =
+        f.blocks.iter().map(|b| vec![0; b.instrs.len()]).collect();
+
+    let mut state_in: Vec<_> = vec![DelayRegTracker::default(); f.blocks.len()];
+    let mut state_out: Vec<_> =
+        vec![DelayRegTracker::default(); f.blocks.len()];
+
+    let latency_upper_bound: u8 = sm
+        .latency_upper_bound()
+        .try_into()
+        .expect("Latency upper bound too large!");
+
+    // Compute instruction delays using an optimistic backwards data-flow
+    // algorithm.  For back-cycles we assume the best and recompute when
+    // new data is available.  This is yields correct results as long as
+    // the data flow analysis is run until completion.
+    BackwardDataflow {
+        cfg: &f.blocks,
+        block_in: &mut state_in[..],
+        block_out: &mut state_out[..],
+        transfer: |block_idx, block, reg_in, reg_out| {
+            let mut uses = reg_out.clone();
+
+            let mut sched = BlockDelayScheduler {
+                sm,
+                f,
+                // Barriers are handled by `assign_barriers`, and it does
+                // not handle cross-block barrier signal/wait.
+                // We can safely assume that no barrier is active at the
+                // start and end of the block
+                bars: [0_u32; 6],
+                current_cycle: 0_u32,
+                instr_cycles: &mut instr_cycles,
+            };
+
+            for ip in (0..block.instrs.len()).rev() {
+                let loc = InstrIdx::new(block_idx, ip);
+                sched.process_instr(loc, &mut uses);
+            }
+
+            // Update accumulated delay
+            let block_cycles = sched.current_cycle;
+            uses.retain(|reg_use| {
+                reg_use.map.retain(|(_rw, k), v| {
+                    let overcount = if k.loc.block_idx as usize == block_idx {
+                        // Only instrs before instr_idx must be counted
+                        instr_cycles[k.loc.block_idx as usize]
+                            [k.loc.instr_idx as usize]
+                    } else {
+                        0
+                    };
+                    let instr_executed = (block_cycles - overcount)
+                        .try_into()
+                        .unwrap_or(u8::MAX);
+                    // We only care about the accumulated delay until it
+                    // is bigger than the maximum delay of an instruction.
+                    // after that, it cannot cause hazards.
+                    let (added, overflow) =
+                        (*v).overflowing_add(instr_executed);
+                    *v = added;
+                    // Stop keeping track of entries that happened too
+                    // many cycles "in the future", and cannot affect
+                    // scheduling anymore
+                    !overflow && added <= latency_upper_bound
+                });
+                !reg_use.map.is_empty()
+            });
+
+            if *reg_in == uses {
+                false
+            } else {
+                *reg_in = uses;
+                true
+            }
+        },
+        join: |curr_in, succ_out| {
+            // We start with an optimistic assumption and gradually make it
+            // less optimistic.  So in the join operation we need to keep
+            // the "worst" accumulated latency, that is the lowest one.
+            // i.e. if an instruction has an accumulated latency of 2 cycles,
+            // it can interfere with the next block, while if it had 200 cycles
+            // it's highly unlikely that it could interfere.
+            curr_in.merge_with(succ_out, |a, b| {
+                a.merge_with(b, |ai, bi| (*ai).min(*bi))
+            });
+        },
+    }
+    .solve();
+
+    // Update the deps.delay for each instruction and compute
+    for (bi, b) in f.blocks.iter_mut().enumerate() {
+        let cycles = &instr_cycles[bi];
+        for (ip, i) in b.instrs.iter_mut().enumerate() {
+            let delay = cycles[ip] - cycles.get(ip + 1).copied().unwrap_or(0);
+            let delay: u8 = delay.try_into().expect("Delay overflow");
+            i.deps.delay = delay.max(MIN_INSTR_DELAY) as u8;
+        }
+    }
+
+    let min_num_static_cycles = instr_cycles
+        .iter()
+        .enumerate()
+        .map(|(block_idx, cycles)| {
+            let cycles = cycles.last().copied().unwrap_or(0);
+            let block_weight = estimate_block_weight(&f.blocks, block_idx);
+            u64::from(cycles)
+                .checked_mul(block_weight)
+                .expect("Cycle count estimate overflow")
+        })
+        .reduce(|a, b| a.checked_add(b).expect("Cycle count estimate overflow"))
+        .unwrap_or(0);
 
     let max_instr_delay = sm.max_instr_delay();
     f.map_instrs(|mut instr, _| {
@@ -782,7 +1035,7 @@ fn calc_delays(f: &mut Function, sm: &dyn ShaderModel) -> u32 {
             instr.deps.set_delay(max_instr_delay);
             let mut instrs = vec![instr];
             while delay > 0 {
-                let mut nop = Instr::new_boxed(OpNop { label: None });
+                let mut nop = Instr::new(OpNop { label: None });
                 nop.deps.set_delay(delay.min(max_instr_delay));
                 delay -= nop.deps.delay;
                 instrs.push(nop);
@@ -796,7 +1049,7 @@ fn calc_delays(f: &mut Function, sm: &dyn ShaderModel) -> u32 {
             // of 2 after every instruction which has an exec latency.  Perhaps
             // it has something to do with .yld?  In any case, the extra 2
             // cycles aren't worth the chance of weird bugs.
-            let mut nop = Instr::new_boxed(OpNop { label: None });
+            let mut nop = Instr::new(OpNop { label: None });
             nop.deps.set_delay(2);
             MappedInstrs::Many(vec![instr, nop])
         } else {
@@ -849,7 +1102,7 @@ impl Shader<'_> {
         if DEBUG.serial() {
             self.assign_deps_serial();
         } else {
-            let mut min_num_static_cycles = 0;
+            let mut min_num_static_cycles = 0u64;
             for f in &mut self.functions {
                 assign_barriers(f, self.sm);
                 min_num_static_cycles += calc_delays(f, self.sm);

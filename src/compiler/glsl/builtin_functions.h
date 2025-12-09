@@ -42,7 +42,7 @@ _mesa_glsl_builtin_functions_decref(void);
 
 extern ir_function_signature *
 _mesa_glsl_find_builtin_function(_mesa_glsl_parse_state *state,
-                                 const char *name, exec_list *actual_parameters);
+                                 const char *name, ir_exec_list *actual_parameters);
 
 extern bool
 _mesa_glsl_has_builtin_function(_mesa_glsl_parse_state *state,

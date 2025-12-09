@@ -7,7 +7,7 @@
  */
 
 #include "radv_meta.h"
-#include "radv_printf.h"
+#include "radv_debug_nir.h"
 
 #include "vk_common_entrypoints.h"
 #include "vk_pipeline_cache.h"
@@ -239,7 +239,7 @@ radv_meta_get_view_type(const struct radv_image *image)
    case VK_IMAGE_TYPE_3D:
       return VK_IMAGE_VIEW_TYPE_3D;
    default:
-      unreachable("bad VkImageViewType");
+      UNREACHABLE("bad VkImageViewType");
    }
 }
 
@@ -367,6 +367,7 @@ radv_meta_bind_descriptors(struct radv_cmd_buffer *cmd_buffer, VkPipelineBindPoi
    VK_FROM_HANDLE(radv_pipeline_layout, layout, _layout);
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    struct radv_descriptor_set_layout *set_layout = layout->set[0].layout;
+   struct radv_cmd_stream *cs = cmd_buffer->cs;
    uint32_t upload_offset;
    uint8_t *ptr;
 
@@ -395,7 +396,7 @@ radv_meta_bind_descriptors(struct radv_cmd_buffer *cmd_buffer, VkPipelineBindPoi
          VK_FROM_HANDLE(radv_image_view, iview, image_view);
          for (uint32_t b = 0; b < ARRAY_SIZE(iview->image->bindings); b++) {
             if (iview->image->bindings[b].bo)
-               radv_cs_add_buffer(device->ws, cmd_buffer->cs, iview->image->bindings[b].bo);
+               radv_cs_add_buffer(device->ws, cs->b, iview->image->bindings[b].bo);
          }
       }
    }

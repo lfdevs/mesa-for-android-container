@@ -55,7 +55,6 @@ struct nvk_image_view_capture {
 
 VkResult nvk_image_view_init(struct nvk_device *dev,
                              struct nvk_image_view *view,
-                             bool driver_internal,
                              const VkImageViewCreateInfo *pCreateInfo);
 
 void nvk_image_view_finish(struct nvk_device *dev,

@@ -192,6 +192,10 @@ print_instr_name(struct log_stream *stream, struct ir3_instruction *instr,
          mesa_log_stream_printf(stream, ".a1en");
       if (instr->flags & IR3_INSTR_U)
          mesa_log_stream_printf(stream, ".u");
+      if (instr->flags & IR3_INSTR_RCK)
+         mesa_log_stream_printf(stream, ".rck");
+      if (instr->flags & IR3_INSTR_CLP)
+         mesa_log_stream_printf(stream, ".clp");
       if (instr->opc == OPC_LDC)
          mesa_log_stream_printf(stream, ".offset%d", instr->cat6.d);
       if (instr->opc == OPC_LDC_K)
@@ -338,6 +342,9 @@ print_reg_name(struct log_stream *stream, struct ir3_instruction *instr,
    if (reg->flags & IR3_REG_EARLY_CLOBBER)
       mesa_log_stream_printf(stream, "(early_clobber)");
 
+   if (reg->flags & IR3_REG_DUMMY)
+      mesa_log_stream_printf(stream, "(dummy)");
+
    /* Right now all instructions that use tied registers only have one
     * destination register, so we can just print (tied) as if it's a flag,
     * although it's more convenient for RA if it's a pointer.
@@ -352,6 +359,8 @@ print_reg_name(struct log_stream *stream, struct ir3_instruction *instr,
          mesa_log_stream_printf(stream, "!");
    }
 
+   if (reg->flags & IR3_REG_UNIFORM)
+      mesa_log_stream_printf(stream, "u");
    if (reg->flags & IR3_REG_SHARED)
       mesa_log_stream_printf(stream, "s");
    if (reg->flags & IR3_REG_HALF)
@@ -432,6 +441,8 @@ print_instr(struct log_stream *stream, struct ir3_instruction *instr, int lvl)
    }
 
    if (opc_cat(instr->opc) == 1) {
+      if (instr->cat1.sat)
+         mesa_log_stream_printf(stream, "(sat)");
       switch (instr->cat1.round) {
       case ROUND_ZERO:
          break;
@@ -472,6 +483,11 @@ print_instr(struct log_stream *stream, struct ir3_instruction *instr, int lvl)
       if (instr->opc == OPC_END || instr->opc == OPC_CHMASK)
          mesa_log_stream_printf(stream, " (%u)", instr->end.outidxs[n]);
       first = false;
+   }
+
+   if ((opc_cat(instr->opc) == 1) && (instr->cat1.r[0] || instr->cat1.r[1])) {
+      mesa_log_stream_printf(stream, ", %u, %u",
+                             instr->cat1.r[0], instr->cat1.r[1]);
    }
 
    if (is_tex(instr) && !(instr->flags & IR3_INSTR_S2EN) &&

@@ -740,8 +740,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
    }
 
    if (nr_planes > 3) {
-      lp_setup_add_scissor_planes(scissor, &plane[3],
-                                  s_planes, setup->multisample);
+      lp_setup_add_scissor_planes(scissor, &plane[3], s_planes);
    }
 
    return lp_setup_bin_triangle(setup, tri, use_32bits,
@@ -1040,7 +1039,7 @@ calc_fixed_position(struct lp_setup_context *setup,
                     const float (*v1)[4],
                     const float (*v2)[4])
 {
-   float pixel_offset = setup->multisample ? 0.0 : setup->pixel_offset;
+   float pixel_offset = setup->pixel_offset;
    /*
     * The rounding may not be quite the same with DETECT_ARCH_SSE
     * (util_iround right now only does nearest/even on x87,

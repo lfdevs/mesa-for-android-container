@@ -13,7 +13,7 @@ section_start piglit "Building piglit"
 # setting up the environment variables locally
 ci_tag_build_time_check "PIGLIT_TAG"
 
-REV="0980079dcfb5adbad873d88e00181268f55cb8ef"
+REV="5309e3401d6b03e8a0bb7bfdc1e0f5bc1ad754af"
 
 git clone https://gitlab.freedesktop.org/mesa/piglit.git --single-branch --no-checkout /piglit
 pushd /piglit

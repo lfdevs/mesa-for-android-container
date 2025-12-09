@@ -57,7 +57,7 @@ isl_tiling_to_i915_tiling(enum isl_tiling tiling)
       return I915_TILING_NONE;
    }
 
-   unreachable("Invalid ISL tiling");
+   UNREACHABLE("Invalid ISL tiling");
 }
 
 enum isl_tiling
@@ -74,7 +74,7 @@ isl_tiling_from_i915_tiling(uint32_t tiling)
       return ISL_TILING_Y0;
    }
 
-   unreachable("Invalid i915 tiling");
+   UNREACHABLE("Invalid i915 tiling");
 }
 
 /** Sentinel is DRM_FORMAT_MOD_INVALID. */
@@ -208,10 +208,22 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
     * and don't want to provide a default value either, so we don't
     * use debug_get_num_option() here.
     */
-   const char *mod_str = getenv("INTEL_MODIFIER_OVERRIDE");
+   const char *mod_str = os_get_option("INTEL_MODIFIER_OVERRIDE");
    if (mod_str != NULL) {
       return modifier == strtoul(mod_str, NULL, 0);
    }
+
+   const struct isl_drm_modifier_info *mod_info =
+      isl_drm_modifier_get_info(modifier);
+   if (mod_info != NULL) {
+      if (mod_info->supports_render_compression &&
+          (INTEL_DEBUG(DEBUG_NO_CCS) || INTEL_DEBUG(DEBUG_NO_CCS_MODIFIER)))
+         return 0;
+
+      if (mod_info->supports_clear_color && INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
+         return 0;
+   }
+
    /* FINISHME: Add gfx12 modifiers */
    switch (modifier) {
    default:
@@ -233,23 +245,14 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
       if (devinfo->ver <= 8 || devinfo->ver >= 12)
          return 0;
 
-      if (INTEL_DEBUG(DEBUG_NO_CCS))
-         return 0;
-
       return 4;
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
       if (devinfo->verx10 != 120)
          return 0;
 
-      if (INTEL_DEBUG(DEBUG_NO_CCS))
-         return 0;
-
       return 4;
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
       if (devinfo->verx10 != 120)
-         return 0;
-
-      if (INTEL_DEBUG(DEBUG_NO_CCS) || INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
          return 0;
 
       return 5;
@@ -263,15 +266,9 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
       if (!intel_device_info_is_dg2(devinfo))
          return 0;
 
-      if (INTEL_DEBUG(DEBUG_NO_CCS))
-         return 0;
-
       return 4;
    case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC:
       if (!intel_device_info_is_dg2(devinfo))
-         return 0;
-
-      if (INTEL_DEBUG(DEBUG_NO_CCS) || INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
          return 0;
 
       return 5;
@@ -279,31 +276,19 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
       if (!intel_device_info_is_mtl_or_arl(devinfo))
          return 0;
 
-      if (INTEL_DEBUG(DEBUG_NO_CCS))
-         return 0;
-
       return 4;
    case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC:
       if (!intel_device_info_is_mtl_or_arl(devinfo))
          return 0;
 
-      if (INTEL_DEBUG(DEBUG_NO_CCS) || INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
-         return 0;
-
       return 5;
    case I915_FORMAT_MOD_4_TILED_LNL_CCS:
-      if (devinfo->platform != INTEL_PLATFORM_LNL)
-         return 0;
-
-      if (INTEL_DEBUG(DEBUG_NO_CCS))
+      if (devinfo->ver < 20 || devinfo->has_local_mem)
          return 0;
 
       return 4;
    case I915_FORMAT_MOD_4_TILED_BMG_CCS:
-      if (devinfo->platform != INTEL_PLATFORM_BMG)
-         return 0;
-
-      if (INTEL_DEBUG(DEBUG_NO_CCS))
+      if (devinfo->ver < 20 || !devinfo->has_local_mem)
          return 0;
 
       return 4;

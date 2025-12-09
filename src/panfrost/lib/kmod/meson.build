@@ -13,7 +13,7 @@ libpankmod_lib = static_library(
   include_directories : [inc_include, inc_src, inc_panfrost],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies: [dep_libdrm, idep_mesautil, idep_pan_packers],
+  dependencies: [dep_libdrm, idep_mesautil, idep_pan_packers, libpanfrost_model_dep],
   build_by_default : false,
 )
 

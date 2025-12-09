@@ -46,7 +46,7 @@ anv_gem_wait(struct anv_device *device, uint32_t gem_handle, int64_t *timeout_ns
    case INTEL_KMD_TYPE_XE:
       return -1;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return -1;
    }
 }
@@ -61,7 +61,7 @@ anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle)
    case INTEL_KMD_TYPE_XE:
       return -1;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return -1;
    }
 }
@@ -76,7 +76,7 @@ anv_gem_set_tiling(struct anv_device *device,
    case INTEL_KMD_TYPE_XE:
       return 0;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return -1;
    }
 }
@@ -125,7 +125,7 @@ anv_gem_import_bo_alloc_flags_to_bo_flags(struct anv_device *device,
       *bo_flags = device->kmd_backend->bo_alloc_flags_to_bo_flags(device, alloc_flags);
       return VK_SUCCESS;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return VK_ERROR_UNKNOWN;
    }
 }

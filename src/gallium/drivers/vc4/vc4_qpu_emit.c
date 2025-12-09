@@ -359,7 +359,7 @@ vc4_generate_code_block(struct vc4_compile *c,
                         case QFILE_TEX_T:
                         case QFILE_TEX_R:
                         case QFILE_TEX_B:
-                                unreachable("bad qir src file");
+                                UNREACHABLE("bad qir src file");
                         }
                 }
 

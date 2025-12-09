@@ -76,7 +76,7 @@ set_viewport_no_notify(struct gl_context *ctx, unsigned idx,
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_VIEWPORT_BIT);
-   ctx->NewDriverState |= ST_NEW_VIEWPORT;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_VIEWPORT);
 
    ctx->ViewportArray[idx].X = x;
    ctx->ViewportArray[idx].Width = width;
@@ -297,7 +297,7 @@ set_depth_range_no_notify(struct gl_context *ctx, unsigned idx,
 
    /* The depth range is needed by program state constants. */
    FLUSH_VERTICES(ctx, _NEW_VIEWPORT, GL_VIEWPORT_BIT);
-   ctx->NewDriverState |= ST_NEW_VIEWPORT;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_VIEWPORT);
 
    ctx->ViewportArray[idx].Near = SATURATE(nearval);
    ctx->ViewportArray[idx].Far = SATURATE(farval);
@@ -511,13 +511,13 @@ clip_control(struct gl_context *ctx, GLenum origin, GLenum depth, bool no_error)
 
    /* Affects transform state and the viewport transform */
    FLUSH_VERTICES(ctx, 0, GL_TRANSFORM_BIT);
-   ctx->NewDriverState |= ST_NEW_VIEWPORT | ST_NEW_RASTERIZER;
+   ST_SET_STATE2(ctx->NewDriverState, ST_NEW_VIEWPORT, ST_NEW_RASTERIZER);
 
    if (ctx->Transform.ClipOrigin != origin) {
       ctx->Transform.ClipOrigin = origin;
 
       /* Affects the winding order of the front face. */
-      ctx->NewDriverState |= ST_NEW_RASTERIZER;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
    }
 
    if (ctx->Transform.ClipDepthMode != depth) {
@@ -600,7 +600,7 @@ subpixel_precision_bias(struct gl_context *ctx, GLuint xbits, GLuint ybits)
    ctx->SubpixelPrecisionBias[0] = xbits;
    ctx->SubpixelPrecisionBias[1] = ybits;
 
-   ctx->NewDriverState |= ST_NEW_RASTERIZER;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
 }
 
 void GLAPIENTRY
@@ -656,7 +656,7 @@ set_viewport_swizzle(struct gl_context *ctx, GLuint index,
       return;
 
    FLUSH_VERTICES(ctx, _NEW_VIEWPORT, GL_VIEWPORT_BIT);
-   ctx->NewDriverState |= ST_NEW_VIEWPORT;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_VIEWPORT);
 
    viewport->SwizzleX = swizzlex;
    viewport->SwizzleY = swizzley;

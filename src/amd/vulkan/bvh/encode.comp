@@ -6,18 +6,6 @@
 
 #version 460
 
-#extension GL_GOOGLE_include_directive : require
-
-#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
-#extension GL_EXT_scalar_block_layout : require
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_buffer_reference2 : require
-#extension GL_KHR_memory_scope_semantics : require
-
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #include "build_helpers.h"
@@ -176,13 +164,7 @@ main()
          uint32_t dst_offset;
 
          if (type == vk_ir_node_internal) {
-            if (VK_BUILD_FLAG(RADV_BUILD_FLAG_COMPACT)) {
-               dst_offset = atomicAdd(DEREF(args.header).dst_node_offset, SIZEOF(radv_bvh_box32_node));
-            } else {
-               uint32_t offset_in_internal_nodes = offset - intermediate_leaf_nodes_size;
-               uint32_t child_index = offset_in_internal_nodes / SIZEOF(vk_ir_box_node);
-               dst_offset = dst_internal_offset + child_index * SIZEOF(radv_bvh_box32_node);
-            }
+            dst_offset = atomicAdd(DEREF(args.header).dst_node_offset, SIZEOF(radv_bvh_box32_node));
 
             REF(vk_ir_box_node) child_node = REF(vk_ir_box_node)OFFSET(args.intermediate_bvh, offset);
             DEREF(child_node).bvh_offset = dst_offset;
@@ -238,15 +220,22 @@ main()
                     gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
 
       DEREF(dst_node).children = children;
-      DEREF(dst_node).flags = flags;
+
+      if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+         DEREF(dst_node).flags = flags;
+
       break;
    }
 
    if (is_root_node) {
+      vk_aabb aabb = src.base.aabb;
+      if (DEREF(args.header).active_leaf_count == 0)
+         aabb = vk_aabb(vec3(NAN), vec3(NAN));
+
       REF(radv_accel_struct_header) header = REF(radv_accel_struct_header)(args.output_bvh - args.output_bvh_offset);
       DEREF(header).bvh_offset = args.output_bvh_offset;
       DEREF(header).root_flags = src.flags;
-      DEREF(header).aabb = src.base.aabb;
+      DEREF(header).aabb = aabb;
 
       set_parent(RADV_BVH_ROOT_NODE, RADV_BVH_INVALID_NODE);
    }

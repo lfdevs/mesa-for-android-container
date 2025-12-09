@@ -90,7 +90,7 @@ agx_translate_layout(enum ail_tiling tiling)
       return AGX_LAYOUT_LINEAR;
    }
 
-   unreachable("Invalid tiling");
+   UNREACHABLE("Invalid tiling");
 }
 
 static inline enum agx_zls_tiling
@@ -102,7 +102,7 @@ agx_translate_zls_tiling(enum ail_tiling tiling)
    case AIL_TILING_TWIDDLED:
       return AGX_ZLS_TILING_TWIDDLED;
    default:
-      unreachable("Invalid ZLS tiling");
+      UNREACHABLE("Invalid ZLS tiling");
    }
 }
 
@@ -150,7 +150,7 @@ agx_translate_sample_count(unsigned samples)
    case 4:
       return AGX_SAMPLE_COUNT_4;
    default:
-      unreachable("Invalid sample count");
+      UNREACHABLE("Invalid sample count");
    }
 }
 
@@ -167,7 +167,7 @@ agx_translate_depth_layout(enum gl_frag_depth_layout layout)
    case FRAG_DEPTH_LAYOUT_UNCHANGED:
       return AGX_CONSERVATIVE_DEPTH_UNCHANGED;
    default:
-      unreachable("depth layout should have been canonicalized");
+      UNREACHABLE("depth layout should have been canonicalized");
    }
 }
 
@@ -315,16 +315,6 @@ agx_fill_decompress_args(struct ail_layout *layout, unsigned layer,
       context, grid, barrier,                                                  \
       agx_fill_decompress_args(layout, layer, level, ptr, images),             \
       util_logbase2(layout->sample_count_sa))
-
-#define libagx_tessellate(context, grid, barrier, prim, mode, state)           \
-   if (prim == TESS_PRIMITIVE_QUADS) {                                         \
-      libagx_tess_quad(context, grid, barrier, state, mode);                   \
-   } else if (prim == TESS_PRIMITIVE_TRIANGLES) {                              \
-      libagx_tess_tri(context, grid, barrier, state, mode);                    \
-   } else {                                                                    \
-      assert(prim == TESS_PRIMITIVE_ISOLINES);                                 \
-      libagx_tess_isoline(context, grid, barrier, state, mode);                \
-   }
 
 struct agx_border_packed;
 

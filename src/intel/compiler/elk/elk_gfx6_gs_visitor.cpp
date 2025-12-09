@@ -31,7 +31,7 @@
 
 #include "elk_gfx6_gs_visitor.h"
 #include "elk_eu.h"
-#include "elk_prim.h"
+#include "compiler/intel_prim.h"
 
 namespace elk {
 
@@ -546,7 +546,7 @@ gfx6_gs_visitor::xfb_write()
       num_verts = 3;
       break;
    default:
-      unreachable("Unexpected primitive type in Gfx6 SOL program.");
+      UNREACHABLE("Unexpected primitive type in Gfx6 SOL program.");
    }
 
    this->current_annotation = "gfx6 thread end: svb writes init";

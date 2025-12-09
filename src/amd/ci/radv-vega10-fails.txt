@@ -10,16 +10,12 @@ dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.whole_copy_before_r
 dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.whole_copy_before_resolving_transfer.4_bit,Fail
 dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.whole_copy_before_resolving_transfer.8_bit,Fail
 
-# Video failures (needs firmware updates).
+# RADV_PERFTEST=video_decode,video_encode expected failures.
 dEQP-VK.video.synchronization.decode_h264.basic.event.device_set_reset,Fail
 dEQP-VK.video.synchronization.decode_h265.basic.event.device_set_reset,Fail
 dEQP-VK.video.synchronization2.decode_h264.basic.event.device_set_reset,Fail
 dEQP-VK.video.synchronization2.decode_h265.basic.event.device_set_reset,Fail
 
-# CTS bug
-dEQP-VK.video.formats.decode_h264_g8_b8r8_2plane_420_unorm_decode_dst_420_8bit,Fail
-dEQP-VK.video.formats.decode_h264_g8_b8r8_2plane_420_unorm_decode_dst_monochrome_8bit,Fail
-dEQP-VK.video.formats.decode_h265_g10x6_b10x6r10x6_2plane_420_unorm_3pack16_decode_dst_420_10bit,Fail
-dEQP-VK.video.formats.decode_h265_g10x6_b10x6r10x6_2plane_420_unorm_3pack16_decode_dst_monochrome_10bit,Fail
-dEQP-VK.video.formats.decode_h265_g8_b8r8_2plane_420_unorm_decode_dst_420_8bit,Fail
-dEQP-VK.video.formats.decode_h265_g8_b8r8_2plane_420_unorm_decode_dst_monochrome_8bit,Fail
+# CTS bug https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6155
+dEQP-VK.api.copy_and_blit.core.image_to_image_transfer_queue.array.array_to_array_whole_mipmap_s8_uint,Fail
+dEQP-VK.api.copy_and_blit.dedicated_allocation.image_to_image_transfer_queue.array.array_to_array_whole_mipmap_s8_uint,Fail

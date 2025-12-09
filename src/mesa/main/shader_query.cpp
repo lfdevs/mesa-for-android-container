@@ -478,6 +478,8 @@ _mesa_program_resource_name(struct gl_program_resource *res)
    case GL_COMPUTE_SUBROUTINE_UNIFORM:
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
       return RESOURCE_UNI(res)->name.string + MESA_SUBROUTINE_PREFIX_LEN;
    case GL_VERTEX_SUBROUTINE:
    case GL_GEOMETRY_SUBROUTINE:
@@ -485,6 +487,8 @@ _mesa_program_resource_name(struct gl_program_resource *res)
    case GL_COMPUTE_SUBROUTINE:
    case GL_TESS_CONTROL_SUBROUTINE:
    case GL_TESS_EVALUATION_SUBROUTINE:
+   case GL_TASK_SUBROUTINE_EXT:
+   case GL_MESH_SUBROUTINE_EXT:
       return RESOURCE_SUB(res)->name.string;
    default:
       break;
@@ -513,6 +517,8 @@ _mesa_program_resource_name_length(struct gl_program_resource *res)
    case GL_COMPUTE_SUBROUTINE_UNIFORM:
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
       return RESOURCE_UNI(res)->name.length - MESA_SUBROUTINE_PREFIX_LEN;
    case GL_VERTEX_SUBROUTINE:
    case GL_GEOMETRY_SUBROUTINE:
@@ -520,6 +526,8 @@ _mesa_program_resource_name_length(struct gl_program_resource *res)
    case GL_COMPUTE_SUBROUTINE:
    case GL_TESS_CONTROL_SUBROUTINE:
    case GL_TESS_EVALUATION_SUBROUTINE:
+   case GL_TASK_SUBROUTINE_EXT:
+   case GL_MESH_SUBROUTINE_EXT:
       return RESOURCE_SUB(res)->name.length;
    default:
       break;
@@ -553,6 +561,8 @@ _mesa_program_get_resource_name(struct gl_program_resource *res,
    case GL_COMPUTE_SUBROUTINE_UNIFORM:
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
       *out = RESOURCE_UNI(res)->name;
       out->string += MESA_SUBROUTINE_PREFIX_LEN;
       out->length -= MESA_SUBROUTINE_PREFIX_LEN;
@@ -564,6 +574,8 @@ _mesa_program_get_resource_name(struct gl_program_resource *res,
    case GL_COMPUTE_SUBROUTINE:
    case GL_TESS_CONTROL_SUBROUTINE:
    case GL_TESS_EVALUATION_SUBROUTINE:
+   case GL_TASK_SUBROUTINE_EXT:
+   case GL_MESH_SUBROUTINE_EXT:
       *out = RESOURCE_SUB(res)->name;
       return out->string != NULL;
    default:
@@ -588,6 +600,8 @@ _mesa_program_resource_array_size(struct gl_program_resource *res)
    case GL_COMPUTE_SUBROUTINE_UNIFORM:
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
       return RESOURCE_UNI(res)->array_elements;
    case GL_BUFFER_VARIABLE:
       /* Unsized arrays */
@@ -602,6 +616,8 @@ _mesa_program_resource_array_size(struct gl_program_resource *res)
    case GL_COMPUTE_SUBROUTINE:
    case GL_TESS_CONTROL_SUBROUTINE:
    case GL_TESS_EVALUATION_SUBROUTINE:
+   case GL_TASK_SUBROUTINE_EXT:
+   case GL_MESH_SUBROUTINE_EXT:
    case GL_ATOMIC_COUNTER_BUFFER:
    case GL_UNIFORM_BLOCK:
    case GL_SHADER_STORAGE_BLOCK:
@@ -758,12 +774,16 @@ _mesa_program_resource_find_name(struct gl_shader_program *shProg,
          case GL_COMPUTE_SUBROUTINE_UNIFORM:
          case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
          case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+         case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+         case GL_MESH_SUBROUTINE_UNIFORM_EXT:
          case GL_VERTEX_SUBROUTINE:
          case GL_GEOMETRY_SUBROUTINE:
          case GL_FRAGMENT_SUBROUTINE:
          case GL_COMPUTE_SUBROUTINE:
          case GL_TESS_CONTROL_SUBROUTINE:
          case GL_TESS_EVALUATION_SUBROUTINE:
+         case GL_TASK_SUBROUTINE_EXT:
+         case GL_MESH_SUBROUTINE_EXT:
             if (name[rname.length] == '.') {
                return res;
             }
@@ -932,6 +952,8 @@ _mesa_program_resource_index(struct gl_shader_program *shProg,
    case GL_COMPUTE_SUBROUTINE:
    case GL_TESS_CONTROL_SUBROUTINE:
    case GL_TESS_EVALUATION_SUBROUTINE:
+   case GL_TASK_SUBROUTINE_EXT:
+   case GL_MESH_SUBROUTINE_EXT:
       return RESOURCE_SUB(res)->index;
    case GL_UNIFORM_BLOCK:
    case GL_SHADER_STORAGE_BLOCK:
@@ -989,12 +1011,16 @@ _mesa_program_resource_find_index(struct gl_shader_program *shProg,
       case GL_COMPUTE_SUBROUTINE_UNIFORM:
       case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
       case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+      case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+      case GL_MESH_SUBROUTINE_UNIFORM_EXT:
       case GL_VERTEX_SUBROUTINE:
       case GL_GEOMETRY_SUBROUTINE:
       case GL_FRAGMENT_SUBROUTINE:
       case GL_COMPUTE_SUBROUTINE:
       case GL_TESS_CONTROL_SUBROUTINE:
       case GL_TESS_EVALUATION_SUBROUTINE:
+      case GL_TASK_SUBROUTINE_EXT:
+      case GL_MESH_SUBROUTINE_EXT:
       case GL_BUFFER_VARIABLE:
          if (++idx == (int) index)
             return res;
@@ -1167,6 +1193,8 @@ program_resource_location(struct gl_program_resource *res, unsigned array_index)
    case GL_COMPUTE_SUBROUTINE_UNIFORM:
    case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
    case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+   case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+   case GL_MESH_SUBROUTINE_UNIFORM_EXT:
       /* If the uniform is an array, fail if the index is out of bounds. */
       if (array_index > 0
           && array_index >= RESOURCE_UNI(res)->array_elements) {
@@ -1247,9 +1275,13 @@ stage_from_enum(GLenum ref)
       return MESA_SHADER_FRAGMENT;
    case GL_REFERENCED_BY_COMPUTE_SHADER:
       return MESA_SHADER_COMPUTE;
+   case GL_REFERENCED_BY_TASK_SHADER_EXT:
+      return MESA_SHADER_TASK;
+   case GL_REFERENCED_BY_MESH_SHADER_EXT:
+      return MESA_SHADER_MESH;
    default:
       assert(!"shader stage not supported");
-      return MESA_SHADER_STAGES;
+      return MESA_SHADER_MESH_STAGES;
    }
 }
 
@@ -1492,6 +1524,8 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
       case GL_COMPUTE_SUBROUTINE_UNIFORM:
       case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
       case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+      case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+      case GL_MESH_SUBROUTINE_UNIFORM_EXT:
 
          /* Test if a buffer variable is an array or an unsized array.
           * Unsized arrays return zero as array size.
@@ -1549,15 +1583,22 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
    case GL_NUM_ACTIVE_VARIABLES:
    case GL_ACTIVE_VARIABLES:
       return get_buffer_property(shProg, res, prop, val, glthread, caller);
-   case GL_REFERENCED_BY_COMPUTE_SHADER:
-      if (!_mesa_has_compute_shaders(ctx))
-         goto invalid_enum;
-      FALLTHROUGH;
    case GL_REFERENCED_BY_VERTEX_SHADER:
    case GL_REFERENCED_BY_TESS_CONTROL_SHADER:
    case GL_REFERENCED_BY_TESS_EVALUATION_SHADER:
    case GL_REFERENCED_BY_GEOMETRY_SHADER:
    case GL_REFERENCED_BY_FRAGMENT_SHADER:
+   case GL_REFERENCED_BY_COMPUTE_SHADER:
+   case GL_REFERENCED_BY_TASK_SHADER_EXT:
+   case GL_REFERENCED_BY_MESH_SHADER_EXT:
+      if (prop == GL_REFERENCED_BY_COMPUTE_SHADER) {
+         if (!_mesa_has_compute_shaders(ctx))
+            goto invalid_enum;
+      } else if (prop == GL_REFERENCED_BY_TASK_SHADER_EXT ||
+                 prop == GL_REFERENCED_BY_MESH_SHADER_EXT) {
+         if (!_mesa_has_EXT_mesh_shader(ctx))
+            goto invalid_enum;
+      }
       switch (res->Type) {
       case GL_UNIFORM:
       case GL_PROGRAM_INPUT:
@@ -1581,6 +1622,8 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
       case GL_COMPUTE_SUBROUTINE_UNIFORM:
       case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
       case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+      case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+      case GL_MESH_SUBROUTINE_UNIFORM_EXT:
       case GL_PROGRAM_INPUT:
       case GL_PROGRAM_OUTPUT:
          *val = program_resource_location(res, 0);
@@ -1614,7 +1657,9 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
           res->Type != GL_GEOMETRY_SUBROUTINE_UNIFORM &&
           res->Type != GL_COMPUTE_SUBROUTINE_UNIFORM &&
           res->Type != GL_TESS_CONTROL_SUBROUTINE_UNIFORM &&
-          res->Type != GL_TESS_EVALUATION_SUBROUTINE_UNIFORM)
+          res->Type != GL_TESS_EVALUATION_SUBROUTINE_UNIFORM &&
+          res->Type != GL_TASK_SUBROUTINE_UNIFORM_EXT &&
+          res->Type != GL_MESH_SUBROUTINE_UNIFORM_EXT)
          goto invalid_operation;
       *val = RESOURCE_UNI(res)->num_compatible_subroutines;
       return 1;
@@ -1629,7 +1674,9 @@ _mesa_program_resource_prop(struct gl_shader_program *shProg,
           res->Type != GL_GEOMETRY_SUBROUTINE_UNIFORM &&
           res->Type != GL_COMPUTE_SUBROUTINE_UNIFORM &&
           res->Type != GL_TESS_CONTROL_SUBROUTINE_UNIFORM &&
-          res->Type != GL_TESS_EVALUATION_SUBROUTINE_UNIFORM)
+          res->Type != GL_TESS_EVALUATION_SUBROUTINE_UNIFORM &&
+          res->Type != GL_TASK_SUBROUTINE_UNIFORM_EXT &&
+          res->Type != GL_MESH_SUBROUTINE_UNIFORM_EXT)
          goto invalid_operation;
       uni = RESOURCE_UNI(res);
 
@@ -1844,7 +1891,9 @@ _mesa_get_program_interfaceiv(struct gl_shader_program *shProg,
       case GL_GEOMETRY_SUBROUTINE_UNIFORM:
       case GL_COMPUTE_SUBROUTINE_UNIFORM:
       case GL_TESS_CONTROL_SUBROUTINE_UNIFORM:
-      case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM: {
+      case GL_TESS_EVALUATION_SUBROUTINE_UNIFORM:
+      case GL_TASK_SUBROUTINE_UNIFORM_EXT:
+      case GL_MESH_SUBROUTINE_UNIFORM_EXT: {
          for (i = 0, *params = 0; i < shProg->data->NumProgramResourceList; i++) {
             if (shProg->data->ProgramResourceList[i].Type == programInterface) {
                struct gl_uniform_storage *uni =

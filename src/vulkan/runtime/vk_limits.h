@@ -75,7 +75,7 @@
 
 #define MESA_VK_MAX_VIEWPORTS 16
 #define MESA_VK_MAX_SCISSORS 16
-#define MESA_VK_MAX_DISCARD_RECTANGLES 4
+#define MESA_VK_MAX_DISCARD_RECTANGLES 8
 
 /* As of June 29, 2022, according to vulkan.gpuinfo.org, no reports list more
  * than 16 samples for framebufferColorSampleCounts except one layer running

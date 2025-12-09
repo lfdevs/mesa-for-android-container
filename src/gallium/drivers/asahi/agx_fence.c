@@ -147,7 +147,8 @@ agx_create_fence_fd(struct pipe_context *pctx,
 }
 
 void
-agx_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *f, uint64_t value)
+agx_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *f,
+                      uint64_t value)
 {
    struct agx_device *dev = agx_device(pctx->screen);
    struct agx_context *ctx = agx_context(pctx);

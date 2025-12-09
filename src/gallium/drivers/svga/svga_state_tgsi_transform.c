@@ -46,14 +46,14 @@ insert_at_head(struct svga_shader *head, struct svga_shader *shader)
  */
 static void
 bind_shader(struct svga_context *svga,
-            const enum pipe_shader_type shader_type,
+            const mesa_shader_stage shader_type,
             struct svga_shader *shader)
 {
    switch (shader_type) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       svga->pipe.bind_vs_state(&svga->pipe, shader);
       break;
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       /**
        * Avoid pipe->bind_fs_state call because it goes through aapoint
        * layer. We loose linked list of all transformed shaders if aapoint
@@ -61,13 +61,13 @@ bind_shader(struct svga_context *svga,
        */
       svga_bind_fs_state(&svga->pipe, shader);
       break;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       svga->pipe.bind_gs_state(&svga->pipe, shader);
       break;
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       svga->pipe.bind_tcs_state(&svga->pipe, shader);
       break;
-   case PIPE_SHADER_TESS_EVAL:
+   case MESA_SHADER_TESS_EVAL:
       svga->pipe.bind_tes_state(&svga->pipe, shader);
       break;
    default:
@@ -82,24 +82,24 @@ bind_shader(struct svga_context *svga,
  */
 static void *
 create_shader(struct svga_context *svga,
-              const enum pipe_shader_type shader_type,
+              const mesa_shader_stage shader_type,
               struct pipe_shader_state *state)
 {
    switch (shader_type) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       return svga->pipe.create_vs_state(&svga->pipe, state);
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       /**
        * Avoid pipe->create_fs_state call because it goes through aapoint
        * layer. We loose linked list of all transformed shaders if aapoint
        * is used.
        */
       return svga_create_fs_state(&svga->pipe, state);
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       return svga->pipe.create_gs_state(&svga->pipe, state);
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       return svga->pipe.create_tcs_state(&svga->pipe, state);
-   case PIPE_SHADER_TESS_EVAL:
+   case MESA_SHADER_TESS_EVAL:
       return svga->pipe.create_tes_state(&svga->pipe, state);
    default:
       return NULL;
@@ -192,8 +192,7 @@ transform_dynamic_indexing(struct svga_context *svga,
    }
    transform_shader->token_key = key;
    bind_shader(svga, info->processor, transform_shader);
-   if (new_tokens)
-      FREE(new_tokens);
+   FREE(new_tokens);
 }
 
 

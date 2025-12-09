@@ -37,12 +37,9 @@ ir3_src_read_delay(struct ir3_compiler *compiler, struct ir3_instruction *instr,
       return src_n;
    }
 
-   /* cat3 instructions consume their last source one or two cycles later. Note
-    * that not all cat3 instructions seem to do this pre-a7xx.
+   /* mad instructions consume their last source one or two cycles later
     */
-   bool cat3_reads_later = compiler->gen >= 7
-                              ? (opc_cat(instr->opc) == 3)
-                              : (is_mad(instr->opc) || is_madsh(instr->opc));
+   bool cat3_reads_later = (is_mad(instr->opc) || is_madsh(instr->opc));
    if (cat3_reads_later && src_n == 2) {
       return compiler->delay_slots.cat3_src2_read;
    }

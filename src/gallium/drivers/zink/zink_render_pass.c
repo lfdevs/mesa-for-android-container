@@ -188,6 +188,7 @@ zink_render_msaa_expand(struct zink_context *ctx, uint32_t msaa_expand_mask)
 
    bool blitting = ctx->blitting;
    u_foreach_bit(i, msaa_expand_mask) {
+      zink_create_transient_surface(ctx, &ctx->fb_state.cbufs[i], ctx->fb_state.cbufs[i].nr_samples);
       struct pipe_resource *src = ctx->fb_state.cbufs[i].texture;
       struct zink_resource *res = zink_resource(src);
       struct zink_resource *transient = res->transient;

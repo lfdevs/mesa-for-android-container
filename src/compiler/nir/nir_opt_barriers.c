@@ -302,13 +302,13 @@ nir_opt_barrier_modes_impl(nir_function_impl *impl)
 {
    bool progress = false;
 
-   nir_instr_worklist *barriers = nir_instr_worklist_create();
-   if (!barriers)
+   nir_instr_worklist barriers;
+   if (!nir_instr_worklist_init(&barriers))
       return false;
 
    struct u_vector mem_derefs;
    if (!u_vector_init(&mem_derefs, 32, sizeof(struct nir_instr *))) {
-      nir_instr_worklist_destroy(barriers);
+      nir_instr_worklist_fini(&barriers);
       return false;
    }
 
@@ -323,7 +323,7 @@ nir_opt_barrier_modes_impl(nir_function_impl *impl)
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
             if (intrin->intrinsic == nir_intrinsic_barrier)
-               nir_instr_worklist_push_tail(barriers, instr);
+               nir_instr_worklist_push_tail(&barriers, instr);
 
          } else if (instr->type == nir_instr_type_deref) {
             nir_deref_instr *deref = nir_instr_as_deref(instr);
@@ -337,7 +337,7 @@ nir_opt_barrier_modes_impl(nir_function_impl *impl)
       }
    }
 
-   nir_foreach_instr_in_worklist(instr, barriers) {
+   nir_foreach_instr_in_worklist(instr, &barriers) {
       nir_intrinsic_instr *barrier = nir_instr_as_intrinsic(instr);
 
       const unsigned barrier_modes = nir_intrinsic_memory_modes(barrier);
@@ -383,7 +383,7 @@ nir_opt_barrier_modes_impl(nir_function_impl *impl)
       }
    }
 
-   nir_instr_worklist_destroy(barriers);
+   nir_instr_worklist_fini(&barriers);
    u_vector_finish(&mem_derefs);
 
    return progress;

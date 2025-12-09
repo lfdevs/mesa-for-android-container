@@ -86,6 +86,12 @@ apply_blit_output_modifiers(nir_builder *b, nir_def *color,
       /* Discard channels not present in dst. The hardware fills unstored channels with 0. */
       if (key->last_dst_channel < key->last_src_channel)
          color = nir_trim_vector(b, color, key->last_dst_channel + 1);
+
+      /* Precision issue workaround for piglit/texsubimage array pbo.
+       * Determined by trial and error.
+       */
+      if (key->dst_is_rgb5)
+         color = nir_fadd(b, color, nir_imm_floatN_t(b, -1.0/4096, bit_size));
    }
 
    /* Discard channels not present in dst. The hardware fills unstored channels with 0. */
@@ -568,8 +574,8 @@ ac_prepare_compute_blit(const struct ac_cs_blit_options *options,
       return true;
 
    if (blit->dst.format == PIPE_FORMAT_A8R8_UNORM || /* This format fails AMD_TEST=imagecopy. */
-       max_dst_chan_size == 5 || /* PIPE_FORMAT_R5G5B5A1_UNORM has precision issues */
-       max_dst_chan_size == 6 || /* PIPE_FORMAT_R5G6B5_UNORM has precision issues */
+       (info->gfx_level <= GFX8 && max_dst_chan_size == 5) || /* image stores with R5G5B5A1_UNORM have precision issues */
+       (info->gfx_level <= GFX8 && max_dst_chan_size == 6) || /* image stores with R5G6B5_UNORM have precision issues */
        util_format_is_depth_or_stencil(blit->dst.format) ||
        dst_samples > SI_MAX_COMPUTE_BLIT_SAMPLES ||
        /* Image stores support DCC since GFX10. Fail only for gfx queues because compute queues
@@ -1108,10 +1114,13 @@ ac_prepare_compute_blit(const struct ac_cs_blit_options *options,
    key.dst_is_1d = blit->dst.dim == 1;
    key.dst_is_msaa = dst_samples > 1;
    key.dst_has_z = blit->dst.dim == 3 || blit->dst.is_array;
+   key.dst_is_rgb5 = max_dst_chan_size <= 6 &&
+                     !util_format_is_pure_integer(blit->dst.format);
    key.last_dst_channel = util_format_get_last_component(blit->dst.format);
 
    /* ACO doesn't support D16 on GFX8 */
-   bool has_d16 = info->gfx_level >= (key.use_aco || options->use_aco ? GFX9 : GFX8);
+   bool has_d16 = info->gfx_level >= (key.use_aco || options->use_aco ? GFX9 : GFX8) &&
+                  !key.dst_is_rgb5;
 
    if (is_clear) {
       assert(dst_samples <= 8);

@@ -23,7 +23,7 @@ files_blorp_elk = files(
 libblorp = static_library(
   'blorp',
   [files_libblorp, files_blorp_brw],
-  include_directories : [inc_include, inc_src, inc_intel],
+  include_directories : [inc_include, inc_src, inc_intel, inc_intel_compiler],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : [idep_nir_headers, idep_genxml, idep_mesautil, idep_intel_dev],

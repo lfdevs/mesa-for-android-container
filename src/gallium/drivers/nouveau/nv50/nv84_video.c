@@ -28,7 +28,7 @@
 #include "util/format/u_format.h"
 #include "util/u_sampler.h"
 #include "util/u_surface.h"
-#include "vl/vl_zscan.h"
+#include "util/vl_zscan_data.h"
 
 #include "nv50/nv84_video.h"
 
@@ -828,9 +828,6 @@ nv84_screen_get_video_param(struct pipe_screen *pscreen,
       return 2048;
    case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
       return PIPE_FORMAT_NV12;
-   case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-   case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-      return true;
    case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
       return false;
    case PIPE_VIDEO_CAP_MAX_LEVEL:

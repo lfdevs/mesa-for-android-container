@@ -1,3 +1,20 @@
-EGL_EXT_create_context_robustness support on Panfrost V10+
-GL_ARB_robust_buffer_access_behavior, GL_KHR_robust_buffer_access_behavior and GL_KHR_robustness support on Panfrost
-VK_EXT_mutable_descriptor_type on panvk/v9+
+VK_KHR_relaxed_block_layout on pvr
+VK_KHR_storage_buffer_storage_class on pvr
+VK_EXT_external_memory_acquire_unmodified on panvk
+VK_EXT_discard_rectangles on NVK
+VK_KHR_present_id on HoneyKrisp
+VK_KHR_present_id2 on HoneyKrisp
+VK_KHR_present_wait on HoneyKrisp
+VK_KHR_present_wait2 on HoneyKrisp
+VK_KHR_maintenance10 on ANV, NVK, RADV
+VK_EXT_shader_uniform_buffer_unsized_array on NVK, RADV
+VK_EXT_device_memory_report on panvk
+VK_VALVE_video_encode_rgb_conversion on radv
+VK_EXT_custom_resolve on RADV
+GL_EXT_shader_pixel_local_storage on Panfrost v6+
+VK_EXT_image_drm_format_modifier on panvk/v7
+VK_KHR_sampler_ycbcr_conversion on panvk/v7
+sparseResidencyImage2D on panvk v10+
+sparseResidencyStandard2DBlockShape on panvk v10+
+VK_KHR_surface_maintenance1 promotion everywhere EXT is exposed
+VK_KHR_swapchain_maintenance1 promotion everywhere EXT is exposed

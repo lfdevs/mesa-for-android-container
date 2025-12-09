@@ -23,7 +23,7 @@ static void radeon_enc_session_info(struct radeon_encoder *enc)
 {
    RADEON_ENC_BEGIN(enc->cmd.session_info);
    RADEON_ENC_CS(enc->enc_pic.session_info.interface_version);
-   RADEON_ENC_READWRITE(enc->si->res->buf, enc->si->res->domains, 0x0);
+   RADEON_ENC_READWRITE(enc->si->buf, enc->si->domains, 0x0);
    RADEON_ENC_CS(0); /* padding 0, not used for vcn3 */
    RADEON_ENC_END();
 }
@@ -130,7 +130,7 @@ static void radeon_enc_ctx(struct radeon_encoder *enc)
    enc->enc_pic.ctx_buf.two_pass_search_center_map_offset = 0;
 
    RADEON_ENC_BEGIN(enc->cmd.ctx);
-   RADEON_ENC_READWRITE(enc->dpb->res->buf, enc->dpb->res->domains, 0);
+   RADEON_ENC_READWRITE(enc->dpb->buf, enc->dpb->domains, 0);
    RADEON_ENC_CS(enc->enc_pic.ctx_buf.swizzle_mode);
    RADEON_ENC_CS(enc->enc_pic.ctx_buf.rec_luma_pitch);
    RADEON_ENC_CS(enc->enc_pic.ctx_buf.rec_chroma_pitch);
@@ -182,6 +182,9 @@ static void radeon_enc_session_init(struct radeon_encoder *enc)
 
 void radeon_enc_3_0_init(struct radeon_encoder *enc)
 {
+   struct si_screen *sscreen = (struct si_screen *)enc->screen;
+   uint32_t minor_version;
+
    radeon_enc_2_0_init(enc);
 
    enc->session_info = radeon_enc_session_info;
@@ -200,7 +203,10 @@ void radeon_enc_3_0_init(struct radeon_encoder *enc)
       enc->spec_misc = radeon_enc_spec_misc_hevc;
    }
 
+   minor_version =
+      MIN2(sscreen->info.vcn_enc_minor_version, RENCODE_FW_INTERFACE_MINOR_VERSION);
+
    enc->enc_pic.session_info.interface_version =
       ((RENCODE_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |
-      (RENCODE_FW_INTERFACE_MINOR_VERSION << RENCODE_IF_MINOR_VERSION_SHIFT));
+      (minor_version << RENCODE_IF_MINOR_VERSION_SHIFT));
 }

@@ -50,7 +50,7 @@ assert_register_is_aligned(const agx_instr *I, agx_index reg)
       return;
    }
 
-   unreachable("Invalid register size");
+   UNREACHABLE("Invalid register size");
 }
 
 /* Texturing has its own operands */
@@ -58,11 +58,10 @@ static unsigned
 agx_pack_sample_coords(const agx_instr *I, agx_index index, bool *flag,
                        bool *is_16)
 {
-   /* TODO: Do we have a use case for 16-bit coords? */
-   pack_assert_msg(I, index.size == AGX_SIZE_32, "32-bit coordinates");
+   pack_assert_msg(I, index.size <= AGX_SIZE_32, "32-bit coordinates");
    pack_assert_msg(I, index.value < 0x100, "coordinate register bound");
 
-   *is_16 = false;
+   *is_16 = index.size == AGX_SIZE_16;
    *flag = index.discard;
    return index.value;
 }
@@ -169,7 +168,7 @@ agx_pack_pbe_lod(const agx_instr *I, agx_index index, bool *flag)
    else if (index.type == AGX_INDEX_REGISTER)
       *flag = false;
    else
-      unreachable("Invalid PBE LOD type");
+      UNREACHABLE("Invalid PBE LOD type");
 
    return index.value;
 }
@@ -579,8 +578,8 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
       unsigned C = I->explicit_coords ? coords.value : 0;
 
       uint64_t raw = agx_opcodes_info[I->op].encoding.exact |
-                     ((uint64_t)(D & BITFIELD_MASK(8)) << 7) | (St << 22) |
-                     ((uint64_t)(I->format) << 24) |
+                     ((uint64_t)((D >> 1) & BITFIELD_MASK(7)) << 8) |
+                     (St << 22) | ((uint64_t)(I->format) << 24) |
                      ((uint64_t)(C & BITFIELD_MASK(6)) << 16) |
                      ((uint64_t)(I->pixel_offset & BITFIELD_MASK(7)) << 28) |
                      (load || I->explicit_coords ? (1ull << 35) : 0) |
@@ -627,6 +626,9 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
       bool perspective = (I->op == AGX_OPCODE_ITERPROJ);
       unsigned D = agx_pack_alu_dst(I, I->dest[0]);
       unsigned channels = (I->channels & 0x3);
+
+      /* Destination cache not supported, mask off */
+      D &= ~1;
 
       agx_index src_I = I->src[0];
       pack_assert(I, src_I.type == AGX_INDEX_IMMEDIATE ||
@@ -910,8 +912,8 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
          (q2 << 30) | (((uint64_t)(T & BITFIELD_MASK(6))) << 32) |
          (((uint64_t)Tt) << 38) |
          (((uint64_t)(I->dim & BITFIELD_MASK(3))) << 40) |
-         (((uint64_t)q3) << 43) | (((uint64_t)I->mask) << 48) |
-         (((uint64_t)lod_mode) << 52) |
+         (((uint64_t)q3) << 43) | (Cs ? BITFIELD64_BIT(47) : 0) |
+         (((uint64_t)I->mask) << 48) | (((uint64_t)lod_mode) << 52) |
          (((uint64_t)(S & BITFIELD_MASK(6))) << 56) | (((uint64_t)St) << 62) |
          (((uint64_t)I->scoreboard) << 63);
 
@@ -1069,7 +1071,7 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
          .skip_to_end = I->op == AGX_OPCODE_JMP_EXEC_NONE_AFTER,
       };
 
-      util_dynarray_append(fixups, struct agx_branch_fixup, fixup);
+      util_dynarray_append(fixups, fixup);
 
       /* The rest of the instruction is fixed */
       struct agx_opcode_info info = agx_opcodes_info[I->op];
@@ -1171,6 +1173,12 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
       break;
    }
 
+   case AGX_OPCODE_EXPORT:
+      /* Zero-byte pseudo-op. This remains until late for the benefit of
+       * register cache optimizations.
+       */
+      return;
+
    default:
       agx_pack_alu(emission, I);
       return;
@@ -1222,7 +1230,7 @@ agx_pack_binary(agx_context *ctx, struct util_dynarray *emission)
    if (!ctx->key->no_stop || ctx->is_preamble) {
       for (unsigned i = 0; i < 8; ++i) {
          uint16_t trap = agx_opcodes_info[AGX_OPCODE_TRAP].encoding.exact;
-         util_dynarray_append(emission, uint16_t, trap);
+         util_dynarray_append(emission, trap);
       }
    }
 }

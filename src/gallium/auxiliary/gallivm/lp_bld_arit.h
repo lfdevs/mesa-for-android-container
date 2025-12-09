@@ -36,10 +36,9 @@
 #ifndef LP_BLD_ARIT_H
 #define LP_BLD_ARIT_H
 
+#include <stdbool.h>
 
-#include "gallivm/lp_bld.h"
-#include "util/compiler.h"
-
+#include <llvm-c/Core.h>
 
 struct lp_type;
 struct lp_build_context;

@@ -43,10 +43,14 @@ pvr_copy_or_resolve_color_image_region(struct pvr_cmd_buffer *cmd_buffer,
                                        const struct pvr_image *dst,
                                        const VkImageCopy2 *region);
 
-VkResult pvr_copy_buffer_to_image_region(struct pvr_cmd_buffer *cmd_buffer,
-                                         pvr_dev_addr_t buffer_dev_addr,
-                                         const struct pvr_image *image,
-                                         const VkBufferImageCopy2 *region);
+VkResult
+pvr_copy_or_resolve_depth_stencil_region(struct pvr_cmd_buffer *cmd_buffer,
+                                         const struct pvr_image *src,
+                                         const struct pvr_image *dst,
+                                         int resolve_op,
+                                         bool clear_complement,
+                                         const VkClearDepthStencilValue *ds_clear_values,
+                                         const VkImageCopy2 *region);
 
 VkResult
 pvr_copy_buffer_to_image_region_format(struct pvr_cmd_buffer *cmd_buffer,
@@ -56,11 +60,6 @@ pvr_copy_buffer_to_image_region_format(struct pvr_cmd_buffer *cmd_buffer,
                                        VkFormat src_format,
                                        VkFormat dst_format,
                                        uint32_t flags);
-
-VkResult pvr_copy_image_to_buffer_region(struct pvr_cmd_buffer *cmd_buffer,
-                                         const struct pvr_image *image,
-                                         pvr_dev_addr_t buffer_dev_addr,
-                                         const VkBufferImageCopy2 *region);
 
 VkResult
 pvr_copy_image_to_buffer_region_format(struct pvr_cmd_buffer *cmd_buffer,
@@ -74,5 +73,11 @@ pvr_copy_image_to_buffer_region_format(struct pvr_cmd_buffer *cmd_buffer,
 void pvr_clear_attachments_render_init(struct pvr_cmd_buffer *cmd_buffer,
                                        const VkClearAttachment *attachment,
                                        const VkClearRect *rect);
+
+void pvr_clear_depth_stencil_image(struct pvr_cmd_buffer *cmd_buffer,
+                                   const struct pvr_image *image,
+                                   const VkClearDepthStencilValue *pDepthStencil,
+                                   uint32_t rangeCount,
+                                   const VkImageSubresourceRange *pRanges);
 
 #endif /* PVR_BLIT_H */

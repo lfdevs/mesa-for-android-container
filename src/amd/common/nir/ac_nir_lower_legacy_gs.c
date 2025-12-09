@@ -176,7 +176,7 @@ ac_nir_lower_legacy_gs(nir_shader *nir, ac_nir_lower_legacy_gs_options *options,
       num_vertices_per_primitive = 3;
       break;
    default:
-      unreachable("Invalid GS output primitive.");
+      UNREACHABLE("Invalid GS output primitive.");
       break;
    }
 

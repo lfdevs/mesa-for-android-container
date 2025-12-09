@@ -1,0 +1,3 @@
+# Known HW deficiency on Gfx9 and flaky
+# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/36348#note_3037412
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.*

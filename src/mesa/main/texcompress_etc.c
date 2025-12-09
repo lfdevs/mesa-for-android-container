@@ -549,7 +549,7 @@ etc2_rgb8_fetch_texel(const struct etc2_block *block,
          dst[3] = 255;
    }
    else
-      unreachable("unhandled block mode");
+      UNREACHABLE("unhandled block mode");
 }
 
 static void

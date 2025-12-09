@@ -119,16 +119,16 @@ v3d_has_feature(struct v3d_screen *screen, enum drm_v3d_param feature)
 static void
 v3d_init_shader_caps(struct v3d_screen *screen)
 {
-        for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+        for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
                 struct pipe_shader_caps *caps =
                         (struct pipe_shader_caps *)&screen->base.shader_caps[i];
 
                 switch (i) {
-                case PIPE_SHADER_VERTEX:
-                case PIPE_SHADER_FRAGMENT:
-                case PIPE_SHADER_GEOMETRY:
+                case MESA_SHADER_VERTEX:
+                case MESA_SHADER_FRAGMENT:
+                case MESA_SHADER_GEOMETRY:
                         break;
-                case PIPE_SHADER_COMPUTE:
+                case MESA_SHADER_COMPUTE:
                         if (!screen->has_csd)
                                 continue;
                         break;
@@ -143,13 +143,13 @@ v3d_init_shader_caps(struct v3d_screen *screen)
                 caps->max_control_flow_depth = UINT_MAX;
 
                 switch (i) {
-                case PIPE_SHADER_VERTEX:
+                case MESA_SHADER_VERTEX:
                         caps->max_inputs = V3D_MAX_VS_INPUTS / 4;
                         break;
-                case PIPE_SHADER_GEOMETRY:
+                case MESA_SHADER_GEOMETRY:
                         caps->max_inputs = V3D_MAX_GS_INPUTS / 4;
                         break;
-                case PIPE_SHADER_FRAGMENT:
+                case MESA_SHADER_FRAGMENT:
                         caps->max_inputs = V3D_MAX_FS_INPUTS / 4;
                         break;
                 default:
@@ -157,7 +157,7 @@ v3d_init_shader_caps(struct v3d_screen *screen)
                 }
 
                 caps->max_outputs =
-                        i == PIPE_SHADER_FRAGMENT ? 4 : V3D_MAX_FS_INPUTS / 4;
+                        i == MESA_SHADER_FRAGMENT ? 4 : V3D_MAX_FS_INPUTS / 4;
 
                 caps->max_temps = 256; /* GL_MAX_PROGRAM_TEMPORARIES_ARB */
                 /* Note: Limited by the offset size in
@@ -173,7 +173,7 @@ v3d_init_shader_caps(struct v3d_screen *screen)
 
                 caps->max_shader_buffers =
                         screen->has_cache_flush &&
-                        (i != PIPE_SHADER_VERTEX && i != PIPE_SHADER_GEOMETRY) ?
+                        (i != MESA_SHADER_VERTEX && i != MESA_SHADER_GEOMETRY) ?
                         PIPE_MAX_SHADER_BUFFERS : 0;
 
                 caps->max_shader_images =
@@ -362,6 +362,7 @@ v3d_init_screen_caps(struct v3d_screen *screen)
         caps->supported_prim_modes_with_restart = screen->prim_types;
 
         caps->texture_buffer_objects = true;
+        caps->buffer_sampler_view_rgba_only = true;
 
         caps->texture_buffer_offset_alignment = V3D_TMU_TEXEL_ALIGN;
 
@@ -388,6 +389,22 @@ v3d_init_screen_caps(struct v3d_screen *screen)
 
         caps->max_texture_anisotropy = 16.0f;
         caps->max_texture_lod_bias = 16.0f;
+
+        caps->device_reset_status_query = screen->devinfo.has_reset_counter;
+        caps->robust_buffer_access_behavior = true;
+
+        /* FIXME: same settings as v3dv, maybe put them in a common place. */
+        if (screen->devinfo.ver >= 71) {
+           caps->shader_subgroup_size = V3D_CHANNELS;
+           caps->shader_subgroup_supported_stages =
+              BITFIELD_BIT(MESA_SHADER_FRAGMENT) | BITFIELD_BIT(MESA_SHADER_COMPUTE);
+           caps->shader_subgroup_supported_features = PIPE_SHADER_SUBGROUP_FEATURE_BASIC |
+              PIPE_SHADER_SUBGROUP_FEATURE_BALLOT | PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE |
+              PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE_RELATIVE |
+              PIPE_SHADER_SUBGROUP_FEATURE_VOTE | PIPE_SHADER_SUBGROUP_FEATURE_ARITHMETIC |
+              PIPE_SHADER_SUBGROUP_FEATURE_QUAD;
+           caps->shader_subgroup_quad_all_stages = false;
+   }
 }
 
 static bool
@@ -483,14 +500,6 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
                 return false;
         }
 
-        /* We do not support EXT_float_blend (blending with 32F formats)*/
-        if ((usage & PIPE_BIND_BLENDABLE) &&
-            (format == PIPE_FORMAT_R32G32B32A32_FLOAT ||
-             format == PIPE_FORMAT_R32G32_FLOAT ||
-             format == PIPE_FORMAT_R32_FLOAT)) {
-                return false;
-        }
-
         if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
             !v3d_tex_format_supported(&screen->devinfo, format)) {
                 return false;
@@ -534,7 +543,7 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
 
 static const struct nir_shader_compiler_options *
 v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
-                                enum pipe_shader_type shader)
+                                mesa_shader_stage shader)
 {
         struct v3d_screen *screen = v3d_screen(pscreen);
         const struct v3d_device_info *devinfo = &screen->devinfo;
@@ -600,6 +609,8 @@ v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
                 .lower_ufind_msb = true,
                 .has_fsub = true,
                 .has_isub = true,
+                .has_imul24 = true,
+                .has_umul24 = true,
                 .has_uclz = true,
                 .divergence_analysis_options =
                        nir_divergence_multiple_workgroup_per_compute_subgroup,
@@ -763,8 +774,6 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
 {
         struct v3d_screen *screen = rzalloc(NULL, struct v3d_screen);
         struct pipe_screen *pscreen;
-
-        util_cpu_trace_init();
 
         pscreen = &screen->base;
 

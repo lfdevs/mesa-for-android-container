@@ -32,6 +32,7 @@
 #include "util/u_string.h"
 #include "util/xmlconfig.h"
 #include "util/driconf.h"
+#include "util/perf/cpu_trace.h"
 
 #include <string.h>
 
@@ -168,6 +169,8 @@ struct pipe_screen *
 pipe_loader_create_screen_vk(struct pipe_loader_device *dev, bool sw_vk, bool driver_name_is_inferred)
 {
    struct pipe_screen_config config;
+
+   util_cpu_trace_init();
 
    pipe_loader_load_options(dev);
    config.driver_name_is_inferred = driver_name_is_inferred;

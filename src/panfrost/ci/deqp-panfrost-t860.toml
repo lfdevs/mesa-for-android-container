@@ -9,6 +9,7 @@ deqp_args = [
 ]
 version_check = "GL ES 3.1.*git"
 renderer_check = "Mali-T860"
+extensions_check = "/install/panfrost-t860-gles2-extensions.txt"
 
 [[deqp]]
 deqp = "/deqp-gles/modules/gles3/deqp-gles3"

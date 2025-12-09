@@ -30,131 +30,6 @@
 
 #include "vl_csc.h"
 
-/*
- * Color space conversion formulas
- *
- * To convert YCbCr to RGB,
- *    vec4  ycbcr, rgb
- *    mat44 csc
- *    rgb = csc * ycbcr
- *
- * To calculate the color space conversion matrix csc with ProcAmp adjustments,
- *    mat44 csc, cstd, procamp, bias
- *    csc = cstd * (procamp * bias)
- *
- * Where cstd is a matrix corresponding to one of the color standards (BT.601, BT.709, etc)
- * adjusted for the kind of YCbCr -> RGB mapping wanted (1:1, full),
- * bias is a matrix corresponding to the kind of YCbCr -> RGB mapping wanted (1:1, full)
- *
- * To calculate procamp,
- *    mat44 procamp, hue, saturation, brightness, contrast
- *    procamp = brightness * (saturation * (contrast * hue))
- * Alternatively,
- *    procamp = saturation * (brightness * (contrast * hue))
- *
- * contrast
- * [ c, 0, 0, 0]
- * [ 0, c, 0, 0]
- * [ 0, 0, c, 0]
- * [ 0, 0, 0, 1]
- *
- * brightness
- * [ 1, 0, 0, b/c]
- * [ 0, 1, 0,   0]
- * [ 0, 0, 1,   0]
- * [ 0, 0, 0,   1]
- *
- * saturation
- * [ 1, 0, 0, 0]
- * [ 0, s, 0, 0]
- * [ 0, 0, s, 0]
- * [ 0, 0, 0, 1]
- *
- * hue
- * [ 1,       0,      0, 0]
- * [ 0,  cos(h), sin(h), 0]
- * [ 0, -sin(h), cos(h), 0]
- * [ 0,       0,      0, 1]
- *
- * procamp
- * [ c,           0,          0, b]
- * [ 0,  c*s*cos(h), c*s*sin(h), 0]
- * [ 0, -c*s*sin(h), c*s*cos(h), 0]
- * [ 0,           0,          0, 1]
- *
- * bias
- * [ 1, 0, 0,  ybias]
- * [ 0, 1, 0, cbbias]
- * [ 0, 0, 1, crbias]
- * [ 0, 0, 0,      1]
- *
- * csc
- * [ c*cstd[ 0], c*cstd[ 1]*s*cos(h) - c*cstd[ 2]*s*sin(h), c*cstd[ 2]*s*cos(h) + c*cstd[ 1]*s*sin(h), cstd[ 3] + cstd[ 0]*(b + c*ybias) + cstd[ 1]*(c*cbbias*s*cos(h) + c*crbias*s*sin(h)) + cstd[ 2]*(c*crbias*s*cos(h) - c*cbbias*s*sin(h))]
- * [ c*cstd[ 4], c*cstd[ 5]*s*cos(h) - c*cstd[ 6]*s*sin(h), c*cstd[ 6]*s*cos(h) + c*cstd[ 5]*s*sin(h), cstd[ 7] + cstd[ 4]*(b + c*ybias) + cstd[ 5]*(c*cbbias*s*cos(h) + c*crbias*s*sin(h)) + cstd[ 6]*(c*crbias*s*cos(h) - c*cbbias*s*sin(h))]
- * [ c*cstd[ 8], c*cstd[ 9]*s*cos(h) - c*cstd[10]*s*sin(h), c*cstd[10]*s*cos(h) + c*cstd[ 9]*s*sin(h), cstd[11] + cstd[ 8]*(b + c*ybias) + cstd[ 9]*(c*cbbias*s*cos(h) + c*crbias*s*sin(h)) + cstd[10]*(c*crbias*s*cos(h) - c*cbbias*s*sin(h))]
- * [ c*cstd[12], c*cstd[13]*s*cos(h) - c*cstd[14]*s*sin(h), c*cstd[14]*s*cos(h) + c*cstd[13]*s*sin(h), cstd[15] + cstd[12]*(b + c*ybias) + cstd[13]*(c*cbbias*s*cos(h) + c*crbias*s*sin(h)) + cstd[14]*(c*crbias*s*cos(h) - c*cbbias*s*sin(h))]
- */
-
-/*
- * Converts ITU-R BT.601 YCbCr pixels to RGB pixels where:
- * Y is in [16,235], Cb and Cr are in [16,240]
- * R, G, and B are in [16,235]
- */
-static const vl_csc_matrix bt_601 =
-{
-   { 1.0f,  0.0f,    1.371f, 0.0f, },
-   { 1.0f, -0.336f, -0.698f, 0.0f, },
-   { 1.0f,  1.732f,  0.0f,   0.0f, }
-};
-
-/*
- * Converts ITU-R BT.709 YCbCr pixels to RGB pixels where:
- * Y is in [16,235], Cb and Cr are in [16,240]
- * R, G, and B are in [16,235]
- */
-static const vl_csc_matrix bt_709 =
-{
-   { 1.0f,  0.0f,    1.540f, 0.0f, },
-   { 1.0f, -0.183f, -0.459f, 0.0f, },
-   { 1.0f,  1.816f,  0.0f,   0.0f, }
-};
-
-/*
- * Converts ITU-R BT.709 YCbCr pixels to RGB pixels where:
- * Y, Cb, and Cr are in [0,255]
- * R, G, and B are in [16,235]
- */
-static const vl_csc_matrix bt_709_full =
-{
-   { 0.859f,  0.0f,    1.352f, 0.0625f, },
-   { 0.859f, -0.161f, -0.402f, 0.0625f, },
-   { 0.859f,  1.594f,  0.0f,   0.0625f, }
-};
-
-/*
- * Converts SMPTE 240M YCbCr pixels to RGB pixels where:
- * Y is in [16,235], Cb and Cr are in [16,240]
- * R, G, and B are in [16,235]
- */
-static const vl_csc_matrix smpte240m =
-{
-   { 1.0f,  0.0f,    1.541f, 0.0f, },
-   { 1.0f, -0.221f, -0.466f, 0.0f, },
-   { 1.0f,  1.785f,  0.0f,   0.0f, }
-};
-
-static const vl_csc_matrix bt_709_rev  = {
-   { 0.183f,  0.614f,  0.062f, 0.0625f},
-   {-0.101f, -0.338f,  0.439f, 0.5f   },
-   { 0.439f, -0.399f, -0.040f, 0.5f   }
-};
-
-static const vl_csc_matrix bt_709_rev_full = {
-   { 0.213f,  0.715f,  0.072f, 0.0f },
-   {-0.115f, -0.385f,  0.5f,   0.5f },
-   { 0.5f,   -0.454f, -0.046f, 0.5f }
-};
-
 static const vl_csc_matrix identity =
 {
    { 1.0f, 0.0f, 0.0f, 0.0f, },
@@ -162,83 +37,224 @@ static const vl_csc_matrix identity =
    { 0.0f, 0.0f, 1.0f, 0.0f, }
 };
 
-const struct vl_procamp vl_default_procamp = {
-   0.0f,  /* brightness */
-   1.0f,  /* contrast   */
-   1.0f,  /* saturation */
-   0.0f   /* hue        */
-};
-
-void vl_csc_get_matrix(enum VL_CSC_COLOR_STANDARD cs,
-                       struct vl_procamp *procamp,
-                       bool full_range,
-                       vl_csc_matrix *matrix)
+static unsigned format_bpc(enum pipe_format format)
 {
-   float cbbias = -128.0f/255.0f;
-   float crbias = -128.0f/255.0f;
+   const enum pipe_format plane_format = util_format_get_plane_format(format, 0);
+   const struct util_format_description *desc = util_format_description(plane_format);
 
-   const struct vl_procamp *p = procamp ? procamp : &vl_default_procamp;
-   float c = p->contrast;
-   float s = p->saturation;
-   float b = p->brightness;
-   float h = p->hue;
-   float x, y;
+   for (unsigned i = 0; i < desc->nr_channels; i++) {
+      if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID)
+         return desc->channel[i].size;
+   }
+   UNREACHABLE("invalid format description");
+}
 
-   const vl_csc_matrix *cstd;
+void vl_csc_get_rgbyuv_matrix(enum pipe_video_vpp_matrix_coefficients coefficients,
+                              enum pipe_format in_format, enum pipe_format out_format,
+                              enum pipe_video_vpp_color_range in_color_range,
+                              enum pipe_video_vpp_color_range out_color_range,
+                              vl_csc_matrix *matrix)
+{
+   const bool in_yuv = util_format_is_yuv(in_format);
+   const bool out_yuv = util_format_is_yuv(out_format);
+   const unsigned bpc = format_bpc(in_format);
+   const float scale = (1 << bpc) / ((1 << bpc) - 1.0);
+   const float r_min = 16.0 / 256.0 * scale;
+   const float r_max = 235.0 / 256.0 * scale;
+   const float c_mid = 128.0 / 256.0 * scale;
+   const float c_max = 240.0 / 256.0 * scale;
+   float r_scale, g_scale, r_bias, g_bias;
 
-   if (full_range) {
-      c *= 1.164f;              /* Adjust for the y range */
-      b *= 1.164f;              /* Adjust for the y range */
-      b -= c * 16.0f  / 255.0f; /* Adjust for the y bias */
+   memcpy(matrix, &identity, sizeof(vl_csc_matrix));
+
+   if (in_yuv != out_yuv && coefficients == PIPE_VIDEO_VPP_MCF_RGB)
+      return;
+
+   /* Convert input to full range, chroma to [-0.5,0.5]. */
+   if (in_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED) {
+      r_scale = 1.0 / (r_max - r_min);
+      g_scale = in_yuv ? 0.5 / (c_max - c_mid) : r_scale;
+      r_bias = -r_min;
+      g_bias = in_yuv ? -c_mid : r_bias;
+   } else if (in_yuv) {
+      r_scale = 1.0;
+      g_scale = 0.5 / (1.0 - c_mid);
+      r_bias = 0.0;
+      g_bias = -c_mid;
+   } else {
+      r_scale = g_scale = 1.0;
+      r_bias = g_bias = 0.0;
    }
 
-   /* Parameter substitutions */
-   x = c * s * cosf(h);
-   y = c * s * sinf(h);
+   for (unsigned i = 0; i < 3; i++) {
+      (*matrix)[i][i] = i == 0 ? r_scale : g_scale;
+      (*matrix)[i][3] = (i == 0 ? r_bias : g_bias) * (*matrix)[i][i];
+   }
 
-   assert(matrix);
+   if (in_yuv != out_yuv) {
+      float cr, cg, cb;
 
-   switch (cs) {
-      case VL_CSC_COLOR_STANDARD_BT_601:
-         cstd = &bt_601;
+      switch (coefficients) {
+      case PIPE_VIDEO_VPP_MCF_BT470BG:
+      case PIPE_VIDEO_VPP_MCF_SMPTE170M:
+         cr = 0.299;
+         cb = 0.114;
          break;
-      case VL_CSC_COLOR_STANDARD_BT_709:
-         cstd = &bt_709;
+      case PIPE_VIDEO_VPP_MCF_SMPTE240M:
+         cr = 0.212;
+         cb = 0.087;
          break;
-      case VL_CSC_COLOR_STANDARD_BT_709_FULL:
-         cstd = &bt_709_full;
+      case PIPE_VIDEO_VPP_MCF_BT2020_NCL:
+         cr = 0.2627;
+         cb = 0.0593;
          break;
-      case VL_CSC_COLOR_STANDARD_SMPTE_240M:
-         cstd = &smpte240m;
-         break;
-      case VL_CSC_COLOR_STANDARD_BT_709_REV:
-         memcpy(matrix, full_range ? bt_709_rev_full : bt_709_rev, sizeof(vl_csc_matrix));
-         return;
-      case VL_CSC_COLOR_STANDARD_IDENTITY:
+      case PIPE_VIDEO_VPP_MCF_BT709:
       default:
-         assert(cs == VL_CSC_COLOR_STANDARD_IDENTITY);
-         memcpy(matrix, identity, sizeof(vl_csc_matrix));
-         return;
+         cr = 0.2126;
+         cb = 0.0722;
+         break;
+      }
+
+      cg = 1.0 - cb - cr;
+
+      if (in_yuv) {
+         /* YUV to RGB */
+         (*matrix)[0][0] = 1.0;
+         (*matrix)[0][1] = 0.0;
+         (*matrix)[0][2] = 2.0 - 2.0 * cr;
+         (*matrix)[0][3] = 0.0;
+         (*matrix)[1][0] = 1.0;
+         (*matrix)[1][1] = (-cb / cg) * (2.0 - 2.0 * cb);
+         (*matrix)[1][2] = (-cr / cg) * (2.0 - 2.0 * cr);
+         (*matrix)[1][3] = 0.0;
+         (*matrix)[2][0] = 1.0;
+         (*matrix)[2][1] = 2.0 - 2.0 * cb;
+         (*matrix)[2][2] = 0.0;
+         (*matrix)[2][3] = 0.0;
+      } else {
+         /* RGB to YUV */
+         (*matrix)[0][0] = cr;
+         (*matrix)[0][1] = cg;
+         (*matrix)[0][2] = cb;
+         (*matrix)[0][3] = 0.0;
+         (*matrix)[1][0] = (0.5 / (cb - 1.0)) * cr;
+         (*matrix)[1][1] = (0.5 / (cb - 1.0)) * cg;
+         (*matrix)[1][2] = 0.5;
+         (*matrix)[1][3] = 0.0;
+         (*matrix)[2][0] = 0.5;
+         (*matrix)[2][1] = (0.5 / (cr - 1.0)) * cg;
+         (*matrix)[2][2] = (0.5 / (cr - 1.0)) * cb;
+         (*matrix)[2][3] = 0.0;
+      }
+
+      for (unsigned i = 0; i < 3; i++) {
+         for (unsigned j = 0; j < 3; j++) {
+            (*matrix)[i][j] *= j == 0 ? r_scale : g_scale;
+            (*matrix)[i][3] += (*matrix)[i][j] * (j == 0 ? r_bias : g_bias);
+         }
+      }
    }
 
-   (*matrix)[0][0] = c * (*cstd)[0][0];
-   (*matrix)[0][1] = (*cstd)[0][1] * x - (*cstd)[0][2] * y;
-   (*matrix)[0][2] = (*cstd)[0][2] * x + (*cstd)[0][1] * y;
-   (*matrix)[0][3] = (*cstd)[0][3] + (*cstd)[0][0] * b +
-                     (*cstd)[0][1] * (x * cbbias + y * crbias) +
-                     (*cstd)[0][2] * (x * crbias - y * cbbias);
+   /* Convert output to reduced range, chroma to [0.0,1.0]. */
+   if (out_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED) {
+      r_scale = (r_max - r_min) / 1.0;
+      g_scale = in_yuv ? r_scale : (c_max - c_mid) / 0.5;
+      r_bias = r_min;
+      g_bias = in_yuv ? r_bias : c_mid;
+   } else if (out_yuv) {
+      r_scale = 1.0;
+      g_scale = (1.0 - c_mid) / 0.5;
+      r_bias = 0.0;
+      g_bias = c_mid;
+   } else {
+      r_scale = g_scale = 1.0;
+      r_bias = g_bias = 0.0;
+   }
 
-   (*matrix)[1][0] = c * (*cstd)[1][0];
-   (*matrix)[1][1] = (*cstd)[1][1] * x - (*cstd)[1][2] * y;
-   (*matrix)[1][2] = (*cstd)[1][2] * x + (*cstd)[1][1] * y;
-   (*matrix)[1][3] = (*cstd)[1][3] + (*cstd)[1][0] * b +
-                     (*cstd)[1][1] * (x * cbbias + y * crbias) +
-                     (*cstd)[1][2] * (x * crbias - y * cbbias);
+   for (unsigned i = 0; i < 3; i++) {
+      for (unsigned j = 0; j < 4; j++)
+         (*matrix)[i][j] *= i == 0 ? r_scale : g_scale;
+      (*matrix)[i][3] += i == 0 ? r_bias : g_bias;
+   }
+}
 
-   (*matrix)[2][0] = c * (*cstd)[2][0];
-   (*matrix)[2][1] = (*cstd)[2][1] * x - (*cstd)[2][2] * y;
-   (*matrix)[2][2] = (*cstd)[2][2] * x + (*cstd)[2][1] * y;
-   (*matrix)[2][3] = (*cstd)[2][3] + (*cstd)[2][0] * b +
-                     (*cstd)[2][1] * (x * cbbias + y * crbias) +
-                     (*cstd)[2][2] * (x * crbias - y * cbbias);
+void vl_csc_get_primaries_matrix(enum pipe_video_vpp_color_primaries in_color_primaries,
+                                 enum pipe_video_vpp_color_primaries out_color_primaries,
+                                 vl_csc_matrix *matrix)
+{
+   if (in_color_primaries == out_color_primaries) {
+      memcpy(matrix, &identity, sizeof(vl_csc_matrix));
+      return;
+   }
+
+   switch (in_color_primaries) {
+   case PIPE_VIDEO_VPP_PRI_SMPTE170M:
+   case PIPE_VIDEO_VPP_PRI_SMPTE240M:
+      switch (out_color_primaries) {
+      case PIPE_VIDEO_VPP_PRI_BT2020:
+         memcpy(matrix, &(vl_csc_matrix){
+            { 0.595254, 0.349314, 0.055432, 0.0 },
+            { 0.081244, 0.891503, 0.027253, 0.0 },
+            { 0.015512, 0.081912, 0.902576, 0.0 },
+         }, sizeof(vl_csc_matrix));
+         break;
+
+      case PIPE_VIDEO_VPP_PRI_BT709:
+      default:
+         memcpy(matrix, &(vl_csc_matrix){
+            {  0.939543,  0.050181, 0.010276, 0.0 },
+            {  0.017772,  0.965793, 0.016435, 0.0 },
+            { -0.001622, -0.004370, 1.005991, 0.0 },
+         }, sizeof(vl_csc_matrix));
+         break;
+      }
+      break;
+
+   case PIPE_VIDEO_VPP_PRI_BT2020:
+      switch (out_color_primaries) {
+      case PIPE_VIDEO_VPP_PRI_SMPTE170M:
+      case PIPE_VIDEO_VPP_PRI_SMPTE240M:
+         memcpy(matrix, &(vl_csc_matrix){
+            {  1.776133, -0.687820, -0.088313, 0.0 },
+            { -0.161375,  1.187315, -0.025940, 0.0 },
+            { -0.015881, -0.095931,  1.111812, 0.0 },
+         }, sizeof(vl_csc_matrix));
+         break;
+
+      case PIPE_VIDEO_VPP_PRI_BT709:
+      default:
+         memcpy(matrix, &(vl_csc_matrix){
+            {  1.660491, -0.587641, -0.072850, 0.0 },
+            { -0.124550,  1.132900, -0.008349, 0.0 },
+            { -0.018151, -0.100579,  1.118729, 0.0 },
+         }, sizeof(vl_csc_matrix));
+         break;
+      }
+      break;
+
+   case PIPE_VIDEO_VPP_PRI_BT709:
+   default:
+      switch (out_color_primaries) {
+      case PIPE_VIDEO_VPP_PRI_SMPTE170M:
+      case PIPE_VIDEO_VPP_PRI_SMPTE240M:
+         memcpy(matrix, &(vl_csc_matrix){
+            {  1.065379, -0.055401, -0.009978, 0.0 },
+            { -0.019633,  1.036363, -0.016731, 0.0 },
+            {  0.001632,  0.004412,  0.993956, 0.0 },
+         }, sizeof(vl_csc_matrix));
+         break;
+
+      case PIPE_VIDEO_VPP_PRI_BT2020:
+         memcpy(matrix, &(vl_csc_matrix){
+            { 0.627404, 0.329283, 0.043313, 0.0 },
+            { 0.069097, 0.919540, 0.011362, 0.0 },
+            { 0.016391, 0.088013, 0.895595, 0.0 },
+         }, sizeof(vl_csc_matrix));
+         break;
+
+      default:
+         memcpy(matrix, &identity, sizeof(vl_csc_matrix));
+      }
+      break;
+   }
 }

@@ -34,7 +34,7 @@ import get_hash_params
 
 param_desc_file = os.path.join(os.path.dirname(__file__), "get_hash_params.py")
 
-GLAPI = os.path.join(os.path.dirname(__file__), "..", "..", "mapi", "glapi", "gen")
+GLAPI = os.path.join(os.path.dirname(__file__), "..", "glapi", "glapi", "gen")
 sys.path.insert(0, GLAPI)
 import gl_XML
 

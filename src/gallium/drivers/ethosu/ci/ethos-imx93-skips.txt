@@ -1,0 +1,14 @@
+Add.Op/.*
+AddQuant.Op/.*
+Conv2D.Op/.*
+DepthwiseConv2D.Op/.*
+FullyConnected.Op/.*
+
+# Don't support unfused Pad operations yet
+Models.Op/yolox_000
+Models.Op/yolox_003
+Models.Op/yolox_012
+Models.Op/yolox_027
+Models.Op/yolox_042
+Models.Op/yolox_077
+Models.Op/yolox_086

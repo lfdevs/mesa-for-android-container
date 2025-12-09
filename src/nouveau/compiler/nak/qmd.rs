@@ -3,6 +3,8 @@
 
 extern crate nvidia_headers;
 
+use std::cmp::min;
+
 use compiler::bindings::*;
 use nak_bindings::*;
 use nvidia_headers::classes::{cla0c0, clc0c0, clc3c0, clc6c0, clcbc0, clcdc0};
@@ -25,7 +27,12 @@ trait QMD {
     fn set_register_count(&mut self, register_count: u8);
     fn set_crs_size(&mut self, crs_size: u32);
     fn set_slm_size(&mut self, slm_size: u32);
-    fn set_smem_size(&mut self, smem_size: u32, smem_max: u32);
+    fn set_smem_size(
+        &mut self,
+        smem_size: u32,
+        dev: &nv_device_info,
+        info: &nak_shader_info,
+    );
 }
 
 macro_rules! set_enum {
@@ -67,6 +74,9 @@ macro_rules! qmd_impl_common {
         }
 
         const GLOBAL_SIZE_LAYOUT: nak_qmd_dispatch_size_layout = {
+            assert!(paste! {$c::[<$s _MAX_BIT>]} < size_of::<Self>() * 8);
+            assert!(NAK_MAX_QMD_SIZE_B as usize >= size_of::<Self>());
+
             let w = paste! {$c::[<$s _CTA_RASTER_WIDTH>]};
             let h = paste! {$c::[<$s _CTA_RASTER_HEIGHT>]};
             let d = paste! {$c::[<$s _CTA_RASTER_DEPTH>]};
@@ -279,7 +289,12 @@ mod qmd_0_6 {
         qmd_impl_set_register_count!(cla0c0, QMDV00_06, REGISTER_COUNT);
         qmd_impl_set_slm_size!(cla0c0, QMDV00_06, NONE);
 
-        fn set_smem_size(&mut self, smem_size: u32, _smem_max: u32) {
+        fn set_smem_size(
+            &mut self,
+            smem_size: u32,
+            _dev: &nv_device_info,
+            _info: &nak_shader_info,
+        ) {
             let mut bv = QMDBitView::new(&mut self.qmd);
 
             let smem_size = smem_size.next_multiple_of(0x100);
@@ -325,7 +340,12 @@ mod qmd_2_1 {
         qmd_impl_set_register_count!(clc0c0, QMDV02_01, REGISTER_COUNT);
         qmd_impl_set_slm_size!(clc0c0, QMDV02_01, NONE);
 
-        fn set_smem_size(&mut self, smem_size: u32, _smem_max: u32) {
+        fn set_smem_size(
+            &mut self,
+            smem_size: u32,
+            _dev: &nv_device_info,
+            _info: &nak_shader_info,
+        ) {
             let mut bv = QMDBitView::new(&mut self.qmd);
 
             let smem_size = smem_size.next_multiple_of(0x100);
@@ -335,33 +355,79 @@ mod qmd_2_1 {
 }
 use qmd_2_1::Qmd2_1;
 
-fn gv100_sm_config_smem_size(size: u32) -> u32 {
-    let size = if size > 64 * 1024 {
-        96 * 1024
-    } else if size > 32 * 1024 {
-        64 * 1024
-    } else if size > 16 * 1024 {
-        32 * 1024
-    } else if size > 8 * 1024 {
-        16 * 1024
-    } else {
-        8 * 1024
+fn gv100_smem_size_to_hw(size_kb: u16) -> u16 {
+    assert!(size_kb % 4 == 0);
+    (size_kb / 4) + 1
+}
+
+/// Returns the SM_CONFIG_SHARED_MEM_SIZE for the given workgroups and shared
+/// memory size.
+fn gv100_pick_smem_size_kb(
+    size: u32,
+    smem_sizes_kb: &[u16],
+    workgroups: u32,
+) -> u16 {
+    let highest = *smem_sizes_kb.last().unwrap();
+    // How many workgroups can we launch with the requested shared mem size?
+    let workgroups = min(workgroups, u32::from(highest) * 1024 / size.max(1));
+    assert!(
+        workgroups > 0,
+        "Requested shared memory not supported by the hw."
+    );
+
+    // Now that we know for how many workgroups we have shared memory, try to
+    // find the smallest allocation that fits.
+    *smem_sizes_kb
+        .iter()
+        .find(|&&val| u32::from(val) * 1024 >= size * workgroups)
+        .unwrap_or(&highest)
+}
+
+/// Returns the (MIN_, TARGET_, MAX_) SM_CONFIG_SHARED_MEM_SIZE values.
+fn gv100_get_hw_smem_sizes(
+    smem_size: u32,
+    dev: &nv_device_info,
+    info: &nak_shader_info,
+) -> (u16, u16, u16) {
+    let cs_info = unsafe {
+        assert!(info.stage == MESA_SHADER_COMPUTE);
+        &info.__bindgen_anon_1.cs
     };
 
-    size / 4096 + 1
+    let smem_sizes = &dev.sm_smem_sizes_kB[0..dev.sm_smem_size_count.into()];
+    let threads =
+        cs_info.local_size[0] * cs_info.local_size[1] * cs_info.local_size[2];
+    let warps = threads.div_ceil(32);
+    let workgroups_per_sm = info.max_warps_per_sm / u32::from(warps);
+
+    let min = gv100_pick_smem_size_kb(smem_size, smem_sizes, 1);
+    let target =
+        gv100_pick_smem_size_kb(smem_size, smem_sizes, workgroups_per_sm);
+    let max = *smem_sizes.last().unwrap();
+
+    (
+        gv100_smem_size_to_hw(min),
+        gv100_smem_size_to_hw(target),
+        gv100_smem_size_to_hw(max),
+    )
 }
 
 macro_rules! qmd_impl_set_smem_size_bounded {
     ($c:ident, $s:ident) => {
-        fn set_smem_size(&mut self, smem_size: u32, smem_max: u32) {
+        fn set_smem_size(
+            &mut self,
+            smem_size: u32,
+            dev: &nv_device_info,
+            info: &nak_shader_info,
+        ) {
             let mut bv = QMDBitView::new(&mut self.qmd);
 
             let smem_size = smem_size.next_multiple_of(0x100);
             set_field!(bv, $c, $s, SHARED_MEMORY_SIZE, smem_size);
 
-            let max = gv100_sm_config_smem_size(smem_max);
-            let min = gv100_sm_config_smem_size(smem_size.into());
-            let target = gv100_sm_config_smem_size(smem_size.into());
+            let (min, target, max) =
+                gv100_get_hw_smem_sizes(smem_size, dev, info);
+
             set_field!(bv, $c, $s, MIN_SM_CONFIG_SHARED_MEM_SIZE, min);
             set_field!(bv, $c, $s, MAX_SM_CONFIG_SHARED_MEM_SIZE, max);
             set_field!(bv, $c, $s, TARGET_SM_CONFIG_SHARED_MEM_SIZE, target);
@@ -371,7 +437,12 @@ macro_rules! qmd_impl_set_smem_size_bounded {
 
 macro_rules! qmd_impl_set_smem_size_bounded_gb {
     ($c:ident, $s:ident) => {
-        fn set_smem_size(&mut self, smem_size: u32, smem_max: u32) {
+        fn set_smem_size(
+            &mut self,
+            smem_size: u32,
+            dev: &nv_device_info,
+            info: &nak_shader_info,
+        ) {
             let mut bv = QMDBitView::new(&mut self.qmd);
 
             let smem_size = smem_size.next_multiple_of(0x100);
@@ -386,9 +457,9 @@ macro_rules! qmd_impl_set_smem_size_bounded_gb {
                 smem_size_shifted
             );
 
-            let max = gv100_sm_config_smem_size(smem_max);
-            let min = gv100_sm_config_smem_size(smem_size.into());
-            let target = gv100_sm_config_smem_size(smem_size.into());
+            let (min, target, max) =
+                gv100_get_hw_smem_sizes(smem_size, dev, info);
+
             set_field!(bv, $c, $s, MIN_SM_CONFIG_SHARED_MEM_SIZE, min);
             set_field!(bv, $c, $s, MAX_SM_CONFIG_SHARED_MEM_SIZE, max);
             set_field!(bv, $c, $s, TARGET_SM_CONFIG_SHARED_MEM_SIZE, target);
@@ -472,12 +543,12 @@ mod qmd_4_0 {
 
     #[repr(transparent)]
     pub struct Qmd4_0 {
-        qmd: [u32; 64],
+        qmd: [u32; 96],
     }
 
     impl QMD for Qmd4_0 {
         fn new() -> Self {
-            let mut qmd = [0; 64];
+            let mut qmd = [0; 96];
             let mut bv = QMDBitView::new(&mut qmd);
             qmd_init!(bv, clcbc0, QMDV04_00, 4, 0);
             Self { qmd }
@@ -514,12 +585,12 @@ mod qmd_5_0 {
     }
 
     pub struct Qmd5_0 {
-        qmd: [u32; 64],
+        qmd: [u32; 96],
     }
 
     impl QMD for Qmd5_0 {
         fn new() -> Self {
-            let mut qmd = [0; 64];
+            let mut qmd = [0; 96];
             let mut bv = QMDBitView::new(&mut qmd);
             qmd_init!(bv, clcdc0, QMDV05_00, 5, 0);
             set_field!(bv, clcdc0, QMDV05_00, QMD_TYPE, 0x2);
@@ -542,7 +613,11 @@ mod qmd_5_0 {
 }
 use qmd_5_0::Qmd5_0;
 
-fn fill_qmd<Q: QMD>(info: &nak_shader_info, qmd_info: &nak_qmd_info) -> Q {
+fn fill_qmd<Q: QMD>(
+    dev: &nv_device_info,
+    info: &nak_shader_info,
+    qmd_info: &nak_qmd_info,
+) -> Q {
     let cs_info = unsafe {
         assert!(info.stage == MESA_SHADER_COMPUTE);
         &info.__bindgen_anon_1.cs
@@ -566,9 +641,8 @@ fn fill_qmd<Q: QMD>(info: &nak_shader_info, qmd_info: &nak_qmd_info) -> Q {
     qmd.set_crs_size(info.crs_size);
     qmd.set_slm_size(info.slm_size);
 
-    assert!(qmd_info.smem_size >= cs_info.smem_size);
-    assert!(qmd_info.smem_size <= qmd_info.smem_max);
-    qmd.set_smem_size(qmd_info.smem_size.into(), qmd_info.smem_max.into());
+    assert!(qmd_info.smem_size <= u32::from(dev.max_smem_per_wg_kB) * 1024);
+    qmd.set_smem_size(qmd_info.smem_size.into(), dev, info);
 
     for i in 0..qmd_info.num_cbufs {
         let cb = &qmd_info.cbufs[usize::try_from(i).unwrap()];
@@ -578,6 +652,27 @@ fn fill_qmd<Q: QMD>(info: &nak_shader_info, qmd_info: &nak_qmd_info) -> Q {
     }
 
     qmd
+}
+
+#[no_mangle]
+pub extern "C" fn nak_qmd_size_B(dev: &nv_device_info) -> u32 {
+    let size_B = if dev.cls_compute >= clcdc0::BLACKWELL_COMPUTE_A {
+        size_of::<Qmd5_0>().try_into().unwrap()
+    } else if dev.cls_compute >= clcbc0::HOPPER_COMPUTE_A {
+        size_of::<Qmd4_0>().try_into().unwrap()
+    } else if dev.cls_compute >= clc6c0::AMPERE_COMPUTE_A {
+        size_of::<Qmd3_0>().try_into().unwrap()
+    } else if dev.cls_compute >= clc3c0::VOLTA_COMPUTE_A {
+        size_of::<Qmd2_2>().try_into().unwrap()
+    } else if dev.cls_compute >= clc0c0::PASCAL_COMPUTE_A {
+        size_of::<Qmd2_1>().try_into().unwrap()
+    } else if dev.cls_compute >= cla0c0::KEPLER_COMPUTE_A {
+        size_of::<Qmd0_6>().try_into().unwrap()
+    } else {
+        panic!("Unknown shader model");
+    };
+    assert!(size_B <= NAK_MAX_QMD_SIZE_B);
+    size_B
 }
 
 #[no_mangle]
@@ -600,28 +695,28 @@ pub extern "C" fn nak_fill_qmd(
     unsafe {
         if dev.cls_compute >= clcdc0::BLACKWELL_COMPUTE_A {
             let qmd_out = qmd_out as *mut Qmd5_0;
-            assert!(qmd_size == std::mem::size_of_val(&*qmd_out));
-            qmd_out.write(fill_qmd(info, qmd_info));
+            assert!(qmd_size == size_of_val(&*qmd_out));
+            qmd_out.write(fill_qmd(dev, info, qmd_info));
         } else if dev.cls_compute >= clcbc0::HOPPER_COMPUTE_A {
             let qmd_out = qmd_out as *mut Qmd4_0;
-            assert!(qmd_size == std::mem::size_of_val(&*qmd_out));
-            qmd_out.write(fill_qmd(info, qmd_info));
+            assert!(qmd_size == size_of_val(&*qmd_out));
+            qmd_out.write(fill_qmd(dev, info, qmd_info));
         } else if dev.cls_compute >= clc6c0::AMPERE_COMPUTE_A {
             let qmd_out = qmd_out as *mut Qmd3_0;
-            assert!(qmd_size == std::mem::size_of_val(&*qmd_out));
-            qmd_out.write(fill_qmd(info, qmd_info));
+            assert!(qmd_size == size_of_val(&*qmd_out));
+            qmd_out.write(fill_qmd(dev, info, qmd_info));
         } else if dev.cls_compute >= clc3c0::VOLTA_COMPUTE_A {
             let qmd_out = qmd_out as *mut Qmd2_2;
-            assert!(qmd_size == std::mem::size_of_val(&*qmd_out));
-            qmd_out.write(fill_qmd(info, qmd_info));
+            assert!(qmd_size == size_of_val(&*qmd_out));
+            qmd_out.write(fill_qmd(dev, info, qmd_info));
         } else if dev.cls_compute >= clc0c0::PASCAL_COMPUTE_A {
             let qmd_out = qmd_out as *mut Qmd2_1;
-            assert!(qmd_size == std::mem::size_of_val(&*qmd_out));
-            qmd_out.write(fill_qmd(info, qmd_info));
+            assert!(qmd_size == size_of_val(&*qmd_out));
+            qmd_out.write(fill_qmd(dev, info, qmd_info));
         } else if dev.cls_compute >= cla0c0::KEPLER_COMPUTE_A {
             let qmd_out = qmd_out as *mut Qmd0_6;
-            assert!(qmd_size == std::mem::size_of_val(&*qmd_out));
-            qmd_out.write(fill_qmd(info, qmd_info));
+            assert!(qmd_size == size_of_val(&*qmd_out));
+            qmd_out.write(fill_qmd(dev, info, qmd_info));
         } else {
             panic!("Unknown shader model");
         }

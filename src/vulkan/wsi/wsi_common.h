@@ -29,6 +29,7 @@
 #include "util/log.h"
 #include "vk_alloc.h"
 #include "vk_dispatch_table.h"
+#include "vk_internal_exts.h"
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_icd.h>
 
@@ -44,56 +45,9 @@ extern const struct vk_device_entrypoint_table wsi_device_entrypoints;
 
 #include <util/list.h>
 
-/* This is guaranteed to not collide with anything because it's in the
- * VK_KHR_swapchain namespace but not actually used by the extension.
- */
-#define VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA (VkStructureType)1000001002
-#define VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA (VkStructureType)1000001003
-#define VK_STRUCTURE_TYPE_WSI_SURFACE_SUPPORTED_COUNTERS_MESA (VkStructureType)1000001005
-#define VK_STRUCTURE_TYPE_WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA (VkStructureType)1000001006
-
-#define VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA_cast struct wsi_image_create_info
-#define VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA_cast struct wsi_memory_allocate_info
-#define VK_STRUCTURE_TYPE_WSI_SURFACE_SUPPORTED_COUNTERS_MESA_cast struct wsi_surface_supported_counters
-#define VK_STRUCTURE_TYPE_WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA_cast struct wsi_memory_signal_submit_info
-
-/* This is always chained to VkImageCreateInfo when a wsi image is created.
- * It indicates that the image can be transitioned to/from
- * VK_IMAGE_LAYOUT_PRESENT_SRC_KHR.
- */
-struct wsi_image_create_info {
-    VkStructureType sType;
-    const void *pNext;
-    bool scanout;
-
-    /* if true, the image is a blit source */
-    bool blit_src;
-};
-
-struct wsi_memory_allocate_info {
-    VkStructureType sType;
-    const void *pNext;
-    bool implicit_sync;
-};
-
-/* To be chained into VkSurfaceCapabilities2KHR */
-struct wsi_surface_supported_counters {
-   VkStructureType sType;
-   const void *pNext;
-
-   VkSurfaceCounterFlagsEXT supported_surface_counters;
-
-};
-
-/* To be chained into VkSubmitInfo */
-struct wsi_memory_signal_submit_info {
-    VkStructureType sType;
-    const void *pNext;
-    VkDeviceMemory memory;
-};
-
 struct wsi_interface;
 struct vk_instance;
+struct vk_queue;
 
 struct driOptionCache;
 
@@ -131,6 +85,9 @@ struct wsi_device {
    VkPresentModeKHR override_present_mode;
    bool force_bgra8_unorm_first;
 
+   /* Cached result for wsi_drm_check_dma_buf_sync_file_import_export(). */
+   uint32_t cached_sync_file_import_export_result;
+
    /* Whether to enable adaptive sync for a swapchain if implemented and
     * available. Not all window systems might support this. */
    bool enable_adaptive_sync;
@@ -142,6 +99,8 @@ struct wsi_device {
    bool force_headless_swapchain;
 
    bool force_swapchain_to_currentExtent;
+
+   bool disable_unordered_submits;
 
    struct {
       /* Override the minimum number of images on the swapchain.
@@ -180,25 +139,18 @@ struct wsi_device {
                                       VkDeviceMemory *out);
    } win32;
 
+   struct {
+      VkResult (*bind_drawable_to_vkimage)(VkImage image, void *drawable);
+      /* Does not transfer the ownership to the command buffer. The command
+       * buffer must retain the drawable to ensure lifespan. */
+      void (*encode_drawable_present)(VkCommandBuffer cmd, void *drawable);
+   } metal;
+
+
    bool sw;
 
    /* Set to true if the implementation is ok with linear WSI images. */
    bool wants_linear;
-
-   /* Signals the semaphore such that any wait on the semaphore will wait on
-    * any reads or writes on the give memory object.  This is used to
-    * implement the semaphore signal operation in vkAcquireNextImage.  This
-    * requires the driver to implement vk_device::create_sync_for_memory.
-    */
-   bool signal_semaphore_with_memory;
-
-   /* Signals the fence such that any wait on the fence will wait on any reads
-    * or writes on the give memory object.  This is used to implement the
-    * semaphore signal operation in vkAcquireNextImage.  This requires the
-    * driver to implement vk_device::create_sync_for_memory.  The resulting
-    * vk_sync must support CPU waits.
-    */
-   bool signal_fence_with_memory;
 
    /* Whether present_wait functionality is enabled on the device.
     * In this case, we have to create an extra timeline semaphore
@@ -237,7 +189,7 @@ struct wsi_device {
     * A driver can implement this callback to return a special queue to execute
     * buffer blits.
     */
-   VkQueue (*get_blit_queue)(VkDevice device);
+   struct vk_queue *(*get_blit_queue)(VkDevice device);
 
 #define WSI_CB(cb) PFN_vk##cb cb
    WSI_CB(AllocateMemory);
@@ -272,7 +224,7 @@ struct wsi_device {
    WSI_CB(GetPhysicalDeviceImageFormatProperties2);
    WSI_CB(GetSemaphoreFdKHR);
    WSI_CB(ResetFences);
-   WSI_CB(QueueSubmit);
+   WSI_CB(QueueSubmit2);
    WSI_CB(SetDebugUtilsObjectNameEXT);
    WSI_CB(WaitForFences);
    WSI_CB(MapMemory);
@@ -338,9 +290,7 @@ wsi_common_acquire_next_image2(const struct wsi_device *wsi,
 
 VkResult
 wsi_common_queue_present(const struct wsi_device *wsi,
-                         VkDevice device_h,
-                         VkQueue queue_h,
-                         int queue_family_index,
+                         struct vk_queue *queue,
                          const VkPresentInfoKHR *pPresentInfo);
 
 VkResult
@@ -348,9 +298,6 @@ wsi_common_create_swapchain_image(const struct wsi_device *wsi,
                                   const VkImageCreateInfo *pCreateInfo,
                                   VkSwapchainKHR _swapchain,
                                   VkImage *pImage);
-
-bool
-wsi_common_vk_instance_supports_present_wait(const struct vk_instance *instance);
 
 VkImageUsageFlags
 wsi_caps_get_image_usage(void);

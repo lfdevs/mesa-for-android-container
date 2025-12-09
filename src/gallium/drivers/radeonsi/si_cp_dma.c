@@ -67,12 +67,13 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
       command |= S_415_RAW_WAIT(1);
 
    /* Src and dst flags. */
-   if (sctx->screen->info.cp_dma_use_L2)
+   /* GFX12: TC_L2 means MALL, which should always be set. */
+   if (sctx->screen->info.cp_dma_use_L2 || sctx->gfx_level == GFX12)
       header |= S_501_DST_SEL(V_501_DST_ADDR_TC_L2);
 
    if (flags & CP_DMA_CLEAR) {
       header |= S_411_SRC_SEL(V_411_DATA);
-   } else if (sctx->screen->info.cp_dma_use_L2) {
+   } else if (sctx->screen->info.cp_dma_use_L2 || sctx->gfx_level == GFX12) {
       header |= S_501_SRC_SEL(V_501_SRC_ADDR_TC_L2);
    }
 
@@ -354,13 +355,8 @@ void si_cp_write_data(struct si_context *sctx, struct si_resource *buf, unsigned
    radeon_add_to_buffer_list(sctx, cs, buf, RADEON_USAGE_WRITE | RADEON_PRIO_CP_DMA);
    uint64_t va = buf->gpu_address + offset;
 
-   radeon_begin(cs);
-   radeon_emit(PKT3(PKT3_WRITE_DATA, 2 + size / 4, 0));
-   radeon_emit(S_370_DST_SEL(dst_sel) | S_370_WR_CONFIRM(1) | S_370_ENGINE_SEL(engine));
-   radeon_emit(va);
-   radeon_emit(va >> 32);
-   radeon_emit_array((const uint32_t *)data, size / 4);
-   radeon_end();
+   ac_emit_cp_write_data(&cs->current, engine, dst_sel, va, size / 4,
+                         (const uint32_t *)data, false);
 }
 
 void si_cp_copy_data(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned dst_sel,
@@ -378,12 +374,6 @@ void si_cp_copy_data(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned
    uint64_t dst_va = (dst ? dst->gpu_address : 0ull) + dst_offset;
    uint64_t src_va = (src ? src->gpu_address : 0ull) + src_offset;
 
-   radeon_begin(cs);
-   radeon_emit(PKT3(PKT3_COPY_DATA, 4, 0));
-   radeon_emit(COPY_DATA_SRC_SEL(src_sel) | COPY_DATA_DST_SEL(dst_sel) | COPY_DATA_WR_CONFIRM);
-   radeon_emit(src_va);
-   radeon_emit(src_va >> 32);
-   radeon_emit(dst_va);
-   radeon_emit(dst_va >> 32);
-   radeon_end();
+   ac_emit_cp_copy_data(&cs->current, src_sel, dst_sel, src_va, dst_va,
+                        AC_CP_COPY_DATA_WR_CONFIRM, false);
 }

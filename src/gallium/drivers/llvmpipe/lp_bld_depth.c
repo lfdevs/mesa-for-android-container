@@ -827,6 +827,8 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
                             LLVMValueRef z_fb,
                             LLVMValueRef s_fb,
                             LLVMValueRef face,
+                            LLVMValueRef min_depth_bounds,
+                            LLVMValueRef max_depth_bounds,
                             LLVMValueRef *z_value,
                             LLVMValueRef *s_value,
                             bool do_branch,
@@ -841,7 +843,7 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
    LLVMValueRef z_dst = NULL;
    LLVMValueRef stencil_vals = NULL;
    LLVMValueRef z_bitmask = NULL, stencil_shift = NULL;
-   LLVMValueRef z_pass = NULL, s_pass_mask = NULL;
+   LLVMValueRef z_pass = NULL, s_pass_mask = NULL, b_pass_mask = NULL;
    LLVMValueRef current_mask = mask ? lp_build_mask_value(mask) : *cov_mask;
    LLVMValueRef front_facing = NULL;
    bool have_z, have_s;
@@ -883,7 +885,7 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
       assert(z_swizzle != PIPE_SWIZZLE_NONE ||
              s_swizzle != PIPE_SWIZZLE_NONE);
 
-      assert(depth->enabled || stencil[0].enabled);
+      assert(depth->enabled || depth->depth_bounds_test || stencil[0].enabled);
 
       assert(format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS);
       assert(format_desc->block.width == 1);
@@ -1026,6 +1028,40 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
       }
    }
 
+   if (depth->depth_bounds_test) {
+      if (!z_type.floating) {
+         struct lp_type f_type = lp_type_float_vec(32, 32 * z_type.length);
+         struct lp_build_context f_bld;
+
+         lp_build_context_init(&f_bld, gallivm, f_type);
+
+         min_depth_bounds = lp_build_max(&f_bld,
+                                         lp_build_const_vec(gallivm, f_type, 0.0f),
+                                         min_depth_bounds);
+         max_depth_bounds = lp_build_min(&f_bld,
+                                         lp_build_const_vec(gallivm, f_type, 1.0f),
+                                         max_depth_bounds);
+
+         min_depth_bounds =
+            lp_build_clamped_float_to_unsigned_norm(gallivm, f_type, z_width,
+                                                    min_depth_bounds);
+         max_depth_bounds =
+            lp_build_clamped_float_to_unsigned_norm(gallivm, f_type, z_width,
+                                                    max_depth_bounds);
+      }
+
+      LLVMValueRef above_min = lp_build_cmp(&z_bld, PIPE_FUNC_GEQUAL,
+                                            z_dst, min_depth_bounds);
+      LLVMValueRef below_max = lp_build_cmp(&z_bld, PIPE_FUNC_LEQUAL,
+                                            z_dst, max_depth_bounds);
+
+      b_pass_mask =
+         LLVMBuildAnd(builder, above_min, below_max, "");
+
+      /* Mask off any writes that failed the depth bounds test */
+      current_mask = b_pass_mask;
+   }
+
    if (depth->enabled) {
       /*
        * Convert fragment Z to the desired type, aligning the LSB to the right.
@@ -1112,7 +1148,7 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
                                             stencil_refs, stencil_vals,
                                             z_pass_mask, front_facing);
       }
-   } else {
+   } else if (stencil[0].enabled) {
       /* No depth test: apply Z-pass operator to stencil buffer values which
        * passed the stencil test.
        */
@@ -1146,6 +1182,9 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
    }
 
    if (mask) {
+      if (b_pass_mask)
+         lp_build_mask_update(mask, b_pass_mask);
+
       if (s_pass_mask)
          lp_build_mask_update(mask, s_pass_mask);
 
@@ -1153,6 +1192,9 @@ lp_build_depth_stencil_test(struct gallivm_state *gallivm,
          lp_build_mask_update(mask, z_pass);
    } else {
       LLVMValueRef tmp_mask = *cov_mask;
+      if (b_pass_mask)
+         tmp_mask = LLVMBuildAnd(builder, tmp_mask, b_pass_mask, "");
+
       if (s_pass_mask)
          tmp_mask = LLVMBuildAnd(builder, tmp_mask, s_pass_mask, "");
 

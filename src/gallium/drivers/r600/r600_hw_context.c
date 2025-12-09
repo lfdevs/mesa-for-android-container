@@ -296,7 +296,7 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 
 	if (ctx->is_debug) {
 		if (!ws->fence_wait(ws, ctx->b.last_gfx_fence, 10000000)) {
-			const char *fname = getenv("R600_TRACE");
+			const char *fname = os_get_option("R600_TRACE");
 			if (!fname)
 				exit(-1);
 			FILE *fl = fopen(fname, "w+");
@@ -320,9 +320,8 @@ void r600_begin_new_cs(struct r600_context *ctx)
 
 		/* Create a buffer used for writing trace IDs and initialize it to 0. */
 		assert(!ctx->trace_buf);
-		ctx->trace_buf = (struct r600_resource*)
-			pipe_buffer_create(ctx->b.b.screen, 0,
-					   PIPE_USAGE_STAGING, 4);
+		ctx->trace_buf = r600_as_resource(pipe_buffer_create(ctx->b.b.screen, 0,
+								  PIPE_USAGE_STAGING, 4));
 		if (ctx->trace_buf)
 			pipe_buffer_write_nooverlap(&ctx->b.b, &ctx->trace_buf->b.b,
 						    0, sizeof(zero), &zero);
@@ -347,7 +346,7 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	r600_mark_atom_dirty(ctx, &ctx->clip_state.atom);
 	r600_mark_atom_dirty(ctx, &ctx->db_misc_state.atom);
 	r600_mark_atom_dirty(ctx, &ctx->db_state.atom);
-	r600_mark_atom_dirty(ctx, &ctx->framebuffer.atom);
+	r600_mark_atom_dirty(ctx, &ctx->cb_state.atom);
 	if (ctx->b.gfx_level >= EVERGREEN) {
 		r600_mark_atom_dirty(ctx, &ctx->fragment_images.atom);
 		r600_mark_atom_dirty(ctx, &ctx->fragment_buffers.atom);
@@ -397,7 +396,7 @@ void r600_begin_new_cs(struct r600_context *ctx)
 	r600_vertex_buffers_dirty(ctx);
 
 	/* Re-emit shader resources. */
-	for (shader = 0; shader < PIPE_SHADER_TYPES; shader++) {
+	for (shader = 0; shader < MESA_SHADER_STAGES; shader++) {
 		struct r600_constbuf_state *constbuf = &ctx->constbuf_state[shader];
 		struct r600_textures_info *samplers = &ctx->samplers[shader];
 
@@ -501,11 +500,11 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(dst, &r600_resource(dst)->valid_buffer_range, dst_offset,
+	util_range_add(dst, &r600_as_resource(dst)->valid_buffer_range, dst_offset,
 		       dst_offset + size);
 
-	dst_offset += r600_resource(dst)->gpu_address;
-	src_offset += r600_resource(src)->gpu_address;
+	dst_offset += r600_as_resource(dst)->gpu_address;
+	src_offset += r600_as_resource(src)->gpu_address;
 
 	/* Flush the caches where the resources are bound. */
 	rctx->b.flags |= r600_get_flush_flags(R600_COHERENCY_SHADER) |
@@ -533,9 +532,9 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 		}
 
 		/* This must be done after r600_need_cs_space. */
-		src_reloc = radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, (struct r600_resource*)src,
+		src_reloc = radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, r600_as_resource(src),
 						  RADEON_USAGE_READ | RADEON_PRIO_CP_DMA);
-		dst_reloc = radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, (struct r600_resource*)dst,
+		dst_reloc = radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx, r600_as_resource(dst),
 						  RADEON_USAGE_WRITE | RADEON_PRIO_CP_DMA);
 
 		radeon_emit(cs, PKT3(PKT3_CP_DMA, 4, 0));
@@ -577,8 +576,8 @@ void r600_dma_copy_buffer(struct r600_context *rctx,
 {
 	struct radeon_cmdbuf *cs = &rctx->b.dma.cs;
 	unsigned i, ncopy, csize;
-	struct r600_resource *rdst = (struct r600_resource*)dst;
-	struct r600_resource *rsrc = (struct r600_resource*)src;
+	struct r600_resource *rdst = r600_as_resource(dst);
+	struct r600_resource *rsrc = r600_as_resource(src);
 
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping

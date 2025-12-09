@@ -38,23 +38,23 @@ struct d3d12_root_signature {
 };
 
 static D3D12_SHADER_VISIBILITY
-get_shader_visibility(enum pipe_shader_type stage)
+get_shader_visibility(mesa_shader_stage stage)
 {
    switch (stage) {
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       return D3D12_SHADER_VISIBILITY_VERTEX;
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       return D3D12_SHADER_VISIBILITY_PIXEL;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       return D3D12_SHADER_VISIBILITY_GEOMETRY;
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       return D3D12_SHADER_VISIBILITY_HULL;
-   case PIPE_SHADER_TESS_EVAL:
+   case MESA_SHADER_TESS_EVAL:
       return D3D12_SHADER_VISIBILITY_DOMAIN;
-   case PIPE_SHADER_COMPUTE:
+   case MESA_SHADER_COMPUTE:
       return D3D12_SHADER_VISIBILITY_ALL;
    default:
-      unreachable("unknown shader stage");
+      UNREACHABLE("unknown shader stage");
    }
 }
 
@@ -122,8 +122,8 @@ create_root_signature(struct d3d12_context *ctx, struct d3d12_root_signature_key
 
    unsigned count = key->compute ? 1 : D3D12_GFX_SHADER_STAGES;
    for (unsigned i = 0; i < count; ++i) {
-      unsigned stage = key->compute ? PIPE_SHADER_COMPUTE : i;
-      D3D12_SHADER_VISIBILITY visibility = get_shader_visibility((enum pipe_shader_type)stage);
+      unsigned stage = key->compute ? MESA_SHADER_COMPUTE : i;
+      D3D12_SHADER_VISIBILITY visibility = get_shader_visibility((mesa_shader_stage)stage);
 
       if (key->stages[i].end_cb_bindings - key->stages[i].begin_cb_bindings > 0) {
          init_range_root_param(&root_params[num_params++],
@@ -192,8 +192,8 @@ create_root_signature(struct d3d12_context *ctx, struct d3d12_root_signature_key
             key->stages[i].state_vars_size,
             visibility);
       }
-      assert(num_params < PIPE_SHADER_TYPES * D3D12_NUM_BINDING_TYPES);
-      assert(num_ranges < PIPE_SHADER_TYPES * (D3D12_NUM_BINDING_TYPES + 1));
+      assert(num_params < MESA_SHADER_STAGES * D3D12_NUM_BINDING_TYPES);
+      assert(num_ranges < MESA_SHADER_STAGES * (D3D12_NUM_BINDING_TYPES + 1));
    }
 
    D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_sig_desc;

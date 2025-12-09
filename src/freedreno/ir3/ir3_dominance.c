@@ -105,3 +105,19 @@ ir3_block_dominates(struct ir3_block *a, struct ir3_block *b)
    return a->dom_pre_index <= b->dom_pre_index &&
           a->dom_post_index >= b->dom_post_index;
 }
+
+/**
+ * Computes the least common ancestor of two blocks.  If one of the blocks is
+ * null, the other block is returned.
+ */
+struct ir3_block *
+ir3_dominance_lca(struct ir3_block *b1, struct ir3_block *b2)
+{
+   if (b1 == NULL)
+      return b2;
+
+   if (b2 == NULL)
+      return b1;
+
+   return intersect(b1, b2);
+}

@@ -47,10 +47,10 @@ get_proj_index(nir_instr *coord_instr, nir_instr *proj_instr,
    if (coord_src_ssa != proj_src_ssa)
       return NULL;
 
-   if (coord_src_ssa->parent_instr->type != nir_instr_type_intrinsic)
+   if (!nir_def_is_intrinsic(coord_src_ssa))
       return NULL;
 
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(coord_src_ssa->parent_instr);
+   nir_intrinsic_instr *intrin = nir_def_as_intrinsic(coord_src_ssa);
    if (intrin->intrinsic != nir_intrinsic_load_input)
       return NULL;
 
@@ -105,10 +105,10 @@ lima_nir_lower_txp_instr(nir_builder *b, nir_instr *instr,
    nir_def *coords_ssa = tex->src[coords_idx].src.ssa;
 
    int proj_idx_in_vec = -1;
-   nir_def *load_input = get_proj_index(coords_ssa->parent_instr,
-                                            proj_ssa->parent_instr,
-                                            tex->coord_components,
-                                            &proj_idx_in_vec);
+   nir_def *load_input = get_proj_index(nir_def_instr(coords_ssa),
+                                        nir_def_instr(proj_ssa),
+                                        tex->coord_components,
+                                        &proj_idx_in_vec);
    nir_def *combined;
    if (load_input && proj_idx_in_vec == 3) {
       unsigned xyzw[] = { 0, 1, 2, 3 };

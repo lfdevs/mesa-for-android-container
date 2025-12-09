@@ -194,7 +194,7 @@ handle_tex_src(struct v3d_compile *c,
         }
 
         default:
-                unreachable("unknown texture source");
+                UNREACHABLE("unknown texture source");
         }
 }
 
@@ -397,7 +397,7 @@ v3d_image_atomic_tmu_op(nir_intrinsic_instr *instr)
         case nir_atomic_op_ixor:    return V3D_TMU_OP_WRITE_XOR_READ_NOT;
         case nir_atomic_op_xchg:    return V3D_TMU_OP_WRITE_XCHG_READ_FLUSH;
         case nir_atomic_op_cmpxchg: return V3D_TMU_OP_WRITE_CMPXCHG_READ_FLUSH;
-        default:                    unreachable("unknown atomic op");
+        default:                    UNREACHABLE("unknown atomic op");
         }
 }
 
@@ -414,7 +414,7 @@ v3d_image_load_store_tmu_op(nir_intrinsic_instr *instr)
                 return v3d_image_atomic_tmu_op(instr);
 
         default:
-                unreachable("unknown image intrinsic");
+                UNREACHABLE("unknown image intrinsic");
         };
 }
 
@@ -461,7 +461,7 @@ vir_image_emit_register_writes(struct v3d_compile *c,
                 break;
         }
         default:
-                unreachable("bad image sampler dim");
+                UNREACHABLE("bad image sampler dim");
         }
 
         /* In order to fetch on a cube map, we need to interpret it as

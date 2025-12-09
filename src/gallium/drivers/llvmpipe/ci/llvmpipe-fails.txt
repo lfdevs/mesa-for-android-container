@@ -1,14 +1,13 @@
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.compute,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.vertex,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.vertex_and_fragment,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.compute,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.vertex,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.vertex_and_fragment,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.compute,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.vertex,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.vertex_and_fragment,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.compute,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.vertex,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.vertex_and_fragment,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.compute,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.vertex,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.vertex_and_fragment,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.compute,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.vertex,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.vertex_and_fragment,Fail
 
-spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 
 glx@glx-make-current,Fail
@@ -52,12 +51,10 @@ spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 2 msaa,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 2 upsample,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 4 msaa,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 4 upsample,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 4 centroid-edges,Fail
+spec@ext_framebuffer_multisample@interpolation 6 centroid-edges,Fail
+spec@ext_framebuffer_multisample@interpolation 8 centroid-edges,Fail
 
 spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,Fail
@@ -75,7 +72,6 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
 # Debian bookworm fails
-spec@arb_viewport_array@display-list,Fail
 spec@intel_shader_atomic_float_minmax@execution@ssbo-atomicmin-float-nan,Fail
 spec@intel_shader_atomic_float_minmax@execution@ssbo-atomicmax-float-nan,Fail
 spec@intel_shader_atomic_float_minmax@execution@ssbo-atomiccompswap-float,Crash
@@ -103,3 +99,6 @@ spec@ovr_multiview@compiler@multiple-num-views-in-single-declaration-mismatch.ve
 
 # New failures with GL CTS 4.6.6.0
 KHR-GL45.direct_state_access.vertex_arrays_vertex_buffers_errors,Fail
+
+# src/compiler/nir/nir.h:2850: nir_src_comp_as_uint: Assertion `nir_src_is_const(src)' failed.
+spec@glsl-1.50@execution@geometry@dynamic_input_array_index,Crash

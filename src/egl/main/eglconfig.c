@@ -323,7 +323,7 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
                valid = EGL_FALSE;
             break;
          default:
-            unreachable("check _eglValidationTable[]");
+            UNREACHABLE("check _eglValidationTable[]");
             break;
          }
          break;
@@ -343,7 +343,7 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
                    EGL_OPENGL_ES3_BIT_KHR | EGL_OPENGL_BIT;
             break;
          default:
-            unreachable("check _eglValidationTable[]");
+            UNREACHABLE("check _eglValidationTable[]");
             mask = 0;
             break;
          }
@@ -466,7 +466,7 @@ _eglMatchConfig(const _EGLConfig *conf, const _EGLConfig *criteria)
          /* ignored here */
          break;
       case ATTRIB_CRITERION_IGNORE:
-         unreachable("already handled above");
+         UNREACHABLE("already handled above");
          break;
       }
 

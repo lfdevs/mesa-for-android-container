@@ -70,6 +70,7 @@ tu_load_gmem_attachment(struct tu_cmd_buffer *cmd,
                         struct tu_cs *cs,
                         struct tu_resolve_group *resolve_group,
                         uint32_t a,
+                        uint32_t gmem_a,
                         bool cond_exec_allowed,
                         bool force_load);
 

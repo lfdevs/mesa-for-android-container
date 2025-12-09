@@ -285,7 +285,7 @@ get_fast_clear_rect(const struct isl_device *dev,
             case  32: ccs_format = ISL_FORMAT_GFX12_CCS_32BPP_Y0;  break;
             case  64: ccs_format = ISL_FORMAT_GFX12_CCS_64BPP_Y0;  break;
             case 128: ccs_format = ISL_FORMAT_GFX12_CCS_128BPP_Y0; break;
-            default:  unreachable("Invalid surface bpb for fast clearing");
+            default:  UNREACHABLE("Invalid surface bpb for fast clearing");
             }
          } else {
             assert(aux_surf->usage == ISL_SURF_USAGE_CCS_BIT);
@@ -378,7 +378,7 @@ get_fast_clear_rect(const struct isl_device *dev,
          x_scaledown = dev->info->ver >= 20 ? 8 : 1;
          break;
       default:
-         unreachable("Unexpected MCS format for fast clear");
+         UNREACHABLE("Unexpected MCS format for fast clear");
       }
       y_scaledown = dev->info->ver >= 20 ? 4 : 2;
       x_align = x_scaledown * 2;
@@ -387,8 +387,8 @@ get_fast_clear_rect(const struct isl_device *dev,
 
    *x0 = ROUND_DOWN_TO(*x0,  x_align) / x_scaledown;
    *y0 = ROUND_DOWN_TO(*y0, y_align) / y_scaledown;
-   *x1 = ALIGN(*x1, x_align) / x_scaledown;
-   *y1 = ALIGN(*y1, y_align) / y_scaledown;
+   *x1 = align(*x1, x_align) / x_scaledown;
+   *y1 = align(*y1, y_align) / y_scaledown;
 }
 
 static void
@@ -541,7 +541,7 @@ blorp_fast_clear(struct blorp_batch *batch,
          assert(surf->surf->levels > 1 ||
                 surf->surf->logical_level0_px.d > 1 ||
                 surf->surf->logical_level0_px.a > 1);
-         const int phys_height0 = ALIGN(surf->surf->logical_level0_px.h,
+         const int phys_height0 = align(surf->surf->logical_level0_px.h,
                                         surf->surf->image_alignment_el.h);
          unaligned_height = phys_height0 % 32;
          size_B = (int64_t)surf->surf->row_pitch_B * (phys_height0 - unaligned_height);
@@ -583,7 +583,7 @@ blorp_fast_clear(struct blorp_batch *batch,
                                  mem_surf.addr.offset, size_B, ISL_TILING_4);
                assert(isl_surf.logical_level0_px.h == 32);
                assert(isl_surf.logical_level0_px.a == 1);
-               isl_surf.row_pitch_B = ALIGN(isl_surf.row_pitch_B, 16 * 128);
+               isl_surf.row_pitch_B = align(isl_surf.row_pitch_B, 16 * 128);
             } else {
                isl_surf_from_mem(batch->blorp->isl_dev, &isl_surf,
                                  mem_surf.addr.offset, size_B, ISL_TILING_64);
@@ -1341,8 +1341,8 @@ blorp_ccs_resolve(struct blorp_batch *batch,
          x_scaledown = aux_fmtl->bw / 2;
          y_scaledown = aux_fmtl->bh / 2;
       }
-      params.x1 = ALIGN(params.x1, x_scaledown) / x_scaledown;
-      params.y1 = ALIGN(params.y1, y_scaledown) / y_scaledown;
+      params.x1 = align(params.x1, x_scaledown) / x_scaledown;
+      params.y1 = align(params.y1, y_scaledown) / y_scaledown;
    }
 
    if (batch->blorp->isl_dev->info->ver >= 10) {
@@ -1433,7 +1433,8 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
    /* Do an MCS fetch and check if it is equal to the magic clear value */
    nir_def *mcs =
       blorp_nir_txf_ms_mcs(&b, nir_f2i32(&b, nir_load_frag_coord(&b)),
-                               nir_load_layer_id(&b));
+                               nir_load_layer_id(&b),
+                               blorp->isl_dev->info);
    nir_def *is_clear =
       blorp_nir_mcs_is_clear_color(&b, mcs, blorp_key.num_samples);
 
@@ -1557,7 +1558,7 @@ blorp_mcs_ambiguate(struct blorp_batch *batch,
    case 8:  renderable_format = ISL_FORMAT_R8_UINT;     break;
    case 32: renderable_format = ISL_FORMAT_R32_UINT;    break;
    case 64: renderable_format = ISL_FORMAT_R32G32_UINT; break;
-   default: unreachable("Unexpected MCS format size for ambiguate");
+   default: UNREACHABLE("Unexpected MCS format size for ambiguate");
    }
 
    /* From Bspec 57340 (r59562):

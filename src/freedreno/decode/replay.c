@@ -584,7 +584,7 @@ device_submit_cmdstreams(struct device *dev)
       .out_syncobjs = 0,
       .nr_in_syncobjs = 0,
       .nr_out_syncobjs = 0,
-      .syncobj_stride = sizeof(struct drm_msm_gem_submit_syncobj),
+      .syncobj_stride = sizeof(struct drm_msm_syncobj),
    };
 
    int ret = drmCommandWriteRead(dev->fd, DRM_MSM_GEM_SUBMIT, &submit_req,

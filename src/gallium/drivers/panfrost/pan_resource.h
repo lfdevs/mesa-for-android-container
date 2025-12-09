@@ -225,7 +225,7 @@ panfrost_translate_texture_dimension(enum pipe_texture_target t)
       return MALI_TEXTURE_DIMENSION_CUBE;
 
    default:
-      unreachable("Unknown target");
+      UNREACHABLE("Unknown target");
    }
 }
 

@@ -52,7 +52,6 @@ typedef struct nir_intrinsic_instr nir_intrinsic_instr;
 typedef struct nir_load_const_instr nir_load_const_instr;
 typedef struct nir_undef_instr nir_undef_instr;
 typedef struct nir_phi_instr nir_phi_instr;
-typedef struct nir_parallel_copy_instr nir_parallel_copy_instr;
 
 typedef struct nir_xfb_info nir_xfb_info;
 typedef struct nir_tcs_info nir_tcs_info;
@@ -77,18 +76,21 @@ typedef enum {
    nir_var_mem_task_payload      = (1 << 11),
    nir_var_mem_node_payload      = (1 << 12),
    nir_var_mem_node_payload_in   = (1 << 13),
+   nir_var_mem_pixel_local_in    = (1 << 14),
+   nir_var_mem_pixel_local_out   = (1 << 15),
+   nir_var_mem_pixel_local_inout = (1 << 16),
 
-   nir_var_function_in           = (1 << 14),
-   nir_var_function_out          = (1 << 15),
-   nir_var_function_inout        = (1 << 16),
+   nir_var_function_in           = (1 << 17),
+   nir_var_function_out          = (1 << 18),
+   nir_var_function_inout        = (1 << 19),
 
    /* Generic modes intentionally come last. See encode_dref_modes() in
     * nir_serialize.c for more details.
     */
-   nir_var_shader_temp           = (1 << 17),
-   nir_var_function_temp         = (1 << 18),
-   nir_var_mem_shared            = (1 << 19),
-   nir_var_mem_global            = (1 << 20),
+   nir_var_shader_temp           = (1 << 20),
+   nir_var_function_temp         = (1 << 21),
+   nir_var_mem_shared            = (1 << 22),
+   nir_var_mem_global            = (1 << 23),
 
    nir_var_mem_generic           = (nir_var_shader_temp |
                                     nir_var_function_temp |
@@ -106,7 +108,13 @@ typedef enum {
                                  nir_var_mem_shared | nir_var_mem_global |
                                  nir_var_mem_push_const | nir_var_mem_task_payload |
                                  nir_var_shader_out | nir_var_system_value,
-   nir_num_variable_modes        = 21,
+
+   /* modes that can serve as fragment shader outputs */
+   nir_var_any_pixel_local   = nir_var_mem_pixel_local_in |
+                               nir_var_mem_pixel_local_out |
+                               nir_var_mem_pixel_local_inout,
+
+   nir_num_variable_modes        = 24,
    nir_var_all                   = (1 << nir_num_variable_modes) - 1,
 } nir_variable_mode;
 MESA_DEFINE_CPP_ENUM_BITFIELD_OPERATORS(nir_variable_mode)

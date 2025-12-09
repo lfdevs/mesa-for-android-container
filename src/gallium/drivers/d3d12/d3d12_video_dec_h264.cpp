@@ -23,7 +23,7 @@
 
 #include "d3d12_video_dec.h"
 #include "d3d12_video_dec_h264.h"
-#include "vl/vl_zscan.h"
+#include "util/vl_zscan_data.h"
 
 #include <cmath>
 
@@ -174,7 +174,7 @@ d3d12_video_decoder_prepare_dxva_slices_control_h264(struct d3d12_video_decoder 
             break;
          default:
          {
-            unreachable("Unsupported pipe_slice_buffer_placement_type");
+            UNREACHABLE("Unsupported pipe_slice_buffer_placement_type");
          } break;
       }
 

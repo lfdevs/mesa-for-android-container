@@ -215,6 +215,7 @@ class Value(object):
       ${'true' if val.nnan else 'false'},
       ${'true' if val.ninf else 'false'},
       ${'true' if val.contract else 'false'},
+      ${'true' if len(val.sources) > 1 and isinstance(val.sources[1], Constant) else 'false'},
       ${val.swizzle},
       ${val.c_opcode()},
       ${val.comm_expr_idx}, ${val.comm_exprs},

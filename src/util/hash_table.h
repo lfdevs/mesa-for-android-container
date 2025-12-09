@@ -44,6 +44,7 @@ struct hash_entry {
 };
 
 struct hash_table {
+   void *mem_ctx;
    struct hash_entry *table;
    uint32_t (*key_hash_function)(const void *key);
    bool (*key_equals_function)(const void *a, const void *b);
@@ -56,6 +57,15 @@ struct hash_table {
    uint32_t size_index;
    uint32_t entries;
    uint32_t deleted_entries;
+
+   /* "table" points to here at first. A bigger storage is allocated separately
+    * when a bigger size is needed.
+    */
+   struct hash_entry _initial_storage[19]; /* hash_sizes[0].size */
+
+   /* Don't insert any new fields here. All other fields must be before
+    * _initial_storage.
+    */
 };
 
 struct hash_table *
@@ -64,15 +74,25 @@ _mesa_hash_table_create(void *mem_ctx,
                         bool (*key_equals_function)(const void *a,
                                                     const void *b));
 
-bool
+void
 _mesa_hash_table_init(struct hash_table *ht,
                       void *mem_ctx,
                       uint32_t (*key_hash_function)(const void *key),
                       bool (*key_equals_function)(const void *a,
                                                   const void *b));
 
+void
+_mesa_hash_table_fini(struct hash_table *ht,
+                      void (*delete_function)(struct hash_entry *entry));
+
 struct hash_table *
 _mesa_hash_table_create_u32_keys(void *mem_ctx);
+
+void
+_mesa_hash_table_init_u32_keys(struct hash_table *ht, void *mem_ctx);
+
+bool _mesa_hash_table_copy(struct hash_table *dst, struct hash_table *src,
+                      void *dst_mem_ctx);
 
 struct hash_table *
 _mesa_hash_table_clone(struct hash_table *src, void *dst_mem_ctx);
@@ -132,12 +152,14 @@ bool _mesa_key_pointer_equal(const void *a, const void *b);
 struct hash_table *
 _mesa_pointer_hash_table_create(void *mem_ctx);
 
-static inline struct hash_table *
-_mesa_string_hash_table_create(void *mem_ctx)
-{
-   return _mesa_hash_table_create(mem_ctx, _mesa_hash_string,
-                                  _mesa_key_string_equal);
-}
+void
+_mesa_pointer_hash_table_init(struct hash_table *ht, void *mem_ctx);
+
+struct hash_table *
+_mesa_string_hash_table_create(void *mem_ctx);
+
+void
+_mesa_string_hash_table_init(struct hash_table *ht, void *mem_ctx);
 
 bool
 _mesa_hash_table_reserve(struct hash_table *ht, unsigned size);
@@ -186,16 +208,21 @@ hash_table_call_foreach(struct hash_table *ht,
       return memcmp(a, b, sizeof(struct T)) == 0;                              \
    }                                                                           \
                                                                                \
-   static struct hash_table *T##_table_create(void *memctx)                    \
+   static UNUSED inline struct hash_table *T##_table_create(void *memctx)      \
    {                                                                           \
       return _mesa_hash_table_create(memctx, T##_hash, T##_equal);             \
-   }
+   }                                                                           \
+                                                                               \
+   static UNUSED inline void T##_table_init(struct hash_table *ht, void *memctx) \
+   {                                                                           \
+      _mesa_hash_table_init(ht, memctx, T##_hash, T##_equal);                  \
+   }                                                                           \
 
 /**
  * Hash table wrapper which supports 64-bit keys.
  */
 struct hash_table_u64 {
-   struct hash_table *table;
+   struct hash_table table;
    void *freed_key_data;
    void *deleted_key_data;
 };
@@ -238,7 +265,7 @@ static inline uint32_t
 _mesa_hash_table_u64_num_entries(struct hash_table_u64 *ht)
 {
    return (!!ht->freed_key_data) + (!!ht->deleted_key_data) +
-          _mesa_hash_table_num_entries(ht->table);
+          _mesa_hash_table_num_entries(&ht->table);
 }
 
 /**

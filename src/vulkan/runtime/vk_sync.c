@@ -33,6 +33,10 @@
 #include "vk_alloc.h"
 #include "vk_device.h"
 #include "vk_log.h"
+#include "vk_physical_device.h"
+#include "vk_sync_binary.h"
+#include "vk_sync_dummy.h"
+#include "vk_sync_timeline.h"
 
 static void
 vk_sync_type_validate(const struct vk_sync_type *type)
@@ -139,10 +143,8 @@ vk_sync_destroy(struct vk_device *device,
    vk_free(&device->alloc, sync);
 }
 
-VkResult
-vk_sync_signal(struct vk_device *device,
-               struct vk_sync *sync,
-               uint64_t value)
+static void
+assert_signal_valid(struct vk_sync *sync, uint64_t value)
 {
    assert(sync->type->features & VK_SYNC_FEATURE_CPU_SIGNAL);
 
@@ -150,8 +152,62 @@ vk_sync_signal(struct vk_device *device,
       assert(value > 0);
    else
       assert(value == 0);
+}
 
+VkResult
+vk_sync_signal(struct vk_device *device,
+               struct vk_sync *sync,
+               uint64_t value)
+{
+   assert_signal_valid(sync, value);
    return sync->type->signal(device, sync, value);
+}
+
+static bool
+can_signal_many(struct vk_device *device,
+                uint32_t signal_count,
+                const struct vk_sync_signal *signals)
+{
+   if (signals[0].sync->type->signal_many == NULL)
+      return false;
+
+   /* If we only have one sync type, there's no need to check everything */
+   if (device->physical->supported_sync_types[1] == NULL) {
+      assert(signals[0].sync->type == device->physical->supported_sync_types[0]);
+      return true;
+   }
+
+   for (uint32_t i = 1; i < signal_count; i++) {
+      if (signals[i].sync->type != signals[0].sync->type)
+         return false;
+   }
+
+   return true;
+}
+
+VkResult
+vk_sync_signal_many(struct vk_device *device,
+                    uint32_t signal_count,
+                    const struct vk_sync_signal *signals)
+{
+   if (signal_count == 0)
+      return VK_SUCCESS;
+
+   for (uint32_t i = 0; i < signal_count; i++)
+      assert_signal_valid(signals[i].sync, signals[i].signal_value);
+
+   if (can_signal_many(device, signal_count, signals))
+      return signals[0].sync->type->signal_many(device, signal_count, signals);
+
+   for (uint32_t i = 0; i < signal_count; i++) {
+      struct vk_sync *sync = signals[i].sync;
+      uint64_t value = signals[i].signal_value;
+      VkResult result = sync->type->signal(device, sync, value);
+      if (unlikely(result != VK_SUCCESS))
+         return result;
+   }
+
+   return VK_SUCCESS;
 }
 
 VkResult
@@ -163,13 +219,63 @@ vk_sync_get_value(struct vk_device *device,
    return sync->type->get_value(device, sync, value);
 }
 
+static void
+assert_reset_valid(struct vk_sync *sync)
+{
+   assert(sync->type->features & VK_SYNC_FEATURE_CPU_RESET);
+   assert(!(sync->flags & VK_SYNC_IS_TIMELINE));
+}
+
 VkResult
 vk_sync_reset(struct vk_device *device,
               struct vk_sync *sync)
 {
-   assert(sync->type->features & VK_SYNC_FEATURE_CPU_RESET);
-   assert(!(sync->flags & VK_SYNC_IS_TIMELINE));
+   assert_reset_valid(sync);
    return sync->type->reset(device, sync);
+}
+
+static bool
+can_reset_many(struct vk_device *device,
+               uint32_t sync_count,
+               struct vk_sync *const *syncs)
+{
+   if (syncs[0]->type->reset_many == NULL)
+      return false;
+
+   if (device->physical->supported_sync_types[1] == NULL) {
+      assert(syncs[0]->type == device->physical->supported_sync_types[0]);
+      return true;
+   }
+
+   for (uint32_t i = 1; i < sync_count; i++) {
+      if (syncs[i]->type != syncs[0]->type)
+         return false;
+   }
+
+   return true;
+}
+
+VkResult
+vk_sync_reset_many(struct vk_device *device,
+                   uint32_t sync_count,
+                   struct vk_sync *const *syncs)
+{
+   if (sync_count == 0)
+      return VK_SUCCESS;
+
+   for (uint32_t i = 0; i < sync_count; i++)
+      assert_reset_valid(syncs[i]);
+
+   if (can_reset_many(device, sync_count, syncs))
+      return syncs[0]->type->reset_many(device, sync_count, syncs);
+
+   for (uint32_t i = 0; i < sync_count; i++) {
+      VkResult result = syncs[i]->type->reset(device, syncs[i]);
+      if (unlikely(result != VK_SUCCESS))
+         return result;
+   }
+
+   return VK_SUCCESS;
 }
 
 VkResult vk_sync_move(struct vk_device *device,
@@ -258,7 +364,8 @@ vk_sync_wait(struct vk_device *device,
 }
 
 static bool
-can_wait_many(uint32_t wait_count,
+can_wait_many(struct vk_device *device,
+              uint32_t wait_count,
               const struct vk_sync_wait *waits,
               enum vk_sync_wait_flags wait_flags)
 {
@@ -268,6 +375,12 @@ can_wait_many(uint32_t wait_count,
    if ((wait_flags & VK_SYNC_WAIT_ANY) &&
        !(waits[0].sync->type->features & VK_SYNC_FEATURE_WAIT_ANY))
       return false;
+
+   /* If we only have one sync type, there's no need to check everything */
+   if (device->physical->supported_sync_types[1] == NULL) {
+      assert(waits[0].sync->type == device->physical->supported_sync_types[0]);
+      return true;
+   }
 
    for (uint32_t i = 0; i < wait_count; i++) {
       assert_valid_wait(waits[i].sync, waits[i].wait_value, wait_flags);
@@ -293,7 +406,7 @@ __vk_sync_wait_many(struct vk_device *device,
                             wait_flags & ~VK_SYNC_WAIT_ANY, abs_timeout_ns);
    }
 
-   if (can_wait_many(wait_count, waits, wait_flags)) {
+   if (can_wait_many(device, wait_count, waits, wait_flags)) {
       return waits[0].sync->type->wait_many(device, wait_count, waits,
                                             wait_flags, abs_timeout_ns);
    } else if (wait_flags & VK_SYNC_WAIT_ANY) {
@@ -443,4 +556,117 @@ vk_sync_set_win32_export_params(struct vk_device *device,
    assert(sync->flags & VK_SYNC_IS_SHARED);
 
    return sync->type->set_win32_export_params(device, sync, security_attributes, access, name);
+}
+
+/**
+ * Unwraps a vk_sync_wait, removing any vk_sync_timeline or vk_sync_binary
+ * and replacing the sync with the actual driver primitive.
+ *
+ * After this is returns, wait->sync may be NULL, indicating no actual wait
+ * is needed and this wait can be discarded.
+ *
+ * If the sync is a timeline, the point will be returned in point_out.
+ * Otherwise point_out will be set to NULL.
+ */
+VkResult
+vk_sync_wait_unwrap(struct vk_device *device,
+                    struct vk_sync_wait *wait,
+                    struct vk_sync_timeline_point **point_out)
+{
+   *point_out = NULL;
+
+   if (wait->sync->flags & VK_SYNC_IS_TIMELINE) {
+      if (wait->wait_value == 0) {
+         *wait = (struct vk_sync_wait) { .sync = NULL };
+         return VK_SUCCESS;
+      }
+   } else {
+      assert(wait->wait_value == 0);
+   }
+
+   struct vk_sync_timeline *timeline = vk_sync_as_timeline(wait->sync);
+   if (timeline) {
+      assert(device->timeline_mode == VK_DEVICE_TIMELINE_MODE_EMULATED);
+      VkResult result = vk_sync_timeline_get_point(device, timeline,
+                                                   wait->wait_value,
+                                                   point_out);
+      if (unlikely(result != VK_SUCCESS)) {
+         /* vk_sync_timeline_get_point() returns VK_NOT_READY if no time
+          * point can be found.  Turn that into an actual error.
+          */
+         return vk_errorf(device, VK_ERROR_UNKNOWN,
+                          "Time point >= %"PRIu64" not found",
+                          wait->wait_value);
+      }
+
+      /* This can happen if the point is long past */
+      if (*point_out == NULL) {
+         *wait = (struct vk_sync_wait) { .sync = NULL };
+         return VK_SUCCESS;
+      }
+
+      wait->sync = &(*point_out)->sync;
+      wait->wait_value = 0;
+   }
+
+   struct vk_sync_binary *binary = vk_sync_as_binary(wait->sync);
+   if (binary) {
+      wait->sync = &binary->timeline;
+      wait->wait_value = binary->next_point;
+   }
+
+   if (vk_sync_type_is_dummy(wait->sync->type)) {
+      if (*point_out != NULL) {
+         vk_sync_timeline_point_unref(device, *point_out);
+         *point_out = NULL;
+      }
+      *wait = (struct vk_sync_wait) { .sync = NULL };
+      return VK_SUCCESS;
+   }
+
+   return VK_SUCCESS;
+}
+
+/**
+ * Unwraps a vk_sync_signal, removing any vk_sync_timeline or vk_sync_binary
+ * and replacing the sync with the actual driver primitive.
+ *
+ * If the sync is a timeline, the point will be returned in point_out.  This
+ * point must be installed in the timeline after the actual signal has been
+ * submitted to the kernel driver.  Otherwise point_out will be set to NULL.
+ */
+VkResult
+vk_sync_signal_unwrap(struct vk_device *device,
+                      struct vk_sync_signal *signal,
+                      struct vk_sync_timeline_point **point_out)
+{
+   if (signal->sync->flags & VK_SYNC_IS_TIMELINE)
+      assert(signal->signal_value > 0);
+   else
+      assert(signal->signal_value == 0);
+
+   *point_out = NULL;
+
+   struct vk_sync_timeline *timeline = vk_sync_as_timeline(signal->sync);
+   if (timeline) {
+      assert(device->timeline_mode == VK_DEVICE_TIMELINE_MODE_EMULATED);
+      VkResult result = vk_sync_timeline_alloc_point(device, timeline,
+                                                     signal->signal_value,
+                                                     point_out);
+      if (unlikely(result != VK_SUCCESS))
+         return result;
+
+      signal->sync = &(*point_out)->sync;
+      signal->signal_value = 0;
+   }
+
+   struct vk_sync_binary *binary = vk_sync_as_binary(signal->sync);
+   if (binary) {
+      signal->sync = &binary->timeline;
+      signal->signal_value = ++binary->next_point;
+   }
+
+   assert(!vk_sync_type_is_dummy(signal->sync->type));
+
+   return VK_SUCCESS;
 }

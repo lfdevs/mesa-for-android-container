@@ -105,10 +105,6 @@ glslparsertest@glsl2@gst-gl-text-download-i420-yv12.frag,Fail
 shaders@glsl-arb-fragment-coord-conventions,Fail
 shaders@glsl-max-vertex-attrib,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
-spec@!opengl 1.0@gl-1.0-edgeflag,Fail
-spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
-spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
-spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-scissor-offscreen,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
 spec@!opengl 1.1@clipflat,Fail
@@ -764,7 +760,13 @@ spec@arb_clear_texture@arb_clear_texture-3d,Fail
 spec@arb_clear_texture@arb_clear_texture-sized-formats,Fail
 spec@glsl-1.10@execution@glsl-fs-inline-explosion,Crash
 spec@glsl-1.10@execution@glsl-vs-inline-explosion,Crash
-spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
+
+# A sub-case involving polygon stipple fails because driver doesn't implement
+# stipple
+spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
+
+# Bisected to b3133e250e1 ("gallium: add pipe_context::resource_release to eliminate buffer refcounting")
+spec@!opengl 1.1@longprim,Crash
 
 # fails on arm64, passes on armhf
 spec@arb_depth_buffer_float@depthstencil-render-miplevels 1024 s=z24_s8_d=z32f,Fail
@@ -901,8 +903,6 @@ spec@!opengl 1.4@tex-miplevel-selection-lod,Fail
 spec@!opengl 1.4@tex-miplevel-selection-lod-bias,Fail
 spec@!opengl 1.5@depth-tex-compare,Fail
 spec@!opengl 2.0@attrib-assignments,Fail
-spec@!opengl 2.0@gl-2.0-edgeflag,Fail
-spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 spec@arb_depth_texture@depth-level-clamp,Fail
 spec@arb_depth_texture@texwrap formats,Fail
 spec@arb_depth_texture@texwrap formats@GL_DEPTH_COMPONENT16,Fail
@@ -975,6 +975,13 @@ spec@ext_direct_state_access@textures@TextureSubImage2DEXT + display list GL_COM
 spec@ext_direct_state_access@textures@TextureSubImage2DEXT + display list GL_COMPILE_AND_EXECUTE,Fail
 spec@ext_direct_state_access@textures@TextureSubImage2DEXT,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
+
+# Driver is not handling VERT_{ATTRIB,BIT}_EDFLAG at all
+spec@!opengl 1.0@gl-1.0-edgeflag,Fail
+spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
+spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
+spec@!opengl 2.0@gl-2.0-edgeflag,Fail
+spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 
 # Remaining crashes are CMA allocation failures.
 spec@ext_framebuffer_multisample@blit-mismatched-formats,Fail
@@ -1195,9 +1202,6 @@ spec@ext_framebuffer_multisample@unaligned-blit 4 stencil msaa,Fail
 # https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/817
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 
-# Bisected to 35ae5dce39c ("mesa: don't pass Infs to the shader via gl_Fog.scale")
-spec@glsl-1.10@execution@glsl-1.10-built-in-uniform-state,Fail
-
 # Couldn't reproduce locally
 spec@oes_packed_depth_stencil@depth_stencil texture gles2,Fail
 
@@ -1229,12 +1233,15 @@ asan-dEQP-GLES2.functional.uniform_api.random.79,Fail
 
 # Already known failures
 ubsan-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component16,Fail
+ubsan-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component24,Fail
 ubsan-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail
 ubsan-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
 ubsan-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
 ubsan-dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_masked,Fail
 ubsan-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_mirror_rgba8888,Fail
+ubsan-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_repeat_rgba8888,Fail
 ubsan-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_nearest_linear_mirror_rgba8888,Fail
+ubsan-dEQP-GLES2.functional.texture.mipmap.2d.basic.linear_linear_clamp_non_square,Fail
 ubsan-dEQP-GLES2.functional.texture.mipmap.2d.basic.linear_linear_mirror_non_square,Fail
 ubsan-dEQP-GLES2.functional.texture.mipmap.2d.basic.linear_linear_repeat_non_square,Fail
 ubsan-dEQP-GLES2.functional.texture.mipmap.2d.basic.nearest_linear_clamp_non_square,Fail
@@ -1403,3 +1410,5 @@ gles_wacky_yuv_formats,Fail
 gles_wacky_yuv_formats_cs,Fail
 gles_xfermodes2,Fail
 gles_xfermodes3,Fail
+spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-04,Fail
+spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-05,Fail

@@ -39,12 +39,12 @@
 #include <pthread.h>
 #include "drm-uapi/i915_drm.h"
 
+#include "util/cache_ops.h"
 #include "util/hash_table.h"
 #include "util/u_math.h"
 
 #define MESA_LOG_TAG "INTEL-SANITIZE-GPU"
 #include "util/log.h"
-#include "common/intel_mem.h"
 
 static int (*libc_open)(const char *pathname, int flags, mode_t mode);
 static int (*libc_close)(int fd);
@@ -191,7 +191,7 @@ padding_is_good(int fd, uint32_t handle)
     * if the bo is not cache coherent we likely need to
     * invalidate the cache lines to get it.
     */
-   intel_invalidate_range(mapped, PADDING_SIZE);
+   util_flush_inval_range(mapped, PADDING_SIZE);
 #endif
 
    expected_value = handle & 0xFF;

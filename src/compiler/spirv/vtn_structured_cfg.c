@@ -92,7 +92,7 @@ vtn_construct_type_to_string(enum vtn_construct_type t)
    CASE(case);
    }
 #undef CASE
-   unreachable("invalid construct type");
+   UNREACHABLE("invalid construct type");
    return "";
 }
 
@@ -196,7 +196,7 @@ vtn_branch_type_to_string(enum vtn_branch_type t)
    CASE(return);
    }
 #undef CASE
-   unreachable("unknown branch type");
+   UNREACHABLE("unknown branch type");
    return "";
 }
 
@@ -393,7 +393,7 @@ structured_post_order_traversal(struct vtn_builder *b, struct vtn_block *block)
       break;
 
    default:
-      unreachable("invalid branch opcode");
+      UNREACHABLE("invalid branch opcode");
    }
 
    b->func->ordered_blocks[b->func->ordered_blocks_count++] = block;
@@ -504,7 +504,7 @@ pop_construct(struct vtn_construct_stack *stack)
 static inline void
 push_construct(struct vtn_construct_stack *stack, struct vtn_construct *c)
 {
-   util_dynarray_append(&stack->data, struct vtn_construct *, c);
+   util_dynarray_append(&stack->data, c);
 }
 
 static int
@@ -749,7 +749,7 @@ create_constructs(struct vtn_builder *b)
          }
 
          default:
-            unreachable("invalid merge opcode");
+            UNREACHABLE("invalid merge opcode");
          }
       }
 
@@ -991,7 +991,7 @@ branch_type_for_terminator(struct vtn_builder *b, struct vtn_block *block)
    case SpvOpUnreachable:
       return vtn_branch_type_return;
    default:
-      unreachable("unexpected terminator operation");
+      UNREACHABLE("unexpected terminator operation");
       return vtn_branch_type_none;
    }
 }
@@ -1652,7 +1652,7 @@ vtn_emit_cf_func_structured(struct vtn_builder *b, struct vtn_function *func,
 
          switch (next->type) {
          case vtn_construct_type_function:
-            unreachable("should've already entered function construct");
+            UNREACHABLE("should've already entered function construct");
             break;
 
          case vtn_construct_type_selection: {

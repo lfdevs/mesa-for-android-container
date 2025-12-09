@@ -69,7 +69,7 @@ pass(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
       frag_z = nir_bcsel(b, cond, adjusted_frag_z, frag_z);
 
       nir_def *new_dest = nir_vector_insert_imm(b, &intrin->def, frag_z, 2);
-      nir_def_rewrite_uses_after(&intrin->def, new_dest, new_dest->parent_instr);
+      nir_def_rewrite_uses_after(&intrin->def, new_dest);
       return true;
    }
    case nir_intrinsic_load_barycentric_at_sample: {

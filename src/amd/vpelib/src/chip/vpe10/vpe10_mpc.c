@@ -67,7 +67,7 @@ void vpe10_construct_mpc(struct vpe_priv *vpe_priv, struct mpc *mpc)
 
 void vpe10_mpc_program_mpcc_mux(struct mpc *mpc, enum mpc_mpccid mpcc_idx,
     enum mpc_mux_topsel topsel, enum mpc_mux_botsel botsel, enum mpc_mux_outmux outmux,
-    enum mpc_mux_oppid oppid)
+    enum mpc_mux_oppid oppid, enum mpcc_blend_mode blend_mode)
 {
     PROGRAM_ENTRY();
 
@@ -77,21 +77,7 @@ void vpe10_mpc_program_mpcc_mux(struct mpc *mpc, enum mpc_mpccid mpcc_idx,
     REG_SET(VPMPCC_BOT_SEL, 0, VPMPCC_BOT_SEL, botsel);
     REG_SET(VPMPC_OUT_MUX, 0, VPMPC_OUT_MUX, outmux);
     REG_SET(VPMPCC_VPOPP_ID, 0, VPMPCC_VPOPP_ID, oppid);
-
-    /* program mux and MPCC_MODE */
-    if (mpc->vpe_priv->init.debug.mpc_bypass) {
-        REG_UPDATE(VPMPCC_CONTROL, VPMPCC_MODE, MPCC_BLEND_MODE_BYPASS);
-    } else if (botsel != MPC_MUX_BOTSEL_DISABLE) {
-        // ERROR: Actually VPE10 only supports 1 MPCC so botsel should always disable
-        VPE_ASSERT(0);
-        REG_UPDATE(VPMPCC_CONTROL, VPMPCC_MODE, MPCC_BLEND_MODE_TOP_BOT_BLENDING);
-    } else {
-        // single layer, use Top layer bleneded with background color
-        if (topsel != MPC_MUX_TOPSEL_DISABLE)
-            REG_UPDATE(VPMPCC_CONTROL, VPMPCC_MODE, MPCC_BLEND_MODE_TOP_LAYER_ONLY);
-        else // both layer disabled, pure bypass mode
-            REG_UPDATE(VPMPCC_CONTROL, VPMPCC_MODE, MPCC_BLEND_MODE_BYPASS);
-    }
+    REG_UPDATE(VPMPCC_CONTROL, VPMPCC_MODE, blend_mode);
 }
 
 void vpe10_mpc_program_mpcc_blending(
@@ -926,8 +912,9 @@ bool vpe10_mpc_program_3dlut_indirect(struct mpc *mpc,
     uint64_t                     lut3_gpuva;
     uint32_t                     lut_size0;
     uint32_t                     lut_size;
-    struct tetrahedral_17x17x17 *tetra17 = NULL;
-    struct tetrahedral_9x9x9    *tetra9  = NULL;
+    // see struct tetrahedral_17x17x17 / tetrahedral_9x9x9 definition
+    const uint32_t tetra17_lut_size = 1228;
+    const uint32_t tetra9_lut_size  = 182;
 
     // make sure it is in DIRECT type
     config_writer_set_type(config_writer, CONFIG_TYPE_DIRECT, mpc->inst);
@@ -949,15 +936,15 @@ bool vpe10_mpc_program_3dlut_indirect(struct mpc *mpc,
         lut1_gpuva = lut0_3_buf->gpu_va + (uint64_t)(offsetof(struct tetrahedral_17x17x17, lut1));
         lut2_gpuva = lut0_3_buf->gpu_va + (uint64_t)(offsetof(struct tetrahedral_17x17x17, lut2));
         lut3_gpuva = lut0_3_buf->gpu_va + (uint64_t)(offsetof(struct tetrahedral_17x17x17, lut3));
-        lut_size0  = sizeof(tetra17->lut0) / sizeof(tetra17->lut0[0]);
-        lut_size   = sizeof(tetra17->lut1) / sizeof(tetra17->lut1[0]);
+        lut_size0  = tetra17_lut_size + 1; // lut0 has an extra element (vertex (0,0,0))
+        lut_size   = tetra17_lut_size;
     } else {
         lut0_gpuva = lut0_3_buf->gpu_va;
         lut1_gpuva = lut0_3_buf->gpu_va + (uint64_t)(offsetof(struct tetrahedral_9x9x9, lut1));
         lut2_gpuva = lut0_3_buf->gpu_va + (uint64_t)(offsetof(struct tetrahedral_9x9x9, lut2));
         lut3_gpuva = lut0_3_buf->gpu_va + (uint64_t)(offsetof(struct tetrahedral_9x9x9, lut3));
-        lut_size0  = sizeof(tetra9->lut0) / sizeof(tetra9->lut0[0]);
-        lut_size   = sizeof(tetra9->lut1) / sizeof(tetra9->lut1[0]);
+        lut_size0  = tetra9_lut_size + 1; // lut0 has an extra element (vertex (0,0,0))
+        lut_size   = tetra9_lut_size;
     }
 
     vpe10_mpc_select_3dlut_ram(mpc, mode, is_12bits_color_channel);

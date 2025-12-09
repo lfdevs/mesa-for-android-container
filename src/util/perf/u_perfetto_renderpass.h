@@ -23,7 +23,11 @@
 
 #include "vulkan/runtime/vk_object.h"
 
-#include "perfetto.h"
+#ifndef ANDROID_LIBPERFETTO
+#include <perfetto.h>
+#else
+#include <perfetto/tracing.h>
+#endif
 
 #include "util/hash_table.h"
 #include "util/perf/u_trace.h"
@@ -118,12 +122,12 @@ class MesaRenderpassDataSource
    static void EmitClockSync(TraceContext &ctx,
                              uint64_t cpu_ts,
                              uint64_t gpu_ts,
+                             uint32_t cpu_clock_id,
                              uint32_t gpu_clock_id)
    {
       auto packet = ctx.NewTracePacket();
 
-      packet->set_timestamp_clock_id(
-         perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+      packet->set_timestamp_clock_id(cpu_clock_id);
       packet->set_timestamp(cpu_ts);
 
       auto event = packet->set_clock_snapshot();
@@ -131,8 +135,7 @@ class MesaRenderpassDataSource
       {
          auto clock = event->add_clocks();
 
-         clock->set_clock_id(
-            perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
+         clock->set_clock_id(cpu_clock_id);
          clock->set_timestamp(cpu_ts);
       }
 

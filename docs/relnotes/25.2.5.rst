@@ -1,0 +1,191 @@
+Mesa 25.2.5 Release Notes / 2025-10-15
+======================================
+
+Mesa 25.2.5 is a bug fix release which fixes bugs found since the 25.2.4 release.
+
+Mesa 25.2.5 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.5 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: bb6243e7a6f525febfa1e6ab50827ca4d4bfdad73812377b0ca9b6c50998b03e  mesa-25.2.5.tar.xz
+    SHA512: 29e61b5ecb467a706e3279c0e79ddd8d55109c08f7856d35c4042f518a70622fb19cdd208a82317654e0396835cb3117b756a96d9a0693bfa33730a50bbbd1d0  mesa-25.2.5.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- anv: Age of Wonders 4 corruption on a Arc b580
+- nvk commets cause  problems with kepler
+- Confidential issue #14013
+- radv: meta pipeline cache appears to be broken
+- A bunch of CTS tests are failing on Gfx12.0 trying to use the blitter with TILE_X
+- [ANV] Bunch of tests in dEQP-VK.pipeline.*.render_to_image.*3d.*2d_compatible failing on gen9/11
+- bisected build failure in clc_helpers.ccp with llvm 22
+
+
+Changes
+-------
+
+Ashley Smith (2):
+
+- panfrost,mesa: Fix versions for EXT_shader_realtime_clock
+- panfrost,mesa: Fix versions for EXT_shader_clock
+
+Benjamin Cheng (2):
+
+- vulkan/query_pool: Store video encode feedback
+- radv: Output requested encode query results only
+
+Calder Young (1):
+
+- isl: Fix noncoherent framebuffer fetch when base_level != 0
+
+Daniel Schürmann (1):
+
+- nir/divergence: don't assume that load_sample_positions_amd is always uniform
+
+Danylo Piliaiev (1):
+
+- tu: Prevent GPU hang with occlusion query + certain depth state
+
+David Rosca (2):
+
+- radeonsi/vpe: Fix transfer function mapping to vpelib
+- frontends/va: Fix parsing VP9 frame header
+
+Dmitry Baryshkov (1):
+
+- glx: provide glx.pc
+
+Eric Engestrom (4):
+
+- docs: add sha sum for 25.2.4
+- .pick_status.json: Update to 282e8285f1b0e2808dc2416f7274a85e39828cdf
+- ci-tron: bump job template commit to get cached job templates
+- .pick_status.json: Mark 6f241b7f6afefe38d4d7610cf0237c91ca3806b0 as denominated
+
+Erik Faye-Lund (1):
+
+- aux/pp: release correct sampler-views
+
+Faith Ekstrand (1):
+
+- nil: Add a GOB_TYPE_MODIFIER_INFOS table
+
+Georg Lehmann (2):
+
+- aco/optimizer: fix incorrect operand order assumption for neg(mul) opt
+- aco: fix global_atomic_swap offset overflow check
+
+Hans-Kristian Arntzen (1):
+
+- radv: Actually fail custom border color sampler creation.
+
+Iago Toral Quiroga (1):
+
+- panfrost: fix swapped stats for varing and position shaders
+
+José Roberto de Souza (3):
+
+- anv/allocator: Change some parameters and variables from 32bit to 64bits
+- anv/allocator: Don't call anv_block_pool_map() with an offset that includes start_offset
+- anv/allocator: Subtract start_offset in chunk_offset
+
+Karol Herbst (2):
+
+- libagx: fix heap argument type in libagx_draw_robust_index
+- clc: Fix createDiagnostics for LLVM-22
+
+Lionel Landwerlin (3):
+
+- vulkan/render_pass: fixup renderpasses barriers for 2D views of 3D images
+- anv: fix companion usage for emulated image
+- anv: fix query copy with shaders
+
+Lorenzo Rossi (1):
+
+- nvk: Fix QMD buffer length on upload
+
+Lucas Stach (1):
+
+- etnaviv: fix YUV tiler blits
+
+Mauro Rossi (1):
+
+- amd: require LLVM when amd-use-llvm is enabled
+
+Mike Blumenkrantz (7):
+
+- zink: stop using vk lazy allocations / transient attachments
+- zink: strip dmabuf bind flags when creating transient image
+- zink: always add mutable to transient surface creation when needed
+- zink: only add mutable bind for transient surfaces when necessary
+- zink: disable msrtss handling when blitting
+- glsl: fix gl_ViewID_OVR type to uint
+- mesa: copy NumSamples in reuse_framebuffer_texture_attachment
+
+Natalie Vock (2):
+
+- vulkan/bvh: Mark instances with NAN AABBs as inactive
+- radv/bvh: Encode empty AS bounds as NaN
+
+Olivia Lee (1):
+
+- vtn_bindgen2: use anonymous namespace to avoid name collisions
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- tc: prevent flush of incomplete batches
+
+Rob Clark (1):
+
+- freedreno: Disable explicit sync heuristic for Xwayland
+
+Sagar Ghuge (1):
+
+- Revert "intel: Always set Cube Face Enables for all surfaces."
+
+Samuel Pitoiset (5):
+
+- radv: reserve more CS space when executing DGC calls
+- radv: fix expected disk cache size for meta shaders
+- vulkan/runtime: fix memleak when creating ETC pipelines
+- radv/rt: fix memory leak in lower_rt_instructions_monolithic()
+- radv: fix shaders memleak when importing pipeline binaries with GPL
+
+Simon Perretta (1):
+
+- pvr: amend num temps calculation when wg_size is not provided
+
+Tapani Pälli (3):
+
+- intel/blorp: add restriction for gfx12
+- iris: add a check if blorp can support blitter copy
+- anv: add cs stall for any pipe control on compute
+
+TellowKrinkle (1):
+
+- hk: Enable caching on memory marked with HOST_CACHED_BIT
+
+Yiwei Zhang (2):
+
+- panvk: fix to clear FPK with incompatible blend modes
+- panvk: allow panvk_pool_alloc_mem to use full slab_size

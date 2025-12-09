@@ -130,7 +130,7 @@ d3d12_video_decoder_prepare_dxva_slices_control_hevc(struct d3d12_video_decoder 
    
    if(!picture_hevc->slice_parameter.slice_info_present)
    {
-      unreachable("Unsupported - need pipe_h265_picture_desc.slice_parameter.slice_info_present");
+      UNREACHABLE("Unsupported - need pipe_h265_picture_desc.slice_parameter.slice_info_present");
    }
 
    debug_printf("[d3d12_video_decoder_hevc] Upper layer reported %d slices for this frame, parsing them below...\n",
@@ -172,7 +172,7 @@ d3d12_video_decoder_prepare_dxva_slices_control_hevc(struct d3d12_video_decoder 
             break;
          default:
          {
-            unreachable("Unsupported pipe_slice_buffer_placement_type");
+            UNREACHABLE("Unsupported pipe_slice_buffer_placement_type");
          } break;
       }
 

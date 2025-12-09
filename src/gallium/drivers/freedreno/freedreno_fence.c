@@ -204,7 +204,7 @@ fd_create_pipe_fence_fd(struct pipe_context *pctx, struct pipe_fence_handle **pf
       break;
    }
    default:
-      unreachable("Unhandled fence type");
+      UNREACHABLE("Unhandled fence type");
    }
 }
 
@@ -316,13 +316,13 @@ fd_pipe_fence_get_fd(struct pipe_screen *pscreen, struct pipe_fence_handle *fenc
    /* We don't expect deferred flush to be combined with fence-fd: */
    assert(!fence->last_fence);
 
-   assert(fence->use_fence_fd);
 
    /* NOTE: in the deferred fence case, the pctx we want is the threaded-ctx
     * but if TC is not used, this will be null.  Which is fine, we won't call
     * threaded_context_flush() in that case
     */
    fence_flush(&fence->ctx->tc->base, fence, OS_TIMEOUT_INFINITE);
+   assert(fence->use_fence_fd);
    assert(fence->fence);
    return os_dupfd_cloexec(fence->fence->fence_fd);
 }

@@ -1,5 +1,3 @@
-# swtcl tests come first, since otherwise there are some flakes,
-# see https://gitlab.freedesktop.org/mesa/mesa/-/issues/12765
 [[deqp]]
 deqp = "/deqp-gles/modules/gles2/deqp-gles2"
 caselists = ["/deqp-gles/mustpass/gles2-main.txt"]
@@ -13,22 +11,6 @@ deqp_args = [
 version_check = "GL ES 2.0.*git"
 renderer_check = "RV370"
 extensions_check = "/install/r300-rv380-gles2-extensions.txt"
-prefix = "swtcl-"
-[deqp.env]
-RADEON_DEBUG = "notcl"
-
-[[deqp]]
-deqp = "/deqp-gles/modules/gles2/deqp-gles2"
-caselists = ["/deqp-gles/mustpass/gles2-main.txt"]
-deqp_args = [
-    "--deqp-surface-width=256",
-    "--deqp-surface-height=256",
-    "--deqp-surface-type=pbuffer",
-    "--deqp-gl-config-name=rgba8888d24s8ms0",
-    "--deqp-visibility=hidden"
-]
-version_check = "GL ES 2.0.*git"
-renderer_check = "RV370"
 
 [[deqp]]
 deqp = "/deqp-gles/external/openglcts/modules/glcts"

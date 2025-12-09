@@ -9,7 +9,7 @@
 using namespace aco;
 
 BEGIN_TEST(lower_subdword.simple_extract)
-   //>> v1: %a, v2: %b = p_startpgm
+   //>> v1: %a:v[0], v2: %b:v[1-2] = p_startpgm
    if (!setup_cs("v1 v2", GFX6))
       return;
 
@@ -38,7 +38,7 @@ BEGIN_TEST(lower_subdword.simple_extract)
 END_TEST
 
 BEGIN_TEST(lower_subdword.simple_split)
-   //>> v1: %a, v2: %b = p_startpgm
+   //>> v1: %a:v[0], v2: %b:v[1-2] = p_startpgm
    if (!setup_cs("v1 v2", GFX6))
       return;
 
@@ -70,7 +70,7 @@ BEGIN_TEST(lower_subdword.simple_split)
 END_TEST
 
 BEGIN_TEST(lower_subdword.simple_create)
-   //>> v1: %b,  v1: %w,  v1: %tb,  s1: %sd,  v1: %vd = p_startpgm
+   //>> v1: %b:v[0],  v1: %w:v[1],  v1: %tb:v[2],  s1: %sd:s[0],  v1: %vd:v[3] = p_startpgm
    if (!setup_cs("v1b v2b v3b s1 v1 ", GFX6))
       return;
 
@@ -112,7 +112,7 @@ BEGIN_TEST(lower_subdword.simple_create)
 END_TEST
 
 BEGIN_TEST(lower_subdword.create_const_undef)
-   //>> v1: %b,  v1: %w = p_startpgm
+   //>> v1: %b:v[0],  v1: %w:v[1] = p_startpgm
    if (!setup_cs("v1b v2b", GFX6))
       return;
 

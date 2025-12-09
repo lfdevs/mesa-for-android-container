@@ -170,7 +170,7 @@ check_os_altivec_support(void)
       }
    }
 #elif DETECT_OS_LINUX /* !DETECT_OS_APPLE && !DETECT_OS_NETBSD && !DETECT_OS_OPENBSD */
-   char *env_vsx = getenv("GALLIVM_VSX");
+   const char *env_vsx = os_get_option("GALLIVM_VSX");
    uint64_t hwcap = getauxval(AT_HWCAP);
    util_cpu_caps.has_altivec = (hwcap >> 28) & 1;
    if (!env_vsx || env_vsx[0] != '0')
@@ -190,13 +190,13 @@ check_os_altivec_support(void)
        * lp_build_create_jit_compiler_for_module().
        * If you want to disable Altivec code generation, the best place to do it is here.
        */
-      char *env_control = getenv("GALLIVM_ALTIVEC");    /* 1=enable (default); 0=disable */
+      const char *env_control = os_get_option("GALLIVM_ALTIVEC");    /* 1=enable (default); 0=disable */
       if (env_control && env_control[0] == '0') {
          enable_altivec = false;
       }
 #endif
       /* VSX instructions can be explicitly enabled/disabled via GALLIVM_VSX=1 or 0 */
-      char *env_vsx = getenv("GALLIVM_VSX");
+      const char *env_vsx = os_get_option("GALLIVM_VSX");
       if (env_vsx && env_vsx[0] == '0') {
          enable_vsx = false;
       }

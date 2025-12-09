@@ -112,6 +112,11 @@ visit_instr(nir_instr *instr, uint32_t *cur_modes, unsigned vis_avail_sem)
       unsigned semantics = nir_intrinsic_memory_semantics(intrin);
       nir_intrinsic_set_memory_semantics(
          intrin, semantics & ~vis_avail_sem);
+
+      if (nir_intrinsic_memory_semantics(intrin) == 0 &&
+          nir_intrinsic_execution_scope(intrin) <= SCOPE_INVOCATION)
+         nir_instr_remove(instr);
+
       return true;
    }
 
@@ -151,7 +156,7 @@ lower_make_visible(nir_cf_node *cf_node, uint32_t *cur_modes)
    switch (cf_node->type) {
    case nir_cf_node_block: {
       nir_block *block = nir_cf_node_as_block(cf_node);
-      nir_foreach_instr(instr, block)
+      nir_foreach_instr_safe(instr, block)
          progress |= visit_instr(instr, cur_modes, NIR_MEMORY_MAKE_VISIBLE);
       break;
    }
@@ -179,7 +184,7 @@ lower_make_visible(nir_cf_node *cf_node, uint32_t *cur_modes)
       break;
    }
    case nir_cf_node_function:
-      unreachable("Invalid cf type");
+      UNREACHABLE("Invalid cf type");
    }
    return progress;
 }
@@ -191,7 +196,7 @@ lower_make_available(nir_cf_node *cf_node, uint32_t *cur_modes)
    switch (cf_node->type) {
    case nir_cf_node_block: {
       nir_block *block = nir_cf_node_as_block(cf_node);
-      nir_foreach_instr_reverse(instr, block)
+      nir_foreach_instr_reverse_safe(instr, block)
          progress |= visit_instr(instr, cur_modes, NIR_MEMORY_MAKE_AVAILABLE);
       break;
    }
@@ -219,7 +224,7 @@ lower_make_available(nir_cf_node *cf_node, uint32_t *cur_modes)
       break;
    }
    case nir_cf_node_function:
-      unreachable("Invalid cf type");
+      UNREACHABLE("Invalid cf type");
    }
    return progress;
 }

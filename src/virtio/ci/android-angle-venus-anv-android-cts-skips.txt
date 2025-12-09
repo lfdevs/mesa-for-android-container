@@ -9,3 +9,7 @@ x86_64 CtsGraphicsTestCases android.graphics.cts.VulkanFeaturesTest#testVulkanAp
 
 ### no support for ABP 2021
 x86_64 CtsGraphicsTestCases android.graphics.cts.VulkanFeaturesTest#testAndroidBaselineProfile2021Support
+
+## Mainly for testing platform features. Skip as take too long.
+x86_64 CtsDeqpTestCases dEQP-VK.wsi.android.incremental_present.*
+x86_64 CtsDeqpTestCases dEQP-VK.wsi.android.shared_presentable_image.*

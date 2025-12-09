@@ -52,7 +52,7 @@ lower_wpos_center_instr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def *spos = nir_load_sample_pos_or_center(b);
    wpos = nir_fadd(b, wpos, nir_pad_vector_imm_int(b, spos, 0, 4));
 
-   nir_def_rewrite_uses_after(&intr->def, wpos, wpos->parent_instr);
+   nir_def_rewrite_uses_after(&intr->def, wpos);
    return true;
 }
 

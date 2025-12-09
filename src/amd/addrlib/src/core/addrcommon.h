@@ -37,12 +37,14 @@
 // Platform specific debug break defines
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #if DEBUG
-    #if defined(__GNUC__)
+    #if defined(_WIN32)
+        #define ADDR_DBG_BREAK()    { __debugbreak(); }
+    #elif defined(__GNUC__)
         #define ADDR_DBG_BREAK()    { raise(SIGTRAP); }
     #elif defined(__APPLE__)
         #define ADDR_DBG_BREAK()    { IOPanic("");}
     #else
-        #define ADDR_DBG_BREAK()    { __debugbreak(); }
+        #define ADDR_DBG_BREAK()
     #endif
 #else
     #define ADDR_DBG_BREAK()

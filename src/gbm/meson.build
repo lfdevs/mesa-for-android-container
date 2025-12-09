@@ -13,7 +13,7 @@ files_gbm = files(
 args_gbm = [
   '-DDEFAULT_BACKENDS_PATH="@0@"'.format(gbm_backends_path),
 ]
-incs_gbm = [include_directories('main'), inc_loader, inc_gallium]
+incs_gbm = [include_directories('main'), inc_loader, inc_gallium, inc_util]
 
 libgbm_name = 'gbm'
 

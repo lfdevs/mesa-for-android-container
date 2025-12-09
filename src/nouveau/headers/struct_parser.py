@@ -25,11 +25,16 @@ TEMPLATE_RS = Template("""\
 use std::ops::Range;
 
 % for s in structs:
+pub const ${s.name}_MAX_BIT: usize = ${s.max_bit};
     % for f in s.fields:
         % if f.stride:
 #[inline]
 pub const fn ${s.name}_${f.name}(i: usize) -> Range<usize> {
+        % if f.stride == 1:
+    (i + ${f.lo})..(i + ${f.hi + 1})
+        % else:
     (i * ${f.stride} + ${f.lo})..(i * ${f.stride} + ${f.hi + 1})
+        % endif
 }
         % else:
 pub const ${s.name}_${f.name}: Range<usize> = ${f.lo}..${f.hi + 1};
@@ -81,9 +86,11 @@ class Struct(object):
     def __init__(self, name):
         self.name = name
         self.fields = []
+        self.max_bit = 0
 
     def add_field(self, name, lo, hi, stride=0):
         self.fields.append(Field(name, lo, hi, stride))
+        self.max_bit = max(self.max_bit, hi)
 
 DRF_RE = re.compile(r'(?P<hi>[0-9]+):(?P<lo>[0-9]+)')
 FIELD_NAME_RE = re.compile(r'_?(?P<dw>[0-9]+)?_?(?P<name>.*)')

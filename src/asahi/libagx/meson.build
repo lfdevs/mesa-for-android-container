@@ -21,6 +21,7 @@ libagx_spv = custom_target(
     libagx_shader_files, '--',
     '-I' + join_paths(meson.project_source_root(), 'include'),
     '-I' + join_paths(meson.project_source_root(), 'src/compiler/libcl'),
+    '-I' + join_paths(meson.project_source_root(), 'src/poly/cl'),
     '-I' + join_paths(meson.current_source_dir(), '.'),
     '-I' + join_paths(meson.current_source_dir(), '../../'),
     '-I' + join_paths(meson.current_source_dir(), 'shaders'),

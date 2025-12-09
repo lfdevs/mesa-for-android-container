@@ -947,6 +947,32 @@ r300_set_framebuffer_state(struct pipe_context* pipe,
     util_framebuffer_init(pipe, state, r300->fb_cbufs, &r300->fb_zsbuf);
     util_copy_framebuffer_state(r300->fb_state.state, state);
 
+    /* DXTC blits require that blocks are 2x1 or 4x1 pixels, but
+     * pipe_surface_width sets the framebuffer width as if blocks were 1x1
+     * pixels. Override the width to correct that.
+     */
+    if (state->nr_cbufs == 1 && state->cbufs[0].texture &&
+        state->cbufs[0].format == PIPE_FORMAT_R8G8B8A8_UNORM &&
+        util_format_is_compressed(state->cbufs[0].texture->format)) {
+        struct pipe_framebuffer_state *fb =
+            (struct pipe_framebuffer_state*)r300->fb_state.state;
+        const struct util_format_description *desc =
+            util_format_description(state->cbufs[0].texture->format);
+        unsigned width = u_minify(state->cbufs[0].texture->width0,
+                                  state->cbufs[0].level);
+
+        assert(desc->block.width == 4 && desc->block.height == 4);
+
+        /* Each 64-bit DXT block is 2x1 pixels, and each 128-bit DXT
+         * block is 4x1 pixels when blitting.
+         */
+        width = align(width, 4); /* align to the DXT block width. */
+        if (desc->block.bits == 64)
+           width = DIV_ROUND_UP(width, 2);
+
+        fb->width = width;
+    }
+
     /* Remove trailing NULL colorbuffers. */
     while (current_state->nr_cbufs && !current_state->cbufs[current_state->nr_cbufs-1].texture)
         current_state->nr_cbufs--;
@@ -1519,7 +1545,7 @@ static void*
 }
 
 static void r300_bind_sampler_states(struct pipe_context* pipe,
-                                     enum pipe_shader_type shader,
+                                     mesa_shader_stage shader,
                                      unsigned start, unsigned count,
                                      void** states)
 {
@@ -1530,7 +1556,7 @@ static void r300_bind_sampler_states(struct pipe_context* pipe,
 
     assert(start == 0);
 
-    if (shader != PIPE_SHADER_FRAGMENT)
+    if (shader != MESA_SHADER_FRAGMENT)
        return;
 
     if (count > tex_units)
@@ -1573,7 +1599,7 @@ static uint32_t r300_assign_texture_cache_region(unsigned index, unsigned num)
 }
 
 static void r300_set_sampler_views(struct pipe_context* pipe,
-                                   enum pipe_shader_type shader,
+                                   mesa_shader_stage shader,
                                    unsigned start, unsigned count,
                                    unsigned unbind_num_trailing_slots,
                                    struct pipe_sampler_view** views)
@@ -1588,7 +1614,7 @@ static void r300_set_sampler_views(struct pipe_context* pipe,
 
     assert(start == 0);  /* non-zero not handled yet */
 
-    if (shader != PIPE_SHADER_FRAGMENT || count > tex_units) {
+    if (shader != MESA_SHADER_FRAGMENT || count > tex_units) {
        return;
     }
 
@@ -1792,14 +1818,13 @@ static void r300_set_vertex_buffers_hwtcl(struct pipe_context* pipe,
     struct r300_context* r300 = r300_context(pipe);
 
     util_set_vertex_buffers_count(r300->vertex_buffer,
-                                  &r300->nr_vertex_buffers, buffers, count,
-                                  true);
+                                  &r300->nr_vertex_buffers, buffers, count);
 
     /* There must be at least one vertex buffer set, otherwise it locks up. */
     if (!r300->nr_vertex_buffers) {
         util_set_vertex_buffers_count(r300->vertex_buffer,
                                       &r300->nr_vertex_buffers,
-                                      &r300->dummy_vb, 1, false);
+                                      &r300->dummy_vb, 1);
     }
 
     r300->vertex_arrays_dirty = true;
@@ -1813,8 +1838,7 @@ static void r300_set_vertex_buffers_swtcl(struct pipe_context* pipe,
     unsigned i;
 
     util_set_vertex_buffers_count(r300->vertex_buffer,
-                                  &r300->nr_vertex_buffers, buffers, count,
-                                  true);
+                                  &r300->nr_vertex_buffers, buffers, count);
     draw_set_vertex_buffers(r300->draw, count, buffers);
 
     if (!buffers)
@@ -2062,8 +2086,7 @@ static void r300_delete_vs_state(struct pipe_context* pipe, void* shader)
 }
 
 static void r300_set_constant_buffer(struct pipe_context *pipe,
-                                     enum pipe_shader_type shader, uint index,
-                                     bool take_ownership,
+                                     mesa_shader_stage shader, uint index,
                                      const struct pipe_constant_buffer *cb)
 {
     struct r300_context* r300 = r300_context(pipe);
@@ -2074,10 +2097,10 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
         return;
 
     switch (shader) {
-        case PIPE_SHADER_VERTEX:
+        case MESA_SHADER_VERTEX:
             cbuf = (struct r300_constant_buffer*)r300->vs_constants.state;
             break;
-        case PIPE_SHADER_FRAGMENT:
+        case MESA_SHADER_FRAGMENT:
             cbuf = (struct r300_constant_buffer*)r300->fs_constants.state;
             break;
         default:
@@ -2096,12 +2119,12 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
             return;
     }
 
-    if (shader == PIPE_SHADER_FRAGMENT ||
-        (shader == PIPE_SHADER_VERTEX && r300->screen->caps.has_tcl)) {
+    if (shader == MESA_SHADER_FRAGMENT ||
+        (shader == MESA_SHADER_VERTEX && r300->screen->caps.has_tcl)) {
         cbuf->ptr = mapped;
     }
 
-    if (shader == PIPE_SHADER_VERTEX) {
+    if (shader == MESA_SHADER_VERTEX) {
         if (r300->screen->caps.has_tcl) {
             struct r300_vertex_shader *vs = r300_vs(r300);
 
@@ -2119,10 +2142,10 @@ static void r300_set_constant_buffer(struct pipe_context *pipe,
             }
             r300_mark_atom_dirty(r300, &r300->vs_constants);
         } else if (r300->draw) {
-            draw_set_mapped_constant_buffer(r300->draw, PIPE_SHADER_VERTEX,
+            draw_set_mapped_constant_buffer(r300->draw, MESA_SHADER_VERTEX,
                 0, mapped, cb->buffer_size);
         }
-    } else if (shader == PIPE_SHADER_FRAGMENT) {
+    } else if (shader == MESA_SHADER_FRAGMENT) {
         r300_mark_atom_dirty(r300, &r300->fs_constants);
     }
 }
@@ -2178,6 +2201,7 @@ void r300_init_state_functions(struct r300_context* r300)
     r300->context.create_sampler_view = r300_create_sampler_view;
     r300->context.sampler_view_destroy = r300_sampler_view_destroy;
     r300->context.sampler_view_release = u_default_sampler_view_release;
+    r300->context.resource_release = u_default_resource_release;
 
     r300->context.set_scissor_states = r300_set_scissor_states;
 

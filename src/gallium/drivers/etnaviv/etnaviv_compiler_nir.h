@@ -205,7 +205,7 @@ real_def(nir_def *def, unsigned *swiz, unsigned *mask)
       return def;
 
    bool can_bypass_src = !nir_def_used_by_if(def);
-   nir_instr *p_instr = def->parent_instr;
+   nir_instr *p_instr = nir_def_instr(def);
 
    /* if used by a vecN, the "real" destination becomes the vecN destination
     * lower_alu guarantees that values used by a vecN are only used by that vecN
@@ -245,7 +245,7 @@ real_def(nir_def *def, unsigned *swiz, unsigned *mask)
          update_swiz_mask(alu, def, swiz, mask);
          break;
       case nir_op_mov: {
-         switch (def->parent_instr->type) {
+         switch (nir_def_instr_type(def)) {
          case nir_instr_type_alu:
          case nir_instr_type_tex:
             break;

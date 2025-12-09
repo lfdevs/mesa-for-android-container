@@ -36,7 +36,7 @@ fd2_shader_state_delete(struct pipe_context *pctx, void *hwcso)
 }
 
 static void
-emit(struct fd_ringbuffer *ring, gl_shader_stage type,
+emit(struct fd_ringbuffer *ring, mesa_shader_stage type,
      struct ir2_shader_info *info, struct util_dynarray *patches)
 {
    unsigned i;
@@ -47,9 +47,9 @@ emit(struct fd_ringbuffer *ring, gl_shader_stage type,
    OUT_RING(ring, type == MESA_SHADER_FRAGMENT);
    OUT_RING(ring, info->sizedwords);
 
-   if (patches)
-      util_dynarray_append(patches, uint32_t *,
-                           &ring->cur[info->mem_export_ptr]);
+   if (patches) {
+      util_dynarray_append(patches, &ring->cur[info->mem_export_ptr]);
+   }
 
    for (i = 0; i < info->sizedwords; i++)
       OUT_RING(ring, info->dwords[i]);
@@ -175,9 +175,9 @@ fd2_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
    /* clear/gmem2mem/mem2gmem need to be changed to remove this condition */
    if (prog != &ctx->solid_prog && prog != &ctx->blit_prog[0]) {
-      patch_fetches(ctx, vpi, ctx->vtx.vtx, &ctx->tex[PIPE_SHADER_VERTEX]);
+      patch_fetches(ctx, vpi, ctx->vtx.vtx, &ctx->tex[MESA_SHADER_VERTEX]);
       if (fp)
-         patch_fetches(ctx, fpi, NULL, &ctx->tex[PIPE_SHADER_FRAGMENT]);
+         patch_fetches(ctx, fpi, NULL, &ctx->tex[MESA_SHADER_FRAGMENT]);
    }
 
    emit(ring, MESA_SHADER_VERTEX, vpi,

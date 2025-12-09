@@ -76,10 +76,11 @@ static uint16_t vpe_get_visual_confirm_total_seg_count(
     return total_visual_confirm_segs;
 }
 
-struct vpe_color vpe_get_visual_confirm_color(enum vpe_surface_pixel_format format,
-    struct vpe_color_space cs, enum color_space output_cs, struct transfer_func *output_tf,
-    enum vpe_surface_pixel_format output_format, bool enable_3dlut)
+struct vpe_color vpe_get_visual_confirm_color(struct vpe_priv *vpe_priv,
+    enum vpe_surface_pixel_format format, struct vpe_color_space cs, enum color_space output_cs,
+    struct transfer_func *output_tf, enum vpe_surface_pixel_format output_format, bool enable_3dlut)
 {
+
     struct vpe_color visual_confirm_color;
     visual_confirm_color.is_ycbcr = false;
     visual_confirm_color.rgba.a   = 0.0;
@@ -97,7 +98,7 @@ struct vpe_color vpe_get_visual_confirm_color(enum vpe_surface_pixel_format form
         break;
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr:
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb:
-        // YUV420 10bit: yellow (SDR)
+        // YUV420 10bit: Yellow (SDR)
         switch (cs.tf) {
         case VPE_TF_G22:
         case VPE_TF_G24:
@@ -151,9 +152,9 @@ struct vpe_color vpe_get_visual_confirm_color(enum vpe_surface_pixel_format form
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F:
-        // FP16 and variants: orange
+        // FP16 and variants: Orange
         visual_confirm_color.rgba.r = 1.0;
-        visual_confirm_color.rgba.g = 0.21972f;
+        visual_confirm_color.rgba.g = 0.65f;
         visual_confirm_color.rgba.b = 0.0;
         break;
     default:
@@ -161,7 +162,7 @@ struct vpe_color vpe_get_visual_confirm_color(enum vpe_surface_pixel_format form
     }
 
     // Due to there will be regamma (ogam), need convert the bg color for visual confirm
-    vpe_bg_color_convert(
+    vpe_priv->resource.bg_color_convert(
         output_cs, output_tf, output_format, &visual_confirm_color, NULL, enable_3dlut);
 
     // Experimental: To make FP16 Linear color looks more visually ok

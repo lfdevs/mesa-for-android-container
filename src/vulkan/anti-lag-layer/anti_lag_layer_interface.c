@@ -271,6 +271,10 @@ should_enable_layer(instance_data *ctx, VkPhysicalDevice physicalDevice,
 
    /* Ensure that the underlying implementation does not expose VK_AMD_anti_lag itself. */
    ext_feature.antiLag = false;
+
+   /* Don't clobber unrelated pNext chains passed in at device creation time. */
+   ext_feature.pNext = NULL;
+
    VkPhysicalDeviceFeatures2 features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
       .pNext = &ext_feature,

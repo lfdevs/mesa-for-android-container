@@ -816,8 +816,6 @@ spec@ext_texture_srgb@fbo-fast-clear,Fail
 
 spec@ext_transform_feedback@immediate-reuse-index-buffer,Fail
 
-spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
-
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 
 spec@glsl-1.20@execution@fs-nan-builtin-max,Fail

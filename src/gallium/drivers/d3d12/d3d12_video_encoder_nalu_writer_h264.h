@@ -196,14 +196,12 @@ enum H264_SPEC_PROFILES
    H264_PROFILE_HIGH10 = 110,
 };
 
-#define MAX_COMPRESSED_PPS 256
-#define MAX_COMPRESSED_SPS 256
+#define MAX_COMPRESSED_NALU (10*1024)
 
 class d3d12_video_nalu_writer_h264
 {
  public:
-   d3d12_video_nalu_writer_h264()
-   { }
+   d3d12_video_nalu_writer_h264();
    ~d3d12_video_nalu_writer_h264()
    { }
 
@@ -260,6 +258,9 @@ class d3d12_video_nalu_writer_h264
                                 uint32_t                       iNaluIdc,
                                 uint32_t                       iNaluType,
                                 const H264_SLICE_PREFIX_SVC*   pSvcExtendedHeader = NULL);
+
+   d3d12_video_encoder_bitstream m_rbsp_buffer;
+   d3d12_video_encoder_bitstream m_nalu_buffer;
 };
 
 #endif

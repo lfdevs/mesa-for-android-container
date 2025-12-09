@@ -281,7 +281,7 @@ compute_cliprect(struct softpipe_context *sp)
 
 static void
 set_shader_sampler(struct softpipe_context *softpipe,
-                   enum pipe_shader_type shader,
+                   mesa_shader_stage shader,
                    int max_sampler)
 {
    int i;
@@ -294,7 +294,7 @@ set_shader_sampler(struct softpipe_context *softpipe,
 void
 softpipe_update_compute_samplers(struct softpipe_context *softpipe)
 {
-   set_shader_sampler(softpipe, PIPE_SHADER_COMPUTE, softpipe->cs->max_sampler);
+   set_shader_sampler(softpipe, MESA_SHADER_COMPUTE, softpipe->cs->max_sampler);
 }
 
 static void
@@ -302,12 +302,12 @@ update_tgsi_samplers( struct softpipe_context *softpipe )
 {
    unsigned i, sh;
 
-   set_shader_sampler(softpipe, PIPE_SHADER_VERTEX,
+   set_shader_sampler(softpipe, MESA_SHADER_VERTEX,
                       softpipe->vs->max_sampler);
-   set_shader_sampler(softpipe, PIPE_SHADER_FRAGMENT,
+   set_shader_sampler(softpipe, MESA_SHADER_FRAGMENT,
                       softpipe->fs_variant->info.file_max[TGSI_FILE_SAMPLER]);
    if (softpipe->gs) {
-      set_shader_sampler(softpipe, PIPE_SHADER_GEOMETRY,
+      set_shader_sampler(softpipe, MESA_SHADER_GEOMETRY,
                          softpipe->gs->max_sampler);
    }
 
@@ -345,9 +345,9 @@ update_fragment_shader(struct softpipe_context *softpipe, unsigned prim)
       softpipe->fs_variant->prepare(softpipe->fs_variant, 
                                     softpipe->fs_machine,
                                     (struct tgsi_sampler *) softpipe->
-                                    tgsi.sampler[PIPE_SHADER_FRAGMENT],
-                                    (struct tgsi_image *)softpipe->tgsi.image[PIPE_SHADER_FRAGMENT],
-                                    (struct tgsi_buffer *)softpipe->tgsi.buffer[PIPE_SHADER_FRAGMENT]);
+                                    tgsi.sampler[MESA_SHADER_FRAGMENT],
+                                    (struct tgsi_image *)softpipe->tgsi.image[MESA_SHADER_FRAGMENT],
+                                    (struct tgsi_buffer *)softpipe->tgsi.buffer[MESA_SHADER_FRAGMENT]);
    }
    else {
       softpipe->fs_variant = NULL;

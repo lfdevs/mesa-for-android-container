@@ -305,7 +305,7 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 
    glsl_type_singleton_init_or_ref();
 
-   char *nv_dbg = getenv("NOUVEAU_MESA_DEBUG");
+   const char *nv_dbg = os_get_option("NOUVEAU_MESA_DEBUG");
    if (nv_dbg)
       nouveau_mesa_debug = atoi(nv_dbg);
 

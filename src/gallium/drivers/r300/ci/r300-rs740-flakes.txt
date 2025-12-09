@@ -1,0 +1,81 @@
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.35
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.45
+dEQP-GLES2.functional.fragment_ops.random.77
+
+# Unfortunately it looks like all tex-miplevel selection
+# tests are very flaky.
+spec@arb_texture_rectangle@tex-miplevel-selection*
+spec@glsl-1.20@execution@tex-miplevel-selection*
+spec@!opengl 1.4@tex-miplevel-selection
+spec@!opengl 1.4@tex-miplevel-selection-lod
+spec@!opengl 1.4@tex-miplevel-selection-lod-bias
+spec@!opengl 2.1@pbo@test_draw_pixels
+spec@arb_draw_buffers@fbo-mrt-alphatest
+spec@arb_sampler_objects@sampler-incomplete
+spec@oes_draw_elements_base_vertex@oes_draw_elements_base_vertex-drawelements
+shaders@glsl-fs-bug25902
+shaders@glsl-lod-bias
+spec@oes_texture_float@oes_texture_float
+spec@ext_direct_state_access@textures*
+spec@!opengl 1.1@texgen
+spec@ati_fragment_shader@ati_fragment_shader-render-textargets
+spec@ati_fragment_shader@ati_fragment_shader-render-notexture
+spec@ext_texture_compression_s3tc@s3tc-errors_gles2
+fast_color_clear@fcc-front-buffer-distraction
+shaders@glsl-vs-point-size
+spec@khr_texture_compression_astc@miptree-gles hdr
+spec@khr_texture_compression_astc@miptree-gles hdr@HDR Profile
+spec@!opengl 1.2@tex3d-maxsize
+spec@ext_framebuffer_object@fbo-readpixels
+spec@!opengl 1.1@gl-1.2-texture-base-level
+spec@!opengl 1.1@gl-1.1-read-pixels-after-display-list
+
+# Uninitialized reads in FS, https://gitlab.freedesktop.org/mesa/mesa/-/issues/12047
+spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0
+spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0
+spec@glsl-1.20@execution@glsl-fs-frontfacing-not
+
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.17
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.35
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.88
+dEQP-GLES2.functional.fragment_ops.random.77
+dEQP-GLES2.functional.fragment_ops.scissor.contained_point
+shaders@glsl-fs-bug25902
+spec@!opengl 1.1@gl-1.1-read-pixels-after-display-list
+spec@!opengl 1.1@texgen
+spec@!opengl 1.5@depth-tex-compare
+spec@!opengl 2.0@incomplete-texture-glsl
+spec@!opengl 2.1@pbo@test_draw_pixels
+spec@arb_fragment_program@fp-formats
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec4
+spec@ati_fragment_shader@ati_fragment_shader-render-sources
+spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index8-drawpixels
+spec@glsl-1.20@execution@built-in-functions@vs-op-div-mat4x3-mat4x3
+spec@glsl-1.20@execution@built-in-functions@vs-op-selection-bool-mat3x2-mat3x2
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(\) 1d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(\) 1dshadow
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(\) 2d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(\) 2dshadow
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(bias\) 2d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(bias\) 2dshadow
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1dshadow
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj\(bias\) 2d_projvec4
+spec@khr_texture_compression_astc@miptree-gl srgb-sd
+spec@khr_texture_compression_astc@miptree-gl srgb-sd@sRGB skip decode
+spec@nv_primitive_restart@primitive-restart-draw-mode-line_strip
+spec@oes_texture_float@oes_texture_float
+
+spec@!opengl 1.0@gl-1.0-blend-func
+spec@!opengl 1.0@gl-1.0-drawpixels-depth-test
+spec@ext_texture_env_combine@texture-env-combine
+spec@nv_primitive_restart@primitive-restart-draw-mode-line_loop
+spec@nv_primitive_restart@primitive-restart-draw-mode-points
+spec@nv_primitive_restart@primitive-restart-draw-mode-polygon
+spec@nv_primitive_restart@primitive-restart-draw-mode-triangle_fan
+spec@nv_primitive_restart@primitive-restart-draw-mode-triangle_strip
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.17
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.20
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.63
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.64
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.86

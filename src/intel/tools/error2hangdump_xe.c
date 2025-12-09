@@ -12,6 +12,7 @@
 
 #include "error_decode_xe_lib.h"
 #include "error2hangdump_lib.h"
+#include "intel/common/intel_gem.h"
 #include "intel/dev/intel_device_info.h"
 #include "util/macros.h"
 
@@ -42,7 +43,7 @@ read_xe_data_file(FILE *dump_file, FILE *hang_dump_file, bool verbose)
 
          if (error_decode_xe_read_u64_hexacimal_parameter(line, "batch_addr[", &u64_value)) {
             batch_buffers.addrs = realloc(batch_buffers.addrs, sizeof(uint64_t) * (batch_buffers.len + 1));
-            batch_buffers.addrs[batch_buffers.len] = u64_value;
+            batch_buffers.addrs[batch_buffers.len] = intel_48b_address(u64_value);
             batch_buffers.len++;
          }
 

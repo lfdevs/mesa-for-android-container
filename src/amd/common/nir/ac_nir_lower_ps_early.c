@@ -426,8 +426,8 @@ lower_ps_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       }
 
       if (s->options->ps_iter_samples >= 2 &&
-          sample_id->parent_instr->type == nir_instr_type_intrinsic &&
-          nir_instr_as_intrinsic(sample_id->parent_instr)->intrinsic == nir_intrinsic_load_sample_id) {
+          nir_def_is_intrinsic(sample_id) &&
+          nir_def_as_intrinsic(sample_id)->intrinsic == nir_intrinsic_load_sample_id) {
          nir_def_replace(&intrin->def, nir_load_barycentric_sample(b, 32, .interp_mode = mode));
          return true;
       }

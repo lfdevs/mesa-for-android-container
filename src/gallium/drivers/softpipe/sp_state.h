@@ -171,7 +171,7 @@ softpipe_update_derived(struct softpipe_context *softpipe, unsigned prim);
 
 void
 softpipe_set_sampler_views(struct pipe_context *pipe,
-                           enum pipe_shader_type shader,
+                           mesa_shader_stage shader,
                            unsigned start,
                            unsigned num,
                            unsigned unbind_num_trailing_slots,

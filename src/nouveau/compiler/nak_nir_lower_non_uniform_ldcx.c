@@ -60,7 +60,7 @@ lower_ldcx_to_global(nir_builder *b, nir_intrinsic_instr *load,
    nir_def *val;
    nir_push_if(b, nir_ilt(b, offset, size));
    {
-      val = nir_build_load_global_constant(b,
+      val = nir_load_global_constant(b,
          load->def.num_components, load->def.bit_size,
          nir_iadd(b, addr, nir_u2u64(b, offset)),
          .align_mul = nir_intrinsic_align_mul(load),
@@ -70,6 +70,17 @@ lower_ldcx_to_global(nir_builder *b, nir_intrinsic_instr *load,
    val = nir_if_phi(b, val, zero);
 
    nir_def_replace(&load->def, val);
+}
+
+static bool
+lower_all_ldcx_to_global_intrin(nir_builder *b, nir_intrinsic_instr *load,
+                                void *data)
+{
+   if (load->intrinsic != nir_intrinsic_ldcx_nv)
+      return false;
+
+   lower_ldcx_to_global(b, load, data);
+   return true;
 }
 
 struct non_uniform_section {
@@ -112,7 +123,7 @@ add_live_handle(nir_def *handle, struct non_uniform_section *nus)
 static bool
 def_needs_hoist(nir_def *def, nir_block *target)
 {
-   return def->parent_instr->block->index > target->index;
+   return nir_def_block(def)->index > target->index;
 }
 
 static bool
@@ -121,7 +132,7 @@ can_hoist_def(nir_def *def, nir_block *target)
    if (!def_needs_hoist(def, target))
       return true;
 
-   nir_instr *instr = def->parent_instr;
+   nir_instr *instr = nir_def_instr(def);
    switch (instr->type) {
    case nir_instr_type_alu: {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
@@ -160,7 +171,7 @@ hoist_def(nir_def *def, nir_block *target)
    if (!def_needs_hoist(def, target))
       return false;
 
-   nir_instr *instr = def->parent_instr;
+   nir_instr *instr = nir_def_instr(def);
    switch (instr->type) {
    case nir_instr_type_alu: {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
@@ -184,7 +195,7 @@ hoist_def(nir_def *def, nir_block *target)
       break;
 
    default:
-      unreachable("Cannot hoist instruction");
+      UNREACHABLE("Cannot hoist instruction");
    }
 
    nir_instr_remove(instr);
@@ -206,7 +217,7 @@ try_hoist_ldcx_handles_block(nir_block *block, struct non_uniform_section *nus)
           */
          nir_alu_instr *alu = nir_instr_as_alu(instr);
          for (uint8_t i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
-            nir_instr *src_instr = alu->src[i].src.ssa->parent_instr;
+            nir_instr *src_instr = nir_def_instr(alu->src[i].src.ssa);
             if (src_instr->type != nir_instr_type_intrinsic)
                continue;
 
@@ -320,7 +331,7 @@ static bool
 try_remat_ldcx_alu_use(nir_builder *b, nir_alu_instr *alu, uint8_t src_idx,
                        struct non_uniform_section *nus)
 {
-   nir_instr *src_instr = alu->src[src_idx].src.ssa->parent_instr;
+   nir_instr *src_instr = nir_def_instr(alu->src[src_idx].src.ssa);
    if (src_instr->type != nir_instr_type_intrinsic)
       return false;
 
@@ -480,7 +491,7 @@ lower_cf_list(nir_builder *b, struct exec_list *cf_list,
       }
 
       default:
-         unreachable("Unknown CF node type");
+         UNREACHABLE("Unknown CF node type");
       }
    }
 
@@ -491,6 +502,12 @@ bool
 nak_nir_lower_non_uniform_ldcx(nir_shader *nir,
                                const struct nak_compiler *nak)
 {
+   /* If we don't have UGPRs, lower all of them. */
+   if (nak_debug_no_ugpr()) {
+      return nir_shader_intrinsics_pass(nir, lower_all_ldcx_to_global_intrin,
+                                        nir_metadata_none, (void *)nak);
+   }
+
    /* Real functions are going to make hash of this */
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    nir_builder b = nir_builder_create(impl);

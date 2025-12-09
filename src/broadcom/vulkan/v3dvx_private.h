@@ -138,8 +138,7 @@ v3dX(cmd_buffer_prepare_suspend_job_for_submit)(struct v3dv_job *job);
 
 void
 v3dX(get_hw_clear_color)(const VkClearColorValue *color,
-                         uint32_t internal_type,
-                         uint32_t internal_size,
+                         const struct v3dv_format_plane *format,
                          uint32_t *hw_color);
 
 /* Used at v3dv_device */

@@ -6,7 +6,7 @@
 
 #include "genxml/gen_macros.h"
 #include "util/macros.h"
-#include "bifrost_compile.h"
+#include "bifrost/bifrost_compile.h"
 #include "libpan_shaders.h"
 #include "panvk_device.h"
 #include "panvk_precomp_cache.h"

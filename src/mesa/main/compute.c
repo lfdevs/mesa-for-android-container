@@ -295,7 +295,9 @@ prepare_compute(struct gl_context *ctx)
    if (ctx->NewState)
       _mesa_update_state(ctx);
 
-   st_validate_state(st, ST_PIPELINE_COMPUTE_STATE_MASK);
+   ST_PIPELINE_COMPUTE_STATE_MASK(mask);
+   st_validate_state(st, mask);
+   st_context_add_work(st);
 }
 
 static ALWAYS_INLINE void

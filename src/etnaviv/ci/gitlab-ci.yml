@@ -10,7 +10,6 @@ gc2000-gles2:
     DEQP_SUITE: etnaviv-gc2000
     # Disable reporting, since DUTs don't have internet access
     FLAKES_CHANNEL: ""
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 28
   timeout: 30m
 
@@ -25,7 +24,6 @@ gc2000-gles2:
     FLAKES_CHANNEL: ""
     DEQP_FRACTION: 100
     FDO_CI_CONCURRENT: 1
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 28
   timeout: 30m
 
@@ -47,7 +45,6 @@ gc3000-gles2:
   variables:
     DEQP_SUITE: etnaviv-gc3000
     FLAKES_CHANNEL: ""
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 28
   timeout: 30m
 
@@ -57,9 +54,8 @@ gc7000-imx8mq-gles2:
     - .austriancoder-imx8mq-nitrogen:arm64
     - .etnaviv-manual-rules
   variables:
-    DEQP_SUITE: etnaviv-gc7000
+    DEQP_SUITE: etnaviv-gc7000-r6214
     FLAKES_CHANNEL: ""
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 28
   timeout: 30m
 
@@ -69,5 +65,5 @@ gc7000-imx8mp-gles2:
     - .pengutronix-imx8mp-mba8mpxl:arm64
     - .etnaviv-manual-rules
   variables:
-    DEQP_SUITE: etnaviv-gc7000
+    DEQP_SUITE: etnaviv-gc7000-r6204
   timeout: 30m

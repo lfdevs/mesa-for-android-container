@@ -117,6 +117,12 @@ target_to_index(const struct gl_query_object *q)
          return PIPE_STAT_QUERY_DS_INVOCATIONS;
       case GL_COMPUTE_SHADER_INVOCATIONS_ARB:
          return PIPE_STAT_QUERY_CS_INVOCATIONS;
+      case GL_TASK_SHADER_INVOCATIONS_EXT:
+         return PIPE_STAT_QUERY_TS_INVOCATIONS;
+      case GL_MESH_SHADER_INVOCATIONS_EXT:
+         return PIPE_STAT_QUERY_MS_INVOCATIONS;
+      case GL_MESH_PRIMITIVES_GENERATED_EXT:
+         return PIPE_STAT_QUERY_MS_PRIMITIVES;
       default:
          break;
    }
@@ -193,6 +199,9 @@ begin_query(struct gl_context *ctx, struct gl_query_object *q)
    case GL_COMPUTE_SHADER_INVOCATIONS_ARB:
    case GL_CLIPPING_INPUT_PRIMITIVES_ARB:
    case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
+   case GL_TASK_SHADER_INVOCATIONS_EXT:
+   case GL_MESH_SHADER_INVOCATIONS_EXT:
+   case GL_MESH_PRIMITIVES_GENERATED_EXT:
       type = st->has_single_pipe_stat ? PIPE_QUERY_PIPELINE_STATISTICS_SINGLE
                                       : PIPE_QUERY_PIPELINE_STATISTICS;
       break;
@@ -332,8 +341,17 @@ get_query_result(struct pipe_context *pipe,
       case GL_CLIPPING_OUTPUT_PRIMITIVES_ARB:
          q->Result = data.pipeline_statistics.c_primitives;
          break;
+      case GL_TASK_SHADER_INVOCATIONS_EXT:
+         q->Result = data.pipeline_statistics.ts_invocations;
+         break;
+      case GL_MESH_SHADER_INVOCATIONS_EXT:
+         q->Result = data.pipeline_statistics.ms_invocations;
+         break;
+      case GL_MESH_PRIMITIVES_GENERATED_EXT:
+         q->Result = data.pipeline_statistics.ms_primitives;
+         break;
       default:
-         unreachable("invalid pipeline statistics counter");
+         UNREACHABLE("invalid pipeline statistics counter");
       }
       break;
    case PIPE_QUERY_OCCLUSION_PREDICATE:
@@ -448,7 +466,7 @@ store_query_result(struct gl_context *ctx, struct gl_query_object *q,
       result_type = PIPE_QUERY_TYPE_U64;
       break;
    default:
-      unreachable("Unexpected result type");
+      UNREACHABLE("Unexpected result type");
    }
 
    if (pname == GL_QUERY_RESULT_AVAILABLE) {
@@ -559,6 +577,24 @@ get_query_binding_point(struct gl_context *ctx, GLenum target, GLuint index)
    case GL_COMPUTE_SHADER_INVOCATIONS:
       if (_mesa_has_compute_shaders(ctx))
          return get_pipe_stats_binding_point(ctx, target);
+      else
+         return NULL;
+
+   case GL_TASK_SHADER_INVOCATIONS_EXT:
+      if (_mesa_has_EXT_mesh_shader(ctx))
+         return &ctx->Query.task_shader_invocations;
+      else
+         return NULL;
+
+   case GL_MESH_SHADER_INVOCATIONS_EXT:
+      if (_mesa_has_EXT_mesh_shader(ctx))
+         return &ctx->Query.mesh_shader_invocations;
+      else
+         return NULL;
+
+   case GL_MESH_PRIMITIVES_GENERATED_EXT:
+      if (_mesa_has_EXT_mesh_shader(ctx))
+         return &ctx->Query.mesh_primitives_generated;
       else
          return NULL;
 
@@ -1072,6 +1108,15 @@ _mesa_GetQueryIndexediv(GLenum target, GLuint index, GLenum pname,
          case GL_CLIPPING_OUTPUT_PRIMITIVES:
             *params = ctx->Const.QueryCounterBits.ClOutPrimitives;
             break;
+         case GL_TASK_SHADER_INVOCATIONS_EXT:
+            *params = ctx->Const.QueryCounterBits.TsInvocations;
+            break;
+         case GL_MESH_SHADER_INVOCATIONS_EXT:
+            *params = ctx->Const.QueryCounterBits.MsInvocations;
+            break;
+         case GL_MESH_PRIMITIVES_GENERATED_EXT:
+            *params = ctx->Const.QueryCounterBits.MeshPrimitivesGenerated;
+            break;
          default:
             _mesa_problem(ctx,
                           "Unknown target in glGetQueryIndexediv(target = %s)",
@@ -1215,7 +1260,7 @@ invalid_enum:
       break;
    }
    default:
-      unreachable("unexpected ptype");
+      UNREACHABLE("unexpected ptype");
    }
 }
 
@@ -1380,6 +1425,16 @@ _mesa_init_queryobj(struct gl_context *ctx)
       ctx->Const.QueryCounterBits.ComputeInvocations = 0;
       ctx->Const.QueryCounterBits.ClInPrimitives = 0;
       ctx->Const.QueryCounterBits.ClOutPrimitives = 0;
+   }
+
+   if (screen->caps.mesh_shader && screen->caps.mesh.pipeline_statistic_queries) {
+      ctx->Const.QueryCounterBits.TsInvocations = 64;
+      ctx->Const.QueryCounterBits.MsInvocations = 64;
+      ctx->Const.QueryCounterBits.MeshPrimitivesGenerated = 64;
+   } else {
+      ctx->Const.QueryCounterBits.TsInvocations = 0;
+      ctx->Const.QueryCounterBits.MsInvocations = 0;
+      ctx->Const.QueryCounterBits.MeshPrimitivesGenerated = 0;
    }
 }
 

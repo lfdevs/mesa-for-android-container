@@ -9,7 +9,6 @@ if with_intel_vk
     command : [
       prog_python, '@INPUT@', '@OUTPUT@',
       prog_glslang,
-      '--create-entry', 'main',
       '--vn', 'float64_spv_source',
       '--glsl-version', '450',
       '-Olib',

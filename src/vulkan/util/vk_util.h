@@ -306,22 +306,15 @@ struct vk_pipeline_cache_header {
 #define VK_ENUM_OFFSET(__enum) \
    ((__enum) >= VK_EXT_OFFSET ? ((__enum) % 1000) : (__enum))
 
-#define typed_memcpy(dest, src, count) do { \
-   STATIC_ASSERT(sizeof(*(src)) == sizeof(*(dest))); \
-   if ((dest) != NULL && (src) != NULL && (count) > 0) { \
-       memcpy((dest), (src), (count) * sizeof(*(src))); \
-   } \
-} while (0)
-
-static inline gl_shader_stage
+static inline mesa_shader_stage
 vk_to_mesa_shader_stage(VkShaderStageFlagBits vk_stage)
 {
    assert(util_bitcount((uint32_t) vk_stage) == 1);
-   return (gl_shader_stage) (ffs((uint32_t) vk_stage) - 1);
+   return (mesa_shader_stage) (ffs((uint32_t) vk_stage) - 1);
 }
 
 static inline VkShaderStageFlagBits
-mesa_to_vk_shader_stage(gl_shader_stage mesa_stage)
+mesa_to_vk_shader_stage(mesa_shader_stage mesa_stage)
 {
    return (VkShaderStageFlagBits) (1 << ((uint32_t) mesa_stage));
 }
@@ -371,7 +364,7 @@ vk_index_type_to_bytes(VkIndexType type)
    case VK_INDEX_TYPE_UINT8_KHR: return 1;
    case VK_INDEX_TYPE_UINT16:    return 2;
    case VK_INDEX_TYPE_UINT32:    return 4;
-   default:                      unreachable("Invalid index type");
+   default:                      UNREACHABLE("Invalid index type");
    }
 }
 
@@ -382,7 +375,7 @@ vk_index_to_restart(VkIndexType type)
    case VK_INDEX_TYPE_UINT8_KHR: return 0xff;
    case VK_INDEX_TYPE_UINT16:    return 0xffff;
    case VK_INDEX_TYPE_UINT32:    return 0xffffffff;
-   default:                      unreachable("unexpected index type");
+   default:                      UNREACHABLE("unexpected index type");
    }
 }
 
@@ -398,6 +391,8 @@ vk_descriptor_type_is_dynamic(VkDescriptorType type)
       return false;
    }
 }
+
+enum mesa_prim vk_topology_to_mesa(VkPrimitiveTopology topology);
 
 #define VK_PRINT_STR(field, ...) do {                          \
    memset(field, 0, sizeof(field));                            \

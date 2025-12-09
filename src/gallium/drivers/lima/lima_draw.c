@@ -37,6 +37,7 @@
 #include "util/hash_table.h"
 
 #include "lima_context.h"
+#include "lima_pack.h"
 #include "lima_screen.h"
 #include "lima_resource.h"
 #include "lima_program.h"
@@ -288,7 +289,7 @@ lima_pack_vs_cmd(struct lima_context *ctx, const struct pipe_draw_info *info,
                  const struct pipe_draw_start_count_bias *draw)
 {
    struct lima_context_constant_buffer *ccb =
-      ctx->const_buffer + PIPE_SHADER_VERTEX;
+      ctx->const_buffer + MESA_SHADER_VERTEX;
    struct lima_vs_compiled_shader *vs = ctx->vs;
    struct lima_job *job = lima_job_get(ctx);
 
@@ -419,20 +420,20 @@ lima_pack_plbu_cmd(struct lima_context *ctx, const struct pipe_draw_info *info,
    PLBU_CMD_END();
 }
 
-static int
+static enum lima_blend_func
 lima_blend_func(enum pipe_blend_func pipe)
 {
    switch (pipe) {
    case PIPE_BLEND_ADD:
-      return 2;
+      return LIMA_BLEND_FUNC_ADD;
    case PIPE_BLEND_SUBTRACT:
-      return 0;
+      return LIMA_BLEND_FUNC_SUBTRACT;
    case PIPE_BLEND_REVERSE_SUBTRACT:
-      return 1;
+      return LIMA_BLEND_FUNC_REVERSE_SUBTRACT;
    case PIPE_BLEND_MIN:
-      return 4;
+      return LIMA_BLEND_FUNC_MIN;
    case PIPE_BLEND_MAX:
-      return 5;
+      return LIMA_BLEND_FUNC_MAX;
    }
    return -1;
 }
@@ -491,77 +492,84 @@ lima_blend_factor(enum pipe_blendfactor pipe)
    return -1;
 }
 
-static int
-lima_calculate_alpha_blend(enum pipe_blend_func rgb_func, enum pipe_blend_func alpha_func,
-                           enum pipe_blendfactor rgb_src_factor, enum pipe_blendfactor rgb_dst_factor,
-                           enum pipe_blendfactor alpha_src_factor, enum pipe_blendfactor alpha_dst_factor)
+static void
+lima_calculate_alpha_blend(struct LIMA_RENDER_STATE* state, struct pipe_rt_blend_state* rt)
 {
+   state->blend_func_rgb = lima_blend_func(rt->rgb_func);
+   state->blend_func_a = lima_blend_func(rt->alpha_func);
+   state->blend_factor_src_rgb = lima_blend_factor(rt->rgb_src_factor);
+   state->blend_factor_dst_rgb = lima_blend_factor(rt->rgb_dst_factor);
+   // the "cut" bit is implied to be "1" for alpha src/dst
+   state->blend_factor_src_a = lima_blend_factor(rt->alpha_src_factor) & 0xf;
+   state->blend_factor_dst_a = lima_blend_factor(rt->alpha_dst_factor) & 0xf;
+
    /* PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE has to be changed to PIPE_BLENDFACTOR_ONE
     * if it is set for alpha_src or alpha_dst.
     */
-   if (alpha_src_factor == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE)
-      alpha_src_factor = PIPE_BLENDFACTOR_ONE;
+   if (rt->alpha_src_factor == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE)
+      state->blend_factor_src_a = LIMA_BLEND_FACTOR_ALPHA_ONE;
 
-   if (alpha_dst_factor == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE)
-      alpha_dst_factor = PIPE_BLENDFACTOR_ONE;
+   if (rt->alpha_dst_factor == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE)
+      state->blend_factor_dst_a = LIMA_BLEND_FACTOR_ALPHA_ONE;
 
    /* MIN and MAX ops actually do OP(As * S + Ad * D, Ad), so
     * we need to set S to 1 and D to 0 to get correct result */
-   if (alpha_func == PIPE_BLEND_MIN ||
-       alpha_func == PIPE_BLEND_MAX) {
-      alpha_src_factor = PIPE_BLENDFACTOR_ONE;
-      alpha_dst_factor = PIPE_BLENDFACTOR_ZERO;
+   if (rt->alpha_func == PIPE_BLEND_MIN || rt->alpha_func == PIPE_BLEND_MAX) {
+      state->blend_factor_src_a = LIMA_BLEND_FACTOR_ALPHA_ONE;
+      state->blend_factor_dst_a = LIMA_BLEND_FACTOR_ALPHA_ZERO;
    }
 
    /* MIN and MAX ops actually do OP(Cs * S + Cd * D, Cd), so
     * we need to set S to 1 and D to 0 to get correct result */
-   if (rgb_func == PIPE_BLEND_MIN ||
-       rgb_func == PIPE_BLEND_MAX) {
-      rgb_src_factor = PIPE_BLENDFACTOR_ONE;
-      rgb_dst_factor = PIPE_BLENDFACTOR_ZERO;
+   if (rt->rgb_func == PIPE_BLEND_MIN || rt->rgb_func == PIPE_BLEND_MAX) {
+      state->blend_factor_src_rgb = LIMA_BLEND_FACTOR_COLOR_ONE;
+      state->blend_factor_dst_rgb = LIMA_BLEND_FACTOR_COLOR_ZERO;
    }
-
-   return lima_blend_func(rgb_func) |
-      (lima_blend_func(alpha_func) << 3) |
-      (lima_blend_factor(rgb_src_factor) << 6) |
-      (lima_blend_factor(rgb_dst_factor) << 11) |
-      /* alpha_src and alpha_dst are 4 bit, so need to mask 5th bit */
-      ((lima_blend_factor(alpha_src_factor) & 0xf) << 16) |
-      ((lima_blend_factor(alpha_dst_factor) & 0xf) << 20) |
-      0x0C000000; /* need to check if this is GLESv1 glAlphaFunc */
 }
 
-static int
+static enum lima_stencil_op
 lima_stencil_op(enum pipe_stencil_op pipe)
 {
    switch (pipe) {
    case PIPE_STENCIL_OP_KEEP:
-      return 0;
+      return LIMA_STENCIL_OP_KEEP;
    case PIPE_STENCIL_OP_ZERO:
-      return 2;
+      return LIMA_STENCIL_OP_ZERO;
    case PIPE_STENCIL_OP_REPLACE:
-      return 1;
+      return LIMA_STENCIL_OP_REPLACE;
    case PIPE_STENCIL_OP_INCR:
-      return 6;
+      return LIMA_STENCIL_OP_INCR;
    case PIPE_STENCIL_OP_DECR:
-      return 7;
+      return LIMA_STENCIL_OP_DECR;
    case PIPE_STENCIL_OP_INCR_WRAP:
-      return 4;
+      return LIMA_STENCIL_OP_INCR_WRAP;
    case PIPE_STENCIL_OP_DECR_WRAP:
-      return 5;
+      return LIMA_STENCIL_OP_DECR_WRAP;
    case PIPE_STENCIL_OP_INVERT:
-      return 3;
+      return LIMA_STENCIL_OP_INVERT;
    }
    return -1;
 }
 
-static unsigned
-lima_calculate_depth_test(struct pipe_depth_stencil_alpha_state *depth,
-                          struct pipe_rasterizer_state *rst)
+static void
+lima_calculate_stencil(struct LIMA_STENCIL* stencil, struct pipe_stencil_state* stencil_state, uint8_t ref_value)
 {
-   int offset_scale = 0, offset_units = 0;
-   enum pipe_compare_func func = (depth->depth_enabled ? depth->depth_func : PIPE_FUNC_ALWAYS);
+   stencil->compare_function = stencil_state->func;
+   stencil->stencil_fail = lima_stencil_op(stencil_state->fail_op);
+   stencil->depth_fail = lima_stencil_op(stencil_state->zfail_op);
+   stencil->depth_pass = lima_stencil_op(stencil_state->zpass_op);
+   stencil->reference_value = ref_value;
+   stencil->mask = stencil_state->valuemask;
+}
 
+static void
+lima_calculate_depth_test(struct LIMA_RENDER_STATE* state, struct pipe_depth_stencil_alpha_state* depth,
+                          struct pipe_rasterizer_state* rst)
+{
+   state->depth_test = depth->depth_enabled && depth->depth_writemask;
+   state->depth_compare_func = depth->depth_enabled ? depth->depth_func : LIMA_COMPARE_FUNC_ALWAYS;
+
+   int offset_scale = 0, offset_units = 0;
    offset_scale = CLAMP(rst->offset_scale * 4, -128, 127);
    if (offset_scale < 0)
       offset_scale += 0x100;
@@ -570,243 +578,251 @@ lima_calculate_depth_test(struct pipe_depth_stencil_alpha_state *depth,
    if (offset_units < 0)
       offset_units += 0x100;
 
-   return (depth->depth_enabled && depth->depth_writemask) |
-      ((int)func << 1) |
-      (offset_scale << 16) |
-      (offset_units << 24);
+   // FIXME: the depth calculation seems to be wrong, truncate for now
+   state->depth_offset_scale = offset_scale & 0xff;
+   state->depth_offset_units = offset_units & 0xff;
+}
+
+static enum lima_logic_op
+lima_logic_op(enum pipe_logicop pipe)
+{
+   switch (pipe) {
+   case PIPE_LOGICOP_CLEAR:
+      return LIMA_LOGIC_OP_CLEAR;
+   case PIPE_LOGICOP_NOR:
+      return LIMA_LOGIC_OP_NOR;
+   case PIPE_LOGICOP_AND_INVERTED:
+      return LIMA_LOGIC_OP_AND_INVERTED;
+   case PIPE_LOGICOP_COPY_INVERTED:
+      return LIMA_LOGIC_OP_COPY_INVERTED;
+   case PIPE_LOGICOP_AND_REVERSE:
+      return LIMA_LOGIC_OP_AND_REVERSE;
+   case PIPE_LOGICOP_INVERT:
+      return LIMA_LOGIC_OP_INVERT;
+   case PIPE_LOGICOP_XOR:
+      return LIMA_LOGIC_OP_XOR;
+   case PIPE_LOGICOP_NAND:
+      return LIMA_LOGIC_OP_NAND;
+   case PIPE_LOGICOP_AND:
+      return LIMA_LOGIC_OP_AND;
+   case PIPE_LOGICOP_EQUIV:
+      return LIMA_LOGIC_OP_EQUIV;
+   case PIPE_LOGICOP_NOOP:
+      return LIMA_LOGIC_OP_NOOP;
+   case PIPE_LOGICOP_OR_INVERTED:
+      return LIMA_LOGIC_OP_OR_INVERTED;
+   case PIPE_LOGICOP_COPY:
+      return LIMA_LOGIC_OP_COPY;
+   case PIPE_LOGICOP_OR_REVERSE:
+      return LIMA_LOGIC_OP_OR_REVERSE;
+   case PIPE_LOGICOP_OR:
+      return LIMA_LOGIC_OP_OR;
+   case PIPE_LOGICOP_SET:
+      return LIMA_LOGIC_OP_SET;
+   }
+   return -1;
 }
 
 static void
 lima_pack_render_state(struct lima_context *ctx, const struct pipe_draw_info *info)
 {
-   struct lima_fs_compiled_shader *fs = ctx->fs;
-   struct lima_render_state *render =
+   struct lima_fs_compiled_shader* fs = ctx->fs;
+   void *render =
       lima_ctx_buff_alloc(ctx, lima_ctx_buff_pp_plb_rsw,
-                          sizeof(*render));
-   bool early_z = true;
-   bool pixel_kill = true;
+                          LIMA_RENDER_STATE_LENGTH);
 
-   /* do hw support RGBA independ blend?
-    * pipe_caps.indep_blend_enable
-    *
-    * how to handle the no cbuf only zbuf case?
-    */
-   struct pipe_rt_blend_state *rt = ctx->blend->base.rt;
-   render->blend_color_bg = float_to_ubyte(ctx->blend_color.color[2]) |
-      (float_to_ubyte(ctx->blend_color.color[1]) << 16);
-   render->blend_color_ra = float_to_ubyte(ctx->blend_color.color[0]) |
-      (float_to_ubyte(ctx->blend_color.color[3]) << 16);
+   lima_pack(render, RENDER_STATE, state) {
+      state.blend_color_b = ctx->blend_color.color[2];
+      state.blend_color_g = ctx->blend_color.color[1];
+      state.blend_color_r = ctx->blend_color.color[0];
+      state.blend_color_a = ctx->blend_color.color[3];
 
-   if (rt->blend_enable) {
-      render->alpha_blend = lima_calculate_alpha_blend(rt->rgb_func, rt->alpha_func,
-         rt->rgb_src_factor, rt->rgb_dst_factor,
-         rt->alpha_src_factor, rt->alpha_dst_factor);
-   }
-   else {
-      /*
-       * Special handling for blending disabled.
-       * Binary driver is generating the same alpha_value,
-       * as when we would just enable blending, without changing/setting any blend equation/params.
-       * Normaly in this case mesa would set all rt fields (func/factor) to zero.
-       */
-      render->alpha_blend = lima_calculate_alpha_blend(PIPE_BLEND_ADD, PIPE_BLEND_ADD,
-         PIPE_BLENDFACTOR_ONE, PIPE_BLENDFACTOR_ZERO,
-         PIPE_BLENDFACTOR_ONE, PIPE_BLENDFACTOR_ZERO);
-   }
+      struct pipe_rt_blend_state* rt = ctx->blend->base.rt;
+      struct pipe_blend_state* bs = &ctx->blend->base;
 
-   render->alpha_blend |= (rt->colormask & PIPE_MASK_RGBA) << 28;
-
-   struct pipe_rasterizer_state *rst = &ctx->rasterizer->base;
-   render->depth_test = lima_calculate_depth_test(&ctx->zsa->base, rst);
-
-   if (!rst->depth_clip_near || ctx->viewport.near == 0.0f)
-      render->depth_test |= 0x10; /* don't clip depth near */
-   if (!rst->depth_clip_far || ctx->viewport.far == 1.0f)
-      render->depth_test |= 0x20; /* don't clip depth far */
-
-   if (fs->state.frag_depth_reg != -1) {
-      render->depth_test |= (fs->state.frag_depth_reg << 6);
-      /* Shader writes depth */
-      render->depth_test |= 0x801;
-   }
-
-   uint16_t far, near;
-
-   near = float_to_ushort(ctx->viewport.near);
-   far = float_to_ushort(ctx->viewport.far);
-
-   /* overlap with plbu? any place can remove one? */
-   render->depth_range = near | (far << 16);
-
-   struct pipe_stencil_state *stencil = ctx->zsa->base.stencil;
-   struct pipe_stencil_ref *ref = &ctx->stencil_ref;
-
-   if (stencil[0].enabled) { /* stencil is enabled */
-      render->stencil_front = stencil[0].func |
-         (lima_stencil_op(stencil[0].fail_op) << 3) |
-         (lima_stencil_op(stencil[0].zfail_op) << 6) |
-         (lima_stencil_op(stencil[0].zpass_op) << 9) |
-         (ref->ref_value[0] << 16) |
-         (stencil[0].valuemask << 24);
-      render->stencil_back = render->stencil_front;
-      render->stencil_test = (stencil[0].writemask & 0xff) | (stencil[0].writemask & 0xff) << 8;
-      if (stencil[1].enabled) { /* two-side is enabled */
-         render->stencil_back = stencil[1].func |
-            (lima_stencil_op(stencil[1].fail_op) << 3) |
-            (lima_stencil_op(stencil[1].zfail_op) << 6) |
-            (lima_stencil_op(stencil[1].zpass_op) << 9) |
-            (ref->ref_value[1] << 16) |
-            (stencil[1].valuemask << 24);
-         render->stencil_test = (stencil[0].writemask & 0xff) | (stencil[1].writemask & 0xff) << 8;
+      if (bs->logicop_enable) {
+         state.blend_func_rgb = LIMA_BLEND_FUNC_LOGICOP;
+         state.blend_func_a = LIMA_BLEND_FUNC_LOGICOP;
+         state.logicop_rgb = lima_logic_op(bs->logicop_func);
+         state.logicop_a = lima_logic_op(bs->logicop_func);
       }
-      /* TODO: Find out, what (render->stecil_test & 0xff000000) is */
-   }
-   else {
-      /* Default values, when stencil is disabled:
-       * stencil[0|1].valuemask = 0xff
-       * stencil[0|1].func = PIPE_FUNC_ALWAYS
-       * stencil[0|1].writemask = 0xff
-       */
-      render->stencil_front = 0xff000007;
-      render->stencil_back = 0xff000007;
-      render->stencil_test = 0x0000ffff;
-   }
-
-   /* need more investigation */
-   if (info->mode == MESA_PRIM_POINTS)
-      render->multi_sample = 0x00000000;
-   else if (info->mode < MESA_PRIM_TRIANGLES)
-      render->multi_sample = 0x00000400;
-   else
-      render->multi_sample = 0x00000800;
-   if (ctx->framebuffer.base.samples)
-      render->multi_sample |= 0x68;
-   if (ctx->blend->base.alpha_to_coverage)
-      render->multi_sample |= (1 << 7);
-   if (ctx->blend->base.alpha_to_one)
-      render->multi_sample |= (1 << 8);
-   render->multi_sample |= (ctx->sample_mask << 12);
-
-   /* Set gl_FragColor register, need to specify it 4 times */
-   render->multi_sample |= (fs->state.frag_color0_reg << 28) |
-                           (fs->state.frag_color0_reg << 24) |
-                           (fs->state.frag_color0_reg << 20) |
-                           (fs->state.frag_color0_reg << 16);
-
-   /* alpha test */
-   if (ctx->zsa->base.alpha_enabled) {
-      render->multi_sample |= ctx->zsa->base.alpha_func;
-      render->stencil_test |= float_to_ubyte(ctx->zsa->base.alpha_ref_value) << 16;
-   } else {
-      /* func = PIPE_FUNC_ALWAYS */
-      render->multi_sample |= 0x7;
-   }
-
-   render->shader_address =
-      ctx->fs->bo->va | (((uint32_t *)ctx->fs->bo->map)[0] & 0x1F);
-
-   /* seems not needed */
-   render->uniforms_address = 0x00000000;
-
-   render->textures_address = 0x00000000;
-
-   render->aux0 = (ctx->vs->state.varying_stride >> 3);
-   render->aux1 = 0x00000000;
-   if (ctx->rasterizer->base.front_ccw)
-      render->aux1 = 0x00001000;
-
-   if (ctx->blend->base.dither)
-      render->aux1 |= 0x00002000;
-
-   if (fs->state.uses_discard ||
-       ctx->zsa->base.alpha_enabled ||
-       fs->state.frag_depth_reg != -1 ||
-       ctx->blend->base.alpha_to_coverage) {
-      early_z = false;
-      pixel_kill = false;
-   }
-
-   if (rt->blend_enable)
-      pixel_kill = false;
-
-   if ((rt->colormask & PIPE_MASK_RGBA) != PIPE_MASK_RGBA)
-      pixel_kill = false;
-
-   if (early_z)
-      render->aux0 |= 0x300;
-
-   if (pixel_kill)
-      render->aux0 |= 0x1000;
-
-   if (ctx->tex_stateobj.num_samplers) {
-      render->textures_address =
-         lima_ctx_buff_va(ctx, lima_ctx_buff_pp_tex_desc);
-      render->aux0 |= ctx->tex_stateobj.num_samplers << 14;
-      render->aux0 |= 0x20;
-   }
-
-   if (ctx->const_buffer[PIPE_SHADER_FRAGMENT].buffer) {
-      render->uniforms_address =
-         lima_ctx_buff_va(ctx, lima_ctx_buff_pp_uniform_array);
-      uint32_t size = ctx->buffer_state[lima_ctx_buff_pp_uniform].size;
-      uint32_t bits = 0;
-      if (size >= 8) {
-         bits = util_last_bit(size >> 3) - 1;
-         bits += size & u_bit_consecutive(0, bits + 3) ? 1 : 0;
+      else if (rt->blend_enable) {
+         lima_calculate_alpha_blend(&state, rt);
       }
-      render->uniforms_address |= bits > 0xf ? 0xf : bits;
+      else {
+         state.blend_func_rgb = LIMA_BLEND_FUNC_ADD;
+         state.blend_func_a = LIMA_BLEND_FUNC_ADD;
+         state.blend_factor_src_rgb = LIMA_BLEND_FACTOR_COLOR_ONE;
+         state.blend_factor_dst_rgb = LIMA_BLEND_FACTOR_COLOR_ZERO;
+         state.blend_factor_src_a = LIMA_BLEND_FACTOR_ALPHA_ONE;
+         state.blend_factor_dst_a = LIMA_BLEND_FACTOR_ALPHA_ZERO;
+      }
 
-      render->aux0 |= 0x80;
-      render->aux1 |= 0x10000;
-   }
+      state.unknown_0 = 0xC;
 
-   /* Set secondary output color */
-   if (fs->state.frag_color1_reg != -1)
-      render->aux0 |= (fs->state.frag_color1_reg << 28);
+      struct pipe_rasterizer_state* rst = &ctx->rasterizer->base;
+      lima_calculate_depth_test(&state, &ctx->zsa->base, rst);
 
-   if (ctx->vs->state.num_varyings) {
-      render->varying_types = 0x00000000;
-      render->varyings_address = ctx->gp_output->va +
-                                 ctx->gp_output_varyings_offt;
-      for (int i = 0, index = 0; i < ctx->vs->state.num_outputs; i++) {
-         int val;
+      state.depth_test_near_clip_disable = !rst->depth_clip_near || ctx->viewport.near == 0.0f;
+      state.depth_test_far_clip_disable = !rst->depth_clip_far || ctx->viewport.far == 1.0f;
 
-         if (i == ctx->vs->state.gl_pos_idx ||
-             i == ctx->vs->state.point_size_idx)
-            continue;
+      if (fs->state.frag_depth_reg != -1) {
+         state.frag_depth_register = fs->state.frag_depth_reg;
+         state.depth_test = true;
+         state.shader_writes_depth = true;
+      }
 
-         struct lima_varying_info *v = ctx->vs->state.varying + i;
-         if (v->component_size == 4)
-            val = v->components > 2 ? 0 : 1;
-         else
-            val = v->components > 2 ? 2 : 3;
+      state.viewport_near = ctx->viewport.near;
+      state.viewport_far = ctx->viewport.far;
 
-         if (index < 10)
-            render->varying_types |= val << (3 * index);
-         else if (index == 10) {
-            render->varying_types |= val << 30;
-            render->varyings_address |= val >> 2;
+      struct pipe_stencil_state* stencil = ctx->zsa->base.stencil;
+      struct pipe_stencil_ref* ref = &ctx->stencil_ref;
+
+      if (stencil[0].enabled) {
+         lima_calculate_stencil(&state.stencil_front, &stencil[0], ref->ref_value[0]);
+         state.stencil_write_mask_front = stencil[0].writemask;
+      }
+      else {
+         state.stencil_front.compare_function = LIMA_COMPARE_FUNC_ALWAYS;
+         state.stencil_front.mask = 0xff;
+         state.stencil_write_mask_front = 0xff;
+      }
+
+      if (stencil[1].enabled) {
+         lima_calculate_stencil(&state.stencil_back, &stencil[1], ref->ref_value[1]);
+         state.stencil_write_mask_back = stencil[1].writemask;
+      }
+      else {
+         state.stencil_back = state.stencil_front;
+         state.stencil_write_mask_back = state.stencil_write_mask_front;
+      }
+
+      if (info->mode == MESA_PRIM_POINTS)
+         state.draw_mode = LIMA_DRAW_MODE_POINTS;
+      else if (info->mode < MESA_PRIM_TRIANGLES)
+         state.draw_mode = LIMA_DRAW_MODE_LINES;
+      else
+         state.draw_mode = LIMA_DRAW_MODE_TRIANGLES;
+
+      if (ctx->framebuffer.base.samples)
+         state.msaa = 0xd;
+
+      state.alpha_to_coverage = ctx->blend->base.alpha_to_coverage;
+      state.alpha_to_one = ctx->blend->base.alpha_to_one;
+      state.sample_mask = ctx->sample_mask;
+
+      if (fs->state.frag_color0_reg != -1) {
+         /* Set gl_FragColor register, need to specify it 4 times */
+         state.frag_color_register_0 = fs->state.frag_color0_reg;
+         state.frag_color_register_1 = fs->state.frag_color0_reg;
+         state.frag_color_register_2 = fs->state.frag_color0_reg;
+         state.frag_color_register_3 = fs->state.frag_color0_reg;
+      }
+
+      if (ctx->zsa->base.alpha_enabled) {
+         state.alpha_test_func = ctx->zsa->base.alpha_func;
+         state.alpha_reference_value = ctx->zsa->base.alpha_ref_value;
+      }
+      else {
+         state.alpha_test_func = LIMA_COMPARE_FUNC_ALWAYS;
+      }
+
+      state.shader_address = ctx->fs->bo->va;
+      state.fs_first_instr_length = ((uint32_t *)ctx->fs->bo->map)[0] & 0x1f;
+
+      state.varying_stride = ctx->vs->state.varying_stride;
+
+      state.front_face_ccw = ctx->rasterizer->base.front_ccw;
+      state.dithering = ctx->blend->base.dither;
+
+      state.early_z = true;
+      state.pixel_kill = true;
+
+      if (fs->state.uses_discard ||
+          ctx->zsa->base.alpha_enabled ||
+          fs->state.frag_depth_reg != -1 ||
+          ctx->blend->base.alpha_to_coverage) {
+         state.early_z = false;
+         state.pixel_kill = false;
+      }
+
+      if (rt->blend_enable || bs->logicop_enable)
+         state.pixel_kill = false;
+
+      state.color_mask = rt->colormask & PIPE_MASK_RGBA;
+      if ((rt->colormask & PIPE_MASK_RGBA) != PIPE_MASK_RGBA)
+         state.pixel_kill = false;
+
+      if (ctx->tex_stateobj.num_samplers) {
+         state.textures_address =
+            lima_ctx_buff_va(ctx, lima_ctx_buff_pp_tex_desc);
+         state.sampler_count = ctx->tex_stateobj.num_samplers;
+         state.has_samplers = true;
+      }
+
+      if (ctx->const_buffer[MESA_SHADER_FRAGMENT].buffer) {
+         state.uniforms_address = lima_ctx_buff_va(ctx, lima_ctx_buff_pp_uniform_array);
+         uint32_t size = ctx->buffer_state[lima_ctx_buff_pp_uniform].size;
+         uint32_t uniform_count = 0;
+         if (size >= 8) {
+            uniform_count = util_last_bit(size >> 3) - 1;
+            uniform_count += size & u_bit_consecutive(0, uniform_count + 3) ? 1 : 0;
          }
-         else if (index == 11)
-            render->varyings_address |= val << 1;
 
-         index++;
+         state.uniform_count = uniform_count > 0xf ? 0xf : uniform_count;
+         state.has_uniforms = true;
+         state.uniform_bit = true;
       }
-   }
-   else {
-      render->varying_types = 0x00000000;
-      render->varyings_address = 0x00000000;
+
+      /* Set secondary output color */
+      if (fs->state.frag_color1_reg != -1)
+         state.frag_color_1_register = fs->state.frag_color1_reg;
+
+      if (ctx->vs->state.num_varyings) {
+         state.varyings_address = ctx->gp_output->va +
+                                  ctx->gp_output_varyings_offt;
+
+         uint32_t* varyings[] = {&state.varying_type_0, &state.varying_type_1,
+                                 &state.varying_type_2, &state.varying_type_3,
+                                 &state.varying_type_4, &state.varying_type_5,
+                                 &state.varying_type_6, &state.varying_type_7,
+                                 &state.varying_type_8, &state.varying_type_9};
+
+         for (int i = 0, index = 0; i < ctx->vs->state.num_outputs; i++) {
+            uint32_t val;
+
+            if (i == ctx->vs->state.gl_pos_idx || i == ctx->vs->state.point_size_idx)
+               continue;
+
+            struct lima_varying_info* v = ctx->vs->state.varying + i;
+            if (v->component_size == 4)
+               val = v->components > 2 ? LIMA_VARYING_TYPE_VEC4_FP32 : LIMA_VARYING_TYPE_VEC2_FP32;
+            else
+               val = v->components > 2 ? LIMA_VARYING_TYPE_VEC4_FP16 : LIMA_VARYING_TYPE_VEC2_FP16;
+
+            if (index < 10)
+               *varyings[index] = val;
+            else if (index == 10) {
+               state.varying_type_10_low = val & 0x3;
+               state.varying_type_10_high = val >> 2;
+            }
+            else if (index == 11)
+               state.varying_type_11 = val;
+
+            index++;
+         }
+      }
    }
 
    struct lima_job *job = lima_job_get(ctx);
 
    lima_dump_command_stream_print(
-      job->dump, render, sizeof(*render),
+      job->dump, render, LIMA_RENDER_STATE_LENGTH,
       false, "add render state at va %x\n",
       lima_ctx_buff_va(ctx, lima_ctx_buff_pp_plb_rsw));
 
    lima_dump_rsw_command_stream_print(
-      job->dump, render, sizeof(*render),
+      job->dump, render, LIMA_RENDER_STATE_LENGTH,
       lima_ctx_buff_va(ctx, lima_ctx_buff_pp_plb_rsw));
 }
 
@@ -851,7 +867,7 @@ static void
 lima_update_gp_uniform(struct lima_context *ctx)
 {
    struct lima_context_constant_buffer *ccb =
-      ctx->const_buffer + PIPE_SHADER_VERTEX;
+      ctx->const_buffer + MESA_SHADER_VERTEX;
    struct lima_vs_compiled_shader *vs = ctx->vs;
    int uniform_size = MIN2(vs->state.uniform_size, ccb->size);
 
@@ -897,8 +913,8 @@ lima_update_gp_uniform(struct lima_context *ctx)
 static void
 lima_update_pp_uniform(struct lima_context *ctx)
 {
-   const float *const_buff = ctx->const_buffer[PIPE_SHADER_FRAGMENT].buffer;
-   size_t const_buff_size = ctx->const_buffer[PIPE_SHADER_FRAGMENT].size / sizeof(float);
+   const float *const_buff = ctx->const_buffer[MESA_SHADER_FRAGMENT].buffer;
+   size_t const_buff_size = ctx->const_buffer[MESA_SHADER_FRAGMENT].size / sizeof(float);
 
    if (!const_buff)
       return;
@@ -1035,11 +1051,11 @@ lima_draw_vbo_update(struct pipe_context *pctx,
    lima_update_gp_attribute_info(ctx, info, draw);
 
    if ((ctx->dirty & LIMA_CONTEXT_DIRTY_CONST_BUFF &&
-        ctx->const_buffer[PIPE_SHADER_VERTEX].dirty) ||
+        ctx->const_buffer[MESA_SHADER_VERTEX].dirty) ||
        ctx->dirty & LIMA_CONTEXT_DIRTY_VIEWPORT ||
        ctx->dirty & LIMA_CONTEXT_DIRTY_COMPILED_VS) {
       lima_update_gp_uniform(ctx);
-      ctx->const_buffer[PIPE_SHADER_VERTEX].dirty = false;
+      ctx->const_buffer[MESA_SHADER_VERTEX].dirty = false;
    }
 
    lima_update_varying(ctx, info, draw);
@@ -1047,9 +1063,9 @@ lima_draw_vbo_update(struct pipe_context *pctx,
    lima_pack_vs_cmd(ctx, info, draw);
 
    if (ctx->dirty & LIMA_CONTEXT_DIRTY_CONST_BUFF &&
-       ctx->const_buffer[PIPE_SHADER_FRAGMENT].dirty) {
+       ctx->const_buffer[MESA_SHADER_FRAGMENT].dirty) {
       lima_update_pp_uniform(ctx);
-      ctx->const_buffer[PIPE_SHADER_FRAGMENT].dirty = false;
+      ctx->const_buffer[MESA_SHADER_FRAGMENT].dirty = false;
    }
 
    lima_update_textures(ctx);

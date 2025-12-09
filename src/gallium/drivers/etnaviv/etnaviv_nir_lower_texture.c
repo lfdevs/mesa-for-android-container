@@ -252,6 +252,57 @@ lower_txd_offset(nir_builder *b, nir_tex_instr *tex, UNUSED void *data)
 }
 
 static bool
+lower_tg4_offset(nir_builder *b, nir_tex_instr *tex, UNUSED void *data)
+{
+   if (tex->op != nir_texop_tg4)
+      return false;
+
+   nir_def *offset = nir_steal_tex_src(tex, nir_tex_src_offset);
+   if (!offset)
+      return false;
+
+   int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+   assert(coord_index >= 0);
+   nir_def *coord = tex->src[coord_index].src.ssa;
+
+   b->cursor = nir_before_instr(&tex->instr);
+
+   /* Clamp offset to min_texel_offset and max_texel_offset */
+   offset = nir_iclamp(b, offset, nir_imm_int(b, -8), nir_imm_int(b, 7));
+
+   nir_def *sampler = nir_imm_int(b, tex->texture_index);
+   nir_def *base_size_int = nir_load_texture_size_etna(b, 32, sampler);
+   base_size_int = nir_trim_vector(b, base_size_int, tex->coord_components);
+
+   nir_def *base_size = nir_i2f32(b, base_size_int);
+   offset = nir_i2f32(b, offset);
+
+   if (tex->is_array) {
+      const unsigned array_index = tex->coord_components - 1;
+
+      /* Split coordinate into spatial part and array layer */
+      nir_def *spatial_coord = nir_trim_vector(b, coord, array_index);
+      nir_def *array_layer = nir_channel(b, coord, array_index);
+
+      /* Apply offset only to spatial coordinates */
+      spatial_coord = nir_fadd(b, spatial_coord,
+                              nir_fdiv(b, nir_trim_vector(b, offset, array_index),
+                                       base_size));
+
+      /* Reconstruct full coordinate with original array layer */
+      coord = nir_vec3(b, nir_channel(b, spatial_coord, 0),
+                        nir_channel(b, spatial_coord, 1),
+                        array_layer);
+   } else {
+      coord = nir_fadd(b, coord, nir_fdiv(b, offset, base_size));
+   }
+
+   nir_src_rewrite(&tex->src[coord_index].src, coord);
+
+   return true;
+}
+
+static bool
 legalize_txf_lod(nir_builder *b, nir_tex_instr *tex, UNUSED void *data)
 {
    if (tex->op != nir_texop_txf)
@@ -425,6 +476,9 @@ etna_nir_lower_texture(nir_shader *s, struct etna_shader_key *key, const struct 
       nir_metadata_control_flow, NULL);
 
    NIR_PASS(progress, s, nir_shader_tex_pass, lower_txd_offset,
+      nir_metadata_control_flow, NULL);
+
+   NIR_PASS(progress, s, nir_shader_tex_pass, lower_tg4_offset,
       nir_metadata_control_flow, NULL);
 
    NIR_PASS(progress, s, nir_shader_tex_pass, legalize_txf_lod,

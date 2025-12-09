@@ -44,8 +44,6 @@ lavapipe-vkd3d:
   timeout: 15m  # base runtime = 8m
   variables:
     GPU_VERSION: lvp
-    # Random tests fail/crash when trying to run them in parallel
-    FDO_CI_CONCURRENT: 1
   script: install/vkd3d-runner.sh
 
 # Disabled due to only running a single trace which was using old Wine.
@@ -61,7 +59,7 @@ lavapipe-vkd3d:
 
 android-angle-lavapipe:
   variables:
-    ANDROID_GPU_MODE: mesa_swrast_guest_angle
+    CUTTLEFISH_GPU_MODE: mesa_swrast_guest_angle
     DEQP_SUITE: android-angle-lavapipe
     GPU_VERSION: lvp-android-angle
   timeout: 15m
@@ -72,7 +70,7 @@ android-angle-lavapipe:
 
 android-angle-lavapipe-cts:
   variables:
-    ANDROID_GPU_MODE: mesa_swrast_guest_angle
+    CUTTLEFISH_GPU_MODE: mesa_swrast_guest_angle
     GPU_VERSION: lvp-android-angle
   timeout: 15m
   extends:

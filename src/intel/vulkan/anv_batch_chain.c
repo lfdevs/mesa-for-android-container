@@ -370,7 +370,7 @@ anv_batch_bo_link(struct anv_cmd_buffer *cmd_buffer,
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (cmd_buffer->device->physical->memory.need_flush &&
        anv_bo_needs_host_cache_flush(prev_bbo->bo->alloc_flags))
-      intel_flush_range(map, sizeof(uint64_t));
+      util_flush_range(map, sizeof(uint64_t));
 #endif
 }
 
@@ -706,8 +706,6 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
    if (u_vector_length(&cmd_buffer->bt_block_states) == 0)
       return (struct anv_state) { 0 };
 
-   struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
-
    uint32_t bt_size = align(entries * 4, 32);
 
    struct anv_state state = cmd_buffer->bt_next;
@@ -726,6 +724,8 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
        */
       *state_offset = 0;
    } else {
+      struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
+
       assert(bt_block->offset < 0);
       *state_offset = -bt_block->offset;
    }
@@ -1200,7 +1200,7 @@ anv_cmd_buffer_add_secondary(struct anv_cmd_buffer *primary,
       break;
    }
    default:
-      unreachable("Invalid execution mode");
+      UNREACHABLE("Invalid execution mode");
    }
 
    anv_reloc_list_append(&primary->surface_relocs, &secondary->surface_relocs);
@@ -1386,8 +1386,8 @@ can_chain_query_pools(struct anv_query_pool *p1, struct anv_query_pool *p2)
 }
 
 static VkResult
-anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
-                                    struct vk_queue_submit *submit)
+anv_queue_submit_sparse_bind(struct anv_queue *queue,
+                             struct vk_queue_submit *submit)
 {
    struct anv_device *device = queue->device;
    VkResult result;
@@ -1399,22 +1399,22 @@ anv_queue_submit_sparse_bind_locked(struct anv_queue *queue,
     */
    if (device->physical->sparse_type == ANV_SPARSE_TYPE_NOT_SUPPORTED) {
       if (INTEL_DEBUG(DEBUG_SPARSE))
-         fprintf(stderr, "=== application submitting sparse operations: "
-               "buffer_bind:%d image_opaque_bind:%d image_bind:%d\n",
-               submit->buffer_bind_count, submit->image_opaque_bind_count,
-               submit->image_bind_count);
+         mesa_logi("=== application submitting sparse operations: "
+                   "buffer_bind:%d image_opaque_bind:%d image_bind:%d\n",
+                   submit->buffer_bind_count, submit->image_opaque_bind_count,
+                   submit->image_bind_count);
       return vk_queue_set_lost(&queue->vk, "Sparse binding not supported");
    }
 
    assert(submit->command_buffer_count == 0);
 
    if (INTEL_DEBUG(DEBUG_SPARSE)) {
-      fprintf(stderr, "[sparse submission, buffers:%u opaque_images:%u "
-              "images:%u waits:%u signals:%u]\n",
-              submit->buffer_bind_count,
-              submit->image_opaque_bind_count,
-              submit->image_bind_count,
-              submit->wait_count, submit->signal_count);
+      mesa_logi("[sparse submission, buffers:%u opaque_images:%u "
+                "images:%u waits:%u signals:%u]\n",
+                submit->buffer_bind_count,
+                submit->image_opaque_bind_count,
+                submit->image_bind_count,
+                submit->wait_count, submit->signal_count);
    }
 
    struct anv_sparse_submission sparse_submit = {
@@ -1489,24 +1489,6 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
 {
    VkResult result;
 
-   /* It's not safe to access submit->signals[] elements after submit because
-    * the elements might signal through the kernel before this function
-    * returns and another thread could wake up and destroy any of those
-    * elements.
-    *
-    * Build a list of anv_bo_sync elements here and put them in the signal
-    * state after without looking at any other element.
-    */
-   STACK_ARRAY(struct anv_bo_sync *, bo_signals, submit->signal_count);
-   uint32_t bo_signal_count = 0;
-   for (uint32_t i = 0; i < submit->signal_count; i++) {
-      if (!vk_sync_is_anv_bo_sync(submit->signals[i].sync))
-         continue;
-
-      bo_signals[bo_signal_count++] =
-         container_of(submit->signals[i].sync, struct anv_bo_sync, sync);
-   }
-
    if (submit->command_buffer_count == 0) {
       result = anv_queue_exec_locked(queue, submit->wait_count, submit->waits,
                                      0 /* cmd_buffer_count */,
@@ -1563,27 +1545,8 @@ anv_queue_submit_cmd_buffers_locked(struct anv_queue *queue,
          }
       }
    }
-   for (uint32_t i = 0; i < bo_signal_count; i++) {
-      struct anv_bo_sync *bo_sync = bo_signals[i];
-
-      /* Once the execbuf has returned, we need to set the fence state to
-       * SUBMITTED.  We can't do this before calling execbuf because
-       * anv_GetFenceStatus does take the global device lock before checking
-       * fence->state.
-       *
-       * We set the fence state to SUBMITTED regardless of whether or not the
-       * execbuf succeeds because we need to ensure that vkWaitForFences() and
-       * vkGetFenceStatus() return a valid result (VK_ERROR_DEVICE_LOST or
-       * VK_SUCCESS) in a finite amount of time even if execbuf fails.
-       */
-      assert(bo_sync->state == ANV_BO_SYNC_STATE_RESET);
-      bo_sync->state = ANV_BO_SYNC_STATE_SUBMITTED;
-   }
-
-   pthread_cond_broadcast(&queue->device->queue_submit);
 
  fail:
-   STACK_ARRAY_FINISH(bo_signals);
    return result;
 }
 
@@ -1645,24 +1608,20 @@ anv_queue_submit(struct vk_queue *vk_queue,
    if (result != VK_SUCCESS)
       return result;
 
-   pthread_mutex_lock(&device->mutex);
-
    uint64_t start_ts = intel_ds_begin_submit(&queue->ds);
 
    if (submit->buffer_bind_count ||
        submit->image_opaque_bind_count ||
        submit->image_bind_count) {
-      result = anv_queue_submit_sparse_bind_locked(queue, submit);
+      result = anv_queue_submit_sparse_bind(queue, submit);
    } else {
+      pthread_mutex_lock(&device->mutex);
       result = anv_queue_submit_cmd_buffers_locked(queue, submit,
                                                    utrace_submit);
+      pthread_mutex_unlock(&device->mutex);
    }
 
-   /* Take submission ID under lock */
    intel_ds_end_submit(&queue->ds, start_ts);
-
-   pthread_mutex_unlock(&device->mutex);
-
    intel_ds_device_process(&device->ds, false);
 
    return result;
@@ -1679,7 +1638,7 @@ anv_cmd_buffer_clflush(struct anv_cmd_buffer **cmd_buffers,
 
    for (uint32_t i = 0; i < num_cmd_buffers; i++) {
       u_vector_foreach(bbo, &cmd_buffers[i]->seen_bbos) {
-         intel_flush_range_no_fence((*bbo)->bo->map, (*bbo)->length);
+         util_flush_range_no_fence((*bbo)->bo->map, (*bbo)->length);
       }
    }
 
@@ -1707,7 +1666,7 @@ anv_async_submit_extend_batch(struct anv_batch *batch, uint32_t size,
    if (result != VK_SUCCESS)
       return result;
 
-   util_dynarray_append(&submit->batch_bos, struct anv_bo *, bo);
+   util_dynarray_append(&submit->batch_bos, bo);
 
    batch->end += 4 * GFX9_MI_BATCH_BUFFER_START_length;
 
@@ -1753,9 +1712,12 @@ anv_async_submit_init(struct anv_async_submit *submit,
       .relocs = &submit->relocs,
       .user_data = submit,
       .extend_cb = anv_async_submit_extend_batch,
+      .engine_class = use_companion_rcs ?
+                      INTEL_ENGINE_CLASS_RENDER :
+                      queue->family->engine_class,
    };
 
-   util_dynarray_init(&submit->batch_bos, NULL);
+   submit->batch_bos = UTIL_DYNARRAY_INIT;
 
    if (create_signal_sync) {
       result = vk_sync_create(&device->vk,

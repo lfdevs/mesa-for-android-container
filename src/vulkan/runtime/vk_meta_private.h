@@ -65,7 +65,7 @@ vk_image_sampled_view_type(const struct vk_image *image)
    case VK_IMAGE_TYPE_1D: return VK_IMAGE_VIEW_TYPE_1D_ARRAY;
    case VK_IMAGE_TYPE_2D: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
    case VK_IMAGE_TYPE_3D: return VK_IMAGE_VIEW_TYPE_3D;
-   default: unreachable("Invalid image type");
+   default: UNREACHABLE("Invalid image type");
    }
 }
 
@@ -81,7 +81,7 @@ vk_image_render_view_type(const struct vk_image *image, uint32_t layer_count)
       return layer_count == 1 ? VK_IMAGE_VIEW_TYPE_2D :
                                 VK_IMAGE_VIEW_TYPE_2D_ARRAY;
    default:
-      unreachable("Invalid image type");
+      UNREACHABLE("Invalid image type");
    }
 }
 
@@ -98,7 +98,7 @@ vk_image_storage_view_type(const struct vk_image *image)
    case VK_IMAGE_TYPE_3D:
       return VK_IMAGE_VIEW_TYPE_3D;
    default:
-      unreachable("Invalid image type");
+      UNREACHABLE("Invalid image type");
    }
 }
 

@@ -69,7 +69,7 @@
    }
 #define __uuidof(T) __mesa_emulated_uuidof<typename std::decay<T>::type>()
 #endif /*__CRT_UUID_DECL */
-constexpr uint8_t nybble_from_hex(char c) {
+constexpr uint8_t __nybble_from_hex(char c) {
    return ((c >= '0' && c <= '9')
                ? (c - '0')
                : ((c >= 'a' && c <= 'f')
@@ -78,40 +78,35 @@ constexpr uint8_t nybble_from_hex(char c) {
                      : /* Should be an error */ -1)));
 }
 
-constexpr uint8_t byte_from_hex(char c1, char c2) {
-   return nybble_from_hex(c1) << 4 | nybble_from_hex(c2);
+constexpr uint8_t __byte_from_hexstr(const char str[2], unsigned offset) {
+   return __nybble_from_hex(str[offset + 0]) << 4 | __nybble_from_hex(str[offset + 1]);
 }
 
-constexpr uint8_t byte_from_hexstr(const char str[2]) {
-   return nybble_from_hex(str[0]) << 4 | nybble_from_hex(str[1]);
-}
-
-constexpr unsigned short short_from_hexstr(const char str[2], unsigned shift)
+constexpr unsigned short __short_from_hexstr_be(const char str[4], unsigned offset)
 {
-   return ((unsigned short)(nybble_from_hex(str[0]) << 4 |
-                            nybble_from_hex(str[1])))
-          << shift;
+   unsigned short hi = __byte_from_hexstr(str, offset + 0);
+   unsigned short lo = __byte_from_hexstr(str, offset + 2);
+   return (hi << 8) | lo;
 }
 
-constexpr unsigned long word_from_hexstr(const char str[2], unsigned shift)
+constexpr unsigned int __word_from_hexstr_be(const char str[8], unsigned offset)
 {
-   return ((unsigned long)(nybble_from_hex(str[0]) << 4 |
-                           nybble_from_hex(str[1])))
-          << shift;
+   unsigned int hi = __short_from_hexstr_be(str, offset + 0);
+   unsigned int lo = __short_from_hexstr_be(str, offset + 4);
+   return (hi << 16) | lo;
 }
 
 #define CROSS_PLATFORM_UUIDOF(iface, spec)                                \
    struct iface;                                                          \
    __CRT_UUID_DECL(                                                       \
        iface,                                                             \
-       word_from_hexstr(spec, 24) | word_from_hexstr(spec + 2, 16) |      \
-           word_from_hexstr(spec + 4, 8) | word_from_hexstr(spec + 6, 0), \
-       short_from_hexstr(spec + 9, 8) | short_from_hexstr(spec + 11, 0),  \
-       short_from_hexstr(spec + 14, 8) | short_from_hexstr(spec + 16, 0), \
-       byte_from_hexstr(spec + 19), byte_from_hexstr(spec + 21),          \
-       byte_from_hexstr(spec + 24), byte_from_hexstr(spec + 26),          \
-       byte_from_hexstr(spec + 28), byte_from_hexstr(spec + 30),          \
-       byte_from_hexstr(spec + 32), byte_from_hexstr(spec + 34))
+       __word_from_hexstr_be(spec, 0),                                    \
+       __short_from_hexstr_be(spec, 9),                                   \
+       __short_from_hexstr_be(spec, 14),                                  \
+       __byte_from_hexstr(spec, 19), __byte_from_hexstr(spec, 21),        \
+       __byte_from_hexstr(spec, 24), __byte_from_hexstr(spec, 26),        \
+       __byte_from_hexstr(spec, 28), __byte_from_hexstr(spec, 30),        \
+       __byte_from_hexstr(spec, 32), __byte_from_hexstr(spec, 34))
 
 #endif /* defined(_MSC_VER) */
 #endif /* CROSS_PLATFORM_UUIDOF */

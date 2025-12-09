@@ -51,6 +51,8 @@ const struct drm_driver_descriptor descriptor_name = {         \
 #undef GALLIUM_PANFROST
 #undef GALLIUM_LIMA
 #undef GALLIUM_ASAHI
+#undef GALLIUM_ROCKET
+#undef GALLIUM_ETHOSU
 #endif
 
 #ifdef GALLIUM_I915
@@ -428,6 +430,54 @@ DRM_DRIVER_DESCRIPTOR(zink, zink_driconf, ARRAY_SIZE(zink_driconf))
 
 #else
 DRM_DRIVER_DESCRIPTOR_STUB(zink)
+#endif
+
+#ifdef GALLIUM_ROCKET
+#include "rocket/drm/rkt_drm_public.h"
+
+static struct pipe_screen *
+pipe_rknpu_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+
+   screen = rkt_drm_screen_create(fd, config);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+DRM_DRIVER_DESCRIPTOR(rknpu, NULL, 0)
+
+static struct pipe_screen *
+pipe_rocket_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+
+   screen = rkt_drm_screen_create(fd, config);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+DRM_DRIVER_DESCRIPTOR(rocket, NULL, 0)
+
+#else
+DRM_DRIVER_DESCRIPTOR_STUB(rknpu)
+DRM_DRIVER_DESCRIPTOR_STUB(rocket)
+#endif
+
+#ifdef GALLIUM_ETHOSU
+#include "ethosu/drm/ethosu_drm_public.h"
+
+static struct pipe_screen *
+pipe_ethosu_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+
+   screen = ethosu_drm_screen_create(fd, config);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+DRM_DRIVER_DESCRIPTOR(ethosu, NULL, 0)
+
+#else
+DRM_DRIVER_DESCRIPTOR_STUB(ethosu)
 #endif
 
 #ifdef GALLIUM_KMSRO

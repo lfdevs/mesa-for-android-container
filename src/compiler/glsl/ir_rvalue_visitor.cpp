@@ -124,7 +124,7 @@ ir_rvalue_base_visitor::rvalue_visit(ir_assignment *ir)
 ir_visitor_status
 ir_rvalue_base_visitor::rvalue_visit(ir_call *ir)
 {
-   foreach_in_list_safe(ir_rvalue, param, &ir->actual_parameters) {
+   ir_foreach_in_list_safe(ir_rvalue, param, &ir->actual_parameters) {
       ir_rvalue *new_param = param;
       handle_rvalue(&new_param);
 

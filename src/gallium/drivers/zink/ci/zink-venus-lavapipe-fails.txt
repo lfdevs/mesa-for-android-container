@@ -58,10 +58,6 @@ spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
-spec@arb_sample_shading@ignore-centroid-qualifier 2,Fail
-spec@arb_sample_shading@ignore-centroid-qualifier 4,Fail
-spec@arb_sample_shading@interpolate-at-sample-position 2,Fail
-spec@arb_sample_shading@interpolate-at-sample-position 4,Fail
 spec@arb_sample_shading@samplemask 2,Fail
 spec@arb_sample_shading@samplemask 2@0.250000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 2@0.500000 mask_in_one,Fail
@@ -150,5 +146,3 @@ spec@ext_transform_feedback@tessellation quad_strip wireframe,Crash
 spec@!opengl 1.0@gl-1.0-dlist-beginend,Crash
 spec@arb_clip_control@arb_clip_control-depth-precision,Crash
 spec@nv_texture_barrier@blending-in-shader,Crash
-
-spec@arb_viewport_array@display-list,Fail

@@ -57,6 +57,9 @@ struct si_shader_args {
    struct ac_arg cs_user_data[2];
    struct ac_arg cs_shaderbuf[3];
    struct ac_arg cs_image[3];
+   /* TS and MS */
+   struct ac_arg task_ring_addr;
+   struct ac_arg mesh_scratch_ring_addr;
 };
 
 struct si_nir_shader_ctx {
@@ -92,10 +95,10 @@ typedef struct nir_shader nir_shader;
 /* si_shader.c */
 bool si_is_multi_part_shader(struct si_shader *shader);
 bool si_is_merged_shader(struct si_shader *shader);
-unsigned si_get_max_workgroup_size(const struct si_shader *shader);
-enum ac_hw_stage si_select_hw_stage(const gl_shader_stage stage, const union si_shader_key *const key,
+enum ac_hw_stage si_select_hw_stage(const mesa_shader_stage stage, const union si_shader_key *const key,
                                     const enum amd_gfx_level gfx_level);
 bool gfx10_ngg_export_prim_early(struct si_shader *shader);
+unsigned si_calculate_needed_lds_size(enum amd_gfx_level gfx_level, struct si_shader *shader);
 
 /* si_shader_args.c */
 void si_init_shader_args(struct si_shader *shader, struct si_shader_args *args,
@@ -114,8 +117,11 @@ typedef struct nir_def nir_def;
 /* si_nir_*.c */
 bool si_nir_clamp_shadow_comparison_value(nir_shader *nir);
 bool si_nir_kill_outputs(nir_shader *nir, const union si_shader_key *key);
-nir_def *si_nir_load_internal_binding(nir_builder *b, struct si_shader_args *args,
-                                          unsigned slot, unsigned num_components);
+nir_def *si_nir_load_addr32_arg(struct si_screen *sscreen, struct si_shader_args *args,
+                                nir_builder *b, struct ac_arg arg);
+nir_def *si_nir_load_internal_binding(struct si_screen *sscreen, nir_builder *b,
+                                      struct si_shader_args *args, unsigned slot,
+                                      unsigned num_components);
 bool si_nir_lower_abi(nir_shader *nir, struct si_shader *shader, struct si_shader_args *args);
 bool si_nir_lower_color_inputs_to_sysvals(nir_shader *nir);
 bool si_nir_lower_polygon_stipple(nir_shader *nir);
@@ -131,7 +137,7 @@ bool si_nir_mark_divergent_texture_non_uniform(struct nir_shader *nir);
 bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
                             struct si_shader *shader, struct si_linked_shaders *linked,
                             struct util_debug_callback *debug);
-bool si_llvm_build_shader_part(struct si_screen *sscreen, gl_shader_stage stage,
+bool si_llvm_build_shader_part(struct si_screen *sscreen, mesa_shader_stage stage,
                                bool prolog, struct ac_llvm_compiler *compiler,
                                struct util_debug_callback *debug, const char *name,
                                struct si_shader_part *result);
@@ -142,7 +148,7 @@ bool si_aco_compile_shader(struct si_shader *shader, struct si_linked_shaders *l
 void si_aco_resolve_symbols(struct si_shader *shader, uint32_t *code_for_write,
                             const uint32_t *code_for_read, uint64_t scratch_va,
                             uint32_t const_offset);
-bool si_aco_build_shader_part(struct si_screen *screen, gl_shader_stage stage, bool prolog,
+bool si_aco_build_shader_part(struct si_screen *screen, mesa_shader_stage stage, bool prolog,
                               struct util_debug_callback *debug, const char *name,
                               struct si_shader_part *result);
 

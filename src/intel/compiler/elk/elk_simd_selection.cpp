@@ -30,12 +30,8 @@
 unsigned
 elk_required_dispatch_width(const struct shader_info *info)
 {
-   if ((int)info->subgroup_size >= (int)SUBGROUP_SIZE_REQUIRE_8) {
-      assert(gl_shader_stage_uses_workgroup(info->stage));
-      /* These enum values are expressly chosen to be equal to the subgroup
-       * size that they require.
-       */
-      return (unsigned)info->subgroup_size;
+   if (info->min_subgroup_size == info->max_subgroup_size) {
+      return info->max_subgroup_size;
    } else {
       return 0;
    }
@@ -132,7 +128,7 @@ elk_simd_should_compile(elk_simd_selection_state &state, unsigned simd)
       start = DEBUG_CS_SIMD8;
       break;
    default:
-      unreachable("unknown shader stage in elk_simd_should_compile");
+      UNREACHABLE("unknown shader stage in elk_simd_should_compile");
    }
 
    const bool env_skip[] = {

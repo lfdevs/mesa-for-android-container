@@ -20,7 +20,6 @@ dEQP-VK.api.object_management.max_concurrent.query_pool
 spec@!opengl 1.1@longprim
 
 # OOMs
-spec@!opengl 1.1@streaming-texture-leak
 tex3d-maxsize
 
 # Takes absurdly long, sometimes flaking due to the 60s timeout
@@ -33,8 +32,6 @@ glx@glx-make-current
 # So, skip any tests known to crash to make sure the coverage is solid.
 glx@glx-visuals-depth -pixmap
 glx@glx-visuals-stencil -pixmap
-spec@arb_texture_buffer_object@formats (fs- arb)
-spec@arb_texture_buffer_object@formats (vs- arb)
 spec@arb_texture_buffer_object@texture-buffer-size-clamp
 spec@arb_texture_float@fbo-alphatest-formats
 spec@arb_texture_float@fbo-blending-formats
@@ -74,19 +71,6 @@ shaders@glsl-bug-110796
 
 dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed*
 
-# indirect draw not supported yet
-dEQP-VK.synchronization.*indirect*
-dEQP-VK.synchronization2.*indirect*
-dEQP-VK.draw.renderpass.indirect_draw.*
-dEQP-VK.draw.renderpass.*.draw_indirect*
-dEQP-VK.draw.renderpass.*.draw_indexed_indirect*
-dEQP-VK.draw.dynamic_rendering.*.draw_indirect*
-dEQP-VK.draw.dynamic_rendering.*.draw_indexed_indirect*
-dEQP-VK.draw.dynamic_rendering.*.indirect_draw*
-dEQP-VK.multiview.draw_indirect*
-dEQP-VK.multiview.dynamic_rendering.draw_indirect*
-dEQP-VK.multiview.renderpass2.draw_indirect*
-
 # VKCTS bug?
 # Jump to 0x0 (XXX: need more research)
 dEQP-VK.glsl.shader_expect_assume.*
@@ -118,167 +102,21 @@ dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.types.f32mat4x4
 # Job timeout
 dEQP-VK.graphicsfuzz.spv-composites
 
+# Cause OOM when running with alloacation tests
+dEQP-VK.api.command_buffers.many_indirect_draws_on_secondary
+
 # Slow tests (>= 30s)
 dEQP-VK.api.external.fence.sync_fd.export_multiple_times_temporary
 dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
-dEQP-VK.api.object_management.multithreaded_shared_resources.device_group
-dEQP-VK.graphicsfuzz.spv-stable-maze-flatten-copy-composite
-dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap
-dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap_map2
-dEQP-VK.memory.mapping.dedicated_alloc.image.full.variable.implicit_unmap
-dEQP-VK.memory.mapping.dedicated_alloc.image.full.variable.implicit_unmap_map2
-dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap
-dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap_map2
-dEQP-VK.spirv_assembly.instruction.compute.opphi.wide
-dEQP-VK.ssbo.phys.layout.2_level_array.scalar.row_major_mat4
-dEQP-VK.ssbo.phys.layout.2_level_array.scalar.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.2_level_array.scalar.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.2_level_array.scalar.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.2_level_array.std140.row_major_mat4
-dEQP-VK.ssbo.phys.layout.2_level_array.std140.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.2_level_array.std140.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.2_level_array.std430.row_major_mat4
-dEQP-VK.ssbo.phys.layout.2_level_array.std430.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.2_level_array.std430.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.2_level_array.std430.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat2x4
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat2x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat2x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat3
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4x3
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4x3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat2x4
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat3x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4x3
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4x3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat2x4
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat2x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat2x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat2x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat3x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4x3
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4x3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4x3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4x3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat2x4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat2x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat2x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat3
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat3x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4x3
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4x3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4x3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.row_major_mat4x3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat2x4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat2x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat2x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat3x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4x3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4x3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4x3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.column_major_mat4x2_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat2x4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat2x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat2x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat2x4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat3
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat3_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat3x4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat3x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4x3
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4x3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4x3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4x3_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat3x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat3x4_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat4
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat4x3
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat4x3_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.scalar.row_major_mat4x3_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat3x4_comp_access
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat3x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat3x4_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat4
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std140.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat3x4
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat3x4_comp_access
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat3x4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat3x4_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat4
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.random.16bit.all_shared_buffer.40
-dEQP-VK.ssbo.phys.layout.random.16bit.nested_structs_arrays.23
-dEQP-VK.ssbo.phys.layout.random.16bit.scalar.4
-dEQP-VK.ssbo.phys.layout.random.16bit.scalar.78
-dEQP-VK.ssbo.phys.layout.random.8bit.nested_structs_arrays_instance_arrays.12
-dEQP-VK.ssbo.phys.layout.random.8bit.scalar.18
-dEQP-VK.ssbo.phys.layout.random.8bit.scalar.78
-dEQP-VK.ssbo.phys.layout.random.8bit.scalar.96
-dEQP-VK.ssbo.phys.layout.random.all_per_block_buffers.22
-dEQP-VK.ssbo.phys.layout.random.all_shared_buffer.3
-dEQP-VK.ssbo.phys.layout.random.nested_structs_arrays_instance_arrays.23
+dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent
+afbcp-spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x130-501x130
+glx@glx_arb_sync_control@swapbuffersmsc-return swap_interval 0
+spec@!opengl 1.1@copypixels-sync
+spec@!opengl 1.1@draw-sync
+spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x130-501x130
+spec@egl_khr_gl_colorspace@linear
+spec@ext_framebuffer_blit@fbo-blit-check-limits
+spec@glsl-1.30@execution@texelfetch fs sampler2d 1x281-501x281
 
 # Those are failures on G52 but skipped on "G52 r1"
 dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.whole_copy_before_resolving_no_cab.8_bit

@@ -28,7 +28,6 @@
 #include <vulkan/vulkan.h>
 
 #include "hwdef/rogue_hw_defs.h"
-#include "pvr_private.h"
 #include "pvr_types.h"
 #include "util/macros.h"
 
@@ -103,6 +102,10 @@ struct pvr_texture_state_info {
 
    /** Address of texture, which must be aligned to at least 32bits. */
    pvr_dev_addr_t addr;
+
+   uint32_t layer_size;
+   uint32_t buffer_elems;
+   uint32_t z_slice;
 };
 
 VkResult pvr_pack_tex_state(struct pvr_device *device,

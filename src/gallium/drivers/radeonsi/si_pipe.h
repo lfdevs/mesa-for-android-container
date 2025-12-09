@@ -18,6 +18,7 @@
 #include "util/u_vertex_state_cache.h"
 #include "util/perf/u_trace.h"
 #include "util/log.h"
+#include "ac_cmdbuf.h"
 #include "ac_descriptors.h"
 #include "ac_sqtt.h"
 #include "ac_spm.h"
@@ -110,7 +111,7 @@ struct ac_llvm_compiler;
 #define SI_RESOURCE_FLAG_32BIT             (PIPE_RESOURCE_FLAG_DRV_PRIV << 6)
 #define SI_RESOURCE_FLAG_CLEAR             (PIPE_RESOURCE_FLAG_DRV_PRIV << 7)
 
-#define SI_SQTT_STATE_DIRTY_BIT            BITFIELD_BIT(PIPE_SHADER_COMPUTE + 1)
+#define SI_SQTT_STATE_DIRTY_BIT            BITFIELD_BIT(MESA_SHADER_MESH + 1)
 
 enum si_has_gs {
    GS_OFF,
@@ -125,6 +126,11 @@ enum si_has_tess {
 enum si_has_ngg {
    NGG_OFF,
    NGG_ON,
+};
+
+enum si_has_ms {
+   MS_OFF,
+   MS_ON,
 };
 
 #define DCC_CODE(x) (((x) << 24) | ((x) << 16) | ((x) << 8) | (x))
@@ -186,10 +192,6 @@ enum
    DBG_NO_FAST_DISPLAY_LIST,
    DBG_NO_DMA_SHADERS,
 
-   /* Multimedia options: */
-   DBG_NO_EFC,
-   DBG_LOW_LATENCY_ENCODE,
-
    /* 3D engine options: */
    DBG_NO_NGG,
    DBG_ALWAYS_NGG_CULLING_ALL,
@@ -216,8 +218,7 @@ enum
 
    DBG_TMZ,
    DBG_SQTT,
-   DBG_USE_ACO,
-   DBG_USE_LLVM,
+   DBG_EXPORT_MODIFIER,
 
    DBG_COUNT
 };
@@ -232,6 +233,8 @@ enum
    DBG_GS = MESA_SHADER_GEOMETRY,
    DBG_PS = MESA_SHADER_FRAGMENT,
    DBG_CS = MESA_SHADER_COMPUTE,
+   DBG_TS = MESA_SHADER_TASK,
+   DBG_MS = MESA_SHADER_MESH,
    DBG_INIT_NIR,
    DBG_NIR,
    DBG_INIT_LLVM,
@@ -253,6 +256,20 @@ enum
    DBG_CHECK_IR,
    DBG_MONOLITHIC_SHADERS,
    DBG_NO_OPT_VARIANT,
+
+   DBG_USE_LLVM,
+};
+
+/* Debug options for multimedia. */
+enum
+{
+   DBG_NO_EFC,
+   DBG_LOW_LATENCY_ENCODE,
+   DBG_NO_VIDEO_TILING,
+   DBG_NO_DECODE_TIER1,
+   DBG_NO_DECODE_TIER2,
+   DBG_NO_DECODE_TIER3,
+   DBG_NO_ENCODE_TIER2,
 };
 
 enum
@@ -270,7 +287,7 @@ enum
    DBG_TEST_BLIT_PERF,
 };
 
-#define DBG_ALL_SHADERS (((1 << (DBG_CS + 1)) - 1))
+#define DBG_ALL_SHADERS (((1 << (DBG_MS + 1)) - 1))
 #define DBG(name)       (1ull << DBG_##name)
 
 #define SI_BIND_CONSTANT_BUFFER_SHIFT     0
@@ -430,8 +447,8 @@ struct si_surface {
    struct pipe_surface base;
 
    /* These can vary with block-compressed textures. */
-   uint16_t width0;
-   uint16_t height0;
+   unsigned width0;
+   unsigned height0;
 
    bool color_initialized : 1;
    bool depth_initialized : 1;
@@ -525,6 +542,7 @@ struct si_screen {
    struct nir_shader_compiler_options *nir_options;
    uint64_t debug_flags;
    uint64_t shader_debug_flags;
+   uint64_t multimedia_debug_flags;
    char renderer_string[183];
 
    unsigned pa_sc_raster_config;
@@ -547,7 +565,7 @@ struct si_screen {
    /* Force a single shader to use ACO, debug usage. */
    blake3_hash *use_aco_shader_blakes;
    unsigned num_use_aco_shader_blakes;
-   enum pipe_shader_type use_aco_shader_type;
+   mesa_shader_stage use_aco_shader_type;
 
    struct {
 #define OPT_BOOL(name, dflt, description) bool name : 1;
@@ -680,6 +698,9 @@ struct si_screen {
    /* NGG streamout. */
    simple_mtx_t gds_mutex;
    struct pb_buffer_lean *gds_oa;
+
+   /* mesh shader */
+   struct ac_task_info task_info;
 };
 
 struct si_compute {
@@ -817,6 +838,7 @@ struct si_streamout {
    bool streamout_enabled;
    bool prims_gen_query_enabled;
    int num_prims_gen_queries;
+   int num_ngg_queries;
 };
 
 /* A shader state consists of the shader selector, which is a constant state
@@ -907,26 +929,6 @@ struct si_vertex_state {
    struct pipe_vertex_state b;
    struct si_vertex_elements velems;
    uint32_t descriptors[4 * SI_MAX_ATTRIBS];
-};
-
-/* The structure layout is identical to a pair of registers in SET_*_REG_PAIRS_PACKED. */
-struct gfx11_reg_pair {
-   union {
-      /* A pair of register offsets. */
-      struct {
-         uint16_t reg_offset[2];
-      };
-      /* The same pair of register offsets as a dword. */
-      uint32_t reg_offsets;
-   };
-   /* A pair of register values for the register offsets above. */
-   uint32_t reg_value[2];
-};
-
-/* A pair of values for SET_*_REG_PAIRS. */
-struct gfx12_reg {
-   uint32_t reg_offset;
-   uint32_t reg_value;
 };
 
 typedef void (*pipe_draw_vertex_state_func)(struct pipe_context *ctx,
@@ -1027,20 +1029,9 @@ struct si_context {
    union si_state queued;
    union si_state emitted;
 
-   /* Gfx11+: Buffered SH registers for SET_SH_REG_PAIRS_*. */
-   unsigned num_buffered_gfx_sh_regs;
-   unsigned num_buffered_compute_sh_regs;
-   union {
-      struct {
-         struct gfx11_reg_pair buffered_gfx_sh_regs[32];
-         struct gfx11_reg_pair buffered_compute_sh_regs[32];
-      } gfx11;
-
-      struct {
-         struct gfx12_reg buffered_gfx_sh_regs[64];
-         struct gfx12_reg buffered_compute_sh_regs[64];
-      } gfx12;
-   };
+   /* Buffered registers (GFX11+). */
+   struct ac_buffered_sh_regs buffered_gfx_sh_regs;
+   struct ac_buffered_sh_regs buffered_compute_sh_regs;
 
    /* Atom declarations. */
    struct si_framebuffer framebuffer;
@@ -1083,6 +1074,8 @@ struct si_context {
       struct si_shader_ctx_state shaders[SI_NUM_GRAPHICS_SHADERS];
    };
    struct si_cs_shader_state cs_shader_state;
+   struct si_cs_shader_state ts_shader_state;
+   struct si_shader_ctx_state ms_shader_state;
    bool compute_ping_pong_launch;
    /* if current tcs set by user */
    bool is_user_tcs;
@@ -1097,10 +1090,10 @@ struct si_context {
    unsigned num_vertex_elements;  /* 0 if the VS uses blit SGPRs to compute VS inputs */
    unsigned cs_max_waves_per_sh;
    uint32_t compute_tmpring_size;
+   uint16_t dirty_shaders_mask; /* 0: vs, 1: tcs, 2: tes, 3: gs, 4: ps, 5: cs, 6: ts, 7: ms, 8: misc (e.g. sqtt) */
    bool vertex_elements_but_no_buffers;
    bool uses_nontrivial_vs_inputs;
    bool force_trivial_vs_inputs;
-   uint8_t dirty_shaders_mask; /* 0: vs, 1: tcs, 2: tes, 3: gs, 4: ps, 5: cs, 6: misc (e.g. sqtt) */
    bool compute_shaderbuf_sgprs_dirty;
    bool compute_image_sgprs_dirty;
    bool vs_uses_base_instance;
@@ -1121,6 +1114,7 @@ struct si_context {
    struct si_images images[SI_NUM_SHADERS];
    bool bo_list_add_all_resident_resources;
    bool bo_list_add_all_compute_resources;
+   bool bo_list_add_all_mesh_resources;
 
    /* tracked buffers for OpenCL */
    int max_global_buffers;
@@ -1142,12 +1136,6 @@ struct si_context {
    bool vertex_buffers_dirty;
    uint16_t vertex_buffer_unaligned; /* bitmask of not dword-aligned buffers */
    struct pipe_vertex_buffer vertex_buffer[SI_NUM_VERTEX_BUFFERS];
-
-   /* Even though we don't need this variable, u_upload_alloc has an optimization that skips
-    * reference counting when the new upload buffer is the same as the last one. So keep
-    * the last upload buffer here and always pass &last_const_upload_buffer to u_upload_alloc.
-    */
-   struct si_resource *last_const_upload_buffer;
 
    /* MSAA config state. */
    uint8_t ps_iter_samples;
@@ -1262,8 +1250,10 @@ struct si_context {
    bool bindless_descriptors_dirty;
    bool graphics_internal_bindings_pointer_dirty;
    bool compute_internal_bindings_pointer_dirty;
+   bool task_internal_bindings_pointer_dirty;
    bool graphics_bindless_pointer_dirty;
    bool compute_bindless_pointer_dirty;
+   bool task_bindless_pointer_dirty;
    bool gs_attribute_ring_pointer_dirty;
 
    /* Allocated bindless handles */
@@ -1328,7 +1318,6 @@ struct si_context {
 
    /* Shader-based queries. */
    struct list_head shader_query_buffers;
-   unsigned num_active_shader_queries;
 
    struct {
       bool with_cb;
@@ -1373,6 +1362,18 @@ struct si_context {
    struct si_ds_queue ds_queue;
    uint32_t *last_timestamp_cmd;
    unsigned int last_timestamp_cmd_cdw;
+
+   /* For mesh shader */
+   struct si_resource *task_wait_buf;
+   uint32_t task_wait_count;
+   uint32_t last_task_wait_count;
+   bool task_state_init_emitted;
+   struct si_resource *task_ring;
+   struct si_resource *task_scratch_buffer;
+   unsigned max_seen_task_scratch_bytes_per_wave;
+   uint32_t task_tmpring_size;
+   struct si_pm4_state *task_preamble_state;
+   struct si_resource *mesh_scratch_ring;
 };
 
 /* si_barrier.c */
@@ -1497,6 +1498,10 @@ void si_gfx_clear_render_target(struct pipe_context *ctx, struct pipe_surface *d
 void si_init_clear_functions(struct si_context *sctx);
 
 /* si_compute.c */
+bool si_setup_compute_scratch_buffer(struct si_screen *screen,
+                                     struct si_shader *shader,
+                                     struct si_resource **scratch_buffer,
+                                     unsigned max_scratch_bytes_per_wave);
 void si_destroy_compute(struct si_compute *program);
 
 /* si_compute_blit.c */
@@ -1632,6 +1637,8 @@ uint64_t si_begin_counter(struct si_screen *sscreen, unsigned type);
 unsigned si_end_counter(struct si_screen *sscreen, unsigned type, uint64_t begin);
 
 /* si_compute.c */
+void *si_create_compute_state_for_nir(struct pipe_context *ctx, nir_shader *nir,
+                                      enum mesa_shader_stage stage);
 void si_init_compute_functions(struct si_context *sctx);
 
 /* si_pipe.c */
@@ -1648,10 +1655,6 @@ void si_init_perfcounters(struct si_screen *screen);
 void si_destroy_perfcounters(struct si_screen *screen);
 void si_inhibit_clockgating(struct si_context *sctx, struct radeon_cmdbuf *cs, bool inhibit);
 void si_pc_emit_shaders(struct radeon_cmdbuf *cs, unsigned shaders);
-void si_pc_emit_spm_start(struct radeon_cmdbuf *cs);
-void si_pc_emit_spm_stop(struct radeon_cmdbuf *cs, bool never_stop_sq_perf_counters,
-                         bool never_send_perfcounter_stop);
-void si_pc_emit_spm_reset(struct radeon_cmdbuf *cs);
 void si_emit_spm_setup(struct si_context *sctx, struct radeon_cmdbuf *cs);
 bool si_spm_init(struct si_context *sctx);
 void si_spm_finish(struct si_context *sctx);
@@ -1665,7 +1668,7 @@ void si_resume_queries(struct si_context *sctx);
 /* si_shaderlib_nir.c */
 
 void *si_create_shader_state(struct si_context *sctx, struct nir_shader *nir);
-void *si_create_dcc_retile_cs(struct si_context *sctx, struct radeon_surf *surf);
+void *si_create_dcc_retile_cs(struct si_context *sctx, const struct radeon_surf *surf);
 void *gfx9_create_clear_dcc_msaa_cs(struct si_context *sctx, struct si_texture *tex);
 void *si_create_passthrough_tcs(struct si_context *sctx);
 void *si_clear_image_dcc_single_shader(struct si_context *sctx, bool is_msaa, unsigned wg_dim);
@@ -1756,6 +1759,9 @@ si_sqtt_describe_barrier_end(struct si_context* sctx, struct radeon_cmdbuf *rcs,
 bool si_init_sqtt(struct si_context *sctx);
 void si_destroy_sqtt(struct si_context *sctx);
 void si_handle_sqtt(struct si_context *sctx, struct radeon_cmdbuf *rcs);
+
+/* si_mesh_shader.c */
+void si_init_task_mesh_shader_functions(struct si_context *sctx);
 
 /*
  * common helpers
@@ -1866,13 +1872,44 @@ si_get_api_vs_inline(struct si_context *sctx, enum amd_gfx_level gfx_level,
 
 static inline struct si_shader_ctx_state *si_get_vs(struct si_context *sctx)
 {
-   return si_get_vs_inline(sctx, sctx->shader.tes.cso ? TESS_ON : TESS_OFF,
-                           sctx->shader.gs.cso ? GS_ON : GS_OFF);
+   if (sctx->shader.gs.cso)
+      return &sctx->shader.gs;
+   else if (sctx->shader.tes.cso)
+      return &sctx->shader.tes;
+   else if (sctx->shader.vs.cso)
+      return &sctx->shader.vs;
+   else
+      return &sctx->ms_shader_state;
 }
 
-static inline bool si_get_strmout_en(struct si_context *sctx)
+static inline bool si_get_streamout_enable_state(struct si_context *sctx)
 {
-   return sctx->streamout.streamout_enabled || sctx->streamout.prims_gen_query_enabled;
+   /* For GFX11, return whether NGG streamout queries are enabled. For older gens, return whether
+    * streamout hw is enabled.
+    *
+    * Note that when both PRIMITIVES_GENERATED and SO_OVERFLOW queries are enabled and XFB is
+    * disabled, SO_OVERFLOW queries will incorrectly return true because PRIMITIVES_GENERATED
+    * is incremented and PRIMITIVES_EMITTED is not. The problem is that SO_OVERFLOW queries
+    * are implemented by comparing PRIMITIVES_GENERATED and PRIMITIVES_EMITTED, however, when
+    * XFB is disabled, SO_OVERFLOW queries should increment neither PRIMITIVES_GENERATED nor
+    * PRIMITIVES_EMITTED, but when a separate PRIMITIVES_GENERATED is active, we should increment
+    * it. So the 2 queries are in conflict when XFB is disabled.
+    *
+    * Possible solutions:
+    * - For NGG: Emulate SO_OVERFLOW queries using memory stores separately from PRIMITIVES_GENERATED.
+    * - For legacy: Emulate SO_OVERFLOW queries using memory stores, same as NGG.
+    */
+   if (sctx->gfx_level >= GFX11) {
+      /* Enable NGG streamout queries when PRIMITIVES_GENERATED queries are active or when
+       * streamout is enabled and any streamout queries except PRIMITIVES_GENERATED are active.
+       */
+      return sctx->streamout.prims_gen_query_enabled ||
+            (sctx->streamout.streamout_enabled &&
+              (sctx->streamout.num_ngg_queries -
+               sctx->streamout.prims_gen_query_enabled > 0));
+   } else {
+      return sctx->streamout.streamout_enabled || sctx->streamout.prims_gen_query_enabled;
+   }
 }
 
 static inline unsigned si_optimal_tcc_alignment(struct si_context *sctx, unsigned upload_size)
@@ -2258,6 +2295,37 @@ static inline bool si_is_buffer_idle(struct si_context *sctx, struct si_resource
 static inline bool si_vs_uses_vbos(struct si_shader_selector *sel)
 {
    return !sel || !sel->info.base.vs.blit_sgprs_amd;
+}
+
+static ALWAYS_INLINE void
+si_emit_all_states(struct si_context *sctx, uint64_t skip_atom_mask)
+{
+   /* Emit states by calling their emit functions. */
+   uint64_t dirty = sctx->dirty_atoms & ~skip_atom_mask;
+
+   if (dirty) {
+      sctx->dirty_atoms &= skip_atom_mask;
+
+      /* u_bit_scan64 is too slow on i386. */
+      if (sizeof(void*) == 8) {
+         do {
+            unsigned i = u_bit_scan64(&dirty);
+            sctx->atoms.array[i].emit(sctx, i);
+         } while (dirty);
+      } else {
+         unsigned dirty_lo = dirty;
+         unsigned dirty_hi = dirty >> 32;
+
+         while (dirty_lo) {
+            unsigned i = u_bit_scan(&dirty_lo);
+            sctx->atoms.array[i].emit(sctx, i);
+         }
+         while (dirty_hi) {
+            unsigned i = 32 + u_bit_scan(&dirty_hi);
+            sctx->atoms.array[i].emit(sctx, i);
+         }
+      }
+   }
 }
 
 #define PRINT_ERR(fmt, args...)                                                                    \

@@ -1,3 +1,6 @@
+// Copyright 2025 Red Hat.
+// SPDX-License-Identifier: MIT
+
 pub trait TryFromWithErr<T, E>: Sized {
     fn try_from_with_err(value: T, error: E) -> Result<Self, E>;
 }

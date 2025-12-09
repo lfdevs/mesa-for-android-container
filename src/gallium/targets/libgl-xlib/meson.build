@@ -17,7 +17,7 @@ libgl = shared_library(
   'GL',
   files('xlib.c'),
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_gallium_winsys, inc_gallium_drivers,
+    inc_include, inc_src, inc_mesa, inc_gallium, inc_gallium_aux, inc_gallium_winsys, inc_gallium_drivers,
     include_directories('../../frontends/glx/xlib'),
   ],
   gnu_symbol_visibility : 'hidden',

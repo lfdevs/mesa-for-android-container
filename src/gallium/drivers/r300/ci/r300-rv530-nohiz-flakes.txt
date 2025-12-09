@@ -39,6 +39,61 @@ spec@glsl-1.10@execution@built-in-functions@fs-op-ge-int-int-using-if
 spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-mat2-float
 
 # uprev Piglit in Mesa
+spec@!opengl 1.1@tex-upside-down-miptree
 spec@!opengl 1.2@mipmap-setup
 spec@!opengl 1.5@depth-tex-compare
 
+spec@!opengl 1.0@gl-1.0-blend-func
+spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_triangles
+spec@!opengl 1.1@tex-upside-down-miptree
+spec@!opengl 2.1@pbo@test_draw_pixels
+spec@arb_fragment_program@fp-formats
+spec@arb_fragment_program@fp-indirections2
+spec@arb_sampler_objects@sampler-incomplete
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 1dshadow
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 2d
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2drect_projvec4
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2dshadow
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 1dshadow
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture\(\) 2drectshadow
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect
+spec@arb_vertex_buffer_object@vbo-subdata-many drawelements
+spec@ext_direct_state_access@textures@CopyTextureImage2DEXT \+ display list GL_COMPILE
+spec@ext_direct_state_access@textures@CopyTextureSubImage2DEXT \+ display list GL_COMPILE
+spec@ext_texture_compression_rgtc@compressedteximage gl_compressed_red_rgtc1_ext
+spec@ext_texture_compression_s3tc@s3tc-errors_gles2
+spec@glsl-1.10@execution@built-in-functions@fs-op-selection-bool-ivec2-ivec2
+spec@glsl-1.10@execution@built-in-functions@vs-distance-vec3-vec3
+spec@glsl-1.20@execution@built-in-functions@vs-op-div-mat4x3-mat4x3
+spec@glsl-1.20@execution@built-in-functions@vs-op-selection-bool-mat3x2-mat3x2
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(\) 1d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(\) 2dshadow
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(bias\) 1dshadow
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(bias\) 2dshadow
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d_projvec4
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj\(bias\) 1dshadow
+spec@khr_texture_compression_astc@miptree-gl srgb-sd
+spec@khr_texture_compression_astc@miptree-gl srgb-sd@sRGB skip decode
+
+spec@ext_direct_state_access@textures
+spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1
+spec@!opengl 1.1@getteximage-simple
+spec@!opengl 1.1@texsubimage-unpack
+spec@arb_texture_float@fbo-alphatest-formats@GL_RGBA16F
+shaders@glsl-fwidth
+spec@glsl-1.20@execution@built-in-functions@vs-op-div-float-mat2x4
+spec@glsl-1.20@execution@built-in-functions@vs-transpose-mat3x4
+spec@nv_texture_env_combine4@nv_texture_env_combine4-combine
+spec@ext_texture_env_combine@texture-env-combine
+spec@glsl-1.10@execution@built-in-functions@fs-op-ne-vec2-vec2-using-if
+spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1
+spec@glsl-1.10@execution@built-in-functions@vs-max-vec4-vec4
+spec@!opengl 1.1@draw-pixel-with-texture
+spec@glsl-1.10@execution@built-in-functions@fs-op-eq-bvec2-bvec2-using-if
+spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1
+spec@ext_direct_state_access@textures@CopyTextureImage1DEXT \+ display list GL_COMPILE
+spec@ext_direct_state_access@textures@CopyTextureImage2DEXT \+ display list GL_COMPILE
+spec@ext_direct_state_access@textures@CopyTextureSubImage1DEXT \+ display list GL_COMPILE
+spec@ext_direct_state_access@textures@CopyTextureSubImage2DEXT \+ display list GL_COMPILE

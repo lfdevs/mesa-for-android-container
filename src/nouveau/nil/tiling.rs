@@ -40,6 +40,24 @@ pub enum GOBType {
     /// `CopyGOBFermi` implements CPU copies for Fermi color GOBs.
     FermiColor,
 
+    /// The Tegra GOB format for color images
+    ///
+    /// A `TegraColor` GOB is 512 bytes, arranged in a 64x8 layout and split
+    /// into Sectors. Each Sector is 32 Bytes, and the Sectors in a GOB are
+    /// arranged in a 16x2 layout (i.e., two 16B lines on top of each other).
+    /// It's then arranged into two columns that are 2 sectors by 4, leading to
+    /// a 4x4 grid of sectors:
+    ///
+    /// |           |           |           |           |
+    /// |-----------|-----------|-----------|-----------|
+    /// | Sector  0 | Sector  1 | Sector  8 | Sector  9 |
+    /// | Sector  2 | Sector  3 | Sector 10 | Sector 11 |
+    /// | Sector  4 | Sector  5 | Sector 12 | Sector 13 |
+    /// | Sector  6 | Sector  7 | Sector 14 | Sector 15 |
+    ///
+    /// `CopyGOBTegra` implements CPU copies for Tegra color GOBs.
+    TegraColor,
+
     /// The Turing 2D GOB format for color images
     ///
     /// A `TuringColor2D` GOB is 512 bytes, arranged in a 64x8 layout and split
@@ -126,6 +144,8 @@ impl GOBType {
         } else if dev.cls_eng3d >= cl9097::FERMI_A {
             if format.is_depth_or_stencil() {
                 GOBType::FermiZS
+            } else if dev.type_ == NV_DEVICE_TYPE_SOC {
+                GOBType::TegraColor
             } else {
                 GOBType::FermiColor
             }
@@ -139,6 +159,7 @@ impl GOBType {
             GOBType::Linear => Extent4D::new(1, 1, 1, 1),
             GOBType::FermiZS
             | GOBType::FermiColor
+            | GOBType::TegraColor
             | GOBType::TuringColor2D
             | GOBType::Blackwell8Bit
             | GOBType::Blackwell16Bit

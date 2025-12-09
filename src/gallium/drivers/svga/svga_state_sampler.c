@@ -49,7 +49,7 @@ svga_resource_handle(struct pipe_resource *res)
 bool
 svga_check_sampler_view_resource_collision(const struct svga_context *svga,
                                            const struct svga_winsys_surface *res,
-                                           enum pipe_shader_type shader)
+                                           mesa_shader_stage shader)
 {
    struct pipe_screen *screen = svga->pipe.screen;
    unsigned i;
@@ -80,7 +80,7 @@ svga_check_sampler_view_resource_collision(const struct svga_context *svga,
  */
 bool
 svga_check_sampler_framebuffer_resource_collision(struct svga_context *svga,
-                                                  enum pipe_shader_type shader)
+                                                  mesa_shader_stage shader)
 {
    struct svga_surface *surf;
    unsigned i;
@@ -227,11 +227,11 @@ static enum pipe_error
 update_sampler_resources(struct svga_context *svga, uint64_t dirty)
 {
    enum pipe_error ret = PIPE_OK;
-   enum pipe_shader_type shader;
+   mesa_shader_stage shader;
 
    assert(svga_have_vgpu10(svga));
 
-   for (shader = PIPE_SHADER_VERTEX; shader < PIPE_SHADER_COMPUTE; shader++) {
+   for (shader = MESA_SHADER_VERTEX; shader < MESA_SHADER_COMPUTE; shader++) {
       SVGA3dShaderResourceViewId ids[PIPE_MAX_SAMPLERS];
       struct svga_winsys_surface *surfaces[PIPE_MAX_SAMPLERS];
       struct pipe_sampler_view *sampler_views[PIPE_MAX_SAMPLERS];
@@ -355,7 +355,7 @@ update_sampler_resources(struct svga_context *svga, uint64_t dirty)
       surface = svga_resource_handle(sv->base.texture);
       ret = SVGA3D_vgpu10_SetShaderResources(
                svga->swc,
-               svga_shader_type(PIPE_SHADER_FRAGMENT),
+               svga_shader_type(MESA_SHADER_FRAGMENT),
                unit, /* startView */
                1,
                &sv->id,
@@ -378,11 +378,11 @@ static enum pipe_error
 update_samplers(struct svga_context *svga, uint64_t dirty )
 {
    enum pipe_error ret = PIPE_OK;
-   enum pipe_shader_type shader;
+   mesa_shader_stage shader;
 
    assert(svga_have_vgpu10(svga));
 
-   for (shader = PIPE_SHADER_VERTEX; shader < PIPE_SHADER_COMPUTE; shader++) {
+   for (shader = MESA_SHADER_VERTEX; shader < MESA_SHADER_COMPUTE; shader++) {
       const unsigned count = svga->curr.num_samplers[shader];
       SVGA3dSamplerId ids[PIPE_MAX_SAMPLERS*2];
       unsigned i;
@@ -395,7 +395,7 @@ update_samplers(struct svga_context *svga, uint64_t dirty )
          const struct svga_sampler_state *sampler = svga->curr.sampler[shader][i];
 
          /* _NEW_FS */
-         if (shader == PIPE_SHADER_FRAGMENT) {
+         if (shader == MESA_SHADER_FRAGMENT) {
             struct svga_fs_variant *fs =
                svga_fs_variant(svga->state.hw_draw.fs);
 
@@ -493,7 +493,7 @@ update_samplers(struct svga_context *svga, uint64_t dirty )
          return PIPE_OK; /* probably out of memory */
       }
 
-      if (svga->state.hw_draw.samplers[PIPE_SHADER_FRAGMENT][unit]
+      if (svga->state.hw_draw.samplers[MESA_SHADER_FRAGMENT][unit]
           != sampler->id[0]) {
          ret = SVGA3D_vgpu10_SetSamplers(svga->swc,
                                          1, /* count */
@@ -504,10 +504,10 @@ update_samplers(struct svga_context *svga, uint64_t dirty )
             return ret;
 
          /* save the polygon stipple sampler in the hw draw state */
-         svga->state.hw_draw.samplers[PIPE_SHADER_FRAGMENT][unit] =
+         svga->state.hw_draw.samplers[MESA_SHADER_FRAGMENT][unit] =
             sampler->id[0];
       }
-      svga->state.hw_draw.num_samplers[PIPE_SHADER_FRAGMENT]++;
+      svga->state.hw_draw.num_samplers[MESA_SHADER_FRAGMENT]++;
    }
 
    return ret;
@@ -527,7 +527,7 @@ static enum pipe_error
 update_cs_sampler_resources(struct svga_context *svga, uint64_t dirty)
 {
    enum pipe_error ret = PIPE_OK;
-   enum pipe_shader_type shader = PIPE_SHADER_COMPUTE;
+   mesa_shader_stage shader = MESA_SHADER_COMPUTE;
 
    assert(svga_have_sm5(svga));
 
@@ -649,7 +649,7 @@ static enum pipe_error
 update_cs_samplers(struct svga_context *svga, uint64_t dirty )
 {
    enum pipe_error ret = PIPE_OK;
-   enum pipe_shader_type shader = PIPE_SHADER_COMPUTE;
+   mesa_shader_stage shader = MESA_SHADER_COMPUTE;
 
    assert(svga_have_sm5(svga));
 

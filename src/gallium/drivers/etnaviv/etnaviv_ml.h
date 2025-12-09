@@ -18,6 +18,7 @@ enum etna_job_type {
     ETNA_JOB_TYPE_TP,
     ETNA_JOB_TYPE_CONCAT, /* Fake operation, won't execute on HW. Hack will go away after the move to NIR. */
     ETNA_JOB_TYPE_SPLIT, /* Fake operation, won't execute on HW. Hack will go away after the move to NIR. */
+    ETNA_JOB_TYPE_BYPASS, /* Fake operation, won't execute on HW. Hack will go away after the move to NIR. */
 };
 
 enum etna_ml_tp_type {
@@ -25,6 +26,9 @@ enum etna_ml_tp_type {
    ETNA_ML_TP_DETRANSPOSE,
    ETNA_ML_TP_RESHUFFLE,
    ETNA_ML_TP_PAD,
+   ETNA_ML_TP_RELU,
+   ETNA_ML_TP_ABSOLUTE,
+   ETNA_ML_TP_LOGISTIC,
 };
 
 enum etna_ml_tensor_layout {
@@ -56,6 +60,7 @@ struct etna_vip_instruction {
 
    struct etna_bo *configs[MAX_CONFIG_BOS];
    struct etna_bo *coefficients;
+   struct etna_bo *pwl_lut;
    struct pipe_resource *input;
    unsigned input_offset;
    struct pipe_resource *output;
@@ -140,6 +145,10 @@ struct etna_bo *etna_ml_create_bo(struct pipe_context *pctx, size_t size);
 struct pipe_resource *etna_ml_create_resource(struct pipe_context *pctx, size_t size);
 
 struct etna_core_npu_info *etna_ml_get_core_info(struct etna_context *context);
+
+bool
+etna_ml_operation_supported(struct pipe_context *pcontext,
+                            const struct pipe_ml_operation *operation);
 
 struct pipe_ml_subgraph *
 etna_ml_subgraph_create(struct pipe_context *context,

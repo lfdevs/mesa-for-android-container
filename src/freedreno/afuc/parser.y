@@ -185,7 +185,7 @@ label(const char *str)
 %type <num> xmov
 %type <num> peek
 
-%error-verbose
+%define parse.error verbose
 
 %start instrs
 

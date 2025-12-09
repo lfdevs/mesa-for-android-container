@@ -7,6 +7,8 @@ ST_STATE(ST_NEW_GS_STATE, st_update_gp)
 ST_STATE(ST_NEW_TES_STATE, st_update_tep)
 ST_STATE(ST_NEW_TCS_STATE, st_update_tcp)
 ST_STATE(ST_NEW_VS_STATE, st_update_vp)
+ST_STATE(ST_NEW_TS_STATE, st_update_tp)
+ST_STATE(ST_NEW_MS_STATE, st_update_mp)
 
 ST_STATE(ST_NEW_POLY_STIPPLE, st_update_polygon_stipple)
 ST_STATE(ST_NEW_WINDOW_RECTANGLES, st_update_window_rectangles)
@@ -17,6 +19,8 @@ ST_STATE(ST_NEW_FS_SAMPLER_VIEWS, st_update_fragment_textures)
 ST_STATE(ST_NEW_GS_SAMPLER_VIEWS, st_update_geometry_textures)
 ST_STATE(ST_NEW_TCS_SAMPLER_VIEWS, st_update_tessctrl_textures)
 ST_STATE(ST_NEW_TES_SAMPLER_VIEWS, st_update_tesseval_textures)
+ST_STATE(ST_NEW_TS_SAMPLER_VIEWS, st_update_task_textures)
+ST_STATE(ST_NEW_MS_SAMPLER_VIEWS, st_update_mesh_textures)
 
 /* Non-compute samplers. */
 ST_STATE(ST_NEW_VS_SAMPLERS, st_update_vertex_samplers) /* depends on update_*_texture for swizzle */
@@ -24,12 +28,16 @@ ST_STATE(ST_NEW_TCS_SAMPLERS, st_update_tessctrl_samplers) /* depends on update_
 ST_STATE(ST_NEW_TES_SAMPLERS, st_update_tesseval_samplers) /* depends on update_*_texture for swizzle */
 ST_STATE(ST_NEW_GS_SAMPLERS, st_update_geometry_samplers) /* depends on update_*_texture for swizzle */
 ST_STATE(ST_NEW_FS_SAMPLERS, st_update_fragment_samplers) /* depends on update_*_texture for swizzle */
+ST_STATE(ST_NEW_TS_SAMPLERS, st_update_task_samplers) /* depends on update_*_texture for swizzle */
+ST_STATE(ST_NEW_MS_SAMPLERS, st_update_mesh_samplers) /* depends on update_*_texture for swizzle */
 
 ST_STATE(ST_NEW_VS_IMAGES, st_bind_vs_images)
 ST_STATE(ST_NEW_TCS_IMAGES, st_bind_tcs_images)
 ST_STATE(ST_NEW_TES_IMAGES, st_bind_tes_images)
 ST_STATE(ST_NEW_GS_IMAGES, st_bind_gs_images)
 ST_STATE(ST_NEW_FS_IMAGES, st_bind_fs_images)
+ST_STATE(ST_NEW_TS_IMAGES, st_bind_ts_images)
+ST_STATE(ST_NEW_MS_IMAGES, st_bind_ms_images)
 
 ST_STATE(ST_NEW_FB_STATE, st_update_framebuffer_state) /* depends on update_*_texture and bind_*_images */
 ST_STATE(ST_NEW_BLEND, st_update_blend) /* depends on update_framebuffer_state */
@@ -44,18 +52,24 @@ ST_STATE(ST_NEW_TCS_CONSTANTS, st_update_tcs_constants)
 ST_STATE(ST_NEW_TES_CONSTANTS, st_update_tes_constants)
 ST_STATE(ST_NEW_GS_CONSTANTS, st_update_gs_constants)
 ST_STATE(ST_NEW_FS_CONSTANTS, st_update_fs_constants)
+ST_STATE(ST_NEW_TS_CONSTANTS, st_update_ts_constants)
+ST_STATE(ST_NEW_MS_CONSTANTS, st_update_ms_constants)
 
 ST_STATE(ST_NEW_VS_UBOS, st_bind_vs_ubos)
 ST_STATE(ST_NEW_TCS_UBOS, st_bind_tcs_ubos)
 ST_STATE(ST_NEW_TES_UBOS, st_bind_tes_ubos)
 ST_STATE(ST_NEW_FS_UBOS, st_bind_fs_ubos)
 ST_STATE(ST_NEW_GS_UBOS, st_bind_gs_ubos)
+ST_STATE(ST_NEW_TS_UBOS, st_bind_ts_ubos)
+ST_STATE(ST_NEW_MS_UBOS, st_bind_ms_ubos)
 
 ST_STATE(ST_NEW_VS_ATOMICS, st_bind_vs_atomics)
 ST_STATE(ST_NEW_TCS_ATOMICS, st_bind_tcs_atomics)
 ST_STATE(ST_NEW_TES_ATOMICS, st_bind_tes_atomics)
 ST_STATE(ST_NEW_FS_ATOMICS, st_bind_fs_atomics)
 ST_STATE(ST_NEW_GS_ATOMICS, st_bind_gs_atomics)
+ST_STATE(ST_NEW_TS_ATOMICS, st_bind_ts_atomics)
+ST_STATE(ST_NEW_MS_ATOMICS, st_bind_ms_atomics)
 
 /* SSBOs depend on the _atomics having been updated first in the
  * !has_hw_atomics case.
@@ -65,6 +79,8 @@ ST_STATE(ST_NEW_TCS_SSBOS, st_bind_tcs_ssbos)
 ST_STATE(ST_NEW_TES_SSBOS, st_bind_tes_ssbos)
 ST_STATE(ST_NEW_FS_SSBOS, st_bind_fs_ssbos)
 ST_STATE(ST_NEW_GS_SSBOS, st_bind_gs_ssbos)
+ST_STATE(ST_NEW_TS_SSBOS, st_bind_ts_ssbos)
+ST_STATE(ST_NEW_MS_SSBOS, st_bind_ms_ssbos)
 
 ST_STATE(ST_NEW_PIXEL_TRANSFER, st_update_pixel_transfer)
 ST_STATE(ST_NEW_TESS_STATE, st_update_tess)

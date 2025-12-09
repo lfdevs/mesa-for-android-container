@@ -7,6 +7,8 @@
 
 #include "aco_ir.h"
 
+#include "ac_shader_util.h"
+
 namespace aco {
 
 RegisterDemand
@@ -171,12 +173,17 @@ void
 process_live_temps_per_block(live_ctx& ctx, Block* block)
 {
    RegisterDemand new_demand;
+   unsigned num_linear_vgprs = 0;
    block->register_demand = RegisterDemand();
+   block->call_spills = RegisterDemand();
    IDSet live = compute_live_out(ctx, block);
 
    /* initialize register demand */
-   for (unsigned t : live)
+   for (unsigned t : live) {
       new_demand += Temp(t, ctx.program->temp_rc[t]);
+      if (ctx.program->temp_rc[t].is_linear_vgpr())
+         num_linear_vgprs += ctx.program->temp_rc[t].size();
+   }
 
    /* traverse the instructions backwards */
    int idx;
@@ -186,7 +193,8 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
          break;
 
       ctx.program->needs_vcc |= instr_needs_vcc(insn);
-      insn->register_demand = RegisterDemand(new_demand.vgpr, new_demand.sgpr);
+      RegisterDemand demand_after_instr = RegisterDemand(new_demand.vgpr, new_demand.sgpr);
+      insn->register_demand = demand_after_instr;
 
       bool has_vgpr_def = false;
 
@@ -206,6 +214,8 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
 
          if (n) {
             new_demand -= temp;
+            if (temp.regClass().is_linear_vgpr())
+               num_linear_vgprs -= temp.size();
             definition.setKill(false);
          } else {
             insn->register_demand += temp;
@@ -259,7 +269,8 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
          insn->operands[5].setLateKill(true); /* we re-use the destination reg in the middle */
       } else if (insn->opcode == aco_opcode::v_interp_p1_f32 && ctx.program->dev.has_16bank_lds) {
          insn->operands[0].setLateKill(true);
-      } else if (insn->opcode == aco_opcode::p_init_scratch) {
+      } else if (insn->opcode == aco_opcode::p_init_scratch ||
+                 insn->opcode == aco_opcode::p_reload_preserved) {
          insn->operands.back().setLateKill(true);
       } else if (instr_info.classes[(int)insn->opcode] == instr_class::wmma) {
          insn->operands[0].setLateKill(true);
@@ -366,9 +377,79 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
             if (operand.isLateKill())
                insn->register_demand += temp;
             new_demand += temp;
+            if (temp.regClass().is_linear_vgpr())
+               num_linear_vgprs += temp.size();
          } else if (operand.isClobbered()) {
             operand_demand += temp;
          }
+      }
+
+      if (insn->isCall()) {
+         /* For call instructions, definitions are live at the time s_setpc finishes,
+          * which continues execution in the callee. This means that all definitions are
+          * live concurrently with operands.
+          */
+         operand_demand += insn->definitions[0].getTemp();
+         if (insn->definitions[1].physReg() == vcc)
+            operand_demand += insn->definitions[1].getTemp();
+
+         RegisterDemand limit = get_addr_regs_from_waves(ctx.program, ctx.program->min_waves);
+         insn->call().callee_preserved_limit = RegisterDemand();
+
+         BITSET_DECLARE(preserved_regs, 512);
+         insn->call().abi.preservedRegisters(preserved_regs, limit);
+
+         RegisterDemand preserved_reg_demand;
+         preserved_reg_demand.sgpr =
+            __bitset_prefix_sum(preserved_regs, limit.sgpr, 256 / BITSET_WORDBITS);
+         preserved_reg_demand.vgpr = __bitset_prefix_sum(preserved_regs + 256 / BITSET_WORDBITS,
+                                                         limit.vgpr, 256 / BITSET_WORDBITS);
+         insn->call().callee_preserved_limit += preserved_reg_demand;
+
+         /* Killed operands effectively make a preserved register unusable for temporaries which we
+          * want to preserve (those included in caller_preserved_demand).
+          */
+         for (auto& op : insn->operands) {
+            if (!op.isTemp() || !op.isPrecolored() || !op.isKill())
+               continue;
+
+            for (unsigned i = 0; i < op.size(); ++i) {
+               if (BITSET_TEST(preserved_regs, op.physReg().reg() + i))
+                  insn->call().callee_preserved_limit -= Temp(0, RegClass(op.regClass().type(), 1));
+            }
+         }
+
+         /* TODO: the spiller can't handle linear VGPRs. For now, the post-RA preserved register
+          * spilling pass makes sure that all live linear VGPRs are preserved across calls.
+          * Therefore, ignore linear VGPRs in the demand calculation here.
+          */
+         insn->call().callee_preserved_limit.vgpr =
+            MAX2(insn->call().callee_preserved_limit.vgpr - (int16_t)num_linear_vgprs, 0);
+
+         insn->call().caller_preserved_demand = demand_after_instr;
+         insn->call().caller_preserved_demand.vgpr -= num_linear_vgprs;
+
+         /* Non-clobbered (neither discardable nor return) parameters are preserved by the callee
+          * if they are placed in clobbered registers.
+          */
+         for (auto& op : insn->operands) {
+            if (!op.isTemp() || !op.isPrecolored() || op.isClobbered() || op.isKill())
+               continue;
+
+            for (unsigned i = 0; i < op.size(); ++i) {
+               if (!BITSET_TEST(preserved_regs, op.physReg().reg() + i))
+                  insn->call().caller_preserved_demand -=
+                     Temp(0, RegClass(op.regClass().type(), 1));
+            }
+         }
+
+         for (unsigned i = 0; i < insn->definitions.size(); ++i) {
+            if (!insn->definitions[i].isKill())
+               insn->call().caller_preserved_demand -= insn->definitions[i].getTemp();
+         }
+
+         block->call_spills.update(insn->call().caller_preserved_demand -
+                                   insn->call().callee_preserved_limit);
       }
 
       operand_demand += new_demand;
@@ -430,6 +511,7 @@ process_live_temps_per_block(live_ctx& ctx, Block* block)
    block->live_in_demand = new_demand;
    block->register_demand.update(block->live_in_demand);
    ctx.program->max_reg_demand.update(block->register_demand);
+   ctx.program->max_call_spills.update(block->call_spills);
    ctx.handled_once = std::min(ctx.handled_once, block->index);
 
    assert(!block->linear_preds.empty() || (new_demand == RegisterDemand() && live.empty()));
@@ -535,8 +617,8 @@ max_suitable_waves(Program* program, uint16_t waves)
    unsigned num_workgroups = waves * num_simd / waves_per_workgroup;
 
    /* Adjust #workgroups for LDS */
-   unsigned lds_per_workgroup = align(program->config->lds_size * program->dev.lds_encoding_granule,
-                                      program->dev.lds_alloc_granule);
+   unsigned lds_increment = ac_shader_get_lds_alloc_granularity(program->gfx_level);
+   unsigned lds_per_workgroup = align(program->config->lds_size, lds_increment);
 
    if (program->stage == fragment_fs) {
       /* PS inputs are moved from PC (parameter cache) to LDS before PS waves are launched.
@@ -545,7 +627,7 @@ max_suitable_waves(Program* program, uint16_t waves)
        */
       unsigned lds_bytes_per_interp = 3 * 16;
       unsigned lds_param_bytes = lds_bytes_per_interp * program->info.ps.num_inputs;
-      lds_per_workgroup += align(lds_param_bytes, program->dev.lds_alloc_granule);
+      lds_per_workgroup += align(lds_param_bytes, lds_increment);
    }
    unsigned lds_limit = program->wgp_mode ? program->dev.lds_limit * 2 : program->dev.lds_limit;
    if (lds_per_workgroup)
@@ -571,7 +653,7 @@ update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand)
    RegisterDemand limit = get_addr_regs_from_waves(program, program->min_waves);
 
    /* this won't compile, register pressure reduction necessary */
-   if (new_demand.exceeds(limit)) {
+   if (new_demand.exceeds(limit) || program->max_call_spills != RegisterDemand()) {
       program->num_waves = 0;
       program->max_reg_demand = new_demand;
    } else {
@@ -595,6 +677,7 @@ live_var_analysis(Program* program)
    program->live.memory.release();
    program->live.live_in.resize(program->blocks.size(), IDSet(program->live.memory));
    program->max_reg_demand = RegisterDemand();
+   program->max_call_spills = RegisterDemand();
    program->needs_vcc = program->gfx_level >= GFX10;
 
    live_ctx ctx;

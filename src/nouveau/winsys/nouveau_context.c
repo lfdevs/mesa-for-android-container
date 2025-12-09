@@ -11,6 +11,9 @@
 static void
 nouveau_ws_subchan_dealloc(int fd, struct nouveau_ws_object *obj)
 {
+   if (obj->cls == 0)
+      return;
+
    struct {
       struct nvif_ioctl_v0 ioctl;
       struct nvif_ioctl_del del;
@@ -120,33 +123,29 @@ nouveau_ws_channel_dealloc(int fd, int channel)
    assert(!ret);
 }
 
-int
-nouveau_ws_context_create(struct nouveau_ws_device *dev,
-                          enum nouveau_ws_engines engines,
-                          struct nouveau_ws_context **out)
+static int
+nouveau_ws_3d_context_init(struct nouveau_ws_device *dev,
+                           struct nouveau_ws_context *ctx,
+                           enum nouveau_ws_engines engines)
 {
    struct drm_nouveau_channel_alloc req = { };
    uint32_t classes[NOUVEAU_WS_CONTEXT_MAX_CLASSES];
    uint32_t base;
 
-   *out = CALLOC_STRUCT(nouveau_ws_context);
-   if (!*out)
-      return -ENOMEM;
-
    int ret = drmCommandWriteRead(dev->fd, DRM_NOUVEAU_CHANNEL_ALLOC, &req, sizeof(req));
    if (ret)
-      goto fail_alloc;
+      return ret;
 
    ret = nouveau_ws_context_query_classes(dev->fd, req.channel, classes);
    if (ret)
-      goto fail_subchan;
+      return ret;
 
    base = (uint32_t)(0xbeef + req.channel) << 16;
 
    if (engines & NOUVEAU_WS_ENGINE_COPY) {
       uint32_t obj_class = nouveau_ws_context_find_class(classes, 0xb5);
       ret = nouveau_ws_subchan_alloc(dev->fd, req.channel, 0,
-                                     obj_class, &(*out)->copy);
+                                     obj_class, &ctx->copy);
       if (ret)
          goto fail_subchan;
    }
@@ -154,7 +153,7 @@ nouveau_ws_context_create(struct nouveau_ws_device *dev,
    if (engines & NOUVEAU_WS_ENGINE_2D) {
       uint32_t obj_class = nouveau_ws_context_find_class(classes, 0x2d);
       ret = nouveau_ws_subchan_alloc(dev->fd, req.channel, base | 0x902d,
-                                     obj_class, &(*out)->eng2d);
+                                     obj_class, &ctx->eng2d);
       if (ret)
          goto fail_subchan;
    }
@@ -162,7 +161,7 @@ nouveau_ws_context_create(struct nouveau_ws_device *dev,
    if (engines & NOUVEAU_WS_ENGINE_3D) {
       uint32_t obj_class = nouveau_ws_context_find_class(classes, 0x97);
       ret = nouveau_ws_subchan_alloc(dev->fd, req.channel, base | 0x003d,
-                                     obj_class, &(*out)->eng3d);
+                                     obj_class, &ctx->eng3d);
       if (ret)
          goto fail_subchan;
    }
@@ -172,7 +171,7 @@ nouveau_ws_context_create(struct nouveau_ws_device *dev,
       if (!obj_class)
          obj_class = nouveau_ws_context_find_class(classes, 0x39);
       ret = nouveau_ws_subchan_alloc(dev->fd, req.channel, base | 0x323f,
-                                     obj_class, &(*out)->m2mf);
+                                     obj_class, &ctx->m2mf);
       if (ret)
          goto fail_subchan;
    }
@@ -180,25 +179,46 @@ nouveau_ws_context_create(struct nouveau_ws_device *dev,
    if (engines & NOUVEAU_WS_ENGINE_COMPUTE) {
       uint32_t obj_class = nouveau_ws_context_find_class(classes, 0xc0);
       ret = nouveau_ws_subchan_alloc(dev->fd, req.channel, base | 0x00c0,
-                                     obj_class, &(*out)->compute);
+                                     obj_class, &ctx->compute);
       if (ret)
          goto fail_subchan;
    }
 
-   (*out)->channel = req.channel;
-   (*out)->dev = dev;
+   ctx->channel = req.channel;
+
    return 0;
 
 fail_subchan:
-   nouveau_ws_subchan_dealloc(dev->fd, &(*out)->compute);
-   nouveau_ws_subchan_dealloc(dev->fd, &(*out)->eng3d);
-   nouveau_ws_subchan_dealloc(dev->fd, &(*out)->copy);
-   nouveau_ws_subchan_dealloc(dev->fd, &(*out)->m2mf);
-   nouveau_ws_subchan_dealloc(dev->fd, &(*out)->eng2d);
+   nouveau_ws_subchan_dealloc(dev->fd, &ctx->compute);
+   nouveau_ws_subchan_dealloc(dev->fd, &ctx->eng3d);
+   nouveau_ws_subchan_dealloc(dev->fd, &ctx->copy);
+   nouveau_ws_subchan_dealloc(dev->fd, &ctx->m2mf);
+   nouveau_ws_subchan_dealloc(dev->fd, &ctx->eng2d);
    nouveau_ws_channel_dealloc(dev->fd, req.channel);
-fail_alloc:
-   FREE(*out);
+
    return ret;
+}
+
+int
+nouveau_ws_context_create(struct nouveau_ws_device *dev,
+                          enum nouveau_ws_engines engines,
+                          struct nouveau_ws_context **out)
+{
+   struct nouveau_ws_context *ctx = CALLOC_STRUCT(nouveau_ws_context);
+   if (ctx == NULL)
+      return -ENOMEM;
+
+   ctx->dev = dev;
+
+   int ret = nouveau_ws_3d_context_init(dev, ctx, engines);
+   if (ret != 0) {
+      FREE(ctx);
+      return ret;
+   }
+
+   *out = ctx;
+
+   return 0;
 }
 
 void

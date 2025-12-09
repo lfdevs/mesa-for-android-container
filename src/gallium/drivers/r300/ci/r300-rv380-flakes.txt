@@ -1,3 +1,5 @@
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.94
 dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_rgb
 dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba16f_cube
+
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.94

@@ -40,7 +40,7 @@ follow_modifiers(nir_instr *instr)
    nir_alu_instr *alu = nir_instr_as_alu(instr);
 
    if (alu->op == nir_op_fneg || alu->op == nir_op_fabs) {
-      return follow_modifiers(alu->src[0].src.ssa->parent_instr);
+      return follow_modifiers(nir_def_instr(alu->src[0].src.ssa));
    }
    return alu->def.index;
 }
@@ -50,7 +50,7 @@ has_three_different_tmp_sources(nir_alu_instr *fcsel)
 {
    unsigned src_def_index[3];
    for (unsigned i = 0; i < 3; i++) {
-      int index = follow_modifiers(fcsel->src[i].src.ssa->parent_instr);
+      int index = follow_modifiers(nir_def_instr(fcsel->src[i].src.ssa));
       if (index == -1)
          return false;
       else
@@ -93,7 +93,7 @@ r300_nir_lower_fcsel_instr(nir_builder *b, nir_alu_instr *alu, void *data)
        * fcsel_gt by nir_lower_bool_to_float, however we can save on the slt
        * even for nir_op_fcsel_gt if the source is 0 or 1 anyway.
        */
-      nir_instr *src0_instr = alu->src[0].src.ssa->parent_instr;
+      nir_instr *src0_instr = nir_def_instr(alu->src[0].src.ssa);
       if (alu->op == nir_op_fcsel || (alu->op == nir_op_fcsel_gt && is_comparison(src0_instr))) {
          lrp = nir_flrp(b, nir_ssa_for_alu_src(b, alu, 2), nir_ssa_for_alu_src(b, alu, 1),
                         nir_ssa_for_alu_src(b, alu, 0));

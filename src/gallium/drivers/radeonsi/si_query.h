@@ -21,6 +21,7 @@ struct si_query;
 struct si_query_buffer;
 struct si_query_hw;
 struct si_resource;
+struct radeon_cmdbuf;
 
 #define SI_MAX_STREAMS 4
 
@@ -260,5 +261,8 @@ int si_get_perfcounter_group_info(struct si_screen *, unsigned index,
 struct si_qbo_state {
    struct pipe_constant_buffer saved_const0;
 };
+
+bool si_need_emit_task_shader_query(struct si_context *ctx, struct radeon_cmdbuf *cs);
+void si_emit_task_shader_query_state(struct si_context *sctx);
 
 #endif /* SI_QUERY_H */

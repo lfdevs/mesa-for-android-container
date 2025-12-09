@@ -293,6 +293,11 @@ struct rvce_h264_enc_pic {
    bool not_referenced;
 };
 
+struct rvce_fb_buffer {
+   struct si_resource *res;
+   void *data;
+};
+
 /* VCE encoder representation */
 struct rvce_encoder {
    struct pipe_video_codec base;
@@ -305,6 +310,7 @@ struct rvce_encoder {
 
    rvce_get_buffer get_buffer;
 
+   struct pipe_video_buffer *source_copy;
    struct pb_buffer_lean *handle;
    struct radeon_surf *luma;
    struct radeon_surf *chroma;
@@ -315,8 +321,8 @@ struct rvce_encoder {
 
    unsigned dpb_slots;
 
-   struct rvid_buffer *fb;
-   struct rvid_buffer dpb;
+   struct rvce_fb_buffer *fb;
+   struct si_resource *dpb;
    struct pipe_h264_enc_picture_desc pic;
    struct rvce_h264_enc_pic enc_pic;
 

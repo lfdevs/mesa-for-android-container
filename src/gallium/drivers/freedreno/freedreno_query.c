@@ -199,7 +199,7 @@ query_type(enum fd_perfcntr_type type)
       ENUM(TYPE_AMPS);
       ENUM(TYPE_WATTS);
    default:
-      unreachable("bad type");
+      UNREACHABLE("bad type");
       return 0;
    }
 }
@@ -211,7 +211,7 @@ query_result_type(enum fd_perfcntr_result_type type)
       ENUM(RESULT_TYPE_AVERAGE);
       ENUM(RESULT_TYPE_CUMULATIVE);
    default:
-      unreachable("bad type");
+      UNREACHABLE("bad type");
       return 0;
    }
 }

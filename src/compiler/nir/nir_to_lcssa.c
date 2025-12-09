@@ -92,7 +92,7 @@ is_use_inside_loop(nir_src *use, nir_loop *loop)
 static bool
 is_defined_before_loop(nir_def *def, nir_loop *loop)
 {
-   nir_instr *instr = def->parent_instr;
+   nir_instr *instr = nir_def_instr(def);
    nir_block *block_before_loop =
       nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
 
@@ -114,10 +114,12 @@ def_is_invariant(nir_def *def, nir_loop *loop)
    if (is_defined_before_loop(def, loop))
       return invariant;
 
-   if (def->parent_instr->pass_flags == undefined)
-      def->parent_instr->pass_flags = instr_is_invariant(def->parent_instr, loop);
+   nir_instr *instr = nir_def_instr(def);
 
-   return def->parent_instr->pass_flags == invariant;
+   if (instr->pass_flags == undefined)
+      instr->pass_flags = instr_is_invariant(instr, loop);
+
+   return instr->pass_flags == invariant;
 }
 
 static bool
@@ -196,8 +198,8 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
    /* Don't create LCSSA-Phis for loop-invariant variables */
    if (state->skip_invariants &&
        (def->bit_size != 1 || state->skip_bool_invariants)) {
-      assert(def->parent_instr->pass_flags != undefined);
-      if (def->parent_instr->pass_flags == invariant)
+      assert(nir_def_instr(def)->pass_flags != undefined);
+      if (nir_def_instr(def)->pass_flags == invariant)
          return true;
    }
 
@@ -223,8 +225,8 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
    if (all_uses_inside_loop)
       return true;
 
-   if (def->parent_instr->type == nir_instr_type_deref) {
-      nir_rematerialize_deref_in_use_blocks(nir_instr_as_deref(def->parent_instr));
+   if (nir_def_is_deref(def)) {
+      nir_rematerialize_deref_in_use_blocks(nir_def_as_deref(def));
       return true;
    }
 
@@ -236,7 +238,7 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
    /* Create a phi node with as many sources pointing to the same ssa_def as
     * the block has predecessors.
     */
-   uint32_t num_exits = state->block_after_loop->predecessors->entries;
+   uint32_t num_exits = state->block_after_loop->predecessors.entries;
    for (uint32_t i = 0; i < num_exits; i++) {
       nir_phi_instr_add_src(phi, state->exit_blocks[i], def);
    }
@@ -339,7 +341,7 @@ convert_to_lcssa(nir_cf_node *cf_node, lcssa_state *state)
           * The variance then depends on all (nested) break conditions.
           * We don't consider this, but assume all not_invariant.
           */
-         if (nir_loop_first_block(loop)->predecessors->entries == 1)
+         if (nir_loop_first_block(loop)->predecessors.entries == 1)
             goto end;
 
          nir_foreach_block_in_cf_node(block, cf_node) {
@@ -366,7 +368,7 @@ convert_to_lcssa(nir_cf_node *cf_node, lcssa_state *state)
       return;
    }
    default:
-      unreachable("unknown cf node type");
+      UNREACHABLE("unknown cf node type");
    }
 }
 

@@ -6,7 +6,7 @@
 #include "intel_decoder.h"
 #include "intel_decoder_private.h"
 
-#include "compiler/brw_disasm.h"
+#include "compiler/brw/brw_disasm.h"
 
 static void
 ctx_disassemble_program_brw(struct intel_batch_decode_ctx *ctx,

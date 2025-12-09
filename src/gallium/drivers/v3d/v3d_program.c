@@ -23,6 +23,7 @@
 
 #include <inttypes.h>
 #include "util/format/u_format.h"
+#include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/ralloc.h"
@@ -360,11 +361,9 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
         if (s->info.stage == MESA_SHADER_FRAGMENT &&
             s->info.outputs_written & BITFIELD_BIT(FRAG_RESULT_COLOR)) {
                 /* We only support one attachment when doing dual source blending. */
-                if (s->info.fs.color_is_dual_source)
-                        NIR_PASS(_, s, nir_lower_fragcolor, 1);
-                else if (V3D_DBG(SOFT_BLEND))
-                        NIR_PASS(_, s, nir_lower_fragcolor,
-                                 V3D_MAX_DRAW_BUFFERS);
+                unsigned max_rb = s->info.fs.color_is_dual_source ?
+                        1 : V3D_MAX_DRAW_BUFFERS;
+                NIR_PASS(_, s, nir_lower_fragcolor, max_rb);
         }
 
         if (s->info.stage != MESA_SHADER_VERTEX &&
@@ -422,7 +421,7 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
 
         if (V3D_DBG(NIR) || v3d_debug_flag_for_shader_stage(s->info.stage)) {
                 fprintf(stderr, "%s prog %d NIR:\n",
-                        gl_shader_stage_name(s->info.stage),
+                        mesa_shader_stage_name(s->info.stage),
                         so->program_id);
                 nir_print_shader(s, stderr);
                 fprintf(stderr, "\n");
@@ -510,7 +509,7 @@ v3d_get_compiled_shader(struct v3d_context *v3d,
                 ralloc_steal(shader, shader->prog_data.base);
 
                 if (shader->qpu_size) {
-                        u_upload_data(v3d->state_uploader, 0, shader->qpu_size, 8,
+                        u_upload_data_ref(v3d->state_uploader, 0, shader->qpu_size, 8,
                                       qpu_insts, &shader->offset, &shader->resource);
                 }
 
@@ -579,6 +578,9 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
                 if (return_size == 32)
                         key->sampler_is_32b |= (1 << i);
         }
+
+        key->robust_uniform_access = v3d->robust_buffer;
+        key->robust_storage_access = v3d->robust_buffer;
 }
 
 static void
@@ -602,7 +604,7 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         }
 
         memset(key, 0, sizeof(*key));
-        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_FRAGMENT]);
+        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[MESA_SHADER_FRAGMENT]);
         key->ucp_enables = v3d->rasterizer->base.clip_plane_enable;
         key->is_points = (prim_mode == MESA_PRIM_POINTS);
         key->is_lines = (prim_mode >= MESA_PRIM_LINES &&
@@ -625,11 +627,10 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         key->can_earlyz_with_discard = s->info.fs.uses_discard &&
                 !s->info.fs.uses_fbfetch_output &&
                 (!v3d->zsa || !job->zsbuf.texture ||
-                !v3d->zsa->base.depth_enabled ||
-                 !v3d->zsa->base.depth_writemask) &&
+                 !util_writes_depth_stencil(&v3d->zsa->base)) &&
                 !(v3d->active_queries && v3d->current_oq);
 
-        key->software_blend = v3d->blend->use_software;
+        key->software_blend = v3d->framebuffer_soft_blend || v3d->blend->use_software;
 
         for (int i = 0; i < v3d->framebuffer.nr_cbufs; i++) {
                 const struct pipe_surface *cbuf = &v3d->framebuffer.cbufs[i];
@@ -684,6 +685,19 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
                         key->f32_color_rb |= 1 << i;
                 }
 
+                if (desc->is_unorm && desc->channel[0].size == 16) {
+                        /* We write as integer */
+                        key->f32_color_rb |= 1 << i;
+                        key->norm_16 |= 1 << i;
+                }
+
+                if (desc->is_snorm) {
+                        if (desc->channel[0].size == 16)
+                                key->norm_16 |= 1 << i;
+                        key->snorm |= 1 << i;
+                        key->f32_color_rb |= 1 << i;
+                }
+
                 if (util_format_is_pure_uint(cbuf->format))
                         key->f32_color_rb |= 1 << i;
                 else if (util_format_is_pure_sint(cbuf->format))
@@ -720,6 +734,10 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
                     old_fs->prog_data.fs->centroid_flags) {
                         v3d->dirty |= V3D_DIRTY_CENTROID_FLAGS;
                 }
+                if (v3d->prog.fs->prog_data.fs->disable_ez !=
+                    old_fs->prog_data.fs->disable_ez) {
+                   v3d->dirty |= V3D_DIRTY_ZSA;
+                }
         }
 
         if (old_fs && memcmp(v3d->prog.fs->prog_data.fs->input_slots,
@@ -750,7 +768,7 @@ v3d_update_compiled_gs(struct v3d_context *v3d, uint8_t prim_mode)
         }
 
         memset(key, 0, sizeof(*key));
-        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_GEOMETRY]);
+        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[MESA_SHADER_GEOMETRY]);
         key->base.is_last_geometry_stage = true;
         key->num_used_outputs = v3d->prog.fs->prog_data.fs->num_inputs;
         STATIC_ASSERT(sizeof(key->used_outputs) ==
@@ -822,7 +840,7 @@ v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
         }
 
         memset(key, 0, sizeof(*key));
-        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_VERTEX]);
+        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[MESA_SHADER_VERTEX]);
         key->base.is_last_geometry_stage = !v3d->prog.bind_gs;
 
         if (!v3d->prog.bind_gs) {
@@ -935,7 +953,7 @@ v3d_update_compiled_cs(struct v3d_context *v3d)
         }
 
         memset(key, 0, sizeof(*key));
-        v3d_setup_shared_key(v3d, key, &v3d->tex[PIPE_SHADER_COMPUTE]);
+        v3d_setup_shared_key(v3d, key, &v3d->tex[MESA_SHADER_COMPUTE]);
 
         struct v3d_compiled_shader *cs =
                 v3d_get_compiled_shader(v3d, key, sizeof(*key),

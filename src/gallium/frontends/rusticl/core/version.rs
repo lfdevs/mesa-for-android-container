@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use rusticl_opencl_gen::*;
 
 use std::convert::TryFrom;

@@ -28,7 +28,7 @@
 #include "util/detect_os.h"
 #include "util/u_math.h"
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
 enum android_buffer_type {
    ANDROID_BUFFER_NONE = 0,
    ANDROID_BUFFER_NATIVE,
@@ -88,7 +88,7 @@ struct vk_image {
    uint64_t drm_format_mod;
 #endif
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
    enum android_buffer_type android_buffer_type;
    VkDeviceMemory anb_memory;
 
@@ -143,6 +143,11 @@ vk_image_mip_level_extent(const struct vk_image *image,
    return extent;
 }
 
+uint32_t
+vk_image_subresource_slice_count(const struct vk_device *device,
+                                 const struct vk_image *image,
+                                 const VkImageSubresourceLayers *range);
+
 /* This is defined as a macro so that it works for both
  * VkImageSubresourceRange and VkImageSubresourceLayers
  */
@@ -170,7 +175,7 @@ vk_image_sanitize_extent(const struct vk_image *image,
    case VK_IMAGE_TYPE_3D:
       return imageExtent;
    default:
-      unreachable("invalid image type");
+      UNREACHABLE("invalid image type");
    }
 }
 
@@ -189,7 +194,7 @@ vk_image_sanitize_offset(const struct vk_image *image,
    case VK_IMAGE_TYPE_3D:
       return imageOffset;
    default:
-      unreachable("invalid image type");
+      UNREACHABLE("invalid image type");
    }
 }
 
@@ -368,12 +373,10 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vk_image_view, base, VkImageView,
 
 void vk_image_view_init(struct vk_device *device,
                         struct vk_image_view *image_view,
-                        bool driver_internal,
                         const VkImageViewCreateInfo *pCreateInfo);
 void vk_image_view_finish(struct vk_image_view *image_view);
 
 void *vk_image_view_create(struct vk_device *device,
-                           bool driver_internal,
                            const VkImageViewCreateInfo *pCreateInfo,
                            const VkAllocationCallbacks *alloc,
                            size_t size);
@@ -407,7 +410,7 @@ VkImageLayout vk_att_ref_stencil_layout(const VkAttachmentReference2 *att_ref,
 VkImageLayout vk_att_desc_stencil_layout(const VkAttachmentDescription2 *att_desc,
                                            bool final);
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
 static inline bool
 vk_image_is_android_native_buffer(struct vk_image *image)
 {
@@ -419,9 +422,9 @@ vk_image_is_android_native_buffer(struct vk_image *image)
 {
    return false;
 }
-#endif /* DETECT_OS_ANDROID */
+#endif /* VK_USE_PLATFORM_ANDROID_KHR */
 
-#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
+#if defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26
 static inline bool
 vk_image_is_android_hardware_buffer(struct vk_image *image)
 {

@@ -76,7 +76,7 @@ repair_ssa_def(nir_def *def, void *void_state)
       nir_block *src_block = get_src_block(src);
 
       if (nir_block_is_unreachable(src_block) ||
-          !nir_block_dominates(def->parent_instr->block, src_block)) {
+          !nir_block_dominates(nir_def_block(def), src_block)) {
          is_valid = false;
          break;
       }
@@ -87,18 +87,18 @@ repair_ssa_def(nir_def *def, void *void_state)
 
    struct nir_phi_builder *pb = prep_build_phi(state);
 
-   BITSET_SET(state->def_set, def->parent_instr->block->index);
+   BITSET_SET(state->def_set, nir_def_block(def)->index);
 
    struct nir_phi_builder_value *val =
       nir_phi_builder_add_value(pb, def->num_components, def->bit_size,
                                 state->def_set);
 
-   nir_phi_builder_value_set_block_def(val, def->parent_instr->block, def);
+   nir_phi_builder_value_set_block_def(val, nir_def_block(def), def);
 
    nir_foreach_use_including_if_safe(src, def) {
       nir_block *block = get_src_block(src);
 
-      if (block == def->parent_instr->block) {
+      if (block == nir_def_block(def)) {
          assert(nir_phi_builder_value_get_block_def(val, block) == def);
          continue;
       }
@@ -113,14 +113,14 @@ repair_ssa_def(nir_def *def, void *void_state)
        * deref information.
        */
       if (!nir_src_is_if(src) &&
-          def->parent_instr->type == nir_instr_type_deref &&
+          nir_def_is_deref(def) &&
           nir_src_parent_instr(src)->type == nir_instr_type_deref &&
           nir_instr_as_deref(nir_src_parent_instr(src))->deref_type != nir_deref_type_cast) {
          nir_deref_instr *cast =
             nir_deref_instr_create(state->impl->function->shader,
                                    nir_deref_type_cast);
 
-         nir_deref_instr *deref = nir_instr_as_deref(def->parent_instr);
+         nir_deref_instr *deref = nir_def_as_deref(def);
          cast->modes = deref->modes;
          cast->type = deref->type;
          cast->parent = nir_src_for_ssa(block_def);
@@ -151,7 +151,8 @@ nir_repair_ssa_impl(nir_function_impl *impl)
    state.phi_builder = NULL;
    state.progress = false;
 
-   nir_metadata_require(impl, nir_metadata_control_flow);
+   nir_metadata_require(impl,
+                        nir_metadata_block_index | nir_metadata_dominance);
 
    nir_foreach_block_unstructured(block, impl) {
       nir_foreach_instr_safe(instr, block) {

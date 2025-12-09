@@ -33,8 +33,10 @@
 extern "C" {
 #endif
 
-#include "gallivm/lp_bld.h"
+#include <llvm-c/Core.h>
 #include "gallivm/lp_bld_limits.h"
+
+struct gallivm_state;
 
 /* SM 4.0 says that subroutines can nest 32 deep and
  * we need one more for our main function */

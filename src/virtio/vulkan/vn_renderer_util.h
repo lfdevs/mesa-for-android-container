@@ -35,6 +35,11 @@ vn_renderer_submit_simple(struct vn_renderer *renderer,
    return vn_renderer_submit(renderer, &submit);
 }
 
+VkResult
+vn_renderer_submit_simple_sync(struct vn_renderer *renderer,
+                               const void *cs_data,
+                               size_t cs_size);
+
 void
 vn_renderer_shmem_pool_init(struct vn_renderer *renderer,
                             struct vn_renderer_shmem_pool *pool,

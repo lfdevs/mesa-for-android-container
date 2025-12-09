@@ -31,6 +31,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifdef _GAMING_XBOX
 #define strdup _strdup
@@ -65,8 +66,8 @@
 #    define likely(x)   __builtin_expect(!!(x), 1)
 #    define unlikely(x) __builtin_expect(!!(x), 0)
 #  else
-#    define likely(x)   (x)
-#    define unlikely(x) (x)
+#    define likely(x)   (!!(x))
+#    define unlikely(x) (!!(x))
 #  endif
 #endif
 
@@ -102,7 +103,7 @@
 #ifndef __GNUC__
    /* a grown-up compiler is required for the extra type checking: */
 #  define container_of(ptr, type, member)                               \
-      (type*)((uint8_t *)ptr - offsetof(type, member))
+      ((type*)((uint8_t *)ptr - offsetof(type, member)))
 #else
 #  define __same_type(a, b) \
       __builtin_types_compatible_p(__typeof__(a), __typeof__(b))
@@ -120,19 +121,25 @@
  * function" warnings.
  */
 #if defined(HAVE___BUILTIN_UNREACHABLE) || __has_builtin(__builtin_unreachable)
-#define unreachable(str)    \
+#define UNREACHABLE(str)    \
 do {                        \
-   assert(!"" str);         \
+   (void)"" str; /* str must be a string literal */ \
+   assert(!str);            \
    __builtin_unreachable(); \
 } while (0)
 #elif defined (_MSC_VER)
-#define unreachable(str)    \
+#define UNREACHABLE(str)    \
 do {                        \
-   assert(!"" str);         \
+   (void)"" str; /* str must be a string literal */ \
+   assert(!str);            \
    __assume(0);             \
 } while (0)
 #else
-#define unreachable(str) assert(!"" str)
+#define UNREACHABLE(str)    \
+do {                        \
+   (void)"" str; /* str must be a string literal */ \
+   assert(!str);            \
+} while (0)
 #endif
 
 /**
@@ -164,6 +171,12 @@ do {                       \
 #define ATTRIBUTE_CONST __attribute__((__const__))
 #else
 #define ATTRIBUTE_CONST
+#endif
+
+#if defined(HAVE_FUNC_ATTRIBUTE_COLD)
+#define ATTRIBUTE_COLD __attribute__((__cold__))
+#else
+#define ATTRIBUTE_COLD
 #endif
 
 #ifdef HAVE_FUNC_ATTRIBUTE_FLATTEN
@@ -246,6 +259,12 @@ do {                       \
 #define ATTRIBUTE_OPTIMIZE(flags)
 #endif
 
+#ifdef HAVE_FUNC_ATTRIBUTE_NO_SANITIZE_VPTR
+#define ATTRIBUTE_NO_SANITIZE_VPTR __attribute__((no_sanitize(("vptr"))))
+#else
+#define ATTRIBUTE_NO_SANITIZE_VPTR
+#endif
+
 #ifdef __cplusplus
 /**
  * Macro function that evaluates to true if T is a trivially
@@ -276,10 +295,11 @@ do {                       \
 
 /**
  * This marks symbols that should be visible to dynamic library consumers.
+ * On win32, symbols use def file to export, do not use __declspec(dllexport)
  */
 #ifndef PUBLIC
 #  if defined(_WIN32)
-#    define PUBLIC __declspec(dllexport)
+#    define PUBLIC
 #  elif defined(__GNUC__)
 #    define PUBLIC __attribute__((visibility("default")))
 #  else
@@ -489,18 +509,24 @@ typedef int lock_cap_t;
 #define PRAGMA_DIAGNOSTIC_ERROR(X)   DO_PRAGMA( clang diagnostic error #X )
 #define PRAGMA_DIAGNOSTIC_WARNING(X) DO_PRAGMA( clang diagnostic warning #X )
 #define PRAGMA_DIAGNOSTIC_IGNORED(X) DO_PRAGMA( clang diagnostic ignored #X )
+#define PRAGMA_DIAGNOSTIC_IGNORED_CLANG(X) DO_PRAGMA( clang diagnostic ignored #X )
+#define PRAGMA_DIAGNOSTIC_IGNORED_GCC(X)
 #elif defined(__GNUC__)
 #define PRAGMA_DIAGNOSTIC_PUSH       _Pragma("GCC diagnostic push")
 #define PRAGMA_DIAGNOSTIC_POP        _Pragma("GCC diagnostic pop")
 #define PRAGMA_DIAGNOSTIC_ERROR(X)   DO_PRAGMA( GCC diagnostic error #X )
 #define PRAGMA_DIAGNOSTIC_WARNING(X) DO_PRAGMA( GCC diagnostic warning #X )
 #define PRAGMA_DIAGNOSTIC_IGNORED(X) DO_PRAGMA( GCC diagnostic ignored #X )
+#define PRAGMA_DIAGNOSTIC_IGNORED_CLANG(X)
+#define PRAGMA_DIAGNOSTIC_IGNORED_GCC(X) DO_PRAGMA( GCC diagnostic ignored #X )
 #else
 #define PRAGMA_DIAGNOSTIC_PUSH
 #define PRAGMA_DIAGNOSTIC_POP
 #define PRAGMA_DIAGNOSTIC_ERROR(X)
 #define PRAGMA_DIAGNOSTIC_WARNING(X)
 #define PRAGMA_DIAGNOSTIC_IGNORED(X)
+#define PRAGMA_DIAGNOSTIC_IGNORED_CLANG(X)
+#define PRAGMA_DIAGNOSTIC_IGNORED_GCC(X)
 #endif
 
 #define PASTE2(a, b) a ## b
@@ -528,5 +554,25 @@ typedef int lock_cap_t;
       (a) = (b);                                                               \
       (b) = __tmp;                                                             \
    } while (0)
+
+#define typed_memcpy(dest, src, count) do { \
+   STATIC_ASSERT(sizeof(*(src)) == sizeof(*(dest))); \
+   uint8_t *d = (uint8_t*)(dest); \
+   const uint8_t *s = (const uint8_t*)(src); \
+   if (d != NULL && s != NULL && (count) > 0) { \
+       memcpy(d, s, (count) * sizeof(*(src))); \
+   } \
+} while (0)
+
+/*
+ * Swap bits a and b. From Bithacks
+ * https://graphics.stanford.edu/~seander/bithacks.html#SwappingBitsXOR
+ */
+static inline uint32_t
+util_bit_swap(uint32_t v, unsigned a, unsigned b)
+{
+   uint32_t x = ((v >> a) ^ (v >> b)) & 1;
+   return v ^ ((x << a) | (x << b));
+}
 
 #endif /* UTIL_MACROS_H */

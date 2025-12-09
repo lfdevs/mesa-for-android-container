@@ -76,7 +76,7 @@ nir_collect_src_uniforms(const nir_src *src, int component,
    assert(max_num_bo > 0 && max_num_bo <= MAX_NUM_BO);
    assert(component < src->ssa->num_components);
 
-   nir_instr *instr = src->ssa->parent_instr;
+   nir_instr *instr = nir_def_instr(src->ssa);
 
    switch (instr->type) {
    case nir_instr_type_alu: {
@@ -241,7 +241,7 @@ nir_add_inlinable_uniforms(const nir_src *cond, nir_loop_info *info,
          if (nir_scalar_alu_op(cond_scalar) == nir_op_inot)
             cond_scalar = nir_scalar_chase_alu_src(cond_scalar, 0);
 
-         nir_alu_instr *alu = nir_instr_as_alu(cond_scalar.def->parent_instr);
+         nir_alu_instr *alu = nir_def_as_alu(cond_scalar.def);
 
          /* One side of comparison is induction variable, the other side is
           * only uniform.
@@ -442,7 +442,7 @@ nir_inline_uniforms_impl(nir_builder *b, nir_intrinsic_instr *intr, void *state)
                                             intr->src[0].ssa,
                                             nir_imm_int(b, scalar_offset));
                nir_intrinsic_instr *load =
-                  nir_instr_as_intrinsic(components[i]->parent_instr);
+                  nir_def_as_intrinsic(components[i]);
                nir_intrinsic_set_align(load, NIR_ALIGN_MUL_MAX, scalar_offset);
                nir_intrinsic_set_range_base(load, scalar_offset);
                nir_intrinsic_set_range(load, 4);

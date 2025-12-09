@@ -976,7 +976,7 @@ _mesa_PopAttrib(void)
    if (mask & GL_POLYGON_STIPPLE_BIT) {
       memcpy(ctx->PolygonStipple, attr->PolygonStipple, 32*sizeof(GLuint));
 
-      ctx->NewDriverState |= ST_NEW_POLY_STIPPLE;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_POLY_STIPPLE);
    }
 
    if (mask & GL_SCISSOR_BIT) {
@@ -1037,7 +1037,7 @@ _mesa_PopAttrib(void)
          _math_matrix_analyse(ctx->ProjectionMatrixStack.Top);
 
       ctx->NewState |= _NEW_TRANSFORM;
-      ctx->NewDriverState |= ST_NEW_CLIP_STATE;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_CLIP_STATE);
 
       /* restore clip planes */
       for (i = 0; i < ctx->Const.MaxClipPlanes; i++) {
@@ -1088,7 +1088,7 @@ _mesa_PopAttrib(void)
 
          if (memcmp(&ctx->ViewportArray[i].X, &vp->X, sizeof(float) * 6)) {
             ctx->NewState |= _NEW_VIEWPORT;
-            ctx->NewDriverState |= ST_NEW_VIEWPORT;
+            ST_SET_STATE(ctx->NewDriverState, ST_NEW_VIEWPORT);
 
             memcpy(&ctx->ViewportArray[i].X, &vp->X, sizeof(float) * 6);
 

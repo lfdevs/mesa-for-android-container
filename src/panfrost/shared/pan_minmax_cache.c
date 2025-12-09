@@ -75,7 +75,7 @@ pan_calc_cache_key(struct pan_minmax_cache *cache, unsigned index_size,
       index_size = 2;
       break;
    default:
-      unreachable("unknown index size");
+      UNREACHABLE("unknown index size");
    }
    count = count | (index_size << 30);
    ht_key = ((uint64_t)count << 32) | start;

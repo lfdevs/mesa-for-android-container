@@ -35,13 +35,13 @@ static void
 debug_init(void)
 {
    static bool once = false;
-   char *debug, *out;
+   const char *debug, *out;
 
    if (once)
       return;
    once = true;
 
-   debug = getenv("NOUVEAU_LIBDRM_DEBUG");
+   debug = os_get_option("NOUVEAU_LIBDRM_DEBUG");
    if (debug) {
       int n = strtol(debug, NULL, 0);
       if (n >= 0)
@@ -49,7 +49,7 @@ debug_init(void)
    }
 
    nouveau_out = stderr;
-   out = getenv("NOUVEAU_LIBDRM_OUT");
+   out = os_get_option("NOUVEAU_LIBDRM_OUT");
    if (out) {
       FILE *fout = fopen(out, "w");
       if (fout)
@@ -368,7 +368,7 @@ nouveau_device_new(struct nouveau_object *parent, struct nouveau_device **pdev)
    struct nouveau_drm *drm = nouveau_drm(parent);
    struct nouveau_device *dev;
    uint64_t v;
-   char *tmp;
+   const char *tmp;
 
    struct nouveau_device_priv *nvdev = calloc(1, sizeof(*nvdev));
    if (!nvdev)
@@ -425,7 +425,7 @@ nouveau_device_new(struct nouveau_object *parent, struct nouveau_device **pdev)
       nvdev->base.info.type = NV_DEVICE_TYPE_SOC;
       break;
    default:
-      unreachable("unhandled nvidia device type");
+      UNREACHABLE("unhandled nvidia device type");
       break;
    }
 
@@ -455,14 +455,14 @@ nouveau_device_new(struct nouveau_object *parent, struct nouveau_device **pdev)
       goto done;
    nvdev->base.gart_size = v;
 
-   tmp = getenv("NOUVEAU_LIBDRM_VRAM_LIMIT_PERCENT");
+   tmp = os_get_option("NOUVEAU_LIBDRM_VRAM_LIMIT_PERCENT");
    if (tmp)
       nvdev->vram_limit_percent = atoi(tmp);
    else
       nvdev->vram_limit_percent = 80;
    nvdev->base.vram_limit = (nvdev->base.vram_size * nvdev->vram_limit_percent) / 100;
 
-   tmp = getenv("NOUVEAU_LIBDRM_GART_LIMIT_PERCENT");
+   tmp = os_get_option("NOUVEAU_LIBDRM_GART_LIMIT_PERCENT");
    if (tmp)
       nvdev->gart_limit_percent = atoi(tmp);
    else
@@ -852,7 +852,7 @@ nouveau_bo_set_prime(struct nouveau_bo *bo, int *prime_fd)
    struct nouveau_bo_priv *nvbo = nouveau_bo(bo);
    int ret;
 
-   ret = drmPrimeHandleToFD(drm->fd, nvbo->base.handle, O_CLOEXEC, prime_fd);
+   ret = drmPrimeHandleToFD(drm->fd, nvbo->base.handle, DRM_CLOEXEC | DRM_RDWR, prime_fd);
    if (ret)
       return ret;
 

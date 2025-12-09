@@ -37,7 +37,7 @@ lvp_load_node_data(nir_builder *b, nir_def *addr, nir_def **node_data, uint32_t 
    if (offset < LVP_BVH_NODE_PREFETCH_SIZE && node_data)
       return node_data[offset / 4];
 
-   return nir_build_load_global(b, 1, 32, nir_iadd_imm(b, addr, offset));
+   return nir_load_global(b, 1, 32, nir_iadd_imm(b, addr, offset));
 }
 
 void
@@ -45,7 +45,7 @@ lvp_load_wto_matrix(nir_builder *b, nir_def *instance_addr, nir_def **node_data,
 {
    unsigned offset = offsetof(struct lvp_bvh_instance_node, wto_matrix);
    for (unsigned i = 0; i < 3; ++i) {
-      out[i] = nir_build_load_global(b, 4, 32, nir_iadd_imm(b, instance_addr, offset + i * 16));
+      out[i] = nir_load_global(b, 4, 32, nir_iadd_imm(b, instance_addr, offset + i * 16));
       out[i] = nir_vec4(b,
          lvp_load_node_data(b, instance_addr, node_data, offset + i * 16 + 0),
          lvp_load_node_data(b, instance_addr, node_data, offset + i * 16 + 4),
@@ -58,7 +58,7 @@ lvp_load_wto_matrix(nir_builder *b, nir_def *instance_addr, nir_def **node_data,
 nir_def *
 lvp_load_vertex_position(nir_builder *b, nir_def *primitive_addr, uint32_t index)
 {
-   return nir_build_load_global(b, 3, 32, nir_iadd_imm(b, primitive_addr, index * 3 * sizeof(float)));
+   return nir_load_global(b, 3, 32, nir_iadd_imm(b, primitive_addr, index * 3 * sizeof(float)));
 }
 
 static nir_def *
@@ -102,7 +102,7 @@ lvp_build_intersect_ray_box(nir_builder *b, nir_def **node_data, nir_def *ray_tm
 
       /* If x of the aabb min is NaN, then this is an inactive aabb.
        * We don't need to care about any other components being NaN as that is UB.
-       * https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#acceleration-structure-inactive-prims
+       * https://docs.vulkan.org/spec/latest/chapters/accelstructures.html#acceleration-structure-inactive-prims
        */
       nir_def *min_x = nir_channel(b, node_coords[0], 0);
       nir_def *min_x_is_not_nan =
@@ -274,15 +274,15 @@ lvp_build_intersect_ray_tri(nir_builder *b, nir_def **node_data, nir_def *ray_tm
    /* When an edge is hit, we have to ensure that it is not hit twice in case it is shared.
     *
     * Vulkan 1.4.322, Section 40.1.1 Watertightness:
-    * 
+    *
     *    Any set of two triangles with two shared vertices that were specified in the same
     *    winding order in each triangle have a shared edge defined by those vertices.
-    * 
+    *
     * This means we can decide which triangle should intersect by comparing the shared edge
     * to two arbitrary directions because the shared edges are antiparallel. The triangle
     * vertices are transformed so the ray direction is (0 0 1). Therefore it makes sense to
     * choose (1 0 0) and (0 1 0) as reference directions.
-    * 
+    *
     * Hitting edges is extremely rare so an if should be worth.
     */
    nir_def *is_edge_a = nir_feq_imm(b, u, 0.0f);
@@ -302,18 +302,18 @@ lvp_build_intersect_ray_tri(nir_builder *b, nir_def **node_data, nir_def *ray_tm
        *
        *    Any set of two or more triangles where all triangles have one vertex with an
        *    identical position value, that vertex is a shared vertex.
-       * 
+       *
        * Since the no double hit/miss requirement of a shared vertex is only formulated for
        * closed fans
-       * 
+       *
        *    Implementations should not double-hit or miss when a ray intersects a shared edge,
        *    or a shared vertex of a closed fan.
-       * 
+       *
        * it is possible to choose an arbitrary direction n that defines which triangle in the
        * closed fan should intersect the shared vertex with the ray.
-       * 
+       *
        *    All edges that include the above vertex are shared edges.
-       * 
+       *
        * Implies that all triangles have the same winding order. It is therefore sufficiant
        * to choose the triangle where the other vertices are on both sides of a plane
        * perpendicular to n (relying on winding order to get one instead of two triangles
@@ -530,7 +530,7 @@ lvp_build_ray_traversal(nir_builder *b, const struct lvp_ray_traversal_args *arg
 
       nir_def *node_data[LVP_BVH_NODE_PREFETCH_SIZE / 4];
       for (uint32_t i = 0; i < ARRAY_SIZE(node_data); i++)
-         node_data[i] = nir_build_load_global(b, 1, 32, nir_iadd_imm(b, node_addr, i * 4));
+         node_data[i] = nir_load_global(b, 1, 32, nir_iadd_imm(b, node_addr, i * 4));
 
       nir_def *tmax = nir_load_deref(b, args->vars.tmax);
 

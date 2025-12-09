@@ -27,7 +27,6 @@
 
 #include "util/u_debug.h"
 #include "util/u_cpu_detect.h"
-#include "lp_bld.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_init.h"
 #include "lp_bld_type.h"

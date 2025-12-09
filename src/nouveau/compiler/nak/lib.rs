@@ -6,7 +6,6 @@ mod assign_regs;
 mod builder;
 mod calc_instr_deps;
 mod const_tracker;
-mod dataflow;
 mod from_nir;
 mod ir;
 mod legalize;

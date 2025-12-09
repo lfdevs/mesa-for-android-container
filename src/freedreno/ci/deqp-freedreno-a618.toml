@@ -166,6 +166,7 @@ deqp_args = [
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
     "--deqp-gl-config-name=rgba8888d24s8ms0",
 ]
+prefix = "x11-"
 
 [[deqp]]
 deqp = "/deqp-gles/modules/egl/deqp-egl-wayland"

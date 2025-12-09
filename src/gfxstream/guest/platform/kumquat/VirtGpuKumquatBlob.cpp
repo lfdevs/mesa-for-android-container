@@ -4,7 +4,6 @@
  */
 
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <unistd.h>
 
 #include <cerrno>

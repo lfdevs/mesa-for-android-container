@@ -304,11 +304,9 @@ lima_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *pres)
    if (res->scanout)
       renderonly_scanout_destroy(res->scanout, screen->ro);
 
-   if (res->damage.region)
-      FREE(res->damage.region);
+   FREE(res->damage.region);
 
-   if (res->index_cache)
-      FREE(res->index_cache);
+   FREE(res->index_cache);
 
    FREE(res);
 }
@@ -778,8 +776,7 @@ lima_transfer_unmap(struct pipe_context *pctx,
    struct pipe_box box;
    u_box_2d(0, 0, ptrans->box.width, ptrans->box.height, &box);
    lima_transfer_flush_region(pctx, ptrans, &box);
-   if (trans->staging)
-      free(trans->staging);
+   free(trans->staging);
    if (ptrans->usage & PIPE_MAP_WRITE) {
       pan_minmax_cache_invalidate(res->index_cache,
                                   util_format_get_blocksize(res->base.format),

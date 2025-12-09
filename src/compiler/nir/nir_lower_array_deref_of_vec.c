@@ -119,12 +119,10 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
             nir_def *index = deref->arr.index.ssa;
             nir_def *scalar =
                nir_vector_extract(&b, &intrin->def, index);
-            if (scalar->parent_instr->type == nir_instr_type_undef) {
+            if (nir_def_is_undef(scalar)) {
                nir_def_replace(&intrin->def, scalar);
             } else {
-               nir_def_rewrite_uses_after(&intrin->def,
-                                          scalar,
-                                          scalar->parent_instr);
+               nir_def_rewrite_uses_after(&intrin->def, scalar);
             }
             progress = true;
          }

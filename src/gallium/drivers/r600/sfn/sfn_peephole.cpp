@@ -34,6 +34,11 @@ public:
    void apply_source_mods(AluInstr *alu);
    void apply_dest_clamp(AluInstr *alu);
    void try_fuse_with_prev(AluInstr *alu);
+   bool try_omod(AluInstr *alu);
+
+   using OModInfo = std::pair<AluInstr::OutputMod, int>;
+
+   OModInfo get_omod(AluInstr *alu) const;
 
    bool progress{false};
 };
@@ -65,6 +70,8 @@ public:
 void
 PeepholeVisitor::visit(AluInstr *instr)
 {
+   const auto opinfo = alu_ops.at(instr->opcode());
+
    switch (instr->opcode()) {
    case op1_mov:
       if (instr->has_alu_flag(alu_dst_clamp))
@@ -86,6 +93,10 @@ PeepholeVisitor::visit(AluInstr *instr)
          convert_to_mov(instr, 1);
       else if (value_is_const_float(instr->src(1), 1.0f))
          convert_to_mov(instr, 0);
+      else {
+         if (try_omod(instr))
+            return;
+      }
       break;
    case op3_muladd:
    case op3_muladd_ieee:
@@ -106,9 +117,93 @@ PeepholeVisitor::visit(AluInstr *instr)
    default:;
    }
 
-   auto opinfo = alu_ops.at(instr->opcode());
    if (opinfo.can_srcmod)
-         apply_source_mods(instr);
+      apply_source_mods(instr);
+}
+
+bool
+PeepholeVisitor::try_omod(AluInstr *alu)
+{
+   auto [omod, src_idx] = get_omod(alu);
+
+   if (src_idx == -1)
+      return false;
+
+   auto reg = alu->src(src_idx).as_register();
+   if (!reg || !reg->has_flag(Register::ssa) || reg->uses().size() != 1 ||
+       reg->parents().empty())
+      return false;
+
+   assert(reg->parents().size() == 1);
+
+   auto p = *reg->parents().begin();
+
+   auto parent = p->as_alu();
+
+   if (!parent)
+      return false;
+
+   if (parent->has_alu_flag(alu_dst_clamp))
+      return false;
+
+   if (parent->output_modifier() != AluInstr::omod_none)
+      return false;
+
+   switch (parent->opcode()) {
+   case op1_cos:
+   case op1_exp_ieee:
+   case op1_log_clamped:
+   case op1_log_ieee:
+   case op1_max4:
+   case op1_recip_clamped:
+   case op1_recip_ieee:
+   case op1_recipsqrt_clamped:
+   case op1_recipsqrt_ieee1:
+   case op1_sin:
+   case op1_sqrt_ieee:
+   case op2_add:
+   case op2_dot4:
+   case op2_dot4_ieee:
+   case op2_dot:
+   case op2_dot_ieee:
+   case op2_max:
+   case op2_min:
+   case op2_mul:
+   case op2_mul_ieee:
+      break;
+   default:
+      return false;
+   }
+
+   parent->set_output_modifier(omod);
+   if (alu->has_alu_flag(alu_dst_clamp)) {
+      parent->set_alu_flag(alu_dst_clamp);
+      alu->reset_alu_flag(alu_dst_clamp);
+   }
+
+   convert_to_mov(alu, src_idx);
+   progress = true;
+
+   return true;
+}
+
+PeepholeVisitor::OModInfo
+PeepholeVisitor::get_omod(AluInstr *alu) const
+{
+   const std::array<std::pair<float, AluInstr::OutputMod>, 3> mod_table = {
+      {{2.0f, AluInstr::omod_mul2},
+       {4.0f, AluInstr::omod_mul4},
+       {0.5f, AluInstr::omod_div2}}
+   };
+
+   for (int i = 0; i < 2; ++i) {
+      for (int k = 0; k < 3; ++k) {
+         if (value_is_const_float(alu->src(i), mod_table[k].first))
+            return std::make_pair(mod_table[k].second, 1 - i);
+      }
+   }
+
+   return std::make_pair(AluInstr::omod_none, -1);
 }
 
 void
@@ -309,6 +404,16 @@ pred_from_op(EAluOp pred_op, EAluOp op)
          return op2_prede_int;
       case op2_setne_int:
          return op2_pred_setne_int;
+
+      case op2_setge_64:
+         return op2_pred_setge_64;
+      case op2_setgt_64:
+         return op2_pred_setgt_64;
+      case op2_sete_64:
+         return op2_pred_sete_64;
+      case op1_not_int:
+         return op2_prede_int;
+
       default:
          return op0_nop;
       }
@@ -384,12 +489,19 @@ ReplacePredicate::visit(AluInstr *alu)
        *   R = SOME_OP
        *   IF (COND(R, X))
        */
-      if (reg && !reg->has_flag(Register::ssa))
-         return;
+      if (reg && !reg->has_flag(Register::ssa)) {
+         if (m_pred->block_id() != alu->block_id() || m_pred->index() - 1 != alu->index())
+            return;
+      }
    }
 
+   if (likely(alu->opcode() != op1_not_int)) {
+      m_pred->set_sources(alu->sources());
+   } else {
+      if (!m_pred->replace_src(0, alu->psrc(0), 0, AluInstr::mod_none))
+         return;
+   }
    m_pred->set_op(new_op);
-   m_pred->set_sources(alu->sources());
 
    std::array<AluInstr::SourceMod, 2> mods = { AluInstr::mod_abs, AluInstr::mod_neg };
 
@@ -398,6 +510,11 @@ ReplacePredicate::visit(AluInstr *alu)
          if (alu->has_source_mod(i, m))
             m_pred->set_source_mod(i, m);
       }
+   }
+
+   if (alu->alu_slots() > 1) {
+      m_pred->set_alu_slots(alu->alu_slots());
+      m_pred->set_allowed_dest_chan_mask(5);
    }
 
    success = true;

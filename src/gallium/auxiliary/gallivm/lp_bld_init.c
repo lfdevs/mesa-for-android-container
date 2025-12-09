@@ -26,10 +26,6 @@
  **************************************************************************/
 
 
-#include "util/detect.h"
-#include "util/compiler.h"
-#include "util/macros.h"
-#include "util/u_cpu_detect.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/os_time.h"
@@ -39,6 +35,7 @@
 #include "lp_bld_init.h"
 #include "lp_bld_coro.h"
 #include "lp_bld_printf.h"
+#include "lp_bld_passmgr.h"
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm-c/Analysis.h>

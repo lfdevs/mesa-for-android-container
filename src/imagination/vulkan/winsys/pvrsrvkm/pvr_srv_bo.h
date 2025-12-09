@@ -26,7 +26,6 @@
 
 #include <stdint.h>
 
-#include "pvr_private.h"
 #include "pvr_srv.h"
 #include "pvr_types.h"
 #include "pvr_winsys.h"
@@ -156,8 +155,8 @@ void pvr_srv_winsys_buffer_destroy(struct pvr_winsys_bo *bo);
 VkResult pvr_srv_winsys_buffer_get_fd(struct pvr_winsys_bo *bo,
                                       int *const fd_out);
 
-VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo);
-void pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo);
+VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo, void *addr);
+VkResult pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo, bool reserve);
 
 VkResult pvr_srv_heap_alloc_carveout(struct pvr_winsys_heap *heap,
                                      const pvr_dev_addr_t carveout_dev_addr,

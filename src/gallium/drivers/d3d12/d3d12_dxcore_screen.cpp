@@ -52,7 +52,7 @@ get_dxcore_factory()
    IDXCoreAdapterFactory *factory = NULL;
    HRESULT hr = DXCoreCreateAdapterFactory(IID_IDXCoreAdapterFactory, (void **)&factory);
    if (FAILED(hr)) {
-      debug_printf("D3D12: DXCoreCreateAdapterFactory failed: %08x\n", hr);
+      debug_printf("D3D12: DXCoreCreateAdapterFactory failed: %08x\n", (unsigned)hr);
       return NULL;
    }
 
@@ -74,7 +74,7 @@ choose_dxcore_adapter(IDXCoreAdapterFactory *factory, LUID *adapter_luid)
 
 #ifndef _WIN32
       // Pick the user selected adapter if any
-      char *adapter_name = getenv("MESA_D3D12_DEFAULT_ADAPTER_NAME");
+      const char *adapter_name = os_get_option("MESA_D3D12_DEFAULT_ADAPTER_NAME");
       if (adapter_name) {
          for (unsigned i=0; i<list->GetAdapterCount(); i++) {
             if (SUCCEEDED(list->GetAdapter(i, &adapter))) {

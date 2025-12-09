@@ -271,7 +271,7 @@ lower_task_intrinsics(nir_builder *b,
       case nir_intrinsic_launch_mesh_workgroups:
          return lower_task_launch_mesh_workgroups(b, intrin, s);
       default:
-         unreachable("unsupported task shader intrinsic");
+         UNREACHABLE("unsupported task shader intrinsic");
    }
 }
 
@@ -338,7 +338,7 @@ lower_mesh_intrinsics(nir_builder *b,
    if (intrin->intrinsic == nir_intrinsic_load_task_payload)
       return lower_taskmesh_payload_load(b, intrin, s);
    else
-      unreachable("unsupported mesh shader intrinsic");
+      UNREACHABLE("unsupported mesh shader intrinsic");
 }
 
 bool

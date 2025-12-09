@@ -84,7 +84,7 @@ agx_usc_shared_non_fragment(struct agx_usc_builder *b,
                             const struct agx_shader_info *info,
                             unsigned variable_shared_mem)
 {
-   if (info->stage != PIPE_SHADER_FRAGMENT) {
+   if (info->stage != MESA_SHADER_FRAGMENT) {
       agx_usc_shared(b, info->local_size, info->imageblock_stride,
                      variable_shared_mem);
    }

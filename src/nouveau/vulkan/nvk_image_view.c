@@ -8,6 +8,7 @@
 #include "nvk_entrypoints.h"
 #include "nvk_format.h"
 #include "nvk_image.h"
+#include "nvk_sampler.h"
 #include "nvk_physical_device.h"
 
 #include "vk_format.h"
@@ -26,7 +27,7 @@ vk_image_view_type_to_nil_view_type(VkImageViewType view_type)
    case VK_IMAGE_VIEW_TYPE_2D_ARRAY:   return NIL_VIEW_TYPE_2D_ARRAY;
    case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY: return NIL_VIEW_TYPE_CUBE_ARRAY;
    default:
-      unreachable("Invalid image view type");
+      UNREACHABLE("Invalid image view type");
    }
 }
 
@@ -41,7 +42,7 @@ vk_swizzle_to_pipe(VkComponentSwizzle swizzle)
    case VK_COMPONENT_SWIZZLE_ONE:   return PIPE_SWIZZLE_1;
    case VK_COMPONENT_SWIZZLE_ZERO:  return PIPE_SWIZZLE_0;
    default:
-      unreachable("Invalid component swizzle");
+      UNREACHABLE("Invalid component swizzle");
    }
 }
 
@@ -89,7 +90,6 @@ image_3d_view_as_2d_array(struct nil_image *image,
 VkResult
 nvk_image_view_init(struct nvk_device *dev,
                     struct nvk_image_view *view,
-                    bool driver_internal,
                     const VkImageViewCreateInfo *pCreateInfo)
 {
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
@@ -105,7 +105,7 @@ nvk_image_view_init(struct nvk_device *dev,
 
    memset(view, 0, sizeof(*view));
 
-   vk_image_view_init(&dev->vk, &view->vk, driver_internal, pCreateInfo);
+   vk_image_view_init(&dev->vk, &view->vk, pCreateInfo);
 
    /* First, figure out which image planes we need.
     * For depth/stencil, we may only have plane so simply assert
@@ -158,7 +158,9 @@ nvk_image_view_init(struct nvk_device *dev,
       if (image->separate_zs)
          p_format = nil_image.format.p_format;
       else if (view->vk.aspects == VK_IMAGE_ASPECT_STENCIL_BIT)
-         p_format = util_format_stencil_only(p_format);
+         p_format = util_format_stencil_only(nil_image.format.p_format);
+      else if (view->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT)
+         p_format = nil_image.format.p_format;
 
       struct nil_view nil_view = {
          .view_type = vk_image_view_type_to_nil_view_type(view->vk.view_type),
@@ -308,7 +310,7 @@ nvk_CreateImageView(VkDevice _device,
    if (!view)
       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   result = nvk_image_view_init(dev, view, false, pCreateInfo);
+   result = nvk_image_view_init(dev, view, pCreateInfo);
    if (result != VK_SUCCESS) {
       vk_free2(&dev->vk.alloc, pAllocator, view);
       return result;
@@ -355,6 +357,61 @@ nvk_GetImageViewOpaqueCaptureDescriptorDataEXT(
    }
 
    memcpy(pData, &cap, sizeof(cap));
+
+   return VK_SUCCESS;
+}
+
+
+VKAPI_ATTR uint32_t VKAPI_CALL
+nvk_GetImageViewHandleNVX(VkDevice _device,
+                          const VkImageViewHandleInfoNVX *pInfo)
+{
+   VK_FROM_HANDLE(nvk_image_view, view, pInfo->imageView);
+   VK_FROM_HANDLE(nvk_sampler, sampler, pInfo->sampler);
+   assert(view->plane_count == 1);
+
+   uint32_t handle = 0;
+   if (pInfo->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+      struct nvk_storage_image_descriptor desc;
+      STATIC_ASSERT(sizeof(desc) == sizeof(handle));
+
+      desc.image_index = view->planes[0].storage_desc_index;
+      memcpy(&handle, &desc, sizeof(uint32_t));
+   } else {
+      struct nvk_sampled_image_descriptor desc;
+      STATIC_ASSERT(sizeof(desc) == sizeof(handle));
+
+      desc.image_index = view->planes[0].sampled_desc_index;
+      if (pInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+         assert(sampler->plane_count == 1);
+         desc.sampler_index = sampler->planes[0].desc_index;
+      }
+      memcpy(&handle, &desc, sizeof(uint32_t));
+   }
+
+   return handle;
+}
+
+VKAPI_ATTR uint64_t VKAPI_CALL
+nvk_GetImageViewHandle64NVX(VkDevice _device,
+                            const VkImageViewHandleInfoNVX *pInfo)
+{
+   /* NVK does not currently support 64-bit texture addressing,
+    * so this is the same as vkGetImageViewHandleNVX. */
+
+   return nvk_GetImageViewHandleNVX(_device, pInfo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+nvk_GetImageViewAddressNVX(VkDevice _device, VkImageView _imageView,
+                           VkImageViewAddressPropertiesNVX *pProperties)
+{
+   VK_FROM_HANDLE(nvk_image_view, image_view, _imageView);
+   const struct nvk_image *image = (struct nvk_image *)image_view->vk.image;
+
+   const uint8_t plane = image_view->planes[0].image_plane;
+   pProperties->deviceAddress = nvk_image_base_address(image, plane);
+   pProperties->size = nvk_image_size_B(image, plane);
 
    return VK_SUCCESS;
 }

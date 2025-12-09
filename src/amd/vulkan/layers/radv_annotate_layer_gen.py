@@ -52,17 +52,6 @@ annotate_${c.name}(${c.decl_params()})
 % endfor
 """)
 
-# str.removesuffix requires python 3.9+ so implement our own to not break build
-# on older versions
-def removesuffix(s, suffix):
-    l = len(suffix)
-    if l == 0:
-        return s
-    idx = s.find(suffix)
-    if idx == len(s) - l:
-        return s[:-l]
-    return s
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -79,7 +68,7 @@ def main():
         if not e.name.startswith('Cmd') or e.alias or e.return_type != "void":
             continue
 
-        stripped_name = removesuffix(removesuffix(removesuffix(e.name, 'EXT'), 'KHR'), '2')
+        stripped_name = e.name.removesuffix('EXT').removesuffix('KHR').removesuffix('2')
         if stripped_name in commands_names or stripped_name in EXCLUDED_COMMANDS:
             continue
 

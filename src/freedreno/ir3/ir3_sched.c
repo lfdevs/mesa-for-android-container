@@ -1287,7 +1287,7 @@ get_array_id(struct ir3_instruction *instr)
       if (src->flags & IR3_REG_ARRAY)
          return src->array.id;
 
-   unreachable("this was unexpected");
+   UNREACHABLE("this was unexpected");
 }
 
 /* does instruction 'prior' need to be scheduled before 'instr'? */

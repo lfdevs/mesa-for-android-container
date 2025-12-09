@@ -45,7 +45,7 @@ vk_border_color_value(VkBorderColor color)
    case VK_BORDER_COLOR_INT_OPAQUE_WHITE:
       return (VkClearColorValue) { .int32 = { 1, 1, 1, 1 } };
    default:
-      unreachable("Invalid or custom border color enum");
+      UNREACHABLE("Invalid or custom border color enum");
    }
 }
 
@@ -64,7 +64,7 @@ vk_border_color_is_int(VkBorderColor color)
    case VK_BORDER_COLOR_INT_CUSTOM_EXT:
       return true;
    default:
-      unreachable("Invalid border color enum");
+      UNREACHABLE("Invalid border color enum");
    }
 }
 

@@ -387,7 +387,7 @@ vec4_instruction::implied_mrf_writes() const
    case ELK_SHADER_OPCODE_GET_BUFFER_SIZE:
       return header_size;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
@@ -648,7 +648,7 @@ vec4_visitor::opt_algebraic()
             if (inst->dst.type != inst->src[0].type &&
                 inst->dst.type != ELK_REGISTER_TYPE_DF &&
                 inst->src[0].type != ELK_REGISTER_TYPE_F)
-               unreachable("unimplemented: saturate mixed types");
+               UNREACHABLE("unimplemented: saturate mixed types");
 
             if (elk_saturate_immediate(inst->src[0].type,
                                        &inst->src[0].as_elk_reg())) {
@@ -701,7 +701,7 @@ vec4_visitor::opt_algebraic()
 	       inst->src[0] = elk_imm_ud(0u);
 	       break;
 	    default:
-	       unreachable("not reached");
+	       UNREACHABLE("not reached");
 	    }
 	    inst->src[1] = src_reg();
 	    progress = true;
@@ -1388,7 +1388,7 @@ vec4_visitor::dump_instruction_to_file(const elk_backend_instruction *be_inst, F
    case IMM:
    case ATTR:
    case UNIFORM:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
    if (inst->dst.offset ||
        (inst->dst.file == VGRF &&
@@ -1480,7 +1480,7 @@ vec4_visitor::dump_instruction_to_file(const elk_backend_instruction *be_inst, F
          fprintf(file, "(null)");
          break;
       case MRF:
-         unreachable("not reached");
+         UNREACHABLE("not reached");
       }
 
       if (inst->src[i].offset ||
@@ -1785,7 +1785,7 @@ vec4_visitor::convert_to_hw_regs()
 
          case MRF:
          case ATTR:
-            unreachable("not reached");
+            UNREACHABLE("not reached");
          }
 
          apply_logical_swizzle(&reg, inst, i);
@@ -1851,7 +1851,7 @@ vec4_visitor::convert_to_hw_regs()
       case IMM:
       case ATTR:
       case UNIFORM:
-         unreachable("not reached");
+         UNREACHABLE("not reached");
       }
 
       dst = reg;
@@ -2082,7 +2082,7 @@ scalarize_predicate(elk_predicate predicate, unsigned writemask)
    case WRITEMASK_W:
       return ELK_PREDICATE_ALIGN16_REPLICATE_W;
    default:
-      unreachable("invalid writemask");
+      UNREACHABLE("invalid writemask");
    }
 }
 

@@ -474,7 +474,7 @@ main(int argc, char *argv[])
       }
 
       default:
-         unreachable("Invalid block type");
+         UNREACHABLE("Invalid block type");
       }
    }
 

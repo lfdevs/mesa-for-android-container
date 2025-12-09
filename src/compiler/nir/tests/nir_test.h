@@ -25,7 +25,7 @@ class nir_test : public ::testing::Test {
    {
    }
 
-   nir_test(const char *name, gl_shader_stage stage)
+   nir_test(const char *name, mesa_shader_stage stage)
    {
       glsl_type_singleton_init_or_ref();
 

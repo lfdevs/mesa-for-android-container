@@ -136,7 +136,7 @@ _mesa_texstore_bptc_rgba_unorm(TEXSTORE_PARAMS)
       /* convert image to RGBA/ubyte */
       GLubyte *tempImageSlices[1];
       int rgbaRowStride = 4 * srcWidth * sizeof(GLubyte);
-      tempImage = malloc(srcWidth * srcHeight * 4 * sizeof(GLubyte));
+      tempImage = malloc((size_t)srcWidth * srcHeight * 4 * sizeof(GLubyte));
       if (!tempImage)
          return GL_FALSE; /* out of memory */
       tempImageSlices[0] = (GLubyte *) tempImage;
@@ -185,7 +185,7 @@ texstore_bptc_rgb_float(TEXSTORE_PARAMS,
       /* convert image to RGB/float */
       GLfloat *tempImageSlices[1];
       int rgbRowStride = 3 * srcWidth * sizeof(GLfloat);
-      tempImage = malloc(srcWidth * srcHeight * 3 * sizeof(GLfloat));
+      tempImage = malloc((size_t)srcWidth * srcHeight * 3 * sizeof(GLfloat));
       if (!tempImage)
          return GL_FALSE; /* out of memory */
       tempImageSlices[0] = (GLfloat *) tempImage;

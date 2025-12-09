@@ -48,7 +48,7 @@ struct lower_io_state {
 
 static void
 emit_copies(nir_builder *b, struct exec_list *dest_vars,
-            struct exec_list *src_vars)
+            struct exec_list *src_vars, unsigned stream)
 {
    assert(exec_list_length(dest_vars) == exec_list_length(src_vars));
 
@@ -62,6 +62,38 @@ emit_copies(nir_builder *b, struct exec_list *dest_vars,
        */
       if (src->data.mode == nir_var_shader_out &&
           !src->data.fb_fetch_output)
+         continue;
+
+      /* No need to copy the contents of a pixel-local output variable
+       * to the temporary allocated for it, since its initial value is
+       * undefined. Similarly, no need to copy data to a pixel-local
+       * input variable since it's supposed to be read-only.
+       */
+      if (src->data.mode == nir_var_mem_pixel_local_out ||
+          dest->data.mode == nir_var_mem_pixel_local_in)
+         continue;
+
+      /* Don't copy those variables before emit_vertex that are not emitted
+       * by that emit_vertex instruction.
+       */
+      unsigned stream_mask = 0;
+
+      if (dest->data.stream & NIR_STREAM_PACKED) {
+         unsigned slots = glsl_count_dword_slots(src->type, false);
+
+         assert(slots && slots <= 4);
+
+         for (unsigned i = 0; i < slots; i++) {
+            unsigned stream = (dest->data.stream >> (i * 2)) & 0x3;
+
+            stream_mask |= BITFIELD_BIT(stream);
+         }
+      } else {
+         assert(dest->data.stream < 4);
+         stream_mask = BITFIELD_BIT(dest->data.stream);
+      }
+
+      if (!(BITFIELD_BIT(stream) & stream_mask))
          continue;
 
       /* Can't copy the contents of the temporary back to a read-only
@@ -93,21 +125,22 @@ emit_output_copies_impl(struct lower_io_state *state, nir_function_impl *impl)
             if (intrin->intrinsic == nir_intrinsic_emit_vertex ||
                 intrin->intrinsic == nir_intrinsic_emit_vertex_with_counter) {
                b.cursor = nir_before_instr(&intrin->instr);
-               emit_copies(&b, &state->new_outputs, &state->old_outputs);
+               emit_copies(&b, &state->new_outputs, &state->old_outputs,
+                           nir_intrinsic_stream_id(intrin));
             }
          }
       }
    } else if (impl == state->entrypoint) {
       b.cursor = nir_before_impl(impl);
-      emit_copies(&b, &state->old_outputs, &state->new_outputs);
+      emit_copies(&b, &state->old_outputs, &state->new_outputs, 0);
 
       /* For all other shader types, we need to do the copies right before
        * the jumps to the end block.
        */
-      set_foreach(impl->end_block->predecessors, block_entry) {
+      set_foreach(&impl->end_block->predecessors, block_entry) {
          struct nir_block *block = (void *)block_entry->key;
          b.cursor = nir_after_block_before_jump(block);
-         emit_copies(&b, &state->new_outputs, &state->old_outputs);
+         emit_copies(&b, &state->new_outputs, &state->old_outputs, 0);
       }
    }
 }
@@ -184,7 +217,7 @@ emit_interp(nir_builder *b, nir_deref_instr **old_interp_deref,
       case nir_deref_type_array_wildcard:
       case nir_deref_type_ptr_as_array:
       case nir_deref_type_cast:
-         unreachable("bad deref type");
+         UNREACHABLE("bad deref type");
       }
 
       old_interp_deref++;
@@ -288,16 +321,34 @@ emit_input_copies_impl(struct lower_io_state *state, nir_function_impl *impl)
 {
    if (impl == state->entrypoint) {
       nir_builder b = nir_builder_at(nir_before_impl(impl));
-      emit_copies(&b, &state->old_inputs, &state->new_inputs);
+      emit_copies(&b, &state->old_inputs, &state->new_inputs, 0);
       if (state->shader->info.stage == MESA_SHADER_FRAGMENT)
          fixup_interpolation(state, impl, &b);
+   }
+}
+
+static const char *mode_str(nir_variable_mode mode)
+{
+   switch (mode) {
+   case nir_var_shader_in:
+      return "in";
+   case nir_var_mem_pixel_local_in:
+      return "pls_in";
+   case nir_var_shader_out:
+      return "out";
+   case nir_var_mem_pixel_local_out:
+      return "pls_out";
+   case nir_var_mem_pixel_local_inout:
+      return "pls_inout";
+   default:
+      UNREACHABLE("Invalid mode");
    }
 }
 
 static nir_variable *
 create_shadow_temp(struct lower_io_state *state, nir_variable *var)
 {
-   nir_variable *nvar = ralloc(state->shader, nir_variable);
+   nir_variable *nvar = nir_variable_create_zeroed(state->shader);
    memcpy(nvar, var, sizeof *nvar);
    nvar->data.cannot_coalesce = true;
 
@@ -305,13 +356,13 @@ create_shadow_temp(struct lower_io_state *state, nir_variable *var)
    nir_variable *temp = var;
 
    /* Reparent the name to the new variable */
-   ralloc_steal(nvar, nvar->name);
+   nir_variable_steal_name(state->shader, nvar, var);
 
    assert(nvar->constant_initializer == NULL && nvar->pointer_initializer == NULL);
 
    /* Give the original a new name with @<mode>-temp appended */
-   const char *mode = (temp->data.mode == nir_var_shader_in) ? "in" : "out";
-   temp->name = ralloc_asprintf(var, "%s@%s-temp", mode, nvar->name);
+   const char *mode = mode_str(temp->data.mode);
+   nir_variable_set_namef(state->shader, temp, "%s@%s-temp", mode, nvar->name);
    temp->data.mode = nir_var_shader_temp;
    temp->data.read_only = false;
    temp->data.fb_fetch_output = false;
@@ -332,9 +383,13 @@ move_variables_to_list(nir_shader *shader, nir_variable_mode mode,
 
 bool
 nir_lower_io_vars_to_temporaries(nir_shader *shader, nir_function_impl *entrypoint,
-                                 bool outputs, bool inputs)
+                                 nir_variable_mode modes)
 {
+   ASSERTED const nir_variable_mode supported_modes =
+      nir_var_shader_in | nir_var_shader_out | nir_var_any_pixel_local;
    struct lower_io_state state;
+
+   assert(!(modes & ~supported_modes));
 
    if (shader->info.stage != MESA_SHADER_VERTEX &&
        shader->info.stage != MESA_SHADER_TESS_EVAL &&
@@ -348,12 +403,25 @@ nir_lower_io_vars_to_temporaries(nir_shader *shader, nir_function_impl *entrypoi
    state.input_map = _mesa_pointer_hash_table_create(NULL);
 
    exec_list_make_empty(&state.old_inputs);
-   if (inputs)
+   if (modes & nir_var_shader_in)
       move_variables_to_list(shader, nir_var_shader_in, &state.old_inputs);
 
    exec_list_make_empty(&state.old_outputs);
-   if (outputs)
+   if (modes & nir_var_shader_out)
       move_variables_to_list(shader, nir_var_shader_out, &state.old_outputs);
+
+   /* All PLS vars are fragment shader outputs by nature, even if they
+    * are flagged _in (AKA read-only).
+    */
+   if (modes & nir_var_mem_pixel_local_in)
+      move_variables_to_list(shader, nir_var_mem_pixel_local_in,
+                             &state.old_outputs);
+   if (modes & nir_var_mem_pixel_local_out)
+      move_variables_to_list(shader, nir_var_mem_pixel_local_out,
+                             &state.old_outputs);
+   if (modes & nir_var_mem_pixel_local_inout)
+      move_variables_to_list(shader, nir_var_mem_pixel_local_inout,
+                             &state.old_outputs);
 
    exec_list_make_empty(&state.new_inputs);
    exec_list_make_empty(&state.new_outputs);
@@ -374,10 +442,10 @@ nir_lower_io_vars_to_temporaries(nir_shader *shader, nir_function_impl *entrypoi
    }
 
    nir_foreach_function_impl(impl, shader) {
-      if (inputs)
+      if (modes & nir_var_shader_in)
          emit_input_copies_impl(&state, impl);
 
-      if (outputs)
+      if (modes & (nir_var_shader_out | nir_var_any_pixel_local))
          emit_output_copies_impl(&state, impl);
 
       nir_progress(true, impl, nir_metadata_control_flow);

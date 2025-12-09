@@ -35,6 +35,6 @@ mme_sim_core(const struct nv_device_info *devinfo,
       mme_fermi_sim_core(inst_count, insts, state_ops, state_handler);
       free(insts);
    } else {
-      unreachable("Unsupported GPU class");
+      UNREACHABLE("Unsupported GPU class");
    }
 }

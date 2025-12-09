@@ -109,7 +109,7 @@ void
 tu_breadcrumbs_init(struct tu_device *device)
 {
    const char *breadcrumbs_opt = NULL;
-#ifdef TU_BREADCRUMBS_ENABLED
+#if TU_BREADCRUMBS_ENABLED
    breadcrumbs_opt = os_get_option("TU_BREADCRUMBS");
 #endif
 

@@ -13,6 +13,7 @@ struct nouveau_ws_device;
 
 #include "nv_push.h"
 #include "nv_push_cl9097.h"
+#include "nv_push_clc7c0.h"
 
 #define DATA_BO_SIZE 4096
 #define DATA_DWORDS 1024
@@ -129,6 +130,36 @@ mme_store(mme_builder *b, struct mme_value64 addr, mme_value v,
    mme_emit(b, addr.lo);
    mme_emit(b, v);
    mme_emit(b, mme_imm(0x10000000));
+
+   if (free_reg && v.type == MME_VALUE_TYPE_REG)
+      mme_free_reg(b, v);
+}
+
+inline void
+mme_store_compute_imm_addr(mme_builder *b, uint64_t addr, mme_value v,
+                           bool free_reg = false)
+{
+   mme_mthd(b, NVC7C0_SET_REPORT_SEMAPHORE_PAYLOAD_LOWER);
+   mme_emit(b, v);
+   mme_emit(b, mme_imm(0));
+   mme_emit(b, mme_imm(low32(addr)));
+   mme_emit(b, mme_imm(high32(addr)));
+   mme_emit(b, mme_imm(0x8));
+
+   if (free_reg && v.type == MME_VALUE_TYPE_REG)
+      mme_free_reg(b, v);
+}
+
+inline void
+mme_store_compute(mme_builder *b, struct mme_value64 addr, mme_value v,
+                  bool free_reg = false)
+{
+   mme_mthd(b, NVC7C0_SET_REPORT_SEMAPHORE_PAYLOAD_LOWER);
+   mme_emit(b, v);
+   mme_emit(b, mme_imm(0));
+   mme_emit(b, addr.lo);
+   mme_emit(b, addr.hi);
+   mme_emit(b, mme_imm(0x8));
 
    if (free_reg && v.type == MME_VALUE_TYPE_REG)
       mme_free_reg(b, v);

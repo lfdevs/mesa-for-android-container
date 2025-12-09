@@ -39,9 +39,8 @@
 .nvk-ci-tron-common:
   variables:
     CI_TRON_PATTERN__JOB_WARN__REGEX: 'nouveau .+ job timeout|NMI backtrace for cpu \d+'
-    CI_TRON_KERNEL__URL: https://fs.mupuf.org/linux/v6.16-rc2/linux-x86_64
-    CI_TRON_INITRAMFS__DEPMOD__URL: "https://fs.mupuf.org/linux/v6.16-rc2/linux-x86_64.depmod.cpio.xz"
-    CI_TRON_INITRAMFS__GPU__URL: "https://fs.mupuf.org/linux/v6.16-rc2/linux-x86_64.gpu.cpio"
+    CI_TRON_INITRAMFS__DEPMOD__URL: "https://gitlab.freedesktop.org/gfx-ci/boot2container/-/releases/$B2C_VERSION/downloads/linux-x86_64.depmod.cpio.xz"
+    CI_TRON_INITRAMFS__GPU__URL: "https://gitlab.freedesktop.org/gfx-ci/boot2container/-/releases/$B2C_VERSION/downloads/linux-x86_64.gpu.cpio"
     CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__KEEP__0__PATH: ${GPU_FIRMWARE_KEEP_PATH_REGEX}
     CI_TRON_KERNEL_CMDLINE__LOAD_MODULES: 'modules_load=nouveau'
     # GSP is not loaded by default
@@ -53,7 +52,6 @@
     DEQP_SUITE: nvk
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
     NVK_I_WANT_A_BROKEN_VULKAN_DRIVER: 1
-    HWCI_TEST_SCRIPT: install/deqp-runner.sh
 
 .nvk-ga106-valve:
   extends:

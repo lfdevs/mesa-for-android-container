@@ -93,7 +93,7 @@ pm_query(struct etna_context *ctx, struct etna_acc_query *aq, unsigned flags)
 }
 
 static bool
-perfmon_supports(unsigned query_type)
+perfmon_supports(UNUSED struct etna_context *ctx, unsigned query_type)
 {
    return !!etna_pm_query_config(query_type);
 }
@@ -106,10 +106,10 @@ perfmon_allocate(struct etna_context *ctx, unsigned query_type)
 
    cfg = etna_pm_query_config(query_type);
    if (!cfg)
-      return false;
+      return NULL;
 
    if (!etna_pm_cfg_supported(ctx->screen->perfmon, cfg))
-      return false;
+      return NULL;
 
    pq = CALLOC_STRUCT(etna_pm_query);
    if (!pq)

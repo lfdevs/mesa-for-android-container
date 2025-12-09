@@ -21,15 +21,23 @@
  * IN THE SOFTWARE.
  */
 
-#ifdef HAVE_DL_ITERATE_PHDR
+#include "build_id.h"
+
+#if HAVE_BUILD_ID
 #include <dlfcn.h>
-#include <link.h>
 #include <stddef.h>
 #include <string.h>
 
-#include "build_id.h"
 #include "macros.h"
 
+#if  DETECT_OS_APPLE
+#include <mach-o/loader.h>
+
+struct build_id_note {
+   const struct uuid_command uuid_cmd;
+};
+#else
+#include <link.h>
 #ifndef NT_GNU_BUILD_ID
 #define NT_GNU_BUILD_ID 3
 #endif
@@ -44,6 +52,7 @@ struct build_id_note {
    char name[4]; /* Note name for build-id is "GNU\0" */
    uint8_t build_id[0];
 };
+#endif /*  DETECT_OS_APPLE */
 
 struct callback_data {
    /* Base address of shared object, taken from Dl_info::dli_fbase */
@@ -52,6 +61,38 @@ struct callback_data {
    struct build_id_note *note;
 };
 
+#if DETECT_OS_APPLE
+static int
+build_id_find_uuid_command(void *data_)
+{
+   struct callback_data *data = data_;
+   const struct mach_header *header =
+      (const struct mach_header *)data->dli_fbase;
+   const struct load_command *cmd = NULL;
+
+   /* Headers' sizes differ based on architecture */
+   if (header->magic == MH_MAGIC_64 || header->magic == MH_CIGAM_64) {
+      cmd =
+         (const struct load_command *)((const struct mach_header_64 *)header +
+                                       1);
+   } else if (header->magic == MH_MAGIC || header->magic == MH_CIGAM) {
+      cmd = (const struct load_command *)(header + 1);
+   } else {
+      return 0;
+   }
+
+   uint32_t ncmds = header->ncmds;
+   for (uint32_t i = 0; i < ncmds; i++) {
+      if (cmd->cmd == LC_UUID) {
+         data->note = (struct build_id_note *)cmd;
+         return 1;
+      }
+      cmd = (const struct load_command *)((const char *)cmd + cmd->cmdsize);
+   }
+
+   return 0;
+}
+#else
 static int
 build_id_find_nhdr_callback(struct dl_phdr_info *info, size_t size, void *data_)
 {
@@ -98,6 +139,7 @@ build_id_find_nhdr_callback(struct dl_phdr_info *info, size_t size, void *data_)
 
    return 0;
 }
+#endif /* DETECT_OS_APPLE */
 
 const struct build_id_note *
 build_id_find_nhdr_for_addr(const void *addr)
@@ -115,8 +157,13 @@ build_id_find_nhdr_for_addr(const void *addr)
       .note = NULL,
    };
 
+#if DETECT_OS_APPLE
+   if (!build_id_find_uuid_command(&data))
+      return NULL;
+#else
    if (!dl_iterate_phdr(build_id_find_nhdr_callback, &data))
       return NULL;
+#endif /* DETECT_OS_APPLE */
 
    return data.note;
 }
@@ -124,13 +171,21 @@ build_id_find_nhdr_for_addr(const void *addr)
 unsigned
 build_id_length(const struct build_id_note *note)
 {
+#if DETECT_OS_APPLE
+   return sizeof(note->uuid_cmd.uuid);
+#else
    return note->nhdr.n_descsz;
+#endif /* DETECT_OS_APPLE */
 }
 
 const uint8_t *
 build_id_data(const struct build_id_note *note)
 {
+#if DETECT_OS_APPLE
+   return note->uuid_cmd.uuid;
+#else
    return note->build_id;
+#endif /* DETECT_OS_APPLE */
 }
 
 #endif

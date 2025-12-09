@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!DOCTYPE OpenGLAPI SYSTEM "gl_API.dtd">
+
+<OpenGLAPI>
+
+<category name="GL_EXT_shader_pixel_local_storage" number="167">
+
+  <enum name="MAX_SHADER_PIXEL_LOCAL_STORAGE_FAST_SIZE_EXT" count="1" value="0x8F63">
+    <size name="GetIntegerv"   mode="get"/>
+    <size name="GetInteger64v" mode="get"/>
+  </enum>
+
+  <enum name="MAX_SHADER_PIXEL_LOCAL_STORAGE_SIZE_EXT" count="1" value="0x8F67">
+    <size name="GetIntegerv"   mode="get"/>
+    <size name="GetInteger64v" mode="get"/>
+  </enum>
+
+</category>
+
+</OpenGLAPI>

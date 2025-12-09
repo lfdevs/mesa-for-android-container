@@ -179,7 +179,7 @@ crocus_alloc_item_data(struct crocus_context *ice, uint32_t size)
    uint32_t offset = ice->shaders.cache_next_offset;
 
    /* Programs are always 64-byte aligned, so set up the next one now */
-   ice->shaders.cache_next_offset = ALIGN(offset + size, 64);
+   ice->shaders.cache_next_offset = align(offset + size, 64);
    return offset;
 }
 

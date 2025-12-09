@@ -33,7 +33,7 @@ static bool
 can_move_src_to_top(nir_src *src, void *_state)
 {
    opt_move_to_top_state *state = (opt_move_to_top_state *)_state;
-   nir_instr *instr = src->ssa->parent_instr;
+   nir_instr *instr = nir_def_instr(src->ssa);
 
    assert(util_bitcount(instr->pass_flags & (PASS_FLAG_CANT_MOVE |
                                              PASS_FLAG_CAN_MOVE)) <= 1);
@@ -72,9 +72,14 @@ can_move_src_to_top(nir_src *src, void *_state)
       case nir_intrinsic_load_interpolated_input:
       case nir_intrinsic_load_per_primitive_input:
       case nir_intrinsic_load_per_vertex_input:
-      /* load_smem_amd and its sources. */
       case nir_intrinsic_load_scalar_arg_amd:
-      case nir_intrinsic_load_smem_amd:
+         break;
+      case nir_intrinsic_load_global_amd:
+         if (!(nir_intrinsic_access(nir_instr_as_intrinsic(instr)) &
+               ACCESS_SMEM_AMD)) {
+            instr->pass_flags |= PASS_FLAG_CANT_MOVE;
+            return false;
+         }
          break;
       default:
          instr->pass_flags |= PASS_FLAG_CANT_MOVE;
@@ -106,7 +111,7 @@ can_move_src_to_top(nir_src *src, void *_state)
 static bool
 move_src(nir_src *src, void *_state)
 {
-   nir_instr *instr = src->ssa->parent_instr;
+   nir_instr *instr = nir_def_instr(src->ssa);
    nir_builder *b = (nir_builder *)_state;
 
    if (instr->pass_flags & PASS_FLAG_MOVED)
@@ -139,7 +144,8 @@ handle_load(nir_builder *b, nir_intrinsic_instr *intr, void *_state)
            !nir_is_output_load(intr);
 
    move |= state->options & nir_move_to_top_load_smem_amd &&
-           intr->intrinsic == nir_intrinsic_load_smem_amd;
+           (intr->intrinsic == nir_intrinsic_load_global_amd &&
+            nir_intrinsic_access(intr) & ACCESS_SMEM_AMD);
 
    if (!move)
       return false;

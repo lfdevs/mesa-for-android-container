@@ -491,22 +491,22 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
       }
       if (tmp_surf.pipe_fence)
          drv->pipe->screen->fence_reference(drv->pipe->screen, &tmp_surf.pipe_fence, NULL);
-      VARectangle src_rect = {
-         .x = x,
-         .y = y,
-         .width = width,
-         .height = height,
+      struct pipe_vpp_desc param = {
+         .src_region = {
+            .x0 = x,
+            .y0 = y,
+            .x1 = x + width,
+            .y1 = y + height,
+         },
+         .dst_region = {
+            .x0 = 0,
+            .y0 = 0,
+            .x1 = vaimage->width,
+            .y1 = vaimage->height,
+         },
       };
-      VARectangle dst_rect = {
-         .x = 0,
-         .y = 0,
-         .width = vaimage->width,
-         .height = vaimage->height,
-      };
-      VAProcPipelineParameterBuffer proc = {0};
-      ret = vlVaPostProcCompositor(drv, &src_rect, &dst_rect,
-                                   surf->buffer, tmp_surf.buffer,
-                                   VL_COMPOSITOR_NONE, &proc);
+      ret = vlVaPostProcCompositor(drv, surf->buffer, tmp_surf.buffer,
+                                   VL_COMPOSITOR_NONE, &param);
       drv->pipe->flush(drv->pipe, NULL, 0);
       if (ret != VA_STATUS_SUCCESS) {
          tmp_surf.buffer->destroy(tmp_surf.buffer);
@@ -661,22 +661,22 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
       if (tmp_surf.pipe_fence)
          drv->pipe->screen->fence_reference(drv->pipe->screen, &tmp_surf.pipe_fence, NULL);
       vlVaUploadImage(drv, &tmp_surf, img_buf, vaimage);
-      VARectangle src_rect = {
-         .x = src_x,
-         .y = src_y,
-         .width = src_width,
-         .height = src_height,
+      struct pipe_vpp_desc param = {
+         .src_region = {
+            .x0 = src_x,
+            .y0 = src_y,
+            .x1 = src_x + src_width,
+            .y1 = src_y + src_height,
+         },
+         .dst_region = {
+            .x0 = dest_x,
+            .y0 = dest_y,
+            .x1 = dest_x + dest_width,
+            .y1 = dest_y + dest_height,
+         },
       };
-      VARectangle dst_rect = {
-         .x = dest_x,
-         .y = dest_y,
-         .width = dest_width,
-         .height = dest_height,
-      };
-      VAProcPipelineParameterBuffer proc = {0};
-      ret = vlVaPostProcCompositor(drv, &src_rect, &dst_rect,
-                                   tmp_surf.buffer, surf->buffer,
-                                   VL_COMPOSITOR_NONE, &proc);
+      ret = vlVaPostProcCompositor(drv, tmp_surf.buffer, surf->buffer,
+                                   VL_COMPOSITOR_NONE, &param);
       vlVaSurfaceFlush(drv, surf);
       tmp_surf.buffer->destroy(tmp_surf.buffer);
       mtx_unlock(&drv->mutex);

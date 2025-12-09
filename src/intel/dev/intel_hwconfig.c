@@ -301,6 +301,12 @@ process_hwconfig_item(struct intel_device_info *devinfo,
    case INTEL_HWCONFIG_MAX_DS_URB_ENTRIES:
       DEVINFO_HWCONFIG(200, urb.max_entries[MESA_SHADER_TESS_EVAL], item);
       break;
+   case INTEL_HWCONFIG_NUM_PIXEL_PIPES:
+      DEVINFO_HWCONFIG_KV(200, num_color_pipes, item->key, item->val[0]);
+      break;
+   case INTEL_HWCONFIG_GEOMETRY_PIPES_PER_SLICE:
+      DEVINFO_HWCONFIG_KV(200, num_geom_pipes, item->key, item->val[0]);
+      break;
    default:
       break; /* ignore */
    }
@@ -319,6 +325,13 @@ late_apply_hwconfig(struct intel_device_info *devinfo)
    if (devinfo->verx10 >= CALC_TOPOLOGY_LAYOUT_VERX10) {
       assert((devinfo->max_subslices_per_slice % devinfo->max_slices) == 0);
       devinfo->max_subslices_per_slice /= devinfo->max_slices;
+   }
+
+   /* Calculate total pipes count from stored values */
+   if (devinfo->verx10 >= 200) {
+      devinfo->num_color_pipes *= devinfo->max_slices;
+      devinfo->num_depth_pipes =  devinfo->num_color_pipes;
+      devinfo->num_geom_pipes  *= devinfo->max_slices;
    }
 }
 
@@ -362,7 +375,7 @@ intel_get_hwconfig_table(int fd, struct intel_device_info *devinfo,
    case INTEL_KMD_TYPE_XE:
       return intel_device_info_xe_query_hwconfig(fd, hwconfig_len);
    default:
-      unreachable("unknown kmd type");
+      UNREACHABLE("unknown kmd type");
       return NULL;
    }
 }

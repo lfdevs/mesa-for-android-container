@@ -50,7 +50,7 @@ view_dsv_dimension(enum pipe_texture_target target, unsigned samples)
                            D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
 
    default:
-      unreachable("unexpected target");
+      UNREACHABLE("unexpected target");
    }
 }
 
@@ -76,25 +76,22 @@ view_rtv_dimension(enum pipe_texture_target target, unsigned samples)
    case PIPE_TEXTURE_3D: return D3D12_RTV_DIMENSION_TEXTURE3D;
 
    default:
-      unreachable("unexpected target");
+      UNREACHABLE("unexpected target");
    }
 }
 
 static void
-initialize_dsv(struct pipe_context *pctx,
-               struct pipe_resource *pres,
+initialize_dsv(struct d3d12_screen *screen,
+               struct d3d12_resource *res,
                const struct pipe_surface *tpl,
                struct d3d12_descriptor_handle *handle,
                DXGI_FORMAT dxgi_format)
 {
-   struct d3d12_resource *res = d3d12_resource(pres);
-   struct d3d12_screen *screen = d3d12_screen(pctx->screen);
-
    D3D12_DEPTH_STENCIL_VIEW_DESC desc;
    desc.Format = dxgi_format;
    desc.Flags = D3D12_DSV_FLAG_NONE;
 
-   desc.ViewDimension = view_dsv_dimension(pres->target, pres->nr_samples);
+   desc.ViewDimension = view_dsv_dimension(res->base.b.target, res->base.b.nr_samples);
    switch (desc.ViewDimension) {
    case D3D12_DSV_DIMENSION_TEXTURE1D:
       if (tpl->first_layer > 0)
@@ -137,7 +134,7 @@ initialize_dsv(struct pipe_context *pctx,
       break;
 
    default:
-      unreachable("Unhandled DSV dimension");
+      UNREACHABLE("Unhandled DSV dimension");
    }
 
    mtx_lock(&screen->descriptor_pool_mutex);
@@ -149,23 +146,21 @@ initialize_dsv(struct pipe_context *pctx,
 }
 
 static void
-initialize_rtv(struct pipe_context *pctx,
-               struct pipe_resource *pres,
+initialize_rtv(struct d3d12_screen *screen,
+               struct d3d12_resource *res,
                const struct pipe_surface *tpl,
                struct d3d12_descriptor_handle *handle,
                DXGI_FORMAT dxgi_format)
 {
-   struct d3d12_resource *res = d3d12_resource(pres);
-   struct d3d12_screen *screen = d3d12_screen(pctx->screen);
 
    D3D12_RENDER_TARGET_VIEW_DESC desc;
    desc.Format = dxgi_format;
 
-   desc.ViewDimension = view_rtv_dimension(pres->target, pres->nr_samples);
+   desc.ViewDimension = view_rtv_dimension(res->base.b.target, res->base.b.nr_samples);
    switch (desc.ViewDimension) {
    case D3D12_RTV_DIMENSION_BUFFER:
       desc.Buffer.FirstElement = 0;
-      desc.Buffer.NumElements = pres->width0 / util_format_get_blocksize(tpl->format);
+      desc.Buffer.NumElements = res->base.b.width0 / util_format_get_blocksize(tpl->format);
       break;
 
    case D3D12_RTV_DIMENSION_TEXTURE1D:
@@ -216,7 +211,7 @@ initialize_rtv(struct pipe_context *pctx,
       break;
 
    default:
-      unreachable("Unhandled RTV dimension");
+      UNREACHABLE("Unhandled RTV dimension");
    }
 
    mtx_lock(&screen->descriptor_pool_mutex);
@@ -227,26 +222,26 @@ initialize_rtv(struct pipe_context *pctx,
                                        handle->cpu_handle);
 }
 
-static struct pipe_surface *
-d3d12_create_surface(struct pipe_context *pctx,
-                     struct pipe_resource *pres,
+struct d3d12_surface *
+d3d12_create_surface(struct d3d12_screen *screen,
                      const struct pipe_surface *tpl)
 {
+   struct d3d12_resource *res = d3d12_resource(tpl->texture);
    bool is_depth_or_stencil = util_format_is_depth_or_stencil(tpl->format);
    unsigned bind = is_depth_or_stencil ? PIPE_BIND_DEPTH_STENCIL : PIPE_BIND_RENDER_TARGET;
 
    /* Don't bother if we don't support the requested format as RT or DS */
-   if (!pctx->screen->is_format_supported(pctx->screen, tpl->format, PIPE_TEXTURE_2D,
-                                          tpl->nr_samples, tpl->nr_samples,bind))
+   if (!screen->base.is_format_supported(&screen->base, tpl->format, PIPE_TEXTURE_2D,
+                                         tpl->nr_samples, tpl->nr_samples,bind))
       return NULL;
 
    struct d3d12_surface *surface = CALLOC_STRUCT(d3d12_surface);
    if (!surface)
       return NULL;
 
-   pipe_resource_reference(&surface->base.texture, pres);
+   pipe_resource_reference(&surface->base.texture, &res->base.b);
    pipe_reference_init(&surface->base.reference, 1);
-   surface->base.context = pctx;
+   surface->screen = screen;
    surface->base.format = tpl->format;
    surface->base.level = tpl->level;
    surface->base.first_layer = tpl->first_layer;
@@ -254,19 +249,17 @@ d3d12_create_surface(struct pipe_context *pctx,
 
    DXGI_FORMAT dxgi_format = d3d12_get_resource_rt_format(tpl->format);
    if (is_depth_or_stencil)
-      initialize_dsv(pctx, pres, tpl, &surface->desc_handle, dxgi_format);
+      initialize_dsv(screen, res, tpl, &surface->desc_handle, dxgi_format);
    else
-      initialize_rtv(pctx, pres, tpl, &surface->desc_handle, dxgi_format);
+      initialize_rtv(screen, res, tpl, &surface->desc_handle, dxgi_format);
 
-   return &surface->base;
+   return surface;
 }
 
-static void
-d3d12_surface_destroy(struct pipe_context *pctx,
-                      struct pipe_surface *psurf)
+void
+d3d12_surface_destroy(struct d3d12_surface *surface)
 {
-   struct d3d12_surface *surface = (struct d3d12_surface*) psurf;
-   struct d3d12_screen *screen = d3d12_screen(pctx->screen);
+   struct d3d12_screen *screen = surface->screen;
 
    mtx_lock(&screen->descriptor_pool_mutex);
    d3d12_descriptor_handle_free(&surface->desc_handle);
@@ -274,18 +267,18 @@ d3d12_surface_destroy(struct pipe_context *pctx,
       d3d12_descriptor_handle_free(&surface->uint_rtv_handle);
    mtx_unlock(&screen->descriptor_pool_mutex);
 
-   pipe_resource_reference(&psurf->texture, NULL);
-   pipe_resource_reference(&surface->rgba_texture, NULL);
+   pipe_resource_reference(&surface->base.texture, NULL);
    FREE(surface);
 }
 
 static void
-blit_surface(struct pipe_context *pctx, struct d3d12_surface *surface, bool pre)
+blit_logicop_surface(struct pipe_context *pctx, struct d3d12_surface *surface, bool pre)
 {
    struct pipe_blit_info info = {};
+   struct pipe_resource *logicop_surface = d3d12_resource_get_logicop_texture(d3d12_resource(surface->base.texture));
 
-   info.src.resource = pre ? surface->base.texture : surface->rgba_texture;
-   info.dst.resource = pre ? surface->rgba_texture : surface->base.texture;
+   info.src.resource = pre ? surface->base.texture : logicop_surface;
+   info.dst.resource = pre ? logicop_surface : surface->base.texture;
    info.src.format = pre ? surface->base.texture->format : PIPE_FORMAT_R8G8B8A8_UNORM;
    info.dst.format = pre ? PIPE_FORMAT_R8G8B8A8_UNORM : surface->base.texture->format;
    info.src.level = info.dst.level = 0;
@@ -305,7 +298,6 @@ d3d12_surface_update_pre_draw(struct pipe_context *pctx,
                               struct d3d12_surface *surface,
                               DXGI_FORMAT format)
 {
-   struct d3d12_screen *screen = d3d12_screen(pctx->screen);
    struct d3d12_resource *res = d3d12_resource(surface->base.texture);
    DXGI_FORMAT dxgi_format = d3d12_get_resource_rt_format(surface->base.format);
    enum d3d12_surface_conversion_mode mode;
@@ -313,38 +305,13 @@ d3d12_surface_update_pre_draw(struct pipe_context *pctx,
    if (dxgi_format == format)
       return D3D12_SURFACE_CONVERSION_NONE;
 
-   if (dxgi_format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-       dxgi_format == DXGI_FORMAT_B8G8R8X8_UNORM)
-      mode = D3D12_SURFACE_CONVERSION_BGRA_UINT;
-   else
+   struct pipe_resource *logicop_resource = d3d12_resource_get_logicop_texture(res);
+   if (logicop_resource == surface->base.texture) {
       mode = D3D12_SURFACE_CONVERSION_RGBA_UINT;
-
-   if (mode == D3D12_SURFACE_CONVERSION_BGRA_UINT) {
-      if (!surface->rgba_texture) {
-         struct pipe_resource templ = {};
-         struct pipe_resource *src = surface->base.texture;
-
-         templ.format = PIPE_FORMAT_R8G8B8A8_UNORM;
-         templ.width0 = src->width0;
-         templ.height0 = src->height0;
-         templ.depth0 = src->depth0;
-         templ.array_size = src->array_size;
-         templ.nr_samples = src->nr_samples;
-         templ.nr_storage_samples = src->nr_storage_samples;
-         templ.usage = PIPE_USAGE_STAGING;
-         templ.bind = src->bind;
-         templ.target = src->target;
-
-         surface->rgba_texture = screen->base.resource_create(&screen->base, &templ);
-      }
-
-      blit_surface(pctx, surface, true);
-      res = d3d12_resource(surface->rgba_texture);
-   }
-
-   if (!d3d12_descriptor_handle_is_allocated(&surface->uint_rtv_handle)) {
-      initialize_rtv(pctx, &res->base.b, &surface->base,
-                     &surface->uint_rtv_handle, DXGI_FORMAT_R8G8B8A8_UINT);
+   } else {
+      blit_logicop_surface(pctx, surface, true);
+      res = d3d12_resource(logicop_resource);
+      mode = D3D12_SURFACE_CONVERSION_BGRA_UINT;
    }
 
    return mode;
@@ -356,21 +323,22 @@ d3d12_surface_update_post_draw(struct pipe_context *pctx,
                                enum d3d12_surface_conversion_mode mode)
 {
    if (mode == D3D12_SURFACE_CONVERSION_BGRA_UINT)
-      blit_surface(pctx, surface, false);
+      blit_logicop_surface(pctx, surface, false);
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE
 d3d12_surface_get_handle(struct d3d12_surface *surface,
-                         enum d3d12_surface_conversion_mode mode)
+                         enum d3d12_surface_conversion_mode mode,
+                         DXGI_FORMAT format)
 {
-   if (mode != D3D12_SURFACE_CONVERSION_NONE)
+   if (mode != D3D12_SURFACE_CONVERSION_NONE) {
+      struct d3d12_resource *base_res = d3d12_resource(surface->base.texture);
+      if (!d3d12_descriptor_handle_is_allocated(&surface->uint_rtv_handle)) {
+         initialize_rtv(surface->screen,
+                        d3d12_resource(d3d12_resource_get_logicop_texture(base_res)),
+                        &surface->base, &surface->uint_rtv_handle, format);
+      }
       return surface->uint_rtv_handle.cpu_handle;
+   }
    return surface->desc_handle.cpu_handle;
-}
-
-void
-d3d12_context_surface_init(struct pipe_context *context)
-{
-   context->create_surface = d3d12_create_surface;
-   context->surface_destroy = d3d12_surface_destroy;
 }

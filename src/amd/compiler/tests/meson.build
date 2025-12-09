@@ -53,7 +53,7 @@ test(
       inc_include, inc_src, inc_amd, inc_amd_common, inc_amd_common_llvm,
     ],
     link_with : [
-      libamd_common, libamd_common_llvm, libvulkan_radeon,
+      libamd_common, libamd_common_llvm, libvulkan_radeon, libamdgpu_noop_drm_shim,
     ],
     dependencies : [
       dep_llvm, dep_thread, idep_aco, idep_nir, idep_mesautil, idep_vulkan_util_headers, idep_amdgfxregs_h,
@@ -62,4 +62,5 @@ test(
     build_by_default : true,
   ),
   suite : ['amd', 'compiler'],
+  env : ['LD_PRELOAD=@0@'.format(libamdgpu_noop_drm_shim.full_path())],
 )

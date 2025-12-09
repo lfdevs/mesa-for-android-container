@@ -62,6 +62,7 @@ union ac_cs_blit_key {
       bool dst_is_msaa:1;
       bool src_has_z:1;
       bool dst_has_z:1;
+      bool dst_is_rgb5:1;
       bool a16:1;
       bool d16:1;
       uint8_t log_samples:2;
@@ -97,7 +98,7 @@ struct ac_cs_blit_options {
 struct ac_cs_blit_description
 {
    struct {
-      struct radeon_surf *surf;
+      const struct radeon_surf *surf;
       uint8_t dim;            /* 1 = 1D texture, 2 = 2D texture, 3 = 3D texture */
       bool is_array;          /* array or cube texture */
       unsigned width0;        /* level 0 width */

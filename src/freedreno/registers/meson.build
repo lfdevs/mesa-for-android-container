@@ -22,7 +22,7 @@ foreach f : xml_files
     _name,
     input: [gen_header_py, f, freedreno_schema, freedreno_copyright],
     output: _name,
-    command: [prog_python, '@INPUT0@', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'c-defines'],
+    command: [prog_python, '@INPUT0@', '--validate', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'c-defines'],
     capture: true,
   )
 endforeach

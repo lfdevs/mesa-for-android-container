@@ -8,7 +8,6 @@
 #include "vulkan/vulkan_core.h"
 #include "agx_helpers.h"
 #include "agx_linker.h"
-#include "agx_nir_lower_gs.h"
 #include "agx_pack.h"
 #include "agx_scratch.h"
 #include "agx_tilebuffer.h"

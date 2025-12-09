@@ -27,6 +27,7 @@
 #ifndef H_ETNAVIV_BLT
 #define H_ETNAVIV_BLT
 
+#include "etnaviv_internal.h"
 #include "etnaviv_tiling.h"
 
 #include <stdbool.h>
@@ -92,6 +93,16 @@ struct blt_inplace_op
    uint32_t num_tiles;
    uint8_t ts_mode; /* TS_MODE_* */
    uint8_t bpp;
+};
+
+struct blt_genmipmap_op {
+   struct blt_imginfo src;
+   uint16_t width;
+   uint16_t height;
+
+   uint8_t num_levels;
+   uint32_t stride[ETNA_NUM_LOD - 1];
+   struct etna_reloc level[ETNA_NUM_LOD - 1];
 };
 
 /* Context initialization for BLT clear_blit functions. */

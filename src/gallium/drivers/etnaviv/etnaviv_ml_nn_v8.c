@@ -685,7 +685,7 @@ create_bo(struct etna_ml_subgraph *subgraph, const struct etna_operation *operat
       input_channels = 2 * output_channels;
 
    unsigned header_size = 64;
-   unsigned body_size = ALIGN(DIV_ROUND_UP(output_channels, cores_used) * (input_channels * operation->weight_height * operation->weight_width + 4 + 4), 64) * 2;
+   unsigned body_size = align(DIV_ROUND_UP(output_channels, cores_used) * (input_channels * operation->weight_height * operation->weight_width + 4 + 4), 64) * 2;
    unsigned tail_size = 64;
    max_size = header_size + cores_used * body_size + tail_size;
 
@@ -803,7 +803,7 @@ etna_ml_create_coeffs_v8(struct etna_ml_subgraph *subgraph, const struct etna_op
    header->symbol_map = pack_symbol_map(symbol_map);
    header->version = 1;
 
-   map += ALIGN(sizeof(*header), 64) / 4;
+   map += align(sizeof(*header), 64) / 4;
 
    encoder_init(&encoder, symbol_map, map);
 

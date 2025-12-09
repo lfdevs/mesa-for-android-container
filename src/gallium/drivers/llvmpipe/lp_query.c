@@ -345,6 +345,11 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
          case PIPE_STAT_QUERY_MS_INVOCATIONS:
             value = pq->stats.ms_invocations;
             break;
+         case PIPE_STAT_QUERY_MS_PRIMITIVES:
+            value = pq->stats.ms_primitives;
+            break;
+         default:
+            UNREACHABLE("Invalid pipe_statistics_query_index");
          }
          break;
       default:

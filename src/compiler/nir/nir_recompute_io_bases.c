@@ -68,19 +68,25 @@ bool
 nir_recompute_io_bases(nir_shader *nir, nir_variable_mode modes)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   bool make_colors_last = nir->options->io_options &
+                           nir_io_assign_color_input_bases_after_all_other_inputs;
 
    BITSET_DECLARE(inputs, NUM_TOTAL_VARYING_SLOTS);
    BITSET_DECLARE(per_prim_inputs, NUM_TOTAL_VARYING_SLOTS);  /* FS only */
+   /* radeonsi prefers color inputs to be last. */
+   BITSET_DECLARE(color_inputs, 2); /* VARYING_SLOT_COL{0,1}, FS only */
    BITSET_DECLARE(dual_slot_inputs, NUM_TOTAL_VARYING_SLOTS); /* VS only */
    BITSET_DECLARE(outputs, NUM_TOTAL_VARYING_SLOTS);
+
    BITSET_ZERO(inputs);
    BITSET_ZERO(per_prim_inputs);
+   BITSET_ZERO(color_inputs);
    BITSET_ZERO(dual_slot_inputs);
    BITSET_ZERO(outputs);
 
    /* Gather the bitmasks of used locations. */
-   nir_foreach_block_safe(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
          nir_variable_mode mode;
          nir_intrinsic_instr *intr = nir_get_io_intrinsic(instr, modes, &mode);
          if (!intr)
@@ -93,13 +99,32 @@ nir_recompute_io_bases(nir_shader *nir, nir_variable_mode modes)
 
          if (mode == nir_var_shader_in) {
             for (unsigned i = 0; i < num_slots; i++) {
-               if (intr->intrinsic == nir_intrinsic_load_per_primitive_input)
-                  BITSET_SET(per_prim_inputs, sem.location + i);
+               unsigned location = sem.location + i;
+               /* GPU like AMD require per primitive inputs come after per
+                * vertex inputs.
+                */
+               if (intr->intrinsic == nir_intrinsic_load_per_primitive_input ||
+                   /* Some fragment shader input varying is per vertex when vertex
+                    * pipeline, per primitive when mesh pipeline. In order to share
+                    * the same fragment shader code, we move these varyings after
+                    * other per vertex varyings by handling them like per primitive
+                    * varyings here.
+                    */
+                   (nir->info.stage == MESA_SHADER_FRAGMENT &&
+                    (location == VARYING_SLOT_PRIMITIVE_ID ||
+                     location == VARYING_SLOT_VIEWPORT ||
+                     location == VARYING_SLOT_LAYER)))
+                  BITSET_SET(per_prim_inputs, location);
+               else if (make_colors_last &&
+                        nir->info.stage == MESA_SHADER_FRAGMENT &&
+                        (location == VARYING_SLOT_COL0 ||
+                         location == VARYING_SLOT_COL1))
+                  BITSET_SET(color_inputs, location - VARYING_SLOT_COL0);
                else
-                  BITSET_SET(inputs, sem.location + i);
+                  BITSET_SET(inputs, location);
 
                if (sem.high_dvec2)
-                  BITSET_SET(dual_slot_inputs, sem.location + i);
+                  BITSET_SET(dual_slot_inputs, location);
             }
          } else if (!sem.dual_source_blend_index) {
             for (unsigned i = 0; i < num_slots; i++)
@@ -108,13 +133,17 @@ nir_recompute_io_bases(nir_shader *nir, nir_variable_mode modes)
       }
    }
 
-   const unsigned num_normal_inputs = BITSET_COUNT(inputs) + BITSET_COUNT(dual_slot_inputs);
+   const unsigned num_normal_inputs = BITSET_COUNT(inputs) +
+                                      BITSET_COUNT(dual_slot_inputs) +
+                                      BITSET_COUNT(color_inputs);
+   assert(nir->info.stage == MESA_SHADER_FRAGMENT ||
+          BITSET_COUNT(color_inputs) == 0);
 
    /* Renumber bases. */
-   bool changed = false;
+   bool progress = false;
 
-   nir_foreach_block_safe(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
          nir_variable_mode mode;
          nir_intrinsic_instr *intr = nir_get_io_intrinsic(instr, modes, &mode);
          if (!intr)
@@ -125,34 +154,57 @@ nir_recompute_io_bases(nir_shader *nir, nir_variable_mode modes)
          if (sem.medium_precision)
             num_slots = (num_slots + sem.high_16bits + 1) / 2;
 
+         unsigned new_base;
+
          if (mode == nir_var_shader_in) {
-            if (intr->intrinsic == nir_intrinsic_load_per_primitive_input) {
-               nir_intrinsic_set_base(intr,
-                                      num_normal_inputs +
-                                         BITSET_PREFIX_SUM(per_prim_inputs, sem.location));
+            if (BITSET_TEST(per_prim_inputs, sem.location)){
+               new_base = num_normal_inputs +
+                          BITSET_PREFIX_SUM(per_prim_inputs, sem.location);
+            } else if (make_colors_last &&
+                       nir->info.stage == MESA_SHADER_FRAGMENT &&
+                       (sem.location == VARYING_SLOT_COL0 ||
+                        sem.location == VARYING_SLOT_COL1)) {
+               new_base = BITSET_COUNT(inputs) +
+                          BITSET_PREFIX_SUM(color_inputs,
+                                            sem.location - VARYING_SLOT_COL0);
             } else {
-               nir_intrinsic_set_base(intr,
-                                      BITSET_PREFIX_SUM(inputs, sem.location) +
-                                         BITSET_PREFIX_SUM(dual_slot_inputs, sem.location) +
-                                         (sem.high_dvec2 ? 1 : 0));
+               new_base = BITSET_PREFIX_SUM(inputs, sem.location) +
+                          BITSET_PREFIX_SUM(dual_slot_inputs, sem.location) +
+                          (sem.high_dvec2 ? 1 : 0);
             }
          } else if (sem.dual_source_blend_index) {
-            nir_intrinsic_set_base(intr,
-                                   BITSET_PREFIX_SUM(outputs, NUM_TOTAL_VARYING_SLOTS));
+            new_base = BITSET_PREFIX_SUM(outputs, NUM_TOTAL_VARYING_SLOTS);
          } else {
-            nir_intrinsic_set_base(intr,
-                                   BITSET_PREFIX_SUM(outputs, sem.location));
+            new_base = BITSET_PREFIX_SUM(outputs, sem.location);
          }
-         changed = true;
+
+         if (nir_intrinsic_base(intr) != new_base) {
+            nir_intrinsic_set_base(intr, new_base);
+            progress = true;
+         }
       }
    }
 
-   nir_progress(changed, impl, nir_metadata_control_flow);
 
-   if (modes & nir_var_shader_in)
-      nir->num_inputs = BITSET_COUNT(inputs) + BITSET_COUNT(per_prim_inputs);
-   if (modes & nir_var_shader_out)
-      nir->num_outputs = BITSET_COUNT(outputs);
 
-   return changed;
+   if (modes & nir_var_shader_in) {
+      unsigned num_inputs = BITSET_COUNT(inputs) + BITSET_COUNT(color_inputs) +
+                            BITSET_COUNT(per_prim_inputs);
+
+      if (nir->num_inputs != num_inputs) {
+         nir->num_inputs = num_inputs;
+         progress = true;
+      }
+   }
+
+   if (modes & nir_var_shader_out) {
+      unsigned num_outputs = BITSET_COUNT(outputs);
+
+      if (nir->num_outputs != num_outputs) {
+         nir->num_outputs = num_outputs;
+         progress = true;
+      }
+   }
+
+   return nir_progress(progress, impl, nir_metadata_all);
 }

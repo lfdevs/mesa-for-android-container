@@ -14,7 +14,6 @@
 #include "util/simple_mtx.h"
 #include "util/u_queue.h"
 #include "ac_linux_drm.h"
-#include <amdgpu.h>
 #include "amdgpu_userq.h"
 
 struct amdgpu_cs;
@@ -215,13 +214,13 @@ struct amdgpu_winsys {
    ac_drm_device *dev;
 
    simple_mtx_t bo_fence_lock;
+   simple_mtx_t stats_lock;
 
    int num_cs; /* The number of command streams created. */
-   uint32_t surf_index_color;
-   uint32_t surf_index_fmask;
    uint32_t next_bo_unique_id;
    uint64_t allocated_vram;
    uint64_t allocated_gtt;
+   uint32_t allocated_oa;
    uint64_t mapped_vram;
    uint64_t mapped_gtt;
    uint64_t slab_wasted_vram;

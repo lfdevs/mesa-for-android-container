@@ -44,6 +44,9 @@ dEQP-GLES2.functional.texture.mipmap.cube.projected.linear_nearest,Fail
 
 wayland-dEQP-EGL.functional.create_context.no_config,Fail
 wayland-dEQP-EGL.functional.image.modify.renderbuffer_depth16_renderbuffer_clear_depth,Fail
+wayland-dEQP-EGL.functional.wide_color.pbuffer_fp16_default_colorspace,Fail
+wayland-dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_srgb,Fail
+wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_srgb,Fail
 wayland-dEQP-EGL.functional.wide_color.window_fp16_default_colorspace,Fail
 wayland-dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb,Fail
 wayland-dEQP-EGL.functional.wide_color.window_888_colorspace_srgb,Fail
@@ -486,21 +489,6 @@ spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_AND,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_AND_INVERTED,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_AND_REVERSE,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_CLEAR,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_COPY_INVERTED,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_EQUIV,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_INVERT,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_NAND,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_NOOP,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_NOR,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_OR,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_OR_INVERTED,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_OR_REVERSE,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_SET,Fail
-spec@!opengl 1.0@gl-1.0-logicop@GL_XOR,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-ortho-pos,Fail
 spec@!opengl 1.0@gl-1.0-rastercolor,Fail
@@ -508,7 +496,6 @@ spec@!opengl 1.0@gl-1.0-scissor-bitmap,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
 spec@!opengl 1.1@gl-1.1-xor-copypixels,Fail
-spec@!opengl 1.1@gl-1.1-xor,Fail
 spec@!opengl 1.1@line-flat-clip-color,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
@@ -582,10 +569,6 @@ spec@!opengl 1.1@line-smooth-stipple,Fail
 
 # bookworm update
 spec@ext_framebuffer_multisample@renderbufferstorage-samples,Fail
-
-# remove this after https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/843
-# is merged and piglit is updated
-spec@glsl-1.10@execution@glsl-1.10-built-in-uniform-state,Fail
 
 x11-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_srgb,Fail
 x11-dEQP-EGL.functional.wide_color.window_888_colorspace_srgb,Fail

@@ -67,8 +67,7 @@ copy_propagation_test::copy_propagation_test()
    params.mem_ctx = ctx;
 
    prog_data = ralloc(ctx, struct elk_wm_prog_data);
-   nir_shader *shader =
-      nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL, NULL);
+   nir_shader *shader = nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL);
 
    v = new copy_propagation_fs_visitor(compiler, &params, prog_data, shader);
 
@@ -100,7 +99,7 @@ instruction(elk_bblock_t *block, int num)
 static bool
 copy_propagation(elk_fs_visitor *v)
 {
-   const bool print = getenv("TEST_DEBUG");
+   const bool print = os_get_option("TEST_DEBUG");
 
    if (print) {
       fprintf(stderr, "= Before =\n");

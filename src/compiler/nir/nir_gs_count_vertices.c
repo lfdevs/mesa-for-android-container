@@ -70,7 +70,7 @@ nir_gs_count_vertices_and_primitives(const nir_shader *shader,
       /* set_vertex_and_primitive_count intrinsics only appear in predecessors of the
        * end block.  So we don't need to walk all of them.
        */
-      set_foreach(impl->end_block->predecessors, entry) {
+      set_foreach(&impl->end_block->predecessors, entry) {
          nir_block *block = (nir_block *)entry->key;
 
          nir_foreach_instr_reverse(instr, block) {

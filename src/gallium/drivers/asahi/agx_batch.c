@@ -634,8 +634,8 @@ asahi_add_attachment(struct attachments *att, struct agx_resource *rsrc)
    assert(att->count < MAX_ATTACHMENTS);
 
    att->list[att->count++] = (struct drm_asahi_attachment){
-      .size = rsrc->layout.size_B,
-      .pointer = rsrc->bo->va->addr,
+      .size = rsrc->layout.size_B - rsrc->layout.level_offsets_B[0],
+      .pointer = agx_map_gpu(rsrc),
    };
 }
 
@@ -659,7 +659,7 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
 
    uint64_t wait_seqid = p_atomic_read(&screen->flush_wait_seqid);
 
-   struct agx_submit_virt virt = {0};
+   struct agx_submit_virt virt = {.ring_idx = ctx->virt_ring_idx};
 
    /* Elide syncing against our own queue */
    if (wait_seqid && wait_seqid == ctx->flush_my_seqid) {
@@ -815,15 +815,14 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
    };
 
    /* Submit! */
-   struct util_dynarray cmdbuf;
-   util_dynarray_init(&cmdbuf, NULL);
+   struct util_dynarray cmdbuf = UTIL_DYNARRAY_INIT;
 
    if (compute) {
       /* Barrier on previous submission */
       struct drm_asahi_cmd_header header = agx_cmd_header(true, 0, 0);
 
-      util_dynarray_append(&cmdbuf, struct drm_asahi_cmd_header, header);
-      util_dynarray_append(&cmdbuf, struct drm_asahi_cmd_compute, *compute);
+      util_dynarray_append(&cmdbuf, header);
+      util_dynarray_append(&cmdbuf, *compute);
    }
 
    if (render) {
@@ -851,7 +850,7 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
             .vdm_barrier = DRM_ASAHI_BARRIER_NONE,
          };
 
-         util_dynarray_append(&cmdbuf, struct drm_asahi_cmd_header, header);
+         util_dynarray_append(&cmdbuf, header);
          util_dynarray_append_array(&cmdbuf, struct drm_asahi_attachment,
                                     att.list, att.count);
       }
@@ -860,8 +859,8 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
       struct drm_asahi_cmd_header header = agx_cmd_header(
          false, compute ? DRM_ASAHI_BARRIER_NONE : 0, compute ? 1 : 0);
 
-      util_dynarray_append(&cmdbuf, struct drm_asahi_cmd_header, header);
-      util_dynarray_append(&cmdbuf, struct drm_asahi_cmd_render, *render);
+      util_dynarray_append(&cmdbuf, header);
+      util_dynarray_append(&cmdbuf, *render);
    }
 
    struct drm_asahi_submit submit = {
@@ -976,8 +975,7 @@ agx_batch_submit(struct agx_context *ctx, struct agx_batch *batch,
    util_dynarray_fini(&cmdbuf);
    agx_batch_mark_submitted(batch);
 
-   if (virt.extres)
-      free(virt.extres);
+   free(virt.extres);
 
    /* Record the last syncobj for fence creation */
    ctx->syncobj = batch->syncobj;

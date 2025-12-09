@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MIT
+--
 -- Parse logs from https://github.com/freedreno/freedreno/
 -- test-texturator.c to generate a src/freedreno/fdl/fd6_layout_test.c
 -- block.  We figure out the offsets from blits, but there may be some

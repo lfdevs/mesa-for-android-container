@@ -8,11 +8,8 @@ uncollapsed_section_start wayland "Building Wayland"
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
 # ALPINE_X86_64_BUILD_TAG
-# DEBIAN_BASE_TAG
 # DEBIAN_BUILD_TAG
-# DEBIAN_TEST_ANDROID_TAG
-# DEBIAN_TEST_GL_TAG
-# DEBIAN_TEST_VK_TAG
+# DEBIAN_TEST_BASE_TAG
 # FEDORA_X86_64_BUILD_TAG
 
 export LIBWAYLAND_VERSION="1.24.0"

@@ -105,7 +105,7 @@ struct etna_cmd_stream *etna_cmd_stream_new(struct etna_pipe *pipe,
 	}
 
 	/* allocate even number of 32-bit words */
-	size = ALIGN(size, 2);
+	size = align(size, 2);
 
 	stream->base.buffer = malloc(size * sizeof(uint32_t));
 	if (!stream->base.buffer) {

@@ -30,20 +30,13 @@
 extern "C" {
 #endif
 
-/* Matches hardware Pixel Kill enum on Bifrost and Valhall */
-enum pan_earlyzs {
-   PAN_EARLYZS_FORCE_EARLY = 0,
-   PAN_EARLYZS_WEAK_EARLY = 2,
-   PAN_EARLYZS_FORCE_LATE = 3
-};
-
 /* Early-ZS pair. */
 struct pan_earlyzs_state {
    /* Z/S test and update */
-   enum pan_earlyzs update : 2;
+   unsigned update : 2;
 
    /* Pixel kill */
-   enum pan_earlyzs kill : 2;
+   unsigned kill : 2;
 
    /* True if the shader read-only ZS optimization should be enabled */
    bool shader_readonly_zs : 1;

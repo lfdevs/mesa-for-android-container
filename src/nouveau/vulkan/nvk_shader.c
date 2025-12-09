@@ -60,7 +60,7 @@ nvk_physical_device_compiler_flags(const struct nvk_physical_device *pdev)
 
 static const nir_shader_compiler_options *
 nvk_get_nir_options(struct vk_physical_device *vk_pdev,
-                    gl_shader_stage stage,
+                    mesa_shader_stage stage,
                     UNUSED const struct vk_pipeline_robustness_state *rs)
 {
    const struct nvk_physical_device *pdev =
@@ -85,7 +85,7 @@ nvk_ubo_addr_format(const struct nvk_physical_device *pdev,
       case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT:
          return nir_address_format_64bit_bounded_global;
       default:
-         unreachable("Invalid robust buffer access behavior");
+         UNREACHABLE("Invalid robust buffer access behavior");
       }
    }
 }
@@ -105,14 +105,14 @@ nvk_ssbo_addr_format(const struct nvk_physical_device *pdev,
       case VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT:
          return nir_address_format_64bit_bounded_global;
       default:
-         unreachable("Invalid robust buffer access behavior");
+         UNREACHABLE("Invalid robust buffer access behavior");
       }
    }
 }
 
 static struct spirv_to_nir_options
 nvk_get_spirv_options(struct vk_physical_device *vk_pdev,
-                      UNUSED gl_shader_stage stage,
+                      UNUSED mesa_shader_stage stage,
                       const struct vk_pipeline_robustness_state *rs)
 {
    const struct nvk_physical_device *pdev =
@@ -250,7 +250,7 @@ lower_load_intrinsic(nir_builder *b, nir_intrinsic_instr *load,
                            .align_mul = align_mul,
                            .align_offset = align_offset);
       } else {
-         unreachable("Invalid UBO index");
+         UNREACHABLE("Invalid UBO index");
       }
       nir_def_rewrite_uses(&load->def, val);
       return true;
@@ -284,7 +284,7 @@ lower_load_intrinsic(nir_builder *b, nir_intrinsic_instr *load,
       }
 
       nir_def *val =
-         nir_build_load_global_constant(b, load->def.num_components,
+         nir_load_global_constant(b, load->def.num_components,
                                         load->def.bit_size,
                                         nir_iadd(b, base_addr, nir_u2u64(b, offset)),
                                         .align_mul = nir_intrinsic_align_mul(load),
@@ -603,7 +603,7 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
 }
 
 uint32_t
-mesa_to_nv9097_shader_type(gl_shader_stage stage)
+mesa_to_nv9097_shader_type(mesa_shader_stage stage)
 {
    static const uint32_t mesa_to_nv9097[] = {
       [MESA_SHADER_VERTEX]    = NV9097_SET_PIPELINE_SHADER_TYPE_VERTEX,
@@ -617,14 +617,14 @@ mesa_to_nv9097_shader_type(gl_shader_stage stage)
 }
 
 uint32_t
-nvk_pipeline_bind_group(gl_shader_stage stage)
+nvk_pipeline_bind_group(mesa_shader_stage stage)
 {
    return stage;
 }
 
 uint16_t
 nvk_max_shader_push_dw(const struct nvk_physical_device *pdev,
-                       gl_shader_stage stage, bool last_vtgm)
+                       mesa_shader_stage stage, bool last_vtgm)
 {
    if (stage == MESA_SHADER_COMPUTE)
       return 0;
@@ -655,7 +655,8 @@ nvk_shader_fill_push(struct nvk_device *dev,
    ASSERTED uint16_t max_dw_count = 0;
    uint32_t push_dw[200];
    struct nv_push push, *p = &push;
-   nv_push_init(&push, push_dw, ARRAY_SIZE(push_dw));
+   nv_push_init(&push, push_dw, ARRAY_SIZE(push_dw),
+                nvk_queue_subchannels_from_engines(NVKMD_ENGINE_3D));
 
    const uint32_t type = mesa_to_nv9097_shader_type(shader->info.stage);
 
@@ -908,10 +909,12 @@ nvk_compile_shader(struct nvk_device *dev,
       return result;
    }
 
-   result = nvk_shader_upload(dev, shader);
-   if (result != VK_SUCCESS) {
-      nvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
-      return result;
+   if (dev->nvkmd) {
+      result = nvk_shader_upload(dev, shader);
+      if (result != VK_SUCCESS) {
+         nvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+         return result;
+      }
    }
 
    if (info->stage == MESA_SHADER_FRAGMENT) {
@@ -922,7 +925,7 @@ nvk_compile_shader(struct nvk_device *dev,
       }
    }
 
-   if (info->stage != MESA_SHADER_COMPUTE) {
+   if (info->stage != MESA_SHADER_COMPUTE && dev->nvkmd) {
       result = nvk_shader_fill_push(dev, shader, pAllocator);
       if (result != VK_SUCCESS) {
          nvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
@@ -1061,13 +1064,15 @@ nvk_deserialize_shader(struct vk_device *vk_dev,
       return vk_error(dev, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
    }
 
-   result = nvk_shader_upload(dev, shader);
-   if (result != VK_SUCCESS) {
-      nvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
-      return result;
+   if (dev->nvkmd) {
+      result = nvk_shader_upload(dev, shader);
+      if (result != VK_SUCCESS) {
+         nvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+         return result;
+      }
    }
 
-   if (info.stage != MESA_SHADER_COMPUTE) {
+   if (info.stage != MESA_SHADER_COMPUTE && dev->nvkmd) {
       result = nvk_shader_fill_push(dev, shader, pAllocator);
       if (result != VK_SUCCESS) {
          nvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);

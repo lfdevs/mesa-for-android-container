@@ -311,7 +311,7 @@ combine_stores_block(struct combine_stores_state *state, nir_block *block)
          break;
 
       case nir_intrinsic_barrier:
-         if (nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_RELEASE) {
+         if (nir_intrinsic_memory_semantics(intrin) & (NIR_MEMORY_RELEASE | NIR_MEMORY_MAKE_AVAILABLE)) {
             combine_stores_with_modes(state,
                                       nir_intrinsic_memory_modes(intrin));
          }

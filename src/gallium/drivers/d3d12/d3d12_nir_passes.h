@@ -60,10 +60,10 @@ d3d12_lower_point_sprite(nir_shader *shader,
 bool
 d3d12_lower_state_vars(struct nir_shader *s, struct d3d12_shader *shader);
 
-void
+bool
 d3d12_lower_yflip(nir_shader *s);
 
-void
+bool
 d3d12_lower_depth_range(nir_shader *nir);
 
 bool
@@ -75,23 +75,23 @@ d3d12_lower_load_patch_vertices_in(nir_shader *nir);
 bool
 d3d12_lower_compute_state_vars(nir_shader *nir);
 
-void
+bool
 d3d12_lower_uint_cast(nir_shader *nir, bool is_signed);
 
-void
+bool
 d3d12_add_missing_dual_src_target(struct nir_shader *s,
                                   unsigned missing_mask);
 
 bool
 d3d12_fix_io_uint_type(struct nir_shader *s, uint64_t in_mask, uint64_t out_mask);
 
-void
+bool
 d3d12_nir_invert_depth(nir_shader *s, unsigned viewport_mask, bool clip_halfz);
 
-void
+bool
 d3d12_lower_primitive_id(nir_shader *shader);
 
-void
+bool
 d3d12_lower_triangle_strip(nir_shader *shader);
 
 bool
@@ -103,7 +103,7 @@ d3d12_disable_multisampling(nir_shader *s);
 bool
 d3d12_split_needed_varyings(nir_shader *s);
 
-void
+bool
 d3d12_write_0_to_new_varying(nir_shader *s, nir_variable *var);
 
 #ifdef __cplusplus

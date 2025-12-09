@@ -39,6 +39,7 @@
 #include "lp_bld_coro.h"
 #include "lp_bld_printf.h"
 #include "lp_bld_intr.h"
+#include "lp_bld_tgsi.h"
 
 #include "util/u_cpu_detect.h"
 #include "util/u_math.h"
@@ -151,7 +152,7 @@ lp_nir_instr_src_divergent(nir_instr *instr, uint32_t src_index)
    case nir_instr_type_call:
       return true;
    default:
-      unreachable("Unhandled instruction type");
+      UNREACHABLE("Unhandled instruction type");
    }
 }
 
@@ -217,6 +218,7 @@ struct lp_build_nir_soa_context
    LLVMValueRef ssbo_ptr;
 
    LLVMValueRef shared_ptr;
+   LLVMValueRef shared_size;
    LLVMValueRef payload_ptr;
    LLVMValueRef scratch_ptr;
    unsigned scratch_size;
@@ -361,7 +363,7 @@ group_op_mask_vec(struct lp_build_nir_soa_context *bld)
 {
    if (bld->shader->info.fs.require_full_quads)
       return mask_vec_with_helpers(bld);
-   
+
    return mask_vec(bld);
 }
 
@@ -1267,8 +1269,10 @@ emit_load_const(struct lp_build_nir_soa_context *bld,
 
    for (unsigned i = 0; i < instr->def.num_components; i++) {
      outval[i] = lp_build_const_int_vec(bld->base.gallivm, int_bld->type,
-                                        bits == 32 ? instr->value[i].u32
-                                                   : instr->value[i].u64);
+                                        bits == 8 ? instr->value[i].u8 :
+                                        bits == 16 ? instr->value[i].u32 :
+                                        bits == 32 ? instr->value[i].u32 :
+                                                     instr->value[i].u64);
    }
    for (unsigned i = instr->def.num_components; i < NIR_MAX_VEC_COMPONENTS; i++) {
       outval[i] = NULL;
@@ -1314,11 +1318,27 @@ mem_access_base_pointer(struct lp_build_nir_soa_context *bld,
          ptr = LLVMBuildPtrToInt(gallivm->builder, ptr, bld->int64_bld.elem_type, "");
          ptr = LLVMBuildAdd(gallivm->builder, ptr, lp_build_const_int64(gallivm, 12), "");
          ptr = LLVMBuildIntToPtr(gallivm->builder, ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0), "");
+         if (bounds)
+            *bounds = NULL;
       }
-      else
+      else {
          ptr = bld->shared_ptr;
-      if (bounds)
-         *bounds = NULL;
+         if (bounds) {
+            /*
+             * For shared mem, use essentially the same logic as for SSBOs,
+             * and clamp against the declared size.
+             * Note this is probably overkill - unsure of vulkan semantics,
+             * but d3d would allow for instance to just clamp offsets,
+             * since OOB writes cause shared mem to become undefined, and OOB
+             * reads have undefined results, unlike for SSBOs there's no
+             * need to ignore writes and return 0 for reads.
+             * Bounds is in units of bit_size (not bytes).
+             */
+            uint32_t shift_val = bit_size_to_shift_size(bit_size);
+            *bounds = LLVMBuildAShr(gallivm->builder, bld->shared_size,
+                                    lp_build_const_int32(gallivm, shift_val), "");
+         }
+      }
    }
 
    /* Cast it to the pointer type of the access this instruction is doing. */
@@ -2880,7 +2900,7 @@ get_src_index(nir_src *src)
       return ((uintptr_t)src - (uintptr_t)&call->params[0]) / sizeof(nir_src);
    }
    default:
-      unreachable("Unhandled instruction type");
+      UNREACHABLE("Unhandled instruction type");
    }
 }
 
@@ -2890,7 +2910,7 @@ get_instr_src_vec(struct lp_build_nir_soa_context *bld, nir_instr *instr, uint32
    struct gallivm_state *gallivm = bld->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
 
-   nir_src *src = NULL; 
+   nir_src *src = NULL;
    switch (instr->type) {
    case nir_instr_type_alu: {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
@@ -2918,7 +2938,7 @@ get_instr_src_vec(struct lp_build_nir_soa_context *bld, nir_instr *instr, uint32
       break;
    }
    default:
-      unreachable("Unhandled instruction type");
+      UNREACHABLE("Unhandled instruction type");
    }
 
    bool divergent = lp_nir_instr_src_divergent(instr, src_index);
@@ -2966,8 +2986,10 @@ assign_ssa_dest(struct lp_build_nir_soa_context *bld, const nir_def *ssa,
    struct gallivm_state *gallivm = bld->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
 
-   if (gallivm->di_builder && ssa->parent_instr->has_debug_info) {
-      nir_instr_debug_info *debug_info = nir_instr_get_debug_info(ssa->parent_instr);
+   if (gallivm->di_builder && nir_def_instr(ssa)->has_debug_info) {
+      /* Cast away the constness */
+      nir_instr_debug_info *debug_info =
+         nir_instr_get_debug_info((void *) nir_def_instr(ssa));
 
       /* Use "ssa_%u" because GDB cannot handle "%%%u" */
       char name[16];
@@ -3161,7 +3183,7 @@ do_int_divide(struct lp_build_nir_soa_context *bld,
 
 static LLVMValueRef
 do_int_mod(struct lp_build_nir_soa_context *bld,
-           bool is_unsigned, unsigned src_bit_size,
+           bool is_unsigned, bool use_src2_sign, unsigned src_bit_size,
            LLVMValueRef src, LLVMValueRef src2)
 {
    struct gallivm_state *gallivm = bld->base.gallivm;
@@ -3178,8 +3200,18 @@ do_int_mod(struct lp_build_nir_soa_context *bld,
       divisor = get_signed_divisor(gallivm, int_bld, mask_bld,
                                    src_bit_size, src, divisor);
    }
-   LLVMValueRef result = lp_build_mod(int_bld, src, divisor);
-   return LLVMBuildOr(builder, div_mask, result, "");
+   LLVMValueRef rem = lp_build_mod(int_bld, src, divisor);
+   rem = LLVMBuildOr(builder, div_mask, rem, "");
+
+   if (use_src2_sign) {
+      LLVMValueRef add_src2 = LLVMBuildICmp(builder, LLVMIntNE, rem, int_bld->zero, "");
+      LLVMValueRef signs_different = LLVMBuildXor(builder, LLVMBuildICmp(builder, LLVMIntSLT, src, int_bld->zero, ""),
+                                                  LLVMBuildICmp(builder, LLVMIntSLT, src2, int_bld->zero, ""), "");
+      add_src2 = LLVMBuildAnd(builder, add_src2, signs_different, "");
+      rem = LLVMBuildSelect(builder, add_src2, LLVMBuildAdd(builder, rem, src2, ""), rem, "");
+   }
+
+   return rem;
 }
 
 static LLVMValueRef
@@ -3241,12 +3273,37 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
    case nir_op_f2f16:
    case nir_op_f2f32:
    case nir_op_f2f64:
+      /*
+       * FIXME: for f2f16 we can get here even without lp_has_fp16(), despite
+       * not announcing f16 capability. Should not happen from GL side (glsl has
+       * lowering pass for f16 pack/unpack functions if not supported) however
+       * from Vulkan side things like quantizeToF16, unpack2x16float use this.
+       * Need to fix up the llvm type in this case at least, although on some
+       * platforms this will still crash if the llvm backend doesn't handle half
+       * type on its own (but works on x86 even without f16c).
+       * Alternatively could use lp_build_half_to_float/float_to_half() but need
+       * to modify to handle rounding differently (need RNE instead of RTZ here).
+       * Ideally would be able to just use llvm half type consistently for f16,
+       * but not all backends are ready for that.
+       */
       if (src_bit_size[0] > instr->def.bit_size) {
-         result = LLVMBuildFPTrunc(builder, src[0],
-                                 dst_float_bld->vec_type, "");
+         LLVMTypeRef llvm_dst_type = dst_float_bld->vec_type;
+         if (instr->def.bit_size == 16 && !lp_has_fp16()) {
+            llvm_dst_type = LLVMHalfTypeInContext(gallivm->context);
+            if (dst_float_bld->type.length != 1)
+               llvm_dst_type = LLVMVectorType(llvm_dst_type, dst_float_bld->type.length);
+         }
+         result = LLVMBuildFPTrunc(builder, src[0], llvm_dst_type, "");
+         /* don't need a bit cast for f16, caller already has one */
       } else {
-         result = LLVMBuildFPExt(builder, src[0],
-                                 dst_float_bld->vec_type, "");
+         LLVMValueRef src0 = src[0];
+         if (src_bit_size[0] == 16 && !lp_has_fp16()) {
+            LLVMTypeRef llvm_src_type = LLVMHalfTypeInContext(gallivm->context);
+            if (dst_float_bld->type.length != 1)
+               llvm_src_type = LLVMVectorType(llvm_src_type, dst_float_bld->type.length);
+            src0 = LLVMBuildBitCast(builder, src0, llvm_src_type, "");
+         }
+         result = LLVMBuildFPExt(builder, src0, dst_float_bld->vec_type, "");
       }
       break;
    case nir_op_f2i8:
@@ -3320,7 +3377,7 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
       break;
    }
    case nir_op_fisfinite32:
-      unreachable("Should have been lowered in nir_opt_algebraic_late.");
+      UNREACHABLE("Should have been lowered in nir_opt_algebraic_late.");
    case nir_op_flog2:
       result = lp_build_log2_safe(float_bld, src[0]);
       break;
@@ -3332,11 +3389,13 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
       /* If one of the sources is known to be a number (i.e., not NaN), then
        * better code can be generated by passing that information along.
        */
-      if (is_a_number(bld->range_ht, instr, 1,
+      nir_search_state search;
+      search.range_ht = bld->range_ht;
+      if (is_a_number(&search, instr, 1,
                       0 /* unused num_components */,
                       NULL /* unused swizzle */)) {
          minmax_nan = GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN;
-      } else if (is_a_number(bld->range_ht, instr, 0,
+      } else if (is_a_number(&search, instr, 0,
                              0 /* unused num_components */,
                              NULL /* unused swizzle */)) {
          first = 1;
@@ -3464,7 +3523,7 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
       break;
    case nir_op_imod:
    case nir_op_irem:
-      result = do_int_mod(bld, false, src_bit_size[0], src[0], src[1]);
+      result = do_int_mod(bld, false, instr->op == nir_op_imod, src_bit_size[0], src[0], src[1]);
       break;
    case nir_op_ishl: {
       if (src_bit_size[0] == 64)
@@ -3563,7 +3622,7 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
       result = lp_build_min(uint_bld, src[0], src[1]);
       break;
    case nir_op_umod:
-      result = do_int_mod(bld, true, src_bit_size[0], src[0], src[1]);
+      result = do_int_mod(bld, true, false, src_bit_size[0], src[0], src[1]);
       break;
    case nir_op_umul_high: {
       LLVMValueRef hi_bits;
@@ -3773,7 +3832,7 @@ get_deref_offset(struct lp_build_nir_soa_context *bld, nir_deref_instr *instr,
                offset = array_off;
          }
       } else
-         unreachable("Uhandled deref type in get_deref_instr_offset");
+         UNREACHABLE("Uhandled deref type in get_deref_instr_offset");
    }
 
 out:
@@ -3970,7 +4029,7 @@ visit_load_var(struct lp_build_nir_soa_context *bld,
                nir_intrinsic_instr *instr,
                LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
 {
-   nir_deref_instr *deref = nir_instr_as_deref(instr->src[0].ssa->parent_instr);
+   nir_deref_instr *deref = nir_def_as_deref(instr->src[0].ssa);
    nir_variable *var = nir_deref_instr_get_variable(deref);
    assert(util_bitcount(deref->modes) == 1);
    nir_variable_mode mode = deref->modes;
@@ -4018,7 +4077,7 @@ static void
 visit_store_var(struct lp_build_nir_soa_context *bld,
                 nir_intrinsic_instr *instr)
 {
-   nir_deref_instr *deref = nir_instr_as_deref(instr->src[0].ssa->parent_instr);
+   nir_deref_instr *deref = nir_def_as_deref(instr->src[0].ssa);
    nir_variable *var = nir_deref_instr_get_variable(deref);
    assert(util_bitcount(deref->modes) == 1);
    nir_variable_mode mode = deref->modes;
@@ -4220,7 +4279,7 @@ img_params_init_resource(struct lp_build_nir_soa_context *bld, struct lp_img_par
          params->image_index = nir_src_as_int(*src);
       else
          params->image_index_offset = get_src(bld, src, 0);
-   
+
       return;
    }
 
@@ -4235,7 +4294,7 @@ sampler_size_params_init_resource(struct lp_build_nir_soa_context *bld, struct l
          params->texture_unit = nir_src_as_int(*src);
       else
          params->texture_unit_offset = get_src(bld, src, 0);
-   
+
       return;
    }
 
@@ -4351,7 +4410,7 @@ lp_translate_atomic_op(nir_atomic_op op)
    case nir_atomic_op_fmin: return LLVMAtomicRMWBinOpFMin;
    case nir_atomic_op_fmax: return LLVMAtomicRMWBinOpFMax;
 #endif
-   default:          unreachable("Unexpected atomic");
+   default:          UNREACHABLE("Unexpected atomic");
    }
 }
 
@@ -4540,7 +4599,7 @@ visit_shared_load(struct lp_build_nir_soa_context *bld,
    bool offset_is_uniform = !lp_nir_instr_src_divergent(&instr->instr, 0);
    emit_load_mem(bld, instr->def.num_components,
                  instr->def.bit_size, true,
-                 offset_is_uniform, false, true, NULL, offset, result);
+                 offset_is_uniform, false, false, NULL, offset, result);
 }
 
 static void
@@ -4550,10 +4609,10 @@ visit_shared_store(struct lp_build_nir_soa_context *bld,
    LLVMValueRef val[NIR_MAX_VEC_COMPONENTS] = { NULL };
    get_src_vec(bld, 0, val);
    LLVMValueRef offset = get_src(bld, &instr->src[1], 0);
-   int writemask = instr->const_index[1];
+   int writemask = nir_intrinsic_write_mask(instr);
    int nc = nir_src_num_components(instr->src[0]);
    int bitsize = nir_src_bit_size(instr->src[0]);
-   emit_store_mem(bld, writemask, nc, bitsize, false, true, NULL, offset, val);
+   emit_store_mem(bld, writemask, nc, bitsize, false, false, NULL, offset, val);
 }
 
 static void
@@ -4568,7 +4627,7 @@ visit_shared_atomic(struct lp_build_nir_soa_context *bld,
    if (instr->intrinsic == nir_intrinsic_shared_atomic_swap)
       val2 = get_src(bld, &instr->src[2], 0);
 
-   emit_atomic_mem(bld, nir_intrinsic_atomic_op(instr), bitsize, false, true,
+   emit_atomic_mem(bld, nir_intrinsic_atomic_op(instr), bitsize, false, false,
                    NULL, offset, val, val2, &result[0]);
 }
 
@@ -4818,7 +4877,7 @@ visit_interp(struct lp_build_nir_soa_context *bld,
              nir_intrinsic_instr *instr,
              LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
 {
-   nir_deref_instr *deref = nir_instr_as_deref(instr->src[0].ssa->parent_instr);
+   nir_deref_instr *deref = nir_def_as_deref(instr->src[0].ssa);
    unsigned num_components = instr->def.num_components;
    nir_variable *var = nir_deref_instr_get_variable(deref);
    unsigned const_index;
@@ -4941,7 +5000,7 @@ visit_payload_store(struct lp_build_nir_soa_context *bld,
    LLVMValueRef val[NIR_MAX_VEC_COMPONENTS] = { NULL };
    get_src_vec(bld, 0, val);
    LLVMValueRef offset = get_src(bld, &instr->src[1], 0);
-   int writemask = instr->const_index[1];
+   int writemask = nir_intrinsic_write_mask(instr);
    int nc = nir_src_num_components(instr->src[0]);
    int bitsize = nir_src_bit_size(instr->src[0]);
    emit_store_mem(bld, writemask, nc, bitsize, true, true, NULL, offset, val);
@@ -5273,7 +5332,7 @@ visit_txs(struct lp_build_nir_soa_context *bld, nir_tex_instr *instr)
 }
 
 static enum lp_sampler_lod_property
-lp_build_nir_lod_property(gl_shader_stage stage, nir_src lod_src)
+lp_build_nir_lod_property(mesa_shader_stage stage, nir_src lod_src)
 {
    enum lp_sampler_lod_property lod_property;
 
@@ -5291,7 +5350,7 @@ lp_build_nir_lod_property(gl_shader_stage stage, nir_src lod_src)
 }
 
 uint32_t
-lp_build_nir_sample_key(gl_shader_stage stage, nir_tex_instr *instr)
+lp_build_nir_sample_key(mesa_shader_stage stage, nir_tex_instr *instr)
 {
    uint32_t sample_key = 0;
 
@@ -5558,7 +5617,7 @@ visit_tex(struct lp_build_nir_soa_context *bld, nir_tex_instr *instr)
          vec_type = bld->uint16_bld.vec_type;
          break;
       default:
-         unreachable("unexpected alu type");
+         UNREACHABLE("unexpected alu type");
       }
       for (int i = 0; i < instr->def.num_components; ++i) {
          if (is_float) {
@@ -5599,7 +5658,7 @@ visit_jump(struct lp_build_nir_soa_context *bld,
       continue_stmt(bld);
       break;
    default:
-      unreachable("Unknown jump instr\n");
+      UNREACHABLE("Unknown jump instr\n");
    }
 }
 
@@ -5621,7 +5680,7 @@ visit_deref(struct lp_build_nir_soa_context *bld,
       break;
    }
    default:
-      unreachable("Unhandled deref_instr deref type");
+      UNREACHABLE("Unhandled deref_instr deref type");
    }
 
    assign_ssa_dest(bld, &instr->def, result);
@@ -5979,6 +6038,7 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
    bld.thread_data_ptr = params->thread_data_ptr;
    bld.image = params->image;
    bld.shared_ptr = params->shared_ptr;
+   bld.shared_size = params->shared_size;
    bld.payload_ptr = params->payload_ptr;
    bld.coro = params->coro;
    bld.num_inputs = params->num_inputs;
@@ -6013,7 +6073,7 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
 
    bld.shader = shader;
 
-   bld.scratch_size = ALIGN(shader->scratch_size, 8);
+   bld.scratch_size = align(shader->scratch_size, 8);
    if (params->scratch_ptr)
       bld.scratch_ptr = params->scratch_ptr;
    else if (shader->scratch_size) {
@@ -6150,7 +6210,7 @@ lp_build_nir_soa_prepasses(struct nir_shader *nir)
    do {
       progress = false;
       NIR_PASS(progress, nir, nir_lower_alu_to_scalar, NULL, NULL);
-      NIR_PASS(progress, nir, nir_copy_prop);
+      NIR_PASS(progress, nir, nir_opt_copy_prop);
       NIR_PASS(progress, nir, nir_opt_dce);
    } while (progress);
 

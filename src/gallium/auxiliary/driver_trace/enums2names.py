@@ -108,13 +108,7 @@ def pkk_get_argparser():
         type=str,
         metavar="outfile",
         dest="out_header",
-        help="output C header file")
-
-    optparser.add_argument("-I",
-        type=str,
-        metavar="include",
-        dest="include_file",
-        help="include file / path used for C source output")
+        help="output H header file (the basename will be use to include the header in the C source file)")
 
     return optparser
 
@@ -235,9 +229,6 @@ def pkk_output_header(fh):
 
 
 def pkk_output_source(fh):
-    if pkk_cfg.include_file == None:
-        pkk_fatal("Output C source enabled, but include file is not set (-I option).")
-
     print(textwrap.dedent("""\
         /*
          * File generated with {program}, please do not edit manually.
@@ -245,7 +236,7 @@ def pkk_output_source(fh):
         #include "{include_file}"
         """).format(
             program=pkk_progname,
-            include_file=pkk_cfg.include_file,
+            include_file=os.path.basename(pkk_cfg.out_header),
             ), file=fh)
 
     for name in lst_enum_include:

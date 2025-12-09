@@ -339,8 +339,8 @@ tu_rmv_log_image_bind(struct tu_device *device, struct tu_image *image)
 {
    simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
 
-   uint64_t address = image->bo ? image->iova : 0;
-   uint64_t size = image->bo ? image->total_size : 0;
+   uint64_t address = image->iova;
+   uint64_t size = image->iova ? image->total_size : 0;
    tu_rmv_emit_resource_bind_locked(device,
                                     tu_rmv_get_resource_id_locked(device, image),
                                     address, size);
@@ -395,6 +395,11 @@ void
 tu_rmv_log_query_pool_create(struct tu_device *device,
                              struct tu_query_pool *query_pool)
 {
+   if (query_pool->vk.query_type != VK_QUERY_TYPE_OCCLUSION &&
+       query_pool->vk.query_type != VK_QUERY_TYPE_PIPELINE_STATISTICS &&
+       query_pool->vk.query_type != VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+      return;
+
    simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
 
    struct vk_rmv_resource_create_token token = {

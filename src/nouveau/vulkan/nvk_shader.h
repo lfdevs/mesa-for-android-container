@@ -39,7 +39,7 @@ struct vk_shader_module;
 #define NVK_SHADER_STAGE_GRAPHICS_BITS \
    (NVK_SHADER_STAGE_VTGM_BITS | VK_SHADER_STAGE_FRAGMENT_BIT)
 
-static inline gl_shader_stage
+static inline mesa_shader_stage
 nvk_last_vtgm_shader_stage(VkShaderStageFlags stages)
 {
    stages &= ~VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -48,7 +48,7 @@ nvk_last_vtgm_shader_stage(VkShaderStageFlags stages)
 }
 
 static inline uint32_t
-nvk_cbuf_binding_for_stage(gl_shader_stage stage)
+nvk_cbuf_binding_for_stage(mesa_shader_stage stage)
 {
    return stage;
 }
@@ -81,7 +81,7 @@ struct nvk_cbuf_map {
 
 uint16_t
 nvk_max_shader_push_dw(const struct nvk_physical_device *pdev,
-                       gl_shader_stage stage, bool last_vtgm);
+                       mesa_shader_stage stage, bool last_vtgm);
 
 struct nvk_shader {
    struct vk_shader vk;
@@ -148,7 +148,7 @@ nvk_compile_nir_shader(struct nvk_device *dev, nir_shader *nir,
                        const VkAllocationCallbacks *alloc,
                        struct nvk_shader **shader_out);
 
-uint32_t mesa_to_nv9097_shader_type(gl_shader_stage stage);
-uint32_t nvk_pipeline_bind_group(gl_shader_stage stage);
+uint32_t mesa_to_nv9097_shader_type(mesa_shader_stage stage);
+uint32_t nvk_pipeline_bind_group(mesa_shader_stage stage);
 
 #endif

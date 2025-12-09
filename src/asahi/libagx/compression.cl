@@ -43,7 +43,7 @@ index_metadata(uint3 c, uint width, uint height, uint layer_stride)
    uint intl_mask = (1 << intl_bits) - 1;
    uint2 intl_coords = c.xy & intl_mask;
 
-   return nir_interleave_agx(intl_coords.x, intl_coords.y) +
+   return nir_interleave(intl_coords.x, intl_coords.y) +
           ((major_coord & ~intl_mask) << intl_bits) + (layer_stride * c.z);
 }
 
@@ -150,7 +150,7 @@ stretched_sa_to_px(ushort2 px, uint samples)
    case  4: return (ushort2)(px.x / 2, px.y / 2);
    case  2: return (ushort2)(px.x, px.y / 2);
    case  1: return px;
-   default: unreachable("invalid sample count");
+   default: UNREACHABLE("invalid sample count");
    }
    /* clang-format on */
 }

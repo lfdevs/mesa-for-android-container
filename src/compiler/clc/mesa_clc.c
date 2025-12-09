@@ -85,7 +85,7 @@ main(int argc, char **argv)
       char *arg = argv[i];
       bool option = arg[0] == '-';
 
-      util_dynarray_append(option ? &clang_args : &input_files, char *, arg);
+      util_dynarray_append(option ? &clang_args : &input_files, arg);
    }
 
    if (util_dynarray_num_elements(&input_files, char *) == 0) {
@@ -153,7 +153,7 @@ main(int argc, char **argv)
 
 
    util_dynarray_foreach(&spirv_objs, struct clc_binary, p) {
-      util_dynarray_append(&spirv_ptr_objs, struct clc_binary *, p);
+      util_dynarray_append(&spirv_ptr_objs, p);
    }
 
    struct clc_linker_args link_args = {

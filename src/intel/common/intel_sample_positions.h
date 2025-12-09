@@ -50,7 +50,7 @@ intel_get_sample_positions(int samples)
    case 4: return intel_sample_positions_4x;
    case 8: return intel_sample_positions_8x;
    case 16: return intel_sample_positions_16x;
-   default: unreachable("Invalid sample count");
+   default: UNREACHABLE("Invalid sample count");
    }
 }
 

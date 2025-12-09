@@ -42,19 +42,19 @@ pass(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       if (opts && opts->native_loads)
          return false;
 
-      def = nir_build_load_global(b, intr->def.num_components,
-                                  intr->def.bit_size,
-                                  calc_address(b, intr, opts),
-                                  .align_mul = nir_intrinsic_align_mul(intr),
-                                  .align_offset = nir_intrinsic_align_offset(intr));
+      def = nir_load_global(b, intr->def.num_components,
+                            intr->def.bit_size,
+                            calc_address(b, intr, opts),
+                            .align_mul = nir_intrinsic_align_mul(intr),
+                            .align_offset = nir_intrinsic_align_offset(intr));
       break;
 
    case nir_intrinsic_store_ssbo:
-      nir_build_store_global(b, intr->src[0].ssa,
-                             calc_address(b, intr, opts),
-                             .align_mul = nir_intrinsic_align_mul(intr),
-                             .align_offset = nir_intrinsic_align_offset(intr),
-                             .write_mask = nir_intrinsic_write_mask(intr));
+      nir_store_global(b, intr->src[0].ssa,
+                       calc_address(b, intr, opts),
+                       .align_mul = nir_intrinsic_align_mul(intr),
+                       .align_offset = nir_intrinsic_align_offset(intr),
+                       .write_mask = nir_intrinsic_write_mask(intr));
       break;
 
    case nir_intrinsic_ssbo_atomic:

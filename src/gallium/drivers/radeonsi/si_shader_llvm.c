@@ -56,7 +56,7 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
 static bool si_compile_llvm(struct si_screen *sscreen, struct si_shader_binary *binary,
                             struct ac_shader_config *conf, struct ac_llvm_compiler *compiler,
                             struct ac_llvm_context *ac, struct util_debug_callback *debug,
-                            gl_shader_stage stage, const char *name)
+                            mesa_shader_stage stage, const char *name)
 {
    unsigned count = p_atomic_inc_return(&sscreen->num_compilations);
 
@@ -117,7 +117,7 @@ static void si_llvm_context_init(struct si_shader_context *ctx, struct si_screen
    ctx->compiler = compiler;
 
    ac_llvm_context_init(&ctx->ac, compiler, &sscreen->info, float_mode,
-                        wave_size, 64, exports_color_null, exports_mrtz);
+                        wave_size, exports_color_null, exports_mrtz);
 }
 
 void si_llvm_create_func(struct si_shader_context *ctx, const char *name, LLVMTypeRef *return_types,
@@ -131,7 +131,7 @@ void si_llvm_create_func(struct si_shader_context *ctx, const char *name, LLVMTy
    else
       ret_type = ctx->ac.voidt;
 
-   gl_shader_stage real_stage = ctx->stage;
+   mesa_shader_stage real_stage = ctx->stage;
 
    /* LS is merged into HS (TCS), and ES is merged into GS. */
    if (ctx->screen->info.gfx_level >= GFX9 && ctx->stage <= MESA_SHADER_GEOMETRY) {
@@ -160,7 +160,7 @@ void si_llvm_create_func(struct si_shader_context *ctx, const char *name, LLVMTy
       call_conv = AC_LLVM_AMDGPU_CS;
       break;
    default:
-      unreachable("Unhandle shader type");
+      UNREACHABLE("Unhandle shader type");
    }
 
    /* Setup the function */
@@ -261,7 +261,7 @@ LLVMValueRef si_prolog_get_internal_binding_slot(struct si_shader_context *ctx, 
 {
    LLVMValueRef list = LLVMBuildIntToPtr(
       ctx->ac.builder, ac_get_arg(&ctx->ac, ctx->args->internal_bindings),
-      ac_array_in_const32_addr_space(&ctx->ac), "");
+      LLVMPointerTypeInContext(ctx->ac.context, AC_ADDR_SPACE_CONST_32BIT), "");
    LLVMValueRef index = LLVMConstInt(ctx->ac.i32, slot, 0);
 
    return ac_build_load_to_sgpr(&ctx->ac,
@@ -415,7 +415,7 @@ static LLVMValueRef si_llvm_load_sampler_desc(struct ac_shader_abi *abi, LLVMVal
          is_vec4 = true;
          break;
       default:
-         unreachable("invalid desc");
+         UNREACHABLE("invalid desc");
       }
 
       struct ac_llvm_pointer list = {
@@ -679,7 +679,7 @@ bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *
    return true;
 }
 
-bool si_llvm_build_shader_part(struct si_screen *sscreen, gl_shader_stage stage,
+bool si_llvm_build_shader_part(struct si_screen *sscreen, mesa_shader_stage stage,
                                bool prolog, struct ac_llvm_compiler *compiler,
                                struct util_debug_callback *debug, const char *name,
                                struct si_shader_part *result)
@@ -713,7 +713,7 @@ bool si_llvm_build_shader_part(struct si_screen *sscreen, gl_shader_stage stage,
       }
       break;
    default:
-      unreachable("bad shader part");
+      UNREACHABLE("bad shader part");
    }
 
    struct si_shader_context ctx;
@@ -733,7 +733,7 @@ bool si_llvm_build_shader_part(struct si_screen *sscreen, gl_shader_stage stage,
       build = prolog ? si_llvm_build_ps_prolog : si_llvm_build_ps_epilog;
       break;
    default:
-      unreachable("bad shader part");
+      UNREACHABLE("bad shader part");
    }
 
    build(&ctx, key);

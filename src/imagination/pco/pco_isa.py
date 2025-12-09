@@ -1820,8 +1820,8 @@ F_SBMODE = field_enum_type(
 name='sbmode', num_bits=2,
 elems=[
    ('none', 0b00),
-   ('data', 0b01),
-   ('info', 0b10),
+   ('rawdata', 0b01),
+   ('coeffs', 0b10),
    ('both', 0b11),
 ])
 
@@ -2532,30 +2532,7 @@ field_mappings=[
    ('f16', 'f16'),
    ('swap', 'swap'),
    ('cachemode_ld', 'cachemode_smp_ld'),
-   ('w', 'smp_w', 0),
-])
-
-I_SMP_EXTB_W = bit_struct(
-name='smp_extb_w',
-bit_set=I_BACKEND,
-field_mappings=[
-   ('backend_op', 'backend_op', 'dma'),
-
-   ('fcnorm', 'fcnorm'),
-   ('drc', 'drc'),
-   ('dma_op', 'dma_op', 'smp'),
-
-   ('extb', 'extb', 1),
-   ('dmn', 'dmn'),
-   ('exta', 'exta', 0),
-   ('chan', 'chan'),
-   ('lodm', 'lodm'),
-
-   ('rsvd3', 'rsvd3_smp'),
-   ('f16', 'f16'),
-   ('swap', 'swap'),
-   ('cachemode_st', 'cachemode_smp_st'),
-   ('w', 'smp_w', 1),
+   ('w', 'smp_w'),
 ])
 
 I_SMP_EXTAB = bit_struct(
@@ -2586,38 +2563,7 @@ field_mappings=[
    ('f16', 'f16'),
    ('swap', 'swap'),
    ('cachemode_ld', 'cachemode_smp_ld'),
-   ('w', 'smp_w', 0),
-])
-
-I_SMP_EXTAB_W = bit_struct(
-name='smp_extab_w',
-bit_set=I_BACKEND,
-field_mappings=[
-   ('backend_op', 'backend_op', 'dma'),
-
-   ('fcnorm', 'fcnorm'),
-   ('drc', 'drc'),
-   ('dma_op', 'dma_op', 'smp'),
-
-   ('extb', 'extb', 1),
-   ('dmn', 'dmn'),
-   ('exta', 'exta', 1),
-   ('chan', 'chan'),
-   ('lodm', 'lodm'),
-
-   ('pplod', 'pplod'),
-   ('proj', 'proj'),
-   ('sbmode', 'sbmode'),
-   ('nncoords', 'nncoords'),
-   ('sno', 'sno'),
-   ('soo', 'soo'),
-   ('tao', 'tao'),
-
-   ('rsvd3', 'rsvd3_smp'),
-   ('f16', 'f16'),
-   ('swap', 'swap'),
-   ('cachemode_st', 'cachemode_smp_st'),
-   ('w', 'smp_w', 1),
+   ('w', 'smp_w'),
 ])
 
 I_ATOMIC = bit_struct(

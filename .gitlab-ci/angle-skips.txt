@@ -5,3 +5,12 @@ dEQP-GLES3.functional.transform_feedback.random.*
 dEQP-GLES31.functional.program_interface_query.transform_feedback_varying.*_array_element
 dEQP-GLES31.functional.program_interface_query.transform_feedback_varying.type.*.array.*
 KHR-GLES31.core.program_interface_query.transform-feedback-types
+
+# CTS bug - https://gerrit.khronos.org/c/vk-gl-cts/+/17901
+# https://issues.angleproject.org/issues/436377594#comment6
+dEQP-GLES31.functional.debug.negative_coverage.log.advanced_blend.attachment_advanced_equation
+dEQP-GLES31.functional.debug.negative_coverage.log.advanced_blend.blend_qualifier_mismatch
+dEQP-GLES31.functional.debug.negative_coverage.log.compute.invalid_program_query
+dEQP-GLES31.functional.debug.negative_coverage.log.shader.link_program
+dEQP-GLES31.functional.debug.negative_coverage.log.shader.use_program
+dEQP-GLES31.functional.debug.negative_coverage.log.tessellation.single_tessellation_stage

@@ -112,7 +112,7 @@ iris_is_format_supported(struct pipe_screen *pscreen,
 {
    struct iris_screen *screen = (struct iris_screen *) pscreen;
    const struct intel_device_info *devinfo = screen->devinfo;
-   uint32_t max_samples = devinfo->ver == 8 ? 8 : 16;
+   uint32_t max_samples = devinfo->ver == 8 || devinfo->ver >= 30 ? 8 : 16;
 
    if (sample_count > max_samples ||
        !util_is_power_of_two_or_zero(sample_count))

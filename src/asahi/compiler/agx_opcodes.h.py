@@ -44,7 +44,7 @@ agx_${name}_as_str(enum agx_${name} x)
 % for k, v in enums[name].items():
     case AGX_${name.upper()}_${v.replace('.', '_').upper()}: return "${v}";
 % endfor
-    default: unreachable("Nonexhaustive enum");
+    default: UNREACHABLE("Nonexhaustive enum");
     }
 }
 

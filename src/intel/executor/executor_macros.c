@@ -6,7 +6,7 @@
 #include <ctype.h>
 
 #include "util/ralloc.h"
-#include "intel/compiler/brw_asm.h"
+#include "intel/compiler/brw/brw_asm.h"
 
 #include "executor.h"
 
@@ -93,7 +93,7 @@ executor_macro_mov(executor_context *ec, char **src, char *line)
          break;
       }
       default:
-         unreachable("invalid gfx version");
+         UNREACHABLE("invalid gfx version");
       }
 
    } else {
@@ -115,7 +115,7 @@ executor_macro_mov(executor_context *ec, char **src, char *line)
       }
 
       default:
-         unreachable("invalid gfx version");
+         UNREACHABLE("invalid gfx version");
       }
    }
 }
@@ -143,7 +143,7 @@ executor_macro_syncnop(executor_context *ec, char **src, char *line)
    }
 
    default:
-      unreachable("invalid gfx version");
+      UNREACHABLE("invalid gfx version");
    }
 }
 
@@ -184,7 +184,7 @@ executor_macro_eot(executor_context *ec, char **src, char *line)
          break;
    }
    default:
-      unreachable("invalid gfx version");
+      UNREACHABLE("invalid gfx version");
    }
 }
 
@@ -220,7 +220,7 @@ executor_macro_id(executor_context *ec, char **src, char *line)
    }
 
    default:
-      unreachable("invalid gfx version");
+      UNREACHABLE("invalid gfx version");
    }
 }
 
@@ -284,7 +284,7 @@ executor_macro_write(executor_context *ec, char **src, char *line)
    }
 
    default:
-      unreachable("invalid gfx version");
+      UNREACHABLE("invalid gfx version");
    }
 }
 
@@ -349,7 +349,7 @@ executor_macro_read(executor_context *ec, char **src, char *line)
    }
 
    default:
-      unreachable("invalid gfx version");
+      UNREACHABLE("invalid gfx version");
    }
 }
 

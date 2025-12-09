@@ -43,6 +43,7 @@ virgl-traces:
     PIGLIT_REPLAY_DEVICE_NAME: "gl-virgl"
     PIGLIT_RESULTS: "virgl-replay"
     LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/install/lib/"     # For Crosvm
+    KERNEL_TAG: "v6.16-mesa-9d85"
   tags:
     - $FDO_RUNNER_JOB_PRIORITY_TAG_X86_64_KVM
   script:
@@ -55,8 +56,6 @@ virgl-traces:
   extends:
     - .virgl-iris-test
     - .virgl-iris-manual-rules
-  variables:
-    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=${FDO_HTTP_CACHE_URI}"
 
 .virgl-iris-traces-performance:
   extends:
@@ -66,13 +65,12 @@ virgl-traces:
     HWCI_FREQ_MAX: "true"
     PIGLIT_REPLAY_SUBCOMMAND: profile
     PIGLIT_REPLAY_LOOP_TIMES: 150
-    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=${FDO_HTTP_CACHE_URI}"
 
 .android-virgl-llvmpipe:
   extends:
     - .test-android
     - .virgl-rules
   variables:
-    ANDROID_GPU_MODE: drm_virgl
+    CUTTLEFISH_GPU_MODE: drm_virgl
     GPU_VERSION: virgl-gl
     DEQP_SUITE: android-virgl

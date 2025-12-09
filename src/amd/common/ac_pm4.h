@@ -13,6 +13,8 @@
 extern "C" {
 #endif
 
+struct ac_cmdbuf;
+
 struct ac_pm4_state {
    const struct radeon_info *info;
 
@@ -68,6 +70,9 @@ ac_pm4_create_sized(const struct radeon_info *info, bool debug_sqtt,
 
 void
 ac_pm4_free_state(struct ac_pm4_state *state);
+
+void
+ac_pm4_emit_commands(struct ac_cmdbuf *cs, const struct ac_pm4_state *state);
 
 #ifdef __cplusplus
 }

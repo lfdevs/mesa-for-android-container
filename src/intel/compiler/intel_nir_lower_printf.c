@@ -22,8 +22,8 @@
  */
 
 #include "intel_nir.h"
+#include "intel_shader_enums.h"
 #include "compiler/nir/nir_builder.h"
-#include "brw_compiler.h"
 
 static bool
 lower_printf_intrinsics(nir_builder *b, nir_intrinsic_instr *intrin, void *_)

@@ -263,7 +263,7 @@ nir_precomp_index(const nir_shader *lib, const nir_function *func)
       i += nir_precomp_nr_variants(candidate);
    }
 
-   unreachable("function must be in library");
+   UNREACHABLE("function must be in library");
 }
 
 static inline void
@@ -628,7 +628,7 @@ nir_precomp_print_target_binary_map(FILE *fp_c, FILE *fp_h, const char *prefix, 
 
 static inline nir_shader *
 nir_precompiled_build_variant(const nir_function *libfunc,
-                              gl_shader_stage stage, unsigned variant,
+                              mesa_shader_stage stage, unsigned variant,
                               const nir_shader_compiler_options *opts,
                               const struct nir_precomp_opts *precomp_opt,
                               nir_def *(*load_arg)(nir_builder *b,
@@ -652,6 +652,7 @@ nir_precompiled_build_variant(const nir_function *libfunc,
 
    assert(libfunc->workgroup_size[0] != 0 && "must set workgroup size");
 
+   b.shader->info.workgroup_size_variable = false;
    b.shader->info.workgroup_size[0] = libfunc->workgroup_size[0];
    b.shader->info.workgroup_size[1] = libfunc->workgroup_size[1];
    b.shader->info.workgroup_size[2] = libfunc->workgroup_size[2];

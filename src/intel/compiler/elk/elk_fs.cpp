@@ -88,7 +88,7 @@ elk_fs_inst::init(enum elk_opcode opcode, uint8_t exec_size, const elk_fs_reg &d
       break;
    case IMM:
    case UNIFORM:
-      unreachable("Invalid destination register file");
+      UNREACHABLE("Invalid destination register file");
    }
 
    this->writes_accumulator = false;
@@ -529,7 +529,7 @@ elk_fs_reg::is_contiguous() const
       return true;
    }
 
-   unreachable("Invalid register file");
+   UNREACHABLE("Invalid register file");
 }
 
 unsigned
@@ -909,7 +909,7 @@ elk_fs_inst::size_read(int arg) const
    case ATTR:
       return components_read(arg) * src[arg].component_size(exec_size);
    case MRF:
-      unreachable("MRF registers are not allowed as sources");
+      UNREACHABLE("MRF registers are not allowed as sources");
    }
    return 0;
 }
@@ -931,7 +931,7 @@ namespace {
       case ELK_PREDICATE_ALIGN1_ALL16H:   return 16;
       case ELK_PREDICATE_ALIGN1_ANY32H:   return 32;
       case ELK_PREDICATE_ALIGN1_ALL32H:   return 32;
-      default: unreachable("Unsupported predicate");
+      default: UNREACHABLE("Unsupported predicate");
       }
    }
 
@@ -945,7 +945,7 @@ namespace {
       assert(util_is_power_of_two_nonzero(width));
       const unsigned start = (inst->flag_subreg * 16 + inst->group) &
                              ~(width - 1);
-      const unsigned end = start + ALIGN(inst->exec_size, width);
+      const unsigned end = start + align(inst->exec_size, width);
       return ((1 << DIV_ROUND_UP(end, 8)) - 1) & ~((1 << (start / 8)) - 1);
    }
 
@@ -1063,7 +1063,7 @@ elk_fs_inst::implied_mrf_writes() const
    case ELK_SHADER_OPCODE_GFX4_SCRATCH_WRITE:
       return mlen;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
@@ -1149,7 +1149,7 @@ elk_barycentric_mode(nir_intrinsic_instr *intr)
       bary = ELK_BARYCENTRIC_PERSPECTIVE_SAMPLE;
       break;
    default:
-      unreachable("invalid intrinsic");
+      UNREACHABLE("invalid intrinsic");
    }
 
    if (mode == INTERP_MODE_NOPERSPECTIVE)
@@ -1178,12 +1178,12 @@ centroid_to_pixel(enum elk_barycentric_mode bary)
 bool
 elk_fs_visitor::mark_last_urb_write_with_eot()
 {
-   foreach_in_list_reverse(elk_fs_inst, prev, &this->instructions) {
+   brw_foreach_in_list_reverse(elk_fs_inst, prev, &this->instructions) {
       if (prev->opcode == ELK_SHADER_OPCODE_URB_WRITE_LOGICAL) {
          prev->eot = true;
 
          /* Delete now dead instructions. */
-         foreach_in_list_reverse_safe(exec_node, dead, &this->instructions) {
+         brw_foreach_in_list_reverse_safe(brw_exec_node, dead, &this->instructions) {
             if (dead == prev)
                break;
             dead->remove();
@@ -1525,7 +1525,7 @@ elk_fs_visitor::assign_urb_setup()
             const bool per_prim = inst->src[i].nr < prog_data->num_per_primitive_inputs;
             const unsigned base = urb_start +
                (per_prim ? 0 :
-                ALIGN(prog_data->num_per_primitive_inputs / 2,
+                align(prog_data->num_per_primitive_inputs / 2,
                       reg_unit(devinfo)));
             const unsigned idx = per_prim ? inst->src[i].nr :
                inst->src[i].nr - prog_data->num_per_primitive_inputs;
@@ -2126,7 +2126,7 @@ src_as_uint(const elk_fs_reg &src)
       return src.u64;
 
    default:
-      unreachable("Invalid integer type.");
+      UNREACHABLE("Invalid integer type.");
    }
 }
 
@@ -2153,7 +2153,7 @@ elk_imm_for_type(uint64_t value, enum elk_reg_type type)
       return elk_imm_uq(value);
 
    default:
-      unreachable("Invalid integer type.");
+      UNREACHABLE("Invalid integer type.");
    }
 }
 
@@ -2230,7 +2230,7 @@ elk_fs_visitor::opt_algebraic()
             if (inst->dst.type != inst->src[0].type &&
                 inst->dst.type != ELK_REGISTER_TYPE_DF &&
                 inst->src[0].type != ELK_REGISTER_TYPE_F)
-               unreachable("unimplemented: saturate mixed types");
+               UNREACHABLE("unimplemented: saturate mixed types");
 
             if (elk_saturate_immediate(inst->src[0].type,
                                        &inst->src[0].as_elk_reg())) {
@@ -2487,7 +2487,7 @@ elk_fs_visitor::opt_algebraic()
                break;
             default:
                /* Just in case a future platform re-enables B or UB types. */
-               unreachable("Invalid source size.");
+               UNREACHABLE("Invalid source size.");
             }
 
             inst->opcode = ELK_OPCODE_MOV;
@@ -2530,9 +2530,9 @@ elk_fs_visitor::opt_algebraic()
             inst->sources = 1;
             progress = true;
          } else if (inst->src[1].file == IMM) {
+            const unsigned comp = inst->src[1].ud & (inst->exec_size - 1);
             inst->opcode = ELK_OPCODE_MOV;
-            inst->src[0] = component(inst->src[0],
-                                     inst->src[1].ud);
+            inst->src[0] = component(inst->src[0], comp);
             inst->sources = 1;
             progress = true;
          }
@@ -4172,7 +4172,7 @@ elk_fb_write_msg_control(const elk_fs_inst *inst,
       else if (inst->group % 16 == 8)
          mctl = ELK_DATAPORT_RENDER_TARGET_WRITE_SIMD8_DUAL_SOURCE_SUBSPAN23;
       else
-         unreachable("Invalid dual-source FB write instruction group");
+         UNREACHABLE("Invalid dual-source FB write instruction group");
    } else {
       assert(inst->group == 0 || (inst->group == 16 && inst->exec_size == 16));
 
@@ -4181,7 +4181,7 @@ elk_fb_write_msg_control(const elk_fs_inst *inst,
       else if (inst->exec_size == 8)
          mctl = ELK_DATAPORT_RENDER_TARGET_WRITE_SIMD8_SINGLE_SOURCE_SUBSPAN01;
       else
-         unreachable("Invalid FB write execution size");
+         UNREACHABLE("Invalid FB write execution size");
    }
 
    return mctl;
@@ -5123,7 +5123,7 @@ elk_fs_visitor::lower_simd_width()
           * instructions (this is required for some render target writes), we
           * split from the highest group to lowest.
           */
-         exec_node *const after_inst = inst->next;
+         brw_exec_node *const after_inst = inst->next;
          for (int i = n - 1; i >= 0; i--) {
             /* Emit a copy of the original instruction with the lowered width.
              * If the EOT flag was set throw it away except for the last
@@ -5296,7 +5296,7 @@ elk_fs_visitor::lower_find_live_channel()
           * specified quarter control as result.
           */
          if (inst->group > 0)
-            ubld.SHR(mask, mask, elk_imm_ud(ALIGN(inst->group, 8)));
+            ubld.SHR(mask, mask, elk_imm_ud(align(inst->group, 8)));
 
          ubld.AND(mask, exec_mask, mask);
          exec_mask = mask;
@@ -5345,7 +5345,7 @@ elk_fs_visitor::dump_instructions_to_file(FILE *file) const
       fprintf(file, "Maximum %3d registers live at once.\n", max_pressure);
    } else {
       int ip = 0;
-      foreach_in_list(elk_backend_instruction, inst, &instructions) {
+      brw_foreach_in_list(elk_backend_instruction, inst, &instructions) {
          fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
@@ -5427,7 +5427,7 @@ elk_fs_visitor::dump_instruction_to_file(const elk_backend_instruction *be_inst,
       }
       break;
    case IMM:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 
    if (inst->dst.offset ||
@@ -5990,7 +5990,7 @@ elk_fs_visitor::allocate_registers(bool allow_spilling)
       prog_data->total_scratch = MAX2(elk_get_scratch_size(last_scratch),
                                       prog_data->total_scratch);
 
-      if (gl_shader_stage_is_compute(stage)) {
+      if (mesa_shader_stage_is_compute(stage)) {
          if (devinfo->platform == INTEL_PLATFORM_HSW) {
             /* According to the MEDIA_VFE_STATE's "Per Thread Scratch Space"
              * field documentation, Haswell supports a minimum of 2kB of
@@ -6003,7 +6003,7 @@ elk_fs_visitor::allocate_registers(bool allow_spilling)
              * field documentation, platforms prior to Haswell measure scratch
              * size linearly with a range of [1kB, 12kB] and 1kB granularity.
              */
-            prog_data->total_scratch = ALIGN(last_scratch, 1024);
+            prog_data->total_scratch = align(last_scratch, 1024);
             max_scratch_size = 12 * 1024;
          }
       }
@@ -6328,7 +6328,7 @@ elk_fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
 bool
 elk_fs_visitor::run_cs(bool allow_spilling)
 {
-   assert(gl_shader_stage_is_compute(stage));
+   assert(mesa_shader_stage_is_compute(stage));
    assert(devinfo->ver >= 7);
    const fs_builder bld = fs_builder(this).at_end();
 
@@ -6501,7 +6501,7 @@ elk_nir_move_interpolation_to_top(nir_shader *nir)
             if (intrin->intrinsic != nir_intrinsic_load_interpolated_input)
                continue;
             nir_intrinsic_instr *bary_intrinsic =
-               nir_instr_as_intrinsic(intrin->src[0].ssa->parent_instr);
+               nir_def_as_intrinsic(intrin->src[0].ssa);
             nir_intrinsic_op op = bary_intrinsic->intrinsic;
 
             /* Leave interpolateAtSample/Offset() where they are. */
@@ -6511,7 +6511,7 @@ elk_nir_move_interpolation_to_top(nir_shader *nir)
 
             nir_instr *move[3] = {
                &bary_intrinsic->instr,
-               intrin->src[1].ssa->parent_instr,
+               nir_def_instr(intrin->src[1].ssa),
                instr
             };
 
@@ -6666,7 +6666,7 @@ elk_nir_populate_wm_prog_data(nir_shader *shader,
 static inline int
 elk_register_blocks(int reg_count)
 {
-   return ALIGN(reg_count, 16) / 16 - 1;
+   return align(reg_count, 16) / 16 - 1;
 }
 
 const unsigned *
@@ -7178,7 +7178,7 @@ static UNUSED void
 elk_fs_test_dispatch_packing(const fs_builder &bld)
 {
    const elk_fs_visitor *shader = static_cast<const elk_fs_visitor *>(bld.shader);
-   const gl_shader_stage stage = shader->stage;
+   const mesa_shader_stage stage = shader->stage;
    const bool uses_vmask =
       stage == MESA_SHADER_FRAGMENT &&
       elk_wm_prog_data(shader->stage_prog_data)->uses_vmask;
@@ -7204,7 +7204,7 @@ elk_fs_test_dispatch_packing(const fs_builder &bld)
 unsigned
 elk_fs_visitor::workgroup_size() const
 {
-   assert(gl_shader_stage_uses_workgroup(stage));
+   assert(mesa_shader_stage_uses_workgroup(stage));
    const struct elk_cs_prog_data *cs = elk_cs_prog_data(prog_data);
    return cs->local_size[0] * cs->local_size[1] * cs->local_size[2];
 }

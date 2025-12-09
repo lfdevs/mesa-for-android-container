@@ -92,7 +92,7 @@ nir_lower_tex_shadow_impl(nir_builder *b, nir_instr *instr, void *options)
 
    int sampler_index = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
    if (sampler_index >= 0) {
-      sampler_deref = nir_instr_as_deref(tex->src[sampler_index].src.ssa->parent_instr);
+      sampler_deref = nir_def_as_deref(tex->src[sampler_index].src.ssa);
       sampler = nir_deref_instr_get_variable(sampler_deref);
       sampler_binding = sampler ? sampler->data.binding : 0;
    }

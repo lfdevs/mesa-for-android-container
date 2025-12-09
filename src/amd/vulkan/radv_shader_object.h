@@ -16,7 +16,7 @@
 struct radv_shader_object {
    struct vk_object_base base;
 
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
 
    VkShaderCodeTypeEXT code_type;
 
@@ -43,7 +43,6 @@ struct radv_shader_object {
       struct radv_shader_binary *copy_binary;
    } gs;
 
-   uint32_t push_constant_size;
    uint32_t dynamic_offset_count;
 };
 

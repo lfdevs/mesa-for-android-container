@@ -102,7 +102,7 @@ shader_cache_write_program_metadata(struct gl_context *ctx,
    blob_init(&metadata);
 
    if (ctx->Driver.ShaderCacheSerializeDriverBlob) {
-      for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
          struct gl_linked_shader *sh = prog->_LinkedShaders[i];
          if (sh)
             ctx->Driver.ShaderCacheSerializeDriverBlob(ctx, sh->Program);

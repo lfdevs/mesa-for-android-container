@@ -39,12 +39,12 @@ dzn_wsi_get_d3d12_command_queue(VkDevice dev)
    return device->swapchain_queue->cmdqueue;
 }
 
-static VkQueue
+static struct vk_queue *
 dzn_wsi_get_blit_queue(VkDevice dev)
 {
    VK_FROM_HANDLE(dzn_device, device, dev);
 
-   return dzn_queue_to_handle(device->swapchain_queue);
+   return &device->swapchain_queue->vk;
 }
 
 static bool

@@ -28,7 +28,7 @@
 
 static nir_intrinsic_instr *
 dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
-                  nir_def *offset,
+                  nir_io_offset offset,
                   unsigned align_mul, unsigned align_offset,
                   nir_def *data,
                   unsigned num_components, unsigned bit_size)
@@ -45,7 +45,7 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
          assert(&intrin->src[i] != intrin_offset_src);
          dup->src[i] = nir_src_for_ssa(data);
       } else if (&intrin->src[i] == intrin_offset_src) {
-         dup->src[i] = nir_src_for_ssa(offset);
+         /* Handled by nir_set_io_offset below. */
       } else {
          dup->src[i] = nir_src_for_ssa(intrin->src[i].ssa);
       }
@@ -55,6 +55,7 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    for (unsigned i = 0; i < info->num_indices; i++)
       dup->const_index[i] = intrin->const_index[i];
 
+   nir_set_io_offset(dup, offset);
    nir_intrinsic_set_align(dup, align_mul, align_offset);
 
    if (info->has_dest) {
@@ -180,9 +181,9 @@ lower_mem_load(nir_builder *b, nir_intrinsic_instr *intrin,
       return false;
 
    /* Otherwise, we have to break it into chunks.  We could end up with as
-    * many as 32 chunks if we're loading a u64vec16 as individual dwords.
+    * many as 128 chunks if we're loading a u64vec16 as individual bytes.
     */
-   nir_def *chunks[32];
+   nir_def *chunks[128];
    unsigned num_chunks = 0;
    unsigned chunk_start = 0;
    while (chunk_start < bytes_read) {
@@ -208,7 +209,14 @@ lower_mem_load(nir_builder *b, nir_intrinsic_instr *intrin,
 
          uint64_t align_mask = requested.align - 1;
          nir_def *chunk_offset = nir_iadd_imm(b, offset, chunk_start);
-         nir_def *aligned_offset = nir_iand_imm(b, chunk_offset, ~align_mask);
+
+         /* TODO add support for offset_shift. */
+         assert(!nir_intrinsic_has_offset_shift(intrin) ||
+                nir_intrinsic_offset_shift(intrin) == 0);
+         nir_io_offset aligned_offset = (nir_io_offset){
+            .def = nir_iand_imm(b, chunk_offset, ~align_mask),
+            .shift = 0,
+         };
 
          nir_intrinsic_instr *load =
             dup_mem_intrinsic(b, intrin, aligned_offset,
@@ -238,8 +246,15 @@ lower_mem_load(nir_builder *b, nir_intrinsic_instr *intrin,
       } else if (chunk_align_offset % requested.align) {
          /* In this case, we know how much to adjust the offset */
          uint32_t delta = chunk_align_offset % requested.align;
-         nir_def *load_offset =
-            nir_iadd_imm(b, offset, (int64_t)chunk_start - (int64_t)delta);
+
+         /* TODO add support for offset_shift. */
+         assert(!nir_intrinsic_has_offset_shift(intrin) ||
+                nir_intrinsic_offset_shift(intrin) == 0);
+         nir_io_offset load_offset = (nir_io_offset){
+            .def =
+               nir_iadd_imm(b, offset, (int64_t)chunk_start - (int64_t)delta),
+            .shift = 0,
+         };
 
          const uint32_t load_align_offset =
             (chunk_align_offset - delta) % align_mul;
@@ -269,7 +284,8 @@ lower_mem_load(nir_builder *b, nir_intrinsic_instr *intrin,
                                 1, chunk_bit_size);
          }
       } else {
-         nir_def *chunk_offset = nir_iadd_imm(b, offset, chunk_start);
+         nir_io_offset chunk_offset =
+            nir_io_offset_iadd(b, intrin, chunk_start);
          nir_intrinsic_instr *load =
             dup_mem_intrinsic(b, intrin, chunk_offset,
                               align_mul, chunk_align_offset, NULL,
@@ -381,6 +397,10 @@ lower_mem_store(nir_builder *b, nir_intrinsic_instr *intrin,
          };
 
          uint64_t align_mask = requested.align - 1;
+
+         /* TODO add support for offset_shift. */
+         assert(!nir_intrinsic_has_offset_shift(intrin) ||
+                nir_intrinsic_offset_shift(intrin) == 0);
          nir_def *chunk_offset = nir_iadd_imm(b, offset, chunk_start);
          nir_def *pad = chunk_align < 4 ? nir_iand_imm(b, chunk_offset, align_mask) : nir_imm_intN_t(b, 0, chunk_offset->bit_size);
          chunk_offset = nir_iand_imm(b, chunk_offset, ~align_mask);
@@ -442,14 +462,15 @@ lower_mem_store(nir_builder *b, nir_intrinsic_instr *intrin,
             break;
          }
          default:
-            unreachable("Unsupported unaligned store");
+            UNREACHABLE("Unsupported unaligned store");
          }
       } else {
          nir_def *packed = nir_extract_bits(b, &value, 1, chunk_start * 8,
                                             requested.num_components,
                                             requested.bit_size);
 
-         nir_def *chunk_offset = nir_iadd_imm(b, offset, chunk_start);
+         nir_io_offset chunk_offset =
+            nir_io_offset_iadd(b, intrin, chunk_start);
          dup_mem_intrinsic(b, intrin, chunk_offset,
                            align_mul, chunk_align_offset, packed,
                            requested.num_components, requested.bit_size);

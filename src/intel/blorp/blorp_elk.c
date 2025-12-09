@@ -12,7 +12,7 @@
 
 static const nir_shader_compiler_options *
 blorp_nir_options_elk(struct blorp_context *blorp,
-                      gl_shader_stage stage)
+                      mesa_shader_stage stage)
 {
    const struct elk_compiler *compiler = blorp->compiler->elk;
    return compiler->nir_options[stage];
@@ -232,7 +232,8 @@ blorp_ensure_sf_program_elk(struct blorp_batch *batch,
    const unsigned *program;
    unsigned program_size;
 
-   struct intel_vue_map vue_map;
+   /* Some fields that are not set can be read in debug paths, so initialization is required */
+   struct intel_vue_map vue_map = {0};
    elk_compute_vue_map(compiler->devinfo, &vue_map, slots_valid,
                        INTEL_VUE_LAYOUT_FIXED, 1);
 

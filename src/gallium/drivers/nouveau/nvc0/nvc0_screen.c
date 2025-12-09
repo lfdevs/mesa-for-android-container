@@ -116,7 +116,7 @@ nvc0_init_shader_caps(struct nvc0_screen *screen)
 {
    const uint16_t class_3d = screen->base.class_3d;
 
-   for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
       struct pipe_shader_caps *caps =
          (struct pipe_shader_caps *)&screen->base.base.shader_caps[i];
 
@@ -142,8 +142,8 @@ nvc0_init_shader_caps(struct nvc0_screen *screen)
       caps->max_sampler_views = (class_3d >= NVE4_3D_CLASS) ? 32 : 16;
       caps->max_shader_images =
          class_3d >= NVE4_3D_CLASS ||
-         i == PIPE_SHADER_FRAGMENT ||
-         i == PIPE_SHADER_COMPUTE ? NVC0_MAX_IMAGES : 0;
+         i == MESA_SHADER_FRAGMENT ||
+         i == MESA_SHADER_COMPUTE ? NVC0_MAX_IMAGES : 0;
    }
 }
 

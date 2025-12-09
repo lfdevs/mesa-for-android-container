@@ -350,7 +350,7 @@ static void set_random_image_attrs(struct pipe_resource *templ, bool allow_msaa,
       templ->nr_samples = 2 << (rand() % 3);
       break;
    default:
-      unreachable("invalid path");
+      UNREACHABLE("invalid path");
    }
 
    templ->usage = PIPE_USAGE_DEFAULT;
@@ -414,7 +414,19 @@ static void print_image_attrs(struct si_screen *sscreen, struct si_texture *tex)
 {
    const char *mode;
 
-   if (sscreen->info.gfx_level >= GFX9) {
+   if (sscreen->info.gfx_level >= GFX12) {
+      static const char *modes[32] = {
+         [ADDR3_LINEAR] = "LINEAR",
+         [ADDR3_256B_2D] = "256B_2D",
+         [ADDR3_4KB_2D] = "4KB_2D",
+         [ADDR3_64KB_2D] = "64KB_2D",
+         [ADDR3_256KB_2D] = "256KB_2D",
+         [ADDR3_4KB_3D] = "4KB_3D",
+         [ADDR3_64KB_3D] = "64KB_3D",
+         [ADDR3_256KB_3D] = "256KB_3D",
+      };
+      mode = modes[tex->surface.u.gfx9.swizzle_mode];
+   } else if (sscreen->info.gfx_level >= GFX9) {
       static const char *modes[32] = {
          [ADDR_SW_LINEAR] = "LINEAR",
          [ADDR_SW_4KB_S_X] = "4KB_S_X",

@@ -99,6 +99,7 @@ void u_upload_unmap( struct u_upload_mgr *upload );
  * \param alignment        Alignment of the suballocation within the buffer
  * \param out_offset       Pointer to where the new buffer offset will be returned.
  * \param outbuf           Pointer to where the upload buffer will be returned.
+ * \param releasebuf       If non-null, this buffer must be released by the caller
  * \param ptr              Pointer to the allocated memory that is returned.
  */
 void u_upload_alloc(struct u_upload_mgr *upload,
@@ -107,8 +108,19 @@ void u_upload_alloc(struct u_upload_mgr *upload,
                     unsigned alignment,
                     unsigned *out_offset,
                     struct pipe_resource **outbuf,
+                    struct pipe_resource **releasebuf,
                     void **ptr);
 
+
+/* same as above, but outbuf gains a ref */
+void
+u_upload_alloc_ref(struct u_upload_mgr *upload,
+                  unsigned min_out_offset,
+                  unsigned size,
+                  unsigned alignment,
+                  unsigned *out_offset,
+                  struct pipe_resource **outbuf,
+                  void **ptr);
 
 /**
  * Allocate and write data to the upload buffer.
@@ -122,7 +134,17 @@ void u_upload_data(struct u_upload_mgr *upload,
                    unsigned alignment,
                    const void *data,
                    unsigned *out_offset,
-                   struct pipe_resource **outbuf);
+                   struct pipe_resource **outbuf,
+                   struct pipe_resource **releasebuf);
+
+/* same as above, but outbuf gains a ref */
+void u_upload_data_ref(struct u_upload_mgr *upload,
+                     unsigned min_out_offset,
+                     unsigned size,
+                     unsigned alignment,
+                     const void *data,
+                     unsigned *out_offset,
+                     struct pipe_resource **outbuf);
 
 #ifdef __cplusplus
 } // extern "C" {

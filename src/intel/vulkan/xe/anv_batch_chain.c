@@ -26,6 +26,7 @@
 #include "anv_private.h"
 #include "anv_measure.h"
 #include "common/intel_bind_timeline.h"
+#include "common/xe/intel_gem.h"
 #include "perf/intel_perf.h"
 
 #include "drm-uapi/xe_drm.h"
@@ -132,6 +133,21 @@ xe_exec_print_debug(struct anv_queue *queue, uint32_t cmd_buffer_count,
                                    perf_query_pool, perf_query_pass);
 }
 
+#define xe_exec_ioctl(q, e) xe_exec_ioctl_impl((q), (e), __func__, __LINE__)
+
+static VkResult
+xe_exec_ioctl_impl(struct anv_queue *queue, struct drm_xe_exec *exec,
+                   const char *func, int line)
+{
+   struct anv_device *device = queue->device;
+
+   int ret = xe_gem_exec_ioctl(device->fd, device->info, exec);
+   if (ret)
+      return vk_queue_set_lost(&queue->vk, "%s(%d) failed: %m", func, line);
+
+   return VK_SUCCESS;
+}
+
 VkResult
 xe_queue_exec_async(struct anv_async_submit *submit,
                     uint32_t wait_count,
@@ -179,7 +195,7 @@ xe_queue_exec_async(struct anv_async_submit *submit,
    if (device->physical->memory.need_flush &&
        anv_bo_needs_host_cache_flush(device->utrace_bo_pool.bo_alloc_flags)) {
       util_dynarray_foreach(&submit->batch_bos, struct anv_bo *, bo)
-         intel_flush_range((*bo)->map, (*bo)->size);
+         util_flush_range((*bo)->map, (*bo)->size);
    }
 #endif
 
@@ -197,10 +213,9 @@ xe_queue_exec_async(struct anv_async_submit *submit,
    xe_exec_print_debug(queue, 0, NULL, NULL, 0, &exec);
    anv_async_submit_print_batch(submit);
 
-   if (likely(!device->info->no_hw)) {
-      if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &exec))
-         return vk_device_set_lost(&device->vk, "anv_xe_queue_exec_locked failed: %m");
-   }
+   VkResult result = xe_exec_ioctl(queue, &exec);
+   if (result != VK_SUCCESS)
+      return result;
 
    return anv_queue_post_submit(queue, VK_SUCCESS);
 }
@@ -245,10 +260,8 @@ xe_companion_rcs_queue_exec_locked(struct anv_queue *queue,
    anv_measure_submit(companion_rcs_cmd_buffer);
    xe_exec_print_debug(queue, 1, &companion_rcs_cmd_buffer, NULL, 0, &exec);
 
-   if (!device->info->no_hw) {
-      if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &exec))
-         result = vk_device_set_lost(&device->vk, "anv_xe_queue_exec_locked failed: %m");
-   }
+   result = xe_exec_ioctl(queue, &exec);
+
    vk_free(&device->vk.alloc, xe_syncs);
 
    return result;
@@ -367,16 +380,13 @@ xe_queue_exec_locked(struct anv_queue *queue,
          xe_syncs[1].timeline_value = intel_bind_timeline_get_last_point(&device->perf_timeline);
       }
 
-      if (!device->info->no_hw && result == VK_SUCCESS) {
-         if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &perf_query_exec))
-            result = vk_device_set_lost(&device->vk, "perf_query_exec failed: %m");
-      }
+      if (result == VK_SUCCESS)
+         result = xe_exec_ioctl(queue, &perf_query_exec);
    }
 
-   if (!device->info->no_hw && result == VK_SUCCESS) {
-      if (intel_ioctl(device->fd, DRM_IOCTL_XE_EXEC, &exec))
-         result = vk_device_set_lost(&device->vk, "anv_xe_queue_exec_locked failed: %m");
-   }
+   if (result == VK_SUCCESS)
+      result = xe_exec_ioctl(queue, &exec);
+
    vk_free(&device->vk.alloc, xe_syncs);
 
    if (cmd_buffer_count != 0 && cmd_buffers[0]->companion_rcs_cmd_buffer &&

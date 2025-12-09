@@ -226,7 +226,7 @@ struct lima_context {
    struct lima_blend_state *blend;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
-   struct lima_context_constant_buffer const_buffer[PIPE_SHADER_TYPES];
+   struct lima_context_constant_buffer const_buffer[MESA_SHADER_STAGES];
    struct lima_texture_stateobj tex_stateobj;
    struct lima_pp_stream_state pp_stream;
 

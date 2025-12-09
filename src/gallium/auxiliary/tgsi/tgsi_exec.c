@@ -1069,7 +1069,7 @@ tgsi_exec_machine_bind_shader(
    for (k = 0; k < TGSI_SEMANTIC_COUNT; k++)
       mach->SysSemanticToIndex[k] = -1;
 
-   if (mach->ShaderType == PIPE_SHADER_GEOMETRY &&
+   if (mach->ShaderType == MESA_SHADER_GEOMETRY &&
        !mach->UsedGeometryShader) {
       struct tgsi_exec_vector *inputs;
       struct tgsi_exec_vector *outputs;
@@ -1184,7 +1184,7 @@ tgsi_exec_machine_bind_shader(
          break;
 
       case TGSI_TOKEN_TYPE_PROPERTY:
-         if (mach->ShaderType == PIPE_SHADER_GEOMETRY) {
+         if (mach->ShaderType == MESA_SHADER_GEOMETRY) {
             if (parse.FullToken.FullProperty.Property.PropertyName == TGSI_PROPERTY_GS_MAX_OUTPUT_VERTICES) {
                mach->MaxOutputVertices = parse.FullToken.FullProperty.u[0].Data;
             }
@@ -1208,7 +1208,7 @@ tgsi_exec_machine_bind_shader(
 
 
 struct tgsi_exec_machine *
-tgsi_exec_machine_create(enum pipe_shader_type shader_type)
+tgsi_exec_machine_create(mesa_shader_stage shader_type)
 {
    struct tgsi_exec_machine *mach;
 
@@ -1220,14 +1220,14 @@ tgsi_exec_machine_create(enum pipe_shader_type shader_type)
 
    mach->ShaderType = shader_type;
 
-   if (shader_type != PIPE_SHADER_COMPUTE) {
+   if (shader_type != MESA_SHADER_COMPUTE) {
       mach->Inputs = align_malloc(sizeof(struct tgsi_exec_vector) * PIPE_MAX_SHADER_INPUTS, 16);
       mach->Outputs = align_malloc(sizeof(struct tgsi_exec_vector) * PIPE_MAX_SHADER_OUTPUTS, 16);
       if (!mach->Inputs || !mach->Outputs)
          goto fail;
    }
 
-   if (shader_type == PIPE_SHADER_FRAGMENT) {
+   if (shader_type == MESA_SHADER_FRAGMENT) {
       mach->InputSampleOffsetApply = align_malloc(sizeof(apply_sample_offset_func) * PIPE_MAX_SHADER_INPUTS, 16);
       if (!mach->InputSampleOffsetApply)
          goto fail;
@@ -1421,7 +1421,7 @@ fetch_src_file_channel(const struct tgsi_exec_machine *mach,
    case TGSI_FILE_INPUT:
       for (i = 0; i < TGSI_QUAD_SIZE; i++) {
          /*
-         if (PIPE_SHADER_GEOMETRY == mach->ShaderType) {
+         if (MESA_SHADER_GEOMETRY == mach->ShaderType) {
             debug_printf("Fetching Input[%d] (2d=%d, 1d=%d)\n",
                          index2D->i[i] * TGSI_EXEC_MAX_INPUT_ATTRIBS + index->i[i],
                          index2D->i[i], index->i[i]);
@@ -1690,7 +1690,7 @@ store_dest_dstret(struct tgsi_exec_machine *mach,
       debug_printf("NumOutputs = %d, TEMP_O_C/I = %d, redindex = %d\n",
                    mach->NumOutputs, mach->Temps[TEMP_OUTPUT_I].xyzw[TEMP_OUTPUT_C].u[0],
                    reg->Register.Index);
-      if (PIPE_SHADER_GEOMETRY == mach->ShaderType) {
+      if (MESA_SHADER_GEOMETRY == mach->ShaderType) {
          debug_printf("STORING OUT[%d] mask(%d), = (", offset + index, execmask);
          for (i = 0; i < TGSI_QUAD_SIZE; i++)
             if (execmask & (1 << i))
@@ -1713,7 +1713,7 @@ store_dest_dstret(struct tgsi_exec_machine *mach,
       break;
 
    default:
-      unreachable("Bad destination file");
+      UNREACHABLE("Bad destination file");
    }
 
    return dst;
@@ -1881,7 +1881,7 @@ emit_primitive(struct tgsi_exec_machine *mach,
 static void
 conditional_emit_primitive(struct tgsi_exec_machine *mach)
 {
-   if (PIPE_SHADER_GEOMETRY == mach->ShaderType) {
+   if (MESA_SHADER_GEOMETRY == mach->ShaderType) {
       int emitted_verts = mach->Primitives[0][mach->OutputPrimCount[0]];
       if (emitted_verts) {
          emit_primitive(mach, NULL);
@@ -2774,7 +2774,7 @@ exec_declaration(struct tgsi_exec_machine *mach,
       return;
    }
 
-   if (mach->ShaderType == PIPE_SHADER_FRAGMENT) {
+   if (mach->ShaderType == MESA_SHADER_FRAGMENT) {
       if (decl->Declaration.File == TGSI_FILE_INPUT) {
          unsigned first, last, mask;
 
@@ -3706,7 +3706,7 @@ exec_load_membuf(struct tgsi_exec_machine *mach,
       break;
 
    default:
-      unreachable("unsupported TGSI_OPCODE_LOAD file");
+      UNREACHABLE("unsupported TGSI_OPCODE_LOAD file");
    }
 
    union tgsi_exec_channel offset;
@@ -3839,7 +3839,7 @@ exec_store_membuf(struct tgsi_exec_machine *mach,
       break;
 
    default:
-      unreachable("unsupported TGSI_OPCODE_STORE file");
+      UNREACHABLE("unsupported TGSI_OPCODE_STORE file");
    }
 
    union tgsi_exec_channel offset;
@@ -4030,7 +4030,7 @@ exec_atomop_membuf(struct tgsi_exec_machine *mach,
                result = fui(uif(val) + r0.f[i]);
             break;
          default:
-            unreachable("bad atomic op");
+            UNREACHABLE("bad atomic op");
          }
          memcpy(ptr[i], &result, sizeof(result));
       }
@@ -5953,7 +5953,7 @@ tgsi_exec_machine_setup_masks(struct tgsi_exec_machine *mach)
    mach->KillMask = 0;
    mach->OutputVertexOffset = 0;
 
-   if (mach->ShaderType == PIPE_SHADER_GEOMETRY) {
+   if (mach->ShaderType == MESA_SHADER_GEOMETRY) {
       for (unsigned i = 0; i < TGSI_MAX_VERTEX_STREAMS; i++) {
          mach->OutputPrimCount[i] = 0;
          mach->Primitives[i][0] = 0;
@@ -6028,7 +6028,7 @@ tgsi_exec_machine_run( struct tgsi_exec_machine *mach, int start_pc )
          barrier_hit = exec_instruction(mach, mach->Instructions + mach->pc, &mach->pc);
 
          /* for compute shaders if we hit a barrier return now for later rescheduling */
-         if (barrier_hit && mach->ShaderType == PIPE_SHADER_COMPUTE)
+         if (barrier_hit && mach->ShaderType == MESA_SHADER_COMPUTE)
             return 0;
 
 #if DEBUG_EXECUTION
@@ -6076,7 +6076,7 @@ tgsi_exec_machine_run( struct tgsi_exec_machine *mach, int start_pc )
 
 #if 0
    /* we scale from floats in [0,1] to Zbuffer ints in sp_quad_depth_test.c */
-   if (mach->ShaderType == PIPE_SHADER_FRAGMENT) {
+   if (mach->ShaderType == MESA_SHADER_FRAGMENT) {
       /*
        * Scale back depth component.
        */

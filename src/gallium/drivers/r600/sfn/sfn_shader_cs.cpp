@@ -59,7 +59,7 @@ ComputeShader::process_stage_intrinsic(nir_intrinsic_instr *instr)
 void
 ComputeShader::do_get_shader_info(r600_shader *sh_info)
 {
-   sh_info->processor_type = PIPE_SHADER_COMPUTE;
+   sh_info->processor_type = MESA_SHADER_COMPUTE;
 }
 
 bool
@@ -81,7 +81,7 @@ ComputeShader::emit_load_from_info_buffer(nir_intrinsic_instr *instr, int offset
       emit_instruction(new AluInstr(op1_mov,
                                     m_zero_register,
                                     value_factory().inline_const(ALU_SRC_0, 0),
-                                    AluInstr::last_write));
+                                    AluInstr::write));
    }
 
    auto dest = value_factory().dest_vec4(instr->def, pin_group);
@@ -109,8 +109,8 @@ ComputeShader::emit_load_3vec(nir_intrinsic_instr *instr,
 
    for (int i = 0; i < 3; ++i) {
       auto dest = vf.dest(instr->def, i, pin_none);
-      emit_instruction(new AluInstr(
-         op1_mov, dest, src[i], i == 2 ? AluInstr::last_write : AluInstr::write));
+      emit_instruction(
+         new AluInstr(op1_mov, dest, src[i], i == 2 ? AluInstr::write : AluInstr::write));
    }
    return true;
 }

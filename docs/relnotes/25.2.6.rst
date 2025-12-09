@@ -1,0 +1,199 @@
+Mesa 25.2.6 Release Notes / 2025-10-29
+======================================
+
+Mesa 25.2.6 is a bug fix release which fixes bugs found since the 25.2.5 release.
+
+Mesa 25.2.6 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.6 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 361c97e8afa5fe20141c5362c5b489040751e12861c186a16c621a2fb182fc42  mesa-25.2.6.tar.xz
+    SHA512: c34f55132ee9097a7c4961745bf07a08fc612bf0f7c570c023fedb16c8eafbefdc1cc022f722c345780bb14ec4ce25d9a206a9196d9d51c97b389db5160de9cc  mesa-25.2.6.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- [ANV][PTL][DG2] Flickering textures in Assassin's Creed Valhalla benchmark
+- ADL, ANV: Wuthering Waves leads to gpu reset on Alder Lake iGPU
+- [ANV][EXT_debug_utils] descriptor set object_name leak when not calling vkFreeDescriptorSets
+- nvk: CTS failures in sample_locations_ext.verify_interpolation.samples_1
+- [regression] [bisected] RuneLite GPU Experimental - GPU crash
+- lp_test_arit.c:200:14: error: static declaration of ‘rsqrtf’ follows non-static declaration
+- build failure with glibc 2.42
+- zink: chromium flickers in youtube when fullscreening videos
+- r600: Attribute stride updates may be skipped
+- anv: Assert in brew when descriptor indexing with modulo
+- [ANV][TGL]: test_buffer_feedback_instructions_sm51 on vkd3d-proton crashes
+
+
+Changes
+-------
+
+Alyssa Rosenzweig (1):
+
+- anv: use D3D-compatible texturing for Proton
+
+Benjamin Cheng (3):
+
+- radv/video_enc: Cleanup slice count assert
+- radv/video: Override H265 SPS block size parameters
+- radv/video: Override H265 SPS unaligned resolutions
+
+Connor Abbott (6):
+
+- tu: Don't patch GMEM for input attachments never in GMEM
+- tu: Fix 3d load path with D24S8 on a7xx
+- tu: Also disable stencil load for attachments not in GMEM
+- tu: Fix RT count with remapped color attachments
+- tu: Rename tu_render_pass_attachment::clear_views to used_views
+- tu: Fix attachment stores with subpasses with partial views
+
+Danylo Piliaiev (2):
+
+- tu: Destroy all mutexes used for device
+- tu: Synchronize access to copy_timestamp_cs_pool
+
+Emma Anholt (1):
+
+- nir/shrink_stores: Don't shrink stores to an invalid num_components.
+
+Eric Engestrom (8):
+
+- docs: add sha sum for 25.2.5
+- .pick_status.json: Mark !36883 commits as denominated
+- .pick_status.json: Update to b82044c31b0be1c7682548a8e10905a4ff5b13d7
+- .pick_status.json: Mark 77fb8fb062457dad73bd763e97bf757b6cd04080 as denominated
+- .pick_status.json: Mark bca29b1c92320dea0004341a08cc76a18e3edaf3 as denominated
+- .pick_status.json: Mark 8d05b7b72e70fe35d6ff6b5d65272ec520a707f3 as denominated
+- .pick_status.json: Mark 006085e6769c3697c29cd5087dfabe7b5b8d046a as denominated
+- .pick_status.json: Mark 343eef990e54d974d811f7414e79a8854b8c97f9 as denominated
+
+Faith Ekstrand (7):
+
+- panvk: Fix integer dot product properties
+- nvk: Include the chipset in the pipeline/binary cache UUID
+- nvk: Disable sampleLocationsSampleCounts for 1x MSAA
+- nvk: Look at the right pointer in GetDescriptorInfo for SSBOs
+- nvk: Capture/replay buffer addresses for EDB capture/replay
+- panvk/shader: [de]serialize desc_info.max_varying_loads
+- panvk/shader: Use the right copy size for deserializing dynamic UBOs/SSBOs
+
+Gert Wollny (1):
+
+- r600: Fix comparison of strides array when emitting vertex buffers
+
+Job Noorman (2):
+
+- nir: mark fneg distribution through fadd/ffma as nsz
+- spirv: don't set in_bounds for structs
+
+José Roberto de Souza (1):
+
+- gallium/llvmpipe/test: Rename rsqrtf() to _rsqrtf()
+
+Karol Herbst (1):
+
+- nak: fix MMA latencies on Ampere
+
+Konstantin Seurer (1):
+
+- aco: Fixup out_launch_size_y in the RT prolog for 1D dispatch
+
+Lionel Landwerlin (6):
+
+- brw: fix invalid sparse bitfield offset computation
+- brw: prevent LOAD_REG modifications on MOV_INDIRECT/BROADCAST
+- brw: only consider cross lane access on non scalar VGRFs
+- brw: fix ballot() type operations in shaders with HALT instructions
+- anv: destroy sets when destroying pool
+- vulkan/render_pass: Add a missing sType
+
+Marek Olšák (2):
+
+- r300: fix DXTC blits
+- winsys/radeon: fix completely broken tessellation for gfx6-7
+
+Mary Guillemard (5):
+
+- hk: Fix maxVariableDescriptorCount with inline uniform block
+- hk: Disable 1x in sampleLocationsSampleCounts
+- hk: Remove unused allocation in queue_submit
+- hk: Make width and height per block in HIC
+- hk: Allocate the temp tile buffer in copy_image_to_image_cpu
+
+Mel Henning (2):
+
+- nvk: Fix maxVariableDescriptorCount with iub
+- nvk: Really fix maxVariableDescriptorCount w/ iub
+
+Mike Blumenkrantz (3):
+
+- zink: defer swapchain updates for interval changes if acquired image is active
+- zink: consistently set/unset msrtss in begin_rendering
+- zink: collapse gfx pipeline fetching and binding conditionals
+
+Natalie Vock (1):
+
+- nir/lower_shader_calls: Repair SSA after wrap_instrs
+
+Olivia Lee (1):
+
+- panfrost: fix cl_local_size for precompiled shaders
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- radeonsi: propagate shader updates for merged shaders
+
+Ruijing Dong (1):
+
+- radeonsi/vcn: Correct a typo condition for jpeg decoding
+
+Sagar Ghuge (2):
+
+- brw/rt: Move nir_build_vec3_mat_mult_col_major helper to header
+- brw/rt: fix ray_object_(direction|origin) for closest-hit shaders
+
+Taras Pisetskyi (1):
+
+- drirc/anv: force_vk_vendor=-1 for Wuthering Waves
+
+Timur Kristóf (4):
+
+- radeonsi: Don't use compute queue with regalloc hang bug
+- radv: Disable compute queues when the regalloc bug is present
+- radv: Mitigate GPU hang on Hawaii in Dota 2 and RotTR
+- ac/nir/ngg_mesh: Lower num_subgroups to constant
+
+Valentine Burley (2):
+
+- tu: Fix indexing with variable descriptor count
+- tu: Fix maxVariableDescriptorCount with inline uniform blocks
+
+Xaver Hugl (2):
+
+- vulkan/wsi: require extended target volume support for scRGB
+- vulkan/wsi: remove support for VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT
+
+Yiwei Zhang (2):
+
+- panvk: fix to advance vs driver_set properly
+- panvk: fix to advance vs res_table properly

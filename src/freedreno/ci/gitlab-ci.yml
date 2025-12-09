@@ -1,21 +1,33 @@
 include:
   - local: 'src/freedreno/ci/gitlab-ci-inc.yml'
 
-.a306-gl:
+a200-gl:
   extends:
-    - .baremetal-deqp-test
-    - .a306-test
+    - .ci-tron-arm32-test-gl
+    - .a200
+    - .lumag-freedreno-manual-rules
+  timeout: 180m
+  parallel: 2
+  variables:
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 180
+    DEQP_SUITE: freedreno-a200
+
+a306-gl:
+  extends:
+    - .lava-arm64-test-gl
+    - .lava-dragonboard-410c:arm64
+    - .collabora-freedreno-rules
   variables:
     DEQP_SUITE: freedreno-a306
     FDO_CI_CONCURRENT: 6
   parallel: 5
 
-.a306-piglit:
+a306-piglit:
   extends:
-    - .baremetal-deqp-test
-    - .a306-test
+    - .lava-arm64-test-gl
+    - .lava-dragonboard-410c:arm64
     - .test-piglit
-    - .google-freedreno-manual-rules
+    - .collabora-freedreno-manual-rules
   timeout: 40m
   variables:
     DEQP_SUITE: freedreno-a306-piglit
@@ -26,53 +38,64 @@ include:
 # it started.
 .a306-piglit-gl:
   extends:
-    - .baremetal-deqp-test
-    - .a306-test
+    - .lava-arm64-test-gl
+    - .lava-dragonboard-410c:arm64
     - .test-piglit
-    - .google-freedreno-manual-rules
+    - .collabora-freedreno-manual-rules
   variables:
     BM_KERNEL_EXTRA_ARGS: "msm.num_hw_submissions=1"
     DEQP_SUITE: freedreno-a306-piglit-quick-gl
     FDO_CI_CONCURRENT: 3
     HWCI_START_WESTON: 1
 
-.a306-piglit-shader:
+a306-piglit-shader:
   extends:
-    - .baremetal-deqp-test
-    - .a306-test
+    - .lava-arm64-test-gl
+    - .lava-dragonboard-410c:arm64
     - .test-piglit
-    - .google-freedreno-manual-rules
+    - .collabora-freedreno-manual-rules
   variables:
     DEQP_SUITE: freedreno-a306-piglit-quick-shader
     FDO_CI_CONCURRENT: 6
     HWCI_START_WESTON: 1
 
-.a306-traces:
+a306-traces:
   extends:
-    - .google-freedreno-test-traces
-    - .a306-test
+    - .lava-arm64-piglit-traces
+    - .lava-dragonboard-410c:arm64
+    - .collabora-freedreno-rules
+  variables:
+    HWCI_START_WESTON: 1
+    PIGLIT_REPLAY_DEVICE_NAME: "${GPU_VERSION}"
+    PIGLIT_TRACES_FILE: traces-freedreno.yml
 
-.a530-gl:
+a530-gl:
   extends:
-    - .baremetal-deqp-test
+    - .lava-arm64-test-gl
+    - .lava-dragonboard-820c:arm64
     - .test-piglit
-    - .a530-test
+    - .collabora-freedreno-rules
   variables:
     DEQP_SUITE: freedreno-a530
     FDO_CI_CONCURRENT: 3  # if 4, sometimes "deqp-gles31, not enough memory for the allocation" appears
   parallel: 6
 
-.a530-traces:
+a530-traces:
   extends:
-    - .google-freedreno-test-traces
-    - .a530-test
+    - .lava-arm64-piglit-traces
+    - .lava-dragonboard-820c:arm64
+    - .collabora-freedreno-rules
+  variables:
+    HWCI_START_WESTON: 1
+    PIGLIT_REPLAY_DEVICE_NAME: "${GPU_VERSION}"
+    PIGLIT_TRACES_FILE: traces-freedreno.yml
 
-.a530-piglit:
+a530-piglit:
   extends:
-    - .baremetal-deqp-test
-    - .a530-test
+    - .lava-arm64-test-gl
+    - .lava-dragonboard-820c:arm64
     - .test-piglit
-    - .google-freedreno-manual-rules
+    - .collabora-freedreno-manual-rules
   parallel: 2
   variables:
     DEQP_SUITE: freedreno-a530-piglit
@@ -125,14 +148,14 @@ a618-gles-asan:
   extends:
     - .lava-arm64-test-asan-gl
     - .lava-sc7180-trogdor-kingoftown:arm64
-    - .collabora-turnip-manual-rules
+    - .collabora-freedreno-manual-rules
   variables:
     DEQP_SUITE: freedreno-a618-gles-asan
     FLAKES_CHANNEL: "#freedreno-ci"
     FDO_CI_CONCURRENT: 2 # We get OOMkills if we go too wide with asan enabled
 
 # Run dEQP EGL window system tests with the window systems available.
-# X11 takes over the screen, wayland is run headless.
+# wayland and xwayland run headless.
 a618-gl:
   extends:
     - .lava-arm64-test-gl
@@ -141,7 +164,6 @@ a618-gl:
   variables:
     DEQP_SUITE: freedreno-a618
     FLAKES_CHANNEL: "#freedreno-ci"
-    HWCI_START_XORG: 1
     HWCI_START_WESTON: 1
     DEQP_FRACTION: 4
 
@@ -245,7 +267,7 @@ a660-gl-cl:
   rules:
     - !reference [.collabora-freedreno-rules, rules]
     - !reference [.rusticl-rules, rules]
-  parallel: 3
+  parallel: 2
   variables:
     DEQP_SUITE: freedreno-a660
     HWCI_START_WESTON: 1
@@ -255,11 +277,10 @@ a660-vk:
     - .lava-arm64-test-vk
     - .collabora-turnip-rules
     - .lava-sm8350-hdk:arm64
-  parallel: 3
+  parallel: 5
   variables:
     DEQP_SUITE: freedreno-a660-vk
     FLAKES_CHANNEL: "#freedreno-ci"
-    DEQP_FRACTION: 6
 
 a660-vk-full:
   extends:
@@ -281,7 +302,6 @@ a750-angle:
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 20
     DEQP_SUITE: tu-angle
-    HWCI_TEST_SCRIPT: ./install/deqp-runner.sh
     DRIVER_NAME: null  # Don't use freedreno skips
 
 a750-gl-cl:
@@ -297,19 +317,18 @@ a750-gl-cl:
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 25
     HWCI_START_WESTON: 1
-    HWCI_TEST_SCRIPT: install/deqp-runner.sh
     DEQP_SUITE: freedreno-a750
 
 a750-vk:
   extends:
     - .ci-tron-arm64-test-vk
-    - .a750-mupuf
-    - .valve-turnip-manual-rules
-  timeout: 75m  # base runtime 54min total, 51min of testing
+    - .a750-kws
+    - .valve-turnip-rules
+  parallel: 4
+  timeout: 18m  # base runtime is 12.5, 11min of testing
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 70
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 16
     DEQP_SUITE: freedreno-a750-vk
-    HWCI_TEST_SCRIPT: ./install/deqp-runner.sh
 
 a750-vkd3d:
   extends:
@@ -320,5 +339,4 @@ a750-vkd3d:
   timeout: 15m  # base runtime 3min
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 12
-    GPU_VERSION: freedreno-a750
     FDO_CI_CONCURRENT: 1

@@ -15,10 +15,11 @@
 #include "ac_spm.h"
 #include "ac_sqtt.h"
 
+#include "util/bitset.h"
 #include "util/mesa-blake3.h"
 
+#include "radv_debug_nir.h"
 #include "radv_pipeline.h"
-#include "radv_printf.h"
 #include "radv_queue.h"
 #include "radv_radeon_winsys.h"
 #include "radv_rra.h"
@@ -33,6 +34,7 @@
 #define RADV_NUM_HW_CTX (RADEON_CTX_PRIORITY_REALTIME + 1)
 
 struct radv_image_view;
+struct radv_cmd_stream;
 
 enum radv_dispatch_table {
    RADV_DEVICE_DISPATCH_TABLE,
@@ -55,13 +57,11 @@ struct radv_layer_dispatch_tables {
 };
 
 struct radv_device_cache_key {
-   uint32_t keep_shader_info : 1;
    uint32_t image_2d_view_of_3d : 1;
    uint32_t mesh_shader_queries : 1;
    uint32_t primitives_generated_query : 1;
-   uint32_t trap_excp_flags : 4;
 
-   uint32_t reserved : 24;
+   uint32_t reserved : 29;
 };
 
 enum radv_force_vrs {
@@ -146,6 +146,8 @@ struct radv_device {
    struct radv_layer_dispatch_tables layer_dispatch;
 
    struct radeon_winsys_ctx *hw_ctx[RADV_NUM_HW_CTX];
+   struct radeon_winsys_ctx *hw_vcn_enc_ctx;
+
    struct radv_meta_state meta_state;
 
    struct radv_queue *queues[RADV_MAX_QUEUE_FAMILIES];
@@ -171,18 +173,16 @@ struct radv_device {
    struct radeon_winsys_bo *trace_bo;
    struct radv_trace_data *trace_data;
 
+   VkDeviceMemory va_validation_memory;
+   VkBuffer va_validation_buffer;
+   BITSET_WORD *valid_vas;
+   uint64_t valid_vas_addr;
+
    /* Whether to keep shader debug info, for debugging. */
    bool keep_shader_info;
 
    /* Backup in-memory cache to be used if the app doesn't provide one */
    struct vk_pipeline_cache *mem_cache;
-
-   /*
-    * use different counters so MSAA MRTs get consecutive surface indices,
-    * even if MASK is allocated in between.
-    */
-   uint32_t image_mrt_offset_counter;
-   uint32_t fmask_mrt_offset_counter;
 
    struct list_head shader_arenas;
    struct hash_table_u64 *capture_replay_arena_vas;
@@ -289,7 +289,7 @@ struct radv_device {
    struct radeon_winsys_bo *perf_counter_bo;
 
    /* Interleaved lock/unlock commandbuffers for perfcounter passes. */
-   struct radeon_cmdbuf **perf_counter_lock_cs;
+   struct radv_cmd_stream **perf_counter_lock_cs;
 
    bool uses_shadow_regs;
 
@@ -340,7 +340,7 @@ VkResult radv_device_init_vrs_state(struct radv_device *device);
 
 unsigned radv_get_default_max_sample_dist(int log_samples);
 
-void radv_emit_default_sample_locations(const struct radv_physical_device *pdev, struct radeon_cmdbuf *cs,
+void radv_emit_default_sample_locations(const struct radv_physical_device *pdev, struct radv_cmd_stream *cs,
                                         int nr_samples);
 
 struct radv_color_buffer_info {

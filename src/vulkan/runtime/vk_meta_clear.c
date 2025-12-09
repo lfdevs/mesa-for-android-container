@@ -453,6 +453,7 @@ clear_image_level_layers(struct vk_command_buffer *cmd,
    const VkImageViewCreateInfo view_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .pNext = &view_usage,
+      .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
       .image = vk_image_to_handle(image),
       .viewType = vk_image_render_view_type(image, layer_count),
       .format = format,

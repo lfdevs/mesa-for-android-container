@@ -34,13 +34,9 @@
  */
 
 #include "pipe/p_defines.h"
-#include "pipe/p_state.h"
-#include "pipe/p_shader_tokens.h"
 #include "util/bitset.h"
 #include "util/compiler.h"
 #include "util/u_debug.h"
-#include "util/u_dump.h"
-#include "util/u_memory.h"
 #include "util/u_math.h"
 #include "util/format/u_format.h"
 #include "util/u_cpu_detect.h"
@@ -2256,7 +2252,7 @@ lp_build_sample_aniso(struct lp_build_sample_context *bld,
 
    /*
     * We use the suggested anisotropic filtering algorithm from the Vulkan spec:
-    * https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#textures-texel-anisotropic-filtering
+    * https://docs.vulkan.org/spec/latest/chapters/textures.html#textures-texel-anisotropic-filtering
     * The coordinate offset expression is the same in all cases: -1/2 + i / (N + 1)
     * We can rewrite this expression as: (-N - 1) / (2N + 2) + 2i / (2N + 2) =
     *     (-N - 1 + 2i) / (2N + 2) = (-0.5N - 0.5 + i) / (N + 1)
@@ -2499,7 +2495,7 @@ lp_build_sample_common(struct lp_build_sample_context *bld,
 
    switch (mip_filter) {
    default:
-      unreachable("Bad mip_filter value in lp_build_sample_soa()");
+      UNREACHABLE("Bad mip_filter value in lp_build_sample_soa()");
    case PIPE_TEX_MIPFILTER_NONE:
       /* always use mip level 0 */
       *ilevel0 = first_level;
@@ -3645,7 +3641,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
            (bld.num_lods == 1 ||
             derived_sampler_state.min_img_filter == derived_sampler_state.mag_img_filter))) {
          if (use_aos) {
-            /* do sampling/filtering with fixed pt arithmetic */
+            /* do sampling/filtering with 8-bit unorm arithmetic */
             lp_build_sample_aos(&bld,
                                 newcoords[0], newcoords[1],
                                 newcoords[2],
@@ -3796,7 +3792,7 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
             }
 
             if (use_aos) {
-               /* do sampling/filtering with fixed pt arithmetic */
+               /* do sampling/filtering with 8-bit arithmetic */
                lp_build_sample_aos(&bld4,
                                    s4, t4, r4, offsets4,
                                    lod_positive4, lod_fpart4,

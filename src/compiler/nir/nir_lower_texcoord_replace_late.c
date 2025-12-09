@@ -64,8 +64,7 @@ pass(nir_builder *b, nir_instr *instr, void *data)
    }
 
    nir_def *res = nir_vec(b, &channels[component], intr->num_components);
-   nir_def_rewrite_uses_after(&intr->def, res,
-                              res->parent_instr);
+   nir_def_rewrite_uses_after(&intr->def, res);
    return true;
 }
 

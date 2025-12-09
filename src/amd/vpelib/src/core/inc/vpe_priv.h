@@ -273,8 +273,19 @@ struct vpe_priv {
     uint16_t vpe_num_instance;
     bool     collaboration_mode;
     enum vpe_expansion_mode expansion_mode;
+    const struct vpe_engine       *engine_handle; /**< vpe engine instance */
 };
 
+/** internal vpe engine instance */
+struct vpe_engine_priv {
+    struct vpe_engine pub; /**< public member */
+
+    /** internal */
+    struct vpe_init_data           init;        /**< vpe init data */
+    uint8_t                        ver_major;   /**< vpe major version */
+    uint8_t                        ver_minor;   /**< vpe minor version */
+    uint8_t                        ver_rev;     /**< vpe revision version */
+};
 #ifdef __cplusplus
 }
 #endif

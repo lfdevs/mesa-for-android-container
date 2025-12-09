@@ -562,6 +562,21 @@ static const struct dri2_format_mapping g8r8_b8r8_mapping = {
      { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888 } }
 };
 
+static const struct dri2_format_mapping r16g16_r16b16_mapping = {
+   DRM_FORMAT_Y216,
+   __DRI_IMAGE_FORMAT_NONE,
+   PIPE_FORMAT_R16G16_R16B16_422_UNORM, 2,
+   { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR1616 },
+     { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR16161616 } }
+};
+static const struct dri2_format_mapping r10g10_r10b10_mapping = {
+   DRM_FORMAT_Y210,
+   __DRI_IMAGE_FORMAT_NONE,
+   PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM, 2,
+   { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR1616 },
+     { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR16161616 } }
+};
+
 static const struct dri2_format_mapping r10_g10b10_mapping = {
    DRM_FORMAT_NV15,
    __DRI_IMAGE_FORMAT_NONE,
@@ -617,7 +632,7 @@ to_dri_compression_rate(uint32_t rate)
    case 11: return __DRI_FIXED_RATE_COMPRESSION_11BPC;
    case 12: return __DRI_FIXED_RATE_COMPRESSION_12BPC;
    default:
-      unreachable("invalid compression fixed-rate value");
+      UNREACHABLE("invalid compression fixed-rate value");
    }
 }
 
@@ -642,8 +657,28 @@ from_dri_compression_rate(enum __DRIFixedRateCompression rate)
    case __DRI_FIXED_RATE_COMPRESSION_11BPC: return 11;
    case __DRI_FIXED_RATE_COMPRESSION_12BPC: return 12;
    default:
-      unreachable("invalid compression fixed-rate value");
+      UNREACHABLE("invalid compression fixed-rate value");
    }
+}
+
+static bool
+format_and_modifier_supported(struct pipe_screen *pscreen, enum pipe_format format,
+                              enum pipe_texture_target target, unsigned sample_count,
+                              unsigned storage_sample_count, unsigned bind,
+                              uint64_t modifier)
+{
+   if (!pscreen->is_format_supported(pscreen, format, target, sample_count,
+                                     storage_sample_count, bind))
+      return false;
+   if (!pscreen->is_dmabuf_modifier_supported)
+      return true;
+
+   if (pscreen->is_dmabuf_modifier_supported(pscreen, modifier, format, NULL))
+      return true;
+   if (modifier == DRM_FORMAT_MOD_INVALID)
+      return pscreen->is_dmabuf_modifier_supported(pscreen, DRM_FORMAT_MOD_LINEAR, format, NULL);
+
+   return false;
 }
 
 static struct dri_image *
@@ -660,65 +695,66 @@ dri_create_image_from_winsys(struct dri_screen *screen,
    int i;
    bool use_lowered = false;
    const unsigned format_planes = util_format_get_num_planes(map->pipe_format);
+   uint64_t modifier = whandle[0].modifier;
 
-   if (pscreen->is_format_supported(pscreen, map->pipe_format, screen->target, 0, 0,
-                                    PIPE_BIND_RENDER_TARGET))
+   if (format_and_modifier_supported(pscreen, map->pipe_format, screen->target, 0, 0,
+                                     PIPE_BIND_RENDER_TARGET, modifier))
       tex_usage |= PIPE_BIND_RENDER_TARGET;
-   if (pscreen->is_format_supported(pscreen, map->pipe_format, screen->target, 0, 0,
-                                    PIPE_BIND_SAMPLER_VIEW) ||
-       pscreen->is_format_supported(pscreen, map->pipe_format, screen->target, 0, 0,
-                                    PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SAMPLER_VIEW_SUBOPTIMAL))
+   if (format_and_modifier_supported(pscreen, map->pipe_format, screen->target, 0, 0,
+                                     PIPE_BIND_SAMPLER_VIEW, modifier) ||
+       format_and_modifier_supported(pscreen, map->pipe_format, screen->target, 0, 0,
+                                     PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SAMPLER_VIEW_SUBOPTIMAL, modifier))
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
 
    /* For NV12, see if we have support for sampling r8_g8b8 */
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV12 &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8_G8B8_420_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R8_G8B8_420_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r8_g8b8_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    /* For NV21, see if we have support for sampling r8_b8g8 */
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV21 &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8_B8G8_420_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R8_B8G8_420_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r8_b8g8_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    /* For NV16, see if we have support for sampling r8_g8b8 */
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV16 &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8_G8B8_422_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R8_G8B8_422_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r8_g8b8_mapping_422;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    /* For NV15, see if we have support for sampling r10_g10b10 */
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV15 &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R10_G10B10_420_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R10_G10B10_420_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r10_g10b10_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_NV20 &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R10_G10B10_422_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R10_G10B10_422_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r10_g10b10_mapping_422;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    /* For YUV420_8BIT, see if we have support for sampling r8b8g8_420 */
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_Y8U8V8_420_UNORM_PACKED &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8G8B8_420_UNORM_PACKED,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R8G8B8_420_UNORM_PACKED,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r8g8b8_420_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_Y10U10V10_420_UNORM_PACKED &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R10G10B10_420_UNORM_PACKED,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R10G10B10_420_UNORM_PACKED,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r10g10b10_420_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
@@ -726,13 +762,13 @@ dri_create_image_from_winsys(struct dri_screen *screen,
    /* For YV12 and I420, see if we have support for sampling r8_b8_g8 or r8_g8_b8 */
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_IYUV) {
       if (map->dri_fourcc == DRM_FORMAT_YUV420 &&
-          pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8_G8_B8_420_UNORM,
-                                       screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+          format_and_modifier_supported(pscreen, PIPE_FORMAT_R8_G8_B8_420_UNORM,
+                                        screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
          map = &r8_g8_b8_mapping;
          tex_usage |= PIPE_BIND_SAMPLER_VIEW;
       } else if (map->dri_fourcc == DRM_FORMAT_YVU420 &&
-          pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8_B8_G8_420_UNORM,
-                                       screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+          format_and_modifier_supported(pscreen, PIPE_FORMAT_R8_B8_G8_420_UNORM,
+                                        screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
          map = &r8_b8_g8_mapping;
          tex_usage |= PIPE_BIND_SAMPLER_VIEW;
       }
@@ -742,30 +778,42 @@ dri_create_image_from_winsys(struct dri_screen *screen,
     * can be used for YUYV and UYVY formats.
     */
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_YUYV &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8G8_R8B8_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R8G8_R8B8_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r8g8_r8b8_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_YVYU &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_R8B8_R8G8_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R8B8_R8G8_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r8b8_r8g8_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_UYVY &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_G8R8_B8R8_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_G8R8_B8R8_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &g8r8_b8r8_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
    if (!tex_usage && map->pipe_format == PIPE_FORMAT_VYUY &&
-       pscreen->is_format_supported(pscreen, PIPE_FORMAT_B8R8_G8R8_UNORM,
-                                    screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_B8R8_G8R8_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &b8r8_g8r8_mapping;
+      tex_usage |= PIPE_BIND_SAMPLER_VIEW;
+   }
+   if (!tex_usage && map->pipe_format == PIPE_FORMAT_Y210 &&
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
+      map = &r10g10_r10b10_mapping;
+      tex_usage |= PIPE_BIND_SAMPLER_VIEW;
+   }
+   if (!tex_usage && map->pipe_format == PIPE_FORMAT_Y216 &&
+       format_and_modifier_supported(pscreen, PIPE_FORMAT_R16G16_R16B16_422_UNORM,
+                                     screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
+      map = &r16g16_r16b16_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
    }
 
@@ -914,6 +962,10 @@ dri_create_image(struct dri_screen *screen,
       return NULL;
 
    if (!pscreen->resource_create_with_modifiers && count > 0)
+      return NULL;
+
+   if (width > pscreen->caps.max_texture_2d_size ||
+       height > pscreen->caps.max_texture_2d_size)
       return NULL;
 
    if (pscreen->is_format_supported(pscreen, map->pipe_format, screen->target,
@@ -1144,6 +1196,9 @@ dri2_query_image_by_resource_param(struct dri_image *image, int attrib, int *val
    case __DRI_IMAGE_ATTRIB_FD:
       param = PIPE_RESOURCE_PARAM_HANDLE_TYPE_FD;
       break;
+   case __DRI_IMAGE_ATTRIB_DISJOINT_PLANES:
+      param = PIPE_RESOURCE_PARAM_DISJOINT_PLANES;
+      break;
    default:
       return false;
    }
@@ -1157,6 +1212,7 @@ dri2_query_image_by_resource_param(struct dri_image *image, int attrib, int *val
    case __DRI_IMAGE_ATTRIB_STRIDE:
    case __DRI_IMAGE_ATTRIB_OFFSET:
    case __DRI_IMAGE_ATTRIB_NUM_PLANES:
+   case __DRI_IMAGE_ATTRIB_DISJOINT_PLANES:
       if (res_param > INT_MAX)
          return false;
       *value = (int)res_param;
@@ -1257,9 +1313,8 @@ dri2_from_planar(struct dri_image *image, int plane, void *loaderPrivate)
    if (plane < 0) {
       return NULL;
    } else if (plane > 0) {
-      uint64_t planes;
-      if (!dri2_resource_get_param(image, PIPE_RESOURCE_PARAM_NPLANES, 0,
-                                   &planes) ||
+      int planes;
+      if (!dri2_query_image(image, __DRI_IMAGE_ATTRIB_NUM_PLANES, &planes) ||
           plane >= planes) {
          return NULL;
       }

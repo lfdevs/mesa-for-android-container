@@ -114,7 +114,7 @@ static const struct debug_named_value debug_control[] = {
 DEBUG_GET_ONCE_FLAGS_OPTION(v3d_debug, "V3D_DEBUG", debug_control, 0)
 
 bool
-v3d_debug_flag_for_shader_stage(gl_shader_stage stage)
+v3d_debug_flag_for_shader_stage(mesa_shader_stage stage)
 {
         uint32_t flags[] = {
                 [MESA_SHADER_VERTEX] = V3D_DEBUG_VS,

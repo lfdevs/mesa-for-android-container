@@ -128,7 +128,7 @@ elk_reg_type_from_bit_size(unsigned bit_size,
       case 64:
          return ELK_REGISTER_TYPE_DF;
       default:
-         unreachable("Invalid bit size");
+         UNREACHABLE("Invalid bit size");
       }
    case ELK_REGISTER_TYPE_B:
    case ELK_REGISTER_TYPE_W:
@@ -144,7 +144,7 @@ elk_reg_type_from_bit_size(unsigned bit_size,
       case 64:
          return ELK_REGISTER_TYPE_Q;
       default:
-         unreachable("Invalid bit size");
+         UNREACHABLE("Invalid bit size");
       }
    case ELK_REGISTER_TYPE_UB:
    case ELK_REGISTER_TYPE_UW:
@@ -160,10 +160,10 @@ elk_reg_type_from_bit_size(unsigned bit_size,
       case 64:
          return ELK_REGISTER_TYPE_UQ;
       default:
-         unreachable("Invalid bit size");
+         UNREACHABLE("Invalid bit size");
       }
    default:
-      unreachable("Unknown type");
+      UNREACHABLE("Unknown type");
    }
 }
 

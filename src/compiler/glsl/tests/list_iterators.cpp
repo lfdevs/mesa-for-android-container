@@ -23,9 +23,9 @@
 
 #include <gtest/gtest.h>
 
-#include "list.h"
+#include "ir_list.h"
 
-class test_node_inherite : public exec_node  {
+class test_node_inherite : public ir_exec_node  {
 public:
    uint32_t value;
 
@@ -39,7 +39,7 @@ public:
 
    void *mem_ctx;
 
-   exec_list node_list;
+   ir_exec_list node_list;
 };
 
 void
@@ -47,19 +47,19 @@ list_iterators_node_inherite::SetUp()
 {
    mem_ctx = ralloc_context(NULL);
 
-   exec_list_make_empty(&node_list);
+   ir_exec_list_make_empty(&node_list);
 
    for (size_t i = 0; i < GetParam(); i++) {
       test_node_inherite *node = new(mem_ctx) test_node_inherite();
       node->value = i;
-      exec_list_push_tail(&node_list, node);
+      ir_exec_list_push_tail(&node_list, node);
    }
 }
 
 void
 list_iterators_node_inherite::TearDown()
 {
-   exec_list_make_empty(&node_list);
+   ir_exec_list_make_empty(&node_list);
 
    ralloc_free(mem_ctx);
    mem_ctx = NULL;
@@ -74,7 +74,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(list_iterators_node_inherite, foreach_in_list)
 {
    size_t i = 0;
-   foreach_in_list(test_node_inherite, n, &node_list) {
+   ir_foreach_in_list(test_node_inherite, n, &node_list) {
       EXPECT_EQ(n->value, i);
       i++;
    }
@@ -83,7 +83,7 @@ TEST_P(list_iterators_node_inherite, foreach_in_list)
 TEST_P(list_iterators_node_inherite, foreach_in_list_reverse)
 {
    size_t i = GetParam() - 1;
-   foreach_in_list_reverse(test_node_inherite, n, &node_list) {
+   ir_foreach_in_list_reverse(test_node_inherite, n, &node_list) {
       EXPECT_EQ(n->value, i);
       i--;
    }
@@ -92,7 +92,7 @@ TEST_P(list_iterators_node_inherite, foreach_in_list_reverse)
 TEST_P(list_iterators_node_inherite, foreach_in_list_safe)
 {
    size_t i = 0;
-   foreach_in_list_safe(test_node_inherite, n, &node_list) {
+   ir_foreach_in_list_safe(test_node_inherite, n, &node_list) {
       EXPECT_EQ(n->value, i);
 
       if (i % 2 == 0) {
@@ -102,13 +102,13 @@ TEST_P(list_iterators_node_inherite, foreach_in_list_safe)
       i++;
    }
 
-   exec_list_validate(&node_list);
+   ir_exec_list_validate(&node_list);
 }
 
 TEST_P(list_iterators_node_inherite, foreach_in_list_reverse_safe)
 {
    size_t i = GetParam() - 1;
-   foreach_in_list_reverse_safe(test_node_inherite, n, &node_list) {
+   ir_foreach_in_list_reverse_safe(test_node_inherite, n, &node_list) {
       EXPECT_EQ(n->value, i);
 
       if (i % 2 == 0) {
@@ -118,13 +118,13 @@ TEST_P(list_iterators_node_inherite, foreach_in_list_reverse_safe)
       i--;
    }
 
-   exec_list_validate(&node_list);
+   ir_exec_list_validate(&node_list);
 }
 
 TEST_P(list_iterators_node_inherite, foreach_in_list_use_after)
 {
    size_t i = 0;
-   foreach_in_list_use_after(test_node_inherite, n, &node_list) {
+   ir_foreach_in_list_use_after(test_node_inherite, n, &node_list) {
       EXPECT_EQ(n->value, i);
 
       if (i == GetParam() / 2) {
@@ -144,7 +144,7 @@ class test_node_embed {
 public:
 
    uint32_t value_header;
-   exec_node node;
+   ir_exec_node node;
    uint32_t value_footer;
 
    virtual ~test_node_embed() = default;
@@ -157,7 +157,7 @@ public:
 
    void *mem_ctx;
 
-   exec_list node_list;
+   ir_exec_list node_list;
 };
 
 void
@@ -165,20 +165,20 @@ list_iterators_node_embed::SetUp()
 {
    mem_ctx = ralloc_context(NULL);
 
-   exec_list_make_empty(&node_list);
+   ir_exec_list_make_empty(&node_list);
 
    for (size_t i = 0; i < GetParam(); i++) {
       test_node_embed *node = new(mem_ctx) test_node_embed();
       node->value_header = i;
       node->value_footer = i;
-      exec_list_push_tail(&node_list, &node->node);
+      ir_exec_list_push_tail(&node_list, &node->node);
    }
 }
 
 void
 list_iterators_node_embed::TearDown()
 {
-   exec_list_make_empty(&node_list);
+   ir_exec_list_make_empty(&node_list);
 
    ralloc_free(mem_ctx);
    mem_ctx = NULL;
@@ -193,7 +193,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(list_iterators_node_embed, foreach_list_typed)
 {
    size_t i = 0;
-   foreach_list_typed(test_node_embed, n, node, &node_list) {
+   ir_foreach_list_typed(test_node_embed, n, node, &node_list) {
       EXPECT_EQ(n->value_header, i);
       EXPECT_EQ(n->value_footer, i);
       i++;
@@ -206,14 +206,14 @@ TEST_P(list_iterators_node_embed, foreach_list_typed_from)
       return;
    }
 
-   exec_node *start_node = node_list.get_head();
+   ir_exec_node *start_node = node_list.get_head();
 
    size_t i = 0;
    for (; i < GetParam() / 2; i++) {
       start_node = start_node->get_next();
    }
 
-   foreach_list_typed_from(test_node_embed, n, node, &node_list, start_node) {
+   ir_foreach_list_typed_from(test_node_embed, n, node, &node_list, start_node) {
       EXPECT_EQ(n->value_header, i);
       EXPECT_EQ(n->value_footer, i);
       i++;
@@ -223,7 +223,7 @@ TEST_P(list_iterators_node_embed, foreach_list_typed_from)
 TEST_P(list_iterators_node_embed, foreach_list_typed_reverse)
 {
    size_t i = GetParam() - 1;
-   foreach_list_typed_reverse(test_node_embed, n, node, &node_list) {
+   ir_foreach_list_typed_reverse(test_node_embed, n, node, &node_list) {
       EXPECT_EQ(n->value_header, i);
       EXPECT_EQ(n->value_footer, i);
       i--;
@@ -233,33 +233,33 @@ TEST_P(list_iterators_node_embed, foreach_list_typed_reverse)
 TEST_P(list_iterators_node_embed, foreach_list_typed_safe)
 {
    size_t i = 0;
-   foreach_list_typed_safe(test_node_embed, n, node, &node_list) {
+   ir_foreach_list_typed_safe(test_node_embed, n, node, &node_list) {
       EXPECT_EQ(n->value_header, i);
       EXPECT_EQ(n->value_footer, i);
 
       if (i % 2 == 0) {
-         exec_node_remove(&n->node);
+         ir_exec_node_remove(&n->node);
       }
 
       i++;
    }
 
-   exec_list_validate(&node_list);
+   ir_exec_list_validate(&node_list);
 }
 
 TEST_P(list_iterators_node_embed, foreach_list_typed_reverse_safe)
 {
    size_t i = GetParam() - 1;
-   foreach_list_typed_reverse_safe(test_node_embed, n, node, &node_list) {
+   ir_foreach_list_typed_reverse_safe(test_node_embed, n, node, &node_list) {
       EXPECT_EQ(n->value_header, i);
       EXPECT_EQ(n->value_footer, i);
 
       if (i % 2 == 0) {
-         exec_node_remove(&n->node);
+         ir_exec_node_remove(&n->node);
       }
 
       i--;
    }
 
-   exec_list_validate(&node_list);
+   ir_exec_list_validate(&node_list);
 }

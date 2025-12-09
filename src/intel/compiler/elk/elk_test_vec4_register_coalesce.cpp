@@ -59,32 +59,32 @@ public:
 protected:
    virtual dst_reg *make_reg_for_system_value(int /* location */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void setup_payload()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_prolog()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_thread_end()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_urb_write_header(int /* mrf */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual vec4_instruction *emit_urb_write_opcode(bool /* complete */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 };
 
@@ -101,8 +101,7 @@ void register_coalesce_vec4_test::SetUp()
    params = {};
    params.mem_ctx = ctx;
 
-   nir_shader *shader =
-      nir_shader_create(ctx, MESA_SHADER_VERTEX, NULL, NULL);
+   nir_shader *shader = nir_shader_create(ctx, MESA_SHADER_VERTEX, NULL);
 
    v = new register_coalesce_vec4_visitor(compiler, &params, shader, prog_data);
 
@@ -122,7 +121,7 @@ void register_coalesce_vec4_test::TearDown()
 static void
 _register_coalesce(vec4_visitor *v, const char *func)
 {
-   const bool print = getenv("TEST_DEBUG");
+   const bool print = os_get_option("TEST_DEBUG");
 
    if (print) {
       printf("%s: instructions before:\n", func);

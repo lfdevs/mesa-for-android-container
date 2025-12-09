@@ -1,3 +1,6 @@
+// Copyright 2022 Red Hat.
+// SPDX-License-Identifier: MIT
+
 pub mod context;
 pub mod device;
 pub mod fence;

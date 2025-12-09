@@ -173,7 +173,7 @@ if with_tools.contains('etnaviv')
     'etnaviv-assembler',
     ['assembler.c'],
     gnu_symbol_visibility: 'hidden',
-    dependencies: [ idep_libetnaviv_decode ],
+    dependencies: [ idep_libetnaviv_decode, idep_etnaviv_enums_h ],
     link_with: [libetnaviv_encode, libetnaviv_isa_rs],
   )
 else

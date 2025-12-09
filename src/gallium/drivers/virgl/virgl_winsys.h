@@ -181,7 +181,7 @@ static inline void virgl_ws_fill_new_caps_defaults(struct virgl_drm_caps *caps)
    caps->caps.v2.max_compute_shared_memory_size = 0;
    caps->caps.v2.host_feature_check_version = 0;
    caps->caps.v2.max_texture_samplers = 16;
-   for (int shader_type = 0; shader_type < PIPE_SHADER_TYPES; shader_type++) {
+   for (int shader_type = 0; shader_type < MESA_SHADER_STAGES; shader_type++) {
       caps->caps.v2.max_const_buffer_size[shader_type] = 4096 * sizeof(float[4]);
       caps->caps.v2.max_shader_storage_blocks[shader_type] = INT_MAX;
    }

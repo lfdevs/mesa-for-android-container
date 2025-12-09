@@ -33,11 +33,11 @@ fd6_ubwc_compat_mode(const struct fd_dev_info *info, enum pipe_format format)
    switch (format) {
    case PIPE_FORMAT_R8G8_UNORM:
    case PIPE_FORMAT_R8G8_SRGB:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R8G8_INT : FD6_UBWC_R8G8_UNORM;
 
    case PIPE_FORMAT_R8G8_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R8G8_INT : FD6_UBWC_UNKNOWN_COMPAT;
 
    case PIPE_FORMAT_R8G8_UINT:
@@ -46,11 +46,11 @@ fd6_ubwc_compat_mode(const struct fd_dev_info *info, enum pipe_format format)
 
    case PIPE_FORMAT_R8G8B8A8_UNORM:
    case PIPE_FORMAT_R8G8B8A8_SRGB:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R8G8B8A8_INT : FD6_UBWC_R8G8B8A8_UNORM;
 
    case PIPE_FORMAT_R8G8B8A8_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R8G8B8A8_INT : FD6_UBWC_UNKNOWN_COMPAT;
 
    case PIPE_FORMAT_R8G8B8A8_UINT:
@@ -58,11 +58,11 @@ fd6_ubwc_compat_mode(const struct fd_dev_info *info, enum pipe_format format)
       return FD6_UBWC_R8G8B8A8_INT;
 
    case PIPE_FORMAT_R16G16_UNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R16G16_INT : FD6_UBWC_R16G16_UNORM;
 
    case PIPE_FORMAT_R16G16_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R16G16_INT : FD6_UBWC_UNKNOWN_COMPAT;
 
    case PIPE_FORMAT_R16G16_UINT:
@@ -70,11 +70,11 @@ fd6_ubwc_compat_mode(const struct fd_dev_info *info, enum pipe_format format)
       return FD6_UBWC_R16G16_INT;
 
    case PIPE_FORMAT_R16G16B16A16_UNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R16G16B16A16_INT : FD6_UBWC_R16G16B16A16_UNORM;
 
    case PIPE_FORMAT_R16G16B16A16_SNORM:
-      return info->a7xx.ubwc_unorm_snorm_int_compatible ?
+      return info->props.ubwc_unorm_snorm_int_compatible ?
          FD6_UBWC_R16G16B16A16_INT : FD6_UBWC_UNKNOWN_COMPAT;
 
    case PIPE_FORMAT_R16G16B16A16_UINT:

@@ -27,6 +27,10 @@
 
 #include "pan_jc.h"
 
+struct panfrost_jm_context {
+   uint32_t handle;
+};
+
 struct panfrost_jm_batch {
    /* Job related fields. */
    struct {
@@ -50,16 +54,9 @@ struct pipe_draw_info;
 struct pipe_grid_info;
 struct pipe_draw_start_count_bias;
 
-static inline int
-GENX(jm_init_context)(struct panfrost_context *ctx)
-{
-   return 0;
-}
+int GENX(jm_init_context)(struct panfrost_context *ctx);
 
-static inline void
-GENX(jm_cleanup_context)(struct panfrost_context *ctx)
-{
-}
+void GENX(jm_cleanup_context)(struct panfrost_context *ctx);
 
 int
 GENX(jm_init_batch)(struct panfrost_batch *batch);

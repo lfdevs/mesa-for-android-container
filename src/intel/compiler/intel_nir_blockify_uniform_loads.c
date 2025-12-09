@@ -27,14 +27,10 @@
 #include "nir_builder.h"
 
 static bool
-rebase_const_offset_ubo_loads_instr(nir_builder *b,
-                                    nir_instr *instr,
-                                    void *cb_data)
+rebase_const_offset_ubo_loads_intr(nir_builder *b,
+                                   nir_intrinsic_instr *intrin,
+                                   void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    if (intrin->intrinsic != nir_intrinsic_load_ubo_uniform_block_intel)
       return false;
 
@@ -76,11 +72,11 @@ rebase_const_offset_ubo_loads_instr(nir_builder *b,
       /* Change the base of the load to the new lower offset, and emit
        * moves to read from the now higher vector component locations.
        */
-      b->cursor = nir_before_instr(instr);
+      b->cursor = nir_before_instr(&intrin->instr);
       nir_src_rewrite(&intrin->src[1], nir_imm_int(b, new_offset));
    }
 
-   b->cursor = nir_after_instr(instr);
+   b->cursor = nir_after_instr(&intrin->instr);
 
    nir_scalar components[NIR_MAX_VEC_COMPONENTS];
    nir_scalar undef = nir_get_scalar(nir_undef(b, 1, type_bytes * 8), 0);
@@ -93,8 +89,7 @@ rebase_const_offset_ubo_loads_instr(nir_builder *b,
    nir_def *rebase = nir_vec_scalars(b, components, orig_def_components);
    rebase->divergent = false;
 
-   nir_def_rewrite_uses_after(&intrin->def, rebase, rebase->parent_instr);
-
+   nir_def_rewrite_uses_after(&intrin->def, rebase);
    return true;
 }
 
@@ -146,24 +141,20 @@ rebase_const_offset_ubo_loads_instr(nir_builder *b,
 bool
 brw_nir_rebase_const_offset_ubo_loads(nir_shader *shader)
 {
-   return nir_shader_instructions_pass(shader,
-                                       rebase_const_offset_ubo_loads_instr,
-                                       nir_metadata_control_flow |
-                                       nir_metadata_live_defs,
-                                       NULL);
+   return nir_shader_intrinsics_pass(shader,
+                                     rebase_const_offset_ubo_loads_intr,
+                                     nir_metadata_control_flow |
+                                     nir_metadata_live_defs,
+                                     NULL);
 }
 
 static bool
-intel_nir_blockify_uniform_loads_instr(nir_builder *b,
-                                       nir_instr *instr,
-                                       void *cb_data)
+intel_nir_blockify_uniform_loads_intr(nir_builder *b,
+                                      nir_intrinsic_instr *intrin,
+                                      void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
    const struct intel_device_info *devinfo = cb_data;
 
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_ssbo:
@@ -269,8 +260,8 @@ intel_nir_blockify_uniform_loads(nir_shader *shader,
 {
    nir_divergence_analysis(shader);
 
-   return nir_shader_instructions_pass(shader,
-                                       intel_nir_blockify_uniform_loads_instr,
-                                       nir_metadata_control_flow,
-                                       (void *) devinfo);
+   return nir_shader_intrinsics_pass(shader,
+                                     intel_nir_blockify_uniform_loads_intr,
+                                     nir_metadata_control_flow,
+                                     (void *) devinfo);
 }

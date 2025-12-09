@@ -24,6 +24,12 @@ html_docs = custom_target(
             '-Ddepfile=@DEPFILE@',
             sphinx_args,
             meson.current_source_dir(), '@OUTPUT@'],
+  env: [
+    'MESA_BUILD_ROOT=' + meson.project_build_root()
+  ],
+  depends: [
+    u_format_gen_h,
+  ],
   output: 'html',
   build_by_default: get_option('html-docs').enabled(),
 )

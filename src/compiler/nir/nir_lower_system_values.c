@@ -142,7 +142,7 @@ lower_system_value_instr(nir_builder *b, nir_instr *instr, void *_state)
          return nir_load_barycentric_coord_at_offset(b, 32, intrin->src[1].ssa,
                                                      .interp_mode = interp_mode);
       default:
-         unreachable("Bogus interpolateAt() intrinsic.");
+         UNREACHABLE("Bogus interpolateAt() intrinsic.");
       }
    }
 
@@ -193,7 +193,7 @@ lower_system_value_instr(nir_builder *b, nir_instr *instr, void *_state)
             break;
 
          default:
-            unreachable("unsupported system value array deref");
+            UNREACHABLE("unsupported system value array deref");
          }
       }
       nir_variable *var = deref->var;
@@ -347,11 +347,14 @@ lower_system_value_instr(nir_builder *b, nir_instr *instr, void *_state)
 nir_def *
 nir_build_lowered_load_helper_invocation(nir_builder *b)
 {
-   nir_def *tmp;
-   tmp = nir_ishl(b, nir_imm_int(b, 1),
-                  nir_load_sample_id_no_per_sample(b));
-   tmp = nir_iand(b, nir_load_sample_mask_in(b), tmp);
-   return nir_inot(b, nir_i2b(b, tmp));
+   nir_def *mask = nir_load_sample_mask_in(b);
+
+   if (b->shader->info.fs.uses_sample_shading) {
+      nir_def *id = nir_load_sample_id(b);
+      mask = nir_iand(b, mask, nir_ishl(b, nir_imm_int(b, 1), id));
+   }
+
+   return nir_ieq_imm(b, mask, 0);
 }
 
 bool
@@ -546,7 +549,7 @@ lower_compute_system_value_instr(nir_builder *b,
           b->shader->info.derivative_group == DERIVATIVE_GROUP_QUADS &&
           _mesa_set_search(state->lower_once_list, instr) == NULL) {
          nir_def *ids = nir_load_local_invocation_id(b);
-         _mesa_set_add(state->lower_once_list, ids->parent_instr);
+         _mesa_set_add(state->lower_once_list, nir_def_instr(ids));
 
          nir_def *x = nir_channel(b, ids, 0);
          nir_def *y = nir_channel(b, ids, 1);
@@ -701,7 +704,7 @@ lower_compute_system_value_instr(nir_builder *b,
          nir_def *group_size = nir_u2uN(b, nir_load_workgroup_size(b), bit_size);
          nir_def *base_group_id = nir_load_base_workgroup_id(b, bit_size);
 
-         _mesa_set_add(state->lower_once_list, global_id->parent_instr);
+         _mesa_set_add(state->lower_once_list, nir_def_instr(global_id));
 
          return nir_iadd(b, global_id, nir_imul(b, base_group_id, group_size));
       } else if (options && options->global_id_is_32bit && bit_size > 32) {
@@ -800,7 +803,7 @@ bool
 nir_lower_compute_system_values(nir_shader *shader,
                                 const nir_lower_compute_system_values_options *options)
 {
-   if (!gl_shader_stage_uses_workgroup(shader->info.stage))
+   if (!mesa_shader_stage_uses_workgroup(shader->info.stage))
       return false;
 
    struct lower_sysval_state state;

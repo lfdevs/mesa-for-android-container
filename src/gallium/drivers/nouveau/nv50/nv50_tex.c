@@ -191,7 +191,7 @@ nv50_create_texture_view(struct pipe_context *pipe,
       tic[2] |= G80_TIC_2_TEXTURE_TYPE_ONE_D_BUFFER | G80_TIC_2_LAYOUT_PITCH;
       break;
    default:
-      unreachable("unexpected/invalid texture target");
+      UNREACHABLE("unexpected/invalid texture target");
    }
 
    tic[3] = (flags & NV50_TEXVIEW_FILTER_MSAA8) ? 0x20000000 : 0x00300000;

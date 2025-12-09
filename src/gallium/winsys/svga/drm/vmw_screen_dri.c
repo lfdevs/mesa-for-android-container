@@ -326,7 +326,7 @@ vmw_drm_surface_get_handle(struct svga_winsys_screen *sws,
        whandle->handle = vsrf->sid;
        break;
     case WINSYS_HANDLE_TYPE_FD:
-       ret = drmPrimeHandleToFD(vws->ioctl.drm_fd, vsrf->sid, DRM_CLOEXEC,
+       ret = drmPrimeHandleToFD(vws->ioctl.drm_fd, vsrf->sid, DRM_CLOEXEC | DRM_RDWR,
                                 (int *)&whandle->handle);
        if (ret) {
           vmw_error("Failed to get file descriptor from prime.\n");

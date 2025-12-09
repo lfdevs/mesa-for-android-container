@@ -27,7 +27,11 @@
 #include <vulkan/vulkan.h>
 #include <xf86drm.h>
 
-#include "pvr_private.h"
+#include "pco/pco_data.h"
+#include "pco_uscgen_programs.h"
+#include "pvr_csb.h"
+#include "pvr_pass.h"
+#include "pvr_pds.h"
 #include "pvr_types.h"
 #include "pvr_winsys.h"
 #include "pvr_winsys_helper.h"
@@ -277,19 +281,17 @@ static void pvr_setup_static_vdm_sync(uint8_t *const pds_ptr,
                                       uint8_t *const usc_ptr,
                                       uint64_t usc_sync_offset_in_bytes)
 {
-   /* TODO: this needs to be auto-generated */
-   const uint8_t state_update[] = { 0x44, 0xA0, 0x80, 0x05,
-                                    0x00, 0x00, 0x00, 0xFF };
-
    struct pvr_pds_kickusc_program ppp_state_update_program = { 0 };
+   const pco_precomp_data *precomp_data =
+      (pco_precomp_data *)pco_usclib_common[VS_NOP_COMMON];
 
    memcpy(usc_ptr + usc_sync_offset_in_bytes,
-          state_update,
-          sizeof(state_update));
+          precomp_data->binary,
+          precomp_data->size_dwords * sizeof(uint32_t));
 
    pvr_pds_setup_doutu(&ppp_state_update_program.usc_task_control,
                        usc_sync_offset_in_bytes,
-                       0,
+                       precomp_data->temps,
                        ROGUE_PDSINST_DOUTU_SAMPLE_RATE_INSTANCE,
                        false);
 
@@ -320,15 +322,15 @@ pvr_winsys_helper_fill_static_memory(struct pvr_winsys *const ws,
 {
    VkResult result;
 
-   result = ws->ops->buffer_map(general_vma->bo);
+   result = ws->ops->buffer_map(general_vma->bo, NULL);
    if (result != VK_SUCCESS)
       goto err_out;
 
-   result = ws->ops->buffer_map(pds_vma->bo);
+   result = ws->ops->buffer_map(pds_vma->bo, NULL);
    if (result != VK_SUCCESS)
       goto err_pvr_srv_winsys_buffer_unmap_general;
 
-   result = ws->ops->buffer_map(usc_vma->bo);
+   result = ws->ops->buffer_map(usc_vma->bo, NULL);
    if (result != VK_SUCCESS)
       goto err_pvr_srv_winsys_buffer_unmap_pds;
 
@@ -340,17 +342,17 @@ pvr_winsys_helper_fill_static_memory(struct pvr_winsys *const ws,
    pvr_setup_static_pixel_event_program(pds_vma->bo->map,
                                         pds_vma->heap->static_data_offsets.eot);
 
-   ws->ops->buffer_unmap(usc_vma->bo);
-   ws->ops->buffer_unmap(pds_vma->bo);
-   ws->ops->buffer_unmap(general_vma->bo);
+   ws->ops->buffer_unmap(usc_vma->bo, false);
+   ws->ops->buffer_unmap(pds_vma->bo, false);
+   ws->ops->buffer_unmap(general_vma->bo, false);
 
    return VK_SUCCESS;
 
 err_pvr_srv_winsys_buffer_unmap_pds:
-   ws->ops->buffer_unmap(pds_vma->bo);
+   ws->ops->buffer_unmap(pds_vma->bo, false);
 
 err_pvr_srv_winsys_buffer_unmap_general:
-   ws->ops->buffer_unmap(general_vma->bo);
+   ws->ops->buffer_unmap(general_vma->bo, false);
 
 err_out:
    return result;

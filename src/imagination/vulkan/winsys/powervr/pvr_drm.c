@@ -36,7 +36,7 @@
 #include "pvr_drm_job_render.h"
 #include "pvr_drm_job_transfer.h"
 #include "pvr_drm_public.h"
-#include "pvr_private.h"
+#include "pvr_macros.h"
 #include "pvr_winsys.h"
 #include "pvr_winsys_helper.h"
 #include "vk_alloc.h"
@@ -131,7 +131,7 @@ static VkResult pvr_drm_override_quirks(struct pvr_drm_winsys *drm_ws,
       .pointer = (__u64)&query,
    };
 
-/* clang-format off */
+   /* clang-format off */
 #define PVR_QUIRKS(x) \
    x(48545) \
    x(49927) \
@@ -253,7 +253,7 @@ static VkResult pvr_drm_override_enhancements(struct pvr_drm_winsys *drm_ws,
    if (result != VK_SUCCESS)
       goto out_free_enhancements;
 
-/* clang-format off */
+   /* clang-format off */
 #define PVR_ENHANCEMENT_SET(number) \
    dev_info->enhancements.has_ern##number = \
       pvr_u32_in_array((uint32_t *)query.enhancements, query.count, number)

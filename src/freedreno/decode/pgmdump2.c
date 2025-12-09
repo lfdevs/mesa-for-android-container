@@ -347,9 +347,9 @@ decode_shader_descriptor_block(struct state *state,
             unsigned dwords = 2 * stats.instlen;
 
             if (gpu_id >= 400) {
-               dwords = ALIGN(dwords, 16 * 2);
+               dwords = align(dwords, 16 * 2);
             } else {
-               dwords = ALIGN(dwords, 4 * 2);
+               dwords = align(dwords, 4 * 2);
             }
 
             unsigned half_regs = state->half_regs;

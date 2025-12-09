@@ -9,7 +9,6 @@ glx.*
 shaders@glsl-uniform-interstage-limits@subdivide 5
 shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges
 spec@arb_internalformat_query2@all internalformat_<x>_type pname checks
-spec@!opengl 1.1@streaming-texture-leak
 spec@arb_map_buffer_alignment@arb_map_buffer_alignment-map-invalidate-range
 spec@!opengl 1.0@depth-clear-precision-check
 spec@arb_point_parameters@arb_point_parameters-point-attenuation

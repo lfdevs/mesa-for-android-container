@@ -110,7 +110,6 @@ files_libnouveau = files(
   'nvc0/cla0c0qmd.h',
   'nvc0/clc0c0qmd.h',
   'nvc0/clc3c0qmd.h',
-  'nvc0/drf.h',
   'nvc0/qmd.h',
   'nvc0/qmda0c0.c',
   'nvc0/qmdc0c0.c',
@@ -167,7 +166,7 @@ libnouveau = static_library(
   'nouveau',
   [files_libnouveau, sha1_h],
   include_directories : [
-    inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
+    inc_src, inc_include, inc_gallium, inc_gallium_aux,
   ],
   gnu_symbol_visibility : 'hidden',
   link_with : [libnouveauwinsys],

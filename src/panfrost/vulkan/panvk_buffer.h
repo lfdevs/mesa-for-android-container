@@ -10,19 +10,12 @@
 
 #include "vk_buffer.h"
 
+#define PANVK_MAX_BUFFER_SIZE UINT32_MAX
+
 struct panvk_priv_bo;
 
 struct panvk_buffer {
    struct vk_buffer vk;
-
-   /* FIXME: Only used for index buffers to do the min/max index retrieval on
-    * the CPU. This is all broken anyway and the min/max search should be done
-    * with a compute shader that also patches the job descriptor accordingly
-    * (basically an indirect draw).
-    *
-    * Make sure this field goes away as soon as we fixed indirect draws.
-    */
-   void *host_ptr;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_buffer, vk.base, VkBuffer,

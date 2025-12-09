@@ -15,11 +15,8 @@
 #include "vk_acceleration_structure.h"
 #include "drm-uapi/drm_fourcc.h"
 
-#include "tu_android.h"
 #include "tu_device.h"
 #include "tu_image.h"
-
-#include <vulkan/vulkan_android.h>
 
 static bool
 tu6_format_vtx_supported(enum pipe_format format)
@@ -104,7 +101,7 @@ static bool
 tu_format_linear_filtering_supported(struct tu_physical_device *physical_device,
                                      VkFormat vk_format)
 {
-   if (physical_device->info->a6xx.is_a702) {
+   if (physical_device->info->props.is_a702) {
       switch (vk_format) {
       case VK_FORMAT_D16_UNORM:
       case VK_FORMAT_D24_UNORM_S8_UINT:
@@ -130,7 +127,8 @@ static void
 tu_physical_device_get_format_properties(
    struct tu_physical_device *physical_device,
    VkFormat vk_format,
-   VkFormatProperties3 *out_properties)
+   VkFormatProperties3 *out_properties,
+   VkSubpassResolvePerformanceQueryEXT *msrtss_out)
 {
    VkFormatFeatureFlags2 linear = 0, optimal = 0, buffer = 0;
    enum pipe_format format = vk_format_to_pipe_format(vk_format);
@@ -147,6 +145,10 @@ tu_physical_device_get_format_properties(
        !(supported_vtx || supported_color || supported_tex)) {
       goto end;
    }
+
+   /* We never have to spill to memory for MSRTSS. */
+   if (msrtss_out)
+      msrtss_out->optimal = true;
 
    /* We don't support BufferToImage/ImageToBuffer for npot formats */
    if (!is_npot)
@@ -182,7 +184,7 @@ tu_physical_device_get_format_properties(
          if (ycbcr_info->n_planes > 1) {
             optimal |= VK_FORMAT_FEATURE_2_COSITED_CHROMA_SAMPLES_BIT |
                        VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
-            if (physical_device->info->a6xx.has_separate_chroma_filter)
+            if (physical_device->info->props.has_separate_chroma_filter)
                optimal |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT;
          }
       } else {
@@ -223,10 +225,11 @@ tu_physical_device_get_format_properties(
 
       /* TODO: The blob also exposes these for R16G16_UINT/R16G16_SINT/
        * R32G32_SFLOAT/R32G32B32A32_SFLOAT, but we don't have any tests for those.
-       * R32_SFLOAT is also included here by the blob, but that requires
-       * implementing VK_EXT_shader_atomic_float.
+       * The WoA blob on X1 also supports VK_EXT_shader_image_atomic_int64 (for
+       * R64_UINT and R64_SINT).
        */
-      if (vk_format == VK_FORMAT_R32_UINT || vk_format == VK_FORMAT_R32_SINT) {
+      if (vk_format == VK_FORMAT_R32_UINT || vk_format == VK_FORMAT_R32_SINT ||
+          vk_format == VK_FORMAT_R32_SFLOAT) {
          optimal |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_ATOMIC_BIT;
          buffer |= VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_ATOMIC_BIT;
       }
@@ -314,9 +317,12 @@ tu_GetPhysicalDeviceFormatProperties2(
       vk_find_struct(pFormatProperties->pNext, FORMAT_PROPERTIES_3);
    if (!props3)
       props3 = &local_props3;
+   VkSubpassResolvePerformanceQueryEXT *msrtss_out =
+      vk_find_struct(pFormatProperties->pNext,
+                     SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT);
 
    tu_physical_device_get_format_properties(
-      physical_device, format, props3);
+      physical_device, format, props3, msrtss_out);
 
    pFormatProperties->formatProperties = (VkFormatProperties) {
       .linearTilingFeatures =
@@ -346,7 +352,7 @@ tu_GetPhysicalDeviceFormatProperties2(
       /* note: ubwc_possible() argument values to be ignored except for format */
       if (pFormatProperties->formatProperties.optimalTilingFeatures &&
           tiling_possible(format) &&
-          ubwc_possible(NULL, format, VK_IMAGE_TYPE_2D, 0, 0,
+          ubwc_possible(NULL, format, VK_IMAGE_TYPE_2D, 0, 0, 0,
                         physical_device->info, VK_SAMPLE_COUNT_1_BIT, 1,
                         false)) {
          vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out, mod_props) {
@@ -388,7 +394,7 @@ tu_get_image_format_properties(
    BITMASK_ENUM(VkSampleCountFlagBits) sampleCounts = VK_SAMPLE_COUNT_1_BIT;
 
    tu_physical_device_get_format_properties(physical_device, info->format,
-                                            &format_props);
+                                            &format_props, NULL);
 
    switch (info->tiling) {
    case VK_IMAGE_TILING_LINEAR:
@@ -403,6 +409,10 @@ tu_get_image_format_properties(
        * importing/exporting with modifiers yet.
        */
       if (info->flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT)
+         return VK_ERROR_FORMAT_NOT_SUPPORTED;
+
+      /* Don't allow modifiers with sparse */
+      if (info->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
          return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
       switch (drm_info->drmFormatModifier) {
@@ -423,9 +433,9 @@ tu_get_image_format_properties(
                return VK_ERROR_FORMAT_NOT_SUPPORTED;
          }
 
-         if (!ubwc_possible(NULL, info->format, info->type, info->usage,
-                            info->usage, physical_device->info, sampleCounts,
-                            1, false)) {
+         if (!ubwc_possible(NULL, info->format, info->type, info->flags,
+                            info->usage, info->usage, physical_device->info,
+                            sampleCounts, 1, false)) {
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
          }
 
@@ -442,11 +452,36 @@ tu_get_image_format_properties(
       format_feature_flags = format_props.optimalTilingFeatures;
       break;
    default:
-      unreachable("bad VkPhysicalDeviceImageFormatInfo2");
+      UNREACHABLE("bad VkPhysicalDeviceImageFormatInfo2");
    }
 
    if (format_feature_flags == 0)
       return tu_image_unsupported_format(pImageFormatProperties);
+
+   if (info->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
+      if (!physical_device->has_sparse)
+         return tu_image_unsupported_format(pImageFormatProperties);
+   }
+
+   if (info->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) {
+      /* Don't support multi-planar formats with sparse yet */
+      if (vk_format_get_plane_count(info->format) > 1)
+         return tu_image_unsupported_format(pImageFormatProperties);
+
+      /* Sparse isn't compatible with HIC */
+      if (info->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT)
+         return tu_image_unsupported_format(pImageFormatProperties);
+
+      /* We can't support sparse when we force linear tiling, so disable
+       * sparse with formats or usages which could cause us to fall back to
+       * linear. We also currently don't support sparse for 3D images.
+       */
+      if (info->type != VK_IMAGE_TYPE_2D ||
+          info->tiling != VK_IMAGE_TILING_OPTIMAL ||
+          !tiling_possible(info->format) ||
+          (info->usage & VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT))
+         return tu_image_unsupported_format(pImageFormatProperties);
+   }
 
    if (info->type != VK_IMAGE_TYPE_2D &&
        vk_format_is_depth_or_stencil(info->format))
@@ -454,7 +489,7 @@ tu_get_image_format_properties(
 
    switch (info->type) {
    default:
-      unreachable("bad vkimage type\n");
+      UNREACHABLE("bad vkimage type\n");
    case VK_IMAGE_TYPE_1D:
       maxExtent.width = 16384;
       maxExtent.height = 1;
@@ -536,7 +571,8 @@ tu_get_image_format_properties(
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
+   if (image_usage & (VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT)) {
       if (!(format_feature_flags &
             (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT |
              VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT))) {
@@ -767,10 +803,11 @@ tu_GetPhysicalDeviceImageFormatProperties2(
          (fd6_color_swap(vk_format_to_pipe_format(base_info->format),
                                                   TILE6_LINEAR, false) == WZYX &&
          !ubwc_possible(NULL, base_info->format, base_info->type,
+                        base_info->flags,
                         (base_info->usage & ~VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT),
                         (base_info->usage & ~VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT),
                         physical_device->info, VK_SAMPLE_COUNT_1_BIT, 1,
-                        physical_device->info->a6xx.has_z24uint_s8uint));
+                        physical_device->info->props.has_z24uint_s8uint));
    }
 
    return VK_SUCCESS;
@@ -788,15 +825,4 @@ fail:
    }
 
    return result;
-}
-
-VKAPI_ATTR void VKAPI_CALL
-tu_GetPhysicalDeviceSparseImageFormatProperties2(
-   VkPhysicalDevice physicalDevice,
-   const VkPhysicalDeviceSparseImageFormatInfo2 *pFormatInfo,
-   uint32_t *pPropertyCount,
-   VkSparseImageFormatProperties2 *pProperties)
-{
-   /* Sparse images are not yet supported. */
-   *pPropertyCount = 0;
 }

@@ -36,7 +36,6 @@
 #include "fw-api/pvr_rogue_fwif_rf.h"
 #include "pvr_csb.h"
 #include "pvr_job_render.h"
-#include "pvr_private.h"
 #include "pvr_srv.h"
 #include "pvr_srv_bo.h"
 #include "pvr_srv_bridge.h"
@@ -253,7 +252,7 @@ static uint64_t pvr_rogue_get_cr_multisamplectl_val(uint32_t samples,
 
          break;
       default:
-         unreachable("Unsupported number of samples");
+         UNREACHABLE("Unsupported number of samples");
       }
    }
 

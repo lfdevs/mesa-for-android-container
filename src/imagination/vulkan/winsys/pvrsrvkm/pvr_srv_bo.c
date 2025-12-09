@@ -29,7 +29,7 @@
 #include <sys/mman.h>
 #include <xf86drm.h>
 
-#include "pvr_private.h"
+#include "pvr_macros.h"
 #include "pvr_srv.h"
 #include "pvr_srv_bo.h"
 #include "pvr_srv_bridge.h"
@@ -39,6 +39,7 @@
 #include "util/bitscan.h"
 #include "util/macros.h"
 #include "util/u_math.h"
+#include "vk_alloc.h"
 #include "vk_log.h"
 
 /* Note: This function does not have an associated pvr_srv_free_display_pmr
@@ -62,7 +63,7 @@ static VkResult pvr_srv_alloc_display_pmr(struct pvr_srv_winsys *srv_ws,
    if (result != VK_SUCCESS)
       return result;
 
-   ret = drmPrimeHandleToFD(srv_ws->base.display_fd, handle, O_CLOEXEC, &fd);
+   ret = drmPrimeHandleToFD(srv_ws->base.display_fd, handle, DRM_CLOEXEC | DRM_RDWR, &fd);
    if (ret) {
       result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto err_display_buffer_destroy;
@@ -289,14 +290,14 @@ VkResult pvr_srv_winsys_buffer_get_fd(struct pvr_winsys_bo *bo,
       return pvr_srv_physmem_export_dmabuf(ws->render_fd, srv_bo->pmr, fd_out);
 
    /* For display buffers, export using saved buffer handle */
-   ret = drmPrimeHandleToFD(ws->display_fd, srv_bo->handle, O_CLOEXEC, fd_out);
+   ret = drmPrimeHandleToFD(ws->display_fd, srv_bo->handle, DRM_CLOEXEC | DRM_RDWR, fd_out);
    if (ret)
       return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    return VK_SUCCESS;
 }
 
-VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo)
+VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo, void *addr)
 {
    struct pvr_srv_winsys_bo *srv_bo = to_pvr_srv_winsys_bo(bo);
    struct pvr_winsys *ws = bo->ws;
@@ -309,7 +310,8 @@ VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo)
    assert(!bo->map);
 
    /* Map the full PMR to CPU space */
-   result = pvr_mmap(bo->size,
+   result = pvr_mmap(addr,
+                     bo->size,
                      prot,
                      MAP_SHARED,
                      ws->render_fd,
@@ -327,9 +329,10 @@ VkResult pvr_srv_winsys_buffer_map(struct pvr_winsys_bo *bo)
    return VK_SUCCESS;
 }
 
-void pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo)
+VkResult pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo, bool reserve)
 {
    struct pvr_srv_winsys_bo *srv_bo = to_pvr_srv_winsys_bo(bo);
+   VkResult result;
 
    /* output error if trying to unmap memory that is not previously mapped */
    assert(bo->map);
@@ -337,11 +340,13 @@ void pvr_srv_winsys_buffer_unmap(struct pvr_winsys_bo *bo)
    VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
 
    /* Unmap the whole PMR from CPU space */
-   pvr_munmap(bo->map, bo->size);
+   result = pvr_munmap(bo->map, bo->size, reserve);
 
    bo->map = NULL;
 
    buffer_release(srv_bo);
+
+   return result;
 }
 
 /* This function must be used to allocate from a heap carveout and must only be

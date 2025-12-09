@@ -96,7 +96,7 @@ ${item.token_name}_${prop}(const struct intel_device_info *devinfo)
    case 45: return ${item.get_prop(prop, 4.5)};
    case 40: return ${item.get_prop(prop, 4)};
    default:
-      unreachable("Invalid hardware generation");
+      UNREACHABLE("Invalid hardware generation");
    }
 }
 %endif

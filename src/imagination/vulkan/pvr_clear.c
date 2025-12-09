@@ -25,21 +25,34 @@
 #include <vulkan/vulkan_core.h>
 
 #include "hwdef/rogue_hw_utils.h"
+#include "pco/pco_data.h"
+#include "pco_uscgen_programs.h"
 #include "pvr_clear.h"
-#include "pvr_hardcode.h"
+#include "pvr_cmd_buffer.h"
+#include "pvr_device.h"
 #include "pvr_pds.h"
-#include "pvr_private.h"
-#include "usc/programs/pvr_shader_factory.h"
-#include "usc/programs/pvr_static_shaders.h"
+#include "pvr_physical_device.h"
 #include "pvr_types.h"
+#include "pvr_usc.h"
 #include "vk_alloc.h"
 #include "vk_log.h"
+
+#define PVR_STATIC_CLEAR_PDS_STATE_COUNT          \
+   (pvr_cmd_length(TA_STATE_PDS_SHADERBASE) +     \
+    pvr_cmd_length(TA_STATE_PDS_TEXUNICODEBASE) + \
+    pvr_cmd_length(TA_STATE_PDS_SIZEINFO1) +      \
+    pvr_cmd_length(TA_STATE_PDS_SIZEINFO2) +      \
+    pvr_cmd_length(TA_STATE_PDS_VARYINGBASE) +    \
+    pvr_cmd_length(TA_STATE_PDS_TEXTUREDATABASE))
+
+static_assert(PVR_PDS_STATE_LENGTH == PVR_STATIC_CLEAR_PDS_STATE_COUNT,
+              "pvr_static_clear_ppp_pds_state_type might require fixing.");
 
 static void pvr_device_setup_graphics_static_clear_ppp_base(
    struct pvr_static_clear_ppp_base *const base)
 {
    pvr_csb_pack (&base->wclamp, TA_WCLAMP, wclamp) {
-      wclamp.val = fui(0.00001f);
+      wclamp.val = fui(1.0e-13f);
    }
 
    /* clang-format off */
@@ -166,9 +179,9 @@ VkResult pvr_emit_ppp_from_template(
 
    struct pvr_device *const device = csb->device;
    const uint32_t cache_line_size =
-      rogue_get_slc_cache_line_size(&device->pdevice->dev_info);
+      pvr_get_slc_cache_line_size(&device->pdevice->dev_info);
    const struct pvr_static_clear_ppp_base *const base =
-      &device->static_clear_state.ppp_base;
+      &device->static_clear_state->ppp_base;
    struct pvr_suballoc_bo *pvr_bo;
    uint32_t *stream;
    VkResult result;
@@ -241,45 +254,37 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
       MAX2(ROGUE_TA_STATE_PDS_TEXUNICODEBASE_ADDR_ALIGNMENT,
            ROGUE_TA_STATE_PDS_SHADERBASE_ADDR_ALIGNMENT);
    struct pvr_device_static_clear_state *clear_state =
-      &device->static_clear_state;
+      device->static_clear_state;
    const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
-   uint32_t pds_texture_program_offsets[PVR_CLEAR_ATTACHMENT_PROGRAM_COUNT];
-   uint32_t pds_pixel_program_offsets[PVR_CLEAR_ATTACHMENT_PROGRAM_COUNT];
-   uint32_t usc_program_offsets[PVR_CLEAR_ATTACHMENT_PROGRAM_COUNT];
+   uint32_t pds_texture_program_offsets[PVR_NUM_CLEAR_ATTACH_SHADERS];
+   uint32_t pds_pixel_program_offsets[PVR_NUM_CLEAR_ATTACH_SHADERS];
+   uint32_t usc_program_offsets[PVR_NUM_CLEAR_ATTACH_SHADERS];
+   pco_shader *shaders[PVR_NUM_CLEAR_ATTACH_SHADERS];
+   struct pvr_clear_attach_props props;
    uint64_t usc_upload_offset;
    uint64_t pds_upload_offset;
    uint32_t alloc_size = 0;
    VkResult result;
    uint8_t *ptr;
 
-#if !defined(NDEBUG)
-   uint32_t clear_attachment_info_count = 0;
+   /* Build and upload USC fragment shaders. */
+   for (unsigned dword_count = 1; dword_count <= 4; ++dword_count) {
+      for (unsigned offset = 0; offset <= 3; ++offset) {
+         for (unsigned uses_tile_buffer = 0; uses_tile_buffer <= 1;
+              ++uses_tile_buffer) {
+            if (dword_count + offset > 4)
+               continue;
 
-   for (uint32_t i = 0; i < ARRAY_SIZE(clear_attachment_collection); i++) {
-      if (!clear_attachment_collection[i].info)
-         continue;
+            props.dword_count = dword_count;
+            props.offset = offset;
+            props.uses_tile_buffer = uses_tile_buffer;
 
-      clear_attachment_info_count++;
-   }
-
-   assert(clear_attachment_info_count == PVR_CLEAR_ATTACHMENT_PROGRAM_COUNT);
-#endif
-
-   /* Upload USC fragment shaders. */
-
-   for (uint32_t i = 0, offset_idx = 0;
-        i < ARRAY_SIZE(clear_attachment_collection);
-        i++) {
-      if (!clear_attachment_collection[i].info)
-         continue;
-
-      usc_program_offsets[offset_idx] = alloc_size;
-      /* TODO: The compiler will likely give us a pre-aligned size for the USC
-       * shader so don't bother aligning here when it's hooked up.
-       */
-      alloc_size += ALIGN_POT(clear_attachment_collection[i].size, 4);
-
-      offset_idx++;
+            unsigned u = pvr_uscgen_clear_attach_index(&props);
+            shaders[u] =
+               pvr_uscgen_clear_attach(device->pdevice->pco_ctx, &props);
+            alloc_size += pco_shader_binary_size(shaders[u]);
+         }
+      }
    }
 
    result = pvr_bo_suballoc(&device->suballoc_usc,
@@ -293,55 +298,46 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
    usc_upload_offset =
       clear_state->usc_clear_attachment_programs->dev_addr.addr -
       device->heaps.usc_heap->base_addr.addr;
+
    ptr = (uint8_t *)pvr_bo_suballoc_get_map_addr(
       clear_state->usc_clear_attachment_programs);
 
-   for (uint32_t i = 0, offset_idx = 0;
-        i < ARRAY_SIZE(clear_attachment_collection);
-        i++) {
-      if (!clear_attachment_collection[i].info)
-         continue;
+   unsigned offset = 0;
+   for (unsigned u = 0; u < ARRAY_SIZE(shaders); ++u) {
+      unsigned shader_size = pco_shader_binary_size(shaders[u]);
 
-      memcpy(ptr + usc_program_offsets[offset_idx],
-             clear_attachment_collection[i].code,
-             clear_attachment_collection[i].size);
+      usc_program_offsets[u] = offset;
+      memcpy(&ptr[offset], pco_shader_binary_data(shaders[u]), shader_size);
 
-      offset_idx++;
+      offset += shader_size;
    }
 
    /* Upload PDS programs. */
 
    alloc_size = 0;
 
-   for (uint32_t i = 0, offset_idx = 0;
-        i < ARRAY_SIZE(clear_attachment_collection);
-        i++) {
+   for (unsigned u = 0; u < ARRAY_SIZE(shaders); ++u) {
       struct pvr_pds_pixel_shader_sa_program texture_pds_program;
       struct pvr_pds_kickusc_program pixel_shader_pds_program;
       uint32_t program_size;
 
-      if (!clear_attachment_collection[i].info)
-         continue;
-
       /* Texture program to load colors. */
-
       texture_pds_program = (struct pvr_pds_pixel_shader_sa_program){
          .num_texture_dma_kicks = 1,
       };
 
       pvr_pds_set_sizes_pixel_shader_uniform_texture_code(&texture_pds_program);
 
-      pds_texture_program_offsets[offset_idx] = alloc_size;
+      pds_texture_program_offsets[u] = alloc_size;
       alloc_size += ALIGN_POT(PVR_DW_TO_BYTES(texture_pds_program.code_size),
                               pds_prog_alignment);
 
       /* Pixel program to load fragment shader. */
-
       pixel_shader_pds_program = (struct pvr_pds_kickusc_program){ 0 };
 
       pvr_pds_setup_doutu(&pixel_shader_pds_program.usc_task_control,
-                          usc_upload_offset + usc_program_offsets[offset_idx],
-                          clear_attachment_collection[i].info->temps_required,
+                          usc_upload_offset + usc_program_offsets[u],
+                          pco_shader_data(shaders[u])->common.temps,
                           ROGUE_PDSINST_DOUTU_SAMPLE_RATE_INSTANCE,
                           false);
 
@@ -351,10 +347,8 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
                      pixel_shader_pds_program.data_size;
       program_size = PVR_DW_TO_BYTES(program_size);
 
-      pds_pixel_program_offsets[offset_idx] = alloc_size;
+      pds_pixel_program_offsets[u] = alloc_size;
       alloc_size += ALIGN_POT(program_size, pds_prog_alignment);
-
-      offset_idx++;
    }
 
    result = pvr_bo_suballoc(&device->suballoc_pds,
@@ -370,64 +364,54 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
    pds_upload_offset =
       clear_state->pds_clear_attachment_programs->dev_addr.addr -
       device->heaps.pds_heap->base_addr.addr;
+
    ptr =
       pvr_bo_suballoc_get_map_addr(clear_state->pds_clear_attachment_programs);
 
-   for (uint32_t i = 0, offset_idx = 0;
-        i < ARRAY_SIZE(clear_attachment_collection);
-        i++) {
+   for (unsigned u = 0; u < ARRAY_SIZE(shaders); ++u) {
       struct pvr_pds_pixel_shader_sa_program texture_pds_program;
       struct pvr_pds_kickusc_program pixel_shader_pds_program;
 
-      if (!clear_attachment_collection[i].info) {
-         clear_state->pds_clear_attachment_program_info[i] =
-            (struct pvr_pds_clear_attachment_program_info){ 0 };
-
-         continue;
-      }
-
       /* Texture program to load colors. */
-
       texture_pds_program = (struct pvr_pds_pixel_shader_sa_program){
          .num_texture_dma_kicks = 1,
       };
 
       pvr_pds_generate_pixel_shader_sa_code_segment(
          &texture_pds_program,
-         (uint32_t *)(ptr + pds_texture_program_offsets[offset_idx]));
+         (uint32_t *)(ptr + pds_texture_program_offsets[u]));
 
       /* Pixel program to load fragment shader. */
-
       pixel_shader_pds_program = (struct pvr_pds_kickusc_program){ 0 };
 
       pvr_pds_setup_doutu(&pixel_shader_pds_program.usc_task_control,
-                          usc_upload_offset + usc_program_offsets[offset_idx],
-                          clear_attachment_collection[i].info->temps_required,
+                          usc_upload_offset + usc_program_offsets[u],
+                          pco_shader_data(shaders[u])->common.temps,
                           ROGUE_PDSINST_DOUTU_SAMPLE_RATE_INSTANCE,
                           false);
 
       pvr_pds_generate_pixel_shader_program(
          &pixel_shader_pds_program,
-         (uint32_t *)(ptr + pds_pixel_program_offsets[offset_idx]));
+         (uint32_t *)(ptr + pds_pixel_program_offsets[u]));
 
       /* Setup the PDS program info. */
-
       pvr_pds_set_sizes_pixel_shader_sa_texture_data(&texture_pds_program,
                                                      dev_info);
 
-      clear_state->pds_clear_attachment_program_info[i] =
+      clear_state->pds_clear_attachment_program_info[u] =
          (struct pvr_pds_clear_attachment_program_info){
-            .texture_program_offset = PVR_DEV_ADDR(
-               pds_upload_offset + pds_texture_program_offsets[offset_idx]),
-            .pixel_program_offset = PVR_DEV_ADDR(
-               pds_upload_offset + pds_pixel_program_offsets[offset_idx]),
+            .texture_program_offset =
+               PVR_DEV_ADDR(pds_upload_offset + pds_texture_program_offsets[u]),
+            .pixel_program_offset =
+               PVR_DEV_ADDR(pds_upload_offset + pds_pixel_program_offsets[u]),
 
             .texture_program_pds_temps_count = texture_pds_program.temps_used,
             .texture_program_data_size = texture_pds_program.data_size,
          };
-
-      offset_idx++;
    }
+
+   for (unsigned u = 0; u < ARRAY_SIZE(shaders); ++u)
+      ralloc_free(shaders[u]);
 
    return VK_SUCCESS;
 }
@@ -436,7 +420,7 @@ static void
 pvr_device_finish_clear_attachment_programs(struct pvr_device *device)
 {
    struct pvr_device_static_clear_state *clear_state =
-      &device->static_clear_state;
+      device->static_clear_state;
 
    pvr_bo_suballoc_free(clear_state->usc_clear_attachment_programs);
    pvr_bo_suballoc_free(clear_state->pds_clear_attachment_programs);
@@ -491,46 +475,41 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
 
    const uint32_t vdm_state_size_in_dw =
       pvr_clear_vdm_state_get_size_in_dw(dev_info, 1);
-   struct pvr_device_static_clear_state *state = &device->static_clear_state;
-   const uint32_t cache_line_size = rogue_get_slc_cache_line_size(dev_info);
+
+   struct pvr_device_static_clear_state *state = device->static_clear_state =
+      vk_zalloc(&device->vk.alloc,
+                sizeof(struct pvr_device_static_clear_state), 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!state)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   const uint32_t cache_line_size = pvr_get_slc_cache_line_size(dev_info);
    struct pvr_pds_vertex_shader_program pds_program;
-   struct util_dynarray passthrough_vert_shader;
+   const pco_precomp_data *precomp_data;
    uint32_t *state_buffer;
    VkResult result;
 
    if (PVR_HAS_FEATURE(dev_info, gs_rta_support)) {
-      struct util_dynarray passthrough_rta_vert_shader;
-
-      util_dynarray_init(&passthrough_rta_vert_shader, NULL);
-      pvr_hard_code_get_passthrough_rta_vertex_shader(
-         dev_info,
-         &passthrough_rta_vert_shader);
+      precomp_data =
+         (pco_precomp_data *)pco_usclib_common[VS_PASSTHROUGH_RTA_COMMON];
 
       result = pvr_gpu_upload_usc(device,
-                                  passthrough_rta_vert_shader.data,
-                                  passthrough_rta_vert_shader.size,
+                                  precomp_data->binary,
+                                  precomp_data->size_dwords * sizeof(uint32_t),
                                   cache_line_size,
                                   &state->usc_multi_layer_vertex_shader_bo);
-      if (result != VK_SUCCESS) {
-         util_dynarray_fini(&passthrough_rta_vert_shader);
-         return result;
-      }
-
-      util_dynarray_fini(&passthrough_rta_vert_shader);
+      if (result != VK_SUCCESS)
+         goto err_free_static_clear_state;
    } else {
       state->usc_multi_layer_vertex_shader_bo = NULL;
    }
 
-   util_dynarray_init(&passthrough_vert_shader, NULL);
-   pvr_hard_code_get_passthrough_vertex_shader(dev_info,
-                                               &passthrough_vert_shader);
-
+   precomp_data = (pco_precomp_data *)pco_usclib_common[VS_PASSTHROUGH_COMMON];
    result = pvr_gpu_upload_usc(device,
-                               passthrough_vert_shader.data,
-                               passthrough_vert_shader.size,
+                               precomp_data->binary,
+                               precomp_data->size_dwords * sizeof(uint32_t),
                                cache_line_size,
                                &state->usc_vertex_shader_bo);
-   util_dynarray_fini(&passthrough_vert_shader);
    if (result != VK_SUCCESS)
       goto err_free_usc_multi_layer_shader;
 
@@ -619,12 +598,15 @@ err_free_usc_shader:
 err_free_usc_multi_layer_shader:
    pvr_bo_suballoc_free(state->usc_multi_layer_vertex_shader_bo);
 
+err_free_static_clear_state:
+   vk_free(&device->vk.alloc, state);
+
    return result;
 }
 
 void pvr_device_finish_graphics_static_clear_state(struct pvr_device *device)
 {
-   struct pvr_device_static_clear_state *state = &device->static_clear_state;
+   struct pvr_device_static_clear_state *state = device->static_clear_state;
 
    pvr_device_finish_clear_attachment_programs(device);
 
@@ -638,6 +620,8 @@ void pvr_device_finish_graphics_static_clear_state(struct pvr_device *device)
    pvr_bo_suballoc_free(state->vertices_bo);
    pvr_bo_suballoc_free(state->usc_vertex_shader_bo);
    pvr_bo_suballoc_free(state->usc_multi_layer_vertex_shader_bo);
+
+   vk_free(&device->vk.alloc, state);
 }
 
 void pvr_pds_clear_vertex_shader_program_init_base(
@@ -876,16 +860,22 @@ void pvr_pack_clear_vdm_state(const struct pvr_device_info *const dev_info,
    const uint32_t vs_output_size =
       DIV_ROUND_UP(vs_output_size_in_bytes,
                    ROGUE_VDMCTRL_VDM_STATE4_VS_OUTPUT_SIZE_UNIT_SIZE);
-   const bool needs_instance_count =
-      !PVR_HAS_FEATURE(dev_info, gs_rta_support) && layer_count > 1;
    uint32_t *stream = state_buffer;
+   bool needs_instance_count;
    uint32_t max_instances;
    uint32_t cam_size;
 
-   /* The layer count should at least be 1. For vkCmdClearAttachment() the spec.
-    * guarantees that the layer count is not 0.
-    */
-   assert(layer_count != 0);
+   if (PVR_HAS_FEATURE(dev_info, gs_rta_support)) {
+      needs_instance_count = layer_count > 1;
+
+      /* The layer count should at least be 1. For vkCmdClearAttachment() the
+       * spec. guarantees that the layer count is not 0.
+       */
+      assert(layer_count);
+   } else {
+      needs_instance_count = false;
+      assert(layer_count == 1);
+   }
 
    pvr_calculate_vertex_cam_size(dev_info,
                                  vs_output_size,

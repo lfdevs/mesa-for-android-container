@@ -135,7 +135,7 @@ emit_atomic(struct ir3_builder *b, nir_atomic_op op, struct ir3_instruction *bo,
    case nir_atomic_op_cmpxchg:
       return ir3_ATOMIC_S_CMPXCHG(b, bo, 0, data, 0, offset, 0, byte_offset, 0);
    default:
-      unreachable("boo");
+      UNREACHABLE("boo");
    }
 }
 
@@ -380,7 +380,7 @@ emit_intrinsic_atomic_image(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 static struct ir3_instruction *
 emit_intrinsic_atomic_global(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 {
-   unreachable("Global atomic are unimplemented on A5xx");
+   UNREACHABLE("Global atomic are unimplemented on A5xx");
 }
 
 const struct ir3_context_funcs ir3_a4xx_funcs = {

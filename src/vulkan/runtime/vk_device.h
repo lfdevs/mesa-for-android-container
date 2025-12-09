@@ -41,7 +41,8 @@ extern "C" {
 struct vk_acceleration_structure_build_ops;
 struct vk_command_buffer_ops;
 struct vk_device_shader_ops;
-struct vk_sync;
+struct vk_sync_signal;
+struct vk_sync_wait;
 
 enum vk_queue_submit_mode {
    /** Submits happen immediately
@@ -218,28 +219,20 @@ struct vk_device {
    /** Period of VK_TIME_DOMAIN_DEVICE_KHR */
    uint64_t device_time_domain_period;
 
-   /** Creates a vk_sync that wraps a memory object
+   /** Copies the sync payloads from the set of waits to the set of signals
     *
-    * This is always a one-shot object so it need not track any additional
-    * state.  Since it's intended for synchronizing between processes using
-    * implicit synchronization mechanisms, no such tracking would be valid
-    * anyway.
-    *
-    * If `signal_memory` is set, the resulting vk_sync will be used to signal
-    * the memory object from a queue ``via vk_queue_submit::signals``.  The common
-    * code guarantees that, by the time vkQueueSubmit() returns, the signal
-    * operation has been submitted to the kernel via the driver's
-    * ``vk_queue::driver_submit`` hook.  This means that any vkQueueSubmit() call
-    * which needs implicit synchronization may block.
-    *
-    * If `signal_memory` is not set, it can be assumed that memory object
-    * already has a signal operation pending from some other process and we
-    * need only wait on it.
+    * This effectively does the same as a vk_queue::driver_submit() with the
+    * given set of waits and signals and no command buffers, only without the
+    * queue.  Instead, the driver is expected to simply copy the sync payloads
+    * from the wait set, merge them together into one, and apply that to the
+    * signals.  After this function returns, all of the signals are now
+    * equivalent to the union all of the waits.
     */
-   VkResult (*create_sync_for_memory)(struct vk_device *device,
-                                      VkDeviceMemory memory,
-                                      bool signal_memory,
-                                      struct vk_sync **sync_out);
+   VkResult (*copy_sync_payloads)(struct vk_device *device,
+                                  uint32_t wait_count,
+                                  const struct vk_sync_wait *waits,
+                                  uint32_t signal_count,
+                                  const struct vk_sync_signal *signals);
 
    /* Set by vk_device_set_drm_fd() */
    struct util_sync_provider *sync;
@@ -428,6 +421,20 @@ vk_device_check_status(struct vk_device *device)
 
    return result;
 }
+
+/** Copy semaphore payloads to other semaphores/fences
+ *
+ * This is equivalent to doing VkQueueSubmit without any command buffers or
+ * sparse bind operations and without implicitly synchronizing on any queue.
+ */
+VkResult
+vk_device_copy_semaphore_payloads(struct vk_device *device,
+                                  uint32_t wait_semaphore_count,
+                                  const VkSemaphoreSubmitInfo *wait_semaphores,
+                                  uint32_t signal_semaphore_count,
+                                  const VkSemaphoreSubmitInfo *signal_semaphores,
+                                  uint32_t fence_count,
+                                  const VkFence *fences);
 
 VkResult
 vk_device_get_timestamp(struct vk_device *device, VkTimeDomainKHR domain,

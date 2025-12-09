@@ -56,23 +56,16 @@ screen_create(int gpu_fd, const struct pipe_screen_config *config, struct render
          break;
 
       info = etna_gpu_get_core_info(core);
-      switch (info->type) {
-      case ETNA_CORE_GPU:
-         /* Look for a 3D capable GPU */
-         if (!gpu && etna_core_has_feature(info, ETNA_FEATURE_PIPE_3D)) {
+      if (!gpu && /* Look for a 3D capable GPU */
+          etna_core_has_feature(info, ETNA_FEATURE_CORE_GPU) &&
+	  etna_core_has_feature(info, ETNA_FEATURE_PIPE_3D))
             gpu = core;
-            continue;
-         }
-         break;
-      case ETNA_CORE_NPU:
-         if (!npu) {
+
+      if (!npu && etna_core_has_feature(info, ETNA_FEATURE_CORE_NPU))
             npu = core;
+
+      if (gpu || npu)
             continue;
-         }
-         break;
-      default:
-         unreachable("invalid core type");
-      }
 
       etna_gpu_del(core);
    }

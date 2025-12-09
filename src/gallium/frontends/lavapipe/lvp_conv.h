@@ -60,37 +60,6 @@ static inline unsigned vk_conv_stencil_op(uint32_t vk_stencil_op)
    }
 }
 
-static inline unsigned vk_conv_topology(VkPrimitiveTopology topology)
-{
-   switch (topology) {
-   case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:
-      return MESA_PRIM_POINTS;
-   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
-      return MESA_PRIM_LINES;
-   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:
-      return MESA_PRIM_LINE_STRIP;
-   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
-      return MESA_PRIM_TRIANGLES;
-   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
-      return MESA_PRIM_TRIANGLE_STRIP;
-   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
-      return MESA_PRIM_TRIANGLE_FAN;
-   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
-      return MESA_PRIM_LINES_ADJACENCY;
-   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:
-      return MESA_PRIM_LINE_STRIP_ADJACENCY;
-   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
-      return MESA_PRIM_TRIANGLES_ADJACENCY;
-   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:
-      return MESA_PRIM_TRIANGLE_STRIP_ADJACENCY;
-   case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
-      return MESA_PRIM_PATCHES;
-   default:
-      assert(0);
-      return 0;
-   }
-}
-
 static inline unsigned vk_conv_wrap_mode(VkSamplerAddressMode addr_mode)
 {
    switch (addr_mode) {
@@ -129,6 +98,6 @@ static inline enum pipe_swizzle vk_conv_swizzle(VkComponentSwizzle swiz,
    case VK_COMPONENT_SWIZZLE_IDENTITY:
       return identity;
    default:
-      unreachable("Invalid VkComponentSwizzle value");
+      UNREACHABLE("Invalid VkComponentSwizzle value");
    }
 }

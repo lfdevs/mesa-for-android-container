@@ -16,9 +16,6 @@
 #include "util/list.h"
 #include "util/vma.h"
 
-/* Stride of the image heap, equal to the size of a texture/PBE descriptor */
-#define HK_IMAGE_STRIDE (24)
-
 struct hk_descriptor_set_layout;
 
 struct hk_sampled_image_descriptor {
@@ -51,9 +48,8 @@ static_assert(sizeof(struct hk_sampled_image_descriptor) == 64,
 struct hk_storage_image_descriptor {
    struct agx_texture_packed tex;
    struct agx_pbe_packed pbe;
-   uint8_t pad[16];
 };
-static_assert(sizeof(struct hk_storage_image_descriptor) == 64,
+static_assert(sizeof(struct hk_storage_image_descriptor) == 48,
               "hk_storage_image_descriptor has no holes");
 
 /* This has to match nir_address_format_64bit_bounded_global */

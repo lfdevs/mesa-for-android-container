@@ -74,9 +74,12 @@ PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct nvk_bindless_cbuf {
    uint64_t base_addr_shift_4:45;
    uint64_t size_shift_4:19;
+   /* For descriptor buffers, avoid returning garbage data.
+    * The descriptor payload must be invariant. */
+   uint64_t padding;
 };
 PRAGMA_DIAGNOSTIC_POP
-static_assert(sizeof(struct nvk_bindless_cbuf) == 8,
+static_assert(sizeof(struct nvk_bindless_cbuf) == 16,
               "nvk_bindless_cbuf has no holes");
 
 /* Hopper+ uses a new cbuf format */
@@ -85,9 +88,12 @@ PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct nvk_bindless_cbuf_2 {
    uint64_t base_addr_shift_6:51;
    uint64_t size_shift_4:13;
+   /* For descriptor buffers, avoid returning garbage data.
+    * The descriptor payload must be invariant. */
+   uint64_t padding;
 };
 PRAGMA_DIAGNOSTIC_POP
-static_assert(sizeof(struct nvk_bindless_cbuf_2) == 8,
+static_assert(sizeof(struct nvk_bindless_cbuf_2) == 16,
               "nvk_bindless_cbuf_2 has no holes");
 
 /* This has to match nir_address_format_64bit_bounded_global */

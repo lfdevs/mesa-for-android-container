@@ -63,7 +63,7 @@ struct vpe_video_processor {
 
     uint8_t bufs_num;
     uint8_t cur_buf;
-    struct rvid_buffer *emb_buffers;
+    struct si_resource **emb_buffers;
 
     /* VPE HW version */
     uint8_t ver_major;
@@ -78,6 +78,8 @@ struct vpe_video_processor {
 
     struct pipe_surface src_surfaces[VL_MAX_SURFACES];
     struct pipe_surface dst_surfaces[VL_MAX_SURFACES];
+    struct pipe_video_buffer *src_buffer;
+    struct pipe_video_buffer *dst_buffer;
 
     /* For HDR content display */
     void *gm_handle;

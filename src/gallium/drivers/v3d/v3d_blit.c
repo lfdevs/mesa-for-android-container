@@ -31,6 +31,9 @@
 #include "broadcom/common/v3d_tiling.h"
 #include "broadcom/common/v3d_tfu.h"
 
+#define V3D_VERSION 42
+#include "v3dx_format_table.h"
+
 /**
  * The param @op_blit is used to tell if we are saving state for blitter_blit
  * (if true) or blitter_clear (if false). If other blitter functions are used
@@ -42,7 +45,7 @@ void
 v3d_blitter_save(struct v3d_context *v3d, enum v3d_blitter_op op)
 {
         util_blitter_save_fragment_constant_buffer_slot(v3d->blitter,
-                                                        v3d->constbuf[PIPE_SHADER_FRAGMENT].cb);
+                                                        v3d->constbuf[MESA_SHADER_FRAGMENT].cb);
         util_blitter_save_vertex_buffers(v3d->blitter, v3d->vertexbuf.vb, v3d->vertexbuf.count);
         util_blitter_save_vertex_elements(v3d->blitter, v3d->vtx);
         util_blitter_save_vertex_shader(v3d->blitter, v3d->prog.bind_vs);
@@ -65,11 +68,11 @@ v3d_blitter_save(struct v3d_context *v3d, enum v3d_blitter_op op)
         if (op & V3D_SAVE_TEXTURES) {
                 util_blitter_save_scissor(v3d->blitter, &v3d->scissor);
                 util_blitter_save_fragment_sampler_states(v3d->blitter,
-                                                          v3d->tex[PIPE_SHADER_FRAGMENT].num_samplers,
-                                                          (void **)v3d->tex[PIPE_SHADER_FRAGMENT].samplers);
+                                                          v3d->tex[MESA_SHADER_FRAGMENT].num_samplers,
+                                                          (void **)v3d->tex[MESA_SHADER_FRAGMENT].samplers);
                 util_blitter_save_fragment_sampler_views(v3d->blitter,
-                                                         v3d->tex[PIPE_SHADER_FRAGMENT].num_textures,
-                                                         v3d->tex[PIPE_SHADER_FRAGMENT].textures);
+                                                         v3d->tex[MESA_SHADER_FRAGMENT].num_textures,
+                                                         v3d->tex[MESA_SHADER_FRAGMENT].textures);
         }
 
         if (!(op & V3D_DISABLE_RENDER_COND)) {
@@ -347,11 +350,20 @@ check_tlb_blit_ok(struct v3d_device_info *devinfo, struct pipe_blit_info *info)
             v3d_get_rt_format(devinfo, info->dst.format))
                 return false;
 
+        /* We can not support tlb copies between different formats with
+         * the same internal format if either format is emulated in shaders.
+         */
+        if ((info->src.format != info->dst.format) &&
+            (v3d_rt_format_is_emulated(info->src.format) ||
+             v3d_rt_format_is_emulated(info->dst.format))) {
+                return false;
+        }
+
         bool is_msaa_resolve = (info->src.resource->nr_samples > 1 &&
                                 info->dst.resource->nr_samples < 2);
 
         if (is_msaa_resolve &&
-            !v3d_format_supports_tlb_msaa_resolve(devinfo, info->src.format))
+            !v3d_format_supports_tlb_resolve_and_blend(devinfo, info->src.format))
                 return false;
 
         return true;
@@ -560,9 +572,9 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
          * This should be fine because we only get here if the src and dst boxes
          * match, so we know the blit involves the same tiles on both surfaces.
          */
-        uint16_t dst_width, dst_height;
+        unsigned dst_width, dst_height;
         pipe_surface_size(&dst_surf, &dst_width, &dst_height);
-        uint16_t src_width, src_height;
+        unsigned src_width, src_height;
         pipe_surface_size(&src_surf, &src_width, &src_height);
         job->draw_width = MIN2(dst_width, src_width);
         job->draw_height = MIN2(dst_height, src_height);
@@ -614,7 +626,7 @@ v3d_get_sand8_vs(struct pipe_context *pctx)
                 return v3d->sand8_blit_vs;
 
         const struct nir_shader_compiler_options *options =
-                pscreen->nir_options[PIPE_SHADER_VERTEX];
+                pscreen->nir_options[MESA_SHADER_VERTEX];
 
         nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX,
                                                        options,
@@ -661,7 +673,7 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
                 return *cached_shader;
 
         const struct nir_shader_compiler_options *options =
-                pscreen->nir_options[PIPE_SHADER_FRAGMENT];
+                pscreen->nir_options[MESA_SHADER_FRAGMENT];
 
         nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
                                                        options, "%s", name);
@@ -678,6 +690,7 @@ v3d_get_sand8_fs(struct pipe_context *pctx, int cpp)
                 nir_variable_create(b.shader, nir_var_shader_out,
                                     vec4, "f_color");
         color_out->data.location = FRAG_RESULT_COLOR;
+        b.shader->info.outputs_written |= BITFIELD_BIT(FRAG_RESULT_COLOR);
 
         nir_variable *pos_in =
                 nir_variable_create(b.shader, nir_var_shader_in, vec4, "pos");
@@ -825,7 +838,7 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
          * size now we are using a cpp=4 format. Next dimension take into
          * account the UIF microtile layouts.
          */
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(&dst_surf, &width, &height);
         width = align(width, 8) / 2;
         if (src->cpp == 1)
@@ -837,12 +850,12 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 .buffer_size = sizeof(sand8_stride),
         };
 
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, false,
+        pctx->set_constant_buffer(pctx, MESA_SHADER_FRAGMENT, 0,
                                   &cb_uniforms);
         struct pipe_constant_buffer saved_fs_cb1 = { 0 };
         pipe_resource_reference(&saved_fs_cb1.buffer,
-                                v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1].buffer);
-        memcpy(&saved_fs_cb1, &v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1],
+                                v3d->constbuf[MESA_SHADER_FRAGMENT].cb[1].buffer);
+        memcpy(&saved_fs_cb1, &v3d->constbuf[MESA_SHADER_FRAGMENT].cb[1],
                sizeof(struct pipe_constant_buffer));
         struct pipe_constant_buffer cb_src = {
                 .buffer = info->src.resource,
@@ -850,13 +863,13 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 .buffer_size = (src->bo->size -
                                 src->slices[info->src.level].offset),
         };
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, false,
+        pctx->set_constant_buffer(pctx, MESA_SHADER_FRAGMENT, 1,
                                   &cb_src);
         /* Unbind the textures, to make sure we don't try to recurse into the
          * shadow blit.
          */
-        pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT, 0, 0, 0, NULL);
-        pctx->bind_sampler_states(pctx, PIPE_SHADER_FRAGMENT, 0, 0, NULL);
+        pctx->set_sampler_views(pctx, MESA_SHADER_FRAGMENT, 0, 0, 0, NULL);
+        pctx->bind_sampler_states(pctx, MESA_SHADER_FRAGMENT, 0, 0, NULL);
 
         util_blitter_custom_shader(v3d->blitter, &dst_surf, width, height,
                                    v3d_get_sand8_vs(pctx),
@@ -866,7 +879,7 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         util_blitter_restore_constant_buffer_state(v3d->blitter);
 
         /* Restore cb1 (util_blitter doesn't handle this one). */
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, true,
+        pctx->set_constant_buffer(pctx, MESA_SHADER_FRAGMENT, 1,
                                   &saved_fs_cb1);
 
         pipe_resource_reference(&dst_surf.texture, NULL);
@@ -891,7 +904,7 @@ v3d_get_sand30_vs(struct pipe_context *pctx)
                 return v3d->sand30_blit_vs;
 
         const struct nir_shader_compiler_options *options =
-                pscreen->nir_options[PIPE_SHADER_VERTEX];
+                pscreen->nir_options[MESA_SHADER_VERTEX];
 
         nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX,
                                                        options,
@@ -966,7 +979,7 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
                 return  v3d->sand30_blit_fs;
 
         const struct nir_shader_compiler_options *options =
-                pscreen->nir_options[PIPE_SHADER_FRAGMENT];
+                pscreen->nir_options[MESA_SHADER_FRAGMENT];
 
         nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
                                                        options,
@@ -986,6 +999,7 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
                                                       nir_var_shader_out,
                                                       glsl_uvec4, "f_color");
         color_out->data.location = FRAG_RESULT_COLOR;
+        b.shader->info.outputs_written |= BITFIELD_BIT(FRAG_RESULT_COLOR);
 
         nir_variable *pos_in =
                 nir_variable_create(b.shader, nir_var_shader_in, vec4, "pos");
@@ -1132,7 +1146,7 @@ v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
          * size now we are using a cpp=8 format. Next dimension take into
          * account the UIF microtile layouts.
          */
-        uint16_t width, height;
+        unsigned width, height;
         pipe_surface_size(&dst_surf, &width, &height);
         height /= 2;
         width = align(width, 8);
@@ -1144,13 +1158,13 @@ v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 .buffer_size = sizeof(sand30_stride),
         };
 
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, false,
+        pctx->set_constant_buffer(pctx, MESA_SHADER_FRAGMENT, 0,
                                   &cb_uniforms);
 
         struct pipe_constant_buffer saved_fs_cb1 = { 0 };
         pipe_resource_reference(&saved_fs_cb1.buffer,
-                                v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1].buffer);
-        memcpy(&saved_fs_cb1, &v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1],
+                                v3d->constbuf[MESA_SHADER_FRAGMENT].cb[1].buffer);
+        memcpy(&saved_fs_cb1, &v3d->constbuf[MESA_SHADER_FRAGMENT].cb[1],
                sizeof(struct pipe_constant_buffer));
         struct pipe_constant_buffer cb_src = {
                 .buffer = info->src.resource,
@@ -1158,14 +1172,14 @@ v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 .buffer_size = (src->bo->size -
                                 src->slices[info->src.level].offset),
         };
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, false,
+        pctx->set_constant_buffer(pctx, MESA_SHADER_FRAGMENT, 1,
                                   &cb_src);
         /* Unbind the textures, to make sure we don't try to recurse into the
          * shadow blit.
          */
-        pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT, 0, 0, 0,
+        pctx->set_sampler_views(pctx, MESA_SHADER_FRAGMENT, 0, 0, 0,
                                 NULL);
-        pctx->bind_sampler_states(pctx, PIPE_SHADER_FRAGMENT, 0, 0, NULL);
+        pctx->bind_sampler_states(pctx, MESA_SHADER_FRAGMENT, 0, 0, NULL);
 
         util_blitter_custom_shader(v3d->blitter, &dst_surf, width, height,
                                    v3d_get_sand30_vs(pctx),
@@ -1175,7 +1189,7 @@ v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         util_blitter_restore_constant_buffer_state(v3d->blitter);
 
         /* Restore cb1 (util_blitter doesn't handle this one). */
-        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, true,
+        pctx->set_constant_buffer(pctx, MESA_SHADER_FRAGMENT, 1,
                                   &saved_fs_cb1);
         pipe_resource_reference(&dst_surf.texture, NULL);
 

@@ -30,7 +30,7 @@ pub enum ShaderType {
 impl From<&ShaderStageInfo> for ShaderType {
     fn from(value: &ShaderStageInfo) -> Self {
         match value {
-            ShaderStageInfo::Vertex => ShaderType::Vertex,
+            ShaderStageInfo::Vertex(_) => ShaderType::Vertex,
             ShaderStageInfo::Fragment(_) => ShaderType::Fragment,
             ShaderStageInfo::Geometry(_) => ShaderType::Geometry,
             ShaderStageInfo::TessellationInit(_) => {
@@ -228,6 +228,15 @@ impl ShaderProgramHeader {
     pub fn set_gs_passthrough_enable(&mut self, gs_passthrough_enable: bool) {
         assert!(self.shader_type == ShaderType::Geometry);
         self.set_bit(24, gs_passthrough_enable);
+    }
+
+    #[inline]
+    pub fn set_isbe_space_sharing_enable(
+        &mut self,
+        isbe_space_sharing_enable: bool,
+    ) {
+        assert!(self.shader_type == ShaderType::Vertex);
+        self.set_bit(25, isbe_space_sharing_enable);
     }
 
     #[inline]
@@ -535,6 +544,9 @@ pub fn encode_header(
     }
 
     match &shader_info.stage {
+        ShaderStageInfo::Vertex(stage) => {
+            sph.set_isbe_space_sharing_enable(stage.isbe_space_sharing_enable);
+        }
         ShaderStageInfo::Fragment(stage) => {
             let zs_self_dep = fs_key.is_some_and(|key| key.zs_self_dep);
             sph.set_kills_pixels(stage.uses_kill || zs_self_dep);

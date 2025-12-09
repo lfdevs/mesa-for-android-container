@@ -57,13 +57,17 @@ EXPORT_DONE PIXEL 0 R2000.xyzw
    expect.push_back(new AluInstr(op1_mov,
                                  new Register(2000, 0, pin_group),
                                  new LiteralConstant(0x38000000),
-                                 {alu_write}));
+                                 AluInstr::write));
 
-   expect.push_back(new AluInstr(
-      op1_mov, new Register(2000, 1, pin_group), new LiteralConstant(0x0), {alu_write}));
+   expect.push_back(new AluInstr(op1_mov,
+                                 new Register(2000, 1, pin_group),
+                                 new LiteralConstant(0x0),
+                                 AluInstr::write));
 
-   expect.push_back(new AluInstr(
-      op1_mov, new Register(2000, 2, pin_group), new LiteralConstant(0x0), {alu_write}));
+   expect.push_back(new AluInstr(op1_mov,
+                                 new Register(2000, 2, pin_group),
+                                 new LiteralConstant(0x0),
+                                 AluInstr::write));
 
    expect.push_back(new AluInstr(op1_mov,
                                  new Register(2000, 3, pin_group),

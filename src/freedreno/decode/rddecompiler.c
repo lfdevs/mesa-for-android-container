@@ -415,16 +415,16 @@ decompile_commands(uint32_t *dwords, uint32_t sizedwords, int level, uint32_t *c
                                    "CP_SET_DRAW_STATE", level);
                }
             }
-         } else if (val == CP_CONTEXT_REG_BUNCH || val == CP_CONTEXT_REG_BUNCH2) {
+         } else if (val == CP_CONTEXT_REG_BUNCH || val == CP_NON_CONTEXT_REG_BUNCH) {
             uint32_t *dw = dwords + 1;
             uint32_t cnt = count - 1;
 
-            if (val == CP_CONTEXT_REG_BUNCH2) {
+            if (val == CP_NON_CONTEXT_REG_BUNCH) {
                if (options.no_reg_bunch) {
-                  printlvl(level, "// CP_CONTEXT_REG_BUNCH2\n");
+                  printlvl(level, "// CP_NON_CONTEXT_REG_BUNCH\n");
                   printlvl(level, "{\n");
                } else {
-                  printlvl(level, "pkt7(cs, %s, %u);\n", "CP_CONTEXT_REG_BUNCH2", cnt);
+                  printlvl(level, "pkt7(cs, %s, %u);\n", "CP_NON_CONTEXT_REG_BUNCH", cnt);
                   printlvl(level, "{\n");
                   printlvl(level + 1, "pkt(cs, 0x%x);\n", dw[0]);
                   printlvl(level + 1, "pkt(cs, 0x%x);\n", dw[1]);

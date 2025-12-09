@@ -66,7 +66,7 @@ gm200_validate_sample_locations(struct nvc0_context *nvc0, unsigned ms)
             unsigned ri = (pixel_y * grid_width + pixel_x % grid_width);
             ri = ri * ms + sample;
             sample_locations[wi][0] = locations[ri] & 0xf;
-            sample_locations[wi][1] = 16 - (locations[ri] >> 4);
+            sample_locations[wi][1] = locations[ri] >> 4;
          }
       }
    } else {

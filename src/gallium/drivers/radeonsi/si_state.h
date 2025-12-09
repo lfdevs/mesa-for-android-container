@@ -15,8 +15,8 @@
 extern "C" {
 #endif
 
-#define SI_NUM_GRAPHICS_SHADERS (PIPE_SHADER_FRAGMENT + 1)
-#define SI_NUM_SHADERS          (PIPE_SHADER_COMPUTE + 1)
+#define SI_NUM_GRAPHICS_SHADERS (MESA_SHADER_FRAGMENT + 1)
+#define SI_NUM_SHADERS          (MESA_SHADER_MESH + 1)
 
 #define SI_NUM_VERTEX_BUFFERS SI_MAX_ATTRIBS
 #define SI_NUM_SAMPLERS       32 /* OpenGL textures units per shader */
@@ -33,6 +33,7 @@ struct si_texture;
 struct si_qbo_state;
 struct legacy_surf_level;
 struct pb_slab_entry;
+struct radeon_cmdbuf;
 
 struct si_state_blend {
    struct si_pm4_state pm4;
@@ -429,6 +430,11 @@ enum si_tracked_reg
    SI_TRACKED_COMPUTE_DISPATCH_SCRATCH_BASE_LO, /* GFX11+ */
    SI_TRACKED_COMPUTE_DISPATCH_SCRATCH_BASE_HI, /* GFX11+ */
 
+   /* 3 consecutive registers. */
+   SI_TRACKED_SPI_SHADER_GS_MESHLET_DIM,       /* GFX11+ */
+   SI_TRACKED_SPI_SHADER_GS_MESHLET_EXP_ALLOC, /* GFX11+ */
+   SI_TRACKED_SPI_SHADER_GS_MESHLET_CTRL,      /* GFX12+ */
+
    SI_NUM_ALL_TRACKED_REGS,
 };
 
@@ -497,11 +503,11 @@ enum
 
 #define SI_DESCS_INTERNAL      0
 #define SI_DESCS_FIRST_SHADER  1
-#define SI_DESCS_FIRST_COMPUTE (SI_DESCS_FIRST_SHADER + PIPE_SHADER_COMPUTE * SI_NUM_SHADER_DESCS)
+#define SI_DESCS_FIRST_COMPUTE (SI_DESCS_FIRST_SHADER + MESA_SHADER_COMPUTE * SI_NUM_SHADER_DESCS)
 #define SI_NUM_DESCS           (SI_DESCS_FIRST_SHADER + SI_NUM_SHADERS * SI_NUM_SHADER_DESCS)
 
 #define SI_DESCS_SHADER_MASK(name)                                                                 \
-   BITFIELD_RANGE(SI_DESCS_FIRST_SHADER + PIPE_SHADER_##name * SI_NUM_SHADER_DESCS,             \
+   BITFIELD_RANGE(SI_DESCS_FIRST_SHADER + MESA_SHADER_##name * SI_NUM_SHADER_DESCS,             \
                      SI_NUM_SHADER_DESCS)
 
 static inline unsigned si_const_and_shader_buffer_descriptors_idx(unsigned shader)
@@ -576,7 +582,7 @@ struct si_buffer_resources {
    } while (0)
 
 /* si_descriptors.c */
-void si_get_inline_uniform_state(union si_shader_key *key, enum pipe_shader_type shader,
+void si_get_inline_uniform_state(union si_shader_key *key, mesa_shader_stage shader,
                                  bool *inline_uniforms, uint32_t **inlined_values);
 void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture *tex,
                                     const struct legacy_surf_level *base_level_info,
@@ -585,14 +591,14 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
                                     bool is_stencil, uint16_t access, uint32_t * restrict state);
 void si_update_ps_colorbuf0_slot(struct si_context *sctx);
 void si_force_disable_ps_colorbuf0_slot(struct si_context *sctx);
-void si_invalidate_inlinable_uniforms(struct si_context *sctx, enum pipe_shader_type shader);
+void si_invalidate_inlinable_uniforms(struct si_context *sctx, mesa_shader_stage shader);
 void si_get_pipe_constant_buffer(struct si_context *sctx, uint shader, uint slot,
                                  struct pipe_constant_buffer *cbuf);
-void si_set_shader_buffers(struct pipe_context *ctx, enum pipe_shader_type shader,
+void si_set_shader_buffers(struct pipe_context *ctx, mesa_shader_stage shader,
                            unsigned start_slot, unsigned count,
                            const struct pipe_shader_buffer *sbuffers,
                            unsigned writable_bitmask, bool internal_blit);
-void si_get_shader_buffers(struct si_context *sctx, enum pipe_shader_type shader, uint start_slot,
+void si_get_shader_buffers(struct si_context *sctx, mesa_shader_stage shader, uint start_slot,
                            uint count, struct pipe_shader_buffer *sbuf);
 void si_set_ring_buffer(struct si_context *sctx, uint slot, struct pipe_resource *buffer,
                         unsigned stride, unsigned num_records, bool add_tid, bool swizzle,
@@ -600,14 +606,17 @@ void si_set_ring_buffer(struct si_context *sctx, uint slot, struct pipe_resource
 void si_init_all_descriptors(struct si_context *sctx);
 void si_release_all_descriptors(struct si_context *sctx);
 void si_compute_resources_add_all_to_bo_list(struct si_context *sctx);
+void si_mesh_resources_add_all_to_bo_list(struct si_context *sctx);
 int si_gfx_resources_check_encrypted(struct si_context *sctx);
 bool si_compute_resources_check_encrypted(struct si_context *sctx);
 void si_shader_pointers_mark_dirty(struct si_context *sctx);
 void si_add_all_descriptors_to_bo_list(struct si_context *sctx);
 void si_update_all_texture_descriptors(struct si_context *sctx);
+void si_set_user_data_base(struct si_context *sctx, unsigned shader, uint32_t new_base);
 void si_shader_change_notify(struct si_context *sctx);
 void si_update_needs_color_decompress_masks(struct si_context *sctx);
 void si_emit_compute_shader_pointers(struct si_context *sctx);
+void si_emit_task_shader_pointers(struct si_context *sctx);
 void si_set_internal_const_buffer(struct si_context *sctx, uint slot,
                                   const struct pipe_constant_buffer *input);
 void si_set_internal_shader_buffer(struct si_context *sctx, uint slot,
@@ -629,6 +638,7 @@ void si_init_state_compute_functions(struct si_context *sctx);
 void si_init_state_functions(struct si_context *sctx);
 void si_init_screen_state_functions(struct si_screen *sscreen);
 bool si_init_gfx_preamble_state(struct si_context *sctx);
+void si_init_compute_preamble_state(struct si_context *sctx, struct si_pm4_state *pm4);
 void si_make_buffer_descriptor(struct si_screen *screen, struct si_resource *buf,
                                enum pipe_format format, unsigned offset, unsigned num_elements,
                                uint32_t *state);
@@ -652,7 +662,7 @@ void si_init_screen_live_shader_cache(struct si_screen *sscreen);
 void si_init_shader_functions(struct si_context *sctx);
 bool si_init_shader_cache(struct si_screen *sscreen);
 void si_destroy_shader_cache(struct si_screen *sscreen);
-void si_schedule_initial_compile(struct si_context *sctx, gl_shader_stage stage,
+void si_schedule_initial_compile(struct si_context *sctx, mesa_shader_stage stage,
                                  struct util_queue_fence *ready_fence,
                                  struct si_compiler_ctx_state *compiler_ctx_state, void *job,
                                  util_queue_execute_func execute);
@@ -679,15 +689,20 @@ bool si_update_spi_tmpring_size(struct si_context *sctx, unsigned bytes);
 bool si_set_tcs_to_fixed_func_shader(struct si_context *sctx);
 void si_update_tess_io_layout_state(struct si_context *sctx);
 void si_update_common_shader_state(struct si_context *sctx, struct si_shader_selector *sel,
-                                   enum pipe_shader_type type);
+                                   mesa_shader_stage type);
 
 /* si_state_draw.cpp */
-void si_cp_dma_prefetch(struct si_context *sctx, struct pipe_resource *buf,
+void si_cp_dma_prefetch(struct radeon_cmdbuf *cs,
+                        enum amd_gfx_level gfx_level,
+                        struct pipe_resource *buf,
                         unsigned offset, unsigned size);
 void si_set_vertex_buffer_descriptor(struct si_screen *sscreen, struct si_vertex_elements *velems,
                                      const struct pipe_vertex_buffer *vb, unsigned element_index,
                                      uint32_t *out);
-void si_emit_buffered_compute_sh_regs(struct si_context *sctx);
+void si_emit_buffered_compute_sh_regs(struct si_context *sctx, struct radeon_cmdbuf *cs);
+void si_emit_buffered_gfx_sh_regs_for_mesh(struct si_context *sctx);
+void si_emit_rasterizer_prim_state_for_mesh(struct si_context *sctx);
+bool si_update_shaders_for_mesh(struct si_context *sctx, struct si_shader *old_vs, struct si_shader *new_vs);
 void si_init_draw_functions_GFX6(struct si_context *sctx);
 void si_init_draw_functions_GFX7(struct si_context *sctx);
 void si_init_draw_functions_GFX8(struct si_context *sctx);

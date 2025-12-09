@@ -448,7 +448,7 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx, struct pipe_resour
          else
             uploader = sctx->b.stream_uploader;
 
-         u_upload_alloc(uploader, 0, box->width + (box->x % SI_MAP_BUFFER_ALIGNMENT),
+         u_upload_alloc_ref(uploader, 0, box->width + (box->x % SI_MAP_BUFFER_ALIGNMENT),
                         sctx->screen->info.tcc_cache_line_size, &offset,
                         (struct pipe_resource **)&staging, (void **)&data);
 

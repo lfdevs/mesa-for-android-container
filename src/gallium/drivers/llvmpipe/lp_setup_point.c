@@ -115,7 +115,7 @@ texcoord_coef(struct lp_setup_context *setup,
 
    assert(i < 4);
 
-   const float pixel_offset = setup->multisample ? 0.0 : setup->pixel_offset;
+   const float pixel_offset = setup->pixel_offset;
    if (i == 0) {
       float dadx = FIXED_ONE / (float)info->dx12;
       float dady =  0.0f;
@@ -343,7 +343,7 @@ try_setup_point(struct lp_setup_context *setup,
     * slightly different rounding.
     */
    const int adj = (setup->bottom_edge_rule != 0) ? 1 : 0;
-   const float pixel_offset = setup->multisample ? 0.0 : setup->pixel_offset;
+   const float pixel_offset = setup->pixel_offset;
    struct lp_scene *scene = setup->scene;
    int x[2], y[2];
 

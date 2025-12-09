@@ -6,6 +6,7 @@ dEQP-VK.cooperative_vector.matmul.matrixmul2addmul2.sint32_sint8_sint8_sint32.wo
 dEQP-VK.glsl.matrix.add.uniform.highp_mat4x3_float_fragment
 
 dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1024
+dEQP-VK.memory_model.message_passing.ext.f32.coherent.atomic_atomic.atomicwrite.device.payload_nonlocal.image.guard_nonlocal.image.vert
 dEQP-VK.memory_model.write_after_read.ext.u32.coherent.atomic_atomic.atomicrmw.queuefamily.payload_local.image.guard_local.buffer.frag
 dEQP-VK.memory_model.write_after_read.ext.u32.coherent.fence_atomic.atomicwrite.device.payload_local.image.guard_local.buffer.frag
 
@@ -25,6 +26,7 @@ dEQP-VK.pipeline.shader_object_unlinked_spirv.sampler.view_type.*reduce.*
 
 dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.single_buffer_read_only_graphics.opselect_vec4arr_second_input_tessc
 
+dEQP-VK.synchronization.global_priority_transition.low.semaphore.no_modifiers.from_graphics_to_compute
 dEQP-VK.synchronization.global_priority_transition.preemption.compute_low_to_compute_high
 dEQP-VK.synchronization.global_priority_transition.preemption.compute_low_to_compute_realtime
 dEQP-VK.synchronization.global_priority_transition.preemption.compute_low_to_exclusive-compute_high

@@ -125,17 +125,50 @@ PROP WRITE_ALL_COLORS:1
 PROP COLOR_EXPORT_MASK:15
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SHADER
-ALU MOV S0.x@free : L[0xbf000000] {WL}
-ALU MOV S1.x@free : I[0] {WL}
+ALU MOV S0.x@free : L[0xbf000000] {W}
+ALU MOV S1.x@free : I[0] {W}
 ALU MOV S2.x : KC0[0].x {W}
 ALU MOV S2.y : KC0[0].y {W}
 ALU MOV S2.z : KC0[0].z {W}
-ALU MOV S2.w : KC0[0].w {WL}
-ALU ADD S3.x@free : S0.x@free S2.x {WL}
+ALU MOV S2.w : KC0[0].w {W}
+ALU ADD S3.x@free : S0.x@free S2.x {W}
 ALU MOV S4.x@group : S3.x@free {W}
 ALU MOV S4.y@group : S2.y {W}
 ALU MOV S4.z@group : S2.z {W}
-ALU MOV S4.w@group : S2.w {WL}
+ALU MOV S4.w@group : S2.w {W}
+EXPORT_DONE PIXEL 0 S4.xyzw
+)";
+
+const char *add_add_1_expect_from_nir_scheduled =
+   R"(FS
+CHIPCLASS EVERGREEN
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP WRITE_ALL_COLORS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
+SHADER
+ALU_GROUP_BEGIN
+ALU MOV S0.x@chan : L[0xbf000000] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+ALU MOV S1.x@chan : I[0] {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+ALU MOV S2.x@chan : KC0[0].x {W}
+ALU MOV S2.y@chan : KC0[0].y {W}
+ALU MOV S2.z@chan : KC0[0].z {W}
+ALU MOV S2.w@chan : KC0[0].w {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+ALU ADD S3.x@chan : S0.x@free S2.x@chan {WL}
+ALU_GROUP_END
+ALU_GROUP_BEGIN
+ALU MOV S4.x@chgr : S3.x@chan {W}
+ALU MOV S4.y@chgr : S2.y@chan {W}
+ALU MOV S4.z@chgr : S2.z@chan {W}
+ALU MOV S4.w@chgr : S2.w@chan {WL}
+ALU_GROUP_END
 EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
@@ -149,17 +182,17 @@ PROP WRITE_ALL_COLORS:1
 PROP COLOR_EXPORT_MASK:15
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SHADER
-ALU MOV S0.x@free : L[0xbf000000] {WL}
-ALU MOV S1.x@free : I[0] {WL}
+ALU MOV S0.x@free : L[0xbf000000] {W}
+ALU MOV S1.x@free : I[0] {W}
 ALU MOV S2.x : KC0[0].x {W}
 ALU MOV S2.y : KC0[0].y {W}
 ALU MOV S2.z : KC0[0].z {W}
-ALU MOV S2.w : KC0[0].w {WL}
-ALU ADD S3.x@free : L[0xbf000000] KC0[0].x {WL}
+ALU MOV S2.w : KC0[0].w {W}
+ALU ADD S3.x@free : L[0xbf000000] KC0[0].x {W}
 ALU MOV S4.x@group : S3.x@free {W}
 ALU MOV S4.y@group : KC0[0].y {W}
 ALU MOV S4.z@group : KC0[0].z {W}
-ALU MOV S4.w@group : KC0[0].w {WL}
+ALU MOV S4.w@group : KC0[0].w {W}
 EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
@@ -173,11 +206,11 @@ PROP WRITE_ALL_COLORS:1
 PROP COLOR_EXPORT_MASK:15
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SHADER
-ALU ADD S3.x@free : L[0xbf000000] KC0[0].x {WL}
+ALU ADD S3.x@free : L[0xbf000000] KC0[0].x {W}
 ALU MOV S4.x@group : S3.x@free {W}
 ALU MOV S4.y@group : KC0[0].y {W}
 ALU MOV S4.z@group : KC0[0].z {W}
-ALU MOV S4.w@group : KC0[0].w {WL}
+ALU MOV S4.w@group : KC0[0].w {W}
 EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
@@ -195,7 +228,7 @@ SHADER
 ALU ADD S4.x@group : L[0xbf000000] KC0[0].x {W}
 ALU MOV S4.y@group : KC0[0].y {W}
 ALU MOV S4.z@group : KC0[0].z {W}
-ALU MOV S4.w@group : KC0[0].w {WL}
+ALU MOV S4.w@group : KC0[0].w {W}
 EXPORT_DONE PIXEL 0 S4.xyzw
 )";
 
@@ -378,36 +411,36 @@ INPUT LOC:0 VARYING_SLOT:32 INTERP:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SYSVALUES R0.xy__
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
 ALU INTERP_ZW  __.x@chan : R0.y@fully Param0.x VEC_210 {}
 ALU INTERP_ZW  __.y@chan : R0.x@fully Param0.y VEC_210 {}
-ALU INTERP_ZW  S1025.z@chan : R0.y@fully Param0.z VEC_210 {W}
+ALU INTERP_ZW  __.z@chan : R0.y@fully Param0.z VEC_210 {}
 ALU INTERP_ZW  S1025.w@chan : R0.x@fully Param0.w VEC_210 {W}
-ALU MOV S1024.x : I[0] {WL}
+ALU MOV __.x : I[0] {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU INTERP_XY  S1025.x@chan : R0.y@fully Param0.x VEC_210 {W}
-ALU INTERP_XY  S1025.y@chan : R0.x@fully Param0.y VEC_210 {W}
+ALU INTERP_XY  __.x@chan : R0.y@fully Param0.x VEC_210 {}
+ALU INTERP_XY  __.y@chan : R0.x@fully Param0.y VEC_210 {}
 ALU INTERP_XY  __.z@chan : R0.y@fully Param0.z VEC_210 {}
 ALU INTERP_XY  __.w@chan : R0.x@fully Param0.w VEC_210 {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU FLT_TO_INT S1026.x : S1025.x@chan {W}
-ALU FLT_TO_INT S1026.y : S1025.y@chan {W}
-ALU FLT_TO_INT S1026.z : S1025.w@chan {WL}
+ALU FLT_TO_INT __.x : I[PV].x@chan {}
+ALU FLT_TO_INT __.y : I[PV].y@chan {}
+ALU FLT_TO_INT __.z : S1025.w@chan {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU MOV S1027.x : S1026.x {W}
-ALU MOV S1027.y : S1026.y {W}
-ALU MOV S1028.w@group : S1026.z {WL}
+ALU MOV __.x : I[PV].x {}
+ALU MOV __.y : I[PV].y {}
+ALU MOV S1028.w@group : I[PV].z {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU MOV S1028.x@group : S1027.x {W}
-ALU MOV S1028.y@group : S1027.y {WL}
+ALU MOV S1028.x@group : I[PV].x {W}
+ALU MOV S1028.y@group : I[PV].y {WL}
 ALU_GROUP_END
 BLOCK_END
-BLOCK_START
+BLOCK_START TEX
 TEX LD S1029.xyzw : S1028.xy_w RID:0 SID:18 NNNN
 BLOCK_END
 BLOCK_START
@@ -463,41 +496,40 @@ INPUT LOC:0 VARYING_SLOT:32 INTERP:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SYSVALUES R0.xy__
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
 ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
 ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
-ALU INTERP_ZW S1025.z@chan : R0.y@fully Param0.z {W} VEC_210
+ALU INTERP_ZW __.z@chan : R0.y@fully Param0.z {} VEC_210
 ALU INTERP_ZW S1025.w@chan : R0.x@fully Param0.w {WL} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU INTERP_XY S1025.x@chan : R0.y@fully Param0.x {W} VEC_210
-ALU INTERP_XY S1025.y@chan : R0.x@fully Param0.y {W} VEC_210
+ALU INTERP_XY __.x@chan : R0.y@fully Param0.x {} VEC_210
+ALU INTERP_XY __.y@chan : R0.x@fully Param0.y {} VEC_210
 ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
 ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU FLT_TO_INT S1026.x : S1025.x@chan {W}
-ALU FLT_TO_INT S1026.y : S1025.y@chan {W}
-ALU FLT_TO_INT S1026.z : S1025.w@chan {WL}
+ALU FLT_TO_INT __.x : I[PV].x {}
+ALU FLT_TO_INT __.y : I[PV].y {}
+ALU FLT_TO_INT __.z : S1025.w@chan {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU MOV S1027.x : S1026.x {W}
-ALU MOV S1027.y : S1026.y {W}
-ALU MOV S1028.w@group : S1026.z {WL}
+ALU MOV __.x : I[PV].x {}
+ALU MOV __.y : I[PV].y {}
+ALU MOV S1028.w@group : I[PV].z {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU MOV S1028.x@group : S1027.x {W}
-ALU MOV S1028.y@group : S1027.y {WL}
+ALU MOV S1028.x@group : I[PV].x {W}
+ALU MOV S1028.y@group : I[PV].y {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
 ALU MOV S1024.x : I[0] {WL}
 ALU_GROUP_END
-BLOCK_START
-BLOCK_END
+BLOCK_START TEX
 TEX LD S1029.xyzw : S1028.xy_w RID:0 SID:18 NNNN
-BLOCK_START
 BLOCK_END
+BLOCK_START
 EXPORT_DONE PIXEL 0 S1029.xyzw
 BLOCK_END
 )";
@@ -513,26 +545,26 @@ INPUT LOC:0 VARYING_SLOT:32 INTERP:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SYSVALUES R0.xy__
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
 ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
 ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
-ALU INTERP_ZW S1025.z@chan : R0.y@fully Param0.z {W} VEC_210
+ALU INTERP_ZW __.z : R0.y@fully Param0.z {} VEC_210
 ALU INTERP_ZW S1025.w@chan : R0.x@fully Param0.w {WL} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU INTERP_XY S1025.x@chan : R0.y@fully Param0.x {W} VEC_210
-ALU INTERP_XY S1025.y@chan : R0.x@fully Param0.y {W} VEC_210
+ALU INTERP_XY __.x : R0.y@fully Param0.x {} VEC_210
+ALU INTERP_XY __.y : R0.x@fully Param0.y {} VEC_210
 ALU INTERP_XY __.z@chan : R0.y@fully Param0.z {} VEC_210
 ALU INTERP_XY __.w@chan : R0.x@fully Param0.w {L} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU FLT_TO_INT S1026.x@group : S1025.x@chan {W}
-ALU FLT_TO_INT S1026.y@group : S1025.y@chan {W}
+ALU FLT_TO_INT S1026.x@group : I[PV].x {W}
+ALU FLT_TO_INT S1026.y@group : I[PV].y {W}
 ALU FLT_TO_INT S1026.z@group : S1025.w@chan {WL}
 ALU_GROUP_END
 BLOCK_END
-BLOCK_START
+BLOCK_START TEX
 TEX LD S1029.xyzw : S1026.xy_z RID:0 SID:18 NNNN
 BLOCK_END
 BLOCK_START
@@ -1056,63 +1088,63 @@ OUTPUT LOC:1 VARYING_SLOT:1 MASK:15
 SYSVALUES R1.xyzw
 REGISTERS R2.x R3.x R4.x R5.x R6.x R7.x R8.x
 SHADER
-ALU MOV S9.x@free : I[0] {WL}
-ALU MOV S10.x@free : I[-1] {WL}
-ALU MOV S11.x@free : I[0] {WL}
-ALU MOV S12.x@free : I[1] {WL}
+ALU MOV S9.x@free : I[0] {W}
+ALU MOV S10.x@free : I[-1] {W}
+ALU MOV S11.x@free : I[0] {W}
+ALU MOV S12.x@free : I[1] {W}
 ALU MOV S13.x : I[1.0] {W}
 ALU MOV S13.y : I[1.0] {W}
 ALU MOV S13.z : I[0] {W}
-ALU MOV S13.w : I[1.0] {WL}
-ALU MOV S14.x@free : L[0x2] {WL}
-ALU MOV S15.x@free : KC0[0].x {WL}
-ALU SETE_INT S16.x@free : S15.x@free S12.x@free {WL}
+ALU MOV S13.w : I[1.0] {W}
+ALU MOV S14.x@free : L[0x2] {W}
+ALU MOV S15.x@free : KC0[0].x {W}
+ALU SETE_INT S16.x@free : S15.x@free S12.x@free {W}
 IF (( ALU PRED_SETNE_INT __.x@free : S16.x@free I[0] {LEP} PUSH_BEFORE ))
-  ALU MOV S18.x@free : KC0[2].x {WL}
-  ALU SETNE_INT S19.x@free : S18.x@free S12.x {WL}
+  ALU MOV S18.x@free : KC0[2].x {W}
+  ALU SETNE_INT S19.x@free : S18.x@free S12.x {W}
   IF (( ALU PRED_SETNE_INT __.y@free : S19.x@free I[0] {LEP} PUSH_BEFORE ))
-    ALU MOV R3.x : S12.x@free {WL}
-    ALU MOV R2.x : S9.x@free {WL}
+    ALU MOV R3.x : S12.x@free {W}
+    ALU MOV R2.x : S9.x@free {W}
     LOOP_BEGIN
-      ALU INT_TO_FLT R4.x : R2.x {WL}
-      ALU MOV S21.x@free : KC0[1].x {WL}
-      ALU SETNE_INT S22.x@free : S21.x@free S14.x@free {WL}
+      ALU INT_TO_FLT R4.x : R2.x {W}
+      ALU MOV S21.x@free : KC0[1].x {W}
+      ALU SETNE_INT S22.x@free : S21.x@free S14.x@free {W}
       IF (( ALU PRED_SETNE_INT __.z@free : S22.x@free I[0] {LEP} PUSH_BEFORE ))
         BREAK
       ENDIF
-      ALU ADD_INT R5.x@free : R3.x S12.x@free {WL}
-      ALU MOV R2.x : R3.x {WL}
-      ALU MOV R3.x : R5.x {WL}
+      ALU ADD_INT R5.x@free : R3.x S12.x@free {W}
+      ALU MOV R2.x : R3.x {W}
+      ALU MOV R3.x : R5.x {W}
     LOOP_END
-    ALU MOV S24.x@free : I[1.0] {WL}
-    ALU MOV R8.x : S24.x@free {WL}
-    ALU MOV R7.x : R8.x {WL}
-    ALU MOV R6.x : S10.x@free {WL}
+    ALU MOV S24.x@free : I[1.0] {W}
+    ALU MOV R8.x : S24.x@free {W}
+    ALU MOV R7.x : R8.x {W}
+    ALU MOV R6.x : S10.x@free {W}
   ELSE
-    ALU MOV S25.x@free : I[1.0] {WL}
-    ALU MOV R8.x : S25.x@free {WL}
-    ALU MOV R7.x : S9.x {WL}
-    ALU MOV R4.x : R8.x {WL}
-    ALU MOV R6.x : S11.x@free {WL}
+    ALU MOV S25.x@free : I[1.0] {W}
+    ALU MOV R8.x : S25.x@free {W}
+    ALU MOV R7.x : S9.x {W}
+    ALU MOV R4.x : R8.x {W}
+    ALU MOV R6.x : S11.x@free {W}
   ENDIF
 ELSE
-  ALU MOV S26.x@free : I[1.0] {WL}
-  ALU MOV R8.x : S26.x@free {WL}
-  ALU MOV R7.x : S9.x {WL}
-  ALU MOV R4.x : R8.x {WL}
-  ALU MOV R6.x : S10.x@free {WL}
+  ALU MOV S26.x@free : I[1.0] {W}
+  ALU MOV R8.x : S26.x@free {W}
+  ALU MOV R7.x : S9.x {W}
+  ALU MOV R4.x : R8.x {W}
+  ALU MOV R6.x : S10.x@free {W}
 ENDIF
-ALU CNDE_INT S27.x@free : R6.x S13.x R4.x {WL}
-ALU CNDE_INT S28.x@free : R6.x S13.y R7.x {WL}
-ALU CNDE_INT S29.x@free : R6.x S13.w R8.x {WL}
+ALU CNDE_INT S27.x@free : R6.x S13.x R4.x {W}
+ALU CNDE_INT S28.x@free : R6.x S13.y R7.x {W}
+ALU CNDE_INT S29.x@free : R6.x S13.w R8.x {W}
 EXPORT_DONE POS 0 R1.xyzw
-ALU MOV CLAMP S31.x@free : S27.x@free {WL}
-ALU MOV CLAMP S32.x@free : S28.x@free {WL}
-ALU MOV CLAMP S33.x@free : S29.x@free {WL}
+ALU MOV CLAMP S31.x@free : S27.x@free {W}
+ALU MOV CLAMP S32.x@free : S28.x@free {W}
+ALU MOV CLAMP S33.x@free : S29.x@free {W}
 ALU MOV S34.x@group : S31.x@free {W}
 ALU MOV S34.y@group : S32.x@free {W}
 ALU MOV S34.z@group : S9.x@free {W}
-ALU MOV S34.w@group : S33.x@free {WL}
+ALU MOV S34.w@group : S33.x@free {W}
 EXPORT_DONE PARAM 0 S34.xyzw
 )";
 
@@ -1128,39 +1160,39 @@ REGISTERS R2.x@free R3.x@free R4.x@free R5.x@free R6.x@free R7.x@free R8.x@free
 SHADER
 IF (( ALU PREDE_INT __.x@free : KC0[0].x I[1] {LEP} PUSH_BEFORE ))
   IF (( ALU PRED_SETNE_INT __.y@free : KC0[2].x I[1]  {LEP} PUSH_BEFORE ))
-    ALU MOV R3.x : I[1] {WL}
-    ALU MOV R2.x : I[0] {WL}
+    ALU MOV R3.x : I[1] {W}
+    ALU MOV R2.x : I[0] {W}
     LOOP_BEGIN
-      ALU INT_TO_FLT R4.x : R2.x {WL}
+      ALU INT_TO_FLT R4.x : R2.x {W}
       IF (( ALU PRED_SETNE_INT __.z@free : KC0[1].x L[0x2] {LEP} PUSH_BEFORE ))
         BREAK
       ENDIF
-      ALU ADD_INT R5.x : R3.x I[1] {WL}
-      ALU MOV R2.x : R3.x {WL}
-      ALU MOV R3.x : R5.x {WL}
+      ALU ADD_INT R5.x : R3.x I[1] {W}
+      ALU MOV R2.x : R3.x {W}
+      ALU MOV R3.x : R5.x {W}
     LOOP_END
-    ALU MOV R8.x : I[1.0] {WL}
-    ALU MOV R7.x : I[1.0] {WL}
-    ALU MOV R6.x : I[-1] {WL}
+    ALU MOV R8.x : I[1.0] {W}
+    ALU MOV R7.x : I[1.0] {W}
+    ALU MOV R6.x : I[-1] {W}
   ELSE
-    ALU MOV R8.x : I[1.0] {WL}
-    ALU MOV R7.x : I[0] {WL}
-    ALU MOV R4.x : I[1.0] {WL}
-    ALU MOV R6.x : I[0] {WL}
+    ALU MOV R8.x : I[1.0] {W}
+    ALU MOV R7.x : I[0] {W}
+    ALU MOV R4.x : I[1.0] {W}
+    ALU MOV R6.x : I[0] {W}
   ENDIF
 ELSE
-  ALU MOV R8.x : I[1.0] {WL}
-  ALU MOV R7.x : I[0] {WL}
-  ALU MOV R4.x : I[1.0] {WL}
-  ALU MOV R6.x : I[-1] {WL}
+  ALU MOV R8.x : I[1.0] {W}
+  ALU MOV R7.x : I[0] {W}
+  ALU MOV R4.x : I[1.0] {W}
+  ALU MOV R6.x : I[-1] {W}
 ENDIF
-ALU CNDE_INT S27.x@free : R6.x I[1.0] R4.x {WL}
-ALU CNDE_INT S28.x@free : R6.x I[1.0] R7.x {WL}
-ALU CNDE_INT S29.x@free : R6.x I[1.0] R8.x {WL}
+ALU CNDE_INT S27.x@free : R6.x I[1.0] R4.x {W}
+ALU CNDE_INT S28.x@free : R6.x I[1.0] R7.x {W}
+ALU CNDE_INT S29.x@free : R6.x I[1.0] R8.x {W}
 EXPORT_DONE POS 0 R1.xyzw
 ALU MOV CLAMP S34.x@group : S27.x@free {W}
 ALU MOV CLAMP S34.y@group : S28.x@free {W}
-ALU MOV CLAMP S34.w@group : S29.x@free {WL}
+ALU MOV CLAMP S34.w@group : S29.x@free {W}
 EXPORT_DONE PARAM 0 S34.xy0w
 )";
 
@@ -1376,29 +1408,29 @@ PROP COLOR_EXPORT_MASK:15
 PROP WRITE_ALL_COLORS:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-  ALU ADD S4.x@chan : |KC0[0].x| -KC0[2].x {W}
-  ALU ADD S4.y@chan : |KC0[0].y| -KC0[2].y {WL}
+  ALU ADD __.x : |KC0[0].x| -KC0[2].x {}
+  ALU ADD __.y : |KC0[0].y| -KC0[2].y {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU DOT4_IEEE S5.x@chan : S4.x@chan S4.x@chan {W}
-  ALU DOT4_IEEE __.y@chan : S4.y@chan S4.y@chan {}
-  ALU DOT4_IEEE __.z@chan : I[0] I[0] {}
-  ALU DOT4_IEEE __.w@chan : I[0] I[0] {L}
+  ALU DOT4_IEEE __.x : I[PV].x I[PV].x {}
+  ALU DOT4_IEEE __.y : I[PV].y I[PV].y {}
+  ALU DOT4_IEEE __.z : I[0] I[0] {}
+  ALU DOT4_IEEE __.w : I[0] I[0] {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU SQRT_IEEE S6.x : S5.x@chan {WL}
+  ALU SQRT_IEEE __.x : I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU SETGE_DX10 S8.x : KC0[1].x S6.x {WL}
+  ALU SETGE_DX10 __.x : KC0[1].x I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU NOT_INT S9.x : S8.x {W}
-  ALU AND_INT S12.y@group : S8.x I[1.0] {WL}
+  ALU NOT_INT __.x@chan : I[PV].x {}
+  ALU AND_INT S12.y@chgr : I[PV].x I[1.0] {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU AND_INT S12.x@group : S9.x I[1.0] {WL}
+  ALU AND_INT S12.x@chgr : I[PV].x I[1.0] {WL}
 ALU_GROUP_END
 BLOCK_END
 BLOCK_START
@@ -1463,84 +1495,26 @@ ALU MOV S0.x@free : I[0] {WL}
 ALU MOV S1.x@free : I[1] {WL}
 ALU MOV S2.x@free : L[0x2] {WL}
 ALU MOV S3.x@free : L[0x3] {WL}
-ALU MOV S4.x : KC0[4].x {W}
-ALU MOV S4.y : KC0[4].y {W}
-ALU MOV S4.z : KC0[4].z {W}
-ALU MOV S4.w : KC0[4].w {WL}
-ALU MOV S5.x : KC0[0].x {W}
-ALU MOV S5.y : KC0[0].y {W}
-ALU MOV S5.z : KC0[0].z {W}
-ALU MOV S5.w : KC0[0].w {WL}
-ALU SETNE S6.x@group : S4.x S5.x {W}
-ALU SETNE S6.y@group : S4.y S5.y {W}
-ALU SETNE S6.z@group : S4.z S5.z {W}
-ALU SETNE S6.w@group : S4.w S5.w {WL}
-ALU MAX4 S7.x@free : S6.x@group + S6.y@group + S6.z@group + S6.w@group {WL}
-ALU SETE_DX10 S8.x@free : S7.x@free I[1.0] {WL}
-ALU MOV S9.x : KC0[5].x {W}
-ALU MOV S9.y : KC0[5].y {W}
-ALU MOV S9.z : KC0[5].z {W}
-ALU MOV S9.w : KC0[5].w {WL}
-ALU MOV S10.x : KC0[1].x {W}
-ALU MOV S10.y : KC0[1].y {W}
-ALU MOV S10.z : KC0[1].z {W}
-ALU MOV S10.w : KC0[1].w {WL}
-ALU SETNE S11.x@group : S9.x S10.x {W}
-ALU SETNE S11.y@group : S9.y S10.y {W}
-ALU SETNE S11.z@group : S9.z S10.z {W}
-ALU SETNE S11.w@group : S9.w S10.w {WL}
-ALU MAX4 S12.y@free : S11.x@group + S11.y@group + S11.z@group + S11.w@group {WL}
-ALU SETE_DX10 S13.x@free : S12.y@free I[1.0] {WL}
-ALU MOV S14.x : KC0[6].x {W}
-ALU MOV S14.y : KC0[6].y {W}
-ALU MOV S14.z : KC0[6].z {W}
-ALU MOV S14.w : KC0[6].w {WL}
-ALU MOV S15.x : KC0[2].x {W}
-ALU MOV S15.y : KC0[2].y {W}
-ALU MOV S15.z : KC0[2].z {W}
-ALU MOV S15.w : KC0[2].w {WL}
-ALU SETNE S16.x@group : S14.x S15.x {W}
-ALU SETNE S16.y@group : S14.y S15.y {W}
-ALU SETNE S16.z@group : S14.z S15.z {W}
-ALU SETNE S16.w@group : S14.w S15.w {WL}
-ALU MAX4 S17.z@free : S16.x@group + S16.y@group + S16.z@group + S16.w@group {WL}
-ALU SETE_DX10 S18.x@free : S17.z@free I[1.0] {WL}
-ALU MOV S19.x : KC0[7].x {W}
-ALU MOV S19.y : KC0[7].y {W}
-ALU MOV S19.z : KC0[7].z {W}
-ALU MOV S19.w : KC0[7].w {WL}
-ALU MOV S20.x : KC0[3].x {W}
-ALU MOV S20.y : KC0[3].y {W}
-ALU MOV S20.z : KC0[3].z {W}
-ALU MOV S20.w : KC0[3].w {WL}
-ALU SETNE S21.x@group : S19.x S20.x {W}
-ALU SETNE S21.y@group : S19.y S20.y {W}
-ALU SETNE S21.z@group : S19.z S20.z {W}
-ALU SETNE S21.w@group : S19.w S20.w {WL}
-ALU MAX4 S22.w@free : S21.x@group + S21.y@group + S21.z@group + S21.w@group {WL}
-ALU SETE_DX10 S23.x@free : S22.w@free I[1.0] {WL}
-ALU MOV S24.x : S8.x@free {W}
-ALU MOV S24.y : S13.x@free {W}
-ALU MOV S24.z : S18.x@free {W}
-ALU MOV S24.w : S23.x@free {WL}
-ALU MOV S25.x : I[0] {W}
-ALU MOV S25.y : I[0] {W}
-ALU MOV S25.z : I[0] {W}
-ALU MOV S25.w : I[0] {WL}
-ALU SETNE_INT S27.x@free : S24.x S25.x {W}
-ALU SETNE_INT S28.y@free : S24.y S25.y {W}
-ALU SETNE_INT S29.z@free : S24.z S25.z {W}
-ALU SETNE_INT S30.w@free : S24.w S25.w {WL}
-ALU OR_INT S31.x@free : S27.x@free S28.y@free {W}
-ALU OR_INT S32.y@free : S29.z@free S30.w@free {WL}
-ALU OR_INT S26.x@free : S31.x@free S32.y@free {WL}
-ALU NOT_INT S33.x@free : S26.x@free {WL}
-ALU AND_INT S34.x@free : S33.x@free I[1.0] {WL}
-ALU MOV S35.x@group : S34.x@free {W}
-ALU MOV S35.y@group : S0.x@free {W}
-ALU MOV S35.z@group : S0.x@free {W}
-ALU MOV S35.w@group : S0.x@free {WL}
-EXPORT_DONE PIXEL 0 S35.xyzw
+ALU MOV S4.x@free : KC0[4].x {W}
+ALU MOV S5.y@free : KC0[4].y {W}
+ALU MOV S6.z@free : KC0[4].z {W}
+ALU MOV S7.w@free : KC0[4].w {WL}
+ALU MOV S8.x@free : KC0[0].x {W}
+ALU MOV S9.y@free : KC0[0].y {W}
+ALU MOV S10.z@free : KC0[0].z {W}
+ALU MOV S11.w@free : KC0[0].w {WL}
+ALU SETNE S12.x@free : S4.x S8.x {W}
+ALU SETNE S13.y@free : S5.y S9.y {W}
+ALU SETNE S14.z@free : S6.z S10.z {W}
+ALU SETNE S15.w@free : S7.w S11.w {WL}
+ALU MAX4 S16.x@free : S12.x@free + S13.y@free + S14.z@free + S15.w@free {WL}
+ALU SETE_DX10 S17.x@free : S16.x@free I[1.0] {WL}
+ALU NOT_INT S18.x@free : S17.x@free {WL}
+ALU MOV S19.x@group : S18.x@free {W}
+ALU MOV S19.y@group : S0.x@free {W}
+ALU MOV S19.z@group : S0.x@free {W}
+ALU MOV S19.w@group : S0.x@free {WL}
+EXPORT_DONE PIXEL 0 S19.xyzw
 )";
 
 const char *shader_with_bany_expect_opt_sched_eg =
@@ -1552,91 +1526,30 @@ PROP COLOR_EXPORT_MASK:15
 PROP WRITE_ALL_COLORS:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-  ALU SETNE S6.x@chgr : KC0[4].x KC0[0].x {W}
-  ALU SETNE S6.y@chgr : KC0[4].y KC0[0].y {WL}
+  ALU SETNE S12.x@chan : KC0[4].x KC0[0].x {W}
+  ALU SETNE S13.y@chan : KC0[4].y KC0[0].y {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU SETNE S6.z@chgr : KC0[4].z KC0[0].z {W}
-  ALU SETNE S6.w@chgr : KC0[4].w KC0[0].w {WL}
+  ALU SETNE __.x@chan : KC0[4].w KC0[0].w {}
+  ALU SETNE __.y@chan : KC0[4].z KC0[0].z {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MAX4 S7.x@chan : S6.x@chgr {W}
-  ALU MAX4 __.y@chan : S6.y@chgr {}
-  ALU MAX4 __.z@chan : S6.z@chgr {}
-  ALU MAX4 __.w@chan : S6.w@chgr {}
-  ALU SETNE S11.x@chgr : KC0[5].x KC0[1].x {WL}
+  ALU MAX4 __.x : S12.x@chan {}
+  ALU MAX4 __.y@chgr : S13.y@chan {}
+  ALU MAX4 __.z@chgr : I[PV].y {}
+  ALU MAX4 __.w@chgr : I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU SETE_DX10 S8.x@free : S7.x@chan I[1.0] {W}
-  ALU SETNE S11.y@chgr : KC0[5].y KC0[1].y {WL}
+  ALU SETE_DX10 __.x : I[PV].x I[1.0] {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU SETNE_INT S27.x@chan : S8.x@free I[0] {W}
-  ALU SETNE S11.z@chgr : KC0[5].z KC0[1].z {W}
-  ALU SETNE S11.w@chgr : KC0[5].w KC0[1].w {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU MAX4 __.x@chan : S11.x@chgr {}
-  ALU MAX4 S12.y@chan : S11.y@chgr {W}
-  ALU MAX4 __.z@chan : S11.z@chgr {}
-  ALU MAX4 __.w@chan : S11.w@chgr {}
-  ALU SETNE S16.x@chgr : KC0[6].x KC0[2].x {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU SETE_DX10 S13.x@free : S12.y@chan I[1.0] {W}
-  ALU SETNE S16.y@chgr : KC0[6].y KC0[2].y {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU SETNE_INT S28.y@chan : S13.x@free I[0] {W}
-  ALU SETNE S16.z@chgr : KC0[6].z KC0[2].z {W}
-  ALU SETNE S16.w@chgr : KC0[6].w KC0[2].w {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU MAX4 __.x@chan : S16.x@chgr {}
-  ALU MAX4 __.y@chan : S16.y@chgr {}
-  ALU MAX4 S17.z@chan : S16.z@chgr {W}
-  ALU MAX4 __.w@chan : S16.w@chgr {}
-  ALU SETNE S21.x@chgr : KC0[7].x KC0[3].x {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU OR_INT S31.x@chan : S27.x@chan S28.y@chan {W}
-  ALU SETNE S21.y@chgr : KC0[7].y KC0[3].y {W}
-  ALU SETE_DX10 S18.z@chan : S17.z@chan I[1.0] {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU SETNE_INT S29.x@chan : S18.z@chan I[0] {W}
-  ALU SETNE S21.z@chgr : KC0[7].z KC0[3].z {W}
-  ALU SETNE S21.w@chgr : KC0[7].w KC0[3].w {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU MAX4 __.x@chan : S21.x@chgr {}
-  ALU MAX4 __.y@chan : S21.y@chgr {}
-  ALU MAX4 __.z@chan : S21.z@chgr {}
-  ALU MAX4 S22.w@chan : S21.w@chgr {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU SETE_DX10 S23.x@free : S22.w@chan I[1.0] {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU SETNE_INT S30.w@chan : S23.x@free I[0] {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU OR_INT S32.y@chan : S29.x@chan S30.w@chan {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU OR_INT S26.x@chan : S31.x@chan S32.y@chan {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU NOT_INT S33.x@free : S26.x@chan {WL}
-ALU_GROUP_END
-ALU_GROUP_BEGIN
-  ALU AND_INT S35.x@group : S33.x@free I[1.0] {WL}
+  ALU NOT_INT S19.x@chgr : I[PV].x {WL}
 ALU_GROUP_END
 BLOCK_END
 BLOCK_START
-EXPORT_DONE PIXEL 0 S35.x000
+EXPORT_DONE PIXEL 0 S19.x000
 BLOCK_END
 )";
 
@@ -1687,32 +1600,32 @@ PROP COLOR_EXPORT_MASK:15
 PROP WRITE_ALL_COLORS:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-  ALU SETNE_DX10 S5.x : KC0[2].y KC0[0].y {W}
-  ALU SETNE_DX10 S5.y : KC0[2].x KC0[0].x {WL}
+  ALU SETNE_DX10 __.x : KC0[2].y KC0[0].y {}
+  ALU SETNE_DX10 __.y : KC0[2].x KC0[0].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU SETNE_DX10 S9.x : KC0[3].y KC0[1].y {W}
-  ALU SETNE_DX10 S9.y : KC0[3].x KC0[1].x {W}
-  ALU OR_INT S6.x : S5.x S5.y {WL}
+  ALU SETNE_DX10 __.x : KC0[3].y KC0[1].y {}
+  ALU SETNE_DX10 __.y : KC0[3].x KC0[1].x {}
+  ALU OR_INT S6.x@chan : I[PV].x I[PV].y {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU OR_INT S10.x : S9.x S9.y {WL}
+  ALU OR_INT __.x : I[PV].x I[PV].y {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU OR_INT S11.x : S10.x S6.x {WL}
+  ALU OR_INT __.x : I[PV].x S6.x@chan {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU NOT_INT S12.x : S11.x {W}
-  ALU AND_INT S15.z@group : S11.x I[1.0] {WL}
+  ALU NOT_INT __.x : I[PV].x {}
+  ALU AND_INT S15.z@chgr : I[PV].x I[1.0] {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU AND_INT S13.x : S12.x I[1.0] {WL}
+  ALU AND_INT __.x : I[PV].x I[1.0] {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MOV S15.x@group : S13.x {W}
-  ALU MOV S15.y@group : S13.x {WL}
+  ALU MOV S15.x@chgr : I[PV].x {W}
+  ALU MOV S15.y@chgr : I[PV].x {WL}
 ALU_GROUP_END
 BLOCK_END
 BLOCK_START
@@ -1729,7 +1642,7 @@ OUTPUT LOC:1 VARYING_SLOT:32 MASK:15
 OUTPUT LOC:2 VARYING_SLOT:33 MASK:15
 OUTPUT LOC:3 VARYING_SLOT:34 MASK:15
 OUTPUT LOC:4 VARYING_SLOT:35 MASK:15
-REGISTERS R1.xyzw
+SYSVALUES R1.xyzw
 ARRAYS A2[4].xy A2[4].zw
 SHADER
 ALU MOV S6.x : I[0] {WL}
@@ -1868,7 +1781,7 @@ OUTPUT LOC:1 VARYING_SLOT:32 MASK:15
 OUTPUT LOC:2 VARYING_SLOT:33 MASK:15
 OUTPUT LOC:3 VARYING_SLOT:34 MASK:15
 OUTPUT LOC:4 VARYING_SLOT:35 MASK:15
-REGISTERS R1.xyzw
+SYSVALUES R1.xyzw
 ARRAYS A2[4].xy A2[4].zw
 SHADER
 ALU MUL_IEEE S14.x : KC0[2].x R1.y@fully {W}
@@ -1944,10 +1857,10 @@ OUTPUT LOC:1 VARYING_SLOT:32 MASK:15
 OUTPUT LOC:2 VARYING_SLOT:33 MASK:15
 OUTPUT LOC:3 VARYING_SLOT:34 MASK:15
 OUTPUT LOC:4 VARYING_SLOT:35 MASK:15
-REGISTERS R1.xyzw
+SYSVALUES R1.xyzw
 ARRAYS A2[4].xy A2[4].zw
 SHADER
-BLOCK_START
+BLOCK_START ALU_PUSH_BEFORE
 ALU_GROUP_BEGIN
   ALU MOV A2[0].x : I[1.0] {W}
   ALU MOV A2[0].y : L[0x3f8ccccd] {W}
@@ -1960,67 +1873,74 @@ ALU_GROUP_BEGIN
   ALU MOV A2[1].y : L[0x40066666] {W}
   ALU MOV A2[1].z : L[0x40c00000] {W}
   ALU MOV A2[1].w : L[0x40c33333] {W}
-  ALU MUL_IEEE S14.x : KC0[2].x R1.y@fully {WL}
+  ALU MUL_IEEE __.x : KC0[2].x R1.y@fully {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
   ALU MOV A2[3].x : L[0x40800000] {W}
   ALU MOV A2[2].y : L[0x40466666] {W}
   ALU MOV A2[2].z : L[0x40e00000] {W}
   ALU MOV A2[2].w : L[0x40e33333] {W}
-  ALU MULADD_IEEE S15.x : KC0[1].x R1.x@fully S14.x {WL}
+  ALU MULADD_IEEE __.x : KC0[1].x R1.x@fully I[PS] {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MULADD_IEEE S17.x : KC0[3].x R1.z@fully S15.x {W}
+  ALU MULADD_IEEE __.x : KC0[3].x R1.z@fully I[PS] {}
   ALU MOV A2[3].y : L[0x40833333] {W}
   ALU MOV A2[3].z : L[0x41000000] {W}
   ALU MOV A2[3].w : L[0x4101999a] {W}
-  ALU MUL_IEEE S14.y : KC0[2].y R1.y@fully {WL}
+  ALU MUL_IEEE __.y : KC0[2].y R1.y@fully {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MULADD_IEEE S19.x@group : KC0[4].x R1.w@fully S17.x {W}
-  ALU MULADD_IEEE S15.y : KC0[1].y R1.x@fully S14.y {WL}
+  ALU MULADD_IEEE S19.x@group : KC0[4].x R1.w@fully I[PV].x {W}
+  ALU MULADD_IEEE __.y : KC0[1].y R1.x@fully I[PS] {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MULADD_IEEE S17.y : KC0[3].y R1.z@fully S15.y {W}
-  ALU MUL_IEEE S14.z : KC0[2].z R1.y@fully {W}
-  ALU MUL_IEEE S14.w : KC0[2].w R1.y@fully {WL}
+  ALU MULADD_IEEE __.y : KC0[3].y R1.z@fully I[PV].y {}
+  ALU MUL_IEEE __.z : KC0[2].z R1.y@fully {}
+  ALU MUL_IEEE __.w : KC0[2].w R1.y@fully {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MULADD_IEEE S19.y@group : KC0[4].y R1.w@fully S17.y {W}
-  ALU MULADD_IEEE S15.z : KC0[1].z R1.x@fully S14.z {W}
-  ALU MULADD_IEEE S15.w : KC0[1].w R1.x@fully S14.w {WL}
+  ALU MULADD_IEEE S19.y@group : KC0[4].y R1.w@fully I[PV].y {W}
+  ALU MULADD_IEEE __.z : KC0[1].z R1.x@fully I[PV].z {}
+  ALU MULADD_IEEE __.w : KC0[1].w R1.x@fully I[PV].w {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MULADD_IEEE S17.z : KC0[3].z R1.z@fully S15.z {W}
-  ALU MULADD_IEEE S17.w : KC0[3].w R1.z@fully S15.w {WL}
+  ALU MULADD_IEEE __.z : KC0[3].z R1.z@fully I[PV].z {}
+  ALU MULADD_IEEE __.w : KC0[3].w R1.z@fully I[PV].w {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MULADD_IEEE S19.z@group : KC0[4].z R1.w@fully S17.z {W}
-  ALU MULADD_IEEE S19.w@group : KC0[4].w R1.w@fully S17.w {WL}
+  ALU PRED_SETGE_INT __.x@chan : KC0[0].x L[0x4] {EP} PUSH_BEFORE
+  ALU MULADD_IEEE S19.z@group : KC0[4].z R1.w@fully I[PV].z {W}
+  ALU MULADD_IEEE S19.w@group : KC0[4].w R1.w@fully I[PV].w {WL}
 ALU_GROUP_END
-IF (( ALU PRED_SETGE_INT __.x@free : KC0[0].x L[0x4] {LEP} PUSH_BEFORE ))
+IF (( ALU PRED_SETGE_INT __.x@chan : KC0[0].x L[0x4] {EP} PUSH_BEFORE ))
+BLOCK_END
+BLOCK_START ALU
   ALU_GROUP_BEGIN
-    ALU ADD_INT S34.x : KC0[0].x L[0xfffffffc] {WL}
+    ALU ADD_INT __.x : KC0[0].x L[0xfffffffc] {L}
   ALU_GROUP_END
   ALU_GROUP_BEGIN
-     ALU MOVA_INT AR : S34.x {L}
+     ALU MOVA_INT AR : I[PV].x {L}
   ALU_GROUP_END
   ALU_GROUP_BEGIN
     ALU MOV A2[AR].z : I[0] {W}
     ALU MOV A2[AR].w : L[0x3dcccccd] {WL}
   ALU_GROUP_END
 ELSE
+BLOCK_END
+BLOCK_START ALU
   ALU_GROUP_BEGIN
-     ALU MOV S37.x : KC0[0].x {WL}
+     ALU MOV __.x : KC0[0].x {L}
   ALU_GROUP_END
   ALU_GROUP_BEGIN
-     ALU MOVA_INT AR : S37.x {L}
+     ALU MOVA_INT AR : I[PV].x {L}
   ALU_GROUP_END
   ALU_GROUP_BEGIN
     ALU MOV A2[AR].x : I[0] {W}
     ALU MOV A2[AR].y : L[0x3dcccccd] {WL}
   ALU_GROUP_END
 ENDIF
+BLOCK_END
+BLOCK_START ALU
   ALU_GROUP_BEGIN
     ALU MOV S46.x@chgr : A2[0].x {W}
     ALU MOV S46.y@chgr : A2[0].y {W}
@@ -2052,7 +1972,7 @@ EXPORT PARAM 0 S46.xyzw
 EXPORT PARAM 1 S47.xyzw
 EXPORT PARAM 2 S48.xyzw
 EXPORT_DONE PARAM 3 S49.xyzw
-BLOCK END\n
+BLOCK_END
 )";
 
 const char *shader_with_dest_array2 =
@@ -2093,30 +2013,30 @@ PROP WRITE_ALL_COLORS:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 ARRAYS A0[2].xy
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
   ALU MOV A0[0].x : KC0[0].x {W}
   ALU MOV A0[0].y : KC0[0].y {W}
   ALU MOV A0[1].x : KC0[1].x {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MOV S1.x : KC0[2].x {W}
+  ALU MOV __.x : KC0[2].x {}
   ALU MOV A0[1].y : KC0[1].y {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MOVA_INT AR : S1.x {L}
+  ALU MOVA_INT AR : I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
   ALU MOV A0[AR].x : I[1.0] {W}
   ALU MOV A0[AR].y : L[2.0] {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MOV S2.x : A0[0].x {W}
-  ALU MOV S2.y : A0[0].y {WL}
+  ALU MOV __.x : A0[0].x {}
+  ALU MOV __.y : A0[0].y {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MUL_IEEE S3.x@group : S2.x KC0[2].y {W}
-  ALU MUL_IEEE S3.y@group : S2.y KC0[2].y {WL}
+  ALU MUL_IEEE S3.x@group : I[PV].x KC0[2].y {W}
+  ALU MUL_IEEE S3.y@group : I[PV].y KC0[2].y {WL}
 ALU_GROUP_END
 BLOCK_END
 BLOCK_START
@@ -2134,30 +2054,30 @@ PROP WRITE_ALL_COLORS:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 ARRAYS A0[2].xy
 SHADER
-BLOCK_START
+BLOCK_START  ALU
 ALU_GROUP_BEGIN
   ALU MOV A0[0].x : KC0[0].x {W}
   ALU MOV A0[0].y : KC0[0].y {W}
   ALU MOV A0[1].x : KC0[1].x {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MOV R2.x : KC0[2].x {W}
+  ALU MOV __.x : KC0[2].x {}
   ALU MOV A0[1].y : KC0[1].y {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MOVA_INT AR : R2.x {L}
+  ALU MOVA_INT AR : I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
   ALU MOV A0[AR].x : I[1.0] {W}
   ALU MOV A0[AR].y : L[2.0] {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MOV R1.x : A0[0].x {W}
-  ALU MOV R1.y : A0[0].y {WL}
+  ALU MOV __.x : A0[0].x {}
+  ALU MOV __.y : A0[0].y {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU MUL_IEEE R0.x : R1.x KC0[2].y {W}
-  ALU MUL_IEEE R0.y : R1.y KC0[2].y {WL}
+  ALU MUL_IEEE R0.x : I[PV].x KC0[2].y {W}
+  ALU MUL_IEEE R0.y : I[PV].y KC0[2].y {WL}
 ALU_GROUP_END
 BLOCK_END
 BLOCK_START
@@ -2256,21 +2176,21 @@ PROP COLOR_EXPORT_MASK:15
 PROP WRITE_ALL_COLORS:1
 INPUT LOC:0 VARYING_SLOT:32 INTERP:2
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
-REGISTERS R0.x@fully R0.y@fully R1.xyzw
+REGISTERS R0.x R0.y
 SHADER
 ALU_GROUP_BEGIN
 ALU INTERP_ZW __.x : R0.y Param0.x {} VEC_210
 ALU INTERP_ZW __.y : R0.x Param0.y {} VEC_210
-ALU INTERP_ZW R1.z : R0.y Param0.z {W} VEC_210
-ALU INTERP_ZW R1.w : R0.x Param0.w {WL} VEC_210
+ALU INTERP_ZW R0.z : R0.y Param0.z {W} VEC_210
+ALU INTERP_ZW R0.w : R0.x Param0.w {WL} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-ALU INTERP_XY R1.x : R0.y Param0.x {W} VEC_210
-ALU INTERP_XY R1.y : R0.x Param0.y {W} VEC_210
+ALU INTERP_XY R0.x : R0.y Param0.x {W} VEC_210
+ALU INTERP_XY R0.y : R0.x Param0.y {W} VEC_210
 ALU INTERP_XY __.z : R0.y Param0.z {} VEC_210
 ALU INTERP_XY __.w : R0.x Param0.w {L} VEC_210
 ALU_GROUP_END
-EXPORT_DONE PIXEL 0 R1.xyzw
+EXPORT_DONE PIXEL 0 R0.xyzw
 )";
 
 const char *shader_group_chan_pin_to_combine_2 =
@@ -2474,7 +2394,7 @@ INPUT LOC:0 VARYING_SLOT:32 INTERP:2
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 REGISTERS R0.x@fully R0.y@fully
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
   ALU INTERP_XY S1.x@chan : R0.y@fully Param0.x {W} VEC_210
   ALU INTERP_XY S1.y@chan : R0.x@fully Param0.y {W} VEC_210
@@ -2484,26 +2404,26 @@ ALU_GROUP_END
 ALU_GROUP_BEGIN
   ALU INTERP_ZW __.x@chan : R0.y@fully Param0.x {} VEC_210
   ALU INTERP_ZW __.y@chan : R0.x@fully Param0.y {} VEC_210
-  ALU INTERP_ZW S1.z@chan : R0.y@fully Param0.z {W} VEC_210
-  ALU INTERP_ZW S1.w@chan : R0.x@fully Param0.w {WL} VEC_210
+  ALU INTERP_ZW __.z : R0.y@fully Param0.z {} VEC_210
+  ALU INTERP_ZW __.w : R0.x@fully Param0.w {L} VEC_210
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU ADD S2.x@group : S1.x@chan S1.z@chan {W}
-  ALU ADD S2.y@group : S1.y@chan S1.w@chan {W}
-  ALU MUL_IEEE S3.z@chgr : S1.x@chan S1.z@chan {W}
-  ALU MUL_IEEE S3.w@chgr : S1.y@chan S1.w@chan {WL}
+  ALU ADD S2.x@group : S1.x@chan I[PV].z {W}
+  ALU ADD S2.y@group : S1.y@chan I[PV].w {W}
+  ALU MUL_IEEE S3.z@chgr : S1.x@chan I[PV].z {W}
+  ALU MUL_IEEE S3.w@chgr : S1.y@chan I[PV].w {WL}
 ALU_GROUP_END
 BLOCK_END
-BLOCK_START
+BLOCK_START TEX
 TEX SAMPLE S4.xyzw : S2.xy__ RID:18 SID:0 NNNN
 TEX SAMPLE S5.xyzw : S3.zw__ RID:18 SID:0 NNNN
 BLOCK_END
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-ALU ADD S6.x@group : S5.x@group S4.x@group {W}
-ALU ADD S6.y@group : S5.y@group S4.y@group {W}
-ALU ADD S6.z@group : S5.z@group S4.z@group {W}
-ALU ADD S6.w@group : S5.w@group S4.w@group {WL}
+ALU ADD S6.x@group : S5.x@chgr S4.x@chgr {W}
+ALU ADD S6.y@group : S5.y@chgr S4.y@chgr {W}
+ALU ADD S6.z@group : S5.z@chgr S4.z@chgr {W}
+ALU ADD S6.w@group : S5.w@chgr S4.w@chgr {WL}
 ALU_GROUP_END
 BLOCK_END
 BLOCK_START
@@ -2542,30 +2462,43 @@ PROP COLOR_EXPORT_MASK:15
 PROP WRITE_ALL_COLORS:1
 OUTPUT LOC:0 FRAG_RESULT:2 MASK:15
 SHADER
+BLOCK_START ALU
 ALU_GROUP_BEGIN
   ALU MOV R1.x@free : I[0] {W}
   ALU MOV S2.y@chan : L[0x38f00000] {WL}
 ALU_GROUP_END
 LOOP_BEGIN
+BLOCK_END
+BLOCK_START ALU_PUSH_BEFORE
   ALU_GROUP_BEGIN
     ALU RECIPSQRT_IEEE S3.x@chan : |R1.x@free| {W}
-    ALU RECIPSQRT_IEEE __.y@chan : |R1.x@free| {}
-    ALU RECIPSQRT_IEEE __.z@chan : |R1.x@free| {L}
+    ALU RECIPSQRT_IEEE __.y@chgr : |R1.x@free| {}
+    ALU RECIPSQRT_IEEE __.z@chgr : |R1.x@free| {L}
   ALU_GROUP_END
   ALU_GROUP_BEGIN
-    ALU SETGT_DX10 S4.x@chan : S3.x@chgr S2.y@free {WL}
+    ALU SETGT_DX10 __.x : I[PV].x S2.y@free {L}
   ALU_GROUP_END
-  IF (( ALU PRED_SETNE_INT __.x@free : S4.x@chan I[0] {LEP} PUSH_BEFORE ))
+  ALU_GROUP_BEGIN
+    ALU PRED_SETNE_INT __.x@chan : I[PV].x I[0] {LEP} PUSH_BEFORE
+  ALU_GROUP_END
+  IF (( ALU PRED_SETNE_INT __.x@chan : I[PV].x I[0] {LEP} PUSH_BEFORE ))
      BREAK
+BLOCK_END
+BLOCK_START
   ENDIF
+BLOCK_END
+BLOCK_START ALU
   ALU_GROUP_BEGIN
-    ALU ADD S5.x@free : S3.x@chan  L[0x38f00000] {WL}
+    ALU ADD __.x : S3.x@chan  L[0x38f00000] {L}
   ALU_GROUP_END
   ALU_GROUP_BEGIN
-    ALU MUL R1.x@free : S5.x@free  L[0x38f00000] {WL}
+    ALU MUL R1.x@free : I[PV].x  L[0x38f00000] {WL}
   ALU_GROUP_END
 LOOP_END
+BLOCK_END
+BLOCK_START
 EXPORT_DONE PIXEL 0 R1.xxxx
+BLOCK_END
 )";
 
 const char *gs_abs_float_nir =
@@ -2779,30 +2712,30 @@ const char *vtx_for_tcs_sched =
 CHIPCLASS EVERGREEN
 REGISTERS R0.x@fully R0.y@fully
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-  ALU MOV S3.x@free : R0.x@fully {W}
-  ALU MOV S7.y@free : I[0] {WL}
+  ALU MOV S3.x@chan : R0.x@fully {W}
+  ALU MOV S7.y@chan : I[0] {WL}
 ALU_GROUP_END
 BLOCK_END
-BLOCK_START
-LOAD_BUF S4.xyzw : S3.x@free RID:0
-LOAD_BUF S8.xyzw : S7.y@free RID:16 SRF
+BLOCK_START VTX
+LOAD_BUF S4.xyzw : S3.x@chan RID:0
+LOAD_BUF S8.xyzw : S7.y@chan RID:16 SRF
 BLOCK_END
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-  ALU MUL_UINT24 S10.x@free : S8.y@group R0.y@fully {WL}
+  ALU MUL_UINT24 S10.x@chan : S8.y@chgr R0.y@fully {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-  ALU ADD_INT S12.x@chan : L[0x8] S10.x@free {WL}
+  ALU ADD_INT S12.x@chan : L[0x8] I[PV].x {WL}
 ALU_GROUP_END
 BLOCK_END
-BLOCK_START
-LOAD_BUF S5.xyzw : S4.x@group + 96b RID:0
+BLOCK_START VTX
+LOAD_BUF S5.xyzw : S4.x@chgr + 96b RID:0
 BLOCK_END
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-  ALU LDS WRITE_REL __.x : S10.x@free S5.x@group S5.y@group {L}
+  ALU LDS WRITE_REL __.x : S10.x@chan S5.x@chgr S5.y@chgr {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
   ALU LDS WRITE_REL __.x : S12.x@chan I[0] I[1.0] {L}
@@ -3128,42 +3061,42 @@ CHIPCLASS EVERGREEN
 OUTPUT LOC:0 VARYING_SLOT:0 MASK:15
 REGISTERS R0.x@fully R0.y@fully R0.z@fully
 SHADER
-BLOCK_START
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-  ALU ADD S1026.x@chan : R0.x@fully R0.y@fully {W}
+  ALU ADD __.x : R0.x@fully R0.y@fully {}
    ALU MOV S1033.y@chan : I[0] {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-   ALU ADD S1028.x@chan : I[1.0] -S1026.x@chan {WL}
+   ALU ADD __.x : I[1.0] -I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-   ALU MULADD_IEEE S1029.x@chan : L[0x40000000] S1028.x@chan R0.y@fully {WL}
+   ALU MULADD_IEEE __.x@chan : L[0x40000000] I[PV].x R0.y@fully {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-   ALU TRUNC S1030.x@chan : S1029.x@chan {WL}
+   ALU TRUNC __.x : I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-   ALU FLT_TO_INT S1031.x@chan : S1030.x@chan {WL}
+   ALU FLT_TO_INT S1031.x@chan : I[PV].x {WL}
 ALU_GROUP_END
-BLOCK_START
 BLOCK_END
+BLOCK_START VTX
 LOAD_BUF S1034.xyzw : S1033.y@chan RID:16 SRF
-BLOCK_START
 BLOCK_END
+BLOCK_START ALU
 ALU_GROUP_BEGIN
-   ALU MULADD_UINT24 S1036.x@chan : S1034.x@group R0.z@fully S1034.z@group {WL}
+   ALU MULADD_UINT24 __.x@chan : S1034.x@chgr R0.z@fully S1034.z@chgr {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-   ALU MULADD_UINT24 S1037.x@chan : S1034.y@group S1031.x@chan S1036.x@chan {WL}
+   ALU MULADD_UINT24 __.x@chan : S1034.y@chgr S1031.x@chan I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-   ALU ADD_INT S1039.x : I[0] S1037.x@chan {W}
-   ALU ADD_INT S1039.y : L[0x4] S1037.x@chan {W}
-   ALU ADD_INT S1039.z : L[0x8] S1037.x@chan {W}
-   ALU ADD_INT S1039.w : L[0xc] S1037.x@chan {WL}
+   ALU ADD_INT __.x : I[0] I[PV].x {}
+   ALU ADD_INT S1039.y : L[0x4] I[PV].x {W}
+   ALU ADD_INT S1039.z : L[0x8] I[PV].x {W}
+   ALU ADD_INT S1039.w : L[0xc] I[PV].x {WL}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
-   ALU LDS READ_RET __.x@chan : S1039.x {L}
+   ALU LDS READ_RET __.x@chan : I[PV].x {L}
 ALU_GROUP_END
 ALU_GROUP_BEGIN
    ALU LDS READ_RET __.x@chan : S1039.y {L}
@@ -3186,8 +3119,8 @@ ALU_GROUP_END
 ALU_GROUP_BEGIN
    ALU MOV S1040.w@group : I[LDS_OQ_A_POP] {WL}
 ALU_GROUP_END
-BLOCK_START
 BLOCK_END
+BLOCK_START
 EXPORT_DONE POS 0 S1040.xyzw
 EXPORT_DONE PARAM 0 R0.____
 BLOCK_END)";

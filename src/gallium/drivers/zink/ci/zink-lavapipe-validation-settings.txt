@@ -1,6 +1,6 @@
 # Please include a comment with the log message and a testcase triggering each
 # VUID at the bottom of the file.
-khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-RuntimeSpirv-Location-06272,VUID-vkCmdDrawMultiEXT-None-02699,VUID-RuntimeSpirv-OpEntryPoint-08743,VUID-vkCmdPipelineBarrier2-shaderTileImageColorReadAccess-08718,VUID-VkGraphicsPipelineCreateInfo-flags-06482,VUID-vkCmdPipelineBarrier2-None-08719,VUID-vkCmdDrawMultiEXT-rasterizationSamples-07474
+khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-RuntimeSpirv-Location-06272,VUID-vkCmdDrawMultiEXT-None-02699,VUID-RuntimeSpirv-OpEntryPoint-08743,VUID-vkCmdPipelineBarrier2-shaderTileImageColorReadAccess-08718,VUID-VkGraphicsPipelineCreateInfo-flags-06482,VUID-vkCmdPipelineBarrier2-None-08719,VUID-vkCmdDrawMultiEXT-rasterizationSamples-07474,VUID-vkDestroyDevice-device-05137,VUID-VkRectLayerKHR-offset-04864,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,UNASSIGNED-GeneralParameterError-RequiredHandle,VUID-VkImageMemoryBarrier2-image-parameter,VUID-vkCmdDrawMultiIndexedEXT-None-10909
 khronos_validation.report_flags = error
 khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG,VK_DBG_LAYER_ACTION_BREAK
 VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
@@ -58,3 +58,61 @@ khronos_validation.log_filename = stdout
 
 # spec broken
 # VUID-vkCmdDrawMultiEXT-rasterizationSamples-07474
+
+# dEQP-GLES3.functional.draw_buffers_indexed.random.max_required_draw_buffers.10
+#
+# Validation Error: [ VUID-vkDestroyDevice-device-05137 ] | MessageID = 0x4872eaa0
+# vkDestroyDevice(): Object Tracking - For VkDevice 0x55997ba34f80, VkImage 0x25e600000025e6 has not been destroyed.
+# The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
+# Objects: 1
+#     [0] VkImage 0x25e600000025e6
+
+# dEQP-EGL.functional.swap_buffers_with_damage.resize_before_swap.buffer_age_render_render
+#
+# Validation Error: [ VUID-VkRectLayerKHR-offset-04864 ] | MessageID = 0xa3aae54b
+# vkQueuePresentKHR(): pPresentInfo->pNext<VkPresentRegionsKHR>.pRegions[0].pRectangles[25] sum of offset.y (-20) and extent.height (10) after applying preTransform (VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) is greater than the corresponding swapchain's imageExtent.height (240).
+# The Vulkan spec states: The sum of offset and extent, after being transformed according to the preTransform member of the VkSwapchainCreateInfoKHR structure, must be no greater than the imageExtent member of the VkSwapchainCreateInfoKHR structure passed to vkCreateSwapchainKHR (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkRectLayerKHR-offset-04864)
+# Objects: 1
+#     [0] VkSwapchainKHR 0x8b000000008b
+
+# dEQP-EGL.functional.swap_buffers_with_damage.resize_before_swap.clear_render
+#
+# Validation Error: [ VUID-vkAcquireNextImageKHR-semaphore-01779 ] | MessageID = 0x5717e75b
+# vkAcquireNextImageKHR(): Semaphore must not have any pending operations.
+# The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
+# Objects: 1
+#     [0] VkSemaphore 0x310000000031
+
+# dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_even_none
+#
+# Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+# vkQueueSubmit(): pSubmits[1].pSignalSemaphores[1] (VkSemaphore 0x380000000038) is being signaled by VkQueue 0x55da4072d660, but it may still be in use by VkSwapchainKHR 0x220000000022.
+# Here are the most recently acquired image indices: 1, 2, 0, 1, 2, [0], 1, 2.
+# (brackets mark the last use of VkSemaphore 0x380000000038 in a presentation operation)
+# Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x380000000038 may still be in use and cannot be safely reused with image index 2.
+# Vulkan insight: One solution is to assign each image its own semaphore. Here are some common methods to ensure that a semaphore passed to vkQueuePresentKHR is not in use and can be safely reused:
+#     a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+#     b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+# The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+# Objects: 2
+#     [0] VkSemaphore 0x380000000038
+#     [1] VkQueue 0x55da4072d660
+#
+# Validation Error: [ VUID-VkImageMemoryBarrier2-srcAccessMask-07454 ] | MessageID = 0x3fac578b
+# vkCmdPipelineBarrier2(): pDependencyInfo->pImageMemoryBarriers[0].srcAccessMask (VK_ACCESS_SHADER_READ_BIT) is not supported by stage mask (VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT).
+# The Vulkan spec states: If srcAccessMask includes VK_ACCESS_2_SHADER_READ_BIT, srcStageMask must include VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT, or one of the VK_PIPELINE_STAGE_*_SHADER_BIT stages (https://docs.vulkan.org/spec/latest/chapters/synchronization.html#VUID-VkImageMemoryBarrier2-srcAccessMask-07454)
+# Objects: 1
+#     [0] VkCommandBuffer 0x55da40ee59e0[zink barrier cmdbuf]
+
+# dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.reads.shader_storage_block.compute
+#
+# Validation Error: [ UNASSIGNED-GeneralParameterError-RequiredHandle ] | MessageID = 0x8fdcb17b
+# vkCmdPipelineBarrier2(): pDependencyInfo->pImageMemoryBarriers[0].image is VK_NULL_HANDLE.
+# Objects: 1
+#     [0] VkCommandBuffer 0x563b96845900[zink barrier cmdbuf]
+
+# dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.reads.shader_storage_block.compute
+#
+# Validation Error: [ VUID-VkImageMemoryBarrier2-image-parameter ] | MessageID = 0xa2d5467b
+# vkCmdPipelineBarrier2(): pDependencyInfo->pImageMemoryBarriers[0].image Invalid VkImage Object 0x0.
+# The Vulkan spec states: image must be a valid VkImage handle (https://docs.vulkan.org/spec/latest/chapters/synchronization.html#VUID-VkImageMemoryBarrier2-image-parameter)

@@ -31,7 +31,7 @@ struct radv_shader_context {
    const struct radv_shader_info *shader_info;
    const struct radv_shader_args *args;
 
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
 
    unsigned max_workgroup_size;
    LLVMContextRef context;
@@ -57,13 +57,13 @@ create_llvm_function(struct ac_llvm_context *ctx, LLVMModuleRef module, LLVMBuil
    }
 
    ac_llvm_set_workgroup_size(main_function.value, max_workgroup_size);
-   ac_llvm_set_target_features(main_function.value, ctx, true);
+   ac_llvm_set_target_features(main_function.value, ctx, options->wgp_mode);
 
    return main_function;
 }
 
 static enum ac_llvm_calling_convention
-get_llvm_calling_convention(LLVMValueRef func, gl_shader_stage stage)
+get_llvm_calling_convention(LLVMValueRef func, mesa_shader_stage stage)
 {
    switch (stage) {
    case MESA_SHADER_VERTEX:
@@ -83,19 +83,19 @@ get_llvm_calling_convention(LLVMValueRef func, gl_shader_stage stage)
       return AC_LLVM_AMDGPU_CS;
       break;
    default:
-      unreachable("Unhandle shader type");
+      UNREACHABLE("Unhandle shader type");
    }
 }
 
 /* Returns whether the stage is a stage that can be directly before the GS */
 static bool
-is_pre_gs_stage(gl_shader_stage stage)
+is_pre_gs_stage(mesa_shader_stage stage)
 {
    return stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_TESS_EVAL;
 }
 
 static void
-create_function(struct radv_shader_context *ctx, gl_shader_stage stage, bool has_previous_stage)
+create_function(struct radv_shader_context *ctx, mesa_shader_stage stage, bool has_previous_stage)
 {
    if (ctx->ac.gfx_level >= GFX10) {
       if (is_pre_gs_stage(stage) && ctx->shader_info->is_ngg) {
@@ -206,8 +206,7 @@ ac_translate_nir_to_llvm(struct ac_llvm_compiler *ac_llvm, const struct radv_nir
       exports_color_null = !exports_mrtz || (shaders[0]->info.outputs_written & (0xffu << FRAG_RESULT_DATA0));
    }
 
-   ac_llvm_context_init(&ctx.ac, ac_llvm, options->info, float_mode, info->wave_size, info->ballot_bit_size,
-                        exports_color_null, exports_mrtz);
+   ac_llvm_context_init(&ctx.ac, ac_llvm, options->info, float_mode, info->wave_size, exports_color_null, exports_mrtz);
 
    uint32_t length = 1;
    for (uint32_t i = 0; i < shader_count; i++)
@@ -391,6 +390,7 @@ ac_compile_llvm_module(struct ac_llvm_compiler *ac_llvm, LLVMModuleRef llvm_modu
 
    rbin->base.type = RADV_BINARY_TYPE_RTLD;
    rbin->base.total_size = alloc_size;
+   rbin->base.config.wgp_mode = options->wgp_mode;
    rbin->elf_size = elf_size;
    rbin->llvm_ir_size = llvm_ir_size;
    *rbinary = &rbin->base;

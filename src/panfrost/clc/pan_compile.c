@@ -5,10 +5,11 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "pan_compile.h"
 #include "compiler/glsl_types.h"
 #include "compiler/spirv/nir_spirv.h"
-#include "panfrost/compiler/bifrost_compile.h"
+#include "panfrost/compiler/bifrost/bifrost_compile.h"
+#include "panfrost/compiler/pan_compiler.h"
+#include "panfrost/compiler/pan_nir.h"
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_builder_opcodes.h"
@@ -24,9 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "panfrost/util/pan_ir.h"
 #include "util/macros.h"
 #include "util/u_dynarray.h"
+#include "util/u_printf.h"
 #include <sys/mman.h>
 
 static const struct spirv_to_nir_options spirv_options = {
@@ -64,7 +65,7 @@ optimize(nir_shader *nir)
       NIR_PASS(progress, nir, nir_lower_var_copies);
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
 
-      NIR_PASS(progress, nir, nir_copy_prop);
+      NIR_PASS(progress, nir, nir_opt_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_lower_all_phis_to_scalar);
       NIR_PASS(progress, nir, nir_opt_dce);
@@ -125,7 +126,7 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size, unsigned arch)
    NIR_PASS(_, nir, nir_lower_returns);
    NIR_PASS(_, nir, nir_inline_functions);
    nir_remove_non_exported(nir);
-   NIR_PASS(_, nir, nir_copy_prop);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
    NIR_PASS(_, nir, nir_opt_deref);
 
    /* We can't deal with constant data, get rid of it */
@@ -285,6 +286,13 @@ main(int argc, const char **argv)
    }
 
    off_t spirv_len = lseek(fd, 0, SEEK_END);
+   if (spirv_len < 0) {
+      fprintf(stderr, "Failed to lseek to the end of the file: errno=%d, %s\n",
+              errno, strerror(errno));
+      close(fd);
+      goto input_spirv_open_failed;
+   }
+
    const void *spirv_map = mmap(NULL, spirv_len, PROT_READ, MAP_PRIVATE, fd, 0);
    close(fd);
 
@@ -307,6 +315,7 @@ main(int argc, const char **argv)
    }
 
    glsl_type_singleton_init_or_ref();
+   u_printf_singleton_init_or_ref();
 
    /* POSIX basename can modify the content of the path */
    char *tmp_out_h_path = strdup(output_h_path);
@@ -341,6 +350,7 @@ main(int argc, const char **argv)
 
          struct pan_compile_inputs inputs = {
             .gpu_id = gpu_prod_id << 16,
+            .gpu_variant = 0,
          };
 
          nir_link_shader_functions(s, nir);
@@ -409,7 +419,10 @@ main(int argc, const char **argv)
             NIR_PASS(progress, s, nir_opt_loop);
          } while (progress);
 
-         pan_shader_preprocess(s, inputs.gpu_id);
+         pan_preprocess_nir(s, inputs.gpu_id);
+         pan_nir_lower_texture_early(s, inputs.gpu_id);
+         pan_postprocess_nir(s, inputs.gpu_id);
+         pan_nir_lower_texture_late(s, inputs.gpu_id);
 
          NIR_PASS(_, s, nir_opt_deref);
          NIR_PASS(_, s, nir_lower_vars_to_ssa);
@@ -425,7 +438,7 @@ main(int argc, const char **argv)
 
          struct util_dynarray shader_binary;
          struct pan_shader_info shader_info = {0};
-         util_dynarray_init(&shader_binary, NULL);
+         shader_binary = UTIL_DYNARRAY_INIT;
          pan_shader_compile(clone, &inputs, &shader_binary, &shader_info);
 
          assert(shader_info.push.count * 4 <=
@@ -450,6 +463,7 @@ main(int argc, const char **argv)
    nir_precomp_print_binary_map(fp_c, nir, library_name, target_name,
                                 remap_variant);
 
+   u_printf_singleton_decref();
    glsl_type_singleton_decref();
    fclose(fp_c);
    fclose(fp_h);
@@ -458,6 +472,7 @@ main(int argc, const char **argv)
    return 0;
 
 invalid_precomp:
+   u_printf_singleton_decref();
    glsl_type_singleton_decref();
 fp_c_open_failed:
    fclose(fp_h);

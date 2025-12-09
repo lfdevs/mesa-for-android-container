@@ -47,7 +47,7 @@ Convert12ToSpecH264Profiles(D3D12_VIDEO_ENCODER_PROFILE_H264 profile12)
       } break;
       default:
       {
-         unreachable("Unsupported D3D12_VIDEO_ENCODER_PROFILE_H264");
+         UNREACHABLE("Unsupported D3D12_VIDEO_ENCODER_PROFILE_H264");
       } break;
    }
 }
@@ -60,7 +60,7 @@ d3d12_video_bitstream_builder_h264::build_sps(const struct pipe_h264_enc_seq_par
                                               const D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264 &   codecConfig,
                                               const D3D12_VIDEO_ENCODER_SEQUENCE_GOP_STRUCTURE_H264 &gopConfig,
                                               uint32_t                                    seq_parameter_set_id,
-                                              D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC sequenceTargetResolution,
+                                              const D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC& sequenceTargetResolution,
                                               D3D12_BOX                                   frame_cropping_codec_config,
                                               std::vector<uint8_t> &                      headerBitstream,
                                               std::vector<uint8_t>::iterator              placingPositionStart,

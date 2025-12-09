@@ -12,8 +12,7 @@
 
 template <chip CHIP>
 void
-fd6_emit_flushes(struct fd_context *ctx, struct fd_ringbuffer *ring,
-                 unsigned flushes)
+fd6_emit_flushes(struct fd_context *ctx, fd_cs &cs, unsigned flushes)
 {
    /* Experiments show that invalidating CCU while it still has data in it
     * doesn't work, so make sure to always flush before invalidating in case
@@ -21,42 +20,36 @@ fd6_emit_flushes(struct fd_context *ctx, struct fd_ringbuffer *ring,
     * However it does seem to work for UCHE.
     */
    if (flushes & (FD6_FLUSH_CCU_COLOR | FD6_INVALIDATE_CCU_COLOR))
-      fd6_event_write<CHIP>(ctx, ring, FD_CCU_CLEAN_COLOR);
+      fd6_event_write<CHIP>(ctx, cs, FD_CCU_CLEAN_COLOR);
 
    if (flushes & (FD6_FLUSH_CCU_DEPTH | FD6_INVALIDATE_CCU_DEPTH))
-      fd6_event_write<CHIP>(ctx, ring, FD_CCU_CLEAN_DEPTH);
+      fd6_event_write<CHIP>(ctx, cs, FD_CCU_CLEAN_DEPTH);
 
    if (flushes & FD6_INVALIDATE_CCU_COLOR)
-      fd6_event_write<CHIP>(ctx, ring, FD_CCU_INVALIDATE_COLOR);
+      fd6_event_write<CHIP>(ctx, cs, FD_CCU_INVALIDATE_COLOR);
 
    if (flushes & FD6_INVALIDATE_CCU_DEPTH)
-      fd6_event_write<CHIP>(ctx, ring, FD_CCU_INVALIDATE_DEPTH);
+      fd6_event_write<CHIP>(ctx, cs, FD_CCU_INVALIDATE_DEPTH);
+
+   if ((CHIP >= A7XX) && (flushes & FD6_INVALIDATE_CCHE))
+      fd_pkt7(cs, CP_CCHE_INVALIDATE, 0);
 
    if (flushes & FD6_FLUSH_CACHE)
-      fd6_event_write<CHIP>(ctx, ring, FD_CACHE_CLEAN);
+      fd6_event_write<CHIP>(ctx, cs, FD_CACHE_CLEAN);
 
    if (flushes & FD6_INVALIDATE_CACHE)
-      fd6_event_write<CHIP>(ctx, ring, FD_CACHE_INVALIDATE);
+      fd6_event_write<CHIP>(ctx, cs, FD_CACHE_INVALIDATE);
 
    if (flushes & FD6_WAIT_MEM_WRITES)
-      OUT_PKT7(ring, CP_WAIT_MEM_WRITES, 0);
+      fd_pkt7(cs, CP_WAIT_MEM_WRITES, 0);
 
    if (flushes & FD6_WAIT_FOR_IDLE)
-      OUT_PKT7(ring, CP_WAIT_FOR_IDLE, 0);
+      fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
 
    if (flushes & FD6_WAIT_FOR_ME)
-      OUT_PKT7(ring, CP_WAIT_FOR_ME, 0);
+      fd_pkt7(cs, CP_WAIT_FOR_ME, 0);
 }
 FD_GENX(fd6_emit_flushes);
-
-template <chip CHIP>
-void
-fd6_barrier_flush(struct fd_batch *batch)
-{
-   fd6_emit_flushes<CHIP>(batch->ctx, batch->draw, batch->barrier);
-   batch->barrier = 0;
-}
-FD_GENX(fd6_barrier_flush);
 
 static void
 add_flushes(struct pipe_context *pctx, unsigned flushes)
@@ -148,7 +141,7 @@ fd6_memory_barrier(struct pipe_context *pctx, unsigned flags)
       * with these opcodes, but the alternative would add unnecessary WAIT_FOR_ME's
       * before draw opcodes that don't need it.
       */
-      if (fd_context(pctx)->screen->info->a6xx.indirect_draw_wfm_quirk) {
+      if (fd_context(pctx)->screen->info->props.indirect_draw_wfm_quirk) {
          flushes |= FD6_WAIT_FOR_ME;
       }
    }

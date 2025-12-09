@@ -42,7 +42,7 @@
 #include "main/errors.h"
 #include "main/config.h"
 #include "dispatch.h"
-#include "mapi/glapi/glapi.h"
+#include "mesa/glapi/glapi/glapi.h"
 #include "util/compiler.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
@@ -199,7 +199,7 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
 
    if (dbFlag) {
       /* Check if the MESA_BACK_BUFFER env var is set */
-      char *backbuffer = getenv("MESA_BACK_BUFFER");
+      const char *backbuffer = os_get_option("MESA_BACK_BUFFER");
       if (backbuffer) {
          if (backbuffer[0]=='p' || backbuffer[0]=='P') {
             ximageFlag = GL_FALSE;
@@ -223,13 +223,13 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
 
    /* Comparing IDs uses less memory but sometimes fails. */
    /* XXX revisit this after 3.0 is finished. */
-   if (getenv("MESA_GLX_VISUAL_HACK"))
+   if (os_get_option("MESA_GLX_VISUAL_HACK"))
       comparePointers = GL_TRUE;
    else
       comparePointers = GL_FALSE;
 
    /* Force the visual to have an alpha channel */
-   if (rgbFlag && getenv("MESA_GLX_FORCE_ALPHA"))
+   if (rgbFlag && os_get_option("MESA_GLX_FORCE_ALPHA"))
       alphaFlag = GL_TRUE;
 
    /* First check if a matching visual is already in the list */
@@ -288,7 +288,7 @@ static GLint
 default_depth_bits(void)
 {
    int zBits;
-   const char *zEnv = getenv("MESA_GLX_DEPTH_BITS");
+   const char *zEnv = os_get_option("MESA_GLX_DEPTH_BITS");
    if (zEnv)
       zBits = atoi(zEnv);
    else
@@ -300,7 +300,7 @@ static GLint
 default_alpha_bits(void)
 {
    int aBits;
-   const char *aEnv = getenv("MESA_GLX_ALPHA_BITS");
+   const char *aEnv = os_get_option("MESA_GLX_ALPHA_BITS");
    if (aEnv)
       aBits = atoi(aEnv);
    else
@@ -449,11 +449,11 @@ get_env_visual(Display *dpy, int scr, const char *varname)
    int depth, xclass = -1;
    XVisualInfo *vis;
 
-   if (!getenv( varname )) {
+   if (!os_get_option( varname )) {
       return NULL;
    }
 
-   strncpy( value, getenv(varname), 100 );
+   strncpy( value, os_get_option(varname), 100 );
    value[99] = 0;
 
    sscanf( value, "%s %d", type, &depth );
@@ -1181,7 +1181,7 @@ glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
    static bool firsttime = 1, no_rast = 0;
 
    if (firsttime) {
-      no_rast = getenv("SP_NO_RAST") != NULL;
+      no_rast = os_get_option("SP_NO_RAST") != NULL;
       firsttime = 0;
    }
 
@@ -1356,7 +1356,7 @@ glXDestroyGLXPixmap( Display *dpy, GLXPixmap pixmap )
    if (b) {
       XMesaDestroyBuffer(b);
    }
-   else if (getenv("MESA_DEBUG")) {
+   else if (os_get_option("MESA_DEBUG")) {
       _mesa_warning(NULL, "Mesa: glXDestroyGLXPixmap: invalid pixmap\n");
    }
 }
@@ -1425,7 +1425,7 @@ glXSwapBuffers( Display *dpy, GLXDrawable drawable )
    static bool firsttime = 1, no_rast = 0;
 
    if (firsttime) {
-      no_rast = getenv("SP_NO_RAST") != NULL;
+      no_rast = os_get_option("SP_NO_RAST") != NULL;
       firsttime = 0;
    }
 
@@ -1435,7 +1435,7 @@ glXSwapBuffers( Display *dpy, GLXDrawable drawable )
    if (buffer) {
       XMesaSwapBuffers(buffer);
    }
-   else if (getenv("MESA_DEBUG")) {
+   else if (os_get_option("MESA_DEBUG")) {
       _mesa_warning(NULL, "glXSwapBuffers: invalid drawable 0x%x\n",
                     (int) drawable);
    }
@@ -1453,7 +1453,7 @@ glXCopySubBufferMESA(Display *dpy, GLXDrawable drawable,
    if (buffer) {
       XMesaCopySubBuffer(buffer, x, y, width, height);
    }
-   else if (getenv("MESA_DEBUG")) {
+   else if (os_get_option("MESA_DEBUG")) {
       _mesa_warning(NULL, "Mesa: glXCopySubBufferMESA: invalid drawable\n");
    }
 }

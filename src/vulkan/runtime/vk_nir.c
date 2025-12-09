@@ -118,8 +118,7 @@ nir_vk_is_not_xfb_output(nir_variable *var, void *data)
 nir_shader *
 vk_spirv_to_nir(struct vk_device *device,
                 const uint32_t *spirv_data, size_t spirv_size_B,
-                gl_shader_stage stage, const char *entrypoint_name,
-                enum gl_subgroup_size subgroup_size,
+                mesa_shader_stage stage, const char *entrypoint_name,
                 const VkSpecializationInfo *spec_info,
                 const struct spirv_to_nir_options *spirv_options,
                 const struct nir_shader_compiler_options *nir_options,
@@ -136,7 +135,6 @@ vk_spirv_to_nir(struct vk_device *device,
    spirv_options_local.capabilities = &spirv_caps;
    spirv_options_local.debug.func = spirv_nir_debug;
    spirv_options_local.debug.private_data = (void *)device;
-   spirv_options_local.subgroup_size = subgroup_size;
 
    uint32_t num_spec_entries = 0;
    struct nir_spirv_specialization *spec_entries =
@@ -165,7 +163,8 @@ vk_spirv_to_nir(struct vk_device *device,
    NIR_PASS(_, nir, nir_lower_variable_initializers, nir_var_function_temp);
    NIR_PASS(_, nir, nir_lower_returns);
    NIR_PASS(_, nir, nir_inline_functions);
-   NIR_PASS(_, nir, nir_copy_prop);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
+   NIR_PASS(_, nir, nir_opt_constant_folding);
    NIR_PASS(_, nir, nir_opt_deref);
 
    /* Pick off the single entrypoint that we want */

@@ -29,6 +29,7 @@
 extern "C" {
 #endif
 #include "util/u_prim.h"
+#include "zink_context.h"
 
 struct compute_pipeline_cache_entry {
    struct zink_compute_pipeline_state state;
@@ -55,7 +56,7 @@ zink_desc_type_from_vktype(VkDescriptorType type)
    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
       return ZINK_DESCRIPTOR_TYPE_IMAGE;
    default:
-      unreachable("unhandled descriptor type");
+      UNREACHABLE("unhandled descriptor type");
    }
 }
 
@@ -100,7 +101,7 @@ zink_primitive_topology(enum mesa_prim mode)
       return VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY;
 
    default:
-      unreachable("unexpected enum mesa_prim");
+      UNREACHABLE("unexpected enum mesa_prim");
    }
 }
 
@@ -116,12 +117,14 @@ unsigned
 zink_program_num_bindings(const struct zink_program *pg);
 
 bool
-zink_program_descriptor_is_buffer(struct zink_context *ctx, gl_shader_stage stage, enum zink_descriptor_type type, unsigned i);
+zink_program_descriptor_is_buffer(struct zink_context *ctx, mesa_shader_stage stage, enum zink_descriptor_type type, unsigned i);
 
 void
 zink_gfx_program_update(struct zink_context *ctx);
 void
 zink_gfx_program_update_optimal(struct zink_context *ctx);
+void
+zink_mesh_program_update_optimal(struct zink_context *ctx);
 
 
 struct zink_gfx_library_key *
@@ -155,7 +158,8 @@ struct zink_gfx_program *
 zink_create_gfx_program(struct zink_context *ctx,
                         struct zink_shader **stages,
                         unsigned vertices_per_patch,
-                        uint32_t gfx_hash);
+                        uint32_t gfx_hash,
+                        bool is_mesh);
 
 void
 zink_destroy_gfx_program(struct zink_screen *screen,
@@ -247,7 +251,7 @@ zink_program_has_descriptors(const struct zink_program *pg)
 static inline struct zink_fs_key_base *
 zink_set_fs_base_key(struct zink_context *ctx)
 {
-   ctx->dirty_gfx_stages |= BITFIELD_BIT(MESA_SHADER_FRAGMENT);
+   zink_update_dirty_gfx_stages(ctx, BITFIELD_BIT(MESA_SHADER_FRAGMENT));
    return zink_screen(ctx->base.screen)->optimal_keys ?
           &ctx->gfx_pipeline_state.shader_keys_optimal.key.fs :
           &ctx->gfx_pipeline_state.shader_keys.key[MESA_SHADER_FRAGMENT].key.fs.base;
@@ -265,7 +269,7 @@ static inline struct zink_fs_key *
 zink_set_fs_key(struct zink_context *ctx)
 {
    assert(!zink_screen(ctx->base.screen)->optimal_keys);
-   ctx->dirty_gfx_stages |= BITFIELD_BIT(MESA_SHADER_FRAGMENT);
+   zink_update_dirty_gfx_stages(ctx, BITFIELD_BIT(MESA_SHADER_FRAGMENT));
    return &ctx->gfx_pipeline_state.shader_keys.key[MESA_SHADER_FRAGMENT].key.fs;
 }
 
@@ -279,7 +283,7 @@ zink_get_fs_key(const struct zink_context *ctx)
 static inline struct zink_gs_key *
 zink_set_gs_key(struct zink_context *ctx)
 {
-   ctx->dirty_gfx_stages |= BITFIELD_BIT(MESA_SHADER_GEOMETRY);
+   zink_update_dirty_gfx_stages(ctx, BITFIELD_BIT(MESA_SHADER_GEOMETRY));
    assert(!zink_screen(ctx->base.screen)->optimal_keys);
    return &ctx->gfx_pipeline_state.shader_keys.key[MESA_SHADER_GEOMETRY].key.gs;
 }
@@ -298,7 +302,7 @@ zink_set_tcs_key_patches(struct zink_context *ctx, uint8_t patch_vertices)
                               &ctx->gfx_pipeline_state.shader_keys.key[MESA_SHADER_TESS_CTRL].key.tcs;
    if (tcs->patch_vertices == patch_vertices)
       return false;
-   ctx->dirty_gfx_stages |= BITFIELD_BIT(MESA_SHADER_TESS_CTRL);
+   zink_update_dirty_gfx_stages(ctx, BITFIELD_BIT(MESA_SHADER_TESS_CTRL));
    tcs->patch_vertices = patch_vertices;
    return true;
 }
@@ -320,7 +324,7 @@ zink_update_gs_key_rectangular_line(struct zink_context *ctx);
 static inline struct zink_vs_key *
 zink_set_vs_key(struct zink_context *ctx)
 {
-   ctx->dirty_gfx_stages |= BITFIELD_BIT(MESA_SHADER_VERTEX);
+   zink_update_dirty_gfx_stages(ctx, BITFIELD_BIT(MESA_SHADER_VERTEX));
    assert(!zink_screen(ctx->base.screen)->optimal_keys);
    return &ctx->gfx_pipeline_state.shader_keys.key[MESA_SHADER_VERTEX].key.vs;
 }
@@ -369,22 +373,22 @@ void
 zink_create_primitive_emulation_gs(struct zink_context *ctx);
 
 static inline const struct zink_shader_key_base *
-zink_get_shader_key_base(const struct zink_context *ctx, gl_shader_stage pstage)
+zink_get_shader_key_base(const struct zink_context *ctx, mesa_shader_stage pstage)
 {
    assert(!zink_screen(ctx->base.screen)->optimal_keys);
    return &ctx->gfx_pipeline_state.shader_keys.key[pstage].base;
 }
 
 static inline struct zink_shader_key_base *
-zink_set_shader_key_base(struct zink_context *ctx, gl_shader_stage pstage)
+zink_set_shader_key_base(struct zink_context *ctx, mesa_shader_stage pstage)
 {
-   ctx->dirty_gfx_stages |= BITFIELD_BIT(pstage);
+   zink_update_dirty_gfx_stages(ctx, BITFIELD_BIT(pstage));
    assert(!zink_screen(ctx->base.screen)->optimal_keys);
    return &ctx->gfx_pipeline_state.shader_keys.key[pstage].base;
 }
 
 static inline void
-zink_set_zs_needs_shader_swizzle_key(struct zink_context *ctx, gl_shader_stage pstage, bool swizzle_update)
+zink_set_zs_needs_shader_swizzle_key(struct zink_context *ctx, mesa_shader_stage pstage, bool swizzle_update)
 {
    if (!zink_screen(ctx->base.screen)->driver_compiler_workarounds.needs_zs_shader_swizzle) {
       if (pstage != MESA_SHADER_FRAGMENT)
@@ -431,6 +435,35 @@ zink_can_use_shader_objects(const struct zink_context *ctx)
           !ctx->is_generated_gs_bound;
 }
 
+ALWAYS_INLINE static bool
+zink_can_use_pipeline_libs_mesh(const struct zink_context *ctx)
+{
+   return
+          /* this is just terrible */
+          !zink_get_fs_base_key(ctx)->shadow_needs_shader_swizzle &&
+          /* TODO: is sample shading even possible to handle with GPL? */
+          !ctx->gfx_stages[MESA_SHADER_FRAGMENT]->info.fs.uses_sample_shading &&
+          !zink_get_fs_base_key(ctx)->fbfetch_ms &&
+          !ctx->gfx_pipeline_state.force_persample_interp &&
+          !ctx->gfx_pipeline_state.min_samples &&
+          !ctx->fb_state.viewmask;
+}
+
+/* stricter requirements */
+ALWAYS_INLINE static bool
+zink_can_use_shader_objects_mesh(const struct zink_context *ctx)
+{
+   return
+          ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT_MESH(ctx->gfx_pipeline_state.mesh_optimal_key) &&
+          /* TODO: is sample shading even possible to handle with GPL? */
+          !ctx->gfx_stages[MESA_SHADER_FRAGMENT]->info.fs.uses_sample_shading &&
+          /* TODO: maybe someday shader objects + viewmask */
+          !ctx->gfx_stages[MESA_SHADER_MESH]->info.view_mask &&
+          !ctx->gfx_pipeline_state.force_persample_interp &&
+          !ctx->gfx_pipeline_state.min_samples &&
+          !ctx->fb_state.viewmask;
+}
+
 bool
 zink_set_rasterizer_discard(struct zink_context *ctx, bool disable);
 void
@@ -458,6 +491,18 @@ zink_sanitize_optimal_key(struct zink_shader **shaders, uint32_t val)
       k.val = val;
    else
       k.val = zink_shader_key_optimal_no_tcs(val);
+   if (!zink_shader_uses_samples(shaders[MESA_SHADER_FRAGMENT]))
+      k.fs.samples = false;
+   if (!(shaders[MESA_SHADER_FRAGMENT]->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DATA1)))
+      k.fs.force_dual_color_blend = false;
+   return k.val;
+}
+
+static inline uint32_t
+zink_sanitize_optimal_key_mesh(struct zink_shader **shaders, uint32_t val)
+{
+   union zink_shader_key_optimal k;
+   k.val = zink_shader_key_optimal_mesh(val);
    if (!zink_shader_uses_samples(shaders[MESA_SHADER_FRAGMENT]))
       k.fs.samples = false;
    if (!(shaders[MESA_SHADER_FRAGMENT]->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DATA1)))

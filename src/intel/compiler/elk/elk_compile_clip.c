@@ -78,7 +78,7 @@ elk_compile_clip(const struct elk_compiler *compiler,
       elk_emit_point_clip( &c );
       break;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 
    elk_compact_instructions(&c.func, 0, NULL);

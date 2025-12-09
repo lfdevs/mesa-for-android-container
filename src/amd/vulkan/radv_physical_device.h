@@ -16,6 +16,7 @@
 
 #include "ac_uvd_dec.h"
 #include "ac_vcn_enc.h"
+#include "radv_constants.h"
 #include "radv_instance.h"
 #include "radv_queue.h"
 #include "radv_radeon_winsys.h"
@@ -27,7 +28,6 @@
 #include "vk_physical_device.h"
 
 #ifndef _WIN32
-#include <amdgpu.h>
 #include <xf86drm.h>
 #endif
 
@@ -64,8 +64,9 @@ struct radv_physical_device_cache_key {
    uint32_t use_llvm : 1;
    uint32_t use_ngg : 1;
    uint32_t use_ngg_culling : 1;
+   uint32_t no_implicit_varying_subgroup_size : 1;
 
-   uint32_t reserved : 10;
+   uint32_t reserved : 9;
 };
 
 enum radv_video_enc_hw_ver {
@@ -74,6 +75,25 @@ enum radv_video_enc_hw_ver {
    RADV_VIDEO_ENC_HW_3,
    RADV_VIDEO_ENC_HW_4,
    RADV_VIDEO_ENC_HW_5,
+};
+
+/**
+ * Description of the various HiZ workarounds for GFX12.
+ *
+ * - disabled: None of the HiZ/HiS workarounds are enabled. This is very risky and should only be
+ *   used when we guarantee no issues. Performance is optimal.
+ *
+ * - partial: Emit BOTTOM_OF_PIPE_TS events after every draw to mitigate the issue. This is
+ *   potentially risky because it doesn't mitigate the issue complety but it helps in most cases.
+ *   Performance should be mostly optimal.
+ *
+ * - full: Disable HiZ/HiS at draw time when required to prevent the issue to happen. This solution
+ *   should be completely safe but it might decrease performance in some cases.
+ */
+enum radv_gfx12_hiz_wa {
+   RADV_GFX12_HIZ_WA_DISABLED,
+   RADV_GFX12_HIZ_WA_PARTIAL,
+   RADV_GFX12_HIZ_WA_FULL,
 };
 
 struct radv_physical_device {
@@ -104,11 +124,8 @@ struct radv_physical_device {
    /* Whether to enable HTILE compression for depth/stencil images. */
    bool use_hiz;
 
-   /* Whether the driver uses BOTTOM_OF_PIPE_TS events to workaround random GPU hangs with HiZ/HiS
-    * on GFX12. Note that this workaround doesn't mitigate the issue reliably but it helps in most
-    * scenarios.
-    */
-   bool use_gfx12_hiz_his_event_wa;
+   /* GFX12 HiZ workaround behavior. */
+   enum radv_gfx12_hiz_wa gfx12_hiz_wa;
 
    /* Whether to enable NGG. */
    bool use_ngg;
@@ -198,9 +215,21 @@ struct radv_physical_device {
    struct radv_physical_device_cache_key cache_key;
 
    uint32_t tess_distribution_mode;
+
+   struct {
+      struct {
+         uint32_t width;
+         uint32_t height;
+         uint32_t depth;
+      } max_dims;
+
+      uint32_t max_array_layers;
+   } image_props;
 };
 
 VK_DEFINE_HANDLE_CASTS(radv_physical_device, vk.base, VkPhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE)
+
+bool radv_sparse_enabled(const struct radv_physical_device *pdev);
 
 static inline struct radv_instance *
 radv_physical_device_instance(const struct radv_physical_device *pdev)
@@ -213,7 +242,8 @@ radv_dedicated_sparse_queue_enabled(const struct radv_physical_device *pdev)
 {
    /* Dedicated sparse queue requires VK_QUEUE_SUBMIT_MODE_THREADED, which is incompatible with
     * VK_DEVICE_TIMELINE_MODE_EMULATED. */
-   return pdev->info.has_timeline_syncobj;
+   return pdev->info.has_timeline_syncobj &&
+          radv_sparse_enabled(pdev);
 }
 
 static inline bool
@@ -256,16 +286,24 @@ vk_queue_to_radv(const struct radv_physical_device *pdev, int queue_family_index
  * specific shader stage (developers only).
  */
 static inline bool
-radv_use_llvm_for_stage(const struct radv_physical_device *pdev, UNUSED gl_shader_stage stage)
+radv_use_llvm_for_stage(const struct radv_physical_device *pdev, UNUSED mesa_shader_stage stage)
 {
    return pdev->use_llvm;
 }
+
+bool radv_host_image_copy_enabled(const struct radv_physical_device *pdev);
 
 bool radv_enable_rt(const struct radv_physical_device *pdev);
 
 bool radv_emulate_rt(const struct radv_physical_device *pdev);
 
 bool radv_use_bvh8(const struct radv_physical_device *pdev);
+
+bool radv_is_dcc_disabled(const struct radv_physical_device *pdev);
+
+bool radv_are_dcc_stores_disabled(const struct radv_physical_device *pdev);
+
+bool radv_are_dcc_mips_disabled(const struct radv_physical_device *pdev);
 
 uint32_t radv_find_memory_index(const struct radv_physical_device *pdev, VkMemoryPropertyFlags flags);
 
@@ -276,6 +314,8 @@ VkResult create_drm_physical_device(struct vk_instance *vk_instance, struct _drm
 
 void radv_physical_device_destroy(struct vk_physical_device *vk_pdev);
 
+bool radv_transfer_queue_enabled(const struct radv_physical_device *pdev);
+
 bool radv_compute_queue_enabled(const struct radv_physical_device *pdev);
 
 static inline uint32_t
@@ -283,6 +323,20 @@ radv_get_sampled_image_desc_size(const struct radv_physical_device *pdev)
 {
    /* Main descriptor + FMASK desccriptor if needed. */
    return 32 + (pdev->use_fmask ? 32 : 0);
+}
+
+static inline uint32_t
+radv_get_combined_image_sampler_desc_size(const struct radv_physical_device *pdev)
+{
+   const uint32_t image_desc_size = radv_get_sampled_image_desc_size(pdev);
+
+   return align(image_desc_size + RADV_SAMPLER_DESC_SIZE, 32);
+}
+
+static inline uint32_t
+radv_get_combined_image_sampler_offset(const struct radv_physical_device *pdev)
+{
+   return radv_get_combined_image_sampler_desc_size(pdev) - RADV_SAMPLER_DESC_SIZE;
 }
 
 #endif /* RADV_PHYSICAL_DEVICE_H */

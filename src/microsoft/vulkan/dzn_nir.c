@@ -978,6 +978,6 @@ dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, struct dzn_nir_
 
    nir_validate_shader(nir, "in dzn_nir_polygon_point_mode_gs");
 
-   NIR_PASS_V(nir, nir_lower_var_copies);
+   NIR_PASS(_, nir, nir_lower_var_copies);
    return b->shader;
 }

@@ -86,7 +86,7 @@ get_vertex_index_for_all_inputs(nir_shader *nir, struct lower_vs_inputs_state *s
 
    if (key->ge.mono.instance_divisor_is_fetched) {
       s->instance_divisor_constbuf =
-         si_nir_load_internal_binding(b, s->args, SI_VS_CONST_INSTANCE_DIVISORS, 4);
+         si_nir_load_internal_binding(sel->screen, b, s->args, SI_VS_CONST_INSTANCE_DIVISORS, 4);
    }
 
    for (int i = 0; i < sel->info.num_inputs; i++)
@@ -338,7 +338,7 @@ opencoded_load_format(nir_builder *b, nir_def *rsrc, nir_def *vindex,
          break;
       }
       default:
-         unreachable("invalid fetch format");
+         UNREACHABLE("invalid fetch format");
          break;
       }
    }
@@ -396,7 +396,7 @@ opencoded_load_format(nir_builder *b, nir_def *rsrc, nir_def *vindex,
       }
       break;
    default:
-      unreachable("invalid fetch format");
+      UNREACHABLE("invalid fetch format");
       break;
    }
 
@@ -432,9 +432,10 @@ load_vs_input_from_vertex_buffer(nir_builder *b, unsigned input_index,
       vb_desc = ac_nir_load_arg(b, &s->args->ac, s->args->vb_descriptors[input_index]);
    } else {
       unsigned index = input_index - sel->info.num_vbos_in_user_sgprs;
-      nir_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->ac.vertex_buffers);
-      vb_desc = nir_load_smem_amd(b, 4, addr, nir_imm_int(b, index * 16),
-                                  .access = ACCESS_CAN_SPECULATE);
+      nir_def *addr = si_nir_load_addr32_arg(s->shader->selector->screen, s->args,
+                                             b, s->args->ac.vertex_buffers);
+      vb_desc = ac_nir_load_smem(b, 4, addr, nir_imm_int(b, index * 16), 16,
+                                 ACCESS_CAN_SPECULATE);
    }
 
    nir_def *vertex_index = s->vertex_index[input_index];

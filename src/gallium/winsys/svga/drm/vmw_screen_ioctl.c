@@ -1025,7 +1025,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       goto out_no_3d;
    }
    vws->ioctl.hwversion = gp_arg.value;
-   getenv_val = getenv("SVGA_FORCE_HOST_BACKED");
+   getenv_val = os_get_option("SVGA_FORCE_HOST_BACKED");
    if (!getenv_val || strcmp(getenv_val, "0") == 0) {
       memset(&gp_arg, 0, sizeof(gp_arg));
       gp_arg.param = DRM_VMW_PARAM_HW_CAPS;
@@ -1093,7 +1093,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
 
             debug_printf("Have VGPU10 interface and hardware.\n");
             vws->base.have_vgpu10 = true;
-            vgpu10_val = getenv("SVGA_VGPU10");
+            vgpu10_val = os_get_option("SVGA_VGPU10");
             if (vgpu10_val && strcmp(vgpu10_val, "0") == 0) {
                debug_printf("Disabling VGPU10 interface.\n");
                vws->base.have_vgpu10 = false;
@@ -1157,7 +1157,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
 
       if (vws->ioctl.have_drm_2_16) {
          vws->base.have_coherent = true;
-         getenv_val = getenv("SVGA_FORCE_COHERENT");
+         getenv_val = os_get_option("SVGA_FORCE_COHERENT");
          if (getenv_val && strcmp(getenv_val, "0") != 0)
             vws->force_coherent = true;
       }
@@ -1183,7 +1183,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
 
    /* Userspace surfaces are only supported on guest-backed hardware */
    vws->userspace_surface = false;
-   getenv_val = getenv("VMW_SVGA_USERSPACE_SURFACE");
+   getenv_val = os_get_option("VMW_SVGA_USERSPACE_SURFACE");
    if (getenv_val && atoi(getenv_val)) {
       assert(vws->base.have_gb_objects);
       assert(vws->base.have_vgpu10);

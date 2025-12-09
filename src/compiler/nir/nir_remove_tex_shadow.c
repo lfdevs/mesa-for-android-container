@@ -80,7 +80,7 @@ remove_tex_shadow(struct nir_builder *b, nir_instr *instr, void *data)
       nir_variable *sampler = NULL;
       int sampler_src_index = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
       if (sampler_src_index >= 0) {
-         sampler_deref = nir_instr_as_deref(tex->src[sampler_src_index].src.ssa->parent_instr);
+         sampler_deref = nir_def_as_deref(tex->src[sampler_src_index].src.ssa);
          sampler = nir_deref_instr_get_variable(sampler_deref);
          sampler->type = strip_shadow_with_array(sampler->type);
          sampler_deref->type = sampler->type;

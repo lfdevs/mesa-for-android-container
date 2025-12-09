@@ -161,8 +161,8 @@ static void add_interference(struct regalloc_ctx *ctx, unsigned i, unsigned j)
 
    a->num_conflicts++;
    b->num_conflicts++;
-   util_dynarray_append(&a->conflict_list, unsigned, j);
-   util_dynarray_append(&b->conflict_list, unsigned, i);
+   util_dynarray_append(&a->conflict_list, j);
+   util_dynarray_append(&b->conflict_list, i);
 }
 
 /* Make the register or node "i" interfere with all the other live registers

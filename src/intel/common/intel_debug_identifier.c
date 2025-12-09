@@ -77,7 +77,7 @@ intel_debug_write_identifiers(void *_output,
       }
 
       default:
-         unreachable("Missing identifier write");
+         UNREACHABLE("Missing identifier write");
       }
 
       assert(output < output_end);

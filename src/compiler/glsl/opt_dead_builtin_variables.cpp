@@ -33,10 +33,10 @@
  * outputs (fragment shader only) that are not used can be removed.
  */
 void
-optimize_dead_builtin_variables(exec_list *instructions,
+optimize_dead_builtin_variables(ir_exec_list *instructions,
                                 enum ir_variable_mode other)
 {
-   foreach_in_list_safe(ir_instruction, inst, instructions) {
+   ir_foreach_in_list_safe(ir_instruction, inst, instructions) {
       ir_variable *var = inst->as_variable();
       if (!var || var->data.used)
          continue;

@@ -61,7 +61,7 @@ void
 ir3_disk_cache_init_shader_key(struct ir3_compiler *compiler,
                                struct ir3_shader *shader)
 {
-   if (!compiler->disk_cache)
+   if (!compiler->disk_cache && !ir3_shader_bisect_need_shader_key())
       return;
 
    struct mesa_sha1 ctx;

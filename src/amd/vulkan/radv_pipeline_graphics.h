@@ -42,6 +42,51 @@ struct radv_sample_locations_state {
    VkSampleLocationEXT locations[MAX_SAMPLE_LOCATIONS];
 };
 
+struct radv_viewport_xform_state {
+   float scale[3];
+   float translate[3];
+};
+
+struct radv_blend_equation_state {
+   struct {
+      uint32_t cb_blend_control;
+      uint32_t sx_mrt_blend_opt;
+   } att[MAX_RTS];
+
+   bool mrt0_is_dual_src;
+};
+
+struct radv_vertex_input_state {
+   uint32_t attribute_mask;
+
+   uint32_t instance_rate_inputs;
+   uint32_t nontrivial_divisors;
+   uint32_t zero_divisors;
+   uint32_t post_shuffle;
+   /* Having two separate fields instead of a single uint64_t makes it easier to remove attributes
+    * using bitwise arithmetic.
+    */
+   uint32_t alpha_adjust_lo;
+   uint32_t alpha_adjust_hi;
+   uint32_t nontrivial_formats;
+
+   uint8_t bindings[MAX_VERTEX_ATTRIBS];
+   uint32_t divisors[MAX_VERTEX_ATTRIBS];
+   uint32_t offsets[MAX_VERTEX_ATTRIBS];
+   uint8_t formats[MAX_VERTEX_ATTRIBS];
+   uint8_t format_align_req_minus_1[MAX_VERTEX_ATTRIBS];
+   uint8_t component_align_req_minus_1[MAX_VERTEX_ATTRIBS];
+   uint8_t format_sizes[MAX_VERTEX_ATTRIBS];
+   uint32_t attrib_index_offset[MAX_VERTEX_ATTRIBS]; /* Only used with static strides. */
+   uint32_t non_trivial_format[MAX_VERTEX_ATTRIBS];
+
+   uint32_t vbo_misaligned_mask;
+   uint32_t vbo_unaligned_mask;
+   uint32_t vbo_misaligned_mask_invalid;
+
+   bool bindings_match_attrib;
+};
+
 struct radv_dynamic_state {
    struct vk_dynamic_graphics_state vk;
 
@@ -51,16 +96,19 @@ struct radv_dynamic_state {
     */
    uint64_t mask;
 
-   struct {
-      struct {
-         float scale[3];
-         float translate[3];
-      } xform[MAX_VIEWPORTS];
-   } hw_vp;
+   struct radv_viewport_xform_state vp_xform[MAX_VIEWPORTS];
+
+   struct radv_vertex_input_state vertex_input;
 
    struct radv_sample_locations_state sample_location;
 
    VkImageAspectFlags feedback_loop_aspects;
+
+   uint32_t color_write_enable;
+   uint32_t color_write_mask;
+   uint8_t color_blend_enable;
+
+   struct radv_blend_equation_state blend_eq;
 };
 
 struct radv_multisample_state {
@@ -84,19 +132,6 @@ struct radv_sqtt_shaders_reloc {
 struct radv_graphics_pipeline {
    struct radv_pipeline base;
 
-   bool uses_drawid;
-   bool uses_baseinstance;
-
-   /* Whether the pipeline forces per-vertex VRS (GFX10.3+). */
-   bool force_vrs_per_vertex;
-
-   /* Whether the pipeline uses NGG (GFX10+). */
-   bool is_ngg;
-   bool has_ngg_culling;
-
-   uint8_t vtx_emit_num;
-
-   uint32_t vtx_base_sgpr;
    uint64_t dynamic_states;
    uint64_t needed_dynamic_state;
 
@@ -104,17 +139,12 @@ struct radv_graphics_pipeline {
 
    struct radv_dynamic_state dynamic_state;
 
-   struct radv_vertex_input_state vertex_input;
-
    struct radv_multisample_state ms;
    struct radv_ia_multi_vgt_param_helpers ia_multi_vgt_param;
-   uint32_t binding_stride[MAX_VBS];
    uint32_t db_render_control;
 
    /* Last pre-PS API stage */
-   gl_shader_stage last_vgt_api_stage;
-
-   unsigned rast_prim;
+   mesa_shader_stage last_vgt_api_stage;
 
    /* Custom blend mode for internal operations. */
    unsigned custom_blend_mode;
@@ -173,7 +203,7 @@ struct radv_graphics_lib_pipeline {
 RADV_DECL_PIPELINE_DOWNCAST(graphics_lib, RADV_PIPELINE_GRAPHICS_LIB)
 
 static inline bool
-radv_pipeline_has_stage(const struct radv_graphics_pipeline *pipeline, gl_shader_stage stage)
+radv_pipeline_has_stage(const struct radv_graphics_pipeline *pipeline, mesa_shader_stage stage)
 {
    return pipeline->base.shaders[stage];
 }
@@ -227,6 +257,21 @@ radv_conv_gl_prim_to_gs_out(unsigned gl_prim)
 }
 
 static inline uint32_t
+radv_conv_tess_prim_to_gs_out(enum tess_primitive_mode prim)
+{
+   switch (prim) {
+   case TESS_PRIMITIVE_TRIANGLES:
+   case TESS_PRIMITIVE_QUADS:
+      return V_028A6C_TRISTRIP;
+   case TESS_PRIMITIVE_ISOLINES:
+      return V_028A6C_LINESTRIP;
+   default:
+      assert(0);
+      return 0;
+   }
+}
+
+static inline uint32_t
 radv_translate_prim(unsigned topology)
 {
    switch (topology) {
@@ -255,7 +300,7 @@ radv_translate_prim(unsigned topology)
    case VK_PRIMITIVE_TOPOLOGY_META_RECT_LIST_MESA:
       return V_008958_DI_PT_RECTLIST;
    default:
-      unreachable("unhandled primitive type");
+      UNREACHABLE("unhandled primitive type");
    }
 }
 
@@ -280,21 +325,21 @@ radv_prim_is_points_or_lines(unsigned topology)
 }
 
 static inline bool
-radv_rast_prim_is_point(unsigned rast_prim)
+radv_vgt_outprim_is_point(unsigned vgt_outprim_type)
 {
-   return rast_prim == V_028A6C_POINTLIST;
+   return vgt_outprim_type == V_028A6C_POINTLIST;
 }
 
 static inline bool
-radv_rast_prim_is_line(unsigned rast_prim)
+radv_vgt_outprim_is_line(unsigned vgt_outprim_type)
 {
-   return rast_prim == V_028A6C_LINESTRIP;
+   return vgt_outprim_type == V_028A6C_LINESTRIP;
 }
 
 static inline bool
-radv_rast_prim_is_points_or_lines(unsigned rast_prim)
+radv_vgt_outprim_is_point_or_line(unsigned vgt_outprim_type)
 {
-   return radv_rast_prim_is_point(rast_prim) || radv_rast_prim_is_line(rast_prim);
+   return radv_vgt_outprim_is_point(vgt_outprim_type) || radv_vgt_outprim_is_line(vgt_outprim_type);
 }
 
 static inline bool
@@ -415,7 +460,7 @@ radv_translate_blend_logic_op(VkLogicOp op)
    case VK_LOGIC_OP_SET:
       return V_028808_ROP3_SET;
    default:
-      unreachable("Unhandled logic op");
+      UNREACHABLE("Unhandled logic op");
    }
 }
 
@@ -589,7 +634,11 @@ struct radv_ia_multi_vgt_param_helpers radv_compute_ia_multi_vgt_param(const str
 
 void radv_get_viewport_xform(const VkViewport *viewport, float scale[3], float translate[3]);
 
-struct radv_shader *radv_get_shader(struct radv_shader *const *shaders, gl_shader_stage stage);
+void radv_translate_blend_equation(const struct radv_physical_device *pdev, VkBlendOp eqRGB, VkBlendFactor srcRGB,
+                                   VkBlendFactor dstRGB, VkBlendOp eqA, VkBlendFactor srcA, VkBlendFactor dstA,
+                                   uint32_t *cb_blend_control_out, uint32_t *sx_mrt_blend_opt_out);
+
+struct radv_shader *radv_get_shader(struct radv_shader *const *shaders, mesa_shader_stage stage);
 
 struct radv_ps_epilog_state {
    uint8_t color_attachment_count;
@@ -597,7 +646,7 @@ struct radv_ps_epilog_state {
    uint8_t color_attachment_mappings[MAX_RTS];
 
    uint32_t color_write_mask;
-   uint32_t color_blend_enable;
+   uint8_t color_blend_enable;
 
    uint32_t colors_written;
    bool mrt0_is_dual_src;
@@ -634,8 +683,6 @@ struct radv_vgt_shader_key {
 
 struct radv_vgt_shader_key radv_get_vgt_shader_key(const struct radv_device *device, struct radv_shader **shaders,
                                                    const struct radv_shader *gs_copy_shader);
-
-uint32_t radv_get_vgt_gs_out(struct radv_shader **shaders, uint32_t primitive_topology, bool is_ngg);
 
 bool radv_needs_null_export_workaround(const struct radv_device *device, const struct radv_shader *ps,
                                        unsigned custom_blend_mode);

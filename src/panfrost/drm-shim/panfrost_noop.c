@@ -30,6 +30,7 @@
 #include "drm-uapi/panfrost_drm.h"
 #include "drm-uapi/panthor_drm.h"
 
+#include "util/os_misc.h"
 #include "util/os_mman.h"
 #include "util/u_math.h"
 
@@ -41,7 +42,7 @@ bool drm_shim_driver_prefers_first_render_node = true;
 static uint64_t
 pan_get_gpu_id(void)
 {
-   char *override_version = getenv("PAN_GPU_ID");
+   const char *override_version = os_get_option("PAN_GPU_ID");
 
    if (override_version)
       return strtol(override_version, NULL, 16);
@@ -109,7 +110,7 @@ panfrost_ioctl_create_bo(int fd, unsigned long request, void *arg)
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
    struct shim_bo *bo = calloc(1, sizeof(*bo));
-   size_t size = ALIGN(create->size, 4096);
+   size_t size = align_uintptr(create->size, 4096);
 
    drm_shim_bo_init(bo, size);
 
@@ -236,7 +237,7 @@ panthor_ioctl_bo_create(int fd, unsigned long request, void *arg)
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
    struct shim_bo *bo = calloc(1, sizeof(*bo));
-   size_t size = ALIGN(bo_create->size, 4096);
+   size_t size = align_uintptr(bo_create->size, 4096);
 
    drm_shim_bo_init(bo, size);
 

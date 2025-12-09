@@ -84,16 +84,16 @@ fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond) assert_dt
    util_blitter_save_blend(ctx->blitter, ctx->blend);
    util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->zsa);
    util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
-   util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask, ctx->min_samples);
+   util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask, 1 /* min_samples -- unused in freedreno */);
    util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer);
    util_blitter_save_fragment_sampler_states(
-      ctx->blitter, ctx->tex[PIPE_SHADER_FRAGMENT].num_samplers,
-      (void **)ctx->tex[PIPE_SHADER_FRAGMENT].samplers);
+      ctx->blitter, ctx->tex[MESA_SHADER_FRAGMENT].num_samplers,
+      (void **)ctx->tex[MESA_SHADER_FRAGMENT].samplers);
    util_blitter_save_fragment_sampler_views(
-      ctx->blitter, ctx->tex[PIPE_SHADER_FRAGMENT].num_textures,
-      ctx->tex[PIPE_SHADER_FRAGMENT].textures);
+      ctx->blitter, ctx->tex[MESA_SHADER_FRAGMENT].num_textures,
+      ctx->tex[MESA_SHADER_FRAGMENT].textures);
    util_blitter_save_fragment_constant_buffer_slot(ctx->blitter,
-                                                   ctx->constbuf[PIPE_SHADER_FRAGMENT].cb);
+                                                   ctx->constbuf[MESA_SHADER_FRAGMENT].cb);
    if (!render_cond)
       util_blitter_save_render_condition(ctx->blitter, ctx->cond_query,
                                          ctx->cond_cond, ctx->cond_mode);
@@ -158,7 +158,7 @@ build_f16_copy_fs_shader(struct pipe_screen *pscreen, enum pipe_texture_target t
       [PIPE_TEXTURE_CUBE_ARRAY] = GLSL_SAMPLER_DIM_CUBE,
    };
 
-   const nir_shader_compiler_options *options = pscreen->nir_options[PIPE_SHADER_FRAGMENT];
+   const nir_shader_compiler_options *options = pscreen->nir_options[MESA_SHADER_FRAGMENT];
    nir_builder _b =
       nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,
                                      "f16 copy %s fs",
@@ -226,6 +226,12 @@ fd_blitter_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
    /* Initialize the sampler view. */
    default_src_texture(&src_templ, src, info->src.level);
    src_templ.format = info->src.format;
+   if (info->swizzle_enable) {
+      src_templ.swizzle_r = info->swizzle[0];
+      src_templ.swizzle_g = info->swizzle[1];
+      src_templ.swizzle_b = info->swizzle[2];
+      src_templ.swizzle_a = info->swizzle[3];
+   }
    src_view = pipe->create_sampler_view(pipe, src, &src_templ);
 
    /* Note: a2xx does not support fp16: */
@@ -292,7 +298,7 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
       .buffer_size = 16,
       .user_buffer = &color->ui,
    };
-   pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, false, &cb);
+   pctx->set_constant_buffer(pctx, MESA_SHADER_FRAGMENT, 0, &cb);
 
    unsigned rs_idx = pfb->samples > 1 ? 1 : 0;
    if (!ctx->clear_rs_state[rs_idx]) {
@@ -316,8 +322,7 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
    pctx->set_viewport_states(pctx, 0, 1, &vp);
 
    pctx->bind_vertex_elements_state(pctx, ctx->solid_vbuf_state.vtx);
-   util_set_vertex_buffers(pctx, 1, false,
-                           &ctx->solid_vbuf_state.vertexbuf.vb[0]);
+   pctx->set_vertex_buffers(pctx, 1, &ctx->solid_vbuf_state.vertexbuf.vb[0]);
    pctx->set_stream_output_targets(pctx, 0, NULL, NULL, 0);
 
    if (pfb->layers > 1)

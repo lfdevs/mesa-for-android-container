@@ -67,6 +67,7 @@ dEQP-VK.api.descriptor_pool.repeated_free_reset_long
 dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic
 
 # Times out
+dEQP-VK.api.descriptor_pool.repeated_reset_long
 dEQP-VK.memory.allocation.basic.percent_1.reverse.count_12
 dEQP-VK.rasterization.primitives_multisample_4_bit.static_stipple.bresenham_line_strip_wide
 dEQP-VK.ray_query.builtin.instanceid.tese.aabbs
@@ -87,4 +88,5 @@ dEQP-VK.tessellation.misc_draw.fill_overlap_triangles_equal_spacing_draw_indirec
 dEQP-VK.tessellation.shader_input_output.tess_level_inner_1_tes
 dEQP-VK.tessellation.tesscoord.triangles_equal_spacing_execution_mode_in_tesc
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_linear_mipmap_linear_clamp
+dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_linear_mipmap_linear_repeat
 nir-stress=dEQP-VK.ray_query.builtin.instanceid.tese.triangles

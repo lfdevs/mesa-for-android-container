@@ -65,10 +65,8 @@ Temp merged_wave_info_to_mask(isel_context* ctx, unsigned i);
 void
 get_const_vec(nir_def* vec, nir_const_value* cv[4])
 {
-   if (vec->parent_instr->type != nir_instr_type_alu)
-      return;
-   nir_alu_instr* vec_instr = nir_instr_as_alu(vec->parent_instr);
-   if (vec_instr->op != nir_op_vec(vec->num_components))
+   nir_alu_instr* vec_instr = nir_def_as_alu_or_null(vec);
+   if (!vec_instr || vec_instr->op != nir_op_vec(vec->num_components))
       return;
 
    for (unsigned i = 0; i < vec->num_components; i++) {
@@ -83,6 +81,7 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
    assert(instr->op != nir_texop_samples_identical);
 
    Builder bld(ctx->program, ctx->block);
+   bool disable_wqm = instr->skip_helpers;
    bool has_bias = false, has_lod = false, level_zero = false, has_compare = false,
         has_offset = false, has_ddx = false, has_ddy = false, has_derivs = false,
         has_sample_index = false, has_clamped_lod = false, has_wqm_coord = false;
@@ -338,7 +337,7 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
          Temp tg4_lod = bld.copy(bld.def(v1), Operand::zero());
          Temp size = bld.tmp(v2);
          MIMG_instruction* tex = emit_mimg(bld, aco_opcode::image_get_resinfo, {size}, resource,
-                                           Operand(s4), std::vector<Temp>{tg4_lod});
+                                           Operand(s4), std::vector<Temp>{tg4_lod}, disable_wqm);
          tex->dim = dim;
          tex->dmask = 0x3;
          tex->da = da;
@@ -442,7 +441,7 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
          case 2: op = aco_opcode::buffer_load_format_d16_xy; break;
          case 3: op = aco_opcode::buffer_load_format_d16_xyz; break;
          case 4: op = aco_opcode::buffer_load_format_d16_xyzw; break;
-         default: unreachable("Tex instruction loads more than 4 components.");
+         default: UNREACHABLE("Tex instruction loads more than 4 components.");
          }
       } else {
          switch (util_last_bit(dmask & 0xf)) {
@@ -450,11 +449,12 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
          case 2: op = aco_opcode::buffer_load_format_xy; break;
          case 3: op = aco_opcode::buffer_load_format_xyz; break;
          case 4: op = aco_opcode::buffer_load_format_xyzw; break;
-         default: unreachable("Tex instruction loads more than 4 components.");
+         default: UNREACHABLE("Tex instruction loads more than 4 components.");
          }
       }
 
-      aco_ptr<Instruction> mubuf{create_instruction(op, Format::MUBUF, 3 + instr->is_sparse, 1)};
+      aco_ptr<Instruction> mubuf{
+         create_instruction(op, Format::MUBUF, 3 + instr->is_sparse + 2 * disable_wqm, 1)};
       mubuf->operands[0] = Operand(resource);
       mubuf->operands[1] = Operand(coords[0]);
       mubuf->operands[2] = Operand::c32(0);
@@ -463,6 +463,7 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
       mubuf->mubuf().tfe = instr->is_sparse;
       if (mubuf->mubuf().tfe)
          mubuf->operands[3] = emit_tfe_init(bld, tmp_dst);
+      init_disable_wqm(bld, mubuf->mubuf(), disable_wqm);
       ctx->block->instructions.emplace_back(std::move(mubuf));
 
       expand_vector(ctx, tmp_dst, dst, instr->def.num_components, dmask);
@@ -494,7 +495,8 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
                          ? aco_opcode::image_load
                          : aco_opcode::image_load_mip;
       Operand vdata = instr->is_sparse ? emit_tfe_init(bld, tmp_dst) : Operand(v1);
-      MIMG_instruction* tex = emit_mimg(bld, op, {tmp_dst}, resource, Operand(s4), args, vdata);
+      MIMG_instruction* tex =
+         emit_mimg(bld, op, {tmp_dst}, resource, Operand(s4), args, disable_wqm, vdata);
       if (instr->op == nir_texop_fragment_mask_fetch_amd)
          tex->dim = da ? ac_image_2darray : ac_image_2d;
       else
@@ -674,7 +676,7 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
 
    Operand vdata = instr->is_sparse ? emit_tfe_init(bld, tmp_dst) : Operand(v1);
    MIMG_instruction* tex =
-      emit_mimg(bld, opcode, {tmp_dst}, resource, Operand(sampler), args, vdata);
+      emit_mimg(bld, opcode, {tmp_dst}, resource, Operand(sampler), args, disable_wqm, vdata);
    tex->dim = dim;
    tex->dmask = dmask & 0xf;
    tex->da = da;
@@ -682,7 +684,7 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
    tex->tfe = instr->is_sparse;
    tex->d16 = d16;
    tex->a16 = a16;
-   if (implicit_derivs)
+   if (implicit_derivs && !has_wqm_coord)
       set_wqm(ctx, true);
 
    if (tg4_integer_cube_workaround) {
@@ -725,10 +727,10 @@ Operand
 get_phi_operand(isel_context* ctx, nir_def* ssa, RegClass rc)
 {
    Temp tmp = get_ssa_temp(ctx, ssa);
-   if (ssa->parent_instr->type == nir_instr_type_undef) {
+   if (nir_def_is_undef(ssa)) {
       return Operand(rc);
-   } else if (ssa->bit_size == 1 && ssa->parent_instr->type == nir_instr_type_load_const) {
-      bool val = nir_instr_as_load_const(ssa->parent_instr)->value[0].b;
+   } else if (ssa->bit_size == 1 && nir_def_is_const(ssa)) {
+      bool val = nir_def_as_load_const(ssa)->value[0].b;
       return Operand::c32_or_c64(val ? -1 : 0, ctx->program->lane_mask == s2);
    } else {
       return Operand(tmp);
@@ -849,7 +851,7 @@ visit_loop(isel_context* ctx, nir_loop* loop)
    loop_context lc;
    begin_loop(ctx, &lc);
    ctx->cf_info.parent_loop.has_divergent_break =
-      loop->divergent_break && nir_loop_first_block(loop)->predecessors->entries > 1;
+      loop->divergent_break && nir_loop_first_block(loop)->predecessors.entries > 1;
    ctx->cf_info.in_divergent_cf |= ctx->cf_info.parent_loop.has_divergent_break;
 
    visit_cf_list(ctx, &loop->body);
@@ -943,7 +945,7 @@ visit_cf_list(isel_context* ctx, struct exec_list* list)
       case nir_cf_node_block: visit_block(ctx, nir_cf_node_as_block(node)); break;
       case nir_cf_node_if: visit_if(ctx, nir_cf_node_as_if(node)); break;
       case nir_cf_node_loop: visit_loop(ctx, nir_cf_node_as_loop(node)); break;
-      default: unreachable("unimplemented cf list type");
+      default: UNREACHABLE("unimplemented cf list type");
       }
    }
 
@@ -1196,7 +1198,7 @@ select_program_rt(isel_context& ctx, unsigned shader_count, struct nir_shader* c
       append_logical_start(ctx.block);
       split_arguments(&ctx, startpgm);
       visit_cf_list(&ctx, &nir_shader_get_entrypoint(nir)->body);
-      append_logical_end(ctx.block);
+      append_logical_end(&ctx);
       ctx.block->kind |= block_kind_uniform;
 
       /* Fix output registers and jump to next shader. We can skip this when dealing with a raygen
@@ -1204,6 +1206,8 @@ select_program_rt(isel_context& ctx, unsigned shader_count, struct nir_shader* c
        */
       if (shader_count > 1 || shaders[i]->info.stage != MESA_SHADER_RAYGEN)
          insert_rt_jump_next(ctx, args);
+      else
+         Builder(ctx.program, ctx.block).sopp(aco_opcode::s_endpgm);
 
       cleanup_context(&ctx);
    }
@@ -1353,7 +1357,7 @@ select_shader(isel_context& ctx, nir_shader* nir, const bool need_startpgm, cons
    if (need_endpgm) {
       program->config->float_mode = program->blocks[0].fp_mode.val;
 
-      append_logical_end(ctx.block);
+      append_logical_end(&ctx);
       ctx.block->kind |= block_kind_uniform;
 
       if ((!program->info.ps.has_epilog && !is_first_stage_of_merged_shader) ||

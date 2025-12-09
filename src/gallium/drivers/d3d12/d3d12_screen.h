@@ -151,6 +151,7 @@ struct d3d12_screen {
    bool have_load_at_vertex;
    bool support_shader_images;
    bool support_create_not_resident;
+   bool supports_dynamic_queue_priority;
 
 #ifdef _GAMING_XBOX
    UINT64 frame_token;

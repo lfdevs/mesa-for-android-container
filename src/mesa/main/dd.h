@@ -115,7 +115,7 @@ struct dd_function_table {
     */
    /** Allocate a new program */
    struct gl_program * (*NewProgram)(struct gl_context *ctx,
-                                     gl_shader_stage stage,
+                                     mesa_shader_stage stage,
                                      GLuint id, bool is_arb_asm);
    /**
     * \name Draw functions.

@@ -39,8 +39,9 @@
 #include "util/u_framebuffer.h"
 #include "util/u_suballoc.h"
 #include "util/u_threaded_context.h"
+struct d3d12_context_queue_priority_manager;
 
-#define D3D12_GFX_SHADER_STAGES (PIPE_SHADER_TYPES - 1)
+#define D3D12_GFX_SHADER_STAGES (MESA_SHADER_STAGES - 1)
 
 enum d3d12_dirty_flags
 {
@@ -206,8 +207,9 @@ struct d3d12_context {
    struct hash_table *tcs_variant_cache;
    struct hash_table *compute_transform_cache;
 
-   struct pipe_constant_buffer cbufs[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
-   PIPE_FB_SURFACES; //STOP USING THIS
+   struct pipe_constant_buffer cbufs[MESA_SHADER_STAGES][PIPE_MAX_CONSTANT_BUFFERS];
+   struct d3d12_surface *fb_cbufs[PIPE_MAX_COLOR_BUFS];
+   struct d3d12_surface *fb_zsbuf;
    struct pipe_framebuffer_state fb;
    struct pipe_vertex_buffer vbs[PIPE_MAX_ATTRIBS];
    D3D12_VERTEX_BUFFER_VIEW vbvs[PIPE_MAX_ATTRIBS];
@@ -222,23 +224,23 @@ struct d3d12_context {
    D3D12_RECT scissors[PIPE_MAX_VIEWPORTS];
    float blend_factor[4];
    struct pipe_stencil_ref stencil_ref;
-   struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
-   unsigned num_sampler_views[PIPE_SHADER_TYPES];
+   struct pipe_sampler_view *sampler_views[MESA_SHADER_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   unsigned num_sampler_views[MESA_SHADER_STAGES];
    unsigned has_int_samplers;
-   struct pipe_shader_buffer ssbo_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
-   unsigned num_ssbo_views[PIPE_SHADER_TYPES];
-   struct pipe_image_view image_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
-   enum pipe_format image_view_emulation_formats[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
-   unsigned num_image_views[PIPE_SHADER_TYPES];
-   struct d3d12_sampler_state *samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
-   unsigned num_samplers[PIPE_SHADER_TYPES];
+   struct pipe_shader_buffer ssbo_views[MESA_SHADER_STAGES][PIPE_MAX_SHADER_BUFFERS];
+   unsigned num_ssbo_views[MESA_SHADER_STAGES];
+   struct pipe_image_view image_views[MESA_SHADER_STAGES][PIPE_MAX_SHADER_IMAGES];
+   enum pipe_format image_view_emulation_formats[MESA_SHADER_STAGES][PIPE_MAX_SHADER_IMAGES];
+   unsigned num_image_views[MESA_SHADER_STAGES];
+   struct d3d12_sampler_state *samplers[MESA_SHADER_STAGES][PIPE_MAX_SAMPLERS];
+   unsigned num_samplers[MESA_SHADER_STAGES];
    D3D12_INDEX_BUFFER_VIEW ibv;
 
-   dxil_wrap_sampler_state tex_wrap_states[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   dxil_wrap_sampler_state tex_wrap_states[MESA_SHADER_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
    dxil_wrap_sampler_state tex_wrap_states_shader_key[PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
-   dxil_texture_swizzle_state tex_swizzle_state[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
-   enum compare_func tex_compare_func[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   dxil_texture_swizzle_state tex_swizzle_state[MESA_SHADER_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   enum compare_func tex_compare_func[MESA_SHADER_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    struct {
       bool enabled;
@@ -266,7 +268,7 @@ struct d3d12_context {
 
    struct d3d12_gfx_pipeline_state gfx_pipeline_state;
    struct d3d12_compute_pipeline_state compute_pipeline_state;
-   unsigned shader_dirty[PIPE_SHADER_TYPES];
+   unsigned shader_dirty[MESA_SHADER_STAGES];
    unsigned state_dirty;
    unsigned cmdlist_dirty;
    ID3D12PipelineState *current_gfx_pso;
@@ -296,6 +298,11 @@ struct d3d12_context {
    /* used by d3d12_blit.cpp */
    void *stencil_resolve_vs, *stencil_resolve_fs, *stencil_resolve_fs_no_flip, *sampler_state;
 #endif // HAVE_GALLIUM_D3D12_GRAPHICS
+
+   struct d3d12_context_queue_priority_manager* priority_manager; // Object passed and managed by frontend
+   mtx_t priority_manager_lock; // Mutex to protect access to priority_manager
+
+   uint32_t max_video_encoding_async_depth = 0u;
 };
 
 static inline struct d3d12_context *
@@ -322,6 +329,17 @@ d3d12_current_batch(struct d3d12_context *ctx)
 
 struct pipe_context *
 d3d12_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags);
+
+int
+d3d12_context_set_queue_priority_manager(struct pipe_context *ctx, struct d3d12_context_queue_priority_manager *priority_manager);
+
+int
+d3d12_video_encoder_set_max_async_queue_depth(struct pipe_context *ctx, uint32_t max_async_depth);
+
+int
+d3d12_video_encoder_get_last_slice_completion_fence(struct pipe_video_codec *codec,
+                                                    void *feedback,
+                                                    pipe_fence_handle **last_slice_completion_fence);
 
 bool
 d3d12_enable_fake_so_buffers(struct d3d12_context *ctx, unsigned factor);

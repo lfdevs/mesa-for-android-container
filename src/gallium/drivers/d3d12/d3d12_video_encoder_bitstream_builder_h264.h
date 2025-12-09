@@ -41,7 +41,7 @@ class d3d12_video_bitstream_builder_h264 : public d3d12_video_bitstream_builder_
                       const D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264 &   codecConfig,
                       const D3D12_VIDEO_ENCODER_SEQUENCE_GOP_STRUCTURE_H264 &gopConfig,
                       uint32_t                                               seq_parameter_set_id,
-                      D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC            sequenceTargetResolution,
+                      const D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC&     sequenceTargetResolution,
                       D3D12_BOX                                              frame_cropping_codec_config,
                       std::vector<uint8_t> &                                 headerBitstream,
                       std::vector<uint8_t>::iterator                         placingPositionStart,

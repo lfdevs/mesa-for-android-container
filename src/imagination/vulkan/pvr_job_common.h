@@ -30,7 +30,6 @@
 
 #include "hwdef/rogue_hw_defs.h"
 #include "pvr_csb_enum_helpers.h"
-#include "pvr_private.h"
 #include "pvr_types.h"
 
 enum pvr_pbe_gamma {

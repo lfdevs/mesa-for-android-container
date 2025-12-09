@@ -21,15 +21,12 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "util/compiler.h"
-#include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_init.h"
 #include "gallivm/lp_bld_struct.h"
 #include "gallivm/lp_bld_sample.h"
 #include "gallivm/lp_bld_const.h"
 #include "gallivm/lp_bld_debug.h"
 #include "gallivm/lp_bld_flow.h"
-#include "gallivm/lp_bld_ir_common.h"
 #include "draw/draw_vertex_header.h"
 #include "lp_bld_jit_types.h"
 
@@ -235,11 +232,11 @@ lp_build_create_jit_image_type(struct gallivm_state *gallivm)
    elem_types[LP_JIT_IMAGE_HEIGHT] =
    elem_types[LP_JIT_IMAGE_DEPTH] = LLVMInt16TypeInContext(lc);
    elem_types[LP_JIT_IMAGE_NUM_SAMPLES] = LLVMInt8TypeInContext(lc);
-   elem_types[LP_JIT_IMAGE_BASE] = 
+   elem_types[LP_JIT_IMAGE_BASE] =
    elem_types[LP_JIT_IMAGE_RESIDENCY] = LLVMPointerType(LLVMInt8TypeInContext(lc), 0);
    elem_types[LP_JIT_IMAGE_ROW_STRIDE] =
    elem_types[LP_JIT_IMAGE_IMG_STRIDE] =
-   elem_types[LP_JIT_IMAGE_SAMPLE_STRIDE] = 
+   elem_types[LP_JIT_IMAGE_SAMPLE_STRIDE] =
    elem_types[LP_JIT_IMAGE_BASE_OFFSET] = LLVMInt32TypeInContext(lc);
 
    image_type = LLVMStructTypeInContext(lc, elem_types,
@@ -918,7 +915,7 @@ lp_build_image_function_type(struct gallivm_state *gallivm,
 
    for (uint32_t i = 0; i < num_inputs; i++)
       arg_types[num_params++] = component_type;
-   
+
    if (params->img_op == LP_IMG_LOAD_SPARSE) {
       LLVMTypeRef val_type[5];
       val_type[0] = val_type[1] = val_type[2] = val_type[3] = component_type;

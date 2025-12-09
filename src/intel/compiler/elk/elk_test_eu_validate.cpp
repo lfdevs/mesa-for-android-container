@@ -94,7 +94,7 @@ INSTANTIATE_TEST_SUITE_P(
 static bool
 validate(struct elk_codegen *p)
 {
-   const bool print = getenv("TEST_DEBUG");
+   const bool print = os_get_option("TEST_DEBUG");
    struct elk_disasm_info *disasm = elk_disasm_initialize(p->isa, NULL);
 
    if (print) {

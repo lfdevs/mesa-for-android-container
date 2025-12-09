@@ -46,6 +46,7 @@
 #include "gallivm/lp_bld_logic.h"
 #include "gallivm/lp_bld_struct.h"
 #include "gallivm/lp_bld_gather.h"
+#include "gallivm/lp_bld_bitarit.h"
 #include "lp_bld_interp.h"
 
 
@@ -186,6 +187,20 @@ calc_offsets(struct lp_build_context *coeff_bld,
 }
 
 
+/*
+ * Calculate offset for centroid interpolation (i.e. select the right
+ * position for interpolation). According to d3d11 rules,
+ * https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#3.5.5%20Centroid%20Sampling%20of%20Attributes,
+ * 1) if all samples are covered (the spec is not explicit on this, but
+ *    "covered" here according to tests includes the state sample mask (making
+ *    things easier as our mask always includes this)), select center.
+ * 2) Otherwise, select position from sample that has lowest index that is
+ *    covered (spec states this takes state sample mask into account).
+ * 3) Else, if no sample is covered (e.g. helper pixels), use center if
+ *    state sample mask covers all samples, otherwise use position from sample
+ *    with lowest index that is covered by state sample mask.
+ * Other APIs seem to have less strict rules or don't explicitly state them.
+ */
 static void
 calc_centroid_offsets(struct lp_build_interp_soa_context *bld,
                       struct gallivm_state *gallivm,
@@ -197,19 +212,28 @@ calc_centroid_offsets(struct lp_build_interp_soa_context *bld,
 {
    struct lp_build_context *coeff_bld = &bld->coeff_bld;
    LLVMBuilderRef builder = gallivm->builder;
-   LLVMValueRef s_mask_and = NULL;
+   LLVMValueRef cov_mask_and = NULL;
+   LLVMValueRef cov_mask_or = NULL;
    LLVMValueRef centroid_x_offset = pix_center_offset;
    LLVMValueRef centroid_y_offset = pix_center_offset;
+   /*
+    * Use backward loop so the last covered sample is the one with the
+    * lowest index.
+    */
    for (int s = bld->coverage_samples - 1; s >= 0; s--) {
       LLVMValueRef sample_cov;
-      LLVMValueRef s_mask_idx = LLVMBuildMul(builder, bld->num_loop, lp_build_const_int32(gallivm, s), "");
-
+      LLVMValueRef s_mask_idx = LLVMBuildMul(builder, bld->num_loop,
+                                             lp_build_const_int32(gallivm, s), "");
       s_mask_idx = LLVMBuildAdd(builder, s_mask_idx, loop_iter, "");
       sample_cov = lp_build_pointer_get2(builder, mask_type, mask_store, s_mask_idx);
-      if (s == bld->coverage_samples - 1)
-         s_mask_and = sample_cov;
-      else
-         s_mask_and = LLVMBuildAnd(builder, s_mask_and, sample_cov, "");
+      if (s == bld->coverage_samples - 1) {
+         cov_mask_and = sample_cov;
+         cov_mask_or = sample_cov;
+      }
+      else {
+         cov_mask_and = LLVMBuildAnd(builder, cov_mask_and, sample_cov, "");
+         cov_mask_or = LLVMBuildOr(builder, cov_mask_or, sample_cov, "");
+      }
 
       LLVMValueRef x_val_idx = lp_build_const_int32(gallivm, s * 2);
       LLVMValueRef y_val_idx = lp_build_const_int32(gallivm, s * 2 + 1);
@@ -223,8 +247,13 @@ calc_centroid_offsets(struct lp_build_interp_soa_context *bld,
       centroid_x_offset = lp_build_select(coeff_bld, sample_cov, x_val_idx, centroid_x_offset);
       centroid_y_offset = lp_build_select(coeff_bld, sample_cov, y_val_idx, centroid_y_offset);
    }
-   *centroid_x = lp_build_select(coeff_bld, s_mask_and, pix_center_offset, centroid_x_offset);
-   *centroid_y = lp_build_select(coeff_bld, s_mask_and, pix_center_offset, centroid_y_offset);
+   centroid_x_offset = lp_build_select(coeff_bld, cov_mask_or, centroid_x_offset,
+                                       bld->nonecovered_pos_x);
+   centroid_y_offset = lp_build_select(coeff_bld, cov_mask_or, centroid_y_offset,
+                                       bld->nonecovered_pos_y);
+
+   *centroid_x = lp_build_select(coeff_bld, cov_mask_and, pix_center_offset, centroid_x_offset);
+   *centroid_y = lp_build_select(coeff_bld, cov_mask_and, pix_center_offset, centroid_y_offset);
 }
 
 
@@ -338,7 +367,6 @@ attribs_update_simple(struct lp_build_interp_soa_context *bld,
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context *coeff_bld = &bld->coeff_bld;
    struct lp_build_context *setup_bld = &bld->setup_bld;
-   LLVMValueRef oow = NULL;
    LLVMValueRef pixoffx;
    LLVMValueRef pixoffy;
    LLVMValueRef ptr;
@@ -425,25 +453,23 @@ attribs_update_simple(struct lp_build_interp_soa_context *bld,
                }
 
                if (interp == LP_INTERP_PERSPECTIVE) {
-                  if (oow == NULL) {
-                     LLVMValueRef w;
-                     assert(attrib != 0);
-                     assert(bld->mask[0] & TGSI_WRITEMASK_W);
-                     if (bld->coverage_samples > 1 &&
-                         (loc == TGSI_INTERPOLATE_LOC_SAMPLE ||
-                          loc == TGSI_INTERPOLATE_LOC_CENTROID)) {
-                        /*
-                         * We can't use the precalculated 1/w since we didn't know
-                         * the actual position yet (we were assuming center).
-                         */
-                        LLVMValueRef indexw = lp_build_const_int32(gallivm, 3);
-                        w = interp_attrib_linear(bld, 0, indexw, chan_pixoffx, chan_pixoffy);
-                     }
-                     else {
-                        w = bld->attribs[0][3];
-                     }
-                     oow = lp_build_rcp(coeff_bld, w);
+                  LLVMValueRef w;
+                  assert(attrib != 0);
+                  assert(bld->mask[0] & TGSI_WRITEMASK_W);
+                  if (bld->coverage_samples > 1 &&
+                      (loc == TGSI_INTERPOLATE_LOC_SAMPLE ||
+                       loc == TGSI_INTERPOLATE_LOC_CENTROID)) {
+                     /*
+                      * We can't use the precalculated 1/w since we didn't know
+                      * the actual position yet (we were assuming center).
+                      */
+                     LLVMValueRef indexw = lp_build_const_int32(gallivm, 3);
+                     w = interp_attrib_linear(bld, 0, indexw, chan_pixoffx, chan_pixoffy);
                   }
+                  else {
+                     w = bld->attribs[0][3];
+                  }
+                  LLVMValueRef oow = lp_build_rcp(coeff_bld, w);
                   a = lp_build_mul(coeff_bld, a, oow);
                }
 
@@ -766,6 +792,7 @@ lp_build_interp_soa_init(struct lp_build_interp_soa_context *bld,
                          LLVMValueRef num_loop,
                          LLVMBuilderRef builder,
                          struct lp_type type,
+                         LLVMValueRef smask,
                          LLVMValueRef a0_ptr,
                          LLVMValueRef dadx_ptr,
                          LLVMValueRef dady_ptr,
@@ -836,6 +863,69 @@ lp_build_interp_soa_init(struct lp_build_interp_soa_context *bld,
    bld->num_loop = num_loop;
    bld->sample_pos_array_type = sample_pos_array_type;
    bld->sample_pos_array = sample_pos_array;
+   if (coverage_samples > 1 && smask) {
+      /*
+       * Note that none of this depends on the shader invocation,
+       * only the sample mask we get from the jit context.
+       */
+      LLVMBuilderRef builder = gallivm->builder;
+      LLVMTypeRef f32t = LLVMFloatTypeInContext(gallivm->context);
+
+      LLVMValueRef all_samples = lp_build_const_int32(gallivm, (1 << coverage_samples) - 1);
+      smask = LLVMBuildAnd(builder, smask, all_samples, "");
+      LLVMValueRef smask_all = LLVMBuildICmp(builder, LLVMIntEQ, smask, all_samples, "");
+      /*
+       * also use center if we have an empty sample mask - no practical value,
+       * but it's either this or making sure we get a valid index in the else
+       * clause I suspect.
+       */
+      LLVMValueRef smask_none = LLVMBuildICmp(builder, LLVMIntEQ, smask,
+                                              lp_build_const_int32(gallivm, 0), "");
+      LLVMValueRef nonecovered_center = LLVMBuildOr(builder, smask_none, smask_all, "");
+      LLVMValueRef cent_x_store =
+         lp_build_alloca(gallivm, LLVMFloatTypeInContext(gallivm->context), "cent_x_temp");
+      LLVMValueRef cent_y_store =
+         lp_build_alloca(gallivm, LLVMFloatTypeInContext(gallivm->context), "cent_y_temp");
+      struct lp_build_if_state center_if;
+
+      lp_build_if(&center_if, gallivm, nonecovered_center);
+      {
+         LLVMBuildStore(builder, LLVMConstReal(f32t, 0.5f), cent_x_store);
+         LLVMBuildStore(builder, LLVMConstReal(f32t, 0.5f), cent_y_store);
+      }
+      lp_build_else(&center_if);
+      {
+         struct lp_type i32_type = { .width = 32, .length = 1 };
+         struct lp_build_context i32_bld;
+         lp_build_context_init(&i32_bld, gallivm, i32_type);
+         /*
+          * XXX don't really need the defined (but wrong here) behavior if smask is 0.
+          */
+         LLVMValueRef first = lp_build_cttz(&i32_bld, smask);
+         LLVMValueRef x_val_idx = LLVMBuildMul(builder, first,
+                                               lp_build_const_int32(gallivm, 2), "");
+         LLVMValueRef y_val_idx = LLVMBuildAdd(builder, x_val_idx,
+                                               lp_build_const_int32(gallivm, 1), "");
+         LLVMValueRef pos_x = lp_build_array_get2(gallivm, bld->sample_pos_array_type,
+                                                  bld->sample_pos_array, x_val_idx);
+         LLVMValueRef pos_y = lp_build_array_get2(gallivm, bld->sample_pos_array_type,
+                                                  bld->sample_pos_array, y_val_idx);
+         LLVMBuildStore(builder, pos_x, cent_x_store);
+         LLVMBuildStore(builder, pos_y, cent_y_store);
+      }
+      lp_build_endif(&center_if);
+      LLVMValueRef nonecovered_x = LLVMBuildLoad2(builder, f32t, cent_x_store, "");
+      LLVMValueRef nonecovered_y = LLVMBuildLoad2(builder, f32t, cent_y_store, "");
+      bld->nonecovered_pos_x = lp_build_broadcast_scalar(&bld->coeff_bld, nonecovered_x);
+      bld->nonecovered_pos_y = lp_build_broadcast_scalar(&bld->coeff_bld, nonecovered_y);
+   } else {
+      /*
+       * Seems like we shouldn't need this, but the rest of the code
+       * seems to indicate this can happen.
+       */
+       bld->nonecovered_pos_x = lp_build_const_vec(gallivm, coeff_type, 0.5f);
+       bld->nonecovered_pos_y = lp_build_const_vec(gallivm, coeff_type, 0.5f);
+   }
 
    pos_init(bld, x0, y0);
 

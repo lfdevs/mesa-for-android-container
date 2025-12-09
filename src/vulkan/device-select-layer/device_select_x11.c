@@ -23,26 +23,22 @@
 
 /* connect to an X server and work out the default device. */
 
-#include <xcb/xcb.h>
-#include <xcb/dri3.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <xf86drm.h>
+#include <xcb/dri3.h>
+#include <xcb/xcb.h>
 
 #include "device_select.h"
 static int
-ds_dri3_open(xcb_connection_t *conn,
-             xcb_window_t root,
-             uint32_t provider)
+ds_dri3_open(xcb_connection_t *conn, xcb_window_t root, uint32_t provider)
 {
-   xcb_dri3_open_cookie_t       cookie;
-   xcb_dri3_open_reply_t        *reply;
-   int                          fd;
+   xcb_dri3_open_cookie_t cookie;
+   xcb_dri3_open_reply_t *reply;
+   int fd;
 
-   cookie = xcb_dri3_open(conn,
-                          root,
-                          provider);
+   cookie = xcb_dri3_open(conn, root, provider);
 
    reply = xcb_dri3_open_reply(conn, cookie, NULL);
    if (!reply)
@@ -60,67 +56,68 @@ ds_dri3_open(xcb_connection_t *conn,
    return fd;
 }
 
-int device_select_find_xcb_pci_default(struct device_pci_info *devices, uint32_t device_count)
+int
+device_select_find_xcb_pci_default(struct device_pci_info *devices, uint32_t device_count)
 {
-  const xcb_setup_t *setup;
-  xcb_screen_iterator_t iter;
-  int scrn;
-  xcb_connection_t *conn;
-  int default_idx = -1;
-  drmDevicePtr xdev = NULL;
+   const xcb_setup_t *setup;
+   xcb_screen_iterator_t iter;
+   int scrn;
+   xcb_connection_t *conn;
+   int default_idx = -1;
+   drmDevicePtr xdev = NULL;
 
-  conn = xcb_connect(NULL, &scrn);
-  if (xcb_connection_has_error(conn)) {
-    xcb_disconnect(conn);
-    return -1;
-  }
+   conn = xcb_connect(NULL, &scrn);
+   if (xcb_connection_has_error(conn)) {
+      xcb_disconnect(conn);
+      return -1;
+   }
 
-  xcb_query_extension_cookie_t dri3_cookie;
-  xcb_query_extension_reply_t *dri3_reply = NULL;
+   xcb_query_extension_cookie_t dri3_cookie;
+   xcb_query_extension_reply_t *dri3_reply = NULL;
 
-  dri3_cookie = xcb_query_extension(conn, 4, "DRI3");
-  dri3_reply = xcb_query_extension_reply(conn, dri3_cookie, NULL);
+   dri3_cookie = xcb_query_extension(conn, 4, "DRI3");
+   dri3_reply = xcb_query_extension_reply(conn, dri3_cookie, NULL);
 
-  if (!dri3_reply)
-    goto out;
+   if (!dri3_reply)
+      goto out;
 
-  if (dri3_reply->present == 0)
-    goto out;
+   if (dri3_reply->present == 0)
+      goto out;
 
-  setup = xcb_get_setup(conn);
-  iter = xcb_setup_roots_iterator(setup);
+   setup = xcb_get_setup(conn);
+   iter = xcb_setup_roots_iterator(setup);
 
-  xcb_screen_t *screen = iter.data;
+   xcb_screen_t *screen = iter.data;
 
-  int dri3_fd = ds_dri3_open(conn, screen->root, 0);
-  if (dri3_fd == -1)
-    goto out;
+   int dri3_fd = ds_dri3_open(conn, screen->root, 0);
+   if (dri3_fd == -1)
+      goto out;
 
-  int ret = drmGetDevice2(dri3_fd, 0, &xdev);
-  close(dri3_fd);
-  if (ret < 0)
-    goto out;
+   int ret = drmGetDevice2(dri3_fd, 0, &xdev);
+   close(dri3_fd);
+   if (ret < 0)
+      goto out;
 
-  for (unsigned i = 0; i < device_count; i++) {
-    if (devices[i].has_bus_info) {
-      if (xdev->businfo.pci->domain == devices[i].bus_info.domain &&
-          xdev->businfo.pci->bus == devices[i].bus_info.bus &&
-          xdev->businfo.pci->dev == devices[i].bus_info.dev &&
-          xdev->businfo.pci->func == devices[i].bus_info.func) {
-        default_idx = i;
+   for (unsigned i = 0; i < device_count; i++) {
+      if (devices[i].has_bus_info) {
+         if (xdev->businfo.pci->domain == devices[i].bus_info.domain &&
+             xdev->businfo.pci->bus == devices[i].bus_info.bus &&
+             xdev->businfo.pci->dev == devices[i].bus_info.dev &&
+             xdev->businfo.pci->func == devices[i].bus_info.func) {
+            default_idx = i;
+         }
+      } else {
+         if (xdev->deviceinfo.pci->vendor_id == devices[i].dev_info.vendor_id &&
+             xdev->deviceinfo.pci->device_id == devices[i].dev_info.device_id)
+            default_idx = i;
       }
-    } else {
-      if (xdev->deviceinfo.pci->vendor_id == devices[i].dev_info.vendor_id &&
-          xdev->deviceinfo.pci->device_id == devices[i].dev_info.device_id)
-        default_idx = i;
-    }
-    if (default_idx != -1)
-      break;
-  }
+      if (default_idx != -1)
+         break;
+   }
 
 out:
-  free(dri3_reply);
-  drmFreeDevice(&xdev); /* Is NULL pointer safe. */
-  xcb_disconnect(conn);
-  return default_idx;
+   free(dri3_reply);
+   drmFreeDevice(&xdev); /* Is NULL pointer safe. */
+   xcb_disconnect(conn);
+   return default_idx;
 }

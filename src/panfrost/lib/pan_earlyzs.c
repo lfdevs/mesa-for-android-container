@@ -21,21 +21,24 @@
  * SOFTWARE.
  */
 
+#include "genxml/gen_macros.h"
+
 #include "pan_earlyzs.h"
-#include "panfrost/util/pan_ir.h"
+#include "panfrost/compiler/pan_compiler.h"
+
 
 /*
  * Return an "early" mode. If it is known that the depth/stencil tests always
  * pass (so the shader is always executed), weak early is usually faster than
  * force early.
  */
-static enum pan_earlyzs
+static enum mali_pixel_kill
 best_early_mode(bool zs_always_passes, bool force_early)
 {
    if (zs_always_passes && !force_early)
-      return PAN_EARLYZS_WEAK_EARLY;
+      return MALI_PIXEL_KILL_WEAK_EARLY;
    else
-      return PAN_EARLYZS_FORCE_EARLY;
+      return MALI_PIXEL_KILL_FORCE_EARLY;
 }
 
 /*
@@ -121,9 +124,9 @@ analyze(const struct pan_shader_info *s, bool writes_zs_or_oq,
    /* Collect results */
    return (struct pan_earlyzs_state){
       .update = late_update
-                   ? PAN_EARLYZS_FORCE_LATE
+                   ? MALI_PIXEL_KILL_FORCE_LATE
                    : best_early_mode(zs_always_passes, force_early_update),
-      .kill = late_kill ? PAN_EARLYZS_FORCE_LATE
+      .kill = late_kill ? MALI_PIXEL_KILL_FORCE_LATE
                         : best_early_mode(zs_always_passes, force_early_kill),
       .shader_readonly_zs = optimize_shader_read_only_zs,
    };

@@ -13,6 +13,7 @@
 
 #include "radv_radeon_winsys.h"
 
+struct radv_cmd_stream;
 struct radv_device;
 struct radv_queue_state;
 struct radv_queue;
@@ -22,7 +23,7 @@ VkResult radv_create_shadow_regs_preamble(struct radv_device *device, struct rad
 void radv_destroy_shadow_regs_preamble(struct radv_device *device, struct radv_queue_state *queue_state,
                                        struct radeon_winsys *ws);
 
-void radv_emit_shadow_regs_preamble(struct radeon_cmdbuf *cs, const struct radv_device *device,
+void radv_emit_shadow_regs_preamble(struct radv_cmd_stream *cs, const struct radv_device *device,
                                     struct radv_queue_state *queue_state);
 
 VkResult radv_init_shadowed_regs_buffer_state(const struct radv_device *device, struct radv_queue *queue);

@@ -191,39 +191,39 @@ draw_total_tes_outputs(const struct draw_context *draw);
 
 void
 draw_texture_sampler(struct draw_context *draw,
-                     enum pipe_shader_type shader_type,
+                     mesa_shader_stage shader_type,
                      struct tgsi_sampler *sampler);
 
 void
 draw_image(struct draw_context *draw,
-           enum pipe_shader_type shader_type,
+           mesa_shader_stage shader_type,
            struct tgsi_image *image);
 
 void
 draw_buffer(struct draw_context *draw,
-           enum pipe_shader_type shader_type,
+           mesa_shader_stage shader_type,
            struct tgsi_buffer *buffer);
 
 void
 draw_set_sampler_views(struct draw_context *draw,
-                       enum pipe_shader_type shader_stage,
+                       mesa_shader_stage shader_stage,
                        struct pipe_sampler_view **views,
                        unsigned num);
 void
 draw_set_samplers(struct draw_context *draw,
-                  enum pipe_shader_type shader_stage,
+                  mesa_shader_stage shader_stage,
                   struct pipe_sampler_state **samplers,
                   unsigned num);
 
 void
 draw_set_images(struct draw_context *draw,
-                enum pipe_shader_type shader_stage,
+                mesa_shader_stage shader_stage,
                 struct pipe_image_view *images,
                 unsigned num);
 
 void
 draw_set_mapped_texture(struct draw_context *draw,
-                        enum pipe_shader_type shader_stage,
+                        mesa_shader_stage shader_stage,
                         unsigned sview_idx,
                         uint32_t width, uint32_t height, uint32_t depth,
                         uint32_t first_level, uint32_t last_level,
@@ -236,7 +236,7 @@ draw_set_mapped_texture(struct draw_context *draw,
 
 void
 draw_set_mapped_image(struct draw_context *draw,
-                      enum pipe_shader_type shader_stage,
+                      mesa_shader_stage shader_stage,
                       unsigned idx,
                       uint32_t width, uint32_t height, uint32_t depth,
                       const void *base_ptr,
@@ -340,14 +340,14 @@ void draw_set_mapped_vertex_buffer(struct draw_context *draw,
 
 void
 draw_set_mapped_constant_buffer(struct draw_context *draw,
-                                enum pipe_shader_type shader_type,
+                                mesa_shader_stage shader_type,
                                 unsigned slot,
                                 const void *buffer,
                                 unsigned size);
 
 void
 draw_set_mapped_shader_buffer(struct draw_context *draw,
-                              enum pipe_shader_type shader_type,
+                              mesa_shader_stage shader_type,
                               unsigned slot,
                               const void *buffer,
                               unsigned size);

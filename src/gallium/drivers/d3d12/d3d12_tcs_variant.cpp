@@ -137,7 +137,7 @@ create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_vari
 
    nir->info.tess.tcs_vertices_out = static_cast<uint8_t>(key->vertices_out);
    nir_validate_shader(nir, "created");
-   NIR_PASS_V(nir, nir_lower_var_copies);
+   NIR_PASS(_, nir, nir_lower_var_copies);
 
    struct pipe_shader_state templ;
 
@@ -145,7 +145,7 @@ create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_vari
    templ.ir.nir = nir;
    templ.stream_output.num_outputs = 0;
 
-   d3d12_shader_selector *tcs = d3d12_create_shader(ctx, PIPE_SHADER_TESS_CTRL, &templ);
+   d3d12_shader_selector *tcs = d3d12_create_shader(ctx, MESA_SHADER_TESS_CTRL, &templ);
    if (tcs) {
       tcs->is_variant = true;
       tcs->tcs_key = *key;

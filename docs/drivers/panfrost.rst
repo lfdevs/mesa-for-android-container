@@ -9,7 +9,7 @@ and `Mali-G610 <https://www.khronos.org/conformance/adopters/conformant-products
 but **non-conformant** on other GPUs.
 
 PanVK, the Vulkan implementation in the Panfrost driver stack, is currently
-**conformant** on `Mali-G610 <https://www.khronos.org/conformance/adopters/conformant-products#submission_906>`__,
+**conformant** on `Mali-G610 <https://www.khronos.org/conformance/adopters/conformant-products#submission_939>`__,
 but *non-conformant* on other GPUs.
 
 The following hardware is currently supported:
@@ -28,11 +28,11 @@ The following hardware is currently supported:
 +--------------------+---------------+-----------+--------+--------+
 | G57                | Valhall (v9)  | 3.1       | 3.1    |        |
 +--------------------+---------------+-----------+--------+--------+
-| G310, G610         | Valhall (v10) | 3.1       | 3.1    | 1.2    |
+| G310, G610         | Valhall (v10) | 3.1       | 3.1    | 1.4    |
 +--------------------+---------------+-----------+--------+--------+
-| G720               | 5th Gen (v12) | 3.1       | 3.1    | 1.2    |
+| G720               | 5th Gen (v12) | 3.1       | 3.1    | 1.4    |
 +--------------------+---------------+-----------+--------+--------+
-| G725               | 5th Gen (v13) | 3.1       | 3.1    | 1.2    |
+| G725               | 5th Gen (v13) | 3.1       | 3.1    | 1.4    |
 +--------------------+---------------+-----------+--------+--------+
 
 Other Midgard and Bifrost chips (e.g. G71) are not yet supported.

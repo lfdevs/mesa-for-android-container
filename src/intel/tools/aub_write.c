@@ -94,7 +94,7 @@ write_execlists_header(struct aub_file *aub, const char *name)
    app_name_len =
       snprintf(app_name, sizeof(app_name), "PCI-ID=0x%X %s",
                aub->pci_id, name);
-   app_name_len = ALIGN(app_name_len, sizeof(uint32_t));
+   app_name_len = align(app_name_len, sizeof(uint32_t));
 
    dwords = 5 + app_name_len / sizeof(uint32_t);
    dword_out(aub, CMD_MEM_TRACE_VERSION | (dwords - 1));
@@ -189,7 +189,7 @@ mem_trace_memory_write_header_out(struct aub_file *aub, uint64_t addr,
                                   uint32_t len, uint32_t addr_space,
                                   const char *desc)
 {
-   uint32_t dwords = ALIGN(len, sizeof(uint32_t)) / sizeof(uint32_t);
+   uint32_t dwords = align(len, sizeof(uint32_t)) / sizeof(uint32_t);
 
    if (aub->verbose_log_file) {
       fprintf(aub->verbose_log_file,
@@ -447,7 +447,7 @@ engine_from_engine_class(enum intel_engine_class engine_class)
    case INTEL_ENGINE_CLASS_VIDEO:
       return &engines[engine_class];
    default:
-      unreachable("unknown ring");
+      UNREACHABLE("unknown ring");
    }
 }
 
@@ -499,7 +499,7 @@ write_hwsp(struct aub_file *aub,
    case INTEL_ENGINE_CLASS_COPY:    reg = BCSUNIT0(HWS_PGA); break;
    case INTEL_ENGINE_CLASS_VIDEO:   reg = VCSUNIT0(HWS_PGA); break;
    default:
-      unreachable("unknown ring");
+      UNREACHABLE("unknown ring");
    }
 
    register_write_out(aub, reg, aub->engine_setup[engine_class].hwsp_addr);

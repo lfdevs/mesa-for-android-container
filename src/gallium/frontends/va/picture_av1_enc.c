@@ -434,19 +434,18 @@ vlVaHandleVAEncMiscParameterTypeHRDAV1(vlVaContext *context, VAEncMiscParameterB
 
 static void av1_color_config(vlVaContext *context, struct vl_vlc *vlc)
 {
-   unsigned high_bitdepth = 0;
    unsigned bit_depth = 8;
    unsigned mono_chrome = 0;
    unsigned subsampling_x = 0, subsampling_y = 0;
 
    struct pipe_av1_enc_seq_param *seq = &context->desc.av1enc.seq;
 
-   high_bitdepth = av1_f(vlc, 1);
-   if (seq->profile == 2 && high_bitdepth) {
+   seq->seq_bits.high_bitdepth = av1_f(vlc, 1);
+   if (seq->profile == 2 && seq->seq_bits.high_bitdepth) {
       unsigned twelve_bit = av1_f(vlc, 1);
       bit_depth = twelve_bit ? 12 : 10;
    } else if (seq->profile <= 2)
-      bit_depth = high_bitdepth ? 10 : 8;
+      bit_depth = seq->seq_bits.high_bitdepth ? 10 : 8;
 
    context->desc.av1enc.seq.bit_depth_minus8 = bit_depth - 8;
 
@@ -560,7 +559,10 @@ static void av1_sequence_header(vlVaContext *context, struct vl_vlc *vlc)
    seq->seq_bits.use_128x128_superblock = av1_f(vlc, 1);
    seq->seq_bits.enable_filter_intra = av1_f(vlc, 1);
    seq->seq_bits.enable_intra_edge_filter = av1_f(vlc, 1);
-   if (!seq->seq_bits.reduced_still_picture_header) {
+   if (seq->seq_bits.reduced_still_picture_header) {
+      seq->seq_bits.force_screen_content_tools = AV1_SELECT_SCREEN_CONTENT_TOOLS;
+      seq->seq_bits.force_integer_mv = AV1_SELECT_INTEGER_MV;
+   } else {
       seq->seq_bits.enable_interintra_compound = av1_f(vlc, 1);
       seq->seq_bits.enable_masked_compound = av1_f(vlc, 1);
       seq->seq_bits.enable_warped_motion = av1_f(vlc, 1);
@@ -572,16 +574,14 @@ static void av1_sequence_header(vlVaContext *context, struct vl_vlc *vlc)
       } else
          seq->seq_bits.enable_ref_frame_mvs = 0;
 
-      seq->seq_bits.disable_screen_content_tools = av1_f(vlc, 1);
-      if (seq->seq_bits.disable_screen_content_tools)
+      if (av1_f(vlc, 1)) /* seq_choose_screen_content_tools */
          seq->seq_bits.force_screen_content_tools = AV1_SELECT_SCREEN_CONTENT_TOOLS;
       else
          seq->seq_bits.force_screen_content_tools = av1_f(vlc, 1);
 
       seq->seq_bits.force_integer_mv = AV1_SELECT_INTEGER_MV;
-      if (seq->seq_bits.force_screen_content_tools) {
-         seq->seq_bits.choose_integer_mv = av1_f(vlc, 1);
-         if (!seq->seq_bits.choose_integer_mv)
+      if (seq->seq_bits.force_screen_content_tools > 0) {
+         if (!av1_f(vlc, 1)) /* seq_choose_integer_mv */
             seq->seq_bits.force_integer_mv = av1_f(vlc, 1);
       }
       if (seq->seq_bits.enable_order_hint)

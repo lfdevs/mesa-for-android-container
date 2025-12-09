@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use mesa_rust_gen::pipe_format;
 use rusticl_opencl_gen::*;
 

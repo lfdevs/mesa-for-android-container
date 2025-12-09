@@ -29,6 +29,7 @@ static const struct vk_instance_extension_table instance_extensions = {
 #ifdef NVK_USE_WSI_PLATFORM
    .KHR_get_surface_capabilities2 = true,
    .KHR_surface = true,
+   .KHR_surface_maintenance1 = true,
    .KHR_surface_protected_capabilities = true,
    .EXT_surface_maintenance1 = true,
    .EXT_swapchain_colorspace = true,
@@ -89,10 +90,11 @@ nvk_init_debug_flags(struct nvk_instance *instance)
       { "no_cbuf", NVK_DEBUG_NO_CBUF },
       { "edb_bview", NVK_DEBUG_FORCE_EDB_BVIEW },
       { "gart", NVK_DEBUG_FORCE_GART },
+      { "coherent", NVK_DEBUG_FORCE_COHERENT },
       { NULL, 0 },
    };
 
-   instance->debug_flags = parse_debug_string(getenv("NVK_DEBUG"), flags);
+   instance->debug_flags = parse_debug_string(os_get_option("NVK_DEBUG"), flags);
 }
 
 static const driOptionDescription nvk_dri_options[] = {
@@ -101,7 +103,6 @@ static const driOptionDescription nvk_dri_options[] = {
       DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
       DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(false)
       DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT(false)
-      DRI_CONF_VK_KHR_PRESENT_WAIT(false)
       DRI_CONF_VK_XWAYLAND_WAIT_READY(false)
    DRI_CONF_SECTION_END
 

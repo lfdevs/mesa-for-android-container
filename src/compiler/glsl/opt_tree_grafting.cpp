@@ -203,7 +203,7 @@ ir_tree_grafting_visitor::visit_enter(ir_function_signature *ir)
 ir_visitor_status
 ir_tree_grafting_visitor::visit_enter(ir_call *ir)
 {
-   foreach_two_lists(formal_node, &ir->callee->parameters,
+   ir_foreach_two_lists(formal_node, &ir->callee->parameters,
                      actual_node, &ir->actual_parameters) {
       ir_variable *sig_param = (ir_variable *) formal_node;
       ir_rvalue *ir = (ir_rvalue *) actual_node;
@@ -323,7 +323,7 @@ try_tree_grafting(ir_assignment *start,
       fprintf(stderr, "\n");
    }
 
-   for (exec_node *node = start->next;
+   for (ir_exec_node *node = start->next;
 	node != bb_last->next;
 	node = node->next) {
       ir_instruction *ir = (ir_instruction *) node;
@@ -349,7 +349,7 @@ tree_grafting_basic_block(ir_instruction *bb_first,
 {
    struct tree_grafting_info *info = (struct tree_grafting_info *)data;
    ir_instruction *ir;
-   exec_node *node, *node_next;
+   ir_exec_node *node, *node_next;
 
    for (node = bb_first, node_next = bb_first->next;
 	node != bb_last->next;
@@ -368,6 +368,7 @@ tree_grafting_basic_block(ir_instruction *bb_first,
           lhs_var->data.mode == ir_var_function_inout ||
           lhs_var->data.mode == ir_var_shader_out ||
           lhs_var->data.mode == ir_var_shader_storage ||
+          lhs_var->data.mode == ir_var_shader_task_payload ||
           lhs_var->data.mode == ir_var_shader_shared)
          continue;
 
@@ -407,7 +408,7 @@ tree_grafting_basic_block(ir_instruction *bb_first,
  * Does a copy propagation pass on the code present in the instruction stream.
  */
 bool
-do_tree_grafting(exec_list *instructions)
+do_tree_grafting(ir_exec_list *instructions)
 {
    ir_variable_refcount_visitor refs;
    struct tree_grafting_info info;

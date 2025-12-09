@@ -163,7 +163,7 @@ fn generate_from_rule_impl_opc(isa: &ISA) -> TokenStream2 {
 /// Main derive function to generate the parser
 fn derive_parser(input: TokenStream) -> TokenStream {
     let mut ast: DeriveInput = parse_macro_input!(input as DeriveInput);
-    let root = "../src/etnaviv/isa/";
+    let root = Path::new(file!()).parent().expect("Failed to located parent");
     let (isa_filename, static_rules_filename) = parse_derive(&ast);
     let isa_path = Path::new(&root).join(isa_filename);
     let static_rules_path = Path::new(&root).join(static_rules_filename);

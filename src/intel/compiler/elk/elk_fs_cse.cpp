@@ -36,7 +36,7 @@
 using namespace elk;
 
 namespace {
-struct aeb_entry : public exec_node {
+struct aeb_entry : public brw_exec_node {
    /** The instruction that generates the expression value. */
    elk_fs_inst *generator;
 
@@ -246,7 +246,7 @@ bool
 elk_fs_visitor::opt_cse_local(const fs_live_variables &live, elk_bblock_t *block, int &ip)
 {
    bool progress = false;
-   exec_list aeb;
+   brw_exec_list aeb;
 
    void *cse_ctx = ralloc_context(NULL);
 
@@ -259,7 +259,7 @@ elk_fs_visitor::opt_cse_local(const fs_live_variables &live, elk_bblock_t *block
          bool found = false;
          bool negate = false;
 
-         foreach_in_list_use_after(aeb_entry, entry, &aeb) {
+         brw_foreach_in_list_use_after(aeb_entry, entry, &aeb) {
             /* Match current instruction's expression against those in AEB. */
             if (!(entry->generator->dst.is_null() && !inst->dst.is_null()) &&
                 instructions_match(inst, entry->generator, &negate)) {
@@ -328,7 +328,7 @@ elk_fs_visitor::opt_cse_local(const fs_live_variables &live, elk_bblock_t *block
           inst->opcode == ELK_SHADER_OPCODE_HALT_TARGET)
          aeb.make_empty();
 
-      foreach_in_list_safe(aeb_entry, entry, &aeb) {
+      brw_foreach_in_list_safe(aeb_entry, entry, &aeb) {
          /* Kill all AEB entries that write a different value to or read from
           * the flag register if we just wrote it.
           */

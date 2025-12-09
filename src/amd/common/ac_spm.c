@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "ac_cmdbuf.h"
 #include "ac_spm.h"
 
 #include "util/bitscan.h"
@@ -12,74 +13,96 @@
 
 /* SPM counters definition. */
 /* GFX10+ */
-static struct ac_spm_counter_descr gfx10_num_l2_hits = {TCP, 0x9};
-static struct ac_spm_counter_descr gfx10_num_l2_misses = {TCP, 0x12};
-static struct ac_spm_counter_descr gfx10_num_scache_hits = {SQ, 0x14f};
-static struct ac_spm_counter_descr gfx10_num_scache_misses = {SQ, 0x150};
-static struct ac_spm_counter_descr gfx10_num_scache_misses_dup = {SQ, 0x151};
-static struct ac_spm_counter_descr gfx10_num_icache_hits = {SQ, 0x12c};
-static struct ac_spm_counter_descr gfx10_num_icache_misses = {SQ, 0x12d};
-static struct ac_spm_counter_descr gfx10_num_icache_misses_dup = {SQ, 0x12e};
-static struct ac_spm_counter_descr gfx10_num_gl1c_hits = {GL1C, 0xe};
-static struct ac_spm_counter_descr gfx10_num_gl1c_misses = {GL1C, 0x12};
-static struct ac_spm_counter_descr gfx10_num_gl2c_hits = {GL2C, 0x3};
-static struct ac_spm_counter_descr gfx10_num_gl2c_misses = {GL2C, 0x23};
+static struct ac_spm_counter_descr gfx10_tcp_perf_sel_req = {TCP, 0x9};
+static struct ac_spm_counter_descr gfx10_tcp_perf_sel_req_miss = {TCP, 0x12};
+static struct ac_spm_counter_descr gfx10_sqc_perf_sel_dcache_hits = {SQ, 0x14f};
+static struct ac_spm_counter_descr gfx10_sqc_perf_sel_dcache_misses = {SQ, 0x150};
+static struct ac_spm_counter_descr gfx10_sqc_perf_sel_dcache_misses_duplicate = {SQ, 0x151};
+static struct ac_spm_counter_descr gfx10_sqc_perf_sel_icache_hits = {SQ, 0x12c};
+static struct ac_spm_counter_descr gfx10_sqc_perf_sel_icache_misses = {SQ, 0x12d};
+static struct ac_spm_counter_descr gfx10_sqc_perf_sel_icache_misses_duplicate = {SQ, 0x12e};
+static struct ac_spm_counter_descr gfx10_gl1c_perf_sel_req = {GL1C, 0xe};
+static struct ac_spm_counter_descr gfx10_gl1c_perf_sel_req_miss = {GL1C, 0x12};
+static struct ac_spm_counter_descr gfx10_gl2c_perf_sel_req = {GL2C, 0x3};
+static struct ac_spm_counter_descr gfx10_gl2c_perf_sel_miss = {GL2C, 0x23};
 
 static struct ac_spm_counter_create_info gfx10_spm_counters[] = {
-   {&gfx10_num_l2_hits},
-   {&gfx10_num_l2_misses},
-   {&gfx10_num_scache_hits},
-   {&gfx10_num_scache_misses},
-   {&gfx10_num_scache_misses_dup},
-   {&gfx10_num_icache_hits},
-   {&gfx10_num_icache_misses},
-   {&gfx10_num_icache_misses_dup},
-   {&gfx10_num_gl1c_hits},
-   {&gfx10_num_gl1c_misses},
-   {&gfx10_num_gl2c_hits},
-   {&gfx10_num_gl2c_misses},
+   {&gfx10_tcp_perf_sel_req},
+   {&gfx10_tcp_perf_sel_req_miss},
+   {&gfx10_sqc_perf_sel_dcache_hits},
+   {&gfx10_sqc_perf_sel_dcache_misses},
+   {&gfx10_sqc_perf_sel_dcache_misses_duplicate},
+   {&gfx10_sqc_perf_sel_icache_hits},
+   {&gfx10_sqc_perf_sel_icache_misses},
+   {&gfx10_sqc_perf_sel_icache_misses_duplicate},
+   {&gfx10_gl1c_perf_sel_req},
+   {&gfx10_gl1c_perf_sel_req_miss},
+   {&gfx10_gl2c_perf_sel_req},
+   {&gfx10_gl2c_perf_sel_miss},
 };
 
 /* GFX10.3+ */
-static struct ac_spm_counter_descr gfx103_num_gl2c_misses = {GL2C, 0x2b};
+static struct ac_spm_counter_descr gfx103_gl2c_perf_sel_miss = {GL2C, 0x2b};
 
 static struct ac_spm_counter_create_info gfx103_spm_counters[] = {
-   {&gfx10_num_l2_hits},
-   {&gfx10_num_l2_misses},
-   {&gfx10_num_scache_hits},
-   {&gfx10_num_scache_misses},
-   {&gfx10_num_scache_misses_dup},
-   {&gfx10_num_icache_hits},
-   {&gfx10_num_icache_misses},
-   {&gfx10_num_icache_misses_dup},
-   {&gfx10_num_gl1c_hits},
-   {&gfx10_num_gl1c_misses},
-   {&gfx10_num_gl2c_hits},
-   {&gfx103_num_gl2c_misses},
+   {&gfx10_tcp_perf_sel_req},
+   {&gfx10_tcp_perf_sel_req_miss},
+   {&gfx10_sqc_perf_sel_dcache_hits},
+   {&gfx10_sqc_perf_sel_dcache_misses},
+   {&gfx10_sqc_perf_sel_dcache_misses_duplicate},
+   {&gfx10_sqc_perf_sel_icache_hits},
+   {&gfx10_sqc_perf_sel_icache_misses},
+   {&gfx10_sqc_perf_sel_icache_misses_duplicate},
+   {&gfx10_gl1c_perf_sel_req},
+   {&gfx10_gl1c_perf_sel_req_miss},
+   {&gfx10_gl2c_perf_sel_req},
+   {&gfx103_gl2c_perf_sel_miss},
 };
 
 /* GFX11+ */
-static struct ac_spm_counter_descr gfx11_num_l2_misses = {TCP, 0x11};
-static struct ac_spm_counter_descr gfx11_num_scache_hits = {SQ_WGP, 0x126};
-static struct ac_spm_counter_descr gfx11_num_scache_misses = {SQ_WGP, 0x127};
-static struct ac_spm_counter_descr gfx11_num_scache_misses_dup = {SQ_WGP, 0x128};
-static struct ac_spm_counter_descr gfx11_num_icache_hits = {SQ_WGP, 0x10e};
-static struct ac_spm_counter_descr gfx11_num_icache_misses = {SQ_WGP, 0x10f};
-static struct ac_spm_counter_descr gfx11_num_icache_misses_dup = {SQ_WGP, 0x110};
+static struct ac_spm_counter_descr gfx11_tcp_perf_sel_req_miss = {TCP, 0x11};
+static struct ac_spm_counter_descr gfx11_sqc_perf_sel_dcache_hits = {SQ_WGP, 0x126};
+static struct ac_spm_counter_descr gfx11_sqc_perf_sel_dcache_misses = {SQ_WGP, 0x127};
+static struct ac_spm_counter_descr gfx11_sqc_perf_sel_dcache_misses_duplicate = {SQ_WGP, 0x128};
+static struct ac_spm_counter_descr gfx11_sqc_perf_sel_icache_hits = {SQ_WGP, 0x10e};
+static struct ac_spm_counter_descr gfx11_sqc_perf_sel_icache_misses = {SQ_WGP, 0x10f};
+static struct ac_spm_counter_descr gfx11_sqc_perf_sel_icache_misses_duplicate = {SQ_WGP, 0x110};
 
 static struct ac_spm_counter_create_info gfx11_spm_counters[] = {
-   {&gfx10_num_l2_hits},
-   {&gfx11_num_l2_misses},
-   {&gfx11_num_scache_hits},
-   {&gfx11_num_scache_misses},
-   {&gfx11_num_scache_misses_dup},
-   {&gfx11_num_icache_hits},
-   {&gfx11_num_icache_misses},
-   {&gfx11_num_icache_misses_dup},
-   {&gfx10_num_gl1c_hits},
-   {&gfx10_num_gl1c_misses},
-   {&gfx10_num_gl2c_hits},
-   {&gfx103_num_gl2c_misses},
+   {&gfx10_tcp_perf_sel_req},
+   {&gfx11_tcp_perf_sel_req_miss},
+   {&gfx11_sqc_perf_sel_dcache_hits},
+   {&gfx11_sqc_perf_sel_dcache_misses},
+   {&gfx11_sqc_perf_sel_dcache_misses_duplicate},
+   {&gfx11_sqc_perf_sel_icache_hits},
+   {&gfx11_sqc_perf_sel_icache_misses},
+   {&gfx11_sqc_perf_sel_icache_misses_duplicate},
+   {&gfx10_gl1c_perf_sel_req},
+   {&gfx10_gl1c_perf_sel_req_miss},
+   {&gfx10_gl2c_perf_sel_req},
+   {&gfx103_gl2c_perf_sel_miss},
+};
+
+/* GFX12+ */
+static struct ac_spm_counter_descr gfx12_sqc_perf_sel_dcache_hits = {SQ_WGP, 0x146};
+static struct ac_spm_counter_descr gfx12_sqc_perf_sel_dcache_misses = {SQ_WGP, 0x147};
+static struct ac_spm_counter_descr gfx12_sqc_perf_sel_dcache_misses_duplicate = {SQ_WGP, 0x148};
+static struct ac_spm_counter_descr gfx12_sqc_perf_sel_icache_hits = {SQ_WGP, 0x12e};
+static struct ac_spm_counter_descr gfx12_sqc_perf_sel_icache_misses = {SQ_WGP, 0x12f};
+static struct ac_spm_counter_descr gfx12_sqc_perf_sel_icache_misses_duplicate = {SQ_WGP, 0x130};
+static struct ac_spm_counter_descr gfx12_gl2c_perf_sel_miss = {GL2C, 0x2a};
+
+static struct ac_spm_counter_create_info gfx12_spm_counters[] = {
+   {&gfx10_tcp_perf_sel_req},
+   {&gfx11_tcp_perf_sel_req_miss},
+   {&gfx12_sqc_perf_sel_dcache_hits},
+   {&gfx12_sqc_perf_sel_dcache_misses},
+   {&gfx12_sqc_perf_sel_dcache_misses_duplicate},
+   {&gfx12_sqc_perf_sel_icache_hits},
+   {&gfx12_sqc_perf_sel_icache_misses},
+   {&gfx12_sqc_perf_sel_icache_misses_duplicate},
+   {&gfx10_gl2c_perf_sel_req},
+   {&gfx12_gl2c_perf_sel_miss},
 };
 
 static struct ac_spm_block_select *
@@ -491,6 +514,10 @@ bool ac_init_spm(const struct radeon_info *info,
       create_info_count = ARRAY_SIZE(gfx11_spm_counters);
       create_info = gfx11_spm_counters;
       break;
+   case GFX12:
+      create_info_count = ARRAY_SIZE(gfx12_spm_counters);
+      create_info = gfx12_spm_counters;
+      break;
    default:
       fprintf(stderr, "radv: Failed to initialize SPM because SPM counters aren't implemented.\n");
       return false; /* not implemented */
@@ -593,8 +620,12 @@ bool ac_init_spm(const struct radeon_info *info,
       }
    }
 
-   /* On GFX11, the data size written by the hw is in units of segment. */
-   spm->ptr_granularity = info->gfx_level >= GFX11 ? 32 : 1;
+   /* Configure the sample interval to default to 4096 clk. */
+   spm->sample_interval = 4096;
+
+   /* On GFX11-11.5, the data size written by the hw is in units of segment. */
+   spm->ptr_granularity =
+      (info->gfx_level == GFX11 || info->gfx_level == GFX11_5) ? 32 : 1;
 
    return true;
 }
@@ -657,4 +688,252 @@ bool ac_spm_get_trace(const struct ac_spm *spm, struct ac_spm_trace *trace)
    trace->sample_size_in_bytes = ac_spm_get_sample_size(spm);
 
    return ac_spm_get_num_samples(spm, &trace->num_samples);
+}
+
+static void
+ac_emit_spm_muxsel(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level,
+                   enum amd_ip_type ip_type, const struct ac_spm *spm)
+{
+   /* Upload each muxsel ram to the RLC. */
+   for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
+      unsigned rlc_muxsel_addr, rlc_muxsel_data;
+      unsigned grbm_gfx_index = S_030800_SH_BROADCAST_WRITES(1) |
+                                S_030800_INSTANCE_BROADCAST_WRITES(1);
+
+      if (!spm->num_muxsel_lines[s])
+         continue;
+
+      if (s == AC_SPM_SEGMENT_TYPE_GLOBAL) {
+         grbm_gfx_index |= S_030800_SE_BROADCAST_WRITES(1);
+
+         rlc_muxsel_addr = gfx_level >= GFX11 ? R_037220_RLC_SPM_GLOBAL_MUXSEL_ADDR
+                                              : R_037224_RLC_SPM_GLOBAL_MUXSEL_ADDR;
+         rlc_muxsel_data = gfx_level >= GFX11 ? R_037224_RLC_SPM_GLOBAL_MUXSEL_DATA
+                                              : R_037228_RLC_SPM_GLOBAL_MUXSEL_DATA;
+      } else {
+         grbm_gfx_index |= S_030800_SE_INDEX(s);
+
+         rlc_muxsel_addr = gfx_level >= GFX11 ? R_037228_RLC_SPM_SE_MUXSEL_ADDR
+                                              : R_03721C_RLC_SPM_SE_MUXSEL_ADDR;
+         rlc_muxsel_data = gfx_level >= GFX11 ? R_03722C_RLC_SPM_SE_MUXSEL_DATA
+                                              : R_037220_RLC_SPM_SE_MUXSEL_DATA;
+      }
+
+      ac_cmdbuf_begin(cs);
+
+      ac_cmdbuf_set_uconfig_reg(R_030800_GRBM_GFX_INDEX, grbm_gfx_index);
+
+      for (unsigned l = 0; l < spm->num_muxsel_lines[s]; l++) {
+         uint32_t *data = (uint32_t *)spm->muxsel_lines[s][l].muxsel;
+
+         /* Select MUXSEL_ADDR to point to the next muxsel. */
+         ac_cmdbuf_set_uconfig_perfctr_reg(gfx_level, ip_type, rlc_muxsel_addr,
+                                           l * AC_SPM_MUXSEL_LINE_SIZE);
+
+         /* Write the muxsel line configuration with MUXSEL_DATA. */
+         ac_cmdbuf_emit(PKT3(PKT3_WRITE_DATA, 2 + AC_SPM_MUXSEL_LINE_SIZE, 0));
+         ac_cmdbuf_emit(S_370_DST_SEL(V_370_MEM_MAPPED_REGISTER) |
+                        S_370_WR_CONFIRM(1) |
+                        S_370_ENGINE_SEL(V_370_ME) |
+                        S_370_WR_ONE_ADDR(1));
+         ac_cmdbuf_emit(rlc_muxsel_data >> 2);
+         ac_cmdbuf_emit(0);
+         ac_cmdbuf_emit_array(data, AC_SPM_MUXSEL_LINE_SIZE);
+      }
+
+      ac_cmdbuf_end();
+   }
+}
+
+static void
+ac_emit_spm_counters(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level,
+                     enum amd_ip_type ip_type,
+                     const struct ac_spm *spm)
+{
+   if (gfx_level >= GFX11) {
+      for (uint32_t instance = 0; instance < ARRAY_SIZE(spm->sq_wgp); instance++) {
+         uint32_t num_counters = spm->sq_wgp[instance].num_counters;
+
+         if (!num_counters)
+            continue;
+
+         ac_cmdbuf_begin(cs);
+         ac_cmdbuf_set_uconfig_reg(R_030800_GRBM_GFX_INDEX, spm->sq_wgp[instance].grbm_gfx_index);
+
+         for (uint32_t b = 0; b < num_counters; b++) {
+            const struct ac_spm_counter_select *cntr_sel = &spm->sq_wgp[instance].counters[b];
+            uint32_t reg_base = R_036700_SQ_PERFCOUNTER0_SELECT;
+
+            ac_cmdbuf_set_uconfig_perfctr_reg_seq(gfx_level, ip_type,
+                                                  reg_base + b * 4, 1);
+            ac_cmdbuf_emit(cntr_sel->sel0);
+         }
+
+         ac_cmdbuf_end();
+      }
+   }
+
+   for (uint32_t instance = 0; instance < ARRAY_SIZE(spm->sqg); instance++) {
+      uint32_t num_counters = spm->sqg[instance].num_counters;
+
+      if (!num_counters)
+         continue;
+
+      ac_cmdbuf_begin(cs);
+      ac_cmdbuf_set_uconfig_reg(R_030800_GRBM_GFX_INDEX, S_030800_SH_BROADCAST_WRITES(1) |
+                                                         S_030800_INSTANCE_BROADCAST_WRITES(1) |
+                                                         S_030800_SE_INDEX(instance));
+
+      for (uint32_t b = 0; b < num_counters; b++) {
+         const struct ac_spm_counter_select *cntr_sel = &spm->sqg[instance].counters[b];
+         uint32_t reg_base = R_036700_SQ_PERFCOUNTER0_SELECT;
+
+         ac_cmdbuf_set_uconfig_perfctr_reg_seq(gfx_level, ip_type,
+                                               reg_base + b * 4, 1);
+         ac_cmdbuf_emit(cntr_sel->sel0 | S_036700_SQC_BANK_MASK(0xf)); /* SQC_BANK_MASK only gfx10 */
+      }
+
+      ac_cmdbuf_end();
+   }
+
+   for (uint32_t b = 0; b < spm->num_block_sel; b++) {
+      struct ac_spm_block_select *block_sel = &spm->block_sel[b];
+      struct ac_pc_block_base *regs = block_sel->b->b->b;
+
+      for (unsigned i = 0; i < block_sel->num_instances; i++) {
+         struct ac_spm_block_instance *block_instance = &block_sel->instances[i];
+
+         ac_cmdbuf_begin(cs);
+         ac_cmdbuf_set_uconfig_reg(R_030800_GRBM_GFX_INDEX, block_instance->grbm_gfx_index);
+
+         for (unsigned c = 0; c < block_instance->num_counters; c++) {
+            const struct ac_spm_counter_select *cntr_sel = &block_instance->counters[c];
+
+            if (!cntr_sel->active)
+               continue;
+
+            ac_cmdbuf_set_uconfig_perfctr_reg_seq(gfx_level, ip_type, regs->select0[c], 1);
+            ac_cmdbuf_emit(cntr_sel->sel0);
+
+            ac_cmdbuf_set_uconfig_perfctr_reg_seq(gfx_level, ip_type, regs->select1[c], 1);
+            ac_cmdbuf_emit(cntr_sel->sel1);
+         }
+
+         ac_cmdbuf_end();
+      }
+   }
+
+   /* Restore global broadcasting. */
+   ac_cmdbuf_begin(cs);
+   ac_cmdbuf_set_uconfig_reg(R_030800_GRBM_GFX_INDEX, S_030800_SE_BROADCAST_WRITES(1) |
+                                                      S_030800_SH_BROADCAST_WRITES(1) |
+                                                      S_030800_INSTANCE_BROADCAST_WRITES(1));
+   ac_cmdbuf_end();
+}
+
+void
+ac_emit_spm_setup(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level,
+                  enum amd_ip_type ip_type, const struct ac_spm *spm,
+                  uint64_t va)
+{
+   /* It's required that the ring VA and the size are correctly aligned. */
+   assert(!(va & (AC_SPM_RING_BASE_ALIGN - 1)));
+   assert(!(spm->buffer_size & (AC_SPM_RING_BASE_ALIGN - 1)));
+   assert(spm->sample_interval >= 32);
+
+   ac_cmdbuf_begin(cs);
+
+   /* Configure the SPM ring buffer. */
+   ac_cmdbuf_set_uconfig_reg(R_037200_RLC_SPM_PERFMON_CNTL,
+                             S_037200_PERFMON_RING_MODE(0) | /* no stall and no interrupt on overflow */
+                             S_037200_PERFMON_SAMPLE_INTERVAL(spm->sample_interval)); /* in sclk */
+   ac_cmdbuf_set_uconfig_reg(R_037204_RLC_SPM_PERFMON_RING_BASE_LO, va);
+   ac_cmdbuf_set_uconfig_reg(R_037208_RLC_SPM_PERFMON_RING_BASE_HI,
+                             S_037208_RING_BASE_HI(va >> 32));
+   ac_cmdbuf_set_uconfig_reg(R_03720C_RLC_SPM_PERFMON_RING_SIZE, spm->buffer_size);
+
+   /* Configure the muxsel. */
+   uint32_t total_muxsel_lines = 0;
+   for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
+      total_muxsel_lines += spm->num_muxsel_lines[s];
+   }
+
+   ac_cmdbuf_set_uconfig_reg(R_03726C_RLC_SPM_ACCUM_MODE, 0);
+
+   if (gfx_level >= GFX11) {
+      ac_cmdbuf_set_uconfig_reg(R_03721C_RLC_SPM_PERFMON_SEGMENT_SIZE,
+                                S_03721C_TOTAL_NUM_SEGMENT(total_muxsel_lines) |
+                                S_03721C_GLOBAL_NUM_SEGMENT(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_GLOBAL]) |
+                                S_03721C_SE_NUM_SEGMENT(spm->max_se_muxsel_lines));
+
+      ac_cmdbuf_set_uconfig_reg(R_037210_RLC_SPM_RING_WRPTR, 0);
+   } else {
+      ac_cmdbuf_set_uconfig_reg(R_037210_RLC_SPM_PERFMON_SEGMENT_SIZE, 0);
+      ac_cmdbuf_set_uconfig_reg(R_03727C_RLC_SPM_PERFMON_SE3TO0_SEGMENT_SIZE,
+                                S_03727C_SE0_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE0]) |
+                                S_03727C_SE1_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE1]) |
+                                S_03727C_SE2_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE2]) |
+                                S_03727C_SE3_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_SE3]));
+      ac_cmdbuf_set_uconfig_reg(R_037280_RLC_SPM_PERFMON_GLB_SEGMENT_SIZE,
+                                S_037280_PERFMON_SEGMENT_SIZE(total_muxsel_lines) |
+                                S_037280_GLOBAL_NUM_LINE(spm->num_muxsel_lines[AC_SPM_SEGMENT_TYPE_GLOBAL]));
+   }
+
+   ac_cmdbuf_end();
+
+   /* Upload each muxsel ram to the RLC. */
+   ac_emit_spm_muxsel(cs, gfx_level, ip_type, spm);
+
+   /* Select SPM counters. */
+   ac_emit_spm_counters(cs, gfx_level, ip_type, spm);
+}
+
+void
+ac_emit_spm_start(struct ac_cmdbuf *cs, enum amd_ip_type ip_type)
+{
+   ac_cmdbuf_begin(cs);
+
+   /* Start SPM counters. */
+   ac_cmdbuf_set_uconfig_reg(R_036020_CP_PERFMON_CNTL,
+                             S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_DISABLE_AND_RESET) |
+                                S_036020_SPM_PERFMON_STATE(V_036020_STRM_PERFMON_STATE_START_COUNTING));
+
+   /* Start windowed performance counters. */
+   if (ip_type == AMD_IP_GFX)
+      ac_cmdbuf_event_write(V_028A90_PERFCOUNTER_START);
+   ac_cmdbuf_set_sh_reg(R_00B82C_COMPUTE_PERFCOUNT_ENABLE, S_00B82C_PERFCOUNT_ENABLE(1));
+
+   ac_cmdbuf_end();
+}
+
+void
+ac_emit_spm_stop(struct ac_cmdbuf *cs, enum amd_ip_type ip_type,
+                 const struct radeon_info *info)
+{
+   ac_cmdbuf_begin(cs);
+
+   /* Stop windowed performance counters. */
+   if (ip_type == AMD_IP_GFX && !info->never_send_perfcounter_stop)
+      ac_cmdbuf_event_write(V_028A90_PERFCOUNTER_STOP);
+
+   ac_cmdbuf_set_sh_reg(R_00B82C_COMPUTE_PERFCOUNT_ENABLE, S_00B82C_PERFCOUNT_ENABLE(0));
+
+   /* Stop SPM counters. */
+   ac_cmdbuf_set_uconfig_reg(R_036020_CP_PERFMON_CNTL,
+                             S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_DISABLE_AND_RESET) |
+                             S_036020_SPM_PERFMON_STATE(info->never_stop_sq_perf_counters ?
+                                V_036020_STRM_PERFMON_STATE_START_COUNTING :
+                                V_036020_STRM_PERFMON_STATE_STOP_COUNTING));
+
+   ac_cmdbuf_end();
+}
+
+void
+ac_emit_spm_reset(struct ac_cmdbuf *cs)
+{
+   ac_cmdbuf_begin(cs);
+   ac_cmdbuf_set_uconfig_reg(R_036020_CP_PERFMON_CNTL,
+                             S_036020_PERFMON_STATE(V_036020_CP_PERFMON_STATE_DISABLE_AND_RESET) |
+                             S_036020_SPM_PERFMON_STATE(V_036020_STRM_PERFMON_STATE_DISABLE_AND_RESET));
+   ac_cmdbuf_end();
 }

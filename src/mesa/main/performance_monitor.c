@@ -419,7 +419,7 @@ init_groups(struct gl_context *ctx)
                c->Type = GL_PERCENTAGE_AMD;
                break;
             default:
-               unreachable("Invalid driver query type!");
+               UNREACHABLE("Invalid driver query type!");
          }
 
          c->query_type = info.query_type;
@@ -467,8 +467,7 @@ new_performance_monitor(struct gl_context *ctx, GLuint index)
    for (i = 0; i < ctx->PerfMonitor.NumGroups; i++) {
       const struct gl_perf_monitor_group *g = &ctx->PerfMonitor.Groups[i];
 
-      m->ActiveCounters[i] = rzalloc_array(m->ActiveCounters, BITSET_WORD,
-                                           BITSET_WORDS(g->NumCounters));
+      m->ActiveCounters[i] = BITSET_RZALLOC(m->ActiveCounters, g->NumCounters);
       if (m->ActiveCounters[i] == NULL)
          goto fail;
    }

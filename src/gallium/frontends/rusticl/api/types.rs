@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::CLResult;
 use crate::api::icd::ReferenceCountedAPIPointer;
 use crate::core::context::Context;

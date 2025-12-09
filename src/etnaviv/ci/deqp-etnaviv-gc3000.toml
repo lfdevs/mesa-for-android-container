@@ -8,3 +8,15 @@ deqp_args = [
 ]
 version_check = "GL ES 2.0.*git"
 renderer_check = "GC3000"
+extensions_check = "/install/etnaviv-gc3000-r5450-gles2-extensions.txt"
+
+[[deqp]]
+deqp = "/deqp-gles/external/openglcts/modules/glcts"
+caselists = [
+    "/deqp-gles/mustpass/gles2-khr-main.txt",
+]
+deqp_args = [
+    "--deqp-surface-width=256", "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+]

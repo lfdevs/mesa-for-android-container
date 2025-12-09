@@ -1,1 +1,6 @@
 dEQP-VK.tessellation.misc_draw.triangles_instances
+
+dEQP-VK.binding_model.descriptor_buffer.sparse_binding_buffer.capture_replay.compute_comp_combined_image_sampler_custom_border_color
+
+
+dEQP-VK.binding_model.descriptor_buffer.sparse_binding_buffer.capture_replay.compute_comp_combined_image_sampler_custom_border_color

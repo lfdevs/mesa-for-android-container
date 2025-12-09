@@ -75,7 +75,7 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 
 	if (op & R600_SAVE_CONST_BUF0) {
 		util_blitter_save_fragment_constant_buffer_slot(rctx->blitter,
-								&rctx->constbuf_state[PIPE_SHADER_FRAGMENT].cb[0]);
+								&rctx->constbuf_state[MESA_SHADER_FRAGMENT].cb[0]);
 	}
 
 	if (op & R600_SAVE_FRAMEBUFFER)
@@ -83,12 +83,12 @@ static void r600_blitter_begin(struct pipe_context *ctx, enum r600_blitter_op op
 
 	if (op & R600_SAVE_TEXTURES) {
 		util_blitter_save_fragment_sampler_states(
-			rctx->blitter, util_last_bit(rctx->samplers[PIPE_SHADER_FRAGMENT].states.enabled_mask),
-			(void**)rctx->samplers[PIPE_SHADER_FRAGMENT].states.states);
+			rctx->blitter, util_last_bit(rctx->samplers[MESA_SHADER_FRAGMENT].states.enabled_mask),
+			(void**)rctx->samplers[MESA_SHADER_FRAGMENT].states.states);
 
 		util_blitter_save_fragment_sampler_views(
-			rctx->blitter, util_last_bit(rctx->samplers[PIPE_SHADER_FRAGMENT].views.enabled_mask),
-			(struct pipe_sampler_view**)rctx->samplers[PIPE_SHADER_FRAGMENT].views.views);
+			rctx->blitter, util_last_bit(rctx->samplers[MESA_SHADER_FRAGMENT].views.enabled_mask),
+			(struct pipe_sampler_view**)rctx->samplers[MESA_SHADER_FRAGMENT].views.views);
 	}
 
 	if (op & R600_DISABLE_RENDER_COND)
@@ -171,19 +171,18 @@ static void r600_blit_decompress_depth(struct pipe_context *ctx,
 				surf_tmpl.first_layer = layer;
 				surf_tmpl.last_layer = layer;
 
-				zsurf = ctx->create_surface(ctx, &texture->resource.b.b, &surf_tmpl);
+				zsurf = r600_create_surface_custom(ctx, &texture->resource.b.b, &surf_tmpl);
 
 				surf_tmpl.format = flushed_depth_texture->resource.b.b.format;
-				cbsurf = ctx->create_surface(ctx,
-						&flushed_depth_texture->resource.b.b, &surf_tmpl);
+				cbsurf = r600_create_surface_custom(ctx, &flushed_depth_texture->resource.b.b, &surf_tmpl);
 
 				r600_blitter_begin(ctx, R600_DECOMPRESS);
 				util_blitter_custom_depth_stencil(rctx->blitter, zsurf, cbsurf, 1 << sample,
 								  rctx->custom_dsa_flush, depth);
 				r600_blitter_end(ctx);
 
-				pipe_surface_reference(&zsurf, NULL);
-				pipe_surface_reference(&cbsurf, NULL);
+				r600_destroy_surface_custom(zsurf);
+				r600_destroy_surface_custom(cbsurf);
 			}
 		}
 
@@ -238,14 +237,14 @@ static void r600_blit_decompress_depth_in_place(struct r600_context *rctx,
 			surf_tmpl.first_layer = layer;
 			surf_tmpl.last_layer = layer;
 
-			zsurf = rctx->b.b.create_surface(&rctx->b.b, &texture->resource.b.b, &surf_tmpl);
+			zsurf = r600_create_surface_custom(&rctx->b.b, &texture->resource.b.b, &surf_tmpl);
 
 			r600_blitter_begin(&rctx->b.b, R600_DECOMPRESS);
 			util_blitter_custom_depth_stencil(rctx->blitter, zsurf, NULL, ~0,
 							  rctx->custom_dsa_flush, 1.0f);
 			r600_blitter_end(&rctx->b.b);
 
-			pipe_surface_reference(&zsurf, NULL);
+			r600_destroy_surface_custom(zsurf);
 		}
 
 		/* The texture will always be dirty if some layers or samples aren't flushed.
@@ -278,7 +277,7 @@ void r600_decompress_depth_textures(struct r600_context *rctx,
 		assert(view);
 		rview = (struct r600_pipe_sampler_view*)view;
 
-		tex = (struct r600_texture *)view->texture;
+		tex = r600_as_texture(view->texture);
 		assert(tex->db_compatible);
 
 		if (r600_can_sample_zs(tex, rview->is_stencil_sampler)) {
@@ -310,7 +309,7 @@ void r600_decompress_depth_images(struct r600_context *rctx,
 		view = &images->views[i];
 		assert(view);
 
-		tex = (struct r600_texture *)view->base.resource;
+		tex = r600_as_texture(view->base.resource);
 		assert(tex->db_compatible);
 
 		if (r600_can_sample_zs(tex, false)) {
@@ -356,14 +355,14 @@ static void r600_blit_decompress_color(struct pipe_context *ctx,
 			surf_tmpl.level = level;
 			surf_tmpl.first_layer = layer;
 			surf_tmpl.last_layer = layer;
-			cbsurf = ctx->create_surface(ctx, &rtex->resource.b.b, &surf_tmpl);
+			cbsurf = r600_create_surface_custom(ctx, &rtex->resource.b.b, &surf_tmpl);
 
 			r600_blitter_begin(ctx, R600_DECOMPRESS);
 			util_blitter_custom_color(rctx->blitter, cbsurf,
 				rtex->fmask.size ? rctx->custom_blend_decompress : rctx->custom_blend_fastclear);
 			r600_blitter_end(ctx);
 
-			pipe_surface_reference(&cbsurf, NULL);
+			r600_destroy_surface_custom(cbsurf);
 		}
 
 		/* The texture will always be dirty if some layers aren't flushed.
@@ -389,7 +388,7 @@ void r600_decompress_color_textures(struct r600_context *rctx,
 		view = &textures->views[i]->base;
 		assert(view);
 
-		tex = (struct r600_texture *)view->texture;
+		tex = r600_as_texture(view->texture);
 		assert(tex->cmask.size);
 
 		r600_blit_decompress_color(&rctx->b.b, tex,
@@ -413,7 +412,7 @@ void r600_decompress_color_images(struct r600_context *rctx,
 		view = &images->views[i];
 		assert(view);
 
-		tex = (struct r600_texture *)view->base.resource;
+		tex = r600_as_texture(view->base.resource);
 		assert(tex->cmask.size);
 
 		r600_blit_decompress_color(&rctx->b.b, tex,
@@ -433,7 +432,7 @@ static bool r600_decompress_subresource(struct pipe_context *ctx,
 					unsigned first_layer, unsigned last_layer)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
-	struct r600_texture *rtex = (struct r600_texture*)tex;
+	struct r600_texture *rtex = r600_as_texture(tex);
 
 	if (rtex->db_compatible) {
 		if (r600_can_sample_zs(rtex, false)) {
@@ -515,7 +514,7 @@ evergreen_do_fast_color_clear(struct r600_context *rctx,
 		if (!(*buffers & clear_bit))
 			continue;
 
-		tex = (struct r600_texture *)rctx->framebuffer.fb_cbufs[i]->texture;
+		tex = r600_as_texture(rctx->framebuffer.state.cbufs[i].texture);
 
 		/* the clear is allowed if all layers are bound */
 		if (fb->cbufs[i].first_layer != 0 ||
@@ -594,7 +593,7 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 	struct pipe_framebuffer_state *fb = &rctx->framebuffer.state;
 
 	if (buffers & PIPE_CLEAR_COLOR && rctx->b.gfx_level >= EVERGREEN) {
-		evergreen_do_fast_color_clear(rctx, fb, &rctx->framebuffer.atom,
+		evergreen_do_fast_color_clear(rctx, fb, &rctx->cb_state.atom,
 					      &buffers, NULL, color);
 		if (!buffers)
 			return; /* all buffers have been fast cleared */
@@ -614,7 +613,7 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 			if (!fb->cbufs[i].texture)
 				continue;
 
-			tex = (struct r600_texture *)fb->cbufs[i].texture;
+			tex = r600_as_texture(fb->cbufs[i].texture);
 			if (tex->fmask.size == 0)
 				tex->dirty_level_mask &= ~(1 << fb->cbufs[i].level);
 		}
@@ -625,7 +624,7 @@ static void r600_clear(struct pipe_context *ctx, unsigned buffers,
 		struct r600_texture *rtex;
 		unsigned level = fb->zsbuf.level;
 
-		rtex = (struct r600_texture*)fb->zsbuf.texture;
+		rtex = r600_as_texture(fb->zsbuf.texture);
 
 		/* We can't use hyperz fast clear if each slice of a texture
 		 * array are clear to different value. To simplify code just
@@ -808,7 +807,7 @@ static void r600_blitter_clear_buffer(struct r600_context *rctx,
 		return;
 	}
 
-	u_upload_data(pipe->stream_uploader, 0, num_channels*4, 4, clear_value,
+	u_upload_data_ref(pipe->stream_uploader, 0, num_channels*4, 4, clear_value,
 	              &vb.buffer_offset, &vb.buffer.resource);
 	if (!vb.buffer.resource)
 		goto out;
@@ -862,7 +861,7 @@ static void r600_clear_buffer(struct pipe_context *ctx, struct pipe_resource *ds
 					  1, &clear_value);
 		r600_blitter_end(ctx);
 	} else {
-		uint32_t *map = r600_buffer_map_sync_with_rings(&rctx->b, r600_resource(dst),
+		uint32_t *map = r600_buffer_map_sync_with_rings(&rctx->b, r600_as_resource(dst),
 								 PIPE_MAP_WRITE);
 		map += offset / 4;
 		size /= 4;
@@ -941,7 +940,10 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 		src_box = &sbox;
 
 		src_force_level = src_level;
-	} else if (!util_blitter_is_copy_supported(rctx->blitter, dst, src)) {
+	} else if (!util_blitter_is_copy_supported(rctx->blitter, dst, src) ||
+		   (src->format == dst->format &&
+		    ((util_format_is_float(src->format) && !util_format_is_depth_or_stencil(src->format)) ||
+		     util_format_is_snorm(src->format)))) {
 		if (util_format_is_subsampled_422(src->format)) {
 
 			src_templ.format = PIPE_FORMAT_R8G8B8A8_UINT;
@@ -988,9 +990,7 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 		}
 	}
 
-	dst_view = r600_create_surface_custom(ctx, dst, &dst_templ,
-					      /* we don't care about these two for r600g */
-					      dst->width0, dst->height0);
+	dst_view = r600_create_surface_custom(ctx, dst, &dst_templ);
 
 	if (rctx->b.gfx_level >= EVERGREEN) {
 		src_view = evergreen_create_sampler_view_custom(ctx, src, &src_templ,
@@ -1012,7 +1012,7 @@ void r600_resource_copy_region(struct pipe_context *ctx,
 				  false, false, 0, NULL);
 	r600_blitter_end(ctx);
 
-	pipe_surface_reference(&dst_view, NULL);
+	r600_destroy_surface_custom(dst_view);
 	pipe_sampler_view_reference(&src_view, NULL);
 }
 
@@ -1020,7 +1020,7 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 				     const struct pipe_blit_info *info)
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
-	struct r600_texture *dst = (struct r600_texture*)info->dst.resource;
+	struct r600_texture *dst = r600_as_texture(info->dst.resource);
 	unsigned dst_width = u_minify(info->dst.resource->width0, info->dst.level);
 	unsigned dst_height = u_minify(info->dst.resource->height0, info->dst.level);
 	enum pipe_format format = info->src.format;
@@ -1173,7 +1173,7 @@ static void r600_blit(struct pipe_context *ctx,
                       const struct pipe_blit_info *info)
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
-	struct r600_texture *rdst = (struct r600_texture *)info->dst.resource;
+	struct r600_texture *rdst = r600_as_texture(info->dst.resource);
 
 	if (do_hardware_msaa_resolve(ctx, info)) {
 		return;
@@ -1262,7 +1262,7 @@ static void r600_blit(struct pipe_context *ctx,
 static void r600_flush_resource(struct pipe_context *ctx,
 				struct pipe_resource *res)
 {
-	struct r600_texture *rtex = (struct r600_texture*)res;
+	struct r600_texture *rtex = r600_as_texture(res);
 
 	assert(res->target != PIPE_BUFFER);
 

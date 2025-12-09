@@ -53,9 +53,9 @@ struct match_node {
 
 struct match_state {
    /* Map from nir_variable * -> match_node */
-   struct hash_table *var_nodes;
+   struct hash_table var_nodes;
    /* Map from cast nir_deref_instr * -> match_node */
-   struct hash_table *cast_nodes;
+   struct hash_table cast_nodes;
 
    unsigned cur_instr;
 
@@ -92,24 +92,24 @@ node_for_deref(nir_deref_instr *instr, struct match_node *parent,
    switch (instr->deref_type) {
    case nir_deref_type_var: {
       struct hash_entry *entry =
-         _mesa_hash_table_search(state->var_nodes, instr->var);
+         _mesa_hash_table_search(&state->var_nodes, instr->var);
       if (entry) {
          return entry->data;
       } else {
          struct match_node *node = create_match_node(instr->type, state);
-         _mesa_hash_table_insert(state->var_nodes, instr->var, node);
+         _mesa_hash_table_insert(&state->var_nodes, instr->var, node);
          return node;
       }
    }
 
    case nir_deref_type_cast: {
       struct hash_entry *entry =
-         _mesa_hash_table_search(state->cast_nodes, instr);
+         _mesa_hash_table_search(&state->cast_nodes, instr);
       if (entry) {
          return entry->data;
       } else {
          struct match_node *node = create_match_node(instr->type, state);
-         _mesa_hash_table_insert(state->cast_nodes, instr, node);
+         _mesa_hash_table_insert(&state->cast_nodes, instr, node);
          return node;
       }
    }
@@ -132,7 +132,7 @@ node_for_deref(nir_deref_instr *instr, struct match_node *parent,
       break;
 
    default:
-      unreachable("bad deref type");
+      UNREACHABLE("bad deref type");
    }
 
    assert(idx < parent->num_children);
@@ -251,7 +251,7 @@ _foreach_aliasing(nir_deref_instr **deref, match_cb cb,
       return;
 
    default:
-      unreachable("bad deref type");
+      UNREACHABLE("bad deref type");
    }
 }
 
@@ -263,23 +263,23 @@ foreach_aliasing_node(nir_deref_path *path,
                       struct match_state *state)
 {
    if (path->path[0]->deref_type == nir_deref_type_var) {
-      struct hash_entry *entry = _mesa_hash_table_search(state->var_nodes,
+      struct hash_entry *entry = _mesa_hash_table_search(&state->var_nodes,
                                                          path->path[0]->var);
       if (entry)
          _foreach_aliasing(&path->path[1], cb, entry->data, state);
 
-      hash_table_foreach(state->cast_nodes, entry)
+      hash_table_foreach(&state->cast_nodes, entry)
          _foreach_child(cb, entry->data, state);
    } else {
       /* Casts automatically alias anything that isn't a cast */
       assert(path->path[0]->deref_type == nir_deref_type_cast);
-      hash_table_foreach(state->var_nodes, entry)
+      hash_table_foreach(&state->var_nodes, entry)
          _foreach_child(cb, entry->data, state);
 
       /* Casts alias other casts if the casts are different or if they're the
        * same and the path from the cast may alias as per the usual rules.
        */
-      hash_table_foreach(state->cast_nodes, entry) {
+      hash_table_foreach(&state->cast_nodes, entry) {
          const nir_deref_instr *cast = entry->key;
          assert(cast->deref_type == nir_deref_type_cast);
          if (cast == path->path[0])
@@ -382,7 +382,7 @@ try_match_deref(nir_deref_path *base_path, int *path_array_idx,
          continue;
 
       default:
-         unreachable("Invalid deref type in a path");
+         UNREACHABLE("Invalid deref type in a path");
       }
    }
 
@@ -526,8 +526,8 @@ opt_find_array_copies_block(nir_builder *b, nir_block *block,
 
    unsigned next_index = 0;
 
-   _mesa_hash_table_clear(state->var_nodes, NULL);
-   _mesa_hash_table_clear(state->cast_nodes, NULL);
+   _mesa_hash_table_clear(&state->var_nodes, NULL);
+   _mesa_hash_table_clear(&state->cast_nodes, NULL);
 
    nir_foreach_instr(instr, block) {
       if (instr->type != nir_instr_type_intrinsic)
@@ -639,8 +639,8 @@ opt_find_array_copies_impl(nir_function_impl *impl)
 
    struct match_state s;
    s.dead_ctx = ralloc_context(NULL);
-   s.var_nodes = _mesa_pointer_hash_table_create(s.dead_ctx);
-   s.cast_nodes = _mesa_pointer_hash_table_create(s.dead_ctx);
+   _mesa_pointer_hash_table_init(&s.var_nodes, s.dead_ctx);
+   _mesa_pointer_hash_table_init(&s.cast_nodes, s.dead_ctx);
    s.builder = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {

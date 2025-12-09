@@ -21,6 +21,7 @@
 #include <memory>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace aco {
@@ -297,7 +298,7 @@ public:
       buffer->current_idx = 0;
    }
 
-   bool operator==(const monotonic_buffer_resource& other) { return buffer == other.buffer; }
+   bool operator==(const monotonic_buffer_resource& other) const { return buffer == other.buffer; }
 
 private:
    struct Buffer {
@@ -390,6 +391,14 @@ using map = std::map<Key, T, Compare, aco::monotonic_allocator<std::pair<const K
 template <class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>>
 using unordered_map =
    std::unordered_map<Key, T, Hash, Pred, aco::monotonic_allocator<std::pair<const Key, T>>>;
+
+/*
+ * aco::unordered_set - alias for std::unordered_set with monotonic_allocator
+ *
+ * This template specialization mimics std::pmr::unordered_set.
+ */
+template <class T, class Hash = std::hash<T>, class Pred = std::equal_to<T>>
+using unordered_set = std::unordered_set<T, Hash, Pred, aco::monotonic_allocator<T>>;
 
 /*
  * Cache-friendly set of 32-bit IDs with fast insert/erase/lookup and

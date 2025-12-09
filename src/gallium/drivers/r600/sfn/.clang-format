@@ -2,11 +2,21 @@
 BasedOnStyle: InheritParentConfig
 DisableFormat: false
 
+AllowShortFunctionsOnASingleLine: All
 AlwaysBreakAfterReturnType: TopLevel
 AllowShortEnumsOnASingleLine: false
 BinPackParameters: false
 BinPackArguments: false
 
+# Include local files first and go to more general files
+# to avoid hidden dependencies
+IncludeCategories:
+  - Regex:           '<[[:alnum:].]+>'
+    Priority:        3
+  - Regex:           '.*\/.*'
+    Priority:        2
+  - Regex:           '.*'
+    Priority:        1
 ColumnLimit: 90
 
 IncludeBlocks: Regroup

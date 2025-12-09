@@ -44,12 +44,12 @@
  * processed, some of the added nodes may not be processed.
  */
 ir_visitor_status
-visit_list_elements(ir_hierarchical_visitor *v, exec_list *l,
+visit_list_elements(ir_hierarchical_visitor *v, ir_exec_list *l,
                     bool statement_list)
 {
    ir_instruction *prev_base_ir = v->base_ir;
 
-   foreach_in_list_safe(ir_instruction, ir, l) {
+   ir_foreach_in_list_safe(ir_instruction, ir, l) {
       if (statement_list)
          v->base_ir = ir;
       ir_visitor_status s = ir->accept(v);

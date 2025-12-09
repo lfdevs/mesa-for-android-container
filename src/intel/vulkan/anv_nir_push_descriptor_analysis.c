@@ -23,17 +23,18 @@
 
 #include "anv_nir.h"
 
-#include "compiler/brw_nir.h"
+#include "compiler/brw/brw_nir.h"
 
-const struct anv_descriptor_set_layout *
-anv_pipeline_layout_get_push_set(const struct anv_pipeline_sets_layout *layout,
+static const struct anv_descriptor_set_layout *
+anv_pipeline_layout_get_push_set(struct anv_descriptor_set_layout * const *set_layouts,
+                                 uint32_t set_count,
                                  uint8_t *set_idx)
 {
-   for (unsigned s = 0; s < ARRAY_SIZE(layout->set); s++) {
-      struct anv_descriptor_set_layout *set_layout = layout->set[s].layout;
+   for (unsigned s = 0; s < set_count; s++) {
+      const struct anv_descriptor_set_layout *set_layout = set_layouts[s];
 
       if (!set_layout ||
-          !(set_layout->flags &
+          !(set_layout->vk.flags &
             VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR))
          continue;
 
@@ -53,11 +54,12 @@ anv_pipeline_layout_get_push_set(const struct anv_pipeline_sets_layout *layout,
  */
 uint32_t
 anv_nir_compute_used_push_descriptors(nir_shader *shader,
-                                      const struct anv_pipeline_sets_layout *layout)
+                                      struct anv_descriptor_set_layout * const *set_layouts,
+                                      uint32_t set_count)
 {
    uint8_t push_set;
    const struct anv_descriptor_set_layout *push_set_layout =
-      anv_pipeline_layout_get_push_set(layout, &push_set);
+      anv_pipeline_layout_get_push_set(set_layouts, set_count, &push_set);
    if (push_set_layout == NULL)
       return 0;
 
@@ -102,19 +104,21 @@ anv_nir_compute_used_push_descriptors(nir_shader *shader,
    return used_push_bindings;
 }
 
-/* This function checks whether the shader accesses the push descriptor
- * buffer. This function must be called after anv_nir_compute_push_layout().
+/* This function returns a bit field with one bit set to 1 indicating the push
+ * descriptor set used. This function must be called after
+ * anv_nir_compute_push_layout().
  */
-bool
+uint8_t
 anv_nir_loads_push_desc_buffer(nir_shader *nir,
-                               const struct anv_pipeline_sets_layout *layout,
+                               struct anv_descriptor_set_layout * const *set_layouts,
+                               uint32_t set_count,
                                const struct anv_pipeline_bind_map *bind_map)
 {
    uint8_t push_set;
    const struct anv_descriptor_set_layout *push_set_layout =
-      anv_pipeline_layout_get_push_set(layout, &push_set);
+      anv_pipeline_layout_get_push_set(set_layouts, set_count, &push_set);
    if (push_set_layout == NULL)
-      return false;
+      return 0;
 
    nir_foreach_function_impl(impl, nir) {
       nir_foreach_block(block, impl) {
@@ -136,13 +140,13 @@ anv_nir_loads_push_desc_buffer(nir_shader *nir,
             if ((binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS ||
                  binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS_BUFFER) &&
                 binding->index == push_set) {
-               return true;
+               return BITFIELD_BIT(push_set);
             }
          }
       }
    }
 
-   return false;
+   return 0;
 }
 
 /* This function computes a bitfield of all the UBOs bindings in the push
@@ -153,12 +157,13 @@ anv_nir_loads_push_desc_buffer(nir_shader *nir,
  */
 uint32_t
 anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
-                                     const struct anv_pipeline_sets_layout *layout,
+                                     struct anv_descriptor_set_layout * const *set_layouts,
+                                     uint32_t set_count,
                                      const struct anv_pipeline_bind_map *bind_map)
 {
    uint8_t push_set;
    const struct anv_descriptor_set_layout *push_set_layout =
-      anv_pipeline_layout_get_push_set(layout, &push_set);
+      anv_pipeline_layout_get_push_set(set_layouts, set_count, &push_set);
    if (push_set_layout == NULL)
       return 0;
 
@@ -191,8 +196,7 @@ anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
 
             /* Don't check the load_ubo from descriptor buffers */
             nir_intrinsic_instr *resource =
-               intrin->src[0].ssa->parent_instr->type == nir_instr_type_intrinsic ?
-               nir_instr_as_intrinsic(intrin->src[0].ssa->parent_instr) : NULL;
+               nir_src_as_intrinsic(intrin->src[0]);
             if (resource == NULL || resource->intrinsic != nir_intrinsic_resource_intel)
                continue;
 

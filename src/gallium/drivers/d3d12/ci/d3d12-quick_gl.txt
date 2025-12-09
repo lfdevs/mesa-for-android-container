@@ -409,9 +409,5 @@ spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Fail
 spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Fail
 wgl@wgl-multi-context-single-window,Fail
 
-# Should've been fixed by https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/843
-# but still seems to be failing.
-spec@arb_vertex_program@arb_vertex_program-property-bindings,Fail
-
 # This tests NaNs in a GLSL version where NaNs are undefined
 shaders@glsl-fs-fogscale@vs and fs,Fail

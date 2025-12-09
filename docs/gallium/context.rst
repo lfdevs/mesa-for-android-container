@@ -652,6 +652,10 @@ call to ``flush`` is required to make sure the commands are emitted to the GPU.
 The Gallium implementation may implicitly ``flush`` the command stream during a
 ``fence_server_sync`` or ``fence_server_signal`` call if necessary.
 
+Gallium frontends must ensure that ``fence_server_signal`` returns before calling
+``fence_server_sync`` on the same ``pipe_fence_handle`` even if those calls are made on
+a different ``pipe_context``.
+
 Resource Busy Queries
 ^^^^^^^^^^^^^^^^^^^^^
 

@@ -1,0 +1,6 @@
+{
+    "$schema": "https://aka.ms/winget-settings.schema.json",
+    "installBehavior": {
+        "archiveExtractionMethod": "tar"
+    }
+}

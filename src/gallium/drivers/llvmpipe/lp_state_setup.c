@@ -566,7 +566,7 @@ init_args(struct gallivm_state *gallivm,
    load_attribute(gallivm, args, key, 0, attr_pos);
 
    pixel_center = lp_build_const_vec(gallivm, typef4,
-                                     (!key->multisample && key->pixel_center_half) ? 0.5 : 0.0);
+                                     key->pixel_center_half ? 0.5 : 0.0);
 
    /*
     * xy are first two elems in v0a/v1a/v2a but just use vec4 arit
@@ -774,15 +774,15 @@ lp_make_setup_variant_key(const struct llvmpipe_context *lp,
                           struct lp_setup_variant_key *key)
 {
    const struct lp_fragment_shader *fs = lp->fs;
+   const struct pipe_rasterizer_state *rast = lp->rasterizer;
    struct nir_shader *nir = fs->base.ir.nir;
 
    assert(sizeof key->inputs[0] == sizeof(uint));
 
    key->num_inputs = nir->num_inputs;
-   key->flatshade_first = lp->rasterizer->flatshade_first;
-   key->pixel_center_half = lp->rasterizer->half_pixel_center;
-   key->multisample = lp->rasterizer->multisample;
-   key->twoside = lp->rasterizer->light_twoside;
+   key->flatshade_first = rast->flatshade_first;
+   key->pixel_center_half = rast->half_pixel_center && !rast->multisample;
+   key->twoside = rast->light_twoside;
    key->size = offsetof(struct lp_setup_variant_key, inputs[key->num_inputs]);
 
    key->color_slot = lp->color_slot[0];
@@ -795,23 +795,23 @@ lp_make_setup_variant_key(const struct llvmpipe_context *lp,
     * to the primitive's maximum Z value. Retain the original depth bias
     * value until that stage.
     */
-   key->floating_point_depth = lp->floating_point_depth && !lp->rasterizer->offset_units_unscaled;
+   key->floating_point_depth = lp->floating_point_depth && !rast->offset_units_unscaled;
 
-   key->pgon_offset_units = (float) lp->rasterizer->offset_units;
-   if (lp->rasterizer->offset_units != 0 && !lp->floating_point_depth &&
-       !lp->rasterizer->offset_units_unscaled) {
+   key->pgon_offset_units = (float) rast->offset_units;
+   if (rast->offset_units != 0 && !lp->floating_point_depth &&
+       !rast->offset_units_unscaled) {
       /* Ensure correct rounding if a unorm format is used. */
       float adjustment =
          lp->floating_point_depth
          ? 0
-         : (lp->rasterizer->offset_units > 0 ? 0.5 : -0.5);
+         : (rast->offset_units > 0.0f ? 0.5f : -0.5f);
 
       key->pgon_offset_units =
-         (float) ((lp->rasterizer->offset_units + adjustment) * lp->mrd);
+         (float) ((rast->offset_units + adjustment) * lp->mrd);
    }
 
-   key->pgon_offset_scale = lp->rasterizer->offset_scale;
-   key->pgon_offset_clamp = lp->rasterizer->offset_clamp;
+   key->pgon_offset_scale = rast->offset_scale;
+   key->pgon_offset_clamp = rast->offset_clamp;
    key->uses_constant_interp = 0;
    key->pad = 0;
 
@@ -819,7 +819,7 @@ lp_make_setup_variant_key(const struct llvmpipe_context *lp,
 
    for (unsigned i = 0; i < key->num_inputs; i++) {
       if (key->inputs[i].interp == LP_INTERP_COLOR) {
-         if (lp->rasterizer->flatshade)
+         if (rast->flatshade)
             key->inputs[i].interp = LP_INTERP_CONSTANT;
          else
             key->inputs[i].interp = LP_INTERP_PERSPECTIVE;

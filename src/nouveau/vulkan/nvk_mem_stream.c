@@ -195,6 +195,29 @@ nvk_mem_stream_flush(struct nvk_device *dev,
    if (stream->next_time_point == UINT64_MAX)
       abort();
 
+   /* Flush any chunks with idle_time_point == next_time_point, including
+    * those on the recycle list.  We can assume that anything with
+    * idle_time_point < next_time_point is already flushed by a previous call
+    * to nvk_mem_stream_flush().
+    */
+   if (stream->chunk != NULL) {
+      struct nvk_mem_stream_chunk *chunk = stream->chunk;
+      assert(chunk->idle_time_point <= stream->next_time_point);
+      if (chunk->idle_time_point == stream->next_time_point) {
+         nvkmd_mem_sync_map_to_gpu(stream->chunk->mem, 0,
+                                   NVK_MEM_STREAM_MAX_ALLOC_SIZE);
+      }
+   }
+
+   list_for_each_entry_rev(struct nvk_mem_stream_chunk, chunk,
+                           &stream->recycle, link) {
+      assert(chunk->idle_time_point <= stream->next_time_point);
+      if (chunk->idle_time_point < stream->next_time_point)
+         break;
+
+      nvkmd_mem_sync_map_to_gpu(chunk->mem, 0, NVK_MEM_STREAM_MAX_ALLOC_SIZE);
+   }
+
    const struct vk_sync_signal signal = {
       .sync = stream->sync,
       .stage_mask = ~0,

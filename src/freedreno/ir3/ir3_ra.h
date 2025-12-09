@@ -294,4 +294,6 @@ void ir3_reg_interval_remove_all(struct ir3_reg_ctx *ctx,
 void ra_update_affinity(unsigned file_size, struct ir3_register *reg,
                         physreg_t physreg);
 
+void ir3_ra_handle_unavailable_merge_set(struct ir3_register *reg);
+
 #endif

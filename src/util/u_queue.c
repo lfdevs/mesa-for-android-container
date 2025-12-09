@@ -708,6 +708,7 @@ util_queue_finish(struct util_queue *queue)
    queue->create_threads_on_demand = false;
 
    fences = malloc(queue->num_threads * sizeof(*fences));
+   unsigned num_fences = queue->num_threads;
    util_barrier_init(&barrier, queue->num_threads);
 
    for (unsigned i = 0; i < queue->num_threads; ++i) {
@@ -718,7 +719,7 @@ util_queue_finish(struct util_queue *queue)
    queue->create_threads_on_demand = true;
    mtx_unlock(&queue->lock);
 
-   for (unsigned i = 0; i < queue->num_threads; ++i) {
+   for (unsigned i = 0; i < num_fences; ++i) {
       util_queue_fence_wait(&fences[i]);
       util_queue_fence_destroy(&fences[i]);
    }

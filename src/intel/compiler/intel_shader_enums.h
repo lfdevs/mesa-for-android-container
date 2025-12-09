@@ -30,6 +30,57 @@ intel_sometimes_invert(enum intel_sometimes x)
    return (enum intel_sometimes)((int)INTEL_ALWAYS - (int)x);
 }
 
+#define INTEL_TESS_CONFIG_INPUT_VERTICES_OFFSET   (0)
+#define INTEL_TESS_CONFIG_INPUT_VERTICES_SIZE     (5)
+#define INTEL_TESS_CONFIG_OUTPUT_VERTICES_OFFSET  (5)
+#define INTEL_TESS_CONFIG_OUTPUT_VERTICES_SIZE    (5)
+#define INTEL_TESS_CONFIG_BUILTINS_OFFSET         (10)
+#define INTEL_TESS_CONFIG_BUILTINS_SIZE           (6)
+#define INTEL_TESS_CONFIG_PER_VERTEX_SLOTS_OFFSET (16)
+#define INTEL_TESS_CONFIG_PER_VERTEX_SLOTS_SIZE   (6)
+#define INTEL_TESS_CONFIG_PER_PATCH_SLOTS_OFFSET  (22)
+#define INTEL_TESS_CONFIG_PER_PATCH_SLOTS_SIZE    (6)
+
+enum intel_tess_configs {
+   /** Tessellation inputs vertices minus 1
+    *
+    * This field actually covers 5bits.
+    */
+   INTEL_TESS_CONFIG_INPUT_VERTICES  = BITFIELD_BIT(INTEL_TESS_CONFIG_INPUT_VERTICES_OFFSET),
+
+   /** Tessellation outputs vertices minus 1
+    *
+    * This field actually covers 5bits.
+    */
+   INTEL_TESS_CONFIG_OUTPUT_VERTICES = BITFIELD_BIT(INTEL_TESS_CONFIG_OUTPUT_VERTICES_OFFSET),
+
+   /** Tessellation builtins per-vertex offset
+    *
+    * This field actually covers 5bits.
+    */
+   INTEL_TESS_CONFIG_BUILTINS      = BITFIELD_BIT(INTEL_TESS_CONFIG_BUILTINS_OFFSET),
+
+   /** Number of per vertex slots
+    *
+    * This field actually covers 6bits.
+    */
+   INTEL_TESS_PER_VERTEX_SLOTS     = BITFIELD_BIT(INTEL_TESS_CONFIG_PER_VERTEX_SLOTS_OFFSET),
+
+   /** Number of per patch slots
+    *
+    * This field actually covers 6bits.
+    */
+   INTEL_TESS_PER_PATCH_SLOTS      = BITFIELD_BIT(INTEL_TESS_CONFIG_PER_PATCH_SLOTS_OFFSET),
+
+   /** Tesselation primitive modes
+    *
+    * Only one of the following 3 bits should be set.
+    */
+   INTEL_TESS_CONFIG_QUADS           = BITFIELD_BIT(29),
+   INTEL_TESS_CONFIG_TRIANGLES       = BITFIELD_BIT(30),
+   INTEL_TESS_CONFIG_ISOLINES        = BITFIELD_BIT(31)
+};
+
 #define INTEL_MSAA_FLAG_FIRST_VUE_SLOT_OFFSET     (19)
 #define INTEL_MSAA_FLAG_FIRST_VUE_SLOT_SIZE       (6)
 #define INTEL_MSAA_FLAG_PRIMITIVE_ID_INDEX_OFFSET (25)
@@ -294,6 +345,11 @@ struct intel_vue_map {
     * shader outputs and tessellation evaluation shader inputs.
     */
    int num_per_vertex_slots;
+
+   /**
+    * Location at which the builtins live.
+    */
+   int builtins_slot_offset;
 };
 
 struct intel_cs_dispatch_info {
@@ -313,6 +369,36 @@ enum intel_compute_walk_order {
    INTEL_WALK_ORDER_ZXY = 4,
    INTEL_WALK_ORDER_ZYX = 5,
 };
+
+static inline uint32_t
+intel_tess_config(uint32_t input_vertices,
+                  uint32_t output_vertices,
+                  enum intel_tess_domain tess_domain,
+                  uint32_t num_per_patch_slots,
+                  uint32_t num_per_vertex_slots,
+                  uint32_t builtins_slot_offset)
+{
+   assert(num_per_patch_slots < (1u << INTEL_TESS_CONFIG_PER_PATCH_SLOTS_SIZE));
+   assert(num_per_vertex_slots < (1u << INTEL_TESS_CONFIG_PER_VERTEX_SLOTS_SIZE));
+   assert(builtins_slot_offset < (1u << INTEL_TESS_CONFIG_BUILTINS_SIZE));
+   assert(input_vertices != 0);
+   assert((input_vertices - 1) < (1u << INTEL_TESS_CONFIG_INPUT_VERTICES_SIZE));
+   assert((output_vertices - 1) < (1u << INTEL_TESS_CONFIG_OUTPUT_VERTICES_SIZE));
+
+   const uint32_t primitive_flags =
+      tess_domain == INTEL_TESS_DOMAIN_TRI ? INTEL_TESS_CONFIG_TRIANGLES :
+      tess_domain == INTEL_TESS_DOMAIN_QUAD ? INTEL_TESS_CONFIG_QUADS :
+      INTEL_TESS_CONFIG_ISOLINES;
+
+   return
+      (((input_vertices - 1) & 0x1f) << INTEL_TESS_CONFIG_INPUT_VERTICES_OFFSET) |
+      (((output_vertices - 1) & 0x1f) << INTEL_TESS_CONFIG_OUTPUT_VERTICES_OFFSET) |
+      primitive_flags |
+      (num_per_patch_slots << INTEL_TESS_CONFIG_PER_PATCH_SLOTS_OFFSET) |
+      (num_per_vertex_slots << INTEL_TESS_CONFIG_PER_VERTEX_SLOTS_OFFSET) |
+      (builtins_slot_offset << INTEL_TESS_CONFIG_BUILTINS_OFFSET);
+
+}
 
 static inline bool
 intel_fs_is_persample(enum intel_sometimes shader_persample_dispatch,
@@ -502,6 +588,68 @@ intel_fs_msaa_flags(struct intel_fs_params params)
 
    return fs_msaa_flags;
 }
+
+#define INTEL_MAX_EMBEDDED_SAMPLERS (4096)
+
+enum intel_shader_reloc_id {
+   INTEL_SHADER_RELOC_CONST_DATA_ADDR_LOW,
+   INTEL_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
+   INTEL_SHADER_RELOC_SHADER_START_OFFSET,
+
+   INTEL_LAST_COMMON_SHADER_RELOC = INTEL_SHADER_RELOC_SHADER_START_OFFSET,
+
+   BRW_SHADER_RELOC_RESUME_SBT_ADDR_LOW = INTEL_LAST_COMMON_SHADER_RELOC + 1,
+   BRW_SHADER_RELOC_RESUME_SBT_ADDR_HIGH,
+   BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH,
+   BRW_SHADER_RELOC_DESCRIPTORS_BUFFER_ADDR_HIGH,
+   BRW_SHADER_RELOC_INSTRUCTION_BASE_ADDR_HIGH,
+   BRW_SHADER_RELOC_PRINTF_BUFFER_ADDR_LOW,
+   BRW_SHADER_RELOC_PRINTF_BUFFER_ADDR_HIGH,
+   BRW_SHADER_RELOC_PRINTF_BUFFER_SIZE,
+   /* Leave this entry last: */
+   BRW_SHADER_RELOC_EMBEDDED_SAMPLER_HANDLE,
+   BRW_SHADER_RELOC_LAST_EMBEDDED_SAMPLER_HANDLE =
+   BRW_SHADER_RELOC_EMBEDDED_SAMPLER_HANDLE + INTEL_MAX_EMBEDDED_SAMPLERS - 1,
+};
+
+enum intel_shader_reloc_type {
+   /** An arbitrary 32-bit value */
+   INTEL_SHADER_RELOC_TYPE_U32,
+   /** A MOV instruction with an immediate source */
+   INTEL_SHADER_RELOC_TYPE_MOV_IMM,
+};
+
+/** Represents a code relocation
+ *
+ * Relocatable constants are immediates in the code which we want to be able
+ * to replace post-compile with the actual value.
+ */
+struct intel_shader_reloc {
+   /** The 32-bit ID of the relocatable constant */
+   uint32_t id;
+
+   /** Type of this relocation */
+   enum intel_shader_reloc_type type;
+
+   /** The offset in the shader to the relocated value
+    *
+    * For MOV_IMM relocs, this is an offset to the MOV instruction.  This
+    * allows us to do some sanity checking while we update the value.
+    */
+   uint32_t offset;
+
+   /** Value to be added to the relocated value before it is written */
+   uint32_t delta;
+};
+
+/** A value to write to a relocation */
+struct intel_shader_reloc_value {
+   /** The 32-bit ID of the relocatable constant */
+   uint32_t id;
+
+   /** The value with which to replace the relocated immediate */
+   uint32_t value;
+};
 
 #ifdef __cplusplus
 } /* extern "C" */

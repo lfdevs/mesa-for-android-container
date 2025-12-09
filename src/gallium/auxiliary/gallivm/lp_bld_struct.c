@@ -34,12 +34,10 @@
  */
 
 
-#include "util/u_debug.h"
-#include "util/u_memory.h"
-
 #include "lp_bld_const.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_struct.h"
+#include "util/macros.h"
 
 LLVMValueRef
 lp_build_struct_get_ptr2(struct gallivm_state *gallivm,

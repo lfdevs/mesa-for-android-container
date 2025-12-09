@@ -384,7 +384,7 @@ lower_int64_compare(nir_builder *b, nir_op op, nir_def *x, nir_def *y)
       /* Lower as !(x < y) in the hopes of better CSE */
       return nir_inot(b, lower_int64_compare(b, nir_op_ilt, x, y));
    default:
-      unreachable("Invalid comparison");
+      UNREACHABLE("Invalid comparison");
    }
 }
 
@@ -748,7 +748,7 @@ lower_2f(nir_builder *b, nir_def *x, unsigned dest_bit_size,
       significand_bits = 10;
       break;
    default:
-      unreachable("Invalid dest_bit_size");
+      UNREACHABLE("Invalid dest_bit_size");
    }
 
    nir_def *discard =
@@ -1111,7 +1111,7 @@ lower_int64_alu_instr(nir_builder *b, nir_alu_instr *alu)
    case nir_op_f2u64:
       return lower_f2(b, src[0], alu->op == nir_op_f2i64);
    default:
-      unreachable("Invalid ALU opcode to lower");
+      UNREACHABLE("Invalid ALU opcode to lower");
    }
 }
 
@@ -1383,12 +1383,12 @@ lower_int64_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
       case nir_op_ixor:
          return split_64bit_subgroup_op(b, intrin);
       default:
-         unreachable("Unsupported subgroup scan/reduce op");
+         UNREACHABLE("Unsupported subgroup scan/reduce op");
       }
       break;
 
    default:
-      unreachable("Unsupported intrinsic");
+      UNREACHABLE("Unsupported intrinsic");
    }
    return NULL;
 }

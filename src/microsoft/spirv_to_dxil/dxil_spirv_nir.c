@@ -116,11 +116,11 @@ dxil_spirv_nir_prep(nir_shader *nir)
    * inline functions.  That way they get properly initialized at the top
    * of the function and not at the top of its caller.
    */
-   NIR_PASS_V(nir, nir_lower_variable_initializers, nir_var_function_temp);
-   NIR_PASS_V(nir, nir_lower_returns);
-   NIR_PASS_V(nir, nir_inline_functions);
-   NIR_PASS_V(nir, nir_copy_prop);
-   NIR_PASS_V(nir, nir_opt_deref);
+   NIR_PASS(_, nir, nir_lower_variable_initializers, nir_var_function_temp);
+   NIR_PASS(_, nir, nir_lower_returns);
+   NIR_PASS(_, nir, nir_inline_functions);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
+   NIR_PASS(_, nir, nir_opt_deref);
 
    /* Pick off the single entrypoint that we want */
    nir_remove_non_entrypoints(nir);
@@ -130,20 +130,20 @@ dxil_spirv_nir_prep(nir_shader *nir)
    * nir_remove_dead_variables and split_per_member_structs below see the
    * corresponding stores.
    */
-   NIR_PASS_V(nir, nir_lower_variable_initializers, ~0);
+   NIR_PASS(_, nir, nir_lower_variable_initializers, ~0);
 
    /* Split member structs.  We do this before lower_io_to_temporaries so that
    * it doesn't lower system values to temporaries by accident.
    */
-   NIR_PASS_V(nir, nir_split_var_copies);
-   NIR_PASS_V(nir, nir_split_per_member_structs);
+   NIR_PASS(_, nir, nir_split_var_copies);
+   NIR_PASS(_, nir, nir_split_per_member_structs);
 
-   NIR_PASS_V(nir, nir_remove_dead_variables,
+   NIR_PASS(_, nir, nir_remove_dead_variables,
               nir_var_shader_in | nir_var_shader_out | nir_var_system_value |
               nir_var_shader_call_data | nir_var_ray_hit_attrib,
               NULL);
 
-   NIR_PASS_V(nir, nir_propagate_invariant, false);
+   NIR_PASS(_, nir, nir_propagate_invariant, false);
 }
 
 static void
@@ -633,16 +633,18 @@ write_pntc_with_pos(nir_builder *b, nir_instr *instr, void *_data)
    return true;
 }
 
-static void
+static bool
 dxil_spirv_write_pntc(nir_shader *nir, const struct dxil_spirv_runtime_conf *conf)
 {
    struct lower_pntc_data data = { .conf = conf };
    data.pntc = nir_variable_create(nir, nir_var_shader_out, glsl_vec4_type(), "gl_PointCoord");
    data.pntc->data.location = VARYING_SLOT_PNTC;
-   nir_shader_instructions_pass(nir, write_pntc_with_pos,
-                                nir_metadata_control_flow |
-                                nir_metadata_loop_analysis,
-                                &data);
+   bool progress = nir_shader_instructions_pass(nir, write_pntc_with_pos,
+                                                nir_metadata_control_flow |
+                                                nir_metadata_loop_analysis,
+                                                &data);
+   if (!progress)
+      return false;
    nir->info.outputs_written |= VARYING_BIT_PNTC;
 
    /* Add the runtime data var if it's not already there */
@@ -654,6 +656,7 @@ dxil_spirv_write_pntc(nir_shader *nir, const struct dxil_spirv_runtime_conf *con
    nir_variable *ubo_var = nir_get_binding_variable(nir, binding);
    if (!ubo_var)
       add_runtime_data_var(nir, conf->runtime_data_cbv.register_space, conf->runtime_data_cbv.base_shader_register);
+   return true;
 }
 
 static bool
@@ -685,11 +688,11 @@ lower_pntc_read(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def *pntc = nir_fadd_imm(b,
                                     nir_fsub(b, nir_trim_vector(b, pos, 2), nir_trim_vector(b, point_center, 2)),
                                     0.5);
-   nir_def_rewrite_uses_after(point_center, pntc, pntc->parent_instr);
+   nir_def_rewrite_uses_after(point_center, pntc);
    return true;
 }
 
-static void
+static bool
 dxil_spirv_compute_pntc(nir_shader *nir)
 {
    nir_variable *pos = nir_find_variable_with_location(nir, nir_var_shader_in, VARYING_SLOT_POS);
@@ -698,10 +701,10 @@ dxil_spirv_compute_pntc(nir_shader *nir)
       pos->data.location = VARYING_SLOT_POS;
       pos->data.sample = nir_find_variable_with_location(nir, nir_var_shader_in, VARYING_SLOT_PNTC)->data.sample;
    }
-   nir_shader_intrinsics_pass(nir, lower_pntc_read,
-                                nir_metadata_control_flow |
-                                nir_metadata_loop_analysis,
-                                pos);
+   return nir_shader_intrinsics_pass(nir, lower_pntc_read,
+                                     nir_metadata_control_flow |
+                                     nir_metadata_loop_analysis,
+                                     pos);
 }
 
 static bool
@@ -742,7 +745,7 @@ add_layer_write(nir_builder *b, nir_instr *instr, void *data)
    return true;
 }
 
-static void
+static bool
 lower_view_index_to_rt_layer(nir_shader *nir)
 {
    bool existing_write =
@@ -751,21 +754,23 @@ lower_view_index_to_rt_layer(nir_shader *nir)
                                    nir_metadata_loop_analysis, NULL);
 
    if (existing_write)
-      return;
+      return true;
 
    nir_variable *var = nir_variable_create(nir, nir_var_shader_out,
                                            glsl_uint_type(), "gl_Layer");
    var->data.location = VARYING_SLOT_LAYER;
    var->data.interpolation = INTERP_MODE_FLAT;
    if (nir->info.stage == MESA_SHADER_GEOMETRY) {
-      nir_shader_instructions_pass(nir,
-                                   add_layer_write,
-                                   nir_metadata_control_flow |
-                                   nir_metadata_loop_analysis, var);
+      return nir_shader_instructions_pass(nir,
+                                          add_layer_write,
+                                          nir_metadata_control_flow |
+                                          nir_metadata_loop_analysis, var);
    } else {
       nir_function_impl *func = nir_shader_get_entrypoint(nir);
       nir_builder b = nir_builder_at(nir_after_impl(func));
-      add_layer_write(&b, NULL, var);
+      return nir_progress(add_layer_write(&b, NULL, var), b.impl,
+                          nir_metadata_control_flow |
+                          nir_metadata_loop_analysis);
    }
 }
 
@@ -782,14 +787,14 @@ dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir,
          nir->info.clip_distance_array_size = prev_stage_nir->info.clip_distance_array_size;
 
          if (nir->info.inputs_read & VARYING_BIT_PNTC) {
-            NIR_PASS_V(prev_stage_nir, dxil_spirv_write_pntc, conf);
-            NIR_PASS_V(nir, dxil_spirv_compute_pntc);
+            NIR_PASS(_, prev_stage_nir, dxil_spirv_write_pntc, conf);
+            NIR_PASS(_, nir, dxil_spirv_compute_pntc);
             metadata->requires_runtime_data = true;
          }
       }
 
-      NIR_PASS_V(nir, dxil_nir_kill_undefined_varyings, prev_stage_nir->info.outputs_written, prev_stage_nir->info.patch_outputs_written, NULL);
-      NIR_PASS_V(prev_stage_nir, dxil_nir_kill_unused_outputs, nir->info.inputs_read, nir->info.patch_inputs_read, NULL);
+      NIR_PASS(_, nir, dxil_nir_kill_undefined_varyings, prev_stage_nir->info.outputs_written, prev_stage_nir->info.patch_outputs_written, NULL);
+      NIR_PASS(_, prev_stage_nir, dxil_nir_kill_unused_outputs, nir->info.inputs_read, nir->info.patch_inputs_read, NULL);
 
       dxil_reassign_driver_locations(nir, nir_var_shader_in, prev_stage_nir->info.outputs_written, NULL);
       dxil_reassign_driver_locations(prev_stage_nir, nir_var_shader_out, nir->info.inputs_read, NULL);
@@ -890,27 +895,28 @@ dxil_spirv_nir_passes(nir_shader *nir,
 {
    glsl_type_singleton_init_or_ref();
 
-   NIR_PASS_V(nir, nir_opt_vectorize_io_vars,
+   NIR_PASS(_, nir, nir_opt_vectorize_io_vars,
               nir_var_shader_out |
               (nir->info.stage != MESA_SHADER_VERTEX ? nir_var_shader_in : 0));
-   NIR_PASS_V(nir, nir_opt_combine_stores, nir_var_shader_out);
-   NIR_PASS_V(nir, nir_remove_dead_derefs);
+   NIR_PASS(_, nir, nir_opt_combine_stores, nir_var_shader_out);
+   NIR_PASS(_, nir, nir_remove_dead_derefs);
 
    const struct nir_lower_sysvals_to_varyings_options sysvals_to_varyings = {
       .frag_coord = true,
       .point_coord = true,
       .front_face = true,
+      .layer_id = true,
    };
-   NIR_PASS_V(nir, nir_lower_sysvals_to_varyings, &sysvals_to_varyings);
+   NIR_PASS(_, nir, nir_lower_sysvals_to_varyings, &sysvals_to_varyings);
 
-   NIR_PASS_V(nir, nir_lower_system_values);
+   NIR_PASS(_, nir, nir_lower_system_values);
 
    nir_lower_compute_system_values_options compute_options = {
       .has_base_workgroup_id = conf->workgroup_id_mode != DXIL_SPIRV_SYSVAL_TYPE_ZERO,
    };
-   NIR_PASS_V(nir, nir_lower_compute_system_values, &compute_options);
-   NIR_PASS_V(nir, dxil_nir_lower_subgroup_id);
-   NIR_PASS_V(nir, dxil_nir_lower_num_subgroups);
+   NIR_PASS(_, nir, nir_lower_compute_system_values, &compute_options);
+   NIR_PASS(_, nir, dxil_nir_lower_subgroup_id);
+   NIR_PASS(_, nir, dxil_nir_lower_num_subgroups);
 
    nir_lower_subgroups_options subgroup_options = {
       .ballot_bit_size = 32,
@@ -923,12 +929,12 @@ dxil_spirv_nir_passes(nir_shader *nir,
    if (nir->info.stage != MESA_SHADER_FRAGMENT &&
        nir->info.stage != MESA_SHADER_COMPUTE)
       subgroup_options.lower_quad = true;
-   NIR_PASS_V(nir, nir_lower_subgroups, &subgroup_options);
-   NIR_PASS_V(nir, nir_lower_bit_size, lower_bit_size_callback, NULL);
+   NIR_PASS(_, nir, nir_lower_subgroups, &subgroup_options);
+   NIR_PASS(_, nir, nir_lower_bit_size, lower_bit_size_callback, NULL);
 
    // Ensure subgroup scans on bools are gone
-   NIR_PASS_V(nir, nir_opt_dce);
-   NIR_PASS_V(nir, dxil_nir_lower_unsupported_subgroup_scan);
+   NIR_PASS(_, nir, nir_opt_dce);
+   NIR_PASS(_, nir, dxil_nir_lower_unsupported_subgroup_scan);
 
    // Force sample-rate shading if we're asked to.
    if (conf->force_sample_rate_shading) {
@@ -943,12 +949,12 @@ dxil_spirv_nir_passes(nir_shader *nir,
       gl_system_value system_values[] = {SYSTEM_VALUE_FIRST_VERTEX,
                                          SYSTEM_VALUE_BASE_VERTEX,
                                          SYSTEM_VALUE_BASE_INSTANCE};
-      NIR_PASS_V(nir, dxil_nir_lower_system_values_to_zero, system_values,
+      NIR_PASS(_, nir, dxil_nir_lower_system_values_to_zero, system_values,
                  ARRAY_SIZE(system_values));
    }
 
    if (conf->lower_view_index_to_rt_layer)
-      NIR_PASS_V(nir, lower_view_index_to_rt_layer);
+      NIR_PASS(_, nir, lower_view_index_to_rt_layer);
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
    metadata->needs_draw_sysvals = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FIRST_VERTEX) ||
@@ -959,80 +965,83 @@ dxil_spirv_nir_passes(nir_shader *nir,
             conf);
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-      NIR_PASS_V(nir, nir_lower_input_attachments,
+      NIR_PASS(_, nir, nir_lower_input_attachments,
                  &(nir_input_attachment_options){
-                     .use_fragcoord_sysval = false,
-                     .use_layer_id_sysval = !conf->lower_view_index,
                      .use_view_id_for_layer = !conf->lower_view_index,
                  });
 
-      NIR_PASS_V(nir, dxil_nir_lower_discard_and_terminate);
-      NIR_PASS_V(nir, nir_lower_returns);
-      NIR_PASS_V(nir, dxil_nir_lower_sample_pos);
-      NIR_PASS_V(nir, nir_lower_fragcoord_wtrans);
+      /* Lower sysvals again to get rid of load_layer_id */
+      NIR_PASS(_, nir, nir_lower_sysvals_to_varyings, &sysvals_to_varyings);
+
+      NIR_PASS(_, nir, dxil_nir_lower_discard_and_terminate);
+      NIR_PASS(_, nir, nir_lower_returns);
+      NIR_PASS(_, nir, dxil_nir_lower_sample_pos);
+      NIR_PASS(_, nir, nir_lower_fragcoord_wtrans);
    }
 
-   NIR_PASS_V(nir, nir_opt_deref);
+   NIR_PASS(_, nir, nir_opt_deref);
 
-   NIR_PASS_V(nir, nir_lower_memory_model);
-   NIR_PASS_V(nir, dxil_nir_lower_coherent_loads_and_stores);
+   NIR_PASS(_, nir, nir_lower_memory_model);
+   NIR_PASS(_, nir, dxil_nir_lower_coherent_loads_and_stores);
 
    if (conf->inferred_read_only_images_as_srvs) {
       const nir_opt_access_options opt_access_options = {
          .is_vulkan = true,
       };
-      NIR_PASS_V(nir, nir_opt_access, &opt_access_options);
+      NIR_PASS(_, nir, nir_opt_access, &opt_access_options);
    }
 
-   NIR_PASS_V(nir, dxil_spirv_nir_discard_point_size_var);
+   NIR_PASS(_, nir, dxil_spirv_nir_discard_point_size_var);
 
-   NIR_PASS_V(nir, nir_remove_dead_variables,
+   NIR_PASS(_, nir, nir_remove_dead_variables,
               nir_var_shader_in | nir_var_shader_out |
               nir_var_system_value | nir_var_mem_shared,
               NULL);
 
    uint32_t push_constant_size = 0;
-   NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_push_const,
+   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_push_const,
               nir_address_format_32bit_offset);
-   NIR_PASS_V(nir, dxil_spirv_nir_lower_load_push_constant,
+   NIR_PASS(_, nir, dxil_spirv_nir_lower_load_push_constant,
               nir_address_format_32bit_index_offset,
               conf->push_constant_cbv.register_space,
               conf->push_constant_cbv.base_shader_register,
               &push_constant_size);
 
-   NIR_PASS_V(nir, dxil_spirv_nir_lower_buffer_device_address);
-   NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_ubo | nir_var_mem_ssbo,
+   NIR_PASS(_, nir, dxil_spirv_nir_lower_buffer_device_address);
+   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo | nir_var_mem_ssbo,
               nir_address_format_32bit_index_offset);
-   NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_global,
+   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_global,
               nir_address_format_32bit_index_offset_pack64);
 
    if (nir->info.shared_memory_explicit_layout) {
-      NIR_PASS_V(nir, nir_lower_vars_to_explicit_types, nir_var_mem_shared,
+      NIR_PASS(_, nir, nir_lower_vars_to_explicit_types, nir_var_mem_shared,
                  shared_var_info);
-      NIR_PASS_V(nir, dxil_nir_split_unaligned_loads_stores, nir_var_mem_shared);
-      NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_shared, nir_address_format_32bit_offset);
+      NIR_PASS(_, nir, dxil_nir_split_unaligned_loads_stores, nir_var_mem_shared);
+      NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_shared, nir_address_format_32bit_offset);
+      NIR_PASS(_, nir, dxil_nir_scratch_and_shared_to_dxil);
    } else {
-      NIR_PASS_V(nir, nir_split_struct_vars, nir_var_mem_shared);
-      NIR_PASS_V(nir, dxil_nir_flatten_var_arrays, nir_var_mem_shared);
-      NIR_PASS_V(nir, dxil_nir_lower_var_bit_size, nir_var_mem_shared,
+      NIR_PASS(_, nir, nir_split_struct_vars, nir_var_mem_shared);
+      NIR_PASS(_, nir, dxil_nir_flatten_var_arrays, nir_var_mem_shared);
+      NIR_PASS(_, nir, dxil_nir_lower_var_bit_size, nir_var_mem_shared,
                  conf->shader_model_max >= SHADER_MODEL_6_2 ? 16 : 32, 64);
    }
 
-   NIR_PASS_V(nir, dxil_nir_lower_int_cubemaps, false);
+   NIR_PASS(_, nir, dxil_nir_lower_int_cubemaps, false);
 
-   NIR_PASS_V(nir, nir_lower_clip_cull_distance_array_vars);
-   NIR_PASS_V(nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir), true, true);
-   NIR_PASS_V(nir, nir_lower_global_vars_to_local);
-   NIR_PASS_V(nir, nir_split_var_copies);
-   NIR_PASS_V(nir, nir_lower_var_copies);
-   NIR_PASS_V(nir, nir_lower_io_array_vars_to_elements_no_indirects, false);
+   NIR_PASS(_, nir, nir_lower_clip_cull_distance_array_vars);
+   NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir),
+            nir_var_shader_out | nir_var_shader_in);
+   NIR_PASS(_, nir, nir_lower_global_vars_to_local);
+   NIR_PASS(_, nir, nir_split_var_copies);
+   NIR_PASS(_, nir, nir_lower_var_copies);
+   NIR_PASS(_, nir, nir_lower_io_array_vars_to_elements_no_indirects, false);
 
 
    if (conf->yz_flip.mode != DXIL_SPIRV_YZ_FLIP_NONE) {
       assert(nir->info.stage == MESA_SHADER_VERTEX ||
              nir->info.stage == MESA_SHADER_GEOMETRY ||
              nir->info.stage == MESA_SHADER_TESS_EVAL);
-      NIR_PASS_V(nir,
+      NIR_PASS(_, nir,
                  dxil_spirv_nir_lower_yz_flip,
                  conf, &metadata->requires_runtime_data);
    }
@@ -1048,17 +1057,17 @@ dxil_spirv_nir_passes(nir_shader *nir,
                             conf->push_constant_cbv.base_shader_register);
    }
 
-   NIR_PASS_V(nir, nir_lower_fp16_casts, nir_lower_fp16_all & ~nir_lower_fp16_rtz);
-   NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
-   NIR_PASS_V(nir, nir_opt_dce);
-   NIR_PASS_V(nir, dxil_nir_lower_double_math);
+   NIR_PASS(_, nir, nir_lower_fp16_casts, nir_lower_fp16_all & ~nir_lower_fp16_rtz);
+   NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
+   NIR_PASS(_, nir, nir_opt_dce);
+   NIR_PASS(_, nir, dxil_nir_lower_double_math);
 
    {
       bool progress;
       do
       {
          progress = false;
-         NIR_PASS(progress, nir, nir_copy_prop);
+         NIR_PASS(progress, nir, nir_opt_copy_prop);
          NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
          NIR_PASS(progress, nir, nir_opt_deref);
          NIR_PASS(progress, nir, nir_opt_dce);
@@ -1067,7 +1076,7 @@ dxil_spirv_nir_passes(nir_shader *nir,
          NIR_PASS(progress, nir, nir_opt_cse);
          if (nir_opt_loop(nir)) {
             progress = true;
-            NIR_PASS(progress, nir, nir_copy_prop);
+            NIR_PASS(progress, nir, nir_opt_copy_prop);
             NIR_PASS(progress, nir, nir_opt_dce);
          }
          NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
@@ -1077,36 +1086,32 @@ dxil_spirv_nir_passes(nir_shader *nir,
       } while (progress);
    }
 
-   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
-   NIR_PASS_V(nir, nir_split_struct_vars, nir_var_function_temp);
-   NIR_PASS_V(nir, dxil_nir_flatten_var_arrays, nir_var_function_temp);
-   NIR_PASS_V(nir, dxil_nir_lower_var_bit_size, nir_var_function_temp,
+   NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
+   NIR_PASS(_, nir, nir_split_struct_vars, nir_var_function_temp);
+   NIR_PASS(_, nir, dxil_nir_flatten_var_arrays, nir_var_function_temp);
+   NIR_PASS(_, nir, dxil_nir_lower_var_bit_size, nir_var_function_temp,
               conf->shader_model_max >= SHADER_MODEL_6_2 ? 16 : 32, 64);
 
-   NIR_PASS_V(nir, nir_lower_doubles, NULL, nir->options->lower_doubles_options);
+   NIR_PASS(_, nir, nir_lower_doubles, NULL, nir->options->lower_doubles_options);
 
    if (conf->declared_read_only_images_as_srvs)
-      NIR_PASS_V(nir, nir_lower_readonly_images_to_tex, true);
+      NIR_PASS(_, nir, nir_lower_readonly_images_to_tex, true);
    nir_lower_tex_options lower_tex_options = {
       .lower_txp = UINT32_MAX,
       .lower_invalid_implicit_lod = true,
       .lower_tg4_offsets = true,
    };
-   NIR_PASS_V(nir, nir_lower_tex, &lower_tex_options);
+   NIR_PASS(_, nir, nir_lower_tex, &lower_tex_options);
 
-   NIR_PASS_V(nir, dxil_nir_split_clip_cull_distance);
-   const struct dxil_nir_lower_loads_stores_options loads_stores_options = {
-      .use_16bit_ssbo = conf->shader_model_max >= SHADER_MODEL_6_2,
-   };
-   NIR_PASS_V(nir, dxil_nir_lower_loads_stores_to_dxil, &loads_stores_options);
-   NIR_PASS_V(nir, dxil_nir_split_typed_samplers);
-   NIR_PASS_V(nir, dxil_nir_lower_ubo_array_one_to_static);
-   NIR_PASS_V(nir, nir_opt_dce);
-   NIR_PASS_V(nir, nir_remove_dead_derefs);
-   NIR_PASS_V(nir, nir_remove_dead_variables,
+   NIR_PASS(_, nir, dxil_nir_split_clip_cull_distance);
+   NIR_PASS(_, nir, dxil_nir_split_typed_samplers);
+   NIR_PASS(_, nir, dxil_nir_lower_ubo_array_one_to_static);
+   NIR_PASS(_, nir, nir_opt_dce);
+   NIR_PASS(_, nir, nir_remove_dead_derefs);
+   NIR_PASS(_, nir, nir_remove_dead_variables,
               nir_var_uniform | nir_var_shader_in | nir_var_shader_out,
               NULL);
-   NIR_PASS_V(nir, merge_ubos_and_ssbos);
+   NIR_PASS(_, nir, merge_ubos_and_ssbos);
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       dxil_sort_ps_outputs(nir);

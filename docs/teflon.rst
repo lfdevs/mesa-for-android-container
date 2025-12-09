@@ -15,6 +15,9 @@ Mesa contains a TensorFlow Lite delegate that can make use of NPUs to accelerate
    * - Etnaviv
      - ``VeriSilicon VIPNano-SI+.8002``
      - ``NXP iMX8M Plus on Toradex Verdin SoM``
+   * - Rocket
+     - ``RK3588 NPU``
+     - ``PINE64 QuartzPro64``
 
 .. list-table:: Tested models
    :header-rows: 1
@@ -25,29 +28,33 @@ Mesa contains a TensorFlow Lite delegate that can make use of NPUs to accelerate
      - Status
      - Inference speed on AML-A311D-CC Alta
      - Inference speed on Verdin iMX8M Plus
+     - Inference speed on QuartzPro64
    * - MobileNet V1
      - UINT8
      - http://download.tensorflow.org/models/mobilenet_v1_2018_08_02/mobilenet_v1_1.0_224_quant.tgz
      - Fully supported
      - ~6.6 ms
      - ~7.9 ms
+     - ~18 ms
    * - MobileNet V2
      - UINT8
      - https://storage.googleapis.com/mobilenet_v2/checkpoints/quantized_v2_224_100.tgz
      - Fully supported
      - ~6.9 ms
      - ~8.0 ms
+     - ~21 ms
    * - SSDLite MobileDet
      - UINT8
      - https://raw.githubusercontent.com/google-coral/test_data/master/ssdlite_mobiledet_coco_qat_postprocess.tflite
      - Fully supported
      - ~24.8 ms
      - ~24.4 ms
+     - ~48 ms
 
 Build
 -----
 
-Build Mesa as usual, with the -Dteflon=true argument.
+Build Mesa as usual, with the -Dteflon=true argument. Make sure at least one of etnaviv or rocket gallium drivers is enabled, as Teflon only works with these drivers.
 
 Example instructions:
 
@@ -62,7 +69,7 @@ Example instructions:
 
    # Build Mesa
    ~ $ cd mesa
-   mesa $ meson setup build -Dgallium-drivers=etnaviv -Dvulkan-drivers= -Dteflon=true
+   mesa $ meson setup build -Dgallium-drivers=etnaviv,rocket -Dvulkan-drivers= -Dteflon=true
    mesa $ meson compile -C build
 
 Install runtime dependencies
@@ -99,7 +106,7 @@ This example script has been based from the code in https://github.com/tensorflo
    ~ $ cd mesa/
    mesa $ TEFLON_DEBUG=verbose ETNA_MESA_DEBUG=ml_dbgs python3.10 src/gallium/frontends/teflon/tests/classification.py \
           -i ~/tensorflow/assets/grace_hopper.bmp \
-          -m src/gallium/targets/teflon/tests/mobilenet_v1_1.0_224_quant.tflite \
+          -m src/gallium/targets/teflon/tests/models/mobilenetv1/mobilenet_v1_1_224_quant.tflite \
           -l src/gallium/frontends/teflon/tests/labels_mobilenet_quant_v1_224.txt \
           -e build/src/gallium/targets/teflon/libteflon.so
 

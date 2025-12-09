@@ -62,7 +62,7 @@ foreach v : ['80', '90', '110', '120', '125', '200', '300']
   iris_per_hw_ver_libs += static_library(
     'iris_per_hw_ver@0@'.format(v),
     ['iris_blorp.c', 'iris_query.c', 'iris_state.c', 'iris_indirect_gen.c', gen_xml_pack],
-    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_intel],
+    include_directories : [inc_include, inc_src, inc_mesa, inc_gallium, inc_gallium_aux, inc_intel],
     c_args : [
       intel_common_args,
       no_override_init_args, sse2_args,
@@ -77,12 +77,12 @@ endforeach
 
 libiris = static_library(
   'iris',
-  [files_libiris, gen_xml_pack],
+  [files_libiris, gen_xml_pack, sha1_h],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_intel,
     inc_gallium_drivers,
     # these should not be necessary, but main/macros.h...
-    inc_mesa, inc_mapi
+    inc_mesa
   ],
   c_args : [intel_common_args, sse2_args],
   cpp_args : [intel_common_args, sse2_args],

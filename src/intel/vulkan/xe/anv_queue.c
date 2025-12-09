@@ -45,7 +45,7 @@ anv_vk_priority_to_drm_sched_priority(VkQueueGlobalPriorityKHR vk_priority)
    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR:
       return DRM_SCHED_PRIORITY_HIGH;
    default:
-      unreachable("Invalid priority");
+      UNREACHABLE("Invalid priority");
       return DRM_SCHED_PRIORITY_MIN;
    }
 }
@@ -126,6 +126,7 @@ create_engine(struct anv_device *device,
          .vm_id = device->vm_id,
          .width = 1,
          .num_placements = count,
+         .flags = 0,
    };
    intel_xe_gem_add_ext((uint64_t *)&create.extensions,
                         DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY,
@@ -134,6 +135,10 @@ create_engine(struct anv_device *device,
       intel_xe_gem_add_ext((uint64_t *)&create.extensions,
                            DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY,
                            &pxp_ext.base);
+   if (device->physical->instance->force_guc_low_latency &&
+       physical->info.supports_low_latency_hint)
+      create.flags |= DRM_XE_EXEC_QUEUE_LOW_LATENCY_HINT;
+
    int ret;
    bool retry;
    do {

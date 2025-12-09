@@ -91,6 +91,7 @@ fd6_zsa_state_create(struct pipe_context *pctx,
 
    enum adreno_compare_func depth_func =
       (enum adreno_compare_func)cso->depth_func; /* maps 1:1 */
+   bool force_z_test_enable = false;
 
    /* On some GPUs it is necessary to enable z test for depth bounds test
     * when UBWC is enabled. Otherwise, the GPU would hang. FUNC_ALWAYS is
@@ -99,17 +100,12 @@ fd6_zsa_state_create(struct pipe_context *pctx,
     *  dEQP-VK.dynamic_state.ds_state.depth_bounds_1
     */
    if (cso->depth_bounds_test && !cso->depth_enabled &&
-       ctx->screen->info->a6xx.depth_bounds_require_depth_test_quirk) {
-      so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_Z_TEST_ENABLE;
+       ctx->screen->info->props.depth_bounds_require_depth_test_quirk) {
+      force_z_test_enable = true;
       depth_func = FUNC_ALWAYS;
    }
 
-   so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_ZFUNC(depth_func);
-
    if (cso->depth_enabled) {
-      so->rb_depth_cntl |=
-         A6XX_RB_DEPTH_CNTL_Z_TEST_ENABLE | A6XX_RB_DEPTH_CNTL_Z_READ_ENABLE;
-
       so->lrz.test = true;
 
       if (cso->depth_writemask) {
@@ -155,9 +151,6 @@ fd6_zsa_state_create(struct pipe_context *pctx,
       }
    }
 
-   if (cso->depth_writemask)
-      so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_Z_WRITE_ENABLE;
-
    if (cso->stencil[0].enabled) {
       const struct pipe_stencil_state *s = &cso->stencil[0];
 
@@ -167,97 +160,86 @@ fd6_zsa_state_create(struct pipe_context *pctx,
        */
       update_lrz_stencil(so, (enum pipe_compare_func)s->func, util_writes_stencil(s));
 
-      so->rb_stencil_control |=
-         A6XX_RB_STENCIL_CNTL_STENCIL_READ |
-         A6XX_RB_STENCIL_CNTL_STENCIL_ENABLE |
-         A6XX_RB_STENCIL_CNTL_FUNC((enum adreno_compare_func)s->func) | /* maps 1:1 */
-         A6XX_RB_STENCIL_CNTL_FAIL(fd_stencil_op(s->fail_op)) |
-         A6XX_RB_STENCIL_CNTL_ZPASS(fd_stencil_op(s->zpass_op)) |
-         A6XX_RB_STENCIL_CNTL_ZFAIL(fd_stencil_op(s->zfail_op));
-
-      so->rb_stencilmask = A6XX_RB_STENCIL_MASK_MASK(s->valuemask);
-      so->rb_stencilwrmask = A6XX_RB_STENCIL_WRITE_MASK_WRMASK(s->writemask);
-
       if (cso->stencil[1].enabled) {
          const struct pipe_stencil_state *bs = &cso->stencil[1];
 
          update_lrz_stencil(so, (enum pipe_compare_func)bs->func, util_writes_stencil(bs));
-
-         so->rb_stencil_control |=
-            A6XX_RB_STENCIL_CNTL_STENCIL_ENABLE_BF |
-            A6XX_RB_STENCIL_CNTL_FUNC_BF((enum adreno_compare_func)bs->func) | /* maps 1:1 */
-            A6XX_RB_STENCIL_CNTL_FAIL_BF(fd_stencil_op(bs->fail_op)) |
-            A6XX_RB_STENCIL_CNTL_ZPASS_BF(fd_stencil_op(bs->zpass_op)) |
-            A6XX_RB_STENCIL_CNTL_ZFAIL_BF(fd_stencil_op(bs->zfail_op));
-
-         so->rb_stencilmask |= A6XX_RB_STENCIL_MASK_BFMASK(bs->valuemask);
-         so->rb_stencilwrmask |= A6XX_RB_STENCIL_WRITE_MASK_BFWRMASK(bs->writemask);
       }
    }
 
-   if (cso->alpha_enabled) {
-      /* Alpha test is functionally a conditional discard, so we can't
-       * write LRZ before seeing if we end up discarding or not
-       */
-      if (cso->alpha_func != PIPE_FUNC_ALWAYS) {
-         so->lrz.write = false;
-         so->alpha_test = true;
-      }
-
-      uint32_t ref = cso->alpha_ref_value * 255.0f;
-      so->rb_alpha_control =
-         A6XX_RB_ALPHA_TEST_CNTL_ALPHA_TEST |
-         A6XX_RB_ALPHA_TEST_CNTL_ALPHA_REF(ref) |
-         A6XX_RB_ALPHA_TEST_CNTL_ALPHA_TEST_FUNC(
-               (enum adreno_compare_func)cso->alpha_func);
+   /* Alpha test is functionally a conditional discard, so we can't
+    * write LRZ before seeing if we end up discarding or not
+    */
+   if (cso->alpha_enabled && (cso->alpha_func != PIPE_FUNC_ALWAYS)) {
+      so->lrz.write = false;
+      so->alpha_test = true;
    }
 
    if (cso->depth_bounds_test) {
-      so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_Z_BOUNDS_ENABLE |
-                           A6XX_RB_DEPTH_CNTL_Z_READ_ENABLE;
       so->lrz.z_bounds_enable = true;
    }
 
+   const struct pipe_stencil_state *fs = &cso->stencil[0];
+   const struct pipe_stencil_state *bs = &cso->stencil[1];
+
    /* Build the four state permutations (with/without alpha/depth-clamp)*/
    for (int i = 0; i < 4; i++) {
-      struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe, 16 * 4);
       bool depth_clamp_enable = (i & FD6_ZSA_DEPTH_CLAMP);
+      bool no_alpha = (i & FD6_ZSA_NO_ALPHA);
 
-      OUT_PKT4(ring, REG_A6XX_RB_ALPHA_TEST_CNTL, 1);
-      OUT_RING(ring,
-               (i & FD6_ZSA_NO_ALPHA)
-                  ? so->rb_alpha_control & ~A6XX_RB_ALPHA_TEST_CNTL_ALPHA_TEST
-                  : so->rb_alpha_control);
+      fd_crb crb(ctx->pipe, 10);
 
-      OUT_PKT4(ring, REG_A6XX_RB_STENCIL_CNTL, 1);
-      OUT_RING(ring, so->rb_stencil_control);
+      crb.add(A6XX_RB_ALPHA_TEST_CNTL(
+         .alpha_ref = (uint32_t)(cso->alpha_ref_value * 255.0f) & 0xff,
+         .alpha_test = cso->alpha_enabled && !no_alpha,
+         .alpha_test_func = (enum adreno_compare_func)cso->alpha_func,
+      ));
 
-      OUT_REG(ring, A6XX_GRAS_SU_STENCIL_CNTL(cso->stencil[0].enabled));
-
-      OUT_PKT4(ring, REG_A6XX_RB_DEPTH_CNTL, 1);
-      OUT_RING(ring,
-               so->rb_depth_cntl | COND(depth_clamp_enable || CHIP >= A7XX,
-                                        A6XX_RB_DEPTH_CNTL_Z_CLAMP_ENABLE));
-
-      OUT_REG(ring, A6XX_GRAS_SU_DEPTH_CNTL(cso->depth_enabled));
-
-      OUT_PKT4(ring, REG_A6XX_RB_STENCIL_MASK, 2);
-      OUT_RING(ring, so->rb_stencilmask);
-      OUT_RING(ring, so->rb_stencilwrmask);
-
-      if (CHIP >= A7XX && !depth_clamp_enable) {
-         OUT_REG(ring,
-            A6XX_RB_DEPTH_BOUND_MIN(0.0f),
-            A6XX_RB_DEPTH_BOUND_MAX(1.0f),
-         );
-      } else {
-         OUT_REG(ring,
-            A6XX_RB_DEPTH_BOUND_MIN(cso->depth_bounds_min),
-            A6XX_RB_DEPTH_BOUND_MAX(cso->depth_bounds_max),
-         );
+      if (CHIP >= A8XX) {
+         crb.add(SP_ALPHA_TEST_CNTL(CHIP,
+            .alpha_test = cso->alpha_enabled && !no_alpha,
+         ));
       }
 
-      so->stateobj[i] = ring;
+      crb.add(A6XX_RB_STENCIL_CNTL(
+         .stencil_enable = fs->enabled,
+         .stencil_enable_bf = bs->enabled,
+         .stencil_read = fs->enabled,
+         .func     = (enum adreno_compare_func)fs->func, /* maps 1:1 */
+         .fail     = fd_stencil_op(fs->fail_op),
+         .zpass    = fd_stencil_op(fs->zpass_op),
+         .zfail    = fd_stencil_op(fs->zfail_op),
+         .func_bf  = (enum adreno_compare_func)bs->func, /* maps 1:1 */
+         .fail_bf  = fd_stencil_op(bs->fail_op),
+         .zpass_bf = fd_stencil_op(bs->zpass_op),
+         .zfail_bf = fd_stencil_op(bs->zfail_op),
+      ));
+
+      crb.add(GRAS_SU_STENCIL_CNTL(CHIP, cso->stencil[0].enabled));
+      crb.add(A6XX_RB_STENCIL_MASK(.mask = fs->valuemask, .bfmask = bs->valuemask));
+      crb.add(A6XX_RB_STENCIL_WRITE_MASK(.wrmask = fs->writemask, .bfwrmask = bs->writemask));
+
+      crb.add(A6XX_RB_DEPTH_CNTL(
+         .z_test_enable = cso->depth_enabled || force_z_test_enable,
+         .z_write_enable = cso->depth_writemask,
+         .zfunc = depth_func,
+         .z_clamp_enable = depth_clamp_enable || CHIP >= A7XX,
+         .z_read_enable = cso->depth_enabled || cso->depth_bounds_test,
+         .z_bounds_enable = cso->depth_bounds_test,
+         .o_depth_01_clamp_en = CHIP >= A8XX,
+      ));
+
+      crb.add(GRAS_SU_DEPTH_CNTL(CHIP, cso->depth_enabled));
+
+      if (CHIP >= A7XX && !depth_clamp_enable) {
+         crb.add(A6XX_RB_DEPTH_BOUND_MIN(0.0f));
+         crb.add(A6XX_RB_DEPTH_BOUND_MAX(1.0f));
+      } else {
+         crb.add(A6XX_RB_DEPTH_BOUND_MIN(cso->depth_bounds_min));
+         crb.add(A6XX_RB_DEPTH_BOUND_MAX(cso->depth_bounds_max));
+      }
+
+      so->stateobj[i] = crb;
    }
 
    return so;

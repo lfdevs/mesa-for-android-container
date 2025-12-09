@@ -394,7 +394,7 @@ null_sampler_view(struct pipe_context *ctx, unsigned tgsi_tex_target)
                               PIPE_FORMAT_R8G8B8A8_UNORM, 0);
    util_set_common_states_and_clear(cso, ctx, cb);
 
-   ctx->set_sampler_views(ctx, PIPE_SHADER_FRAGMENT, 0, 0, 1, NULL);
+   ctx->set_sampler_views(ctx, MESA_SHADER_FRAGMENT, 0, 0, 1, NULL);
 
    /* Fragment shader. */
    fs = util_make_fragment_tex_shader(ctx, tgsi_tex_target,
@@ -436,7 +436,7 @@ util_test_constant_buffer(struct pipe_context *ctx,
                               PIPE_FORMAT_R8G8B8A8_UNORM, 0);
    util_set_common_states_and_clear(cso, ctx, cb);
 
-   pipe_set_constant_buffer(ctx, PIPE_SHADER_FRAGMENT, 0, constbuf);
+   pipe_set_constant_buffer(ctx, MESA_SHADER_FRAGMENT, 0, constbuf);
 
    /* Fragment shader. */
    {
@@ -707,7 +707,7 @@ test_texture_barrier(struct pipe_context *ctx, bool use_fbfetch,
       templ.swizzle_b = PIPE_SWIZZLE_Z;
       templ.swizzle_a = PIPE_SWIZZLE_W;
       view = ctx->create_sampler_view(ctx, cb, &templ);
-      ctx->set_sampler_views(ctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, &view);
+      ctx->set_sampler_views(ctx, MESA_SHADER_FRAGMENT, 0, 1, 0, &view);
 
       /* Fragment shader. */
       if (num_samples > 1) {
@@ -843,7 +843,7 @@ test_compute_clear_image_shader(struct pipe_context *ctx)
    image.shader_access = image.access = PIPE_IMAGE_ACCESS_READ_WRITE;
    image.format = cb->format;
 
-   ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, 0, &image);
+   ctx->set_shader_images(ctx, MESA_SHADER_COMPUTE, 0, 1, 0, &image);
 
    /* Dispatch compute. */
    struct pipe_grid_info info = {0};

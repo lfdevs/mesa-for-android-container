@@ -28,7 +28,7 @@ tu_CreateBufferView(VkDevice _device,
    uint8_t swiz[4] = { PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z,
                        PIPE_SWIZZLE_W };
 
-   fdl6_buffer_view_init(
+   TU_CALLX(device, fdl6_buffer_view_init)(
       view->descriptor, vk_format_to_pipe_format(view->vk.format),
       swiz, vk_buffer_address(&buffer->vk, view->vk.offset), view->vk.range);
 

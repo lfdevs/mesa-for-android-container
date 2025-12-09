@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+<!DOCTYPE OpenGLAPI SYSTEM "gl_API.dtd">
+
+<OpenGLAPI>
+
+<category name="GL_EXT_mesh_shader" number="1024">
+
+  <enum name="MESH_SHADER_EXT" value="0x9559"/>
+  <enum name="TASK_SHADER_EXT" value="0x955A"/>
+  <enum name="MAX_TASK_UNIFORM_BLOCKS_EXT" value="0x8E68"/>
+  <enum name="MAX_TASK_TEXTURE_IMAGE_UNITS_EXT" value="0x8E69"/>
+  <enum name="MAX_TASK_IMAGE_UNIFORMS_EXT" value="0x8E6A"/>
+  <enum name="MAX_TASK_UNIFORM_COMPONENTS_EXT" value="0x8E6B"/>
+  <enum name="MAX_TASK_ATOMIC_COUNTER_BUFFERS_EXT" value="0x8E6C"/>
+  <enum name="MAX_TASK_ATOMIC_COUNTERS_EXT" value="0x8E6D"/>
+  <enum name="MAX_TASK_SHADER_STORAGE_BLOCKS_EXT" value="0x8E6E"/>
+  <enum name="MAX_COMBINED_TASK_UNIFORM_COMPONENTS_EXT" value="0x8E6F"/>
+  <enum name="MAX_MESH_UNIFORM_BLOCKS_EXT" value="0x8E60"/>
+  <enum name="MAX_MESH_TEXTURE_IMAGE_UNITS_EXT" value="0x8E61"/>
+  <enum name="MAX_MESH_IMAGE_UNIFORMS_EXT" value="0x8E62"/>
+  <enum name="MAX_MESH_UNIFORM_COMPONENTS_EXT" value="0x8E63"/>
+  <enum name="MAX_MESH_ATOMIC_COUNTER_BUFFERS_EXT" value="0x8E64"/>
+  <enum name="MAX_MESH_ATOMIC_COUNTERS_EXT" value="0x8E65"/>
+  <enum name="MAX_MESH_SHADER_STORAGE_BLOCKS_EXT" value="0x8E66"/>
+  <enum name="MAX_COMBINED_MESH_UNIFORM_COMPONENTS_EXT" value="0x8E67"/>
+  <enum name="MAX_TASK_WORK_GROUP_TOTAL_COUNT_EXT" value="0x9740"/>
+  <enum name="MAX_MESH_WORK_GROUP_TOTAL_COUNT_EXT" value="0x9741"/>
+  <enum name="MAX_MESH_WORK_GROUP_INVOCATIONS_EXT" value="0x9757"/>
+  <enum name="MAX_TASK_WORK_GROUP_INVOCATIONS_EXT" value="0x9759"/>
+  <enum name="MAX_TASK_PAYLOAD_SIZE_EXT" value="0x9742"/>
+  <enum name="MAX_TASK_SHARED_MEMORY_SIZE_EXT" value="0x9743"/>
+  <enum name="MAX_MESH_SHARED_MEMORY_SIZE_EXT" value="0x9744"/>
+  <enum name="MAX_TASK_PAYLOAD_AND_SHARED_MEMORY_SIZE_EXT" value="0x9745"/>
+  <enum name="MAX_MESH_PAYLOAD_AND_SHARED_MEMORY_SIZE_EXT" value="0x9746"/>
+  <enum name="MAX_MESH_OUTPUT_MEMORY_SIZE_EXT" value="0x9747"/>
+  <enum name="MAX_MESH_PAYLOAD_AND_OUTPUT_MEMORY_SIZE_EXT" value="0x9748"/>
+  <enum name="MAX_MESH_OUTPUT_VERTICES_EXT" value="0x9538"/>
+  <enum name="MAX_MESH_OUTPUT_PRIMITIVES_EXT" value="0x9756"/>
+  <enum name="MAX_MESH_OUTPUT_COMPONENTS_EXT" value="0x9749"/>
+  <enum name="MAX_MESH_OUTPUT_LAYERS_EXT" value="0x974A"/>
+  <enum name="MAX_MESH_MULTIVIEW_VIEW_COUNT_EXT" value="0x9557"/>
+  <enum name="MESH_OUTPUT_PER_VERTEX_GRANULARITY_EXT" value="0x92DF"/>
+  <enum name="MESH_OUTPUT_PER_PRIMITIVE_GRANULARITY_EXT" value="0x9543"/>
+  <enum name="MAX_PREFERRED_TASK_WORK_GROUP_INVOCATIONS_EXT" value="0x974B"/>
+  <enum name="MAX_PREFERRED_MESH_WORK_GROUP_INVOCATIONS_EXT" value="0x974C"/>
+  <enum name="MESH_PREFERS_LOCAL_INVOCATION_VERTEX_OUTPUT_EXT" value="0x974D"/>
+  <enum name="MESH_PREFERS_LOCAL_INVOCATION_PRIMITIVE_OUTPUT_EXT" value="0x974E"/>
+  <enum name="MESH_PREFERS_COMPACT_VERTEX_OUTPUT_EXT" value="0x974F"/>
+  <enum name="MESH_PREFERS_COMPACT_PRIMITIVE_OUTPUT_EXT" value="0x9750"/>
+  <enum name="MAX_TASK_WORK_GROUP_COUNT_EXT" value="0x9751"/>
+  <enum name="MAX_MESH_WORK_GROUP_COUNT_EXT" value="0x9752"/>
+  <enum name="MAX_TASK_WORK_GROUP_SIZE_EXT" value="0x975A"/>
+  <enum name="MAX_MESH_WORK_GROUP_SIZE_EXT" value="0x9758"/>
+  <enum name="TASK_WORK_GROUP_SIZE_EXT" value="0x953F"/>
+  <enum name="MESH_WORK_GROUP_SIZE_EXT" value="0x953E"/>
+  <enum name="MESH_VERTICES_OUT_EXT" value="0x9579"/>
+  <enum name="MESH_PRIMITIVES_OUT_EXT" value="0x957A"/>
+  <enum name="MESH_OUTPUT_TYPE_EXT" value="0x957B"/>
+  <enum name="UNIFORM_BLOCK_REFERENCED_BY_MESH_SHADER_EXT" value="0x959C"/>
+  <enum name="UNIFORM_BLOCK_REFERENCED_BY_TASK_SHADER_EXT" value="0x959D"/>
+  <enum name="ATOMIC_COUNTER_BUFFER_REFERENCED_BY_MESH_SHADER_EXT" value="0x959E"/>
+  <enum name="ATOMIC_COUNTER_BUFFER_REFERENCED_BY_TASK_SHADER_EXT" value="0x959F"/>
+  <enum name="REFERENCED_BY_MESH_SHADER_EXT" value="0x95A0"/>
+  <enum name="REFERENCED_BY_TASK_SHADER_EXT" value="0x95A1"/>
+  <enum name="MESH_SUBROUTINE_EXT" value="0x957C"/>
+  <enum name="TASK_SUBROUTINE_EXT" value="0x957D"/>
+  <enum name="MESH_SUBROUTINE_UNIFORM_EXT" value="0x957E"/>
+  <enum name="TASK_SUBROUTINE_UNIFORM_EXT" value="0x957F"/>
+  <enum name="TASK_SHADER_INVOCATIONS_EXT" value="0x9753"/>
+  <enum name="MESH_SHADER_INVOCATIONS_EXT" value="0x9754"/>
+  <enum name="MESH_PRIMITIVES_GENERATED_EXT" value="0x9755"/>
+  <enum name="MESH_SHADER_BIT_EXT" value="0x00000040"/>
+  <enum name="TASK_SHADER_BIT_EXT" value="0x00000080"/>
+
+  <function name="DrawMeshTasksEXT" es2="3.2">
+    <param name="num_groups_x" type="GLuint"/>
+    <param name="num_groups_y" type="GLuint"/>
+    <param name="num_groups_z" type="GLuint"/>
+  </function>
+
+  <function name="DrawMeshTasksIndirectEXT" es2="3.2">
+    <param name="indirect" type="GLintptr"/>
+  </function>
+
+  <function name="MultiDrawMeshTasksIndirectEXT">
+    <param name="indirect" type="GLintptr"/>
+    <param name="drawcount" type="GLsizei"/>
+    <param name="stride" type="GLsizei"/>
+  </function>
+
+  <function name="MultiDrawMeshTasksIndirectCountEXT">
+    <param name="indirect" type="GLintptr"/>
+    <param name="drawcount" type="GLintptr"/>
+    <param name="maxdrawcount" type="GLsizei"/>
+    <param name="stride" type="GLsizei"/>
+  </function>
+
+</category>
+
+</OpenGLAPI>

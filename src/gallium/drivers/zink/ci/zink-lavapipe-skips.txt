@@ -43,8 +43,5 @@ glx@glx-tfp
 # These tests started hitting timeouts when we upgraded LLVM from v11 to 13
 spec@arb_texture_rg@fbo-blending-formats
 
-#these need format conversions that gallium doesn't implement yet
-spec@arb_texture_buffer_object@formats.*arb.*
-
 # Crashes when accessing a descriptor out of bounds
 spec@arb_shader_image_load_store@invalid

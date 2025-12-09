@@ -15,10 +15,10 @@
 #include <stdbool.h>
 
 struct radv_device;
-struct radeon_cmdbuf;
+struct radv_cmd_stream;
 struct radv_cmd_buffer;
 
-void radv_cs_cp_dma_prefetch(const struct radv_device *device, struct radeon_cmdbuf *cs, uint64_t va, unsigned size,
+void radv_cs_cp_dma_prefetch(const struct radv_device *device, struct radv_cmd_stream *cs, uint64_t va, unsigned size,
                              bool predicating);
 
 void radv_cp_dma_prefetch(struct radv_cmd_buffer *cmd_buffer, uint64_t va, unsigned size);

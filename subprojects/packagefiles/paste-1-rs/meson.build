@@ -5,7 +5,6 @@ project(
   license : '(MIT or Apache-2.0)',
 )
 
-add_languages('rust', required: true)
 rust = import('rust')
 
 lib = rust.proc_macro(

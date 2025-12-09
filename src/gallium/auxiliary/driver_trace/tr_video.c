@@ -98,7 +98,7 @@ unwrap_refrence_frames(struct pipe_picture_desc **picture)
     }
     case PIPE_VIDEO_FORMAT_UNKNOWN:
     default:
-        unreachable("unknown video format");
+        UNREACHABLE("unknown video format");
     }
 }
 

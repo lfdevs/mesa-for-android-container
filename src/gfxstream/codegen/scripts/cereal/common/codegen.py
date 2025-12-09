@@ -636,7 +636,7 @@ class CodeGen(object):
 
     def vkApiCall(self, api, customPrefix="", globalStatePrefix="",
                   customParameters=None, checkForDeviceLost=False,
-                  checkForOutOfMemory=False, checkDispatcher=None):
+                  checkDispatcher=None):
         callLhs = None
 
         retTypeName = api.getRetTypeExpr()
@@ -672,16 +672,6 @@ class CodeGen(object):
 
         if retTypeName == "VkResult" and checkForDeviceLost:
             self.stmt("if ((%s) == VK_ERROR_DEVICE_LOST) %sDeviceLost()" % (callLhs, globalStatePrefix))
-
-        if retTypeName == "VkResult" and checkForOutOfMemory:
-            if api.name == "vkAllocateMemory":
-                self.stmt(
-                    "%sCheckOutOfMemory(%s, opcode, context, std::make_optional<uint64_t>(pAllocateInfo->allocationSize))"
-                    % (globalStatePrefix, callLhs))
-            else:
-                self.stmt(
-                    "%sCheckOutOfMemory(%s, opcode, context)"
-                    % (globalStatePrefix, callLhs))
 
         return (retTypeName, retVar)
 

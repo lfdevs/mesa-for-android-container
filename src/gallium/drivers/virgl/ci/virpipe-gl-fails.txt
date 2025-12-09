@@ -56,9 +56,7 @@ glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 
-glx@glx_arb_create_context_no_error@no error,Fail
 
-glx@glx_ext_import_context@import context- multi process,Fail
 glx@glx_ext_import_context@imported context has same context id,Fail
 glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
@@ -86,12 +84,14 @@ spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@!opengl 1.1@depthstencil-default_fb-copypixels,Fail
 spec@!opengl 1.1@depthstencil-default_fb-copypixels samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-copypixels samples=4,Fail
+spec@!opengl 1.1@depthstencil-default_fb-copypixels samples=6,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=4,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=4,Fail
+spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=8,Fail
 spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
@@ -208,11 +208,7 @@ spec@arb_depth_texture@texwrap formats bordercolor@GL_DEPTH_COMPONENT16- border 
 spec@arb_depth_texture@texwrap formats bordercolor@GL_DEPTH_COMPONENT24- border color only,Fail
 spec@arb_depth_texture@texwrap formats bordercolor@GL_DEPTH_COMPONENT32- border color only,Fail
 
-spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-double-float,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat2x4-mat2x4,Fail
-spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat3-mat3,Fail
-spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat3x2-mat3x2,Fail
-spec@arb_gpu_shader_fp64@execution@conversion@geom-conversion-explicit-dmat4x2-mat4x2,Fail
 
 spec@arb_occlusion_query@occlusion_query_conform,Fail
 spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Fail
@@ -364,10 +360,7 @@ spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_framebuffer_multisample@alpha-blending-after-rendering 2,Fail
 spec@ext_framebuffer_multisample@blit-mismatched-formats,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 2 msaa,Fail
 spec@ext_framebuffer_multisample@clip-and-scissor-blit 2 upsample,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 4 msaa,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 4 upsample,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 4 centroid-edges,Fail
 spec@ext_framebuffer_multisample@no-color 2 depth single,Fail
@@ -463,8 +456,6 @@ spec@ext_texture_snorm@texwrap formats bordercolor@GL_RGB8_SNORM- border color o
 spec@ext_texture_snorm@texwrap formats bordercolor@GL_RGBA16_SNORM- border color only,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor@GL_RGBA8_SNORM- border color only,Fail
 
-spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
-
 spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 
@@ -492,9 +483,6 @@ spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
 spec@!opengl 1.1@line-smooth-stipple,Fail
 
-# fails since CI uprev to Debian 12
-spec@arb_viewport_array@display-list,Fail
-
 spec@arb_gl_spirv@execution@ssbo@unsized-array,Fail
 spec@!opengl 1.1@line-flat-clip-color,Fail
 spec@glsl-1.40@uniform_buffer@two-stages,Fail
@@ -516,8 +504,6 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SR
 
 # These are llvmpipe crashes when running virgl on top of llvmpipe
 spec@glsl-1.50@execution@geometry@dynamic_input_array_index,Crash
-spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec3-index-wr-before-gs,Crash
-spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec4-index-wr-before-gs,Fail
 
 # uprev Piglit in Mesa
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled,Fail
@@ -529,6 +515,7 @@ spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_RGBA
 spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT- border color only,Fail
 spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT- border color only,Fail
 spec@arb_texture_compression_bptc@texwrap formats bordercolor@GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM- border color only,Fail
+spec@arb_texture_cube_map_array@fbo-generatemipmap-cubemap array s3tc_dxt1,Fail
 spec@arb_texture_rectangle@texwrap rect bordercolor,Fail
 spec@arb_texture_rectangle@texwrap rect bordercolor@GL_RGBA8- border color only,Fail
 spec@arb_texture_rg@texwrap formats-float bordercolor,Fail
@@ -571,7 +558,6 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- border color only,Fail
-spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec2-index-wr-before-gs,Fail
 
 # New failures with GL CTS 4.6.6.0 & ES CTS 3.2.12.0
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
@@ -579,3 +565,8 @@ KHR-GL43.cull_distance.functional_test_item_5_primitive_mode_points_max_culldist
 KHR-Single-GL43.arrays_of_arrays_gl.InteractionArgumentAliasing4_var_type_index_4,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.InteractionFunctionCalls1_var_type_index_13,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.SubroutineArgumentAliasing3_var_type_index_13,Fail
+
+glx@glx-multithread-buffer-busy-tracking-bug,Fail
+spec@arb_es2_compatibility@texwrap formats bordercolor,Fail
+spec@arb_es2_compatibility@texwrap formats bordercolor@GL_RGB565- border color only,Fail
+spec@arb_spirv_extensions@execution@storage_buffer_storage_class@unsized-array,Fail

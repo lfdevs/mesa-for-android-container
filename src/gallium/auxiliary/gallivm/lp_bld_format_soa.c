@@ -26,11 +26,7 @@
  **************************************************************************/
 
 
-#include "pipe/p_defines.h"
-
 #include "util/format/u_format.h"
-#include "util/u_memory.h"
-#include "util/u_string.h"
 #include "util/u_math.h"
 
 #include "lp_bld_type.h"
@@ -43,7 +39,6 @@
 #include "lp_bld_arit.h"
 #include "lp_bld_pack.h"
 #include "lp_bld_flow.h"
-#include "lp_bld_printf.h"
 #include "lp_bld_intr.h"
 
 static void

@@ -59,7 +59,7 @@ vc4_nir_lower_txf_ms_instr(nir_builder *b, nir_instr *instr, void *data)
                         sample_index = txf_ms->src[i].src.ssa;
                         break;
                 default:
-                        unreachable("Unknown txf_ms src\n");
+                        UNREACHABLE("Unknown txf_ms src\n");
                 }
         }
         assert(coord);

@@ -238,7 +238,7 @@ vc4_ra_select_callback(unsigned int n, BITSET_WORD *regs, void *data)
                 }
         }
 
-        unreachable("RA must pass us at least one possible reg.");
+        UNREACHABLE("RA must pass us at least one possible reg.");
 }
 
 /**

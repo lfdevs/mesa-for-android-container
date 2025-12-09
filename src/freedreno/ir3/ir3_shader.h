@@ -107,7 +107,11 @@ struct ir3_driver_params_fs {
    uint32_t frag_size;
    uint32_t __pad_09;
    uint32_t frag_offset;
-   uint32_t __pad_11_12[2];
+   uint32_t __pad_11;
+   uint32_t gmem_frag_scale;
+   uint32_t __pad_13;
+   uint32_t gmem_frag_offset;
+   uint32_t __pad_15;
 };
 #define IR3_DP_FS(name) dword_offsetof(struct ir3_driver_params_fs, name)
 
@@ -385,7 +389,6 @@ struct ir3_shader_key {
          /*
           * Fragment shader variant parameters:
           */
-         unsigned sample_shading : 1;
          unsigned msaa           : 1;
          /* used when shader needs to handle flat varyings (a4xx)
           * for front/back color inputs to frag shader:
@@ -446,7 +449,7 @@ ir3_tess_mode(enum tess_primitive_mode tess_mode)
    case TESS_PRIMITIVE_QUADS:
       return IR3_TESS_QUADS;
    default:
-      unreachable("bad tessmode");
+      UNREACHABLE("bad tessmode");
    }
 }
 
@@ -462,7 +465,7 @@ ir3_tess_factor_stride(unsigned patch_type)
    case IR3_TESS_QUADS:
       return 28;
    default:
-      unreachable("bad tessmode");
+      UNREACHABLE("bad tessmode");
    }
 }
 
@@ -573,6 +576,11 @@ struct ir3_disasm_info {
    char *disasm;
 };
 
+struct ir3_disasm_options {
+   FILE *out;
+   bool print_raw;
+};
+
 /* Represents half register in regid */
 #define HALF_REG_ID 0x100
 
@@ -634,6 +642,7 @@ struct ir3_shader_variant {
 
    /* id of the shader the variant came from (for debug) */
    uint32_t shader_id;
+   struct ir3_shader *shader;
 
    struct ir3_shader_key key;
 
@@ -652,7 +661,7 @@ struct ir3_shader_variant {
    struct ir3_shader_variant *next;
 
    /* replicated here to avoid passing extra ptrs everywhere: */
-   gl_shader_stage type;
+   mesa_shader_stage type;
    struct ir3_compiler *compiler;
 
    char *name;
@@ -849,7 +858,12 @@ struct ir3_shader_variant {
     */
    bool has_kill;
 
-   bool per_samp;
+   /* Whether the shader should run at sample rate (set by
+    * info->fs.uses_sample_shading, which is set when using a variable that
+    * implicitly enables it, or glMinSampleShading() or
+    * VkPipelineMultisampleStateCreateInfo->sampleShadingEnable forcing it.
+    */
+   bool sample_shading;
 
    bool post_depth_coverage;
 
@@ -965,7 +979,7 @@ ir3_shader_stage(struct ir3_shader_variant *v)
    case MESA_SHADER_KERNEL:
       return "CL";
    default:
-      unreachable("invalid type");
+      UNREACHABLE("invalid type");
       return NULL;
    }
 }
@@ -987,7 +1001,7 @@ ir3_has_binning_vs(const struct ir3_shader_key *key)
  * generated.
  */
 struct ir3_shader {
-   gl_shader_stage type;
+   mesa_shader_stage type;
 
    /* shader id (for debug): */
    uint32_t id;
@@ -1180,13 +1194,15 @@ struct ir3_shader *
 ir3_shader_passthrough_tcs(struct ir3_shader *vs, unsigned patch_vertices);
 void ir3_shader_destroy(struct ir3_shader *shader);
 void ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out);
+void ir3_shader_disasm_options(struct ir3_shader_variant *so, uint32_t *bin,
+                               struct ir3_disasm_options *options);
 uint64_t ir3_shader_outputs(const struct ir3_shader *so);
 
 int ir3_glsl_type_size(const struct glsl_type *type, bool bindless);
 
 void ir3_shader_get_subgroup_size(const struct ir3_compiler *compiler,
                                   const struct ir3_shader_options *options,
-                                  gl_shader_stage stage,
+                                  mesa_shader_stage stage,
                                   unsigned *subgroup_size,
                                   unsigned *max_subgroup_size);
 
@@ -1317,7 +1333,7 @@ ir3_link_add(struct ir3_shader_linkage *l, uint8_t slot, uint8_t regid_,
    l->max_loc = MAX2(l->max_loc, loc + util_last_bit(compmask));
 
    if (regid_ != regid(63, 0)) {
-      int i = l->cnt++;
+      const unsigned i = l->cnt++;
       assert(i < ARRAY_SIZE(l->var));
 
       l->var[i].slot = slot;

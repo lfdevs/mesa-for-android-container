@@ -68,6 +68,7 @@ struct nir_shader;
 struct agx_submit_virt {
    uint32_t extres_count;
    struct asahi_ccmd_submit_res *extres;
+   uint32_t ring_idx;
 };
 
 typedef struct {

@@ -65,7 +65,7 @@ __gen_combine_address(struct iris_batch *batch, void *location,
 static inline struct iris_address
 __gen_get_batch_address(struct iris_batch *batch, void *location)
 {
-   unreachable("Not supported by iris");
+   UNREACHABLE("Not supported by iris");
 }
 
 #define __gen_address_type struct iris_address

@@ -202,6 +202,96 @@ def define_tracepoints():
                 var='sync_wait',
                 c_format='0x%x',
             ),
+        ],
+    )
+
+    # low-level tracepoints for CS commands
+
+    begin_end_tp(
+        'sync32_add',
+        args=[
+            Arg(
+                type='uint64_t',
+                var='sync_addr',
+                is_indirect=True,
+                c_format='0x%" PRIx64 "'
+            ),
+            Arg(
+                type='uint32_t',
+                var='sync_val',
+                is_indirect=True,
+                c_format='%u',
+            ),
+        ],
+    )
+
+    begin_end_tp(
+        'sync64_add',
+        args=[
+            Arg(
+                type='uint64_t',
+                var='sync_addr',
+                is_indirect=True,
+                c_format='0x%" PRIx64 "'
+            ),
+            Arg(
+                type='uint64_t',
+                var='sync_val',
+                is_indirect=True,
+                c_format='%" PRIu64 "',
+            ),
+        ],
+    )
+
+    begin_end_tp(
+        'sync32_wait',
+        args=[
+            Arg(
+                type='uint64_t',
+                var='sync_addr',
+                is_indirect=True,
+                c_format='0x%" PRIx64 "'
+            ),
+            Arg(
+                type='uint32_t',
+                var='sync_val',
+                is_indirect=True,
+                c_format='%u',
+            ),
+            Arg(
+                type='unsigned',
+                var='cond',
+                c_format='%u',
+            ),
+        ],
+    )
+
+    begin_end_tp(
+        'sync64_wait',
+        args=[
+            Arg(
+                type='uint64_t',
+                var='sync_addr',
+                is_indirect=True,
+                c_format='0x%" PRIx64 "'
+            ),
+            Arg(
+                type='uint64_t',
+                var='sync_val',
+                is_indirect=True,
+                c_format='%" PRIu64 "',
+            ),
+            Arg(
+                type='unsigned',
+                var='cond',
+                c_format='%u',
+            ),
+        ],
+    )
+
+    begin_end_tp(
+        'flush_cache',
+        args=[
             Arg(
                 type='uint8_t',
                 var='l2',
@@ -219,11 +309,6 @@ def define_tracepoints():
             ),
         ],
     )
-
-    # low-level tracepoints for CS commands
-
-    begin_end_tp('sync_wait')
-
 
 def generate_code():
     utrace_generate(

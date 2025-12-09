@@ -297,7 +297,7 @@ vk_rmv_token_size_from_type(enum vk_rmv_token_type type)
    case VK_RMV_TOKEN_TYPE_RESOURCE_DESTROY:
       return sizeof(struct vk_rmv_resource_destroy_token);
    default:
-      unreachable("invalid token type");
+      UNREACHABLE("invalid token type");
    }
 }
 

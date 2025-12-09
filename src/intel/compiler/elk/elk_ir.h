@@ -26,7 +26,7 @@
 
 #include <assert.h>
 #include "elk_reg.h"
-#include "compiler/glsl/list.h"
+#include "compiler/brw_list.h"
 
 #define MAX_SAMPLER_MESSAGE_SIZE 11
 
@@ -93,7 +93,7 @@ struct elk_backend_reg : private elk_reg
 
 struct elk_bblock_t;
 
-struct elk_backend_instruction : public exec_node {
+struct elk_backend_instruction : public brw_exec_node {
    bool elk_is_3src(const struct elk_compiler *compiler) const;
    bool is_math() const;
    bool is_control_flow_begin() const;
@@ -130,7 +130,7 @@ struct elk_backend_instruction : public exec_node {
    bool is_volatile() const;
 #else
 struct elk_backend_instruction {
-   struct exec_node link;
+   struct brw_exec_node link;
 #endif
    /** @{
     * Annotation for the generated IR.  One of the two can be set.

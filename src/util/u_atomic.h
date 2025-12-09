@@ -139,7 +139,7 @@ __forceinline short _interlockedadd16(short volatile * _Addend, short _Value)
 #define p_atomic_set(_v, _i) (*(_v) = (_i))
 #if defined(__cplusplus)
 #include <type_traits>
-#define p_atomic_read(_v) (*reinterpret_cast<std::add_volatile_t<decltype(_v)>>(_v))
+#define p_atomic_read(_v) (*reinterpret_cast<std::add_pointer_t<std::add_volatile_t<std::remove_pointer_t<decltype(_v)>>>>(_v))
 #else
 #define p_atomic_read(_v) (_Generic(*(_v), \
    bool            : *((volatile bool*)            (_v)), \

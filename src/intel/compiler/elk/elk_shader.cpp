@@ -79,7 +79,7 @@ elk_type_for_base_type(const struct glsl_type *type)
    case GLSL_TYPE_BFLOAT16:
    case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_FLOAT_E5M2:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 
    return ELK_REGISTER_TYPE_F;
@@ -110,7 +110,7 @@ elk_math_function(enum elk_opcode op)
    case ELK_SHADER_OPCODE_INT_REMAINDER:
       return ELK_MATH_FUNCTION_INT_DIV_REMAINDER;
    default:
-      unreachable("not reached: unknown math function");
+      UNREACHABLE("not reached: unknown math function");
    }
 }
 
@@ -520,7 +520,7 @@ elk_instruction_name(const struct elk_isa_info *isa, enum elk_opcode op)
       return "read_sr_reg";
    }
 
-   unreachable("not reached");
+   UNREACHABLE("not reached");
 }
 
 bool
@@ -561,15 +561,15 @@ elk_saturate_immediate(enum elk_reg_type type, struct elk_reg *reg)
       break;
    case ELK_REGISTER_TYPE_UB:
    case ELK_REGISTER_TYPE_B:
-      unreachable("no UB/B immediates");
+      UNREACHABLE("no UB/B immediates");
    case ELK_REGISTER_TYPE_V:
    case ELK_REGISTER_TYPE_UV:
    case ELK_REGISTER_TYPE_VF:
-      unreachable("unimplemented: saturate vector immediate");
+      UNREACHABLE("unimplemented: saturate vector immediate");
    case ELK_REGISTER_TYPE_HF:
-      unreachable("unimplemented: saturate HF immediate");
+      UNREACHABLE("unimplemented: saturate HF immediate");
    case ELK_REGISTER_TYPE_NF:
-      unreachable("no NF immediates");
+      UNREACHABLE("no NF immediates");
    }
 
    if (size < 8) {
@@ -615,15 +615,15 @@ elk_negate_immediate(enum elk_reg_type type, struct elk_reg *reg)
       return true;
    case ELK_REGISTER_TYPE_UB:
    case ELK_REGISTER_TYPE_B:
-      unreachable("no UB/B immediates");
+      UNREACHABLE("no UB/B immediates");
    case ELK_REGISTER_TYPE_UV:
    case ELK_REGISTER_TYPE_V:
-      unreachable("unimplemented: negate UV/V immediate");
+      UNREACHABLE("unimplemented: negate UV/V immediate");
    case ELK_REGISTER_TYPE_HF:
       reg->ud ^= 0x80008000;
       return true;
    case ELK_REGISTER_TYPE_NF:
-      unreachable("no NF immediates");
+      UNREACHABLE("no NF immediates");
    }
 
    return false;
@@ -655,7 +655,7 @@ elk_abs_immediate(enum elk_reg_type type, struct elk_reg *reg)
       return true;
    case ELK_REGISTER_TYPE_UB:
    case ELK_REGISTER_TYPE_B:
-      unreachable("no UB/B immediates");
+      UNREACHABLE("no UB/B immediates");
    case ELK_REGISTER_TYPE_UQ:
    case ELK_REGISTER_TYPE_UD:
    case ELK_REGISTER_TYPE_UW:
@@ -663,14 +663,14 @@ elk_abs_immediate(enum elk_reg_type type, struct elk_reg *reg)
       /* Presumably the absolute value modifier on an unsigned source is a
        * nop, but it would be nice to confirm.
        */
-      unreachable("unimplemented: abs unsigned immediate");
+      UNREACHABLE("unimplemented: abs unsigned immediate");
    case ELK_REGISTER_TYPE_V:
-      unreachable("unimplemented: abs V immediate");
+      UNREACHABLE("unimplemented: abs V immediate");
    case ELK_REGISTER_TYPE_HF:
       reg->ud &= ~0x80008000;
       return true;
    case ELK_REGISTER_TYPE_NF:
-      unreachable("no NF immediates");
+      UNREACHABLE("no NF immediates");
    }
 
    return false;
@@ -1118,7 +1118,7 @@ elk_backend_instruction::is_volatile() const
 static bool
 inst_is_in_block(const elk_bblock_t *block, const elk_backend_instruction *inst)
 {
-   const exec_node *n = inst;
+   const brw_exec_node *n = inst;
 
    /* Find the tail sentinel. If the tail sentinel is the sentinel from the
     * list header in the elk_bblock_t, then this instruction is in that basic
@@ -1155,7 +1155,7 @@ elk_backend_instruction::insert_after(elk_bblock_t *block, elk_backend_instructi
 
    adjust_later_block_ips(block, 1);
 
-   exec_node::insert_after(inst);
+   brw_exec_node::insert_after(inst);
 }
 
 void
@@ -1171,7 +1171,7 @@ elk_backend_instruction::insert_before(elk_bblock_t *block, elk_backend_instruct
 
    adjust_later_block_ips(block, 1);
 
-   exec_node::insert_before(inst);
+   brw_exec_node::insert_before(inst);
 }
 
 void
@@ -1197,7 +1197,7 @@ elk_backend_instruction::remove(elk_bblock_t *block, bool defer_later_block_ip_u
       block->end_ip--;
    }
 
-   exec_node::remove();
+   brw_exec_node::remove();
 }
 
 void
@@ -1229,7 +1229,7 @@ elk_backend_shader::dump_instructions_to_file(FILE *file) const
       }
    } else {
       int ip = 0;
-      foreach_in_list(elk_backend_instruction, inst, &instructions) {
+      brw_foreach_in_list(elk_backend_instruction, inst, &instructions) {
          if (!INTEL_DEBUG(DEBUG_OPTIMIZER))
             fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
@@ -1301,7 +1301,7 @@ elk_compile_tes(const struct elk_compiler *compiler,
       BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
 
    /* URB entry sizes are stored as a multiple of 64 bytes. */
-   prog_data->base.urb_entry_size = ALIGN(output_size_bytes, 64) / 64;
+   prog_data->base.urb_entry_size = align(output_size_bytes, 64) / 64;
 
    prog_data->base.urb_read_length = 0;
 
@@ -1325,7 +1325,7 @@ elk_compile_tes(const struct elk_compiler *compiler,
       prog_data->domain = INTEL_TESS_DOMAIN_ISOLINE;
       break;
    default:
-      unreachable("invalid domain shader primitive mode");
+      UNREACHABLE("invalid domain shader primitive mode");
    }
 
    if (nir->info.tess.point_mode) {

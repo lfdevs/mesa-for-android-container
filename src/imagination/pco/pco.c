@@ -11,8 +11,10 @@
  */
 
 #include "compiler/glsl_types.h"
+#include "nir_serialize.h"
 #include "pco.h"
 #include "pco_internal.h"
+#include "util/blob.h"
 #include "util/hash_table.h"
 #include "util/list.h"
 #include "util/macros.h"
@@ -55,6 +57,13 @@ pco_ctx *pco_ctx_create(const struct pvr_device_info *dev_info, void *mem_ctx)
    ralloc_set_destructor(ctx, pco_ctx_destructor);
 
    return ctx;
+}
+
+void pco_ctx_setup_usclib(pco_ctx *ctx, const void *data, unsigned size)
+{
+   struct blob_reader blob_reader;
+   blob_reader_init(&blob_reader, data, size);
+   ctx->usclib = nir_deserialize(ctx, pco_nir_options(), &blob_reader);
 }
 
 /**
@@ -127,7 +136,10 @@ pco_func *pco_func_create(pco_shader *shader,
       list_add(&func->link, &shader->funcs);
    } else if (type == PCO_FUNC_TYPE_ENTRYPOINT) {
       assert(!pco_entrypoint(shader));
-      list_add(&func->link, !preamble ? &shader->funcs : &preamble->link);
+      if (!preamble)
+         list_add(&func->link, &shader->funcs);
+      else
+         list_add(&func->link, &preamble->link);
    } else {
       list_addtail(&func->link, &shader->funcs);
    }
@@ -182,8 +194,11 @@ pco_if *pco_if_create(pco_func *func)
 
    init_cf_node(&pif->cf_node, PCO_CF_NODE_TYPE_IF);
    pif->parent_func = func;
+   list_inithead(&pif->prologue);
    list_inithead(&pif->then_body);
+   list_inithead(&pif->interlogue);
    list_inithead(&pif->else_body);
+   list_inithead(&pif->epilogue);
    pif->index = func->next_if++;
 
    return pif;
@@ -201,7 +216,10 @@ pco_loop *pco_loop_create(pco_func *func)
 
    init_cf_node(&loop->cf_node, PCO_CF_NODE_TYPE_LOOP);
    loop->parent_func = func;
+   list_inithead(&loop->prologue);
    list_inithead(&loop->body);
+   list_inithead(&loop->interlogue);
+   list_inithead(&loop->epilogue);
    loop->index = func->next_loop++;
 
    return loop;
@@ -211,15 +229,12 @@ pco_loop *pco_loop_create(pco_func *func)
  * \brief Allocates and sets up a PCO instruction.
  *
  * \param[in,out] func Parent function.
- * \param[in] op Instruction op.
  * \param[in] num_dests Number of destinations.
  * \param[in] num_srcs Number of sources.
  * \return The PCO instruction, or NULL on failure.
  */
-pco_instr *pco_instr_create(pco_func *func,
-                            enum pco_op op,
-                            unsigned num_dests,
-                            unsigned num_srcs)
+pco_instr *
+pco_instr_create(pco_func *func, unsigned num_dests, unsigned num_srcs)
 {
    pco_instr *instr;
    unsigned size = sizeof(*instr);
@@ -229,8 +244,6 @@ pco_instr *pco_instr_create(pco_func *func,
    instr = rzalloc_size(func, size);
 
    instr->parent_func = func;
-
-   instr->op = op;
 
    instr->num_dests = num_dests;
    instr->dest = (pco_ref *)(instr + 1);
@@ -280,4 +293,26 @@ void pco_instr_delete(pco_instr *instr)
 pco_data *pco_shader_data(pco_shader *shader)
 {
    return &shader->data;
+}
+
+/**
+ * \brief Returns precompilation data for a shader.
+ *
+ * \param[in] shader PCO shader.
+ * \return The precompilation data.
+ */
+pco_precomp_data pco_get_precomp_data(pco_shader *shader)
+{
+   assert(pco_shader_binary_size(shader));
+
+   unsigned size_dwords = pco_shader_binary_size(shader) / sizeof(uint32_t);
+   assert(size_dwords <= UINT16_MAX);
+
+   return (pco_precomp_data){
+      .temps = shader->data.common.temps,
+      .vtxins = shader->data.common.vtxins,
+      .coeffs = shader->data.common.coeffs,
+      .shareds = shader->data.common.shareds,
+      .size_dwords = size_dwords,
+   };
 }

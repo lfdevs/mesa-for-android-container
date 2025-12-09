@@ -56,10 +56,10 @@ nir_lower_to_source_mods_instr(nir_builder *b, nir_instr *instr,
    nir_alu_instr *alu = nir_instr_as_alu(instr);
 
    for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
-      if (alu->src[i].src.ssa->parent_instr->type != nir_instr_type_alu)
+      if (!nir_src_is_alu(alu->src[i].src))
          continue;
 
-      nir_alu_instr *parent = nir_instr_as_alu(alu->src[i].src.ssa->parent_instr);
+      nir_alu_instr *parent = nir_def_as_alu(alu->src[i].src.ssa);
 
       if (nir_alu_type_get_base_type(nir_op_infos[alu->op].input_types[i]) != nir_type_float)
          continue;

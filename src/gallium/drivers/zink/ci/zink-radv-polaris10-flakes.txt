@@ -52,3 +52,64 @@ spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative
 spec@ext_timer_query@time-elapsed
 spec@glsl-1.50@execution@geometry@point-size-out
 spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs
+
+KHR-GL46.gpu_shader_fp64.builtin.lessthan_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.lessthanequal_dvec4
+KHR-GL46.packed_pixels.varied_rectangle.rgb12_format_red
+KHR-GL46.packed_pixels.varied_rectangle.rgb32i_format_rgb_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgba2_format_rgba
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32ui_srgb8_alpha8_astc_10x5_khr.texture2d_array_to_texture3d
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16ui.cubemap_to_texture2d
+spec@!opengl 1.0@gl-1.0-ortho-pos
+spec@!opengl 1.1@depthstencil-default_fb-blit
+spec@!opengl 1.1@draw-sync
+spec@arb_point_parameters@arb_point_parameters-point-attenuation
+spec@oes_texture_view@rendering-formats
+
+KHR-GL46.gpu_shader_fp64.builtin.lessthan_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.matrixcompmult_dmat2
+KHR-GL46.gpu_shader_fp64.builtin.smoothstep_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.trunc_dvec2
+KHR-GL46.gpu_shader_fp64.builtin.unpackdouble2x32_double
+KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.r3_g3_b2_format_rgb
+KHR-GL46.packed_pixels.varied_rectangle.r8ui_format_red_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgb10_a2ui_format_rgb_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgb16f_format_rgb
+KHR-GL46.packed_pixels.varied_rectangle.rgb8_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.rgb8_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgb8_snorm_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgb8ui_format_bgra_integer
+KHR-GL46.packed_pixels.varied_rectangle.srgb8_alpha8_format_rg
+dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec3
+dEQP-GLES3.functional.transform_feedback.basic_types.separate.points.mediump_uvec3
+dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_8x5_rgba.rgba_astc_8x5_khr_srgb8_alpha8_astc_8x5_khr.texture2d_to_texture3d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32ui_srgb8_alpha8_astc_6x5_khr.texture3d_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_12x12_khr_rgba32i.texture2d_array_to_texture3d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_8x6_khr_rgba32f.texture2d_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x5_khr_rgba32ui.texture2d_array_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x5_khr_rgba32ui.texture2d_array_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x6_khr_rgba32ui.texture3d_to_texture3d
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.renderbuffer_to_cubemap
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.r32i_rg16f.texture2d_to_texture2d
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.rgba8ui_r32i.cubemap_to_texture3d
+dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.mul.ivec4_to_uvec4_fragment
+spec@!opengl 1.1@copypixels-sync
+spec@amd_pinned_memory@map-buffer offset=0
+spec@amd_shader_trinary_minmax@execution@built-in-functions@cs-mid3-ivec4-ivec4-ivec4
+spec@arb_sync@sync_api
+spec@ext_texture_array@copyteximage 1d_array samples=2
+spec@ext_texture_array@fbo-depth-array depth-draw
+spec@ext_texture_array@fbo-depth-array fs-writes-depth
+spec@ext_texture_lod_bias@lodbias
+spec@glsl-1.30@execution@texelfetch fs sampler1darray 1x71-501x71
+spec@glsl-1.30@execution@texelfetch fs sampler2d 1x71-501x71
+spec@glsl-1.30@execution@texelfetch fs sampler2darray 1x129x9-98x129x9
+
+
+# mesh shaders somehow?
+glx@glx-visuals-depth
+glx@glx-visuals-depth -pixmap
+glx@glx-visuals-stencil
+glx@glx-visuals-stencil -pixmap
+

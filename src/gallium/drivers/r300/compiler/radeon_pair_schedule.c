@@ -17,10 +17,10 @@
 
 #define VERBOSE 0
 
-#define DBG(...)                                                                                   \
-   do {                                                                                            \
-      if (VERBOSE)                                                                                 \
-         fprintf(stderr, __VA_ARGS__);                                                             \
+#define DBG(...)                       \
+   do {                                \
+      if (VERBOSE)                     \
+         fprintf(stderr, __VA_ARGS__); \
    } while (0)
 
 struct schedule_instruction {

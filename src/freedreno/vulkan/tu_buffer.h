@@ -12,14 +12,21 @@
 
 #include "tu_common.h"
 
+#include "tu_knl.h"
+
 #include "vk_buffer.h"
 
 struct tu_buffer
 {
    struct vk_buffer vk;
 
-   struct tu_bo *bo;
-   uint64_t bo_size;
+   union {
+      struct {
+         struct tu_bo *bo;
+         uint64_t bo_size;
+      };
+      struct tu_sparse_vma vma;
+   };
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_buffer, vk.base, VkBuffer,

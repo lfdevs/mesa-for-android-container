@@ -39,7 +39,7 @@ libwgl = static_library(
     '-D_GDI32_',             # prevent wgl* being declared __declspec(dllimport)
   ],
   include_directories : [
-    inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_mapi, inc_mesa,
+    inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_mesa,
   ],
   dependencies : _wgl_deps,
 )

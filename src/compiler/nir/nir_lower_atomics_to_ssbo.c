@@ -103,6 +103,8 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
       nir_intrinsic_instr_create(b->shader, op);
    if (nir_intrinsic_has_atomic_op(new_instr))
       nir_intrinsic_set_atomic_op(new_instr, atomic_op);
+   if (op == nir_intrinsic_load_ssbo)
+      nir_intrinsic_set_access(new_instr, ACCESS_COHERENT | ACCESS_ATOMIC);
 
    /* a couple instructions need special handling since they don't map
     * 1:1 with ssbo atomics

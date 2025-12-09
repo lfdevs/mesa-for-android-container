@@ -402,7 +402,7 @@ v3dv_bo_cache_init(struct v3dv_device *device)
     */
    device->bo_cache.size_list_size = 0;
 
-   const char *max_cache_size_str = getenv("V3DV_MAX_BO_CACHE_SIZE");
+   const char *max_cache_size_str = os_get_option("V3DV_MAX_BO_CACHE_SIZE");
    if (max_cache_size_str == NULL)
       device->bo_cache.max_cache_size = DEFAULT_MAX_BO_CACHE_SIZE;
    else

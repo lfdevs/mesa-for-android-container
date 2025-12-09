@@ -38,8 +38,25 @@ tu_device_get_u_trace(struct tu_device *device);
 /**
  * Queue-id's
  */
-enum {
-   DEFAULT_HW_QUEUE_ID,
+enum tu_queue_id {
+   BR_HW_QUEUE_ID,
+   BV_HW_QUEUE_ID,
+
+   /* Labels set via VK_EXT_debug_utils are in a separate track due to the
+    * following part of the spec:
+    *  "An application may open a debug label region in one command buffer and
+    *   close it in another, or otherwise split debug label regions across
+    *   multiple command buffers or multiple queue submissions."
+    *
+    * This means labels can start in one renderpass and end in another command
+    * buffer, which breaks our assumption that stages can be modeled as a stack.
+    * While applications aren't expected to use labels in such extreme ways,
+    * even simpler cases can break our assumptions.
+    *
+    * Having annotations in a separate track prevents the main track(s) from
+    * entering an invalid state.
+    */
+   ANNOTATIONS_QUEUE_ID,
 };
 
 /**
@@ -52,6 +69,8 @@ enum tu_stage_id {
    SECONDARY_CMD_BUFFER_STAGE_ID,
    CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID,
    BINNING_STAGE_ID,
+   CONCURRENT_BINNING_STAGE_ID,
+   CONCURRENT_BINNING_BARRIER_STAGE_ID,
    GMEM_STAGE_ID,
    BYPASS_STAGE_ID,
    BLIT_STAGE_ID,
@@ -63,6 +82,7 @@ enum tu_stage_id {
    GMEM_LOAD_STAGE_ID,
    GMEM_STORE_STAGE_ID,
    SYSMEM_RESOLVE_STAGE_ID,
+   CUSTOM_RESOLVE_STAGE_ID,
    // TODO add the rest from fd_stage_id
 };
 
@@ -70,7 +90,9 @@ static const struct {
    const char *name;
    const char *desc;
 } queues[] = {
-   [DEFAULT_HW_QUEUE_ID] = {"GPU Queue 0", "Default Adreno Hardware Queue"},
+   [BR_HW_QUEUE_ID] = {"GPU Queue 0", "Default Adreno Hardware Queue"},
+   [BV_HW_QUEUE_ID] = {"GPU Queue 1", "Adreno Bin Visibility Queue"},
+   [ANNOTATIONS_QUEUE_ID] = {"Annotations", "Annotations Queue"},
 };
 
 static const struct {
@@ -83,6 +105,8 @@ static const struct {
    [SECONDARY_CMD_BUFFER_STAGE_ID] = { "Secondary Command Buffer" },
    [CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID]    = { "Annotation", "Render Pass Command Buffer Annotation" },
    [BINNING_STAGE_ID]        = { "Binning", "Perform Visibility pass and determine target bins" },
+   [CONCURRENT_BINNING_STAGE_ID] = { "Concurrent Binning", "Perform concurrent Visibility pass and determine target bins" },
+   [CONCURRENT_BINNING_BARRIER_STAGE_ID] = {"Concurrent Binning Barrier", "Concurrent binning cannot happen earlier than this point"},
    [GMEM_STAGE_ID]           = { "GMEM", "Rendering to GMEM" },
    [BYPASS_STAGE_ID]         = { "Bypass", "Rendering to system memory" },
    [BLIT_STAGE_ID]           = { "Blit", "Performing a Blit operation" },
@@ -94,26 +118,11 @@ static const struct {
    [GMEM_LOAD_STAGE_ID]      = { "GMEM Load", "Per tile system memory to GMEM load" },
    [GMEM_STORE_STAGE_ID]     = { "GMEM Store", "Per tile GMEM to system memory store" },
    [SYSMEM_RESOLVE_STAGE_ID] = { "SysMem Resolve", "System memory MSAA resolve" },
+   [CUSTOM_RESOLVE_STAGE_ID] = { "Custom Resolve", "Custom resolve via shader" },
    // TODO add the rest
 };
 
 static uint32_t gpu_clock_id;
-static uint64_t next_clock_sync_ns; /* cpu time of next clk sync */
-
-/**
- * The timestamp at the point where we first emitted the clock_sync..
- * this  will be a *later* timestamp that the first GPU traces (since
- * we capture the first clock_sync from the CPU *after* the first GPU
- * tracepoints happen).  To avoid confusing perfetto we need to drop
- * the GPU traces with timestamps before this.
- */
-static uint64_t sync_gpu_ts;
-
-static uint64_t last_suspend_count;
-
-static uint64_t gpu_max_timestamp;
-static uint64_t gpu_timestamp_offset;
-
 struct TuRenderpassTraits : public perfetto::DefaultDataSourceTraits {
    using IncrementalStateType = MesaRenderpassIncrementalState;
 };
@@ -124,21 +133,43 @@ class TuRenderpassDataSource : public MesaRenderpassDataSource<TuRenderpassDataS
    {
       MesaRenderpassDataSource<TuRenderpassDataSource, TuRenderpassTraits>::OnStart(args);
 
-      /* Note: clock_id's below 128 are reserved.. for custom clock sources,
-       * using the hash of a namespaced string is the recommended approach.
-       * See: https://perfetto.dev/docs/concepts/clock-sync
+      /* See: https://perfetto.dev/docs/concepts/clock-sync
+       *
+       * Use sequence-scoped clock (64 <= ID < 128) for GPU clock because
+       * there's no central daemon emitting consistent snapshots for
+       * synchronization between CPU and GPU clocks on behalf of renderstages
+       * and counters producers.
+       *
+       * When CPU clock is the same with the authoritative trace clock
+       * (normally default to CLOCK_BOOTTIME), perfetto drops the
+       * non-monotonic snapshots to ensure validity of the global source clock
+       * in the resolution graph. When they are different, the clocks are
+       * marked invalid and the rest of the clock syncs will fail during trace
+       * processing.
+       *
+       * Meanwhile, since the clock is now sequence-scoped (unique per
+       * producer + writer pair within the tracing session), we can simply
+       * pick 64.
        */
-      gpu_clock_id =
-         _mesa_hash_string("org.freedesktop.mesa.freedreno") | 0x80000000;
-
-      gpu_timestamp_offset = 0;
-      gpu_max_timestamp = 0;
-      last_suspend_count = 0;
+      gpu_clock_id = 64;
    }
 };
 
 PERFETTO_DECLARE_DATA_SOURCE_STATIC_MEMBERS(TuRenderpassDataSource);
 PERFETTO_DEFINE_DATA_SOURCE_STATIC_MEMBERS(TuRenderpassDataSource);
+
+static void
+emit_sync_timestamp(struct tu_perfetto_clocks &clocks)
+{
+   uint32_t cpu_clock_id = perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME;
+   uint64_t gpu_ts = clocks.gpu_ts + clocks.gpu_ts_offset;
+   TuRenderpassDataSource::Trace([=](auto tctx) {
+      MesaRenderpassDataSource<TuRenderpassDataSource,
+                               TuRenderpassTraits>::EmitClockSync(tctx, clocks.cpu,
+                                                                  gpu_ts, cpu_clock_id,
+                                                                  gpu_clock_id);
+   });
+}
 
 static void
 setup_incremental_state(TuRenderpassDataSource::TraceContext &ctx)
@@ -180,32 +211,40 @@ setup_incremental_state(TuRenderpassDataSource::TraceContext &ctx)
 }
 
 static struct tu_perfetto_stage *
-stage_push(struct tu_device *dev)
+stage_push(struct tu_perfetto_stage_stack *stack)
 {
-   struct tu_perfetto_state *p = &dev->perfetto;
-
-   if (p->stage_depth >= ARRAY_SIZE(p->stages)) {
-      p->skipped_depth++;
+   if (stack->stage_depth >= ARRAY_SIZE(stack->stages)) {
+      stack->skipped_depth++;
       return NULL;
    }
 
-   return &p->stages[p->stage_depth++];
+   return &stack->stages[stack->stage_depth++];
 }
 
 static struct tu_perfetto_stage *
-stage_pop(struct tu_device *dev)
+stage_pop(struct tu_perfetto_stage_stack *stack)
 {
-   struct tu_perfetto_state *p = &dev->perfetto;
-
-   if (!p->stage_depth)
+   if (!stack->stage_depth)
       return NULL;
 
-   if (p->skipped_depth) {
-      p->skipped_depth--;
+   if (stack->skipped_depth) {
+      stack->skipped_depth--;
       return NULL;
    }
 
-   return &p->stages[--p->stage_depth];
+   return &stack->stages[--stack->stage_depth];
+}
+
+static struct tu_perfetto_stage_stack *
+get_stack(struct tu_device *dev, enum tu_stage_id stage_id)
+{
+   switch (stage_id) {
+   case CMD_BUFFER_ANNOTATION_STAGE_ID:
+   case CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID:
+      return &dev->perfetto.annotations_stack;
+   default:
+      return &dev->perfetto.render_stack;
+   }
 }
 
 static void
@@ -218,7 +257,8 @@ stage_start(struct tu_device *dev,
             const void *indirect = nullptr,
             trace_payload_as_extra_func payload_as_extra = nullptr)
 {
-   struct tu_perfetto_stage *stage = stage_push(dev);
+   struct tu_perfetto_stage_stack *stack = get_stack(dev, stage_id);
+   struct tu_perfetto_stage *stage = stage_push(stack);
 
    if (!stage) {
       PERFETTO_ELOG("stage %d is nested too deep", stage_id);
@@ -257,7 +297,9 @@ stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
           const void *indirect = nullptr,
           trace_payload_as_extra_func payload_as_extra = nullptr)
 {
-   struct tu_perfetto_stage *stage = stage_pop(dev);
+   struct tu_perfetto_state *state = &dev->perfetto;
+   struct tu_perfetto_stage_stack *stack = get_stack(dev, stage_id);
+   struct tu_perfetto_stage *stage = stage_pop(stack);
    auto trace_flush_data =
       (const struct tu_u_trace_submission_data *) flush_data;
    uint32_t submission_id = trace_flush_data->submission_id;
@@ -277,26 +319,48 @@ stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
       return;
    }
 
-   /* If we haven't managed to calibrate the alignment between GPU and CPU
-    * timestamps yet, then skip this trace, otherwise perfetto won't know
-    * what to do with it.
+   /* We use sequence-scoped clock for GPU time with perfetto.
+    * Different threads have different scopes, so we have to sync clocks
+    * in the same thread where renderstage events are emitted.
     */
-   if (!sync_gpu_ts)
-      return;
+   if (state->has_pending_clocks_sync) {
+      mtx_lock(&state->pending_clocks_sync_mtx);
+      struct tu_perfetto_clocks clocks = state->pending_clocks_sync;
+      state->has_pending_clocks_sync = false;
+      mtx_unlock(&state->pending_clocks_sync_mtx);
+
+      emit_sync_timestamp(clocks);
+   }
+
+   uint32_t queue_id = BR_HW_QUEUE_ID;
+   switch (stage->stage_id) {
+      case CMD_BUFFER_ANNOTATION_STAGE_ID:
+      case CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID:
+         queue_id = ANNOTATIONS_QUEUE_ID;
+         break;
+      /* We only know dynamically whether concurrent binning was enabled. Just
+       * assume it is and always make binning appear on the BV timeline.
+       */
+      case CONCURRENT_BINNING_STAGE_ID:
+      case CONCURRENT_BINNING_BARRIER_STAGE_ID:
+         queue_id = BV_HW_QUEUE_ID;
+      default:
+         break;
+   }
 
    TuRenderpassDataSource::Trace([=](TuRenderpassDataSource::TraceContext tctx) {
       setup_incremental_state(tctx);
 
       auto packet = tctx.NewTracePacket();
 
-      gpu_max_timestamp = MAX2(gpu_max_timestamp, ts_ns + gpu_ts_offset);
+      state->gpu_max_timestamp = MAX2(state->gpu_max_timestamp, ts_ns + gpu_ts_offset);
 
       packet->set_timestamp(stage->start_ts + gpu_ts_offset);
       packet->set_timestamp_clock_id(gpu_clock_id);
 
       auto event = packet->set_gpu_render_stage_event();
       event->set_event_id(0); // ???
-      event->set_hw_queue_id(DEFAULT_HW_QUEUE_ID);
+      event->set_hw_queue_id(queue_id);
       event->set_duration(ts_ns - stage->start_ts);
       if (stage->stage_iid)
          event->set_stage_iid(stage->stage_iid);
@@ -342,16 +406,16 @@ PERFETTO_DEFINE_DATA_SOURCE_STATIC_MEMBERS(TuMemoryDataSource);
 extern "C" {
 #endif
 
-void
-tu_perfetto_init(void)
-{
-   util_perfetto_init();
+static once_flag tu_perfetto_init_once_flag = ONCE_FLAG_INIT;
 
+void
+tu_perfetto_init_once()
+{
    {
-   perfetto::DataSourceDescriptor dsd;
+      perfetto::DataSourceDescriptor dsd;
 #if DETECT_OS_ANDROID
-     // Android tooling expects this data source name
-     dsd.set_name("gpu.renderstages");
+      // Android tooling expects this data source name
+      dsd.set_name("gpu.renderstages");
 #else
       dsd.set_name("gpu.renderstages.msm");
 #endif
@@ -359,20 +423,16 @@ tu_perfetto_init(void)
    }
 
    {
-     perfetto::DataSourceDescriptor dsd;
-     dsd.set_name("gpu.memory.msm");
-     TuMemoryDataSource::Register(dsd);
+      perfetto::DataSourceDescriptor dsd;
+      dsd.set_name("gpu.memory.msm");
+      TuMemoryDataSource::Register(dsd);
    }
 }
 
-static void
-emit_sync_timestamp(uint64_t cpu_ts, uint64_t gpu_ts)
+void
+tu_perfetto_init(void)
 {
-   TuRenderpassDataSource::Trace([=](auto tctx) {
-      MesaRenderpassDataSource<TuRenderpassDataSource,
-                               TuRenderpassTraits>::EmitClockSync(tctx, cpu_ts,
-                                                                  gpu_ts, gpu_clock_id);
-   });
+   call_once(&tu_perfetto_init_once_flag, tu_perfetto_init_once);
 }
 
 uint64_t
@@ -385,6 +445,7 @@ static struct tu_perfetto_clocks
 sync_clocks(struct tu_device *dev,
             const struct tu_perfetto_clocks *gpu_clocks)
 {
+   struct tu_perfetto_state *state = &dev->perfetto;
    struct tu_perfetto_clocks clocks {};
    if (gpu_clocks) {
       clocks = *gpu_clocks;
@@ -398,14 +459,13 @@ sync_clocks(struct tu_device *dev,
        * equal to GetBootTimeNs.
        */
 
-      clocks.gpu_ts_offset = MAX2(gpu_timestamp_offset, clocks.gpu_ts_offset);
-      gpu_timestamp_offset = clocks.gpu_ts_offset;
-      sync_gpu_ts = clocks.gpu_ts + clocks.gpu_ts_offset;
+      clocks.gpu_ts_offset = MAX2(state->gpu_timestamp_offset, clocks.gpu_ts_offset);
+      state->gpu_timestamp_offset = clocks.gpu_ts_offset;
    } else {
       clocks.gpu_ts = 0;
-      clocks.gpu_ts_offset = gpu_timestamp_offset;
+      clocks.gpu_ts_offset = state->gpu_timestamp_offset;
 
-      if (clocks.cpu < next_clock_sync_ns)
+      if (clocks.cpu < state->next_clock_sync_ns)
          return clocks;
 
       if (tu_device_get_gpu_timestamp(dev, &clocks.gpu_ts)) {
@@ -428,31 +488,31 @@ sync_clocks(struct tu_device *dev,
        * Perfetto requires clock snapshots to be monotonic,
        * so we have to fix-up the time.
        */
-      if (current_suspend_count != last_suspend_count) {
-         gpu_timestamp_offset = gpu_max_timestamp;
-         last_suspend_count = current_suspend_count;
+      if (current_suspend_count != state->last_suspend_count) {
+         state->gpu_timestamp_offset = state->gpu_max_timestamp;
+         state->last_suspend_count = current_suspend_count;
       }
-      clocks.gpu_ts_offset = gpu_timestamp_offset;
+      clocks.gpu_ts_offset = state->gpu_timestamp_offset;
 
       uint64_t gpu_absolute_ts = clocks.gpu_ts + clocks.gpu_ts_offset;
 
       /* Fallback check, detect non-monotonic cases which would happen
        * if we cannot retrieve suspend count.
        */
-      if (sync_gpu_ts > gpu_absolute_ts) {
-         gpu_absolute_ts += (gpu_max_timestamp - gpu_timestamp_offset);
-         gpu_timestamp_offset = gpu_max_timestamp;
-         clocks.gpu_ts = gpu_absolute_ts - gpu_timestamp_offset;
+      if (state->last_sync_gpu_ts > gpu_absolute_ts) {
+         gpu_absolute_ts += (state->gpu_max_timestamp - state->gpu_timestamp_offset);
+         state->gpu_timestamp_offset = state->gpu_max_timestamp;
+         clocks.gpu_ts = gpu_absolute_ts - state->gpu_timestamp_offset;
       }
 
-      if (sync_gpu_ts > gpu_absolute_ts) {
+      if (state->last_sync_gpu_ts > gpu_absolute_ts) {
          PERFETTO_ELOG("Non-monotonic gpu timestamp detected, bailing out");
          return {};
       }
 
-      gpu_max_timestamp = clocks.gpu_ts;
-      sync_gpu_ts = clocks.gpu_ts;
-      next_clock_sync_ns = clocks.cpu + 30000000;
+      state->gpu_max_timestamp = clocks.gpu_ts;
+      state->last_sync_gpu_ts = clocks.gpu_ts;
+      state->next_clock_sync_ns = clocks.cpu + 30000000;
    }
 
    return clocks;
@@ -465,17 +525,24 @@ tu_perfetto_end_submit(struct tu_queue *queue,
                        struct tu_perfetto_clocks *gpu_clocks)
 {
    struct tu_device *dev = queue->device;
+   struct tu_perfetto_state *state = &dev->perfetto;
    if (!u_trace_perfetto_active(tu_device_get_u_trace(dev)))
       return {};
 
    struct tu_perfetto_clocks clocks = sync_clocks(dev, gpu_clocks);
-   if (clocks.gpu_ts > 0)
-      emit_sync_timestamp(clocks.cpu, clocks.gpu_ts + clocks.gpu_ts_offset);
+
+   if (clocks.gpu_ts > 0) {
+      mtx_lock(&state->pending_clocks_sync_mtx);
+      state->pending_clocks_sync = clocks;
+      state->has_pending_clocks_sync = true;
+      mtx_unlock(&state->pending_clocks_sync_mtx);
+   }
 
    TuRenderpassDataSource::Trace([=](TuRenderpassDataSource::TraceContext tctx) {
       auto packet = tctx.NewTracePacket();
 
       packet->set_timestamp(start_ts);
+      packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
 
       auto event = packet->set_vulkan_api_event();
       auto submit = event->set_vk_queue_submit();
@@ -525,6 +592,8 @@ CREATE_EVENT_CALLBACK(cmd_buffer, CMD_BUFFER_STAGE_ID)
 CREATE_EVENT_CALLBACK(secondary_cmd_buffer, SECONDARY_CMD_BUFFER_STAGE_ID)
 CREATE_EVENT_CALLBACK(render_pass, RENDER_PASS_STAGE_ID)
 CREATE_EVENT_CALLBACK(binning_ib, BINNING_STAGE_ID)
+CREATE_EVENT_CALLBACK(concurrent_binning_ib, CONCURRENT_BINNING_STAGE_ID)
+CREATE_EVENT_CALLBACK(concurrent_binning_barrier, CONCURRENT_BINNING_BARRIER_STAGE_ID)
 CREATE_EVENT_CALLBACK(draw_ib_gmem, GMEM_STAGE_ID)
 CREATE_EVENT_CALLBACK(draw_ib_sysmem, BYPASS_STAGE_ID)
 CREATE_EVENT_CALLBACK(blit, BLIT_STAGE_ID)
@@ -538,6 +607,7 @@ CREATE_EVENT_CALLBACK(sysmem_clear_all, CLEAR_SYSMEM_STAGE_ID)
 CREATE_EVENT_CALLBACK(gmem_load, GMEM_LOAD_STAGE_ID)
 CREATE_EVENT_CALLBACK(gmem_store, GMEM_STORE_STAGE_ID)
 CREATE_EVENT_CALLBACK(sysmem_resolve, SYSMEM_RESOLVE_STAGE_ID)
+CREATE_EVENT_CALLBACK(custom_resolve, CUSTOM_RESOLVE_STAGE_ID)
 
 void
 tu_perfetto_start_cmd_buffer_annotation(
@@ -608,6 +678,7 @@ log_mem(struct tu_device *dev, struct tu_buffer *buffer, struct tu_image *image,
       auto packet = tctx.NewTracePacket();
 
       packet->set_timestamp(perfetto::base::GetBootTimeNs().count());
+      packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
 
       auto event = packet->set_vulkan_memory_event();
 
@@ -618,13 +689,13 @@ log_mem(struct tu_device *dev, struct tu_buffer *buffer, struct tu_image *image,
       if (buffer) {
          event->set_source(perfetto::protos::pbzero::perfetto_pbzero_enum_VulkanMemoryEvent::SOURCE_BUFFER);
          event->set_memory_size(buffer->vk.size);
-         if (buffer->bo)
+         if (buffer->vk.device_address)
             event->set_memory_address(buffer->vk.device_address);
       } else {
          assert(image);
          event->set_source(perfetto::protos::pbzero::perfetto_pbzero_enum_VulkanMemoryEvent::SOURCE_IMAGE);
          event->set_memory_size(image->layout[0].size);
-         if (image->bo)
+         if (image->iova)
             event->set_memory_address(image->iova);
       }
 
@@ -666,7 +737,7 @@ tu_perfetto_log_bind_image(struct tu_device *dev, struct tu_image *image)
 void
 tu_perfetto_log_destroy_image(struct tu_device *dev, struct tu_image *image)
 {
-   log_mem(dev, NULL, image, image->bo ?
+   log_mem(dev, NULL, image, image->mem ?
       perfetto::protos::pbzero::perfetto_pbzero_enum_VulkanMemoryEvent::OP_DESTROY_BOUND :
       perfetto::protos::pbzero::perfetto_pbzero_enum_VulkanMemoryEvent::OP_DESTROY);
 }

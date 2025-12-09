@@ -43,7 +43,6 @@ util_draw_vertex_buffer(struct pipe_context *pipe,
                         struct cso_context *cso,
                         struct pipe_resource *vbuf,
                         unsigned offset,
-                        bool vb_take_ownership,
                         enum mesa_prim prim_type,
                         unsigned num_verts,
                         unsigned num_attribs)
@@ -60,10 +59,10 @@ util_draw_vertex_buffer(struct pipe_context *pipe,
    /* note: vertex elements already set by caller */
 
    if (cso) {
-      cso_set_vertex_buffers(cso, 1, vb_take_ownership, &vbuffer);
+      cso_set_vertex_buffers(cso, 1, &vbuffer);
       cso_draw_arrays(cso, prim_type, 0, num_verts);
    } else {
-      util_set_vertex_buffers(pipe, 1, vb_take_ownership, &vbuffer);
+      pipe->set_vertex_buffers(pipe, 1, &vbuffer);
       util_draw_arrays(pipe, prim_type, 0, num_verts);
    }
 }
@@ -87,7 +86,7 @@ util_draw_user_vertex_buffer(struct cso_context *cso, void *buffer,
 
    /* note: vertex elements already set by caller */
 
-   cso_set_vertex_buffers(cso, 1, false, &vbuffer);
+   cso_set_vertex_buffers(cso, 1, &vbuffer);
    cso_draw_arrays(cso, prim_type, 0, num_verts);
 }
 

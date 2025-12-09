@@ -573,17 +573,17 @@ _mesa_update_renderbuffer_surface(struct gl_context *ctx,
       rtt_height = 1;
    }
 
-   /* find matching mipmap level size */
-   unsigned level;
-   for (level = 0; level <= resource->last_level; level++) {
-      if (u_minify(resource->width0, level) == rtt_width &&
-          u_minify(resource->height0, level) == rtt_height &&
+   /* try to find matching mipmap level size, or just use level 0 and assume partial render */
+   unsigned level = 0;
+   for (int test_level = 0; test_level <= resource->last_level; test_level++) {
+      if (u_minify(resource->width0, test_level) == rtt_width &&
+          u_minify(resource->height0, test_level) == rtt_height &&
           (resource->target != PIPE_TEXTURE_3D ||
-           u_minify(resource->depth0, level) == rtt_depth)) {
+           u_minify(resource->depth0, test_level) == rtt_depth)) {
+         level = test_level;
          break;
       }
    }
-   assert(level <= resource->last_level);
 
    /* determine the layer bounds */
    unsigned first_layer, last_layer;
@@ -627,7 +627,7 @@ _mesa_update_renderbuffer_surface(struct gl_context *ctx,
          than or equal to samples and no more than the next larger sample count 
          supported by the implementation.
        */
-      for (unsigned i = rb->rtt_nr_samples + 1; i <= ctx->Const.MaxFramebufferSamples; i++) {
+      for (unsigned i = rb->rtt_nr_samples; i <= ctx->Const.MaxFramebufferSamples; i++) {
          if (!ctx->st->screen->is_format_supported(ctx->st->screen, format, resource->target, i, i, resource->bind))
             continue;
          nr_samples = i;

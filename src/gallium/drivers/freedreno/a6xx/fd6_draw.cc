@@ -25,6 +25,7 @@
 #include "fd6_draw.h"
 #include "fd6_emit.h"
 #include "fd6_program.h"
+#include "fd6_screen.h"
 #include "fd6_vsc.h"
 #include "fd6_zsa.h"
 
@@ -60,7 +61,7 @@ is_indexed(enum draw_type type)
 }
 
 static void
-draw_emit_xfb(struct fd_ringbuffer *ring, struct CP_DRAW_INDX_OFFSET_0 *draw0,
+draw_emit_xfb(fd_cs &cs, struct CP_DRAW_INDX_OFFSET_0 *draw0,
               const struct pipe_draw_info *info,
               const struct pipe_draw_indirect_info *indirect)
 {
@@ -68,14 +69,13 @@ draw_emit_xfb(struct fd_ringbuffer *ring, struct CP_DRAW_INDX_OFFSET_0 *draw0,
       fd_stream_output_target(indirect->count_from_stream_output);
    struct fd_resource *offset = fd_resource(target->offset_buf);
 
-   OUT_PKT7(ring, CP_DRAW_AUTO, 6);
-   OUT_RING(ring, pack_CP_DRAW_INDX_OFFSET_0(*draw0).value);
-   OUT_RING(ring, info->instance_count);
-   OUT_RELOC(ring, offset->bo, 0, 0, 0);
-   OUT_RING(
-      ring,
-      0); /* byte counter offset subtraced from the value read from above */
-   OUT_RING(ring, target->stride);
+   fd_pkt7(cs, CP_DRAW_AUTO, 6)
+      .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
+      .add(CP_DRAW_AUTO_1(info->instance_count))
+      .add(CP_DRAW_AUTO_NUM_VERTICES_BASE(offset->bo, 0))
+      /* byte counter offset subtraced from the value read from above: */
+      .add(CP_DRAW_AUTO_4(0))
+      .add(CP_DRAW_AUTO_5(target->stride));
 }
 
 static inline unsigned
@@ -100,9 +100,7 @@ max_indices(const struct pipe_draw_info *info, unsigned index_offset)
 
 template <draw_type DRAW>
 static void
-draw_emit_indirect(struct fd_context *ctx,
-                   struct fd_ringbuffer *ring,
-                   struct CP_DRAW_INDX_OFFSET_0 *draw0,
+draw_emit_indirect(fd_cs &cs, struct CP_DRAW_INDX_OFFSET_0 *draw0,
                    const struct pipe_draw_info *info,
                    const struct pipe_draw_indirect_info *indirect,
                    unsigned index_offset, uint32_t driver_param)
@@ -110,59 +108,94 @@ draw_emit_indirect(struct fd_context *ctx,
    struct fd_resource *ind = fd_resource(indirect->buffer);
 
    if (DRAW == DRAW_INDIRECT_OP_INDIRECT_COUNT_INDEXED) {
-      OUT_PKT7(ring, CP_DRAW_INDIRECT_MULTI, 11);
-      OUT_RING(ring, pack_CP_DRAW_INDX_OFFSET_0(*draw0).value);
-      OUT_RING(ring,
-         (A6XX_CP_DRAW_INDIRECT_MULTI_1_OPCODE(INDIRECT_OP_INDIRECT_COUNT_INDEXED)
-         | A6XX_CP_DRAW_INDIRECT_MULTI_1_DST_OFF(driver_param)));
       struct fd_resource *count_buf = fd_resource(indirect->indirect_draw_count);
       struct pipe_resource *idx = info->index.resource;
-      OUT_RING(ring, indirect->draw_count);
-      OUT_RELOC(ring, fd_resource(idx)->bo, index_offset, 0, 0);
-      OUT_RING(ring, max_indices(info, index_offset));
-      OUT_RELOC(ring, ind->bo, indirect->offset, 0, 0);
-      OUT_RELOC(ring, count_buf->bo, indirect->indirect_draw_count_offset, 0, 0);
-      OUT_RING(ring, indirect->stride);
+
+      fd_pkt7(cs, CP_DRAW_INDIRECT_MULTI, 11)
+         .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_1(
+            .opcode = INDIRECT_OP_INDIRECT_COUNT_INDEXED,
+            .dst_off = driver_param,
+         ))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_DRAW_COUNT(indirect->draw_count))
+         .add(INDIRECT_OP_INDIRECT_COUNT_INDEXED_CP_DRAW_INDIRECT_MULTI_INDEX(
+            fd_resource(idx)->bo, index_offset
+         ))
+         .add(INDIRECT_OP_INDIRECT_COUNT_INDEXED_CP_DRAW_INDIRECT_MULTI_MAX_INDICES(
+            max_indices(info, index_offset)
+         ))
+         .add(INDIRECT_OP_INDIRECT_COUNT_INDEXED_CP_DRAW_INDIRECT_MULTI_INDIRECT(
+            ind->bo, indirect->offset
+         ))
+         .add(INDIRECT_OP_INDIRECT_COUNT_INDEXED_CP_DRAW_INDIRECT_MULTI_INDIRECT_COUNT(
+            count_buf->bo, indirect->indirect_draw_count_offset
+         ))
+         .add(INDIRECT_OP_INDIRECT_COUNT_INDEXED_CP_DRAW_INDIRECT_MULTI_STRIDE(
+            indirect->stride
+         ));
    } else if (DRAW == DRAW_INDIRECT_OP_INDEXED) {
-      OUT_PKT7(ring, CP_DRAW_INDIRECT_MULTI, 9);
-      OUT_RING(ring, pack_CP_DRAW_INDX_OFFSET_0(*draw0).value);
-      OUT_RING(ring,
-         (A6XX_CP_DRAW_INDIRECT_MULTI_1_OPCODE(INDIRECT_OP_INDEXED)
-         | A6XX_CP_DRAW_INDIRECT_MULTI_1_DST_OFF(driver_param)));
       struct pipe_resource *idx = info->index.resource;
-      OUT_RING(ring, indirect->draw_count);
-      //index va
-      OUT_RELOC(ring, fd_resource(idx)->bo, index_offset, 0, 0);
-      //max indices
-      OUT_RING(ring, max_indices(info, index_offset));
-      OUT_RELOC(ring, ind->bo, indirect->offset, 0, 0);
-      OUT_RING(ring, indirect->stride);
+
+      fd_pkt7(cs, CP_DRAW_INDIRECT_MULTI, 9)
+         .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_1(
+            .opcode = INDIRECT_OP_INDEXED,
+            .dst_off = driver_param,
+         ))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_DRAW_COUNT(indirect->draw_count))
+         //index va
+         .add(INDIRECT_OP_INDEXED_CP_DRAW_INDIRECT_MULTI_INDEX(
+            fd_resource(idx)->bo, index_offset
+         ))
+         //max indices
+         .add(INDIRECT_OP_INDEXED_CP_DRAW_INDIRECT_MULTI_MAX_INDICES(
+            max_indices(info, index_offset)
+         ))
+         .add(INDIRECT_OP_INDEXED_CP_DRAW_INDIRECT_MULTI_INDIRECT(
+            ind->bo, indirect->offset
+         ))
+         .add(INDIRECT_OP_INDEXED_CP_DRAW_INDIRECT_MULTI_STRIDE(
+            indirect->stride
+         ));
    }  else if(DRAW == DRAW_INDIRECT_OP_INDIRECT_COUNT) {
-      OUT_PKT7(ring, CP_DRAW_INDIRECT_MULTI, 8);
-      OUT_RING(ring, pack_CP_DRAW_INDX_OFFSET_0(*draw0).value);
-      OUT_RING(ring,
-         (A6XX_CP_DRAW_INDIRECT_MULTI_1_OPCODE(INDIRECT_OP_INDIRECT_COUNT)
-         | A6XX_CP_DRAW_INDIRECT_MULTI_1_DST_OFF(driver_param)));
       struct fd_resource *count_buf = fd_resource(indirect->indirect_draw_count);
-      OUT_RING(ring, indirect->draw_count);
-      OUT_RELOC(ring, ind->bo, indirect->offset, 0, 0);
-      OUT_RELOC(ring, count_buf->bo, indirect->indirect_draw_count_offset, 0, 0);
-      OUT_RING(ring, indirect->stride);
+
+      fd_pkt7(cs, CP_DRAW_INDIRECT_MULTI, 8)
+         .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_1(
+            .opcode = INDIRECT_OP_INDIRECT_COUNT,
+            .dst_off = driver_param,
+         ))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_DRAW_COUNT(indirect->draw_count))
+         .add(INDIRECT_OP_INDIRECT_COUNT_CP_DRAW_INDIRECT_MULTI_INDIRECT(
+            ind->bo, indirect->offset
+         ))
+         .add(INDIRECT_OP_INDIRECT_COUNT_CP_DRAW_INDIRECT_MULTI_INDIRECT_COUNT(
+            count_buf->bo, indirect->indirect_draw_count_offset
+         ))
+         .add(INDIRECT_OP_INDIRECT_COUNT_CP_DRAW_INDIRECT_MULTI_STRIDE(
+            indirect->stride
+         ));
    } else if (DRAW == DRAW_INDIRECT_OP_NORMAL) {
-      OUT_PKT7(ring, CP_DRAW_INDIRECT_MULTI, 6);
-      OUT_RING(ring, pack_CP_DRAW_INDX_OFFSET_0(*draw0).value);
-      OUT_RING(ring,
-         (A6XX_CP_DRAW_INDIRECT_MULTI_1_OPCODE(INDIRECT_OP_NORMAL)
-         | A6XX_CP_DRAW_INDIRECT_MULTI_1_DST_OFF(driver_param)));
-      OUT_RING(ring, indirect->draw_count);
-      OUT_RELOC(ring, ind->bo, indirect->offset, 0, 0);
-      OUT_RING(ring, indirect->stride);
+      fd_pkt7(cs, CP_DRAW_INDIRECT_MULTI, 6)
+         .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_1(
+            .opcode = INDIRECT_OP_NORMAL,
+            .dst_off = driver_param,
+         ))
+         .add(A6XX_CP_DRAW_INDIRECT_MULTI_DRAW_COUNT(indirect->draw_count))
+         .add(INDIRECT_OP_NORMAL_CP_DRAW_INDIRECT_MULTI_INDIRECT(
+            ind->bo, indirect->offset
+         ))
+         .add(INDIRECT_OP_NORMAL_CP_DRAW_INDIRECT_MULTI_STRIDE(
+            indirect->stride
+         ));
    }
 }
 
 template <draw_type DRAW>
 static void
-draw_emit(struct fd_ringbuffer *ring, struct CP_DRAW_INDX_OFFSET_0 *draw0,
+draw_emit(fd_cs &cs, struct CP_DRAW_INDX_OFFSET_0 *draw0,
           const struct pipe_draw_info *info,
           const struct pipe_draw_start_count_bias *draw, unsigned index_offset)
 {
@@ -171,17 +204,21 @@ draw_emit(struct fd_ringbuffer *ring, struct CP_DRAW_INDX_OFFSET_0 *draw0,
 
       struct pipe_resource *idx_buffer = info->index.resource;
 
-      OUT_PKT(ring, CP_DRAW_INDX_OFFSET, pack_CP_DRAW_INDX_OFFSET_0(*draw0),
-              CP_DRAW_INDX_OFFSET_1(.num_instances = info->instance_count),
-              CP_DRAW_INDX_OFFSET_2(.num_indices = draw->count),
-              CP_DRAW_INDX_OFFSET_3(.first_indx = draw->start),
-              A5XX_CP_DRAW_INDX_OFFSET_INDX_BASE(fd_resource(idx_buffer)->bo,
-                                                 index_offset),
-              A5XX_CP_DRAW_INDX_OFFSET_6(.max_indices = max_indices(info, index_offset)));
+      fd_pkt7(cs, CP_DRAW_INDX_OFFSET, 7)
+         .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
+         .add(CP_DRAW_INDX_OFFSET_1(.num_instances = info->instance_count))
+         .add(CP_DRAW_INDX_OFFSET_2(.num_indices = draw->count))
+         .add(CP_DRAW_INDX_OFFSET_3(.first_indx = draw->start))
+         .add(A5XX_CP_DRAW_INDX_OFFSET_INDX_BASE(
+            fd_resource(idx_buffer)->bo,
+            index_offset
+         ))
+         .add(A5XX_CP_DRAW_INDX_OFFSET_6(.max_indices = max_indices(info, index_offset)));
    } else if (DRAW == DRAW_DIRECT_OP_NORMAL) {
-      OUT_PKT(ring, CP_DRAW_INDX_OFFSET, pack_CP_DRAW_INDX_OFFSET_0(*draw0),
-              CP_DRAW_INDX_OFFSET_1(.num_instances = info->instance_count),
-              CP_DRAW_INDX_OFFSET_2(.num_indices = draw->count));
+      fd_pkt7(cs, CP_DRAW_INDX_OFFSET, 3)
+         .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
+         .add(CP_DRAW_INDX_OFFSET_1(.num_instances = info->instance_count))
+         .add(CP_DRAW_INDX_OFFSET_2(.num_indices = draw->count));
    }
 }
 
@@ -214,7 +251,6 @@ get_program_state(struct fd_context *ctx, const struct pipe_draw_info *info)
     * by not initializing these inline:
     */
    key.key.ucp_enables = ctx->rasterizer->clip_plane_enable;
-   key.key.sample_shading = (ctx->min_samples > 1);
    key.key.msaa = (ctx->framebuffer.samples > 1);
    key.key.rasterflat = ctx->rasterizer->flatshade;
 
@@ -259,18 +295,16 @@ get_program_state(struct fd_context *ctx, const struct pipe_draw_info *info)
 
 template <chip CHIP>
 static void
-flush_streamout(struct fd_context *ctx, struct fd6_emit *emit)
+flush_streamout(struct fd_context *ctx, fd_cs &cs, struct fd6_emit *emit)
    assert_dt
 {
    if (!emit->streamout_mask)
       return;
 
-   struct fd_ringbuffer *ring = ctx->batch->draw;
-
    for (unsigned i = 0; i < PIPE_MAX_SO_BUFFERS; i++) {
       if (emit->streamout_mask & (1 << i)) {
          enum fd_gpu_event evt = (enum fd_gpu_event)(FD_FLUSH_SO_0 + i);
-         fd6_event_write<CHIP>(ctx, ring, evt);
+         fd6_event_write<CHIP>(ctx, cs, evt);
       }
    }
 }
@@ -361,7 +395,7 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
       ctx->stats.fs_regs += ir3_shader_halfregs(emit.fs);
    }
 
-   struct fd_ringbuffer *ring = ctx->batch->draw;
+   fd_cs cs(ctx->batch->draw);
 
    struct CP_DRAW_INDX_OFFSET_0 draw0 = {
       .prim_type = ctx->screen->primtypes[info->mode],
@@ -396,40 +430,43 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
       draw0.tess_enable = true;
 
       /* maximum number of patches that can fit in tess factor/param buffers */
-      uint32_t subdraw_size = MIN2(FD6_TESS_FACTOR_SIZE / factor_stride,
-                                   FD6_TESS_PARAM_SIZE / (emit.hs->output_size * 4));
+      uint32_t subdraw_size = MIN2(FD6_TESS<CHIP>::FACTOR_SIZE / factor_stride,
+                                   FD6_TESS<CHIP>::PARAM_SIZE / (emit.hs->output_size * 4));
       /* convert from # of patches to draw count */
       subdraw_size *= ctx->patch_vertices;
 
-      OUT_PKT7(ring, CP_SET_SUBDRAW_SIZE, 1);
-      OUT_RING(ring, subdraw_size);
+      /* For gen8 tess_bo is sized for two draws, adjust subdraw size accordingly: */
+      if (CHIP >= A8XX)
+         subdraw_size /= 2;
+
+      fd_pkt7(cs, CP_SET_SUBDRAW_SIZE, 1)
+         .add(subdraw_size);
 
       ctx->batch->tessellation = true;
    }
 
-   uint32_t index_start = is_indexed(DRAW) ? draws[0].index_bias : draws[0].start;
-   if (ctx->last.dirty || (ctx->last.index_start != index_start)) {
-      OUT_PKT4(ring, REG_A6XX_VFD_INDEX_OFFSET, 1);
-      OUT_RING(ring, index_start); /* VFD_INDEX_OFFSET */
-      ctx->last.index_start = index_start;
-   }
+   with_crb (cs, 3) {
+      uint32_t index_start = is_indexed(DRAW) ? draws[0].index_bias : draws[0].start;
+      if (ctx->last.dirty || (ctx->last.index_start != index_start)) {
+         crb.add(A6XX_VFD_INDEX_OFFSET(index_start));
+         ctx->last.index_start = index_start;
+      }
 
-   if (ctx->last.dirty || (ctx->last.instance_start != info->start_instance)) {
-      OUT_PKT4(ring, REG_A6XX_VFD_INSTANCE_START_OFFSET, 1);
-      OUT_RING(ring, info->start_instance); /* VFD_INSTANCE_START_OFFSET */
-      ctx->last.instance_start = info->start_instance;
-   }
+      if (ctx->last.dirty || (ctx->last.instance_start != info->start_instance)) {
+         crb.add(A6XX_VFD_INSTANCE_START_OFFSET(info->start_instance));
+         ctx->last.instance_start = info->start_instance;
+      }
 
-   uint32_t restart_index =
-      info->primitive_restart ? info->restart_index : 0xffffffff;
-   if (ctx->last.dirty || (ctx->last.restart_index != restart_index)) {
-      OUT_PKT4(ring, REG_A6XX_PC_RESTART_INDEX, 1);
-      OUT_RING(ring, restart_index); /* PC_RESTART_INDEX */
-      ctx->last.restart_index = restart_index;
+      uint32_t restart_index =
+         info->primitive_restart ? info->restart_index : 0xffffffff;
+      if (ctx->last.dirty || (ctx->last.restart_index != restart_index)) {
+         crb.add(PC_RESTART_INDEX(CHIP, restart_index));
+         ctx->last.restart_index = restart_index;
+      }
    }
 
    if (emit.dirty_groups)
-      fd6_emit_3d_state<CHIP, PIPELINE>(ring, &emit);
+      fd6_emit_3d_state<PIPELINE, CHIP>(cs, &emit);
 
    /* All known firmware versions do not wait for WFI's with CP_DRAW_AUTO.
     * Plus, for the common case where the counter buffer is written by
@@ -445,21 +482,12 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
        DRAW == DRAW_INDIRECT_OP_INDIRECT_COUNT)
       ctx->batch->barrier |= FD6_WAIT_FOR_ME;
 
-   if (ctx->batch->barrier)
-      fd6_barrier_flush<CHIP>(ctx->batch);
-
-   /* for debug after a lock up, write a unique counter value
-    * to scratch7 for each draw, to make it easier to match up
-    * register dumps to cmdstream.  The combination of IB
-    * (scratch6) and DRAW is enough to "triangulate" the
-    * particular draw that caused lockup.
-    */
-   emit_marker6(ring, 7);
+   fd6_barrier_flush<CHIP>(cs, ctx->batch);
 
    if (is_indirect(DRAW)) {
       assert(num_draws == 1);  /* only >1 for direct draws */
       if (DRAW == DRAW_INDIRECT_OP_XFB) {
-         draw_emit_xfb(ring, &draw0, info, indirect);
+         draw_emit_xfb(cs, &draw0, info, indirect);
       } else {
          const struct ir3_const_state *const_state = ir3_const_state(emit.vs);
          uint32_t dst_offset_dp =
@@ -471,10 +499,10 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
                                    emit.vs->constlen))
             dst_offset_dp = 0;
 
-         draw_emit_indirect<DRAW>(ctx, ring, &draw0, info, indirect, index_offset, dst_offset_dp);
+         draw_emit_indirect<DRAW>(cs, &draw0, info, indirect, index_offset, dst_offset_dp);
       }
    } else {
-      draw_emit<DRAW>(ring, &draw0, info, &draws[0], index_offset);
+      draw_emit<DRAW>(cs, &draw0, info, &draws[0], index_offset);
 
       if (unlikely(num_draws > 1)) {
 
@@ -493,14 +521,14 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
          uint32_t last_index_start = ctx->last.index_start;
 
          for (unsigned i = 1; i < num_draws; i++) {
-            flush_streamout<CHIP>(ctx, &emit);
+            flush_streamout<CHIP>(ctx, cs, &emit);
 
             fd6_vsc_update_sizes(ctx->batch, info, &draws[i]);
 
             uint32_t index_start = is_indexed(DRAW) ? draws[i].index_bias : draws[i].start;
             if (last_index_start != index_start) {
-               OUT_PKT4(ring, REG_A6XX_VFD_INDEX_OFFSET, 1);
-               OUT_RING(ring, index_start); /* VFD_INDEX_OFFSET */
+               fd_pkt4(cs, 1)
+                  .add(A6XX_VFD_INDEX_OFFSET(index_start));
                last_index_start = index_start;
             }
 
@@ -508,21 +536,19 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
                emit.state.num_groups = 0;
                emit.draw = &draws[i];
                emit.draw_id = info->increment_draw_id ? i : 0;
-               fd6_emit_3d_state<CHIP, PIPELINE>(ring, &emit);
+               fd6_emit_3d_state<PIPELINE, CHIP>(cs, &emit);
             }
 
             assert(!index_offset); /* handled by util_draw_multi() */
 
-            draw_emit<DRAW>(ring, &draw0, info, &draws[i], 0);
+            draw_emit<DRAW>(cs, &draw0, info, &draws[i], 0);
          }
 
          ctx->last.index_start = last_index_start;
       }
    }
 
-   emit_marker6(ring, 7);
-
-   flush_streamout<CHIP>(ctx, &emit);
+   flush_streamout<CHIP>(ctx, cs, &emit);
 
    fd_context_all_clean(ctx);
 }

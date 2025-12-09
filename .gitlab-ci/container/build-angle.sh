@@ -13,7 +13,7 @@ section_start angle "Building ANGLE"
 # setting up the environment variables locally
 ci_tag_build_time_check "ANGLE_TAG"
 
-ANGLE_REV="6a04a50f98cac71b25464d10289ce7a013841caf"
+ANGLE_REV="127a84404b88dbc4327ffb7f831a9a36c3b111bc"
 DEPOT_REV="5982a1aeb33dc36382ed8c62eddf52a6135e7dd3"
 
 # Set ANGLE_ARCH based on DEBIAN_ARCH if it hasn't been explicitly defined
@@ -107,6 +107,8 @@ case "$ANGLE_TARGET" in
   linux) cat >> out/Release/args.gn <<EOF
 angle_egl_extension="so.1"
 angle_glesv2_extension="so.2"
+clang_unsafe_buffers_paths=""
+clang_use_chrome_plugins=false
 use_custom_libcxx=false
 custom_toolchain="//build/toolchain/linux/unbundle:default"
 host_toolchain="//build/toolchain/linux/unbundle:default"

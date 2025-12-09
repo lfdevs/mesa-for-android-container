@@ -167,8 +167,7 @@ vn_cs_encoder_fini(struct vn_cs_encoder *enc)
 
    for (uint32_t i = 0; i < enc->buffer_count; i++)
       vn_renderer_shmem_unref(enc->instance->renderer, enc->buffers[i].shmem);
-   if (enc->buffers)
-      free(enc->buffers);
+   free(enc->buffers);
 }
 
 /**

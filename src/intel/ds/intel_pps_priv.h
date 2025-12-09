@@ -32,9 +32,26 @@
 static inline uint32_t
 intel_pps_clock_id(uint32_t gpu_id)
 {
-   char buf[40];
+   /* See the "Sequence-scoped clocks" section of
+    * https://perfetto.dev/docs/concepts/clock-sync
+    *
+    * intel_pps_clock_id can be called from:
+    * - intel_ds_device_init
+    *   - anv, hasvk and iris all pass minor
+    * - IntelDriver::init_perfcnt
+    *   - pps passes DrmDevice::gpu_num, which is the index into the devices
+    *     returned from drmGetDevices2 capped to 64 devices
+    *
+    * So (gpu_id & 0x3F) is valid for all above, except for render minors
+    * dynamically allocated >= 192 which we can fallback to use global gpu
+    * clock but with pid additionally hashed in.
+    */
+   if (gpu_id < 192)
+      return 64 + (gpu_id & 0x3F);
+
+   char buf[64];
    snprintf(buf, sizeof(buf),
-            "org.freedesktop.mesa.intel.gpu%u", gpu_id);
+            "org.freedesktop.mesa.intel.gpu%u.pid%d", gpu_id, (int)getpid());
 
    return _mesa_hash_string(buf) | 0x80000000;
 }

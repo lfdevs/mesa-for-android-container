@@ -1,0 +1,2 @@
+# RADV bug
+dEQP-VK.texture.mipmap.cubemap.misc.projected_derivatives,Fail

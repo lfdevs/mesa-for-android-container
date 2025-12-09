@@ -41,7 +41,7 @@ fd5_emit_const_user(struct fd_ringbuffer *ring,
                     const struct ir3_shader_variant *v, uint32_t regid,
                     uint32_t sizedwords, const uint32_t *dwords)
 {
-   emit_const_asserts(ring, v, regid, sizedwords);
+   emit_const_asserts(v, regid, sizedwords);
 
    OUT_PKT7(ring, CP_LOAD_STATE4, 3 + sizedwords);
    OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(regid / 4) |
@@ -65,7 +65,7 @@ fd5_emit_const_bo(struct fd_ringbuffer *ring,
    uint32_t num_unit = sizedwords / 4;
    assert(num_unit % 4 == 0);
 
-   emit_const_asserts(ring, v, regid, sizedwords);
+   emit_const_asserts(v, regid, sizedwords);
 
    OUT_PKT7(ring, CP_LOAD_STATE4, 3);
    OUT_RING(ring, CP_LOAD_STATE4_0_DST_OFF(dst_off) |
@@ -76,7 +76,7 @@ fd5_emit_const_bo(struct fd_ringbuffer *ring,
 }
 
 static void
-fd5_emit_const_ptrs(struct fd_ringbuffer *ring, gl_shader_stage type,
+fd5_emit_const_ptrs(struct fd_ringbuffer *ring, mesa_shader_stage type,
                     uint32_t regid, uint32_t num, struct fd_bo **bos,
                     uint32_t *offsets)
 {
@@ -238,7 +238,7 @@ setup_border_colors(struct fd_texture_stateobj *tex,
                   clamped = CLAMP(bc->ui[j], 0, 65535);
                break;
             default:
-               unreachable("Unexpected bit size");
+               UNREACHABLE("Unexpected bit size");
             case 32:
                clamped = 0;
                break;
@@ -294,15 +294,15 @@ emit_border_color(struct fd_context *ctx, struct fd_ringbuffer *ring) assert_dt
 
    const unsigned int alignment =
       util_next_power_of_two(FD5_BORDER_COLOR_UPLOAD_SIZE);
-   u_upload_alloc(fd5_ctx->border_color_uploader, 0,
+   u_upload_alloc_ref(fd5_ctx->border_color_uploader, 0,
                   FD5_BORDER_COLOR_UPLOAD_SIZE, alignment,
                   &off, &fd5_ctx->border_color_buf, &ptr);
 
    entries = ptr;
 
-   setup_border_colors(&ctx->tex[PIPE_SHADER_VERTEX], &entries[0]);
-   setup_border_colors(&ctx->tex[PIPE_SHADER_FRAGMENT],
-                       &entries[ctx->tex[PIPE_SHADER_VERTEX].num_samplers]);
+   setup_border_colors(&ctx->tex[MESA_SHADER_VERTEX], &entries[0]);
+   setup_border_colors(&ctx->tex[MESA_SHADER_FRAGMENT],
+                       &entries[ctx->tex[MESA_SHADER_VERTEX].num_samplers]);
 
    OUT_PKT4(ring, REG_A5XX_TPL1_TP_BORDER_COLOR_BASE_ADDR_LO, 2);
    OUT_RELOC(ring, fd_resource(fd5_ctx->border_color_buf)->bo, off, 0, 0);
@@ -317,7 +317,7 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
 {
    bool needs_border = false;
    unsigned bcolor_offset =
-      (sb == SB4_FS_TEX) ? ctx->tex[PIPE_SHADER_VERTEX].num_samplers : 0;
+      (sb == SB4_FS_TEX) ? ctx->tex[MESA_SHADER_VERTEX].num_samplers : 0;
    unsigned i;
 
    if (tex->num_samplers > 0) {
@@ -822,22 +822,22 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
       OUT_RING(ring, A5XX_RB_BLEND_ALPHA_F32(bcolor->color[3]));
    }
 
-   if (ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX) {
+   if (ctx->dirty_shader[MESA_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX) {
       needs_border |=
-         emit_textures(ctx, ring, SB4_VS_TEX, &ctx->tex[PIPE_SHADER_VERTEX]);
+         emit_textures(ctx, ring, SB4_VS_TEX, &ctx->tex[MESA_SHADER_VERTEX]);
       OUT_PKT4(ring, REG_A5XX_TPL1_VS_TEX_COUNT, 1);
-      OUT_RING(ring, ctx->tex[PIPE_SHADER_VERTEX].num_textures);
+      OUT_RING(ring, ctx->tex[MESA_SHADER_VERTEX].num_textures);
    }
 
-   if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_TEX) {
+   if (ctx->dirty_shader[MESA_SHADER_FRAGMENT] & FD_DIRTY_SHADER_TEX) {
       needs_border |=
-         emit_textures(ctx, ring, SB4_FS_TEX, &ctx->tex[PIPE_SHADER_FRAGMENT]);
+         emit_textures(ctx, ring, SB4_FS_TEX, &ctx->tex[MESA_SHADER_FRAGMENT]);
    }
 
    OUT_PKT4(ring, REG_A5XX_TPL1_FS_TEX_COUNT, 1);
-   OUT_RING(ring, ctx->shaderimg[PIPE_SHADER_FRAGMENT].enabled_mask
+   OUT_RING(ring, ctx->shaderimg[MESA_SHADER_FRAGMENT].enabled_mask
                      ? ~0
-                     : ctx->tex[PIPE_SHADER_FRAGMENT].num_textures);
+                     : ctx->tex[MESA_SHADER_FRAGMENT].num_textures);
 
    OUT_PKT4(ring, REG_A5XX_TPL1_CS_TEX_COUNT, 1);
    OUT_RING(ring, 0);
@@ -846,12 +846,12 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
       emit_border_color(ctx, ring);
 
    if (!emit->binning_pass) {
-      if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_SSBO)
-         emit_ssbos(ctx, ring, SB4_SSBO, &ctx->shaderbuf[PIPE_SHADER_FRAGMENT],
+      if (ctx->dirty_shader[MESA_SHADER_FRAGMENT] & FD_DIRTY_SHADER_SSBO)
+         emit_ssbos(ctx, ring, SB4_SSBO, &ctx->shaderbuf[MESA_SHADER_FRAGMENT],
                   fp);
 
-      if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_IMAGE)
-         fd5_emit_images(ctx, ring, PIPE_SHADER_FRAGMENT, fp);
+      if (ctx->dirty_shader[MESA_SHADER_FRAGMENT] & FD_DIRTY_SHADER_IMAGE)
+         fd5_emit_images(ctx, ring, MESA_SHADER_FRAGMENT, fp);
    }
 }
 
@@ -859,12 +859,12 @@ void
 fd5_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
                   struct ir3_shader_variant *cp)
 {
-   enum fd_dirty_shader_state dirty = ctx->dirty_shader[PIPE_SHADER_COMPUTE];
+   enum fd_dirty_shader_state dirty = ctx->dirty_shader[MESA_SHADER_COMPUTE];
 
    if (dirty & FD_DIRTY_SHADER_TEX) {
       bool needs_border = false;
       needs_border |=
-         emit_textures(ctx, ring, SB4_CS_TEX, &ctx->tex[PIPE_SHADER_COMPUTE]);
+         emit_textures(ctx, ring, SB4_CS_TEX, &ctx->tex[MESA_SHADER_COMPUTE]);
 
       if (needs_border)
          emit_border_color(ctx, ring);
@@ -886,16 +886,16 @@ fd5_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
    }
 
    OUT_PKT4(ring, REG_A5XX_TPL1_CS_TEX_COUNT, 1);
-   OUT_RING(ring, ctx->shaderimg[PIPE_SHADER_COMPUTE].enabled_mask
+   OUT_RING(ring, ctx->shaderimg[MESA_SHADER_COMPUTE].enabled_mask
                      ? ~0
-                     : ctx->tex[PIPE_SHADER_COMPUTE].num_textures);
+                     : ctx->tex[MESA_SHADER_COMPUTE].num_textures);
 
    if (dirty & FD_DIRTY_SHADER_SSBO)
-      emit_ssbos(ctx, ring, SB4_CS_SSBO, &ctx->shaderbuf[PIPE_SHADER_COMPUTE],
+      emit_ssbos(ctx, ring, SB4_CS_SSBO, &ctx->shaderbuf[MESA_SHADER_COMPUTE],
                  cp);
 
    if (dirty & FD_DIRTY_SHADER_IMAGE)
-      fd5_emit_images(ctx, ring, PIPE_SHADER_COMPUTE, cp);
+      fd5_emit_images(ctx, ring, MESA_SHADER_COMPUTE, cp);
 }
 
 /* emit setup at begin of new cmdstream buffer (don't rely on previous

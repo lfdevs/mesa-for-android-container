@@ -60,7 +60,7 @@ make_gs_key(struct svga_context *svga, struct svga_compile_key *key)
    /*
     * SVGA_NEW_TEXTURE_BINDING | SVGA_NEW_SAMPLER
     */
-   svga_init_shader_key_common(svga, PIPE_SHADER_GEOMETRY, &gs->base, key);
+   svga_init_shader_key_common(svga, MESA_SHADER_GEOMETRY, &gs->base, key);
 
    memcpy(key->generic_remap_table, gs->generic_remap_table,
           sizeof(gs->generic_remap_table));

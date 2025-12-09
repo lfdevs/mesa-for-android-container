@@ -96,7 +96,7 @@ setup_border_color(struct fd_screen *screen,
                    struct fd6_bcolor_entry *e)
 {
    STATIC_ASSERT(sizeof(struct fd6_bcolor_entry) == FD6_BORDER_COLOR_SIZE);
-   const bool has_z24uint_s8uint = screen->info->a6xx.has_z24uint_s8uint;
+   const bool has_z24uint_s8uint = screen->info->props.has_z24uint_s8uint;
    const union pipe_color_union *bc = &sampler->border_color;
 
    enum pipe_format format = sampler->border_color_format;
@@ -163,7 +163,7 @@ setup_border_color(struct fd_screen *screen,
                clamped = CLAMP(bc->ui[j], 0, 65535);
             break;
          default:
-            unreachable("Unexpected bit size");
+            UNREACHABLE("Unexpected bit size");
          case 32:
             clamped = 0;
             break;
@@ -250,6 +250,7 @@ get_bcolor_offset(struct fd_context *ctx, const struct pipe_sampler_state *sampl
    return idx;
 }
 
+template <chip CHIP>
 static void *
 fd6_sampler_state_create(struct pipe_context *pctx,
                          const struct pipe_sampler_state *cso)
@@ -268,29 +269,75 @@ fd6_sampler_state_create(struct pipe_context *pctx,
    if (cso->min_mip_filter == PIPE_TEX_MIPFILTER_LINEAR)
       miplinear = true;
 
+   /* We don't know if the format is going to be YUV.  Setting CHROMA_LINEAR
+    * unconditionally seems fine.
+    */
+   bool chroma_linear =
+      cso->mag_img_filter == PIPE_TEX_FILTER_LINEAR &&
+      cso->min_img_filter == PIPE_TEX_FILTER_LINEAR;
+
    bool needs_border = false;
-   so->texsamp0 =
-      COND(miplinear, A6XX_TEX_SAMP_0_MIPFILTER_LINEAR_NEAR) |
-      A6XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
-      A6XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
-      A6XX_TEX_SAMP_0_ANISO((enum a6xx_tex_aniso)aniso) |
-      A6XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, &needs_border)) |
-      A6XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, &needs_border)) |
-      A6XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, &needs_border));
 
-   so->texsamp1 =
-      COND(cso->min_mip_filter == PIPE_TEX_MIPFILTER_NONE,
-           A6XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR) |
-      COND(!cso->seamless_cube_map, A6XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF) |
-      COND(cso->unnormalized_coords, A6XX_TEX_SAMP_1_UNNORM_COORDS);
+   if (CHIP <= A7XX) {
+      so->descriptor[0] =
+         COND(miplinear, A6XX_TEX_SAMP_0_MIPFILTER_LINEAR_NEAR) |
+         A6XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
+         A6XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
+         A6XX_TEX_SAMP_0_ANISO((enum a6xx_tex_aniso)aniso) |
+         A6XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, &needs_border)) |
+         A6XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, &needs_border)) |
+         A6XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, &needs_border)) |
+         A6XX_TEX_SAMP_0_LOD_BIAS(cso->lod_bias);
 
-   so->texsamp0 |= A6XX_TEX_SAMP_0_LOD_BIAS(cso->lod_bias);
-   so->texsamp1 |= A6XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
-                   A6XX_TEX_SAMP_1_MAX_LOD(cso->max_lod);
+      so->descriptor[1] =
+         COND(cso->compare_mode, A6XX_TEX_SAMP_1_COMPARE_FUNC((enum adreno_compare_func)cso->compare_func)) |
+         COND(cso->min_mip_filter == PIPE_TEX_MIPFILTER_NONE,
+            A6XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR) |
+         COND(!cso->seamless_cube_map, A6XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF) |
+         COND(cso->unnormalized_coords, A6XX_TEX_SAMP_1_UNNORM_COORDS) |
+         A6XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
+         A6XX_TEX_SAMP_1_MAX_LOD(cso->max_lod);
 
-   if (cso->compare_mode)
-      so->texsamp1 |=
-         A6XX_TEX_SAMP_1_COMPARE_FUNC((enum adreno_compare_func)cso->compare_func); /* maps 1:1 */
+      so->descriptor[2] =
+         A6XX_TEX_SAMP_2_REDUCTION_MODE(reduction_mode(cso->reduction_mode)) |
+         COND(chroma_linear, A6XX_TEX_SAMP_2_CHROMA_LINEAR);
+
+   } else if (CHIP >= A8XX) {
+      const float MAX_LOD = 4095.0f / 256.0f;
+
+      so->descriptor[0] =
+         COND(miplinear, A8XX_TEX_SAMP_0_MIPFILTER_LINEAR_NEAR) |
+         COND(cso->min_mip_filter == PIPE_TEX_MIPFILTER_NONE,
+            A8XX_TEX_SAMP_0_MIPMAPING_DIS) |
+         A8XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
+         A8XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
+         A8XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, &needs_border)) |
+         A8XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, &needs_border)) |
+         A8XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, &needs_border)) |
+         A8XX_TEX_SAMP_0_LOD_BIAS(CLAMP(cso->lod_bias, -16, MAX_LOD)) |
+         A8XX_TEX_SAMP_0_ANISO((enum a6xx_tex_aniso)aniso);
+
+      float min_lod, max_lod;
+
+      if (cso->unnormalized_coords) {
+         min_lod = max_lod = 0;
+      } else if (cso->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
+         min_lod = CLAMP(cso->min_lod, 0.0f, MAX_LOD);
+         max_lod = CLAMP(cso->max_lod, 0.0f, MAX_LOD);
+      } else {
+         min_lod = CLAMP(cso->min_lod, 0.0f, 0.25f);
+         max_lod = CLAMP(cso->max_lod, 0.0f, 0.25f);
+      }
+
+      so->descriptor[1] =
+         A8XX_TEX_SAMP_1_MAX_LOD(max_lod) |
+         A8XX_TEX_SAMP_1_MIN_LOD(min_lod) |
+         A8XX_TEX_SAMP_1_REDUCTION_MODE(reduction_mode(cso->reduction_mode)) |
+         COND(cso->compare_mode, A8XX_TEX_SAMP_1_COMPARE_FUNC((enum adreno_compare_func)cso->compare_func)) |
+         COND(chroma_linear, A8XX_TEX_SAMP_1_CHROMA_LINEAR) |
+         COND(!cso->seamless_cube_map, A8XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF) |
+         COND(cso->unnormalized_coords, A8XX_TEX_SAMP_1_UNNORM_COORDS);
+   }
 
    if (needs_border) {
       bool fast_border_color_enable = false;
@@ -321,23 +368,22 @@ fd6_sampler_state_create(struct pipe_context *pctx,
          fast_border_color = A6XX_BORDER_COLOR_1_1_1_1;
       }
 
-      if (fast_border_color_enable) {
-         so->texsamp2 = A6XX_TEX_SAMP_2_FASTBORDERCOLOR(fast_border_color) |
-                        A6XX_TEX_SAMP_2_FASTBORDERCOLOREN;
-      } else {
-         so->texsamp2 = A6XX_TEX_SAMP_2_BCOLOR(get_bcolor_offset(ctx, cso));
+      if (CHIP <= A7XX) {
+         if (fast_border_color_enable) {
+            so->descriptor[2] |= A6XX_TEX_SAMP_2_FASTBORDERCOLOR(fast_border_color) |
+                                 A6XX_TEX_SAMP_2_FASTBORDERCOLOREN;
+         } else {
+            so->descriptor[2] |= A6XX_TEX_SAMP_2_BCOLOR(get_bcolor_offset(ctx, cso));
+         }
+      } else if (CHIP >= A8XX) {
+         if (fast_border_color_enable) {
+            so->descriptor[2] |= A8XX_TEX_SAMP_2_FASTBORDERCOLOR(fast_border_color) |
+                                 A8XX_TEX_SAMP_2_FASTBORDERCOLOREN;
+         } else {
+            so->descriptor[2] |= A8XX_TEX_SAMP_2_BCOLOR(get_bcolor_offset(ctx, cso));
+         }
       }
    }
-
-   /* We don't know if the format is going to be YUV.  Setting CHROMA_LINEAR
-    * unconditionally seems fine.
-    */
-   if (cso->mag_img_filter == PIPE_TEX_FILTER_LINEAR &&
-       cso->min_img_filter == PIPE_TEX_FILTER_LINEAR)
-      so->texsamp2 |= A6XX_TEX_SAMP_2_CHROMA_LINEAR;
-
-   so->texsamp2 |=
-      A6XX_TEX_SAMP_2_REDUCTION_MODE(reduction_mode(cso->reduction_mode));
 
    return so;
 }
@@ -415,6 +461,7 @@ fd6_sampler_view_invalidate(struct fd_context *ctx,
    fd_screen_unlock(ctx->screen);
 }
 
+template <chip CHIP>
 static void
 fd6_sampler_view_update(struct fd_context *ctx,
                         struct fd6_pipe_sampler_view *so)
@@ -440,14 +487,9 @@ fd6_sampler_view_update(struct fd_context *ctx,
       format = rsc->b.b.format;
    }
 
-   so->ptr1 = rsc;
-
    if (cso->is_tex2d_from_buf) {
       struct fdl_view_args args = {
-         .chip = ctx->screen->gen,
-
-         /* Using relocs for addresses still */
-         .iova = 0,
+         .iova = fd_bo_get_iova(rsc->bo),
          .base_miplevel = 0,
          .level_count = 1,
          .base_array_layer = 0,
@@ -468,27 +510,23 @@ fd6_sampler_view_update(struct fd_context *ctx,
                                 &cso->u.tex2d_from_buf);
 
       struct fdl6_view view;
-      fdl6_view_init(&view, &layouts, &args,
-                     ctx->screen->info->a6xx.has_z24uint_s8uint);
+      fdl6_view_init<CHIP>(&view, &layouts, &args,
+                           ctx->screen->info->props.has_z24uint_s8uint);
 
       memcpy(so->descriptor, view.descriptor, sizeof(so->descriptor));
    } else if (cso->target == PIPE_BUFFER) {
       uint8_t swiz[4] = {cso->swizzle_r, cso->swizzle_g, cso->swizzle_b,
                          cso->swizzle_a};
 
-      /* Using relocs for addresses still */
-      uint64_t iova = cso->u.buf.offset;
+      uint64_t iova = cso->u.buf.offset + fd_bo_get_iova(rsc->bo);
 
       uint32_t size = fd_clamp_buffer_size(cso->format, cso->u.buf.size,
                                            A4XX_MAX_TEXEL_BUFFER_ELEMENTS_UINT);
 
-      fdl6_buffer_view_init(so->descriptor, cso->format, swiz, iova, size);
+      fdl6_buffer_view_init<CHIP>(so->descriptor, cso->format, swiz, iova, size);
    } else {
       struct fdl_view_args args = {
-         .chip = ctx->screen->gen,
-
-         /* Using relocs for addresses still */
-         .iova = 0,
+         .iova = fd_bo_get_iova(rsc->bo),
 
          .base_miplevel = fd_sampler_first_level(cso),
          .level_count =
@@ -521,25 +559,15 @@ fd6_sampler_view_update(struct fd_context *ctx,
          plane2 ? &plane2->layout : &dummy_layout,
       };
       struct fdl6_view view;
-      fdl6_view_init(&view, layouts, &args,
-                     ctx->screen->info->a6xx.has_z24uint_s8uint);
+      fdl6_view_init<CHIP>(&view, layouts, &args,
+                           ctx->screen->info->props.has_z24uint_s8uint);
       memcpy(so->descriptor, view.descriptor, sizeof(so->descriptor));
-
-      if (rsc->b.b.format == PIPE_FORMAT_R8_G8B8_420_UNORM) {
-         /* In case of biplanar R8_G8B8, the UBWC metadata address in
-          * dwords 7 and 8, is instead the pointer to the second plane.
-          */
-         so->ptr2 = plane1;
-      } else {
-         if (fd_resource_ubwc_enabled(rsc, fd_sampler_first_level(cso))) {
-            so->ptr2 = rsc;
-         }
-      }
    }
 }
 
+template <chip CHIP>
 static void
-fd6_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
+fd6_set_sampler_views(struct pipe_context *pctx, mesa_shader_stage shader,
                       unsigned start, unsigned nr,
                       unsigned unbind_num_trailing_slots,
                       struct pipe_sampler_view **views)
@@ -562,7 +590,7 @@ fd6_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
       struct fd_resource *rsc = fd_resource(so->base.texture);
 
       fd6_validate_format(ctx, rsc, so->base.format);
-      fd6_sampler_view_update(ctx, so);
+      fd6_sampler_view_update<CHIP>(ctx, so);
    }
 }
 
@@ -600,97 +628,56 @@ tex_key_equals(const void *_a, const void *_b)
    return memcmp(a, b, sizeof(struct fd6_texture_key)) == 0;
 }
 
+static enum a6xx_state_block
+stage2sb(mesa_shader_stage type)
+{
+   switch (type) {
+   case MESA_SHADER_VERTEX:     return SB6_VS_TEX;
+   case MESA_SHADER_TESS_CTRL:  return SB6_HS_TEX;
+   case MESA_SHADER_TESS_EVAL:  return SB6_DS_TEX;
+   case MESA_SHADER_GEOMETRY:   return SB6_GS_TEX;
+   case MESA_SHADER_FRAGMENT:   return SB6_FS_TEX;
+   case MESA_SHADER_COMPUTE:    return SB6_CS_TEX;
+   default:
+      UNREACHABLE("bad state block");
+   }
+}
+
 static struct fd_ringbuffer *
-build_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
+build_texture_state(struct fd_context *ctx, mesa_shader_stage type,
                     struct fd_texture_stateobj *tex)
    assert_dt
 {
-   struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe, 32 * 4);
-   unsigned opcode, tex_samp_reg, tex_const_reg, tex_count_reg;
-   enum a6xx_state_block sb;
-
-   switch (type) {
-   case PIPE_SHADER_VERTEX:
-      sb = SB6_VS_TEX;
-      opcode = CP_LOAD_STATE6_GEOM;
-      tex_samp_reg = REG_A6XX_SP_VS_SAMPLER_BASE;
-      tex_const_reg = REG_A6XX_SP_VS_TEXMEMOBJ_BASE;
-      tex_count_reg = REG_A6XX_SP_VS_TSIZE;
-      break;
-   case PIPE_SHADER_TESS_CTRL:
-      sb = SB6_HS_TEX;
-      opcode = CP_LOAD_STATE6_GEOM;
-      tex_samp_reg = REG_A6XX_SP_HS_SAMPLER_BASE;
-      tex_const_reg = REG_A6XX_SP_HS_TEXMEMOBJ_BASE;
-      tex_count_reg = REG_A6XX_SP_HS_TSIZE;
-      break;
-   case PIPE_SHADER_TESS_EVAL:
-      sb = SB6_DS_TEX;
-      opcode = CP_LOAD_STATE6_GEOM;
-      tex_samp_reg = REG_A6XX_SP_DS_SAMPLER_BASE;
-      tex_const_reg = REG_A6XX_SP_DS_TEXMEMOBJ_BASE;
-      tex_count_reg = REG_A6XX_SP_DS_TSIZE;
-      break;
-   case PIPE_SHADER_GEOMETRY:
-      sb = SB6_GS_TEX;
-      opcode = CP_LOAD_STATE6_GEOM;
-      tex_samp_reg = REG_A6XX_SP_GS_SAMPLER_BASE;
-      tex_const_reg = REG_A6XX_SP_GS_TEXMEMOBJ_BASE;
-      tex_count_reg = REG_A6XX_SP_GS_TSIZE;
-      break;
-   case PIPE_SHADER_FRAGMENT:
-      sb = SB6_FS_TEX;
-      opcode = CP_LOAD_STATE6_FRAG;
-      tex_samp_reg = REG_A6XX_SP_PS_SAMPLER_BASE;
-      tex_const_reg = REG_A6XX_SP_PS_TEXMEMOBJ_BASE;
-      tex_count_reg = REG_A6XX_SP_PS_TSIZE;
-      break;
-   case PIPE_SHADER_COMPUTE:
-      sb = SB6_CS_TEX;
-      opcode = CP_LOAD_STATE6_FRAG;
-      tex_samp_reg = REG_A6XX_SP_CS_SAMPLER_BASE;
-      tex_const_reg = REG_A6XX_SP_CS_TEXMEMOBJ_BASE;
-      tex_count_reg = REG_A6XX_SP_CS_TSIZE;
-      break;
-   default:
-      unreachable("bad state block");
-   }
+   struct fd_bo *tex_desc = NULL, *samp_desc = NULL;
+   fd_cs cs(ctx->pipe, 32 * 4);
 
    if (tex->num_samplers > 0) {
-      struct fd_ringbuffer *state =
-         fd_ringbuffer_new_object(ctx->pipe, tex->num_samplers * 4 * 4);
+      samp_desc = fd_bo_new(ctx->dev, tex->num_samplers * 4 * 4,
+                            FD_BO_GPUREADONLY | FD_BO_HINT_COMMAND,
+                            "samp desc");
+      uint32_t *buf = (uint32_t *)fd_bo_map(samp_desc);
+      fd_bo_mark_for_dump(samp_desc);
+
       for (unsigned i = 0; i < tex->num_samplers; i++) {
          static const struct fd6_sampler_stateobj dummy_sampler = {};
          const struct fd6_sampler_stateobj *sampler =
             tex->samplers[i] ? fd6_sampler_stateobj(tex->samplers[i])
                              : &dummy_sampler;
-         OUT_RING(state, sampler->texsamp0);
-         OUT_RING(state, sampler->texsamp1);
-         OUT_RING(state, sampler->texsamp2);
-         OUT_RING(state, sampler->texsamp3);
+         memcpy(buf, sampler->descriptor, 4 * 4);
+         buf += 4;
       }
 
-      /* output sampler state: */
-      OUT_PKT7(ring, opcode, 3);
-      OUT_RING(ring, CP_LOAD_STATE6_0_DST_OFF(0) |
-                        CP_LOAD_STATE6_0_STATE_TYPE(ST6_SHADER) |
-                        CP_LOAD_STATE6_0_STATE_SRC(SS6_INDIRECT) |
-                        CP_LOAD_STATE6_0_STATE_BLOCK(sb) |
-                        CP_LOAD_STATE6_0_NUM_UNIT(tex->num_samplers));
-      OUT_RB(ring, state); /* SRC_ADDR_LO/HI */
-
-      OUT_PKT4(ring, tex_samp_reg, 2);
-      OUT_RB(ring, state); /* SRC_ADDR_LO/HI */
-
-      fd_ringbuffer_del(state);
+      cs.attach_bo(samp_desc);
    }
 
-   unsigned num_textures = tex->num_textures;
+   if (tex->num_textures > 0) {
+      tex_desc = fd_bo_new(ctx->dev, tex->num_textures * 16 * 4,
+                           FD_BO_GPUREADONLY | FD_BO_HINT_COMMAND,
+                           "tex desc");
+      uint32_t *buf = (uint32_t *)fd_bo_map(tex_desc);
+      fd_bo_mark_for_dump(tex_desc);
 
-   if (num_textures > 0) {
-      struct fd_ringbuffer *state =
-         fd_ringbuffer_new_object(ctx->pipe, num_textures * 16 * 4);
-      for (unsigned i = 0; i < num_textures; i++) {
+      for (unsigned i = 0; i < tex->num_textures; i++) {
          const struct fd6_pipe_sampler_view *view;
 
          if (tex->textures[i]) {
@@ -703,56 +690,77 @@ build_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
             view = &dummy_view;
          }
 
-         OUT_RING(state, view->descriptor[0]);
-         OUT_RING(state, view->descriptor[1]);
-         OUT_RING(state, view->descriptor[2]);
-         OUT_RING(state, view->descriptor[3]);
-
-         if (view->ptr1) {
-            OUT_RELOC(state, view->ptr1->bo, view->descriptor[4],
-                      (uint64_t)view->descriptor[5] << 32, 0);
-         } else {
-            OUT_RING(state, view->descriptor[4]);
-            OUT_RING(state, view->descriptor[5]);
-         }
-
-         OUT_RING(state, view->descriptor[6]);
-
-         if (view->ptr2) {
-            OUT_RELOC(state, view->ptr2->bo, view->descriptor[7], 0, 0);
-         } else {
-            OUT_RING(state, view->descriptor[7]);
-            OUT_RING(state, view->descriptor[8]);
-         }
-
-         OUT_RING(state, view->descriptor[9]);
-         OUT_RING(state, view->descriptor[10]);
-         OUT_RING(state, view->descriptor[11]);
-         OUT_RING(state, view->descriptor[12]);
-         OUT_RING(state, view->descriptor[13]);
-         OUT_RING(state, view->descriptor[14]);
-         OUT_RING(state, view->descriptor[15]);
+         memcpy(buf, view->descriptor, 16 * 4);
+         buf += 16;
       }
 
-      /* emit texture state: */
-      OUT_PKT7(ring, opcode, 3);
-      OUT_RING(ring, CP_LOAD_STATE6_0_DST_OFF(0) |
-                        CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
-                        CP_LOAD_STATE6_0_STATE_SRC(SS6_INDIRECT) |
-                        CP_LOAD_STATE6_0_STATE_BLOCK(sb) |
-                        CP_LOAD_STATE6_0_NUM_UNIT(num_textures));
-      OUT_RB(ring, state); /* SRC_ADDR_LO/HI */
-
-      OUT_PKT4(ring, tex_const_reg, 2);
-      OUT_RB(ring, state); /* SRC_ADDR_LO/HI */
-
-      fd_ringbuffer_del(state);
+      cs.attach_bo(tex_desc);
    }
 
-   OUT_PKT4(ring, tex_count_reg, 1);
-   OUT_RING(ring, num_textures);
+   with_crb (cs, 5) {
+      switch (type) {
+      case MESA_SHADER_VERTEX:
+         crb.add(A6XX_SP_VS_SAMPLER_BASE(samp_desc));
+         crb.add(A6XX_SP_VS_TEXMEMOBJ_BASE(tex_desc));
+         crb.add(A6XX_SP_VS_TSIZE(tex->num_textures));
+         break;
+      case MESA_SHADER_TESS_CTRL:
+         crb.add(A6XX_SP_HS_SAMPLER_BASE(samp_desc));
+         crb.add(A6XX_SP_HS_TEXMEMOBJ_BASE(tex_desc));
+         crb.add(A6XX_SP_HS_TSIZE(tex->num_textures));
+         break;
+      case MESA_SHADER_TESS_EVAL:
+         crb.add(A6XX_SP_DS_SAMPLER_BASE(samp_desc));
+         crb.add(A6XX_SP_DS_TEXMEMOBJ_BASE(tex_desc));
+         crb.add(A6XX_SP_DS_TSIZE(tex->num_textures));
+         break;
+      case MESA_SHADER_GEOMETRY:
+         crb.add(A6XX_SP_GS_SAMPLER_BASE(samp_desc));
+         crb.add(A6XX_SP_GS_TEXMEMOBJ_BASE(tex_desc));
+         crb.add(A6XX_SP_GS_TSIZE(tex->num_textures));
+         break;
+      case MESA_SHADER_FRAGMENT:
+         crb.add(A6XX_SP_PS_SAMPLER_BASE(samp_desc));
+         crb.add(A6XX_SP_PS_TEXMEMOBJ_BASE(tex_desc));
+         crb.add(A6XX_SP_PS_TSIZE(tex->num_textures));
+         break;
+      case MESA_SHADER_COMPUTE:
+         crb.add(A6XX_SP_CS_SAMPLER_BASE(samp_desc));
+         crb.add(A6XX_SP_CS_TEXMEMOBJ_BASE(tex_desc));
+         crb.add(A6XX_SP_CS_TSIZE(tex->num_textures));
+         break;
+      default:
+         UNREACHABLE("bad state block");
+      }
+   }
 
-   return ring;
+   if (samp_desc) {
+      fd_pkt7(cs, fd6_stage2opcode(type), 3)
+         .add(CP_LOAD_STATE6_0(
+            .state_type = ST6_SHADER,
+            .state_src = SS6_INDIRECT,
+            .state_block = stage2sb(type),
+            .num_unit = tex->num_samplers,
+         ))
+         .add(CP_LOAD_STATE6_EXT_SRC_ADDR(samp_desc));
+
+         fd_bo_del(samp_desc);
+   }
+
+   if (tex_desc) {
+      fd_pkt7(cs, fd6_stage2opcode(type), 3)
+         .add(CP_LOAD_STATE6_0(
+            .state_type = ST6_CONSTANTS,
+            .state_src = SS6_INDIRECT,
+            .state_block = stage2sb(type),
+            .num_unit = tex->num_textures,
+         ))
+         .add(CP_LOAD_STATE6_EXT_SRC_ADDR(tex_desc));
+
+         fd_bo_del(tex_desc);
+   }
+
+   return cs;
 }
 
 /**
@@ -762,6 +770,7 @@ build_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
  * state.  And furthermore, this avoids cross-ctx (thread) sharing
  * of fd_ringbuffer's, avoiding their need for atomic refcnts.
  */
+template <chip CHIP>
 static void
 handle_invalidates(struct fd_context *ctx)
    assert_dt
@@ -789,15 +798,16 @@ handle_invalidates(struct fd_context *ctx)
          if (!so)
             continue;
 
-         fd6_sampler_view_update(ctx, so);
+         fd6_sampler_view_update<CHIP>(ctx, so);
       }
    }
 
    fd6_ctx->tex_cache_needs_invalidate = false;
 }
 
+template <chip CHIP>
 struct fd6_texture_state *
-fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type)
+fd6_texture_state(struct fd_context *ctx, mesa_shader_stage type)
 {
    struct fd_texture_stateobj *tex = &ctx->tex[type];
    struct fd6_context *fd6_ctx = fd6_context(ctx);
@@ -805,7 +815,7 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type)
    struct fd6_texture_key key;
 
    if (unlikely(fd6_ctx->tex_cache_needs_invalidate))
-      handle_invalidates(ctx);
+      handle_invalidates<CHIP>(ctx);
 
    memset(&key, 0, sizeof(key));
 
@@ -874,6 +884,7 @@ out_unlock:
    fd_screen_unlock(ctx->screen);
    return state;
 }
+FD_GENX(fd6_texture_state);
 
 static void
 fd6_texture_state_destroy(struct fd6_texture_state *state)
@@ -908,19 +919,20 @@ fd6_rebind_resource(struct fd_context *ctx, struct fd_resource *rsc) assert_dt
    }
 }
 
+template <chip CHIP>
 void
 fd6_texture_init(struct pipe_context *pctx) disable_thread_safety_analysis
 {
    struct fd_context *ctx = fd_context(pctx);
    struct fd6_context *fd6_ctx = fd6_context(ctx);
 
-   pctx->create_sampler_state = fd6_sampler_state_create;
+   pctx->create_sampler_state = fd6_sampler_state_create<CHIP>;
    pctx->delete_sampler_state = fd6_sampler_state_delete;
    pctx->bind_sampler_states = fd_sampler_states_bind;
 
    pctx->create_sampler_view = fd6_sampler_view_create;
    pctx->sampler_view_destroy = fd6_sampler_view_destroy;
-   pctx->set_sampler_views = fd6_set_sampler_views;
+   pctx->set_sampler_views = fd6_set_sampler_views<CHIP>;
 
    ctx->rebind_resource = fd6_rebind_resource;
 
@@ -935,6 +947,7 @@ fd6_texture_init(struct pipe_context *pctx) disable_thread_safety_analysis
    fd6_ctx->tex_cache = _mesa_hash_table_create(NULL, tex_key_hash, tex_key_equals);
    util_idalloc_init(&fd6_ctx->tex_ids, 256);
 }
+FD_GENX(fd6_texture_init);
 
 void
 fd6_texture_fini(struct pipe_context *pctx)

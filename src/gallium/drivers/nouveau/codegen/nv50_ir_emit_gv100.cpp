@@ -974,7 +974,7 @@ gv100_interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data
    case NV50_IR_INTERP_DEFAULT : sample = 0; break;
    case NV50_IR_INTERP_CENTROID: sample = 1; break;
    case NV50_IR_INTERP_OFFSET  : sample = 2; break;
-   default: unreachable("invalid sample mode");
+   default: UNREACHABLE("invalid sample mode");
    }
 
    int interp;
@@ -983,7 +983,7 @@ gv100_interpApply(const FixupEntry *entry, uint32_t *code, const FixupData& data
    case NV50_IR_INTERP_PERSPECTIVE: interp = 0; break;
    case NV50_IR_INTERP_FLAT       : interp = 1; break;
    case NV50_IR_INTERP_SC         : interp = 2; break;
-   default: unreachable("invalid ipa mode");
+   default: UNREACHABLE("invalid ipa mode");
    }
 
    code[loc + 2] &= ~(0xf << 12);

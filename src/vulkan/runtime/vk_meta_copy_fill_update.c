@@ -83,9 +83,9 @@ struct vk_meta_copy_image_key {
    /* One source per-aspect being copied. */
    struct {
       struct vk_meta_copy_image_view view;
+      VkImageAspectFlagBits aspects;
    } src, dst;
 
-   VkImageAspectFlagBits aspects;
    VkSampleCountFlagBits samples;
 
    uint32_t wg_size[3];
@@ -994,8 +994,8 @@ build_image_to_buffer_shader(const struct vk_meta_device *meta,
     * that's fine because we pass a write_mask to store_global.
     */
    assert(texel->num_components >= comp_count);
-   nir_store_global(b, copy_img_buf_addr(b, buf_pfmt, copy_id),
-                    comp_sz / 8, texel, nir_component_mask(comp_count));
+   nir_store_global(b, texel, copy_img_buf_addr(b, buf_pfmt, copy_id),
+                    .write_mask = nir_component_mask(comp_count));
 
    nir_pop_if(b, NULL);
 
@@ -1063,7 +1063,7 @@ build_buffer_to_image_fs(const struct vk_meta_device *meta,
 
    coords = nir_isub(b, coords, img_offs);
 
-   nir_def *texel = nir_build_load_global(b,
+   nir_def *texel = nir_load_global(b,
       comp_count, comp_sz, copy_img_buf_addr(b, buf_pfmt, coords),
       .align_mul = 1 << (ffs(blk_sz) - 1));
 
@@ -1161,7 +1161,7 @@ build_buffer_to_image_cs(const struct vk_meta_device *meta,
    unsigned bit_sz = blk_sz & 1 ? 8 : blk_sz & 2 ? 16 : 32;
    unsigned comp_count = blk_sz * 8 / bit_sz;
 
-   nir_def *texel = nir_build_load_global(b,
+   nir_def *texel = nir_load_global(b,
          comp_count, bit_sz, copy_img_buf_addr(b, buf_pfmt, copy_id),
          .align_mul = 1 << (ffs(blk_sz) - 1));
 
@@ -1337,7 +1337,7 @@ img_copy_view_info(VkImageViewType view_type, VkImageAspectFlags aspects,
          view.plane.format = img_props->plane[2].view_format;
          break;
       default:
-         unreachable("invalid ycbcr aspect");
+         UNREACHABLE("invalid ycbcr aspect");
       }
 
       assert(format_is_supported(view.color.format));
@@ -1716,23 +1716,25 @@ build_copy_image_fs(const struct vk_meta_device *meta, const void *key_data)
    nir_variable *color_var = NULL;
    uint32_t tex_binding = 0;
 
-   u_foreach_bit(a, key->aspects) {
-      VkImageAspectFlagBits aspect = 1 << a;
+   u_foreach_bit(a, key->src.aspects) {
+      VkImageAspectFlags src_aspect = 1 << a;
+      VkImageAspectFlags dst_aspect =
+         key->dst.aspects == key->src.aspects ? src_aspect : key->dst.aspects;
       VkFormat src_fmt =
-         copy_img_view_format_for_aspect(&key->src.view, aspect);
+         copy_img_view_format_for_aspect(&key->src.view, src_aspect);
       VkFormat dst_fmt =
-         copy_img_view_format_for_aspect(&key->dst.view, aspect);
+         copy_img_view_format_for_aspect(&key->dst.view, dst_aspect);
       nir_deref_instr *tex =
-         tex_deref(b, &key->src.view, aspect, key->samples, tex_binding++);
+         tex_deref(b, &key->src.view, src_aspect, key->samples, tex_binding++);
       nir_def *texel = read_texel(b, tex, src_coords, sample_id);
 
       if (!color_var || !depth_stencil_interleaved(&key->dst.view)) {
          color_var =
-            frag_var(b, &key->dst.view, aspect, color_var != NULL ? 1 : 0);
+            frag_var(b, &key->dst.view, dst_aspect, color_var != NULL ? 1 : 0);
       }
 
       texel = convert_texel(b, src_fmt, dst_fmt, texel);
-      write_frag(b, &key->dst.view, aspect, color_var, texel);
+      write_frag(b, &key->dst.view, dst_aspect, color_var, texel);
    }
 
    return b->shader;
@@ -1759,7 +1761,7 @@ get_copy_image_gfx_pipeline(struct vk_device *device,
 
    return get_gfx_copy_pipeline(
       device, meta, *layout_out, key->samples, build_copy_image_fs,
-      key->aspects, &key->dst.view, key, sizeof(*key), pipeline_out);
+      key->dst.aspects, &key->dst.view, key, sizeof(*key), pipeline_out);
 }
 
 static nir_shader *
@@ -1808,16 +1810,18 @@ build_copy_image_cs(const struct vk_meta_device *meta, const void *key_data)
    dst_coords = nir_pad_vector_imm_int(b, dst_coords, 0, 4);
 
    uint32_t binding = 0;
-   u_foreach_bit(a, key->aspects) {
-      VkImageAspectFlagBits aspect = 1 << a;
+   u_foreach_bit(a, key->src.aspects) {
+      VkImageAspectFlagBits src_aspect = 1 << a;
+      VkImageAspectFlags dst_aspect =
+         key->dst.aspects == key->src.aspects ? src_aspect : key->dst.aspects;
       VkFormat src_fmt =
-         copy_img_view_format_for_aspect(&key->src.view, aspect);
+         copy_img_view_format_for_aspect(&key->src.view, src_aspect);
       VkFormat dst_fmt =
-         copy_img_view_format_for_aspect(&key->dst.view, aspect);
+         copy_img_view_format_for_aspect(&key->dst.view, dst_aspect);
       nir_deref_instr *tex =
-         tex_deref(b, &key->src.view, aspect, key->samples, binding);
+         tex_deref(b, &key->src.view, src_aspect, key->samples, binding);
       nir_deref_instr *img =
-         img_deref(b, &key->dst.view, aspect, key->samples, binding + 1);
+         img_deref(b, &key->dst.view, dst_aspect, key->samples, binding + 1);
 
       for (uint32_t s = 0; s < key->samples; s++) {
          nir_def *sample_id =
@@ -1825,7 +1829,7 @@ build_copy_image_cs(const struct vk_meta_device *meta, const void *key_data)
          nir_def *texel = read_texel(b, tex, src_coords, sample_id);
 
          texel = convert_texel(b, src_fmt, dst_fmt, texel);
-         write_img(b, &key->dst.view, aspect, key->samples, img, dst_coords,
+         write_img(b, &key->dst.view, dst_aspect, key->samples, img, dst_coords,
                    sample_id, texel);
       }
 
@@ -1874,14 +1878,14 @@ copy_image_prepare_gfx_desc_set(
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
-   VkImageAspectFlags aspects = key->aspects;
+   VkImageAspectFlags src_aspects = key->src.aspects;
    VkImageView iviews[] = {
       VK_NULL_HANDLE,
       VK_NULL_HANDLE,
    };
    uint32_t desc_count = 0;
 
-   u_foreach_bit(a, aspects) {
+   u_foreach_bit(a, src_aspects) {
       assert(desc_count < ARRAY_SIZE(iviews));
 
       VkResult result = copy_create_src_image_view(
@@ -1912,7 +1916,7 @@ copy_image_prepare_compute_desc_set(
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
-   VkImageAspectFlags aspects = key->aspects;
+   VkImageAspectFlags src_aspects = key->src.aspects;
    VkImageView iviews[] = {
       VK_NULL_HANDLE,
       VK_NULL_HANDLE,
@@ -1921,23 +1925,21 @@ copy_image_prepare_compute_desc_set(
    };
    unsigned desc_count = 0;
 
-   u_foreach_bit(a, aspects) {
-      VkImageAspectFlagBits aspect = 1 << a;
+   u_foreach_bit(a, src_aspects) {
+      VkImageAspectFlagBits src_aspect = 1 << a;
+      VkImageAspectFlags dst_aspect =
+         key->dst.aspects == key->src.aspects ? src_aspect : key->dst.aspects;
 
       assert(desc_count + 2 <= ARRAY_SIZE(iviews));
 
       VkResult result = copy_create_src_image_view(
-         cmd, meta, src_img, &key->src.view, aspect, &region->srcSubresource,
+         cmd, meta, src_img, &key->src.view, src_aspect, &region->srcSubresource,
          &iviews[desc_count++]);
       if (unlikely(result != VK_SUCCESS))
          return result;
 
-      if (region->srcSubresource.aspectMask !=
-          region->dstSubresource.aspectMask)
-         aspect = region->dstSubresource.aspectMask;
-
       result = copy_create_dst_image_view(
-         cmd, meta, dst_img, &key->dst.view, aspect, &region->dstOffset,
+         cmd, meta, dst_img, &key->dst.view, dst_aspect, &region->dstOffset,
          &region->extent, &region->dstSubresource,
          VK_PIPELINE_BIND_POINT_COMPUTE, &iviews[desc_count++]);
       if (unlikely(result != VK_SUCCESS))
@@ -2075,17 +2077,36 @@ aspect_masks_valid(struct vk_image *src_img, struct vk_image *dst_img,
    const struct vk_format_ycbcr_info *dst_ycbcr_info =
       vk_format_get_ycbcr_info(dst_img->format);
 
-   /* From the Vulkan 1.4.303 spec, vkCmdCopyImage:
-    *
-    *    VUID-vkCmdCopyImage-srcImage-01551
-    *
-    *    "If neither srcImage nor dstImage has a multi-planar image format
-    *    then for each element of pRegions, srcSubresource.aspectMask and
-    *    dstSubresource.aspectMask must match"
-    */
-   if (!src_ycbcr_info && !dst_ycbcr_info)
-      return region->srcSubresource.aspectMask ==
-         region->dstSubresource.aspectMask;
+   if (!src_ycbcr_info && !dst_ycbcr_info) {
+      ASSERTED const VkImageAspectFlags valid_aspects =
+         VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT |
+         VK_IMAGE_ASPECT_STENCIL_BIT;
+
+      assert(!(region->srcSubresource.aspectMask & ~valid_aspects) &&
+             !(region->dstSubresource.aspectMask & ~valid_aspects));
+
+      /* From the Vulkan 1.4.303 spec, vkCmdCopyImage:
+       *
+       *    VUID-vkCmdCopyImage-srcSubresource-10214
+       *
+       *    "If srcSubresource.aspectMask is VK_IMAGE_ASPECT_COLOR_BIT, then
+       *    dstSubresource.aspectMask must not contain both
+       *    VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT"
+       *
+       *    VUID-vkCmdCopyImage-dstSubresource-10215
+       *
+       *    "If dstSubresource.aspectMask is VK_IMAGE_ASPECT_COLOR_BIT, then
+       *    srSubresource.aspectMask must not contain both
+       *    VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT"
+       */
+      if ((region->srcSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT ||
+           region->dstSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT) &&
+          (util_bitcount(region->srcSubresource.aspectMask) != 1 ||
+           util_bitcount(region->dstSubresource.aspectMask) != 1))
+         return false;
+
+      return true;
+   }
 
    /*    VUID-vkCmdCopyImage-srcImage-08713
     *
@@ -2156,10 +2177,11 @@ copy_image_region_gfx(struct vk_command_buffer *cmd,
    struct vk_meta_copy_image_key key = {
       .key_type = VK_META_OBJECT_KEY_COPY_IMAGE_GFX,
       .samples = src_img->samples,
-      .aspects = region->srcSubresource.aspectMask,
+      .src.aspects = region->srcSubresource.aspectMask,
       .src.view = img_copy_view_info(vk_image_sampled_view_type(src_img),
                                      region->srcSubresource.aspectMask, src_img,
                                      src_props),
+      .dst.aspects = region->dstSubresource.aspectMask,
       .dst.view = img_copy_view_info(dst_view_type,
                                      region->dstSubresource.aspectMask, dst_img,
                                      dst_props),
@@ -2215,10 +2237,11 @@ copy_image_region_compute(struct vk_command_buffer *cmd,
    struct vk_meta_copy_image_key key = {
       .key_type = VK_META_OBJECT_KEY_COPY_IMAGE_CS,
       .samples = src_img->samples,
-      .aspects = region->srcSubresource.aspectMask,
+      .src.aspects = region->srcSubresource.aspectMask,
       .src.view = img_copy_view_info(vk_image_sampled_view_type(src_img),
                                      region->srcSubresource.aspectMask, src_img,
                                      src_props),
+      .dst.aspects = region->dstSubresource.aspectMask,
       .dst.view = img_copy_view_info(
          dst_view_type, region->dstSubresource.aspectMask, dst_img, dst_props),
    };
@@ -2346,11 +2369,11 @@ build_copy_buffer_shader(const struct vk_meta_device *meta,
 
    nir_def *src_addr = load_info(b, struct vk_meta_copy_buffer_info, src_addr);
    nir_def *dst_addr = nir_load_push_constant(b, 1, 64, nir_imm_int(b, 8));
-   nir_def *data = nir_build_load_global(b, chunk_comp_count, chunk_bit_size,
+   nir_def *data = nir_load_global(b, chunk_comp_count, chunk_bit_size,
                                          nir_iadd(b, src_addr, offset),
                                          .align_mul = chunk_bit_size / 8);
 
-   nir_build_store_global(b, data, nir_iadd(b, dst_addr, offset),
+   nir_store_global(b, data, nir_iadd(b, dst_addr, offset),
                           .align_mul = key->chunk_size);
 
    nir_pop_if(b, NULL);
@@ -2529,7 +2552,7 @@ build_fill_buffer_shader(const struct vk_meta_device *meta,
    nir_def *buf_addr =
       load_info(b, struct vk_meta_fill_buffer_info, buf_addr);
 
-   nir_build_store_global(b, data, nir_iadd(b, buf_addr, offset),
+   nir_store_global(b, data, nir_iadd(b, buf_addr, offset),
                           .align_mul = 4);
 
    nir_pop_if(b, NULL);

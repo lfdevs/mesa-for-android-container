@@ -388,7 +388,7 @@ execution_type_for_type(enum elk_reg_type type)
    case ELK_REGISTER_TYPE_UV:
       return ELK_REGISTER_TYPE_W;
    }
-   unreachable("not reached");
+   UNREACHABLE("not reached");
 }
 
 /**
@@ -452,7 +452,7 @@ execution_type(const struct elk_isa_info *isa, const elk_inst *inst)
        src1_exec_type == ELK_REGISTER_TYPE_DF)
       return ELK_REGISTER_TYPE_DF;
 
-   unreachable("not reached");
+   UNREACHABLE("not reached");
 }
 
 /**
@@ -623,7 +623,7 @@ general_restrictions_based_on_operand_types(const struct elk_isa_info *isa,
          switch (s) {
          case 0: src_type = elk_inst_src0_type(devinfo, inst); break;
          case 1: src_type = elk_inst_src1_type(devinfo, inst); break;
-         default: unreachable("invalid src");
+         default: UNREACHABLE("invalid src");
          }
       }
 

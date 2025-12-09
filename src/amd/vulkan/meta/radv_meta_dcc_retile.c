@@ -110,6 +110,7 @@ radv_retile_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image)
 {
    struct radv_meta_saved_state saved_state;
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   struct radv_cmd_stream *cs = cmd_buffer->cs;
    VkPipelineLayout layout;
    VkPipeline pipeline;
    VkResult result;
@@ -135,7 +136,7 @@ radv_retile_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image)
 
    const uint64_t va = image->bindings[0].addr;
 
-   radv_cs_add_buffer(device->ws, cmd_buffer->cs, image->bindings[0].bo);
+   radv_cs_add_buffer(device->ws, cs->b, image->bindings[0].bo);
 
    radv_meta_bind_descriptors(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 2,
                               (VkDescriptorGetInfoEXT[]){

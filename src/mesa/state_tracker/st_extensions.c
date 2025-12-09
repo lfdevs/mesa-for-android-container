@@ -100,6 +100,12 @@ static unsigned mesa_to_gl_stages(unsigned stages)
    if (stages & BITFIELD_BIT(MESA_SHADER_COMPUTE))
       ret |= GL_COMPUTE_SHADER_BIT;
 
+   if (stages & BITFIELD_BIT(MESA_SHADER_TASK))
+      ret |= GL_TASK_SHADER_BIT_EXT;
+
+   if (stages & BITFIELD_BIT(MESA_SHADER_MESH))
+      ret |= GL_MESH_SHADER_BIT_EXT;
+
    return ret;
 }
 
@@ -111,14 +117,12 @@ void st_init_limits(struct pipe_screen *screen,
                     struct gl_constants *c, struct gl_extensions *extensions,
                     gl_api api)
 {
-   unsigned sh;
+   mesa_shader_stage sh;
    bool can_ubo = true;
    int temp;
 
    c->MaxTextureSize = screen->caps.max_texture_2d_size;
    c->MaxTextureSize = MIN2(c->MaxTextureSize, 1 << (MAX_TEXTURE_LEVELS - 1));
-   c->MaxTextureMbytes = MAX2(c->MaxTextureMbytes,
-                              screen->caps.max_texture_mb);
 
    c->Max3DTextureLevels
       = _min(screen->caps.max_texture_3d_levels,
@@ -199,14 +203,10 @@ void st_init_limits(struct pipe_screen *screen,
 
    c->PointSizeFixed = screen->caps.point_size_fixed != PIPE_POINT_SIZE_LOWER_ALWAYS;
 
-   for (sh = 0; sh < PIPE_SHADER_TYPES; ++sh) {
-      const gl_shader_stage stage = tgsi_processor_to_shader_stage(sh);
-      struct gl_shader_compiler_options *options =
-         &c->ShaderCompilerOptions[stage];
-      struct gl_program_constants *pc = &c->Program[stage];
+   for (sh = 0; sh < MESA_SHADER_MESH_STAGES; ++sh) {
+      struct gl_program_constants *pc = &c->Program[sh];
 
-      if (!screen->nir_options[stage] ||
-          (sh == PIPE_SHADER_COMPUTE && !screen->caps.compute))
+      if (!screen->shader_caps[sh].max_instructions)
          continue;
 
       pc->MaxTextureImageUnits =
@@ -230,16 +230,16 @@ void st_init_limits(struct pipe_screen *screen,
          screen->shader_caps[sh].max_const_buffer0_size / 4;
 
       /* reserve space in the default-uniform for lowered state */
-      if (sh == PIPE_SHADER_VERTEX ||
-          sh == PIPE_SHADER_TESS_EVAL ||
-          sh == PIPE_SHADER_GEOMETRY) {
+      if (sh == MESA_SHADER_VERTEX ||
+          sh == MESA_SHADER_TESS_EVAL ||
+          sh == MESA_SHADER_GEOMETRY) {
 
          if (!screen->caps.clip_planes)
             pc->MaxUniformComponents -= 4 * MAX_CLIP_PLANES;
 
          if (!screen->caps.point_size_fixed)
             pc->MaxUniformComponents -= 4;
-      } else if (sh == PIPE_SHADER_FRAGMENT) {
+      } else if (sh == MESA_SHADER_FRAGMENT) {
          if (!screen->caps.alpha_test)
             pc->MaxUniformComponents -= 4;
       }
@@ -320,53 +320,23 @@ void st_init_limits(struct pipe_screen *screen,
          pc->MediumFloat = pc->LowFloat;
       }
 
-      /* TODO: make these more fine-grained if anyone needs it */
-      options->MaxIfDepth =
-         screen->shader_caps[sh].max_control_flow_depth;
-
-      options->EmitNoMainReturn =
-         !screen->shader_caps[sh].subroutines;
-
-      options->EmitNoCont =
-         !screen->shader_caps[sh].cont_supported;
-
-      options->EmitNoIndirectTemp =
-         !screen->shader_caps[sh].indirect_temp_addr;
-      options->EmitNoIndirectUniform =
-         !screen->shader_caps[sh].indirect_const_addr;
-
       if (pc->MaxInstructions &&
-          (options->EmitNoIndirectUniform || pc->MaxUniformBlocks < 12)) {
+          (!screen->shader_caps[sh].indirect_const_addr ||
+           pc->MaxUniformBlocks < 12)) {
          can_ubo = false;
       }
-
-      if (sh == PIPE_SHADER_VERTEX || sh == PIPE_SHADER_GEOMETRY) {
-         if (screen->caps.viewport_transform_lowered)
-            options->LowerBuiltinVariablesXfb |= VARYING_BIT_POS;
-         if (screen->caps.psiz_clamped)
-            options->LowerBuiltinVariablesXfb |= VARYING_BIT_PSIZ;
-      }
-
-      options->LowerPrecisionFloat16 =
-         screen->shader_caps[sh].fp16;
-      options->LowerPrecisionDerivatives =
-         screen->shader_caps[sh].fp16_derivatives;
-      options->LowerPrecisionInt16 =
-         screen->shader_caps[sh].int16;
-      options->LowerPrecisionConstants =
-         screen->shader_caps[sh].glsl_16bit_consts;
-      options->LowerPrecisionFloat16Uniforms =
-         screen->shader_caps[sh].fp16_const_buffers;
-      options->LowerPrecision16BitLoadDst =
-         screen->shader_caps[sh].glsl_16bit_load_dst;
    }
 
-   c->MaxUserAssignableUniformLocations =
+   c->MaxUserAssignableUniformLocations = MAX3(
       c->Program[MESA_SHADER_VERTEX].MaxUniformComponents +
       c->Program[MESA_SHADER_TESS_CTRL].MaxUniformComponents +
       c->Program[MESA_SHADER_TESS_EVAL].MaxUniformComponents +
       c->Program[MESA_SHADER_GEOMETRY].MaxUniformComponents +
-      c->Program[MESA_SHADER_FRAGMENT].MaxUniformComponents;
+      c->Program[MESA_SHADER_FRAGMENT].MaxUniformComponents,
+      c->Program[MESA_SHADER_TASK].MaxUniformComponents +
+      c->Program[MESA_SHADER_MESH].MaxUniformComponents +
+      c->Program[MESA_SHADER_FRAGMENT].MaxUniformComponents,
+      c->Program[MESA_SHADER_COMPUTE].MaxUniformComponents);
 
    c->GLSLLowerConstArrays =
       screen->caps.prefer_imm_arrays_as_constbuf;
@@ -374,14 +344,41 @@ void st_init_limits(struct pipe_screen *screen,
       screen->caps.glsl_tess_levels_as_inputs;
    c->PrimitiveRestartForPatches = false;
 
+   unsigned vertex_pipeline_max_combined_texture_image_units =
+      c->Program[MESA_SHADER_VERTEX].MaxTextureImageUnits +
+      c->Program[MESA_SHADER_TESS_CTRL].MaxTextureImageUnits +
+      c->Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits +
+      c->Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits +
+      c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits;
+   unsigned compute_pipeline_max_combined_texture_image_units =
+      c->Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits;
+
+   /* GLES spec added all texture image units from all shader stages,
+    * so the minimum value of GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS is
+    * 96 (16 per shader), while GL spec maximum different pipelines
+    * (minimum value is 80).
+    *
+    * There is dEQP test to check this value >=96:
+    *
+    *   dEQP-GLES31.functional.state_query.integer.max_combined_texture_image_units*
+    *
+    * It will fail for driver with max 16 per shader texture image
+    * units (i.e. freedreno) if we use the GL way for GLES.
+    */
+   c->MaxCombinedTextureImageUnits = _mesa_is_api_gles2(api) ?
+      vertex_pipeline_max_combined_texture_image_units +
+      compute_pipeline_max_combined_texture_image_units :
+      MAX2(vertex_pipeline_max_combined_texture_image_units,
+           compute_pipeline_max_combined_texture_image_units);
+
+   unsigned mesh_pipeline_max_combined_texture_image_units =
+      c->Program[MESA_SHADER_TASK].MaxTextureImageUnits +
+      c->Program[MESA_SHADER_MESH].MaxTextureImageUnits +
+      c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits;
+
    c->MaxCombinedTextureImageUnits =
-         _min(c->Program[MESA_SHADER_VERTEX].MaxTextureImageUnits +
-              c->Program[MESA_SHADER_TESS_CTRL].MaxTextureImageUnits +
-              c->Program[MESA_SHADER_TESS_EVAL].MaxTextureImageUnits +
-              c->Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits +
-              c->Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits +
-              c->Program[MESA_SHADER_COMPUTE].MaxTextureImageUnits,
-              MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+      MAX2(c->MaxCombinedTextureImageUnits,
+           mesh_pipeline_max_combined_texture_image_units);
 
    /* This depends on program constants. */
    c->MaxTextureCoordUnits
@@ -450,13 +447,27 @@ void st_init_limits(struct pipe_screen *screen,
 
    if (can_ubo) {
       extensions->ARB_uniform_buffer_object = GL_TRUE;
-      c->MaxCombinedUniformBlocks = c->MaxUniformBufferBindings =
+      /* API binding point limit */
+      c->MaxUniformBufferBindings =
          c->Program[MESA_SHADER_VERTEX].MaxUniformBlocks +
          c->Program[MESA_SHADER_TESS_CTRL].MaxUniformBlocks +
          c->Program[MESA_SHADER_TESS_EVAL].MaxUniformBlocks +
          c->Program[MESA_SHADER_GEOMETRY].MaxUniformBlocks +
          c->Program[MESA_SHADER_FRAGMENT].MaxUniformBlocks +
-         c->Program[MESA_SHADER_COMPUTE].MaxUniformBlocks;
+         c->Program[MESA_SHADER_COMPUTE].MaxUniformBlocks +
+         c->Program[MESA_SHADER_TASK].MaxUniformBlocks +
+         c->Program[MESA_SHADER_MESH].MaxUniformBlocks;
+      /* Shader program limit */
+      c->MaxCombinedUniformBlocks = MAX3(
+         c->Program[MESA_SHADER_VERTEX].MaxUniformBlocks +
+         c->Program[MESA_SHADER_TESS_CTRL].MaxUniformBlocks +
+         c->Program[MESA_SHADER_TESS_EVAL].MaxUniformBlocks +
+         c->Program[MESA_SHADER_GEOMETRY].MaxUniformBlocks +
+         c->Program[MESA_SHADER_FRAGMENT].MaxUniformBlocks,
+         c->Program[MESA_SHADER_TASK].MaxUniformBlocks +
+         c->Program[MESA_SHADER_MESH].MaxUniformBlocks +
+         c->Program[MESA_SHADER_FRAGMENT].MaxUniformBlocks,
+         c->Program[MESA_SHADER_COMPUTE].MaxUniformBlocks);
       assert(c->MaxCombinedUniformBlocks <= MAX_COMBINED_UNIFORM_BUFFERS);
    }
 
@@ -486,11 +497,14 @@ void st_init_limits(struct pipe_screen *screen,
       MIN2(screen->caps.max_combined_hw_atomic_counter_buffers,
            MAX_COMBINED_ATOMIC_BUFFERS);
    if (!c->MaxCombinedAtomicBuffers) {
-      c->MaxCombinedAtomicBuffers = MAX2(
+      c->MaxCombinedAtomicBuffers = MAX3(
          c->Program[MESA_SHADER_VERTEX].MaxAtomicBuffers +
          c->Program[MESA_SHADER_TESS_CTRL].MaxAtomicBuffers +
          c->Program[MESA_SHADER_TESS_EVAL].MaxAtomicBuffers +
          c->Program[MESA_SHADER_GEOMETRY].MaxAtomicBuffers +
+         c->Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers,
+         c->Program[MESA_SHADER_TASK].MaxAtomicBuffers +
+         c->Program[MESA_SHADER_MESH].MaxAtomicBuffers +
          c->Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers,
          c->Program[MESA_SHADER_COMPUTE].MaxAtomicBuffers);
       assert(c->MaxCombinedAtomicBuffers <= MAX_COMBINED_ATOMIC_BUFFERS);
@@ -514,11 +528,14 @@ void st_init_limits(struct pipe_screen *screen,
          MIN2(screen->caps.max_combined_shader_buffers,
               MAX_COMBINED_SHADER_STORAGE_BUFFERS);
       if (!c->MaxCombinedShaderStorageBlocks) {
-         c->MaxCombinedShaderStorageBlocks = MAX2(
+         c->MaxCombinedShaderStorageBlocks = MAX3(
             c->Program[MESA_SHADER_VERTEX].MaxShaderStorageBlocks +
             c->Program[MESA_SHADER_TESS_CTRL].MaxShaderStorageBlocks +
             c->Program[MESA_SHADER_TESS_EVAL].MaxShaderStorageBlocks +
             c->Program[MESA_SHADER_GEOMETRY].MaxShaderStorageBlocks +
+            c->Program[MESA_SHADER_FRAGMENT].MaxShaderStorageBlocks,
+            c->Program[MESA_SHADER_TASK].MaxShaderStorageBlocks +
+            c->Program[MESA_SHADER_MESH].MaxShaderStorageBlocks +
             c->Program[MESA_SHADER_FRAGMENT].MaxShaderStorageBlocks,
             c->Program[MESA_SHADER_COMPUTE].MaxShaderStorageBlocks);
          assert(c->MaxCombinedShaderStorageBlocks < MAX_COMBINED_SHADER_STORAGE_BUFFERS);
@@ -533,13 +550,16 @@ void st_init_limits(struct pipe_screen *screen,
          extensions->ARB_shader_storage_buffer_object = GL_TRUE;
    }
 
-   c->MaxCombinedImageUniforms =
-         c->Program[MESA_SHADER_VERTEX].MaxImageUniforms +
-         c->Program[MESA_SHADER_TESS_CTRL].MaxImageUniforms +
-         c->Program[MESA_SHADER_TESS_EVAL].MaxImageUniforms +
-         c->Program[MESA_SHADER_GEOMETRY].MaxImageUniforms +
-         c->Program[MESA_SHADER_FRAGMENT].MaxImageUniforms +
-         c->Program[MESA_SHADER_COMPUTE].MaxImageUniforms;
+   c->MaxCombinedImageUniforms = MAX3(
+      c->Program[MESA_SHADER_VERTEX].MaxImageUniforms +
+      c->Program[MESA_SHADER_TESS_CTRL].MaxImageUniforms +
+      c->Program[MESA_SHADER_TESS_EVAL].MaxImageUniforms +
+      c->Program[MESA_SHADER_GEOMETRY].MaxImageUniforms +
+      c->Program[MESA_SHADER_FRAGMENT].MaxImageUniforms,
+      c->Program[MESA_SHADER_TASK].MaxImageUniforms +
+      c->Program[MESA_SHADER_MESH].MaxImageUniforms +
+      c->Program[MESA_SHADER_FRAGMENT].MaxImageUniforms,
+      c->Program[MESA_SHADER_COMPUTE].MaxImageUniforms);
    c->MaxCombinedShaderOutputResources += c->MaxCombinedImageUniforms;
    c->MaxImageUnits = MAX_IMAGE_UNITS;
    if (c->Program[MESA_SHADER_FRAGMENT].MaxImageUniforms &&
@@ -1086,6 +1106,7 @@ void st_init_extensions(struct pipe_screen *screen,
 #else
    EXT_CAP(EXT_memory_object_win32,          memobj);
 #endif
+   EXT_CAP(EXT_mesh_shader,                  mesh_shader);
    EXT_CAP(EXT_multisampled_render_to_texture, surface_sample_count);
    EXT_CAP(EXT_semaphore,                    fence_signal);
 #ifndef _WIN32
@@ -1093,6 +1114,7 @@ void st_init_extensions(struct pipe_screen *screen,
 #else
    EXT_CAP(EXT_semaphore_win32,              fence_signal);
 #endif
+   EXT_CAP(EXT_shader_pixel_local_storage,   shader_pixel_local_storage_size);
    EXT_CAP(EXT_shader_realtime_clock,        shader_realtime_clock);
    EXT_CAP(EXT_shader_samples_identical,     shader_samples_identical);
    EXT_CAP(EXT_texture_array,                max_texture_array_layers);
@@ -1123,6 +1145,7 @@ void st_init_extensions(struct pipe_screen *screen,
    EXT_CAP(NV_conditional_render,            conditional_render);
    EXT_CAP(NV_fill_rectangle,                polygon_mode_fill_rectangle);
    EXT_CAP(NV_primitive_restart,             primitive_restart);
+   EXT_CAP(NV_representative_fragment_test,  representative_fragment_test);
    EXT_CAP(NV_shader_atomic_float,           image_atomic_float_add);
    EXT_CAP(NV_shader_atomic_int64,           shader_atomic_int64);
    EXT_CAP(NV_texture_barrier,               texture_barrier);
@@ -1241,7 +1264,9 @@ void st_init_extensions(struct pipe_screen *screen,
        * pipe cap.
        */
       extensions->EXT_gpu_shader4 = GL_TRUE;
-      extensions->EXT_texture_buffer_object = GL_TRUE;
+
+      if (!screen->caps.buffer_sampler_view_rgba_only)
+         extensions->EXT_texture_buffer_object = GL_TRUE;
 
       if (consts->MaxTransformFeedbackBuffers &&
           screen->caps.shader_array_components)
@@ -1289,8 +1314,8 @@ void st_init_extensions(struct pipe_screen *screen,
       }
    } else {
       /* Optional integer support for GLSL 1.2. */
-      if (screen->shader_caps[PIPE_SHADER_VERTEX].integers &&
-          screen->shader_caps[PIPE_SHADER_FRAGMENT].integers) {
+      if (screen->shader_caps[MESA_SHADER_VERTEX].integers &&
+          screen->shader_caps[MESA_SHADER_FRAGMENT].integers) {
          consts->NativeIntegers = GL_TRUE;
 
          extensions->EXT_shader_integer_mix = GL_TRUE;
@@ -1307,6 +1332,8 @@ void st_init_extensions(struct pipe_screen *screen,
       consts->GLSLZeroInit = screen->caps.glsl_zero_init;
    }
 
+   consts->VertexProgramDefaultOut = options->vertex_program_default_out;
+
    if (extensions->EXT_semaphore) {
       consts->MaxTimelineSemaphoreValueDifference = screen->caps.max_timeline_semaphore_difference;
       extensions->NV_timeline_semaphore = consts->MaxTimelineSemaphoreValueDifference > 0;
@@ -1322,14 +1349,14 @@ void st_init_extensions(struct pipe_screen *screen,
    /* Below are the cases which cannot be moved into tables easily. */
 
    /* The compatibility profile also requires GLSLVersionCompat >= 400. */
-   if (screen->shader_caps[PIPE_SHADER_TESS_CTRL].max_instructions > 0 &&
+   if (screen->shader_caps[MESA_SHADER_TESS_CTRL].max_instructions > 0 &&
        (api != API_OPENGL_COMPAT || consts->GLSLVersionCompat >= 400)) {
       extensions->ARB_tessellation_shader = GL_TRUE;
    }
 
    /* OES_geometry_shader requires instancing */
    if ((GLSLVersion >= 400 || ESSLVersion >= 310) &&
-       screen->shader_caps[PIPE_SHADER_GEOMETRY].max_instructions > 0 &&
+       screen->shader_caps[MESA_SHADER_GEOMETRY].max_instructions > 0 &&
        consts->MaxGeometryShaderInvocations >= 32) {
       extensions->OES_geometry_shader = GL_TRUE;
    }
@@ -1538,7 +1565,7 @@ void st_init_extensions(struct pipe_screen *screen,
        screen->caps.buffer_sampler_view_rgba_only)
       extensions->ARB_texture_buffer_object = GL_FALSE;
 
-   if (extensions->ARB_texture_buffer_object) {
+   if (screen->caps.texture_buffer_objects) {
       consts->MaxTextureBufferSize =
          screen->caps.max_texel_buffer_elements;
       consts->TextureBufferOffsetAlignment =
@@ -1554,7 +1581,7 @@ void st_init_extensions(struct pipe_screen *screen,
 
    extensions->OES_texture_buffer =
       consts->Program[MESA_SHADER_COMPUTE].MaxImageUniforms &&
-      extensions->ARB_texture_buffer_object &&
+      screen->caps.texture_buffer_objects &&
       extensions->ARB_texture_buffer_range &&
       extensions->ARB_texture_buffer_object_rgb32;
 
@@ -1567,7 +1594,7 @@ void st_init_extensions(struct pipe_screen *screen,
     * prefer to disable varying packing rather than run the risk of varying
     * packing preventing a shader from running.
     */
-   if (screen->shader_caps[PIPE_SHADER_FRAGMENT].max_tex_indirections <= 8) {
+   if (screen->shader_caps[MESA_SHADER_FRAGMENT].max_tex_indirections <= 8) {
       /* We can't disable varying packing if transform feedback is available,
        * because transform feedback code assumes a packed varying layout.
        */
@@ -1632,7 +1659,7 @@ void st_init_extensions(struct pipe_screen *screen,
        extensions->ARB_uniform_buffer_object &&
        (extensions->NV_primitive_restart ||
         consts->PrimitiveRestartFixedIndex) &&
-       screen->shader_caps[PIPE_SHADER_VERTEX].max_texture_samplers >= 16 &&
+       screen->shader_caps[MESA_SHADER_VERTEX].max_texture_samplers >= 16 &&
        /* Requirements for ETC2 emulation. */
        screen->is_format_supported(screen, PIPE_FORMAT_R8G8B8A8_UNORM,
                                    PIPE_TEXTURE_2D, 0, 0,
@@ -1654,15 +1681,6 @@ void st_init_extensions(struct pipe_screen *screen,
                                    PIPE_BIND_SAMPLER_VIEW)) {
       extensions->ARB_ES3_compatibility = GL_TRUE;
    }
-
-#ifdef HAVE_ST_VDPAU
-   if (screen->get_video_param &&
-       screen->get_video_param(screen, PIPE_VIDEO_PROFILE_UNKNOWN,
-                               PIPE_VIDEO_ENTRYPOINT_BITSTREAM,
-                               PIPE_VIDEO_CAP_SUPPORTS_INTERLACED)) {
-      extensions->NV_vdpau_interop = GL_TRUE;
-   }
-#endif
 
    if (screen->caps.doubles) {
       extensions->ARB_gpu_shader_fp64 = GL_TRUE;
@@ -1840,7 +1858,7 @@ void st_init_extensions(struct pipe_screen *screen,
       screen->caps.allow_draw_out_of_order;
    consts->GLThreadNopCheckFramebufferStatus = options->glthread_nop_check_framebuffer_status;
 
-   if (screen->shader_caps[PIPE_SHADER_FRAGMENT].integers &&
+   if (screen->shader_caps[MESA_SHADER_FRAGMENT].integers &&
        extensions->ARB_stencil_texturing &&
        screen->caps.doubles &&
        !(screen->nir_options[MESA_SHADER_FRAGMENT]->lower_doubles_options &

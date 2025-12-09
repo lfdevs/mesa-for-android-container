@@ -36,10 +36,12 @@
 #define RADEON_VCN_SIGNATURE_SIZE                                     (0x00000010)
 
 #define RADEON_VCN_IB_COMMON_OP_WRITEMEMORY                           (0x33000001)
+#define RADEON_VCN_IB_COMMON_OP_RESOLVEINPUTPARAMLAYOUT               (0x31000007)
+
+#define RADEON_VCN_RESOLVE_INPUT_PARAM_LAYOUT_TYPE_QPMAP_INT8         1
+#define RADEON_VCN_RESOLVE_INPUT_PARAM_LAYOUT_TYPE_QPMAP_INT16        2
 
 struct rvcn_sq_var {
-   unsigned int *signature_ib_checksum;
-   unsigned int *signature_ib_total_size_in_dw;
    unsigned int *engine_ib_size_of_packages;
 };
 
@@ -52,6 +54,18 @@ struct rvcn_cmn_engine_op_writememory {
     unsigned int dest_addr_lo;           // Low address of memory
     unsigned int dest_addr_hi;           // High address of memory
     unsigned int data;                   // data to be written
+};
+
+struct rvcn_cmn_engine_op_resolveinputparamlayout {
+   unsigned char map_type;                 /* Map Type for this input */
+   unsigned int map_width;                 /* Width of Map */
+   unsigned int map_height;                /* Height of Map */
+   unsigned int input_buffer_address_lo;   /* Low address of input 2d texture */
+   unsigned int input_buffer_address_hi;   /* High address of input 2d texture */
+   unsigned int input_buffer_pitch;        /* Row pitch of input 2d texture */
+   unsigned int input_buffer_swizzle_mode; /* Swizzle mode of input 2d texture */
+   unsigned int output_buffer_address_lo;  /* Low address of output buffer */
+   unsigned int output_buffer_address_hi;  /* High address of output buffer */
 };
 
 #endif

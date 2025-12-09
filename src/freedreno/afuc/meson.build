@@ -99,6 +99,7 @@ if cc.sizeof('size_t') > 4
       'util.c',
       'util.h',
       afuc_isa,
+      freedreno_pm4_xml_header_file,
     ],
     include_directories: [
       inc_freedreno,

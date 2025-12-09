@@ -355,7 +355,7 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir)
                                             (nir_type_float | nir_type_int | nir_type_uint);
                out.buffer = xfb.out[index % 2].buffer;
                out.offset = (uint32_t)xfb.out[index % 2].offset * 4;
-               util_dynarray_append(&array, nir_xfb_output_info, out);
+               util_dynarray_append(&array, out);
 
                uint8_t stream = (sem.gs_streams >> (i * 2)) & 0x3;
                buffer_to_stream[out.buffer] = stream;

@@ -7,7 +7,7 @@ uncollapsed_section_start xwayland "Building XWayland"
 
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
-# DEBIAN_BASE_TAG
+# DEBIAN_TEST_BASE_TAG
 #
 export XORGPROTO_VERSION="xorgproto-2024.1"
 export XWAYLAND_VERSION="xwayland-24.1.8"

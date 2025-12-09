@@ -111,7 +111,7 @@ struct r600_command_buffer {
 
 struct r600_db_state {
 	struct r600_atom		atom;
-	struct r600_surface		*rsurf;
+	struct pipe_surface		*rsurf;
 };
 
 struct r600_db_misc_state {
@@ -188,9 +188,11 @@ struct r600_cs_shader_state {
 };
 
 struct r600_framebuffer {
-	struct r600_atom atom;
-	PIPE_FB_SURFACES; //STOP USING THIS
 	struct pipe_framebuffer_state state;
+};
+
+struct r600_cb_state {
+	struct r600_atom atom;
 	unsigned compressed_cb_mask;
 	unsigned nr_samples;
 	bool export_16bpc;
@@ -326,7 +328,7 @@ struct r600_pipe_shader_selector {
 
 	unsigned	num_shaders;
 
-	enum pipe_shader_type	type;
+	mesa_shader_stage	type;
         enum pipe_shader_ir ir_type;
 
 	/* geometry shader properties */
@@ -453,6 +455,7 @@ struct r600_image_state {
 	uint32_t                        dirty_mask;
 	uint32_t			compressed_depthtex_mask;
 	uint32_t			compressed_colortex_mask;
+	uint32_t			incomplete_mask;
 	bool				dirty_buffer_constants;
 	struct r600_image_view views[R600_MAX_IMAGES];
 };
@@ -533,6 +536,7 @@ struct r600_context {
 	struct r600_db_state		db_state;
 	struct r600_cso_state		dsa_state;
 	struct r600_framebuffer		framebuffer;
+	struct r600_cb_state            cb_state;
 	struct r600_poly_offset_state	poly_offset_state;
 	struct r600_cso_state		rasterizer_state;
 	struct r600_sample_mask		sample_mask;
@@ -552,10 +556,10 @@ struct r600_context {
 	struct r600_cs_shader_state	cs_shader_state;
 	struct r600_shader_stages_state shader_stages;
 	struct r600_gs_rings_state	gs_rings;
-	struct r600_constbuf_state	constbuf_state[PIPE_SHADER_TYPES];
-	struct r600_textures_info	samplers[PIPE_SHADER_TYPES];
+	struct r600_constbuf_state	constbuf_state[MESA_SHADER_STAGES];
+	struct r600_textures_info	samplers[MESA_SHADER_STAGES];
 
-	struct r600_shader_driver_constants_info driver_consts[PIPE_SHADER_TYPES];
+	struct r600_shader_driver_constants_info driver_consts[MESA_SHADER_STAGES];
 
 	/** Vertex buffers for fetch shaders */
 	struct r600_vertexbuf_state	vertex_buffer_state;
@@ -717,9 +721,11 @@ bool evergreen_is_format_supported(struct pipe_screen *screen,
 				   unsigned storage_sample_count,
 				   unsigned usage);
 void evergreen_init_color_surface(struct r600_context *rctx,
-				  struct r600_surface *surf);
+                                  struct r600_cb_surface *surf,
+				  const struct pipe_surface *cbuf);
 void evergreen_init_color_surface_rat(struct r600_context *rctx,
-					struct r600_surface *surf);
+				      struct r600_cb_surface *surf,
+				      const struct pipe_surface *cbuf);
 void evergreen_update_db_shader_control(struct r600_context * rctx);
 bool evergreen_adjust_gprs(struct r600_context *rctx);
 void evergreen_setup_scratch_buffers(struct r600_context *rctx);
@@ -1085,7 +1091,7 @@ void eg_dump_debug_state(struct pipe_context *ctx, FILE *f,
 struct r600_pipe_shader_selector *r600_create_shader_state_tokens(struct pipe_context *ctx,
 								  const void *tokens,
 								  enum pipe_shader_ir,
-								  unsigned pipe_shader_type);
+								  unsigned mesa_shader_stage);
 int r600_shader_select(struct pipe_context *ctx,
 		       struct r600_pipe_shader_selector* sel,
 		       bool *dirty, bool precompile);

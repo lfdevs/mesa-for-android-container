@@ -61,6 +61,7 @@ _Present(DXGI_DDI_ARG_PRESENT *pPresentData)
    struct Device *device = CastDevice(pPresentData->hDevice);
    Resource *pSrcResource = CastResource(pPresentData->hSurfaceToPresent);
 
+   device->pipe->flush(device->pipe, NULL, 0);
    device->pipe->screen->flush_frontbuffer(device->pipe->screen, device->pipe, 
       pSrcResource->resource, 0, 0, pPresentData->pDXGIContext, 0, NULL);
 

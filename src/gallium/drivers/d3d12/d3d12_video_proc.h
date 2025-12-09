@@ -100,7 +100,9 @@ struct d3d12_video_processor
    const uint m_NodeIndex = 0u;
 
    ComPtr<ID3D12Fence> m_spFence;
+   ComPtr<ID3D12Fence> m_spResidencyFence;
    uint                m_fenceValue = 1u;
+   uint64_t            m_ResidencyFenceValue = 0u;
 
    ComPtr<ID3D12VideoDevice>             m_spD3D12VideoDevice;
    
@@ -112,8 +114,6 @@ struct d3d12_video_processor
    std::vector<ComPtr<ID3D12CommandAllocator>>        m_spCommandAllocators;
    std::vector<d3d12_unique_fence>                    m_PendingFences;
    ComPtr<ID3D12VideoProcessCommandList1>             m_spCommandList;
-
-   std::vector<D3D12_RESOURCE_BARRIER> m_transitionsBeforeCloseCmdList;
 
    // Current state between begin and end frame
    d3d12_video_processor_output_context m_OutputArguments;
@@ -127,6 +127,8 @@ struct d3d12_video_processor
 
    struct d3d12_fence* input_surface_fence = NULL;
    uint64_t input_surface_fence_value;
+   std::vector<D3D12_RESOURCE_BARRIER> m_barrierTransitionsScratch;
+   std::vector<DXGI_FORMAT> m_inputFormatsScratch;
 };
 
 struct pipe_video_codec *

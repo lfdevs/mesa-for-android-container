@@ -33,42 +33,19 @@
 #ifndef DRIVER_INCLUDES_H
 #define DRIVER_INCLUDES_H
 
-#ifdef __MINGW32__
-#undef WIN32_LEAN_AND_MEAN /* for DEFINE_GUID macro */
-#define _NO_OLDNAMES       /* avoid defining ssize_t */
-#include <stdio.h>         /* for vsnprintf */
-#undef fileno              /* we redefine this in vm_basic_defs.h */
-#endif
+#include "Debug.h"
+#include "util/u_inlines.h"
 
-
-#include <windows.h>
-
-#include "winddk_compat.h"
-
-//typedef LARGE_INTEGER PHYSICAL_ADDRESS;
-//typedef __success(return >= 0) LONG NTSTATUS;
+#include <winddk_compat.h>
 
 #define D3D10DDI_MINOR_HEADER_VERSION 2
 
 /* Unfortunately WinDDK's d3d10umddi.h defines D3D10.x constants as global
  * const variables instead of preprocessor defines, causing LINK to fail due
- * to duplicate symbols.  Include d3d10_1.h to avoid the issue.
+ * to duplicate symbols. Include d3d10_1.h to avoid the issue.
  */
-#ifdef _MSC_VER
 #include <d3d10_1.h>
-#endif
 
 #include <d3d10umddi.h>
-
-#include "Debug.h"
-
-#include "pipe/p_screen.h"
-#include "pipe/p_context.h"
-#include "util/format/u_formats.h"
-#include "pipe/p_defines.h"
-
-#include "util/u_debug.h"
-#include "util/u_inlines.h"
-
 
 #endif   /* DRIVER_INCLUDES_H */

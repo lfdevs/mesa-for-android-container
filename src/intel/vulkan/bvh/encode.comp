@@ -5,29 +5,41 @@
 
 #version 460
 
-#extension GL_GOOGLE_include_directive : require
-
-#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
-#extension GL_EXT_scalar_block_layout : require
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_buffer_reference2 : require
-#extension GL_KHR_memory_scope_semantics : require
-#extension GL_EXT_shader_atomic_int64: require
-
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 #include "anv_build_helpers.h"
 #include "anv_build_interface.h"
 
 #define ULP 1.1920928955078125e-7f
+#define READY_TO_WRITE(offset) ((offset) < VK_NULL_BVH_OFFSET)
+#define ASSIGNED_NODE_TO_ENCODE (gl_GlobalInvocationID.x < DEREF(args.header).ir_internal_node_count)
+
+/* Debugging helper: disable encoding by exiting early. Ensure compiler doesn't
+ * dead code eliminate by comparing to value that should never evaluate as true.
+ */
+#define DEBUG_DISABLE_WRITE 0
+#define DEBUG_EXIT_EARLY(val) (DEBUG_DISABLE_WRITE == 1) && ((val) != 123456)
+
+/* IR_NODE refers to memory that holds IR NODEs which are to be encoded. */
+#define IR_NODE uint32_t
+#define NODE_OFFSET(node) (OFFSET(args.intermediate_bvh, ir_id_to_offset(node)))
+
+/* An offset in 64B blocks from args.output_bvh that points to output of
+ * encoded nodes. Can be a leaf or internal node.
+ */
+#define BLOCK uint32_t
+#define BLOCK_OFFSET(block) (OFFSET(args.output_bvh, ANV_RT_BLOCK_SIZE * block))
 
 layout(push_constant) uniform CONSTS {
    encode_args args;
 };
+
+void
+debug_dump(uint32_t offset, uint32_t value)
+{
+   REF(uint32_t) msg = REF(uint32_t)(OFFSET(args.output_bvh, offset));
+   DEREF(msg) = value;
+}
 
 uint32_t
 get_instance_flag(uint32_t src)
@@ -36,9 +48,34 @@ get_instance_flag(uint32_t src)
    return flags & 0xf;
 }
 
+struct anv_cluster {
+   /* simd lane inside cluster: 0 .. 7 */
+   uint32_t idx;
+
+   /* ID of cluster: 0 .. globalInvocations.x/8-1 */
+   uint32_t cluster_id;
+
+   /* size = 8 */
+   uint32_t size;
+};
+
+/* cluster_size has to be a power of two and <32. */
+void
+anv_cluster_init(out anv_cluster cluster, uint32_t size)
+{
+   cluster.idx = gl_SubgroupInvocationID & (size - 1);
+   cluster.cluster_id = gl_SubgroupInvocationID / size;
+   cluster.size = size;
+}
+
+#define anv_shuffle(cluster, cluster_idx, value) \
+   subgroupShuffle(value, (gl_SubgroupInvocationID & (~(cluster.size - 1))) + cluster_idx)
+
 void
 encode_leaf_node(uint32_t type, uint64_t src_node, uint64_t dst_node, REF(anv_accel_struct_header) dst_header)
 {
+   if (DEBUG_EXIT_EARLY(type))
+      return;
    switch (type) {
    case vk_ir_node_triangle: {
       REF(anv_quad_leaf_node) quad_leaf = REF(anv_quad_leaf_node)(dst_node);
@@ -214,7 +251,8 @@ encode_leaf_node(uint32_t type, uint64_t src_node, uint64_t dst_node, REF(anv_ac
       DEREF(dst_instance).part1.instance_index = src.instance_id;
       DEREF(dst_instance).part1.instance_id = src.custom_instance_and_mask & 0xffffff;
 
-      uint64_t instance_leaves_addr_base = args.output_bvh - args.output_bvh_offset + ANV_RT_BVH_HEADER_SIZE;
+      uint64_t instance_leaves_addr_base = args.output_bvh -
+         args.output_bvh_offset + ANV_RT_BVH_HEADER_SIZE;
       uint64_t cnt = atomicAdd(DEREF(dst_header).instance_count, 1);
       DEREF(INDEX(uint64_t, instance_leaves_addr_base, cnt)) = dst_node;
       break;
@@ -254,21 +292,20 @@ aabb_size(vk_aabb input_aabb)
  * Otherwise, it's a mixed node.
  */
 uint8_t
-determine_internal_node_type(uint32_t children[6], uint child_count)
+determine_internal_node_type(anv_cluster cluster, uint32_t child, uint child_count)
 {
    if (child_count == 0)
       return uint8_t(ANV_NODE_TYPE_INVALID);
 
-   uint32_t type_of_first_child = ir_id_to_type(children[0]);
-   for (uint32_t i = 1; i < child_count; ++i) {
-      uint32_t type = ir_id_to_type(children[i]);
-      if(type != type_of_first_child){
-         return uint8_t(ANV_NODE_TYPE_MIXED);
-      }
-   }
+   uint32_t type = ir_id_to_type(child);
+   uint32_t first_type_of_child = subgroupClusteredMin(type, 8);
+   uint32_t second_type_of_child = subgroupClusteredMax(type, 8);
+
+   if (first_type_of_child != second_type_of_child)
+      return uint8_t(ANV_NODE_TYPE_MIXED);
 
    /* All children have same type. Now check what type they are. */
-   switch (type_of_first_child){
+   switch (first_type_of_child){
    case vk_ir_node_triangle:
       return uint8_t(ANV_NODE_TYPE_QUAD);
    case vk_ir_node_aabb:
@@ -302,22 +339,20 @@ quantize_bounds(vk_aabb aabb, vec3 base, i8vec3 exp)
 }
 
 void
-encode_internal_node(uint32_t children[6], uint32_t child_block_offset_from_internal_node, uint child_count,
-                     vec3 min_offset, vec3 max_offset, uint32_t bvh_block_offset)
+encode_internal_node(uint32_t child, uint32_t child_block_offset_from_internal_node,
+                     uint child_count, vk_aabb child_aabb, uint32_t bvh_block_offset,
+                     anv_cluster cluster)
 {
+   if (DEBUG_EXIT_EARLY(child_count))
+      return;
    REF(anv_internal_node) dst_node =
       REF(anv_internal_node)(OFFSET(args.output_bvh, ANV_RT_BLOCK_SIZE * bvh_block_offset));
 
-   DEREF(dst_node).child_block_offset = child_block_offset_from_internal_node;
-
    vk_aabb box;
-   box.min = min_offset;
-   box.max = max_offset;
+   box.min = subgroupClusteredMin(child_aabb.min, 8);
+   box.max = subgroupClusteredMax(child_aabb.max, 8);
 
    vk_aabb conservative_child_aabb = conservative_aabb(box);
-   DEREF(dst_node).lower[0] = conservative_child_aabb.min.x;
-   DEREF(dst_node).lower[1] = conservative_child_aabb.min.y;
-   DEREF(dst_node).lower[2] = conservative_child_aabb.min.z;
 
    float up = 1.0 + ULP;
    ivec3 exp;
@@ -330,96 +365,159 @@ encode_internal_node(uint32_t children[6], uint32_t child_block_offset_from_inte
    exp.z += int((mant.z > (255.0f / 256.0f)));
 
    i8vec3 exponent_i8 = i8vec3(exp);
-   DEREF(dst_node).exp_x = max(int8_t(-128), exponent_i8.x);
-   DEREF(dst_node).exp_y = max(int8_t(-128), exponent_i8.y);
-   DEREF(dst_node).exp_z = max(int8_t(-128), exponent_i8.z);
+   i8vec3 exp_i8 = {max(int8_t(-128), exponent_i8.x),
+                    max(int8_t(-128), exponent_i8.y),
+                    max(int8_t(-128), exponent_i8.z)};
 
-   i8vec3 exp_i8 = i8vec3(DEREF(dst_node).exp_x, DEREF(dst_node).exp_y, DEREF(dst_node).exp_z);
+   uint8_t node_type = determine_internal_node_type(cluster, child, child_count);
 
-   DEREF(dst_node).node_mask = uint8_t(0xff);
-   DEREF(dst_node).node_type = determine_internal_node_type(children, child_count);
-
-   for (uint32_t i = 0; i < 6; i++) {
-      if (i < child_count) {
-         uint32_t type = ir_id_to_type(children[i]);
-         /* blockIncr and child_block_offset are how HW used to find children during traversal.
-          * If not set properly, gpu could hang.
-          */
-         DEREF(dst_node).data[i].block_incr_and_start_prim =
-            type == vk_ir_node_instance ? uint8_t(2) : uint8_t(1);
-
-         uint32_t offset = ir_id_to_offset(children[i]);
-
-         vk_aabb child_aabb =
-            DEREF(REF(vk_ir_node)OFFSET(args.intermediate_bvh, offset)).aabb;
-
-         child_aabb = conservative_aabb(child_aabb);
-
-         vk_aabb quantize_aabb = quantize_bounds(child_aabb, conservative_child_aabb.min, exp_i8);
-
-         DEREF(dst_node).lower_x[i] = uint8_t(quantize_aabb.min.x);
-         DEREF(dst_node).lower_y[i] = uint8_t(quantize_aabb.min.y);
-         DEREF(dst_node).lower_z[i] = uint8_t(quantize_aabb.min.z);
-         DEREF(dst_node).upper_x[i] = uint8_t(quantize_aabb.max.x);
-         DEREF(dst_node).upper_y[i] = uint8_t(quantize_aabb.max.y);
-         DEREF(dst_node).upper_z[i] = uint8_t(quantize_aabb.max.z);
-
-         /* for a mixed node, encode type of each children in startPrim in childdata */
-         if (DEREF(dst_node).node_type == uint8_t(ANV_NODE_TYPE_MIXED)){
-            uint32_t type = ir_id_to_type(children[i]);
-            switch (type){
-            case vk_ir_node_triangle:
-               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_QUAD) << 2);
-               break;
-            case vk_ir_node_aabb:
-               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_PROCEDURAL) << 2);
-               break;
-            case vk_ir_node_instance:
-               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_INSTANCE) << 2);
-               break;
-            case vk_ir_node_internal:
-               DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_MIXED) << 2);
-               break;
-            }
-         }
-      } else {
-         /* Invalid Child Nodes: For invalid child nodes, the MSBs of lower and upper
-          * x planes are flipped. In other words:
-          * bool valid(int i) const {
-          *   return !(lower_x[i] & 0x80) || (upper_x[i] & 0x80);
-          * }
-          */
-         DEREF(dst_node).lower_x[i] = uint8_t(0x80);
-         DEREF(dst_node).lower_y[i] = uint8_t(0);
-         DEREF(dst_node).lower_z[i] = uint8_t(0);
-         DEREF(dst_node).upper_x[i] = uint8_t(0);
-         DEREF(dst_node).upper_y[i] = uint8_t(0);
-         DEREF(dst_node).upper_z[i] = uint8_t(0);
-
-         /* in case HW also references blockIncr to do something, we zero out the data. */
-         DEREF(dst_node).data[i].block_incr_and_start_prim = uint8_t(0);
-         DEREF(dst_node).data[i].block_incr_and_start_prim |= (uint8_t(ANV_NODE_TYPE_INVALID) << 2);
-      }
+   if (cluster.idx == 0) {
+      DEREF(dst_node).child_block_offset = child_block_offset_from_internal_node;
+      DEREF(dst_node).lower[0] = conservative_child_aabb.min.x;
+      DEREF(dst_node).lower[1] = conservative_child_aabb.min.y;
+      DEREF(dst_node).lower[2] = conservative_child_aabb.min.z;
+      DEREF(dst_node).exp_x = exp_i8[0];
+      DEREF(dst_node).exp_y = exp_i8[1];
+      DEREF(dst_node).exp_z = exp_i8[2];
+      DEREF(dst_node).node_mask = uint8_t(0xff);
+      DEREF(dst_node).node_type = node_type;
    }
+
+   child_aabb = conservative_aabb(child_aabb);
+   vk_aabb quantize_aabb = quantize_bounds(child_aabb, conservative_child_aabb.min, exp_i8);
+   bool valid_leaf = cluster.idx < child_count;
+
+   DEREF(dst_node).lower_x[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.min.x) : uint8_t(0x80);
+   DEREF(dst_node).lower_y[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.min.y) : uint8_t(0);
+   DEREF(dst_node).lower_z[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.min.z) : uint8_t(0);
+   DEREF(dst_node).upper_x[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.max.x) : uint8_t(0);
+   DEREF(dst_node).upper_y[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.max.y) : uint8_t(0);
+   DEREF(dst_node).upper_z[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.max.z) : uint8_t(0);
+
+   /* blockIncr and child_block_offset are how HW used to find children during traversal.
+    * If not set properly, gpu could hang.
+    */
+   uint32_t type = ir_id_to_type(child);
+   uint8_t block_incr_and_start_prim = type == vk_ir_node_instance ? uint8_t(2) : uint8_t(1);
+   /* for a mixed node, encode type of each children in startPrim in childdata */
+   if (node_type == uint8_t(ANV_NODE_TYPE_MIXED))
+      block_incr_and_start_prim |=
+         (type == vk_ir_node_triangle) ? (uint8_t(ANV_NODE_TYPE_QUAD) << 2) :
+         (type == vk_ir_node_aabb) ? (uint8_t(ANV_NODE_TYPE_PROCEDURAL) << 2) :
+         (type == vk_ir_node_instance) ? (uint8_t(ANV_NODE_TYPE_INSTANCE) << 2) :
+         (type == vk_ir_node_internal) ? (uint8_t(ANV_NODE_TYPE_MIXED) << 2) : uint8_t(0);
+   DEREF(dst_node).data[cluster.idx].block_incr_and_start_prim = block_incr_and_start_prim;
+}
+
+/* Collapse nodes until reaching 6 children, which typically can be
+ * 5 internal nodes, or run out of nodes to collapse which often
+ * happens at tips of tree. Tree is collapsed in direction of
+ * largest surface areas, resulting in a quality bvh tree.
+ *
+ * Early find_children phase defers node collapse as it's a
+ * speculative phase. Nodes are collapsed only if parent node
+ * is found to be real (not collapsed node.)
+ */
+uint32_t
+find_children(vk_ir_box_node src, inout uint32_t children[6],
+              inout uint32_t collapsed_nodes[6],
+              out uint32_t collapsed_child_count, bool defer_collapse)
+{
+   uint32_t found_child_count = 0;
+   collapsed_child_count = 0;
+
+   /* Initial node can have at most two children */
+   for (uint32_t i = 0; i < 2; ++i)
+      if (src.children[i] != VK_BVH_INVALID_NODE)
+         children[found_child_count++] = src.children[i];
+
+   /* For this node, try to collapse binary to 6-ary children */
+   while (found_child_count < 6) {
+      /* find vk_ir_node_internal children with largest surface areas */
+      int32_t collapsed_child_index = -1;
+      float largest_surface_area = -INFINITY;
+
+      for (int32_t i = 0; i < found_child_count; ++i) {
+         /* Only collapse internal nodes, not leaf nodes. */
+         if (ir_id_to_type(children[i]) != vk_ir_node_internal)
+            continue;
+
+         vk_aabb bounds = DEREF(REF(vk_ir_node)NODE_OFFSET(children[i])).aabb;
+
+         float surface_area = aabb_surface_area(bounds);
+         if (surface_area > largest_surface_area) {
+            largest_surface_area = surface_area;
+            collapsed_child_index = i;
+         }
+      }
+
+      if (collapsed_child_index != -1) {
+         /* If deferred, save nodes to collapse later */
+         if (defer_collapse && collapsed_child_count < 6)
+            collapsed_nodes[collapsed_child_count] =
+               ir_id_to_offset(children[collapsed_child_index]);
+         collapsed_child_count++;
+
+         /* Once I found a good vk_ir_node_internal child, try to connect myself
+          * to this child's children, i.e. my grandchildren. Grandchildren can be
+          * internal nodes or leaves.
+          */
+         REF(vk_ir_box_node) child_node =
+            REF(vk_ir_box_node)NODE_OFFSET(children[collapsed_child_index]);
+         IR_NODE grandchildren[2] = DEREF(child_node).children;
+         uint32_t valid_grandchild_count = 0;
+
+         if (grandchildren[1] != VK_BVH_INVALID_NODE)
+            ++valid_grandchild_count;
+
+         if (grandchildren[0] != VK_BVH_INVALID_NODE)
+            ++valid_grandchild_count;
+         else
+            grandchildren[0] = grandchildren[1];
+
+         /* Grandchild now becomes my direct child, and can possibly be collapsed
+          * in the next iteration if found_child_count has not reached 6.
+          */
+         if (valid_grandchild_count > 1)
+            children[found_child_count++] = grandchildren[1];
+
+         if (valid_grandchild_count > 0)
+            children[collapsed_child_index] = grandchildren[0];
+         else {
+            /* This child doesn't have valid children, then I don't consider this
+             * child as my child anymore. This is possible depending on how and
+             * when lbvh/ploc algorithm marks a node as VK_BVH_INVALID_NODE.
+             */
+            found_child_count--;
+            children[collapsed_child_index] = children[found_child_count];
+         }
+         if (!defer_collapse)
+            DEREF(child_node).bvh_offset = VK_NULL_BVH_OFFSET;
+      } else
+         break;
+   }
+   return found_child_count;
 }
 
 void
 main()
 {
-   /* Encode.comp is dispatched through indirect dispatch with calculated groupCountX,
-    * but we can still overdispatch invocations, so we need a guard here.
-    *
-    * Also, we can't support more than 0xFFFFFFFF internal nodes due to SW
-    * limit we enforce on indirect workgroup count for signaling.
+   /* Each lane will process one vk_ir_node_internal. The root node is sitting
+    * at the end of the IR BVH, and we let the lane with
+    * gl_GlobalInvocationID.x == 0 to take care of it. To improve performance,
+    * we remap globalID to reduce chances that the same HW thread will
+    * need to handle it's immediate children too, reducing latency. This hashing
+    * algorithm spreads handling of a node's children to other threads.
     */
-   if (gl_GlobalInvocationID.x >= DEREF(args.header).ir_internal_node_count ||
-       DEREF(args.header).ir_internal_node_count > 0xFFFFFFFF)
-      return;
-
-   /* Each lane will process one vk_ir_node_internal. The root node is sitting at the end
-    * of the IR BVH, and we let the lane with gl_GlobalInvocationID.x == 0 to take care of it.
-    */
-   uint32_t global_id = DEREF(args.header).ir_internal_node_count - 1 - gl_GlobalInvocationID.x;
+   uint32_t global_id_hash = (gl_GlobalInvocationID.x <
+                              (DEREF(args.header).ir_internal_node_count & ~0xFF))
+      ? (gl_GlobalInvocationID.x & 0xFFFFFF00)  |
+        ((gl_GlobalInvocationID.x & 0x0F) << 4) |
+        ((gl_GlobalInvocationID.x & 0xF0) >> 4)
+      : gl_GlobalInvocationID.x;
+   uint32_t global_id =
+      DEREF(args.header).ir_internal_node_count - 1 -
+      min(global_id_hash, DEREF(args.header).ir_internal_node_count - 1);
 
    uint32_t intermediate_leaf_node_size;
    switch (args.geometry_type) {
@@ -434,16 +532,24 @@ main()
       break;
    }
 
-   uint32_t intermediate_leaf_nodes_size = args.leaf_node_count * intermediate_leaf_node_size;
+   /* Each invocation cluster encodes one internal node. */
+   anv_cluster cluster;
+   anv_cluster_init(cluster, 8);
+
+   uint32_t intermediate_leaf_nodes_size =
+      args.leaf_node_count * intermediate_leaf_node_size;
 
    REF(vk_ir_box_node) intermediate_internal_nodes =
-      REF(vk_ir_box_node)OFFSET(args.intermediate_bvh, intermediate_leaf_nodes_size);
-   REF(vk_ir_box_node) src_node = INDEX(vk_ir_box_node, intermediate_internal_nodes, global_id);
+      REF(vk_ir_box_node)OFFSET(args.intermediate_bvh,
+                                intermediate_leaf_nodes_size);
+   REF(vk_ir_box_node) src_node =
+      INDEX(vk_ir_box_node, intermediate_internal_nodes, global_id);
    vk_ir_box_node src = DEREF(src_node);
 
    bool is_root_node = gl_GlobalInvocationID.x == 0;
 
-   REF(anv_accel_struct_header) header = REF(anv_accel_struct_header)(args.output_bvh - args.output_bvh_offset);
+   REF(anv_accel_struct_header) header =
+      REF(anv_accel_struct_header)(args.output_bvh - args.output_bvh_offset);
 
    if (is_root_node) {
       DEREF(header).instance_flags =
@@ -451,149 +557,155 @@ main()
          /* These will be removed when processing leaf nodes */
          ANV_INSTANCE_FLAG_FORCE_OPAQUE | ANV_INSTANCE_FLAG_FORCE_NON_OPAQUE;
 
-      /* Indicate where the next children should be encoded. Offset measured in number of 64B blocks and started from output_bvh */
+      /* Tracks BLOCK where the next children should be encoded. */
       DEREF(args.header).dst_node_offset = 1;
-
       DEREF(header).instance_count = 0;
    }
 
-   for (;;) {
-      /* Make changes to the current node's BVH offset value visible. */
-      memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
-                    gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+   IR_NODE children[6] = {VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE,
+                          VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE,
+                          VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE};
+   uint32_t collapsed_nodes[6];
+   uint32_t collapsed_child_count;
+   uint32_t found_child_count;
+   uint32_t num_blocks_to_add;
 
-      /* Indicate where this internal node should be encoded. Offset measured in number of 64B blocks and started from output_bvh.*/
-      uint32_t bvh_block_offset = is_root_node ? 0 : DEREF(src_node).bvh_offset;
+   /* Every simd lane is assigned an IR BVH internal node to encode. Since
+    * we are collapsing a binary tree into a hex tree, most simd lanes will
+    * never need to encode.
+    *
+    * To increase performance, have all IR BVH speculatively calculate which
+    * nodes they would collapse. Most of this work will be thrown away since
+    * over half the IR internal nodes never get written, but reduces latency.
+    */
+   if (ASSIGNED_NODE_TO_ENCODE) {
+      found_child_count = find_children(src, children, collapsed_nodes,
+                                        collapsed_child_count, true);
 
-      /* The invocation that processes this node is spinning, since its parent hasn't told it bvh_offset */
-      if (bvh_block_offset == VK_UNKNOWN_BVH_OFFSET)
-         continue;
-
-      if (bvh_block_offset == VK_NULL_BVH_OFFSET)
-         break;
-
-      uint32_t found_child_count = 0;
-      uint32_t children[6] = {VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE,
-                              VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE,
-                              VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE};
-
-      /* Initially, this node can have at most two children (can be internal nodes or leaves). */
-      for (uint32_t i = 0; i < 2; ++i)
-         if (src.children[i] != VK_BVH_INVALID_NODE)
-            children[found_child_count++] = src.children[i];
-
-      /* For this node, try to collapse binary to 6-ary children */
-      while (found_child_count < 6) {
-         /* For each iteration, find a vk_ir_node_internal child that has largest surface area */
-         int32_t collapsed_child_index = -1;
-         float largest_surface_area = -INFINITY;
-
-         for (int32_t i = 0; i < found_child_count; ++i) {
-            /* If a child is a leaf (not vk_ir_node_internal), there's no need to collapse it. */
-            if (ir_id_to_type(children[i]) != vk_ir_node_internal)
-               continue;
-
-            vk_aabb bounds =
-               DEREF(REF(vk_ir_node)OFFSET(args.intermediate_bvh,
-                                           ir_id_to_offset(children[i]))).aabb;
-
-            float surface_area = aabb_surface_area(bounds);
-            if (surface_area > largest_surface_area) {
-               largest_surface_area = surface_area;
-               collapsed_child_index = i;
-            }
-         }
-
-         if (collapsed_child_index != -1) {
-            /* Once I found a good vk_ir_node_internal child, try to connect myself
-             * to this child's children, i.e. my grandchildren. Grandchildren can be
-             * internal nodes or leaves.
-             */
-            REF(vk_ir_box_node) child_node =
-               REF(vk_ir_box_node)OFFSET(args.intermediate_bvh,
-                                        ir_id_to_offset(children[collapsed_child_index]));
-            uint32_t grandchildren[2] = DEREF(child_node).children;
-            uint32_t valid_grandchild_count = 0;
-
-            if (grandchildren[1] != VK_BVH_INVALID_NODE)
-               ++valid_grandchild_count;
-
-            if (grandchildren[0] != VK_BVH_INVALID_NODE)
-               ++valid_grandchild_count;
-            else
-               grandchildren[0] = grandchildren[1];
-
-            /* Grandchild now becomes my direct child, and can possibly be collapsed
-             * in the next iteration if found_child_count has not reached 6.
-             */
-            if (valid_grandchild_count > 1)
-               children[found_child_count++] = grandchildren[1];
-
-            if (valid_grandchild_count > 0)
-               children[collapsed_child_index] = grandchildren[0];
-            else {
-               /* This child doesn't have valid children, then I don't consider this
-                * child as my child anymore. This is possible depending on how and
-                * when lbvh/ploc algorithm marks a node as VK_BVH_INVALID_NODE.
-                */
-               found_child_count--;
-               children[collapsed_child_index] = children[found_child_count];
-            }
-
-            /* Finish collapsing, now I can mark this collapsed internal node as NULL,
-             * so whichever lane that would have processed it will return.
-             */
-            DEREF(child_node).bvh_offset = VK_NULL_BVH_OFFSET;
-         } else
-            break;
-      }
-
-      /* Count the number of instance children found. For each one found, it contributes to 2 blocks to dst_node_offset */
-      uint32_t num_blocks_to_add = 0;
+      /* Count the number of instance children found. For each one found,
+       * it contributes to 2 blocks to dst_node_offset
+       */
+      num_blocks_to_add = 0;
       for (uint32_t i = 0; i < found_child_count; ++i) {
          uint32_t type = ir_id_to_type(children[i]);
          num_blocks_to_add += (type == vk_ir_node_instance) ? 2 : 1;
       }
+   }
 
-      /* Used for finding where to encode children. Also, update dst_node_offset so other invocations know where to start encoding */
-      uint32_t child_block_offset_from_output_bvh = atomicAdd(DEREF(args.header).dst_node_offset, num_blocks_to_add);
+   BLOCK bvh_block_offset = (is_root_node) ? 0 :
+                            (ASSIGNED_NODE_TO_ENCODE ? VK_UNKNOWN_BVH_OFFSET
+                                                     : VK_NULL_BVH_OFFSET);
 
-      /* This is one of the needed information in anv_internal_node */
-      uint32_t child_block_offset_from_internal_node = child_block_offset_from_output_bvh - bvh_block_offset;
+   /* For all but the root internal node, nodes wait until their parent node
+    * informs them whether they are a valid child (valid bvh offset written)
+    * or were collapsed (VK_NULL_BVH_OFFSET written) and have no work to do.
+    */
+   for (;;) {
+      /* Make changes to the current node's BVH offset value visible. */
+      memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                    gl_SemanticsAcquire | gl_SemanticsMakeVisible);
 
-      vec3 min_offset = vec3(INFINITY);
-      vec3 max_offset = vec3(-INFINITY);
-      for (uint32_t i = 0; i < found_child_count; ++i) {
-         /* Retrieve type and location of the child from IR BVH */
-         uint32_t type = ir_id_to_type(children[i]);
-         uint32_t offset = ir_id_to_offset(children[i]);
+      /* Indicate where this internal node should be encoded. Offset measured
+       * in number of 64B blocks and started from output_bvh.
+       */
+      if (bvh_block_offset == VK_UNKNOWN_BVH_OFFSET)
+         bvh_block_offset = DEREF(src_node).bvh_offset;
 
-         if (type == vk_ir_node_internal) {
-            REF(vk_ir_box_node) child_node = REF(vk_ir_box_node)OFFSET(args.intermediate_bvh, offset);
-            DEREF(child_node).bvh_offset = child_block_offset_from_output_bvh;
-         } else {
-            encode_leaf_node(type, args.intermediate_bvh + offset,
-                             args.output_bvh + ANV_RT_BLOCK_SIZE * child_block_offset_from_output_bvh,
-                             header);
+      /* The invocation that processes this node is spinning, since its parent
+       * hasn't told it bvh_offset
+       */
+      BLOCK first_child_block;
+      if (READY_TO_WRITE(bvh_block_offset)) {
+         /* Used for finding where to encode children. Also, update dst_node_offset
+          * so other invocations know where to start encoding
+          */
+         first_child_block =
+            atomicAdd(DEREF(args.header).dst_node_offset, num_blocks_to_add);
+
+         /* Yes, we are potentially calling find_children again here. This is to
+          * handle an edge case where some bvh trees have nodes with only a single
+          * child. This can potentially lead to lots of nodes needing to be
+          * collapsed, overflowing the 6-element buffer allocated. To handle these
+          * rare cases we find the children again, immediately collapsing them as
+          * we find them.
+          */
+         if (collapsed_child_count > 6)
+            find_children(src, children, collapsed_nodes, collapsed_child_count, false);
+
+         BLOCK child_offset = first_child_block;
+         for (uint32_t i = 0; i < found_child_count; ++i) {
+            /* Retrieve type and location of the child from IR BVH */
+            uint32_t type = ir_id_to_type(children[i]);
+
+            if (type == vk_ir_node_internal) {
+               REF(vk_ir_box_node) child_node =
+                  REF(vk_ir_box_node)NODE_OFFSET(children[i]);
+               DEREF(child_node).bvh_offset = child_offset;
+            }
+
+            child_offset += (type == vk_ir_node_instance) ? 2 : 1;
          }
 
-         vk_aabb child_aabb =
-            DEREF(REF(vk_ir_node)OFFSET(args.intermediate_bvh, offset)).aabb;
-
-         min_offset = min(min_offset, child_aabb.min);
-         max_offset = max(max_offset, child_aabb.max);
-
-         child_block_offset_from_output_bvh += (type == vk_ir_node_instance) ? 2 : 1;
+         /* Mark this collapsed internal node as NULL,
+          * so whichever lane that would have processed it will return.
+          */
+         for (uint32_t i = 0; i < collapsed_child_count; i++) {
+            REF(vk_ir_box_node) child_node =
+               REF(vk_ir_box_node)OFFSET(args.intermediate_bvh, collapsed_nodes[i]);
+            DEREF(child_node).bvh_offset = VK_NULL_BVH_OFFSET;
+         }
+         /* Make changes to the children's BVH offset value available to child threads. */
+         memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                       gl_SemanticsRelease | gl_SemanticsMakeAvailable);
       }
 
-      /* Make changes to the children's BVH offset value available to the other invocations. */
-      memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
-                    gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+      /* While all work prior was performed with each simd lane working on
+       * separate nodes, encoding is achieved with all simd lanes in cluster
+       * working together on same internal node. Walk through each ready node
+       * and encode in concert.
+       */
+      while (READY_TO_WRITE(subgroupClusteredMin(bvh_block_offset, 8))) {
+         /* Select next ready simd lane to write */
+         uint32_t idx = (READY_TO_WRITE(bvh_block_offset)) ? cluster.idx : -1;
+         idx = subgroupClusteredMin(idx, 8);
 
-      encode_internal_node(children, child_block_offset_from_internal_node,
-                           found_child_count, min_offset, max_offset, bvh_block_offset);
+         /* Propagate src child and dest blocks of next simd lane to other lanes */
+         IR_NODE child = VK_BVH_INVALID_NODE;
+         BLOCK child_block = anv_shuffle(cluster, idx, first_child_block);
+         BLOCK internal_node_block = anv_shuffle(cluster, idx, bvh_block_offset);
+         vk_aabb child_aabb = {vec3(INFINITY), vec3(-INFINITY)};
+         bvh_block_offset = (cluster.idx == idx) ? VK_NULL_BVH_OFFSET
+                                                 : bvh_block_offset;
+         if (cluster.idx >= 6)
+            continue;
+         if (cluster.idx < anv_shuffle(cluster, idx, found_child_count)) {
+            for (uint32_t i = 0; ; i++) {
+               child = anv_shuffle(cluster, idx, children[i]);
+               if (i == cluster.idx)
+                  break;
+               uint32_t type = ir_id_to_type(child);
+               child_block += (type == vk_ir_node_instance) ? 2 : 1;
+            }
 
-      break;
+            if (child != VK_BVH_INVALID_NODE)
+               child_aabb = DEREF(REF(vk_ir_node)NODE_OFFSET(child)).aabb;
+
+            uint32_t type = ir_id_to_type(child);
+            if (child != VK_BVH_INVALID_NODE && type != vk_ir_node_internal)
+               encode_leaf_node(type, NODE_OFFSET(child),
+                              BLOCK_OFFSET(child_block), header);
+         }
+
+         BLOCK child_block_offset =
+            anv_shuffle(cluster, 0, child_block) - internal_node_block;
+         encode_internal_node(child, child_block_offset,
+                              anv_shuffle(cluster, idx, found_child_count),
+                              child_aabb, internal_node_block, cluster);
+      }
+
+      uint32_t is_done = (bvh_block_offset == VK_NULL_BVH_OFFSET) ? 1 : 0;
+      if (subgroupClusteredAdd(is_done, 8) == 8)
+         break;
    }
 
    if (is_root_node) {

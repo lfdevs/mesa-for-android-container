@@ -72,14 +72,14 @@ set_const_initialiser(nir_deref_instr **p, nir_constant *top_level_init,
       } else if ((*p)->deref_type == nir_deref_type_struct) {
          ret = ret->elements[(*p)->strct.index];
       } else {
-         unreachable("Unsupported deref type");
+         UNREACHABLE("Unsupported deref type");
       }
    }
 
    /* Now that we have selected the corrent nir_constant we copy the constant
     * values to it.
     */
-   nir_instr *src_instr = const_src->ssa->parent_instr;
+   nir_instr *src_instr = nir_def_instr(const_src->ssa);
    assert(src_instr->type == nir_instr_type_load_const);
    nir_load_const_instr *load = nir_instr_as_load_const(src_instr);
 
@@ -100,10 +100,13 @@ rebuild_const_array_initialiser(const struct glsl_type *type, void *mem_ctx)
 
    if (glsl_type_is_matrix(type) && glsl_get_matrix_columns(type) > 1) {
       ret->num_elements = glsl_get_matrix_columns(type);
-      ret->elements = ralloc_array(mem_ctx, nir_constant *, ret->num_elements);
 
-      for (unsigned i = 0; i < ret->num_elements; i++) {
-         ret->elements[i] = rzalloc(mem_ctx, nir_constant);
+      if (ret->num_elements) {
+         ret->elements = ralloc_array(ret, nir_constant *, ret->num_elements);
+
+         for (unsigned i = 0; i < ret->num_elements; i++) {
+            ret->elements[i] = rzalloc(ret, nir_constant);
+         }
       }
 
       return ret;
@@ -111,15 +114,18 @@ rebuild_const_array_initialiser(const struct glsl_type *type, void *mem_ctx)
 
    if (glsl_type_is_array(type) || glsl_type_is_struct(type)) {
       ret->num_elements = glsl_get_length(type);
-      ret->elements = ralloc_array(mem_ctx, nir_constant *, ret->num_elements);
 
-      for (unsigned i = 0; i < ret->num_elements; i++) {
-         if (glsl_type_is_array(type)) {
-            ret->elements[i] =
-               rebuild_const_array_initialiser(glsl_get_array_element(type), mem_ctx);
-         } else {
-            ret->elements[i] =
-               rebuild_const_array_initialiser(glsl_get_struct_field(type, i), mem_ctx);
+      if (ret->num_elements) {
+         ret->elements = ralloc_array(ret, nir_constant *, ret->num_elements);
+
+         for (unsigned i = 0; i < ret->num_elements; i++) {
+            if (glsl_type_is_array(type)) {
+               ret->elements[i] =
+                  rebuild_const_array_initialiser(glsl_get_array_element(type), ret);
+            } else {
+               ret->elements[i] =
+                  rebuild_const_array_initialiser(glsl_get_struct_field(type, i), ret);
+            }
          }
       }
    }
@@ -162,10 +168,10 @@ lower_const_array_to_uniform(nir_shader *shader, struct var_info *info,
    if (*const_count == limit)
       return false;
 
-   nir_variable *uni = rzalloc(shader, nir_variable);
+   nir_variable *uni = nir_variable_create_zeroed(shader);
 
    /* Rebuild constant initialiser */
-   nir_constant *const_init = rebuild_const_array_initialiser(var->type, uni);
+   nir_constant *const_init = rebuild_const_array_initialiser(var->type, shader);
 
    /* Set constant initialiser */
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
@@ -201,8 +207,8 @@ lower_const_array_to_uniform(nir_shader *shader, struct var_info *info,
    uni->data.read_only = true;
    uni->data.mode = nir_var_uniform;
    uni->type = info->var->type;
-   uni->name = ralloc_asprintf(uni, "constarray_%x_%u",
-                               *const_count, shader->info.stage);
+   nir_variable_set_namef(shader, uni,"constarray_%x_%u",
+                          *const_count, shader->info.stage);
 
    nir_shader_add_variable(shader, uni);
 
@@ -395,7 +401,7 @@ nir_lower_const_arrays_to_uniforms(nir_shader *shader,
                new_deref_instr = nir_build_deref_struct(&b, new_deref_instr,
                                                         (*p)->strct.index);
             } else {
-               unreachable("Unsupported deref type");
+               UNREACHABLE("Unsupported deref type");
             }
          }
          nir_deref_path_finish(&path);

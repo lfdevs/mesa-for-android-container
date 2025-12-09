@@ -29,6 +29,39 @@ tu_CreateBuffer(VkDevice _device,
    if (buffer == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   if (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
+      struct tu_instance *instance = device->physical_device->instance;
+      BITMASK_ENUM(tu_sparse_vma_flags) flags = 0;
+      uint64_t client_address = 0;
+
+      if (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT)
+         flags |= TU_SPARSE_VMA_MAP_ZERO;
+      if (pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)
+         flags |= TU_SPARSE_VMA_REPLAYABLE;
+
+      const VkBufferOpaqueCaptureAddressCreateInfo *replay_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO);
+      if (replay_info && replay_info->opaqueCaptureAddress) {
+         client_address = replay_info->opaqueCaptureAddress;
+         flags |= TU_SPARSE_VMA_REPLAYABLE;
+      }
+
+      VkResult result =
+         tu_sparse_vma_init(device, &buffer->vk.base, &buffer->vma,
+                            &buffer->vk.device_address, flags,
+                            pCreateInfo->size, client_address);
+
+      if (result != VK_SUCCESS) {
+         vk_buffer_destroy(&device->vk, pAllocator, &buffer->vk);
+         return result;
+      }
+
+      vk_address_binding_report(&instance->vk, &buffer->vk.base,
+                                buffer->vk.device_address, buffer->vk.size,
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
+   }
+
    TU_RMV(buffer_create, device, buffer);
 
 #ifdef HAVE_PERFETTO
@@ -58,10 +91,16 @@ tu_DestroyBuffer(VkDevice _device,
    tu_perfetto_log_destroy_buffer(device, buffer);
 #endif
 
-   if (buffer->vk.device_address)
+   if (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
+      vk_address_binding_report(&instance->vk, &buffer->vk.base,
+                                buffer->vk.device_address, buffer->vk.size,
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
+      tu_sparse_vma_finish(device, &buffer->vma);
+   } else if (buffer->vk.device_address) {
       vk_address_binding_report(&instance->vk, &buffer->vk.base,
                                 buffer->vk.device_address, buffer->bo_size,
                                 VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
+   }
 
 
    vk_buffer_destroy(&device->vk, pAllocator, &buffer->vk);
@@ -76,10 +115,13 @@ tu_GetDeviceBufferMemoryRequirements(
    VK_FROM_HANDLE(tu_device, device, _device);
 
    uint64_t size = pInfo->pCreateInfo->size;
+   uint32_t alignment =
+      (pInfo->pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) ?
+      os_page_size : 64;
    pMemoryRequirements->memoryRequirements = (VkMemoryRequirements) {
-      .size = MAX2(align64(size, 64), size),
-      .alignment = 64,
-      .memoryTypeBits = (1 << device->physical_device->memory.type_count) - 1,
+      .size = MAX2(align64(size, alignment), size),
+      .alignment = alignment,
+      .memoryTypeBits = (1 << device->physical_device->memory.non_lazy_type_count) - 1,
    };
 
    vk_foreach_struct(ext, pMemoryRequirements->pNext) {
@@ -179,6 +221,13 @@ uint64_t tu_GetBufferOpaqueCaptureAddress(
    VkDevice _device,
    const VkBufferDeviceAddressInfo* pInfo)
 {
-   /* We care only about memory allocation opaque addresses */
+   VK_FROM_HANDLE(tu_buffer, buffer, pInfo->buffer);
+
+   /* Sparse buffers have their own iova allocation, but all others do not so
+    * we only care about sparse buffers.
+    */
+   if (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)
+      return buffer->vk.device_address;
+
    return 0;
 }

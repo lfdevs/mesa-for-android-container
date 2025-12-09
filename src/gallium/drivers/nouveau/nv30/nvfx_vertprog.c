@@ -140,7 +140,7 @@ emit_src(struct nvfx_vpc *vpc, uint32_t *hw,
       if (src.reg.index < 256 && src.reg.index >= -256) {
          reloc.location = vp->nr_insns - 1;
          reloc.target = src.reg.index;
-         util_dynarray_append(&vp->const_relocs, struct nvfx_relocation, reloc);
+         util_dynarray_append(&vp->const_relocs, reloc);
       } else {
          hw[1] |= (src.reg.index << NVFX_VP(INST_CONST_SRC_SHIFT)) &
                NVFX_VP(INST_CONST_SRC_MASK);
@@ -689,7 +689,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
 
       reloc.location = vpc->vp->nr_insns;
       reloc.target = finst->Label.Label + 1;
-      util_dynarray_append(&vpc->label_relocs, struct nvfx_relocation, reloc);
+      util_dynarray_append(&vpc->label_relocs, reloc);
 
       insn = arith(0, SCA, BRA, none.reg, 0, none, none, none);
       insn.cc_test = NVFX_COND_EQ;
@@ -700,7 +700,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    case TGSI_OPCODE_CAL:
       reloc.location = vpc->vp->nr_insns;
       reloc.target = finst->Label.Label;
-      util_dynarray_append(&vpc->label_relocs, struct nvfx_relocation, reloc);
+      util_dynarray_append(&vpc->label_relocs, reloc);
 
       if(finst->Instruction.Opcode == TGSI_OPCODE_CAL)
          insn = arith(0, SCA, CAL, none.reg, 0, none, none, none);
@@ -716,7 +716,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
       } else {
          reloc.location = vpc->vp->nr_insns;
          reloc.target = vpc->info->num_instructions;
-         util_dynarray_append(&vpc->label_relocs, struct nvfx_relocation, reloc);
+         util_dynarray_append(&vpc->label_relocs, reloc);
          nvfx_vp_emit(vpc, arith(0, SCA, BRA, none.reg, 0, none, none, none));
       }
       break;
@@ -732,14 +732,14 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    case TGSI_OPCODE_BGNLOOP:
       loop.cont_target = idx;
       loop.brk_target = finst->Label.Label + 1;
-      util_dynarray_append(&vpc->loop_stack, struct nvfx_loop_entry, loop);
+      util_dynarray_append(&vpc->loop_stack, loop);
       break;
    case TGSI_OPCODE_ENDLOOP:
       loop = util_dynarray_pop(&vpc->loop_stack, struct nvfx_loop_entry);
 
       reloc.location = vpc->vp->nr_insns;
       reloc.target = loop.cont_target;
-      util_dynarray_append(&vpc->label_relocs, struct nvfx_relocation, reloc);
+      util_dynarray_append(&vpc->label_relocs, reloc);
 
       nvfx_vp_emit(vpc, arith(0, SCA, BRA, none.reg, 0, none, none, none));
       break;
@@ -748,7 +748,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
 
       reloc.location = vpc->vp->nr_insns;
       reloc.target = loop.cont_target;
-      util_dynarray_append(&vpc->label_relocs, struct nvfx_relocation, reloc);
+      util_dynarray_append(&vpc->label_relocs, reloc);
 
       nvfx_vp_emit(vpc, arith(0, SCA, BRA, none.reg, 0, none, none, none));
       break;
@@ -757,7 +757,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
 
       reloc.location = vpc->vp->nr_insns;
       reloc.target = loop.brk_target;
-      util_dynarray_append(&vpc->label_relocs, struct nvfx_relocation, reloc);
+      util_dynarray_append(&vpc->label_relocs, reloc);
 
       nvfx_vp_emit(vpc, arith(0, SCA, BRA, none.reg, 0, none, none, none));
       break;
@@ -767,7 +767,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
          if(idx != (vpc->info->num_instructions - 1)) {
             reloc.location = vpc->vp->nr_insns;
             reloc.target = vpc->info->num_instructions;
-            util_dynarray_append(&vpc->label_relocs, struct nvfx_relocation, reloc);
+            util_dynarray_append(&vpc->label_relocs, reloc);
             nvfx_vp_emit(vpc, arith(0, SCA, BRA, none.reg, 0, none, none, none));
          }
       } else {
@@ -989,7 +989,7 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
       vpc->cvtx_idx = vpc->hpos_idx;
    }
 
-   util_dynarray_init(&insns, NULL);
+   insns = UTIL_DYNARRAY_INIT;
 
    tgsi_parse_init(&parse, vp->pipe.tokens);
    while (!tgsi_parse_end_of_tokens(&parse)) {
@@ -1015,7 +1015,7 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
       {
          const struct tgsi_full_instruction *finst;
          unsigned idx = insns.size >> 2;
-         util_dynarray_append(&insns, unsigned, vp->nr_insns);
+         util_dynarray_append(&insns, vp->nr_insns);
          finst = &parse.FullToken.FullInstruction;
          if (!nvfx_vertprog_parse_instruction(vpc, idx, finst))
             goto out;
@@ -1026,7 +1026,7 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
       }
    }
 
-   util_dynarray_append(&insns, unsigned, vp->nr_insns);
+   util_dynarray_append(&insns, vp->nr_insns);
 
    for(unsigned i = 0; i < vpc->label_relocs.size; i += sizeof(struct nvfx_relocation))
    {
@@ -1038,7 +1038,7 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
 
       //debug_printf("hw %u -> tgsi %u = hw %u\n", hw_reloc.location, label_reloc->target, hw_reloc.target);
 
-      util_dynarray_append(&vp->branch_relocs, struct nvfx_relocation, hw_reloc);
+      util_dynarray_append(&vp->branch_relocs, hw_reloc);
    }
    util_dynarray_fini(&insns);
    util_dynarray_trim(&vp->branch_relocs);

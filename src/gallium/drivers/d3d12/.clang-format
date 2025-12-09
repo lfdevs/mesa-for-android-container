@@ -3,10 +3,10 @@ BasedOnStyle: InheritParentConfig
 DisableFormat: false
 
 ColumnLimit: 120
-SortIncludes: false
+SortIncludes: Never
 
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
 AlignTrailingComments: true
 
 PenaltyExcessCharacter: 75
@@ -51,7 +51,7 @@ SpaceBeforeCtorInitializerColon: true
 SpacesInContainerLiterals: true
 SpaceBeforeParens: ControlStatements
 SpacesBeforeTrailingComments: 3
-SpacesInAngles: false
+SpacesInAngles: Never
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 SpacesInCStyleCastParentheses: false

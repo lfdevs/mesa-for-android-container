@@ -16,6 +16,20 @@
 #include "nir_intrinsics_indices.h"
 #include "shader_enums.h"
 
+static bool
+inline_uvs_index(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   struct agx_varyings_vs *varyings = data;
+   if (intr->intrinsic != nir_intrinsic_load_uvs_index_agx)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   unsigned slot = nir_intrinsic_io_semantics(intr).location;
+
+   nir_def_replace(&intr->def, nir_imm_intN_t(b, varyings->slots[slot], 16));
+   return true;
+}
+
 struct ctx {
    nir_def *layer, *viewport;
    nir_cursor after_layer_viewport;
@@ -75,11 +89,11 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    if (sem.location == VARYING_SLOT_LAYER) {
       assert(ctx->layer == NULL && "only written once");
       ctx->layer = value;
-      ctx->after_layer_viewport = nir_after_instr(index->parent_instr);
+      ctx->after_layer_viewport = nir_after_def(index);
    } else if (sem.location == VARYING_SLOT_VIEWPORT) {
       assert(ctx->viewport == NULL && "only written once");
       ctx->viewport = value;
-      ctx->after_layer_viewport = nir_after_instr(index->parent_instr);
+      ctx->after_layer_viewport = nir_after_def(index);
    } else if (sem.location == VARYING_SLOT_CLIP_DIST0 ||
               sem.location == VARYING_SLOT_CLIP_DIST1) {
 
@@ -208,6 +222,19 @@ agx_nir_lower_uvs(nir_shader *s, struct agx_unlinked_uvs_layout *layout)
       cfg.output_count_2 = offs;
    }
 
+   /* If we know the interpolation qualifiers in the vertex shader, we can
+    * inline UVS indices to eliminate some indirection.
+    */
+   if (s->info.known_interpolation_qualifiers) {
+      struct agx_varyings_vs v;
+      uint64_t flat = ~(s->info.linear_varyings | s->info.perspective_varyings);
+
+      agx_assign_uvs(&v, layout, flat, s->info.linear_varyings);
+
+      nir_shader_intrinsics_pass(s, inline_uvs_index, nir_metadata_control_flow,
+                                 &v);
+   }
+
    return progress;
 }
 
@@ -218,13 +245,14 @@ agx_assign_uvs(struct agx_varyings_vs *varyings,
 {
    *varyings = (struct agx_varyings_vs){0};
 
-   /* These are always flat-shaded from the FS perspective */
+   /* Layer/viewport always flat-shaded, no other special varyings are */
+   flat_mask &= BITFIELD64_RANGE(VARYING_SLOT_VAR0, 32);
    flat_mask |= VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT;
 
    /* The internal cull distance slots are always linearly-interpolated */
    linear_mask |= BITFIELD64_RANGE(VARYING_SLOT_CULL_PRIMITIVE, 2);
 
-   assert(!(flat_mask & linear_mask));
+   assert(!(flat_mask & linear_mask & layout->written));
 
    /* TODO: Link FP16 varyings */
    unsigned num_32_smooth = 0, num_32_flat = 0, num_32_linear = 0;

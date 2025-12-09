@@ -31,9 +31,9 @@ struct pipe_context;
 
 struct d3d12_surface {
    struct pipe_surface base;
-   struct d3d12_descriptor_handle uint_rtv_handle;
-   struct pipe_resource *rgba_texture;
+   struct d3d12_screen *screen;
 
+   struct d3d12_descriptor_handle uint_rtv_handle;
    struct d3d12_descriptor_handle desc_handle;
 };
 
@@ -42,12 +42,6 @@ enum d3d12_surface_conversion_mode {
    D3D12_SURFACE_CONVERSION_RGBA_UINT,
    D3D12_SURFACE_CONVERSION_BGRA_UINT,
 };
-
-static inline struct d3d12_surface *
-d3d12_surface(struct pipe_surface *psurf)
-{
-   return (struct d3d12_surface *)psurf;
-}
 
 enum d3d12_surface_conversion_mode
 d3d12_surface_update_pre_draw(struct pipe_context *pctx,
@@ -61,9 +55,27 @@ d3d12_surface_update_post_draw(struct pipe_context *pctx,
 
 D3D12_CPU_DESCRIPTOR_HANDLE
 d3d12_surface_get_handle(struct d3d12_surface *surface,
-                         enum d3d12_surface_conversion_mode mode);
+                         enum d3d12_surface_conversion_mode mode,
+                         DXGI_FORMAT format);
+
+struct d3d12_surface *
+d3d12_create_surface(struct d3d12_screen *screen,
+                     const struct pipe_surface *tpl);
 
 void
-d3d12_context_surface_init(struct pipe_context *context);
+d3d12_surface_destroy(struct d3d12_surface *surf);
+
+static inline void
+d3d12_surface_reference(struct d3d12_surface **dst, struct d3d12_surface *src)
+{
+   struct d3d12_surface *old_dst = *dst;
+
+   if (pipe_reference_described(old_dst ? &old_dst->base.reference : NULL,
+                                src ? &src->base.reference : NULL,
+                                (debug_reference_descriptor)
+                                debug_describe_surface))
+      d3d12_surface_destroy(old_dst);
+   *dst = src;
+}
 
 #endif

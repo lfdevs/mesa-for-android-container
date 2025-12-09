@@ -7,7 +7,6 @@ texelfetch@gs
 
 # GPU hangs now
 variable-indexing@gs-in
-fs-multiple-large-local-arrays
 
 # intermittent GL_OOMs, let's make sure that doesn't impact other tests.
 spec@!opengl 1.2@tex3d-maxsize

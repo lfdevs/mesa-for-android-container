@@ -36,42 +36,6 @@
  * Internal functions
  */
 
-static ALWAYS_INLINE struct pipe_resource *
-_mesa_get_bufferobj_reference(struct gl_context *ctx, struct gl_buffer_object *obj)
-{
-   assert(obj);
-   struct pipe_resource *buffer = obj->buffer;
-
-   /* Only one context is using the fast path. All other contexts must use
-    * the slow path.
-    */
-   if (unlikely(obj->private_refcount_ctx != ctx ||
-                obj->private_refcount <= 0)) {
-      if (buffer) {
-         if (obj->private_refcount_ctx != ctx) {
-            p_atomic_inc(&buffer->reference.count);
-         } else {
-            /* This is the number of atomic increments we will skip. */
-            const unsigned count = 100000000;
-            p_atomic_add(&buffer->reference.count, count);
-
-            /* Remove the reference that we return. */
-            assert(obj->private_refcount == 0);
-            obj->private_refcount = count - 1;
-         }
-      }
-      return buffer;
-   }
-
-   /* Return a buffer reference while decrementing the private refcount.
-    * The buffer must be non-NULL, which is implied by private_refcount_ctx
-    * being non-NULL.
-    */
-   assert(buffer);
-   obj->private_refcount--;
-   return buffer;
-}
-
 void _mesa_bufferobj_subdata(struct gl_context *ctx,
                           GLintptrARB offset,
                           GLsizeiptrARB size,
@@ -104,8 +68,6 @@ GLboolean _mesa_bufferobj_unmap(struct gl_context *ctx, struct gl_buffer_object 
 
 struct gl_buffer_object *
 _mesa_bufferobj_alloc(struct gl_context *ctx, GLuint id);
-void
-_mesa_bufferobj_release_buffer(struct gl_buffer_object *obj);
 
 enum pipe_map_flags
 _mesa_access_flags_to_transfer_flags(GLbitfield access, bool wholeBuffer);

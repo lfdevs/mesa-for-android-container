@@ -106,16 +106,18 @@ hud_draw_colored_prims(struct hud_context *hud, unsigned prim,
    hud->constants.translate[1] = (float) (yoffset * hud_scale);
    hud->constants.scale[0] = hud_scale;
    hud->constants.scale[1] = yscale * hud_scale;
-   pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
+   pipe_upload_constant_buffer0(pipe, MESA_SHADER_VERTEX, &hud->constbuf);
 
+   struct pipe_resource *releasebuf = NULL;
    u_upload_data(hud->pipe->stream_uploader, 0,
                  num_vertices * 2 * sizeof(float), 16, buffer,
-                 &vbuffer.buffer_offset, &vbuffer.buffer.resource);
+                 &vbuffer.buffer_offset, &vbuffer.buffer.resource, &releasebuf);
    u_upload_unmap(hud->pipe->stream_uploader);
 
-   cso_set_vertex_buffers(cso, 1, true, &vbuffer);
+   cso_set_vertex_buffers(cso, 1, &vbuffer);
    cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
    cso_draw_arrays(cso, prim, 0, num_vertices);
+   pipe_resource_release(hud->pipe, releasebuf);
 }
 
 static void
@@ -518,15 +520,12 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
                         CSO_BIT_MIN_SAMPLES |
                         CSO_BIT_BLEND |
                         CSO_BIT_DEPTH_STENCIL_ALPHA |
-                        CSO_BIT_FRAGMENT_SHADER |
                         CSO_BIT_FRAGMENT_SAMPLERS |
                         CSO_BIT_RASTERIZER |
                         CSO_BIT_VIEWPORT |
                         CSO_BIT_STREAM_OUTPUTS |
-                        CSO_BIT_GEOMETRY_SHADER |
-                        CSO_BIT_TESSCTRL_SHADER |
-                        CSO_BIT_TESSEVAL_SHADER |
-                        CSO_BIT_VERTEX_SHADER |
+                        CSO_BIT_MESH_SHADER |
+                        CSO_BITS_VERTEX_PIPE_SHADERS |
                         CSO_BIT_VERTEX_ELEMENTS |
                         CSO_BIT_PAUSE_QUERIES |
                         CSO_BIT_RENDER_CONDITION));
@@ -574,13 +573,14 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
    cso_set_tessctrl_shader_handle(cso, NULL);
    cso_set_tesseval_shader_handle(cso, NULL);
    cso_set_geometry_shader_handle(cso, NULL);
+   cso_set_mesh_shader_handle(cso, NULL);
    cso_set_vertex_shader_handle(cso, hud->vs_color);
    cso_set_vertex_elements(cso, &hud->velems);
    cso_set_render_condition(cso, NULL, false, 0);
-   pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, 1, 0,
+   pipe->set_sampler_views(pipe, MESA_SHADER_FRAGMENT, 0, 1, 0,
                            &hud->font_sampler_view);
-   cso_set_samplers(cso, PIPE_SHADER_FRAGMENT, 1, sampler_states);
-   pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
+   cso_set_samplers(cso, MESA_SHADER_FRAGMENT, 1, sampler_states);
+   pipe_upload_constant_buffer0(pipe, MESA_SHADER_VERTEX, &hud->constbuf);
 
    /* draw accumulated vertices for background quads */
    cso_set_blend(cso, &hud->alpha_blend);
@@ -596,27 +596,23 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
       hud->constants.scale[0] = hud_scale;
       hud->constants.scale[1] = hud_scale;
 
-      pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
+      pipe_upload_constant_buffer0(pipe, MESA_SHADER_VERTEX, &hud->constbuf);
 
-      cso_set_vertex_buffers(cso, 1, true, &hud->bg.vbuf);
+      cso_set_vertex_buffers(cso, 1, &hud->bg.vbuf);
       cso_draw_arrays(cso, MESA_PRIM_QUADS, 0, hud->bg.num_vertices);
-      hud->bg.vbuf.buffer.resource = NULL;
-   } else {
-      pipe_resource_reference(&hud->bg.vbuf.buffer.resource, NULL);
    }
+   hud->bg.vbuf.buffer.resource = NULL;
 
    /* draw accumulated vertices for text */
    if (hud->text.num_vertices) {
       cso_set_vertex_shader_handle(cso, hud->vs_text);
       cso_set_vertex_elements(cso, &hud->text_velems);
-      cso_set_vertex_buffers(cso, 1, true, &hud->text.vbuf);
+      cso_set_vertex_buffers(cso, 1, &hud->text.vbuf);
       cso_set_fragment_shader_handle(hud->cso, hud->fs_text);
       cso_draw_arrays(cso, MESA_PRIM_QUADS, 0, hud->text.num_vertices);
       cso_set_vertex_elements(cso, &hud->velems);
-      hud->text.vbuf.buffer.resource = NULL;
-   } else {
-      pipe_resource_reference(&hud->text.vbuf.buffer.resource, NULL);
    }
+   hud->text.vbuf.buffer.resource = NULL;
 
    if (hud->simple)
       goto done;
@@ -632,17 +628,15 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
    hud->constants.translate[1] = 0;
    hud->constants.scale[0] = hud_scale;
    hud->constants.scale[1] = hud_scale;
-   pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
+   pipe_upload_constant_buffer0(pipe, MESA_SHADER_VERTEX, &hud->constbuf);
 
    if (hud->whitelines.num_vertices) {
       cso_set_vertex_shader_handle(cso, hud->vs_color);
-      cso_set_vertex_buffers(cso, 1, true, &hud->whitelines.vbuf);
+      cso_set_vertex_buffers(cso, 1, &hud->whitelines.vbuf);
       cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
       cso_draw_arrays(cso, MESA_PRIM_LINES, 0, hud->whitelines.num_vertices);
-      hud->whitelines.vbuf.buffer.resource = NULL;
-   } else {
-      pipe_resource_reference(&hud->whitelines.vbuf.buffer.resource, NULL);
    }
+   hud->whitelines.vbuf.buffer.resource = NULL;
 
    /* draw the rest */
    cso_set_blend(cso, &hud->alpha_blend);
@@ -696,17 +690,19 @@ hud_stop_queries(struct hud_context *hud, struct pipe_context *pipe)
    /* Allocate everything once and divide the storage into 3 portions
     * manually, because u_upload_alloc can unmap memory from previous calls.
     */
+   struct pipe_resource *pres = NULL, *releasebuf = NULL;
    u_upload_alloc(pipe->stream_uploader, 0,
                   hud->bg.buffer_size +
                   hud->whitelines.buffer_size +
                   hud->text.buffer_size,
-                  16, &hud->bg.vbuf.buffer_offset, &hud->bg.vbuf.buffer.resource,
+                  16, &hud->bg.vbuf.buffer_offset, &pres, &releasebuf,
                   (void**)&hud->bg.vertices);
    if (!hud->bg.vertices)
       return;
-
-   pipe_resource_reference(&hud->whitelines.vbuf.buffer.resource, hud->bg.vbuf.buffer.resource);
-   pipe_resource_reference(&hud->text.vbuf.buffer.resource, hud->bg.vbuf.buffer.resource);
+   hud->bg.vbuf.buffer.resource = pres;
+   hud->whitelines.vbuf.buffer.resource = pres;
+   hud->text.vbuf.buffer.resource = pres;
+   pipe_resource_release(pipe, releasebuf);
 
    hud->whitelines.vbuf.buffer_offset = hud->bg.vbuf.buffer_offset +
                                         hud->bg.buffer_size;
@@ -1038,7 +1034,7 @@ hud_graph_destroy(struct hud_graph *graph, struct pipe_context *pipe)
    FREE(graph->vertices);
    if (graph->free_query_data)
       graph->free_query_data(graph->query_data, pipe);
-   if (graph->fd)
+   if (graph->fd && graph->fd != stdout)
       fclose(graph->fd);
    FREE(graph);
 }

@@ -25,7 +25,7 @@
 
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
-#include "compiler/glsl/list.h"
+#include "compiler/list.h"
 
 #include "main/mtypes.h"
 #include "main/shader_types.h"
@@ -102,7 +102,7 @@ ptn_get_src(struct ptn_compile *c, const struct prog_src_register *prog_src)
          nir_def *baryc = nir_load_barycentric_pixel(b, 32);
 
          if (slot != VARYING_SLOT_COL0 && slot != VARYING_SLOT_COL1) {
-            nir_intrinsic_set_interp_mode(nir_instr_as_intrinsic(baryc->parent_instr),
+            nir_intrinsic_set_interp_mode(nir_def_as_intrinsic(baryc),
                                           INTERP_MODE_SMOOTH);
          }
 
@@ -374,7 +374,7 @@ _mesa_texture_index_to_sampler_dim(gl_texture_index index, bool *is_array)
    case NUM_TEXTURE_TARGETS:
       break;
    }
-   unreachable("unknown texture target");
+   UNREACHABLE("unknown texture target");
 }
 
 static nir_def *
@@ -784,6 +784,13 @@ setup_registers_and_variables(struct ptn_compile *c)
        * the shader.
        */
       c->output_regs[i] = nir_decl_reg(b, 4, 32, 0);
+
+      /* Initialize output registers with default value vec4(0, 0, 0, 1) */
+      if (c->ctx->Const.VertexProgramDefaultOut &&
+          c->prog->info.stage == MESA_SHADER_VERTEX &&
+          i != VARYING_SLOT_FOGC && i <= VARYING_SLOT_TEX7) {
+         nir_store_reg(b, nir_imm_vec4(b, 0, 0, 0, 1), c->output_regs[i]);
+      }
    }
 
    /* Create temporary registers. */
@@ -807,7 +814,7 @@ prog_to_nir(const struct gl_context *ctx, const struct gl_program *prog)
       ctx->screen->nir_options[prog->info.stage];
    struct ptn_compile *c;
    struct nir_shader *s;
-   gl_shader_stage stage = prog->info.stage;
+   mesa_shader_stage stage = prog->info.stage;
 
    c = rzalloc(NULL, struct ptn_compile);
    if (!c)
@@ -819,6 +826,8 @@ prog_to_nir(const struct gl_context *ctx, const struct gl_program *prog)
 
    /* Copy the shader_info from the gl_program */
    c->build.shader->info = prog->info;
+   c->build.shader->info.max_subgroup_size = 128;
+   c->build.shader->info.min_subgroup_size = 1;
 
    s = c->build.shader;
 
@@ -858,12 +867,15 @@ prog_to_nir(const struct gl_context *ctx, const struct gl_program *prog)
 
    /* ARB_vp: */
    if (prog->arb.IsPositionInvariant) {
-      NIR_PASS(_, s, st_nir_lower_position_invariant, prog->Parameters);
+      NIR_PASS(_, s, st_nir_lower_position_invariant, prog->Parameters,
+               ctx->Const.PackedDriverUniformStorage);
    }
 
    /* Add OPTION ARB_fog_exp code */
-   if (prog->arb.Fog)
-      NIR_PASS(_, s, st_nir_lower_fog, prog->arb.Fog, prog->Parameters);
+   if (prog->arb.Fog) {
+      NIR_PASS(_, s, st_nir_lower_fog, prog->arb.Fog, prog->Parameters,
+               ctx->Const.PackedDriverUniformStorage);
+   }
 
 fail:
    if (c->error) {

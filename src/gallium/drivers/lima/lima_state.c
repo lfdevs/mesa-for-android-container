@@ -193,7 +193,7 @@ lima_set_vertex_buffers(struct pipe_context *pctx,
    struct lima_context_vertex_buffer *so = &ctx->vertex_buffers;
 
    util_set_vertex_buffers_mask(so->vb, &so->enabled_mask,
-                                vb, count, true);
+                                vb, count);
    so->count = util_last_bit(so->enabled_mask);
 
    ctx->dirty |= LIMA_CONTEXT_DIRTY_VERTEX_BUFF;
@@ -263,8 +263,7 @@ lima_set_stencil_ref(struct pipe_context *pctx,
 
 static void
 lima_set_constant_buffer(struct pipe_context *pctx,
-                         enum pipe_shader_type shader, uint index,
-                         bool pass_reference,
+                         mesa_shader_stage shader, uint index,
                          const struct pipe_constant_buffer *cb)
 {
    struct lima_context *ctx = lima_context(pctx);
@@ -308,7 +307,7 @@ lima_sampler_state_delete(struct pipe_context *pctx, void *sstate)
 
 static void
 lima_sampler_states_bind(struct pipe_context *pctx,
-                        enum pipe_shader_type shader, unsigned start,
+                        mesa_shader_stage shader, unsigned start,
                         unsigned nr, void **hwcso)
 {
    struct lima_context *ctx = lima_context(pctx);
@@ -369,7 +368,7 @@ lima_sampler_view_destroy(struct pipe_context *pctx,
 
 static void
 lima_set_sampler_views(struct pipe_context *pctx,
-                      enum pipe_shader_type shader,
+                      mesa_shader_stage shader,
                       unsigned start, unsigned nr,
                        unsigned unbind_num_trailing_slots,
                       struct pipe_sampler_view **views)
@@ -441,6 +440,7 @@ lima_state_init(struct lima_context *ctx)
    ctx->base.create_sampler_view = lima_create_sampler_view;
    ctx->base.sampler_view_destroy = lima_sampler_view_destroy;
    ctx->base.sampler_view_release = u_default_sampler_view_release;
+   ctx->base.resource_release = u_default_resource_release;
    ctx->base.set_sampler_views = lima_set_sampler_views;
 
    ctx->base.set_sample_mask = lima_set_sample_mask;
@@ -452,5 +452,5 @@ lima_state_fini(struct lima_context *ctx)
    struct lima_context_vertex_buffer *so = &ctx->vertex_buffers;
 
    util_set_vertex_buffers_mask(so->vb, &so->enabled_mask, NULL,
-                                0, false);
+                                0);
 }

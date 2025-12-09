@@ -562,6 +562,7 @@ static const struct opcode_desc v3d42_mul_ops[] = {
         { 1, 1, .mux.b_mask = ANYMUX, .mux.a_mask = ANYMUX, V3D_QPU_M_ADD },
         { 2, 2, .mux.b_mask = ANYMUX, .mux.a_mask = ANYMUX, V3D_QPU_M_SUB },
         { 3, 3, .mux.b_mask = ANYMUX, .mux.a_mask = ANYMUX, V3D_QPU_M_UMUL24 },
+        { 3, 3, .mux.b_mask = ANYMUX, .mux.a_mask = ANYMUX, V3D_QPU_M_UMUL24_RTOP0 },
         { 4, 8, .mux.b_mask = ANYMUX, .mux.a_mask = ANYMUX, V3D_QPU_M_VFMUL },
         { 9, 9, .mux.b_mask = ANYMUX, .mux.a_mask = ANYMUX, V3D_QPU_M_SMUL24 },
         { 10, 10, .mux.b_mask = ANYMUX, .mux.a_mask = ANYMUX, V3D_QPU_M_MULTOP },
@@ -749,7 +750,7 @@ static const struct opcode_desc v3d71_mul_ops[] = {
         { 1, 1, .raddr_mask = ANYOPMASK, V3D_QPU_M_ADD, 71 },
         { 2, 2, .raddr_mask = ANYOPMASK, V3D_QPU_M_SUB, 71 },
         { 3, 3, .raddr_mask = ANYOPMASK, V3D_QPU_M_UMUL24, 71 },
-        { 3, 3, .raddr_mask = ANYOPMASK, V3D_QPU_M_UMUL24, 71 },
+        { 3, 3, .raddr_mask = ANYOPMASK, V3D_QPU_M_UMUL24_RTOP0, 71 },
         { 4, 8, .raddr_mask = ANYOPMASK, V3D_QPU_M_VFMUL, 71 },
         { 9, 9, .raddr_mask = ANYOPMASK, V3D_QPU_M_SMUL24, 71 },
         { 10, 10, .raddr_mask = ANYOPMASK, V3D_QPU_M_MULTOP, 71 },
@@ -773,6 +774,10 @@ static const struct opcode_desc v3d71_mul_ops[] = {
         { 14, 14, .raddr_mask = OP_MASK(33), V3D_QPU_M_FTOSNORM16, 71 },
         { 14, 14, .raddr_mask = OP_MASK(34), V3D_QPU_M_VFTOUNORM8, 71 },
         { 14, 14, .raddr_mask = OP_MASK(35), V3D_QPU_M_VFTOSNORM8, 71 },
+        { 14, 14, .raddr_mask = OP_MASK(36), V3D_QPU_M_FUNPACKUNORMLO, 71 },
+        { 14, 14, .raddr_mask = OP_MASK(37), V3D_QPU_M_FUNPACKUNORMHI, 71 },
+        { 14, 14, .raddr_mask = OP_MASK(38), V3D_QPU_M_FUNPACKSNORMLO, 71 },
+        { 14, 14, .raddr_mask = OP_MASK(39), V3D_QPU_M_FUNPACKSNORMHI, 71 },
         { 14, 14, .raddr_mask = OP_MASK(48), V3D_QPU_M_VFTOUNORM10LO, 71 },
         { 14, 14, .raddr_mask = OP_MASK(49), V3D_QPU_M_VFTOUNORM10HI, 71 },
 
@@ -1282,7 +1287,7 @@ v3d71_qpu_add_unpack(const struct v3d_device_info *devinfo, uint64_t packed_inst
 
         case V3D_QPU_A_VFMIN:
         case V3D_QPU_A_VFMAX:
-                unreachable("pending v3d71 update");
+                UNREACHABLE("pending v3d71 update");
                 if (!v3d_qpu_float16_unpack_unpack(op & 0x7,
                                                    &instr->alu.add.a.unpack)) {
                         return false;
@@ -1479,7 +1484,7 @@ v3d71_qpu_mul_unpack(const struct v3d_device_info *devinfo, uint64_t packed_inst
                 break;
 
         case V3D_QPU_M_VFMUL:
-                unreachable("pending v3d71 update");
+                UNREACHABLE("pending v3d71 update");
                 instr->alu.mul.output_pack = V3D_QPU_PACK_NONE;
 
                 if (!v3d_qpu_float16_unpack_unpack(((op & 0x7) - 4) & 7,
@@ -2224,7 +2229,7 @@ v3d71_qpu_mul_pack(const struct v3d_device_info *devinfo,
         }
 
         case V3D_QPU_M_VFMUL: {
-                unreachable("pending v3d71 update");
+                UNREACHABLE("pending v3d71 update");
                 uint32_t packed;
 
                 if (instr->alu.mul.output_pack != V3D_QPU_PACK_NONE)

@@ -20,6 +20,15 @@
 
 #define PANVK_QUERY_TIMEOUT 2000000000ull
 
+static void
+reset_query_pool(struct panvk_query_pool *pool, uint32_t firstQuery,
+                 uint32_t queryCount)
+{
+   struct panvk_query_available_obj *available =
+      panvk_query_available_host_addr(pool, firstQuery);
+   memset(available, 0, queryCount * sizeof(*available));
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_per_arch(CreateQueryPool)(VkDevice _device,
                                 const VkQueryPoolCreateInfo *pCreateInfo,
@@ -57,7 +66,7 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
    }
 #endif
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 
    pool->reports_per_query = reports_per_query;
@@ -88,6 +97,9 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
    }
 
+   if (pCreateInfo->flags & VK_QUERY_POOL_CREATE_RESET_BIT_KHR)
+      reset_query_pool(pool, 0, pool->vk.query_count);
+
    *pQueryPool = panvk_query_pool_to_handle(pool);
 
    return VK_SUCCESS;
@@ -113,10 +125,7 @@ panvk_per_arch(ResetQueryPool)(VkDevice device, VkQueryPool queryPool,
                                uint32_t firstQuery, uint32_t queryCount)
 {
    VK_FROM_HANDLE(panvk_query_pool, pool, queryPool);
-
-   struct panvk_query_available_obj *available =
-      panvk_query_available_host_addr(pool, firstQuery);
-   memset(available, 0, queryCount * sizeof(*available));
+   reset_query_pool(pool, firstQuery, queryCount);
 }
 
 static bool
@@ -260,7 +269,7 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
       }
 #endif
       default:
-         unreachable("Unsupported query type");
+         UNREACHABLE("Unsupported query type");
       }
 
       if (!write_results)

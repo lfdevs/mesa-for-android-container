@@ -124,11 +124,11 @@ InstrFactory::load_const(nir_load_const_instr *literal, Shader& shader)
       for (int i = 0; i < literal->def.num_components; ++i) {
          auto dest0 = m_value_factory.dest(literal->def, 2 * i, pin_none);
          auto src0 = m_value_factory.literal(literal->value[i].u64 & 0xffffffff);
-         shader.emit_instruction(new AluInstr(op1_mov, dest0, src0, {alu_write}));
+         shader.emit_instruction(new AluInstr(op1_mov, dest0, src0, AluInstr::write));
 
          auto dest1 = m_value_factory.dest(literal->def, 2 * i + 1, pin_none);
          auto src1 = m_value_factory.literal((literal->value[i].u64 >> 32) & 0xffffffff);
-         shader.emit_instruction(new AluInstr(op1_mov, dest1, src1, AluInstr::last_write));
+         shader.emit_instruction(new AluInstr(op1_mov, dest1, src1, AluInstr::write));
       }
    } else {
       Pin pin = literal->def.num_components == 1 ? pin_free : pin_none;
@@ -156,11 +156,9 @@ InstrFactory::load_const(nir_load_const_instr *literal, Shader& shader)
             src = m_value_factory.literal(v);
          }
 
-         ir = new AluInstr(op1_mov, dest, src, {alu_write});
+         ir = new AluInstr(op1_mov, dest, src, AluInstr::write);
          shader.emit_instruction(ir);
       }
-      if (ir)
-         ir->set_alu_flag(alu_last_instr);
    }
    return true;
 }
@@ -196,7 +194,7 @@ InstrFactory::process_undef(nir_undef_instr *undef, Shader& shader)
    for (int i = 0; i < undef->def.num_components; ++i) {
       auto dest = shader.value_factory().undef(undef->def.index, i);
       shader.emit_instruction(
-         new AluInstr(op1_mov, dest, value_factory().zero(), AluInstr::last_write));
+         new AluInstr(op1_mov, dest, value_factory().zero(), AluInstr::write));
    }
    return true;
 }

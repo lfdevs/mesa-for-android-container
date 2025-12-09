@@ -26,7 +26,6 @@ spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count
 spec@!opengl 1.4@triangle-rasterization-overdraw
 
 # oom
-spec@!opengl 1.1@streaming-texture-leak
 spec@!opengl 1.2@tex3d-maxsize
 
 # Allocates >1GB CPU memory and more GPU, and ooms.

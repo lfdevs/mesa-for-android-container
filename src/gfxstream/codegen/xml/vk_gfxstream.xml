@@ -239,7 +239,11 @@ specific entries.
             <proto><type>VkResult</type> <name>vkGetSemaphoreGOOGLE</name></proto>
             <param><type>VkDevice</type> <name>device</name></param>
             <param><type>VkSemaphore</type> <name>semaphore</name></param>
-	    <param><type>uint64_t</type> <name>syncId</name></param>
+	        <param><type>uint64_t</type> <name>syncId</name></param>
+        </command>
+        <command>
+            <proto><type>void</type> <name>vkTraceAsyncGOOGLE</name></proto>
+            <param><type>uint64_t</type> <name>id</name></param>
         </command>
     </commands>
     <extensions comment="Vulkan extension interface definitions">
@@ -280,6 +284,7 @@ specific entries.
                 <command name="vkUpdateDescriptorSetWithTemplateSized2GOOGLE"/>
                 <command name="vkQueueSubmitAsync2GOOGLE"/>
                 <command name="vkGetSemaphoreGOOGLE"/>
+                <command name="vkTraceAsyncGOOGLE"/>
             </require>
         </extension>
     </extensions>

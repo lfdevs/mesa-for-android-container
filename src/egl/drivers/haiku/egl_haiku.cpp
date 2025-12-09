@@ -44,7 +44,7 @@
 #include "pipe/p_defines.h"
 #include "state_tracker/st_context.h"
 #include "util/u_atomic.h"
-#include <mapi/glapi/glapi.h>
+#include "mesa/glapi/glapi/glapi.h"
 
 #include "hgl/hgl_sw_winsys.h"
 #include "hgl_context.h"
@@ -399,7 +399,7 @@ haiku_initialize(_EGLDisplay *disp)
       ret = haiku_initialize_impl(disp, disp->PlatformDisplay);
       break;
    default:
-      unreachable("Callers ensure we cannot get here.");
+      UNREACHABLE("Callers ensure we cannot get here.");
       return EGL_FALSE;
    }
 

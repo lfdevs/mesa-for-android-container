@@ -37,7 +37,7 @@ emit_loop_jump(isel_context* ctx, bool is_break)
 {
    Builder bld(ctx->program, ctx->block);
    Block* logical_target;
-   append_logical_end(ctx->block);
+   append_logical_end(ctx);
    unsigned idx = ctx->block->index;
 
    if (is_break) {
@@ -119,7 +119,7 @@ update_exec_info(isel_context* ctx)
 void
 begin_loop(isel_context* ctx, loop_context* lc)
 {
-   append_logical_end(ctx->block);
+   append_logical_end(ctx);
    ctx->block->kind |= block_kind_loop_preheader | block_kind_uniform;
    Builder bld(ctx->program, ctx->block);
    bld.branch(aco_opcode::p_branch);
@@ -158,7 +158,7 @@ end_loop(isel_context* ctx, loop_context* lc)
    if (!ctx->cf_info.has_branch) {
       unsigned loop_header_idx = ctx->cf_info.parent_loop.header_idx;
       Builder bld(ctx->program, ctx->block);
-      append_logical_end(ctx->block);
+      append_logical_end(ctx);
 
       ctx->block->kind |= (block_kind_continue | block_kind_uniform);
       if (!ctx->cf_info.has_divergent_branch)
@@ -201,7 +201,7 @@ begin_uniform_if_then(isel_context* ctx, if_context* ic, Temp cond)
 
    ic->cond = cond;
 
-   append_logical_end(ctx->block);
+   append_logical_end(ctx);
    ctx->block->kind |= block_kind_uniform;
 
    aco_ptr<Instruction> branch;
@@ -239,7 +239,7 @@ begin_uniform_if_else(isel_context* ctx, if_context* ic, bool logical_else)
    Block* BB_then = ctx->block;
 
    if (!ctx->cf_info.has_branch) {
-      append_logical_end(BB_then);
+      append_logical_end(ctx);
       /* branch from then block to endif block */
       aco_ptr<Instruction> branch;
       branch.reset(create_instruction(aco_opcode::p_branch, Format::PSEUDO_BRANCH, 0, 0));
@@ -272,7 +272,7 @@ end_uniform_if(isel_context* ctx, if_context* ic, bool logical_else)
 
    if (!ctx->cf_info.has_branch) {
       if (logical_else)
-         append_logical_end(BB_else);
+         append_logical_end(ctx);
       /* branch from then block to endif block */
       aco_ptr<Instruction> branch;
       branch.reset(create_instruction(aco_opcode::p_branch, Format::PSEUDO_BRANCH, 0, 0));
@@ -306,7 +306,7 @@ void
 begin_divergent_if_then(isel_context* ctx, if_context* ic, Temp cond,
                         nir_selection_control sel_ctrl)
 {
-   append_logical_end(ctx->block);
+   append_logical_end(ctx);
    ctx->block->kind |= block_kind_branch;
 
    /* branch to linear then block */
@@ -346,7 +346,7 @@ void
 begin_divergent_if_else(isel_context* ctx, if_context* ic, nir_selection_control sel_ctrl)
 {
    Block* BB_then_logical = ctx->block;
-   append_logical_end(BB_then_logical);
+   append_logical_end(ctx);
    /* branch from logical then block to invert block */
    aco_ptr<Instruction> branch;
    branch.reset(create_instruction(aco_opcode::p_branch, Format::PSEUDO_BRANCH, 0, 0));
@@ -398,7 +398,7 @@ void
 end_divergent_if(isel_context* ctx, if_context* ic)
 {
    Block* BB_else_logical = ctx->block;
-   append_logical_end(BB_else_logical);
+   append_logical_end(ctx);
 
    /* branch from logical else block to endif block */
    aco_ptr<Instruction> branch;

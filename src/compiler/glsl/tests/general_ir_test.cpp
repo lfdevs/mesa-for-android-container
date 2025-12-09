@@ -61,7 +61,7 @@ TEST_F(ir_variable_constructor, interface)
    static const char name[] = "named_instance";
 
    ir_variable *const v =
-      new(mem_ctx) ir_variable(iface, name, ir_var_uniform);
+      new(linear_context(mem_ctx)) ir_variable(iface, name, ir_var_uniform);
 
    EXPECT_STREQ(name, v->name);
    EXPECT_NE(name, v->name);
@@ -91,7 +91,7 @@ TEST_F(ir_variable_constructor, interface_array)
    static const char name[] = "array_instance";
 
    ir_variable *const v =
-      new(mem_ctx) ir_variable(interface_array, name, ir_var_uniform);
+      new(linear_context(mem_ctx)) ir_variable(interface_array, name, ir_var_uniform);
 
    EXPECT_STREQ(name, v->name);
    EXPECT_NE(name, v->name);

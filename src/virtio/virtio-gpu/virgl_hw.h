@@ -627,6 +627,7 @@ enum virgl_formats {
 #define VIRGL_CAP_V2_GROUP_VOTE           (1u << 15)
 #define VIRGL_CAP_V2_MIRROR_CLAMP_TO_EDGE (1u << 16)
 #define VIRGL_CAP_V2_MIRROR_CLAMP         (1u << 17)
+#define VIRGL_CAP_V2_RESOURCE_LAYOUT      (1u << 18)
 
 /* virgl bind flags - these are compatible with mesa 10.5 gallium.
  * but are fixed, no other should be passed to virgl either.
@@ -807,13 +808,13 @@ struct virgl_caps_v2 {
         // Guest-side driver has always used it as such.
         uint32_t max_texture_samplers;
         struct virgl_supported_format_mask supported_multisample_formats;
-        uint32_t max_const_buffer_size[6]; // PIPE_SHADER_TYPES
+        uint32_t max_const_buffer_size[6]; // MESA_SHADER_STAGES
         uint32_t num_video_caps;
         struct virgl_video_caps video_caps[32];
         uint32_t max_uniform_block_size;
         uint32_t max_tcs_outputs;
         uint32_t max_tes_outputs;
-        uint32_t max_shader_storage_blocks[6]; // PIPE_SHADER_TYPES
+        uint32_t max_shader_storage_blocks[6]; // MESA_SHADER_STAGES
 };
 
 union virgl_caps {

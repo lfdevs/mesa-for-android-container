@@ -31,6 +31,15 @@ else
     export PIGLIT_REPLAY_EXTRA_ARGS="--keep-image ${PIGLIT_REPLAY_EXTRA_ARGS}"
 fi
 
+if [ -n "${LAVA_HTTP_CACHE_URI:-}" ]; then
+    export PIGLIT_REPLAY_EXTRA_ARGS="--download-caching-proxy-url=${LAVA_HTTP_CACHE_URI} ${PIGLIT_REPLAY_EXTRA_ARGS}"
+elif [ -n "${CI_TRON_JOB_HTTP_SERVER:-}" ]; then
+    export PIGLIT_REPLAY_EXTRA_ARGS="--download-caching-proxy-url=${CI_TRON_JOB_HTTP_SERVER}/caching_proxy/ ${PIGLIT_REPLAY_EXTRA_ARGS}"
+elif [ -n "${FDO_HTTP_CACHE_URI:-}" ]; then
+    # FIXME: remove when there is no baremetal traces job anymore.
+    export PIGLIT_REPLAY_EXTRA_ARGS="--download-caching-proxy-url=${FDO_HTTP_CACHE_URI} ${PIGLIT_REPLAY_EXTRA_ARGS}"
+fi
+
 # Set up the environment.
 # Modifiying here directly LD_LIBRARY_PATH may cause problems when
 # using a command wrapper. Hence, we will just set it when running the
@@ -90,17 +99,7 @@ elif [ "$PIGLIT_PLATFORM" = "mixed_glx_egl" ]; then
     SANITY_MESA_VERSION_CMD="$SANITY_MESA_VERSION_CMD --platform glx --api gl"
 else
     SANITY_MESA_VERSION_CMD="$SANITY_MESA_VERSION_CMD --platform glx --api gl --profile core"
-    # copy-paste from init-stage2.sh, please update accordingly
-    {
-      WESTON_X11_SOCK="/tmp/.X11-unix/X0"
-      export WAYLAND_DISPLAY=wayland-0
-      export DISPLAY=:0
-      mkdir -p /tmp/.X11-unix
-
-      env weston --config="/install/common/weston.ini" -Swayland-0 --use-gl &
-
-      while [ ! -S "$WESTON_X11_SOCK" ]; do sleep 1; done
-    }
+    . /install/common/weston.sh --renderer=gl
 fi
 
 # If the job is parallel at the  gitlab job level, will take the corresponding
@@ -121,7 +120,7 @@ replay_s3_upload_images() {
             fi
             __S3_PATH="$PIGLIT_REPLAY_REFERENCE_IMAGES_BASE"
             __DESTINATION_FILE_PATH="${line##*-}"
-            if curl --fail -L -s -I "https://${__S3_PATH}/${__DESTINATION_FILE_PATH}" | grep -q "content-type: application/octet-stream" 2>/dev/null; then
+            if curl --fail -L -s -I "https://${__S3_PATH}/${__DESTINATION_FILE_PATH}" | grep -Eq "^content-type: (binary|application)\/octet-stream" 2>/dev/null; then
                 continue
             fi
         else

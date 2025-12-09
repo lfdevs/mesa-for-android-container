@@ -43,7 +43,7 @@ dril_dri = shared_library(
   'dril_dri',
   files('dril_target.c'),
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_drivers,
+    inc_include, inc_src, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_drivers,
     inc_gallium_winsys,
   ],
   gnu_symbol_visibility : 'hidden',
@@ -124,7 +124,8 @@ foreach d : [[with_gallium_kmsro, [
              [with_gallium_lima, 'lima_dri.so'],
              [with_gallium_d3d12, 'd3d12_dri.so'],
              [with_gallium_zink, 'zink_dri.so'],
-             [with_gallium_asahi, 'asahi_dri.so']]
+             [with_gallium_asahi, 'asahi_dri.so'],
+             [with_gallium_rocket, 'rocket_dri.so']]
   if d[0]
     dril_drivers += d[1]
   endif

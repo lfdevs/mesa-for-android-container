@@ -13,6 +13,7 @@
     - $FDO_RUNNER_JOB_PRIORITY_TAG_X86_64
   variables:
     GPU_VERSION: softpipe
+    DRIVER_NAME: softpipe
     LIBGL_ALWAYS_SOFTWARE: "true"
     FLAKES_CHANNEL: "#mesa-swrast-ci"
     GALLIUM_DRIVER: "softpipe"

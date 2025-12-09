@@ -253,7 +253,7 @@ print_cache_flags(enum amd_gfx_level gfx_level, const T& instr, FILE* output)
             fprintf(output, " non_temporal");
          if (instr.cache.gfx12.temporal_hint & gfx12_atomic_accum_deferred_scope)
             fprintf(output, " accum_deferred_scope");
-      } else if (instr.definitions.empty()) {
+      } else if (!instr.definitions.empty()) {
          switch (instr.cache.gfx12.temporal_hint) {
          case gfx12_load_regular_temporal: break;
          case gfx12_load_non_temporal: fprintf(output, " non_temporal"); break;
@@ -858,6 +858,8 @@ print_block_kind(uint16_t kind, FILE* output)
       fprintf(output, "export_end, ");
    if (kind & block_kind_end_with_regs)
       fprintf(output, "end_with_regs, ");
+   if (kind & block_kind_contains_call)
+      fprintf(output, "contains_call, ");
 }
 
 static void
@@ -876,7 +878,7 @@ print_stage(Stage stage, FILE* output)
       case SWStage::TS: fprintf(output, "TS"); break;
       case SWStage::MS: fprintf(output, "MS"); break;
       case SWStage::RT: fprintf(output, "RT"); break;
-      default: unreachable("invalid SW stage");
+      default: UNREACHABLE("invalid SW stage");
       }
       if (stage.num_sw_stages() > 1)
          fprintf(output, "+");
@@ -893,7 +895,7 @@ print_stage(Stage stage, FILE* output)
    case AC_HW_NEXT_GEN_GEOMETRY_SHADER: fprintf(output, "NEXT_GEN_GEOMETRY_SHADER"); break;
    case AC_HW_PIXEL_SHADER: fprintf(output, "PIXEL_SHADER"); break;
    case AC_HW_COMPUTE_SHADER: fprintf(output, "COMPUTE_SHADER"); break;
-   default: unreachable("invalid HW stage");
+   default: UNREACHABLE("invalid HW stage");
    }
 
    fprintf(output, ")\n");

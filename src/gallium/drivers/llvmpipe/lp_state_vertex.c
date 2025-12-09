@@ -89,7 +89,7 @@ llvmpipe_set_vertex_buffers(struct pipe_context *pipe,
 
    util_set_vertex_buffers_count(llvmpipe->vertex_buffer,
                                  &llvmpipe->num_vertex_buffers,
-                                 buffers, count, true);
+                                 buffers, count);
 
    llvmpipe->dirty |= LP_NEW_VERTEX;
 

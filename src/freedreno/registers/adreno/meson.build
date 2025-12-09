@@ -12,6 +12,8 @@ xml_reg_files = [
   'a6xx_perfcntrs.xml',
   'a7xx_enums.xml',
   'a7xx_perfcntrs.xml',
+  'a8xx_enums.xml',
+  'a8xx_descriptors.xml',
 ]
 
 xml_files = xml_reg_files
@@ -21,10 +23,26 @@ xml_files += [
   'adreno_control_regs.xml',
   'adreno_pipe_regs.xml',
   'adreno_common.xml',
-  'adreno_pm4.xml',
 ]
 
-freedreno_py_header_files = []
+freedreno_pm4_xml_header_file = []
+
+freedreno_pm4_xml_header_file += custom_target(
+    'adreno_pm4.xml.h',
+    input: [gen_header_py, 'adreno_pm4.xml', freedreno_schema, freedreno_copyright],
+    output: 'adreno_pm4.xml.h',
+    command: [prog_python, '@INPUT0@', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'c-defines'],
+    capture: true,
+)
+
+freedreno_pm4_xml_header_file += custom_target(
+    'adreno-pm4-pack.xml.h',
+    input: [gen_header_py, 'adreno_pm4.xml', freedreno_schema, freedreno_copyright],
+    output: 'adreno-pm4-pack.xml.h',
+    command: [prog_python, '@INPUT0@', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'c-pack-structs'],
+    capture: true,
+)
+freedreno_xml_header_files += freedreno_pm4_xml_header_file
 
 foreach f : xml_files
   _name = f + '.h'
@@ -32,7 +50,7 @@ foreach f : xml_files
     _name,
     input: [gen_header_py, f, freedreno_schema, freedreno_copyright],
     output: _name,
-    command: [prog_python, '@INPUT0@', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'c-defines'],
+    command: [prog_python, '@INPUT0@', '--validate', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'c-defines'],
     capture: true,
   )
   _gzname = f + '.gz'
@@ -56,13 +74,7 @@ freedreno_xml_header_files += custom_target(
     capture: true,
 )
 
-freedreno_xml_header_files += custom_target(
-    'adreno-pm4-pack.xml.h',
-    input: [gen_header_py, 'adreno_pm4.xml', freedreno_schema, freedreno_copyright],
-    output: 'adreno-pm4-pack.xml.h',
-    command: [prog_python, '@INPUT0@', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'c-pack-structs'],
-    capture: true,
-)
+freedreno_py_header_files = []
 
 foreach f : xml_reg_files
   _pyname = f.split('.')[0] + '.py'

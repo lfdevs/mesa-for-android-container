@@ -5,7 +5,7 @@ set -ex
 
 uncollapsed_section_start kdl "Building kdl"
 
-KDL_REVISION="cbbe5fd54505fd03ee34f35bfd16794f0c30074f"
+KDL_REVISION="42218ba7297a28d64ddd1d4b5f200a60b3659d42"
 KDL_CHECKOUT_DIR="/tmp/ci-kdl.git"
 
 mkdir -p ${KDL_CHECKOUT_DIR}

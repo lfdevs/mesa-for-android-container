@@ -2,7 +2,7 @@ Shading Language
 ================
 
 This page describes the features and status of Mesa's support for the
-`OpenGL Shading Language <https://www.khronos.org/opengl/wiki/OpenGL_Shading_Language>`__.
+`OpenGL Shading Language <https://wikis.khronos.org/opengl/OpenGL_Shading_Language>`__.
 
 .. _envvars:
 

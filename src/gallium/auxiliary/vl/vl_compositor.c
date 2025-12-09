@@ -286,7 +286,7 @@ cleanup_buffers(struct vl_compositor *c)
    if (c->pipe_gfx_supported) {
            c->pipe->delete_vertex_elements_state(c->pipe, c->vertex_elems_state);
    }
-   pipe_resource_reference(&c->vertex_buf.buffer.resource, NULL);
+   c->vertex_buf.buffer.resource = NULL;
 }
 
 static inline struct u_rect
@@ -506,20 +506,6 @@ vl_compositor_cleanup(struct vl_compositor *c)
    cleanup_buffers(c);
    cleanup_shaders(c);
    cleanup_pipe_state(c);
-}
-
-bool
-vl_compositor_set_csc_matrix(struct vl_compositor_state *s,
-                             vl_csc_matrix const *matrix,
-                             float luma_min, float luma_max)
-{
-   assert(s);
-
-   memcpy(&s->csc_matrix, matrix, sizeof(vl_csc_matrix));
-   s->luma_min = luma_min;
-   s->luma_max = luma_max;
-
-   return true;
 }
 
 void
@@ -867,8 +853,6 @@ vl_compositor_init(struct vl_compositor *c, struct pipe_context *pipe, bool comp
 bool
 vl_compositor_init_state(struct vl_compositor_state *s, struct pipe_context *pipe)
 {
-   vl_csc_matrix csc_matrix;
-
    assert(s);
 
    memset(s, 0, sizeof(*s));
@@ -888,7 +872,7 @@ vl_compositor_init_state(struct vl_compositor_state *s, struct pipe_context *pip
       pipe->screen,
       PIPE_BIND_CONSTANT_BUFFER,
       PIPE_USAGE_DEFAULT,
-      sizeof(csc_matrix) + 32 * sizeof(float) + 2 * sizeof(int)
+      sizeof(vl_csc_matrix) * 3 + 28 * sizeof(float) + 4 * sizeof(int)
    );
 
    if (!s->shader_params)
@@ -896,9 +880,9 @@ vl_compositor_init_state(struct vl_compositor_state *s, struct pipe_context *pip
 
    vl_compositor_clear_layers(s);
 
-   vl_csc_get_matrix(VL_CSC_COLOR_STANDARD_IDENTITY, NULL, true, &csc_matrix);
-   if (!vl_compositor_set_csc_matrix(s, (const vl_csc_matrix *)&csc_matrix, 1.0f, 0.0f))
-      return false;
+   vl_csc_get_rgbyuv_matrix(PIPE_VIDEO_VPP_MCF_BT709, PIPE_FORMAT_NV12, PIPE_FORMAT_B8G8R8A8_UNORM,
+                            PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED, PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_FULL,
+                            &s->csc_matrix);
 
    return true;
 }
@@ -909,5 +893,5 @@ vl_compositor_cleanup_state(struct vl_compositor_state *s)
    assert(s);
 
    vl_compositor_clear_layers(s);
-   pipe_resource_reference(&s->shader_params, NULL);
+   pipe_resource_release(s->pipe, s->shader_params);
 }

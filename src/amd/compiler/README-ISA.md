@@ -338,6 +338,17 @@ Only `s_waitcnt_vscnt null, 0`. Needed even if the first instruction is a load.
 NSA MIMG instructions should be limited to 3 dwords before GFX10.3 to avoid
 stability issues: https://reviews.llvm.org/D103348
 
+## RDNA2 / GFX10.3 hazards
+
+### SALU EXEC write followed by NSA MIMG instruction
+
+Triggered-by:
+Potential stability issues can occur if an SALU instruction changes exec from 0
+to non-zero immediately before an NSA MIMG instruction with 4+ dwords.
+
+Mitigated-by: Any instruction, including `s_nop`.
+
+
 ## RDNA3 / GFX11 hazards
 
 ### VcmpxPermlaneHazard

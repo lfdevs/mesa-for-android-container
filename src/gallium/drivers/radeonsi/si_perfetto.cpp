@@ -69,6 +69,7 @@ static void sync_timestamp(SIRenderpassDataSource::TraceContext &ctx, struct si_
    struct si_context *sctx = container_of(device, struct si_context, ds);
    gpu_ts = sctx->screen->b.get_timestamp(&sctx->screen->b);
 
+   uint32_t cpu_clock_id = perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME;
    cpu_ts = perfetto::base::GetBootTimeNs().count();
 
    if (cpu_ts < device->next_clock_sync_ns)
@@ -79,7 +80,7 @@ static void sync_timestamp(SIRenderpassDataSource::TraceContext &ctx, struct si_
    device->sync_gpu_ts = gpu_ts;
    device->next_clock_sync_ns = cpu_ts + 1000000000ull;
    MesaRenderpassDataSource<SIRenderpassDataSource, SIRenderpassTraits>::
-      EmitClockSync(ctx, cpu_ts, gpu_ts, device->gpu_clock_id);
+      EmitClockSync(ctx, cpu_ts, gpu_ts, cpu_clock_id, device->gpu_clock_id);
 }
 
 static void send_descriptors(SIRenderpassDataSource::TraceContext &ctx,
@@ -316,7 +317,6 @@ void si_ds_end_submit(struct si_ds_queue *queue, uint64_t start_ts)
 static void si_driver_ds_init_once(void)
 {
 #ifdef HAVE_PERFETTO
-   util_perfetto_init();
    perfetto::DataSourceDescriptor dsd;
 #if DETECT_OS_ANDROID
    // Android tooling expects this data source name

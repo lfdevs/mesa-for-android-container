@@ -163,7 +163,13 @@ uint16_t vpe_find_bg_gaps(struct vpe_priv *vpe_priv, const struct vpe_rect *targ
     struct stream_ctx *ctx = &vpe_priv->stream_ctx[bg_index];
 
     num_segs          = ctx->num_segments;
-    dst_viewport_rect = &(ctx->segment_ctx[0].scaler_data.dst_viewport);
+
+    if (num_segs == 0) { // To hit this condition destination rectangle width or height must be 0
+        goto full_bg;
+
+    } else {
+        dst_viewport_rect = &(ctx->segment_ctx[0].scaler_data.dst_viewport);
+    }
 
     if (ctx->stream_type == VPE_STREAM_TYPE_BG_GEN) {
         goto full_bg;

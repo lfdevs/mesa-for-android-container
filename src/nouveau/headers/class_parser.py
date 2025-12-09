@@ -27,6 +27,7 @@ METHOD_ARRAY_SIZES = {
     'SET_COLOR_COMPRESSION'                                 : 8,
     'SET_COLOR_CLEAR_VALUE'                                 : 4,
     'SET_CT_WRITE'                                          : 8,
+    # For compute, this is only 8:
     'SET_MME_SHADOW_SCRATCH'                                : 256,
     'SET_MULTI_VIEW_RENDER_TARGET_ARRAY_INDEX_OFFSET'       : 4,
     'SET_PIPELINE_*'                                        : 6,
@@ -66,6 +67,7 @@ METHOD_IS_FLOAT = [
     'SET_VIEWPORT_CLIP_MIN_Z',
     'SET_VIEWPORT_CLIP_MAX_Z',
     'SET_Z_CLEAR_VALUE',
+    'SET_POINT_SIZE',
 ]
 
 # generator chokes on these in later files
@@ -148,9 +150,9 @@ __${nvcl}_${mthd.name}(uint32_t *val_out, struct nv_${nvcl.lower()}_${mthd.name}
 
 %endfor
 
-const char *P_PARSE_${nvcl}_MTHD(uint16_t idx);
+const char *P_PARSE_${nvcl}_MTHD(uint16_t idx) ATTRIBUTE_COLD;
 void P_DUMP_${nvcl}_MTHD_DATA(FILE *fp, uint16_t idx, uint32_t data,
-                              const char *prefix);
+                              const char *prefix) ATTRIBUTE_COLD;
 """)
 
 TEMPLATE_C = Template("""\
@@ -158,12 +160,49 @@ TEMPLATE_C = Template("""\
 
 #include <stdio.h>
 
+<%def name="cases(mthd)">
+  %if mthd.is_array:
+    %for i in range(mthd.array_size):
+    case ${nvcl}_${mthd.name}(${i}):
+    %endfor
+  % else:
+    case ${nvcl}_${mthd.name}:
+  %endif
+</%def>
+
+<%def name="prev_cases()">
+  %if any_method_removed:
+    %for mthd in methods:
+      %if prev_methods.get(mthd.name, None) == mthd:
+        ${cases(mthd)}
+      %endif
+    %endfor
+  %else:
+    default:
+  %endif
+</%def>
+
+%if prev_nvcl:
+const char *P_PARSE_${prev_nvcl}_MTHD(uint16_t idx) ATTRIBUTE_COLD;
+void P_DUMP_${prev_nvcl}_MTHD_DATA(FILE *fp, uint16_t idx, uint32_t data,
+                                   const char *prefix) ATTRIBUTE_COLD;
+%endif
+
 const char*
 P_PARSE_${nvcl}_MTHD(uint16_t idx)
 {
     switch (idx) {
+
+%if prev_nvcl:
+  ${prev_cases()}
+    return P_PARSE_${prev_nvcl}_MTHD(idx);
+%endif
+
 %for mthd in methods:
   %if mthd.is_array and mthd.array_size == 0:
+    <% continue %>
+  %endif
+  %if prev_methods.get(mthd.name, None) == mthd:
     <% continue %>
   %endif
   %if mthd.is_array:
@@ -176,8 +215,11 @@ P_PARSE_${nvcl}_MTHD(uint16_t idx)
         return "${nvcl}_${mthd.name}";
   %endif
 %endfor
+
+%if not prev_nvcl or any_method_removed:
     default:
         return "unknown method";
+%endif
     }
 }
 
@@ -187,17 +229,21 @@ P_DUMP_${nvcl}_MTHD_DATA(FILE *fp, uint16_t idx, uint32_t data,
 {
     UNUSED uint32_t parsed;
     switch (idx) {
+
+%if prev_nvcl:
+  ${prev_cases()}
+    P_DUMP_${prev_nvcl}_MTHD_DATA(fp, idx, data, prefix);
+    break;
+%endif
+
 %for mthd in methods:
   %if mthd.is_array and mthd.array_size == 0:
     <% continue %>
   %endif
-  %if mthd.is_array:
-    %for i in range(mthd.array_size):
-    case ${nvcl}_${mthd.name}(${i}):
-    %endfor
-  % else:
-    case ${nvcl}_${mthd.name}:
+  %if prev_methods.get(mthd.name, None) == mthd:
+    <% continue %>
   %endif
+  ${cases(mthd)}
   %for field in mthd.fields:
     <% field_width = field.end - field.start + 1 %>
     %if field_width == 32:
@@ -227,9 +273,11 @@ P_DUMP_${nvcl}_MTHD_DATA(FILE *fp, uint16_t idx, uint32_t data,
   %endfor
         break;
 %endfor
+%if not prev_nvcl or any_method_removed:
     default:
         fprintf(fp, "%s.VALUE = 0x%x${bs}n", prefix, data);
         break;
+%endif
     }
 }
 """)
@@ -294,7 +342,7 @@ pub struct ${to_camel(mthd.name)} {
 % if not mthd.is_array:
 ## This trait lays out how the conversion to u32 happens
 impl Mthd for ${to_camel(mthd.name)} {
-    const ADDR: u16 = ${mthd.addr.replace('(', '').replace(')', '')};
+    const ADDR: u16 = ${mthd.addr_expr(None)};
     const CLASS: u16 = ${version[1].lower() if version is not None else nvcl.lower().replace("nv", "0x")};
 
 %else:
@@ -302,8 +350,7 @@ impl ArrayMthd for ${to_camel(mthd.name)} {
     const CLASS: u16 = ${version[1].lower() if version is not None else nvcl.lower().replace("nv", "0x")};
 
     fn addr(i: usize) -> u16 {
-        <% assert not ('i' in mthd.addr and 'j' in mthd.addr) %>
-        (${mthd.addr.replace('j', 'i').replace('(', '').replace(')', '')}).try_into().unwrap()
+        (${mthd.addr_expr('i')}).try_into().unwrap()
     }
 %endif
 
@@ -312,20 +359,20 @@ impl ArrayMthd for ${to_camel(mthd.name)} {
         let mut val = 0;
         %for field in mthd.fields:
             <% field_width = field.end - field.start + 1 %>
-            %if field_width == 32:
-                %if field.rs_type(mthd) == "u32":
-        val |= self.${field.rs_name};
-                %else:
-        val |= self.${field.rs_name} as u32;
-                %endif
+            %if field.rs_type(mthd) == "u32":
+        let field_u32 = self.${field.rs_name};
             %else:
-                %if field.rs_type(mthd) == "u32":
-        assert!(self.${field.rs_name} < (1 << ${field_width}));
-        val |= self.${field.rs_name} << ${field.start};
-                %else:
-        assert!((self.${field.rs_name} as u32) < (1 << ${field_width}));
-        val |= (self.${field.rs_name} as u32) << ${field.start};
-                %endif
+        let field_u32 = self.${field.rs_name} as u32;
+            %endif
+            %if field_width == 32:
+            <% assert field_width == 32 %>
+            %else:
+        assert!(field_u32 < (1 << ${field_width}));
+            %endif
+            %if field.start == 0:
+        val |= field_u32;
+            %else:
+        val |= field_u32 << ${field.start};
             %endif
         %endfor
 
@@ -341,6 +388,12 @@ impl ArrayMthd for ${to_camel(mthd.name)} {
 def to_camel(snake_str):
     result = ''.join(word.title() for word in snake_str.split('_'))
     return result if not result[0].isdigit() else '_' + result
+
+def strip_parens(s):
+    s = s.strip()
+    while s.startswith('(') and s.endswith(')'):
+        s = s[1:-1].strip()
+    return s
 
 def glob_match(glob, name):
     if glob.endswith('*'):
@@ -433,6 +486,25 @@ class Method(object):
                self.is_array == other.is_array and \
                self.fields == other.fields
 
+    def addr_expr(self, idx_var):
+        expr = self.addr
+        if self.is_array:
+            # We don't support multiple-indexing but the headers aren't
+            # consistent in choosing i vs. j.
+            assert idx_var is not None
+            assert not ('i' in self.addr and 'j' in self.addr)
+            expr = re.sub(r'[ij]', idx_var, expr)
+
+            # Rust doesn't like extra parens
+            expr = expr.replace('(' + idx_var + ')', idx_var)
+        else:
+            assert not 'i' in self.addr and not 'j' in self.addr
+
+        # Rust also doesn't like extra parens
+        expr = strip_parens(expr)
+
+        return expr
+
     @property
     def array_size(self):
         for (glob, value) in METHOD_ARRAY_SIZES.items():
@@ -469,11 +541,11 @@ def parse_header(nvcl, f):
             continue
 
         if line.startswith("#define"):
-            list = line.split();
+            list = [strip_parens(e) for e in line.split()]
             if "_cl_" in list[1]:
                 continue
 
-            if not list[1].startswith(nvcl):
+            if (not list[1].startswith(nvcl)) or list[1].endswith('VIDEO_DECODER'):
                 if len(list) > 2 and list[2].startswith("0x"):
                     assert version is None
                     version = (list[1], list[2])
@@ -560,12 +632,15 @@ def main():
 
     prev_mod = None
     prev_methods = {}
+    prev_nvcl = None
     if args.prev_in_h is not None:
         prev_clheader = os.path.basename(args.prev_in_h)
         prev_nvcl = nvcl_for_filename(prev_clheader)
         prev_mod = prev_clheader.removesuffix(".h")
         with open(args.prev_in_h, 'r', encoding='utf-8') as f:
             (prev_version, prev_methods) = parse_header(prev_nvcl, f)
+
+    any_method_removed = any(x not in methods for x in prev_methods)
 
     environment = {
         'clheader': clheader,
@@ -574,6 +649,8 @@ def main():
         'methods': list(methods.values()),
         'prev_mod': prev_mod,
         'prev_methods': prev_methods,
+        'prev_nvcl': prev_nvcl,
+        'any_method_removed': any_method_removed,
         'to_camel': to_camel,
         'bs': '\\'
     }

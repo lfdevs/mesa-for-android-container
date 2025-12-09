@@ -8,8 +8,11 @@
 #include "aco_builder.h"
 #include "aco_instruction_selection.h"
 #include "aco_ir.h"
+#include "aco_nir_call_attribs.h"
 
 #include "util/memstream.h"
+
+#include <optional>
 
 namespace aco {
 
@@ -38,9 +41,20 @@ append_logical_start(Block* b)
 }
 
 void
-append_logical_end(Block* b)
+append_logical_end(isel_context* ctx, bool append_reload_preserved)
 {
-   Builder(NULL, b).pseudo(aco_opcode::p_logical_end);
+   Builder bld(ctx->program, ctx->block);
+
+   if (append_reload_preserved && ctx->program->is_callee) {
+      Operand stack_ptr_op;
+      if (ctx->program->gfx_level >= GFX9)
+         stack_ptr_op = Operand(ctx->callee_info.stack_ptr.def.getTemp());
+      else
+         stack_ptr_op = Operand(load_scratch_resource(ctx->program, bld, -1u, false));
+      bld.pseudo(aco_opcode::p_reload_preserved, bld.def(bld.lm), bld.def(s1, scc), stack_ptr_op);
+   }
+
+   bld.pseudo(aco_opcode::p_logical_end);
 }
 
 Temp
@@ -498,7 +512,7 @@ emit_pack_v1(isel_context* ctx, const std::vector<Temp>& unpacked)
 
 MIMG_instruction*
 emit_mimg(Builder& bld, aco_opcode op, std::vector<Temp> dsts, Temp rsrc, Operand samp,
-          std::vector<Temp> coords, Operand vdata)
+          std::vector<Temp> coords, bool disable_wqm, Operand vdata)
 {
    bool is_vsample = !samp.isUndefined() || op == aco_opcode::image_msaa_load;
 
@@ -541,7 +555,8 @@ emit_mimg(Builder& bld, aco_opcode op, std::vector<Temp> dsts, Temp rsrc, Operan
       coords.resize(nsa_size + 1);
    }
 
-   aco_ptr<Instruction> mimg{create_instruction(op, Format::MIMG, 3 + coords.size(), dsts.size())};
+   aco_ptr<Instruction> mimg{
+      create_instruction(op, Format::MIMG, 3 + coords.size() + disable_wqm * 2, dsts.size())};
    for (unsigned i = 0; i < dsts.size(); ++i)
       mimg->definitions[i] = Definition(dsts[i]);
    mimg->operands[0] = Operand(rsrc);
@@ -549,6 +564,8 @@ emit_mimg(Builder& bld, aco_opcode op, std::vector<Temp> dsts, Temp rsrc, Operan
    mimg->operands[2] = vdata;
    for (unsigned i = 0; i < coords.size(); i++)
       mimg->operands[3 + i] = Operand(coords[i]);
+
+   init_disable_wqm(bld, mimg->mimg(), disable_wqm);
    mimg->mimg().strict_wqm = strict_wqm;
 
    return &bld.insert(std::move(mimg))->mimg();
@@ -581,11 +598,14 @@ create_fs_dual_src_export_gfx11(isel_context* ctx, const struct aco_export_mrt* 
    Builder bld(ctx->program, ctx->block);
 
    aco_ptr<Instruction> exp{
-      create_instruction(aco_opcode::p_dual_src_export_gfx11, Format::PSEUDO, 8, 6)};
+      create_instruction(aco_opcode::p_dual_src_export_gfx11, Format::PSEUDO, 10, 6)};
    for (unsigned i = 0; i < 4; i++) {
       exp->operands[i] = mrt0 ? mrt0->out[i] : Operand(v1);
       exp->operands[i + 4] = mrt1 ? mrt1->out[i] : Operand(v1);
    }
+
+   instr_exact_mask(exp.get()) = Operand();
+   instr_wqm_mask(exp.get()) = Operand();
 
    RegClass type = RegClass(RegType::vgpr, util_bitcount(mrt0->enabled_channels));
    exp->definitions[0] = bld.def(type); /* mrt0 */
@@ -792,7 +812,7 @@ finish_program(isel_context* ctx)
       while (it != instrs->end()) {
          aco_ptr<Instruction>& instr = *it;
          /* End WQM before: */
-         if (instr->isVMEM() || instr->isFlatLike() || instr->isDS() || instr->isEXP() ||
+         if (instr->isDS() || instr->isEXP() ||
              instr->opcode == aco_opcode::p_dual_src_export_gfx11 ||
              instr->opcode == aco_opcode::p_jump_to_epilog ||
              instr->opcode == aco_opcode::p_logical_start)
@@ -812,6 +832,277 @@ finish_program(isel_context* ctx)
       bld.reset(instrs, it);
       bld.pseudo(aco_opcode::p_end_wqm);
    }
+}
+
+struct param_assignment_info {
+   uint16_t required_alignment;
+   uint16_t provided_alignment;
+   RegClass rc;
+   parameter_info* dst_info;
+   bool is_return_param;
+   /* If true, this parameter shouldn't count toward the callee info's reg_param_count because it
+    * receives special handling (e.g. the call return address being a definition instead of an
+    * operand).
+    */
+   bool is_system_param;
+   /* This parameter must reside in a register. Used for stack pointers as well as s_swappc
+    * operands.
+    */
+   bool force_reg;
+};
+
+std::optional<PhysReg>
+find_reg(BITSET_WORD* regs, RegClass rc)
+{
+   uint16_t start = 0;
+   uint16_t size = 128;
+   if (rc.type() == RegType::vgpr) {
+      start = 256;
+      size = 256;
+   }
+
+   uint16_t contiguous_size = 0;
+   for (uint16_t i = 0; i < size; ++i) {
+      if (!BITSET_TEST(regs, start + i)) {
+         contiguous_size = 0;
+         continue;
+      }
+      if (++contiguous_size >= rc.size())
+         return PhysReg{(unsigned)(start + i - contiguous_size + 1)};
+   }
+   return {};
+}
+
+void
+find_param_regs(Program* program, const ABI& abi, callee_info& info,
+                std::vector<struct param_assignment_info>& params, RegisterDemand reg_limit)
+{
+   unsigned scratch_param_bytes = 0;
+   RegisterDemand param_demand = RegisterDemand();
+
+   BITSET_DECLARE(preserved_regs, 512);
+   BITSET_DECLARE(clobbered_regs, 512);
+   abi.preservedRegisters(preserved_regs, reg_limit);
+   BITSET_COPY(clobbered_regs, preserved_regs);
+   BITSET_NOT(clobbered_regs);
+   bool has_preserved_regs = !BITSET_IS_EMPTY(preserved_regs);
+
+   std::stable_sort(params.begin(), params.end(),
+                    [](const param_assignment_info& first, const param_assignment_info& second)
+                    {
+                       /* Assign parameters with larger alignments first so we can use parameters
+                        * with smaller alignments as padding
+                        */
+                       return first.provided_alignment > second.provided_alignment;
+                    });
+   std::stable_sort(params.begin(), params.end(),
+                    [](const param_assignment_info& first, const param_assignment_info& second)
+                    {
+                       /* Move parameters forced into registers to the very front so we assign
+                        * them first.
+                        */
+                       return first.force_reg && !second.force_reg;
+                    });
+   for (size_t i = 1; i < params.size(); ++i) {
+      assert(!params[i].force_reg || params[i - 1].force_reg);
+   }
+   /* Reverse parameters and start from the end, to make erasing elements cheap */
+   std::reverse(params.begin(), params.end());
+
+   while (!params.empty()) {
+      RegClass rc = params.back().rc;
+      bool discardable = params.back().dst_info->discardable || params.back().is_return_param;
+
+      BITSET_WORD* regs;
+      if (has_preserved_regs && !discardable)
+         regs = preserved_regs;
+      else
+         regs = clobbered_regs;
+
+      auto next_reg = find_reg(regs, rc);
+      /* Force parameter into scratch if it exceeds the ABI's maximum parameter demand */
+      if (abi.max_param_demand != RegisterDemand() &&
+          (param_demand + Temp(0, rc)).exceeds(abi.max_param_demand))
+         next_reg = {};
+
+      if (next_reg && next_reg->reg() % params.back().required_alignment) {
+         /* We found a register, but it's not aligned properly. Check if we can add some padding
+          * (and ideally stuff a different parameter in there).
+          */
+         uint16_t required_padding =
+            params.back().required_alignment - (next_reg->reg() % params.back().required_alignment);
+         uint16_t aligned_size = rc.size() + required_padding;
+         for (unsigned i = 0; i < aligned_size; ++i) {
+            /* The added padding exceeds the size of the register range. Just bail out at this
+             * point.
+             * TODO: we could probably try finding a new register, but then we'd need to reevaluate
+             * alignment etc...
+             */
+            if (!BITSET_TEST(regs, next_reg->advance(i * 4).reg())) {
+               next_reg = {};
+               break;
+            }
+         }
+
+         /* Try finding a small parameter to put inside the padding space */
+         for (auto it2 = std::next(params.rbegin()); next_reg && it2 != params.rend(); ++it2) {
+            if (it2->rc.type() != params.back().rc.type() ||
+                it2->dst_info->discardable != discardable)
+               continue;
+            if (it2->rc.size() > required_padding || (it2->required_alignment % next_reg->reg()))
+               continue;
+
+            param_demand += Temp(0, it2->rc);
+
+            it2->dst_info->def.setPrecolored(*next_reg);
+            for (unsigned i = 0; i < it2->rc.size(); ++i)
+               BITSET_CLEAR(regs, next_reg->reg() + i);
+            if (!it2->is_system_param) {
+               ++info.reg_param_count;
+               if (discardable)
+                  ++info.reg_discardable_param_count;
+            }
+            params.erase(std::prev(it2.base()));
+            break;
+         }
+         if (next_reg)
+            next_reg = next_reg->advance(required_padding * 4);
+      }
+      if (next_reg) {
+         param_demand += Temp(0, params.back().rc);
+         params.back().dst_info->def.setPrecolored(*next_reg);
+         BITSET_CLEAR_RANGE(regs, next_reg->reg(), next_reg->reg() + params.back().rc.size() - 1);
+         if (!params.back().is_system_param) {
+            ++info.reg_param_count;
+            if (discardable)
+               ++info.reg_discardable_param_count;
+         }
+      } else {
+         assert(!params.back().force_reg);
+         params.back().dst_info->is_reg = false;
+         params.back().dst_info->scratch_offset = scratch_param_bytes;
+         scratch_param_bytes += rc.size() * 4;
+      }
+      params.pop_back();
+   }
+
+   info.scratch_param_size = scratch_param_bytes;
+   if (program)
+      program->callee_param_demand = param_demand;
+}
+
+struct callee_info
+get_callee_info(amd_gfx_level gfx_level, const ABI& abi, unsigned param_count,
+                const nir_parameter* parameters, Program* program, RegisterDemand reg_limit)
+{
+   struct callee_info info = {};
+   info.param_infos.reserve(param_count);
+
+   std::vector<param_assignment_info> assignment_infos;
+   assignment_infos.reserve(param_count + 2);
+
+   Temp return_addr = program ? program->allocateTmp(s2) : Temp();
+   Definition return_def = Definition(return_addr);
+   info.return_address = {};
+   info.return_address.discardable = false;
+   info.return_address.is_reg = true;
+   info.return_address.def = return_def;
+
+   param_assignment_info return_def_info = {};
+   return_def_info.required_alignment = 2;
+   return_def_info.provided_alignment = 2;
+   return_def_info.rc = s2;
+   return_def_info.dst_info = &info.return_address;
+   return_def_info.is_return_param = false;
+   return_def_info.is_system_param = true;
+   return_def_info.force_reg = true;
+   assignment_infos.push_back(return_def_info);
+
+   if (gfx_level >= GFX9) {
+      Temp stack_ptr = program ? program->allocateTmp(s1) : Temp();
+      Definition stack_def = Definition(stack_ptr);
+      info.stack_ptr = {};
+      info.stack_ptr.discardable = false;
+      info.stack_ptr.is_reg = true;
+      info.stack_ptr.def = stack_def;
+
+      param_assignment_info stack_ptr_info = {};
+      stack_ptr_info.required_alignment = 1;
+      stack_ptr_info.provided_alignment = 1;
+      stack_ptr_info.rc = s1;
+      stack_ptr_info.dst_info = &info.stack_ptr;
+      stack_ptr_info.is_return_param = false;
+      stack_ptr_info.is_system_param = true;
+      stack_ptr_info.force_reg = true;
+      assignment_infos.push_back(stack_ptr_info);
+   } else {
+      Temp scratch_rsrc = program ? program->allocateTmp(s4) : Temp();
+      Definition rsrc_def = Definition(scratch_rsrc);
+      info.stack_ptr = {};
+      info.stack_ptr.discardable = false;
+      info.stack_ptr.is_reg = true;
+      info.stack_ptr.def = rsrc_def;
+
+      param_assignment_info rsrc_info = {};
+      rsrc_info.required_alignment = 4;
+      rsrc_info.provided_alignment = 4;
+      rsrc_info.rc = s4;
+      rsrc_info.dst_info = &info.stack_ptr;
+      rsrc_info.is_return_param = false;
+      rsrc_info.is_system_param = true;
+      rsrc_info.force_reg = true;
+      assignment_infos.push_back(rsrc_info);
+   }
+
+   size_t info_base = assignment_infos.size();
+
+   for (unsigned i = 0; i < param_count; ++i) {
+      RegType type = parameters[i].is_uniform ? RegType::sgpr : RegType::vgpr;
+      unsigned byte_size = align(parameters[i].bit_size, 32) / 8 * parameters[i].num_components;
+      RegClass rc = RegClass(type, byte_size / 4);
+
+      Temp dst = program ? program->allocateTmp(rc) : Temp();
+      Definition def = Definition(dst);
+
+      parameter_info param_info = {};
+      param_info.discardable =
+         !!(parameters[i].driver_attributes & ACO_NIR_PARAM_ATTRIB_DISCARDABLE);
+      param_info.is_reg = true;
+      param_info.def = def;
+      info.param_infos.push_back(param_info);
+
+      uint16_t required_alignment = 1;
+      uint16_t provided_alignment = 1;
+
+      if (rc.type() == RegType::sgpr) {
+         if (rc.size() > 2)
+            required_alignment = 4;
+         else if (rc.size() > 1)
+            required_alignment = 2;
+      }
+      if (rc.size() % 4 == 0)
+         provided_alignment = 4;
+      else if (rc.size() % 2 == 0)
+         provided_alignment = 2;
+
+      param_assignment_info assignment_info = {};
+      assignment_info.required_alignment = required_alignment;
+      assignment_info.provided_alignment = provided_alignment;
+      assignment_info.rc = rc;
+      assignment_info.is_return_param = parameters[i].is_return;
+      /* Force the first two parameters (callee addresses) into registers - they're assumed to be
+       * accessible through a temp.
+       */
+      assignment_info.force_reg = i <= 1;
+      assignment_infos.push_back(assignment_info);
+   }
+
+   for (unsigned i = 0; i < param_count; ++i)
+      assignment_infos[info_base + i].dst_info = &info.param_infos[i];
+
+   find_param_regs(program, abi, info, assignment_infos, reg_limit);
+
+   return info;
 }
 
 } // namespace aco

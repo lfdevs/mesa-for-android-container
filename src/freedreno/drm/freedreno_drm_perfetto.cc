@@ -50,19 +50,25 @@ class FdMemoryDataSource : public perfetto::DataSource<FdMemoryDataSource> {
 PERFETTO_DECLARE_DATA_SOURCE_STATIC_MEMBERS(FdMemoryDataSource);
 PERFETTO_DEFINE_DATA_SOURCE_STATIC_MEMBERS(FdMemoryDataSource);
 
+bool fd_drm_perfetto_active = false;
+
 extern "C" void
 fd_drm_perfetto_init(void)
 {
-   util_perfetto_init();
-
-   perfetto::DataSourceDescriptor dsd;
-   dsd.set_name("gpu.memory.msm");
-   FdMemoryDataSource::Register(dsd);
+   if (!fd_drm_perfetto_active && util_perfetto_is_tracing_enabled()) {
+      perfetto::DataSourceDescriptor dsd;
+      dsd.set_name("gpu.memory.msm");
+      FdMemoryDataSource::Register(dsd);
+      fd_drm_perfetto_active = true;
+   }
 }
 
 extern "C" void
 fd_alloc_log(struct fd_bo *bo, enum fd_alloc_category from, enum fd_alloc_category to)
 {
+   if (!fd_drm_perfetto_active)
+      return;
+
    /* Special case for BOs that back heap chunks, they don't immediately
     * transition to active, despite what the caller thinks:
     */

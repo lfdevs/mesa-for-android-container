@@ -172,7 +172,7 @@ get_partition_table_index(VkFormat format)
    case VK_FORMAT_ASTC_12x12_SRGB_BLOCK:
       return 13;
    default:
-      unreachable("bad astc format\n");
+      UNREACHABLE("bad astc format\n");
       return 0;
    }
 }

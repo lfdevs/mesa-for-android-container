@@ -104,7 +104,7 @@ anv_device_init_blorp(struct anv_device *device)
       device->blorp.exec = gfx8_blorp_exec;
       break;
    default:
-      unreachable("Unknown hardware generation");
+      UNREACHABLE("Unknown hardware generation");
    }
 }
 
@@ -437,7 +437,7 @@ isl_format_for_size(unsigned size_B)
    case 12: return ISL_FORMAT_R32G32B32_UINT;
    case 16: return ISL_FORMAT_R32G32B32A32_UINT;
    default:
-      unreachable("Unknown format size");
+      UNREACHABLE("Unknown format size");
    }
 }
 
@@ -647,7 +647,7 @@ blit_image(struct anv_cmd_buffer *cmd_buffer,
       blorp_filter = BLORP_FILTER_BILINEAR;
       break;
    default:
-      unreachable("Invalid filter");
+      UNREACHABLE("Invalid filter");
    }
 
    assert(anv_image_aspects_compatible(src_res->aspectMask,
@@ -1314,7 +1314,9 @@ anv_image_msaa_resolve(struct anv_cmd_buffer *cmd_buffer,
 
    assert(src_image->vk.image_type == VK_IMAGE_TYPE_2D);
    assert(src_image->vk.samples > 1);
-   assert(dst_image->vk.image_type == VK_IMAGE_TYPE_2D);
+   assert((dst_image->vk.image_type == VK_IMAGE_TYPE_2D) ||
+          (dst_image->vk.image_type == VK_IMAGE_TYPE_3D &&
+           dst_base_layer == 0 && layer_count == 1));
    assert(dst_image->vk.samples == 1);
 
    struct blorp_surf src_surf, dst_surf;
@@ -1884,7 +1886,7 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
    case ISL_AUX_OP_FULL_RESOLVE:
    case ISL_AUX_OP_AMBIGUATE:
    default:
-      unreachable("Unsupported MCS operation");
+      UNREACHABLE("Unsupported MCS operation");
    }
 
    anv_add_pending_pipe_bits(cmd_buffer,
@@ -1982,7 +1984,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
       }
       break;
    default:
-      unreachable("Unsupported CCS operation");
+      UNREACHABLE("Unsupported CCS operation");
    }
 
    anv_add_pending_pipe_bits(cmd_buffer,

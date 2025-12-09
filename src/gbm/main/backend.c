@@ -35,6 +35,7 @@
 #include <assert.h>
 #include <dlfcn.h>
 #include <xf86drm.h>
+#include "util/os_misc.h"
 
 #include "loader.h"
 #include "backend.h"
@@ -149,7 +150,7 @@ _gbm_create_device(int fd)
 {
    struct gbm_device *dev = NULL;
 
-   const char *b = getenv("GBM_BACKEND");
+   const char *b = os_get_option("GBM_BACKEND");
    if (b) {
       dev = load_backend_by_name(b, fd, true);
       if (dev) return dev;

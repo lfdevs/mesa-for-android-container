@@ -24,11 +24,19 @@
 #ifndef BUILD_ID_H
 #define BUILD_ID_H
 
+#include "detect_os.h"
+
+#if defined(HAVE_DL_ITERATE_PHDR) || DETECT_OS_APPLE
+#define HAVE_BUILD_ID 1
+#else
+#define HAVE_BUILD_ID 0
+#endif /* defined(HAVE_DL_ITERATE_PHDR) || DETECT_OS_APPLE */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifdef HAVE_DL_ITERATE_PHDR
+#if HAVE_BUILD_ID
 
 #include <stdint.h>
 

@@ -7,7 +7,6 @@ subdir('android_stub')
 subdir('util')
 
 inc_mesa = include_directories('mesa')
-inc_mapi = include_directories('mapi')
 inc_src = include_directories('.')
 inc_gallium = include_directories('gallium/include')
 inc_gallium_aux = include_directories('gallium/auxiliary')
@@ -53,10 +52,10 @@ endif
 if with_gallium_or_lvp or with_gbm or with_platform_wayland
   subdir('loader')
 endif
-if with_gallium
-  subdir('mapi')
-endif
 subdir('compiler')
+if with_poly
+  subdir('poly')
+endif
 if with_tools.contains('drm-shim')
   subdir('drm-shim')
 endif
@@ -90,7 +89,7 @@ endif
 if with_gallium_freedreno or with_freedreno_vk or with_tools.contains('freedreno')
   subdir('freedreno')
 endif
-if with_imagination_vk
+if with_imagination_vk or with_tools.contains('imagination')
   subdir('imagination')
 endif
 if with_gallium_panfrost or with_gallium_lima or with_panfrost_vk or with_tools.contains('panfrost')
@@ -115,6 +114,9 @@ endif
 if with_gallium_asahi or with_asahi_vk or with_tools.contains('asahi')
   subdir('asahi')
 endif
+if with_kosmickrisp_vk
+  subdir('kosmickrisp')
+endif
 if with_gallium
   subdir('mesa')
 endif
@@ -124,10 +126,10 @@ endif
 # These require libgallium (shared_glapi_lib)
 if with_gallium and (with_glx != 'disabled' or with_egl)
   if with_gles1 and not with_glvnd
-    subdir('mapi/es1api')
+    subdir('mesa/glapi/es1api')
   endif
   if with_gles2 and not with_glvnd
-    subdir('mapi/es2api')
+    subdir('mesa/glapi/es2api')
   endif
   if with_tests
     subdir('mesa/main/tests')

@@ -60,7 +60,7 @@ vkviewtype_from_pipe(enum pipe_texture_target target, bool need_2D)
       return VK_IMAGE_VIEW_TYPE_3D;
 
    default:
-      unreachable("unsupported target");
+      UNREACHABLE("unsupported target");
    }
 }
 
@@ -112,7 +112,7 @@ apply_view_usage_for_format(struct zink_screen *screen, struct pipe_resource *pr
    VkFormatFeatureFlags feats = res->linear ?
                                 zink_get_format_props(screen, format)->linearTilingFeatures :
                                 zink_get_format_props(screen, format)->optimalTilingFeatures;
-   VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+   uint64_t attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
    usage_info->usage = res->obj->vkusage & ~attachment;
    if (res->obj->modifier_aspect) {
       feats = res->obj->vkfeats;
@@ -189,7 +189,7 @@ componentmapping_to_pipe(VkComponentSwizzle c)
    case VK_COMPONENT_SWIZZLE_A:
       return PIPE_SWIZZLE_W;
    default:
-      unreachable("unknown swizzle");
+      UNREACHABLE("unknown swizzle");
    }
 }
 
@@ -295,7 +295,10 @@ zink_create_transient_surface(struct zink_context *ctx, const struct pipe_surfac
       /* transient fb attachment: not cached */
       struct pipe_resource rtempl = *psurf->texture;
       rtempl.nr_samples = nr_samples;
+      rtempl.bind &= ~(PIPE_BIND_LINEAR | ZINK_BIND_DMABUF);
       rtempl.bind |= ZINK_BIND_TRANSIENT;
+      if (zink_format_needs_mutable(rtempl.format, psurf->format))
+         rtempl.bind |= ZINK_BIND_MUTABLE;
       res->transient = zink_resource(ctx->base.screen->resource_create(ctx->base.screen, &rtempl));
       transient = res->transient;
       if (unlikely(!transient)) {

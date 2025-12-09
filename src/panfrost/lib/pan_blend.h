@@ -31,8 +31,6 @@
 #include "util/blend.h"
 #include "util/format/u_format.h"
 
-#include "panfrost/util/pan_ir.h"
-
 struct MALI_BLEND_EQUATION;
 
 struct pan_blend_equation {

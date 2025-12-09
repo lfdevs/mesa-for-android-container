@@ -26,11 +26,9 @@
  **************************************************************************/
 
 #include "util/u_debug.h"
-#include "util/u_memory.h"
 #include "util/os_time.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_passmgr.h"
-#include "lp_bld_init.h"
 
 #define USE_NEW_PASS (LLVM_VERSION_MAJOR >= 15)
 

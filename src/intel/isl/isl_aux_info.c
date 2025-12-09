@@ -31,8 +31,8 @@ UNUSED static void static_assert_func(void) {
    STATIC_ASSERT(ISL_AUX_STATE_ASSERT == ((enum isl_aux_state) 0));
 }
 
-#undef unreachable
-#define unreachable(str) return 0
+#undef UNREACHABLE
+#define UNREACHABLE(str) return 0
 
 #undef assert
 #define assert(cond) do { \
@@ -124,7 +124,7 @@ aux_state_possible(enum isl_aux_state state,
 #endif
    }
 
-   unreachable("Invalid aux state.");
+   UNREACHABLE("Invalid aux state.");
 }
 
 enum isl_aux_state
@@ -136,7 +136,21 @@ isl_aux_get_initial_state(const struct intel_device_info *devinfo,
    case ISL_AUX_USAGE_HIZ:
    case ISL_AUX_USAGE_HIZ_CCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:
-      return ISL_AUX_STATE_AUX_INVALID;
+      if (devinfo->ver >= 20) {
+         /* According to HSD 22011236099, there are no illegal values for HiZ.
+          * As neither the main and aux surfaces contain anything of interest,
+          * treat them as being in sync. This state can avoid the need to
+          * ambiguate in some cases.
+          */
+         return ISL_AUX_STATE_RESOLVED;
+      } else if (zeroed && devinfo->ver <= 11) {
+         /* On ICL and prior, fast-clearing a HiZ block fills it with zeroes.
+          * On gfx12+, it is filled with a non-zero value.
+          */
+         return ISL_AUX_STATE_CLEAR;
+      } else {
+         return ISL_AUX_STATE_AUX_INVALID;
+      }
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_MCS_CCS:
       if (zeroed) {
@@ -173,7 +187,6 @@ isl_aux_get_initial_state(const struct intel_device_info *devinfo,
           */
          return ISL_AUX_STATE_PASS_THROUGH;
       } else if (devinfo->ver >= 12) {
-         assert(!devinfo->has_illegal_ccs_values);
          /* From Bspec 47709, "MCS/CCS Buffers for Render Target(s)":
           *
           *    "CCS surface does not require initialization. Illegal CCS
@@ -200,11 +213,13 @@ isl_aux_get_initial_state(const struct intel_device_info *devinfo,
           * behavior, COMPRESSED_NO_CLEAR.
           */
          return ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
+      } else if (devinfo->ver >= 9) {
+         return ISL_AUX_STATE_AUX_INVALID;
       } else {
-         unreachable("Unsupported gfx version");
+         UNREACHABLE("Unsupported gfx version");
       }
    default:
-      unreachable("Unsupported aux mode");
+      UNREACHABLE("Unsupported aux mode");
    }
 }
 
@@ -246,7 +261,7 @@ isl_aux_prepare_access(enum isl_aux_state initial_state,
 #endif
    }
 
-   unreachable("Invalid aux state.");
+   UNREACHABLE("Invalid aux state.");
 }
 
 enum isl_aux_state
@@ -283,7 +298,7 @@ isl_aux_state_transition_aux_op(enum isl_aux_state initial_state,
 #endif
    }
 
-   unreachable("Invalid aux op.");
+   UNREACHABLE("Invalid aux op.");
 }
 
 enum isl_aux_state
@@ -332,7 +347,7 @@ isl_aux_state_transition_write(enum isl_aux_state initial_state,
 #endif
    }
 
-   unreachable("Invalid aux state.");
+   UNREACHABLE("Invalid aux state.");
 }
 
 bool

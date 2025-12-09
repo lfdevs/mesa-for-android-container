@@ -3,6 +3,7 @@
  * Copyright (C) 2014 Broadcom
  * Copyright (C) 2018-2019 Alyssa Rosenzweig
  * Copyright (C) 2019-2020 Collabora, Ltd.
+ * Copyright (C) 2025 Arm Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,6 +37,7 @@
 
 struct pan_ptr;
 struct mali_texture_packed;
+struct mali_buffer_packed;
 struct pan_buffer_view;
 
 #if PAN_ARCH >= 7
@@ -91,9 +93,13 @@ void GENX(pan_tex_emit_afrc_payload_entry)(
       unsigned layer_or_z_slice, unsigned sample, void **payload);
 #endif
 
-void
-GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
-                              struct mali_texture_packed *out,
-                              const struct pan_ptr *payload);
+#if PAN_ARCH >= 9
+void GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
+                                   struct mali_buffer_packed *out);
+#else
+void GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
+                                   struct mali_texture_packed *out,
+                                   const struct pan_ptr *payload);
+#endif
 
 #endif

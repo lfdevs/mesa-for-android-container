@@ -12,11 +12,12 @@
 #include "panvk_priv_bo.h"
 
 #include "kmod/pan_kmod.h"
+#include "pan_props.h"
 
 #include "genxml/decode.h"
 
 VkResult
-panvk_priv_bo_create(struct panvk_device *dev, size_t size, uint32_t flags,
+panvk_priv_bo_create(struct panvk_device *dev, uint64_t size, uint32_t flags,
                      VkSystemAllocationScope scope, struct panvk_priv_bo **out)
 {
    VkResult result;
@@ -59,8 +60,8 @@ panvk_priv_bo_create(struct panvk_device *dev, size_t size, uint32_t flags,
    };
 
    if (!(dev->kmod.vm->flags & PAN_KMOD_VM_FLAG_AUTO_VA)) {
-      op.va.start = panvk_as_alloc(dev,
-         op.va.size, op.va.size > 0x200000 ? 0x200000 : 0x1000);
+      op.va.start = panvk_as_alloc(dev, op.va.size,
+         pan_choose_gpu_va_alignment(dev->kmod.vm, op.va.size));
       if (!op.va.start) {
          result = panvk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
          goto err_munmap_bo;

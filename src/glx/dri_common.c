@@ -45,6 +45,7 @@
 #include <xcb/xproto.h>
 #include "dri_util.h"
 #include "pipe-loader/pipe_loader.h"
+#include "x11/x11_display.h"
 
 #define __ATTRIB(attrib, field) \
     { attrib, offsetof(struct glx_config, field) }
@@ -601,7 +602,7 @@ dri_context_error_to_glx_error(unsigned error)
    else if (error == __DRI_CTX_ERROR_UNKNOWN_FLAG)
       return BadValue;
    else
-      unreachable("Impossible DRI context error");
+      UNREACHABLE("Impossible DRI context error");
 }
 
 struct glx_context *
@@ -887,7 +888,8 @@ dri_create_context_attribs(struct glx_screen *base,
                               num_ctx_attribs / 2,
                               ctx_attribs,
                               error,
-                              pcp);
+                              pcp,
+                              x11_xlib_display_is_thread_safe(base->dpy));
 
    *error = dri_context_error_to_glx_error(*error);
 
@@ -959,7 +961,7 @@ dri_screen_init(struct glx_screen *psc, struct glx_display *priv, int screen, in
       type = DRI_SCREEN_SWRAST;
       break;
    default:
-      unreachable("unknown glx driver type");
+      UNREACHABLE("unknown glx driver type");
    }
 
    psc->frontend_screen = driCreateNewScreen3(screen, fd,

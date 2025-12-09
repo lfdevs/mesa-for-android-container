@@ -7,7 +7,7 @@ section_start weston "Building Weston"
 
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
-# DEBIAN_BASE_TAG
+# DEBIAN_TEST_BASE_TAG
 
 export WESTON_VERSION="14.0.1"
 

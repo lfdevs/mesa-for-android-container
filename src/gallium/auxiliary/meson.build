@@ -385,8 +385,6 @@ if draw_with_llvm
 endif
 
 files_libgalliumvl = files(
-  'vl/vl_bicubic_filter.c',
-  'vl/vl_bicubic_filter.h',
   'vl/vl_codec.c',
   'vl/vl_codec.h',
   'vl/vl_compositor.c',
@@ -397,32 +395,18 @@ files_libgalliumvl = files(
   'vl/vl_compositor_cs.h',
   'vl/vl_csc.c',
   'vl/vl_csc.h',
-  'vl/vl_decoder.c',
-  'vl/vl_decoder.h',
   'vl/vl_defines.h',
   'vl/vl_deint_filter.c',
   'vl/vl_deint_filter.h',
   'vl/vl_deint_filter_cs.c',
   'vl/vl_deint_filter_cs.h',
-  'vl/vl_idct.c',
-  'vl/vl_idct.h',
-  'vl/vl_matrix_filter.c',
-  'vl/vl_matrix_filter.h',
-  'vl/vl_mc.c',
-  'vl/vl_mc.h',
-  'vl/vl_median_filter.c',
-  'vl/vl_median_filter.h',
   'vl/vl_mpeg12_bitstream.c',
   'vl/vl_mpeg12_bitstream.h',
-  'vl/vl_mpeg12_decoder.c',
-  'vl/vl_mpeg12_decoder.h',
   'vl/vl_types.h',
   'vl/vl_vertex_buffers.c',
   'vl/vl_vertex_buffers.h',
   'vl/vl_video_buffer.c',
   'vl/vl_video_buffer.h',
-  'vl/vl_zscan.c',
-  'vl/vl_zscan.h',
 )
 
 vlwinsys_deps = []
@@ -459,7 +443,7 @@ files_libgallium += custom_target(
   'tr_util.[ch]',
   input: ['../include/pipe/p_defines.h', '../include/pipe/p_video_enums.h', '../../util/blend.h'],
   output: ['tr_util.c', 'tr_util.h'],
-  command: [prog_python, prog_enums2names, '@INPUT@', '-C', '@OUTPUT0@', '-H', '@OUTPUT1@', '-I', 'tr_util.h'],
+  command: [prog_python, prog_enums2names, '@INPUT@', '-C', '@OUTPUT0@', '-H', '@OUTPUT1@'],
   depend_files: prog_enums2names,
 )
 
@@ -529,7 +513,7 @@ if with_tests
     executable(
       'gallium-aux',
       'util/u_surface_test.cpp',
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
+      include_directories : [inc_include, inc_src, inc_gallium, inc_gallium_aux],
       link_with: libgallium,
       dependencies : [idep_gtest, idep_mesautil],
     ),
@@ -562,7 +546,7 @@ libgalliumvl = static_library(
 
 # some drivers export their screen creation function globally, so all frontends have to contain the
 # full libgalliumvl. So we'll handle this here globally for everybody.
-if (with_gallium_mediafoundation or with_gallium_va or with_gallium_vdpau or with_dri or with_gallium_radeonsi)
+if (with_gallium_mediafoundation or with_gallium_va or with_dri or with_gallium_radeonsi)
   libgalliumvl_stub = libgalliumvl
 else
   libgalliumvl_stub = _libgalliumvl_stub

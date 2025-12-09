@@ -24,6 +24,7 @@ enum nouveau_ws_bo_flags {
    NOUVEAU_WS_BO_GART  = 1 << 1,
    NOUVEAU_WS_BO_MAP   = 1 << 2,
    NOUVEAU_WS_BO_NO_SHARE = 1 << 3,
+   NOUVEAU_WS_BO_COHERENT = 1 << 4,
 };
 
 enum nouveau_ws_bo_map_flags {
@@ -39,6 +40,7 @@ struct nouveau_ws_bo {
    uint32_t handle;
    enum nouveau_ws_bo_flags flags;
    atomic_uint_fast32_t refcnt;
+   uint8_t pte_kind;
 };
 
 void nouveau_ws_bo_bind_vma(struct nouveau_ws_device *dev,

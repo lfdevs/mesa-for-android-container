@@ -83,7 +83,7 @@ query_features_from_kernel(struct etna_gpu *gpu)
 		features[i - ETNA_GPU_FEATURES_0] = val;
 	}
 
-	gpu->info.type = ETNA_CORE_GPU;
+	etna_core_enable_feature(&gpu->info, ETNA_FEATURE_CORE_GPU);
 
 	ETNA_FEATURE(chipFeatures, FAST_CLEAR);
 	ETNA_FEATURE(chipFeatures, PIPE_3D);
@@ -155,7 +155,7 @@ query_limits_from_kernel(struct etna_gpu *gpu)
 	struct etna_core_info *info = &gpu->info;
 	uint64_t val;
 
-	assert(info->type == ETNA_CORE_GPU);
+	assert(etna_core_has_feature(info, ETNA_FEATURE_CORE_GPU));
 
 	etna_gpu_get_param(gpu, ETNA_GPU_INSTRUCTION_COUNT, &val);
 	info->gpu.max_instructions = val;

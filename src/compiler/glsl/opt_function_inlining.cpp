@@ -35,7 +35,7 @@
 #include "util/hash_table.h"
 
 static void
-do_variable_replacement(exec_list *instructions,
+do_variable_replacement(ir_exec_list *instructions,
                         ir_variable *orig,
                         ir_rvalue *repl);
 
@@ -51,14 +51,13 @@ public:
 static void
 replace_return_with_assignment(ir_instruction *ir, void *data)
 {
-   void *ctx = ralloc_parent(ir);
    ir_dereference *orig_deref = (ir_dereference *) data;
    ir_return *ret = ir->as_return();
 
    if (ret) {
       if (ret->value) {
-	 ir_rvalue *lhs = orig_deref->clone(ctx, NULL);
-         ret->replace_with(new(ctx) ir_assignment(lhs, ret->value));
+	 ir_rvalue *lhs = orig_deref->clone(ir->node_linalloc, NULL);
+         ret->replace_with(new(ir->node_linalloc) ir_assignment(lhs, ret->value));
       } else {
 	 /* un-valued return has to be the last return, or we shouldn't
 	  * have reached here. (see can_inline()).
@@ -82,18 +81,17 @@ ir_visitor_status
 ir_save_lvalue_visitor::visit_enter(ir_dereference_array *deref)
 {
    if (deref->array_index->ir_type != ir_type_constant) {
-      void *ctx = ralloc_parent(deref);
       ir_variable *index;
       ir_assignment *assignment;
 
-      index = new(ctx) ir_variable(deref->array_index->type, "saved_idx", ir_var_temporary);
+      index = new(deref->node_linalloc) ir_variable(deref->array_index->type, "saved_idx", ir_var_temporary);
       base_ir->insert_before(index);
 
-      assignment = new(ctx) ir_assignment(new(ctx) ir_dereference_variable(index),
+      assignment = new(deref->node_linalloc) ir_assignment(new(deref->node_linalloc) ir_dereference_variable(index),
                                           deref->array_index);
       base_ir->insert_before(assignment);
 
-      deref->array_index = new(ctx) ir_dereference_variable(index);
+      deref->array_index = new(deref->node_linalloc) ir_dereference_variable(index);
    }
 
    deref->array->accept(this);
@@ -137,13 +135,13 @@ should_replace_variable(ir_variable *sig_param, ir_rvalue *param,
 void
 ir_call::generate_inline(ir_instruction *next_ir)
 {
-   void *ctx = ralloc_parent(this);
+   linear_ctx *linalloc = this->node_linalloc;
    ir_variable **parameters;
    unsigned num_parameters;
    int i;
-   struct hash_table *ht;
+   struct hash_table ht;
 
-   ht = _mesa_pointer_hash_table_create(NULL);
+   _mesa_pointer_hash_table_init(&ht, NULL);
 
    num_parameters = this->callee->parameters.length();
    parameters = new ir_variable *[num_parameters];
@@ -152,7 +150,7 @@ ir_call::generate_inline(ir_instruction *next_ir)
     * and set up the mapping of real function body variables to ours.
     */
    i = 0;
-   foreach_two_lists(formal_node, &this->callee->parameters,
+   ir_foreach_two_lists(formal_node, &this->callee->parameters,
                      actual_node, &this->actual_parameters) {
       ir_variable *sig_param = (ir_variable *) formal_node;
       ir_rvalue *param = (ir_rvalue *) actual_node;
@@ -163,7 +161,7 @@ ir_call::generate_inline(ir_instruction *next_ir)
          /* Actual replacement happens below */
 	 parameters[i] = NULL;
       } else {
-	 parameters[i] = sig_param->clone(ctx, ht);
+	 parameters[i] = sig_param->clone(linalloc, &ht);
 	 parameters[i]->data.mode = ir_var_temporary;
 
 	 /* Remove the read-only decoration because we're going to write
@@ -198,7 +196,7 @@ ir_call::generate_inline(ir_instruction *next_ir)
              sig_param->data.mode == ir_var_const_in) {
             ir_assignment *assign;
 
-            assign = new(ctx) ir_assignment(new(ctx) ir_dereference_variable(parameters[i]),
+            assign = new(linalloc) ir_assignment(new(linalloc) ir_dereference_variable(parameters[i]),
                                             param);
             next_ir->insert_before(assign);
          } else {
@@ -214,8 +212,8 @@ ir_call::generate_inline(ir_instruction *next_ir)
             if (sig_param->data.mode == ir_var_function_inout) {
                ir_assignment *assign;
 
-               assign = new(ctx) ir_assignment(new(ctx) ir_dereference_variable(parameters[i]),
-                                               param->clone(ctx, NULL)->as_rvalue());
+               assign = new(linalloc) ir_assignment(new(linalloc) ir_dereference_variable(parameters[i]),
+                                               param->clone(linalloc, NULL)->as_rvalue());
                next_ir->insert_before(assign);
             }
          }
@@ -224,11 +222,11 @@ ir_call::generate_inline(ir_instruction *next_ir)
       ++i;
    }
 
-   exec_list new_instructions;
+   ir_exec_list new_instructions;
 
    /* Generate the inlined body of the function to a new list */
-   foreach_in_list(ir_instruction, ir, &callee->body) {
-      ir_instruction *new_ir = ir->clone(ctx, ht);
+   ir_foreach_in_list(ir_instruction, ir, &callee->body) {
+      ir_instruction *new_ir = ir->clone(linalloc, &ht);
 
       new_instructions.push_tail(new_ir);
       visit_tree(new_ir, replace_return_with_assignment, this->return_deref);
@@ -237,7 +235,7 @@ ir_call::generate_inline(ir_instruction *next_ir)
    /* If any opaque types were passed in, replace any deref of the
     * opaque variable with a deref of the argument.
     */
-   foreach_two_lists(formal_node, &this->callee->parameters,
+   ir_foreach_two_lists(formal_node, &this->callee->parameters,
                      actual_node, &this->actual_parameters) {
       ir_rvalue *const param = (ir_rvalue *) actual_node;
       ir_variable *sig_param = (ir_variable *) formal_node;
@@ -255,7 +253,7 @@ ir_call::generate_inline(ir_instruction *next_ir)
     * variables to our own.
     */
    i = 0;
-   foreach_two_lists(formal_node, &this->callee->parameters,
+   ir_foreach_two_lists(formal_node, &this->callee->parameters,
                      actual_node, &this->actual_parameters) {
       ir_rvalue *const param = (ir_rvalue *) actual_node;
       const ir_variable *const sig_param = (ir_variable *) formal_node;
@@ -265,8 +263,8 @@ ir_call::generate_inline(ir_instruction *next_ir)
 			    sig_param->data.mode == ir_var_function_inout)) {
 	 ir_assignment *assign;
 
-         assign = new(ctx) ir_assignment(param,
-                                         new(ctx) ir_dereference_variable(parameters[i]));
+         assign = new(linalloc) ir_assignment(param,
+                                         new(linalloc) ir_dereference_variable(parameters[i]));
 	 next_ir->insert_before(assign);
       }
 
@@ -275,7 +273,7 @@ ir_call::generate_inline(ir_instruction *next_ir)
 
    delete [] parameters;
 
-   _mesa_hash_table_destroy(ht, NULL);
+   _mesa_hash_table_fini(&ht, NULL);
 }
 
 /**
@@ -316,7 +314,7 @@ ir_variable_replacement_visitor::replace_deref(ir_dereference **deref)
 {
    ir_dereference_variable *deref_var = (*deref)->as_dereference_variable();
    if (deref_var && deref_var->var == this->orig)
-      *deref = this->repl->as_dereference()->clone(ralloc_parent(*deref), NULL);
+      *deref = this->repl->as_dereference()->clone((*deref)->node_linalloc, NULL);
 }
 
 void
@@ -338,7 +336,7 @@ ir_variable_replacement_visitor::replace_rvalue(ir_rvalue **rvalue)
 
    ir_dereference_variable *deref_var = (deref)->as_dereference_variable();
    if (deref_var && deref_var->var == this->orig)
-      *rvalue = this->repl->clone(ralloc_parent(deref), NULL);
+      *rvalue = this->repl->clone(deref->node_linalloc, NULL);
 }
 
 ir_visitor_status
@@ -361,7 +359,7 @@ ir_variable_replacement_visitor::visit_leave(ir_assignment *ir)
 ir_visitor_status
 ir_variable_replacement_visitor::visit_leave(ir_call *ir)
 {
-   foreach_in_list_safe(ir_rvalue, param, &ir->actual_parameters) {
+   ir_foreach_in_list_safe(ir_rvalue, param, &ir->actual_parameters) {
       ir_rvalue *new_param = param;
       replace_rvalue(&new_param);
 
@@ -373,7 +371,7 @@ ir_variable_replacement_visitor::visit_leave(ir_call *ir)
 }
 
 static void
-do_variable_replacement(exec_list *instructions,
+do_variable_replacement(ir_exec_list *instructions,
                         ir_variable *orig,
                         ir_rvalue *repl)
 {

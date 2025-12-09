@@ -24,9 +24,6 @@ dEQP-GLES2.functional.shaders.loops.*dynamic.*vertex
 # https://gitlab.freedesktop.org/mesa/piglit/-/issues/104
 spec@ext_external_objects@vk-.*
 
-# Slow piglit tests (> 1 minute to run)
-spec@!opengl 1.1@streaming-texture-leak
-
 # Versions / Extensions not supported
 spec@!opengl 3.*
 spec@!opengl 4.*

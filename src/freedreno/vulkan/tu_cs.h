@@ -441,13 +441,48 @@ tu_cs_trace_start(struct u_trace_context *utctx,
 __attribute__((format(printf, 3, 4))) void
 tu_cs_trace_end(struct u_trace_context *utctx, void *cs, const char *fmt, ...);
 
+struct tu_cs_patchable_state {
+   uint32_t *nop_header;
+   uint32_t dwords;
+   uint32_t enable_patch;
+   uint32_t disable_patch;
+   uint32_t *_end;
+};
+
+/* Create a region that can be enabled/disabled by updating CP_NOP header. */
+static struct tu_cs_patchable_state
+tu_cs_patchable_start(struct tu_cs *cs, uint32_t reserved_size)
+{
+   tu_cs_reserve(cs, reserved_size);
+   uint32_t *nop_header = cs->cur;
+   tu_cs_emit_pkt7(cs, CP_NOP, 0);
+   return (struct tu_cs_patchable_state) {
+      .nop_header = nop_header,
+      .dwords = 0,
+      .enable_patch = pm4_pkt7_hdr(CP_NOP, 0),
+      .disable_patch = 0,
+      ._end = cs->end,
+   };
+}
+
+static void
+tu_cs_patchable_end(struct tu_cs *cs,
+                    bool enabled_by_default,
+                    struct tu_cs_patchable_state *state)
+{
+   assert(cs->end == state->_end);
+   state->dwords = cs->cur - state->nop_header - 1;
+   state->disable_patch = pm4_pkt7_hdr(CP_NOP, state->dwords);
+   if (!enabled_by_default)
+      *state->nop_header = state->disable_patch;
+}
+
 /* Helpers for bracketing a large sequence of commands of unknown size inside
  * a CP_COND_REG_EXEC packet.
  */
 static inline void
 tu_cond_exec_start(struct tu_cs *cs, uint32_t cond_flags)
 {
-   assert(cs->mode == TU_CS_MODE_GROW);
    assert(cs->cond_stack_depth < TU_COND_EXEC_STACK_SIZE);
 
    ASSERTED enum compare_mode mode =
@@ -485,6 +520,62 @@ tu_cond_exec_end(struct tu_cs *cs)
       /* rewind the CS to drop the empty cond reg packet. */
       cs->cur = cs->cur - 3;
    }
+}
+
+static inline void
+tu7_thread_control(struct tu_cs *cs, enum cp_thread thread)
+{
+   tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
+   tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(thread));
+}
+
+static inline void
+tu7_set_pred_mask(struct tu_cs *cs, uint32_t mask, uint32_t val)
+{
+   tu_cs_emit_pkt7(cs, CP_REG_TEST, 3);
+   tu_cs_emit(cs, A6XX_CP_REG_TEST_0_PRED_UPDATE |
+                  A6XX_CP_REG_TEST_0_SKIP_WAIT_FOR_ME);
+   tu_cs_emit(cs, mask);
+   tu_cs_emit(cs, val);
+}
+
+static inline void
+tu7_set_pred_bit(struct tu_cs *cs, enum tu_predicate_bit bit, bool val)
+{
+   tu7_set_pred_mask(cs, 1u << bit, val ? (1u << bit) : 0);
+}
+
+static inline void
+tu7_write_onchip_timestamp(struct tu_cs *cs, enum tu_onchip_addr onchip_addr)
+{
+   tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 2);
+   tu_cs_emit(cs, CP_EVENT_WRITE7_0_WRITE_DST(EV_DST_ONCHIP) |
+                  CP_EVENT_WRITE7_0_WRITE_SRC(EV_WRITE_TIMESTAMP_SUM) |
+                  CP_EVENT_WRITE7_0_EVENT(DUMMY_EVENT) |
+                  CP_EVENT_WRITE7_0_WRITE_ENABLED);
+   tu_cs_emit(cs, onchip_addr);
+}
+
+static inline void
+tu7_wait_onchip_timestamp(struct tu_cs *cs, enum tu_onchip_addr onchip_addr)
+{
+   tu_cs_emit_pkt7(cs, CP_WAIT_TIMESTAMP, 3);
+   tu_cs_emit(cs, CP_WAIT_TIMESTAMP_0_WAIT_DST(TS_WAIT_ONCHIP) |
+                  CP_WAIT_TIMESTAMP_0_WAIT_VALUE_SRC(TS_WAIT_GE_TIMESTAMP_SUM));
+   tu_cs_emit_qw(cs, onchip_addr);
+}
+
+static inline void
+tu7_wait_onchip_val(struct tu_cs *cs, enum tu_onchip_addr onchip_addr,
+                    uint32_t val)
+{
+   tu_cs_emit_pkt7(cs, CP_WAIT_REG_MEM, 6);
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_EQ) |
+                  CP_WAIT_REG_MEM_0_POLL(POLL_ON_CHIP));
+   tu_cs_emit_qw(cs, onchip_addr);
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_3_REF(val));
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_4_MASK(~0));
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_5_DELAY_LOOP_CYCLES(0));
 }
 
 uint64_t

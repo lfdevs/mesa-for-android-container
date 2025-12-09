@@ -110,6 +110,12 @@ struct pan_image_props {
 struct pan_image_layout {
    struct pan_image_slice_layout slices[MAX_MIP_LEVELS];
 
+   union {
+      struct {
+         int mode;
+      } afbc;
+   };
+
    /* Image plane data size in bytes */
    uint64_t data_size_B;
    uint64_t array_stride_B;
@@ -126,8 +132,19 @@ struct pan_image_layout_constraints {
     */
    uint64_t offset_B;
 
+   /* Minimal aligment for an array layer. Used to implement sparse residency. */
+   uint32_t array_align_B;
+
    /* Row pitch in bytes. Non-zero if layout is explicit. */
    uint32_t wsi_row_pitch_B;
+
+   union {
+      struct {
+         /* Minimal alignment for a row of ordered blocks. Used to implement sparse
+         * residency. */
+         uint32_t row_align_B;
+      } u_tiled;
+   };
 
    /* When true, AFBC/AFRC imports are stricter than they were when those
     * modifiers where introduced. */

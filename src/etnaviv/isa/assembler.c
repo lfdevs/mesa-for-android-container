@@ -95,14 +95,13 @@ main(int argc, char *argv[])
       return EXIT_FAILURE;
    }
 
-   struct util_dynarray bin;
-   util_dynarray_init(&bin, NULL);
+   struct util_dynarray bin = UTIL_DYNARRAY_INIT;
 
    for (unsigned int i = 0; i < result->num_instr; i++) {
       struct encoded_instr encoded;
 
       isa_assemble_instruction(encoded.word, &result->instr[i]);
-      util_dynarray_append(&bin, struct encoded_instr, encoded);
+      util_dynarray_append(&bin, encoded);
    }
 
    unsigned int num = util_dynarray_num_elements(&bin, struct encoded_instr);

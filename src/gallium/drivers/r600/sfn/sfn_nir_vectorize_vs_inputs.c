@@ -107,7 +107,7 @@ r600_vec_instr_stack_create(void *mem_ctx)
 static void
 r600_vec_instr_stack_push(struct util_dynarray *stack, nir_instr *instr)
 {
-   util_dynarray_append(stack, nir_instr *, instr);
+   util_dynarray_append(stack, instr);
 }
 
 static unsigned

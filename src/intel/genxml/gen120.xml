@@ -1893,14 +1893,14 @@
     <field name="Long Term Reference Flags L0" dword="2" bits="26:24" type="uint" />
     <field name="Long Term Reference Flags L1" dword="2" bits="27:27" type="uint" />
     <field name="Transform Skip" dword="2" bits="30:30" type="bool" />
-    <field name="POC Number For Refid0 In L0" dword="3" bits="7:0" type="uint" />
+    <field name="POC Number For Refid0 In L0" dword="3" bits="7:0" type="int" />
     <field name="Values3" dword="3" bits="31:0" type="uint" />
-    <field name="POC Number For Refid0 In L1" dword="3" bits="15:8" type="uint" />
-    <field name="POC Number For Refid1 In L0" dword="3" bits="23:16" type="uint" />
-    <field name="POC Number For Refid1 In L1" dword="3" bits="31:24" type="uint" />
-    <field name="POC Number For Refid2 In L0" dword="4" bits="7:0" type="uint" />
+    <field name="POC Number For Refid0 In L1" dword="3" bits="15:8" type="int" />
+    <field name="POC Number For Refid1 In L0" dword="3" bits="23:16" type="int" />
+    <field name="POC Number For Refid1 In L1" dword="3" bits="31:24" type="int" />
+    <field name="POC Number For Refid2 In L0" dword="4" bits="7:0" type="int" />
     <field name="Values4" dword="4" bits="31:0" type="uint" />
-    <field name="POC Number For Refid2 In L1" dword="4" bits="15:8" type="uint" />
+    <field name="POC Number For Refid2 In L1" dword="4" bits="15:8" type="int" />
     <field name="Values5" dword="5" bits="31:0" type="uint" />
     <field name="Stream In ROI Enable" dword="5" bits="8:8" type="bool" />
     <field name="Sub Pel Mode" dword="5" bits="11:10" type="uint" />
@@ -2253,8 +2253,14 @@
       <value name="Mid-cmdbuffer Preemption" value="0" />
       <value name="Object Level Preemption" value="1" />
     </field>
+    <field name="Media And GPGPU Pre-emption Control" dword="0" bits="2:1" type="uint">
+      <value name="Mid-thread Pre-emption" value="0" />
+      <value name="Thread Group Pre-emption" value="1" />
+      <value name="Command Level Pre-emption" value="2" />
+    </field>
     <field name="Disable Preemption and High Priority Pausing due to 3DPRIMITIVE Command" dword="0" bits="10:10" type="bool" />
     <field name="Replay Mode Mask" dword="0" bits="16:16" type="bool" />
+    <field name="Media And GPGPU Pre-emption Control Mask" dword="0" bits="18:17" type="uint" />
     <field name="Disable Preemption and High Priority Pausing due to 3DPRIMITIVE Command Mask" dword="0" bits="26:26" type="bool" />
   </register>
   <register name="FF_MODE2" length="1" num="0x6604">

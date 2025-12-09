@@ -133,7 +133,7 @@ libagx_twiddle_coordinates(ushort2 coord, uint16_t tile_w_px,
    uint32_t tile_mask = upsample(tile_mask_vec.y, tile_mask_vec.x);
    uint32_t coord_xy = upsample(coord.y, coord.x);
    ushort2 offs_px = as_ushort2(coord_xy & tile_mask);
-   uint32_t offset_within_tile_px = nir_interleave_agx(offs_px.x, offs_px.y);
+   uint32_t offset_within_tile_px = nir_interleave(offs_px.x, offs_px.y);
 
    /* Get the coordinates of the corner of the tile */
    ushort2 tile_px = as_ushort2(coord_xy & ~tile_mask);

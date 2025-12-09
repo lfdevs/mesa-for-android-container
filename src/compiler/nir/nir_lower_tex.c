@@ -42,6 +42,7 @@
 #include "nir_builder.h"
 #include "nir_builtin_builder.h"
 #include "nir_format_convert.h"
+#include "nir_loop_analyze.h"
 
 typedef struct nir_const_value_3_4 {
    nir_const_value v[3][4];
@@ -144,7 +145,7 @@ project_src(nir_builder *b, nir_tex_instr *tex)
                                  nir_channel(b, unprojected, 1));
             break;
          default:
-            unreachable("bad texture coord count for array");
+            UNREACHABLE("bad texture coord count for array");
             break;
          }
       }
@@ -307,7 +308,7 @@ lower_1d(nir_builder *b, nir_tex_instr *tex)
          dst = nir_channel(b, &tex->def, 0);
       }
 
-      nir_def_rewrite_uses_after(&tex->def, dst, dst->parent_instr);
+      nir_def_rewrite_uses_after(&tex->def, dst);
    }
 }
 
@@ -443,13 +444,13 @@ convert_yuv_to_rgb(nir_builder *b, nir_tex_instr *tex,
    nir_def *m2 = nir_f2fN(b, nir_build_imm(b, 4, 32, m->v[2]), bit_size);
 
    if (options->lower_sx10_external & (1u << texture_index)) {
-      m0 = nir_fmul_imm(b, m0, 64.0f);
-      m1 = nir_fmul_imm(b, m1, 64.0f);
-      m2 = nir_fmul_imm(b, m2, 64.0f);
+      m0 = nir_fmul_imm(b, m0, 65535.0f / 1023.0f);
+      m1 = nir_fmul_imm(b, m1, 65535.0f / 1023.0f);
+      m2 = nir_fmul_imm(b, m2, 65535.0f / 1023.0f);
    } else if (options->lower_sx12_external & (1u << texture_index)) {
-      m0 = nir_fmul_imm(b, m0, 16.0f);
-      m1 = nir_fmul_imm(b, m1, 16.0f);
-      m2 = nir_fmul_imm(b, m2, 16.0f);
+      m0 = nir_fmul_imm(b, m0, 65535.0f / 4095.0f);
+      m1 = nir_fmul_imm(b, m1, 65535.0f / 4095.0f);
+      m2 = nir_fmul_imm(b, m2, 65535.0f / 4095.0f);
    }
 
    nir_def *result =
@@ -941,6 +942,7 @@ lower_tex_to_txd(nir_builder *b, nir_tex_instr *tex)
    txd->is_array = tex->is_array;
    txd->is_shadow = tex->is_shadow;
    txd->is_new_style_shadow = tex->is_new_style_shadow;
+   txd->is_sparse = tex->is_sparse;
    txd->can_speculate = tex->can_speculate;
 
    /* reuse existing srcs */
@@ -983,6 +985,7 @@ lower_txb_to_txl(nir_builder *b, nir_tex_instr *tex)
    txl->is_array = tex->is_array;
    txl->is_shadow = tex->is_shadow;
    txl->is_new_style_shadow = tex->is_new_style_shadow;
+   txl->is_sparse = tex->is_sparse;
    txl->can_speculate = tex->can_speculate;
 
    /* reuse all but bias src */
@@ -1087,8 +1090,7 @@ swizzle_tg4_broadcom(nir_builder *b, nir_tex_instr *tex)
    unsigned swiz[4] = { 2, 3, 1, 0 };
    nir_def *swizzled = nir_swizzle(b, &tex->def, swiz, 4);
 
-   nir_def_rewrite_uses_after(&tex->def, swizzled,
-                              swizzled->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, swizzled);
 }
 
 static void
@@ -1125,8 +1127,7 @@ swizzle_result(nir_builder *b, nir_tex_instr *tex, const uint8_t swizzle[4])
       }
    }
 
-   nir_def_rewrite_uses_after(&tex->def, swizzled,
-                              swizzled->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, swizzled);
 }
 
 static void
@@ -1147,8 +1148,7 @@ linearize_srgb_result(nir_builder *b, nir_tex_instr *tex)
                               nir_channel(b, rgb, 2),
                               nir_channel(b, &tex->def, 3));
 
-   nir_def_rewrite_uses_after(&tex->def, result,
-                              result->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, result);
 }
 
 /**
@@ -1204,7 +1204,7 @@ lower_tex_packing(nir_builder *b, nir_tex_instr *tex,
             break;
          }
          default:
-            unreachable("wrong dest_size");
+            UNREACHABLE("wrong dest_size");
          }
          break;
 
@@ -1217,7 +1217,7 @@ lower_tex_packing(nir_builder *b, nir_tex_instr *tex,
          break;
 
       default:
-         unreachable("unknown base type");
+         UNREACHABLE("unknown base type");
       }
       break;
    }
@@ -1228,28 +1228,8 @@ lower_tex_packing(nir_builder *b, nir_tex_instr *tex,
       break;
    }
 
-   nir_def_rewrite_uses_after(&tex->def, color,
-                              color->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, color);
    return true;
-}
-
-static bool
-sampler_index_lt(nir_tex_instr *tex, unsigned max)
-{
-   assert(nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref) == -1);
-
-   unsigned sampler_index = tex->sampler_index;
-
-   int sampler_offset_idx =
-      nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset);
-   if (sampler_offset_idx >= 0) {
-      if (!nir_src_is_const(tex->src[sampler_offset_idx].src))
-         return false;
-
-      sampler_index += nir_src_as_uint(tex->src[sampler_offset_idx].src);
-   }
-
-   return sampler_index < max;
 }
 
 static bool
@@ -1352,8 +1332,7 @@ nir_lower_txs_lod(nir_builder *b, nir_tex_instr *tex)
       minified = nir_vec(b, comp, dest_size);
    }
 
-   nir_def_rewrite_uses_after(&tex->def, minified,
-                              minified->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, minified);
    return true;
 }
 
@@ -1372,7 +1351,7 @@ nir_lower_txs_cube_array(nir_builder *b, nir_tex_instr *tex)
                    nir_idiv(b, nir_channel(b, size, 2),
                             nir_imm_int(b, 6)));
 
-   nir_def_rewrite_uses_after(&tex->def, size, size->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, size);
 }
 
 /* Adjust the sample index according to AMD FMASK (fragment mask).
@@ -1483,12 +1462,13 @@ nir_lower_lod_zero_width(nir_builder *b, nir_tex_instr *tex)
    nir_def *def =
       nir_vec2(b, nir_channel(b, &tex->def, 0), adjusted_lod);
 
-   nir_def_rewrite_uses_after(&tex->def, def, def->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, def);
 }
 
 static void
 lower_sampler_lod_bias(nir_builder *b, nir_tex_instr *tex)
 {
+   b->cursor = nir_before_instr(&tex->instr);
    nir_def *bias = nir_build_texture_query(b, tex, nir_texop_lod_bias, 1,
                                            nir_type_float16, false, false);
 
@@ -1553,16 +1533,105 @@ lower_index_to_offset(nir_builder *b, nir_tex_instr *tex)
    return progress;
 }
 
+unsigned
+nir_tex_parse_txd_coords(nir_shader *shader, nir_tex_instr *tex, nir_instr **ddxy_instrs)
+{
+   if (tex->op != nir_texop_txd)
+      return 0;
+
+   /* Non-uniform texture samples with implicit LOD might require that the resource is quad-uniform. */
+   if (tex->texture_non_uniform || tex->sampler_non_uniform)
+      return 0;
+
+   nir_def *coord = nir_get_tex_src(tex, nir_tex_src_coord);
+   nir_def *ddxy[] = { nir_get_tex_src(tex, nir_tex_src_ddx), nir_get_tex_src(tex, nir_tex_src_ddy) };
+   assert(coord && ddxy[0] && ddxy[0]);
+   for (unsigned i = 0; i < ddxy[0]->num_components; i++) {
+      nir_scalar coord_comp = nir_scalar_resolved(coord, i);
+      for (unsigned j = 0; j < 2; j++) {
+         nir_scalar ddxy_comp = nir_scalar_resolved(ddxy[j], i);
+         if (!nir_scalar_is_intrinsic(ddxy_comp))
+            return 0;
+
+         nir_intrinsic_op op = nir_scalar_intrinsic_op(ddxy_comp);
+         bool coarse_default = shader->options->coarse_ddx;
+         if (j == 0 && (op != nir_intrinsic_ddx || !coarse_default) &&
+             op != nir_intrinsic_ddx_coarse)
+            return 0;
+         if (j == 1 && (op != nir_intrinsic_ddy || !coarse_default) &&
+             op != nir_intrinsic_ddy_coarse)
+            return 0;
+
+         ddxy_instrs[i * 2 + j] = nir_def_instr(ddxy_comp.def);
+
+         nir_def *def = nir_def_as_intrinsic(ddxy_comp.def)->src[0].ssa;
+         ddxy_comp = nir_scalar_resolved(def, ddxy_comp.comp);
+         if (!nir_scalar_equal(coord_comp, ddxy_comp))
+            return 0;
+      }
+   }
+
+   return ddxy[0]->num_components;
+}
+
+static bool
+optimize_txd(nir_shader *shader, nir_tex_instr *tex, unsigned prev_terminate_return)
+{
+   nir_instr *ddxy_instrs[NIR_MAX_VEC_COMPONENTS * 2];
+   unsigned size = nir_tex_parse_txd_coords(shader, tex, ddxy_instrs);
+   if (!size)
+      return false;
+
+   for (unsigned i = 0; i < size; i++) {
+      nir_instr *instr = ddxy_instrs[i];
+      if (instr->block->cf_node.parent != tex->instr.block->cf_node.parent)
+         return false;
+
+      if (prev_terminate_return > instr->index)
+         return false;
+
+      nir_cf_node *cur = &tex->instr.block->cf_node;
+      while (cur != &instr->block->cf_node) {
+         cur = nir_cf_node_prev(cur);
+         if (contains_other_jump(cur, NULL))
+            return false;
+      }
+   }
+
+   tex->op = nir_texop_tex;
+   nir_tex_instr_remove_src(tex, nir_tex_instr_src_index(tex, nir_tex_src_ddx));
+   nir_tex_instr_remove_src(tex, nir_tex_instr_src_index(tex, nir_tex_src_ddy));
+   return true;
+}
+
 static bool
 nir_lower_tex_block(nir_block *block, nir_builder *b,
                     const nir_lower_tex_options *options,
-                    const struct nir_shader_compiler_options *compiler_options)
+                    const struct nir_shader_compiler_options *compiler_options,
+                    unsigned *prev_terminate_return)
 {
    bool progress = false;
 
    nir_foreach_instr_safe(instr, block) {
-      if (instr->type != nir_instr_type_tex)
+      if (instr->type == nir_instr_type_intrinsic) {
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         switch (intrin->intrinsic) {
+         case nir_intrinsic_terminate:
+         case nir_intrinsic_terminate_if:
+            *prev_terminate_return = instr->index;
+            break;
+         default:
+            break;
+         }
          continue;
+      } else if (instr->type == nir_instr_type_jump) {
+         if (nir_instr_as_jump(instr)->type == nir_jump_halt ||
+             nir_instr_as_jump(instr)->type == nir_jump_return)
+            *prev_terminate_return = instr->index;
+         continue;
+      } else if (instr->type != nir_instr_type_tex) {
+         continue;
+      }
 
       nir_tex_instr *tex = nir_instr_as_tex(instr);
       bool lower_txp = !!(options->lower_txp & (1 << tex->sampler_dim));
@@ -1719,8 +1788,6 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
 
       const bool has_min_lod =
          nir_tex_instr_src_index(tex, nir_tex_src_min_lod) >= 0;
-      const bool has_offset =
-         nir_tex_instr_src_index(tex, nir_tex_src_offset) >= 0;
 
       if (tex->op == nir_texop_txb && tex->is_shadow && has_min_lod &&
           options->lower_txb_shadow_clamp) {
@@ -1742,21 +1809,23 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
          progress = true;
       }
 
+      /* saturate_src() replaces tex with txd, so skip if sat_mask!=0. */
+      if (options->optimize_txd && tex->op == nir_texop_txd && !sat_mask &&
+          nir_shader_supports_implicit_lod(b->shader)) {
+         progress |= optimize_txd(b->shader, tex, *prev_terminate_return);
+      }
+
       if (tex->op == nir_texop_txd &&
           (options->lower_txd ||
            (options->lower_txd_clamp && has_min_lod) ||
            (options->lower_txd_shadow && tex->is_shadow) ||
-           (options->lower_txd_shadow_clamp && tex->is_shadow && has_min_lod) ||
-           (options->lower_txd_offset_clamp && has_offset && has_min_lod) ||
-           (options->lower_txd_clamp_bindless_sampler && has_min_lod &&
-            nir_tex_instr_src_index(tex, nir_tex_src_sampler_handle) != -1) ||
-           (options->lower_txd_clamp_if_sampler_index_not_lt_16 &&
-            has_min_lod && !sampler_index_lt(tex, 16)) ||
            (options->lower_txd_cube_map &&
             tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE) ||
            (options->lower_txd_3d &&
             tex->sampler_dim == GLSL_SAMPLER_DIM_3D) ||
-           (options->lower_txd_array && tex->is_array))) {
+           (options->lower_txd_array && tex->is_array) ||
+           (options->lower_txd_cb &&
+            options->lower_txd_cb(tex, options->lower_txd_data)))) {
          lower_gradient(b, tex);
          progress = true;
          continue;
@@ -1839,8 +1908,11 @@ nir_lower_tex_impl(nir_function_impl *impl,
    bool progress = false;
    nir_builder builder = nir_builder_create(impl);
 
+   nir_metadata_require(impl, nir_metadata_instr_index);
+
+   unsigned prev_terminate_return = 0;
    nir_foreach_block(block, impl) {
-      progress |= nir_lower_tex_block(block, &builder, options, compiler_options);
+      progress |= nir_lower_tex_block(block, &builder, options, compiler_options, &prev_terminate_return);
    }
 
    nir_progress(true, impl, nir_metadata_control_flow);

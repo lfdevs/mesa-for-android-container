@@ -243,7 +243,7 @@ stw_st_framebuffer_validate_locked(struct st_context *st,
       if (format != PIPE_FORMAT_NONE) {
          templ.format = format;
 
-         if (bind != PIPE_BIND_DEPTH_STENCIL && stwfb->stvis.samples > 1) {
+         if ((bind & PIPE_BIND_DEPTH_STENCIL) == 0 && stwfb->stvis.samples > 1) {
             templ.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
             templ.nr_samples = templ.nr_storage_samples =
                stwfb->stvis.samples;
@@ -340,7 +340,8 @@ stw_st_framebuffer_validate(struct st_context *st,
 
    stw_framebuffer_lock(stwfb->fb);
 
-   if (stwfb->fb->must_resize || stwfb->needs_fake_front || (statt_mask & ~stwfb->texture_mask)) {
+   if (stwfb->fb->must_resize || (statt_mask & ST_ATTACHMENT_FRONT_LEFT_MASK) ||
+       (statt_mask & ~stwfb->texture_mask)) {
       stw_st_framebuffer_validate_locked(st, &stwfb->base,
             stwfb->fb->width, stwfb->fb->height, statt_mask);
       stwfb->fb->must_resize = false;

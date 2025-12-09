@@ -122,7 +122,7 @@ load_reg(struct mme_tu104_sim *sim,
    case MME_TU104_REG_LOAD1:
       return sim->load[1];
    default:
-      unreachable("Unhandled register type");
+      UNREACHABLE("Unhandled register type");
    }
 }
 
@@ -156,7 +156,7 @@ store_reg(struct mme_tu104_sim *sim,
    } else if (reg <= MME_TU104_REG_ZERO) {
       /* Do nothing */
    } else {
-      unreachable("Unhandled register type");
+      UNREACHABLE("Unhandled register type");
    }
 }
 
@@ -180,7 +180,7 @@ eval_cond(enum mme_tu104_alu_op op, uint32_t x, uint32_t y)
    case MME_TU104_ALU_OP_SEQ:
       return x == y;
    default:
-      unreachable("Not a comparison op");
+      UNREACHABLE("Not a comparison op");
    }
 }
 
@@ -336,7 +336,7 @@ eval_alu(struct mme_tu104_sim *sim,
       break;
    }
    default:
-      unreachable("Unhandled ALU op");
+      UNREACHABLE("Unhandled ALU op");
    }
 
    sim->alu_res[alu_idx] = res;
@@ -368,7 +368,7 @@ load_out(struct mme_tu104_sim *sim,
    case MME_TU104_OUT_OP_IMM32:
       return ((uint32_t)inst->imm[0] << 16) | inst->imm[1];
    default:
-      unreachable("Unhandled output op");
+      UNREACHABLE("Unhandled output op");
    }
 }
 

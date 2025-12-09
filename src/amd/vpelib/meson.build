@@ -16,7 +16,6 @@ c_args_vpe = cc.get_supported_arguments([
   '-Werror=override-init',
   '-Werror=enum-conversion',
   '-Werror=enum-compare',
-  '-Werror=maybe-uninitialized',
   '-Werror=parentheses',
 ])
 

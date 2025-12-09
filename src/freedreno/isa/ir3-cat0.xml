@@ -50,15 +50,31 @@ SOFTWARE.
 		<map name="INV1">src->cat0.inv1</map>
 		<map name="INV2">src->cat0.inv2</map>
 		<map name="EQ">!!(src->flags &amp; IR3_INSTR_EQ)</map>
+		<map name="EOLM">!!(src->flags &amp; IR3_INSTR_EOLM)</map>
+		<map name="EOGM">!!(src->flags &amp; IR3_INSTR_EOGM)</map>
+		<map name="EOSTSC">!!(src->flags &amp; IR3_INSTR_EOSTSC)</map>
 	</encode>
 </bitset>
 
 
 <bitset name="#instruction-cat0-0src" extends="#instruction-cat0">
 	<display>
-		{SY}{SS}{EQ}{JP}{REPEAT}{NAME}
+		{SY}{SS}{EQ}{JP}{EOLM}{EOGM}{EOSTSC}{REPEAT}{NAME}
 	</display>
-	<pattern low="32" high="36">xxxxx</pattern>
+	<field name="EOLM" pos="32" type="bool" display="(eolm)">
+		<doc>
+			Is set on a NOP after the last cat6 instruction. Must be set outside
+			of control flow including preambles. Doesn't seem to affect correctness.
+		</doc>
+	</field>
+	<field name="EOGM" pos="33" type="bool" display="(eogm)">
+		<doc>
+			Is set on a NOP after the last cat5/cat6 instruction. Must be set outside
+			of control flow including preambles. Doesn't seem to affect correctness.
+		</doc>
+	</field>
+	<field name="EOSTSC" pos="34" type="bool" display="(eostsc)"/>
+	<pattern low="35" high="36">00</pattern>
 	<pattern low="37" high="39">000</pattern>  <!-- BRTYPE -->
 	<pattern low="45" high="47">000</pattern>  <!-- src1 -->
 	<pattern low="52" high="54">000</pattern>  <!-- src0 -->

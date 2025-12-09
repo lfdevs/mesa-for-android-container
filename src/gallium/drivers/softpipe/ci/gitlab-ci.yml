@@ -4,7 +4,6 @@ include:
 softpipe:
   variables:
     DEQP_SUITE: softpipe
-    XVFB_SCRIPT: "install/deqp-runner.sh"
     DEQP_FRACTION: 4
   timeout: 15m
   extends:
@@ -14,7 +13,10 @@ softpipe:
     . "$SCRIPTS_DIR"/setup-test-env.sh
     export LD_LIBRARY_PATH=$CI_PROJECT_DIR/install/lib
     export LIBGL_DRIVERS_PATH=$CI_PROJECT_DIR/install/lib/dri
-    xvfb-run -e results/xvfb.log --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && ${XVFB_SCRIPT}"
+    section_start weston "weston: prepare"
+    . "$CI_PROJECT_DIR/install/common/weston.sh"
+    section_end weston
+    $CI_PROJECT_DIR/install/deqp-runner.sh
 
 softpipe-asan-gles31:
   variables:

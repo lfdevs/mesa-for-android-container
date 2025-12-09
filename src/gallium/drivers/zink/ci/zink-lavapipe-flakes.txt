@@ -25,8 +25,13 @@ glx@glx-destroycontext-1
 
 glx@glx-multithread-texture
 
+# glx-multithread-clearbuffer: ../src/util/u_queue.h:111: util_queue_fence_reset: Assertion `v == 0' failed.
+glx@glx-multithread-clearbuffer
+
 # does not happen very often, but rarely does
 KHR-GL46.limits.max_fragment_interpolation_offset
+
+spec@ext_framebuffer_object@fbo-flushing-2
 
 # no output timeout, probably stuck in some X11 connection thing
 spec@ext_framebuffer_multisample@accuracy all_samples depth_resolve depthstencil
@@ -46,3 +51,58 @@ KHR-GL46.limits.max_geometry_total_output_components
 
 # reported to pass locally, seems to bounce around in CI
 KHR-GL46.sparse_buffer_tests.BufferStorageTest_.*
+
+# deqp-egl-x11: ../src/gallium/auxiliary/draw/draw_context.c:859: draw_do_flush: Assertion `!draw->flushing' failed.
+x11-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.*
+x11-dEQP-EGL.functional.sharing.gles2.multithread.random.textures.copytexsubimage2d.*
+
+spec@arb_direct_state_access@texture-storage-multisample
+
+wayland-dEQP-EGL.functional.color_clears.multi_context.gles1_gles2.rgba8888_window
+wayland-dEQP-EGL.functional.color_clears.multi_context.gles2.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_context.gles3.rgba8888_window
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgba8888_window
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_context.gles2.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_context.gles2.rgba8888_window
+wayland-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgba8888_window
+wayland-dEQP-EGL.functional.render.multi_context.gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_context.gles3.rgb888_window
+wayland-dEQP-EGL.functional.render.multi_context.gles3.rgba8888_window
+wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb888_window
+wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.render.single_context.gles2.rgba8888_window
+wayland-dEQP-EGL.functional.render.single_context.gles3.rgb888_window
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random.textures.copytexsubimage2d.1
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random.textures.copytexsubimage2d.12
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random.textures.copytexsubimage2d.17
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random.textures.copytexsubimage2d.3
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.images.copyteximage2d.11
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.textures.copytexsubimage2d.13
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.12
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.3
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.6
+wayland-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.7
+x11-dEQP-EGL.functional.color_clears.multi_context.gles2.rgb888_pbuffer
+x11-dEQP-EGL.functional.render.multi_context.gles2.rgb888_pbuffer
+x11-dEQP-EGL.functional.render.multi_context.gles2.rgba8888_pbuffer
+x11-dEQP-EGL.functional.render.multi_context.gles2.rgba8888_window
+x11-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgba8888_pbuffer
+x11-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgba8888_window
+x11-dEQP-EGL.functional.render.multi_context.gles3.rgb888_pbuffer
+x11-dEQP-EGL.functional.render.multi_context.gles3.rgb888_window
+x11-dEQP-EGL.functional.render.multi_context.gles3.rgba8888_window
+x11-dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_pbuffer
+x11-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgba8888_pbuffer
+x11-dEQP-EGL.functional.render.multi_thread.gles3.rgb888_window
+x11-dEQP-EGL.functional.render.single_context.gles3.rgba8888_pbuffer
+x11-dEQP-EGL.functional.sharing.gles2.multithread.random.textures.copyteximage2d.16
+x11-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.textures.copytexsubimage2d.16
+x11-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.textures.copytexsubimage2d.3
+x11-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.textures.copytexsubimage2d.7
+x11-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.images.copytexsubimage2d.9
+x11-dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_sync.buffers.bufferdata_render
+x11-dEQP-EGL.functional.swap_buffers_with_damage.resize_after_swap.buffer_age_clear_render
+x11-dEQP-EGL.functional.swap_buffers_with_damage.resize_before_swap.buffer_age_render

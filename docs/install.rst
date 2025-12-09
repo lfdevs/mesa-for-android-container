@@ -29,13 +29,14 @@ you're willing to maintain support for other compiler get in touch.
 
 - GCC 8.0.0 or later (some parts of Mesa may require later versions)
 - Clang 5.0 or later (some parts of Mesa may require later versions)
-- Microsoft Visual Studio 2019 Version 16.11 or later and
-  Windows SDK of at least 20348 is required, for building on Windows.
+- Microsoft Visual C++ compiler
+  - Windows SDK of at least 20348 is required
+  - Visual Studio 2022 version 17.9 or later for (ARM, AARCH64, ARM64EC, X86, X64)
 
 Third party/extra tools.
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-- `Python <https://www.python.org/>`__ - Python 3.6 or newer is required.
+- `Python <https://www.python.org/>`__ - Python 3.9 or newer is required.
 - Python package ``packaging`` is required on Python 3.12+:
   ``pip install packaging``
 - `Python Mako module <https://www.makotemplates.org/>`__ - Python Mako
@@ -161,7 +162,7 @@ Vulkan
 
 .. code-block:: sh
 
-   VK_DRIVER_FILES="$MESA_INSTALLDIR/share/vulkan/icd/my_icd.json" vulkaninfo
+   VK_DRIVER_FILES="$MESA_INSTALLDIR/share/vulkan/icd.d/my_icd.json" vulkaninfo
 
 where ``my_icd.json`` is replaced with the actual ICD json file name.  This
 will depend on your driver.  For instance, the 64-bit Lavapipe driver ICD file

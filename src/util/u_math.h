@@ -53,7 +53,6 @@
 
 #ifdef __HAIKU__
 #include <sys/param.h>
-#undef ALIGN
 #endif
 
 #ifdef __cplusplus
@@ -130,7 +129,7 @@ util_fast_log2(float x)
 static inline int
 util_ifloor(float f)
 {
-#if defined(USE_X86_ASM) && defined(__GNUC__) && defined(__i386__)
+#if DETECT_ARCH_X86 && DETECT_CC_GCC
    /*
     * IEEE floor for computers that round to nearest or even.
     * 'f' must be between -4194304 and 4194303.
@@ -648,29 +647,7 @@ util_memcpy_cpu_to_le32(void * restrict dest, const void * restrict src, size_t 
 }
 
 /**
- * Align a value up to an alignment value
- *
- * If \c value is not already aligned to the requested alignment value, it
- * will be rounded up.
- *
- * \param value  Value to be rounded
- * \param alignment  Alignment value to be used.  This must be a power of two.
- *
- * \sa ROUND_DOWN_TO()
- */
-
-#if defined(ALIGN)
-#undef ALIGN
-#endif
-static inline uint32_t
-ALIGN(uint32_t value, uint32_t alignment)
-{
-   assert(util_is_power_of_two_nonzero(alignment));
-   return ALIGN_POT(value, alignment);
-}
-
-/**
- * Like ALIGN(), but works with a non-power-of-two alignment.
+ * Like align(), but works with a non-power-of-two alignment.
  */
 static inline uintptr_t
 ALIGN_NPOT(uintptr_t value, int32_t alignment)
@@ -688,7 +665,7 @@ ALIGN_NPOT(uintptr_t value, int32_t alignment)
  * \param value  Value to be rounded
  * \param alignment  Alignment value to be used.  This must be a power of two.
  *
- * \sa ALIGN()
+ * \sa align()
  */
 static inline uint64_t
 ROUND_DOWN_TO(uint64_t value, uint32_t alignment)
@@ -730,9 +707,14 @@ align_uintptr(uintptr_t value, uintptr_t alignment)
 static inline size_t
 util_align_npot(size_t value, size_t alignment)
 {
-   if (value % alignment)
-      return value + (alignment - (value % alignment));
-   return value;
+   assert(alignment > 0);
+   return (value + alignment - 1) / alignment * alignment;
+}
+
+static inline size_t
+util_round_down_npot(size_t value, size_t alignment)
+{
+   return value - (value % alignment);
 }
 
 static inline unsigned
@@ -846,6 +828,12 @@ util_is_aligned(uintmax_t n, uintmax_t a)
 {
    assert((a != 0) && ((a & (a - 1)) == 0));
    return (n & (a - 1)) == 0;
+}
+
+static inline bool
+util_ptr_is_aligned(const void *ptr, uintmax_t a)
+{
+   return util_is_aligned((uintptr_t) ptr, a);
 }
 
 static inline bool

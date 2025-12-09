@@ -74,8 +74,6 @@ uint64_t aco_get_codegen_flags();
 
 bool aco_is_gpu_supported(const struct radeon_info* info);
 
-bool aco_nir_op_supports_packed_math_16bit(const nir_alu_instr* alu);
-
 void aco_print_asm(const struct radeon_info *info, unsigned wave_size,
                    uint32_t *binary, unsigned num_dw);
 

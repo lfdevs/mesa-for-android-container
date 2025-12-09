@@ -688,6 +688,7 @@ isl_format_for_pipe_format(enum pipe_format pf)
       [PIPE_FORMAT_R16G16B16X16_SINT]       = ISL_FORMAT_R16G16B16A16_SINT,
       [PIPE_FORMAT_R32G32B32X32_UINT]       = ISL_FORMAT_R32G32B32A32_UINT,
       [PIPE_FORMAT_R32G32B32X32_SINT]       = ISL_FORMAT_R32G32B32A32_SINT,
+      [PIPE_FORMAT_R10G10B10X2_UNORM]       = ISL_FORMAT_R10G10B10A2_UNORM,
       [PIPE_FORMAT_R10G10B10X2_SNORM]       = ISL_FORMAT_R10G10B10A2_SNORM,
    };
    assert(pf < PIPE_FORMAT_COUNT);
@@ -1087,7 +1088,7 @@ isl_format_has_color_component(enum isl_format fmt, int component)
    case 3:
       return (fmtl->channels.a.bits + intensity) > 0;
    default:
-      unreachable("Invalid color component: must be 0..3");
+      UNREACHABLE("Invalid color component: must be 0..3");
    }
 }
 
@@ -1111,7 +1112,7 @@ isl_format_get_depth_format(enum isl_format fmt, bool has_stencil)
 {
    switch (fmt) {
    default:
-      unreachable("bad isl depth format");
+      UNREACHABLE("bad isl depth format");
    case ISL_FORMAT_R32_FLOAT_X8X24_TYPELESS:
       assert(has_stencil);
       return 0; /* D32_FLOAT_S8X24_UINT */
@@ -1211,7 +1212,7 @@ isl_format_rgbx_to_rgba(enum isl_format rgbx)
    case ISL_FORMAT_B5G5R5X1_UNORM_SRGB:
       return ISL_FORMAT_B5G5R5A1_UNORM_SRGB;
    default:
-      unreachable("Invalid RGBX format");
+      UNREACHABLE("Invalid RGBX format");
    }
 }
 
@@ -1300,7 +1301,7 @@ pack_channel(const union isl_color_value *value, unsigned i,
       break;
 
    default:
-      unreachable("Invalid channel type");
+      UNREACHABLE("Invalid channel type");
    }
 
    unsigned dword = layout->start_bit / 32;
@@ -1399,7 +1400,7 @@ unpack_channel(union isl_color_value *value,
       break;
 
    default:
-      unreachable("Invalid channel type");
+      UNREACHABLE("Invalid channel type");
    }
 
    for (unsigned i = 0; i < count; i++)

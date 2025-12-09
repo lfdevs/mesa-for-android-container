@@ -67,11 +67,8 @@ chase_alu_src_helper(const nir_src *src)
 static inline bool
 chase_source_mod(nir_def **ssa, nir_op op, uint8_t *swizzle)
 {
-   if ((*ssa)->parent_instr->type != nir_instr_type_alu)
-      return false;
-
-   nir_alu_instr *alu = nir_instr_as_alu((*ssa)->parent_instr);
-   if (alu->op != op)
+   nir_alu_instr *alu = nir_def_as_alu_or_null(*ssa);
+   if (!alu || alu->op != op)
       return false;
 
    /* If there are other uses of the modifier that don't fold, we can't fold it
@@ -97,7 +94,7 @@ chase_source_mod(nir_def **ssa, nir_op op, uint8_t *swizzle)
 nir_legacy_alu_src
 nir_legacy_chase_alu_src(const nir_alu_src *src, bool fuse_fabs)
 {
-   if (src->src.ssa->parent_instr->type == nir_instr_type_alu) {
+   if (nir_src_is_alu(src->src)) {
       nir_legacy_alu_src out = {
          .src.is_ssa = true,
          .src.ssa = src->src.ssa,
@@ -164,23 +161,18 @@ nir_legacy_fsat_folds(nir_alu_instr *fsat)
    assert(&fsat->src[0].src ==
           list_first_entry(&def->uses, nir_src, use_link));
 
-   nir_instr *generate = def->parent_instr;
-   if (generate->type != nir_instr_type_alu)
-      return false;
-
-   nir_alu_instr *generate_alu = nir_instr_as_alu(generate);
-   nir_alu_type dest_type = nir_op_infos[generate_alu->op].output_type;
-   if (dest_type != nir_type_float)
+   nir_alu_instr *generate = nir_def_as_alu_or_null(def);
+   if (!generate || nir_op_infos[generate->op].output_type != nir_type_float)
       return false;
 
    /* If we are a saturating a source modifier fsat(fabs(x)), we need to emit
     * either the fsat or the modifier or else the sequence disappears.
     */
-   if (generate_alu->op == nir_op_fabs || generate_alu->op == nir_op_fneg)
+   if (generate->op == nir_op_fabs || generate->op == nir_op_fneg)
       return false;
 
    /* We can't do expansions without a move in the middle */
-   unsigned nr_components = generate_alu->def.num_components;
+   unsigned nr_components = generate->def.num_components;
    if (fsat->def.num_components != nr_components)
       return false;
 

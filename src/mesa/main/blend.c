@@ -241,7 +241,7 @@ blend_func_separate(struct gl_context *ctx,
                     GLenum sfactorA, GLenum dfactorA)
 {
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
 
    const unsigned numBuffers = num_buffers(ctx);
    for (unsigned buf = 0; buf < numBuffers; buf++) {
@@ -402,7 +402,7 @@ blend_func_separatei(GLuint buf, GLenum sfactorRGB, GLenum dfactorRGB,
    }
 
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
 
    ctx->Color.Blend[buf].SrcRGB = sfactorRGB;
    ctx->Color.Blend[buf].DstRGB = dfactorRGB;
@@ -808,7 +808,7 @@ _mesa_BlendColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha )
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND_COLOR;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND_COLOR);
    COPY_4FV( ctx->Color.BlendColorUnclamped, tmp );
 
    ctx->Color.BlendColor[0] = CLAMP(tmp[0], 0.0F, 1.0F);
@@ -850,7 +850,7 @@ _mesa_AlphaFunc( GLenum func, GLclampf ref )
    case GL_GEQUAL:
    case GL_ALWAYS:
       FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-      ctx->NewDriverState |= ctx->DriverFlags.NewAlphaTest;
+      ST_SET_STATES(ctx->NewDriverState, ctx->DriverFlags.NewAlphaTest);
       ctx->Color.AlphaFunc = func;
       ctx->Color.AlphaRefUnclamped = ref;
       ctx->Color.AlphaRef = CLAMP(ref, 0.0F, 1.0F);
@@ -913,7 +913,7 @@ logic_op(struct gl_context *ctx, GLenum opcode, bool no_error)
    }
 
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
    ctx->Color.LogicOp = opcode;
    ctx->Color._LogicOp = color_logicop_mapping[opcode & 0x0f];
    _mesa_update_allow_draw_out_of_order(ctx);
@@ -959,7 +959,7 @@ _mesa_IndexMask( GLuint mask )
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
    ctx->Color.IndexMask = mask;
 }
 
@@ -998,7 +998,7 @@ _mesa_ColorMask( GLboolean red, GLboolean green,
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
    ctx->Color.ColorMask = mask;
    _mesa_update_allow_draw_out_of_order(ctx);
 }
@@ -1031,7 +1031,7 @@ _mesa_ColorMaski(GLuint buf, GLboolean red, GLboolean green,
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
    ctx->Color.ColorMask &= ~(0xfu << (4 * buf));
    ctx->Color.ColorMask |= mask << (4 * buf);
    _mesa_update_allow_draw_out_of_order(ctx);
@@ -1145,7 +1145,7 @@ _mesa_update_clamp_fragment_color(struct gl_context *ctx,
       return;
 
    ctx->NewState |= _NEW_FRAG_CLAMP; /* for state constants */
-   ctx->NewDriverState |= ctx->DriverFlags.NewFragClamp;
+   ST_SET_STATES(ctx->NewDriverState, ctx->DriverFlags.NewFragClamp);
    ctx->Color._ClampFragmentColor = clamp;
 }
 

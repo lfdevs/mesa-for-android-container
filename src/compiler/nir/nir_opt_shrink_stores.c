@@ -82,7 +82,9 @@ opt_shrink_store_instr(nir_builder *b, nir_intrinsic_instr *instr, bool shrink_i
 
    /* Trim the num_components stored according to the write mask. */
    unsigned write_mask = nir_intrinsic_write_mask(instr);
-   unsigned last_bit = util_last_bit(write_mask);
+   /* Don't trim down to an invalid number of components, though. */
+   unsigned last_bit = nir_round_up_components(util_last_bit(write_mask));
+
    if (last_bit < instr->num_components) {
       nir_def *def = nir_trim_vector(b, instr->src[0].ssa, last_bit);
       nir_src_rewrite(&instr->src[0], def);

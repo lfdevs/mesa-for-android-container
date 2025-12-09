@@ -2,6 +2,11 @@
 # Author: Antonio Caggiano <antonio.caggiano@collabora.com>
 # SPDX-License-Identifier: MIT
 
+intel_tracepoint_android_opts = []
+if with_platform_android
+  intel_tracepoint_android_opts += '--android'
+endif
+
 intel_tracepoint_files = custom_target(
   'intel_tracepoints.[ch]',
   input : 'intel_tracepoints.py',
@@ -14,6 +19,7 @@ intel_tracepoint_files = custom_target(
     '--utrace-hdr', '@OUTPUT0@',
     '--perfetto-hdr', '@OUTPUT1@',
     '--utrace-src', '@OUTPUT2@',
+    intel_tracepoint_android_opts,
   ],
   depend_files : u_trace_py,
 )

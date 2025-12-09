@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "ac_shader_util.h"
 #include "radv_cmd_buffer.h"
 #include "radv_cs.h"
 #include "radv_entrypoints.h"
@@ -23,7 +24,7 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
    const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radv_sqtt_shaders_reloc *reloc = pipeline->sqtt_shaders_reloc;
-   struct radeon_cmdbuf *cs = cmd_buffer->cs;
+   struct radv_cmd_stream *cs = cmd_buffer->cs;
 
    radv_foreach_stage (s, RADV_GRAPHICS_STAGE_BITS & ~VK_SHADER_STAGE_TASK_BIT_EXT) {
       const struct radv_shader *shader = pipeline->base.shaders[s];
@@ -32,18 +33,32 @@ radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv
          continue;
 
       /* Shaders are allocated in the 32-bit addr space and high bits are already configured. */
+      radeon_begin(cs);
       if (pdev->info.gfx_level >= GFX12) {
-         gfx12_push_sh_reg(cmd_buffer, shader->info.regs.pgm_lo, reloc->va[s] >> 8);
+         gfx12_push_sh_reg(shader->info.regs.pgm_lo, reloc->va[s] >> 8);
       } else {
-         radeon_begin(cs);
          radeon_set_sh_reg(shader->info.regs.pgm_lo, reloc->va[s] >> 8);
-         radeon_end();
       }
+      radeon_end();
+   }
+
+   struct radv_shader *task_shader = cmd_buffer->state.shaders[MESA_SHADER_TASK];
+   if (task_shader) {
+      struct radv_cmd_stream *ace_cs = cmd_buffer->gang.cs;
+      const uint64_t va = reloc->va[MESA_SHADER_TASK];
+
+      radeon_begin(ace_cs);
+      if (pdev->info.gfx_level >= GFX12) {
+         gfx12_push_sh_reg(task_shader->info.regs.pgm_lo, va >> 8);
+      } else {
+         radeon_set_sh_reg(task_shader->info.regs.pgm_lo, va >> 8);
+      }
+      radeon_end();
    }
 }
 
 static uint64_t
-radv_sqtt_shader_get_va_reloc(struct radv_pipeline *pipeline, gl_shader_stage stage)
+radv_sqtt_shader_get_va_reloc(struct radv_pipeline *pipeline, mesa_shader_stage stage)
 {
    if (pipeline->type == RADV_PIPELINE_GRAPHICS) {
       struct radv_graphics_pipeline *graphics_pipeline = radv_pipeline_to_graphics(pipeline);
@@ -141,8 +156,7 @@ radv_sqtt_reloc_graphics_shaders(struct radv_device *device, struct radv_graphic
    return VK_SUCCESS;
 
 fail:
-   if (reloc->alloc)
-      radv_free_shader_memory(device, reloc->alloc);
+   radv_free_shader_memory(device, reloc->alloc);
    free(reloc);
    return result;
 }
@@ -306,7 +320,7 @@ radv_gfx12_write_draw_marker(struct radv_cmd_buffer *cmd_buffer, const struct ra
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const enum amd_gfx_level gfx_level = pdev->info.gfx_level;
    const enum amd_ip_type ring = radv_queue_family_to_ring(pdev, cmd_buffer->qf);
-   struct radeon_cmdbuf *cs = cmd_buffer->cs;
+   struct radv_cmd_stream *cs = cmd_buffer->cs;
 
    /* RGP doesn't need this marker for indirect draws. */
    if (draw_info->indirect_va)
@@ -330,8 +344,7 @@ radv_describe_draw(struct radv_cmd_buffer *cmd_buffer, const struct radv_draw_in
    const struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (likely(!device->sqtt.bo))
-      return;
+   assert(device->sqtt.bo);
 
    radv_write_event_marker(cmd_buffer, cmd_buffer->state.current_event_type, UINT_MAX, UINT_MAX, UINT_MAX);
 
@@ -704,12 +717,17 @@ radv_sqtt_wsi_submit(VkQueue _queue, uint32_t submitCount, const VkSubmitInfo2 *
 
       radv_describe_queue_present(queue, cpu_timestamp, gpu_timestamp_ptr);
 
-      result = device->layer_dispatch.rgp.QueueSubmit2(_queue, 1, &sqtt_submit, _fence);
+      result = device->layer_dispatch.rgp.QueueSubmit2(_queue, 1, &sqtt_submit,
+                                                       i + 1 == submitCount ? _fence : VK_NULL_HANDLE);
+
       if (result != VK_SUCCESS)
          goto fail;
 
       FREE(new_cmdbufs);
    }
+
+   if (submitCount == 0 && _fence != VK_NULL_HANDLE)
+      result = device->layer_dispatch.rgp.QueueSubmit2(_queue, 0, NULL, _fence);
 
    return result;
 
@@ -1023,7 +1041,7 @@ sqtt_CmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddress
                      const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable, uint32_t width,
                      uint32_t height, uint32_t depth)
 {
-   EVENT_RT_MARKER(TraceRaysKHR, ApiRayTracingSeparateCompiled, commandBuffer, pRaygenShaderBindingTable,
+   EVENT_RT_MARKER(TraceRaysKHR, EventRayTracingSeparateCompiled, commandBuffer, pRaygenShaderBindingTable,
                    pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
 }
 
@@ -1035,14 +1053,14 @@ sqtt_CmdTraceRaysIndirectKHR(VkCommandBuffer commandBuffer,
                              const VkStridedDeviceAddressRegionKHR *pCallableShaderBindingTable,
                              VkDeviceAddress indirectDeviceAddress)
 {
-   EVENT_RT_MARKER(TraceRaysIndirectKHR, ApiRayTracingSeparateCompiled, commandBuffer, pRaygenShaderBindingTable,
+   EVENT_RT_MARKER(TraceRaysIndirectKHR, EventRayTracingSeparateCompiled, commandBuffer, pRaygenShaderBindingTable,
                    pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress);
 }
 
 VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdTraceRaysIndirect2KHR(VkCommandBuffer commandBuffer, VkDeviceAddress indirectDeviceAddress)
 {
-   EVENT_RT_MARKER_ALIAS(TraceRaysIndirect2KHR, TraceRaysIndirectKHR, ApiRayTracingSeparateCompiled, commandBuffer,
+   EVENT_RT_MARKER_ALIAS(TraceRaysIndirect2KHR, TraceRaysIndirectKHR, EventRayTracingSeparateCompiled, commandBuffer,
                          indirectDeviceAddress);
 }
 
@@ -1356,7 +1374,7 @@ radv_get_rgp_shader_stage(struct radv_shader *shader)
    case MESA_SHADER_CALLABLE:
       return RGP_HW_STAGE_CS;
    default:
-      unreachable("invalid mesa shader stage");
+      UNREACHABLE("invalid mesa shader stage");
    }
 }
 
@@ -1365,9 +1383,7 @@ radv_fill_code_object_record(struct radv_device *device, struct rgp_shader_data 
                              struct radv_shader *shader, uint64_t va)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   unsigned lds_increment = pdev->info.gfx_level >= GFX11 && shader->info.stage == MESA_SHADER_FRAGMENT
-                               ? 1024
-                               : pdev->info.lds_encode_granularity;
+   unsigned lds_increment = ac_shader_get_lds_alloc_granularity(pdev->info.gfx_level);
 
    memset(shader_data->rt_shader_name, 0, sizeof(shader_data->rt_shader_name));
    shader_data->hash[0] = (uint64_t)(uintptr_t)shader;
@@ -1377,7 +1393,7 @@ radv_fill_code_object_record(struct radv_device *device, struct rgp_shader_data 
    shader_data->vgpr_count = shader->config.num_vgprs;
    shader_data->sgpr_count = shader->config.num_sgprs;
    shader_data->scratch_memory_size = shader->config.scratch_bytes_per_wave;
-   shader_data->lds_size = shader->config.lds_size * lds_increment;
+   shader_data->lds_size = align(shader->config.lds_size, lds_increment);
    shader_data->wavefront_size = shader->info.wave_size;
    shader_data->base_address = va & 0xffffffffffff;
    shader_data->elf_symbol_offset = 0;
@@ -1463,7 +1479,7 @@ radv_add_rt_record(struct radv_device *device, struct rgp_code_object *code_obje
       snprintf(shader_data->rt_shader_name, sizeof(shader_data->rt_shader_name), "_amdgpu_cs_main");
       break;
    default:
-      unreachable("invalid rt stage");
+      UNREACHABLE("invalid rt stage");
    }
    record->num_shaders_combined = 1;
 

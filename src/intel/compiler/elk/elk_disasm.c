@@ -976,7 +976,7 @@ vstride_from_align1_3src_vstride(const struct intel_device_info *devinfo,
    case ELK_ALIGN1_3SRC_VERTICAL_STRIDE_4: return ELK_VERTICAL_STRIDE_4;
    case ELK_ALIGN1_3SRC_VERTICAL_STRIDE_8: return ELK_VERTICAL_STRIDE_8;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
@@ -989,7 +989,7 @@ hstride_from_align1_3src_hstride(enum gfx10_align1_3src_src_horizontal_stride hs
    case ELK_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_2: return ELK_HORIZONTAL_STRIDE_2;
    case ELK_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_4: return ELK_HORIZONTAL_STRIDE_4;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
@@ -1002,7 +1002,7 @@ vstride_from_align1_3src_hstride(enum gfx10_align1_3src_src_horizontal_stride hs
    case ELK_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_2: return ELK_VERTICAL_STRIDE_2;
    case ELK_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_4: return ELK_VERTICAL_STRIDE_4;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
@@ -1027,7 +1027,7 @@ implied_width(enum elk_vertical_stride _vert_stride,
       case ELK_VERTICAL_STRIDE_8: return ELK_WIDTH_8;
       case ELK_VERTICAL_STRIDE_0:
       default:
-         unreachable("not reached");
+         UNREACHABLE("not reached");
       }
 
    } else {
@@ -2064,14 +2064,14 @@ elk_disassemble_with_errors(const struct elk_isa_info *isa,
    const struct elk_label *root_label =
       elk_label_assembly(isa, assembly, start, end, mem_ctx);
 
-   foreach_list_typed(struct inst_group, group, link,
+   brw_foreach_list_typed(struct inst_group, group, link,
                       &elk_disasm_info->group_list) {
-      struct exec_node *next_node = exec_node_get_next(&group->link);
-      if (exec_node_is_tail_sentinel(next_node))
+      struct brw_exec_node *next_node = brw_exec_node_get_next(&group->link);
+      if (brw_exec_node_is_tail_sentinel(next_node))
          break;
 
       struct inst_group *next =
-         exec_node_data(struct inst_group, next_node, link);
+         brw_exec_node_data(struct inst_group, next_node, link);
 
       int start_offset = group->offset;
       int end_offset = next->offset;

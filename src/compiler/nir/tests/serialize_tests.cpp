@@ -127,7 +127,7 @@ TEST_P(nir_serialize_all_test, alu_single_value_src_swizzle)
    nir_def *zero = nir_imm_zero(b, GetParam(), 32);
    nir_def *fmax = nir_fmax(b, zero, zero);
 
-   nir_alu_instr *fmax_alu = nir_instr_as_alu(fmax->parent_instr);
+   nir_alu_instr *fmax_alu = nir_def_as_alu(fmax);
 
    memset(fmax_alu->src[0].swizzle, GetParam() - 1, NIR_MAX_VEC_COMPONENTS);
    memset(fmax_alu->src[1].swizzle, GetParam() - 1, NIR_MAX_VEC_COMPONENTS);
@@ -151,7 +151,7 @@ TEST_P(nir_serialize_all_test, alu_vec)
    };
 
    nir_def *vec = nir_vec(b, undefs, GetParam());
-   nir_alu_instr *vec_alu = nir_instr_as_alu(vec->parent_instr);
+   nir_alu_instr *vec_alu = nir_def_as_alu(vec);
    for (int i = 0; i < GetParam(); i++)
       vec_alu->src[i].swizzle[0] = (GetParam() - 1) - i;
 
@@ -166,7 +166,7 @@ TEST_P(nir_serialize_all_test, alu_two_components_full_swizzle)
 {
    nir_def *undef = nir_undef(b, 2, 32);
    nir_def *fma = nir_ffma(b, undef, undef, undef);
-   nir_alu_instr *fma_alu = nir_instr_as_alu(fma->parent_instr);
+   nir_alu_instr *fma_alu = nir_def_as_alu(fma);
 
    fma->num_components = GetParam();
 
@@ -187,7 +187,7 @@ TEST_P(nir_serialize_all_but_one_test, single_channel)
 {
    nir_def *zero = nir_undef(b, GetParam(), 32);
    nir_def *vec = nir_channel(b, zero, GetParam() - 1);
-   nir_alu_instr *vec_alu = nir_instr_as_alu(vec->parent_instr);
+   nir_alu_instr *vec_alu = nir_def_as_alu(vec);
 
    serialize();
 

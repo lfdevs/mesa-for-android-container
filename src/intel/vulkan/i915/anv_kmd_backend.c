@@ -226,7 +226,7 @@ mmap_calc_flags(struct anv_device *device, struct anv_bo *bo)
       flags = I915_MMAP_WC;
       break;
    case INTEL_DEVICE_INFO_MMAP_MODE_UC:
-      unreachable("Missing");
+      UNREACHABLE("Missing");
    default:
       /* no flags == WB */
       flags = 0;
@@ -285,16 +285,13 @@ static uint32_t
 i915_bo_alloc_flags_to_bo_flags(struct anv_device *device,
                                 enum anv_bo_alloc_flags alloc_flags)
 {
-   struct anv_physical_device *pdevice = device->physical;
-
    uint64_t bo_flags = EXEC_OBJECT_PINNED;
 
    if (!(alloc_flags & ANV_BO_ALLOC_32BIT_ADDRESS))
       bo_flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
 
-   if (((alloc_flags & ANV_BO_ALLOC_CAPTURE) ||
-        INTEL_DEBUG(DEBUG_CAPTURE_ALL)) &&
-       pdevice->has_exec_capture)
+   if ((alloc_flags & ANV_BO_ALLOC_CAPTURE) ||
+        INTEL_DEBUG(DEBUG_CAPTURE_ALL))
       bo_flags |= EXEC_OBJECT_CAPTURE;
 
    if (alloc_flags & ANV_BO_ALLOC_IMPLICIT_WRITE) {
@@ -302,7 +299,7 @@ i915_bo_alloc_flags_to_bo_flags(struct anv_device *device,
       bo_flags |= EXEC_OBJECT_WRITE;
    }
 
-   if (!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_SYNC) && pdevice->has_exec_async)
+   if (!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_SYNC))
       bo_flags |= EXEC_OBJECT_ASYNC;
 
    return bo_flags;

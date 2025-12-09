@@ -43,7 +43,7 @@ fd3_emit_const_user(struct fd_ringbuffer *ring,
                     const struct ir3_shader_variant *v, uint32_t regid,
                     uint32_t sizedwords, const uint32_t *dwords)
 {
-   emit_const_asserts(ring, v, regid, sizedwords);
+   emit_const_asserts(v, regid, sizedwords);
 
    OUT_PKT3(ring, CP_LOAD_STATE, 2 + sizedwords);
    OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(regid / 2) |
@@ -70,7 +70,7 @@ fd3_emit_const_bo(struct fd_ringbuffer *ring,
    uint32_t num_unit = sizedwords / 2;
    assert(num_unit % 2 == 0);
 
-   emit_const_asserts(ring, v, regid, sizedwords);
+   emit_const_asserts(v, regid, sizedwords);
 
    OUT_PKT3(ring, CP_LOAD_STATE, 2);
    OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(dst_off) |
@@ -81,7 +81,7 @@ fd3_emit_const_bo(struct fd_ringbuffer *ring,
 }
 
 static void
-fd3_emit_const_ptrs(struct fd_ringbuffer *ring, gl_shader_stage type,
+fd3_emit_const_ptrs(struct fd_ringbuffer *ring, mesa_shader_stage type,
                     uint32_t regid, uint32_t num, struct fd_bo **bos,
                     uint32_t *offsets)
 {
@@ -235,7 +235,7 @@ emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
       unsigned off;
       void *ptr;
 
-      u_upload_alloc(fd3_ctx->border_color_uploader, 0,
+      u_upload_alloc_ref(fd3_ctx->border_color_uploader, 0,
                      BORDER_COLOR_UPLOAD_SIZE, BORDER_COLOR_UPLOAD_SIZE, &off,
                      &fd3_ctx->border_color_buf, &ptr);
 
@@ -301,7 +301,7 @@ fd3_emit_gmem_restore_tex(struct fd_ringbuffer *ring,
 
       struct fd_resource *rsc = fd_resource(psurf[i].texture);
       enum pipe_format format = fd_gmem_restore_format(psurf[i].format);
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(&psurf[i], &width, &height);
       /* The restore blit_zs shader expects stencil in sampler 0, and depth
        * in sampler 1
@@ -384,7 +384,7 @@ fd3_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd3_emit *emit)
             vtxcnt_regid = vp->inputs[i].regid;
             break;
          default:
-            unreachable("invalid system value");
+            UNREACHABLE("invalid system value");
             break;
          }
       } else if (i < vtx->vtx->num_elements) {
@@ -810,11 +810,11 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
    if (dirty & FD_DIRTY_TEX)
       fd_wfi(ctx->batch, ring);
 
-   if (ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX)
-      emit_textures(ctx, ring, SB_VERT_TEX, &ctx->tex[PIPE_SHADER_VERTEX]);
+   if (ctx->dirty_shader[MESA_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX)
+      emit_textures(ctx, ring, SB_VERT_TEX, &ctx->tex[MESA_SHADER_VERTEX]);
 
-   if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_TEX)
-      emit_textures(ctx, ring, SB_FRAG_TEX, &ctx->tex[PIPE_SHADER_FRAGMENT]);
+   if (ctx->dirty_shader[MESA_SHADER_FRAGMENT] & FD_DIRTY_SHADER_TEX)
+      emit_textures(ctx, ring, SB_FRAG_TEX, &ctx->tex[MESA_SHADER_FRAGMENT]);
 }
 
 /* emit setup at begin of new cmdstream buffer (don't rely on previous

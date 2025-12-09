@@ -27,6 +27,7 @@
 #include "vk_command_buffer.h"
 #include "vk_common_entrypoints.h"
 #include "vk_device.h"
+#include "vk_util.h"
 
 void
 vk_query_pool_init(struct vk_device *device,
@@ -42,6 +43,13 @@ vk_query_pool_init(struct vk_device *device,
    query_pool->pipeline_statistics =
       pCreateInfo->queryType == VK_QUERY_TYPE_PIPELINE_STATISTICS ?
       pCreateInfo->pipelineStatistics : 0;
+
+   if (pCreateInfo->queryType == VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR) {
+      const struct VkQueryPoolVideoEncodeFeedbackCreateInfoKHR *feedback_info =
+         vk_find_struct_const(pCreateInfo->pNext, QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR);
+      if (feedback_info)
+         query_pool->encode_feedback_flags = feedback_info->encodeFeedbackFlags;
+   }
 }
 
 void *

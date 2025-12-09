@@ -30,16 +30,10 @@
 class d3d12_video_encoder_references_manager_h264 : public d3d12_video_encoder_references_manager_interface
 {
  public:
-   void begin_frame(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA curFrameData,
+   void begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1& curFrameData,
                     bool bUsedAsReference,
                     struct pipe_picture_desc *picture);
-   bool get_current_frame_picture_control_data(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA &codecAllocation);
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
-   void begin_frame1(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 curFrameData,
-                     bool bUsedAsReference,
-                     struct pipe_picture_desc *picture);
-   bool get_current_frame_picture_control_data1(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation);
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
+   bool get_current_frame_picture_control_data(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation);
 
    D3D12_VIDEO_ENCODE_REFERENCE_FRAMES get_current_reference_frames();
 
@@ -64,8 +58,6 @@ class d3d12_video_encoder_references_manager_h264 : public d3d12_video_encoder_r
    void print_dpb();
    void print_l0_l1_lists();
    void print_mmco_lists();
-   void begin_frame_impl(bool bUsedAsReference,
-                         struct pipe_picture_desc *picture);
 
    // Class members
    struct d3d12_video_dpb

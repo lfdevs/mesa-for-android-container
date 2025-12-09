@@ -63,7 +63,7 @@ zink_destroy_resource_object(struct zink_screen *screen, struct zink_resource_ob
 void
 debug_describe_zink_resource_object(char *buf, const struct zink_resource_object *ptr);
 
-static inline void
+static ALWAYS_INLINE void
 zink_resource_object_reference(struct zink_screen *screen,
                              struct zink_resource_object **dst,
                              struct zink_resource_object *src)
@@ -107,82 +107,88 @@ zink_resource_copies_reset(struct zink_resource *res);
 #include "zink_bo.h"
 #include "zink_kopper.h"
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_usage_is_unflushed(const struct zink_resource *res)
 {
    return zink_bo_has_unflushed_usage(res->obj->bo);
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_usage_is_unflushed_write(const struct zink_resource *res)
 {
    return zink_batch_usage_is_unflushed(res->obj->bo->writes.u);
 }
 
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_usage_matches(const struct zink_resource *res, const struct zink_batch_state *bs)
 {
    return zink_bo_usage_matches(res->obj->bo, bs);
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_has_usage(const struct zink_resource *res)
 {
    return zink_bo_has_usage(res->obj->bo);
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_has_unflushed_usage(const struct zink_resource *res)
 {
    return zink_bo_has_unflushed_usage(res->obj->bo);
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_usage_check_completion(struct zink_screen *screen, struct zink_resource *res, enum zink_resource_access access)
 {
    return zink_bo_usage_check_completion(screen, res->obj->bo, access);
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_usage_check_completion_fast(struct zink_screen *screen, struct zink_resource *res, enum zink_resource_access access)
 {
    return zink_bo_usage_check_completion_fast(screen, res->obj->bo, access);
 }
 
-static inline void
+static ALWAYS_INLINE void
+zink_resource_usage_unflushed_wait(struct zink_context *ctx, struct zink_resource *res, enum zink_resource_access access)
+{
+   zink_bo_usage_unflushed_wait(ctx, res->obj->bo, access);
+}
+
+static ALWAYS_INLINE void
 zink_resource_usage_try_wait(struct zink_context *ctx, struct zink_resource *res, enum zink_resource_access access)
 {
    zink_bo_usage_try_wait(ctx, res->obj->bo, access);
 }
 
-static inline void
+static ALWAYS_INLINE void
 zink_resource_usage_wait(struct zink_context *ctx, struct zink_resource *res, enum zink_resource_access access)
 {
    zink_bo_usage_wait(ctx, res->obj->bo, access);
 }
 
-static inline void
+static ALWAYS_INLINE void
 zink_resource_usage_set(struct zink_resource *res, struct zink_batch_state *bs, bool write)
 {
    zink_bo_usage_set(res->obj->bo, bs, write);
    res->obj->unsync_access = false;
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_object_usage_unset(struct zink_resource_object *obj, struct zink_batch_state *bs)
 {
    return zink_bo_usage_unset(obj->bo, bs);
 }
 
-static inline void
+static ALWAYS_INLINE void
 zink_batch_resource_usage_set(struct zink_batch_state *bs, struct zink_resource *res, bool write, bool is_buffer)
 {
    if (!is_buffer) {
       if (res->obj->dt) {
          VkSemaphore acquire = zink_kopper_acquire_submit(zink_screen(bs->ctx->base.screen), res);
          if (acquire)
-            util_dynarray_append(&bs->acquires, VkSemaphore, acquire);
+            util_dynarray_append(&bs->acquires, acquire);
       } else if (res->obj->exportable) {
          struct pipe_resource *pres = NULL;
          bool found = false;
@@ -205,7 +211,7 @@ zink_batch_resource_usage_set(struct zink_batch_state *bs, struct zink_resource 
 void
 zink_debug_mem_print_stats(struct zink_screen *screen);
 
-static inline void
+static ALWAYS_INLINE void
 zink_resource_reference(struct zink_resource **d, struct zink_resource *s)
 {
    struct pipe_resource *dst = &(*d)->base.b;

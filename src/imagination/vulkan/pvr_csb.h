@@ -48,7 +48,16 @@
 #define __pvr_make_address(addr_u64) PVR_DEV_ADDR(addr_u64)
 /* clang-format on */
 
-#include "csbgen/rogue_hwdefs.h"
+#include "csbgen/rogue/cdm.h"
+#include "csbgen/rogue/cr.h"
+#include "csbgen/rogue/ipf.h"
+#include "csbgen/rogue/kmd_stream.h"
+#include "csbgen/rogue/lls.h"
+#include "csbgen/rogue/pbestate.h"
+#include "csbgen/rogue/pds.h"
+#include "csbgen/rogue/ppp.h"
+#include "csbgen/rogue/texstate.h"
+#include "csbgen/rogue/vdm.h"
 
 /**
  * \brief Size of the individual csb buffer object.
@@ -254,25 +263,6 @@ void pvr_csb_dump(const struct pvr_csb *csb,
 #define pvr_cmd_enum_to_str(x) ROGUE_##x##_to_str
 
 /**
- * \brief Merges dwords0 and dwords1 arrays and stores the result into the
- * control stream pointed by the csb object.
- *
- * \param[in] csb     Control Stream Builder object.
- * \param[in] dwords0 Dwords0 array.
- * \param[in] dwords1 Dwords1 array.
- */
-#define pvr_csb_emit_merge(csb, dwords0, dwords1)                \
-   do {                                                          \
-      uint32_t *dw;                                              \
-      STATIC_ASSERT(ARRAY_SIZE(dwords0) == ARRAY_SIZE(dwords1)); \
-      dw = pvr_csb_alloc_dwords(csb, ARRAY_SIZE(dwords0));       \
-      if (!dw)                                                   \
-         break;                                                  \
-      for (uint32_t i = 0; i < ARRAY_SIZE(dwords0); i++)         \
-         dw[i] = (dwords0)[i] | (dwords1)[i];                    \
-   } while (0)
-
-/**
  * \brief Packs a command/state into one or more dwords and stores them into
  * the control stream pointed by the csb object.
  *
@@ -292,22 +282,6 @@ void pvr_csb_dump(const struct pvr_csb *csb,
            pvr_cmd_pack(cmd)(_dst, &name);                         \
            _dst = NULL;                                            \
         }))
-
-/**
- * \brief Stores dword into the control stream pointed by the csb object.
- *
- * \param[in] csb   Control Stream Builder object.
- * \param[in] dword Dword to store into control stream.
- */
-#define pvr_csb_emit_dword(csb, dword)                  \
-   do {                                                 \
-      uint32_t *dw;                                     \
-      STATIC_ASSERT(sizeof(dword) == sizeof(uint32_t)); \
-      dw = pvr_csb_alloc_dwords(csb, 1U);               \
-      if (!dw)                                          \
-         break;                                         \
-      *dw = dword;                                      \
-   } while (0)
 
 /**
  * \name Raw command/state buffer helpers.

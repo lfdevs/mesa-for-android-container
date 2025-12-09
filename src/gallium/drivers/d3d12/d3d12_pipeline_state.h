@@ -66,7 +66,7 @@ struct d3d12_depth_stencil_alpha_state {
 
 struct d3d12_gfx_pipeline_state {
    ID3D12RootSignature *root_signature;
-   struct d3d12_shader *stages[PIPE_SHADER_TYPES - 1];
+   struct d3d12_shader *stages[MESA_SHADER_STAGES - 1];
    struct pipe_stream_output_info so_info;
 
    struct d3d12_vertex_elements_state *ves;
@@ -107,7 +107,7 @@ d3d12_gfx_pipeline_state_cache_invalidate(struct d3d12_context *ctx, const void 
 
 void
 d3d12_gfx_pipeline_state_cache_invalidate_shader(struct d3d12_context *ctx,
-                                                 enum pipe_shader_type stage,
+                                                 mesa_shader_stage stage,
                                                  struct d3d12_shader_selector *selector);
 
 void

@@ -428,7 +428,7 @@ maybe_init(int fd)
 
    initialized = true;
 
-   const char *config_path = getenv("INTEL_DUMP_GPU_CONFIG");
+   const char *config_path = os_get_option("INTEL_DUMP_GPU_CONFIG");
    fail_if(config_path == NULL, "INTEL_DUMP_GPU_CONFIG is not set\n");
 
    config = fopen(config_path, "r");

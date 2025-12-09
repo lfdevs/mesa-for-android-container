@@ -1,4 +1,4 @@
-/* Copyright 2022 Advanced Micro Devices, Inc.
+/* Copyright 2022-2025 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -106,13 +106,14 @@ enum vpe_status {
  *         emitted must by synchronized with handler
  */
 enum vpe_event_id {
-    VPE_EVENT_CHECK_SUPPORT, /**< Event emitted by vpe_check_support.
-                                  Params:
-                                          UInt32 num_streams,
-                                          UInt32 target_rect.width,
-                                          UInt32 target_rect.height,
-                                          UInt32 target_rect.height
-                               */
+    VPE_EVENT_CHECK_SUPPORT,     /**< Event emitted by vpe_check_support.
+                                      Params:
+                                              UInt32 num_streams,
+                                              UInt32 target_rect.width,
+                                              UInt32 target_rect.height,
+                                              UInt32 target_rect.height */
+    VPE_EVENT_PLANE_DESC_INPUT,  /**< Event emitted by vpe_plane_desc_input */
+    VPE_EVENT_PLANE_DESC_OUTPUT, /**< Event emitted by vpe_plane_desc_output */
 
     VPE_EVENT_MAX_ID         /**< Max ID represents the number of event IDs supported */
 };
@@ -218,29 +219,34 @@ struct vpe_color_caps {
 /** @struct vpe_caps
  *  @brief VPE Capabilities
  *  Those depend on the condition like input format
- *  shall be queried by @ref vpe_cap_funcs
+ *  shall be queried by @ref vpe_check_support_funcs
  */
 struct vpe_caps {
-    uint32_t max_downscale_ratio; /**< max downscaling ratio (src/dest) x 100.
-                                     E.g. 4k -> 1080p is 400 */
-    uint64_t lut_size;            /**< 3dlut size */
+    struct vpe_size max_input_size;      /**< Maximum input size */
+    struct vpe_size min_input_size;      /**< Minimum input size */
+    struct vpe_size max_output_size;     /**< Maximum output size */
+    struct vpe_size min_output_size;     /**< Minimum output size */
+    uint32_t        max_downscale_ratio; /**< max downscaling ratio (src/dest) x 100.
+                                              E.g. 4k -> 1080p is 400 */
+    uint64_t lut_size;                   /**< 3dlut size */
 
     uint32_t rotation_support       : 1; /**< rotation support */
     uint32_t h_mirror_support       : 1; /**< horizontal mirror support */
     uint32_t v_mirror_support       : 1; /**< vertical mirror support */
     uint32_t is_apu                 : 1; /**< is APU */
     uint32_t bg_color_check_support : 1; /**< background color check support */
+
+    /** resource capability */
     struct {
-        uint32_t num_dpp;
-        uint32_t num_opp;
-        uint32_t num_mpc_3dlut;
-        uint32_t num_cdc_be;
+        uint32_t num_dpp;             /**< num of dpp */
+        uint32_t num_opp;             /**< num of opp */
+        uint32_t num_mpc_3dlut;       /**< num of mpc 3dlut */
+        uint32_t num_cdc_be;          /**< num of cdc backend */
+        uint32_t num_queue;           /**< num of hw queue */
+    } resource_caps;                  /**< resource capability */
 
-        uint32_t num_queue; /**< num of hw queue */
-    } resource_caps;        /**< resource caps */
-
-    struct vpe_color_caps color_caps; /**< color management caps */
-    struct vpe_plane_caps plane_caps; /**< plane caps */
+    struct vpe_color_caps color_caps; /**< Color management caps */
+    struct vpe_plane_caps plane_caps; /**< Plane capabilities */
 
 };
 
@@ -266,61 +272,38 @@ struct vpe_dcc_setting {
     unsigned int max_uncompressed_blk_size; /**< max uncompressed block size */
     bool         independent_64b_blks;      /**< independent 64b blocks */
 
+    /** DCC controls */
     struct {
-        uint32_t dcc_256_64_64             : 1;
-        uint32_t dcc_128_128_uncontrained  : 1;
-        uint32_t dcc_256_128_128           : 1;
-        uint32_t dcc_256_256_unconstrained : 1;
-    } dcc_controls; /**< DCC controls */
+        uint32_t dcc_256_64_64             : 1; /**< DCC 256 64 64 */
+        uint32_t dcc_128_128_uncontrained  : 1; /**< DCC 128 128 unconstrained */
+        uint32_t dcc_256_128_128           : 1; /**< DCC 256 128 128 */
+        uint32_t dcc_256_256_unconstrained : 1; /**< DCC 256 256 unconstrained */
+    } dcc_controls;
 };
 
 /** @struct vpe_surface_dcc_cap
  *  @brief DCC Capabilities
  */
 struct vpe_surface_dcc_cap {
+    /**
+     * @brief Union of graphics and video dcc settings
+     */
     union {
+        /** graph dcc setting */
         struct {
-            struct vpe_dcc_setting rgb;
+            struct vpe_dcc_setting rgb; /**< dcc setting for RGB */
         } grph;
 
+        /** video dcc settings */
         struct {
-            struct vpe_dcc_setting luma;
-            struct vpe_dcc_setting chroma;
+            struct vpe_dcc_setting luma;   /**< dcc setting for luma */
+            struct vpe_dcc_setting chroma; /**< dcc setting for chroma */
         } video;
     };
 
     bool capable;             /**< DCC capable */
     bool const_color_support; /**< DCC const color support */
 
-};
-
-/** @struct vpe_cap_funcs
- *  @brief Conditional Capability functions
- */
-struct vpe_cap_funcs {
-    /** @brief
-     * Get DCC support and setting according to the format,
-     * scan direction and swizzle mode for output.
-     *
-     * @param[in]      vpe           vpe instance
-     * @param[in]      params        surface properties
-     * @param[in/out]  cap           dcc capable result and related settings
-     * @return true if supported
-     */
-    bool (*get_dcc_compression_output_cap)(const struct vpe *vpe,
-        const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
-
-    /** @brief
-     * Get DCC support and setting according to the format,
-     * scan direction and swizzle mode for input.
-     *
-     * @param[in]      vpe           vpe instance
-     * @param[in]      params        surface properties
-     * @param[in/out]  cap           dcc capable result and related settings
-     * @return true if supported
-     */
-    bool (*get_dcc_compression_input_cap)(const struct vpe *vpe,
-        const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
 };
 
 /****************************************
@@ -362,24 +345,26 @@ struct vpe_callback_funcs {
 
     void             *mem_ctx; /**< optional. provided by the caller and pass back to callback */
     vpe_zalloc_func_t zalloc;  /**< Memory allocation */
-    vpe_free_func_t   free;    /**< Free memory. In sync with @ref zalloc */
+    vpe_free_func_t   free;    /**< Free memory. In sync with @ref vpe_zalloc_func_t */
 };
 
 /** @struct vpe_mem_low_power_enable_options
  *  @brief Component activation on low power mode. Only used for debugging.
  */
 struct vpe_mem_low_power_enable_options {
+    /** override flags */
     struct {
-        uint32_t dscl : 1;
-        uint32_t cm   : 1;
-        uint32_t mpc  : 1;
-    } flags; /**< override flags */
+        uint32_t dscl : 1; /**< DSCL */
+        uint32_t cm   : 1; /**< CM */
+        uint32_t mpc  : 1; /**< MPC */
+    } flags;
 
+    /** enable bits */
     struct {
-        uint32_t dscl : 1;
-        uint32_t cm   : 1;
-        uint32_t mpc  : 1;
-    } bits; /**< enable bits */
+        uint32_t dscl : 1; /**< DSCL */
+        uint32_t cm   : 1; /**< CM */
+        uint32_t mpc  : 1; /**< MPC */
+    } bits;
 };
 
 /** @enum vpe_expansion_mode
@@ -419,13 +404,17 @@ struct vpe_clamping_params {
  *  @brief Configurable parameters for visual confirm bar
  */
 struct vpe_visual_confirm {
+    /** @brief confirm value
+     */
     union {
+        /** @brief confirm fields
+         */
         struct {
-            uint32_t input_format  : 1;
-            uint32_t output_format : 1;
-            uint32_t reserved      : 30;
+            uint32_t input_format  : 1; /**< input format, 0: disable, 1: enable*/
+            uint32_t output_format : 1; /**< output format, 0: disable, 1: enable*/
+            uint32_t reserved : 30; /**< reserved */
         };
-        uint32_t value;
+        uint32_t value; /**< confirm value */
     };
 };
 
@@ -433,57 +422,65 @@ struct vpe_visual_confirm {
  *  @brief Configurable parameters for debugging purpose
  */
 struct vpe_debug_options {
-    // override flags
-    struct {
-        uint32_t cm_in_bypass            : 1;
-        uint32_t vpcnvc_bypass           : 1;
-        uint32_t mpc_bypass              : 1;
-        uint32_t identity_3dlut          : 1;
-        uint32_t sce_3dlut               : 1;
-        uint32_t disable_reuse_bit       : 1;
-        uint32_t bg_color_fill_only      : 1;
-        uint32_t assert_when_not_support : 1;
-        uint32_t bypass_gamcor           : 1;
-        uint32_t bypass_ogam             : 1;
-        uint32_t bypass_dpp_gamut_remap  : 1;
-        uint32_t bypass_post_csc         : 1;
-        uint32_t bypass_blndgam          : 1;
-        uint32_t clamping_setting        : 1;
-        uint32_t expansion_mode          : 1;
-        uint32_t bypass_per_pixel_alpha  : 1;
-        uint32_t dpp_crc_ctrl            : 1;
-        uint32_t opp_pipe_crc_ctrl       : 1;
-        uint32_t mpc_crc_ctrl            : 1;
-        uint32_t bg_bit_depth            : 1;
-        uint32_t visual_confirm          : 1;
-        uint32_t skip_optimal_tap_check  : 1;
-        uint32_t disable_lut_caching     : 1;
-    } flags;
+
+    /** Struct to specify whether the debug flag for that
+     *  corresponding field should be honored.
+     */
+	struct {
+        uint32_t cm_in_bypass             : 1; /**< Color management bypass */
+        uint32_t vpcnvc_bypass            : 1; /**< VPCNVC bypass */
+        uint32_t mpc_bypass               : 1; /**< MPC bypass */
+        uint32_t identity_3dlut           : 1; /**< Identity 3dlut */
+        uint32_t sce_3dlut                : 1; /**< SCE 3dlut */
+        uint32_t disable_reuse_bit        : 1; /**< Disable reuse bit */
+        uint32_t bg_color_fill_only       : 1; /**< Background color fill only */
+        uint32_t assert_when_not_support  : 1; /**< Assert when not supported */
+        uint32_t bypass_gamcor            : 1; /**< Bypass gamcor */
+        uint32_t bypass_ogam              : 1; /**< Bypass ogam */
+        uint32_t bypass_dpp_gamut_remap   : 1; /**< Bypass dpp gamut remap */
+        uint32_t bypass_post_csc          : 1; /**< Bypass post csc */
+        uint32_t bypass_blndgam           : 1; /**< Bypass blndgam */
+        uint32_t clamping_setting         : 1; /**< Clamping setting */
+        uint32_t expansion_mode           : 1; /**< Color component expansion mode */
+        uint32_t bypass_per_pixel_alpha   : 1; /**< Per-pixel alpha bypass */
+        uint32_t dpp_crc_ctrl             : 1; /**< DPP CRC control */
+        uint32_t opp_pipe_crc_ctrl        : 1; /**< OPP pipe CRC control */
+        uint32_t mpc_crc_ctrl             : 1; /**< MPC CRC control */
+        uint32_t bg_bit_depth             : 1; /**< Background color bit depth. */
+        uint32_t visual_confirm           : 1; /**< visual confirm */
+        uint32_t skip_optimal_tap_check   : 1; /**< Skip optimal tap check */
+        uint32_t disable_lut_caching      : 1; /**< disable config caching for all luts */
+        uint32_t disable_performance_mode : 1; /**< disable performance mode */
+        uint32_t reserved : 8;
+    } flags;                                  /**< debug flags */
 
     // valid only if the corresponding flag is set
-    uint32_t cm_in_bypass            : 1;
-    uint32_t vpcnvc_bypass           : 1;
-    uint32_t mpc_bypass              : 1;
-    uint32_t identity_3dlut          : 1;
-    uint32_t sce_3dlut               : 1;
-    uint32_t disable_reuse_bit       : 1;
-    uint32_t bg_color_fill_only      : 1;
-    uint32_t assert_when_not_support : 1;
-    uint32_t bypass_gamcor           : 1;
-    uint32_t bypass_ogam             : 1;
-    uint32_t bypass_dpp_gamut_remap  : 1;
-    uint32_t bypass_post_csc         : 1;
-    uint32_t bypass_blndgam          : 1;
-    uint32_t clamping_setting        : 1;
-    uint32_t bypass_per_pixel_alpha  : 1;
-    uint32_t dpp_crc_ctrl            : 1;
-    uint32_t opp_pipe_crc_ctrl       : 1;
-    uint32_t mpc_crc_ctrl            : 1;
-    uint32_t skip_optimal_tap_check  : 1;
-    uint32_t disable_lut_caching     : 1; /*< disable config caching for all luts */
-    uint32_t bg_bit_depth;
+    uint32_t cm_in_bypass             : 1; /**< Color management bypass */
+    uint32_t vpcnvc_bypass            : 1; /**< VPCNVC bypass */
+    uint32_t mpc_bypass               : 1; /**< MPC bypass */
+    uint32_t identity_3dlut           : 1; /**< Identity 3dlut */
+    uint32_t sce_3dlut                : 1; /**< SCE 3dlut */
+    uint32_t disable_reuse_bit        : 1; /**< Disable reuse bit */
+    uint32_t bg_color_fill_only       : 1; /**< Background color fill only */
+    uint32_t assert_when_not_support  : 1; /**< Assert when not supported */
+    uint32_t bypass_gamcor            : 1; /**< Bypass gamcor */
+    uint32_t bypass_ogam              : 1; /**< Bypass ogam */
+    uint32_t bypass_dpp_gamut_remap   : 1; /**< Bypass dpp gamut remap */
+    uint32_t bypass_post_csc          : 1; /**< Bypass post csc */
+    uint32_t bypass_blndgam           : 1; /**< Bypass blndgam */
+    uint32_t clamping_setting         : 1; /**< Clamping setting */
+    uint32_t bypass_per_pixel_alpha   : 1; /**< Per-pixel alpha bypass */
+    uint32_t dpp_crc_ctrl             : 1; /**< DPP CRC control */
+    uint32_t opp_pipe_crc_ctrl        : 1; /**< OPP pipe CRC control */
+    uint32_t mpc_crc_ctrl             : 1; /**< MPC CRC control */
+    uint32_t skip_optimal_tap_check   : 1; /**< Skip optimal tap check */
+    uint32_t disable_lut_caching      : 1; /**< disable config caching for all luts */
+    uint32_t disable_performance_mode : 1; /**< disable performance mode */
+    uint32_t bg_bit_depth;                 /**< Background color bit depth. */
 
-    struct vpe_mem_low_power_enable_options enable_mem_low_power;
+    struct vpe_mem_low_power_enable_options
+		enable_mem_low_power; /**< Component activation on low power mode. Only used for debugging.
+                               */
     enum vpe_expansion_mode                 expansion_mode;
     struct vpe_clamping_params              clamping_params;
     struct vpe_visual_confirm               visual_confirm_params;
@@ -493,23 +490,12 @@ struct vpe_debug_options {
  *  @brief VPE ip info and debug/callback functions
  */
 struct vpe_init_data {
-
-    uint8_t                   ver_major; /**< vpe major version */
-    uint8_t                   ver_minor; /**< vpe minor version */
-    uint8_t                   ver_rev;   /**< vpe revision version */
-    struct vpe_callback_funcs funcs;     /**< function callbacks */
-    struct vpe_debug_options  debug;     /**< debug options */
-};
-
-/** @struct vpe
- *  @brief VPE instance created through vpelib entry function vpe_create()
- */
-struct vpe {
-    uint32_t          version;       /**< API version */
-    enum vpe_ip_level level;         /**< HW IP level */
-
-    struct vpe_caps      *caps;      /**< general static chip caps */
-    struct vpe_cap_funcs *cap_funcs; /**< conditional caps */
+    uint8_t                   ver_major;     /**< vpe major version */
+    uint8_t                   ver_minor;     /**< vpe minor version */
+    uint8_t                   ver_rev;       /**< vpe revision version */
+    struct vpe_callback_funcs funcs;         /**< function callbacks */
+    struct vpe_debug_options  debug;         /**< debug options */
+    const struct vpe_engine  *engine_handle; /**< vpe instance */
 };
 
 /*****************************************************
@@ -630,8 +616,10 @@ struct vpe_color_ycbcra {
  *  @brief Color value of each pixel
  */
 struct vpe_color {
-    bool is_ycbcr;                      /**< Set if the color space format is YCbCr.
-                                           If Ture, use @ref ycbcra. If False, use @ref rgba. */
+    bool is_ycbcr; /**< Set if the color space format is YCbCr.
+                      If Ture, use @ref vpe_color_rgba. If False, use @ref vpe_color_ycbcra. */
+    /** @brief color values
+     */
     union {
         struct vpe_color_rgba   rgba;   /**< RGBA value */
         struct vpe_color_ycbcra ycbcra; /**< YCbCr value */
@@ -640,7 +628,7 @@ struct vpe_color {
 
 /** @struct vpe_color_adjust
  * @brief Color adjustment values
- * <pre>
+ * @pre
  * Adjustment     Min      Max    default   step
  *
  * Brightness  -100.0f,  100.0f,   0.0f,    0.1f
@@ -650,7 +638,6 @@ struct vpe_color {
  * Hue         -180.0f,  180.0f,   0.0f,    1.0f
  *
  * Saturation     0.0f,    3.0f,   1.0f,    0.01f
- * </pre>
  */
 struct vpe_color_adjust {
     float brightness; /**< Brightness */
@@ -759,11 +746,14 @@ struct vpe_tonemap_params {
     enum vpe_color_primaries   lut_out_gamut;        /**< Output color primary */
     uint16_t                   input_pq_norm_factor; /**< Perceptual Quantizer normalization
                                                         factor. */
-    uint16_t                   lut_dim;              /**< Size of one dimension of the 3D-LUT */
+    uint16_t                   lut_dim;              /**< Size of one dimension of the 3D-LUT data*/
+    uint16_t                   lut_container_dim;    /**< Size of one dimension of the 3D-LUT container*/
+    /** @brief 3D LUT settings
+     */
     union {
         uint16_t *lut_data;                          /**< Accessible to CPU */
     };
-    bool is_dma_lut;   /**< DMA LUT */
+    bool is_dma_lut;   /**< Set to true if the 3D LUT is DMA LUT */
     bool enable_3dlut; /**< Enable/Disable 3D-LUT */
 };
 
@@ -829,15 +819,17 @@ struct vpe_stream {
                                          */
     struct vpe_reserved_param reserved_param;     /**< Reserved parameter for input surface */
 
+    /** @brief stream feature flags
+     */
     struct {
-        uint32_t hdr_metadata : 1;
+        uint32_t hdr_metadata      : 1; /**< Set if hdr meta data is available */
         uint32_t geometric_scaling : 1; /**< Enables geometric scaling.
                                          * Support 1 input stream only.
                                          * If set, gamut/gamma remapping will be disabled,
                                          * as well as blending.
                                          * Destination rect must equal to target rect.
                                          */
-        uint32_t reserved : 30;
+        uint32_t reserved : 30; /**< reserved */
     } flags; /**< Data flags */
 };
 
@@ -863,7 +855,6 @@ struct vpe_predication_info {
  *  @brief Build parametrs for vpelib. Must get populated before vpe_check_support() call.
  */
 struct vpe_build_param {
-
     uint32_t                num_streams;          /**< Number of source streams */
     struct vpe_stream      *streams;              /**< List of input streams */
     struct vpe_surface_info dst_surface;          /**< Destination/Output surface */
@@ -876,10 +867,11 @@ struct vpe_build_param {
     struct vpe_reserved_param dst_reserved_param; /**< Reserved parameter for destination surface */
     struct vpe_predication_info predication_info; /**< Predication info */
 
+    /** Data flags */
     struct {
-        uint32_t hdr_metadata : 1;
-        uint32_t reserved     : 31;
-    } flags; /**< Data flags */
+        uint32_t hdr_metadata : 1;  /**< Set if hdr meta data is available */
+        uint32_t reserved     : 31; /**< reserved */
+    } flags;
 
     uint16_t num_instances;      /**< Number of instances for the collaboration mode */
     bool     collaboration_mode; /**< Collaboration mode. If set, multiple instances of VPE being
@@ -918,6 +910,89 @@ struct vpe_buf {
 struct vpe_build_bufs {
     struct vpe_buf cmd_buf; /**< Command buffer. gpu_va is optional */
     struct vpe_buf emb_buf; /**< Embedded buffer */
+};
+
+/** @struct vpe_check_support_funcs
+ *  @brief  check support functions
+ */
+struct vpe_check_support_funcs {
+    /** @brief
+     * Check if the input surface format is supported
+     *
+     * @param[in] format  input format
+     * @return true if supported
+     */
+    bool (*check_input_format)(enum vpe_surface_pixel_format format);
+
+    /** @brief
+     * Check if the output surface format is supported
+     *
+     * @param[in] format  output format
+     * @return true if supported
+     */
+    bool (*check_output_format)(enum vpe_surface_pixel_format format);
+
+    /** @brief
+     * Check if the input color space is supported
+     *
+     * @param[in] format  input format
+     * @param[in] vcs     input color space
+     * @return true if supported
+     */
+    bool (*check_input_color_space)(
+        enum vpe_surface_pixel_format format, const struct vpe_color_space *vcs);
+
+    /** @brief
+     * Check if the output color space is supported
+     *
+     * @param[in] format  output format
+     * @param[in] vcs     output color space
+     * @return true if supported
+     */
+    bool (*check_output_color_space)(
+        enum vpe_surface_pixel_format format, const struct vpe_color_space *vcs);
+
+    /** @brief
+     * Get DCC support and setting according to the format,
+     * scan direction and swizzle mode for output.
+     *
+     * @param[in]      params        surface properties
+     * @param[in/out]  cap           dcc capable result and related settings
+     * @return true if supported
+     */
+    bool (*get_dcc_compression_output_cap)(
+        const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
+
+    /** @brief
+     * Get DCC support and setting according to the format,
+     * scan direction and swizzle mode for input.
+     *
+     * @param[in]      params        surface properties
+     * @param[in/out]  cap           dcc capable result and related settings
+     * @return true if supported
+     */
+    bool (*get_dcc_compression_input_cap)(
+        const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
+};
+
+/** @struct vpe
+ *  @brief VPE instance created through vpelib entry function vpe_create()
+ */
+struct vpe {
+    uint32_t                       version;     /**< API version */
+    enum vpe_ip_level              level;       /**< HW IP level */
+    struct vpe_caps               *caps;        /**< general static chip caps */
+    struct vpe_check_support_funcs check_funcs; /**< vpe check format support funcs */
+};
+
+/** @struct vpe_engine
+ *  @brief VPE engine information
+ */
+struct vpe_engine {
+    uint32_t                       api_version; /**< API version */
+    enum vpe_ip_level              ip_level;    /**< HW IP level */
+    const struct vpe_caps         *caps;        /**< general static chip caps */
+    struct vpe_check_support_funcs check_funcs; /**< vpe check format support funcs */
 };
 
 #ifdef __cplusplus

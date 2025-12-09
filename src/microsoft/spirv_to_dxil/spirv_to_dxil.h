@@ -37,7 +37,7 @@ extern "C" {
 // NB: I've copy and pasted some types into this header so we don't have to
 // include other headers. This will surely break if any of these types change.
 
-// Copy of gl_shader_stage
+// Copy of mesa_shader_stage
 typedef enum {
    DXIL_SPIRV_SHADER_NONE = -1,
    DXIL_SPIRV_SHADER_VERTEX = 0,

@@ -449,7 +449,7 @@ etna_pm_query_setup(struct etna_screen *screen)
       if (!etna_pm_cfg_supported(screen->perfmon, cfg))
          continue;
 
-      util_dynarray_append(&screen->supported_pm_queries, unsigned, i);
+      util_dynarray_append(&screen->supported_pm_queries, i);
    }
 }
 

@@ -235,7 +235,7 @@ write_buffer_view_desc(struct panvk_descriptor_set *set,
    else
       write_desc(set, binding, elem, &view->descs.tex, NO_SUBDESC);
 #else
-   write_desc(set, binding, elem, &view->descs.tex, NO_SUBDESC);
+   write_desc(set, binding, elem, &view->descs.buf, NO_SUBDESC);
 #endif
 }
 
@@ -697,7 +697,7 @@ panvk_per_arch(descriptor_set_write)(struct panvk_descriptor_set *set,
       break;
 
    default:
-      unreachable("Unsupported descriptor type");
+      UNREACHABLE("Unsupported descriptor type");
    }
    return VK_SUCCESS;
 }
@@ -766,7 +766,7 @@ panvk_descriptor_set_copy(const VkCopyDescriptorSet *copy)
    }
 
    default:
-      unreachable("Unsupported descriptor type");
+      UNREACHABLE("Unsupported descriptor type");
    }
 
    return VK_SUCCESS;
@@ -872,7 +872,7 @@ panvk_per_arch(descriptor_set_write_template)(
          break;
 
       default:
-         unreachable("Unsupported descriptor type");
+         UNREACHABLE("Unsupported descriptor type");
       }
    }
 }

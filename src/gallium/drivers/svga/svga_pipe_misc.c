@@ -159,14 +159,14 @@ svga_set_framebuffer_state(struct pipe_context *pipe,
     * different size, depending on the host API and driver,
     */
    {
-      uint16_t width = 0, height = 0;
+      unsigned width = 0, height = 0;
       if (fb->zsbuf.texture) {
          pipe_surface_size(&fb->zsbuf, &width, &height);
       }
       for (unsigned i = 0; i < fb->nr_cbufs; ++i) {
          if (fb->cbufs[i].texture) {
             if (width && height) {
-               uint16_t cwidth, cheight;
+               unsigned cwidth, cheight;
                pipe_surface_size(&fb->cbufs[i], &cwidth, &cheight);
                if (cwidth != width ||
                    cheight != height) {

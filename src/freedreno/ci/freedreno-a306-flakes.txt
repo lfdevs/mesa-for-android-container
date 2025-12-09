@@ -13,6 +13,12 @@ glx@glx-swap-event_interval
 glx@glx-swap-event_async
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero
 glx@glx_arb_sync_control@waitformsc
+glx@glx_ext_no_config_context@no fbconfig
+
+spec@arb_map_buffer_alignment@arb_map_buffer_alignment-map-invalidate-range
+spec@arb_vertex_buffer_object@vbo-subdata-many drawelements
+spec@egl_chromium_sync_control@conformance
+spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
 
 dEQP-GLES3.functional.occlusion_query.all_occluders
 dEQP-GLES3.functional.occlusion_query.conservative_depth_clear_stencil_write

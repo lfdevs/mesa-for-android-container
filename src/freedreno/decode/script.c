@@ -20,10 +20,12 @@
 #include "util/u_math.h"
 
 #include "cffdec.h"
+#include "cffdump-pkt-handler.h"
 #include "rnnutil.h"
 #include "script.h"
 
 static lua_State *L;
+static lua_State *iL;
 
 #if 0
 #define DBG(fmt, ...)                                                          \
@@ -214,6 +216,9 @@ l_rnn_etype(lua_State *L, struct rnn *rnn, struct rnndelem *elem,
       return l_rnn_etype_reg(L, rnn, elem, offset);
    case RNN_ETYPE_ARRAY:
       return l_rnn_etype_array(L, rnn, elem, offset);
+   case RNN_ETYPE_STRIPE:
+      assert(elem->subelemsnum == 1);
+      return l_rnn_etype(L, rnn, elem->subelems[0], offset);
    default:
       /* hmm.. */
       printf("unhandled type: %d\n", elem->type);
@@ -544,6 +549,26 @@ static const struct luaL_Reg l_regs[] = {
    {NULL, NULL} /* sentinel */
 };
 
+/* Expose the private functionality to the internal pkt enviroment as a "priv"
+ * library:
+ */
+
+static int
+l_priv_reg_set(lua_State *L)
+{
+   uint32_t regbase = (uint32_t)lua_tonumber(L, 1);
+   uint32_t regval = (uint32_t)lua_tonumber(L, 2);
+
+   reg_set(regbase, regval);
+
+   return 1;
+}
+
+static const struct luaL_Reg l_priv[] = {
+   {"reg_set", l_priv_reg_set},
+   {NULL, NULL} /* sentinel */
+};
+
 /* Expose API to lookup snapshot buffers:
  */
 
@@ -573,11 +598,20 @@ static const struct luaL_Reg l_bos[] = {
 };
 
 static void
-openlib(const char *lib, const luaL_Reg *reg)
+openlib(lua_State *state, const char *lib, const luaL_Reg *reg)
 {
-   lua_newtable(L);
-   luaL_setfuncs(L, reg, 0);
-   lua_setglobal(L, lib);
+   lua_newtable(state);
+   luaL_setfuncs(state, reg, 0);
+   lua_setglobal(state, lib);
+}
+
+static void
+common_libs(lua_State *state)
+{
+   luaL_openlibs(state);
+   openlib(state, "bos", l_bos);
+   openlib(state, "regs", l_regs);
+   openlib(state, "rnn", l_rnn);
 }
 
 /* called at start to load the script: */
@@ -589,10 +623,7 @@ script_load(const char *file)
    assert(!L);
 
    L = luaL_newstate();
-   luaL_openlibs(L);
-   openlib("bos", l_bos);
-   openlib("regs", l_regs);
-   openlib("rnn", l_rnn);
+   common_libs(L);
 
    ret = luaL_loadfile(L, file);
    if (ret)
@@ -603,6 +634,48 @@ script_load(const char *file)
       error("%s\n");
 
    return 0;
+}
+
+void
+internal_lua_pkt_handler_load(void)
+{
+   int ret;
+
+   if (iL)
+      return;
+
+   iL = luaL_newstate();
+
+   common_libs(iL);
+   openlib(iL, "priv", l_priv);
+
+   ret = luaL_loadstring(iL, cffdump_pkt_handler_lua_src);
+   if (ret) {
+      fprintf(stderr, "%s\n", lua_tostring(iL, -1));
+      exit(1);
+   }
+
+   ret = lua_pcall(iL, 0, LUA_MULTRET, 0);
+   if (ret) {
+      fprintf(stderr, "%s\n", lua_tostring(iL, -1));
+      exit(1);
+   }
+}
+
+void
+internal_lua_pkt_handler_init_rnn(struct rnn *rnn)
+{
+   struct rnndec *rnndec = lua_newuserdata(iL, sizeof(*rnndec));
+   rnndec->base = *rnn;
+   rnndec->sizedwords = 0;
+
+   luaL_newmetatable(iL, "rnnmeta");
+   luaL_setfuncs(iL, l_meta_rnn, 0);
+   lua_pop(iL, 1);
+
+   luaL_setmetatable(iL, "rnnmeta");
+
+   lua_setglobal(iL, "r");
 }
 
 /* called at start of each cmdstream file: */
@@ -695,22 +768,24 @@ static const struct luaL_Reg l_meta_rnn_dom[] = {
 
 /* called to general pm4 packet decoding, such as texture/sampler state
  */
-void
-script_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
-              struct rnndomain *dom)
+static bool
+handle_packet_setup(lua_State *state, uint32_t *dwords, uint32_t sizedwords,
+                    struct rnn *rnn, struct rnndomain *dom)
 {
-   if (!L)
-      return;
+   if (!state)
+      return false;
 
-   lua_getglobal(L, dom->name);
+   assert(state == L || state == iL);
+
+   lua_getglobal(state, dom->name);
 
    /* if no handler for the packet, just ignore it: */
-   if (!lua_isfunction(L, -1)) {
-      lua_pop(L, 1);
-      return;
+   if (!lua_isfunction(state, -1)) {
+      lua_pop(state, 1);
+      return false;
    }
 
-   struct rnndec *rnndec = lua_newuserdata(L, sizeof(*rnndec));
+   struct rnndec *rnndec = lua_newuserdata(state, sizeof(*rnndec));
 
    rnndec->base = *rnn;
    rnndec->base.dom[0] = dom;
@@ -718,16 +793,53 @@ script_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
    rnndec->dwords = dwords;
    rnndec->sizedwords = sizedwords;
 
-   luaL_newmetatable(L, "rnnmetadom");
-   luaL_setfuncs(L, l_meta_rnn_dom, 0);
-   lua_pop(L, 1);
+   luaL_newmetatable(state, "rnnmetadom");
+   luaL_setfuncs(state, l_meta_rnn_dom, 0);
+   lua_pop(state, 1);
 
-   luaL_setmetatable(L, "rnnmetadom");
+   luaL_setmetatable(state, "rnnmetadom");
 
-   lua_pushnumber(L, sizedwords);
+   lua_pushnumber(state, sizedwords);
+
+   return true;
+}
+
+void
+script_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
+              struct rnndomain *dom)
+{
+   bool ret;
+
+   ret = handle_packet_setup(L, dwords, sizedwords, rnn, dom);
+   if (!ret)
+      return;
 
    if (lua_pcall(L, 2, 0, 0) != 0)
       error("error running function `f': %s\n");
+}
+
+const char *
+internal_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
+                struct rnndomain *dom)
+{
+   bool ret;
+
+   ret = handle_packet_setup(iL, dwords, sizedwords, rnn, dom);
+   if (!ret)
+      return NULL;
+
+   /* 2 args, 1 result */
+   if (lua_pcall(iL, 2, 1, 0) != 0) {
+      fprintf(stderr, "error running function `f': %s\n",
+              lua_tostring(iL, -1));
+      exit(1);
+   }
+
+   char *str;
+   asprintf(&str, "%s", lua_tostring(iL, -1));
+   lua_pop(iL, 1);
+
+   return str;
 }
 
 /* helper to call fxn that takes and returns void: */
@@ -782,4 +894,14 @@ script_finish(void)
 
    lua_close(L);
    L = NULL;
+}
+
+void
+internal_lua_pkt_handler_finish(void)
+{
+   if (!iL)
+      return;
+
+   lua_close(iL);
+   iL = NULL;
 }

@@ -180,6 +180,10 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
       cs->RS_KICKER_INPLACE = rs->tile_count;
    }
    cs->source_ts_valid = rs->source_ts_valid;
+   cs->single_buffer = screen->specs.single_buffer;
+
+   if (cs->single_buffer)
+      assert(!src_multi && !dst_multi);
 }
 
 #define EMIT_STATE(state_name, src_value) \
@@ -244,7 +248,12 @@ etna_submit_rs_state(struct etna_context *ctx,
       /*28   */ EMIT_STATE(RS_FILL_VALUE(2), cs->RS_FILL_VALUE[2]);
       /*29   */ EMIT_STATE(RS_FILL_VALUE(3), cs->RS_FILL_VALUE[3]);
       /*30/31*/ EMIT_STATE(RS_EXTRA_CONFIG, cs->RS_EXTRA_CONFIG);
+
+      if (cs->single_buffer)
+         EMIT_STATE(RS_SINGLE_BUFFER, VIVS_RS_SINGLE_BUFFER_ENABLE);
       /*32/33*/ EMIT_STATE(RS_KICKER, 0xbeebbeeb);
+      if (cs->single_buffer)
+         EMIT_STATE(RS_SINGLE_BUFFER, 0x0);
       etna_coalesce_end(stream, &coalesce);
    } else {
       etna_cmd_stream_reserve(stream, 22);
@@ -284,6 +293,10 @@ etna_rs_gen_clear_cmd(struct etna_context *ctx,
    uint32_t format;
 
    switch (util_format_get_blocksizebits(psurf->format)) {
+   case 8:
+      assert(VIV_FEATURE(screen, ETNA_FEATURE_S8));
+      format = RS_FORMAT_S8;
+      break;
    case 16:
       format = RS_FORMAT_A4R4G4B4;
       break;
@@ -295,7 +308,7 @@ etna_rs_gen_clear_cmd(struct etna_context *ctx,
       format = RS_FORMAT_64BPP_CLEAR;
       break;
    default:
-      unreachable("bpp not supported for clear by RS");
+      UNREACHABLE("bpp not supported for clear by RS");
       break;
    }
 
@@ -487,6 +500,9 @@ etna_clear_rs(struct pipe_context *pctx, unsigned buffers, const struct pipe_sci
          if (!psurf->texture)
             continue;
 
+         if (!(buffers & (PIPE_CLEAR_COLOR0 << idx)))
+            continue;
+
          if (etna_resource_get_render_compatible(pctx, psurf->texture)->levels[psurf->level].ts_size)
             need_ts_flush = true;
       }
@@ -511,6 +527,9 @@ etna_clear_rs(struct pipe_context *pctx, unsigned buffers, const struct pipe_sci
          struct pipe_surface *psurf = &ctx->framebuffer_s.cbufs[idx];
 
          if (!psurf->texture)
+            continue;
+
+         if (!(buffers & (PIPE_CLEAR_COLOR0 << idx)))
             continue;
 
          etna_blit_clear_color_rs(pctx, idx, color, use_ts);
@@ -602,7 +621,7 @@ etna_compute_tileoffset(const struct pipe_box *box, enum pipe_format format,
       offset = (y & ~0x3f) * stride + blocksize * ((x & ~0x3f) << 6);
       break;
    default:
-      unreachable("invalid resource layout");
+      UNREACHABLE("invalid resource layout");
    }
 
    return offset;

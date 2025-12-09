@@ -60,9 +60,8 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
    if (!so)
       return NULL;
 
-   struct fd_ringbuffer *ring = fd_ringbuffer_new_object(
-      blend->ctx->pipe, ((A6XX_MAX_RENDER_TARGETS * 4) + 6) * 4);
-   so->stateobj = ring;
+   unsigned nregs = (3 * A6XX_MAX_RENDER_TARGETS) + 3;
+   fd_crb crb(blend->ctx->pipe, nregs);
 
    for (unsigned i = 0; i <= cso->max_rt; i++) {
       const struct pipe_rt_blend_state *rt;
@@ -72,25 +71,29 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
       else
          rt = &cso->rt[0];
 
-      OUT_REG(ring,
-              A6XX_RB_MRT_BLEND_CONTROL(
-                 i, .rgb_src_factor = fd_blend_factor(rt->rgb_src_factor),
+      crb.add(A6XX_RB_MRT_BLEND_CONTROL(i,
+                 .rgb_src_factor = fd_blend_factor(rt->rgb_src_factor),
                  .rgb_blend_opcode = blend_func(rt->rgb_func),
                  .rgb_dest_factor = fd_blend_factor(rt->rgb_dst_factor),
                  .alpha_src_factor = fd_blend_factor(rt->alpha_src_factor),
                  .alpha_blend_opcode = blend_func(rt->alpha_func),
-                 .alpha_dest_factor = fd_blend_factor(rt->alpha_dst_factor), ));
+                 .alpha_dest_factor = fd_blend_factor(rt->alpha_dst_factor),
+               ))
+        .add(A6XX_RB_MRT_CONTROL(i,
+                 .color_blend_en = rt->blend_enable,
+                 .alpha_blend_en = rt->blend_enable,
+                 .rop_enable = cso->logicop_enable,
+                 .rop_code = rop,
+                 .component_enable = rt->colormask,
+               ));
 
-      OUT_REG(ring,
-              A6XX_RB_MRT_CONTROL(
-                    i,
-                    .blend = rt->blend_enable,
-                    .blend2 = rt->blend_enable,
-                    .rop_enable = cso->logicop_enable,
-                    .rop_code = rop,
-                    .component_enable = rt->colormask,
-              )
-      );
+      if (CHIP == A8XX) {
+         crb.add(SP_MRT_BLEND_CNTL_REG(CHIP, i,
+                 .color_blend_en = rt->blend_enable,
+                 .alpha_blend_en = rt->blend_enable,
+                 .component_write_mask = rt->colormask,
+         ));
+      }
 
       if (rt->blend_enable) {
          mrt_blend |= (1 << i);
@@ -104,8 +107,7 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
    /* sRGB + dither on a7xx goes badly: */
    bool dither = (CHIP < A7XX) ? cso->dither : false;
 
-   OUT_REG(ring,
-      A6XX_RB_DITHER_CNTL(
+   crb.add(A6XX_RB_DITHER_CNTL(
             .dither_mode_mrt0 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
             .dither_mode_mrt1 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
             .dither_mode_mrt2 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
@@ -114,32 +116,27 @@ __fd6_setup_blend_variant(struct fd6_blend_stateobj *blend,
             .dither_mode_mrt5 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
             .dither_mode_mrt6 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
             .dither_mode_mrt7 = dither ? DITHER_ALWAYS : DITHER_DISABLE,
-      )
-   );
+      ))
+     .add(SP_BLEND_CNTL(CHIP,
+            .enable_blend = mrt_blend,
+            .independent_blend_en = cso->independent_blend_enable,
+            .dual_color_in_enable = blend->use_dual_src_blend,
+            .alpha_to_coverage = cso->alpha_to_coverage,
+            .alpha_to_one = cso->alpha_to_one,
+       ))
+     .add(A6XX_RB_BLEND_CNTL(
+            .blend_reads_dest = mrt_blend,
+            .independent_blend = cso->independent_blend_enable,
+            .dual_color_in_enable = blend->use_dual_src_blend,
+            .alpha_to_coverage = cso->alpha_to_coverage,
+            .alpha_to_one = cso->alpha_to_one,
+            .sample_mask = sample_mask,
+       ));
 
-   OUT_REG(ring,
-           A6XX_SP_BLEND_CNTL(
-                 .enable_blend = mrt_blend,
-                 .unk8 = true,
-                 .dual_color_in_enable = blend->use_dual_src_blend,
-                 .alpha_to_coverage = cso->alpha_to_coverage,
-           ),
-   );
-
-   OUT_REG(ring,
-           A6XX_RB_BLEND_CNTL(
-                 .blend_reads_dest = mrt_blend,
-                 .independent_blend = cso->independent_blend_enable,
-                 .dual_color_in_enable = blend->use_dual_src_blend,
-                 .alpha_to_coverage = cso->alpha_to_coverage,
-                 .alpha_to_one = cso->alpha_to_one,
-                 .sample_mask = sample_mask,
-           ),
-   );
-
+   so->stateobj = crb;
    so->sample_mask = sample_mask;
 
-   util_dynarray_append(&blend->variants, struct fd6_blend_variant *, so);
+   util_dynarray_append(&blend->variants, so);
 
    return so;
 }

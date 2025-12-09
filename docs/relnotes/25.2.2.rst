@@ -1,0 +1,277 @@
+Mesa 25.2.2 Release Notes / 2025-09-03
+======================================
+
+Mesa 25.2.2 is a bug fix release which fixes bugs found since the 25.2.1 release.
+
+Mesa 25.2.2 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.2 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 43d7abcd4aa8049d8fd75538344a374104765e81e17b4a6314cee2c0160e4412  mesa-25.2.2.tar.xz
+    SHA512: 69cd7ed33d0856e227a0219a9d09e5eb2fad28162276b5971bff4f7102cf58b0d914131ad6543562cba230ce6fb9b2076d3b156b1b8c375e74722a143aee5379  mesa-25.2.2.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- radv: watching vp9 encoded video with vulkan hwdecode result in artifacts
+- ci: zink-venus-lavapipe errors
+- [ANV][DG2][BMG] 3DMark Solar Bay Misrendering
+- lavapipe defaults to memfd when multiple export types are requested
+- anv: Simple vulkan compute shader causes Intel GPU hang due to excessive loop unrolling
+- INTEL_DEBUG=spill_fs regression
+- NIR validation failed after nir_lower_io in DOOM The Dark Ages
+- ACO validation failed in DOOM: The Dark Ages - Undef operand to \`p_parallelcopy`
+- ACO validation failure in DOOM: The Dark Ages Shader
+- Dragon Age Veilguard / Ability Wheel Targeting Visual Distortion
+- [AMD] glTexturePageCommitmentEXT triggers an error if level is higher than 0
+- missing sparse synchronization in zink
+- System Crashes when starting VR on rx 9070 (xt)
+
+
+Changes
+-------
+
+Aleksi Sapon (1):
+
+- draw: fix missing line viewport transformation
+
+Alyssa Ross (1):
+
+- gfxstream: guest: don't use transitional LFS64 API
+
+Antonio Ospite (2):
+
+- nak/nouveau: silence errors about never used methods
+- compiler/rust: fix errors about hiding elided lifetime
+
+Ashley Smith (1):
+
+- mesa: Fix support for GL_EXT_shader_clock
+
+Boris Brezillon (1):
+
+- panvk: Fix disjoint image memory binding
+
+Caio Oliveira (2):
+
+- brw: Fix folding case for MAD instruction with all immediates
+- brw: Fix checking sources of wrong instruction in opt_address_reg_load
+
+Connor Abbott (2):
+
+- vulkan/queue: Fix VkTimelineSemaphoreSubmitInfo sanitization
+- tu: Fix CmdBindTransformFeedbackBuffersEXT size handling
+
+Daniel Schürmann (1):
+
+- aco/ra: don't clear lateKill operands in get_reg_create_vector()
+
+David Rosca (7):
+
+- radeonsi/vcn: Disable H264 encode 8x8 transform when CABAC is disabled
+- radv/video: Disable H264 encode 8x8 transform when CABAC is disabled
+- radeonsi/vcn: Disable H264/5 constrained intra pred with rate control
+- radeonsi/vcn: Fix compatibility with old FW for encode
+- radeonsi/vcn: Fix HEVC encode cu_qp_delta with old FW
+- radeonsi/vcn: Fix HEVC encode transform_skip with old FW
+- radv/video: Fix VP9 loop filter and segmentation params
+
+Eric Engestrom (4):
+
+- docs: add sha sum for 25.2.1
+- .pick_status.json: Update to c0e51bcf24c7905a2fdc272194744a5fdfe8c345
+- .pick_status.json: Mark 85310e912c5a2fc542618a11b9e38ea9c433ed18 as denominated
+- .pick_status.json: Mark a34756bbedacdf2558c966466a71bfd3715fa295 as denominated
+
+Eric R. Smith (2):
+
+- mesa: fix off by one in MSRTT handling
+- panvk: revised occlusion query pointer fix
+
+Erik Faye-Lund (1):
+
+- pan/lib: clamp format size to 4
+
+Faith Ekstrand (10):
+
+- subprojects: Stop calling add_languages() in paste-1-rs/meson.build
+- nak: Add a nak_qmd_size_B() query
+- nak/hw_runner: Allow for variable sized QMDs
+- nvk: Allow for larger QMDs
+- nak/qmd: QMD versions 4.0 and 5.0 are both 384B
+- nak: NAK_MAX_QMD_SIZE_B should be 384
+- compiler/rust: Fix the DFS loop detection algorithm
+- lavapipe: Always use dma-buf for external memory when we can
+- nir: Add an option to make lower_phis_to_regs_block() less clever
+- nak,nir: Use a simpler version of phis_to_regs_block in lower_cf
+
+Georg Lehmann (6):
+
+- nir/uub: fix exclusive scans
+- aco: fix ra validation for flat/global/scratch/ds load sbyte_d16
+- aco/optimizer: don't apply packed clamp to v_fma_mix
+- aco/optimizer: don't create undef copies from p_create_vector
+- ac/nir: do not assume mesh cull flag is 1bit
+- nir/lower_io: fix boolean output stores
+
+Hans-Kristian Arntzen (2):
+
+- nvk: Return 0 for opaque memory capture replay.
+- nvk: Avoid passing garbage data in descriptor buffers for UBOs.
+
+Iván Briano (1):
+
+- anv: fix capture/replay of sparse images with descriptor buffer
+
+Jarrett Johnson (1):
+
+- nir: tag cls variable as maybe unused
+
+Jesse Natalie (1):
+
+- nir: Add missing #include for c99_alloca.h
+
+Jianxun Zhang (2):
+
+- anv: No compression on host memory allocation (xe2)
+- anv: Fix PAT entry in importing (xe2)
+
+Job Noorman (4):
+
+- ir3: don't vectorize nir_op_sdot_4x8_iadd[_sat]
+- ir3: emit descriptor prefetch in block dominated by its sources
+- ir3/cf: don't swap signedness of (sat) instructions
+- ir3: use nir_lower_bit_size for 8-bit bit_count
+
+Josh Simmons (1):
+
+- util: Fix \`BITSET_EXTRACT` out-of-bounds read
+
+Julia Zhang (1):
+
+- pps: init driver in OnSetup
+
+Karol Herbst (2):
+
+- aux/trace: move fence_server calls outside the locked area
+- rusticl/event: fix create_and_queue for deps in error states
+
+Lionel Landwerlin (9):
+
+- brw: fix analysis dirtying with pulled constants
+- anv: fix uninitialized return value
+- brw: remove uniform from opt_offsets
+- brw: fix INTEL_DEBUG=spill_fs
+- brw: fix broadcast opcode
+- anv: temporary disable KHR_maintenance8
+- Revert "anv: enable non uniform texture offset lowering"
+- Revert "brw: move texture offset packing to NIR"
+- anv: fix pipeline barriers with pre-rasterization stages
+
+Mark Collins (1):
+
+- freedreno/drm: Only initialize memory data source when Perfetto is active
+
+Mary Guillemard (2):
+
+- nouveau/headers: Fix nv_push rust push_inline_data implementation
+- hk: Return 0 for opaque memory capture replay
+
+Mike Blumenkrantz (14):
+
+- zink: break out unflushed batch waiting into separate function/mechanism
+- zink: pass ctx to sparse bind functions
+- zink: when sparse unbinding, always wait on main timeline semaphore
+- zink: trigger fb unbind barrier on resolve images too
+- zink: fix sizing on resolve resource array
+- zink: update resized swapchain depth buffer layout while blitting
+- zink: unify/fix clear flushing
+- zink: also set msrtss stencil
+- zink: always flush clears when doing single-aspect blit to avoid data loss
+- zink: fix some weird indentation in update_binds_for_samplerviews()
+- zink: flag resources for layout eval in update_binds_for_samplerviews()
+- zink: zero db offset on batch reset
+- zink: don't increase db scale when resizing a db up to the current scale
+- kopper: unwrap screen before checking cpu flag
+
+Nataraj Deshpande (1):
+
+- anv: add feature flags for linearly tiled ASTC images
+
+Philipp Zabel (1):
+
+- rusticl: Fix hidden lifetime warnings
+
+Pierre-Eric Pelloux-Prayer (2):
+
+- mesa/st: always use base_serialized_nir for draw
+- nir/opt_varyings: fix build with PRINT_RELOCATE_SLOT
+
+Pohsiang (John) Hsu (1):
+
+- gallium/pipebuffer: fix multithread issue on pb_slab_manager_create_buffer
+
+Qiang Yu (1):
+
+- mesa: fix glTexPageCommitmentARB and glTexturePageCommitmentEXT level check
+
+Rob Clark (1):
+
+- drirc: Work around ANGLE brokeness
+
+Robert Mader (2):
+
+- gallium: Set and count all extra samplers
+- nir: Fixup 10/12 bit SW decoder YCbCr formats
+
+Sagar Ghuge (4):
+
+- anv: Add missing ACCELERATION_STRUCTURE_READ in barrier handling
+- anv: Enable CS stall for ACCELERATION_STRUCTURE_COPY stage
+- anv: Add missing L3 flushes
+- anv: Apply pipe flushes for outstanding PC bits
+
+Samuel Pitoiset (4):
+
+- radv: dirty some states from graphics pipeline earlier
+- radv: add missing L2 invalidate cache flush for non-coherent images
+- radv: fix hashing graphics pipeline when no stages are compiled
+- radv/rt: fix a potential issue with RADV_PERFTEST=dmashaders
+
+Tapani Pälli (1):
+
+- anv: change some image qualifiers as coherent for Last Of Us
+
+Trigger Huang (1):
+
+- virtio/vdrm: add ENABLE_DRM_AMDGPU for c_args
+
+Valentine Burley (1):
+
+- ci/crosvm: Retry all curl errors when downloading kernel
+
+Yiwei Zhang (4):
+
+- panvk: ensure wsi memory is bound at offset 0
+- vulkan/android: amend a missing case for IMPLEMENTATION_DEFINED AHB
+- vulkan: handle wsi private data properly
+- anv: fix broken utrace

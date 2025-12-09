@@ -63,7 +63,7 @@ nir_blend_func(
       return nir_fmax(b, src, dst);
    }
 
-   unreachable("Invalid blend function");
+   UNREACHABLE("Invalid blend function");
 }
 
 /* Does this blend function multiply by a blend factor? */
@@ -128,7 +128,7 @@ nir_blend_factor_value(
       return nir_alpha_saturate(b, src, dst, chan);
    default:
       assert(util_blendfactor_is_inverted(factor_without_invert));
-      unreachable("Unexpected inverted factor");
+      UNREACHABLE("Unexpected inverted factor");
    }
 }
 
@@ -235,7 +235,7 @@ nir_logicop_func(
    case PIPE_LOGICOP_EQUIV:
       return nir_ixor(b, nir_ixor(b, src, dst), bitmask);
    case PIPE_LOGICOP_NOOP:
-      unreachable("optimized out");
+      UNREACHABLE("optimized out");
    case PIPE_LOGICOP_OR_INVERTED:
       return nir_ior(b, nir_ixor(b, src, bitmask), dst);
    case PIPE_LOGICOP_COPY:
@@ -248,7 +248,7 @@ nir_logicop_func(
       return nir_imm_ivec4(b, ~0, ~0, ~0, ~0);
    }
 
-   unreachable("Invalid logciop function");
+   UNREACHABLE("Invalid logciop function");
 }
 
 static nir_def *

@@ -376,7 +376,7 @@ static void compute_depq(double inY, double *outX, bool clip)
     *outX = ret;
 }
 
-static bool is_limited_cs(enum color_space cs)
+bool vpe_is_limited_cs(enum color_space cs)
 {
     bool is_limited = false;
 
@@ -407,8 +407,8 @@ static bool is_limited_cs(enum color_space cs)
     return is_limited;
 }
 
-static void vpe_bg_degam(
-    struct transfer_func *output_tf, struct vpe_color *bg_color) {
+void vpe_bg_degam(struct transfer_func *output_tf, struct vpe_color *bg_color)
+{
 
     double degam_r = (double)bg_color->rgba.r;
     double degam_g = (double)bg_color->rgba.g;
@@ -438,11 +438,10 @@ static void vpe_bg_degam(
     bg_color->rgba.r = (float)degam_r;
     bg_color->rgba.g = (float)degam_g;
     bg_color->rgba.b = (float)degam_b;
-
 }
 
-static void vpe_bg_inverse_gamut_remap(enum color_space output_cs,
-    struct transfer_func *output_tf, struct vpe_color *bg_color)
+void vpe_bg_inverse_gamut_remap(
+    enum color_space output_cs, struct transfer_func *output_tf, struct vpe_color *bg_color)
 {
 
         double bg_rgb[3] = { 0.0 };
@@ -479,19 +478,47 @@ static void vpe_bg_inverse_gamut_remap(enum color_space output_cs,
 
 }
 
-// To understand the logic for background color conversion,
-// please refer to vpe_update_output_gamma_sequence in color.c
-void vpe_bg_color_convert(enum color_space output_cs, struct transfer_func *output_tf,
-    enum vpe_surface_pixel_format pixel_format, struct vpe_color *mpc_bg_color,
-    struct vpe_color *opp_bg_color, bool enable_3dlut)
+void vpe_inverse_output_csc(enum color_space output_cs, struct vpe_color *bg_color)
 {
-    if (output_tf->type != TF_TYPE_BYPASS) {
-        // inverse degam
-        if (output_tf->tf == TRANSFER_FUNC_PQ2084 && !is_limited_cs(output_cs))
-            vpe_bg_degam(output_tf, mpc_bg_color);
-        // inverse gamut remap
-        if (enable_3dlut)
-            vpe_bg_inverse_gamut_remap(output_cs, output_tf, mpc_bg_color);
+    enum color_space bgcolor_cs = COLOR_SPACE_YCBCR709;
+
+    switch (output_cs) {
+        // output is ycbr cs, follow output's setting
+    case COLOR_SPACE_YCBCR601:
+    case COLOR_SPACE_YCBCR709:
+    case COLOR_SPACE_YCBCR601_LIMITED:
+    case COLOR_SPACE_YCBCR709_LIMITED:
+    case COLOR_SPACE_2020_YCBCR:
+    case COLOR_SPACE_2020_YCBCR_LIMITED:
+        bgcolor_cs = output_cs;
+        break;
+        // output is RGB cs, follow output's range
+        // but need yuv to rgb csc
+    case COLOR_SPACE_SRGB_LIMITED:
+    case COLOR_SPACE_RGB601_LIMITED:
+        bgcolor_cs = COLOR_SPACE_YCBCR709_LIMITED;
+        break;
+    case COLOR_SPACE_2020_RGB_LIMITEDRANGE:
+        bgcolor_cs = COLOR_SPACE_2020_YCBCR_LIMITED;
+        break;
+    case COLOR_SPACE_SRGB:
+    case COLOR_SPACE_MSREF_SCRGB:
+    case COLOR_SPACE_RGB601:
+        bgcolor_cs = COLOR_SPACE_YCBCR709;
+        break;
+    case COLOR_SPACE_2020_RGB_FULLRANGE:
+        bgcolor_cs = COLOR_SPACE_2020_YCBCR;
+        break;
+    default:
+        // should revise the newly added CS
+        // and set corresponding bgcolor_cs accordingly
+        VPE_ASSERT(0);
+        bgcolor_cs = COLOR_SPACE_YCBCR709;
+        break;
     }
-    // for TF_TYPE_BYPASS, bg color should be programmed to mpc as linear
+
+    // input is [0-0xffff]
+    // convert bg color to RGB full range for use inside pipe
+    vpe_bg_csc(bg_color, bgcolor_cs);
 }
+

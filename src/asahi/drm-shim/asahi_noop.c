@@ -15,8 +15,9 @@ static const struct drm_asahi_params_global params = {
    .gpu_generation = 13,
    .gpu_variant = 'G',
    .gpu_revision = 0,
-   .vm_start = 0x1000000,
-   .vm_end = 0x5000000,
+   .vm_start = 0x4000,
+   .vm_end = 0x7fffff8000ull,
+   .command_timestamp_frequency_hz = 1000000000,
 };
 
 struct asahi_bo {
@@ -105,6 +106,7 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_ASAHI_GEM_MMAP_OFFSET] = asahi_ioctl_gem_mmap_offset,
    [DRM_ASAHI_QUEUE_CREATE] = asahi_ioctl_noop,
    [DRM_ASAHI_QUEUE_DESTROY] = asahi_ioctl_noop,
+   [DRM_ASAHI_GEM_BIND_OBJECT] = asahi_ioctl_noop,
    [DRM_ASAHI_SUBMIT] = asahi_ioctl_noop,
 };
 

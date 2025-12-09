@@ -112,7 +112,7 @@ remove_struct_derefs_prep(nir_deref_instr **p, char **name,
    }
 
    default:
-      unreachable("Invalid deref type");
+      UNREACHABLE("Invalid deref type");
       break;
    }
 }
@@ -148,7 +148,7 @@ lower_deref(nir_builder *b, struct lower_samplers_as_deref_state *state,
             nir_deref_instr *deref)
 {
    nir_variable *var = nir_deref_instr_get_variable(deref);
-   gl_shader_stage stage = state->shader->info.stage;
+   mesa_shader_stage stage = state->shader->info.stage;
 
    if (!(var->data.mode & (nir_var_uniform | nir_var_image)) ||
        var->data.bindless)
@@ -330,7 +330,7 @@ lower_intrinsic(nir_intrinsic_instr *instr,
    }
    if (instr->intrinsic == nir_intrinsic_image_deref_order ||
        instr->intrinsic == nir_intrinsic_image_deref_format)
-      unreachable("how did you even manage this?");
+      UNREACHABLE("how did you even manage this?");
 
    return false;
 }

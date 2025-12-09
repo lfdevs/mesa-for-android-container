@@ -20,3 +20,8 @@ dEQP-VK.sparse_resources.image_sparse_binding.multiple_sparse_image_opaque_memor
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_sparse_image_opaque_memory_bind_info.cube_array.*
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_sparse_memory_bind.cube_array.*
 dEQP-VK.sparse_resources.image_sparse_residency.cube_array.*
+
+# https://github.com/KhronosGroup/VK-GL-CTS/issues/546
+dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.vulkan_memory_model.cooperative_matrix.type_punning.*
+# https://github.com/KhronosGroup/VK-GL-CTS/issues/553
+dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.vulkan_memory_model.cooperative_matrix.mixed.load.*

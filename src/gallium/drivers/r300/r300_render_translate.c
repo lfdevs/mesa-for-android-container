@@ -21,7 +21,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
     switch (*index_size) {
     case 1:
         *out_buffer = NULL;
-        u_upload_alloc(r300->uploader, 0, count * 2, 4,
+        u_upload_alloc_ref(r300->uploader, 0, count * 2, 4,
                        &out_offset, out_buffer, ptr);
 
         util_shorten_ubyte_elts_to_userptr(
@@ -35,7 +35,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
     case 2:
         if (index_offset) {
             *out_buffer = NULL;
-            u_upload_alloc(r300->uploader, 0, count * 2, 4,
+            u_upload_alloc_ref(r300->uploader, 0, count * 2, 4,
                            &out_offset, out_buffer, ptr);
 
             util_rebuild_ushort_elts_to_userptr(&r300->context, info,
@@ -50,7 +50,7 @@ void r300_translate_index_buffer(struct r300_context *r300,
     case 4:
         if (index_offset) {
             *out_buffer = NULL;
-            u_upload_alloc(r300->uploader, 0, count * 4, 4,
+            u_upload_alloc_ref(r300->uploader, 0, count * 4, 4,
                            &out_offset, out_buffer, ptr);
 
             util_rebuild_uint_elts_to_userptr(&r300->context, info,

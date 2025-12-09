@@ -207,7 +207,7 @@ driComputeOptionsSha1(const driOptionCache *cache, unsigned char *sha1)
                                       cache->values[i]._string);
          break;
       default:
-         unreachable("unsupported dri config type!");
+         UNREACHABLE("unsupported dri config type!");
       }
 
       if (!ret) {

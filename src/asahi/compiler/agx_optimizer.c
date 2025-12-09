@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "util/lut.h"
 #include "util/macros.h"
 #include "agx_builder.h"
 #include "agx_compiler.h"
@@ -262,7 +263,7 @@ agx_icond_is_unsigned(enum agx_icond cond)
       return false;
    }
 
-   unreachable("invalid condition");
+   UNREACHABLE("invalid condition");
 }
 
 static bool
@@ -415,7 +416,7 @@ agx_optimizer_if_not(agx_instr **defs, agx_instr *I)
    agx_instr *def = defs[I->src[0].value];
    if (def->op != AGX_OPCODE_BITOP ||
        !agx_is_equiv(def->src[1], agx_immediate(1)) ||
-       def->truth_table != AGX_BITOP_XOR)
+       def->truth_table != UTIL_LUT2(a ^ b))
       return;
 
    /* Fuse */
@@ -513,20 +514,11 @@ agx_optimizer_bitop(agx_instr **defs, agx_instr *I)
       agx_index src = I->src[s];
       agx_instr *def = defs[src.value];
 
-      /* Check for not src */
-      if (def->op != AGX_OPCODE_NOT)
-         continue;
-
-      /* Select new operation */
-      if (s == 0) {
-         I->truth_table =
-            ((I->truth_table & 0x5) << 1) | ((I->truth_table & 0xa) >> 1);
-      } else if (s == 1) {
-         I->truth_table = ((I->truth_table & 0x3) << 2) | (I->truth_table >> 2);
+      /* If we find a not, select new operation and fuse */
+      if (def->op == AGX_OPCODE_NOT) {
+         I->truth_table = util_lut2_invert_source(I->truth_table, s);
+         I->src[s] = def->src[0];
       }
-
-      /* Fuse */
-      I->src[s] = def->src[0];
    }
 }
 
@@ -607,7 +599,7 @@ void
 agx_optimizer_backward(agx_context *ctx)
 {
    agx_instr **uses = calloc(ctx->alloc, sizeof(*uses));
-   BITSET_WORD *multiple = calloc(BITSET_WORDS(ctx->alloc), sizeof(*multiple));
+   BITSET_WORD *multiple = BITSET_CALLOC(ctx->alloc);
 
    agx_foreach_block_rev(ctx, block) {
       /* Phi sources are logically read at the end of predecessor, so process

@@ -232,7 +232,7 @@
     <field name="Flip vertical" size="1" start="54" type="bool"/>
     <field name="Samples" size="1" start="56" type="Sample Count"/>
     <field name="Unk mipmapped" size="1" start="58" type="bool"/>
-    <field name="Compressed 1" size="1" start="59" type="bool"/>
+    <field name="Compressed" size="1" start="59" type="bool"/>
     <field name="Mode" size="2" start="60" type="Image Mode"/>
     <field name="Buffer" size="36" start="64" type="address" modifier="shr(4)"/>
     <field name="Level" size="4" start="100" type="uint"/>
@@ -294,7 +294,7 @@
     to switch tile size (or disable tiling altogether?) at small mip levels to
     reduce wasted memory due to padding. Causing test flakiness when set. -->
     <field name="Unk mipmapped" size="1" start="102" type="bool"/>
-    <field name="Compressed 1" size="1" start="103" type="bool"/>
+    <field name="Compressed" size="1" start="103" type="bool"/>
     <field name="Mode" size="2" start="104" type="Image Mode"/>
     <field name="Compression" size="2" start="106" type="hex"/> <!-- 0 for uncompressed -->
     <field name="sRGB" size="1" start="108" type="bool"/>
@@ -411,7 +411,7 @@
   </struct>
 
   <!-- PPP state starts -->
-  <struct name="PPP Header" size="4">
+  <struct name="PPP Header" size="4" align="4">
     <field name="Fragment control" size="1" start="0" type="bool"/>
     <field name="Fragment control 2" size="1" start="1" type="bool"/>
     <field name="Fragment front face" size="1" start="2" type="bool"/>

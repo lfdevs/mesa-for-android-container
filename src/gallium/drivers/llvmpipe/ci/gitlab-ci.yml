@@ -32,7 +32,6 @@ llvmpipe-traces:
 llvmpipe:
   variables:
     DEQP_SUITE: llvmpipe
-    XVFB_SCRIPT: "install/deqp-runner.sh"
     DEQP_FRACTION: 4
   extends:
     - .llvmpipe-deqp-test
@@ -42,10 +41,9 @@ llvmpipe:
     export LD_LIBRARY_PATH="$CI_PROJECT_DIR/install/lib"
     export LIBGL_DRIVERS_PATH="$CI_PROJECT_DIR/install/lib/dri"
     section_start weston "weston: prepare"
-    weston -Bheadless-backend.so -Swayland-0 --idle-time=0 &
-    export WAYLAND_DISPLAY=wayland-0
+    . "$CI_PROJECT_DIR/install/common/weston.sh"
     section_end weston
-    xvfb-run -e results/xvfb.log --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && ${XVFB_SCRIPT}"
+    $CI_PROJECT_DIR/install/deqp-runner.sh
 
 llvmpipe-full:
   extends:
@@ -77,7 +75,7 @@ llvmpipe-deqp-asan:
     - .test-android
     - .llvmpipe-rules
   variables:
-    ANDROID_GPU_MODE: mesa_swrast
+    CUTTLEFISH_GPU_MODE: mesa_swrast
     GPU_VERSION: llvmpipe
     DEQP_SUITE: android-llvmpipe
     # TODO: define DEQP_FRACTION?

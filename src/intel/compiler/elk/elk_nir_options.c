@@ -8,6 +8,8 @@
 #define COMMON_OPTIONS                                                        \
    .compact_arrays = true,                                                    \
    .discard_is_demote = true,                                                 \
+   .has_f2i_sat = true,                                                       \
+   .has_f2u_sat = true,                                                       \
    .has_uclz = true,                                                          \
    .lower_fdiv = true,                                                        \
    .lower_scmp = true,                                                        \
@@ -35,7 +37,7 @@
    .support_indirect_inputs = BITFIELD_BIT(MESA_SHADER_TESS_CTRL) |           \
                               BITFIELD_BIT(MESA_SHADER_TESS_EVAL) |           \
                               BITFIELD_BIT(MESA_SHADER_FRAGMENT),             \
-   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES)
+   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES)
 
 #define COMMON_SCALAR_OPTIONS                                                 \
    .lower_to_scalar = true,                                                   \

@@ -22,8 +22,8 @@ INSTALL=$(realpath -s "$PWD"/install)
 export LD_LIBRARY_PATH="$INSTALL"/lib/:$LD_LIBRARY_PATH
 export EGL_PLATFORM=surfaceless
 ARCH=$(uname -m)
-export VK_DRIVER_FILES="$PWD"/install/share/vulkan/icd.d/"$VK_DRIVER"_icd."$ARCH".json
-export OCL_ICD_VENDORS="$PWD"/install/etc/OpenCL/vendors/
+export VK_DRIVER_FILES="$INSTALL"/share/vulkan/icd.d/"$VK_DRIVER"_icd."$ARCH".json
+export OCL_ICD_VENDORS="$INSTALL"/etc/OpenCL/vendors/
 
 if [ -n "${ANGLE_TAG:-}" ]; then
   # Are we using the right ANGLE version?
@@ -58,37 +58,34 @@ findmnt -n tmpfs ${SHADER_CACHE_HOME} || findmnt -n tmpfs ${SHADER_CACHE_DIR} ||
     mount -t tmpfs -o nosuid,nodev,size=2G,mode=1755 tmpfs ${SHADER_CACHE_DIR}
 }
 
-BASELINE=""
-if [ -e "$INSTALL/$GPU_VERSION-fails.txt" ]; then
-    BASELINE="--baseline $INSTALL/$GPU_VERSION-fails.txt"
-fi
+touch /fails.txt
+touch /flakes.txt
+cat $INSTALL/all-skips.txt > /skips.txt
 
-# Default to an empty known flakes file if it doesn't exist.
-touch $INSTALL/$GPU_VERSION-flakes.txt
+add_if_exists() {
+  prefix=$1
+  kind=$2
+  if [ -e "$INSTALL/$prefix-$kind.txt" ]; then
+    cat "$INSTALL/$prefix-$kind.txt" >> "/$kind.txt"
+  fi
+}
 
-
-if [ -n "$VK_DRIVER" ] && [ -e "$INSTALL/$VK_DRIVER-skips.txt" ]; then
-    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/$VK_DRIVER-skips.txt"
-fi
-
-if [ -n "$GALLIUM_DRIVER" ] && [ -e "$INSTALL/$GALLIUM_DRIVER-skips.txt" ]; then
-    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/$GALLIUM_DRIVER-skips.txt"
-fi
-
-if [ -n "$DRIVER_NAME" ] && [ -e "$INSTALL/$DRIVER_NAME-skips.txt" ]; then
-    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/$DRIVER_NAME-skips.txt"
-fi
-
-if [ -e "$INSTALL/$GPU_VERSION-skips.txt" ]; then
-    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/$GPU_VERSION-skips.txt"
-fi
+# remove duplicate values to avoid reading the same file multiple times
+{
+  echo "$DRIVER_NAME"
+  echo "$GPU_VERSION"
+} | sort -u | while read -r prefix; do
+  add_if_exists "$prefix" fails
+  add_if_exists "$prefix" flakes
+  add_if_exists "$prefix" skips
+done
 
 if [ -e "$INSTALL/$GPU_VERSION-slow-skips.txt" ] && [[ $CI_JOB_NAME != *full* ]]; then
-    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/$GPU_VERSION-slow-skips.txt"
+    cat "$INSTALL/$GPU_VERSION-slow-skips.txt" >> /skips.txt
 fi
 
 if [ -n "${ANGLE_TAG:-}" ]; then
-    DEQP_SKIPS="$DEQP_SKIPS $INSTALL/angle-skips.txt"
+    cat "$INSTALL/angle-skips.txt" >> /skips.txt
 fi
 
 # Set the path to VK validation layer settings (in case it ends up getting loaded)
@@ -139,14 +136,15 @@ deqp-runner \
     suite \
     --suite $INSTALL/deqp-$DEQP_SUITE.toml \
     --output $RESULTS_DIR \
-    --skips $INSTALL/all-skips.txt $DEQP_SKIPS \
-    --flakes $INSTALL/$GPU_VERSION-flakes.txt \
+    --baseline /fails.txt \
+    --skips /skips.txt \
+    --flakes /flakes.txt \
     --testlog-to-xml /deqp-tools/testlog-to-xml \
     --fraction-start ${CI_NODE_INDEX:-1} \
     --fraction $((CI_NODE_TOTAL * ${DEQP_FRACTION:-1})) \
     --jobs ${FDO_CI_CONCURRENT:-4} \
-    $BASELINE \
     ${DEQP_RUNNER_MAX_FAILS:+--max-fails "$DEQP_RUNNER_MAX_FAILS"} \
+    ${DEQP_RUNNER_SHADER_CACHE_DIR:+--shader-cache-dir "$DEQP_RUNNER_SHADER_CACHE_DIR"} \
     ${DEQP_FORCE_ASAN:+--env LD_PRELOAD=libasan.so.8:/install/lib/libdlclose-skip.so}; DEQP_EXITCODE=$?
 
 { set +x; } 2>/dev/null

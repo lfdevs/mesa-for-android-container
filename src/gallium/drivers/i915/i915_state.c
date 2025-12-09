@@ -46,6 +46,7 @@
 #include "i915_resource.h"
 #include "i915_state.h"
 #include "i915_state_inlines.h"
+#include "i915_surface.h"
 
 static void i915_delete_fs_state(struct pipe_context *pipe, void *shader);
 
@@ -349,10 +350,10 @@ i915_create_sampler_state(struct pipe_context *pipe,
 
 static void
 i915_bind_sampler_states(struct pipe_context *pipe,
-                         enum pipe_shader_type shader, unsigned start,
+                         mesa_shader_stage shader, unsigned start,
                          unsigned num, void **samplers)
 {
-   if (shader != PIPE_SHADER_FRAGMENT) {
+   if (shader != MESA_SHADER_FRAGMENT) {
       assert(num == 0);
       return;
    }
@@ -672,7 +673,7 @@ i915_create_vs_state(struct pipe_context *pipe,
    if (templ->type == PIPE_SHADER_IR_NIR) {
       nir_shader *s = templ->ir.nir;
 
-      NIR_PASS(_, s, nir_lower_point_size, 1.0, 255.0);
+      NIR_PASS(_, s, nir_lower_point_size, 1.0, 255.0, nir_type_invalid);
 
       /* The gallivm draw path doesn't support non-native-integers NIR shaders,
        * st/mesa does native-integers for the screen as a whole rather than
@@ -717,8 +718,7 @@ i915_delete_vs_state(struct pipe_context *pipe, void *shader)
 
 static void
 i915_set_constant_buffer(struct pipe_context *pipe,
-                         enum pipe_shader_type shader, uint32_t index,
-                         bool take_ownership,
+                         mesa_shader_stage shader, uint32_t index,
                          const struct pipe_constant_buffer *cb)
 {
    struct i915_context *i915 = i915_context(pipe);
@@ -727,7 +727,7 @@ i915_set_constant_buffer(struct pipe_context *pipe,
    bool diff = true;
 
    /* XXX don't support geom shaders now */
-   if (shader == PIPE_SHADER_GEOMETRY)
+   if (shader == MESA_SHADER_GEOMETRY)
       return;
 
    if (cb && cb->user_buffer) {
@@ -760,16 +760,11 @@ i915_set_constant_buffer(struct pipe_context *pipe,
       diff = i915->current.num_user_constants[shader] != 0;
    }
 
-   if (take_ownership) {
-      pipe_resource_reference(&i915->constants[shader], NULL);
-      i915->constants[shader] = buf;
-   } else {
-      pipe_resource_reference(&i915->constants[shader], buf);
-   }
+   pipe_resource_reference(&i915->constants[shader], buf);
    i915->current.num_user_constants[shader] = new_num;
 
    if (diff)
-      i915->dirty |= shader == PIPE_SHADER_VERTEX ? I915_NEW_VS_CONSTANTS
+      i915->dirty |= shader == MESA_SHADER_VERTEX ? I915_NEW_VS_CONSTANTS
                                                   : I915_NEW_FS_CONSTANTS;
 
    if (cb && cb->user_buffer) {
@@ -778,12 +773,12 @@ i915_set_constant_buffer(struct pipe_context *pipe,
 }
 
 static void
-i915_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
+i915_set_sampler_views(struct pipe_context *pipe, mesa_shader_stage shader,
                        unsigned start, unsigned num,
                        unsigned unbind_num_trailing_slots,
                        struct pipe_sampler_view **views)
 {
-   if (shader != PIPE_SHADER_FRAGMENT) {
+   if (shader != MESA_SHADER_FRAGMENT) {
       /* No support for VS samplers, because it would mean accessing the
        * write-combined maps of the textures, which is very slow.  VS samplers
        * are not a required feature of GL2.1 or GLES2.
@@ -861,13 +856,51 @@ i915_sampler_view_destroy(struct pipe_context *pipe,
    FREE(view);
 }
 
+void
+i915_framebuffer_init(struct pipe_context *pctx, const struct pipe_framebuffer_state *fb, struct pipe_surface **cbufs, struct pipe_surface **zsbuf)
+{
+   if (fb) {
+      for (unsigned i = 0; i < fb->nr_cbufs; i++) {
+         if (cbufs[i] && pipe_surface_equal(&fb->cbufs[i], cbufs[i]))
+            continue;
+
+         struct pipe_surface *psurf = fb->cbufs[i].texture ? i915_create_surface(pctx, fb->cbufs[i].texture, &fb->cbufs[i]) : NULL;
+         if (cbufs[i])
+            i915_surface_destroy(pctx, cbufs[i]);
+         cbufs[i] = psurf;
+      }
+
+      for (unsigned i = fb->nr_cbufs; i < 1; i++) {
+         if (cbufs[i])
+            i915_surface_destroy(pctx, cbufs[i]);
+         cbufs[i] = NULL;
+      }
+
+      if (*zsbuf && pipe_surface_equal(&fb->zsbuf, *zsbuf))
+         return;
+      struct pipe_surface *zsurf = fb->zsbuf.texture ? i915_create_surface(pctx, fb->zsbuf.texture, &fb->zsbuf) : NULL;
+      if (*zsbuf)
+         i915_surface_destroy(pctx, *zsbuf);
+      *zsbuf = zsurf;
+   } else {
+      for (unsigned i = 0; i < 1; i++) {
+         if (cbufs[i])
+            i915_surface_destroy(pctx, cbufs[i]);
+         cbufs[i] = NULL;
+      }
+      if (*zsbuf)
+         i915_surface_destroy(pctx, *zsbuf);
+      *zsbuf = NULL;
+   }
+}
+
 static void
 i915_set_framebuffer_state(struct pipe_context *pipe,
                            const struct pipe_framebuffer_state *fb)
 {
    struct i915_context *i915 = i915_context(pipe);
 
-   util_framebuffer_init(pipe, fb, i915->fb_cbufs, &i915->fb_zsbuf);
+   i915_framebuffer_init(pipe, fb, i915->fb_cbufs, &i915->fb_zsbuf);
    util_copy_framebuffer_state(&i915->framebuffer, fb);
    if (fb->nr_cbufs) {
       struct i915_surface *surf = i915_surface(i915->fb_cbufs[0]);
@@ -1018,8 +1051,7 @@ i915_set_vertex_buffers(struct pipe_context *pipe, unsigned count,
    assert(count <= PIPE_MAX_ATTRIBS);
 
    util_set_vertex_buffers_count(draw->pt.vertex_buffer,
-                                 &draw->pt.nr_vertex_buffers, buffers, count,
-                                 true);
+                                 &draw->pt.nr_vertex_buffers, buffers, count);
 }
 
 static void *
@@ -1109,6 +1141,7 @@ i915_init_state_functions(struct i915_context *i915)
    i915->base.create_sampler_view = i915_create_sampler_view;
    i915->base.sampler_view_destroy = i915_sampler_view_destroy;
    i915->base.sampler_view_release = u_default_sampler_view_release;
+   i915->base.resource_release = u_default_resource_release;
    i915->base.set_viewport_states = i915_set_viewport_states;
    i915->base.set_vertex_buffers = i915_set_vertex_buffers;
 }

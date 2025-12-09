@@ -21,5 +21,5 @@ lib = rust.proc_macro(
 )
 
 dep_remain = declare_dependency(
-  link_with : [lib, syn, quote, proc_macro2]
+  link_with : [lib]
 )

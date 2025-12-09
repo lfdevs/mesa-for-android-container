@@ -42,7 +42,7 @@ fn op_reg_latency(op: &Op, reader: bool, op_reg_idx: usize) -> RegLatencySM100 {
         Op::IAdd3(_) | Op::IAdd3X(_) => Alu,
 
         Op::BMsk(_) => Alu,
-        // Sgxt => Alu,
+        Op::Sgxt(_) => Alu,
         Op::Lop3(_) => Alu,
         Op::Flo(_) => Decoupled,
         Op::ISetP(_) => Dualalu,
@@ -92,6 +92,7 @@ fn op_reg_latency(op: &Op, reader: bool, op_reg_idx: usize) -> RegLatencySM100 {
         Op::AL2P(_) => Decoupled,
 
         Op::Mov(_) => Dualalu,
+        Op::Movm(_) => DecoupledAgu,
         Op::Sel(_) => Dualalu,
         Op::BRev(_) => Decoupled,
         // P2R => Alu,
@@ -160,7 +161,7 @@ fn op_reg_latency(op: &Op, reader: bool, op_reg_idx: usize) -> RegLatencySM100 {
         Op::Isberd(_) => DecoupledAgu,
         Op::LdTram(_) => DecoupledAgu,
         Op::Shfl(_) => DecoupledAgu,
-        //Op::LdSm(_) => DecoupledAgu
+        Op::Ldsm(_) => DecoupledAgu,
         x => {
             panic!("Illegal instuction in reg category {}", x);
         }
@@ -171,6 +172,7 @@ fn op_pred_latency(op: &Op) -> PredLatencySM100 {
     use PredLatencySM100::*;
     match op {
         Op::Atom(_) => Decoupled,
+        Op::Bra(_) => Decoupled,
         Op::DSetP(_) => RedirectedFp64,
         Op::FMnMx(_) | Op::FSetP(_) => Dualalu,
         Op::HFma2(_) => Fp16,
@@ -281,7 +283,7 @@ fn op_ureg_latency(
         Op::PSetP(_) => coupled,
         // UR2UP
         Op::Sel(_) => coupled,
-        // SGXT
+        Op::Sgxt(_) => coupled,
         Op::Shf(_) => coupled,
         Op::Shfl(_) => decoupled,
 
@@ -342,6 +344,7 @@ fn op_upred_latency(op: &Op) -> UpredLatencySM100 {
         | Op::LeaX(_)
         | Op::Lop3(_)
         | Op::Mov(_) => Udp,
+        Op::Bra(_) => BraJmp,
         Op::Ldc(_) => UldcMma,
         Op::PLop3(_) => {
             if uniform_op {
@@ -409,7 +412,7 @@ impl SM120Latency {
     ) -> u32 {
         let dst_file = match &write.dsts_as_slice()[dst_idx] {
             Dst::None => return 0,
-            Dst::SSA(vec) => vec.file().unwrap(),
+            Dst::SSA(vec) => vec.file(),
             Dst::Reg(reg) => reg.file(),
         };
 
@@ -426,6 +429,10 @@ impl SM120Latency {
                     || read_latency == RegLatencySM100::Hmma
                 {
                     RegLatencySM100::raw(write_latency, read_latency, false) + 9
+                } else if write_latency == RegLatencySM100::Imma
+                    || read_latency == RegLatencySM100::Imma
+                {
+                    RegLatencySM100::raw(write_latency, read_latency, false) + 5
                 } else {
                     RegLatencySM100::raw(write_latency, read_latency, false) + 1
                 }
@@ -462,7 +469,7 @@ impl SM120Latency {
     pub fn war(read: &Op, src_idx: usize, write: &Op, dst_idx: usize) -> u32 {
         let dst_file = match &write.dsts_as_slice()[dst_idx] {
             Dst::None => return 0,
-            Dst::SSA(vec) => vec.file().unwrap(),
+            Dst::SSA(vec) => vec.file(),
             Dst::Reg(reg) => reg.file(),
         };
 
@@ -507,7 +514,7 @@ impl SM120Latency {
     ) -> u32 {
         let dst_file = match &a.dsts_as_slice()[a_dst_idx] {
             Dst::None => return 0,
-            Dst::SSA(vec) => vec.file().unwrap(),
+            Dst::SSA(vec) => vec.file(),
             Dst::Reg(reg) => reg.file(),
         };
 

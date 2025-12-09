@@ -1,2 +1,5 @@
 # See https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/9049
 dEQP-VK.pipeline.timestamp.calibrated.calibration_test,Fail
+
+# RADV bug
+dEQP-VK.pipeline.pipeline_library.multisample.3d.64x64x8_1.r8g8b8a8_unorm.samples_2,Fail

@@ -26,18 +26,13 @@
  **************************************************************************/
 
 #include "lp_bld_const.h"
-#include "lp_bld_struct.h"
 #include "lp_bld_format.h"
-#include "lp_bld_debug.h"
 #include "lp_bld_type.h"
 #include "lp_bld_conv.h"
 #include "lp_bld_pack.h"
 #include "lp_bld_intr.h"
-#include "lp_bld_gather.h"
 
-#include "util/u_memory.h"
 #include "util/format/u_format.h"
-#include "pipe/p_state.h"
 
 
 

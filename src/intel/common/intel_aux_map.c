@@ -446,7 +446,7 @@ get_bpp_encoding(enum isl_format format)
       case ISL_FORMAT_PLANAR_420_10: return 1;
       case ISL_FORMAT_PLANAR_420_16: return 0;
       default:
-         unreachable("Unsupported format!");
+         UNREACHABLE("Unsupported format!");
          return 0;
       }
    } else {
@@ -457,7 +457,7 @@ get_bpp_encoding(enum isl_format format)
       case 64:  return 6;
       case 128: return 7;
       default:
-         unreachable("Unsupported bpp!");
+         UNREACHABLE("Unsupported bpp!");
          return 0;
       }
    }
@@ -539,7 +539,7 @@ get_aux_entry(struct intel_aux_map_context *ctx, uint64_t main_address,
             fprintf(stderr, "AUX-MAP L3[0x%x]: 0x%"PRIx64", map=%p\n",
                     l3_index, l2_level->address, l2_level->entries);
       } else {
-         unreachable("Failed to add L2 Aux-Map Page Table!");
+         UNREACHABLE("Failed to add L2 Aux-Map Page Table!");
       }
       l3_level->entries[l3_index] = (l2_level->address & L3_ENTRY_L2_ADDR_MASK) |
                                     INTEL_AUX_MAP_ENTRY_VALID_BIT;
@@ -557,7 +557,7 @@ get_aux_entry(struct intel_aux_map_context *ctx, uint64_t main_address,
             fprintf(stderr, "AUX-MAP L2[0x%x]: 0x%"PRIx64", map=%p\n",
                     l2_index, l1_level->address, l1_level->entries);
       } else {
-         unreachable("Failed to add L1 Aux-Map Page Table!");
+         UNREACHABLE("Failed to add L1 Aux-Map Page Table!");
       }
       l2_level->entries[l2_index] = (l1_level->address & get_l1_addr_mask(ctx)) |
                                     INTEL_AUX_MAP_ENTRY_VALID_BIT;

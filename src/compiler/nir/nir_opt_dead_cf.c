@@ -145,7 +145,7 @@ def_only_used_in_cf_node(nir_def *def, void *_node)
        * corresponding predecessor is inside the loop or not because the value
        * can go through the phi into the outside world and escape the loop.
        */
-      if (block != def->parent_instr->block && !block_in_cf_node(block, node))
+      if (block != nir_def_block(def) && !block_in_cf_node(block, node))
          return false;
    }
 
@@ -241,6 +241,7 @@ node_is_dead(nir_cf_node *node)
             case nir_intrinsic_load_shared:
             case nir_intrinsic_load_shared2_amd:
             case nir_intrinsic_load_output:
+            case nir_intrinsic_load_pixel_local:
             case nir_intrinsic_load_per_vertex_output:
             case nir_intrinsic_load_per_view_output:
                /* Same as above loads. */
@@ -363,7 +364,7 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
          progress |= dead_cf_list(&loop->body, &dummy);
 
          nir_block *next = nir_cf_node_as_block(nir_cf_node_next(cur));
-         if (next->predecessors->entries == 0 &&
+         if (next->predecessors.entries == 0 &&
              (!exec_list_is_empty(&next->instr_list) ||
               !exec_node_is_tail_sentinel(next->cf_node.node.next))) {
             nir_remove_after_cf_node(cur);
@@ -373,7 +374,7 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
       }
 
       default:
-         unreachable("unknown cf node type");
+         UNREACHABLE("unknown cf node type");
       }
 
       prev = cur;

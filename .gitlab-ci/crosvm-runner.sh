@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2086 # we want word splitting
+# shellcheck disable=SC1091 # paths only become valid at runtime
+
+. "${SCRIPTS_DIR}/setup-test-env.sh"
 
 set -ue
 
@@ -82,10 +85,11 @@ fi
 set_vsock_context || { echo "Could not generate crosvm vsock CID" >&2; exit 1; }
 
 # Securely pass the current variables to the crosvm environment
-echo "Variables passed through:"
+section_start variables "Environment variables passed through to VM:"
 SCRIPTS_DIR=$(readlink -en "${0%/*}")
 filter_env_vars | tee ${VM_TEMP_DIR}/crosvm-env.sh
 cp ${SCRIPTS_DIR}/setup-test-env.sh ${VM_TEMP_DIR}/setup-test-env.sh
+section_end variables
 
 # Set the crosvm-script as the arguments of the current script
 {
@@ -120,12 +124,14 @@ then
   set -x
 fi
 
+section_start kernel "Downloading kernel image"
 if [ ! -f "/kernel/${KERNEL_IMAGE_NAME:-bzImage}" ]; then
   mkdir -p /kernel
   # shellcheck disable=SC2153
-  curl -L --retry 4 -f --retry-connrefused --retry-delay 30 \
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 30 \
     -o "/kernel/${KERNEL_IMAGE_NAME:-bzImage}" "${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH:-amd64}/${KERNEL_IMAGE_NAME:-bzImage}"
 fi
+section_end kernel
 
 # We aren't testing the host driver here, so we don't need to validate NIR on the host
 NIR_DEBUG="novalidate" \
@@ -141,6 +147,7 @@ crosvm --no-syslog run \
     --cid ${VSOCK_CID} -p "${CROSVM_KERN_ARGS}" \
     /kernel/${KERNEL_IMAGE_NAME:-bzImage} > ${VM_TEMP_DIR}/crosvm 2>&1
 
+section_start crosvm_results "Processing crosvm results"
 CROSVM_RET=$?
 
 [ ${CROSVM_RET} -eq 0 ] && {
@@ -157,5 +164,6 @@ CROSVM_RET=$?
     cat ${VM_TEMP_DIR}/crosvm >&2
     set -x
 }
+section_end crosvm_results
 
 exit ${CROSVM_RET}

@@ -560,6 +560,7 @@ void trace_dump_framebuffer_state(const struct pipe_framebuffer_state *state)
    trace_dump_member(uint, state, samples);
    trace_dump_member(uint, state, layers);
    trace_dump_member(uint, state, nr_cbufs);
+   trace_dump_member(bool, state, pls_enabled);
    trace_dump_member_begin("cbufs");
    trace_dump_array_impl(surface, state->cbufs, state->nr_cbufs, &);
    trace_dump_member_end();
@@ -580,6 +581,7 @@ void trace_dump_framebuffer_state_deep(const struct pipe_framebuffer_state *stat
    trace_dump_member(uint, state, samples);
    trace_dump_member(uint, state, layers);
    trace_dump_member(uint, state, nr_cbufs);
+   trace_dump_member(bool, state, pls_enabled);
    trace_dump_member_begin("cbufs");
    trace_dump_array_impl(surface, state->cbufs, state->nr_cbufs, &);
    trace_dump_member_end();
@@ -1100,6 +1102,9 @@ trace_dump_query_result(unsigned query_type, unsigned index,
       trace_dump_member(uint, &result->pipeline_statistics, hs_invocations);
       trace_dump_member(uint, &result->pipeline_statistics, ds_invocations);
       trace_dump_member(uint, &result->pipeline_statistics, cs_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, ts_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, ms_invocations);
+      trace_dump_member(uint, &result->pipeline_statistics, ms_primitives);
       trace_dump_struct_end();
       break;
 
@@ -1139,6 +1144,15 @@ trace_dump_query_result(unsigned query_type, unsigned index,
       case PIPE_STAT_QUERY_CS_INVOCATIONS:
          trace_dump_member(uint, &result->pipeline_statistics, cs_invocations);
          break;
+      case PIPE_STAT_QUERY_TS_INVOCATIONS:
+         trace_dump_member(uint, &result->pipeline_statistics, ts_invocations);
+         break;
+      case PIPE_STAT_QUERY_MS_INVOCATIONS:
+         trace_dump_member(uint, &result->pipeline_statistics, ms_invocations);
+         break;
+      case PIPE_STAT_QUERY_MS_PRIMITIVES:
+         trace_dump_member(uint, &result->pipeline_statistics, ms_primitives);
+         break;
       }
       trace_dump_struct_end();
       break;
@@ -1174,6 +1188,10 @@ void trace_dump_grid_info(const struct pipe_grid_info *state)
 
    trace_dump_member(ptr, state, indirect);
    trace_dump_member(uint, state, indirect_offset);
+
+   trace_dump_member(uint, state, draw_count);
+   trace_dump_member(uint, state, indirect_draw_count_offset);
+   trace_dump_member(ptr, state, indirect_draw_count);
 
    trace_dump_member_begin("globals");
    trace_dump_array(ptr, state->globals, state->num_globals);
@@ -1251,7 +1269,6 @@ void trace_dump_pipe_picture_desc(const struct pipe_picture_desc *picture)
    trace_dump_member_end();
    trace_dump_member(uint, picture, key_size);
    trace_dump_member(format, picture, input_format);
-   trace_dump_member(bool, picture, input_full_range);
    trace_dump_member(format, picture, output_format);
    trace_dump_member(ptr, picture, in_fence);
    trace_dump_member(uint, picture, in_fence_value);

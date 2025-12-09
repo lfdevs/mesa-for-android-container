@@ -243,7 +243,7 @@ ir_validate::visit_enter(ir_function *ir)
    /* Verify that all of the things stored in the list of signatures are,
     * in fact, function signatures.
     */
-   foreach_in_list(ir_instruction, sig, &ir->signatures) {
+   ir_foreach_in_list(ir_instruction, sig, &ir->signatures) {
       if (sig->ir_type != ir_type_function_signature) {
 	 printf("Non-signature in signature list of function `%s'\n",
 		ir->name);
@@ -257,8 +257,6 @@ ir_validate::visit_enter(ir_function *ir)
 ir_visitor_status
 ir_validate::visit_leave(ir_function *ir)
 {
-   assert(ralloc_parent(ir->name) == ir);
-
    this->current_function = NULL;
    return visit_continue;
 }
@@ -1046,14 +1044,6 @@ ir_validate::visit_leave(ir_swizzle *ir)
 ir_visitor_status
 ir_validate::visit(ir_variable *ir)
 {
-   /* An ir_variable is the one thing that can (and will) appear multiple times
-    * in an IR tree.  It is added to the hashtable so that it can be used
-    * in the ir_dereference_variable handler to ensure that a variable is
-    * declared before it is dereferenced.
-    */
-   if (ir->name && ir->is_name_ralloced())
-      assert(ralloc_parent(ir->name) == ir);
-
    _mesa_set_add(ir_set, ir);
 
    /* If a variable is an array, verify that the maximum array index is in
@@ -1175,8 +1165,8 @@ ir_validate::visit_enter(ir_call *ir)
       abort();
    }
 
-   const exec_node *formal_param_node = callee->parameters.get_head_raw();
-   const exec_node *actual_param_node = ir->actual_parameters.get_head_raw();
+   const ir_exec_node *formal_param_node = callee->parameters.get_head_raw();
+   const ir_exec_node *actual_param_node = ir->actual_parameters.get_head_raw();
    while (true) {
       if (formal_param_node->is_tail_sentinel()
           != actual_param_node->is_tail_sentinel()) {
@@ -1244,7 +1234,7 @@ check_node_type(ir_instruction *ir, void *data)
 }
 
 void
-validate_ir_tree(exec_list *instructions)
+validate_ir_tree(ir_exec_list *instructions)
 {
    /* We shouldn't have any reason to validate IR in a release build,
     * and it's half composed of assert()s anyway which wouldn't do
@@ -1258,7 +1248,7 @@ validate_ir_tree(exec_list *instructions)
 
    v.run(instructions);
 
-   foreach_in_list(ir_instruction, ir, instructions) {
+   ir_foreach_in_list(ir_instruction, ir, instructions) {
       visit_tree(ir, check_node_type, NULL);
    }
 }

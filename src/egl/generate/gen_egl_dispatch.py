@@ -39,7 +39,7 @@ import sys
 import textwrap
 
 import os
-NEWAPI = os.path.join(os.path.dirname(__file__), "..", "..", "mapi", "new")
+NEWAPI = os.path.join(os.path.dirname(__file__), "..", "..", "mesa", "glapi", "new")
 sys.path.insert(0, NEWAPI)
 import genCommon
 

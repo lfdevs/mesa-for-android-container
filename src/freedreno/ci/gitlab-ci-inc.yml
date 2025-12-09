@@ -65,27 +65,12 @@
       when: manual
 
 
-.google-freedreno-rules:
-  stage: freedreno
-  rules:
-    - !reference [.test, rules]
-    - !reference [.google-freedreno-farm-rules, rules]
-    - !reference [.freedreno-rules, rules]
-
 .collabora-freedreno-rules:
   stage: freedreno
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.freedreno-rules, rules]
-
-.google-freedreno-manual-rules:
-  stage: freedreno-nightly
-  extends: .no-auto-retry
-  rules:
-    - !reference [.test, rules]
-    - !reference [.google-freedreno-farm-manual-rules, rules]
-    - !reference [.freedreno-manual-rules, rules]
 
 .collabora-freedreno-manual-rules:
   stage: freedreno-nightly
@@ -96,27 +81,12 @@
     - !reference [.freedreno-manual-rules, rules]
 
 
-.google-turnip-rules:
-  stage: freedreno
-  rules:
-    - !reference [.test, rules]
-    - !reference [.google-freedreno-farm-rules, rules]
-    - !reference [.turnip-rules, rules]
-
 .collabora-turnip-rules:
   stage: freedreno
   rules:
     - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.turnip-rules, rules]
-
-.google-turnip-manual-rules:
-  stage: freedreno-nightly
-  extends: .no-auto-retry
-  rules:
-    - !reference [.test, rules]
-    - !reference [.google-freedreno-farm-manual-rules, rules]
-    - !reference [.turnip-manual-rules, rules]
 
 .collabora-turnip-manual-rules:
   stage: freedreno-nightly
@@ -127,21 +97,6 @@
     - !reference [.turnip-manual-rules, rules]
 
 # For piglit and skqp test jobs that run both GL and VK tests.
-.google-freedreno-turnip-rules:
-  stage: freedreno
-  rules:
-    - !reference [.test, rules]
-    - !reference [.google-freedreno-rules, rules]
-    - !reference [.google-turnip-rules, rules]
-
-.google-freedreno-turnip-manual-rules:
-  stage: freedreno-nightly
-  extends: .no-auto-retry
-  rules:
-    - !reference [.test, rules]
-    - !reference [.google-freedreno-manual-rules, rules]
-    - !reference [.google-turnip-manual-rules, rules]
-
 .collabora-freedreno-turnip-rules:
   stage: freedreno
   rules:
@@ -165,6 +120,13 @@
     - !reference [.valve-farm-manual-rules, rules]
     - !reference [.freedreno-manual-rules, rules]
 
+.valve-turnip-rules:
+  stage: freedreno
+  rules:
+    - !reference [.test, rules]
+    - !reference [.valve-farm-rules, rules]
+    - !reference [.turnip-rules, rules]
+
 .valve-turnip-manual-rules:
   stage: freedreno-nightly
   extends: .no-auto-retry
@@ -173,12 +135,20 @@
     - !reference [.valve-farm-manual-rules, rules]
     - !reference [.turnip-manual-rules, rules]
 
-.google-freedreno-rules-restricted:
+.lumag-freedreno-rules:
   stage: freedreno
   rules:
     - !reference [.test, rules]
-    - !reference [.restricted-rules, rules]
-    - !reference [.google-freedreno-rules, rules]
+    - !reference [.lumag-farm-rules, rules]
+    - !reference [.freedreno-rules, rules]
+
+.lumag-freedreno-manual-rules:
+  stage: freedreno-nightly
+  extends: .no-auto-retry
+  rules:
+    - !reference [.test, rules]
+    - !reference [.lumag-farm-manual-rules, rules]
+    - !reference [.freedreno-manual-rules, rules]
 
 .collabora-freedreno-rules-restricted:
   stage: freedreno
@@ -186,23 +156,6 @@
     - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
     - !reference [.collabora-freedreno-rules, rules]
-
-.google-freedreno-rules-performance:
-  stage: performance
-  extends: .no-auto-retry
-  rules:
-    - !reference [.test, rules]
-    - !reference [.performance-rules, rules]
-    - !reference [.google-freedreno-manual-rules, rules]
-  allow_failure: true # see comment in .performance-rules, which we don't inherit this line from.
-  variables:
-    # Ensure that we are using the release build artifact
-    S3_ARTIFACT_NAME: mesa-arm64-default-release
-  needs:
-    - job: debian/baremetal_arm64_test-gl
-      optional: true
-    - debian-arm64-release
-  dependencies: null
 
 .collabora-freedreno-rules-performance:
   stage: performance
@@ -223,6 +176,33 @@
       artifacts: false # we pull the artifacts from S3
   dependencies: null
 
+# Status: https://lava.collabora.dev/scheduler/device_type/dragonboard-410c
+.lava-dragonboard-410c:arm64:
+  variables:
+    BOOT_METHOD: fastboot
+    DEVICE_TYPE: dragonboard-410c
+    DTB: apq8016-sbc-usb-host
+    FDO_CI_CONCURRENT: 8
+    FARM: collabora
+    GPU_VERSION: freedreno-a306
+    KERNEL_IMAGE_NAME: "Image.gz"
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-dragonboard-410c
+    LAVA_FIRMWARE: qcom-lava
+
+# Status: https://lava.collabora.dev/scheduler/device_type/dragonboard-820c
+.lava-dragonboard-820c:arm64:
+  variables:
+    BOOT_METHOD: fastboot
+    DEVICE_TYPE: dragonboard-820c
+    DTB: apq8096-db820c
+    FDO_CI_CONCURRENT: 8
+    FARM: collabora
+    GPU_VERSION: freedreno-a530
+    KERNEL_IMAGE_NAME: "Image.gz"
+    KERNEL_IMAGE_TYPE: ""
+    RUNNER_TAG: mesa-ci-x86-64-lava-dragonboard-820c
+    LAVA_FIRMWARE: qcom-lava
 
 # Status: https://lava.collabora.dev/scheduler/device_type/sc7180-trogdor-kingoftown
 .lava-sc7180-trogdor-kingoftown:arm64:
@@ -241,7 +221,6 @@
     DRIVER_NAME: freedreno-a6xx
     VK_DRIVER: freedreno
     LAVA_FIRMWARE: qcom-lava
-    KERNEL_TAG: msm-next-250718
 
 # Status: https://lava.collabora.dev/scheduler/device_type/sc7180-trogdor-lazor-limozeen
 .lava-sc7180-trogdor-lazor-limozeen:arm64:
@@ -260,7 +239,6 @@
     DRIVER_NAME: freedreno-a6xx
     VK_DRIVER: freedreno
     LAVA_FIRMWARE: qcom-lava
-    KERNEL_TAG: msm-next-250718
 
 # Status: https://lava.collabora.dev/scheduler/device_type/sm8350-hdk
 .lava-sm8350-hdk:arm64:
@@ -277,83 +255,42 @@
     KERNEL_IMAGE_NAME: "Image.gz"
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-sm8350-hdk
+    # The device has A/B boot slots - select slot A
+    LAVA_FASTBOOT_CMD: "set_active a"
     DRIVER_NAME: freedreno-a6xx
     VK_DRIVER: freedreno
     LAVA_FIRMWARE: qcom-lava
-    KERNEL_TAG: msm-next-250718
 
-
-.google-freedreno-test-gl:
-  extends:
-    - .baremetal-test-arm64-gl
-    - .google-freedreno-rules
-  variables:
-    VK_DRIVER: freedreno
-    FLAKES_CHANNEL: "#freedreno-ci"
-    PIGLIT_PLATFORM: mixed_glx_egl
-    BM_CMDLINE: "ip=dhcp console=ttyMSM0,115200n8 $BM_KERNEL_EXTRA_ARGS root=/dev/nfs rw nfsrootdebug nfsroot=,tcp,nfsvers=4.2 init=/init $BM_KERNELARGS"
-    FARM: google
-  script:
-    - ./install/bare-metal/fastboot.sh
-
-.google-freedreno-test-vk:
-  extends:
-    - .baremetal-test-arm64-vk
-    - .google-freedreno-rules
-  variables:
-    VK_DRIVER: freedreno
-    FLAKES_CHANNEL: "#freedreno-ci"
-    PIGLIT_PLATFORM: mixed_glx_egl
-    BM_CMDLINE: "ip=dhcp console=ttyMSM0,115200n8 $BM_KERNEL_EXTRA_ARGS root=/dev/nfs rw nfsrootdebug nfsroot=,tcp,nfsvers=4.2 init=/init $BM_KERNELARGS"
-    FARM: google
-  script:
-    - ./install/bare-metal/fastboot.sh
-
-.google-freedreno-test-traces:
-  extends:
-    - .piglit-traces-test
-  variables:
-    HWCI_START_XORG: 1
-    PIGLIT_TRACES_FILE: traces-freedreno.yml
-  artifacts:
-    reports:
-      junit: results/junit.xml
-
-.a306-test:
-  extends:
-    - .google-freedreno-test-gl
-  variables:
-    BM_KERNEL: Image.gz
-    BM_DTB: apq8016-sbc-usb-host
-    DEVICE_TYPE: apq8016-sbc-usb-host
-    GPU_VERSION: freedreno-a306
-  timeout: 20m
-  tags:
-    - google-freedreno-db410c
-
-# 8 devices (2023-04-15)
-.a530-test:
-  extends:
-    - .google-freedreno-test-gl
-  variables:
-    BM_KERNEL: Image.gz
-    BM_DTB: apq8096-db820c
-    DEVICE_TYPE: apq8096-db820c
-    GPU_VERSION: freedreno-a530
-  timeout: 20m
-  tags:
-    - google-freedreno-db820c
 
 # CI-tron
 
-.a750-mupuf:
+.a200:
+  variables:
+    FDO_CI_CONCURRENT: 2
+    CI_TRON_DUT_SETUP_TAGS: dt_gpu:codename:a200
+    CI_TRON_INITRAMFS_CATEGORY__50_PLATFORM__0__URL: 'https://${S3_BASE_PATH}/${FIRMWARE_REPO}/qcom-${FIRMWARE_TAG}.tar'
+    CI_TRON_INITRAMFS_CATEGORY__50_PLATFORM__0__FORMAT__0__ARCHIVE__EXTENSION: 'cpio'
+    CI_TRON_INITRAMFS_CATEGORY__50_PLATFORM__0__FORMAT__0__ARCHIVE__KEEP__0__PATH: '(./lib/firmware/qcom/yamato.*)'
+    # as good as anything else, works for now
+    CI_TRON_DTB__0__URL: '$KERNEL_IMAGE_BASE/armhf/imx53-qsrb.dtb'
+    CI_TRON__B2C_SWAP_SIZE: '4g'
+    CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__MINUTES: 0.5
+    CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__RETRIES: 3
+    CI_TRON_WATCHDOG__FIRMWARE_TO_LINUX__MINUTES: 1.0
+    CI_TRON_WATCHDOG__FIRMWARE_TO_LINUX__RETRIES: 5
+    CI_TRON_WATCHDOG__FIRMWARE_TO_LINUX__START_REGEX: 'Model: Freescale i.MX53 Quick Start Board'  # A line repeated during firmware boot
+    CI_TRON_WATCHDOG__FIRMWARE_TO_LINUX__STOP_REGEX: 'CPU identified as i.MX53'                    # A line repeated during Linux boot
+    GPU_VERSION: freedreno-a200
+    RUNNER_FARM_LOCATION: lumag
+
+
+.a750:
   variables:
     FDO_CI_CONCURRENT: 8
-    RUNNER_FARM_LOCATION: mupuf
     CI_TRON_DUT_SETUP_TAGS: dt_gpu:codename:a750
-    CI_TRON_KERNEL__URL: 'https://fs.mupuf.org/hdk8650/2025-01-23-msm-gpu-fault-fixes-msm-next-6dbabc6/linux-arm64'
+    CI_TRON_KERNEL__URL: 'https://fs.mupuf.org/hdk8650/2025-08-22-msm-fixes-for-mesa-ci//linux-arm64'
     CI_TRON_INITRAMFS_CATEGORY__50_PLATFORM__0__URL: 'https://fs.mupuf.org/hdk8650/sm8650-hdk-firmware.cpio.xz'
-    CI_TRON_DTB__0__URL: 'https://fs.mupuf.org/hdk8650/2025-01-23-msm-gpu-fault-fixes-msm-next-6dbabc6/linux-arm64.dtbs.cpio.xz'
+    CI_TRON_DTB__0__URL: 'https://fs.mupuf.org/hdk8650/2025-08-22-msm-fixes-for-mesa-ci//linux-arm64.dtbs.cpio.xz'
     CI_TRON_DTB__0__FORMAT__0__ARCHIVE__MATCH: 'boot/dtbs/qcom/sm8650-hdk.dtb'
     CI_TRON__B2C_SWAP_SIZE: '16g'
     CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__MINUTES: 0.5
@@ -365,3 +302,18 @@
     GPU_VERSION: freedreno-a750
     DRIVER_NAME: freedreno-a6xx
     VK_DRIVER: freedreno
+
+
+# 6 devices (2025-09-28)
+.a750-kws:
+  extends:
+    - .a750
+  variables:
+    RUNNER_FARM_LOCATION: keywords
+
+# 1 device (2025-09-15)
+.a750-mupuf:
+  extends:
+    - .a750
+  variables:
+    RUNNER_FARM_LOCATION: mupuf

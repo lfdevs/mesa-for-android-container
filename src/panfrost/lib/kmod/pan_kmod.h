@@ -55,8 +55,14 @@ enum pan_kmod_vm_flags {
    PAN_KMOD_VM_FLAG_TRACK_ACTIVITY = BITFIELD_BIT(1),
 };
 
+#define PAN_PGSIZE_4K (uint64_t)0x1000
+#define PAN_PGSIZE_2M (uint64_t)0x200000
+
 /* Object representing a GPU VM. */
 struct pan_kmod_vm {
+   /* Page sizes supported by this VM. */
+   uint64_t pgsize_bitmap;
+
    /* Combination of pan_kmod_vm_flags flags. */
    uint32_t flags;
 
@@ -125,7 +131,7 @@ struct pan_kmod_bo {
    int32_t refcnt;
 
    /* Size of the buffer object. */
-   size_t size;
+   uint64_t size;
 
    /* Handle attached to the buffer object. */
    uint32_t handle;
@@ -198,6 +204,9 @@ struct pan_kmod_dev_props {
 
    /* Support cycle count and timestamp propagation as job requirement */
    bool gpu_can_query_timestamp;
+
+   /* Cycle counter and timestamp device coherent propogation is enabled */
+   bool timestamp_device_coherent;
 
    /* GPU Timestamp frequency */
    uint64_t timestamp_frequency;
@@ -295,7 +304,7 @@ struct pan_kmod_vm_op {
       uint64_t start;
 
       /* Size of the VA range */
-      size_t size;
+      uint64_t size;
    } va;
 
    union {
@@ -377,7 +386,7 @@ struct pan_kmod_ops {
     */
    struct pan_kmod_bo *(*bo_alloc)(struct pan_kmod_dev *dev,
                                    struct pan_kmod_vm *exclusive_vm,
-                                   size_t size, uint32_t flags);
+                                   uint64_t size, uint32_t flags);
 
    /* Free buffer object. */
    void (*bo_free)(struct pan_kmod_bo *bo);
@@ -386,7 +395,7 @@ struct pan_kmod_ops {
     * Return NULL if the import fails for any reason.
     */
    struct pan_kmod_bo *(*bo_import)(struct pan_kmod_dev *dev, uint32_t handle,
-                                    size_t size, uint32_t flags);
+                                    uint64_t size, uint32_t flags);
 
    /* Post export operations.
     * Return 0 on success, -1 otherwise.
@@ -526,7 +535,7 @@ pan_kmod_dev_get_user_priv(struct pan_kmod_dev *dev)
 
 struct pan_kmod_bo *pan_kmod_bo_alloc(struct pan_kmod_dev *dev,
                                       struct pan_kmod_vm *exclusive_vm,
-                                      size_t size, uint32_t flags);
+                                      uint64_t size, uint32_t flags);
 
 static inline struct pan_kmod_bo *
 pan_kmod_bo_get(struct pan_kmod_bo *bo)
@@ -616,7 +625,7 @@ pan_kmod_bo_mmap(struct pan_kmod_bo *bo, off_t bo_offset, size_t size, int prot,
 {
    off_t mmap_offset;
 
-   if (bo_offset + size > bo->size)
+   if ((uint64_t)bo_offset + (uint64_t)size > bo->size)
       return MAP_FAILED;
 
    mmap_offset = bo->dev->ops->bo_get_mmap_offset(bo);
@@ -639,7 +648,7 @@ pan_kmod_set_bo_label(struct pan_kmod_dev *dev, struct pan_kmod_bo *bo, const ch
       dev->ops->bo_set_label(dev, bo, label);
 }
 
-static inline size_t
+static inline uint64_t
 pan_kmod_bo_size(struct pan_kmod_bo *bo)
 {
    return bo->size;

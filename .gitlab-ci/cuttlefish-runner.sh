@@ -60,7 +60,7 @@ VSOCK_CID=$((VSOCK_BASE + (CI_JOB_ID & 0xfff)))
 
 # Venus requires a custom kernel for now
 CUSTOM_KERNEL_ARGS=""
-if [ "$ANDROID_GPU_MODE" = "venus" ] || [ "$ANDROID_GPU_MODE" = "venus_guest_angle" ]; then
+if [ "$CUTTLEFISH_GPU_MODE" = "venus" ] || [ "$CUTTLEFISH_GPU_MODE" = "venus_guest_angle" ]; then
   CUSTOM_KERNEL_ARGS="
   -kernel_path=/cuttlefish/bzImage
   -initramfs_path=/cuttlefish/initramfs.img
@@ -79,7 +79,7 @@ HOME=/cuttlefish launch_cvd \
   -enable_modem_simulator=false \
   -guest_enforce_security=false \
   -report_anonymous_usage_stats=no \
-  -gpu_mode="$ANDROID_GPU_MODE" \
+  -gpu_mode="$CUTTLEFISH_GPU_MODE" \
   -cpus=${FDO_CI_CONCURRENT:-4} \
   -memory_mb ${CUTTLEFISH_MEMORY:-4096} \
   $CUSTOM_KERNEL_ARGS

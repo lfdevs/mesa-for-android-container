@@ -98,7 +98,7 @@ genX(call_internal_shader)(nir_builder *b, enum anv_internal_kernel_name shader_
       return sizeof(struct anv_memcpy_params);
 
    default:
-      unreachable("Invalid shader name");
+      UNREACHABLE("Invalid shader name");
       break;
    }
 }

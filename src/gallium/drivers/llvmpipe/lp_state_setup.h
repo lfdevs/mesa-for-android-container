@@ -26,7 +26,6 @@ struct lp_setup_variant_key {
    unsigned twoside:1;
    unsigned floating_point_depth:1;
    unsigned uses_constant_interp:1;
-   unsigned multisample:1;
    unsigned pad:3;
 
    /* TODO: get those floats out of the key and use a jit_context for setup */

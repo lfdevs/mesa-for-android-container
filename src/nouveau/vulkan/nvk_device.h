@@ -50,8 +50,6 @@ struct nvk_device {
    struct nvk_slm_area slm;
    struct nvkmd_mem *vab_memory;
 
-   struct nvk_queue queue;
-
    struct vk_meta_device meta;
 
    struct nvk_shader *copy_queries;

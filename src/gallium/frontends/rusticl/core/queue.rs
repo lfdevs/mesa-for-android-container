@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::*;
 use crate::core::context::*;
 use crate::core::device::*;
@@ -74,8 +77,8 @@ impl<'a> QueueContext<'a> {
             variant: NirKernelVariant::Default,
             cso: None,
             use_stream: self.dev.prefers_real_buffer_in_cb0(),
-            bound_sampler_views: 0,
-            bound_shader_images: 0,
+            bound_sampler_views: Vec::new(),
+            bound_shader_images: Vec::new(),
             samplers: HashMap::new(),
         }
     }
@@ -90,12 +93,12 @@ pub struct QueueContextWithState<'a> {
     builds: Option<Arc<NirKernelBuilds>>,
     variant: NirKernelVariant,
     cso: Option<CSOWrapper<'a>>,
-    bound_sampler_views: u32,
-    bound_shader_images: u32,
+    bound_sampler_views: Vec<PipeSamplerView<'a>>,
+    bound_shader_images: Vec<PipeImageView>,
     samplers: HashMap<PipeSamplerState, *mut c_void>,
 }
 
-impl QueueContextWithState<'_> {
+impl<'c> QueueContextWithState<'c> {
     // TODO: figure out how to make it &mut self without causing tons of borrowing issues.
     pub fn bind_kernel(
         &mut self,
@@ -148,18 +151,18 @@ impl QueueContextWithState<'_> {
         self.ctx.bind_sampler_states(&samplers);
     }
 
-    pub fn bind_sampler_views(&mut self, views: Vec<PipeSamplerView>) {
+    pub fn bind_sampler_views(&mut self, mut views: Vec<PipeSamplerView<'c>>) {
         let cnt = views.len() as u32;
-        let unbind_cnt = self.bound_sampler_views.saturating_sub(cnt);
-        self.ctx.set_sampler_views(views, unbind_cnt);
-        self.bound_sampler_views = cnt;
+        let unbind_cnt = (self.bound_sampler_views.len() as u32).saturating_sub(cnt);
+        self.ctx.set_sampler_views(&mut views, unbind_cnt);
+        self.bound_sampler_views = views;
     }
 
-    pub fn bind_shader_images(&mut self, images: &[PipeImageView]) {
+    pub fn bind_shader_images(&mut self, images: Vec<PipeImageView>) {
         let cnt = images.len() as u32;
-        let unbind_cnt = self.bound_shader_images.saturating_sub(cnt);
-        self.ctx.set_shader_images(images, unbind_cnt);
-        self.bound_shader_images = cnt;
+        let unbind_cnt = (self.bound_shader_images.len() as u32).saturating_sub(cnt);
+        self.ctx.set_shader_images(&images, unbind_cnt);
+        self.bound_shader_images = images;
     }
 
     pub fn update_cb0(&self, data: &[u8]) -> CLResult<()> {
@@ -188,9 +191,11 @@ impl<'a> Deref for QueueContextWithState<'a> {
 impl Drop for QueueContextWithState<'_> {
     fn drop(&mut self) {
         self.set_constant_buffer(0, &[]);
-        self.ctx.clear_sampler_views(self.bound_sampler_views);
+        self.ctx
+            .clear_sampler_views(self.bound_sampler_views.len() as u32);
         self.ctx.clear_sampler_states(self.dev.max_samplers());
-        self.ctx.clear_shader_images(self.bound_shader_images);
+        self.ctx
+            .clear_shader_images(self.bound_shader_images.len() as u32);
 
         self.samplers
             .values()
@@ -231,7 +236,7 @@ impl SendableQueueContext {
     }
 
     /// The returned value can be used to execute operation on the wrapped context in a safe manner.
-    fn ctx(&self) -> QueueContext {
+    fn ctx(&self) -> QueueContext<'_> {
         QueueContext {
             ctx: &self.ctx,
             dev: self.dev,

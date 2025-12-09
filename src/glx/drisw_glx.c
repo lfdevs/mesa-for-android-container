@@ -43,7 +43,7 @@
 #include "kopper_interface.h"
 #include "loader_dri_helper.h"
 #include "dri_util.h"
-#include "mapi/glapi/glapi.h"
+#include "mesa/glapi/glapi/glapi.h"
 #include "dispatch.h"
 
 static int xshm_error = 0;
@@ -558,12 +558,12 @@ driswSwapBuffers(__GLXDRIdrawable * pdraw,
    (void) divisor;
    (void) remainder;
 
+   if (psc->kopper)
+       return kopperSwapBuffers(pdraw->dri_drawable, flush ? __DRI2_FLUSH_CONTEXT : 0);
+
    if (flush) {
       CALL_Flush(GET_DISPATCH(), ());
    }
-
-   if (psc->kopper)
-       return kopperSwapBuffers(pdraw->dri_drawable, 0);
 
    driSwapBuffers(pdraw->dri_drawable);
 

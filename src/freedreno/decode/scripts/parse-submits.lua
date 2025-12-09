@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MIT
+--
 -- Parse cmdstream dump and analyse blits and batches
 
 --local posix = require "posix"
@@ -195,7 +197,7 @@ function CP_SET_MARKER(pkt, size)
 end
 
 function CP_EVENT_WRITE(pkt, size)
-	if tostring(pkt[0].EVENT) ~= "BLIT" then
+	if tostring(pkt[0].EVENT) ~= "CCU_RESOLVE" then
 		return
 	end
 	nullbatch = false
@@ -313,7 +315,7 @@ function draw(primtype, nindx)
 	if primtype == "BLIT_OP_SCALE" then
 		handle_blit()
 		return
-	elseif primtype == "EVENT:BLIT" then
+	elseif primtype == "EVENT:CCU_RESOLVE" then
 		return
 	end
 
@@ -408,8 +410,8 @@ function draw(primtype, nindx)
 	-- TODO should also check for stencil buffer for z32+s8 case
 
 	if m == "RM6_BIN_RENDER_START" then
-		binw = r.VSC_BIN_SIZE.WIDTH
-		binh = r.VSC_BIN_SIZE.HEIGHT
+		binw = r.VSC_BIN_SIZE.BINW
+		binh = r.VSC_BIN_SIZE.BINH
 		nbins = r.VSC_EXPANDED_BIN_CNTL.NX * r.VSC_EXPANDED_BIN_CNTL.NY
 	end
 

@@ -138,7 +138,7 @@ TEST_F(alu_srcs_negative_equal_test, trivial_float)
    nir_def *negative_two = nir_imm_float(&bld, -2.0f);
 
    nir_def *result = nir_fadd(&bld, two, negative_two);
-   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);
+   nir_alu_instr *instr = nir_def_as_alu(result);
 
    ASSERT_NE((void *) 0, instr);
    EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
@@ -152,7 +152,7 @@ TEST_F(alu_srcs_negative_equal_test, trivial_int)
    nir_def *negative_two = nir_imm_int(&bld, -2);
 
    nir_def *result = nir_iadd(&bld, two, negative_two);
-   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);
+   nir_alu_instr *instr = nir_def_as_alu(result);
 
    ASSERT_NE((void *) 0, instr);
    EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
@@ -172,7 +172,7 @@ TEST_F(alu_srcs_negative_equal_test, trivial_negation_float)
 
    nir_def *result = nir_fadd(&bld, two_plus_two, negation);
 
-   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);
+   nir_alu_instr *instr = nir_def_as_alu(result);
 
    ASSERT_NE((void *) 0, instr);
    EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
@@ -192,7 +192,7 @@ TEST_F(alu_srcs_negative_equal_test, trivial_negation_int)
 
    nir_def *result = nir_iadd(&bld, two_plus_two, negation);
 
-   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);
+   nir_alu_instr *instr = nir_def_as_alu(result);
 
    ASSERT_NE((void *) 0, instr);
    EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
@@ -216,7 +216,7 @@ TEST_F(alu_srcs_negative_equal_test, full_type ## _self)                \
       result = nir_fadd(&bld, a, a);                                    \
    else                                                                 \
       result = nir_iadd(&bld, a, a);                                    \
-   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);       \
+   nir_alu_instr *instr = nir_def_as_alu(result);                       \
    ASSERT_NE((void *) 0, instr);                                        \
    EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 0, 0));       \
    EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));       \
@@ -256,7 +256,7 @@ TEST_F(alu_srcs_negative_equal_test, full_type ## _trivially_true)      \
       result = nir_fadd(&bld, a, b);                                    \
    else                                                                 \
       result = nir_iadd(&bld, a, b);                                    \
-   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);       \
+   nir_alu_instr *instr = nir_def_as_alu(result);                       \
    ASSERT_NE((void *) 0, instr);                                        \
    EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 0, 0));       \
    EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));        \
@@ -349,7 +349,7 @@ count_sequence(nir_const_value c[NIR_MAX_VEC_COMPONENTS],
 
    case nir_type_bool:
    default:
-      unreachable("invalid base type");
+      UNREACHABLE("invalid base type");
    }
 }
 
@@ -407,6 +407,6 @@ negate(nir_const_value dst[NIR_MAX_VEC_COMPONENTS],
 
    case nir_type_bool:
    default:
-      unreachable("invalid base type");
+      UNREACHABLE("invalid base type");
    }
 }

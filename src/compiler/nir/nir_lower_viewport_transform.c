@@ -50,18 +50,31 @@ static bool
 lower_viewport_transform_instr(nir_builder *b, nir_intrinsic_instr *intr,
                                void *data)
 {
-   if (intr->intrinsic != nir_intrinsic_store_deref)
-      return false;
+   gl_varying_slot location = VARYING_SLOT_MAX;
+   nir_src *pos_src;
 
-   nir_variable *var = nir_intrinsic_get_var(intr, 0);
-   if (var->data.mode != nir_var_shader_out ||
-       var->data.location != VARYING_SLOT_POS)
+   if (intr->intrinsic == nir_intrinsic_store_deref) {
+      nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+      if (!nir_deref_mode_is(deref, nir_var_shader_out))
+         return false;
+
+      nir_variable *var = nir_deref_instr_get_variable(deref);
+      location = var->data.location;
+      pos_src = &intr->src[1];
+   } else if (intr->intrinsic == nir_intrinsic_store_output ||
+              intr->intrinsic == nir_intrinsic_store_per_view_output) {
+      location = nir_intrinsic_io_semantics(intr).location;
+      pos_src = &intr->src[0];
+   }
+
+   if (location != VARYING_SLOT_POS)
       return false;
 
    b->cursor = nir_before_instr(&intr->instr);
 
    /* Grab the source and viewport */
-   nir_def *input_point = intr->src[1].ssa;
+   nir_def *input_point = pos_src->ssa;
+   assert(input_point->num_components == 4);
    nir_def *scale = nir_load_viewport_scale(b);
    nir_def *offset = nir_load_viewport_offset(b);
 
@@ -93,7 +106,7 @@ lower_viewport_transform_instr(nir_builder *b, nir_intrinsic_instr *intr,
                                     nir_channel(b, screen, 2),
                                     w_recip);
 
-   nir_src_rewrite(&intr->src[1], screen_space);
+   nir_src_rewrite(pos_src, screen_space);
    return true;
 }
 

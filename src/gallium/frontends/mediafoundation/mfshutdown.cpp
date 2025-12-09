@@ -28,7 +28,6 @@
 HRESULT
 CDX12EncHMFT::CheckShutdown( void )
 {
-   std::lock_guard<std::mutex> lock( m_lockShutdown );
    if( m_bShutdown )
    {
       return MF_E_SHUTDOWN;

@@ -8,7 +8,7 @@ use crate::legalize::{
 };
 use crate::sm30_instr_latencies::{
     encode_kepler_shader, instr_exec_latency, instr_latency,
-    KeplerInstructionEncoder,
+    latency_upper_bound, KeplerInstructionEncoder,
 };
 use bitview::{
     BitMutView, BitMutViewable, BitView, BitViewable, SetBit, SetField,
@@ -110,12 +110,16 @@ impl ShaderModel for ShaderModel32 {
         instr_latency(self.sm, write, dst_idx)
     }
 
+    fn latency_upper_bound(&self) -> u32 {
+        latency_upper_bound()
+    }
+
     fn max_instr_delay(&self) -> u8 {
         32
     }
 
     fn legalize_op(&self, b: &mut LegalizeBuilder, op: &mut Op) {
-        as_sm32_op_mut(op).legalize(b);
+        op.legalize(b);
     }
 
     fn encode_shader(&self, s: &Shader<'_>) -> Vec<u32> {
@@ -3280,97 +3284,98 @@ impl SM32Op for OpOut {
 // - 0x1b8 quadon (enable all threads in quad)
 // - 0x1c0 quadpop (redisable them)
 // - 0x190 ret
-macro_rules! as_sm50_op_match {
-    ($op: expr) => {
+macro_rules! sm32_op_match {
+    ($op: expr, |$x: ident| $y: expr) => {
         match $op {
-            Op::FAdd(op) => op,
-            Op::FFma(op) => op,
-            Op::FMnMx(op) => op,
-            Op::FMul(op) => op,
-            Op::Rro(op) => op,
-            Op::MuFu(op) => op,
-            Op::FSet(op) => op,
-            Op::FSetP(op) => op,
-            Op::FSwz(op) => op,
-            Op::DAdd(op) => op,
-            Op::DFma(op) => op,
-            Op::DMnMx(op) => op,
-            Op::DMul(op) => op,
-            Op::DSetP(op) => op,
-            Op::Bfe(op) => op,
-            Op::Flo(op) => op,
-            Op::IAdd2(op) => op,
-            Op::IAdd2X(op) => op,
-            Op::IMad(op) => op,
-            Op::IMul(op) => op,
-            Op::IMnMx(op) => op,
-            Op::ISetP(op) => op,
-            Op::Lop2(op) => op,
-            Op::PopC(op) => op,
-            Op::Shf(op) => op,
-            Op::Shl(op) => op,
-            Op::Shr(op) => op,
-            Op::F2F(op) => op,
-            Op::F2I(op) => op,
-            Op::I2F(op) => op,
-            Op::I2I(op) => op,
-            Op::Mov(op) => op,
-            Op::Prmt(op) => op,
-            Op::Sel(op) => op,
-            Op::Shfl(op) => op,
-            Op::PSetP(op) => op,
-            Op::Tex(op) => op,
-            Op::Tld(op) => op,
-            Op::Tld4(op) => op,
-            Op::Tmml(op) => op,
-            Op::Txd(op) => op,
-            Op::Txq(op) => op,
-            Op::SuClamp(op) => op,
-            Op::SuBfm(op) => op,
-            Op::SuEau(op) => op,
-            Op::IMadSp(op) => op,
-            Op::SuLdGa(op) => op,
-            Op::SuStGa(op) => op,
-            Op::Ld(op) => op,
-            Op::Ldc(op) => op,
-            Op::LdSharedLock(op) => op,
-            Op::St(op) => op,
-            Op::StSCheckUnlock(op) => op,
-            Op::Atom(op) => op,
-            Op::AL2P(op) => op,
-            Op::ALd(op) => op,
-            Op::ASt(op) => op,
-            Op::Ipa(op) => op,
-            Op::CCtl(op) => op,
-            Op::MemBar(op) => op,
-            Op::Bra(op) => op,
-            Op::SSy(op) => op,
-            Op::Sync(op) => op,
-            Op::Brk(op) => op,
-            Op::PBk(op) => op,
-            Op::Cont(op) => op,
-            Op::PCnt(op) => op,
-            Op::Exit(op) => op,
-            Op::Bar(op) => op,
-            Op::TexDepBar(op) => op,
-            Op::ViLd(op) => op,
-            Op::Kill(op) => op,
-            Op::Nop(op) => op,
-            Op::PixLd(op) => op,
-            Op::S2R(op) => op,
-            Op::Vote(op) => op,
-            Op::Out(op) => op,
+            Op::FAdd($x) => $y,
+            Op::FFma($x) => $y,
+            Op::FMnMx($x) => $y,
+            Op::FMul($x) => $y,
+            Op::Rro($x) => $y,
+            Op::MuFu($x) => $y,
+            Op::FSet($x) => $y,
+            Op::FSetP($x) => $y,
+            Op::FSwz($x) => $y,
+            Op::DAdd($x) => $y,
+            Op::DFma($x) => $y,
+            Op::DMnMx($x) => $y,
+            Op::DMul($x) => $y,
+            Op::DSetP($x) => $y,
+            Op::Bfe($x) => $y,
+            Op::Flo($x) => $y,
+            Op::IAdd2($x) => $y,
+            Op::IAdd2X($x) => $y,
+            Op::IMad($x) => $y,
+            Op::IMul($x) => $y,
+            Op::IMnMx($x) => $y,
+            Op::ISetP($x) => $y,
+            Op::Lop2($x) => $y,
+            Op::PopC($x) => $y,
+            Op::Shf($x) => $y,
+            Op::Shl($x) => $y,
+            Op::Shr($x) => $y,
+            Op::F2F($x) => $y,
+            Op::F2I($x) => $y,
+            Op::I2F($x) => $y,
+            Op::I2I($x) => $y,
+            Op::Mov($x) => $y,
+            Op::Prmt($x) => $y,
+            Op::Sel($x) => $y,
+            Op::Shfl($x) => $y,
+            Op::PSetP($x) => $y,
+            Op::Tex($x) => $y,
+            Op::Tld($x) => $y,
+            Op::Tld4($x) => $y,
+            Op::Tmml($x) => $y,
+            Op::Txd($x) => $y,
+            Op::Txq($x) => $y,
+            Op::SuClamp($x) => $y,
+            Op::SuBfm($x) => $y,
+            Op::SuEau($x) => $y,
+            Op::IMadSp($x) => $y,
+            Op::SuLdGa($x) => $y,
+            Op::SuStGa($x) => $y,
+            Op::Ld($x) => $y,
+            Op::Ldc($x) => $y,
+            Op::LdSharedLock($x) => $y,
+            Op::St($x) => $y,
+            Op::StSCheckUnlock($x) => $y,
+            Op::Atom($x) => $y,
+            Op::AL2P($x) => $y,
+            Op::ALd($x) => $y,
+            Op::ASt($x) => $y,
+            Op::Ipa($x) => $y,
+            Op::CCtl($x) => $y,
+            Op::MemBar($x) => $y,
+            Op::Bra($x) => $y,
+            Op::SSy($x) => $y,
+            Op::Sync($x) => $y,
+            Op::Brk($x) => $y,
+            Op::PBk($x) => $y,
+            Op::Cont($x) => $y,
+            Op::PCnt($x) => $y,
+            Op::Exit($x) => $y,
+            Op::Bar($x) => $y,
+            Op::TexDepBar($x) => $y,
+            Op::ViLd($x) => $y,
+            Op::Kill($x) => $y,
+            Op::Nop($x) => $y,
+            Op::PixLd($x) => $y,
+            Op::S2R($x) => $y,
+            Op::Vote($x) => $y,
+            Op::Out($x) => $y,
             _ => panic!("Unhandled instruction {}", $op),
         }
     };
 }
 
-fn as_sm32_op(op: &Op) -> &dyn SM32Op {
-    as_sm50_op_match!(op)
-}
-
-fn as_sm32_op_mut(op: &mut Op) -> &mut dyn SM32Op {
-    as_sm50_op_match!(op)
+impl SM32Op for Op {
+    fn legalize(&mut self, b: &mut LegalizeBuilder) {
+        sm32_op_match!(self, |op| op.legalize(b));
+    }
+    fn encode(&self, e: &mut SM32Encoder<'_>) {
+        sm32_op_match!(self, |op| op.encode(e));
+    }
 }
 
 impl KeplerInstructionEncoder for ShaderModel32 {
@@ -3386,7 +3391,7 @@ impl KeplerInstructionEncoder for ShaderModel32 {
             labels,
             inst: [0_u32; 2],
         };
-        as_sm32_op(&instr.op).encode(&mut e);
+        instr.op.encode(&mut e);
         e.set_pred(&instr.pred);
         encoded.extend(&e.inst[..]);
     }

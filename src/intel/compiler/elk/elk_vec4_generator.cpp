@@ -109,7 +109,7 @@ generate_math2_gfx4(struct elk_codegen *p,
 static void
 generate_tex(struct elk_codegen *p,
              struct elk_vue_prog_data *prog_data,
-             gl_shader_stage stage,
+             mesa_shader_stage stage,
              vec4_instruction *inst,
              struct elk_reg dst,
              struct elk_reg src,
@@ -172,7 +172,7 @@ generate_tex(struct elk_codegen *p,
          msg_type = GFX6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO;
          break;
       default:
-	 unreachable("should not get here: invalid vec4 texture opcode");
+	 UNREACHABLE("should not get here: invalid vec4 texture opcode");
       }
    } else {
       switch (inst->opcode) {
@@ -200,7 +200,7 @@ generate_tex(struct elk_codegen *p,
 	 assert(inst->mlen == 2);
 	 break;
       default:
-	 unreachable("should not get here: invalid vec4 texture opcode");
+	 UNREACHABLE("should not get here: invalid vec4 texture opcode");
       }
    }
 
@@ -1986,7 +1986,7 @@ generate_code(struct elk_codegen *p,
             dst_type = ELK_REGISTER_TYPE_UD;
             break;
          default:
-            unreachable("Not supported conversion");
+            UNREACHABLE("Not supported conversion");
          }
          dst = retype(dst, dst_type);
 
@@ -2198,7 +2198,7 @@ generate_code(struct elk_codegen *p,
          break;
 
       default:
-         unreachable("Unsupported opcode");
+         UNREACHABLE("Unsupported opcode");
       }
 
       if (inst->opcode == ELK_VEC4_OPCODE_PACK_BYTES) {

@@ -76,8 +76,8 @@ struct Device
    unsigned restart_index;
    unsigned index_size;
    unsigned ib_offset;
-   void *samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
-   struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   void *samplers[MESA_SHADER_STAGES][PIPE_MAX_SAMPLERS];
+   struct pipe_sampler_view *sampler_views[MESA_SHADER_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    void *empty_fs;
    void *empty_vs;

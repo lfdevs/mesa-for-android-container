@@ -78,7 +78,7 @@ elk_fs_visitor::lower_pack()
          }
          break;
       default:
-         unreachable("skipped above");
+         UNREACHABLE("skipped above");
       }
 
       inst->remove(block);

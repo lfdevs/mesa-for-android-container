@@ -126,10 +126,10 @@ svga_shader_emit_header(struct svga_shader_emitter *emit)
    memset(&header, 0, sizeof header);
 
    switch (emit->unit) {
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       header.value = SVGA3D_PS_30;
       break;
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       header.value = SVGA3D_VS_30;
       break;
    }
@@ -150,7 +150,7 @@ struct svga_shader_variant *
 svga_tgsi_vgpu9_translate(struct svga_context *svga,
                           const struct svga_shader *shader,
                           const struct svga_compile_key *key,
-                          enum pipe_shader_type unit)
+                          mesa_shader_stage unit)
 {
    struct svga_shader_variant *variant = NULL;
    struct svga_shader_emitter emit;
@@ -173,10 +173,10 @@ svga_tgsi_vgpu9_translate(struct svga_context *svga,
 
    emit.imm_start = emit.info.file_max[TGSI_FILE_CONSTANT] + 1;
 
-   if (unit == PIPE_SHADER_FRAGMENT)
+   if (unit == MESA_SHADER_FRAGMENT)
       emit.imm_start += key->num_unnormalized_coords;
 
-   if (unit == PIPE_SHADER_VERTEX) {
+   if (unit == MESA_SHADER_VERTEX) {
       emit.imm_start += key->vs.need_prescale ? 2 : 0;
    }
 
@@ -219,7 +219,7 @@ svga_tgsi_vgpu9_translate(struct svga_context *svga,
    memcpy(&variant->key, key, sizeof(*key));
    variant->id = UTIL_BITMASK_INVALID_INDEX;
 
-   if (unit == PIPE_SHADER_FRAGMENT) {
+   if (unit == MESA_SHADER_FRAGMENT) {
       struct svga_fs_variant *fs_variant = svga_fs_variant(variant);
 
       fs_variant->pstipple_sampler_unit = emit.pstipple_sampler_unit;
@@ -411,7 +411,7 @@ svga_tgsi_scan_shader(struct svga_shader *shader)
    /* Convert TGSI inputs semantic.
     * Vertex shader does not have varying inputs but vertex attributes.
     */
-   if (shader->stage == PIPE_SHADER_VERTEX) {
+   if (shader->stage == MESA_SHADER_VERTEX) {
       for (unsigned i = 0; i < info->num_inputs; i++) {
          info->input_semantic_name[i] =
             svga_tgsi_to_gl_vert_attrib_semantic(
@@ -433,7 +433,7 @@ svga_tgsi_scan_shader(struct svga_shader *shader)
    /* Convert TGSI outputs semantic.
     * Fragment shader does not have varying outputs but fragment results.
     */
-   if (shader->stage == PIPE_SHADER_FRAGMENT) {
+   if (shader->stage == MESA_SHADER_FRAGMENT) {
       for (unsigned i = 0; i < info->num_outputs; i++) {
          info->output_semantic_name[i] =
             svga_tgsi_to_gl_frag_result_semantic(
@@ -455,15 +455,15 @@ svga_tgsi_scan_shader(struct svga_shader *shader)
    info->constbuf0_num_uniforms = tgsi_info->const_file_max[0] + 1;
 
    switch (tgsi_info->processor) {
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       info->fs.color0_writes_all_cbufs =
          tgsi_info->properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS];
       break;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       info->gs.out_prim = tgsi_info->properties[TGSI_PROPERTY_GS_OUTPUT_PRIM];
       info->gs.in_prim = tgsi_info->properties[TGSI_PROPERTY_GS_INPUT_PRIM];
       break;
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       info->tcs.vertices_out =
          tgsi_info->properties[TGSI_PROPERTY_TCS_VERTICES_OUT];
 
@@ -478,7 +478,7 @@ svga_tgsi_scan_shader(struct svga_shader *shader)
          }
       }
       break;
-   case PIPE_SHADER_TESS_EVAL:
+   case MESA_SHADER_TESS_EVAL:
       info->tes.prim_mode =
          tgsi_info->properties[TGSI_PROPERTY_TES_PRIM_MODE];
 

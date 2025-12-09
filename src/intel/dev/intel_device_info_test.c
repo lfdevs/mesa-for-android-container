@@ -27,7 +27,7 @@ main(int argc, char *argv[])
                          chipsets[i].pci_id);
       assert(len < sizeof force_probe);
 
-      setenv("INTEL_FORCE_PROBE", force_probe, 1);
+      os_set_option("INTEL_FORCE_PROBE", force_probe, true);
       assert(intel_get_device_info_from_pci_id(chipsets[i].pci_id, &devinfo));
 
       verify_device_info(&devinfo);

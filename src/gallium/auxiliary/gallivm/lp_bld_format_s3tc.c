@@ -38,9 +38,7 @@
 
 #include "util/format/u_format.h"
 #include "util/u_math.h"
-#include "util/u_string.h"
 #include "util/u_cpu_detect.h"
-#include "util/u_debug.h"
 
 #include "lp_bld_arit.h"
 #include "lp_bld_type.h"
@@ -51,8 +49,6 @@
 #include "lp_bld_logic.h"
 #include "lp_bld_pack.h"
 #include "lp_bld_flow.h"
-#include "lp_bld_printf.h"
-#include "lp_bld_struct.h"
 #include "lp_bld_swizzle.h"
 #include "lp_bld_init.h"
 #include "lp_bld_debug.h"
@@ -1197,7 +1193,7 @@ s3tc_update_cache_access(struct gallivm_state *gallivm,
 }
 #endif
 
-/** 
+/**
  * Calculate 1/3(v1-v0) + v0 and 2*1/3(v1-v0) + v0.
  * The lerp is performed between the first 2 32bit colors
  * in the source vector, both results are returned packed in result vector.
@@ -2012,7 +2008,7 @@ update_cached_block(struct gallivm_state *gallivm,
    args[0] = ptr_addr;
    args[1] = hash_index;
    args[2] = cache;
- 
+
    LLVMBuildCall2(builder, function_type, function, args, ARRAY_SIZE(args), "");
    bb = LLVMGetInsertBlock(builder);
    inst = LLVMGetLastInstruction(bb);

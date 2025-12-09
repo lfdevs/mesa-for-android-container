@@ -61,13 +61,13 @@ static const unsigned known_desktop_gl_versions[] =
 
 
 _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
-					       gl_shader_stage stage,
+					       mesa_shader_stage stage,
                                                void *mem_ctx)
-   : ctx(_ctx), exts(&_ctx->Extensions), consts(&_ctx->Const),
-     api(_ctx->API), cs_input_local_size_specified(false), cs_input_local_size(),
+   : ctx(_ctx), exts(&_ctx->Extensions), consts(&_ctx->Const), caps(&_ctx->screen->caps),
+     api(_ctx->API), cs_ms_input_local_size_specified(false), cs_ms_input_local_size(),
      switch_state(), warnings_enabled(true)
 {
-   assert(stage < MESA_SHADER_STAGES);
+   assert(stage < MESA_SHADER_MESH_STAGES);
    this->stage = stage;
 
    this->scanner = NULL;
@@ -304,6 +304,10 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
 
    this->gs_input_prim_type_specified = false;
    this->tcs_output_vertices_specified = false;
+   this->ms_output_max_vertices_specified = false;
+   this->ms_output_max_primitives_specified = false;
+   this->ms_per_vertex_output_size = 0;
+   this->ms_per_primitive_output_size = 0;
    this->gs_input_size = 0;
    this->in_qualifier = new(this) ast_type_qualifier();
    this->out_qualifier = new(this) ast_type_qualifier();
@@ -658,8 +662,12 @@ mesa_stage_to_gl_stage_bit(unsigned stage)
       return GL_FRAGMENT_SHADER_BIT;
    case MESA_SHADER_COMPUTE:
       return GL_COMPUTE_SHADER_BIT;
+   case MESA_SHADER_TASK:
+      return GL_TASK_SHADER_BIT_EXT;
+   case MESA_SHADER_MESH:
+      return GL_MESH_SHADER_BIT_EXT;
    default:
-      unreachable("glsl parser: invalid shader stage");
+      UNREACHABLE("glsl parser: invalid shader stage");
    }
 }
 
@@ -820,6 +828,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT_AEP(EXT_geometry_shader),
    EXT(EXT_gpu_shader4),
    EXT_AEP(EXT_gpu_shader5),
+   EXT(EXT_mesh_shader),
    EXT_AEP(EXT_primitive_bounding_box),
    EXT(EXT_separate_shader_objects),
    EXT(EXT_shader_clock),
@@ -831,6 +840,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(EXT_shader_implicit_conversions),
    EXT(EXT_shader_integer_mix),
    EXT_AEP(EXT_shader_io_blocks),
+   EXT(EXT_shader_pixel_local_storage),
    EXT(EXT_shader_realtime_clock),
    EXT(EXT_shader_samples_identical),
    EXT(EXT_shadow_samplers),
@@ -1102,10 +1112,10 @@ _mesa_ast_set_aggregate_type(const glsl_type *type,
        * E.g., if <type> if struct S[2] we want to set each element's type to
        * struct S.
        */
-      for (exec_node *expr_node = ai->expressions.get_head_raw();
+      for (ir_exec_node *expr_node = ai->expressions.get_head_raw();
            !expr_node->is_tail_sentinel();
            expr_node = expr_node->next) {
-         ast_expression *expr = exec_node_data(ast_expression, expr_node,
+         ast_expression *expr = ir_exec_node_data(ast_expression, expr_node,
                                                link);
 
          if (expr->oper == ast_aggregate)
@@ -1114,12 +1124,12 @@ _mesa_ast_set_aggregate_type(const glsl_type *type,
 
    /* If the aggregate is a struct, recursively set its fields' types. */
    } else if (glsl_type_is_struct(type)) {
-      exec_node *expr_node = ai->expressions.get_head_raw();
+      ir_exec_node *expr_node = ai->expressions.get_head_raw();
 
       /* Iterate through the struct's fields. */
       for (unsigned i = 0; !expr_node->is_tail_sentinel() && i < type->length;
            i++, expr_node = expr_node->next) {
-         ast_expression *expr = exec_node_data(ast_expression, expr_node,
+         ast_expression *expr = ir_exec_node_data(ast_expression, expr_node,
                                                link);
 
          if (expr->oper == ast_aggregate) {
@@ -1128,10 +1138,10 @@ _mesa_ast_set_aggregate_type(const glsl_type *type,
       }
    /* If the aggregate is a matrix, set its columns' types. */
    } else if (glsl_type_is_matrix(type)) {
-      for (exec_node *expr_node = ai->expressions.get_head_raw();
+      for (ir_exec_node *expr_node = ai->expressions.get_head_raw();
            !expr_node->is_tail_sentinel();
            expr_node = expr_node->next) {
-         ast_expression *expr = exec_node_data(ast_expression, expr_node,
+         ast_expression *expr = ir_exec_node_data(ast_expression, expr_node,
                                                link);
 
          if (expr->oper == ast_aggregate)
@@ -1165,6 +1175,17 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
          _mesa_glsl_warning(locp, state,
                             "#version 140 / GL_ARB_uniform_buffer_object "
                             "required for defining uniform blocks");
+      }
+   } else if (q.flags.q.pixel_local_storage) {
+      if (!state->EXT_shader_pixel_local_storage_enable) {
+         _mesa_glsl_error(locp, state,
+                          "GL_EXT_shader_pixel_local_storage "
+                          "required for defining pixel local storage blocks");
+
+      } else if (state->EXT_shader_pixel_local_storage_warn) {
+         _mesa_glsl_warning(locp, state,
+                            "GL_EXT_shader_pixel_local_storage "
+                            "required for defining pixel local storage blocks");
       }
    } else {
       if (!state->has_shader_io_blocks()) {
@@ -1206,7 +1227,7 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
    ast_type_qualifier::bitset_t interface_type_mask;
    struct ast_type_qualifier temp_type_qualifier;
 
-   /* Get a bitmask containing only the in/out/uniform/buffer
+   /* Get a bitmask containing only the in/out/uniform/buffer/pls
     * flags, allowing us to ignore other irrelevant flags like
     * interpolation qualifiers.
     */
@@ -1216,11 +1237,14 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
    temp_type_qualifier.flags.q.out = true;
    temp_type_qualifier.flags.q.buffer = true;
    temp_type_qualifier.flags.q.patch = true;
+   temp_type_qualifier.flags.q.per_primitive = true;
+   temp_type_qualifier.flags.q.pixel_local_storage =
+      GLSL_PIXEL_LOCAL_STORAGE_INOUT;
    interface_type_mask = temp_type_qualifier.flags.i;
 
    /* Get the block's interface qualifier.  The interface_qualifier
     * production rule guarantees that only one bit will be set (and
-    * it will be in/out/uniform).
+    * it will be in/out/uniform/pls).
     */
    ast_type_qualifier::bitset_t block_interface_qualifier = q.flags.i;
 
@@ -1235,7 +1259,10 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
       block->default_layout.stream = state->out_qualifier->stream;
    }
 
-   if (state->has_enhanced_layouts() && block->default_layout.flags.q.out &&
+   /* Not apply to mesh shader. */
+   if (state->stage <= MESA_SHADER_GEOMETRY &&
+       state->has_enhanced_layouts() &&
+       block->default_layout.flags.q.out &&
        state->exts->ARB_transform_feedback3) {
       /* Assign global layout's xfb_buffer value. */
       block->default_layout.flags.q.xfb_buffer = 1;
@@ -1243,7 +1270,7 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
       block->default_layout.xfb_buffer = state->out_qualifier->xfb_buffer;
    }
 
-   foreach_list_typed (ast_declarator_list, member, link, &block->declarations) {
+   ir_foreach_list_typed (ast_declarator_list, member, link, &block->declarations) {
       ast_type_qualifier& qualifier = member->type->qualifier;
       if ((qualifier.flags.i & interface_type_mask) == 0) {
          /* GLSLangSpec.1.50.11, 4.3.7 (Interface Blocks):
@@ -1261,7 +1288,7 @@ _mesa_ast_process_interface_block(YYLTYPE *locp,
           *  the block."
           */
          _mesa_glsl_error(locp, state,
-                          "uniform/in/out qualifier on "
+                          "optional qualifier on "
                           "interface block member does not match "
                           "the interface block");
       }
@@ -1324,6 +1351,8 @@ _mesa_ast_type_qualifier_print(const struct ast_type_qualifier *q)
       printf("flat ");
    if (q->flags.q.noperspective)
       printf("noperspective ");
+   if (q->flags.q.per_primitive)
+      printf("per_primitive ");
 }
 
 
@@ -1358,7 +1387,7 @@ ast_compound_statement::print(void) const
 {
    printf("{\n");
 
-   foreach_list_typed(ast_node, ast, link, &this->statements) {
+   ir_foreach_list_typed(ast_node, ast, link, &this->statements) {
       ast->print();
    }
 
@@ -1437,7 +1466,7 @@ ast_expression::print(void) const
       subexpressions[0]->print();
       printf("( ");
 
-      foreach_list_typed (ast_node, ast, link, &this->expressions) {
+      ir_foreach_list_typed (ast_node, ast, link, &this->expressions) {
 	 if (&ast->link != this->expressions.get_head())
 	    printf(", ");
 
@@ -1484,7 +1513,7 @@ ast_expression::print(void) const
 
    case ast_sequence: {
       printf("( ");
-      foreach_list_typed (ast_node, ast, link, & this->expressions) {
+      ir_foreach_list_typed (ast_node, ast, link, & this->expressions) {
 	 if (&ast->link != this->expressions.get_head())
 	    printf(", ");
 
@@ -1496,7 +1525,7 @@ ast_expression::print(void) const
 
    case ast_aggregate: {
       printf("{ ");
-      foreach_list_typed (ast_node, ast, link, & this->expressions) {
+      ir_foreach_list_typed (ast_node, ast, link, & this->expressions) {
 	 if (&ast->link != this->expressions.get_head())
 	    printf(", ");
 
@@ -1550,7 +1579,7 @@ ast_function::print(void) const
    return_type->print();
    printf(" %s (", identifier);
 
-   foreach_list_typed(ast_node, ast, link, & this->parameters) {
+   ir_foreach_list_typed(ast_node, ast, link, & this->parameters) {
       ast->print();
    }
 
@@ -1627,7 +1656,7 @@ ast_declarator_list::print(void) const
    else
       printf("precise ");
 
-   foreach_list_typed (ast_node, ast, link, & this->declarations) {
+   ir_foreach_list_typed (ast_node, ast, link, & this->declarations) {
       if (&ast->link != this->declarations.get_head())
 	 printf(", ");
 
@@ -1769,7 +1798,7 @@ ast_case_label::ast_case_label(ast_expression *test_value)
 
 void ast_case_label_list::print(void) const
 {
-   foreach_list_typed(ast_node, ast, link, & this->labels) {
+   ir_foreach_list_typed(ast_node, ast, link, & this->labels) {
       ast->print();
    }
    printf("\n");
@@ -1784,7 +1813,7 @@ ast_case_label_list::ast_case_label_list(void)
 void ast_case_statement::print(void) const
 {
    labels->print();
-   foreach_list_typed(ast_node, ast, link, & this->stmts) {
+   ir_foreach_list_typed(ast_node, ast, link, & this->stmts) {
       ast->print();
       printf("\n");
    }
@@ -1799,7 +1828,7 @@ ast_case_statement::ast_case_statement(ast_case_label_list *labels)
 
 void ast_case_statement_list::print(void) const
 {
-   foreach_list_typed(ast_node, ast, link, & this->cases) {
+   ir_foreach_list_typed(ast_node, ast, link, & this->cases) {
       ast->print();
    }
 }
@@ -1869,7 +1898,7 @@ void
 ast_struct_specifier::print(void) const
 {
    printf("struct %s { ", name);
-   foreach_list_typed(ast_node, ast, link, &this->declarations) {
+   ir_foreach_list_typed(ast_node, ast, link, &this->declarations) {
       ast->print();
    }
    printf("} ");
@@ -1886,7 +1915,7 @@ ast_struct_specifier::ast_struct_specifier(const char *identifier,
 
 void ast_subroutine_list::print(void) const
 {
-   foreach_list_typed (ast_node, ast, link, & this->declarations) {
+   ir_foreach_list_typed (ast_node, ast, link, & this->declarations) {
       if (&ast->link != this->declarations.get_head())
          printf(", ");
       ast->print();
@@ -1900,13 +1929,20 @@ set_shader_inout_layout(struct gl_shader *shader,
    /* Should have been prevented by the parser. */
    if (shader->Stage != MESA_SHADER_GEOMETRY &&
        shader->Stage != MESA_SHADER_TESS_EVAL &&
-       shader->Stage != MESA_SHADER_COMPUTE) {
+       shader->Stage != MESA_SHADER_COMPUTE &&
+       shader->Stage != MESA_SHADER_TASK &&
+       shader->Stage != MESA_SHADER_MESH) {
       assert(!state->in_qualifier->flags.i);
+   }
+
+   if (shader->Stage != MESA_SHADER_COMPUTE &&
+       shader->Stage != MESA_SHADER_TASK &&
+       shader->Stage != MESA_SHADER_MESH) {
+      assert(!state->cs_ms_input_local_size_specified);
    }
 
    if (shader->Stage != MESA_SHADER_COMPUTE) {
       /* Should have been prevented by the parser. */
-      assert(!state->cs_input_local_size_specified);
       assert(!state->cs_input_local_size_variable_specified);
       assert(state->cs_derivative_group == DERIVATIVE_GROUP_NONE);
    }
@@ -2036,9 +2072,9 @@ set_shader_inout_layout(struct gl_shader *shader,
       break;
 
    case MESA_SHADER_COMPUTE:
-      if (state->cs_input_local_size_specified) {
+      if (state->cs_ms_input_local_size_specified) {
          for (int i = 0; i < 3; i++)
-            shader->info.Comp.LocalSize[i] = state->cs_input_local_size[i];
+            shader->info.Comp.LocalSize[i] = state->cs_ms_input_local_size[i];
       } else {
          for (int i = 0; i < 3; i++)
             shader->info.Comp.LocalSize[i] = 0;
@@ -2093,6 +2129,61 @@ set_shader_inout_layout(struct gl_shader *shader,
       shader->SampleInterlockOrdered = state->fs_sample_interlock_ordered;
       shader->SampleInterlockUnordered = state->fs_sample_interlock_unordered;
       shader->BlendSupport = state->fs_blend_support;
+      break;
+
+   case MESA_SHADER_MESH:
+      if (state->out_qualifier->flags.q.prim_type) {
+         shader->info.Mesh.OutputType =
+            gl_to_mesa_prim(state->out_qualifier->prim_type);
+      } else {
+         shader->info.Mesh.OutputType = MESA_PRIM_UNKNOWN;
+      }
+
+      shader->info.Mesh.MaxVertices = -1;
+      if (state->out_qualifier->flags.q.max_vertices) {
+         unsigned qual_max_vertices;
+         if (state->out_qualifier->max_vertices->
+               process_qualifier_constant(state, "max_vertices",
+                                          &qual_max_vertices, true)) {
+
+            if (qual_max_vertices > state->caps->mesh.max_mesh_output_vertices) {
+               YYLTYPE loc = state->out_qualifier->max_vertices->get_location();
+               _mesa_glsl_error(&loc, state,
+                                "maximum output vertices (%d) exceeds "
+                                "GL_MAX_MESH_OUTPUT_VERTICES_EXT",
+                                qual_max_vertices);
+            }
+            shader->info.Mesh.MaxVertices = qual_max_vertices;
+         }
+      }
+
+      shader->info.Mesh.MaxPrimitives = -1;
+      if (state->out_qualifier->flags.q.max_primitives) {
+         unsigned qual_max_primitives;
+         if (state->out_qualifier->max_primitives->
+               process_qualifier_constant(state, "max_primitives",
+                                          &qual_max_primitives, true)) {
+
+            if (qual_max_primitives > state->caps->mesh.max_mesh_output_primitives) {
+               YYLTYPE loc = state->out_qualifier->max_primitives->get_location();
+               _mesa_glsl_error(&loc, state,
+                                "maximum output primitives (%d) exceeds "
+                                "GL_MAX_MESH_OUTPUT_PRIMITIVES_EXT",
+                                qual_max_primitives);
+            }
+            shader->info.Mesh.MaxPrimitives = qual_max_primitives;
+         }
+      }
+
+      FALLTHROUGH;
+   case MESA_SHADER_TASK:
+      if (state->cs_ms_input_local_size_specified) {
+         for (int i = 0; i < 3; i++)
+            shader->info.Mesh.LocalSize[i] = state->cs_ms_input_local_size[i];
+      } else {
+         for (int i = 0; i < 3; i++)
+            shader->info.Mesh.LocalSize[i] = 0;
+      }
       break;
 
    default:
@@ -2181,22 +2272,21 @@ do_late_parsing_checks(struct _mesa_glsl_parse_state *state)
 }
 
 static void
-opt_shader(const struct gl_constants *consts,
+opt_shader(const struct pipe_screen *screen,
+           const struct gl_constants *consts,
            const struct gl_extensions *exts,
-           struct gl_shader *shader)
+           struct gl_shader *shader,
+           linear_ctx *linalloc)
 {
    assert(shader->CompileStatus != COMPILE_FAILURE &&
           !shader->ir->is_empty());
-
-   const struct gl_shader_compiler_options *options =
-      &consts->ShaderCompilerOptions[shader->Stage];
 
    /* Do some optimization at compile time to reduce shader IR size
     * and reduce later work if the same shader is linked multiple times.
     *
     * Run it just once, since NIR will do the real optimization.
     */
-   do_common_optimization(shader->ir, false, options, consts->NativeIntegers);
+   do_common_optimization(shader->ir, false, shader->Stage, screen);
 
    validate_ir_tree(shader->ir);
 
@@ -2218,7 +2308,7 @@ opt_shader(const struct gl_constants *consts,
 
    optimize_dead_builtin_variables(shader->ir, other);
 
-   lower_vector_derefs(shader);
+   lower_vector_derefs(shader, linalloc);
 
    lower_packing_builtins(shader->ir, exts->ARB_shading_language_packing,
                           exts->ARB_gpu_shader5,
@@ -2231,9 +2321,6 @@ opt_shader(const struct gl_constants *consts,
    do_vec_index_to_cond_assign(shader->ir);
 
    validate_ir_tree(shader->ir);
-
-   /* Retain any live IR, but trash the rest. */
-   reparent_ir(shader->ir, shader->ir);
 }
 
 static bool
@@ -2358,7 +2445,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    }
 
    if (dump_ast) {
-      foreach_list_typed(ast_node, ast, link, &state->translation_unit) {
+      ir_foreach_list_typed(ast_node, ast, link, &state->translation_unit) {
          ast->print();
       }
       printf("\n\n");
@@ -2367,7 +2454,7 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
    ralloc_free(shader->ir);
    ralloc_free(shader->nir);
    shader->nir = NULL;
-   shader->ir = new(shader) exec_list;
+   shader->ir = new(shader) ir_exec_list;
    if (!state->error && !state->translation_unit.is_empty())
       _mesa_ast_to_hir(shader->ir, state);
 
@@ -2395,17 +2482,17 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
       state->has_implicit_int_to_uint_conversion();
    shader->KHR_shader_subgroup_basic_enable = state->KHR_shader_subgroup_basic_enable;
 
-   struct gl_shader_compiler_options *options =
-      &ctx->Const.ShaderCompilerOptions[shader->Stage];
-
    if (!state->error && !shader->ir->is_empty()) {
       if (state->es_shader &&
-          (options->LowerPrecisionFloat16 || options->LowerPrecisionInt16))
-         lower_precision(options, shader->ir);
+          (ctx->screen->shader_caps[shader->Stage].fp16 ||
+           ctx->screen->shader_caps[shader->Stage].int16))
+         lower_precision(ctx->screen, shader->Stage, shader->ir);
+
       lower_builtins(shader->ir);
       assign_subroutine_indexes(state);
       lower_subroutine(shader->ir, state);
-      opt_shader(&ctx->Const, &ctx->Extensions, shader);
+      opt_shader(ctx->screen, &ctx->Const, &ctx->Extensions, shader,
+                 state->linalloc);
    }
 
    if (!force_recompile) {
@@ -2421,9 +2508,6 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
          shader->FallbackSource = NULL;
       }
    }
-
-   delete state->symbols;
-   ralloc_free(state);
 
    if (ctx->_Shader && ctx->_Shader->Flags & GLSL_DUMP) {
       if (shader->CompileStatus) {
@@ -2453,6 +2537,9 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
       shader->nir = glsl_to_nir(shader, ctx->screen->nir_options[shader->Stage],
                                 source_blake3);
    }
+
+   delete state->symbols;
+   ralloc_free(state);
 
    if (ctx->Cache && shader->CompileStatus == COMPILE_SUCCESS) {
       char sha1_buf[41];
@@ -2485,9 +2572,8 @@ _mesa_glsl_compile_shader(struct gl_context *ctx, struct gl_shader *shader,
  *                                    integers in floating point registers).
  */
 bool
-do_common_optimization(exec_list *ir, bool linked,
-                       const struct gl_shader_compiler_options *options,
-                       bool native_integers)
+do_common_optimization(ir_exec_list *ir, bool linked, mesa_shader_stage stage,
+                       const struct pipe_screen *screen)
 {
    const bool debug = false;
    bool progress = false;
@@ -2514,8 +2600,8 @@ do_common_optimization(exec_list *ir, bool linked,
    OPT(do_tree_grafting, ir);
    OPT(do_minmax_prune, ir);
    OPT(do_rebalance_tree, ir);
-   OPT(do_algebraic, ir, native_integers, options);
-   OPT(do_lower_jumps, ir, true, options->EmitNoCont);
+   OPT(do_algebraic, ir);
+   OPT(do_lower_jumps, ir, true, !screen->shader_caps[stage].cont_supported);
 
    /* If an optimization pass fails to preserve the invariant flag, calling
     * the pass only once earlier may result in incorrect code generation. Always call

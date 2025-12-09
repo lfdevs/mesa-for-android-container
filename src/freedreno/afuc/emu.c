@@ -552,7 +552,8 @@ emu_init(struct emu *emu)
    if (emu->fw_id == AFUC_A750) {
       emu_set_control_reg(emu, 0, 7 << 28);
       emu_set_control_reg(emu, 2, 0x40 << 8);
-   } else if (emu->fw_id == AFUC_A730 || emu->fw_id == AFUC_A740) {
+   } else if (emu->fw_id == AFUC_A730 || emu->fw_id == AFUC_A740 ||
+              emu->fw_id == AFUC_GEN70500) {
       emu_set_control_reg(emu, 0xef, 1 << 21);
       emu_set_control_reg(emu, 0, 7 << 28);
    } else if (emu->fw_id == AFUC_A660) {

@@ -11,6 +11,7 @@
 #include "freedreno_dev_info.h"
 
 #include "ir3_compiler.h"
+#include "ir3_nir.h"
 
 static const struct debug_named_value shader_debug_options[] = {
    /* clang-format off */
@@ -104,6 +105,8 @@ static const nir_shader_compiler_options ir3_base_options = {
    .lower_pack_64_4x16 = true,
    .lower_to_scalar = true,
    .has_imul24 = true,
+   .has_umul24 = true,
+   .has_umul_16x16 = true,
    .has_icsel_eqz32 = true,
    .has_icsel_eqz16 = true,
    .has_fsub = true,
@@ -111,6 +114,12 @@ static const nir_shader_compiler_options ir3_base_options = {
    .force_indirect_unrolling_sampler = true,
    .lower_uniforms_to_ubo = true,
    .max_unroll_iterations = 32,
+
+   /* Not actually supported but we want fmulz to be produced and then be
+    * lowered with the abs min pattern since we have free abs on min.
+    */
+   .has_fmulz = true,
+   .lower_fmulz_with_abs_min = true,
 
    .lower_cs_local_index_to_id = true,
    .lower_wpos_pntc = true,
@@ -143,6 +152,8 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    if (ir3_shader_override_path) {
       ir3_shader_debug |= IR3_DBG_NOCACHE;
    }
+
+   ir3_shader_bisect_init();
 
    compiler->dev = dev;
    compiler->dev_id = dev_id;
@@ -199,7 +210,7 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
        */
       compiler->max_const_compute = compiler->gen >= 7 ? 512 : 256;
 
-      if (dev_info->a6xx.is_a702) {
+      if (dev_info->props.is_a702) {
          /* No GS/tess, 128 per stage otherwise: */
          compiler->max_const_compute = 128;
          compiler->max_const_pipeline = 256;
@@ -213,15 +224,15 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
 
       compiler->has_preamble = true;
 
-      compiler->tess_use_shared = dev_info->a6xx.tess_use_shared;
+      compiler->tess_use_shared = dev_info->props.tess_use_shared;
 
-      compiler->has_getfiberid = dev_info->a6xx.has_getfiberid;
-      compiler->mov_half_shared_quirk = dev_info->a6xx.mov_half_shared_quirk;
-      compiler->has_movs = dev_info->a6xx.has_movs;
+      compiler->has_getfiberid = dev_info->props.has_getfiberid;
+      compiler->mov_half_shared_quirk = dev_info->props.mov_half_shared_quirk;
+      compiler->has_movs = dev_info->props.has_movs;
 
-      compiler->has_dp2acc = dev_info->a6xx.has_dp2acc;
-      compiler->has_dp4acc = dev_info->a6xx.has_dp4acc;
-      compiler->has_compliant_dp4acc = dev_info->a7xx.has_compliant_dp4acc;
+      compiler->has_dp2acc = dev_info->props.has_dp2acc;
+      compiler->has_dp4acc = dev_info->props.has_dp4acc;
+      compiler->has_compliant_dp4acc = dev_info->props.has_compliant_dp4acc;
 
       if (compiler->gen == 6 && options->shared_push_consts) {
          compiler->shared_consts_base_offset = 504;
@@ -233,30 +244,33 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
          compiler->geom_shared_consts_size_quirk = 0;
       }
 
-      compiler->has_fs_tex_prefetch = dev_info->a6xx.has_fs_tex_prefetch;
-      compiler->stsc_duplication_quirk = dev_info->a7xx.stsc_duplication_quirk;
-      compiler->load_shader_consts_via_preamble = dev_info->a7xx.load_shader_consts_via_preamble;
-      compiler->load_inline_uniforms_via_preamble_ldgk = dev_info->a7xx.load_inline_uniforms_via_preamble_ldgk;
+      compiler->has_fs_tex_prefetch = dev_info->props.has_fs_tex_prefetch;
+      compiler->stsc_duplication_quirk = dev_info->props.stsc_duplication_quirk;
+      compiler->load_shader_consts_via_preamble = dev_info->props.load_shader_consts_via_preamble;
+      compiler->load_inline_uniforms_via_preamble_ldgk = dev_info->props.load_inline_uniforms_via_preamble_ldgk;
       compiler->num_predicates = 4;
       compiler->bitops_can_write_predicates = true;
       compiler->has_branch_and_or = true;
       compiler->has_predication = true;
-      compiler->predtf_nop_quirk = dev_info->a6xx.predtf_nop_quirk;
-      compiler->prede_nop_quirk = dev_info->a6xx.prede_nop_quirk;
-      compiler->has_scalar_alu = dev_info->a6xx.has_scalar_alu;
-      compiler->has_isam_v = dev_info->a6xx.has_isam_v;
-      compiler->has_ssbo_imm_offsets = dev_info->a6xx.has_ssbo_imm_offsets;
-      compiler->fs_must_have_non_zero_constlen_quirk = dev_info->a7xx.fs_must_have_non_zero_constlen_quirk;
-      compiler->has_early_preamble = dev_info->a6xx.has_early_preamble;
+      compiler->predtf_nop_quirk = dev_info->props.predtf_nop_quirk;
+      compiler->prede_nop_quirk = dev_info->props.prede_nop_quirk;
+      compiler->has_scalar_alu = dev_info->props.has_scalar_alu;
+      compiler->has_scalar_predicates = dev_info->props.has_scalar_predicates;
+      compiler->has_isam_v = dev_info->props.has_isam_v;
+      compiler->has_ssbo_imm_offsets = dev_info->props.has_ssbo_imm_offsets;
+      compiler->fs_must_have_non_zero_constlen_quirk = dev_info->props.fs_must_have_non_zero_constlen_quirk;
+      compiler->has_early_preamble = dev_info->props.has_early_preamble;
       compiler->has_rpt_bary_f = true;
       compiler->has_shfl = true;
       compiler->reading_shading_rate_requires_smask_quirk =
-         dev_info->a7xx.reading_shading_rate_requires_smask_quirk;
-      compiler->has_alias_rt = dev_info->a7xx.has_alias_rt;
+         dev_info->props.reading_shading_rate_requires_smask_quirk;
+      compiler->has_alias_rt = dev_info->props.has_alias_rt;
       compiler->mergedregs = true;
+      compiler->has_sel_b_fneg = dev_info->props.has_sel_b_fneg;
 
-      if (compiler->gen >= 7) {
-         compiler->has_alias_tex = true;
+      compiler->has_alias_tex = (compiler->gen >= 7);
+
+      if (compiler->gen == 7) {
          compiler->delay_slots.alu_to_alu = 2;
          compiler->delay_slots.non_alu = 5;
          compiler->delay_slots.cat3_src2_read = 1;
@@ -294,7 +308,7 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    compiler->has_isam_ssbo = compiler->gen >= 6;
 
    if (compiler->gen >= 6) {
-      compiler->reg_size_vec4 = dev_info->a6xx.reg_size_vec4;
+      compiler->reg_size_vec4 = dev_info->props.reg_size_vec4;
    } else if (compiler->gen >= 4) {
       /* On a4xx-a5xx, using r24.x and above requires using the smallest
        * threadsize.
@@ -338,21 +352,21 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
 
    /* Set up nir shader compiler options, using device-specific overrides of our base settings. */
    compiler->nir_options = ir3_base_options;
-   compiler->nir_options.has_iadd3 = dev_info->a6xx.has_sad;
+   compiler->nir_options.has_iadd3 = dev_info->props.has_sad;
 
    if (compiler->gen >= 6) {
       compiler->nir_options.force_indirect_unrolling = nir_var_all,
       compiler->nir_options.lower_device_index_to_zero = true;
       compiler->nir_options.instance_id_includes_base_index = true;
 
-      if (dev_info->a6xx.has_dp2acc || dev_info->a6xx.has_dp4acc) {
+      if (dev_info->props.has_dp2acc || dev_info->props.has_dp4acc) {
          compiler->nir_options.has_udot_4x8 =
             compiler->nir_options.has_udot_4x8_sat = true;
          compiler->nir_options.has_sudot_4x8 =
             compiler->nir_options.has_sudot_4x8_sat = true;
       }
 
-      if (dev_info->a6xx.has_dp4acc && dev_info->a7xx.has_compliant_dp4acc) {
+      if (dev_info->props.has_dp4acc && dev_info->props.has_compliant_dp4acc) {
          compiler->nir_options.has_sdot_4x8 =
             compiler->nir_options.has_sdot_4x8_sat = true;
       }
@@ -376,7 +390,8 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    compiler->nir_options.support_indirect_inputs =
       BITFIELD_BIT(MESA_SHADER_TESS_CTRL) |
       BITFIELD_BIT(MESA_SHADER_TESS_EVAL) | BITFIELD_BIT(MESA_SHADER_FRAGMENT);
-   compiler->nir_options.support_indirect_outputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES);
+   compiler->nir_options.support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES);
+   compiler->nir_options.max_offset_shift = ir3_nir_max_offset_shift;
 
    if (!options->disable_cache)
       ir3_disk_cache_init(compiler);

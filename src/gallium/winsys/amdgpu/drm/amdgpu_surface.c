@@ -54,11 +54,6 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    if (r)
       return r;
 
-   surf->blk_w = util_format_get_blockwidth(tex->format);
-   surf->blk_h = util_format_get_blockheight(tex->format);
-   surf->bpe = bpe;
-   surf->flags = flags;
-
    struct ac_surf_config config;
 
    config.info.width = tex->width0;
@@ -76,16 +71,29 @@ static int amdgpu_surface_init(struct radeon_winsys *rws,
    config.is_array = tex->target == PIPE_TEXTURE_1D_ARRAY ||
                      tex->target == PIPE_TEXTURE_2D_ARRAY ||
                      tex->target == PIPE_TEXTURE_CUBE_ARRAY;
+   config.blk_w = util_format_get_blockwidth(tex->format);
+   config.blk_h = util_format_get_blockheight(tex->format);
+   config.bpe = bpe;
+   config.surf_flags = flags;
+   config.modifier = surf->modifier;
 
-   /* Use different surface counters for color and FMASK, so that MSAA MRTs
-    * always use consecutive surface indices when FMASK is allocated between
-    * them.
-    */
-   config.info.surf_index = &aws->surf_index_color;
-   config.info.fmask_surf_index = &aws->surf_index_fmask;
-
-   if (flags & RADEON_SURF_Z_OR_SBUFFER)
-      config.info.surf_index = NULL;
+   if (info->gfx_level >= GFX9) {
+      config.gfx9.swizzle_mode = surf->u.gfx9.swizzle_mode;
+      config.gfx9.dcc_number_type = surf->u.gfx9.dcc_number_type;
+      config.gfx9.dcc_data_format = surf->u.gfx9.dcc_data_format;
+      config.gfx9.dcc_max_compressed_block_size = surf->u.gfx9.color.dcc.max_compressed_block_size;
+      config.gfx9.dcc_independent_64B_blocks = surf->u.gfx9.color.dcc.independent_64B_blocks;
+      config.gfx9.dcc_independent_128B_blocks = surf->u.gfx9.color.dcc.independent_128B_blocks;
+      config.gfx9.dcc_write_compress_disable = surf->u.gfx9.dcc_write_compress_disable;
+      config.gfx9.display_dcc_pitch_max = surf->u.gfx9.color.display_dcc_pitch_max;
+   } else {
+      config.gfx6.pipe_config = surf->u.legacy.pipe_config;
+      config.gfx6.bankw = surf->u.legacy.bankw;
+      config.gfx6.bankh = surf->u.legacy.bankh;
+      config.gfx6.tile_split = surf->u.legacy.tile_split;
+      config.gfx6.mtilea = surf->u.legacy.mtilea;
+      config.gfx6.num_banks = surf->u.legacy.num_banks;
+   }
 
    /* Use radeon_info from the driver, not the winsys. The driver is allowed to change it. */
    return ac_compute_surface(aws->addrlib, info, &config, mode, surf);

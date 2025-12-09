@@ -65,11 +65,11 @@ hash_deref(const void *void_deref)
          continue;
 
       default:
-         unreachable("Invalid deref type");
+         UNREACHABLE("Invalid deref type");
       }
    }
 
-   unreachable("We should have hit a variable dereference");
+   UNREACHABLE("We should have hit a variable dereference");
 }
 
 static bool
@@ -93,11 +93,11 @@ derefs_equal(const void *void_a, const void *void_b)
          continue;
 
       default:
-         unreachable("Invalid deref type");
+         UNREACHABLE("Invalid deref type");
       }
    }
 
-   unreachable("We should have hit a variable dereference");
+   UNREACHABLE("We should have hit a variable dereference");
 }
 
 static nir_def *
@@ -147,7 +147,7 @@ get_deref_reg_location(nir_deref_instr *deref,
    nir_builder *b = &state->builder;
 
    nir_def *reg = get_reg_for_deref(deref, state);
-   nir_intrinsic_instr *decl = nir_instr_as_intrinsic(reg->parent_instr);
+   nir_intrinsic_instr *decl = nir_def_as_intrinsic(reg);
 
    /* It is possible for a user to create a shader that has an array with a
     * single element and then proceed to access it indirectly.  Indirectly
@@ -274,7 +274,7 @@ lower_locals_to_regs_block(nir_block *block,
       }
 
       case nir_intrinsic_copy_deref:
-         unreachable("There should be no copies whatsoever at this point");
+         UNREACHABLE("There should be no copies whatsoever at this point");
          break;
 
       default:

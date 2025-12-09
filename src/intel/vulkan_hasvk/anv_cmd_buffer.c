@@ -248,7 +248,7 @@ mem_update(void *dst, const void *src, size_t size)
 
 static void
 set_dirty_for_bind_map(struct anv_cmd_buffer *cmd_buffer,
-                       gl_shader_stage stage,
+                       mesa_shader_stage stage,
                        const struct anv_pipeline_bind_map *map)
 {
    assert(stage < ARRAY_SIZE(cmd_buffer->state.surface_sha1s));
@@ -319,7 +319,7 @@ void anv_CmdBindPipeline(
    }
 
    default:
-      unreachable("invalid bind point");
+      UNREACHABLE("invalid bind point");
       break;
    }
 }
@@ -362,7 +362,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
       break;
 
    default:
-      unreachable("invalid bind point");
+      UNREACHABLE("invalid bind point");
    }
 
    VkShaderStageFlags dirty_stages = 0;
@@ -517,7 +517,7 @@ anv_isl_format_for_descriptor_type(const struct anv_device *device,
       return ISL_FORMAT_RAW;
 
    default:
-      unreachable("Invalid descriptor type");
+      UNREACHABLE("Invalid descriptor type");
    }
 }
 
@@ -589,7 +589,7 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
    const unsigned push_constant_alignment =
       cmd_buffer->device->info->ver < 8 ? 32 : 64;
    const unsigned aligned_total_push_constants_size =
-      ALIGN(total_push_constants_size, push_constant_alignment);
+      align(total_push_constants_size, push_constant_alignment);
    struct anv_state state =
       anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
                                          aligned_total_push_constants_size,
@@ -664,7 +664,7 @@ anv_cmd_buffer_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
       break;
 
    default:
-      unreachable("invalid bind point");
+      UNREACHABLE("invalid bind point");
    }
 
    struct anv_push_descriptor_set **push_set =

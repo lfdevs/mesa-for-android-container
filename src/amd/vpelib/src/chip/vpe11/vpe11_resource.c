@@ -1,4 +1,4 @@
-/* Copyright 2023 Advanced Micro Devices, Inc.
+/* Copyright 2023-2025 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -59,6 +59,26 @@
         reg##reg_name##_##DEFAULT, false}
 
 static struct vpe_caps caps = {
+    .max_input_size =
+        {
+            .width  = 16384,
+            .height = 16384,
+        },
+    .max_output_size =
+        {
+            .width  = 16384,
+            .height = 16384,
+        },
+    .min_input_size =
+        {
+            .width  = 1,
+            .height = 1,
+        },
+    .min_output_size =
+        {
+            .width  = 1,
+            .height = 1,
+        },
     .lut_size               = LUT_BUFFER_SIZE,
     .rotation_support       = 0,
     .h_mirror_support       = 1,
@@ -113,7 +133,7 @@ static struct vpe_caps caps = {
                     .p010            = 1, /**< planar 4:2:0 10-bit */
                     .p016            = 0, /**< planar 4:2:0 16-bit */
                     .ayuv            = 0, /**< packed 4:4:4 */
-                    .yuy2 = 0
+                    .yuy2            = 0, /**< packed 4:2:2 */
                 },
             .output_pixel_format_support =
                 {
@@ -136,21 +156,13 @@ static struct vpe_caps caps = {
         },
 };
 
-static struct vpe_cap_funcs cap_funcs =
-{
-    .get_dcc_compression_output_cap = vpe10_get_dcc_compression_output_cap,
-    .get_dcc_compression_input_cap  = vpe10_get_dcc_compression_input_cap
-};
-
 enum vpe_status vpe11_construct_resource(struct vpe_priv *vpe_priv, struct resource *res)
 {
     struct vpe *vpe = &vpe_priv->pub;
 
     vpe->caps      = &caps;
-    vpe->cap_funcs = &cap_funcs;
 
     vpe10_construct_vpec(vpe_priv, &res->vpec);
-
     res->cdc_fe[0] = vpe10_cdc_fe_create(vpe_priv, 0);
     if (!res->cdc_fe[0])
         goto err;
@@ -180,8 +192,6 @@ enum vpe_status vpe11_construct_resource(struct vpe_priv *vpe_priv, struct resou
 
     res->internal_hdr_normalization = 1;
 
-    res->check_input_color_space           = vpe10_check_input_color_space;
-    res->check_output_color_space          = vpe10_check_output_color_space;
     res->check_h_mirror_support            = vpe10_check_h_mirror_support;
     res->calculate_segments                = vpe10_calculate_segments;
     res->set_num_segments                  = vpe11_set_num_segments;
@@ -195,6 +205,7 @@ enum vpe_status vpe11_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->program_backend                   = vpe10_program_backend;
     res->get_bufs_req                      = vpe10_get_bufs_req;
     res->check_bg_color_support            = vpe10_check_bg_color_support;
+    res->bg_color_convert                  = vpe10_bg_color_convert;
     res->check_mirror_rotation_support     = vpe10_check_mirror_rotation_support;
     res->update_blnd_gamma                 = vpe10_update_blnd_gamma;
     res->update_output_gamma               = vpe10_update_output_gamma;
@@ -303,4 +314,19 @@ bool vpe11_validate_cached_param(struct vpe_priv *vpe_priv, const struct vpe_bui
         return false;
 
     return true;
+}
+
+const struct vpe_caps *vpe11_get_capability(void)
+{
+    return &caps;
+}
+
+void vpe11_setup_check_funcs(struct vpe_check_support_funcs *funcs)
+{
+    funcs->check_input_format             = vpe10_check_input_format;
+    funcs->check_output_format            = vpe10_check_output_format;
+    funcs->check_input_color_space        = vpe10_check_input_color_space;
+    funcs->check_output_color_space       = vpe10_check_output_color_space;
+    funcs->get_dcc_compression_input_cap  = vpe10_get_dcc_compression_input_cap;
+    funcs->get_dcc_compression_output_cap = vpe10_get_dcc_compression_output_cap;
 }

@@ -172,15 +172,15 @@ namespace
 
       initialize_context_to_defaults(ctx, API_OPENGLES2);
       ctx->Version = 31;
-      for (int i = 0; i < MESA_SHADER_STAGES; i++) {
-         ctx->Const.ShaderCompilerOptions[i].LowerPrecisionFloat16 = true;
-         ctx->Const.ShaderCompilerOptions[i].LowerPrecisionInt16 = true;
+      for (int i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->fp16 = true;
+         ((struct pipe_shader_caps*)&ctx->screen->shader_caps[i])->int16 = true;
          ctx->screen->nir_options[i] = &compiler_options;
       }
 
       /* GL_ARB_explicit_uniform_location, GL_MAX_UNIFORM_LOCATIONS */
       ctx->Const.MaxUserAssignableUniformLocations =
-         4 * MESA_SHADER_STAGES * MAX_UNIFORMS;
+         4 * MESA_SHADER_MESH_STAGES * MAX_UNIFORMS;
 
       ctx->Const.Program[MESA_SHADER_VERTEX].MaxCombinedUniformComponents = 128 * 4;
       ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxCombinedUniformComponents = 16 * 4;
@@ -216,6 +216,7 @@ namespace
 
       /* Store the source for printing from later assertions. */
       this->source = source;
+      free(local_ctx.screen);
    }
 
    // A predicate-formatter for asserting that two integers are mutually prime.

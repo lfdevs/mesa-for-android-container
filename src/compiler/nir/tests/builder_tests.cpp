@@ -34,7 +34,7 @@ private:
       case 16: return glsl_u16vec_type(def->num_components);
       case 32: return glsl_uvec_type(def->num_components);
       case 64: return glsl_u64vec_type(def->num_components);
-      default: unreachable("Invalid bit size");
+      default: UNREACHABLE("Invalid bit size");
       }
    }
 

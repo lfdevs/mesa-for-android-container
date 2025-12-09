@@ -230,7 +230,7 @@ enum spirv_verify_result
 spirv_verify_gl_specialization_constants(
    const uint32_t *words, size_t word_count,
    struct nir_spirv_specialization *spec, unsigned num_spec,
-   gl_shader_stage stage, const char *entry_point_name)
+   mesa_shader_stage stage, const char *entry_point_name)
 {
    /* vtn_warn/vtn_log uses debug.func. Setting a null to prevent crash. Not
     * need to print the warnings now, would be done later, on the real

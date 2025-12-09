@@ -197,7 +197,7 @@ void
 crocus_predraw_resolve_inputs(struct crocus_context *ice,
                               struct crocus_batch *batch,
                               bool *draw_aux_buffer_disabled,
-                              gl_shader_stage stage,
+                              mesa_shader_stage stage,
                               bool consider_framebuffer)
 {
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
@@ -623,7 +623,7 @@ crocus_hiz_exec(struct crocus_context *ice,
       break;
    case ISL_AUX_OP_PARTIAL_RESOLVE:
    case ISL_AUX_OP_NONE:
-      unreachable("Invalid HiZ op");
+      UNREACHABLE("Invalid HiZ op");
    }
 
    DBG("%s %s to res %p level %d layers %d-%d\n",
@@ -858,7 +858,7 @@ crocus_resource_prepare_access(struct crocus_context *ice,
          } else if (isl_aux_usage_has_hiz(res->aux.usage)) {
             crocus_hiz_exec(ice, batch, res, level, layer, 1, aux_op);
          } else if (res->aux.usage == ISL_AUX_USAGE_STC_CCS) {
-            unreachable("crocus doesn't resolve STC_CCS resources");
+            UNREACHABLE("crocus doesn't resolve STC_CCS resources");
          } else {
             assert(isl_aux_usage_has_ccs(res->aux.usage));
             crocus_resolve_color(ice, batch, res, level, layer, aux_op);

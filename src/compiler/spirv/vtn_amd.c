@@ -47,7 +47,7 @@ vtn_handle_amd_gcn_shader_instruction(struct vtn_builder *b, SpvOp ext_opcode,
       break;
    }
    default:
-      unreachable("Invalid opcode");
+      UNREACHABLE("Invalid opcode");
    }
 
    vtn_push_nir_ssa(b, w[2], def);
@@ -79,7 +79,7 @@ vtn_handle_amd_shader_ballot_instruction(struct vtn_builder *b, SpvOp ext_opcode
       op = nir_intrinsic_mbcnt_amd;
       break;
    default:
-      unreachable("Invalid opcode");
+      UNREACHABLE("Invalid opcode");
    }
 
    const struct glsl_type *dest_type = vtn_get_type(b, w[1])->type;
@@ -171,7 +171,7 @@ vtn_handle_amd_shader_trinary_minmax_instruction(struct vtn_builder *b, SpvOp ex
                      nir_imax(nb, src[1], src[2]));
       break;
    default:
-      unreachable("unknown opcode\n");
+      UNREACHABLE("unknown opcode\n");
       break;
    }
 
@@ -190,7 +190,7 @@ vtn_handle_amd_shader_explicit_vertex_parameter_instruction(struct vtn_builder *
       op = nir_intrinsic_interp_deref_at_vertex;
       break;
    default:
-      unreachable("unknown opcode");
+      UNREACHABLE("unknown opcode");
    }
 
    nir_intrinsic_instr *intrin = nir_intrinsic_instr_create(b->nb.shader, op);

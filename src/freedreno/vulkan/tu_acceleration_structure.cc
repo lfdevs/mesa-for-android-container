@@ -135,7 +135,7 @@ get_bvh_layout(VkGeometryTypeKHR geometry_type,
    offset += (internal_count + leaf_count) * sizeof(uint32_t);
 
    /* The BVH and hence bvh_offset needs 64 byte alignment for RT nodes. */
-   offset = ALIGN(offset, 64);
+   offset = align64(offset, 64);
    layout->bvh_offset = offset;
 
    offset += internal_count * sizeof(struct tu_internal_node) +
@@ -234,11 +234,6 @@ encode(VkCommandBuffer commandBuffer,
    tu_dispatch_unaligned_indirect(commandBuffer,
                                   intermediate_header_addr +
                                   offsetof(struct vk_ir_header, ir_internal_node_count));
-
-   *(VkDeviceSize *)
-      util_sparse_array_get(&device->accel_struct_ranges,
-                            vk_acceleration_structure_get_va(dst)) = dst->size;
-
 }
 
 static VkResult

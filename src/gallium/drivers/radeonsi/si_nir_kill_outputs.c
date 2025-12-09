@@ -9,7 +9,8 @@ bool si_nir_kill_outputs(nir_shader *nir, const union si_shader_key *key)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    assert(impl);
-   assert(nir->info.stage <= MESA_SHADER_GEOMETRY);
+   assert(nir->info.stage <= MESA_SHADER_GEOMETRY ||
+          nir->info.stage == MESA_SHADER_MESH);
 
    if (!key->ge.opt.kill_outputs &&
        !key->ge.opt.kill_pointsize &&

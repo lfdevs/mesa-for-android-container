@@ -211,7 +211,7 @@ d3d12_video_decoder_prepare_dxva_slices_control_vp9(struct d3d12_video_decoder *
 {
    if(!picture_vp9->slice_parameter.slice_info_present)
    {
-      unreachable("Unsupported - need pipe_vp9_picture_desc.slice_parameter.slice_info_present");
+      UNREACHABLE("Unsupported - need pipe_vp9_picture_desc.slice_parameter.slice_info_present");
    }
 
    debug_printf("[d3d12_video_decoder_vp9] Upper layer reported %d slices for this frame, parsing them below...\n",
@@ -251,7 +251,7 @@ d3d12_video_decoder_prepare_dxva_slices_control_vp9(struct d3d12_video_decoder *
             break;
          default:
          {
-            unreachable("Unsupported pipe_slice_buffer_placement_type");
+            UNREACHABLE("Unsupported pipe_slice_buffer_placement_type");
          } break;
       }
 

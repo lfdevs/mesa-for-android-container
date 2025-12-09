@@ -123,13 +123,13 @@ enum radeon_family
    CHIP_PHOENIX,        /* Ryzen Z1 Extreme, Ryzen 7040, Ryzen 8040 */
    CHIP_PHOENIX2,       /* Ryzen Z1, Ryzen 8040 */
    /* GFX11.5 (RDNA 3.5) */
-   CHIP_GFX1150,
-   CHIP_GFX1151,
-   CHIP_GFX1152,
+   CHIP_STRIX1,         /* Ryzen AI 360-375 */
+   CHIP_STRIX_HALO,     /* Ryzen AI MAX */
+   CHIP_KRACKAN1,       /* Ryzen AI 330-350 */
    CHIP_GFX1153,
    /* GFX12 (RDNA 4) */
-   CHIP_GFX1200,
-   CHIP_GFX1201,
+   CHIP_GFX1200,        /* Radeon 9060 */
+   CHIP_GFX1201,        /* Radeon 9070 */
    CHIP_LAST,
 };
 

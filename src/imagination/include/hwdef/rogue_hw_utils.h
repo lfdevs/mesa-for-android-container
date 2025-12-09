@@ -39,8 +39,8 @@
 #define __pvr_make_address(addr_u64) PVR_DEV_ADDR(addr_u64)
 /* clang-format on */
 
-#include "csbgen/rogue_cdm.h"
-#include "csbgen/rogue_lls.h"
+#include "csbgen/rogue/cdm.h"
+#include "csbgen/rogue/lls.h"
 
 #undef __pvr_make_address
 #undef __pvr_get_address
@@ -50,6 +50,8 @@
 #include "pvr_device_info.h"
 #include "util/compiler.h"
 #include "util/macros.h"
+
+#include "pvr_hw_utils.h"
 
 static inline void
 rogue_get_isp_samples_per_tile_xy(const struct pvr_device_info *dev_info,
@@ -124,7 +126,7 @@ static void rogue_get_isp_scale_xy_from_samples(const uint32_t samples,
       *y_scale_out = 4;
       break;
    default:
-      unreachable("Unsupported number of samples");
+      UNREACHABLE("Unsupported number of samples");
    }
 }
 
@@ -259,25 +261,6 @@ rogue_get_render_size_max(const struct pvr_device_info *dev_info)
    rogue_get_render_size_max(dev_info)
 
 static inline uint32_t
-rogue_get_slc_cache_line_size(const struct pvr_device_info *dev_info)
-{
-   return PVR_GET_FEATURE_VALUE(dev_info, slc_cache_line_size_bits, 8U) / 8U;
-}
-
-static inline uint32_t pvr_get_max_user_vertex_output_components(
-   const struct pvr_device_info *dev_info)
-{
-   const uint32_t uvs_pba_entries =
-      PVR_GET_FEATURE_VALUE(dev_info, uvs_pba_entries, 0U);
-   const uint32_t uvs_banks = PVR_GET_FEATURE_VALUE(dev_info, uvs_banks, 0U);
-
-   if (uvs_banks <= 8U && uvs_pba_entries == 160U)
-      return 64U;
-
-   return 128U;
-}
-
-static inline uint32_t
 rogue_max_compute_shared_registers(const struct pvr_device_info *dev_info)
 {
    if (PVR_HAS_FEATURE(dev_info, compute))
@@ -302,10 +285,14 @@ rogue_get_cdm_context_resume_buffer_size(const struct pvr_device_info *dev_info)
 {
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
       const uint32_t max_num_cores = rogue_get_max_num_cores(dev_info);
-      const uint32_t cache_line_size = rogue_get_slc_cache_line_size(dev_info);
+      const uint32_t cache_line_size = pvr_get_slc_cache_line_size(dev_info);
       const uint32_t cdm_context_resume_buffer_stride =
          ALIGN_POT(ROGUE_LLS_CDM_CONTEXT_RESUME_BUFFER_SIZE, cache_line_size);
 
+      /*
+       * TODO: Optimise buffer size based on the core_count,
+       * not max_num_cores
+       */
       return cdm_context_resume_buffer_stride * max_num_cores;
    }
 
@@ -316,7 +303,7 @@ static inline uint32_t rogue_get_cdm_context_resume_buffer_alignment(
    const struct pvr_device_info *dev_info)
 {
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support))
-      return rogue_get_slc_cache_line_size(dev_info);
+      return pvr_get_slc_cache_line_size(dev_info);
 
    return ROGUE_LLS_CDM_CONTEXT_RESUME_BUFFER_ALIGNMENT;
 }
@@ -434,7 +421,7 @@ rogue_max_wg_temps(const struct pvr_device_info *dev_info,
 {
    assert(wg_size <= rogue_get_max_total_instances(dev_info));
    if (!wg_size)
-      return rogue_get_compute_max_work_group_size(dev_info);
+      wg_size = rogue_get_compute_max_work_group_size(dev_info);
 
    if (wg_size > ROGUE_MAX_INSTANCES_PER_TASK && has_barrier) {
       /* Number of slots allocated for each workgroup. */
@@ -466,5 +453,24 @@ rogue_max_wg_temps(const struct pvr_device_info *dev_info,
    }
 
    return temps;
+}
+
+static inline uint32_t
+rogue_num_uscs_per_tile(const struct pvr_device_info *dev_info)
+{
+   if (PVR_HAS_FEATURE(dev_info, tile_per_usc) ||
+       PVR_HAS_FEATURE(dev_info, pbe2_in_xe))
+      return 1;
+
+   return 4;
+}
+
+static inline uint32_t rogue_usc_indexed_pixel_output_index_scale(
+   const struct pvr_device_info *dev_info)
+{
+   if (PVR_HAS_FEATURE(dev_info, tile_per_usc))
+      return 4;
+
+   return 1;
 }
 #endif /* ROGUE_HW_UTILS_H */

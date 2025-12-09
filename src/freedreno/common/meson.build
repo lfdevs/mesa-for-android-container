@@ -26,7 +26,9 @@ libfreedreno_common = static_library(
     'freedreno_uuid.c',
     'freedreno_uuid.h',
     'freedreno_guardband.h',
+    'freedreno_vrs.h',
     freedreno_devices_h,
+    freedreno_pm4_xml_header_file,
     sha1_h,
     'redump.h'
   ],

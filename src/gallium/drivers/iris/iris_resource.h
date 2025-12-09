@@ -483,10 +483,6 @@ bool iris_has_invalid_primary(const struct iris_resource *res,
 void iris_resource_check_level_layer(const struct iris_resource *res,
                                      uint32_t level, uint32_t layer);
 
-bool iris_resource_level_has_hiz(const struct intel_device_info *devinfo,
-                                 const struct iris_resource *res,
-                                 uint32_t level);
-
 bool iris_sample_with_depth_aux(const struct intel_device_info *devinfo,
                                 const struct iris_resource *res);
 

@@ -125,8 +125,6 @@
   variables:
     DEVICE_TYPE: rpi3
     GPU_VERSION: broadcom-rpi3
-  script:
-    - ./install/bare-metal/poe-powered.sh
   tags:
     - igalia-rpi3
 
@@ -136,8 +134,6 @@
     DEVICE_TYPE: rpi4
     GPU_VERSION: broadcom-rpi4
     VK_DRIVER: broadcom
-  script:
-    - ./install/bare-metal/poe-powered.sh
   tags:
     - igalia-rpi4
 
@@ -147,13 +143,11 @@
     DEVICE_TYPE: rpi5
     GPU_VERSION: broadcom-rpi5
     VK_DRIVER: broadcom
-  script:
-    - ./install/bare-metal/poe-powered.sh
   tags:
     - igalia-rpi5
 
 
-# 1 device (2025-05-12)
+# 4 device (2025-11-28)
 .igalia-bcm2835-vc4:
   variables:
     RPI_MODEL: bcm2835-vc4
@@ -166,7 +160,7 @@
     GPU_VERSION: "broadcom-rpi3"
 
 
-# 1 device (2025-05-12)
+# 7 device (2025-11-28)
 .igalia-bcm2711-vc5:
   variables:
     RPI_MODEL: bcm2711-vc5
@@ -179,7 +173,7 @@
     GPU_VERSION: "broadcom-rpi4"
 
 
-# 1 device (2025-05-12)
+# 5 device (2025-11-28)
 .igalia-bcm2712-vc6:
   variables:
     RPI_MODEL: bcm2712-vc6
@@ -226,9 +220,15 @@
     CI_TRON_INITRAMFS_CATEGORY__50_KERNEL_MODULES__0__FORMAT__0__ARCHIVE__KEEP__0__REWRITE: 'usr/lib/\1'
     VK_DRIVER: broadcom
     FLAKES_CHANNEL: "#videocore-ci"
+    # FIXME: hack to mask the problem in https://gitlab.freedesktop.org/gfx-ci/ci-tron/-/issues/303
+    # To be reverted once the cause is identified and fixed.
+    CI_TRON_PATTERN__SESSION_REBOOT__REGEX: "VFS: Cannot open root device"
+    CI_TRON_TIMEOUT__BOOT_CYCLE__RETRIES: 2
+    CI_TRON_TIMEOUT__BOOT_CYCLE__MINUTES: 1440  # 24h, but really it's just some huge value that will never actually trigger; the OVERALL timeout continues to apply
   tags:
     - farm:igalia
     - dt_gpu:model:$RPI_MODEL
+    - ci-tron:priority:$CI_TRON_JOB_PRIORITY
 
 
 # For RPI_KERNEL, see KERNEL in
@@ -291,6 +291,14 @@
     RPI_CONFIG_TXT_64BIT: 'arm_64bit=1'
     RPI_KERNEL: 'kernel_2712'
     RPI_MODULES: 'v8-16k'
+
+.ci-tron-v3d-traces:arm64:
+  extends:
+    - .ci-tron-arm64-test-gl
+    - .piglit-traces-test
+    - .v3d-rules
+  variables:
+    PIGLIT_TRACES_FILE: traces-broadcom.yml
 
 
 .broadcom-test:

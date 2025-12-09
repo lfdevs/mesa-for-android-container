@@ -19,8 +19,8 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 {
 	struct radeon_cmdbuf *cs = &rctx->b.dma.cs;
 	unsigned i, ncopy, csize, sub_cmd, shift;
-	struct r600_resource *rdst = (struct r600_resource*)dst;
-	struct r600_resource *rsrc = (struct r600_resource*)src;
+	struct r600_resource *rdst = r600_as_resource(dst);
+	struct r600_resource *rsrc = r600_as_resource(src);
 
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
@@ -75,10 +75,10 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(dst, &r600_resource(dst)->valid_buffer_range, offset,
+	util_range_add(dst, &r600_as_resource(dst)->valid_buffer_range, offset,
 		       offset + size);
 
-	offset += r600_resource(dst)->gpu_address;
+	offset += r600_as_resource(dst)->gpu_address;
 
 	/* Flush the cache where the resource is bound. */
 	rctx->b.flags |= r600_get_flush_flags(coher) |
@@ -105,7 +105,7 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 
 		/* This must be done after r600_need_cs_space. */
 		reloc = radeon_add_to_buffer_list(&rctx->b, &rctx->b.gfx,
-					      (struct r600_resource*)dst, RADEON_USAGE_WRITE |
+					      r600_as_resource(dst), RADEON_USAGE_WRITE |
 					      RADEON_PRIO_CP_DMA);
 
 		radeon_emit(cs, PKT3(PKT3_CP_DMA, 4, 0));

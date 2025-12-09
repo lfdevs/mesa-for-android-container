@@ -1736,7 +1736,7 @@ FreedrenoDriver::Countable::resolve() const
          return;
       }
    }
-   unreachable("no such countable!");
+   UNREACHABLE("no such countable!");
 }
 
 uint64_t

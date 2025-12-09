@@ -27,6 +27,7 @@
 #include "vk_common_entrypoints.h"
 #include "vk_device.h"
 #include "vk_enum_defines.h"
+#include "vk_format.h"
 #include "vk_image.h"
 #include "vk_log.h"
 #include "vk_physical_device.h"
@@ -402,29 +403,47 @@ vk_common_QueueSignalReleaseImageANDROID(VkQueue _queue,
 {
    VK_FROM_HANDLE(vk_queue, queue, _queue);
    struct vk_device *device = queue->base.device;
-   VkResult result = VK_SUCCESS;
+   VkResult result;
 
-   STACK_ARRAY(VkPipelineStageFlags, stage_flags, MAX2(1, waitSemaphoreCount));
-   for (uint32_t i = 0; i < MAX2(1, waitSemaphoreCount); i++)
-      stage_flags[i] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-   result = vk_anb_semaphore_init_once(queue, device);
-   if (result != VK_SUCCESS) {
-      STACK_ARRAY_FINISH(stage_flags);
-      return result;
+   if (waitSemaphoreCount == 0) {
+      *pNativeFenceFd = -1;
+      return VK_SUCCESS;
    }
 
-   const VkSubmitInfo submit_info = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .waitSemaphoreCount = waitSemaphoreCount,
-      .pWaitSemaphores = pWaitSemaphores,
-      .pWaitDstStageMask = stage_flags,
-      .signalSemaphoreCount = 1,
-      .pSignalSemaphores = &queue->anb_semaphore,
+   result = vk_anb_semaphore_init_once(queue, device);
+   if (result != VK_SUCCESS)
+      return result;
+
+   STACK_ARRAY(VkSemaphoreSubmitInfo, wait_infos, waitSemaphoreCount);
+   for (uint32_t i = 0; i < waitSemaphoreCount; i++) {
+      wait_infos[i] = (VkSemaphoreSubmitInfo){
+         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+         .semaphore = pWaitSemaphores[i],
+         /* see wsi_common_queue_present for the rationale */
+         .stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+      };
+   }
+   const VkSemaphoreSubmitInfo signal_info = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+      .semaphore = queue->anb_semaphore,
+      /* see wsi_common_queue_present for the rationale */
+      .stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
    };
-   result = device->dispatch_table.QueueSubmit(_queue, 1, &submit_info,
-                                               VK_NULL_HANDLE);
-   STACK_ARRAY_FINISH(stage_flags);
+   if (device->copy_sync_payloads != NULL) {
+      result = vk_device_copy_semaphore_payloads(
+         device, waitSemaphoreCount, wait_infos, 1, &signal_info, 0, NULL);
+   } else {
+      const VkSubmitInfo2 submit_info = {
+         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+         .waitSemaphoreInfoCount = waitSemaphoreCount,
+         .pWaitSemaphoreInfos = wait_infos,
+         .signalSemaphoreInfoCount = 1,
+         .pSignalSemaphoreInfos = &signal_info,
+      };
+      result = device->dispatch_table.QueueSubmit2(_queue, 1, &submit_info,
+                                                   VK_NULL_HANDLE);
+   }
+   STACK_ARRAY_FINISH(wait_infos);
    if (result != VK_SUCCESS)
       return result;
 
@@ -738,6 +757,13 @@ get_ahb_buffer_format_properties2(
    if (!gpu_usage)
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 
+   /* No known gralloc implementations currently allocate with a
+    * layers > 1. So return an error if we happen to get one since
+    * the rest of mesa won't handle it properly.
+    */
+   if (desc.layers > 1)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+
    /* Fill properties fields based on description. */
    VkAndroidHardwareBufferFormatProperties2ANDROID *p = pProperties;
 
@@ -793,6 +819,13 @@ get_ahb_buffer_format_properties2(
       break;
    case DRM_FORMAT_NV12:
       external_format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+      break;
+   case DRM_FORMAT_P010:
+      external_format = VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
+      break;
+   case DRM_FORMAT_XBGR8888:
+      /* This can be resolved from IMPLEMENTATION_DEFINED AHB format */
+      external_format = VK_FORMAT_R8G8B8A8_UNORM;
       break;
    default:
       mesa_loge("Unsupported external DRM format: %d", info.drm_fourcc);
@@ -857,53 +890,81 @@ vk_common_GetAndroidHardwareBufferPropertiesANDROID(
    VkAndroidHardwareBufferPropertiesANDROID *pProperties)
 {
    VK_FROM_HANDLE(vk_device, device, device_h);
-   struct vk_physical_device *pdevice = device->physical;
-
    VkResult result;
 
-   VkAndroidHardwareBufferFormatPropertiesANDROID *format_prop =
-      vk_find_struct(pProperties->pNext, ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID);
+   VkAndroidHardwareBufferFormatPropertiesANDROID *format_prop = NULL;
+   VkAndroidHardwareBufferFormatProperties2ANDROID *format_prop2 = NULL;
+   VkAndroidHardwareBufferFormatResolvePropertiesANDROID *format_resolve = NULL;
 
-   /* Fill format properties of an Android hardware buffer. */
-   if (format_prop) {
-      VkAndroidHardwareBufferFormatProperties2ANDROID format_prop2 = {
-         .sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_2_ANDROID,
-      };
-      result = get_ahb_buffer_format_properties2(device, buffer, &format_prop2);
-      if (result != VK_SUCCESS)
-         return result;
-
-      format_prop->format                 = format_prop2.format;
-      format_prop->externalFormat         = format_prop2.externalFormat;
-      format_prop->formatFeatures         =
-         vk_format_features2_to_features(format_prop2.formatFeatures);
-      format_prop->samplerYcbcrConversionComponents =
-         format_prop2.samplerYcbcrConversionComponents;
-      format_prop->suggestedYcbcrModel    = format_prop2.suggestedYcbcrModel;
-      format_prop->suggestedYcbcrRange    = format_prop2.suggestedYcbcrRange;
-      format_prop->suggestedXChromaOffset = format_prop2.suggestedXChromaOffset;
-      format_prop->suggestedYChromaOffset = format_prop2.suggestedYChromaOffset;
+   vk_foreach_struct(ext, pProperties->pNext) {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID:
+         format_prop = (void *)ext;
+         break;
+      case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_2_ANDROID:
+         format_prop2 = (void *)ext;
+         break;
+      case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_RESOLVE_PROPERTIES_ANDROID:
+         format_resolve = (void *)ext;
+         break;
+      default:
+         break;
+      }
    }
 
-   VkAndroidHardwareBufferFormatProperties2ANDROID *format_prop2 =
-      vk_find_struct(pProperties->pNext, ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_2_ANDROID);
+   /* Fill format properties of an Android hardware buffer. */
+   VkAndroidHardwareBufferFormatProperties2ANDROID local_prop2 = {
+      .sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_2_ANDROID,
+   };
+   if (!format_prop2 && (format_prop || format_resolve))
+      format_prop2 = &local_prop2;
+
    if (format_prop2) {
       result = get_ahb_buffer_format_properties2(device, buffer, format_prop2);
       if (result != VK_SUCCESS)
          return result;
    }
 
+   if (format_prop) {
+      format_prop->format                 = format_prop2->format;
+      format_prop->externalFormat         = format_prop2->externalFormat;
+      format_prop->formatFeatures         =
+         vk_format_features2_to_features(format_prop2->formatFeatures);
+      format_prop->samplerYcbcrConversionComponents =
+         format_prop2->samplerYcbcrConversionComponents;
+      format_prop->suggestedYcbcrModel    = format_prop2->suggestedYcbcrModel;
+      format_prop->suggestedYcbcrRange    = format_prop2->suggestedYcbcrRange;
+      format_prop->suggestedXChromaOffset = format_prop2->suggestedXChromaOffset;
+      format_prop->suggestedYChromaOffset = format_prop2->suggestedYChromaOffset;
+   }
+
+   if (format_resolve) {
+      if (device->enabled_extensions.ANDROID_external_format_resolve) {
+         assert(format_prop2->externalFormat != VK_FORMAT_UNDEFINED);
+         const uint32_t num_bits = vk_format_get_component_bits(
+            format_prop2->externalFormat, UTIL_FORMAT_COLORSPACE_RGB, 1);
+         format_resolve->colorAttachmentFormat =
+            num_bits == 8 ? VK_FORMAT_R8G8B8A8_UNORM
+                          : VK_FORMAT_R16G16B16A16_UNORM;
+      } else {
+         format_resolve->colorAttachmentFormat = VK_FORMAT_UNDEFINED;
+      }
+   }
+
    const native_handle_t *handle = AHardwareBuffer_getNativeHandle(buffer);
    assert(handle && handle->numFds > 0);
    pProperties->allocationSize = lseek(handle->data[0], 0, SEEK_END);
 
-   VkPhysicalDeviceMemoryProperties mem_props;
+   VkMemoryFdPropertiesKHR fd_props = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
+   };
+   result = device->dispatch_table.GetMemoryFdPropertiesKHR(
+      device_h, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, handle->data[0],
+      &fd_props);
+   if (result != VK_SUCCESS)
+      return result;
 
-   device->physical->dispatch_table.GetPhysicalDeviceMemoryProperties(
-      (VkPhysicalDevice)pdevice, &mem_props);
-
-   /* All memory types. (Should we be smarter than this?) */
-   pProperties->memoryTypeBits = (1u << mem_props.memoryTypeCount) - 1;
+   pProperties->memoryTypeBits = fd_props.memoryTypeBits;
 
    return VK_SUCCESS;
 }
@@ -998,6 +1059,16 @@ vk_android_get_ahb_buffer_properties(
       .compatibleHandleTypes =
          VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
    };
+}
+
+bool vk_android_rp_attachment_has_external_format(
+   const VkAttachmentDescription2 *desc)
+{
+   const VkExternalFormatANDROID *format_info =
+      vk_find_struct_const(desc->pNext,
+                           EXTERNAL_FORMAT_ANDROID);
+   return (desc->format == VK_FORMAT_UNDEFINED) &&
+          (format_info != NULL);
 }
 
 #endif /* ANDROID_API_LEVEL >= 26 */

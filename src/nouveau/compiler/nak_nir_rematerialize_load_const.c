@@ -28,7 +28,7 @@ rematerialize_load_const(nir_src *src, void *_ctx)
    }
 
    nir_load_const_instr *old_lc =
-      nir_instr_as_load_const(src->ssa->parent_instr);
+      nir_def_as_load_const(src->ssa);
 
    nir_load_const_instr *new_lc =
       nir_instr_as_load_const(nir_instr_clone(ctx->b.shader, &old_lc->instr));

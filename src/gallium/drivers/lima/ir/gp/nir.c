@@ -53,7 +53,7 @@ static void register_node_ssa(gpir_block *block, gpir_node *node, nir_def *ssa)
     */
    bool needs_register = false;
    nir_foreach_use(use, ssa) {
-      if (nir_src_parent_instr(use)->block != ssa->parent_instr->block) {
+      if (nir_src_parent_instr(use)->block != nir_def_block(ssa)) {
          needs_register = true;
          break;
       }
@@ -62,7 +62,7 @@ static void register_node_ssa(gpir_block *block, gpir_node *node, nir_def *ssa)
    if (!needs_register) {
       nir_foreach_if_use(use, ssa) {
          if (nir_cf_node_prev(&nir_src_parent_if(use)->cf_node) !=
-             &ssa->parent_instr->block->cf_node) {
+             &nir_def_block(ssa)->cf_node) {
             needs_register = true;
             break;
          }
@@ -425,7 +425,7 @@ static void gpir_print_shader_db(struct nir_shader *nir, gpir_compiler *comp,
    char *shaderdb;
    ASSERTED int ret = asprintf(&shaderdb,
                                "%s shader: %d inst, %d loops, %d:%d spills:fills\n",
-                               gl_shader_stage_name(info->stage),
+                               mesa_shader_stage_name(info->stage),
                                comp->num_instr,
                                comp->num_loops,
                                comp->num_spills,

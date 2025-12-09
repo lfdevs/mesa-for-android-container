@@ -115,16 +115,11 @@ vn_device_memory_import_dma_buf(struct vn_device *dev,
    const VkMemoryType *mem_type =
       &dev->physical_device->memory_properties
           .memoryTypes[alloc_info->memoryTypeIndex];
-   const VkMemoryDedicatedAllocateInfo *dedicated_info =
-      vk_find_struct_const(alloc_info->pNext, MEMORY_DEDICATED_ALLOCATE_INFO);
-   const bool is_dedicated =
-      dedicated_info && (dedicated_info->image != VK_NULL_HANDLE ||
-                         dedicated_info->buffer != VK_NULL_HANDLE);
 
    struct vn_renderer_bo *bo;
    VkResult result = vn_renderer_bo_create_from_dma_buf(
-      dev->renderer, is_dedicated ? alloc_info->allocationSize : 0, fd,
-      mem_type->propertyFlags, &bo);
+      dev->renderer, alloc_info->allocationSize, fd, mem_type->propertyFlags,
+      &bo);
    if (result != VK_SUCCESS)
       return result;
 
@@ -441,6 +436,7 @@ vn_MapMemory2(VkDevice device,
    const VkDeviceSize size = pMemoryMapInfo->size;
    const struct vk_device_memory *mem_vk = &mem->base.vk;
    const bool need_bo = !mem->base_bo;
+   void *placed_addr = NULL;
    void *ptr = NULL;
    VkResult result;
 
@@ -462,7 +458,14 @@ vn_MapMemory2(VkDevice device,
          return vn_error(dev->instance, result);
    }
 
-   ptr = vn_renderer_bo_map(dev->renderer, mem->base_bo);
+   if (pMemoryMapInfo->flags & VK_MEMORY_MAP_PLACED_BIT_EXT) {
+      const VkMemoryMapPlacedInfoEXT *placed_info = vk_find_struct_const(
+         pMemoryMapInfo->pNext, MEMORY_MAP_PLACED_INFO_EXT);
+      assert(placed_info != NULL);
+      placed_addr = placed_info->pPlacedAddress;
+   }
+
+   ptr = vn_renderer_bo_map(dev->renderer, mem->base_bo, placed_addr);
    if (!ptr) {
       /* vn_renderer_bo_map implies a roundtrip on success, but not here. */
       if (need_bo) {
@@ -568,7 +571,6 @@ vn_GetMemoryFdKHR(VkDevice device,
 VkResult
 vn_get_memory_dma_buf_properties(struct vn_device *dev,
                                  int fd,
-                                 uint64_t *out_alloc_size,
                                  uint32_t *out_mem_type_bits)
 {
    VkDevice device = vn_device_to_handle(dev);
@@ -583,13 +585,8 @@ vn_get_memory_dma_buf_properties(struct vn_device *dev,
 
    vn_ring_roundtrip(dev->primary_ring);
 
-   VkMemoryResourceAllocationSizePropertiesMESA alloc_size_props = {
-      .sType =
-         VK_STRUCTURE_TYPE_MEMORY_RESOURCE_ALLOCATION_SIZE_PROPERTIES_MESA,
-   };
    VkMemoryResourcePropertiesMESA props = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_RESOURCE_PROPERTIES_MESA,
-      .pNext = &alloc_size_props,
    };
    result = vn_call_vkGetMemoryResourcePropertiesMESA(
       dev->primary_ring, device, bo->res_id, &props);
@@ -599,7 +596,6 @@ vn_get_memory_dma_buf_properties(struct vn_device *dev,
       return result;
    }
 
-   *out_alloc_size = alloc_size_props.allocationSize;
    *out_mem_type_bits = props.memoryTypeBits;
 
    return VK_SUCCESS;
@@ -613,15 +609,13 @@ vn_GetMemoryFdPropertiesKHR(VkDevice device,
 {
    VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
-   uint64_t alloc_size = 0;
    uint32_t mem_type_bits = 0;
    VkResult result = VK_SUCCESS;
 
    if (handleType != VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT)
       return vn_error(dev->instance, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
-   result =
-      vn_get_memory_dma_buf_properties(dev, fd, &alloc_size, &mem_type_bits);
+   result = vn_get_memory_dma_buf_properties(dev, fd, &mem_type_bits);
    if (result != VK_SUCCESS)
       return vn_error(dev->instance, result);
 

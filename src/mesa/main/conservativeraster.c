@@ -64,7 +64,7 @@ conservative_raster_parameter(GLenum pname, GLfloat param,
       }
 
       FLUSH_VERTICES(ctx, 0, 0);
-      ctx->NewDriverState |= ST_NEW_RASTERIZER;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
 
       ctx->ConservativeRasterDilate =
          CLAMP(param,
@@ -83,7 +83,7 @@ conservative_raster_parameter(GLenum pname, GLfloat param,
       }
 
       FLUSH_VERTICES(ctx, 0, 0);
-      ctx->NewDriverState |= ST_NEW_RASTERIZER;
+      ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
       ctx->ConservativeRasterMode = param;
       break;
    default:

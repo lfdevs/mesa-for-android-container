@@ -56,7 +56,7 @@ struct softpipe_context {
 
    /** Constant state objects */
    struct pipe_blend_state *blend;
-   struct pipe_sampler_state *samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
+   struct pipe_sampler_state *samplers[MESA_SHADER_STAGES][PIPE_MAX_SAMPLERS];
    struct pipe_depth_stencil_alpha_state *depth_stencil;
    struct pipe_rasterizer_state *rasterizer;
    struct sp_fragment_shader *fs;
@@ -72,13 +72,13 @@ struct softpipe_context {
    struct pipe_blend_color blend_color_clamped;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
-   struct pipe_resource *constants[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
+   struct pipe_resource *constants[MESA_SHADER_STAGES][PIPE_MAX_CONSTANT_BUFFERS];
    struct pipe_framebuffer_state framebuffer;
    struct pipe_scissor_state scissors[PIPE_MAX_VIEWPORTS];
-   struct pipe_sampler_view *sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   struct pipe_sampler_view *sampler_views[MESA_SHADER_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
-   struct pipe_image_view images[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
-   struct pipe_shader_buffer buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
+   struct pipe_image_view images[MESA_SHADER_STAGES][PIPE_MAX_SHADER_IMAGES];
+   struct pipe_shader_buffer buffers[MESA_SHADER_STAGES][PIPE_MAX_SHADER_BUFFERS];
    struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    struct pipe_resource *mapped_vs_tex[PIPE_MAX_SHADER_SAMPLER_VIEWS];
@@ -92,8 +92,8 @@ struct softpipe_context {
    struct pipe_query_data_pipeline_statistics pipeline_statistics;
    unsigned active_statistics_queries;
 
-   unsigned num_samplers[PIPE_SHADER_TYPES];
-   unsigned num_sampler_views[PIPE_SHADER_TYPES];
+   unsigned num_samplers[MESA_SHADER_STAGES];
+   unsigned num_sampler_views[MESA_SHADER_STAGES];
 
    unsigned num_vertex_buffers;
 
@@ -109,7 +109,7 @@ struct softpipe_context {
    uint8_t *mapped_vbuffer[PIPE_MAX_ATTRIBS];
 
    /** Mapped constant buffers */
-   struct tgsi_exec_consts_info mapped_constants[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
+   struct tgsi_exec_consts_info mapped_constants[MESA_SHADER_STAGES][PIPE_MAX_CONSTANT_BUFFERS];
 
    /** Vertex format */
    struct sp_setup_info setup_info;
@@ -155,9 +155,9 @@ struct softpipe_context {
 
    /** TGSI exec things */
    struct {
-      struct sp_tgsi_sampler *sampler[PIPE_SHADER_TYPES];
-      struct sp_tgsi_image *image[PIPE_SHADER_TYPES];
-      struct sp_tgsi_buffer *buffer[PIPE_SHADER_TYPES];
+      struct sp_tgsi_sampler *sampler[MESA_SHADER_STAGES];
+      struct sp_tgsi_image *image[MESA_SHADER_STAGES];
+      struct sp_tgsi_buffer *buffer[MESA_SHADER_STAGES];
    } tgsi;
 
    struct tgsi_exec_machine *fs_machine;
@@ -182,12 +182,12 @@ struct softpipe_context {
 
    /*
     * Texture caches for vertex, fragment, geometry stages.
-    * Don't use PIPE_SHADER_TYPES here to avoid allocating unused memory
+    * Don't use MESA_SHADER_STAGES here to avoid allocating unused memory
     * for compute shaders.
     * XXX wouldn't it make more sense for the tile cache to just be part
     * of sp_sampler_view?
     */
-   struct softpipe_tex_tile_cache *tex_cache[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   struct softpipe_tex_tile_cache *tex_cache[MESA_SHADER_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 };
 
 

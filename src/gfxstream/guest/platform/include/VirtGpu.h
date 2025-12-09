@@ -45,7 +45,6 @@ enum VirtGpuCapset {
     kCapsetVenus = 4,
     kCapsetCrossDomain = 5,
     kCapsetDrm = 6,
-    kCapsetGfxStreamMagma = 7,
     kCapsetGfxStreamGles = 8,
     kCapsetGfxStreamComposer = 9,
 };

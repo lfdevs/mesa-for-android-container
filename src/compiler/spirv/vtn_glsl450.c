@@ -322,7 +322,8 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
       break;
 
    default:
-      mediump_16bit = b->options->mediump_16bit_alu && vtn_value_is_relaxed_precision(b, dest_val);
+      mediump_16bit = b->options->mediump_16bit_alu &&
+                      vtn_has_decoration(b, dest_val, SpvDecorationRelaxedPrecision);
       break;
    }
 
@@ -343,7 +344,7 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
 
    struct vtn_ssa_value *dest = vtn_create_ssa_value(b, dest_type);
 
-   vtn_handle_no_contraction(b, vtn_untyped_value(b, w[2]));
+   b->nb.exact |= vtn_has_decoration(b, vtn_untyped_value(b, w[2]), SpvDecorationNoContraction);
    switch (entrypoint) {
    case GLSLstd450Radians:
       dest->def = nir_radians(nb, src[0]);

@@ -51,13 +51,13 @@ fd_depth_clamp_enabled(struct fd_context *ctx) assert_dt
 }
 
 void fd_set_shader_buffers(struct pipe_context *pctx,
-                           enum pipe_shader_type shader,
+                           mesa_shader_stage shader,
                            unsigned start, unsigned count,
                            const struct pipe_shader_buffer *buffers,
                            unsigned writable_bitmask) in_dt;
 
 void fd_set_shader_images(struct pipe_context *pctx,
-                          enum pipe_shader_type shader, unsigned start,
+                          mesa_shader_stage shader, unsigned start,
                           unsigned count, unsigned unbind_num_trailing_slots,
                           const struct pipe_image_view *images) in_dt;
 

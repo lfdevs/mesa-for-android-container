@@ -38,8 +38,8 @@
 
 
 #include "util/format/u_format.h"
-#include "util/compiler.h"
-#include "gallivm/lp_bld.h"
+
+#include <llvm-c/Core.h>
 
 #ifdef __cplusplus
 extern "C" {

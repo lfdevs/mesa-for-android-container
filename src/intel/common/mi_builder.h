@@ -486,7 +486,7 @@ mi_value_half(struct mi_value value, bool top_32_bits)
       return value;
    }
 
-   unreachable("Invalid mi_value type");
+   UNREACHABLE("Invalid mi_value type");
 }
 
 static inline void
@@ -507,7 +507,7 @@ _mi_copy_no_unref(struct mi_builder *b,
 
    switch (dst.type) {
    case MI_VALUE_TYPE_IMM:
-      unreachable("Cannot copy to an immediate");
+      UNREACHABLE("Cannot copy to an immediate");
 
    case MI_VALUE_TYPE_MEM64:
    case MI_VALUE_TYPE_REG64:
@@ -567,7 +567,7 @@ _mi_copy_no_unref(struct mi_builder *b,
                               mi_value_half(src, true));
          break;
       default:
-         unreachable("Invalid mi_value type");
+         UNREACHABLE("Invalid mi_value type");
       }
       break;
 
@@ -598,7 +598,7 @@ _mi_copy_no_unref(struct mi_builder *b,
             mi_value_unref(b, tmp);
          }
 #else
-         unreachable("Cannot do mem <-> mem copy on IVB and earlier");
+         UNREACHABLE("Cannot do mem <-> mem copy on IVB and earlier");
 #endif
          break;
 
@@ -615,7 +615,7 @@ _mi_copy_no_unref(struct mi_builder *b,
          break;
 
       default:
-         unreachable("Invalid mi_value type");
+         UNREACHABLE("Invalid mi_value type");
       }
       break;
 
@@ -644,7 +644,7 @@ _mi_copy_no_unref(struct mi_builder *b,
             lrm.MemoryAddress = src.addr;
          }
 #else
-         unreachable("Cannot load do mem -> reg copy on SNB and earlier");
+         UNREACHABLE("Cannot load do mem -> reg copy on SNB and earlier");
 #endif
          break;
 
@@ -666,17 +666,17 @@ _mi_copy_no_unref(struct mi_builder *b,
             }
          }
 #else
-         unreachable("Cannot do reg <-> reg copy on IVB and earlier");
+         UNREACHABLE("Cannot do reg <-> reg copy on IVB and earlier");
 #endif
          break;
 
       default:
-         unreachable("Invalid mi_value type");
+         UNREACHABLE("Invalid mi_value type");
       }
       break;
 
    default:
-      unreachable("Invalid mi_value type");
+      UNREACHABLE("Invalid mi_value type");
    }
 
 
@@ -1373,7 +1373,7 @@ mi_store_relocated_imm(struct mi_builder *b, struct mi_value dst)
    }
 
    default:
-      unreachable("Invalid value type");
+      UNREACHABLE("Invalid value type");
    }
 
    mi_value_unref(b, dst);
@@ -1393,7 +1393,7 @@ mi_relocate_store_imm(struct mi_reloc_imm_token token, uint64_t value)
       *token.ptr[0] = value & 0xffffffff;
       break;
    default:
-      unreachable("Invalid value type");
+      UNREACHABLE("Invalid value type");
    }
 }
 

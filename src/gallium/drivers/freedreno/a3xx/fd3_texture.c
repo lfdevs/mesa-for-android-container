@@ -110,7 +110,7 @@ tex_type(unsigned target)
 {
    switch (target) {
    default:
-      unreachable("Unsupported target");
+      UNREACHABLE("Unsupported target");
    case PIPE_BUFFER:
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_1D_ARRAY:

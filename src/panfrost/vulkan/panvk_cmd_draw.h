@@ -72,7 +72,7 @@ struct panvk_rendering_state {
 
 #if PAN_ARCH < 9
       uint32_t bo_count;
-      struct pan_kmod_bo *bos[MAX_RTS + 2];
+      struct pan_kmod_bo *bos[(MAX_RTS * PANVK_MAX_PLANES) + 2];
 #endif
    } fb;
 
@@ -149,6 +149,10 @@ struct panvk_cmd_graphics_state {
 #if PAN_ARCH < 9
       uint64_t attribs;
       uint64_t attrib_bufs;
+      uint64_t indirect_attribs_infos;
+      uint64_t indirect_attrib_bufs_infos;
+      uint64_t indirect_varying_bufs_infos;
+      bool previous_draw_was_indirect;
 #endif
    } vs;
 
@@ -166,9 +170,6 @@ struct panvk_cmd_graphics_state {
    /* Index buffer */
    struct {
       uint64_t dev_addr;
-#if PAN_ARCH < 9
-      void *host_addr;
-#endif
       uint64_t size;
       uint8_t index_size;
    } ib;

@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MIT
+--
 -- Parse logs from test-quad-textured-3d.c to exctract layer/level
 -- offsets
 --

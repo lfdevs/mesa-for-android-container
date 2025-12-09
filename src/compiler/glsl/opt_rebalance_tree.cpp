@@ -327,7 +327,7 @@ ir_rebalance_visitor::handle_rvalue(ir_rvalue **rvalue)
 }
 
 bool
-do_rebalance_tree(exec_list *instructions)
+do_rebalance_tree(ir_exec_list *instructions)
 {
    ir_rebalance_visitor v;
 

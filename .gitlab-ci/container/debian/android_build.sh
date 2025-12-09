@@ -35,6 +35,13 @@ find /${ndk}/ -type f \( -iname '*clang-check*' -o -iname '*clang-tidy*' -o -ina
 
 sh .gitlab-ci/container/create-android-ndk-pc.sh /$ndk zlib.pc "" "-lz" "1.2.3" $ANDROID_SDK_VERSION
 
+# Install android Rust targets
+rustup target add \
+    x86_64-linux-android \
+    i686-linux-android \
+    aarch64-linux-android \
+    armv7-linux-androideabi
+
 sh .gitlab-ci/container/create-android-cross-file.sh /$ndk x86_64-linux-android x86_64 x86_64 $ANDROID_SDK_VERSION
 sh .gitlab-ci/container/create-android-cross-file.sh /$ndk i686-linux-android x86 x86 $ANDROID_SDK_VERSION
 sh .gitlab-ci/container/create-android-cross-file.sh /$ndk aarch64-linux-android aarch64 armv8 $ANDROID_SDK_VERSION
@@ -112,6 +119,8 @@ rm -rf $LIBELF_VERSION
 # Build LLVM libraries for Android only if necessary, uploading a copy to S3
 # to avoid rebuilding it in a future run if the version does not change.
 bash .gitlab-ci/container/build-android-x86_64-llvm.sh
+
+. .gitlab-ci/container/build-bindgen.sh
 
 apt-get purge -y "${EPHEMERAL[@]}"
 

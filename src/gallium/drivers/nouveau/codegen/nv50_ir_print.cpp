@@ -61,7 +61,7 @@ static const char **colour;
 
 static void init_colours()
 {
-   if (getenv("NV50_PROG_DEBUG_NO_COLORS") != NULL)
+   if (os_get_option("NV50_PROG_DEBUG_NO_COLORS") != NULL)
       colour = _nocolour;
    else
       colour = _colour;
@@ -979,12 +979,12 @@ nv50_ir_prog_info_out_print(struct nv50_ir_prog_info_out *info_out)
 
    INFO("   \"prop\":{\n");
    switch (info_out->type) {
-      case PIPE_SHADER_VERTEX:
+      case MESA_SHADER_VERTEX:
          INFO("      \"vp\": {\"usesDrawParameters\":\"%s\"}\n",
                info_out->prop.vp.usesDrawParameters ? "true" : "false");
          break;
-      case PIPE_SHADER_TESS_CTRL:
-      case PIPE_SHADER_TESS_EVAL:
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
          INFO("      \"tp\":{\n");
          INFO("         \"outputPatchSize\":\"%d\"\n", info_out->prop.tp.outputPatchSize);
          INFO("         \"partitioning\":\"%d\"\n", info_out->prop.tp.partitioning);
@@ -992,13 +992,13 @@ nv50_ir_prog_info_out_print(struct nv50_ir_prog_info_out *info_out)
          INFO("         \"domain\":\"%d\"\n", info_out->prop.tp.domain);
          INFO("         \"outputPrim\":\"%d\"\n", info_out->prop.tp.outputPrim);
          break;
-      case PIPE_SHADER_GEOMETRY:
+      case MESA_SHADER_GEOMETRY:
          INFO("      \"gp\":{\n");
          INFO("         \"outputPrim\":\"%d\"\n", info_out->prop.gp.outputPrim);
          INFO("         \"instancesCount\":\"%d\"\n", info_out->prop.gp.instanceCount);
          INFO("         \"maxVertices\":\"%d\"\n", info_out->prop.gp.maxVertices);
          break;
-      case PIPE_SHADER_FRAGMENT:
+      case MESA_SHADER_FRAGMENT:
          INFO("      \"fp\":{\n");
          INFO("         \"numColourResults\":\"%d\"\n", info_out->prop.fp.numColourResults);
          INFO("         \"writesDepth\":\"%s\"\n", info_out->prop.fp.writesDepth ? "true" : "false");

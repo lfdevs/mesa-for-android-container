@@ -42,7 +42,7 @@ struct active_atomic_buffer {
    struct active_atomic_counter_uniform *uniforms;
    unsigned num_uniforms;
    unsigned uniform_buffer_size;
-   unsigned stage_counter_references[MESA_SHADER_STAGES];
+   unsigned stage_counter_references[MESA_SHADER_MESH_STAGES];
    unsigned size;
 };
 
@@ -142,7 +142,7 @@ find_active_atomic_counters(const struct gl_constants *consts,
                     consts->MaxAtomicBufferBindings);
    *num_buffers = 0;
 
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; ++i) {
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; ++i) {
       struct gl_linked_shader *sh = prog->_LinkedShaders[i];
       if (sh == NULL)
          continue;
@@ -195,7 +195,7 @@ gl_nir_link_assign_atomic_counter_resources(const struct gl_constants *consts,
                                             struct gl_shader_program *prog)
 {
    unsigned num_buffers;
-   unsigned num_atomic_buffers[MESA_SHADER_STAGES] = {0};
+   unsigned num_atomic_buffers[MESA_SHADER_MESH_STAGES] = {0};
    struct active_atomic_buffer *abs =
       find_active_atomic_counters(consts, prog, &num_buffers);
 
@@ -246,7 +246,7 @@ gl_nir_link_assign_atomic_counter_resources(const struct gl_constants *consts,
       }
 
       /* Assign stage-specific fields. */
-      for (unsigned stage = 0; stage < MESA_SHADER_STAGES; ++stage) {
+      for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; ++stage) {
          if (ab->stage_counter_references[stage]) {
             mab->StageReferences[stage] = GL_TRUE;
             num_atomic_buffers[stage]++;
@@ -261,7 +261,7 @@ gl_nir_link_assign_atomic_counter_resources(const struct gl_constants *consts,
    /* Store a list pointers to atomic buffers per stage and store the index
     * to the intra-stage buffer list in uniform storage.
     */
-   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; ++stage) {
+   for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; ++stage) {
       if (prog->_LinkedShaders[stage] == NULL ||
           num_atomic_buffers[stage] <= 0)
          continue;
@@ -308,8 +308,8 @@ gl_nir_link_check_atomic_counter_resources(const struct gl_constants *consts,
    unsigned num_buffers;
    struct active_atomic_buffer *abs =
       find_active_atomic_counters(consts, prog, &num_buffers);
-   unsigned atomic_counters[MESA_SHADER_STAGES] = {0};
-   unsigned atomic_buffers[MESA_SHADER_STAGES] = {0};
+   unsigned atomic_counters[MESA_SHADER_MESH_STAGES] = {0};
+   unsigned atomic_buffers[MESA_SHADER_MESH_STAGES] = {0};
    unsigned total_atomic_counters = 0;
    unsigned total_atomic_buffers = 0;
 
@@ -341,7 +341,7 @@ gl_nir_link_check_atomic_counter_resources(const struct gl_constants *consts,
          }
       }
 
-      for (unsigned j = 0; j < MESA_SHADER_STAGES; ++j) {
+      for (unsigned j = 0; j < MESA_SHADER_MESH_STAGES; ++j) {
          const unsigned n = abs[i].stage_counter_references[j];
 
          if (n) {
@@ -354,7 +354,7 @@ gl_nir_link_check_atomic_counter_resources(const struct gl_constants *consts,
    }
 
    /* Check that they are within the supported limits. */
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (atomic_counters[i] > consts->Program[i].MaxAtomicCounters)
          linker_error(prog, "Too many %s shader atomic counters",
                       _mesa_shader_stage_to_string(i));

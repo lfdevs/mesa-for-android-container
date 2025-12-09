@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "http://caching-proxy/cache/?uri=https://s3.freedesktop.org/mesa-tracie-public/"
+  download-url: "https://s3.freedesktop.org/mesa-tracie-public/"
 
 traces:
   unigine/heaven-scene1-low-d3d11.trace-dxgi:
@@ -38,7 +38,7 @@ traces:
       checksum: 6cb8190a2ee4c335291914fbc70a8bb8
   gputest/furmark-v2.trace:
     gl-radeonsi-stoney:
-      checksum: d9452b1aa606d61a51a80fb4644b7303
+      checksum: 1b0894a0059e5cdb6aadb24a7d291e9f
   gputest/triangle-v2.trace:
     gl-radeonsi-stoney:
       checksum: 2d0527e7288a0fc31099404546dadbfb

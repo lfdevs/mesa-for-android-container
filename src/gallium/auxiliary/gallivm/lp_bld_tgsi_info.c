@@ -28,7 +28,6 @@
 
 #include "util/compiler.h"
 #include "util/u_memory.h"
-#include "util/u_math.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_dump.h"

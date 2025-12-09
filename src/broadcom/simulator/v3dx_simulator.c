@@ -288,6 +288,12 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
 	case DRM_V3D_PARAM_MAX_PERF_COUNTERS:
 		args->value = perfcnt_total;
 		return 0;
+        case DRM_V3D_PARAM_GLOBAL_RESET_COUNTER:
+                args->value = 0;
+                return 0;
+        case DRM_V3D_PARAM_CONTEXT_RESET_COUNTER:
+                args->value = 0;
+                return 0;
         }
 
         if (args->param < ARRAY_SIZE(reg_map) && reg_map[args->param]) {
@@ -432,7 +438,7 @@ v3d_isr_hub(struct v3d_hw *v3d)
                  * the future. In any case, note that for this case we would
                  * only be doing debugging log.
                  */
-                unreachable("TFU Conversion Complete interrupt not handled");
+                UNREACHABLE("TFU Conversion Complete interrupt not handled");
         }
 
         handle_mmu_interruptions(v3d, hub_status);

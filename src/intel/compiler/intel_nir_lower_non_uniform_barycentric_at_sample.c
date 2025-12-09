@@ -48,7 +48,7 @@ intel_nir_lower_non_uniform_barycentric_at_sample_instr(nir_builder *b,
        !nir_src_is_divergent(&intrin->src[0]))
       return false;
 
-   if (intrin->def.parent_instr->pass_flags != 0)
+   if (nir_def_instr(&intrin->def)->pass_flags != 0)
       return false;
 
    nir_def *sample_id = intrin->src[0].ssa;
@@ -62,7 +62,7 @@ intel_nir_lower_non_uniform_barycentric_at_sample_instr(nir_builder *b,
       nir_push_if(b, nir_ieq(b, sample_id, first_sample_id));
       {
          nir_builder_instr_insert(b, &intrin->instr);
-         intrin->def.parent_instr->pass_flags = 1;
+         nir_def_instr(&intrin->def)->pass_flags = 1;
 
          nir_src_rewrite(&intrin->src[0], first_sample_id);
 
@@ -85,10 +85,10 @@ intel_nir_lower_non_uniform_interpolated_input_instr(nir_builder *b,
    if (load_ii->intrinsic != nir_intrinsic_load_interpolated_input)
       return false;
 
-   assert(load_ii->src[0].ssa->parent_instr->type == nir_instr_type_intrinsic);
+   assert(nir_src_is_intrinsic(load_ii->src[0]));
 
    nir_intrinsic_instr *bary =
-      nir_instr_as_intrinsic(load_ii->src[0].ssa->parent_instr);
+      nir_def_as_intrinsic(load_ii->src[0].ssa);
    if (bary->intrinsic != nir_intrinsic_load_barycentric_at_sample)
       return false;
 
@@ -113,7 +113,7 @@ intel_nir_lower_non_uniform_interpolated_input_instr(nir_builder *b,
          /* Set pass_flags so that the other lowering pass won't try to also
           * lower this new load_barycentric_at_sample.
           */
-         new_bary->parent_instr->pass_flags = 1;
+         nir_def_instr(new_bary)->pass_flags = 1;
 
          nir_builder_instr_insert(b, &load_ii->instr);
 

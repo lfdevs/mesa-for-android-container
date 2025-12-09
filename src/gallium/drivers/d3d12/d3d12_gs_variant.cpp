@@ -144,14 +144,14 @@ d3d12_make_passthrough_gs(struct d3d12_context *ctx, struct d3d12_gs_variant_key
    nir_emit_vertex(&b, 0);
    nir_end_primitive(&b, 0);
 
-   NIR_PASS_V(nir, nir_lower_var_copies);
+   NIR_PASS(_, nir, nir_lower_var_copies);
    nir_validate_shader(nir, "in d3d12_create_passthrough_gs");
 
    templ.type = PIPE_SHADER_IR_NIR;
    templ.ir.nir = nir;
    templ.stream_output.num_outputs = 0;
 
-   gs = d3d12_create_shader(ctx, PIPE_SHADER_GEOMETRY, &templ);
+   gs = d3d12_create_shader(ctx, MESA_SHADER_GEOMETRY, &templ);
 
    return gs;
 }
@@ -338,13 +338,13 @@ d3d12_finish_emit_primitives_gs(struct emit_primitives_context *emit_ctx, bool e
 
    nir_validate_shader(nir, "in d3d12_lower_edge_flags");
 
-   NIR_PASS_V(nir, nir_lower_var_copies);
+   NIR_PASS(_, nir, nir_lower_var_copies);
 
    templ.type = PIPE_SHADER_IR_NIR;
    templ.ir.nir = nir;
    templ.stream_output.num_outputs = 0;
 
-   return d3d12_create_shader(emit_ctx->ctx, PIPE_SHADER_GEOMETRY, &templ);
+   return d3d12_create_shader(emit_ctx->ctx, MESA_SHADER_GEOMETRY, &templ);
 }
 
 static d3d12_shader_selector*

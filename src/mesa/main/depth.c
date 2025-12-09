@@ -85,7 +85,7 @@ depth_func(struct gl_context *ctx, GLenum func, bool no_error)
    }
 
    FLUSH_VERTICES(ctx, 0, GL_DEPTH_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_DSA;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_DSA);
    ctx->Depth.Func = func;
    _mesa_update_allow_draw_out_of_order(ctx);
 }
@@ -128,7 +128,7 @@ _mesa_DepthMask( GLboolean flag )
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_DEPTH_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_DSA;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_DSA);
    ctx->Depth.Mask = flag;
    _mesa_update_allow_draw_out_of_order(ctx);
 }
@@ -158,7 +158,7 @@ _mesa_DepthBoundsEXT( GLclampd zmin, GLclampd zmax )
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_DEPTH_BUFFER_BIT);
-   ctx->NewDriverState |= ST_NEW_DSA;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_DSA);
    ctx->Depth.BoundsMin = zmin;
    ctx->Depth.BoundsMax = zmax;
 }

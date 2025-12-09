@@ -397,6 +397,7 @@ _mesa_components_in_format(GLenum format)
    case GL_BGR:
    case GL_RGB_INTEGER:
    case GL_BGR_INTEGER:
+   case GL_SRGB_EXT:
       return 3;
 
    case GL_RGBA:
@@ -404,6 +405,8 @@ _mesa_components_in_format(GLenum format)
    case GL_ABGR_EXT:
    case GL_RGBA_INTEGER:
    case GL_BGRA_INTEGER:
+   case GL_SRGB_ALPHA_EXT:
+   case GL_SRGB8_ALPHA8_EXT:
       return 4;
 
    default:
@@ -1822,6 +1825,11 @@ valid_texture_format_enum(const struct gl_context *ctx, GLenum format)
              _mesa_has_ARB_ES3_compatibility(ctx) ||
              _mesa_is_gles(ctx);
 
+   case GL_SRGB_EXT:
+   case GL_SRGB_ALPHA_EXT:
+   case GL_SRGB8_ALPHA8_EXT:
+      return _mesa_is_gles(ctx) && _mesa_has_EXT_sRGB(ctx);
+
    case GL_ABGR_EXT:
       return _mesa_has_EXT_abgr(ctx);
 
@@ -2166,6 +2174,16 @@ _mesa_error_check_format_and_type(const struct gl_context *ctx,
                return GL_INVALID_ENUM;
          }
 
+      case GL_SRGB_EXT:
+      case GL_SRGB_ALPHA_EXT:
+      case GL_SRGB8_ALPHA8_EXT:
+         switch (type) {
+         case GL_UNSIGNED_BYTE:
+            return GL_NO_ERROR;
+         default:
+            return GL_INVALID_ENUM;
+         }
+
       case GL_ABGR_EXT:
          switch (type) {
             case GL_BYTE:
@@ -2488,6 +2506,16 @@ _mesa_base_tex_format(const struct gl_context *ctx, GLint internalFormat)
       }
    }
 
+   if (_mesa_has_EXT_sRGB(ctx)) {
+      switch (internalFormat) {
+      case GL_SRGB_EXT:
+         return GL_RGB;
+      case GL_SRGB_ALPHA_EXT:
+      case GL_SRGB8_ALPHA8_EXT:
+         return GL_RGBA;
+      }
+   }
+
    switch (internalFormat) {
    case GL_COMPRESSED_ALPHA:
       return (ctx->API != API_OPENGL_CORE) ? GL_ALPHA : -1;
@@ -2593,6 +2621,16 @@ _mesa_base_tex_format(const struct gl_context *ctx, GLint internalFormat)
          return (ctx->API != API_OPENGL_CORE) ? GL_INTENSITY : -1;
       default:
          ; /* fallthrough */
+      }
+   }
+
+   if (_mesa_has_EXT_sRGB(ctx)) {
+      switch (internalFormat) {
+      case GL_SRGB_EXT:
+         return GL_RGB;
+      case GL_SRGB_ALPHA_EXT:
+      case GL_SRGB8_ALPHA8_EXT:
+         return GL_RGBA;
       }
    }
 
@@ -2806,14 +2844,17 @@ gles_effective_internal_format_for_format_and_type(GLenum format,
    switch (type) {
    case GL_UNSIGNED_BYTE:
       switch (format) {
+      case GL_SRGB_ALPHA_EXT:
       case GL_RGBA:
          return GL_RGBA8;
+      case GL_SRGB_EXT:
       case GL_RGB:
          return GL_RGB8;
       case GL_RG:
          return GL_RG8;
       case GL_RED:
          return GL_R8;
+      case GL_SRGB8_ALPHA8_EXT:
       /* Although LUMINANCE_ALPHA, LUMINANCE and ALPHA appear in table 3.12,
        * (section 3.8 Texturing, page 128 of the OpenGL-ES 3.0.4) as effective
        * internal formats, they do not correspond to GL constants, so the base
@@ -3110,14 +3151,15 @@ _mesa_gles_error_check_format_and_type(struct gl_context *ctx,
          return GL_INVALID_OPERATION;
 
       GLenum baseInternalFormat;
-      if (internalFormat == GL_BGRA) {
+      if (internalFormat == GL_BGRA || internalFormat == GL_SRGB_ALPHA_EXT || internalFormat == GL_SRGB_EXT) {
          /* Unfortunately, _mesa_base_tex_format returns a base format of
-          * GL_RGBA for GL_BGRA.  This makes perfect sense if you're
+          * GL_RGBA for GL_BGRA and GL_RGBA/GL_RGB for the SRGB formats.
+          * This makes perfect sense if you're
           * asking the question, "what channels does this format have?"
           * However, if we're trying to determine if two internal formats
-          * match in the ES3 sense, we actually want GL_BGRA.
+          * match in the ES3 sense, we actually want the original format.
           */
-         baseInternalFormat = GL_BGRA;
+         baseInternalFormat = internalFormat;
       } else {
          baseInternalFormat =
             _mesa_base_tex_format(ctx, effectiveInternalFormat);
@@ -3758,13 +3800,14 @@ set_swizzle(uint8_t *swizzle, int x, int y, int z, int w)
    swizzle[MESA_FORMAT_SWIZZLE_Z] = z;
    swizzle[MESA_FORMAT_SWIZZLE_W] = w;
 }
-
 static bool
 get_swizzle_from_gl_format(GLenum format, uint8_t *swizzle)
 {
    switch (format) {
    case GL_RGBA:
    case GL_RGBA_INTEGER:
+   case GL_SRGB_ALPHA_EXT:
+   case GL_SRGB8_ALPHA8_EXT:
       set_swizzle(swizzle, 0, 1, 2, 3);
       return true;
    case GL_BGRA:
@@ -3776,6 +3819,7 @@ get_swizzle_from_gl_format(GLenum format, uint8_t *swizzle)
       return true;
    case GL_RGB:
    case GL_RGB_INTEGER:
+   case GL_SRGB_EXT:
       set_swizzle(swizzle, 0, 1, 2, 5);
       return true;
    case GL_BGR:
@@ -4122,7 +4166,7 @@ _mesa_format_from_format_and_type(GLenum format, GLenum type)
     * matches the GL format/type provided. We may need to add a new Mesa
     * format in that case.
     */
-   unreachable("Unsupported format");
+   UNREACHABLE("Unsupported format");
 }
 
 uint32_t

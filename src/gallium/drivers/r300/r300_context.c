@@ -10,7 +10,6 @@
 #include "util/u_upload_mgr.h"
 #include "util/u_debug_cb.h"
 #include "util/os_time.h"
-#include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 
 #include "r300_cb.h"
@@ -416,9 +415,6 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     r300_init_render_functions(r300);
     r300_init_states(&r300->context);
 
-    r300->context.create_video_codec = vl_create_decoder;
-    r300->context.create_video_buffer = vl_video_buffer_create;
-
     r300->uploader = u_upload_create(&r300->context, 128 * 1024,
                                      PIPE_BIND_CUSTOM, PIPE_USAGE_STREAM, 0);
     r300->context.stream_uploader = u_upload_create(&r300->context, 1024 * 1024,
@@ -467,7 +463,8 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
         vb.depth0 = 1;
 
         r300->dummy_vb.buffer.resource = screen->resource_create(screen, &vb);
-        util_set_vertex_buffers(&r300->context, 1, false, &r300->dummy_vb);
+        pipe_reference(NULL, &r300->dummy_vb.buffer.resource->reference);
+        r300->context.set_vertex_buffers(&r300->context, 1, &r300->dummy_vb);
     }
 
     {

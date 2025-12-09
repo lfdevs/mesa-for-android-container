@@ -247,7 +247,15 @@ enum v3d_qpu_add_op {
 enum v3d_qpu_mul_op {
         V3D_QPU_M_ADD,
         V3D_QPU_M_SUB,
+        /* UMUL24 is emitted together with MULTOP (which writes the RTOP register) to
+         * implement 32-bit multiplies.
+         */
         V3D_QPU_M_UMUL24,
+        /* UMUL24_RTOP0 is emitted to implement a regular 24-bit multiply with the
+         * implicit expectation that the RTOP register value is 0. This allows us to
+         * soften scheduling restrictions.
+         */
+        V3D_QPU_M_UMUL24_RTOP0,
         V3D_QPU_M_VFMUL,
         V3D_QPU_M_SMUL24,
         V3D_QPU_M_MULTOP,
@@ -261,6 +269,10 @@ enum v3d_qpu_mul_op {
         V3D_QPU_M_FTOSNORM16,
         V3D_QPU_M_VFTOUNORM8,
         V3D_QPU_M_VFTOSNORM8,
+        V3D_QPU_M_FUNPACKUNORMLO,
+        V3D_QPU_M_FUNPACKUNORMHI,
+        V3D_QPU_M_FUNPACKSNORMLO,
+        V3D_QPU_M_FUNPACKSNORMHI,
         V3D_QPU_M_VFTOUNORM10LO,
         V3D_QPU_M_VFTOUNORM10HI,
 };

@@ -1,5 +1,9 @@
-25.1,2025-07-30,25.1.7,Eric Engestrom,
-,2025-08-13,25.1.8,Eric Engestrom,
-,2025-08-27,25.1.9,Eric Engestrom,Last planned 25.1.x release.
-25.2,2025-07-30,25.2.0-rc3,Eric Engestrom,
-,2025-08-06,25.2.0-rc4,Eric Engestrom,or 25.2.0 final
+25.3,2025-12-17,25.3.2,Dylan Baker
+,2025-12-31,25.3.3,Dylan Baker,
+,2026-01-14,25.3.4,Dylan Baker,
+,2026-01-28,25.3.5,Dylan Baker,
+,2026-02-11,25.3.6,Dylan Baker,Last planned 25.3 release
+26.0,2026-01-14,26.0.0-rc1,Eric Engestrom,26.0 branchpoint
+,2026-01-21,26.0.0-rc2,Eric Engestrom,
+,2026-01-28,26.0.0-rc3,Eric Engestrom,
+,2026-02-04,26.0.0-rc4,Eric Engestrom,or 26.0.0 final

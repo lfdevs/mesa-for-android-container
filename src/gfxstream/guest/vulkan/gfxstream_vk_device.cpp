@@ -417,6 +417,7 @@ void gfxstream_vk_DestroyInstance(VkInstance _instance, const VkAllocationCallba
     // To make End2EndTests happy, since now the host connection is statically linked to
     // libvulkan_ranchu.so [separate HostConnections now].
 #if defined(END2END_TESTS)
+    GfxStreamConnectionManager::resetThreadLocalInstance();
     VirtGpuDevice::resetInstance();
     gSeqno = 0;
 #endif

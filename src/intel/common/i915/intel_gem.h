@@ -27,6 +27,7 @@
 #include <stdint.h>
 
 #include "common/intel_gem.h"
+#include "util/os_time.h"
 
 #include "drm-uapi/i915_drm.h"
 
@@ -50,6 +51,7 @@ i915_gem_create_context_ext(int fd,
 bool i915_gem_supports_protected_context(int fd);
 bool i915_gem_get_param(int fd, uint32_t param, int *value);
 bool i915_gem_can_render_on_fd(int fd);
+bool i915_gem_supports_dma_buf_sync_file(int fd);
 
 /**
  * A wrapper around DRM_IOCTL_I915_QUERY
@@ -138,4 +140,30 @@ intel_i915_gem_add_ext(__u64 *ptr, uint32_t ext_name,
    ext->name = ext_name;
 
    *iter = (uintptr_t) ext;
+}
+
+static inline int
+i915_gem_execbuf_ioctl(int fd, const struct intel_device_info *info,
+                       struct drm_i915_gem_execbuffer2 *execbuf)
+{
+   int ret, retries;
+
+   assert((execbuf->flags & I915_EXEC_FENCE_OUT) == 0);
+
+   if (unlikely(info->no_hw))
+      return 0;
+
+   for (retries = 0; retries < INTEL_EXEC_IOCTL_MAX_RETRIES; retries++) {
+      ret = intel_ioctl(fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, execbuf);
+
+      if (likely(!(ret && errno == ENOMEM)))
+         break;
+
+      if (unlikely(retries == INTEL_EXEC_IOCTL_RETRY_WARN))
+         fprintf(stderr, "intel: the execbuf ioctl keeps returning ENOMEM\n");
+
+      os_time_sleep(intel_exec_ioctl_sleep_us(retries));
+   }
+
+   return ret;
 }

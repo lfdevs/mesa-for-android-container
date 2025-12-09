@@ -3,29 +3,11 @@
 #include "nv_device_info.h"
 
 #include <inttypes.h>
+#include "util/os_misc.h"
 
-#include "nv_push_cl902d.h"
-#include "nv_push_cl9039.h"
-#include "nv_push_cl906f.h"
-#include "nv_push_cl9097.h"
-#include "nv_push_cl90b5.h"
-#include "nv_push_cla097.h"
-#include "nv_push_cla0b5.h"
-#include "nv_push_cla040.h"
-#include "nv_push_cla0c0.h"
-#include "nv_push_cla140.h"
-#include "nv_push_clb197.h"
-#include "nv_push_clc0c0.h"
-#include "nv_push_clc1b5.h"
-#include "nv_push_clc397.h"
-#include "nv_push_clc3c0.h"
-#include "nv_push_clc597.h"
-#include "nv_push_clc5c0.h"
-#include "nv_push_clc697.h"
-#include "nv_push_clc6c0.h"
-#include "nv_push_clc797.h"
-#include "nv_push_clc7c0.h"
-#include "nv_push_clcab5.h"
+#include "drf.h"
+#include "cl906f.h"
+#include "nv_push_class_dump.h"
 
 #ifndef NDEBUG
 void
@@ -42,16 +24,15 @@ nv_push_validate(struct nv_push *push)
    /* parse all the headers to see if we get to buf->map */
    while (cur < push->end) {
       uint32_t hdr = *cur;
-      uint32_t mthd = hdr >> 29;
+      uint32_t mthd = NVVAL_GET(hdr, NV906F, DMA, SEC_OP);
 
       switch (mthd) {
-      /* immd */
-      case 4:
+      case NV906F_DMA_SEC_OP_IMMD_DATA_METHOD:
          break;
-      case 1:
-      case 3:
-      case 5: {
-         uint32_t count = (hdr >> 16) & 0x1fff;
+      case NV906F_DMA_SEC_OP_INC_METHOD:
+      case NV906F_DMA_SEC_OP_NON_INC_METHOD:
+      case NV906F_DMA_SEC_OP_ONE_INC: {
+         uint32_t count = NVVAL_GET(hdr, NV906F, DMA, METHOD_COUNT);
          assert(count);
          cur += count;
          break;
@@ -71,18 +52,26 @@ vk_push_print(FILE *fp, const struct nv_push *push,
               const struct nv_device_info *devinfo)
 {
    uint32_t *cur = push->start;
+   uint16_t curr_subchans[8] = {0};
+   curr_subchans[0] = devinfo->cls_eng3d;
+   curr_subchans[1] = devinfo->cls_compute;
+   curr_subchans[2] = devinfo->cls_m2mf;
+   curr_subchans[3] = devinfo->cls_eng2d;
+   curr_subchans[4] = devinfo->cls_copy;
 
    const bool print_offsets = true;
 
    while (cur < push->end) {
       uint32_t hdr = *cur;
-      uint32_t type = hdr >> 29;
-      bool is_tert = type == 0 || type == 2;
+      uint32_t type = NVVAL_GET(hdr, NV906F, DMA, SEC_OP);
+      bool is_tert = type == NV906F_DMA_SEC_OP_GRP0_USE_TERT ||
+                     type == NV906F_DMA_SEC_OP_GRP2_USE_TERT;
       uint32_t inc = 0;
-      uint32_t count = is_tert ? (hdr >> 18) & 0x3ff : (hdr >> 16) & 0x1fff;
-      uint32_t tert_op = (hdr >> 16) & 0x3;
-      uint32_t subchan = (hdr >> 13) & 0x7;
-      uint32_t mthd = (hdr & 0xfff) << 2;
+      uint32_t count = is_tert ? (hdr >> 18) & 0x3ff
+                               : NVVAL_GET(hdr, NV906F, DMA, METHOD_COUNT);
+      uint32_t tert_op = NVVAL_GET(hdr, NV906F, DMA, TERT_OP);
+      uint32_t subchan = NVVAL_GET(hdr, NV906F, DMA, METHOD_SUBCHANNEL);
+      uint32_t mthd = NVVAL_GET(hdr, NV906F, DMA, METHOD_ADDRESS) << 2;
       uint32_t value = 0;
       bool is_immd = false;
 
@@ -100,33 +89,33 @@ vk_push_print(FILE *fp, const struct nv_push *push,
       const char *mthd_name = "";
 
       switch (type) {
-      case 4:
+      case NV906F_DMA_SEC_OP_IMMD_DATA_METHOD:
          fprintf(fp, " IMMD\n");
          inc = 0;
          is_immd = true;
-         value = count;
+         value = NVVAL_GET(hdr, NV906F, DMA, IMMD_DATA);
          count = 1;
          break;
-      case 1:
+      case NV906F_DMA_SEC_OP_INC_METHOD:
          fprintf(fp, " NINC\n");
          inc = count;
          break;
-      case 2:
-      case 3:
+      case NV906F_DMA_SEC_OP_GRP2_USE_TERT:
+      case NV906F_DMA_SEC_OP_NON_INC_METHOD:
          fprintf(fp, " 0INC\n");
          inc = 0;
          break;
-      case 5:
+      case NV906F_DMA_SEC_OP_ONE_INC:
          fprintf(fp, " 1INC\n");
          inc = 1;
          break;
-      case 0:
+      case NV906F_DMA_SEC_OP_GRP0_USE_TERT:
          switch (tert_op) {
-         case 0:
+         case NV906F_DMA_TERT_OP_GRP0_INC_METHOD:
             fprintf(fp, " NINC\n");
             inc = count;
             break;
-         case 1:
+         case NV906F_DMA_TERT_OP_GRP0_SET_SUB_DEV_MASK:
             fprintf(fp, " SUB_DEVICE_OP\n");
             mthd_name = "SET_SUBDEVICE_MASK";
             mthd = tert_op;
@@ -134,7 +123,7 @@ vk_push_print(FILE *fp, const struct nv_push *push,
             count = 1;
             is_immd = true;
             break;
-         case 2:
+         case NV906F_DMA_TERT_OP_GRP0_STORE_SUB_DEV_MASK:
             fprintf(fp, " SUB_DEVICE_OP\n");
             mthd_name = "STORE_SUBDEVICE_MASK";
             mthd = tert_op;
@@ -142,7 +131,7 @@ vk_push_print(FILE *fp, const struct nv_push *push,
             count = 1;
             is_immd = true;
             break;
-         case 3:
+         case NV906F_DMA_TERT_OP_GRP0_USE_SUB_DEV_MASK:
             fprintf(fp, " SUB_DEVICE_OP\n");
             mthd_name = "USE_SUBDEVICE_MASK";
             mthd = tert_op;
@@ -153,115 +142,24 @@ vk_push_print(FILE *fp, const struct nv_push *push,
       }
 
       while (count--) {
-         if (!is_tert) {
-            if (mthd < 0x100) {
-               mthd_name = P_PARSE_NV906F_MTHD(mthd);
-            } else {
-               switch (subchan) {
-               case 0:
-                  if (devinfo->cls_eng3d >= 0xc797)
-                     mthd_name = P_PARSE_NVC797_MTHD(mthd);
-                  else if (devinfo->cls_eng3d >= 0xc697)
-                     mthd_name = P_PARSE_NVC697_MTHD(mthd);
-                  else if (devinfo->cls_eng3d >= 0xc597)
-                     mthd_name = P_PARSE_NVC597_MTHD(mthd);
-                  else if (devinfo->cls_eng3d >= 0xc397)
-                     mthd_name = P_PARSE_NVC397_MTHD(mthd);
-                  else if (devinfo->cls_eng3d >= 0xb197)
-                     mthd_name = P_PARSE_NVB197_MTHD(mthd);
-                  else if (devinfo->cls_eng3d >= 0xa097)
-                     mthd_name = P_PARSE_NVA097_MTHD(mthd);
-                  else
-                     mthd_name = P_PARSE_NV9097_MTHD(mthd);
-                  break;
-               case 1:
-                  if (devinfo->cls_compute >= 0xc7c0)
-                     mthd_name = P_PARSE_NVC7C0_MTHD(mthd);
-                  else if (devinfo->cls_compute >= 0xc6c0)
-                     mthd_name = P_PARSE_NVC6C0_MTHD(mthd);
-                  else if (devinfo->cls_compute >= 0xc5c0)
-                     mthd_name = P_PARSE_NVC5C0_MTHD(mthd);
-                  else if (devinfo->cls_compute >= 0xc3c0)
-                     mthd_name = P_PARSE_NVC3C0_MTHD(mthd);
-                  else if (devinfo->cls_compute >= 0xc0c0)
-                     mthd_name = P_PARSE_NVC0C0_MTHD(mthd);
-                  else
-                     mthd_name = P_PARSE_NVA0C0_MTHD(mthd);
-                  break;
-               case 2:
-                  if (devinfo->cls_m2mf >= 0xa140)
-                     mthd_name = P_PARSE_NVA140_MTHD(mthd);
-                  else if (devinfo->cls_m2mf >= 0xa040)
-                     mthd_name = P_PARSE_NVA040_MTHD(mthd);
-                  else if (devinfo->cls_m2mf >= 0x9039)
-                     mthd_name = P_PARSE_NV9039_MTHD(mthd);
-                  break;
-               case 3:
-                  mthd_name = P_PARSE_NV902D_MTHD(mthd);
-                  break;
-               case 4:
-                  if (devinfo->cls_copy >= 0xcab5)
-                     mthd_name = P_PARSE_NVCAB5_MTHD(mthd);
-                  else if (devinfo->cls_copy >= 0xc1b5)
-                     mthd_name = P_PARSE_NVC1B5_MTHD(mthd);
-                  else if (devinfo->cls_copy >= 0xa0b5)
-                     mthd_name = P_PARSE_NVA0B5_MTHD(mthd);
-                  else
-                     mthd_name = P_PARSE_NV90B5_MTHD(mthd);
-                  break;
-               default:
-                  mthd_name = "unknown method";
-                  break;
-               }
-            }
-         }
-
          if (!is_immd)
             value = *cur;
 
-         fprintf(fp, "\tmthd %04x %s\n", mthd, mthd_name);
-         if (mthd < 0x100) {
-            P_DUMP_NV906F_MTHD_DATA(fp, mthd, value, "\t\t");
-         } else {
-            switch (subchan) {
-            case 0:
-               if (devinfo->cls_eng3d >= 0xc597)
-                  P_DUMP_NVC597_MTHD_DATA(fp, mthd, value, "\t\t");
-               else if (devinfo->cls_eng3d >= 0xc397)
-                  P_DUMP_NVC397_MTHD_DATA(fp, mthd, value, "\t\t");
-               else if (devinfo->cls_eng3d >= 0xb197)
-                  P_DUMP_NVB197_MTHD_DATA(fp, mthd, value, "\t\t");
-               else if (devinfo->cls_eng3d >= 0xa097)
-                  P_DUMP_NVA097_MTHD_DATA(fp, mthd, value, "\t\t");
-               else
-                  P_DUMP_NV9097_MTHD_DATA(fp, mthd, value, "\t\t");
-               break;
-            case 1:
-               if (devinfo->cls_compute >= 0xc3c0)
-                  P_DUMP_NVC3C0_MTHD_DATA(fp, mthd, value, "\t\t");
-               else if (devinfo->cls_compute >= 0xc0c0)
-                  P_DUMP_NVC0C0_MTHD_DATA(fp, mthd, value, "\t\t");
-               else
-                  P_DUMP_NVA0C0_MTHD_DATA(fp, mthd, value, "\t\t");
-               break;
-            case 3:
-               P_DUMP_NV902D_MTHD_DATA(fp, mthd, value, "\t\t");
-               break;
-            case 4:
-               if (devinfo->cls_copy >= 0xcab5)
-                  P_DUMP_NVCAB5_MTHD_DATA(fp, mthd, value, "\t\t");
-               else if (devinfo->cls_copy >= 0xc1b5)
-                  P_DUMP_NVC1B5_MTHD_DATA(fp, mthd, value, "\t\t");
-               else if (devinfo->cls_copy >= 0xa0b5)
-                  P_DUMP_NVA0B5_MTHD_DATA(fp, mthd, value, "\t\t");
-               else
-                  P_DUMP_NV90B5_MTHD_DATA(fp, mthd, value, "\t\t");
-               break;
-            default:
-               fprintf(fp, "%s.VALUE = 0x%x\n", "\t\t", value);
-               break;
-            }
+         if (mthd == 0) { /* SET_OBJECT */
+            curr_subchans[subchan] = value & 0xffff;
          }
+         int class_id = curr_subchans[subchan];
+
+         /* If the sub channel is unbound, the expected behavior is to have it
+          * routed to the GPFIFO class */
+         if (class_id == 0)
+            class_id = devinfo->cls_gpfifo;
+
+         if (!is_tert)
+            mthd_name = P_PARSE_NV_MTHD(class_id, mthd);
+
+         fprintf(fp, "\tmthd %04x %s\n", mthd, mthd_name);
+         P_DUMP_NV_MTHD_DATA(fp, class_id, mthd, value, "\t\t");
 
          if (!is_immd)
             cur++;

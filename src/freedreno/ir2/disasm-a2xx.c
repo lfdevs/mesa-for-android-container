@@ -87,7 +87,7 @@ print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
 }
 
 static void
-print_export_comment(uint32_t num, gl_shader_stage type)
+print_export_comment(uint32_t num, mesa_shader_stage type)
 {
    const char *name = NULL;
    switch (type) {
@@ -210,7 +210,7 @@ struct {
 
 static int
 disasm_alu(uint32_t *dwords, uint32_t alu_off, int level, int sync,
-           gl_shader_stage type)
+           mesa_shader_stage type)
 {
    instr_alu_t *alu = (instr_alu_t *)dwords;
 
@@ -600,7 +600,7 @@ print_cf(instr_cf_t *cf, int level)
  */
 
 int
-disasm_a2xx(uint32_t *dwords, int sizedwords, int level, gl_shader_stage type)
+disasm_a2xx(uint32_t *dwords, int sizedwords, int level, mesa_shader_stage type)
 {
    instr_cf_t *cfs = (instr_cf_t *)dwords;
    int idx, max_idx;

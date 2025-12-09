@@ -142,6 +142,13 @@
         - src/intel/vulkan/**/*
       when: on_success
 
+.anv-restricted-rules:
+  stage: intel
+  rules:
+    - !reference [.test, rules]
+    - !reference [.restricted-rules, rules]
+    - !reference [.anv-rules, rules]
+
 .anv-manual-rules:
   stage: intel-nightly
   extends: .no-auto-retry
@@ -325,7 +332,7 @@
   variables:
     DEVICE_TYPE: acer-chromebox-cxi4-puff
     FARM: collabora
-    FDO_CI_CONCURRENT: 9
+    FDO_CI_CONCURRENT: 3
     GPU_VERSION: iris-cml
     HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-acer-chromebox-cxi4-puff
@@ -410,6 +417,8 @@
   extends:
     - .iris-test
     - .lava-acer-n20q11-r856ltn-p1s2-nissa:x86_64
+  variables:
+    DEQP_SUITE: iris-adl
 
 .iris-whl-deqp:
   extends:

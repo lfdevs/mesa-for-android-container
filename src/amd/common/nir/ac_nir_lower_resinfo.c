@@ -69,10 +69,11 @@ lower_query_size(nir_builder *b, nir_def *desc, nir_src *lod,
       if (gfx_level == GFX8) {
          /* On GFX8, the descriptor contains the size in bytes,
           * but TXQ must return the size in elements.
-          * The stride is always non-zero for resources using TXQ.
+          * The stride is always non-zero for resources using TXQ, except when
+          * using null descriptors in Vulkan, so apply trivial fixup.
           * Divide the size by the stride.
           */
-         size = nir_udiv(b, size, get_field(b, desc, 1, ~C_008F04_STRIDE));
+         size = nir_udiv(b, size, nir_umax_imm(b, get_field(b, desc, 1, ~C_008F04_STRIDE), 1));
       }
       return size;
    }
@@ -225,7 +226,7 @@ lower_query_size(nir_builder *b, nir_def *desc, nir_src *lod,
       result = nir_vec3(b, width, height, depth);
       break;
    default:
-      unreachable("invalid sampler dim");
+      UNREACHABLE("invalid sampler dim");
    }
 
    return handle_null_desc(b, desc, result);
@@ -234,16 +235,25 @@ lower_query_size(nir_builder *b, nir_def *desc, nir_src *lod,
 static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
 {
    enum amd_gfx_level gfx_level = *(enum amd_gfx_level*)data;
-   nir_def *result = NULL, *dst = NULL;
+   nir_def *result = NULL;
 
-   if (instr->type == nir_instr_type_intrinsic) {
+   if (instr->type == nir_instr_type_intrinsic &&
+       nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_get_ssbo_size) {
+      /* Lower get_ssbo_size to ssbo_descriptor_amd. */
+      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+
+      b->cursor = nir_before_instr(instr);
+
+      nir_def *desc = nir_ssbo_descriptor_amd(b, intr->src[0].ssa,
+                                              .access = nir_intrinsic_access(intr));
+      result = nir_channel(b, desc, 2);
+   } else if (instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
       const struct glsl_type *type;
       enum glsl_sampler_dim dim;
       bool is_array;
       nir_def *desc = NULL;
 
-      dst = &intr->def;
       b->cursor = nir_before_instr(instr);
 
       switch (intr->intrinsic) {
@@ -259,7 +269,7 @@ static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
 
       case nir_intrinsic_image_deref_size:
       case nir_intrinsic_image_deref_samples:
-         type = nir_instr_as_deref(intr->src[0].ssa->parent_instr)->type;
+         type = nir_def_as_deref(intr->src[0].ssa)->type;
          dim = glsl_get_sampler_dim(type);
          is_array = glsl_sampler_type_is_array(type);
          desc = nir_image_deref_descriptor_amd(b, dim == GLSL_SAMPLER_DIM_BUF ? 4 : 8,
@@ -305,7 +315,6 @@ static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
       nir_def *desc = NULL;
       nir_src *lod = NULL;
 
-      dst = &tex->def;
       b->cursor = nir_before_instr(instr);
 
       switch (tex->op) {
@@ -352,7 +361,7 @@ static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
             result = query_samples(b, desc, tex->sampler_dim, gfx_level);
             break;
          default:
-            unreachable("shouldn't get here");
+            UNREACHABLE("shouldn't get here");
          }
          break;
 
@@ -364,11 +373,12 @@ static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
    if (!result)
       return false;
 
+   nir_def *dst = nir_instr_def(instr);
    assert(dst->bit_size == 32 || dst->bit_size == 16);
    if (dst->bit_size == 16)
       result = nir_u2u16(b, result);
 
-   nir_def_rewrite_uses_after(dst, result, instr);
+   nir_def_rewrite_uses_after_instr(dst, result, instr);
    nir_instr_remove(instr);
    return true;
 }

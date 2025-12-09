@@ -70,7 +70,7 @@ line_width(struct gl_context *ctx, GLfloat width, bool no_error)
    }
 
    FLUSH_VERTICES(ctx, 0, GL_LINE_BIT);
-   ctx->NewDriverState |= ST_NEW_RASTERIZER;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
    ctx->Line.Width = width;
 }
 
@@ -122,7 +122,7 @@ _mesa_LineStipple( GLint factor, GLushort pattern )
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_LINE_BIT);
-   ctx->NewDriverState |= ST_NEW_RASTERIZER;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
    ctx->Line.StippleFactor = factor;
    ctx->Line.StipplePattern = pattern;
 }

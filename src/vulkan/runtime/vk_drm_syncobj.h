@@ -54,6 +54,20 @@ vk_sync_as_drm_syncobj(struct vk_sync *sync)
    return container_of(sync, struct vk_drm_syncobj, base);
 }
 
+/** Signal the signal syncobjs with the union/merge of the wait syncobjs
+ *
+ * This is an implementation of vk_device::copy_sync_payloads for drivers
+ * which use DRM syncobjs as their only core synchronization primitive.
+ * Internally, it either uses DRM_SYNCOBJ_TRANSFER if the driver supports
+ * timelines or sync file import/export if the driver only supports binary
+ * sync objects.
+ */
+VkResult vk_drm_syncobj_copy_payloads(struct vk_device *device,
+                                      uint32_t wait_count,
+                                      const struct vk_sync_wait *waits,
+                                      uint32_t signal_count,
+                                      const struct vk_sync_signal *signals);
+
 struct util_sync_provider;
 struct vk_sync_type vk_drm_syncobj_get_type_from_provider(struct util_sync_provider *sync);
 struct vk_sync_type vk_drm_syncobj_get_type(int drm_fd);

@@ -27,7 +27,7 @@ static inline void
 vk_meta_object_list_add_obj(struct vk_meta_object_list *mol,
                             struct vk_object_base *obj)
 {
-   util_dynarray_append(&mol->arr, struct vk_object_base *, obj);
+   util_dynarray_append(&mol->arr, obj);
 }
 
 static inline void

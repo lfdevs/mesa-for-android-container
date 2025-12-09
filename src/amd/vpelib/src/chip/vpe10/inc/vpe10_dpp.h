@@ -276,7 +276,6 @@ extern "C" {
         SFRB(VPCM_GAMCOR_LUT_READ_COLOR_SEL, VPCM_GAMCOR_LUT_CONTROL, post_fix),                   \
         SFRB(VPCM_GAMCOR_LUT_READ_DBG, VPCM_GAMCOR_LUT_CONTROL, post_fix),                         \
         SFRB(VPCM_GAMCOR_LUT_HOST_SEL, VPCM_GAMCOR_LUT_CONTROL, post_fix),                         \
-        SFRB(VPCM_GAMCOR_LUT_CONFIG_MODE, VPCM_GAMCOR_LUT_CONTROL, post_fix),                      \
         SFRB(VPCM_GAMCOR_RAMA_EXP_REGION_START_B, VPCM_GAMCOR_RAMA_START_CNTL_B, post_fix),        \
         SFRB(                                                                                      \
             VPCM_GAMCOR_RAMA_EXP_REGION_START_SEGMENT_B, VPCM_GAMCOR_RAMA_START_CNTL_B, post_fix), \
@@ -398,6 +397,7 @@ extern "C" {
 
 #define DPP_FIELD_LIST_VPE10(post_fix)                                                             \
     DPP_FIELD_LIST_VPE10_COMMON(post_fix),                                                         \
+        SFRB(VPCM_GAMCOR_LUT_CONFIG_MODE, VPCM_GAMCOR_LUT_CONTROL, post_fix),                      \
         SFRB(ALPHA_2BIT_LUT0, VPCNVC_ALPHA_2BIT_LUT, post_fix),                                    \
         SFRB(ALPHA_2BIT_LUT1, VPCNVC_ALPHA_2BIT_LUT, post_fix),                                    \
         SFRB(ALPHA_2BIT_LUT2, VPCNVC_ALPHA_2BIT_LUT, post_fix),                                    \
@@ -426,7 +426,6 @@ extern "C" {
         SFRB(VPDPP_CLOCK_ENABLE, VPDPP_CONTROL, post_fix),                                         \
         SFRB(PRE_DEGAM_MODE, VPCNVC_PRE_DEGAM, post_fix),                                          \
         SFRB(PRE_DEGAM_SELECT, VPCNVC_PRE_DEGAM, post_fix)
-
 
 #define DPP_REG_VARIABLE_LIST_VPE10_COMMON                                                         \
     reg_id_val VPCNVC_SURFACE_PIXEL_FORMAT;                                                        \
@@ -715,7 +714,6 @@ extern "C" {
     type VPCM_GAMCOR_LUT_READ_COLOR_SEL;                                                           \
     type VPCM_GAMCOR_LUT_READ_DBG;                                                                 \
     type VPCM_GAMCOR_LUT_HOST_SEL;                                                                 \
-    type VPCM_GAMCOR_LUT_CONFIG_MODE;                                                              \
     type VPCM_GAMCOR_RAMA_EXP_REGION_START_B;                                                      \
     type VPCM_GAMCOR_RAMA_EXP_REGION_START_SEGMENT_B;                                              \
     type VPCM_GAMCOR_RAMA_EXP_REGION_START_G;                                                      \
@@ -835,6 +833,7 @@ extern "C" {
 
 #define DPP_FIELD_VARIABLE_LIST_VPE10(type)                                                        \
     DPP_FIELD_VARIABLE_LIST_VPE10_COMMON(type)                                                     \
+    type VPCM_GAMCOR_LUT_CONFIG_MODE;                                                              \
     type PRE_DEGAM_MODE;                                                                           \
     type PRE_DEGAM_SELECT;
 

@@ -12,6 +12,7 @@
 #include "nir_builder.h"
 
 #include "pan_shader.h"
+#include "pan_nir.h"
 
 struct panvk_fb_preload_shader_key {
    enum panvk_meta_object_key_type type;
@@ -57,28 +58,6 @@ texel_fetch(nir_builder *b, VkImageViewType view_type,
    return &tex->def;
 }
 
-static nir_variable *
-color_output_var(nir_builder *b, VkImageViewType view_type,
-                 VkImageAspectFlags aspect, VkSampleCountFlagBits samples,
-                 nir_alu_type fmt_type, unsigned rt)
-{
-   enum glsl_base_type base_type =
-      nir_get_glsl_base_type_for_nir_type(fmt_type);
-   const struct glsl_type *var_type = glsl_vector_type(base_type, 4);
-   static const char *var_names[] = {
-      "gl_FragData[0]", "gl_FragData[1]", "gl_FragData[2]", "gl_FragData[3]",
-      "gl_FragData[4]", "gl_FragData[5]", "gl_FragData[6]", "gl_FragData[7]",
-   };
-
-   assert(rt < ARRAY_SIZE(var_names));
-
-   nir_variable *var = nir_variable_create(b->shader, nir_var_shader_out,
-                                           var_type, var_names[rt]);
-   var->data.location = FRAG_RESULT_DATA0 + rt;
-
-   return var;
-}
-
 static nir_def *
 get_layer_id(nir_builder *b)
 {
@@ -93,7 +72,7 @@ static nir_shader *
 get_preload_nir_shader(const struct panvk_fb_preload_shader_key *key)
 {
    nir_builder builder = nir_builder_init_simple_shader(
-      MESA_SHADER_FRAGMENT, pan_shader_get_compiler_options(PAN_ARCH),
+      MESA_SHADER_FRAGMENT, pan_get_nir_shader_compiler_options(PAN_ARCH),
       "panvk-meta-preload");
    nir_builder *b = &builder;
    nir_def *sample_id =
@@ -171,10 +150,14 @@ get_preload_shader(struct panvk_device *dev,
 
    struct pan_compile_inputs inputs = {
       .gpu_id = phys_dev->kmod.props.gpu_id,
+      .gpu_variant = phys_dev->kmod.props.gpu_variant,
       .is_blit = true,
    };
 
-   pan_shader_preprocess(nir, inputs.gpu_id);
+   pan_preprocess_nir(nir, inputs.gpu_id);
+   pan_nir_lower_texture_early(nir, inputs.gpu_id);
+   pan_postprocess_nir(nir, inputs.gpu_id);
+   pan_nir_lower_texture_late(nir, inputs.gpu_id);
 
    VkResult result = panvk_per_arch(create_internal_shader)(
       dev, nir, &inputs, &shader);
@@ -400,10 +383,10 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
    uint16_t minx = 0, miny = 0, maxx, maxy;
  
    /* Align on 32x32 tiles */
-   minx = fbinfo->extent.minx & ~31;
-   miny = fbinfo->extent.miny & ~31;
-   maxx = MIN2(ALIGN_POT(fbinfo->extent.maxx + 1, 32), fbinfo->width) - 1;
-   maxy = MIN2(ALIGN_POT(fbinfo->extent.maxy + 1, 32), fbinfo->height) - 1;
+   minx = fbinfo->draw_extent.minx & ~31;
+   miny = fbinfo->draw_extent.miny & ~31;
+   maxx = MIN2(ALIGN_POT(fbinfo->draw_extent.maxx + 1, 32), fbinfo->width) - 1;
+   maxy = MIN2(ALIGN_POT(fbinfo->draw_extent.maxy + 1, 32), fbinfo->height) - 1;
 
    struct pan_ptr vpd = panvk_cmd_alloc_desc(cmdbuf, VIEWPORT);
    if (!vpd.cpu)
@@ -440,6 +423,13 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
       return result;
 
    struct mali_draw_packed dcd_base;
+
+   /* If we got a preload without any draw, we end up with a NULL TLS
+    * descriptor. Allocate a dummy one (no TLS, no WLS) to get things working. */
+   if (!batch->tls.cpu) {
+      panvk_per_arch(cmd_alloc_tls_desc)(cmdbuf, true);
+      GENX(pan_emit_tls)(&batch->tlsinfo, batch->tls.cpu);
+   }
 
    pan_pack(&dcd_base, DRAW, cfg) {
       cfg.thread_storage = batch->tls.gpu;
@@ -497,9 +487,9 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf, struct pan_fb_info *fbinfo,
        * screen rectangle will always intersect, this won't affect
        * performance.
        */
-      bool always = !fbinfo->extent.minx && !fbinfo->extent.miny &&
-                    fbinfo->extent.maxx == (fbinfo->width - 1) &&
-                    fbinfo->extent.maxy == (fbinfo->height - 1);
+      bool always = !fbinfo->draw_extent.minx && !fbinfo->draw_extent.miny &&
+                    fbinfo->draw_extent.maxx == (fbinfo->width - 1) &&
+                    fbinfo->draw_extent.maxy == (fbinfo->height - 1);
 
       /* If we're dealing with a combined ZS resource and only one
        * component is cleared, we need to reload the whole surface

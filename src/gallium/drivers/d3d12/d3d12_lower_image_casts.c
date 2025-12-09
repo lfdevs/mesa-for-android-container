@@ -230,7 +230,7 @@ lower_image_cast_instr(nir_builder *b, nir_intrinsic_instr *intr, void *_data)
          nir_type_int : nir_type_float);
 
    if (intr->intrinsic == nir_intrinsic_image_deref_load) {
-      nir_def_rewrite_uses_after(value, new_value, new_value->parent_instr);
+      nir_def_rewrite_uses_after(value, new_value);
       nir_intrinsic_set_dest_type(intr, alu_type);
    } else {
       nir_src_rewrite(&intr->src[3], new_value);

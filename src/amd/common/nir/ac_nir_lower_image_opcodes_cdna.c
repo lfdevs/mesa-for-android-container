@@ -39,7 +39,7 @@ static unsigned get_coord_components(enum glsl_sampler_dim dim, bool is_array)
    case GLSL_SAMPLER_DIM_3D:
       return 3;
    default:
-      unreachable("unexpected sampler type");
+      UNREACHABLE("unexpected sampler type");
    }
 }
 
@@ -329,7 +329,7 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
 
       case nir_intrinsic_image_deref_load:
       case nir_intrinsic_image_deref_store:
-         deref = nir_instr_as_deref(intr->src[0].ssa->parent_instr);
+         deref = nir_def_as_deref(intr->src[0].ssa);
          access = nir_deref_instr_get_variable(deref)->data.access;
          dim = glsl_get_sampler_dim(deref->type);
          if (dim == GLSL_SAMPLER_DIM_BUF)
@@ -390,7 +390,7 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
       case nir_intrinsic_bindless_image_load:
          result = emulated_image_load(b, intr->def.num_components, intr->def.bit_size,
                                       desc, intr->src[1].ssa, access, dim, is_array, true);
-         nir_def_rewrite_uses_after(dst, result, instr);
+         nir_def_rewrite_uses_after_instr(dst, result, instr);
          nir_instr_remove(instr);
          return true;
 
@@ -402,7 +402,7 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
          return true;
 
       default:
-         unreachable("shouldn't get here");
+         UNREACHABLE("shouldn't get here");
       }
    } else if (instr->type == nir_instr_type_tex) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
@@ -468,7 +468,7 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
             case nir_tex_src_texture_offset:
             case nir_tex_src_sampler_offset:
             case nir_tex_src_plane:
-               unreachable("unsupported texture src");
+               UNREACHABLE("unsupported texture src");
 
             default:;
             }
@@ -480,7 +480,7 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
                                          desc, coord,
                                          ACCESS_RESTRICT | ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER,
                                          tex->sampler_dim, tex->is_array, true);
-            nir_def_rewrite_uses_after(dst, result, instr);
+            nir_def_rewrite_uses_after_instr(dst, result, instr);
             nir_instr_remove(instr);
             return true;
 
@@ -488,12 +488,12 @@ static bool lower_image_opcodes(nir_builder *b, nir_instr *instr, void *data)
          case nir_texop_txl:
             result = emulated_tex_level_zero(b, tex->def.num_components, tex->def.bit_size,
                                   desc, sampler_desc, coord, tex->sampler_dim, tex->is_array);
-            nir_def_rewrite_uses_after(dst, result, instr);
+            nir_def_rewrite_uses_after_instr(dst, result, instr);
             nir_instr_remove(instr);
             return true;
 
          default:
-            unreachable("shouldn't get here");
+            UNREACHABLE("shouldn't get here");
          }
          break;
 

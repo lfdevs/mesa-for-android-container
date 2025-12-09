@@ -56,11 +56,11 @@ stream_state(struct crocus_batch *batch,
              uint32_t *out_offset,
              struct crocus_bo **out_bo)
 {
-   uint32_t offset = ALIGN(batch->state.used, alignment);
+   uint32_t offset = align(batch->state.used, alignment);
 
    if (offset + size >= STATE_SZ && !batch->no_wrap) {
       crocus_batch_flush(batch);
-      offset = ALIGN(batch->state.used, alignment);
+      offset = align(batch->state.used, alignment);
    } else if (offset + size >= batch->state.bo->size) {
       const unsigned new_size =
          MIN2(batch->state.bo->size + batch->state.bo->size / 2,

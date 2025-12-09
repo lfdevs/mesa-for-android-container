@@ -42,18 +42,18 @@
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
 #include "compiler/nir/nir_serialize.h"
-#include "intel/compiler/brw_compiler.h"
-#include "intel/compiler/brw_nir.h"
+#include "intel/compiler/brw/brw_compiler.h"
+#include "intel/compiler/brw/brw_nir.h"
 #include "intel/compiler/intel_nir.h"
-#include "intel/compiler/brw_prim.h"
+#include "intel/compiler/intel_prim.h"
 #ifdef INTEL_USE_ELK
 #include "intel/compiler/elk/elk_compiler.h"
 #include "intel/compiler/elk/elk_nir.h"
-#include "intel/compiler/elk/elk_prim.h"
 #endif
 #include "iris_context.h"
 #include "iris_pipe.h"
 #include "nir/tgsi_to_nir.h"
+#include "git_sha1.h"
 
 static inline enum intel_vue_layout
 vue_layout(bool separate_shader)
@@ -66,7 +66,6 @@ vue_layout(bool separate_shader)
    .prefix.limit_trig_input_range =                        \
       screen->driconf.limit_trig_input_range
 #define BRW_KEY_INIT(base_key, _vue_layout) \
-   .base.program_string_id = (base_key).program_string_id,     \
    .base.limit_trig_input_range = (base_key).limit_trig_input_range, \
    .base.vue_layout = _vue_layout
 
@@ -223,9 +222,9 @@ iris_apply_brw_tes_prog_data(struct iris_compiled_shader *shader,
 
    iris_apply_brw_vue_prog_data(&brw->base, &iris->base);
 
-   iris->partitioning         = brw->partitioning;
-   iris->output_topology      = brw->output_topology;
-   iris->domain               = brw->domain;
+   iris->partitioning         = brw_tess_info_partitioning(brw->tess_info);
+   iris->output_topology      = brw_tess_info_output_topology(brw->tess_info);
+   iris->domain               = brw_tess_info_domain(brw->tess_info);
    iris->include_primitive_id = brw->include_primitive_id;
 }
 
@@ -288,7 +287,7 @@ iris_apply_brw_prog_data(struct iris_compiled_shader *shader,
       iris_apply_brw_gs_prog_data(shader, brw_gs_prog_data_const(brw));
       break;
    default:
-      unreachable("invalid shader stage");
+      UNREACHABLE("invalid shader stage");
    }
 
    shader->brw_prog_data = brw;
@@ -490,7 +489,7 @@ iris_apply_elk_prog_data(struct iris_compiled_shader *shader,
       iris_apply_elk_gs_prog_data(shader, elk_gs_prog_data_const(elk));
       break;
    default:
-      unreachable("invalid shader stage");
+      UNREACHABLE("invalid shader stage");
    }
 
    shader->elk_prog_data = elk;
@@ -576,16 +575,12 @@ iris_to_brw_fs_key(const struct iris_screen *screen,
    return (struct brw_wm_prog_key) {
       BRW_KEY_INIT(key->base, key->vue_layout),
       .nr_color_regions = key->nr_color_regions,
-      .flat_shade = key->flat_shade,
       .alpha_test_replicate_alpha = key->alpha_test_replicate_alpha,
       .alpha_to_coverage = key->alpha_to_coverage ? INTEL_ALWAYS : INTEL_NEVER,
-      .clamp_fragment_color = key->clamp_fragment_color,
       .persample_interp = key->persample_interp ? INTEL_ALWAYS : INTEL_NEVER,
       .multisample_fbo = key->multisample_fbo ? INTEL_ALWAYS : INTEL_NEVER,
       .force_dual_color_blend = key->force_dual_color_blend,
-      .coherent_fb_fetch = key->coherent_fb_fetch,
       .color_outputs_valid = key->color_outputs_valid,
-      .input_slots_valid = key->input_slots_valid,
       .ignore_sample_mask_out = !key->multisample_fbo,
       .null_push_constant_tbimr_workaround =
          screen->devinfo->needs_null_push_constant_tbimr_workaround,
@@ -663,10 +658,8 @@ iris_to_elk_fs_key(const struct iris_screen *screen,
       ELK_KEY_INIT(screen->devinfo->ver, key->base.program_string_id,
                    key->base.limit_trig_input_range),
       .nr_color_regions = key->nr_color_regions,
-      .flat_shade = key->flat_shade,
       .alpha_test_replicate_alpha = key->alpha_test_replicate_alpha,
       .alpha_to_coverage = key->alpha_to_coverage ? ELK_ALWAYS : ELK_NEVER,
-      .clamp_fragment_color = key->clamp_fragment_color,
       .persample_interp = key->persample_interp ? ELK_ALWAYS : ELK_NEVER,
       .multisample_fbo = key->multisample_fbo ? ELK_ALWAYS : ELK_NEVER,
       .force_dual_color_blend = key->force_dual_color_blend,
@@ -696,7 +689,7 @@ upload_state(struct u_upload_mgr *uploader,
              unsigned alignment)
 {
    void *p = NULL;
-   u_upload_alloc(uploader, 0, size, alignment, &ref->offset, &ref->res, &p);
+   u_upload_alloc_ref(uploader, 0, size, alignment, &ref->offset, &ref->res, &p);
    return p;
 }
 
@@ -819,7 +812,7 @@ iris_uses_image_atomic(const nir_shader *shader)
             switch (intrin->intrinsic) {
             case nir_intrinsic_image_deref_atomic:
             case nir_intrinsic_image_deref_atomic_swap:
-               unreachable("Should have been lowered in "
+               UNREACHABLE("Should have been lowered in "
                            "iris_lower_storage_image_derefs");
 
             case nir_intrinsic_image_atomic:
@@ -935,7 +928,7 @@ setup_vec4_image_sysval(uint32_t *sysvals, uint32_t idx,
    for (unsigned i = n; i < 4; ++i)
       sysvals[i] = ELK_PARAM_BUILTIN_ZERO;
 #else
-   unreachable("no elk support");
+   UNREACHABLE("no elk support");
 #endif
 }
 
@@ -994,7 +987,6 @@ iris_setup_uniforms(ASSERTED const struct intel_device_info *devinfo,
          case nir_intrinsic_load_constant: {
             unsigned load_size = intrin->def.num_components *
                                  intrin->def.bit_size / 8;
-            unsigned load_align = intrin->def.bit_size / 8;
 
             /* This one is special because it reads from the shader constant
              * data and not cbuf0 which gallium uploads for us.
@@ -1017,13 +1009,12 @@ iris_setup_uniforms(ASSERTED const struct intel_device_info *devinfo,
             assert(IRIS_MEMZONE_SHADER_START >> 32 == 0ull);
 
             nir_def *const_data_addr =
-               nir_iadd(&b, nir_load_reloc_const_intel(&b, BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW), offset);
+               nir_iadd(&b, nir_load_reloc_const_intel(&b, INTEL_SHADER_RELOC_CONST_DATA_ADDR_LOW), offset);
 
             nir_def *data =
-               nir_load_global_constant(&b, nir_u2u64(&b, const_data_addr),
-                                        load_align,
-                                        intrin->def.num_components,
-                                        intrin->def.bit_size);
+               nir_load_global_constant(&b, intrin->def.num_components,
+                                        intrin->def.bit_size,
+                                        nir_u2u64(&b, const_data_addr));
 
             nir_def_rewrite_uses(&intrin->def,
                                      data);
@@ -1255,9 +1246,9 @@ iris_print_binding_table(FILE *fp, const char *name,
    uint32_t compacted = 0;
 
    for (int i = 0; i < IRIS_SURFACE_GROUP_COUNT; i++) {
-      uint32_t size = bt->sizes[i];
-      total += size;
-      if (size)
+      uint32_t surf_count = bt->surf_count[i];
+      total += surf_count;
+      if (surf_count)
          compacted += util_bitcount64(bt->used_mask[i]);
    }
 
@@ -1299,7 +1290,7 @@ uint32_t
 iris_group_index_to_bti(const struct iris_binding_table *bt,
                         enum iris_surface_group group, uint32_t index)
 {
-   assert(index < bt->sizes[group]);
+   assert(index < bt->surf_count[group]);
    uint64_t mask = bt->used_mask[group];
    uint64_t bit = 1ull << index;
    if (bit & mask) {
@@ -1337,7 +1328,7 @@ rewrite_src_with_bti(nir_builder *b, struct iris_binding_table *bt,
                      nir_instr *instr, nir_src *src,
                      enum iris_surface_group group)
 {
-   assert(bt->sizes[group] > 0);
+   assert(bt->surf_count[group] > 0);
 
    b->cursor = nir_before_instr(instr);
    nir_def *bti;
@@ -1349,7 +1340,7 @@ rewrite_src_with_bti(nir_builder *b, struct iris_binding_table *bt,
       /* Indirect usage makes all the surfaces of the group to be available,
        * so we can just add the base.
        */
-      assert(bt->used_mask[group] == BITFIELD64_MASK(bt->sizes[group]));
+      assert(bt->used_mask[group] == BITFIELD64_MASK(bt->surf_count[group]));
       bti = nir_iadd_imm(b, src->ssa, bt->offsets[group]);
    }
    nir_src_rewrite(src, bti);
@@ -1359,15 +1350,15 @@ static void
 mark_used_with_src(struct iris_binding_table *bt, nir_src *src,
                    enum iris_surface_group group)
 {
-   assert(bt->sizes[group] > 0);
+   assert(bt->surf_count[group] > 0);
 
    if (nir_src_is_const(*src)) {
       uint64_t index = nir_src_as_uint(*src);
-      assert(index < bt->sizes[group]);
+      assert(index < bt->surf_count[group]);
       bt->used_mask[group] |= 1ull << index;
    } else {
       /* There's an indirect usage, we need all the surfaces. */
-      bt->used_mask[group] = BITFIELD64_MASK(bt->sizes[group]);
+      bt->used_mask[group] = BITFIELD64_MASK(bt->surf_count[group]);
    }
 }
 
@@ -1400,7 +1391,7 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
     * upfront how many will be used, so mark them.
     */
    if (info->stage == MESA_SHADER_FRAGMENT) {
-      bt->sizes[IRIS_SURFACE_GROUP_RENDER_TARGET] = num_render_targets;
+      bt->surf_count[IRIS_SURFACE_GROUP_RENDER_TARGET] = num_render_targets;
       /* All render targets used. */
       bt->used_mask[IRIS_SURFACE_GROUP_RENDER_TARGET] =
          BITFIELD64_MASK(num_render_targets);
@@ -1409,28 +1400,28 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
        * framebuffer fetch on Gfx8
        */
       if (devinfo->ver == 8 && info->outputs_read) {
-         bt->sizes[IRIS_SURFACE_GROUP_RENDER_TARGET_READ] = num_render_targets;
+         bt->surf_count[IRIS_SURFACE_GROUP_RENDER_TARGET_READ] = num_render_targets;
          bt->used_mask[IRIS_SURFACE_GROUP_RENDER_TARGET_READ] =
             BITFIELD64_MASK(num_render_targets);
       }
 
       bt->use_null_rt = use_null_rt;
    } else if (info->stage == MESA_SHADER_COMPUTE) {
-      bt->sizes[IRIS_SURFACE_GROUP_CS_WORK_GROUPS] = 1;
+      bt->surf_count[IRIS_SURFACE_GROUP_CS_WORK_GROUPS] = 1;
    }
 
    assert(ARRAY_SIZE(info->textures_used) >= 4);
    int max_tex = BITSET_LAST_BIT(info->textures_used);
    assert(max_tex <= 128);
-   bt->sizes[IRIS_SURFACE_GROUP_TEXTURE_LOW64] = MIN2(64, max_tex);
-   bt->sizes[IRIS_SURFACE_GROUP_TEXTURE_HIGH64] = MAX2(0, max_tex - 64);
+   bt->surf_count[IRIS_SURFACE_GROUP_TEXTURE_LOW64] = MIN2(64, max_tex);
+   bt->surf_count[IRIS_SURFACE_GROUP_TEXTURE_HIGH64] = MAX2(0, max_tex - 64);
    bt->used_mask[IRIS_SURFACE_GROUP_TEXTURE_LOW64] =
       info->textures_used[0] | ((uint64_t)info->textures_used[1]) << 32;
    bt->used_mask[IRIS_SURFACE_GROUP_TEXTURE_HIGH64] =
       info->textures_used[2] | ((uint64_t)info->textures_used[3]) << 32;
    bt->samplers_used_mask = info->samplers_used[0];
 
-   bt->sizes[IRIS_SURFACE_GROUP_IMAGE] = BITSET_LAST_BIT(info->images_used);
+   bt->surf_count[IRIS_SURFACE_GROUP_IMAGE] = BITSET_LAST_BIT(info->images_used);
 
    /* Allocate an extra slot in the UBO section for NIR constants.
     * Binding table compaction will remove it if unnecessary.
@@ -1439,12 +1430,12 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
     * they are uploaded separately from shs->constbuf[], but from a shader
     * point of view, they're another UBO (at the end of the section).
     */
-   bt->sizes[IRIS_SURFACE_GROUP_UBO] = num_cbufs + 1;
+   bt->surf_count[IRIS_SURFACE_GROUP_UBO] = num_cbufs + 1;
 
-   bt->sizes[IRIS_SURFACE_GROUP_SSBO] = info->num_ssbos;
+   bt->surf_count[IRIS_SURFACE_GROUP_SSBO] = info->num_ssbos;
 
    for (int i = 0; i < IRIS_SURFACE_GROUP_COUNT; i++)
-      assert(bt->sizes[i] <= SURFACE_GROUP_MAX_ELEMENTS);
+      assert(bt->surf_count[i] <= SURFACE_GROUP_MAX_ELEMENTS);
 
    /* Mark surfaces used for the cases we don't have the information available
     * upfront.
@@ -1502,7 +1493,7 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
    /* When disable we just mark everything as used. */
    if (unlikely(skip_compacting_binding_tables())) {
       for (int i = 0; i < IRIS_SURFACE_GROUP_COUNT; i++)
-         bt->used_mask[i] = BITFIELD64_MASK(bt->sizes[i]);
+         bt->used_mask[i] = BITFIELD64_MASK(bt->surf_count[i]);
    }
 
    /* Calculate the offsets and the binding table size based on the used
@@ -1519,7 +1510,7 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
    bt->size_bytes = next * 4;
 
    if (INTEL_DEBUG(DEBUG_BT)) {
-      iris_print_binding_table(stderr, gl_shader_stage_name(info->stage), bt);
+      iris_print_binding_table(stderr, mesa_shader_stage_name(info->stage), bt);
    }
 
    /* Apply the binding table indices.  The backend compiler is not expected
@@ -1529,7 +1520,7 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
    nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block (block, impl) {
-      nir_foreach_instr (instr, block) {
+      nir_foreach_instr_safe (instr, block) {
          if (instr->type == nir_instr_type_tex) {
             nir_tex_instr *tex = nir_instr_as_tex(instr);
             if (tex->texture_index < 64) {
@@ -1572,6 +1563,13 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
 
          case nir_intrinsic_load_output:
             if (devinfo->ver == 8) {
+               /* We're using a BTI as the load_output offset here which
+                * breaks newer NIR assumptions.
+                */
+               nir_io_semantics io_sem = nir_intrinsic_io_semantics(intrin);
+               io_sem.no_validate = true;
+               nir_intrinsic_set_io_semantics(intrin, io_sem);
+
                rewrite_src_with_bti(&b, bt, instr, &intrin->src[0],
                                     IRIS_SURFACE_GROUP_RENDER_TARGET_READ);
             }
@@ -1585,11 +1583,28 @@ iris_setup_binding_table(const struct intel_device_info *devinfo,
                                  IRIS_SURFACE_GROUP_SSBO);
             break;
 
+         case nir_intrinsic_load_num_workgroups:
+            b.cursor = nir_before_instr(instr);
+            nir_def_replace(
+               &intrin->def,
+               nir_load_ubo(&b,
+                            intrin->def.num_components,
+                            intrin->def.bit_size,
+                            nir_imm_int(&b, bt->offsets[
+                                           IRIS_SURFACE_GROUP_CS_WORK_GROUPS]),
+                            nir_imm_int(&b, 0),
+                            .range_base = 0,
+                            .range = intrin->def.num_components *
+                                     intrin->def.bit_size / 8));
+            break;
+
          default:
             break;
          }
       }
    }
+
+   nir_validate_shader(nir, "after iris_setup_binding_table");
 }
 
 static void
@@ -1636,7 +1651,7 @@ iris_debug_recompile_brw(struct iris_screen *screen,
       old_key.cs = iris_to_brw_cs_key(screen, old_iris_key);
       break;
    default:
-      unreachable("invalid shader stage");
+      UNREACHABLE("invalid shader stage");
    }
 
    brw_debug_key_recompile(c, dbg, info->stage, &old_key.base, key);
@@ -1688,7 +1703,7 @@ iris_debug_recompile_elk(struct iris_screen *screen,
       old_key.cs = iris_to_elk_cs_key(screen, old_iris_key);
       break;
    default:
-      unreachable("invalid shader stage");
+      UNREACHABLE("invalid shader stage");
    }
 
    elk_debug_key_recompile(c, dbg, info->stage, &old_key.base, key);
@@ -1699,7 +1714,7 @@ iris_debug_recompile_elk(struct iris_screen *screen,
 static void
 check_urb_size(struct iris_context *ice,
                unsigned needed_size,
-               gl_shader_stage stage)
+               mesa_shader_stage stage)
 {
    unsigned last_allocated_size = ice->shaders.urb.cfg.size[stage];
 
@@ -1720,7 +1735,7 @@ check_urb_size(struct iris_context *ice,
  *
  * This stage is the one which will feed stream output and the rasterizer.
  */
-static gl_shader_stage
+static mesa_shader_stage
 last_vue_stage(struct iris_context *ice)
 {
    if (ice->shaders.uncompiled[MESA_SHADER_GEOMETRY])
@@ -1781,7 +1796,7 @@ find_or_add_variant(const struct iris_screen *screen,
       }
    }
 
-   gl_shader_stage stage = ish->nir->info.stage;
+   mesa_shader_stage stage = ish->nir->info.stage;
 
    if (variant == NULL) {
       variant = iris_create_shader_variant(screen, NULL, stage, cache_id,
@@ -1836,6 +1851,38 @@ iris_schedule_compile(struct iris_screen *screen,
    }
 }
 
+static debug_archiver *
+iris_debug_archiver_open(void *tmp_ctx, struct iris_screen *screen,
+                         const struct nir_shader *nir, const void *key,
+                         unsigned key_size)
+{
+   if (!INTEL_DEBUG(DEBUG_MDA) || !screen->brw)
+      return NULL;
+
+   char name[SHA1_DIGEST_STRING_LENGTH + 5] = {};
+   {
+      struct mesa_sha1 ctx;
+      unsigned char hash[SHA1_DIGEST_LENGTH];
+
+      _mesa_sha1_init(&ctx);
+      _mesa_sha1_update(&ctx, nir->info.source_blake3, BLAKE3_OUT_LEN);
+      _mesa_sha1_update(&ctx, key, key_size);
+      _mesa_sha1_final(&ctx, hash);
+
+      _mesa_sha1_format(name, hash);
+   }
+   memcpy(&name[SHA1_DIGEST_STRING_LENGTH - 1], ".iris", 5);
+
+   debug_archiver *debug_archiver =
+      debug_archiver_open(tmp_ctx, name, PACKAGE_VERSION MESA_GIT_SHA1);
+
+   if (debug_archiver) {
+      debug_archiver_set_prefix(debug_archiver,
+                                _mesa_shader_stage_to_abbrev(nir->info.stage));
+   }
+   return debug_archiver;
+}
+
 /**
  * Compile a vertex shader, and upload the assembly.
  */
@@ -1855,12 +1902,15 @@ iris_compile_vs(struct iris_screen *screen,
    nir_shader *nir = nir_shader_clone(mem_ctx, ish->nir);
    const struct iris_vs_prog_key *const key = &shader->key.vs;
 
+   debug_archiver *debug_archiver =
+      iris_debug_archiver_open(mem_ctx, screen, ish->nir, key, sizeof(*key));
+
    if (key->vue.nr_userclip_plane_consts) {
       nir_function_impl *impl = nir_shader_get_entrypoint(nir);
       /* Check if variables were found. */
       if (nir_lower_clip_vs(nir, (1 << key->vue.nr_userclip_plane_consts) - 1,
                             true, false, NULL)) {
-         nir_lower_io_vars_to_temporaries(nir, impl, true, false);
+         nir_lower_io_vars_to_temporaries(nir, impl, nir_var_shader_out);
          nir_lower_global_vars_to_local(nir);
          nir_lower_vars_to_ssa(nir);
          nir_shader_gather_info(nir, impl);
@@ -1884,10 +1934,6 @@ iris_compile_vs(struct iris_screen *screen,
 
       brw_nir_analyze_ubo_ranges(screen->brw, nir, brw_prog_data->base.base.ubo_ranges);
 
-      brw_compute_vue_map(devinfo,
-                          &brw_prog_data->base.vue_map, nir->info.outputs_written,
-                          key->vue.layout, /* pos_slots */ 1);
-
       struct brw_vs_prog_key brw_key = iris_to_brw_vs_key(screen, key);
 
       struct brw_compile_vs_params params = {
@@ -1896,6 +1942,7 @@ iris_compile_vs(struct iris_screen *screen,
             .nir = nir,
             .log_data = dbg,
             .source_hash = ish->source_hash,
+            .archiver = debug_archiver,
          },
          .key = &brw_key,
          .prog_data = brw_prog_data,
@@ -1942,9 +1989,11 @@ iris_compile_vs(struct iris_screen *screen,
          iris_apply_elk_prog_data(shader, &elk_prog_data->base.base);
       }
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
+
+   debug_archiver_close(debug_archiver);
 
    if (program == NULL) {
       dbg_printf("Failed to compile vertex shader: %s\n", error);
@@ -2025,7 +2074,7 @@ iris_update_compiled_vs(struct iris_context *ice)
  * Get the shader_info for a given stage, or NULL if the stage is disabled.
  */
 const struct shader_info *
-iris_get_shader_info(const struct iris_context *ice, gl_shader_stage stage)
+iris_get_shader_info(const struct iris_context *ice, mesa_shader_stage stage)
 {
    const struct iris_uncompiled_shader *ish = ice->shaders.uncompiled[stage];
 
@@ -2106,11 +2155,14 @@ iris_compile_tcs(struct iris_screen *screen,
          assert(screen->elk);
          nir = elk_nir_create_passthrough_tcs(mem_ctx, screen->elk, &elk_key);
 #else
-         unreachable("no elk support");
+         UNREACHABLE("no elk support");
 #endif
       }
       source_hash = *(uint32_t*)nir->info.source_blake3;
    }
+
+   debug_archiver *debug_archiver =
+      iris_debug_archiver_open(mem_ctx, screen, nir, key, sizeof(*key));
 
    iris_setup_uniforms(devinfo, mem_ctx, nir, &system_values,
                        &num_system_values, &num_cbufs);
@@ -2130,6 +2182,7 @@ iris_compile_tcs(struct iris_screen *screen,
             .nir = nir,
             .log_data = dbg,
             .source_hash = source_hash,
+            .archiver = debug_archiver,
          },
          .key = &brw_key,
          .prog_data = brw_prog_data,
@@ -2168,9 +2221,11 @@ iris_compile_tcs(struct iris_screen *screen,
          iris_apply_elk_prog_data(shader, &elk_prog_data->base.base);
       }
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
+
+   debug_archiver_close(debug_archiver);
 
    if (program == NULL) {
       dbg_printf("Failed to compile control shader: %s\n", error);
@@ -2295,11 +2350,14 @@ iris_compile_tes(struct iris_screen *screen,
    nir_shader *nir = nir_shader_clone(mem_ctx, ish->nir);
    const struct iris_tes_prog_key *const key = &shader->key.tes;
 
+   debug_archiver *debug_archiver =
+      iris_debug_archiver_open(mem_ctx, screen, ish->nir, key, sizeof(*key));
+
    if (key->vue.nr_userclip_plane_consts) {
       nir_function_impl *impl = nir_shader_get_entrypoint(nir);
       nir_lower_clip_vs(nir, (1 << key->vue.nr_userclip_plane_consts) - 1,
                         true, false, NULL);
-      nir_lower_io_vars_to_temporaries(nir, impl, true, false);
+      nir_lower_io_vars_to_temporaries(nir, impl, nir_var_shader_out);
       nir_lower_global_vars_to_local(nir);
       nir_lower_vars_to_ssa(nir);
       nir_shader_gather_info(nir, impl);
@@ -2323,7 +2381,7 @@ iris_compile_tes(struct iris_screen *screen,
 
       struct intel_vue_map input_vue_map;
       brw_compute_tess_vue_map(&input_vue_map, key->inputs_read,
-                               key->patch_inputs_read);
+                               key->patch_inputs_read, false /* separate */);
 
       struct brw_tes_prog_key brw_key = iris_to_brw_tes_key(screen, key);
 
@@ -2333,6 +2391,7 @@ iris_compile_tes(struct iris_screen *screen,
             .nir = nir,
             .log_data = dbg,
             .source_hash = ish->source_hash,
+            .archiver = debug_archiver,
          },
          .key = &brw_key,
          .prog_data = brw_prog_data,
@@ -2379,9 +2438,11 @@ iris_compile_tes(struct iris_screen *screen,
          iris_apply_elk_prog_data(shader, &elk_prog_data->base.base);
       }
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
+
+   debug_archiver_close(debug_archiver);
 
    if (program == NULL) {
       dbg_printf("Failed to compile evaluation shader: %s\n", error);
@@ -2484,11 +2545,14 @@ iris_compile_gs(struct iris_screen *screen,
    nir_shader *nir = nir_shader_clone(mem_ctx, ish->nir);
    const struct iris_gs_prog_key *const key = &shader->key.gs;
 
+   debug_archiver *debug_archiver =
+      iris_debug_archiver_open(mem_ctx, screen, ish->nir, key, sizeof(*key));
+
    if (key->vue.nr_userclip_plane_consts) {
       nir_function_impl *impl = nir_shader_get_entrypoint(nir);
       nir_lower_clip_gs(nir, (1 << key->vue.nr_userclip_plane_consts) - 1,
                         false, NULL);
-      nir_lower_io_vars_to_temporaries(nir, impl, true, false);
+      nir_lower_io_vars_to_temporaries(nir, impl, nir_var_shader_out);
       nir_lower_global_vars_to_local(nir);
       nir_lower_vars_to_ssa(nir);
       nir_shader_gather_info(nir, impl);
@@ -2521,6 +2585,7 @@ iris_compile_gs(struct iris_screen *screen,
             .nir = nir,
             .log_data = dbg,
             .source_hash = ish->source_hash,
+            .archiver = debug_archiver,
          },
          .key = &brw_key,
          .prog_data = brw_prog_data,
@@ -2565,9 +2630,11 @@ iris_compile_gs(struct iris_screen *screen,
          iris_apply_elk_prog_data(shader, &elk_prog_data->base.base);
       }
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
+
+   debug_archiver_close(debug_archiver);
 
    if (program == NULL) {
       dbg_printf("Failed to compile geometry shader: %s\n", error);
@@ -2667,6 +2734,9 @@ iris_compile_fs(struct iris_screen *screen,
    nir_shader *nir = nir_shader_clone(mem_ctx, ish->nir);
    const struct iris_fs_prog_key *const key = &shader->key.fs;
 
+   debug_archiver *debug_archiver =
+      iris_debug_archiver_open(mem_ctx, screen, ish->nir, key, sizeof(*key));
+
    iris_setup_uniforms(devinfo, mem_ctx, nir, &system_values,
                        &num_system_values, &num_cbufs);
 
@@ -2704,6 +2774,7 @@ iris_compile_fs(struct iris_screen *screen,
             .nir = nir,
             .log_data = dbg,
             .source_hash = ish->source_hash,
+            .archiver = debug_archiver,
          },
          .key = &brw_key,
          .prog_data = brw_prog_data,
@@ -2752,9 +2823,11 @@ iris_compile_fs(struct iris_screen *screen,
          iris_apply_elk_prog_data(shader, &elk_prog_data->base);
       }
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
+
+   debug_archiver_close(debug_archiver);
 
    if (program == NULL) {
       dbg_printf("Failed to compile fragment shader: %s\n", error);
@@ -2874,7 +2947,7 @@ update_last_vue_map(struct iris_context *ice,
 
 static void
 iris_update_pull_constant_descriptors(struct iris_context *ice,
-                                      gl_shader_stage stage)
+                                      mesa_shader_stage stage)
 {
    struct iris_compiled_shader *shader = ice->shaders.prog[stage];
 
@@ -2967,7 +3040,7 @@ iris_update_compiled_shaders(struct iris_context *ice)
       }
    }
 
-   gl_shader_stage last_stage = last_vue_stage(ice);
+   mesa_shader_stage last_stage = last_vue_stage(ice);
    struct iris_compiled_shader *shader = ice->shaders.prog[last_stage];
    struct iris_uncompiled_shader *ish = ice->shaders.uncompiled[last_stage];
    update_last_vue_map(ice, shader);
@@ -3010,13 +3083,16 @@ iris_compile_cs(struct iris_screen *screen,
    nir_shader *nir = nir_shader_clone(mem_ctx, ish->nir);
    const struct iris_cs_prog_key *const key = &shader->key.cs;
 
+   debug_archiver *debug_archiver =
+      iris_debug_archiver_open(mem_ctx, screen, ish->nir, key, sizeof(*key));
+
    if (screen->brw)
       NIR_PASS(_, nir, brw_nir_lower_cs_intrinsics, devinfo, NULL);
    else
 #ifdef INTEL_USE_ELK
       NIR_PASS(_, nir, elk_nir_lower_cs_intrinsics, devinfo, NULL);
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
 
    iris_setup_uniforms(devinfo, mem_ctx, nir,
@@ -3041,6 +3117,7 @@ iris_compile_cs(struct iris_screen *screen,
             .nir = nir,
             .log_data = dbg,
             .source_hash = ish->source_hash,
+            .archiver = debug_archiver,
          },
          .key = &brw_key,
          .prog_data = brw_prog_data,
@@ -3077,9 +3154,11 @@ iris_compile_cs(struct iris_screen *screen,
          iris_apply_elk_prog_data(shader, &elk_prog_data->base);
       }
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
+
+   debug_archiver_close(debug_archiver);
 
    if (program == NULL) {
       dbg_printf("Failed to compile compute shader: %s\n", error);
@@ -3170,7 +3249,7 @@ iris_fill_cs_push_const_buffer(struct iris_screen *screen,
 struct iris_bo *
 iris_get_scratch_space(struct iris_context *ice,
                        unsigned per_thread_scratch,
-                       gl_shader_stage stage)
+                       mesa_shader_stage stage)
 {
    struct iris_screen *screen = (struct iris_screen *)ice->ctx.screen;
    struct iris_bufmgr *bufmgr = screen->bufmgr;
@@ -3305,7 +3384,7 @@ iris_create_compute_state(struct pipe_context *ctx,
       break;
 
    default:
-      unreachable("Unsupported IR");
+      UNREACHABLE("Unsupported IR");
    }
 
    /* Most of iris doesn't really care about the difference between compute
@@ -3415,7 +3494,7 @@ iris_compile_shader(void *_job, UNUSED void *_gdata, UNUSED int thread_index)
       break;
 
    default:
-      unreachable("Invalid shader stage.");
+      UNREACHABLE("Invalid shader stage.");
    }
 }
 
@@ -3542,7 +3621,7 @@ iris_create_shader_state(struct pipe_context *ctx,
       break;
 
    default:
-      unreachable("Invalid shader stage.");
+      UNREACHABLE("Invalid shader stage.");
    }
 
    if (screen->precompile) {
@@ -3613,7 +3692,7 @@ iris_delete_shader_state(struct pipe_context *ctx, void *state)
    struct iris_uncompiled_shader *ish = state;
    struct iris_context *ice = (void *) ctx;
 
-   const gl_shader_stage stage = ish->nir->info.stage;
+   const mesa_shader_stage stage = ish->nir->info.stage;
 
    if (ice->shaders.uncompiled[stage] == ish) {
       ice->shaders.uncompiled[stage] = NULL;
@@ -3633,7 +3712,7 @@ iris_delete_shader_state(struct pipe_context *ctx, void *state)
 static void
 bind_shader_state(struct iris_context *ice,
                   struct iris_uncompiled_shader *ish,
-                  gl_shader_stage stage)
+                  mesa_shader_stage stage)
 {
    uint64_t stage_dirty_bit = IRIS_STAGE_DIRTY_UNCOMPILED_VS << stage;
    const uint64_t nos = ish ? ish->nos : 0;
@@ -3770,7 +3849,8 @@ iris_bind_cs_state(struct pipe_context *ctx, void *state)
 }
 
 static void
-iris_finalize_nir(struct pipe_screen *_screen, struct nir_shader *nir)
+iris_finalize_nir(struct pipe_screen *_screen, struct nir_shader *nir,
+                  bool optimize)
 {
    struct iris_screen *screen = (struct iris_screen *)_screen;
 
@@ -3779,6 +3859,8 @@ iris_finalize_nir(struct pipe_screen *_screen, struct nir_shader *nir)
    if (screen->brw) {
       struct brw_nir_compiler_opts opts = {};
       brw_preprocess_nir(screen->brw, nir, &opts);
+
+      NIR_PASS(_, nir, nir_update_image_intrinsic_from_var);
 
       NIR_PASS(_, nir, brw_nir_lower_storage_image,
                  screen->brw,
@@ -3806,7 +3888,7 @@ iris_finalize_nir(struct pipe_screen *_screen, struct nir_shader *nir)
                     .lower_get_size = true,
                  });
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 
@@ -3827,7 +3909,7 @@ iris_set_max_shader_compiler_threads(struct pipe_screen *pscreen,
 static bool
 iris_is_parallel_shader_compilation_finished(struct pipe_screen *pscreen,
                                              void *v_shader,
-                                             enum pipe_shader_type p_stage)
+                                             mesa_shader_stage p_stage)
 {
    struct iris_screen *screen = (struct iris_screen *) pscreen;
 
@@ -3902,7 +3984,7 @@ iris_get_cs_dispatch_info(const struct intel_device_info *devinfo,
                                       elk_cs_prog_data(shader->elk_prog_data),
                                       block);
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 }
@@ -3920,7 +4002,7 @@ iris_cs_push_const_total_size(const struct iris_compiled_shader *shader,
       return elk_cs_push_const_total_size(elk_cs_prog_data(shader->elk_prog_data),
                                           threads);
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 }
@@ -3938,7 +4020,7 @@ iris_fs_barycentric_modes(const struct iris_compiled_shader *shader,
       return elk_wm_prog_data_barycentric_modes(elk_wm_prog_data(shader->elk_prog_data),
                                                 pushed_msaa_flags);
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 }
@@ -3959,7 +4041,7 @@ iris_indirect_ubos_use_sampler(struct iris_screen *screen)
       assert(screen->elk);
       return screen->elk->indirect_ubos_use_sampler;
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 }
@@ -4001,16 +4083,15 @@ iris_shader_perf_log(void *data, unsigned *id, const char *fmt, ...)
 
 const struct nir_shader_compiler_options *
 iris_get_compiler_options(struct pipe_screen *pscreen,
-                          enum pipe_shader_type pstage)
+                          mesa_shader_stage stage)
 {
    struct iris_screen *screen = (struct iris_screen *) pscreen;
-   gl_shader_stage stage = stage_from_pipe(pstage);
 
 #ifdef INTEL_USE_ELK
-   return screen->brw ? screen->brw->nir_options[stage]
+   return screen->brw ? &screen->brw->nir_options[stage]
                       : screen->elk->nir_options[stage];
 #else
-   return screen->brw->nir_options[stage];
+   return &screen->brw->nir_options[stage];
 #endif
 }
 
@@ -4033,7 +4114,7 @@ iris_compiler_init(struct iris_screen *screen)
       screen->elk->shader_perf_log = iris_shader_perf_log;
       screen->elk->supports_shader_constants = true;
 #else
-      unreachable("no elk support");
+      UNREACHABLE("no elk support");
 #endif
    }
 }

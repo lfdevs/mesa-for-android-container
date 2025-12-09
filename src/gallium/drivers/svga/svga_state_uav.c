@@ -335,7 +335,7 @@ svga_create_uav_list(struct svga_context *svga,
                      SVGA3dUAViewId *uaViewIds,
                      struct svga_winsys_surface **uaViews)
 {
-   enum pipe_shader_type first_shader, last_shader;
+   mesa_shader_stage first_shader, last_shader;
    struct svga_uav *uav;
    int uav_index = -1;
 
@@ -343,14 +343,14 @@ svga_create_uav_list(struct svga_context *svga,
    svga->state.uav_timestamp[pipe_type]++;
 
    if (pipe_type == SVGA_PIPE_GRAPHICS) {
-      first_shader = PIPE_SHADER_VERTEX;
-      last_shader = PIPE_SHADER_COMPUTE;
+      first_shader = MESA_SHADER_VERTEX;
+      last_shader = MESA_SHADER_COMPUTE;
    } else {
-      first_shader = PIPE_SHADER_COMPUTE;
+      first_shader = MESA_SHADER_COMPUTE;
       last_shader = first_shader + 1;
    }
 
-   for (enum pipe_shader_type shader = first_shader;
+   for (mesa_shader_stage shader = first_shader;
         shader < last_shader; shader++) {
 
       unsigned num_image_views = svga->curr.num_image_views[shader];
@@ -589,18 +589,18 @@ svga_save_uav_state(struct svga_context *svga,
                     SVGA3dUAViewId *uaViewIds,
                     struct svga_winsys_surface **uaViews)
 {
-   enum pipe_shader_type first_shader, last_shader;
+   mesa_shader_stage first_shader, last_shader;
    unsigned i;
 
    if (pipe_type == SVGA_PIPE_GRAPHICS) {
-      first_shader = PIPE_SHADER_VERTEX;
-      last_shader = PIPE_SHADER_COMPUTE;
+      first_shader = MESA_SHADER_VERTEX;
+      last_shader = MESA_SHADER_COMPUTE;
    } else {
-      first_shader = PIPE_SHADER_COMPUTE;
+      first_shader = MESA_SHADER_COMPUTE;
       last_shader = first_shader + 1;
    }
 
-   for (enum pipe_shader_type shader = first_shader;
+   for (mesa_shader_stage shader = first_shader;
         shader < last_shader; shader++) {
 
       /**
@@ -702,8 +702,8 @@ need_to_set_uav(struct svga_context *svga,
       return true;
 
    /* If image views are different */
-   for (enum pipe_shader_type shader = PIPE_SHADER_VERTEX;
-        shader < PIPE_SHADER_COMPUTE; shader++) {
+   for (mesa_shader_stage shader = MESA_SHADER_VERTEX;
+        shader < MESA_SHADER_COMPUTE; shader++) {
       unsigned num_image_views = svga->curr.num_image_views[shader];
       if ((num_image_views != svga->state.hw_draw.num_image_views[shader]) ||
           memcmp(svga->state.hw_draw.image_views[shader],
@@ -811,7 +811,7 @@ need_to_set_cs_uav(struct svga_context *svga,
                    SVGA3dUAViewId *uaViewIds,
                    struct svga_winsys_surface **uaViews)
 {
-   enum pipe_shader_type shader = PIPE_SHADER_COMPUTE;
+   mesa_shader_stage shader = MESA_SHADER_COMPUTE;
 
    if (svga->state.hw_draw.num_cs_uavs != num_uavs)
       return true;

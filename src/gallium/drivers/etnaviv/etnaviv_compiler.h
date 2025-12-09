@@ -99,7 +99,7 @@ struct etna_shader_variant {
 #define VARIANT_CACHE_PTR(v)   (((char *)v) + VARIANT_CACHE_START)
 #define VARIANT_CACHE_SIZE     (sizeof(struct etna_shader_variant) - VARIANT_CACHE_START)
 
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
    uint32_t code_size; /* code size in uint32 words */
    unsigned num_loops;
    unsigned num_temps;

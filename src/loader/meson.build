@@ -4,31 +4,18 @@
 inc_loader = include_directories('.')
 
 if with_platform_wayland
-  wp_dir = dep_wl_protocols.get_variable(pkgconfig : 'pkgdatadir', internal : 'pkgdatadir')
   wp_protos = {
-    'fifo-v1': 'staging/fifo/fifo-v1.xml',
-    'commit-timing-v1': 'staging/commit-timing/commit-timing-v1.xml',
-    'linux-dmabuf-unstable-v1': 'unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml',
-    'presentation-time': 'stable/presentation-time/presentation-time.xml',
-    'tearing-control-v1': 'staging/tearing-control/tearing-control-v1.xml',
-    'linux-drm-syncobj-v1': 'staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml',
-    'color-management-v1': 'staging/color-management/color-management-v1.xml',
+    'fifo-v1': mod_wl.find_protocol('fifo', state : 'staging', version : 1),
+    'commit-timing-v1': mod_wl.find_protocol('commit-timing', state : 'staging', version : 1),
+    'linux-dmabuf-unstable-v1': mod_wl.find_protocol('linux-dmabuf', state : 'unstable', version : 1),
+    'presentation-time': mod_wl.find_protocol('presentation-time'),
+    'tearing-control-v1': mod_wl.find_protocol('tearing-control', state : 'staging', version : 1),
+    'linux-drm-syncobj-v1': mod_wl.find_protocol('linux-drm-syncobj', state : 'staging', version : 1),
+    'color-management-v1': mod_wl.find_protocol('color-management', state : 'staging', version : 1)
   }
   wp_files = {}
   foreach name, xml : wp_protos
-    code = custom_target(
-      name + '-protocol.c',
-      input : files(join_paths(wp_dir, xml)),
-      output : name + '-protocol.c',
-      command : [prog_wl_scanner, wl_scanner_arg, '@INPUT@', '@OUTPUT@'],
-    )
-    header = custom_target(
-      name + '-client-protocol.h',
-      input : files(join_paths(wp_dir, xml)),
-      output : name + '-client-protocol.h',
-      command : [prog_wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
-    )
-    wp_files += { name: [code, header] }
+    wp_files += {name : mod_wl.scan_xml(xml, include_core_only : false)}
   endforeach
 
   libloader_wayland_helper = static_library(

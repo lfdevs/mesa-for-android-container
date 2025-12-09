@@ -365,7 +365,7 @@ LiveRangeInstrVisitor::visit(ControlFlowInstr *instr)
    case ControlFlowInstr::cf_wait_ack:
       break;
    default:
-      unreachable("Flow control unreachanble");
+      UNREACHABLE("Flow control unreachanble");
    }
 }
 
@@ -374,7 +374,6 @@ LiveRangeInstrVisitor::visit(IfInstr *instr)
 {
    int b = m_block;
    m_block = -1;
-   instr->predicate()->accept(*this);
    scope_if();
    m_block = b;
 }
@@ -411,14 +410,14 @@ LiveRangeInstrVisitor::visit(WriteTFInstr *instr)
 void
 LiveRangeInstrVisitor::visit(UNUSED LDSAtomicInstr *instr)
 {
-   unreachable("LDSAtomicInstr must be lowered before scheduling and live "
+   UNREACHABLE("LDSAtomicInstr must be lowered before scheduling and live "
                "range evaluation");
 }
 
 void
 LiveRangeInstrVisitor::visit(UNUSED LDSReadInstr *instr)
 {
-   unreachable("LDSReadInstr must be lowered before scheduling and live "
+   UNREACHABLE("LDSReadInstr must be lowered before scheduling and live "
                "range evaluation");
 }
 
@@ -443,7 +442,7 @@ LiveRangeInstrVisitor::record_write(int block, const Register *reg)
          auto& rav = m_register_access(array(i, reg->chan()));
          rav.record_write(block, m_line > 0 ? m_line - 1 : 0, m_current_scope);
       }
-   } else {
+   } else if (reg->sel() != g_registers_unused) {
       auto& ra = m_register_access(*reg);
       sfn_log << SfnLog::merge << *reg << " write:" << block << ":" << m_line << "\n";
       ra.record_write(block, m_line, m_current_scope);

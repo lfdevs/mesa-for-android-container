@@ -136,6 +136,7 @@ Enum("intel_platform",
       "INTEL_PLATFORM_BMG",
       "INTEL_PLATFORM_PTL",
       "INTEL_PLATFORM_WCL",
+      "INTEL_PLATFORM_NVL_U",
       ])
 
 Struct("intel_memory_class_instance",
@@ -288,9 +289,6 @@ Struct("intel_device_info",
         Member("bool", "supports_simd16_3src", compiler_field=True),
         Member("bool", "disable_ccs_repack"),
 
-        Member("bool", "has_illegal_ccs_values",
-               comment="True if CCS needs to be initialized before use."),
-
         Member("bool", "has_flat_ccs",
                comment=dedent("""\
                True if CCS uses a flat virtual address translation to a memory
@@ -310,6 +308,7 @@ Struct("intel_device_info",
         Member("bool", "has_context_isolation"),
         Member("bool", "has_set_pat_uapi"),
         Member("bool", "has_indirect_unroll"),
+        Member("bool", "supports_low_latency_hint"),
 
         Member("bool", "has_coarse_pixel_primitive_and_cb", compiler_field=True,
                comment=dedent("""\
@@ -444,6 +443,10 @@ Struct("intel_device_info",
                Actual maximum compute shader threads is max_cs_threads * subslices.
 
                Thread count * number of EUs per subslice""")),
+
+        Member("unsigned", "num_geom_pipes", comment="Number of geometry pipes"),
+        Member("unsigned", "num_depth_pipes", comment="Number of depth pipes"),
+        Member("unsigned", "num_color_pipes", comment="Number of color pipes"),
 
         Member("unsigned", "max_cs_workgroup_threads", compiler_field=True,
                comment=dedent("""\

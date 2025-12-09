@@ -125,6 +125,7 @@ libfreedreno_ir3_files = files(
   'ir3_sched.c',
   'ir3_shader.c',
   'ir3_shader.h',
+  'ir3_shader_bisect.c',
   'ir3_shared_folding.c',
   'ir3_shared_ra.c',
   'ir3_spill.c',

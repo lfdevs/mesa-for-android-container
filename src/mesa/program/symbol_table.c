@@ -26,6 +26,7 @@
 #include "symbol_table.h"
 #include "util/hash_table.h"
 #include "util/u_string.h"
+#include "util/ralloc.h"
 
 struct symbol {
    /** Symbol name. */
@@ -81,6 +82,8 @@ struct _mesa_symbol_table {
 
     /** Current scope depth. */
     unsigned depth;
+
+    linear_ctx *linalloc;
 };
 
 void
@@ -91,8 +94,6 @@ _mesa_symbol_table_pop_scope(struct _mesa_symbol_table *table)
 
     table->current_scope = scope->next;
     table->depth--;
-
-    free(scope);
 
     while (sym != NULL) {
         struct symbol *const next = sym->next_with_same_scope;
@@ -107,7 +108,6 @@ _mesa_symbol_table_pop_scope(struct _mesa_symbol_table *table)
            _mesa_hash_table_remove(table->ht, hte);
         }
 
-        free(sym);
         sym = next;
     }
 }
@@ -116,7 +116,8 @@ _mesa_symbol_table_pop_scope(struct _mesa_symbol_table *table)
 void
 _mesa_symbol_table_push_scope(struct _mesa_symbol_table *table)
 {
-    struct scope_level *const scope = calloc(1, sizeof(*scope));
+    struct scope_level *const scope = linear_zalloc(table->linalloc,
+                                                    struct scope_level);
     if (scope == NULL) {
        _mesa_error_no_memory(__func__);
        return;
@@ -183,7 +184,8 @@ _mesa_symbol_table_add_symbol(struct _mesa_symbol_table *table,
    if (sym && sym->depth == table->depth)
       return -1;
 
-   new_sym = calloc(1, sizeof(*sym) + (sym ? 0 : (strlen(name) + 1)));
+   new_sym = linear_zalloc_child(table->linalloc,
+                                 sizeof(*sym) + (sym ? 0 : (strlen(name) + 1)));
    if (new_sym == NULL) {
       _mesa_error_no_memory(__func__);
       return -1;
@@ -234,6 +236,7 @@ _mesa_symbol_table_ctor(void)
     if (table != NULL) {
        table->ht = _mesa_hash_table_create(NULL, _mesa_hash_string,
                                            _mesa_key_string_equal);
+       table->linalloc = linear_context(ralloc_context(NULL));
 
        _mesa_symbol_table_push_scope(table);
     }
@@ -256,11 +259,10 @@ _mesa_symbol_table_dtor(struct _mesa_symbol_table *table)
       while (scope->symbols) {
          struct symbol *sym = scope->symbols;
          scope->symbols = sym->next_with_same_scope;
-         free(sym);
       }
-      free(scope);
    }
 
    _mesa_hash_table_destroy(table->ht, NULL);
+   ralloc_free(ralloc_parent_of_linear_context(table->linalloc));
    free(table);
 }

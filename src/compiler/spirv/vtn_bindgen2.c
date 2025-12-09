@@ -90,7 +90,7 @@ optimize(nir_shader *nir)
 
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
 
-      NIR_PASS(progress, nir, nir_copy_prop);
+      NIR_PASS(progress, nir, nir_opt_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_lower_all_phis_to_scalar);
       NIR_PASS(progress, nir, nir_opt_dce);
@@ -158,7 +158,7 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size)
    NIR_PASS(_, nir, nir_lower_returns);
    NIR_PASS(_, nir, nir_inline_functions);
    nir_remove_non_exported(nir);
-   NIR_PASS(_, nir, nir_copy_prop);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
    NIR_PASS(_, nir, nir_opt_deref);
 
    /* We can't deal with constant data, get rid of it */
@@ -237,7 +237,8 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size)
    bool scratch_lowered = false;
    NIR_PASS(scratch_lowered, nir, nir_lower_scratch_to_var);
    if (scratch_lowered) {
-      NIR_PASS(_, nir, nir_lower_indirect_derefs, nir_var_function_temp, ~0);
+      NIR_PASS(_, nir, nir_lower_indirect_derefs_to_if_else_trees,
+               nir_var_function_temp, ~0);
    }
 
    /* Prune derefs/variables late, since scratch lowering leaves dead
@@ -248,7 +249,7 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size)
             nir_var_function_temp | nir_var_shader_temp, NULL);
 
    /* Do a last round of clean up after the extra lowering */
-   NIR_PASS(_, nir, nir_copy_prop);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
    NIR_PASS(_, nir, nir_opt_constant_folding);
    NIR_PASS(_, nir, nir_opt_algebraic);
    NIR_PASS(_, nir, nir_opt_cse);
@@ -329,6 +330,7 @@ main(int argc, char **argv)
    }
 
    glsl_type_singleton_init_or_ref();
+   u_printf_singleton_init_or_ref();
 
    for (unsigned i = 0; i < 2; ++i) {
       FILE *fp = i ? fp_c : fp_h;
@@ -409,14 +411,15 @@ main(int argc, char **argv)
       fprintf(fp, "#endif\n");
    }
 
-   fprintf(fp_c, "struct vtn_bindgen_dummy {\n");
-   fprintf(fp_c, "   vtn_bindgen_dummy() {\n");
-   fprintf(fp_c, "      /* Format strings:\n");
-   fprintf(fp_c, "       *\n");
+   fprintf(fp_c, "namespace {\n");
+   fprintf(fp_c, "   struct vtn_bindgen_dummy {\n");
+   fprintf(fp_c, "      vtn_bindgen_dummy() {\n");
+   fprintf(fp_c, "         /* Format strings:\n");
+   fprintf(fp_c, "          *\n");
    for (unsigned i = 0; i < nir->printf_info_count; ++i) {
       u_printf_info *info = &nir->printf_info[i];
       const char *str = info->strings;
-      fprintf(fp_c, "       * ");
+      fprintf(fp_c, "          * ");
 
       for (unsigned j = 0; j < strlen(str); ++j) {
          char c = str[j];
@@ -430,7 +433,7 @@ main(int argc, char **argv)
 
       fprintf(fp_c, "\n");
    }
-   fprintf(fp_c, "       */\n");
+   fprintf(fp_c, "          */\n");
 
    /* Stuff printf info into Mesa's singleton */
    struct blob blob;
@@ -440,20 +443,22 @@ main(int argc, char **argv)
                           (const uint32_t *)blob.data, blob.size, false);
    blob_finish(&blob);
 
-   fprintf(fp_c, "      u_printf_singleton_init_or_ref();\n");
+   fprintf(fp_c, "         u_printf_singleton_init_or_ref();\n");
    fprintf(
       fp_c,
-      "      u_printf_singleton_add_serialized((const void*)printf_0_blob, sizeof(printf_0_blob));\n");
+      "         u_printf_singleton_add_serialized((const void*)printf_0_blob, sizeof(printf_0_blob));\n");
 
-   fprintf(fp_c, "   }\n");
+   fprintf(fp_c, "      }\n");
    fprintf(fp_c, "\n");
-   fprintf(fp_c, "   ~vtn_bindgen_dummy() {\n");
-   fprintf(fp_c, "      u_printf_singleton_decref();\n");
-   fprintf(fp_c, "   }\n");
-   fprintf(fp_c, "};\n");
+   fprintf(fp_c, "      ~vtn_bindgen_dummy() {\n");
+   fprintf(fp_c, "         u_printf_singleton_decref();\n");
+   fprintf(fp_c, "      }\n");
+   fprintf(fp_c, "   };\n");
    fprintf(fp_c, "\n");
-   fprintf(fp_c, "static vtn_bindgen_dummy vtn_bindgen_dummy_instance;\n");
+   fprintf(fp_c, "   static vtn_bindgen_dummy vtn_bindgen_dummy_instance;\n");
+   fprintf(fp_c, "}\n");
 
+   u_printf_singleton_decref();
    glsl_type_singleton_decref();
    fclose(fp_c);
    fclose(fp_h);

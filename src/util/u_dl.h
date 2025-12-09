@@ -68,6 +68,11 @@ util_dl_proc
 util_dl_get_proc_address(struct util_dl_library *library,
                          const char *procname);
 
+/**
+ * Lookup the dll absolute path of a function, the return value need free
+ */
+char *
+util_dl_get_path_from_proc(const void *func_proc);
 
 /**
  * Close a library.

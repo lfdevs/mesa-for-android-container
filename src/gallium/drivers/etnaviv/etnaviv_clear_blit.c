@@ -41,6 +41,7 @@
 #include "pipe/p_state.h"
 #include "util/compiler.h"
 #include "util/u_blitter.h"
+#include "util/u_dump.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_surface.h"
@@ -50,7 +51,7 @@ void
 etna_blit_save_state(struct etna_context *ctx, bool render_cond)
 {
    util_blitter_save_fragment_constant_buffer_slot(ctx->blitter,
-                                                   ctx->constant_buffer[PIPE_SHADER_FRAGMENT].cb);
+                                                   ctx->constant_buffer[MESA_SHADER_FRAGMENT].cb);
    util_blitter_save_vertex_buffers(ctx->blitter, ctx->vertex_buffer.vb,
                                     ctx->vertex_buffer.count);
    util_blitter_save_vertex_elements(ctx->blitter, ctx->vertex_elements);
@@ -73,8 +74,8 @@ etna_blit_save_state(struct etna_context *ctx, bool render_cond)
       util_blitter_save_render_condition(ctx->blitter,
             ctx->cond_query, ctx->cond_cond, ctx->cond_mode);
 
-   if (DBG_ENABLED(ETNA_DBG_DEQP))
-      util_blitter_save_so_targets(ctx->blitter, 0, NULL, 0);
+   util_blitter_save_so_targets(ctx->blitter, ctx->streamout.num_targets,
+                                ctx->streamout.targets, MESA_PRIM_UNKNOWN);
 }
 
 uint64_t
@@ -133,10 +134,6 @@ etna_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
    if (ctx->blit(pctx, &info))
       goto success;
 
-   if (etna_format_needs_yuv_tiler(blit_info->src.format) &&
-       etna_try_yuv_blit(pctx, blit_info))
-      goto success;
-
    if (util_try_blit_via_copy_region(pctx, &info, false))
       goto success;
 
@@ -146,10 +143,10 @@ etna_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
    }
 
    if (!util_blitter_is_blit_supported(ctx->blitter, &info)) {
-      DBG("blit unsupported %s -> %s",
-          util_format_short_name(info.src.resource->format),
-          util_format_short_name(info.dst.resource->format));
-      return;
+      fprintf(stderr, "\n");
+      util_dump_blit_info(stderr, &info);
+      fprintf(stderr, "\n\n");
+      UNREACHABLE("Unsupported blit");
    }
 
    etna_blit_save_state(ctx, info.render_condition_enable);
@@ -274,7 +271,10 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
 
       for (int z = 0; z < depth; z++) {
          blit.src.box.z = blit.dst.box.z = z;
-         ctx->blit(pctx, &blit);
+         if (unlikely(etna_format_needs_yuv_tiler(blit.src.format)))
+            etna_try_yuv_blit(pctx, &blit);
+         else
+            ctx->blit(pctx, &blit);
       }
 
       if (src == dst)
@@ -313,7 +313,10 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
 
    for (int z = 0; z < box->depth; z++) {
       blit.src.box.z = blit.dst.box.z = box->z + z;
-      ctx->blit(pctx, &blit);
+      if (unlikely(etna_format_needs_yuv_tiler(blit.src.format)))
+         etna_try_yuv_blit(pctx, &blit);
+      else
+         ctx->blit(pctx, &blit);
    }
 
    if (src == dst)

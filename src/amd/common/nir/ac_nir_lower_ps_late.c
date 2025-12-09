@@ -424,7 +424,7 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, unsigned output_index, u
          pack_op = nir_op_pack_snorm_2x16;
          break;
       default:
-         unreachable("unsupported color export format");
+         UNREACHABLE("unsupported color export format");
          break;
       }
 
@@ -571,14 +571,6 @@ emit_ps_null_export(nir_builder *b, lower_ps_state *s)
        !s->options->dcc_decompress_gfx11)
       return;
 
-   /* The `done` export exits the POPS ordered section on GFX11+, make sure UniformMemory and
-    * ImageMemory (in SPIR-V terms) accesses from the ordered section may not be reordered below it.
-    */
-   if (s->options->gfx_level >= GFX11 && pops)
-      nir_scoped_memory_barrier(b, SCOPE_QUEUE_FAMILY, NIR_MEMORY_RELEASE,
-                                nir_var_image | nir_var_mem_ubo | nir_var_mem_ssbo |
-                                nir_var_mem_global);
-
    /* Gfx11 doesn't support null exports, and mrt0 should be exported instead. */
    unsigned target = s->options->gfx_level >= GFX11 ?
       V_008DFC_SQ_EXP_MRT : V_008DFC_SQ_EXP_NULL;
@@ -637,7 +629,7 @@ export_ps_outputs(nir_builder *b, lower_ps_state *s)
       case BITFIELD_RANGE(0, 2):
          break;
       default:
-         unreachable("unexpected number of color outputs for dual source blending");
+         UNREACHABLE("unexpected number of color outputs for dual source blending");
       }
    }
 
@@ -671,21 +663,6 @@ export_ps_outputs(nir_builder *b, lower_ps_state *s)
       unsigned final_exp_flags = nir_intrinsic_flags(final_exp);
       final_exp_flags |= AC_EXP_FLAG_DONE | AC_EXP_FLAG_VALID_MASK;
       nir_intrinsic_set_flags(final_exp, final_exp_flags);
-
-      /* The `done` export exits the POPS ordered section on GFX11+, make sure UniformMemory and
-       * ImageMemory (in SPIR-V terms) accesses from the ordered section may not be reordered below
-       * it.
-       */
-      if (s->options->gfx_level >= GFX11 &&
-          (b->shader->info.fs.sample_interlock_ordered ||
-           b->shader->info.fs.sample_interlock_unordered ||
-           b->shader->info.fs.pixel_interlock_ordered ||
-           b->shader->info.fs.pixel_interlock_unordered)) {
-         b->cursor = nir_before_instr(&final_exp->instr);
-         nir_scoped_memory_barrier(b, SCOPE_QUEUE_FAMILY, NIR_MEMORY_RELEASE,
-                                   nir_var_image | nir_var_mem_ubo | nir_var_mem_ssbo |
-                                   nir_var_mem_global);
-      }
    } else {
       emit_ps_null_export(b, s);
    }

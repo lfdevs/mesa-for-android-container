@@ -809,27 +809,6 @@ trace_screen_resource_get_param(struct pipe_screen *_screen,
    return result;
 }
 
-static void
-trace_screen_resource_get_info(struct pipe_screen *_screen,
-                               struct pipe_resource *resource,
-                               unsigned *stride,
-                               unsigned *offset)
-{
-   struct trace_screen *tr_screen = trace_screen(_screen);
-   struct pipe_screen *screen = tr_screen->screen;
-
-   trace_dump_call_begin("pipe_screen", "resource_get_info");
-   trace_dump_arg(ptr, screen);
-   trace_dump_arg(ptr, resource);
-
-   screen->resource_get_info(screen, resource, stride, offset);
-
-   trace_dump_arg(uint, *stride);
-   trace_dump_arg(uint, *offset);
-
-   trace_dump_call_end();
-}
-
 static uint64_t
 trace_screen_resource_get_address(struct pipe_screen *_screen,
                                   struct pipe_resource *resource)
@@ -936,21 +915,37 @@ trace_screen_fence_reference(struct pipe_screen *_screen,
 }
 
 
+static struct pipe_fence_handle *
+trace_screen_semaphore_create(struct pipe_screen *_screen)
+{
+   struct trace_screen *tr_scr = trace_screen(_screen);
+   struct pipe_screen *screen = tr_scr->screen;
+   struct pipe_fence_handle *res;
+
+   trace_dump_call_begin("pipe_screen", "fence_reference");
+   trace_dump_arg(ptr, screen);
+
+   res = screen->semaphore_create(screen);
+
+   trace_dump_ret(ptr, res);
+   trace_dump_call_end();
+
+   return res;
+}
+
+
 static int
 trace_screen_fence_get_fd(struct pipe_screen *_screen,
                           struct pipe_fence_handle *fence)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
-   int result;
+   int result = screen->fence_get_fd(screen, fence);
 
    trace_dump_call_begin("pipe_screen", "fence_get_fd");
 
    trace_dump_arg(ptr, screen);
    trace_dump_arg(ptr, fence);
-
-   result = screen->fence_get_fd(screen, fence);
-
    trace_dump_ret(int, result);
 
    trace_dump_call_end();
@@ -1075,11 +1070,12 @@ trace_screen_get_timestamp(struct pipe_screen *_screen)
 }
 
 static void
-trace_screen_finalize_nir(struct pipe_screen *_screen, struct nir_shader *nir)
+trace_screen_finalize_nir(struct pipe_screen *_screen, struct nir_shader *nir,
+                          bool optimize)
 {
    struct pipe_screen *screen = trace_screen(_screen)->screen;
 
-   screen->finalize_nir(screen, nir);
+   screen->finalize_nir(screen, nir, optimize);
 }
 
 static void
@@ -1505,12 +1501,12 @@ trace_screen_create(struct pipe_screen *screen)
    SCR_INIT(check_resource_capability);
    tr_scr->base.resource_get_handle = trace_screen_resource_get_handle;
    SCR_INIT(resource_get_param);
-   SCR_INIT(resource_get_info);
    SCR_INIT(resource_get_address);
    SCR_INIT(resource_from_memobj);
    SCR_INIT(resource_changed);
    tr_scr->base.resource_destroy = trace_screen_resource_destroy;
    tr_scr->base.fence_reference = trace_screen_fence_reference;
+   SCR_INIT(semaphore_create);
    SCR_INIT(fence_get_fd);
    SCR_INIT(create_fence_win32);
    tr_scr->base.fence_finish = trace_screen_fence_finish;

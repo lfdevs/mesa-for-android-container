@@ -218,6 +218,9 @@ struct cs_builder {
    /* ralloc context used for cs_maybe allocations */
    void *maybe_ctx;
 
+   /* Mask of resources required by this CS. */
+   uint32_t req_resource_mask;
+
    /* Temporary storage for inner blocks that need to be built
     * and copied in one monolithic sequence of instructions with no
     * jump in the middle.
@@ -260,7 +263,7 @@ cs_builder_init(struct cs_builder *b, const struct cs_builder_conf *conf,
     */
    b->conf.nr_kernel_registers = MAX2(b->conf.nr_kernel_registers, 3);
 
-   util_dynarray_init(&b->blocks.instrs, NULL);
+   b->blocks.instrs = UTIL_DYNARRAY_INIT;
 }
 
 static inline bool
@@ -432,12 +435,14 @@ cs_dst64(struct cs_builder *b, struct cs_index dst)
    return cs_dst_tuple(b, dst, 2, BITFIELD_MASK(2));
 }
 
+#define CS_MAX_REG_TUPLE_SIZE 16
+
 static inline struct cs_index
 cs_reg_tuple(ASSERTED struct cs_builder *b, uint8_t reg, uint8_t size)
 {
    assert(reg + size <= b->conf.nr_registers - b->conf.nr_kernel_registers &&
           "overflowed register file");
-   assert(size <= 16 && "unsupported");
+   assert(size <= CS_MAX_REG_TUPLE_SIZE && "unsupported");
 
    return (struct cs_index){
       .type = CS_INDEX_REGISTER,
@@ -492,6 +497,25 @@ cs_extract32(struct cs_builder *b, struct cs_index idx, unsigned word)
    return cs_reg32(b, idx.reg + word);
 }
 
+static inline struct cs_index
+cs_extract64(struct cs_builder *b, struct cs_index idx, unsigned word)
+{
+   assert(idx.type == CS_INDEX_REGISTER && "unsupported");
+   assert(word + 1 < idx.size && "overrun");
+
+   return cs_reg64(b, idx.reg + word);
+}
+
+static inline struct cs_index
+cs_extract_tuple(struct cs_builder *b, struct cs_index idx, unsigned word,
+                 unsigned size)
+{
+   assert(idx.type == CS_INDEX_REGISTER && "unsupported");
+   assert(word + size < idx.size && "overrun");
+
+   return cs_reg_tuple(b, idx.reg + word, size);
+}
+
 static inline struct cs_block *
 cs_cur_block(struct cs_builder *b)
 {
@@ -513,6 +537,17 @@ cs_reserve_instrs(struct cs_builder *b, uint32_t num_instrs)
    if (unlikely(!cs_is_valid(b)))
       return false;
 
+   /* Make sure we have sufficient capacity if we wont allocate more */
+   if (b->conf.alloc_buffer == NULL) {
+      if (unlikely(b->cur_chunk.size + num_instrs > b->cur_chunk.buffer.capacity)) {
+         assert(!"Out of CS space");
+         b->invalid = true;
+         return false;
+      }
+
+      return true;
+   }
+
    /* Lazy root chunk allocation. */
    if (unlikely(!b->root_chunk.buffer.cpu)) {
       b->root_chunk.buffer = b->conf.alloc_buffer(b->conf.cookie);
@@ -530,8 +565,10 @@ cs_reserve_instrs(struct cs_builder *b, uint32_t num_instrs)
     * We actually do this a few instructions before running out, because the
     * sequence to jump to a new queue takes multiple instructions.
     */
-   if (unlikely((b->cur_chunk.size + num_instrs + JUMP_SEQ_INSTR_COUNT) >
-                b->cur_chunk.buffer.capacity)) {
+   bool jump_to_next_chunk =
+      (b->cur_chunk.size + num_instrs + JUMP_SEQ_INSTR_COUNT) >
+      b->cur_chunk.buffer.capacity;
+   if (unlikely(jump_to_next_chunk)) {
       /* Now, allocate a new chunk */
       struct cs_buffer newbuf = b->conf.alloc_buffer(b->conf.cookie);
 
@@ -1068,9 +1105,9 @@ cs_invert_cond(enum mali_cs_condition cond)
    case MALI_CS_CONDITION_GEQUAL:
       return MALI_CS_CONDITION_LESS;
    case MALI_CS_CONDITION_ALWAYS:
-      unreachable("cannot invert ALWAYS");
+      UNREACHABLE("cannot invert ALWAYS");
    default:
-      unreachable("invalid cond");
+      UNREACHABLE("invalid cond");
    }
 }
 
@@ -1114,7 +1151,7 @@ cs_branch_label_cond64(struct cs_builder *b, struct cs_label *label,
       cs_branch_label_cond32(b, label, MALI_CS_CONDITION_EQUAL, val_hi);
       break;
    default:
-      unreachable("unsupported 64bit condition");
+      UNREACHABLE("unsupported 64bit condition");
    }
 
    cs_set_label(b, &false_label);
@@ -1477,12 +1514,21 @@ cs_shader_res_sel(uint8_t srt, uint8_t fau, uint8_t spd, uint8_t tsd)
    };
 }
 
+enum cs_res_id {
+   CS_COMPUTE_RES = BITFIELD_BIT(0),
+   CS_FRAG_RES = BITFIELD_BIT(1),
+   CS_TILER_RES = BITFIELD_BIT(2),
+   CS_IDVS_RES = BITFIELD_BIT(3),
+};
+
 static inline void
 cs_run_compute(struct cs_builder *b, unsigned task_increment,
                enum mali_task_axis task_axis, struct cs_shader_res_sel res_sel)
 {
    /* Staging regs */
    cs_flush_loads(b);
+
+   b->req_resource_mask |= CS_COMPUTE_RES;
 
    cs_emit(b, RUN_COMPUTE, I) {
       I.task_increment = task_increment;
@@ -1502,6 +1548,8 @@ cs_run_tiling(struct cs_builder *b, uint32_t flags_override,
    /* Staging regs */
    cs_flush_loads(b);
 
+   b->req_resource_mask |= CS_TILER_RES;
+
    cs_emit(b, RUN_TILING, I) {
       I.flags_override = flags_override;
       I.srt_select = res_sel.srt;
@@ -1520,6 +1568,8 @@ cs_run_idvs2(struct cs_builder *b, uint32_t flags_override, bool malloc_enable,
 {
    /* Staging regs */
    cs_flush_loads(b);
+
+   b->req_resource_mask |= CS_IDVS_RES;
 
    cs_emit(b, RUN_IDVS2, I) {
       I.flags_override = flags_override;
@@ -1542,6 +1592,8 @@ cs_run_idvs(struct cs_builder *b, uint32_t flags_override, bool malloc_enable,
 {
    /* Staging regs */
    cs_flush_loads(b);
+
+   b->req_resource_mask |= CS_IDVS_RES;
 
    cs_emit(b, RUN_IDVS, I) {
       I.flags_override = flags_override;
@@ -1579,6 +1631,8 @@ cs_run_fragment(struct cs_builder *b, bool enable_tem,
    /* Staging regs */
    cs_flush_loads(b);
 
+   b->req_resource_mask |= CS_FRAG_RES;
+
    cs_emit(b, RUN_FRAGMENT, I) {
       I.enable_tem = enable_tem;
       I.tile_order = tile_order;
@@ -1592,6 +1646,8 @@ cs_run_fullscreen(struct cs_builder *b, uint32_t flags_override,
    /* Staging regs */
    cs_flush_loads(b);
 
+   b->req_resource_mask |= CS_TILER_RES;
+
    cs_emit(b, RUN_FULLSCREEN, I) {
       I.flags_override = flags_override;
       I.dcd = cs_src64(b, dcd);
@@ -1601,6 +1657,8 @@ cs_run_fullscreen(struct cs_builder *b, uint32_t flags_override,
 static inline void
 cs_finish_tiling(struct cs_builder *b)
 {
+   b->req_resource_mask |= CS_TILER_RES;
+
    cs_emit(b, FINISH_TILING, I)
       ;
 }
@@ -1650,6 +1708,19 @@ cs_umin32(struct cs_builder *b, struct cs_index dest, struct cs_index src1,
       I.source_1 = cs_src32(b, src1);
       I.source_0 = cs_src32(b, src2);
    }
+}
+
+static inline void
+cs_move_reg32(struct cs_builder *b, struct cs_index dest, struct cs_index src)
+{
+#if PAN_ARCH >= 11
+   cs_emit(b, MOVE_REG32, I) {
+      I.destination = cs_dst32(b, dest);
+      I.source = cs_src32(b, src);
+   }
+#else
+   cs_add32(b, dest, src, 0);
+#endif
 }
 
 #if PAN_ARCH >= 11
@@ -1714,15 +1785,6 @@ cs_bit_clear32(struct cs_builder *b, struct cs_index dest, struct cs_index src1,
       I.destination = cs_dst32(b, dest);
       I.source_1 = cs_src32(b, src1);
       I.source_0 = cs_src32(b, src2);
-   }
-}
-
-static inline void
-cs_move_reg32(struct cs_builder *b, struct cs_index dest, struct cs_index src)
-{
-   cs_emit(b, MOVE_REG32, I) {
-      I.destination = cs_dst32(b, dest);
-      I.source = cs_src32(b, src);
    }
 }
 
@@ -1909,13 +1971,6 @@ cs_jump(struct cs_builder *b, struct cs_index address, struct cs_index length)
    }
 }
 
-enum cs_res_id {
-   CS_COMPUTE_RES = BITFIELD_BIT(0),
-   CS_FRAG_RES = BITFIELD_BIT(1),
-   CS_TILER_RES = BITFIELD_BIT(2),
-   CS_IDVS_RES = BITFIELD_BIT(3),
-};
-
 static inline void
 cs_req_res(struct cs_builder *b, uint32_t res_mask)
 {
@@ -2014,6 +2069,8 @@ cs_run_compute_indirect(struct cs_builder *b, unsigned wg_per_task,
 {
    /* Staging regs */
    cs_flush_loads(b);
+
+   b->req_resource_mask |= CS_COMPUTE_RES;
 
    cs_emit(b, RUN_COMPUTE_INDIRECT, I) {
       I.workgroups_per_task = wg_per_task;
@@ -2390,7 +2447,7 @@ static inline void
 cs_trace_preamble(struct cs_builder *b, const struct cs_tracing_ctx *ctx,
                   struct cs_index scratch_regs, unsigned trace_size)
 {
-   assert(trace_size > 0 && ALIGN_POT(trace_size, 64) == trace_size &&
+   assert(trace_size > 0 && util_is_aligned(trace_size, 64) &&
           trace_size < INT16_MAX);
    assert(scratch_regs.size >= 4 && !(scratch_regs.reg & 1));
 

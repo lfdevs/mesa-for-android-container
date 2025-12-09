@@ -57,8 +57,10 @@ enum intel_debug_flag {
    DEBUG_BLORP,
    DEBUG_NO_DUAL_OBJECT_GS,
    DEBUG_OPTIMIZER,
+   DEBUG_MDA,
    DEBUG_ANNOTATION,
    DEBUG_NO_OACONFIG,
+   DEBUG_NO_FILL_OPT,
    DEBUG_SPILL_FS,
    DEBUG_SPILL_VEC4,
    DEBUG_HEX,
@@ -66,6 +68,7 @@ enum intel_debug_flag {
    DEBUG_L3,
    DEBUG_NO_CCS,
    DEBUG_NO_HIZ,
+   DEBUG_NO_CCS_MODIFIER,
    DEBUG_COLOR,
    DEBUG_REEMIT,
    DEBUG_SOFT64,
@@ -190,7 +193,7 @@ extern uint32_t intel_shader_dump_filter;
       dbg_printf(__VA_ARGS__);         \
 } while(0)
 
-extern uint64_t intel_debug_flag_for_shader_stage(gl_shader_stage stage);
+extern uint64_t intel_debug_flag_for_shader_stage(mesa_shader_stage stage);
 
 extern void process_intel_debug_variable(void);
 

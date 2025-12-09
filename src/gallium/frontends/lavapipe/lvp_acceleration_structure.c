@@ -278,7 +278,7 @@ lvp_select_subtrees_to_flatten(const struct vk_ir_header *header, const struct v
    }
 
    if (flatten && has_internal_child) {
-      util_dynarray_append(subtrees, uint32_t, index);
+      util_dynarray_append(subtrees, index);
       *max_subtree_size = MAX2(*max_subtree_size, child_count);
       return;
    }
@@ -313,7 +313,7 @@ lvp_gather_subtree(const uint8_t *output, uint32_t offset, uint32_t *leaf_nodes,
 
 static uint32_t
 lvp_rebuild_subtree(const uint8_t *output, uint32_t *leaf_nodes, vk_aabb *leaf_bounds,
-                    uint32_t *internal_nodes, uint32_t leaf_node_count, 
+                    uint32_t *internal_nodes, uint32_t leaf_node_count,
                     uint32_t *internal_node_index)
 {
    uint32_t child_nodes[2];
@@ -393,7 +393,7 @@ lvp_flatten_as(const struct vk_ir_header *header, const struct vk_ir_box_node *i
    /* Select the subtrees that have to be rebuilt in order to
     * limit the BVH to a supported depth.
     */
-   util_dynarray_init(&subtrees, NULL);
+   subtrees = UTIL_DYNARRAY_INIT;
    uint32_t max_subtree_size = 0;
    lvp_select_subtrees_to_flatten(header, ir_box_nodes, node_depth, child_counts,
                                   root_offset, header->ir_internal_node_count - 1,
@@ -571,10 +571,10 @@ lvp_encode_as(struct vk_acceleration_structure *dst, VkDeviceAddress intermediat
       }
    }
 
-   /* The BVH exceeds the maximum depth supported by the traversal stack, 
+   /* The BVH exceeds the maximum depth supported by the traversal stack,
     * flatten the offending parts of the tree.
     */
-   if (max_node_depth >= 24)
+   if (max_node_depth >= (geometry_type == VK_GEOMETRY_TYPE_INSTANCES_KHR ? LVP_MAX_TLAS_DEPTH : LVP_MAX_BLAS_DEPTH))
       lvp_flatten_as(header, ir_box_nodes, root_offset, node_depth, output);
 
    free(node_depth);
@@ -605,7 +605,7 @@ lvp_WriteAccelerationStructuresPropertiesKHR(
    const VkAccelerationStructureKHR *pAccelerationStructures, VkQueryType queryType,
    size_t dataSize, void *pData, size_t stride)
 {
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
@@ -615,7 +615,7 @@ lvp_BuildAccelerationStructuresKHR(
    const VkAccelerationStructureBuildGeometryInfoKHR *pInfos,
    const VkAccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos)
 {
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
@@ -635,7 +635,7 @@ VKAPI_ATTR VkResult VKAPI_CALL
 lvp_CopyAccelerationStructureKHR(VkDevice _device, VkDeferredOperationKHR deferredOperation,
                                  const VkCopyAccelerationStructureInfoKHR *pInfo)
 {
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
@@ -643,7 +643,7 @@ VKAPI_ATTR VkResult VKAPI_CALL
 lvp_CopyMemoryToAccelerationStructureKHR(VkDevice _device, VkDeferredOperationKHR deferredOperation,
                                          const VkCopyMemoryToAccelerationStructureInfoKHR *pInfo)
 {
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
@@ -651,7 +651,7 @@ VKAPI_ATTR VkResult VKAPI_CALL
 lvp_CopyAccelerationStructureToMemoryKHR(VkDevice _device, VkDeferredOperationKHR deferredOperation,
                                          const VkCopyAccelerationStructureToMemoryInfoKHR *pInfo)
 {
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return VK_ERROR_FEATURE_NOT_PRESENT;
 }
 
@@ -730,13 +730,13 @@ lvp_CmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t in
                                       const VkAccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos)
 {
    VK_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
-
-   lvp_init_radix_sort(cmd_buffer->device);
+   struct lvp_device *device = lvp_cmd_buffer_device(cmd_buffer);
+   lvp_init_radix_sort(device);
 
    lvp_enqueue_save_state(commandBuffer);
 
-   vk_cmd_build_acceleration_structures(commandBuffer, &cmd_buffer->device->vk, &cmd_buffer->device->meta,
-                                        infoCount, pInfos, ppBuildRangeInfos, &cmd_buffer->device->accel_struct_args);
+   vk_cmd_build_acceleration_structures(commandBuffer, &device->vk, &device->meta,
+                                        infoCount, pInfos, ppBuildRangeInfos, &device->accel_struct_args);
 
    lvp_enqueue_restore_state(commandBuffer);
 }

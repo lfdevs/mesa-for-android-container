@@ -12,10 +12,22 @@
 #include "aco_interface.h"
 #include "nir_format_convert.h"
 #include "ac_nir_helpers.h"
+#include "nir/nir_serialize.h"
 
 void *si_create_shader_state(struct si_context *sctx, nir_shader *nir)
 {
-   sctx->b.screen->finalize_nir(sctx->b.screen, nir);
+   static blake3_hash zeros;
+
+   if (!memcmp(nir->info.source_blake3, zeros, sizeof(blake3_hash))) {
+      struct blob blob = {};
+
+      blob_init(&blob);
+      nir_serialize(&blob, nir, false);
+      _mesa_blake3_compute(blob.data, blob.size, nir->info.source_blake3);
+      blob_finish(&blob);
+   }
+
+   sctx->b.screen->finalize_nir(sctx->b.screen, nir, true);
    return pipe_shader_from_nir(&sctx->b, nir);
 }
 
@@ -26,7 +38,7 @@ static void unpack_2x16(nir_builder *b, nir_def *src, nir_def **x, nir_def **y)
    *y = nir_ushr_imm(b, src, 16);
 }
 
-void *si_create_dcc_retile_cs(struct si_context *sctx, struct radeon_surf *surf)
+void *si_create_dcc_retile_cs(struct si_context *sctx, const struct radeon_surf *surf)
 {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, sctx->screen->nir_options,
                                                   "dcc_retile");

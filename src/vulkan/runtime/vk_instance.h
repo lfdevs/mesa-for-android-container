@@ -175,7 +175,7 @@ struct vk_instance {
    uint64_t trace_mode;
 
    uint32_t trace_frame;
-   char *trace_trigger_file;
+   const char *trace_trigger_file;
 
    /** Whether the capture mode is per-submit. */
    bool trace_per_submit;

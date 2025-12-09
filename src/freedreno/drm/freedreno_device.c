@@ -236,6 +236,12 @@ fd_device_version(struct fd_device *dev)
    return dev->version;
 }
 
+void
+fd_device_disable_explicit_sync_heuristic(struct fd_device *dev)
+{
+   dev->disable_explicit_sync_heuristic = true;
+}
+
 DEBUG_GET_ONCE_BOOL_OPTION(libgl, "LIBGL_DEBUG", false)
 
 bool

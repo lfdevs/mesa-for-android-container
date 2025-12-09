@@ -34,8 +34,6 @@
  */
 
 
-#include "util/u_debug.h"
-
 #include "lp_bld_type.h"
 #include "lp_bld_const.h"
 #include "lp_bld_arit.h"

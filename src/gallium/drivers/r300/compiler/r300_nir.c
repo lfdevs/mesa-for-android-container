@@ -128,11 +128,11 @@ remove_clip_vertex(nir_builder *b, nir_instr *instr, UNUSED void *_)
    if (deref->deref_type == nir_deref_type_var &&
        deref->var->data.mode == nir_var_shader_out &&
        deref->var->data.location == VARYING_SLOT_CLIP_VERTEX) {
-       nir_foreach_use_safe(src, &deref->def) {
-          nir_instr_remove(nir_src_parent_instr(src));
-       }
-       nir_instr_remove(instr);
-       return true;
+      nir_foreach_use_safe (src, &deref->def) {
+         nir_instr_remove(nir_src_parent_instr(src));
+      }
+      nir_instr_remove(instr);
+      return true;
    }
    return false;
 }
@@ -147,12 +147,12 @@ r300_optimize_nir(struct nir_shader *s, struct r300_screen *screen)
       if (nir_shader_instructions_pass(s, remove_clip_vertex,
                                        nir_metadata_control_flow, NULL)) {
          unsigned clip_vertex_location = 0;
-         nir_foreach_variable_with_modes(var, s, nir_var_shader_out) {
+         nir_foreach_variable_with_modes (var, s, nir_var_shader_out) {
             if (var->data.location == VARYING_SLOT_CLIP_VERTEX) {
                clip_vertex_location = var->data.driver_location;
             }
          }
-         nir_foreach_variable_with_modes(var, s, nir_var_shader_out) {
+         nir_foreach_variable_with_modes (var, s, nir_var_shader_out) {
             if (var->data.driver_location > clip_vertex_location) {
                var->data.driver_location--;
             }
@@ -168,7 +168,7 @@ r300_optimize_nir(struct nir_shader *s, struct r300_screen *screen)
       progress = false;
       NIR_PASS(_, s, nir_lower_vars_to_ssa);
 
-      NIR_PASS(progress, s, nir_copy_prop);
+      NIR_PASS(progress, s, nir_opt_copy_prop);
       NIR_PASS(progress, s, r300_nir_lower_flrp);
       NIR_PASS(progress, s, nir_opt_algebraic);
       if (s->info.stage == MESA_SHADER_VERTEX) {

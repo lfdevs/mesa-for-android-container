@@ -224,6 +224,10 @@ etna_emit_tex(struct etna_compile *c, nir_tex_instr * tex, unsigned dst_swiz,
       inst.opcode = ISA_OPC_TXF;
       inst.src[2] = etna_immediate_int(0x1100);
       break;
+   case nir_texop_tg4:
+      inst.opcode = ISA_OPC_TG4;
+      inst.src[1] = etna_immediate_int(tex->component);
+      break;
    default:
       compile_error(c, "Unhandled NIR tex type: %d\n", tex->op);
    }

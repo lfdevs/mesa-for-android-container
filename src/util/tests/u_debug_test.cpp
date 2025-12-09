@@ -28,6 +28,8 @@
 
 #include <gtest/gtest.h>
 #include "c11/threads.h"
+
+#include "util/os_misc.h"
 #include "util/u_debug.h"
 
 #define NUM_DEBUG_TEST_THREAD 8
@@ -44,15 +46,8 @@ test_thread(void *_state)
 
 TEST(u_debug, DEBUG_GET_ONCE_BOOL_Multithread)
 {
-   {
-      static char env_str[] = "X_TEST_ENV_BOOL=true";
-      putenv(env_str);
-   }
-
-   {
-      static char env_str[] = "X_TEST_GALLIUM_DRIVER=test_driver";
-      putenv(env_str);
-   }
+   os_set_option("X_TEST_ENV_BOOL", "true", true);
+   os_set_option("X_TEST_GALLIUM_DRIVER", "test_driver", true);
 
    thrd_t threads[NUM_DEBUG_TEST_THREAD];
    for (unsigned i = 0; i < NUM_DEBUG_TEST_THREAD; i++) {
@@ -69,92 +64,79 @@ TEST(u_debug, DEBUG_GET_ONCE_BOOL_Multithread)
 TEST(u_debug, debug_get_bool_option)
 {
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_0=10";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_0", "10", true);
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_0", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_0", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_1";
-      putenv(env_str);
+      os_unset_option("MESA_UNIT_TEST_BOOL_VARIABLE_1");
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_1", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_1", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_2=INVALID";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_2", "INVALID", true);
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_2", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_2", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_3=0";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_3", "0", true);
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_3", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_3", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_4=n";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_4", "n", true);
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_4", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_4", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_5=No";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_5", "No", true);
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_5", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_5", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_6=F";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_6", "F", true);
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_6", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_6", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_7=fAlse";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_7", "fAlse", true);
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_7", true));
       EXPECT_FALSE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_7", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_8=1";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_8", "1", true);
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_8", true));
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_8", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_9=Y";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_9", "Y", true);
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_9", true));
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_9", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_10=Yes";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_10", "Yes", true);
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_10", true));
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_10", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_11=t";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_11", "t", true);
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_11", true));
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_11", false));
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_BOOL_VARIABLE_12=True";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_BOOL_VARIABLE_12", "True", true);
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_12", true));
       EXPECT_TRUE(debug_get_bool_option("MESA_UNIT_TEST_BOOL_VARIABLE_12", false));
    }
@@ -163,22 +145,19 @@ TEST(u_debug, debug_get_bool_option)
 TEST(u_debug, debug_get_num_option)
 {
    {
-      static char env_str[] = "MESA_UNIT_TEST_NUM_VARIABLE_0=101";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_NUM_VARIABLE_0", "101", true);
       EXPECT_EQ(debug_get_num_option("MESA_UNIT_TEST_NUM_VARIABLE_0", 10), 101);
       EXPECT_EQ(debug_get_num_option("MESA_UNIT_TEST_NUM_VARIABLE_0", 0), 101);
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_NUM_VARIABLE_1";
-      putenv(env_str);
+      os_unset_option("MESA_UNIT_TEST_NUM_VARIABLE_1");
       EXPECT_EQ(debug_get_num_option("MESA_UNIT_TEST_NUM_VARIABLE_1", 10), 10);
       EXPECT_EQ(debug_get_num_option("MESA_UNIT_TEST_NUM_VARIABLE_1", 100), 100);
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_NUM_VARIABLE_2=something";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_NUM_VARIABLE_2", "something", true);
       EXPECT_EQ(debug_get_num_option("MESA_UNIT_TEST_NUM_VARIABLE_2", 10), 10);
       EXPECT_EQ(debug_get_num_option("MESA_UNIT_TEST_NUM_VARIABLE_2", 100), 100);
    }
@@ -197,20 +176,17 @@ TEST(u_debug, DEBUG_GET_ONCE_NUM_OPTION_Macro)
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_DEBUG_GET_ONCE_NUM_VARIABLE_1=9223372036854775807";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_DEBUG_GET_ONCE_NUM_VARIABLE_1", "9223372036854775807", true);
       EXPECT_EQ(debug_get_option_num_once_test_1(), INT64_MAX);
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_DEBUG_GET_ONCE_NUM_VARIABLE_1=9223372036854775806";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_DEBUG_GET_ONCE_NUM_VARIABLE_1", "9223372036854775806", true);
       EXPECT_EQ(debug_get_option_num_once_test_1(), INT64_MAX);
    }
 
    {
-      static char env_str[] = "MESA_UNIT_TEST_DEBUG_GET_ONCE_NUM_VARIABLE_2=-9223372036854775808";
-      putenv(env_str);
+      os_set_option("MESA_UNIT_TEST_DEBUG_GET_ONCE_NUM_VARIABLE_2", "-9223372036854775808", true);
       EXPECT_EQ(debug_get_option_num_once_test_2(), INT64_MIN);
    }
 }

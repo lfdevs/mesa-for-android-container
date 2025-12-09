@@ -11,12 +11,7 @@ shaders@point-vertex-id gl_vertexid divisor,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
 shaders@point-vertex-id gl_vertexid,Fail
-spec@!opengl 1.0@gl-1.0-edgeflag,Fail
-spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
-spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
-spec@!opengl 1.1@point-line-no-cull,Fail
-spec@!opengl 1.1@teximage-colors gl_alpha16@Exact upload-download of GL_ALPHA16,Fail
 spec@!opengl 1.1@texwrap formats bordercolor,Fail
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled,Fail
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_LUMINANCE12_ALPHA12- swizzled- border color only,Fail
@@ -26,14 +21,6 @@ spec@!opengl 1.1@texwrap formats bordercolor@GL_LUMINANCE12_ALPHA12- border colo
 spec@!opengl 1.1@texwrap formats bordercolor@GL_LUMINANCE12_ALPHA4- border color only,Fail
 spec@!opengl 1.1@texwrap formats bordercolor@GL_LUMINANCE16_ALPHA16- border color only,Fail
 spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
-spec@!opengl 2.0@gl-2.0-edgeflag,Fail
-spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
-spec@arb_color_buffer_float@gl_rgba32f-render,Fail
-spec@arb_color_buffer_float@gl_rgba32f-render-fog,Fail
-spec@arb_color_buffer_float@gl_rgba32f-render-sanity,Fail
-spec@arb_color_buffer_float@gl_rgba32f-render-sanity-fog,Fail
-spec@arb_copy_image@arb_copy_image-formats,Fail
-spec@arb_copy_image@arb_copy_image-formats@Source: GL_ALPHA16/Destination: GL_ALPHA16,Fail
 spec@arb_depth_buffer_float@fbo-generatemipmap-formats,Fail
 spec@arb_depth_buffer_float@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32F NPOT,Fail
 spec@arb_depth_buffer_float@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32F,Fail
@@ -82,59 +69,6 @@ spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_shader_storage_buffer_object@compiler@atomicmin-swizzle.vert,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
-spec@arb_texture_buffer_object@formats (fs- arb),Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_INTENSITY8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (fs- arb)@GL_LUMINANCE_ALPHA8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb),Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_INTENSITY8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA16F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA16I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA16UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA32F_ARB,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA32I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA32UI_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA8I_EXT,Fail
-spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE_ALPHA8UI_EXT,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_sampler,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_size_via_sampler,Fail
@@ -177,8 +111,6 @@ spec@ext_framebuffer_multisample@interpolation 2 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 4 centroid-edges,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-clear-and-render,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-rendering,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-modifiers,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-modifiers@autogen-R16-DRM_FORMAT_MOD_LINEAR-clear_reimport,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor-swizzled,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor-swizzled@GL_DEPTH24_STENCIL8- swizzled- border color only,Fail
@@ -225,7 +157,6 @@ spec@glsl-1.10@execution@glsl-fs-inline-explosion,Crash
 spec@glsl-1.10@execution@glsl-vs-inline-explosion,Crash
 spec@glsl-1.10@execution@loops@glsl-fs-unroll-explosion,Crash
 spec@glsl-1.10@execution@loops@glsl-vs-unroll-explosion,Crash
-spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 spec@glsl-1.20@execution@fs-underflow-mul-compare-zero,Fail
 spec@glsl-1.30@execution@varying-packing-mixed-types,Crash
@@ -233,8 +164,6 @@ spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
-spec@nv_copy_image@nv_copy_image-formats,Fail
-spec@nv_copy_image@nv_copy_image-formats@Source: GL_ALPHA16/Destination: GL_ALPHA16,Fail
 spec@nv_image_formats@compiler@declaration-disallow-r16-snorm-2d-array.frag,Fail
 spec@nv_image_formats@compiler@declaration-disallow-r16-snorm-2d-array.vert,Fail
 spec@nv_image_formats@compiler@declaration-disallow-r16-snorm-2d.frag,Fail
@@ -287,6 +216,16 @@ spec@nv_read_depth@read_depth_gles3,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 
+# A sub-case involving polygon stipple fails because driver doesn't implement
+# stipple
+spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
+
+# Driver does not handle VERT_{ATTRIB,BIT}_EDGEFLAG at all.
+spec@!opengl 1.0@gl-1.0-edgeflag,Fail
+spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
+spec@!opengl 2.0@gl-2.0-edgeflag,Fail
+spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
+
 # Hardware do not support line/polygon stipple. In fact, this feature
 # was deprecated/removed in newer OpenGL spec versions. It could be
 # emulated using shaders.
@@ -324,10 +263,8 @@ spec@!opengl 1.1@polygon-mode-offset@config 6: Expected blue pixel in center,Fai
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on right edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on top edge,Fail
 
-# V3D does not support PIPE_FORMAT_{R16,R16G16,R16G16B16A16}_UNORM for
+# V3D does not support PIPE_FORMAT_{R8,R8G8,R8G8B8A8}_SNORM for
 # rendering
-spec@!opengl 3.0@required-texture-attachment-formats,Fail
-spec@!opengl 3.1@required-texture-attachment-formats,Fail
 spec@arb_texture_view@rendering-formats,Crash
 
 # V3D does not support blending for GL_R{GBA}32F
@@ -338,10 +275,6 @@ spec@!opengl 1.1@getteximage-formats,Fail
 spec@!opengl 3.0@sampler-cube-shadow,Fail
 spec@arb_texture_cube_map_array@arb_texture_cube_map_array-sampler-cube-array-shadow,Fail
 
-# This fails the subtest for GL_ALPHA16 because we don't support a 16-bit unorm format for rendering
-# so gallium falls back to using an 8-bit unorm format and we lose some precision in the result.
-spec@arb_clear_texture@arb_clear_texture-sized-formats,Fail
-
 # These fail because the shaders use indirect indexing on samplers which we
 # don't support (the GLSL linker fails to link the shaders because of this).
 # If loop unrolling kicks-in for these tests it removes the indirect indexing
@@ -349,9 +282,6 @@ spec@arb_clear_texture@arb_clear_texture-sized-formats,Fail
 # tests.
 spec@!opengl 2.0@max-samplers border,Fail
 spec@!opengl 2.0@max-samplers,Fail
-
-# uprev Piglit in Mesa
-spec@glsl-1.40@uniform_buffer@two-stages,Fail
 
 # Precision differences between expected and obtained; works if
 # exporting V3D_DEBUG=tmu32.
@@ -399,11 +329,8 @@ program@execute@builtin@builtin-float-sign-1.0.generated@sign float4,Fail
 program@execute@builtin@builtin-float-sign-1.0.generated@sign float8,Fail
 program@execute@builtin@builtin-long-abs-1.0.generated,Crash
 program@execute@builtin@builtin-long-clamp-1.1.generated,Crash
-program@execute@builtin@builtin-long-mad_hi-1.0.generated,Crash
-program@execute@builtin@builtin-long-mad_sat-1.0.generated,Crash
 program@execute@builtin@builtin-long-max-1.1.generated,Crash
 program@execute@builtin@builtin-long-min-1.1.generated,Crash
-program@execute@builtin@builtin-long-mul_hi-1.0.generated,Crash
 program@execute@builtin@builtin-long-popcount-1.2.generated,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long1,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long16,Fail
@@ -411,11 +338,8 @@ program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long2,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long4,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long8,Fail
 program@execute@builtin@builtin-ulong-clamp-1.1.generated,Crash
-program@execute@builtin@builtin-ulong-mad_hi-1.0.generated,Crash
-program@execute@builtin@builtin-ulong-mad_sat-1.0.generated,Crash
 program@execute@builtin@builtin-ulong-max-1.1.generated,Crash
 program@execute@builtin@builtin-ulong-min-1.1.generated,Crash
-program@execute@builtin@builtin-ulong-mul_hi-1.0.generated,Crash
 program@execute@builtin@builtin-ulong-popcount-1.2.generated,Fail
 program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong1,Fail
 program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong16,Fail
@@ -447,13 +371,319 @@ KHR-GL31.frag_coord_conventions.multisample,Fail
 # This seems to be working with upstream
 program@execute@vector-conversion,Fail
 
-# B10G11R11 Formats have accuracy issues.
-dEQP-VK.pipeline.monolithic.blend.dual_source.format.b10g11r11_ufloat_pack32.output_variable.states.color_dc_ca_rsub_alpha_dc_s1a_rsub-color_cc_da_min_alpha_ca_1ms1a_max-color_1msc_1mdc_max_alpha_cc_sa_rsub-color_da_o_sub_alpha_z_dc_rsub,Fail
-dEQP-VK.pipeline.monolithic.blend.dual_source.format.b10g11r11_ufloat_pack32.output_variable.states.color_da_ca_max_alpha_da_1mdc_rsub-color_sa_1msc_sub_alpha_sc_1mca_sub-color_1ms1c_s1c_add_alpha_s1c_dc_rsub-color_da_1mda_add_alpha_s1c_1msa_sub,Fail
-dEQP-VK.pipeline.monolithic.blend.dual_source.format.b10g11r11_ufloat_pack32.output_variable.states.color_1ms1a_sa_max_alpha_sas_sas_min-color_1ms1c_1msa_sub_alpha_1msc_o_add-color_sa_sa_rsub_alpha_cc_cc_add-color_da_da_add_alpha_s1c_da_add,Fail
-dEQP-VK.pipeline.monolithic.blend.dual_source.format.b10g11r11_ufloat_pack32.output_array.states.color_dc_ca_rsub_alpha_dc_s1a_rsub-color_cc_da_min_alpha_ca_1ms1a_max-color_1msc_1mdc_max_alpha_cc_sa_rsub-color_da_o_sub_alpha_z_dc_rsub,Fail
-dEQP-VK.pipeline.monolithic.blend.dual_source.format.b10g11r11_ufloat_pack32.output_array.states.color_da_ca_max_alpha_da_1mdc_rsub-color_sa_1msc_sub_alpha_sc_1mca_sub-color_1ms1c_s1c_add_alpha_s1c_dc_rsub-color_da_1mda_add_alpha_s1c_1msa_sub,Fail
-dEQP-VK.pipeline.monolithic.blend.dual_source.format.b10g11r11_ufloat_pack32.output_array.states.color_1ms1a_sa_max_alpha_sas_sas_min-color_1ms1c_1msa_sub_alpha_1msc_o_add-color_sa_sa_rsub_alpha_cc_cc_add-color_da_da_add_alpha_s1c_da_add,Fail
+# New failures with VK CTS 1.4.3.3
+dEQP-VK.glsl.helper_invocations.load_from_image,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_srgb_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_srgb_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_srgb_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_srgb_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_srgb_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_srgb_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_srgb_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_unorm_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_unorm_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_unorm_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_unorm_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_unorm_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_unorm_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.b8g8r8a8_unorm_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sfloat_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sfloat_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sfloat_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sfloat_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sfloat_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sfloat_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sfloat_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sfloat_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sfloat_r32g32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sfloat_r32g32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sfloat_r32g32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sint_r32g32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sint_r32g32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sint_r32g32_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sint_r32g32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sint_r32g32_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_sint_r32g32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_uint_r32g32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_uint_r32g32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_uint_r32g32_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_uint_r32g32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_uint_r32g32_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r16g16b16a16_uint_r32g32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sfloat_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sfloat_r16g16b16a16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sfloat_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sfloat_r16g16b16a16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sfloat_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sint_r16g16b16a16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sint_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sint_r16g16b16a16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_sint_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_uint_r16g16b16a16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_uint_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_uint_r16g16b16a16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r32g32_uint_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_sint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_sint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_sint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_sint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_sint_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_sint_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_sint_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_srgb_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_srgb_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_srgb_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_srgb_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_srgb_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_srgb_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_srgb_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_uint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_uint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_uint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_uint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_uint_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_uint_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_uint_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d.r8g8b8a8_unorm_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_srgb_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_srgb_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_srgb_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_srgb_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_srgb_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_srgb_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_srgb_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_unorm_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_unorm_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_unorm_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_unorm_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_unorm_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_unorm_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.b8g8r8a8_unorm_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sfloat_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sfloat_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sfloat_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sfloat_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sfloat_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sfloat_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sfloat_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sint_r32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sint_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_uint_r32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_uint_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sfloat_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sfloat_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sfloat_r32g32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sfloat_r32g32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sfloat_r32g32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sint_r32g32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sint_r32g32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sint_r32g32_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sint_r32g32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sint_r32g32_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_sint_r32g32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_uint_r32g32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_uint_r32g32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_uint_r32g32_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_uint_r32g32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_uint_r32g32_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r16g16b16a16_uint_r32g32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sfloat_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_sint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32_uint_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sfloat_r16g16b16a16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sfloat_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sfloat_r16g16b16a16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sfloat_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sint_r16g16b16a16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sint_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sint_r16g16b16a16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_sint_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_uint_r16g16b16a16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_uint_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_uint_r16g16b16a16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r32g32_uint_r16g16b16a16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_srgb_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_srgb_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_srgb_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_srgb_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_srgb_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_srgb_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_srgb_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r16g16_sint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r16g16_uint_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r32_sfloat_draw_copy_resolve_mutable_color_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_uint_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_unorm_r16g16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_unorm_r16g16_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_unorm_r32_sfloat_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_unorm_r32_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_unorm_r32_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_unorm_r8g8b8a8_sint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_unorm_r8g8b8a8_uint_draw_copy_resolve_mutable_resolve_att,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.and_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.and_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.and_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.clear_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.copy_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.copy_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.equivalent_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.invert_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.nand_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.no_op_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.nor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.or_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.or_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.or_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.set_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.b8g8r8a8_srgb.xor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.and_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.and_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.and_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.clear_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.copy_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.copy_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.equivalent_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.invert_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.nand_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.no_op_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.nor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.or_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.or_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.or_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.set_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16_sfloat.xor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.and_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.and_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.and_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.clear_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.copy_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.copy_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.equivalent_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.invert_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.nand_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.no_op_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.nor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.or_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.or_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.or_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.set_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16_sfloat.xor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.and_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.and_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.and_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.clear_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.copy_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.copy_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.equivalent_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.invert_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.nand_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.no_op_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.nor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.or_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.or_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.or_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.set_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r16g16b16a16_sfloat.xor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.and_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.and_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.and_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.clear_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.copy_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.copy_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.equivalent_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.invert_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.nand_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.no_op_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.nor_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.or_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.or_inverted_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.or_reverse_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.set_blend,Fail
+dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.xor_blend,Fail
+
+# ASAN failures
+asan-KHR-GL31.frag_coord_conventions.multisample,Fail
+asan-KHR-GL31.transform_feedback3.skip_multiple_buffers,Fail
+asan-dEQP-VK.image.mutable.2d_array.r16g16b16a16_sfloat_r16g16b16a16_sint_draw_copy_resolve_mutable_resolve_att,Fail
+asan-dEQP-VK.pipeline.monolithic.logic_op_na_formats.r8g8b8a8_srgb.or_inverted_blend,Fail
 
 # SKQP failing tests
 ES2BlendWithNoTexture,Fail
@@ -588,3 +818,6 @@ vk_wacky_yuv_formats,Fail
 vk_wacky_yuv_formats_cs,Fail
 vk_xfermodes2,Fail
 vk_xfermodes3,Fail
+
+# Bisected to 08b5876c379 ("v3d: only expose rgba buffer-textures")
+TransferPixelsTest,Fail

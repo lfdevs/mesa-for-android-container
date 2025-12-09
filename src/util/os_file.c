@@ -29,6 +29,9 @@
 #ifndef F_DUPFD_CLOEXEC
 #define F_DUPFD_CLOEXEC 1030
 #endif
+#ifndef F_DUPFD_QUERY
+#define F_DUPFD_QUERY 1027
+#endif
 #endif
 
 
@@ -207,6 +210,8 @@ os_read_file(const char *filename, size_t *size)
 #define KCMP_FILE 0
 #endif
 
+#elif DETECT_OS_LINUX
+#include <sys/epoll.h>
 #endif
 
 #if DETECT_OS_DRAGONFLY || DETECT_OS_FREEBSD
@@ -242,6 +247,18 @@ os_same_file_description(int fd1, int fd2)
    if (fd1 == fd2)
       return 0;
 
+#if DETECT_OS_LINUX
+   /* Use F_DUPFD_QUERY if available. */
+   int r = fcntl(fd1, F_DUPFD_QUERY, fd2);
+
+   if (r < 0) {
+      if (errno == EBADF)
+         return 1;
+   } else {
+      return r == 1 ? 0 : 1;
+   }
+#endif
+
 #ifdef SYS_kcmp
    return syscall(SYS_kcmp, pid, pid, KCMP_FILE, fd1, fd2);
 #elif DETECT_OS_DRAGONFLY || DETECT_OS_FREEBSD
@@ -270,6 +287,43 @@ os_same_file_description(int fd1, int fd2)
       return -1;
 
    return (fd1_kfile < fd2_kfile) | ((fd1_kfile > fd2_kfile) << 1);
+#elif DETECT_OS_LINUX
+   int efd = epoll_create1(EPOLL_CLOEXEC);
+   if (efd < 0)
+      return -1;
+
+   struct epoll_event evt = {0};
+   /* Get a new file descriptor number for fd1. */
+   int tmp = os_dupfd_cloexec(fd1);
+   /* Add it to evt. */
+   r = epoll_ctl(efd, EPOLL_CTL_ADD, tmp, &evt);
+   if (r)
+      goto error;
+
+   /* Now use dup2 to get tmp to point to fd2's file description. */
+   r = dup2(fd2, tmp);
+   if (r < 0)
+      goto error;
+
+   /* Last step: add tmp again to evt. Given that we're adding the
+    * same file description as fd2 (thanks to dup2), it will fail with
+    * EEXIST if fd1 and fd2 both point to the same file description.
+    */
+   r = epoll_ctl(efd, EPOLL_CTL_ADD, tmp, &evt);
+   if (r) {
+      if (errno == EEXIST)
+         r = 0;
+      else
+         r = -1;
+   } else {
+      r = 1;
+   }
+
+error:
+   close(tmp);
+   close(efd);
+
+   return r;
 #else
    /* Otherwise we can't tell */
    return -1;

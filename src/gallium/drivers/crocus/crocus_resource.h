@@ -73,7 +73,7 @@ crocus_combine_swizzle(enum pipe_swizzle outswz[4],
       case PIPE_SWIZZLE_W: outswz[i] = fswz[3]; break;
       case PIPE_SWIZZLE_1: outswz[i] = PIPE_SWIZZLE_1; break;
       case PIPE_SWIZZLE_0: outswz[i] = PIPE_SWIZZLE_0; break;
-      default: unreachable("invalid swizzle");
+      default: UNREACHABLE("invalid swizzle");
       }
    }
 }

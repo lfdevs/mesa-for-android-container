@@ -61,37 +61,37 @@ protected:
    /* Dummy implementation for pure virtual methods */
    virtual dst_reg *make_reg_for_system_value(int /* location */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void setup_payload()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_prolog()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_program_code()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_thread_end()
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual void emit_urb_write_header(int /* mrf */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 
    virtual vec4_instruction *emit_urb_write_opcode(bool /* complete */)
    {
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 };
 
@@ -107,8 +107,7 @@ void cmod_propagation_vec4_test::SetUp()
    params.mem_ctx = ctx;
 
    prog_data = ralloc(ctx, struct elk_vue_prog_data);
-   nir_shader *shader =
-      nir_shader_create(ctx, MESA_SHADER_VERTEX, NULL, NULL);
+   nir_shader *shader = nir_shader_create(ctx, MESA_SHADER_VERTEX, NULL);
 
    v = new cmod_propagation_vec4_visitor(compiler, &params, shader, prog_data);
 
@@ -138,7 +137,7 @@ instruction(elk_bblock_t *block, int num)
 static bool
 cmod_propagation(vec4_visitor *v)
 {
-   const bool print = getenv("TEST_DEBUG");
+   const bool print = os_get_option("TEST_DEBUG");
 
    if (print) {
       fprintf(stderr, "= Before =\n");

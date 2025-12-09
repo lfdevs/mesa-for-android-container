@@ -3,26 +3,10 @@
 
 inc_wayland_drm = include_directories('.')
 
-wayland_drm_protocol_c = custom_target(
-  'wayland-drm-protocol.c',
-  input : 'wayland-drm.xml',
-  output : 'wayland-drm-protocol.c',
-  command : [prog_wl_scanner, wl_scanner_arg, '@INPUT@', '@OUTPUT@'],
-)
-
-wayland_drm_client_protocol_h = custom_target(
-  'wayland-drm-client-protocol.h',
-  input : 'wayland-drm.xml',
-  output : 'wayland-drm-client-protocol.h',
-  command : [prog_wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
-)
-
-wayland_drm_server_protocol_h = custom_target(
-  'wayland-drm-server-protocol.h',
-  input : 'wayland-drm.xml',
-  output : 'wayland-drm-server-protocol.h',
-  command : [prog_wl_scanner, 'server-header', '@INPUT@', '@OUTPUT@'],
-)
+_wl_drm = mod_wl.scan_xml('wayland-drm.xml', server : true, include_core_only : false)
+wayland_drm_protocol_c = _wl_drm[0]
+wayland_drm_client_protocol_h = _wl_drm[1]
+wayland_drm_server_protocol_h = _wl_drm[2]
 
 libwayland_drm = static_library(
   'wayland_drm',

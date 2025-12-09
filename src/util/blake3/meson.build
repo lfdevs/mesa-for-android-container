@@ -42,7 +42,7 @@ endif
 blake3 = static_library(
   'blake3',
   files_blake3,
-  c_args : blake3_defs,
+  c_args : blake3_defs + cc.get_supported_arguments('-Wno-error'),
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

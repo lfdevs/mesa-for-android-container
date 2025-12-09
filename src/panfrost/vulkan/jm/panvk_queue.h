@@ -28,8 +28,15 @@ VkResult panvk_per_arch(create_gpu_queue)(
    uint32_t queue_idx, struct vk_queue **out_queue);
 void panvk_per_arch(destroy_gpu_queue)(struct vk_queue *vk_queue);
 VkResult panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue,
-                                      struct vk_queue_submit *vk_submit);
-VkResult panvk_per_arch(gpu_queue_check_status)(
-   struct vk_queue *vk_queue);
+                                          struct vk_queue_submit *vk_submit);
+VkResult panvk_per_arch(gpu_queue_check_status)(struct vk_queue *vk_queue);
+
+VkResult panvk_per_arch(create_bind_queue)(
+   struct panvk_device *device, const VkDeviceQueueCreateInfo *create_info,
+   uint32_t queue_idx, struct vk_queue **out_queue);
+void panvk_per_arch(destroy_bind_queue)(struct vk_queue *vk_queue);
+VkResult panvk_per_arch(bind_queue_submit)(struct vk_queue *vk_queue,
+                                           struct vk_queue_submit *vk_submit);
+VkResult panvk_per_arch(bind_queue_check_status)(struct vk_queue *vk_queue);
 
 #endif

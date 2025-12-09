@@ -101,7 +101,8 @@ dri_create_context(struct dri_screen *screen,
                    const struct __DriverContextConfig *ctx_config,
                    unsigned *error,
                    struct dri_context *sharedContextPrivate,
-                   void *loaderPrivate);
+                   void *loaderPrivate,
+                   bool thread_safe);
 
 #endif
 

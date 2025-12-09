@@ -64,9 +64,7 @@ struct pvr_spm_eot_state {
 
    struct pvr_suballoc_bo *usc_eot_program;
 
-   /* TODO: Make this struct pvr_pds_upload? It would pull in pvr_private.h
-    * though which causes a cycle since that includes pvr_spm.h .
-    */
+   /* TODO: Make this struct pvr_pds_upload? */
    /* This is only the data section upload. The code was uploaded at device
     * creation.
     */
@@ -77,9 +75,7 @@ struct pvr_spm_eot_state {
 struct pvr_spm_bgobj_state {
    struct pvr_bo *consts_buffer;
 
-   /* TODO: Make this struct pvr_pds_upload? It would pull in pvr_private.h
-    * though which causes a cycle since that includes pvr_spm.h .
-    */
+   /* TODO: Make this struct pvr_pds_upload? */
    struct pvr_suballoc_bo *pds_texture_data_upload;
 
    uint64_t pds_reg_values[ROGUE_NUM_CR_PDS_BGRND_WORDS];
@@ -115,8 +111,8 @@ VkResult
 pvr_spm_init_eot_state(struct pvr_device *device,
                        struct pvr_spm_eot_state *spm_eot_state,
                        const struct pvr_framebuffer *framebuffer,
-                       const struct pvr_renderpass_hwsetup_render *hw_render,
-                       uint32_t *emit_count_out);
+                       const struct pvr_renderpass_hwsetup_render *hw_render);
+
 void pvr_spm_finish_eot_state(struct pvr_device *device,
                               struct pvr_spm_eot_state *spm_eot_state);
 
@@ -124,8 +120,8 @@ VkResult
 pvr_spm_init_bgobj_state(struct pvr_device *device,
                          struct pvr_spm_bgobj_state *spm_bgobj_state,
                          const struct pvr_framebuffer *framebuffer,
-                         const struct pvr_renderpass_hwsetup_render *hw_render,
-                         uint32_t emit_count);
+                         const struct pvr_renderpass_hwsetup_render *hw_render);
+
 void pvr_spm_finish_bgobj_state(struct pvr_device *device,
                                 struct pvr_spm_bgobj_state *spm_bgobj_state);
 

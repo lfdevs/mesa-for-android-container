@@ -85,8 +85,8 @@ impl PhiSrcMap {
 
 trait Spill {
     fn spill_file(&self, file: RegFile) -> RegFile;
-    fn spill(&mut self, dst: SSAValue, src: Src) -> Box<Instr>;
-    fn fill(&mut self, dst: Dst, src: SSAValue) -> Box<Instr>;
+    fn spill(&mut self, dst: SSAValue, src: Src) -> Instr;
+    fn fill(&mut self, dst: Dst, src: SSAValue) -> Instr;
 }
 
 struct SpillUniform<'a> {
@@ -105,17 +105,17 @@ impl Spill for SpillUniform<'_> {
         file.to_warp()
     }
 
-    fn spill(&mut self, dst: SSAValue, src: Src) -> Box<Instr> {
+    fn spill(&mut self, dst: SSAValue, src: Src) -> Instr {
         self.info.num_spills_to_reg += 1;
-        Instr::new_boxed(OpCopy {
+        Instr::new(OpCopy {
             dst: dst.into(),
             src: src,
         })
     }
 
-    fn fill(&mut self, dst: Dst, src: SSAValue) -> Box<Instr> {
+    fn fill(&mut self, dst: Dst, src: SSAValue) -> Instr {
         self.info.num_fills_from_reg += 1;
-        Instr::new_boxed(OpR2UR {
+        Instr::new(OpR2UR {
             dst: dst,
             src: src.into(),
         })
@@ -141,17 +141,17 @@ impl Spill for SpillPred<'_> {
         }
     }
 
-    fn spill(&mut self, dst: SSAValue, src: Src) -> Box<Instr> {
+    fn spill(&mut self, dst: SSAValue, src: Src) -> Instr {
         assert!(matches!(dst.file(), RegFile::GPR | RegFile::UGPR));
         self.info.num_spills_to_reg += 1;
         if let Some(b) = src.as_bool() {
             let u32_src = Src::from(if b { !0 } else { 0 });
-            Instr::new_boxed(OpCopy {
+            Instr::new(OpCopy {
                 dst: dst.into(),
                 src: u32_src,
             })
         } else {
-            Instr::new_boxed(OpSel {
+            Instr::new(OpSel {
                 dst: dst.into(),
                 cond: src.bnot(),
                 srcs: [0.into(), (!0).into()],
@@ -159,10 +159,10 @@ impl Spill for SpillPred<'_> {
         }
     }
 
-    fn fill(&mut self, dst: Dst, src: SSAValue) -> Box<Instr> {
+    fn fill(&mut self, dst: Dst, src: SSAValue) -> Instr {
         assert!(matches!(src.file(), RegFile::GPR | RegFile::UGPR));
         self.info.num_fills_from_reg += 1;
-        Instr::new_boxed(OpISetP {
+        Instr::new(OpISetP {
             dst: dst,
             set_op: PredSetOp::And,
             cmp_op: IntCmpOp::Ne,
@@ -191,20 +191,20 @@ impl Spill for SpillBar<'_> {
         RegFile::GPR
     }
 
-    fn spill(&mut self, dst: SSAValue, src: Src) -> Box<Instr> {
+    fn spill(&mut self, dst: SSAValue, src: Src) -> Instr {
         assert!(dst.file() == RegFile::GPR);
         self.info.num_spills_to_reg += 1;
-        Instr::new_boxed(OpBMov {
+        Instr::new(OpBMov {
             dst: dst.into(),
             src: src,
             clear: false,
         })
     }
 
-    fn fill(&mut self, dst: Dst, src: SSAValue) -> Box<Instr> {
+    fn fill(&mut self, dst: Dst, src: SSAValue) -> Instr {
         assert!(src.file() == RegFile::GPR);
         self.info.num_fills_from_reg += 1;
-        Instr::new_boxed(OpBMov {
+        Instr::new(OpBMov {
             dst: dst,
             src: src.into(),
             clear: false,
@@ -228,12 +228,12 @@ impl Spill for SpillGPR<'_> {
         RegFile::Mem
     }
 
-    fn spill(&mut self, dst: SSAValue, src: Src) -> Box<Instr> {
+    fn spill(&mut self, dst: SSAValue, src: Src) -> Instr {
         assert!(dst.file() == RegFile::Mem);
         self.info.num_spills_to_mem += 1;
         if let Some(ssa) = src.as_ssa() {
-            assert!(ssa.file() == Some(RegFile::GPR));
-            Instr::new_boxed(OpCopy {
+            assert!(ssa.file() == RegFile::GPR);
+            Instr::new(OpCopy {
                 dst: dst.into(),
                 src: src,
             })
@@ -241,14 +241,14 @@ impl Spill for SpillGPR<'_> {
             // We use parallel copies for spilling non-GPR things to Mem
             let mut pcopy = OpParCopy::new();
             pcopy.push(dst.into(), src);
-            Instr::new_boxed(pcopy)
+            Instr::new(pcopy)
         }
     }
 
-    fn fill(&mut self, dst: Dst, src: SSAValue) -> Box<Instr> {
+    fn fill(&mut self, dst: Dst, src: SSAValue) -> Instr {
         assert!(src.file() == RegFile::Mem);
         self.info.num_fills_from_mem += 1;
-        Instr::new_boxed(OpCopy {
+        Instr::new(OpCopy {
             dst: dst,
             src: src.into(),
         })
@@ -319,12 +319,12 @@ impl<'a, S: Spill> SpillCache<'a, S> {
         })
     }
 
-    fn spill_src(&mut self, ssa: SSAValue, src: Src) -> Box<Instr> {
+    fn spill_src(&mut self, ssa: SSAValue, src: Src) -> Instr {
         let dst = self.get_spill(ssa);
         self.spill.spill(dst, src)
     }
 
-    fn spill(&mut self, ssa: SSAValue) -> Box<Instr> {
+    fn spill(&mut self, ssa: SSAValue) -> Instr {
         if let Some(c) = self.const_tracker.get(&ssa) {
             self.spill_src(ssa, c.clone().into())
         } else {
@@ -332,14 +332,14 @@ impl<'a, S: Spill> SpillCache<'a, S> {
         }
     }
 
-    fn fill_dst(&mut self, dst: Dst, ssa: SSAValue) -> Box<Instr> {
+    fn fill_dst(&mut self, dst: Dst, ssa: SSAValue) -> Instr {
         let src = self.get_spill(ssa);
         self.spill.fill(dst, src)
     }
 
-    fn fill(&mut self, ssa: SSAValue) -> Box<Instr> {
+    fn fill(&mut self, ssa: SSAValue) -> Instr {
         if let Some(c) = self.const_tracker.get(&ssa) {
-            Instr::new_boxed(OpCopy {
+            Instr::new(OpCopy {
                 dst: ssa.into(),
                 src: c.clone().into(),
             })
@@ -800,13 +800,11 @@ fn spill_values<S: Spill>(
                             if spills.contains(dst_ssa) {
                                 if b.s.insert(*src_ssa) {
                                     if DEBUG.annotate() {
-                                        instrs.push(Instr::new_boxed(
-                                            OpAnnotate {
-                                                annotation:
-                                                    "generated by spill_values"
-                                                        .into(),
-                                            },
-                                        ));
+                                        instrs.push(Instr::new(OpAnnotate {
+                                            annotation:
+                                                "generated by spill_values"
+                                                    .into(),
+                                        }));
                                     }
                                     instrs.push(spill.spill(*src_ssa));
                                 }
@@ -863,7 +861,7 @@ fn spill_values<S: Spill>(
                         instr.for_each_ssa_use_mut(|ssa| {
                             if ssa.file() == file && !b.w.contains(ssa) {
                                 if DEBUG.annotate() {
-                                    instrs.push(Instr::new_boxed(OpAnnotate {
+                                    instrs.push(Instr::new(OpAnnotate {
                                         annotation: "generated by spill_values"
                                             .into(),
                                     }));
@@ -908,13 +906,11 @@ fn spill_values<S: Spill>(
                                 b.w.remove(&ssa);
                                 if !spill.is_const(&ssa) {
                                     if DEBUG.annotate() {
-                                        instrs.push(Instr::new_boxed(
-                                            OpAnnotate {
-                                                annotation:
-                                                    "generated by spill_values"
-                                                        .into(),
-                                            },
-                                        ));
+                                        instrs.push(Instr::new(OpAnnotate {
+                                            annotation:
+                                                "generated by spill_values"
+                                                    .into(),
+                                        }));
                                     }
                                     instrs.push(spill.spill(ssa));
                                     b.s.insert(ssa);
@@ -923,7 +919,7 @@ fn spill_values<S: Spill>(
                         }
 
                         if DEBUG.annotate() {
-                            instrs.push(Instr::new_boxed(OpAnnotate {
+                            instrs.push(Instr::new(OpAnnotate {
                                 annotation: "generated by spill_values".into(),
                             }));
                         }

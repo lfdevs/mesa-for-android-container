@@ -45,10 +45,36 @@ bvh_shaders = [
 vk_bvh_include_dir = dir_source_root + '/src/vulkan/runtime/bvh'
 
 vk_bvh_includes = files(
+  'leaf.h',
   'vk_build_helpers.h',
   'vk_build_interface.h',
   'vk_bvh.h',
+  'vk_debug.h',
 )
+
+vk_glsl_shader_extensions = [
+  'GL_GOOGLE_include_directive',
+  'GL_EXT_shader_explicit_arithmetic_types_int8',
+  'GL_EXT_shader_explicit_arithmetic_types_int16',
+  'GL_EXT_shader_explicit_arithmetic_types_int32',
+  'GL_EXT_shader_explicit_arithmetic_types_int64',
+  'GL_EXT_shader_explicit_arithmetic_types_float16',
+  'GL_EXT_scalar_block_layout',
+  'GL_EXT_buffer_reference',
+  'GL_EXT_buffer_reference2',
+  'GL_KHR_memory_scope_semantics',
+  'GL_KHR_shader_subgroup_arithmetic',
+  'GL_KHR_shader_subgroup_basic',
+  'GL_KHR_shader_subgroup_shuffle',
+  'GL_KHR_shader_subgroup_ballot',
+  'GL_KHR_shader_subgroup_clustered',
+  'GL_EXT_shader_atomic_int64',
+]
+
+vk_glsl_shader_preamble = []
+foreach ext : vk_glsl_shader_extensions
+  vk_glsl_shader_preamble += ['-P#extension ' + ext + ' : require']
+endforeach
 
 bvh_spv = []
 foreach s : bvh_shaders
@@ -56,6 +82,7 @@ foreach s : bvh_shaders
     prog_glslang, '-V', '-I' + vk_bvh_include_dir, '--target-env', 'spirv1.5', '-x', '-o', '@OUTPUT@', '@INPUT@'
   ] + (with_mesa_debug ? ['-g'] : [])
   command += glslang_quiet
+  command += vk_glsl_shader_preamble
 
   bvh_spv += custom_target(
     s[1] + '.spv.h',

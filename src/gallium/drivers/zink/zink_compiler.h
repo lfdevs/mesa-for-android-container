@@ -43,7 +43,7 @@ struct spirv_shader;
 
 struct tgsi_token;
 
-static inline gl_shader_stage
+static inline mesa_shader_stage
 clamp_stage(const shader_info *info)
 {
    return info->stage == MESA_SHADER_KERNEL ? MESA_SHADER_COMPUTE : info->stage;
@@ -74,7 +74,7 @@ void
 zink_shader_init(struct zink_screen *screen, struct zink_shader *zs);
 
 void
-zink_shader_finalize(struct pipe_screen *pscreen, struct nir_shader *nir);
+zink_shader_finalize(struct pipe_screen *pscreen, struct nir_shader *nir, bool optimize);
 
 void
 zink_shader_free(struct zink_screen *screen, struct zink_shader *shader);

@@ -32,7 +32,7 @@
 #include "elk_compiler.h"
 #include "elk_disasm.h"
 #include "elk_eu.h"
-#include "elk_prim.h"
+#include "compiler/intel_prim.h"
 
 #include "dev/intel_debug.h"
 
@@ -621,7 +621,7 @@ elk_compile_ff_gs_prog(struct elk_compiler *compiler,
          check_edge_flag = true;
          break;
       default:
-         unreachable("Unexpected primitive type in Gen6 SOL program.");
+         UNREACHABLE("Unexpected primitive type in Gen6 SOL program.");
       }
       gfx6_sol_program(&c, key, num_verts, check_edge_flag);
    } else {

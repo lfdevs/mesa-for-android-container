@@ -199,7 +199,7 @@ softpipe_launch_grid(struct pipe_context *context,
    for (local_z = 0; local_z < bdepth; local_z++) {
       for (local_y = 0; local_y < bheight; local_y++) {
          for (local_x = 0; local_x < bwidth; local_x += TGSI_QUAD_SIZE) {
-            machines[idx] = tgsi_exec_machine_create(PIPE_SHADER_COMPUTE);
+            machines[idx] = tgsi_exec_machine_create(MESA_SHADER_COMPUTE);
 
             machines[idx]->LocalMem = local_mem;
             machines[idx]->LocalMemSize = shared_mem_size;
@@ -208,11 +208,11 @@ softpipe_launch_grid(struct pipe_context *context,
                        local_x, local_y, local_z,
                        grid_size[0], grid_size[1], grid_size[2],
                        bwidth, bheight, bdepth,
-                       (struct tgsi_sampler *)softpipe->tgsi.sampler[PIPE_SHADER_COMPUTE],
-                       (struct tgsi_image *)softpipe->tgsi.image[PIPE_SHADER_COMPUTE],
-                       (struct tgsi_buffer *)softpipe->tgsi.buffer[PIPE_SHADER_COMPUTE]);
+                       (struct tgsi_sampler *)softpipe->tgsi.sampler[MESA_SHADER_COMPUTE],
+                       (struct tgsi_image *)softpipe->tgsi.image[MESA_SHADER_COMPUTE],
+                       (struct tgsi_buffer *)softpipe->tgsi.buffer[MESA_SHADER_COMPUTE]);
             tgsi_exec_set_constant_buffers(machines[idx], PIPE_MAX_CONSTANT_BUFFERS,
-                                           softpipe->mapped_constants[PIPE_SHADER_COMPUTE]);
+                                           softpipe->mapped_constants[MESA_SHADER_COMPUTE]);
             idx++;
          }
       }

@@ -30,9 +30,11 @@
 #define LP_BLD_QUAD_H_
 
 
-#include "gallivm/lp_bld.h"
+#include <llvm-c/Core.h>
 
 
+struct gallivm_state;
+struct lp_type;
 struct lp_build_context;
 
 

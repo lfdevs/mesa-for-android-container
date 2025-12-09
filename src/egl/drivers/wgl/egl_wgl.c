@@ -46,7 +46,7 @@
 #include <pipe/p_state.h>
 
 #include "util/u_call_once.h"
-#include "mapi/glapi/glapi.h"
+#include "mesa/glapi/glapi/glapi.h"
 #include "dispatch.h"
 
 #include <GL/mesa_glinterop.h>
@@ -159,7 +159,7 @@ wgl_add_config(_EGLDisplay *disp, const struct stw_pixelformat_info *stw_config,
 
       _eglLinkConfig(&conf->base);
    } else {
-      unreachable("duplicates should not be possible");
+      UNREACHABLE("duplicates should not be possible");
       return NULL;
    }
 
@@ -337,7 +337,7 @@ wgl_initialize(_EGLDisplay *disp)
       ret = wgl_initialize_impl(disp, disp->PlatformDisplay);
       break;
    default:
-      unreachable("Callers ensure we cannot get here.");
+      UNREACHABLE("Callers ensure we cannot get here.");
       return EGL_FALSE;
    }
 
@@ -863,7 +863,7 @@ wgl_create_image_khr_texture(_EGLDisplay *disp, _EGLContext *ctx,
       gl_target = GL_TEXTURE_CUBE_MAP;
       break;
    default:
-      unreachable("Unexpected target in wgl_create_image_khr_texture()");
+      UNREACHABLE("Unexpected target in wgl_create_image_khr_texture()");
       return EGL_NO_IMAGE_KHR;
    }
 

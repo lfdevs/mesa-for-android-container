@@ -113,7 +113,8 @@ driver_llvmpipe = declare_dependency(
 
 if with_tests
   foreach t : ['lp_test_format', 'lp_test_arit', 'lp_test_blend',
-               'lp_test_conv', 'lp_test_printf', 'lp_test_lookup_multiple']
+               'lp_test_lerp', 'lp_test_conv', 'lp_test_printf',
+               'lp_test_lookup_multiple']
     test(
       t,
       executable(

@@ -14,13 +14,11 @@ git config --global user.name "Mesa CI"
 
 git clone \
     https://github.com/intel/libva-utils.git \
-    -b 2.18.1 \
+    -b 2.22.0 \
     --depth 1 \
     /va-utils
 
 pushd /va-utils
-# Too old libva in Debian 11. TODO: when this PR gets in, refer to the patch.
-curl --fail -L https://github.com/intel/libva-utils/pull/329.patch | git am
 
 meson setup build -D tests=true -Dprefix=/va ${EXTRA_MESON_ARGS:-}
 meson install -C build

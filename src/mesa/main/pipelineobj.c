@@ -60,7 +60,7 @@ _mesa_delete_pipeline_object(struct gl_context *ctx,
 {
    unsigned i;
 
-   for (i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       _mesa_reference_program(ctx, &obj->CurrentProgram[i], NULL);
       _mesa_reference_shader_program(ctx, &obj->ReferencedPrograms[i], NULL);
    }
@@ -207,7 +207,7 @@ static void
 use_program_stage(struct gl_context *ctx, GLenum type,
                   struct gl_shader_program *shProg,
                   struct gl_pipeline_object *pipe) {
-   gl_shader_stage stage = _mesa_shader_enum_to_shader_stage(type);
+   mesa_shader_stage stage = _mesa_shader_enum_to_shader_stage(type);
    struct gl_program *prog = NULL;
    if (shProg && shProg->_LinkedShaders[stage])
       prog = shProg->_LinkedShaders[stage]->Program;
@@ -249,6 +249,12 @@ use_program_stages(struct gl_context *ctx, struct gl_shader_program *shProg,
 
    if ((stages & GL_COMPUTE_SHADER_BIT) != 0)
       use_program_stage(ctx, GL_COMPUTE_SHADER, shProg, pipe);
+
+   if ((stages & GL_TASK_SHADER_BIT_EXT) != 0)
+      use_program_stage(ctx, GL_TASK_SHADER_EXT, shProg, pipe);
+
+   if ((stages & GL_MESH_SHADER_BIT_EXT) != 0)
+      use_program_stage(ctx, GL_MESH_SHADER_EXT, shProg, pipe);
 
    pipe->Validated = pipe->UserValidated = false;
 
@@ -316,6 +322,8 @@ _mesa_UseProgramStages(GLuint pipeline, GLbitfield stages, GLuint program)
                           GL_TESS_EVALUATION_SHADER_BIT;
    if (_mesa_has_compute_shaders(ctx))
       any_valid_stages |= GL_COMPUTE_SHADER_BIT;
+   if (_mesa_has_EXT_mesh_shader(ctx))
+      any_valid_stages |= GL_TASK_SHADER_BIT_EXT | GL_MESH_SHADER_BIT_EXT;
 
    if (stages != GL_ALL_SHADER_BITS && (stages & ~any_valid_stages) != 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glUseProgramStages(Stages)");
@@ -530,7 +538,7 @@ _mesa_bind_pipeline(struct gl_context *ctx,
                                          ctx->Pipeline.Default);
       }
 
-      for (i = 0; i < MESA_SHADER_STAGES; i++) {
+      for (i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
          struct gl_program *prog = ctx->_Shader->CurrentProgram[i];
          if (prog) {
             _mesa_program_init_subroutine_defaults(ctx, prog);
@@ -820,7 +828,7 @@ program_stages_interleaved_illegally(const struct gl_pipeline_object *pipe)
    /* Look for programs bound to stages: A -> B -> A, with any intervening
     * sequence of unrelated programs or empty stages.
     */
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       struct gl_program *cur = pipe->CurrentProgram[i];
 
       /* Empty stages anywhere in the pipe are OK.  Also we can be confident
@@ -858,8 +866,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
 
    /* Release and reset the info log.
     */
-   if (pipe->InfoLog != NULL)
-      ralloc_free(pipe->InfoLog);
+   ralloc_free(pipe->InfoLog);
 
    pipe->InfoLog = NULL;
 
@@ -878,7 +885,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     * bound to the vertex stage also has a fragment shader, the fragment
     * shader must also be bound to the fragment stage.
     */
-   for (i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (!program_stages_all_active(pipe, pipe->CurrentProgram[i])) {
          return GL_FALSE;
       }
@@ -939,7 +946,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     *           applied to the pipeline object via UseProgramStages with the
     *           PROGRAM_SEPARABLE parameter set to FALSE.
     */
-   for (i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (pipe->CurrentProgram[i] &&
           !pipe->CurrentProgram[i]->info.separate_shader) {
          pipe->InfoLog = ralloc_asprintf(pipe,
@@ -962,7 +969,7 @@ _mesa_validate_program_pipeline(struct gl_context* ctx,
     *         there is a current program pipeline object, and that object is
     *         empty (no executable code is installed for any stage).
     */
-   for (i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (pipe->CurrentProgram[i]) {
          program_empty = false;
          break;

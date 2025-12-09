@@ -40,8 +40,13 @@ struct pipe_video_buffer *si_video_buffer_create_with_modifiers(struct pipe_cont
       if (!ac_modifier_supports_video(&sscreen->info, mod))
          continue;
 
-      if (mod != DRM_FORMAT_MOD_LINEAR && !sscreen->info.has_image_opcodes)
-         continue;
+      if (mod != DRM_FORMAT_MOD_LINEAR) {
+         if (sscreen->multimedia_debug_flags & DBG(NO_VIDEO_TILING))
+            continue;
+
+         if (!sscreen->info.has_image_opcodes)
+            continue;
+      }
 
       allowed_modifiers[allowed_modifiers_count++] = mod;
    }
@@ -105,8 +110,6 @@ static struct pb_buffer_lean *si_uvd_set_dtb(struct ruvd_msg *msg, struct vl_vid
    struct si_texture *chroma = (struct si_texture *)buf->resources[1];
    enum ruvd_surface_type type =
       (sscreen->info.gfx_level >= GFX9) ? RUVD_SURFACE_TYPE_GFX9 : RUVD_SURFACE_TYPE_LEGACY;
-
-   msg->body.decode.dt_field_mode = buf->base.interlaced;
 
    si_uvd_set_dt_surfaces(msg, &luma->surface, (chroma) ? &chroma->surface : NULL, type);
 

@@ -5,8 +5,8 @@
 
 #include "intel_tools.h"
 
-#include "compiler/brw_disasm.h"
-#include "compiler/brw_isa_info.h"
+#include "compiler/brw/brw_disasm.h"
+#include "compiler/brw/brw_isa_info.h"
 #ifdef INTEL_USE_ELK
 #include "compiler/elk/elk_disasm.h"
 #include "compiler/elk/elk_isa_info.h"

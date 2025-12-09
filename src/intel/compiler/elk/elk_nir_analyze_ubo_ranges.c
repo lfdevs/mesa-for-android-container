@@ -160,7 +160,7 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          const int bytes = nir_intrinsic_dest_components(intrin) *
                            (intrin->def.bit_size / 8);
          const int start = ROUND_DOWN_TO(byte_offset, 32);
-         const int end = ALIGN(byte_offset + bytes, 32);
+         const int end = align(byte_offset + bytes, 32);
          const int chunks = (end - start) / 32;
 
          /* TODO: should we count uses in loops as higher benefit? */

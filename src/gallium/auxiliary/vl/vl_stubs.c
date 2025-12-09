@@ -1,39 +1,7 @@
 #include <assert.h>
 
-#include "vl_decoder.h"
 #include "vl_mpeg12_bitstream.h"
-#include "vl_mpeg12_decoder.h"
 #include "vl_video_buffer.h"
-#include "vl_zscan.h"
-
-
-/*
- * vl_decoder stubs
- */
-bool
-vl_profile_supported(struct pipe_screen *screen,
-                     enum pipe_video_profile profile,
-                     enum pipe_video_entrypoint entrypoint)
-{
-   assert(0);
-   return false;
-}
-
-int
-vl_level_supported(struct pipe_screen *screen,
-                   enum pipe_video_profile profile)
-{
-   assert(0);
-   return 0;
-}
-
-struct pipe_video_codec *
-vl_create_decoder(struct pipe_context *pipe,
-                  const struct pipe_video_codec *templat)
-{
-   assert(0);
-   return NULL;
-}
 
 
 /*
@@ -142,16 +110,4 @@ vl_mpg12_bs_decode(struct vl_mpg12_bs *bs,
                    const unsigned *sizes)
 {
    assert(0);
-}
-
-
-/*
- * vl_mpeg12_decoder stubs
- */
-struct pipe_video_codec *
-vl_create_mpeg12_decoder(struct pipe_context *pipe,
-                         const struct pipe_video_codec *templat)
-{
-   assert(0);
-   return NULL;
 }

@@ -113,7 +113,7 @@ load_input(struct st_translate *t, gl_varying_slot slot)
    nir_def *baryc = nir_load_barycentric_pixel(t->b, 32);
 
    if (slot != VARYING_SLOT_COL0 && slot != VARYING_SLOT_COL1) {
-      nir_intrinsic_set_interp_mode(nir_instr_as_intrinsic(baryc->parent_instr),
+      nir_intrinsic_set_interp_mode(nir_def_as_intrinsic(baryc),
                                     INTERP_MODE_SMOOTH);
    }
 
@@ -160,7 +160,7 @@ get_source(struct st_translate *t, GLenum src_type)
       return load_input(t, VARYING_SLOT_COL1);
    } else {
       /* frontend prevents this */
-      unreachable("unknown source");
+      UNREACHABLE("unknown source");
    }
 }
 
@@ -262,7 +262,7 @@ emit_arith_inst(struct st_translate *t,
       return nir_channel_vec4(t->b, nir_fdot4(t->b,src[0], src[1]), 0);
 
    default:
-      unreachable("Unknown ATI_fs opcode");
+      UNREACHABLE("Unknown ATI_fs opcode");
    }
 }
 
@@ -441,6 +441,8 @@ st_translate_atifs_program(struct ati_fragment_shader *atifs,
 
    /* Copy the shader_info from the gl_program */
    t->b->shader->info = program->info;
+   t->b->shader->info.max_subgroup_size = 128;
+   t->b->shader->info.min_subgroup_size = 1;
 
    nir_shader *s = t->b->shader;
    s->info.name = ralloc_asprintf(s, "ATIFS%d", program->Id);

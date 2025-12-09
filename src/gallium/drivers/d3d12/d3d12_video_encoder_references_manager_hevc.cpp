@@ -31,23 +31,16 @@
 
 using namespace std;
 
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
 bool
-d3d12_video_encoder_references_manager_hevc::get_current_frame_picture_control_data1(
+d3d12_video_encoder_references_manager_hevc::get_current_frame_picture_control_data(
    D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation)
 {
    assert(codecAllocation.DataSize == sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2));
-   memcpy(codecAllocation.pHEVCPicData, &m_curFrameState, sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2));
-   return true;
-}
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
+   if (codecAllocation.DataSize != sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2))
+      return false;
 
-bool
-d3d12_video_encoder_references_manager_hevc::get_current_frame_picture_control_data(
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA &codecAllocation)
-{
-   assert(codecAllocation.DataSize == sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC));
-   memcpy(codecAllocation.pHEVCPicData, &m_curFrameState, sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC));
+   *codecAllocation.pHEVCPicData = m_curFrameState;
+
    return true;
 }
 
@@ -96,11 +89,12 @@ d3d12_video_encoder_friendly_frame_type_hevc(D3D12_VIDEO_ENCODER_FRAME_TYPE_HEVC
       } break;
       default:
       {
-         unreachable("Unsupported D3D12_VIDEO_ENCODER_FRAME_TYPE_HEVC");
+         UNREACHABLE("Unsupported D3D12_VIDEO_ENCODER_FRAME_TYPE_HEVC");
       } break;
    }
 }
 
+#ifdef MESA_DEBUG
 void
 d3d12_video_encoder_references_manager_hevc::print_l0_l1_lists()
 {
@@ -176,7 +170,9 @@ d3d12_video_encoder_references_manager_hevc::print_l0_l1_lists()
                    modificationOrderList1ContentsString.c_str());
    }
 }
+#endif // MESA_DEBUG
 
+#ifdef MESA_DEBUG
 void
 d3d12_video_encoder_references_manager_hevc::print_dpb()
 {
@@ -225,6 +221,7 @@ d3d12_video_encoder_references_manager_hevc::print_dpb()
                    dpbContents.c_str());
    }
 }
+#endif // MESA_DEBUG
 
 static D3D12_VIDEO_ENCODER_FRAME_TYPE_HEVC
 d3d12_video_encoder_convert_frame_type_hevc(enum pipe_h2645_enc_picture_type picType)
@@ -248,38 +245,17 @@ d3d12_video_encoder_convert_frame_type_hevc(enum pipe_h2645_enc_picture_type pic
       } break;
       default:
       {
-         unreachable("Unsupported pipe_h2645_enc_picture_type");
+         UNREACHABLE("Unsupported pipe_h2645_enc_picture_type");
       } break;
    }
 }
 
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
 void
-d3d12_video_encoder_references_manager_hevc::begin_frame1(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 curFrameData,
-                                                          bool bUsedAsReference,
-                                                          struct pipe_picture_desc *picture)
-{
-   assert(curFrameData.DataSize == sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2));
-   memcpy(&m_curFrameState, curFrameData.pHEVCPicData, sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2));
-   begin_frame_impl(bUsedAsReference, picture);
-}
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
-
-void
-d3d12_video_encoder_references_manager_hevc::begin_frame(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA curFrameData,
+d3d12_video_encoder_references_manager_hevc::begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1& curFrameData,
                                                          bool bUsedAsReference,
                                                          struct pipe_picture_desc *picture)
 {
-   assert(curFrameData.DataSize == sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC));
-   memcpy(&m_curFrameState, curFrameData.pHEVCPicData, sizeof(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC));
-   memset(((uint8_t*)(&m_curFrameState) + curFrameData.DataSize), 0, sizeof(m_curFrameState) - curFrameData.DataSize);
-   begin_frame_impl(bUsedAsReference, picture);
-}
-
-void
-d3d12_video_encoder_references_manager_hevc::begin_frame_impl(bool bUsedAsReference,
-                                                              struct pipe_picture_desc *picture)
-{
+   m_curFrameState = *curFrameData.pHEVCPicData;
    m_isCurrentFrameUsedAsReference = bUsedAsReference;
 
    struct pipe_h265_enc_picture_desc *hevcPic = (struct pipe_h265_enc_picture_desc *) picture;
@@ -299,7 +275,6 @@ d3d12_video_encoder_references_manager_hevc::begin_frame_impl(bool bUsedAsRefere
    m_CurrentFrameReferencesData.pReferenceFramesReconPictureDescriptors.resize(hevcPic->dpb_size);
    m_CurrentFrameReferencesData.ReferenceTextures.pResources.resize(hevcPic->dpb_size);
    m_CurrentFrameReferencesData.ReferenceTextures.pSubresources.resize(hevcPic->dpb_size);
-   m_CurrentFrameReferencesData.pReferenceFramesReconPictureDescriptors.resize(hevcPic->dpb_size);
    m_CurrentFrameReferencesData.ReconstructedPicTexture = { NULL, 0u };
    for (uint8_t i = 0; i < hevcPic->dpb_size; i++) {
       //
@@ -412,6 +387,8 @@ d3d12_video_encoder_references_manager_hevc::begin_frame_impl(bool bUsedAsRefere
       }
    }
 
+#ifdef MESA_DEBUG
    print_dpb();
    print_l0_l1_lists();
+#endif
 }

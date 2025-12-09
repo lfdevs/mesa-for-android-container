@@ -43,14 +43,14 @@ static bool debug = false;
  * for usage on an unlinked instruction stream.
  */
 bool
-do_dead_code(exec_list *instructions)
+do_dead_code(ir_exec_list *instructions)
 {
    ir_variable_refcount_visitor v;
    bool progress = false;
 
    v.run(instructions);
 
-   hash_table_foreach(v.ht, e) {
+   hash_table_foreach(&v.ht, e) {
       ir_variable_refcount_entry *entry = (ir_variable_refcount_entry *)e->data;
 
       /* Since each assignment is a reference, the refereneced count must be
@@ -85,7 +85,7 @@ do_dead_code(exec_list *instructions)
 
             while (!entry->assign_list.is_empty()) {
                struct assignment_entry *assignment_entry =
-                  exec_node_data(struct assignment_entry,
+                  ir_exec_node_data(struct assignment_entry,
                                  entry->assign_list.get_head_raw(), link);
 
 	       assignment_entry->assign->remove();
@@ -96,7 +96,6 @@ do_dead_code(exec_list *instructions)
                }
 
                assignment_entry->link.remove();
-               free(assignment_entry);
             }
             progress = true;
 	 }
@@ -165,14 +164,14 @@ do_dead_code(exec_list *instructions)
  * with global scope.
  */
 bool
-do_dead_code_unlinked(exec_list *instructions)
+do_dead_code_unlinked(ir_exec_list *instructions)
 {
    bool progress = false;
 
-   foreach_in_list(ir_instruction, ir, instructions) {
+   ir_foreach_in_list(ir_instruction, ir, instructions) {
       ir_function *f = ir->as_function();
       if (f) {
-	 foreach_in_list(ir_function_signature, sig, &f->signatures) {
+	 ir_foreach_in_list(ir_function_signature, sig, &f->signatures) {
 	    if (do_dead_code(&sig->body))
 	       progress = true;
 	 }

@@ -750,9 +750,9 @@ ChipFamily Gfx11Lib::HwlConvertChipFamily(
             }
             break;
 
-        case FAMILY_GFX1150:
+        case FAMILY_STX:
             {
-                m_settings.isGfx1150 = 1;
+                m_settings.isStrix = 1;
             }
             break;
         case FAMILY_PHX:
@@ -1743,7 +1743,7 @@ UINT_32 Gfx11Lib::GetValidDisplaySwizzleModes(
 
         if (false
             || (m_settings.isPhoenix)
-            || (m_settings.isGfx1150)
+            || (m_settings.isStrix)
            )
         {
             // Not all GPUs support displaying with 256kB swizzle modes.

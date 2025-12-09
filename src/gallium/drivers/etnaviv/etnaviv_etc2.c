@@ -99,8 +99,9 @@ etna_etc2_calculate_blocks(uint8_t *buffer, unsigned stride,
       uint8_t *src = buffer;
 
       for (unsigned x = 0; x < width; x += bw) {
-         if (needs_patching(src + offset, punchthrough_alpha))
-            util_dynarray_append(offsets, unsigned, src + offset - base);
+         if (needs_patching(src + offset, punchthrough_alpha)) {
+            util_dynarray_append_typed(offsets, unsigned, src + offset - base);
+         }
 
          src += bs;
       }

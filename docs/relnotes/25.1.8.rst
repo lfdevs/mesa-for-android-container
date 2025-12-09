@@ -1,0 +1,192 @@
+Mesa 25.1.8 Release Notes / 2025-08-13
+======================================
+
+Mesa 25.1.8 is a bug fix release which fixes bugs found since the 25.1.7 release.
+
+Mesa 25.1.8 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.1.8 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 5cf1571d0d646d90047f3d93f57acc787cf88ec7e95efe172c555b492c30fb71  mesa-25.1.8.tar.xz
+    SHA512: 98435d52a2855c71b15060785c225dc674b3565545a8581a5dd501605a04f9d597636282f1bce61e7a2e8ee98c31ecf7fbccab594571e31bc8b827e18e98aaa5  mesa-25.1.8.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Build dependency on intel_wa.h missing in Intel vulkan driver
+- \`vn_ring`: use-after-release crash after \`vn_ring_destroy` on Virtio-Vulkan
+- venus: vkmark --winsys headless segfault (regression)
+- Vulkan headless WSI crashes when initializing swapchain on Asahi Linux running Apple M1 Max
+- [RADV] Graphical glitches in Ghost of Tsushima on Polaris
+- Segfault when activating DPMS on i915 hardware
+- radv: regression: commit a7291074c800 break lighting in Like a Dragon: Infinite Wealth
+
+
+Changes
+-------
+
+Alyssa Rosenzweig (2):
+
+- asahi: enable virtgpu support
+- agx: gate scratch opt on internal shaders
+
+Caio Oliveira (1):
+
+- brw: Remove extra iteration on instructions from brw_opt_address_reg_load
+
+Christian Gmeiner (2):
+
+- etnaviv: blt: Clear only requested color buffers
+- etnaviv: rs: Clear only requested color buffers
+
+Dave Airlie (1):
+
+- spirv: move cmat store barrier after the store.
+
+David Rosca (3):
+
+- vulkan/video: Fix h265 level values
+- radv: Add timeout to video encode query
+- rusticl/ptr: Fix hidden lifetime warning
+
+Emma Anholt (1):
+
+- i915: Avoid calling drm_intel_get_aperture_sizes().
+
+Eric Engestrom (7):
+
+- docs: add sha sum for 25.1.7
+- .pick_status.json: Update to 20171f23d6b89c8fdcb2b6a56de4d8293995af64
+- .pick_status.json: Mark 0cd745c386a342e2bc8b1cc5cfd26f33b771910d as denominated
+- .pick_status.json: Mark 9ced3148ca18e8b057e7f2a7e773c701b95c8741 as denominated
+- .pick_status.json: Mark 5649a0aa06e7f436a7f010e733e60366b471da79 as denominated
+- .pick_status.json: Mark 71c4f136607eeb50b8aa08ad1a8efb8412385b96 as denominated
+- ci: track changes to new src/x11/ folder
+
+Eric R. Smith (1):
+
+- panvk: fix a NULL pointer dereference in occlusion queries
+
+Erico Nunes (1):
+
+- lima: ppir: fix store_output optimization for modifiers
+
+Gert Wollny (3):
+
+- r600/sfn: check number of fsat64 source uses properly
+- r600: Update GPR count when adding a GDS instruction
+- r00/sfn: Fix copy propagation into buffer load address
+
+Hans-Kristian Arntzen (1):
+
+- ac/nir: Avoid 0/0 when computing texel buffer size on Polaris.
+
+Job Noorman (1):
+
+- ir3/legalize: prevent infinite loop when inserting (ss)nop
+
+Jordan Justen (1):
+
+- intel/dev: Add BMG 0xe209 PCI ID
+
+Karol Herbst (11):
+
+- rusticl: use pipe_sampler_view_release
+- rusticl/mesa: wire up fence_server
+- rusticl/gl: store the mesa_glinterop_export_in
+- st/interup: flushing objects is a no-op when no context is bound
+- rusticl/gl: only flush objects on import if we get a valid fd
+- rusticl/gl: flush and wait on gl objects inside clEnqueueAcquireGLObjects
+- zink: fix data race in descriptor_util_pool_key_get
+- rusticl: silence warnings in generated sources
+- rusticl: silence new warnings from rustc versions above our rustc target
+- anv: do not map from_host_ptr bos in image_bind_address
+- zink: set zink_bo is_user_ptr on creation
+
+Kenneth Graunke (4):
+
+- brw: Refactor copy propagation checks for EOT send restrictions
+- brw: Fix units in copy propagation EOT restriction size calculation
+- brw: Update copy propagation into EOT sends handling for Xe2 units
+- intel: Disable 16x MSAA support on Xe3
+
+Lars-Ivar Hesselberg Simonsen (1):
+
+- u_trace: Indirect capture fixes
+
+Lionel Landwerlin (2):
+
+- anv: fix wsi image aliasing
+- anv: fix missing meson dep
+
+Mary Guillemard (2):
+
+- panvk: Always use varying_count in emit_varying_attrs
+- panvk: track oq write jobs in JM
+
+Mike Blumenkrantz (5):
+
+- zink: also add access stage sync when rebinding buffers
+- zink: fix tc buffer replacement rebind condition
+- zink: trigger multi-context buffer invalidate on internal buffer invalidate
+- zink: don't access ctx in submit_queue
+- perfetto: unify init
+
+Patrick Lerda (3):
+
+- r600: refactor r600_is_buffer_format_supported() for the next update
+- r600: fix remaining pbo issues
+- r600: fix arb_shader_image_load_store incomplete
+
+Rhys Perry (2):
+
+- nir/load_store_vectorize: check for interfering shared2 before vectorizing
+- nir/load_store_vectorize: set is_store for shared append/consume
+
+Ricardo Garcia (1):
+
+- radv: Ignore image barrier queue families if equal
+
+Rob Clark (1):
+
+- freedreno: Remove obsolete comment
+
+Rohan Garg (1):
+
+- intel/compiler: use the WA framework when emitting WA 14014595444
+
+Samuel Pitoiset (3):
+
+- radv: fix fbfetch output with compresed FMASK on <= GFX9
+- ac,radv,radeonsi: fix programming PA_SU_PRIM_FILTER_CNTL on GFX12
+- radv/amdgpu: fix creation with different but unused RADV_PERFTEST flags
+
+Thomas H.P. Andersen (1):
+
+- zink: do not overwrite existing error for miptail on uncommit
+
+Yiwei Zhang (4):
+
+- util/perf: amend missing atrace_init
+- vulkan/wsi/headless: allow explicit modifiers
+- venus: fix a race condition in ring shmem reuse
+- vulkan/util: add missing vulkan header

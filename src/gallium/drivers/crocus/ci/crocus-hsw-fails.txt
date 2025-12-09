@@ -96,8 +96,6 @@ spec@arb_sample_shading@samplemask 8@1.000000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 8@noms mask_in_one,Fail
 spec@arb_sample_shading@samplemask 8@sample mask_in_one,Fail
 
-spec@arb_viewport_array@display-list,Fail
-
 spec@arb_shader_image_load_store@early-z,Fail
 spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
 

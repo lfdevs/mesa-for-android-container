@@ -29,15 +29,20 @@
 #include "hwdef/rogue_hw_defs.h"
 #include "hwdef/rogue_hw_utils.h"
 #include "pvr_bo.h"
+#include "pvr_border.h"
+#include "pvr_cmd_buffer.h"
 #include "pvr_csb.h"
 #include "pvr_debug.h"
+#include "pvr_device.h"
 #include "pvr_csb_enum_helpers.h"
 #include "pvr_debug.h"
 #include "pvr_job_common.h"
 #include "pvr_job_context.h"
 #include "pvr_job_render.h"
+#include "pvr_macros.h"
 #include "pvr_pds.h"
-#include "pvr_private.h"
+#include "pvr_physical_device.h"
+#include "pvr_query.h"
 #include "pvr_rogue_fw.h"
 #include "pvr_types.h"
 #include "pvr_winsys.h"
@@ -48,6 +53,23 @@
 #include "vk_alloc.h"
 #include "vk_log.h"
 #include "vk_util.h"
+
+static_assert(pvr_cmd_length(PBESTATE_REG_WORD0) == 2,
+              "PBESTATE_REG_WORD0 cannot be stored in uint64_t");
+static_assert(pvr_cmd_length(PBESTATE_REG_WORD1) == 2,
+              "PBESTATE_REG_WORD1 cannot be stored in uint64_t");
+static_assert(ROGUE_NUM_PBESTATE_REG_WORDS >= 2,
+              "Cannot store both PBESTATE_REG_WORD{0,1}");
+
+static_assert(pvr_cmd_length(CR_PDS_BGRND0_BASE) == 2,
+              "CR_PDS_BGRND0_BASE cannot be stored in uint64_t");
+static_assert(pvr_cmd_length(CR_PDS_BGRND1_BASE) == 2,
+              "CR_PDS_BGRND1_BASE cannot be stored in uint64_t");
+static_assert(pvr_cmd_length(CR_PDS_BGRND3_SIZEINFO) == 2,
+              "CR_PDS_BGRND3_SIZEINFO cannot be stored in uint64_t");
+static_assert(ROGUE_NUM_CR_PDS_BGRND_WORDS == 3,
+              "Cannot store all CR_PDS_BGRND words");
+
 
 #define ROGUE_BIF_PM_FREELIST_BASE_ADDR_ALIGNSIZE 16U
 
@@ -98,7 +120,8 @@ struct pvr_rt_dataset {
    struct pvr_winsys_rt_dataset *ws_rt_dataset;
 
    /* RT data information */
-   struct pvr_bo *mta_mlist_bo;
+   struct pvr_bo *mta_bo;
+   struct pvr_bo *mlist_bo;
 
    struct pvr_bo *rgn_headers_bo;
    uint64_t rgn_headers_stride;
@@ -165,7 +188,7 @@ VkResult pvr_free_list_create(struct pvr_device *device,
     * of the two values) and divide this by 4. If the PM page size is 4096
     * bytes then we end up with an alignment of 65536 bytes.
     */
-   cache_line_size = rogue_get_slc_cache_line_size(&device->pdevice->dev_info);
+   cache_line_size = pvr_get_slc_cache_line_size(&device->pdevice->dev_info);
 
    addr_alignment =
       MAX2(ROGUE_BIF_PM_FREELIST_BASE_ADDR_ALIGNSIZE, cache_line_size);
@@ -279,7 +302,7 @@ static inline void pvr_get_samples_in_xy(uint32_t samples,
       *y_out = 4;
       break;
    default:
-      unreachable("Unsupported number of samples");
+      UNREACHABLE("Unsupported number of samples");
    }
 }
 
@@ -578,77 +601,98 @@ static void pvr_rt_get_region_headers_stride_size(
    *size_out = rgn_headers_size * layers;
 }
 
-static VkResult
-pvr_rt_mta_mlist_data_init(struct pvr_device *device,
-                           struct pvr_rt_dataset *rt_dataset,
-                           const struct pvr_free_list *global_free_list,
-                           const struct pvr_free_list *local_free_list,
-                           const struct pvr_rt_mtile_info *mtile_info)
+static VkResult pvr_rt_mta_data_init(struct pvr_device *device,
+                                     struct pvr_rt_dataset *rt_dataset)
 {
    const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
-   const uint32_t mlist_size =
-      pvr_rt_get_mlist_size(global_free_list, local_free_list);
-   uint32_t mta_size = rogue_get_macrotile_array_size(dev_info);
+   const uint32_t mta_size = rogue_get_macrotile_array_size(dev_info);
    const uint32_t num_rt_datas = ARRAY_SIZE(rt_dataset->rt_datas);
-   uint32_t rt_datas_mlist_size;
-   uint32_t rt_datas_mta_size;
    pvr_dev_addr_t dev_addr;
    VkResult result;
 
-   /* Allocate memory for macrotile array and Mlist for all RT datas.
-    *
-    * Allocation layout: MTA[0..N] + Mlist alignment padding + Mlist[0..N].
-    *
-    * N is number of RT datas.
-    */
-   rt_datas_mta_size = ALIGN_POT(mta_size * num_rt_datas,
-                                 ROGUE_CR_PM_MLIST0_BASE_ADDR_ALIGNMENT);
-   rt_datas_mlist_size = mlist_size * num_rt_datas;
+   /* Valid case - see rogue_get_macrotile_array_size() */
+   if (mta_size == 0) {
+      rt_dataset->mta_bo = NULL;
+
+      for (uint32_t i = 0; i < num_rt_datas; i++)
+         rt_dataset->rt_datas[i].mta_dev_addr = PVR_DEV_ADDR_INVALID;
+
+      return VK_SUCCESS;
+   }
 
    result = pvr_bo_alloc(device,
                          device->heaps.general_heap,
-                         rt_datas_mta_size + rt_datas_mlist_size,
+                         mta_size * num_rt_datas,
                          ROGUE_CR_PM_MTILE_ARRAY_BASE_ADDR_ALIGNMENT,
                          PVR_BO_ALLOC_FLAG_GPU_UNCACHED,
-                         &rt_dataset->mta_mlist_bo);
+                         &rt_dataset->mta_bo);
    if (result != VK_SUCCESS)
       return result;
 
-   dev_addr = rt_dataset->mta_mlist_bo->vma->dev_addr;
+   dev_addr = rt_dataset->mta_bo->vma->dev_addr;
 
    for (uint32_t i = 0; i < num_rt_datas; i++) {
-      if (mta_size != 0) {
-         rt_dataset->rt_datas[i].mta_dev_addr = dev_addr;
-         dev_addr = PVR_DEV_ADDR_OFFSET(dev_addr, mta_size);
-      } else {
-         rt_dataset->rt_datas[i].mta_dev_addr = PVR_DEV_ADDR_INVALID;
-      }
-   }
-
-   dev_addr = PVR_DEV_ADDR_OFFSET(rt_dataset->mta_mlist_bo->vma->dev_addr,
-                                  rt_datas_mta_size);
-
-   for (uint32_t i = 0; i < num_rt_datas; i++) {
-      if (mlist_size != 0) {
-         rt_dataset->rt_datas[i].mlist_dev_addr = dev_addr;
-         dev_addr = PVR_DEV_ADDR_OFFSET(dev_addr, mlist_size);
-      } else {
-         rt_dataset->rt_datas[i].mlist_dev_addr = PVR_DEV_ADDR_INVALID;
-      }
+      rt_dataset->rt_datas[i].mta_dev_addr = dev_addr;
+      dev_addr = PVR_DEV_ADDR_OFFSET(dev_addr, mta_size);
    }
 
    return VK_SUCCESS;
 }
 
-static void pvr_rt_mta_mlist_data_fini(struct pvr_rt_dataset *rt_dataset)
+static void pvr_rt_mta_data_fini(struct pvr_rt_dataset *rt_dataset)
 {
-   for (uint32_t i = 0; i < ARRAY_SIZE(rt_dataset->rt_datas); i++) {
-      rt_dataset->rt_datas[i].mlist_dev_addr = PVR_DEV_ADDR_INVALID;
+   if (rt_dataset->mta_bo == NULL)
+      return;
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(rt_dataset->rt_datas); i++)
       rt_dataset->rt_datas[i].mta_dev_addr = PVR_DEV_ADDR_INVALID;
+
+   pvr_bo_free(rt_dataset->device, rt_dataset->mta_bo);
+   rt_dataset->mta_bo = NULL;
+}
+
+static VkResult
+pvr_rt_mlist_data_init(struct pvr_device *device,
+                       struct pvr_rt_dataset *rt_dataset,
+                       const struct pvr_free_list *global_free_list,
+                       const struct pvr_free_list *local_free_list)
+{
+   const uint32_t mlist_size =
+      pvr_rt_get_mlist_size(global_free_list, local_free_list);
+   const uint32_t num_rt_datas = ARRAY_SIZE(rt_dataset->rt_datas);
+   pvr_dev_addr_t dev_addr;
+   VkResult result;
+
+   /* No known cores where the Mlist size could be 0 */
+   assert(mlist_size > 0);
+
+   result = pvr_bo_alloc(device,
+                         device->heaps.general_heap,
+                         mlist_size * num_rt_datas,
+                         ROGUE_CR_PM_MTILE_ARRAY_BASE_ADDR_ALIGNMENT,
+                         PVR_BO_ALLOC_FLAG_GPU_UNCACHED |
+                            PVR_BO_ALLOC_FLAG_PM_FW_PROTECT,
+                         &rt_dataset->mlist_bo);
+   if (result != VK_SUCCESS)
+      return result;
+
+   dev_addr = rt_dataset->mlist_bo->vma->dev_addr;
+
+   for (uint32_t i = 0; i < num_rt_datas; i++) {
+      rt_dataset->rt_datas[i].mlist_dev_addr = dev_addr;
+      dev_addr = PVR_DEV_ADDR_OFFSET(dev_addr, mlist_size);
    }
 
-   pvr_bo_free(rt_dataset->device, rt_dataset->mta_mlist_bo);
-   rt_dataset->mta_mlist_bo = NULL;
+   return VK_SUCCESS;
+}
+
+static void pvr_rt_mlist_data_fini(struct pvr_rt_dataset *rt_dataset)
+{
+   for (uint32_t i = 0; i < ARRAY_SIZE(rt_dataset->rt_datas); i++)
+      rt_dataset->rt_datas[i].mlist_dev_addr = PVR_DEV_ADDR_INVALID;
+
+   pvr_bo_free(rt_dataset->device, rt_dataset->mlist_bo);
+   rt_dataset->mlist_bo = NULL;
 }
 
 static VkResult
@@ -705,31 +749,38 @@ static VkResult pvr_rt_datas_init(struct pvr_device *device,
 {
    VkResult result;
 
-   result = pvr_rt_mta_mlist_data_init(device,
-                                       rt_dataset,
-                                       global_free_list,
-                                       local_free_list,
-                                       mtile_info);
+   result = pvr_rt_mta_data_init(device, rt_dataset);
    if (result != VK_SUCCESS)
       return result;
+
+   result = pvr_rt_mlist_data_init(device,
+                                   rt_dataset,
+                                   global_free_list,
+                                   local_free_list);
+   if (result != VK_SUCCESS)
+      goto err_pvr_rt_mta_data_fini;
 
    result =
       pvr_rt_rgn_headers_data_init(device, rt_dataset, mtile_info, layers);
    if (result != VK_SUCCESS)
-      goto err_pvr_rt_mta_mlist_data_fini;
+      goto err_pvr_rt_mlist_data_fini;
 
    return VK_SUCCESS;
 
-err_pvr_rt_mta_mlist_data_fini:
-   pvr_rt_mta_mlist_data_fini(rt_dataset);
+err_pvr_rt_mlist_data_fini:
+   pvr_rt_mlist_data_fini(rt_dataset);
 
-   return VK_SUCCESS;
+err_pvr_rt_mta_data_fini:
+   pvr_rt_mta_data_fini(rt_dataset);
+
+   return result;
 }
 
 static void pvr_rt_datas_fini(struct pvr_rt_dataset *rt_dataset)
 {
    pvr_rt_rgn_headers_data_fini(rt_dataset);
-   pvr_rt_mta_mlist_data_fini(rt_dataset);
+   pvr_rt_mlist_data_fini(rt_dataset);
+   pvr_rt_mta_data_fini(rt_dataset);
 }
 
 static void pvr_rt_dataset_ws_create_info_init(
@@ -952,7 +1003,7 @@ static void pvr_geom_state_stream_init(struct pvr_render_ctx *ctx,
                  CR_TPU_BORDER_COLOUR_TABLE_VDM,
                  value) {
       value.border_colour_table_address =
-         device->border_color_table.table->vma->dev_addr;
+         device->border_color_table->table->vma->dev_addr;
    }
    stream_ptr += pvr_cmd_length(CR_TPU_BORDER_COLOUR_TABLE_VDM);
 
@@ -963,9 +1014,11 @@ static void pvr_geom_state_stream_init(struct pvr_render_ctx *ctx,
    stream_ptr += pvr_cmd_length(CR_PPP_CTRL);
 
    pvr_csb_pack (stream_ptr, CR_TE_PSG, value) {
+      struct pvr_rt_dataset *rt_dataset =
+         job->view_state.rt_datasets[job->view_state.view_index];
       value.completeonterminate = job->geometry_terminate;
 
-      value.region_stride = job->rt_dataset->rgn_headers_stride /
+      value.region_stride = rt_dataset->rgn_headers_stride /
                             ROGUE_CR_TE_PSG_REGION_STRIDE_UNIT_SIZE;
 
       value.forcenewstate = PVR_HAS_QUIRK(dev_info, 52942);
@@ -986,9 +1039,9 @@ static void pvr_geom_state_stream_init(struct pvr_render_ctx *ctx,
    }
    stream_ptr += pvr_cmd_length(VDMCTRL_PDS_STATE0);
 
-   /* clang-format off */
-   pvr_csb_pack (stream_ptr, KMD_STREAM_VIEW_IDX, value);
-   /* clang-format on */
+   pvr_csb_pack (stream_ptr, KMD_STREAM_VIEW_IDX, value) {
+      value.idx = job->view_state.view_index;
+   }
    stream_ptr += pvr_cmd_length(KMD_STREAM_VIEW_IDX);
 
    state->fw_stream_len = (uint8_t *)stream_ptr - (uint8_t *)state->fw_stream;
@@ -1041,7 +1094,8 @@ pvr_geom_state_flags_init(const struct pvr_render_job *const job,
                           struct pvr_winsys_geometry_state_flags *flags)
 {
    *flags = (struct pvr_winsys_geometry_state_flags){
-      .is_first_geometry = !job->rt_dataset->need_frag,
+      .is_first_geometry =
+         !job->view_state.rt_datasets[job->view_state.view_index]->need_frag,
       .is_last_geometry = job->geometry_terminate,
       .use_single_core = job->frag_uses_atomic_ops,
    };
@@ -1118,12 +1172,16 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
    const struct pvr_device_runtime_info *dev_runtime_info =
       &pdevice->dev_runtime_info;
    const struct pvr_device_info *dev_info = &pdevice->dev_info;
+   const struct pvr_rt_dataset *rt_dataset =
+      job->view_state.rt_datasets[job->view_state.view_index];
    const enum ROGUE_CR_ISP_AA_MODE_TYPE isp_aa_mode =
       pvr_cr_isp_aa_mode_type(job->samples);
+   struct pvr_rt_mtile_info tiling_info = { 0 };
 
    enum ROGUE_CR_ZLS_FORMAT_TYPE zload_format = ROGUE_CR_ZLS_FORMAT_TYPE_F32Z;
    uint32_t *stream_ptr = (uint32_t *)state->fw_stream;
    uint32_t *stream_len_ptr = stream_ptr;
+   uint32_t view_index;
    uint32_t pixel_ctl;
    uint32_t isp_ctl;
 
@@ -1208,6 +1266,7 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
 
       value.forcezload = value.zloaden || value.sloaden;
       value.forcezstore = value.zstoreen || value.sstoreen;
+      value.zonlyrender = job->z_only_render;
    }
    stream_ptr += pvr_cmd_length(CR_ISP_ZLSCTL);
 
@@ -1260,24 +1319,32 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
                  CR_TPU_BORDER_COLOUR_TABLE_PDM,
                  value) {
       value.border_colour_table_address =
-         device->border_color_table.table->vma->dev_addr;
+         device->border_color_table->table->vma->dev_addr;
    }
    stream_ptr += pvr_cmd_length(CR_TPU_BORDER_COLOUR_TABLE_PDM);
 
-   STATIC_ASSERT(ARRAY_SIZE(job->pds_bgnd_reg_values) ==
+   STATIC_ASSERT(ARRAY_SIZE(job->view_state.view[0].pds_bgnd_reg_values) ==
                  ROGUE_NUM_CR_PDS_BGRND_WORDS);
-   STATIC_ASSERT(sizeof(job->pds_bgnd_reg_values[0]) == sizeof(uint64_t));
+   STATIC_ASSERT(sizeof(job->view_state.view[0].pds_bgnd_reg_values[0]) ==
+                 sizeof(uint64_t));
+
+   if (job->view_state.force_pds_bgnd_reg_values_zero)
+      view_index = 0;
+   else
+      view_index = job->view_state.view_index;
+
    memcpy(stream_ptr,
-          job->pds_bgnd_reg_values,
-          sizeof(job->pds_bgnd_reg_values));
+          job->view_state.view[view_index].pds_bgnd_reg_values,
+          sizeof(job->view_state.view[view_index].pds_bgnd_reg_values));
    stream_ptr += ROGUE_NUM_CR_PDS_BGRND_WORDS * DWORDS_PER_U64;
 
-   STATIC_ASSERT(ARRAY_SIZE(job->pds_pr_bgnd_reg_values) ==
+   STATIC_ASSERT(ARRAY_SIZE(job->view_state.view[0].pr_pds_bgnd_reg_values) ==
                  ROGUE_NUM_CR_PDS_BGRND_WORDS);
-   STATIC_ASSERT(sizeof(job->pds_pr_bgnd_reg_values[0]) == sizeof(uint64_t));
+   STATIC_ASSERT(sizeof(job->view_state.view[0].pr_pds_bgnd_reg_values[0]) ==
+                 sizeof(uint64_t));
    memcpy(stream_ptr,
-          job->pds_pr_bgnd_reg_values,
-          sizeof(job->pds_pr_bgnd_reg_values));
+          job->view_state.view[view_index].pr_pds_bgnd_reg_values,
+          sizeof(job->view_state.view[view_index].pr_pds_bgnd_reg_values));
    stream_ptr += ROGUE_NUM_CR_PDS_BGRND_WORDS * DWORDS_PER_U64;
 
 #undef DWORDS_PER_U64
@@ -1301,6 +1368,7 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
        */
       switch (zload_format) {
       case ROGUE_CR_ZLS_FORMAT_TYPE_F32Z:
+      case ROGUE_CR_ZLS_FORMAT_TYPE_F64Z:
          value.value = fui(depth_clear);
          break;
 
@@ -1313,7 +1381,7 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
          break;
 
       default:
-         unreachable("Unsupported depth format");
+         UNREACHABLE("Unsupported depth format");
       }
    }
    stream_ptr += pvr_cmd_length(CR_ISP_BGOBJDEPTH);
@@ -1332,6 +1400,11 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
    }
    stream_ptr += pvr_cmd_length(CR_ISP_AA);
 
+   pvr_rt_mtile_info_init(dev_info,
+                          &tiling_info,
+                          rt_dataset->width,
+                          rt_dataset->height,
+                          rt_dataset->samples);
    pvr_csb_pack (stream_ptr, CR_ISP_CTL, value) {
       value.sample_pos = true;
       value.process_empty_tiles = job->process_empty_tiles;
@@ -1342,6 +1415,31 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
        */
       value.dbias_is_int = PVR_HAS_ERN(dev_info, 42307) &&
                            pvr_zls_format_type_is_int(job->ds.zls_format);
+
+      if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
+         value.skip_init_hdrs = true;
+
+         if (PVR_HAS_QUIRK(dev_info, 72168)) {
+            /* x_tile_max is the 0-based index of the last 16x16 tile in a row.
+             * We cannot set SKIP_INIT_HDRS if the number of tile group rows is
+             * odd AND the width is <= 2 tiles.
+             */
+            if (((((tiling_info.y_tile_max + 1) / 2) & 0x1) == 1) &&
+                (tiling_info.x_tile_max <= 1)) {
+               value.skip_init_hdrs = false;
+            }
+         }
+
+         if (PVR_HAS_QUIRK(dev_info, 72463)) {
+            /* We cannot set SKIP_INIT_HDRS if the number of tile group rows is
+             * <= 2 AND the width is <= 2 tiles.
+             */
+            if ((((tiling_info.y_tile_max + 1) / 2) <= 2) &&
+                (tiling_info.x_tile_max <= 1)) {
+               value.skip_init_hdrs = false;
+            }
+         }
+      }
    }
    /* FIXME: When pvr_setup_tiles_in_flight() is refactored it might be
     * possible to fully pack CR_ISP_CTL above rather than having to OR in part
@@ -1382,9 +1480,9 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
       stream_ptr += pvr_cmd_length(KMD_STREAM_PIXEL_PHANTOM);
    }
 
-   /* clang-format off */
-   pvr_csb_pack (stream_ptr, KMD_STREAM_VIEW_IDX, value);
-   /* clang-format on */
+   pvr_csb_pack (stream_ptr, KMD_STREAM_VIEW_IDX, value) {
+      value.idx = job->view_state.view_index;
+   }
    stream_ptr += pvr_cmd_length(KMD_STREAM_VIEW_IDX);
 
    /* Make sure that the pvr_frag_km_...() function is returning the correct
@@ -1393,14 +1491,20 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
    assert((uint8_t *)stream_ptr - (uint8_t *)state->fw_stream ==
           pvr_frag_km_stream_pds_eot_data_addr_offset(dev_info));
 
+   if (job->view_state.force_pds_pixel_event_data_offset_zero)
+      view_index = 0;
+   else
+      view_index = job->view_state.view_index;
+
    pvr_csb_pack (stream_ptr, CR_EVENT_PIXEL_PDS_DATA, value) {
-      value.addr = PVR_DEV_ADDR(job->pds_pixel_event_data_offset);
+      value.addr = PVR_DEV_ADDR(
+         job->view_state.view[view_index].pds_pixel_event_data_offset);
    }
    stream_ptr += pvr_cmd_length(CR_EVENT_PIXEL_PDS_DATA);
 
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
-      pvr_finishme(
-         "Emit isp_oclqry_stride when feature gpu_multicore_support is present");
+      if (device->pdevice->dev_runtime_info.core_count > 1)
+         pvr_finishme("Emit isp_oclqry_stride, core_count is greater than one");
       *stream_ptr = 0;
       stream_ptr++;
    }
@@ -1429,8 +1533,8 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
    stream_ptr++;
 
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
-      pvr_finishme(
-         "Emit execute_count when feature gpu_multicore_support is present");
+      if (device->pdevice->dev_runtime_info.core_count > 1)
+         pvr_finishme("Emit execute_count core_count is greater than one");
       *stream_ptr = 0;
       stream_ptr++;
    }
@@ -1536,6 +1640,14 @@ static void pvr_render_job_ws_fragment_pr_init_based_on_fragment_state(
       pvr_frag_km_stream_pbe_reg_words_offset(dev_info);
    const uint32_t eot_data_addr_byte_offset =
       pvr_frag_km_stream_pds_eot_data_addr_offset(dev_info);
+   const uint32_t view_index =
+      job->view_state.force_pds_pixel_event_data_offset_zero
+         ? 0
+         : job->view_state.view_index;
+   const uint32_t pr_pds_pixel_event_data_offset =
+      job->view_state.use_pds_pixel_event_data_offset
+         ? job->view_state.view[view_index].pds_pixel_event_data_offset
+         : job->pr_pds_pixel_event_data_offset;
 
    /* Massive copy :( */
    *state = *frag;
@@ -1550,10 +1662,11 @@ static void pvr_render_job_ws_fragment_pr_init_based_on_fragment_state(
    assert(state->fw_stream_len >=
           eot_data_addr_byte_offset +
              PVR_DW_TO_BYTES(pvr_cmd_length(CR_EVENT_PIXEL_PDS_DATA)));
+
    pvr_csb_pack ((uint32_t *)&state->fw_stream[eot_data_addr_byte_offset],
                  CR_EVENT_PIXEL_PDS_DATA,
                  eot_pds_data) {
-      eot_pds_data.addr = PVR_DEV_ADDR(job->pr_pds_pixel_event_data_offset);
+      eot_pds_data.addr = PVR_DEV_ADDR(pr_pds_pixel_event_data_offset);
    }
 }
 
@@ -1566,8 +1679,10 @@ static void pvr_render_job_ws_submit_info_init(
 {
    memset(submit_info, 0, sizeof(*submit_info));
 
-   submit_info->rt_dataset = job->rt_dataset->ws_rt_dataset;
-   submit_info->rt_data_idx = job->rt_dataset->rt_data_idx;
+   submit_info->rt_dataset =
+      job->view_state.rt_datasets[job->view_state.view_index]->ws_rt_dataset;
+   submit_info->rt_data_idx =
+      job->view_state.rt_datasets[job->view_state.view_index]->rt_data_idx;
 
    submit_info->frame_num = ctx->device->global_queue_present_count;
    submit_info->job_num = ctx->device->global_cmd_buffer_submit_count;
@@ -1608,7 +1723,8 @@ VkResult pvr_render_job_submit(struct pvr_render_ctx *ctx,
                                struct vk_sync *signal_sync_geom,
                                struct vk_sync *signal_sync_frag)
 {
-   struct pvr_rt_dataset *rt_dataset = job->rt_dataset;
+   struct pvr_rt_dataset *rt_dataset =
+      job->view_state.rt_datasets[job->view_state.view_index];
    struct pvr_winsys_render_submit_info submit_info;
    struct pvr_device *device = ctx->device;
    VkResult result;

@@ -39,6 +39,7 @@ static const struct vk_instance_extension_table
 #ifdef VN_USE_WSI_PLATFORM
       .KHR_get_surface_capabilities2 = true,
       .KHR_surface = true,
+      .KHR_surface_maintenance1 = true,
       .KHR_surface_protected_capabilities = true,
       .EXT_surface_maintenance1 = true,
       .EXT_swapchain_colorspace = true,
@@ -268,9 +269,6 @@ vn_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                   const VkAllocationCallbacks *pAllocator,
                   VkInstance *pInstance)
 {
-   vn_trace_init();
-   VN_TRACE_FUNC();
-
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : vk_default_allocator();
    struct vn_instance *instance;
@@ -295,6 +293,9 @@ vn_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
       vk_free(alloc, instance);
       return vn_error(NULL, result);
    }
+
+   /* util_cpu_trace_init is called by vk_instance_init */
+   VN_TRACE_FUNC();
 
    VkInstance instance_handle = vn_instance_to_handle(instance);
    /* ring_idx = 0 reserved for CPU timeline */

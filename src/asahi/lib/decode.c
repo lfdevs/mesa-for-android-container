@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "util/os_misc.h"
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
 #include <sys/mman.h>
@@ -84,7 +85,7 @@ _agxdecode_grab_mapped(struct agxdecode_ctx *ctx, uint64_t gpu_va, void **buf,
                        int line, const char *filename)
 {
    if (lib_config.read_gpu_mem)
-      unreachable("you'll have to figure it out.");
+      UNREACHABLE("you'll have to figure it out.");
 
    const struct agx_bo *mem =
       agxdecode_find_mapped_gpu_mem_containing(ctx, gpu_va);
@@ -912,7 +913,7 @@ agxdecode_drm_cmdbuf(struct agxdecode_ctx *ctx,
       } else if (header->cmd_type == DRM_ASAHI_SET_COMPUTE_ATTACHMENTS) {
          agxdecode_drm_attachments("Compute", data, header->size);
       } else {
-         unreachable("Invalid command type");
+         UNREACHABLE("Invalid command type");
       }
 
       offs += header->size;
@@ -992,7 +993,7 @@ agxdecode_track_alloc(struct agxdecode_ctx *ctx, struct agx_bo *alloc)
       assert(!match && "tried to alloc already allocated BO");
    }
 
-   util_dynarray_append(&ctx->mmap_array, struct agx_bo, *alloc);
+   util_dynarray_append(&ctx->mmap_array, *alloc);
 }
 
 void
@@ -1020,11 +1021,11 @@ agxdecode_dump_file_open(void)
    if (agxdecode_dump_stream)
       return;
 
-   /* This does a getenv every frame, so it is possible to use
-    * setenv to change the base at runtime.
+   /* This does a os_get_option every frame, so it is possible to use
+    * os_set_option to change the base at runtime.
     */
    const char *dump_file_base =
-      getenv("AGXDECODE_DUMP_FILE") ?: "agxdecode.dump";
+      os_get_option("AGXDECODE_DUMP_FILE") ?: "agxdecode.dump";
    if (!strcmp(dump_file_base, "stderr"))
       agxdecode_dump_stream = stderr;
    else {
@@ -1085,7 +1086,7 @@ libagxdecode_init(struct libagxdecode_config *config)
    chip_id_to_params(&lib_params, config->chip_id);
 #else
    /* fopencookie is a glibc extension */
-   unreachable("libagxdecode only available with glibc");
+   UNREACHABLE("libagxdecode only available with glibc");
 #endif
 }
 

@@ -111,10 +111,12 @@ void pvr_dump_physical_device_info(const struct pvr_device_dump_info *dump_info)
    pvr_dump_field_string(&ctx, "MESA ", PACKAGE_VERSION MESA_GIT_SHA1);
    pvr_dump_dedent(&ctx);
 
-   pvr_dump_mark_section(&ctx, "Display Platform Compatible Strings");
-   pvr_dump_indent(&ctx);
-   pvr_dump_field_compatible_strings(&ctx, dump_info->drm_display.comp);
-   pvr_dump_dedent(&ctx);
+   if (dump_info->drm_display.comp) {
+      pvr_dump_mark_section(&ctx, "Display Platform Compatible Strings");
+      pvr_dump_indent(&ctx);
+      pvr_dump_field_compatible_strings(&ctx, dump_info->drm_display.comp);
+      pvr_dump_dedent(&ctx);
+   }
 
    pvr_dump_mark_section(&ctx, "Render Platform Compatible Strings");
    pvr_dump_indent(&ctx);

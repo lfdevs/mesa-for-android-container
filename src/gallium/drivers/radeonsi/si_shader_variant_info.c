@@ -25,6 +25,16 @@ void si_get_shader_variant_info(struct si_shader *shader,
        */
       for (unsigned i = 0; i < ARRAY_SIZE(shader->info.ps_inputs); i++)
          shader->info.ps_inputs[i].interpolate = INTERP_MODE_FLAT;
+
+      shader->info.num_ps_per_primitive_inputs =
+         util_bitcount64(nir->info.per_primitive_inputs);
+
+      /* gl_Layer is always from shader arg, not varying */
+      uint64_t maybe_per_prim_inputs =
+         nir->info.inputs_read & ~nir->info.per_primitive_inputs &
+         (VARYING_BIT_PRIMITIVE_ID | VARYING_BIT_VIEWPORT);
+      shader->info.num_ps_maybe_per_primitive_inputs =
+         util_bitcount64(maybe_per_prim_inputs);
    }
 
    nir_foreach_block(block, nir_shader_get_entrypoint(nir)) {
@@ -50,6 +60,7 @@ void si_get_shader_variant_info(struct si_shader *shader,
             case nir_intrinsic_load_input:
             case nir_intrinsic_load_input_vertex:
             case nir_intrinsic_load_per_vertex_input:
+            case nir_intrinsic_load_per_primitive_input:
             case nir_intrinsic_load_interpolated_input: {
                if (nir->info.stage == MESA_SHADER_VERTEX) {
                   shader->info.uses_vmem_load_other = true;
@@ -78,6 +89,9 @@ void si_get_shader_variant_info(struct si_shader *shader,
                      shader->info.ps_inputs[index].interpolate = INTERP_MODE_SMOOTH;
                      if (intr->def.bit_size == 16)
                         shader->info.ps_inputs[index].fp16_lo_hi_valid |= 0x1 << sem.high_16bits;
+                  } else if (intr->intrinsic == nir_intrinsic_load_per_primitive_input) {
+                     /* per primitive input from mesh shader */
+                     shader->info.ps_inputs[index].interpolate = INTERP_MODE_NONE;
                   }
                }
                break;
@@ -128,6 +142,7 @@ void si_get_shader_variant_info(struct si_shader *shader,
                   shader->info.uses_vmem_load_other = true;
                break;
             case nir_intrinsic_store_output:
+            case nir_intrinsic_store_per_vertex_output:
                if (nir->info.stage == MESA_SHADER_FRAGMENT) {
                   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
@@ -137,8 +152,9 @@ void si_get_shader_variant_info(struct si_shader *shader,
                      shader->info.writes_stencil = true;
                   else if (sem.location == FRAG_RESULT_SAMPLE_MASK)
                      shader->info.writes_sample_mask = true;
-               } else if (nir->info.stage <= MESA_SHADER_GEOMETRY &&
-                          !shader->key.ge.as_ls && !shader->key.ge.as_es) {
+               } else if ((nir->info.stage <= MESA_SHADER_GEOMETRY &&
+                           !shader->key.ge.as_ls && !shader->key.ge.as_es) ||
+                          nir->info.stage == MESA_SHADER_MESH) {
                   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
                   /* Clip/cull distances must be gathered manually because nir_opt_clip_cull_const
@@ -270,22 +286,22 @@ void si_get_shader_variant_info(struct si_shader *shader,
       }
    }
 
-   if (nir->info.stage <= MESA_SHADER_GEOMETRY) {
-      if (!shader->key.ge.as_ls && !shader->key.ge.as_es) {
-         if (nir->xfb_info) {
-            unsigned num_streamout_dwords = 0;
+   if ((nir->info.stage <= MESA_SHADER_GEOMETRY &&
+        !shader->key.ge.as_ls && !shader->key.ge.as_es) ||
+       nir->info.stage == MESA_SHADER_MESH) {
+      if (nir->xfb_info) {
+         unsigned num_streamout_dwords = 0;
 
-            for (unsigned i = 0; i < 4; i++)
-               num_streamout_dwords += nir->info.xfb_stride[i];
-            shader->info.num_streamout_vec4s = DIV_ROUND_UP(num_streamout_dwords, 4);
-         }
-
-         if (shader->key.ge.mono.write_pos_to_clipvertex ||
-             nir->info.outputs_written & VARYING_BIT_CLIP_VERTEX)
-            shader->info.clipdist_mask = SI_USER_CLIP_PLANE_MASK;
-
-         shader->info.clipdist_mask &= ~shader->key.ge.opt.kill_clip_distances;
+         for (unsigned i = 0; i < 4; i++)
+            num_streamout_dwords += nir->info.xfb_stride[i];
+         shader->info.num_streamout_vec4s = DIV_ROUND_UP(num_streamout_dwords, 4);
       }
+
+      if (shader->key.ge.mono.write_pos_to_clipvertex ||
+          nir->info.outputs_written & VARYING_BIT_CLIP_VERTEX)
+         shader->info.clipdist_mask = SI_USER_CLIP_PLANE_MASK;
+
+      shader->info.clipdist_mask &= ~shader->key.ge.opt.kill_clip_distances;
    }
 }
 
@@ -293,6 +309,9 @@ void si_get_shader_variant_info(struct si_shader *shader,
 void si_get_late_shader_variant_info(struct si_shader *shader, struct si_shader_args *args,
                                      nir_shader *nir)
 {
+   /* mesh shader know this after ac_nir_lower_ngg_mesh() */
+   shader->info.shared_size = nir->info.shared_size;
+
    nir_foreach_block(block, nir_shader_get_entrypoint(nir)) {
       nir_foreach_instr(instr, block) {
          if (instr->type != nir_instr_type_intrinsic)

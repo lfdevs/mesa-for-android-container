@@ -506,9 +506,6 @@ nouveau_vp3_screen_get_video_param(struct pipe_screen *pscreen,
       }
    case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
       return PIPE_FORMAT_NV12;
-   case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-   case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-      return true;
    case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
       return false;
    case PIPE_VIDEO_CAP_MAX_LEVEL:

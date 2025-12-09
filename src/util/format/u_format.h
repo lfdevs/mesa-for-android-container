@@ -1301,133 +1301,6 @@ util_format_get_num_planes(enum pipe_format format)
    }
 }
 
-static inline enum pipe_format
-util_format_get_plane_format(enum pipe_format format, unsigned plane)
-{
-   switch (format) {
-   case PIPE_FORMAT_YV12:
-   case PIPE_FORMAT_YV16:
-   case PIPE_FORMAT_IYUV:
-   case PIPE_FORMAT_Y8_U8_V8_422_UNORM:
-   case PIPE_FORMAT_Y8_U8_V8_444_UNORM:
-   case PIPE_FORMAT_Y8_400_UNORM:
-   case PIPE_FORMAT_R8_G8_B8_UNORM:
-   case PIPE_FORMAT_Y8_U8_V8_440_UNORM:
-      return PIPE_FORMAT_R8_UNORM;
-   case PIPE_FORMAT_NV12:
-   case PIPE_FORMAT_NV16:
-   case PIPE_FORMAT_R8_G8B8_420_UNORM:
-   case PIPE_FORMAT_R8_G8B8_422_UNORM:
-      return !plane ? PIPE_FORMAT_R8_UNORM : PIPE_FORMAT_RG88_UNORM;
-   case PIPE_FORMAT_NV21:
-   case PIPE_FORMAT_R8_B8G8_420_UNORM:
-   case PIPE_FORMAT_R8_B8G8_422_UNORM:
-      return !plane ? PIPE_FORMAT_R8_UNORM : PIPE_FORMAT_GR88_UNORM;
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_420_UNORM:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_422_UNORM:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_444_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_420_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_422_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_444_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_420_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_422_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_444_UNORM:
-      return PIPE_FORMAT_R16_UNORM;
-   case PIPE_FORMAT_P010:
-   case PIPE_FORMAT_P012:
-   case PIPE_FORMAT_P016:
-   case PIPE_FORMAT_P030:
-   case PIPE_FORMAT_Y16_U16V16_422_UNORM:
-      return !plane ? PIPE_FORMAT_R16_UNORM : PIPE_FORMAT_R16G16_UNORM;
-   default:
-      return format;
-   }
-}
-
-static inline unsigned
-util_format_get_plane_width(enum pipe_format format, unsigned plane,
-                            unsigned width)
-{
-   switch (format) {
-   case PIPE_FORMAT_YV12:
-   case PIPE_FORMAT_YV16:
-   case PIPE_FORMAT_IYUV:
-   case PIPE_FORMAT_NV12:
-   case PIPE_FORMAT_NV21:
-   case PIPE_FORMAT_P010:
-   case PIPE_FORMAT_P012:
-   case PIPE_FORMAT_P016:
-   case PIPE_FORMAT_P030:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_420_UNORM:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_422_UNORM:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_444_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_420_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_422_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_444_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_420_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_422_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_444_UNORM:
-   case PIPE_FORMAT_Y8_U8_V8_422_UNORM:
-   case PIPE_FORMAT_NV16:
-   case PIPE_FORMAT_Y16_U16V16_422_UNORM:
-   case PIPE_FORMAT_R8_G8B8_420_UNORM:
-   case PIPE_FORMAT_R8_B8G8_420_UNORM:
-   case PIPE_FORMAT_G8_B8R8_420_UNORM:
-   case PIPE_FORMAT_R8_G8B8_422_UNORM:
-   case PIPE_FORMAT_R8_B8G8_422_UNORM:
-   case PIPE_FORMAT_G8_B8R8_422_UNORM:
-   case PIPE_FORMAT_R8_G8_B8_420_UNORM:
-   case PIPE_FORMAT_R8_B8_G8_420_UNORM:
-   case PIPE_FORMAT_G8_B8_R8_420_UNORM:
-   case PIPE_FORMAT_R10_G10B10_420_UNORM:
-   case PIPE_FORMAT_R10_G10B10_422_UNORM:
-   case PIPE_FORMAT_X6G10_X6B10X6R10_420_UNORM:
-   case PIPE_FORMAT_X4G12_X4B12X4R12_420_UNORM:
-      return !plane ? width : (width + 1) / 2;
-   default:
-      return width;
-   }
-}
-
-static inline unsigned
-util_format_get_plane_height(enum pipe_format format, unsigned plane,
-                             unsigned height)
-{
-   switch (format) {
-   case PIPE_FORMAT_YV12:
-   case PIPE_FORMAT_IYUV:
-   case PIPE_FORMAT_NV12:
-   case PIPE_FORMAT_NV21:
-   case PIPE_FORMAT_P010:
-   case PIPE_FORMAT_P012:
-   case PIPE_FORMAT_P016:
-   case PIPE_FORMAT_P030:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_420_UNORM:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_422_UNORM:
-   case PIPE_FORMAT_Y10X6_U10X6_V10X6_444_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_420_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_422_UNORM:
-   case PIPE_FORMAT_Y12X4_U12X4_V12X4_444_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_420_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_422_UNORM:
-   case PIPE_FORMAT_Y16_U16_V16_444_UNORM:
-   case PIPE_FORMAT_Y8_U8_V8_440_UNORM:
-   case PIPE_FORMAT_R8_G8B8_420_UNORM:
-   case PIPE_FORMAT_R8_B8G8_420_UNORM:
-   case PIPE_FORMAT_G8_B8R8_420_UNORM:
-   case PIPE_FORMAT_R8_G8_B8_420_UNORM:
-   case PIPE_FORMAT_R8_B8_G8_420_UNORM:
-   case PIPE_FORMAT_G8_B8_R8_420_UNORM:
-   case PIPE_FORMAT_R10_G10B10_420_UNORM:
-   case PIPE_FORMAT_X6G10_X6B10X6R10_420_UNORM:
-   case PIPE_FORMAT_X4G12_X4B12X4R12_420_UNORM:
-      return !plane ? height : (height + 1) / 2;
-   case PIPE_FORMAT_YV16:
-   default:
-      return height;
-   }
-}
-
 /**
  * Return the number of components stored.
  * Formats with block size != 1x1 will always have 1 component (the block).
@@ -1672,9 +1545,6 @@ void pipe_swizzle_4f(float *dst, const float *src,
 void util_format_unswizzle_4f(float *dst, const float *src,
                               const unsigned char swz[4]);
 
-enum pipe_format
-util_format_snorm_to_sint(enum pipe_format format) ATTRIBUTE_CONST;
-
 extern void
 util_copy_rect(void * dst, enum pipe_format format,
                unsigned dst_stride, unsigned dst_x, unsigned dst_y,
@@ -1687,10 +1557,6 @@ util_copy_rect(void * dst, enum pipe_format format,
  */
 enum pipe_format
 util_format_rgb_to_bgr(enum pipe_format format);
-
-/* Returns the pipe format with SNORM formats cast to UNORM, otherwise the original pipe format. */
-enum pipe_format
-util_format_snorm_to_unorm(enum pipe_format format);
 
 enum pipe_format
 util_format_rgbx_to_rgba(enum pipe_format format);

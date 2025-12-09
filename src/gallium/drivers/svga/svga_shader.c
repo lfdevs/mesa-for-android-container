@@ -256,7 +256,7 @@ isValidSampleCFormat(enum pipe_format format)
  */
 void
 svga_init_shader_key_common(const struct svga_context *svga,
-                            enum pipe_shader_type shader_type,
+                            mesa_shader_stage shader_type,
                             const struct svga_shader *shader,
                             struct svga_compile_key *key)
 {
@@ -473,7 +473,7 @@ svga_init_shader_key_common(const struct svga_context *svga,
          /* Save the uavSpliceIndex which is the index used for the first uav
           * in the draw pipeline. For compute, uavSpliceIndex is always 0.
           */
-         if (shader_type != PIPE_SHADER_COMPUTE)
+         if (shader_type != MESA_SHADER_COMPUTE)
             key->uav_splice_index = svga->state.hw_draw.uavSpliceIndex;
 
          unsigned uav_splice_index = key->uav_splice_index;
@@ -771,27 +771,27 @@ svga_set_shader(struct svga_context *svga,
 
 
 struct svga_shader_variant *
-svga_new_shader_variant(struct svga_context *svga, enum pipe_shader_type type)
+svga_new_shader_variant(struct svga_context *svga, mesa_shader_stage type)
 {
    struct svga_shader_variant *variant;
 
    switch (type) {
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       variant = CALLOC(1, sizeof(struct svga_fs_variant));
       break;
-   case PIPE_SHADER_GEOMETRY:
+   case MESA_SHADER_GEOMETRY:
       variant = CALLOC(1, sizeof(struct svga_gs_variant));
       break;
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       variant = CALLOC(1, sizeof(struct svga_vs_variant));
       break;
-   case PIPE_SHADER_TESS_EVAL:
+   case MESA_SHADER_TESS_EVAL:
       variant = CALLOC(1, sizeof(struct svga_tes_variant));
       break;
-   case PIPE_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_CTRL:
       variant = CALLOC(1, sizeof(struct svga_tcs_variant));
       break;
-   case PIPE_SHADER_COMPUTE:
+   case MESA_SHADER_COMPUTE:
       variant = CALLOC(1, sizeof(struct svga_cs_variant));
       break;
    default:
@@ -914,7 +914,7 @@ svga_rebind_shaders(struct svga_context *svga)
 struct svga_shader *
 svga_create_shader(struct pipe_context *pipe,
                    const struct pipe_shader_state *templ,
-                   enum pipe_shader_type stage,
+                   mesa_shader_stage stage,
                    unsigned shader_structlen)
 {
    struct svga_context *svga = svga_context(pipe);

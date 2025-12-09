@@ -432,7 +432,7 @@ i915_create_surface_custom(struct pipe_context *ctx, struct pipe_resource *pt,
    return ps;
 }
 
-static struct pipe_surface *
+struct pipe_surface *
 i915_create_surface(struct pipe_context *ctx, struct pipe_resource *pt,
                     const struct pipe_surface *surf_tmpl)
 {
@@ -440,7 +440,7 @@ i915_create_surface(struct pipe_context *ctx, struct pipe_resource *pt,
                                      pt->height0);
 }
 
-static void
+void
 i915_surface_destroy(struct pipe_context *ctx, struct pipe_surface *surf)
 {
    pipe_resource_reference(&surf->texture, NULL);
@@ -461,6 +461,4 @@ i915_init_surface_functions(struct i915_context *i915)
    }
    i915->base.blit = i915_blit;
    i915->base.flush_resource = i915_flush_resource;
-   i915->base.create_surface = i915_create_surface;
-   i915->base.surface_destroy = i915_surface_destroy;
 }

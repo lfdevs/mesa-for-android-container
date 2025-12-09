@@ -1,13 +1,9 @@
 dEQP-GLES2.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_component16
 
-# First seen in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/69489085 and https://gitlab.freedesktop.org/mesa/mesa/-/jobs/69488933
-x11-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.texsubimage2d.14
-x11-dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_server_sync.textures.copyteximage2d_copytexsubimage2d_render
-x11-dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_sync.textures.copyteximage2d_texsubimage2d_render
-x11-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.images.copyteximage2d.17
-x11-dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_sync.images.texture_source.copyteximage2d_render
-x11-dEQP-EGL.functional.sharing.gles2.multithread.simple.textures.copyteximage2d_texsubimage2d_render
-x11-dEQP-EGL.functional.sharing.gles2.multithread.simple.textures.teximage2d_copytexsubimage2d_render
+# First seen early 2025, persisting across both X11 and Wayland, with all the
+# multithreading tests. Example: https://gitlab.freedesktop.org/mesa/mesa/-/jobs/84352269
+# Fails with SEGV.
+.*dEQP-EGL.functional.sharing.gles2.multithread..*
 
 # the array tests take us down with a fault:
 # panfrost ff9a0000.gpu: js fault, js=0, status=INSTR_INVALID_PC
@@ -15,6 +11,3 @@ x11-dEQP-EGL.functional.sharing.gles2.multithread.simple.textures.teximage2d_cop
 # flake the lot until it's been root-caused; first seen around 2025-05-07
 dEQP-GLES3.functional.fragment_out.array..*
 dEQP-GLES3.functional.fragment_out.random..*
-
-# New flake with ES CTS 3.2.12.0
-x11-dEQP-EGL.functional.sharing.gles2.multithread.simple.images.texture_source.copyteximage2d_render

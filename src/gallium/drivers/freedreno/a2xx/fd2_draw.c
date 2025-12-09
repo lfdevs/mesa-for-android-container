@@ -595,7 +595,7 @@ fd2_clear(struct fd_context *ctx, enum fd_buffer_mask buffers,
             depth_clear = (uint32_t)(0xffffffff * depth);
             break;
          default:
-            unreachable("invalid depth");
+            UNREACHABLE("invalid depth");
             break;
          }
 
@@ -637,8 +637,8 @@ dirty:
                  FD_DIRTY_SAMPLE_MASK | FD_DIRTY_PROG | FD_DIRTY_CONST |
                  FD_DIRTY_BLEND | FD_DIRTY_FRAMEBUFFER | FD_DIRTY_SCISSOR;
 
-   ctx->dirty_shader[PIPE_SHADER_VERTEX] |= FD_DIRTY_SHADER_PROG;
-   ctx->dirty_shader[PIPE_SHADER_FRAGMENT] |=
+   ctx->dirty_shader[MESA_SHADER_VERTEX] |= FD_DIRTY_SHADER_PROG;
+   ctx->dirty_shader[MESA_SHADER_FRAGMENT] |=
       FD_DIRTY_SHADER_PROG | FD_DIRTY_SHADER_CONST;
 
    return true;

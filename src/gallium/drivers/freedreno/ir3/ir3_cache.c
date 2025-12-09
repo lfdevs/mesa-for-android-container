@@ -102,7 +102,7 @@ ir3_cache_lookup(struct ir3_cache *cache, const struct ir3_cache_key *key,
    const struct ir3_shader_variant *variants[MESA_SHADER_STAGES];
    struct ir3_shader_key shader_key = key->key;
 
-   for (gl_shader_stage stage = MESA_SHADER_VERTEX; stage < MESA_SHADER_STAGES;
+   for (mesa_shader_stage stage = MESA_SHADER_VERTEX; stage < MESA_SHADER_STAGES;
         stage++) {
       if (shaders[stage]) {
          variants[stage] =
@@ -118,7 +118,7 @@ ir3_cache_lookup(struct ir3_cache *cache, const struct ir3_cache_key *key,
    uint32_t safe_constlens = ir3_trim_constlen(variants, compiler);
    shader_key.safe_constlen = true;
 
-   for (gl_shader_stage stage = MESA_SHADER_VERTEX; stage < MESA_SHADER_STAGES;
+   for (mesa_shader_stage stage = MESA_SHADER_VERTEX; stage < MESA_SHADER_STAGES;
         stage++) {
       if (safe_constlens & (1 << stage)) {
          variants[stage] =

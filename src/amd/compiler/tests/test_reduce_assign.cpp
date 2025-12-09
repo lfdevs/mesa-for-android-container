@@ -19,7 +19,7 @@ BEGIN_TEST(setup_reduce_temp.divergent_if_phi)
     * ... = phi ...
     */
    // TODO: fix the RA validator to spot this
-   //>> s2: %_, v1: %a = p_startpgm
+   //>> s2: %_:s[0-1], v1: %a:v[0] = p_startpgm
    if (!setup_cs("s2 v1", GFX9))
       return;
 

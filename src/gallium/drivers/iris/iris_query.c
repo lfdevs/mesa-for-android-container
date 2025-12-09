@@ -518,7 +518,7 @@ iris_begin_query(struct pipe_context *ctx, struct pipe_query *query)
    else
       size = sizeof(struct iris_query_snapshots);
 
-   u_upload_alloc(ice->query_buffer_uploader, 0,
+   u_upload_alloc_ref(ice->query_buffer_uploader, 0,
                   size, util_next_power_of_two(size),
                   &q->query_state_ref.offset,
                   &q->query_state_ref.res, &ptr);

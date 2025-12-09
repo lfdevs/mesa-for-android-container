@@ -125,11 +125,7 @@ intel_nir_clamp_image_1d_2d_array_sizes_instr(nir_builder *b,
       nir_vec(b, components, image_size->num_components);
 
    b->cursor = nir_after_instr(instr);
-
-   nir_def_rewrite_uses_after(image_size,
-                                  image_size_replacement,
-                                  image_size_replacement->parent_instr);
-
+   nir_def_rewrite_uses_after(image_size, image_size_replacement);
    return true;
 }
 

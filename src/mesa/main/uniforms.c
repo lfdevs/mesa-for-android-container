@@ -69,7 +69,7 @@ update_single_shader_texture_used(struct gl_shader_program *shProg,
                                   struct gl_program *prog,
                                   GLuint unit, GLuint target)
 {
-   gl_shader_stage prog_stage = prog->info.stage;
+   mesa_shader_stage prog_stage = prog->info.stage;
 
    assert(unit < ARRAY_SIZE(prog->TexturesUsed));
    assert(target < NUM_TEXTURE_TARGETS);
@@ -102,7 +102,7 @@ _mesa_update_shader_textures_used(struct gl_shader_program *shProg,
                                   struct gl_program *prog)
 {
    GLbitfield mask = prog->SamplersUsed;
-   ASSERTED gl_shader_stage prog_stage = prog->info.stage;
+   ASSERTED mesa_shader_stage prog_stage = prog->info.stage;
    GLuint s;
 
    assert(shProg->_LinkedShaders[prog_stage]);
@@ -1109,7 +1109,7 @@ uniform_block_binding(struct gl_context *ctx, struct gl_shader_program *shProg,
        uniformBlockBinding) {
 
       FLUSH_VERTICES(ctx, 0, 0);
-      ctx->NewDriverState |= ST_NEW_UNIFORM_BUFFER;
+      ST_SET_SHADER_STATES(ctx->NewDriverState, UBOS);
 
       shProg->data->UniformBlocks[uniformBlockIndex].Binding =
          uniformBlockBinding;
@@ -1171,7 +1171,7 @@ shader_storage_block_binding(struct gl_context *ctx,
        shaderStorageBlockBinding) {
 
       FLUSH_VERTICES(ctx, 0, 0);
-      ctx->NewDriverState |= ST_NEW_STORAGE_BUFFER;
+      ST_SET_SHADER_STATES(ctx->NewDriverState, SSBOS);
 
       shProg->data->ShaderStorageBlocks[shaderStorageBlockIndex].Binding =
          shaderStorageBlockBinding;
@@ -1306,6 +1306,18 @@ mesa_bufferiv(struct gl_shader_program *shProg, GLenum type,
    case GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_COMPUTE_SHADER:
       _mesa_program_resource_prop(shProg, res, index,
                                   GL_REFERENCED_BY_COMPUTE_SHADER, params,
+                                  false, caller);
+      return;
+   case GL_UNIFORM_BLOCK_REFERENCED_BY_TASK_SHADER_EXT:
+   case GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_TASK_SHADER_EXT:
+      _mesa_program_resource_prop(shProg, res, index,
+                                  GL_REFERENCED_BY_TASK_SHADER_EXT, params,
+                                  false, caller);
+      return;
+   case GL_UNIFORM_BLOCK_REFERENCED_BY_MESH_SHADER_EXT:
+   case GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_MESH_SHADER_EXT:
+      _mesa_program_resource_prop(shProg, res, index,
+                                  GL_REFERENCED_BY_MESH_SHADER_EXT, params,
                                   false, caller);
       return;
    default:

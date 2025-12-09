@@ -146,7 +146,7 @@ struct vk_queue {
    struct util_dynarray labels;
    bool region_begin;
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
    /** SYNC_FD signal semaphore for vkQueueSignalReleaseImageANDROID
     *
     * VK_ANDROID_native_buffer enforces explicit fencing on the present api
@@ -191,9 +191,6 @@ vk_queue_is_empty(struct vk_queue *queue)
 VkResult vk_queue_enable_submit_thread(struct vk_queue *queue);
 
 VkResult vk_queue_flush(struct vk_queue *queue, uint32_t *submit_count_out);
-
-VkResult vk_queue_wait_before_present(struct vk_queue *queue,
-                                      const VkPresentInfoKHR *pPresentInfo);
 
 VkResult PRINTFLIKE(4, 5)
 _vk_queue_set_lost(struct vk_queue *queue,
@@ -244,7 +241,6 @@ struct vk_queue_submit {
 
    bool _has_binary_permanent_semaphore_wait;
    struct vk_sync **_wait_temps;
-   struct vk_sync *_mem_signal_temp;
    struct vk_sync_timeline_point **_wait_points;
    struct vk_sync_timeline_point **_signal_points;
 };

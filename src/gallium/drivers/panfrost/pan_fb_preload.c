@@ -38,6 +38,8 @@
 #include "pan_pool.h"
 #include "pan_shader.h"
 #include "pan_texture.h"
+#include "compiler/pan_compiler.h"
+#include "compiler/pan_nir.h"
 
 #if PAN_ARCH >= 6
 /* On Midgard, the native preload infrastructure (via MFBD preloads) is broken
@@ -59,7 +61,7 @@ nir_type_to_reg_fmt(nir_alu_type in)
    case nir_type_uint32:
       return MALI_REGISTER_FILE_FORMAT_U32;
    default:
-      unreachable("Invalid type");
+      UNREACHABLE("Invalid type");
    }
 }
 #endif
@@ -150,13 +152,14 @@ pan_preload_emit_blend(unsigned rt,
          cfg.equation.color_mask = 0xf;
 
 #if PAN_ARCH >= 6
-         nir_alu_type type = preload_shader->key.surfaces[rt].type;
-
          cfg.internal.fixed_function.num_comps = 4;
          cfg.internal.fixed_function.conversion.memory_format =
             GENX(pan_dithered_format_from_pipe_format)(iview->format, false);
+#if PAN_ARCH < 9
+         nir_alu_type type = preload_shader->key.surfaces[rt].type;
          cfg.internal.fixed_function.conversion.register_format =
             nir_type_to_reg_fmt(type);
+#endif
 
          cfg.internal.fixed_function.rt = rt;
 #endif
@@ -405,7 +408,7 @@ pan_preload_get_shader(struct pan_fb_preload_cache *cache,
    unsigned coord_comps = 0;
    unsigned sig_offset = 0;
    char sig[256];
-   bool first = true;
+   sig[0] = '\0';
    for (unsigned i = 0; i < ARRAY_SIZE(key->surfaces); i++) {
       const char *type_str, *dim_str;
       if (key->surfaces[i].type == nir_type_invalid)
@@ -422,7 +425,7 @@ pan_preload_get_shader(struct pan_fb_preload_cache *cache,
          type_str = "int";
          break;
       default:
-         unreachable("Invalid type\n");
+         UNREACHABLE("Invalid type\n");
       }
 
       switch (key->surfaces[i].dim) {
@@ -439,29 +442,26 @@ pan_preload_get_shader(struct pan_fb_preload_cache *cache,
          dim_str = "3D";
          break;
       default:
-         unreachable("Invalid dim\n");
+         UNREACHABLE("Invalid dim\n");
       }
 
       coord_comps = MAX2(coord_comps, (key->surfaces[i].dim ?: 3) +
                                          (key->surfaces[i].array ? 1 : 0));
 
-      if (sig_offset >= sizeof(sig)) {
-         first = false;
+      if (sig_offset >= sizeof(sig))
          continue;
-      }
 
       sig_offset +=
          snprintf(sig + sig_offset, sizeof(sig) - sig_offset,
                   "%s[%s;%s;%s%s;samples=%d]",
-                  first ? "" : ",", gl_frag_result_name(key->surfaces[i].loc),
+                  sig_offset == 0 ? "" : ",",
+                  gl_frag_result_name(key->surfaces[i].loc),
                   type_str, dim_str, key->surfaces[i].array ? "[]" : "",
                   key->surfaces[i].samples);
-
-      first = false;
    }
 
    nir_builder b = nir_builder_init_simple_shader(
-      MESA_SHADER_FRAGMENT, pan_shader_get_compiler_options(PAN_ARCH),
+      MESA_SHADER_FRAGMENT, pan_get_nir_shader_compiler_options(PAN_ARCH),
       "pan_preload(%s)", sig);
 
    nir_def *barycentric = nir_load_barycentric(
@@ -493,7 +493,7 @@ pan_preload_get_shader(struct pan_fb_preload_cache *cache,
          sampler_dim = GLSL_SAMPLER_DIM_CUBE;
          break;
       default:
-         unreachable("Invalid dimension");
+         UNREACHABLE("Invalid dimension");
       }
 
       nir_tex_instr *tex = nir_tex_instr_create(b.shader, ms ? 3 : 1);
@@ -547,12 +547,11 @@ pan_preload_get_shader(struct pan_fb_preload_cache *cache,
 
    struct pan_compile_inputs inputs = {
       .gpu_id = cache->gpu_id,
+      .gpu_variant = cache->gpu_variant,
       .is_blit = true,
       .no_idvs = true,
    };
-   struct util_dynarray binary;
-
-   util_dynarray_init(&binary, NULL);
+   struct util_dynarray binary = UTIL_DYNARRAY_INIT;
 
    shader = rzalloc(cache->shaders.preload, struct pan_preload_shader_data);
 
@@ -561,7 +560,9 @@ pan_preload_get_shader(struct pan_fb_preload_cache *cache,
    for (unsigned i = 0; i < active_count; ++i)
       BITSET_SET(b.shader->info.textures_used, i);
 
-   pan_shader_preprocess(b.shader, inputs.gpu_id);
+   pan_preprocess_nir(b.shader, inputs.gpu_id);
+   pan_nir_lower_texture_early(b.shader, inputs.gpu_id);
+   pan_postprocess_nir(b.shader, inputs.gpu_id);
 
    if (PAN_ARCH == 4) {
       NIR_PASS(_, b.shader, nir_shader_intrinsics_pass,
@@ -1069,10 +1070,10 @@ pan_preload_emit_dcd(struct pan_fb_preload_cache *cache, struct pan_pool *pool,
          maxy = fb->height - 1;
       } else {
          /* Align on 32x32 tiles */
-         minx = fb->extent.minx & ~31;
-         miny = fb->extent.miny & ~31;
-         maxx = MIN2(ALIGN_POT(fb->extent.maxx + 1, 32), fb->width) - 1;
-         maxy = MIN2(ALIGN_POT(fb->extent.maxy + 1, 32), fb->height) - 1;
+         minx = fb->draw_extent.minx & ~31;
+         miny = fb->draw_extent.miny & ~31;
+         maxx = MIN2(ALIGN_POT(fb->draw_extent.maxx + 1, 32), fb->width) - 1;
+         maxy = MIN2(ALIGN_POT(fb->draw_extent.maxy + 1, 32), fb->height) - 1;
       }
 
       cfg.thread_storage = tsd;
@@ -1217,9 +1218,9 @@ pan_preload_emit_pre_frame_dcd(struct pan_fb_preload_cache *cache,
     * write even clean tiles to make sure CRC data is updated. */
    if (crc_rt >= 0) {
       bool *valid = fb->rts[crc_rt].crc_valid;
-      bool full = !fb->extent.minx && !fb->extent.miny &&
-                  fb->extent.maxx == (fb->width - 1) &&
-                  fb->extent.maxy == (fb->height - 1);
+      bool full = !fb->draw_extent.minx && !fb->draw_extent.miny &&
+                  fb->draw_extent.maxx == (fb->width - 1) &&
+                  fb->draw_extent.maxy == (fb->height - 1);
 
       if (full && !(*valid))
          always_write = true;
@@ -1237,9 +1238,9 @@ pan_preload_emit_pre_frame_dcd(struct pan_fb_preload_cache *cache,
        * performance. The UNUSED tag is because some PAN_ARCH variants do not
        * need this test.
        */
-      UNUSED bool always = !fb->extent.minx && !fb->extent.miny &&
-                           fb->extent.maxx == (fb->width - 1) &&
-                           fb->extent.maxy == (fb->height - 1);
+      UNUSED bool always = !fb->draw_extent.minx && !fb->draw_extent.miny &&
+                           fb->draw_extent.maxx == (fb->width - 1) &&
+                           fb->draw_extent.maxy == (fb->height - 1);
 
       /* If we're dealing with a combined ZS resource and only one
        * component is cleared, we need to reload the whole surface
@@ -1414,11 +1415,12 @@ pan_preload_prefill_preload_shader_cache(struct pan_fb_preload_cache *cache)
 
 void
 GENX(pan_fb_preload_cache_init)(
-   struct pan_fb_preload_cache *cache, unsigned gpu_id,
+   struct pan_fb_preload_cache *cache, unsigned gpu_id, uint32_t gpu_variant,
    struct pan_blend_shader_cache *blend_shader_cache, struct pan_pool *bin_pool,
    struct pan_pool *desc_pool)
 {
    cache->gpu_id = gpu_id;
+   cache->gpu_variant = gpu_variant;
    cache->shaders.preload = pan_preload_shader_key_table_create(NULL);
    cache->shaders.pool = bin_pool;
    pthread_mutex_init(&cache->shaders.lock, NULL);

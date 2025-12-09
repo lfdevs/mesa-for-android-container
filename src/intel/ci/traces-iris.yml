@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "http://caching-proxy/cache/?uri=https://s3.freedesktop.org/mesa-tracie-public/"
+  download-url: "https://s3.freedesktop.org/mesa-tracie-public/"
 
 traces:
   behdad-glyphy/glyphy-v2.trace:
@@ -36,20 +36,20 @@ traces:
       checksum: f53ac20e17da91c0359c31f2fa3f401e
   0ad/0ad-v2.trace:
     gl-intel-apl:
-      checksum: b25b9dfce05def046f6277d05b3cba98
+      checksum: 6c9f66db38f03847574c543de48fa203
     gl-intel-glk:
-      checksum: b25b9dfce05def046f6277d05b3cba98
+      checksum: 6c9f66db38f03847574c543de48fa203
     gl-intel-amly:
-      checksum: b25b9dfce05def046f6277d05b3cba98
+      checksum: 6c9f66db38f03847574c543de48fa203
     gl-intel-kbl:
-      checksum: b25b9dfce05def046f6277d05b3cba98
+      checksum: 6c9f66db38f03847574c543de48fa203
     gl-intel-whl:
       checksum: e67b7a93bac02e41de0326419ee17a3e
     gl-intel-cml:
-      checksum: b25b9dfce05def046f6277d05b3cba98
+      checksum: 6c9f66db38f03847574c543de48fa203
     gl-intel-adl:
       label: [no-perf]
-      checksum: b25b9dfce05def046f6277d05b3cba98
+      checksum: 6c9f66db38f03847574c543de48fa203
   pathfinder/demo-v2.trace:
     gl-intel-apl:
       checksum: d9b33f0a2efe17c21b7933242afd9ec7
@@ -97,13 +97,13 @@ traces:
       checksum: 448886e3b24f6408e013ea13f7c96d28
   gputest/furmark-v2.trace:
     gl-intel-apl:
-      checksum: 06f4222f7f5737f93ed1d191cbdc0798
+      checksum: 54305eb5dd7fea9e34bd61567bbd4c08
     gl-intel-glk:
-      checksum: 06f4222f7f5737f93ed1d191cbdc0798
+      checksum: 54305eb5dd7fea9e34bd61567bbd4c08
     gl-intel-amly:
       checksum: 06f4222f7f5737f93ed1d191cbdc0798
     gl-intel-kbl:
-      checksum: 06f4222f7f5737f93ed1d191cbdc0798
+      checksum: 54305eb5dd7fea9e34bd61567bbd4c08
     gl-intel-whl:
       checksum: 06d587a2b934295da6ad874b750b9c9d
     gl-intel-cml:
@@ -403,13 +403,13 @@ traces:
       checksum: 6517788d0f65166239e4f3000ebf5d95
   supertuxkart/supertuxkart-antediluvian-abyss.rdc:
     gl-intel-apl:
-      checksum: 0af2faa0d9183c1bc4dc7612befe1f0a
+      checksum: 8e16741f5d3409740bdf5c8835ed01b9
     gl-intel-glk:
-      checksum: 0af2faa0d9183c1bc4dc7612befe1f0a
+      checksum: 8e16741f5d3409740bdf5c8835ed01b9
     gl-intel-amly:
       checksum: 0af2faa0d9183c1bc4dc7612befe1f0a
     gl-intel-kbl:
-      checksum: 0af2faa0d9183c1bc4dc7612befe1f0a
+      checksum: 8e16741f5d3409740bdf5c8835ed01b9
     gl-intel-whl:
       checksum: 0af2faa0d9183c1bc4dc7612befe1f0a
     gl-intel-cml:
@@ -435,13 +435,13 @@ traces:
       checksum: 0a4095dc7b441643a3336975b61c9e6a
   supertuxkart/supertuxkart-ravenbridge-mansion.rdc:
     gl-intel-apl:
-      checksum: ca0b64f1a62e01765146be8391eae636
+      checksum: 6901ed686bce207a3b0d7454761d9018
     gl-intel-glk:
-      checksum: ca0b64f1a62e01765146be8391eae636
+      checksum: 6901ed686bce207a3b0d7454761d9018
     gl-intel-amly:
       checksum: ca0b64f1a62e01765146be8391eae636
     gl-intel-kbl:
-      checksum: ca0b64f1a62e01765146be8391eae636
+      checksum: 6901ed686bce207a3b0d7454761d9018
     gl-intel-whl:
       checksum: ca0b64f1a62e01765146be8391eae636
     gl-intel-cml:

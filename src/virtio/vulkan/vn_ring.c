@@ -98,9 +98,14 @@ vn_ring_store_tail(struct vn_ring *ring)
 {
    /* the renderer is expected to load the tail with memory_order_acquire,
     * forming a release-acquire ordering
+    *
+    * To avoid incompatibility between the compiler implementations used by
+    * the driver and the renderer, seq_cst ordering is picked here, which has
+    * required a full mfence instruction. Then the renderer side acquire is
+    * ensured to be ordered after the cache flush of ring cs updates.
     */
    return atomic_store_explicit(ring->shared.tail, ring->cur,
-                                memory_order_release);
+                                memory_order_seq_cst);
 }
 
 uint32_t
@@ -375,8 +380,13 @@ vn_ring_destroy(struct vn_ring *ring)
    struct vn_cs_encoder local_enc = VN_CS_ENCODER_INITIALIZER_LOCAL(
       destroy_ring_data, sizeof(destroy_ring_data));
    vn_encode_vkDestroyRingMESA(&local_enc, 0, ring->id);
-   vn_renderer_submit_simple(ring->instance->renderer, destroy_ring_data,
-                             vn_cs_encoder_get_len(&local_enc));
+
+   /* With the shmem cache, vkDestroyRingMESA must be a synchronous call to
+    * ensure renderer side ring destruction has finished before the same shmem
+    * gets reused by other things.
+    */
+   vn_renderer_submit_simple_sync(ring->instance->renderer, destroy_ring_data,
+                                  vn_cs_encoder_get_len(&local_enc));
 
    mtx_destroy(&ring->roundtrip_mutex);
 

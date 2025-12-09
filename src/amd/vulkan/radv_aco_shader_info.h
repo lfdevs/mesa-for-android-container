@@ -22,6 +22,23 @@ static inline void radv_aco_convert_ps_epilog_key(struct aco_ps_epilog_info *aco
                                                   const struct radv_ps_epilog_key *radv,
                                                   const struct radv_shader_args *radv_args);
 
+static inline unsigned
+radv_calculate_lds_size(const struct radv_shader_info *radv, const enum amd_gfx_level gfx_level)
+{
+   unsigned lds_size = 0;
+
+   if (radv->is_ngg)
+      lds_size = radv->nir_shared_size;
+   else if (gfx_level >= GFX9 && radv->stage == MESA_SHADER_GEOMETRY)
+      lds_size = radv->legacy_gs_info.lds_size;
+   else if (radv->stage == MESA_SHADER_TESS_CTRL)
+      lds_size = radv->tcs.lds_size; /* only used by stats */
+   else
+      lds_size = radv->nir_shared_size;
+
+   return lds_size;
+}
+
 static inline void
 radv_aco_convert_shader_info(struct aco_shader_info *aco_info, const struct radv_shader_info *radv,
                              const struct radv_shader_args *radv_args, const struct radv_device_cache_key *radv_key,
@@ -33,19 +50,18 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info, const struct radv
    ASSIGN_FIELD(merged_shader_compiled_separately);
    ASSIGN_FIELD(vs.tcs_in_out_eq);
    ASSIGN_FIELD(vs.has_prolog);
-   ASSIGN_FIELD(tcs.num_lds_blocks);
    ASSIGN_FIELD(ps.num_inputs);
    ASSIGN_FIELD(cs.uses_full_subgroups);
    aco_info->vs.any_tcs_inputs_via_lds = radv->vs.tcs_inputs_via_lds != 0;
    aco_info->ps.spi_ps_input_ena = radv->ps.spi_ps_input_ena;
    aco_info->ps.spi_ps_input_addr = radv->ps.spi_ps_input_addr;
    aco_info->ps.has_prolog = false;
-   aco_info->gfx9_gs_ring_lds_size = radv->gs_ring_info.lds_size;
    aco_info->image_2d_view_of_3d = radv_key->image_2d_view_of_3d;
    aco_info->epilog_pc = radv_args->epilog_pc;
    aco_info->hw_stage = radv_select_hw_stage(radv, gfx_level);
    aco_info->next_stage_pc = radv_args->next_stage_pc;
    aco_info->schedule_ngg_pos_exports = gfx_level < GFX11 && radv->has_ngg_culling && radv->has_ngg_early_prim_export;
+   aco_info->lds_size = radv_calculate_lds_size(radv, gfx_level);
 }
 
 static inline void
@@ -100,7 +116,6 @@ radv_aco_convert_opts(struct aco_compiler_options *aco_info, const struct radv_n
    ASSIGN_FIELD(enable_mrt_output_nan_fixup);
    ASSIGN_FIELD(wgp_mode);
    ASSIGN_FIELD(debug.func);
-   ASSIGN_FIELD(debug.private_data);
    ASSIGN_FIELD(debug.private_data);
    aco_info->is_opengl = false;
    aco_info->load_grid_size_from_user_sgpr = radv_args->load_grid_size_from_user_sgpr;

@@ -14,7 +14,7 @@ build_tex_load_ms(nir_builder *b, unsigned num_components, unsigned bit_size,
                   nir_deref_instr *tex_deref, nir_def *coord, nir_def *sample_index)
 {
    nir_def *result = nir_txf_ms(b, coord, sample_index, .texture_deref = tex_deref);
-   nir_tex_instr *tex = nir_instr_as_tex(result->parent_instr);
+   nir_tex_instr *tex = nir_def_as_tex(result);
 
    assert(bit_size == 32 || bit_size == 16);
    if (bit_size == 16) {

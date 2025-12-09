@@ -397,7 +397,7 @@ elk_cs_thread_payload::load_subgroup_id(const fs_builder &bld,
    auto devinfo = bld.shader->devinfo;
    dest = retype(dest, ELK_REGISTER_TYPE_UD);
 
-   assert(gl_shader_stage_is_compute(bld.shader->stage));
+   assert(mesa_shader_stage_is_compute(bld.shader->stage));
    int index = elk_get_subgroup_id_param_index(devinfo,
                                                bld.shader->stage_prog_data);
    bld.MOV(dest, elk_fs_reg(UNIFORM, index, ELK_REGISTER_TYPE_UD));

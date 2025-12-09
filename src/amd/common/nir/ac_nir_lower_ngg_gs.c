@@ -660,6 +660,10 @@ ngg_gs_build_streamout(nir_builder *b, lower_ngg_gs_state *s)
    nir_def *export_seq[4] = {0};
    nir_def *out_vtx_primflag[4] = {0};
 
+   const unsigned scratch_stride = align(s->max_num_waves, 4);
+   const unsigned scratch_base_off = scratch_stride;
+   const unsigned num_streams = util_bitcount(info->streams_written);
+
    u_foreach_bit(stream, info->streams_written) {
       out_vtx_primflag[stream] =
          ngg_gs_load_out_vtx_primflag(b, stream, tid_in_tg, out_vtx_lds_addr, max_vtxcnt, s);
@@ -669,9 +673,8 @@ ngg_gs_build_streamout(nir_builder *b, lower_ngg_gs_state *s)
        */
       prim_live[stream] = nir_i2b(b, nir_iand_imm(b, out_vtx_primflag[stream], 1));
 
-      unsigned scratch_stride = ALIGN(s->max_num_waves, 4);
       nir_def *scratch_base =
-         nir_iadd_imm(b, s->lds_addr_gs_out_vtx, stream * scratch_stride);
+         nir_iadd_imm(b, s->lds_addr_gs_out_vtx, stream * scratch_stride + scratch_base_off);
 
       /* We want to export primitives to streamout buffer in sequence,
        * but not all vertices are alive or mark end of a primitive, so
@@ -697,18 +700,14 @@ ngg_gs_build_streamout(nir_builder *b, lower_ngg_gs_state *s)
       export_seq[stream] = rep.repacked_invocation_index;
    }
 
-   /* Workgroup barrier: wait for LDS scratch reads finish. */
-   nir_barrier(b, .execution_scope = SCOPE_WORKGROUP,
-                      .memory_scope = SCOPE_WORKGROUP,
-                      .memory_semantics = NIR_MEMORY_ACQ_REL,
-                      .memory_modes = nir_var_mem_shared);
-
    /* Get global buffer offset where this workgroup will stream out data to. */
    nir_def *emit_prim[4] = {0};
    nir_def *buffer_offsets[4] = {0};
    nir_def *so_buffer[4] = {0};
+   nir_def *buffer_info_scratch_base =
+      nir_iadd_imm_nuw(b, s->lds_addr_gs_out_vtx, num_streams * scratch_stride + scratch_base_off);
    ac_nir_ngg_build_streamout_buffer_info(b, info, s->options->hw_info->gfx_level, s->options->has_xfb_prim_query,
-                                   s->options->use_gfx12_xfb_intrinsic, s->lds_addr_gs_out_vtx, tid_in_tg,
+                                   s->options->use_gfx12_xfb_intrinsic, buffer_info_scratch_base, tid_in_tg,
                                    gen_prim, so_buffer, buffer_offsets, emit_prim);
 
    u_foreach_bit(stream, info->streams_written) {
@@ -858,7 +857,7 @@ ac_nir_lower_ngg_gs(nir_shader *shader, const ac_nir_lower_ngg_options *options,
    else if (shader->info.gs.output_primitive == MESA_PRIM_TRIANGLE_STRIP)
       state.num_vertices_per_primitive = 3;
    else
-      unreachable("Invalid GS output primitive.");
+      UNREACHABLE("Invalid GS output primitive.");
 
    /* Extract the full control flow. It is going to be wrapped in an if statement. */
    nir_cf_list extracted;

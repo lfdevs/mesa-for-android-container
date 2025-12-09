@@ -43,7 +43,7 @@ pvr_srv_from_winsys_priority(enum pvr_winsys_ctx_priority priority)
    case PVR_WINSYS_CTX_PRIORITY_LOW:
       return RGX_CONTEXT_PRIORITY_LOW;
    default:
-      unreachable("Invalid winsys context priority.");
+      UNREACHABLE("Invalid winsys context priority.");
    }
 }
 

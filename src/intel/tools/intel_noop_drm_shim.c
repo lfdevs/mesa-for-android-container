@@ -557,20 +557,20 @@ void
 drm_shim_driver_init(void)
 {
    i915.device_id = 0;
-   const char *json_dev_str = getenv("INTEL_STUB_GPU_JSON");
+   const char *json_dev_str = os_get_option("INTEL_STUB_GPU_JSON");
    if (json_dev_str != NULL) {
       if (!intel_device_info_from_json(json_dev_str, &i915.devinfo))
          return;
       i915.device_id = i915.devinfo.pci_device_id;
       i915_device_from_json = true;
    } else {
-      const char *device_id_str = getenv("INTEL_STUB_GPU_DEVICE_ID");
+      const char *device_id_str = os_get_option("INTEL_STUB_GPU_DEVICE_ID");
       if (device_id_str != NULL) {
          /* Set as 0 if strtoul fails */
          i915.device_id = strtoul(device_id_str, NULL, 16);
       }
       if (i915.device_id == 0) {
-         const char *user_platform = getenv("INTEL_STUB_GPU_PLATFORM");
+         const char *user_platform = os_get_option("INTEL_STUB_GPU_PLATFORM");
          /* Use SKL if nothing is specified. */
          i915.device_id = intel_device_name_to_pci_device_id(user_platform ?: "skl");
       }

@@ -639,13 +639,6 @@ lp_scene_begin_binning(struct lp_scene *scene,
    }
 
    scene->fb_max_layer = max_layer;
-   scene->fb_max_samples = util_framebuffer_get_num_samples(fb);
-   if (scene->fb_max_samples == 4) {
-      for (unsigned i = 0; i < 4; i++) {
-         scene->fixed_sample_pos[i][0] = util_iround(lp_sample_pos_4x[i][0] * FIXED_ONE);
-         scene->fixed_sample_pos[i][1] = util_iround(lp_sample_pos_4x[i][1] * FIXED_ONE);
-      }
-   }
 }
 
 

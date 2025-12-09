@@ -1,5 +1,6 @@
-When compiled with `gallium-driver=llvmpipe` or `gallium-driver=softpipe` the resulting libgallium_d3d10.dll implements D3D10's software rendering interface, like WARP.
+# D3D10umd Readme
 
+When compiled with `gallium-driver=llvmpipe` or `gallium-driver=softpipe` the resulting libgallium_d3d10.dll implements D3D10's software rendering interface, like WARP.
 
 It can be used directly from WLK 1.6 and WHCK 2.0 D3D10+ tests, via the -Src
 and -SWDLL options. For example:
@@ -10,7 +11,6 @@ However, as of WHCK version 2.1 this mechanism no longer works reliably.
 Either you use WHCK 2.0 binaries, or you must use the alternative method
 described below (of copying libgallium_d3d10.dll into the executable directory and rename
 it such that it matches the D3D10 UMD of the test machine).
-
 
 Examples can be easily modified to load it too:
 
@@ -36,7 +36,6 @@ Examples can be easily modified to load it too:
                                   NULL, /* pFeatureLevel */
                                   &g_pDeviceContext); /* ppImmediateContext */
 
-
 Alternatively, it can be renamed into the system's D3D10 UMD driver (e.g.,
 vm3dum_10.dll for VMware vGPU, nvwgf2um.dll for NVIDIA GPU), and placed into
 the application directory, or system's directory, and used instead.
@@ -46,4 +45,27 @@ following once:
 
     reg add "HKLM\System\CurrentControlSet\Control\Session Manager" /v "SafeDllSearchMode" /t REG_DWORD /d 0 /f
 
-See also https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order
+See also <https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order>
+
+## Building with MSVC
+
+Install Windows SDK 10.0.26100.0 and Windows DDK 10.0.26100.0 with MSVC and use it, other version of Windows SDK/DDK
+may also work but not verified.
+
+## Building with mingw
+
+Install Windows SDK 10.0.26100.0 and Windows DDK 10.0.26100.0, other version of Windows SDK/DDK
+may also work but not verified.
+
+Copy the following list of files from Windows SDK/DDK into mingw's `include` folder or `include\winddk` folder in mesa source tree:
+    ```txt
+    d3d10umddi.h
+    d3dkmddi.h
+    d3dkmdt.h
+    d3dkmthk.h
+    d3dukmdt.h
+    d3dumddi.h
+    dxgiddi.h
+    dxmini.h
+    wmidata.h
+    ```

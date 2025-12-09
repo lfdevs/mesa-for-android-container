@@ -75,12 +75,12 @@ instr_can_rewrite(const nir_instr *instr)
       }
    }
    case nir_instr_type_call:
+   case nir_instr_type_cmat_call:
    case nir_instr_type_jump:
    case nir_instr_type_undef:
       return false;
-   case nir_instr_type_parallel_copy:
    default:
-      unreachable("Invalid instruction type");
+      UNREACHABLE("Invalid instruction type");
    }
 
    return false;
@@ -187,7 +187,7 @@ hash_deref(uint32_t hash, const nir_deref_instr *instr)
       break;
 
    default:
-      unreachable("Invalid instruction deref type");
+      UNREACHABLE("Invalid instruction deref type");
    }
 
    return hash;
@@ -339,7 +339,7 @@ hash_instr(const void *data)
       hash = hash_tex(hash, nir_instr_as_tex(instr));
       break;
    default:
-      unreachable("Invalid instruction type");
+      UNREACHABLE("Invalid instruction type");
    }
 
    return hash;
@@ -359,7 +359,7 @@ nir_srcs_equal(nir_src src1, nir_src src2)
 static nir_alu_instr *
 get_neg_instr(nir_src s, nir_alu_type base_type)
 {
-   nir_alu_instr *alu = nir_src_as_alu_instr(s);
+   nir_alu_instr *alu = nir_src_as_alu(s);
 
    return alu != NULL && (alu->op == (base_type == nir_type_float ? nir_op_fneg : nir_op_ineg))
              ? alu
@@ -643,7 +643,7 @@ nir_instrs_equal(const nir_instr *instr1, const nir_instr *instr2)
          break;
 
       default:
-         unreachable("Invalid instruction deref type");
+         UNREACHABLE("Invalid instruction deref type");
       }
       return true;
    }
@@ -757,12 +757,11 @@ nir_instrs_equal(const nir_instr *instr1, const nir_instr *instr2)
    case nir_instr_type_call:
    case nir_instr_type_jump:
    case nir_instr_type_undef:
-   case nir_instr_type_parallel_copy:
    default:
-      unreachable("Invalid instruction type");
+      UNREACHABLE("Invalid instruction type");
    }
 
-   unreachable("All cases in the above switch should return");
+   UNREACHABLE("All cases in the above switch should return");
 }
 
 static bool
@@ -771,16 +770,16 @@ cmp_func(const void *data1, const void *data2)
    return nir_instrs_equal(data1, data2);
 }
 
-struct set *
-nir_instr_set_create(void *mem_ctx)
+void
+nir_instr_set_init(struct set *s, void *mem_ctx)
 {
-   return _mesa_set_create(mem_ctx, hash_instr, cmp_func);
+   _mesa_set_init(s, mem_ctx, hash_instr, cmp_func);
 }
 
 void
-nir_instr_set_destroy(struct set *instr_set)
+nir_instr_set_fini(struct set *instr_set)
 {
-   _mesa_set_destroy(instr_set, NULL);
+   _mesa_set_fini(instr_set, NULL);
 }
 
 nir_instr *

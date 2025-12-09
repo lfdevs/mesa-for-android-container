@@ -38,12 +38,21 @@ afbcp-glx@glx-multithread-clearbuffer
 dEQP-VK.memory.pipeline_barrier.host_write_vertex_buffer.1048576_vertex_buffer_stride_2
 dEQP-VK.memory.pipeline_barrier.host_write_uniform_buffer.1048576
 dEQP-VK.memory.pipeline_barrier.host_write_uniform_texel_buffer.1048576
+dEQP-VK.memory.pipeline_barrier.host_write_index_buffer.1048576
 
 # Sometime timeout
 dEQP-VK.memory.pipeline_barrier.host_write_storage_buffer.1048576
+
+# CTS bug, see https://github.com/KhronosGroup/VK-GL-CTS/commit/3871f1a1c1e5fa479baea4a82ecdd36c30cd7bc0
+dEQP-VK.renderpass2.depth_stencil_resolve.*_samplemask
 
 # The simulate_oom WSI tests are broken in CI
 dEQP-VK.wsi.*.swapchain.simulate_oom.*
 
 # These intermittently crash on mt8186, but they passed on meson-g12b-a311d-khadas-vim3
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_*
+
+# New flakes in 1.4.3.3
+dEQP-VK.dynamic_rendering.graphics_pipeline_library.suballocation.attachment.8.615
+dEQP-VK.renderpass.dedicated_allocation.attachment.8.753
+dEQP-VK.renderpass2.dedicated_allocation.attachment.8.603

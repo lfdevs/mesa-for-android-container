@@ -323,36 +323,29 @@ si_vpe_maps_vpp_to_vpe_primaries(enum pipe_video_vpp_color_primaries colour_prim
 }
 
 static enum vpe_transfer_function
-si_vpe_maps_vpp_to_vpe_transfer_function(
-                        enum pipe_video_vpp_transfer_characteristic transfer_characteristics,
-                        enum pipe_video_vpp_matrix_coefficients matrix_coefficients)
+si_vpe_maps_vpp_to_vpe_transfer_function(enum pipe_video_vpp_transfer_characteristic trc)
 {
-   if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_BT709)
-      return (matrix_coefficients == PIPE_VIDEO_VPP_MCF_RGB)? VPE_TF_SRGB : VPE_TF_BT709;
-
-   else if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_GAMMA22)
+   switch (trc) {
+   case PIPE_VIDEO_VPP_TRC_GAMMA22:
       return VPE_TF_G22;
-
-   else if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_SMPTEST2084)
+   case PIPE_VIDEO_VPP_TRC_LINEAR:
+      return VPE_TF_G10;
+   case PIPE_VIDEO_VPP_TRC_IEC61966_2_1:
+      return VPE_TF_SRGB;
+   case PIPE_VIDEO_VPP_TRC_SMPTEST2084:
       return VPE_TF_PQ;
-
-   else if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_LINEAR)
-      return VPE_TF_G10;
-
-   else if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_ARIB_STD_B67)
+   case PIPE_VIDEO_VPP_TRC_ARIB_STD_B67:
       return VPE_TF_HLG;
-
-   else if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_BT2020_10)
-      return VPE_TF_G10;
-
-   else if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_SMPTEST428_1)
+   case PIPE_VIDEO_VPP_TRC_BT709:
+   case PIPE_VIDEO_VPP_TRC_SMPTE170M:
+   case PIPE_VIDEO_VPP_TRC_SMPTE240M:
+   case PIPE_VIDEO_VPP_TRC_IEC61966_2_4:
+   case PIPE_VIDEO_VPP_TRC_BT1361_ECG:
+   case PIPE_VIDEO_VPP_TRC_BT2020_10:
+   case PIPE_VIDEO_VPP_TRC_BT2020_12:
+   default:
       return VPE_TF_G24;
-
-   else if (transfer_characteristics == PIPE_VIDEO_VPP_TRC_BT2020_12)
-      return (matrix_coefficients == PIPE_VIDEO_VPP_MCF_RGB)? VPE_TF_SRGB : VPE_TF_BT709;
-
-   SIVPE_PRINT("WARNING: map VA-API transfer_characteristics(%d) to BT709/SRGB\n", transfer_characteristics);
-   return (matrix_coefficients == PIPE_VIDEO_VPP_MCF_RGB)? VPE_TF_SRGB : VPE_TF_BT709;
+   }
 }
 
 static enum ToneMapTransferFunction
@@ -377,6 +370,22 @@ si_vpe_maps_vpe_to_gm_transfer_function(const enum vpe_transfer_function vpe_tf)
    default:
       SIVPE_PRINT("[FIXIT] No GMLIB TF mapped\n");
       return TMG_TF_BT709;
+   }
+}
+
+static enum ToneMapColorPrimaries
+si_vpe_mpes_vpe_to_gm_primary(enum vpe_color_primaries vpe_pri)
+{
+   switch (vpe_pri) {
+   case VPE_PRIMARIES_BT601:
+      return TMG_CP_BT601;
+   case VPE_PRIMARIES_BT709:
+      return TMG_CP_BT709;
+   case VPE_PRIMARIES_BT2020:
+      return TMG_CP_BT2020;
+   default:
+      SIVPE_PRINT("[FIXIT] No GMLIB Primary mapped\n");
+      return TMG_CP_BT709;
    }
 }
 
@@ -406,52 +415,21 @@ si_vpe_set_color_space(const struct pipe_vpp_desc *process_properties,
                        enum pipe_format format,
                        int which_surface)
 {
-   enum pipe_video_vpp_color_standard_type colors_standard;
    enum pipe_video_vpp_color_range color_range;
    enum pipe_video_vpp_chroma_siting chroma_siting;
    enum pipe_video_vpp_color_primaries colour_primaries;
    enum pipe_video_vpp_transfer_characteristic transfer_characteristics;
-   enum pipe_video_vpp_matrix_coefficients matrix_coefficients;
 
    if (which_surface == USE_SRC_SURFACE) {
-      colors_standard          = process_properties->in_colors_standard;
       color_range              = process_properties->in_color_range;
       chroma_siting            = process_properties->in_chroma_siting;
       colour_primaries         = process_properties->in_color_primaries;
       transfer_characteristics = process_properties->in_transfer_characteristics;
-      matrix_coefficients      = process_properties->in_matrix_coefficients;
    } else {
-      colors_standard          = process_properties->out_colors_standard;
       color_range              = process_properties->out_color_range;
       chroma_siting            = process_properties->out_chroma_siting;
       colour_primaries         = process_properties->out_color_primaries;
       transfer_characteristics = process_properties->out_transfer_characteristics;
-      matrix_coefficients      = process_properties->out_matrix_coefficients;
-   }
-
-   switch (colors_standard) {
-   case PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_EXPLICIT:
-      /* use original settings from user application */
-      break;
-
-   case PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT601:
-      colour_primaries         = PIPE_VIDEO_VPP_PRI_SMPTE170M;
-      transfer_characteristics = PIPE_VIDEO_VPP_TRC_SMPTE170M;
-      matrix_coefficients      = PIPE_VIDEO_VPP_MCF_SMPTE170M;
-      break;
-
-   case PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT2020:
-      colour_primaries         = PIPE_VIDEO_VPP_PRI_BT2020;
-      transfer_characteristics = PIPE_VIDEO_VPP_TRC_BT2020_10;
-      matrix_coefficients      = PIPE_VIDEO_VPP_MCF_BT2020_NCL;
-      break;
-
-   default:
-   case PIPE_VIDEO_VPP_COLOR_STANDARD_TYPE_BT709:
-      colour_primaries         = PIPE_VIDEO_VPP_PRI_BT709;
-      transfer_characteristics = PIPE_VIDEO_VPP_TRC_BT709;
-      matrix_coefficients      = PIPE_VIDEO_VPP_MCF_BT709;
-      break;
    }
 
    switch (format) {
@@ -473,7 +451,6 @@ si_vpe_set_color_space(const struct pipe_vpp_desc *process_properties,
    case PIPE_FORMAT_A2B10G10R10_UNORM:
    case PIPE_FORMAT_B10G10R10A2_UNORM:
    default:
-      matrix_coefficients = PIPE_VIDEO_VPP_MCF_RGB;
       color_space->encoding = VPE_PIXEL_ENCODING_RGB;
       break;
    }
@@ -508,7 +485,7 @@ si_vpe_set_color_space(const struct pipe_vpp_desc *process_properties,
    }
 
    color_space->primaries = si_vpe_maps_vpp_to_vpe_primaries(colour_primaries);
-   color_space->tf = si_vpe_maps_vpp_to_vpe_transfer_function(transfer_characteristics, matrix_coefficients);
+   color_space->tf = si_vpe_maps_vpp_to_vpe_transfer_function(transfer_characteristics);
 }
 
 static enum vpe_status
@@ -525,9 +502,9 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
    enum pipe_format format;
 
    if (which_surface == USE_SRC_SURFACE)
-      format = process_properties->base.input_format;
+      format = vpeproc->src_buffer->buffer_format;
    else
-      format = process_properties->base.output_format;
+      format = vpeproc->dst_buffer->buffer_format;
 
    /* Trusted memory not supported now */
    plane_address->tmz_surface = false;
@@ -548,7 +525,7 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
       return VPE_STATUS_NOT_SUPPORTED;
 
    /* 1st plane ret setting */
-   uint16_t width, height;
+   unsigned width, height;
    pipe_surface_size(&surfaces[0], &width, &height);
    plane_size->surface_size.x         = 0;
    plane_size->surface_size.y         = 0;
@@ -595,13 +572,13 @@ si_vpe_set_surface_info(struct vpe_video_processor *vpeproc,
       return VPE_STATUS_NOT_SUPPORTED;
 
    struct vpe_plane_dcc_param *dcc_param = &surface_info->dcc;
-   dcc_param->enable                   = false;
-   dcc_param->meta_pitch               = 0;
-   dcc_param->independent_64b_blks     = false;
-   dcc_param->dcc_ind_blk              = 0;
-   dcc_param->meta_pitch_c             = 0;
-   dcc_param->independent_64b_blks_c   = false;
-   dcc_param->dcc_ind_blk_c            = 0;
+   dcc_param->enable                     = false;
+   dcc_param->src.meta_pitch             = 0;
+   dcc_param->src.independent_64b_blks   = false;
+   dcc_param->src.dcc_ind_blk            = 0;
+   dcc_param->src.meta_pitch_c           = 0;
+   dcc_param->src.independent_64b_blks_c = false;
+   dcc_param->src.dcc_ind_blk_c          = 0;
 
    return VPE_STATUS_OK;
 }
@@ -822,9 +799,10 @@ si_vpe_set_stream_out_param(struct vpe_video_processor *vpeproc,
 }
 
 static inline int
-si_vpe_is_tonemappingstream(enum vpe_transfer_function tf)
+si_vpe_is_tonemappingstream(enum vpe_transfer_function tf, unsigned int in_lum, unsigned int out_lum)
 {
-   return (tf == VPE_TF_HLG || tf == VPE_TF_G10 || tf == VPE_TF_PQ);
+   return ((tf == VPE_TF_HLG) ||
+          ((tf == VPE_TF_G10 || tf == VPE_TF_PQ) && (in_lum > out_lum)));
 }
 
 static void
@@ -832,11 +810,16 @@ si_vpe_set_tonemap(struct vpe_video_processor *vpeproc,
                    const struct pipe_vpp_desc *process_properties,
                    struct vpe_build_param *build_param)
 {
-   if (!debug_get_bool_option("AMDGPU_SIVPE_HDR_TONEMAPPING", false))
+   if (!debug_get_bool_option("AMDGPU_SIVPE_HDR_TONEMAPPING", true))
       return;
 
    /* Check if source is tone mapping stream */
-   if (si_vpe_is_tonemappingstream(build_param->streams[0].surface_info.cs.tf)) {
+   if (si_vpe_is_tonemappingstream(
+               build_param->streams[0].surface_info.cs.tf,
+               build_param->streams[0].hdr_metadata.max_mastering,
+               build_param->hdr_metadata.max_mastering)) {
+
+      SIVPE_DBG(vpeproc->log_level, "Handling Tone mapping stream...\n");
 
       if (!vpeproc->gm_handle) {
          vpeproc->gm_handle = tm_create();
@@ -888,6 +871,7 @@ si_vpe_set_tonemap(struct vpe_video_processor *vpeproc,
          tm_par.dstMetaData.maxContentLightLevel         = build_param->hdr_metadata.max_content;
          tm_par.dstMetaData.maxFrameAverageLightLevel    = build_param->hdr_metadata.avg_content;
          tm_par.outputContainerGamma                     = si_vpe_maps_vpe_to_gm_transfer_function(build_param->dst_surface.cs.tf);
+         tm_par.outputContainerPrimaries                 = si_vpe_mpes_vpe_to_gm_primary(build_param->dst_surface.cs.primaries);
 
          /* If the tone mapping of source is changed during playback, it must be recalculated.
           * Now assume that the tone mapping is fixed.
@@ -902,18 +886,20 @@ si_vpe_set_tonemap(struct vpe_video_processor *vpeproc,
       build_param->streams[0].flags.hdr_metadata             = 1;
       build_param->streams[0].tm_params.enable_3dlut         = 1;
       build_param->streams[0].tm_params.UID                  = 1;
+      SIVPE_DBG(vpeproc->log_level, "Enable Tone mapping 3DLut\n");
    } else {
       build_param->streams[0].flags.hdr_metadata             = 0;
       build_param->streams[0].tm_params.enable_3dlut         = 0;
       build_param->streams[0].tm_params.UID                  = 0;
+      SIVPE_DBG(vpeproc->log_level, "Disable Tone mapping 3DLut\n");
    }
    build_param->streams[0].tm_params.lut_data                = vpeproc->lut_data;
    build_param->streams[0].tm_params.lut_dim                 = VPE_LUT_DIM;
    build_param->streams[0].tm_params.input_pq_norm_factor    = 0;
+   build_param->streams[0].tm_params.shaper_tf               = build_param->streams[0].surface_info.cs.tf;
    build_param->streams[0].tm_params.lut_in_gamut            = build_param->streams[0].surface_info.cs.primaries;
+   build_param->streams[0].tm_params.lut_out_tf              = build_param->dst_surface.cs.tf;
    build_param->streams[0].tm_params.lut_out_gamut           = build_param->dst_surface.cs.primaries;
-   build_param->streams[0].tm_params.lut_out_tf              = build_param->streams[0].surface_info.cs.tf;
-   build_param->streams[0].tm_params.shaper_tf               = build_param->dst_surface.cs.tf;
 }
 
 static void
@@ -930,29 +916,24 @@ si_vpe_processor_destroy(struct pipe_video_codec *codec)
       vpe_destroy(&vpeproc->vpe_handle);
 
    if (vpeproc->vpe_build_param) {
-      if (vpeproc->vpe_build_param->streams)
-         FREE(vpeproc->vpe_build_param->streams);
+      FREE(vpeproc->vpe_build_param->streams);
       FREE(vpeproc->vpe_build_param);
    }
 
    if (vpeproc->emb_buffers) {
       for (i = 0; i < vpeproc->bufs_num; i++)
-         if (vpeproc->emb_buffers[i].res)
-            si_vid_destroy_buffer(&vpeproc->emb_buffers[i]);
+         si_resource_reference(&vpeproc->emb_buffers[i], NULL);
       FREE(vpeproc->emb_buffers);
    }
 
    if (vpeproc->gm_handle)
       tm_destroy(&vpeproc->gm_handle);
-   
-   if (vpeproc->lut_data)
-      FREE(vpeproc->lut_data);
 
-   if (vpeproc->geometric_scaling_ratios)
-      FREE(vpeproc->geometric_scaling_ratios);
+   FREE(vpeproc->lut_data);
 
-   if (vpeproc->lanczos_info)
-      FREE(vpeproc->lanczos_info);
+   FREE(vpeproc->geometric_scaling_ratios);
+
+   FREE(vpeproc->lanczos_info);
 
    if (vpeproc->geometric_buf[0])
       vpeproc->geometric_buf[0]->destroy(vpeproc->geometric_buf[0]);
@@ -977,6 +958,7 @@ si_vpe_processor_begin_frame(struct pipe_video_codec *codec,
 
    dst_surfaces = target->get_surfaces(target);
    memcpy(vpeproc->dst_surfaces, dst_surfaces, sizeof(vpeproc->dst_surfaces));
+   vpeproc->dst_buffer = target;
 }
 
 static void
@@ -1174,7 +1156,7 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
    struct vpe *vpe_handle = vpeproc->vpe_handle;
    struct vpe_build_param *build_param = vpeproc->vpe_build_param;
    struct vpe_build_bufs *build_bufs = vpeproc->vpe_build_bufs;
-   struct rvid_buffer *emb_buf;
+   struct si_resource *emb_buf;
    uint64_t *vpe_ptr;
 
    assert(process_properties);
@@ -1198,10 +1180,10 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
    build_bufs->cmd_buf.tmz = false;
 
    /* Init EmbBuf address and size information */
-   emb_buf = &vpeproc->emb_buffers[vpeproc->cur_buf];
+   emb_buf = vpeproc->emb_buffers[vpeproc->cur_buf];
    /* Map EmbBuf for CPU access */
    vpe_ptr = (uint64_t *)vpeproc->ws->buffer_map(vpeproc->ws,
-                                                 emb_buf->res->buf,
+                                                 emb_buf->buf,
                                                  NULL,
                                                  PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
    if (!vpe_ptr) {
@@ -1209,14 +1191,14 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
       return 1;
    }
    build_bufs->emb_buf.cpu_va = (uintptr_t)vpe_ptr;
-   build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(emb_buf->res->buf);
+   build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(emb_buf->buf);
    build_bufs->emb_buf.size = VPE_EMBBUF_SIZE;
    build_bufs->emb_buf.tmz = false;
 
    result = vpe_build_commands(vpe_handle, build_param, build_bufs);
 
    /* Un-map Emb_buf */
-   vpeproc->ws->buffer_unmap(vpeproc->ws, emb_buf->res->buf);
+   vpeproc->ws->buffer_unmap(vpeproc->ws, emb_buf->buf);
 
    if (VPE_STATUS_OK != result) {
       SIVPE_ERR("Build commands failed with result: %d\n", result);
@@ -1240,7 +1222,7 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
    vpeproc->cs.current.cdw += (vpeproc->vpe_build_bufs->cmd_buf.size / 4);
 
    /* Add embbuf into bo_handle list */
-   vpeproc->ws->cs_add_buffer(&vpeproc->cs, emb_buf->res->buf, RADEON_USAGE_READ | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_GTT);
+   vpeproc->ws->cs_add_buffer(&vpeproc->cs, emb_buf->buf, RADEON_USAGE_READ | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_GTT);
 
    /* Add surface buffers into bo_handle list */
    si_vpe_cs_add_surface_buffer(vpeproc, src_surfaces, RADEON_USAGE_READ);
@@ -1349,6 +1331,7 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
 
    /* Get input surface */
    memcpy(vpeproc->src_surfaces, input_texture->get_surfaces(input_texture), sizeof(vpeproc->src_surfaces));
+   vpeproc->src_buffer = input_texture;
 
    /* Get scaling ratio info */
    src_rect_width  = process_properties->src_region.x1 - process_properties->src_region.x0;
@@ -1439,17 +1422,13 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
        * Sould copy the source setting and destination setting from original command.
        * Complete the CSC at the first round.
        */
-      process_geoscl.base.input_format            = process_properties->base.input_format;
-      process_geoscl.base.output_format           = process_properties->base.output_format;
       process_geoscl.orientation                  = process_properties->orientation;
       process_geoscl.blend.mode                   = process_properties->blend.mode;
       process_geoscl.blend.global_alpha           = process_properties->blend.global_alpha;
       process_geoscl.background_color             = 0;
 
-      process_geoscl.in_colors_standard           = process_properties->in_colors_standard;
       process_geoscl.in_color_range               = process_properties->in_color_range;
       process_geoscl.in_chroma_siting             = process_properties->in_chroma_siting;
-      process_geoscl.out_colors_standard          = process_properties->out_colors_standard;
       process_geoscl.out_color_range              = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_FULL;
       process_geoscl.out_chroma_siting            = process_properties->out_chroma_siting;
 
@@ -1487,10 +1466,8 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
        * The source format should be reset to the format of DstFormat.
        * And other option should be cleaned.
        */
-      process_geoscl.base.input_format            = process_properties->base.output_format;
       process_geoscl.orientation                  = PIPE_VIDEO_VPP_ORIENTATION_DEFAULT;
       process_geoscl.blend.global_alpha           = 1.0f;
-      process_geoscl.in_colors_standard           = process_properties->out_colors_standard;
       process_geoscl.in_color_range               = PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_FULL;
       process_geoscl.in_chroma_siting             = process_properties->out_chroma_siting;
       process_geoscl.in_color_primaries           = process_properties->out_color_primaries;
@@ -1657,7 +1634,7 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
     */
    vpeproc->bufs_num = (uint8_t)debug_get_num_option("AMDGPU_SIVPE_BUF_NUM", VPE_BUFFERS_NUM);
    vpeproc->cur_buf = 0;
-   vpeproc->emb_buffers = (struct rvid_buffer *)CALLOC(vpeproc->bufs_num, sizeof(struct rvid_buffer));
+   vpeproc->emb_buffers = CALLOC(vpeproc->bufs_num, sizeof(struct si_resource *));
    if (!vpeproc->emb_buffers) {
       SIVPE_ERR("Allocate command buffer list failed\n");
       goto fail;
@@ -1665,11 +1642,11 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
       SIVPE_INFO(vpeproc->log_level, "Number of emb_buf is %d\n", vpeproc->bufs_num);
 
    for (i = 0; i < vpeproc->bufs_num; i++) {
-      if (!si_vid_create_buffer(vpeproc->screen, &vpeproc->emb_buffers[i], VPE_EMBBUF_SIZE, PIPE_USAGE_DEFAULT)) {
+      vpeproc->emb_buffers[i] = si_resource(pipe_buffer_create(vpeproc->screen, 0, PIPE_USAGE_DEFAULT, VPE_EMBBUF_SIZE));
+      if (!vpeproc->emb_buffers[i]) {
           SIVPE_ERR("Can't allocated emb_buf buffers.\n");
           goto fail;
       }
-      si_vid_clear_buffer(context, &vpeproc->emb_buffers[i]);
    }
 
    /* Create VPE parameters structure */

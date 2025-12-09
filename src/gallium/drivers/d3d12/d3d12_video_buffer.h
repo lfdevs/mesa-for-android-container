@@ -30,6 +30,7 @@
 #include "vl/vl_defines.h"
 #include <vector>
 #include "d3d12_video_types.h"
+#include "d3d12_interop_public.h"
 
 ///
 /// Pipe video buffer interface starts
@@ -107,6 +108,10 @@ struct d3d12_video_buffer
    // in the function d3d12_video_enc::d3d12_video_create_dpb_buffer()
    // Points to the same address as d3d12_video_encoder::m_spVideoTexArrayDPBPoolInUse
    std::shared_ptr<uint32_t> m_spVideoTexArrayDPBPoolInUse;
+   struct d3d12_interop_video_buffer_associated_data d3d12_video_buffer_associated_data = {};
+
+   uint32_t subresource_index = 0;
+   void* readonly_resource = nullptr;
 };
 
 ///

@@ -19,25 +19,18 @@ _nir_foreach_def(nir_instr *instr, nir_foreach_def_cb cb, void *state)
       return cb(&nir_instr_as_tex(instr)->def, state);
    case nir_instr_type_phi:
       return cb(&nir_instr_as_phi(instr)->def, state);
-   case nir_instr_type_parallel_copy: {
-      nir_foreach_parallel_copy_entry(entry, nir_instr_as_parallel_copy(instr)) {
-         if (!entry->dest_is_reg && !cb(&entry->dest.def, state))
-            return false;
-      }
-      return true;
-   }
-
    case nir_instr_type_load_const:
       return cb(&nir_instr_as_load_const(instr)->def, state);
    case nir_instr_type_undef:
       return cb(&nir_instr_as_undef(instr)->def, state);
 
    case nir_instr_type_call:
+   case nir_instr_type_cmat_call:
    case nir_instr_type_jump:
       return true;
 
    default:
-      unreachable("Invalid instruction type");
+      UNREACHABLE("Invalid instruction type");
    }
 }
 
@@ -116,16 +109,6 @@ nir_foreach_src(nir_instr *instr, nir_foreach_src_cb cb, void *state)
       }
       break;
    }
-   case nir_instr_type_parallel_copy: {
-      nir_parallel_copy_instr *pc = nir_instr_as_parallel_copy(instr);
-      nir_foreach_parallel_copy_entry(entry, pc) {
-         if (!_nir_visit_src(&entry->src, cb, state))
-            return false;
-         if (entry->dest_is_reg && !_nir_visit_src(&entry->dest.reg, cb, state))
-            return false;
-      }
-      break;
-   }
    case nir_instr_type_jump: {
       nir_jump_instr *jump = nir_instr_as_jump(instr);
 
@@ -133,13 +116,20 @@ nir_foreach_src(nir_instr *instr, nir_foreach_src_cb cb, void *state)
          return false;
       return true;
    }
-
+   case nir_instr_type_cmat_call: {
+      nir_cmat_call_instr *call = nir_instr_as_cmat_call(instr);
+      for (unsigned i = 0; i < call->num_params; i++) {
+         if (!_nir_visit_src(&call->params[i], cb, state))
+            return false;
+      }
+      break;
+   }
    case nir_instr_type_load_const:
    case nir_instr_type_undef:
       return true;
 
    default:
-      unreachable("Invalid instruction type");
+      UNREACHABLE("Invalid instruction type");
       break;
    }
 

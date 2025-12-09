@@ -323,7 +323,7 @@ static bool gpir_lower_eq_ne(gpir_block *block, gpir_node *node)
          node_new_op = gpir_op_max; /* or */
          break;
       default:
-         unreachable("bad node op");
+         UNREACHABLE("bad node op");
    }
 
    gpir_alu_node *e = gpir_node_to_alu(node);

@@ -53,7 +53,6 @@ struct vdrm_device_funcs {
 struct vdrm_device {
    const struct vdrm_device_funcs *funcs;
 
-   struct virgl_renderer_capset_drm caps;
    bool supports_cross_device;
    struct vdrm_shmem *shmem;
    uint8_t *rsp_mem;
@@ -70,6 +69,12 @@ struct vdrm_device {
    uint32_t reqbuf_len;
    uint32_t reqbuf_cnt;
    uint8_t reqbuf[0x4000];
+
+   /*
+    * struct virgl_renderer_capset_drm has a varying size and must be placed
+    * in the end of struct vdrm_device.
+    */
+   struct virgl_renderer_capset_drm caps;
 };
 
 struct vdrm_device *vdrm_device_connect(int fd, uint32_t context_type);

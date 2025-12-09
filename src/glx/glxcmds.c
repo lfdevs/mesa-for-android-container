@@ -157,7 +157,7 @@ GetGLXPrivScreenConfig(Display * dpy, int scrn, struct glx_display ** ppriv,
 
    /* Check to see if the GL is supported on this screen */
    *ppsc = (*ppriv)->screens[scrn];
-   if ((*ppsc)->configs == NULL && (*ppsc)->visuals == NULL) {
+   if (*ppsc == NULL || ((*ppsc)->configs == NULL && (*ppsc)->visuals == NULL)) {
       /* No support for GL on this screen regardless of visual */
       return GLX_BAD_VISUAL;
    }
@@ -1477,6 +1477,7 @@ glXGetFBConfigs(Display * dpy, int screen, int *nelements)
    *nelements = 0;
    if (priv && (priv->screens != NULL)
        && (screen >= 0) && (screen < ScreenCount(dpy))
+       && (priv->screens[screen] != NULL)
        && (priv->screens[screen]->configs != NULL)
        && (priv->screens[screen]->configs->fbconfigID
       != (int) GLX_DONT_CARE)) {

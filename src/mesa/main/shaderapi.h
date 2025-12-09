@@ -81,10 +81,10 @@ _mesa_longest_attribute_name_length(struct gl_shader_program *shProg);
 
 extern void
 _mesa_shader_write_subroutine_indices(struct gl_context *ctx,
-                                      gl_shader_stage stage);
+                                      mesa_shader_stage stage);
 
 void
-_mesa_use_program(struct gl_context *ctx, gl_shader_stage stage,
+_mesa_use_program(struct gl_context *ctx, mesa_shader_stage stage,
                   struct gl_shader_program *shProg, struct gl_program *prog,
                   struct gl_pipeline_object *shTarget);
 
@@ -173,11 +173,11 @@ _mesa_program_init_subroutine_defaults(struct gl_context *ctx,
                                        struct gl_program *prog);
 
 GLcharARB *
-_mesa_read_shader_source(const gl_shader_stage stage, const char *source,
+_mesa_read_shader_source(const mesa_shader_stage stage, const char *source,
                          const blake3_hash blake3);
 
 void
-_mesa_dump_shader_source(const gl_shader_stage stage, const char *source,
+_mesa_dump_shader_source(const mesa_shader_stage stage, const char *source,
                          const blake3_hash blake3);
 
 void

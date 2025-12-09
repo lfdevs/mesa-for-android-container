@@ -89,7 +89,7 @@ softpipe_set_vertex_buffers(struct pipe_context *pipe,
 
    util_set_vertex_buffers_count(softpipe->vertex_buffer,
                                  &softpipe->num_vertex_buffers,
-                                 buffers, count, true);
+                                 buffers, count);
 
    softpipe->dirty |= SP_NEW_VERTEX;
 

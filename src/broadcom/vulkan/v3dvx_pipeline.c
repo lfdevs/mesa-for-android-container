@@ -65,7 +65,7 @@ blend_factor(VkBlendFactor factor, bool dst_alpha_one, bool *needs_constants,
       *needs_dual_src = true;
       return VK_BLEND_FACTOR_ZERO;
    default:
-      unreachable("Unknown blend factor.");
+      UNREACHABLE("Unknown blend factor.");
    }
 }
 
@@ -266,7 +266,7 @@ v3dX(translate_stencil_op)(VkStencilOp op)
    case VK_STENCIL_OP_DECREMENT_AND_WRAP:
       return V3D_STENCIL_OP_DECWRAP;
    default:
-      unreachable("bad stencil op");
+      UNREACHABLE("bad stencil op");
    }
 }
 

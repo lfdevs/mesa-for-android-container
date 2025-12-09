@@ -15,6 +15,7 @@
 
 #include "lima_context.h"
 #include "lima_gpu.h"
+#include "lima_pack.h"
 #include "lima_resource.h"
 #include "lima_texture.h"
 #include "lima_format.h"
@@ -55,51 +56,71 @@ lima_pack_blit_cmd(struct lima_job *job,
 
    struct lima_screen *screen = lima_screen(ctx->base.screen);
 
-   uint32_t reload_shader_first_instr_size =
-      ((uint32_t *)(screen->pp_buffer->map + pp_reload_program_offset))[0] & 0x1f;
-   uint32_t reload_shader_va = screen->pp_buffer->va + pp_reload_program_offset;
+   lima_pack(cpu + lima_blit_render_state_offset, RENDER_STATE, state)
+   {
+      state.shader_address = screen->pp_buffer->va + pp_reload_program_offset;
+      state.fs_first_instr_length = ((uint32_t *)(screen->pp_buffer->map + pp_reload_program_offset))[0] & 0x1f;
 
-   struct lima_render_state reload_render_state = {
-      .alpha_blend = 0xf03b1ad2,
-      .depth_test = 0x0000000e,
-      .depth_range = 0xffff0000,
-      .stencil_front = 0x00000007,
-      .stencil_back = 0x00000007,
-      .multi_sample = 0x00000007,
-      .shader_address = reload_shader_va | reload_shader_first_instr_size,
-      .varying_types = 0x00000001,
-      .textures_address = va + lima_blit_tex_array_offset,
-      .aux0 = 0x00004021,
-      .varyings_address = va + lima_blit_varying_offset,
-   };
+      state.varying_type_0 = LIMA_VARYING_TYPE_VEC2_FP32;
 
-   reload_render_state.multi_sample |= (sample_mask << 12);
+      state.textures_address = va + lima_blit_tex_array_offset;
 
-   uint16_t width, height;
-   if (job->key.cbuf.texture) {
-      pipe_surface_size(&job->key.cbuf, &width, &height);
-   } else {
-      pipe_surface_size(&job->key.zsbuf, &width, &height);
-   }
-   fb_width = width;
-   fb_height = height;
+      state.varying_stride = 2 * sizeof(float);
+      state.has_samplers = true;
+      state.sampler_count = 1;
 
-   if (util_format_is_depth_or_stencil(res->base.format)) {
-      reload_render_state.alpha_blend &= 0x0fffffff;
-      if (res->base.format != PIPE_FORMAT_Z16_UNORM)
-         reload_render_state.depth_test |= 0x400;
-      if (res->reload & PIPE_CLEAR_DEPTH)
-         reload_render_state.depth_test |= 0x801;
-      if (res->reload & PIPE_CLEAR_STENCIL) {
-         reload_render_state.depth_test |= 0x1000;
-         reload_render_state.stencil_front = 0x0000024f;
-         reload_render_state.stencil_back = 0x0000024f;
-         reload_render_state.stencil_test = 0x0000ffff;
+      state.varyings_address = va + lima_blit_varying_offset;
+
+      state.sample_mask = sample_mask;
+
+      state.blend_func_rgb = LIMA_BLEND_FUNC_ADD;
+      state.blend_func_a = LIMA_BLEND_FUNC_ADD;
+      state.blend_factor_src_rgb = LIMA_BLEND_FACTOR_COLOR_ONE;
+      state.blend_factor_dst_rgb = LIMA_BLEND_FACTOR_COLOR_ZERO;
+      state.blend_factor_src_a = LIMA_BLEND_FACTOR_ALPHA_ONE;
+      state.blend_factor_dst_a = LIMA_BLEND_FACTOR_ALPHA_ZERO;
+
+      state.depth_compare_func = LIMA_COMPARE_FUNC_ALWAYS;
+
+      state.stencil_front.compare_function = LIMA_COMPARE_FUNC_ALWAYS;
+      state.stencil_back.compare_function = LIMA_COMPARE_FUNC_ALWAYS;
+
+      state.alpha_test_func = LIMA_COMPARE_FUNC_ALWAYS;
+      state.color_mask = 0xf;
+
+      state.viewport_near = 0.0f;
+      state.viewport_far = 1.0f;
+
+      if (util_format_is_depth_or_stencil(res->base.format)) {
+         state.color_mask = 0;
+         if (res->base.format != PIPE_FORMAT_Z16_UNORM)
+            state.shader_writes_depth_stencil = true;
+         if (res->reload & PIPE_CLEAR_DEPTH) {
+            state.depth_test = true;
+            state.shader_writes_depth = true;
+         }
+         if (res->reload & PIPE_CLEAR_STENCIL) {
+            state.shader_writes_stencil = true;
+            state.stencil_front.compare_function = LIMA_COMPARE_FUNC_ALWAYS;
+            state.stencil_front.stencil_fail = LIMA_STENCIL_OP_REPLACE;
+            state.stencil_front.depth_fail = LIMA_STENCIL_OP_REPLACE;
+            state.stencil_front.depth_pass = LIMA_STENCIL_OP_REPLACE;
+            state.stencil_back = state.stencil_front;
+
+            state.stencil_write_mask_front = 0xff;
+            state.stencil_write_mask_back = 0xff;
+         }
       }
    }
 
-   memcpy(cpu + lima_blit_render_state_offset, &reload_render_state,
-          sizeof(reload_render_state));
+   unsigned width, height;
+   if (job->key.cbuf.texture)
+      pipe_surface_size(&job->key.cbuf, &width, &height);
+   else
+      pipe_surface_size(&job->key.zsbuf, &width, &height);
+
+   fb_width = width;
+   fb_height = height;
 
    lima_pack(cpu + lima_blit_tex_desc_offset, TEXTURE_DESCRIPTOR, desc) {
       lima_texture_desc_set_res(ctx, &desc, &res->base, level, level,

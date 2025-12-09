@@ -8,9 +8,6 @@ spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_
 # Flaky with a Fail result since the piglit fix made it stop crashing.
 glx@glx-make-current
 
-# OQ flakes/fails started with no perceivable pattern around 2023-12-13
-dEQP-GLES3.functional.occlusion_query..*
-
 # uprev Piglit in Mesa
 dEQP-GLES3.functional.occlusion_query.scissor_depth_write_stencil_write_stencil_clear
 glx@glx-multithread-texture
@@ -19,22 +16,13 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
 dEQP-GLES2.functional.fbo.render.resize.rbo_bgra_stencil_index8
 dEQP-GLES3.functional.fbo.render.recreate_color.tex2d_rg8ui_depth_stencil_rbo_depth24_stencil8
 
-dEQP-GLES3.functional.occlusion_query.depth_clear_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.conservative_scissor_depth_write_stencil_write
-dEQP-GLES3.functional.occlusion_query.depth_write
-dEQP-GLES3.functional.occlusion_query.depth_write_depth_clear_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.scissor_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.scissor_depth_clear
-dEQP-GLES3.functional.occlusion_query.conservative_scissor_depth_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.conservative_scissor_stencil_clear
-dEQP-GLES3.functional.occlusion_query.conservative_depth_clear
-dEQP-GLES3.functional.occlusion_query.scissor_depth_clear_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.conservative_depth_write_stencil_clear
-
+dEQP-GLES2.functional.texture.mipmap.2d.generate.rgba8888_non_square_fastest
 dEQP-GLES3.functional.texture.filtering.3d.formats.r11f_g11f_b10f_nearest_mipmap_nearest
+dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_clamp_mirror
 
 dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_12x12_rgba.srgb8_alpha8_astc_12x12_khr_srgb8_alpha8_astc_12x12_khr.texture2d_to_cubemap
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_srgb8_alpha8_etc2_eac.texture2d_array_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_64_bits_mixed.rg32i_r11_eac.cubemap_to_texture2d
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_64_bits.rg32f_rgba16ui.texture3d_to_renderbuffer
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_96_bits.rgb32f_rgb32i.texture3d_to_texture2d
 dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.at_sample_id.multisample_rbo_2
@@ -42,23 +30,31 @@ dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.fragment.sam
 
 glx@glx-visuals-stencil
 spec@!opengl 1.0@gl-1.0-ortho-pos
+spec@!opengl 1.0@gl-1.0-readpixsanity
 spec@!opengl 1.1@draw-pixels
 spec@!opengl 1.2@texture-packed-formats
+spec@!opengl 3.2@layered-rendering@clear-color-all-types 3d mipmapped
 spec@amd_shader_trinary_minmax@execution@built-in-functions@fs-mid3-vec4-vec4-vec4
+spec@arb_clear_buffer_object@arb_clear_buffer_object-formats
 spec@arb_clear_texture@arb_clear_texture-depth
 spec@arb_copy_image@arb_copy_image-formats --samples=2
 spec@arb_draw_indirect@arb_draw_indirect-transform-feedback
 spec@arb_framebuffer_srgb@blit renderbuffer linear_to_srgb upsample disabled render
+spec@arb_framebuffer_srgb@blit renderbuffer srgb scaled disabled clear
 spec@arb_framebuffer_srgb@blit texture linear_to_srgb scaled enabled render
+spec@arb_framebuffer_srgb@blit texture srgb_to_linear single_sampled enabled render
 spec@arb_gpu_shader5@texturegatheroffset@vs-rgba-0-unorm-2d
+spec@arb_gpu_shader_int64@execution@built-in-functions@fs-op-sub-uint64_t-uint64_t
 spec@arb_sample_shading@arb_sample_shading-builtin-gl-sample-mask-mrt-alpha-to-coverage
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection \*gradarb 3d
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-assign-bitxor-uint-uint
 spec@arb_texture_float@multisample-formats 2 gl_arb_texture_float
 spec@arb_texture_gather@texturegatheroffset@vs-r-red-uint-2darray
+spec@arb_texture_rg@multisample-formats 2 gl_arb_texture_rg-int
 spec@arb_texture_rg@multisample-formats 6 gl_arb_texture_rg-float
 spec@arb_texture_rg@multisample-formats 8 gl_arb_texture_rg
 spec@arb_texture_view@rendering-r32ui
+spec@arb_transform_feedback2@change objects while paused
 spec@arb_vertex_buffer_object@vbo-subdata-many drawarrays
 spec@arb_vertex_buffer_object@vbo-subdata-many drawelements
 spec@arb_vertex_buffer_object@vbo-subdata-many drawrangeelements
@@ -73,10 +69,14 @@ spec@ext_framebuffer_multisample@accuracy all_samples depth_draw depthstencil
 spec@ext_framebuffer_multisample@accuracy all_samples depth_draw small depthstencil
 spec@ext_framebuffer_multisample@accuracy all_samples depth_resolve small depthstencil
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve small depthstencil
+spec@ext_framebuffer_multisample@interpolation 6 non-centroid-deriv-disabled
+spec@ext_framebuffer_object@fbo-drawbuffers-blend-add
+spec@ext_framebuffer_object@fbo-generatemipmap-nonsquare
 spec@ext_framebuffer_object@getteximage-formats init-by-rendering
 spec@glsl-1.20@execution@built-in-functions@vs-transpose-mat2x4
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(\) 1d
 spec@glsl-1.20@execution@variable-indexing@vs-varying-mat2-row-rd
+spec@glsl-1.30@execution@fs-execution-ordering
 spec@glsl-1.30@execution@tex-miplevel-selection texture\(\) 1darrayshadow
 spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 2darrayshadow
 spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2d
@@ -86,5 +86,9 @@ spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 2d
 spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 3d
 spec@glsl-1.30@execution@tex-miplevel-selection textureproj\(bias\) 1d_projvec4
 spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 1d
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojlodoffset 2d_projvec4
+spec@glsl-1.30@execution@texturesize@fs-texturesize-sampler2darrayshadow
+spec@glsl-4.00@execution@built-in-functions@gs-mix-dvec2-dvec2-bvec2
 spec@glsl-4.30@execution@built-in-functions@cs-op-bitxor-uvec3-uint
 spec@nv_copy_image@nv_copy_image-formats --samples=4
+spec@nv_copy_image@nv_copy_image-formats --samples=8

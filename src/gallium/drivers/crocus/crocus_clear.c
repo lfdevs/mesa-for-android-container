@@ -729,7 +729,7 @@ crocus_clear_texture(struct pipe_context *ctx,
          case 96:  format = ISL_FORMAT_R32G32B32_UINT;    break;
          case 128: format = ISL_FORMAT_R32G32B32A32_UINT; break;
          default:
-            unreachable("Unknown format bpb");
+            UNREACHABLE("Unknown format bpb");
          }
 
          /* No aux surfaces for non-renderable surfaces */

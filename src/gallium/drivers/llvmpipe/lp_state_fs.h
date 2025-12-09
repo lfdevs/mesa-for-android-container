@@ -63,6 +63,7 @@ struct lp_depth_state
    unsigned enabled:1;         /**< depth test enabled? */
    unsigned writemask:1;       /**< allow depth buffer writes? */
    unsigned func:3;            /**< depth test func (PIPE_FUNC_x) */
+   unsigned depth_bounds_test:1;
 };
 
 struct lp_fragment_shader_variant_key
@@ -87,6 +88,7 @@ struct lp_fragment_shader_variant_key
    unsigned multisample:1;
    unsigned no_ms_sample_mask_out:1;
    unsigned restrict_depth_values:1;
+   unsigned sample_locations_enabled:1;
 
    enum pipe_format zsbuf_format;
    enum pipe_format cbuf_format[PIPE_MAX_COLOR_BUFS];
@@ -95,6 +97,7 @@ struct lp_fragment_shader_variant_key
    uint8_t zsbuf_nr_samples;
    uint8_t coverage_samples;
    uint8_t min_samples;
+   uint8_t sample_locations[LP_MAX_SAMPLES]; /* maybe pass this through scene? */
    /* followed by variable number of samplers + images */
 };
 

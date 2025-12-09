@@ -6,7 +6,7 @@ COPYRIGHT=u"""
 """
 
 import argparse
-from vk_physical_device_features_gen import get_renamed_feature, str_removeprefix
+from vk_physical_device_features_gen import get_renamed_feature
 import os
 import sys
 import xml.etree.ElementTree as et
@@ -71,13 +71,13 @@ def process_enable(enab):
         else:
             return f"(p->{attrib['member']} & {attrib['value']})"
     elif 'extension' in attrib:
-        return f"e->{str_removeprefix(attrib['extension'], 'VK_')}"
+        return f"e->{attrib['extension'].removeprefix('VK_')}"
     elif 'feature' in attrib:
         feat = get_renamed_feature(attrib['struct'], attrib['feature'])
         return f"f->{feat}"
     else:
         version = attrib['version']
-        return f"(api_version >= VK_API_{str_removeprefix(version, 'VK_')})"
+        return f"(api_version >= VK_API_{version.removeprefix('VK_')})"
 
 def get_capabilities(doc, beta):
     caps = {}

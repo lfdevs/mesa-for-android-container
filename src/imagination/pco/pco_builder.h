@@ -100,6 +100,28 @@ static inline pco_cursor pco_cursor_after_block(pco_block *block)
 }
 
 /**
+ * \brief Returns a cursor set to before a list.
+ *
+ * \param[in] list The list.
+ * \return The cursor.
+ */
+static inline pco_cursor pco_cursor_before_list(struct list_head *list)
+{
+   return pco_cursor_before_cf_node(pco_cf_node_head(list));
+}
+
+/**
+ * \brief Returns a cursor set to after an exec_list.
+ *
+ * \param[in] list The list.
+ * \return The list.
+ */
+static inline pco_cursor pco_cursor_after_list(struct list_head *list)
+{
+   return pco_cursor_after_cf_node(pco_cf_node_tail(list));
+}
+
+/**
  * \brief Returns a cursor set to before an instruction.
  *
  * \param[in] instr The instruction.
@@ -210,7 +232,7 @@ static inline pco_func *pco_cursor_func(pco_cursor cursor)
       break;
    }
 
-   unreachable();
+   UNREACHABLE("");
 }
 
 /**
@@ -238,7 +260,7 @@ static inline pco_cf_node *pco_cursor_cf_node(pco_cursor cursor)
       break;
    }
 
-   unreachable();
+   UNREACHABLE("");
 }
 
 /**
@@ -274,7 +296,7 @@ static inline pco_block *pco_cursor_block(pco_cursor cursor)
       break;
    }
 
-   unreachable();
+   UNREACHABLE("");
 }
 
 /**
@@ -312,7 +334,7 @@ static inline pco_instr *pco_cursor_instr(pco_cursor cursor)
       break;
    }
 
-   unreachable();
+   UNREACHABLE("");
 }
 
 /**
@@ -355,7 +377,7 @@ static inline pco_igrp *pco_cursor_igrp(pco_cursor cursor)
       break;
    }
 
-   unreachable();
+   UNREACHABLE("");
 }
 
 /* Builder functions. */
@@ -375,22 +397,6 @@ static pco_builder pco_builder_create(pco_func *func, pco_cursor cursor)
 }
 
 /**
- * \brief Inserts a block at a position specified by the builder.
- *
- * \param[in] b The builder.
- * \param[in] block The block.
- */
-/* TODO: test with multiple blocks. */
-static inline void pco_builder_insert_block(pco_builder *b, pco_block *block)
-{
-   struct list_head *list = &pco_cursor_cf_node(b->cursor)->link;
-   bool before = pco_cursor_is_before(b->cursor);
-
-   list_add(&block->cf_node.link, before ? list->prev : list);
-   b->cursor = pco_cursor_after_block(block);
-}
-
-/**
  * \brief Inserts a instruction at a position specified by the builder.
  *
  * \param[in] b The builder.
@@ -398,14 +404,24 @@ static inline void pco_builder_insert_block(pco_builder *b, pco_block *block)
  */
 static inline void pco_builder_insert_instr(pco_builder *b, pco_instr *instr)
 {
-   pco_instr *cursor_instr = pco_cursor_instr(b->cursor);
-   bool before = pco_cursor_is_before(b->cursor);
    pco_block *block = pco_cursor_block(b->cursor);
-   struct list_head *list = cursor_instr ? &cursor_instr->link : &block->instrs;
-
    instr->parent_block = block;
 
-   list_add(&instr->link, (before && cursor_instr) ? list->prev : list);
+   pco_instr *cursor_instr = pco_cursor_instr(b->cursor);
+   bool before = pco_cursor_is_before(b->cursor);
+
+   if (cursor_instr) {
+      if (before)
+         list_add(&instr->link, cursor_instr->link.prev);
+      else
+         list_add(&instr->link, &cursor_instr->link);
+   } else {
+      if (before)
+         list_add(&instr->link, &block->instrs);
+      else
+         list_addtail(&instr->link, &block->instrs);
+   }
+
    b->cursor = pco_cursor_after_instr(instr);
 }
 
@@ -417,14 +433,24 @@ static inline void pco_builder_insert_instr(pco_builder *b, pco_instr *instr)
  */
 static inline void pco_builder_insert_igrp(pco_builder *b, pco_igrp *igrp)
 {
-   pco_igrp *cursor_igrp = pco_cursor_igrp(b->cursor);
-   bool before = pco_cursor_is_before(b->cursor);
    pco_block *block = pco_cursor_block(b->cursor);
-   struct list_head *list = cursor_igrp ? &cursor_igrp->link : &block->instrs;
-
    igrp->parent_block = block;
 
-   list_add(&igrp->link, (before && cursor_igrp) ? list->prev : list);
+   pco_igrp *cursor_igrp = pco_cursor_igrp(b->cursor);
+   bool before = pco_cursor_is_before(b->cursor);
+
+   if (cursor_igrp) {
+      if (before)
+         list_add(&igrp->link, cursor_igrp->link.prev);
+      else
+         list_add(&igrp->link, &cursor_igrp->link);
+   } else {
+      if (before)
+         list_add(&igrp->link, &block->instrs);
+      else
+         list_addtail(&igrp->link, &block->instrs);
+   }
+
    b->cursor = pco_cursor_after_igrp(igrp);
 }
 
@@ -437,7 +463,7 @@ static inline void pco_builder_insert_igrp(pco_builder *b, pco_igrp *igrp)
  * \param[in] instr The instruction.
  * \return True if the instruction has the default execution condition.
  */
-static inline bool pco_instr_default_exec(pco_instr *instr)
+static inline bool pco_instr_has_default_exec(pco_instr *instr)
 {
    if (!pco_instr_has_exec_cnd(instr))
       return true;

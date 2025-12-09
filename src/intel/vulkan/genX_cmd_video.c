@@ -34,7 +34,8 @@ genX(CmdBeginVideoCodingKHR)(VkCommandBuffer commandBuffer,
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_video_session, vid, pBeginInfo->videoSession);
-   ANV_FROM_HANDLE(anv_video_session_params, params, pBeginInfo->videoSessionParameters);
+   VK_FROM_HANDLE(vk_video_session_parameters, params,
+                  pBeginInfo->videoSessionParameters);
 
    cmd_buffer->video.vid = vid;
    cmd_buffer->video.params = params;
@@ -173,7 +174,7 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
 {
    ANV_FROM_HANDLE(anv_buffer, src_buffer, frame_info->srcBuffer);
    struct anv_video_session *vid = cmd_buffer->video.vid;
-   struct anv_video_session_params *params = cmd_buffer->video.params;
+   struct vk_video_session_parameters *params = cmd_buffer->video.params;
 
    const struct VkVideoDecodeH265PictureInfoKHR *h265_pic_info =
       vk_find_struct_const(frame_info->pNext, VIDEO_DECODE_H265_PICTURE_INFO_KHR);
@@ -181,7 +182,7 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
    const StdVideoH265SequenceParameterSet *sps;
    const StdVideoH265PictureParameterSet *pps;
 
-   vk_video_get_h265_parameters(&vid->vk, params ? &params->vk : NULL, frame_info, h265_pic_info, &sps, &pps);
+   vk_video_get_h265_parameters(&vid->vk, params, frame_info, h265_pic_info, &sps, &pps);
 
    struct vk_video_h265_reference ref_slots[2][8] = { 0 };
    uint8_t dpb_idx[ANV_VIDEO_H265_MAX_NUM_REF_FRAME] = { 0,};
@@ -250,7 +251,7 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
 
    anv_batch_emit(&cmd_buffer->batch, GENX(HCP_PIPE_BUF_ADDR_STATE), buf) {
       buf.DecodedPictureAddress =
-         anv_image_address(img, &img->planes[0].primary_surface.memory_range);
+         anv_image_dpb_address(iv, frame_info->dstPictureResource.baseArrayLayer);
 
       buf.DecodedPictureMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.DecodedPictureAddress.bo, 0),
@@ -340,7 +341,8 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
          .MOCS = anv_mocs(cmd_buffer->device, buf.SAOTileColumnBufferAddress.bo, 0),
       };
 
-      buf.CurrentMVTemporalBufferAddress = anv_image_address(img, &img->vid_dmv_top_surface);
+      buf.CurrentMVTemporalBufferAddress =
+         anv_image_dmv_top_address(iv, frame_info->dstPictureResource.baseArrayLayer);
 
       buf.CurrentMVTemporalBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.CurrentMVTemporalBufferAddress.bo, 0),
@@ -358,7 +360,7 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
          dpb_idx[slot_idx] = i;
 
          buf.ReferencePictureAddress[i] =
-            anv_image_address(ref_iv->image, &ref_iv->image->planes[0].primary_surface.memory_range);
+            anv_image_dpb_address(ref_iv, frame_info->pReferenceSlots[i].pPictureResource->baseArrayLayer);
       }
 
       buf.ReferencePictureMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
@@ -389,7 +391,7 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
             anv_image_view_from_handle(frame_info->pReferenceSlots[i].pPictureResource->imageViewBinding);
 
          buf.CollocatedMVTemporalBufferAddress[i] =
-            anv_image_address(ref_iv->image, &ref_iv->image->vid_dmv_top_surface);
+            anv_image_dmv_top_address(ref_iv, frame_info->pReferenceSlots[i].pPictureResource->baseArrayLayer);
       }
 
       buf.CollocatedMVTemporalBufferMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
@@ -809,6 +811,7 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
                ref.ReferenceListEntry[i].ListEntry = dpb_idx[slot_idx];
                ref.ReferenceListEntry[i].ReferencePicturetbValue = CLAMP(diff_poc, -128, 127) & 0xff;
                ref.ReferenceListEntry[i].TopField = true;
+               ref.ReferenceListEntry[i].LongTermReference = ref_slots[0][i].lt;
             }
          }
       }
@@ -828,6 +831,7 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
                ref.ReferenceListEntry[i].ListEntry = dpb_idx[slot_idx];
                ref.ReferenceListEntry[i].ReferencePicturetbValue = CLAMP(diff_poc, -128, 127) & 0xff;
                ref.ReferenceListEntry[i].TopField = true;
+               ref.ReferenceListEntry[i].LongTermReference = ref_slots[1][i].lt;
             }
          }
       }
@@ -890,14 +894,14 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
 {
    ANV_FROM_HANDLE(anv_buffer, src_buffer, frame_info->srcBuffer);
    struct anv_video_session *vid = cmd_buffer->video.vid;
-   struct anv_video_session_params *params = cmd_buffer->video.params;
+   struct vk_video_session_parameters *params = cmd_buffer->video.params;
    const struct VkVideoDecodeH264PictureInfoKHR *h264_pic_info =
       vk_find_struct_const(frame_info->pNext, VIDEO_DECODE_H264_PICTURE_INFO_KHR);
 
    const StdVideoH264SequenceParameterSet *sps;
    const StdVideoH264PictureParameterSet *pps;
 
-   vk_video_get_h264_parameters(&vid->vk, params ? &params->vk : NULL, frame_info, h264_pic_info, &sps, &pps);
+   vk_video_get_h264_parameters(&vid->vk, params, frame_info, h264_pic_info, &sps, &pps);
 
    uint8_t dpb_slots[ANV_VIDEO_H264_MAX_DPB_SLOTS] = { 0,};
 
@@ -951,11 +955,11 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
    anv_batch_emit(&cmd_buffer->batch, GENX(MFX_PIPE_BUF_ADDR_STATE), buf) {
       bool use_pre_deblock = false;
       if (use_pre_deblock) {
-         buf.PreDeblockingDestinationAddress = anv_image_address(img,
-                                                                 &img->planes[0].primary_surface.memory_range);
+         buf.PreDeblockingDestinationAddress =
+            anv_image_dpb_address(iv, frame_info->dstPictureResource.baseArrayLayer);
       } else {
-         buf.PostDeblockingDestinationAddress = anv_image_address(img,
-                                                                  &img->planes[0].primary_surface.memory_range);
+         buf.PostDeblockingDestinationAddress =
+            anv_image_dpb_address(iv, frame_info->dstPictureResource.baseArrayLayer);
       }
       buf.PreDeblockingDestinationAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.PreDeblockingDestinationAddress.bo, 0),
@@ -1003,8 +1007,8 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
 
          dpb_slots[idx] = i;
 
-         buf.ReferencePictureAddress[i] = anv_image_address(ref_iv->image,
-                                                            &ref_iv->image->planes[0].primary_surface.memory_range);
+         buf.ReferencePictureAddress[i] =
+            anv_image_dpb_address(ref_iv, frame_info->pReferenceSlots[i].pPictureResource->baseArrayLayer);
 
          if (i == 0) {
             ref_bo = ref_iv->image->bindings[0].address.bo;
@@ -1173,8 +1177,8 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
             vk_find_struct_const(frame_info->pReferenceSlots[i].pNext, VIDEO_DECODE_H264_DPB_SLOT_INFO_KHR);
          const struct anv_image_view *ref_iv = anv_image_view_from_handle(frame_info->pReferenceSlots[i].pPictureResource->imageViewBinding);
          const StdVideoDecodeH264ReferenceInfo *ref_info = dpb_slot->pStdReferenceInfo;
-         avc_directmode.DirectMVBufferAddress[idx] = anv_image_address(ref_iv->image,
-                                                                     &ref_iv->image->vid_dmv_top_surface);
+         avc_directmode.DirectMVBufferAddress[idx] =
+            anv_image_dmv_top_address(ref_iv, frame_info->pReferenceSlots[i].pPictureResource->baseArrayLayer);
          if (i == 0) {
             dmv_bo = ref_iv->image->bindings[0].address.bo;
          }
@@ -1185,8 +1189,8 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
          .MOCS = anv_mocs(cmd_buffer->device, dmv_bo, 0),
       };
 
-      avc_directmode.DirectMVBufferWriteAddress = anv_image_address(img,
-                                                                    &img->vid_dmv_top_surface);
+      avc_directmode.DirectMVBufferWriteAddress =
+         anv_image_dmv_top_address(iv, frame_info->dstPictureResource.baseArrayLayer);
       avc_directmode.DirectMVBufferWriteAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, img->bindings[0].address.bo, 0),
       };
@@ -1333,7 +1337,8 @@ get_relative_dist(const VkVideoDecodeAV1PictureInfoKHR *av1_pic_info,
 }
 
 struct av1_refs_info {
-   const struct anv_image *img;
+   const struct anv_image_view *iv;
+   uint32_t array_layer;
    uint8_t order_hint;
    uint8_t ref_order_hints[STD_VIDEO_AV1_NUM_REF_FRAMES];
    uint8_t disable_frame_end_update_cdf;
@@ -1347,20 +1352,23 @@ struct av1_refs_info {
 static int
 find_cdf_index(const struct anv_video_session *vid,
                const struct av1_refs_info *refs_info,
-               const struct anv_image *img)
+               const struct anv_image_view *iv,
+               uint32_t array_layer)
 {
    for (uint32_t i = 0; i < STD_VIDEO_AV1_NUM_REF_FRAMES; i++) {
       if (vid) {
-         if (!vid->prev_refs[i].img)
+         if (!vid->prev_refs[i].iv)
             continue;
 
-         if (vid->prev_refs[i].img == img)
+         if (vid->prev_refs[i].iv == iv &&
+             vid->prev_refs[i].array_layer == array_layer)
             return vid->prev_refs[i].default_cdf_index;
       } else {
-         if (!refs_info[i].img)
+         if (!refs_info[i].iv)
             continue;
 
-         if (refs_info[i].img == img)
+         if (refs_info[i].iv == iv &&
+             refs_info[i].array_layer == array_layer)
             return refs_info[i].default_cdf_index;
       }
    }
@@ -1429,14 +1437,25 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
    const struct anv_image_view *dpb_iv = frame_info->pSetupReferenceSlot ?
       anv_image_view_from_handle(frame_info->pSetupReferenceSlot->pPictureResource->imageViewBinding) :
       dst_iv;
+   const uint32_t dpb_array_layer = frame_info->pSetupReferenceSlot ?
+      frame_info->pSetupReferenceSlot->pPictureResource->baseArrayLayer :
+      frame_info->dstPictureResource.baseArrayLayer;
    const struct anv_image *dpb_img = dpb_iv->image;
    const bool is_10bit = seq_hdr->pColorConfig->BitDepth == 10;
+   const bool is_grain = vid->vk.av1.film_grain_support && std_pic_info->flags.apply_grain;
+
+#if GFX_VER < 20
+   if (is_grain) {
+      anv_finishme("Film grain synthesis on pre-Xe2 hardware via shader kernel");
+   }
+#endif
 
    VkExtent2D frameExtent = frame_info->dstPictureResource.codedExtent;
    int denom = std_pic_info->coded_denom + 9;
    unsigned downscaled_width = (frameExtent.width * 8 + denom / 2) / denom;
 
-   ref_info[AV1_INTRA_FRAME].img = dpb_img;
+   ref_info[AV1_INTRA_FRAME].iv = dpb_iv;
+   ref_info[AV1_INTRA_FRAME].array_layer = dpb_array_layer;
    ref_info[AV1_INTRA_FRAME].frame_width = frameExtent.width;
    ref_info[AV1_INTRA_FRAME].frame_height = frameExtent.height;
 
@@ -1455,7 +1474,7 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
          if (ref_idx == idx) {
             const struct anv_image_view *ref_iv =
                anv_image_view_from_handle(frame_info->pReferenceSlots[j].pPictureResource->imageViewBinding);
-            const struct anv_image *ref_img = ref_iv->image;
+            const uint32_t ref_array_layer = frame_info->pReferenceSlots[j].pPictureResource->baseArrayLayer;
             const struct VkVideoDecodeAV1DpbSlotInfoKHR *dpb_slot =
                vk_find_struct_const(frame_info->pReferenceSlots[j].pNext, VIDEO_DECODE_AV1_DPB_SLOT_INFO_KHR);
             const struct StdVideoDecodeAV1ReferenceInfo *std_ref_info = dpb_slot->pStdReferenceInfo;
@@ -1464,31 +1483,32 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
             ref_info[i + 1].frame_type = std_ref_info->frame_type;
             ref_info[i + 1].frame_width = frameExtent.width;
             ref_info[i + 1].frame_height = frameExtent.height;
-            ref_info[i + 1].img = ref_img;
+            ref_info[i + 1].iv = ref_iv;
+            ref_info[i + 1].array_layer = ref_array_layer;
             ref_info[i + 1].order_hint = std_ref_info->OrderHint;
             memcpy(ref_info[i + 1].ref_order_hints, std_ref_info->SavedOrderHints, STD_VIDEO_AV1_NUM_REF_FRAMES);
             ref_info[i + 1].disable_frame_end_update_cdf = std_ref_info->flags.disable_frame_end_update_cdf;
-            ref_info[i + 1].default_cdf_index = find_cdf_index(vid, NULL, ref_img);
+            ref_info[i + 1].default_cdf_index = find_cdf_index(vid, NULL, ref_iv, ref_array_layer);
          }
       }
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(AVP_SURFACE_STATE), ss) {
       ss.SurfaceFormat = is_10bit ? AVP_P010 : AVP_PLANAR_420_8;
-      ss.SurfacePitchMinus1 = dst_img->planes[0].primary_surface.isl.row_pitch_B - 1;
-      ss.YOffsetforUCb = dst_img->planes[1].primary_surface.memory_range.offset /
-                         dst_img->planes[0].primary_surface.isl.row_pitch_B;
+      ss.SurfacePitchMinus1 = dpb_img->planes[0].primary_surface.isl.row_pitch_B - 1;
+      ss.YOffsetforUCb = dpb_img->planes[1].primary_surface.memory_range.offset /
+                         dpb_img->planes[0].primary_surface.isl.row_pitch_B;
    };
 
    if (!frame_is_key_or_intra(std_pic_info->frame_type)) {
       for (enum av1_ref_frame r = AV1_INTRA_FRAME; r <= AV1_ALTREF_FRAME; r++) {
-         if (ref_info[r].img && frame_info->referenceSlotCount) {
+         if (ref_info[r].iv && frame_info->referenceSlotCount) {
             anv_batch_emit(&cmd_buffer->batch, GENX(AVP_SURFACE_STATE), ss) {
                ss.SurfaceID = 0x6 + r;
                ss.SurfaceFormat = is_10bit ? AVP_P010 : AVP_PLANAR_420_8;
-               ss.SurfacePitchMinus1 = ref_info[r].img->planes[0].primary_surface.isl.row_pitch_B - 1;
-               ss.YOffsetforUCb = ref_info[r].img->planes[1].primary_surface.memory_range.offset /
-                                  ref_info[r].img->planes[0].primary_surface.isl.row_pitch_B;
+               ss.SurfacePitchMinus1 = ref_info[r].iv->image->planes[0].primary_surface.isl.row_pitch_B - 1;
+               ss.YOffsetforUCb = ref_info[r].iv->image->planes[1].primary_surface.memory_range.offset /
+                                  ref_info[r].iv->image->planes[0].primary_surface.isl.row_pitch_B;
             }
          }
       }
@@ -1497,6 +1517,16 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
    if (std_pic_info->flags.allow_intrabc) {
       anv_batch_emit(&cmd_buffer->batch, GENX(AVP_SURFACE_STATE), ss) {
          ss.SurfaceID = 0xE;
+         ss.SurfaceFormat = is_10bit ? AVP_P010 : AVP_PLANAR_420_8;
+         ss.SurfacePitchMinus1 = dpb_img->planes[0].primary_surface.isl.row_pitch_B - 1;
+         ss.YOffsetforUCb = dpb_img->planes[1].primary_surface.memory_range.offset /
+                            dpb_img->planes[0].primary_surface.isl.row_pitch_B;
+      }
+   }
+
+   if (is_grain) {
+      anv_batch_emit(&cmd_buffer->batch, GENX(AVP_SURFACE_STATE), ss) {
+         ss.SurfaceID = 0x2;
          ss.SurfaceFormat = is_10bit ? AVP_P010 : AVP_PLANAR_420_8;
          ss.SurfacePitchMinus1 = dst_img->planes[0].primary_surface.isl.row_pitch_B - 1;
          ss.YOffsetforUCb = dst_img->planes[1].primary_surface.memory_range.offset /
@@ -1510,27 +1540,30 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
    assert(dst_img->planes[0].primary_surface.isl.tiling == ISL_TILING_4);
 #endif
    anv_batch_emit(&cmd_buffer->batch, GENX(AVP_PIPE_BUF_ADDR_STATE), buf) {
-      buf.DecodedOutputFrameBufferAddress = anv_image_address(dst_img,
-                                                              &dst_img->planes[0].primary_surface.memory_range);
+      buf.DecodedOutputFrameBufferAddress =
+         anv_image_dpb_address(dpb_iv, dpb_array_layer);
       buf.DecodedOutputFrameBufferAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.DecodedOutputFrameBufferAddress.bo, 0),
 #if GFX_VERx10 >= 125
-	 .TiledResourceMode = TRMODE_TILEF,
+         .TiledResourceMode = TRMODE_TILEF,
 #endif
       };
-      buf.CurrentFrameMVWriteBufferAddress = anv_image_address(dpb_img,
-                                                               &dpb_img->vid_dmv_top_surface);
+      buf.CurrentFrameMVWriteBufferAddress =
+         anv_image_dmv_top_address(dpb_iv, dpb_array_layer);
       buf.CurrentFrameMVWriteBufferAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.CurrentFrameMVWriteBufferAddress.bo, 0),
       };
 
       if (std_pic_info->flags.allow_intrabc) {
          buf.IntraBCDecodedOutputFrameBufferAddress =
-            anv_image_address(dst_img, &dst_img->planes[0].primary_surface.memory_range);
+            anv_image_dpb_address(dpb_iv, dpb_array_layer);
       }
 
       buf.IntraBCDecodedOutputFrameBufferAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.IntraBCDecodedOutputFrameBufferAddress.bo, 0),
+#if GFX_VERx10 >= 125
+         .TiledResourceMode = TRMODE_TILEF,
+#endif
       };
 
       if (use_internal_cache_mem) {
@@ -1878,13 +1911,14 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
 
       if (std_pic_info->frame_type != STD_VIDEO_AV1_FRAME_TYPE_KEY) {
          for (enum av1_ref_frame r = AV1_INTRA_FRAME; r <= AV1_ALTREF_FRAME; r++) {
-            const struct anv_image *ref_img = ref_info[r].img;
-            if (ref_img) {
+            const struct anv_image_view *ref_iv = ref_info[r].iv;
+            const struct anv_image *ref_img = ref_iv->image;
+            if (ref_iv) {
 
                buf.ReferencePictureAddress[r] =
-                  anv_image_address(ref_img, &ref_img->planes[0].primary_surface.memory_range);
+                  anv_image_dpb_address(ref_iv, ref_info[r].array_layer);
                buf.CollocatedMVTemporalBufferAddress[r] =
-                  anv_image_address(ref_img, &ref_img->vid_dmv_top_surface);
+                  anv_image_dmv_top_address(ref_iv, ref_info[r].array_layer);
 
                if (!ref_bo)
                   ref_bo = ref_img->bindings[0].address.bo;
@@ -1913,8 +1947,9 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
          if (ref_info[std_pic_info->primary_ref_frame + 1].disable_frame_end_update_cdf) {
             use_default_cdf = true;
 
-            const struct anv_image *ref_img = ref_info[std_pic_info->primary_ref_frame + 1].img;
-            cdf_index = find_cdf_index(vid, NULL, ref_img);
+            const struct anv_image_view *ref_iv = ref_info[std_pic_info->primary_ref_frame + 1].iv;
+            const uint32_t ref_layer = ref_info[std_pic_info->primary_ref_frame + 1].array_layer;
+            cdf_index = find_cdf_index(vid, NULL, ref_iv, ref_layer);
          }
       }
 
@@ -1925,18 +1960,17 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
 
          ref_info[0].default_cdf_index = cdf_index;
       } else {
-         const struct anv_image *ref_img = ref_info[std_pic_info->primary_ref_frame + 1].img;
-         buf.CDFTablesInitializationBufferAddress = anv_image_address(ref_img,
-                                                                      &ref_img->av1_cdf_table);
+         const struct anv_image_view *ref_iv = ref_info[std_pic_info->primary_ref_frame + 1].iv;
+         const uint32_t ref_layer = ref_info[std_pic_info->primary_ref_frame + 1].array_layer;
+         buf.CDFTablesInitializationBufferAddress = anv_image_av1_table_address(ref_iv, ref_layer);
       }
       buf.CDFTablesInitializationBufferAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.CDFTablesInitializationBufferAddress.bo, 0),
       };
 
       if (!std_pic_info->flags.disable_frame_end_update_cdf) {
-         const struct anv_image *ref_img = ref_info[0].img;
-         buf.CDFTablesBackwardAdaptationBufferAddress = anv_image_address(ref_img,
-                                                                          &ref_img->av1_cdf_table);
+         buf.CDFTablesBackwardAdaptationBufferAddress =
+            anv_image_av1_table_address(ref_info[0].iv, ref_info[0].array_layer);
       }
 
       buf.CDFTablesBackwardAdaptationBufferAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
@@ -1986,14 +2020,27 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
       };
 #endif
 #if GFX_VER >= 20
+      if (is_grain) {
+         buf.FilmGrainInjectedOutputFrameBufferAddress =
+            anv_image_dpb_address(dst_iv, frame_info->dstPictureResource.baseArrayLayer);
+         buf.FilmGrainSampleTemplateAddress = (struct anv_address) {
+            vid->vid_mem[ANV_VID_MEM_AV1_FILM_GRAIN_SAMPLE_TEMPLATE].mem->bo,
+            vid->vid_mem[ANV_VID_MEM_AV1_FILM_GRAIN_SAMPLE_TEMPLATE].offset
+         };
+         buf.FilmGrainTileColumnDataReadWriteBufferAddress = (struct anv_address) {
+            vid->vid_mem[ANV_VID_MEM_AV1_FILM_GRAIN_TILE_COLUMN_RW].mem->bo,
+            vid->vid_mem[ANV_VID_MEM_AV1_FILM_GRAIN_TILE_COLUMN_RW].offset
+         };
+      }
       buf.FilmGrainInjectedOutputFrameBufferAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
-         .MOCS = anv_mocs(cmd_buffer->device, NULL, 0),
+         .MOCS = anv_mocs(cmd_buffer->device, buf.FilmGrainInjectedOutputFrameBufferAddress.bo, 0),
+         .TiledResourceMode = TRMODE_TILEF,
       };
       buf.FilmGrainSampleTemplateAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
-         .MOCS = anv_mocs(cmd_buffer->device, NULL, 0),
+         .MOCS = anv_mocs(cmd_buffer->device, buf.FilmGrainSampleTemplateAddress.bo, 0),
       };
       buf.FilmGrainTileColumnDataReadWriteBufferAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
-         .MOCS = anv_mocs(cmd_buffer->device, NULL, 0),
+         .MOCS = anv_mocs(cmd_buffer->device, buf.FilmGrainTileColumnDataReadWriteBufferAddress.bo, 0),
       };
 #endif
    };
@@ -2196,6 +2243,9 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
       pic.GlobalMotionType6 = std_pic_info->pGlobalMotion->GmType[6];
       pic.GlobalMotionType7 = std_pic_info->pGlobalMotion->GmType[7];
       pic.FrameLevelGlobalMotionInvalidFlags = 0;
+#if GFX_VER >= 20
+      pic.ApplyFilmGrainFlag = is_grain;
+#endif
 
       uint8_t idx = 0;
       int warp_params[8][6] = { 0, };
@@ -2459,6 +2509,51 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
 
    };
 
+#if GFX_VER >= 20
+   if (is_grain) {
+      const StdVideoAV1FilmGrain* filmGrainParams = std_pic_info->pFilmGrain;
+      anv_batch_emit(&cmd_buffer->batch, GENX(AVP_FILM_GRAIN_STATE), fg) {
+         fg.GrainRandomSeed = filmGrainParams->grain_seed;
+         fg.ClipToRestrictedRangeFlag = filmGrainParams->flags.clip_to_restricted_range;
+         fg.GrainNoiseOverlapFlag = filmGrainParams->flags.overlap_flag;
+         fg.ChromaScalingFromLumaFlag = filmGrainParams->flags.chroma_scaling_from_luma;
+         fg.MCIdentityFlag = seq_hdr->pColorConfig->matrix_coefficients == STD_VIDEO_AV1_MATRIX_COEFFICIENTS_IDENTITY;
+         fg.NumberofLumaPoints = filmGrainParams->num_y_points;
+         fg.NumberofChromaCbPoints = filmGrainParams->num_cb_points;
+         fg.NumberofChromaCrPoints = filmGrainParams->num_cr_points;
+         fg.GrainScalingMinus8 = filmGrainParams->grain_scaling_minus_8;
+         fg.ARCoeffLag = filmGrainParams->ar_coeff_lag;
+         fg.ARCoeffShiftMinus6 = filmGrainParams->ar_coeff_shift_minus_6;
+         fg.GrainScaleShift = filmGrainParams->grain_scale_shift;
+         for (unsigned i = 0; i < STD_VIDEO_AV1_MAX_NUM_Y_POINTS; ++i) {
+            fg.PointLumaValue[i] = filmGrainParams->point_y_value[i];
+            fg.PointLumaScaling[i] = filmGrainParams->point_y_scaling[i];
+         }
+         for (unsigned i = 0; i < STD_VIDEO_AV1_MAX_NUM_CB_POINTS; ++i) {
+            fg.PointCBValue[i] = filmGrainParams->point_cb_value[i];
+            fg.PointCBScaling[i] = filmGrainParams->point_cb_scaling[i];
+         }
+         for (unsigned i = 0; i < STD_VIDEO_AV1_MAX_NUM_CR_POINTS; ++i) {
+            fg.PointCRValue[i] = filmGrainParams->point_cr_value[i];
+            fg.PointCRScaling[i] = filmGrainParams->point_cr_scaling[i];
+         }
+         for (unsigned i = 0; i < STD_VIDEO_AV1_MAX_NUM_POS_LUMA; ++i) {
+            fg.ARCoeffLumaPlus128[i] = (uint8_t) filmGrainParams->ar_coeffs_y_plus_128[i];
+         }
+         for (unsigned i = 0; i < STD_VIDEO_AV1_MAX_NUM_POS_CHROMA; ++i) {
+            fg.ARCoeffChromaCBPlus128[i] = (uint8_t) filmGrainParams->ar_coeffs_cb_plus_128[i];
+            fg.ARCoeffChromaCRPlus128[i] = (uint8_t) filmGrainParams->ar_coeffs_cr_plus_128[i];
+         }
+         fg.CBMult = filmGrainParams->cb_mult;
+         fg.CBLumaMult = filmGrainParams->cb_luma_mult;
+         fg.CBOffset = filmGrainParams->cb_offset;
+         fg.CRMult = filmGrainParams->cr_mult;
+         fg.CRLumaMult = filmGrainParams->cr_luma_mult;
+         fg.CROffset = filmGrainParams->cr_offset;
+      };
+   }
+#endif
+
    unsigned column = tile_idx % std_pic_info->pTileInfo->TileCols;
    unsigned row = tile_idx / std_pic_info->pTileInfo->TileCols;
    bool last_tile = (column == std_pic_info->pTileInfo->TileCols - 1) &&
@@ -2506,10 +2601,12 @@ anv_av1_decode_video_tile(struct anv_cmd_buffer *cmd_buffer,
 
    /* Set necessary info from current refs to the prev_refs */
    for (int i = 0; i < STD_VIDEO_AV1_NUM_REF_FRAMES; ++i) {
-      vid->prev_refs[i].img = ref_info[i].img;
+      vid->prev_refs[i].iv = ref_info[i].iv;
+      vid->prev_refs[i].array_layer = ref_info[i].array_layer;
       vid->prev_refs[i].default_cdf_index =
          i == 0 ? ref_info[i].default_cdf_index :
-                  find_cdf_index(NULL, ref_info, ref_info[i].img);
+                  find_cdf_index(NULL, ref_info, ref_info[i].iv,
+                                 ref_info[i].array_layer);
    }
 }
 
@@ -2535,7 +2632,7 @@ anv_av1_calculate_xstep_qn(struct anv_cmd_buffer *cmd_buffer,
    int32_t mib_size_log2 = seq_hdr->flags.use_128x128_superblock ?
       av1_max_mib_size_log2 : av1_min_mib_size_log2;
 
-   int32_t mi_cols = ALIGN(frameExtent.width, 8) >> mib_size_log2;
+   int32_t mi_cols = align(frameExtent.width, 8) >> mib_size_log2;
 
    int denom = std_pic_info->coded_denom + 9;
    unsigned downscaled_width = (frameExtent.width * 8 + denom / 2) / denom;
@@ -2543,8 +2640,8 @@ anv_av1_calculate_xstep_qn(struct anv_cmd_buffer *cmd_buffer,
    for (uint8_t i = 0; i < 2; i++) { /* i == 0 : luma, i == 1 : chroma */
       int subsampling_x = seq_hdr->pColorConfig->subsampling_x;
       int ssx = i & subsampling_x;
-      int downscaled = ALIGN(downscaled_width, 2) >> ssx;
-      int upscaled = ALIGN(frameExtent.width, 2) >> ssx;
+      int downscaled = align(downscaled_width, 2) >> ssx;
+      int upscaled = align(frameExtent.width, 2) >> ssx;
 
       int xstep_qn = ((downscaled << av1_rs_scale_subpel_bits) + upscaled / 2) / upscaled;
 
@@ -2606,10 +2703,10 @@ anv_av1_decode_video(struct anv_cmd_buffer *cmd_buffer,
    const VkVideoDecodeAV1PictureInfoKHR *av1_pic_info =
       vk_find_struct_const(frame_info->pNext, VIDEO_DECODE_AV1_PICTURE_INFO_KHR);
    struct anv_video_session *vid = cmd_buffer->video.vid;
-   struct anv_video_session_params *params = cmd_buffer->video.params;
+   struct vk_video_session_parameters *params = cmd_buffer->video.params;
    const StdVideoAV1SequenceHeader *seq_hdr;
 
-   vk_video_get_av1_parameters(&vid->vk, params ? &params->vk : NULL, frame_info, &seq_hdr);
+   vk_video_get_av1_parameters(&vid->vk, params, frame_info, &seq_hdr);
 
    anv_av1_calculate_xstep_qn(cmd_buffer, frame_info, seq_hdr);
 
@@ -2617,6 +2714,15 @@ anv_av1_decode_video(struct anv_cmd_buffer *cmd_buffer,
       anv_av1_decode_video_tile(cmd_buffer, frame_info, seq_hdr, t);
 }
 #endif
+
+enum vp9_seg_lvl_features
+{
+   VP9_SEG_LVL_ALT_Q = 0,        /* Use alternate Quantizer */
+   VP9_SEG_LVL_ALT_L = 1,        /* Use alternate loop filter value */
+   VP9_SEG_LVL_REF_FRAME = 2,    /* Optional Segment reference frame */
+   VP9_SEG_LVL_SKIP = 3,         /* Optional Segment (0,0) + skip mode */
+   VP9_SEG_LVL_MAX = 4           /* Number of segment features */
+};
 
 static uint8_t
 anv_vp9_get_ref_idx(const struct VkVideoDecodeInfoKHR *frame_info, int slot_id)
@@ -2791,6 +2897,9 @@ anv_vp9_decode_video(struct anv_cmd_buffer *cmd_buffer,
    const struct anv_image_view *iv = frame_info->pSetupReferenceSlot ?
       anv_image_view_from_handle(frame_info->pSetupReferenceSlot->pPictureResource->imageViewBinding) :
       dst_iv;
+   const uint32_t array_layer = frame_info->pSetupReferenceSlot ?
+      frame_info->pSetupReferenceSlot->pPictureResource->baseArrayLayer :
+      frame_info->dstPictureResource.baseArrayLayer;
 
    const struct anv_image *img = iv->image;
 
@@ -2864,8 +2973,7 @@ anv_vp9_decode_video(struct anv_cmd_buffer *cmd_buffer,
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(HCP_PIPE_BUF_ADDR_STATE), buf) {
-      buf.DecodedPictureAddress =
-         anv_image_address(img, &img->planes[0].primary_surface.memory_range);
+      buf.DecodedPictureAddress = anv_image_dpb_address(iv, array_layer);
 
       buf.DecodedPictureMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, buf.DecodedPictureAddress.bo, 0),
@@ -2974,8 +3082,7 @@ anv_vp9_decode_video(struct anv_cmd_buffer *cmd_buffer,
             assert(frame_info->pReferenceSlots[idx].slotIndex == vp9_pic_info->referenceNameSlotIndices[i]);
 
             buf.ReferencePictureAddress[i] =
-               anv_image_address(ref_iv->image, &ref_iv->image->planes[0].primary_surface.memory_range);
-
+               anv_image_dpb_address(ref_iv, frame_info->pReferenceSlots[idx].pPictureResource->baseArrayLayer);
          }
       }
 
@@ -3118,14 +3225,42 @@ anv_vp9_decode_video(struct anv_cmd_buffer *cmd_buffer,
    else
       num_segments = 8;
 
-   uint8_t loop_filter_level = loop_filter->loop_filter_level;
-
    for (uint32_t i = 0; i < num_segments; i++) {
       anv_batch_emit(&cmd_buffer->batch, GENX(HCP_VP9_SEGMENT_STATE), seg) {
+         uint32_t qyac = std_pic->base_q_idx;
+         uint8_t lvl = loop_filter->loop_filter_level;
+         bool skip = false;
+         bool ref_enable = false;
+         uint16_t ref_val = 0;
+
          seg.SegmentID = i;
 
+         if (std_pic->flags.segmentation_enabled && segmentation) {
+            u_foreach_bit(val, segmentation->FeatureEnabled[i]) {
+               if (val == VP9_SEG_LVL_ALT_Q) {
+                  qyac = segmentation->FeatureData[i][val];
+                  if (!segmentation->flags.segmentation_abs_or_delta_update)
+                     qyac += std_pic->base_q_idx;
+               } else if (val == VP9_SEG_LVL_ALT_L) {
+                  lvl = segmentation->FeatureData[i][val];
+                  if (!std_pic->pSegmentation->flags.segmentation_abs_or_delta_update)
+                     lvl += loop_filter->loop_filter_level;
+                  lvl = CLAMP(lvl, 0, 63);
+               } else if (val == VP9_SEG_LVL_REF_FRAME) {
+                  ref_enable = true;
+                  ref_val = segmentation->FeatureData[i][val];
+               } else if (val == VP9_SEG_LVL_SKIP) {
+                  skip = true;
+               }
+            }
+         }
+
+         seg.SegmentSkipped = skip;
+         seg.SegmentReferenceEnable = ref_enable;
+         seg.SegmentReference = ref_val;
+
          int16_t qmul[2][2] = { 0, };
-         anv_calculate_qmul(vp9_pic_info, i, (int16_t *)qmul);
+         anv_calculate_qmul(vp9_pic_info, qyac, i, (int16_t *)qmul);
 
          seg.LumaDCQuantScale = qmul[0][0];
          seg.LumaACQuantScale = qmul[0][1];
@@ -3135,43 +3270,47 @@ anv_vp9_decode_video(struct anv_cmd_buffer *cmd_buffer,
          if (loop_filter->flags.loop_filter_delta_enabled) {
             int shift = loop_filter->loop_filter_level >= 32;
 
-            if (loop_filter_level > 0) {
-               seg.FilterLevelRef0Mode0 = CLAMP(loop_filter_level +
-                     loop_filter->loop_filter_ref_deltas[0] * (1 << shift), 0, 63);
-               seg.FilterLevelRef0Mode1 = seg.FilterLevelRef0Mode0;
+            seg.FilterLevelRef0Mode0 = CLAMP(lvl +
+                  loop_filter->loop_filter_ref_deltas[0] * (1 << shift), 0, 63);
+            seg.FilterLevelRef0Mode1 = seg.FilterLevelRef0Mode0;
 
-               seg.FilterLevelRef1Mode0 = CLAMP(loop_filter_level +
-                     loop_filter->loop_filter_ref_deltas[1] * (1 <<shift) +
-                     loop_filter->loop_filter_mode_deltas[0] * (1 << shift), 0, 0x3f);
-               seg.FilterLevelRef1Mode1 = CLAMP(loop_filter_level +
-                     loop_filter->loop_filter_ref_deltas[1] * (1 <<shift)
-                     + loop_filter->loop_filter_mode_deltas[1] * (1 << shift), 0, 0x3f);
+            seg.FilterLevelRef1Mode0 = CLAMP(lvl +
+                  (loop_filter->loop_filter_ref_deltas[1] +
+                   loop_filter->loop_filter_mode_deltas[0]) * (1 << shift), 0, 0x3f);
+            seg.FilterLevelRef1Mode1 = CLAMP(lvl +
+                  (loop_filter->loop_filter_ref_deltas[1] +
+                   loop_filter->loop_filter_mode_deltas[1]) * (1 << shift), 0, 0x3f);
 
-               seg.FilterLevelRef2Mode0 = CLAMP(loop_filter_level +
-                     loop_filter->loop_filter_ref_deltas[2] * (1 <<shift) +
-                     loop_filter->loop_filter_mode_deltas[0] * (1 << shift), 0, 0x3f);
+            seg.FilterLevelRef2Mode0 = CLAMP(lvl +
+                  (loop_filter->loop_filter_ref_deltas[2] +
+                   loop_filter->loop_filter_mode_deltas[0]) * (1 << shift), 0, 0x3f);
 
-               seg.FilterLevelRef2Mode1 = CLAMP(loop_filter_level +
-                     loop_filter->loop_filter_ref_deltas[2] * (1 <<shift) +
-                     loop_filter->loop_filter_mode_deltas[1] * (1 << shift), 0, 0x3f);
+            seg.FilterLevelRef2Mode1 = CLAMP(lvl +
+                  (loop_filter->loop_filter_ref_deltas[2] +
+                   loop_filter->loop_filter_mode_deltas[1]) * (1 << shift), 0, 0x3f);
 
-               seg.FilterLevelRef3Mode0 = CLAMP(loop_filter_level +
-                     loop_filter->loop_filter_ref_deltas[3] * (1 <<shift) +
-                     loop_filter->loop_filter_mode_deltas[0] * (1 << shift), 0, 0x3f);
+            seg.FilterLevelRef3Mode0 = CLAMP(lvl +
+                  (loop_filter->loop_filter_ref_deltas[3] +
+                   loop_filter->loop_filter_mode_deltas[0]) * (1 << shift), 0, 0x3f);
 
-               seg.FilterLevelRef3Mode1 = CLAMP(loop_filter_level +
-                     loop_filter->loop_filter_ref_deltas[3] * (1 <<shift) +
-                     loop_filter->loop_filter_mode_deltas[1] * (1 << shift), 0, 0x3f);
+            seg.FilterLevelRef3Mode1 = CLAMP(lvl +
+                  (loop_filter->loop_filter_ref_deltas[3] +
+                   loop_filter->loop_filter_mode_deltas[1]) * (1 << shift), 0, 0x3f);
+
+            /* Clear filter level when filter level is zero in the picture param */
+            if (!loop_filter->loop_filter_level) {
+               seg.FilterLevelRef0Mode0 = 0;
+               seg.FilterLevelRef2Mode0 = 0;
             }
          } else {
-            seg.FilterLevelRef0Mode0 = loop_filter_level;
-            seg.FilterLevelRef0Mode1 = loop_filter_level;
-            seg.FilterLevelRef1Mode0 = loop_filter_level;
-            seg.FilterLevelRef1Mode1 = loop_filter_level;
-            seg.FilterLevelRef2Mode0 = loop_filter_level;
-            seg.FilterLevelRef2Mode1 = loop_filter_level;
-            seg.FilterLevelRef3Mode0 = loop_filter_level;
-            seg.FilterLevelRef3Mode1 = loop_filter_level;
+            seg.FilterLevelRef0Mode0 = lvl;
+            seg.FilterLevelRef0Mode1 = lvl;
+            seg.FilterLevelRef1Mode0 = lvl;
+            seg.FilterLevelRef1Mode1 = lvl;
+            seg.FilterLevelRef2Mode0 = lvl;
+            seg.FilterLevelRef2Mode1 = lvl;
+            seg.FilterLevelRef3Mode0 = lvl;
+            seg.FilterLevelRef3Mode1 = lvl;
          }
       }
    }
@@ -3179,8 +3318,8 @@ anv_vp9_decode_video(struct anv_cmd_buffer *cmd_buffer,
    anv_batch_emit(&cmd_buffer->batch, GENX(HCP_VP9_PIC_STATE), pic) {
       if (std_pic->flags.segmentation_enabled)
          assert(segmentation != NULL);
-      pic.FrameWidth = ALIGN(frame_width, 8) - 1;
-      pic.FrameHeight = ALIGN(frame_height, 8) - 1;
+      pic.FrameWidth = align(frame_width, 8) - 1;
+      pic.FrameHeight = align(frame_height, 8) - 1;
       /* STD_VIDEO_VP9_FRAME_TYPE_KEY == VP9_Key_frmae
        * STD_VIDEO_VP9_FRAME_TYPE_NON_KEY == VP9_InterFrame
        */

@@ -1,32 +1,73 @@
 /*
  * Copyright © 2014 Intel Corporation
+ * SPDX-License-Identifier: MIT
+ */
+
+/* Common Subexpression Elimination
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
+ * This implementation behaves more like Global Value Numbering (GVN) than
+ * traditional CSE. While traditional CSE eliminates redundant instructions
+ * that have identical representations, GVN eliminates redundant instructions
+ * that have identical behavior.
  *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
+ * The pass walks the shader and adds instructions into a set whose equality
+ * function returns whether the behavior of 2 instructions is identical.
+ * When we encounter an instruction that is already in the set, the instruction
+ * is eliminated if the instruction in the set dominates it, else
+ * the instruction replaces the instruction in the set (see example 4).
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * Non-reorderable intrinsics are ignored with the exception of certain
+ * non-reorderable subgroups ops and intrinsics like demote and terminate that
+ * are CSE'd.
+ *
+ * Example 1. Identical instructions:
+ *    %2 = iadd %0, %1
+ *    control_flow {
+ *       %3 = iadd %0, %1 // eliminated
+ *    }
+ *
+ * Example 2. Commutative instructions:
+ *    %3 = ffma %0, %1, %2
+ *    %4 = ffma %1, %0, %2 // eliminated
+ *
+ * Example 3. Non-matching ALU flags are merged:
+ *    %2 = fmul %0, %1 (fp_fast_math)  // exact added here
+ *    %3 = fmul %0, %1 (exact)         // eliminated
+ *
+ * Example 4. Non-dominating situation:
+ *    if {
+ *       %2 = iadd %0, %1
+ *    } else {
+ *       %3 = iadd %0, %1 // keep, but replace %2 in the set
+ *       %4 = iadd %0, %1 // eliminated
+ *    }
+ *    TODO: We could move %2 before "if" in this pass instead. It would also
+ *          reduce register usage when %0 and %1 are no longer live in
+ *          the range between "if" and %3, while only %2 would be live in that
+ *          range.
+ *
+ * TODO - everything below is not implemented:
+ *
+ * Implementing the following cases could eliminate most of nir_opt_copy_prop:
+ *
+ * Case 1. Copy propagation of movs without swizzles:
+ *    32x4 %2 = (any instruction)
+ *    32x4 %3 = mov %2.xyzw   // eliminated since it's equal to %2
+ *
+ * Case 2. Copy propagation of movs with swizzles:
+ *    32x2 %2 = (any instruction)
+ *    32x3 %3 = mov %2.yxx    // eliminated conditionally
+ *       All %3 uses that are ALU will absorb the swizzle and are changed
+ *       to use %2, and those uses that are not ALU will keep the mov.
+ *
+ * While vecN is possible to occur here instead, NIR should always create
+ * swizzled mov instead of vecN when all components use the same def, and
+ * nir_validate should assert that, so this should never occur:
+ *    32x4 %2 = vec4 %1.?, %1.?, %1.?, %1.?
  */
 
 #include "nir.h"
 #include "nir_instr_set.h"
-
-/*
- * Implements common subexpression elimination
- */
 
 static bool
 dominates(const nir_instr *old_instr, const nir_instr *new_instr)
@@ -37,16 +78,17 @@ dominates(const nir_instr *old_instr, const nir_instr *new_instr)
 static bool
 nir_opt_cse_impl(nir_function_impl *impl)
 {
-   struct set *instr_set = nir_instr_set_create(NULL);
+   struct set instr_set;
+   nir_instr_set_init(&instr_set, NULL);
 
-   _mesa_set_resize(instr_set, impl->ssa_alloc);
+   _mesa_set_resize(&instr_set, impl->ssa_alloc);
 
    nir_metadata_require(impl, nir_metadata_dominance);
 
    bool progress = false;
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
-         if (nir_instr_set_add_or_rewrite(instr_set, instr, dominates)) {
+         if (nir_instr_set_add_or_rewrite(&instr_set, instr, dominates)) {
             progress = true;
             nir_instr_remove(instr);
          }
@@ -55,7 +97,7 @@ nir_opt_cse_impl(nir_function_impl *impl)
 
    nir_progress(progress, impl, nir_metadata_control_flow);
 
-   nir_instr_set_destroy(instr_set);
+   nir_instr_set_fini(&instr_set);
    return progress;
 }
 

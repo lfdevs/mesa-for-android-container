@@ -132,7 +132,7 @@ GV100LegalizeSSA::handleLOP2(Instruction *i)
    case OP_OR : subOp = src0 | src1; break;
    case OP_XOR: subOp = src0 ^ src1; break;
    default:
-      unreachable("invalid LOP2 opcode");
+      UNREACHABLE("invalid LOP2 opcode");
    }
 
    bld.mkOp3(OP_LOP3_LUT, TYPE_U32, i->getDef(0), i->getSrc(0), i->getSrc(1),

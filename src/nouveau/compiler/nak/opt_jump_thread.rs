@@ -8,7 +8,10 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 
 fn clone_branch(op: &Op) -> Op {
     match op {
-        Op::Bra(b) => Op::Bra(b.clone()),
+        Op::Bra(b) => {
+            assert!(b.cond.is_true());
+            Op::Bra(b.clone())
+        }
         Op::Exit(e) => Op::Exit(e.clone()),
         _ => unreachable!(),
     }
@@ -42,10 +45,22 @@ fn jump_thread(func: &mut Function) -> bool {
     for i in (0..func.blocks.len()).rev() {
         // Replace the branch if possible
         if let Some(instr) = func.blocks[i].instrs.last_mut() {
-            if let Op::Bra(OpBra { target }) = instr.op {
-                if let Some(replacement) = replacements.get(&target) {
-                    instr.op = clone_branch(replacement);
-                    progress = true;
+            if let Op::Bra(bra) = &mut instr.op {
+                if let Some(replacement) = replacements.get(&bra.target) {
+                    if bra.cond.is_true() {
+                        // Unconditional branches can just be replaced
+                        instr.op = clone_branch(replacement);
+                        progress = true;
+                    } else {
+                        // OpExit has a form that takes an input predicate but it
+                        // doesn't support upred so there's nothing we can do here.
+                        // TODO: however we could do something for the case OpBra has a
+                        //       non uniform input predicate.
+                        if let Op::Bra(replacement) = replacement {
+                            bra.target = replacement.target;
+                            progress = true;
+                        }
+                    }
                 }
                 // If the branch target was previously a trivial block then the
                 // branch was previously a forward edge (see above) and by
@@ -58,7 +73,7 @@ fn jump_thread(func: &mut Function) -> bool {
         let block_label = func.blocks[i].label;
         match &func.blocks[i].instrs[..] {
             [instr] => {
-                if instr.is_branch() && instr.pred.is_true() {
+                if instr.is_branch_always_taken() {
                     // Upholds invariant 2 because we updated the branch above
                     replacements.insert(block_label, clone_branch(&instr.op));
                 }
@@ -72,9 +87,13 @@ fn jump_thread(func: &mut Function) -> bool {
                     .get(&target_label)
                     .map(clone_branch)
                     .unwrap_or_else(|| {
-                        Op::Bra(OpBra {
-                            target: target_label,
-                        })
+                        Op::Bra(
+                            OpBra {
+                                target: target_label,
+                                cond: true.into(),
+                            }
+                            .into(),
+                        )
                     });
                 replacements.insert(block_label, replacement);
             }
@@ -123,8 +142,8 @@ fn rewrite_cfg(func: &mut Function) {
 fn opt_fall_through(func: &mut Function) {
     for i in 0..func.blocks.len() - 1 {
         let remove_last_instr = match func.blocks[i].branch() {
-            Some(b) => match b.op {
-                Op::Bra(OpBra { target }) => target == func.blocks[i + 1].label,
+            Some(b) => match &b.op {
+                Op::Bra(bra) => bra.target == func.blocks[i + 1].label,
                 _ => false,
             },
             None => false,

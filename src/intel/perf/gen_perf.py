@@ -217,6 +217,7 @@ exp_ops = {}
 #                 (n operands, splicer)
 exp_ops["AND"]  = (2, splice_bitwise_and)
 exp_ops["OR"]   = (2, splice_bitwise_or)
+exp_ops["UGT"]  = (2, splice_ugt)
 exp_ops["UGTE"] = (2, splice_ugte)
 exp_ops["ULT"]  = (2, splice_ult)
 exp_ops["&&"]   = (2, splice_logical_and)
@@ -253,6 +254,9 @@ hw_vars["$L3BankTotalCount"] = "perf->sys_vars.n_l3_banks"
 hw_vars["$L3BankMaxCount"] = "perf->sys_vars.n_l3_banks"
 hw_vars["$L3NodeTotalCount"] = "perf->sys_vars.n_l3_nodes"
 hw_vars["$SqidiTotalCount"] = "perf->sys_vars.n_sq_idis"
+hw_vars["$DepthPipeTotalCount"] = "perf->sys_vars.n_depth_pipes"
+hw_vars["$GeometryPipeTotalCount"] = "perf->sys_vars.n_geom_pipes"
+hw_vars["$ColorPipeTotalCount"] = "perf->sys_vars.n_color_pipes"
 
 def resolve_variable(name, set, allow_counters):
     if name in hw_vars:

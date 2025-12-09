@@ -155,6 +155,8 @@ union zink_shader_key_optimal {
 
 /* the default key has only last_vertex_stage set*/
 #define ZINK_SHADER_KEY_OPTIMAL_DEFAULT (1<<0)
+/* mesh default key has no bits set */
+#define ZINK_SHADER_KEY_OPTIMAL_DEFAULT_MESH (0)
 /* Ignore patch_vertices bits that would only be used if we had to generate the missing TCS */
 static inline uint32_t
 zink_shader_key_optimal_no_tcs(uint32_t key)
@@ -164,7 +166,17 @@ zink_shader_key_optimal_no_tcs(uint32_t key)
    k.tcs_bits = 0;
    return k.val;
 }
+static inline uint32_t
+zink_shader_key_optimal_mesh(uint32_t key)
+{
+   union zink_shader_key_optimal k;
+   k.val = key;
+   k.vs_bits = 0;
+   k.tcs_bits = 0;
+   return k.val;
+}
 #define ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT(key) (zink_shader_key_optimal_no_tcs(key) == ZINK_SHADER_KEY_OPTIMAL_DEFAULT)
+#define ZINK_SHADER_KEY_OPTIMAL_IS_DEFAULT_MESH(key) (zink_shader_key_optimal_mesh(key) == ZINK_SHADER_KEY_OPTIMAL_DEFAULT_MESH)
 
 static inline const struct zink_fs_key_base *
 zink_fs_key_base(const struct zink_shader_key *key)

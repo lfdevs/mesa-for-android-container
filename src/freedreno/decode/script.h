@@ -18,8 +18,14 @@
 
 #ifdef ENABLE_SCRIPTING
 
+struct rnn;
+struct rnndomain;
+
 /* called at start to load the script: */
 int script_load(const char *file);
+/* called at start to load internal pkt handlers: */
+void internal_lua_pkt_handler_load(void);
+void internal_lua_pkt_handler_init_rnn(struct rnn *rnn);
 
 /* called at start of each cmdstream file: */
 void script_start_cmdstream(const char *name);
@@ -30,12 +36,15 @@ void script_start_cmdstream(const char *name);
 __attribute__((weak))
 void script_draw(const char *primtype, uint32_t nindx);
 
-struct rnn;
-struct rnndomain;
 __attribute__((weak))
 void script_packet(uint32_t *dwords, uint32_t sizedwords,
                    struct rnn *rnn,
                    struct rnndomain *dom);
+
+__attribute__((weak))
+const char * internal_packet(uint32_t *dwords, uint32_t sizedwords,
+                             struct rnn *rnn,
+                             struct rnndomain *dom);
 
 /* maybe at some point it is interesting to add additional script
  * hooks for CP_EVENT_WRITE, etc?
@@ -49,6 +58,7 @@ void script_end_submit(void);
 
 /* called after last cmdstream file: */
 void script_finish(void);
+void internal_lua_pkt_handler_finish(void);
 
 #else
 // TODO no-op stubs..

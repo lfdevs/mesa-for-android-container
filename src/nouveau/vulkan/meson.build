@@ -93,8 +93,6 @@ nvk_entrypoints = custom_target(
   depend_files : vk_entrypoints_gen_depend_files,
 )
 
-relative_dir = fs.relative_to(meson.global_source_root(), meson.global_build_root())
-
 nvkcl_spv = custom_target(
   input : nvkcl_files,
   output : 'nvkcl.spv',
@@ -132,8 +130,6 @@ nvk_deps = [
 nvk_flags = []
 
 if with_platform_android
-  nvk_deps += [dep_android, idep_u_gralloc]
-  nvk_flags += '-DVK_USE_PLATFORM_ANDROID_KHR'
   nvk_files += files('nvk_android.c')
 endif
 
@@ -147,8 +143,6 @@ libnvk = static_library(
     sha1_h,
   ],
   include_directories : [
-    inc_gallium,
-    inc_gallium_aux,
     inc_include,
     inc_src,
   ],
@@ -165,22 +159,18 @@ libvulkan_nouveau = shared_library(
   install : true,
 )
 
-icd_lib_path = join_paths(get_option('prefix'), get_option('libdir'))
-icd_file_name = 'libvulkan_nouveau.so'
-if with_platform_windows
-  icd_lib_path = import('fs').relative_to(get_option('bindir'), with_vulkan_icd_dir)
-  icd_file_name = 'vulkan_nouveau.dll'
-endif
+icd_file_name = libname_prefix + 'vulkan_nouveau.' + libname_suffix
 
 nouveau_icd = custom_target(
   'nouveau_icd',
   input : [vk_icd_gen, vk_api_xml],
-  output : 'nouveau_icd.@0@.json'.format(host_machine.cpu()),
+  output : 'nouveau_icd.' + vulkan_manifest_suffix,
   command : [
     prog_python, '@INPUT0@',
     '--api-version', '1.4', '--xml', '@INPUT1@',
     '--sizeof-pointer', sizeof_pointer,
-    '--lib-path', join_paths(icd_lib_path, icd_file_name),
+    '--icd-lib-path', vulkan_icd_lib_path,
+    '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,
@@ -198,7 +188,8 @@ custom_target(
     prog_python, '@INPUT0@',
     '--api-version', '1.4', '--xml', '@INPUT1@',
     '--sizeof-pointer', sizeof_pointer,
-    '--lib-path', meson.current_build_dir() / icd_file_name,
+    '--icd-lib-path', meson.current_build_dir(),
+    '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,

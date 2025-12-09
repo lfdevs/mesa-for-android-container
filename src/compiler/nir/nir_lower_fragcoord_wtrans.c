@@ -62,8 +62,7 @@ lower_fragcoord_wtrans(nir_builder *b, nir_intrinsic_instr *intr,
 
    nir_def *frag_coord = nir_vector_insert_imm(b, &intr->def, invert, 3);
 
-   nir_def_rewrite_uses_after(&intr->def, frag_coord,
-                              frag_coord->parent_instr);
+   nir_def_rewrite_uses_after(&intr->def, frag_coord);
 
    return true;
 }

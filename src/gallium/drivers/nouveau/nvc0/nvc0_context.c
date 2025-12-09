@@ -528,7 +528,7 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    memset(nvc0->tex_handles, ~0, sizeof(nvc0->tex_handles));
 
-   util_dynarray_init(&nvc0->global_residents, NULL);
+   nvc0->global_residents = UTIL_DYNARRAY_INIT;
 
    // Make sure that the first TSC entry has SRGB conversion bit set, since we
    // use it as a fallback on Fermi for TXF, and on Kepler+ generations for

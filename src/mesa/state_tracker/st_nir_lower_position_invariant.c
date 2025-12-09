@@ -18,7 +18,8 @@
  */
 bool
 st_nir_lower_position_invariant(struct nir_shader *s,
-                                struct gl_program_parameter_list *paramList)
+                                struct gl_program_parameter_list *paramList,
+                                bool packed_driver_uniform_storage)
 {
    assert(s->info.io_lowered);
    nir_function_impl *impl = nir_shader_get_entrypoint(s);
@@ -28,8 +29,9 @@ st_nir_lower_position_invariant(struct nir_shader *s,
    for (int i = 0; i < 4; i++) {
       gl_state_index16 tokens[STATE_LENGTH] = {
           STATE_MVP_MATRIX_TRANSPOSE, 0, i, i};
-      nir_variable *var = st_nir_state_variable_create(s, glsl_vec4_type(), tokens);
-      _mesa_add_state_reference(paramList, tokens);
+      nir_variable *var =
+         st_nir_state_variable_create(s, glsl_vec4_type(), paramList, tokens,
+                                      NULL, packed_driver_uniform_storage);
       mvp[i] = nir_load_var(&b, var);
    }
 

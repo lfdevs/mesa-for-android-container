@@ -262,8 +262,6 @@ class Group(object):
                 print(f"   assert((values->{field.name} & {mask}) == 0);")
             elif field.modifier[0] == "minus":
                 print(f"   assert(values->{field.name} >= {field.modifier[1]});")
-            elif field.modifier[0] == "log2":
-                print(f"   assert(IS_POT_NONZERO(values->{field.name}));")
 
         for index in range(math.ceil(self.length / 4)):
             # Handle MBZ words

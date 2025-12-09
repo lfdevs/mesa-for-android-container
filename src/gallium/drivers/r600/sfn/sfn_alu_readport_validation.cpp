@@ -72,7 +72,23 @@ public:
 };
 
 bool
-AluReadportReservation::schedule_vec_src(PVirtualValue src[3],
+AluReadportReservation::update_from_sources(const std::array<PVirtualValue, 3>& src,
+                                            const unsigned int nsrc)
+{
+   AluBankSwizzle bs = alu_vec_012;
+   while (bs != alu_vec_unknown) {
+      AluReadportReservation rpr = *this;
+      if (rpr.schedule_vec_src(src, nsrc, bs) == nsrc) {
+         *this = rpr;
+         return true;
+      }
+      ++bs;
+   }
+   return false;
+}
+
+unsigned
+AluReadportReservation::schedule_vec_src(const std::array<PVirtualValue, 3>& src,
                                          int nsrc,
                                          AluBankSwizzle swz)
 {
@@ -90,9 +106,12 @@ AluReadportReservation::schedule_vec_src(PVirtualValue src[3],
       visitor.cycle = cycle_vec(swz, i);
       visitor.isrc = i;
       src[i]->accept(visitor);
+      if (!visitor.success) {
+         return i;
+      }
    }
 
-   return visitor.success;
+   return nsrc;
 }
 
 bool
@@ -163,6 +182,13 @@ AluReadportReservation::AluReadportReservation()
 bool
 AluReadportReservation::reserve_gpr(int sel, int chan, int cycle)
 {
+   for (int c = 0; c < 3; ++c) {
+      if (m_hw_gpr[c][chan] == sel) {
+         if (cycle == c)
+            return true;
+      }
+   }
+
    if (m_hw_gpr[cycle][chan] == -1) {
       m_hw_gpr[cycle][chan] = sel;
    } else if (m_hw_gpr[cycle][chan] != sel) {
@@ -247,7 +273,7 @@ void
 ReserveReadport::visit(const LocalArray& value)
 {
    (void)value;
-   unreachable("a full array is not available here");
+   UNREACHABLE("a full array is not available here");
 }
 
 void

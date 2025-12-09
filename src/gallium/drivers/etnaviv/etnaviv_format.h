@@ -59,4 +59,32 @@ translate_pe_format_rb_swap(enum pipe_format fmt);
 uint32_t
 translate_vertex_format_type(enum pipe_format fmt);
 
+static inline enum pipe_format
+translate_format_128bit_to_64bit(enum pipe_format fmt)
+{
+    switch (fmt) {
+    case PIPE_FORMAT_R32G32B32A32_FLOAT:
+        return PIPE_FORMAT_R32G32_FLOAT;
+    case PIPE_FORMAT_R32G32B32A32_SINT:
+        return PIPE_FORMAT_R32G32_SINT;
+    case PIPE_FORMAT_R32G32B32A32_UINT:
+        return PIPE_FORMAT_R32G32_UINT;
+    default:
+        return fmt;
+    }
+}
+
+static inline bool
+format_is_128bit(enum pipe_format fmt)
+{
+    switch (fmt) {
+    case PIPE_FORMAT_R32G32B32A32_FLOAT:
+    case PIPE_FORMAT_R32G32B32A32_SINT:
+    case PIPE_FORMAT_R32G32B32A32_UINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
 #endif /* ETNAVIV_FORMAT_H_ */

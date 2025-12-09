@@ -45,9 +45,6 @@ fd_reg_stomp_allowed(chip CHIP, uint16_t reg)
        */
       case REG_A6XX_SP_PS_BASE ... REG_A6XX_SP_PS_BASE + 1:
          return false;
-      /* Not used on A6XX but causes failures when set */
-      case REG_A6XX_TPL1_DBG_ECO_CNTL1:
-         return false;
       }
       break;
    }
@@ -61,23 +58,24 @@ fd_reg_stomp_allowed(chip CHIP, uint16_t reg)
       case REG_A7XX_SP_PS_CONST_CONFIG:
       case REG_A6XX_SP_VS_BASE ... REG_A6XX_SP_VS_BASE + 1:
       case REG_A6XX_SP_PS_BASE ... REG_A6XX_SP_PS_BASE + 1:
-      /* There is a guess that GPU may not be able to handle different values of
-       * certain debug register between BR/BV. This one causes GPU to hang.
-       */
-      case REG_A7XX_SP_UNKNOWN_AE73:
-      case REG_A7XX_RB_UNKNOWN_8E79:
-      case REG_A7XX_SP_CHICKEN_BITS_2:
-      case REG_A6XX_TPL1_DBG_ECO_CNTL:
-         return false;
       case REG_A7XX_SP_GS_VGS_CNTL:
       case REG_A7XX_SP_PS_VGS_CNTL:
       case REG_A7XX_SP_CS_VGS_CNTL:
          return false;
       }
+
+      /* The reg stomper doesn't play well with VSC registers because they are
+       * shared between BR and BV and it isn't part of the synchronization
+       * dance to enable BV and binning in BR with concurrent binning disabled
+       * to share the use of them.
+       */
+      if (reg >= REG_A6XX_VSC_BIN_SIZE && reg <= REG_A7XX_VSC_UNKNOWN_0D08)
+         return false;
+
       break;
    }
    default: {
-      unreachable("Unknown GPU");
+      UNREACHABLE("Unknown GPU");
    }
    }
 

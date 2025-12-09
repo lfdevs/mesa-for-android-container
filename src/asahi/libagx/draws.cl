@@ -4,8 +4,8 @@
  */
 #include "asahi/lib/agx_abi.h"
 #include "compiler/libcl/libcl_vk.h"
+#include "poly/geometry.h"
 #include "agx_pack.h"
-#include "geometry.h"
 #include "libagx_dgc.h"
 
 /*
@@ -36,9 +36,9 @@ libagx_predicate_indirect(global uint32_t *out, constant uint32_t *in,
 KERNEL(1)
 libagx_draw_without_adj(global VkDrawIndirectCommand *out,
                         global VkDrawIndirectCommand *in,
-                        global struct agx_ia_state *ia, uint64_t index_buffer,
-                        uint64_t index_buffer_range_el, int index_size_B,
-                        enum mesa_prim prim)
+                        global struct poly_vertex_params *vp,
+                        uint64_t index_buffer, uint64_t index_buffer_range_el,
+                        int index_size_B, enum mesa_prim prim)
 {
    *out = (VkDrawIndirectCommand){
       .vertexCount = libagx_remap_adj_count(in->vertexCount, prim),
@@ -49,11 +49,11 @@ libagx_draw_without_adj(global VkDrawIndirectCommand *out,
    if (index_size_B) {
       uint offs = in->firstVertex;
 
-      ia->index_buffer = libagx_index_buffer(
-         index_buffer, index_buffer_range_el, offs, index_size_B);
+      vp->index_buffer = poly_index_buffer(index_buffer, index_buffer_range_el,
+                                           offs, index_size_B);
 
-      ia->index_buffer_range_el =
-         libagx_index_buffer_range_el(index_buffer_range_el, offs);
+      vp->index_buffer_range_el =
+         poly_index_buffer_range_el(index_buffer_range_el, offs);
    }
 }
 
@@ -122,8 +122,7 @@ libagx_memset_small(global uchar *dst, uchar b, int len, uint tid)
  * TODO: Handle multiple draws in parallel.
  */
 KERNEL(32)
-libagx_draw_robust_index(global uint32_t *vdm,
-                         global struct agx_geometry_state *heap,
+libagx_draw_robust_index(global uint32_t *vdm, global struct poly_heap *heap,
                          constant VkDrawIndexedIndirectCommand *cmd,
                          uint64_t in_buf_ptr, uint32_t in_buf_range_B,
                          ushort restart, enum agx_primitive topology,
@@ -163,7 +162,7 @@ libagx_draw_robust_index(global uint32_t *vdm,
       /* Allocate memory for the shadow index buffer */
       global uchar *padded;
       if (first) {
-         padded = agx_heap_alloc_nonatomic(heap, out_size_B);
+         padded = poly_heap_alloc(heap, out_size_B);
       }
       padded = (global uchar *)sub_group_broadcast((uintptr_t)padded, 0);
 
@@ -172,7 +171,7 @@ libagx_draw_robust_index(global uint32_t *vdm,
       draw.start = 0;
 
       /* Clone the index buffer. The destination is aligned as a post-condition
-       * of agx_heap_alloc_nonatomic.
+       * of poly_heap_alloc_nonatomic.
        */
       libagx_memcpy_to_aligned((global uint *)padded, in_buf, in_size_B, tid,
                                32);

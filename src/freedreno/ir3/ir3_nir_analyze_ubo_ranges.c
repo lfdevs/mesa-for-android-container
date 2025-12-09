@@ -36,7 +36,7 @@ get_ubo_load_range(nir_shader *nir, nir_intrinsic_instr *instr,
       return false;
 
    r->start = ROUND_DOWN_TO(offset, alignment * 16);
-   r->end = ALIGN(offset + size, alignment * 16);
+   r->end = align(offset + size, alignment * 16);
 
    return true;
 }
@@ -214,10 +214,10 @@ gather_ubo_ranges(nir_shader *nir, nir_intrinsic_instr *instr,
 static void
 handle_partial_const(nir_builder *b, nir_def **srcp, int *offp)
 {
-   if ((*srcp)->parent_instr->type != nir_instr_type_alu)
+   if (!nir_def_is_alu(*srcp))
       return;
 
-   nir_alu_instr *alu = nir_instr_as_alu((*srcp)->parent_instr);
+   nir_alu_instr *alu = nir_def_as_alu((*srcp));
 
    if (alu->op == nir_op_imad24_ir3) {
       /* This case is slightly more complicated as we need to
@@ -428,18 +428,11 @@ copy_global_to_uniform(nir_shader *nir, struct ir3_ubo_analysis_state *state)
 }
 
 static bool
-copy_ubo_to_uniform(nir_shader *nir, const struct ir3_const_state *const_state,
-                    bool const_data_via_cp)
+copy_ubo_to_uniform(nir_shader *nir, const struct ir3_const_state *const_state)
 {
    const struct ir3_ubo_analysis_state *state = &const_state->ubo_state;
 
    if (state->num_enabled == 0)
-      return false;
-
-   if (state->num_enabled == 1 &&
-       !state->range[0].ubo.bindless &&
-       state->range[0].ubo.block == const_state->consts_ubo.idx &&
-       const_data_via_cp)
       return false;
 
    nir_function_impl *preamble = nir_shader_get_preamble(nir);
@@ -448,15 +441,6 @@ copy_ubo_to_uniform(nir_shader *nir, const struct ir3_const_state *const_state,
 
    for (unsigned i = 0; i < state->num_enabled; i++) {
       const struct ir3_ubo_range *range = &state->range[i];
-
-      /* The constant_data UBO is pushed in a different path from normal
-       * uniforms, and the state is setup earlier so it makes more sense to let
-       * the CP do it for us.
-       */
-      if (!range->ubo.bindless &&
-          range->ubo.block == const_state->consts_ubo.idx &&
-          const_data_via_cp)
-         continue;
 
       nir_def *ubo = nir_imm_int(b, range->ubo.block);
       if (range->ubo.bindless) {
@@ -736,8 +720,7 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
    }
 
    if (compiler->has_preamble && push_ubos)
-      progress |= copy_ubo_to_uniform(
-         nir, const_state, !compiler->load_shader_consts_via_preamble);
+      progress |= copy_ubo_to_uniform(nir, const_state);
 
    return progress;
 }

@@ -92,9 +92,8 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
        */
       nir_def_rewrite_uses(&intr->def, phi);
 
-      nir_instr *phi_instr = phi->parent_instr;
-      nir_phi_instr *phi_as_phi = nir_instr_as_phi(phi_instr);
-      nir_phi_src *phi_src = nir_phi_get_src_from_block(phi_as_phi,
+      nir_phi_instr *phi_instr = nir_def_as_phi(phi);
+      nir_phi_src *phi_src = nir_phi_get_src_from_block(phi_instr,
                                                         intr->instr.block);
       nir_src_rewrite(&phi_src->src, &intr->def);
    }

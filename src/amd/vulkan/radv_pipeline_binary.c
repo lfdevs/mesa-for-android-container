@@ -64,7 +64,7 @@ radv_get_pipeline_key(struct radv_device *device, const VkPipelineCreateInfoKHR 
       break;
    }
    default:
-      unreachable("unsupported pipeline create info struct");
+      UNREACHABLE("unsupported pipeline create info struct");
    }
 
    return result;
@@ -153,7 +153,7 @@ radv_create_pipeline_binary_from_data(struct radv_device *device, const VkAlloca
       return result;
    }
 
-   util_dynarray_append(pipeline_binaries, struct radv_pipeline_binary *, pipeline_binary);
+   util_dynarray_append(pipeline_binaries, pipeline_binary);
    return result;
 }
 
@@ -183,7 +183,7 @@ radv_create_pipeline_binary_from_shader(struct radv_device *device, const VkAllo
       return result;
    }
 
-   util_dynarray_append(pipeline_binaries, struct radv_pipeline_binary *, pipeline_binary);
+   util_dynarray_append(pipeline_binaries, pipeline_binary);
    return result;
 }
 
@@ -239,7 +239,7 @@ radv_create_pipeline_binary_from_rt_shader(struct radv_device *device, const VkA
       return result;
    }
 
-   util_dynarray_append(pipeline_binaries, struct radv_pipeline_binary *, pipeline_binary);
+   util_dynarray_append(pipeline_binaries, pipeline_binary);
    return result;
 }
 
@@ -376,7 +376,7 @@ radv_CreatePipelineBinariesKHR(VkDevice _device, const VkPipelineBinaryCreateInf
    for (uint32_t i = 0; i < pBinaries->pipelineBinaryCount; i++)
       pBinaries->pPipelineBinaries[i] = VK_NULL_HANDLE;
 
-   util_dynarray_init(&pipeline_binaries, NULL);
+   pipeline_binaries = UTIL_DYNARRAY_INIT;
 
    /* Get all pipeline binaries from the pCreateInfo first to simplify the creation. */
    result = radv_create_pipeline_binaries(device, pCreateInfo, pAllocator, &pipeline_binaries, NULL);

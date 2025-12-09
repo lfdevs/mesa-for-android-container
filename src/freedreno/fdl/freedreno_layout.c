@@ -16,6 +16,7 @@ void
 fdl_layout_buffer(struct fdl_layout *layout, uint32_t size)
 {
    layout->width0 = size;
+   layout->pitch0 = size;
    layout->height0 = 1;
    layout->depth0 = 1;
    layout->cpp = 1;
@@ -58,3 +59,123 @@ fdl_dump_layout(struct fdl_layout *layout)
          fdl_tile_mode_desc(layout, level), layout->is_mutable ? "mutable" : "");
    }
 }
+
+void
+fdl_get_sparse_block_size(enum pipe_format format, uint32_t nr_samples,
+                          uint32_t *blockwidth, uint32_t *blockheight)
+{
+   /* This is taken from the table in section 33.4.3 "Standard Sparse Image
+    * Block Shapes"
+    */
+
+   switch (nr_samples) {
+   case 1:
+      switch (util_format_get_blocksize(format)) {
+      case 1:
+         *blockwidth = 256;
+         *blockheight = 256;
+         break;
+      case 2:
+         *blockwidth = 256;
+         *blockheight = 128;
+         break;
+      case 4:
+         *blockwidth = 128;
+         *blockheight = 128;
+         break;
+      case 8:
+         *blockwidth = 128;
+         *blockheight = 64;
+         break;
+      case 16:
+         *blockwidth = 64;
+         *blockheight = 64;
+         break;
+      default:
+         UNREACHABLE("invalid block size");
+      }
+      break;
+   case 2:
+      switch (util_format_get_blocksize(format)) {
+      case 1:
+         *blockwidth = 128;
+         *blockheight = 256;
+         break;
+      case 2:
+         *blockwidth = 128;
+         *blockheight = 128;
+         break;
+      case 4:
+         *blockwidth = 64;
+         *blockheight = 128;
+         break;
+      case 8:
+         *blockwidth = 64;
+         *blockheight = 64;
+         break;
+      case 16:
+         *blockwidth = 32;
+         *blockheight = 64;
+         break;
+      default:
+         UNREACHABLE("invalid block size");
+      }
+      break;
+   case 4:
+      switch (util_format_get_blocksize(format)) {
+      case 1:
+         *blockwidth = 128;
+         *blockheight = 128;
+         break;
+      case 2:
+         *blockwidth = 128;
+         *blockheight = 64;
+         break;
+      case 4:
+         *blockwidth = 64;
+         *blockheight = 64;
+         break;
+      case 8:
+         *blockwidth = 64;
+         *blockheight = 32;
+         break;
+      case 16:
+         *blockwidth = 32;
+         *blockheight = 32;
+         break;
+      default:
+         UNREACHABLE("invalid block size");
+      }
+      break;
+   case 8:
+      switch (util_format_get_blocksize(format)) {
+      case 1:
+         *blockwidth = 64;
+         *blockheight = 128;
+         break;
+      case 2:
+         *blockwidth = 64;
+         *blockheight = 64;
+         break;
+      case 4:
+         *blockwidth = 32;
+         *blockheight = 64;
+         break;
+      case 8:
+         *blockwidth = 32;
+         *blockheight = 32;
+         break;
+      case 16:
+         *blockwidth = 16;
+         *blockheight = 32;
+         break;
+      default:
+         UNREACHABLE("invalid block size");
+      }
+      break;
+   /* 16X MSAA is not supported */
+   default:
+      UNREACHABLE("invalid MSAA count");
+   }
+}
+

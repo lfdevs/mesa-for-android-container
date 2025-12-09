@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::event::create_and_queue;
 use crate::api::icd::*;
 use crate::api::util::*;
@@ -132,9 +135,9 @@ fn create_command_queue_with_properties(
     let d = Device::ref_from_raw(device)?;
 
     // SAFETY: properties is a 0 terminated array by spec.
-    let properties = unsafe { Properties::new(properties) }.ok_or(CL_INVALID_PROPERTY)?;
+    let properties = unsafe { Properties::new(properties) }.ok_or(CL_INVALID_VALUE)?;
     for (&key, &val) in properties.iter() {
-        match u32::try_from(key).or(Err(CL_INVALID_PROPERTY))? {
+        match u32::try_from(key).or(Err(CL_INVALID_VALUE))? {
             CL_QUEUE_PROPERTIES => queue_properties = val,
             CL_QUEUE_PRIORITY_KHR if d.context_priority_supported() != 0 => {
                 let valid_props: cl_queue_properties = (CL_QUEUE_PRIORITY_LOW_KHR
@@ -149,7 +152,7 @@ fn create_command_queue_with_properties(
             // CL_INVALID_QUEUE_PROPERTIES if values specified in properties are valid but are not
             // supported by the device.
             CL_QUEUE_SIZE => return Err(CL_INVALID_QUEUE_PROPERTIES),
-            _ => return Err(CL_INVALID_PROPERTY),
+            _ => return Err(CL_INVALID_VALUE),
         }
     }
 

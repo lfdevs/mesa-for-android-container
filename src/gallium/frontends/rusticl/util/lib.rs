@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 pub mod assert;
 pub mod bitset;
 pub mod conversion;

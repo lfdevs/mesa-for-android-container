@@ -55,6 +55,9 @@ wsi_metal_surface_get_capabilities(VkIcdSurfaceBase *surface,
       &caps->currentExtent.width,
       &caps->currentExtent.height);
 
+   if (!caps->currentExtent.width && !caps->currentExtent.height)
+      caps->currentExtent.width = caps->currentExtent.height = UINT32_MAX;
+
    caps->minImageCount = 2;
    caps->maxImageCount = 3;
 
@@ -89,8 +92,8 @@ wsi_metal_surface_get_capabilities2(VkIcdSurfaceBase *surface,
 {
    assert(caps->sType == VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR);
 
-   const VkSurfacePresentModeEXT *present_mode =
-      (const VkSurfacePresentModeEXT *)vk_find_struct_const(info_next, SURFACE_PRESENT_MODE_EXT);
+   const VkSurfacePresentModeKHR *present_mode =
+      (const VkSurfacePresentModeKHR *)vk_find_struct_const(info_next, SURFACE_PRESENT_MODE_KHR);
 
    VkResult result =
       wsi_metal_surface_get_capabilities(surface, wsi_device,
@@ -104,10 +107,10 @@ wsi_metal_surface_get_capabilities2(VkIcdSurfaceBase *surface,
          break;
       }
 
-      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT: {
+      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_KHR: {
          /* TODO: support scaling */
-         VkSurfacePresentScalingCapabilitiesEXT *scaling =
-            (VkSurfacePresentScalingCapabilitiesEXT *)ext;
+         VkSurfacePresentScalingCapabilitiesKHR *scaling =
+            (VkSurfacePresentScalingCapabilitiesKHR *)ext;
          scaling->supportedPresentScaling = 0;
          scaling->supportedPresentGravityX = 0;
          scaling->supportedPresentGravityY = 0;
@@ -116,10 +119,10 @@ wsi_metal_surface_get_capabilities2(VkIcdSurfaceBase *surface,
          break;
       }
 
-      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT: {
+      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_KHR: {
          /* Unsupported, just report the input present mode. */
-         VkSurfacePresentModeCompatibilityEXT *compat =
-            (VkSurfacePresentModeCompatibilityEXT *)ext;
+         VkSurfacePresentModeCompatibilityKHR *compat =
+            (VkSurfacePresentModeCompatibilityKHR *)ext;
          if (compat->pPresentModes) {
             if (compat->presentModeCount) {
                assert(present_mode);
@@ -128,8 +131,8 @@ wsi_metal_surface_get_capabilities2(VkIcdSurfaceBase *surface,
             }
          } else {
             if (!present_mode)
-               wsi_common_vk_warn_once("Use of VkSurfacePresentModeCompatibilityEXT "
-                                       "without a VkSurfacePresentModeEXT set. This is an "
+               wsi_common_vk_warn_once("Use of VkSurfacePresentModeCompatibilityKHR "
+                                       "without a VkSurfacePresentModeKHR set. This is an "
                                        "application bug.\n");
             compat->presentModeCount = 1;
          }
@@ -151,6 +154,19 @@ static const VkFormat available_surface_formats[] = {
    VK_FORMAT_R16G16B16A16_SFLOAT,
    VK_FORMAT_A2R10G10B10_UNORM_PACK32,
    VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+};
+
+static const VkColorSpaceKHR available_surface_color_spaces[] = {
+   VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+   VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT,
+   VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT,
+   VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT,
+   VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT,
+   VK_COLOR_SPACE_BT709_NONLINEAR_EXT,
+   VK_COLOR_SPACE_BT2020_LINEAR_EXT,
+   VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT,
+   VK_COLOR_SPACE_PASS_THROUGH_EXT,
+   VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT,
 };
 
 static void
@@ -182,9 +198,11 @@ wsi_metal_surface_get_formats(VkIcdSurfaceBase *icd_surface,
    get_sorted_vk_formats(wsi_device->force_bgra8_unorm_first, sorted_formats);
 
    for (unsigned i = 0; i < ARRAY_SIZE(sorted_formats); i++) {
-      vk_outarray_append_typed(VkSurfaceFormatKHR, &out, f) {
-         f->format = sorted_formats[i];
-         f->colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+      for (unsigned j = 0; j < ARRAY_SIZE(available_surface_color_spaces); j++) {
+         vk_outarray_append_typed(VkSurfaceFormatKHR, &out, f) {
+            f->format = sorted_formats[i];
+            f->colorSpace = available_surface_color_spaces[j];
+         }
       }
    }
 
@@ -204,10 +222,12 @@ wsi_metal_surface_get_formats2(VkIcdSurfaceBase *icd_surface,
    get_sorted_vk_formats(wsi_device->force_bgra8_unorm_first, sorted_formats);
 
    for (unsigned i = 0; i < ARRAY_SIZE(sorted_formats); i++) {
-      vk_outarray_append_typed(VkSurfaceFormat2KHR, &out, f) {
-         assert(f->sType == VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
-         f->surfaceFormat.format = sorted_formats[i];
-         f->surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+      for (unsigned j = 0; j < ARRAY_SIZE(available_surface_color_spaces); j++) {
+         vk_outarray_append_typed(VkSurfaceFormat2KHR, &out, f) {
+            assert(f->sType == VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
+            f->surfaceFormat.format = sorted_formats[i];
+            f->surfaceFormat.colorSpace = available_surface_color_spaces[j];
+         }
       }
    }
 
@@ -252,7 +272,7 @@ wsi_metal_surface_get_present_rectangles(VkIcdSurfaceBase *surface,
 
 struct wsi_metal_image {
    struct wsi_image base;
-   CAMetalDrawableBridged *drawable;
+   CAMetalDrawable *drawable;
 };
 
 struct wsi_metal_swapchain {
@@ -260,11 +280,6 @@ struct wsi_metal_swapchain {
 
    VkExtent2D extent;
    VkFormat vk_format;
-
-   struct u_vector modifiers;
-
-   VkPresentModeKHR present_mode;
-   bool fifo_ready;
 
    VkIcdSurfaceMetal *surface;
 
@@ -286,6 +301,149 @@ wsi_metal_swapchain_get_wsi_image(struct wsi_swapchain *wsi_chain,
 }
 
 static VkResult
+wsi_cmd_blit_image_to_image(const struct wsi_swapchain *chain,
+                            const struct wsi_image_info *info,
+                            struct wsi_image *image)
+{
+   /* Should only be called from non-software backends */
+   assert(!chain->wsi->sw);
+   
+   const struct wsi_device *wsi = chain->wsi;
+   struct wsi_metal_image *metal_image = container_of(image, struct wsi_metal_image, base);
+   VkResult result;
+   int queue_count = chain->blit.queue != NULL ? 1 : wsi->queue_family_count;
+
+   for (uint32_t i = 0; i < queue_count; i++) {
+      if (!chain->cmd_pools[i])
+         continue;
+
+      /* We need to cycle command buffers since the MTLTexture backing the presentable
+       * VkImage changes every time it's acquired. We only have one command buffer
+       * per blit since we only submit to a single queue which is the blit queue. */
+      wsi->FreeCommandBuffers(chain->device, chain->cmd_pools[i], 1u,
+                              &image->blit.cmd_buffers[i + queue_count]);
+
+      /* Store the command buffer in flight */
+      image->blit.cmd_buffers[i + queue_count] = image->blit.cmd_buffers[i];
+
+      const VkCommandBufferAllocateInfo cmd_buffer_info = {
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+         .pNext = NULL,
+         .commandPool = chain->cmd_pools[i],
+         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+         .commandBufferCount = 1,
+      };
+      result = wsi->AllocateCommandBuffers(chain->device, &cmd_buffer_info,
+                                          &image->blit.cmd_buffers[i]);
+      if (result != VK_SUCCESS)
+         return result;
+
+      const VkCommandBufferBeginInfo begin_info = {
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      };
+      wsi->BeginCommandBuffer(image->blit.cmd_buffers[i], &begin_info);
+
+      VkImageMemoryBarrier img_mem_barriers[] = {
+         {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = NULL,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image->image,
+            .subresourceRange = {
+               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+               .baseMipLevel = 0,
+               .levelCount = 1,
+               .baseArrayLayer = 0,
+               .layerCount = 1,
+            },
+         },
+         {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = NULL,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image->blit.image,
+            .subresourceRange = {
+               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+               .baseMipLevel = 0,
+               .levelCount = 1,
+               .baseArrayLayer = 0,
+               .layerCount = 1,
+            },
+         },
+      };
+      const uint32_t img_mem_barrier_count = 2;
+      wsi->CmdPipelineBarrier(image->blit.cmd_buffers[i],
+                              VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                              VK_PIPELINE_STAGE_TRANSFER_BIT,
+                              0,
+                              0, NULL,
+                              0, NULL,
+                              img_mem_barrier_count, img_mem_barriers);
+
+      struct VkImageCopy image_copy = {
+         .srcSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+         },
+         .srcOffset = { .x = 0, .y = 0, .z = 0 },
+         .dstSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+         },
+         .dstOffset = { .x = 0, .y = 0, .z = 0 },
+         .extent = info->create.extent,
+      };
+
+      wsi->CmdCopyImage(image->blit.cmd_buffers[i],
+                        image->image,
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        image->blit.image,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &image_copy);
+
+      img_mem_barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+      img_mem_barriers[0].dstAccessMask = 0;
+      img_mem_barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+      img_mem_barriers[0].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      img_mem_barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+      img_mem_barriers[1].dstAccessMask = 0;
+      img_mem_barriers[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+      img_mem_barriers[1].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      wsi->CmdPipelineBarrier(image->blit.cmd_buffers[i],
+                              VK_PIPELINE_STAGE_TRANSFER_BIT,
+                              VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                              0,
+                              0, NULL,
+                              0, NULL,
+                              img_mem_barrier_count, img_mem_barriers);
+
+      result = wsi->EndCommandBuffer(image->blit.cmd_buffers[i]);
+
+      wsi->metal.encode_drawable_present(image->blit.cmd_buffers[i], metal_image->drawable);
+   }
+
+   /* Release the drawable since command buffers should have retained the drawable. */
+   wsi_metal_release_drawable(metal_image->drawable);
+   metal_image->drawable = NULL;
+
+   return result;
+}
+
+static VkResult
 wsi_metal_swapchain_acquire_next_image(struct wsi_swapchain *wsi_chain,
                                        const VkAcquireNextImageInfoKHR *info,
                                        uint32_t *image_index)
@@ -302,11 +460,19 @@ wsi_metal_swapchain_acquire_next_image(struct wsi_swapchain *wsi_chain,
 
    while (1) {
       /* Try to acquire an drawable. Unfortunately we might block for up to 1 second. */
-      CAMetalDrawableBridged *drawable = wsi_metal_layer_acquire_drawable(chain->surface->pLayer);
+      CAMetalDrawable *drawable = wsi_metal_layer_acquire_drawable(chain->surface->pLayer);
       if (drawable) {
          uint32_t i = (chain->current_image_index++) % chain->base.image_count;
+         struct wsi_metal_image *image = &chain->images[i];
          *image_index = i;
-         chain->images[i].drawable = drawable;
+         image->drawable = drawable;
+         if (!wsi_chain->wsi->sw) {
+            chain->base.wsi->metal.bind_drawable_to_vkimage(image->base.blit.image,
+                                                            image->drawable);
+            /* Since present images will only be backed by MTLTextures after acquisition,
+             * we need to re-record the command buffer so it uses the new drawable. */
+            wsi_cmd_blit_image_to_image(wsi_chain, &wsi_chain->image_info, &image->base);
+         }
          return VK_SUCCESS;
       }
 
@@ -331,13 +497,80 @@ wsi_metal_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
    struct wsi_metal_image *image = &chain->images[image_index];
 
-   wsi_metal_layer_blit_and_present(chain->blit_context,
-      &image->drawable,
-      image->base.cpu_map,
-      chain->extent.width, chain->extent.height,
-      image->base.row_pitches[0]);
+   if (wsi_chain->wsi->sw) {
+      wsi_metal_layer_blit_and_present(chain->blit_context,
+         &image->drawable,
+         image->base.cpu_map,
+         chain->extent.width, chain->extent.height,
+         image->base.row_pitches[0]);
+   }
 
-   return VK_SUCCESS;
+   uint32_t width = 0u, height = 0u;
+   wsi_metal_layer_size(chain->surface->pLayer, &width, &height);
+   bool is_optimal = (width == chain->extent.width && height == chain->extent.height);
+   return is_optimal ? VK_SUCCESS : VK_SUBOPTIMAL_KHR;
+}
+
+static void
+wsi_metal_destroy_image(const struct wsi_metal_swapchain *metal_chain,
+                        struct wsi_metal_image *metal_image)
+{
+   const struct wsi_swapchain *chain = &metal_chain->base;
+   const struct wsi_device *wsi = chain->wsi;
+   struct wsi_image *image = &metal_image->base;
+
+   /* Software backends can just call common and return */
+   if (wsi->sw) {
+      wsi_destroy_image(chain, image);
+      return;
+   }
+
+   /* Required since we allocate 2 per queue, stored with the following layout:
+    * cmd_pool 0: 0, queue_count
+    * cmd_pool 1: 1, 1 + queue_count
+    * ...
+    */
+   if (image->blit.cmd_buffers) {
+      int queue_count =
+         chain->blit.queue != NULL ? 1 : wsi->queue_family_count;
+
+      for (uint32_t i = 0; i < queue_count; i++) {
+         if (!chain->cmd_pools[i])
+            continue;
+         wsi->FreeCommandBuffers(chain->device, chain->cmd_pools[i],
+                                 1, &image->blit.cmd_buffers[i]);
+         wsi->FreeCommandBuffers(chain->device, chain->cmd_pools[i],
+                                 1, &image->blit.cmd_buffers[i + queue_count]);
+      }
+      vk_free(&chain->alloc, image->blit.cmd_buffers);
+      image->blit.cmd_buffers = NULL;
+   }
+
+   wsi_destroy_image(chain, image);
+}
+
+static VkResult
+wsi_metal_create_image(const struct wsi_metal_swapchain *metal_chain,
+                       const struct wsi_image_info *info,
+                       struct wsi_metal_image *metal_image)
+{
+   const struct wsi_swapchain *chain = &metal_chain->base;
+   const struct wsi_device *wsi = chain->wsi;
+   struct wsi_image *image = &metal_image->base;
+
+   VkResult result = wsi_create_image(chain, info, image);
+
+   /* Software backends can just call common and return */
+   if (wsi->sw || result != VK_SUCCESS)
+      return result;
+
+   /* Create VkImages to handle binding at acquisition. */
+   result = wsi->CreateImage(chain->device, &chain->image_info.create,
+                             &chain->alloc, &image->blit.image);
+   if (result != VK_SUCCESS)
+      wsi_metal_destroy_image(metal_chain, metal_image);
+
+   return result;
 }
 
 static VkResult
@@ -348,14 +581,18 @@ wsi_metal_swapchain_destroy(struct wsi_swapchain *wsi_chain,
       (struct wsi_metal_swapchain *)wsi_chain;
 
    for (uint32_t i = 0; i < chain->base.image_count; i++) {
-      wsi_metal_layer_cancel_present(chain->blit_context, &chain->images[i].drawable);
-      if (chain->images[i].base.image != VK_NULL_HANDLE)
-         wsi_destroy_image(&chain->base, &chain->images[i].base);
+      struct wsi_metal_image *image = &chain->images[i];
+      if (image->drawable) {
+         wsi_metal_release_drawable(image->drawable);
+         image->drawable = NULL;
+      }
+
+      if (image != VK_NULL_HANDLE)
+         wsi_metal_destroy_image(chain, image);
    }
 
-   u_vector_finish(&chain->modifiers);
-
-   wsi_destroy_metal_layer_blit_context(chain->blit_context);
+   if (chain->base.wsi->sw)
+      wsi_destroy_metal_layer_blit_context(chain->blit_context);
 
    wsi_swapchain_finish(&chain->base);
 
@@ -372,36 +609,23 @@ wsi_metal_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
                                       const VkAllocationCallbacks* pAllocator,
                                       struct wsi_swapchain **swapchain_out)
 {
-   VkResult result;
-
    VkIcdSurfaceMetal *metal_surface = (VkIcdSurfaceMetal *)icd_surface;
    assert(metal_surface->pLayer);
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR);
 
-   MTLPixelFormat metal_format;
-   switch (pCreateInfo->imageFormat)
-   {
-      case VK_FORMAT_B8G8R8A8_SRGB:
-         metal_format = MTLPixelFormatBGRA8Unorm_sRGB;
-         break;
-      case VK_FORMAT_B8G8R8A8_UNORM:
-         metal_format = MTLPixelFormatBGRA8Unorm;
-         break;
-      case VK_FORMAT_R16G16B16A16_SFLOAT:
-         metal_format = MTLPixelFormatRGBA16Float;
-         break;
-      case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-         metal_format = MTLPixelFormatRGB10A2Unorm;
-         break;
-      case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-         metal_format = MTLPixelFormatBGR10A2Unorm;
-         break;
-      default:
-         return VK_ERROR_FORMAT_NOT_SUPPORTED;
-   }
+   const int num_images = pCreateInfo->minImageCount;
+   const bool opaque_composition =
+      pCreateInfo->compositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+   const bool immediate_mode =
+      pCreateInfo->presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR;
 
-   int num_images = pCreateInfo->minImageCount;
+   VkResult result = wsi_metal_layer_configure(metal_surface->pLayer,
+      pCreateInfo->imageExtent.width, pCreateInfo->imageExtent.height,
+      num_images, pCreateInfo->imageFormat, pCreateInfo->imageColorSpace,
+      opaque_composition, immediate_mode);
+   if (result != VK_SUCCESS)
+      return result;
 
    struct wsi_metal_swapchain *chain;
    size_t size = sizeof(*chain) + num_images * sizeof(chain->images[0]);
@@ -409,16 +633,24 @@ wsi_metal_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+   /* Software drivers cannot render to an MTLTexture as of now. Rendering to
+    * MTLTexture could be supported, but outside of the scope of adding a
+    * Metal backend that uses MTLTexture as render target. The software path
+    * will render to a CPU texture, and blit it to the presentation MTLTexture
+    * at the last moment. */
+   const bool is_sw_driver = wsi_device->sw;
    struct wsi_cpu_image_params cpu_params = {
       .base.image_type = WSI_IMAGE_TYPE_CPU,
    };
+   struct wsi_base_image_params metal_params = {
+      .image_type = WSI_IMAGE_TYPE_METAL,
+   };
+   struct wsi_base_image_params *params = is_sw_driver ? &cpu_params.base : &metal_params;
 
    result = wsi_swapchain_init(wsi_device, &chain->base, device,
-                               pCreateInfo, &cpu_params.base, pAllocator);
-   if (result != VK_SUCCESS) {
-      vk_free(pAllocator, chain);
-      return result;
-   }
+                               pCreateInfo, params, pAllocator);
+   if (result != VK_SUCCESS)
+      goto fail_chain_alloc;
 
    chain->base.destroy = wsi_metal_swapchain_destroy;
    chain->base.get_wsi_image = wsi_metal_swapchain_get_wsi_image;
@@ -429,28 +661,36 @@ wsi_metal_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->extent = pCreateInfo->imageExtent;
    chain->vk_format = pCreateInfo->imageFormat;
    chain->surface = metal_surface;
-
-   wsi_metal_layer_configure(metal_surface->pLayer,
-      pCreateInfo->imageExtent.width, pCreateInfo->imageExtent.height,
-      num_images, metal_format,
-      pCreateInfo->compositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-      pCreateInfo->presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR);
-
    chain->current_image_index = 0;
+
+   uint32_t created_image_count = 0;
    for (uint32_t i = 0; i < chain->base.image_count; i++) {
-      result = wsi_create_image(&chain->base, &chain->base.image_info,
-                                &chain->images[i].base);
+      result = wsi_metal_create_image(chain, &chain->base.image_info,
+                                      &chain->images[i]);
       if (result != VK_SUCCESS)
-         return result;
+         goto fail_init_images;
 
       chain->images[i].drawable = NULL;
+      created_image_count++;
    }
 
-   chain->blit_context = wsi_create_metal_layer_blit_context();
+   if (is_sw_driver)
+      chain->blit_context = wsi_create_metal_layer_blit_context();
 
    *swapchain_out = &chain->base;
 
    return VK_SUCCESS;
+
+fail_init_images:
+   for (uint32_t i = 0; i < created_image_count; i++)
+      wsi_metal_destroy_image(chain, &chain->images[i]);
+
+   wsi_swapchain_finish(&chain->base);
+
+fail_chain_alloc:
+   vk_free(pAllocator, chain);
+
+   return result;
 }
 
 VkResult
@@ -522,5 +762,81 @@ wsi_CreateMetalSurfaceEXT(
    assert(surface->pLayer);
 
    *pSurface = VkIcdSurfaceBase_to_handle(&surface->base);
+   return VK_SUCCESS;
+}
+
+static VkResult
+wsi_metal_create_mem(const struct wsi_swapchain *chain,
+                     const struct wsi_image_info *info,
+                     struct wsi_image *image)
+{
+   assert(chain->blit.type == WSI_SWAPCHAIN_IMAGE_BLIT);
+
+   const struct wsi_device *wsi = chain->wsi;
+
+   VkMemoryRequirements requirements;
+   wsi->GetImageMemoryRequirements(chain->device, image->image, &requirements);
+
+   struct wsi_memory_allocate_info memory_wsi_info = {
+      .sType = VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA,
+      .pNext = NULL,
+      .implicit_sync = false,
+   };
+   VkMemoryDedicatedAllocateInfo image_mem_dedicated_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
+      .pNext = &memory_wsi_info,
+      .image = image->image,
+      .buffer = VK_NULL_HANDLE,
+   };
+   VkMemoryAllocateInfo image_mem_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &image_mem_dedicated_info,
+      .allocationSize = requirements.size,
+      .memoryTypeIndex = requirements.memoryTypeBits,
+   };
+
+   return wsi->AllocateMemory(chain->device, &image_mem_info,
+                              &chain->alloc, &image->memory);
+}
+
+static VkResult
+wsi_metal_allocate_command_buffer(const struct wsi_swapchain *chain,
+                                  const struct wsi_image_info *info,
+                                  struct wsi_image *image)
+{
+   const struct wsi_device *wsi = chain->wsi;
+   /* We need to create 2 command buffers per queue to be able to ping pong the blit.
+    * The first queue_family_count will store the next blit command,
+    * and the remaining will store the ones in flight. */
+   int cmd_buffer_count =
+      chain->blit.queue != NULL ? 2 : wsi->queue_family_count * 2;
+   image->blit.cmd_buffers =
+      vk_zalloc(&chain->alloc,
+                sizeof(VkCommandBuffer) * cmd_buffer_count, 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+   return image->blit.cmd_buffers ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+/* Common utilities required by wsi_common.c */
+VkResult
+wsi_metal_configure_image(const struct wsi_swapchain *chain,
+                          const VkSwapchainCreateInfoKHR *pCreateInfo,
+                          const struct wsi_metal_image_params *params,
+                          struct wsi_image_info *info)
+{
+   VkResult result =
+      wsi_configure_image(chain, pCreateInfo, 0, info);
+   if (result != VK_SUCCESS)
+      return result;
+
+   if (chain->blit.type != WSI_SWAPCHAIN_NO_BLIT) {
+      info->create.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+      info->wsi.blit_src = true;
+      info->finish_create = wsi_metal_allocate_command_buffer;
+      info->select_image_memory_type = wsi_select_device_memory_type;
+      info->create_mem = wsi_metal_create_mem;
+   }
+
    return VK_SUCCESS;
 }

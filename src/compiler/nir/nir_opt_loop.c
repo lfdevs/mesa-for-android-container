@@ -72,7 +72,7 @@ opt_loop_merge_break_continue(nir_if *nif)
    nir_block *after_if = nir_cf_node_cf_tree_next(&nif->cf_node);
 
    /* The block after the IF must have no predecessors and be empty. */
-   if (after_if->predecessors->entries > 0 || !is_block_empty(after_if))
+   if (after_if->predecessors.entries > 0 || !is_block_empty(after_if))
       return false;
 
    nir_block *last_then = nir_if_last_then_block(nif);
@@ -86,7 +86,7 @@ opt_loop_merge_break_continue(nir_if *nif)
     * merge the statement after the branch
     */
    if ((then_break && else_break) || (then_cont && else_cont)) {
-      nir_lower_phis_to_regs_block(last_then->successors[0]);
+      nir_lower_phis_to_regs_block(last_then->successors[0], false);
       nir_instr_remove_v(nir_block_last_instr(last_then));
       nir_instr *jump = nir_block_last_instr(last_else);
       nir_instr_remove_v(jump);
@@ -154,7 +154,7 @@ opt_loop_terminator(nir_if *nif)
          return false;
 
       /* We are about to move the predecessor. */
-      nir_lower_phis_to_regs_block(continue_from_blk->successors[0]);
+      nir_lower_phis_to_regs_block(continue_from_blk->successors[0], false);
    }
 
    /* Even though this if statement has a jump on one side, we may still have
@@ -209,7 +209,7 @@ static bool
 opt_loop_last_block(nir_block *block, bool is_trivial_continue, bool is_trivial_break)
 {
    /* If this block has no predecessors, let nir_opt_dead_cf() do the cleanup */
-   if (block->predecessors->entries == 0)
+   if (block->predecessors.entries == 0)
       return false;
 
    bool progress = false;
@@ -221,7 +221,7 @@ opt_loop_last_block(nir_block *block, bool is_trivial_continue, bool is_trivial_
     * control-flow will naturally take us to the same target block.
     */
    if ((has_break && is_trivial_break) || (has_continue && is_trivial_continue)) {
-      nir_lower_phis_to_regs_block(block->successors[0]);
+      nir_lower_phis_to_regs_block(block->successors[0], false);
       nir_instr_remove_v(nir_block_last_instr(block));
       return true;
    }
@@ -269,7 +269,7 @@ opt_loop_last_block(nir_block *block, bool is_trivial_continue, bool is_trivial_
       nir_remove_single_src_phis_block(nir_cf_node_cf_tree_next(prev));
 
       /* We are about to remove one predecessor. */
-      nir_lower_phis_to_regs_block(block->successors[0]);
+      nir_lower_phis_to_regs_block(block->successors[0], false);
 
       nir_cf_list tmp;
       nir_cf_extract(&tmp, nir_after_cf_node(prev), nir_after_block_before_jump(block));
@@ -313,13 +313,13 @@ can_constant_fold(nir_scalar scalar, nir_block *loop_header)
       return true;
    }
 
-   if (scalar.def->parent_instr->type == nir_instr_type_phi) {
+   if (nir_def_instr_type(scalar.def) == nir_instr_type_phi) {
       /* If this is a phi from anything but the loop header, we cannot constant-fold. */
-      if (scalar.def->parent_instr->block != loop_header)
+      if (nir_def_block(scalar.def) != loop_header)
          return false;
 
       nir_block *preheader = nir_block_cf_tree_prev(loop_header);
-      nir_phi_instr *phi = nir_instr_as_phi(scalar.def->parent_instr);
+      nir_phi_instr *phi = nir_def_as_phi(scalar.def);
       nir_phi_src *src = nir_phi_get_src_from_block(phi, preheader);
       return can_constant_fold(nir_get_scalar(src->src.ssa, 0), loop_header);
    }
@@ -367,7 +367,7 @@ opt_loop_peel_initial_break(nir_loop *loop)
    nir_block *exit_block = nir_cf_node_cf_tree_next(&loop->cf_node);
 
    /* The loop must have exactly one continue block. */
-   if (header_block->predecessors->entries != 2)
+   if (header_block->predecessors.entries != 2)
       return false;
 
    nir_cf_node *if_node = nir_cf_node_next(&header_block->cf_node);
@@ -417,9 +417,9 @@ opt_loop_peel_initial_break(nir_loop *loop)
    }
 
    /* Lower loop header and LCSSA-phis to regs. */
-   nir_lower_phis_to_regs_block(header_block);
+   nir_lower_phis_to_regs_block(header_block, false);
    nir_lower_ssa_defs_to_regs_block(header_block);
-   nir_lower_phis_to_regs_block(exit_block);
+   nir_lower_phis_to_regs_block(exit_block, false);
 
    /* Extract the loop header including the first break. */
    nir_cf_list tmp;
@@ -468,7 +468,7 @@ insert_phis_after_terminator_merge(nir_def *def, void *state)
       }
 
       if (nir_src_is_if(src) ||
-          (!nir_src_is_if(src) && nir_src_parent_instr(src)->block != def->parent_instr->block)) {
+          (!nir_src_is_if(src) && nir_src_parent_instr(src)->block != nir_def_block(def))) {
          if (!phi_created) {
             phi_instr = nir_phi_instr_create(m_state->shader);
             nir_def_init(&phi_instr->instr, &phi_instr->def, def->num_components,
@@ -696,7 +696,7 @@ opt_loop_cf_list(nir_builder *b, struct exec_list *cf_list,
       }
 
       case nir_cf_node_function:
-         unreachable("Invalid cf type");
+         UNREACHABLE("Invalid cf type");
       }
    }
 

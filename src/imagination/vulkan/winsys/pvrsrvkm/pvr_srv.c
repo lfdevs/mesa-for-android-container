@@ -28,8 +28,9 @@
 
 #include "hwdef/rogue_hw_utils.h"
 #include "pvr_csb.h"
+#include "pvr_device.h"
 #include "pvr_device_info.h"
-#include "pvr_private.h"
+#include "pvr_physical_device.h"
 #include "pvr_srv.h"
 #include "pvr_srv_bo.h"
 #include "pvr_srv_bridge.h"

@@ -20,7 +20,7 @@ translate_sampler_dim(VkImageType type)
    case VK_IMAGE_TYPE_3D:
       return GLSL_SAMPLER_DIM_3D;
    default:
-      unreachable("Unhandled image type");
+      UNREACHABLE("Unhandled image type");
    }
 }
 
@@ -99,7 +99,7 @@ get_pipeline(struct radv_device *device, const struct radv_image_view *src_iview
       fs = radv_meta_nir_build_blit_copy_fragment_shader_stencil(device, tex_dim);
       break;
    default:
-      unreachable("Unhandled aspect");
+      UNREACHABLE("Unhandled aspect");
    }
 
    VkGraphicsPipelineCreateInfo pipeline_create_info = {
@@ -219,7 +219,7 @@ get_pipeline(struct radv_device *device, const struct radv_image_view *src_iview
       render.stencil_attachment_format = VK_FORMAT_S8_UINT;
       break;
    default:
-      unreachable("Unhandled aspect");
+      UNREACHABLE("Unhandled aspect");
    }
 
    result = vk_meta_create_graphics_pipeline(&device->vk, &device->meta_state.device, &pipeline_create_info, &render,
@@ -286,7 +286,7 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_i
 
    VkRenderingInfo rendering_info = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-      .flags = VK_RENDERING_INPUT_ATTACHMENT_NO_CONCURRENT_WRITES_BIT_MESA,
+      .flags = VK_RENDERING_LOCAL_READ_CONCURRENT_ACCESS_CONTROL_BIT_KHR,
       .renderArea =
          {
             .offset = {0, 0},
@@ -336,7 +336,11 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_i
 
    radv_CmdDraw(radv_cmd_buffer_to_handle(cmd_buffer), 3, 1, 0, 0);
 
-   radv_CmdEndRendering(radv_cmd_buffer_to_handle(cmd_buffer));
+   const VkRenderingEndInfoKHR end_info = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_END_INFO_KHR,
+   };
+
+   radv_CmdEndRendering2KHR(radv_cmd_buffer_to_handle(cmd_buffer), &end_info);
 }
 
 static bool
@@ -487,6 +491,7 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
       radv_image_view_init(&dst_iview, device,
                            &(VkImageViewCreateInfo){
                               .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                              .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                               .image = radv_image_to_handle(dst_image),
                               .viewType = radv_meta_get_view_type(dst_image),
                               .format = dst_image->vk.format,
@@ -500,6 +505,7 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
       radv_image_view_init(&src_iview, device,
                            &(VkImageViewCreateInfo){
                               .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                              .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                               .image = radv_image_to_handle(src_image),
                               .viewType = radv_meta_get_view_type(src_image),
                               .format = src_image->vk.format,

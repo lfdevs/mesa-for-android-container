@@ -32,7 +32,7 @@
 #include "main/context.h"
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
-#include "main/texcompress_astc.h"
+#include "util/texcompress_astc.h"
 #include "util/texcompress_astc_luts_wrap.h"
 #include "main/uniforms.h"
 
@@ -150,23 +150,23 @@ bind_compute_state(struct st_context *st,
                    bool cs_handle_from_prog,
                    bool constbuf0_from_prog)
 {
-   assert(prog->info.stage == PIPE_SHADER_COMPUTE);
+   assert(prog->info.stage == MESA_SHADER_COMPUTE);
 
    /* Set compute states in the same order as defined in st_atom_list.h */
 
-   assert(prog->affected_states & ST_NEW_CS_STATE);
-   assert(st->shader_has_one_variant[PIPE_SHADER_COMPUTE]);
+   assert(BITSET_TEST(prog->affected_states, ST_NEW_CS_STATE));
+   assert(st->shader_has_one_variant[MESA_SHADER_COMPUTE]);
    cso_set_compute_shader_handle(st->cso_context,
                                  cs_handle_from_prog ?
                                  prog->variants->driver_shader : NULL);
 
-   if (prog->affected_states & ST_NEW_CS_SAMPLER_VIEWS) {
+   if (BITSET_TEST(prog->affected_states, ST_NEW_CS_SAMPLER_VIEWS)) {
       st->pipe->set_sampler_views(st->pipe, prog->info.stage, 0,
                                   prog->info.num_textures, 0,
                                   sampler_views);
    }
 
-   if (prog->affected_states & ST_NEW_CS_SAMPLERS) {
+   if (BITSET_TEST(prog->affected_states, ST_NEW_CS_SAMPLERS)) {
       /* Programs seem to set this bit more often than needed. For example, if
        * a program only uses texelFetch, this shouldn't be needed. Section
        * "11.1.3.2 Texel Fetches", of the GL 4.6 spec says:
@@ -182,26 +182,26 @@ bind_compute_state(struct st_context *st,
        */
    }
 
-   if (prog->affected_states & ST_NEW_CS_CONSTANTS) {
+   if (BITSET_TEST(prog->affected_states, ST_NEW_CS_CONSTANTS)) {
       st_upload_constants(st, constbuf0_from_prog ? prog : NULL,
                           prog->info.stage);
    }
 
-   if (prog->affected_states & ST_NEW_CS_UBOS) {
-      unreachable("Uniform buffer objects not handled");
+   if (BITSET_TEST(prog->affected_states, ST_NEW_CS_UBOS)) {
+      UNREACHABLE("Uniform buffer objects not handled");
    }
 
-   if (prog->affected_states & ST_NEW_CS_ATOMICS) {
-      unreachable("Atomic buffer objects not handled");
+   if (BITSET_TEST(prog->affected_states, ST_NEW_CS_ATOMICS)) {
+      UNREACHABLE("Atomic buffer objects not handled");
    }
 
-   if (prog->affected_states & ST_NEW_CS_SSBOS) {
+   if (BITSET_TEST(prog->affected_states, ST_NEW_CS_SSBOS)) {
       st->pipe->set_shader_buffers(st->pipe, prog->info.stage, 0,
                                    prog->info.num_ssbos, shader_buffers,
                                    prog->sh.ShaderStorageBlocksWriteAccess);
    }
 
-   if (prog->affected_states & ST_NEW_CS_IMAGES) {
+   if (BITSET_TEST(prog->affected_states, ST_NEW_CS_IMAGES)) {
       st->pipe->set_shader_images(st->pipe, prog->info.stage, 0,
                                   prog->info.num_images, 0, image_views);
    }
@@ -217,7 +217,7 @@ dispatch_compute_state(struct st_context *st,
                        unsigned num_workgroups_y,
                        unsigned num_workgroups_z)
 {
-   assert(prog->info.stage == PIPE_SHADER_COMPUTE);
+   assert(prog->info.stage == MESA_SHADER_COMPUTE);
 
    /* Bind the state */
    bind_compute_state(st, prog, sampler_views, shader_buffers, image_views,
@@ -242,8 +242,9 @@ dispatch_compute_state(struct st_context *st,
     * trampled on by these state changes, dirty the relevant flags.
     */
    if (st->cp) {
-      st->ctx->NewDriverState |=
-         st->cp->affected_states & prog->affected_states;
+      st_state_bitset state;
+      BITSET_AND(state, st->cp->affected_states, prog->affected_states);
+      ST_SET_STATES(st->ctx->NewDriverState, state);
    }
 }
 
@@ -290,7 +291,7 @@ cs_encode_bc1(struct st_context *st,
    struct pipe_resource *bc1_tex =
       st_texture_create(st, PIPE_TEXTURE_2D, PIPE_FORMAT_R32G32_UINT, 0,
                         DIV_ROUND_UP(rgba8_tex->width0, 4),
-                        DIV_ROUND_UP(rgba8_tex->height0, 4), 1, 1, 0,
+                        DIV_ROUND_UP(rgba8_tex->height0, 4), 1, 1, 0, 0,
                         PIPE_BIND_SHADER_IMAGE |
                         PIPE_BIND_SAMPLER_VIEW, false,
                         PIPE_COMPRESSION_FIXED_RATE_NONE);
@@ -351,7 +352,7 @@ cs_encode_bc4(struct st_context *st,
    struct pipe_resource *bc4_tex =
       st_texture_create(st, PIPE_TEXTURE_2D, PIPE_FORMAT_R32G32_UINT, 0,
                         DIV_ROUND_UP(rgba8_tex->width0, 4),
-                        DIV_ROUND_UP(rgba8_tex->height0, 4), 1, 1, 0,
+                        DIV_ROUND_UP(rgba8_tex->height0, 4), 1, 1, 0, 0,
                         PIPE_BIND_SHADER_IMAGE |
                         PIPE_BIND_SAMPLER_VIEW, false,
                         PIPE_COMPRESSION_FIXED_RATE_NONE);
@@ -413,7 +414,7 @@ cs_stitch_64bpb_textures(struct st_context *st,
    stitched_tex =
       st_texture_create(st, PIPE_TEXTURE_2D, PIPE_FORMAT_R32G32B32A32_UINT, 0,
                         tex_hi->width0,
-                        tex_hi->height0, 1, 1, 0,
+                        tex_hi->height0, 1, 1, 0, 0,
                         PIPE_BIND_SHADER_IMAGE |
                         PIPE_BIND_SAMPLER_VIEW, false,
                         PIPE_COMPRESSION_FIXED_RATE_NONE);
@@ -480,7 +481,7 @@ sw_decode_astc(struct st_context *st,
    /* Create the destination */
    struct pipe_resource *rgba8_tex =
       st_texture_create(st, PIPE_TEXTURE_2D, PIPE_FORMAT_R8G8B8A8_UNORM, 0,
-                        width_px, height_px, 1, 1, 0,
+                        width_px, height_px, 1, 1, 0, PIPE_RESOURCE_FLAG_MAP_UNSYNCHRONIZED,
                         PIPE_BIND_SAMPLER_VIEW, false,
                         PIPE_COMPRESSION_FIXED_RATE_NONE);
    if (!rgba8_tex)
@@ -489,7 +490,7 @@ sw_decode_astc(struct st_context *st,
    /* Temporarily map the destination and decode into the returned pointer */
    struct pipe_transfer *rgba8_xfer;
    void *rgba8_map = pipe_texture_map(st->pipe, rgba8_tex, 0, 0,
-                                      PIPE_MAP_WRITE, 0, 0,
+                                      PIPE_MAP_WRITE | PIPE_MAP_UNSYNCHRONIZED, 0, 0,
                                       width_px, height_px, &rgba8_xfer);
    if (!rgba8_map) {
       pipe_resource_reference(&rgba8_tex, NULL);
@@ -575,7 +576,7 @@ get_astc_partition_table_view(struct st_context *st,
    struct pipe_resource *res =
       st_texture_create(st, PIPE_TEXTURE_2D, PIPE_FORMAT_R8_UINT, 0,
                         ptable_box.width, ptable_box.height,
-                        1, 1, 0,
+                        1, 1, 0, 0,
                         PIPE_BIND_SAMPLER_VIEW, false,
                         PIPE_COMPRESSION_FIXED_RATE_NONE);
    if (!res)
@@ -648,7 +649,7 @@ cs_decode_astc(struct st_context *st,
    /* Create the destination */
    struct pipe_resource *rgba8_tex =
       st_texture_create(st, PIPE_TEXTURE_2D, PIPE_FORMAT_R8G8B8A8_UNORM, 0,
-                        width_px, height_px, 1, 1, 0,
+                        width_px, height_px, 1, 1, 0, 0,
                         PIPE_BIND_SAMPLER_VIEW, false,
                         PIPE_COMPRESSION_FIXED_RATE_NONE);
 

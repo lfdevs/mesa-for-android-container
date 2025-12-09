@@ -369,7 +369,7 @@ pb_slab_manager_create_buffer(struct pb_manager *_mgr,
                               const struct pb_desc *desc)
 {
    struct pb_slab_manager *mgr = pb_slab_manager(_mgr);
-   static struct pb_slab_buffer *buf;
+   struct pb_slab_buffer *buf;
    struct pb_slab *slab;
    struct list_head *list;
 

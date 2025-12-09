@@ -42,7 +42,7 @@ vk_priority_to_i915(VkQueueGlobalPriorityKHR priority)
    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR:
       return INTEL_CONTEXT_REALTIME_PRIORITY;
    default:
-      unreachable("Invalid priority");
+      UNREACHABLE("Invalid priority");
    }
 }
 
@@ -103,10 +103,29 @@ anv_i915_physical_device_get_parameters(struct anv_physical_device *device)
       return result;
    }
 
-   if (intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_ASYNC, &val))
-      device->has_exec_async = val;
-   if (intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_CAPTURE, &val))
-      device->has_exec_capture = val;
+   if (!intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_ASYNC, &val) || !val) {
+      result = vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
+                         "kernel missing exec async support");
+      return result;
+   }
+
+   if (!intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_CAPTURE, &val) || !val) {
+      result = vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
+                         "kernel missing exec capture support");
+      return result;
+   }
+
+   if (!intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_TIMELINE_FENCES, &val) || !val) {
+      result = vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
+                         "kernel missing exec capture support");
+      return result;
+   }
+
+   if (!i915_gem_supports_dma_buf_sync_file(fd)) {
+      result = vk_errorf(device, VK_ERROR_INCOMPATIBLE_DRIVER,
+                         "kernel missing dma-buf sync file import/export");
+      return result;
+   }
 
    /* Start with medium; sorted low to high */
    const VkQueueGlobalPriorityKHR priorities[] = {
@@ -121,9 +140,6 @@ anv_i915_physical_device_get_parameters(struct anv_physical_device *device)
          break;
       device->max_context_priority = priorities[i];
    }
-
-   if (intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_TIMELINE_FENCES, &val))
-      device->has_exec_timeline = val;
 
    if (intel_gem_get_context_param(fd, 0, I915_CONTEXT_PARAM_VM, &value))
       device->has_vm_control = value;
@@ -349,25 +365,28 @@ anv_i915_device_check_status(struct vk_device *vk_device)
          result = anv_gem_context_get_reset_stats(device,
                                                   device->queues[i].context_id);
          if (result != VK_SUCCESS)
-            return result;
+            goto done;
 
          if (device->queues[i].companion_rcs_id != 0) {
             uint32_t context_id = device->queues[i].companion_rcs_id;
             result = anv_gem_context_get_reset_stats(device, context_id);
-            if (result != VK_SUCCESS) {
-               return result;
-            }
+            if (result != VK_SUCCESS)
+               goto done;
          }
       }
    } else {
       result = anv_gem_context_get_reset_stats(device, device->context_id);
    }
 
-   if (result != VK_SUCCESS)
-      return result;
-
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT))
-      result = vk_check_printf_status(vk_device, &device->printf);
+ done:
+   if (INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+      VkResult print_result =
+         vk_check_printf_status(vk_device, &device->printf);
+      /* Report the device error if there is one, only report the printf error
+       * if no device error.
+       */
+      result = result != VK_SUCCESS ? result : print_result;
+   }
 
    return result;
 }

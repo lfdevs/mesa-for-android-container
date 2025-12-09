@@ -159,8 +159,6 @@ struct vpe10_cdc_fe {
 
 void vpe10_construct_cdc_fe(struct vpe_priv *vpe_priv, struct cdc_fe *cdc_fe);
 
-bool vpe10_cdc_check_input_format(struct cdc_fe *cdc_fe, enum vpe_surface_pixel_format format);
-
 void vpe10_cdc_program_surface_config(struct cdc_fe *cdc_fe, enum vpe_surface_pixel_format format,
     enum vpe_rotation_angle rotation, bool horizontal_mirror, enum vpe_swizzle_mode_values swizzle);
 

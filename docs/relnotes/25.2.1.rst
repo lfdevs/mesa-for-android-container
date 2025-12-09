@@ -1,0 +1,197 @@
+Mesa 25.2.1 Release Notes / 2025-08-20
+======================================
+
+Mesa 25.2.1 is a bug fix release which fixes bugs found since the 25.2.0 release.
+
+Mesa 25.2.1 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.1 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: c124372189d35f48e049ee503029171c68962c580971cb86d968a6771c965ba4  mesa-25.2.1.tar.xz
+    SHA512: 913ee1d00e13bafb7275740ba0883cf949a42d45595ef5bab60038064cb27aff36285ac9105269be5c0e3b4320fc7b70ca5c5f28e2cf79457882baff7e10620b  mesa-25.2.1.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- d3d10umd: Build regression on 25.2.0-rc1
+- nvk/nak regression: memory_model.message_passing fails on KeplerA
+- [ANV] dEQP-VK.api.copy_and_blit.copy_commands2.image_to_buffer_transfer_queue.2d_images.whole_r32g32b32_uint_linear and possibly others asserts on LNL
+- Build dependency on intel_wa.h missing in Intel vulkan driver
+- Missing polygons/vertices in CS2 on BMG
+- \`vn_ring`: use-after-release crash after \`vn_ring_destroy` on Virtio-Vulkan
+- venus: vkmark --winsys headless segfault (regression)
+- Vulkan headless WSI crashes when initializing swapchain on Asahi Linux running Apple M1 Max
+
+
+Changes
+-------
+
+Alyssa Rosenzweig (1):
+
+- agx: gate scratch opt on internal shaders
+
+David Rosca (6):
+
+- radv: Add timeout to video encode query
+- radv: Fix alignment for linear video decode dst images
+- rusticl/ptr: Fix hidden lifetime warning
+- ac/vcn_dec: Add av1_intrabc_workaround
+- radeonsi/vcn: Enable AV1 decode workaround for gfx1153
+- radv/video: Enable AV1 decode workaround for gfx1153
+
+Derek Foreman (1):
+
+- dril: Skip some pipe formats to avoid breaking X
+
+Eric Engestrom (3):
+
+- docs: add sha sum for 25.2.0
+- .pick_status.json: Update to f4808ea46fa2a35ea3138b78c52ed8f8c26f92ce
+- ci: track changes to new src/x11/ folder
+
+Eric R. Smith (1):
+
+- panvk: fix a NULL pointer dereference in occlusion queries
+
+Erik Faye-Lund (2):
+
+- panvk: fix EXT_texture_compression_astc_support
+- pan: use translate_s_format for stencil
+
+Faith Ekstrand (2):
+
+- nvk: Allow kepler in nvk_is_conformant()
+- anv: Set the Shader capability when compiling the FP64 shader
+
+Georg Lehmann (2):
+
+- nir/uub: guard against division by 0
+- aco/isel: fix vectorized i2i16 with 8bit vec8 source
+
+Gert Wollny (7):
+
+- r600/sfn: check number of fsat64 source uses properly
+- r600: Update GPR count when adding a GDS instruction
+- r600/sfn: factor out adding an input in GS
+- r600/sfn: Handle indirect access to GS input arrays
+- r00/sfn: Fix copy propagation into buffer load address
+- r600/sfn: When splitting an ALU CF update possible start of next CF
+- r600/sfn: Fix AR use tracking off-by-one error
+
+Iván Briano (2):
+
+- anv: check for pending_db_mode when dirtying descriptor mode
+- anv: dirty descriptor state on CmdSetDescriptorBufferOffets
+
+Job Noorman (1):
+
+- ir3/array_to_ssa: fix updating/removing phis
+
+Jordan Justen (1):
+
+- intel/dev: Add BMG 0xe209 PCI ID
+
+Karol Herbst (11):
+
+- rusticl: use pipe_sampler_view_release
+- rusticl/mesa: wire up fence_server
+- rusticl/gl: store the mesa_glinterop_export_in
+- st/interup: flushing objects is a no-op when no context is bound
+- rusticl/gl: only flush objects on import if we get a valid fd
+- rusticl/gl: flush and wait on gl objects inside clEnqueueAcquireGLObjects
+- zink: fix data race in descriptor_util_pool_key_get
+- rusticl: silence warnings in generated sources
+- rusticl: silence new warnings from rustc versions above our rustc target
+- anv: do not map from_host_ptr bos in image_bind_address
+- zink: set zink_bo is_user_ptr on creation
+
+Kenneth Graunke (1):
+
+- intel: Disable 16x MSAA support on Xe3
+
+Lars-Ivar Hesselberg Simonsen (3):
+
+- u_trace: Indirect capture fixes
+- panvk: Fix instrumentation on v12+
+- panvk: Fix IUB decode
+
+Lionel Landwerlin (4):
+
+- meson: remove intel-clc options
+- brw: compute consistent clip/cull distance masks with VUE
+- anv: fix missing meson dep
+- anv: fix R64* vertex buffer format support
+
+Lorenzo Rossi (1):
+
+- nak/kepler: Refine instruction scheduling
+
+Max R (1):
+
+- d3d10umd: De-bufferize OutputMerger
+
+Mel Henning (1):
+
+- meson,nvk: Require rustc-hash 2.0 or later
+
+Mike Blumenkrantz (3):
+
+- zink: don't access ctx in submit_queue
+- perfetto: unify init
+- zink: remove UNSYNCHRONIZED map flag during unmap flush for non-subdata calls
+
+Natalie Vock (1):
+
+- radv: Only expose indirect raytracing on gfx7+
+
+Patrick Lerda (1):
+
+- r600: fix evergreen gds atomic_counter_comp_swap
+
+Rob Clark (2):
+
+- freedreno: Remove obsolete comment
+- freedreno/layout: Don't align explicit layouts to page size
+
+Rohan Garg (1):
+
+- intel/compiler: use the WA framework when emitting WA 14014595444
+
+Samuel Pitoiset (4):
+
+- ac,radv,radeonsi: fix programming PA_SU_PRIM_FILTER_CNTL on GFX12
+- radv/amdgpu: fix creation with different but unused RADV_PERFTEST flags
+- radv: fix reserving space for emitting push constants with DGC IES
+- radv: fix color attachment remapping with fast-GPL/ESO
+
+Tapani Pälli (2):
+
+- isl/blorp: handle failing 96bpp linear blit case
+- compiler/types: handle BFLOAT16 when decoding blob
+
+Yiwei Zhang (5):
+
+- util/perf: amend missing atrace_init
+- vulkan/wsi/headless: allow explicit modifiers
+- venus: fix a race condition in ring shmem reuse
+- vulkan/util: add missing vulkan header
+- venus: hide swapchainMaintenance1 behind wsi guard

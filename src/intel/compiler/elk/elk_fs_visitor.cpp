@@ -375,7 +375,7 @@ cond_for_alpha_func(enum compare_func func)
    case COMPARE_FUNC_NOTEQUAL:
       return ELK_CONDITIONAL_NEQ;
    default:
-      unreachable("Not reached");
+      UNREACHABLE("Not reached");
    }
 }
 
@@ -557,7 +557,7 @@ elk_fs_visitor::emit_urb_writes(const elk_fs_reg &gs_vertex_count)
       urb_handle = gs_payload().urb_handles;
       break;
    default:
-      unreachable("invalid stage");
+      UNREACHABLE("invalid stage");
    }
 
    const fs_builder bld = fs_builder(this).at_end();
@@ -680,7 +680,7 @@ elk_fs_visitor::emit_urb_writes(const elk_fs_reg &gs_vertex_count)
       }
       case ELK_VARYING_SLOT_NDC:
       case VARYING_SLOT_EDGE:
-         unreachable("unexpected scalar vs output");
+         UNREACHABLE("unexpected scalar vs output");
          break;
 
       default:

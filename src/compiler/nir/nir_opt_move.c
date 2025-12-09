@@ -57,7 +57,7 @@ nir_opt_move_block(nir_block *block, nir_move_options options)
    bool progress = false;
    nir_instr *last_instr = nir_block_ends_in_jump(block) ? nir_block_last_instr(block) : NULL;
    const nir_if *iff = nir_block_get_following_if(block);
-   const nir_instr *if_cond_instr = iff ? iff->condition.ssa->parent_instr : NULL;
+   const nir_instr *if_cond_instr = iff ? nir_def_instr(iff->condition.ssa) : NULL;
 
    /* Walk the instructions backwards.
     * The instructions get indexed while iterating.
@@ -138,6 +138,9 @@ nir_opt_move(nir_shader *shader, nir_move_options options)
    bool progress = false;
 
    nir_foreach_function_impl(impl, shader) {
+      if (options & (nir_move_only_convergent | nir_move_only_divergent))
+         nir_metadata_require(impl, nir_metadata_divergence);
+
       bool impl_progress = false;
       nir_foreach_block(block, impl) {
          if (nir_opt_move_block(block, options))

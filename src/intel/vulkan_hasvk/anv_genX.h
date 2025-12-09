@@ -113,8 +113,7 @@ void
 genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,
                      const struct intel_l3_config *l3_config,
                      VkShaderStageFlags active_stages,
-                     const unsigned entry_size[4],
-                     enum intel_urb_deref_block_size *deref_block_size);
+                     const unsigned entry_size[4]);
 
 void genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
                             const struct vk_sample_locations_state *sl);

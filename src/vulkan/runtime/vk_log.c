@@ -46,7 +46,7 @@ vk_object_to_physical_device(struct vk_object_base *obj)
 {
    switch (obj->type) {
    case VK_OBJECT_TYPE_INSTANCE:
-      unreachable("Unsupported object type");
+      UNREACHABLE("Unsupported object type");
    case VK_OBJECT_TYPE_PHYSICAL_DEVICE:
       return container_of(obj, struct vk_physical_device, base);
    case VK_OBJECT_TYPE_SURFACE_KHR:
@@ -54,7 +54,7 @@ vk_object_to_physical_device(struct vk_object_base *obj)
    case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
    case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT:
    case VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT:
-      unreachable("Unsupported object type");
+      UNREACHABLE("Unsupported object type");
    default:
       return vk_object_to_device(obj)->physical;
    }
@@ -145,7 +145,7 @@ __vk_log_impl(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
       mesa_loge("%s: %s", message_idname, message);
       break;
    default:
-      unreachable("Invalid debug message severity");
+      UNREACHABLE("Invalid debug message severity");
       break;
    }
 
@@ -250,7 +250,7 @@ __vk_log_impl(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
          flags |= VK_DEBUG_REPORT_ERROR_BIT_EXT;
          break;
       default:
-         unreachable("Invalid debug message severity");
+         UNREACHABLE("Invalid debug message severity");
          break;
       }
 

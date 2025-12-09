@@ -28,7 +28,7 @@
 #include <poll.h>
 #include <vulkan/vulkan.h>
 
-#include "pvr_private.h"
+#include "pvr_device.h"
 #include "pvr_srv.h"
 #include "pvr_srv_sync.h"
 #include "util/libsync.h"
@@ -224,7 +224,7 @@ static VkResult pvr_srv_sync_move(struct vk_device *device,
       return VK_SUCCESS;
    }
 
-   unreachable("srv_sync doesn't support move for shared sync objects.");
+   UNREACHABLE("srv_sync doesn't support move for shared sync objects.");
    return VK_ERROR_UNKNOWN;
 }
 

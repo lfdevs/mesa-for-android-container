@@ -125,6 +125,7 @@ static void
 set_label(struct gl_context *ctx, GLenum identifier, GLuint name, char **labelPtr,
           const char *label, int length, const char *caller, bool ext_length)
 {
+   unsigned max_label_len = ctx->screen->caps.max_label_length;
    char *old_label = *labelPtr;
    *labelPtr = NULL;
 
@@ -132,11 +133,11 @@ set_label(struct gl_context *ctx, GLenum identifier, GLuint name, char **labelPt
    if (label) {
       if ((!ext_length && length >= 0) ||
           (ext_length && length > 0)) {
-         if (length >= MAX_LABEL_LENGTH)
+         if (length >= max_label_len)
             _mesa_error(ctx, GL_INVALID_VALUE,
                         "%s(length=%d, which is not less than "
-                        "GL_MAX_LABEL_LENGTH=%d)", caller, length,
-                        MAX_LABEL_LENGTH);
+                        "GL_MAX_LABEL_LENGTH=%u)", caller, length,
+                        max_label_len);
 
          /* explicit length */
          *labelPtr = malloc(length+1);
@@ -157,11 +158,11 @@ set_label(struct gl_context *ctx, GLenum identifier, GLuint name, char **labelPt
          }
 
          int len = strlen(label);
-         if (len >= MAX_LABEL_LENGTH)
+         if (len >= max_label_len)
             _mesa_error(ctx, GL_INVALID_VALUE,
                 "%s(label length=%d, which is not less than "
-                "GL_MAX_LABEL_LENGTH=%d)", caller, len,
-                MAX_LABEL_LENGTH);
+                "GL_MAX_LABEL_LENGTH=%u)", caller, len,
+                max_label_len);
 
          /* null-terminated string */
          *labelPtr = strdup(label);

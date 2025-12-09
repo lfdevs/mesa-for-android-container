@@ -160,7 +160,9 @@ struct vn_renderer_bo_ops {
                          struct vn_renderer_bo *bo);
 
    /* map is not thread-safe */
-   void *(*map)(struct vn_renderer *renderer, struct vn_renderer_bo *bo);
+   void *(*map)(struct vn_renderer *renderer,
+                struct vn_renderer_bo *bo,
+                void *placed_addr);
 
    void (*flush)(struct vn_renderer *renderer,
                  struct vn_renderer_bo *bo,
@@ -368,9 +370,11 @@ vn_renderer_bo_export_dma_buf(struct vn_renderer *renderer,
 }
 
 static inline void *
-vn_renderer_bo_map(struct vn_renderer *renderer, struct vn_renderer_bo *bo)
+vn_renderer_bo_map(struct vn_renderer *renderer,
+                   struct vn_renderer_bo *bo,
+                   void *placed_addr)
 {
-   return renderer->bo_ops.map(renderer, bo);
+   return renderer->bo_ops.map(renderer, bo, placed_addr);
 }
 
 static inline void

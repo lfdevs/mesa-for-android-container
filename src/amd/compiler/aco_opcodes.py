@@ -50,6 +50,7 @@ class Format(IntEnum):
    PSEUDO_BRANCH = auto()
    PSEUDO_BARRIER = auto()
    PSEUDO_REDUCTION = auto()
+   PSEUDO_CALL = auto()
    # Scalar ALU & Control Formats
    SOP1 = auto()
    SOP2 = auto()
@@ -93,7 +94,7 @@ class Format(IntEnum):
          return "salu"
       elif self in [Format.FLAT, Format.GLOBAL, Format.SCRATCH]:
          return "flatlike"
-      elif self in [Format.PSEUDO_BRANCH, Format.PSEUDO_REDUCTION, Format.PSEUDO_BARRIER]:
+      elif self in [Format.PSEUDO_BRANCH, Format.PSEUDO_REDUCTION, Format.PSEUDO_BARRIER, Format.PSEUDO_CALL]:
          return self.name.split("_")[-1].lower()
       else:
          return self.name.lower()
@@ -152,7 +153,8 @@ class Format(IntEnum):
                  ('unsigned', 'dest', None),
                  ('bool', 'compr', 'false', 'compressed'),
                  ('bool', 'done', 'false'),
-                 ('bool', 'vm', 'false', 'valid_mask')]
+                 ('bool', 'vm', 'false', 'valid_mask'),
+                 ('bool', 'disable_wqm', 'false')]
       elif self == Format.PSEUDO_BRANCH:
          return [('uint32_t', 'target0', '0', 'target[0]'),
                  ('uint32_t', 'target1', '0', 'target[1]')]
@@ -162,6 +164,8 @@ class Format(IntEnum):
       elif self == Format.PSEUDO_BARRIER:
          return [('memory_sync_info', 'sync', None),
                  ('sync_scope', 'exec_scope', 'scope_invocation')]
+      elif self == Format.PSEUDO_CALL:
+         return [('ABI', 'abi', None)]
       elif self == Format.VINTRP:
          return [('unsigned', 'attribute', None),
                  ('unsigned', 'component', None),
@@ -200,6 +204,9 @@ class Format(IntEnum):
 
    def get_builder_field_decls(self):
       return [('%s %s=%s' % (f[0], f[1], f[2]) if f[2] != None else '%s %s' % (f[0], f[1])) for f in self.get_builder_fields()]
+
+   def has_disable_wqm(self):
+      return any([f[1] == 'disable_wqm' for f in self.get_builder_fields()])
 
    def get_builder_initialization(self, num_operands):
       res = ''
@@ -349,6 +356,8 @@ insn("p_unit_test")
 
 insn("p_callee_stack_ptr")
 
+insn("p_reload_preserved")
+
 insn("p_create_vector")
 insn("p_extract_vector")
 insn("p_split_vector")
@@ -371,6 +380,8 @@ insn("p_cbranch_z", format=Format.PSEUDO_BRANCH)
 insn("p_cbranch_nz", format=Format.PSEUDO_BRANCH)
 
 insn("p_barrier", format=Format.PSEUDO_BARRIER)
+
+insn("p_call", format=Format.PSEUDO_CALL)
 
 # Primitive Ordered Pixel Shading pseudo-instructions.
 
@@ -427,6 +438,11 @@ insn("p_bpermute_shared_vgpr")
 # definitions: result VGPR, temp EXEC, clobbered SCC
 # operands: linear VGPR, index * 4, input data, same half (bool)
 insn("p_bpermute_permlane")
+
+# simulates v_permlane64_b32 behavior using shared vgprs (for GFX10/10.3)
+# definitions result VGPR
+# operands: input data
+insn("p_permlane64_shared_vgpr")
 
 # creates a lane mask where only the first active lane is selected
 insn("p_elect")
@@ -1313,10 +1329,10 @@ VOP3 = {
    ("v_lshl_b64",              dst(U64), src(U64, U32), op(0x161, gfx8=-1), InstrClass.Valu64),
    ("v_lshr_b64",              dst(U64), src(U64, U32), op(0x162, gfx8=-1), InstrClass.Valu64),
    ("v_ashr_i64",              dst(I64), src(I64, U32), op(0x163, gfx8=-1), InstrClass.Valu64),
-   ("v_add_f64_e64",           dst(F64), src(F64, F64), op(0x164, gfx8=0x280, gfx10=0x164, gfx11=0x327, gfx12=0x102), InstrClass.ValuDoubleAdd), # GFX12 is VOP2 opcode + 0x100
-   ("v_mul_f64_e64",           dst(F64), src(F64, F64), op(0x165, gfx8=0x281, gfx10=0x165, gfx11=0x328, gfx12=0x106), InstrClass.ValuDouble), # GFX12 is VOP2 opcode + 0x100
-   ("v_min_f64_e64",           dst(F64), src(F64, F64), op(0x166, gfx8=0x282, gfx10=0x166, gfx11=0x329, gfx12=0x10d), InstrClass.ValuDouble), # GFX12 is VOP2 opcode + 0x100
-   ("v_max_f64_e64",           dst(F64), src(F64, F64), op(0x167, gfx8=0x283, gfx10=0x167, gfx11=0x32a, gfx12=0x10e), InstrClass.ValuDouble), # GFX12 is VOP2 opcode + 0x100
+   ("v_add_f64_e64",           dst(F64), src(F64, F64), op(0x164, gfx8=0x280, gfx10=0x164, gfx11=0x327, gfx12=-1), InstrClass.ValuDoubleAdd), # GFX12 is VOP2
+   ("v_mul_f64_e64",           dst(F64), src(F64, F64), op(0x165, gfx8=0x281, gfx10=0x165, gfx11=0x328, gfx12=-1), InstrClass.ValuDouble), # GFX12 is VOP2
+   ("v_min_f64_e64",           dst(F64), src(F64, F64), op(0x166, gfx8=0x282, gfx10=0x166, gfx11=0x329, gfx12=-1), InstrClass.ValuDouble), # GFX12 is VOP2
+   ("v_max_f64_e64",           dst(F64), src(F64, F64), op(0x167, gfx8=0x283, gfx10=0x167, gfx11=0x32a, gfx12=-1), InstrClass.ValuDouble), # GFX12 is VOP2
    ("v_ldexp_f64",             dst(F64), src(F64, U32), op(0x168, gfx8=0x284, gfx10=0x168, gfx11=0x32b), InstrClass.ValuDouble),
    ("v_mul_lo_u32",            dst(U32), src(U32, U32), op(0x169, gfx8=0x285, gfx10=0x169, gfx11=0x32c), InstrClass.ValuQuarterRate32),
    ("v_mul_hi_u32",            dst(U32), src(U32, U32), op(0x16a, gfx8=0x286, gfx10=0x16a, gfx11=0x32d), InstrClass.ValuQuarterRate32),
@@ -1374,7 +1390,7 @@ VOP3 = {
    ("v_bcnt_u32_b32",          dst(U32), src(U32, U32), op(0x122, gfx8=0x28b, gfx10=0x364, gfx11=0x31e)),
    ("v_mbcnt_lo_u32_b32",      dst(U32), src(U32, U32), op(0x123, gfx8=0x28c, gfx10=0x365, gfx11=0x31f)),
    ("v_mbcnt_hi_u32_b32_e64",  dst(U32), src(U32, U32), op(gfx8=0x28d, gfx10=0x366, gfx11=0x320)),
-   ("v_lshlrev_b64_e64",       dst(U64), src(U32, U64), op(gfx8=0x28f, gfx10=0x2ff, gfx11=0x33c, gfx12=0x11f), InstrClass.Valu64), # GFX12 is VOP2 opcode + 0x100
+   ("v_lshlrev_b64_e64",       dst(U64), src(U32, U64), op(gfx8=0x28f, gfx10=0x2ff, gfx11=0x33c, gfx12=-1), InstrClass.Valu64), # GFX12 is VOP2
    ("v_lshrrev_b64",           dst(U64), src(U32, U64), op(gfx8=0x290, gfx10=0x300, gfx11=0x33d), InstrClass.Valu64),
    ("v_ashrrev_i64",           dst(I64), src(U32, I64), op(gfx8=0x291, gfx10=0x301, gfx11=0x33e), InstrClass.Valu64),
    ("v_bfm_b32",               dst(U32), src(U32, U32), op(0x11e, gfx8=0x293, gfx10=0x363, gfx11=0x31d)),
@@ -1747,12 +1763,6 @@ MUBUF = {
    ("buffer_gl0_inv",               op(gfx10=0x71, gfx11=0x2b, gfx12=-1)),
    ("buffer_gl1_inv",               op(gfx10=0x72, gfx11=0x2c, gfx12=-1)),
    ("buffer_atomic_csub",           op(gfx10=0x34, gfx11=0x37)), #GFX10.3+. seems glc must be set. buffer_atomic_csub_u32 in GFX11
-   ("buffer_load_lds_b32",          op(gfx11=0x31, gfx12=-1)),
-   ("buffer_load_lds_format_x",     op(gfx11=0x32, gfx12=-1)),
-   ("buffer_load_lds_i8",           op(gfx11=0x2e, gfx12=-1)),
-   ("buffer_load_lds_i16",          op(gfx11=0x30, gfx12=-1)),
-   ("buffer_load_lds_u8",           op(gfx11=0x2d, gfx12=-1)),
-   ("buffer_load_lds_u16",          op(gfx11=0x2f, gfx12=-1)),
    ("buffer_atomic_add_f32",        op(gfx11=0x56)),
    ("buffer_atomic_pk_add_f16",     op(gfx12=0x59)),
    ("buffer_atomic_pk_add_bf16",    op(gfx12=0x5a)),

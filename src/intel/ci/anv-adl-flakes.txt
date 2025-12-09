@@ -5,6 +5,8 @@ shaderquery-dEQP-VK.query_pool.performance_query.query_compute
 # Seen in https://gitlab.freedesktop.org/mesa/mesa/-/pipelines/1364513
 dEQP-VK.pipeline.monolithic.creation_cache_control.compute_pipelines.single_pipeline_no_compile
 
+dEQP-VK.synchronization2.signal_order.shared_binary_semaphore.write_copy_image_read_image_tess_eval.image_64x64x8_r32_sfloat_opaque_fd
+
 # various valgrind errors, driver is mapping buffer at command buffer
 # building time, this is out of spec
 dEQP-VK.video.encode.h265.i_p

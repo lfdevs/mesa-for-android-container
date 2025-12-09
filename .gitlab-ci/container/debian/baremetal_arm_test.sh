@@ -2,7 +2,7 @@
 # shellcheck disable=SC2154 # arch is assigned in previous scripts
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
-# DEBIAN_BASE_TAG
+# DEBIAN_TEST_BASE_TAG
 
 set -e
 
@@ -17,7 +17,6 @@ DEPS=(
     netcat-openbsd
     openssh-server
     procps
-    python3-distutils
     python3-filelock
     python3-fire
     python3-minimal

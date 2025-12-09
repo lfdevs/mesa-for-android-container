@@ -42,7 +42,7 @@ duplicate_def_at_use(nir_builder *b, nir_def *def, bool duplicate_for_ffma)
           * if 'if use', clone where it is
           */
          if (nir_src_is_if(use_src)) {
-            b->cursor = nir_before_instr(def->parent_instr);
+            b->cursor = nir_before_def(def);
          } else {
             b->cursor = nir_before_instr(nir_src_parent_instr(use_src));
             last_parent_instr = nir_src_parent_instr(use_src);
@@ -54,17 +54,17 @@ duplicate_def_at_use(nir_builder *b, nir_def *def, bool duplicate_for_ffma)
             }
          }
 
-         dupl = nir_instr_def(nir_instr_clone(b->shader, def->parent_instr));
-         dupl->parent_instr->pass_flags = 1;
+         dupl = nir_instr_def(nir_instr_clone(b->shader, nir_def_instr(def)));
+         nir_def_instr(dupl)->pass_flags = 1;
 
-         nir_builder_instr_insert(b, dupl->parent_instr);
+         nir_builder_instr_insert(b, nir_def_instr(dupl));
       }
 
       nir_src_rewrite(use_src, dupl);
       last_dupl = dupl;
    }
 
-   nir_instr_remove(def->parent_instr);
+   nir_instr_remove(nir_def_instr(def));
    return true;
 }
 

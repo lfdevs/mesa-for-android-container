@@ -105,7 +105,7 @@ ResolveState(Device *pDevice)
    update_velems(pDevice);
 
    if (pDevice->vbuffers_changed) {
-      cso_set_vertex_buffers(pDevice->cso, PIPE_MAX_ATTRIBS, false, pDevice->vertex_buffers);
+      cso_set_vertex_buffers(pDevice->cso, PIPE_MAX_ATTRIBS, pDevice->vertex_buffers);
       pDevice->vbuffers_changed = false;
    }
 }

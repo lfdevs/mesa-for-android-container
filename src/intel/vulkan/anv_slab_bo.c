@@ -102,7 +102,7 @@ get_slabs(struct anv_device *device, uint64_t size)
          return slabs;
    }
 
-   unreachable("should have found a valid slab for this size");
+   UNREACHABLE("should have found a valid slab for this size");
    return NULL;
 }
 
@@ -258,7 +258,7 @@ anv_slab_alloc(void *priv,
       alloc_flags |= ANV_BO_ALLOC_DESCRIPTOR_POOL_FLAGS;
       break;
    default:
-      unreachable("Missing");
+      UNREACHABLE("Missing");
       return NULL;
    }
 
@@ -293,7 +293,7 @@ anv_slab_alloc(void *priv,
       struct anv_bo *bo = &slab->entries[i];
       uint64_t offset = intel_48b_address(slab->bo->offset);
 
-      offset += (i * entry_size);
+      offset += ((uint64_t)i * entry_size);
 
       bo->name = "slab_child";
       bo->gem_handle = slab->bo->gem_handle;

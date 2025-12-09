@@ -50,6 +50,27 @@ const unsigned const_resource_plane_order_YVU[3] = {
    1
 };
 
+static enum pipe_format
+vl_get_plane_format(enum pipe_format format, unsigned plane)
+{
+   enum pipe_format fmt = util_format_get_plane_format(format, plane);
+
+   switch (fmt) {
+   case PIPE_FORMAT_X6R10_UNORM:
+   case PIPE_FORMAT_X4R12_UNORM:
+      return PIPE_FORMAT_R16_UNORM;
+   case PIPE_FORMAT_X6R10X6G10_UNORM:
+   case PIPE_FORMAT_X4R12X4G12_UNORM:
+      return PIPE_FORMAT_R16G16_UNORM;
+   case PIPE_FORMAT_YUYV:
+      return PIPE_FORMAT_R8G8_R8B8_UNORM;
+   case PIPE_FORMAT_UYVY:
+      return PIPE_FORMAT_G8R8_B8R8_UNORM;
+   default:
+      return fmt;
+   }
+}
+
 void
 vl_get_video_buffer_formats(struct pipe_screen *screen, enum pipe_format format,
                             enum pipe_format out_format[VL_NUM_COMPONENTS])
@@ -58,14 +79,9 @@ vl_get_video_buffer_formats(struct pipe_screen *screen, enum pipe_format format,
    unsigned i;
 
    for (i = 0; i < num_planes; i++)
-      out_format[i] = util_format_get_plane_format(format, i);
+      out_format[i] = vl_get_plane_format(format, i);
    for (; i < VL_NUM_COMPONENTS; i++)
       out_format[i] = PIPE_FORMAT_NONE;
-
-   if (format == PIPE_FORMAT_YUYV)
-      out_format[0] = PIPE_FORMAT_R8G8_R8B8_UNORM;
-   else if (format == PIPE_FORMAT_UYVY)
-      out_format[0] = PIPE_FORMAT_G8R8_B8R8_UNORM;
 }
 
 const unsigned *

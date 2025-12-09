@@ -47,7 +47,7 @@ lower_block(nir_builder *b, nir_block *block)
 
       nir_def* x = nir_as_uniform(b, &phi->def);
       x->divergent = false;
-      nir_def_rewrite_uses_after(&phi->def, x, x->parent_instr);
+      nir_def_rewrite_uses_after(&phi->def, x);
 
       progress = true;
    }
@@ -91,7 +91,7 @@ lower_cf_list(nir_builder *b, struct exec_list *cf_list)
       }
 
       default:
-         unreachable("Unknown CF node type");
+         UNREACHABLE("Unknown CF node type");
       }
    }
 
@@ -108,8 +108,7 @@ nak_nir_mark_lcssa_invariants(nir_shader *shader)
       nir_metadata_require(impl, nir_metadata_divergence);
 
       bool impl_progress = lower_cf_list(&b, &impl->body);
-      progress |= nir_progress(impl_progress, impl,
-                                         nir_metadata_control_flow | nir_metadata_divergence);
+      progress |= nir_progress(impl_progress, impl, nir_metadata_control_flow);
    }
 
    return progress;

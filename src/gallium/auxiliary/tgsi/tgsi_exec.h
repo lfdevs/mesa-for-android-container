@@ -322,7 +322,7 @@ struct tgsi_exec_machine
    unsigned ConstsSize[PIPE_MAX_CONSTANT_BUFFERS];
 
    const struct tgsi_token       *Tokens;   /**< Declarations, instructions */
-   enum pipe_shader_type         ShaderType; /**< PIPE_SHADER_x */
+   mesa_shader_stage         ShaderType; /**< PIPE_SHADER_x */
 
    /* GEOMETRY processor only. */
    /* Number of vertices emitted per emitted primitive. */
@@ -408,7 +408,7 @@ struct tgsi_exec_machine
 };
 
 struct tgsi_exec_machine *
-tgsi_exec_machine_create(enum pipe_shader_type shader_type);
+tgsi_exec_machine_create(mesa_shader_stage shader_type);
 
 void
 tgsi_exec_machine_destroy(struct tgsi_exec_machine *mach);

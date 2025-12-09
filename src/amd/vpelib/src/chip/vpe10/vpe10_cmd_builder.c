@@ -29,12 +29,19 @@
 #include "vpe10_plane_desc_writer.h"
 #include "vpe10_cmd_builder.h"
 
+#define LOG_INPUT_PLANE  1
+#define LOG_OUTPUT_PLANE 0
+
 /***** Internal helpers *****/
 static void get_np_and_subop(struct vpe_priv *vpe_priv, struct vpe_cmd_info *cmd_info,
     struct vpe10_plane_desc_header *header);
 
 static enum VPE_PLANE_CFG_ELEMENT_SIZE vpe_get_element_size(
     enum vpe_surface_pixel_format format, int plane_idx);
+
+static void log_plane_desc_event(struct vpe_priv *vpe_priv, struct vpe_cmd_info *cmd_info,
+    struct vpe10_plane_desc_header *header, struct vpe10_plane_desc_src *src,
+    struct vpe10_plane_desc_dst *dst, uint32_t cmd_idx, uint32_t plane_idx, bool input_flag);
 
 void vpe10_construct_cmd_builder(struct vpe_priv *vpe_priv, struct cmd_builder *builder)
 {
@@ -69,7 +76,11 @@ enum vpe_status vpe10_build_vpe_cmd(
     struct vpe_vector      *config_vector;
     struct config_record   *config;
     struct vpe_cmd_info    *cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
+    enum vpe_status         status   = VPE_STATUS_OK;
     VPE_ASSERT(cmd_info);
+
+    if (cmd_info == NULL)
+        return VPE_STATUS_ERROR;
 
     vpe_desc_writer->init(vpe_desc_writer, &cur_bufs->cmd_buf, cmd_info->cd);
 
@@ -94,6 +105,8 @@ enum vpe_status vpe10_build_vpe_cmd(
         // this would allow reuse of the previous register configs
         pipe_ctx = vpe_pipe_find_owner(vpe_priv, cmd_info->inputs[pipe_idx].stream_idx, &reuse);
         VPE_ASSERT(pipe_ctx);
+        if (!pipe_ctx)
+            continue;
 
         if (!reuse) {
             vpe_priv->resource.program_frontend(
@@ -115,7 +128,8 @@ enum vpe_status vpe10_build_vpe_cmd(
                 cmd_type = VPE_CMD_TYPE_BG_VSCF_OUTPUT;
             else {
                 VPE_ASSERT(0);
-                return VPE_STATUS_ERROR;
+                status = VPE_STATUS_ERROR;
+                break;
             }
 
             // follow the same order of config generation in "non-reuse" case
@@ -124,19 +138,34 @@ enum vpe_status vpe10_build_vpe_cmd(
             VPE_ASSERT(config_vector->num_elements);
             for (config_idx = 0; config_idx < config_vector->num_elements; config_idx++) {
                 config = (struct config_record *)vpe_vector_get(config_vector, config_idx);
-
+                VPE_ASSERT(config);
+                if (config == NULL) {
+                    status = VPE_STATUS_ERROR;
+                    break;
+                }
                 vpe_desc_writer->add_config_desc(
                     vpe_desc_writer, config->config_base_addr, reuse, (uint8_t)emb_buf->tmz);
             }
+
+            if (status != VPE_STATUS_OK)
+                break;
 
             // stream-op sharing
             config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_type];
             for (config_idx = 0; config_idx < config_vector->num_elements; config_idx++) {
                 config = (struct config_record *)vpe_vector_get(config_vector, config_idx);
+                VPE_ASSERT(config);
+                if (config == NULL) {
+                    status = VPE_STATUS_ERROR;
+                    break;
+                }
 
                 vpe_desc_writer->add_config_desc(
                     vpe_desc_writer, config->config_base_addr, reuse, (uint8_t)emb_buf->tmz);
             }
+
+            if (status != VPE_STATUS_OK)
+                break;
 
             // command specific
             vpe_priv->resource.program_frontend(
@@ -145,40 +174,52 @@ enum vpe_status vpe10_build_vpe_cmd(
     }
 
     VPE_ASSERT(pipe_ctx);
+    if (!pipe_ctx)
+        status = VPE_STATUS_ERROR;
 
     // If config writer has been crashed due to buffer overflow
-    if (vpe_priv->config_writer.status != VPE_STATUS_OK) {
-        return vpe_priv->config_writer.status;
+    if ((status == VPE_STATUS_OK) && (vpe_priv->config_writer.status != VPE_STATUS_OK)) {
+        status = vpe_priv->config_writer.status;
     }
 
-    // backend programming
-    output_ctx = &vpe_priv->output_ctx;
+    if (status == VPE_STATUS_OK) {
+        // backend programming
+        output_ctx = &vpe_priv->output_ctx;
 
-    config_vector = output_ctx->configs[0];
-    if (!config_vector->num_elements) {
-        vpe_priv->resource.program_backend(vpe_priv, pipe_ctx->pipe_idx, cmd_idx, false);
-    } else {
-        bool reuse = !vpe_priv->init.debug.disable_reuse_bit;
+        config_vector = output_ctx->configs[0];
+        if (!config_vector->num_elements) {
+            vpe_priv->resource.program_backend(vpe_priv, pipe_ctx->pipe_idx, cmd_idx, false);
+        } else {
+            bool reuse = !vpe_priv->init.debug.disable_reuse_bit;
 
-        // re-use output register configs
-        for (config_idx = 0; config_idx < config_vector->num_elements; config_idx++) {
-            config = (struct config_record *)vpe_vector_get(config_vector, config_idx);
+            // re-use output register configs
+            for (config_idx = 0; config_idx < config_vector->num_elements; config_idx++) {
+                config = (struct config_record *)vpe_vector_get(config_vector, config_idx);
+                VPE_ASSERT(config);
+                if (config == NULL) {
+                    status = VPE_STATUS_ERROR;
+                    break;
+                }
 
-            vpe_desc_writer->add_config_desc(
-                vpe_desc_writer, config->config_base_addr, reuse, (uint8_t)emb_buf->tmz);
+                vpe_desc_writer->add_config_desc(
+                    vpe_desc_writer, config->config_base_addr, reuse, (uint8_t)emb_buf->tmz);
+            }
+
+            if (status == VPE_STATUS_OK)
+                vpe_priv->resource.program_backend(vpe_priv, pipe_ctx->pipe_idx, cmd_idx, true);
         }
-
-        vpe_priv->resource.program_backend(vpe_priv, pipe_ctx->pipe_idx, cmd_idx, true);
     }
 
     /* If writer crashed due to buffer overflow */
-    if (vpe_desc_writer->status != VPE_STATUS_OK) {
-        return vpe_desc_writer->status;
+    if ((status == VPE_STATUS_OK) && (vpe_desc_writer->status != VPE_STATUS_OK)) {
+        status = vpe_desc_writer->status;
     }
 
-    vpe_desc_writer->complete(vpe_desc_writer);
+    if (status == VPE_STATUS_OK) {
+        vpe_desc_writer->complete(vpe_desc_writer);
+    }
 
-    return VPE_STATUS_OK;
+    return status;
 }
 
 enum vpe_status vpe10_build_plane_descriptor(
@@ -195,6 +236,8 @@ enum vpe_status vpe10_build_plane_descriptor(
     struct plane_desc_writer      *plane_desc_writer = &vpe_priv->plane_desc_writer;
     struct vpe_cmd_info           *cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
     VPE_ASSERT(cmd_info);
+    if (cmd_info == NULL)
+        return VPE_STATUS_ERROR;
 
     VPE_ASSERT(cmd_info->num_inputs == 1);
 
@@ -223,6 +266,8 @@ enum vpe_status vpe10_build_plane_descriptor(
         src.elem_size    = (uint8_t)(vpe_get_element_size(surface_info->format, 0));
 
         plane_desc_writer->add_source(&vpe_priv->plane_desc_writer, &src, true);
+        // log input event - plane0
+        log_plane_desc_event(vpe_priv, cmd_info, &header, &src, &dst, cmd_idx, 0, LOG_INPUT_PLANE);
 
         if (vpe_is_dual_plane_format(surface_info->format)) {
             addrloc = &surface_info->address.video_progressive.chroma_addr;
@@ -237,6 +282,9 @@ enum vpe_status vpe10_build_plane_descriptor(
             src.elem_size    = (uint8_t)(vpe_get_element_size(surface_info->format, 1));
 
             plane_desc_writer->add_source(&vpe_priv->plane_desc_writer, &src, false);
+            // log input event - plane1
+            log_plane_desc_event(
+                vpe_priv, cmd_info, &header, &src, &dst, cmd_idx, 1, LOG_INPUT_PLANE);
         }
     } else {
         addrloc = &surface_info->address.grph.addr;
@@ -251,8 +299,9 @@ enum vpe_status vpe10_build_plane_descriptor(
         src.elem_size    = (uint8_t)(vpe_get_element_size(surface_info->format, 0));
 
         plane_desc_writer->add_source(&vpe_priv->plane_desc_writer, &src, true);
+        // log input event - plane0
+        log_plane_desc_event(vpe_priv, cmd_info, &header, &src, &dst, cmd_idx, 0, LOG_INPUT_PLANE);
     }
-
     surface_info = &vpe_priv->output_ctx.surface;
 
     VPE_ASSERT(surface_info->address.type == VPE_PLN_ADDR_TYPE_GRAPHICS);
@@ -278,7 +327,30 @@ enum vpe_status vpe10_build_plane_descriptor(
 
     plane_desc_writer->add_destination(&vpe_priv->plane_desc_writer, &dst, true);
 
+    // log output event - plane0
+    log_plane_desc_event(vpe_priv, cmd_info, &header, &src, &dst, cmd_idx, 0, LOG_OUTPUT_PLANE);
+
     return vpe_priv->plane_desc_writer.status;
+}
+
+// Function logs plane descriptor information like number of planes, plane
+// descriptor type, base address, pitch, viewport, swizzle, etc. to etw events
+static void log_plane_desc_event(struct vpe_priv *vpe_priv, struct vpe_cmd_info *cmd_info,
+    struct vpe10_plane_desc_header *header, struct vpe10_plane_desc_src *src,
+    struct vpe10_plane_desc_dst *dst, uint32_t cmd_idx, uint32_t plane_idx, bool input_flag)
+{
+    // check if event is for input or output plane
+    if (input_flag) {
+        vpe_event(VPE_EVENT_PLANE_DESC_INPUT, vpe_priv->pub.level,
+            vpe_priv->vpe_cmd_vector->num_elements, cmd_idx, cmd_info->num_inputs, 0,
+            (header->nps0 + 1), 0, 0, plane_idx, 0, 0, 0, src->base_addr_lo, src->base_addr_hi,
+            src->viewport_x, src->viewport_y, src->viewport_w, src->viewport_h, src->swizzle, 0, 0);
+    } else {
+        vpe_event(VPE_EVENT_PLANE_DESC_OUTPUT, vpe_priv->pub.level,
+            vpe_priv->vpe_cmd_vector->num_elements, cmd_idx, cmd_info->num_outputs, plane_idx,
+            (header->npd0 + 1), 0, 0, dst->base_addr_lo, dst->base_addr_hi, dst->viewport_x,
+            dst->viewport_y, dst->viewport_w, dst->viewport_h, dst->swizzle);
+    }
 }
 
 static void get_np_and_subop(struct vpe_priv *vpe_priv, struct vpe_cmd_info *cmd_info,

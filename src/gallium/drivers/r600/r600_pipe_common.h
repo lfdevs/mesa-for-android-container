@@ -48,12 +48,12 @@ struct u_log_context;
 #define R600_NOT_QUERY		0xffffffff
 
 /* Debug flags. */
-#define DBG_VS			(1 << PIPE_SHADER_VERTEX)
-#define DBG_PS			(1 << PIPE_SHADER_FRAGMENT)
-#define DBG_GS			(1 << PIPE_SHADER_GEOMETRY)
-#define DBG_TCS			(1 << PIPE_SHADER_TESS_CTRL)
-#define DBG_TES			(1 << PIPE_SHADER_TESS_EVAL)
-#define DBG_CS			(1 << PIPE_SHADER_COMPUTE)
+#define DBG_VS			(1 << MESA_SHADER_VERTEX)
+#define DBG_PS			(1 << MESA_SHADER_FRAGMENT)
+#define DBG_GS			(1 << MESA_SHADER_GEOMETRY)
+#define DBG_TCS			(1 << MESA_SHADER_TESS_CTRL)
+#define DBG_TES			(1 << MESA_SHADER_TESS_EVAL)
+#define DBG_CS			(1 << MESA_SHADER_COMPUTE)
 #define DBG_ALL_SHADERS		(DBG_FS - 1)
 #define DBG_FS			(1 << 6) /* fetch shader */
 #define DBG_TEX			(1 << 7)
@@ -77,6 +77,8 @@ struct u_log_context;
 #define DBG_INFO		(1ull << 40)
 #define DBG_NO_WC		(1ull << 41)
 #define DBG_CHECK_VM		(1ull << 42)
+/* shader-db */
+#define DBG_SHADER_DB		(1ull << 43)
 /* gap */
 #define DBG_TEST_VMFAULT_CP	(1ull << 51)
 #define DBG_TEST_VMFAULT_SDMA	(1ull << 52)
@@ -86,6 +88,8 @@ struct u_log_context;
 #define R600_MAX_VIEWPORTS        16
 
 #define R600_MAX_VARIABLE_THREADS_PER_BLOCK 1024
+
+#define R600_MAX_COLOR_BUFFERS 12
 
 enum r600_coherency {
 	R600_COHERENCY_NONE, /* no cache flushes needed */
@@ -167,6 +171,33 @@ struct r600_cmask_info {
 	uint64_t base_address_reg;
 };
 
+struct r600_pre_eg_cb {
+	struct r600_resource            *cb_buffer_fmask; /* Used for FMASK relocations. R600 only */
+	struct r600_resource            *cb_buffer_cmask; /* Used for CMASK relocations. R600 only */
+
+	/* Misc. color flags. */
+	bool                            alphatest_bypass;
+	bool                            export_16bpc;
+
+	unsigned                        cb_color_size; /* R600 only */
+	unsigned                 	cb_color_info;
+	unsigned                        cb_color_base;
+	unsigned                        cb_color_view;
+	unsigned                        cb_color_fmask;
+	unsigned                        cb_color_cmask;
+	unsigned                        cb_color_mask; /* R600 only */
+};
+
+struct r600_pre_eg_zs {
+	uint64_t                        db_depth_base;
+	uint64_t                        db_htile_data_base;
+	unsigned                        db_depth_view;
+	unsigned                        db_depth_size;
+	unsigned                        db_depth_info; /* R600 only, then SI and later */
+	unsigned                        db_prefetch_limit; /* R600 only */
+	unsigned                        db_htile_surface;
+};
+
 struct r600_texture {
 	struct r600_resource		resource;
 
@@ -205,16 +236,7 @@ struct r600_texture {
 	uint32_t			framebuffers_bound;
 };
 
-struct r600_surface {
-	struct pipe_surface		base;
-
-	/* These can vary with block-compressed textures. */
-	unsigned width0;
-	unsigned height0;
-
-	bool color_initialized;
-	bool depth_initialized;
-
+struct r600_cb_surface {
 	/* Misc. color flags. */
 	bool alphatest_bypass;
 	bool export_16bpc;
@@ -225,7 +247,6 @@ struct r600_surface {
 	unsigned cb_color_info;
 	unsigned cb_color_base;
 	unsigned cb_color_view;
-	unsigned cb_color_size;		/* R600 only */
 	unsigned cb_color_dim;		/* EG only */
 	unsigned cb_color_pitch;	/* EG and later */
 	unsigned cb_color_slice;	/* EG and later */
@@ -233,23 +254,28 @@ struct r600_surface {
 	unsigned cb_color_fmask;	/* CB_COLORn_FMASK (EG and later) or CB_COLORn_FRAG (r600) */
 	unsigned cb_color_fmask_slice;	/* EG and later */
 	unsigned cb_color_cmask;	/* CB_COLORn_TILE (r600 only) */
-	unsigned cb_color_mask;		/* R600 only */
-	struct r600_resource *cb_buffer_fmask; /* Used for FMASK relocations. R600 only */
-	struct r600_resource *cb_buffer_cmask; /* Used for CMASK relocations. R600 only */
 
 	/* DB registers. */
 	uint64_t db_depth_base;		/* DB_Z_READ/WRITE_BASE (EG and later) or DB_DEPTH_BASE (r600) */
 	uint64_t db_stencil_base;	/* EG and later */
 	uint64_t db_htile_data_base;
-	unsigned db_depth_info;		/* R600 only, then SI and later */
 	unsigned db_z_info;		/* EG and later */
 	unsigned db_depth_view;
 	unsigned db_depth_size;
 	unsigned db_depth_slice;	/* EG and later */
 	unsigned db_stencil_info;	/* EG and later */
-	unsigned db_prefetch_limit;	/* R600 only */
 	unsigned db_htile_surface;
 	unsigned db_preload_control;	/* EG and later */
+};
+
+struct evergreen_framebuffer {
+	struct r600_cb_surface cbufs[R600_MAX_COLOR_BUFFERS];
+	struct r600_cb_surface zsbuf;
+};
+
+struct r600_pre_eg_cbzs {
+	struct r600_pre_eg_cb cb_surface[PIPE_MAX_COLOR_BUFS];
+	struct r600_pre_eg_zs zs_surface;
 };
 
 struct r600_mmio_counter {
@@ -451,6 +477,8 @@ struct r600_viewports {
 struct r600_window_rectangles {
 	unsigned			number;
 	bool				include;
+	bool				fbo_cayman_workaround;
+	bool				viewport_cayman_workaround;
 	struct pipe_scissor_state	states[R600_MAX_WINDOW_RECTANGLES];
 	struct r600_atom		atom;
 };
@@ -574,6 +602,9 @@ struct r600_common_context {
 
 	void				*query_result_shader;
 
+	struct evergreen_framebuffer    framebuffer;
+	struct r600_pre_eg_cbzs         *r600_pre_eg_cbzs;
+
 	/* Copy one resource to another using async DMA. */
 	void (*dma_copy)(struct pipe_context *ctx,
 			 struct pipe_resource *dst,
@@ -677,7 +708,7 @@ void r600_buffer_flush_region(struct pipe_context *ctx,
 struct pipe_resource *r600_buffer_create(struct pipe_screen *screen,
 					 const struct pipe_resource *templ,
 					 unsigned alignment);
-struct pipe_resource * r600_aligned_buffer_create(struct pipe_screen *screen,
+struct r600_resource * r600_aligned_buffer_create(struct pipe_screen *screen,
 						  unsigned flags,
 						  unsigned usage,
 						  unsigned size,
@@ -798,8 +829,8 @@ struct pipe_resource *r600_texture_create(struct pipe_screen *screen,
 					const struct pipe_resource *templ);
 struct pipe_surface *r600_create_surface_custom(struct pipe_context *pipe,
 						struct pipe_resource *texture,
-						const struct pipe_surface *templ,
-						unsigned width0, unsigned height0);
+						const struct pipe_surface *templ);
+void r600_destroy_surface_custom(struct pipe_surface *);
 unsigned r600_translate_colorswap(enum pipe_format format, bool do_endian_swap);
 void r600_texture_alloc_cmask_separate(struct r600_common_screen *rscreen,
 					struct r600_texture *rtex);
@@ -820,6 +851,8 @@ void r600_texture_transfer_unmap(struct pipe_context *ctx,
 /* r600_viewport.c */
 void evergreen_apply_scissor_bug_workaround(struct r600_common_context *rctx,
 					    struct pipe_scissor_state *scissor);
+void cayman_apply_scissor_workaround_1x1(struct r600_common_context *rctx,
+					 struct radeon_cmdbuf *cs);
 void r600_update_vs_writes_viewport_index(struct r600_common_context *rctx,
 					  struct tgsi_shader_info *info);
 void r600_init_viewport_functions(struct r600_common_context *rctx);
@@ -838,7 +871,7 @@ void cayman_emit_msaa_state(struct radeon_cmdbuf *cs, int nr_samples,
 
 /* Inline helpers. */
 
-static inline struct r600_resource *r600_resource(struct pipe_resource *r)
+static inline struct r600_resource *r600_as_resource(struct pipe_resource *r)
 {
 	return (struct r600_resource*)r;
 }
@@ -860,7 +893,7 @@ static inline void
 r600_context_add_resource_size(struct pipe_context *ctx, struct pipe_resource *r)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
-	struct r600_resource *res = (struct r600_resource *)r;
+	struct r600_resource *res = r600_as_resource(r);
 
 	if (res) {
 		/* Add memory usage for need_gfx_cs_space */
@@ -946,6 +979,12 @@ static inline bool
 r600_htile_enabled(struct r600_texture *tex, unsigned level)
 {
 	return tex->htile_offset && level == 0;
+}
+
+static inline struct r600_texture *
+r600_as_texture(struct pipe_resource *res)
+{
+	return (struct r600_texture *)res;
 }
 
 #define COMPUTE_DBG(rscreen, fmt, args...) \

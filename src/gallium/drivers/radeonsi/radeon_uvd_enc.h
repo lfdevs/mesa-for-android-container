@@ -311,6 +311,11 @@ struct pipe_video_codec *radeon_uvd_create_encoder(struct pipe_context *context,
                                                    struct radeon_winsys *ws,
                                                    radeon_uvd_enc_get_buffer get_buffer);
 
+struct radeon_uvd_enc_fb_buffer {
+   struct si_resource *res;
+   void *data;
+};
+
 struct radeon_uvd_enc_pic {
    enum pipe_h2645_enc_picture_type picture_type;
    struct pipe_h265_enc_picture_desc *desc;
@@ -355,9 +360,9 @@ struct radeon_uvd_encoder {
 
    unsigned dpb_slots;
 
-   struct rvid_buffer *si;
-   struct rvid_buffer *fb;
-   struct rvid_buffer dpb;
+   struct si_resource *si;
+   struct radeon_uvd_enc_fb_buffer *fb;
+   struct si_resource *dpb;
    struct radeon_uvd_enc_pic enc_pic;
 
    uint32_t total_task_size;

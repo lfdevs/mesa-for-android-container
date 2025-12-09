@@ -48,13 +48,13 @@ struct svga_shader_variant *
 svga_tgsi_vgpu9_translate(struct svga_context *svga,
                           const struct svga_shader *shader,
                           const struct svga_compile_key *key,
-                          enum pipe_shader_type unit);
+                          mesa_shader_stage unit);
 
 struct svga_shader_variant *
 svga_tgsi_vgpu10_translate(struct svga_context *svga,
                            const struct svga_shader *shader,
                            const struct svga_compile_key *key,
-                           enum pipe_shader_type unit);
+                           mesa_shader_stage unit);
 
 bool svga_shader_verify(const uint32_t *tokens, unsigned nr_tokens);
 

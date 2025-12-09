@@ -103,7 +103,7 @@ drm_shim_device_init(void)
     * with EINVAL.
     */
 
-   shim_page_size = sysconf(_SC_PAGE_SIZE);
+   shim_page_size = sysconf(_SC_PAGESIZE);
 
    util_vma_heap_init(&shim_device.mem_heap, shim_page_size,
                       SHIM_MEM_SIZE - shim_page_size);
@@ -224,6 +224,7 @@ drm_shim_ioctl_get_cap(int fd, unsigned long request, void *arg)
    case DRM_CAP_PRIME:
    case DRM_CAP_SYNCOBJ:
    case DRM_CAP_SYNCOBJ_TIMELINE:
+   case DRM_CAP_ADDFB2_MODIFIERS:
       gc->value = 1;
       return 0;
 

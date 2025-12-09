@@ -84,11 +84,11 @@ svga_sampler_view_reference(struct svga_sampler_view **ptr, struct svga_sampler_
 bool
 svga_check_sampler_view_resource_collision(const struct svga_context *svga,
                                            const struct svga_winsys_surface *res,
-                                           enum pipe_shader_type shader);
+                                           mesa_shader_stage shader);
 
 bool
 svga_check_sampler_framebuffer_resource_collision(struct svga_context *svga,
-                                                  enum pipe_shader_type shader);
+                                                  mesa_shader_stage shader);
 
 enum pipe_error
 svga_validate_pipe_sampler_view(struct svga_context *svga,

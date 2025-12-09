@@ -1,0 +1,692 @@
+/*
+ * Copyright © 2025 Valve Corporation
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_KHR_memory_scope_semantics : require
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_shuffle : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_KHR_shader_subgroup_clustered : require
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#define GFX12
+#define USE_GLOBAL_SYNC
+
+#include "vk_debug.h"
+
+#include "build_helpers.h"
+#include "build_interface.h"
+#include "encode.h"
+#include "invocation_cluster.h"
+
+layout(push_constant) uniform CONSTS
+{
+   encode_triangles_gfx12_args args;
+};
+
+#define UNASSIGNED_VERTEX_INDICES 0xfffffffffffful
+
+void
+main()
+{
+   bool is_retry = VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES_RETRY);
+
+   uint32_t global_id = gl_GlobalInvocationID.x;
+
+   /* Each invocation cluster handles one task. */
+   radv_invocation_cluster cluster;
+   radv_invocation_cluster_init(cluster, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+
+   uint32_t task_index = global_id / RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT;
+   if (is_retry) {
+      VOID_REF retry_indices = OFFSET(args.header, SIZEOF(vk_ir_header) + args.batches_size);
+      task_index = DEREF(INDEX(uint32_t, retry_indices, task_index));
+   }
+
+   VOID_REF triangle_tasks = OFFSET(args.header, SIZEOF(vk_ir_header));
+   REF(radv_triangle_encode_task) task = INDEX(radv_triangle_encode_task, triangle_tasks, task_index);
+   uint32_t pair_index_node_index0 = DEREF(task).pair_index_node_index[cluster.invocation_index * 2];
+   uint32_t pair_index_node_index1 = DEREF(task).pair_index_node_index[cluster.invocation_index * 2 + 1];
+
+   uint32_t total_pair_count = min(findLSB(radv_ballot(cluster, pair_index_node_index0 == RADV_BVH_INVALID_NODE)), 8u);
+
+   if (cluster.invocation_index >= total_pair_count)
+      return;
+
+   uint32_t leaf_index0 = pair_index_node_index0 & 0x0fffffff;
+   vk_ir_triangle_node node0 = DEREF(INDEX(vk_ir_triangle_node, args.intermediate_bvh, leaf_index0));
+
+   uint32_t triangle_id0 = node0.triangle_id;
+   uint32_t geometry_id0 = node0.geometry_id_and_flags & 0xffffff;
+   bool opaque0 = (node0.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0;
+   uint32_t triangle_id1 = triangle_id0;
+   uint32_t geometry_id1 = geometry_id0;
+   bool opaque1 = false;
+
+   vec3 vertices[6];
+   vertices[0] = vec3(node0.coords[0][0], node0.coords[0][1], node0.coords[0][2]);
+   vertices[1] = vec3(node0.coords[1][0], node0.coords[1][1], node0.coords[1][2]);
+   vertices[2] = vec3(node0.coords[2][0], node0.coords[2][1], node0.coords[2][2]);
+
+   uint32_t pair_vertex_indices = 0x210;
+
+   uint32_t pair_size = 1;
+   if (pair_index_node_index1 != RADV_BVH_INVALID_NODE) {
+      pair_size = 2;
+
+      uint32_t leaf_index1 = pair_index_node_index1 & 0x0fffffff;
+      vk_ir_triangle_node node1 = DEREF(INDEX(vk_ir_triangle_node, args.intermediate_bvh, leaf_index1));
+
+      triangle_id1 = node1.triangle_id;
+      geometry_id1 = node1.geometry_id_and_flags & 0xffffff;
+      opaque1 = (node1.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0;
+
+      vertices[3] = vec3(node1.coords[0][0], node1.coords[0][1], node1.coords[0][2]);
+      vertices[4] = vec3(node1.coords[1][0], node1.coords[1][1], node1.coords[1][2]);
+      vertices[5] = vec3(node1.coords[2][0], node1.coords[2][1], node1.coords[2][2]);
+
+      pair_vertex_indices = 0x543210;
+
+      /* Deduplicate vertices here so it does not have to be done during the compression loop. */
+      for (uint32_t i = 0; i < 3; i++) {
+         for (uint32_t j = 0; j < 3; j++) {
+            if (vertices[3 + i] == vertices[j]) {
+               uint32_t bit_offset = (i + 3) * 4;
+               uint32_t clear_mask = ~(0xf << bit_offset);
+               pair_vertex_indices = (pair_vertex_indices & clear_mask) | (j << bit_offset);
+               break;
+            }
+         }
+      }
+   }
+
+   /* Encode inside a loop. Every active invocation tries to compress with the previously chosen
+    * nodes. The invocation with the smallest node size is chosen. TODO: Are there better heuristics?
+    * If there are no new candidates because the node would be too large, encode the previously chosen nodes
+    * and break out of the loop. In this case the first active invocation is chosen.
+    */
+
+   /* Each vertex is described by 8 bits. The highest 4 contain the invocation index and the low 4 bits contain the
+    * array index.
+    */
+   uint64_t vertex_indices = UNASSIGNED_VERTEX_INDICES;
+
+   bool vertex_used[6] = {false, false, false, false, false, false};
+
+   uint32_t hw_node_index = 0;
+   uvec3 encode_vertex_payload_bit_size;
+   uint32_t encode_trailing_zero_bits;
+   uint32_t encode_geometry_id_base_bit_size;
+   uint32_t encode_geometry_id_payload_bit_size;
+   uint32_t encode_triangle_id_base_bit_size;
+   uint32_t encode_triangle_id_payload_bit_size;
+   uint32_t encode_indices_midpoint;
+
+   uint32_t invocation_vertex_count = pair_index_node_index1 != RADV_BVH_INVALID_NODE ? 6 : 3;
+
+   while (true) {
+      /* assigned is true for every invocation whorse triangles are already part of the node. */
+      bool assigned = vertex_indices != UNASSIGNED_VERTEX_INDICES;
+      uint32_t assigned_mask = radv_ballot(cluster, assigned);
+      uint32_t first_assigned_invocation = findLSB(assigned_mask);
+      uint32_t last_assigned_invocation = assigned_mask != 0 ? findMSB(assigned_mask) : 0;
+
+      if (!assigned)
+         vertex_indices = 0;
+
+      bool found[6] = {false, false, false, false, false, false};
+
+      /* At this point vertex_used is only set for assigned invocations since the rejected candidate invocations are
+       * reset.
+       */
+      uint32_t vertex_count = 0;
+      for (uint32_t i = 0; i < 6; i++)
+         vertex_count += bitCount(radv_ballot(cluster, vertex_used[i]));
+
+      for (uint32_t target_invocation = first_assigned_invocation; target_invocation <= last_assigned_invocation;
+           target_invocation++) {
+
+         if (((assigned_mask >> target_invocation) & 1) == 0)
+            continue;
+
+         vec3 target_vertices[6];
+         bool target_vertex_used[6];
+         for (uint32_t i = 0; i < 6; i++) {
+            target_vertices[i] = radv_read_invocation(cluster, target_invocation, vertices[i]);
+            target_vertex_used[i] = radv_read_invocation(cluster, target_invocation, vertex_used[i]);
+         }
+
+         uint32_t target_vertex_count = radv_read_invocation(cluster, target_invocation, invocation_vertex_count);
+
+         if (!assigned) {
+            for (uint32_t candidate_vertex_index = 0; candidate_vertex_index < invocation_vertex_count;
+                 candidate_vertex_index++) {
+               if (found[candidate_vertex_index])
+                  continue;
+
+               uint32_t assign_index = 0;
+
+               for (uint32_t target_vertex_index = 0; target_vertex_index < target_vertex_count;
+                    target_vertex_index++) {
+                  if (target_vertex_used[target_vertex_index] &&
+                      target_vertices[target_vertex_index] == vertices[candidate_vertex_index]) {
+                     found[candidate_vertex_index] = true;
+                     assign_index = target_vertex_index;
+                  }
+               }
+
+               if (found[candidate_vertex_index])
+                  vertex_indices |= uint64_t((target_invocation << 4) + assign_index)
+                                    << uint64_t(candidate_vertex_index * 8);
+            }
+         }
+      }
+
+      /* Handle the remaining vertices that are not already present in the assigned invocations. */
+      if (!assigned) {
+         for (uint32_t i = 0; i < invocation_vertex_count; i++) {
+            if (found[i])
+               continue;
+
+            uint32_t pair_vertex_index = (pair_vertex_indices >> (i * 4)) & 0xf;
+            if (pair_vertex_index == i) {
+               vertex_indices |= uint64_t((cluster.invocation_index << 4) + i) << uint64_t(i * 8);
+               vertex_used[i] = true;
+               vertex_count++;
+            } else {
+               uint64_t vertex_index = (vertex_indices >> uint64_t(pair_vertex_index * 8)) & 0xff;
+               vertex_indices |= vertex_index << uint64_t(i * 8);
+            }
+         }
+      }
+
+      /* Compute the node layout and size. For assigned invocations, the values contain information about the node with
+       * only the assigned triangles and for !assigned invocations, the current invocation is included.
+       */
+
+      uint32_t triangle_id_base_bit_size;
+      uint32_t triangle_id_payload_bit_size;
+      uint32_t geometry_id_base_bit_size;
+      uint32_t geometry_id_payload_bit_size;
+      for (uint32_t i = 0; i <= first_assigned_invocation; i++) {
+         /* Determine the number of bits required to represent the node ids in the hw's encoding format.
+          * Base and "offset" are masked and OR'd together, so look at the highest-ordered differing bit.
+          */
+         uint32_t triangle_id_base = radv_read_invocation(cluster, i, triangle_id0);
+         triangle_id_base_bit_size = findMSB(triangle_id_base) + 1;
+         uint32_t invoc_triangle_id_payload_bit_size =
+            max(findMSB(triangle_id0 ^ triangle_id_base), findMSB(triangle_id1 ^ triangle_id_base)) + 1;
+         triangle_id_payload_bit_size = subgroupClusteredMax(assigned ? invoc_triangle_id_payload_bit_size : 0,
+                                                             RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+
+         uint32_t geometry_id_base = radv_read_invocation(cluster, i, geometry_id0);
+         geometry_id_base_bit_size = align(findMSB(geometry_id_base) + 1, 2);
+         uint32_t invoc_geometry_id_payload_bit_size =
+            max(findMSB(geometry_id0 ^ geometry_id_base), findMSB(geometry_id1 ^ geometry_id_base)) + 1;
+         geometry_id_payload_bit_size = subgroupClusteredMax(assigned ? invoc_geometry_id_payload_bit_size : 0,
+                                                             RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+
+         if (!assigned) {
+            triangle_id_payload_bit_size = max(triangle_id_payload_bit_size, invoc_triangle_id_payload_bit_size);
+            geometry_id_payload_bit_size = max(geometry_id_payload_bit_size, invoc_geometry_id_payload_bit_size);
+         }
+
+         if (cluster.invocation_index <= i)
+            break;
+      }
+
+      geometry_id_payload_bit_size = align(geometry_id_payload_bit_size, 2);
+
+      /* vertex_used[0] is guaranteed to be true for at least one invocation. */
+      uvec3 vertex_prefix = first_assigned_invocation == 0xffffffff
+                               ? floatBitsToUint(vertices[0])
+                               : radv_read_invocation(cluster, first_assigned_invocation, floatBitsToUint(vertices[0]));
+      uvec3 vertex_payload_mask = uvec3(0);
+      uint32_t vertex_non_zero_mask = 0;
+      for (uint32_t i = 0; i < invocation_vertex_count; i++) {
+         vertex_payload_mask |= vertex_prefix ^ floatBitsToUint(vertices[i]);
+         vertex_non_zero_mask |=
+            floatBitsToUint(vertices[i].x) | floatBitsToUint(vertices[i].y) | floatBitsToUint(vertices[i].z);
+      }
+
+      uint32_t trailing_zero_bits = min(findLSB(vertex_non_zero_mask), 32u);
+      uvec3 vertex_payload_bit_size = min(findMSB(vertex_payload_mask), 31u) + 1;
+
+      if (!assigned) {
+         trailing_zero_bits = 32;
+         vertex_payload_bit_size = uvec3(0);
+      }
+
+      trailing_zero_bits = subgroupClusteredMin(trailing_zero_bits, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+      vertex_payload_bit_size =
+         subgroupClusteredMax(vertex_payload_bit_size, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+
+      if (!assigned) {
+         trailing_zero_bits = min(trailing_zero_bits, min(findLSB(vertex_non_zero_mask), 32u));
+         vertex_payload_bit_size = max(vertex_payload_bit_size, min(findMSB(vertex_payload_mask), 31u) + 1);
+      }
+
+      vertex_payload_bit_size.x =
+         vertex_payload_bit_size.x > trailing_zero_bits ? vertex_payload_bit_size.x - trailing_zero_bits : 1;
+      vertex_payload_bit_size.y =
+         vertex_payload_bit_size.y > trailing_zero_bits ? vertex_payload_bit_size.y - trailing_zero_bits : 1;
+      vertex_payload_bit_size.z =
+         vertex_payload_bit_size.z > trailing_zero_bits ? vertex_payload_bit_size.z - trailing_zero_bits : 1;
+
+      uvec3 vertex_base_bit_size = uvec3(32 - trailing_zero_bits) - vertex_payload_bit_size;
+
+      uint32_t required_bit_size = RADV_GFX12_PRIMITIVE_NODE_HEADER_SIZE;
+
+      required_bit_size += vertex_base_bit_size.x + vertex_base_bit_size.y + vertex_base_bit_size.z;
+      required_bit_size +=
+         vertex_count * (vertex_payload_bit_size.x + vertex_payload_bit_size.y + vertex_payload_bit_size.z);
+
+      uint32_t pair_count = bitCount(assigned_mask);
+      if (!assigned)
+         pair_count++;
+
+      required_bit_size += geometry_id_base_bit_size + (pair_count * 2 - 1) * geometry_id_payload_bit_size;
+      uint32_t indices_midpoint = required_bit_size;
+      required_bit_size += triangle_id_base_bit_size + (pair_count * 2 - 1) * triangle_id_payload_bit_size;
+
+      uint32_t triangle_pair_descs_size = RADV_GFX12_PRIMITIVE_NODE_PAIR_DESC_SIZE * pair_count;
+      required_bit_size += triangle_pair_descs_size;
+
+      if (vertex_count > 15)
+         required_bit_size = RADV_GFX12_BVH_NODE_SIZE * 8 + 1;
+
+      /* This is only relevant for unassigned invocations. If every invocation is assigned, the 0xffffffff will force a
+       * final flush.
+       */
+      uint32_t min_required_bit_size =
+         subgroupClusteredMin(assigned ? 0xffffffff : required_bit_size, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+
+      /* The last iteration always needs to write the remaining triangles. */
+      if (min_required_bit_size > RADV_GFX12_BVH_NODE_SIZE * 8) {
+         if (assigned) {
+            encode_vertex_payload_bit_size = vertex_payload_bit_size;
+            encode_trailing_zero_bits = trailing_zero_bits;
+            encode_geometry_id_base_bit_size = geometry_id_base_bit_size;
+            encode_geometry_id_payload_bit_size = geometry_id_payload_bit_size;
+            encode_triangle_id_base_bit_size = triangle_id_base_bit_size;
+            encode_triangle_id_payload_bit_size = triangle_id_payload_bit_size;
+            encode_indices_midpoint = indices_midpoint;
+            break;
+         } else {
+            hw_node_index++;
+
+            vertex_indices = UNASSIGNED_VERTEX_INDICES;
+            for (uint32_t i = 0; i < 6; i++)
+               vertex_used[i] = false;
+         }
+      } else {
+         uint32_t chosen_invocation =
+            findMSB(radv_ballot(cluster, !assigned && required_bit_size == min_required_bit_size));
+         if (cluster.invocation_index != chosen_invocation && !assigned) {
+            vertex_indices = UNASSIGNED_VERTEX_INDICES;
+            for (uint32_t i = 0; i < 6; i++)
+               vertex_used[i] = false;
+         }
+      }
+   }
+
+   uint32_t hw_node_count = subgroupClusteredMax(hw_node_index, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT) + 1;
+
+   uint32_t pair_index;
+   uint32_t pair_base_index = 0;
+   uint32_t pair_count;
+   uint32_t first_active_in_node;
+   uint32_t node_mask;
+   uint32_t node_invocations;
+   for (uint32_t i = 0; i < hw_node_count; i++) {
+      uint32_t current_node_mask = radv_ballot(cluster, hw_node_index == i);
+      if (hw_node_index == i) {
+         node_mask = current_node_mask;
+         pair_count = bitCount(node_mask);
+         first_active_in_node = findLSB(node_mask);
+         pair_index = bitCount(node_mask & ((1u << cluster.invocation_index) - 1));
+         node_invocations = subgroupClusteredOr(cluster.invocation_index << (pair_index * 4),
+                                                RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+         break;
+      }
+      pair_base_index += bitCount(current_node_mask);
+   }
+
+   bool is_single_prim_node = pair_count == 1 && pair_index_node_index1 == RADV_BVH_INVALID_NODE;
+
+   /* If there is a node that contains only one primitive, abort this encoding attempt and retry during a second pass
+    * which will pair such nodes. This needs a separate pass so that the allocated nodes of two batches can be
+    * guaranteed to be close enough since primitive nodes can only have small relative offsets. The retry pass has
+    * RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES_RETRY (is_retry) set.
+    */
+   uint32_t single_prim_node_invoc = findLSB(radv_ballot(cluster, is_single_prim_node));
+   bool has_single_prim_node = radv_ballot(cluster, is_single_prim_node) != 0;
+   if (!is_retry && has_single_prim_node) {
+      if (cluster.invocation_index == 0) {
+         uint32_t retry_base_invocation =
+            atomicAdd(DEREF(args.header).driver_internal[RADV_IR_HEADER_ENCODE_TRIANGLES_RETRY_INVOCATIONS_X],
+                      RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT);
+
+         uint32_t retry_batch_index_index = retry_base_invocation / RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT;
+         VOID_REF retry_indices = OFFSET(args.header, SIZEOF(vk_ir_header) + args.batches_size);
+         DEREF(INDEX(uint32_t, retry_indices, retry_batch_index_index)) = task_index;
+      }
+
+      return;
+   }
+
+   if (is_retry) {
+      /* Move the single primitive node to the end since it needs to offset into the next batch. */
+      uint32_t single_prim_pair_base_index = radv_read_invocation(cluster, single_prim_node_invoc, pair_base_index);
+
+      if (pair_base_index > single_prim_pair_base_index)
+         pair_base_index--;
+      if (is_single_prim_node)
+         pair_base_index = total_pair_count - 1;
+   }
+
+   REF(radv_gfx12_box_node) parent_node =
+      REF(radv_gfx12_box_node)(args.output_base + args.output_bvh_offset + DEREF(task).parent_offset);
+   uint32_t first_leaf_child_index = (DEREF(parent_node).child_count_exponents >> 28) + 1;
+   if (first_leaf_child_index == 0x10)
+      first_leaf_child_index = 0;
+
+   /* Two batches are always combined into one during the retry pass is there is a second batch. The goal is to merge
+    * all primitive nodes with just one triangle (except one if there is an odd number of such nodes). Since the
+    * compression loop above can always merge at least two nodes, the following assumptions should hold:
+    *
+    *    - There is at most one primitive node with only one triangle in a batch
+    *    - this primitive has the max hw_node_index in this batch.
+    *
+    * If there is a second batch, the first batch will allocate one less primitive node. This is the triangle that will
+    * be merged into the second batch which we know has the highest hw_node_index/dst_offset. The second batch starts in
+    * dst memory where the primitive that was removed from the first batch should have been. The merged triangle can be
+    * referenced in two different ways:
+    *
+    *    - If the batch contains only one triangle, the primitive_base_id is changed to point at the merged node.
+    *    - Otherwise the node size inside the cild info before the moved triangle child info is set to skip ahead to the
+    *      merged primitive node in the second batch.
+    */
+
+   if (is_retry) {
+      assert(bitCount(radv_ballot(cluster, is_single_prim_node)) == 1,
+             "radv: encode_triangles_gfx12: There must be exactly one node with only one triangle.\n");
+      assert(!is_single_prim_node || hw_node_index == hw_node_count - 1,
+             "radv: encode_triangles_gfx12: The single triangle primitive node must be last.\n");
+   }
+
+   radv_invocation_cluster alloc_cluster = cluster;
+   uint32_t alloc_hw_node_count = hw_node_count;
+   bool has_second_batch = false;
+   bool jump_to_second_batch = false;
+   uint32_t single_prim_node_invocs[2];
+   if (is_retry) {
+      radv_invocation_cluster_init(alloc_cluster, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT * 2);
+
+      has_second_batch = (radv_ballot(alloc_cluster, true) >> RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT) != 0;
+
+      single_prim_node_invocs[0] = radv_read_invocation(alloc_cluster, 0, single_prim_node_invoc);
+      single_prim_node_invocs[1] =
+         radv_read_invocation(alloc_cluster, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT, single_prim_node_invoc) +
+         RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT;
+
+      if (has_second_batch) {
+         alloc_hw_node_count =
+            radv_read_invocation(alloc_cluster, 0, hw_node_count) +
+            radv_read_invocation(alloc_cluster, RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT, hw_node_count) - 1;
+
+         jump_to_second_batch = alloc_cluster.invocation_index < RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT;
+         if (is_single_prim_node) {
+            encode_vertex_payload_bit_size = uvec3(32);
+            encode_trailing_zero_bits = 0;
+            encode_geometry_id_base_bit_size = 24;
+            encode_geometry_id_payload_bit_size = 24;
+            encode_triangle_id_base_bit_size = 24;
+            encode_triangle_id_payload_bit_size = 24;
+            encode_indices_midpoint = RADV_GFX12_PRIMITIVE_NODE_HEADER_SIZE + 32 * 9 * 2 + 24 * 2;
+
+            vertex_indices = 0;
+            for (uint32_t i = 0; i < 6; i++) {
+               vertex_used[i] = true;
+               vertex_indices |= uint64_t((cluster.invocation_index << 4) + i) << uint64_t(i * 8);
+            }
+
+            vertices[3] = radv_read_invocation(alloc_cluster, single_prim_node_invocs[0], vertices[0]);
+            vertices[4] = radv_read_invocation(alloc_cluster, single_prim_node_invocs[0], vertices[1]);
+            vertices[5] = radv_read_invocation(alloc_cluster, single_prim_node_invocs[0], vertices[2]);
+
+            triangle_id1 = radv_read_invocation(alloc_cluster, single_prim_node_invocs[0], triangle_id0);
+            geometry_id1 = radv_read_invocation(alloc_cluster, single_prim_node_invocs[0], geometry_id0);
+            opaque1 = radv_read_invocation(alloc_cluster, single_prim_node_invocs[0], opaque0);
+
+            /* Indicate that there is a second node. The actual value of pair_index_node_index1 is not used. */
+            pair_index_node_index1 = 0;
+         }
+      }
+   }
+
+   /* Allocate space for the primitive node. */
+   uint32_t dst_offset;
+   if (cluster.invocation_index == 0) {
+      if (alloc_cluster.invocation_index == 0)
+         dst_offset = atomicAdd(DEREF(args.header).dst_node_offset, alloc_hw_node_count * RADV_GFX12_BVH_NODE_SIZE);
+      dst_offset = radv_read_invocation(alloc_cluster, 0, dst_offset);
+
+      if (alloc_cluster.invocation_index == RADV_TRIANGLE_ENCODE_TASK_INVOCATION_COUNT) {
+         dst_offset +=
+            radv_read_invocation(alloc_cluster, 0, hw_node_count) * RADV_GFX12_BVH_NODE_SIZE - RADV_GFX12_BVH_NODE_SIZE;
+      }
+
+      DEREF(parent_node).primitive_base_id = pack_node_id(dst_offset, 0);
+      DEREF(parent_node).child_count_exponents = (DEREF(parent_node).child_count_exponents & 0x0fffffff) |
+                                                 ((first_leaf_child_index + total_pair_count - 1) << 28);
+   }
+   dst_offset = radv_read_invocation(cluster, 0, dst_offset) + hw_node_index * RADV_GFX12_BVH_NODE_SIZE;
+
+   uint32_t second_dst_offset = radv_read_invocation(alloc_cluster, single_prim_node_invocs[1], dst_offset);
+   bool rewrite_primitive_base_id = jump_to_second_batch && total_pair_count == 1;
+   if (rewrite_primitive_base_id)
+      DEREF(parent_node).primitive_base_id = pack_node_id(second_dst_offset, 0);
+
+   radv_gfx12_box_child child = DEREF(parent_node).children[first_leaf_child_index + cluster.invocation_index];
+
+   memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
+                 gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+
+   if (pair_index < pair_count - 1)
+      child.dword2 = child.dword2 & 0xffffff;
+
+   uint32_t jump_size = radv_read_invocation(alloc_cluster, single_prim_node_invocs[1], dst_offset) - dst_offset;
+   if (jump_to_second_batch && !rewrite_primitive_base_id && pair_base_index + pair_index == (total_pair_count - 1) - 1)
+      child.dword2 = (child.dword2 & 0xffffff) | ((jump_size / RADV_GFX12_BVH_NODE_SIZE) << 28);
+
+   /* Update the node type because it encodes the pair index which cannot be known in advance.
+    * The BVH8 encoding uses 4 bits for the type. The high bit is used to reference up to 8 pairs.
+    */
+   child.dword2 |= ((pair_index & 0x3) << 24);
+   if (pair_index >= 4)
+      child.dword2 |= (8 << 24);
+
+   DEREF(parent_node).children[first_leaf_child_index + pair_base_index + pair_index] = child;
+
+   /* Return because the triangle is written by the second batch. */
+   if (is_single_prim_node && jump_to_second_batch)
+      return;
+
+   VOID_REF dst_leaf_addr = args.output_base + args.output_bvh_offset + dst_offset;
+
+   bit_writer writer;
+   bit_writer_init(writer, dst_leaf_addr);
+
+   if (cluster.invocation_index == first_active_in_node) {
+      bit_writer_write(writer, encode_vertex_payload_bit_size.x - 1, 5);    /* x_vertex_bits_minus_one */
+      bit_writer_write(writer, encode_vertex_payload_bit_size.y - 1, 5);    /* y_vertex_bits_minus_one */
+      bit_writer_write(writer, encode_vertex_payload_bit_size.z - 1, 5);    /* z_vertex_bits_minus_one */
+      bit_writer_write(writer, encode_trailing_zero_bits, 5);               /* trailing_zero_bits */
+      bit_writer_write(writer, encode_geometry_id_base_bit_size / 2, 4);    /* geometry_index_base_bits_div_2 */
+      bit_writer_write(writer, encode_geometry_id_payload_bit_size / 2, 4); /* geometry_index_bits_div_2 */
+      bit_writer_write(writer, pair_count - 1, 3);                          /* triangle_pair_count_minus_one */
+      bit_writer_write(writer, 0, 1);                                       /* vertex_type */
+      bit_writer_write(writer, encode_triangle_id_base_bit_size, 5);        /* primitive_index_base_bits */
+      bit_writer_write(writer, encode_triangle_id_payload_bit_size, 5);     /* primitive_index_bits */
+      bit_writer_write(writer, encode_indices_midpoint, 10);
+
+      uvec3 vertex_prefix = floatBitsToUint(vertices[0]);
+      uvec3 vertex_base_bit_size = uvec3(32 - encode_trailing_zero_bits) - encode_vertex_payload_bit_size;
+      if (vertex_base_bit_size.x > 0) {
+         bit_writer_write(writer, vertex_prefix.x >> (encode_trailing_zero_bits + encode_vertex_payload_bit_size.x),
+                          vertex_base_bit_size.x);
+      }
+      if (vertex_base_bit_size.y > 0) {
+         bit_writer_write(writer, vertex_prefix.y >> (encode_trailing_zero_bits + encode_vertex_payload_bit_size.y),
+                          vertex_base_bit_size.y);
+      }
+      if (vertex_base_bit_size.z > 0) {
+         bit_writer_write(writer, vertex_prefix.z >> (encode_trailing_zero_bits + encode_vertex_payload_bit_size.z),
+                          vertex_base_bit_size.z);
+      }
+   }
+
+   uint32_t vertex_used_mask[6];
+   for (uint32_t processed_node_index = 0; processed_node_index < hw_node_count; processed_node_index++) {
+      if (processed_node_index != hw_node_index)
+         continue;
+
+      for (uint32_t vertex_index = 0; vertex_index < 6; vertex_index++)
+         vertex_used_mask[vertex_index] = radv_ballot(cluster, vertex_used[vertex_index]);
+   }
+
+   for (uint32_t vertex_index = 0; vertex_index < 6; vertex_index++) {
+      uvec3 vertex = floatBitsToUint(vertices[vertex_index]) >> encode_trailing_zero_bits;
+      vertex = vertex & uvec3((1ul << uint64_t(encode_vertex_payload_bit_size.x)) - 1,
+                              (1ul << uint64_t(encode_vertex_payload_bit_size.y)) - 1,
+                              (1ul << uint64_t(encode_vertex_payload_bit_size.z)) - 1);
+
+      for (uint32_t i = 0; i < pair_count; i++) {
+         uint32_t invocation = (node_invocations >> (i * 4)) & 0xf;
+         if ((vertex_used_mask[vertex_index] & (1u << invocation)) == 0)
+            continue;
+
+         uvec3 current_vertex = radv_read_invocation(cluster, invocation, vertex);
+
+         if (cluster.invocation_index == first_active_in_node) {
+            bit_writer_write(writer, current_vertex.x, encode_vertex_payload_bit_size.x);
+            bit_writer_write(writer, current_vertex.y, encode_vertex_payload_bit_size.y);
+            bit_writer_write(writer, current_vertex.z, encode_vertex_payload_bit_size.z);
+         }
+      }
+   }
+
+   if (encode_geometry_id_payload_bit_size > 0) {
+      uint32_t geometry_id_payload_mask =
+         (encode_geometry_id_payload_bit_size == 32) ? 0xffffffff : ((1u << encode_geometry_id_payload_bit_size) - 1);
+      uint32_t geometry_id_payloads[2] = {
+         geometry_id0 & geometry_id_payload_mask,
+         geometry_id1 & geometry_id_payload_mask,
+      };
+
+      for (int32_t i = int32_t(pair_count) - 1; i >= 0; i--) {
+         uint32_t invocation = (node_invocations >> (uint32_t(i) * 4)) & 0xf;
+
+         uint32_t payload0 = radv_read_invocation(cluster, invocation, geometry_id_payloads[0]);
+         uint32_t payload1 = radv_read_invocation(cluster, invocation, geometry_id_payloads[1]);
+         if (cluster.invocation_index == first_active_in_node) {
+            bit_writer_write(writer, payload1, encode_geometry_id_payload_bit_size);
+            if (invocation != first_active_in_node)
+               bit_writer_write(writer, payload0, encode_geometry_id_payload_bit_size);
+         }
+      }
+   }
+
+   if (cluster.invocation_index == first_active_in_node) {
+      bit_writer_write(writer, geometry_id0, encode_geometry_id_base_bit_size);
+      bit_writer_write(writer, triangle_id0, encode_triangle_id_base_bit_size);
+   }
+
+   if (encode_triangle_id_payload_bit_size > 0) {
+      uint32_t triangle_id_payload_mask =
+         (encode_triangle_id_payload_bit_size == 32) ? 0xffffffff : ((1u << encode_triangle_id_payload_bit_size) - 1);
+      uint32_t triangle_id_payloads[2] = {
+         triangle_id0 & triangle_id_payload_mask,
+         triangle_id1 & triangle_id_payload_mask,
+      };
+
+      for (uint32_t i = 0; i < pair_count; i++) {
+         uint32_t invocation = (node_invocations >> (i * 4)) & 0xf;
+
+         uint32_t payload0 = radv_read_invocation(cluster, invocation, triangle_id_payloads[0]);
+         uint32_t payload1 = radv_read_invocation(cluster, invocation, triangle_id_payloads[1]);
+         if (cluster.invocation_index == first_active_in_node) {
+            if (invocation != first_active_in_node)
+               bit_writer_write(writer, payload0, encode_triangle_id_payload_bit_size);
+            bit_writer_write(writer, payload1, encode_triangle_id_payload_bit_size);
+         }
+      }
+   }
+
+   if (cluster.invocation_index == first_active_in_node) {
+      uint32_t triangle_pair_descs_size = RADV_GFX12_PRIMITIVE_NODE_PAIR_DESC_SIZE * pair_count;
+      uint32_t target = 32 * 32 - triangle_pair_descs_size;
+      uint32_t skip_count = target - writer.total_count;
+      if (skip_count <= 32)
+         bit_writer_write(writer, 0, skip_count);
+      else
+         bit_writer_skip_to(writer, target);
+   }
+
+   uint32_t encoded_vertex_indices = 0;
+   for (uint32_t i = 0; i < 6; i++) {
+      uint32_t vertex_index = uint32_t((vertex_indices >> (i * 8)) & 0xff);
+      uint32_t invocation = vertex_index >> 4;
+      uint32_t array_index = vertex_index & 0xf;
+
+      uint32_t encoded_index = bitCount(vertex_used_mask[array_index] & ((1u << invocation) - 1));
+      for (uint32_t j = 0; j < 5; j++) {
+         if (array_index > j) {
+            encoded_index += bitCount(vertex_used_mask[j]);
+         }
+      }
+
+      encoded_vertex_indices |= (encoded_index << (i * 4));
+   }
+
+   for (int32_t i = int32_t(pair_count) - 1; i >= 0; i--) {
+      uint32_t invocation = (node_invocations >> (uint32_t(i) * 4)) & 0xf;
+
+      bool has_second_triangle =
+         radv_read_invocation(cluster, invocation, pair_index_node_index1 != RADV_BVH_INVALID_NODE);
+      bool current_opaque0 = radv_read_invocation(cluster, invocation, opaque0);
+      bool current_opaque1 = radv_read_invocation(cluster, invocation, opaque1);
+      uint32_t current_encoded_vertex_indices = radv_read_invocation(cluster, invocation, encoded_vertex_indices);
+
+      if (cluster.invocation_index == first_active_in_node) {
+         bit_writer_write(writer, 1, 1);                                                /* prim_range_stop */
+         bit_writer_write(writer, 0, 1);                                                /* tri1_double_sided */
+         bit_writer_write(writer, (has_second_triangle && current_opaque1) ? 1 : 0, 1); /* tri1_opaque */
+         bit_writer_write(writer, has_second_triangle ? (current_encoded_vertex_indices >> 12) : 0,
+                          12);                                 /* tri1_v0_index, tri1_v1_index, tri1_v2_index */
+         bit_writer_write(writer, 0, 1);                       /* tri0_double_sided */
+         bit_writer_write(writer, current_opaque0 ? 1 : 0, 1); /* tri0_opaque */
+         bit_writer_write(writer, current_encoded_vertex_indices & 0xfff,
+                          12); /* tri0_v0_index, tri0_v1_index, tri0_v2_index */
+      }
+   }
+
+   if (cluster.invocation_index == first_active_in_node)
+      bit_writer_finish(writer);
+}

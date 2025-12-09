@@ -56,8 +56,8 @@ static const struct fd6_format formats[PIPE_FORMAT_COUNT] = {
    _TC(L8_UNORM,   8_UNORM,                     WZYX),
    _TC(L8_SRGB,    8_UNORM,                     WZYX),
    _TC(L8_SNORM,   8_SNORM,                     WZYX),
-   _T_(I8_UNORM,   8_UNORM,                     WZYX),
-   _T_(I8_SNORM,   8_SNORM,                     WZYX),
+   _TC(I8_UNORM,   8_UNORM,                     WZYX),
+   _TC(I8_SNORM,   8_SNORM,                     WZYX),
 
    _T_(A8_UINT,    8_UINT,                      WZYX),
    _T_(A8_SINT,    8_SINT,                      WZYX),
@@ -83,16 +83,16 @@ static const struct fd6_format formats[PIPE_FORMAT_COUNT] = {
    _T_(A16_UINT,    16_UINT,                    WZYX),
    _T_(A16_SINT,    16_SINT,                    WZYX),
    _T_(A16_FLOAT,   16_FLOAT,                   WZYX),
-   _T_(L16_UNORM,   16_UNORM,                   WZYX),
-   _T_(L16_SNORM,   16_SNORM,                   WZYX),
-   _T_(L16_UINT,    16_UINT,                    WZYX),
-   _T_(L16_SINT,    16_SINT,                    WZYX),
-   _T_(L16_FLOAT,   16_FLOAT,                   WZYX),
-   _T_(I16_UNORM,   16_UNORM,                   WZYX),
-   _T_(I16_SNORM,   16_SNORM,                   WZYX),
-   _T_(I16_UINT,    16_UINT,                    WZYX),
-   _T_(I16_SINT,    16_SINT,                    WZYX),
-   _T_(I16_FLOAT,   16_FLOAT,                   WZYX),
+   _TC(L16_UNORM,   16_UNORM,                   WZYX),
+   _TC(L16_SNORM,   16_SNORM,                   WZYX),
+   _TC(L16_UINT,    16_UINT,                    WZYX),
+   _TC(L16_SINT,    16_SINT,                    WZYX),
+   _TC(L16_FLOAT,   16_FLOAT,                   WZYX),
+   _TC(I16_UNORM,   16_UNORM,                   WZYX),
+   _TC(I16_SNORM,   16_SNORM,                   WZYX),
+   _TC(I16_UINT,    16_UINT,                    WZYX),
+   _TC(I16_SINT,    16_SINT,                    WZYX),
+   _TC(I16_FLOAT,   16_FLOAT,                   WZYX),
 
    VTC(R8G8_UNORM,   8_8_UNORM,                 WZYX),
    VTC(R8G8_SNORM,   8_8_SNORM,                 WZYX),
@@ -103,6 +103,7 @@ static const struct fd6_format formats[PIPE_FORMAT_COUNT] = {
    _TC(R8G8_SRGB,    8_8_UNORM,                 WZYX),
 
    _T_(L8A8_UNORM,   8_8_UNORM,                 WZYX),
+   _T_(L8A8_SNORM,   8_8_SNORM,                 WZYX),
    _T_(L8A8_UINT,    8_8_UINT,                  WZYX),
    _T_(L8A8_SINT,    8_8_SINT,                  WZYX),
 
@@ -431,7 +432,7 @@ bool
 fd6_texture_format_supported(const struct fd_dev_info *info, enum pipe_format format,
                              enum a6xx_tile_mode tile_mode, bool is_mutable)
 {
-   if (info->a6xx.is_a702) {
+   if (info->props.is_a702) {
       /* BPTC is removed */
       switch (format) {
       case PIPE_FORMAT_BPTC_RGBA_UNORM:

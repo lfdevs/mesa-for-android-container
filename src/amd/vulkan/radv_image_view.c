@@ -44,7 +44,7 @@ radv_tex_dim(VkImageType image_type, VkImageViewType view_type, unsigned nr_laye
       else
          return V_008F1C_SQ_RSRC_IMG_2D_ARRAY;
    default:
-      unreachable("illegal image type");
+      UNREACHABLE("illegal image type");
    }
 }
 
@@ -286,7 +286,7 @@ gfx6_make_texture_descriptor(struct radv_device *device, struct radv_image *imag
       .min_lod = min_lod,
       .dcc_enabled = radv_dcc_enabled(image, first_level),
       .tc_compat_htile_enabled = radv_tc_compat_htile_enabled(image, first_level),
-      .aniso_single_level = !instance->drirc.disable_aniso_single_level,
+      .aniso_single_level = !instance->drirc.debug.disable_aniso_single_level,
    };
 
    ac_build_texture_descriptor(&pdev->info, &tex_state, &state[0]);
@@ -497,8 +497,9 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
    const struct VkImageViewSlicedCreateInfoEXT *sliced_3d =
       vk_find_struct_const(pCreateInfo->pNext, IMAGE_VIEW_SLICED_CREATE_INFO_EXT);
 
-   bool from_client = extra_create_info && extra_create_info->from_client;
-   vk_image_view_init(&device->vk, &iview->vk, !from_client, pCreateInfo);
+   if (!extra_create_info || !extra_create_info->from_client)
+      assert(pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA);
+   vk_image_view_init(&device->vk, &iview->vk, pCreateInfo);
 
    memset(&iview->descriptor, 0, sizeof(iview->descriptor));
 
@@ -640,6 +641,42 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
       radv_image_view_make_descriptor(iview, device, format, &pCreateInfo->components, true, disable_compression,
                                       enable_compression, iview->plane_id + i, i, sliced_3d);
    }
+}
+
+void
+radv_hiz_image_view_init(struct radv_image_view *iview, struct radv_device *device,
+                         const VkImageViewCreateInfo *pCreateInfo)
+{
+   VK_FROM_HANDLE(radv_image, image, pCreateInfo->image);
+
+   assert(pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA);
+   vk_image_view_init(&device->vk, &iview->vk, pCreateInfo);
+
+   assert(vk_format_has_depth(image->vk.format) && vk_format_has_stencil(image->vk.format));
+   assert(iview->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT);
+
+   memset(&iview->descriptor, 0, sizeof(iview->descriptor));
+
+   iview->image = image;
+
+   const uint32_t type =
+      radv_tex_dim(image->vk.image_type, iview->vk.view_type, image->vk.array_layers, image->vk.samples, true, false);
+
+   const struct ac_gfx12_hiz_state hiz_state = {
+      .surf = &image->planes[0].surface,
+      .va = image->bindings[0].addr,
+      .type = type,
+      .num_samples = image->vk.samples,
+      .first_level = iview->vk.base_mip_level,
+      .last_level = iview->vk.base_mip_level + iview->vk.level_count - 1,
+      .num_levels = image->vk.mip_levels,
+      .first_layer = iview->vk.base_array_layer,
+      .last_layer = iview->vk.base_array_layer + iview->vk.layer_count - 1,
+   };
+
+   uint32_t *desc = iview->storage_descriptor.plane_descriptors[0];
+
+   ac_build_gfx12_hiz_descriptor(&hiz_state, desc);
 }
 
 void

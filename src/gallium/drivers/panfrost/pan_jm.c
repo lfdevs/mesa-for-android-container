@@ -86,7 +86,7 @@ jm_submit_jc(struct panfrost_batch *batch, uint64_t first_job_desc,
    struct pipe_context *gallium = (struct pipe_context *)ctx;
    struct panfrost_device *dev = pan_device(gallium->screen);
    struct drm_panfrost_submit submit = {
-      0,
+      .jm_ctx_handle = ctx->jm.handle,
    };
    uint32_t in_syncs[1];
    uint32_t *bo_handles;
@@ -292,7 +292,7 @@ GENX(jm_emit_fragment_job)(struct panfrost_batch *batch,
 static void
 jm_emit_shader_env(struct panfrost_batch *batch,
                    struct MALI_SHADER_ENVIRONMENT *cfg,
-                   enum pipe_shader_type stage, uint64_t shader_ptr)
+                   mesa_shader_stage stage, uint64_t shader_ptr)
 {
    cfg->resources = panfrost_emit_resources(batch, stage);
    cfg->thread_storage = batch->tls.gpu;
@@ -330,14 +330,14 @@ GENX(jm_launch_grid)(struct panfrost_batch *batch,
    }
 
    pan_section_pack(t.cpu, COMPUTE_JOB, DRAW, cfg) {
-      cfg.state = batch->rsd[PIPE_SHADER_COMPUTE];
-      cfg.attributes = batch->attribs[PIPE_SHADER_COMPUTE];
-      cfg.attribute_buffers = batch->attrib_bufs[PIPE_SHADER_COMPUTE];
+      cfg.state = batch->rsd[MESA_SHADER_COMPUTE];
+      cfg.attributes = batch->attribs[MESA_SHADER_COMPUTE];
+      cfg.attribute_buffers = batch->attrib_bufs[MESA_SHADER_COMPUTE];
       cfg.thread_storage = batch->tls.gpu;
-      cfg.uniform_buffers = batch->uniform_buffers[PIPE_SHADER_COMPUTE];
-      cfg.push_uniforms = batch->push_uniforms[PIPE_SHADER_COMPUTE];
-      cfg.textures = batch->textures[PIPE_SHADER_COMPUTE];
-      cfg.samplers = batch->samplers[PIPE_SHADER_COMPUTE];
+      cfg.uniform_buffers = batch->uniform_buffers[MESA_SHADER_COMPUTE];
+      cfg.push_uniforms = batch->push_uniforms[MESA_SHADER_COMPUTE];
+      cfg.textures = batch->textures[MESA_SHADER_COMPUTE];
+      cfg.samplers = batch->samplers[MESA_SHADER_COMPUTE];
    }
 
 #if PAN_ARCH == 4
@@ -346,7 +346,7 @@ GENX(jm_launch_grid)(struct panfrost_batch *batch,
 #endif
 #else
    struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_compiled_shader *cs = ctx->prog[PIPE_SHADER_COMPUTE];
+   struct panfrost_compiled_shader *cs = ctx->prog[MESA_SHADER_COMPUTE];
 
    pan_section_pack(t.cpu, COMPUTE_JOB, PAYLOAD, cfg) {
       cfg.workgroup_size_x = info->block[0];
@@ -357,8 +357,8 @@ GENX(jm_launch_grid)(struct panfrost_batch *batch,
       cfg.workgroup_count_y = num_wg[1];
       cfg.workgroup_count_z = num_wg[2];
 
-      jm_emit_shader_env(batch, &cfg.compute, PIPE_SHADER_COMPUTE,
-                         batch->rsd[PIPE_SHADER_COMPUTE]);
+      jm_emit_shader_env(batch, &cfg.compute, MESA_SHADER_COMPUTE,
+                         batch->rsd[MESA_SHADER_COMPUTE]);
 
       /* Workgroups may be merged if the shader does not use barriers
        * or shared memory. This condition is checked against the
@@ -451,7 +451,7 @@ jm_emit_tiler_desc(struct panfrost_batch *batch)
 #if PAN_ARCH <= 7
 static inline void
 jm_emit_draw_descs(struct panfrost_batch *batch, struct MALI_DRAW *d,
-                   enum pipe_shader_type st)
+                   mesa_shader_stage st)
 {
    d->offset_start = batch->ctx->offset_start;
    d->instance_size =
@@ -468,13 +468,13 @@ jm_emit_vertex_draw(struct panfrost_batch *batch,
                     struct mali_draw_packed *section)
 {
    pan_pack(section, DRAW, cfg) {
-      cfg.state = batch->rsd[PIPE_SHADER_VERTEX];
-      cfg.attributes = batch->attribs[PIPE_SHADER_VERTEX];
-      cfg.attribute_buffers = batch->attrib_bufs[PIPE_SHADER_VERTEX];
+      cfg.state = batch->rsd[MESA_SHADER_VERTEX];
+      cfg.attributes = batch->attribs[MESA_SHADER_VERTEX];
+      cfg.attribute_buffers = batch->attrib_bufs[MESA_SHADER_VERTEX];
       cfg.varyings = batch->varyings.vs;
       cfg.varying_buffers = cfg.varyings ? batch->varyings.bufs : 0;
       cfg.thread_storage = batch->tls.gpu;
-      jm_emit_draw_descs(batch, &cfg, PIPE_SHADER_VERTEX);
+      jm_emit_draw_descs(batch, &cfg, MESA_SHADER_VERTEX);
    }
 }
 
@@ -543,11 +543,11 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
          struct panfrost_resource *rsrc =
             pan_resource(ctx->occlusion_query->rsrc);
          cfg.occlusion = rsrc->plane.base;
-         panfrost_batch_write_rsrc(ctx->batch, rsrc, PIPE_SHADER_FRAGMENT);
+         panfrost_batch_write_rsrc(ctx->batch, rsrc, MESA_SHADER_FRAGMENT);
       }
 
 #if PAN_ARCH >= 9
-      struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
+      struct panfrost_compiled_shader *fs = ctx->prog[MESA_SHADER_FRAGMENT];
 
       cfg.flags_0.multisample_enable = rast->multisample;
       cfg.flags_1.sample_mask = rast->multisample ? ctx->sample_mask : 0xFFFF;
@@ -587,7 +587,11 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
 
          cfg.flags_0.allow_forward_pixel_to_kill =
             pan_allow_forward_pixel_to_kill(ctx, fs);
-         cfg.flags_0.allow_forward_pixel_to_be_killed = !fs->info.writes_global;
+
+         /* early ZS check for FPK is performed by HW on v7+ */
+         cfg.flags_0.allow_forward_pixel_to_be_killed =
+            !fs->info.writes_global &&
+            ((PAN_ARCH > 6) || earlyzs.kill != MALI_PIXEL_KILL_FORCE_LATE);
 
          /* Mask of render targets that may be written. A render
           * target may be written if the fragment shader writes
@@ -625,8 +629,8 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
          cfg.flags_0.overdraw_alpha0 = panfrost_overdraw_alpha(ctx, 0);
          cfg.flags_0.overdraw_alpha1 = panfrost_overdraw_alpha(ctx, 1);
 
-         jm_emit_shader_env(batch, &cfg.shader, PIPE_SHADER_FRAGMENT,
-                            batch->rsd[PIPE_SHADER_FRAGMENT]);
+         jm_emit_shader_env(batch, &cfg.shader, MESA_SHADER_FRAGMENT,
+                            batch->rsd[MESA_SHADER_FRAGMENT]);
       } else {
          /* These operations need to be FORCE to benefit from the
           * depth-only pass optimizations.
@@ -650,9 +654,9 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
       }
 #else
       cfg.position = batch->varyings.pos;
-      cfg.state = batch->rsd[PIPE_SHADER_FRAGMENT];
-      cfg.attributes = batch->attribs[PIPE_SHADER_FRAGMENT];
-      cfg.attribute_buffers = batch->attrib_bufs[PIPE_SHADER_FRAGMENT];
+      cfg.state = batch->rsd[MESA_SHADER_FRAGMENT];
+      cfg.attributes = batch->attribs[MESA_SHADER_FRAGMENT];
+      cfg.attribute_buffers = batch->attrib_bufs[MESA_SHADER_FRAGMENT];
       cfg.viewport = batch->viewport;
       cfg.varyings = batch->varyings.fs;
       cfg.varying_buffers = cfg.varyings ? batch->varyings.bufs : 0;
@@ -667,7 +671,7 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
          cfg.flat_shading_vertex = rast->flatshade_first ^ (PAN_ARCH <= 5);
       }
 
-      jm_emit_draw_descs(batch, &cfg, PIPE_SHADER_FRAGMENT);
+      jm_emit_draw_descs(batch, &cfg, MESA_SHADER_FRAGMENT);
 #endif
    }
 }
@@ -708,7 +712,7 @@ jm_emit_primitive(struct panfrost_batch *batch,
 
       cfg.job_task_split = 6;
 #else
-      struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
+      struct panfrost_compiled_shader *fs = ctx->prog[MESA_SHADER_FRAGMENT];
 
       cfg.allow_rotating_primitives = allow_rotating_primitives(fs, info);
       cfg.primitive_restart = info->primitive_restart;
@@ -758,8 +762,8 @@ jm_emit_malloc_vertex_job(struct panfrost_batch *batch,
                           bool secondary_shader, void *job)
 {
    struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
-   struct panfrost_compiled_shader *fs = ctx->prog[PIPE_SHADER_FRAGMENT];
+   struct panfrost_compiled_shader *vs = ctx->prog[MESA_SHADER_VERTEX];
+   struct panfrost_compiled_shader *fs = ctx->prog[MESA_SHADER_FRAGMENT];
 
    bool fs_required = panfrost_fs_required(
       fs, ctx->blend, &ctx->pipe_framebuffer, ctx->depth_stencil);
@@ -808,7 +812,7 @@ jm_emit_malloc_vertex_job(struct panfrost_batch *batch,
                       fs_required, u_reduced_prim(info->mode));
 
    pan_section_pack(job, MALLOC_VERTEX_JOB, POSITION, cfg) {
-      jm_emit_shader_env(batch, &cfg, PIPE_SHADER_VERTEX,
+      jm_emit_shader_env(batch, &cfg, MESA_SHADER_VERTEX,
                          panfrost_get_position_shader(batch, info));
    }
 
@@ -820,7 +824,7 @@ jm_emit_malloc_vertex_job(struct panfrost_batch *batch,
       if (!secondary_shader)
          continue;
 
-      jm_emit_shader_env(batch, &cfg, PIPE_SHADER_VERTEX,
+      jm_emit_shader_env(batch, &cfg, MESA_SHADER_VERTEX,
                          panfrost_get_varying_shader(batch));
    }
 }
@@ -876,8 +880,8 @@ GENX(jm_launch_xfb)(struct panfrost_batch *batch,
       cfg.workgroup_count_y = info->instance_count;
       cfg.workgroup_count_z = 1;
 
-      jm_emit_shader_env(batch, &cfg.compute, PIPE_SHADER_VERTEX,
-                         batch->rsd[PIPE_SHADER_VERTEX]);
+      jm_emit_shader_env(batch, &cfg.compute, MESA_SHADER_VERTEX,
+                         batch->rsd[MESA_SHADER_VERTEX]);
 
       /* TODO: Indexing. Also, this is a legacy feature... */
       cfg.compute.attribute_offset = batch->ctx->offset_start;
@@ -938,7 +942,7 @@ GENX(jm_launch_draw)(struct panfrost_batch *batch,
                      unsigned vertex_count)
 {
    struct panfrost_context *ctx = batch->ctx;
-   struct panfrost_compiled_shader *vs = ctx->prog[PIPE_SHADER_VERTEX];
+   struct panfrost_compiled_shader *vs = ctx->prog[MESA_SHADER_VERTEX];
    bool secondary_shader = vs->info.vs.secondary_enable;
    bool idvs = vs->info.vs.idvs;
 
@@ -970,7 +974,7 @@ GENX(jm_launch_draw)(struct panfrost_batch *batch,
 #elif PAN_ARCH >= 6
       tiler = pan_pool_alloc_desc(&batch->pool.base, INDEXED_VERTEX_JOB);
 #else
-      unreachable("IDVS is unsupported on Midgard");
+      UNREACHABLE("IDVS is unsupported on Midgard");
 #endif
    } else {
       vertex = pan_pool_alloc_desc(&batch->pool.base, COMPUTE_JOB);
@@ -1014,7 +1018,7 @@ GENX(jm_launch_draw_indirect)(struct panfrost_batch *batch,
                               unsigned drawid_offset,
                               const struct pipe_draw_indirect_info *indirect)
 {
-   unreachable("draw indirect not implemented for jm");
+   UNREACHABLE("draw indirect not implemented for jm");
 }
 
 void
@@ -1030,5 +1034,57 @@ GENX(jm_emit_write_timestamp)(struct panfrost_batch *batch,
 
    pan_jc_add_job(&batch->jm.jobs.vtc_jc, MALI_JOB_TYPE_WRITE_VALUE, false,
                   false, 0, 0, &job, false);
-   panfrost_batch_write_rsrc(batch, dst, PIPE_SHADER_VERTEX);
+   panfrost_batch_write_rsrc(batch, dst, MESA_SHADER_VERTEX);
+}
+
+int
+GENX(jm_init_context)(struct panfrost_context *ctx)
+{
+   /* The default context is medium prio, so we use that one. */
+   if (!(ctx->flags &
+         (PIPE_CONTEXT_HIGH_PRIORITY | PIPE_CONTEXT_LOW_PRIORITY))) {
+      ctx->jm.handle = 0;
+      return 0;
+   }
+
+   struct panfrost_device *dev = pan_device(ctx->base.screen);
+   enum drm_panfrost_jm_ctx_priority prio;
+
+   if (ctx->flags & PIPE_CONTEXT_HIGH_PRIORITY)
+      prio = PANFROST_JM_CTX_PRIORITY_HIGH;
+   else if (ctx->flags & PIPE_CONTEXT_LOW_PRIORITY)
+      prio = PANFROST_JM_CTX_PRIORITY_LOW;
+   else
+      prio = PANFROST_JM_CTX_PRIORITY_MEDIUM;
+
+   struct drm_panfrost_jm_ctx_create args = {
+      .priority = prio,
+   };
+
+   int ret = pan_kmod_ioctl(panfrost_device_fd(dev),
+                            DRM_IOCTL_PANFROST_JM_CTX_CREATE,
+                            &args);
+   if (ret)
+      return -1;
+
+   ctx->jm.handle = args.handle;
+   return 0;
+}
+
+void
+GENX(jm_cleanup_context)(struct panfrost_context *ctx)
+{
+   if (!ctx->jm.handle)
+      return;
+
+   struct panfrost_device *dev = pan_device(ctx->base.screen);
+   struct drm_panfrost_jm_ctx_destroy args = {
+      .handle = ctx->jm.handle,
+   };
+
+   ASSERTED int ret = pan_kmod_ioctl(panfrost_device_fd(dev),
+                                     DRM_IOCTL_PANFROST_JM_CTX_DESTROY,
+                                     &args);
+
+   assert(!ret);
 }

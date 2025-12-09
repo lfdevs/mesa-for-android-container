@@ -13,6 +13,9 @@ pub fn instr_latency(_sm: u8, op: &Op, _dst_idx: usize) -> u32 {
         Op::Ld(_) => 24,
         Op::ALd(_) => 24,
         Op::IMul(_) => 15, // This does not apply to imad, right? right???
+        Op::ISetP(_) => 13,
+        Op::PSetP(_) => 13,
+        Op::IAdd2(o) if !o.carry_out.is_none() => 13,
         Op::Tex(_)
         | Op::Tld(_)
         | Op::Tld4(_)
@@ -23,7 +26,12 @@ pub fn instr_latency(_sm: u8, op: &Op, _dst_idx: usize) -> u32 {
     }
 }
 
-pub fn instr_exec_latency(_sm: u8, op: &Op) -> u32 {
+pub fn latency_upper_bound() -> u32 {
+    24
+}
+
+pub fn instr_exec_latency(sm: u8, op: &Op) -> u32 {
+    let is_kepler_a = sm == 30;
     match op {
         Op::Tex(_)
         | Op::Tld(_)
@@ -31,6 +39,8 @@ pub fn instr_exec_latency(_sm: u8, op: &Op) -> u32 {
         | Op::Tmml(_)
         | Op::Txd(_)
         | Op::Txq(_) => 17,
+        Op::MemBar(_) => 16,
+        Op::Cont(_) | Op::Brk(_) if is_kepler_a => 5,
         Op::Exit(_) => 15,
         _ => 1,
     }
@@ -118,7 +128,7 @@ where
     let mut instr_iter = func
         .blocks
         .iter()
-        .flat_map(|b| b.instrs.iter().map(|x| &**x))
+        .flat_map(|b| b.instrs.iter().map(|x| &*x))
         .peekable();
     let mut filling_instr = Instr {
         pred: true.into(),

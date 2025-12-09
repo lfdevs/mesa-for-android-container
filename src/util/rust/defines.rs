@@ -86,7 +86,7 @@ pub const WAIT_CONTEXT_MAX: usize = 16;
 
 pub enum DescriptorType {
     Unknown,
-    Memory(u32),
+    Memory(u32, u32), // (size, handle_type)
     WritePipe,
 }
 

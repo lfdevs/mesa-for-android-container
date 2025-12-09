@@ -67,7 +67,7 @@ get_drm_format_modifier_properties_list(
       {
          *out_props = (VkDrmFormatModifierPropertiesEXT){
             .drmFormatModifier = mod,
-            .drmFormatModifierPlaneCount = 1 /* no planar mods */,
+            .drmFormatModifierPlaneCount = vk_format_get_plane_count(vk_format),
             .drmFormatModifierTilingFeatures = flags,
          };
       };
@@ -96,7 +96,7 @@ get_drm_format_modifier_properties_list_2(
       {
          *out_props = (VkDrmFormatModifierProperties2EXT){
             .drmFormatModifier = mod,
-            .drmFormatModifierPlaneCount = 1, /* no planar mods */
+            .drmFormatModifierPlaneCount = vk_format_get_plane_count(vk_format),
             .drmFormatModifierTilingFeatures = flags,
          };
       };

@@ -33,6 +33,7 @@
 #define INSTR_6XX_RAW(i, d, ...) { .gpu_id = 630, .instr = NULL, .instr_raw = i, .expected = d, __VA_ARGS__ }
 #define INSTR_7XX(i, d, ...) { .chip_id = 0x07030001, .instr = #i, .instr_raw = 0, .expected = d, __VA_ARGS__ }
 #define INSTR_7XX_RAW(i, d, ...) { .chip_id = 0x07030001, .instr = NULL, .instr_raw = i, .expected = d, __VA_ARGS__ }
+#define INSTR_8XX(i, d, ...) { .chip_id = 0x44050000, .instr = #i, .instr_raw = 0, .expected = d, __VA_ARGS__ }
 /* clang-format on */
 
 static const struct test {
@@ -68,6 +69,10 @@ static const struct test {
    INSTR_6XX(07020000_00000000, "predf"),
    INSTR_6XX(07820000_00000000, "prede"),
 
+   INSTR_7XX(00000003_00000000, "(eolm)(eogm)nop"),
+   INSTR_7XX(00000001_00000000, "(eolm)nop"),
+   INSTR_8XX(00001004_00000000, "(ss)(eostsc)nop"),
+
    /* cat1 */
    INSTR_6XX(20244000_00000020, "mov.f32f32 r0.x, c8.x"),
    INSTR_6XX(20200000_00000020, "mov.f16f16 hr0.x, hc8.x"),
@@ -91,10 +96,15 @@ static const struct test {
    INSTR_6XX(20400006_00003800, "mov.f16f16 hr1.z, h(0.500000)"),
    INSTR_6XX(204880f5_00000000, "mova1 a1.x, 0"),
 
+   INSTR_6XX(201108f4_00000000, "mova.u a0.x, (r)hr0.x"),
+   INSTR_6XX(204888f5_00000000, "mova1.u a1.x, 0"),
+   INSTR_8XX(20130cf4_008000c0, "mova.u.r (sat)a0.x, hr48.x, 0, 1"),
+
    INSTR_7XX(2004c005_00000405, "cov.f32u32 r1.y, (last)r1.y"),
 
    INSTR_7XX(200440c0_ae800004, "movs.f32f32 r48.x, r1.x, 93"),
    INSTR_7XX(201100c0_c000040b, "movs.s16s16 hr48.x, (last)hr2.w, a0.x"),
+   INSTR_7XX(201504c0_000000c0, "cov.s32s16 (sat)hr48.x, r48.x"),
 
    /* cat2 */
    INSTR_6XX(40104002_0c210001, "add.f hr0.z, r0.y, c<a0.x + 33>"),
@@ -116,6 +126,9 @@ static const struct test {
 
    INSTR_7XX(42380800_04010400, "(nop3) add.s r0.x, (last)r0.x, (last)r0.y"),
    INSTR_7XX(42930000_04000406, "cmps.u.ge r0.x, (last)r1.z, (last)r0.x"),
+
+   INSTR_7XX(429000f5_100600c1, "cmps.u.lt up0.y, r48.y, c1.z"),
+   INSTR_7XX(4490000c_10534007, "add.f.mul2.lt r3.x, (neg)r1.w, c20.w"),
 
    /* cat3 */
    INSTR_6XX(66000000_10421041, "sel.f16 hr0.x, hc16.y, hr0.x, hc16.z"),
@@ -144,6 +157,10 @@ static const struct test {
 
    INSTR_7XX(61808000_04020400, "madsh.m16 r0.x, (last)r0.x, r0.y, (last)r0.z"),
    INSTR_7XX(64838806_04088406, "(nop3) sel.b32 r1.z, (last)r1.z, r1.w, (last)r2.x"),
+   INSTR_7XX(6286880e_040ee002, "(nop3) mad.f32.mul2 r3.z, (neg)r0.z, r3.y, (last)r3.z"),
+   INSTR_8XX(6206000a_040a0610, "mad.u24 r2.z, 16, r3.x, (last)r2.z"),
+   INSTR_8XX(62000800_06030402, "(nop1) mad.u24 r0.x, (last)r0.z, r0.x, 3"),
+   INSTR_8XX(63820009_07024409, "mad.f32 r2.y, (neg)(last)r2.y, r1.x, (1.0)"),
 
    /* cat4 */
    INSTR_6XX(8010000a_00000003, "rcp r2.z, r0.w"),
@@ -192,6 +209,9 @@ static const struct test {
    INSTR_6XX(b7e03104_00180001, "(sy)quad_shuffle.diag (u32)(x)r1.x, r0.x"), /* (sy)quad_shuffle.diag (u32)(xOOO)r1.x, r0.x */
 
    INSTR_6XX(a7000000_00000000, "tcinv"),
+
+   /* custom */
+   INSTR_6XX(a0c07f04_0cc00005, "sam.rck (xyzw)r1.x, r0.z, s#6, t#6"),
 
    /* cat6 */
 
@@ -290,6 +310,8 @@ static const struct test {
    INSTR_7XX(d1260406_00e77100, "(sy)stib.b.untyped.1d.u32.4.imm.base0 r1.z, r0.x+4, 2"),
    INSTR_7XX(c3260002_01e1b100, "ldib.b.untyped.1d.u32.4.imm.base0 r0.z, r0.y+12, 0"),
    INSTR_7XX(c7661840_4de74144, "stib.b.untyped.1d.u32.1.uniform.base2 r16.x, r19.y+29, r3.x"),
+
+   INSTR_6XX(c0260d0a_0a61b180, "ldib.b.untyped.1d.u32.rck.4.nonuniform.base0 r2.z, r2.z, r1.z"),
 
    /* dEQP-GLES31.functional.tessellation.invariance.outer_edge_symmetry.isolines_equal_spacing_ccw */
    INSTR_6XX(c2c21100_04800006, "stlw.f32 l[r2.x], r0.w, 4"),
@@ -405,6 +427,7 @@ static const struct test {
    INSTR_6XX(c0260000_00478200, "ldc.offset1.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
    INSTR_6XX(c0260000_00478400, "ldc.offset2.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
    INSTR_6XX(c0260000_00478600, "ldc.offset3.1.imm r0.x, r0.x, 0"), /* ldc.1.mode0.base0 r0.x, r0.x, 0 */
+   INSTR_8XX(c0260000_00678600, "ldc.offset3.1.imm r0.x, r0.x, 0"),
 
    /* dEQP-VK.glsl.arrays.length.float_fragment */
    INSTR_6XX(c02600c1_00c7a900, "ldc.u.offset0.3.imm.base0 r48.y, 0, 0"), /* ldc.u.3.mode4.base0 sr48.y, 0, 0 */
@@ -447,6 +470,9 @@ static const struct test {
    /* dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.const_literal.fragment.sampler2d */
    INSTR_6XX(a0c01f04_0cc00005, "sam (f32)(xyzw)r1.x, r0.z, s#6, t#6"),
 
+   /* custom */
+   INSTR_6XX(a0c01f04_0cc40005, "sam.clp (f32)(xyzw)r1.x, r0.z, r0.x, s#6, t#6"),
+
    /* dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.uniform.fragment.sampler2d */
    INSTR_4XX(a0c81f02_00800001, "sam.s2en.uniform (f32)(xyzw)r0.z, r0.x, hr1.x"), /* sam.s2en.mode0 (f32)(xyzw)r0.z, r0.x, hr1.x */ /* same for 5xx */
    INSTR_6XX(a0c81f07_0100000b, "sam.s2en.uniform (f32)(xyzw)r1.w, r1.y, hr2.x"), /* sam.s2en.mode0 (f32)(xyzw)r1.w, r1.y, hr2.x */
@@ -454,6 +480,9 @@ static const struct test {
    /* dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.dynamically_uniform.fragment.sampler2d */
    INSTR_4XX(a0c81f02_80800001, "sam.s2en.nonuniform (f32)(xyzw)r0.z, r0.x, hr1.x"), /* sam.s2en.uniform (f32)(xyzw)r0.z, r0.x, hr1.x */ /* same for 5xx */
    INSTR_6XX(a0c81f07_8100000b, "sam.s2en.nonuniform (f32)(xyzw)r1.w, r1.y, hr2.x"), /* sam.s2en.mode4 (f32)(xyzw)r1.w, r1.y, hr2.x */
+
+   /* custom */
+   INSTR_6XX(a1083f06_c0240805, "samb.base0.clp (u32)(xyzw)r1.z, r0.z, r1.x, s#1, t#0"), /* sam.s2en.mode4.clp (f32)(xyzw)r1.w, r1.y, hr2.x */
 
    /* NonUniform: */
    /* dEQP-VK.descriptor_indexing.storage_buffer */

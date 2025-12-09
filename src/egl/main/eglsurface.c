@@ -510,7 +510,7 @@ _eglQuerySurface(_EGLDisplay *disp, _EGLSurface *surface, EGLint attribute,
        */
       switch (surface->Type) {
       default:
-         unreachable("bad EGLSurface type");
+         UNREACHABLE("bad EGLSurface type");
       case EGL_WINDOW_BIT:
          *value = surface->RequestedRenderBuffer;
          break;

@@ -2230,7 +2230,7 @@ void CHLSLTessellator::QuadHLSLProcessTessFactors( float tessFactor_Ueq0, float 
             insideTessFactor[U] = (tessFactor_Veq0 + tessFactor_Veq1 + tessFactor_Ueq0 + tessFactor_Ueq1) / 4;
             break;
         default:
-            unreachable("impossible m_insideTessFactorReduction");
+            UNREACHABLE("impossible m_insideTessFactorReduction");
         }
         // Scale inside tessFactor based on user scale factor.
 
@@ -2297,7 +2297,7 @@ void CHLSLTessellator::QuadHLSLProcessTessFactors( float tessFactor_Ueq0, float 
             insideTessFactor[V] = (tessFactor_Ueq0 + tessFactor_Ueq1) / 2;
             break;
         default:
-            unreachable("impossible m_insideTessFactorReduction");
+            UNREACHABLE("impossible m_insideTessFactorReduction");
         }
         // Scale inside tessFactors based on user scale factor.
 
@@ -2470,7 +2470,7 @@ void CHLSLTessellator::TriHLSLProcessTessFactors( float tessFactor_Ueq0, float t
         insideTessFactor = (tessFactor_Ueq0 + tessFactor_Veq0 + tessFactor_Weq0) / 3;
         break;
     default:
-        unreachable("impossible m_insideTessFactorReduction");
+        UNREACHABLE("impossible m_insideTessFactorReduction");
     }
 
     // Scale inside TessFactor based on user scale factor.

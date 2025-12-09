@@ -1,0 +1,34 @@
+%YAML 1.2
+---
+
+traces:
+  angle/libangle_restricted_traces_among_us.so:
+    vk-anv-adl:
+      checksum: 06b628f9cb4fc4e59cc31b54451151e3
+  angle/libangle_restricted_traces_asphalt_9.so:
+    vk-anv-adl:
+      checksum: b0f121660eee2ba3fb45bef218e55ce2
+  angle/libangle_restricted_traces_brawl_starts.so:
+    vk-anv-adl:
+      checksum: e038ef82470fff7b94cf958fa869d130
+  angle/libangle_restricted_traces_candy_crush_soda_saga.so:
+    vk-anv-adl:
+      checksum: dcfc2dbc1e383d10b86a9c3a52452aa8
+  angle/libangle_restricted_traces_free_fire.so:
+    vk-anv-adl:
+      checksum: 1a9f03ed30ee254842afe7ab7792a493
+  angle/libangle_restricted_traces_google_maps.so:
+    vk-anv-adl:
+      checksum: 3b6fa15ed853da3a073fdbd70f2d1b7a
+  angle/libangle_restricted_traces_minetest.so:
+    vk-anv-adl:
+      checksum: a2d769be52e38da9be5f61f6bb32e325
+  angle/libangle_restricted_traces_mobile_legends.so:
+    vk-anv-adl:
+      checksum: ae8371870059d87d475da217a453acfc
+  angle/libangle_restricted_traces_pubg_mobile_battle_royale.so:
+    vk-anv-adl:
+      checksum: b1970da0e8d29498078e53d2b6bbff71
+  angle/libangle_restricted_traces_temple_run_300.so:
+    vk-anv-adl:
+      checksum: 72610fdadbfb7d99aa5de13d78598ff2

@@ -175,8 +175,8 @@ xe_remove_config(struct intel_perf_config *perf, int fd, uint64_t config_id)
 }
 
 static void
-oa_prop_set(struct drm_xe_ext_set_property *props, uint32_t *index,
-            enum drm_xe_oa_property_id prop_id, uint64_t value)
+xe_prop_set(struct drm_xe_ext_set_property *props, uint32_t *index,
+            uint32_t prop_id, uint64_t value)
 {
    if (*index > 0)
       props[*index - 1].base.next_extension = (uintptr_t)&props[*index];
@@ -185,6 +185,20 @@ oa_prop_set(struct drm_xe_ext_set_property *props, uint32_t *index,
    props[*index].property = prop_id;
    props[*index].value = value;
    *index = *index + 1;
+}
+
+static void
+oa_prop_set(struct drm_xe_ext_set_property *props, uint32_t *index,
+            enum drm_xe_oa_property_id prop_id, uint64_t value)
+{
+   xe_prop_set(props, index, (uint32_t)prop_id, value);
+}
+
+static void
+eu_stall_prop_set(struct drm_xe_ext_set_property *props, uint32_t *index,
+                  enum drm_xe_eu_stall_property_id prop_id, uint64_t value)
+{
+   xe_prop_set(props, index, (uint32_t)prop_id, value);
 }
 
 int
@@ -337,7 +351,7 @@ xe_perf_stream_read_error(int perf_stream_fd, uint8_t *buffer)
    else if (status.oa_status & DRM_XE_OASTATUS_MMIO_TRG_Q_FULL)
       header->type = INTEL_PERF_RECORD_TYPE_MMIO_TRG_Q_FULL;
    else
-      unreachable("missing");
+      UNREACHABLE("missing");
 
    return header->type ? header->size : -1;
 }
@@ -417,9 +431,9 @@ xe_perf_eustall_stream_open(int drm_fd, uint32_t sample_rate,
    int gt_id = first_rendering_gt_id(drm_fd);
    assert(gt_id >= 0);
 
-   oa_prop_set(props, &i, DRM_XE_EU_STALL_PROP_SAMPLE_RATE, sample_rate);
-   oa_prop_set(props, &i, DRM_XE_EU_STALL_PROP_WAIT_NUM_REPORTS, min_event_count);
-   oa_prop_set(props, &i, DRM_XE_EU_STALL_PROP_GT_ID, gt_id);
+   eu_stall_prop_set(props, &i, DRM_XE_EU_STALL_PROP_SAMPLE_RATE, sample_rate);
+   eu_stall_prop_set(props, &i, DRM_XE_EU_STALL_PROP_WAIT_NUM_REPORTS, min_event_count);
+   eu_stall_prop_set(props, &i, DRM_XE_EU_STALL_PROP_GT_ID, gt_id);
 
    fd = intel_ioctl(drm_fd, DRM_IOCTL_XE_OBSERVATION, &observation_param);
    if (fd < 0)

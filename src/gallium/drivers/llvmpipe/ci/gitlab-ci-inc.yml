@@ -76,6 +76,7 @@
     LIBGL_ALWAYS_SOFTWARE: "true"
     GALLIUM_DRIVER: "llvmpipe"
     FLAKES_CHANNEL: "#mesa-swrast-ci"
+    DRIVER_NAME: llvmpipe
     GPU_VERSION: llvmpipe
 
 .llvmpipe-piglit-cl:

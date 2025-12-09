@@ -57,7 +57,7 @@ void
 intel_measure_init(struct intel_measure_device *device)
 {
    static bool once = false;
-   const char *env = getenv("INTEL_MEASURE");
+   const char *env = os_get_option("INTEL_MEASURE");
    if (unlikely(!once)) {
       once = true;
       memset(&config, 0, sizeof(struct intel_measure_config));

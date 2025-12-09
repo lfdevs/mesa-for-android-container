@@ -18,7 +18,6 @@
 struct radv_device;
 struct radv_graphics_state_key;
 struct radv_pipeline;
-struct radv_pipeline_layout;
 struct radv_ray_tracing_group;
 struct radv_ray_tracing_pipeline;
 struct radv_graphics_pipeline;
@@ -54,7 +53,7 @@ void radv_ray_tracing_pipeline_cache_insert(struct radv_device *device, struct v
                                             struct radv_ray_tracing_pipeline *pipeline, unsigned num_stages);
 
 nir_shader *radv_pipeline_cache_lookup_nir(struct radv_device *device, struct vk_pipeline_cache *cache,
-                                           gl_shader_stage stage, const blake3_hash key);
+                                           mesa_shader_stage stage, const blake3_hash key);
 
 void radv_pipeline_cache_insert_nir(struct radv_device *device, struct vk_pipeline_cache *cache, const blake3_hash key,
                                     const nir_shader *nir);

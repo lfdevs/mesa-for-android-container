@@ -46,12 +46,6 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
     * one created earlier
     */
    if ((flags & TC_FLUSH_ASYNC) && fencep) {
-      /* We don't currently expect async+flush in the fence-fd
-       * case.. for that to work properly we'd need TC to tell
-       * us in the create_fence callback that it needs an fd.
-       */
-      assert(!(flags & PIPE_FLUSH_FENCE_FD));
-
       fd_pipe_fence_set_batch(*fencep, batch);
       fd_pipe_fence_ref(&batch->fence, *fencep);
 
@@ -127,6 +121,9 @@ out:
 
    u_trace_context_process(&ctx->trace_context,
                            !!(flags & PIPE_FLUSH_END_OF_FRAME));
+
+   if (FD_DBG(ABORT))
+      assert(pctx->get_device_reset_status(pctx) == PIPE_NO_RESET);
 }
 
 static void
@@ -718,7 +715,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
    slab_create_child(&ctx->transfer_pool, &screen->transfer_pool);
    slab_create_child(&ctx->transfer_pool_unsync, &screen->transfer_pool);
 
-   util_dynarray_init(&ctx->global_bindings, NULL);
+   ctx->global_bindings = UTIL_DYNARRAY_INIT;
 
    fd_draw_init(pctx);
    fd_resource_context_init(pctx);

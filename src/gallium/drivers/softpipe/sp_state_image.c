@@ -27,7 +27,7 @@
 #include "sp_buffer.h"
 
 static void softpipe_set_shader_images(struct pipe_context *pipe,
-                                       enum pipe_shader_type shader,
+                                       mesa_shader_stage shader,
                                        unsigned start,
                                        unsigned num,
                                        unsigned unbind_num_trailing_slots,
@@ -35,7 +35,7 @@ static void softpipe_set_shader_images(struct pipe_context *pipe,
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
    unsigned i;
-   assert(shader < PIPE_SHADER_TYPES);
+   assert(shader < MESA_SHADER_STAGES);
    assert(start + num <= ARRAY_SIZE(softpipe->sampler_views[shader]));
 
    /* set the new images */
@@ -61,7 +61,7 @@ static void softpipe_set_shader_images(struct pipe_context *pipe,
 }
 
 static void softpipe_set_shader_buffers(struct pipe_context *pipe,
-                                        enum pipe_shader_type shader,
+                                        mesa_shader_stage shader,
                                         unsigned start,
                                         unsigned num,
                                         const struct pipe_shader_buffer *buffers,
@@ -69,7 +69,7 @@ static void softpipe_set_shader_buffers(struct pipe_context *pipe,
 {
    struct softpipe_context *softpipe = softpipe_context(pipe);
    unsigned i;
-   assert(shader < PIPE_SHADER_TYPES);
+   assert(shader < MESA_SHADER_STAGES);
    assert(start + num <= ARRAY_SIZE(softpipe->buffers[shader]));
 
    /* set the new images */

@@ -143,7 +143,7 @@ elk_fs_visitor::opt_peephole_sel()
 
       elk_bblock_t *then_block = block->next();
       elk_bblock_t *else_block = NULL;
-      foreach_list_typed(elk_bblock_link, child, link, &block->children) {
+      brw_foreach_list_typed(elk_bblock_link, child, link, &block->children) {
          if (child->block != then_block) {
             if (child->block->prev()->end()->opcode == ELK_OPCODE_ELSE) {
                else_block = child->block;

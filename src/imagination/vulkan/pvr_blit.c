@@ -28,14 +28,20 @@
 #include <vulkan/vulkan.h>
 
 #include "pvr_blit.h"
+#include "pvr_buffer.h"
 #include "pvr_clear.h"
+#include "pvr_cmd_buffer.h"
 #include "pvr_csb.h"
+#include "pvr_device.h"
+#include "pvr_entrypoints.h"
 #include "pvr_formats.h"
+#include "pvr_hw_pass.h"
+#include "pvr_image.h"
 #include "pvr_job_transfer.h"
-#include "pvr_private.h"
-#include "usc/programs/pvr_shader_factory.h"
-#include "usc/programs/pvr_static_shaders.h"
+#include "pvr_pass.h"
+#include "pvr_physical_device.h"
 #include "pvr_types.h"
+#include "pvr_usc.h"
 #include "util/bitscan.h"
 #include "util/list.h"
 #include "util/macros.h"
@@ -48,6 +54,17 @@
 
 /* TODO: Investigate where this limit comes from. */
 #define PVR_MAX_TRANSFER_SIZE_IN_TEXELS 2048U
+#define PVR_RESOLVE_DEFAULT PVR_RESOLVE_BLEND
+
+static inline void
+pvr_transfer_cmd_init_default(struct pvr_cmd_buffer *cmd_buffer,
+                              struct pvr_transfer_cmd *transfer_cmd)
+{
+   transfer_cmd->sources[0].filter = PVR_FILTER_POINT;
+   transfer_cmd->sources[0].resolve_op = PVR_RESOLVE_DEFAULT;
+   transfer_cmd->sources[0].addr_mode = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
+   transfer_cmd->cmd_buffer = cmd_buffer;
+}
 
 static struct pvr_transfer_cmd *
 pvr_transfer_cmd_alloc(struct pvr_cmd_buffer *cmd_buffer)
@@ -64,10 +81,7 @@ pvr_transfer_cmd_alloc(struct pvr_cmd_buffer *cmd_buffer)
    }
 
    /* transfer_cmd->mapping_count is already set to zero. */
-   transfer_cmd->sources[0].filter = PVR_FILTER_POINT;
-   transfer_cmd->sources[0].resolve_op = PVR_RESOLVE_BLEND;
-   transfer_cmd->sources[0].addr_mode = ROGUE_TEXSTATE_ADDRMODE_CLAMP_TO_EDGE;
-   transfer_cmd->cmd_buffer = cmd_buffer;
+   pvr_transfer_cmd_init_default(cmd_buffer, transfer_cmd);
 
    return transfer_cmd;
 }
@@ -136,7 +150,7 @@ VkFormat pvr_get_raw_copy_format(VkFormat format)
    case 16:
       return VK_FORMAT_R32G32B32A32_UINT;
    default:
-      unreachable("Unhandled copy block size.");
+      UNREACHABLE("Unhandled copy block size.");
    }
 }
 
@@ -214,9 +228,9 @@ static void pvr_setup_transfer_surface(struct pvr_device *device,
 void pvr_CmdBlitImage2(VkCommandBuffer commandBuffer,
                        const VkBlitImageInfo2 *pBlitImageInfo)
 {
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
-   PVR_FROM_HANDLE(pvr_image, src, pBlitImageInfo->srcImage);
-   PVR_FROM_HANDLE(pvr_image, dst, pBlitImageInfo->dstImage);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_image, src, pBlitImageInfo->srcImage);
+   VK_FROM_HANDLE(pvr_image, dst, pBlitImageInfo->dstImage);
    struct pvr_device *device = cmd_buffer->device;
    enum pvr_filter filter = PVR_FILTER_DONTCARE;
 
@@ -427,6 +441,7 @@ static VkFormat pvr_get_copy_format(VkFormat format)
    case VK_FORMAT_R8_SNORM:
       return VK_FORMAT_R8_SINT;
    case VK_FORMAT_R8G8_SNORM:
+   case VK_FORMAT_R8G8_SSCALED:
       return VK_FORMAT_R8G8_SINT;
    case VK_FORMAT_R8G8B8_SNORM:
       return VK_FORMAT_R8G8B8_SINT;
@@ -485,7 +500,8 @@ pvr_copy_or_resolve_image_region(struct pvr_cmd_buffer *cmd_buffer,
                                  enum pvr_resolve_op resolve_op,
                                  const struct pvr_image *src,
                                  const struct pvr_image *dst,
-                                 const VkImageCopy2 *region)
+                                 const VkImageCopy2 *region,
+                                 struct pvr_transfer_cmd *ds_transfer_cmd)
 {
    enum pipe_format src_pformat = vk_format_to_pipe_format(src->vk.format);
    enum pipe_format dst_pformat = vk_format_to_pipe_format(dst->vk.format);
@@ -514,6 +530,19 @@ pvr_copy_or_resolve_image_region(struct pvr_cmd_buffer *cmd_buffer,
           */
          flags |= PVR_TRANSFER_CMD_FLAGS_PICKD;
       }
+   }
+
+   if (src->vk.samples > 1U && dst->vk.samples < 2U) {
+      /* Blend is not defined for integer formats */
+      if (resolve_op == PVR_RESOLVE_BLEND && vk_format_is_int(src->vk.format)) {
+         /* Override for either color or DS */
+         resolve_op = PVR_RESOLVE_SAMPLE0;
+      }
+   } else {
+      assert(!ds_transfer_cmd ||
+             ds_transfer_cmd->sources[0].resolve_op == PVR_RESOLVE_DEFAULT);
+      /* Override for either color or DS */
+      resolve_op = PVR_RESOLVE_DEFAULT;
    }
 
    src_extent = region->extent;
@@ -564,8 +593,11 @@ pvr_copy_or_resolve_image_region(struct pvr_cmd_buffer *cmd_buffer,
       if (!transfer_cmd)
          return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-      transfer_cmd->flags |= flags;
+      if (ds_transfer_cmd)
+         memcpy(transfer_cmd, ds_transfer_cmd, sizeof(*transfer_cmd));
+
       transfer_cmd->sources[0].resolve_op = resolve_op;
+      transfer_cmd->flags |= flags;
 
       pvr_setup_surface_for_image(
          cmd_buffer->device,
@@ -614,19 +646,39 @@ pvr_copy_or_resolve_color_image_region(struct pvr_cmd_buffer *cmd_buffer,
                                        const struct pvr_image *dst,
                                        const VkImageCopy2 *region)
 {
-   enum pvr_resolve_op resolve_op = PVR_RESOLVE_BLEND;
+   return pvr_copy_or_resolve_image_region(cmd_buffer,
+                                           PVR_RESOLVE_DEFAULT,
+                                           src,
+                                           dst,
+                                           region,
+                                           NULL);
+}
 
-   if (src->vk.samples > 1U && dst->vk.samples < 2U) {
-      /* Integer resolve picks a single sample. */
-      if (vk_format_is_int(src->vk.format))
-         resolve_op = PVR_RESOLVE_SAMPLE0;
+VkResult pvr_copy_or_resolve_depth_stencil_region(
+   struct pvr_cmd_buffer *cmd_buffer,
+   const struct pvr_image *src_image,
+   const struct pvr_image *dst_image,
+   int resolve_op,
+   bool clear_complement,
+   const VkClearDepthStencilValue *ds_clear_values,
+   const VkImageCopy2 *region)
+{
+   struct pvr_transfer_cmd transfer_cmd = { 0 };
+
+   pvr_transfer_cmd_init_default(cmd_buffer, &transfer_cmd);
+
+   if (clear_complement) {
+      transfer_cmd.clear_color[1].ui = ds_clear_values->stencil;
+      transfer_cmd.clear_color[0].f = ds_clear_values->depth;
+      transfer_cmd.flags |= PVR_TRANSFER_CMD_FLAGS_FILL;
    }
 
    return pvr_copy_or_resolve_image_region(cmd_buffer,
                                            resolve_op,
-                                           src,
-                                           dst,
-                                           region);
+                                           src_image,
+                                           dst_image,
+                                           region,
+                                           &transfer_cmd);
 }
 
 static bool pvr_can_merge_ds_regions(const VkImageCopy2 *pRegionA,
@@ -695,9 +747,9 @@ static bool pvr_can_merge_ds_regions(const VkImageCopy2 *pRegionA,
 void pvr_CmdCopyImage2(VkCommandBuffer commandBuffer,
                        const VkCopyImageInfo2 *pCopyImageInfo)
 {
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
-   PVR_FROM_HANDLE(pvr_image, src, pCopyImageInfo->srcImage);
-   PVR_FROM_HANDLE(pvr_image, dst, pCopyImageInfo->dstImage);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_image, src, pCopyImageInfo->srcImage);
+   VK_FROM_HANDLE(pvr_image, dst, pCopyImageInfo->dstImage);
 
    const bool can_merge_ds = src->vk.format == VK_FORMAT_D24_UNORM_S8_UINT &&
                              dst->vk.format == VK_FORMAT_D24_UNORM_S8_UINT;
@@ -824,6 +876,7 @@ pvr_copy_buffer_to_image_region_format(struct pvr_cmd_buffer *const cmd_buffer,
             region->imageExtent.height,
             row_length_in_texels);
 
+         transfer_cmd->sources[0].surface.sample_count = image->vk.samples;
          transfer_cmd->sources[0].surface.depth = 1;
          transfer_cmd->source_count = 1;
 
@@ -853,7 +906,7 @@ pvr_copy_buffer_to_image_region_format(struct pvr_cmd_buffer *const cmd_buffer,
    return VK_SUCCESS;
 }
 
-VkResult
+static VkResult
 pvr_copy_buffer_to_image_region(struct pvr_cmd_buffer *const cmd_buffer,
                                 const pvr_dev_addr_t buffer_dev_addr,
                                 const struct pvr_image *const image,
@@ -863,6 +916,12 @@ pvr_copy_buffer_to_image_region(struct pvr_cmd_buffer *const cmd_buffer,
    VkFormat src_format;
    VkFormat dst_format;
    uint32_t flags = 0;
+
+   /* From the Vulkan spec:
+    *
+    *    dstImage must have a sample count equal to VK_SAMPLE_COUNT_1_BIT
+    */
+   assert(image->vk.samples == VK_SAMPLE_COUNT_1_BIT);
 
    if (vk_format_has_depth(image->vk.format) &&
        vk_format_has_stencil(image->vk.format)) {
@@ -894,9 +953,9 @@ void pvr_CmdCopyBufferToImage2(
    VkCommandBuffer commandBuffer,
    const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo)
 {
-   PVR_FROM_HANDLE(pvr_buffer, src, pCopyBufferToImageInfo->srcBuffer);
-   PVR_FROM_HANDLE(pvr_image, dst, pCopyBufferToImageInfo->dstImage);
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_buffer, src, pCopyBufferToImageInfo->srcBuffer);
+   VK_FROM_HANDLE(pvr_image, dst, pCopyBufferToImageInfo->dstImage);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
 
@@ -930,9 +989,6 @@ pvr_copy_image_to_buffer_region_format(struct pvr_cmd_buffer *const cmd_buffer,
    uint32_t max_depth_slice;
    VkSubresourceLayout info;
 
-   /* Only images with VK_SAMPLE_COUNT_1_BIT can be copied to buffer. */
-   assert(image->vk.samples == 1);
-
    if (region->bufferRowLength == 0)
       buffer_row_length = region->imageExtent.width;
    else
@@ -964,6 +1020,7 @@ pvr_copy_image_to_buffer_region_format(struct pvr_cmd_buffer *const cmd_buffer,
 
    dst_rect.extent.width = region->imageExtent.width;
    dst_rect.extent.height = region->imageExtent.height;
+   dst_surface.sample_count = image->vk.samples;
 
    if (util_format_is_compressed(pformat)) {
       uint32_t block_width = util_format_get_blockwidth(pformat);
@@ -1042,7 +1099,7 @@ pvr_copy_image_to_buffer_region_format(struct pvr_cmd_buffer *const cmd_buffer,
    return VK_SUCCESS;
 }
 
-VkResult
+static VkResult
 pvr_copy_image_to_buffer_region(struct pvr_cmd_buffer *const cmd_buffer,
                                 const struct pvr_image *const image,
                                 const pvr_dev_addr_t buffer_dev_addr,
@@ -1053,11 +1110,23 @@ pvr_copy_image_to_buffer_region(struct pvr_cmd_buffer *const cmd_buffer,
    VkFormat src_format = pvr_get_copy_format(image->vk.format);
    VkFormat dst_format;
 
-   /* Color and depth aspect copies can be done using an appropriate raw format.
+   /* From the Vulkan spec:
+    *
+    *    srcImage must have a sample count equal to VK_SAMPLE_COUNT_1_BIT
+    */
+   assert(image->vk.samples == VK_SAMPLE_COUNT_1_BIT);
+
+   /* Color and depth aspect copies can nearly all be done using an appropriate
+    * raw format.
     */
    if (aspect_mask & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT)) {
-      src_format = pvr_get_raw_copy_format(src_format);
-      dst_format = src_format;
+      if (src_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+         dst_format = VK_FORMAT_D32_SFLOAT;
+      } else {
+         src_format = pvr_get_raw_copy_format(src_format);
+
+         dst_format = src_format;
+      }
    } else if (aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT) {
       /* From the Vulkan spec:
        *
@@ -1082,9 +1151,9 @@ void pvr_CmdCopyImageToBuffer2(
    VkCommandBuffer commandBuffer,
    const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo)
 {
-   PVR_FROM_HANDLE(pvr_buffer, dst, pCopyImageToBufferInfo->dstBuffer);
-   PVR_FROM_HANDLE(pvr_image, src, pCopyImageToBufferInfo->srcImage);
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_buffer, dst, pCopyImageToBufferInfo->dstBuffer);
+   VK_FROM_HANDLE(pvr_image, src, pCopyImageToBufferInfo->srcImage);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
 
@@ -1183,8 +1252,8 @@ void pvr_CmdClearColorImage(VkCommandBuffer commandBuffer,
                             uint32_t rangeCount,
                             const VkImageSubresourceRange *pRanges)
 {
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
-   PVR_FROM_HANDLE(pvr_image, image, _image);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_image, image, _image);
 
    for (uint32_t i = 0; i < rangeCount; i++) {
       const VkResult result =
@@ -1194,16 +1263,12 @@ void pvr_CmdClearColorImage(VkCommandBuffer commandBuffer,
    }
 }
 
-void pvr_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer,
-                                   VkImage _image,
-                                   VkImageLayout imageLayout,
+void pvr_clear_depth_stencil_image(struct pvr_cmd_buffer *cmd_buffer,
+                                   const struct pvr_image *image,
                                    const VkClearDepthStencilValue *pDepthStencil,
                                    uint32_t rangeCount,
                                    const VkImageSubresourceRange *pRanges)
 {
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
-   PVR_FROM_HANDLE(pvr_image, image, _image);
-
    for (uint32_t i = 0; i < rangeCount; i++) {
       const VkImageAspectFlags ds_aspect = VK_IMAGE_ASPECT_DEPTH_BIT |
                                            VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -1211,7 +1276,7 @@ void pvr_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer,
       uint32_t flags = 0U;
       VkResult result;
 
-      if (image->vk.format == VK_FORMAT_D24_UNORM_S8_UINT &&
+      if (vk_format_aspects(image->vk.format) == ds_aspect &&
           pRanges[i].aspectMask != ds_aspect) {
          /* A depth or stencil blit to a packed_depth_stencil requires a merge
           * operation.
@@ -1230,6 +1295,23 @@ void pvr_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer,
       if (result != VK_SUCCESS)
          return;
    }
+}
+
+void pvr_CmdClearDepthStencilImage(VkCommandBuffer commandBuffer,
+                                   VkImage _image,
+                                   VkImageLayout imageLayout,
+                                   const VkClearDepthStencilValue *pDepthStencil,
+                                   uint32_t rangeCount,
+                                   const VkImageSubresourceRange *pRanges)
+{
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_image, image, _image);
+
+   pvr_clear_depth_stencil_image(cmd_buffer,
+                                 image,
+                                 pDepthStencil,
+                                 rangeCount,
+                                 pRanges);
 }
 
 static VkResult pvr_cmd_copy_buffer_region(struct pvr_cmd_buffer *cmd_buffer,
@@ -1342,8 +1424,8 @@ void pvr_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
                          VkDeviceSize dataSize,
                          const void *pData)
 {
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
-   PVR_FROM_HANDLE(pvr_buffer, dst, dstBuffer);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_buffer, dst, dstBuffer);
    struct pvr_suballoc_bo *pvr_bo;
    VkResult result;
 
@@ -1366,9 +1448,9 @@ void pvr_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
 void pvr_CmdCopyBuffer2(VkCommandBuffer commandBuffer,
                         const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
-   PVR_FROM_HANDLE(pvr_buffer, src, pCopyBufferInfo->srcBuffer);
-   PVR_FROM_HANDLE(pvr_buffer, dst, pCopyBufferInfo->dstBuffer);
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_buffer, src, pCopyBufferInfo->srcBuffer);
+   VK_FROM_HANDLE(pvr_buffer, dst, pCopyBufferInfo->dstBuffer);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
 
@@ -1393,8 +1475,8 @@ void pvr_CmdFillBuffer(VkCommandBuffer commandBuffer,
                        VkDeviceSize fillSize,
                        uint32_t data)
 {
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
-   PVR_FROM_HANDLE(pvr_buffer, dst, dstBuffer);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_buffer, dst, dstBuffer);
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
 
@@ -1490,10 +1572,11 @@ pvr_get_max_layers_covering_target(VkRect2D target_rect,
  */
 static inline bool
 pvr_clear_needs_rt_id_output(struct pvr_device_info *dev_info,
+                             bool multiview_enabled,
                              uint32_t rect_count,
                              const VkClearRect *rects)
 {
-   if (!PVR_HAS_FEATURE(dev_info, gs_rta_support))
+   if (!PVR_HAS_FEATURE(dev_info, gs_rta_support) || multiview_enabled)
       return false;
 
    for (uint32_t i = 0; i < rect_count; i++) {
@@ -1506,75 +1589,45 @@ pvr_clear_needs_rt_id_output(struct pvr_device_info *dev_info,
 
 static VkResult pvr_clear_color_attachment_static_create_consts_buffer(
    struct pvr_cmd_buffer *cmd_buffer,
-   const struct pvr_shader_factory_info *shader_info,
+   const struct pvr_clear_attach_props *props,
    const uint32_t clear_color[static const PVR_CLEAR_COLOR_ARRAY_SIZE],
-   ASSERTED bool uses_tile_buffer,
+   bool uses_tile_buffer,
    uint32_t tile_buffer_idx,
    struct pvr_suballoc_bo **const const_shareds_buffer_out)
 {
    struct pvr_device *device = cmd_buffer->device;
    struct pvr_suballoc_bo *const_shareds_buffer;
    struct pvr_bo *tile_buffer;
-   uint64_t tile_dev_addr;
+   uint64_t tile_dev_addr = 0;
    uint32_t *buffer;
    VkResult result;
 
    /* TODO: This doesn't need to be aligned to slc size. Alignment to 4 is fine.
     * Change pvr_cmd_buffer_alloc_mem() to take in an alignment?
     */
-   result =
-      pvr_cmd_buffer_alloc_mem(cmd_buffer,
-                               device->heaps.general_heap,
-                               PVR_DW_TO_BYTES(shader_info->const_shared_regs),
-                               &const_shareds_buffer);
+   /* TODO: only allocate what's needed, not always
+    * _PVR_CLEAR_ATTACH_DATA_COUNT? */
+   result = pvr_cmd_buffer_alloc_mem(cmd_buffer,
+                                     device->heaps.general_heap,
+                                     _PVR_CLEAR_ATTACH_DATA_COUNT,
+                                     &const_shareds_buffer);
    if (result != VK_SUCCESS)
       return result;
 
    buffer = pvr_bo_suballoc_get_map_addr(const_shareds_buffer);
 
-   for (uint32_t i = 0; i < PVR_CLEAR_ATTACHMENT_CONST_COUNT; i++) {
-      uint32_t dest_idx = shader_info->driver_const_location_map[i];
+   buffer[PVR_CLEAR_ATTACH_DATA_DWORD0] = clear_color[0];
+   buffer[PVR_CLEAR_ATTACH_DATA_DWORD1] = clear_color[1];
+   buffer[PVR_CLEAR_ATTACH_DATA_DWORD2] = clear_color[2];
+   buffer[PVR_CLEAR_ATTACH_DATA_DWORD3] = clear_color[3];
 
-      if (dest_idx == PVR_CLEAR_ATTACHMENT_DEST_ID_UNUSED)
-         continue;
-
-      assert(dest_idx < shader_info->const_shared_regs);
-
-      switch (i) {
-      case PVR_CLEAR_ATTACHMENT_CONST_COMPONENT_0:
-      case PVR_CLEAR_ATTACHMENT_CONST_COMPONENT_1:
-      case PVR_CLEAR_ATTACHMENT_CONST_COMPONENT_2:
-      case PVR_CLEAR_ATTACHMENT_CONST_COMPONENT_3:
-         buffer[dest_idx] = clear_color[i];
-         break;
-
-      case PVR_CLEAR_ATTACHMENT_CONST_TILE_BUFFER_UPPER:
-         assert(uses_tile_buffer);
-         tile_buffer = device->tile_buffer_state.buffers[tile_buffer_idx];
-         tile_dev_addr = tile_buffer->vma->dev_addr.addr;
-         buffer[dest_idx] = (uint32_t)(tile_dev_addr >> 32);
-         break;
-
-      case PVR_CLEAR_ATTACHMENT_CONST_TILE_BUFFER_LOWER:
-         assert(uses_tile_buffer);
-         tile_buffer = device->tile_buffer_state.buffers[tile_buffer_idx];
-         tile_dev_addr = tile_buffer->vma->dev_addr.addr;
-         buffer[dest_idx] = (uint32_t)tile_dev_addr;
-         break;
-
-      default:
-         unreachable("Unsupported clear attachment const type.");
-      }
+   if (uses_tile_buffer) {
+      tile_buffer = device->tile_buffer_state.buffers[tile_buffer_idx];
+      tile_dev_addr = tile_buffer->vma->dev_addr.addr;
    }
 
-   for (uint32_t i = 0; i < shader_info->num_static_const; i++) {
-      const struct pvr_static_buffer *static_buff =
-         &shader_info->static_const_buffer[i];
-
-      assert(static_buff->dst_idx < shader_info->const_shared_regs);
-
-      buffer[static_buff->dst_idx] = static_buff->value;
-   }
+   buffer[PVR_CLEAR_ATTACH_DATA_TILE_ADDR_LO] = tile_dev_addr & 0xffffffff;
+   buffer[PVR_CLEAR_ATTACH_DATA_TILE_ADDR_HI] = tile_dev_addr >> 32;
 
    *const_shareds_buffer_out = const_shareds_buffer;
 
@@ -1595,13 +1648,12 @@ static VkResult pvr_clear_color_attachment_static(
    ASSERTED const bool has_eight_output_registers =
       PVR_HAS_FEATURE(dev_info, eight_output_registers);
    const struct pvr_device_static_clear_state *dev_clear_state =
-      &device->static_clear_state;
+      device->static_clear_state;
    const bool uses_tile_buffer = mrt_resource->type ==
                                  USC_MRT_RESOURCE_TYPE_MEMORY;
    const struct pvr_pds_clear_attachment_program_info *clear_attachment_program;
    struct pvr_pds_pixel_shader_sa_program texture_program;
-   uint32_t pds_state[PVR_STATIC_CLEAR_PDS_STATE_COUNT];
-   const struct pvr_shader_factory_info *shader_info;
+   uint32_t pds_state[PVR_PDS_STATE_LENGTH];
    struct pvr_suballoc_bo *pds_texture_program_bo;
    struct pvr_static_clear_ppp_template template;
    struct pvr_suballoc_bo *const_shareds_buffer;
@@ -1626,15 +1678,17 @@ static VkResult pvr_clear_color_attachment_static(
 
    assert(has_eight_output_registers || out_reg_count + output_offset <= 4);
 
-   program_idx = pvr_get_clear_attachment_program_index(out_reg_count,
-                                                        output_offset,
-                                                        uses_tile_buffer);
+   struct pvr_clear_attach_props props = {
+      .dword_count = out_reg_count,
+      .offset = output_offset,
+      .uses_tile_buffer = uses_tile_buffer,
+   };
 
-   shader_info = clear_attachment_collection[program_idx].info;
+   program_idx = pvr_uscgen_clear_attach_index(&props);
 
    result = pvr_clear_color_attachment_static_create_consts_buffer(
       cmd_buffer,
-      shader_info,
+      &props,
       clear_color,
       uses_tile_buffer,
       tile_buffer_idx,
@@ -1642,20 +1696,18 @@ static VkResult pvr_clear_color_attachment_static(
    if (result != VK_SUCCESS)
       return result;
 
-   /* clang-format off */
-   texture_program = (struct pvr_pds_pixel_shader_sa_program){
-      .num_texture_dma_kicks = 1,
-      .texture_dma_address = {
-         [0] = const_shareds_buffer->dev_addr.addr,
-      }
-   };
-   /* clang-format on */
+   texture_program =
+      (struct pvr_pds_pixel_shader_sa_program){ .num_texture_dma_kicks = 1,
+                                                .texture_dma_address = {
+                                                   [0] = const_shareds_buffer
+                                                            ->dev_addr.addr,
+                                                } };
 
    pvr_csb_pack (&texture_program.texture_dma_control[0],
                  PDSINST_DOUT_FIELDS_DOUTD_SRC1,
                  doutd_src1) {
       doutd_src1.dest = ROGUE_PDSINST_DOUTD_DEST_COMMON_STORE;
-      doutd_src1.bsize = shader_info->const_shared_regs;
+      doutd_src1.bsize = _PVR_CLEAR_ATTACH_DATA_COUNT;
    }
 
    clear_attachment_program =
@@ -1713,7 +1765,7 @@ static VkResult pvr_clear_color_attachment_static(
                  TA_STATE_PDS_SIZEINFO2,
                  sizeinfo2) {
       sizeinfo2.usc_sharedsize =
-         DIV_ROUND_UP(shader_info->const_shared_regs,
+         DIV_ROUND_UP(_PVR_CLEAR_ATTACH_DATA_COUNT,
                       ROGUE_TA_STATE_PDS_SIZEINFO2_USC_SHAREDSIZE_UNIT_SIZE);
    }
 
@@ -1728,7 +1780,7 @@ static VkResult pvr_clear_color_attachment_static(
 
    assert(template_idx < PVR_STATIC_CLEAR_VARIANT_COUNT);
    template =
-      cmd_buffer->device->static_clear_state.ppp_templates[template_idx];
+      cmd_buffer->device->static_clear_state->ppp_templates[template_idx];
 
    template.config.pds_state = &pds_state;
 
@@ -1915,8 +1967,10 @@ static void pvr_clear_attachments(struct pvr_cmd_buffer *cmd_buffer,
    /* We'll be emitting to the control stream. */
    sub_cmd->empty_cmd = false;
 
-   vs_has_rt_id_output =
-      pvr_clear_needs_rt_id_output(dev_info, rect_count, rects);
+   vs_has_rt_id_output = pvr_clear_needs_rt_id_output(dev_info,
+                                                      pass->multiview_enabled,
+                                                      rect_count,
+                                                      rects);
 
    /* 4 because we're expecting the USC to output X, Y, Z, and W. */
    vs_output_size_in_bytes = PVR_DW_TO_BYTES(4);
@@ -2014,7 +2068,7 @@ static void pvr_clear_attachments(struct pvr_cmd_buffer *cmd_buffer,
 
          assert(template_idx < PVR_STATIC_CLEAR_VARIANT_COUNT);
          template =
-            cmd_buffer->device->static_clear_state.ppp_templates[template_idx];
+            cmd_buffer->device->static_clear_state->ppp_templates[template_idx];
 
          if (attachment->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
             /* clang-format off */
@@ -2048,7 +2102,7 @@ static void pvr_clear_attachments(struct pvr_cmd_buffer *cmd_buffer,
 
       if (vs_has_rt_id_output) {
          const struct pvr_device_static_clear_state *dev_clear_state =
-            &cmd_buffer->device->static_clear_state;
+            cmd_buffer->device->static_clear_state;
          const struct pvr_suballoc_bo *multi_layer_vert_bo =
             dev_clear_state->usc_multi_layer_vertex_shader_bo;
 
@@ -2074,15 +2128,15 @@ static void pvr_clear_attachments(struct pvr_cmd_buffer *cmd_buffer,
           */
          pvr_pds_clear_vertex_shader_program_init_base(
             &pds_program,
-            cmd_buffer->device->static_clear_state.usc_vertex_shader_bo);
+            cmd_buffer->device->static_clear_state->usc_vertex_shader_bo);
 
          pds_program_upload.code_offset =
-            cmd_buffer->device->static_clear_state.pds.code_offset;
+            cmd_buffer->device->static_clear_state->pds.code_offset;
          /* TODO: The code size doesn't get used by pvr_clear_vdm_state() maybe
           * let's change its interface to make that clear and not set this?
           */
          pds_program_upload.code_size =
-            cmd_buffer->device->static_clear_state.pds.code_size;
+            cmd_buffer->device->static_clear_state->pds.code_size;
       }
 
       for (uint32_t j = 0; j < rect_count; j++) {
@@ -2102,8 +2156,7 @@ static void pvr_clear_attachments(struct pvr_cmd_buffer *cmd_buffer,
             if (result != VK_SUCCESS)
                return;
 
-            if (clear_rect->baseArrayLayer != 0)
-               continue;
+            continue;
          }
 
          /* TODO: Allocate all the buffers in one go before the loop, and add
@@ -2208,7 +2261,7 @@ void pvr_CmdClearAttachments(VkCommandBuffer commandBuffer,
                              uint32_t rectCount,
                              const VkClearRect *pRects)
 {
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    struct pvr_cmd_buffer_state *state = &cmd_buffer->state;
    struct pvr_sub_cmd_gfx *sub_cmd = &state->current_sub_cmd->gfx;
 
@@ -2282,9 +2335,9 @@ void pvr_CmdClearAttachments(VkCommandBuffer commandBuffer,
 void pvr_CmdResolveImage2(VkCommandBuffer commandBuffer,
                           const VkResolveImageInfo2 *pResolveImageInfo)
 {
-   PVR_FROM_HANDLE(pvr_image, src, pResolveImageInfo->srcImage);
-   PVR_FROM_HANDLE(pvr_image, dst, pResolveImageInfo->dstImage);
-   PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
+   VK_FROM_HANDLE(pvr_image, src, pResolveImageInfo->srcImage);
+   VK_FROM_HANDLE(pvr_image, dst, pResolveImageInfo->dstImage);
+   VK_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
 

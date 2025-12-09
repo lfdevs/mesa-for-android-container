@@ -215,7 +215,7 @@ pixel_storei(GLenum pname, GLint param, bool no_error)
          if (!no_error)
             goto invalid_enum_error;
          else
-            unreachable("invalid pixel store enum");
+            UNREACHABLE("invalid pixel store enum");
    }
 
    return;

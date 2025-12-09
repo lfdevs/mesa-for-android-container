@@ -26,10 +26,7 @@
  **************************************************************************/
 
 
-#include "util/u_debug.h"
-
 #include "lp_bld_type.h"
-#include "lp_bld_debug.h"
 #include "lp_bld_const.h"
 #include "lp_bld_bitarit.h"
 #include "lp_bld_intr.h"

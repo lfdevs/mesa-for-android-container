@@ -27,7 +27,7 @@
 #include "vk_common_entrypoints.h"
 #include "vk_util.h"
 
-#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
+#if defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26
 #include <vndk/hardware_buffer.h>
 #endif
 
@@ -56,7 +56,7 @@ vk_device_memory_create(struct vk_device *device,
       }
 
       case VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID: {
-#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
+#if defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26
          const VkImportAndroidHardwareBufferInfoANDROID *ahb_info = (void *)ext;
 
          assert(mem->import_handle_type == 0);
@@ -79,8 +79,8 @@ vk_device_memory_create(struct vk_device *device,
          mem->ahardware_buffer = ahb_info->buffer;
          break;
 #else
-         unreachable("AHardwareBuffer import requires Android >= 26");
-#endif /* DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26 */
+         UNREACHABLE("AHardwareBuffer import requires Android >= 26");
+#endif /* defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26 */
       }
 
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR: {
@@ -122,7 +122,7 @@ vk_device_memory_create(struct vk_device *device,
          }
          break;
 #else
-         unreachable("Win32 platform support disabled");
+         UNREACHABLE("Win32 platform support disabled");
 #endif
       }
 
@@ -182,15 +182,15 @@ vk_device_memory_destroy(struct vk_device *device,
                          struct vk_device_memory *mem)
 {
 
-#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
+#if defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26
    if (mem->ahardware_buffer)
       AHardwareBuffer_release(mem->ahardware_buffer);
-#endif /* DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26 */
+#endif /* defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26 */
 
    vk_object_free(device, alloc, mem);
 }
 
-#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 26
+#if defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26
 VkResult
 vk_common_GetMemoryAndroidHardwareBufferANDROID(
    VkDevice _device,

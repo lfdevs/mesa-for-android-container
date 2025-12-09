@@ -84,8 +84,6 @@ struct vpe10_cdc_be {
 
 void vpe10_construct_cdc_be(struct vpe_priv *vpe_priv, struct cdc_be *cdc_be);
 
-bool vpe10_cdc_check_output_format(struct cdc_be *cdc_be, enum vpe_surface_pixel_format format);
-
 void vpe10_cdc_program_global_sync(
     struct cdc_be *cdc_be, uint32_t vupdate_offset, uint32_t vupdate_width, uint32_t vready_offset);
 

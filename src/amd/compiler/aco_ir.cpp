@@ -43,7 +43,7 @@ static once_flag init_once_flag = ONCE_FLAG_INIT;
 static void
 init_once()
 {
-   debug_flags = parse_debug_string(getenv("ACO_DEBUG"), aco_debug_options);
+   debug_flags = parse_debug_string(os_get_option("ACO_DEBUG"), aco_debug_options);
 
 #ifndef NDEBUG
    /* enable some flags by default on debug builds */
@@ -78,7 +78,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
       case GFX10: program->family = CHIP_NAVI10; break;
       case GFX10_3: program->family = CHIP_NAVI21; break;
       case GFX11: program->family = CHIP_NAVI31; break;
-      case GFX11_5: program->family = CHIP_GFX1150; break;
+      case GFX11_5: program->family = CHIP_STRIX1; break;
       case GFX12: program->family = CHIP_GFX1200; break;
       default: program->family = CHIP_UNKNOWN; break;
       }
@@ -87,11 +87,6 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
    }
    program->wave_size = info->wave_size;
    program->lane_mask = program->wave_size == 32 ? s1 : s2;
-
-   program->dev.lds_encoding_granule = gfx_level >= GFX11 && stage == fragment_fs ? 1024
-                                       : gfx_level >= GFX7                        ? 512
-                                                                                  : 256;
-   program->dev.lds_alloc_granule = gfx_level >= GFX10_3 ? 1024 : program->dev.lds_encoding_granule;
 
    /* GFX6: There is 64KB LDS per CU, but a single workgroup can only use 32KB. */
    program->dev.lds_limit = gfx_level >= GFX7 ? 65536 : 32768;
@@ -109,7 +104,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
       program->dev.sgpr_limit =
          108; /* includes VCC, which can be treated as s[106-107] on GFX10+ */
 
-      if (family == CHIP_NAVI31 || family == CHIP_NAVI32 || family == CHIP_GFX1151 ||
+      if (family == CHIP_NAVI31 || family == CHIP_NAVI32 || family == CHIP_STRIX_HALO ||
           gfx_level >= GFX12) {
          program->dev.physical_vgprs = program->wave_size == 32 ? 1536 : 768;
          program->dev.vgpr_alloc_granule = program->wave_size == 32 ? 24 : 12;
@@ -132,8 +127,12 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
       program->dev.sgpr_limit = 104;
    }
 
-   if (program->stage == raytracing_cs)
-      program->dev.vgpr_limit = util_align_npot(128, program->dev.vgpr_alloc_granule);
+   if (program->stage == raytracing_cs) {
+      unsigned vgpr_limit = util_align_npot(128, program->dev.vgpr_alloc_granule);
+      unsigned min_waves = program->dev.physical_vgprs / vgpr_limit;
+      vgpr_limit = program->dev.physical_vgprs / min_waves;
+      program->dev.vgpr_limit = util_round_down_npot(vgpr_limit, program->dev.vgpr_alloc_granule);
+   }
 
    program->dev.scratch_alloc_granule = gfx_level >= GFX11 ? 256 : 1024;
 
@@ -171,7 +170,8 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
 
    program->dev.fused_mad_mix = program->gfx_level >= GFX10;
    if (program->family == CHIP_VEGA12 || program->family == CHIP_VEGA20 ||
-       program->family == CHIP_MI100 || program->family == CHIP_MI200)
+       program->family == CHIP_MI100 || program->family == CHIP_MI200 ||
+       program->family == CHIP_GFX940)
       program->dev.fused_mad_mix = true;
 
    if (program->gfx_level >= GFX12) {
@@ -242,6 +242,72 @@ is_wait_export_ready(amd_gfx_level gfx_level, const Instruction* instr)
    return instr->opcode == aco_opcode::s_wait_event &&
           (gfx_level >= GFX12 ? (instr->salu().imm & wait_event_imm_wait_export_ready_gfx12)
                               : !(instr->salu().imm & wait_event_imm_dont_wait_export_ready_gfx11));
+}
+
+static bool
+is_done_sendmsg(amd_gfx_level gfx_level, const Instruction* instr)
+{
+   if (gfx_level <= GFX10_3 && instr->opcode == aco_opcode::s_sendmsg)
+      return (instr->salu().imm & sendmsg_id_mask) == sendmsg_gs_done;
+   return false;
+}
+
+static bool
+is_pos_prim_export(amd_gfx_level gfx_level, const Instruction* instr)
+{
+   /* Because of NO_PC_EXPORT=1, a done=1 position or primitive export can launch PS waves before
+    * the NGG/VS wave finishes if there are no parameter exports.
+    */
+   return gfx_level >= GFX10 && instr->opcode == aco_opcode::exp &&
+          instr->exp().dest >= V_008DFC_SQ_EXP_POS && instr->exp().dest <= V_008DFC_SQ_EXP_PRIM;
+}
+
+static bool
+is_pops_end_export(Program* program, const Instruction* instr)
+{
+   return program->gfx_level >= GFX11 && instr->opcode == aco_opcode::exp &&
+          instr->exp().dest <= V_008DFC_SQ_EXP_NULL && program->has_pops_overlapped_waves_wait;
+}
+
+static bool
+is_ordered_ps_done_sendmsg(const Instruction* instr)
+{
+   return instr->opcode == aco_opcode::s_sendmsg &&
+          (instr->salu().imm & sendmsg_id_mask) == sendmsg_ordered_ps_done;
+}
+
+uint16_t
+is_atomic_or_control_instr(Program* program, const Instruction* instr, memory_sync_info sync,
+                           unsigned semantic)
+{
+   bool is_acquire = semantic & semantic_acquire;
+   bool is_release = semantic & semantic_release;
+
+   bool is_atomic = sync.semantics & semantic_atomic;
+   // TODO: NIR doesn't have any atomic load/store, so we assume any load/store is atomic
+   is_atomic |= !(sync.semantics & semantic_private) && sync.storage;
+   if (is_atomic) {
+      bool is_load = !instr->definitions.empty() || (sync.semantics & semantic_rmw);
+      bool is_store = instr->definitions.empty() || (sync.semantics & semantic_rmw);
+      return ((is_release && is_store) || (is_acquire && is_load)) ? sync.storage : 0;
+   }
+
+   uint16_t cls = BITFIELD_MASK(storage_count);
+   if (is_acquire) {
+      if (is_wait_export_ready(program->gfx_level, instr) ||
+          instr->opcode == aco_opcode::p_pops_gfx9_add_exiting_wave_id)
+         return cls & ~storage_shared;
+   }
+   if (is_release) {
+      if (is_done_sendmsg(program->gfx_level, instr) ||
+          is_pos_prim_export(program->gfx_level, instr))
+         return cls & ~storage_shared;
+
+      if (is_pops_end_export(program, instr) || is_ordered_ps_done_sendmsg(instr) ||
+          instr->opcode == aco_opcode::p_pops_gfx9_ordered_section_done)
+         return cls & ~storage_shared;
+   }
+   return (instr->isBarrier() && instr->barrier().exec_scope > scope_invocation) ? cls : 0;
 }
 
 memory_sync_info
@@ -838,7 +904,7 @@ get_reduction_identity(ReduceOp op, unsigned idx)
    case fmax16: return 0xfc00u;                /* negative infinity */
    case fmax32: return 0xff800000u;            /* negative infinity */
    case fmax64: return idx ? 0xfff00000u : 0u; /* negative infinity */
-   default: unreachable("Invalid reduction operation"); break;
+   default: UNREACHABLE("Invalid reduction operation"); break;
    }
    return 0;
 }
@@ -1449,7 +1515,8 @@ get_tied_defs(Instruction* instr)
               instr->opcode == aco_opcode::ds_bvh_stack_push8_pop1_rtn_b32 ||
               instr->opcode == aco_opcode::ds_bvh_stack_push8_pop2_rtn_b64) {
       ops.push_back(0);
-   } else if (instr->isMUBUF() && instr->definitions.size() == 1 && instr->operands.size() == 4) {
+   } else if (instr->isMUBUF() && instr->definitions.size() == 1 &&
+              (instr_info.is_atomic[(int)instr->opcode] || instr->mubuf().tfe)) {
       ops.push_back(3);
    } else if (instr->isMIMG() && instr->definitions.size() == 1 &&
               !instr->operands[2].isUndefined()) {
@@ -1574,30 +1641,19 @@ parse_depctr_wait(const Instruction* instr)
    return res;
 }
 
-bool
-dealloc_vgprs(Program* program)
+uint16_t
+depctr_wait::pack() const
 {
-   if (program->gfx_level < GFX11)
-      return false;
-
-   /* If we insert the sendmsg on GFX11.5, the export priority workaround will require us to insert
-    * a wait after exports. There might still be pending VMEM stores for PS parameter exports,
-    * except NGG lowering usually inserts a memory barrier. This means there is unlikely to be any
-    * pending VMEM stores or exports if we insert the sendmsg for these stages. */
-   if (program->gfx_level == GFX11_5 && (program->stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER ||
-                                         program->stage.hw == AC_HW_PIXEL_SHADER))
-      return false;
-
-   Block& block = program->blocks.back();
-
-   /* don't bother checking if there is a pending VMEM store or export: there almost always is */
-   Builder bld(program);
-   if (!block.instructions.empty() && block.instructions.back()->opcode == aco_opcode::s_endpgm) {
-      bld.reset(&block.instructions, block.instructions.begin() + (block.instructions.size() - 1));
-      bld.sopp(aco_opcode::s_sendmsg, sendmsg_dealloc_vgprs);
-   }
-
-   return true;
+   uint16_t imm = 0;
+   imm |= (va_vdst & 0xf) << 12;
+   imm |= (va_sdst & 0x7) << 9;
+   imm |= (va_ssrc & 0x1) << 8;
+   imm |= (hold_cnt & 0x1) << 7;
+   imm |= 0x3 << 5; /* don't know what this is, if anything */
+   imm |= (vm_vsrc & 0x7) << 2;
+   imm |= (va_vcc & 0x1) << 1;
+   imm |= (sa_sdst & 0x1);
+   return imm;
 }
 
 bool
@@ -1622,6 +1678,7 @@ get_instr_data_size(Format format)
    case Format::PSEUDO_BARRIER: return sizeof(Pseudo_barrier_instruction);
    case Format::PSEUDO_REDUCTION: return sizeof(Pseudo_reduction_instruction);
    case Format::PSEUDO_BRANCH: return sizeof(Pseudo_branch_instruction);
+   case Format::PSEUDO_CALL: return sizeof(Pseudo_call_instruction);
    case Format::DS: return sizeof(DS_instruction);
    case Format::FLAT:
    case Format::GLOBAL:

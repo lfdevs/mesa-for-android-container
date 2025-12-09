@@ -2470,7 +2470,7 @@ nvc0_hw_sm_get_program(struct nvc0_screen *screen)
    if (!prog)
       return NULL;
 
-   prog->type = PIPE_SHADER_COMPUTE;
+   prog->type = MESA_SHADER_COMPUTE;
    prog->translated = true;
 
    if (screen->base.class_3d >= GM107_3D_CLASS) {

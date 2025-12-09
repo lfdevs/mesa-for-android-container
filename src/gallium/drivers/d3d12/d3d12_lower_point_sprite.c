@@ -27,7 +27,7 @@
 #include "d3d12_compiler.h"
 #include "d3d12_nir_passes.h"
 #include "dxil_nir.h"
-#include "program/prog_statevars.h"
+#include "mesa/program/prog_statevars.h"
 
 struct output_writes {
    nir_def *val;
@@ -149,7 +149,7 @@ lower_store(nir_intrinsic_instr *instr, nir_builder *b, struct lower_state *stat
                .deref = nir_src_as_deref(instr->src[0]),
                .write_mask = nir_intrinsic_write_mask(instr),
             };
-            util_dynarray_append(&state->output_writes, struct output_writes, data);
+            util_dynarray_append(&state->output_writes, data);
             break;
          }
       }
@@ -166,11 +166,11 @@ lower_emit_vertex(nir_intrinsic_instr *instr, nir_builder *b, struct lower_state
 {
    unsigned stream_id = nir_intrinsic_stream_id(instr);
 
-   nir_def *point_width, *point_height;
-   get_scaled_point_size(b, state, &point_width, &point_height);
-
-   nir_instr_remove(&instr->instr);
+   b->cursor = nir_instr_remove(&instr->instr);
    if (stream_id == 0) {
+      nir_def *point_width, *point_height;
+      get_scaled_point_size(b, state, &point_width, &point_height);
+
       for (unsigned i = 0; i < 4; i++) {
          /* All outputs need to be emitted for each vertex */
          util_dynarray_foreach(&state->output_writes, struct output_writes, data) {

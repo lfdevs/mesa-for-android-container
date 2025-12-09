@@ -50,6 +50,16 @@ etna_texture_untile(void *dest, void *src, unsigned basex, unsigned basey,
                    unsigned src_stride, unsigned width, unsigned height,
                    unsigned dst_stride, unsigned elmtsize);
 
+void
+etna_texture_tile_rgba32f(void *dest, void *src, unsigned basex, unsigned basey,
+                  unsigned dst_stride, unsigned width, unsigned height,
+                  unsigned src_stride, unsigned layer_stride);
+
+void
+etna_texture_untile_rgba32f(void *dest, void *src, unsigned basex, unsigned basey,
+                            unsigned src_stride, unsigned width, unsigned height,
+                            unsigned dst_stride, unsigned layer_stride);
+
 /* XXX from/to supertiling (can have different layouts, may be better
  * to leave to RS) */
 

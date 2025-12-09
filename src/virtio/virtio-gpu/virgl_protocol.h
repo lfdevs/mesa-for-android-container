@@ -45,6 +45,19 @@ struct virgl_memory_info
    uint32_t nr_device_memory_evictions; /**< # of evictions (monotonic counter) */
 };
 
+#define VIRGL_RESOURCE_MAX_PLANES	4
+struct virgl_resource_layout
+{
+    uint64_t modifier;
+    uint32_t num_planes;
+    uint32_t reserved1;
+    struct {
+        uint64_t offset;
+        uint32_t stride;
+        uint32_t size;
+    } planes[VIRGL_RESOURCE_MAX_PLANES];
+};
+
 enum virgl_object_type {
    VIRGL_OBJECT_NULL,
    VIRGL_OBJECT_BLEND,
@@ -130,6 +143,7 @@ enum virgl_context_cmd {
    VIRGL_CCMD_END_FRAME,
 
    VIRGL_CCMD_CLEAR_SURFACE,
+   VIRGL_CCMD_GET_PIPE_RESOURCE_LAYOUT,
 
    VIRGL_MAX_COMMANDS
 };
@@ -779,5 +793,10 @@ enum vrend_tweak_type {
 #define VIRGL_CLEAR_SURFACE_DST_Y                  8
 #define VIRGL_CLEAR_SURFACE_WIDTH                  9
 #define VIRGL_CLEAR_SURFACE_HEIGHT                 10
+
+/* VIRGL_CCMD_GET_PIPE_RESOURCE_LAYOUT */
+#define VIRGL_RESOURCE_LAYOUT_SIZE           2
+#define VIRGL_RESOURCE_LAYOUT_HANDLE_OUT     1
+#define VIRGL_RESOURCE_LAYOUT_HANDLE_TARGET  2
 
 #endif

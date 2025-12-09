@@ -24,6 +24,7 @@
 /* A collection of unit tests for u_process.c */
 
 #include "util/detect_os.h"
+#include "util/os_misc.h"
 #include "util/u_process.h"
 #include <stdio.h>
 #include <stdbool.h>
@@ -58,7 +59,7 @@ test_util_get_process_name (void)
    const char *expected = "process_test";
 #endif
 
-   const char *name_override = getenv("MESA_PROCESS_NAME");
+   const char *name_override = os_get_option("MESA_PROCESS_NAME");
    if (name_override)
       expected = name_override;
 
@@ -88,13 +89,12 @@ test_util_get_process_exec_path (void)
       return;
    }
    posixify_path(path);
-   char* build_path = getenv("BUILD_FULL_PATH");
+   char* build_path = os_get_option_dup("BUILD_FULL_PATH");
    if (!build_path) {
       fprintf(stderr, "BUILD_FULL_PATH environment variable should be set\n");
       error = true;
       return;
    }
-   build_path = strdup(build_path);
    posixify_path(build_path);
 #ifdef __CYGWIN__
    int i = strlen(build_path) - 4;

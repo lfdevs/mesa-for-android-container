@@ -5,9 +5,12 @@
 test_uav_counter_null_behavior_dxbc,Crash
 test_uav_counter_null_behavior_dxil,Crash
 
-test_sampler_feedback_implicit_lod_aniso,Fail
+test_custom_border_color_limits,Fail
+test_derivative_hoisting_dxil,Fail
 
-# Might be a test bug; see https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/32777#note_3010306
-test_wmma_copy_transpose,Crash
-test_wmma_matmul,Crash
-test_wmma_multi_matmul,Crash
+test_undefined_structured_raw_alias_dxbc,Fail
+test_undefined_structured_raw_alias_dxil,Fail
+test_undefined_structured_raw_read_typed_dxbc,Fail
+test_undefined_structured_raw_read_typed_dxil,Fail
+
+test_large_buffer_descriptors,Crash

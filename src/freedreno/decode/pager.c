@@ -13,6 +13,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "util/os_misc.h"
+
 #include "pager.h"
 
 static pid_t pager_pid;
@@ -47,7 +49,7 @@ pager_open(void)
       close(fd[1]);
 
       less_opts = "FRSMKX";
-      setenv("LESS", less_opts, 1);
+      os_set_option("LESS", less_opts, true);
 
       execlp("less", "less", NULL);
 

@@ -29,8 +29,8 @@
 #ifndef LP_BLD_MISC_H
 #define LP_BLD_MISC_H
 
+#include <stdbool.h>
 
-#include "lp_bld.h"
 #include <llvm/Config/llvm-config.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Target.h>

@@ -44,7 +44,7 @@ vk_logic_op_to_pipe(VkLogicOp in)
    case VK_LOGIC_OP_SET:
       return PIPE_LOGICOP_SET;
    default:
-      unreachable("Invalid logicop");
+      UNREACHABLE("Invalid logicop");
    }
 }
 
@@ -63,7 +63,7 @@ vk_blend_op_to_pipe(VkBlendOp in)
    case VK_BLEND_OP_MAX:
       return PIPE_BLEND_MAX;
    default:
-      unreachable("Invalid blend op");
+      UNREACHABLE("Invalid blend op");
    }
 }
 
@@ -110,6 +110,6 @@ vk_blend_factor_to_pipe(VkBlendFactor vk_factor)
    case VK_BLEND_FACTOR_SRC_ALPHA_SATURATE:
       return PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE;
    default:
-      unreachable("Invalid blend factor");
+      UNREACHABLE("Invalid blend factor");
    }
 }

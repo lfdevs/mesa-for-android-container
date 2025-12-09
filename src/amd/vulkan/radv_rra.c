@@ -153,7 +153,7 @@ amdgpu_vram_type_to_rra(uint32_t type)
    case AMD_VRAM_TYPE_LPDDR5:
       return RRA_MEMORY_TYPE_LPDDR5;
    default:
-      unreachable("invalid vram type");
+      UNREACHABLE("invalid vram type");
    }
 }
 
@@ -177,8 +177,7 @@ rra_dump_asic_info(const struct radeon_info *gpu_info, FILE *output)
       .rev_id = gpu_info->pci_rev_id,
    };
 
-   strncpy(asic_info.device_name, gpu_info->marketing_name ? gpu_info->marketing_name : gpu_info->name,
-           RRA_FILE_DEVICE_NAME_MAX_SIZE - 1);
+   strncpy(asic_info.device_name, gpu_info->marketing_name, RRA_FILE_DEVICE_NAME_MAX_SIZE - 1);
 
    fwrite(&asic_info, sizeof(struct rra_asic_info), 1, output);
 }
@@ -487,7 +486,7 @@ radv_rra_trace_init(struct radv_device *device)
       radv_find_memory_index(pdev, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
                                       VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
 
-   util_dynarray_init(&device->rra_trace.ray_history, NULL);
+   device->rra_trace.ray_history = UTIL_DYNARRAY_INIT;
 
    device->rra_trace.ray_history_buffer_size = debug_get_num_option("RADV_RRA_TRACE_HISTORY_SIZE", 100 * 1024 * 1024);
    if (device->rra_trace.ray_history_buffer_size <

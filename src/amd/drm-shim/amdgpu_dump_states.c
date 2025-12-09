@@ -379,7 +379,6 @@ amdgpu_dump_hw_ips(int fd)
       printf("   .ib_size_alignment = %u,\n", info.ib_size_alignment);
       printf("   .available_rings = 0x%x,\n", info.available_rings);
       printf("   .ip_discovery_version = 0x%04x,\n", info.ip_discovery_version);
-      printf("   .userq_num_slots = 0x%x,\n", info.userq_num_slots);
       printf("},\n");
    }
 }

@@ -41,6 +41,14 @@ struct winsys_handle;
 struct virgl_screen;
 struct virgl_context;
 
+struct virgl_resource_gbm_metadata
+{
+   struct virgl_resource_layout layout;
+   struct virgl_resource *res;
+   struct pipe_context *ctx;
+   simple_mtx_t lock;
+};
+
 struct virgl_resource_metadata
 {
    unsigned long level_offset[VR_MAX_TEXTURE_2D_LEVELS];
@@ -48,6 +56,7 @@ struct virgl_resource_metadata
    unsigned layer_stride[VR_MAX_TEXTURE_2D_LEVELS];
    uint32_t plane, plane_offset, total_size;
    uint64_t modifier;
+   struct virgl_resource_gbm_metadata gbm;
 };
 
 struct virgl_resource {

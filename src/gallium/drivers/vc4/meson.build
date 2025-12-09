@@ -82,7 +82,6 @@ if host_machine.cpu_family() == 'arm'
     c_args : ['-mfpu=neon', '-DV3D_BUILD_NEON'],
     dependencies : vc4_deps,
   )
-  vc4_c_args += '-DUSE_ARM_ASM'
 endif
 
 if dep_simpenrose.found()

@@ -70,6 +70,20 @@ struct fd_dev_info {
    };
 
    struct {
+      uint32_t RB_DBG_ECO_CNTL;
+      uint32_t RB_DBG_ECO_CNTL_blit;
+      uint32_t RB_RBP_CNTL;
+   } magic;
+
+   struct {
+         uint32_t reg;
+         uint32_t value;
+   } magic_raw[64];
+
+   struct {
+      /*
+       * A6XX / gen6
+       */
       uint32_t reg_size_vec4;
 
       /* The size (in instrlen units (128 bytes)) of instruction cache where
@@ -160,10 +174,6 @@ struct fd_dev_info {
       bool has_per_view_viewport;
       bool has_gmem_fast_clear;
 
-      /* Per CCU GMEM amount reserved for each of DEPTH and COLOR caches
-       * in sysmem rendering. */
-      uint32_t sysmem_per_ccu_depth_cache_size;
-      uint32_t sysmem_per_ccu_color_cache_size;
       /* Per CCU GMEM amount reserved for color cache used by GMEM resolves
        * which require color cache (non-BLIT event case).
        * The size is expressed as a fraction of ccu cache used by sysmem
@@ -173,6 +183,21 @@ struct fd_dev_info {
        */
       /* see enum a6xx_ccu_cache_size */
       uint32_t gmem_ccu_color_cache_fraction;
+      uint32_t gmem_per_ccu_color_cache_size;
+      uint32_t gmem_ccu_depth_cache_fraction;
+      uint32_t gmem_per_ccu_depth_cache_size;
+      uint32_t sysmem_ccu_color_cache_fraction;
+      uint32_t sysmem_per_ccu_color_cache_size;
+      uint32_t sysmem_ccu_depth_cache_fraction;
+      uint32_t sysmem_per_ccu_depth_cache_size;
+
+      /* Size of various in-gmem caches: */
+      uint32_t sysmem_vpc_attr_buf_size;
+      uint32_t sysmem_vpc_pos_buf_size;
+      uint32_t sysmem_vpc_bv_pos_buf_size;
+      uint32_t gmem_vpc_attr_buf_size;
+      uint32_t gmem_vpc_pos_buf_size;
+      uint32_t gmem_vpc_bv_pos_buf_size;
 
       /* Corresponds to SP_LB_PARAM_LIMIT::PRIMALLOCTHRESHOLD */
       uint32_t prim_alloc_threshold;
@@ -187,6 +212,8 @@ struct fd_dev_info {
 
       /* See ir3_compiler::has_scalar_alu. */
       bool has_scalar_alu;
+      /* See ir3_compiler::has_scalar_predicates. */
+      bool has_scalar_predicates;
       /* See ir3_compiler::has_early_preamble. */
       bool has_early_preamble;
 
@@ -208,6 +235,11 @@ struct fd_dev_info {
        */
       bool has_ubwc_linear_mipmap_fallback;
 
+      /* Whether threshold for linear mipmaps for compressed textures is in
+       * blocks, if false then threshold is in texels.
+       */
+      bool supports_linear_mipmap_threshold_in_blocks;
+
       /* Whether 4 nops are needed after the second pred[tf] of a
        * pred[tf]/pred[ft] pair to work around a hardware issue.
        */
@@ -224,29 +256,6 @@ struct fd_dev_info {
       /* A702 cuts A LOT of things.. */
       bool is_a702;
 
-      struct {
-         uint32_t PC_POWER_CNTL;
-         uint32_t TPL1_DBG_ECO_CNTL;
-         uint32_t GRAS_DBG_ECO_CNTL;
-         uint32_t SP_CHICKEN_BITS;
-         uint32_t UCHE_CLIENT_PF;
-         uint32_t PC_MODE_CNTL;
-         uint32_t SP_DBG_ECO_CNTL;
-         uint32_t RB_DBG_ECO_CNTL;
-         uint32_t RB_DBG_ECO_CNTL_blit;
-         uint32_t HLSQ_DBG_ECO_CNTL;
-         uint32_t RB_UNKNOWN_8E01;
-         uint32_t VPC_DBG_ECO_CNTL;
-         uint32_t UCHE_UNKNOWN_0E12;
-
-         uint32_t RB_CCU_DBG_ECO_CNTL;
-      } magic;
-
-      struct {
-            uint32_t reg;
-            uint32_t value;
-      } magic_raw[64];
-
       /* maximum number of descriptor sets */
       uint32_t max_sets;
 
@@ -254,9 +263,30 @@ struct fd_dev_info {
       float line_width_max;
 
       bool has_bin_mask;
-   } a6xx;
 
-   struct {
+      /* On a618 at least, there seems to be an errata where a 3D draw
+       * followed by an A2D blit without any event or wait in between hangs
+       * waiting for the draw to complete. Seen on
+       * dEQP-VK.renderpass2.dedicated_allocation.attachment_allocation.grow.17
+       * with sysmem.
+       */
+      bool blit_wfi_quirk;
+
+      /* True if sel.b supports (neg) that behaves as fneg. */
+      bool has_sel_b_fneg;
+
+      /* Whether CP_REG_TEST::PRED_BIT exists so that there are 32 predicates
+       * that can be written by CP_REG_TEST instead of just 1.
+       */
+      bool has_pred_bit;
+
+      /* True if PC_DGEN_SO_CNTL is present. */
+      bool has_pc_dgen_so_cntl;
+
+      /*
+       * A7XX / gen7
+       */
+
       /* stsc may need to be done twice for the same range to workaround
        * _something_, observed in blob's disassembly.
        */
@@ -276,9 +306,6 @@ struct fd_dev_info {
       bool load_shader_consts_via_preamble;
 
       bool has_gmem_vpc_attr_buf;
-      /* Size of buffer in gmem for VPC attributes */
-      uint32_t sysmem_vpc_attr_buf_size;
-      uint32_t gmem_vpc_attr_buf_size;
 
       /* Whether UBWC is supported on all UAVs. Prior to this, only readonly
        * or writeonly UAVs could use UBWC and mixing reads and writes was not
@@ -348,6 +375,9 @@ struct fd_dev_info {
        */
       bool reading_shading_rate_requires_smask_quirk;
 
+      /* Is lock/unlock sequence needed at end of compute shader? */
+      bool cs_lock_unlock_quirk;
+
       /* Whether the ray_intersection instruction is present. */
       bool has_ray_intersection;
 
@@ -367,7 +397,13 @@ struct fd_dev_info {
 
       /* On a750 the control register layout is rearranged. */
       bool new_control_regs;
-   } a7xx;
+
+      /* a740+ support a per-view list of bin scales in GRAS which can be used
+       * to modify the viewport, rather than manually patching it in the
+       * driver.
+       */
+      bool has_hw_bin_scaling;
+   } props;
 };
 
 struct fd_dev_id {

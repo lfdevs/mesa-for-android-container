@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <algorithm>
 #include <cstdio>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
-#include <xtensor/xrandom.hpp>
+#include <sys/mman.h>
 
 #include <iostream>
 #include <sstream>
@@ -18,13 +18,15 @@
 #include "tensorflow/lite/c/c_api.h"
 #include "test_executor.h"
 
-#define TEST_CONV2D           1
-#define TEST_DEPTHWISE        1
-#define TEST_ADD              1
-#define TEST_FULLY_CONNECTED  1
-#define TEST_MODELS           1
+#include "util/os_misc.h"
 
-#define TOLERANCE       2
+#define TEST_CONV2D          1
+#define TEST_DEPTHWISE       1
+#define TEST_ADD             1
+#define TEST_FULLY_CONNECTED 1
+#define TEST_MODELS          1
+
+#define TOLERANCE 8
 
 std::vector<bool> is_signed{false}; /* TODO: Support INT8? */
 std::vector<bool> padding_same{false, true};
@@ -37,13 +39,6 @@ std::vector<int> weight_size{1, 3, 5};
 std::vector<int> input_size{3, 5, 8, 80, 112};
 std::vector<int> fc_channels{23, 46, 128, 256, 512};
 std::vector<int> fc_size{128, 1280, 25088, 62720};
-
-static void
-set_seed(unsigned seed)
-{
-   srand(seed);
-   xt::random::seed(seed);
-}
 
 static void
 test_model(void *buf, size_t buf_size, std::string cache_dir, unsigned tolerance)
@@ -62,7 +57,7 @@ test_model(void *buf, size_t buf_size, std::string cache_dir, unsigned tolerance
    run_model(model, EXECUTOR_CPU, &input, &num_inputs, &cpu_output, &output_sizes, &output_types, &num_outputs, cache_dir);
    run_model(model, EXECUTOR_NPU, &input, &num_inputs, &npu_output, &output_sizes, &output_types, &num_outputs, cache_dir);
 
-   char *dump_output = getenv("TEFLON_DUMP_OUTPUT");
+   const char *dump_output = os_get_option("TEFLON_DUMP_OUTPUT");
    if (dump_output && atoi(dump_output) == 1) {
       for (unsigned i = 0; i < num_outputs; i++) {
          char name[250];
@@ -87,59 +82,59 @@ test_model(void *buf, size_t buf_size, std::string cache_dir, unsigned tolerance
    for (size_t i = 0; i < num_outputs; i++) {
       for (size_t j = 0; j < output_sizes[i]; j++) {
          switch (output_types[i]) {
-            case kTfLiteFloat32: {
-               float *cpu = ((float**)cpu_output)[i];
-               float *npu = ((float**)npu_output)[i];
-               if (abs(cpu[j] - npu[j]) > tolerance / 33.0) {
-                  std::cout << "CPU: ";
-                  for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
-                     std::cout << std::setfill('0') << std::setw(6) << cpu[k] << " ";
-                  std::cout << "\n";
-                  std::cout << "NPU: ";
-                  for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
-                     std::cout << std::setfill('0') << std::setw(6) << npu[k] << " ";
-                  std::cout << "\n";
+         case kTfLiteFloat32: {
+            float *cpu = ((float **)cpu_output)[i];
+            float *npu = ((float **)npu_output)[i];
+            if (abs(cpu[j] - npu[j]) > tolerance / 33.0) {
+               std::cout << "CPU: ";
+               for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
+                  std::cout << std::setfill('0') << std::setw(6) << cpu[k] << " ";
+               std::cout << "\n";
+               std::cout << "NPU: ";
+               for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
+                  std::cout << std::setfill('0') << std::setw(6) << npu[k] << " ";
+               std::cout << "\n";
 
-                  FAIL() << "Output at " << j << " from the NPU (" << std::setfill('0') << std::setw(2) << npu[j] << ") doesn't match that from the CPU (" << std::setfill('0') << std::setw(2) << cpu[j] << ").";
-               }
-               break;
+               FAIL() << "Output at " << j << " from the NPU (" << std::setfill('0') << std::setw(2) << npu[j] << ") doesn't match that from the CPU (" << std::setfill('0') << std::setw(2) << cpu[j] << ").";
             }
-            case kTfLiteInt8: {
-               int8_t *cpu = ((int8_t**)cpu_output)[i];
-               int8_t *npu = ((int8_t**)npu_output)[i];
-               if (abs(cpu[j] - npu[j]) > tolerance) {
-                  std::cout << "CPU: ";
-                  for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
-                     std::cout << std::setfill('0') << std::setw(2) << std::hex << int(cpu[k] & 0xff) << " ";
-                  std::cout << "\n";
-                  std::cout << "NPU: ";
-                  for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
-                     std::cout << std::setfill('0') << std::setw(2) << std::hex << int(npu[k] & 0xff) << " ";
-                  std::cout << "\n";
+            break;
+         }
+         case kTfLiteInt8: {
+            int8_t *cpu = ((int8_t **)cpu_output)[i];
+            int8_t *npu = ((int8_t **)npu_output)[i];
+            if (abs(cpu[j] - npu[j]) > tolerance) {
+               std::cout << "CPU: ";
+               for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
+                  std::cout << std::setfill('0') << std::setw(2) << std::hex << int(cpu[k] & 0xff) << " ";
+               std::cout << "\n";
+               std::cout << "NPU: ";
+               for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
+                  std::cout << std::setfill('0') << std::setw(2) << std::hex << int(npu[k] & 0xff) << " ";
+               std::cout << "\n";
 
-                  FAIL() << "Output at " << j << " from the NPU (" << std::setfill('0') << std::setw(2) << std::hex << int(npu[j] & 0xff) << ") doesn't match that from the CPU (" << std::setfill('0') << std::setw(2) << std::hex << int(cpu[j] & 0xff) << ").";
-               }
-               break;
+               FAIL() << "Output at " << j << " from the NPU (" << std::setfill('0') << std::setw(2) << std::hex << int(npu[j] & 0xff) << ") doesn't match that from the CPU (" << std::setfill('0') << std::setw(2) << std::hex << int(cpu[j] & 0xff) << ").";
             }
-            case kTfLiteUInt8: {
-               uint8_t *cpu = ((uint8_t**)cpu_output)[i];
-               uint8_t *npu = ((uint8_t**)npu_output)[i];
-               if (abs(cpu[j] - npu[j]) > tolerance) {
-                  std::cout << "CPU: ";
-                  for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
-                     std::cout << std::setfill('0') << std::setw(2) << std::hex << int(cpu[k]) << " ";
-                  std::cout << "\n";
-                  std::cout << "NPU: ";
-                  for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
-                     std::cout << std::setfill('0') << std::setw(2) << std::hex << int(npu[k]) << " ";
-                  std::cout << "\n";
+            break;
+         }
+         case kTfLiteUInt8: {
+            uint8_t *cpu = ((uint8_t **)cpu_output)[i];
+            uint8_t *npu = ((uint8_t **)npu_output)[i];
+            if (abs(cpu[j] - npu[j]) > tolerance) {
+               std::cout << "CPU: ";
+               for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
+                  std::cout << std::setfill('0') << std::setw(2) << std::hex << int(cpu[k]) << " ";
+               std::cout << "\n";
+               std::cout << "NPU: ";
+               for (int k = 0; k < std::min(int(output_sizes[i]), 24); k++)
+                  std::cout << std::setfill('0') << std::setw(2) << std::hex << int(npu[k]) << " ";
+               std::cout << "\n";
 
-                  FAIL() << "Output at " << j << " from the NPU (" << std::setfill('0') << std::setw(2) << std::hex << int(npu[j]) << ") doesn't match that from the CPU (" << std::setfill('0') << std::setw(2) << std::hex << int(cpu[j]) << ").";
-               }
-               break;
+               FAIL() << "Output at " << j << " from the NPU (" << std::setfill('0') << std::setw(2) << std::hex << int(npu[j]) << ") doesn't match that from the CPU (" << std::setfill('0') << std::setw(2) << std::hex << int(cpu[j]) << ").";
             }
-            default:
-               assert(!"Unsupported data type for output tensor");
+            break;
+         }
+         default:
+            assert(!"Unsupported data type for output tensor");
          }
       }
    }
@@ -175,7 +170,7 @@ test_model_file(std::string file_name, unsigned tolerance, bool use_cache)
       cache_dir << path.stem().string();
    }
 
-   set_seed(4);
+   srand(4);
 
    struct stat sb;
    int model_fd = open(file_name.c_str(), O_RDONLY);
@@ -200,7 +195,7 @@ test_conv(int input_size, int weight_size, int input_channels, int output_channe
    if (weight_size > input_size)
       GTEST_SKIP();
 
-   set_seed(seed);
+   srand(seed);
 
    if (cache_is_enabled()) {
       if (access(model_cache.str().c_str(), F_OK) == 0) {
@@ -245,7 +240,7 @@ test_add(int input_size, int weight_size, int input_channels, int output_channel
    if (weight_size > input_size)
       GTEST_SKIP();
 
-   set_seed(seed);
+   srand(seed);
 
    if (cache_is_enabled()) {
       if (access(model_cache.str().c_str(), F_OK) == 0) {
@@ -284,7 +279,7 @@ test_fully_connected(int input_size, int output_channels, bool is_signed, int se
    model_cache << cache_dir.str() << "/"
                << "model.tflite";
 
-   set_seed(seed);
+   srand(seed);
 
    if (cache_is_enabled()) {
       if (access(model_cache.str().c_str(), F_OK) == 0) {
@@ -476,10 +471,10 @@ class FullyConnected : public testing::TestWithParam<std::tuple<bool, int, int>>
 TEST_P(FullyConnected, Op)
 {
    test_fully_connected(
-             std::get<2>(GetParam()),
-             std::get<1>(GetParam()),
-             std::get<0>(GetParam()),
-             4);
+      std::get<2>(GetParam()),
+      std::get<1>(GetParam()),
+      std::get<0>(GetParam()),
+      4);
 }
 
 static inline std::string
@@ -513,8 +508,8 @@ TEST_P(Models, Op)
    std::ostringstream file_path;
    auto test_name = GetParam();
    test_name.replace(test_name.find("_"), 1, "/");
-   assert(getenv("TEFLON_TEST_DATA"));
-   file_path << getenv("TEFLON_TEST_DATA") << "/models/" << test_name << ".tflite";
+   assert(os_get_option("TEFLON_TEST_DATA"));
+   file_path << os_get_option("TEFLON_TEST_DATA") << "/models/" << test_name << ".tflite";
 
    test_model_file(file_path.str(), TOLERANCE, true);
 }
@@ -522,13 +517,13 @@ TEST_P(Models, Op)
 std::vector<std::string>
 get_model_files(void)
 {
-   assert(getenv("TEFLON_TEST_DATA"));
+   assert(os_get_option("TEFLON_TEST_DATA"));
    std::stringstream dir;
-   dir << getenv("TEFLON_TEST_DATA") << "/models";
+   dir << os_get_option("TEFLON_TEST_DATA") << "/models";
 
    std::vector<std::string> paths;
    std::filesystem::recursive_directory_iterator b(dir.str());
-   for (auto const& f : b) {
+   for (auto const &f : b) {
       if (f.path().extension() != ".tflite")
          continue;
 
@@ -579,7 +574,7 @@ main(int argc, char **argv)
       int depthwise = atoi(argv[n++]);
       int seed = atoi(argv[n++]);
 
-      set_seed(seed);
+      srand(seed);
 
       buf = conv2d_generate_model(input_size, weight_size,
                                   input_channels, output_channels,

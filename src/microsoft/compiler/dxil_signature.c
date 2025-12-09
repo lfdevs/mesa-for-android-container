@@ -181,10 +181,10 @@ get_additional_semantic_info(nir_shader *s, nir_variable *var, struct semantic_i
    return next_row;
 }
 
-typedef void (*semantic_info_proc)(nir_variable *var, struct semantic_info *info, gl_shader_stage stage);
+typedef void (*semantic_info_proc)(nir_variable *var, struct semantic_info *info, mesa_shader_stage stage);
 
 static void
-get_semantic_vs_in_name(nir_variable *var, struct semantic_info *info, gl_shader_stage stage)
+get_semantic_vs_in_name(nir_variable *var, struct semantic_info *info, mesa_shader_stage stage)
 {
    strcpy(info->name, "TEXCOORD");
    info->index = var->data.driver_location;
@@ -192,7 +192,7 @@ get_semantic_vs_in_name(nir_variable *var, struct semantic_info *info, gl_shader
 }
 
 static void
-get_semantic_sv_name(nir_variable *var, struct semantic_info *info, gl_shader_stage stage)
+get_semantic_sv_name(nir_variable *var, struct semantic_info *info, mesa_shader_stage stage)
 {
    if (stage != MESA_SHADER_VERTEX)
       info->interpolation = get_interpolation(var);
@@ -211,7 +211,7 @@ get_semantic_sv_name(nir_variable *var, struct semantic_info *info, gl_shader_st
       info->kind = DXIL_SEM_SAMPLE_INDEX;
       break;
    default:
-      unreachable("unsupported system value");
+      UNREACHABLE("unsupported system value");
    }
    strncpy(info->name, var->name, ARRAY_SIZE(info->name) - 1);
 }
@@ -327,7 +327,7 @@ get_semantic_name(nir_variable *var, struct semantic_info *info,
 }
 
 static void
-get_semantic_in_name(nir_variable *var, struct semantic_info *info, gl_shader_stage stage)
+get_semantic_in_name(nir_variable *var, struct semantic_info *info, mesa_shader_stage stage)
 {
    const struct glsl_type *type = var->type;
    if (nir_is_arrayed_io(var, stage) &&
@@ -372,14 +372,14 @@ prog_semantic_from_kind(enum dxil_semantic_kind kind, unsigned num_vals, unsigne
          DXIL_PROG_SEM_FINAL_LINE_DENSITY_TESSFACTOR :
          DXIL_PROG_SEM_FINAL_LINE_DETAIL_TESSFACTOR;
       default:
-         unreachable("Invalid row count for tess factor");
+         UNREACHABLE("Invalid row count for tess factor");
       }
    case DXIL_SEM_INSIDE_TESS_FACTOR:
       switch (num_vals) {
       case 2: return DXIL_PROG_SEM_FINAL_QUAD_INSIDE_EDGE_TESSFACTOR;
       case 1: return DXIL_PROG_SEM_FINAL_TRI_INSIDE_EDGE_TESSFACTOR;
       default:
-         unreachable("Invalid row count for inner tess factor");
+         UNREACHABLE("Invalid row count for inner tess factor");
       }
    default:
        return DXIL_PROG_SEM_UNDEFINED;
@@ -715,7 +715,7 @@ patch_sysvalue_name(nir_variable *var)
          return var->data.location_frac == 0 ?
             "LINEDET" : "LINEDEN";
       default:
-         unreachable("Unexpected outer tess factor array size");
+         UNREACHABLE("Unexpected outer tess factor array size");
       }
       break;
    case VARYING_SLOT_TESS_LEVEL_INNER:
@@ -725,7 +725,7 @@ patch_sysvalue_name(nir_variable *var)
       case 1:
          return "TRIINT";
       default:
-         unreachable("Unexpected inner tess factory array size");
+         UNREACHABLE("Unexpected inner tess factory array size");
       }
       break;
    default:

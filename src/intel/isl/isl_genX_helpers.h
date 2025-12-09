@@ -53,7 +53,7 @@ isl_encode_halign(uint8_t halign)
    case   4: return HALIGN_4;
    case   8: return HALIGN_8;
 #endif
-   default: unreachable("Invalid halign");
+   default: UNREACHABLE("Invalid halign");
    }
 }
 
@@ -69,7 +69,7 @@ isl_encode_valign(uint8_t valign)
    case   2: return VALIGN_2;
    case   4: return VALIGN_4;
 #endif
-   default: unreachable("Invalid valign");
+   default: UNREACHABLE("Invalid valign");
    }
 }
 
@@ -136,7 +136,7 @@ isl_get_qpitch(const struct isl_surf *surf)
 {
    switch (surf->dim_layout) {
    default:
-      unreachable("Bad isl_surf_dim");
+      UNREACHABLE("Bad isl_surf_dim");
    case ISL_DIM_LAYOUT_GFX4_2D:
       if (GFX_VER >= 9) {
          if (surf->dim == ISL_SURF_DIM_3D && surf->tiling == ISL_TILING_W) {
@@ -204,6 +204,10 @@ isl_get_qpitch(const struct isl_surf *surf)
 UNUSED static uint8_t
 isl_get_render_compression_format(enum isl_format format)
 {
+   /* The spec gives no CMFs to NPOT RGB formats. Remap them to RGBA. */
+   if (isl_format_get_layout(format)->bpb % 3 == 0)
+      format = isl_format_rgb_to_rgba(format);
+
    /* Bspec 63919 (r60413):
     *
     *   Table "[Enumeration] UNIFIED_COMPRESSION_FORMAT"
@@ -327,7 +331,7 @@ isl_get_render_compression_format(enum isl_format format)
    case ISL_FORMAT_R9G9B9E5_SHAREDEXP:
       return CMF_R11_G11_B10;
    default:
-      unreachable("Unsupported render compression format!");
+      UNREACHABLE("Unsupported render compression format!");
       return 0;
    }
 }
@@ -429,7 +433,7 @@ isl_get_render_compression_format(enum isl_format format)
    case ISL_FORMAT_R8_SINT:
       return 0x19;
    default:
-      unreachable("Unsupported render compression format!");
+      UNREACHABLE("Unsupported render compression format!");
       return 0;
    }
 }

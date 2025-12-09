@@ -29,12 +29,6 @@
 #ifdef HAVE_SYS_SHM_H
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#ifdef __FreeBSD__
-/* sys/ipc.h -> sys/_types.h -> machine/param.h
- * - defines ALIGN which clashes with our ALIGN
- */
-#undef ALIGN
-#endif
 #endif
 
 #include "util/compiler.h"
@@ -186,7 +180,8 @@ dri_sw_displaytarget_create_mapped(struct sw_winsys *winsys,
                                    enum pipe_format format,
                                    unsigned width, unsigned height,
                                    unsigned stride,
-                                   void *data)
+                                   void *data,
+                                   struct winsys_handle *whandle)
 {
    UNUSED struct dri_sw_winsys *ws = dri_sw_winsys(winsys);
    struct dri_sw_displaytarget *dri_sw_dt;

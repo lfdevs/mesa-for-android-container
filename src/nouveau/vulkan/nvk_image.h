@@ -103,6 +103,15 @@ struct nvk_image {
     */
    struct nvk_image_plane linear_tiled_shadow;
    struct nvkmd_mem *linear_tiled_shadow_mem;
+
+   /* This indicates that we would like to compress the image and would prefer
+    * larger pages and a dedicated allocation.
+    */
+   bool can_compress;
+   /* This indicates that we actually have compressed the image. This is set at
+    * bind time.
+    */
+   bool is_compressed;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(nvk_image, vk.base, VkImage, VK_OBJECT_TYPE_IMAGE)
@@ -117,6 +126,12 @@ static inline uint64_t
 nvk_image_base_address(const struct nvk_image *image, uint8_t plane)
 {
    return nvk_image_plane_base_address(&image->planes[plane]);
+}
+
+static inline uint64_t
+nvk_image_size_B(const struct nvk_image *image, uint8_t plane)
+{
+   return image->planes[plane].nil.size_B;
 }
 
 static inline uint8_t
@@ -142,7 +157,7 @@ nvk_image_aspects_to_plane(const struct nvk_image *image,
       switch(aspectMask) {
       case VK_IMAGE_ASPECT_DEPTH_BIT: return 0;
       case VK_IMAGE_ASPECT_STENCIL_BIT: return 1;
-      default: unreachable("Not a depth/stencil aspect");
+      default: UNREACHABLE("Not a depth/stencil aspect");
       }
    }
 

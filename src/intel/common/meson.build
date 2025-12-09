@@ -42,23 +42,10 @@ files_libintel_common = files(
   'intel_uuid.h',
   'intel_measure.c',
   'intel_measure.h',
-  'intel_mem.c',
-  'intel_mem.h',
   'intel_pixel_hash.h'
 )
 
 libintel_common_links = [libisl]
-
-if with_clflushopt
-  libintel_clflushopt = static_library(
-    'intel_clflushopt',
-    ['intel_clflushopt.c'],
-    include_directories : [inc_include, inc_src],
-    c_args : [no_override_init_args] + clflushopt_args,
-    gnu_symbol_visibility : 'hidden',
-  )
-  libintel_common_links += libintel_clflushopt
-endif
 
 libintel_common = static_library(
   'intel_common',

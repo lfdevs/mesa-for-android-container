@@ -335,7 +335,7 @@ emit_constants(struct i915_context *i915)
          const uint32_t *c;
          if (i915->fs->constant_flags[i] == I915_CONSTFLAG_USER) {
             /* grab user-defined constant */
-            c = (uint32_t *)i915_buffer(i915->constants[PIPE_SHADER_FRAGMENT])
+            c = (uint32_t *)i915_buffer(i915->constants[MESA_SHADER_FRAGMENT])
                    ->data;
             c += 4 * i;
          } else {

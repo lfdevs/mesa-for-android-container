@@ -164,7 +164,7 @@ VkResult genX(CreateQueryPool)(
       uint64s_per_slot = 1 + 2;
       break;
    default:
-      unreachable("Invalid query type");
+      UNREACHABLE("Invalid query type");
    }
 
    if (!vk_object_multialloc(&device->vk, &ma, pAllocator,
@@ -592,7 +592,7 @@ VkResult genX(GetQueryPoolResults)(
       }
 
       default:
-         unreachable("invalid pool type");
+         UNREACHABLE("invalid pool type");
       }
 
       if (!write_results)
@@ -714,7 +714,7 @@ emit_zero_queries(struct anv_cmd_buffer *cmd_buffer,
       break;
 
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -791,7 +791,7 @@ void genX(CmdResetQueryPool)(
    }
 
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -895,7 +895,7 @@ emit_perf_intel_query(struct anv_cmd_buffer *cmd_buffer,
       }
 
       default:
-         unreachable("Invalid query field");
+         UNREACHABLE("Invalid query field");
          break;
       }
    }
@@ -1072,7 +1072,7 @@ void genX(CmdBeginQueryIndexedEXT)(
             break;
 
          default:
-            unreachable("Invalid query field");
+            UNREACHABLE("Invalid query field");
             break;
          }
       }
@@ -1090,7 +1090,7 @@ void genX(CmdBeginQueryIndexedEXT)(
    }
 
    default:
-      unreachable("");
+      UNREACHABLE("");
    }
 }
 
@@ -1224,7 +1224,7 @@ void genX(CmdEndQueryIndexedEXT)(
             break;
 
          default:
-            unreachable("Invalid query field");
+            UNREACHABLE("Invalid query field");
             break;
          }
       }
@@ -1258,7 +1258,7 @@ void genX(CmdEndQueryIndexedEXT)(
    }
 
    default:
-      unreachable("");
+      UNREACHABLE("");
    }
 
    /* When multiview is active the spec requires that N consecutive query
@@ -1498,12 +1498,12 @@ void genX(CmdCopyQueryPoolResults)(
 
 #if GFX_VER >= 8
       case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR:
-         unreachable("Copy KHR performance query results not implemented");
+         UNREACHABLE("Copy KHR performance query results not implemented");
          break;
 #endif
 
       default:
-         unreachable("unhandled query type");
+         UNREACHABLE("unhandled query type");
       }
 
       if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {

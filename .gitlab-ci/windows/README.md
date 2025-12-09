@@ -19,7 +19,7 @@ the image is rebuilt inside the user's namespace.
 The rebuild executes `docker build` which calls `mesa_deps.ps1` inside the
 container to fetch and install all build dependencies. This includes Visual
 Studio Community Edition (downloaded from Microsoft, under the license which
-allows use by open-source projects), other build tools from Chocolatey, and
+allows use by open-source projects), other build tools from winget, and
 finally Meson and Python dependencies from PyPI.
 
 This job is executed inside a Windows shell environment directly inside the

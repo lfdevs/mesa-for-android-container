@@ -75,6 +75,8 @@ etna_rasterizer_state_create(struct pipe_context *pctx,
       cs->offset_units = 0.0f;
    }
 
+   cs->TFB_CONFIG = COND(so->rasterizer_discard, VIVS_TFB_CONFIG_RASTERIZER_DISCARD);
+
    assert(!so->clip_halfz); /* could be supported with shader magic, actually
                                D3D z is default on older gc */
 

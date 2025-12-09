@@ -1,6 +1,6 @@
 [wrap-git]
 directory = perfetto
 
-url = https://android.googlesource.com/platform/external/perfetto
+url = https://github.com/google/perfetto
 revision = v47.0
 depth = 1

@@ -427,14 +427,14 @@ dzn_meta_blits_get_vs(struct dzn_device *device)
    if (meta->vs.pShaderBytecode == NULL) {
       nir_shader *nir = dzn_nir_blit_vs();
 
-      NIR_PASS_V(nir, nir_lower_system_values);
+      NIR_PASS(_, nir, nir_lower_system_values);
 
       gl_system_value system_values[] = {
          SYSTEM_VALUE_FIRST_VERTEX,
          SYSTEM_VALUE_BASE_VERTEX,
       };
 
-      NIR_PASS_V(nir, dxil_nir_lower_system_values_to_zero, system_values,
+      NIR_PASS(_, nir, dxil_nir_lower_system_values_to_zero, system_values,
                 ARRAY_SIZE(system_values));
 
       D3D12_SHADER_BYTECODE bc;
@@ -763,7 +763,7 @@ dzn_meta_blits_finish(struct dzn_device *device)
    }
 
    if (meta->contexts) {
-      hash_table_foreach(meta->contexts->table, he)
+      hash_table_foreach(&meta->contexts->table, he)
          dzn_meta_blit_destroy(device, he->data);
       _mesa_hash_table_u64_destroy(meta->contexts);
    }

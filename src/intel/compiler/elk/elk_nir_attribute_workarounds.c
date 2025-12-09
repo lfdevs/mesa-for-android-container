@@ -115,8 +115,7 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
                                             : nir_u2f32(b, val);
    }
 
-   nir_def_rewrite_uses_after(&intrin->def, val,
-                                  val->parent_instr);
+   nir_def_rewrite_uses_after(&intrin->def, val);
 
    return true;
 }

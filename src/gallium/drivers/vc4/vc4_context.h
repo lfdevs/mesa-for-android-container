@@ -374,7 +374,7 @@ struct vc4_context {
         struct pipe_framebuffer_state framebuffer;
         struct pipe_poly_stipple stipple;
         struct pipe_viewport_state viewport;
-        struct vc4_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
+        struct vc4_constbuf_stateobj constbuf[MESA_SHADER_STAGES];
         struct vc4_vertexbuf_stateobj vertexbuf;
 
         struct vc4_hwperfmon *perfmon;
@@ -457,10 +457,11 @@ void vc4_state_init(struct pipe_context *pctx);
 void vc4_program_init(struct pipe_context *pctx);
 void vc4_program_fini(struct pipe_context *pctx);
 void vc4_query_init(struct pipe_context *pctx);
-void vc4_simulator_init(struct vc4_screen *screen);
-void vc4_simulator_destroy(struct vc4_screen *screen);
+struct vc4_simulator_file *vc4_simulator_init(struct vc4_screen *screen);
+void vc4_simulator_destroy(struct vc4_simulator_file *sim_file);
 int vc4_simulator_ioctl(int fd, unsigned long request, void *arg);
 void vc4_simulator_open_from_handle(int fd, int handle, uint32_t size);
+uint32_t vc4_simulator_get_raster_stride_align(int fd);
 
 static inline int
 vc4_ioctl(int fd, unsigned long request, void *arg)

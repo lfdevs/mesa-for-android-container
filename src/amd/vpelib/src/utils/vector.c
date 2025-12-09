@@ -66,7 +66,7 @@ static struct vpe_vector *vector_realloc(struct vpe_vector *vector, size_t new_s
 
 void *vpe_vector_get(struct vpe_vector *vector, size_t idx)
 {
-    if (!vector)
+    if (!vector || idx >= vector->num_elements)
         return NULL;
 
     return (void *)((char *)(vector->element) + (idx * vector->element_size));
@@ -90,13 +90,39 @@ void vpe_vector_push(struct vpe_vector *vector, void *p_element)
     vector->num_elements++;
 }
 
+void vpe_vector_erase(struct vpe_vector *vector, size_t idx, size_t num_to_erase)
+{
+    if (!vector)
+        return;
+
+    if (idx >= vector->num_elements)
+        return;
+
+    if ((num_to_erase < 1) || ((num_to_erase + idx) > vector->num_elements))
+        return;
+
+    if (idx != (vector->num_elements - num_to_erase)) {
+        void *erase_element           = vpe_vector_get(vector, idx);
+        void *next_element            = vpe_vector_get(vector, idx + num_to_erase);
+        void *new_first_empty_element = vpe_vector_get(vector, vector->num_elements - num_to_erase);
+
+        memcpy(erase_element, next_element,
+            (vector->num_elements - idx - num_to_erase) * vector->element_size);
+
+        vector->num_elements -= num_to_erase;
+    } else {
+        void *last_element = vpe_vector_get(vector, vector->num_elements - num_to_erase);
+
+        vector->num_elements -= num_to_erase;
+    }
+}
+
 void vpe_vector_clear(struct vpe_vector *vector)
 {
     if (!vector)
         return;
 
     vector->num_elements = 0;
-    memset(vector->element, 0, vector->capacity * vector->element_size);
 }
 
 void vpe_vector_free(struct vpe_vector *vector)

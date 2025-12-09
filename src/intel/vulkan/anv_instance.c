@@ -12,7 +12,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ADAPTIVE_SYNC(true)
       DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
       DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(false)
-      DRI_CONF_VK_KHR_PRESENT_WAIT(false)
+      DRI_CONF_VK_WSI_DISABLE_UNORDERED_SUBMITS(false)
       DRI_CONF_VK_XWAYLAND_WAIT_READY(false)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(0)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS_WITH_BARRIER(false)
@@ -37,6 +37,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONFIG_INTEL_VF_DISTRIBUTION(true)
       DRI_CONFIG_INTEL_TE_DISTRIBUTION(true)
       DRI_CONFIG_INTEL_STORAGE_CACHE_POLICY_WT(false)
+      DRI_CONF_ANV_LARGE_WORKGROUP_NON_COHERENT_IMAGE_WORKAROUND(false)
       DRI_CONF_ANV_COMPRESSION_CONTROL_ENABLED(false)
       DRI_CONF_ANV_FAKE_NONLOCAL_MEMORY(false)
       DRI_CONF_OPT_E(intel_stack_id, 512, 256, 2048,
@@ -55,7 +56,11 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
       DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(false)
       DRI_CONF_LIMIT_TRIG_INPUT_RANGE(false)
+#if DETECT_OS_ANDROID && ANDROID_API_LEVEL >= 35
+      DRI_CONF_ANV_EMULATE_READ_WITHOUT_FORMAT(true)
+#else
       DRI_CONF_ANV_EMULATE_READ_WITHOUT_FORMAT(false)
+#endif
       DRI_CONF_FORCE_VK_VENDOR()
       DRI_CONF_FAKE_SPARSE(false)
       DRI_CONF_CUSTOM_BORDER_COLORS_WITHOUT_FORMAT(!DETECT_OS_ANDROID)
@@ -103,6 +108,7 @@ static const struct vk_instance_extension_table instance_extensions = {
 #ifdef ANV_USE_WSI_PLATFORM
    .KHR_get_surface_capabilities2            = true,
    .KHR_surface                              = true,
+   .KHR_surface_maintenance1                 = true,
    .KHR_surface_protected_capabilities       = true,
    .EXT_surface_maintenance1                 = true,
    .EXT_swapchain_colorspace                 = true,
@@ -194,6 +200,8 @@ anv_init_dri_options(struct anv_instance *instance)
        driQueryOptionb(&instance->dri_options, "intel_vf_distribution");
     instance->enable_te_distribution =
        driQueryOptionb(&instance->dri_options, "intel_te_distribution");
+    instance->large_workgroup_non_coherent_image_workaround =
+       driQueryOptionb(&instance->dri_options, "anv_large_workgroup_non_coherent_image_workaround");
     instance->disable_fcv =
        driQueryOptionb(&instance->dri_options, "anv_disable_fcv");
     instance->enable_buffer_comp =
@@ -214,6 +222,18 @@ anv_init_dri_options(struct anv_instance *instance)
        driQueryOptionb(&instance->dri_options, "anv_vf_component_packing");
     instance->lower_terminate_to_discard =
        driQueryOptionb(&instance->dri_options, "vk_lower_terminate_to_discard");
+
+    if (instance->vk.app_info.engine_name &&
+        !strcmp(instance->vk.app_info.engine_name, "DXVK")) {
+        /* Since 2.3.1+, DXVK uses the application version to signal D3D9. */
+        const bool is_d3d9 = instance->vk.app_info.app_version & 0x1;
+
+        /* This driconf bit enables D3D10+ behaviour for texture coordinate
+         * rounding. As D3D9 wants the Vulkan behaviour instead, apply the
+         * workaround only to D3D10+.
+         */
+        instance->force_filter_addr_rounding &= !is_d3d9;
+    }
 
     instance->stack_ids = driQueryOptioni(&instance->dri_options, "intel_stack_id");
     switch (instance->stack_ids) {

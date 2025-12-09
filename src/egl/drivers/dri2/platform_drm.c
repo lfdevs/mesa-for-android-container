@@ -216,21 +216,58 @@ dri2_drm_destroy_surface(_EGLDisplay *disp, _EGLSurface *surf)
    return EGL_TRUE;
 }
 
+static void
+destroy_oldest_unused_bo(struct dri2_egl_surface *dri2_surf)
+{
+   int max_age = 0;
+   struct dri2_egl_buffer *oldest_buffer = NULL;
+
+   for (unsigned i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
+      if (dri2_surf->color_buffers[i].locked ||
+          dri2_surf->back == &dri2_surf->color_buffers[i])
+         continue;
+
+      if (!max_age || dri2_surf->color_buffers[i].age > max_age) {
+         oldest_buffer = &dri2_surf->color_buffers[i];
+         max_age = dri2_surf->color_buffers[i].age;
+      }
+   }
+
+   gbm_bo_destroy(oldest_buffer->bo);
+   oldest_buffer->bo = NULL;
+   oldest_buffer->age = 0;
+
+   dri2_surf->excess_bo_frames = 0;
+}
+
 static int
 get_back_bo(struct dri2_egl_surface *dri2_surf)
 {
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
    struct gbm_dri_surface *surf = dri2_surf->gbm_surf;
-   int age = 0;
+   int min_age = 0, max_age = 0;
 
    if (dri2_surf->back == NULL) {
       for (unsigned i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
-         if (!dri2_surf->color_buffers[i].locked &&
-             dri2_surf->color_buffers[i].age >= age) {
-            dri2_surf->back = &dri2_surf->color_buffers[i];
-            age = dri2_surf->color_buffers[i].age;
+         if (!dri2_surf->color_buffers[i].locked) {
+            int age = dri2_surf->color_buffers[i].age;
+
+            if (!min_age || age < min_age)
+               min_age = age;
+
+            if (!max_age || age > max_age) {
+               dri2_surf->back = &dri2_surf->color_buffers[i];
+               max_age = age;
+            }
          }
+      }
+
+      if (min_age && min_age < max_age) {
+         if (++dri2_surf->excess_bo_frames == 1000)
+            destroy_oldest_unused_bo(dri2_surf);
+      } else {
+         dri2_surf->excess_bo_frames = 0;
       }
    }
 

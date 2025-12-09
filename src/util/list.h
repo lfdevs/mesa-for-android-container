@@ -44,6 +44,12 @@
 
 #define list_assert(cond, msg)  assert(cond && msg)
 
+#define list_validate_iter(item, msg) \
+   list_assert(list_is_linked(item) && !list_is_empty(item), msg)
+
+#define list_validate_iter_safe(item, end, msg) \
+   list_assert(list_is_linked(item) && (!list_is_empty(item) || end), msg)
+
 struct list_head
 {
     struct list_head *prev;
@@ -234,38 +240,39 @@ static inline void list_move_to(struct list_head *item, struct list_head *loc) {
 	pos = list_container_of(pos->member.prev, pos, member))
 
 #define list_for_each_entry(type, pos, head, member)                    \
-   for (type *pos = list_entry((head)->next, type, member),        \
-	     *__next = list_entry(pos->member.next, type, member); \
+   for (type *pos = list_entry((head)->next, type, member);             \
 	&pos->member != (head);                                         \
-	pos = list_entry(pos->member.next, type, member),          \
-	list_assert(pos == __next, "use _safe iterator"),               \
-	__next = list_entry(__next->member.next, type, member))
+        list_validate_iter(&pos->member, "use _safe iterator"), \
+	pos = list_entry(pos->member.next, type, member))
 
 #define list_for_each_entry_safe(type, pos, head, member)               \
    for (type *pos = list_entry((head)->next, type, member),        \
 	     *__next = list_entry(pos->member.next, type, member); \
 	&pos->member != (head);                                         \
 	pos = __next,                                                   \
+        list_validate_iter_safe(&pos->member, &pos->member == (head), \
+           "use non _safe iterator"), \
 	__next = list_entry(__next->member.next, type, member))
 
 #define list_for_each_entry_rev(type, pos, head, member)                \
-   for (type *pos = list_entry((head)->prev, type, member),        \
-	     *__prev = list_entry(pos->member.prev, type, member); \
+   for (type *pos = list_entry((head)->prev, type, member);             \
 	&pos->member != (head);                                         \
-	pos = list_entry(pos->member.prev, type, member),          \
-	list_assert(pos == __prev, "use _safe iterator"),               \
-	__prev = list_entry(__prev->member.prev, type, member))
+        list_validate_iter(&pos->member, "use _safe iterator"), \
+	pos = list_entry(pos->member.prev, type, member))
 
 #define list_for_each_entry_safe_rev(type, pos, head, member)           \
    for (type *pos = list_entry((head)->prev, type, member),        \
 	     *__prev = list_entry(pos->member.prev, type, member); \
 	&pos->member != (head);                                         \
 	pos = __prev,                                                   \
+        list_validate_iter_safe(&pos->member, &pos->member == (head), \
+           "use non _safe iterator"), \
         __prev = list_entry(__prev->member.prev, type, member))
 
 #define list_for_each_entry_from(type, pos, start, head, member)        \
    for (type *pos = list_entry((start), type, member);             \
 	&pos->member != (head);                                         \
+        list_validate_iter(&pos->member, "use _safe iterator"), \
 	pos = list_entry(pos->member.next, type, member))
 
 #define list_for_each_entry_from_safe(type, pos, start, head, member)   \
@@ -273,18 +280,23 @@ static inline void list_move_to(struct list_head *item, struct list_head *loc) {
 	     *__next = list_entry(pos->member.next, type, member); \
 	&pos->member != (head);                                         \
 	pos = __next,                                                   \
+        list_validate_iter_safe(&pos->member, &pos->member == (head), \
+           "use non _safe iterator"), \
 	__next = list_entry(__next->member.next, type, member))
 
 #define list_for_each_entry_from_rev(type, pos, start, head, member)    \
    for (type *pos = list_entry((start), type, member);             \
 	&pos->member != (head);                                         \
+        list_validate_iter(&pos->member, "use _safe iterator"), \
 	pos = list_entry(pos->member.prev, type, member))
 
 #define list_pair_for_each_entry(type, pos1, pos2, head1, head2, member) \
    for (type *pos1 = list_entry((head1)->next, type, member),      \
              *pos2 = list_entry((head2)->next, type, member);      \
         &pos1->member != (head1) && &pos2->member != (head2);           \
+        list_validate_iter(&pos1->member, "iterator invalidated"), \
 	pos1 = list_entry(pos1->member.next, type, member),        \
+        list_validate_iter(&pos2->member, "iterator invalidated"), \
 	pos2 = list_entry(pos2->member.next, type, member))
 
 #endif /*_UTIL_LIST_H_*/

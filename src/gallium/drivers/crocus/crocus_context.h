@@ -756,9 +756,10 @@ struct crocus_context {
 };
 
 #define perf_debug(dbg, ...) do {                      \
+   void *__var = (void*)(dbg);                         \
    if (INTEL_DEBUG(DEBUG_PERF))                        \
       dbg_printf(__VA_ARGS__);                         \
-   if (unlikely(dbg))                                  \
+   if (unlikely(__var))                                \
       util_debug_message(dbg, PERF_INFO, __VA_ARGS__); \
 } while(0)
 
@@ -837,10 +838,10 @@ void crocus_init_flush_functions(struct pipe_context *ctx);
 
 /* crocus_program.c */
 const struct shader_info *crocus_get_shader_info(const struct crocus_context *ice,
-                                                 gl_shader_stage stage);
+                                                 mesa_shader_stage stage);
 struct crocus_bo *crocus_get_scratch_space(struct crocus_context *ice,
                                            unsigned per_thread_scratch,
-                                           gl_shader_stage stage);
+                                           mesa_shader_stage stage);
 /**
  * Map a <group, index> pair to a binding table index.
  *
@@ -942,7 +943,7 @@ bool crocus_blorp_upload_shader(struct blorp_batch *blorp_batch,
 void crocus_predraw_resolve_inputs(struct crocus_context *ice,
                                    struct crocus_batch *batch,
                                    bool *draw_aux_buffer_disabled,
-                                   gl_shader_stage stage,
+                                   mesa_shader_stage stage,
                                    bool consider_framebuffer);
 void crocus_predraw_resolve_framebuffer(struct crocus_context *ice,
                                         struct crocus_batch *batch,

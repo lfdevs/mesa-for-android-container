@@ -229,7 +229,7 @@ namespace {
             }
          }
       default:
-         unreachable("Invalid register file");
+         UNREACHABLE("Invalid register file");
       }
    }
 
@@ -318,7 +318,7 @@ namespace {
             return 0x3;
 
          default:
-            unreachable("Unknown invalid execution type source mask.");
+            UNREACHABLE("Unknown invalid execution type source mask.");
          }
       } else {
          return 0;

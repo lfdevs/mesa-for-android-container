@@ -130,12 +130,16 @@ gitlab-ci*.yml @eric
 /src/imagination/pco/ @simon-perretta-img
 
 # Intel
-/include/drm-uapi/i915_drm.h @kwg @llandwerlin @gfxstrand @idr
-/include/pci_ids/i*_pci_ids.h @kwg @llandwerlin @gfxstrand @idr
-/src/intel/ @kwg @llandwerlin @gfxstrand @idr
-/src/gallium/winsys/iris/ @kwg @llandwerlin @gfxstrand @idr
-/src/gallium/drivers/iris/ @kwg @llandwerlin @gfxstrand @idr
+/include/drm-uapi/i915_drm.h @kwg @llandwerlin @idr
+/include/pci_ids/i*_pci_ids.h @kwg @llandwerlin @idr
+/src/intel/ @kwg @llandwerlin @idr
+/src/gallium/winsys/iris/ @kwg @llandwerlin @idr
+/src/gallium/drivers/iris/ @kwg @llandwerlin @idr
 /src/gallium/drivers/i915/ @anholt
+
+# KosmicKrisp
+/src/kosmickrisp @aitor
+/src/kosmickrisp/compiler @agoldmints
 
 # Microsoft
 /src/microsoft/ @jenatali
@@ -148,6 +152,11 @@ gitlab-ci*.yml @eric
 
 # R300
 /src/gallium/drivers/r300/ @ondracka @gawin
+
+# Venus
+/src/virtio/virtio-gpu/venus_hw.h @zzyiwei @olv
+/src/virtio/venus-protocol/ @zzyiwei @olv
+/src/virtio/vulkan/ @zzyiwei @olv
 
 # VirGL - Video
 /src/gallium/drivers/virgl/virgl_video.* @flynnjiang

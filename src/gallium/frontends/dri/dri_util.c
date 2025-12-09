@@ -139,7 +139,7 @@ driCreateNewScreen3(int scrn, int fd,
       pscreen = dri_swrast_kms_init_screen(screen, driver_name_is_inferred);
       break;
    default:
-      unreachable("unknown dri screen type");
+      UNREACHABLE("unknown dri screen type");
    }
    if (pscreen == NULL) {
       dri_destroy_screen(screen);
@@ -421,7 +421,8 @@ driCreateContextAttribs(struct dri_screen *screen, int api,
                         unsigned num_attribs,
                         const uint32_t *attribs,
                         unsigned *error,
-                        void *data)
+                        void *data,
+                        bool thread_safe)
 {
     const struct gl_config *modes = (config != NULL) ? &config->modes : NULL;
     gl_api mesa_api;
@@ -594,27 +595,27 @@ driCreateContextAttribs(struct dri_screen *screen, int api,
 
     struct dri_context *ctx = dri_create_context(screen, mesa_api,
                                                  modes, &ctx_config, error,
-                                                 shared, data);
+                                                 shared, data, thread_safe);
     return ctx;
 }
 
 static struct dri_context *
 driCreateNewContextForAPI(struct dri_screen *screen, int api,
                           const struct dri_config *config,
-                          struct dri_context *shared, void *data)
+                          struct dri_context *shared, void *data, bool thread_safe)
 {
     unsigned error;
 
     return driCreateContextAttribs(screen, api, config, shared, 0, NULL,
-                                   &error, data);
+                                   &error, data, thread_safe);
 }
 
 struct dri_context *
 driCreateNewContext(struct dri_screen *screen, const struct dri_config *config,
-                    struct dri_context *shared, void *data)
+                    struct dri_context *shared, void *data, bool thread_safe)
 {
     return driCreateNewContextForAPI(screen, __DRI_API_OPENGL,
-                                     config, shared, data);
+                                     config, shared, data, thread_safe);
 }
 
 /**
@@ -1058,6 +1059,7 @@ bool
 dri_get_drm_device_info(const char *device_name, uint8_t *device_uuid, uint8_t *driver_uuid,
                         char **vendor_name, char **renderer_name, char **driver_name)
 {
+#ifdef HAVE_LIBDRM
    struct pipe_loader_device *pldev;
    struct pipe_screen *pscreen;
    int fd;
@@ -1076,18 +1078,19 @@ dri_get_drm_device_info(const char *device_name, uint8_t *device_uuid, uint8_t *
       close(fd);
       return false;
    }
-   if (!pscreen->get_device_uuid || !pscreen->get_driver_uuid ||
-       !pscreen->get_device_vendor || !pscreen->get_name) {
-      pscreen->destroy(pscreen);
-      pipe_loader_release(&pldev, 1);
-      close(fd);
-      return false;
-   }
 
-   pscreen->get_device_uuid(pscreen, (char *)device_uuid);
-   pscreen->get_driver_uuid(pscreen, (char *)driver_uuid);
-   *vendor_name = strdup(pscreen->get_device_vendor(pscreen));
-   *renderer_name = strdup(pscreen->get_name(pscreen));
+   if (pscreen->get_device_uuid)
+      pscreen->get_device_uuid(pscreen, (char *)device_uuid);
+
+   if (pscreen->get_driver_uuid)
+      pscreen->get_driver_uuid(pscreen, (char *)driver_uuid);
+
+   if (pscreen->get_device_vendor)
+      *vendor_name = strdup(pscreen->get_device_vendor(pscreen));
+
+   if (pscreen->get_name)
+      *renderer_name = strdup(pscreen->get_name(pscreen));
+
    *driver_name = loader_get_driver_for_fd(fd);
 
    pscreen->destroy(pscreen);
@@ -1095,4 +1098,7 @@ dri_get_drm_device_info(const char *device_name, uint8_t *device_uuid, uint8_t *
    close(fd);
 
    return true;
+#else
+   return false;
+#endif
 }

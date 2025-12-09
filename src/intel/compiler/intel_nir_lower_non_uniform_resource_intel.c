@@ -38,11 +38,11 @@ add_src_instr(nir_src *src, void *state)
 {
    struct util_dynarray *inst_array = state;
    util_dynarray_foreach(inst_array, nir_instr *, instr_ptr) {
-      if (*instr_ptr == src->ssa->parent_instr)
+      if (*instr_ptr == nir_def_instr(src->ssa))
          return true;
    }
 
-   util_dynarray_append(inst_array, nir_instr *, src->ssa->parent_instr);
+   util_dynarray_append(inst_array, nir_def_instr(src->ssa));
 
    return true;
 }
@@ -54,10 +54,10 @@ find_resource_intel(struct util_dynarray *inst_array,
    /* If resouce_intel is already directly in front of the instruction, there
     * is nothing to do.
     */
-   if (nir_instr_is_resource_intel(def->parent_instr))
+   if (nir_instr_is_resource_intel(nir_def_instr(def)))
       return NULL;
 
-   util_dynarray_append(inst_array, nir_instr *, def->parent_instr);
+   util_dynarray_append(inst_array, nir_def_instr(def));
 
    unsigned idx = 0, scan_index = 0;
    while (idx < util_dynarray_num_elements(inst_array, nir_instr *)) {

@@ -197,17 +197,17 @@ nv30_fragtex_set_sampler_views(struct pipe_context *pipe, unsigned nr,
 
 
 static void
-nv30_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
+nv30_set_sampler_views(struct pipe_context *pipe, mesa_shader_stage shader,
                        unsigned start, unsigned nr,
                        unsigned unbind_num_trailing_slots,
                        struct pipe_sampler_view **views)
 {
    assert(start == 0);
    switch (shader) {
-   case PIPE_SHADER_FRAGMENT:
+   case MESA_SHADER_FRAGMENT:
       nv30_fragtex_set_sampler_views(pipe, nr, views);
       break;
-   case PIPE_SHADER_VERTEX:
+   case MESA_SHADER_VERTEX:
       nv40_verttex_set_sampler_views(pipe, nr, views);
       break;
    default:

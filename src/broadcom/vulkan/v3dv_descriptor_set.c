@@ -245,7 +245,7 @@ v3dv_descriptor_map_get_texture_bo(struct v3dv_descriptor_state *descriptor_stat
       return image->planes[map->plane[index]].mem->bo;
    }
    default:
-      unreachable("descriptor type doesn't has a texture bo");
+      UNREACHABLE("descriptor type doesn't has a texture bo");
    }
 }
 
@@ -466,7 +466,7 @@ v3dv_CreateDescriptorPool(VkDevice _device,
       case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
          break;
       default:
-         unreachable("Unimplemented descriptor type");
+         UNREACHABLE("Unimplemented descriptor type");
          break;
       }
 
@@ -752,7 +752,7 @@ v3dv_CreateDescriptorSetLayout(VkDevice _device,
          /* Nothing here, just to keep the descriptor type filtering below */
          break;
       default:
-         unreachable("Unknown descriptor type\n");
+         UNREACHABLE("Unknown descriptor type\n");
          break;
       }
 
@@ -1266,7 +1266,7 @@ v3dv_UpdateDescriptorSets(VkDevice  _device,
             break;
          }
          default:
-            unreachable("unimplemented descriptor type");
+            UNREACHABLE("unimplemented descriptor type");
             break;
          }
          descriptor++;
@@ -1448,7 +1448,7 @@ v3dv_UpdateDescriptorSetWithTemplate(
       }
 
       default:
-         unreachable("Unsupported descriptor type");
+         UNREACHABLE("Unsupported descriptor type");
       }
    }
 }

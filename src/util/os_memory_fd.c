@@ -44,6 +44,7 @@
 #include "anon_file.h"
 #include "mesa-sha1.h"
 #include "u_math.h"
+#include "u_overflow.h"
 #include "os_memory.h"
 
 /* (Re)define UUID_SIZE to avoid including vulkan.h (or p_defines.h) here. */
@@ -65,6 +66,23 @@ get_driver_id_sha1_hash(uint8_t sha1[SHA1_DIGEST_LENGTH], const char *driver_id)
    _mesa_sha1_final(&sha1_ctx, sha1);
 }
 
+static bool
+get_fd_header(int fd, struct memory_header *header, char const *driver_id)
+{
+   lseek(fd, 0, SEEK_SET);
+   const int bytes_read = read(fd, header, sizeof(*header));
+   if (bytes_read != sizeof(*header))
+      return false;
+
+   // Check the uuid we put after the sizes in order to verify that the fd
+   // is a memfd that we created and not some random fd.
+   uint8_t sha1[SHA1_DIGEST_LENGTH];
+   get_driver_id_sha1_hash(sha1, driver_id);
+
+   assert(SHA1_DIGEST_LENGTH >= UUID_SIZE);
+   return memcmp(header->uuid, sha1, UUID_SIZE) == 0;
+}
+
 /**
  * Imports memory from a file descriptor
  */
@@ -74,20 +92,8 @@ os_import_memory_fd(int fd, void **ptr, uint64_t *size, char const *driver_id)
    void *mapped_ptr;
    struct memory_header header;
 
-   lseek(fd, 0, SEEK_SET);
-   int bytes_read = read(fd, &header, sizeof(header));
-   if(bytes_read != sizeof(header))
+   if (!get_fd_header(fd, &header, driver_id))
       return false;
-
-   // Check the uuid we put after the sizes in order to verify that the fd
-   // is a memfd that we created and not some random fd.
-   uint8_t sha1[SHA1_DIGEST_LENGTH];
-   get_driver_id_sha1_hash(sha1, driver_id);
-
-   assert(SHA1_DIGEST_LENGTH >= UUID_SIZE);
-   if (memcmp(header.uuid, sha1, UUID_SIZE)) {
-      return false;
-   }
 
    mapped_ptr = mmap(NULL, header.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
    if (mapped_ptr == MAP_FAILED) {
@@ -97,6 +103,25 @@ os_import_memory_fd(int fd, void **ptr, uint64_t *size, char const *driver_id)
    // the offset does not count as part of the size
    *size = header.size - header.offset;
    return true;
+}
+
+/**
+ * Map memory from a file descriptor at placed address
+ */
+bool
+os_map_memory_fd_placed(int fd, void *addr, uint64_t size, uint64_t offset,
+                        char const *driver_id)
+{
+   struct memory_header header;
+
+   if (!get_fd_header(fd, &header, driver_id))
+      return false;
+
+   if (header.size - header.offset < size + offset)
+      return false;
+
+   return mmap(addr, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd,
+               offset + header.offset) != MAP_FAILED;
 }
 
 /**
@@ -118,9 +143,12 @@ os_malloc_aligned_fd(size_t size, size_t alignment, int *fd, char const *fd_name
     *
     * while checking for overflow.
     */
+   if (util_add_overflow(size_t, size, alignment, &alloc_size))
+      return NULL;
+   size = alloc_size;
+
    const size_t header_size = sizeof(struct memory_header) + sizeof(size_t);
-   if (add_overflow_size_t(size, alignment, &alloc_size) ||
-       add_overflow_size_t(alloc_size, header_size, &alloc_size))
+   if (util_add_overflow(size_t, size, header_size, &alloc_size))
       return NULL;
 
    mem_fd = os_create_anonymous_file(alloc_size, fd_name);

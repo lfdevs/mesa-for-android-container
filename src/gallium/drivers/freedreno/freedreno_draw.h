@@ -69,8 +69,9 @@ fd_draw(struct fd_batch *batch, struct fd_ringbuffer *ring,
          size += 2;
 
       BEGIN_RING(ring, size + 1);
-      if (vismode)
-         util_dynarray_append(&batch->draw_patches, uint32_t *, ring->cur);
+      if (vismode) {
+         util_dynarray_append(&batch->draw_patches, ring->cur);
+      }
 
       OUT_PKT3(ring, vismode ? CP_DRAW_INDX_BIN : CP_DRAW_INDX, size);
       OUT_RING(ring, 0x00000000);

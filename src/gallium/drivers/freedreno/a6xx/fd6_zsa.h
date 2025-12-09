@@ -23,12 +23,6 @@
 struct fd6_zsa_stateobj {
    struct pipe_depth_stencil_alpha_state base;
 
-   uint32_t rb_alpha_control;
-   uint32_t rb_depth_cntl;
-   uint32_t rb_stencil_control;
-   uint32_t rb_stencilmask;
-   uint32_t rb_stencilwrmask;
-
    struct fd6_lrz_state lrz;
    bool writes_zs : 1; /* writes depth and/or stencil */
    bool writes_z : 1;  /* writes depth */

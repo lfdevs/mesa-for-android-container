@@ -25,10 +25,12 @@ static struct rnnenum *pm4_packets;
 static int
 find_reg(struct rnndomain *dom, const char *name)
 {
-   for (int i = 0; i < dom->subelemsnum; i++)
+   for (int i = 0; i < dom->subelemsnum; i++) {
+      if (!rnndec_varmatch(ctx, &dom->subelems[i]->varinfo))
+         continue;
       if (!strcmp(name, dom->subelems[i]->name))
          return dom->subelems[i]->offset;
-
+   }
    return -1;
 }
 
@@ -266,6 +268,7 @@ int afuc_util_init(enum afuc_fwid fw_id, int *gpuver_out, bool colors)
       break;
    case AFUC_A730:
    case AFUC_A740:
+   case AFUC_GEN70500:
       name = "A6XX";
       variant = "A7XX";
       control_reg_name = "A7XX_CONTROL_REG";

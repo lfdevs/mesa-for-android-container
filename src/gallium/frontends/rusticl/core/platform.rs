@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::CLResult;
 use crate::api::icd::DISPATCH;
 use crate::core::device::*;
@@ -273,6 +276,16 @@ impl Platform {
         // SAFETY: no concurrent static mut access due to std::Once
         #[allow(static_mut_refs)]
         PLATFORM_ONCE.call_once(|| unsafe { PLATFORM.init() });
+    }
+
+    pub fn all_devs_have_semaphores(&self) -> bool {
+        self.devs.iter().all(|dev| dev.are_semaphores_supported())
+    }
+
+    pub fn all_devs_have_external_semaphores(&self) -> bool {
+        self.devs
+            .iter()
+            .all(|dev| dev.are_external_semaphores_supported())
     }
 }
 

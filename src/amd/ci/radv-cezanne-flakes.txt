@@ -1,0 +1,2 @@
+dEQP-VK.pipeline.shader_object_unlinked_spirv.multisample.m10_resolve.resolve_cmd.d32_sfloat_s8_uint.depth.max.regions_multilayer.no_flags
+dEQP-VK.pipeline.monolithic.multisample.m10_resolve.resolve_cmd.d32_sfloat.depth.max.regions_multilayer.no_flags

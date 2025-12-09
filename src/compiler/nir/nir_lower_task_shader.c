@@ -132,7 +132,7 @@ static bool
 nir_lower_nv_task_count(nir_shader *shader)
 {
    lower_task_nv_state state = {
-      .task_count_shared_addr = ALIGN(shader->info.shared_size, 4),
+      .task_count_shared_addr = align(shader->info.shared_size, 4),
    };
 
    shader->info.shared_size += 4;
@@ -159,7 +159,7 @@ shared_opcode_for_task_payload(nir_intrinsic_op task_payload_op)
    case nir_intrinsic_store_task_payload:
       return nir_intrinsic_store_shared;
    default:
-      unreachable("Invalid task payload atomic");
+      UNREACHABLE("Invalid task payload atomic");
    }
 }
 
@@ -277,7 +277,7 @@ emit_shared_to_payload_copy(nir_builder *b,
       off += remaining_dwords * 4;
    }
 
-   assert(s->payload_offset_in_bytes + ALIGN(payload_size, 4) == off);
+   assert(s->payload_offset_in_bytes + align(payload_size, 4) == off);
 }
 
 static bool
@@ -453,7 +453,7 @@ nir_lower_task_shader(nir_shader *shader,
                             requires_payload_in_shared(shader, atomics, small_types);
 
    lower_task_state state = {
-      .payload_shared_addr = ALIGN(shader->info.shared_size, 16),
+      .payload_shared_addr = align(shader->info.shared_size, 16),
       .payload_in_shared = payload_in_shared,
       .payload_offset_in_bytes = options.payload_offset_in_bytes,
    };

@@ -186,11 +186,29 @@ Shader::emit_instruction_from_string(const std::string& s)
 {
 
    sfn_log << SfnLog::instr << "Create Instr from '" << s << "'\n";
-   if (s == "BLOCK_START") {
+   if (s.compare(0, 11, "BLOCK_START") == 0) {
+      std::istringstream ins(s.substr(11));
+      string type;
+      ins >> type;
       if (!m_current_block->empty()) {
          start_new_block(m_current_block->nesting_offset());
          sfn_log << SfnLog::instr << "   Emit start block\n";
       }
+
+      if (type == "ALU")
+         m_current_block->set_cf_start(new ControlFlowInstr(ControlFlowInstr::cf_alu));
+      else if (type == "ALU_PUSH_BEFORE")
+         m_current_block->set_cf_start(
+            new ControlFlowInstr(ControlFlowInstr::cf_alu_push_before));
+      else if (type == "GDS")
+         m_current_block->set_cf_start(new ControlFlowInstr(ControlFlowInstr::cf_gds));
+      else if (type == "TEX")
+         m_current_block->set_cf_start(new ControlFlowInstr(ControlFlowInstr::cf_tex));
+      else if (type == "VTX")
+         m_current_block->set_cf_start(new ControlFlowInstr(ControlFlowInstr::cf_vtx));
+      else if (type == "POP")
+         m_current_block->set_cf_start(new ControlFlowInstr(ControlFlowInstr::cf_pop));
+
       return;
    }
 
@@ -395,38 +413,33 @@ Shader::allocate_reserved_registers()
    m_instr_factory->value_factory().set_virtual_register_base(reserved_registers_end);
    if (!m_atomics.empty()) {
       m_atomic_update = value_factory().temp_register();
-      auto alu = new AluInstr(op1_mov,
-                              m_atomic_update,
-                              value_factory().one_i(),
-                              AluInstr::last_write);
+      auto alu =
+         new AluInstr(op1_mov, m_atomic_update, value_factory().one_i(), AluInstr::write);
       alu->set_alu_flag(alu_no_schedule_bias);
       emit_instruction(alu);
    }
 
    if (m_flags.test(sh_needs_sbo_ret_address)) {
-      m_rat_return_address = value_factory().temp_register(0);
-      auto temp0 = value_factory().temp_register(0);
-      auto temp1 = value_factory().temp_register(1);
-      auto temp2 = value_factory().temp_register(2);
+      m_rat_return_address = value_factory().temp_register(-1);
+      auto thread_pos = value_factory().temp_register(0);
+      auto temp2 = value_factory().temp_register(-1);
+      auto mask = value_factory().literal(-1);
+      auto src = {mask, mask};
+      emit_instruction(
+         new AluInstr(op1_mbcnt_32lo_accum_prev_int, thread_pos, src, AluInstr::write, 2));
 
-      auto group = new AluGroup();
-      group->add_instruction(new AluInstr(
-         op1_mbcnt_32lo_accum_prev_int, temp0, value_factory().literal(-1), {alu_write}));
-      group->add_instruction(new AluInstr(
-         op1_mbcnt_32hi_int, temp1, value_factory().literal(-1), {alu_write}));
-      emit_instruction(group);
       emit_instruction(new AluInstr(op3_muladd_uint24,
                                     temp2,
                                     value_factory().inline_const(ALU_SRC_SE_ID, 0),
                                     value_factory().literal(256),
                                     value_factory().inline_const(ALU_SRC_HW_WAVE_ID, 0),
-                                    {alu_write, alu_last_instr}));
+                                    AluInstr::write));
       emit_instruction(new AluInstr(op3_muladd_uint24,
                                     m_rat_return_address,
                                     temp2,
                                     value_factory().literal(0x40),
-                                    temp0,
-                                    {alu_write, alu_last_instr}));
+                                    thread_pos,
+                                    AluInstr::write));
    }
 }
 
@@ -660,7 +673,7 @@ Shader::process_cf_node(nir_cf_node *node)
 static bool
 child_block_empty(const exec_list& list)
 {
-   if (list.is_empty())
+   if (exec_list_is_empty(&list))
       return true;
 
    bool result = true;
@@ -669,7 +682,7 @@ child_block_empty(const exec_list& list)
    {
 
       if (n->type == nir_cf_node_block) {
-         if (!nir_cf_node_as_block(n)->instr_list.is_empty())
+         if (!exec_list_is_empty(&nir_cf_node_as_block(n)->instr_list))
             return false;
       }
       if (n->type == nir_cf_node_if)
@@ -713,13 +726,13 @@ Shader::process_if(nir_if *if_stmt)
    EAluOp op = child_block_empty(if_stmt->then_list) ? op2_prede_int :
                                                        op2_pred_setne_int;
 
+   auto flags = {alu_update_exec, alu_last_instr, alu_update_pred};
+
    AluInstr *pred = new AluInstr(op,
-                                 value_factory().temp_register(),
+                                 0,
                                  value,
                                  value_factory().zero(),
-                                 AluInstr::last);
-   pred->set_alu_flag(alu_update_exec);
-   pred->set_alu_flag(alu_update_pred);
+                                 flags);
    pred->set_cf_type(cf_alu_push_before);
 
    IfInstr *ir = new IfInstr(pred);
@@ -850,8 +863,6 @@ Shader::emit_tex_fdd(const nir_intrinsic_instr* intr, int opcode, bool fine)
       mv = new AluInstr(op1_mov, tmp[i], src[i], AluInstr::write);
       emit_instruction(mv);
    }
-   if (mv)
-      mv->set_alu_flag(alu_last_instr);
 
    auto dst = value_factory_.dest_vec4(intr->def, pin_group);
    RegisterVec4::Swizzle dst_swz = {7, 7, 7, 7};
@@ -979,7 +990,7 @@ lds_op_from_intrinsic(nir_atomic_op op, bool ret)
    case nir_atomic_op_cmpxchg:
       return LDS_CMP_XCHG_RET;
    default:
-      unreachable("Unsupported shared atomic_op opcode");
+      UNREACHABLE("Unsupported shared atomic_op opcode");
    }
 }
 
@@ -992,7 +1003,7 @@ Shader::emit_load_to_register(PVirtualValue src, int chan)
    if (!dest || chan >= 0) {
       dest = value_factory().temp_register(chan);
       dest->set_pin(pin_free);
-      emit_instruction(new AluInstr(op1_mov, dest, src, AluInstr::last_write));
+      emit_instruction(new AluInstr(op1_mov, dest, src, AluInstr::write));
    }
    return dest;
 }
@@ -1078,7 +1089,7 @@ RegisterAccessHandler::RegisterAccessHandler(Shader& shader, nir_intrinsic_instr
 void RegisterReadHandler::visit(LocalArray& array)
 {
    int slots =  ir->def.bit_size / 32;
-   auto pin = ir->def.num_components > 1 ? pin_none : pin_free;
+   auto pin = ir->def.num_components * slots > 1 ? pin_none : pin_free;
    for (int i = 0; i < ir->def.num_components; ++i) {
       for (int s = 0; s < slots; ++s) {
          int chan = i * slots + s;
@@ -1170,7 +1181,7 @@ Shader::evaluate_resource_offset(nir_intrinsic_instr *instr, int src_id)
          uav_id = uav_id_val->as_register();
       } else {
          uav_id = vf.temp_register();
-         emit_instruction(new AluInstr(op1_mov, uav_id, uav_id_val, AluInstr::last_write));
+         emit_instruction(new AluInstr(op1_mov, uav_id, uav_id_val, AluInstr::write));
       }
    }
    return std::make_pair(offset, uav_id);
@@ -1200,8 +1211,6 @@ Shader::emit_store_scratch(nir_intrinsic_instr *intr)
    if (!ir)
       return true;
 
-   ir->set_alu_flag(alu_last_instr);
-
    auto address = vf.src(intr->src[1], 0);
 
    int align = nir_intrinsic_align_mul(intr);
@@ -1224,7 +1233,7 @@ Shader::emit_store_scratch(nir_intrinsic_instr *intr)
       ws_ir = new ScratchIOInstr(value, offset, align, align_offset, writemask);
    } else {
       auto addr_temp = vf.temp_register(0);
-      auto load_addr = new AluInstr(op1_mov, addr_temp, address, AluInstr::last_write);
+      auto load_addr = new AluInstr(op1_mov, addr_temp, address, AluInstr::write);
       load_addr->set_alu_flag(alu_no_schedule_bias);
       emit_instruction(load_addr);
 
@@ -1249,6 +1258,10 @@ Shader::emit_load_scratch(nir_intrinsic_instr *intr)
       for (unsigned i = 0; i < intr->num_components; ++i)
          dest_swz[i] = i;
 
+      auto wait = new ControlFlowInstr(ControlFlowInstr::cf_wait_ack);
+      emit_instruction(wait);
+      chain_scratch_read(wait);
+
       auto *ir = new LoadFromScratch(dest, dest_swz, addr, m_scratch_size);
       emit_instruction(ir);
       chain_scratch_read(ir);
@@ -1272,7 +1285,7 @@ Shader::emit_load_scratch(nir_intrinsic_instr *intr)
          ir = new ScratchIOInstr(dest, offset, align, align_offset, 0xf, true);
       } else {
          auto addr_temp = value_factory().temp_register(0);
-         auto load_addr = new AluInstr(op1_mov, addr_temp, addr, AluInstr::last_write);
+         auto load_addr = new AluInstr(op1_mov, addr_temp, addr, AluInstr::write);
          load_addr->set_alu_flag(alu_no_schedule_bias);
          emit_instruction(load_addr);
 
@@ -1295,7 +1308,7 @@ bool Shader::emit_load_global(nir_intrinsic_instr *intr)
    auto src = src_value->as_register();
    if (!src) {
       src = value_factory().temp_register();
-      emit_instruction(new AluInstr(op1_mov, src, src_value, AluInstr::last_write));
+      emit_instruction(new AluInstr(op1_mov, src, src_value, AluInstr::write));
    }
    auto load = new LoadFromBuffer(dest, {0,7,7,7}, src, 0, 1, NULL, fmt_32);
    load->set_mfc(4);
@@ -1426,13 +1439,19 @@ void Shader::InstructionChain::visit(AluInstr *instr)
       if (last_ssbo_instr)
          instr->add_required_instr(last_ssbo_instr);
    }
-
 }
 
 void
 Shader::InstructionChain::visit(ScratchIOInstr *instr)
 {
    apply(instr, &last_scratch_instr);
+}
+
+void
+Shader::InstructionChain::visit(IfInstr *instr)
+{
+   if (last_group_barrier)
+      instr->predicate()->add_required_instr(last_group_barrier);
 }
 
 void
@@ -1490,8 +1509,7 @@ bool
 Shader::emit_load_tcs_param_base(nir_intrinsic_instr *instr, int offset)
 {
    auto src = value_factory().temp_register();
-   emit_instruction(
-      new AluInstr(op1_mov, src, value_factory().zero(), AluInstr::last_write));
+   emit_instruction(new AluInstr(op1_mov, src, value_factory().zero(), AluInstr::write));
 
    auto dest = value_factory().dest_vec4(instr->def, pin_group);
    auto fetch = new LoadFromBuffer(dest,
@@ -1512,8 +1530,7 @@ bool
 Shader::emit_get_lds_info_uint(nir_intrinsic_instr *instr, int offset)
 {
    auto src = value_factory().temp_register();
-   emit_instruction(
-      new AluInstr(op1_mov, src, value_factory().zero(), AluInstr::last_write));
+   emit_instruction(new AluInstr(op1_mov, src, value_factory().zero(), AluInstr::write));
 
    auto dest = value_factory().dest_vec4(instr->def, pin_group);
    auto fetch = new LoadFromBuffer(dest,
@@ -1540,7 +1557,7 @@ Shader::emit_shader_clock(nir_intrinsic_instr *instr)
    group->add_instruction(new AluInstr(op1_mov,
                                        vf.dest(instr->def, 1, pin_chan),
                                        vf.inline_const(ALU_SRC_TIME_HI, 0),
-                                       AluInstr::last_write));
+                                       AluInstr::write));
    emit_instruction(group);
    return true;
 }
@@ -1551,7 +1568,6 @@ Shader::emit_group_barrier(nir_intrinsic_instr *intr)
    assert(m_control_flow_depth == 0);
    (void)intr;
    auto op = new AluInstr(op0_group_barrier, 0);
-   op->set_alu_flag(alu_last_instr);
    emit_instruction(op);
    return true;
 }
@@ -1632,11 +1648,9 @@ Shader::load_ubo(nir_intrinsic_instr *instr)
          ir = new AluInstr(op1_mov,
                            value_factory().dest(instr->def, i, pin),
                            uniform,
-                           {alu_write});
+                           AluInstr::write);
          emit_instruction(ir);
       }
-      if (ir)
-         ir->set_alu_flag(alu_last_instr);
       return true;
    } else {
       int buf_cmp = nir_intrinsic_component(instr);
@@ -1651,8 +1665,6 @@ Shader::load_ubo(nir_intrinsic_instr *instr)
          ir = new AluInstr(op1_mov, dest, u, AluInstr::write);
          emit_instruction(ir);
       }
-      if (ir)
-         ir->set_alu_flag(alu_last_instr);
       m_indirect_files |= 1 << TGSI_FILE_CONSTANT;
       return true;
    }
@@ -1670,7 +1682,7 @@ bool
 Shader::emit_simple_mov(nir_def& def, int chan, PVirtualValue src, Pin pin)
 {
    auto dst = value_factory().dest(def, chan, pin);
-   emit_instruction(new AluInstr(op1_mov, dst, src, AluInstr::last_write));
+   emit_instruction(new AluInstr(op1_mov, dst, src, AluInstr::write));
    return true;
 }
 

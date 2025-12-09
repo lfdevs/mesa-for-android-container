@@ -47,7 +47,7 @@ struct pvr_sampler;
 /* Forward declaration from "pvr_bo.h" */
 struct pvr_bo;
 
-/* Forward declaration from "pvr_private.h" */
+/* Forward declaration from "pvr_device.h" */
 struct pvr_device;
 
 struct pvr_border_color_table {
@@ -59,15 +59,20 @@ struct pvr_border_color_table {
    struct pvr_bo *table;
 };
 
-VkResult pvr_border_color_table_init(struct pvr_border_color_table *table,
-                                     struct pvr_device *device);
-void pvr_border_color_table_finish(struct pvr_border_color_table *table,
-                                   struct pvr_device *device);
+VkResult
+pvr_border_color_table_init(struct pvr_device *const device);
+
+void
+pvr_border_color_table_finish(struct pvr_device *device);
 
 VkResult
-pvr_border_color_table_get_or_create_entry(struct pvr_border_color_table *table,
+pvr_border_color_table_get_or_create_entry(struct pvr_device *device,
                                            const struct pvr_sampler *sampler,
+                                           struct pvr_border_color_table *table,
                                            uint32_t *index_out);
+
+void pvr_border_color_table_release_entry(struct pvr_border_color_table *table,
+                                          uint32_t index);
 
 static inline bool pvr_border_color_table_is_index_valid(
    const struct pvr_border_color_table *const table,

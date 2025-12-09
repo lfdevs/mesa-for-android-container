@@ -45,34 +45,23 @@ extern "C" {
 /**
  * Shader stages.
  *
+ * For vertex/tessallation/geometry/fragment shaders:
  * The order must match how shaders are ordered in the pipeline.
  * The GLSL linker assumes that if i<j, then the j-th shader is
  * executed later than the i-th shader.
  */
-typedef enum pipe_shader_type
-{
+typedef enum mesa_shader_stage {
    MESA_SHADER_NONE = -1,
    MESA_SHADER_VERTEX = 0,
-   PIPE_SHADER_VERTEX = MESA_SHADER_VERTEX,
    MESA_SHADER_TESS_CTRL = 1,
-   PIPE_SHADER_TESS_CTRL = MESA_SHADER_TESS_CTRL,
    MESA_SHADER_TESS_EVAL = 2,
-   PIPE_SHADER_TESS_EVAL = MESA_SHADER_TESS_EVAL,
    MESA_SHADER_GEOMETRY = 3,
-   PIPE_SHADER_GEOMETRY = MESA_SHADER_GEOMETRY,
    MESA_SHADER_FRAGMENT = 4,
-   PIPE_SHADER_FRAGMENT = MESA_SHADER_FRAGMENT,
    MESA_SHADER_COMPUTE = 5,
-   PIPE_SHADER_COMPUTE = MESA_SHADER_COMPUTE,
+   MESA_SHADER_TASK = 6,
+   MESA_SHADER_MESH = 7,
 
-   PIPE_SHADER_TYPES = (PIPE_SHADER_COMPUTE + 1),
    /* Vulkan-only stages. */
-   MESA_SHADER_TASK         = 6,
-   PIPE_SHADER_TASK = MESA_SHADER_TASK,
-   MESA_SHADER_MESH         = 7,
-   PIPE_SHADER_MESH = MESA_SHADER_MESH,
-   PIPE_SHADER_MESH_TYPES = (PIPE_SHADER_MESH + 1),
-
    MESA_SHADER_RAYGEN       = 8,
    MESA_SHADER_ANY_HIT      = 9,
    MESA_SHADER_CLOSEST_HIT  = 10,
@@ -82,23 +71,40 @@ typedef enum pipe_shader_type
 
    /* must be last so it doesn't affect the GL pipeline */
    MESA_SHADER_KERNEL = 14,
-} gl_shader_stage;
+} mesa_shader_stage;
 
 static inline bool
-gl_shader_stage_is_compute(gl_shader_stage stage)
+mesa_shader_stage_is_graphics(mesa_shader_stage stage)
+{
+   switch (stage) {
+   case MESA_SHADER_VERTEX:
+   case MESA_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_EVAL:
+   case MESA_SHADER_GEOMETRY:
+   case MESA_SHADER_FRAGMENT:
+   case MESA_SHADER_TASK:
+   case MESA_SHADER_MESH:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static inline bool
+mesa_shader_stage_is_compute(mesa_shader_stage stage)
 {
    return stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_KERNEL;
 }
 
 static inline bool
-gl_shader_stage_is_mesh(gl_shader_stage stage)
+mesa_shader_stage_is_mesh(mesa_shader_stage stage)
 {
    return stage == MESA_SHADER_TASK ||
           stage == MESA_SHADER_MESH;
 }
 
 static inline bool
-gl_shader_stage_uses_workgroup(gl_shader_stage stage)
+mesa_shader_stage_uses_workgroup(mesa_shader_stage stage)
 {
    return stage == MESA_SHADER_COMPUTE ||
           stage == MESA_SHADER_KERNEL ||
@@ -107,7 +113,7 @@ gl_shader_stage_uses_workgroup(gl_shader_stage stage)
 }
 
 static inline bool
-gl_shader_stage_is_callable(gl_shader_stage stage)
+mesa_shader_stage_is_callable(mesa_shader_stage stage)
 {
    return stage == MESA_SHADER_ANY_HIT ||
           stage == MESA_SHADER_CLOSEST_HIT ||
@@ -117,13 +123,13 @@ gl_shader_stage_is_callable(gl_shader_stage stage)
 }
 
 static inline bool
-gl_shader_stage_is_rt(gl_shader_stage stage)
+mesa_shader_stage_is_rt(mesa_shader_stage stage)
 {
-   return stage == MESA_SHADER_RAYGEN || gl_shader_stage_is_callable(stage);
+   return stage == MESA_SHADER_RAYGEN || mesa_shader_stage_is_callable(stage);
 }
 
 static inline bool
-gl_shader_stage_can_set_fragment_shading_rate(gl_shader_stage stage)
+mesa_shader_stage_can_set_fragment_shading_rate(mesa_shader_stage stage)
 {
    /* According to EXT_fragment_shading_rate :
     *
@@ -143,24 +149,36 @@ gl_shader_stage_can_set_fragment_shading_rate(gl_shader_stage stage)
 
 typedef short gl_state_index16; /* see enum gl_state_index */
 
-const char *gl_shader_stage_name(gl_shader_stage stage);
+const char *mesa_shader_stage_name(mesa_shader_stage stage);
 
 /**
- * Translate a gl_shader_stage to a short shader stage name for debug
+ * Translate a mesa_shader_stage to a short shader stage name for debug
  * printouts and error messages.
  */
 const char *_mesa_shader_stage_to_string(unsigned stage);
 
 /**
- * Translate a gl_shader_stage to a shader stage abbreviation (VS, GS, FS)
+ * Translate a mesa_shader_stage to a shader stage abbreviation (VS, GS, FS)
  * for debug printouts and error messages.
  */
 const char *_mesa_shader_stage_to_abbrev(unsigned stage);
+
+
+/**
+ * Translate a gl_shader_stage to a shader stage file extension
+ * that's easily consumed by glslang.
+ */
+const char *_mesa_shader_stage_to_file_ext(unsigned stage);
 
 /**
  * GL related stages (not including CL)
  */
 #define MESA_SHADER_STAGES (MESA_SHADER_COMPUTE + 1)
+
+/**
+ * GL related stages with mesh shader (not including CL)
+ */
+#define MESA_SHADER_MESH_STAGES (MESA_SHADER_MESH + 1)
 
 /**
  * Vulkan stages (not including CL)
@@ -463,7 +481,7 @@ typedef enum
 #define MAX_VARYINGS_INCL_PATCH (VARYING_SLOT_TESS_MAX - VARYING_SLOT_VAR0)
 
 const char *gl_varying_slot_name_for_stage(gl_varying_slot slot,
-                                           gl_shader_stage stage);
+                                           mesa_shader_stage stage);
 
 /**
  * Determine if the given gl_varying_slot appears in the fragment shader.
@@ -837,6 +855,11 @@ typedef enum
    /** Required for VK_KHX_multiview */
    SYSTEM_VALUE_VIEW_INDEX,
 
+   /** Metal's amplification_id. Required to emulate view index on the vertex
+    * shaders. This value is present in both vertex and fragment shaders
+    */
+   SYSTEM_VALUE_AMPLIFICATION_ID_KK,
+
    /**
     * Driver internal vertex-count, used (for example) for drivers to
     * calculate stride for stream-out outputs.  Not externally visible.
@@ -937,6 +960,13 @@ typedef enum
    SYSTEM_VALUE_SM_COUNT_NV,
    SYSTEM_VALUE_WARP_ID_NV,
    SYSTEM_VALUE_SM_ID_NV,
+
+   /* SPV_ARM_core_builtins */
+   SYSTEM_VALUE_CORE_ID,
+   SYSTEM_VALUE_CORE_COUNT_ARM,
+   SYSTEM_VALUE_CORE_MAX_ID_ARM,
+   SYSTEM_VALUE_WARP_ID_ARM,
+   SYSTEM_VALUE_WARP_MAX_ID_ARM,
 
    SYSTEM_VALUE_MAX             /**< Number of values */
 } gl_system_value;
@@ -1040,6 +1070,9 @@ enum gl_access_qualifier
     * This means that the memory scope is the current device. It indicates
     * that reads and writes are coherent with reads and writes from other
     * shader invocations and other workgroups.
+    *
+    * This is not necessary for shared access. It is always workgroup
+    * coherent.
     */
    ACCESS_COHERENT      = (1 << 0),
 
@@ -1166,6 +1199,53 @@ enum gl_access_qualifier
     * Indicates that this load will use SMEM.
     */
    ACCESS_SMEM_AMD = (1 << 16),
+
+   /**
+    * Indicates that this load must be skipped by helper invocations.
+    */
+   ACCESS_SKIP_HELPERS = (1 << 17),
+
+   /**
+    * Indicates that this is an atomic load/store. Atomic RMW, swap, and other
+    * intrinsics which are always atomic such as atomic_counter_read_deref do
+    * not need this flag.
+    *
+    * If this is a vector load/store, then each component is considered its
+    * own atomic access.
+    *
+    * For non-shared load/store, instructions with this flag should also have
+    * ACCESS_COHERENT.
+    *
+    * The differences between atomic and non-atomic accesses can be summarized
+    * as follows:
+    * - Bounds checking of a 64-bit atomic access must be done per-component,
+    *   and not for each 32-bit part.
+    * - Atomics accesses are always coherent. Non-shared atomic load/store
+    *   should have the ACCESS_COHERENT flag.
+    * - Data races do not happen with two atomic accesses, with each access
+    *   instead reading/writing a valid value. Two non-atomic accesses or an
+    *   atomic access and a non-atomic access can data race, which is either
+    *   undefined behaviour or undefined value, depending on
+    *   shader_info::assume_no_data_races.
+    * - Because of data races, atomics are necessary for sychronization
+    *   without barriers. In the Vulkan memory model, synchronizes-with
+    *   relations only form between two memory barriers if control barriers or
+    *   atomic accesses are involved.
+    *
+    * Some hardware can "tear" loads with a subgroup uniform address, which
+    * means that a store from a different subgroup interrupts the load,
+    * causing the result to not be subgroup uniform and instead be a mix of
+    * the old and new values, despite the address being subgroup uniform. If
+    * a load is not atomic and assume_no_data_races=true, we can assume that
+    * the load never tears.
+    */
+   ACCESS_ATOMIC = (1 << 18),
+
+   /**
+    * Indicates that access should be serialized with regard to the Intel EU
+    * fusion feature.
+    */
+   ACCESS_FUSED_EU_DISABLE_INTEL = (1 << 19),
 };
 
 /**
@@ -1504,7 +1584,7 @@ enum float_controls
       FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP64 |
       FLOAT_CONTROLS_INF_PRESERVE_FP64 |
       FLOAT_CONTROLS_NAN_PRESERVE_FP64,
-   
+
    FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE =
       FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP16 |
       FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP32 |
@@ -1575,44 +1655,6 @@ enum cl_sampler_filter_mode {
 #define MAT_BIT_BACK_SHININESS        (1<<MAT_ATTRIB_BACK_SHININESS)
 #define MAT_BIT_FRONT_INDEXES         (1<<MAT_ATTRIB_FRONT_INDEXES)
 #define MAT_BIT_BACK_INDEXES          (1<<MAT_ATTRIB_BACK_INDEXES)
-
-/** An enum representing what kind of input gl_SubgroupSize is. */
-enum ENUM_PACKED gl_subgroup_size
-{
-   /** Actual subgroup size, whatever that happens to be */
-   SUBGROUP_SIZE_VARYING = 0,
-
-   /** Subgroup size must appear to be draw or dispatch-uniform
-    *
-    * This is the OpenGL behavior
-    */
-   SUBGROUP_SIZE_UNIFORM,
-
-   /** Subgroup size must appear to be the API advertised constant
-    *
-    * This is the default Vulkan 1.1 behavior
-    */
-   SUBGROUP_SIZE_API_CONSTANT,
-
-   /** Subgroup size must actually be the API advertised constant
-    *
-    * Not only must the subgroup size match the API advertised constant as
-    * with SUBGROUP_SIZE_API_CONSTANT but it must also be dispatched such that
-    * all the subgroups are full if there are enough invocations.
-    */
-   SUBGROUP_SIZE_FULL_SUBGROUPS,
-
-   /* These enums are specifically chosen so that the value of the enum is
-    * also the subgroup size.  If any new values are added, they must respect
-    * this invariant.
-    */
-   SUBGROUP_SIZE_REQUIRE_4   = 4,   /**< VK_EXT_subgroup_size_control */
-   SUBGROUP_SIZE_REQUIRE_8   = 8,   /**< VK_EXT_subgroup_size_control */
-   SUBGROUP_SIZE_REQUIRE_16  = 16,  /**< VK_EXT_subgroup_size_control */
-   SUBGROUP_SIZE_REQUIRE_32  = 32,  /**< VK_EXT_subgroup_size_control */
-   SUBGROUP_SIZE_REQUIRE_64  = 64,  /**< VK_EXT_subgroup_size_control */
-   SUBGROUP_SIZE_REQUIRE_128 = 128, /**< VK_EXT_subgroup_size_control */
-};
 
 /* Ordered from narrower to wider scope. */
 typedef enum {

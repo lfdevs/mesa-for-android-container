@@ -59,7 +59,7 @@ check_for_lowered_ffloor(nir_alu_instr *fadd)
    nir_alu_instr *fneg = NULL;
    nir_src x;
    for (unsigned i = 0; i < 2; i++) {
-      nir_alu_instr *fadd_src_alu = nir_src_as_alu_instr(fadd->src[i].src);
+      nir_alu_instr *fadd_src_alu = nir_src_as_alu(fadd->src[i].src);
       if (fadd_src_alu && fadd_src_alu->op == nir_op_fneg) {
          fneg = fadd_src_alu;
          x = fadd->src[1 - i].src;
@@ -69,7 +69,7 @@ check_for_lowered_ffloor(nir_alu_instr *fadd)
    if (!fneg || !instr_has_only_trivial_swizzles(fneg))
       return false;
 
-   nir_alu_instr *ffract = nir_src_as_alu_instr(fneg->src[0].src);
+   nir_alu_instr *ffract = nir_src_as_alu(fneg->src[0].src);
    if (ffract && ffract->op == nir_op_ffract &&
        nir_srcs_equal(ffract->src[0].src, x) &&
        instr_has_only_trivial_swizzles(ffract))
@@ -123,7 +123,7 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
       /* If the source was already integer, then we did't need to truncate and
        * can switch it to a mov that can be copy-propagated away.
        */
-      nir_alu_instr *src_alu = nir_src_as_alu_instr(alu->src[0].src);
+      nir_alu_instr *src_alu = nir_src_as_alu(alu->src[0].src);
       if (src_alu) {
          switch (src_alu->op) {
          /* Check for the y = x - ffract(x) patterns from lowered ffloor. */
@@ -262,10 +262,8 @@ nir_lower_int_to_float_impl(nir_function_impl *impl)
    nir_builder b = nir_builder_create(impl);
 
    nir_index_ssa_defs(impl);
-   float_types = calloc(BITSET_WORDS(impl->ssa_alloc),
-                        sizeof(BITSET_WORD));
-   int_types = calloc(BITSET_WORDS(impl->ssa_alloc),
-                      sizeof(BITSET_WORD));
+   float_types = BITSET_CALLOC(impl->ssa_alloc);
+   int_types = BITSET_CALLOC(impl->ssa_alloc);
    nir_gather_types(impl, float_types, int_types);
 
    nir_foreach_block(block, impl) {

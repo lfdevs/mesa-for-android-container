@@ -228,7 +228,7 @@ static unsigned busy_index_from_type(struct r600_common_screen *rscreen,
 	case R600_QUERY_GPU_SCRATCH_RAM_BUSY:
 		return BUSY_INDEX(rscreen, scratch_ram);
 	default:
-		unreachable("invalid query type");
+		UNREACHABLE("invalid query type");
 	}
 }
 

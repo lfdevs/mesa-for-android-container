@@ -210,6 +210,9 @@ struct ir3_compiler {
    /* Whether half register shared->non-shared moves are broken. */
    bool mov_half_shared_quirk;
 
+   /* Is lock/unlock sequence needed for CS? */
+   bool cs_lock_unlock_quirk;
+
    /* Whether movs is supported for subgroupBroadcast. */
    bool has_movs;
 
@@ -284,6 +287,11 @@ struct ir3_compiler {
     */
    bool has_scalar_alu;
 
+   /* True if cat2 instructions can write predicate registers from the scalar
+    * ALU.
+    */
+   bool has_scalar_predicates;
+
    bool fs_must_have_non_zero_constlen_quirk;
 
    /* On all generations that support scalar ALU, there is also a copy of the
@@ -305,6 +313,8 @@ struct ir3_compiler {
    bool reading_shading_rate_requires_smask_quirk;
 
    bool cat3_rel_offset_0_quirk;
+
+   bool has_sel_b_fneg;
 
    struct {
       /* The number of cycles needed for the result of one ALU operation to be
@@ -393,7 +403,7 @@ extern enum ir3_shader_debug ir3_shader_debug;
 extern const char *ir3_shader_override_path;
 
 static inline bool
-shader_debug_enabled(gl_shader_stage type, bool internal)
+shader_debug_enabled(mesa_shader_stage type, bool internal)
 {
    if (internal)
       return !!(ir3_shader_debug & IR3_DBG_SHADER_INTERNAL);
@@ -448,6 +458,12 @@ ir3_shader_debug_hash_key()
 /* Returns a pointer to internal static tmp buffer. */
 const char *
 ir3_shader_debug_as_string(void);
+
+void ir3_shader_bisect_init(void);
+bool ir3_shader_bisect_need_shader_key(void);
+void ir3_shader_bisect_dump_id(struct ir3_shader_variant *v);
+bool ir3_shader_bisect_select(struct ir3_shader_variant *v);
+bool ir3_shader_bisect_disasm_select(struct ir3_shader_variant *v);
 
 ENDC;
 

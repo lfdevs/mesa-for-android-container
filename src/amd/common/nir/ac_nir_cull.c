@@ -527,7 +527,7 @@ ac_nir_cull_primitive(nir_builder *b,
       return ac_nir_cull_line(b, skip_viewport_state_culling, initially_accepted, pos, &w_info,
                               accept_func, state);
    } else {
-      unreachable("point culling not implemented");
+      UNREACHABLE("point culling not implemented");
    }
 
    return NULL;

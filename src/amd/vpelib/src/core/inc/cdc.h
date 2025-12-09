@@ -38,8 +38,6 @@ struct vpe_priv;
 
 /** note: all program_* functions shall return number of config packet created */
 struct cdc_fe_funcs {
-    bool (*check_input_format)(struct cdc_fe *cdc_fe, enum vpe_surface_pixel_format format);
-
     /** non segment specific */
     void (*program_surface_config)(struct cdc_fe *cdc_fe, enum vpe_surface_pixel_format format,
         enum vpe_rotation_angle rotation, bool horizontal_mirror,
@@ -60,8 +58,6 @@ struct cdc_fe_funcs {
 };
 
 struct cdc_be_funcs {
-    bool (*check_output_format)(struct cdc_be *cdc_be, enum vpe_surface_pixel_format format);
-
     void (*program_global_sync)(struct cdc_be *cdc_be, uint32_t vupdate_offset,
         uint32_t vupdate_width, uint32_t vready_offset);
 

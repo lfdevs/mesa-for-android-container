@@ -524,6 +524,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    si_add_all_descriptors_to_bo_list(ctx);
    si_shader_pointers_mark_dirty(ctx);
    ctx->cs_shader_state.emitted_program = NULL;
+   ctx->ts_shader_state.emitted_program = NULL;
 
    /* The CS initialization should be emitted before everything else. */
    if (ctx->cs_preamble_state) {
@@ -615,8 +616,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
          si_mark_atom_dirty(ctx, &ctx->atoms.s.dpbb_state);
       si_mark_atom_dirty(ctx, &ctx->atoms.s.stencil_ref);
       si_mark_atom_dirty(ctx, &ctx->atoms.s.spi_map);
-      if (ctx->gfx_level < GFX11)
-         si_mark_atom_dirty(ctx, &ctx->atoms.s.streamout_enable);
+      si_mark_atom_dirty(ctx, &ctx->atoms.s.streamout_enable);
       /* CLEAR_STATE disables all window rectangles. */
       if (!has_clear_state || ctx->num_window_rectangles > 0)
          si_mark_atom_dirty(ctx, &ctx->atoms.s.window_rectangles);
@@ -651,10 +651,10 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    ctx->last_tes_sh_base = -1;
    ctx->last_num_tcs_input_cp = -1;
 
-   assert(ctx->num_buffered_gfx_sh_regs == 0);
-   assert(ctx->num_buffered_compute_sh_regs == 0);
-   ctx->num_buffered_gfx_sh_regs = 0;
-   ctx->num_buffered_compute_sh_regs = 0;
+   assert(ctx->buffered_gfx_sh_regs.num == 0);
+   assert(ctx->buffered_compute_sh_regs.num == 0);
+   ctx->buffered_gfx_sh_regs.num = 0;
+   ctx->buffered_compute_sh_regs.num = 0;
 
    if (ctx->scratch_buffer)
       si_mark_atom_dirty(ctx, &ctx->atoms.s.scratch_state);
@@ -677,6 +677,8 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
     */
    ctx->force_shader_coherency.with_cb = true;
    ctx->force_shader_coherency.with_db = true;
+
+   ctx->task_state_init_emitted = false;
 }
 
 void si_trace_emit(struct si_context *sctx)
@@ -686,10 +688,7 @@ void si_trace_emit(struct si_context *sctx)
 
    si_cp_write_data(sctx, sctx->current_saved_cs->trace_buf, 0, 4, V_370_MEM, V_370_ME, &trace_id);
 
-   radeon_begin(cs);
-   radeon_emit(PKT3(PKT3_NOP, 0, 0));
-   radeon_emit(AC_ENCODE_TRACE_POINT(trace_id));
-   radeon_end();
+   ac_emit_cp_nop(&cs->current, AC_ENCODE_TRACE_POINT(trace_id));
 
    if (sctx->log)
       u_log_flush(sctx->log);

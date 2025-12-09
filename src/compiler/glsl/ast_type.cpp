@@ -98,6 +98,7 @@ ast_type_qualifier::has_storage() const
           || this->flags.q.out
           || this->flags.q.uniform
           || this->flags.q.buffer
+          || this->flags.q.task_payload
           || this->flags.q.shared_storage;
 }
 
@@ -106,7 +107,8 @@ ast_type_qualifier::has_auxiliary_storage() const
 {
    return this->flags.q.centroid
           || this->flags.q.sample
-          || this->flags.q.patch;
+          || this->flags.q.patch
+          || this->flags.q.per_primitive;
 }
 
 bool ast_type_qualifier::has_memory() const
@@ -294,6 +296,7 @@ ast_type_qualifier::merge_qualifier(YYLTYPE *loc,
    input_layout_mask.flags.q.smooth = 1;
    input_layout_mask.flags.q.non_coherent = 1;
    input_layout_mask.flags.q.explicit_numviews = 1;
+   input_layout_mask.flags.q.per_primitive = 1;
 
    if (state->has_bindless()) {
       /* Allow to use image qualifiers with shader inputs/outputs. */
@@ -351,6 +354,16 @@ ast_type_qualifier::merge_qualifier(YYLTYPE *loc,
       }
    }
 
+   if (q.flags.q.max_primitives) {
+      if (this->flags.q.max_primitives
+          && !is_single_layout_merge && !is_multiple_layouts_merge) {
+         this->max_primitives->merge_qualifier(q.max_primitives);
+      } else {
+         this->flags.q.max_primitives = 1;
+         this->max_primitives = q.max_primitives;
+      }
+   }
+
    if (q.subroutine_list) {
       if (this->subroutine_list) {
          _mesa_glsl_error(loc, state,
@@ -385,7 +398,9 @@ ast_type_qualifier::merge_qualifier(YYLTYPE *loc,
       }
    }
 
-   if (state->has_enhanced_layouts()) {
+   /* Not apply to mesh shader */
+   if (state->stage <= MESA_SHADER_GEOMETRY &&
+       state->has_enhanced_layouts()) {
       if (!this->flags.q.explicit_xfb_buffer) {
          if (q.flags.q.xfb_buffer) {
             this->flags.q.xfb_buffer = 1;
@@ -585,6 +600,25 @@ ast_type_qualifier::validate_out_qualifier(YYLTYPE *loc,
    case MESA_SHADER_FRAGMENT:
       valid_out_mask.flags.q.blend_support = 1;
       break;
+   case MESA_SHADER_MESH:
+      if (this->flags.q.prim_type) {
+         /* Make sure this is a valid output primitive type. */
+         switch (this->prim_type) {
+         case GL_POINTS:
+         case GL_LINES:
+         case GL_TRIANGLES:
+            break;
+         default:
+            r = false;
+            _mesa_glsl_error(loc, state, "invalid mesh shader output "
+                             "primitive type");
+            break;
+         }
+      }
+      valid_out_mask.flags.q.max_vertices = 1;
+      valid_out_mask.flags.q.max_primitives = 1;
+      valid_out_mask.flags.q.prim_type = 1;
+      break;
    default:
       r = false;
       _mesa_glsl_error(loc, state,
@@ -616,6 +650,9 @@ ast_type_qualifier::merge_into_out_qualifier(YYLTYPE *loc,
       break;
    case MESA_SHADER_TESS_CTRL:
       node = new(state->linalloc) ast_tcs_output_layout(*loc);
+      break;
+   case MESA_SHADER_MESH:
+      node = new(state->linalloc) ast_ms_output_layout(*loc);
       break;
    default:
       break;
@@ -700,11 +737,16 @@ ast_type_qualifier::validate_in_qualifier(YYLTYPE *loc,
       valid_in_mask.flags.q.local_size_variable = 1;
       valid_in_mask.flags.q.derivative_group = 1;
       break;
+   case MESA_SHADER_TASK:
+   case MESA_SHADER_MESH:
+      valid_in_mask.flags.q.local_size = 7;
+      break;
    default:
       r = false;
       _mesa_glsl_error(loc, state,
                        "input layout qualifiers only valid in "
-                       "geometry, tessellation, fragment and compute shaders");
+                       "geometry, tessellation, fragment, task, mesh "
+                       "and compute shaders");
       break;
    }
 
@@ -815,8 +857,8 @@ ast_type_qualifier::merge_into_in_qualifier(YYLTYPE *loc,
     * into HIR.
     */
    if (state->in_qualifier->flags.q.local_size) {
-      node = new(lin_ctx) ast_cs_input_layout(*loc,
-                                              state->in_qualifier->local_size);
+      node = new(lin_ctx) ast_cs_ms_input_layout(*loc,
+                                                 state->in_qualifier->local_size);
       state->in_qualifier->flags.q.local_size = 0;
       for (int i = 0; i < 3; i++)
          state->in_qualifier->local_size[i] = NULL;
@@ -900,6 +942,7 @@ ast_type_qualifier::validate_flags(YYLTYPE *loc,
    Q(noperspective);
    Q(origin_upper_left);
    Q(pixel_center_integer);
+   Q(pixel_local_storage);
    Q2(explicit_align, align);
    Q2(explicit_component, component);
    Q2(explicit_location, location);
@@ -950,6 +993,9 @@ ast_type_qualifier::validate_flags(YYLTYPE *loc,
    Q(sample_interlock_ordered);
    Q(sample_interlock_unordered);
    Q2(non_coherent, noncoherent);
+   Q(task_payload);
+   Q(per_primitive);
+   Q(max_primitives);
 
 #undef Q
 #undef Q2
@@ -976,16 +1022,16 @@ ast_layout_expression::process_qualifier_constant(struct _mesa_glsl_parse_state 
    if (!can_be_zero)
       min_value = 1;
 
-   for (exec_node *node = layout_const_expressions.get_head_raw();
+   for (ir_exec_node *node = layout_const_expressions.get_head_raw();
         !node->is_tail_sentinel(); node = node->next) {
 
-      exec_list dummy_instructions;
-      ast_node *const_expression = exec_node_data(ast_node, node, link);
+      ir_exec_list dummy_instructions;
+      ast_node *const_expression = ir_exec_node_data(ast_node, node, link);
 
       ir_rvalue *const ir = const_expression->hir(&dummy_instructions, state);
 
       ir_constant *const const_int =
-         ir->constant_expression_value(ralloc_parent(ir));
+         ir->constant_expression_value(state->linalloc);
 
       if (const_int == NULL || !glsl_type_is_integer_32(const_int->type)) {
          YYLTYPE loc = const_expression->get_location();
@@ -1032,7 +1078,7 @@ process_qualifier_constant(struct _mesa_glsl_parse_state *state,
                            ast_expression *const_expression,
                            unsigned *value)
 {
-   exec_list dummy_instructions;
+   ir_exec_list dummy_instructions;
 
    if (const_expression == NULL) {
       *value = 0;
@@ -1042,7 +1088,7 @@ process_qualifier_constant(struct _mesa_glsl_parse_state *state,
    ir_rvalue *const ir = const_expression->hir(&dummy_instructions, state);
 
    ir_constant *const const_int =
-      ir->constant_expression_value(ralloc_parent(ir));
+      ir->constant_expression_value(state->linalloc);
    if (const_int == NULL || !glsl_type_is_integer_32(const_int->type)) {
       _mesa_glsl_error(loc, state, "%s must be an integral constant "
                        "expression", qual_indentifier);

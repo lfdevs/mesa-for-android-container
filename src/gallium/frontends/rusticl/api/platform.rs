@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::CLResult;
 use crate::api::util::*;
 use crate::core::platform::*;
@@ -24,6 +27,31 @@ unsafe impl CLInfo<cl_platform_info> for cl_platform_id {
             CL_PLATFORM_NAME => v.write::<&CStr>(c"rusticl"),
             CL_PLATFORM_NUMERIC_VERSION => v.write::<cl_version>(CLVersion::Cl3_0.into()),
             CL_PLATFORM_PROFILE => v.write::<&CStr>(c"FULL_PROFILE"),
+            CL_PLATFORM_SEMAPHORE_EXPORT_HANDLE_TYPES_KHR => {
+                v.write::<&[cl_external_semaphore_handle_type_khr]>(
+                    if Platform::get().all_devs_have_external_semaphores() {
+                        &[CL_SEMAPHORE_HANDLE_SYNC_FD_KHR]
+                    } else {
+                        &[]
+                    },
+                )
+            }
+            CL_PLATFORM_SEMAPHORE_IMPORT_HANDLE_TYPES_KHR => {
+                v.write::<&[cl_external_semaphore_handle_type_khr]>(
+                    if Platform::get().all_devs_have_external_semaphores() {
+                        &[CL_SEMAPHORE_HANDLE_SYNC_FD_KHR]
+                    } else {
+                        &[]
+                    },
+                )
+            }
+            CL_PLATFORM_SEMAPHORE_TYPES_KHR => {
+                v.write::<&[cl_semaphore_type_khr]>(if Platform::get().all_devs_have_semaphores() {
+                    &[CL_SEMAPHORE_TYPE_BINARY_KHR]
+                } else {
+                    &[]
+                })
+            }
             CL_PLATFORM_VENDOR => v.write::<&CStr>(c"Mesa/X.org"),
             // OpenCL<space><major_version.minor_version><space><platform-specific information>
             CL_PLATFORM_VERSION => v.write::<&CStr>(c"OpenCL 3.0 "),
@@ -94,26 +122,18 @@ fn icd_set_platform_dispatch_data(
 #[test]
 fn test_get_platform_info() {
     let mut s: usize = 0;
-    let mut r = get_platform_info(
-        ptr::null(),
-        CL_PLATFORM_EXTENSIONS,
-        0,
-        ptr::null_mut(),
-        &mut s,
-    );
-    assert!(r.is_ok());
+    // Being a lil sneaky sneak, shhhh
+    Platform::init_once();
+    let p = Platform::get().as_ptr();
+    let mut r =
+        unsafe { clGetPlatformInfo(p, CL_PLATFORM_EXTENSIONS, 0, std::ptr::null_mut(), &mut s) };
+    assert_eq!(r, CL_SUCCESS as i32);
     assert!(s > 0);
 
     let mut v: Vec<u8> = vec![0; s];
-    r = get_platform_info(
-        ptr::null(),
-        CL_PLATFORM_EXTENSIONS,
-        s,
-        v.as_mut_ptr().cast(),
-        &mut s,
-    );
+    r = unsafe { clGetPlatformInfo(p, CL_PLATFORM_EXTENSIONS, s, v.as_mut_ptr().cast(), &mut s) };
 
-    assert!(r.is_ok());
+    assert_eq!(r, CL_SUCCESS as i32);
     assert_eq!(s, v.len());
     assert!(!v[0..s - 2].contains(&0));
     assert_eq!(v[s - 1], 0);

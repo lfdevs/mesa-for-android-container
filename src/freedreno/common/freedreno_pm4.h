@@ -11,15 +11,11 @@
 
 #include <stdint.h>
 
+#include "adreno_pm4.xml.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define CP_TYPE0_PKT 0x00000000
-#define CP_TYPE2_PKT 0x80000000
-#define CP_TYPE3_PKT 0xc0000000
-#define CP_TYPE4_PKT 0x40000000
-#define CP_TYPE7_PKT 0x70000000
 
 #define CP_NOP_MESG 0x4D455347
 #define CP_NOP_BEGN 0x4245474E

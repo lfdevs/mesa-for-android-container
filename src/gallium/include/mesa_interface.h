@@ -588,6 +588,8 @@ enum dri_loader_cap {
 #define __DRI_IMAGE_ATTRIB_MODIFIER_LOWER 0x200B /* available in versions 14 */
 #define __DRI_IMAGE_ATTRIB_MODIFIER_UPPER 0x200C /* available in versions 14 */
 #define __DRI_IMAGE_ATTRIB_COMPRESSION_RATE 0x200D /* available in versions 22 */
+/* If DRI IMAGE has separate plane buffers. */
+#define __DRI_IMAGE_ATTRIB_DISJOINT_PLANES 0x200E
 
 enum __DRIYUVColorSpace {
    __DRI_YUV_COLOR_SPACE_UNDEFINED = 0,

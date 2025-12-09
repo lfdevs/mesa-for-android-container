@@ -53,7 +53,7 @@ lower_ubo_load_instr(nir_builder *b, nir_intrinsic_instr *load,
       assert(ANV_UBO_ALIGNMENT == 64);
 
       unsigned suboffset = offset % 64;
-      uint64_t aligned_offset = offset - suboffset;
+      unsigned aligned_offset = offset - suboffset;
 
       /* Load two just in case we go over a 64B boundary */
       nir_def *data[2];
@@ -64,11 +64,30 @@ lower_ubo_load_instr(nir_builder *b, nir_intrinsic_instr *load,
             b, 16, 32, addr,
             .access = nir_intrinsic_access(load),
             .align_mul = 64);
-         if (bound) {
-            data[i] = nir_bcsel(b,
-                                nir_igt_imm(b, bound, aligned_offset + i * 64 + 63),
-                                data[i],
-                                nir_imm_int(b, 0));
+      }
+
+      if (bound) {
+         nir_def* offsets =
+            nir_imm_uvec8(b, aligned_offset, aligned_offset + 16,
+                          aligned_offset + 32, aligned_offset + 48,
+                          aligned_offset + 64, aligned_offset + 80,
+                          aligned_offset + 96, aligned_offset + 112);
+         nir_def* mask =
+            nir_bcsel(b, nir_ult(b, offsets, bound),
+                      nir_imm_int(b, 0xFFFFFFFF),
+                      nir_imm_int(b, 0x00000000));
+
+         for (unsigned i = 0; i < 2; i++) {
+            /* We prepared a mask where every 1 bit of mask covers 4 bits of the
+             * UBO block we've loaded, when we apply it we'll sign extend each
+             * byte of the mask to a dword to get the final bitfield, this can
+             * be optimized because Intel HW allows instructions to mix several
+             * types and perform the sign extensions implicitly.
+             */
+            data[i] =
+               nir_iand(b,
+                        nir_i2iN(b, nir_extract_bits(b, &mask, 1, i * 128, 16, 8), 32),
+                        data[i]);
          }
       }
 
@@ -83,12 +102,12 @@ lower_ubo_load_instr(nir_builder *b, nir_intrinsic_instr *load,
 
          unsigned load_size = byte_size * load->num_components;
          nir_def *in_bounds =
-            nir_ilt(b, nir_iadd_imm(b, offset, load_size - 1), bound);
+            nir_ult(b, nir_iadd_imm(b, offset, load_size - 1), bound);
 
          nir_push_if(b, in_bounds);
 
          nir_def *load_val =
-            nir_build_load_global_constant(b, load->def.num_components,
+            nir_load_global_constant(b, load->def.num_components,
                                            load->def.bit_size, addr,
                                            .access = nir_intrinsic_access(load),
                                            .align_mul = nir_intrinsic_align_mul(load),
@@ -98,7 +117,7 @@ lower_ubo_load_instr(nir_builder *b, nir_intrinsic_instr *load,
 
          val = nir_if_phi(b, load_val, zero);
       } else {
-         val = nir_build_load_global_constant(b, load->def.num_components,
+         val = nir_load_global_constant(b, load->def.num_components,
                                               load->def.bit_size, addr,
                                               .access = nir_intrinsic_access(load),
                                               .align_mul = nir_intrinsic_align_mul(load),

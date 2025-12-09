@@ -48,7 +48,7 @@
 
 #include "common/intel_aux_map.h"
 #include "intel/common/intel_gem.h"
-#include "intel/compiler/brw_compiler.h"
+#include "intel/compiler/brw/brw_compiler.h"
 #ifdef INTEL_USE_ELK
 #include "intel/compiler/elk/elk_compiler.h"
 #endif
@@ -248,7 +248,7 @@ iris_init_batch(struct iris_context *ice,
                                          stderr, decode_flags, NULL,
                                          decode_get_bo, decode_get_state_size, batch);
 #else
-         unreachable("no elk support");
+         UNREACHABLE("no elk support");
 #endif
       }
       batch->decoder.dynamic_base = IRIS_MEMZONE_DYNAMIC_START;
@@ -281,7 +281,7 @@ iris_init_batches(struct iris_context *ice)
       iris_xe_init_batches(ice);
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
    }
 
    iris_foreach_batch(ice, batch)
@@ -540,7 +540,7 @@ iris_batch_free(const struct iris_context *ice, struct iris_batch *batch)
       iris_xe_destroy_batch(batch);
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
    }
 
    iris_destroy_batch_measure(batch->measure);
@@ -717,7 +717,7 @@ replace_kernel_ctx(struct iris_batch *batch)
    case INTEL_KMD_TYPE_XE:
       return iris_xe_replace_batch(batch);
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return false;
    }
 }

@@ -109,7 +109,7 @@ lower_vtg_io_intrin(nir_builder *b,
       break;
 
    default:
-      unreachable("Unknown NIR I/O intrinsic");
+      UNREACHABLE("Unknown NIR I/O intrinsic");
    }
 
    bool is_patch;
@@ -128,7 +128,7 @@ lower_vtg_io_intrin(nir_builder *b,
       break;
 
    default:
-      unreachable("Unknown shader stage");
+      UNREACHABLE("Unknown shader stage");
    }
 
    nir_component_mask_t mask;

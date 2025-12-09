@@ -45,7 +45,6 @@
 #include "common/intel_gem.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_measure.h"
-#include "common/intel_mem.h"
 #include "common/intel_sample_positions.h"
 #include "decoder/intel_decoder.h"
 #include "dev/intel_device_info.h"
@@ -54,6 +53,7 @@
 #include "ds/intel_driver_ds.h"
 #include "util/bitset.h"
 #include "util/bitscan.h"
+#include "util/cache_ops.h"
 #include "util/detect_os.h"
 #include "util/macros.h"
 #include "util/hash_table.h"
@@ -84,7 +84,6 @@
 #include "vk_physical_device.h"
 #include "vk_shader_module.h"
 #include "vk_sync.h"
-#include "vk_sync_timeline.h"
 #include "vk_util.h"
 #include "vk_queue.h"
 #include "vk_log.h"
@@ -285,14 +284,6 @@ static inline uint32_t
 align_down_npot_u32(uint32_t v, uint32_t a)
 {
    return v - (v % a);
-}
-
-/** Alignment must be a power of 2. */
-static inline bool
-anv_is_aligned(uintmax_t n, uintmax_t a)
-{
-   assert(a == (a & -a));
-   return (n & (a - 1)) == 0;
 }
 
 static inline union isl_color_value
@@ -785,7 +776,7 @@ void anv_scratch_pool_finish(struct anv_device *device,
                              struct anv_scratch_pool *pool);
 struct anv_bo *anv_scratch_pool_alloc(struct anv_device *device,
                                       struct anv_scratch_pool *pool,
-                                      gl_shader_stage stage,
+                                      mesa_shader_stage stage,
                                       unsigned per_thread_scratch);
 
 /** Implements a BO cache that ensures a 1-1 mapping of GEM BOs to anv_bos */
@@ -859,8 +850,6 @@ struct anv_physical_device {
      */
     uint32_t                                    n_perf_query_commands;
     int                                         cmd_parser_version;
-    bool                                        has_exec_async;
-    bool                                        has_exec_capture;
     int                                         max_context_priority;
     uint64_t                                    gtt_size;
 
@@ -873,8 +862,6 @@ struct anv_physical_device {
     bool                                        has_a64_buffer_access;
     /** True if we can use bindless access for samplers */
     bool                                        has_bindless_samplers;
-    /** True if we can use timeline semaphores through execbuf */
-    bool                                        has_exec_timeline;
 
     /** True if we can read the GPU timestamp register
      *
@@ -905,8 +892,7 @@ struct anv_physical_device {
     uint8_t                                     device_uuid[VK_UUID_SIZE];
 
     struct vk_sync_type                         sync_syncobj_type;
-    struct vk_sync_timeline_type                sync_timeline_type;
-    const struct vk_sync_type *                 sync_types[4];
+    const struct vk_sync_type *                 sync_types[2];
 
     struct wsi_device                       wsi_device;
     int                                         local_fd;
@@ -978,7 +964,7 @@ anv_device_search_for_kernel(struct anv_device *device,
 struct anv_shader_bin *
 anv_device_upload_kernel(struct anv_device *device,
                          struct vk_pipeline_cache *cache,
-                         gl_shader_stage stage,
+                         mesa_shader_stage stage,
                          const void *key_data, uint32_t key_size,
                          const void *kernel_data, uint32_t kernel_size,
                          const struct elk_stage_prog_data *prog_data,
@@ -1073,7 +1059,6 @@ struct anv_device {
     bool                                        robust_buffer_access;
 
     pthread_mutex_t                             mutex;
-    pthread_cond_t                              queue_submit;
 
     struct intel_batch_decode_ctx               decoder_ctx;
     /*
@@ -1403,7 +1388,7 @@ write_reloc(const struct anv_device *device, void *p, uint64_t v, bool flush)
 
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    if (flush && device->physical->memory.need_flush)
-      intel_flush_range(p, reloc_size);
+      util_flush_range(p, reloc_size);
 #endif
 }
 
@@ -2702,38 +2687,6 @@ void anv_cmd_buffer_dump(struct anv_cmd_buffer *cmd_buffer);
 
 void anv_cmd_emit_conditional_render_predicate(struct anv_cmd_buffer *cmd_buffer);
 
-enum anv_bo_sync_state {
-   /** Indicates that this is a new (or newly reset fence) */
-   ANV_BO_SYNC_STATE_RESET,
-
-   /** Indicates that this fence has been submitted to the GPU but is still
-    * (as far as we know) in use by the GPU.
-    */
-   ANV_BO_SYNC_STATE_SUBMITTED,
-
-   ANV_BO_SYNC_STATE_SIGNALED,
-};
-
-struct anv_bo_sync {
-   struct vk_sync sync;
-
-   enum anv_bo_sync_state state;
-   struct anv_bo *bo;
-};
-
-extern const struct vk_sync_type anv_bo_sync_type;
-
-static inline bool
-vk_sync_is_anv_bo_sync(const struct vk_sync *sync)
-{
-   return sync->type == &anv_bo_sync_type;
-}
-
-VkResult anv_create_sync_for_memory(struct vk_device *device,
-                                    VkDeviceMemory memory,
-                                    bool signal_memory,
-                                    struct vk_sync **sync_out);
-
 struct anv_event {
    struct vk_object_base                        base;
    uint64_t                                     semaphore;
@@ -2743,8 +2696,8 @@ struct anv_event {
 #define ANV_STAGE_MASK ((1 << MESA_VULKAN_SHADER_STAGES) - 1)
 
 #define anv_foreach_stage(stage, stage_bits)                         \
-   for (gl_shader_stage stage,                                       \
-        __tmp = (gl_shader_stage)((stage_bits) & ANV_STAGE_MASK);    \
+   for (mesa_shader_stage stage,                                       \
+        __tmp = (mesa_shader_stage)((stage_bits) & ANV_STAGE_MASK);    \
         stage = __builtin_ffs(__tmp) - 1, __tmp;                     \
         __tmp &= ~(1 << (stage)))
 
@@ -2765,7 +2718,7 @@ struct anv_pipeline_bind_map {
 struct anv_shader_bin {
    struct vk_pipeline_cache_object base;
 
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
 
    struct anv_state kernel;
    uint32_t kernel_size;
@@ -2783,7 +2736,7 @@ struct anv_shader_bin {
 
 struct anv_shader_bin *
 anv_shader_bin_create(struct anv_device *device,
-                      gl_shader_stage stage,
+                      mesa_shader_stage stage,
                       const void *key, uint32_t key_size,
                       const void *kernel, uint32_t kernel_size,
                       const struct elk_stage_prog_data *prog_data,
@@ -2805,7 +2758,7 @@ anv_shader_bin_unref(struct anv_device *device, struct anv_shader_bin *shader)
 }
 
 struct anv_pipeline_executable {
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
 
    struct elk_compile_stats stats;
 
@@ -2921,7 +2874,7 @@ ANV_DECL_PIPELINE_DOWNCAST(compute, ANV_PIPELINE_COMPUTE)
 
 static inline bool
 anv_pipeline_has_stage(const struct anv_graphics_pipeline *pipeline,
-                       gl_shader_stage stage)
+                       mesa_shader_stage stage)
 {
    return (pipeline->active_stages & mesa_to_vk_shader_stage(stage)) != 0;
 }
@@ -3852,7 +3805,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(anv_performance_configuration_intel, base,
       genX_thing = &gfx8_##thing;               \
       break;                                    \
    default:                                     \
-      unreachable("Unknown hardware generation"); \
+      UNREACHABLE("Unknown hardware generation"); \
    }                                            \
    genX_thing;                                  \
 })

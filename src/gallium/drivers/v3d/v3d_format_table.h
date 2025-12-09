@@ -26,15 +26,28 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef v3dX
+#  include "v3dx_context.h"
+#  include "broadcom/cle/v3dx_pack.h"
+#else
+#  define v3dX(x) v3d42_##x
+#  include "v3dx_format_table.h"
+#  undef v3dX
+
+#  define v3dX(x) v3d71_##x
+#  include "v3dx_format_table.h"
+#  undef v3dX
+#endif
+
 struct v3d_format {
         /** Set if the pipe format is defined in the table. */
         bool present;
 
         /** One of V3D42_OUTPUT_IMAGE_FORMAT_*, or OUTPUT_IMAGE_FORMAT_NO */
-        uint8_t rt_type;
+        enum V3DX(Output_Image_Format) rt_type;
 
         /** One of V3D42_TEXTURE_DATA_FORMAT_*. */
-        uint8_t tex_type;
+        enum V3DX(Texture_Data_Formats) tex_type;
 
         /**
          * Swizzle to apply to the RGBA shader output for storing to the tile

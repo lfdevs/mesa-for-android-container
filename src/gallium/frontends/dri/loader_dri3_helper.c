@@ -182,7 +182,7 @@ loader_dri3_blit_context_get(struct loader_dri3_drawable *draw)
 
    if (!blit_context.ctx) {
       blit_context.ctx = driCreateNewContext(draw->dri_screen_render_gpu,
-                                                           NULL, NULL, NULL);
+                                             NULL, NULL, NULL, true);
       blit_context.cur_screen = draw->dri_screen_render_gpu;
    }
 
@@ -1083,10 +1083,35 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
        * semantic"
        */
       ++draw->send_sbc;
-      if (target_msc == 0 && divisor == 0 && remainder == 0)
+      if (target_msc == 0 && divisor == 0 && remainder == 0) {
+         /* Wait for previous send present request gets its complete event
+          * to update the window msc before send next present request.
+          *
+          * This is to prevent we send too many present requests before we
+          * get an up to date msc value from server when application
+          * start or pause for a while. Otherwise most of the sent
+          * request will be wasted as server just use the latest one and
+          * skip all the previous ones before a vblank. This also match the
+          * swap behavior for interval != 0.
+          *
+          * For example, client side window msc is 0 at the beginning,
+          * when swap interval=1, we will send present request with target
+          * msc = 1, 2, 3, ..., N, before server send back the complete
+          * event for target msc = 1.
+          *
+          * But server side window msc is way bigger than N, so it will
+          * think all these present requests are outdated and just show the
+          * Nth request at the next vblank. [1 .. N-1] requests are skipped.
+          */
+         if (draw->swap_interval != 0) {
+            while (draw->recv_sbc + 1 != draw->send_sbc) {
+               if (!dri3_wait_for_event_locked(draw, NULL))
+                  break;
+            }
+         }
          target_msc = draw->msc + abs(draw->swap_interval) *
                       (draw->send_sbc - draw->recv_sbc);
-      else if (divisor == 0 && remainder > 0) {
+      } else if (divisor == 0 && remainder > 0) {
          /* From the GLX_OML_sync_control spec:
           *     "If <divisor> = 0, the swap will occur when MSC becomes
           *      greater than or equal to <target_msc>."
@@ -1257,6 +1282,7 @@ dri3_cpp_for_fourcc(uint32_t format) {
    case DRM_FORMAT_ARGB1555:
    case DRM_FORMAT_RGB565:
    case DRM_FORMAT_GR88:
+   case DRM_FORMAT_ARGB4444:
       return 2;
    case DRM_FORMAT_XRGB8888:
    case DRM_FORMAT_ARGB8888:
@@ -2066,7 +2092,7 @@ dri3_free_buffers(struct dri_drawable *driDrawable,
       n_id = (draw->cur_blit_source == LOADER_DRI3_FRONT_ID) ? 0 : 1;
       break;
    default:
-      unreachable("unhandled buffer_type");
+      UNREACHABLE("unhandled buffer_type");
    }
 
    for (buf_id = first_id; buf_id < first_id + n_id; buf_id++)

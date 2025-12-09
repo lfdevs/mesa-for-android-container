@@ -8,7 +8,7 @@ libfreedreno_layout = static_library(
     'fd6_format_table.c',
     'fd6_layout.c',
     'fd6_tiled_memcpy.cc',
-    'fd6_view.c',
+    'fd6_view.cc',
     'freedreno_layout.c',
     'freedreno_lrz_layout.c',
     freedreno_xml_header_files,

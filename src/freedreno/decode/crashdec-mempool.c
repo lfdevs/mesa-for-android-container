@@ -71,7 +71,7 @@ dump_mem_pool_chunk(const uint32_t *chunk)
 }
 
 void
-dump_cp_mem_pool(uint32_t *mempool)
+dump_cp_mem_pool(uint32_t *mempool, bool is_bv)
 {
    /* The mem pool is a shared pool of memory used for storing in-flight
     * register writes. There are 6 different queues, one for each
@@ -82,11 +82,12 @@ dump_cp_mem_pool(uint32_t *mempool)
     *
     * The queues are conceptually divided into 128-bit "chunks", and the
     * read and write pointers are in units of chunks.  These chunks are
-    * organized internally into 8-chunk "blocks", and memory is allocated
-    * dynamically in terms of blocks. Each queue is represented as a
-    * singly-linked list of blocks, as well as 3-bit start/end chunk
-    * pointers that point within the first/last block.  The next pointers
-    * are located in a separate array, rather than inline.
+    * organized internally into 8-chunk (or on certain cut-down parts,
+    * 4-chunk) "blocks", and memory is allocated dynamically in terms of
+    * blocks. Each queue is represented as a singly-linked list of blocks, as
+    * well as 3-bit start/end chunk pointers that point within the first/last
+    * block.  The next pointers are located in a separate array, rather than
+    * inline.
     */
 
    /* TODO: The firmware CP_MEM_POOL save/restore routines do something
@@ -111,17 +112,60 @@ dump_cp_mem_pool(uint32_t *mempool)
     */
    bool small_mem_pool = false;
 
-   /* The array of next pointers for each block. */
-   const uint32_t *next_pointers =
-      small_mem_pool ? &mempool[0x800] : &mempool[0x1000];
+   enum {
+      MEMPOOL_FULL,
+      MEMPOOL_HALF,
+      MEMPOOL_QUARTER,
+   } mempool_size = MEMPOOL_FULL;
 
+   if (small_mem_pool)
+      mempool_size = MEMPOOL_HALF;
+   else if (is_bv)
+      mempool_size = MEMPOOL_QUARTER;
+
+   uint32_t next_pointers_offset;
+   uint32_t data1_offset;
+   uint32_t data2_offset;
    /* Maximum number of blocks in the pool, also the size of the pointers
     * array.
     */
-   const int num_blocks = small_mem_pool ? 0x30 : 0x80;
+   int num_blocks;
+   /* log2 of number of chunks per block. */
+   int block_size_log2;
 
-   /* Number of queues */
-   const unsigned num_queues = is_a6xx() ? 6 : 7;
+   switch (mempool_size) {
+   case MEMPOOL_FULL:
+      next_pointers_offset = 0x1000;
+      data1_offset = 0x1800;
+      data2_offset = 0x2000;
+      num_blocks = 0x80;
+      block_size_log2 = 3;
+      break;
+   case MEMPOOL_HALF:
+      next_pointers_offset = 0x800;
+      data1_offset = 0xc00;
+      data2_offset = 0x1000;
+      num_blocks = 0x30;
+      block_size_log2 = 3;
+      break;
+   case MEMPOOL_QUARTER:
+      next_pointers_offset = 0x400;
+      data1_offset = 0x600;
+      data2_offset = 0x800;
+      num_blocks = 0x40;
+      block_size_log2 = 2;
+      break;
+   default:
+      UNREACHABLE("unknown mempool size");
+   }
+   const uint32_t *next_pointers = &mempool[next_pointers_offset];
+
+   const int block_size = 1 << block_size_log2;
+
+   /* Number of queues or clusters. On a7xx the clusters are shuffled a bit to
+    * increase the count by one, but BV seems to not use the last cluster.
+    */
+   const unsigned num_queues = (is_a6xx() || is_bv) ? 6 : 7;
 
    /* Unfortunately the per-queue state is a little more complicated than
     * a simple pair of begin/end pointers. Instead of a single beginning
@@ -182,11 +226,8 @@ dump_cp_mem_pool(uint32_t *mempool)
       uint32_t unk0;
       uint32_t padding0[7]; /* Mirrors of unk0 */
 
-      struct {
-         uint32_t chunk : 3;
-         uint32_t first_block : 32 - 3;
-      } writer[6];
-      uint32_t padding1[2]; /* Mirror of writer[5] */
+      uint32_t writer_first_block_chunk[7];
+      uint32_t padding1[1]; /* Mirror of writer_first_block_chunk[6] */
 
       uint32_t unk1;
       uint32_t padding2[7]; /* Mirrors of unk1 */
@@ -197,11 +238,8 @@ dump_cp_mem_pool(uint32_t *mempool)
       uint32_t unk2[7];
       uint32_t padding4[1];
 
-      struct {
-         uint32_t chunk : 3;
-         uint32_t first_block : 32 - 3;
-      } reader[7];
-      uint32_t padding5[1]; /* Mirror of reader[5] */
+      uint32_t reader_first_block_chunk[7];
+      uint32_t padding5[1]; /* Mirror of reader_first_block_chunk[6] */
 
       uint32_t unk3;
       uint32_t padding6[7]; /* Mirrors of unk3 */
@@ -216,15 +254,13 @@ dump_cp_mem_pool(uint32_t *mempool)
       uint32_t padding9[7]; /* Mirrors of unk4 */
    } data1;
 
-   const uint32_t *data1_ptr =
-      small_mem_pool ? &mempool[0xc00] : &mempool[0x1800];
+   const uint32_t *data1_ptr = &mempool[data1_offset];
    memcpy(&data1, data1_ptr, sizeof(data1));
 
    /* Based on the kernel, the first dword is the mem pool size (in
     * blocks?) and mirrors CP_MEM_POOL_DBG_SIZE.
     */
-   const uint32_t *data2_ptr =
-      small_mem_pool ? &mempool[0x1000] : &mempool[0x2000];
+   const uint32_t *data2_ptr = &mempool[data2_offset];
    const int data2_size = 0x60;
 
    /* This seems to be the size of each queue in chunks. */
@@ -249,28 +285,34 @@ dump_cp_mem_pool(uint32_t *mempool)
       printf("\tCLUSTER_%s:\n\n",
              is_a6xx() ? cluster_names_a6xx[queue] : cluster_names_a7xx[queue]);
 
+      uint32_t writer_first_block =
+         data1.writer_first_block_chunk[queue] >> block_size_log2;
+      uint32_t writer_chunk =
+         data1.writer_first_block_chunk[queue] & (block_size - 1);
+      uint32_t reader_first_block =
+         data1.reader_first_block_chunk[queue] >> block_size_log2;
+      uint32_t reader_chunk =
+         data1.reader_first_block_chunk[queue] & (block_size - 1);
       if (verbose) {
-         printf("\t\twriter_first_block: 0x%x\n",
-                data1.writer[queue].first_block);
+         printf("\t\twriter_first_block: 0x%x\n", writer_first_block);
          printf("\t\twriter_second_block: 0x%x\n",
                 data1.writer_second_block[queue]);
-         printf("\t\twriter_chunk: %d\n", data1.writer[queue].chunk);
-         printf("\t\treader_first_block: 0x%x\n",
-                data1.reader[queue].first_block);
+         printf("\t\twriter_chunk: %d\n", writer_chunk);
+         printf("\t\treader_first_block: 0x%x\n", reader_first_block);
          printf("\t\treader_second_block: 0x%x\n",
                 data1.reader_second_block[queue]);
-         printf("\t\treader_chunk: %d\n", data1.reader[queue].chunk);
+         printf("\t\treader_chunk: %d\n", reader_chunk);
          printf("\t\tblock_count: %d\n", data1.block_count[queue]);
          printf("\t\tunk2: 0x%x\n", data1.unk2[queue]);
          printf("\t\tqueue_size: %d\n\n", queue_sizes[queue]);
       }
 
-      uint32_t cur_chunk = data1.reader[queue].chunk;
-      uint32_t cur_block = cur_chunk > 3 ? data1.reader[queue].first_block
-                                         : data1.reader_second_block[queue];
-      uint32_t last_chunk = data1.writer[queue].chunk;
-      uint32_t last_block = last_chunk > 3 ? data1.writer[queue].first_block
-                                           : data1.writer_second_block[queue];
+      uint32_t cur_chunk = reader_chunk;
+      uint32_t cur_block = cur_chunk >= block_size / 2 ?
+         reader_first_block : data1.reader_second_block[queue];
+      uint32_t last_chunk = writer_chunk;
+      uint32_t last_block = last_chunk >= block_size / 2 ?
+         writer_first_block : data1.writer_second_block[queue];
 
       if (verbose)
          printf("\tblock %x\n", cur_block);
@@ -281,16 +323,16 @@ dump_cp_mem_pool(uint32_t *mempool)
       unsigned calculated_queue_size = 0;
       while (cur_block != last_block || cur_chunk != last_chunk) {
          calculated_queue_size++;
-         uint32_t *chunk_ptr = &mempool[cur_block * 0x20 + cur_chunk * 4];
+         uint32_t *chunk_ptr = &mempool[(cur_block * block_size + cur_chunk) * 4];
 
          dump_mem_pool_chunk(chunk_ptr);
 
          printf("\t%05x: %08x %08x %08x %08x\n",
-                4 * (cur_block * 0x20 + cur_chunk + 4), chunk_ptr[0],
+                16 * (cur_block * block_size + cur_chunk), chunk_ptr[0],
                 chunk_ptr[1], chunk_ptr[2], chunk_ptr[3]);
 
          cur_chunk++;
-         if (cur_chunk == 8) {
+         if (cur_chunk == block_size) {
             cur_block = next_pointers[cur_block];
             if (verbose)
                printf("\tblock %x\n", cur_block);

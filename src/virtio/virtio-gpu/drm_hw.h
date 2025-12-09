@@ -52,7 +52,8 @@ struct virgl_renderer_capset_drm {
       } msm;  /* context_type == VIRTGPU_DRM_CONTEXT_MSM */
       struct {
          uint32_t address32_hi;
-         uint32_t __pad;
+         uint32_t has_vm_always_valid : 1;
+         uint32_t __pad : 31;
 #ifdef ENABLE_DRM_AMDGPU
          struct amdgpu_buffer_size_alignments alignments;
          struct amdgpu_gpu_info gpu_info;

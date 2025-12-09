@@ -141,4 +141,20 @@ VK_DEFINE_HANDLE_CASTS(vn_physical_device,
 void
 vn_physical_device_fini(struct vn_physical_device *physical_dev);
 
+static inline bool
+vn_queue_family_can_feedback(struct vn_physical_device *physical_dev,
+                             uint32_t queue_family_index)
+{
+   /* Feedback requires transfer capability, so we must skip feedback cmd pool
+    * initialization on incompatible queue families. Meanwhile, rely on the
+    * pool_handle for all validity check needed.
+    */
+   assert(queue_family_index < physical_dev->queue_family_count);
+   const struct VkQueueFamilyProperties2 *props =
+      &physical_dev->queue_family_properties[queue_family_index];
+   const VkQueueFlags transfer_flags =
+      VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+   return props->queueFamilyProperties.queueFlags & transfer_flags;
+}
+
 #endif /* VN_PHYSICAL_DEVICE_H */

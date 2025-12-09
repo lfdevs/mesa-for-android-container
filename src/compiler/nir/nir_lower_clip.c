@@ -43,7 +43,7 @@ static nir_variable *
 create_clipdist_var(nir_shader *shader,
                     bool output, gl_varying_slot slot, unsigned array_size)
 {
-   nir_variable *var = rzalloc(shader, nir_variable);
+   nir_variable *var = nir_variable_create_zeroed(shader);
 
    if (output) {
       var->data.driver_location = shader->num_outputs;
@@ -54,7 +54,7 @@ create_clipdist_var(nir_shader *shader,
       var->data.mode = nir_var_shader_in;
       shader->num_inputs += MAX2(1, DIV_ROUND_UP(array_size, 4));
    }
-   var->name = ralloc_asprintf(var, "clipdist_%d", slot - VARYING_SLOT_CLIP_DIST0);
+   nir_variable_set_namef(shader, var, "clipdist_%d", slot - VARYING_SLOT_CLIP_DIST0);
    var->data.index = 0;
    var->data.location = slot;
 
@@ -99,6 +99,10 @@ store_clipdist_output(nir_builder *b, nir_variable *out, int location, int locat
    nir_io_semantics semantics = {
       .location = location,
       .num_slots = b->shader->options->compact_arrays ? num_slots : 1,
+      /* the offset src has a different definition for compact
+       * arrays, and is unfoldable (nir_validate requires that constant
+       * offsets are always 0) */
+      .no_validate = b->shader->options->compact_arrays,
    };
 
    if (location == VARYING_SLOT_CLIP_DIST1 || location_offset)
@@ -120,20 +124,32 @@ static void
 load_clipdist_input(nir_builder *b, nir_variable *in, int location_offset,
                     nir_def **val, bool use_load_interp)
 {
+   bool compact_arrays = b->shader->options->compact_arrays;
+   nir_def *offset = nir_imm_int(b, compact_arrays ? location_offset : 0);
+   unsigned const_offset = compact_arrays ? 0 : location_offset;
+
    nir_def *load;
    if (use_load_interp) {
       /* TODO: use sample when per-sample shading? */
       nir_def *barycentric = nir_load_barycentric(
          b, nir_intrinsic_load_barycentric_pixel, INTERP_MODE_NONE);
       load = nir_load_interpolated_input(
-         b, 4, 32, barycentric, nir_imm_int(b, location_offset),
-         .base = in->data.driver_location,
-         .io_semantics.location = in->data.location);
+         b, 4, 32, barycentric, offset,
+         .base = in->data.driver_location + const_offset,
+         .io_semantics.location = in->data.location + const_offset,
+         /* the offset src has a different definition for compact
+          * arrays, and is unfoldable (nir_validate requires that constant
+          * offsets are always 0) */
+         .io_semantics.no_validate = compact_arrays);
 
    } else {
-      load = nir_load_input(b, 4, 32, nir_imm_int(b, location_offset),
-                            .base = in->data.driver_location,
-                            .io_semantics.location = in->data.location);
+      load = nir_load_input(b, 4, 32, offset,
+                            .base = in->data.driver_location + const_offset,
+                            .io_semantics.location = in->data.location + const_offset,
+                            /* the offset src has a different definition for compact
+                             * arrays, and is unfoldable (nir_validate requires that constant
+                             * offsets are always 0) */
+                            .io_semantics.no_validate = compact_arrays);
    }
 
    val[0] = nir_channel(b, load, 0);
@@ -386,7 +402,7 @@ nir_lower_clip_vs(nir_shader *shader, unsigned ucp_enables, bool use_vars,
     * if there is a good way to sanity check this, but for now the
     * users of this pass don't support sub-routines.
     */
-   assert(impl->end_block->predecessors->entries == 1);
+   assert(impl->end_block->predecessors.entries == 1);
    b.cursor = nir_after_impl(impl);
 
    struct lower_clip_state state = { NULL };
@@ -417,7 +433,7 @@ nir_lower_clip_vs(nir_shader *shader, unsigned ucp_enables, bool use_vars,
       lower_clip_vertex_var(&b, &state);
    }
 
-   return nir_progress(true, impl, nir_metadata_dominance);
+   return nir_progress(true, impl, nir_metadata_control_flow);
 }
 
 /*
@@ -566,7 +582,7 @@ lower_clip_fs(nir_function_impl *impl, unsigned ucp_enables,
       b.shader->info.fs.uses_discard = true;
    }
 
-   nir_progress(true, impl, nir_metadata_dominance);
+   nir_progress(true, impl, nir_metadata_control_flow);
 }
 
 static bool

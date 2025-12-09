@@ -49,10 +49,6 @@ def get_args() -> 'Arguments':
     parser.add_argument('output', help="Name of output file.")
     parser.add_argument('glslang', help="path to glslangValidator")
 
-    parser.add_argument("--create-entry",
-                        dest="create_entry",
-                        help="Create a new entry point and put to the end of a file.")
-
     parser.add_argument('--glsl-version',
                         dest="glsl_ver",
                         choices=['100', '110', '120', '130', '140', '150', '300es', '310es', '330', '400', '410', '420', '430', '440', '450', '460'],
@@ -146,14 +142,11 @@ def postprocess_file(args: 'Arguments') -> None:
 
 
 def preprocess_file(args: 'Arguments', origin_file: T.TextIO, directory: os.PathLike, filemap: T.Dict[str, str]) -> str:
-    if args.create_entry is None and args.glsl_ver is None:
+    if args.glsl_ver is None:
         return origin_file.name
 
     with open(os.path.join(directory, os.path.basename(origin_file.name)), "w") as copy_file:
         lines = origin_file.readlines()
-
-        if args.create_entry is not None:
-            lines.append(f"\nvoid {args.create_entry}() {{}}\n")
 
         if args.glsl_ver is not None:
             override_version(lines, args.glsl_ver)
@@ -194,16 +187,13 @@ def process_file(args: 'Arguments') -> None:
     cmd_list = [args.glslang]
 
     if args.Olib:
-        cmd_list.append("--keep-uncalled")
+        cmd_list.append("--no-link")
 
     if args.vn is not None:
         cmd_list.extend(["--variable-name", args.vn])
 
     if args.extra is not None:
         cmd_list.append(args.extra)
-
-    if args.create_entry is not None:
-        cmd_list.extend(["--entry-point", args.create_entry])
 
     if args.depfile is not None:
         cmd_list.extend(['--depfile', args.depfile])
@@ -228,9 +218,6 @@ def process_file(args: 'Arguments') -> None:
 
     if args.vn is not None:
         postprocess_file(args)
-
-    if args.create_entry is not None:
-        os.remove(copy_file)
 
     if args.depfile is not None:
         fixup_depfile(args.depfile, filemap)

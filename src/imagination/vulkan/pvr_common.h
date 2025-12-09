@@ -40,6 +40,7 @@
  */
 
 #include "hwdef/rogue_hw_defs.h"
+#include "pco/pco_data.h"
 #include "pvr_limits.h"
 #include "pvr_types.h"
 #include "util/list.h"
@@ -47,10 +48,7 @@
 #include "util/vma.h"
 #include "vk_descriptor_set_layout.h"
 #include "vk_object.h"
-#include "vk_sampler.h"
 #include "vk_sync.h"
-
-#define VK_VENDOR_ID_IMAGINATION 0x1010
 
 #define PVR_WORKGROUP_DIMENSIONS 3U
 
@@ -87,7 +85,7 @@ enum pvr_sub_cmd_type {
    PVR_SUB_CMD_TYPE_GRAPHICS,
    PVR_SUB_CMD_TYPE_COMPUTE,
    PVR_SUB_CMD_TYPE_TRANSFER,
-   PVR_SUB_CMD_TYPE_OCCLUSION_QUERY,
+   PVR_SUB_CMD_TYPE_QUERY,
    PVR_SUB_CMD_TYPE_EVENT,
 };
 
@@ -109,7 +107,7 @@ enum pvr_job_type {
    PVR_JOB_TYPE_FRAG,
    PVR_JOB_TYPE_COMPUTE,
    PVR_JOB_TYPE_TRANSFER,
-   PVR_JOB_TYPE_OCCLUSION_QUERY,
+   PVR_JOB_TYPE_QUERY,
    PVR_JOB_TYPE_MAX
 };
 
@@ -127,8 +125,7 @@ enum pvr_pipeline_stage_bits {
    /* Note that this doesn't map to VkPipelineStageFlagBits so be careful with
     * this.
     */
-   PVR_PIPELINE_STAGE_OCCLUSION_QUERY_BIT =
-      BITFIELD_BIT(PVR_JOB_TYPE_OCCLUSION_QUERY),
+   PVR_PIPELINE_STAGE_QUERY_BIT = BITFIELD_BIT(PVR_JOB_TYPE_QUERY),
 };
 
 #define PVR_PIPELINE_STAGE_ALL_GRAPHICS_BITS \
@@ -192,117 +189,41 @@ enum pvr_query_type {
 
 struct pvr_buffer_descriptor {
    uint64_t addr;
+   uint32_t size;
+   uint32_t offset;
 } PACKED;
-static_assert(sizeof(struct pvr_buffer_descriptor) == 2 * sizeof(uint32_t),
+static_assert(sizeof(struct pvr_buffer_descriptor) == 4 * sizeof(uint32_t),
               "pvr_buffer_descriptor size is invalid.");
 
 struct pvr_sampler_descriptor {
    uint64_t words[ROGUE_NUM_TEXSTATE_SAMPLER_WORDS];
+   uint32_t meta[PCO_SAMPLER_META_COUNT];
+   uint64_t gather_words[ROGUE_NUM_TEXSTATE_SAMPLER_WORDS];
 } PACKED;
 static_assert(sizeof(struct pvr_sampler_descriptor) ==
-                 ROGUE_NUM_TEXSTATE_SAMPLER_WORDS * sizeof(uint64_t),
+                 ROGUE_NUM_TEXSTATE_SAMPLER_WORDS * sizeof(uint64_t) * 2 +
+                    PCO_SAMPLER_META_COUNT * sizeof(uint32_t),
               "pvr_sampler_descriptor size is invalid.");
 
 struct pvr_image_descriptor {
    uint64_t words[ROGUE_NUM_TEXSTATE_IMAGE_WORDS];
+   uint32_t meta[PCO_IMAGE_META_COUNT];
 } PACKED;
 static_assert(sizeof(struct pvr_image_descriptor) ==
-                 ROGUE_NUM_TEXSTATE_IMAGE_WORDS * sizeof(uint64_t),
+                 ROGUE_NUM_TEXSTATE_IMAGE_WORDS * sizeof(uint64_t) +
+                    PCO_IMAGE_META_COUNT * sizeof(uint32_t),
               "pvr_image_descriptor size is invalid.");
 
 struct pvr_combined_image_sampler_descriptor {
    struct pvr_image_descriptor image;
    struct pvr_sampler_descriptor sampler;
 } PACKED;
-static_assert(sizeof(struct pvr_combined_image_sampler_descriptor) ==
-                 (ROGUE_NUM_TEXSTATE_IMAGE_WORDS +
-                  ROGUE_NUM_TEXSTATE_SAMPLER_WORDS) *
-                    sizeof(uint64_t),
-              "pvr_combined_image_sampler_descriptor size is invalid.");
-
-struct pvr_sampler {
-   struct vk_sampler vk;
-   struct pvr_sampler_descriptor descriptor;
-};
-
-struct pvr_descriptor_set_layout_binding {
-   VkDescriptorType type;
-   VkDescriptorBindingFlags flags;
-
-   uint32_t stage_flags; /** Which stages can use this binding. */
-
-   uint32_t descriptor_count;
-   uint32_t immutable_sampler_count;
-   struct pvr_sampler **immutable_samplers;
-
-   unsigned offset; /** Offset within the descriptor set. */
-   unsigned stride; /** Stride of each descriptor in this binding. */
-};
-
-struct pvr_descriptor_set_layout {
-   struct vk_descriptor_set_layout vk;
-   VkDescriptorSetLayoutCreateFlagBits flags;
-
-   uint32_t descriptor_count;
-   uint32_t dynamic_buffer_count;
-
-   uint32_t binding_count;
-   struct pvr_descriptor_set_layout_binding *bindings;
-
-   uint32_t immutable_sampler_count;
-   struct pvr_sampler **immutable_samplers;
-
-   uint32_t stage_flags; /** Which stages can use this binding. */
-
-   unsigned size; /** Size in bytes. */
-};
-
-struct pvr_descriptor_pool {
-   struct vk_object_base base;
-
-   VkDescriptorType type;
-   VkAllocationCallbacks alloc;
-   VkDescriptorPoolCreateFlags flags;
-
-   /** List of the descriptor sets created using this pool. */
-   struct list_head desc_sets;
-
-   struct pvr_suballoc_bo *pvr_bo; /** Pool buffer object. */
-   void *mapping; /** Pool buffer CPU mapping. */
-   struct util_vma_heap heap; /** Pool (sub)allocation heap. */
-};
-
-struct pvr_descriptor {
-   VkDescriptorType type;
-
-   union {
-      struct {
-         struct pvr_buffer_view *bview;
-         pvr_dev_addr_t buffer_dev_addr;
-         VkDeviceSize buffer_desc_range;
-         VkDeviceSize buffer_whole_range;
-      };
-
-      struct {
-         VkImageLayout layout;
-         const struct pvr_image_view *iview;
-         const struct pvr_sampler *sampler;
-      };
-   };
-};
-
-struct pvr_descriptor_set {
-   struct vk_object_base base;
-
-   struct pvr_descriptor_set_layout *layout;
-   struct pvr_descriptor_pool *pool;
-
-   unsigned size; /** Descriptor set size. */
-   pvr_dev_addr_t dev_addr; /** Descriptor set device address. */
-   void *mapping; /** Descriptor set CPU mapping. */
-
-   struct list_head link; /** Link in pvr_descriptor_pool::desc_sets. */
-};
+static_assert(
+   sizeof(struct pvr_combined_image_sampler_descriptor) ==
+      (ROGUE_NUM_TEXSTATE_IMAGE_WORDS + ROGUE_NUM_TEXSTATE_SAMPLER_WORDS * 2) *
+            sizeof(uint64_t) +
+         (PCO_IMAGE_META_COUNT + PCO_SAMPLER_META_COUNT) * sizeof(uint32_t),
+   "pvr_combined_image_sampler_descriptor size is invalid.");
 
 struct pvr_event {
    struct vk_object_base base;
@@ -321,5 +242,19 @@ struct pvr_descriptor_state {
 };
 
 #undef PVR_MAX_DYNAMIC_BUFFERS
+
+struct pvr_pds_upload {
+   struct pvr_suballoc_bo *pvr_bo;
+   /* Offset from the pds heap base address. */
+   uint32_t data_offset;
+   /* Offset from the pds heap base address. */
+   uint32_t code_offset;
+
+   /* data_size + code_size = program_size. */
+   uint32_t data_size;
+   uint32_t code_size;
+};
+
+VK_DEFINE_NONDISP_HANDLE_CASTS(pvr_event, base, VkEvent, VK_OBJECT_TYPE_EVENT)
 
 #endif /* PVR_COMMON_H */

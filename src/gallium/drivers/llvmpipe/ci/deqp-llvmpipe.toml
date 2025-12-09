@@ -79,6 +79,7 @@ deqp_args = [
     "--deqp-gl-config-name=rgba8888d24s8ms0",
     "--deqp-visibility=hidden"
 ]
+prefix = "x11-"
 
 [[deqp]]
 deqp = "/deqp-gles/modules/egl/deqp-egl-wayland"

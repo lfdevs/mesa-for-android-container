@@ -434,6 +434,11 @@ struct v3d_fs_key {
         uint8_t swap_color_rb;
         /* Mask of which render targets need to be written as 32-bit floats */
         uint8_t f32_color_rb;
+        /* Mask of which render targets need to be written as 16-bit unorms or snorms */
+        uint8_t norm_16;
+        /* Mask of which render targets need to be written as snorms. */
+        uint8_t snorm;
+
         uint8_t ucp_enables;
 
         /* Color format information per render target. Only set when logic
@@ -826,7 +831,7 @@ struct v3d_compile {
         struct qreg start_msf;
 
         /* If the shader uses subgroup functionality */
-        bool has_subgroups;
+        bool can_use_supergroups;
 
         uint8_t vattr_sizes[V3D_MAX_VS_INPUTS / 4];
         uint32_t vpm_output_size;
@@ -1091,7 +1096,7 @@ struct v3d_compute_prog_data {
         uint32_t shared_size;
         uint16_t local_size[3];
         /* If the shader uses subgroup functionality */
-        bool has_subgroups;
+        bool can_use_supergroups;
 };
 
 struct vpm_config {
@@ -1138,7 +1143,7 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                       int program_id, int variant_id,
                       uint32_t *final_assembly_size);
 
-uint32_t v3d_prog_data_size(gl_shader_stage stage);
+uint32_t v3d_prog_data_size(mesa_shader_stage stage);
 void v3d_nir_to_vir(struct v3d_compile *c);
 
 void vir_compile_destroy(struct v3d_compile *c);
@@ -1455,6 +1460,7 @@ VIR_A_ALU1(CLZ)
 VIR_A_ALU1(UTOF)
 
 VIR_M_ALU2(UMUL24)
+VIR_M_ALU2(UMUL24_RTOP0)
 VIR_M_ALU2(FMUL)
 VIR_M_ALU2(SMUL24)
 VIR_M_NODST_2(MULTOP)
@@ -1487,6 +1493,11 @@ VIR_M_ALU1(FTOSNORM16)
 
 VIR_M_ALU1(VFTOUNORM8)
 VIR_M_ALU1(VFTOSNORM8)
+
+VIR_M_ALU1(FUNPACKUNORMLO)
+VIR_M_ALU1(FUNPACKUNORMHI)
+VIR_M_ALU1(FUNPACKSNORMLO)
+VIR_M_ALU1(FUNPACKSNORMHI)
 
 VIR_M_ALU1(VFTOUNORM10LO)
 VIR_M_ALU1(VFTOUNORM10HI)

@@ -1,6 +1,4 @@
--r requirements-lava.txt
 PyYAML==6.*
-colorama==0.4.*
 filecache==0.81
 flake8==7.*
 gql==3.*
@@ -8,7 +6,8 @@ kaleido==0.2.*
 pandas==2.*
 plotly==5.*
 python-dateutil==2.*
-python-gitlab==4.*
+python-gitlab==5.*
+rich==14.1.*
 ruamel.yaml.clib==0.2.*
 ruamel.yaml==0.17.*
 tabulate==0.9.*

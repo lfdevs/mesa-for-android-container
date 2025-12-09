@@ -19,6 +19,7 @@ static void
 lvp_init_ray_tracing_groups(struct lvp_pipeline *pipeline,
                             const VkRayTracingPipelineCreateInfoKHR *create_info)
 {
+   struct lvp_device *device = lvp_pipeline_device(pipeline);
    uint32_t i = 0;
    for (; i < create_info->groupCount; i++) {
       const VkRayTracingShaderGroupCreateInfoKHR *group_info = create_info->pGroups + i;
@@ -54,10 +55,10 @@ lvp_init_ray_tracing_groups(struct lvp_pipeline *pipeline,
          }
          break;
       default:
-         unreachable("Unimplemented VkRayTracingShaderGroupTypeKHR");
+         UNREACHABLE("Unimplemented VkRayTracingShaderGroupTypeKHR");
       }
 
-      dst->handle.index = p_atomic_inc_return(&pipeline->device->group_handle_alloc);
+      dst->handle.index = p_atomic_inc_return(&device->group_handle_alloc);
    }
 
    if (!create_info->pLibraryInfo)
@@ -233,7 +234,7 @@ lvp_load_sbt_entry(nir_builder *b, nir_def *index,
    }
 
    return (struct lvp_sbt_entry) {
-      .value = nir_build_load_global(b, 1, 32, nir_iadd_imm(b, addr, index_offset)),
+      .value = nir_load_global(b, 1, 32, nir_iadd_imm(b, addr, index_offset)),
       .shader_record_ptr = nir_iadd_imm(b, addr, LVP_RAY_TRACING_GROUP_HANDLE_SIZE),
    };
 }
@@ -342,7 +343,8 @@ lvp_ray_tracing_state_init(nir_shader *nir, struct lvp_ray_tracing_pipeline_comp
    state->terminate = nir_variable_create(nir, nir_var_shader_temp, glsl_bool_type(), "terminate");
    state->opaque = nir_variable_create(nir, nir_var_shader_temp, glsl_bool_type(), "opaque");
 
-   if (compiler->pipeline->device->vk.enabled_features.rayTracingPositionFetch)
+   struct lvp_device *device = lvp_pipeline_device(compiler->pipeline);
+   if (device->vk.enabled_features.rayTracingPositionFetch)
       state->primitive_addr = nir_variable_create(nir, nir_var_shader_temp, glsl_uint64_t_type(), "primitive_addr");
 }
 
@@ -356,7 +358,7 @@ lvp_ray_traversal_state_init(nir_function_impl *impl, struct lvp_ray_traversal_s
    state->current_node = nir_local_variable_create(impl, glsl_uint_type(), "traversal.current_node");
    state->stack_base = nir_local_variable_create(impl, glsl_uint_type(), "traversal.stack_base");
    state->stack_ptr = nir_local_variable_create(impl, glsl_uint_type(), "traversal.stack_ptr");
-   state->stack = nir_local_variable_create(impl, glsl_array_type(glsl_uint_type(), 24 * 2, 0), "traversal.stack");
+   state->stack = nir_local_variable_create(impl, glsl_array_type(glsl_uint_type(), LVP_MAX_TLAS_DEPTH + LVP_MAX_BLAS_DEPTH, 0), "traversal.stack");
    state->hit = nir_local_variable_create(impl, glsl_bool_type(), "traversal.hit");
 
    state->instance_addr = nir_local_variable_create(impl, glsl_uint64_t_type(), "traversal.instance_addr");
@@ -430,7 +432,7 @@ lvp_call_ray_tracing_stage(nir_builder *b, struct lvp_ray_tracing_pipeline_compi
       compiler->callable_size = MAX2(compiler->callable_size, stage->scratch_size);
       break;
    default:
-      unreachable("Invalid ray tracing stage");
+      UNREACHABLE("Invalid ray tracing stage");
       break;
    }
 }
@@ -665,7 +667,7 @@ lvp_handle_triangle_intersection(nir_builder *b,
    if (state->primitive_addr) {
       prev_primitive_addr = nir_load_var(b, state->primitive_addr);
       nir_store_var(b, state->primitive_addr, intersection->base.node_addr, 0x1);
-   }         
+   }
 
    nir_store_scratch(b, intersection->barycentrics, barycentrics_offset);
 
@@ -930,7 +932,7 @@ lvp_lower_ray_tracing_instr(nir_builder *b, nir_instr *instr, void *data)
       break;
    case nir_intrinsic_load_ray_instance_custom_index: {
       nir_def *instance_node_addr = nir_load_var(b, state->instance_addr);
-      nir_def *custom_instance_and_mask = nir_build_load_global(
+      nir_def *custom_instance_and_mask = nir_load_global(
          b, 1, 32,
          nir_iadd_imm(b, instance_node_addr, offsetof(struct lvp_bvh_instance_node, custom_instance_and_mask)));
       def = nir_iand_imm(b, custom_instance_and_mask, 0xFFFFFF);
@@ -945,7 +947,7 @@ lvp_lower_ray_tracing_instr(nir_builder *b, nir_instr *instr, void *data)
       break;
    case nir_intrinsic_load_instance_id: {
       nir_def *instance_node_addr = nir_load_var(b, state->instance_addr);
-      def = nir_build_load_global(
+      def = nir_load_global(
          b, 1, 32, nir_iadd_imm(b, instance_node_addr, offsetof(struct lvp_bvh_instance_node, instance_id)));
       break;
    }
@@ -973,7 +975,7 @@ lvp_lower_ray_tracing_instr(nir_builder *b, nir_instr *instr, void *data)
       nir_def *instance_node_addr = nir_load_var(b, state->instance_addr);
       nir_def *rows[3];
       for (unsigned r = 0; r < 3; ++r)
-         rows[r] = nir_build_load_global(
+         rows[r] = nir_load_global(
             b, 4, 32,
             nir_iadd_imm(b, instance_node_addr, offsetof(struct lvp_bvh_instance_node, otw_matrix) + r * 16));
       def = nir_vec3(b, nir_channel(b, rows[0], c), nir_channel(b, rows[1], c), nir_channel(b, rows[2], c));
@@ -1025,26 +1027,14 @@ lvp_lower_ray_tracing_instr(nir_builder *b, nir_instr *instr, void *data)
    return true;
 }
 
-static bool
-lvp_lower_ray_tracing_stack_base(nir_builder *b, nir_intrinsic_instr *instr, void *data)
-{
-   if (instr->intrinsic != nir_intrinsic_load_ray_tracing_stack_base_lvp)
-      return false;
-
-   b->cursor = nir_after_instr(&instr->instr);
-
-   nir_def_replace(&instr->def, nir_imm_int(b, b->shader->scratch_size));
-
-   return true;
-}
-
 static void
 lvp_compile_ray_tracing_pipeline(struct lvp_pipeline *pipeline,
                                  const VkRayTracingPipelineCreateInfoKHR *create_info)
 {
+   struct lvp_device *device = lvp_pipeline_device(pipeline);
    nir_builder _b = nir_builder_init_simple_shader(
       MESA_SHADER_COMPUTE,
-      pipeline->device->pscreen->nir_options[MESA_SHADER_COMPUTE],
+      device->pscreen->nir_options[MESA_SHADER_COMPUTE],
       "ray tracing pipeline");
    nir_builder *b = &_b;
 
@@ -1109,8 +1099,9 @@ lvp_compile_ray_tracing_pipeline(struct lvp_pipeline *pipeline,
    NIR_PASS(_, b->shader, nir_lower_explicit_io, nir_var_shader_temp,
             nir_address_format_32bit_offset);
 
-   NIR_PASS(_, b->shader, nir_shader_intrinsics_pass, lvp_lower_ray_tracing_stack_base,
-            nir_metadata_control_flow, NULL);
+   NIR_PASS(_, b->shader, nir_inline_sysval,
+            nir_intrinsic_load_ray_tracing_stack_base_lvp,
+            b->shader->scratch_size);
 
    /* We can not support dynamic stack sizes, assume the worst. */
    b->shader->scratch_size +=
@@ -1123,7 +1114,7 @@ lvp_compile_ray_tracing_pipeline(struct lvp_pipeline *pipeline,
    struct lvp_shader *shader = &pipeline->shaders[MESA_SHADER_RAYGEN];
    lvp_shader_init(shader, b->shader);
    shader->push_constant_size = pipeline->layout->push_constant_size;
-   shader->shader_cso = lvp_shader_compile(pipeline->device, shader, nir_shader_clone(NULL, shader->pipeline_nir->nir), false);
+   shader->shader_cso = lvp_shader_compile(device, shader, nir_shader_clone(NULL, shader->pipeline_nir->nir), false);
 
    _mesa_hash_table_destroy(compiler.functions, NULL);
 }
@@ -1148,7 +1139,6 @@ lvp_create_ray_tracing_pipeline(VkDevice _device, const VkAllocationCallbacks *a
 
    vk_pipeline_layout_ref(&layout->vk);
 
-   pipeline->device = device;
    pipeline->layout = layout;
    pipeline->type = LVP_PIPELINE_RAY_TRACING;
    pipeline->flags = vk_rt_pipeline_create_flags(create_info);

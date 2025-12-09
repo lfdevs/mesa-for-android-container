@@ -32,17 +32,11 @@ class d3d12_video_encoder_references_manager_av1 : public d3d12_video_encoder_re
 {
  public:
    void end_frame();
-   void begin_frame(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA curFrameData,
+   void begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1& curFrameData,
                     bool bUsedAsReference,
                     struct pipe_picture_desc *picture);
    D3D12_VIDEO_ENCODER_RECONSTRUCTED_PICTURE get_current_frame_recon_pic_output_allocation();
-   bool get_current_frame_picture_control_data(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA &codecAllocation);
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
-   void begin_frame1(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 curFrameData,
-                     bool bUsedAsReference,
-                     struct pipe_picture_desc *picture);
-   bool get_current_frame_picture_control_data1(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation);
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
+   bool get_current_frame_picture_control_data(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation);
    bool is_current_frame_used_as_reference();
    D3D12_VIDEO_ENCODE_REFERENCE_FRAMES get_current_reference_frames();
 
@@ -64,8 +58,6 @@ class d3d12_video_encoder_references_manager_av1 : public d3d12_video_encoder_re
    void print_virtual_dpb_entries();
    void print_physical_resource_references();
    void print_ref_frame_idx();
-   void begin_frame_impl(bool bUsedAsReference,
-                         struct pipe_picture_desc *picture);
 
    // Class members
 

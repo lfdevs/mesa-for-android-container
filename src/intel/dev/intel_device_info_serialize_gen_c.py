@@ -51,7 +51,7 @@ dump_${decl.name}(enum ${decl.name} arg) {
       return json_value_init_string("${value}");
 % endfor
    default:
-      unreachable("invalid ${decl.name} value");
+      UNREACHABLE("invalid ${decl.name} value");
    }
 }
 

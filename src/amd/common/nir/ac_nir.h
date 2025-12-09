@@ -76,6 +76,10 @@ nir_def *
 ac_nir_unpack_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg,
                   unsigned rshift, unsigned bitwidth);
 
+nir_def *
+ac_nir_load_smem(nir_builder *b, unsigned num_components, nir_def *addr, nir_def *offset,
+                 unsigned align_mul, enum gl_access_qualifier access);
+
 bool ac_nir_lower_sin_cos(nir_shader *shader);
 
 bool ac_nir_lower_intrinsics_to_args(nir_shader *shader, const enum amd_gfx_level gfx_level,
@@ -141,7 +145,7 @@ ac_nir_compute_tess_wg_info(const struct radeon_info *info, const ac_nir_tess_io
                             unsigned tcs_vertices_out, unsigned wave_size, bool tess_uses_primid,
                             unsigned num_tcs_input_cp, unsigned lds_input_vertex_size,
                             unsigned num_remapped_tess_level_outputs, unsigned *num_patches_per_wg,
-                            unsigned *hw_lds_size);
+                            unsigned *lds_size);
 
 bool
 ac_nir_lower_es_outputs_to_mem(nir_shader *shader,
@@ -186,7 +190,7 @@ typedef struct {
    bool write_pos_to_clipvertex;
    const uint8_t *vs_output_param_offset; /* GFX11+ */
    bool has_param_exports;
-   bool can_cull;
+   bool can_cull; /* if true, cull distances are not exported because the shader culls against them */
    bool disable_streamout;
    bool has_gen_prim_query;
    bool has_xfb_prim_query;
@@ -409,7 +413,7 @@ bool
 ac_nir_opt_shared_append(nir_shader *shader);
 
 bool
-ac_nir_flag_smem_for_loads(nir_shader *shader, enum amd_gfx_level gfx_level, bool use_llvm, bool after_lowering);
+ac_nir_flag_smem_for_loads(nir_shader *shader, enum amd_gfx_level gfx_level, bool use_llvm);
 
 bool
 ac_nir_lower_mem_access_bit_sizes(nir_shader *shader, enum amd_gfx_level gfx_level, bool use_llvm);
@@ -429,13 +433,22 @@ ac_nir_mem_vectorize_callback(unsigned align_mul, unsigned align_offset, unsigne
                               nir_intrinsic_instr *low, nir_intrinsic_instr *high, void *data);
 
 bool
-ac_nir_scalarize_overfetching_loads_callback(const nir_instr *instr, const void *data);
+ac_nir_scalarize_overfetching_loads_callback(const nir_intrinsic_instr *intr, const void *data);
 
-enum gl_access_qualifier
-ac_nir_get_mem_access_flags(const nir_intrinsic_instr *instr);
+bool
+ac_nir_store_may_be_subdword(const nir_intrinsic_instr *instr);
 
 uint8_t
 ac_nir_lower_phis_to_scalar_cb(const nir_instr *instr, const void *_);
+
+bool
+ac_nir_allow_offset_wrap_cb(nir_intrinsic_instr *instr, const void *data);
+
+bool
+ac_nir_op_supports_packed_math_16bit(const nir_alu_instr* alu);
+
+uint8_t
+ac_nir_opt_vectorize_cb(const nir_instr *instr, const void *data);
 
 #ifdef __cplusplus
 }

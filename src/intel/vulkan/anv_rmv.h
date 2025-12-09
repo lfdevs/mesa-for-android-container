@@ -37,9 +37,6 @@ struct anv_buffer;
 struct anv_image;
 struct anv_bo;
 struct anv_event;
-struct anv_graphics_pipeline;
-struct anv_compute_pipeline;
-struct anv_ray_tracing_pipeline;
 
 enum anv_image_memory_binding;
 
@@ -101,15 +98,6 @@ void anv_rmv_log_descriptor_pool_create(struct anv_device *device,
                                         const VkDescriptorPoolCreateInfo *create_info,
                                         struct anv_descriptor_pool *pool,
                                         bool is_internal);
-void anv_rmv_log_graphics_pipeline_create(struct anv_device *device,
-                                          struct anv_graphics_pipeline *pipeline,
-                                          bool is_internal);
-void anv_rmv_log_compute_pipeline_create(struct anv_device *device,
-                                         struct anv_compute_pipeline *pipeline,
-                                         bool is_internal);
-void anv_rmv_log_rt_pipeline_create(struct anv_device *device,
-                                    struct anv_ray_tracing_pipeline *pipeline,
-                                    bool is_internal);
 void anv_rmv_log_event_create(struct anv_device *device,
                               struct anv_event *event,
                               VkEventCreateFlags flags, bool is_internal);

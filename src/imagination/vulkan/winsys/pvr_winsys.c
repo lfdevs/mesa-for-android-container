@@ -27,7 +27,6 @@
 #include <xf86drm.h>
 
 #include "powervr/pvr_drm_public.h"
-#include "pvr_private.h"
 #include "pvr_winsys.h"
 #include "vk_log.h"
 

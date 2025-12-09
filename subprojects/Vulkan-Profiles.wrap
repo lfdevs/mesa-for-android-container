@@ -1,0 +1,6 @@
+[wrap-file]
+directory = Vulkan-Profiles-a1e185fb5035f9726d16a869a2f11067dd21aa10
+source_url = https://github.com/KhronosGroup/Vulkan-Profiles/archive/a1e185fb5035f9726d16a869a2f11067dd21aa10.zip
+source_filename = Vulkan-Profiles-a1e185fb50.zip
+source_hash = 775b0faebd53e3f31f1771d7ca9f8d899778ce596177fb9edd8d26d5323f854a
+patch_directory = Vulkan-Profiles

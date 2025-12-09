@@ -64,7 +64,7 @@ union __pvr_value {
 static inline __attribute__((always_inline)) uint64_t __pvr_mbo(uint32_t start,
                                                                 uint32_t end)
 {
-   return (~0ull >> (64 - (end - start + 1))) << start;
+   return (~UINT64_C(0) >> (64 - (end - start + 1))) << start;
 }
 
 static inline __attribute__((always_inline)) uint64_t
@@ -75,7 +75,7 @@ __pvr_uint(uint64_t v, uint32_t start, NDEBUG_UNUSED uint32_t end)
 #ifndef NDEBUG
    const int width = end - start + 1;
    if (width < 64) {
-      const uint64_t max = (1ull << width) - 1;
+      const uint64_t max = (UINT64_C(1) << width) - 1;
       assert(v <= max);
    }
 #endif
@@ -87,7 +87,7 @@ static inline __attribute__((always_inline)) uint64_t
 __pvr_uint_unpack(uint64_t packed, uint32_t start, uint32_t end)
 {
    const int width = end - start + 1;
-   const uint64_t mask = ~0ull >> (64 - width);
+   const uint64_t mask = ~UINT64_C(0) >> (64 - width);
 
    return (packed >> start) & mask;
 }
@@ -107,7 +107,7 @@ __pvr_sint(int64_t v, uint32_t start, uint32_t end)
    }
 #endif
 
-   const uint64_t mask = ~0ull >> (64 - width);
+   const uint64_t mask = ~UINT64_C(0) >> (64 - width);
 
    return (v & mask) << start;
 }
@@ -116,7 +116,7 @@ static inline __attribute__((always_inline)) int64_t
 __pvr_sint_unpack(uint64_t packed, uint32_t start, uint32_t end)
 {
    const int width = end - start + 1;
-   const uint64_t mask = ~0ull >> (64 - width);
+   const uint64_t mask = ~UINT64_C(0) >> (64 - width);
 
    return (int64_t)((packed >> start) & mask);
 }
@@ -128,7 +128,7 @@ __pvr_offset(uint64_t v,
 {
    __pvr_validate_value(v);
 #ifndef NDEBUG
-   uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
+   uint64_t mask = (~UINT64_C(0) >> (64 - (end - start + 1))) << start;
 
    assert((v & ~mask) == 0);
 #endif
@@ -142,7 +142,7 @@ __pvr_offset_unpack(uint64_t packed,
                     NDEBUG_UNUSED uint32_t end)
 {
 #ifndef NDEBUG
-   uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
+   uint64_t mask = (~UINT64_C(0) >> (64 - (end - start + 1))) << start;
 
    assert((packed & ~mask) == 0);
 #endif
@@ -157,7 +157,7 @@ __pvr_address(__pvr_address_type address,
               uint32_t end)
 {
    uint64_t addr_u64 = __pvr_get_address(address);
-   uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
+   uint64_t mask = (~UINT64_C(0) >> (64 - (end - start + 1))) << start;
 
    return ((addr_u64 >> shift) << start) & mask;
 }
@@ -168,7 +168,7 @@ __pvr_address_unpack(uint64_t packed,
                      uint32_t start,
                      uint32_t end)
 {
-   uint64_t mask = (~0ull >> (64 - (end - start + 1))) << start;
+   uint64_t mask = (~UINT64_C(0) >> (64 - (end - start + 1))) << start;
    uint64_t addr_u64 = ((packed & mask) >> start) << shift;
 
    return __pvr_make_address(addr_u64);
@@ -200,7 +200,7 @@ __pvr_sfixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
 #endif
 
    const int64_t int_val = llroundf(v * factor);
-   const uint64_t mask = ~0ull >> (64 - (end - start + 1));
+   const uint64_t mask = ~UINT64_C(0) >> (64 - (end - start + 1));
 
    return (int_val & mask) << start;
 }

@@ -25,7 +25,7 @@ struct panvk_priv_bo {
    } addr;
 };
 
-VkResult panvk_priv_bo_create(struct panvk_device *dev, size_t size,
+VkResult panvk_priv_bo_create(struct panvk_device *dev, uint64_t size,
                               uint32_t flags, VkSystemAllocationScope scope,
                               struct panvk_priv_bo **out);
 

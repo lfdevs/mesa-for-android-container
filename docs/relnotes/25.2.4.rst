@@ -1,0 +1,187 @@
+Mesa 25.2.4 Release Notes / 2025-10-01
+======================================
+
+Mesa 25.2.4 is a bug fix release which fixes bugs found since the 25.2.3 release.
+
+Mesa 25.2.4 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.4 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: a370b4c549cbfbe646b319e34d73edb50ed883978f5e95133f282f0eae39ab52  mesa-25.2.4.tar.xz
+    SHA512: ec74e1cc101b68ad2462399554273a9debb3d93a05c0a315cde3259b250d5828cbcef7771049b52beb01d07c34122fa5257451409b1d2b7fdcbf055c0f2c863d  mesa-25.2.4.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- xe2: DMA Buffer exported modifier is incorrect
+- [ANV][LNL] - FINAL FANTASY XVI (2515020) - Title crashes to Desktop immediately following the splash card.
+- nvk, nak: NAK panic in Call of the Wild: The Angler on RTX 4080
+- Simple External Semaphore test hangs in vk_sync_wait
+- dEQP-VK.spirv_assembly.instruction.compute.float_controls.fp32.input_args.reflect_denorm_flush_to_zero regression on nvk
+- Crash on game Elite Dangerous at 0% planetary generation, on Tigerlake+ Iris Xe and Arc GPUs.
+- Gallium: Segfault while trying to compile a shader with differing UBO contents in fragment and vertex stage - With reproduction case
+- aco: generate wrong code when gl_DrawID is used by primitive indices in mesh shader
+
+
+Changes
+-------
+
+Bas Nieuwenhuizen (1):
+
+- device-select: Fix error check.
+
+Calder Young (1):
+
+- anv: Fix tiling for AV1 IntraBC surface on Gfx125+
+
+Christoph Neuhauser (1):
+
+- egl: Fix invalid device UUID returned by EGL_EXT_device_persistent_id
+
+Daniel Schürmann (1):
+
+- aco/isel: rename emit_readfirstlane() -> emit_vector_as_uniform()
+
+Danylo Piliaiev (1):
+
+- freedreno/decode: Fix preamble decoding
+
+Dave Airlie (1):
+
+- gallivm: handle u8/u16 const loads properly on big-endian.
+
+Ella Stanforth (1):
+
+- v3d/compiler: Lower load_output after logic operations
+
+Eric Engestrom (4):
+
+- docs: add sha sum for 25.2.3
+- .pick_status.json: Update to 42a78a1aae19f855b049462d7714cd1f07ca12e4
+- .pick_status.json: Mark 59278c223614a3877fcbbabb8c9eb3bd4acc3836 as denominated
+- radv: make sure fp16 is enabled consistently on gfx8
+
+Faith Ekstrand (2):
+
+- vulkan/queue: Move shared binary semaphores to temps
+- spirv: Add support for OpBitcast in OpSpecConstantOp
+
+Georg Lehmann (1):
+
+- aco/lower_branches: update branch hints after changing jump targets
+
+Hans-Kristian Arntzen (1):
+
+- radv/sqtt: Ensure that present fence gets signalled.
+
+Hyunjun Ko (1):
+
+- vulkan/video: fix misuse of CLAMP in h265 slice parsing.
+
+Ian Romanick (3):
+
+- brw: Increase the size of some structure fields in combine_constants
+- elk: Increase the size of some structure fields in combine_constants
+- brw/nir: nir_intrinsic_load_reloc_const_intel may not be scalar [v3]
+
+Jianxun Zhang (1):
+
+- iris: Disable compression on sharing without modifier
+
+Jordan Justen (1):
+
+- anv: Use image view base-layer in can_fast_clear_color_att()
+
+José Roberto de Souza (1):
+
+- intel/brw: Use ASR over SHR for SHADER_OPCODE_ISUB_SAT
+
+Karol Herbst (1):
+
+- Revert "ci: Update CrosVM and Virglrenderer"
+
+Kenneth Graunke (2):
+
+- nir: Add load_simd_width_intel to divergence analysis
+- intel/nir: Make ffma peephole optimization preserve fp_fast_math flags
+
+Lucas Fryzek (1):
+
+- anv: Update viewport/scissor state when count changes
+
+Mario Kleiner (2):
+
+- asahi: Fix lseek failure error handling in agx_bo_import().
+- asahi: Set PIPE_BIND_SCANOUT in agx_resource_from_handle().
+
+Mel Henning (2):
+
+- nak: Don't copy-prop adds that flush to zero
+- nak: Fix divergence test for redux availability
+
+Mike Blumenkrantz (7):
+
+- zink: wait on queues during screen destroy
+- zink: account for kopper dt not having a swapchain when pruning batch usage
+- zink: check for zink_batch_state::ctx before using during descriptor state reset
+- zink: flag gfx pipeline_changed if switching from a shader object draw
+- tu: don't deref end info in tu_CmdEndRendering2EXT
+- mesa: don't assert when finding a renderbuffer miplevel fails
+- zink: fix u_blitting when clears are pending
+
+Nanley Chery (8):
+
+- anv: Disable CCS if image bound to wrong heap on Xe2+
+- anv: Disable fast-clears on linear surfaces
+- iris: Disable fast-clears on linear surfaces
+- iris: Add PIPE_BIND_SCANOUT when exporting textures
+- iris: Fix image reallocation for sharing
+- intel/isl: Only set CMF on renderable views on Xe2+
+- intel: Enable CCS_E on linear surfaces on Xe2+
+- iris: Drop iris_resource_image_is_pat_compressible
+
+Olivia Lee (2):
+
+- pan/va: fix bi_is_imm_desc_handle early return
+- panvk: fix FS driver set layout when LD_VAR_BUF is disabled
+
+Qiang Yu (1):
+
+- radeonsi: fix use aco/llvm debug options
+
+Rhys Perry (2):
+
+- aco: workaround load tearing for load_shared2_amd
+- aco: fix SGPR 8-bit nir_op_vec with mixed constant and non-constant
+
+Tapani Pälli (1):
+
+- blorp: add missing pipecontrol after 3DSTATE_WM_HZ_OP for Xe2+
+
+Timothy Arceri (1):
+
+- nir: fix uniform cloning helper again
+
+Timur Kristóf (2):
+
+- spirv: Always mark FS layer and  viewport index inpus as flat
+- ac/nir/ngg: Fix scalarized mesh primitive indices

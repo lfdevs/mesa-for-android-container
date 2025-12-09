@@ -38,7 +38,7 @@
 #include "vk_util.h"
 #include "vulkan/wsi/wsi_common.h"
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
 #include "vk_android.h"
 #include <vulkan/vulkan_android.h>
 #endif
@@ -100,7 +100,7 @@ vk_image_init(struct vk_device *device,
    image->drm_format_mod = ((1ULL << 56) - 1) /* DRM_FORMAT_MOD_INVALID */;
 #endif
 
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
    if (image->external_handle_types &
              VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
       image->android_buffer_type = ANDROID_BUFFER_HARDWARE;
@@ -159,7 +159,7 @@ vk_image_destroy(struct vk_device *device,
                  const VkAllocationCallbacks *alloc,
                  struct vk_image *image)
 {
-#if DETECT_OS_ANDROID
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
    if (image->anb_memory) {
       device->dispatch_table.FreeMemory(
          (VkDevice)device, image->anb_memory, alloc);
@@ -284,6 +284,25 @@ vk_image_expand_aspect_mask(const struct vk_image *image,
    }
 }
 
+uint32_t
+vk_image_subresource_slice_count(const struct vk_device *device,
+                                 const struct vk_image *image,
+                                 const VkImageSubresourceLayers *range)
+{
+   assert(image->image_type == VK_IMAGE_TYPE_3D);
+
+   bool layers_are_slices = device->enabled_features.maintenance9 &&
+      (image->create_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
+   uint32_t slices = u_minify(image->extent.depth, range->mipLevel);
+
+   if (!layers_are_slices) {
+      assert(range->baseArrayLayer == 0);
+      return slices;
+   }
+   return range->layerCount == VK_REMAINING_ARRAY_LAYERS ?
+          slices - range->baseArrayLayer : range->layerCount;
+}
+
 VkExtent3D
 vk_image_extent_to_elements(const struct vk_image *image, VkExtent3D extent)
 {
@@ -388,7 +407,7 @@ vk_image_can_be_aliased_to_yuv_plane(const struct vk_image *image)
    VkFormat format = image->format;
 
    /* Only the 8-bit, 16-bit, and 32-bit classes listed in
-    * https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#formats-compatibility-classes
+    * https://docs.vulkan.org/spec/latest/chapters/formats.html#formats-compatibility-classes
     * are compatible with yuv planes. We must exclude other classes with the
     * same block size as these.
     */
@@ -402,7 +421,7 @@ vk_image_can_be_aliased_to_yuv_plane(const struct vk_image *image)
 
    /* The planes of all the multiplane formats have a block size of 1, 2, or 4.
     * See:
-    * https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#formats-compatible-planes
+    * https://docs.vulkan.org/spec/latest/chapters/formats.html#formats-compatible-planes
     */
    return block_size == 1 || block_size == 2 || block_size == 4;
 }
@@ -416,13 +435,15 @@ remap_swizzle(VkComponentSwizzle swizzle, VkComponentSwizzle component)
 void
 vk_image_view_init(struct vk_device *device,
                    struct vk_image_view *image_view,
-                   bool driver_internal,
                    const VkImageViewCreateInfo *pCreateInfo)
 {
    vk_object_base_init(device, &image_view->base, VK_OBJECT_TYPE_IMAGE_VIEW);
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
    VK_FROM_HANDLE(vk_image, image, pCreateInfo->image);
+
+   const bool driver_internal =
+      (pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA) != 0;
 
    image_view->create_flags = pCreateInfo->flags;
    image_view->image = image;
@@ -455,7 +476,7 @@ vk_image_view_init(struct vk_device *device,
          assert(image->create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
          break;
       default:
-         unreachable("Invalid image view type");
+         UNREACHABLE("Invalid image view type");
       }
    }
 
@@ -619,7 +640,7 @@ vk_image_view_init(struct vk_device *device,
           <= image->mip_levels);
    switch (image->image_type) {
    default:
-      unreachable("bad VkImageType");
+      UNREACHABLE("bad VkImageType");
    case VK_IMAGE_TYPE_1D:
    case VK_IMAGE_TYPE_2D:
       assert(image_view->base_array_layer + image_view->layer_count
@@ -665,7 +686,6 @@ vk_image_view_finish(struct vk_image_view *image_view)
 
 void *
 vk_image_view_create(struct vk_device *device,
-                     bool driver_internal,
                      const VkImageViewCreateInfo *pCreateInfo,
                      const VkAllocationCallbacks *alloc,
                      size_t size)
@@ -676,7 +696,7 @@ vk_image_view_create(struct vk_device *device,
    if (image_view == NULL)
       return NULL;
 
-   vk_image_view_init(device, image_view, driver_internal, pCreateInfo);
+   vk_image_view_init(device, image_view, pCreateInfo);
 
    return image_view;
 }
@@ -739,10 +759,10 @@ vk_image_layout_is_read_only(VkImageLayout layout,
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_QUANTIZATION_MAP_KHR:
    case VK_IMAGE_LAYOUT_TENSOR_ALIASING_ARM:
-      unreachable("Invalid image layout.");
+      UNREACHABLE("Invalid image layout.");
    }
 
-   unreachable("Invalid image layout.");
+   UNREACHABLE("Invalid image layout.");
 }
 
 bool
@@ -1133,8 +1153,8 @@ vk_image_layout_to_usage_flags(VkImageLayout layout,
       return VK_IMAGE_USAGE_TENSOR_ALIASING_BIT_ARM;
 
    case VK_IMAGE_LAYOUT_MAX_ENUM:
-      unreachable("Invalid image layout.");
+      UNREACHABLE("Invalid image layout.");
    }
 
-   unreachable("Invalid image layout.");
+   UNREACHABLE("Invalid image layout.");
 }

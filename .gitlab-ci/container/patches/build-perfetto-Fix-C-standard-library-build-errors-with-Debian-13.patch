@@ -1,0 +1,49 @@
+From 7a5a9e5be4306637cd3a0ef0f770832f4b4cf4b4 Mon Sep 17 00:00:00 2001
+From: Laura Nao <laura.nao@collabora.com>
+Date: Wed, 12 Nov 2025 14:45:32 +0100
+Subject: [PATCH] Fix C++ standard library build errors with Debian 13
+
+Address missing <algorithm> and <optional> includes that caused build
+failures ("no member named 'find' in namespace 'std'" and
+"error: no template named 'optional' in namespace 'std'") when building
+with the native toolchain on Debian 13.
+
+This was fixed upstream in v48[1] and v49[2] respectively, so this patch
+can be dropped once Perfetto is updated to v48+.
+
+[1] https://github.com/google/perfetto/commit/d005c0123b2f929b918359a53ffe61d7ca2212a0
+[2] https://github.com/google/perfetto/commit/acc24608c84d2d2d8d684f40a110d0a6f4eddc51
+
+Signed-off-by: Laura Nao <laura.nao@collabora.com>
+---
+ src/profiling/common/producer_support.cc            | 1 +
+ src/traced/probes/sys_stats/sys_stats_data_source.h | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/src/profiling/common/producer_support.cc b/src/profiling/common/producer_support.cc
+index 5303658..e9e193d 100644
+--- a/src/profiling/common/producer_support.cc
++++ b/src/profiling/common/producer_support.cc
+@@ -16,6 +16,7 @@
+ 
+ #include "src/profiling/common/producer_support.h"
+ 
++#include <algorithm>
+ #include <optional>
+ 
+ #include "perfetto/ext/base/android_utils.h"
+diff --git a/src/traced/probes/sys_stats/sys_stats_data_source.h b/src/traced/probes/sys_stats/sys_stats_data_source.h
+index e09cd8a..7e4749b 100644
+--- a/src/traced/probes/sys_stats/sys_stats_data_source.h
++++ b/src/traced/probes/sys_stats/sys_stats_data_source.h
+@@ -21,6 +21,7 @@
+ 
+ #include <map>
+ #include <memory>
++#include <optional>
+ #include <string>
+ 
+ #include "perfetto/ext/base/paged_memory.h"
+-- 
+2.39.5
+

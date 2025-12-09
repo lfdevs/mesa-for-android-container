@@ -1,3 +1,4 @@
+KHR-Single-GL46.enhanced_layouts.vertex_attrib_locations,Crash
 
 # #6322
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
@@ -10,19 +11,14 @@ spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_ust_test,Fai
 # this test tries to be error-compatible with nvidia. spoiler: mesa isn't, and no driver can pass it
 glx@glx_arb_create_context@invalid flag,Fail
 
+glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero,Fail
+glx@glx_arb_sync_control@swapbuffersmsc-return,Fail
+glx@glx_arb_sync_control@swapbuffersmsc-return swap_interval 0,Fail
+glx@glx_arb_sync_control@swapbuffersmsc-return swap_interval 1,Fail
+
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth,Crash
-glx@glx_arb_create_context_no_error@no error,Fail
 
-glx@glx_ext_import_context@free context,Fail
-glx@glx_ext_import_context@get context id,Fail
-glx@glx_ext_import_context@get current display,Fail
-glx@glx_ext_import_context@import context- multi process,Fail
-glx@glx_ext_import_context@import context- single process,Fail
-glx@glx_ext_import_context@imported context has same context id,Fail
-glx@glx_ext_import_context@make current- multi process,Fail
-glx@glx_ext_import_context@make current- single process,Fail
-glx@glx_ext_import_context@query context info,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-facing,Fail
@@ -44,14 +40,11 @@ spec@!opengl 1.2@copyteximage 3d,Fail
 spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
+spec@arb_fragment_shader_interlock@arb_fragment_shader_interlock-image-load-store,Fail
+spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-z,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
-spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
-spec@arb_sample_shading@ignore-centroid-qualifier 2,Fail
-spec@arb_sample_shading@ignore-centroid-qualifier 4,Fail
-spec@arb_sample_shading@interpolate-at-sample-position 2,Fail
-spec@arb_sample_shading@interpolate-at-sample-position 4,Fail
 spec@arb_sample_shading@samplemask 2,Fail
 spec@arb_sample_shading@samplemask 2@0.250000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 2@0.500000 mask_in_one,Fail
@@ -80,16 +73,52 @@ spec@arb_sample_shading@samplemask 4 all@1.000000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 4 all@noms mask_in_one,Fail
 spec@arb_sample_shading@samplemask 4 all@noms partition,Fail
 spec@arb_sample_shading@samplemask 4 all@sample mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6,Fail
+spec@arb_sample_shading@samplemask 6@0.125000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6@0.250000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6@noms partition,Fail
+spec@arb_sample_shading@samplemask 6@sample mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6 all,Fail
+spec@arb_sample_shading@samplemask 6 all@0.125000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6 all@0.250000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6 all@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6 all@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6 all@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 6 all@noms partition,Fail
+spec@arb_sample_shading@samplemask 6 all@sample mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8,Fail
+spec@arb_sample_shading@samplemask 8@0.125000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8@0.250000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8@noms partition,Fail
+spec@arb_sample_shading@samplemask 8@sample mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8 all,Fail
+spec@arb_sample_shading@samplemask 8 all@0.125000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8 all@0.250000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8 all@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8 all@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8 all@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 8 all@noms partition,Fail
+spec@arb_sample_shading@samplemask 8 all@sample mask_in_one,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
+spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 
+spec@egl 1.4@egl-ext_egl_image_storage,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 2 msaa,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 2 upsample,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 4 msaa,Fail
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 4 upsample,Fail
+spec@ext_framebuffer_multisample@accuracy 4 srgb depthstencil,Fail
+spec@ext_framebuffer_multisample@accuracy 4 srgb depthstencil linear,Fail
+spec@ext_framebuffer_multisample@accuracy 8 srgb depthstencil,Fail
+spec@ext_framebuffer_multisample@accuracy 8 srgb depthstencil linear,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil linear,Fail
 spec@ext_framebuffer_multisample@enable-flag,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-deriv-disabled,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-disabled,Fail
@@ -101,7 +130,16 @@ spec@ext_framebuffer_multisample@interpolation 4 centroid-disabled,Fail
 spec@ext_framebuffer_multisample@interpolation 4 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 4 non-centroid-deriv-disabled,Fail
 spec@ext_framebuffer_multisample@interpolation 4 non-centroid-disabled,Fail
-spec@ext_packed_float@query-rgba-signed-components,Fail
+spec@ext_framebuffer_multisample@interpolation 6 centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 6 centroid-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 6 centroid-edges,Fail
+spec@ext_framebuffer_multisample@interpolation 6 non-centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 6 non-centroid-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 8 centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 8 centroid-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 8 centroid-edges,Fail
+spec@ext_framebuffer_multisample@interpolation 8 non-centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 8 non-centroid-disabled,Fail
 
 spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,Fail
@@ -111,10 +149,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full precision,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
 spec@arb_post_depth_coverage@arb_post_depth_coverage-multisampling,Fail
-spec@arb_shader_image_load_store@early-z,Fail
-spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
-
-spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store,Crash
 
 #literally no driver can pass these
 spec@!opengl 1.0@rasterpos,Fail
@@ -124,13 +158,15 @@ spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@ext_transform_feedback@tessellation quads wireframe,Fail
 
 # Debian 12 CI update, see https://gitlab.freedesktop.org/mesa/mesa/-/issues/9072
-spec@ext_transform_feedback@tessellation quad_strip wireframe,Crash
-spec@!opengl 1.0@gl-1.0-dlist-beginend,Crash
-
-spec@arb_viewport_array@display-list,Fail
+spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
 
 # uprev Piglit in Mea
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export-tex,Fail
-spec@glsl-1.50@execution@variable-indexing@vs-output-array-vec2-index-wr-before-gs,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
+
+# EGL
+wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.shrink,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_height,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_width,Fail

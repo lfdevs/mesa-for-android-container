@@ -107,8 +107,7 @@ static int store_shader(struct pipe_context *ctx,
 	uint32_t *ptr, i;
 
 	if (shader->bo == NULL) {
-		shader->bo = (struct r600_resource*)
-			pipe_buffer_create(ctx->screen, 0, PIPE_USAGE_IMMUTABLE, shader->shader.bc.ndw * 4);
+		shader->bo = r600_as_resource(pipe_buffer_create(ctx->screen, 0, PIPE_USAGE_IMMUTABLE, shader->shader.bc.ndw * 4));
 		if (shader->bo == NULL) {
 			return -ENOMEM;
 		}
@@ -148,7 +147,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 
 	int processor = sel->ir_type == PIPE_SHADER_IR_TGSI ?
 		tgsi_get_processor_type(sel->tokens):
-		pipe_shader_type_from_mesa(sel->nir->info.stage);
+		sel->nir->info.stage;
 	
 	bool dump = r600_can_dump_shader(&rctx->screen->b, processor);
 
@@ -159,8 +158,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 	{
 		glsl_type_singleton_init_or_ref();
 		if (sel->ir_type == PIPE_SHADER_IR_TGSI) {
-			if (sel->nir)
-				ralloc_free(sel->nir);
+			ralloc_free(sel->nir);
 			if (sel->nir_blob) {
 				free(sel->nir_blob);
 				sel->nir_blob = NULL;
@@ -228,16 +226,16 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 
 	/* Build state. */
 	switch (shader->shader.processor_type) {
-	case PIPE_SHADER_TESS_CTRL:
+	case MESA_SHADER_TESS_CTRL:
 		evergreen_update_hs_state(ctx, shader);
 		break;
-	case PIPE_SHADER_TESS_EVAL:
+	case MESA_SHADER_TESS_EVAL:
 		if (key.tes.as_es)
 			evergreen_update_es_state(ctx, shader);
 		else
 			evergreen_update_vs_state(ctx, shader);
 		break;
-	case PIPE_SHADER_GEOMETRY:
+	case MESA_SHADER_GEOMETRY:
 		if (rctx->b.gfx_level >= EVERGREEN) {
 			evergreen_update_gs_state(ctx, shader);
 			evergreen_update_vs_state(ctx, shader->gs_copy_shader);
@@ -246,7 +244,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 			r600_update_vs_state(ctx, shader->gs_copy_shader);
 		}
 		break;
-	case PIPE_SHADER_VERTEX:
+	case MESA_SHADER_VERTEX:
 		export_shader = key.vs.as_es;
 		if (rctx->b.gfx_level >= EVERGREEN) {
 			if (key.vs.as_ls)
@@ -262,14 +260,14 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 				r600_update_vs_state(ctx, shader);
 		}
 		break;
-	case PIPE_SHADER_FRAGMENT:
+	case MESA_SHADER_FRAGMENT:
 		if (rctx->b.gfx_level >= EVERGREEN) {
 			evergreen_update_ps_state(ctx, shader);
 		} else {
 			r600_update_ps_state(ctx, shader);
 		}
 		break;
-	case PIPE_SHADER_COMPUTE:
+	case MESA_SHADER_COMPUTE:
 		evergreen_update_ls_state(ctx, shader);
 		break;
 	default:
@@ -277,14 +275,16 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		goto error;
 	}
 
-	util_debug_message(&rctx->b.debug, SHADER_INFO, "%s shader: %d dw, %d gprs, %d alu_groups, %d loops, %d cf, %d stack",
-		           _mesa_shader_stage_to_abbrev(tgsi_processor_to_shader_stage(processor)),
-	                   shader->shader.bc.ndw,
-	                   shader->shader.bc.ngpr,
-			   shader->shader.bc.nalu_groups,
-			   shader->shader.num_loops,
-			   shader->shader.bc.ncf,
-			   shader->shader.bc.nstack);
+	if (unlikely(rctx->screen->b.debug_flags & DBG_SHADER_DB)) {
+		util_debug_message(&rctx->b.debug, SHADER_INFO, "%s shader: %d dw, %d gprs, %d alu_groups, %d loops, %d cf, %d stack",
+				   _mesa_shader_stage_to_abbrev(processor),
+				   shader->shader.bc.ndw,
+				   shader->shader.bc.ngpr,
+				   shader->shader.bc.nalu_groups,
+				   shader->shader.num_loops,
+				   shader->shader.bc.ncf,
+				   shader->shader.bc.nstack);
+	}
 
 	if (!sel->nir_blob && sel->nir && sel->ir_type != PIPE_SHADER_IR_TGSI) {
 		struct blob blob;
@@ -312,8 +312,7 @@ void r600_pipe_shader_destroy(struct pipe_context *ctx UNUSED, struct r600_pipe_
 		r600_bytecode_clear(&shader->shader.bc);
 	r600_release_command_buffer(&shader->command_buffer);
 
-	if (shader->shader.arrays)
-		free(shader->shader.arrays);
+	free(shader->shader.arrays);
 }
 
 struct r600_shader_ctx {
@@ -760,7 +759,7 @@ int generate_gs_copy_shader(struct r600_context *rctx,
 
 	ctx.shader = &cshader->shader;
 	ctx.bc = &ctx.shader->bc;
-	ctx.type = ctx.bc->type = PIPE_SHADER_VERTEX;
+	ctx.type = ctx.bc->type = MESA_SHADER_VERTEX;
 
 	r600_bytecode_init(ctx.bc, rctx->b.gfx_level, rctx->b.family,
 			   rctx->screen->has_compressed_msaa_texturing);

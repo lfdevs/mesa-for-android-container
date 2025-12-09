@@ -42,7 +42,7 @@
 
 #define WORD_SIZE 4
 
-static gl_shader_stage
+static mesa_shader_stage
 stage_to_enum(char *stage)
 {
    if (!strcmp(stage, "vertex"))
@@ -79,7 +79,7 @@ enum dxil_validator_version val_ver = DXIL_VALIDATOR_1_4;
 struct nir_shader_compiler_options nir_options;
 
 static bool
-compile_shader(const char *filename, gl_shader_stage shader_stage, struct shader *shader,
+compile_shader(const char *filename, mesa_shader_stage shader_stage, struct shader *shader,
                struct dxil_spirv_runtime_conf *conf)
 {
    size_t file_size;
@@ -102,7 +102,7 @@ compile_shader(const char *filename, gl_shader_stage shader_stage, struct shader
 
    shader->nir = spirv_to_nir(
       (const uint32_t *)file_contents, word_count, NULL,
-      0, (gl_shader_stage)shader_stage, shader->entry_point,
+      0, (mesa_shader_stage)shader_stage, shader->entry_point,
       spirv_opts, &nir_options);
    free(file_contents);
    if (!shader->nir) {
@@ -174,7 +174,7 @@ main(int argc, char **argv)
       .entry_point = "main",
       .output_file = NULL,
    };
-   gl_shader_stage shader_stage = MESA_SHADER_FRAGMENT;
+   mesa_shader_stage shader_stage = MESA_SHADER_FRAGMENT;
 
    struct dxil_spirv_runtime_conf conf;
    memset(&conf, 0, sizeof(conf));

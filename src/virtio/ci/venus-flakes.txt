@@ -8,3 +8,6 @@ dEQP-VK.transform_feedback.primitives_generated_query.get.*reset.*
 dEQP-VK.api.image_clearing.dedicated_allocation.clear_color_image.2d.linear.remaining_array_layers.b10g11r11_ufloat_pack32
 
 dEQP-VK.dynamic_rendering.graphics_pipeline_library.suballocation.formats.a8b8g8r8_unorm_pack32.input.load.store.self_dep_clear_draw
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats.a8b8g8r8_unorm_pack32.input.clear.store.self_dep_draw
+
+dEQP-VK.image.host_image_copy.draw_r32g32b32a32_sfloat_r32g32b32a32_sfloat.host_transition_host_copy.memory_to_image.transfer_src_transfer_dst.shader_read_only_optimal.optimal.0_4_4.16x16

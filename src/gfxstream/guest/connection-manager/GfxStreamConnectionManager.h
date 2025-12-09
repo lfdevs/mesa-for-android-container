@@ -31,6 +31,7 @@ class GfxStreamConnectionManager {
    public:
     static GfxStreamConnectionManager* getThreadLocalInstance(GfxStreamTransportType type,
                                                               VirtGpuCapset capset);
+    static void resetThreadLocalInstance();
 
     GfxStreamConnectionManager(GfxStreamTransportType type, VirtGpuCapset capset);
     ~GfxStreamConnectionManager();

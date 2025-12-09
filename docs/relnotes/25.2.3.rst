@@ -1,0 +1,242 @@
+Mesa 25.2.3 Release Notes / 2025-09-17
+======================================
+
+Mesa 25.2.3 is a bug fix release which fixes bugs found since the 25.2.2 release.
+
+Mesa 25.2.3 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.2.3 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: f2d6b28562f1d6cb9c17ee8e58eeade7aa5faf927ae71065eadb41e17f92b4f8  mesa-25.2.3.tar.xz
+    SHA512: e03c09de2a6482a87362c0bf4fab4f9b32ffa48935a8724eb83e75b246f1bfc59524d04ea7e8cbea34e5c6ad2a0793195a076fe2d27da8fb7e05f56c7662eac5  mesa-25.2.3.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Regression since mesa 25.2.0: applications waiting for dGPU to start
+- virgl: guest memory leak with qemu + virtio-gpu-gl
+- iris: Assertion failures in piglit tests on all platforms
+- Minecraft 1.12.2 visual artifacts when running on zink/radv
+- [ANV] [REGRESSION] PCSX2/Midnight Club 3 crashes with VK_ERROR_DEVICE_LOST on Mesa 25.0.7
+- Hollow Knight Silksong segfaults with zink on radv
+- zink: crash in KHR-GL46.framebuffer_blit.scissor_blit
+- turnip: FDM failures with forcebin
+- ARB_vertex_program and ARB_fragment_program are broken
+- nvk: test_conditional_rendering fails on vkd3d-proton
+
+
+Changes
+-------
+
+Boris Brezillon (2):
+
+- panvk/jm: Preload the FB even if we have no draws queued
+- panfrost: Fix panfrost_batch_to_fb_info() for stencil-only attachments
+
+Caio Oliveira (3):
+
+- util: Avoid invalid access in ralloc_print_info()
+- brw: Run validation as soon as we have the CFG around
+- brw: Fix printing of blocks in disassembly when BRW is available
+
+Christian Meissl (1):
+
+- panfrost: take reference from pool used for allocation
+
+Christoph Neuhauser (1):
+
+- iris: Increase max_shader_buffer_size to max_buffer_size
+
+Connor Abbott (1):
+
+- tu: Lower ViewIndex to 0 when multiview is disabled
+
+Corentin Noël (1):
+
+- virgl: Skip resource destruction only when there are actually needed references
+
+Danylo Piliaiev (2):
+
+- tu: Reset rp_trace on tu_reset_cmd_buffer
+- egl: Bring back util_cpu_trace_init
+
+David Rosca (2):
+
+- radv/video: Set rate control to default on reset
+- radeonsi/vcn: Fix calculating QP map region dimensions
+
+Dylan Baker (1):
+
+- intel/brw: Fix implementaiton of \|= operator for enum
+
+Ella Stanforth (1):
+
+- util/list: Fix next instruction removal usecase for non safe iterators
+
+Eric Engestrom (9):
+
+- docs: add sha sum for 25.2.2
+- .pick_status.json: Update to f99230cc67b0af4d403374a7c12529e566590a8b
+- .pick_status.json: Mark 83bf75e307b2171094811884dbd350399cf145ba as denominated
+- .pick_status.json: Mark 22606815722fdc36ecb8afb4a21a825f1b459e1f as denominated
+- .pick_status.json: Mark a09d18a316efb339c0ace43c4f3192cac169df4a as denominated
+- .pick_status.json: Mark d68344bffe893c1ecaa63ce5f2795c3479517da6 as denominated
+- .pick_status.json: Mark 87ce4c6ca4a13952a5b0658c94d638cf52afaed0 as denominated
+- .pick_status.json: Mark bd074a542e203255f1daa5657fd09b88d2e6679e as denominated
+- .pick_status.json: Mark aed7e7add135bbf33de689048a2766ea9e7f095f as denominated
+
+Eric R. Smith (2):
+
+- panfrost: fix typo in register allocation
+- panfrost: fix debug print of spilled registers
+
+Erik Faye-Lund (2):
+
+- panvk: fix up vk1.4 properties
+- aux/pp: fixup sampler-view release
+
+Georg Lehmann (2):
+
+- mesa: clamp fog scale to -FLT_MAX instead of FLT_MIN
+- aco/isel: fix output args init stack buffer overflow
+
+Ian Romanick (1):
+
+- iris: Limit max_shader_buffer_size to INT32_MAX
+
+Job Noorman (1):
+
+- ir3: don't create merge sets for subreg moves
+
+Jose Maria Casanova Crespo (2):
+
+- v3dv: Fix stencil clear values for only stencil clears
+- v3d: Don't enable Early-z with discards when stencil updates are enabled
+
+Karol Herbst (2):
+
+- nak/qmd: import size_of for rust-1.78 compatability
+- rusticl/mem: fix Image::read for 1Darray images
+
+Lionel Landwerlin (1):
+
+- anv: fix partial queries
+
+Mary Guillemard (2):
+
+- pan/decode: Fix SYNC_SET32 double dots
+- panvk: Fix wrong type for sb_mask in CmdSetEvent2
+
+Mel Henning (2):
+
+- nvk: Clear cond_render_gart_* in reset_cmd_buffer
+- nvk: Clear second SET_RENDER_ENABLE operand
+
+Mike Blumenkrantz (15):
+
+- tc: don't unset resolve resource in set_framebuffer_state
+- zink: add another flag to determine whether linked program compile is done
+- zink: toggle ctx->has_swapchain when flushing clears
+- zink: flag pipeline_changed when updating shader modules
+- zink: clamp subgroup op return types to required int/uint types
+- zink: fix edgeflags check on program creation
+- zink: correctly handle batch_id==0 in check_last_finished()
+- zink: only set compute module info on dispatch (after compile fence)
+- zink: set current compute prog after comparing against current compute prog
+- zink: ensure transient surface is created when doing msaa expand
+- zink: flag vertex element state for rebind after vstate draws
+- zink: use implicit offsets for function temp variables in ntv
+- cso: unbind vertex buffers when unbinding context
+- zink: stop unsetting zink_gfx_pipeline::modules on shader unbind
+- zink: don't use screen ralloc context for screen::pipeline_libs
+
+Nanley Chery (2):
+
+- anv,hasvk: Take trace submission ID out of lock
+- anv: Rework locking for sparse binding with TR-TT
+
+Patrick Lerda (3):
+
+- r600: fix r600_resource_copy_region behavior for some formats
+- r600: update multi_draw_indirect_params drm version requirement
+- r600: fix emit_ssbo_atomic_op when ssbo_image_offset is non-zero
+
+Qiang Yu (1):
+
+- panfrost: fix image plane array copy
+
+Quentin Schulz (3):
+
+- nvk: remove unused relative_dir variable
+- meson: replace global_source_root/global_build_root with project_*
+- meson: fix libcl assert() reproducibility
+
+Rhys Perry (1):
+
+- aco: avoid wraparound for smem global loads with both offsets
+
+Rob Clark (1):
+
+- freedreno/registers: Re-enable validation for gen_header.py
+
+Sagar Ghuge (1):
+
+- isl: Respect driconf option for EnableSamplerRoutetoLSC
+
+Samuel Pitoiset (5):
+
+- radv: fix vk_error in radv_update_preambles()
+- radv: fix capture/replay with sampler border color
+- spirv: add missing non-uniform access for SSBO atomics
+- radv/meta: fix saving push constants for depth/stensil resolves on compute
+- radv: set DRLR mapping info from inheritance info when present
+
+Sviatoslav Peleshko (1):
+
+- anv: Always disable Color Blending for unused Render Targets
+
+Tapani Pälli (1):
+
+- egl: allocate device info lazily only when queried
+
+Timur Kristóf (6):
+
+- radv/amdgpu: Fix crash with RADV_DEBUG=noibs
+- radv/amdgpu: Use correct NOP packets when unchaining a CS
+- radv/amdgpu: Don't use IB2 on GFX6 (for now)
+- radv: Don't use EVENT_WRITE_EOS on GFX7
+- radeonsi: Flush L2 for render condition when CP can't use L2
+- radv: Flush L2 before CP DMA copy/fill when CP DMA doesn't use L2
+
+Valentine Burley (1):
+
+- tu: Enable robustBufferAccessUpdateAfterBind
+
+Yiwei Zhang (3):
+
+- radv: bind aliased wsi image at memory offset zero
+- nvk: bind aliased wsi image at memory offset zero
+- tu: bind aliased wsi image at memory offset zero
+
+Yonggang Luo (1):
+
+- tgsi: Fixes ntt_should_vectorize_io parameters

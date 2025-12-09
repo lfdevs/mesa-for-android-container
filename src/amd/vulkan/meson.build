@@ -21,6 +21,7 @@ radv_entrypoints_gen_command += [
   '--device-prefix', 'metro_exodus',
   '--device-prefix', 'rage2',
   '--device-prefix', 'quantic_dream',
+  '--device-prefix', 'no_mans_sky',
 
   # Command buffer annotation layer entrypoints
   '--device-prefix', 'annotate',
@@ -40,6 +41,7 @@ libradv_files = files(
   'layers/radv_metro_exodus.c',
   'layers/radv_rage2.c',
   'layers/radv_quantic_dream.c',
+  'layers/radv_no_mans_sky.c',
   'layers/radv_rmv_layer.c',
   'layers/radv_rra_layer.c',
   'layers/radv_sqtt_layer.c',
@@ -51,6 +53,7 @@ libradv_files = files(
   'meta/radv_meta_buffer.c',
   'meta/radv_meta_bufimage.c',
   'meta/radv_meta_clear.c',
+  'meta/radv_meta_clear_hiz.c',
   'meta/radv_meta_copy.c',
   'meta/radv_meta_copy_vrs_htile.c',
   'meta/radv_meta_dcc_retile.c',
@@ -72,6 +75,7 @@ libradv_files = files(
   'nir/radv_nir_lower_fs_barycentric.c',
   'nir/radv_nir_lower_fs_intrinsics.c',
   'nir/radv_nir_lower_hit_attrib_derefs.c',
+  'nir/radv_nir_lower_immediate_samplers.c',
   'nir/radv_nir_lower_intrinsics_early.c',
   'nir/radv_nir_lower_io.c',
   'nir/radv_nir_lower_primitive_shading_rate.c',
@@ -84,13 +88,10 @@ libradv_files = files(
   'nir/radv_nir_opt_tid_function.c',
   'nir/radv_nir_remap_color_attachment.c',
   'nir/radv_nir_rt_common.c',
-  'nir/radv_nir_rt_shader.c',
-  'winsys/null/radv_null_bo.c',
-  'winsys/null/radv_null_bo.h',
-  'winsys/null/radv_null_cs.c',
-  'winsys/null/radv_null_cs.h',
-  'winsys/null/radv_null_winsys.c',
-  'winsys/null/radv_null_winsys_public.h',
+  'nir/radv_nir_rt_stage_common.c',
+  'nir/radv_nir_rt_stage_cps.c',
+  'nir/radv_nir_rt_stage_monolithic.c',
+  'nir/radv_nir_rt_traversal_shader.c',
   'radv_acceleration_structure.c',
   'radv_android.c',
   'radv_android.h',
@@ -106,6 +107,8 @@ libradv_files = files(
   'radv_cp_reg_shadowing.h',
   'radv_cs.c',
   'radv_cs.h',
+  'radv_debug_nir.c',
+  'radv_debug_nir.h',
   'radv_debug.c',
   'radv_debug.h',
   'radv_device.c',
@@ -148,8 +151,6 @@ libradv_files = files(
   'radv_pipeline_layout.h',
   'radv_pipeline_rt.c',
   'radv_pipeline_rt.h',
-  'radv_printf.c',
-  'radv_printf.h',
   'radv_queue.c',
   'radv_queue.h',
   'radv_radeon_winsys.h',
@@ -249,7 +250,7 @@ libvulkan_radeon = shared_library(
     libamd_common, libamd_common_llvm, libamdgpu_addrlib,
   ],
   dependencies : [
-    dep_llvm, dep_thread, dep_elf, dep_dl, dep_m,
+    dep_llvm, dep_libdrm_amdgpu, dep_thread, dep_elf, dep_dl, dep_m,
     dep_valgrind, radv_deps, idep_aco,
     idep_mesautil, idep_nir, idep_vulkan_util, idep_vulkan_wsi,
     idep_vulkan_runtime, idep_amdgfxregs_h, idep_xmlconfig,
@@ -279,18 +280,14 @@ if with_symbols_check
   )
 endif
 
-icd_lib_path = join_paths(get_option('prefix'), get_option('libdir'))
-icd_file_name = 'libvulkan_radeon.so'
-if with_platform_windows
-  icd_lib_path = import('fs').relative_to(get_option('bindir'), with_vulkan_icd_dir)
-  icd_file_name = 'vulkan_radeon.dll'
-endif
+icd_file_name = libname_prefix + 'vulkan_radeon.' + libname_suffix
 
 icd_command = [
   prog_python, '@INPUT0@',
   '--api-version', '1.4', '--xml', '@INPUT1@',
   '--sizeof-pointer', sizeof_pointer,
-  '--lib-path', join_paths(icd_lib_path, icd_file_name),
+  '--icd-lib-path', vulkan_icd_lib_path,
+  '--icd-filename', icd_file_name,
   '--out', '@OUTPUT@',
 ]
 if with_platform_windows
@@ -300,7 +297,7 @@ endif
 radeon_icd = custom_target(
   'radeon_icd',
   input : [vk_icd_gen, vk_api_xml],
-  output : 'radeon_icd.@0@.json'.format(host_machine.cpu()),
+  output : 'radeon_icd.' + vulkan_manifest_suffix,
   command : icd_command,
   build_by_default : true,
   install_dir : with_vulkan_icd_dir,
@@ -317,7 +314,8 @@ _dev_icd = custom_target(
     prog_python, '@INPUT0@',
     '--api-version', '1.4', '--xml', '@INPUT1@',
     '--sizeof-pointer', sizeof_pointer,
-    '--lib-path', meson.current_build_dir() / icd_file_name,
+    '--icd-lib-path', meson.current_build_dir(),
+    '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,
@@ -356,5 +354,9 @@ if with_radv_tests
     ),
     suite : ['compiler', 'nir'],
     protocol : 'gtest',
+    env : [
+      'LD_PRELOAD=@0@'.format(libamdgpu_noop_drm_shim.full_path()),
+      'AMDGPU_GPU_ID=navi21',
+    ],
   )
 endif

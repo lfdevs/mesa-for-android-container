@@ -27,6 +27,6 @@ agx_negate_src_index(agx_instr *I)
    case AGX_OPCODE_IADD:
       return 1;
    default:
-      unreachable("not allowed");
+      UNREACHABLE("not allowed");
    }
 }

@@ -266,7 +266,7 @@ dzn_translate_compare_op(VkCompareOp in)
    case VK_COMPARE_OP_NOT_EQUAL: return D3D12_COMPARISON_FUNC_NOT_EQUAL;
    case VK_COMPARE_OP_GREATER_OR_EQUAL: return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
    case VK_COMPARE_OP_ALWAYS: return D3D12_COMPARISON_FUNC_ALWAYS;
-   default: unreachable("Invalid compare op");
+   default: UNREACHABLE("Invalid compare op");
    }
 }
 

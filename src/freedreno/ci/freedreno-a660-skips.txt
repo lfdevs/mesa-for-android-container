@@ -13,10 +13,3 @@ dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_geom
 dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_tessc
 dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_tesse
 dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_vert
-
-# 60s timeout (flake)
-dEQP-VK.subgroups.clustered.graphics.subgroupclusteredmul_i64vec4
-
-# timing out in a flaky manner
-# seen first time on this job https://gitlab.freedesktop.org/mesa/mesa/-/jobs/76191050
-dEQP-VK.subgroups.clustered.compute.subgroupclusteredmax_u64vec4_requiredsubgroupsize

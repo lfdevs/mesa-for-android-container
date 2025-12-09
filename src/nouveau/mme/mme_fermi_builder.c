@@ -27,7 +27,7 @@ mme_fermi_is_zero_or_reg(struct mme_value x)
    case MME_VALUE_TYPE_ZERO:  return true;
    case MME_VALUE_TYPE_IMM:   return x.imm == 0;
    case MME_VALUE_TYPE_REG:   return true;
-   default: unreachable("Invalid MME value type");
+   default: UNREACHABLE("Invalid MME value type");
    }
 }
 
@@ -38,7 +38,7 @@ mme_fermi_is_zero_or_imm(struct mme_value x)
    case MME_VALUE_TYPE_ZERO:  return true;
    case MME_VALUE_TYPE_IMM:   return true;
    case MME_VALUE_TYPE_REG:   return false;
-   default: unreachable("Invalid MME value type");
+   default: UNREACHABLE("Invalid MME value type");
    }
 }
 
@@ -56,7 +56,7 @@ mme_value_alu_reg(struct mme_value val)
    case MME_VALUE_TYPE_IMM:
       return MME_FERMI_REG_ZERO;
    }
-   unreachable("Invalid value type");
+   UNREACHABLE("Invalid value type");
 }
 
 static inline uint32_t
@@ -72,7 +72,7 @@ mme_value_alu_imm(struct mme_value val)
    case MME_VALUE_TYPE_REG:
       return 0;
    }
-   unreachable("Invalid value type");
+   UNREACHABLE("Invalid value type");
 }
 
 static inline void
@@ -715,7 +715,7 @@ mme_to_fermi_alu_op(enum mme_alu_op op)
    ALU_CASE(XOR)
 #undef ALU_CASE
    default:
-      unreachable("Unsupported MME ALU op");
+      UNREACHABLE("Unsupported MME ALU op");
    }
 }
 

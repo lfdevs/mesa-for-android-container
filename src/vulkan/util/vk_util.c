@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "vk_internal_exts.h"
 #include "vk_util.h"
 #include "util/u_debug.h"
 
@@ -54,7 +55,7 @@ uint32_t vk_get_driver_version(void)
 
 uint32_t vk_get_version_override(void)
 {
-   const char *str = getenv("MESA_VK_VERSION_OVERRIDE");
+   const char *str = os_get_option("MESA_VK_VERSION_OVERRIDE");
    if (str == NULL)
       return 0;
 
@@ -140,4 +141,39 @@ vk_spec_info_to_nir_spirv(const VkSpecializationInfo *spec_info,
 
    *out_num_spec_entries = num_spec_entries;
    return spec_entries;
+}
+
+enum mesa_prim
+vk_topology_to_mesa(VkPrimitiveTopology topology)
+{
+   switch (topology) {
+   case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:
+      return MESA_PRIM_POINTS;
+   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
+      return MESA_PRIM_LINES;
+   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+      return MESA_PRIM_LINE_STRIP;
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+PRAGMA_DIAGNOSTIC_PUSH
+PRAGMA_DIAGNOSTIC_IGNORED(-Wswitch)
+   case VK_PRIMITIVE_TOPOLOGY_META_RECT_LIST_MESA:
+PRAGMA_DIAGNOSTIC_POP
+      return MESA_PRIM_TRIANGLES;
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+      return MESA_PRIM_TRIANGLE_STRIP;
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
+      return MESA_PRIM_TRIANGLE_FAN;
+   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+      return MESA_PRIM_LINES_ADJACENCY;
+   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:
+      return MESA_PRIM_LINE_STRIP_ADJACENCY;
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+      return MESA_PRIM_TRIANGLES_ADJACENCY;
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:
+      return MESA_PRIM_TRIANGLE_STRIP_ADJACENCY;
+   case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
+      return MESA_PRIM_PATCHES;
+   default:
+      UNREACHABLE("invalid");
+   }
 }

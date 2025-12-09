@@ -123,6 +123,7 @@ if with_dri
     link_for_egl += libloader_wayland_helper
     files_egl += files('drivers/dri2/platform_wayland.c')
     files_egl += wp_files['linux-dmabuf-unstable-v1']
+    files_egl += wp_files['presentation-time']
     if with_wayland_bind_display
       files_egl += [wayland_drm_client_protocol_h]
       link_for_egl += [libwayland_drm]
@@ -143,7 +144,7 @@ elif with_platform_haiku
   files_egl += files('drivers/haiku/egl_haiku.cpp')
 
   incs_for_egl += [inc_gallium, inc_gallium_aux, inc_gallium_drivers, inc_gallium_winsys, inc_gallium_winsys_sw]
-  incs_for_egl += [inc_mesa, inc_mapi]
+  incs_for_egl += [inc_mesa]
   incs_for_egl += [include_directories('../gallium/frontends/hgl')]
 
   link_for_egl += [libmesa, libgallium, libswhgl, libsthgl]
@@ -154,7 +155,7 @@ elif with_platform_windows
   ]
   files_egl += files('drivers/wgl/egl_wgl.c')
   files_egl += main_dispatch_h
-  incs_for_egl += [inc_wgl, inc_gallium, inc_gallium_aux, inc_mesa, inc_mapi]
+  incs_for_egl += [inc_wgl, inc_gallium, inc_gallium_aux, inc_mesa]
   link_for_egl += libgallium_wgl
 
 else

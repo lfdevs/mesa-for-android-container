@@ -223,7 +223,7 @@ _nir_format_norm_factor(nir_builder *b, const unsigned *bits,
          factor[i].f64 = (1ull << (bits[i] - is_signed)) - 1;
          break;
       default:
-         unreachable("invalid bit size");
+         UNREACHABLE("invalid bit size");
          break;
       }
    }
@@ -603,7 +603,7 @@ nir_format_unpack_rgba(nir_builder *b, nir_def *packed,
          break;
 
       case UTIL_FORMAT_TYPE_FIXED:
-         unreachable("Fixed formats not supported");
+         UNREACHABLE("Fixed formats not supported");
 
       case UTIL_FORMAT_TYPE_FLOAT:
          switch (chan->size) {
@@ -616,12 +616,12 @@ nir_format_unpack_rgba(nir_builder *b, nir_def *packed,
             break;
 
          default:
-            unreachable("Unknown number of float bits");
+            UNREACHABLE("Unknown number of float bits");
          }
          break;
 
       default:
-         unreachable("Unknown format channel type");
+         UNREACHABLE("Unknown format channel type");
       }
    }
 
@@ -651,7 +651,7 @@ nir_format_unpack_rgba(nir_builder *b, nir_def *packed,
          break;
 
       default:
-         unreachable("Unknown swizzle");
+         UNREACHABLE("Unknown swizzle");
       }
    }
    nir_def *rgba = nir_vec(b, swiz_comps, 4);
@@ -750,7 +750,7 @@ nir_format_pack_rgba(nir_builder *b, enum pipe_format format, nir_def *rgba)
          break;
 
       case UTIL_FORMAT_TYPE_FIXED:
-         unreachable("Fixed formats not supported");
+         UNREACHABLE("Fixed formats not supported");
 
       case UTIL_FORMAT_TYPE_FLOAT:
          switch (chan->size) {
@@ -763,12 +763,12 @@ nir_format_pack_rgba(nir_builder *b, enum pipe_format format, nir_def *rgba)
             break;
 
          default:
-            unreachable("Unknown number of float bits");
+            UNREACHABLE("Unknown number of float bits");
          }
          break;
 
       default:
-         unreachable("Unknown format channel type");
+         UNREACHABLE("Unknown format channel type");
       }
    }
    nir_def *encoded = nir_vec(b, comps, desc->nr_channels);

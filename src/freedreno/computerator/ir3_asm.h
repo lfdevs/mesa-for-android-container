@@ -21,6 +21,7 @@ struct ir3_kernel {
 define_cast(kernel, ir3_kernel);
 
 struct ir3_kernel *ir3_asm_assemble(struct ir3_compiler *c, FILE *in);
-void ir3_asm_disassemble(struct ir3_kernel *k, FILE *out);
+void ir3_asm_disassemble(struct ir3_kernel *k,
+                         struct ir3_disasm_options *options);
 
 #endif /* __IR3_ASM_H__ */

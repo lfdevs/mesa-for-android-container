@@ -28,7 +28,7 @@ struct radv_compute_pipeline_metadata {
    uint32_t grid_base_sgpr;
    uint32_t push_const_sgpr;
    uint64_t inline_push_const_mask;
-   uint32_t indirect_desc_sets_sgpr;
+   uint32_t indirect_descriptors_sgpr;
 };
 
 uint32_t radv_get_compute_resource_limits(const struct radv_physical_device *pdev, const struct radv_shader_info *info);

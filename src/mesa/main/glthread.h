@@ -331,7 +331,7 @@ void _mesa_glthread_flush_batch(struct gl_context *ctx);
 void _mesa_glthread_finish(struct gl_context *ctx);
 void _mesa_glthread_finish_before(struct gl_context *ctx, const char *func);
 bool _mesa_glthread_invalidate_zsbuf(struct gl_context *ctx);
-void _mesa_glthread_release_upload_buffer(struct gl_context *ctx);
+void _mesa_glthread_release_upload_buffer(struct gl_context *ctx, bool async_release);
 void _mesa_glthread_upload(struct gl_context *ctx, const void *data,
                            GLsizeiptr size, unsigned *out_offset,
                            struct gl_buffer_object **out_buffer,
@@ -404,6 +404,8 @@ void _mesa_glthread_UnrollDrawElements(struct gl_context *ctx,
 void _mesa_glthread_unbind_uploaded_vbos(struct gl_context *ctx);
 void _mesa_glthread_PixelStorei(struct gl_context *ctx, GLenum pname,
                                 GLint param);
+
+void GLAPIENTRY _mesa_InternalReleaseBufferMESA(GLvoid *buffer);
 
 #ifdef __cplusplus
 }

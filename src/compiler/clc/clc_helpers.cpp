@@ -69,6 +69,7 @@
 #endif
 
 #include "util/macros.h"
+#include "util/u_dl.h"
 #include "glsl_types.h"
 
 #include "spirv.h"
@@ -534,7 +535,7 @@ public:
             literalType = CLC_SPEC_CONSTANT_HALF;
             break;
          default:
-            unreachable("Unexpected float bit size");
+            UNREACHABLE("Unexpected float bit size");
          }
          break;
       }
@@ -556,7 +557,7 @@ public:
                literalType = CLC_SPEC_CONSTANT_INT64;
                break;
             default:
-               unreachable("Unexpected int bit size");
+               UNREACHABLE("Unexpected int bit size");
             }
          } else {
             switch (sizeInBits) {
@@ -573,13 +574,13 @@ public:
                literalType = CLC_SPEC_CONSTANT_UINT64;
                break;
             default:
-               unreachable("Unexpected uint bit size");
+               UNREACHABLE("Unexpected uint bit size");
             }
          }
          break;
       }
       default:
-         unreachable("Unexpected type opcode");
+         UNREACHABLE("Unexpected type opcode");
       }
    }
 
@@ -605,7 +606,7 @@ public:
                data.type = CLC_SPEC_CONSTANT_BOOL;
                break;
             default:
-               unreachable("Composites and Ops are not directly specializable.");
+               UNREACHABLE("Composites and Ops are not directly specializable.");
             }
          }
       }
@@ -866,7 +867,7 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
    c->getDiagnosticOpts().ShowCarets = false;
 
    c->createDiagnostics(
-#if LLVM_VERSION_MAJOR >= 20
+#if LLVM_VERSION_MAJOR >= 20 && LLVM_VERSION_MAJOR < 22
                    *llvm::vfs::getRealFileSystem(),
 #endif
                    new clang::TextDiagnosticPrinter(
@@ -905,14 +906,7 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
          ::llvm::MemoryBuffer::getMemBuffer(llvm::StringRef(opencl_c_source, ARRAY_SIZE(opencl_c_source) - 1)).release());
    }
 #else
-
-   Dl_info info;
-   if (dladdr((void *)clang::CompilerInvocation::CreateFromArgs, &info) == 0) {
-      clc_error(logger, "Couldn't find libclang path.\n");
-      return {};
-   }
-
-   char *clang_path = realpath(info.dli_fname, NULL);
+   char *clang_path = util_dl_get_path_from_proc((const void *)clang::CompilerInvocation::CreateFromArgs);
    if (clang_path == nullptr) {
       clc_error(logger, "Couldn't find libclang path.\n");
       return {};

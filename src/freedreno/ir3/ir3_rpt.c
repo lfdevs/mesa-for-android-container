@@ -19,6 +19,8 @@ ir3_supports_vectorized_nir_op(nir_op op)
    case nir_op_udot_4x8_uadd_sat:
    case nir_op_sudot_4x8_iadd:
    case nir_op_sudot_4x8_iadd_sat:
+   case nir_op_sdot_4x8_iadd:
+   case nir_op_sdot_4x8_iadd_sat:
 
       /* Among SFU instructions, only rcp doesn't seem to support repeat. */
    case nir_op_frcp:
@@ -45,16 +47,6 @@ ir3_nir_vectorize_filter(const nir_instr *instr, const void *data)
       return 0;
 
    return 4;
-}
-
-static void
-rpt_list_split(struct list_head *list, struct list_head *at)
-{
-   struct list_head *new_last = at->prev;
-   new_last->next = list;
-   at->prev = list->prev;
-   list->prev->next = at;
-   list->prev = new_last;
 }
 
 static enum ir3_register_flags
@@ -118,8 +110,6 @@ can_rpt(struct ir3_instruction *instr, struct ir3_instruction *rpt,
 {
    if (rpt_n >= 4)
       return false;
-   if (rpt->ip != instr->ip + rpt_n)
-      return false;
    if (rpt->opc != instr->opc)
       return false;
    if (!ir3_supports_rpt(instr->block->shader->compiler, instr->opc))
@@ -148,7 +138,8 @@ cleanup_rpt_instr(struct ir3_instruction *instr)
    unsigned rpt_n = 1;
    foreach_instr_rpt_excl (rpt, instr) {
       if (!can_rpt(instr, rpt, rpt_n++)) {
-         rpt_list_split(&instr->rpt_node, &rpt->rpt_node);
+         rpt->rpt_prev->rpt_next = NULL;
+         rpt->rpt_prev = NULL;
 
          /* We have to do this recursively since later repetitions might come
           * before the first in the instruction list.
@@ -268,20 +259,33 @@ try_merge(struct ir3_instruction *instr, struct ir3_instruction *rpt,
 static bool
 merge_instr(struct ir3_instruction *instr)
 {
-   if (!ir3_instr_is_first_rpt(instr))
+   if (!ir3_instr_is_rpt(instr))
       return false;
 
    bool progress = false;
 
    unsigned rpt_n = 1;
 
-   foreach_instr_rpt_excl_safe (rpt, instr) {
+   /* Try to merge instr with the instructions after it in its rpt group. If
+    * there are still instructions before it, they cannot be merged (because
+    * they come after instr in the block) and will be handled later.
+    */
+   for (struct ir3_instruction *rpt = instr->rpt_next; rpt;
+        rpt = rpt->rpt_next) {
       /* When rpt cannot be merged, stop immediately. We will try to merge rpt
        * with the following instructions (if any) once we encounter it in
        * ir3_combine_rpt.
        */
-      if (!try_merge(instr, rpt, rpt_n))
+      if (!try_merge(instr, rpt, rpt_n)) {
+         /* Unlink rpt from this rpt group so that it becomes the first of a new
+          * one. Note that we don't need to unlink rpt when the merge succeeds
+          * since it will be removed in that case.
+          */
+         assert(rpt->rpt_prev);
+         rpt->rpt_prev->rpt_next = NULL;
+         rpt->rpt_prev = NULL;
          break;
+      }
 
       instr->repeat++;
 
@@ -297,12 +301,15 @@ merge_instr(struct ir3_instruction *instr)
        * remove it in ir3_combine_rpt when we encounter it.
        */
       rpt->flags |= IR3_INSTR_MARK;
-      list_delinit(&rpt->rpt_node);
       ++rpt_n;
       progress = true;
    }
 
-   list_delinit(&instr->rpt_node);
+   if (instr->rpt_prev)
+      instr->rpt_prev->rpt_next = NULL;
+
+   instr->rpt_prev = NULL;
+   instr->rpt_next = NULL;
    return progress;
 }
 
@@ -319,7 +326,7 @@ ir3_merge_rpt(struct ir3 *ir, struct ir3_shader_variant *v)
    foreach_block (block, &ir->block_list) {
       foreach_instr_safe (instr, &block->instr_list) {
          if (instr->flags & IR3_INSTR_MARK) {
-            list_delinit(&instr->node);
+            ir3_instr_remove(instr);
             continue;
          }
 

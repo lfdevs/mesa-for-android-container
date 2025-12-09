@@ -30,8 +30,9 @@
 #define LP_BLD_GATHER_H_
 
 
-#include "gallivm/lp_bld.h"
+#include "gallivm/lp_bld_type.h"
 
+struct gallivm_state;
 
 LLVMValueRef
 lp_build_gather_elem_ptr(struct gallivm_state *gallivm,

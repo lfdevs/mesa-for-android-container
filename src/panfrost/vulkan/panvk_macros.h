@@ -62,7 +62,7 @@ panvk_catch_indirect_alloc_failure(VkResult error)
          panvk_arch_name(name, v13)(__VA_ARGS__);                              \
          break;                                                                \
       default:                                                                 \
-         unreachable("Unsupported architecture");                              \
+         UNREACHABLE("Unsupported architecture");                              \
       }                                                                        \
    } while (0)
 
@@ -85,7 +85,7 @@ panvk_catch_indirect_alloc_failure(VkResult error)
          ret = panvk_arch_name(name, v13)(__VA_ARGS__);                        \
          break;                                                                \
       default:                                                                 \
-         unreachable("Unsupported architecture");                              \
+         UNREACHABLE("Unsupported architecture");                              \
       }                                                                        \
    } while (0)
 

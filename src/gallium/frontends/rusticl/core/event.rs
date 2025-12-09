@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::*;
 use crate::api::types::*;
 use crate::core::context::*;
@@ -94,7 +97,7 @@ impl Event {
         })
     }
 
-    fn state(&self) -> MutexGuard<EventMutState> {
+    fn state(&self) -> MutexGuard<'_, EventMutState> {
         self.state.lock().unwrap()
     }
 

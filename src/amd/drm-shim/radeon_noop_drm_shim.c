@@ -4,6 +4,7 @@
 #include "common/amd_family.h"
 #include "drm-shim/drm_shim.h"
 #include "util/log.h"
+#include "util/os_misc.h"
 #include <util/u_math.h>
 #include <radeon_drm.h>
 
@@ -153,7 +154,7 @@ static const struct radeon_pci_id radeon_pci_ids[] = {
 static void
 radeon_get_device_id()
 {
-   const char *gpu_id = getenv("RADEON_GPU_ID");
+   const char *gpu_id = os_get_option("RADEON_GPU_ID");
    if (!gpu_id)
       return;
 

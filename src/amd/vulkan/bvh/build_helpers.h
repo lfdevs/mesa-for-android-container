@@ -21,6 +21,7 @@ TYPE(radv_gfx12_box_node, 4);
 TYPE(radv_gfx12_instance_node, 8);
 TYPE(radv_gfx12_instance_node_user_data, 4);
 TYPE(radv_gfx12_primitive_node, 4);
+TYPE(radv_triangle_encode_task, 4);
 
 uint32_t
 id_to_offset(uint32_t id)

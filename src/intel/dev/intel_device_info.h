@@ -83,6 +83,9 @@ extern "C" {
 
 #define GFX_IP_VER(major, minor) ((major << 16) | minor)
 
+#define BMG_G31_IP_VER GFX_IP_VER(20, 2)
+#define intel_device_info_is_bmg_g31(devinfo) (devinfo->gfx_ip_ver == BMG_G31_IP_VER)
+
 static inline bool
 intel_device_info_slice_available(const struct intel_device_info *devinfo,
                                   int slice)
@@ -153,7 +156,7 @@ intel_device_info_dual_subslice_id_bound(const struct intel_device_info *devinfo
             return s * devinfo->max_subslices_per_slice + ss + 1;
       }
    }
-   unreachable("Invalid topology");
+   UNREACHABLE("Invalid topology");
    return 0;
 }
 

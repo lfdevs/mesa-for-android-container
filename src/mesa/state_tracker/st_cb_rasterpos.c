@@ -251,7 +251,8 @@ st_RasterPos(struct gl_context *ctx, const GLfloat v[4])
    draw_set_rasterize_stage(st->draw, st->rastpos_stage);
 
    /* make sure everything's up to date */
-   st_validate_state(st, ST_PIPELINE_RENDER_STATE_MASK);
+   ST_PIPELINE_RENDER_STATE_MASK(mask);
+   st_validate_state(st, mask);
 
    /* This will get set only if rastpos_point(), above, gets called */
    ctx->PopAttribState |= GL_CURRENT_BIT;
@@ -261,7 +262,7 @@ st_RasterPos(struct gl_context *ctx, const GLfloat v[4])
     * Just plug in position pointer now.
     */
    rs->VAO->VertexAttrib[VERT_ATTRIB_POS].Ptr = (GLubyte *) v;
-   ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_VERTEX_ARRAYS);
 
    /* The slow path merges vertex buffers, which changes vertex elements. */
    if (!ctx->Const.UseVAOFastPath) {
@@ -277,7 +278,8 @@ st_RasterPos(struct gl_context *ctx, const GLfloat v[4])
    _mesa_set_varying_vp_inputs(ctx, VERT_BIT_POS &
                                ctx->Array._DrawVAO->_EnabledWithMapMode);
 
-   st_prepare_draw(ctx, ST_PIPELINE_RENDER_STATE_MASK);
+   ST_PIPELINE_RENDER_STATE_MASK(pipeline_mask);
+   st_prepare_draw(ctx, pipeline_mask);
    st_feedback_draw_vbo(ctx, &rs->info, 0, NULL, &rs->draw, 1);
 
    _mesa_restore_draw_vao(ctx, old_vao, old_vp_input_filter);

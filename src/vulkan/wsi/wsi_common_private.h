@@ -48,6 +48,7 @@ enum wsi_image_type {
    WSI_IMAGE_TYPE_CPU,
    WSI_IMAGE_TYPE_DRM,
    WSI_IMAGE_TYPE_DXGI,
+   WSI_IMAGE_TYPE_METAL,
 };
 
 struct wsi_base_image_params {
@@ -64,6 +65,7 @@ struct wsi_drm_image_params {
    struct wsi_base_image_params base;
 
    bool same_gpu;
+   /* See wsi_image_info.explicit_sync. */
    bool explicit_sync;
 
    uint32_t num_modifier_lists;
@@ -85,9 +87,23 @@ struct wsi_image_info {
    VkExternalMemoryImageCreateInfo ext_mem;
    VkImageFormatListCreateInfo format_list;
    VkImageDrmFormatModifierListCreateInfoEXT drm_mod_list;
+   VkColorSpaceKHR color_space;
 
    enum wsi_image_type image_type;
+
+   /**
+    * If set, the WSI backend and the WSI device support timeline-based explicit
+    * synchronization.  The device check requires non-emulated timeline
+    * semaphores, so they can be exported as an opaque fd.
+    *
+    * The present will take in the explicit_sync[WSI_ES_ACQUIRE] timeline point
+    * and not present until that completes, and sets up the
+    * explicit_sync[WSI_ES_RELEASE] timeline point for when the image is done
+    * being used by the compositor (whether that's a GPU composite completing,
+    * or the scanned-out frame being flipped away from).
+    */
    bool explicit_sync;
+
    bool prime_use_linear_modifier;
 
    /* Not really part of VkImageCreateInfo but needed to figure out the
@@ -118,7 +134,9 @@ struct wsi_image_info {
 
 enum wsi_explicit_sync_timelines
 {
+   /** Timeline point that must be passed before the display can start reading from the image */
    WSI_ES_ACQUIRE,
+   /** Timeline point that indicates that the display is done reading from this image. */
    WSI_ES_RELEASE,
 
    WSI_ES_COUNT,
@@ -183,9 +201,23 @@ struct wsi_swapchain {
    VkAllocationCallbacks alloc;
    VkFence* fences;
    VkPresentModeKHR present_mode;
+   /**
+    * Timeline for presents completing according to VK_KHR_present_wait.  The
+    * present should complete as close as possible (before or after!) to the
+    * first pixel being scanned out.
+    */
    VkSemaphore present_id_timeline;
 
    int signal_dma_buf_from_semaphore;
+   /**
+    * Optional semaphore for implicit-sync swapchains.  It will be signaled by
+    * the pre-present vkQueueSubmit2, and its syncobj will get imported into the
+    * image's dma-buf before being presented.
+    *
+    * If not set (due to older kernels missing sync-file import/export), for
+    * implicit-sync swapchains, then you have to support
+    * create_sync_for_memory().
+    */
    VkSemaphore dma_buf_semaphore;
 
    struct wsi_image_info image_info;
@@ -202,7 +234,7 @@ struct wsi_swapchain {
        * The created queue will be stored here and will be used to execute the
        * buffer blit instead of using the present queue.
        */
-      VkQueue queue;
+      struct vk_queue *queue;
    } blit;
 
    bool capture_key_pressed;
@@ -377,6 +409,10 @@ wsi_drm_wait_for_explicit_sync_release(struct wsi_swapchain *chain,
                                        struct wsi_image **images,
                                        uint64_t rel_timeout_ns,
                                        uint32_t *image_index);
+
+VkResult
+wsi_drm_init_swapchain_implicit_sync(struct wsi_swapchain *chain);
+
 #endif
 
 struct wsi_interface {
@@ -457,6 +493,22 @@ void wsi_headless_finish_wsi(struct wsi_device *wsi_device,
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(wsi_swapchain, base, VkSwapchainKHR,
                                VK_OBJECT_TYPE_SWAPCHAIN_KHR)
+
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+struct wsi_metal_image_params {
+   struct wsi_base_image_params base;
+   /* Software implementations like lavapipe cannot render to an MTLTexture
+    * directly and therefore require a blit
+    */
+   bool can_render_to_texture;
+};
+
+VkResult
+wsi_metal_configure_image(const struct wsi_swapchain *chain,
+                          const VkSwapchainCreateInfoKHR *pCreateInfo,
+                          const struct wsi_metal_image_params *params,
+                          struct wsi_image_info *info);
+#endif /* defined(VK_USE_PLATFORM_METAL_EXT) */
 
 #ifdef __cplusplus
 }

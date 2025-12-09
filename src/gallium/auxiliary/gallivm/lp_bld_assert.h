@@ -28,9 +28,9 @@
 #ifndef LP_BLD_ASSERT_H
 #define LP_BLD_ASSERT_H
 
+#include <llvm-c/Core.h>
 
-#include "lp_bld.h"
-#include "lp_bld_init.h"
+struct gallivm_state;
 
 
 void

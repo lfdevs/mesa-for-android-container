@@ -12,6 +12,7 @@
 #include "panvk_cmd_buffer.h"
 #include "panvk_entrypoints.h"
 #include "panvk_event.h"
+#include "panvk_meta.h"
 
 #include "util/u_dynarray.h"
 
@@ -30,15 +31,13 @@ panvk_add_set_event_operation(struct panvk_cmd_buffer *cmdbuf,
        * the right order.
        */
       panvk_per_arch(cmd_open_batch)(cmdbuf);
-      util_dynarray_append(&cmdbuf->cur_batch->event_ops,
-                           struct panvk_cmd_event_op, op);
+      util_dynarray_append(&cmdbuf->cur_batch->event_ops, op);
       panvk_per_arch(cmd_close_batch)(cmdbuf);
    } else {
       /* Let's close the current batch so the operation executes before any
        * future commands.
        */
-      util_dynarray_append(&cmdbuf->cur_batch->event_ops,
-                           struct panvk_cmd_event_op, op);
+      util_dynarray_append(&cmdbuf->cur_batch->event_ops, op);
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       panvk_per_arch(cmd_preload_fb_after_batch_split)(cmdbuf);
       panvk_per_arch(cmd_open_batch)(cmdbuf);
@@ -57,8 +56,7 @@ panvk_add_wait_event_operation(struct panvk_cmd_buffer *cmdbuf,
    if (cmdbuf->cur_batch == NULL) {
       /* No open batch, let's create a new one and have it wait for this event. */
       panvk_per_arch(cmd_open_batch)(cmdbuf);
-      util_dynarray_append(&cmdbuf->cur_batch->event_ops,
-                           struct panvk_cmd_event_op, op);
+      util_dynarray_append(&cmdbuf->cur_batch->event_ops, op);
    } else {
       /* Let's close the current batch so any future commands wait on the
        * event signal operation.
@@ -69,8 +67,7 @@ panvk_add_wait_event_operation(struct panvk_cmd_buffer *cmdbuf,
          panvk_per_arch(cmd_preload_fb_after_batch_split)(cmdbuf);
          panvk_per_arch(cmd_open_batch)(cmdbuf);
       }
-      util_dynarray_append(&cmdbuf->cur_batch->event_ops,
-                           struct panvk_cmd_event_op, op);
+      util_dynarray_append(&cmdbuf->cur_batch->event_ops, op);
    }
 }
 
@@ -111,6 +108,19 @@ panvk_per_arch(CmdWaitEvents2)(VkCommandBuffer commandBuffer,
 
    for (uint32_t i = 0; i < eventCount; i++) {
       VK_FROM_HANDLE(panvk_event, event, pEvents[i]);
+      const VkDependencyInfo *info = &pDependencyInfos[i];
+
       panvk_add_wait_event_operation(cmdbuf, event);
+
+      for (uint32_t i = 0; i < info->imageMemoryBarrierCount; i++) {
+         const VkImageMemoryBarrier2 *barrier = &info->pImageMemoryBarriers[i];
+
+         panvk_per_arch(cmd_transition_image_layout)(commandBuffer, barrier);
+      }
+
+      /* We don't need to do anything here to establish the sync between layout
+       * transition dispatches and the commands following the barrier. See the
+       * comment in ./panvk_vX_cmd_buffer.c:CmdPipelineBarrier2 for details.
+       */
    }
 }

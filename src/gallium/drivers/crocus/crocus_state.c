@@ -329,11 +329,11 @@ stream_state(struct crocus_batch *batch,
              unsigned alignment,
              uint32_t *out_offset)
 {
-   uint32_t offset = ALIGN(batch->state.used, alignment);
+   uint32_t offset = align(batch->state.used, alignment);
 
    if (offset + size >= STATE_SZ && !batch->no_wrap) {
       crocus_batch_flush(batch);
-      offset = ALIGN(batch->state.used, alignment);
+      offset = align(batch->state.used, alignment);
    } else if (offset + size >= batch->state.bo->size) {
       const unsigned new_size =
          MIN2(batch->state.bo->size + batch->state.bo->size / 2,
@@ -499,7 +499,7 @@ crocus_store_register_mem32(struct crocus_batch *batch, uint32_t reg,
       srm.PredicateEnable = predicated;
 #else
       if (predicated)
-         unreachable("unsupported predication");
+         UNREACHABLE("unsupported predication");
 #endif
    }
 }
@@ -909,7 +909,7 @@ calculate_curbe_offsets(struct crocus_batch *batch)
 
 static void
 upload_shader_consts(struct crocus_context *ice,
-                     gl_shader_stage stage,
+                     mesa_shader_stage stage,
                      uint32_t *map,
                      unsigned start)
 {
@@ -970,7 +970,7 @@ gen4_upload_curbe(struct crocus_batch *batch)
       goto emit;
 
    uint32_t *map;
-   u_upload_alloc(ice->ctx.const_uploader, 0, buf_sz, 64,
+   u_upload_alloc_ref(ice->ctx.const_uploader, 0, buf_sz, 64,
                   &ice->curbe.curbe_offset, (struct pipe_resource **)&ice->curbe.curbe_res, (void **) &map);
 
    /* fragment shader constants */
@@ -2297,12 +2297,12 @@ crocus_create_sampler_state(struct pipe_context *ctx,
  */
 static void
 crocus_bind_sampler_states(struct pipe_context *ctx,
-                           enum pipe_shader_type p_stage,
+                           mesa_shader_stage p_stage,
                            unsigned start, unsigned count,
                            void **states)
 {
    struct crocus_context *ice = (struct crocus_context *) ctx;
-   gl_shader_stage stage = stage_from_pipe(p_stage);
+   mesa_shader_stage stage = stage_from_pipe(p_stage);
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
 
    assert(start + count <= CROCUS_MAX_TEXTURE_SAMPLERS);
@@ -2318,9 +2318,9 @@ crocus_bind_sampler_states(struct pipe_context *ctx,
 
    if (dirty) {
 #if GFX_VER <= 5
-      if (p_stage == PIPE_SHADER_FRAGMENT)
+      if (p_stage == MESA_SHADER_FRAGMENT)
          ice->state.dirty |= CROCUS_DIRTY_WM;
-      else if (p_stage == PIPE_SHADER_VERTEX)
+      else if (p_stage == MESA_SHADER_VERTEX)
          ice->state.stage_dirty |= CROCUS_STAGE_DIRTY_VS;
 #endif
       ice->state.stage_dirty |= CROCUS_STAGE_DIRTY_SAMPLER_STATES_VS << stage;
@@ -2593,7 +2593,7 @@ crocus_upload_border_color(struct crocus_batch *batch,
  */
 static void
 crocus_upload_sampler_states(struct crocus_context *ice,
-                             struct crocus_batch *batch, gl_shader_stage stage)
+                             struct crocus_batch *batch, mesa_shader_stage stage)
 {
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
    const struct shader_info *info = crocus_get_shader_info(ice, stage);
@@ -3031,7 +3031,7 @@ fill_buffer_image_param(struct isl_image_param *param,
  */
 static void
 crocus_set_shader_images(struct pipe_context *ctx,
-                         enum pipe_shader_type p_stage,
+                         mesa_shader_stage p_stage,
                          unsigned start_slot, unsigned count,
                          unsigned unbind_num_trailing_slots,
                          const struct pipe_image_view *p_images)
@@ -3040,7 +3040,7 @@ crocus_set_shader_images(struct pipe_context *ctx,
    struct crocus_context *ice = (struct crocus_context *) ctx;
    struct crocus_screen *screen = (struct crocus_screen *)ctx->screen;
    const struct intel_device_info *devinfo = &screen->devinfo;
-   gl_shader_stage stage = stage_from_pipe(p_stage);
+   mesa_shader_stage stage = stage_from_pipe(p_stage);
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
    struct crocus_genx_state *genx = ice->state.genx;
    struct isl_image_param *image_params = genx->shaders[stage].image_param;
@@ -3129,13 +3129,13 @@ crocus_set_shader_images(struct pipe_context *ctx,
  */
 static void
 crocus_set_sampler_views(struct pipe_context *ctx,
-                         enum pipe_shader_type p_stage,
+                         mesa_shader_stage p_stage,
                          unsigned start, unsigned count,
                          unsigned unbind_num_trailing_slots,
                          struct pipe_sampler_view **views)
 {
    struct crocus_context *ice = (struct crocus_context *) ctx;
-   gl_shader_stage stage = stage_from_pipe(p_stage);
+   mesa_shader_stage stage = stage_from_pipe(p_stage);
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
 
    shs->bound_sampler_views &= ~u_bit_consecutive(start, count);
@@ -3242,7 +3242,7 @@ crocus_set_sample_mask(struct pipe_context *ctx, unsigned sample_mask)
 {
    struct crocus_context *ice = (struct crocus_context *) ctx;
 
-   /* We only support 16x MSAA, so we have 16 bits of sample maks.
+   /* We only support 8x MSAA, so we have 8 bits of sample maks.
     * st/mesa may pass us 0xffffffff though, meaning "enable all samples".
     */
    ice->state.sample_mask = sample_mask & 0xff;
@@ -3371,6 +3371,45 @@ crocus_set_viewport_states(struct pipe_context *ctx,
       ice->state.dirty |= CROCUS_DIRTY_CC_VIEWPORT;
 }
 
+void
+genX(crocus_framebuffer_init)(struct pipe_context *pctx, const struct pipe_framebuffer_state *fb, struct pipe_surface **cbufs, struct pipe_surface **zsbuf)
+{
+   if (fb) {
+      for (unsigned i = 0; i < fb->nr_cbufs; i++) {
+         if (cbufs[i] && pipe_surface_equal(&fb->cbufs[i], cbufs[i]))
+            continue;
+
+         struct pipe_surface *psurf = fb->cbufs[i].texture ? crocus_create_surface(pctx, fb->cbufs[i].texture, &fb->cbufs[i]) : NULL;
+         if (cbufs[i])
+            crocus_surface_destroy(pctx, cbufs[i]);
+         cbufs[i] = psurf;
+      }
+
+      for (unsigned i = fb->nr_cbufs; i < PIPE_MAX_COLOR_BUFS; i++) {
+         if (cbufs[i])
+            crocus_surface_destroy(pctx, cbufs[i]);
+         cbufs[i] = NULL;
+      }
+
+      if (*zsbuf && pipe_surface_equal(&fb->zsbuf, *zsbuf))
+         return;
+      struct pipe_surface *zsurf = fb->zsbuf.texture ? crocus_create_surface(pctx, fb->zsbuf.texture, &fb->zsbuf) : NULL;
+      if (*zsbuf)
+         crocus_surface_destroy(pctx, *zsbuf);
+      *zsbuf = zsurf;
+   } else {
+      for (unsigned i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
+         if (cbufs[i])
+            crocus_surface_destroy(pctx, cbufs[i]);
+         cbufs[i] = NULL;
+      }
+      if (*zsbuf)
+         crocus_surface_destroy(pctx, *zsbuf);
+      *zsbuf = NULL;
+   }
+}
+
+
 /**
  * The pipe->set_framebuffer_state() driver hook.
  *
@@ -3432,7 +3471,7 @@ crocus_set_framebuffer_state(struct pipe_context *ctx,
 
    /* wm thread dispatch enable */
    ice->state.dirty |= CROCUS_DIRTY_WM;
-   util_framebuffer_init(ctx, state, ice->state.fb_cbufs, &ice->state.fb_zsbuf);
+   genX(crocus_framebuffer_init)(ctx, state, ice->state.fb_cbufs, &ice->state.fb_zsbuf);
    util_copy_framebuffer_state(cso, state);
    cso->samples = samples;
    cso->layers = layers;
@@ -3465,16 +3504,15 @@ crocus_set_framebuffer_state(struct pipe_context *ctx,
  */
 static void
 crocus_set_constant_buffer(struct pipe_context *ctx,
-                           enum pipe_shader_type p_stage, unsigned index,
-                           bool take_ownership,
+                           mesa_shader_stage p_stage, unsigned index,
                            const struct pipe_constant_buffer *input)
 {
    struct crocus_context *ice = (struct crocus_context *) ctx;
-   gl_shader_stage stage = stage_from_pipe(p_stage);
+   mesa_shader_stage stage = stage_from_pipe(p_stage);
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
    struct pipe_constant_buffer *cbuf = &shs->constbufs[index];
 
-   util_copy_constant_buffer(&shs->constbufs[index], input, take_ownership);
+   util_copy_constant_buffer(&shs->constbufs[index], input);
 
    if (input && input->buffer_size && (input->buffer || input->user_buffer)) {
       shs->bound_cbufs |= 1u << index;
@@ -3482,12 +3520,12 @@ crocus_set_constant_buffer(struct pipe_context *ctx,
       if (input->user_buffer) {
          void *map = NULL;
          pipe_resource_reference(&cbuf->buffer, NULL);
-         u_upload_alloc(ice->ctx.const_uploader, 0, input->buffer_size, 64,
+         u_upload_alloc_ref(ice->ctx.const_uploader, 0, input->buffer_size, 64,
                         &cbuf->buffer_offset, &cbuf->buffer, (void **) &map);
 
          if (!cbuf->buffer) {
             /* Allocation was unsuccessful - just unbind */
-            crocus_set_constant_buffer(ctx, p_stage, index, false, NULL);
+            crocus_set_constant_buffer(ctx, p_stage, index, NULL);
             return;
          }
 
@@ -3510,7 +3548,7 @@ crocus_set_constant_buffer(struct pipe_context *ctx,
 
 static void
 upload_sysvals(struct crocus_context *ice,
-               gl_shader_stage stage)
+               mesa_shader_stage stage)
 {
    UNUSED struct crocus_genx_state *genx = ice->state.genx;
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
@@ -3527,7 +3565,7 @@ upload_sysvals(struct crocus_context *ice,
    uint32_t *map = NULL;
 
    assert(sysval_cbuf_index < PIPE_MAX_CONSTANT_BUFFERS);
-   u_upload_alloc(ice->ctx.const_uploader, 0, upload_size, 64,
+   u_upload_alloc_ref(ice->ctx.const_uploader, 0, upload_size, 64,
                   &cbuf->buffer_offset, &cbuf->buffer, (void **) &map);
 
    for (int i = 0; i < shader->num_system_values; i++) {
@@ -3593,13 +3631,13 @@ upload_sysvals(struct crocus_context *ice,
  */
 static void
 crocus_set_shader_buffers(struct pipe_context *ctx,
-                          enum pipe_shader_type p_stage,
+                          mesa_shader_stage p_stage,
                           unsigned start_slot, unsigned count,
                           const struct pipe_shader_buffer *buffers,
                           unsigned writable_bitmask)
 {
    struct crocus_context *ice = (struct crocus_context *) ctx;
-   gl_shader_stage stage = stage_from_pipe(p_stage);
+   mesa_shader_stage stage = stage_from_pipe(p_stage);
    struct crocus_shader_state *shs = &ice->state.shaders[stage];
 
    unsigned modified_bits = u_bit_consecutive(start_slot, count);
@@ -3654,7 +3692,7 @@ crocus_set_vertex_buffers(struct pipe_context *ctx,
       (GFX_VERx10 < 75 && screen->devinfo.platform != INTEL_PLATFORM_BYT) * 2;
 
    util_set_vertex_buffers_mask(ice->state.vertex_buffers, &ice->state.bound_vertex_buffers,
-                                buffers, count, true);
+                                buffers, count);
 
    for (unsigned i = 0; i < count; i++) {
       struct pipe_vertex_buffer *state =
@@ -4017,7 +4055,7 @@ crocus_create_stream_output_target(struct pipe_context *ctx,
 #if GFX_VER >= 7
    struct crocus_context *ice = (struct crocus_context *) ctx;
    void *temp;
-   u_upload_alloc(ice->ctx.stream_uploader, 0, sizeof(uint32_t), 4,
+   u_upload_alloc_ref(ice->ctx.stream_uploader, 0, sizeof(uint32_t), 4,
                   &cso->offset_offset,
                   (struct pipe_resource **)&cso->offset_res,
                   &temp);
@@ -4066,7 +4104,7 @@ crocus_stream_store_prims_written(struct crocus_batch *batch,
                                   struct crocus_stream_output_target *tgt)
 {
    if (!tgt->offset_res) {
-      u_upload_alloc(batch->ice->ctx.stream_uploader, 0, 4096, 4,
+      u_upload_alloc_ref(batch->ice->ctx.stream_uploader, 0, 4096, 4,
                      &tgt->offset_offset,
                      (struct pipe_resource **)&tgt->offset_res,
                      &tgt->prim_map);
@@ -4665,7 +4703,7 @@ crocus_emit_sbe(struct crocus_batch *batch, const struct crocus_context *ice)
 static void
 crocus_populate_vs_key(const struct crocus_context *ice,
                        const struct shader_info *info,
-                       gl_shader_stage last_stage,
+                       mesa_shader_stage last_stage,
                        struct elk_vs_prog_key *key)
 {
    const struct crocus_rasterizer_state *cso_rast = ice->state.cso_rast;
@@ -4713,7 +4751,7 @@ crocus_populate_tcs_key(const struct crocus_context *ice,
 static void
 crocus_populate_tes_key(const struct crocus_context *ice,
                         const struct shader_info *info,
-                        gl_shader_stage last_stage,
+                        mesa_shader_stage last_stage,
                         struct elk_tes_prog_key *key)
 {
    const struct crocus_rasterizer_state *cso_rast = ice->state.cso_rast;
@@ -4734,7 +4772,7 @@ crocus_populate_tes_key(const struct crocus_context *ice,
 static void
 crocus_populate_gs_key(const struct crocus_context *ice,
                        const struct shader_info *info,
-                       gl_shader_stage last_stage,
+                       mesa_shader_stage last_stage,
                        struct elk_gs_prog_key *key)
 {
    const struct crocus_rasterizer_state *cso_rast = ice->state.cso_rast;
@@ -4812,15 +4850,10 @@ crocus_populate_fs_key(const struct crocus_context *ice,
 
    key->nr_color_regions = fb->nr_cbufs;
 
-   key->clamp_fragment_color = rast->cso.clamp_fragment_color;
-
    key->alpha_to_coverage = blend->cso.alpha_to_coverage ?
       ELK_ALWAYS : ELK_NEVER;
 
    key->alpha_test_replicate_alpha = fb->nr_cbufs > 1 && zsa->cso.alpha_enabled;
-
-   key->flat_shade = rast->cso.flatshade &&
-      (info->inputs_read & (VARYING_BIT_COL0 | VARYING_BIT_COL1));
 
    const bool multisample_fbo = rast->cso.multisample && fb->samples > 1;
    key->multisample_fbo = multisample_fbo ? ELK_ALWAYS : ELK_NEVER;
@@ -5327,7 +5360,7 @@ emit_sol_surface(struct crocus_batch *batch,
       surface_format = ISL_FORMAT_R32G32B32A32_FLOAT;
       break;
    default:
-      unreachable("Invalid vector size for transform feedback output");
+      UNREACHABLE("Invalid vector size for transform feedback output");
    }
 
    UNUSED struct isl_device *isl_dev = &batch->screen->isl_dev;
@@ -5355,7 +5388,7 @@ emit_sol_surface(struct crocus_batch *batch,
 static void
 crocus_populate_binding_table(struct crocus_context *ice,
                               struct crocus_batch *batch,
-                              gl_shader_stage stage, bool ff_gs)
+                              mesa_shader_stage stage, bool ff_gs)
 {
    struct crocus_compiled_shader *shader = ff_gs ? ice->shaders.ff_gs_prog : ice->shaders.prog[stage];
    struct crocus_shader_state *shs = ff_gs ? NULL : &ice->state.shaders[stage];
@@ -6084,7 +6117,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
                               batch->screen->l3_config_3d,
                               tess_present,
                               gs_present,
-                              &urb_cfg, NULL, &constrained);
+                              &urb_cfg, &constrained);
 
 #if GFX_VER == 7
          if (devinfo->platform == INTEL_PLATFORM_IVB)
@@ -6558,7 +6591,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
             struct crocus_resource *res = (void *) tgt->base.buffer;
             uint32_t start = tgt->base.buffer_offset;
 #if GFX_VER < 8
-            uint32_t end = ALIGN(start + tgt->base.buffer_size, 4);
+            uint32_t end = align(start + tgt->base.buffer_size, 4);
 #endif
             crocus_emit_cmd(batch, GENX(3DSTATE_SO_BUFFER), sob) {
                sob.SOBufferIndex = i;
@@ -7790,7 +7823,7 @@ crocus_upload_render_state(struct crocus_context *ice,
 
       if (draw->has_user_indices) {
          unsigned start_offset = draw->index_size * sc->start;
-         u_upload_data(ice->ctx.stream_uploader, 0,
+         u_upload_data_ref(ice->ctx.stream_uploader, 0,
                        sc->count * draw->index_size, 4,
                        (char *)draw->index.user + start_offset,
                        &offset, &ice->state.index_buffer.res);
@@ -8110,7 +8143,7 @@ crocus_upload_compute_state(struct crocus_context *ice,
          vfe.URBEntryAllocationSize = GFX_VER == 8 ? 2 : 0;
 
          vfe.CURBEAllocationSize =
-            ALIGN(cs_prog_data->push.per_thread.regs * dispatch.threads +
+            align(cs_prog_data->push.per_thread.regs * dispatch.threads +
                   cs_prog_data->push.cross_thread.regs, 2);
       }
    }
@@ -8126,15 +8159,15 @@ crocus_upload_compute_state(struct crocus_context *ice,
          elk_cs_push_const_total_size(cs_prog_data, dispatch.threads);
       uint32_t *curbe_data_map =
          stream_state(batch,
-                      ALIGN(push_const_size, 64), 64,
+                      align(push_const_size, 64), 64,
                       &curbe_data_offset);
       assert(curbe_data_map);
-      memset(curbe_data_map, 0x5a, ALIGN(push_const_size, 64));
+      memset(curbe_data_map, 0x5a, align(push_const_size, 64));
       crocus_fill_cs_push_const_buffer(cs_prog_data, dispatch.threads,
                                        curbe_data_map);
 
       crocus_emit_cmd(batch, GENX(MEDIA_CURBE_LOAD), curbe) {
-         curbe.CURBETotalDataLength = ALIGN(push_const_size, 64);
+         curbe.CURBETotalDataLength = align(push_const_size, 64);
          curbe.CURBEDataStartAddress = curbe_data_offset;
       }
    }
@@ -8354,7 +8387,7 @@ crocus_rebind_buffer(struct crocus_context *ice,
 
    for (int s = MESA_SHADER_VERTEX; s < MESA_SHADER_STAGES; s++) {
       struct crocus_shader_state *shs = &ice->state.shaders[s];
-      enum pipe_shader_type p_stage = stage_to_pipe(s);
+      mesa_shader_stage p_stage = stage_to_pipe(s);
 
       if (!(res->bind_stages & (1 << s)))
          continue;
@@ -9231,7 +9264,6 @@ genX(crocus_init_state)(struct crocus_context *ice)
    ctx->create_rasterizer_state = crocus_create_rasterizer_state;
    ctx->create_sampler_state = crocus_create_sampler_state;
    ctx->create_sampler_view = crocus_create_sampler_view;
-   ctx->create_surface = crocus_create_surface;
    ctx->create_vertex_elements_state = crocus_create_vertex_elements;
    ctx->bind_blend_state = crocus_bind_blend_state;
    ctx->bind_depth_stencil_alpha_state = crocus_bind_zsa_state;
@@ -9260,6 +9292,7 @@ genX(crocus_init_state)(struct crocus_context *ice)
    ctx->set_viewport_states = crocus_set_viewport_states;
    ctx->sampler_view_destroy = crocus_sampler_view_destroy;
    ctx->sampler_view_release = u_default_sampler_view_release;
+   ctx->resource_release = u_default_resource_release;
    ctx->surface_destroy = crocus_surface_destroy;
    ctx->draw_vbo = crocus_draw_vbo;
    ctx->launch_grid = crocus_launch_grid;

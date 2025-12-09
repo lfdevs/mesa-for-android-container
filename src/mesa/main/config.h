@@ -95,14 +95,11 @@
 /** Line width granularity */
 #define LINE_WIDTH_GRANULARITY 0.1
 
-/** Max memory to allow for a single texture image (in megabytes) */
-#define MAX_TEXTURE_MBYTES 1024
-
 /** Number of texture mipmap levels */
-#define MAX_TEXTURE_LEVELS 15
+#define MAX_TEXTURE_LEVELS 17
 
 /** Maximum rectangular texture size - GL_NV_texture_rectangle */
-#define MAX_TEXTURE_RECT_SIZE 16384
+#define MAX_TEXTURE_RECT_SIZE 65536
 
 /**
  * Maximum number of layers in a 1D or 2D array texture - GL_MESA_texture_array
@@ -165,17 +162,14 @@
 #define MAX_UNIFORMS                   4096
 #define MAX_UNIFORM_BUFFERS            15 /* + 1 default uniform buffer */
 #define MAX_SHADER_STORAGE_BUFFERS     16
-/* 6 is for vertex, hull, domain, geometry, fragment, and compute shader. */
-#define MAX_COMBINED_UNIFORM_BUFFERS   (MAX_UNIFORM_BUFFERS * 6)
-#define MAX_COMBINED_SHADER_STORAGE_BUFFERS   (MAX_SHADER_STORAGE_BUFFERS * 6)
+#define MAX_COMBINED_UNIFORM_BUFFERS   (MAX_UNIFORM_BUFFERS * MESA_SHADER_MESH_STAGES)
+#define MAX_COMBINED_SHADER_STORAGE_BUFFERS   (MAX_SHADER_STORAGE_BUFFERS * MESA_SHADER_MESH_STAGES)
 #define MAX_ATOMIC_COUNTERS            4096
-/* 6 is for vertex, hull, domain, geometry, fragment, and compute shader. */
-#define MAX_COMBINED_ATOMIC_BUFFERS    (MAX_UNIFORM_BUFFERS * 6)
+#define MAX_COMBINED_ATOMIC_BUFFERS    (MAX_UNIFORM_BUFFERS * MESA_SHADER_MESH_STAGES)
 /* Size of an atomic counter in bytes according to ARB_shader_atomic_counters */
 #define ATOMIC_COUNTER_SIZE            4
 #define MAX_IMAGE_UNIFORMS             32
-/* 6 is for vertex, hull, domain, geometry, fragment, and compute shader. */
-#define MAX_IMAGE_UNITS                (MAX_IMAGE_UNIFORMS * 6)
+#define MAX_IMAGE_UNITS                (MAX_IMAGE_UNIFORMS * MESA_SHADER_MESH_STAGES)
 /*@}*/
 
 /**
@@ -213,15 +207,14 @@
 
 /** For GL_ARB_vertex_shader */
 /*@{*/
-/* 6 is for vertex, hull, domain, geometry, fragment, and compute shader. */
-#define MAX_COMBINED_TEXTURE_IMAGE_UNITS (MAX_TEXTURE_IMAGE_UNITS * 6)
+#define MAX_COMBINED_TEXTURE_IMAGE_UNITS (MAX_TEXTURE_IMAGE_UNITS * MESA_SHADER_MESH_STAGES)
 /*@}*/
 
 
 /** For GL_EXT_framebuffer_object */
 /*@{*/
 #define MAX_COLOR_ATTACHMENTS 8
-#define MAX_RENDERBUFFER_SIZE 16384
+#define MAX_RENDERBUFFER_SIZE 65536
 /*@}*/
 
 /** For GL_ATI_envmap_bump - support bump mapping on first 8 units */
@@ -246,7 +239,6 @@
 
 /** For GL_KHR_debug */
 /*@{*/
-#define MAX_LABEL_LENGTH 256
 #define MAX_DEBUG_GROUP_STACK_DEPTH 64
 /*@}*/
 

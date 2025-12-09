@@ -235,20 +235,19 @@ vk_object_base_private_data(struct vk_device *device,
 {
    VK_FROM_HANDLE(vk_private_data_slot, slot, privateDataSlot);
 
-   /* There is an annoying spec corner here on Android.  Because WSI is
-    * implemented in the Vulkan loader which doesn't know about the
-    * VK_EXT_private_data extension, we have to handle VkSwapchainKHR in the
-    * driver as a special case.  On future versions of Android where the
-    * loader does understand VK_EXT_private_data, we'll never see a
-    * vkGet/SetPrivateData call on a swapchain because the loader will
-    * handle it.
+   /* On Android, Vulkan loader implements KHR_swapchain and owns both surface
+    * and swapchain handles. On non-Android, common wsi implements the same and
+    * owns the same. So for both cases, the drivers are unable to handle
+    * vkGet/SetPrivateData call on either a surface or a swapchain.
+    *
+    * For later (or not):
+    * - if common wsi handles surface and swapchain private data, the workaround
+    *   for common wsi can be dropped
+    * - if Android loader handles surface and swapchain private data, the same
+    *   may be gated upon Android platform version
     */
-#if DETECT_OS_ANDROID
    if (objectType == VK_OBJECT_TYPE_SWAPCHAIN_KHR ||
        objectType == VK_OBJECT_TYPE_SURFACE_KHR) {
-#else
-   if (objectType == VK_OBJECT_TYPE_SURFACE_KHR) {
-#endif
       mtx_lock(&device->swapchain_private_mtx);
       VkResult result = get_swapchain_private_data_locked(device, objectHandle,
                                                           slot, private_data);

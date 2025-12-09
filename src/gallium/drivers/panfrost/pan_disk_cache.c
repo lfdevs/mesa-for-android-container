@@ -141,7 +141,7 @@ panfrost_disk_cache_retrieve(struct disk_cache *cache,
    struct blob_reader blob;
    blob_reader_init(&blob, buffer, size);
 
-   util_dynarray_init(&binary->binary, NULL);
+   binary->binary = UTIL_DYNARRAY_INIT;
 
    uint32_t binary_size = blob_read_uint32(&blob);
    void *ptr = util_dynarray_resize_bytes(&binary->binary, binary_size, 1);

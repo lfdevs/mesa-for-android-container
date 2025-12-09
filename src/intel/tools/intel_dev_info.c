@@ -38,7 +38,7 @@
 #include "dev/intel_device_info.h"
 #include "dev/intel_device_info_serialize.h"
 #include "dev/intel_hwconfig.h"
-#include "compiler/brw_compiler.h"
+#include "compiler/brw/brw_compiler.h"
 
 static int
 error(char *fmt, ...)

@@ -111,6 +111,7 @@ static const struct vk_instance_extension_table instance_extensions = {
 #ifdef V3DV_USE_WSI_PLATFORM
    .KHR_get_surface_capabilities2       = true,
    .KHR_surface                         = true,
+   .KHR_surface_maintenance1            = true,
    .KHR_surface_protected_capabilities  = true,
    .EXT_surface_maintenance1            = true,
    .EXT_swapchain_colorspace            = true,
@@ -190,6 +191,7 @@ get_device_extensions(const struct v3dv_physical_device *device,
       .KHR_workgroup_memory_explicit_layout = true,
 #ifdef V3DV_USE_WSI_PLATFORM
       .KHR_swapchain                        = true,
+      .KHR_swapchain_maintenance1           = true,
       .KHR_swapchain_mutable_format         = true,
       .KHR_incremental_present              = true,
       .KHR_present_id2                      = true,
@@ -508,8 +510,14 @@ get_features(const struct v3dv_physical_device *physical_device,
       .maintenance5 = true,
 
 #ifdef V3DV_USE_WSI_PLATFORM
-      /* VK_EXT_swapchain_maintenance1 */
+      /* VK_KHR_swapchain_maintenance1 */
       .swapchainMaintenance1 = true,
+
+      /* VK_KHR_present_id2 */
+      .presentId2 = true,
+
+      /* VK_KHR_present_wait2 */
+      .presentWait2 = true,
 #endif
 
       /* VK_KHR_shader_relaxed_extended_instruction */
@@ -580,7 +588,7 @@ v3dv_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
    instance->pipeline_cache_enabled = true;
    instance->default_pipeline_cache_enabled = true;
    instance->meta_cache_enabled = true;
-   const char *pipeline_cache_str = getenv("V3DV_ENABLE_PIPELINE_CACHE");
+   const char *pipeline_cache_str = os_get_option("V3DV_ENABLE_PIPELINE_CACHE");
    if (pipeline_cache_str != NULL) {
       if (strncmp(pipeline_cache_str, "full", 4) == 0) {
          /* nothing to do, just to filter correct values */
@@ -866,7 +874,8 @@ get_device_properties(const struct v3dv_physical_device *device,
                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
                       VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
                       VK_SUBGROUP_FEATURE_VOTE_BIT |
-                      VK_SUBGROUP_FEATURE_QUAD_BIT;
+                      VK_SUBGROUP_FEATURE_QUAD_BIT |
+                      VK_SUBGROUP_FEATURE_ARITHMETIC_BIT;
    }
 
    /* FIXME: this will probably require an in-depth review */
@@ -1242,7 +1251,8 @@ get_device_properties(const struct v3dv_physical_device *device,
 
 static VkResult
 create_physical_device(struct v3dv_instance *instance,
-                       int32_t render_fd, int32_t primary_fd)
+                       int32_t primary_fd, int32_t render_fd,
+                       int32_t display_fd)
 {
    VkResult result = VK_SUCCESS;
 
@@ -1266,17 +1276,13 @@ create_physical_device(struct v3dv_instance *instance,
       goto fail;
 
    struct stat primary_stat = {0}, render_stat = {0};
-
-   device->has_primary = primary_fd >= 0;
-   if (device->has_primary) {
-      if (fstat(primary_fd, &primary_stat) != 0) {
-         result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
-                            "failed to stat DRM primary node");
-         goto fail;
-      }
-
-      device->primary_devid = primary_stat.st_rdev;
+   if (fstat(primary_fd, &primary_stat) != 0) {
+      result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
+                         "failed to stat DRM primary node");
+      goto fail;
    }
+   device->has_primary = true;
+   device->primary_devid = primary_stat.st_rdev;
 
    if (fstat(render_fd, &render_stat) != 0) {
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
@@ -1291,8 +1297,9 @@ create_physical_device(struct v3dv_instance *instance,
    device->sim_file = v3d_simulator_init(render_fd);
 #endif
 
+   device->primary_fd = primary_fd;
    device->render_fd = render_fd;
-   device->display_fd = primary_fd;
+   device->display_fd = display_fd;
 
    if (!v3d_get_device_info(device->render_fd, &device->devinfo, &v3d_ioctl)) {
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
@@ -1376,11 +1383,6 @@ create_physical_device(struct v3dv_instance *instance,
     */
    device->drm_syncobj_type.features &= ~VK_SYNC_FEATURE_TIMELINE;
 
-   /* Multiwait is required for emulated timeline semaphores and is supported
-    * by the v3d kernel interface.
-    */
-   device->drm_syncobj_type.features |= VK_SYNC_FEATURE_GPU_MULTI_WAIT;
-
    device->sync_timeline_type =
       vk_sync_timeline_get_type(&device->drm_syncobj_type);
 
@@ -1409,10 +1411,12 @@ fail:
    vk_physical_device_finish(&device->vk);
    vk_free(&instance->vk.alloc, device);
 
-   if (render_fd >= 0)
-      close(render_fd);
    if (primary_fd >= 0)
       close(primary_fd);
+   if (render_fd >= 0)
+      close(render_fd);
+   if (display_fd >= 0)
+      close(display_fd);
 
    return result;
 }
@@ -1541,8 +1545,9 @@ enumerate_devices(struct vk_instance *vk_instance)
 
    VkResult result = VK_SUCCESS;
 
-   int32_t render_fd = -1;
    int32_t primary_fd = -1;
+   int32_t render_fd = -1;
+   int32_t display_fd = -1;
    for (unsigned i = 0; i < (unsigned)max_devices; i++) {
 #if USE_V3D_SIMULATOR
       /* In the simulator, we look for an Intel/AMD render node */
@@ -1551,8 +1556,10 @@ enumerate_devices(struct vk_instance *vk_instance)
            devices[i]->bustype == DRM_BUS_PCI &&
           (devices[i]->deviceinfo.pci->vendor_id == 0x8086 ||
            devices[i]->deviceinfo.pci->vendor_id == 0x1002)) {
-         if (try_device(devices[i]->nodes[DRM_NODE_RENDER], &render_fd, NULL))
+         if (try_device(devices[i]->nodes[DRM_NODE_RENDER], &render_fd, NULL)) {
             try_device(devices[i]->nodes[DRM_NODE_PRIMARY], &primary_fd, NULL);
+            try_device(devices[i]->nodes[DRM_NODE_PRIMARY], &display_fd, NULL);
+         }
       }
 #else
       /* On actual hardware, we should have a gpu device (v3d) and a display
@@ -1565,21 +1572,22 @@ enumerate_devices(struct vk_instance *vk_instance)
          continue;
 
       if ((devices[i]->available_nodes & 1 << DRM_NODE_RENDER)) {
+         try_device(devices[i]->nodes[DRM_NODE_PRIMARY], &primary_fd, "v3d");
          try_device(devices[i]->nodes[DRM_NODE_RENDER], &render_fd, "v3d");
-      } else if (primary_fd == -1 &&
+      } else if (display_fd == -1 &&
                  (devices[i]->available_nodes & 1 << DRM_NODE_PRIMARY)) {
-         try_display_device(instance, devices[i]->nodes[DRM_NODE_PRIMARY], &primary_fd);
+         try_display_device(instance, devices[i]->nodes[DRM_NODE_PRIMARY], &display_fd);
       }
 #endif
 
-      if (render_fd >= 0 && primary_fd >= 0)
+      if (render_fd >= 0 && display_fd >= 0)
          break;
    }
 
-   if (render_fd < 0)
+   if (render_fd < 0 || primary_fd < 0)
       result = VK_ERROR_INCOMPATIBLE_DRIVER;
    else
-      result = create_physical_device(instance, render_fd, primary_fd);
+      result = create_physical_device(instance, primary_fd, render_fd, display_fd);
 
    drmFreeDevices(devices, max_devices);
 
@@ -1601,7 +1609,7 @@ v3dv_physical_device_device_id(const struct v3dv_physical_device *dev)
    case 71:
       return 0x55701C33; /* Broadcom deviceID for 2712 */
    default:
-      unreachable("Unsupported V3D version");
+      UNREACHABLE("Unsupported V3D version");
    }
 }
 
@@ -1846,6 +1854,7 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
    cnd_init(&device->query_ended);
 
    device->vk.command_buffer_ops = &v3dv_cmd_buffer_ops;
+   device->vk.copy_sync_payloads = vk_drm_syncobj_copy_payloads;
 
    vk_device_set_drm_fd(&device->vk, physical_device->render_fd);
    vk_device_enable_threaded_submit(&device->vk);
@@ -2102,7 +2111,7 @@ device_alloc_for_wsi(struct v3dv_device *device,
 
    int fd;
    err =
-      drmPrimeHandleToFD(display_fd, create_dumb.handle, O_CLOEXEC, &fd);
+      drmPrimeHandleToFD(display_fd, create_dumb.handle, DRM_CLOEXEC | DRM_RDWR, &fd);
    if (err < 0)
       goto fail_export;
 
@@ -2127,9 +2136,7 @@ static void
 device_add_device_address_bo(struct v3dv_device *device,
                                   struct v3dv_bo *bo)
 {
-   util_dynarray_append(&device->device_address_bo_list,
-                        struct v3dv_bo *,
-                        bo);
+   util_dynarray_append(&device->device_address_bo_list, bo);
 }
 
 static void
@@ -2915,7 +2922,7 @@ v3dv_GetMemoryFdKHR(VkDevice _device,
    int fd, ret;
    ret = drmPrimeHandleToFD(device->pdevice->render_fd,
                             mem->bo->handle,
-                            DRM_CLOEXEC, &fd);
+                            DRM_CLOEXEC | DRM_RDWR, &fd);
    if (ret)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 

@@ -178,7 +178,7 @@ glcpp_lex_update_state_per_token (glcpp_parser_t *parser, int token)
 	 * update the "Internal compiler error" catch-all rule near the end of
 	 * this file. */
 
-%x COMMENT DEFINE DONE HASH NEWLINE_CATCHUP UNREACHABLE
+%x COMMENT DEFINE DONE HASH NEWLINE_CATCHUP NOT_REACHABLE
 
 SPACE		[[:space:]]
 NONSPACE	[^[:space:]]
@@ -602,11 +602,11 @@ PATH			["][]^./ _A-Za-z0-9+*%[(){}|&~=!:;,?-]*["]
 <*>. {
 	glcpp_error(yylloc, yyextra, "Internal compiler error: Unexpected character: %s", yytext);
 
-	/* We don't actually use the UNREACHABLE start condition. We
+	/* We don't actually use the NOT_REACHABLE start condition. We
 	only have this block here so that we can pretend to call some
 	generated functions, (to avoid "defined but not used"
 	warnings. */
-        if (YY_START == UNREACHABLE) {
+        if (YY_START == NOT_REACHABLE) {
 		unput('.');
 		yy_top_state(yyextra);
 	}

@@ -27,49 +27,8 @@
 
 #include "compiler/nir/nir.h"
 #include "genxml/gen_macros.h"
-#include "panfrost/compiler/bifrost/disassemble.h"
-#include "panfrost/compiler/valhall/disassemble.h"
 #include "panfrost/lib/pan_props.h"
-#include "panfrost/midgard/disassemble.h"
-#include "panfrost/util/pan_ir.h"
-#include "panfrost/util/pan_lower_framebuffer.h"
-
-void bifrost_preprocess_nir(nir_shader *nir, unsigned gpu_id);
-void midgard_preprocess_nir(nir_shader *nir, unsigned gpu_id);
-
-static unsigned
-pan_get_fixed_varying_mask(unsigned varyings_used)
-{
-   return (varyings_used & BITFIELD_MASK(VARYING_SLOT_VAR0)) &
-      ~VARYING_BIT_POS & ~VARYING_BIT_PSIZ;
-}
-
-static inline void
-pan_shader_preprocess(nir_shader *nir, unsigned gpu_id)
-{
-   if (pan_arch(gpu_id) >= 6)
-      bifrost_preprocess_nir(nir, gpu_id);
-   else
-      midgard_preprocess_nir(nir, gpu_id);
-}
-
-static inline void
-pan_shader_disassemble(FILE *fp, const void *code, size_t size, unsigned gpu_id,
-                       bool verbose)
-{
-   if (pan_arch(gpu_id) >= 9)
-      disassemble_valhall(fp, (const uint64_t *)code, size, verbose);
-   else if (pan_arch(gpu_id) >= 6)
-      disassemble_bifrost(fp, code, size, verbose);
-   else
-      disassemble_midgard(fp, code, size, gpu_id, verbose);
-}
-
-void pan_shader_compile(nir_shader *nir, struct pan_compile_inputs *inputs,
-                        struct util_dynarray *binary,
-                        struct pan_shader_info *info);
-
-const nir_shader_compiler_options *pan_shader_get_compiler_options(unsigned arch);
+#include "panfrost/compiler/pan_compiler.h"
 
 #ifdef PAN_ARCH
 
@@ -134,7 +93,7 @@ pan_shader_prepare_midgard_rsd(const struct pan_shader_info *info,
 #define pan_preloads(reg) (preload & BITFIELD64_BIT(reg))
 
 static void
-pan_make_preload(gl_shader_stage stage, uint64_t preload,
+pan_make_preload(mesa_shader_stage stage, uint64_t preload,
                  struct MALI_PRELOAD *out)
 {
    switch (stage) {

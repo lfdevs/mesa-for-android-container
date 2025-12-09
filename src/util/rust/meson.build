@@ -25,35 +25,19 @@ dep_zerocopy = dependency('zerocopy',
   required: true,
 )
 
-dep_zerocopy_derive = dependency('zerocopy-derive',
-  version: '>= 0.8.13',
-  fallback: ['zerocopy-derive-0.8-rs', 'dep_zerocopy_derive'],
-  required: true,
-)
+dep_mesa3d_util = [dep_cfg_if, dep_thiserror, dep_remain, dep_zerocopy]
 
-dep_mesa3d_util = [dep_cfg_if, dep_thiserror, dep_remain, dep_zerocopy,
-                   dep_zerocopy_derive]
+supported_systems = ['linux', 'windows', 'darwin', 'macos']
+supported_host_machine = host_machine.system() in supported_systems
 
-if host_machine.system() == 'linux'
+if supported_host_machine
   dep_rustix = dependency('rustix',
     version: '>= 0.38.31',
     fallback: ['rustix-1-rs', 'dep_rustix'],
     required: true,
   )
 
-  dep_bitflags = dependency('bitflags',
-    version: '>= 2.6.0',
-    fallback: ['bitflags-2-rs', 'dep_bitflags'],
-    required: true,
-  )
-
-  dep_errno = dependency('errno',
-    version: '>= 0.3.8',
-    fallback: ['errno-0.3-rs', 'dep_errno'],
-    required: true,
-  )
-  
-  dep_mesa3d_util += [dep_rustix, dep_bitflags, dep_errno]
+  dep_mesa3d_util += [dep_rustix]
 endif
 
 libmesa_rust_util = static_library(

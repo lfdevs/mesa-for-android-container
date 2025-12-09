@@ -13,8 +13,10 @@
 #include <sys/sysinfo.h>
 
 #include "util/disk_cache.h"
+#include "util/os_misc.h"
 #include "git_sha1.h"
 
+#include "vk_android.h"
 #include "vk_device.h"
 #include "vk_drm_syncobj.h"
 #include "vk_format.h"
@@ -23,6 +25,7 @@
 
 #include "panvk_device.h"
 #include "panvk_entrypoints.h"
+#include "panvk_image.h"
 #include "panvk_instance.h"
 #include "panvk_physical_device.h"
 #include "panvk_wsi.h"
@@ -91,8 +94,8 @@ create_kmod_dev(struct panvk_physical_device *device,
 
    drmFreeVersion(version);
 
-   if (instance->debug_flags & PANVK_DEBUG_STARTUP)
-      vk_logi(VK_LOG_NO_OBJS(instance), "Found compatible device '%s'.", path);
+   if (PANVK_DEBUG(STARTUP))
+      mesa_logi("Found compatible device '%s'.", path);
 
    device->kmod.dev = pan_kmod_dev_create(fd, PAN_KMOD_DEV_FLAG_OWNS_FD,
                                           &instance->kmod.allocator);
@@ -132,20 +135,50 @@ get_drm_device_ids(struct panvk_physical_device *device,
    return VK_SUCCESS;
 }
 
-static int
-get_cache_uuid(uint16_t family, void *uuid)
+static void
+init_shader_caches(struct panvk_physical_device *device,
+                   const struct panvk_instance *instance)
 {
-   uint32_t mesa_timestamp;
-   uint16_t f = family;
+   struct mesa_sha1 sha_ctx;
+   _mesa_sha1_init(&sha_ctx);
 
-   if (!disk_cache_get_function_timestamp(get_cache_uuid, &mesa_timestamp))
-      return -1;
+   _mesa_sha1_update(&sha_ctx, instance->driver_build_sha,
+                     sizeof(instance->driver_build_sha));
 
-   memset(uuid, 0, VK_UUID_SIZE);
-   memcpy(uuid, &mesa_timestamp, 4);
-   memcpy((char *)uuid + 4, &f, 2);
-   snprintf((char *)uuid + 6, VK_UUID_SIZE - 10, "pan");
-   return 0;
+   _mesa_sha1_update(&sha_ctx, &device->kmod.props.gpu_id,
+                     sizeof(device->kmod.props.gpu_id));
+
+   unsigned char sha[SHA1_DIGEST_LENGTH];
+   _mesa_sha1_final(&sha_ctx, sha);
+
+   STATIC_ASSERT(VK_UUID_SIZE <= SHA1_DIGEST_LENGTH);
+   memcpy(device->cache_uuid, sha, VK_UUID_SIZE);
+
+#ifdef ENABLE_SHADER_CACHE
+   char renderer[17];
+   ASSERTED int len = snprintf(renderer, sizeof(renderer), "panvk_0x%08x",
+                               device->kmod.props.gpu_id);
+   assert(len == sizeof(renderer) - 1);
+
+   char timestamp[SHA1_DIGEST_STRING_LENGTH];
+   _mesa_sha1_format(timestamp, instance->driver_build_sha);
+
+   const uint64_t driver_flags = 0;
+   device->vk.disk_cache = disk_cache_create(renderer, timestamp, driver_flags);
+#endif
+}
+
+static void
+free_disk_cache(struct panvk_physical_device *device)
+{
+#ifdef ENABLE_SHADER_CACHE
+   if (device->vk.disk_cache) {
+      disk_cache_destroy(device->vk.disk_cache);
+      device->vk.disk_cache = NULL;
+   }
+#else
+   assert(device->vk.disk_cache == NULL);
+#endif
 }
 
 static VkResult
@@ -205,11 +238,6 @@ get_device_sync_types(struct panvk_physical_device *device,
        */
       device->drm_syncobj_type.features &= ~VK_SYNC_FEATURE_TIMELINE;
 
-      /* vk_sync_timeline requires VK_SYNC_FEATURE_GPU_MULTI_WAIT.  Panfrost
-       * waits on the underlying dma-fences and supports the feature.
-       */
-      device->drm_syncobj_type.features |= VK_SYNC_FEATURE_GPU_MULTI_WAIT;
-
       device->sync_timeline_type =
          vk_sync_timeline_get_type(&device->drm_syncobj_type);
       device->sync_types[sync_type_count++] = &device->sync_timeline_type.sync;
@@ -236,6 +264,8 @@ void
 panvk_physical_device_finish(struct panvk_physical_device *device)
 {
    panvk_wsi_finish(device);
+
+   free_disk_cache(device);
 
    pan_kmod_dev_destroy(device->kmod.dev);
 
@@ -271,7 +301,7 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    switch (arch) {
    case 6:
    case 7:
-      if (!getenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER")) {
+      if (!os_get_option("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER")) {
          result = panvk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
                                "WARNING: panvk is not well-tested on v%d, "
                                "pass PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1 "
@@ -301,11 +331,7 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    memset(device->name, 0, sizeof(device->name));
    sprintf(device->name, "%s", device->model->name);
 
-   if (get_cache_uuid(device->kmod.props.gpu_id, device->cache_uuid)) {
-      result = panvk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
-                            "cannot generate UUID");
-      goto fail;
-   }
+   init_shader_caches(device, instance);
 
    result = get_core_masks(device, instance);
    if (result != VK_SUCCESS)
@@ -359,6 +385,8 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    return VK_SUCCESS;
 
 fail:
+   free_disk_cache(device);
+
    if (device->vk.instance)
       vk_physical_device_finish(&device->vk);
 
@@ -369,23 +397,42 @@ fail:
 
 static void
 panvk_fill_global_priority(const struct panvk_physical_device *physical_device,
+                           uint32_t family_idx,
                            VkQueueFamilyGlobalPriorityPropertiesKHR *prio)
 {
-   enum pan_kmod_group_allow_priority_flags prio_mask =
-      physical_device->kmod.props.allowed_group_priorities_mask;
+   const unsigned arch = pan_arch(physical_device->kmod.props.gpu_id);
    uint32_t prio_idx = 0;
 
-   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_LOW)
-      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
+   switch (family_idx) {
+   case PANVK_QUEUE_FAMILY_GPU: {
+      enum pan_kmod_group_allow_priority_flags prio_mask =
+         physical_device->kmod.props.allowed_group_priorities_mask;
 
-   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_MEDIUM)
-      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+      /* Non-medium priority context is not hooked-up in the JM backend, even
+       * though the panfrost kmod advertize it. Manually filter non-medium
+       * priority for now.
+       */
+      if (arch < 10)
+         prio_mask &= PAN_KMOD_GROUP_ALLOW_PRIORITY_MEDIUM;
 
-   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_HIGH)
-      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
+      if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_LOW)
+         prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
+      if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_MEDIUM)
+         prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+      if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_HIGH)
+         prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
+      if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_REALTIME)
+         prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
+      break;
+   }
 
-   if (prio_mask & PAN_KMOD_GROUP_ALLOW_PRIORITY_REALTIME)
-      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
+   case PANVK_QUEUE_FAMILY_BIND:
+      prio->priorities[prio_idx++] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
+      break;
+
+   default:
+      UNREACHABLE("Unknown queue family");
+   }
 
    prio->priorityCount = prio_idx;
 }
@@ -400,11 +447,10 @@ panvk_GetPhysicalDeviceQueueFamilyProperties2(
                           pQueueFamilyPropertyCount);
    unsigned arch = pan_arch(physical_device->kmod.props.gpu_id);
 
-   vk_outarray_append_typed(VkQueueFamilyProperties2, &out, p)
-   {
-      p->queueFamilyProperties = (VkQueueFamilyProperties){
-         .queueFlags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |
-                       VK_QUEUE_TRANSFER_BIT,
+   const VkQueueFamilyProperties qfamily_props[PANVK_QUEUE_FAMILY_COUNT] = {
+      [PANVK_QUEUE_FAMILY_GPU] = {
+         .queueFlags =
+            VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT,
          /* On v10+ we can support up to 127 queues but this causes timeout on
             some CTS tests */
          .queueCount = arch >= 10 ? 2 : 1,
@@ -412,13 +458,27 @@ panvk_GetPhysicalDeviceQueueFamilyProperties2(
             arch >= 10 && physical_device->kmod.props.gpu_can_query_timestamp
                ? 64
                : 0,
-         .minImageTransferGranularity = (VkExtent3D){1, 1, 1},
-      };
+         .minImageTransferGranularity = {1, 1, 1},
+      },
+      [PANVK_QUEUE_FAMILY_BIND] = {
+         .queueFlags = VK_QUEUE_SPARSE_BINDING_BIT,
+         .queueCount = 1,
+      },
+   };
 
-      VkQueueFamilyGlobalPriorityPropertiesKHR *prio =
-         vk_find_struct(p->pNext, QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR);
-      if (prio)
-         panvk_fill_global_priority(physical_device, prio);
+   for (uint32_t family = 0; family < ARRAY_SIZE(qfamily_props); family++) {
+      if (family == PANVK_QUEUE_FAMILY_BIND &&
+          !physical_device->vk.supported_features.sparseBinding)
+         break;
+
+      vk_outarray_append_typed(VkQueueFamilyProperties2, &out, p) {
+         p->queueFamilyProperties = qfamily_props[family];
+
+         VkQueueFamilyGlobalPriorityPropertiesKHR *prio =
+            vk_find_struct(p->pNext, QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR);
+         if (prio)
+            panvk_fill_global_priority(physical_device, family, prio);
+      }
    }
 }
 
@@ -561,16 +621,8 @@ get_image_plane_format_features(struct panvk_physical_device *physical_device,
 
    if (fmt.bind & PAN_BIND_RENDER_TARGET) {
       features |= VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
-
-      /* SNORM rendering isn't working yet (nir_lower_blend bugs), disable for
-       * now.
-       *
-       * XXX: Enable once fixed.
-       */
-      if (!util_format_is_snorm(pfmt)) {
-         features |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT;
-         features |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BLEND_BIT;
-      }
+      features |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT;
+      features |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BLEND_BIT;
    }
 
    if (fmt.bind & PAN_BIND_STORAGE_IMAGE) {
@@ -596,11 +648,6 @@ get_image_format_features(struct panvk_physical_device *physical_device,
 {
    const struct vk_format_ycbcr_info *ycbcr_info =
          vk_format_get_ycbcr_info(format);
-   const unsigned arch = pan_arch(physical_device->kmod.props.gpu_id);
-
-   /* TODO: Bifrost YCbCr support */
-   if (ycbcr_info && arch <= 7)
-      return 0;
 
    if (ycbcr_info == NULL)
       return get_image_plane_format_features(physical_device, format);
@@ -689,7 +736,7 @@ get_image_format_sample_counts(struct panvk_physical_device *physical_device,
                                VkFormat format)
 {
    unsigned arch = pan_arch(physical_device->kmod.props.gpu_id);
-   unsigned max_tib_size = pan_get_max_tib_size(arch, physical_device->model);
+   unsigned max_tib_size = pan_query_tib_size(physical_device->model);
    unsigned max_cbuf_atts = pan_get_max_cbufs(arch, max_tib_size);
 
    assert(!vk_format_is_compressed(format));
@@ -716,12 +763,9 @@ get_buffer_format_features(struct panvk_physical_device *physical_device,
    if ((fmt.bind & PAN_BIND_VERTEX_BUFFER) && !util_format_is_srgb(pfmt))
       features |= VK_FORMAT_FEATURE_2_VERTEX_BUFFER_BIT;
 
-   if ((fmt.bind & PAN_BIND_SAMPLER_VIEW) &&
-       !util_format_is_depth_or_stencil(pfmt))
-      features |= VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT;
-
-   if (fmt.bind & PAN_BIND_STORAGE_IMAGE)
-      features |= VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT |
+   if (fmt.bind & PAN_BIND_TEXEL_BUFFER)
+      features |= VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT |
+                  VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT |
                   VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT |
                   VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
 
@@ -737,6 +781,7 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
                                          VkFormatProperties2 *pFormatProperties)
 {
    VK_FROM_HANDLE(panvk_physical_device, physical_device, physicalDevice);
+   const unsigned arch = pan_arch(physical_device->kmod.props.gpu_id);
 
    VkFormatFeatureFlags2 tex =
       get_image_format_features(physical_device, format);
@@ -763,6 +808,24 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
       VK_OUTARRAY_MAKE_TYPED(VkDrmFormatModifierPropertiesEXT, out,
                              list->pDrmFormatModifierProperties,
                              &list->drmFormatModifierCount);
+      if (pFormatProperties->formatProperties.optimalTilingFeatures &&
+          PANVK_DEBUG(WSI_AFBC))
+      {
+         PAN_SUPPORTED_MODIFIERS(supported);
+         for (int mi = 0; mi < ARRAY_SIZE(supported); mi++) {
+            if (drm_is_afbc(supported[mi]) &&
+                pan_afbc_supports_format(arch, vk_format_to_pipe_format(format)))
+            {
+               vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out, mod_props)
+               {
+                  mod_props->drmFormatModifier = supported[mi];
+                  mod_props->drmFormatModifierPlaneCount = 1;
+                  mod_props->drmFormatModifierTilingFeatures =
+                     pFormatProperties->formatProperties.optimalTilingFeatures;
+               }
+            }
+         }
+      }
 
       if (pFormatProperties->formatProperties.linearTilingFeatures) {
          vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out,
@@ -848,6 +911,59 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
    const struct vk_format_ycbcr_info *ycbcr_info =
       vk_format_get_ycbcr_info(info->format);
 
+   if (info->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
+      if (!physical_device->vk.supported_features.sparseBinding)
+         goto unsupported;
+
+      /*
+       * Sparse only manipulates device mappings and we implement host copies on
+       * host. Purely hypotetically, we could implement host copies for sparse
+       * images in one of, but not limited to, the following ways:
+       *
+       *    * submitting a device copy and immediately waiting on it
+       *
+       *    * mirror sparse binds' modifications to device mappings on host
+       *
+       *    * share a single address space and thus mappings between host and device
+       *
+       * but realistically speaking, the set of people, apps and tests in the
+       * CTS that expect a driver to implement host copies on sparse images is
+       * exactly empty, so let's just not bother.
+       */
+      if (info->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT)
+         goto unsupported;
+   }
+
+   if (info->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) {
+      if (!((info->type == VK_IMAGE_TYPE_2D &&
+             physical_device->vk.supported_features.sparseResidencyImage2D) ||
+            (info->type == VK_IMAGE_TYPE_3D &&
+             physical_device->vk.supported_features.sparseResidencyImage3D)))
+         goto unsupported;
+
+      /* Only single aspect (thus single plane) stuff is supported for now */
+      if (util_bitcount(vk_format_aspects(info->format)) != 1)
+         goto unsupported;
+
+      if (info->tiling != VK_IMAGE_TILING_OPTIMAL)
+         goto unsupported;
+
+      struct panvk_sparse_block_desc sblock_desc = panvk_get_sparse_block_desc(info->type, info->format);
+      if (!panvk_sparse_block_is_valid(sblock_desc))
+         goto unsupported;
+
+      VkImageUsageFlags allowed_usages =
+         VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+         VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+         VK_IMAGE_USAGE_SAMPLED_BIT |
+         VK_IMAGE_USAGE_STORAGE_BIT |
+         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+      if (all_usage & ~allowed_usages)
+         goto unsupported;
+   }
+
    switch (info->tiling) {
    case VK_IMAGE_TILING_LINEAR:
    case VK_IMAGE_TILING_OPTIMAL:
@@ -856,7 +972,16 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
       const VkPhysicalDeviceImageDrmFormatModifierInfoEXT *mod_info =
          vk_find_struct_const(
             info->pNext, PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT);
-      if (mod_info->drmFormatModifier != DRM_FORMAT_MOD_LINEAR)
+
+      /* TODO: switch to using a more generic function for checking mod support here
+       * when adding new modifiers, so that this case doesn't become too big. */
+      const bool can_use_afbc = 
+         PANVK_DEBUG(WSI_AFBC) &&
+         panvk_image_can_use_afbc(physical_device, info->format, info->usage,
+                                  info->type, info->tiling, 0);
+      const bool supported = (drm_is_afbc(mod_info->drmFormatModifier) && can_use_afbc) ||
+         mod_info->drmFormatModifier == DRM_FORMAT_MOD_LINEAR;
+      if (!supported)
          goto unsupported;
 
       /* The only difference between optimal and linear is currently whether
@@ -1141,9 +1266,15 @@ panvk_GetPhysicalDeviceImageFormatProperties2(
          external_props = &fallback_external_props;
       }
 
-      result = panvk_get_external_image_format_properties(
-         physical_device, base_info, external_info->handleType,
-         &external_props->externalMemoryProperties);
+      if (external_info->handleType ==
+          VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID) {
+         result = vk_android_get_ahb_image_properties(physicalDevice, base_info,
+                                                      base_props);
+      } else {
+         result = panvk_get_external_image_format_properties(
+            physical_device, base_info, external_info->handleType,
+            &external_props->externalMemoryProperties);
+      }
       if (result != VK_SUCCESS)
          goto fail;
 
@@ -1243,23 +1374,42 @@ fail:
 }
 
 VKAPI_ATTR void VKAPI_CALL
-panvk_GetPhysicalDeviceSparseImageFormatProperties(
-   VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type,
-   VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling,
-   uint32_t *pNumProperties, VkSparseImageFormatProperties *pProperties)
-{
-   /* Sparse images are not yet supported. */
-   *pNumProperties = 0;
-}
-
-VKAPI_ATTR void VKAPI_CALL
 panvk_GetPhysicalDeviceSparseImageFormatProperties2(
    VkPhysicalDevice physicalDevice,
    const VkPhysicalDeviceSparseImageFormatInfo2 *pFormatInfo,
    uint32_t *pPropertyCount, VkSparseImageFormatProperties2 *pProperties)
 {
-   /* Sparse images are not yet supported. */
-   *pPropertyCount = 0;
+   VK_OUTARRAY_MAKE_TYPED(VkSparseImageFormatProperties2, out, pProperties, pPropertyCount);
+
+   VkPhysicalDeviceImageFormatInfo2 img_info = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+      .format = pFormatInfo->format,
+      .type = pFormatInfo->type,
+      .tiling = pFormatInfo->tiling,
+      .usage = pFormatInfo->usage,
+      .flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+               VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT,
+   };
+   VkImageFormatProperties2 img_props = {};
+   if (panvk_GetPhysicalDeviceImageFormatProperties2(physicalDevice, &img_info, &img_props) != VK_SUCCESS)
+      return;
+
+   if (!(img_props.imageFormatProperties.sampleCounts & pFormatInfo->samples))
+      return;
+
+   /*
+    * We don't support multisampled sparse partially-resident images for now.
+    * Weirdly enough, banning it the obvious way by making
+    * get_image_format_properties report sampleCounts of 1 when flags includes
+    * SPARSE_RESIDENCY causes "required sample counts not supported" CTS fails,
+    * so we ban them here.
+    */
+   if (pFormatInfo->samples != 1)
+      return;
+
+   vk_outarray_append_typed(VkSparseImageFormatProperties2, &out, prop) {
+      prop->properties = panvk_get_sparse_image_fmt_props(pFormatInfo->type, pFormatInfo->format);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1268,6 +1418,13 @@ panvk_GetPhysicalDeviceExternalBufferProperties(
    const VkPhysicalDeviceExternalBufferInfo *pExternalBufferInfo,
    VkExternalBufferProperties *pExternalBufferProperties)
 {
+   if (pExternalBufferInfo->handleType ==
+       VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID) {
+      vk_android_get_ahb_buffer_properties(physicalDevice, pExternalBufferInfo,
+                                           pExternalBufferProperties);
+      return;
+   }
+
    const VkExternalMemoryHandleTypeFlags supported_handle_types =
       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
       VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
@@ -1291,36 +1448,4 @@ panvk_GetPhysicalDeviceExternalBufferProperties(
          .exportFromImportedHandleTypes = handle_types,
          .compatibleHandleTypes = handle_types,
       };
-}
-
-static const VkTimeDomainKHR panvk_time_domains[] = {
-   VK_TIME_DOMAIN_DEVICE_KHR,
-   VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR,
-#ifdef CLOCK_MONOTONIC_RAW
-   VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR,
-#endif
-};
-
-VKAPI_ATTR VkResult VKAPI_CALL
-panvk_GetPhysicalDeviceCalibrateableTimeDomainsKHR(
-   VkPhysicalDevice physicalDevice, uint32_t *pTimeDomainCount,
-   VkTimeDomainKHR *pTimeDomains)
-{
-   VK_FROM_HANDLE(panvk_physical_device, pdev, physicalDevice);
-   VK_OUTARRAY_MAKE_TYPED(VkTimeDomainKHR, out, pTimeDomains, pTimeDomainCount);
-
-   int d = 0;
-
-   /* If GPU query timestamp isn't supported, skip device domain */
-   if (!pdev->kmod.props.gpu_can_query_timestamp)
-      d++;
-
-   for (; d < ARRAY_SIZE(panvk_time_domains); d++) {
-      vk_outarray_append_typed(VkTimeDomainKHR, &out, i)
-      {
-         *i = panvk_time_domains[d];
-      }
-   }
-
-   return vk_outarray_status(&out);
 }

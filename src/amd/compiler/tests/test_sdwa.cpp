@@ -10,7 +10,7 @@ using namespace aco;
 
 BEGIN_TEST(validate.sdwa.allow)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
+      //>> v1: %a:v[0], v1: %b:v[1], s1: %c:s[0], s1: %d:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
       //>> Validation results:
@@ -32,7 +32,7 @@ END_TEST
 
 BEGIN_TEST(validate.sdwa.support)
    for (unsigned i = GFX7; i <= GFX11; i++) {
-      //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
+      //>> v1: %a:v[0], v1: %b:v[1], s1: %c:s[0], s1: %d:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
       //>> Validation results:
@@ -48,7 +48,7 @@ END_TEST
 
 BEGIN_TEST(validate.sdwa.operands)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %vgpr0, v1: %vgp1, s1: %sgpr0, s1: %sgpr1 = p_startpgm
+      //>> v1: %vgpr0:v[0], v1: %vgpr1:v[1], s1: %sgpr0:s[0], s1: %sgpr1:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
       //>> Validation results:
@@ -77,7 +77,7 @@ END_TEST
 
 BEGIN_TEST(validate.sdwa.vopc)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %vgpr0, v1: %vgp1, s1: %sgpr0, s1: %sgpr1 = p_startpgm
+      //>> v1: %vgpr0:v[0], v1: %vgpr1:v[1], s1: %sgpr0:s[0], s1: %sgpr1:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
       //>> Validation results:
@@ -100,7 +100,7 @@ END_TEST
 
 BEGIN_TEST(validate.sdwa.omod)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %vgpr0, v1: %vgp1, s1: %sgpr0, s1: %sgpr1 = p_startpgm
+      //>> v1: %vgpr0:v[0], v1: %vgpr1:v[1], s1: %sgpr0:s[0], s1: %sgpr1:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
       //>> Validation results:
@@ -116,7 +116,7 @@ END_TEST
 
 BEGIN_TEST(validate.sdwa.vcc)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %vgpr0, v1: %vgpr1, s2: %sgpr0 = p_startpgm
+      //>> v1: %vgpr0:v[0], v1: %vgpr1:v[1], s2: %sgpr0:s[0-1] = p_startpgm
       if (!setup_cs("v1 v1 s2", (amd_gfx_level)i))
          continue;
       //>> Validation results:
@@ -140,7 +140,7 @@ END_TEST
 BEGIN_TEST(optimize.sdwa.extract)
    for (unsigned i = GFX7; i <= GFX10; i++) {
       for (unsigned is_signed = 0; is_signed <= 1; is_signed++) {
-         //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
+         //>> v1: %a:v[0], v1: %b:v[1], s1: %c:s[0], s1: %d:s[1] = p_startpgm
          if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i, CHIP_UNKNOWN,
                        is_signed ? "_signed" : "_unsigned"))
             continue;
@@ -265,7 +265,7 @@ END_TEST
 
 BEGIN_TEST(optimize.sdwa.extract_modifiers)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
+      //>> v1: %a:v[0], v1: %b:v[1], s1: %c:s[0], s1: %d:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
 
@@ -316,9 +316,31 @@ BEGIN_TEST(optimize.sdwa.extract_modifiers)
    }
 END_TEST
 
+BEGIN_TEST(optimize.sdwa.extract_modifiers_fp16)
+   for (unsigned i = GFX8; i <= GFX10; i++) {
+      //>> v2b: %a:v[0][0:16], v1: %b:v[1] = p_startpgm
+      if (!setup_cs("v2b v1", (amd_gfx_level)i))
+         continue;
+
+      Temp hi = bld.pseudo(aco_opcode::p_extract_vector, bld.def(v2b), inputs[1], Operand::c32(1));
+
+      //! v2b: %res0 = v_mul_f16 -%b, %a dst_sel:uword0 dst_preserve src0_sel:uword1 src1_sel:uword0
+      //! p_unit_test 0, %res0
+      Temp fneg_hi = fneg(hi);
+      writeout(0, fmul(fneg_hi, inputs[0]));
+
+      //! v2b: %res1 = v_mul_f16 |%b|, %a dst_sel:uword0 dst_preserve src0_sel:uword1 src1_sel:uword0
+      //! p_unit_test 1, %res1
+      Temp fabs_hi = fabs(hi);
+      writeout(1, fmul(fabs_hi, inputs[0]));
+
+      finish_opt_test();
+   }
+END_TEST
+
 BEGIN_TEST(optimize.sdwa.extract.sgpr)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
+      //>> v1: %a:v[0], v1: %b:v[1], s1: %c:s[0], s1: %d:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
 
@@ -362,7 +384,7 @@ END_TEST
 
 BEGIN_TEST(optimize.sdwa.from_vop3)
    for (unsigned i = GFX8; i <= GFX10; i++) {
-      //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
+      //>> v1: %a:v[0], v1: %b:v[1], s1: %c:s[0], s1: %d:s[1] = p_startpgm
       if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i))
          continue;
 
@@ -410,7 +432,7 @@ END_TEST
 
 BEGIN_TEST(optimize.sdwa.insert)
    for (unsigned i = GFX7; i <= GFX10; i++) {
-      //>> v1: %a, v1: %b = p_startpgm
+      //>> v1: %a:v[0], v1: %b:v[1] = p_startpgm
       if (!setup_cs("v1 v1", (amd_gfx_level)i))
          continue;
 
@@ -506,7 +528,7 @@ END_TEST
 
 BEGIN_TEST(optimize.sdwa.insert_modifiers)
    for (unsigned i = GFX8; i <= GFX9; i++) {
-      //>> v1: %a = p_startpgm
+      //>> v1: %a:v[0] = p_startpgm
       if (!setup_cs("v1", (amd_gfx_level)i))
          continue;
 
@@ -559,7 +581,7 @@ BEGIN_TEST(optimize.sdwa.insert_modifiers)
 END_TEST
 
 BEGIN_TEST(optimize.sdwa.special_case_valu)
-   //>> v1: %a, s1: %b = p_startpgm
+   //>> v1: %a:v[0], s1: %b:s[0] = p_startpgm
    if (!setup_cs("v1 s1", GFX10_3))
       return;
 
@@ -636,7 +658,7 @@ BEGIN_TEST(optimize.sdwa.special_case_valu)
 END_TEST
 
 BEGIN_TEST(optimize.sdwa.extract_sgpr_limits)
-   //>> s1: %a = p_startpgm
+   //>> s1: %a:s[0] = p_startpgm
    if (!setup_cs("s1", GFX8))
       return;
 
@@ -660,7 +682,7 @@ BEGIN_TEST(optimize.sdwa.extract_sgpr_limits)
 END_TEST
 
 BEGIN_TEST(optimize.sdwa.subdword_extract)
-   //>> v1: %a, v1: %b, s2: %c = p_startpgm
+   //>> v1: %a:v[0], v1: %b:v[1], s2: %c:s[0-1] = p_startpgm
    if (!setup_cs("v1 v1 s2", GFX10_3))
       return;
 
@@ -689,7 +711,7 @@ BEGIN_TEST(optimize.sdwa.subdword_extract)
                                    Operand::c32(8), Operand::c32(0)),
                         inputs[2]));
 
-   //! v1b: %res3 = v_or_b32 %a, %b dst_sel:ubyte0 dst_preserve src0_sel:uword0 src1_sel:ubyte2
+   //! v1b: %res3 = v_or_b32 %a, %b dst_sel:ubyte0 dst_preserve src0_sel:uword0 src1_sel:uword1
    //! p_unit_test 3, %res3
    writeout(3, bld.vop2(aco_opcode::v_or_b32, bld.def(v1b),
                         bld.pseudo(aco_opcode::p_extract, bld.def(v1b), a, Operand::c32(0),
@@ -703,9 +725,7 @@ BEGIN_TEST(optimize.sdwa.subdword_extract)
                         bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(0),
                                    Operand::c32(8), Operand::c32(1))));
 
-   /* TODO incremental conversion to sdwa loses information if zero extend is actually necessary */
-   //! v2b: %tmp5 = p_extract %b, 1, 8, 1
-   //! v2b: %res5 = v_or_b32 %a, %tmp5 dst_sel:uword0 dst_preserve src0_sel:sbyte0 src1_sel:uword0
+   //! v2b: %res5 = v_or_b32 %a, %b dst_sel:uword0 dst_preserve src0_sel:sbyte0 src1_sel:sbyte1
    //! p_unit_test 5, %res5
    writeout(5, bld.vop2(aco_opcode::v_or_b32, bld.def(v2b),
                         bld.pseudo(aco_opcode::p_extract, bld.def(v2b), a, Operand::c32(0),
@@ -717,7 +737,7 @@ BEGIN_TEST(optimize.sdwa.subdword_extract)
 END_TEST
 
 BEGIN_TEST(optimize.sdwa.extract_vector)
-   //>> v1: %a = p_startpgm
+   //>> v1: %a:v[0] = p_startpgm
    if (!setup_cs("v1", GFX10_3))
       return;
 
@@ -844,4 +864,42 @@ BEGIN_TEST(optimize.sdwa.extract_vector)
                            Operand::c32(1)));
 
    finish_opt_test();
+END_TEST
+
+BEGIN_TEST(optimizer.sdwa.lanemask_extract)
+   for (unsigned i = GFX10; i <= GFX11; i++) {
+      if (i == GFX10_3)
+         continue;
+
+      //>> v1: %a:v[0],  v1: %b:v[1], s1: %c:s[0] = p_startpgm
+      if (!setup_cs("v1 v1 s1", (amd_gfx_level)i, CHIP_UNKNOWN, "", 32))
+         continue;
+
+      Temp a = inputs[0];
+      Temp b = inputs[1];
+      Temp c = inputs[2];
+
+      //! s1: %mask0,  s1: %_:scc = p_extract %c, 0, 16, 0
+      //! v1: %res0 = v_cndmask_b32 %a, %b, %mask0
+      //! p_unit_test 0, %res0
+      Temp mask = ext_ushort(c, 0);
+      Temp bcsel = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), a, b, mask);
+      writeout(0, bcsel);
+
+      //! s1: %mask1,  s1: %_:scc = p_extract %c, 2, 8, 1
+      //! v1: %res1 = v_cndmask_b32 %a, %b, %mask1
+      //! p_unit_test 1, %res1
+      mask = ext_sbyte(c, 2);
+      bcsel = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), a, b, mask);
+      writeout(1, bcsel);
+
+      //! s1: %mask2,  s1: %_:scc = p_extract %c, 3, 8, 0
+      //! v1: %res2 = v_cndmask_b32 %a, %b, %mask2
+      //! p_unit_test 2, %res2
+      mask = ext_ubyte(c, 3);
+      bcsel = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), a, b, mask);
+      writeout(2, bcsel);
+
+      finish_opt_test();
+   }
 END_TEST

@@ -3,7 +3,6 @@ glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
-glx@glx_arb_create_context_no_error@no error,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-last,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-last,Fail
@@ -19,7 +18,6 @@ spec@arb_texture_query_lod@compiler@built-in-functions@texturequerylod-samplercu
 spec@arb_texture_query_lod@compiler@built-in-functions@texturequerylod-samplercubeshadow.frag,Crash
 spec@arb_uniform_buffer_object@referenced-by-shader,Fail
 glx@glx_ext_no_config_context@no fbconfig,Fail
-spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
@@ -38,7 +36,6 @@ spec@glsl-4.00@compiler@built-in-functions@texturequerylod-sampler2dshadow.frag,
 spec@glsl-4.00@compiler@built-in-functions@texturequerylod-samplercubearrayshadow.frag,Crash
 spec@glsl-4.00@compiler@built-in-functions@texturequerylod-samplercubeshadow.frag,Crash
 spec@glsl-es-1.00@linker@glsl-mismatched-uniform-precision-unused,Fail
-spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency ffs,Fail
 spec@glsl-1.50@execution@geometry@tri-strip-ordering-with-prim-restart gl_triangle_strip_adjacency other,Fail
 spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16,Fail
@@ -51,6 +48,9 @@ spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 wgl@wgl-multi-context-single-window,Fail
 wgl@wgl-multi-window-single-context,Fail
 wgl@wgl-sanity,Fail
+spec@!opengl 1.0@rasterpos,Fail
+spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
+spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 
 # glcts failures
 KHR-GL46.geometry_shader.rendering.rendering.triangles_with_adjacency_input_line_strip_output_triangle_strip_adjacency_drawcall,Fail

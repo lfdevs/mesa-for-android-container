@@ -134,6 +134,18 @@ libgl = shared_library(
   install : true,
 )
 
+if not with_glvnd
+  pkg.generate(
+    name : 'glx',
+    description : 'Mesa GLX Library',
+    version : meson.project_version(),
+    libraries : libgl,
+    libraries_private : gl_priv_libs,
+    requires_private : gl_priv_reqs,
+    variables : ['glx_tls=yes'],
+  )
+endif
+
 if with_symbols_check
   libgl_symbols_file = with_glvnd ? 'glvnd-symbols.txt' : 'libgl-symbols.txt'
 

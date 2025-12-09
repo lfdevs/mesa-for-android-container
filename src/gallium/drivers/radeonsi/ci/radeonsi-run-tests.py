@@ -40,6 +40,9 @@ parser = argparse.ArgumentParser(
     description="radeonsi tester",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
+parser.register(
+    "type", "mybool", lambda s: True if s in ["yes", "y", "1", "true"] else False
+)
 parser.add_argument(
     "--jobs",
     "-j",
@@ -49,15 +52,17 @@ parser.add_argument(
 )
 
 # The path to above the mesa directory, i.e. ../../../../../..
-path_above_mesa = os.path.realpath(os.path.join(os.path.dirname(__file__), *['..'] * 6))
+path_above_mesa = os.path.realpath(os.path.join(os.path.dirname(__file__), *[".."] * 6))
 
 parser.add_argument("--piglit-path", type=str, help="Path to piglit source folder.")
-parser.add_argument("--glcts-path", type=str, help="Path to GLCTS source folder.")
+parser.add_argument(
+    "--vk-gl-cts-path", type=str, help="Path to VK-GL-CTS source folder."
+)
 parser.add_argument(
     "--parent-path",
     type=str,
     help="Path to folder containing piglit/GLCTS and dEQP source folders.",
-    default=os.getenv('MAREKO_BUILD_PATH', path_above_mesa),
+    default=os.getenv("MAREKO_BUILD_PATH", path_above_mesa),
 )
 parser.add_argument("--verbose", "-v", action="count", default=0)
 parser.add_argument(
@@ -75,45 +80,51 @@ parser.add_argument(
     default=os.path.dirname(__file__),
 )
 parser.add_argument(
-    "--no-piglit", dest="piglit", help="Disable piglit tests", action="store_false"
+    "--mustrun-path",
+    help="Folder containing expected the mustrun files (default: source folder of vk-gl-cts)",
 )
 parser.add_argument(
-    "--no-glcts", dest="glcts", help="Disable GLCTS tests", action="store_false"
+    "--cts-binaries-path",
+    help="Folder containing expected the vk-gl-cts binaries",
 )
 parser.add_argument(
-    "--no-escts", dest="escts", help="Disable GLES CTS tests", action="store_false"
+    "--piglit", dest="piglit", help="Disable piglit tests", type="mybool"
 )
+parser.add_argument("--glcts", dest="glcts", help="Disable GLCTS tests", type="mybool")
 parser.add_argument(
-    "--no-deqp", dest="deqp", help="Disable dEQP tests", action="store_false"
+    "--escts", dest="escts", help="Disable GLES CTS tests", type="mybool"
 )
+parser.add_argument("--deqp", dest="deqp", help="Disable dEQP tests", type="mybool")
+parser.add_argument("--vkcts", dest="vkcts", help="Disable VKCTS tests", type="mybool")
 parser.add_argument(
-    "--no-deqp-egl",
+    "--deqp-egl",
     dest="deqp_egl",
     help="Disable dEQP-EGL tests",
-    action="store_false",
+    type="mybool",
 )
 parser.add_argument(
-    "--no-deqp-gles2",
+    "--deqp-gles2",
     dest="deqp_gles2",
     help="Disable dEQP-gles2 tests",
-    action="store_false",
+    type="mybool",
 )
 parser.add_argument(
-    "--no-deqp-gles3",
+    "--deqp-gles3",
     dest="deqp_gles3",
     help="Disable dEQP-gles3 tests",
-    action="store_false",
+    type="mybool",
 )
 parser.add_argument(
-    "--no-deqp-gles31",
+    "--deqp-gles31",
     dest="deqp_gles31",
     help="Disable dEQP-gles31 tests",
-    action="store_false",
+    type="mybool",
 )
 parser.set_defaults(piglit=True)
 parser.set_defaults(glcts=True)
 parser.set_defaults(escts=True)
 parser.set_defaults(deqp=True)
+parser.set_defaults(vkcts=False)
 parser.set_defaults(deqp_egl=True)
 parser.set_defaults(deqp_gles2=True)
 parser.set_defaults(deqp_gles3=True)
@@ -125,8 +136,11 @@ parser.add_argument(
     help="Output folder (logs, etc)",
     default=os.path.join(
         # Default is ../../../../../../test-results/datetime
-        os.path.join(path_above_mesa, 'test-results',
-                     datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+        os.path.join(
+            path_above_mesa,
+            "test-results",
+            datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+        )
     ),
 )
 
@@ -157,25 +171,21 @@ parser.add_argument(
 parser.add_argument(
     "--softpipe", dest="softpipe", help="Test softpipe", action="store_true"
 )
-parser.add_argument(
-    "--virgl", dest="virgl", help="Test virgl", action="store_true"
-)
-parser.add_argument(
-    "--zink", dest="zink", help="Test zink", action="store_true"
-)
+parser.add_argument("--virgl", dest="virgl", help="Test virgl", action="store_true")
+parser.add_argument("--zink", dest="zink", help="Test zink", action="store_true")
 
 args = parser.parse_args(sys.argv[1:])
 piglit_path = args.piglit_path
-glcts_path = args.glcts_path
+vk_gl_cts_path = args.vk_gl_cts_path
 
 if args.parent_path:
-    if args.piglit_path or args.glcts_path:
+    if args.piglit_path or args.vk_gl_cts_path:
         parser.print_help()
         sys.exit(0)
     piglit_path = os.path.join(args.parent_path, "piglit")
-    glcts_path = os.path.join(args.parent_path, "glcts")
+    vk_gl_cts_path = os.path.join(args.parent_path, "glcts")
 else:
-    if not args.piglit_path or not args.glcts_path:
+    if not args.piglit_path or not args.vk_gl_cts_path:
         parser.print_help()
         sys.exit(0)
 
@@ -216,30 +226,30 @@ assert args.llvmpipe + args.softpipe + args.virgl + args.zink <= 1
 is_amd = args.llvmpipe + args.softpipe + args.virgl + args.zink == 0
 
 if args.llvmpipe:
-    env["LIBGL_ALWAYS_SOFTWARE"] = '1'
+    env["LIBGL_ALWAYS_SOFTWARE"] = "1"
     baseline = "../../llvmpipe/ci/llvmpipe-fails.txt"
     flakes_list = "../../llvmpipe/ci/llvmpipe-flakes.txt"
     skips_list = "../../llvmpipe/ci/llvmpipe-skips.txt"
 elif args.softpipe:
-    env["LIBGL_ALWAYS_SOFTWARE"] = '1'
-    env["GALLIUM_DRIVER"] = 'softpipe'
+    env["LIBGL_ALWAYS_SOFTWARE"] = "1"
+    env["GALLIUM_DRIVER"] = "softpipe"
     baseline = "../../softpipe/ci/softpipe-fails.txt"
     flakes_list = "../../softpipe/ci/softpipe-flakes.txt"
     skips_list = "../../softpipe/ci/softpipe-skips.txt"
 elif args.virgl:
     env["PIGLIT_PLATFORM"] = "gbm"
-    baseline = ''
+    baseline = ""
     flakes_list = None
     skips_list = "skips.csv"
 elif args.zink:
     env["PIGLIT_PLATFORM"] = "gbm"
-    env["MESA_LOADER_DRIVER_OVERRIDE"] = 'zink'
+    env["MESA_LOADER_DRIVER_OVERRIDE"] = "zink"
     baseline = "../../zink/ci/zink-radv-navi31-fails.txt"
     flakes_list = "../../zink/ci/zink-radv-navi31-flakes.txt"
     skips_list = "../../zink/ci/zink-radv-navi31-skips.txt"
 elif is_amd:
     env["PIGLIT_PLATFORM"] = "gbm"
-    flakes_list = None # it will be determined later
+    flakes_list = None  # it will be determined later
     skips_list = "skips.csv"
 else:
     assert False
@@ -247,7 +257,9 @@ else:
 if not is_amd:
     baseline = os.path.normpath(os.path.join(os.path.dirname(__file__), baseline))
     if flakes_list is not None:
-        flakes_list = os.path.normpath(os.path.join(os.path.dirname(__file__), flakes_list))
+        flakes_list = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), flakes_list)
+        )
 
 skips_list = os.path.normpath(os.path.join(os.path.dirname(__file__), skips_list))
 env_glinfo = dict(env)
@@ -262,7 +274,7 @@ try:
         env=env_glinfo,
     )
 except subprocess.CalledProcessError:
-    print('piglit/bin/glinfo failed to create a GL context')
+    print("piglit/bin/glinfo failed to create a GL context")
     exit(1)
 
 renderer = None
@@ -272,13 +284,15 @@ for line in p.stdout.decode().split("\n"):
         renderer = line
         if is_amd:
             gpu_name_full = "(".join(line.split("(")[:-1]).strip()
-            gpu_name = line.replace("(TM)", "").split("(")[1].split(",")[1].lower().strip()
+            gpu_name = (
+                line.replace("(TM)", "").split("(")[1].split(",")[1].lower().strip()
+            )
         break
     elif "gfx_level" in line:
         gfx_level = int(line.split("=")[1])
 
 if renderer is None:
-    print('piglit/bin/glinfo failed to create a GL context')
+    print("piglit/bin/glinfo failed to create a GL context")
     exit(1)
 
 output_folder = args.output_folder
@@ -299,8 +313,19 @@ logfile = open(os.path.join(output_folder, "{}-run-tests.log".format(gpu_name)),
 
 spin = itertools.cycle("-\\|/")
 
+
 def gfx_level_to_str(cl):
-    supported = ["gfx6", "gfx7", "gfx8", "gfx9", "gfx10", "gfx10_3", "gfx11", "gfx12"]
+    supported = [
+        "gfx6",
+        "gfx7",
+        "gfx8",
+        "gfx9",
+        "gfx10",
+        "gfx10_3",
+        "gfx11",
+        "gfx11_5",
+        "gfx12",
+    ]
     if 8 <= cl and cl < 8 + len(supported):
         return supported[cl - 8]
     return supported[-1]
@@ -351,9 +376,9 @@ def verify_results(results):
             lines = file.readlines()
             if len(lines) == 0:
                 return True
-            print("{} new result{}:".format(len(lines), 's' if len(lines) > 1 else ''))
+            print("{} new result{}:".format(len(lines), "s" if len(lines) > 1 else ""))
             for i in range(min(10, len(lines))):
-                print("  * ", end='')
+                print("  * ", end="")
                 if "Pass" in lines[i]:
                     print_green(lines[i][:-1])
                 else:
@@ -370,7 +395,7 @@ def verify_results(results):
 def parse_test_filters(include_tests, baseline):
     cmd = []
     for t in include_tests:
-        if t == 'baseline':
+        if t == "baseline":
             t = baseline
 
         if os.path.exists(t):
@@ -389,15 +414,19 @@ def select_baseline(basepath, gfx_level, gpu_name, suffix):
 
     # select the best baseline we can find
     # 1. exact match
-    exact = os.path.join(basepath, "{}-{}-{}.csv".format(gfx_level_str, gpu_name, suffix))
+    exact = os.path.join(
+        basepath, "{}-{}-{}.csv".format(gfx_level_str, gpu_name, suffix)
+    )
     if os.path.exists(exact):
         return exact
     # 2. any baseline with the same gfx_level
     while gfx_level >= 8:
-        gfx_level_str += '-'
+        gfx_level_str += "-"
         for subdir, dirs, files in os.walk(basepath):
             for file in files:
-                if file.find(gfx_level_str) == 0 and file.endswith("-{}.csv".format(suffix)):
+                if file.find(gfx_level_str) == 0 and file.endswith(
+                    "-{}.csv".format(suffix)
+                ):
                     return os.path.join(basepath, file)
         # No match. Try an earlier class
         gfx_level = gfx_level - 1
@@ -407,8 +436,8 @@ def select_baseline(basepath, gfx_level, gpu_name, suffix):
 
 
 if is_amd:
-    baseline = select_baseline(args.baseline, gfx_level, gpu_name, 'fail')
-    flakes_list = select_baseline(args.baseline, gfx_level, gpu_name, 'flakes')
+    baseline = select_baseline(args.baseline, gfx_level, gpu_name, "fail")
+    flakes_list = select_baseline(args.baseline, gfx_level, gpu_name, "flakes")
 
 success = True
 filters_args = parse_test_filters(args.include_tests, baseline)
@@ -427,25 +456,29 @@ print_yellow("Skips: {}".format(skips_list))
 if args.piglit:
     out = os.path.join(output_folder, "piglit")
     print_yellow("Running piglit tests", args.verbose > 0)
-    cmd = [
-        "piglit-runner",
-        "run",
-        "--piglit-folder",
-        piglit_path,
-        "--profile",
-        "quick",
-        "--output",
-        out,
-        "--process-isolation",
-        "--timeout",
-        "300",
-        "--jobs",
-        str(args.jobs),
-        "--skips",
-        skips_list,
-        "--skips",
-        os.path.join(path_above_mesa, "mesa", ".gitlab-ci", "all-skips.txt")
-    ] + filters_args + flakes_args
+    cmd = (
+        [
+            "piglit-runner",
+            "run",
+            "--piglit-folder",
+            piglit_path,
+            "--profile",
+            "quick",
+            "--output",
+            out,
+            "--process-isolation",
+            "--timeout",
+            "300",
+            "--jobs",
+            str(args.jobs),
+            "--skips",
+            skips_list,
+            "--skips",
+            os.path.join(path_above_mesa, "mesa", ".gitlab-ci", "all-skips.txt"),
+        ]
+        + filters_args
+        + flakes_args
+    )
 
     if os.path.exists(baseline):
         cmd += ["--baseline", baseline]
@@ -465,56 +498,77 @@ if args.glcts:
     print_yellow("Running  GLCTS tests", args.verbose > 0)
     os.mkdir(os.path.join(output_folder, "glcts"))
 
+    bin_path = (
+        args.cts_binaries_path
+        if args.cts_binaries_path
+        else "{}/build/external/openglcts/modules".format(vk_gl_cts_path)
+    )
     cmd = [
         "deqp-runner",
         "run",
         "--tests-per-group",
         "100",
         "--deqp",
-        "{}/build/external/openglcts/modules/glcts".format(glcts_path),
+        "{}/glcts".format(bin_path),
     ]
+
+    if args.mustrun_path:
+        mustrun_basepaths = [args.mustrun_path, args.mustrun_path]
+    else:
+        mustrun_basepaths = [
+            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/".format(
+                vk_gl_cts_path
+            ),
+            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/".format(
+                vk_gl_cts_path
+            ),
+        ]
 
     if is_amd or args.zink:
         cmd += [
             "--caselist",
-            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-main.txt".format(glcts_path),
+            "{}/gl46-main.txt".format(mustrun_basepaths[0]),
             "--caselist",
-            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl46-khr-single.txt".format(glcts_path),
+            "{}/gl46-khr-single.txt".format(mustrun_basepaths[1]),
         ]
     elif args.llvmpipe:
         cmd += [
             "--caselist",
-            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl45-main.txt".format(glcts_path),
+            "{}/gl45-main.txt".format(mustrun_basepaths[0]),
             "--caselist",
-            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl45-khr-single.txt".format(glcts_path),
+            "{}/gl45-khr-single.txt".format(mustrun_basepaths[1]),
         ]
     elif args.virgl:
         cmd += [
             "--caselist",
-            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl43-main.txt".format(glcts_path),
+            "{}/gl43-main.txt".format(mustrun_basepaths[0]),
             "--caselist",
-            "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl43-khr-single.txt".format(glcts_path),
+            "{}/gl43-khr-single.txt".format(mustrun_basepaths[1]),
         ]
     elif args.softpipe:
         # KHR-GL33.info.renderer crashes with softpipe.
-        #cmd += [
+        # cmd += [
         #    "--caselist",
-        #    "{}/external/openglcts/data/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl33-main.txt".format(glcts_path),
-        #]
+        #    "{}/gl33-main.txt".format(mustrun_basepaths[0]),
+        # ]
         pass
     else:
         assert False
 
-    cmd += [
-        "--output",
-        out,
-        "--skips",
-        skips_list,
-        "--jobs",
-        str(args.jobs),
-        "--timeout",
-        "1000"
-    ] + filters_args + flakes_args
+    cmd += (
+        [
+            "--output",
+            out,
+            "--skips",
+            skips_list,
+            "--jobs",
+            str(args.jobs),
+            "--timeout",
+            "1000",
+        ]
+        + filters_args
+        + flakes_args
+    )
 
     if os.path.exists(baseline):
         cmd += ["--baseline", baseline]
@@ -531,45 +585,54 @@ if args.escts:
     print_yellow("Running  ESCTS tests", args.verbose > 0)
     os.mkdir(out)
 
+    if args.mustrun_path:
+        mustrun_basepath = args.mustrun_path
+    else:
+        mustrun_basepath = "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x".format(
+            vk_gl_cts_path
+        )
+
+    bin_path = (
+        args.cts_binaries_path
+        if args.cts_binaries_path
+        else "{}/build/external/openglcts/modules".format(vk_gl_cts_path)
+    )
+
     cmd = [
         "deqp-runner",
         "run",
         "--tests-per-group",
         "100",
         "--deqp",
-        "{}/build_es/external/openglcts/modules/glcts".format(glcts_path),
+        "{}/glcts".format(bin_path),
         "--caselist",
-        "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles2-khr-main.txt".format(
-            glcts_path
-        ),
+        "{}/gles2-khr-main.txt".format(mustrun_basepath),
         "--caselist",
-        "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles3-khr-main.txt".format(
-            glcts_path
-        ),
+        "{}/gles3-khr-main.txt".format(mustrun_basepath),
         "--caselist",
-        "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles31-khr-main.txt".format(
-            glcts_path
-        ),
+        "{}/gles31-khr-main.txt".format(mustrun_basepath),
     ]
 
     if not args.softpipe:
         cmd += [
             "--caselist",
-            "{}/external/openglcts/data/gl_cts/data/mustpass/gles/khronos_mustpass/3.2.6.x/gles32-khr-main.txt".format(
-                glcts_path
-            ),
+            "{}/gles32-khr-main.txt".format(mustrun_basepath),
         ]
 
-    cmd += [
-        "--output",
-        out,
-        "--skips",
-        skips_list,
-        "--jobs",
-        str(args.jobs),
-        "--timeout",
-        "1000"
-    ] + filters_args + flakes_args
+    cmd += (
+        [
+            "--output",
+            out,
+            "--skips",
+            skips_list,
+            "--jobs",
+            str(args.jobs),
+            "--timeout",
+            "1000",
+        ]
+        + filters_args
+        + flakes_args
+    )
 
     if os.path.exists(baseline):
         cmd += ["--baseline", baseline]
@@ -600,16 +663,26 @@ if args.deqp:
         if not deqp_tests[k]:
             continue
 
+        bin_path = (
+            args.cts_binaries_path
+            if args.cts_binaries_path
+            else "{}/build/modules/{}".format(vk_gl_cts_path, k)
+        )
+
         suite.write("[[deqp]]\n")
         suite.write(
-            'deqp = "{}"\n'.format(
-                "{}/build/modules/{subtest}/deqp-{subtest}".format(glcts_path, subtest=k)
-            )
+            'deqp = "{}"\n'.format("{}/deqp-{subtest}".format(bin_path, subtest=k))
         )
-        suite.write(
-            'caselists = ["{}"]\n'.format(
-                "{}/external/openglcts/data/gl_cts/data/mustpass/{}/aosp_mustpass/3.2.6.x/{}-main.txt".format(glcts_path, "egl" if k == "egl" else "gles", k)
+
+        if args.mustrun_path:
+            mustrun_basepath = args.mustrun_path
+        else:
+            mustrun_basepath = "{}/external/openglcts/data/gl_cts/data/mustpass/{}/aosp_mustpass/3.2.6.x".format(
+                vk_gl_cts_path, "egl" if k == "egl" else "gles"
             )
+
+        suite.write(
+            'caselists = ["{}"]\n'.format("{}/{}-main.txt".format(mustrun_basepath, k))
         )
         if os.path.exists(baseline):
             suite.write('baseline = "{}"\n'.format(baseline))
@@ -622,16 +695,69 @@ if args.deqp:
 
     suite.close()
 
-    cmd = [
-        "deqp-runner",
-        "suite",
-        "--jobs",
-        str(args.jobs),
-        "--output",
-        os.path.join(output_folder, "deqp"),
-        "--suite",
-        suite_filename,
-    ] + filters_args + flakes_args
+    cmd = (
+        [
+            "deqp-runner",
+            "suite",
+            "--jobs",
+            str(args.jobs),
+            "--output",
+            os.path.join(output_folder, "deqp"),
+            "--suite",
+            suite_filename,
+        ]
+        + filters_args
+        + flakes_args
+    )
+
+    run_cmd(cmd, args.verbose)
+
+    if not verify_results(os.path.join(out, "failures.csv")):
+        success = False
+
+# vkcts test
+if args.vkcts and is_amd:
+    out = os.path.join(output_folder, "vkcts")
+    print_yellow("Running  VKCTS tests", args.verbose > 0)
+    os.mkdir(os.path.join(output_folder, "vkcts"))
+
+    if args.mustrun_path:
+        mustrun_basepath = args.mustrun_path
+    else:
+        mustrun_basepath = "{}/external/vulkancts/mustpass/main".format(vk_gl_cts_path)
+
+    bin_path = (
+        args.cts_binaries_path
+        if args.cts_binaries_path
+        else "{}/build/external/vulkancts/modules/vulkan".format(vk_gl_cts_path)
+    )
+
+    cmd = (
+        [
+            "deqp-runner",
+            "run",
+            "--tests-per-group",
+            "100",
+            "--deqp",
+            "{}/deqp-vk".format(bin_path),
+            "--caselist",
+            "{}/vk-default.txt".format(mustrun_basepath),
+            "--output",
+            out,
+            "--skips",
+            skips_list,
+            "--jobs",
+            str(args.jobs),
+            "--timeout",
+            "1000",
+        ]
+        + filters_args
+        + flakes_args
+    )
+
+    if os.path.exists(baseline):
+        cmd += ["--baseline", baseline]
+    cmd += deqp_args
 
     run_cmd(cmd, args.verbose)
 

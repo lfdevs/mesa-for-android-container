@@ -11,11 +11,8 @@ libasahi_lib_files = files(
   'agx_linker.c',
   'agx_bg_eot.c',
   'agx_tilebuffer.c',
-  'agx_nir_lower_gs.c',
-  'agx_nir_lower_ia.c',
   'agx_nir_lower_msaa.c',
   'agx_nir_lower_sample_intrinsics.c',
-  'agx_nir_lower_tess.c',
   'agx_nir_lower_tilebuffer.c',
   'agx_nir_lower_uvs.c',
   'agx_nir_lower_vbo.c',
@@ -66,8 +63,8 @@ libasahi_lib = static_library(
   include_directories : [inc_asahi, inc_virtio_gpu, inc_virtio_vdrm],
   c_args : [no_override_init_args, '-Wno-c2x-extensions'],
   gnu_symbol_visibility : 'hidden',
-  link_with: [libasahi_decode, libvdrm],
-  dependencies: [dep_libdrm, dep_valgrind, idep_nir, idep_mesautil, idep_libagx],
+  link_with: [libasahi_decode, libvdrm, libpoly_nir],
+  dependencies: [dep_libdrm, dep_valgrind, idep_nir, idep_mesautil, idep_libagx, idep_libpoly],
   build_by_default : false,
 )
 

@@ -94,8 +94,8 @@ static const nir_shader_compiler_options sp_compiler_options = {
     * workgroup id.
     */
    .lower_cs_local_index_to_id = true,
-   .support_indirect_inputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES),
-   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(PIPE_SHADER_TYPES),
+   .support_indirect_inputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES),
+   .support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES),
 };
 
 /**
@@ -200,20 +200,20 @@ softpipe_is_format_supported( struct pipe_screen *screen,
 static void
 softpipe_init_shader_caps(struct softpipe_screen *sp_screen)
 {
-   for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
       struct pipe_shader_caps *caps =
          (struct pipe_shader_caps *)&sp_screen->base.shader_caps[i];
 
       switch(i) {
-      case PIPE_SHADER_VERTEX:
-      case PIPE_SHADER_GEOMETRY:
+      case MESA_SHADER_VERTEX:
+      case MESA_SHADER_GEOMETRY:
          if (sp_screen->use_llvm) {
             draw_init_shader_caps(caps);
             break;
          }
          FALLTHROUGH;
-      case PIPE_SHADER_FRAGMENT:
-      case PIPE_SHADER_COMPUTE:
+      case MESA_SHADER_FRAGMENT:
+      case MESA_SHADER_COMPUTE:
          tgsi_exec_init_shader_caps(caps);
          break;
       default:

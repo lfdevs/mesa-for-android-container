@@ -27,6 +27,7 @@
 #include "linker_util.h"
 #include "util/bitscan.h"
 #include "util/set.h"
+#include "util/u_range_remap.h"
 #include "main/consts_exts.h"
 
 void
@@ -226,12 +227,12 @@ link_util_find_empty_block(struct gl_shader_program *prog,
 {
    const unsigned entries = MAX2(1, uniform->array_elements);
 
-   foreach_list_typed(struct empty_uniform_block, block, link,
+   ir_foreach_list_typed(struct empty_uniform_block, block, link,
                       &prog->EmptyUniformLocations) {
       /* Found a block with enough slots to fit the uniform */
       if (block->slots == entries) {
          unsigned start = block->start;
-         exec_node_remove(&block->link);
+         ir_exec_node_remove(&block->link);
          ralloc_free(block);
 
          return start;
@@ -249,24 +250,42 @@ link_util_find_empty_block(struct gl_shader_program *prog,
 }
 
 void
-link_util_update_empty_uniform_locations(struct gl_shader_program *prog)
+link_util_update_empty_uniform_locations(const struct gl_constants *consts,
+                                         struct gl_shader_program *prog)
 {
-   struct empty_uniform_block *current_block = NULL;
-
-   for (unsigned i = 0; i < prog->NumUniformRemapTable; i++) {
-      /* We found empty space in UniformRemapTable. */
-      if (prog->UniformRemapTable[i] == NULL) {
+   int prev_end = -1;
+   list_for_each_entry_safe(struct list_range_entry, e,
+                            &prog->UniformRemapTable->r_list, node) {
+      unsigned next_slot = prev_end + 1;
+      if (e->entry.start > next_slot) {
          /* We've found the beginning of a new continous block of empty slots */
-         if (!current_block || current_block->start + current_block->slots != i) {
-            current_block = rzalloc(prog, struct empty_uniform_block);
-            current_block->start = i;
-            exec_list_push_tail(&prog->EmptyUniformLocations,
+         struct empty_uniform_block *current_block =
+            rzalloc(prog, struct empty_uniform_block);
+         current_block->start = next_slot;
+         current_block->slots = e->entry.start - next_slot;
+         ir_exec_list_push_tail(&prog->EmptyUniformLocations,
                                 &current_block->link);
-         }
-
-         /* The current block continues, so we simply increment its slots */
-         current_block->slots++;
       }
+
+      prev_end = e->entry.end;
+   }
+
+   /* Add the remaining continous block of empty slots */
+   unsigned next_slot = prev_end + 1;
+   /* Some drivers assign a max assignable value greater than max block size
+    * so we work around this by taking the max of either to get the remaining
+    * empty slots.
+    */
+   unsigned max_slot = MAX2(consts->MaxUniformBlockSize,
+                            consts->MaxUserAssignableUniformLocations) - 1;
+   if (max_slot >= next_slot) {
+      struct empty_uniform_block *current_block =
+         rzalloc(prog, struct empty_uniform_block);
+      current_block->start = next_slot;
+      current_block->slots = max_slot + 1 - next_slot;
+
+      ir_exec_list_push_tail(&prog->EmptyUniformLocations,
+                             &current_block->link);
    }
 }
 
@@ -285,10 +304,6 @@ link_util_check_subroutine_resources(struct gl_shader_program *prog)
    }
 }
 
-#if defined(_MSC_VER) && DETECT_ARCH_AARCH64
-// Work around https://developercommunity.visualstudio.com/t/Incorrect-ARM64-codegen-with-optimizatio/10564605
-#pragma optimize("", off)
-#endif
 /**
  * Validate uniform resources used by a program versus the implementation limits
  */
@@ -299,7 +314,7 @@ link_util_check_uniform_resources(const struct gl_constants *consts,
    unsigned total_uniform_blocks = 0;
    unsigned total_shader_storage_blocks = 0;
 
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       struct gl_linked_shader *sh = prog->_LinkedShaders[i];
 
       if (sh == NULL)
@@ -368,9 +383,6 @@ link_util_check_uniform_resources(const struct gl_constants *consts,
       }
    }
 }
-#if defined(_MSC_VER) && DETECT_ARCH_AARCH64
-#pragma optimize("", on)
-#endif
 
 void
 link_util_calculate_subroutine_compat(struct gl_shader_program *prog)
@@ -406,93 +418,6 @@ link_util_calculate_subroutine_compat(struct gl_shader_program *prog)
          uni->num_compatible_subroutines = count;
       }
    }
-}
-
-/**
- * Recursive part of the public mark_array_elements_referenced function.
- *
- * The recursion occurs when an entire array-of- is accessed.  See the
- * implementation for more details.
- *
- * \param dr                List of array_deref_range elements to be
- *                          processed.
- * \param count             Number of array_deref_range elements to be
- *                          processed.
- * \param scale             Current offset scale.
- * \param linearized_index  Current accumulated linearized array index.
- */
-void
-_mark_array_elements_referenced(const struct array_deref_range *dr,
-                                unsigned count, unsigned scale,
-                                unsigned linearized_index,
-                                BITSET_WORD *bits)
-{
-   /* Walk through the list of array dereferences in least- to
-    * most-significant order.  Along the way, accumulate the current
-    * linearized offset and the scale factor for each array-of-.
-    */
-   for (unsigned i = 0; i < count; i++) {
-      if (dr[i].index < dr[i].size) {
-         linearized_index += dr[i].index * scale;
-         scale *= dr[i].size;
-      } else {
-         /* For each element in the current array, update the count and
-          * offset, then recurse to process the remaining arrays.
-          *
-          * There is some inefficency here if the last eBITSET_WORD *bitslement in the
-          * array_deref_range list specifies the entire array.  In that case,
-          * the loop will make recursive calls with count == 0.  In the call,
-          * all that will happen is the bit will be set.
-          */
-         for (unsigned j = 0; j < dr[i].size; j++) {
-            _mark_array_elements_referenced(&dr[i + 1],
-                                            count - (i + 1),
-                                            scale * dr[i].size,
-                                            linearized_index + (j * scale),
-                                            bits);
-         }
-
-         return;
-      }
-   }
-
-   BITSET_SET(bits, linearized_index);
-}
-
-/**
- * Mark a set of array elements as accessed.
- *
- * If every \c array_deref_range is for a single index, only a single
- * element will be marked.  If any \c array_deref_range is for an entire
- * array-of-, then multiple elements will be marked.
- *
- * Items in the \c array_deref_range list appear in least- to
- * most-significant order.  This is the \b opposite order the indices
- * appear in the GLSL shader text.  An array access like
- *
- *     x = y[1][i][3];
- *
- * would appear as
- *
- *     { { 3, n }, { m, m }, { 1, p } }
- *
- * where n, m, and p are the sizes of the arrays-of-arrays.
- *
- * The set of marked array elements can later be queried by
- * \c ::is_linearized_index_referenced.
- *
- * \param dr     List of array_deref_range elements to be processed.
- * \param count  Number of array_deref_range elements to be processed.
- */
-void
-link_util_mark_array_elements_referenced(const struct array_deref_range *dr,
-                                         unsigned count, unsigned array_depth,
-                                         BITSET_WORD *bits)
-{
-   if (count != array_depth)
-      return;
-
-   _mark_array_elements_referenced(dr, count, 1, 0, bits);
 }
 
 const char *

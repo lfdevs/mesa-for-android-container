@@ -1,0 +1,131 @@
+/*
+ * Copyright © 2025 Imagination Technologies Ltd.
+ * SPDX-License-Identifier: MIT
+ */
+
+#ifndef PVR_IFACE_H
+#define PVR_IFACE_H
+
+/**
+ * \file pvr_iface.h
+ *
+ * \brief USC program interface.
+ */
+
+/** Query availability shader data; shared registers. */
+enum pvr_query_availability_data {
+   PVR_QUERY_AVAILABILITY_DATA_INDEX_COUNT,
+
+   PVR_QUERY_AVAILABILITY_DATA_INDEX_BO_LO,
+   PVR_QUERY_AVAILABILITY_DATA_INDEX_BO_HI,
+
+   PVR_QUERY_AVAILABILITY_DATA_BO_LO,
+   PVR_QUERY_AVAILABILITY_DATA_BO_HI,
+
+   _PVR_QUERY_AVAILABILITY_DATA_COUNT,
+};
+
+/** Query copy shader data; shared registers. */
+enum pvr_query_copy_data {
+   PVR_QUERY_COPY_DATA_INDEX_COUNT,
+
+   PVR_QUERY_COPY_DATA_DEST_BO_LO,
+   PVR_QUERY_COPY_DATA_DEST_BO_HI,
+
+   PVR_QUERY_COPY_DATA_AVAILABILITY_BO_LO,
+   PVR_QUERY_COPY_DATA_AVAILABILITY_BO_HI,
+
+   PVR_QUERY_COPY_DATA_RESULT_BO_LO,
+   PVR_QUERY_COPY_DATA_RESULT_BO_HI,
+
+   PVR_QUERY_COPY_DATA_DEST_STRIDE,
+
+   PVR_QUERY_COPY_DATA_FLAGS,
+
+   _PVR_QUERY_COPY_DATA_COUNT,
+};
+
+/** Query reset shader data; shared registers. */
+enum pvr_query_reset_data {
+   PVR_QUERY_RESET_DATA_INDEX_COUNT,
+
+   PVR_QUERY_RESET_DATA_RESULT_BO_LO,
+   PVR_QUERY_RESET_DATA_RESULT_BO_HI,
+
+   PVR_QUERY_RESET_DATA_AVAILABILITY_BO_LO,
+   PVR_QUERY_RESET_DATA_AVAILABILITY_BO_HI,
+
+   _PVR_QUERY_RESET_DATA_COUNT,
+};
+
+/** Clear attachment shader data; shared registers. */
+enum pvr_clear_attach_data {
+   PVR_CLEAR_ATTACH_DATA_DWORD0,
+   PVR_CLEAR_ATTACH_DATA_DWORD1,
+   PVR_CLEAR_ATTACH_DATA_DWORD2,
+   PVR_CLEAR_ATTACH_DATA_DWORD3,
+
+   PVR_CLEAR_ATTACH_DATA_TILE_ADDR_LO,
+   PVR_CLEAR_ATTACH_DATA_TILE_ADDR_HI,
+
+   _PVR_CLEAR_ATTACH_DATA_COUNT,
+};
+
+/** SPM load shader data; shared registers. */
+enum pvr_spm_load_data {
+   PVR_SPM_LOAD_DATA_SMP = 0,
+
+   PVR_SPM_LOAD_DATA_REG_TEX = 4,
+
+   PVR_SPM_LOAD_DATA_BUF_TEX_0 = 8,
+   PVR_SPM_LOAD_DATA_BUF_ADDR_0 = 12,
+
+   PVR_SPM_LOAD_DATA_BUF_ADDR_1 = 14,
+   PVR_SPM_LOAD_DATA_BUF_TEX_1 = 16,
+
+   PVR_SPM_LOAD_DATA_BUF_TEX_2 = 20,
+   PVR_SPM_LOAD_DATA_BUF_ADDR_2 = 24,
+
+   PVR_SPM_LOAD_DATA_BUF_ADDR_3 = 26,
+   PVR_SPM_LOAD_DATA_BUF_TEX_3 = 28,
+
+   PVR_SPM_LOAD_DATA_BUF_TEX_4 = 32,
+   PVR_SPM_LOAD_DATA_BUF_ADDR_4 = 36,
+
+   PVR_SPM_LOAD_DATA_BUF_ADDR_5 = 38,
+   PVR_SPM_LOAD_DATA_BUF_TEX_5 = 40,
+
+   PVR_SPM_LOAD_DATA_BUF_TEX_6 = 44,
+   PVR_SPM_LOAD_DATA_BUF_ADDR_6 = 48,
+
+   _PVR_SPM_LOAD_DATA_COUNT = 50,
+};
+
+/** Load/store sr shader data; vertex input registers. */
+enum pvr_load_store_sr_data {
+   PVR_LOAD_STORE_SR_DATA_SIZE_ADDR_LO,
+   PVR_LOAD_STORE_SR_DATA_SIZE_ADDR_HI,
+
+   PVR_LOAD_STORE_SR_DATA_STORE_ADDR_LO,
+   PVR_LOAD_STORE_SR_DATA_STORE_ADDR_HI,
+
+   _PVR_LOAD_STORE_SR_DATA_COUNT,
+};
+
+/** IDFWDF shader data; shared registers. */
+enum pvr_idfwdf_sr_data {
+   PVR_IDFWDF_DATA_TEX = 0,
+   PVR_IDFWDF_DATA_SMP = 4,
+
+   PVR_IDFWDF_DATA_ADDR_LO,
+   PVR_IDFWDF_DATA_ADDR_HI,
+
+   _PVR_IDFWDF_DATA_COUNT,
+};
+
+#define PVR_IDFWDF_TEX_FORMAT VK_FORMAT_R32G32B32A32_SFLOAT
+#define PVR_IDFWDF_TEX_WIDTH 4U
+#define PVR_IDFWDF_TEX_HEIGHT 2U
+#define PVR_IDFWDF_TEX_STRIDE 4U
+
+#endif /* PVR_IFACE_H */

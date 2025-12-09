@@ -107,7 +107,8 @@ primconvert_init_draw(struct primconvert_context *pc,
                       const struct pipe_draw_info *info,
                       const struct pipe_draw_start_count_bias *draws,
                       struct pipe_draw_info *new_info,
-                      struct pipe_draw_start_count_bias *new_draw)
+                      struct pipe_draw_start_count_bias *new_draw,
+                      struct pipe_resource **releasebuf)
 {
    struct pipe_draw_start_count_bias *direct_draws = NULL;
    unsigned num_direct_draws = 0;
@@ -225,7 +226,7 @@ primconvert_init_draw(struct primconvert_context *pc,
    if (new_size > UINT_MAX)
       return false;
    u_upload_alloc(pc->pipe->stream_uploader, 0, new_size, 4,
-                  &ib_offset, &new_info->index.resource, &dst);
+                  &ib_offset, &new_info->index.resource, releasebuf, &dst);
    if (!dst)
       return false;
    new_draw->start = ib_offset / new_info->index_size;
@@ -288,13 +289,13 @@ util_primconvert_draw_single_vbo(struct primconvert_context *pc,
 {
    struct pipe_draw_info new_info;
    struct pipe_draw_start_count_bias new_draw;
+   struct pipe_resource *releasebuf = NULL;
 
-   if (!primconvert_init_draw(pc, info, draw, &new_info, &new_draw))
+   if (!primconvert_init_draw(pc, info, draw, &new_info, &new_draw, &releasebuf))
       return;
    /* to the translated draw: */
    pc->pipe->draw_vbo(pc->pipe, &new_info, drawid_offset, NULL, &new_draw, 1);
-
-   pipe_resource_reference(&new_info.index.resource, NULL);
+   pipe_resource_release(pc->pipe, releasebuf);
 }
 
 void
@@ -312,7 +313,7 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
       unsigned draw_count = 0;
       struct u_indirect_params *new_draws = util_draw_indirect_read(pc->pipe, info, indirect, &draw_count);
       if (!new_draws)
-         goto cleanup;
+         return;
 
       for (unsigned i = 0; i < draw_count; i++)
          util_primconvert_draw_single_vbo(pc, &new_draws[i].info, drawid_offset + i, &new_draws[i].draw);
@@ -326,12 +327,6 @@ util_primconvert_draw_vbo(struct primconvert_context *pc,
             drawid++;
       }
    }
-
-cleanup:
-   if (info->take_index_buffer_ownership) {
-      struct pipe_resource *buffer = info->index.resource;
-      pipe_resource_reference(&buffer, NULL);
-   }
 }
 
 void
@@ -344,6 +339,7 @@ util_primconvert_draw_vertex_state(struct primconvert_context *pc,
 {
    struct pipe_draw_info new_info;
    struct pipe_draw_start_count_bias new_draw;
+   struct pipe_resource *releasebuf = NULL;
 
    if (pc->cfg.primtypes_mask & BITFIELD_BIT(info.mode)) {
       pc->pipe->draw_vertex_state(pc->pipe, vstate, partial_velem_mask, info, draws, num_draws);
@@ -363,7 +359,7 @@ util_primconvert_draw_vertex_state(struct primconvert_context *pc,
    dinfo.index_size = 4;
    dinfo.instance_count = 1;
    dinfo.index.resource = vstate->input.indexbuf;
-   if (!primconvert_init_draw(pc, &dinfo, draws, &new_info, &new_draw))
+   if (!primconvert_init_draw(pc, &dinfo, draws, &new_info, &new_draw, &releasebuf))
       return;
 
    struct pipe_vertex_state *new_state = pc->pipe->screen->create_vertex_state(pc->pipe->screen,
@@ -381,6 +377,5 @@ util_primconvert_draw_vertex_state(struct primconvert_context *pc,
    }
    if (info.take_vertex_state_ownership)
       pipe_vertex_state_reference(&vstate, NULL);
-
-   pipe_resource_reference(&new_info.index.resource, NULL);
+   pipe_resource_release(pc->pipe, releasebuf);
 }

@@ -12,7 +12,8 @@
 #include "aubinator_error_decode_lib.h"
 #include "error_decode_lib.h"
 #include "error_decode_xe_lib.h"
-#include "intel/compiler/brw_isa_info.h"
+#include "intel/compiler/brw/brw_isa_info.h"
+#include "intel/common/intel_gem.h"
 #include "intel/dev/intel_device_info.h"
 
 static struct intel_batch_decode_bo
@@ -213,7 +214,7 @@ read_xe_data_file(FILE *file,
 
          if (error_decode_xe_read_u64_hexacimal_parameter(line, "batch_addr[", &u64_value)) {
             batch_buffers.addrs = realloc(batch_buffers.addrs, sizeof(uint64_t) * (batch_buffers.len + 1));
-            batch_buffers.addrs[batch_buffers.len] = u64_value;
+            batch_buffers.addrs[batch_buffers.len] = intel_48b_address(u64_value);
             batch_buffers.len++;
          }
 

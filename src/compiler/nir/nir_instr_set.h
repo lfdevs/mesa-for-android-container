@@ -41,10 +41,10 @@
 /*@{*/
 
 /** Creates an instruction set, using a given ralloc mem_ctx */
-struct set *nir_instr_set_create(void *mem_ctx);
+void nir_instr_set_init(struct set *s, void *mem_ctx);
 
 /** Destroys an instruction set. */
-void nir_instr_set_destroy(struct set *instr_set);
+void nir_instr_set_fini(struct set *instr_set);
 
 /**
  * Adds an instruction to an instruction set if it doesn't exist. If it does

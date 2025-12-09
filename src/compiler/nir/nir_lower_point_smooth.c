@@ -96,7 +96,7 @@ lower_point_smooth(nir_builder *b, nir_intrinsic_instr *intr, void *state)
        */
       if (s->found_baryc) {
          nir_intrinsic_instr *baryc_intr =
-            nir_instr_as_intrinsic(baryc->parent_instr);
+            nir_def_as_intrinsic(baryc);
 
          /* Overwrite the intrinsic we just created. */
          baryc_intr->intrinsic = s->found_baryc->intrinsic;

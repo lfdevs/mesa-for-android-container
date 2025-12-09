@@ -108,7 +108,7 @@ disk_cache_get_function_identifier(void *ptr, struct mesa_sha1 *ctx)
 {
    uint32_t timestamp;
 
-#ifdef HAVE_DL_ITERATE_PHDR
+#ifdef HAVE_BUILD_ID
    const struct build_id_note *note = NULL;
    if ((note = build_id_find_nhdr_for_addr(ptr))) {
       _mesa_sha1_update(ctx, build_id_data(note), build_id_length(note));

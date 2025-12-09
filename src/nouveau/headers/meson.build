@@ -1,40 +1,69 @@
 nv_classes = [
+  'cl85b5',
   'cl902d',
   'cl9039',
   'cl906f',
   'cl9097',
   'cl90b5',
   'cl90c0',
+  'cl91c0',
+  'cl9297',
   'cla040',
   'cla0b5',
+  'cla06f',
   'cla097',
   'cla140',
+  'cla16f',
+  'cla1c0',
+  'cla197',
+  'cla26f',
   'cla297',
+  'clb06f',
   'clb097',
+  'clb0b5',
   'clb0c0',
   'clb197',
   'clb1c0',
+  'clc06f',
   'clc097',
   'clc197',
   'clc1b5',
+  'clc1c0',
   'cla0c0',
+  'clc0b5',
   'clc0c0',
+  'clc36f',
   'clc397',
+  'clc3b5',
   'clc3c0',
+  'clc46f',
   'clc56f',
   'clc597',
+  'clc5b0',
+  'clc5b5',
   'clc5c0',
   'clc697',
+  'clc6b5',
   'clc6c0',
   'clc797',
+  'clc7b0',
+  'clc7b5',
   'clc7c0',
   'clc86f',
+  'clc8b5',
+  'clc96f',
+  'clc997',
+  'clc9b0',
+  'clc9b5',
+  'clc9c0',
+  'clca6f',
   'clcab5',
   'clcb97',
   'clcbc0',
   'clcd97',
   'clcdc0',
   'clcec0',
+  'clce97',
 ]
 
 hwref_gens = [
@@ -44,20 +73,43 @@ hwref_gens = [
   'turing/tu102',
 ]
 
+flat_nv_classes = ''
+
 cl_generated = []
 foreach cl : nv_classes
+  prev_cl_h = []
+  prev_cl_args = []
+  foreach prev_cl : nv_classes
+    if prev_cl == cl
+      break
+    endif
+
+    if prev_cl.substring(-2) == cl.substring(-2)
+      prev_cl_h = 'nvidia/classes/'+prev_cl+'.h'
+      prev_cl_args = ['--prev-in-h', '@INPUT2@']
+    endif
+  endforeach
+
+  flat_nv_classes = flat_nv_classes + cl + ' '
   cl_generated += custom_target(
     cl + '.h',
-    input : ['class_parser.py', 'nvidia/classes/'+cl+'.h', 'util.py'],
+    input : ['class_parser.py', 'nvidia/classes/'+cl+'.h', prev_cl_h, 'util.py'],
     output : ['nv_push_'+cl+'.h', 'nv_push_'+cl+'.c'],
-    command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@',
+    command : [prog_python, '@INPUT0@', '--in-h', '@INPUT1@', prev_cl_args,
                '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@'],
   )
 endforeach
 
+nv_push_class_dump_h = custom_target(
+  'nv_push_class_dump.h',
+  input : ['nv_push_class_dump_h.py', 'nvidia/classes/'+cl+'.h', 'util.py'],
+  output : ['nv_push_class_dump.h'],
+  command : [prog_python, '@INPUT0@', '--classes', flat_nv_classes, '--out-h', '@OUTPUT0@'],
+)
+
 _libnvidia_headers = static_library(
   'nvidia_headers_c',
-  ['nv_push.c', cl_generated],
+  ['nv_push.c', cl_generated, nv_push_class_dump_h],
   include_directories : ['.', 'nvidia/classes', inc_include, inc_src],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',

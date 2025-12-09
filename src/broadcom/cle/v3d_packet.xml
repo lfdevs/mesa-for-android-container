@@ -325,6 +325,105 @@
     <value name="ZERO_TO_ONE" value="2"/>
   </enum>
 
+  <enum name="Texture Data Formats">
+    <!--
+	most formats here have R in the low bits, A in the high bits.
+	Exceptions noted.
+    -->
+    <value name="Texture Data Format R8" value="0"/>
+    <value name="Texture Data Format R8 SNORM" value="1"/>
+    <value name="Texture Data Format RG8" value="2"/>
+    <value name="Texture Data Format RG8 SNORM" value="3"/>
+    <value name="Texture Data Format RGBA8" value="4"/>
+    <value name="Texture Data Format RGBA8 SNORM" value="5"/>
+    <value name="Texture Data Format RGB565" value="6"/> <!-- B in low bits -->
+    <value name="Texture Data Format RGBA4" value="7"/> <!-- A low, R high -->
+    <value name="Texture Data Format RGB5_A1" value="8"/> <!-- A low, R high -->
+    <value name="Texture Data Format RGB10_A2" value="9"/> <!-- R low, A high -->
+    <value name="Texture Data Format R16" value="10"/>
+    <value name="Texture Data Format R16 SNORM" value="11"/>
+    <value name="Texture Data Format RG16" value="12"/>
+    <value name="Texture Data Format RG16 SNORM" value="13"/>
+    <value name="Texture Data Format RGBA16" value="14"/>
+    <value name="Texture Data Format RGBA16 SNORM" value="15"/>
+    <value name="Texture Data Format R16F" value="16"/>
+    <value name="Texture Data Format RG16F" value="17"/>
+    <value name="Texture Data Format RGBA16F" value="18"/>
+    <value name="Texture Data Format R11F_G11F_B10F" value="19"/>
+    <value name="Texture Data Format RGB9_E5" value="20"/>
+    <value name="Texture Data Format DEPTH COMP16" value="21"/>
+    <value name="Texture Data Format DEPTH COMP24" value="22"/>
+    <value name="Texture Data Format DEPTH COMP32F" value="23"/>
+    <value name="Texture Data Format DEPTH24_X8" value="24"/> <!-- X low, D high -->
+    <value name="Texture Data Format R4" value="25"/>
+    <value name="Texture Data Format R1" value="26"/>
+    <!-- generic unfiltered 8-bit sample -->
+    <value name="Texture Data Format S8" value="27"/>
+    <!-- generic unfiltered 16-bit sample -->
+    <value name="Texture Data Format S16" value="28"/>
+    <!-- generic unfiltered 32-bit sample -->
+    <value name="Texture Data Format R32F" value="29"/>
+    <!-- generic unfiltered 64-bit sample -->
+    <value name="Texture Data Format RG32F" value="30"/>
+    <!-- generic unfiltered 128-bit sample -->
+    <value name="Texture Data Format RGBA32F" value="31"/>
+
+    <value name="Texture Data Format RGB8_ETC2" value="32"/>
+    <value name="Texture Data Format RGB8_PUNCHTHROUGH_ALPHA1" value="33"/>
+
+    <value name="Texture Data Format R11_EAC" value="34"/>
+    <value name="Texture Data Format SIGNED_R11_EAC" value="35"/>
+    <value name="Texture Data Format RG11_EAC" value="36"/>
+    <value name="Texture Data Format SIGNED_RG11_EAC" value="37"/>
+
+    <value name="Texture Data Format RGBA8_ETC2_EAC" value="38"/>
+    <value name="Texture Data Format YCBCR_LUMA" value="39"/>
+    <value name="Texture Data Format YCBCR_420_CHROMA" value="40"/>
+
+    <value name="Texture Data Format BC1" value="48"/>
+    <value name="Texture Data Format BC2" value="49"/>
+    <value name="Texture Data Format BC3" value="50"/>
+
+    <value name="Texture Data Format ASTC_4x4" value="64"/>
+    <value name="Texture Data Format ASTC_5x4" value="65"/>
+    <value name="Texture Data Format ASTC_5x5" value="66"/>
+    <value name="Texture Data Format ASTC_6x5" value="67"/>
+    <value name="Texture Data Format ASTC_6x6" value="68"/>
+    <value name="Texture Data Format ASTC_8x5" value="69"/>
+    <value name="Texture Data Format ASTC_8x6" value="70"/>
+    <value name="Texture Data Format ASTC_8x8" value="71"/>
+    <value name="Texture Data Format ASTC_10x5" value="72"/>
+    <value name="Texture Data Format ASTC_10x6" value="73"/>
+    <value name="Texture Data Format ASTC_10x8" value="74"/>
+    <value name="Texture Data Format ASTC_10x10" value="75"/>
+    <value name="Texture Data Format ASTC_12x10" value="76"/>
+    <value name="Texture Data Format ASTC_12x12" value="77"/>
+
+    <value name="Texture Data Format R8I" value="96"/>
+    <value name="Texture Data Format R8UI" value="97"/>
+    <value name="Texture Data Format RG8I" value="98"/>
+    <value name="Texture Data Format RG8UI" value="99"/>
+    <value name="Texture Data Format RGBA8I" value="100"/>
+    <value name="Texture Data Format RGBA8UI" value="101"/>
+
+    <value name="Texture Data Format R16I" value="102"/>
+    <value name="Texture Data Format R16UI" value="103"/>
+    <value name="Texture Data Format RG16I" value="104"/>
+    <value name="Texture Data Format RG16UI" value="105"/>
+    <value name="Texture Data Format RGBA16I" value="106"/>
+    <value name="Texture Data Format RGBA16UI" value="107"/>
+
+    <value name="Texture Data Format R32I" value="108"/>
+    <value name="Texture Data Format R32UI" value="109"/>
+    <value name="Texture Data Format RG32I" value="110"/>
+    <value name="Texture Data Format RG32UI" value="111"/>
+    <value name="Texture Data Format RGBA32I" value="112"/>
+    <value name="Texture Data Format RGBA32UI" value="113"/>
+    <value name="Texture Data Format RGB10_A2UI" value="114"/>
+    <value name="Texture Data Format A1_RGB5" value="115"/>
+
+  </enum>
+  
   <packet code="0" name="Halt"/>
   <packet code="1" name="NOP"/>
   <packet code="4" name="Flush"/>
@@ -1514,7 +1613,7 @@
     <field name="Swizzle R" size="3" start="108" type="uint"/>
     <field name="Extended" size="1" start="107" type="bool"/>
 
-    <field name="Texture type" size="7" start="100" type="uint"/>
+    <field name="Texture type" size="7" start="100" type="Texture Data Formats"/>
     <field name="Image Depth" size="14" start="86" type="uint"/>
     <field name="Image Height" size="14" start="72" type="uint"/>
     <field name="Image Width" size="14" start="58" type="uint"/>
@@ -1633,103 +1732,4 @@
     <field name="Min filter Nearest" size="1" start="1" type="bool"/>
     <field name="Mag filter Nearest" size="1" start="0" type="bool"/>
   </struct>
-
-  <enum name="Texture Data Formats">
-    <!--
-	most formats here have R in the low bits, A in the high bits.
-	Exceptions noted.
-    -->
-    <value name="Texture Data Format R8" value="0"/>
-    <value name="Texture Data Format R8 SNORM" value="1"/>
-    <value name="Texture Data Format RG8" value="2"/>
-    <value name="Texture Data Format RG8 SNORM" value="3"/>
-    <value name="Texture Data Format RGBA8" value="4"/>
-    <value name="Texture Data Format RGBA8 SNORM" value="5"/>
-    <value name="Texture Data Format RGB565" value="6"/> <!-- B in low bits -->
-    <value name="Texture Data Format RGBA4" value="7"/> <!-- A low, R high -->
-    <value name="Texture Data Format RGB5_A1" value="8"/> <!-- A low, R high -->
-    <value name="Texture Data Format RGB10_A2" value="9"/> <!-- R low, A high -->
-    <value name="Texture Data Format R16" value="10"/>
-    <value name="Texture Data Format R16 SNORM" value="11"/>
-    <value name="Texture Data Format RG16" value="12"/>
-    <value name="Texture Data Format RG16 SNORM" value="13"/>
-    <value name="Texture Data Format RGBA16" value="14"/>
-    <value name="Texture Data Format RGBA16 SNORM" value="15"/>
-    <value name="Texture Data Format R16F" value="16"/>
-    <value name="Texture Data Format RG16F" value="17"/>
-    <value name="Texture Data Format RGBA16F" value="18"/>
-    <value name="Texture Data Format R11F_G11F_B10F" value="19"/>
-    <value name="Texture Data Format RGB9_E5" value="20"/>
-    <value name="Texture Data Format DEPTH COMP16" value="21"/>
-    <value name="Texture Data Format DEPTH COMP24" value="22"/>
-    <value name="Texture Data Format DEPTH COMP32F" value="23"/>
-    <value name="Texture Data Format DEPTH24_X8" value="24"/> <!-- X low, D high -->
-    <value name="Texture Data Format R4" value="25"/>
-    <value name="Texture Data Format R1" value="26"/>
-    <!-- generic unfiltered 8-bit sample -->
-    <value name="Texture Data Format S8" value="27"/>
-    <!-- generic unfiltered 16-bit sample -->
-    <value name="Texture Data Format S16" value="28"/>
-    <!-- generic unfiltered 32-bit sample -->
-    <value name="Texture Data Format R32F" value="29"/>
-    <!-- generic unfiltered 64-bit sample -->
-    <value name="Texture Data Format RG32F" value="30"/>
-    <!-- generic unfiltered 128-bit sample -->
-    <value name="Texture Data Format RGBA32F" value="31"/>
-
-    <value name="Texture Data Format RGB8_ETC2" value="32"/>
-    <value name="Texture Data Format RGB8_PUNCHTHROUGH_ALPHA1" value="33"/>
-
-    <value name="Texture Data Format R11_EAC" value="34"/>
-    <value name="Texture Data Format SIGNED_R11_EAC" value="35"/>
-    <value name="Texture Data Format RG11_EAC" value="36"/>
-    <value name="Texture Data Format SIGNED_RG11_EAC" value="37"/>
-
-    <value name="Texture Data Format RGBA8_ETC2_EAC" value="38"/>
-    <value name="Texture Data Format YCBCR_LUMA" value="39"/>
-    <value name="Texture Data Format YCBCR_420_CHROMA" value="40"/>
-
-    <value name="Texture Data Format BC1" value="48"/>
-    <value name="Texture Data Format BC2" value="49"/>
-    <value name="Texture Data Format BC3" value="50"/>
-
-    <value name="Texture Data Format ASTC_4x4" value="64"/>
-    <value name="Texture Data Format ASTC_5x4" value="65"/>
-    <value name="Texture Data Format ASTC_5x5" value="66"/>
-    <value name="Texture Data Format ASTC_6x5" value="67"/>
-    <value name="Texture Data Format ASTC_6x6" value="68"/>
-    <value name="Texture Data Format ASTC_8x5" value="69"/>
-    <value name="Texture Data Format ASTC_8x6" value="70"/>
-    <value name="Texture Data Format ASTC_8x8" value="71"/>
-    <value name="Texture Data Format ASTC_10x5" value="72"/>
-    <value name="Texture Data Format ASTC_10x6" value="73"/>
-    <value name="Texture Data Format ASTC_10x8" value="74"/>
-    <value name="Texture Data Format ASTC_10x10" value="75"/>
-    <value name="Texture Data Format ASTC_12x10" value="76"/>
-    <value name="Texture Data Format ASTC_12x12" value="77"/>
-
-    <value name="Texture Data Format R8I" value="96"/>
-    <value name="Texture Data Format R8UI" value="97"/>
-    <value name="Texture Data Format RG8I" value="98"/>
-    <value name="Texture Data Format RG8UI" value="99"/>
-    <value name="Texture Data Format RGBA8I" value="100"/>
-    <value name="Texture Data Format RGBA8UI" value="101"/>
-
-    <value name="Texture Data Format R16I" value="102"/>
-    <value name="Texture Data Format R16UI" value="103"/>
-    <value name="Texture Data Format RG16I" value="104"/>
-    <value name="Texture Data Format RG16UI" value="105"/>
-    <value name="Texture Data Format RGBA16I" value="106"/>
-    <value name="Texture Data Format RGBA16UI" value="107"/>
-
-    <value name="Texture Data Format R32I" value="108"/>
-    <value name="Texture Data Format R32UI" value="109"/>
-    <value name="Texture Data Format RG32I" value="110"/>
-    <value name="Texture Data Format RG32UI" value="111"/>
-    <value name="Texture Data Format RGBA32I" value="112"/>
-    <value name="Texture Data Format RGBA32UI" value="113"/>
-    <value name="Texture Data Format RGB10_A2UI" value="114"/>
-    <value name="Texture Data Format A1_RGB5" value="115"/>
-
-  </enum>
 </vcxml>

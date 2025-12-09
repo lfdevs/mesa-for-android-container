@@ -231,7 +231,7 @@ TEST_F(nir_opt_mqsad_test, mqsad)
    }
 
    ASSERT_TRUE(nir_opt_mqsad(b->shader));
-   nir_copy_prop(b->shader);
+   nir_opt_copy_prop(b->shader);
    nir_opt_dce(b->shader);
 
    require_one_alu(nir_op_mqsad_4x8);

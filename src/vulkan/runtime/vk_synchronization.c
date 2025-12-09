@@ -89,6 +89,19 @@ vk_filter_dst_access_flags2(VkPipelineStageFlags2 stages,
           (all_read_access | VK_ACCESS_2_HOST_WRITE_BIT);
 }
 
+VkPipelineStageFlags2
+vk_collect_dependency_info_src_stages(const VkDependencyInfo* pDependencyInfo)
+{
+   VkPipelineStageFlags2 stages = 0;
+   for (uint32_t i = 0; i < pDependencyInfo->memoryBarrierCount; i++)
+      stages |= pDependencyInfo->pMemoryBarriers[i].srcStageMask;
+   for (uint32_t i = 0; i < pDependencyInfo->bufferMemoryBarrierCount; i++)
+      stages |= pDependencyInfo->pBufferMemoryBarriers[i].srcStageMask;
+   for (uint32_t i = 0; i < pDependencyInfo->imageMemoryBarrierCount; i++)
+      stages |= pDependencyInfo->pImageMemoryBarriers[i].srcStageMask;
+   return stages;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdWriteTimestamp(
    VkCommandBuffer                             commandBuffer,
@@ -202,6 +215,7 @@ vk_common_CmdPipelineBarrier(
 
    VkDependencyInfo dep_info = {
       .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .dependencyFlags = dependencyFlags,
       .memoryBarrierCount = memoryBarrierCount,
       .pMemoryBarriers = memory_barriers,
       .bufferMemoryBarrierCount = bufferMemoryBarrierCount,
@@ -358,7 +372,7 @@ vk_common_GetQueueCheckpointDataNV(
     uint32_t*                                   pCheckpointDataCount,
     VkCheckpointDataNV*                         pCheckpointData)
 {
-   unreachable("Entrypoint not implemented");
+   UNREACHABLE("Entrypoint not implemented");
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -373,7 +387,6 @@ vk_common_QueueSubmit(
 
    STACK_ARRAY(VkSubmitInfo2, submit_info_2, submitCount);
    STACK_ARRAY(VkPerformanceQuerySubmitInfoKHR, perf_query_submit_info, submitCount);
-   STACK_ARRAY(struct wsi_memory_signal_submit_info, wsi_mem_submit_info, submitCount);
 
    uint32_t n_wait_semaphores = 0;
    uint32_t n_command_buffers = 0;
@@ -396,14 +409,6 @@ vk_common_QueueSubmit(
       const VkTimelineSemaphoreSubmitInfo *timeline_info =
          vk_find_struct_const(pSubmits[s].pNext,
                               TIMELINE_SEMAPHORE_SUBMIT_INFO);
-      const uint64_t *wait_values = NULL;
-      const uint64_t *signal_values = NULL;
-
-      if (timeline_info && timeline_info->waitSemaphoreValueCount)
-         wait_values = timeline_info->pWaitSemaphoreValues;
-
-      if (timeline_info && timeline_info->signalSemaphoreValueCount)
-         signal_values = timeline_info->pSignalSemaphoreValues;
 
       const VkDeviceGroupSubmitInfo *group_info =
          vk_find_struct_const(pSubmits[s].pNext, DEVICE_GROUP_SUBMIT_INFO);
@@ -411,8 +416,8 @@ vk_common_QueueSubmit(
       for (uint32_t i = 0; i < pSubmits[s].waitSemaphoreCount; i++) {
          VK_FROM_HANDLE(vk_semaphore, semaphore, pSubmits[s].pWaitSemaphores[i]);
 
-         if (semaphore->type == VK_SEMAPHORE_TYPE_TIMELINE &&
-             timeline_info && timeline_info->waitSemaphoreValueCount) {
+         uint64_t wait_value = 0;
+         if (semaphore->type == VK_SEMAPHORE_TYPE_TIMELINE && timeline_info) {
             /* From the Vulkan 1.3.204 spec:
              *
              *    VUID-VkSubmitInfo-pNext-03241
@@ -423,12 +428,13 @@ vk_common_QueueSubmit(
              *    waitSemaphoreCount"
              */
             assert(timeline_info->waitSemaphoreValueCount == pSubmits[s].waitSemaphoreCount);
+            wait_value = timeline_info->pWaitSemaphoreValues[i];
          }
 
          wait_semaphores[n_wait_semaphores + i] = (VkSemaphoreSubmitInfo) {
             .sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore   = pSubmits[s].pWaitSemaphores[i],
-            .value       = wait_values ? wait_values[i] : 0,
+            .value       = wait_value,
             .stageMask   = pSubmits[s].pWaitDstStageMask[i],
             .deviceIndex = group_info ? group_info->pWaitSemaphoreDeviceIndices[i] : 0,
          };
@@ -443,8 +449,8 @@ vk_common_QueueSubmit(
       for (uint32_t i = 0; i < pSubmits[s].signalSemaphoreCount; i++) {
          VK_FROM_HANDLE(vk_semaphore, semaphore, pSubmits[s].pSignalSemaphores[i]);
 
-         if (semaphore->type == VK_SEMAPHORE_TYPE_TIMELINE &&
-             timeline_info && timeline_info->signalSemaphoreValueCount) {
+         uint64_t signal_value = 0;
+         if (semaphore->type == VK_SEMAPHORE_TYPE_TIMELINE && timeline_info) {
             /* From the Vulkan 1.3.204 spec:
              *
              *    VUID-VkSubmitInfo-pNext-03240
@@ -455,12 +461,13 @@ vk_common_QueueSubmit(
              *    signalSemaphoreCount"
              */
             assert(timeline_info->signalSemaphoreValueCount == pSubmits[s].signalSemaphoreCount);
+            signal_value = timeline_info->pSignalSemaphoreValues[i];
          }
 
          signal_semaphores[n_signal_semaphores + i] = (VkSemaphoreSubmitInfo) {
             .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = pSubmits[s].pSignalSemaphores[i],
-            .value     = signal_values ? signal_values[i] : 0,
+            .value     = signal_value,
             .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
             .deviceIndex = group_info ? group_info->pSignalSemaphoreDeviceIndices[i] : 0,
          };
@@ -490,15 +497,6 @@ vk_common_QueueSubmit(
          __vk_append_struct(&submit_info_2[s], &perf_query_submit_info[s]);
       }
 
-      const struct wsi_memory_signal_submit_info *mem_signal_info =
-         vk_find_struct_const(pSubmits[s].pNext,
-                              WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA);
-      if (mem_signal_info) {
-         wsi_mem_submit_info[s] = *mem_signal_info;
-         wsi_mem_submit_info[s].pNext = NULL;
-         __vk_append_struct(&submit_info_2[s], &wsi_mem_submit_info[s]);
-      }
-
       n_wait_semaphores += pSubmits[s].waitSemaphoreCount;
       n_command_buffers += pSubmits[s].commandBufferCount;
       n_signal_semaphores += pSubmits[s].signalSemaphoreCount;
@@ -514,7 +512,6 @@ vk_common_QueueSubmit(
    STACK_ARRAY_FINISH(signal_semaphores);
    STACK_ARRAY_FINISH(submit_info_2);
    STACK_ARRAY_FINISH(perf_query_submit_info);
-   STACK_ARRAY_FINISH(wsi_mem_submit_info);
 
    return result;
 }

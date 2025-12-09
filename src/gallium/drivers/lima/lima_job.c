@@ -66,7 +66,7 @@ lima_get_fb_info(struct lima_job *job)
       fb->width = ctx->framebuffer.base.width;
       fb->height =  ctx->framebuffer.base.height;
    } else {
-      uint16_t width, height;
+      unsigned width, height;
       pipe_surface_size(psurf, &width, &height);
       fb->width = width;
       fb->height = height;
@@ -310,7 +310,7 @@ lima_job_create_stream_bo(struct lima_job *job, int pipe,
    void *cpu;
    unsigned offset;
    struct pipe_resource *pres = NULL;
-   u_upload_alloc(ctx->uploader, 0, size, 0x40, &offset, &pres, &cpu);
+   u_upload_alloc_ref(ctx->uploader, 0, size, 0x40, &offset, &pres, &cpu);
 
    struct lima_resource *res = lima_resource(pres);
    *va = res->bo->va + offset;

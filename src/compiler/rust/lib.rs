@@ -5,6 +5,8 @@ pub mod as_slice;
 pub mod bindings;
 pub mod bitset;
 pub mod cfg;
+pub mod dataflow;
+pub mod depth_first_search;
 pub mod memstream;
 pub mod nir;
 pub mod nir_instr_printer;

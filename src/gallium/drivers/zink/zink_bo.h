@@ -188,6 +188,15 @@ zink_bo_usage_check_completion_fast(struct zink_screen *screen, struct zink_bo *
 }
 
 static ALWAYS_INLINE void
+zink_bo_usage_unflushed_wait(struct zink_context *ctx, struct zink_bo *bo, enum zink_resource_access access)
+{
+   if (access & ZINK_RESOURCE_ACCESS_READ)
+      zink_batch_usage_unflushed_wait(ctx, bo->reads.u, bo->reads.submit_count, false);
+   if (access & ZINK_RESOURCE_ACCESS_WRITE)
+      zink_batch_usage_unflushed_wait(ctx, bo->writes.u, bo->writes.submit_count, false);
+}
+
+static ALWAYS_INLINE void
 zink_bo_usage_wait(struct zink_context *ctx, struct zink_bo *bo, enum zink_resource_access access)
 {
    if (access & ZINK_RESOURCE_ACCESS_READ)

@@ -38,10 +38,6 @@ dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffer
 dEQP-GLES3.functional.draw_buffers_indexed.random.max_required_draw_buffers.3,Fail
 dEQP-GLES3.functional.draw_buffers_indexed.random.max_required_draw_buffers.11,Fail
 dEQP-GLES3.functional.draw_buffers_indexed.random.max_required_draw_buffers.19,Fail
-dEQP-GLES3.functional.fbo.blit.conversion.r8i_to_rg8i,Fail
-dEQP-GLES3.functional.fbo.blit.conversion.r8i_to_rgba8i,Fail
-dEQP-GLES3.functional.fbo.blit.conversion.r8ui_to_rg8ui,Fail
-dEQP-GLES3.functional.fbo.blit.conversion.r8ui_to_rgba8ui,Fail
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_basic,Fail
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_scale,Fail
 dEQP-GLES3.functional.fbo.blit.depth_stencil.depth24_stencil8_stencil_only,Fail
@@ -237,7 +233,6 @@ spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
 spec@arb_framebuffer_object@fbo-blit-stretch,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels draw stencil,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
-spec@arb_map_buffer_alignment@arb_map_buffer_alignment-map-invalidate-range,Crash
 spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Crash
 spec@arb_point_sprite@arb_point_sprite-interactions 1.0,Fail
 spec@arb_seamless_cube_map@arb_seamless_cubemap,Fail
@@ -324,8 +319,6 @@ spec@arb_transform_feedback3@gl_nextbuffer-gl_nextbuffer,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@arb_uniform_buffer_object@rendering-array,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
-spec@egl_chromium_sync_control@conformance,Fail
-spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_rgba,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
@@ -803,7 +796,6 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_
 # uprev Piglit in Mesa
 spec@arb_texture_rg@fbo-blending-formats,Fail
 spec@arb_texture_rg@fbo-blending-formats@GL_R8,Fail
-spec@glsl-1.40@uniform_buffer@two-stages,Fail
 
 # new failures since 2023/02/08 (CTS uprevs, regressions etc.)
 spec@!opengl 1.1@line-smooth-stipple,Fail
@@ -1122,3 +1114,114 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag,Fail
 
 # New failures with ES CTS 3.2.11.0
 dEQP-GLES2.functional.polygon_offset.fixed16_render_with_units,Fail
+
+# Regressions while the device was offline
+dEQP-GLES2.functional.shaders.invariance.highp.common_subexpression_0,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.common_subexpression_1,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.common_subexpression_2,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.common_subexpression_3,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.loop_0,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.loop_1,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.loop_2,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.loop_3,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.loop_4,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.subexpression_precision_highp,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.subexpression_precision_lowp,Fail
+dEQP-GLES2.functional.shaders.invariance.highp.subexpression_precision_mediump,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.common_subexpression_0,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.common_subexpression_1,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.common_subexpression_2,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.common_subexpression_3,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.loop_0,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.loop_1,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.loop_2,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.loop_3,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.loop_4,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.subexpression_precision_highp,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.subexpression_precision_lowp,Fail
+dEQP-GLES2.functional.shaders.invariance.lowp.subexpression_precision_mediump,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.common_subexpression_0,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.common_subexpression_1,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.common_subexpression_2,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.common_subexpression_3,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.loop_0,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.loop_1,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.loop_2,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.loop_3,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.loop_4,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.subexpression_precision_highp,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.subexpression_precision_lowp,Fail
+dEQP-GLES2.functional.shaders.invariance.mediump.subexpression_precision_mediump,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.common_subexpression_0,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.common_subexpression_1,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.common_subexpression_2,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.common_subexpression_3,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.loop_0,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.loop_1,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.loop_2,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.loop_3,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.loop_4,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.subexpression_precision_highp,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.subexpression_precision_lowp,Fail
+dEQP-GLES3.functional.shaders.invariance.highp.subexpression_precision_mediump,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.common_subexpression_0,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.common_subexpression_1,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.common_subexpression_2,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.common_subexpression_3,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.loop_0,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.loop_1,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.loop_2,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.loop_3,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.loop_4,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.subexpression_precision_highp,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.subexpression_precision_lowp,Fail
+dEQP-GLES3.functional.shaders.invariance.lowp.subexpression_precision_mediump,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.common_subexpression_0,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.common_subexpression_1,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.common_subexpression_2,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.common_subexpression_3,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.loop_0,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.loop_1,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.loop_2,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.loop_3,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.loop_4,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.subexpression_precision_highp,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.subexpression_precision_lowp,Fail
+dEQP-GLES3.functional.shaders.invariance.mediump.subexpression_precision_mediump,Fail
+dEQP-GLES3.functional.state_query.texture.texture_2d_array_texture_immutable_levels_gettexparameterf,Fail
+dEQP-GLES3.functional.state_query.texture.texture_2d_array_texture_immutable_levels_gettexparameteri,Fail
+dEQP-GLES3.functional.state_query.texture.texture_2d_texture_immutable_levels_gettexparameterf,Fail
+dEQP-GLES3.functional.state_query.texture.texture_2d_texture_immutable_levels_gettexparameteri,Fail
+dEQP-GLES3.functional.state_query.texture.texture_3d_texture_immutable_levels_gettexparameterf,Fail
+dEQP-GLES3.functional.state_query.texture.texture_3d_texture_immutable_levels_gettexparameteri,Fail
+dEQP-GLES3.functional.state_query.texture.texture_cube_map_texture_immutable_levels_gettexparameterf,Fail
+dEQP-GLES3.functional.state_query.texture.texture_cube_map_texture_immutable_levels_gettexparameteri,Fail
+
+# Regressions while the device was offline
+glx@glx-tfp,Fail
+shaders@glsl-derivs,Fail
+spec@!opengl es 3.0@texture-immutable-levels,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv21,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xrgb8888,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
+spec@ext_texture_srgb@tex-srgb,Fail
+spec@ext_transform_feedback@tessellation lines flat_first,Fail
+spec@ext_transform_feedback@tessellation lines flat_last,Fail
+spec@ext_transform_feedback@tessellation lines monochrome,Fail
+spec@ext_transform_feedback@tessellation lines smooth,Fail
+spec@ext_transform_feedback@tessellation points flat_first,Fail
+spec@ext_transform_feedback@tessellation points flat_last,Fail
+spec@ext_transform_feedback@tessellation points monochrome,Fail
+spec@ext_transform_feedback@tessellation points smooth,Fail
+spec@ext_transform_feedback@tessellation triangles flat_first,Fail
+spec@ext_transform_feedback@tessellation triangles flat_last,Fail
+spec@ext_transform_feedback@tessellation triangles monochrome,Fail
+spec@ext_transform_feedback@tessellation triangles smooth,Fail
+spec@ext_transform_feedback@tessellation triangles wireframe,Fail
+spec@glsl-1.10@execution@color-interp-smooth-shademodel-flat,Fail

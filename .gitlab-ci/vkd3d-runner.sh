@@ -167,7 +167,7 @@ for expected_fail_line in "${expected_fail_lines[@]}"; do
   printf '%s,%s\n' "$test_name" "$test_status"
 done >> "$RESULTSFILE"
 
-mapfile -t unexpected_results < <(comm -23 "$RESULTSFILE" "$EXPECTATIONFILE")
+mapfile -t unexpected_results < <(comm -23 <(sort "$RESULTSFILE") <(sort "$EXPECTATIONFILE"))
 if [ ${#unexpected_results[@]} -gt 0 ]; then
   printf >&2 '\nUnexpected results:\n'
   printf >&2 '  %s\n' "${unexpected_results[@]}"

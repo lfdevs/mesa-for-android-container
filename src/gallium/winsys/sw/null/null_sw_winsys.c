@@ -97,7 +97,8 @@ null_sw_displaytarget_create_mapped(struct sw_winsys *winsys,
                                     enum pipe_format format,
                                     unsigned width, unsigned height,
                                     unsigned stride,
-                                    void *data)
+                                    void *data,
+                                    struct winsys_handle *whandle)
 {
    fprintf(stderr, "null_sw_displaytarget_create_mapped() returning NULL\n");
    return NULL;

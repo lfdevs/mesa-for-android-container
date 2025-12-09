@@ -36,7 +36,7 @@ LLVMTypeRef lp_build_format_cache_elem_type(struct gallivm_state *gallivm, enum 
    case LP_BUILD_FORMAT_CACHE_MEMBER_TAGS:
       return LLVMInt64TypeInContext(gallivm->context);
    default:
-      unreachable("lp_build_format_cache_elem_type unhandled member type");
+      UNREACHABLE("lp_build_format_cache_elem_type unhandled member type");
    }
 }
 

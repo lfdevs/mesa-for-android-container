@@ -59,9 +59,7 @@ lower_vec3_to_vec4_instr(nir_builder *b, nir_instr *instr, void *data)
 
          b->cursor = nir_after_instr(&intrin->instr);
          nir_def *vec3 = nir_trim_vector(b, &intrin->def, 3);
-         nir_def_rewrite_uses_after(&intrin->def,
-                                    vec3,
-                                    vec3->parent_instr);
+         nir_def_rewrite_uses_after(&intrin->def, vec3);
          return true;
       }
 

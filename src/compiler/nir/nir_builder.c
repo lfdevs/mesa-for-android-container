@@ -23,7 +23,7 @@
  */
 
 #include "nir_builder.h"
-#include "glsl/list.h"
+#include "list.h"
 #include "util/list.h"
 #include "util/ralloc.h"
 #include "glsl_types.h"
@@ -31,14 +31,14 @@
 #include "nir_serialize.h"
 
 nir_builder MUST_CHECK PRINTFLIKE(3, 4)
-   nir_builder_init_simple_shader(gl_shader_stage stage,
+   nir_builder_init_simple_shader(mesa_shader_stage stage,
                                   const nir_shader_compiler_options *options,
                                   const char *name, ...)
 {
    nir_builder b;
 
    memset(&b, 0, sizeof(b));
-   b.shader = nir_shader_create(NULL, stage, options, NULL);
+   b.shader = nir_shader_create(NULL, stage, options);
 
    if (name) {
       va_list args;
@@ -122,6 +122,14 @@ nir_builder_alu_instr_finish_and_insert(nir_builder *build, nir_alu_instr *instr
 
    nir_def_init(&instr->instr, &instr->def, num_components,
                 bit_size);
+
+   if (build->constant_fold_alu) {
+      nir_def *new_def = nir_try_constant_fold_alu(build, instr);
+      if (new_def) {
+         nir_instr_free(&instr->instr);
+         return new_def;
+      }
+   }
 
    nir_builder_instr_insert(build, &instr->instr);
 
@@ -593,7 +601,7 @@ nir_compare_func(nir_builder *b, enum compare_func func,
    case COMPARE_FUNC_LEQUAL:
       return nir_fge(b, src1, src0);
    }
-   unreachable("bad compare func");
+   UNREACHABLE("bad compare func");
 }
 
 nir_def *
@@ -635,7 +643,7 @@ nir_type_convert(nir_builder *b,
             opcode = nir_op_fneu32;
             break;
          default:
-            unreachable("Invalid Boolean size.");
+            UNREACHABLE("Invalid Boolean size.");
          }
       } else {
          assert(src_base == nir_type_int || src_base == nir_type_uint);
@@ -654,7 +662,7 @@ nir_type_convert(nir_builder *b,
             opcode = nir_op_ine32;
             break;
          default:
-            unreachable("Invalid Boolean size.");
+            UNREACHABLE("Invalid Boolean size.");
          }
       }
 

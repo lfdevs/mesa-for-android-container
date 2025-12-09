@@ -67,7 +67,13 @@ build_background_op(nir_builder *b, enum agx_bg_eot_op op, unsigned rt,
                     unsigned nr, bool msaa, bool layered)
 {
    if (op == AGX_BG_LOAD) {
-      nir_def *coord = nir_u2u32(b, nir_load_pixel_coord(b));
+      nir_def *coord = nir_load_pixel_coord(b);
+
+      /* MSAA/array lowerings assume 32-bit coordinates, could be lifted but
+       * that's going to need more work.
+       */
+      if (layered || msaa)
+         coord = nir_u2u32(b, coord);
 
       if (layered) {
          coord = nir_vec3(b, nir_channel(b, coord, 0), nir_channel(b, coord, 1),

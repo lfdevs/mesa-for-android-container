@@ -56,6 +56,10 @@ amd_common_files = files(
   'ac_binary.h',
   'ac_cmdbuf.c',
   'ac_cmdbuf.h',
+  'ac_cmdbuf_cp.c',
+  'ac_cmdbuf_cp.h',
+  'ac_cmdbuf_sdma.c',
+  'ac_cmdbuf_sdma.h',
   'ac_shader_args.c',
   'ac_shader_args.h',
   'ac_shader_util.c',
@@ -72,6 +76,8 @@ amd_common_files = files(
   'ac_formats.c',
   'ac_formats.h',
   'ac_linux_drm.h',
+  'ac_null_device.c',
+  'ac_null_device.h',
   'ac_shadowed_regs.c',
   'ac_shadowed_regs.h',
   'ac_spm.c',
@@ -214,4 +220,25 @@ if with_tests and not with_platform_windows
       suite: ['amd']
     )
   endif
+endif
+
+if with_tests
+  test(
+    'ac_nir_tests',
+    executable(
+      'ac_nir_tests',
+      files(
+        'nir/tests/ac_nir_lower_mem_access_test.cpp',
+      ),
+      cpp_args : [cpp_msvc_compat_args],
+      gnu_symbol_visibility : 'hidden',
+      link_with: [libamd_common],
+      include_directories : [
+        inc_amd, inc_include, inc_src, inc_amd_common
+      ],
+      dependencies : [dep_thread, idep_gtest, idep_nir, idep_mesautil],
+    ),
+    suite : ['amd'],
+    protocol : 'gtest',
+  )
 endif

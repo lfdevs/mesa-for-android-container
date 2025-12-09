@@ -258,6 +258,15 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
       }
    }
 
+   /* if shader has flat varyings, switch to flat shading */
+   for (int idx = 0; idx < link.num_varyings; ++idx) {
+      if (link.varyings[idx].semantic == VARYING_INTERPOLATION_MODE_FLAT) {
+         cs->PA_CONFIG &= ~VIVS_PA_CONFIG_SHADE_MODEL_SMOOTH;
+         cs->PA_CONFIG |= VIVS_PA_CONFIG_SHADE_MODEL_FLAT;
+         break;
+      }
+   }
+
    cs->GL_VARYING_TOTAL_COMPONENTS =
       VIVS_GL_VARYING_TOTAL_COMPONENTS_NUM(align(total_components, 2));
    memcpy(cs->GL_VARYING_NUM_COMPONENTS, num_components, sizeof(uint32_t) * 2);
@@ -401,7 +410,7 @@ etna_shader_stage(struct etna_shader *shader)
    case MESA_SHADER_FRAGMENT:   return "FRAG";
    case MESA_SHADER_COMPUTE:    return "CL";
    default:
-      unreachable("invalid type");
+      UNREACHABLE("invalid type");
       return NULL;
    }
 }
@@ -613,7 +622,7 @@ etna_set_max_shader_compiler_threads(struct pipe_screen *pscreen,
 static bool
 etna_is_parallel_shader_compilation_finished(struct pipe_screen *pscreen,
                                              void *hwcso,
-                                             enum pipe_shader_type shader_type)
+                                             mesa_shader_stage shader_type)
 {
    struct etna_shader *shader = (struct etna_shader *)hwcso;
 

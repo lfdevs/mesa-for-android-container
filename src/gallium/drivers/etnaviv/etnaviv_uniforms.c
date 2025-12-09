@@ -103,7 +103,7 @@ get_texture_size(const struct etna_context *ctx, bool frag,
 
       return u_minify(texture->texture->depth0, texture->u.tex.first_level);
    default:
-      unreachable("Bad texture size field");
+      UNREACHABLE("Bad texture size field");
    }
 }
 
@@ -123,7 +123,7 @@ get_sampler_lod(const struct etna_context *ctx, bool frag,
    case ETNA_UNIFORM_SAMPLER_LOD_BIAS:
       return fui(sampler->lod_bias);
    default:
-      unreachable("Bad sampler lod field");
+      UNREACHABLE("Bad sampler lod field");
    }
 }
 

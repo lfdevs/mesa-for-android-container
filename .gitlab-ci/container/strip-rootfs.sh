@@ -47,7 +47,6 @@ UNNEEDED_PACKAGES=(
   libgl1-mesa-dri mesa-vulkan-drivers mesa-va-drivers mesa-vdpau-drivers i965-va-driver
   intel-media-va-driver
   gnupg2
-  software-properties-common
 )
 
 # Removing unneeded packages

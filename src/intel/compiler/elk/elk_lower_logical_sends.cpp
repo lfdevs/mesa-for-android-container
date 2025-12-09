@@ -124,20 +124,9 @@ lower_urb_write_logical_send(const fs_builder &bld, elk_fs_inst *inst)
 }
 
 static void
-setup_color_payload(const fs_builder &bld, const elk_wm_prog_key *key,
-                    elk_fs_reg *dst, elk_fs_reg color, unsigned components)
+setup_color_payload(const fs_builder &bld, elk_fs_reg *dst, elk_fs_reg color,
+                    unsigned components)
 {
-   if (key->clamp_fragment_color) {
-      elk_fs_reg tmp = bld.vgrf(ELK_REGISTER_TYPE_F, 4);
-      assert(color.type == ELK_REGISTER_TYPE_F);
-
-      for (unsigned i = 0; i < components; i++)
-         set_saturate(true,
-                      bld.MOV(offset(tmp, bld, i), offset(color, bld, i)));
-
-      color = tmp;
-   }
-
    for (unsigned i = 0; i < components; i++)
       dst[i] = offset(color, bld, i);
 }
@@ -273,7 +262,7 @@ lower_fb_write_logical_send(const fs_builder &bld, elk_fs_inst *inst,
                                     .annotate("FB write src0 alpha");
          const elk_fs_reg tmp = ubld.vgrf(ELK_REGISTER_TYPE_F);
          ubld.MOV(tmp, horiz_offset(src0_alpha, i * 8));
-         setup_color_payload(ubld, key, &sources[length], tmp, 1);
+         setup_color_payload(ubld, &sources[length], tmp, 1);
          length++;
       }
    }
@@ -303,11 +292,11 @@ lower_fb_write_logical_send(const fs_builder &bld, elk_fs_inst *inst,
 
    payload_header_size = length;
 
-   setup_color_payload(bld, key, &sources[length], color0, components);
+   setup_color_payload(bld, &sources[length], color0, components);
    length += 4;
 
    if (color1.file != BAD_FILE) {
-      setup_color_payload(bld, key, &sources[length], color1, components);
+      setup_color_payload(bld, &sources[length], color1, components);
       length += 4;
    }
 
@@ -640,7 +629,7 @@ sampler_msg_type(const intel_device_info *devinfo,
       assert(!has_min_lod);
       return GFX6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 
@@ -1311,7 +1300,7 @@ lower_surface_logical_send(const fs_builder &bld, elk_fs_inst *inst)
       break;
 
    default:
-      unreachable("Unsupported surface opcode");
+      UNREACHABLE("Unsupported surface opcode");
    }
 
    uint32_t desc;
@@ -1378,7 +1367,7 @@ lower_surface_logical_send(const fs_builder &bld, elk_fs_inst *inst)
       break;
 
    default:
-      unreachable("Unknown surface logical instruction");
+      UNREACHABLE("Unknown surface logical instruction");
    }
 
    /* Update the original instruction. */
@@ -1503,7 +1492,7 @@ lower_a64_logical_send(const fs_builder &bld, elk_fs_inst *inst)
       break;
 
    default:
-      unreachable("Unknown A64 logical instruction");
+      UNREACHABLE("Unknown A64 logical instruction");
    }
 
    if (bld.shader->stage == MESA_SHADER_FRAGMENT)
@@ -1683,7 +1672,7 @@ lower_interpolator_logical_send(const fs_builder &bld, elk_fs_inst *inst,
       break;
 
    default:
-      unreachable("Invalid interpolator instruction");
+      UNREACHABLE("Invalid interpolator instruction");
    }
 
    const bool dynamic_mode =

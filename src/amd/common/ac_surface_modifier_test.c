@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <amdgpu.h>
 #include "drm-uapi/amdgpu_drm.h"
 #include "drm-uapi/drm_fourcc.h"
 
@@ -17,7 +16,7 @@
 #include "util/mesa-sha1.h"
 #include "addrlib/inc/addrinterface.h"
 
-#include "ac_fake_hw_db.h"
+#include "ac_surface_test.h"
 
 /*
  * The main goal of this test is making sure that we do
@@ -277,6 +276,10 @@ static void test_modifier(const struct radeon_info *info,
             .num_channels = 3,
             .array_size = 1
          },
+         .blk_w = 1,
+         .blk_h = 1,
+         .bpe = util_format_get_blocksize(format),
+         .modifier = modifier,
       };
 
       struct test_entry entry = {
@@ -293,12 +296,7 @@ static void test_modifier(const struct radeon_info *info,
             G_0098F8_NUM_PKRS(info->gb_addr_config) : G_0098F8_NUM_BANKS(info->gb_addr_config)
       };
 
-      struct radeon_surf surf = (struct radeon_surf) {
-         .blk_w = 1,
-         .blk_h = 1,
-         .bpe = util_format_get_blocksize(format),
-         .modifier = modifier,
-      };
+      struct radeon_surf surf;
 
       int r = ac_compute_surface(addrlib, info, &config, RADEON_SURF_MODE_2D, &surf);
       assert(!r);
@@ -325,7 +323,7 @@ static void test_modifier(const struct radeon_info *info,
                block_size_bits = 18;
                break;
             default:
-               unreachable("invalid swizzle mode");
+               UNREACHABLE("invalid swizzle mode");
             }
          } else {
             switch (surf.u.gfx9.swizzle_mode) {
@@ -365,7 +363,7 @@ static void test_modifier(const struct radeon_info *info,
                block_size_bits = 18;
                break;
             default:
-               unreachable("invalid swizzle mode");
+               UNREACHABLE("invalid swizzle mode");
             }
          }
 

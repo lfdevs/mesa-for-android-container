@@ -88,7 +88,7 @@ xe_gem_create(struct anv_device *device,
       gem_create.cpu_caching = DRM_XE_GEM_CPU_CACHING_WB;
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       gem_create.cpu_caching = DRM_XE_GEM_CPU_CACHING_WC;
    }
 

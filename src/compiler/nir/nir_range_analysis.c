@@ -20,6 +20,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include "nir.h"
 #include "nir_range_analysis.h"
 #include <float.h>
 #include <math.h>
@@ -27,7 +28,6 @@
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
 #include "c99_alloca.h"
-#include "nir.h"
 
 /**
  * Analyzes a sequence of operations to determine some aspects of the range of
@@ -41,7 +41,6 @@ struct analysis_query {
 
 struct analysis_state {
    nir_shader *shader;
-   const nir_unsigned_upper_bound_config *config;
    struct hash_table *range_ht;
 
    struct util_dynarray query_stack;
@@ -60,7 +59,7 @@ push_analysis_query(struct analysis_state *state, size_t size)
    q->pushed_queries = 0;
    q->result_index = util_dynarray_num_elements(&state->result_stack, uint32_t);
 
-   util_dynarray_append(&state->result_stack, uint32_t, 0);
+   util_dynarray_append_typed(&state->result_stack, uint32_t, 0);
 
    return q;
 }
@@ -169,7 +168,7 @@ analyze_constant(const struct nir_alu_instr *instr, unsigned src,
       swizzle[i] = instr->src[src].swizzle[i];
 
    const nir_load_const_instr *const load =
-      nir_instr_as_load_const(instr->src[src].src.ssa->parent_instr);
+      nir_def_as_load_const(instr->src[src].src.ssa);
 
    struct ssa_result_range r = { unknown, false, false, false };
 
@@ -287,7 +286,7 @@ analyze_constant(const struct nir_alu_instr *instr, unsigned src,
    }
 
    default:
-      unreachable("Invalid alu source type");
+      UNREACHABLE("Invalid alu source type");
    }
 }
 
@@ -493,11 +492,11 @@ get_fp_key(struct analysis_query *q)
    struct fp_query *fp_q = (struct fp_query *)q;
    const nir_src *src = &fp_q->instr->src[fp_q->src].src;
 
-   if (src->ssa->parent_instr->type != nir_instr_type_alu)
+   if (!nir_def_is_alu(src->ssa))
       return 0;
 
    uintptr_t type_encoding;
-   uintptr_t ptr = (uintptr_t)nir_instr_as_alu(src->ssa->parent_instr);
+   uintptr_t ptr = (uintptr_t) nir_def_as_alu(src->ssa);
 
    /* The low 2 bits have to be zero or this whole scheme falls apart. */
    assert((ptr & 0x3) == 0);
@@ -521,7 +520,7 @@ get_fp_key(struct analysis_query *q)
       type_encoding = 3;
       break;
    default:
-      unreachable("Invalid base type.");
+      UNREACHABLE("Invalid base type.");
    }
 
    return ptr | type_encoding;
@@ -590,20 +589,20 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
       return;
    }
 
-   if (instr->src[src].src.ssa->parent_instr->type != nir_instr_type_alu) {
+   if (!nir_src_is_alu(instr->src[src].src)) {
       *result = pack_data((struct ssa_result_range){ unknown, false, false, false });
       return;
    }
 
    const struct nir_alu_instr *const alu =
-      nir_instr_as_alu(instr->src[src].src.ssa->parent_instr);
+      nir_def_as_alu(instr->src[src].src.ssa);
 
    /* Bail if the type of the instruction generating the value does not match
     * the type the value will be interpreted as.  int/uint/bool can be
     * reinterpreted trivially.  The most important cases are between float and
     * non-float.
     */
-   if (alu->op != nir_op_mov && alu->op != nir_op_bcsel) {
+   if (alu->op != nir_op_mov && alu->op != nir_op_bcsel && alu->op != nir_op_vec2) {
       const nir_alu_type use_base_type =
          nir_alu_type_get_base_type(use_type);
       const nir_alu_type src_base_type =
@@ -626,6 +625,10 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
       case nir_op_mov:
          push_fp_query(state, alu, 0, use_type);
          return;
+      case nir_op_vec2:
+         push_fp_query(state, alu, 0, use_type);
+         push_fp_query(state, alu, 1, use_type);
+         return;
       case nir_op_i2f32:
       case nir_op_u2f32:
       case nir_op_fabs:
@@ -640,6 +643,11 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
       case nir_op_fceil:
       case nir_op_ftrunc:
       case nir_op_ffract:
+      case nir_op_f2f16:
+      case nir_op_f2f16_rtz:
+      case nir_op_f2f16_rtne:
+      case nir_op_f2f32:
+      case nir_op_f2f64:
       case nir_op_fdot2:
       case nir_op_fdot3:
       case nir_op_fdot4:
@@ -822,6 +830,32 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
          r.range = ge_zero;
 
       break;
+
+   case nir_op_f2f16:
+   case nir_op_f2f16_rtz:
+   case nir_op_f2f16_rtne:
+   case nir_op_f2f32:
+   case nir_op_f2f64: {
+      r = unpack_data(src_res[0]);
+
+      bool rtz = alu->op == nir_op_f2f16_rtz;
+      if (alu->op != nir_op_f2f16_rtne && alu->op != nir_op_f2f16_rtz) {
+         nir_shader *shader = nir_cf_node_get_function(&alu->instr.block->cf_node)->function->shader;
+         unsigned execution_mode = shader->info.float_controls_execution_mode;
+         rtz = nir_is_rounding_mode_rtz(execution_mode, alu->def.bit_size);
+      }
+
+      if (alu->src[0].src.ssa->bit_size > alu->def.bit_size) {
+         /* Unless we are rounding towards zero, large values can create Inf. */
+         if (!rtz && r.range != eq_zero)
+            r.is_finite = false;
+
+         /* Underflow can create new zeros. */
+         r.range = union_ranges(r.range, eq_zero);
+      }
+
+      break;
+   }
 
    case nir_op_fabs:
       r = unpack_data(src_res[0]);
@@ -1095,6 +1129,17 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
    case nir_op_mov:
       r = unpack_data(src_res[0]);
       break;
+
+   case nir_op_vec2: {
+      const struct ssa_result_range left = unpack_data(src_res[0]);
+      const struct ssa_result_range right = unpack_data(src_res[1]);
+
+      r.range = union_ranges(left.range, right.range);
+      r.is_integral = left.is_integral && right.is_integral;
+      r.is_a_number = left.is_a_number && right.is_a_number;
+      r.is_finite = left.is_finite && right.is_finite;
+      break;
+   }
 
    case nir_op_fneg:
       r = unpack_data(src_res[0]);
@@ -1482,8 +1527,8 @@ search_phi_bcsel(nir_scalar scalar, nir_scalar *buf, unsigned buf_size, struct s
       return 0;
    _mesa_set_add(visited, scalar.def);
 
-   if (scalar.def->parent_instr->type == nir_instr_type_phi) {
-      nir_phi_instr *phi = nir_instr_as_phi(scalar.def->parent_instr);
+   if (nir_def_instr_type(scalar.def) == nir_instr_type_phi) {
+      nir_phi_instr *phi = nir_def_as_phi(scalar.def);
       unsigned num_sources_left = exec_list_length(&phi->srcs);
       if (buf_size >= num_sources_left) {
          unsigned total_added = 0;
@@ -1517,83 +1562,45 @@ search_phi_bcsel(nir_scalar scalar, nir_scalar *buf, unsigned buf_size, struct s
    return 1;
 }
 
-static nir_variable *
-lookup_input(nir_shader *shader, unsigned driver_location)
+static uint32_t
+get_max_workgroup_invocations(nir_shader *nir)
 {
-   return nir_find_variable_with_driver_location(shader, nir_var_shader_in,
-                                                 driver_location);
+   if (!nir->options || !nir->options->max_workgroup_invocations)
+      return UINT16_MAX;
+
+   return nir->options->max_workgroup_invocations;
 }
 
-/* The config here should be generic enough to be correct on any HW. */
-static const nir_unsigned_upper_bound_config default_ub_config = {
-   .min_subgroup_size = 1u,
-   .max_subgroup_size = UINT16_MAX,
-   .max_workgroup_invocations = UINT16_MAX,
-
+static uint32_t
+get_max_workgroup_count(nir_shader *nir, unsigned dim)
+{
    /* max_workgroup_count represents the maximum compute shader / kernel
     * dispatchable work size. On most hardware, this is essentially
     * unbounded. On some hardware max_workgroup_count[1] and
     * max_workgroup_count[2] may be smaller.
     */
-   .max_workgroup_count = { UINT32_MAX, UINT32_MAX, UINT32_MAX },
+   if (!nir->options || !nir->options->max_workgroup_count[dim])
+      return UINT32_MAX;
 
-   /* max_workgroup_size is the local invocation maximum. This is generally
-    * small the OpenGL 4.2 minimum maximum is 1024.
-    */
-   .max_workgroup_size = { UINT16_MAX, UINT16_MAX, UINT16_MAX },
+   return nir->options->max_workgroup_count[dim];
+}
 
-   .vertex_attrib_max = {
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-      UINT32_MAX,
-   },
-};
-
-struct uub_query {
+struct scalar_query {
    struct analysis_query head;
    nir_scalar scalar;
 };
 
 static void
-push_uub_query(struct analysis_state *state, nir_scalar scalar)
+push_scalar_query(struct analysis_state *state, nir_scalar scalar)
 {
-   struct uub_query *pushed_q = push_analysis_query(state, sizeof(struct uub_query));
+   struct scalar_query *pushed_q = push_analysis_query(state, sizeof(struct scalar_query));
    pushed_q->scalar = scalar;
 }
 
 static uintptr_t
-get_uub_key(struct analysis_query *q)
+get_scalar_key(struct analysis_query *q)
 {
-   nir_scalar scalar = ((struct uub_query *)q)->scalar;
+   nir_scalar scalar = ((struct scalar_query *)q)->scalar;
    /* keys can't be 0, so we have to add 1 to the index */
    unsigned shift_amount = ffs(NIR_MAX_VEC_COMPONENTS) - 1;
    return nir_scalar_is_const(scalar)
@@ -1602,13 +1609,12 @@ get_uub_key(struct analysis_query *q)
 }
 
 static void
-get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *result,
+get_intrinsic_uub(struct analysis_state *state, struct scalar_query q, uint32_t *result,
                   const uint32_t *src)
 {
    nir_shader *shader = state->shader;
-   const nir_unsigned_upper_bound_config *config = state->config;
 
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(q.scalar.def->parent_instr);
+   nir_intrinsic_instr *intrin = nir_def_as_intrinsic(q.scalar.def);
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_local_invocation_index:
       /* The local invocation index is used under the hood by RADV for
@@ -1618,9 +1624,9 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
        * They can safely use the same code path here as variable sized
        * compute-like shader stages.
        */
-      if (!gl_shader_stage_uses_workgroup(shader->info.stage) ||
+      if (!mesa_shader_stage_uses_workgroup(shader->info.stage) ||
           shader->info.workgroup_size_variable) {
-         *result = config->max_workgroup_invocations - 1;
+         *result = get_max_workgroup_invocations(shader) - 1;
       } else {
          *result = (shader->info.workgroup_size[0] *
                     shader->info.workgroup_size[1] *
@@ -1630,24 +1636,24 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       break;
    case nir_intrinsic_load_local_invocation_id:
       if (shader->info.workgroup_size_variable)
-         *result = config->max_workgroup_size[q.scalar.comp] - 1u;
+         *result = get_max_workgroup_invocations(shader) - 1u;
       else
          *result = shader->info.workgroup_size[q.scalar.comp] - 1u;
       break;
    case nir_intrinsic_load_workgroup_id:
-      *result = config->max_workgroup_count[q.scalar.comp] - 1u;
+      *result = get_max_workgroup_count(shader, q.scalar.comp) - 1u;
       break;
    case nir_intrinsic_load_num_workgroups:
-      *result = config->max_workgroup_count[q.scalar.comp];
+      *result = get_max_workgroup_count(shader, q.scalar.comp);
       break;
    case nir_intrinsic_load_global_invocation_id:
       if (shader->info.workgroup_size_variable) {
-         *result = mul_clamp(config->max_workgroup_size[q.scalar.comp],
-                             config->max_workgroup_count[q.scalar.comp]) -
+         *result = mul_clamp(get_max_workgroup_invocations(shader),
+                             get_max_workgroup_count(shader, q.scalar.comp)) -
                    1u;
       } else {
          *result = (shader->info.workgroup_size[q.scalar.comp] *
-                    config->max_workgroup_count[q.scalar.comp]) -
+                    get_max_workgroup_count(shader, q.scalar.comp)) -
                    1u;
       }
       break;
@@ -1659,14 +1665,14 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       break;
    case nir_intrinsic_load_subgroup_invocation:
    case nir_intrinsic_first_invocation:
-      *result = config->max_subgroup_size - 1;
+      *result = shader->info.max_subgroup_size - 1;
       break;
    case nir_intrinsic_mbcnt_amd: {
       if (!q.head.pushed_queries) {
-         push_uub_query(state, nir_get_scalar(intrin->src[1].ssa, 0));
+         push_scalar_query(state, nir_get_scalar(intrin->src[1].ssa, 0));
          return;
       } else {
-         uint32_t src0 = config->max_subgroup_size - 1;
+         uint32_t src0 = shader->info.max_subgroup_size - 1;
          uint32_t src1 = src[0];
          if (src0 + src1 >= src0) /* check overflow */
             *result = src0 + src1;
@@ -1674,45 +1680,74 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       break;
    }
    case nir_intrinsic_load_subgroup_size:
-      *result = config->max_subgroup_size;
+      if (shader->info.api_subgroup_size)
+         *result = shader->info.api_subgroup_size;
+      else
+         *result = shader->info.max_subgroup_size;
       break;
    case nir_intrinsic_load_subgroup_id:
    case nir_intrinsic_load_num_subgroups: {
-      uint32_t workgroup_size = config->max_workgroup_invocations;
-      if (gl_shader_stage_uses_workgroup(shader->info.stage) &&
+      uint32_t workgroup_size = get_max_workgroup_invocations(shader);
+      if (mesa_shader_stage_uses_workgroup(shader->info.stage) &&
           !shader->info.workgroup_size_variable) {
          workgroup_size = shader->info.workgroup_size[0] *
                           shader->info.workgroup_size[1] *
                           shader->info.workgroup_size[2];
       }
-      *result = DIV_ROUND_UP(workgroup_size, config->min_subgroup_size);
+      *result = DIV_ROUND_UP(workgroup_size, shader->info.min_subgroup_size);
       if (intrin->intrinsic == nir_intrinsic_load_subgroup_id)
          (*result)--;
-      break;
-   }
-   case nir_intrinsic_load_input: {
-      if (shader->info.stage == MESA_SHADER_VERTEX && nir_src_is_const(intrin->src[0])) {
-         nir_variable *var = lookup_input(shader, nir_intrinsic_base(intrin));
-         if (var) {
-            int loc = var->data.location - VERT_ATTRIB_GENERIC0;
-            if (loc >= 0)
-               *result = config->vertex_attrib_max[loc];
-         }
-      }
       break;
    }
    case nir_intrinsic_reduce:
    case nir_intrinsic_inclusive_scan:
    case nir_intrinsic_exclusive_scan: {
       nir_op op = nir_intrinsic_reduction_op(intrin);
-      if (op == nir_op_umin || op == nir_op_umax || op == nir_op_imin || op == nir_op_imax) {
+
+      switch (op) {
+      case nir_op_umin:
+      case nir_op_umax:
+      case nir_op_imax:
+      case nir_op_imin:
+      case nir_op_iand:
+      case nir_op_ior:
+      case nir_op_ixor:
+      case nir_op_iadd:
          if (!q.head.pushed_queries) {
-            push_uub_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
+            push_scalar_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
             return;
-         } else {
-            *result = src[0];
          }
+         break;
+      default:
+         return;
       }
+
+      unsigned bit_size = q.scalar.def->bit_size;
+      bool exclusive = intrin->intrinsic == nir_intrinsic_exclusive_scan;
+      switch (op) {
+      case nir_op_umin:
+      case nir_op_umax:
+      case nir_op_imax:
+      case nir_op_imin:
+      case nir_op_iand:
+         *result = src[0];
+         break;
+      case nir_op_ior:
+      case nir_op_ixor:
+         *result = bitmask(util_last_bit64(src[0]));
+         break;
+      case nir_op_iadd:
+         *result = MIN2(*result, (uint64_t)src[0] * (shader->info.max_subgroup_size - exclusive));
+         break;
+      default:
+         UNREACHABLE("unhandled op");
+      }
+
+      if (exclusive) {
+         uint32_t identity = nir_const_value_as_uint(nir_alu_binop_identity(op, bit_size), bit_size);
+         *result = MAX2(*result, identity);
+      }
+
       break;
    }
    case nir_intrinsic_read_first_invocation:
@@ -1728,7 +1763,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
    case nir_intrinsic_quad_swizzle_amd:
    case nir_intrinsic_masked_swizzle_amd:
       if (!q.head.pushed_queries) {
-         push_uub_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
+         push_scalar_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
          return;
       } else {
          *result = src[0];
@@ -1736,8 +1771,8 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
       break;
    case nir_intrinsic_write_invocation_amd:
       if (!q.head.pushed_queries) {
-         push_uub_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
-         push_uub_query(state, nir_get_scalar(intrin->src[1].ssa, q.scalar.comp));
+         push_scalar_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
+         push_scalar_query(state, nir_get_scalar(intrin->src[1].ssa, q.scalar.comp));
          return;
       } else {
          *result = MAX2(src[0], src[1]);
@@ -1746,7 +1781,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
    case nir_intrinsic_load_tess_rel_patch_id_amd:
    case nir_intrinsic_load_tcs_num_patches_amd:
       /* Very generous maximum: TCS/TES executed by largest possible workgroup */
-      *result = config->max_workgroup_invocations / MAX2(shader->info.tess.tcs_vertices_out, 1u);
+      *result = get_max_workgroup_invocations(shader) / MAX2(shader->info.tess.tcs_vertices_out, 1u);
       break;
    case nir_intrinsic_load_typed_buffer_amd: {
       const enum pipe_format format = nir_intrinsic_format(intrin);
@@ -1779,7 +1814,7 @@ get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *re
 }
 
 static void
-get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, const uint32_t *src)
+get_alu_uub(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src)
 {
    nir_op op = nir_scalar_alu_op(q.scalar);
 
@@ -1802,7 +1837,9 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    case nir_op_bcsel:
    case nir_op_b32csel:
    case nir_op_ubfe:
+   case nir_op_bfi:
    case nir_op_bfm:
+   case nir_op_bitfield_select:
    case nir_op_extract_u8:
    case nir_op_extract_i8:
    case nir_op_extract_u16:
@@ -1830,13 +1867,19 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
          return;
       }
       break;
+   case nir_op_bit_count:
+      if (nir_scalar_chase_alu_src(q.scalar, 0).def->bit_size > 32) {
+         *result = nir_scalar_chase_alu_src(q.scalar, 0).def->bit_size;
+         return;
+      }
+      break;
    default:
       return;
    }
 
    if (!q.head.pushed_queries) {
       for (unsigned i = 0; i < nir_op_infos[op].num_inputs; i++)
-         push_uub_query(state, nir_scalar_chase_alu_src(q.scalar, i));
+         push_scalar_query(state, nir_scalar_chase_alu_src(q.scalar, i));
       return;
    }
 
@@ -1877,6 +1920,7 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
       uint32_t src1 = MIN2(src[1], q.scalar.def->bit_size - 1u);
       if (util_last_bit64(src[0]) + src1 <= q.scalar.def->bit_size) /* check overflow */
          *result = src[0] << src1;
+      *result = MIN2(*result, max);
 
       nir_scalar src1_scalar = nir_scalar_chase_alu_src(q.scalar, 1);
       if (nir_scalar_is_const(src1_scalar)) {
@@ -1888,15 +1932,16 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    case nir_op_imul: {
       if (src[0] == 0 || (src[0] * src[1]) / src[0] == src[1]) /* check overflow */
          *result = src[0] * src[1];
+      *result = MIN2(*result, max);
 
       nir_scalar src0_scalar = nir_scalar_chase_alu_src(q.scalar, 0);
       nir_scalar src1_scalar = nir_scalar_chase_alu_src(q.scalar, 1);
       if (nir_scalar_is_const(src0_scalar)) {
          uint32_t const_val = nir_scalar_as_uint(src0_scalar);
-         *result = MIN2(*result, max / const_val * const_val);
+         *result = const_val ? MIN2(*result, max / const_val * const_val) : 0;
       } else if (nir_scalar_is_const(src1_scalar)) {
          uint32_t const_val = nir_scalar_as_uint(src1_scalar);
-         *result = MIN2(*result, max / const_val * const_val);
+         *result = const_val ? MIN2(*result, max / const_val * const_val) : 0;
       }
       break;
    }
@@ -1921,6 +1966,7 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    case nir_op_iadd:
       if (src[0] + src[1] >= src[0]) /* check overflow */
          *result = src[0] + src[1];
+      *result = MIN2(*result, max);
       break;
    case nir_op_umod:
       *result = src[1] ? src[1] - 1 : 0;
@@ -1955,6 +2001,57 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
       }
       break;
    }
+
+   case nir_op_bfi: {
+      nir_scalar src0_scalar = nir_scalar_chase_alu_src(q.scalar, 0);
+      const uint64_t s1 = bitmask(util_last_bit64(src[1]));
+      const uint64_t s2 = bitmask(util_last_bit64(src[2]));
+
+      if (nir_scalar_is_const(src0_scalar)) {
+         const uint64_t s0 = nir_scalar_as_uint(src0_scalar);
+
+         /* This case should be eliminated by opt_algebraic. */
+         if (s0 == 0) {
+            *result = s2;
+         } else {
+            const int x = ffsll(s0) - 1;
+            *result = (s0 & (s1 << x)) | (~s0 & s2);
+         }
+      } else {
+         const uint64_t s0 = bitmask(util_last_bit64(src[0]));
+
+         /* Due to the unpredictable shift, the true maximum value of (s0 &
+          * (s1 << x)) cannot be known. However, it cannot be larger than
+          * s0.
+          *
+          * inot doesn't work in get_alu_uub. It is known that (~s0 & s2)
+          * cannot be larger than s2, so just use s2 as a loose upper bound.
+          */
+         *result = s0 | s2;
+      }
+      break;
+   }
+
+   case nir_op_bitfield_select: {
+      nir_scalar src0_scalar = nir_scalar_chase_alu_src(q.scalar, 0);
+      const uint64_t s1 = bitmask(util_last_bit64(src[1]));
+      const uint64_t s2 = bitmask(util_last_bit64(src[2]));
+
+      if (nir_scalar_is_const(src0_scalar)) {
+         const uint64_t s0 = nir_scalar_as_uint(src0_scalar);
+
+         *result = (s0 & s1) | (~s0 & s2);
+      } else {
+         const uint64_t s0 = bitmask(util_last_bit64(src[0]));
+
+         /* inot doesn't work in get_alu_uub. It is known that (~s0 & s2)
+          * cannot be larger than s2, so just use s2 as a loose upper bound.
+          */
+         *result = (s0 & s1) | s2;
+      }
+      break;
+   }
+
    /* limited floating-point support for f2u32(fmul(load_input(), <constant>)) */
    case nir_op_f2i32:
    case nir_op_f2u32:
@@ -2006,15 +2103,18 @@ get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    case nir_op_extract_i16:
       *result = (src[0] >= 0x8000) ? max : MIN2(src[0], INT16_MAX);
       break;
+   case nir_op_bit_count:
+      *result = util_last_bit64(src[0]);
+      break;
    default:
       break;
    }
 }
 
 static void
-get_phi_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, const uint32_t *src)
+get_phi_uub(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src)
 {
-   nir_phi_instr *phi = nir_instr_as_phi(q.scalar.def->parent_instr);
+   nir_phi_instr *phi = nir_def_as_phi(q.scalar.def);
 
    if (exec_list_is_empty(&phi->srcs))
       return;
@@ -2030,7 +2130,7 @@ get_phi_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
    if (!prev || prev->type == nir_cf_node_block) {
       /* Resolve cycles by inserting max into range_ht. */
       uint32_t max = bitmask(q.scalar.def->bit_size);
-      _mesa_hash_table_insert(state->range_ht, (void *)get_uub_key(&q.head), (void *)(uintptr_t)max);
+      _mesa_hash_table_insert(state->range_ht, (void *)get_scalar_key(&q.head), (void *)(uintptr_t)max);
 
       struct set *visited = _mesa_pointer_set_create(NULL);
       nir_scalar *defs = alloca(sizeof(nir_scalar) * 64);
@@ -2038,10 +2138,10 @@ get_phi_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, 
       _mesa_set_destroy(visited, NULL);
 
       for (unsigned i = 0; i < def_count; i++)
-         push_uub_query(state, defs[i]);
+         push_scalar_query(state, defs[i]);
    } else {
       nir_foreach_phi_src(src, phi)
-         push_uub_query(state, nir_get_scalar(src->src.ssa, q.scalar.comp));
+         push_scalar_query(state, nir_get_scalar(src->src.ssa, q.scalar.comp));
    }
 }
 
@@ -2049,7 +2149,7 @@ static void
 process_uub_query(struct analysis_state *state, struct analysis_query *aq, uint32_t *result,
                   const uint32_t *src)
 {
-   struct uub_query q = *(struct uub_query *)aq;
+   struct scalar_query q = *(struct scalar_query *)aq;
 
    *result = bitmask(q.scalar.def->bit_size);
    if (nir_scalar_is_const(q.scalar))
@@ -2058,42 +2158,36 @@ process_uub_query(struct analysis_state *state, struct analysis_query *aq, uint3
       get_intrinsic_uub(state, q, result, src);
    else if (nir_scalar_is_alu(q.scalar))
       get_alu_uub(state, q, result, src);
-   else if (q.scalar.def->parent_instr->type == nir_instr_type_phi)
+   else if (nir_def_instr_type(q.scalar.def) == nir_instr_type_phi)
       get_phi_uub(state, q, result, src);
 }
 
 uint32_t
 nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
-                         nir_scalar scalar,
-                         const nir_unsigned_upper_bound_config *config)
+                         nir_scalar scalar)
 {
-   if (!config)
-      config = &default_ub_config;
-
-   struct uub_query query_alloc[16];
+   struct scalar_query query_alloc[16];
    uint32_t result_alloc[16];
 
    struct analysis_state state;
    state.shader = shader;
-   state.config = config;
    state.range_ht = range_ht;
    util_dynarray_init_from_stack(&state.query_stack, query_alloc, sizeof(query_alloc));
    util_dynarray_init_from_stack(&state.result_stack, result_alloc, sizeof(result_alloc));
-   state.query_size = sizeof(struct uub_query);
-   state.get_key = &get_uub_key;
+   state.query_size = sizeof(struct scalar_query);
+   state.get_key = &get_scalar_key;
    state.process_query = &process_uub_query;
 
-   push_uub_query(&state, scalar);
+   push_scalar_query(&state, scalar);
 
    return perform_analysis(&state);
 }
 
 bool
 nir_addition_might_overflow(nir_shader *shader, struct hash_table *range_ht,
-                            nir_scalar ssa, unsigned const_val,
-                            const nir_unsigned_upper_bound_config *config)
+                            nir_scalar ssa, unsigned const_val)
 {
-   uint32_t ub = nir_unsigned_upper_bound(shader, range_ht, ssa, config);
+   uint32_t ub = nir_unsigned_upper_bound(shader, range_ht, ssa);
    return const_val + ub < const_val;
 }
 
@@ -2363,4 +2457,119 @@ uint64_t
 nir_def_bits_used(const nir_def *def)
 {
    return ssa_def_bits_used(def, 2);
+}
+
+static void
+get_alu_num_lsb(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src)
+{
+   nir_op op = nir_scalar_alu_op(q.scalar);
+
+   switch (op) {
+   case nir_op_ior:
+   case nir_op_ixor:
+   case nir_op_iadd:
+   case nir_op_iand:
+   case nir_op_imul:
+      if (!q.head.pushed_queries) {
+         push_scalar_query(state, nir_scalar_chase_alu_src(q.scalar, 0));
+         push_scalar_query(state, nir_scalar_chase_alu_src(q.scalar, 1));
+         return;
+      }
+      break;
+   case nir_op_ishl:
+      if (!q.head.pushed_queries) {
+         push_scalar_query(state, nir_scalar_chase_alu_src(q.scalar, 0));
+         return;
+      }
+      break;
+   case nir_op_ishr:
+   case nir_op_ushr:
+      if (!q.head.pushed_queries) {
+         if (nir_scalar_is_const(nir_scalar_chase_alu_src(q.scalar, 1)))
+            push_scalar_query(state, nir_scalar_chase_alu_src(q.scalar, 0));
+         return;
+      }
+      break;
+   case nir_op_bcsel:
+      if (!q.head.pushed_queries) {
+         push_scalar_query(state, nir_scalar_chase_alu_src(q.scalar, 1));
+         push_scalar_query(state, nir_scalar_chase_alu_src(q.scalar, 2));
+         return;
+      }
+      break;
+   default:
+      return;
+   }
+
+   switch (op) {
+   case nir_op_ior:
+   case nir_op_ixor:
+   case nir_op_iadd: {
+      *result = MIN2(src[0], src[1]);
+      break;
+   }
+   case nir_op_iand: {
+      *result = MAX2(src[0], src[1]);
+      break;
+   }
+   case nir_op_imul: {
+      *result = MIN2(src[0] + src[1], q.scalar.def->bit_size);
+      break;
+   }
+   case nir_op_ishl: {
+      nir_scalar src1 = nir_scalar_chase_alu_src(q.scalar, 1);
+      uint32_t mask = q.scalar.def->bit_size - 1;
+      unsigned amount = nir_scalar_is_const(src1) ? nir_scalar_as_uint(src1) & mask : 0;
+      *result = MIN2(src[0] + amount, q.scalar.def->bit_size);
+      break;
+   }
+   case nir_op_ishr:
+   case nir_op_ushr: {
+      nir_scalar src1 = nir_scalar_chase_alu_src(q.scalar, 1);
+      unsigned amount = nir_scalar_as_uint(src1) & (q.scalar.def->bit_size - 1);
+      *result = amount > src[0] ? 0 : src[0] - amount;
+      break;
+   }
+   case nir_op_bcsel: {
+      *result = MIN2(src[0], src[1]);
+      break;
+   }
+   default:
+      UNREACHABLE("Unknown opcode");
+   }
+}
+
+static void
+process_num_lsb_query(struct analysis_state *state, struct analysis_query *aq, uint32_t *result,
+                      const uint32_t *src)
+{
+   struct scalar_query q = *(struct scalar_query *)aq;
+
+   *result = 0;
+   if (nir_scalar_is_const(q.scalar)) {
+      uint64_t val = nir_scalar_as_uint(q.scalar);
+      *result = val ? ffsll(val) - 1 : q.scalar.def->bit_size;
+   } else if (nir_scalar_is_alu(q.scalar)) {
+      get_alu_num_lsb(state, q, result, src);
+   }
+}
+
+unsigned
+nir_def_num_lsb_zero(struct hash_table *numlsb_ht, nir_scalar def)
+{
+   struct scalar_query query_alloc[16];
+   uint32_t result_alloc[16];
+
+   struct analysis_state state;
+   state.shader = NULL;
+   state.range_ht = numlsb_ht;
+   util_dynarray_init_from_stack(&state.query_stack, query_alloc, sizeof(query_alloc));
+   util_dynarray_init_from_stack(&state.result_stack, result_alloc, sizeof(result_alloc));
+   state.query_size = sizeof(struct scalar_query);
+   state.get_key = &get_scalar_key;
+   state.process_query = &process_num_lsb_query;
+
+   push_scalar_query(&state, def);
+
+   return perform_analysis(&state);
 }

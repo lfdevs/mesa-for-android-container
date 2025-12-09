@@ -46,101 +46,60 @@ load_ubo(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var, unsigned 
 }
 
 static bool
-lower_load_base_global_invocation_id(nir_builder *b, nir_intrinsic_instr *intr,
-                                    nir_variable *var)
+is_clc_system_value(const nir_instr *instr, const void *state)
 {
-   b->cursor = nir_after_instr(&intr->instr);
-
-   nir_def *offset = load_ubo(b, intr, var, offsetof(struct clc_work_properties_data,
-                                                         global_offset_x));
-   nir_def_replace(&intr->def, offset);
-   return true;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_base_global_invocation_id:
+   case nir_intrinsic_load_work_dim:
+   case nir_intrinsic_load_num_workgroups:
+   case nir_intrinsic_load_base_workgroup_id:
+      return true;
+   default:
+      return false;
+   }
 }
 
-static bool
-lower_load_work_dim(nir_builder *b, nir_intrinsic_instr *intr,
-                    nir_variable *var)
+static nir_def *
+lower_clc_system_value(nir_builder *b, nir_instr *instr, void *state)
 {
-   b->cursor = nir_after_instr(&intr->instr);
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   nir_variable *var = (nir_variable *)state;
 
-   nir_def *dim = load_ubo(b, intr, var, offsetof(struct clc_work_properties_data,
-                                                      work_dim));
-   nir_def_replace(&intr->def, dim);
-   return true;
-}
-
-static bool
-lower_load_num_workgroups(nir_builder *b, nir_intrinsic_instr *intr,
-                          nir_variable *var)
-{
-   b->cursor = nir_after_instr(&intr->instr);
-
-   nir_def *count =
-      load_ubo(b, intr, var, offsetof(struct clc_work_properties_data,
-                                      group_count_total_x));
-   nir_def_replace(&intr->def, count);
-   return true;
-}
-
-static bool
-lower_load_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intr,
-                             nir_variable *var)
-{
-   b->cursor = nir_after_instr(&intr->instr);
-
-   nir_def *offset =
-      load_ubo(b, intr, var, offsetof(struct clc_work_properties_data,
-                                      group_id_offset_x));
-   nir_def_replace(&intr->def, offset);
-   return true;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_base_global_invocation_id:
+      return load_ubo(b, intr, var, offsetof(struct clc_work_properties_data, global_offset_x));
+   case nir_intrinsic_load_work_dim:
+      return load_ubo(b, intr, var, offsetof(struct clc_work_properties_data, work_dim));
+   case nir_intrinsic_load_num_workgroups:
+      return load_ubo(b, intr, var, offsetof(struct clc_work_properties_data, group_count_total_x));
+   case nir_intrinsic_load_base_workgroup_id:
+      return load_ubo(b, intr, var, offsetof(struct clc_work_properties_data, group_id_offset_x));
+   default:
+      return NULL;
+   }
 }
 
 bool
 clc_nir_lower_system_values(nir_shader *nir, nir_variable *var)
 {
-   bool progress = false;
-
-   foreach_list_typed(nir_function, func, node, &nir->functions) {
-      if (!func->is_entrypoint)
-         continue;
-      assert(func->impl);
-
-      nir_builder b = nir_builder_create(func->impl);
-
-      nir_foreach_block(block, func->impl) {
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-            switch (intr->intrinsic) {
-            case nir_intrinsic_load_base_global_invocation_id:
-               progress |= lower_load_base_global_invocation_id(&b, intr, var);
-               break;
-            case nir_intrinsic_load_work_dim:
-               progress |= lower_load_work_dim(&b, intr, var);
-               break;
-            case nir_intrinsic_load_num_workgroups:
-               progress |= lower_load_num_workgroups(&b, intr, var);
-               break;
-            case nir_intrinsic_load_base_workgroup_id:
-               progress |= lower_load_base_workgroup_id(&b, intr, var);
-               break;
-            default: break;
-            }
-         }
-      }
-   }
-
-   return progress;
+   return nir_shader_lower_instructions(nir, is_clc_system_value, lower_clc_system_value, var);
 }
 
 static bool
-lower_load_kernel_input(nir_builder *b, nir_intrinsic_instr *intr,
-                        nir_variable *var)
+is_load_kernel_input(const nir_instr *instr, const void *state)
 {
-   b->cursor = nir_before_instr(&intr->instr);
+   return instr->type == nir_instr_type_intrinsic &&
+      nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_kernel_input;
+}
+
+static nir_def *
+lower_load_kernel_input(nir_builder *b, nir_instr *instr, void *state)
+{
+   nir_variable *var = (nir_variable *)state;
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
    unsigned bit_size = intr->def.bit_size;
    enum glsl_base_type base_type;
@@ -159,7 +118,7 @@ lower_load_kernel_input(nir_builder *b, nir_intrinsic_instr *intr,
       base_type = GLSL_TYPE_UINT8;
       break;
    default:
-      unreachable("invalid bit size");
+      UNREACHABLE("invalid bit size");
    }
 
    const struct glsl_type *type =
@@ -171,38 +130,13 @@ lower_load_kernel_input(nir_builder *b, nir_intrinsic_instr *intr,
    deref->cast.align_mul = nir_intrinsic_align_mul(intr);
    deref->cast.align_offset = nir_intrinsic_align_offset(intr);
 
-   nir_def *result =
-      nir_load_deref(b, deref);
-   nir_def_replace(&intr->def, result);
-   return true;
+   return nir_load_deref(b, deref);
 }
 
 bool
 clc_nir_lower_kernel_input_loads(nir_shader *nir, nir_variable *var)
 {
-   bool progress = false;
-
-   foreach_list_typed(nir_function, func, node, &nir->functions) {
-      if (!func->is_entrypoint)
-         continue;
-      assert(func->impl);
-
-      nir_builder b = nir_builder_create(func->impl);
-
-      nir_foreach_block(block, func->impl) {
-         nir_foreach_instr_safe(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-            if (intr->intrinsic == nir_intrinsic_load_kernel_input)
-               progress |= lower_load_kernel_input(&b, intr, var);
-         }
-      }
-   }
-
-   return progress;
+   return nir_shader_lower_instructions(nir, is_load_kernel_input, lower_load_kernel_input, var);
 }
 
 
@@ -292,7 +226,7 @@ lower_deref_base_to_constant(nir_builder *b, nir_intrinsic_instr *intr, void *co
    if (!nir_deref_mode_must_be(path.path[0], nir_var_mem_global | nir_var_mem_constant))
       goto done;
 
-   nir_instr *cast_src = path.path[0]->parent.ssa->parent_instr;
+   nir_instr *cast_src = nir_def_instr(path.path[0]->parent.ssa);
    if (cast_src->type != nir_instr_type_intrinsic)
       goto done;
 

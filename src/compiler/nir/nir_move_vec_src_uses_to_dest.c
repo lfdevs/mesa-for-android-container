@@ -48,12 +48,12 @@
 static bool
 ssa_def_dominates_instr(nir_def *def, nir_instr *instr)
 {
-   if (instr->index <= def->parent_instr->index) {
+   if (instr->index <= nir_def_instr(def)->index) {
       return false;
-   } else if (def->parent_instr->block == instr->block) {
-      return def->parent_instr->index < instr->index;
+   } else if (nir_def_block(def) == instr->block) {
+      return nir_def_instr(def)->index < instr->index;
    } else {
-      return nir_block_dominates(def->parent_instr->block, instr->block);
+      return nir_block_dominates(nir_def_block(def), instr->block);
    }
 }
 

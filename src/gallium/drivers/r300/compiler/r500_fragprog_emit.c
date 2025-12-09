@@ -25,9 +25,9 @@
 
 #define PROG_CODE struct r500_fragment_program_code *code = &c->code->code.r500
 
-#define error(fmt, args...)                                                                        \
-   do {                                                                                            \
-      rc_error(&c->Base, "%s::%s(): " fmt "\n", __FILE__, __func__, ##args);                       \
+#define error(fmt, args...)                                                  \
+   do {                                                                      \
+      rc_error(&c->Base, "%s::%s(): " fmt "\n", __FILE__, __func__, ##args); \
    } while (0)
 
 struct branch_info {
@@ -544,8 +544,8 @@ emit_flowcontrol(struct emit_state *s, struct rc_instruction *inst)
          | R500_FC_B_POP_CNT(1);
       s->Code->inst[branch->Endif].inst3 = R500_FC_JUMP_ADDR(branch->Endif + 1);
       s->Code->inst[branch->If].inst2 = R500_FC_OP_JUMP | R500_FC_A_OP_NONE /* no address stack */
-                                        | R500_FC_JUMP_FUNC(0x0f) /* jump if ALU result is false */
-                                        | R500_FC_B_OP0_INCR /* increment branch counter if stay */
+                                        | R500_FC_JUMP_FUNC(0x0f)           /* jump if ALU result is false */
+                                        | R500_FC_B_OP0_INCR                /* increment branch counter if stay */
                                         | R500_FC_IGNORE_UNCOVERED;
 
       if (branch->Else >= 0) {

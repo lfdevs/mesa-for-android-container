@@ -478,7 +478,7 @@ ComputeTest::run_shader_with_raw_args(Shader shader,
    if (args.size() != shader.dxil->kernel->num_args)
       throw runtime_error("incorrect number of inputs");
 
-   struct clc_runtime_kernel_conf conf = { 0 };
+   struct clc_runtime_kernel_conf conf = {};
 
    // Older WARP and some hardware doesn't support int64, so for these tests, unconditionally lower away int64
    // A more complex runtime can be smarter about detecting when this needs to be done

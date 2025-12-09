@@ -122,9 +122,8 @@ Enable the site and restart nginx:
    # Second download should be cached.
    wget http://localhost/cache/?uri=https://s3.freedesktop.org/mesa-tracie-public/itoral-gl-terrain-demo/demo-v2.trace
 
-Now, set ``download-url`` in your ``traces-*.yml`` entry to something like
-``http://caching-proxy/cache/?uri=https://s3.freedesktop.org/mesa-tracie-public``
-and you should have cached downloads for traces.  Add it to
-``FDO_HTTP_CACHE_URI=`` in your ``config.toml`` runner environment lines and you
-can use it for cached artifact downloads instead of going all the way to
-freedesktop.org on each job.
+The trace runner script automatically sets the caching proxy, so there's no
+need to modify anything in the Mesa CI YAML files.
+Add ``LAVA_HTTP_CACHE_URI=http://localhost/cache/?uri=`` to your ``config.toml``
+runner environment lines and you can use it for cached artifact downloads
+instead of going all the way to freedesktop.org on each job.

@@ -1764,8 +1764,12 @@ BEGIN_TEST(insert_nops.valu_read_sgpr.previous_part)
    /* Raytracing shaders have a prolog and may also be split into several parts. */
    program->stage = raytracing_cs;
 
-   /* Despite the SGPR never being read by a VALU in this shader, a sa_sdst(0) is needed. */
+   /* Despite the SGPR never being read by a VALU in this shader, a sa_sdst(0) is needed.
+    * The first instruction is also a sa_sdst(0) in RT shaders to protect against reads of the
+    * setpc target.
+    */
    //>> p_unit_test 0
+   //! s_waitcnt_depctr sa_sdst(0)
    //! s1: %0:s[4] = s_mov_b32 0
    //! s_waitcnt_depctr sa_sdst(0)
    //! s1: %0:s[64] = s_mov_b32 %0:s[4]

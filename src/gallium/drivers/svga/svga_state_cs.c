@@ -27,7 +27,7 @@ make_cs_key(struct svga_context *svga,
 
    memset(key, 0, sizeof *key);
 
-   svga_init_shader_key_common(svga, PIPE_SHADER_COMPUTE, &cs->base, key);
+   svga_init_shader_key_common(svga, MESA_SHADER_COMPUTE, &cs->base, key);
 
    key->cs.grid_size[0] = svga->curr.grid_info.size[0];
    key->cs.grid_size[1] = svga->curr.grid_info.size[1];

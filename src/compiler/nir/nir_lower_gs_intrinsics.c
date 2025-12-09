@@ -268,7 +268,7 @@ append_set_vertex_and_primitive_count(nir_block *end_block, struct state *state)
    /* Insert the new intrinsic in all of the predecessors of the end block,
     * but before any jump instructions (return).
     */
-   set_foreach(end_block->predecessors, entry) {
+   set_foreach(&end_block->predecessors, entry) {
       nir_block *pred = (nir_block *)entry->key;
       b->cursor = nir_after_block_before_jump(pred);
 
@@ -319,7 +319,7 @@ append_set_vertex_and_primitive_count(nir_block *end_block, struct state *state)
 static bool
 a_block_needs_set_vertex_and_primitive_count(nir_block *end_block, bool per_stream)
 {
-   set_foreach(end_block->predecessors, entry) {
+   set_foreach(&end_block->predecessors, entry) {
       nir_block *pred = (nir_block *)entry->key;
 
       for (unsigned stream = 0; stream < NIR_MAX_XFB_STREAMS; ++stream) {

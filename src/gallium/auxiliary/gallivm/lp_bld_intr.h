@@ -38,13 +38,13 @@
 
 #include <llvm/Config/llvm-config.h>
 
-#include "gallivm/lp_bld.h"
-#include "gallivm/lp_bld_init.h"
+#include <llvm-c/Core.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct gallivm_state;
 struct lp_type;
 
 /**

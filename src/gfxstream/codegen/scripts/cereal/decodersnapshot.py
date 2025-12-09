@@ -18,7 +18,7 @@ decoder_snapshot_decl_preamble = """
 
 namespace gfxstream {
 class Stream;
-} // namespace gfxstream
+}  // namespace gfxstream
 
 namespace gfxstream {
 namespace base {
@@ -27,6 +27,7 @@ class BumpPool;
 } // namespace gfxstream
 
 namespace gfxstream {
+namespace host {
 namespace vk {
 
 class VkDecoderSnapshot {
@@ -56,12 +57,14 @@ decoder_snapshot_decl_postamble = """
 };
 
 }  // namespace vk
+}  // namespace host
 }  // namespace gfxstream
 """
 
 decoder_snapshot_impl_preamble ="""
 
 namespace gfxstream {
+namespace host {
 namespace vk {
 
 class VkDecoderSnapshot::Impl {
@@ -139,6 +142,7 @@ VkDecoderSnapshot::~VkDecoderSnapshot() = default;
 decoder_snapshot_namespace_postamble = """
 
 }  // namespace vk
+}  // namespace host
 }  // namespace gfxstream
 
 """
@@ -407,11 +411,9 @@ apiModifies = {
 }
 
 apiActions = {
-    "vkUpdateDescriptorSets" : ["pDescriptorWrites"],
 }
 
 apiActionsTag = {
-    "vkUpdateDescriptorSets" : "Tag_VkUpdateDescriptorSets",
 }
 
 apiClearModifiers = {

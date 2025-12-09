@@ -48,7 +48,6 @@
 
 #include "errno.h"
 #include "common/intel_aux_map.h"
-#include "common/intel_mem.h"
 #include "c99_alloca.h"
 #include "dev/intel_debug.h"
 #include "common/intel_common.h"
@@ -612,7 +611,7 @@ iris_bo_busy(struct iris_bo *bo)
       busy = iris_bo_busy_syncobj(bo);
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       busy = true;
    }
 
@@ -676,7 +675,7 @@ get_slabs(struct iris_bufmgr *bufmgr, uint64_t size)
          return slabs;
    }
 
-   unreachable("should have found a valid slab for this size");
+   UNREACHABLE("should have found a valid slab for this size");
 }
 
 /* Return the power of two size of a slab entry matching the input size. */
@@ -1191,7 +1190,7 @@ alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size, enum bo_alloc_flags
       case IRIS_HEAP_SYSTEM_MEMORY_UNCACHED:
          /* not valid; discrete cards always enable snooping */
       case IRIS_HEAP_MAX:
-         unreachable("invalid heap for BO");
+         UNREACHABLE("invalid heap for BO");
       }
    } else {
       regions[num_regions++] = bufmgr->sys.region;
@@ -1250,7 +1249,7 @@ heap_to_mmap_mode(struct iris_bufmgr *bufmgr, enum iris_heap heap)
       /* compressed bos are not mmaped */
       return IRIS_MMAP_NONE;
    default:
-      unreachable("invalid heap");
+      UNREACHABLE("invalid heap");
    }
 }
 
@@ -1856,7 +1855,7 @@ iris_bo_wait(struct iris_bo *bo, int64_t timeout_ns)
       ret = iris_bo_wait_syncobj(bo, timeout_ns);
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       ret = -1;
    }
 
@@ -1887,7 +1886,7 @@ iris_bufmgr_destroy_global_vm(struct iris_bufmgr *bufmgr)
       iris_xe_destroy_global_vm(bufmgr);
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
    }
 }
 
@@ -2071,6 +2070,14 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
 
 out:
    simple_mtx_unlock(&bufmgr->lock);
+   /* Type of an existing BO's heap should be consistent with the modifier in
+    * terms of compression state when importing it. Compressed heaps are only
+    * present on Xe2+.
+    */
+   assert(!bo || (iris_heap_is_compressed(bo->real.heap) ==
+                  (isl_drm_modifier_has_aux(modifier) &&
+                   bufmgr->devinfo.ver >= 20)));
+
    return bo;
 
 err_vm_alloc:
@@ -2298,7 +2305,7 @@ intel_aux_map_buffer_alloc(void *driver_ctx, uint32_t size)
    struct iris_bufmgr *bufmgr = (struct iris_bufmgr *)driver_ctx;
 
    unsigned int page_size = getpagesize();
-   size = MAX2(ALIGN(size, page_size), page_size);
+   size = MAX2(align(size, page_size), page_size);
 
    struct iris_bo *bo = alloc_fresh_bo(bufmgr, size, BO_ALLOC_CAPTURE);
    if (!bo) {
@@ -2385,7 +2392,7 @@ iris_bufmgr_init_global_vm(struct iris_bufmgr *bufmgr)
       /* Xe requires VM */
       return bufmgr->use_global_vm;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return false;
    }
 }
@@ -2647,16 +2654,16 @@ iris_bufmgr_get_for_fd(int fd, bool bo_reuse)
    }
 
    if (!intel_get_device_info_from_fd(fd, &devinfo, 8, -1))
-      return NULL;
+      goto unlock;
 
    if (devinfo.ver < 8 || devinfo.platform == INTEL_PLATFORM_CHV)
-      return NULL;
+      goto unlock;
 
 #ifndef INTEL_USE_ELK
    if (devinfo.ver < 9) {
       WARN_ONCE(devinfo.ver == 8,
                 "ERROR: Iris was compiled without support for Gfx version 8.\n");
-      return NULL;
+      goto unlock;
    }
 #endif
 
@@ -2763,7 +2770,7 @@ iris_heap_to_pat_entry(const struct intel_device_info *devinfo,
    case IRIS_HEAP_DEVICE_LOCAL_COMPRESSED_SCANOUT:
       return &devinfo->pat.compressed_scanout;
    default:
-      unreachable("invalid heap for platforms using PAT entries");
+      UNREACHABLE("invalid heap for platforms using PAT entries");
    }
 }
 

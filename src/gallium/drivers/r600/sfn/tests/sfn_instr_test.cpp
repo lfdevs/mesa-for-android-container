@@ -37,7 +37,7 @@ TEST_F(InstrTest, test_alu_uni_op_mov)
    AluInstr alu(op1_mov,
                 new Register(128, 2, pin_none),
                 new Register(129, 0, pin_chan),
-                {alu_write});
+                AluInstr::write);
 
    EXPECT_TRUE(alu.has_alu_flag(alu_write));
 
@@ -187,14 +187,14 @@ TEST_F(InstrTest, test_alu_op1_comp)
    auto r129y = new Register(129, 1, pin_none);
    auto r130x = new Register(130, 0, pin_none);
 
-   AluInstr alu1(op1_mov, r128z, r129x, {alu_write});
-   EXPECT_NE(alu1, AluInstr(op1_mov, r128y, r129x, {alu_write}));
-   EXPECT_NE(alu1, AluInstr(op1_mov, r128z, r129xc, {alu_write}));
-   EXPECT_NE(alu1, AluInstr(op1_mov, r128z, r129y, {alu_write}));
-   EXPECT_NE(alu1, AluInstr(op1_mov, r128z, r130x, {alu_write}));
+   AluInstr alu1(op1_mov, r128z, r129x, AluInstr::write);
+   EXPECT_NE(alu1, AluInstr(op1_mov, r128y, r129x, AluInstr::write));
+   EXPECT_NE(alu1, AluInstr(op1_mov, r128z, r129xc, AluInstr::write));
+   EXPECT_NE(alu1, AluInstr(op1_mov, r128z, r129y, AluInstr::write));
+   EXPECT_NE(alu1, AluInstr(op1_mov, r128z, r130x, AluInstr::write));
    EXPECT_NE(alu1, AluInstr(op1_mov, r128z, r129x, {alu_write, alu_last_instr}));
-   EXPECT_NE(alu1, AluInstr(op1_flt_to_int, r128z, r129x, {alu_write}));
-   EXPECT_NE(alu1, AluInstr(op1_mov, r128zc, r129x, {alu_write}));
+   EXPECT_NE(alu1, AluInstr(op1_flt_to_int, r128z, r129x, AluInstr::write));
+   EXPECT_NE(alu1, AluInstr(op1_mov, r128zc, r129x, AluInstr::write));
 
    EXPECT_EQ(alu1, alu1);
 }
@@ -205,14 +205,17 @@ TEST_F(InstrTest, test_alu_op2_comp)
    auto r128y = new Register(128, 1, pin_none);
    auto r128z = new Register(128, 2, pin_none);
 
-   AluInstr alu1(op2_add, r128z, r128x, r128y, {alu_write});
+   AluInstr alu1(op2_add, r128z, r128x, r128y, AluInstr::write);
 
    EXPECT_NE(
-      alu1, AluInstr(op2_add, r128z, r128x, new Register(129, 2, pin_none), {alu_write}));
+      alu1,
+      AluInstr(op2_add, r128z, r128x, new Register(129, 2, pin_none), AluInstr::write));
    EXPECT_NE(
-      alu1, AluInstr(op2_add, r128z, r128x, new Register(128, 0, pin_none), {alu_write}));
+      alu1,
+      AluInstr(op2_add, r128z, r128x, new Register(128, 0, pin_none), AluInstr::write));
    EXPECT_NE(
-      alu1, AluInstr(op2_add, r128z, r128x, new Register(128, 1, pin_chan), {alu_write}));
+      alu1,
+      AluInstr(op2_add, r128z, r128x, new Register(128, 1, pin_chan), AluInstr::write));
 }
 
 TEST_F(InstrTest, test_alu_op3_comp)
@@ -221,20 +224,29 @@ TEST_F(InstrTest, test_alu_op3_comp)
    auto r128y = new Register(128, 1, pin_none);
    auto r128z = new Register(128, 2, pin_none);
 
-   AluInstr alu1(op3_muladd, r128z, r128x, r128y, r128y, {alu_write});
+   AluInstr alu1(op3_muladd, r128z, r128x, r128y, r128y, AluInstr::write);
 
-   EXPECT_NE(
-      alu1,
-      AluInstr(
-         op3_muladd, r128z, r128x, r128y, new Register(129, 2, pin_none), {alu_write}));
-   EXPECT_NE(
-      alu1,
-      AluInstr(
-         op3_muladd, r128z, r128x, r128y, new Register(128, 0, pin_none), {alu_write}));
-   EXPECT_NE(
-      alu1,
-      AluInstr(
-         op3_muladd, r128z, r128x, r128y, new Register(128, 1, pin_chan), {alu_write}));
+   EXPECT_NE(alu1,
+             AluInstr(op3_muladd,
+                      r128z,
+                      r128x,
+                      r128y,
+                      new Register(129, 2, pin_none),
+                      AluInstr::write));
+   EXPECT_NE(alu1,
+             AluInstr(op3_muladd,
+                      r128z,
+                      r128x,
+                      r128y,
+                      new Register(128, 0, pin_none),
+                      AluInstr::write));
+   EXPECT_NE(alu1,
+             AluInstr(op3_muladd,
+                      r128z,
+                      r128x,
+                      r128y,
+                      new Register(128, 1, pin_chan),
+                      AluInstr::write));
 }
 
 TEST_F(InstrTest, test_alu_op3_ne)
@@ -258,7 +270,7 @@ TEST_F(InstrTest, test_alu_op3_ne)
              AluInstr(op3_cnde, R130x, R130y, R130z, R131w, {alu_write, alu_last_instr}));
    EXPECT_NE(alu,
              AluInstr(op3_cnde, R130x, R130y, R131z, R130z, {alu_write, alu_last_instr}));
-   EXPECT_NE(alu, AluInstr(op3_cnde, R130x, R130y, R131z, R131w, {alu_write}));
+   EXPECT_NE(alu, AluInstr(op3_cnde, R130x, R130y, R131z, R131w, AluInstr::write));
 
    AluInstr alu_cf_changes = alu;
    alu_cf_changes.set_cf_type(cf_alu_push_before);
@@ -309,9 +321,6 @@ TEST_F(InstrTest, test_alu_dot4_grouped)
    auto R131w = new Register(131, 3, pin_none);
 
    auto R132x = new Register(132, 0, pin_chan);
-   auto R132y = new Register(132, 1, pin_chan);
-   auto R132z = new Register(132, 2, pin_chan);
-   auto R132w = new Register(132, 3, pin_chan);
 
    AluInstr::SrcValues src({R130x, R130y, R130z, R130w, R131x, R131y, R131z, R131w});
 
@@ -321,26 +330,27 @@ TEST_F(InstrTest, test_alu_dot4_grouped)
    EXPECT_EQ(alu, alu);
 
    ValueFactory vf;
-   auto group = alu.split(vf);
+   auto group = new AluGroup();
+   bool result = alu.split(*group);
    group->fix_last_flag();
-   ASSERT_TRUE(group);
+   ASSERT_TRUE(result);
 
    auto i = group->begin();
    EXPECT_NE(i, group->end());
    ASSERT_TRUE(*i);
-   check(**i, AluInstr(op2_dot4_ieee, R132x, R130x, R130y, {alu_write}));
+   check(**i, AluInstr(op2_dot4_ieee, R132x, R130x, R130y, AluInstr::write));
    ++i;
    EXPECT_NE(i, group->end());
    ASSERT_TRUE(*i);
-   check(**i, AluInstr(op2_dot4_ieee, R132y, R130z, R130w, {}));
+   check(**i, AluInstr(op2_dot4_ieee, 1, {R130z, R130w}, AluInstr::empty));
    ++i;
    EXPECT_NE(i, group->end());
    ASSERT_TRUE(*i);
-   check(**i, AluInstr(op2_dot4_ieee, R132z, R131x, R131y, {}));
+   check(**i, AluInstr(op2_dot4_ieee, 2, {R131x, R131y}, AluInstr::empty));
    ++i;
    EXPECT_NE(i, group->end());
    ASSERT_TRUE(*i);
-   check(**i, AluInstr(op2_dot4_ieee, R132w, R131z, R131w, {alu_last_instr}));
+   check(**i, AluInstr(op2_dot4_ieee, 3, {R131z, R131w}, {alu_last_instr}));
    ++i;
    EXPECT_NE(i, group->end());
    ASSERT_FALSE(*i);

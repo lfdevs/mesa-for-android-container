@@ -53,7 +53,7 @@ fd4_tex_type(unsigned target)
 {
    switch (target) {
    default:
-      unreachable("Unsupported target");
+      UNREACHABLE("Unsupported target");
    case PIPE_BUFFER:
       return A4XX_TEX_BUFFER;
    case PIPE_TEXTURE_1D:

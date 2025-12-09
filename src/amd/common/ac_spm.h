@@ -11,11 +11,15 @@
 
 #include "ac_perfcounter.h"
 
+struct ac_cmdbuf;
+
 #define AC_SPM_MAX_COUNTER_PER_BLOCK 16
 #define AC_SPM_GLOBAL_TIMESTAMP_COUNTERS 4 /* in unit of 16-bit counters*/
 #define AC_SPM_NUM_COUNTER_PER_MUXSEL 16 /* 16 16-bit counters per muxsel */
 #define AC_SPM_MUXSEL_LINE_SIZE ((AC_SPM_NUM_COUNTER_PER_MUXSEL * 2) / 4) /* in dwords */
 #define AC_SPM_NUM_PERF_SEL 4
+
+#define AC_SPM_RING_BASE_ALIGN 32
 
 /* GFX10+ */
 enum ac_spm_global_block {
@@ -196,5 +200,20 @@ bool ac_init_spm(const struct radeon_info *info,
 void ac_destroy_spm(struct ac_spm *spm);
 
 bool ac_spm_get_trace(const struct ac_spm *spm, struct ac_spm_trace *trace);
+
+void
+ac_emit_spm_setup(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level,
+                  enum amd_ip_type ip_type, const struct ac_spm *spm,
+                  uint64_t va);
+
+void
+ac_emit_spm_start(struct ac_cmdbuf *cs, enum amd_ip_type ip_type);
+
+void
+ac_emit_spm_stop(struct ac_cmdbuf *cs, enum amd_ip_type ip_type,
+                 const struct radeon_info *info);
+
+void
+ac_emit_spm_reset(struct ac_cmdbuf *cs);
 
 #endif

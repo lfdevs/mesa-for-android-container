@@ -205,7 +205,7 @@ d3d12_context_state_table_init(struct d3d12_context *ctx)
 void
 d3d12_context_state_table_destroy(struct d3d12_context *ctx)
 {
-   hash_table_foreach(ctx->bo_state_table->table, entry) {
+   hash_table_foreach(&ctx->bo_state_table->table, entry) {
       d3d12_destroy_context_state_table_entry((d3d12_context_state_table_entry *)entry->data);
       free(entry->data);
    }
@@ -334,7 +334,7 @@ resolve_global_state(struct d3d12_context *ctx, ID3D12Resource *res, d3d12_resou
       barrier.Transition.StateBefore = current_state->state;
       barrier.Transition.StateAfter = after;
       barrier.Transition.Subresource = num_subresources == 1 ? D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES : i;
-      util_dynarray_append(&ctx->barrier_scratch, D3D12_RESOURCE_BARRIER, barrier);
+      util_dynarray_append(&ctx->barrier_scratch, barrier);
    }
 }
 
@@ -442,13 +442,13 @@ append_barrier(struct d3d12_context *ctx,
             is_implicit_dispatch) {
          D3D12_RESOURCE_BARRIER uav_barrier = { D3D12_RESOURCE_BARRIER_TYPE_UAV };
          uav_barrier.UAV.pResource = res;
-         util_dynarray_append(&ctx->barrier_scratch, D3D12_RESOURCE_BARRIER, uav_barrier);
+         util_dynarray_append(&ctx->barrier_scratch, uav_barrier);
       } else if (transition_required(current_subresource_state.state, /*inout*/ &after)) {
          // Insert a single concrete barrier (for non-simultaneous access resources).
          transition_desc.Transition.StateBefore = current_subresource_state.state;
          transition_desc.Transition.StateAfter = after;
          assert(transition_desc.Transition.StateBefore != transition_desc.Transition.StateAfter);
-         util_dynarray_append(&ctx->barrier_scratch, D3D12_RESOURCE_BARRIER, transition_desc);
+         util_dynarray_append(&ctx->barrier_scratch, transition_desc);
 
          may_decay = current_state->supports_simultaneous_access && !d3d12_is_write_state(after);
          is_promotion = false;
@@ -485,7 +485,7 @@ d3d12_transition_resource_state(struct d3d12_context *ctx,
 
       if (ctx->id != D3D12_CONTEXT_NO_ID) {
          if ((res->bo->local_needs_resolve_state & (1 << ctx->id)) == 0) {
-            util_dynarray_append(&ctx->local_pending_barriers_bos, struct d3d12_bo*, res->bo);
+            util_dynarray_append(&ctx->local_pending_barriers_bos, res->bo);
             res->bo->local_needs_resolve_state |= (1 << ctx->id);
          }
       }
@@ -547,7 +547,7 @@ d3d12_transition_subresources_state(struct d3d12_context *ctx,
    if (is_accumulate) {
       if (ctx->id != D3D12_CONTEXT_NO_ID) {
          if ((res->bo->local_needs_resolve_state & (1 << ctx->id)) == 0) {
-            util_dynarray_append(&ctx->local_pending_barriers_bos, struct d3d12_bo*, res->bo);
+            util_dynarray_append(&ctx->local_pending_barriers_bos, res->bo);
             res->bo->local_needs_resolve_state |= (1 << ctx->id);
          }
       }

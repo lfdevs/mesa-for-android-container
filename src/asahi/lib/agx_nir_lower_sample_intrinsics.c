@@ -87,7 +87,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
          lowered = nir_iand(b, lowered, nir_u2uN(b, bit, old->bit_size));
       }
 
-      nir_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
+      nir_def_rewrite_uses_after(old, lowered);
       return true;
    }
 
@@ -121,7 +121,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
          b, intr->def.bit_size, nir_load_sample_id(b),
          .interp_mode = nir_intrinsic_interp_mode(intr));
 
-      nir_def_rewrite_uses_after(old, lowered, lowered->parent_instr);
+      nir_def_rewrite_uses_after(old, lowered);
       return true;
    }
 

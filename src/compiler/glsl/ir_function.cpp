@@ -55,10 +55,10 @@ get_param_type(const ir_instruction *inst)
 static parameter_list_match_t
 parameter_lists_match(bool has_implicit_conversions,
                       bool has_implicit_int_to_uint_conversion,
-                      const exec_list *list_a, const exec_list *list_b)
+                      const ir_exec_list *list_a, const ir_exec_list *list_b)
 {
-   const exec_node *node_a = list_a->get_head_raw();
-   const exec_node *node_b = list_b->get_head_raw();
+   const ir_exec_node *node_a = list_a->get_head_raw();
+   const ir_exec_node *node_b = list_b->get_head_raw();
 
    /* This is set to true if there is an inexact match requiring an implicit
     * conversion. */
@@ -219,7 +219,7 @@ is_better_parameter_match(parameter_match_t a_match,
 
 
 static bool
-is_best_inexact_overload(const exec_list *actual_parameters,
+is_best_inexact_overload(const ir_exec_list *actual_parameters,
                          ir_function_signature **matches,
                          int num_matches,
                          ir_function_signature *sig)
@@ -244,9 +244,9 @@ is_best_inexact_overload(const exec_list *actual_parameters,
       if (*other == sig)
          continue;
 
-      const exec_node *node_a = sig->parameters.get_head_raw();
-      const exec_node *node_b = (*other)->parameters.get_head_raw();
-      const exec_node *node_p = actual_parameters->get_head_raw();
+      const ir_exec_node *node_a = sig->parameters.get_head_raw();
+      const ir_exec_node *node_b = (*other)->parameters.get_head_raw();
+      const ir_exec_node *node_p = actual_parameters->get_head_raw();
 
       bool better_for_some_parameter = false;
 
@@ -280,7 +280,7 @@ is_best_inexact_overload(const exec_list *actual_parameters,
 
 static ir_function_signature *
 choose_best_inexact_overload(_mesa_glsl_parse_state *state,
-                             const exec_list *actual_parameters,
+                             const ir_exec_list *actual_parameters,
                              ir_function_signature **matches, int num_matches,
                              bool has_choose_best_inexact_overload)
 {
@@ -303,7 +303,7 @@ choose_best_inexact_overload(_mesa_glsl_parse_state *state,
 
 ir_function_signature *
 ir_function::matching_signature(_mesa_glsl_parse_state *state,
-                                const exec_list *actual_parameters,
+                                const ir_exec_list *actual_parameters,
                                 bool has_implicit_conversions,
                                 bool has_implicit_int_to_uint_conversion,
                                 bool allow_builtins)
@@ -316,7 +316,7 @@ ir_function::matching_signature(_mesa_glsl_parse_state *state,
 
 ir_function_signature *
 ir_function::matching_signature(_mesa_glsl_parse_state *state,
-                                const exec_list *actual_parameters,
+                                const ir_exec_list *actual_parameters,
                                 bool has_implicit_conversions,
                                 bool has_implicit_int_to_uint_conversion,
                                 bool allow_builtins,
@@ -337,7 +337,7 @@ ir_function::matching_signature(_mesa_glsl_parse_state *state,
     *  multiple ways to apply these conversions to the actual arguments of a
     *  call such that the call can be made to match multiple signatures."
     */
-   foreach_in_list(ir_function_signature, sig, &this->signatures) {
+   ir_foreach_in_list(ir_function_signature, sig, &this->signatures) {
       /* Skip over any built-ins that aren't available in this shader. */
       if (sig->is_builtin() && (!allow_builtins ||
                                 !sig->is_builtin_available(state)))
@@ -393,10 +393,10 @@ ir_function::matching_signature(_mesa_glsl_parse_state *state,
 
 
 static bool
-parameter_lists_match_exact(const exec_list *list_a, const exec_list *list_b)
+parameter_lists_match_exact(const ir_exec_list *list_a, const ir_exec_list *list_b)
 {
-   const exec_node *node_a = list_a->get_head_raw();
-   const exec_node *node_b = list_b->get_head_raw();
+   const ir_exec_node *node_a = list_a->get_head_raw();
+   const ir_exec_node *node_b = list_b->get_head_raw();
 
    for (/* empty */
 	; !node_a->is_tail_sentinel() && !node_b->is_tail_sentinel()
@@ -419,9 +419,9 @@ parameter_lists_match_exact(const exec_list *list_a, const exec_list *list_b)
 
 ir_function_signature *
 ir_function::exact_matching_signature(_mesa_glsl_parse_state *state,
-                                      const exec_list *actual_parameters)
+                                      const ir_exec_list *actual_parameters)
 {
-   foreach_in_list(ir_function_signature, sig, &this->signatures) {
+   ir_foreach_in_list(ir_function_signature, sig, &this->signatures) {
       /* Skip over any built-ins that aren't available in this shader. */
       if (sig->is_builtin() && !sig->is_builtin_available(state))
          continue;

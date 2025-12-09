@@ -143,7 +143,7 @@ private:
 };
 
 struct acp {
-   DECLARE_LINEAR_ALLOC_CXX_OPERATORS(acp);
+   DECLARE_LINEAR_ALLOC_CXX_OPERATORS(acp,,);
 
    struct rb_tree by_dst;
    struct rb_tree by_src;
@@ -465,7 +465,7 @@ fs_copy_prop_dataflow::run()
              * parent blocks, it's live coming in to this block.
              */
             bd[block->num].livein[i] = ~0u;
-            foreach_list_typed(elk_bblock_link, parent_link, link, &block->parents) {
+            brw_foreach_list_typed(elk_bblock_link, parent_link, link, &block->parents) {
                elk_bblock_t *parent = parent_link->block;
                /* Consider ACP entries with a known-undefined destination to
                 * be available from the parent.  This is valid because we're
@@ -523,7 +523,7 @@ fs_copy_prop_dataflow::run()
              * inconsistent execution masking, the start of this block
              * is reachable by such an overwrite as well.
              */
-            foreach_list_typed(elk_bblock_link, parent_link, link, &block->parents) {
+            brw_foreach_list_typed(elk_bblock_link, parent_link, link, &block->parents) {
                elk_bblock_t *parent = parent_link->block;
                bd[block->num].exec_mismatch[i] |= (bd[parent->num].exec_mismatch[i] &
                                                    bd[parent->num].reachin[i]);
@@ -548,7 +548,7 @@ fs_copy_prop_dataflow::dump_block_data() const
    foreach_block (block, cfg) {
       fprintf(stderr, "Block %d [%d, %d] (parents ", block->num,
              block->start_ip, block->end_ip);
-      foreach_list_typed(elk_bblock_link, link, link, &block->parents) {
+      brw_foreach_list_typed(elk_bblock_link, link, link, &block->parents) {
          elk_bblock_t *parent = link->block;
          fprintf(stderr, "%d ", parent->num);
       }

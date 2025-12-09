@@ -32,13 +32,13 @@ struct r300_emit_state {
    uint32_t node_flags;
 };
 
-#define PROG_CODE                                                                                  \
-   struct r300_fragment_program_compiler *c = emit->compiler;                                      \
+#define PROG_CODE                                             \
+   struct r300_fragment_program_compiler *c = emit->compiler; \
    struct r300_fragment_program_code *code = &c->code->code.r300
 
-#define error(fmt, args...)                                                                        \
-   do {                                                                                            \
-      rc_error(&c->Base, "%s::%s(): " fmt, __FILE__, __func__, ##args);                            \
+#define error(fmt, args...)                                             \
+   do {                                                                 \
+      rc_error(&c->Base, "%s::%s(): " fmt, __FILE__, __func__, ##args); \
    } while (0)
 
 static unsigned int

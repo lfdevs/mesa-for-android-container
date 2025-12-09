@@ -1,3 +1,6 @@
+// Copyright 2023 Red Hat.
+// SPDX-License-Identifier: MIT
+
 extern crate proc_macro;
 use proc_macro::Delimiter;
 use proc_macro::TokenStream;

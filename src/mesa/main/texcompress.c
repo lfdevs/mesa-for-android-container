@@ -505,7 +505,7 @@ _mesa_astc_ldrhdr_glenum_to_format(const struct gl_context *ctx, GLenum format)
 #undef CASE
 
    default:
-      unreachable("unexpected format");
+      UNREACHABLE("unexpected format");
    }
 }
 

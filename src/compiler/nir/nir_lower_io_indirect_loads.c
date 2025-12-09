@@ -23,6 +23,7 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include <c99_alloca.h>
 
 typedef struct {
    nir_variable *var[INTERP_MODE_COUNT];
@@ -74,7 +75,7 @@ get_load_var(nir_intrinsic_instr *intr, lower_io_indir_loads_state *state)
 }
 
 static nir_variable **
-get_load_once_variable(gl_shader_stage stage, nir_intrinsic_instr *intr,
+get_load_once_variable(mesa_shader_stage stage, nir_intrinsic_instr *intr,
                        lower_io_indir_loads_state *state)
 {
    if (intr->intrinsic == nir_intrinsic_load_interpolated_input) {
@@ -84,7 +85,7 @@ get_load_once_variable(gl_shader_stage stage, nir_intrinsic_instr *intr,
        */
       nir_intrinsic_instr *baryc = nir_src_as_intrinsic(intr->src[0]);
       if (!baryc)
-         return false;
+         return NULL;
 
       enum glsl_interp_mode interp = nir_intrinsic_interp_mode(baryc);
 

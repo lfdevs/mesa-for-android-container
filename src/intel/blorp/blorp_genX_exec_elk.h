@@ -239,8 +239,7 @@ _blorp_combine_address(struct blorp_batch *batch, void *location,
  */
 static void
 emit_urb_config(struct blorp_batch *batch,
-                const struct blorp_params *params,
-                UNUSED enum intel_urb_deref_block_size *deref_block_size)
+                const struct blorp_params *params)
 {
    /* Once vertex fetcher has written full VUE entries with complete
     * header the space requirement is as follows per vertex (in bytes):
@@ -274,8 +273,7 @@ emit_urb_config(struct blorp_batch *batch,
    bool constrained;
    intel_get_urb_config(batch->blorp->compiler->elk->devinfo,
                         blorp_get_l3_config(batch),
-                        false, false, &urb_cfg,
-                        deref_block_size, &constrained);
+                        false, false, &urb_cfg, &constrained);
 
    /* Tell drivers about the config. */
    blorp_pre_emit_urb_config(batch, &urb_cfg);
@@ -405,7 +403,7 @@ blorp_emit_input_varying_data(struct blorp_batch *batch,
                         params->dst.clear_color_addr,
                         clear_color_size);
 #else
-      unreachable("MCS partial resolve is not a thing on SNB and earlier");
+      UNREACHABLE("MCS partial resolve is not a thing on SNB and earlier");
 #endif
    }
 }
@@ -761,8 +759,7 @@ blorp_emit_vs_config(struct blorp_batch *batch,
 
 static void
 blorp_emit_sf_config(struct blorp_batch *batch,
-                     const struct blorp_params *params,
-                     UNUSED enum intel_urb_deref_block_size urb_deref_block_size)
+                     const struct blorp_params *params)
 {
    const struct elk_wm_prog_data *prog_data = params->wm_prog_data;
 
@@ -909,7 +906,7 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          ps.RenderTargetFastClearEnable = true;
          break;
       default:
-         unreachable("Invalid fast clear op");
+         UNREACHABLE("Invalid fast clear op");
       }
 
       /* The RENDER_SURFACE_STATE page for TGL says:
@@ -987,7 +984,7 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       case ISL_AUX_OP_NONE:
          break;
       default:
-         unreachable("not reached");
+         UNREACHABLE("not reached");
       }
 
       if (prog_data) {
@@ -1057,7 +1054,7 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          ps.RenderTargetFastClearEnable = true;
          break;
       default:
-         unreachable("Invalid fast clear op");
+         UNREACHABLE("Invalid fast clear op");
       }
    }
 
@@ -1080,7 +1077,7 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       case ISL_AUX_OP_NONE:
          break;
       default:
-         unreachable("not reached");
+         UNREACHABLE("not reached");
       }
 
       if (prog_data) {
@@ -1233,7 +1230,7 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
          ds.DepthTestEnable = false;
          break;
       case ISL_AUX_OP_PARTIAL_RESOLVE:
-         unreachable("Invalid HIZ op");
+         UNREACHABLE("Invalid HIZ op");
       }
    }
 
@@ -1312,8 +1309,7 @@ blorp_emit_pipeline(struct blorp_batch *batch,
    uint32_t color_calc_state_offset;
    uint32_t depth_stencil_state_offset;
 
-   enum intel_urb_deref_block_size urb_deref_block_size;
-   emit_urb_config(batch, params, &urb_deref_block_size);
+   emit_urb_config(batch, params);
 
    if (params->wm_prog_data) {
       blend_state_offset = blorp_emit_blend_state(batch, params);
@@ -1395,7 +1391,7 @@ blorp_emit_pipeline(struct blorp_batch *batch,
       clip.PerspectiveDivideDisable = true;
    }
 
-   blorp_emit_sf_config(batch, params, urb_deref_block_size);
+   blorp_emit_sf_config(batch, params);
    blorp_emit_ps_config(batch, params);
 
    blorp_emit_cc_viewport(batch);
@@ -1520,7 +1516,7 @@ blorp_emit_surface_state(struct blorp_batch *batch,
                            isl_dev->ss.clear_value_size);
       }
 #else
-      unreachable("Fast clears are only supported on gfx7+");
+      UNREACHABLE("Fast clears are only supported on gfx7+");
 #endif
    }
 
@@ -1799,7 +1795,7 @@ blorp_emit_gfx8_hiz_op(struct blorp_batch *batch,
          break;
       case ISL_AUX_OP_PARTIAL_RESOLVE:
       case ISL_AUX_OP_NONE:
-         unreachable("Invalid HIZ op");
+         UNREACHABLE("Invalid HIZ op");
       }
 
       hzp.NumberofMultisamples = ffs(params->num_samples) - 1;
@@ -1886,7 +1882,7 @@ blorp_get_compute_push_const(struct blorp_batch *batch,
 {
    const struct elk_cs_prog_data *cs_prog_data = params->cs_prog_data;
    const unsigned push_const_size =
-      ALIGN(elk_cs_push_const_total_size(cs_prog_data, threads), 64);
+      align(elk_cs_push_const_total_size(cs_prog_data, threads), 64);
    assert(cs_prog_data->push.cross_thread.size +
           cs_prog_data->push.per_thread.size == sizeof(params->wm_inputs));
 
@@ -1985,7 +1981,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
       vfe.URBEntryAllocationSize = GFX_VER >= 8 ? 2 : 0;
 
       const uint32_t vfe_curbe_allocation =
-         ALIGN(cs_prog_data->push.per_thread.regs * dispatch.threads +
+         align(cs_prog_data->push.per_thread.regs * dispatch.threads +
                cs_prog_data->push.cross_thread.regs, 2);
       vfe.CURBEAllocationSize = vfe_curbe_allocation;
    }
@@ -2053,7 +2049,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
 
 #else /* GFX_VER >= 7 */
 
-   unreachable("Compute blorp is not supported on SNB and earlier");
+   UNREACHABLE("Compute blorp is not supported on SNB and earlier");
 
 #endif /* GFX_VER >= 7 */
 

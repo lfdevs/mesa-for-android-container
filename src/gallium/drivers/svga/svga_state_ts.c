@@ -25,7 +25,7 @@ make_tcs_key(struct svga_context *svga, struct svga_compile_key *key)
    /*
     * SVGA_NEW_TEXTURE_BINDING | SVGA_NEW_SAMPLER
     */
-   svga_init_shader_key_common(svga, PIPE_SHADER_TESS_CTRL, &tcs->base, key);
+   svga_init_shader_key_common(svga, MESA_SHADER_TESS_CTRL, &tcs->base, key);
 
    /* SVGA_NEW_TCS_PARAM */
    key->tcs.vertices_per_patch = svga->curr.vertices_per_patch;
@@ -142,7 +142,7 @@ make_tes_key(struct svga_context *svga, struct svga_compile_key *key)
    /*
     * SVGA_NEW_TEXTURE_BINDING | SVGA_NEW_SAMPLER
     */
-   svga_init_shader_key_common(svga, PIPE_SHADER_TESS_EVAL, &tes->base, key);
+   svga_init_shader_key_common(svga, MESA_SHADER_TESS_EVAL, &tes->base, key);
 
    assert(svga->curr.tcs);
 
@@ -211,7 +211,7 @@ get_passthrough_tcs(struct svga_context *svga)
    cb.user_buffer = (void *) svga->curr.default_tesslevels;
    cb.buffer_offset = 0;
    cb.buffer_size = 2 * 4 * sizeof(float);
-   svga->pipe.set_constant_buffer(&svga->pipe, PIPE_SHADER_TESS_CTRL, 0, false, &cb);
+   svga->pipe.set_constant_buffer(&svga->pipe, MESA_SHADER_TESS_CTRL, 0, &cb);
 }
 
 

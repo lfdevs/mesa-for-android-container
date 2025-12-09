@@ -12,7 +12,7 @@ foreach codec : mft_codecs
         cpp_args : mf_codecs_cpp_args[codec],
         override_options: ['cpp_std=c++20'],
         include_directories: [inc_include, inc_src, inc_gallium, inc_gallium_aux],
-        dependencies: [idep_gtest, dep_dxheaders],
+        dependencies: [idep_gtest, idep_mesautil, dep_dxheaders],
     )
     mediafoundation_test_st += {codec : test_lib}
 endforeach

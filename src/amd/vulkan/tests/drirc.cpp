@@ -105,18 +105,17 @@ TEST_F(drirc, override_compute_shader_version)
       0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0xf8, 0x00,
       0x02, 0x00, 0x05, 0x00, 0x00, 0x00, 0xfd, 0x00, 0x01, 0x00, 0x38, 0x00, 0x01, 0x00};
 
-   uint64_t pipeline_hash;
+   VkPipelineBinaryKeyKHR pipeline_keys[3];
 
-   /* Create a simple compute pipeline to get the pipeline hash. */
-   create_compute_pipeline(ARRAY_SIZE(code), (uint32_t *)code, VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
-   pipeline_hash = get_pipeline_hash(VK_SHADER_STAGE_COMPUTE_BIT);
-   EXPECT_NE(pipeline_hash, 0);
-   destroy_pipeline();
+   /* Create a simple compute pipeline to get the pipeline key. */
+   get_pipeline_key(ARRAY_SIZE(code), (uint32_t *)code, &pipeline_keys[0],
+                    VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
 
-   /* Verify that re-creating the exact same pipeline returns the same pipeline hash. */
-   create_compute_pipeline(ARRAY_SIZE(code), (uint32_t *)code, VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
-   EXPECT_EQ(pipeline_hash, get_pipeline_hash(VK_SHADER_STAGE_COMPUTE_BIT));
-   destroy_pipeline();
+   /* Verify that re-creating the exact same pipeline returns the same pipeline key. */
+   get_pipeline_key(ARRAY_SIZE(code), (uint32_t *)code, &pipeline_keys[1],
+                    VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
+   EXPECT_EQ(pipeline_keys[0].keySize, pipeline_keys[1].keySize);
+   EXPECT_FALSE(memcmp(pipeline_keys[0].key, pipeline_keys[1].key, pipeline_keys[0].keySize));
 
    destroy_device();
 
@@ -124,10 +123,11 @@ TEST_F(drirc, override_compute_shader_version)
 
    create_device();
 
-   /* Verify that overwriting the compute pipeline version returns a different hash. */
-   create_compute_pipeline(ARRAY_SIZE(code), (uint32_t *)code, VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
-   EXPECT_NE(pipeline_hash, get_pipeline_hash(VK_SHADER_STAGE_COMPUTE_BIT));
-   destroy_pipeline();
+   /* Verify that overwriting the compute pipeline version returns a different key. */
+   get_pipeline_key(ARRAY_SIZE(code), (uint32_t *)code, &pipeline_keys[2],
+                    VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR);
+   EXPECT_EQ(pipeline_keys[1].keySize, pipeline_keys[2].keySize);
+   EXPECT_TRUE(memcmp(pipeline_keys[1].key, pipeline_keys[2].key, pipeline_keys[1].keySize));
 
    destroy_device();
 }

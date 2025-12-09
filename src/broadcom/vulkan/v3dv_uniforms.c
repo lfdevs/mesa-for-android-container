@@ -399,7 +399,7 @@ get_texture_size_from_image_view(struct v3dv_image_view *image_view,
       assert(image_view->vk.image);
       return image_view->vk.image->samples;
    default:
-      unreachable("Bad texture size field");
+      UNREACHABLE("Bad texture size field");
    }
 }
 
@@ -415,7 +415,7 @@ get_texture_size_from_buffer_view(struct v3dv_buffer_view *buffer_view,
       return buffer_view->num_elements;
    /* Only size can be queried for texel buffers  */
    default:
-      unreachable("Bad texture size field for texel buffers");
+      UNREACHABLE("Bad texture size field for texel buffers");
    }
 }
 
@@ -451,7 +451,7 @@ get_texture_size(struct v3dv_cmd_buffer *cmd_buffer,
       return get_texture_size_from_buffer_view(descriptor->buffer_view,
                                                contents, data);
    default:
-      unreachable("Wrong descriptor for getting texture size");
+      UNREACHABLE("Wrong descriptor for getting texture size");
    }
 }
 
@@ -684,7 +684,7 @@ v3dv_write_uniforms_wg_offsets(struct v3dv_cmd_buffer *cmd_buffer,
          break;
 
       default:
-         unreachable("unsupported quniform_contents uniform type\n");
+         UNREACHABLE("unsupported quniform_contents uniform type\n");
       }
    }
 

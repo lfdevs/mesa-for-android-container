@@ -29,7 +29,7 @@ radv_nir_lower_io_vars_to_scalar(nir_shader *nir, nir_variable_mode mask)
    NIR_PASS(progress, nir, nir_lower_io_vars_to_scalar, mask);
    if (progress) {
       /* Optimize the new vector code and then remove dead vars */
-      NIR_PASS(_, nir, nir_copy_prop);
+      NIR_PASS(_, nir, nir_opt_copy_prop);
       NIR_PASS(_, nir, nir_opt_shrink_vectors, true);
 
       if (mask & nir_var_shader_out) {
@@ -100,7 +100,7 @@ radv_recompute_fs_input_bases_callback(UNUSED nir_builder *b, nir_intrinsic_inst
       new_base = s->num_always_per_vertex + s->num_potentially_per_primitive +
                  util_bitcount64(s->always_per_primitive & location_mask);
    } else {
-      unreachable("invalid FS input");
+      UNREACHABLE("invalid FS input");
    }
 
    if (new_base != old_base) {
@@ -157,10 +157,8 @@ radv_nir_lower_io(struct radv_device *device, nir_shader *nir)
                nir_lower_io_lower_64bit_to_32 | nir_lower_io_use_interpolated_input_intrinsics);
    }
 
-   /* This pass needs actual constants */
+   /* Fold constant offset srcs for IO. */
    NIR_PASS(_, nir, nir_opt_constant_folding);
-
-   NIR_PASS(_, nir, nir_io_add_const_offset_to_base, nir_var_shader_in | nir_var_shader_out);
 
    if (nir->xfb_info) {
       NIR_PASS(_, nir, nir_io_add_intrinsic_xfb_info);
@@ -169,7 +167,7 @@ radv_nir_lower_io(struct radv_device *device, nir_shader *nir)
          /* The total number of shader outputs is required for computing the pervertex LDS size for
           * VS/TES when lowering NGG streamout.
           */
-         nir_assign_io_var_locations(nir, nir_var_shader_out, &nir->num_outputs, nir->info.stage);
+         nir_assign_io_var_locations(nir, nir_var_shader_out);
       }
    }
 

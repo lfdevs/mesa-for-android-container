@@ -469,7 +469,7 @@ static bool apply_relocs(const struct ac_rtld_upload_info *u, unsigned part_idx,
          *(uint64_t *)dst_ptr = util_cpu_to_le64(abs - va);
          break;
       default:
-         unreachable("bad r_type");
+         UNREACHABLE("bad r_type");
       }
    }
 

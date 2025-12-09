@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MIT
+--
 -- Parse cmdstream dump and check for common errors
 --  1) Check for overflowing HLSQ_xS_CNTL.CONSTLEN
 --  2) Check for constant uploades that overwrite each other.  The

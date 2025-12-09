@@ -237,7 +237,7 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
    /* Push the conversion into the new phi sources: */
    nir_foreach_phi_src(src, phi) {
       /* insert new conversion instr in block of original phi src: */
-      b->cursor = nir_after_instr_and_phis(src->src.ssa->parent_instr);
+      b->cursor = nir_after_instr_and_phis(nir_def_instr(src->src.ssa));
       nir_def *old_src = src->src.ssa;
       nir_def *new_src = nir_build_alu(b, op, old_src, NULL, NULL, NULL);
 
@@ -289,7 +289,7 @@ can_convert_load_const(nir_load_const_instr *lc, nir_op op)
             return false;
          break;
       default:
-         unreachable("bad type");
+         UNREACHABLE("bad type");
          return false;
       }
    }
@@ -309,7 +309,7 @@ find_widening_op(nir_phi_instr *phi, unsigned *bit_size)
    *bit_size = 0;
 
    nir_foreach_phi_src(src, phi) {
-      nir_instr *instr = src->src.ssa->parent_instr;
+      nir_instr *instr = nir_def_instr(src->src.ssa);
       if (instr->type == nir_instr_type_load_const) {
          has_load_const = true;
          continue;
@@ -345,7 +345,7 @@ find_widening_op(nir_phi_instr *phi, unsigned *bit_size)
     * sequence to make the rest of the transformation possible:
     */
    nir_foreach_phi_src(src, phi) {
-      nir_instr *instr = src->src.ssa->parent_instr;
+      nir_instr *instr = nir_def_instr(src->src.ssa);
       if (instr->type != nir_instr_type_load_const)
          continue;
 
@@ -379,7 +379,7 @@ try_move_widening_src(nir_builder *b, nir_phi_instr *phi)
 
    /* Remove the widening conversions from the phi sources: */
    nir_foreach_phi_src(src, phi) {
-      nir_instr *instr = src->src.ssa->parent_instr;
+      nir_instr *instr = nir_def_instr(src->src.ssa);
       nir_def *new_src;
 
       b->cursor = nir_after_instr(instr);

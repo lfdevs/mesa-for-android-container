@@ -19,13 +19,13 @@ import sys
 from ruamel.yaml import YAML
 
 import gitlab
-from colorama import Fore, Style
 from gitlab_common import (get_gitlab_project, read_token, wait_for_pipeline,
                            get_gitlab_pipeline_from_url, TOKEN_DIR, get_token_from_default_dir)
+from rich import print
 
 
 DESCRIPTION_FILE = "export PIGLIT_REPLAY_DESCRIPTION_FILE=.*/install/(.*)$"
-DEVICE_NAME = "declare -x PIGLIT_REPLAY_DEVICE_NAME='(.*)'$"
+DEVICE_NAME = "(?:declare -x|export) PIGLIT_REPLAY_DEVICE_NAME='?([^']*)'?$"
 
 
 def gather_results(
@@ -41,7 +41,7 @@ def gather_results(
             cur_job = project.jobs.get(job.id)
             # get variables
             print(f"👁  {job.name}...")
-            log: list[str] = cur_job.trace().decode("unicode_escape", "ignore").splitlines()
+            log: list[str] = cur_job.trace().decode().splitlines()
             filename: str = ''
             dev_name: str = ''
             for logline in log:
@@ -53,7 +53,7 @@ def gather_results(
                     dev_name = device_name.group(1)
 
             if not filename or not dev_name:
-                print(Fore.RED + "Couldn't find device name or YML file in the logs!" + Style.RESET_ALL)
+                print("[red]Couldn't find device name or YML file in the logs!")
                 return
 
             print(f"👁 Found {dev_name} and file {filename}")
@@ -86,11 +86,11 @@ def gather_results(
                     checksum: str = value['images'][0]['checksum_render']
 
                     if not checksum:
-                        print(Fore.RED + f"{dev_name}: {trace}: checksum is missing! Crash?" + Style.RESET_ALL)
+                        print(f"[red]{dev_name}: {trace}: checksum is missing! Crash?")
                         continue
 
                     if checksum == "error":
-                        print(Fore.RED + f"{dev_name}: {trace}: crashed" + Style.RESET_ALL)
+                        print(f"[red]{dev_name}: {trace}: crashed")
                         continue
 
                     if target['traces'][trace][dev_name].get('checksum') == checksum:
@@ -99,11 +99,11 @@ def gather_results(
                     if "label" in target['traces'][trace][dev_name]:
                         print(
                             f"{dev_name}: {trace}: please verify that label "
-                            f"{Fore.BLUE}{target['traces'][trace][dev_name]['label']}{Style.RESET_ALL} "
+                            f"[blue]{target['traces'][trace][dev_name]['label']}[/blue] "
                             "is still valid"
                              )
 
-                    print(Fore.GREEN + f'{dev_name}: {trace}: checksum updated' + Style.RESET_ALL)
+                    print(f"[green]{dev_name}: {trace}: checksum updated")
                     target['traces'][trace][dev_name]['checksum'] = checksum
 
             with open(traces_file[0], 'w', encoding='utf-8') as target_file:

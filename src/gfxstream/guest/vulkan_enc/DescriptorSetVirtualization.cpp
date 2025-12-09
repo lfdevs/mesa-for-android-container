@@ -435,8 +435,8 @@ void applyDescriptorSetAllocation(VkDescriptorPool pool, VkDescriptorSetLayout s
     }
 }
 
-void removeDescriptorSetAllocation(VkDescriptorPool pool,
-                                   const std::vector<VkDescriptorSetLayoutBinding>& bindings) {
+static void removeDescriptorSetAllocation(
+    VkDescriptorPool pool, const std::vector<VkDescriptorSetLayoutBinding>& bindings) {
     auto allocInfo = as_goldfish_VkDescriptorPool(pool)->allocInfo;
 
     if (0 == allocInfo->usedSets) {

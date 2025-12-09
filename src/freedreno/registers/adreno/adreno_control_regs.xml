@@ -536,6 +536,12 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 		<bitfield name="SYS_WFI_STALL" low="28" high="29" type="sqe_perfcntr_cntl"/>
 	</reg32>
 
+	<reg32 name="COMPLETED_BR_COUNT" offset="0x101"/>
+	<reg32 name="COMPLETED_BV_COUNT" offset="0x102"/>
+	<reg32 name="TIMESTAMP_SUM" offset="0x103"/>
+	<reg32 name="GLOBAL_TIMESTAMP" offset="0x104"/>
+	<reg32 name="LOCAL_TIMESTAMP" offset="0x105"/>
+
 	<reg32 name="CONTEXT_SWITCH_CNTL" offset="0x131"/>
 	<reg32 name="PREEMPT_COOKIE" offset="0x132"/>
 	<reg32 name="PREEMPT_ENABLE" offset="0x133"/>

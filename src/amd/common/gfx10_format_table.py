@@ -36,11 +36,11 @@ HARDCODED = {
     'PIPE_FORMAT_R9G9B9E5_FLOAT': hardcoded_format('5_9_9_9_FLOAT'),
     'PIPE_FORMAT_R11G11B10_FLOAT': hardcoded_format('10_11_11_FLOAT'), # NOTE: full set of int/unorm/etc. exists
 
-    'PIPE_FORMAT_R8G8_B8G8_UNORM': hardcoded_format('GB_GR_UNORM'),
-    'PIPE_FORMAT_G8R8_B8R8_UNORM': hardcoded_format('GB_GR_UNORM'),
+    'PIPE_FORMAT_R8G8_B8G8_422_UNORM': hardcoded_format('GB_GR_UNORM'),
+    'PIPE_FORMAT_G8R8_B8R8_422_UNORM': hardcoded_format('GB_GR_UNORM'),
 
-    'PIPE_FORMAT_R8G8_R8B8_UNORM': hardcoded_format('BG_RG_UNORM'),
-    'PIPE_FORMAT_G8R8_G8B8_UNORM': hardcoded_format('BG_RG_UNORM'),
+    'PIPE_FORMAT_R8G8_R8B8_422_UNORM': hardcoded_format('BG_RG_UNORM'),
+    'PIPE_FORMAT_G8R8_G8B8_422_UNORM': hardcoded_format('BG_RG_UNORM'),
 
     # These mixed channel types are not supported natively
     'PIPE_FORMAT_R8SG8SB8UX8U_NORM': None,

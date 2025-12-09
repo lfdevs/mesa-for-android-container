@@ -1,12 +1,18 @@
 /*
  * Copyright 2024 Google LLC
+ * Copyright 2025 Arm Ltd.
  * SPDX-License-Identifier: MIT
  */
 
 #include "panvk_utrace_perfetto.h"
 
 #include <functional>
+
+#ifndef ANDROID_LIBPERFETTO
 #include <perfetto.h>
+#else
+#include <perfetto/tracing.h>
+#endif
 
 #include "c11/threads.h"
 #include "util/log.h"
@@ -43,10 +49,12 @@ get_stage_name(enum panvk_utrace_perfetto_stage stage)
       CASE(RENDER);
       CASE(DISPATCH);
       CASE(BARRIER);
+      CASE(FLUSH_CACHE);
+      CASE(SYNC_ADD);
       CASE(SYNC_WAIT);
 #undef CASE
    default:
-      unreachable("bad stage");
+      UNREACHABLE("bad stage");
    }
 }
 
@@ -97,10 +105,12 @@ emit_clock_snapshot_packet(struct panvk_device *dev,
 {
    const struct panvk_utrace_perfetto *utp = &dev->utrace.utp;
    const uint64_t gpu_ns = get_gpu_time_ns(dev);
-   const uint64_t cpu_ns = perfetto::base::GetBootTimeNs().count();
+   const uint32_t cpu_clock_id =
+      perfetto::protos::pbzero::BUILTIN_CLOCK_MONOTONIC_RAW;
+   const uint64_t cpu_ns = perfetto::base::GetWallTimeRawNs().count();
 
    MesaRenderpassDataSource<PanVKRenderpassDataSource, PanVKRenderpassTraits>::
-      EmitClockSync(ctx, cpu_ns, gpu_ns, utp->gpu_clock_id);
+      EmitClockSync(ctx, cpu_ns, gpu_ns, cpu_clock_id, utp->gpu_clock_id);
 }
 
 static void
@@ -178,6 +188,11 @@ panvk_utrace_perfetto_begin_event(struct panvk_device *dev,
    if (!ev)
       return;
 
+   struct panvk_utrace_perfetto *utp = &dev->utrace.utp;
+   if (utp->queues[data->subqueue].stack_depth == 1) {
+      utp->base_ts_ns = ts_ns;
+   }
+
    ev->begin_ns = ts_ns;
 }
 
@@ -191,6 +206,21 @@ panvk_utrace_perfetto_end_event(
    const struct panvk_utrace_perfetto_event *ev = end_event(dev, data, stage);
    if (!ev)
       return;
+
+   struct panvk_utrace_perfetto *utp = &dev->utrace.utp;
+   if (ev->begin_ns < utp->base_ts_ns) {
+      /* The event has started before the base event of this nested stack of
+       * events. Is is likely data from a previous submission, so we just drop
+       * it here. */
+      return;
+   }
+
+   uint64_t duration = ts_ns - ev->begin_ns;
+   /* Drop unwritten and zero duration events.
+    * If the timestamp wraps around, end can be before start. Also drop those. */
+   if (duration == 0 || ts_ns == 0 || ts_ns < ev->begin_ns) {
+      return;
+   }
 
    PanVKRenderpassDataSource::Trace(
       [=](PanVKRenderpassDataSource::TraceContext ctx) {
@@ -249,13 +279,39 @@ PANVK_UTRACE_PERFETTO_PROCESS_EVENT(render, RENDER)
 PANVK_UTRACE_PERFETTO_PROCESS_EVENT(dispatch, DISPATCH)
 PANVK_UTRACE_PERFETTO_PROCESS_EVENT(dispatch_indirect, DISPATCH)
 PANVK_UTRACE_PERFETTO_PROCESS_EVENT(barrier, BARRIER)
-PANVK_UTRACE_PERFETTO_PROCESS_EVENT(sync_wait, SYNC_WAIT)
+PANVK_UTRACE_PERFETTO_PROCESS_EVENT(flush_cache, FLUSH_CACHE)
+PANVK_UTRACE_PERFETTO_PROCESS_EVENT(sync32_add, SYNC_ADD)
+PANVK_UTRACE_PERFETTO_PROCESS_EVENT(sync64_add, SYNC_ADD)
+PANVK_UTRACE_PERFETTO_PROCESS_EVENT(sync32_wait, SYNC_WAIT)
+PANVK_UTRACE_PERFETTO_PROCESS_EVENT(sync64_wait, SYNC_WAIT)
 
 static uint32_t
 get_gpu_clock_id(void)
 {
-   /* see https://perfetto.dev/docs/concepts/clock-sync */
-   return _mesa_hash_string("org.freedesktop.mesa.panfrost") | 0x80000000;
+   /* see https://perfetto.dev/docs/concepts/clock-sync
+    *
+    * Use sequence-scoped clock (64 <= ID < 128) for GPU clock because there's
+    * no central daemon emitting consistent snapshots for synchronization
+    * between CPU and GPU clocks on behalf of renderstages and counters
+    * producers.
+    *
+    * When CPU clock is the same with the authoritative trace clock (normally
+    * default to CLOCK_BOOTTIME), perfetto drops the non-monotonic snapshots
+    * to ensure validity of the global source clock in the resolution graph.
+    * When they are different, the clocks are marked invalid and the rest of
+    * the clock syncs will fail during trace processing.
+    *
+    * Now that PanVK has switched to use CLOCK_MONOTONIC_RAW CPU clock, here
+    * we make the GPU clock sequence-scoped so that clock sync for all the
+    * trace packets emitted with the same trusted_packet_sequence_id will be
+    * done in an isolated manner (basically perfetto makes each scoped GPU
+    * clock globally unique).
+    *
+    * Meanwhile, since the clock is now sequence-scoped (unique per producer +
+    * writer pair within the tracing session), we can simply pick 64 to start
+    * with since there's no multi-mali-gpu setup yet.
+    */
+   return 64;
 }
 
 static void
@@ -298,7 +354,11 @@ panvk_utrace_perfetto_init(struct panvk_device *dev, uint32_t queue_count)
    for (uint32_t i = 0; i < ARRAY_SIZE(utp->stage_iids); i++)
       utp->stage_iids[i] = next_iid++;
 
-   util_perfetto_init();
+   /* Mali GPU timestamps map to the system arch counter. CLOCK_MONOTONIC_RAW
+    * is therefore better for synchronization with the GPU timestamps than the
+    * default CLOCK_BOOTTIME, which drifts from the arch counter's rate
+    * slightly due to NTP adjustment. */
+   util_perfetto_set_default_clock(CLOCK_MONOTONIC_RAW);
 
    static once_flag register_ds_once = ONCE_FLAG_INIT;
    call_once(&register_ds_once, register_data_source);

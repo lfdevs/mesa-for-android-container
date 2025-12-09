@@ -96,7 +96,8 @@ nir_phi_builder_create(nir_function_impl *impl)
    pb->shader = impl->function->shader;
    pb->impl = impl;
 
-   assert(impl->valid_metadata & (nir_metadata_control_flow));
+   assert(impl->valid_metadata & (nir_metadata_block_index |
+                                  nir_metadata_dominance));
 
    pb->num_blocks = impl->num_blocks;
    pb->blocks = ralloc_array(pb, nir_block *, pb->num_blocks);
@@ -140,7 +141,7 @@ nir_phi_builder_add_value(struct nir_phi_builder *pb, unsigned num_components,
 
    while (w_start != w_end) {
       nir_block *cur = pb->W[w_start++];
-      set_foreach(cur->dom_frontier, dom_entry) {
+      set_foreach(&cur->dom_frontier, dom_entry) {
          nir_block *next = (nir_block *)dom_entry->key;
 
          /* If there's more than one return statement, then the end block
@@ -290,7 +291,7 @@ nir_phi_builder_finish(struct nir_phi_builder *pb)
          /* XXX: Constructing the array this many times seems expensive. */
          nir_block **preds = nir_block_get_predecessors_sorted(phi->instr.block, pb);
 
-         for (unsigned i = 0; i < phi->instr.block->predecessors->entries; i++) {
+         for (unsigned i = 0; i < phi->instr.block->predecessors.entries; i++) {
             nir_phi_instr_add_src(phi, preds[i],
                                   nir_phi_builder_value_get_block_def(val, preds[i]));
          }

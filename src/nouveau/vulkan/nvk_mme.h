@@ -16,6 +16,7 @@ enum nvk_mme {
    NVK_MME_SELECT_CB0,
    NVK_MME_BIND_CBUF_DESC,
    NVK_MME_CLEAR,
+   NVK_MME_UPDATE_WINDOW_CLIP,
    NVK_MME_BIND_IB,
    NVK_MME_BIND_VB,
    NVK_MME_SET_VB_ENABLES,
@@ -43,14 +44,22 @@ enum nvk_mme {
    NVK_MME_COUNT,
 };
 
+/*
+ * For the compute MME, as tested in scratch_limit_compute in the unit tests,
+ * we only have 8 registers. Using more than 8 leads to a MMU fault.
+ * Moreover, as tested in scratch_share_3d_to_compute, scratch space isn't
+ * shared between compute and 3D.
+ */
 enum nvk_mme_scratch {
    /* These are reserved for communicating with FALCON */
    NVK_MME_SCRATCH_FALCON_0 = 0,
-   NVK_MME_SCRATCH_FALCON_1 = 0,
-   NVK_MME_SCRATCH_FALCON_2 = 0,
+   NVK_MME_SCRATCH_FALCON_1 = 1,
+   NVK_MME_SCRATCH_FALCON_2 = 2,
 
+   /* These need to stay at the top since they get accessed by the compute MME */
    NVK_MME_SCRATCH_CS_INVOCATIONS_HI,
    NVK_MME_SCRATCH_CS_INVOCATIONS_LO,
+
    NVK_MME_SCRATCH_DRAW_BEGIN,
    NVK_MME_SCRATCH_DRAW_COUNT,
    NVK_MME_SCRATCH_DRAW_PAD_DW,
@@ -59,6 +68,9 @@ enum nvk_mme_scratch {
    NVK_MME_SCRATCH_WRITE_MASK_DYN,
    NVK_MME_SCRATCH_WRITE_MASK_PIPELINE,
    NVK_MME_SCRATCH_CONSERVATIVE_RASTER_STATE,
+
+   /* Copy of SET_WINDOW_CLIP_ENABLE */
+   NVK_MME_SCRATCH_WINDOW_CLIP_ENABLED, /* TODO: can we use shadow-ram? */
 
    /* Bitfield of enabled vertex buffer bindings */
    NVK_MME_SCRATCH_VB_ENABLES,
@@ -210,6 +222,7 @@ uint32_t *nvk_build_mme(const struct nv_device_info *devinfo,
 void nvk_mme_select_cb0(struct mme_builder *b);
 void nvk_mme_bind_cbuf_desc(struct mme_builder *b);
 void nvk_mme_clear(struct mme_builder *b);
+void nvk_mme_update_window_clip(struct mme_builder *b);
 void nvk_mme_bind_ib(struct mme_builder *b);
 void nvk_mme_bind_vb(struct mme_builder *b);
 void nvk_mme_set_vb_enables(struct mme_builder *b);

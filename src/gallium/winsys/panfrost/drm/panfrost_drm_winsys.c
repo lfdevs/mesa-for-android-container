@@ -96,7 +96,7 @@ panfrost_create_kms_dumb_buffer_for_resource(struct pipe_resource *rsc,
    out_handle->type = WINSYS_HANDLE_TYPE_FD;
    out_handle->stride = create_dumb.pitch;
 
-   err = drmPrimeHandleToFD(ro->kms_fd, create_dumb.handle, O_CLOEXEC,
+   err = drmPrimeHandleToFD(ro->kms_fd, create_dumb.handle, DRM_CLOEXEC | DRM_RDWR,
                             (int *)&out_handle->handle);
    if (err < 0) {
       fprintf(stderr, "failed to export dumb buffer: %s\n", strerror(errno));

@@ -42,7 +42,7 @@ static void move_instruction_to_start_block(state *state, nir_instr *instr);
 static bool
 check_precondition_src(nir_src *src, void *state)
 {
-   check_precondition_instr(state, src->ssa->parent_instr);
+   check_precondition_instr(state, nir_def_instr(src->ssa));
    return true;
 }
 
@@ -105,7 +105,7 @@ check_precondition_block(precond_state *state, nir_block *block)
 static bool
 move_src(nir_src *src, void *state)
 {
-   move_instruction_to_start_block(state, src->ssa->parent_instr);
+   move_instruction_to_start_block(state, nir_def_instr(src->ssa));
    return true;
 }
 

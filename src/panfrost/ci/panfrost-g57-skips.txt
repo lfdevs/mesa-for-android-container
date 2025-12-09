@@ -14,7 +14,6 @@ dEQP-GLES31.functional.ssbo.layout.random.all_shared_buffer.36
 spec@!opengl 1.1@longprim
 
 # OOMs
-spec@!opengl 1.1@streaming-texture-leak
 tex3d-maxsize
 
 # Takes absurdly long, sometimes flaking due to the 60s timeout
@@ -27,8 +26,6 @@ glx@glx-make-current
 # So, skip any tests known to crash to make sure the coverage is solid.
 glx@glx-visuals-depth -pixmap
 glx@glx-visuals-stencil -pixmap
-spec@arb_texture_buffer_object@formats (fs- arb)
-spec@arb_texture_buffer_object@formats (vs- arb)
 spec@arb_texture_buffer_object@texture-buffer-size-clamp
 spec@arb_texture_float@fbo-alphatest-formats
 spec@arb_texture_float@fbo-blending-formats

@@ -277,7 +277,7 @@ def emit_dispatch_call(api, cgen):
 
     cgen.vkApiCall(api, customPrefix="vk->", customParameters=customParams,
                     checkForDeviceLost=True, globalStatePrefix=global_state_prefix,
-                    checkForOutOfMemory=True, checkDispatcher="CC_LIKELY(vk)")
+                    checkDispatcher="CC_LIKELY(vk)")
 
     emit_snapshot_call(api, cgen)
 
@@ -292,7 +292,7 @@ def emit_global_state_wrapped_call(api, cgen, context=False):
         customParams += ["context"];
     cgen.vkApiCall(api, customPrefix=global_state_prefix,
                    customParameters=customParams, checkForDeviceLost=True,
-                   checkForOutOfMemory=True, globalStatePrefix=global_state_prefix, checkDispatcher="CC_LIKELY(vk)")
+                   globalStatePrefix=global_state_prefix, checkDispatcher="CC_LIKELY(vk)")
     emit_snapshot_call(api, cgen)
 
 
@@ -362,7 +362,6 @@ class VulkanSubDecoder(VulkanWrapperGenerator):
 
         self.cgen.beginBlock()  # function body
 
-        self.cgen.stmt("auto& metricsLogger = *context.metricsLogger")
         self.cgen.stmt("uint32_t count = 0")
         self.cgen.stmt("unsigned char *buf = (unsigned char *)pSubDecodeData")
         self.cgen.stmt("gfxstream::base::BumpPool* pool = readStream->pool()")
@@ -381,7 +380,6 @@ class VulkanSubDecoder(VulkanWrapperGenerator):
         // packetLen should be at least 8 (op code and packet length) and should not be excessively large
         if (packetLen < 8 || packetLen > MAX_PACKET_LENGTH) {
             GFXSTREAM_WARNING("Bad packet length %d detected, subdecode may fail", packetLen);
-            metricsLogger.logMetricEvent(MetricEventBadPacketLength{ .len = packetLen });
         }
         """)
         self.cgen.stmt("if (end - ptr < packetLen) return ptr - (unsigned char*)buf")

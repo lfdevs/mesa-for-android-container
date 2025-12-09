@@ -29,7 +29,7 @@ nv50_ir_prog_info_serialize(struct blob *blob, struct nv50_ir_prog_info *info)
 
    nir_serialize(blob, info->bin.nir, true);
 
-   if (info->type == PIPE_SHADER_COMPUTE)
+   if (info->type == MESA_SHADER_COMPUTE)
       blob_write_bytes(blob, &info->prop.cp, sizeof(info->prop.cp));
 
    blob_write_bytes(blob, &info->io, sizeof(info->io));
@@ -109,20 +109,20 @@ nv50_ir_prog_info_out_serialize(struct blob *blob,
    blob_write_bytes(blob, info_out->out, info_out->numOutputs * sizeof(info_out->out[0]));
 
    switch(info_out->type) {
-      case PIPE_SHADER_VERTEX:
+      case MESA_SHADER_VERTEX:
          blob_write_bytes(blob, &info_out->prop.vp, sizeof(info_out->prop.vp));
          break;
-      case PIPE_SHADER_TESS_CTRL:
-      case PIPE_SHADER_TESS_EVAL:
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
          blob_write_bytes(blob, &info_out->prop.tp, sizeof(info_out->prop.tp));
          break;
-      case PIPE_SHADER_GEOMETRY:
+      case MESA_SHADER_GEOMETRY:
          blob_write_bytes(blob, &info_out->prop.gp, sizeof(info_out->prop.gp));
          break;
-      case PIPE_SHADER_FRAGMENT:
+      case MESA_SHADER_FRAGMENT:
          blob_write_bytes(blob, &info_out->prop.fp, sizeof(info_out->prop.fp));
          break;
-      case PIPE_SHADER_COMPUTE:
+      case MESA_SHADER_COMPUTE:
          blob_write_bytes(blob, &info_out->prop.cp, sizeof(info_out->prop.cp));
          break;
       default:
@@ -229,20 +229,20 @@ nv50_ir_prog_info_out_deserialize(void *data, size_t size, size_t offset,
    blob_copy_bytes(&reader, info_out->out, info_out->numOutputs * sizeof(info_out->out[0]));
 
    switch(info_out->type) {
-      case PIPE_SHADER_VERTEX:
+      case MESA_SHADER_VERTEX:
          blob_copy_bytes(&reader, &info_out->prop.vp, sizeof(info_out->prop.vp));
          break;
-      case PIPE_SHADER_TESS_CTRL:
-      case PIPE_SHADER_TESS_EVAL:
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
          blob_copy_bytes(&reader, &info_out->prop.tp, sizeof(info_out->prop.tp));
          break;
-      case PIPE_SHADER_GEOMETRY:
+      case MESA_SHADER_GEOMETRY:
          blob_copy_bytes(&reader, &info_out->prop.gp, sizeof(info_out->prop.gp));
          break;
-      case PIPE_SHADER_FRAGMENT:
+      case MESA_SHADER_FRAGMENT:
          blob_copy_bytes(&reader, &info_out->prop.fp, sizeof(info_out->prop.fp));
          break;
-      case PIPE_SHADER_COMPUTE:
+      case MESA_SHADER_COMPUTE:
          blob_copy_bytes(&reader, &info_out->prop.cp, sizeof(info_out->prop.cp));
          break;
       default:

@@ -128,7 +128,12 @@ struct v3dv_physical_device {
    struct vk_physical_device vk;
 
    char *name;
+
+   /* primary node (cardN) of the render device */
+   int32_t primary_fd;
+   /* render node (renderN) of the render device */
    int32_t render_fd;
+   /* primary node (cardN) of the display device, if available */
    int32_t display_fd;
 
    /* We need these because it is not clear how to detect
@@ -334,6 +339,8 @@ struct v3dv_pipeline_key {
            enum pipe_blendfactor alpha_dst_factor;
    } blend[V3D_MAX_DRAW_BUFFERS];
    uint8_t f32_color_rb;
+   uint8_t norm_16;
+   uint8_t snorm;
    uint32_t va_swap_rb_mask;
    bool has_multiview;
    bool line_smooth;
@@ -346,7 +353,7 @@ struct v3dv_pipeline_cache_stats {
    uint32_t on_disk_hit;
 };
 
-/* Equivalent to gl_shader_stage, but including the coordinate shaders
+/* Equivalent to mesa_shader_stage, but including the coordinate shaders
  *
  * FIXME: perhaps move to common
  */
@@ -363,7 +370,7 @@ enum broadcom_shader_stage {
 
 /* Assumes that coordinate shaders will be custom-handled by the caller */
 static inline enum broadcom_shader_stage
-gl_shader_stage_to_broadcom(gl_shader_stage stage)
+mesa_shader_stage_to_broadcom(mesa_shader_stage stage)
 {
    switch (stage) {
    case MESA_SHADER_VERTEX:
@@ -375,11 +382,11 @@ gl_shader_stage_to_broadcom(gl_shader_stage stage)
    case MESA_SHADER_COMPUTE:
       return BROADCOM_SHADER_COMPUTE;
    default:
-      unreachable("Unknown gl shader stage");
+      UNREACHABLE("Unknown gl shader stage");
    }
 }
 
-static inline gl_shader_stage
+static inline mesa_shader_stage
 broadcom_shader_stage_to_gl(enum broadcom_shader_stage stage)
 {
    switch (stage) {
@@ -394,7 +401,7 @@ broadcom_shader_stage_to_gl(enum broadcom_shader_stage stage)
    case BROADCOM_SHADER_COMPUTE:
       return MESA_SHADER_COMPUTE;
    default:
-      unreachable("Unknown broadcom shader stage");
+      UNREACHABLE("Unknown broadcom shader stage");
    }
 }
 
@@ -431,7 +438,7 @@ broadcom_binning_shader_stage_for_render_stage(enum broadcom_shader_stage stage)
    case BROADCOM_SHADER_GEOMETRY:
       return BROADCOM_SHADER_GEOMETRY_BIN;
    default:
-      unreachable("Invalid shader stage");
+      UNREACHABLE("Invalid shader stage");
    }
 }
 
@@ -444,7 +451,7 @@ broadcom_shader_stage_name(enum broadcom_shader_stage stage)
    case BROADCOM_SHADER_GEOMETRY_BIN:
       return "MESA_SHADER_GEOMETRY_BIN";
    default:
-      return gl_shader_stage_name(broadcom_shader_stage_to_gl(stage));
+      return mesa_shader_stage_name(broadcom_shader_stage_to_gl(stage));
    }
 }
 
@@ -627,6 +634,12 @@ struct v3dv_format_plane {
 
    /* Whether the return value is 16F/I/UI or 32F/I/UI. */
    uint8_t return_size;
+
+   /* Needs software unorm packing */
+   bool unorm;
+
+   /* Needs software snorm packing */
+   bool snorm;
 };
 
 struct v3dv_format {
@@ -665,7 +678,7 @@ static uint8_t v3dv_plane_from_aspect(VkImageAspectFlags aspect)
    case VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT:
       return 2;
    default:
-      unreachable("invalid image aspect");
+      UNREACHABLE("invalid image aspect");
    }
 }
 
@@ -733,6 +746,10 @@ struct v3dv_image {
     * This holds a tiled copy of the image we can use for that purpose.
     */
    struct v3dv_image *shadow;
+
+   /* Image is a WSI image.
+    */
+   bool from_wsi;
 };
 
 VkResult

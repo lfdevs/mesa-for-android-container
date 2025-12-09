@@ -17,6 +17,7 @@
 #include "panvk_blend.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_device.h"
+#include "panvk_meta.h"
 #include "panvk_shader.h"
 
 struct panvk_blend_shader_key {
@@ -87,6 +88,7 @@ get_blend_shader(struct panvk_device *dev,
    /* Compile the NIR shader */
    struct pan_compile_inputs inputs = {
       .gpu_id = pdev->kmod.props.gpu_id,
+      .gpu_variant = pdev->kmod.props.gpu_variant,
       .is_blend = true,
       .blend = {
          .nr_samples = key.info.nr_samples,
@@ -96,7 +98,8 @@ get_blend_shader(struct panvk_device *dev,
       },
    };
 
-   pan_shader_preprocess(nir, inputs.gpu_id);
+   pan_preprocess_nir(nir, inputs.gpu_id);
+   pan_postprocess_nir(nir, inputs.gpu_id);
 
    enum pipe_format rt_formats[8] = {0};
    rt_formats[rt] = key.info.format;
@@ -193,14 +196,13 @@ emit_blend_desc(const struct pan_shader_info *fs_info, uint64_t fs_code,
          cfg.internal.fixed_function.rt = rt_idx;
 
 #if PAN_ARCH < 9
+         nir_alu_type type = fs_info->bifrost.blend[blend_idx].type;
          if (fs_info->fs.untyped_color_outputs) {
-            nir_alu_type type = fs_info->bifrost.blend[blend_idx].type;
-
             cfg.internal.fixed_function.conversion.register_format =
                GENX(pan_fixup_blend_type)(type, rt->format);
          } else {
             cfg.internal.fixed_function.conversion.register_format =
-               fs_info->bifrost.blend[blend_idx].format;
+               pan_blend_type_from_nir(type);
          }
 
          if (!opaque) {

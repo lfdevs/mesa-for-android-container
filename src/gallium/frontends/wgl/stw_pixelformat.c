@@ -250,10 +250,10 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
     * to force all pixel formats to have a particular number of samples.
     */
    {
-      const char *samples = getenv("WGL_FORCE_MSAA");
+      const char *samples = os_get_option("WGL_FORCE_MSAA");
       if (!samples) {
          static bool warned = false;
-         samples = getenv("SVGA_FORCE_MSAA");
+         samples = os_get_option("SVGA_FORCE_MSAA");
          if (samples && !warned) {
             fprintf(stderr, "*** SVGA_FORCE_MSAA is deprecated; "
                     "use WGL_FORCE_MSAA instead ***\n");
@@ -317,7 +317,7 @@ stw_pixelformat_init(void)
 
    assert(!stw_dev->pixelformat_count);
 
-   util_dynarray_init(&stw_dev->pixelformats, NULL);
+   stw_dev->pixelformats = UTIL_DYNARRAY_INIT;
 
    /* normal, displayable formats */
    num_formats = add_color_format_variants(stw_pf_color,

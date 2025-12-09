@@ -119,7 +119,9 @@ pipeline_statistic_convert(enum pipe_statistics_query_index idx)
       [PIPE_STAT_QUERY_PS_INVOCATIONS] = VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT,
       [PIPE_STAT_QUERY_HS_INVOCATIONS] = VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT,
       [PIPE_STAT_QUERY_DS_INVOCATIONS] = VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT,
-      [PIPE_STAT_QUERY_CS_INVOCATIONS] = VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT
+      [PIPE_STAT_QUERY_CS_INVOCATIONS] = VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT,
+      [PIPE_STAT_QUERY_MS_INVOCATIONS] = VK_QUERY_PIPELINE_STATISTIC_MESH_SHADER_INVOCATIONS_BIT_EXT,
+      [PIPE_STAT_QUERY_TS_INVOCATIONS] = VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT,
    };
    assert(idx < ARRAY_SIZE(map));
    return map[idx];
@@ -280,7 +282,7 @@ get_num_results(struct zink_query *q)
    default:
       debug_printf("unknown query: %s\n",
                    util_str_query_type(q->type, true));
-      unreachable("zink: unknown query type");
+      UNREACHABLE("zink: unknown query type");
    }
 }
 
@@ -328,7 +330,7 @@ convert_query_type(struct zink_screen *screen, enum pipe_query_type query_type, 
    default:
       debug_printf("unknown query: %s\n",
                    util_str_query_type(query_type, true));
-      unreachable("zink: unknown query type");
+      UNREACHABLE("zink: unknown query type");
    }
 }
 
@@ -395,7 +397,7 @@ unref_vk_pool(struct zink_context *ctx, struct zink_query_pool *pool)
 {
    if (!pool || --pool->refcount)
       return;
-   util_dynarray_append(&ctx->bs->dead_querypools, VkQueryPool, pool->query_pool);
+   util_dynarray_append(&ctx->bs->dead_querypools, pool->query_pool);
    if (list_is_linked(&pool->list))
       list_del(&pool->list);
    FREE(pool);
@@ -523,7 +525,7 @@ zink_create_query(struct pipe_context *pctx,
    if (query->vkqtype == -1)
       return NULL;
 
-   util_dynarray_init(&query->starts, NULL);
+   query->starts = UTIL_DYNARRAY_INIT;
 
    assert(!query->precise || query->vkqtype == VK_QUERY_TYPE_OCCLUSION);
 
@@ -651,7 +653,7 @@ check_query_results(struct zink_query *query, union pipe_query_result *result,
       default:
          debug_printf("unhandled query type: %s\n",
                       util_str_query_type(query->type, true));
-         unreachable("unexpected query type");
+         UNREACHABLE("unexpected query type");
       }
    }
 }

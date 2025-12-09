@@ -28,33 +28,19 @@
 #ifndef vl_csc_h
 #define vl_csc_h
 
-#include "util/compiler.h"
+#include "util/format/u_format.h"
+#include "pipe/p_video_enums.h"
 
 typedef float vl_csc_matrix[3][4];
 
-struct vl_procamp
-{
-   float brightness;
-   float contrast;
-   float saturation;
-   float hue;
-};
+void vl_csc_get_rgbyuv_matrix(enum pipe_video_vpp_matrix_coefficients coefficients,
+                              enum pipe_format in_format, enum pipe_format out_format,
+                              enum pipe_video_vpp_color_range in_color_range,
+                              enum pipe_video_vpp_color_range out_color_range,
+                              vl_csc_matrix *matrix);
 
-enum VL_CSC_COLOR_STANDARD
-{
-   VL_CSC_COLOR_STANDARD_IDENTITY,
-   VL_CSC_COLOR_STANDARD_BT_601,
-   VL_CSC_COLOR_STANDARD_BT_709,
-   VL_CSC_COLOR_STANDARD_BT_709_FULL,
-   VL_CSC_COLOR_STANDARD_SMPTE_240M,
-   VL_CSC_COLOR_STANDARD_BT_709_REV
-};
-
-extern const struct vl_procamp vl_default_procamp;
-
-void vl_csc_get_matrix(enum VL_CSC_COLOR_STANDARD cs,
-                       struct vl_procamp *procamp,
-                       bool full_range,
-                       vl_csc_matrix *matrix);
+void vl_csc_get_primaries_matrix(enum pipe_video_vpp_color_primaries in_color_primaries,
+                                 enum pipe_video_vpp_color_primaries out_color_primaries,
+                                 vl_csc_matrix *matrix);
 
 #endif /* vl_csc_h */

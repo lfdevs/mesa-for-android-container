@@ -80,21 +80,21 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
    }
 
    /* Map constant buffers */
-   for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
-      if (svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer == NULL) {
+   for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[MESA_SHADER_VERTEX]); ++i) {
+      if (svga->curr.constbufs[MESA_SHADER_VERTEX][i].buffer == NULL) {
          continue;
       }
 
       map = pipe_buffer_map(&svga->pipe,
-                            svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer,
+                            svga->curr.constbufs[MESA_SHADER_VERTEX][i].buffer,
                             PIPE_MAP_READ |
                             PIPE_MAP_UNSYNCHRONIZED,
                             &cb_transfer[i]);
       assert(map);
       draw_set_mapped_constant_buffer(
-         draw, PIPE_SHADER_VERTEX, i,
+         draw, MESA_SHADER_VERTEX, i,
          map,
-         svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer->width0);
+         svga->curr.constbufs[MESA_SHADER_VERTEX][i].buffer->width0);
    }
 
    draw_vbo(draw, info, drawid_offset, indirect, draw_one, 1,
@@ -120,8 +120,8 @@ svga_swtnl_draw_vbo(struct svga_context *svga,
       draw_set_indexes(draw, NULL, 0, 0);
    }
 
-   for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[PIPE_SHADER_VERTEX]); ++i) {
-      if (svga->curr.constbufs[PIPE_SHADER_VERTEX][i].buffer) {
+   for (i = 0; i < ARRAY_SIZE(svga->curr.constbufs[MESA_SHADER_VERTEX]); ++i) {
+      if (svga->curr.constbufs[MESA_SHADER_VERTEX][i].buffer) {
          pipe_buffer_unmap(&svga->pipe, cb_transfer[i]);
       }
    }
@@ -165,7 +165,7 @@ svga_init_swtnl(struct svga_context *svga)
    util_blitter_cache_all_shaders(svga->blitter);
 
    const nir_alu_type bool_type =
-      screen->screen.shader_caps[PIPE_SHADER_FRAGMENT].integers ?
+      screen->screen.shader_caps[MESA_SHADER_FRAGMENT].integers ?
       nir_type_bool32 : nir_type_float32;
 
    if (!screen->haveLineSmooth)

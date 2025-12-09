@@ -1,0 +1,97 @@
+/*
+ * Copyright © 2019 Collabora Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
+
+#include "nir_builder.h"
+#include "st_nir.h"
+
+/** nir_lower_point_size_mov.c
+ *
+ * This pass lowers glPointSize into gl_PointSize, by adding a uniform
+ * and a move from that uniform to VARYING_SLOT_PSIZ. This is useful for
+ * OpenGL ES level hardware that lack constant point-size hardware state.
+ */
+
+static void
+lower_point_size_mov_after(nir_builder *b, nir_variable *in)
+{
+   nir_def *load = nir_load_var(b, in);
+   load = nir_fclamp(b, nir_channel(b, load, 0), nir_channel(b, load, 1), nir_channel(b, load, 2));
+   nir_store_output(b, load, nir_imm_int(b, 0),
+                    .io_semantics.location = VARYING_SLOT_PSIZ);
+}
+
+static bool
+lower_point_size_mov(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   nir_variable *var = NULL;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_store_output:
+   case nir_intrinsic_store_per_vertex_output:
+   case nir_intrinsic_store_per_view_output:
+   case nir_intrinsic_store_per_primitive_output: {
+      nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+      if (sem.location != VARYING_SLOT_PSIZ)
+         return false;
+      break;
+   }
+   default:
+      return false;
+   }
+   b->cursor = nir_after_instr(&intr->instr);
+   lower_point_size_mov_after(b, data);
+   if (var && !var->data.explicit_location)
+      nir_instr_remove(&intr->instr);
+   return true;
+}
+
+bool
+st_nir_lower_point_size_mov(nir_shader *shader,
+                            const gl_state_index16 *pointsize_state_tokens,
+                            struct gl_program_parameter_list *paramList,
+                            bool packed_driver_uniform_storage)
+{
+   assert(shader->info.stage != MESA_SHADER_FRAGMENT &&
+          shader->info.stage != MESA_SHADER_COMPUTE);
+   assert(shader->info.io_lowered);
+
+   bool progress = false;
+   nir_metadata preserved = nir_metadata_control_flow;
+   nir_variable *in =
+      st_nir_state_variable_create(shader, glsl_vec4_type(), paramList,
+                                   pointsize_state_tokens,
+                                   "gl_PointSizeClampedMESA",
+                                   packed_driver_uniform_storage);
+
+   if (shader->info.outputs_written & VARYING_BIT_PSIZ) {
+      progress = nir_shader_intrinsics_pass(shader, lower_point_size_mov, preserved, in);
+   } else {
+      nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+      nir_builder b = nir_builder_at(nir_before_impl(impl));
+
+      lower_point_size_mov_after(&b, in);
+      shader->info.outputs_written |= VARYING_BIT_PSIZ;
+      progress = true;
+      nir_progress(true, impl, preserved);
+   }
+   return progress;
+}

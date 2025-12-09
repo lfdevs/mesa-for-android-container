@@ -186,7 +186,7 @@ _mesa_update_edgeflag_state_vao(struct gl_context *ctx);
  * \param comps number of components.
  * \param type data type.
  */
-static inline int
+ALWAYS_INLINE static int
 _mesa_bytes_per_vertex_attrib(int comps, GLenum type)
 {
    /* This has comps = 3, but should return 4, so it's difficult to

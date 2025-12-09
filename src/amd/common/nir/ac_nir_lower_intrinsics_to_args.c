@@ -91,7 +91,7 @@ load_subgroup_id_lowered(lower_intrinsics_to_args_state *s, nir_builder *b)
          }
          return nir_ushr_imm(b, sgpr_local_invocation_index, util_logbase2(s->wave_size));
       } else {
-         unreachable("unimplemented for LS");
+         UNREACHABLE("unimplemented for LS");
       }
    } else if (s->hw_stage == AC_HW_LEGACY_GEOMETRY_SHADER ||
               s->hw_stage == AC_HW_NEXT_GEN_GEOMETRY_SHADER) {
@@ -281,7 +281,7 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
             replacement = ac_nir_load_arg_upper_bound(b, s->args, s->args->gs_invocation_id, 31);
          }
       } else {
-         unreachable("unexpected shader stage");
+         UNREACHABLE("unexpected shader stage");
       }
       break;
    case nir_intrinsic_load_sample_id:
@@ -368,7 +368,7 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       else if (s->args->gs_wave_id.used)
          replacement = ac_nir_load_arg(b, s->args, s->args->gs_wave_id);
       else
-         unreachable("Shader doesn't have GS wave ID.");
+         UNREACHABLE("Shader doesn't have GS wave ID.");
       break;
    case nir_intrinsic_overwrite_vs_arguments_amd:
       s->vertex_id = intrin->src[0].ssa;
@@ -405,12 +405,12 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
                 * to optimize some multiplications (in address calculations) so that
                 * constant additions can be added to the const offset in memory load instructions.
                 */
-               nir_intrinsic_set_arg_upper_bound_u32_amd(nir_instr_as_intrinsic(replacement->parent_instr),
+               nir_intrinsic_set_arg_upper_bound_u32_amd(nir_def_as_intrinsic(replacement),
                                                          2048 / b->shader->info.tess.tcs_vertices_out);
             }
          }
       } else {
-         unreachable("invalid stage");
+         UNREACHABLE("invalid stage");
       }
       break;
    case nir_intrinsic_load_primitive_id:
@@ -427,7 +427,7 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
          else
             replacement = ac_nir_load_arg(b, s->args, s->args->gs_prim_id); /* NGG */
       } else {
-         unreachable("invalid stage");
+         UNREACHABLE("invalid stage");
       }
       break;
    case nir_intrinsic_load_tess_coord: {

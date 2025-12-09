@@ -441,7 +441,7 @@ calculate_weight_bo_size(struct etna_ml_subgraph *subgraph, const struct etna_op
    struct pipe_context *context = subgraph->base.context;
    struct etna_context *ctx = etna_context(context);
    unsigned nn_core_count = etna_ml_get_core_info(ctx)->nn_core_count;
-   unsigned header_size = ALIGN(nn_core_count * 4, 64);
+   unsigned header_size = align(nn_core_count * 4, 64);
    unsigned input_channels = operation->addition ? 1 : operation->input_channels;
    unsigned output_channels = operation->addition ? 1 : operation->output_channels;
    unsigned cores_used = MIN2(output_channels, nn_core_count);
@@ -453,7 +453,7 @@ calculate_weight_bo_size(struct etna_ml_subgraph *subgraph, const struct etna_op
 
    weights_size = operation->weight_width * operation->weight_height * input_channels;
    core_size = 1 + 2 + (weights_size + 4 + 4) * kernels_per_core;
-   core_size_aligned = ALIGN(core_size, 64);
+   core_size_aligned = align(core_size, 64);
    compressed_size_aligned = header_size + core_size_aligned * cores_used;
 
    return compressed_size_aligned;
@@ -466,7 +466,7 @@ calculate_zrl_bits(struct etna_ml_subgraph *subgraph, const struct etna_operatio
    struct etna_context *ctx = etna_context(context);
    unsigned nn_core_count = etna_ml_get_core_info(ctx)->nn_core_count;
    unsigned max_zrl_bits = etna_ml_get_core_info(ctx)->nn_zrl_bits;
-   unsigned header_size = ALIGN(nn_core_count * 4, 64);
+   unsigned header_size = align(nn_core_count * 4, 64);
    unsigned input_channels = operation->addition ? 1 : operation->input_channels;
    unsigned output_channels = operation->addition ? 1 : operation->output_channels;
    unsigned cores_used = MIN2(output_channels, nn_core_count);
@@ -518,7 +518,7 @@ etna_ml_create_coeffs_v7(struct etna_ml_subgraph *subgraph, const struct etna_op
    struct pipe_context *context = subgraph->base.context;
    struct etna_context *ctx = etna_context(context);
    unsigned nn_core_count = etna_ml_get_core_info(ctx)->nn_core_count;
-   unsigned header_size = ALIGN(nn_core_count * 4, 64);
+   unsigned header_size = align(nn_core_count * 4, 64);
    unsigned input_channels = operation->addition ? 1 : operation->input_channels;
    unsigned output_channels = operation->addition ? 1 : operation->output_channels;
    unsigned cores_used = MIN2(output_channels, nn_core_count);
@@ -548,7 +548,7 @@ etna_ml_create_coeffs_v7(struct etna_ml_subgraph *subgraph, const struct etna_op
       else
          actual_size = write_core_sequential(subgraph, map, core, operation, zrl_bits);
 
-      actual_size = ALIGN(actual_size, 64);
+      actual_size = align(actual_size, 64);
       max_core_size = MAX2(actual_size, max_core_size);
 
       header[core] = actual_size;

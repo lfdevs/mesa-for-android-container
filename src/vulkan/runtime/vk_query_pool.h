@@ -43,6 +43,13 @@ struct vk_query_pool {
     * If query_type != VK_QUERY_TYPE_PIPELINE_STATISTICS, this will be zero.
     */
    VkQueryPipelineStatisticFlags pipeline_statistics;
+
+   /** VkQueryPoolVideoEncodeFeedbackCreateInfoKHR::encodeFeedbackFlags
+    *
+    * If query_type != VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR, this will be
+    * zero.
+    */
+   VkVideoEncodeFeedbackFlagsKHR encode_feedback_flags;
 };
 
 void vk_query_pool_init(struct vk_device *device,

@@ -152,7 +152,7 @@ struct i915_state {
    unsigned dynamic[I915_MAX_DYNAMIC];
 
    /** number of constants passed in through a constant buffer */
-   uint32_t num_user_constants[PIPE_SHADER_TYPES];
+   uint32_t num_user_constants[MESA_SHADER_STAGES];
 
    /* texture sampler state */
    unsigned sampler[I915_TEX_UNITS][3];
@@ -278,7 +278,7 @@ struct i915_context {
    struct pipe_blend_color blend_color;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
-   struct pipe_resource *constants[PIPE_SHADER_TYPES];
+   struct pipe_resource *constants[MESA_SHADER_STAGES];
    PIPE_FB_SURFACES; //STOP USING THIS
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
@@ -431,6 +431,8 @@ void i915_init_string_functions(struct i915_context *i915);
 struct pipe_context *i915_create_context(struct pipe_screen *screen, void *priv,
                                          unsigned flags);
 
+void
+i915_framebuffer_init(struct pipe_context *pctx, const struct pipe_framebuffer_state *fb, struct pipe_surface **cbufs, struct pipe_surface **zsbuf);
 /***********************************************************************
  * Inline conversion functions.  These are better-typed than the
  * macros used previously:

@@ -77,3 +77,6 @@ c7bf3b69ebc8f2252dbf724a4de638e6bb2ac402
 
 # freedreno/a6xx: The great register renaming
 7fd99c88b9cd5c0c8c1cb3e92383acac5cb8220b
+
+# radv: re-format using clang-format
+1492de1bc3610539b93d8ad17892e7139cd4b05d

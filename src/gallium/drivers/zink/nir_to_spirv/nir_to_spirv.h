@@ -74,7 +74,7 @@ zink_sampler_type(const struct glsl_type *type)
    case GLSL_SAMPLER_DIM_BUF:
       return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
    default:
-      unreachable("unimplemented");
+      UNREACHABLE("unimplemented");
    }
    return 0;
 }
@@ -95,7 +95,7 @@ zink_image_type(const struct glsl_type *type)
    case GLSL_SAMPLER_DIM_BUF:
       return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
    default:
-      unreachable("unimplemented");
+      UNREACHABLE("unimplemented");
    }
    return 0;
 }

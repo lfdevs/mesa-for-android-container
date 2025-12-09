@@ -84,7 +84,7 @@ static const struct debug_named_value agx_debug_options[] = {
 void
 agx_bo_free(struct agx_device *dev, struct agx_bo *bo)
 {
-   const uint64_t handle = bo->uapi_handle;
+   const uint64_t handle = bo->handle;
 
    if (bo->_map)
       munmap(bo->_map, bo->size);
@@ -283,8 +283,7 @@ agx_bo_import(struct agx_device *dev, int fd)
        * for zero sized maps and fail nicely too
        */
       if ((bo->size == 0) || (bo->size == (size_t)-1)) {
-         pthread_mutex_unlock(&dev->bo_map_lock);
-         return NULL;
+         goto error;
       }
       if (bo->size & (AIL_PAGESIZE - 1)) {
          fprintf(
@@ -376,8 +375,8 @@ agx_bo_make_shared(struct agx_device *dev, struct agx_bo *bo)
    bo->flags |= AGX_BO_SHARED;
    assert(bo->prime_fd == -1);
 
-   int ret =
-      drmPrimeHandleToFD(dev->fd, bo->handle, DRM_CLOEXEC, &bo->prime_fd);
+   int ret = drmPrimeHandleToFD(dev->fd, bo->handle, DRM_CLOEXEC | DRM_RDWR,
+                                &bo->prime_fd);
    assert(ret == 0);
    assert(bo->prime_fd >= 0);
 
@@ -521,9 +520,6 @@ agx_open_device(void *memctx, struct agx_device *dev)
          dev->is_virtio = false;
          dev->ops = agx_device_drm_ops;
       } else if (!strcmp(version->name, "virtio_gpu")) {
-         /* TODO: virtio wire protocol is not stable yet */
-         return false;
-
          dev->is_virtio = true;
          if (!agx_virtio_open_device(dev)) {
             fprintf(

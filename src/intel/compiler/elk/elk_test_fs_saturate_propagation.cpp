@@ -67,8 +67,7 @@ saturate_propagation_test::saturate_propagation_test()
    params.mem_ctx = ctx;
 
    prog_data = ralloc(ctx, struct elk_wm_prog_data);
-   nir_shader *shader =
-      nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL, NULL);
+   nir_shader *shader = nir_shader_create(ctx, MESA_SHADER_FRAGMENT, NULL);
 
    v = new saturate_propagation_fs_visitor(compiler, &params, prog_data, shader);
 

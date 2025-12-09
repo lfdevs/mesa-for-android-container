@@ -87,16 +87,6 @@ vn_env_init(void)
 }
 
 void
-vn_trace_init(void)
-{
-#if DETECT_OS_ANDROID
-   atrace_init();
-#else
-   util_cpu_trace_init();
-#endif
-}
-
-void
 vn_log(struct vn_instance *instance, const char *format, ...)
 {
    va_list ap;
@@ -233,7 +223,7 @@ vn_relax_get_profile(enum vn_relax_reason reason)
       };
    }
 
-   unreachable("unhandled vn_relax_reason");
+   UNREACHABLE("unhandled vn_relax_reason");
 }
 
 struct vn_relax_state

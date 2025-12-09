@@ -83,7 +83,7 @@ lower_load_pointcoord(lower_pntc_ytransform_state *state,
 
    /* Reassemble the vector. */
    pntc = nir_vector_insert_imm(b, pntc, flipped_y, y_swizzle);
-   nir_def_rewrite_uses_after(&intr->def, pntc, pntc->parent_instr);
+   nir_def_rewrite_uses_after(&intr->def, pntc);
 }
 
 static void

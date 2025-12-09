@@ -1,5 +1,5 @@
 /**************************************************************************
- * 
+ *
  * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
  *
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,7 +22,7 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  **************************************************************************/
 
 /* Authors:  Keith Whitwell <keithw@vmware.com>
@@ -61,18 +61,19 @@
 #define LP_NEW_TCS          0x200000
 #define LP_NEW_TES          0x400000
 #define LP_NEW_SAMPLE_MASK  0x800000
-#define LP_NEW_TASK                0x1000000
-#define LP_NEW_TASK_CONSTANTS      0x2000000
-#define LP_NEW_TASK_SAMPLER        0x4000000
-#define LP_NEW_TASK_SAMPLER_VIEW   0x8000000
-#define LP_NEW_TASK_SSBOS         0x10000000
-#define LP_NEW_TASK_IMAGES        0x20000000
-#define LP_NEW_MESH               0x40000000
-#define LP_NEW_MESH_CONSTANTS     0x80000000
-#define LP_NEW_MESH_SAMPLER      0x100000000ULL
-#define LP_NEW_MESH_SAMPLER_VIEW 0x200000000ULL
-#define LP_NEW_MESH_SSBOS        0x400000000ULL
-#define LP_NEW_MESH_IMAGES       0x800000000ULL
+#define LP_NEW_SAMPLE_LOCATIONS 0x1000000
+#define LP_NEW_TASK                 0x2000000
+#define LP_NEW_TASK_CONSTANTS       0x4000000
+#define LP_NEW_TASK_SAMPLER         0x8000000
+#define LP_NEW_TASK_SAMPLER_VIEW   0x10000000
+#define LP_NEW_TASK_SSBOS          0x20000000
+#define LP_NEW_TASK_IMAGES         0x40000000
+#define LP_NEW_MESH                0x80000000
+#define LP_NEW_MESH_CONSTANTS     0x100000000ULL
+#define LP_NEW_MESH_SAMPLER       0x200000000ULL
+#define LP_NEW_MESH_SAMPLER_VIEW  0x400000000ULL
+#define LP_NEW_MESH_SSBOS         0x800000000ULL
+#define LP_NEW_MESH_IMAGES       0x1000000000ULL
 
 #define LP_CSNEW_CS 0x1
 #define LP_CSNEW_CONSTANTS 0x2
@@ -125,7 +126,7 @@ llvmpipe_set_framebuffer_state(struct pipe_context *,
 void
 llvmpipe_update_fs(struct llvmpipe_context *lp);
 
-void 
+void
 llvmpipe_update_setup(struct llvmpipe_context *lp);
 
 void
@@ -209,7 +210,7 @@ llvmpipe_prepare_tess_eval_sampling(struct llvmpipe_context *ctx,
                                     struct pipe_sampler_view **views);
 void
 llvmpipe_cleanup_stage_sampling(struct llvmpipe_context *ctx,
-                                enum pipe_shader_type stage);
+                                mesa_shader_stage stage);
 
 void
 llvmpipe_prepare_vertex_images(struct llvmpipe_context *lp,
@@ -233,6 +234,6 @@ llvmpipe_prepare_tess_eval_images(struct llvmpipe_context *lp,
 
 void
 llvmpipe_cleanup_stage_images(struct llvmpipe_context *ctx,
-                              enum pipe_shader_type stage);
+                              mesa_shader_stage stage);
 
 #endif

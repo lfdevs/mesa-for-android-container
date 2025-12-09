@@ -74,7 +74,7 @@ _mesa_spirv_extensions_to_string(enum SpvExtension ext)
    STR(SPV_KHR_variable_pointers);
    STR(SPV_AMD_gcn_shader);
    case SPV_EXTENSIONS_COUNT:
-      unreachable("Unknown SPIR-V extension");
+      UNREACHABLE("Unknown SPIR-V extension");
    }
 #undef STR
 

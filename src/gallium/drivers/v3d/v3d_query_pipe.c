@@ -119,7 +119,7 @@ v3d_begin_query_pipe(struct v3d_context *v3d, struct v3d_query *query)
         case PIPE_QUERY_TIMESTAMP_DISJOINT:
                 break;
         default:
-                unreachable("unsupported query type");
+                UNREACHABLE("unsupported query type");
         }
 
         return true;
@@ -179,7 +179,7 @@ v3d_end_query_pipe(struct v3d_context *v3d, struct v3d_query *query)
         case PIPE_QUERY_TIMESTAMP_DISJOINT:
                 break;
         default:
-                unreachable("unsupported query type");
+                UNREACHABLE("unsupported query type");
         }
 
         return true;
@@ -256,7 +256,7 @@ v3d_get_query_result_pipe(struct v3d_context *v3d, struct v3d_query *query,
                 vresult->timestamp_disjoint.disjoint = false;
            break;
         default:
-                unreachable("unsupported query type");
+                UNREACHABLE("unsupported query type");
         }
 
         return true;

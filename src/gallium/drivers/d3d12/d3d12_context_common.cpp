@@ -60,11 +60,24 @@
 #include "util/u_dl.h"
 #include <dxguids/dxguids.h>
 #include <string.h>
+#include "d3d12_interop_public.h"
 
 static void
 d3d12_context_destroy(struct pipe_context *pctx)
 {
    struct d3d12_context *ctx = d3d12_context(pctx);
+
+   if (ctx->priority_manager)
+   {
+      struct d3d12_screen *screen = d3d12_screen(pctx->screen);
+      if (ctx->priority_manager->unregister_work_queue(ctx->priority_manager, screen->cmdqueue) != 0)
+      {
+         debug_printf("D3D12: Failed to unregister command queue with frontend priority manager\n");
+         assert(false);
+      }
+
+      mtx_destroy(&ctx->priority_manager_lock);
+   }
 
    struct d3d12_screen *screen = d3d12_screen(pctx->screen);
    mtx_lock(&screen->submit_mutex);
@@ -104,7 +117,6 @@ d3d12_context_destroy(struct pipe_context *pctx)
       if (ctx->timestamp_query)
          pctx->destroy_query(pctx, ctx->timestamp_query);
 
-      util_framebuffer_init(pctx, NULL, ctx->fb_cbufs, &ctx->fb_zsbuf);
       util_unreference_framebuffer_state(&ctx->fb);
       d3d12_compute_pipeline_state_cache_destroy(ctx);
       d3d12_root_signature_cache_destroy(ctx);
@@ -340,6 +352,140 @@ d3d12_video_create_codec(struct pipe_context *context,
 }
 #endif
 
+int
+d3d12_context_set_queue_priority(struct d3d12_context_queue_priority_manager* manager,
+                                     ID3D12CommandQueue *d3d12_queue,
+                                     const uint32_t* global_priority,
+                                     const uint32_t* local_priority)
+{
+   if (!global_priority || !local_priority)
+      return -1;
+
+   struct d3d12_context* ctx12 = d3d12_context(manager->context);
+   mtx_lock(&ctx12->priority_manager_lock);
+   {
+      // Set the queue priority
+      ComPtr<ID3D12CommandQueue1> prio_iface;
+      if(FAILED(d3d12_queue->QueryInterface(IID_PPV_ARGS(&prio_iface))))
+      {
+         mtx_unlock(&ctx12->priority_manager_lock);
+         return -1;
+      }
+
+      D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY global_priority_val = static_cast<D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY>(*global_priority);
+      if(FAILED(prio_iface->SetGlobalPriority(global_priority_val)))
+      {
+         mtx_unlock(&ctx12->priority_manager_lock);
+         return -1;
+      }
+
+      D3D12_COMMAND_QUEUE_PROCESS_PRIORITY local_priority_val = static_cast<D3D12_COMMAND_QUEUE_PROCESS_PRIORITY>(*local_priority);
+      if(FAILED(prio_iface->SetProcessPriority(local_priority_val)))
+      {
+         mtx_unlock(&ctx12->priority_manager_lock);
+         return -1;
+      }
+   }
+
+   mtx_unlock(&ctx12->priority_manager_lock);
+   return 0;
+}
+
+int
+d3d12_context_get_queue_priority(struct d3d12_context_queue_priority_manager* manager,
+                                     ID3D12CommandQueue *d3d12_queue,
+                                     uint32_t *global_priority,
+                                     uint32_t *local_priority)
+{
+   struct d3d12_context* ctx12 = d3d12_context(manager->context);
+
+   mtx_lock(&ctx12->priority_manager_lock);
+   {
+      ComPtr<ID3D12CommandQueue1> prio_iface;
+      if (FAILED(d3d12_queue->QueryInterface(IID_PPV_ARGS(&prio_iface))))
+      {
+         mtx_unlock(&ctx12->priority_manager_lock);
+         return -1;
+      }
+
+      if (global_priority)
+      {
+         D3D12_COMMAND_QUEUE_GLOBAL_PRIORITY global_priority_val = {};
+         if (FAILED(prio_iface->GetGlobalPriority(&global_priority_val)))
+         {
+            mtx_unlock(&ctx12->priority_manager_lock);
+            return -1;
+         }
+         *global_priority = static_cast<uint32_t>(global_priority_val);
+      }
+
+      if (local_priority)
+      {
+         D3D12_COMMAND_QUEUE_PROCESS_PRIORITY local_priority_val = {};
+         if (FAILED(prio_iface->GetProcessPriority(&local_priority_val)))
+         {
+            mtx_unlock(&ctx12->priority_manager_lock);
+            return -1;
+         }
+         *local_priority = static_cast<uint32_t>(local_priority_val);
+      }
+   }
+   mtx_unlock(&ctx12->priority_manager_lock);
+   return 0;
+}
+
+int
+d3d12_context_set_queue_priority_manager(struct pipe_context *ctx, struct d3d12_context_queue_priority_manager *priority_manager)
+{
+   if (ctx && priority_manager)
+   {
+      struct d3d12_context *d3d12_ctx = d3d12_context(ctx);
+      d3d12_ctx->priority_manager = (struct d3d12_context_queue_priority_manager*) priority_manager;
+
+      // Validate that the frontend has set all required function pointers
+      assert ( d3d12_ctx->priority_manager->register_work_queue );
+      assert ( d3d12_ctx->priority_manager->unregister_work_queue );
+
+      // Initialize the priority manager lock
+      if (thrd_success != mtx_init(&d3d12_ctx->priority_manager_lock, mtx_plain))
+      {
+         debug_printf("D3D12: Failed to initialize context priority manager lock\n");
+         return 1;
+      }
+
+      //
+      // Fill the function pointers for the context queue priority manager that the frontend expects
+      //
+
+      d3d12_ctx->priority_manager->context = ctx;
+      d3d12_ctx->priority_manager->set_queue_priority = d3d12_context_set_queue_priority;
+      d3d12_ctx->priority_manager->get_queue_priority = d3d12_context_get_queue_priority;
+
+      // Register the context's command queue with the frontend's priority manager
+      struct d3d12_screen *screen = d3d12_screen(ctx->screen);
+      if (d3d12_ctx->priority_manager->register_work_queue(d3d12_ctx->priority_manager, screen->cmdqueue) != 0)
+      {
+         debug_printf("D3D12: Failed to register command queue with frontend priority manager\n");
+         return 1;
+      }
+   }
+
+   return 0;
+}
+
+int
+d3d12_video_encoder_set_max_async_queue_depth(struct pipe_context *ctx, uint32_t max_async_depth)
+{
+   if (max_async_depth > 8) {
+      debug_printf("d3d12_video_encoder_set_max_async_queue_depth: max_async_depth must be between 1 and 8\n");
+      return -1;
+   }
+
+   struct d3d12_context *d3d12_ctx = d3d12_context(ctx);
+   d3d12_ctx->max_video_encoding_async_depth = max_async_depth;
+   return 0;
+}
+
 struct pipe_context *
 d3d12_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
@@ -372,6 +518,7 @@ d3d12_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    if (!ctx)
       return NULL;
 
+   ctx->max_video_encoding_async_depth = static_cast<uint32_t>(debug_get_num_option("D3D12_VIDEO_ENC_ASYNC_DEPTH", 8));
    ctx->base.screen = pscreen;
    ctx->base.priv = priv;
 
@@ -435,7 +582,6 @@ d3d12_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
       ctx->gfx_pipeline_state.sample_mask = ~0;
 
-      d3d12_context_surface_init(&ctx->base);
       d3d12_context_query_init(&ctx->base);
       ctx->queries_disabled = false;
 

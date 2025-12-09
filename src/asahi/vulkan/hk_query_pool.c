@@ -59,7 +59,7 @@ hk_reports_per_query(struct hk_query_pool *pool)
       // Primitives succeeded and primitives needed
       return 2;
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 }
 
@@ -75,115 +75,6 @@ hk_flush_if_timestamp(struct hk_cmd_buffer *cmd, struct hk_query_pool *pool)
       hk_cmd_buffer_end_graphics(cmd);
       hk_cmd_buffer_end_compute(cmd);
    }
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL
-hk_CreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo *pCreateInfo,
-                   const VkAllocationCallbacks *pAllocator,
-                   VkQueryPool *pQueryPool)
-{
-   VK_FROM_HANDLE(hk_device, dev, device);
-   struct hk_query_pool *pool;
-
-   bool occlusion = pCreateInfo->queryType == VK_QUERY_TYPE_OCCLUSION;
-   bool timestamp = pCreateInfo->queryType == VK_QUERY_TYPE_TIMESTAMP;
-   unsigned occlusion_queries = occlusion ? pCreateInfo->queryCount : 0;
-
-   pool =
-      vk_query_pool_create(&dev->vk, pCreateInfo, pAllocator, sizeof(*pool));
-   if (!pool)
-      return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   /* We place the availability first and then data */
-   pool->query_start = 0;
-   if (hk_has_available(pool)) {
-      pool->query_start = align(pool->vk.query_count * sizeof(uint32_t),
-                                sizeof(struct hk_query_report));
-   }
-
-   uint32_t reports_per_query = hk_reports_per_query(pool);
-   pool->query_stride = reports_per_query * sizeof(struct hk_query_report);
-
-   if (pool->vk.query_count > 0) {
-      uint32_t bo_size = pool->query_start;
-
-      /* For occlusion queries, we stick the query index remapping here */
-      if (occlusion_queries)
-         bo_size += sizeof(uint16_t) * pool->vk.query_count;
-      else
-         bo_size += pool->query_stride * pool->vk.query_count;
-
-      /* The kernel requires that timestamp buffers are SHARED */
-      enum agx_bo_flags flags = AGX_BO_WRITEBACK;
-      if (timestamp)
-         flags |= AGX_BO_SHARED;
-
-      pool->bo = agx_bo_create(&dev->dev, bo_size, 0, flags, "Query pool");
-      if (!pool->bo) {
-         hk_DestroyQueryPool(device, hk_query_pool_to_handle(pool), pAllocator);
-         return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-      }
-
-      /* Timestamp buffers must be explicitly bound as such before we can use
-       * them.
-       */
-      if (timestamp) {
-         int ret = agx_bind_timestamps(&dev->dev, pool->bo, &pool->handle);
-         if (ret) {
-            hk_DestroyQueryPool(device, hk_query_pool_to_handle(pool),
-                                pAllocator);
-            return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-         }
-
-         assert(pool->handle && "handles are nonzero");
-      }
-   }
-
-   uint16_t *oq_index = hk_pool_oq_index_ptr(pool);
-
-   for (unsigned i = 0; i < occlusion_queries; ++i) {
-      uint64_t zero = 0;
-      unsigned index;
-
-      VkResult result = hk_descriptor_table_add(
-         dev, &dev->occlusion_queries, &zero, sizeof(uint64_t), &index);
-
-      if (result != VK_SUCCESS) {
-         hk_DestroyQueryPool(device, hk_query_pool_to_handle(pool), pAllocator);
-         return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-      }
-
-      /* We increment as we go so we can clean up properly if we run out */
-      assert(pool->oq_queries < occlusion_queries);
-      oq_index[pool->oq_queries++] = index;
-   }
-
-   *pQueryPool = hk_query_pool_to_handle(pool);
-
-   return VK_SUCCESS;
-}
-
-VKAPI_ATTR void VKAPI_CALL
-hk_DestroyQueryPool(VkDevice device, VkQueryPool queryPool,
-                    const VkAllocationCallbacks *pAllocator)
-{
-   VK_FROM_HANDLE(hk_device, dev, device);
-   VK_FROM_HANDLE(hk_query_pool, pool, queryPool);
-
-   if (!pool)
-      return;
-
-   uint16_t *oq_index = hk_pool_oq_index_ptr(pool);
-
-   for (unsigned i = 0; i < pool->oq_queries; ++i) {
-      hk_descriptor_table_remove(dev, &dev->occlusion_queries, oq_index[i]);
-   }
-
-   if (pool->handle)
-      dev->dev.ops.bo_unbind_object(&dev->dev, pool->handle);
-
-   agx_bo_unreference(&dev->dev, pool->bo);
-   vk_query_pool_destroy(&dev->vk, pAllocator, &pool->vk);
 }
 
 static uint64_t
@@ -276,10 +167,10 @@ hk_queue_write(struct hk_cmd_buffer *cmd, uint64_t address, uint32_t value,
       struct libagx_imm_write imm = {.address = address, .value = value};
 
       if (!cs->imm_writes.data) {
-         util_dynarray_init(&cs->imm_writes, NULL);
+         cs->imm_writes = UTIL_DYNARRAY_INIT;
       }
 
-      util_dynarray_append(&cs->imm_writes, struct libagx_imm_write, imm);
+      util_dynarray_append(&cs->imm_writes, imm);
       return;
    }
 
@@ -297,36 +188,26 @@ hk_queue_write(struct hk_cmd_buffer *cmd, uint64_t address, uint32_t value,
    libagx_write_u32(cmd, agx_1d(1), AGX_BARRIER_ALL, address, value);
 }
 
-/**
- * Goes through a series of consecutive query indices in the given pool,
- * setting all element values to 0 and emitting them as available.
- */
 static void
 emit_zero_queries(struct hk_cmd_buffer *cmd, struct hk_query_pool *pool,
                   uint32_t first_index, uint32_t num_queries,
                   bool set_available)
 {
    struct hk_device *dev = hk_cmd_buffer_device(cmd);
+   perf_debug(cmd, "Query pool zero");
 
-   for (uint32_t i = 0; i < num_queries; i++) {
-      uint64_t report = hk_query_report_addr(dev, pool, first_index + i);
+   struct libagx_reset_query_args info = {
+      .availability = hk_has_available(pool) ? pool->bo->va->addr : 0,
+      .results = pool->oq_queries ? dev->occlusion_queries.bo->va->addr
+                                  : pool->bo->va->addr + pool->query_start,
+      .oq_index = pool->oq_queries ? pool->bo->va->addr + pool->query_start : 0,
 
-      uint64_t value = 0;
-      if (hk_has_available(pool)) {
-         uint64_t available = hk_query_available_addr(pool, first_index + i);
-         hk_queue_write(cmd, available, set_available, false);
-      } else {
-         value = set_available ? 0 : LIBAGX_QUERY_UNAVAILABLE;
-      }
+      .first_query = first_index,
+      .reports_per_query = hk_reports_per_query(pool),
+      .set_available = set_available,
+   };
 
-      /* XXX: is this supposed to happen on the begin? */
-      for (unsigned j = 0; j < hk_reports_per_query(pool); ++j) {
-         hk_queue_write(cmd, report + (j * sizeof(struct hk_query_report)),
-                        value, false);
-         hk_queue_write(cmd, report + (j * sizeof(struct hk_query_report)) + 4,
-                        value >> 32, false);
-      }
-   }
+   libagx_reset_query_struct(cmd, agx_1d(num_queries), AGX_BARRIER_ALL, info);
 }
 
 static void
@@ -350,6 +231,118 @@ host_zero_queries(struct hk_device *dev, struct hk_query_pool *pool,
          reports[j].value = value;
       }
    }
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+hk_CreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo *pCreateInfo,
+                   const VkAllocationCallbacks *pAllocator,
+                   VkQueryPool *pQueryPool)
+{
+   VK_FROM_HANDLE(hk_device, dev, device);
+   struct hk_query_pool *pool;
+
+   bool occlusion = pCreateInfo->queryType == VK_QUERY_TYPE_OCCLUSION;
+   bool timestamp = pCreateInfo->queryType == VK_QUERY_TYPE_TIMESTAMP;
+   unsigned occlusion_queries = occlusion ? pCreateInfo->queryCount : 0;
+
+   pool =
+      vk_query_pool_create(&dev->vk, pCreateInfo, pAllocator, sizeof(*pool));
+   if (!pool)
+      return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   /* We place the availability first and then data */
+   pool->query_start = 0;
+   if (hk_has_available(pool)) {
+      pool->query_start = align(pool->vk.query_count * sizeof(uint32_t),
+                                sizeof(struct hk_query_report));
+   }
+
+   uint32_t reports_per_query = hk_reports_per_query(pool);
+   pool->query_stride = reports_per_query * sizeof(struct hk_query_report);
+
+   if (pool->vk.query_count > 0) {
+      uint32_t bo_size = pool->query_start;
+
+      /* For occlusion queries, we stick the query index remapping here */
+      if (occlusion_queries)
+         bo_size += sizeof(uint16_t) * pool->vk.query_count;
+      else
+         bo_size += pool->query_stride * pool->vk.query_count;
+
+      /* The kernel requires that timestamp buffers are SHARED */
+      enum agx_bo_flags flags = AGX_BO_WRITEBACK;
+      if (timestamp)
+         flags |= AGX_BO_SHARED;
+
+      pool->bo = agx_bo_create(&dev->dev, bo_size, 0, flags, "Query pool");
+      if (!pool->bo) {
+         hk_DestroyQueryPool(device, hk_query_pool_to_handle(pool), pAllocator);
+         return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      }
+
+      /* Timestamp buffers must be explicitly bound as such before we can use
+       * them.
+       */
+      if (timestamp) {
+         int ret = agx_bind_timestamps(&dev->dev, pool->bo, &pool->handle);
+         if (ret) {
+            hk_DestroyQueryPool(device, hk_query_pool_to_handle(pool),
+                                pAllocator);
+            return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         }
+
+         assert(pool->handle && "handles are nonzero");
+      }
+   }
+
+   uint16_t *oq_index = hk_pool_oq_index_ptr(pool);
+
+   for (unsigned i = 0; i < occlusion_queries; ++i) {
+      uint64_t zero = 0;
+      unsigned index;
+
+      VkResult result = hk_descriptor_table_add(
+         dev, &dev->occlusion_queries, &zero, sizeof(uint64_t), &index);
+
+      if (result != VK_SUCCESS) {
+         hk_DestroyQueryPool(device, hk_query_pool_to_handle(pool), pAllocator);
+         return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      }
+
+      /* We increment as we go so we can clean up properly if we run out */
+      assert(pool->oq_queries < occlusion_queries);
+      oq_index[pool->oq_queries++] = index;
+   }
+
+   if (pCreateInfo->flags & VK_QUERY_POOL_CREATE_RESET_BIT_KHR)
+      host_zero_queries(dev, pool, 0, pool->vk.query_count, false);
+
+   *pQueryPool = hk_query_pool_to_handle(pool);
+
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+hk_DestroyQueryPool(VkDevice device, VkQueryPool queryPool,
+                    const VkAllocationCallbacks *pAllocator)
+{
+   VK_FROM_HANDLE(hk_device, dev, device);
+   VK_FROM_HANDLE(hk_query_pool, pool, queryPool);
+
+   if (!pool)
+      return;
+
+   uint16_t *oq_index = hk_pool_oq_index_ptr(pool);
+
+   for (unsigned i = 0; i < pool->oq_queries; ++i) {
+      hk_descriptor_table_remove(dev, &dev->occlusion_queries, oq_index[i]);
+   }
+
+   if (pool->handle)
+      dev->dev.ops.bo_unbind_object(&dev->dev, pool->handle);
+
+   agx_bo_unreference(&dev->dev, pool->bo);
+   vk_query_pool_destroy(&dev->vk, pAllocator, &pool->vk);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -494,7 +487,7 @@ hk_cmd_begin_end_query(struct hk_cmd_buffer *cmd, struct hk_query_pool *pool,
    }
 
    default:
-      unreachable("Unsupported query type");
+      UNREACHABLE("Unsupported query type");
    }
 
    /* We need to set available=1 after the graphics work finishes. */

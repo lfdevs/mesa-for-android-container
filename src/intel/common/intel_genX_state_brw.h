@@ -149,7 +149,7 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
          ps->Kernel0PolyPackingPolicy = POLY_PACK16_FIXED;
          break;
       default:
-         unreachable("Invalid polygon width");
+         UNREACHABLE("Invalid polygon width");
       }
    } else if (enable_16) {
       ps->Kernel0Enable = true;

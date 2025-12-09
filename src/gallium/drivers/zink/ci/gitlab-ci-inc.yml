@@ -104,6 +104,13 @@
     - !reference [.collabora-turnip-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
 
+.zink-turnip-valve-rules:
+  stage: layered-backends
+  rules:
+    - !reference [.test, rules]
+    - !reference [.valve-turnip-rules, rules]
+    - !reference [.zink-common-rules, rules]
+
 .zink-turnip-valve-manual-rules:
   stage: layered-backends-nightly
   extends: .no-auto-retry
@@ -153,15 +160,7 @@
   extends:
     - .zink-test
   variables:
-    # The libX11 in the debian we use doesn't XInitThreads() by default (need
-    # 1.8.1 for that), and eglretrace's waffle GLX path doesn't call it either,
-    # which ends up causing trouble with kopper's X usage.  Use gbm for our
-    # trace replay, instead.
-    # https://gitlab.freedesktop.org/mesa/mesa/-/issues/6753
-    HWCI_START_XORG: ""
     HWCI_TEST_SCRIPT: "/install/piglit/piglit-traces.sh"
-    WAFFLE_PLATFORM: gbm
-    PIGLIT_PLATFORM: gbm
 
 .zink-lavapipe-test:
   extends:
@@ -251,7 +250,6 @@
     - .zink-test
   variables:
     VK_DRIVER: freedreno
-    HWCI_TEST_SCRIPT: ./install/deqp-runner.sh
     # Disable reporting, since DUTs don't have internet access
     FLAKES_CHANNEL: ""
 
@@ -264,10 +262,8 @@
     - .test-piglit
     - .ci-tron-test-radv
   variables:
+    DRIVER_NAME: zink-radv
     DEQP_SUITE: zink-radv
-    HWCI_TEST_SCRIPT: ./install/deqp-runner.sh
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 20
-
     # Disable reporting, since DUTs don't have internet access
     FLAKES_CHANNEL: ""
-

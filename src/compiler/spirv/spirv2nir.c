@@ -46,7 +46,7 @@
 
 struct {
    const char *name;
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
 } abbrev_stage_table[] = {
    { "vs",    MESA_SHADER_VERTEX },
    { "tcs",   MESA_SHADER_TESS_CTRL },
@@ -68,7 +68,7 @@ struct {
    { "kernel",    MESA_SHADER_KERNEL },
 };
 
-static gl_shader_stage
+static mesa_shader_stage
 abbrev_to_stage(const char *name)
 {
    for (unsigned i = 0; i < ARRAY_SIZE(abbrev_stage_table); i++) {
@@ -79,7 +79,7 @@ abbrev_to_stage(const char *name)
 }
 
 static const char *
-stage_to_abbrev(gl_shader_stage stage)
+stage_to_abbrev(mesa_shader_stage stage)
 {
    for (unsigned i = 0; i < ARRAY_SIZE(abbrev_stage_table); i++) {
       if (abbrev_stage_table[i].stage == stage)
@@ -111,7 +111,7 @@ print_usage(char *exec_name, FILE *f)
 
 struct entry_point {
    const char *name;
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
 };
 
 static struct entry_point
@@ -139,10 +139,10 @@ select_entry_point(void *mem_ctx, const uint32_t *words, size_t word_count,
 
          unsigned name_words;
          const char *name = vtn_string_literal(b, &w[3], count - 3, &name_words);
-         gl_shader_stage stage = vtn_stage_for_execution_model(w[1]);
+         mesa_shader_stage stage = vtn_stage_for_execution_model(w[1]);
 
          struct entry_point e = { name, stage };
-         util_dynarray_append(&candidates, struct entry_point, e);
+         util_dynarray_append(&candidates, e);
       } else if (seen_entry_point) {
          /* List of entry_points is over, we can break now. */
          break;
@@ -214,7 +214,7 @@ int main(int argc, char **argv)
          print_usage(argv[0], stdout);
          return 0;
       case 's': {
-         gl_shader_stage s = abbrev_to_stage(optarg);
+         mesa_shader_stage s = abbrev_to_stage(optarg);
          if (s == MESA_SHADER_NONE) {
             fprintf(stderr, "Unknown stage \"%s\"\n", optarg);
             print_usage(argv[0], stderr);
@@ -310,7 +310,7 @@ int main(int argc, char **argv)
             OPT(nir_opt_cse);
             OPT(nir_opt_dead_cf);
             OPT(nir_lower_vars_to_ssa);
-            OPT(nir_copy_prop);
+            OPT(nir_opt_copy_prop);
             OPT(nir_opt_deref);
             OPT(nir_opt_constant_folding);
             OPT(nir_opt_copy_prop_vars);

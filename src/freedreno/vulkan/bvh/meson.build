@@ -51,6 +51,7 @@ foreach s : bvh_shaders
     prog_glslang, '-V', '-I' + vk_bvh_include_dir, '-I' + tu_bvh_include_dir, '--target-env', 'spirv1.5', '-x', '-o', '@OUTPUT@', '@INPUT@'
   ]
   command += glslang_quiet
+  command += vk_glsl_shader_preamble
 
   foreach define : s[2]
     command += '-D' + define

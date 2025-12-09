@@ -24,20 +24,28 @@
  * SOFTWARE.
  */
 
+#include "pvr_wsi.h"
+
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
 
-#include "pvr_private.h"
+#include "pvr_device.h"
+#include "pvr_entrypoints.h"
+#include "pvr_instance.h"
+#include "pvr_physical_device.h"
+#include "pvr_queue.h"
+
 #include "util/u_atomic.h"
 #include "vk_object.h"
+#include "vk_instance.h"
 #include "wsi_common.h"
 
 static PFN_vkVoidFunction pvr_wsi_proc_addr(VkPhysicalDevice physicalDevice,
                                             const char *pName)
 {
-   PVR_FROM_HANDLE(pvr_physical_device, pdevice, physicalDevice);
+   VK_FROM_HANDLE(pvr_physical_device, pdevice, physicalDevice);
 
    return vk_instance_get_proc_addr_unchecked(&pdevice->instance->vk, pName);
 }
@@ -56,7 +64,7 @@ VkResult pvr_wsi_init(struct pvr_physical_device *pdevice)
    if (result != VK_SUCCESS)
       return result;
 
-   pdevice->wsi_device.supports_modifiers = true;
+   pdevice->wsi_device.supports_modifiers = false;
    pdevice->vk.wsi_device = &pdevice->wsi_device;
 
    return VK_SUCCESS;
@@ -71,13 +79,11 @@ void pvr_wsi_finish(struct pvr_physical_device *pdevice)
 VkResult pvr_QueuePresentKHR(VkQueue _queue,
                              const VkPresentInfoKHR *pPresentInfo)
 {
-   PVR_FROM_HANDLE(pvr_queue, queue, _queue);
+   VK_FROM_HANDLE(pvr_queue, queue, _queue);
    VkResult result;
 
    result = wsi_common_queue_present(&queue->device->pdevice->wsi_device,
-                                     pvr_device_to_handle(queue->device),
-                                     _queue,
-                                     0,
+                                     &queue->vk,
                                      pPresentInfo);
    if (result != VK_SUCCESS)
       return result;

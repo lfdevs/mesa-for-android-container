@@ -66,10 +66,10 @@ Cpp11BracedListStyle: false
 ########################
 # Whitespace Alignment #
 ########################
-AlignConsecutiveAssignments: false
+AlignConsecutiveAssignments: None
 #AlignConsecutiveBitFields: false  # Requires clang-11
-AlignConsecutiveDeclarations: false
-AlignConsecutiveMacros: false
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
 AlignTrailingComments: false
 
 AlignEscapedNewlines: Left
@@ -93,7 +93,7 @@ SpaceBeforeRangeBasedForLoopColon: true
 SpaceBeforeSquareBrackets: false
 SpaceInEmptyBlock: false
 SpaceInEmptyParentheses: false
-SpacesInAngles: false
+SpacesInAngles: Never
 SpacesInCStyleCastParentheses: false
 SpacesInConditionalStatement: false
 SpacesInContainerLiterals: false
@@ -158,7 +158,7 @@ SortUsingDeclarations: true
 ############
 # TODO: Temporary config
 IncludeBlocks: Preserve
-SortIncludes: false
+SortIncludes: Never
 # TODO: This requires additional work to clean up headers & includes first
 #IncludeBlocks: Regroup
 #SortIncludes: true
@@ -201,6 +201,12 @@ ForEachMacros: [
   'foreach_instr',
   'foreach_instr_safe',
   'foreach_list_typed',
+  'foreach_list_typed_from',
+  'foreach_list_typed_from_reverse',
+  'foreach_list_typed_reverse',
+  'foreach_list_typed_reverse_safe',
+  'foreach_list_typed_safe',
+  'foreach_target',
   'hash_table_foreach',
   'hash_table_u64_foreach',
   'LIST_FOR_EACH_ENTRY',
@@ -217,51 +223,96 @@ ForEachMacros: [
   'list_for_each_entry_safe_rev',
   'list_pair_for_each_entry',
   'pvr_csb_emit',
-  'pvr_csb_emit_merge',
   'pvr_csb_pack',
   'nir_foreach_block',
   'nir_foreach_block_safe',
   'nir_foreach_block_unstructured',
+  'nir_foreach_reg_decl',
+  'nir_foreach_entrypoint',
+  'nir_foreach_entrypoint_safe',
   'nir_foreach_function',
   'nir_foreach_function_with_impl',
   'nir_foreach_instr',
   'nir_foreach_instr_safe',
+  'nir_foreach_phi_src',
   'nir_foreach_shader_in_variable',
   'nir_foreach_shader_out_variable',
   'nir_foreach_use',
   'nir_foreach_use_safe',
   'nir_foreach_variable_with_modes',
+  'nir_foreach_variable_with_modes_safe',
   'pco_foreach_block_in_func',
   'pco_foreach_block_in_func_from',
   'pco_foreach_block_in_func_from_rev',
   'pco_foreach_block_in_func_rev',
   'pco_foreach_cf_node_in_func',
+  'pco_foreach_cf_node_in_func_structured',
   'pco_foreach_cf_node_in_if_else',
+  'pco_foreach_cf_node_in_if_epilogue',
+  'pco_foreach_cf_node_in_if_interlogue',
+  'pco_foreach_cf_node_in_if_prologue',
   'pco_foreach_cf_node_in_if_then',
   'pco_foreach_cf_node_in_loop',
+  'pco_foreach_cf_node_in_loop_epilogue',
+  'pco_foreach_cf_node_in_loop_interlogue',
+  'pco_foreach_cf_node_in_loop_prologue',
   'pco_foreach_func_in_shader',
   'pco_foreach_func_in_shader_rev',
+  'pco_foreach_if_in_func',
+  'pco_foreach_if_in_func_from',
+  'pco_foreach_if_in_func_from_rev',
+  'pco_foreach_if_in_func_rev',
+  'pco_foreach_ssa_bool_if_in_func',
+  'pco_foreach_ssa_if_in_func',
   'pco_foreach_igrp_in_block',
   'pco_foreach_igrp_in_func',
   'pco_foreach_instr_dest',
   'pco_foreach_instr_dest_from',
+  'pco_foreach_instr_dest_hwreg',
   'pco_foreach_instr_dest_ssa',
   'pco_foreach_instr_dest_ssa_from',
-  'pco_foreach_instr_src',
-  'pco_foreach_instr_src_from',
-  'pco_foreach_instr_src_ssa',
-  'pco_foreach_instr_src_ssa_from',
+  'pco_foreach_instr_dest_vreg',
+  'pco_foreach_instr_dest_vreg_ssa',
   'pco_foreach_instr_in_block',
+  'pco_foreach_instr_in_block_from',
+  'pco_foreach_instr_in_block_from_rev',
+  'pco_foreach_instr_in_block_rev',
   'pco_foreach_instr_in_block_safe',
+  'pco_foreach_instr_in_block_safe_rev',
   'pco_foreach_instr_in_func',
   'pco_foreach_instr_in_func_from',
   'pco_foreach_instr_in_func_from_rev',
-  'pco_foreach_instr_in_func_safe',
   'pco_foreach_instr_in_func_rev',
+  'pco_foreach_instr_in_func_safe',
   'pco_foreach_instr_in_func_safe_rev',
   'pco_foreach_instr_in_igrp',
   'pco_foreach_instr_in_igrp_rev',
+  'pco_foreach_instr_src',
+  'pco_foreach_instr_src_from',
+  'pco_foreach_instr_src_hwreg',
+  'pco_foreach_instr_src_ssa',
+  'pco_foreach_instr_src_ssa_from',
+  'pco_foreach_instr_src_vreg',
+  'pco_foreach_instr_src_vreg_ssa',
+  'pco_foreach_loop_in_func',
+  'pco_foreach_loop_in_func_from',
+  'pco_foreach_loop_in_func_from_rev',
+  'pco_foreach_loop_in_func_rev',
+  'pco_foreach_phase',
+  'pco_foreach_phase_from',
+  'pco_foreach_phase_from_rev',
+  'pco_foreach_phase_in_igrp',
+  'pco_foreach_phase_in_igrp_from',
+  'pco_foreach_phase_in_igrp_from_rev',
+  'pco_foreach_phase_in_igrp_rev',
+  'pco_foreach_phase_rev',
   'pco_foreach_phi_src_in_instr',
+  'pco_foreach_vreg_if_in_func',
+  'pco_foreach_vreg_ssa_if_in_func',
+  'pvr_foreach_supported_tex_format',
+  'pvr_foreach_supported_tex_format_',
+  'pvr_foreach_supported_tex_format_compressed',
+  'pvr_foreach_supported_tex_format_compressed_',
   'rogue_foreach_block',
   'rogue_foreach_block_safe',
   'rogue_foreach_block_rev',

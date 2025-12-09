@@ -47,7 +47,9 @@ fn init_info_from_nir(nak: &nak_compiler, nir: &nir_shader) -> ShaderInfo {
                     smem_size: nir.info.shared_size.try_into().unwrap(),
                 })
             }
-            MESA_SHADER_VERTEX => ShaderStageInfo::Vertex,
+            MESA_SHADER_VERTEX => ShaderStageInfo::Vertex(VertexShaderInfo {
+                isbe_space_sharing_enable: false,
+            }),
             MESA_SHADER_FRAGMENT => {
                 let info_fs = unsafe { &nir.info.__bindgen_anon_1.fs };
                 ShaderStageInfo::Fragment(FragmentShaderInfo {
@@ -752,22 +754,33 @@ impl<'a> ShaderFromNir<'a> {
             }
             nir_op_bitfield_reverse => b.brev(srcs(0)).into(),
             nir_op_ibitfield_extract | nir_op_ubitfield_extract => {
-                let range = b.alloc_ssa(RegFile::GPR);
-                b.push_op(OpPrmt {
-                    dst: range.into(),
-                    srcs: [srcs(1), srcs(2)],
-                    sel: 0x0040.into(),
-                    mode: PrmtMode::Index,
-                });
-
                 let dst = b.alloc_ssa(RegFile::GPR);
-                b.push_op(OpBfe {
-                    dst: dst.into(),
-                    base: srcs(0),
-                    signed: !matches!(alu.op, nir_op_ubitfield_extract),
-                    range: range.into(),
-                    reverse: false,
-                });
+                let signed = !matches!(alu.op, nir_op_ubitfield_extract);
+                if self.sm.sm() >= 70 {
+                    let shifted = b.shr(srcs(0), srcs(1), signed);
+                    b.push_op(OpSgxt {
+                        dst: dst.into(),
+                        a: shifted.into(),
+                        bits: srcs(2),
+                        signed,
+                    });
+                } else {
+                    let range = b.alloc_ssa(RegFile::GPR);
+                    b.push_op(OpPrmt {
+                        dst: range.into(),
+                        srcs: [srcs(1), srcs(2)],
+                        sel: 0x0040.into(),
+                        mode: PrmtMode::Index,
+                    });
+
+                    b.push_op(OpBfe {
+                        dst: dst.into(),
+                        base: srcs(0),
+                        signed,
+                        range: range.into(),
+                        reverse: false,
+                    });
+                };
                 dst.into()
             }
             nir_op_extract_u8 | nir_op_extract_i8 | nir_op_extract_u16
@@ -3343,7 +3356,7 @@ impl<'a> ShaderFromNir<'a> {
                 let (off, off_imm) = self.get_cbuf_addr_offset(&srcs[1]);
 
                 let cb = CBufRef {
-                    buf: CBuf::BindlessSSA(handle),
+                    buf: CBuf::BindlessSSA(handle[..].try_into().unwrap()),
                     offset: off_imm,
                 };
 
@@ -3413,9 +3426,21 @@ impl<'a> ShaderFromNir<'a> {
                 if intrin.memory_scope() != SCOPE_NONE {
                     let mem_scope = match intrin.memory_scope() {
                         SCOPE_INVOCATION | SCOPE_SUBGROUP => MemScope::CTA,
-                        SCOPE_WORKGROUP | SCOPE_QUEUE_FAMILY | SCOPE_DEVICE => {
-                            MemScope::GPU
+                        // A membar.gpu is very expensive so use .cta whenever
+                        // possible.
+                        // TODO: Figure out under which conditions we can relax
+                        //       them for global memory/images to CTA.
+                        SCOPE_WORKGROUP => {
+                            let global_modes = nir_var_image
+                                | nir_var_mem_global
+                                | nir_var_mem_ssbo;
+                            if intrin.memory_modes() & global_modes != 0 {
+                                MemScope::GPU
+                            } else {
+                                MemScope::CTA
+                            }
                         }
+                        SCOPE_QUEUE_FAMILY | SCOPE_DEVICE => MemScope::GPU,
                         _ => panic!("Unhandled memory scope"),
                     };
                     b.push_op(OpMemBar { scope: mem_scope });
@@ -3733,6 +3758,40 @@ impl<'a> ShaderFromNir<'a> {
                 let dst = b.isetp(IntCmpType::I32, IntCmpOp::Ne, src, 0.into());
                 self.set_dst(&intrin.def, dst.into());
             }
+            nir_intrinsic_cmat_load_shared_nv => {
+                let dst_bit_size = usize::from(intrin.def.bit_size());
+                let layout: glsl_matrix_layout = intrin.matrix_layout();
+                let mat_count = intrin.num_matrices();
+                let dst_num_components =
+                    usize::from(intrin.def.num_components());
+                let comps =
+                    (dst_bit_size * dst_num_components).div_ceil(32) as u8;
+                let mat_size = if layout == GLSL_MATRIX_LAYOUT_COLUMN_MAJOR {
+                    LdsmSize::MT8N8
+                } else {
+                    LdsmSize::M8N8
+                };
+                let dst = b.alloc_ssa_vec(RegFile::GPR, comps);
+                let (addr, offset) = self.get_io_addr_offset(&srcs[0], 24);
+                let offset = offset + intrin.base();
+                b.push_op(OpLdsm {
+                    dst: dst.clone().into(),
+                    mat_size,
+                    mat_count,
+                    addr,
+                    offset,
+                });
+                self.set_dst(&intrin.def, dst);
+            }
+            nir_intrinsic_cmat_mov_transpose_nv => {
+                let dst = b.alloc_ssa(RegFile::GPR);
+                let src = self.get_src(&srcs[0]);
+                b.push_op(OpMovm {
+                    dst: dst.clone().into(),
+                    src,
+                });
+                self.set_dst(&intrin.def, dst.into());
+            }
             nir_intrinsic_cmat_muladd_nv => {
                 let flags: nak_nir_cmat_mul_add_flags =
                     unsafe { std::mem::transmute(intrin.flags()) };
@@ -3911,6 +3970,7 @@ impl<'a> ShaderFromNir<'a> {
                 None => {
                     b.push_op(OpBra {
                         target: target_label,
+                        cond: true.into(),
                     });
                 }
             }
@@ -3931,9 +3991,13 @@ impl<'a> ShaderFromNir<'a> {
             Op::Exit(OpExit {})
         } else {
             self.cfg.add_edge(nb.index, target.index);
-            Op::Bra(OpBra {
-                target: self.get_block_label(target),
-            })
+            Op::Bra(
+                OpBra {
+                    target: self.get_block_label(target),
+                    cond: true.into(),
+                }
+                .into(),
+            )
         };
         b.predicate(pred).push_op(op);
     }

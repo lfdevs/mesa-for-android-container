@@ -36,7 +36,7 @@ append_edge(struct dag_node *parent, struct dag_node *child, uintptr_t data)
       .data = data,
    };
 
-   util_dynarray_append(&parent->edges, struct dag_edge, edge);
+   util_dynarray_append(&parent->edges, edge);
    child->parent_count++;
 }
 
@@ -140,14 +140,13 @@ dag_traverse_bottom_up_node(struct dag_node *node,
    if (_mesa_set_search(state->seen, node))
       return;
 
-   struct util_dynarray stack;
-   util_dynarray_init(&stack, NULL);
+   struct util_dynarray stack = UTIL_DYNARRAY_INIT;
 
    do {
       assert(node);
 
       while (node->edges.size != 0) {
-         util_dynarray_append(&stack, struct dag_node *, node);
+         util_dynarray_append(&stack, node);
 
          /* Push unprocessed children onto stack in reverse order. Note that
           * it's possible for any of the children nodes to already be on the
@@ -155,7 +154,7 @@ dag_traverse_bottom_up_node(struct dag_node *node,
           */
          util_dynarray_foreach_reverse(&node->edges, struct dag_edge, edge) {
             if (!_mesa_set_search(state->seen, edge->child)) {
-               util_dynarray_append(&stack, struct dag_node *, edge->child);
+               util_dynarray_append(&stack, edge->child);
             }
          }
 
@@ -252,7 +251,7 @@ dag_validate_node(struct dag_node *node,
 
    _mesa_set_add(state->stack_set, node);
    _mesa_set_add(state->seen, node);
-   util_dynarray_append(&state->stack, struct dag_node *, node);
+   util_dynarray_append(&state->stack, node);
 
    util_dynarray_foreach(&node->edges, struct dag_edge, edge) {
       dag_validate_node(edge->child, state);

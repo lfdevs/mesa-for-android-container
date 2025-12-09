@@ -81,7 +81,7 @@ get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
 
 static nir_variable **
 get_array_elements(struct hash_table *ht, nir_variable *var,
-                   gl_shader_stage stage)
+                   mesa_shader_stage stage)
 {
    nir_variable **elements;
    struct hash_entry *entry = _mesa_hash_table_search(ht, var);

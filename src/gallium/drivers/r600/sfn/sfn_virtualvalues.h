@@ -25,7 +25,7 @@
 #else
 #define ASSERT_OR_THROW(EXPR, ERROR)                                                     \
    if (!(EXPR))                                                                          \
-   unreachable(ERROR)
+   UNREACHABLE(ERROR)
 #endif
 
 namespace r600 {
@@ -57,10 +57,6 @@ using InstructionSet = std::set<Instr *, std::less<Instr *>, Allocator<Instr *>>
 class VirtualValue : public Allocate {
 public:
    static const uint32_t virtual_register_base = 1024;
-   static const uint32_t clause_temp_registers = 2;
-   static const uint32_t gpr_register_end = 128 - 2 * clause_temp_registers;
-   static const uint32_t clause_temp_register_begin = gpr_register_end;
-   static const uint32_t clause_temp_register_end = 128;
 
    static const uint32_t uniforms_begin = 512;
    static const uint32_t uniforms_end = 640;
@@ -169,6 +165,8 @@ public:
    bool has_uses() const { return !m_uses.empty() || pin() == pin_array; }
    void set_chan(int c) { do_set_chan(c); }
 
+   bool can_switch_to_chan(int c);
+
    virtual VirtualValue *addr() const { return nullptr; }
 
    int index() const { return m_index; }
@@ -217,8 +215,8 @@ public:
    }
 
 protected:
-   void do_set_chan(UNUSED int c) { unreachable("Address registers must have chan 0");}
-   void set_sel_internal(UNUSED int sel) {unreachable("Address registers don't support sel override");}
+   void do_set_chan(UNUSED int c) { UNREACHABLE("Address registers must have chan 0");}
+   void set_sel_internal(UNUSED int sel) {UNREACHABLE("Address registers don't support sel override");}
 };
 
 

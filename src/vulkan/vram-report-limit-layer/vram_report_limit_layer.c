@@ -312,7 +312,7 @@ get_instance_chain_info(const VkInstanceCreateInfo *pCreateInfo)
           ((VkLayerInstanceCreateInfo *)item)->function == VK_LAYER_LINK_INFO)
          return (VkLayerInstanceCreateInfo *)item;
    }
-   unreachable("instance chain info not found");
+   UNREACHABLE("instance chain info not found");
    return NULL;
 }
 

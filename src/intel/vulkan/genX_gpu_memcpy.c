@@ -125,12 +125,16 @@ emit_common_so_memcpy(struct anv_memcpy_state *state,
     * allocate space for the VS.  Even though one isn't run, we need VUEs to
     * store the data that VF is going to pass to SOL.
     */
-   const unsigned entry_size[4] = { DIV_ROUND_UP(32, 64), 1, 1, 1 };
-   memcpy(state->urb_cfg.size, &entry_size, sizeof(entry_size));
+   state->urb_cfg = (struct intel_urb_config) {
+      .size = { DIV_ROUND_UP(32, 64), 1, 1, 1 },
+   };
+   UNUSED bool constrained;
+   intel_get_urb_config(device->info, l3_config, false, false,
+                        &state->urb_cfg, &constrained);
 
-   genX(emit_urb_setup)(device, batch, l3_config,
-                        VK_SHADER_STAGE_VERTEX_BIT, urb_cfg_in, &state->urb_cfg,
-                        NULL);
+   if (genX(need_wa_16014912113)(urb_cfg_in, &state->urb_cfg))
+      genX(batch_emit_wa_16014912113)(batch, urb_cfg_in);
+   genX(emit_urb_setup)(batch, device, &state->urb_cfg);
 
 #if GFX_VER >= 12
    /* Disable Primitive Replication. */
@@ -164,7 +168,7 @@ emit_so_memcpy(struct anv_memcpy_state *state,
    case 8:  format = ISL_FORMAT_R32G32_UINT;       break;
    case 16: format = ISL_FORMAT_R32G32B32A32_UINT; break;
    default:
-      unreachable("Invalid size");
+      UNREACHABLE("Invalid size");
    }
 
    uint32_t *dw;
@@ -329,38 +333,39 @@ genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state)
       genX(cmd_buffer_ensure_wa_14018283232)(state->cmd_buffer, false);
 #endif
 
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_URB);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_STATISTICS);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_TOPOLOGY);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VERTEX_INPUT);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_URB);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_VF_STATISTICS);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_VF);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_VF_TOPOLOGY);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_VERTEX_INPUT);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_VF_SGVS);
 #if GFX_VER >= 11
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VF_SGVS_2);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_VF_SGVS_2);
 #endif
 #if GFX_VER >= 12
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_PRIMITIVE_REPLICATION);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_PRIMITIVE_REPLICATION);
 #endif
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SO_DECL_LIST);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SAMPLE_MASK);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MULTISAMPLE);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SF);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_SBE);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_VS);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_HS);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_DS);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_TE);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_GS);
-      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_PS);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_SO_DECL_LIST);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_STREAMOUT);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_SAMPLE_MASK);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_MULTISAMPLE);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_SF);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_SBE);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_VS);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_HS);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_DS);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_TE);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_GS);
+      BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_PS);
       if (state->cmd_buffer->device->vk.enabled_extensions.EXT_mesh_shader) {
-         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MESH_CONTROL);
-         BITSET_SET(hw_state->dirty, ANV_GFX_STATE_TASK_CONTROL);
+         BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_MESH_CONTROL);
+         BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_TASK_CONTROL);
       }
 
-      state->cmd_buffer->state.gfx.dirty |= ~(ANV_CMD_DIRTY_PIPELINE |
-                                              ANV_CMD_DIRTY_INDEX_BUFFER |
-                                              ANV_CMD_DIRTY_INDEX_TYPE);
+      state->cmd_buffer->state.gfx.dirty |=
+         ~(ANV_CMD_DIRTY_ALL_SHADERS(state->device) |
+           ANV_CMD_DIRTY_INDEX_BUFFER |
+           ANV_CMD_DIRTY_INDEX_TYPE);
 
       memcpy(&state->cmd_buffer->state.gfx.urb_cfg, &state->urb_cfg,
              sizeof(struct intel_urb_config));

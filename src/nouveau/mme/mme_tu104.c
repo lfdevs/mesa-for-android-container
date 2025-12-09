@@ -216,7 +216,7 @@ mme_tu104_print_alu_src(FILE *fp, const struct mme_tu104_inst *inst,
          fprintf(fp, " $load1");
          break;
       default:
-         unreachable("Invalid ALU source register");
+         UNREACHABLE("Invalid ALU source register");
       }
    }
 }
@@ -487,7 +487,7 @@ mme_tu104_print_out_src(FILE *fp, const struct mme_tu104_inst *inst,
       fprintf(fp, "0x%x", ((uint32_t)inst->imm[0] << 16) | inst->imm[1]);
       break;
    default:
-      unreachable("Invalid output source");
+      UNREACHABLE("Invalid output source");
    }
 };
 

@@ -53,7 +53,7 @@ TEST_F(ValuefactoryTest, test_create_ssa)
    auto c1 = nir_imm_float(&b, 2.0);
    auto c2 = nir_imm_float(&b, 4.0);
    auto sum = nir_fadd(&b, c1, c2);
-   auto alu = nir_instr_as_alu(sum->parent_instr);
+   auto alu = nir_def_as_alu(sum);
 
    sfn_log << SfnLog::reg << "Search (test) " << &alu->def << "\n";
    auto dest_value = factory->dest(alu->def, 0, pin_none);
@@ -74,7 +74,7 @@ TEST_F(ValuefactoryTest, test_create_ssa_pinned_chan)
    auto c1 = nir_imm_float(&b, 2.0);
    auto c2 = nir_imm_float(&b, 4.0);
    auto sum = nir_fadd(&b, c1, c2);
-   auto alu = nir_instr_as_alu(sum->parent_instr);
+   auto alu = nir_def_as_alu(sum);
 
    auto dest_value = factory->dest(alu->def, 0, pin_chan);
    EXPECT_EQ(dest_value->sel(), 1024);
@@ -92,7 +92,7 @@ TEST_F(ValuefactoryTest, test_create_ssa_pinned_chan_and_reg)
    auto c1 = nir_imm_float(&b, 2.0);
    auto c2 = nir_imm_float(&b, 4.0);
    auto sum = nir_fadd(&b, c1, c2);
-   auto alu = nir_instr_as_alu(sum->parent_instr);
+   auto alu = nir_def_as_alu(sum);
 
    auto dest_value = factory->dest(alu->def, 1, pin_chan);
    EXPECT_EQ(dest_value->sel(), 1024);
@@ -111,13 +111,13 @@ TEST_F(ValuefactoryTest, test_create_const)
    auto c2 = nir_imm_int(&b, 4);
    auto sum = nir_iadd(&b, c1, c2);
 
-   auto ci1 = nir_instr_as_load_const(c1->parent_instr);
+   auto ci1 = nir_def_as_load_const(c1);
    factory->allocate_const(ci1);
 
-   auto ci2 = nir_instr_as_load_const(c2->parent_instr);
+   auto ci2 = nir_def_as_load_const(c2);
    factory->allocate_const(ci2);
 
-   auto alu = nir_instr_as_alu(sum->parent_instr);
+   auto alu = nir_def_as_alu(sum);
 
    PVirtualValue value1 = factory->src(alu->src[0], 0);
    PVirtualValue value2 = factory->src(alu->src[1], 0);

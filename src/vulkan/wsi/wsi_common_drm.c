@@ -24,8 +24,10 @@
 #include "wsi_common_private.h"
 #include "wsi_common_drm.h"
 #include "util/macros.h"
+#include "util/log.h"
 #include "util/os_file.h"
 #include "util/log.h"
+#include "util/u_atomic.h"
 #include "util/xmlconfig.h"
 #include "vk_device.h"
 #include "vk_physical_device.h"
@@ -45,11 +47,6 @@
 static VkResult
 wsi_dma_buf_export_sync_file(int dma_buf_fd, int *sync_file_fd)
 {
-   /* Don't keep trying an IOCTL that doesn't exist. */
-   static bool no_dma_buf_sync_file = false;
-   if (no_dma_buf_sync_file)
-      return VK_ERROR_FEATURE_NOT_PRESENT;
-
    struct dma_buf_export_sync_file export = {
       .flags = DMA_BUF_SYNC_RW,
       .fd = -1,
@@ -57,7 +54,6 @@ wsi_dma_buf_export_sync_file(int dma_buf_fd, int *sync_file_fd)
    int ret = drmIoctl(dma_buf_fd, DMA_BUF_IOCTL_EXPORT_SYNC_FILE, &export);
    if (ret) {
       if (errno == ENOTTY || errno == EBADF || errno == ENOSYS) {
-         no_dma_buf_sync_file = true;
          return VK_ERROR_FEATURE_NOT_PRESENT;
       } else {
          mesa_loge("MESA: failed to export sync file '%s'", strerror(errno));
@@ -73,11 +69,6 @@ wsi_dma_buf_export_sync_file(int dma_buf_fd, int *sync_file_fd)
 static VkResult
 wsi_dma_buf_import_sync_file(int dma_buf_fd, int sync_file_fd)
 {
-   /* Don't keep trying an IOCTL that doesn't exist. */
-   static bool no_dma_buf_sync_file = false;
-   if (no_dma_buf_sync_file)
-      return VK_ERROR_FEATURE_NOT_PRESENT;
-
    struct dma_buf_import_sync_file import = {
       .flags = DMA_BUF_SYNC_RW,
       .fd = sync_file_fd,
@@ -85,7 +76,6 @@ wsi_dma_buf_import_sync_file(int dma_buf_fd, int sync_file_fd)
    int ret = drmIoctl(dma_buf_fd, DMA_BUF_IOCTL_IMPORT_SYNC_FILE, &import);
    if (ret) {
       if (errno == ENOTTY || errno == EBADF || errno == ENOSYS) {
-         no_dma_buf_sync_file = true;
          return VK_ERROR_FEATURE_NOT_PRESENT;
       } else {
          mesa_loge("MESA: failed to import sync file '%s'", strerror(errno));
@@ -96,62 +86,107 @@ wsi_dma_buf_import_sync_file(int dma_buf_fd, int sync_file_fd)
    return VK_SUCCESS;
 }
 
+/**
+ * Returns whether we can do import/export of fences from dma-bufs.
+ *
+ * This should return success on linux 6.0+.
+ */
 static VkResult
-prepare_signal_dma_buf_from_semaphore(struct wsi_swapchain *chain,
-                                      const struct wsi_image *image)
+wsi_drm_check_dma_buf_sync_file_import_export(const struct wsi_device *wsi,
+                                              VkDevice device)
 {
+   /* Not doing a mutex here -- we may race to do the check twice, but it's
+    * lockless normally.
+    */
+   uint32_t cached_result = p_atomic_read(&wsi->cached_sync_file_import_export_result);
+   if (likely(cached_result != 0))
+      return (VkResult) (cached_result + 1);
+
+   /* If we don't have dma-buf export, we don't have dma-buf sync, either */
    VkResult result;
-
-   if (!(chain->wsi->semaphore_export_handle_types &
-         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT))
-      return VK_ERROR_FEATURE_NOT_PRESENT;
-
-   int sync_file_fd = -1;
-   result = wsi_dma_buf_export_sync_file(image->dma_buf_fd, &sync_file_fd);
-   if (result != VK_SUCCESS)
-      return result;
-
-   result = wsi_dma_buf_import_sync_file(image->dma_buf_fd, sync_file_fd);
-   close(sync_file_fd);
-   if (result != VK_SUCCESS)
-      return result;
-
-   /* If we got here, all our checks pass.  Create the actual semaphore */
-   const VkExportSemaphoreCreateInfo export_info = {
-      .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO,
-      .handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
-   };
-   const VkSemaphoreCreateInfo semaphore_info = {
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      .pNext = &export_info,
-   };
-   result = chain->wsi->CreateSemaphore(chain->device, &semaphore_info,
-                                        &chain->alloc,
-                                        &chain->dma_buf_semaphore);
-   if (result != VK_SUCCESS)
-      return result;
-
-   return VK_SUCCESS;
-}
-
-VkResult
-wsi_prepare_signal_dma_buf_from_semaphore(struct wsi_swapchain *chain,
-                                          const struct wsi_image *image)
-{
-   VkResult result;
-
-   /* We cache result - 1 in the swapchain */
-   if (unlikely(chain->signal_dma_buf_from_semaphore == 0)) {
-      result = prepare_signal_dma_buf_from_semaphore(chain, image);
-      assert(result <= 0);
-      chain->signal_dma_buf_from_semaphore = (int)result - 1;
-   } else {
-      result = (VkResult)(chain->signal_dma_buf_from_semaphore + 1);
+   if (wsi->GetMemoryFdKHR == NULL) {
+      result = VK_ERROR_FEATURE_NOT_PRESENT;
+      goto out;
    }
 
+   /* If semaphores don't support sync FD or if the kernel doesn't support
+    * sync file import/export, then WSI will fall back to requesting BO-based
+    * implicit sync from the driver.
+    */
+   if (!(wsi->semaphore_export_handle_types &
+         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT)) {
+      result = VK_ERROR_FEATURE_NOT_PRESENT;
+      goto out;
+   }
+
+   struct VkExportMemoryAllocateInfo export_info = {
+       .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+       .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+   };
+   struct VkMemoryAllocateInfo mem_info = {
+       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+       .allocationSize = 4096,
+       .pNext = (void *)&export_info};
+   VkDeviceMemory mem;
+   result = wsi->AllocateMemory(device, &mem_info, NULL, &mem);
+   if (result != VK_SUCCESS) {
+      mesa_logd("wsi: failed to create memory for dma-buf sync import/export test.");
+      goto out;
+   }
+
+   int fd;
+   struct VkMemoryGetFdInfoKHR get_info = {
+       .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
+       .memory = mem,
+       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+   };
+   result = wsi->GetMemoryFdKHR(device, &get_info, &fd);
+   if (result != VK_SUCCESS) {
+      mesa_logd("wsi: failed to dma-buf fd for sync import/export test.");
+      goto free_mem;
+   }
+
+   int sync_file;
+   result = wsi_dma_buf_export_sync_file(fd, &sync_file);
+   if (result != VK_SUCCESS) {
+      mesa_logd("wsi: failed export sync file from dma-buf fd.");
+      goto free_fd;
+   }
+
+   result = wsi_dma_buf_import_sync_file(fd, sync_file);
+   if (result != VK_SUCCESS) {
+      mesa_logd("wsi: failed import sync file to dma-buf fd.");
+      goto free_sync_file;
+   }
+
+free_sync_file:
+   close(sync_file);
+free_fd:
+   close(fd);
+free_mem:
+   wsi->FreeMemory(device, mem, NULL);
+out:
+
+   /* This is a feature check.  We don't want to return random error codes
+    * from other functions that may call this one, so sanitize it a bit.
+    */
+   if (result != VK_SUCCESS)
+      result = VK_ERROR_FEATURE_NOT_PRESENT;
+
+   /* We can ignore const here -- this field is managed entirely by this
+    * function, in an atomic manner.
+    */
+   p_atomic_set(&((struct wsi_device *)wsi)->cached_sync_file_import_export_result, result - 1);
    return result;
 }
 
+/**
+ * Imports the dma_buf_semaphore's syncobj into the dmabuf so that display
+ * implicit sync waits on it.
+ *
+ * Note that this operation adds this sync point to the implicit fencing of the
+ * dma buf, rather than completely replacing it.
+ */
 VkResult
 wsi_signal_dma_buf_from_semaphore(const struct wsi_swapchain *chain,
                                   const struct wsi_image *image)
@@ -190,6 +225,9 @@ get_sync_file_sync_type(struct vk_device *device,
    return NULL;
 }
 
+/* Extracts a syncobj from a dma-buf into a vk_sync, for the purpose of creating
+ * the AcquireNextImage fence/semaphores.
+ */
 VkResult
 wsi_create_sync_for_dma_buf_wait(const struct wsi_swapchain *chain,
                                  const struct wsi_image *image,
@@ -198,6 +236,15 @@ wsi_create_sync_for_dma_buf_wait(const struct wsi_swapchain *chain,
 {
    VK_FROM_HANDLE(vk_device, device, chain->device);
    VkResult result;
+
+   if (image->dma_buf_fd < 0)
+      return VK_ERROR_FEATURE_NOT_PRESENT;
+
+   /* First, check if we even have the feature */
+   result = wsi_drm_check_dma_buf_sync_file_import_export(chain->wsi,
+                                                          chain->device);
+   if (result != VK_SUCCESS)
+      return result;
 
    const struct vk_sync_type *sync_type =
       get_sync_file_sync_type(device, req_features);
@@ -313,6 +360,38 @@ wsi_destroy_image_explicit_sync_drm(const struct wsi_swapchain *chain,
    }
 }
 
+/**
+ * Sets up the semaphore for WSI-internal implicit sync handling if the WSI
+ * backend is not doing explicit sync.
+ */
+VkResult
+wsi_drm_init_swapchain_implicit_sync(struct wsi_swapchain *chain)
+{
+   /* We don't need implicit sync if explicit sync is available through the
+    * window system protocol.
+    */
+   if (chain->image_info.explicit_sync)
+      return VK_SUCCESS;
+
+   VkResult result =
+      wsi_drm_check_dma_buf_sync_file_import_export(chain->wsi, chain->device);
+   if (result == VK_ERROR_FEATURE_NOT_PRESENT)
+      return VK_SUCCESS;
+
+   /* If we got here, all our checks pass.  Create the actual semaphore */
+   const VkExportSemaphoreCreateInfo export_info = {
+      .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO,
+      .handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT,
+   };
+   const VkSemaphoreCreateInfo semaphore_info = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = &export_info,
+   };
+   return chain->wsi->CreateSemaphore(chain->device, &semaphore_info,
+                                      &chain->alloc,
+                                      &chain->dma_buf_semaphore);
+}
+
 static VkResult
 wsi_create_sync_imm(struct vk_device *device, struct vk_sync **sync_out)
 {
@@ -338,6 +417,10 @@ done:
    return result;
 }
 
+/**
+ * Merges the explicit sync acquire/release timeline points for the image into
+ * vk_sync, for the purpose of creating the AcquireNextImage fence/semaphores.
+ */
 VkResult
 wsi_create_sync_for_image_syncobj(const struct wsi_swapchain *chain,
                                   const struct wsi_image *image,
@@ -670,7 +753,11 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
    const struct wsi_memory_allocate_info memory_wsi_info = {
       .sType = VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA,
       .pNext = NULL,
-      .implicit_sync = !info->explicit_sync,
+      /* Ask for the driver to add implicit sync to the image if we're not
+       * handling implict sync ourselves.
+       */
+      .implicit_sync = !info->explicit_sync && !chain->dma_buf_semaphore,
+      .dma_buf_sync_file = chain->dma_buf_semaphore,
    };
    const VkExportMemoryAllocateInfo memory_export_info = {
       .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,

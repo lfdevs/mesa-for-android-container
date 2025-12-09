@@ -33,6 +33,8 @@
 #include "anv_private.h"
 #include "vk_enum_to_str.h"
 
+#include "compiler/brw/brw_nir_rt.h"
+
 #ifdef NO_REGEX
 typedef int regex_t;
 #define REG_EXTENDED 0
@@ -79,55 +81,57 @@ anv_cmd_buffer_pending_pipe_debug(struct anv_cmd_buffer *cmd_buffer,
    if (bits == 0)
       return;
 
-   fprintf(stdout, "acc: ");
+   struct log_stream *stream = mesa_log_streami();
 
-   fprintf(stdout, "bits: ");
-   anv_dump_pipe_bits(bits, stdout);
-   fprintf(stdout, "reason: %s", reason);
+   mesa_log_stream_printf(stream, "acc: ");
 
-   if (cmd_buffer->batch.pc_reasons_count < ARRAY_SIZE(cmd_buffer->batch.pc_reasons))
-      cmd_buffer->batch.pc_reasons[cmd_buffer->batch.pc_reasons_count++] = reason;
-   fprintf(stdout, "\n");
+   mesa_log_stream_printf(stream, "bits: ");
+   anv_dump_pipe_bits(bits, stream);
+   mesa_log_stream_printf(stream, "reason: %s", reason);
+
+   mesa_log_stream_printf(stream, "\n");
+
+   mesa_log_stream_destroy(stream);
 }
 
 void
-anv_dump_pipe_bits(enum anv_pipe_bits bits, FILE *f)
+anv_dump_pipe_bits(enum anv_pipe_bits bits, struct log_stream *stream)
 {
    if (bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT)
-      fputs("+depth_flush ", f);
+      mesa_log_stream_printf(stream, "+depth_flush ");
    if (bits & ANV_PIPE_DATA_CACHE_FLUSH_BIT)
-      fputs("+dc_flush ", f);
+      mesa_log_stream_printf(stream, "+dc_flush ");
    if (bits & ANV_PIPE_HDC_PIPELINE_FLUSH_BIT)
-      fputs("+hdc_flush ", f);
+      mesa_log_stream_printf(stream, "+hdc_flush ");
    if (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
-      fputs("+rt_flush ", f);
+      mesa_log_stream_printf(stream, "+rt_flush ");
    if (bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT)
-      fputs("+tile_flush ", f);
+      mesa_log_stream_printf(stream, "+tile_flush ");
    if (bits & ANV_PIPE_L3_FABRIC_FLUSH_BIT)
-      fputs("+l3_fabric_flush ", f);
+      mesa_log_stream_printf(stream, "+l3_fabric_flush ");
    if (bits & ANV_PIPE_STATE_CACHE_INVALIDATE_BIT)
-      fputs("+state_inval ", f);
+      mesa_log_stream_printf(stream, "+state_inval ");
    if (bits & ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT)
-      fputs("+const_inval ", f);
+      mesa_log_stream_printf(stream, "+const_inval ");
    if (bits & ANV_PIPE_VF_CACHE_INVALIDATE_BIT)
-      fputs("+vf_inval ", f);
+      mesa_log_stream_printf(stream, "+vf_inval ");
    if (bits & ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT)
-      fputs("+tex_inval ", f);
+      mesa_log_stream_printf(stream, "+tex_inval ");
    if (bits & ANV_PIPE_INSTRUCTION_CACHE_INVALIDATE_BIT)
-      fputs("+ic_inval ", f);
+      mesa_log_stream_printf(stream, "+ic_inval ");
    if (bits & ANV_PIPE_STALL_AT_SCOREBOARD_BIT)
-      fputs("+pb_stall ", f);
+      mesa_log_stream_printf(stream, "+pb_stall ");
    if (bits & ANV_PIPE_PSS_STALL_SYNC_BIT)
-      fputs("+pss_stall ", f);
+      mesa_log_stream_printf(stream, "+pss_stall ");
    if (bits & ANV_PIPE_DEPTH_STALL_BIT)
-      fputs("+depth_stall ", f);
+      mesa_log_stream_printf(stream, "+depth_stall ");
    if (bits & ANV_PIPE_CS_STALL_BIT ||
        bits & ANV_PIPE_END_OF_PIPE_SYNC_BIT)
-      fputs("+cs_stall ", f);
+      mesa_log_stream_printf(stream, "+cs_stall ");
    if (bits & ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT)
-      fputs("+utdp_flush ", f);
+      mesa_log_stream_printf(stream, "+utdp_flush ");
    if (bits & ANV_PIPE_CCS_CACHE_FLUSH_BIT)
-      fputs("+ccs_flush ", f);
+      mesa_log_stream_printf(stream, "+ccs_flush ");
 }
 
 const char *
@@ -159,10 +163,8 @@ anv_gfx_state_bit_to_str(enum anv_gfx_state_bits state)
       NAME(TASK_CONTROL);
       NAME(TASK_SHADER);
       NAME(TASK_REDISTRIB);
-      NAME(BLEND_STATE_PTR);
       NAME(CLIP);
       NAME(CC_STATE);
-      NAME(CC_STATE_PTR);
       NAME(CPS);
       NAME(DEPTH_BOUNDS);
       NAME(INDEX_BUFFER);
@@ -180,18 +182,17 @@ anv_gfx_state_bit_to_str(enum anv_gfx_state_bits state)
       NAME(VF_TOPOLOGY);
       NAME(VFG);
       NAME(VIEWPORT_CC);
-      NAME(VIEWPORT_CC_PTR);
       NAME(VIEWPORT_SF_CLIP);
       NAME(WM);
       NAME(WM_DEPTH_STENCIL);
       NAME(PMA_FIX);
       NAME(WA_18019816803);
+      NAME(WA_14018283232);
       NAME(TBIMR_TILE_PASS_INFO);
       NAME(FS_MSAA_FLAGS);
-      NAME(TCS_INPUT_VERTICES);
-      NAME(COARSE_STATE);
+      NAME(TESS_CONFIG);
       NAME(MESH_PROVOKING_VERTEX);
-   default: unreachable("invalid state");
+   default: UNREACHABLE("invalid state");
    }
 }
 
@@ -262,7 +263,7 @@ create_bvh_dump_file(struct anv_bvh_dump *bvh)
       dump_sub_directory = "BVH_IR_AS";
       break;
    default:
-      unreachable("invalid dump type");
+      UNREACHABLE("invalid dump type");
    }
 
    create_directory(dump_directory, dump_sub_directory);
@@ -333,4 +334,203 @@ void anv_wait_for_attach() {
          sleep(30);
       }
    }
+}
+
+VkResult
+anv_device_init_rt_shaders(struct anv_device *device)
+{
+   if (!device->vk.enabled_extensions.KHR_ray_tracing_pipeline)
+      return VK_SUCCESS;
+
+   bool cache_hit;
+
+   struct anv_push_descriptor_info empty_push_desc_info = {};
+   struct anv_pipeline_bind_map empty_bind_map = {};
+   struct brw_rt_trampoline {
+      char name[16];
+      struct brw_cs_prog_key key;
+   } trampoline_key = {
+      .name = "rt-trampoline",
+   };
+   device->rt_trampoline =
+      anv_device_search_for_kernel(device, device->internal_cache,
+                                   &trampoline_key, sizeof(trampoline_key),
+                                   &cache_hit);
+   if (device->rt_trampoline == NULL) {
+
+      void *tmp_ctx = ralloc_context(NULL);
+      nir_shader *trampoline_nir =
+         brw_nir_create_raygen_trampoline(device->physical->compiler, tmp_ctx);
+
+      unsigned require_size = device->info->ver >= 20 ? 16 : 8;
+      trampoline_nir->info.api_subgroup_size = require_size;
+      trampoline_nir->info.max_subgroup_size = require_size;
+      trampoline_nir->info.min_subgroup_size = require_size;
+
+      struct brw_cs_prog_data trampoline_prog_data = {
+         .uses_btd_stack_ids = true,
+      };
+      struct brw_compile_cs_params params = {
+         .base = {
+            .nir = trampoline_nir,
+            .log_data = device,
+            .mem_ctx = tmp_ctx,
+         },
+         .key = &trampoline_key.key,
+         .prog_data = &trampoline_prog_data,
+      };
+      const unsigned *tramp_data =
+         brw_compile_cs(device->physical->compiler, &params);
+
+      struct anv_shader_upload_params upload_params = {
+         .stage               = MESA_SHADER_COMPUTE,
+         .key_data            = &trampoline_key,
+         .key_size            = sizeof(trampoline_key),
+         .kernel_data         = tramp_data,
+         .kernel_size         = trampoline_prog_data.base.program_size,
+         .prog_data           = &trampoline_prog_data.base,
+         .prog_data_size      = sizeof(trampoline_prog_data),
+         .bind_map            = &empty_bind_map,
+         .push_desc_info      = &empty_push_desc_info,
+      };
+
+      device->rt_trampoline =
+         anv_device_upload_kernel(device, device->internal_cache,
+                                  &upload_params);
+
+      ralloc_free(tmp_ctx);
+
+      if (device->rt_trampoline == NULL)
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
+
+   /* The cache already has a reference and it's not going anywhere so there
+    * is no need to hold a second reference.
+    */
+   anv_shader_internal_unref(device, device->rt_trampoline);
+
+   struct brw_rt_trivial_return {
+      char name[16];
+      struct brw_bs_prog_key key;
+   } return_key = {
+      .name = "rt-trivial-ret",
+   };
+   device->rt_trivial_return =
+      anv_device_search_for_kernel(device, device->internal_cache,
+                                   &return_key, sizeof(return_key),
+                                   &cache_hit);
+   if (device->rt_trivial_return == NULL) {
+      void *tmp_ctx = ralloc_context(NULL);
+      nir_shader *trivial_return_nir =
+         brw_nir_create_trivial_return_shader(device->physical->compiler, tmp_ctx);
+
+      NIR_PASS(_, trivial_return_nir, brw_nir_lower_rt_intrinsics,
+                 &return_key.key.base, device->info);
+
+      struct brw_bs_prog_data return_prog_data = { 0, };
+      struct brw_compile_bs_params params = {
+         .base = {
+            .nir = trivial_return_nir,
+            .log_data = device,
+            .mem_ctx = tmp_ctx,
+         },
+         .key = &return_key.key,
+         .prog_data = &return_prog_data,
+      };
+      const unsigned *return_data =
+         brw_compile_bs(device->physical->compiler, &params);
+
+      struct anv_shader_upload_params upload_params = {
+         .stage               = MESA_SHADER_CALLABLE,
+         .key_data            = &return_key,
+         .key_size            = sizeof(return_key),
+         .kernel_data         = return_data,
+         .kernel_size         = return_prog_data.base.program_size,
+         .prog_data           = &return_prog_data.base,
+         .prog_data_size      = sizeof(return_prog_data),
+         .bind_map            = &empty_bind_map,
+         .push_desc_info      = &empty_push_desc_info,
+      };
+
+      device->rt_trivial_return =
+         anv_device_upload_kernel(device, device->internal_cache,
+                                  &upload_params);
+
+      ralloc_free(tmp_ctx);
+
+      if (device->rt_trivial_return == NULL)
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
+
+   /* The cache already has a reference and it's not going anywhere so there
+    * is no need to hold a second reference.
+    */
+   anv_shader_internal_unref(device, device->rt_trivial_return);
+
+   struct brw_rt_null_ahs {
+      char name[16];
+      struct brw_bs_prog_key key;
+   } null_return_key = {
+      .name = "rt-null-ahs",
+   };
+   device->rt_null_ahs =
+      anv_device_search_for_kernel(device, device->internal_cache,
+                                   &null_return_key, sizeof(null_return_key),
+                                   &cache_hit);
+   if (device->rt_null_ahs == NULL) {
+      void *tmp_ctx = ralloc_context(NULL);
+      nir_shader *null_ahs_nir =
+         brw_nir_create_null_ahs_shader(device->physical->compiler, tmp_ctx);
+
+      NIR_PASS(_, null_ahs_nir, brw_nir_lower_rt_intrinsics,
+                 &null_return_key.key.base, device->info);
+
+      struct brw_bs_prog_data return_prog_data = { 0, };
+      struct brw_compile_bs_params params = {
+         .base = {
+            .nir = null_ahs_nir,
+            .log_data = device,
+            .mem_ctx = tmp_ctx,
+         },
+         .key = &null_return_key.key,
+         .prog_data = &return_prog_data,
+      };
+      const unsigned *return_data =
+         brw_compile_bs(device->physical->compiler, &params);
+
+      struct anv_shader_upload_params upload_params = {
+         .stage               = MESA_SHADER_CALLABLE,
+         .key_data            = &null_return_key,
+         .key_size            = sizeof(null_return_key),
+         .kernel_data         = return_data,
+         .kernel_size         = return_prog_data.base.program_size,
+         .prog_data           = &return_prog_data.base,
+         .prog_data_size      = sizeof(return_prog_data),
+         .bind_map            = &empty_bind_map,
+         .push_desc_info      = &empty_push_desc_info,
+      };
+
+      device->rt_null_ahs =
+         anv_device_upload_kernel(device, device->internal_cache,
+                                  &upload_params);
+
+      ralloc_free(tmp_ctx);
+
+      if (device->rt_null_ahs == NULL)
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
+
+   /* The cache already has a reference and it's not going anywhere so there
+    * is no need to hold a second reference.
+    */
+   anv_shader_internal_unref(device, device->rt_null_ahs);
+
+   return VK_SUCCESS;
+}
+
+void
+anv_device_finish_rt_shaders(struct anv_device *device)
+{
+   if (!device->vk.enabled_extensions.KHR_ray_tracing_pipeline)
+      return;
 }

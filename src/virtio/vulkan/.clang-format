@@ -25,4 +25,4 @@ IncludeCategories:
 ForEachMacros:
   - vk_outarray_append_typed
 
-SpaceBeforeParens: ControlStatementsExceptForEachMacros
+SpaceBeforeParens: ControlStatementsExceptControlMacros

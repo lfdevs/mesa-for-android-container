@@ -5,29 +5,29 @@
 
 #include "nvkmd.h"
 #include "nouveau/nvkmd_nouveau.h"
+#include "nv_push.h"
+#include "util/cache_ops.h"
+#include "util/u_math.h"
 
 #include <inttypes.h>
+#include <unistd.h>
 
-void
-nvkmd_dev_track_mem(struct nvkmd_dev *dev,
-                    struct nvkmd_mem *mem)
+static void
+nvkmd_dev_add_mem(struct nvkmd_dev *dev,
+                  struct nvkmd_mem *mem)
 {
-   if (mem->link.next == NULL) {
-      simple_mtx_lock(&dev->mems_mutex);
-      list_addtail(&mem->link, &dev->mems);
-      simple_mtx_unlock(&dev->mems_mutex);
-   }
+   simple_mtx_lock(&dev->mems_mutex);
+   list_addtail(&mem->link, &dev->mems);
+   simple_mtx_unlock(&dev->mems_mutex);
 }
 
 static void
-nvkmd_dev_untrack_mem(struct nvkmd_dev *dev,
-                      struct nvkmd_mem *mem)
+nvkmd_dev_remove_mem(struct nvkmd_dev *dev,
+                     struct nvkmd_mem *mem)
 {
-   if (mem->link.next != NULL) {
-      simple_mtx_lock(&dev->mems_mutex);
-      list_del(&mem->link);
-      simple_mtx_unlock(&dev->mems_mutex);
-   }
+   simple_mtx_lock(&dev->mems_mutex);
+   list_del(&mem->link);
+   simple_mtx_unlock(&dev->mems_mutex);
 }
 
 static struct nvkmd_mem *
@@ -92,6 +92,38 @@ nvkmd_try_create_pdev_for_drm(struct _drmDevice *drm_device,
                                         debug_flags, pdev_out);
 }
 
+VkResult MUST_CHECK
+nvkmd_dev_alloc_mem(struct nvkmd_dev *dev,
+                    struct vk_object_base *log_obj,
+                    uint64_t size_B, uint64_t align_B,
+                    enum nvkmd_mem_flags flags,
+                    struct nvkmd_mem **mem_out)
+{
+   VkResult result = dev->ops->alloc_mem(dev, log_obj, size_B, align_B,
+                                         flags, mem_out);
+   if (result == VK_SUCCESS)
+      nvkmd_dev_add_mem(dev, *mem_out);
+
+   return result;
+}
+
+VkResult MUST_CHECK
+nvkmd_dev_alloc_tiled_mem(struct nvkmd_dev *dev,
+                          struct vk_object_base *log_obj,
+                          uint64_t size_B, uint64_t align_B,
+                          uint8_t pte_kind, uint16_t tile_mode,
+                          enum nvkmd_mem_flags flags,
+                          struct nvkmd_mem **mem_out)
+{
+   VkResult result = dev->ops->alloc_tiled_mem(dev, log_obj, size_B, align_B,
+                                               pte_kind, tile_mode,
+                                               flags, mem_out);
+   if (result == VK_SUCCESS)
+      nvkmd_dev_add_mem(dev, *mem_out);
+
+   return result;
+}
+
 VkResult
 nvkmd_dev_alloc_mapped_mem(struct nvkmd_dev *dev,
                            struct vk_object_base *log_obj,
@@ -118,6 +150,18 @@ nvkmd_dev_alloc_mapped_mem(struct nvkmd_dev *dev,
    *mem_out = mem;
 
    return VK_SUCCESS;
+}
+
+VkResult MUST_CHECK
+nvkmd_dev_import_dma_buf(struct nvkmd_dev *dev,
+                         struct vk_object_base *log_obj,
+                         int fd, struct nvkmd_mem **mem_out)
+{
+   VkResult result = dev->ops->import_dma_buf(dev, log_obj, fd, mem_out);
+   if (result == VK_SUCCESS)
+      nvkmd_dev_add_mem(dev, *mem_out);
+
+   return result;
 }
 
 VkResult MUST_CHECK
@@ -217,6 +261,70 @@ nvkmd_va_unbind(struct nvkmd_va *va,
    return va->ops->unbind(va, log_obj, va_offset_B, range_B);
 }
 
+static void
+nvkmd_ctx_exec_dump(struct nvkmd_dev *dev, struct vk_object_base *log_obj,
+                    FILE *fp, const struct nvkmd_ctx_exec *exec)
+{
+   uint64_t mem_offset_B = 0;
+   struct nvkmd_mem *mem =
+      nvkmd_dev_lookup_mem_by_va(dev, exec->addr, &mem_offset_B);
+   if (mem == NULL) {
+      fprintf(fp, "<%u B of DATA at UNKNOWN ADDRESS 0x%" PRIx64 ">\n",
+              exec->size_B, exec->addr);
+      return;
+   }
+
+   void *map;
+   VkResult map_result = nvkmd_mem_map(mem, log_obj,
+                                       NVKMD_MEM_MAP_RD, NULL, &map);
+   if (map_result != VK_SUCCESS) {
+      fprintf(fp, "<%u B of DATA at UNMAPPABLE ADDRESS 0x%" PRIx64 ">\n",
+              exec->size_B, exec->addr);
+      goto fail_lookup;
+   }
+
+   assert(mem_offset_B < mem->size_B);
+   uint32_t dump_size_B = MIN2(exec->size_B, mem->size_B - mem_offset_B);
+
+   nvkmd_mem_sync_map_from_gpu(mem, mem_offset_B, dump_size_B);
+
+   struct nv_push push = {
+      .start = mem->map + mem_offset_B,
+      .end = mem->map + mem_offset_B + dump_size_B,
+   };
+   vk_push_print(fp, &push, &dev->pdev->dev_info);
+
+   if (dump_size_B < exec->size_B) {
+      fprintf(fp, "<%u B of DATA at UNKNOWN ADDRESS 0x%" PRIx64 ">\n",
+              exec->size_B - dump_size_B, exec->addr + dump_size_B);
+   }
+
+   nvkmd_mem_unmap(mem, 0);
+fail_lookup:
+   nvkmd_mem_unref(mem);
+}
+
+VkResult MUST_CHECK
+nvkmd_ctx_exec(struct nvkmd_ctx *ctx,
+               struct vk_object_base *log_obj,
+               uint32_t exec_count,
+               const struct nvkmd_ctx_exec *execs)
+{
+   const bool sync = ctx->dev->pdev->debug_flags & NVK_DEBUG_PUSH_SYNC;
+
+   VkResult result = ctx->ops->exec(ctx, log_obj, exec_count, execs);
+   if (result == VK_SUCCESS && sync)
+      result = ctx->ops->sync(ctx, log_obj);
+
+   if ((sync && result != VK_SUCCESS) ||
+       (ctx->dev->pdev->debug_flags & NVK_DEBUG_PUSH_DUMP)) {
+      for (uint32_t i = 0; i < exec_count; i++)
+         nvkmd_ctx_exec_dump(ctx->dev, log_obj, stderr, &execs[i]);
+   }
+
+   return result;
+}
+
 VkResult MUST_CHECK
 nvkmd_ctx_bind(struct nvkmd_ctx *ctx,
                struct vk_object_base *log_obj,
@@ -269,7 +377,7 @@ nvkmd_mem_unref(struct nvkmd_mem *mem)
    if (mem->map != NULL)
       mem->ops->unmap(mem, 0, mem->map);
 
-   nvkmd_dev_untrack_mem(mem->dev, mem);
+   nvkmd_dev_remove_mem(mem->dev, mem);
 
    mem->ops->free(mem);
 }
@@ -339,5 +447,43 @@ nvkmd_mem_unmap(struct nvkmd_mem *mem, enum nvkmd_mem_map_flags flags)
          mem->map = NULL;
       }
       simple_mtx_unlock(&mem->map_mutex);
+   }
+}
+
+void
+nvkmd_mem_sync_to_gpu(struct nvkmd_mem *mem, bool client_map,
+                      uint64_t offset_B, uint64_t range_B)
+{
+   if (mem->flags & NVKMD_MEM_COHERENT)
+      return;
+
+   const uint32_t atom_size_B = mem->dev->pdev->dev_info.nc_atom_size_B;
+   assert(util_is_aligned(offset_B, atom_size_B));
+   assert(util_is_aligned(range_B, atom_size_B));
+
+   if (util_has_cache_ops()) {
+      void *map = client_map ? mem->client_map : mem->map;
+      util_flush_range(map + offset_B, range_B);
+   } else {
+      mem->ops->sync_to_gpu(mem, offset_B, range_B);
+   }
+}
+
+void
+nvkmd_mem_sync_from_gpu(struct nvkmd_mem *mem, bool client_map,
+                        uint64_t offset_B, uint64_t range_B)
+{
+   if (mem->flags & NVKMD_MEM_COHERENT)
+      return;
+
+   const uint32_t atom_size_B = mem->dev->pdev->dev_info.nc_atom_size_B;
+   assert(util_is_aligned(offset_B, atom_size_B));
+   assert(util_is_aligned(range_B, atom_size_B));
+
+   if (util_has_cache_ops()) {
+      void *map = client_map ? mem->client_map : mem->map;
+      util_flush_inval_range(map + offset_B, range_B);
+   } else {
+      mem->ops->sync_from_gpu(mem, offset_B, range_B);
    }
 }

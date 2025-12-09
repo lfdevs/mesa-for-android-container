@@ -17,10 +17,6 @@ BEGIN_TEST(optimizer_postRA.vcmp)
    ASSERTED bool setup_ok = setup_cs("v1", GFX8);
    assert(setup_ok);
 
-   auto& startpgm = bld.instructions->at(0);
-   assert(startpgm->opcode == aco_opcode::p_startpgm);
-   startpgm->definitions[0].setFixed(reg_v0);
-
    Temp v_in = inputs[0];
 
    {
@@ -134,9 +130,13 @@ BEGIN_TEST(optimizer_postRA.vcmp)
 END_TEST
 
 BEGIN_TEST(optimizer_postRA.scc_nocmp_opt)
-   //>> s1: %a, s2: %y, s1: %z = p_startpgm
+   //>> s1: %a:s[0], s2: %y:s[4-5], s1: %z:s[6] = p_startpgm
    ASSERTED bool setup_ok = setup_cs("s1 s2 s1", GFX6);
    assert(setup_ok);
+
+   bld.instructions->at(0)->definitions[0].setFixed(PhysReg(0));
+   bld.instructions->at(0)->definitions[1].setFixed(PhysReg(4));
+   bld.instructions->at(0)->definitions[2].setFixed(PhysReg(6));
 
    PhysReg reg_s0{0};
    PhysReg reg_s2{2};
@@ -327,8 +327,6 @@ BEGIN_TEST(optimizer_postRA.dpp)
    if (!setup_cs("v1 v1 s2 s2", GFX10_3))
       return;
 
-   bld.instructions->at(0)->definitions[0].setFixed(PhysReg(256));
-   bld.instructions->at(0)->definitions[1].setFixed(PhysReg(257));
    bld.instructions->at(0)->definitions[2].setFixed(vcc);
    bld.instructions->at(0)->definitions[3].setFixed(PhysReg(0));
 
@@ -466,9 +464,6 @@ BEGIN_TEST(optimizer_postRA.dpp_across_exec)
       if (!setup_cs("v1 v1", gfx))
          continue;
 
-      bld.instructions->at(0)->definitions[0].setFixed(PhysReg(256));
-      bld.instructions->at(0)->definitions[1].setFixed(PhysReg(257));
-
       PhysReg reg_v2(258);
       Operand a(inputs[0], PhysReg(256));
       Operand b(inputs[1], PhysReg(257));
@@ -493,9 +488,6 @@ BEGIN_TEST(optimizer_postRA.dpp_vcmpx)
    if (!setup_cs("v1 v1", GFX11))
       return;
 
-   bld.instructions->at(0)->definitions[0].setFixed(PhysReg(256));
-   bld.instructions->at(0)->definitions[1].setFixed(PhysReg(257));
-
    PhysReg reg_v2(258);
    Operand a(inputs[0], PhysReg(256));
    Operand b(inputs[1], PhysReg(257));
@@ -516,10 +508,6 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf)
       return;
 
    aco_ptr<Instruction>& startpgm = bld.instructions->at(0);
-   startpgm->definitions[0].setFixed(PhysReg(256));
-   startpgm->definitions[1].setFixed(PhysReg(257));
-   startpgm->definitions[2].setFixed(PhysReg(258));
-   startpgm->definitions[3].setFixed(PhysReg(259));
    startpgm->definitions[4].setFixed(PhysReg(0));
    startpgm->definitions[5].setFixed(PhysReg(4));
 
@@ -681,11 +669,6 @@ BEGIN_TEST(optimizer_postRA.dpp_across_cf_linear_clobber)
    //>> v1: %a:v[0], v1: %b:v[1], s2: %c:s[0-1] = p_startpgm
    if (!setup_cs("v1 v1 s2", GFX10_3))
       return;
-
-   aco_ptr<Instruction>& startpgm = bld.instructions->at(0);
-   startpgm->definitions[0].setFixed(PhysReg(256));
-   startpgm->definitions[1].setFixed(PhysReg(257));
-   startpgm->definitions[2].setFixed(PhysReg(0));
 
    Operand a(inputs[0], PhysReg(256)); /* source for DPP */
    Operand b(inputs[1], PhysReg(257)); /* source for fadd */

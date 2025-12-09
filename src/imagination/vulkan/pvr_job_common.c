@@ -30,7 +30,6 @@
 #include "pvr_device_info.h"
 #include "pvr_formats.h"
 #include "pvr_job_common.h"
-#include "pvr_private.h"
 #include "util/macros.h"
 #include "util/u_math.h"
 #include "vk_alloc.h"
@@ -198,7 +197,7 @@ void pvr_pbe_pack_state(
          reg.swiz_chan0 = ROGUE_PBESTATE_SWIZ_ONE;
          break;
       default:
-         unreachable("Unknown enum pipe_swizzle");
+         UNREACHABLE("Unknown enum pipe_swizzle");
          break;
       }
       /* g, u or stencil*/
@@ -223,7 +222,7 @@ void pvr_pbe_pack_state(
          reg.swiz_chan1 = ROGUE_PBESTATE_SWIZ_ONE;
          break;
       default:
-         unreachable("Unknown enum pipe_swizzle");
+         UNREACHABLE("Unknown enum pipe_swizzle");
          break;
       }
       /* b or v*/
@@ -248,7 +247,7 @@ void pvr_pbe_pack_state(
          reg.swiz_chan2 = ROGUE_PBESTATE_SWIZ_ONE;
          break;
       default:
-         unreachable("Unknown enum pipe_swizzle");
+         UNREACHABLE("Unknown enum pipe_swizzle");
          break;
       }
       /* a */
@@ -273,7 +272,7 @@ void pvr_pbe_pack_state(
          reg.swiz_chan3 = ROGUE_PBESTATE_SWIZ_ONE;
          break;
       default:
-         unreachable("Unknown enum pipe_swizzle");
+         UNREACHABLE("Unknown enum pipe_swizzle");
          break;
       }
 

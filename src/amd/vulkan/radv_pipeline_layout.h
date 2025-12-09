@@ -23,7 +23,6 @@ struct radv_pipeline_layout {
    } set[MAX_SETS];
 
    uint32_t num_sets;
-   uint32_t push_constant_size;
    uint32_t dynamic_offset_count;
    uint16_t dynamic_shader_stages;
 

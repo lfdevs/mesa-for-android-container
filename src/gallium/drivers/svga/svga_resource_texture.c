@@ -1113,10 +1113,8 @@ svga_texture_create(struct pipe_screen *screen,
    return &tex->b;
 
 fail:
-   if (tex->dirty)
-      FREE(tex->dirty);
-   if (tex->defined)
-      FREE(tex->defined);
+   FREE(tex->dirty);
+   FREE(tex->defined);
    FREE(tex);
 fail_notex:
    SVGA_STATS_TIME_POP(svgascreen->sws);
@@ -1459,7 +1457,7 @@ svga_texture_transfer_map_upload(struct svga_context *svga,
     * upload buffer manager code will try to allocate a new buffer
     * with the new buffer size.
     */
-   u_upload_alloc(svga->tex_upload, 0, upload_size, 16,
+   u_upload_alloc_ref(svga->tex_upload, 0, upload_size, 16,
                   &offset, &tex_buffer, &tex_map);
 
    if (!tex_map) {

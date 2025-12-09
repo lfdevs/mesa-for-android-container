@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "util/lut.h"
 #include "agx_builder.h"
 #include "agx_compiler.h"
 
@@ -24,7 +25,7 @@ agx_print_sized(char prefix, unsigned value, enum agx_size size, FILE *fp)
       return;
    }
 
-   unreachable("Invalid size");
+   UNREACHABLE("Invalid size");
 }
 
 static void
@@ -56,12 +57,6 @@ agx_print_index(agx_index index, bool is_float, FILE *fp)
       return;
 
    case AGX_INDEX_NORMAL:
-      if (index.cache)
-         fprintf(fp, "$");
-
-      if (index.discard)
-         fprintf(fp, "`");
-
       if (index.kill)
          fprintf(fp, "*");
 
@@ -87,11 +82,17 @@ agx_print_index(agx_index index, bool is_float, FILE *fp)
       break;
 
    case AGX_INDEX_REGISTER:
+      if (index.cache)
+         fprintf(fp, "$");
+
+      if (index.discard)
+         fprintf(fp, "^");
+
       agx_print_reg(index, index.value, fp);
       break;
 
    default:
-      unreachable("Invalid index type");
+      UNREACHABLE("Invalid index type");
    }
 
    if (index.type == AGX_INDEX_NORMAL) {
@@ -119,35 +120,22 @@ agx_print_index(agx_index index, bool is_float, FILE *fp)
       fprintf(fp, ".neg");
 }
 
-static struct agx_opcode_info
-agx_get_opcode_info_for_print(const agx_instr *I)
-{
-   struct agx_opcode_info info = agx_opcodes_info[I->op];
-
-   if (I->op == AGX_OPCODE_BITOP) {
-      const char *bitops[16] = {
-         [AGX_BITOP_NOR] = "nor",     [AGX_BITOP_ANDN2] = "andn2",
-         [AGX_BITOP_ANDN1] = "andn1", [AGX_BITOP_XOR] = "xor",
-         [AGX_BITOP_NAND] = "nand",   [AGX_BITOP_AND] = "and",
-         [AGX_BITOP_XNOR] = "xnor",   [AGX_BITOP_ORN2] = "orn2",
-         [AGX_BITOP_ORN1] = "orn1",   [AGX_BITOP_OR] = "or",
-      };
-
-      if (bitops[I->truth_table] != NULL) {
-         info.name = bitops[I->truth_table];
-         info.immediates &= ~AGX_IMMEDIATE_TRUTH_TABLE;
-      }
-   }
-
-   return info;
-}
+static const char *lut2_to_function[16] = {
+   "zero", "nor",  "andn2", "not2", "andn1", "not1", "xor", "nand",
+   "and",  "xnor", "mov1",  "orn2", "mov2",  "orn1", "or",  "one",
+};
 
 void
 agx_print_instr(const agx_instr *I, FILE *fp)
 {
    assert(I->op < AGX_NUM_OPCODES);
-   struct agx_opcode_info info = agx_get_opcode_info_for_print(I);
+   struct agx_opcode_info info = agx_opcodes_info[I->op];
    bool print_comma = false;
+
+   if (I->op == AGX_OPCODE_BITOP) {
+      info.name = lut2_to_function[I->truth_table];
+      info.immediates &= ~AGX_IMMEDIATE_TRUTH_TABLE;
+   }
 
    fprintf(fp, "   ");
 

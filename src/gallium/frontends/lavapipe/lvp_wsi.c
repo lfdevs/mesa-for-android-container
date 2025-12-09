@@ -26,7 +26,7 @@
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 lvp_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
-   LVP_FROM_HANDLE(lvp_physical_device, pdevice, physicalDevice);
+   VK_FROM_HANDLE(lvp_physical_device, pdevice, physicalDevice);
    return vk_instance_get_proc_addr_unchecked(pdevice->vk.instance, pName);
 }
 

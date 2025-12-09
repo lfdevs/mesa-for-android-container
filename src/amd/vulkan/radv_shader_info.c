@@ -7,6 +7,7 @@
 #include "nir/nir.h"
 #include "nir/nir_xfb_info.h"
 #include "nir/radv_nir.h"
+#include "ac_shader_util.h"
 #include "nir_tcs_info.h"
 #include "radv_device.h"
 #include "radv_physical_device.h"
@@ -135,18 +136,10 @@ gather_intrinsic_store_output_info(const nir_shader *nir, const nir_intrinsic_in
 {
    const nir_io_semantics io_sem = nir_intrinsic_io_semantics(instr);
    const unsigned location = io_sem.location;
-   const unsigned num_slots = io_sem.num_slots;
    const unsigned component = nir_intrinsic_component(instr);
    const unsigned write_mask = nir_intrinsic_write_mask(instr);
-   uint8_t *output_usage_mask = NULL;
 
    switch (nir->info.stage) {
-   case MESA_SHADER_VERTEX:
-      output_usage_mask = info->vs.output_usage_mask;
-      break;
-   case MESA_SHADER_TESS_EVAL:
-      output_usage_mask = info->tes.output_usage_mask;
-      break;
    case MESA_SHADER_FRAGMENT:
       if (location >= FRAG_RESULT_DATA0) {
          const unsigned fs_semantic = location + io_sem.dual_source_blend_index;
@@ -158,12 +151,6 @@ gather_intrinsic_store_output_info(const nir_shader *nir, const nir_intrinsic_in
       break;
    default:
       break;
-   }
-
-   if (output_usage_mask) {
-      for (unsigned i = 0; i < num_slots; i++) {
-         output_usage_mask[location + i] |= ((write_mask >> (i * 4)) & 0xf) << component;
-      }
    }
 
    if (consider_force_vrs && location == VARYING_SLOT_POS) {
@@ -190,14 +177,25 @@ gather_intrinsic_store_output_info(const nir_shader *nir, const nir_intrinsic_in
 static void
 gather_push_constant_info(const nir_shader *nir, const nir_intrinsic_instr *instr, struct radv_shader_info *info)
 {
+   uint32_t offset, size;
+
+   if (nir_src_is_const(instr->src[0])) {
+      offset = nir_intrinsic_base(instr) + nir_src_as_uint(instr->src[0]);
+      size = instr->num_components * (instr->def.bit_size / 8u);
+   } else {
+      offset = nir_intrinsic_base(instr);
+      size = nir_intrinsic_range(instr);
+   }
+
    info->loads_push_constants = true;
+   info->push_constant_size = MAX2(info->push_constant_size, offset + size);
 
    if (nir_src_is_const(instr->src[0]) && instr->def.bit_size >= 32) {
-      uint32_t start = (nir_intrinsic_base(instr) + nir_src_as_uint(instr->src[0])) / 4u;
-      uint32_t size = instr->num_components * (instr->def.bit_size / 32u);
+      const uint32_t start_dw = offset / 4;
+      const uint32_t size_dw = size / 4;
 
-      if (start + size <= (MAX_PUSH_CONSTANTS_SIZE / 4u)) {
-         info->inline_push_constant_mask |= BITFIELD64_RANGE(start, size);
+      if (start_dw + size_dw <= (MAX_PUSH_CONSTANTS_SIZE / 4u)) {
+         info->inline_push_constant_mask |= BITFIELD64_RANGE(start_dw, size_dw);
          return;
       }
    }
@@ -290,7 +288,7 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
    case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples: {
-      nir_variable *var = nir_deref_instr_get_variable(nir_instr_as_deref(instr->src[0].ssa->parent_instr));
+      nir_variable *var = nir_deref_instr_get_variable(nir_def_as_deref(instr->src[0].ssa));
       mark_sampler_desc(var, info);
       break;
    }
@@ -303,10 +301,6 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
    case nir_intrinsic_store_output:
    case nir_intrinsic_store_per_vertex_output:
       gather_intrinsic_store_output_info(nir, instr, info, consider_force_vrs);
-      break;
-   case nir_intrinsic_bvh64_intersect_ray_amd:
-   case nir_intrinsic_bvh8_intersect_ray_amd:
-      info->cs.uses_rt = true;
       break;
    case nir_intrinsic_load_poly_line_smooth_enabled:
       info->ps.needs_poly_line_smooth = true;
@@ -470,37 +464,6 @@ radv_set_vs_output_param(struct radv_device *device, const struct nir_shader *ni
    outinfo->prim_param_exports = total_param_exports - outinfo->param_exports;
 }
 
-static uint8_t
-radv_get_wave_size(struct radv_device *device, gl_shader_stage stage, const struct radv_shader_info *info,
-                   const struct radv_shader_stage_key *stage_key)
-{
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-
-   if (stage_key->subgroup_required_size)
-      return stage_key->subgroup_required_size * 32;
-
-   if (stage == MESA_SHADER_GEOMETRY && !info->is_ngg)
-      return 64;
-   else if (stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_TASK)
-      return info->wave_size;
-   else if (stage == MESA_SHADER_FRAGMENT)
-      return pdev->ps_wave_size;
-   else if (gl_shader_stage_is_rt(stage))
-      return pdev->rt_wave_size;
-   else
-      return pdev->ge_wave_size;
-}
-
-static uint8_t
-radv_get_ballot_bit_size(struct radv_device *device, gl_shader_stage stage, const struct radv_shader_info *info,
-                         const struct radv_shader_stage_key *stage_key)
-{
-   if (stage_key->subgroup_required_size)
-      return stage_key->subgroup_required_size * 32;
-
-   return 64;
-}
-
 static uint32_t
 radv_compute_esgs_itemsize(const struct radv_device *device, uint32_t num_varyings)
 {
@@ -626,6 +589,9 @@ gather_shader_info_tcs(struct radv_device *device, const nir_shader *nir,
    nir_gather_tcs_info(nir, &tcs_info, nir->info.tess._primitive_mode, nir->info.tess.spacing);
    ac_nir_get_tess_io_info(nir, &tcs_info, ~0ull, ~0, map_output, true, &info->tcs.io_info);
 
+   info->tcs.spacing = nir->info.tess.spacing;
+   info->tcs.ccw = nir->info.tess.ccw;
+   info->tcs.point_mode = nir->info.tess.point_mode;
    info->tcs.tcs_vertices_out = nir->info.tess.tcs_vertices_out;
    info->tcs.tes_inputs_read = ~0ULL;
    info->tcs.tes_patch_inputs_read = ~0ULL;
@@ -637,7 +603,7 @@ gather_shader_info_tcs(struct radv_device *device, const nir_shader *nir,
       radv_get_tess_wg_info(pdev, &info->tcs.io_info, nir->info.tess.tcs_vertices_out,
                             gfx_state->ts.patch_control_points,
                             /* TODO: This should be only inputs in LDS (not VGPR inputs) to reduce LDS usage */
-                            info->tcs.num_linked_inputs, &info->num_tess_patches, &info->tcs.num_lds_blocks);
+                            info->tcs.num_linked_inputs, &info->num_tess_patches, &info->tcs.lds_size);
    }
 }
 
@@ -677,23 +643,23 @@ gather_shader_info_tes(struct radv_device *device, const nir_shader *nir, struct
 }
 
 void
-radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_info *gs_info)
+radv_get_legacy_gs_info(const struct radv_device *device, struct radv_shader_info *es_info, struct radv_shader_info *gs_info)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   struct radv_legacy_gs_info *out = &gs_info->gs_ring_info;
-   const unsigned esgs_vertex_stride = out->esgs_itemsize * 4;
+   struct radv_legacy_gs_info *out = &gs_info->legacy_gs_info;
+   const unsigned esgs_vertex_stride = es_info ? es_info->esgs_itemsize : out->esgs_itemsize;
    ac_legacy_gs_subgroup_info info;
 
    ac_legacy_gs_compute_subgroup_info(gs_info->gs.input_prim, gs_info->gs.vertices_out, gs_info->gs.invocations,
                                       esgs_vertex_stride, &info);
 
-   const uint32_t lds_granularity = pdev->info.lds_encode_granularity;
+   const uint32_t lds_granularity = ac_shader_get_lds_alloc_granularity(pdev->info.gfx_level);
    const uint32_t total_lds_bytes = align(info.esgs_lds_size * 4, lds_granularity);
 
    out->gs_inst_prims_in_subgroup = info.gs_inst_prims_in_subgroup;
    out->es_verts_per_subgroup = info.es_verts_per_subgroup;
    out->gs_prims_per_subgroup = info.gs_prims_per_subgroup;
-   out->lds_size = total_lds_bytes / lds_granularity;
+   out->lds_size = total_lds_bytes;
 
    unsigned num_se = pdev->info.max_se;
    unsigned wave_size = 64;
@@ -743,7 +709,7 @@ gather_shader_info_gs(struct radv_device *device, const nir_shader *nir, struct 
    if (info->is_ngg)
       gather_shader_info_ngg_query(device, info);
    else
-      info->gs_ring_info.esgs_itemsize = radv_compute_esgs_itemsize(device, info->gs.num_linked_inputs) / 4;
+      info->legacy_gs_info.esgs_itemsize = radv_compute_esgs_itemsize(device, info->gs.num_linked_inputs);
 }
 
 static void
@@ -919,32 +885,6 @@ gather_shader_info_cs(struct radv_device *device, const nir_shader *nir, const s
                       struct radv_shader_info *info)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   unsigned default_wave_size = pdev->cs_wave_size;
-   if (info->cs.uses_rt)
-      default_wave_size = pdev->rt_wave_size;
-
-   unsigned local_size = nir->info.workgroup_size[0] * nir->info.workgroup_size[1] * nir->info.workgroup_size[2];
-
-   /* Games don't always request full subgroups when they should, which can cause bugs if cswave32
-    * is enabled. Furthermore, if cooperative matrices or subgroup info are used, we can't transparently change
-    * the subgroup size.
-    */
-   const bool require_full_subgroups =
-      stage_key->subgroup_require_full || nir->info.cs.has_cooperative_matrix ||
-      (default_wave_size == 32 && nir->info.uses_wide_subgroup_intrinsics && local_size % RADV_SUBGROUP_SIZE == 0);
-
-   const unsigned required_subgroup_size = stage_key->subgroup_required_size * 32;
-
-   if (required_subgroup_size) {
-      info->wave_size = required_subgroup_size;
-   } else if (require_full_subgroups) {
-      info->wave_size = RADV_SUBGROUP_SIZE;
-   } else if (pdev->info.gfx_level >= GFX10 && local_size <= 32) {
-      /* Use wave32 for small workgroups. */
-      info->wave_size = 32;
-   } else {
-      info->wave_size = default_wave_size;
-   }
 
    if (pdev->info.has_cs_regalloc_hang_bug) {
       info->cs.regalloc_hang_bug = info->cs.block_size[0] * info->cs.block_size[1] * info->cs.block_size[2] > 256;
@@ -1032,7 +972,7 @@ radv_get_user_data_0(const struct radv_device *device, struct radv_shader_info *
    case MESA_SHADER_ANY_HIT:
       return R_00B900_COMPUTE_USER_DATA_0;
    default:
-      unreachable("invalid shader stage");
+      UNREACHABLE("invalid shader stage");
    }
 }
 
@@ -1064,7 +1004,7 @@ radv_is_merged_shader_compiled_separately(const struct radv_device *device, cons
 }
 
 void
-radv_nir_shader_info_init(gl_shader_stage stage, gl_shader_stage next_stage, struct radv_shader_info *info)
+radv_nir_shader_info_init(mesa_shader_stage stage, mesa_shader_stage next_stage, struct radv_shader_info *info)
 {
    memset(info, 0, sizeof(*info));
 
@@ -1084,10 +1024,8 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct nir_function *func = (struct nir_function *)exec_list_get_head_const(&nir->functions);
 
-   if (layout->use_dynamic_descriptors) {
-      info->loads_push_constants = true;
+   if (layout->use_dynamic_descriptors)
       info->loads_dynamic_offsets = true;
-   }
 
    nir_foreach_block (block, func->impl) {
       gather_info_block(nir, block, info, gfx_state, stage_key, consider_force_vrs);
@@ -1146,7 +1084,7 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
 
    info->user_data_0 = radv_get_user_data_0(device, info);
    info->merged_shader_compiled_separately = radv_is_merged_shader_compiled_separately(device, info);
-   info->force_indirect_desc_sets = info->merged_shader_compiled_separately || stage_key->indirect_bindable;
+   info->force_indirect_descriptors = info->merged_shader_compiled_separately || stage_key->indirect_bindable;
 
    switch (nir->info.stage) {
    case MESA_SHADER_COMPUTE:
@@ -1174,13 +1112,16 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
       gather_shader_info_mesh(device, nir, stage_key, info);
       break;
    default:
-      if (gl_shader_stage_is_rt(nir->info.stage))
+      if (mesa_shader_stage_is_rt(nir->info.stage))
          gather_shader_info_rt(nir, info);
       break;
    }
 
-   info->wave_size = radv_get_wave_size(device, nir->info.stage, info, stage_key);
-   info->ballot_bit_size = radv_get_ballot_bit_size(device, nir->info.stage, info, stage_key);
+   info->wave_size = nir->info.min_subgroup_size;
+   assert(info->wave_size == nir->info.max_subgroup_size);
+   assert(info->wave_size == 32 || info->wave_size == 64);
+   assert(pdev->info.gfx_level >= GFX10 || info->wave_size == 64);
+   assert(nir->info.stage != MESA_SHADER_GEOMETRY || info->is_ngg || info->wave_size == 64);
 
    switch (nir->info.stage) {
    case MESA_SHADER_COMPUTE:
@@ -1547,6 +1488,8 @@ radv_nir_shader_info_merge(const struct radv_shader_stage *src, struct radv_shad
    /* Only inline all push constants if both allows it. */
    dst_info->can_inline_all_push_constants &= src_info->can_inline_all_push_constants;
 
+   dst_info->push_constant_size = MAX2(dst_info->push_constant_size, src_info->push_constant_size);
+
    if (src->stage == MESA_SHADER_VERTEX) {
       dst_info->vs = src_info->vs;
    } else {
@@ -1573,7 +1516,7 @@ radv_nir_shader_info_link(struct radv_device *device, const struct radv_graphics
 
       /* Merge shader info for VS+GS or TES+GS. */
       if ((stages[MESA_SHADER_VERTEX].nir || stages[MESA_SHADER_TESS_EVAL].nir) && stages[MESA_SHADER_GEOMETRY].nir) {
-         gl_shader_stage pre_stage = stages[MESA_SHADER_TESS_EVAL].nir ? MESA_SHADER_TESS_EVAL : MESA_SHADER_VERTEX;
+         mesa_shader_stage pre_stage = stages[MESA_SHADER_TESS_EVAL].nir ? MESA_SHADER_TESS_EVAL : MESA_SHADER_VERTEX;
 
          radv_nir_shader_info_merge(&stages[pre_stage], &stages[MESA_SHADER_GEOMETRY]);
       }
@@ -1622,6 +1565,6 @@ radv_select_hw_stage(const struct radv_shader_info *const info, const enum amd_g
    case MESA_SHADER_CALLABLE:
       return AC_HW_COMPUTE_SHADER;
    default:
-      unreachable("Unsupported HW stage");
+      UNREACHABLE("Unsupported HW stage");
    }
 }

@@ -44,6 +44,7 @@ struct amdgpu_cs_buffer {
 enum ib_type {
    IB_PREAMBLE,
    IB_MAIN,
+   IB_GANG_MAIN,
    IB_NUM,
 };
 
@@ -113,6 +114,7 @@ struct amdgpu_cs_context {
 
 struct amdgpu_cs {
    struct amdgpu_ib main_ib; /* must be first because this is inherited */
+   struct amdgpu_ib gang_main_ib;
    struct amdgpu_winsys *aws;
    struct amdgpu_ctx *ctx;
 
@@ -151,8 +153,6 @@ struct amdgpu_cs {
    struct util_queue_fence flush_completed;
    struct pipe_fence_handle *next_fence;
    struct pb_buffer_lean *preamble_ib_bo;
-
-   struct drm_amdgpu_cs_chunk_cp_gfx_shadow mcbp_fw_shadow_chunk;
 };
 
 struct amdgpu_fence {

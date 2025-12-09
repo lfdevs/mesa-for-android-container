@@ -6,6 +6,3 @@ dEQP-VK.api.external.memory.android_hardware_buffer.*
 # only APKs support window creation on Android.
 dEQP-VK.image.swapchain_mutable.*
 dEQP-VK.wsi.*
-
-# These tests cause hangs and need to be skipped for now.
-dEQP-VK.synchronization*

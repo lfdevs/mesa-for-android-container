@@ -46,7 +46,7 @@
  */
 
 static bool
-occlusion_supports(unsigned query_type)
+occlusion_supports(UNUSED struct etna_context *ctx, unsigned query_type)
 {
    switch (query_type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:

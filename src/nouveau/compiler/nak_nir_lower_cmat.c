@@ -60,7 +60,7 @@ get_nak_cmat_type_for_muladd(struct glsl_cmat_description a_desc,
        k == 16 && glsl_base_type_is_float(c_desc.element_type))
       return NAK_CMAT_TYPE_M16N16K16_FLOAT_SW;
 
-   unreachable("Unable to determine matrix muladd layout!");
+   UNREACHABLE("Unable to determine matrix muladd layout!");
 }
 
 enum nak_matrix_type_layout {
@@ -232,52 +232,114 @@ remap_matrix_type(struct hash_table *mapping, const struct glsl_type *orig)
    return new_type;
 }
 
-/* Computes the index in a linear matrix buffer a thread needs to load from in
+static bool
+uses_movm_for_bit_size(unsigned bit_size)
+{
+   return bit_size == 16;
+}
+
+/**
+ * Returns true when before stores or after loads the loaded matrix has to be transposed
+ */
+static bool
+transpose_on_load_store(struct glsl_cmat_description desc,
+                        enum glsl_matrix_layout layout)
+{
+   return
+      uses_movm_for_bit_size(glsl_base_type_get_bit_size(desc.element_type)) &&
+      ((desc.use == GLSL_CMAT_USE_B && layout != GLSL_MATRIX_LAYOUT_COLUMN_MAJOR) ||
+       (desc.use != GLSL_CMAT_USE_B && layout == GLSL_MATRIX_LAYOUT_COLUMN_MAJOR));
+}
+
+static nir_def *
+transpose_matrix(nir_builder *b, nir_def *value)
+{
+   unsigned vec_size = value->num_components;
+   unsigned bit_size = value->bit_size;
+
+   switch (bit_size) {
+   case 32: {
+      assert(vec_size == 2);
+
+      nir_def *raw = nir_unpack_64_4x16(b, nir_pack_64_2x32(b, value));
+      nir_def *lo = nir_vec2(b,
+         nir_channel(b, raw, 0),
+         nir_channel(b, raw, 2)
+      );
+      nir_def *hi = nir_vec2(b,
+         nir_channel(b, raw, 1),
+         nir_channel(b, raw, 3)
+      );
+
+      lo = nir_cmat_mov_transpose_nv(b, lo);
+      hi = nir_cmat_mov_transpose_nv(b, hi);
+
+      value = nir_vec2(b,
+         nir_pack_32_2x16(b, nir_vec2(b, nir_channel(b, lo, 0), nir_channel(b, hi, 0))),
+         nir_pack_32_2x16(b, nir_vec2(b, nir_channel(b, lo, 1), nir_channel(b, hi, 1)))
+      );
+      break;
+   }
+   case 16:
+      assert(vec_size == 2);
+      value = nir_cmat_mov_transpose_nv(b, value);
+      break;
+   default:
+      assert(!"unsupported bit_size for transpose");
+      break;
+   }
+
+   return value;
+}
+
+/**
+ * Computes the index in a linear matrix buffer a thread needs to load from in
  * order to execute an MMA on the Matrix.
  *
  * This is a generalized formula based on the Matrix layout descriptions from
  * the CUDA PTX instruction set documentation:
  * https://docs.nvidia.com/cuda/archive/12.8.1/parallel-thread-execution/index.html#matrix-multiply-accumulate-operation-using-mma-instruction
+ *
+ * \param group_size Size of the value groups the layout tiles around.
  */
 static void
 compute_mat(struct nir_builder *b, nir_def *lane_id,
             unsigned idx, nir_def **col, nir_def **row,
-            struct glsl_cmat_description desc,
-            unsigned scale)
+            bool alternate_tiling_order,
+            unsigned group_size)
 {
-   assert(idx < 8 * scale);
+   assert(idx < 4 * group_size);
 
    nir_def *quad_id = nir_ushr_imm(b, lane_id, 2);
    nir_def *thread_id_in_quad = nir_iand_imm(b, lane_id, 0x3);
 
-   unsigned row_bound = (desc.use == GLSL_CMAT_USE_B ? 4 : 2) * scale;
-   unsigned col_bound = (desc.use == GLSL_CMAT_USE_B ? 2 : 4) * scale;
+   unsigned row_bound = (alternate_tiling_order ? 2 : 1) * group_size;
+   unsigned col_bound = (alternate_tiling_order ? 1 : 2) * group_size;
 
-   scale = 1 << scale;
    *row = quad_id;
    if (idx & row_bound)
       *row = nir_iadd_imm(b, *row, 8);
 
-   *col = nir_iadd_imm(b, nir_imul_imm(b, thread_id_in_quad, scale),
-                          idx & (scale - 1));
+   *col = nir_iadd_imm(b, nir_imul_imm(b, thread_id_in_quad, group_size),
+                          idx & (group_size - 1));
    if (idx & col_bound)
-      *col = nir_iadd_imm(b, *col, scale * 4);
+      *col = nir_iadd_imm(b, *col, group_size * 4);
 }
 
 static void
 compute_mat_16x32_int8(struct nir_builder *b, nir_def *lane_id,
                        unsigned idx, nir_def **col, nir_def **row,
-                       struct glsl_cmat_description desc)
+                       bool alternate_tiling_order)
 {
-   compute_mat(b, lane_id, idx, col, row, desc, 2);
+   compute_mat(b, lane_id, idx, col, row, alternate_tiling_order, 4);
 }
 
 static void
 compute_mat_16x16(struct nir_builder *b, nir_def *lane_id,
                        unsigned idx, nir_def **col, nir_def **row,
-                       struct glsl_cmat_description desc)
+                       bool alternate_tiling_order)
 {
-   compute_mat(b, lane_id, idx, col, row, desc, 1);
+   compute_mat(b, lane_id, idx, col, row, alternate_tiling_order, 2);
 }
 
 static void
@@ -286,24 +348,32 @@ compute_matrix_offsets(struct nir_builder *b, struct glsl_cmat_description desc,
                        unsigned idx, nir_def **col_offset, nir_def **row_offset)
 {
    enum nak_matrix_type_layout cmat_type = determine_matrix_type(desc);
+   unsigned bit_size = glsl_base_type_bit_size(desc.element_type);
+   bool uses_movm = uses_movm_for_bit_size(bit_size);
+   bool alternate_tiling_order =
+      (uses_movm && layout != GLSL_MATRIX_LAYOUT_ROW_MAJOR) ||
+      (!uses_movm && desc.use == GLSL_CMAT_USE_B);
+
    switch (cmat_type) {
    case NAK_MAT_16x32_INT8:
-      compute_mat_16x32_int8(b, lane_id, idx, col_offset, row_offset, desc);
+      compute_mat_16x32_int8(b, lane_id, idx, col_offset, row_offset, alternate_tiling_order);
       break;
 
    case NAK_MAT_16X16:
-      compute_mat_16x16(b, lane_id, idx, col_offset, row_offset, desc);
+      compute_mat_16x16(b, lane_id, idx, col_offset, row_offset, alternate_tiling_order);
       break;
    }
 
    /* The layout calculation code relies on col and row being swapped for B
     * row-major and non B col-major matrices.
     */
-   if ((desc.use == GLSL_CMAT_USE_B && layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR) ||
-       (desc.use != GLSL_CMAT_USE_B && layout != GLSL_MATRIX_LAYOUT_ROW_MAJOR)) {
-      nir_def *tmp = *col_offset;
-      *col_offset = *row_offset;
-      *row_offset = tmp;
+   if (!uses_movm) {
+      if ((desc.use == GLSL_CMAT_USE_B && layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR) ||
+          (desc.use != GLSL_CMAT_USE_B && layout != GLSL_MATRIX_LAYOUT_ROW_MAJOR)) {
+         nir_def *tmp = *col_offset;
+         *col_offset = *row_offset;
+         *row_offset = tmp;
+      }
    }
 }
 
@@ -328,7 +398,7 @@ get_hw_nak_cmat_type(enum nak_cmat_type cmat_type, uint8_t sm)
    case NAK_CMAT_TYPE_M16N16K16_FLOAT_SW:
       return NAK_CMAT_TYPE_M16N8K16_FLOAT;
    default:
-      unreachable("Unknown Matrix muladd type.");
+      UNREACHABLE("Unknown Matrix muladd type.");
    }
 }
 
@@ -557,7 +627,7 @@ lower_cmat_convert(nir_builder *b, nir_intrinsic_instr *intr, nir_def *cmat,
             nir_channel(b, efgh, 3)
          );
       } else {
-         unreachable("unsupported component counts for Matrix layout conversion");
+         UNREACHABLE("unsupported component counts for Matrix layout conversion");
       }
    }
 
@@ -566,6 +636,235 @@ lower_cmat_convert(nir_builder *b, nir_intrinsic_instr *intr, nir_def *cmat,
       cmat = nir_build_alu1(b, op, cmat);
 
    return cmat;
+}
+
+static struct nir_def*
+try_lower_cmat_load_to_ldsm(nir_builder *b, nir_intrinsic_instr *intr)
+{
+   assert(intr->intrinsic == nir_intrinsic_cmat_load);
+
+   enum glsl_matrix_layout layout = nir_intrinsic_matrix_layout(intr);
+
+   const struct glsl_cmat_description desc = cmat_src_desc(intr->src[0]);
+   const unsigned length = get_cmat_length(desc);
+   nir_deref_instr *deref = nir_def_as_deref(intr->src[1].ssa);
+   const unsigned ptr_bit_size = glsl_get_bit_size(deref->type);
+   const unsigned vec = glsl_get_vector_elements(deref->type);
+   nir_src stride = intr->src[2];
+
+   /* Even though LDSM operates on 16 bit types, the int8 matrix layout is
+    * compatible so that we can use LDSM on it as well. But we can't use it on
+    * the 32 bit types, because that actually uses a different data layout on a
+    * byte level.
+    */
+   const unsigned bit_size = glsl_base_type_bit_size(desc.element_type);
+   if (!nir_src_is_const(stride)
+       || !nir_deref_mode_is(deref, nir_var_mem_shared)
+       || bit_size > 16)
+       return NULL;
+
+   /* The stride is in elements of the pointed to type, not necessarily the
+    * type of the referenced matrix
+    */
+   unsigned stride_bytes = nir_src_as_uint(stride) * vec * ptr_bit_size / 8;
+   if (stride_bytes % 16 != 0)
+      return NULL;
+
+   /* check implicit base ptr alignment */
+   if ((layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR    && desc.cols * bit_size < 128) ||
+       (layout == GLSL_MATRIX_LAYOUT_COLUMN_MAJOR && desc.rows * bit_size < 128))
+         return NULL;
+
+   /* LDSM loads n 8x8 16 bit matrices */
+   unsigned mat_size_bits = desc.rows * desc.cols * bit_size;
+   unsigned ldsm_count = mat_size_bits / (8 * 8 * 16);
+
+   /* TODO: split bigger ones into multiple LDSM calls */
+   if (ldsm_count > 4 || ldsm_count == 0)
+      return NULL;
+
+   if ((desc.use != GLSL_CMAT_USE_B && layout == GLSL_MATRIX_LAYOUT_COLUMN_MAJOR) ||
+       (desc.use == GLSL_CMAT_USE_B && layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR)) {
+      /* Quite the pain, might not be worth it */
+      if (ldsm_count >= 4)
+         return NULL;
+
+      /* We'd need to split the rows leading to unaligned loads */
+      if (ldsm_count >= 2 && (desc.rows / 2) * bit_size < 128)
+         return NULL;
+   }
+
+   /* Account for differences in tiling depending on the layout */
+   nir_def *offset;
+   nir_def *lane_id = nir_load_subgroup_invocation(b);
+   if (ldsm_count == 4 && layout != GLSL_MATRIX_LAYOUT_COLUMN_MAJOR) {
+      nir_def *lower = nir_iand(b, lane_id, nir_imm_int(b, 0x0f));
+      nir_def *upper = nir_iand(b, lane_id, nir_imm_int(b, 0x10));
+
+      offset = nir_imul_imm(b, lower, stride_bytes);
+      offset = nir_iadd(b, offset, upper);
+   } else if (ldsm_count >= 2 && layout == GLSL_MATRIX_LAYOUT_COLUMN_MAJOR) {
+      nir_def *lower;
+      nir_def *lower_lo = nir_iand(b, lane_id, nir_imm_int(b, 0x07));
+      nir_def *upper = nir_iand(b, lane_id, nir_imm_int(b, 0x08));
+      if (ldsm_count == 4) {
+         nir_def *lower_hi = nir_iand(b, lane_id, nir_imm_int(b, 0x10));
+         lower = nir_ior(b, lower_lo, nir_ushr_imm(b, lower_hi, 1));
+      } else {
+         lower = lower_lo;
+      }
+
+      offset = nir_imul_imm(b, lower, stride_bytes);
+      offset = nir_iadd(b, offset, nir_ishl_imm(b, upper, 1));
+   } else {
+      offset = nir_imul_imm(b, lane_id, stride_bytes);
+   }
+
+   nir_def *base = intr->src[1].ssa;
+   offset = nir_u2uN(b, offset, base->bit_size);
+   nir_def *addr = nir_iadd(b, base, offset);
+
+   /* flip the layout for B matrices */
+   if (desc.use == GLSL_CMAT_USE_B) {
+      if (layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR)
+         layout = GLSL_MATRIX_LAYOUT_COLUMN_MAJOR;
+      else if (layout == GLSL_MATRIX_LAYOUT_COLUMN_MAJOR)
+         layout = GLSL_MATRIX_LAYOUT_ROW_MAJOR;
+   }
+
+   /* Each thread loads 32 bits per matrix */
+   assert(length * bit_size == 32 * ldsm_count);
+   return nir_cmat_load_shared_nv(b, length, bit_size, addr,
+                                     .num_matrices = ldsm_count,
+                                     .matrix_layout = layout);
+}
+
+/**
+ * Returns the possibly vectorization width we can use to load/store matrices
+ * of the given cmat desc and layout
+ */
+static int load_store_get_vec_size(const struct glsl_cmat_description desc,
+                                   enum glsl_matrix_layout layout)
+{
+   unsigned bit_size = glsl_base_type_bit_size(desc.element_type);
+   bool uses_movm = uses_movm_for_bit_size(bit_size);
+   bool needs_transpose =
+      (desc.use != GLSL_CMAT_USE_B && layout != GLSL_MATRIX_LAYOUT_ROW_MAJOR) ||
+      (desc.use == GLSL_CMAT_USE_B && layout != GLSL_MATRIX_LAYOUT_COLUMN_MAJOR);
+
+   if (needs_transpose && !uses_movm)
+      return 1;
+
+   switch (bit_size) {
+   case 16:
+   case 32:
+      return 2;
+   case  8:
+      return 4;
+   default:
+      return 1;
+   }
+}
+
+static nir_deref_instr*
+get_cmat_component_deref(nir_builder *b, nir_intrinsic_instr *intr,
+                         nir_def *lane_id, unsigned idx)
+{
+   unsigned deref_src = intr->intrinsic == nir_intrinsic_cmat_store ? 0 : 1;
+   unsigned cmat_src = intr->intrinsic == nir_intrinsic_cmat_store ? 1 : 0;
+
+   const struct glsl_cmat_description desc = cmat_src_desc(intr->src[cmat_src]);
+   nir_deref_instr *deref = nir_def_as_deref(intr->src[deref_src].ssa);
+   unsigned type_size_B = glsl_base_type_bit_size(desc.element_type) / 8;
+
+   const enum glsl_matrix_layout layout = nir_intrinsic_matrix_layout(intr);
+   nir_def *stride = intr->src[2].ssa;
+
+   nir_def *col_offset;
+   nir_def *row_offset;
+   compute_matrix_offsets(b, desc, layout, lane_id, idx,
+                              &col_offset, &row_offset);
+
+   row_offset = nir_imul(b, row_offset, stride);
+   col_offset = nir_u2uN(b, col_offset, deref->def.bit_size);
+   row_offset = nir_u2uN(b, row_offset, deref->def.bit_size);
+
+   unsigned align_mul = 0, align_offset = 0, combined_align = 0;
+   nir_get_explicit_deref_align(deref, false, &align_mul, &align_offset);
+
+   if (align_mul)
+      combined_align = nir_combined_align(align_mul, align_offset);
+
+   /* VUID-RuntimeSpirv-OpCooperativeMatrixLoadKHR-08986:
+    * For OpCooperativeMatrixLoadKHR and OpCooperativeMatrixStoreKHR
+    * instructions, the Pointer and Stride operands must be aligned to at least
+    * the lesser of 16 bytes or the natural alignment of a row or column
+    * (depending on ColumnMajor) of the matrix (where the natural alignment is
+    * the number of columns/rows multiplied by the component size) */
+   unsigned align_elems =
+      layout == GLSL_MATRIX_LAYOUT_COLUMN_MAJOR ? desc.rows : desc.cols;
+   unsigned implicit_align = MIN2(16, align_elems * type_size_B);
+   if (implicit_align > combined_align) {
+      align_mul = implicit_align;
+      align_offset = 0;
+   }
+
+   /* We have to ignore the incoming stride, but have to choose the type of
+    * the pointer as the declared stride is in multiple of the pointer type */
+   deref = nir_build_deref_cast_with_alignment(
+      b, &deref->def, deref->modes,
+      deref->type,
+      glsl_get_vector_elements(deref->type) * glsl_get_bit_size(deref->type) / 8,
+      align_mul,
+      align_offset
+   );
+   deref = nir_build_deref_ptr_as_array(b, deref, row_offset);
+   deref = nir_build_deref_cast(
+      b, &deref->def, deref->modes,
+      glsl_scalar_type(desc.element_type),
+      type_size_B);
+   return nir_build_deref_ptr_as_array(b, deref, col_offset);
+}
+
+static void
+lower_cmat_load(nir_builder *b, nir_intrinsic_instr *intr)
+{
+   struct nir_def *ldsm = try_lower_cmat_load_to_ldsm(b, intr);
+   if (ldsm) {
+      store_cmat_src(b, intr->src[0], ldsm);
+      return;
+   }
+
+   const struct glsl_cmat_description desc = cmat_src_desc(intr->src[0]);
+   const enum glsl_matrix_layout layout = nir_intrinsic_matrix_layout(intr);
+   const unsigned length = get_cmat_length(desc);
+
+   nir_def *vars[NIR_MAX_VEC_COMPONENTS];
+   for (unsigned i = 0; i < length; ++i)
+      vars[i] = nir_undef(b, 1, glsl_base_type_bit_size(desc.element_type));
+
+   nir_def *lane_id = nir_load_subgroup_invocation(b);
+
+   int vec_size = load_store_get_vec_size(desc, layout);
+   for (unsigned idx = 0; idx < length; idx += vec_size) {
+      nir_deref_instr *iter_deref =
+         get_cmat_component_deref(b, intr, lane_id, idx);
+      nir_variable_mode modes = iter_deref->modes;
+      const glsl_type *vec_type = glsl_vector_type(desc.element_type, vec_size);
+      iter_deref = nir_build_deref_cast_with_alignment(b,
+         &iter_deref->def, modes, vec_type,
+         0, vec_size * glsl_base_type_bit_size(desc.element_type) / 8, 0);
+
+      nir_def *value = nir_load_deref(b, iter_deref);
+      if (transpose_on_load_store(desc, layout))
+         value = transpose_matrix(b, value);
+
+      for (int c = 0; c < vec_size; c++)
+         vars[idx + c] = nir_channel(b, value, c);
+   }
+
+   nir_def *mat = nir_vec(b, vars, length);
+   store_cmat_src(b, intr->src[0], mat);
 }
 
 static bool
@@ -605,57 +904,14 @@ lower_cmat_instr(nir_builder *b,
    }
 
    case nir_intrinsic_cmat_load: {
-      const struct glsl_cmat_description desc = cmat_src_desc(intr->src[0]);
-      const unsigned length = get_cmat_length(desc);
-      const enum glsl_matrix_layout layout = nir_intrinsic_matrix_layout(intr);
-
-      nir_deref_instr *deref =
-         nir_instr_as_deref(intr->src[1].ssa->parent_instr);
-      nir_def *stride = intr->src[2].ssa;
-
-      nir_def *vars[NIR_MAX_VEC_COMPONENTS];
-      for (unsigned i = 0; i < length; ++i)
-         vars[i] = nir_undef(b, 1, glsl_base_type_bit_size(desc.element_type));
-
-      nir_def *lane_id = nir_load_subgroup_invocation(b);
-
-      for (unsigned idx = 0; idx < length; idx++) {
-         nir_def *col_offset;
-         nir_def *row_offset;
-
-         compute_matrix_offsets(b, desc, layout, lane_id, idx,
-                                &col_offset, &row_offset);
-
-         row_offset = nir_imul(b, row_offset, stride);
-
-         col_offset = nir_u2uN(b, col_offset, deref->def.bit_size);
-         row_offset = nir_u2uN(b, row_offset, deref->def.bit_size);
-
-         nir_deref_instr *iter_deref =
-            nir_build_deref_ptr_as_array(b, deref, row_offset);
-         iter_deref = nir_build_deref_cast(
-            b, &iter_deref->def, deref->modes,
-            glsl_scalar_type(desc.element_type),
-            glsl_base_type_bit_size(desc.element_type) / 8);
-         iter_deref =
-            nir_build_deref_ptr_as_array(b, iter_deref, col_offset);
-
-         vars[idx] = nir_load_deref(b, iter_deref);
-      }
-
-      nir_def *mat = nir_vec(b, vars, length);
-      store_cmat_src(b, intr->src[0], mat);
+      lower_cmat_load(b, intr);
       nir_instr_remove(instr);
       return true;
    }
 
    case nir_intrinsic_cmat_store: {
-      enum glsl_matrix_layout layout = nir_intrinsic_matrix_layout(intr);
-
-      nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-      nir_def *stride = intr->src[2].ssa;
-
       const struct glsl_cmat_description desc = cmat_src_desc(intr->src[1]);
+      const enum glsl_matrix_layout layout = nir_intrinsic_matrix_layout(intr);
       const unsigned length = get_cmat_length(desc);
       nir_def *src = load_cmat_src(b, intr->src[1]);
 
@@ -665,28 +921,20 @@ lower_cmat_instr(nir_builder *b,
 
       nir_def *lane_id = nir_load_subgroup_invocation(b);
 
-      for (unsigned idx = 0; idx < length; idx++) {
-         nir_def *col_offset;
-         nir_def *row_offset;
-
-         compute_matrix_offsets(b, desc, layout, lane_id, idx,
-                                &col_offset, &row_offset);
-
-         row_offset = nir_imul(b, row_offset, stride);
-
-         col_offset = nir_u2uN(b, col_offset, deref->def.bit_size);
-         row_offset = nir_u2uN(b, row_offset, deref->def.bit_size);
-
+      int vec_size = load_store_get_vec_size(desc, layout);
+      for (unsigned idx = 0; idx < length; idx += vec_size) {
          nir_deref_instr *iter_deref =
-            nir_build_deref_ptr_as_array(b, deref, row_offset);
-         iter_deref = nir_build_deref_cast(
-            b, &iter_deref->def, deref->modes,
-            glsl_scalar_type(desc.element_type),
-            glsl_base_type_bit_size(desc.element_type) / 8);
-         iter_deref =
-            nir_build_deref_ptr_as_array(b, iter_deref, col_offset);
+            get_cmat_component_deref(b, intr, lane_id, idx);
 
-         nir_store_deref(b, iter_deref, vars[idx], 1);
+         nir_variable_mode modes = iter_deref->modes;
+         const glsl_type *vec_type = glsl_vector_type(desc.element_type, vec_size);
+         iter_deref = nir_build_deref_cast_with_alignment(b,
+            &iter_deref->def, modes, vec_type,
+            0, vec_size * glsl_base_type_bit_size(desc.element_type) / 8, 0);
+         nir_def *value = nir_vec(b, &vars[idx], vec_size);
+         if (transpose_on_load_store(desc, layout))
+            value = transpose_matrix(b, value);
+         nir_store_deref(b, iter_deref, value, -1);
       }
 
       nir_instr_remove(instr);
@@ -856,5 +1104,6 @@ nak_nir_lower_cmat(nir_shader *nir, const struct nak_compiler *nak)
          progress = true;
    }
 
+   _mesa_hash_table_destroy(type_mapping, NULL);
    return progress;
 }

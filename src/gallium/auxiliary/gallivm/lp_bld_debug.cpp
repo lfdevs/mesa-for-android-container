@@ -26,7 +26,6 @@
  **************************************************************************/
 
 #include <stddef.h>
-#include <fstream>
 #include <sstream>
 #include <iomanip>
 
@@ -43,11 +42,12 @@
 #include <llvm/Support/Host.h>
 #endif
 
-#include "util/detect_os.h"
-#include "util/u_math.h"
+#include "util/bitscan.h"
 #include "util/u_debug.h"
 #include "util/os_file.h"
+#include "util/u_string.h" // asprintf on MSVC
 
+#include "lp_bld_init.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_intr.h"
 
@@ -252,14 +252,14 @@ lp_profile(LLVMValueRef func, const void *code)
        * this except when running inside linux perf, which can be inferred
        * by the PERF_BUILDID_DIR environment variable.
        */
-      if (getenv("PERF_BUILDID_DIR")) {
+      if (os_get_option("PERF_BUILDID_DIR")) {
          snprintf(filename, sizeof(filename), "/tmp/perf-%llu.map", pid);
          perf_map_file = fopen(filename, "wt");
          snprintf(filename, sizeof(filename), "/tmp/perf-%llu.map.asm", pid);
          perf_asm_file.open(filename);
       }
 #else
-      if (const char* output_dir = getenv("JIT_SYMBOL_MAP_DIR")) {
+      if (const char* output_dir = os_get_option("JIT_SYMBOL_MAP_DIR")) {
          snprintf(filename, sizeof(filename), "%s/jit-symbols-%llu.map", output_dir, pid);
          perf_map_file = fopen(filename, "wt");
          snprintf(filename, sizeof(filename), "%s/jit-symbols-%llu.map.asm", output_dir, pid);
@@ -382,7 +382,7 @@ lp_function_add_debug_info(gallivm_state *gallivm, LLVMValueRef func, LLVMTypeRe
       asprintf(&gallivm->file_name, "%s/%u.nir", LP_NIR_SHADER_DUMP_DIR, shader_index);
 
       gallivm->file = LLVMDIBuilderCreateFile(gallivm->di_builder, gallivm->file_name, strlen(gallivm->file_name), ".", 1);
-   
+
       LLVMDIBuilderCreateCompileUnit(
          gallivm->di_builder, LLVMDWARFSourceLanguageC11, gallivm->file, gallivm->file_name, strlen(gallivm->file_name),
          0, NULL, 0, 0, NULL, 0, LLVMDWARFEmissionFull, 0, 0, 0, "/", 1, "", 0);

@@ -59,7 +59,7 @@ ir_if_simplification_visitor::visit_enter(ir_assignment *ir)
 }
 
 bool
-do_if_simplification(exec_list *instructions)
+do_if_simplification(ir_exec_list *instructions)
 {
    ir_if_simplification_visitor v;
 
@@ -85,7 +85,7 @@ ir_if_simplification_visitor::visit_leave(ir_if *ir)
     * FINISHME: some work to get right.
     */
    ir_constant *condition_constant =
-      ir->condition->constant_expression_value(ralloc_parent(ir));
+      ir->condition->constant_expression_value(ir->node_linalloc);
    if (condition_constant) {
       /* Move the contents of the one branch of the conditional
        * that matters out.
@@ -117,7 +117,7 @@ ir_if_simplification_visitor::visit_leave(ir_if *ir)
     * folded into the generation of "cond" anyway.
     */
    if (ir->then_instructions.is_empty()) {
-      ir->condition = new(ralloc_parent(ir->condition))
+      ir->condition = new(ir->node_linalloc)
 	 ir_expression(ir_unop_logic_not, ir->condition);
       ir->else_instructions.move_nodes_to(&ir->then_instructions);
       this->made_progress = true;

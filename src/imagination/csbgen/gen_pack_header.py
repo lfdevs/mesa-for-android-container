@@ -73,6 +73,10 @@ PACK_FILE_HEADER = """%(license)s
 
 #include "csbgen/pvr_packet_helpers.h"
 
+#ifndef __OPENCL_VERSION__
+#define __constant
+#endif
+
 """
 
 
@@ -248,7 +252,7 @@ class Enum(Node):
 
     def _emit_to_str(self) -> None:
         print(textwrap.dedent("""\
-            static const char *
+            static __constant const char *
             %s_to_str(const enum %s value)
             {""") % (self.full_name, self.full_name))
 

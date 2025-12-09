@@ -373,7 +373,7 @@ begin_transform_feedback(struct gl_context *ctx, GLenum mode, bool no_error)
          return;
       } else {
          /* Stop compiler warnings */
-         unreachable("Error in API use when using KHR_no_error");
+         UNREACHABLE("Error in API use when using KHR_no_error");
       }
    }
 
@@ -884,6 +884,7 @@ transform_feedback_varyings(struct gl_context *ctx,
 
    if (!shProg->TransformFeedback.VaryingNames) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glTransformFeedbackVaryings()");
+      shProg->TransformFeedback.NumVarying = 0;
       return;
    }
 

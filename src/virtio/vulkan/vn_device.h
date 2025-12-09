@@ -44,6 +44,8 @@ struct vn_device {
 
    struct vn_buffer_reqs_cache buffer_reqs_cache;
    struct vn_image_reqs_cache image_reqs_cache;
+
+   bool has_sync2;
 };
 VK_DEFINE_HANDLE_CASTS(vn_device,
                        base.vk.base,

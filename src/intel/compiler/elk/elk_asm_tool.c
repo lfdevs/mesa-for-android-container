@@ -375,11 +375,9 @@ end:
    if (output)
       fclose(output);
 
-   if (p)
-      ralloc_free(p);
+   ralloc_free(p);
 
-   if (devinfo)
-      free(devinfo);
+   free(devinfo);
 
    exit(result);
 }

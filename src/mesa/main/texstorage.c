@@ -118,7 +118,7 @@ _mesa_is_legal_tex_storage_target(const struct gl_context *ctx,
          return false;
       }
    default:
-      unreachable("impossible dimensions");
+      UNREACHABLE("impossible dimensions");
    }
 }
 

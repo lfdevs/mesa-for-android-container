@@ -78,6 +78,8 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
       LLVMTypeRef elem_types[LP_JIT_CTX_COUNT];
       LLVMTypeRef context_type;
 
+      elem_types[LP_JIT_CTX_MIN_DEPTH_BOUNDS] =
+      elem_types[LP_JIT_CTX_MAX_DEPTH_BOUNDS] =
       elem_types[LP_JIT_CTX_ALPHA_REF] = LLVMFloatTypeInContext(lc);
       elem_types[LP_JIT_CTX_SAMPLE_MASK] =
       elem_types[LP_JIT_CTX_STENCIL_REF_FRONT] =
@@ -107,6 +109,12 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
       LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, viewports,
                              gallivm->target, context_type,
                              LP_JIT_CTX_VIEWPORTS);
+      LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, min_depth_bounds,
+                             gallivm->target, context_type,
+                             LP_JIT_CTX_MIN_DEPTH_BOUNDS);
+      LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, max_depth_bounds,
+                             gallivm->target, context_type,
+                             LP_JIT_CTX_MAX_DEPTH_BOUNDS);
       LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, sample_mask,
                              gallivm->target, context_type,
                              LP_JIT_CTX_SAMPLE_MASK);

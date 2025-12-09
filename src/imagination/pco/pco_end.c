@@ -35,7 +35,7 @@ bool pco_end(pco_shader *shader)
 
    if (shader->stage == MESA_SHADER_VERTEX) {
       if (last_instr && last_instr->op == PCO_OP_UVSW_WRITE &&
-          pco_instr_default_exec(last_instr) &&
+          pco_instr_has_default_exec(last_instr) &&
           pco_instr_get_rpt(last_instr) == 1) {
          pco_instr *new_last_instr =
             pco_uvsw_write_emit_endtask(&b,

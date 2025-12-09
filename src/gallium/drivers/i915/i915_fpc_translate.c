@@ -375,7 +375,7 @@ i915_coord_mask(enum tgsi_opcode opcode, enum tgsi_texture_type tex)
       return coord_mask | TGSI_WRITEMASK_XYZ;
 
    default:
-      unreachable("bad texture target");
+      UNREACHABLE("bad texture target");
    }
 }
 

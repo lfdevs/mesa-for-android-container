@@ -1,0 +1,227 @@
+Mesa 25.1.7 Release Notes / 2025-07-30
+======================================
+
+Mesa 25.1.7 is a bug fix release which fixes bugs found since the 25.1.6 release.
+
+Mesa 25.1.7 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.1.7 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 4afd26a3cc93c3dd27183d4c4845f1ca7d683f6343900b54995809b3271ebed6  mesa-25.1.7.tar.xz
+    SHA512: a62fc6970efce3b4861094be2ef3139a3b18a6a51d770ead9f04d39592abc0a13a04702c552637e63bc965236f66ad545d30a9ec446b24f0bfc5bbb7cf0f0757  mesa-25.1.7.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- High GPU usage when using Zink for eglgears_x11 (on X11)
+- Segfault in X11 image acquire code with timeout=0
+- Crash from iris_set_sampler_views in chromium/chrome with accelerated video decoding
+- rusticl: aco: LLVM outperforms ACO in clpeak for \`short` benchmarks on hawaii
+- rusticl: aco: Performance regression in clpeak for char benchmarks on hawaii
+- Race condition with timeline semaphores
+- nir_algebraic silently ignores operand conditions in some cases
+- lavapipe: valgrind triggers errors with CTS unit tests when creating a vulkan device
+- radv: more glcts fails KHR-GL46.shading_language_420pack.initializer_list_initializer*
+- radv: regression in KHR-GL46.gpu_shader5_gl.float_encoding
+- radeonsi: Broken VAAPI video color conversion
+
+
+Changes
+-------
+
+Alyssa Rosenzweig (1):
+
+- agx: make sure denorm flushing really happens
+
+Boyuan Zhang (4):
+
+- pipe: add gaps_in_frame for h264
+- frontends/va: get gaps_in_frame for h264 dec
+- radeon/vcn: add gaps_in_frame flag to h264 sps
+- ci/fluster: remove 3 pass cases resulted by gaps_in_frame
+
+Christoph Pillmayer (1):
+
+- vk/sync: Pass dependencyFlags in vk_common_CmdPipelineBarrier
+
+Danylo Piliaiev (2):
+
+- tu: Use safe-const binning VS when safe-const full VS is used
+- tu: Fix nullptr dereference in cmd_buffer tracepoint
+
+David Rosca (10):
+
+- radeonsi/vcn: Correctly handle tile swizzle
+- radv/video: Fix encode when using layered source image
+- radeonsi/uvd: Set H264 gaps_in_frame_num_value_allowed_flag
+- radv/video: Send slice control, spec misc and deblocking params every frame
+- radv/video: Fix encode bitstream buffer offset and alignment
+- radv/video: Fix setting H265 encode cu_qp_delta on VCN2
+- radv/video: Fix session_init and rc_per_pic on VCN2
+- radv/video: Use the new defines for H264 SPS info flags
+- frontends/va: Add H264 encode more_rbsp_data PPS flag
+- radeonsi/vcn: Use more_rbsp_data flag for H264 PPS encode
+
+Eric Engestrom (8):
+
+- docs: add sha sum for 25.1.6
+- .pick_status.json: Update to f4436d606e0ae76ef6092b850cf79fa3e014f61e
+- .pick_status.json: Mark 80be9153f9debe9021c425c3b10de7804e4a0d7e as denominated
+- .pick_status.json: Mark 0178a4bd9db1ac264541e108ed7ee9282140a9ef as denominated
+- .pick_status.json: Mark 0ed1a10b7331adb25abc2c65ce6ef65b4bb361c8 as denominated
+- .pick_status.json: Mark f4596e78283aa9124ad3358d488167c8a72d6176 as denominated
+- .pick_status.json: Mark a30f91b71a3dc8e9bcaa2b6075d3a6142b5aabf0 as denominated
+- [25.1-only] radeonsi/ci: update expectations for backport MR !36344
+
+Erico Nunes (2):
+
+- lima: fix array limit in texture mipmap descriptor
+- lima: ppir: fix check for discard_block in optimization
+
+Erik Faye-Lund (1):
+
+- pan/ci: remove non-existent flag from PAN_MESA_DEBUG
+
+Faith Ekstrand (4):
+
+- nir/instr_set: Rework tex instr hash/compare
+- vulkan: Rename a bunch of vk_sync_timeline helpers
+- vulkan: Hold a reference to pending vk_sync_timeline_points
+- vulkan/wsi/x11: Handle VK_NOT_READY in AcquireNextImage()
+
+Georg Lehmann (1):
+
+- nir/opt_remove_phis: skip unreachable phis
+
+Iago Toral Quiroga (1):
+
+- frontend/dri: don't call set_damage_region with a null resource
+
+Ian Romanick (1):
+
+- nir/print: Don't segfault checking has_debug_info
+
+Jordan Justen (4):
+
+- intel/dev: Add WCL platform enum
+- intel/dev/mesa_defs.json: Add WCL WA entries
+- intel/dev: Add WCL device info
+- intel/dev: Add WCL PCI IDs
+
+Juston Li (1):
+
+- anv/android: refactor anb resolve to fix align assertion
+
+Karol Herbst (6):
+
+- vtn/opencl: set exact on all ffmas and mads
+- rusticl/mem: relax flags validation for clGetSupportedImageFormats
+- rusticl/queue: do not return event status errors on flush/finish
+- zink: properly unbind sampler views with imported 2D resource
+- rusticl/mesa: use pipe_sampler_view_reference
+- rusticl/queue: clear shader images when destroying queues
+
+Lionel Landwerlin (3):
+
+- brw: fix NIR metadata invalidation with closest-hit shaders
+- brw: fixup source depth enabling with coarse pixel shading
+- brw: fixup coarse_z computation
+
+Lucas Fryzek (1):
+
+- lp: Don't allocate sampler functions if count is 0
+
+Mary Guillemard (2):
+
+- pan/genxml: Add missing parenthesis on pan_cast_and_pack macros
+- pan/bi: Properly handle SWZ.v4i8 lowering on v11+
+
+Maíra Canal (2):
+
+- vulkan: create a wrapper struct for vk_sync_timeline
+- vulkan: don't destroy vk_sync_timeline if a point is still pending
+
+Mel Henning (1):
+
+- nak/mark_lcssa_invariants: Invalidate divergence
+
+Mike Blumenkrantz (6):
+
+- lavapipe: call nir_lower_int64
+- egl/x11: don't leak device_name when choosing zink
+- zink: account for generated tcs when pruning programs
+- zink: remove extra gfx prog unref during separable replacement
+- anv: fix format compatibility check typo
+- kopper: fix initial swapinterval setting
+
+Myrrh Periwinkle (1):
+
+- gallium: Properly handle non-contiguous used sampler view indexes
+
+Natalie Vock (1):
+
+- radv/winsys: Support vm_always_valid in the NULL winsys
+
+Patrick Lerda (1):
+
+- dri: complete the support for ARGB4444
+
+Pierre-Eric Pelloux-Prayer (4):
+
+- bufferobj: init the return value for GetParam functions
+- winsys/radeon: add surface_offset_from_coord
+- radeonsi: allow msaa sparse textures on gfx10+
+- radeonsi: allow sparse depth textures
+
+Rhys Perry (4):
+
+- nir/divergence: ignore boolean phis for ignore_undef_if_phi_srcs
+- nir/cf: have nir_remove_after_cf_node remove phis at the start too
+- nir/search: check variable requirements even if it's already seen
+- nir/uub: fix 8/16-bit overflow
+
+Ruijing Dong (1):
+
+- radeonsi/vcn: vcn5 av1 decoding context buffer fix
+
+Samuel Pitoiset (2):
+
+- radv: fix reporting instance/vertex_count for direct draws with RGP on GFX12
+- radv: reject 1D block-compresed formats with mips on GFX6
+
+Timothy Arceri (1):
+
+- util: add workaround for Interstellar Rift
+
+Yiwei Zhang (11):
+
+- lavapipe: allow AHB export allocation
+- lavapipe: implement GetMemoryAndroidHardwareBufferANDROID
+- lavapipe: do not close import fd on error and amend an error code
+- lavapipe: properly handle AHB release
+- lavapipe: populate AHB memory mapping
+- lavapipe: do not short-circuit AHB export alloc (non-import)
+- lavapipe: amend missing object finish on mem alloc failure
+- u_gralloc/mapper4: properly expose ChromaSiting types based on api level
+- lavapipe: fix a leak on a lvp_image_create exit path
+- lavapipe: fix maint4 vkGetDeviceBufferMemoryRequirements
+- lavapipe: fix maint4 vkGetDeviceImageMemoryRequirements

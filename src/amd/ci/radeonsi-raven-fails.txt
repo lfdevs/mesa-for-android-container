@@ -32,8 +32,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode ful
 
 spec@!opengl 1.1@line-smooth-stipple,Fail
 
-# since Debian 12 (bookworm) uprev
-spec@arb_viewport_array@display-list,Fail
 # since transition XORG -> WESTON
 glx@glx_arb_sync_control@waitformsc,Fail
 

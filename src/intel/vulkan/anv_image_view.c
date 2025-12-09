@@ -16,7 +16,7 @@ remap_swizzle(VkComponentSwizzle swizzle,
    case VK_COMPONENT_SWIZZLE_B:     return format_swizzle.b;
    case VK_COMPONENT_SWIZZLE_A:     return format_swizzle.a;
    default:
-      unreachable("Invalid swizzle");
+      UNREACHABLE("Invalid swizzle");
    }
 }
 
@@ -150,7 +150,7 @@ anv_image_fill_surface_state(struct anv_device *device,
    if (device->info->ver >= 10 && clear_address.bo) {
       uint32_t *clear_addr_dw = surface_state_map +
          device->isl_dev.ss.clear_color_state_offset;
-      assert((clear_address.offset & 0x3f) == 0);
+      assert(util_is_aligned(clear_address.offset, 64));
       state_inout->clear_address.offset |= *clear_addr_dw & 0x3f;
    }
 
@@ -173,7 +173,7 @@ anv_image_view_init(struct anv_device *device,
 {
    ANV_FROM_HANDLE(anv_image, image, pCreateInfo->image);
 
-   vk_image_view_init(&device->vk, &iview->vk, false, pCreateInfo);
+   vk_image_view_init(&device->vk, &iview->vk, pCreateInfo);
    iview->image = image;
    iview->n_planes = anv_image_aspect_get_planes(iview->vk.aspects);
    iview->use_surface_state_stream = surface_state_stream != NULL;

@@ -38,7 +38,7 @@
 #define LP_BLD_ARIT_OVERFLOW_H
 
 
-#include "gallivm/lp_bld.h"
+#include <llvm-c/Core.h>
 
 struct gallivm_state;
 

@@ -211,9 +211,23 @@ panfrost_dev_query_props(const struct pan_kmod_dev *dev,
          fd, DRM_PANFROST_PARAM_SYSTEM_TIMESTAMP_FREQUENCY, true, 0);
    }
 
-   /* Panfrost currently doesn't support priorities, assumes default priority as
-    * medium */
-   props->allowed_group_priorities_mask = PAN_KMOD_GROUP_ALLOW_PRIORITY_MEDIUM;
+   /* Device coherent timestamps are always enabled on panfrost */
+   props->timestamp_device_coherent = true;
+
+   /* Support for priorities was added in panfrost 1.5, assumes default
+    * priority as medium if the param doesn't exist. */
+   uint64_t prios =
+      panfrost_query_raw(fd, DRM_PANFROST_PARAM_ALLOWED_JM_CTX_PRIORITIES,
+                         false, BITFIELD_BIT(PANFROST_JM_CTX_PRIORITY_MEDIUM));
+
+   if (prios & BITFIELD_BIT(PANFROST_JM_CTX_PRIORITY_LOW))
+      props->allowed_group_priorities_mask |= PAN_KMOD_GROUP_ALLOW_PRIORITY_LOW;
+   if (prios & BITFIELD_BIT(PANFROST_JM_CTX_PRIORITY_MEDIUM))
+      props->allowed_group_priorities_mask |=
+         PAN_KMOD_GROUP_ALLOW_PRIORITY_MEDIUM;
+   if (prios & BITFIELD_BIT(PANFROST_JM_CTX_PRIORITY_HIGH))
+      props->allowed_group_priorities_mask |=
+         PAN_KMOD_GROUP_ALLOW_PRIORITY_HIGH;
 }
 
 static uint32_t
@@ -237,9 +251,13 @@ to_panfrost_bo_flags(struct pan_kmod_dev *dev, uint32_t flags)
 
 static struct pan_kmod_bo *
 panfrost_kmod_bo_alloc(struct pan_kmod_dev *dev,
-                       struct pan_kmod_vm *exclusive_vm, size_t size,
+                       struct pan_kmod_vm *exclusive_vm, uint64_t size,
                        uint32_t flags)
 {
+   /* The ioctl uses u32 for size. */
+   if ((uint64_t)(uint32_t)size != size)
+      return NULL;
+
    /* We can't map GPU uncached. */
    if (flags & PAN_KMOD_BO_FLAG_GPU_UNCACHED)
       return NULL;
@@ -276,7 +294,7 @@ panfrost_kmod_bo_free(struct pan_kmod_bo *bo)
 }
 
 static struct pan_kmod_bo *
-panfrost_kmod_bo_import(struct pan_kmod_dev *dev, uint32_t handle, size_t size,
+panfrost_kmod_bo_import(struct pan_kmod_dev *dev, uint32_t handle, uint64_t size,
                         uint32_t flags)
 {
    struct panfrost_kmod_bo *panfrost_bo =
@@ -406,7 +424,7 @@ panfrost_kmod_vm_create(struct pan_kmod_dev *dev, uint32_t flags,
       return NULL;
    }
 
-   pan_kmod_vm_init(&vm->base, dev, 0, flags);
+   pan_kmod_vm_init(&vm->base, dev, 0, flags, PAN_PGSIZE_4K);
    panfrost_dev->vm = vm;
    return &vm->base;
 }

@@ -84,6 +84,21 @@ const struct nvk_mme_test_case nvk_mme_clear_tests[] = {{
    },
 }, {}};
 
+void
+nvk_mme_update_window_clip(struct mme_builder *b)
+{
+   struct mme_value is_drawing = mme_load(b);
+   struct mme_value window_clip_enabled = nvk_mme_load_scratch(b, WINDOW_CLIP_ENABLED);
+
+   struct mme_value new_value = mme_and(b, window_clip_enabled, is_drawing);
+   mme_mthd(b, NV9097_SET_WINDOW_CLIP_ENABLE);
+   mme_emit(b, new_value);
+
+   mme_free_reg(b, new_value);
+   mme_free_reg(b, window_clip_enabled);
+   mme_free_reg(b, is_drawing);
+}
+
 static void
 emit_clear_rects(struct nvk_cmd_buffer *cmd,
                  int color_att,
@@ -135,7 +150,9 @@ nvk_CmdClearAttachments(VkCommandBuffer commandBuffer,
                         const VkClearRect *pRects)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 2 + attachmentCount * 4);
+   const struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 4 + attachmentCount * 4);
 
    P_IMMD(p, NV9097, SET_CLEAR_SURFACE_CONTROL, {
       .respect_stencil_mask   = RESPECT_STENCIL_MASK_FALSE,
@@ -143,6 +160,15 @@ nvk_CmdClearAttachments(VkCommandBuffer commandBuffer,
       .use_scissor0           = USE_SCISSOR0_FALSE,
       .use_viewport_clip0     = USE_VIEWPORT_CLIP0_FALSE,
    });
+
+   /* VK_EXT_discard_rects doesn't influence clears */
+   const bool stash_window_clip =
+      BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DR_ENABLE) || dyn->dr.enable;
+   if (stash_window_clip) {
+      /* Disable WINDOW_CLIP while we clear */
+      P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_UPDATE_WINDOW_CLIP));
+      P_INLINE_DATA(p, 0);
+   }
 
    bool clear_depth = false, clear_stencil = false;
    for (uint32_t i = 0; i < attachmentCount; i++) {
@@ -185,6 +211,13 @@ nvk_CmdClearAttachments(VkCommandBuffer commandBuffer,
    /* No color clears */
    if (clear_depth || clear_stencil)
       emit_clear_rects(cmd, -1, clear_depth, clear_stencil, rectCount, pRects);
+
+   if (stash_window_clip) {
+      p = nvk_cmd_buffer_push(cmd, 2);
+      /* Restore stashed WINDOW_CLIP value */
+      P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_UPDATE_WINDOW_CLIP));
+      P_INLINE_DATA(p, 1);
+   }
 }
 
 static VkImageViewType
@@ -200,7 +233,7 @@ render_view_type(VkImageType image_type, unsigned layer_count)
    case VK_IMAGE_TYPE_3D:
       return VK_IMAGE_VIEW_TYPE_3D;
    default:
-      unreachable("Invalid image type");
+      UNREACHABLE("Invalid image type");
    }
 }
 
@@ -245,6 +278,7 @@ clear_image(struct nvk_cmd_buffer *cmd,
          const VkImageViewCreateInfo view_info = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .pNext = &view_usage_info,
+            .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
             .image = nvk_image_to_handle(image),
             .viewType = render_view_type(image->vk.image_type, layer_count),
             .format = format,
@@ -258,7 +292,7 @@ clear_image(struct nvk_cmd_buffer *cmd,
          };
 
          struct nvk_image_view view;
-         result = nvk_image_view_init(dev, &view, true, &view_info);
+         result = nvk_image_view_init(dev, &view, &view_info);
          assert(result == VK_SUCCESS);
 
          VkRenderingInfo render = {
@@ -289,7 +323,11 @@ clear_image(struct nvk_cmd_buffer *cmd,
             render.pStencilAttachment = &vk_att;
 
          nvk_CmdBeginRendering(nvk_cmd_buffer_to_handle(cmd), &render);
-         nvk_CmdEndRendering(nvk_cmd_buffer_to_handle(cmd));
+
+         const VkRenderingEndInfoKHR end = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_END_INFO_KHR,
+         };
+         nvk_CmdEndRendering2KHR(nvk_cmd_buffer_to_handle(cmd), &end);
 
          nvk_image_view_finish(dev, &view);
       }
@@ -305,7 +343,7 @@ vk_packed_int_format_for_size(unsigned size_B)
    case 4:  return VK_FORMAT_R32_UINT;
    case 8:  return VK_FORMAT_R32G32_UINT;
    case 16: return VK_FORMAT_R32G32B32A32_UINT;
-   default: unreachable("Invalid image format size");
+   default: UNREACHABLE("Invalid image format size");
    }
 }
 

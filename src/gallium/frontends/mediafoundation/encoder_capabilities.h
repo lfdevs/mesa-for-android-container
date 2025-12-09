@@ -75,7 +75,7 @@ class encoder_capabilities
    BOOL m_bHWSupportsQualityVBRRateControlMode = FALSE;
 
    // PIPE_VIDEO_CAP_ENC_INTRA_REFRESH
-   BOOL m_uiHWSupportsIntraRefreshModes = FALSE;
+   enum pipe_video_enc_intra_refresh_mode m_HWSupportsIntraRefreshModes = PIPE_VIDEO_ENC_INTRA_REFRESH_NONE;
 
    // PIPE_VIDEO_CAP_ENC_SUPPORTS_FEEDBACK_METADATA
    enum pipe_video_feedback_metadata_type m_HWSupportedMetadataFlags = PIPE_VIDEO_FEEDBACK_METADATA_TYPE_BITSTREAM_SIZE;
@@ -134,4 +134,13 @@ class encoder_capabilities
 
    // PSNR frame stats
    union pipe_enc_cap_gpu_stats_psnr m_PSNRStatsSupport = {};
+
+   // Driver supports queue priority management
+   bool m_bHWSupportsQueuePriorityManagement = false;
+
+   // Spatial Adaptive Quantization
+   union pipe_enc_cap_spatial_adaptive_quantization m_HWSupportSpatialAdaptiveQuantization = {};
+
+   // PIPE_VIDEO_CAP_ENC_READABLE_RECONSTRUCTED_PICTURE
+   bool m_bHWSupportReadableReconstructedPicture = false;
 };

@@ -1086,6 +1086,7 @@ typedef struct rvcn_dec_message_av1_s {
    rvcn_dec_warped_motion_params_t global_motion[8];
    rvcn_dec_av1_tile_info_t tile_info[256];
    unsigned char reserved[3];
+   unsigned int av1_intrabc_workaround;
 } rvcn_dec_message_av1_t;
 
 typedef struct rvcn_dec_feature_index_s {
@@ -1262,6 +1263,7 @@ struct jpeg_params {
 
 #define RDECODE_SESSION_CONTEXT_SIZE (128 * 1024)
 #define RDECODE_MAX_SUBSAMPLE_SIZE   (2048 * 2 * 4)
+#define RDECODE_IT_SCALING_TABLE_SIZE       992
 
 void ac_vcn_vp9_fill_probs_table(void *ptr);
 

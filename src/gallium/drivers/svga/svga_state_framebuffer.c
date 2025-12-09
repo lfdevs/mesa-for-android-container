@@ -84,7 +84,7 @@ emit_fb_vgpu9(struct svga_context *svga)
       if (svga_surface_needs_propagation(hwfb->zsbuf))
          svga_propagate_surface(svga, hwfb->zsbuf, true);
 
-      if (currfb->zsbuf->base.texture &&
+      if (currfb->zsbuf && currfb->zsbuf->base.texture &&
           util_format_is_depth_and_stencil(currfb->zsbuf->base.format)) {
          ret = SVGA3D_SetRenderTarget(svga->swc, SVGA3D_RT_STENCIL,
                                       currfb->zsbuf);

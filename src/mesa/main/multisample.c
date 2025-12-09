@@ -53,7 +53,7 @@ _mesa_SampleCoverage(GLclampf value, GLboolean invert)
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_MULTISAMPLE_BIT);
-   ctx->NewDriverState |= ST_NEW_SAMPLE_STATE;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_SAMPLE_STATE);
    ctx->Multisample.SampleCoverageValue = value;
    ctx->Multisample.SampleCoverageInvert = invert;
 }
@@ -89,7 +89,8 @@ get_sample_position(struct gl_context *ctx,
 {
    struct st_context *st = st_context(ctx);
 
-   st_validate_state(st, ST_PIPELINE_UPDATE_FB_STATE_MASK);
+   ST_PIPELINE_UPDATE_FB_STATE_MASK(mask);
+   st_validate_state(st, mask);
 
    if (ctx->pipe->get_sample_position)
       ctx->pipe->get_sample_position(ctx->pipe,
@@ -155,7 +156,7 @@ sample_maski(struct gl_context *ctx, GLuint index, GLbitfield mask)
       return;
 
    FLUSH_VERTICES(ctx, 0, 0);
-   ctx->NewDriverState |= ST_NEW_SAMPLE_STATE;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_SAMPLE_STATE);
    ctx->Multisample.SampleMaskValue = mask;
 }
 
@@ -193,7 +194,7 @@ min_sample_shading(struct gl_context *ctx, GLclampf value)
       return;
 
    FLUSH_VERTICES(ctx, 0, GL_MULTISAMPLE_BIT);
-   ctx->NewDriverState |= ctx->DriverFlags.NewSampleShading;
+   ST_SET_STATES(ctx->NewDriverState, ctx->DriverFlags.NewSampleShading);
    ctx->Multisample.MinSampleShadingValue = value;
 }
 
@@ -388,7 +389,7 @@ _mesa_AlphaToCoverageDitherControlNV_no_error(GLenum mode)
    GET_CURRENT_CONTEXT(ctx);
 
    FLUSH_VERTICES(ctx, 0, GL_MULTISAMPLE_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
    ctx->Multisample.SampleAlphaToCoverageDitherControl = mode;
 }
 
@@ -398,7 +399,7 @@ _mesa_AlphaToCoverageDitherControlNV(GLenum mode)
    GET_CURRENT_CONTEXT(ctx);
 
    FLUSH_VERTICES(ctx, 0, GL_MULTISAMPLE_BIT);
-   ctx->NewDriverState |= ST_NEW_BLEND;
+   ST_SET_STATE(ctx->NewDriverState, ST_NEW_BLEND);
    switch (mode) {
       case GL_ALPHA_TO_COVERAGE_DITHER_DEFAULT_NV:
       case GL_ALPHA_TO_COVERAGE_DITHER_ENABLE_NV:
@@ -417,7 +418,8 @@ _mesa_GetProgrammableSampleCaps(struct gl_context *ctx, const struct gl_framebuf
    struct st_context *st = st_context(ctx);
    struct pipe_screen *screen = ctx->pipe->screen;
 
-   st_validate_state(st, ST_PIPELINE_UPDATE_FB_STATE_MASK);
+   ST_PIPELINE_UPDATE_FB_STATE_MASK(mask);
+   st_validate_state(st, mask);
 
    *outBits = 4;
    *outWidth = 1;

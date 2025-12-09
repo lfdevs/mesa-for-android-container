@@ -38,7 +38,7 @@
 static bool
 is_fs_input(const nir_src *src)
 {
-   const nir_instr *parent = src->ssa[0].parent_instr;
+   const nir_instr *parent = nir_def_instr(&src->ssa[0]);
    if (!parent) {
       return false;
    }
@@ -89,7 +89,7 @@ get_nir_input_info(const nir_alu_src *src,
                    int *input_component)
 {
    // The parent instr should be a nir_intrinsic_load_deref.
-   const nir_instr *parent = src->src.ssa[0].parent_instr;
+   const nir_instr *parent = nir_def_instr(&src->src.ssa[0]);
    if (!parent || parent->type != nir_instr_type_intrinsic) {
       return false;
    }
@@ -100,7 +100,7 @@ get_nir_input_info(const nir_alu_src *src,
    }
 
    // The parent of the load should be a type_deref.
-   parent = intrin->src->ssa->parent_instr;
+   parent = nir_def_instr(intrin->src->ssa);
    if (!parent || parent->type != nir_instr_type_deref) {
       return false;
    }
@@ -153,7 +153,7 @@ get_texcoord_provenance(const nir_tex_src *texcoord,
    assert(texcoord->src_type == nir_tex_src_coord);
 
    // The parent instr of the coord should be an nir_op_vec2 alu op
-   const nir_instr *parent = texcoord->src.ssa->parent_instr;
+   const nir_instr *parent = nir_def_instr(texcoord->src.ssa);
    if (!parent || parent->type != nir_instr_type_alu) {
       return false;
    }
@@ -245,7 +245,7 @@ llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
                if (!nir_src_is_const(intrin->src[0]))
                   return false;
                nir_load_const_instr *load =
-                  nir_instr_as_load_const(intrin->src[0].ssa->parent_instr);
+                  nir_def_as_load_const(intrin->src[0].ssa);
                if (load->value[0].u32 != 0 || load->def.num_components > 1)
                   return false;
             } else if (intrin->intrinsic == nir_intrinsic_store_deref) {
@@ -333,7 +333,7 @@ llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
                    */
                   if (nir_src_is_const(alu->src[s].src)) {
                      nir_load_const_instr *load =
-                        nir_instr_as_load_const(alu->src[s].src.ssa->parent_instr);
+                        nir_def_as_load_const(alu->src[s].src.ssa);
                      if (!check_load_const_in_zero_one(load)) {
                         return false;
                      }
@@ -367,7 +367,7 @@ llvmpipe_nir_is_linear_compat(struct nir_shader *shader,
 
    if (util_bitcount64(shader->info.inputs_read) > LP_MAX_LINEAR_INPUTS)
       return false;
-   
+
    if (!shader->info.outputs_written || shader->info.fs.color_is_dual_source ||
        (shader->info.outputs_written & ~BITFIELD64_BIT(FRAG_RESULT_DATA0)))
       return false;

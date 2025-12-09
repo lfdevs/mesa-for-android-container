@@ -154,7 +154,7 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
       break;
 
    default:
-      unreachable("Unknown descriptor set type");
+      UNREACHABLE("Unknown descriptor set type");
    }
    nvk_cmd_dirty_cbufs_for_descriptors(cmd, ~0, 0, 1);
 

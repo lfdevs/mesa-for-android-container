@@ -18,7 +18,6 @@
 
 #define SQTT_BUFFER_ALIGN_SHIFT 12
 
-struct radeon_cmdbuf;
 struct radeon_info;
 
 /**
@@ -34,8 +33,9 @@ struct radeon_info;
  * around each command needed. The primary user of this is RGP.
  */
 struct ac_sqtt {
-   struct radeon_cmdbuf *start_cs[2];
-   struct radeon_cmdbuf *stop_cs[2];
+   /* ac_cmdbuf or radeon_cmdbuf */
+   void *start_cs[2];
+   void *stop_cs[2];
    /* struct radeon_winsys_bo or struct pb_buffer */
    void *bo;
    uint64_t buffer_va;
@@ -258,7 +258,6 @@ enum rgp_sqtt_marker_general_api_type
    ApiCmdDrawMeshTasksIndirectCountEXT = 48,
    ApiCmdDrawMeshTasksIndirectEXT = 49,
 
-   ApiRayTracingSeparateCompiled = 0x800000,
    ApiInvalid = 0xffffffff
 };
 
@@ -328,6 +327,9 @@ enum rgp_sqtt_marker_event_type
    EventCmdDrawMeshTasksIndirectCountEXT = 42,
    EventCmdDrawMeshTasksIndirectEXT = 43,
    EventUnknown = 0x7fff,
+
+   EventRayTracingSeparateCompiled = 0x800000,
+
    EventInvalid = 0xffffffff
 };
 

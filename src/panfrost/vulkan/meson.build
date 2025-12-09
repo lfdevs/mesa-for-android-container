@@ -45,6 +45,7 @@ libpanvk_files = files(
   'panvk_mempool.c',
   'panvk_physical_device.c',
   'panvk_priv_bo.c',
+  'panvk_sparse.c',
   'panvk_utrace.c',
   'panvk_wsi.c',
 )
@@ -71,6 +72,7 @@ avalon_files = []
 jm_archs = [6, 7]
 jm_inc_dir = ['jm']
 jm_files = [
+  'jm/panvk_vX_bind_queue.c',
   'jm/panvk_vX_cmd_buffer.c',
   'jm/panvk_vX_cmd_dispatch.c',
   'jm/panvk_vX_cmd_draw.c',
@@ -84,6 +86,7 @@ jm_files = [
 csf_archs = [10, 12, 13]
 csf_inc_dir = ['csf']
 csf_files = [
+  'csf/panvk_vX_bind_queue.c',
   'csf/panvk_vX_cmd_buffer.c',
   'csf/panvk_vX_cmd_dispatch.c',
   'csf/panvk_vX_cmd_draw.c',
@@ -118,6 +121,7 @@ common_per_arch_files = [
   'panvk_vX_nir_lower_descriptors.c',
   'panvk_vX_sampler.c',
   'panvk_vX_shader.c',
+  sha1_h,
 ]
 
 foreach arch : [6, 7, 10, 12, 13]
@@ -164,6 +168,7 @@ foreach arch : [6, 7, 10, 12, 13]
       idep_libpan_per_arch[arch.to_string()],
     ],
     c_args : [no_override_init_args, panvk_flags, '-DPAN_ARCH=@0@'.format(arch)],
+    gnu_symbol_visibility : 'hidden',
   )
 endforeach
 
@@ -174,6 +179,10 @@ endif
 
 if with_platform_wayland
   panvk_deps += dep_wayland_client
+endif
+
+if with_platform_android
+  libpanvk_files += files('panvk_android.c')
 endif
 
 libvulkan_panfrost = shared_library(
@@ -187,11 +196,9 @@ libvulkan_panfrost = shared_library(
   link_whole : [panvk_per_arch_libs],
   link_with : [
     libpanfrost_shared,
-    libpanfrost_midgard,
-    libpanfrost_bifrost,
     libpanfrost_decode,
     libpanfrost_lib,
-    libpanfrost_util,
+    libpanfrost_compiler,
   ],
   dependencies : [
     dep_dl,
@@ -209,20 +216,36 @@ libvulkan_panfrost = shared_library(
     idep_mesautil,
   ],
   c_args : [no_override_init_args, panvk_flags],
-  link_args : [ld_args_bsymbolic, ld_args_gc_sections, ld_args_build_id],
+  link_args : [vulkan_icd_link_args, ld_args_bsymbolic, ld_args_gc_sections, ld_args_build_id],
+  gnu_symbol_visibility : 'hidden',
   install : true,
 )
+
+if with_symbols_check
+  test(
+    'panvk symbols check',
+    symbols_check,
+    args : [
+      '--lib', libvulkan_panfrost,
+      '--symbols-file', vulkan_icd_symbols,
+      symbols_check_args,
+    ],
+    suite : ['panfrost'],
+  )
+endif
+
+icd_file_name = libname_prefix + 'vulkan_panfrost.' + libname_suffix
 
 panfrost_icd = custom_target(
   'panfrost_icd',
   input : [vk_icd_gen, vk_api_xml],
-  output : 'panfrost_icd.@0@.json'.format(host_machine.cpu()),
+  output : 'panfrost_icd.' + vulkan_manifest_suffix,
   command : [
     prog_python, '@INPUT0@',
     '--api-version', '1.4', '--xml', '@INPUT1@',
     '--sizeof-pointer', sizeof_pointer,
-    '--lib-path', join_paths(get_option('prefix'), get_option('libdir'),
-                             'libvulkan_panfrost.so'),
+    '--icd-lib-path', vulkan_icd_lib_path,
+    '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,
@@ -240,7 +263,8 @@ _dev_icd = custom_target(
     prog_python, '@INPUT0@',
     '--api-version', '1.4', '--xml', '@INPUT1@',
     '--sizeof-pointer', sizeof_pointer,
-    '--lib-path', meson.current_build_dir() / 'libvulkan_panfrost.so',
+    '--icd-lib-path', meson.current_build_dir(),
+    '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,

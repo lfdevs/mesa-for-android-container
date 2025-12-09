@@ -50,7 +50,7 @@ u_tristate_set(enum u_tristate *state, bool value)
       return (value == true);
 
    default:
-      unreachable("Invalid tristate value");
+      UNREACHABLE("Invalid tristate value");
    }
 }
 
@@ -66,7 +66,7 @@ u_tristate_invert(enum u_tristate tri)
    case U_TRISTATE_NO: return U_TRISTATE_YES;
    }
 
-   unreachable("invalid tristate");
+   UNREACHABLE("invalid tristate");
 }
 
 #endif

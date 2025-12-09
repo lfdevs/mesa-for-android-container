@@ -252,9 +252,7 @@ vc4_nir_lower_fs_input(struct vc4_compile *c, nir_builder *b,
                         result = nir_fsub_imm(b, 1.0, result);
 
                 if (result != &intr->def) {
-                        nir_def_rewrite_uses_after(&intr->def,
-                                                       result,
-                                                       result->parent_instr);
+                        nir_def_rewrite_uses_after(&intr->def, result);
                 }
         }
 }

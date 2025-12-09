@@ -19,8 +19,6 @@
 #include "fdl/fd6_format_table.h"
 
 
-BEGINC;
-
 /* Border color layout is diff from a4xx/a5xx.. if it turns out to be
  * the same as a6xx then move this somewhere common ;-)
  *
@@ -49,7 +47,7 @@ struct PACKED fd6_bcolor_entry {
 
 struct fd6_sampler_stateobj {
    struct pipe_sampler_state base;
-   uint32_t texsamp0, texsamp1, texsamp2, texsamp3;
+   uint32_t descriptor[4];
    uint16_t seqno;
 };
 
@@ -61,10 +59,9 @@ fd6_sampler_stateobj(struct pipe_sampler_state *samp)
 
 struct fd6_pipe_sampler_view {
    struct pipe_sampler_view base;
-   struct fd_resource *ptr1, *ptr2;
    uint16_t seqno;
 
-   /* TEX_CONST descriptor, with just offsets from the BOs in the iova dwords. */
+   /* TEX_CONST descriptor */
    uint32_t descriptor[FDL6_TEX_CONST_DWORDS];
 
    /* For detecting when a resource has transitioned from UBWC compressed
@@ -79,6 +76,7 @@ fd6_pipe_sampler_view(struct pipe_sampler_view *pview)
    return (struct fd6_pipe_sampler_view *)pview;
 }
 
+template <chip CHIP>
 void fd6_texture_init(struct pipe_context *pctx);
 void fd6_texture_fini(struct pipe_context *pctx);
 
@@ -109,8 +107,9 @@ struct fd6_texture_state {
    bool invalidate;
 };
 
+template <chip CHIP>
 struct fd6_texture_state *
-fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type) assert_dt;
+fd6_texture_state(struct fd_context *ctx, mesa_shader_stage type) assert_dt;
 
 
 static inline void
@@ -145,7 +144,5 @@ fd6_layout_tex2d_from_buf(struct fdl_layout *layout,
    ASSERTED bool ret = fdl6_layout_image(layout, info, &params, &explicit_layout);
    assert(ret);
 }
-
-ENDC;
 
 #endif /* FD6_TEXTURE_H_ */

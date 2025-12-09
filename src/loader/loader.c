@@ -47,6 +47,7 @@
 #include <GL/gl.h>
 #include "mesa_interface.h"
 #include "loader.h"
+#include "util/drm_is_nouveau.h"
 #include "util/libdrm.h"
 #include "util/os_file.h"
 #include "util/os_misc.h"
@@ -138,11 +139,12 @@ iris_predicate(int fd, const char *driver)
 bool
 nouveau_zink_predicate(int fd, const char *driver)
 {
-#if !defined(HAVE_NVK) || !defined(HAVE_ZINK)
-   if (!strcmp(driver, "zink"))
-      return false;
+#ifndef HAVE_LIBDRM
    return true;
 #else
+   /* Never load on nv proprietary driver */
+   if (!drm_fd_is_nouveau(fd))
+      return false;
 
    bool prefer_zink = false;
    bool require_zink = false;
@@ -448,7 +450,7 @@ static char *drm_get_id_path_tag_for_fd(int fd)
 
 bool loader_get_user_preferred_fd(int *fd_render_gpu, int *original_fd)
 {
-   const char *dri_prime = getenv("DRI_PRIME");
+   const char *dri_prime = os_get_option("DRI_PRIME");
    bool debug = debug_get_bool_option("DRI_PRIME_DEBUG", false);
    char *default_tag = NULL;
    drmDevicePtr devices[MAX_DRM_DEVICES];
@@ -774,7 +776,7 @@ loader_get_driver_for_fd(int fd)
     */
    if (__normal_user()) {
       const char *override = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
-      if (override)
+      if (override && strlen(override))
          return strdup(override);
    }
 

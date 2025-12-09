@@ -233,11 +233,39 @@ bool pvr_tex_format_is_supported(uint32_t tex_format);
 const struct pvr_tex_format_description *
 pvr_get_tex_format_description(uint32_t tex_format);
 
+#define pvr_foreach_supported_tex_format_(format)                             \
+   for (enum ROGUE_TEXSTATE_FORMAT format = 0; format < PVR_TEX_FORMAT_COUNT; \
+        format++)                                                             \
+      if (pvr_tex_format_is_supported(format))
+
+#define pvr_foreach_supported_tex_format(format, desc)     \
+   pvr_foreach_supported_tex_format_ (format)              \
+      for (const struct pvr_tex_format_description *desc = \
+              pvr_get_tex_format_description(format);      \
+           desc;                                           \
+           desc = NULL)
+
 bool pvr_tex_format_compressed_is_supported(uint32_t tex_format);
 
 const struct pvr_tex_format_compressed_description *
 pvr_get_tex_format_compressed_description(uint32_t tex_format);
 
+#define pvr_foreach_supported_tex_format_compressed_(format) \
+   for (enum ROGUE_TEXSTATE_FORMAT_COMPRESSED format = 0;    \
+        format < PVR_TEX_FORMAT_COUNT;                       \
+        format++)                                            \
+      if (pvr_tex_format_compressed_is_supported(format))
+
+#define pvr_foreach_supported_tex_format_compressed(format, desc)     \
+   pvr_foreach_supported_tex_format_compressed_ (format)              \
+      for (const struct pvr_tex_format_compressed_description *desc = \
+              pvr_get_tex_format_compressed_description(format);      \
+           desc;                                                      \
+           desc = NULL)
+
+struct util_format_description;
+const uint8_t *
+pvr_get_format_swizzle_for_tpu(const struct util_format_description *desc);
 const uint8_t *pvr_get_format_swizzle(VkFormat vk_format);
 uint32_t pvr_get_tex_format(VkFormat vk_format);
 uint32_t pvr_get_tex_format_aspect(VkFormat vk_format,
@@ -245,13 +273,16 @@ uint32_t pvr_get_tex_format_aspect(VkFormat vk_format,
 uint32_t pvr_get_pbe_packmode(VkFormat vk_format);
 uint32_t pvr_get_pbe_accum_format(VkFormat vk_format);
 uint32_t pvr_get_pbe_accum_format_size_in_bytes(VkFormat vk_format);
-bool pvr_format_is_pbe_downscalable(VkFormat vk_format);
+bool pvr_format_is_pbe_downscalable(const struct pvr_device_info *dev_info,
+                                    VkFormat vk_format);
 
 void pvr_get_hw_clear_color(VkFormat vk_format,
                             VkClearColorValue value,
                             uint32_t packed_out[static const 4]);
 
 uint32_t pvr_pbe_pixel_num_loads(enum pvr_transfer_pbe_pixel_src pbe_format);
+bool pvr_pbe_pixel_is_norm(enum pvr_transfer_pbe_pixel_src pbe_format);
+uint32_t pvr_pbe_pixel_size(enum pvr_transfer_pbe_pixel_src pbe_format);
 
 static inline bool pvr_vk_format_has_32bit_component(VkFormat vk_format)
 {

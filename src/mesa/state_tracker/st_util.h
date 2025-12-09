@@ -108,37 +108,25 @@ st_point_size_per_vertex(struct gl_context *ctx)
 }
 
 static inline void
-st_validate_state(struct st_context *st, uint64_t pipeline_state_mask)
+st_validate_state(struct st_context *st, const st_state_bitset pipeline_state_mask)
 {
    struct gl_context *ctx = st->ctx;
 
    /* Inactive states are shader states not used by shaders at the moment. */
-   uint64_t dirty = ctx->NewDriverState & st->active_states & pipeline_state_mask;
+   st_state_bitset dirty;
+   BITSET_COPY(dirty, pipeline_state_mask);
+   BITSET_AND(dirty, dirty, ctx->NewDriverState);
+   BITSET_AND(dirty, dirty, st->active_states);
 
-   if (dirty) {
-      ctx->NewDriverState &= ~dirty;
+   if (!BITSET_IS_EMPTY(dirty)) {
+      BITSET_ANDNOT(ctx->NewDriverState, ctx->NewDriverState, dirty);
 
       /* Execute functions that set states that have been changed since
        * the last draw.
-       *
-       * x86_64: u_bit_scan64 is negligibly faster than u_bit_scan
-       * i386:   u_bit_scan64 is noticably slower than u_bit_scan
        */
-      st_update_func_t *update_state = st->update_functions;
-
-      if (sizeof(void*) == 8) {
-         while (dirty)
-            update_state[u_bit_scan64(&dirty)](st);
-      } else {
-         /* Split u_bit_scan64 into 2x u_bit_scan32 for i386. */
-         uint32_t dirty_lo = dirty;
-         uint32_t dirty_hi = dirty >> 32;
-
-         while (dirty_lo)
-            update_state[u_bit_scan(&dirty_lo)](st);
-         while (dirty_hi)
-            update_state[32 + u_bit_scan(&dirty_hi)](st);
-      }
+      unsigned i;
+      BITSET_FOREACH_SET(i, dirty, ST_NUM_ATOMS)
+         st->update_functions[i](st);
    }
 }
 

@@ -353,6 +353,46 @@ clear_color_is_fully_zero(const struct iris_resource *res)
           res->aux.clear_color.u32[3] == 0;
 }
 
+static bool
+try_hw_blitter_copy(struct iris_context *ice,
+                    const struct intel_device_info *devinfo,
+                    const struct pipe_blit_info *info)
+{
+   struct iris_resource *src_res =
+      iris_resource_for_aspect(info->src.resource, PIPE_MASK_RGBA);
+   struct iris_resource *dst_res =
+      iris_resource_for_aspect(info->dst.resource, PIPE_MASK_RGBA);
+   enum pipe_format src_pfmt =
+      pipe_format_for_aspect(info->src.format, PIPE_MASK_RGBA);
+   enum pipe_format dst_pfmt =
+      pipe_format_for_aspect(info->dst.format, PIPE_MASK_RGBA);
+   struct iris_format_info src_fmt =
+      iris_format_for_usage(devinfo, src_pfmt, ISL_SURF_USAGE_BLITTER_SRC_BIT);
+   struct iris_format_info dst_fmt =
+      iris_format_for_usage(devinfo, dst_pfmt, ISL_SURF_USAGE_BLITTER_DST_BIT);
+   enum isl_aux_usage src_aux_usage =
+      iris_resource_render_aux_usage(ice, src_res, src_fmt.fmt,
+                                     info->src.level, false);
+   enum isl_aux_usage dst_aux_usage =
+      iris_resource_render_aux_usage(ice, dst_res, dst_fmt.fmt,
+                                     info->dst.level, false);
+
+   if (!blorp_copy_supports_blitter(&ice->blorp,
+                                    &src_res->surf, &dst_res->surf,
+                                    src_aux_usage, dst_aux_usage)) {
+      return false;
+   }
+
+   assert(!info->render_condition_enable);
+   assert(util_can_blit_via_copy_region(info, false, false));
+   iris_copy_region(&ice->blorp, &ice->batches[IRIS_BATCH_BLITTER],
+                    info->dst.resource, info->dst.level,
+                    info->dst.box.x, info->dst.box.y, info->dst.box.z,
+                    info->src.resource, info->src.level,
+                    &info->src.box);
+   return true;
+}
+
 /**
  * The pipe->blit() driver hook.
  *
@@ -404,14 +444,8 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
    /* Do DRI PRIME blits on the hardware blitter on Gfx12+ */
    if (devinfo->ver >= 12 &&
        (info->dst.resource->bind & PIPE_BIND_PRIME_BLIT_DST)) {
-      assert(!info->render_condition_enable);
-      assert(util_can_blit_via_copy_region(info, false, false));
-      iris_copy_region(&ice->blorp, &ice->batches[IRIS_BATCH_BLITTER],
-                       info->dst.resource, info->dst.level,
-                       info->dst.box.x, info->dst.box.y, info->dst.box.z,
-                       info->src.resource, info->src.level,
-                       &info->src.box);
-      return;
+      if (try_hw_blitter_copy(ice, devinfo, info))
+         return;
    }
 
    if (abs(info->dst.box.width) == abs(info->src.box.width) &&

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "error_decode_lib.h"
+#include "intel/common/intel_gem.h"
 #include "util/macros.h"
 
 static const char *
@@ -210,7 +211,12 @@ static void
 xe_vm_entry_set(struct xe_vm_entry *entry, const uint64_t address,
                 const uint32_t length, const uint32_t *data)
 {
-   entry->address = address;
+   /* Newer versions of Xe KMD will give us the canonical VMA address while
+    * older will give us 48b address.
+    * intel_batch_decoder.c convert addresses to 48b address before calling
+    * get_bo() so here converting all VMA addresses to 48b.
+    */
+   entry->address = intel_48b_address(address);
    entry->length = length;
    entry->data = data;
 }

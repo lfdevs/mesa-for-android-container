@@ -630,45 +630,6 @@ BEGIN_TEST(assembler.mubuf)
          ->mubuf()
          .tfe = true;
 
-      /* LDS */
-      if (gfx == GFX11) {
-         //~gfx11! buffer_load_lds_b32 off, s[32:35], 0                        ; e0c40000 80080080
-         bld.mubuf(aco_opcode::buffer_load_dword, op_s4, Operand(v1), Operand::zero(), op_m0, 0,
-                   false)
-            ->mubuf()
-            .lds = true;
-
-         //~gfx11! buffer_load_lds_i8 off, s[32:35], 0                         ; e0b80000 80080080
-         bld.mubuf(aco_opcode::buffer_load_sbyte, op_s4, Operand(v1), Operand::zero(), op_m0, 0,
-                   false)
-            ->mubuf()
-            .lds = true;
-
-         //~gfx11! buffer_load_lds_i16 off, s[32:35], 0                        ; e0c00000 80080080
-         bld.mubuf(aco_opcode::buffer_load_sshort, op_s4, Operand(v1), Operand::zero(), op_m0, 0,
-                   false)
-            ->mubuf()
-            .lds = true;
-
-         //~gfx11! buffer_load_lds_u8 off, s[32:35], 0                         ; e0b40000 80080080
-         bld.mubuf(aco_opcode::buffer_load_ubyte, op_s4, Operand(v1), Operand::zero(), op_m0, 0,
-                   false)
-            ->mubuf()
-            .lds = true;
-
-         //~gfx11! buffer_load_lds_u16 off, s[32:35], 0                        ; e0bc0000 80080080
-         bld.mubuf(aco_opcode::buffer_load_ushort, op_s4, Operand(v1), Operand::zero(), op_m0, 0,
-                   false)
-            ->mubuf()
-            .lds = true;
-
-         //~gfx11! buffer_load_lds_format_x off, s[32:35], 0                   ; e0c80000 80080080
-         bld.mubuf(aco_opcode::buffer_load_format_x, op_s4, Operand(v1), Operand::zero(), op_m0, 0,
-                   false)
-            ->mubuf()
-            .lds = true;
-      }
-
       /* Stores */
       //~gfx11! buffer_store_b32 v10, off, s[32:35], s30                    ; e0680000 1e080a80
       //~gfx12! buffer_store_b32 v10, off, s[32:35], s30                    ; c406801e 0080400a 00000000
@@ -1162,16 +1123,28 @@ BEGIN_TEST(assembler.vinterp)
          ->vinterp_inreg()
          .neg[2] = true;
 
-      //! v_interp_p10_f16_f32 v42, v10, v20, v30 op_sel:[1,0,0,0] wait_exp:6 ; cd020e2a 047a290a
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_interp_p10_f16_f32 v42, v10, v20, v30 op_sel:[1,0,0,0] wait_exp:6 ; cd020e2a 047a290a')
+      //; else:
+      //;    insert_pattern('v_interp_p10_f16_f32 v42, v10.h, v20, v30.l op_sel:[1,0,0,0] wait_exp:6 ; cd020e2a 047a290a')
       bld.vinterp_inreg(aco_opcode::v_interp_p10_f16_f32_inreg, dst, op0, op1, op2, 0x1, 6);
 
-      //! v_interp_p2_f16_f32 v42, v10, v20, v30 op_sel:[0,1,0,0] wait_exp:6 ; cd03162a 047a290a
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_interp_p2_f16_f32 v42, v10, v20, v30 op_sel:[0,1,0,0] wait_exp:6 ; cd03162a 047a290a')
+      //; else:
+      //;    insert_pattern('v_interp_p2_f16_f32 v42.l, v10.l, v20, v30 op_sel:[0,1,0,0] wait_exp:6 ; cd03162a 047a290a')
       bld.vinterp_inreg(aco_opcode::v_interp_p2_f16_f32_inreg, dst, op0, op1, op2, 0x2, 6);
 
-      //! v_interp_p10_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,1,0] wait_exp:6 ; cd04262a 047a290a
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_interp_p10_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,1,0] wait_exp:6 ; cd04262a 047a290a')
+      //; else:
+      //;    insert_pattern('v_interp_p10_rtz_f16_f32 v42, v10.l, v20, v30.h op_sel:[0,0,1,0] wait_exp:6 ; cd04262a 047a290a')
       bld.vinterp_inreg(aco_opcode::v_interp_p10_rtz_f16_f32_inreg, dst, op0, op1, op2, 0x4, 6);
 
-      //! v_interp_p2_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,0,1] wait_exp:6 ; cd05462a 047a290a
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_interp_p2_rtz_f16_f32 v42, v10, v20, v30 op_sel:[0,0,0,1] wait_exp:6 ; cd05462a 047a290a')
+      //; else:
+      //;    insert_pattern('v_interp_p2_rtz_f16_f32 v42.h, v10.l, v20, v30 op_sel:[0,0,0,1] wait_exp:6 ; cd05462a 047a290a')
       bld.vinterp_inreg(aco_opcode::v_interp_p2_rtz_f16_f32_inreg, dst, op0, op1, op2, 0x8, 6);
 
       //! v_interp_p10_f32 v42, v10, v20, v30 clamp wait_exp:6        ; cd00862a 047a290a
@@ -1268,69 +1241,128 @@ BEGIN_TEST(assembler.vop12c_v128)
       //>> BB0:
       //; if llvm_ver == 16:
       //;    insert_pattern('v_mul_f16_e32 v0, v1, v2 ; Error: VGPR_32_Lo128: unknown register 128 ; 6a000501')
-      //; else:
+      //; elif llvm_ver < 20:
       //;    insert_pattern('v_mul_f16_e32 v0, v1, v2                                    ; 6a000501')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e32 v0.l, v1.l, v2.l                              ; 6a000501')
       bld.vop2(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v2);
 
-      //! v_mul_f16_e64 v128, v1, v2                                  ; d5350080 00020501
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64 v128, v1, v2                                  ; d5350080 00020501')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64 v128.l, v1.l, v2.l                            ; d5350080 00020501')
       bld.vop2(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2);
 
-      //! v_mul_f16_e64 v0, v129, v2                                  ; d5350000 00020581
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64 v0, v129, v2                                  ; d5350000 00020581')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64 v0.l, v129.l, v2.l                            ; d5350000 00020581')
       bld.vop2(aco_opcode::v_mul_f16, dst_v0, op_v129, op_v2);
 
-      //! v_mul_f16_e64 v0, v1, v130                                  ; d5350000 00030501
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64 v0, v1, v130                                  ; d5350000 00030501')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64 v0.l, v1.l, v130.l                            ; d5350000 00030501')
       bld.vop2(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v130);
 
-      //! v_rcp_f16_e64 v128, v1                                      ; d5d40080 00000101
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_rcp_f16_e64 v128, v1                                      ; d5d40080 00000101')
+      //; else:
+      //;    insert_pattern('v_rcp_f16_e64 v128.l, v1.l                                  ; d5d40080 00000101')
       bld.vop1(aco_opcode::v_rcp_f16, dst_v128, op_v1);
 
-      //! v_cmp_eq_f16_e64 vcc, v129, v2                              ; d402006a 00020581
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_cmp_eq_f16_e64 vcc, v129, v2                              ; d402006a 00020581')
+      //; else:
+      //;    insert_pattern('v_cmp_eq_f16_e64 vcc, v129.l, v2.l                          ; d402006a 00020581')
       bld.vopc(aco_opcode::v_cmp_eq_f16, bld.def(s2, vcc), op_v129, op_v2);
 
-      //! v_mul_f16_e64_dpp v128, v1, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 000204fa ff0d2101
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128, v1, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 000204fa ff0d2101')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, v1.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 000204fa ff0d2101')
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2, dpp_row_rr(1));
 
-      //! v_mul_f16_e64_dpp v0, v129, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000204fa ff0d2181
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0, v129, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000204fa ff0d2181')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v129.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000204fa ff0d2181')
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v0, op_v129, op_v2, dpp_row_rr(1));
 
-      //! v_mul_f16_e64_dpp v0, v1, v130 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000304fa ff0d2101
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0, v1, v130 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000304fa ff0d2101')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v1.l, v130.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000304fa ff0d2101')
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v130, dpp_row_rr(1));
 
-      //! v_mul_f16_e64_dpp v128, v1, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350080 000204ea 00000001
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128, v1, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350080 000204ea 00000001')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, v1.l, v2.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350080 000204ea 00000001')
       bld.vop2_dpp8(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2);
 
-      //! v_mul_f16_e64_dpp v0, v129, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000204ea 00000081
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0, v129, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000204ea 00000081')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v129.l, v2.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000204ea 00000081')
       bld.vop2_dpp8(aco_opcode::v_mul_f16, dst_v0, op_v129, op_v2);
 
-      //! v_mul_f16_e64_dpp v0, v1, v130 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000304ea 00000001
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0, v1, v130 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000304ea 00000001')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v1.l, v130.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000304ea 00000001')
       bld.vop2_dpp8(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v130);
 
-      //! v_fma_f16 v128, v1, v2, 0x60                                ; d6480080 03fe0501 00000060
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_fma_f16 v128, v1, v2, 0x60                                ; d6480080 03fe0501 00000060')
+      //; else:
+      //;    insert_pattern('v_fma_f16 v128.l, v1.l, v2.l, 0x60                          ; d6480080 03fe0501 00000060')
       bld.vop2(aco_opcode::v_fmaak_f16, dst_v128, op_v1, op_v2, Operand::literal32(96));
 
-      //! v_fma_f16 v128, v1, 0x60, v2                                ; d6480080 0409ff01 00000060
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_fma_f16 v128, v1, 0x60, v2                                ; d6480080 0409ff01 00000060')
+      //; else:
+      //;    insert_pattern('v_fma_f16 v128.l, v1.l, 0x60, v2.l                          ; d6480080 0409ff01 00000060')
       bld.vop2(aco_opcode::v_fmamk_f16, dst_v128, op_v1, op_v2, Operand::literal32(96));
 
-      //! v_rcp_f16_e64_dpp v128, -v1 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40080 200000fa ff1d2101
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_rcp_f16_e64_dpp v128, -v1 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40080 200000fa ff1d2101')
+      //; else:
+      //;    insert_pattern('v_rcp_f16_e64_dpp v128.l, -v1.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40080 200000fa ff1d2101')
       bld.vop1_dpp(aco_opcode::v_rcp_f16, dst_v128, op_v1, dpp_row_rr(1))->dpp16().neg[0] = true;
 
-      //! v_rcp_f16_e64_dpp v128, |v1| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40180 000000fa ff2d2101
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_rcp_f16_e64_dpp v128, |v1| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40180 000000fa ff2d2101')
+      //; else:
+      //;    insert_pattern('v_rcp_f16_e64_dpp v128.l, |v1.l| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40180 000000fa ff2d2101')
       bld.vop1_dpp(aco_opcode::v_rcp_f16, dst_v128, op_v1, dpp_row_rr(1))->dpp16().abs[0] = true;
 
-      //! v_mul_f16_e64_dpp v128, -v1, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 200204fa ff1d2101
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128, -v1, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 200204fa ff1d2101')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, -v1.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 200204fa ff1d2101')
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2, dpp_row_rr(1))->dpp16().neg[0] =
          true;
 
-      //! v_mul_f16_e64_dpp v128, |v1|, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350180 000204fa ff2d2101
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128, |v1|, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350180 000204fa ff2d2101')
+      //; else:
+      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, |v1.l|, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350180 000204fa ff2d2101')
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2, dpp_row_rr(1))->dpp16().abs[0] =
          true;
 
-      //! v_cmp_eq_f16_e64_dpp vcc, -v129, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402006a 200204fa ff1d2181
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, -v129, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402006a 200204fa ff1d2181')
+      //; else:
+      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, -v129.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402006a 200204fa ff1d2181')
       bld.vopc_dpp(aco_opcode::v_cmp_eq_f16, bld.def(s2, vcc), op_v129, op_v2, dpp_row_rr(1))
          ->dpp16()
          .neg[0] = true;
 
-      //! v_cmp_eq_f16_e64_dpp vcc, |v129|, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402016a 000204fa ff2d2181
+      //; if llvm_ver < 20:
+      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, |v129|, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402016a 000204fa ff2d2181')
+      //; else:
+      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, |v129.l|, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402016a 000204fa ff2d2181')
       bld.vopc_dpp(aco_opcode::v_cmp_eq_f16, bld.def(s2, vcc), op_v129, op_v2, dpp_row_rr(1))
          ->dpp16()
          .abs[0] = true;

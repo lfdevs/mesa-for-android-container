@@ -270,22 +270,22 @@ util_blit_save_state(struct d3d12_context *ctx)
    util_blitter_save_vertex_elements(ctx->blitter, ctx->gfx_pipeline_state.ves);
    util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
    util_blitter_save_rasterizer(ctx->blitter, ctx->gfx_pipeline_state.rast);
-   util_blitter_save_fragment_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_FRAGMENT]);
-   util_blitter_save_vertex_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_VERTEX]);
-   util_blitter_save_geometry_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_GEOMETRY]);
-   util_blitter_save_tessctrl_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_TESS_CTRL]);
-   util_blitter_save_tesseval_shader(ctx->blitter, ctx->gfx_stages[PIPE_SHADER_TESS_EVAL]);
+   util_blitter_save_fragment_shader(ctx->blitter, ctx->gfx_stages[MESA_SHADER_FRAGMENT]);
+   util_blitter_save_vertex_shader(ctx->blitter, ctx->gfx_stages[MESA_SHADER_VERTEX]);
+   util_blitter_save_geometry_shader(ctx->blitter, ctx->gfx_stages[MESA_SHADER_GEOMETRY]);
+   util_blitter_save_tessctrl_shader(ctx->blitter, ctx->gfx_stages[MESA_SHADER_TESS_CTRL]);
+   util_blitter_save_tesseval_shader(ctx->blitter, ctx->gfx_stages[MESA_SHADER_TESS_EVAL]);
 
    util_blitter_save_framebuffer(ctx->blitter, &ctx->fb);
    util_blitter_save_viewport(ctx->blitter, ctx->viewport_states);
    util_blitter_save_scissor(ctx->blitter, ctx->scissor_states);
    util_blitter_save_fragment_sampler_states(ctx->blitter,
-                                             ctx->num_samplers[PIPE_SHADER_FRAGMENT],
-                                             (void **)ctx->samplers[PIPE_SHADER_FRAGMENT]);
+                                             ctx->num_samplers[MESA_SHADER_FRAGMENT],
+                                             (void **)ctx->samplers[MESA_SHADER_FRAGMENT]);
    util_blitter_save_fragment_sampler_views(ctx->blitter,
-                                            ctx->num_sampler_views[PIPE_SHADER_FRAGMENT],
-                                            ctx->sampler_views[PIPE_SHADER_FRAGMENT]);
-   util_blitter_save_fragment_constant_buffer_slot(ctx->blitter, ctx->cbufs[PIPE_SHADER_FRAGMENT]);
+                                            ctx->num_sampler_views[MESA_SHADER_FRAGMENT],
+                                            ctx->sampler_views[MESA_SHADER_FRAGMENT]);
+   util_blitter_save_fragment_constant_buffer_slot(ctx->blitter, ctx->cbufs[MESA_SHADER_FRAGMENT]);
    util_blitter_save_vertex_buffers(ctx->blitter, ctx->vbs, ctx->num_vbs);
    util_blitter_save_sample_mask(ctx->blitter, ctx->gfx_pipeline_state.sample_mask, 0);
    util_blitter_save_so_targets(ctx->blitter, ctx->gfx_pipeline_state.num_so_targets, ctx->so_targets,
@@ -502,8 +502,8 @@ resolve_stencil_to_temp(struct d3d12_context *ctx,
    void *sampler_state = get_sampler_state(ctx);
 
    util_blit_save_state(ctx);
-   pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT, 0, 1, 0, &src_view);
-   pctx->bind_sampler_states(pctx, PIPE_SHADER_FRAGMENT, 0, 1, &sampler_state);
+   pctx->set_sampler_views(pctx, MESA_SHADER_FRAGMENT, 0, 1, 0, &src_view);
+   pctx->bind_sampler_states(pctx, MESA_SHADER_FRAGMENT, 0, 1, &sampler_state);
    util_blitter_custom_shader(ctx->blitter, &dst_tmpl,
                               (uint16_t)pipe_surface_width(&dst_tmpl),
                               (uint16_t)pipe_surface_height(&dst_tmpl),

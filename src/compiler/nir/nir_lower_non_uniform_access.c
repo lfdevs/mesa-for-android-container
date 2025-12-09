@@ -177,7 +177,7 @@ add_non_uniform_instr(struct nu_state *state, struct nu_handle *handles,
       key.instr_index = instr->index;
 
    for (uint32_t i = 0; i < handle_count; i++)
-      key.handle_indixes[i] = handles[i].handle->parent_instr->index;
+      key.handle_indixes[i] = nir_def_instr(handles[i].handle)->index;
 
    struct hash_entry *entry = _mesa_hash_table_search(state->accesses, &key);
    if (!entry) {
@@ -200,7 +200,7 @@ add_non_uniform_instr(struct nu_state *state, struct nu_handle *handles,
    for (uint32_t i = 0; i < handle_count; i++)
       src.srcs[i] = srcs[i];
 
-   util_dynarray_append(&data->srcs, struct nu_handle_src, src);
+   util_dynarray_append(&data->srcs, src);
 }
 
 static bool

@@ -3,13 +3,13 @@
 # © Collabora Limited
 # Author: Guilherme Gallo <guilherme.gallo@collabora.com>
 
-# This script runs unit/integration tests related with LAVA CI tools
+# This script runs unit/integration tests for CI tools
 # shellcheck disable=SC1091 # The relative paths in this file only become valid at runtime.
 # shellcheck disable=SC2086 # quoting PYTEST_VERBOSE makes us pass an empty path
 
 set -eu
 
-PYTHON_BIN="python3.11"
+PYTHON_BIN="python3.13"
 
 if [ -z "${SCRIPTS_DIR:-}" ]; then
     SCRIPTS_DIR="$(dirname "${0}")"
@@ -25,12 +25,7 @@ if [ -z "${CI_PROJECT_DIR:-}" ]; then
     CI_PROJECT_DIR="$(dirname "${0}")/../"
 fi
 
-if [ -z "${CI_JOB_TIMEOUT:-}" ]; then
-    # Export this default value, 1 hour in seconds, to test the lava job submitter
-    export CI_JOB_TIMEOUT=3600
-fi
-
-# If running outside of the debian/x86_64_pyutils container,
+# If running outside of the debian/arm64_build container,
 # run in a virtual environment for isolation
 # e.g. USE_VENV=true ./.gitlab-ci/run-pytest.sh
 if [ "${USE_VENV:-}" == true ]; then
@@ -41,13 +36,12 @@ if [ "${USE_VENV:-}" == true ]; then
     ${PYTHON_BIN} -m pip install --break-system-packages -r "${CI_PROJECT_DIR}/bin/ci/test/requirements.txt"
 fi
 
-LIB_TEST_DIR=${CI_PROJECT_DIR}/.gitlab-ci/lava/tests
 SCRIPT_TEST_DIR=${CI_PROJECT_DIR}/bin/ci
 
 uncollapsed_section_start pytest "Running pytest"
 
-PYTHONPATH="${LIB_TEST_DIR}:${SCRIPT_TEST_DIR}:${PYTHONPATH:-}" ${PYTHON_BIN} -m \
-    pytest "${LIB_TEST_DIR}" "${SCRIPT_TEST_DIR}" \
+PYTHONPATH="${SCRIPT_TEST_DIR}:${PYTHONPATH:-}" ${PYTHON_BIN} -m \
+    pytest "${SCRIPT_TEST_DIR}" \
             -W ignore::DeprecationWarning \
             --junitxml=artifacts/ci_scripts_report.xml \
             -m 'not slow' \
@@ -58,5 +52,5 @@ section_end pytest
 section_start flake8 "flake8"
 ${PYTHON_BIN} -m flake8 \
 --config "${CI_PROJECT_DIR}/.gitlab-ci/.flake8" \
-"${LIB_TEST_DIR}" "${SCRIPT_TEST_DIR}"
+"${SCRIPT_TEST_DIR}"
 section_end flake8

@@ -47,8 +47,7 @@
 void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
                                   uint32_t *enabled_buffers,
                                   const struct pipe_vertex_buffer *src,
-                                  unsigned count,
-                                  bool take_ownership)
+                                  unsigned count)
 {
    unsigned last_count = util_last_bit(*enabled_buffers);
    uint32_t bitmask = 0;
@@ -61,10 +60,7 @@ void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
          if (src[i].buffer.resource)
             bitmask |= 1 << i;
 
-         pipe_vertex_buffer_unreference(&dst[i]);
-
-         if (!take_ownership && !src[i].is_user_buffer)
-            pipe_resource_reference(&dst[i].buffer.resource, src[i].buffer.resource);
+         pipe_vertex_buffer_reference(&dst[i], &src[i]);
       }
 
       /* Copy over the other members of pipe_vertex_buffer. */
@@ -84,8 +80,7 @@ void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
 void util_set_vertex_buffers_count(struct pipe_vertex_buffer *dst,
                                    unsigned *dst_count,
                                    const struct pipe_vertex_buffer *src,
-                                   unsigned count,
-                                   bool take_ownership)
+                                   unsigned count)
 {
    uint32_t enabled_buffers = 0;
 
@@ -94,8 +89,7 @@ void util_set_vertex_buffers_count(struct pipe_vertex_buffer *dst,
          enabled_buffers |= (1ull << i);
    }
 
-   util_set_vertex_buffers_mask(dst, &enabled_buffers, src, count,
-                                take_ownership);
+   util_set_vertex_buffers_mask(dst, &enabled_buffers, src, count);
 
    *dst_count = util_last_bit(enabled_buffers);
 }
@@ -149,7 +143,7 @@ util_upload_index_buffer(struct pipe_context *pipe,
 {
    unsigned start_offset = draw->start * info->index_size;
 
-   u_upload_data(pipe->stream_uploader, start_offset,
+   u_upload_data_ref(pipe->stream_uploader, start_offset,
                  draw->count * info->index_size, alignment,
                  (char*)info->index.user + start_offset,
                  out_offset, out_buffer);

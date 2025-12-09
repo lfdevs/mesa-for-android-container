@@ -125,6 +125,18 @@ const char *rnndec_decode_enum(struct rnndeccontext *ctx, const char *enumname, 
 	return NULL;
 }
 
+int rnndec_decode_enum_value(struct rnndeccontext *ctx, const char *enumname, const char *enumval)
+{
+	struct rnnenum *en = rnn_findenum (ctx->db, enumname);
+	if (en) {
+      for (int i = 0; i < en->valsnum; i++)
+         if (rnndec_varmatch(ctx, &en->vals[i]->varinfo) &&
+               en->vals[i]->valvalid && !strcmp(en->vals[i]->name, enumval))
+            return en->vals[i]->value;
+	}
+	return -1;
+}
+
 /* The name UNK%u is used as a placeholder for bitfields that exist but
  * have an unknown function.
  */

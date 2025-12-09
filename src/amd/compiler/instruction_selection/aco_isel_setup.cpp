@@ -129,7 +129,7 @@ sanitize_cf_list(nir_function_impl* impl, struct exec_list* cf_list)
           * from the loop header are live. Handle this without complicating the ACO IR by creating a
           * dummy break.
           */
-         if (nir_cf_node_cf_tree_next(&loop->cf_node)->predecessors->entries == 0) {
+         if (nir_cf_node_cf_tree_next(&loop->cf_node)->predecessors.entries == 0) {
             nir_builder b = nir_builder_create(impl);
             b.cursor = nir_after_block_before_jump(nir_loop_last_block(loop));
 
@@ -143,7 +143,7 @@ sanitize_cf_list(nir_function_impl* impl, struct exec_list* cf_list)
          }
          break;
       }
-      case nir_cf_node_function: unreachable("Invalid cf type");
+      case nir_cf_node_function: UNREACHABLE("Invalid cf type");
       }
    }
 
@@ -160,7 +160,7 @@ apply_nuw_to_ssa(isel_context* ctx, nir_def* ssa)
    if (!nir_scalar_is_alu(scalar) || nir_scalar_alu_op(scalar) != nir_op_iadd)
       return;
 
-   nir_alu_instr* add = nir_instr_as_alu(ssa->parent_instr);
+   nir_alu_instr* add = nir_def_as_alu(ssa);
 
    if (add->no_unsigned_wrap)
       return;
@@ -172,9 +172,8 @@ apply_nuw_to_ssa(isel_context* ctx, nir_def* ssa)
       std::swap(src0, src1);
    }
 
-   uint32_t src1_ub = nir_unsigned_upper_bound(ctx->shader, ctx->range_ht, src1, &ctx->ub_config);
-   add->no_unsigned_wrap =
-      !nir_addition_might_overflow(ctx->shader, ctx->range_ht, src0, src1_ub, &ctx->ub_config);
+   uint32_t src1_ub = nir_unsigned_upper_bound(ctx->shader, ctx->range_ht, src1);
+   add->no_unsigned_wrap = !nir_addition_might_overflow(ctx->shader, ctx->range_ht, src0, src1_ub);
 }
 
 void
@@ -203,8 +202,11 @@ apply_nuw_to_offsets(isel_context* ctx, nir_function_impl* impl)
                apply_nuw_to_ssa(ctx, intrin->src[2].ssa);
             break;
          case nir_intrinsic_load_scratch: apply_nuw_to_ssa(ctx, intrin->src[0].ssa); break;
-         case nir_intrinsic_store_scratch:
-         case nir_intrinsic_load_smem_amd: apply_nuw_to_ssa(ctx, intrin->src[1].ssa); break;
+         case nir_intrinsic_store_scratch: apply_nuw_to_ssa(ctx, intrin->src[1].ssa); break;
+         case nir_intrinsic_load_global_amd:
+            if (nir_intrinsic_access(intrin) & ACCESS_SMEM_AMD)
+               apply_nuw_to_ssa(ctx, intrin->src[1].ssa);
+            break;
          default: break;
          }
       }
@@ -228,28 +230,11 @@ setup_tcs_info(isel_context* ctx)
 }
 
 void
-setup_lds_size(isel_context* ctx, nir_shader* nir)
-{
-   /* TCS and GFX9 GS are special cases, already in units of the allocation granule. */
-   if (ctx->stage.has(SWStage::TCS))
-      ctx->program->config->lds_size = ctx->program->info.tcs.num_lds_blocks;
-   else if (ctx->stage.hw == AC_HW_LEGACY_GEOMETRY_SHADER && ctx->options->gfx_level >= GFX9)
-      ctx->program->config->lds_size = ctx->program->info.gfx9_gs_ring_lds_size;
-   else
-      ctx->program->config->lds_size =
-         DIV_ROUND_UP(nir->info.shared_size, ctx->program->dev.lds_encoding_granule);
-
-   /* Make sure we fit the available LDS space. */
-   assert((ctx->program->config->lds_size * ctx->program->dev.lds_encoding_granule) <=
-          ctx->program->dev.lds_limit);
-}
-
-void
 setup_nir(isel_context* ctx, nir_shader* nir)
 {
    nir_convert_to_lcssa(nir, true, false);
    if (nir_lower_phis_to_scalar(nir, ac_nir_lower_phis_to_scalar_cb, NULL)) {
-      nir_copy_prop(nir);
+      nir_opt_copy_prop(nir);
       nir_opt_dce(nir);
    }
 
@@ -340,6 +325,23 @@ skip_uniformize_merge_phi(nir_def* ssa, unsigned depth)
    return true;
 }
 
+bool
+intrinsic_try_skip_helpers(nir_intrinsic_instr* intr, UNUSED void* data)
+{
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_load_ubo:
+   case nir_intrinsic_load_constant:
+   case nir_intrinsic_load_scratch:
+   case nir_intrinsic_load_global_amd:
+   case nir_intrinsic_bindless_image_load:
+   case nir_intrinsic_bindless_image_fragment_mask_load_amd:
+   case nir_intrinsic_bindless_image_sparse_load:
+      return !(nir_intrinsic_access(intr) & ACCESS_SMEM_AMD);
+   default: return false;
+   }
+}
+
 } /* end namespace */
 
 void
@@ -348,24 +350,27 @@ init_context(isel_context* ctx, nir_shader* shader)
    nir_function_impl* impl = nir_shader_get_entrypoint(shader);
    ctx->shader = shader;
 
+   assert(shader->info.max_subgroup_size >= ctx->program->wave_size);
+   assert(shader->info.min_subgroup_size <= ctx->program->wave_size);
+   shader->info.max_subgroup_size = ctx->program->wave_size;
+   shader->info.min_subgroup_size = ctx->program->wave_size;
+
    /* Init NIR range analysis. */
    ctx->range_ht = _mesa_pointer_hash_table_create(NULL);
-   ctx->ub_config.min_subgroup_size = ctx->program->wave_size;
-   ctx->ub_config.max_subgroup_size = ctx->program->wave_size;
-   ctx->ub_config.max_workgroup_invocations = 2048;
-   ctx->ub_config.max_workgroup_count[0] = 4294967295;
-   ctx->ub_config.max_workgroup_count[1] = 65535;
-   ctx->ub_config.max_workgroup_count[2] = 65535;
-   ctx->ub_config.max_workgroup_size[0] = 1024;
-   ctx->ub_config.max_workgroup_size[1] = 1024;
-   ctx->ub_config.max_workgroup_size[2] = 1024;
+   ctx->numlsb_ht = _mesa_pointer_hash_table_create(NULL);
 
    uint32_t options =
       shader->options->divergence_analysis_options | nir_divergence_ignore_undef_if_phi_srcs;
    nir_divergence_analysis_impl(impl, (nir_divergence_options)options);
 
    apply_nuw_to_offsets(ctx, impl);
-   ac_nir_flag_smem_for_loads(shader, ctx->program->gfx_level, false, true);
+
+   if (shader->info.stage == MESA_SHADER_FRAGMENT) {
+      nir_opt_load_skip_helpers_options skip_helper_options = {};
+      skip_helper_options.no_add_divergence = true;
+      skip_helper_options.intrinsic_cb = intrinsic_try_skip_helpers;
+      nir_opt_load_skip_helpers(shader, &skip_helper_options);
+   }
 
    /* sanitize control flow */
    sanitize_cf_list(impl, &impl->body);
@@ -386,6 +391,8 @@ init_context(isel_context* ctx, nir_shader* shader)
    ctx->program->allocateRange(impl->ssa_alloc);
    RegClass* regclasses = ctx->program->temp_rc.data() + ctx->first_temp_id;
 
+   unsigned call_count = 0;
+
    /* TODO: make this recursive to improve compile times */
    bool done = false;
    while (!done) {
@@ -399,7 +406,7 @@ init_context(isel_context* ctx, nir_shader* shader)
 
                /* Packed 16-bit instructions have to be VGPR. */
                if (alu_instr->def.num_components == 2 &&
-                   aco_nir_op_supports_packed_math_16bit(alu_instr))
+                   ac_nir_op_supports_packed_math_16bit(alu_instr))
                   type = RegType::vgpr;
 
                switch (alu_instr->op) {
@@ -540,7 +547,6 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_ballot_relaxed:
                case nir_intrinsic_bindless_image_samples:
                case nir_intrinsic_load_scalar_arg_amd:
-               case nir_intrinsic_load_smem_amd:
                case nir_intrinsic_unit_test_uniform_amd: type = RegType::sgpr; break;
                case nir_intrinsic_load_input:
                case nir_intrinsic_load_per_primitive_input:
@@ -621,11 +627,8 @@ init_context(isel_context* ctx, nir_shader* shader)
             }
             case nir_instr_type_tex: {
                nir_tex_instr* tex = nir_instr_as_tex(instr);
-               RegType type = tex->def.divergent ? RegType::vgpr : RegType::sgpr;
-
-               if (tex->op == nir_texop_texture_samples) {
-                  assert(!tex->def.divergent);
-               }
+               RegType type =
+                  tex->def.divergent || tex->skip_helpers ? RegType::vgpr : RegType::sgpr;
 
                RegClass rc = get_reg_class(ctx, type, tex->def.num_components, tex->def.bit_size);
                regclasses[tex->def.index] = rc;
@@ -677,11 +680,17 @@ init_context(isel_context* ctx, nir_shader* shader)
                regclasses[phi->def.index] = rc;
                break;
             }
+            case nir_instr_type_call: {
+               ++call_count;
+               break;
+            }
             default: break;
             }
          }
       }
    }
+
+   ctx->call_infos.reserve(call_count);
 
    ctx->program->config->spi_ps_input_ena = ctx->program->info.ps.spi_ps_input_ena;
    ctx->program->config->spi_ps_input_addr = ctx->program->info.ps.spi_ps_input_addr;
@@ -694,12 +703,13 @@ init_context(isel_context* ctx, nir_shader* shader)
                                       (uint8_t*)shader->constant_data,
                                       (uint8_t*)shader->constant_data + shader->constant_data_size);
 
-   BITSET_CLEAR_RANGE(ctx->output_args, 0, BITSET_SIZE(ctx->output_args));
+   BITSET_ZERO(ctx->output_args);
 }
 
 void
 cleanup_context(isel_context* ctx)
 {
+   _mesa_hash_table_destroy(ctx->numlsb_ht, NULL);
    _mesa_hash_table_destroy(ctx->range_ht, NULL);
 }
 
@@ -726,7 +736,7 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
       case MESA_SHADER_CALLABLE:
       case MESA_SHADER_INTERSECTION:
       case MESA_SHADER_ANY_HIT: sw_stage = SWStage::RT; break;
-      default: unreachable("Shader stage not implemented");
+      default: UNREACHABLE("Shader stage not implemented");
       }
    }
 
@@ -751,16 +761,15 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
    calc_min_waves(program);
 
    unsigned scratch_size = 0;
-   for (unsigned i = 0; i < shader_count; i++) {
-      nir_shader* nir = shaders[i];
-      setup_nir(&ctx, nir);
-      setup_lds_size(&ctx, nir);
-   }
+   for (unsigned i = 0; i < shader_count; i++)
+      setup_nir(&ctx, shaders[i]);
 
    for (unsigned i = 0; i < shader_count; i++)
       scratch_size = std::max(scratch_size, shaders[i]->scratch_size);
 
-   ctx.program->config->scratch_bytes_per_wave = scratch_size * ctx.program->wave_size;
+   ctx.program->config->scratch_bytes_per_wave = align(scratch_size, 4) * ctx.program->wave_size;
+   ctx.program->config->lds_size = program->info.lds_size;
+   assert(ctx.program->config->lds_size <= ctx.program->dev.lds_limit);
 
    unsigned nir_num_blocks = 0;
    for (unsigned i = 0; i < shader_count; i++)

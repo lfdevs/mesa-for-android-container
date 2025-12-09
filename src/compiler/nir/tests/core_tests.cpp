@@ -73,13 +73,13 @@ TEST_F(nir_core_test, nir_instr_free_and_dce_test)
    nir_def *add01 = nir_iadd(b, zero, one);
    nir_def *add11 = nir_iadd(b, one, one);
 
-   nir_cursor c = nir_instr_free_and_dce(add01->parent_instr);
+   nir_cursor c = nir_instr_free_and_dce(nir_def_instr(add01));
    ASSERT_FALSE(shader_contains_def(add01));
    ASSERT_TRUE(shader_contains_def(add11));
    ASSERT_FALSE(shader_contains_def(zero));
    ASSERT_TRUE(shader_contains_def(one));
 
-   ASSERT_TRUE(nir_cursors_equal(c, nir_before_instr(add11->parent_instr)));
+   ASSERT_TRUE(nir_cursors_equal(c, nir_before_def(add11)));
 
    nir_validate_shader(b->shader, "after remove_and_dce");
 }
@@ -89,11 +89,11 @@ TEST_F(nir_core_test, nir_instr_free_and_dce_all_test)
    nir_def *one = nir_imm_int(b, 1);
    nir_def *add = nir_iadd(b, one, one);
 
-   nir_cursor c = nir_instr_free_and_dce(add->parent_instr);
+   nir_cursor c = nir_instr_free_and_dce(nir_def_instr(add));
    ASSERT_FALSE(shader_contains_def(add));
    ASSERT_FALSE(shader_contains_def(one));
 
-   ASSERT_TRUE(nir_cursors_equal(c, nir_before_block(nir_start_block(b->impl))));
+   ASSERT_TRUE(nir_cursors_equal(c, nir_before_impl(b->impl)));
 
    nir_validate_shader(b->shader, "after remove_and_dce");
 }
@@ -107,12 +107,12 @@ TEST_F(nir_core_test, nir_instr_free_and_dce_multiple_src_test)
     * nir_instr_remove for instructions with srcs. */
    nir_def *add2 = nir_iadd(b, add, add);
 
-   nir_cursor c = nir_instr_free_and_dce(add2->parent_instr);
+   nir_cursor c = nir_instr_free_and_dce(nir_def_instr(add2));
    ASSERT_FALSE(shader_contains_def(add2));
    ASSERT_FALSE(shader_contains_def(add));
    ASSERT_FALSE(shader_contains_def(one));
 
-   ASSERT_TRUE(nir_cursors_equal(c, nir_before_block(nir_start_block(b->impl))));
+   ASSERT_TRUE(nir_cursors_equal(c, nir_before_impl(b->impl)));
 
    nir_validate_shader(b->shader, "after remove_and_dce");
 }

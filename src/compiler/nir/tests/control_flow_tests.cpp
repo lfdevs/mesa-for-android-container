@@ -81,13 +81,13 @@ TEST_F(nir_cf_test, delete_break_in_loop)
    EXPECT_EQ(NULL,    block_2->successors[1]);
    EXPECT_EQ(NULL,    block_3->successors[0]);
    EXPECT_EQ(NULL,    block_3->successors[1]);
-   EXPECT_EQ(0,       block_0->predecessors->entries);
-   EXPECT_EQ(1,       block_1->predecessors->entries);
-   EXPECT_EQ(1,       block_2->predecessors->entries);
-   EXPECT_EQ(1,       block_3->predecessors->entries);
-   EXPECT_TRUE(_mesa_set_search(block_1->predecessors, block_0));
-   EXPECT_TRUE(_mesa_set_search(block_2->predecessors, block_1));
-   EXPECT_TRUE(_mesa_set_search(block_3->predecessors, block_2));
+   EXPECT_EQ(0,       block_0->predecessors.entries);
+   EXPECT_EQ(1,       block_1->predecessors.entries);
+   EXPECT_EQ(1,       block_2->predecessors.entries);
+   EXPECT_EQ(1,       block_3->predecessors.entries);
+   EXPECT_TRUE(_mesa_set_search(&block_1->predecessors, block_0));
+   EXPECT_TRUE(_mesa_set_search(&block_2->predecessors, block_1));
+   EXPECT_TRUE(_mesa_set_search(&block_3->predecessors, block_2));
 
    /* Now remove the break. */
    nir_instr_remove(&jump->instr);
@@ -119,14 +119,14 @@ TEST_F(nir_cf_test, delete_break_in_loop)
    EXPECT_EQ(NULL,    block_2->successors[1]);
    EXPECT_EQ(NULL,    block_3->successors[0]);
    EXPECT_EQ(NULL,    block_3->successors[1]);
-   EXPECT_EQ(0,       block_0->predecessors->entries);
-   EXPECT_EQ(2,       block_1->predecessors->entries);
-   EXPECT_EQ(0,       block_2->predecessors->entries);
-   EXPECT_EQ(1,       block_3->predecessors->entries);
-   EXPECT_TRUE(_mesa_set_search(block_1->predecessors, block_0));
-   EXPECT_TRUE(_mesa_set_search(block_1->predecessors, block_1));
-   EXPECT_FALSE(_mesa_set_search(block_2->predecessors, block_1));
-   EXPECT_TRUE(_mesa_set_search(block_3->predecessors, block_2));
+   EXPECT_EQ(0,       block_0->predecessors.entries);
+   EXPECT_EQ(2,       block_1->predecessors.entries);
+   EXPECT_EQ(0,       block_2->predecessors.entries);
+   EXPECT_EQ(1,       block_3->predecessors.entries);
+   EXPECT_TRUE(_mesa_set_search(&block_1->predecessors, block_0));
+   EXPECT_TRUE(_mesa_set_search(&block_1->predecessors, block_1));
+   EXPECT_FALSE(_mesa_set_search(&block_2->predecessors, block_1));
+   EXPECT_TRUE(_mesa_set_search(&block_3->predecessors, block_2));
 
    nir_metadata_require(b->impl, nir_metadata_dominance);
 }

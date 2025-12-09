@@ -29,8 +29,6 @@ fd6_assert_valid_format(struct fd_resource *rsc, enum pipe_format format)
    assert(fd6_check_valid_format(rsc, format) == FORMAT_OK);
 }
 
-void fd6_emit_flag_reference(struct fd_ringbuffer *ring,
-                             struct fd_resource *rsc, int level, int layer);
 template <chip CHIP>
 void fd6_resource_screen_init(struct pipe_screen *pscreen);
 

@@ -166,7 +166,7 @@ static void transform_texture(struct rc_instruction * dst, struct tgsi_instructi
             dst->U.I.TexSrcTarget = RC_TEXTURE_2D_ARRAY;
             break;
         default:
-            unreachable();
+            UNREACHABLE("");
             break;
     }
     dst->U.I.TexSwizzle = RC_SWIZZLE_XYZW;

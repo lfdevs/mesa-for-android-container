@@ -211,6 +211,9 @@ fn process(input: Pair<Rule>, dual_16_mode: bool) -> Option<etna_inst> {
             Rule::Local => {
                 instr.set_local(1);
             }
+            Rule::Unk => {
+                instr.set_unk(1);
+            }
             Rule::Left_shift => {
                 let item = p.into_inner().next().unwrap();
                 let amount = parse_pair(item);

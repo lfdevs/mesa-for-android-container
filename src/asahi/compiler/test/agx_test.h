@@ -19,7 +19,7 @@ agx_test_builder(void *memctx)
    list_inithead(&ctx->blocks);
 
    agx_block *blk = rzalloc(ctx, agx_block);
-   util_dynarray_init(&blk->predecessors, NULL);
+   blk->predecessors = UTIL_DYNARRAY_INIT;
    ctx->num_blocks = 1;
 
    list_addtail(&blk->link, &ctx->blocks);

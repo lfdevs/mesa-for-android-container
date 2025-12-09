@@ -183,7 +183,7 @@ scan_cf_list_defined_by_all_invocs(struct exec_list *cf_list,
          break;
       }
       default:
-         unreachable("unknown cf node type");
+         UNREACHABLE("unknown cf node type");
       }
    }
 }
@@ -287,7 +287,7 @@ scan_cf_list_for_invoc0(struct exec_list *cf_list,
          break;
       }
       default:
-         unreachable("unknown cf node type");
+         UNREACHABLE("unknown cf node type");
       }
    }
 }

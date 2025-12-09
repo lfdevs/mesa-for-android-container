@@ -121,7 +121,7 @@ fd4_launch_grid(struct fd_context *ctx,
    if (!v)
       return;
 
-   if (ctx->dirty_shader[PIPE_SHADER_COMPUTE] & FD_DIRTY_SHADER_PROG)
+   if (ctx->dirty_shader[MESA_SHADER_COMPUTE] & FD_DIRTY_SHADER_PROG)
       cs_program_emit(ring, v);
 
    fd4_emit_cs_state(ctx, ring, v);

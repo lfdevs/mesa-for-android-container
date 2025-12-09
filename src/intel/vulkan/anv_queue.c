@@ -43,7 +43,7 @@ anv_create_engine(struct anv_device *device,
    case INTEL_KMD_TYPE_XE:
       return anv_xe_create_engine(device, queue, pCreateInfo);
    default:
-      unreachable("Missing");
+      UNREACHABLE("Missing");
       return VK_ERROR_UNKNOWN;
    }
 }
@@ -60,7 +60,7 @@ anv_destroy_engine(struct anv_queue *queue)
       anv_xe_destroy_engine(device, queue);
       break;
    default:
-      unreachable("Missing");
+      UNREACHABLE("Missing");
    }
 }
 
@@ -153,18 +153,31 @@ anv_QueueWaitIdle(VkQueue _queue)
       if (queue->vk.submit.mode != VK_QUEUE_SUBMIT_MODE_THREADED) {
          int ret = anv_xe_wait_exec_queue_idle(device, queue->exec_queue_id);
 
-         if (ret == 0)
-            return VK_SUCCESS;
-         if (ret == -ECANCELED)
-            return VK_ERROR_DEVICE_LOST;
-         return vk_errorf(device, VK_ERROR_UNKNOWN, "anv_xe_wait_exec_queue_idle failed: %m");
+         VkResult result;
+         switch (ret) {
+         case 0:
+            result = VK_SUCCESS;
+            break;
+         case -ECANCELED:
+            result = VK_ERROR_DEVICE_LOST;
+            break;
+         default:
+            result = vk_errorf(device, VK_ERROR_UNKNOWN, "anv_xe_wait_exec_queue_idle failed: %m");
+            break;
+         }
+
+         if (INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+            VkResult print_result =
+               vk_check_printf_status(&device->vk, &device->printf);
+            result = result != VK_SUCCESS ? result : print_result;
+         }
+
+         return result;
       }
       FALLTHROUGH;
    case INTEL_KMD_TYPE_I915:
       return vk_common_QueueWaitIdle(_queue);
    default:
-      unreachable("Missing");
+      UNREACHABLE("Missing");
    }
-
-   return VK_SUCCESS;
 }

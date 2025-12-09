@@ -51,7 +51,7 @@ emit_clamp_alpha_test(isel_context* ctx, const struct aco_ps_epilog_info* info, 
          case COMPARE_FUNC_GREATER: opcode = aco_opcode::v_cmp_nlt_f32; break;
          case COMPARE_FUNC_NOTEQUAL: opcode = aco_opcode::v_cmp_nlg_f32; break;
          case COMPARE_FUNC_GEQUAL: opcode = aco_opcode::v_cmp_nle_f32; break;
-         default: unreachable("invalid alpha func");
+         default: UNREACHABLE("invalid alpha func");
          }
 
          Temp ref = get_arg(ctx, info->alpha_reference);
@@ -470,7 +470,7 @@ select_ps_epilog(Program* program, void* pinfo, ac_shader_config* config,
 
    program->config->float_mode = program->blocks[0].fp_mode.val;
 
-   append_logical_end(ctx.block);
+   append_logical_end(&ctx);
    ctx.block->kind |= block_kind_export_end;
    bld.reset(ctx.block);
    bld.sopp(aco_opcode::s_endpgm);

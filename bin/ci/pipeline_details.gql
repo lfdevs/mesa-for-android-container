@@ -28,6 +28,7 @@ query jobs($projectPath: ID!, $iid: ID!, $cursor: String) {
           stage {
             name
           }
+          tags
         }
       }
     }

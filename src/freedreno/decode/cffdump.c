@@ -140,6 +140,8 @@ main(int argc, char **argv)
 
    interactive = isatty(STDOUT_FILENO);
 
+   internal_lua_pkt_handler_load();
+
    options.color = interactive;
 
    while ((c = getopt_long(argc, argv, "vsaS:E:F:D:e:L:q:h", opts, NULL)) !=
@@ -348,6 +350,7 @@ handle_file(const char *filename, int start, int end, int draw)
    }
 
    script_end_cmdstream();
+   cffdec_finish();
 
    reset_buffers();
 

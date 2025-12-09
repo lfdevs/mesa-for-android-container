@@ -102,6 +102,8 @@ struct vk_ir_header {
     * uses a separate memory section for leaf nodes.
     */
    uint32_t dst_leaf_node_offset;
+   /* Additional fields for the driver to use during encode. */
+   uint32_t driver_internal[6];
 };
 
 struct vk_ir_node {
@@ -133,7 +135,6 @@ struct vk_ir_triangle_node {
    vk_ir_node base;
    float coords[3][3];
    uint32_t triangle_id;
-   uint32_t id;
    uint32_t geometry_id_and_flags;
 };
 

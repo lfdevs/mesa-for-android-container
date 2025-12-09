@@ -72,7 +72,7 @@ cso_set_rasterizer(struct cso_context *cso,
 
 void
 cso_set_samplers(struct cso_context *cso,
-                 enum pipe_shader_type shader_stage,
+                 mesa_shader_stage shader_stage,
                  unsigned count,
                  const struct pipe_sampler_state **states);
 
@@ -81,12 +81,12 @@ cso_set_samplers(struct cso_context *cso,
  * samplers one at a time:
  */
 void
-cso_single_sampler(struct cso_context *cso, enum pipe_shader_type shader_stage,
+cso_single_sampler(struct cso_context *cso, mesa_shader_stage shader_stage,
                    unsigned idx, const struct pipe_sampler_state *states);
 
 void
 cso_single_sampler_done(struct cso_context *cso,
-                        enum pipe_shader_type shader_stage);
+                        mesa_shader_stage shader_stage);
 
 void *
 cso_get_vertex_elements_for_bind(struct cso_context *cso,
@@ -98,7 +98,6 @@ cso_set_vertex_elements(struct cso_context *ctx,
 
 void cso_set_vertex_buffers(struct cso_context *ctx,
                             unsigned count,
-                            bool take_ownership,
                             const struct pipe_vertex_buffer *buffers);
 
 void cso_set_stream_outputs(struct cso_context *ctx,
@@ -129,6 +128,8 @@ void cso_set_geometry_shader_handle(struct cso_context *ctx, void *handle);
 void cso_set_tessctrl_shader_handle(struct cso_context *ctx, void *handle);
 void cso_set_tesseval_shader_handle(struct cso_context *ctx, void *handle);
 void cso_set_compute_shader_handle(struct cso_context *ctx, void *handle);
+void cso_set_task_shader_handle(struct cso_context *ctx, void *handle);
+void cso_set_mesh_shader_handle(struct cso_context *ctx, void *handle);
 
 
 void
@@ -179,12 +180,20 @@ cso_set_render_condition(struct cso_context *cso,
 #define CSO_BIT_VERTEX_SHADER         0x20000
 #define CSO_BIT_VIEWPORT              0x40000
 #define CSO_BIT_PAUSE_QUERIES         0x80000
+#define CSO_BIT_TASK_SHADER          0x100000
+#define CSO_BIT_MESH_SHADER          0x200000
 
-#define CSO_BITS_ALL_SHADERS (CSO_BIT_VERTEX_SHADER | \
-                              CSO_BIT_FRAGMENT_SHADER | \
-                              CSO_BIT_GEOMETRY_SHADER | \
-                              CSO_BIT_TESSCTRL_SHADER | \
-                              CSO_BIT_TESSEVAL_SHADER)
+#define CSO_BITS_VERTEX_PIPE_SHADERS \
+   (CSO_BIT_VERTEX_SHADER | \
+    CSO_BIT_FRAGMENT_SHADER | \
+    CSO_BIT_GEOMETRY_SHADER | \
+    CSO_BIT_TESSCTRL_SHADER | \
+    CSO_BIT_TESSEVAL_SHADER)
+
+#define CSO_BITS_MESH_PIPE_SHADERS \
+   (CSO_BIT_TASK_SHADER | \
+    CSO_BIT_MESH_SHADER | \
+    CSO_BIT_FRAGMENT_SHADER)
 
 #define CSO_BIT_COMPUTE_SHADER   (1<<0)
 #define CSO_BIT_COMPUTE_SAMPLERS (1<<1)

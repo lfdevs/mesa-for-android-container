@@ -20,6 +20,7 @@
 
 #include "vk_debug_utils.h"
 
+#include "util/cache_ops.h"
 #include "util/libdrm.h"
 
 #include "tu_device.h"
@@ -35,14 +36,18 @@ tu_bo_init_new_explicit_iova(struct tu_device *dev,
                              uint64_t size,
                              uint64_t client_iova,
                              VkMemoryPropertyFlags mem_property,
-                             enum tu_bo_alloc_flags flags, const char *name)
+                             enum tu_bo_alloc_flags flags,
+                             struct tu_sparse_vma *lazy_vma,
+                             const char *name)
 {
    MESA_TRACE_FUNC();
    struct tu_instance *instance = dev->physical_device->instance;
 
+   size = align64(size, os_page_size);
+
    VkResult result =
       dev->instance->knl->bo_init(dev, base, out_bo, size, client_iova,
-                                  mem_property, flags, name);
+                                  mem_property, flags, lazy_vma, name);
    if (result != VK_SUCCESS)
       return result;
 
@@ -65,6 +70,7 @@ tu_bo_init_dmabuf(struct tu_device *dev,
                   uint64_t size,
                   int fd)
 {
+   size = align64(size, os_page_size);
    VkResult result = dev->instance->knl->bo_init_dmabuf(dev, bo, size, fd);
    if (result != VK_SUCCESS)
       return result;
@@ -134,40 +140,6 @@ tu_bo_unmap(struct tu_device *dev, struct tu_bo *bo, bool reserve)
    return VK_SUCCESS;
 }
 
-static inline void
-tu_sync_cacheline_to_gpu(void const *p __attribute__((unused)))
-{
-#if DETECT_ARCH_AARCH64
-   /* Clean data cache. */
-   __asm volatile("dc cvac, %0" : : "r" (p) : "memory");
-#elif (DETECT_ARCH_X86 || DETECT_ARCH_X86_64)
-   __builtin_ia32_clflush(p);
-#elif DETECT_ARCH_ARM
-   /* DCCMVAC - same as DC CVAC on aarch64.
-    * Seems to be illegal to call from userspace.
-    */
-   //__asm volatile("mcr p15, 0, %0, c7, c10, 1" : : "r" (p) : "memory");
-   unreachable("Cache line clean is unsupported on ARMv7");
-#endif
-}
-
-static inline void
-tu_sync_cacheline_from_gpu(void const *p __attribute__((unused)))
-{
-#if DETECT_ARCH_AARCH64
-   /* Clean and Invalidate data cache, there is no separate Invalidate. */
-   __asm volatile("dc civac, %0" : : "r" (p) : "memory");
-#elif (DETECT_ARCH_X86 || DETECT_ARCH_X86_64)
-   __builtin_ia32_clflush(p);
-#elif DETECT_ARCH_ARM
-   /* DCCIMVAC - same as DC CIVAC on aarch64.
-    * Seems to be illegal to call from userspace.
-    */
-   //__asm volatile("mcr p15, 0, %0, c7, c14, 1" : : "r" (p) : "memory");
-   unreachable("Cache line invalidate is unsupported on ARMv7");
-#endif
-}
-
 void
 tu_bo_sync_cache(struct tu_device *dev,
                  struct tu_bo *bo,
@@ -175,38 +147,14 @@ tu_bo_sync_cache(struct tu_device *dev,
                  VkDeviceSize size,
                  enum tu_mem_sync_op op)
 {
-   uintptr_t level1_dcache_size = dev->physical_device->level1_dcache_size;
    char *start = (char *) bo->map + offset;
-   char *end = start + (size == VK_WHOLE_SIZE ? (bo->size - offset) : size);
 
-   start = (char *) ((uintptr_t) start & ~(level1_dcache_size - 1));
-
-   for (; start < end; start += level1_dcache_size) {
-      if (op == TU_MEM_SYNC_CACHE_TO_GPU) {
-         tu_sync_cacheline_to_gpu(start);
-      } else {
-         tu_sync_cacheline_from_gpu(start);
-      }
+   size = size == VK_WHOLE_SIZE ? (bo->size - offset) : size;
+   if (op == TU_MEM_SYNC_CACHE_TO_GPU) {
+      util_flush_range(start, size);
+   } else {
+      util_flush_inval_range(start, size);
    }
-}
-
-uint32_t
-tu_get_l1_dcache_size()
-{
-if (!(DETECT_ARCH_AARCH64 || DETECT_ARCH_X86 || DETECT_ARCH_X86_64))
-   return 0;
-
-#if DETECT_ARCH_AARCH64 &&                                                   \
-   (!defined(_SC_LEVEL1_DCACHE_LINESIZE) || DETECT_OS_ANDROID)
-   /* Bionic does not implement _SC_LEVEL1_DCACHE_LINESIZE properly: */
-   uint64_t ctr_el0;
-   asm("mrs\t%x0, ctr_el0" : "=r"(ctr_el0));
-   return 4 << ((ctr_el0 >> 16) & 0xf);
-#elif defined(_SC_LEVEL1_DCACHE_LINESIZE)
-   return sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
-#else
-   return 0;
-#endif
 }
 
 void tu_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo)
@@ -223,6 +171,29 @@ tu_bo_set_metadata(struct tu_device *dev, struct tu_bo *bo,
    if (!dev->instance->knl->bo_set_metadata)
       return;
    dev->instance->knl->bo_set_metadata(dev, bo, metadata, metadata_size);
+}
+
+VkResult
+tu_sparse_vma_init(struct tu_device *dev,
+                   struct vk_object_base *base,
+                   struct tu_sparse_vma *out_vma,
+                   uint64_t *out_iova,
+                   enum tu_sparse_vma_flags flags,
+                   uint64_t size, uint64_t client_iova)
+{
+   size = align64(size, os_page_size);
+
+   out_vma->flags = flags;
+   return dev->instance->knl->sparse_vma_init(dev, base, out_vma, out_iova,
+                                              flags, size, client_iova);
+
+}
+
+void
+tu_sparse_vma_finish(struct tu_device *dev,
+                     struct tu_sparse_vma *vma)
+{
+   dev->instance->knl->sparse_vma_finish(dev, vma);
 }
 
 int
@@ -276,17 +247,15 @@ tu_device_check_status(struct vk_device *vk_device)
 }
 
 int
-tu_drm_submitqueue_new(struct tu_device *dev,
-                       int priority,
-                       uint32_t *queue_id)
+tu_drm_submitqueue_new(struct tu_device *dev, struct tu_queue *queue)
 {
-   return dev->instance->knl->submitqueue_new(dev, priority, queue_id);
+   return dev->instance->knl->submitqueue_new(dev, queue);
 }
 
 void
-tu_drm_submitqueue_close(struct tu_device *dev, uint32_t queue_id)
+tu_drm_submitqueue_close(struct tu_device *dev, struct tu_queue *queue)
 {
-   dev->instance->knl->submitqueue_close(dev, queue_id);
+   dev->instance->knl->submitqueue_close(dev, queue);
 }
 
 void *
@@ -308,6 +277,19 @@ tu_submit_add_entries(struct tu_device *dev, void *submit,
 {
    return dev->instance->knl->submit_add_entries(dev, submit, entries,
                                                  num_entries);
+}
+
+void
+tu_submit_add_bind(struct tu_device *dev,
+                   void *_submit,
+                   struct tu_sparse_vma *vma, uint64_t vma_offset,
+                   struct tu_bo *bo, uint64_t bo_offset,
+                   uint64_t size)
+{
+   assert(vma_offset % 4096 == 0);
+   assert(bo_offset % 4096 == 0);
+   return dev->instance->knl->submit_add_bind(dev, _submit, vma, vma_offset,
+                                              bo, bo_offset, size);
 }
 
 VkResult

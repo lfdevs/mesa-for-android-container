@@ -30,7 +30,15 @@
 
 struct i915_context;
 struct i915_screen;
+struct pipe_surface;
+struct pipe_resource;
+struct pipe_context;
 
+struct pipe_surface *
+i915_create_surface(struct pipe_context *ctx, struct pipe_resource *pt,
+                    const struct pipe_surface *surf_tmpl);
+void
+i915_surface_destroy(struct pipe_context *ctx, struct pipe_surface *surf);
 void i915_init_surface_functions(struct i915_context *i915);
 
 #endif /* I915_SCREEN_H */

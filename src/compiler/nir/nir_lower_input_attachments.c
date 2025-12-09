@@ -28,59 +28,34 @@ static nir_def *
 load_frag_coord(nir_builder *b, nir_deref_instr *deref,
                 const nir_input_attachment_options *options)
 {
-   if (options->use_fragcoord_sysval) {
-      nir_def *frag_coord = nir_load_frag_coord(b);
-      if (options->unscaled_input_attachment_ir3 ||
-          options->unscaled_depth_stencil_ir3) {
-         nir_variable *var = nir_deref_instr_get_variable(deref);
-         unsigned base = var->data.index;
-         nir_def *unscaled_frag_coord = nir_load_frag_coord_unscaled_ir3(b);
-         if (deref->deref_type == nir_deref_type_array &&
-             options->unscaled_input_attachment_ir3) {
-            nir_def *unscaled =
-               nir_i2b(b, nir_iand(b, nir_ishr(b, nir_imm_int(b, options->unscaled_input_attachment_ir3 >> base), deref->arr.index.ssa),
-                                   nir_imm_int(b, 1)));
-            frag_coord = nir_bcsel(b, unscaled, unscaled_frag_coord, frag_coord);
-         } else {
-            assert(deref->deref_type == nir_deref_type_var);
-            bool unscaled = base == NIR_VARIABLE_NO_INDEX ? options->unscaled_depth_stencil_ir3 : ((options->unscaled_input_attachment_ir3 >> base) & 1);
-            frag_coord = unscaled ? unscaled_frag_coord : frag_coord;
-         }
+   nir_def *frag_coord = nir_load_frag_coord(b);
+   if (options->gmem_input_attachment_ir3 ||
+       options->gmem_depth_stencil_ir3) {
+      nir_variable *var = nir_deref_instr_get_variable(deref);
+      unsigned base = var->data.index;
+      nir_def *gmem_frag_coord = nir_load_frag_coord_gmem_ir3(b);
+      if (deref->deref_type == nir_deref_type_array &&
+          options->gmem_input_attachment_ir3) {
+         nir_def *gmem =
+            nir_i2b(b, nir_iand(b, nir_ishr(b, nir_imm_int(b, options->gmem_input_attachment_ir3 >> base), deref->arr.index.ssa),
+                                nir_imm_int(b, 1)));
+         frag_coord = nir_bcsel(b, gmem, gmem_frag_coord, frag_coord);
+      } else {
+         assert(deref->deref_type == nir_deref_type_var);
+         bool gmem = base == NIR_VARIABLE_NO_INDEX ? options->gmem_depth_stencil_ir3 : ((options->gmem_input_attachment_ir3 >> base) & 1);
+         frag_coord = gmem ? gmem_frag_coord : frag_coord;
       }
-      return frag_coord;
    }
-
-   nir_variable *pos = nir_get_variable_with_location(b->shader, nir_var_shader_in,
-                                                      VARYING_SLOT_POS, glsl_vec4_type());
-
-   /**
-    * From Vulkan spec:
-    *   "The OriginLowerLeft execution mode must not be used; fragment entry
-    *    points must declare OriginUpperLeft."
-    *
-    * So at this point origin_upper_left should be true
-    */
-   assert(b->shader->info.fs.origin_upper_left == true);
-
-   return nir_load_var(b, pos);
+   return frag_coord;
 }
 
 static nir_def *
 load_layer_id(nir_builder *b, const nir_input_attachment_options *options)
 {
-   if (options->use_layer_id_sysval) {
-      if (options->use_view_id_for_layer)
-         return nir_load_view_index(b);
-      else
-         return nir_load_layer_id(b);
-   }
-
-   gl_varying_slot slot = options->use_view_id_for_layer ? VARYING_SLOT_VIEW_INDEX : VARYING_SLOT_LAYER;
-   nir_variable *layer_id = nir_get_variable_with_location(b->shader, nir_var_shader_in,
-                                                           slot, glsl_int_type());
-   layer_id->data.interpolation = INTERP_MODE_FLAT;
-
-   return nir_load_var(b, layer_id);
+   if (options->use_view_id_for_layer)
+      return nir_load_view_index(b);
+   else
+      return nir_load_layer_id(b);
 }
 
 static nir_def *

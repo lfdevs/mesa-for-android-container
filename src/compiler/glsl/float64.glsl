@@ -1733,7 +1733,7 @@ __fmax64(uint64_t a, uint64_t b)
    bool a_lt_b = __flt64_nonnan_minmax(a, b);
    bool a_nan = __is_nan(a);
 
-   return (b_nan || a_lt_b) && !a_nan ? b : a;
+   return (!b_nan && a_lt_b) || a_nan ? b : a;
 }
 
 uint64_t

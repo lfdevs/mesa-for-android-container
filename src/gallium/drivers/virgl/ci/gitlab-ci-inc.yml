@@ -47,12 +47,16 @@
     - .virgl-rules
   timeout: 15m
   variables:
+    GALLIUM_DRIVER: virpipe
     GALLIVM_PERF: nopt
     FLAKES_CHANNEL: "#virgl-ci"
   script: |
     export LD_LIBRARY_PATH="$CI_PROJECT_DIR/install/lib"
     export LIBGL_DRIVERS_PATH="$CI_PROJECT_DIR/install/lib/dri"
-    xvfb-run --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && GALLIUM_DRIVER=virpipe install/deqp-runner.sh"
+    section_start weston "weston: prepare"
+    . "$CI_PROJECT_DIR/install/common/weston.sh"
+    section_end weston
+    $CI_PROJECT_DIR/install/deqp-runner.sh
 
 .virgl-test:
   extends:

@@ -151,7 +151,7 @@ pub struct SSARef {
 
 #[cfg(target_arch = "x86_64")]
 const _: () = {
-    debug_assert!(std::mem::size_of::<SSARef>() == 16);
+    debug_assert!(size_of::<SSARef>() == 16);
 };
 
 impl SSARef {
@@ -201,49 +201,6 @@ impl SSARef {
                 Self::cold();
                 x.comps()
             }
-        }
-    }
-
-    /// Returns the register file for this SSA reference, if all SSA values have
-    /// the same register file.
-    pub fn file(&self) -> Option<RegFile> {
-        let comps = usize::from(self.comps());
-        let file = self[0].file();
-        for i in 1..comps {
-            if self[i].file() != file {
-                return None;
-            }
-        }
-        Some(file)
-    }
-
-    /// Returns true if this SSA reference is known to be uniform.
-    pub fn is_uniform(&self) -> bool {
-        for ssa in &self[..] {
-            if !ssa.is_uniform() {
-                return false;
-            }
-        }
-        true
-    }
-
-    pub fn is_gpr(&self) -> bool {
-        for ssa in &self[..] {
-            if !ssa.is_gpr() {
-                return false;
-            }
-        }
-        true
-    }
-
-    pub fn is_predicate(&self) -> bool {
-        if self[0].is_predicate() {
-            true
-        } else {
-            for ssa in &self[..] {
-                debug_assert!(!ssa.is_predicate());
-            }
-            false
         }
     }
 
@@ -334,6 +291,12 @@ impl fmt::Display for SSARef {
             }
             write!(f, "}}")
         }
+    }
+}
+
+impl HasRegFile for SSARef {
+    fn file(&self) -> RegFile {
+        (&self[..]).file()
     }
 }
 

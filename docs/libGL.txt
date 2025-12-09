@@ -85,10 +85,6 @@ This section describes the requirements to make an XFree86 4.0
 libGL.so-compatible hardware driver.  It is not intended for end
 users of libGL.so.
 
-The gl_x86_asm.py and assyntax.h files implement x86-optimized dispatch
-of GL functions. They are not required; C-based dispatch can be used
-instead, with a slight performance penalty.
-
 
 
 Driver loading and binding

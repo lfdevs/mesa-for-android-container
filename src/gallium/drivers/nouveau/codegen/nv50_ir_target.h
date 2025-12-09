@@ -176,7 +176,7 @@ public:
 
    virtual void parseDriverInfo(const struct nv50_ir_prog_info *info,
                                 const struct nv50_ir_prog_info_out *info_out) {
-      if (info_out->type == PIPE_SHADER_COMPUTE) {
+      if (info_out->type == MESA_SHADER_COMPUTE) {
          threads = info->prop.cp.numThreads[0] *
             info->prop.cp.numThreads[1] *
             info->prop.cp.numThreads[2];

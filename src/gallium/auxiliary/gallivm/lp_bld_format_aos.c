@@ -34,11 +34,8 @@
 
 
 #include "util/format/u_format.h"
-#include "util/u_memory.h"
-#include "util/u_math.h"
+#include "util/bitscan.h"
 #include "util/u_pointer.h"
-#include "util/u_string.h"
-#include "util/u_cpu_detect.h"
 
 #include "lp_bld_arit.h"
 #include "lp_bld_init.h"
@@ -431,7 +428,7 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
    casted = LLVMBuildFPToSI(builder, scaled, LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), 4), "");
 
    shifted = LLVMBuildShl(builder, casted, LLVMConstVector(shifts, 4), "");
-   
+
    /* Bitwise or all components */
    for (i = 0; i < 4; ++i) {
       if (desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED) {

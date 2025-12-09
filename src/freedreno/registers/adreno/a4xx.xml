@@ -1138,7 +1138,7 @@ perhaps they should be taken with a grain of salt
 	<array offset="0x10" name="RBBM_CLOCK_DELAY_TP" stride="1" length="4">
 		<reg32 offset="0x0" name="REG"/>
 	</array>
-	<reg32 offset="0x0014" name="RBBM_CLOCK_CTL_UCHE "/>
+	<reg32 offset="0x0014" name="RBBM_CLOCK_CTL_UCHE"/>
 	<reg32 offset="0x0015" name="RBBM_CLOCK_CTL2_UCHE"/>
 	<reg32 offset="0x0016" name="RBBM_CLOCK_CTL3_UCHE"/>
 	<reg32 offset="0x0017" name="RBBM_CLOCK_CTL4_UCHE"/>

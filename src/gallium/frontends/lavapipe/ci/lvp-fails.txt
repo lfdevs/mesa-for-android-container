@@ -4,7 +4,6 @@ dEQP-VK.rasterization.provoking_vertex.transform_feedback.first.line_strip_with_
 dEQP-VK.rasterization.provoking_vertex.transform_feedback.per_pipeline.triangle_strip_with_adjacency,Fail
 
 dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.multiple_interpolation.structured.no_sample_decoration.4_samples,Fail
-dEQP-VK.draw.renderpass.multiple_interpolation.structured.with_sample_decoration.4_samples,Fail
 
 dEQP-VK.dynamic_rendering.complete_secondary_cmd_buff.suballocation.unused_attachment.loadopclear.storeopdontcare.stencilloadopdontcare.stencilstoreopdontcare,Fail
 dEQP-VK.dynamic_rendering.complete_secondary_cmd_buff.suballocation.unused_attachment.loadopdontcare.storeopdontcare.stencilloadopdontcare.stencilstoreopdontcare,Fail
@@ -866,3 +865,16 @@ dEQP-VK.pipeline.shader_object_unlinked_spirv.multisample.sample_rate_a2c.static
 
 dEQP-VK.sparse_resources.image_block_shapes.2d.g8b8g8r8_422_unorm.samples_1,Fail
 dEQP-VK.sparse_resources.image_block_shapes.2d_array.g8b8g8r8_422_unorm.samples_1,Fail
+
+# New fails in 1.4.3.3
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats.b8g8r8a8_unorm.input.load.store.self_dep_clear_draw,Fail
+dEQP-VK.mesh_shader.ext.smoke.fast_lib.depth_only_triangles_position_components,Fail
+dEQP-VK.mesh_shader.ext.smoke.monolithic.depth_only_points_position_components,Fail
+dEQP-VK.mesh_shader.ext.smoke.optimized_lib.depth_only_points_position_components,Fail
+dEQP-VK.mesh_shader.ext.smoke.shader_objects.depth_only_triangles_position_components,Fail
+dEQP-VK.pipeline.fast_linked_library.multisample.sample_rate_a2c.dynamic_a2c,Fail
+dEQP-VK.pipeline.monolithic.multisample.sample_rate_a2c.static_a2c,Fail
+dEQP-VK.pipeline.shader_object_linked_spirv.multisample.sample_rate_a2c.dynamic_a2c,Fail
+dEQP-VK.pipeline.shader_object_unlinked_binary.multisample.sample_rate_a2c.dynamic_a2c,Fail
+dEQP-VK.pipeline.shader_object_unlinked_binary.multisample.sample_rate_a2c.static_a2c,Fail
+dEQP-VK.pipeline.shader_object_unlinked_spirv.multisample.sample_rate_a2c.dynamic_a2c,Fail

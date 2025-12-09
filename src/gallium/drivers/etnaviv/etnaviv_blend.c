@@ -101,7 +101,13 @@ etna_blend_state_create(struct pipe_context *pctx,
          VIVS_PE_LOGIC_OP_OP(logicop_enable ? so->logicop_func : LOGIC_OP_COPY) |
          0x000E4000 /* ??? */;
 
-   /* XXX alpha_to_coverage / alpha_to_one? */
+   co->PS_MSAA_CONFIG = ~(VIVS_PS_MSAA_CONFIG_ALPHA_TO_COVERAGE_MASK |
+                          VIVS_PS_MSAA_CONFIG_ALPHA_TO_COVERAGE);
+
+   if (so->alpha_to_coverage)
+      co->PS_MSAA_CONFIG |= VIVS_PS_MSAA_CONFIG_ALPHA_TO_COVERAGE;
+
+   /* XXX alpha_to_one? */
 
    return co;
 }

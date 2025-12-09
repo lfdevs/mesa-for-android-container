@@ -86,7 +86,7 @@ nir_lower_uniforms_to_ubo_instr(nir_builder *b, nir_instr *instr, void *data)
                                     ubo_idx,
                                     nir_iadd_imm(b, nir_amul_imm(b, uniform_offset, multiplier),
                                                  nir_intrinsic_base(intr) * multiplier));
-         nir_intrinsic_instr *load = nir_instr_as_intrinsic(load_result->parent_instr);
+         nir_intrinsic_instr *load = nir_def_as_intrinsic(load_result);
 
          /* If it's const, set the alignment to our known constant offset.  If
           * not, set it to a pessimistic value based on the multiplier (or the

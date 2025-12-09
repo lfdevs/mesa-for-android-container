@@ -22,6 +22,16 @@ for driver in freedreno intel lima v3d vc4; do
     section_end shader-db-${driver}
 done
 
+# Run shader-db over a number of supported platforms for crocus/iris
+for platform in hsw bdw skl mtl; do
+    section_start "shader-db-intel-${platform}" "Running shader-db for intel - ${platform}"
+    env LD_PRELOAD="$LIBDIR/libintel_noop_drm_shim.so" \
+        INTEL_STUB_GPU_PLATFORM="${platform}" \
+        ./run -j"${FDO_CI_CONCURRENT:-4}" ./shaders \
+            > "$ARTIFACTSDIR/intel-${platform}-shader-db.txt"
+    section_end "shader-db-intel-${platform}"
+done
+
 # Run shader-db over a number of supported chipsets for nouveau
 for chipset in 40 a3 c0 e4 f0 134 162; do
     section_start shader-db-nouveau-${chipset} "Running shader-db for nouveau - ${chipset}"

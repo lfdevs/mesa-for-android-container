@@ -71,13 +71,13 @@ try_opt_bcsel_of_shuffle(nir_builder *b, nir_alu_instr *alu,
 
    nir_def *data1, *index1;
    if (!nir_alu_src_is_trivial_ssa(alu, 1) ||
-       alu->src[1].src.ssa->parent_instr->block != alu->instr.block ||
+       nir_def_block(alu->src[1].src.ssa) != alu->instr.block ||
        !src_is_single_use_shuffle(alu->src[1].src, &data1, &index1))
       return NULL;
 
    nir_def *data2, *index2;
    if (!nir_alu_src_is_trivial_ssa(alu, 2) ||
-       alu->src[2].src.ssa->parent_instr->block != alu->instr.block ||
+       nir_def_block(alu->src[2].src.ssa) != alu->instr.block ||
        !src_is_single_use_shuffle(alu->src[2].src, &data2, &index2))
       return NULL;
 
@@ -132,7 +132,7 @@ src_is_quad_broadcast(nir_block *block, nir_src src, nir_intrinsic_instr **intri
 static bool
 src_is_alu(nir_op op, nir_src src, nir_src srcs[2])
 {
-   nir_alu_instr *alu = nir_src_as_alu_instr(src);
+   nir_alu_instr *alu = nir_src_as_alu(src);
    if (alu == NULL || alu->op != op)
       return false;
 
@@ -214,7 +214,7 @@ try_opt_quad_vote(nir_builder *b, nir_alu_instr *alu, bool block_has_discard)
             lane = (nir_intrinsic_swizzle_mask(quad_broadcasts[i]) >> (j * 2)) & 0x3;
             break;
          default:
-            unreachable();
+            UNREACHABLE("");
          }
          lanes_read |= (1 << lane) << (j * 4);
       }
@@ -231,20 +231,19 @@ try_opt_quad_vote(nir_builder *b, nir_alu_instr *alu, bool block_has_discard)
 }
 
 static bool
-opt_intrinsics_alu(nir_builder *b, nir_alu_instr *alu,
-                   bool block_has_discard, const struct nir_shader_compiler_options *options)
+opt_intrinsics_alu(nir_builder *b, nir_alu_instr *alu, bool block_has_discard)
 {
    nir_def *replacement = NULL;
 
    switch (alu->op) {
    case nir_op_bcsel:
       replacement = try_opt_bcsel_of_shuffle(b, alu, block_has_discard);
-      if (!replacement && options->optimize_load_front_face_fsign)
+      if (!replacement && b->shader->options->optimize_load_front_face_fsign)
          replacement = try_opt_front_face_fsign(b, alu);
       break;
    case nir_op_iand:
    case nir_op_ior:
-      if (alu->def.bit_size == 1 && options->optimize_quad_vote_to_reduce)
+      if (alu->def.bit_size == 1 && b->shader->options->optimize_quad_vote_to_reduce)
          replacement = try_opt_quad_vote(b, alu, block_has_discard);
       break;
    default:
@@ -325,16 +324,285 @@ try_opt_exclusive_scan_to_inclusive(nir_builder *b, nir_intrinsic_instr *intrin)
 }
 
 static bool
-opt_intrinsics_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
-                      const struct nir_shader_compiler_options *options)
+try_opt_atomic_isub(nir_builder *b, nir_intrinsic_instr *intrin, unsigned data_idx)
 {
+   if (nir_intrinsic_atomic_op(intrin) != nir_atomic_op_iadd || !b->shader->options->has_atomic_isub)
+      return false;
+
+   nir_scalar data = nir_scalar_resolved(intrin->src[data_idx].ssa, 0);
+
+   if (!nir_scalar_is_alu(data) || nir_scalar_alu_op(data) != nir_op_ineg)
+      return false;
+
+   data = nir_scalar_chase_alu_src(data, 0);
+
+   nir_src_rewrite(&intrin->src[data_idx], nir_mov_scalar(b, data));
+   nir_intrinsic_set_atomic_op(intrin, nir_atomic_op_isub);
+   return true;
+}
+
+static bool
+try_opt_atomic_to_exchange(nir_builder *b, nir_intrinsic_instr *intrin,
+                           unsigned data_idx)
+{
+   nir_scalar data = nir_scalar_resolved(intrin->src[data_idx].ssa, 0);
+   if (!nir_scalar_is_const(data))
+      return false;
+
+   int64_t value;
+   switch (nir_intrinsic_atomic_op(intrin)) {
+   case nir_atomic_op_ior:
+   case nir_atomic_op_umax:
+      value = -1;
+      break;
+   case nir_atomic_op_iand:
+   case nir_atomic_op_umin:
+      value = 0;
+      break;
+   case nir_atomic_op_imin:
+      value = u_intN_min(intrin->def.bit_size);
+      break;
+   case nir_atomic_op_imax:
+      value = u_intN_max(intrin->def.bit_size);
+      break;
+   default:
+      return false;
+   }
+
+   if (nir_scalar_as_int(data) != value)
+      return false;
+
+   nir_intrinsic_set_atomic_op(intrin, nir_atomic_op_xchg);
+   return true;
+}
+
+static nir_alu_type
+image_atomic_type(nir_intrinsic_instr *intrin)
+{
+   enum pipe_format format = nir_intrinsic_format(intrin);
+
+   nir_alu_type base_type = nir_type_float;
+   if (util_format_is_pure_sint(format))
+      base_type = nir_type_int;
+   else if (util_format_is_pure_uint(format))
+      base_type = nir_type_uint;
+
+   return base_type | intrin->def.bit_size;
+}
+
+static bool
+try_opt_atomic_exchange_to_store(nir_builder *b, nir_intrinsic_instr *intrin)
+{
+   if (!b->shader->options->has_atomic_load_store)
+      return false;
+   if (nir_intrinsic_atomic_op(intrin) != nir_atomic_op_xchg)
+      return false;
+   if (!nir_def_is_unused(&intrin->def))
+      return false;
+
+   /* We need to know the storage image format to get the type of the image access. */
+   if (nir_intrinsic_has_format(intrin) && nir_intrinsic_format(intrin) == PIPE_FORMAT_NONE)
+      return false;
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_deref_atomic: {
+      uint32_t access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC;
+      if (!nir_deref_mode_must_be(nir_src_as_deref(intrin->src[0]), nir_var_mem_shared))
+         access |= ACCESS_COHERENT;
+      nir_build_store_deref(b, intrin->src[0].ssa, intrin->src[1].ssa, .access = access);
+      break;
+   }
+   case nir_intrinsic_shared_atomic:
+      nir_store_shared(b, intrin->src[1].ssa, intrin->src[0].ssa,
+                       .access = ACCESS_ATOMIC,
+                       .base = nir_intrinsic_base(intrin));
+      break;
+   case nir_intrinsic_global_atomic:
+      nir_store_global(b, intrin->src[1].ssa, intrin->src[0].ssa,
+                       .access = ACCESS_ATOMIC | ACCESS_COHERENT);
+      break;
+   case nir_intrinsic_global_atomic_amd:
+      nir_store_global_amd(b, intrin->src[1].ssa, intrin->src[0].ssa, intrin->src[2].ssa,
+                           .access = ACCESS_ATOMIC | ACCESS_COHERENT,
+                           .base = nir_intrinsic_base(intrin));
+      break;
+   case nir_intrinsic_ssbo_atomic:
+      nir_store_ssbo(b, intrin->src[2].ssa, intrin->src[0].ssa, intrin->src[1].ssa,
+                     .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                     .offset_shift = nir_intrinsic_offset_shift(intrin));
+      break;
+   case nir_intrinsic_image_deref_atomic:
+      nir_image_deref_store(b, intrin->src[0].ssa,
+                            intrin->src[1].ssa,
+                            intrin->src[2].ssa,
+                            intrin->src[3].ssa,
+                            nir_imm_int(b, 0),
+                            .image_dim = nir_intrinsic_image_dim(intrin),
+                            .image_array = nir_intrinsic_image_array(intrin),
+                            .format = nir_intrinsic_format(intrin),
+                            .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                            .src_type = image_atomic_type(intrin));
+      break;
+   case nir_intrinsic_image_atomic:
+      nir_image_store(b, intrin->src[0].ssa,
+                      intrin->src[1].ssa,
+                      intrin->src[2].ssa,
+                      intrin->src[3].ssa,
+                      nir_imm_int(b, 0),
+                      .image_dim = nir_intrinsic_image_dim(intrin),
+                      .image_array = nir_intrinsic_image_array(intrin),
+                      .format = nir_intrinsic_format(intrin),
+                      .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                      .range_base = nir_intrinsic_range_base(intrin),
+                      .src_type = image_atomic_type(intrin));
+      break;
+   case nir_intrinsic_bindless_image_atomic:
+      nir_bindless_image_store(b, intrin->src[0].ssa,
+                               intrin->src[1].ssa,
+                               intrin->src[2].ssa,
+                               intrin->src[3].ssa,
+                               nir_imm_int(b, 0),
+                               .image_dim = nir_intrinsic_image_dim(intrin),
+                               .image_array = nir_intrinsic_image_array(intrin),
+                               .format = nir_intrinsic_format(intrin),
+                               .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                               .src_type = image_atomic_type(intrin));
+      break;
+   default:
+      UNREACHABLE("unhandled atomic intrinsic");
+   }
+
+   nir_instr_remove(&intrin->instr);
+   return true;
+}
+
+static bool
+try_opt_atomic_to_load(nir_builder *b, nir_intrinsic_instr *intrin,
+                       unsigned data_idx)
+{
+   if (!b->shader->options->has_atomic_load_store)
+      return false;
+
+   nir_scalar data = nir_scalar_resolved(intrin->src[data_idx].ssa, 0);
+   if (!nir_scalar_is_const(data))
+      return false;
+
+   int64_t value;
+   switch (nir_intrinsic_atomic_op(intrin)) {
+   case nir_atomic_op_iadd:
+   case nir_atomic_op_isub:
+   case nir_atomic_op_ior:
+   case nir_atomic_op_ixor:
+   case nir_atomic_op_umax:
+      value = 0;
+      break;
+   case nir_atomic_op_iand:
+   case nir_atomic_op_umin:
+      value = -1;
+      break;
+   case nir_atomic_op_imin:
+      value = u_intN_max(intrin->def.bit_size);
+      break;
+   case nir_atomic_op_imax:
+      value = u_intN_min(intrin->def.bit_size);
+      break;
+   default:
+      return false;
+   }
+
+   if (nir_scalar_as_int(data) != value)
+      return false;
+
+   /* We need to know the storage image format to get the type of the image access. */
+   if (nir_intrinsic_has_format(intrin) && nir_intrinsic_format(intrin) == PIPE_FORMAT_NONE)
+      return false;
+
+   unsigned bit_size = intrin->def.bit_size;
+
+   nir_def *def;
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_deref_atomic: {
+      uint32_t access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC;
+      if (!nir_deref_mode_must_be(nir_src_as_deref(intrin->src[0]), nir_var_mem_shared))
+         access |= ACCESS_COHERENT;
+      def = nir_build_load_deref(b, 1, bit_size, intrin->src[0].ssa, .access = access);
+      break;
+   }
+   case nir_intrinsic_shared_atomic:
+      def = nir_load_shared(b, 1, bit_size, intrin->src[0].ssa,
+                            .access = ACCESS_ATOMIC,
+                            .base = nir_intrinsic_base(intrin));
+      break;
+   case nir_intrinsic_global_atomic:
+      def = nir_load_global(b, 1, bit_size, intrin->src[0].ssa,
+                            .access = ACCESS_ATOMIC | ACCESS_COHERENT);
+      break;
+   case nir_intrinsic_global_atomic_amd:
+      def = nir_load_global_amd(b, 1, bit_size, intrin->src[0].ssa, intrin->src[2].ssa,
+                                .access = ACCESS_ATOMIC | ACCESS_COHERENT,
+                                .base = nir_intrinsic_base(intrin));
+      break;
+   case nir_intrinsic_ssbo_atomic:
+      def = nir_load_ssbo(b, 1, bit_size, intrin->src[0].ssa, intrin->src[1].ssa,
+                          .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                          .offset_shift = nir_intrinsic_offset_shift(intrin));
+      break;
+   case nir_intrinsic_image_deref_atomic:
+      def = nir_image_deref_load(b, 1, bit_size,
+                                 intrin->src[0].ssa,
+                                 intrin->src[1].ssa,
+                                 intrin->src[2].ssa,
+                                 nir_imm_int(b, 0),
+                                 .image_dim = nir_intrinsic_image_dim(intrin),
+                                 .image_array = nir_intrinsic_image_array(intrin),
+                                 .format = nir_intrinsic_format(intrin),
+                                 .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                                 .dest_type = image_atomic_type(intrin));
+      break;
+   case nir_intrinsic_image_atomic:
+      def = nir_image_load(b, 1, bit_size,
+                           intrin->src[0].ssa,
+                           intrin->src[1].ssa,
+                           intrin->src[2].ssa,
+                           nir_imm_int(b, 0),
+                           .image_dim = nir_intrinsic_image_dim(intrin),
+                           .image_array = nir_intrinsic_image_array(intrin),
+                           .format = nir_intrinsic_format(intrin),
+                           .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                           .range_base = nir_intrinsic_range_base(intrin),
+                           .dest_type = image_atomic_type(intrin));
+      break;
+   case nir_intrinsic_bindless_image_atomic:
+      def = nir_bindless_image_load(b, 1, bit_size,
+                                    intrin->src[0].ssa,
+                                    intrin->src[1].ssa,
+                                    intrin->src[2].ssa,
+                                    nir_imm_int(b, 0),
+                                    .image_dim = nir_intrinsic_image_dim(intrin),
+                                    .image_array = nir_intrinsic_image_array(intrin),
+                                    .format = nir_intrinsic_format(intrin),
+                                    .access = nir_intrinsic_access(intrin) | ACCESS_ATOMIC | ACCESS_COHERENT,
+                                    .dest_type = image_atomic_type(intrin));
+      break;
+   default:
+      UNREACHABLE("unhandled atomic intrinsic");
+   }
+
+   nir_def_replace(&intrin->def, def);
+   return true;
+}
+
+static bool
+opt_intrinsics_intrin(nir_builder *b, nir_intrinsic_instr *intrin)
+{
+   bool progress = false;
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_sample_mask_in: {
       /* Transform:
        *   gl_SampleMaskIn == 0 ---> gl_HelperInvocation
        *   gl_SampleMaskIn != 0 ---> !gl_HelperInvocation
        */
-      if (!options->optimize_sample_mask_in)
+      if (!b->shader->options->optimize_sample_mask_in)
          return false;
 
       bool progress = false;
@@ -379,14 +647,36 @@ opt_intrinsics_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
    }
    case nir_intrinsic_exclusive_scan:
       return try_opt_exclusive_scan_to_inclusive(b, intrin);
+   case nir_intrinsic_shared_atomic:
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_global_atomic_amd:
+   case nir_intrinsic_deref_atomic:
+      progress |= try_opt_atomic_isub(b, intrin, 1);
+      progress |= try_opt_atomic_to_exchange(b, intrin, 1);
+      progress |= try_opt_atomic_exchange_to_store(b, intrin);
+      progress |= try_opt_atomic_to_load(b, intrin, 1);
+      return progress;
+   case nir_intrinsic_ssbo_atomic:
+      progress |= try_opt_atomic_isub(b, intrin, 2);
+      progress |= try_opt_atomic_to_exchange(b, intrin, 2);
+      progress |= try_opt_atomic_exchange_to_store(b, intrin);
+      progress |= try_opt_atomic_to_load(b, intrin, 2);
+      return progress;
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_bindless_image_atomic:
+      progress |= try_opt_atomic_isub(b, intrin, 3);
+      progress |= try_opt_atomic_to_exchange(b, intrin, 3);
+      progress |= try_opt_atomic_exchange_to_store(b, intrin);
+      progress |= try_opt_atomic_to_load(b, intrin, 3);
+      return progress;
    default:
       return false;
    }
 }
 
 static bool
-opt_intrinsics_impl(nir_function_impl *impl,
-                    const struct nir_shader_compiler_options *options)
+opt_intrinsics_impl(nir_function_impl *impl)
 {
    nir_builder b = nir_builder_create(impl);
    bool progress = false;
@@ -400,7 +690,7 @@ opt_intrinsics_impl(nir_function_impl *impl,
          switch (instr->type) {
          case nir_instr_type_alu:
             if (opt_intrinsics_alu(&b, nir_instr_as_alu(instr),
-                                   block_has_discard, options))
+                                   block_has_discard))
                progress = true;
             break;
 
@@ -412,7 +702,7 @@ opt_intrinsics_impl(nir_function_impl *impl,
                 intrin->intrinsic == nir_intrinsic_terminate_if)
                block_has_discard = true;
 
-            if (opt_intrinsics_intrin(&b, intrin, options))
+            if (opt_intrinsics_intrin(&b, intrin))
                progress = true;
             break;
          }
@@ -432,7 +722,7 @@ nir_opt_intrinsics(nir_shader *shader)
    bool progress = false;
 
    nir_foreach_function_impl(impl, shader) {
-      bool impl_progress = opt_intrinsics_impl(impl, shader->options);
+      bool impl_progress = opt_intrinsics_impl(impl);
       progress |= nir_progress(impl_progress, impl,
                                nir_metadata_control_flow);
    }

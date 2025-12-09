@@ -55,7 +55,6 @@ radv_pipeline_layout_hash(struct radv_pipeline_layout *layout)
 
       _mesa_blake3_update(&ctx, set_layout->hash, sizeof(set_layout->hash));
    }
-   _mesa_blake3_update(&ctx, &layout->push_constant_size, sizeof(layout->push_constant_size));
    _mesa_blake3_final(&ctx, layout->hash);
 }
 
@@ -99,15 +98,6 @@ radv_CreatePipelineLayout(VkDevice _device, const VkPipelineLayoutCreateInfo *pC
 
       radv_pipeline_layout_add_set(layout, set, set_layout);
    }
-
-   layout->push_constant_size = 0;
-
-   for (unsigned i = 0; i < pCreateInfo->pushConstantRangeCount; ++i) {
-      const VkPushConstantRange *range = pCreateInfo->pPushConstantRanges + i;
-      layout->push_constant_size = MAX2(layout->push_constant_size, range->offset + range->size);
-   }
-
-   layout->push_constant_size = align(layout->push_constant_size, 16);
 
    radv_pipeline_layout_hash(layout);
 

@@ -82,7 +82,7 @@ typedef void (*isl_emit_cpb_control_s_func)(const struct isl_device *dev, void *
       case 300:                                                         \
          return isl_gfx30_##func;                                       \
       default:                                                          \
-         unreachable("Unknown hardware generation");                    \
+         UNREACHABLE("Unknown hardware generation");                    \
       }                                                                 \
    }
 
@@ -107,16 +107,6 @@ static inline bool
 isl_is_pow2(uintmax_t n)
 {
    return !(n & (n - 1));
-}
-
-/**
- * Alignment must be a power of 2.
- */
-static inline bool
-isl_is_aligned(uintmax_t n, uintmax_t a)
-{
-   assert(isl_is_pow2(a));
-   return (n & (a - 1)) == 0;
 }
 
 /**
@@ -184,6 +174,38 @@ isl_minify(uint32_t n, uint32_t levels)
       return 0;
    else
       return MAX(n >> levels, 1);
+}
+
+/**
+ * Returns the greatest common divisor of a and b using Stein's algorithm.
+ */
+static uint32_t
+isl_gcd_u32(uint32_t a, uint32_t b)
+{
+   assert(a > 0 || b > 0);
+   uint32_t k;
+   for (k = 0; ((a | b) & 1) == 0; ++k) {
+      a >>= 1;
+      b >>= 1;
+   }
+   while ((a & 1) == 0)
+      a >>= 1;
+   do {
+      while ((b & 1) == 0)
+         b >>= 1;
+      if (a > b) {
+         uint32_t tmp = a;
+         a = b;
+         b = tmp;
+      }
+      b = (b - a);
+   } while (b != 0);
+   return a << k;
+}
+
+static inline uint32_t
+isl_lcm_u32(uint32_t a, uint32_t b) {
+   return a / isl_gcd_u32(a, b) * b;
 }
 
 static inline struct isl_extent3d

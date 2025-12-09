@@ -450,7 +450,7 @@ calculate_can_move_for_cf_list(opt_preamble_ctx *ctx, struct exec_list *list)
       }
 
       default:
-         unreachable("Unexpected CF node type");
+         UNREACHABLE("Unexpected CF node type");
       }
    }
 
@@ -500,7 +500,7 @@ replace_for_block(nir_builder *b, opt_preamble_ctx *ctx,
                assert(else_def == NULL);
                else_def = phi_src->src.ssa;
             } else {
-               unreachable("Invalid predecessor for phi of if");
+               UNREACHABLE("Invalid predecessor for phi of if");
             }
          }
 
@@ -515,7 +515,7 @@ replace_for_block(nir_builder *b, opt_preamble_ctx *ctx,
             nir_before_block_after_phis(nir_cursor_current_block(b->cursor));
 
          nir_def *repl = nir_if_phi(b, then_def, else_def);
-         clone = repl->parent_instr;
+         clone = nir_def_instr(repl);
 
          _mesa_hash_table_insert(remap_table, &phi->def, repl);
       } else {
@@ -600,7 +600,7 @@ replace_for_cf_list(nir_builder *b, opt_preamble_ctx *ctx,
       }
 
       default:
-         unreachable("Unexpected CF node type");
+         UNREACHABLE("Unexpected CF node type");
       }
    }
 }
@@ -931,8 +931,7 @@ nir_opt_preamble(nir_shader *shader, const nir_opt_preamble_options *options,
     * we did.
     */
    ctx.reconstructed_ifs = _mesa_pointer_set_create(NULL);
-   ctx.reconstructed_defs = calloc(BITSET_WORDS(impl->ssa_alloc),
-                                   sizeof(BITSET_WORD));
+   ctx.reconstructed_defs = BITSET_CALLOC(impl->ssa_alloc);
    analyze_reconstructed(&ctx, impl);
 
    /* If we make progress analyzing speculation, we need to re-analyze

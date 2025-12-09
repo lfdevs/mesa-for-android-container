@@ -13,6 +13,22 @@
     - changes: *venus_file_list
       when: manual
 
+.venus-collabora-rules:
+  rules:
+    - !reference [.test, rules]
+    - !reference [.collabora-farm-rules, rules]
+    - !reference [.vulkan-rules, rules]
+    - changes: *venus_file_list
+      when: on_success
+
+.venus-collabora-manual-rules:
+  rules:
+    - !reference [.test, rules]
+    - !reference [.collabora-farm-manual-rules, rules]
+    - !reference [.vulkan-manual-rules, rules]
+    - changes: *venus_file_list
+      when: manual
+
 .venus-lavapipe-rules:
   stage: layered-backends
   rules:
@@ -29,14 +45,14 @@
 .venus-anv-rules:
   stage: layered-backends
   rules:
-    - !reference [.venus-rules, rules]
+    - !reference [.venus-collabora-rules, rules]
     - !reference [.anv-rules, rules]
 
 .venus-anv-manual-rules:
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
-    - !reference [.venus-manual-rules, rules]
+    - !reference [.venus-collabora-manual-rules, rules]
     - !reference [.anv-manual-rules, rules]
 
 
@@ -60,5 +76,5 @@
     - .anv-test
     - .test-angle
   variables:
-    ANDROID_GPU_MODE: venus_guest_angle
+    CUTTLEFISH_GPU_MODE: venus_guest_angle
     VK_DRIVER: intel

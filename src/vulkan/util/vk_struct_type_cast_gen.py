@@ -91,8 +91,8 @@ def main():
                         help='Vulkan API XML files',
                         action='append',
                         dest='xml_files')
-    parser.add_argument('--outdir',
-                        help='Directory to put the generated files in',
+    parser.add_argument('--out',
+                        help='Output H file',
                         required=True)
     parser.add_argument('--beta', required=True, help='Enable beta extensions.')
 
@@ -105,7 +105,7 @@ def main():
 
     structs = sorted(structs, key=lambda s: s.name)
 
-    for template, file_ in [(H_TEMPLATE, os.path.join(args.outdir, 'vk_struct_type_cast.h'))]:
+    for template, file_ in [(H_TEMPLATE, args.out)]:
         with open(file_, 'w', encoding='utf-8') as f:
             f.write(template.render(
                 file=os.path.basename(__file__),

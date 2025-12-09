@@ -109,6 +109,13 @@ struct ra_spill_ctx {
     */
    struct ir3_register *base_reg;
 
+   /* During spilling/reloading, we keep track of the least common ancestor of
+    * all spill/reload blocks and move base_reg there. This prevents using a GPR
+    * in the preamble, end hence disabling early preamble, if nothing is spilled
+    * there.
+    */
+   struct ir3_block *base_reg_block;
+
    /* Current pvtmem offset in bytes. */
    unsigned spill_slot;
 
@@ -757,6 +764,8 @@ spill(struct ra_spill_ctx *ctx, const struct reg_or_immed *val,
    } else {
       src->wrmask = reg->wrmask;
    }
+
+   ctx->base_reg_block = ir3_dominance_lca(ctx->base_reg_block, spill->block);
 }
 
 static void
@@ -927,6 +936,7 @@ reload(struct ra_spill_ctx *ctx, struct ir3_register *reg,
    dst->merge_set_offset = reg->merge_set_offset;
    dst->interval_start = reg->interval_start;
    dst->interval_end = reg->interval_end;
+   ctx->base_reg_block = ir3_dominance_lca(ctx->base_reg_block, reload->block);
    return dst;
 }
 
@@ -1781,8 +1791,7 @@ record_pred_live_outs(struct ra_spill_ctx *ctx, struct ir3_block *block)
       if (state->visited)
          continue;
 
-      state->live_out = rzalloc_array(ctx, BITSET_WORD,
-                                      BITSET_WORDS(ctx->live->definitions_count));
+      state->live_out = BITSET_RZALLOC(ctx, ctx->live->definitions_count);
 
 
       rb_tree_foreach (struct ra_spill_interval, interval,
@@ -2163,6 +2172,12 @@ ir3_spill(struct ir3 *ir, struct ir3_shader_variant *v,
    cleanup_dead(ir);
 
    ir3_create_parallel_copies(ir);
+
+   if (ctx->base_reg_block &&
+       ctx->base_reg_block != ctx->base_reg->instr->block) {
+      ir3_instr_move_after_phis(ctx->base_reg->instr, ctx->base_reg_block);
+      ctx->base_reg->instr->block = ctx->base_reg_block;
+   }
 
    /* After this point, we're done mutating the IR. Liveness has been trashed,
     * so recalculate it. We'll need it for recalculating the merge sets.

@@ -663,7 +663,7 @@ bind_image_texture(struct gl_context *ctx, struct gl_texture_object *texObj,
    u = &ctx->ImageUnits[unit];
 
    FLUSH_VERTICES(ctx, 0, 0);
-   ctx->NewDriverState |= ST_NEW_IMAGE_UNITS;
+   ST_SET_SHADER_STATES(ctx->NewDriverState, IMAGES);
 
    set_image_binding(u, texObj, level, layered, layer, access, format);
 }
@@ -761,7 +761,7 @@ bind_image_textures(struct gl_context *ctx, GLuint first, GLuint count,
 
    /* Assume that at least one binding will be changed */
    FLUSH_VERTICES(ctx, 0, 0);
-   ctx->NewDriverState |= ST_NEW_IMAGE_UNITS;
+   ST_SET_SHADER_STATES(ctx->NewDriverState, IMAGES);
 
    /* Note that the error semantics for multi-bind commands differ from
     * those of other GL commands.

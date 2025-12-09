@@ -68,7 +68,7 @@ typedef bool (*ac_rtld_get_external_symbol_cb)(enum amd_gfx_level gfx_level, voi
 struct ac_rtld_open_info {
    const struct radeon_info *info;
    struct ac_rtld_options options;
-   gl_shader_stage shader_type;
+   mesa_shader_stage shader_type;
    unsigned wave_size;
 
    unsigned num_parts;

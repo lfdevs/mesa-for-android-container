@@ -569,6 +569,7 @@ create_iview(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *s
    radv_image_view_init(iview, device,
                         &(VkImageViewCreateInfo){
                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                           .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                            .image = radv_image_to_handle(surf->image),
                            .viewType = radv_meta_get_view_type(surf->image),
                            .format = format,
@@ -596,7 +597,7 @@ create_iview(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *s
  */
 static void
 fixup_gfx9_cs_copy(struct radv_cmd_buffer *cmd_buffer, const struct radv_meta_blit2d_buffer *buf_bsurf,
-                   const struct radv_meta_blit2d_surf *img_bsurf, const struct radv_meta_blit2d_rect *rect,
+                   const struct radv_meta_blit2d_surf *img_bsurf, const VkOffset3D *offset, const VkExtent3D *extent,
                    bool to_image)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
@@ -627,9 +628,9 @@ fixup_gfx9_cs_copy(struct radv_cmd_buffer *cmd_buffer, const struct radv_meta_bl
    VkExtent2D hw_mip_extent = {u_minify(hw_base_extent.width, mip_level), u_minify(hw_base_extent.height, mip_level)};
 
    /* The actual extent we want to copy */
-   VkExtent2D mip_extent = {rect->width, rect->height};
+   VkExtent2D mip_extent = {extent->width, extent->height};
 
-   VkOffset2D mip_offset = {to_image ? rect->dst_x : rect->src_x, to_image ? rect->dst_y : rect->src_y};
+   VkOffset2D mip_offset = {offset->x, offset->y};
 
    if (hw_mip_extent.width >= mip_offset.x + mip_extent.width &&
        hw_mip_extent.height >= mip_offset.y + mip_extent.height)
@@ -690,7 +691,7 @@ get_image_stride_for_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct radv_m
 
 void
 radv_meta_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
-                          struct radv_meta_blit2d_buffer *dst, struct radv_meta_blit2d_rect *rect)
+                          struct radv_meta_blit2d_buffer *dst, const VkOffset3D *offset, const VkExtent3D *extent)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    struct radv_image_view src_view;
@@ -732,7 +733,7 @@ radv_meta_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_b
 
    radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
-   unsigned push_constants[4] = {rect->src_x, rect->src_y, src->layer, dst->pitch};
+   unsigned push_constants[4] = {offset->x, offset->y, src->layer, dst->pitch};
 
    const VkPushConstantsInfoKHR pc_info = {
       .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
@@ -745,15 +746,16 @@ radv_meta_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_b
 
    radv_CmdPushConstants2(radv_cmd_buffer_to_handle(cmd_buffer), &pc_info);
 
-   radv_unaligned_dispatch(cmd_buffer, rect->width, rect->height, 1);
-   fixup_gfx9_cs_copy(cmd_buffer, dst, src, rect, false);
+   radv_unaligned_dispatch(cmd_buffer, extent->width, extent->height, 1);
+   fixup_gfx9_cs_copy(cmd_buffer, dst, src, offset, extent, false);
 
    radv_image_view_finish(&src_view);
 }
 
 static void
 radv_meta_buffer_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_buffer *src,
-                                       struct radv_meta_blit2d_surf *dst, struct radv_meta_blit2d_rect *rect)
+                                       struct radv_meta_blit2d_surf *dst, const VkOffset3D *offset,
+                                       const VkExtent3D *extent)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    VkPipelineLayout layout;
@@ -797,8 +799,8 @@ radv_meta_buffer_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struc
    stride = get_image_stride_for_r32g32b32(cmd_buffer, dst);
 
    unsigned push_constants[4] = {
-      rect->dst_x,
-      rect->dst_y,
+      offset->x,
+      offset->y,
       stride,
       src->pitch,
    };
@@ -814,12 +816,12 @@ radv_meta_buffer_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struc
 
    radv_CmdPushConstants2(radv_cmd_buffer_to_handle(cmd_buffer), &pc_info);
 
-   radv_unaligned_dispatch(cmd_buffer, rect->width, rect->height, 1);
+   radv_unaligned_dispatch(cmd_buffer, extent->width, extent->height, 1);
 }
 
 void
 radv_meta_buffer_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_buffer *src,
-                             struct radv_meta_blit2d_surf *dst, struct radv_meta_blit2d_rect *rect)
+                             struct radv_meta_blit2d_surf *dst, const VkOffset3D *offset, const VkExtent3D *extent)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    struct radv_image_view dst_view;
@@ -828,7 +830,7 @@ radv_meta_buffer_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_met
    VkResult result;
 
    if (vk_format_is_96bit(dst->image->vk.format)) {
-      radv_meta_buffer_to_image_cs_r32g32b32(cmd_buffer, src, dst, rect);
+      radv_meta_buffer_to_image_cs_r32g32b32(cmd_buffer, src, dst, offset, extent);
       return;
    }
 
@@ -866,8 +868,8 @@ radv_meta_buffer_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_met
    radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
    unsigned push_constants[4] = {
-      rect->dst_x,
-      rect->dst_y,
+      offset->x,
+      offset->y,
       dst->layer,
       src->pitch,
    };
@@ -883,15 +885,16 @@ radv_meta_buffer_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_met
 
    radv_CmdPushConstants2(radv_cmd_buffer_to_handle(cmd_buffer), &pc_info);
 
-   radv_unaligned_dispatch(cmd_buffer, rect->width, rect->height, 1);
-   fixup_gfx9_cs_copy(cmd_buffer, src, dst, rect, true);
+   radv_unaligned_dispatch(cmd_buffer, extent->width, extent->height, 1);
+   fixup_gfx9_cs_copy(cmd_buffer, src, dst, offset, extent, true);
 
    radv_image_view_finish(&dst_view);
 }
 
 static void
 radv_meta_image_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
-                                      struct radv_meta_blit2d_surf *dst, struct radv_meta_blit2d_rect *rect)
+                                      struct radv_meta_blit2d_surf *dst, const VkOffset3D *src_offset,
+                                      const VkOffset3D *dst_offset, const VkExtent3D *extent)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    unsigned src_stride, dst_stride;
@@ -939,7 +942,7 @@ radv_meta_image_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct
    dst_stride = get_image_stride_for_r32g32b32(cmd_buffer, dst);
 
    unsigned push_constants[6] = {
-      rect->src_x, rect->src_y, src_stride, rect->dst_x, rect->dst_y, dst_stride,
+      src_offset->x, src_offset->y, src_stride, dst_offset->x, dst_offset->y, dst_stride,
    };
 
    const VkPushConstantsInfoKHR pc_info = {
@@ -953,12 +956,13 @@ radv_meta_image_to_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct
 
    radv_CmdPushConstants2(radv_cmd_buffer_to_handle(cmd_buffer), &pc_info);
 
-   radv_unaligned_dispatch(cmd_buffer, rect->width, rect->height, 1);
+   radv_unaligned_dispatch(cmd_buffer, extent->width, extent->height, 1);
 }
 
 void
 radv_meta_image_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
-                            struct radv_meta_blit2d_surf *dst, struct radv_meta_blit2d_rect *rect)
+                            struct radv_meta_blit2d_surf *dst, const VkOffset3D *src_offset,
+                            const VkOffset3D *dst_offset, const VkExtent3D *extent)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    struct radv_image_view src_view, dst_view;
@@ -968,7 +972,7 @@ radv_meta_image_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta
    VkResult result;
 
    if (vk_format_is_96bit(src->format)) {
-      radv_meta_image_to_image_cs_r32g32b32(cmd_buffer, src, dst, rect);
+      radv_meta_image_to_image_cs_r32g32b32(cmd_buffer, src, dst, src_offset, dst_offset, extent);
       return;
    }
 
@@ -1041,7 +1045,7 @@ radv_meta_image_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta
       radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
       unsigned push_constants[6] = {
-         rect->src_x, rect->src_y, src->layer, rect->dst_x, rect->dst_y, dst->layer,
+         src_offset->x, src_offset->y, src->layer, dst_offset->x, dst_offset->y, dst->layer,
       };
 
       const VkPushConstantsInfoKHR pc_info = {
@@ -1055,7 +1059,7 @@ radv_meta_image_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta
 
       radv_CmdPushConstants2(radv_cmd_buffer_to_handle(cmd_buffer), &pc_info);
 
-      radv_unaligned_dispatch(cmd_buffer, rect->width, rect->height, 1);
+      radv_unaligned_dispatch(cmd_buffer, extent->width, extent->height, 1);
 
       radv_image_view_finish(&src_view);
       radv_image_view_finish(&dst_view);
@@ -1067,6 +1071,7 @@ radv_meta_clear_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct ra
                                    const VkClearColorValue *clear_color)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   struct radv_cmd_stream *cs = cmd_buffer->cs;
    VkPipelineLayout layout;
    VkPipeline pipeline;
    unsigned stride;
@@ -1078,7 +1083,7 @@ radv_meta_clear_image_cs_r32g32b32(struct radv_cmd_buffer *cmd_buffer, struct ra
       return;
    }
 
-   radv_cs_add_buffer(device->ws, cmd_buffer->cs, dst->image->bindings[0].bo);
+   radv_cs_add_buffer(device->ws, cs->b, dst->image->bindings[0].bo);
 
    radv_meta_bind_descriptors(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 1,
                               (VkDescriptorGetInfoEXT[]){{

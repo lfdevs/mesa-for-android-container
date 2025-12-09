@@ -856,7 +856,7 @@ nvc0_blitter_make_vp(struct pipe_context *pipe)
 {
    const nir_shader_compiler_options *options =
       nv50_ir_nir_shader_compiler_options(nouveau_screen(pipe->screen)->device->chipset,
-                                          PIPE_SHADER_VERTEX);
+                                          MESA_SHADER_VERTEX);
 
    struct nir_builder b =
       nir_builder_init_simple_shader(MESA_SHADER_VERTEX, options,

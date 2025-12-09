@@ -40,6 +40,7 @@ void afuc_printc(enum afuc_color c, const char *fmt, ...);
 enum afuc_fwid {
    AFUC_A730 = 0x730,
    AFUC_A740 = 0x740,
+   AFUC_GEN70500 = 0x512,
    AFUC_A750 = 0x520,
 
    AFUC_A630 = 0x6ee,

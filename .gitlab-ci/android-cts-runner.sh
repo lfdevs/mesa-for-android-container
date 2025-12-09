@@ -6,7 +6,7 @@
 
 ci_tag_test_time_check "ANDROID_CTS_TAG"
 
-export PATH=/android-tools/build-tools:/android-cts/jdk/bin/:$PATH
+export PATH=/android-cts/jdk/bin/:$PATH
 export JAVA_HOME=/android-cts/jdk
 
 # Wait for the appops service to show up

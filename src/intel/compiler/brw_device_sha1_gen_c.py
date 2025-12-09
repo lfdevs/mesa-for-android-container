@@ -63,13 +63,12 @@ brw_device_sha1_update(struct mesa_sha1 *ctx,
 def main():
     """print intel_device_serialize.c at the specified path"""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--outdir', required=True,
-                        help='Directory to put the generated files in')
+    parser.add_argument('--out', required=True,
+                        help='Output C file')
     args = parser.parse_args()
-    path = os.path.join(args.outdir, 'brw_device_sha1_gen.c')
     device_members = intel_device_info.TYPES_BY_NAME["intel_device_info"].members
     compiler_fields = [field for field in device_members if field.compiler_field]
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(args.out, 'w', encoding='utf-8') as f:
         try:
             f.write(Template(template).render(compiler_fields=compiler_fields))
         except:

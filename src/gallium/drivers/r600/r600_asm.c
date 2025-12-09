@@ -19,6 +19,14 @@
 #define NUM_OF_CYCLES 3
 #define NUM_OF_COMPONENTS 4
 
+/* This GPR is sacrificed for the cases where we write to a op3, but
+ * actually use the result only via PS/PV.
+ * TODO: consider tracking this better in RA and by assigning
+ * a live range only consisting of the one group. With that we might not
+ * need to completely sacrifice this register.
+ */
+#define R600_DUMMY_GPR 123
+
 static inline bool alu_writes(struct r600_bytecode_alu *alu)
 {
 	return alu->dst.write || alu->is_op3;
@@ -1248,7 +1256,6 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		const struct r600_bytecode_alu *alu, unsigned type)
 {
 	struct r600_bytecode_alu *nalu = r600_bytecode_alu();
-	struct r600_bytecode_alu *lalu;
 	int i, r;
 
 	if (!nalu)
@@ -1260,22 +1267,12 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 		assert(!alu->src[0].abs && !alu->src[1].abs && !alu->src[2].abs);
 	}
 
-	if (bc->cf_last != NULL && bc->cf_last->op != type) {
+	if (bc->cf_last != NULL && bc->cf_last->op != type && !bc->force_add_cf) {
 		/* check if we could add it anyway */
-		if ((bc->cf_last->op == CF_OP_ALU && type == CF_OP_ALU_PUSH_BEFORE) ||
-		 	(bc->cf_last->op == CF_OP_ALU_PUSH_BEFORE && type == CF_OP_ALU)) {
-		 	LIST_FOR_EACH_ENTRY(lalu, &bc->cf_last->alu, list) {
-		 		if (lalu->execute_mask) {
-                                        assert(bc->force_add_cf || !"no force cf");
-					bc->force_add_cf = 1;
-					break;
-				}
-		 		type = CF_OP_ALU_PUSH_BEFORE;
-			}
-		} else  {
-                   assert(bc->force_add_cf ||!"no force cf");
-			bc->force_add_cf = 1;
-                }
+		if (bc->cf_last->op == CF_OP_ALU_PUSH_BEFORE && type == CF_OP_ALU)
+			type = CF_OP_ALU_PUSH_BEFORE;
+		else
+			assert(!"Try adding ALU with unsipported CF type to ALU_PUSH_BEFORE");
 	}
 
 	/* cf can contains only alu or only vtx or only tex */
@@ -1316,14 +1313,14 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
 	}
 	/* number of gpr == the last gpr used in any alu */
 	for (i = 0; i < 3; i++) {
-		if (nalu->src[i].sel >= bc->ngpr && nalu->src[i].sel < 123) {
+		if (nalu->src[i].sel >= bc->ngpr && nalu->src[i].sel < R600_DUMMY_GPR) {
 			bc->ngpr = nalu->src[i].sel + 1;
 		}
 		if (nalu->src[i].sel == V_SQ_ALU_SRC_LITERAL)
 			r600_bytecode_special_constants(nalu->src[i].value,
 				&nalu->src[i].sel);
 	}
-	if (nalu->dst.write && nalu->dst.sel >= bc->ngpr && nalu->dst.sel < 123) {
+	if (nalu->dst.write && nalu->dst.sel >= bc->ngpr && nalu->dst.sel < R600_DUMMY_GPR) {
 		bc->ngpr = nalu->dst.sel + 1;
 	}
 	list_addtail(&nalu->list, &bc->cf_last->alu);
@@ -1538,10 +1535,6 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 		 */
 		if (!list_is_empty(&bc->cf_last->vtx))
 			bc->force_add_cf = 1;
-
-		/* slight hack to make gradients always go into same cf */
-		if (ntex->op == FETCH_OP_SET_GRADIENTS_H)
-			bc->force_add_cf = 1;
 	}
 
 	/* cf can contains only alu or only vtx or only tex */
@@ -1582,6 +1575,13 @@ int r600_bytecode_add_gds(struct r600_bytecode *bc, const struct r600_bytecode_g
 	if (bc->gfx_level >= EVERGREEN) {
 		assert(!gds->uav_index_mode ||
 		       bc->index_loaded[gds->uav_index_mode - 1]);
+	}
+
+	if (gds->src_gpr >= bc->ngpr) {
+		bc->ngpr = gds->src_gpr + 1;
+	}
+	if (gds->dst_gpr >= bc->ngpr) {
+		bc->ngpr = gds->dst_gpr + 1;
 	}
 
 	if (bc->cf_last == NULL ||
@@ -1831,9 +1831,9 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 	if (!bc->nstack) { // If not 0, Stack_size already provided by llvm
 		if (bc->stack.max_entries)
 			bc->nstack = bc->stack.max_entries;
-		else if (bc->type == PIPE_SHADER_VERTEX ||
-			 bc->type == PIPE_SHADER_TESS_EVAL ||
-			 bc->type == PIPE_SHADER_TESS_CTRL)
+		else if (bc->type == MESA_SHADER_VERTEX ||
+			 bc->type == MESA_SHADER_TESS_EVAL ||
+			 bc->type == MESA_SHADER_TESS_CTRL)
 			bc->nstack = 1;
 	}
 
@@ -1991,7 +1991,8 @@ static int print_sel(unsigned sel, unsigned rel, unsigned index_mode,
 	if (rel || need_brackets) {
 		o += fprintf(stderr, "[");
 	}
-	o += fprintf(stderr, "%d", sel);
+	if (sel != R600_DUMMY_GPR)
+		o += fprintf(stderr, "%d", sel);
 	if (rel) {
 		if (index_mode == 0 || index_mode == 6)
 			o += fprintf(stderr, "+AR");
@@ -2004,7 +2005,7 @@ static int print_sel(unsigned sel, unsigned rel, unsigned index_mode,
 	return o;
 }
 
-static int print_dst(struct r600_bytecode_alu *alu)
+static int print_dst(struct r600_bytecode_alu *alu, bool is_t)
 {
 	int o = 0;
 	unsigned sel = alu->dst.sel;
@@ -2012,11 +2013,14 @@ static int print_dst(struct r600_bytecode_alu *alu)
 	if (sel >= 128 - 4) { /* clause temporary gpr */
 		sel -= 128 - 4;
 		reg_char = 'T';
+	} else if (sel == R600_DUMMY_GPR) {
+		reg_char = 'P';
 	}
 
 	if (alu_writes(alu)) {
 		o += fprintf(stderr, "%c", reg_char);
 		o += print_sel(sel, alu->dst.rel, alu->index_mode, 0);
+		if (sel == R600_DUMMY_GPR) o += fprintf(stderr, "%c", (is_t ? 'S' : 'V'));
 	} else {
 		o += fprintf(stderr, "__");
 	}
@@ -2415,7 +2419,7 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 			const char *omod_str[] = {"","*2","*4","/2"};
 			const struct alu_op_info *aop = r600_isa_alu(alu->op);
 			int o = 0;
-
+			bool is_t = false;
 			r600_bytecode_alu_nliterals(alu, literal, &nliteral);
 			o += fprintf(stderr, " %04d %08X %08X  ", id, bc->bytecode[id], bc->bytecode[id+1]);
 			if (last)
@@ -2424,9 +2428,10 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 				o += fprintf(stderr, "     ");
 
 			if ((chan_mask & (1 << alu->dst.chan)) ||
-				((aop->slots[bc->isa->hw_class] == AF_S) && !(bc->isa->hw_class == ISA_CC_CAYMAN)))
+				((aop->slots[bc->isa->hw_class] == AF_S) && !(bc->isa->hw_class == ISA_CC_CAYMAN))) {
 				o += fprintf(stderr, "t:");
-			else
+				is_t = true;
+			} else
 				o += fprintf(stderr, "%c:", chan[alu->dst.chan]);
 			chan_mask |= 1 << alu->dst.chan;
 
@@ -2445,7 +2450,7 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 				case 3: fprintf(stderr, "CF_IDX1"); break;
 				}
 			} else {
-				o += print_dst(alu);
+				o += print_dst(alu, is_t);
 			}
 			for (int i = 0; i < aop->src_count; ++i) {
 				o += fprintf(stderr, i == 0 ? ",  ": ", ");

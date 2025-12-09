@@ -36,6 +36,7 @@ ir3_create(struct ir3_compiler *compiler, struct ir3_shader_variant *v)
 
    shader->compiler = compiler;
    shader->type = v->type;
+   shader->lin_ctx = linear_context(shader);
 
    list_inithead(&shader->block_list);
    list_inithead(&shader->array_list);
@@ -379,6 +380,7 @@ ir3_collect_info(struct ir3_shader_variant *v)
    info->sizedwords = info->size / 4;
 
    info->early_preamble = v->early_preamble;
+   info->loops = v->loops;
 
    bool in_preamble = false;
    bool has_eq = false;
@@ -605,7 +607,7 @@ ir3_collect_info(struct ir3_shader_variant *v)
 static struct ir3_register *
 reg_create(struct ir3 *shader, int num, int flags)
 {
-   struct ir3_register *reg = ir3_alloc(shader, sizeof(struct ir3_register));
+   struct ir3_register *reg = linear_zalloc(shader->lin_ctx, struct ir3_register);
    reg->wrmask = 1;
    reg->flags = flags;
    reg->num = num;
@@ -642,13 +644,18 @@ struct ir3_block *
 ir3_block_create(struct ir3 *shader)
 {
    struct ir3_block *block = ir3_alloc(shader, sizeof(*block));
-#if MESA_DEBUG
-   block->serialno = ++shader->block_count;
-#endif
    block->shader = shader;
    list_inithead(&block->node);
    list_inithead(&block->instr_list);
    return block;
+}
+
+uint32_t
+block_id(struct ir3_block *block)
+{
+   if (block->nblock)
+      return block->nblock->index;
+   return (uint32_t)(unsigned long)block;
 }
 
 struct ir3_instruction *
@@ -660,7 +667,7 @@ ir3_find_end(struct ir3 *ir)
             return instr;
       }
    }
-   unreachable("couldn't find end instruction");
+   UNREACHABLE("couldn't find end instruction");
 }
 
 static struct ir3_instruction *
@@ -750,7 +757,7 @@ ir3_find_shpe(struct ir3 *ir)
       }
    }
 
-   unreachable("preamble without shpe");
+   UNREACHABLE("preamble without shpe");
 }
 
 struct ir3_instruction *
@@ -870,7 +877,7 @@ ir3_block_get_pred_index(struct ir3_block *block, struct ir3_block *pred)
       }
    }
 
-   unreachable("ir3_block_get_pred_index() invalid predecessor");
+   UNREACHABLE("ir3_block_get_pred_index() invalid predecessor");
 }
 
 static struct ir3_instruction *
@@ -882,7 +889,7 @@ instr_create(struct ir3_block *block, opc_t opc, int ndst, int nsrc)
    struct ir3_instruction *instr;
    unsigned sz = sizeof(*instr) + (ndst * sizeof(instr->dsts[0])) +
                  (nsrc * sizeof(instr->srcs[0]));
-   char *ptr = ir3_alloc(block->shader, sz);
+   char *ptr = linear_zalloc_child(block->shader->lin_ctx, sz);
 
    instr = (struct ir3_instruction *)ptr;
    ptr += sizeof(*instr);
@@ -894,7 +901,6 @@ instr_create(struct ir3_block *block, opc_t opc, int ndst, int nsrc)
    instr->srcs_max = nsrc;
 #endif
 
-   list_inithead(&instr->rpt_node);
    return instr;
 }
 
@@ -973,7 +979,8 @@ ir3_instr_clone(struct ir3_instruction *instr)
    new_instr->dsts = dsts;
    new_instr->srcs = srcs;
    new_instr->uses = NULL;
-   list_inithead(&new_instr->rpt_node);
+   new_instr->rpt_prev = NULL;
+   new_instr->rpt_next = NULL;
 
    insert_instr(ir3_before_terminator(instr->block), new_instr);
 
@@ -1011,14 +1018,21 @@ ir3_instr_add_dep(struct ir3_instruction *instr, struct ir3_instruction *dep)
          return;
    }
 
-   array_insert(instr, instr->deps, dep);
+   array_insert(instr->block->shader, instr->deps, dep);
 }
 
 void
 ir3_instr_remove(struct ir3_instruction *instr)
 {
    list_delinit(&instr->node);
-   list_delinit(&instr->rpt_node);
+
+   if (instr->rpt_prev) {
+      instr->rpt_prev->rpt_next = instr->rpt_next;
+   }
+
+   if (instr->rpt_next) {
+      instr->rpt_next->rpt_prev = instr->rpt_prev;
+   }
 }
 
 void
@@ -1027,28 +1041,25 @@ ir3_instr_create_rpt(struct ir3_instruction **instrs, unsigned n)
    assert(n > 0 && !ir3_instr_is_rpt(instrs[0]));
 
    for (unsigned i = 1; i < n; ++i) {
-      assert(!ir3_instr_is_rpt(instrs[i]));
-      assert(instrs[i]->serialno > instrs[i - 1]->serialno);
+      struct ir3_instruction *instr = instrs[i];
+      struct ir3_instruction *prev = instrs[i - 1];
+      assert(!ir3_instr_is_rpt(instr));
 
-      list_addtail(&instrs[i]->rpt_node, &instrs[0]->rpt_node);
+      prev->rpt_next = instr;
+      instr->rpt_prev = prev;
    }
 }
 
 bool
 ir3_instr_is_rpt(const struct ir3_instruction *instr)
 {
-   return !list_is_empty(&instr->rpt_node);
+   return instr->rpt_prev || instr->rpt_next;
 }
 
 bool
 ir3_instr_is_first_rpt(const struct ir3_instruction *instr)
 {
-   if (!ir3_instr_is_rpt(instr))
-      return false;
-
-   struct ir3_instruction *prev_rpt =
-      list_entry(instr->rpt_node.prev, struct ir3_instruction, rpt_node);
-   return prev_rpt->serialno > instr->serialno;
+   return instr->rpt_next && !instr->rpt_prev;
 }
 
 struct ir3_instruction *
@@ -1056,9 +1067,7 @@ ir3_instr_prev_rpt(const struct ir3_instruction *instr)
 {
    assert(ir3_instr_is_rpt(instr));
 
-   if (ir3_instr_is_first_rpt(instr))
-      return NULL;
-   return list_entry(instr->rpt_node.prev, struct ir3_instruction, rpt_node);
+   return instr->rpt_prev;
 }
 
 struct ir3_instruction *
@@ -1079,7 +1088,14 @@ ir3_instr_rpt_length(const struct ir3_instruction *instr)
 {
    assert(ir3_instr_is_first_rpt(instr));
 
-   return list_length(&instr->rpt_node) + 1;
+   unsigned length = 1;
+
+   while (instr->rpt_next) {
+      length++;
+      instr = instr->rpt_next;
+   }
+
+   return length;
 }
 
 struct ir3_register *
@@ -1367,7 +1383,8 @@ is_scalar_alu(struct ir3_instruction *instr,
       instr->opc != OPC_SCAN_CLUSTERS_MACRO &&
       instr->opc != OPC_SCAN_MACRO &&
       instr->opc != OPC_MOVS &&
-      is_alu(instr) && (instr->dsts[0]->flags & IR3_REG_SHARED) &&
+      is_alu(instr) &&
+      (instr->dsts[0]->flags & (IR3_REG_SHARED | IR3_REG_UNIFORM)) &&
       /* scalar->scalar mov instructions (but NOT cov) were supported before the
        * scalar ALU was supported, but they still required (ss) whereas on GPUs
        * that have a scalar ALU they are executed on it and do not require (ss).
@@ -1748,7 +1765,7 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
          return true;
 
       /* cat2/cat3 scalar ALU instructions must not have regular sources. */
-      if (instr->dsts[0]->flags & IR3_REG_SHARED) {
+      if (instr->dsts[0]->flags & (IR3_REG_SHARED | IR3_REG_UNIFORM)) {
          if (!(flags & (IR3_REG_SHARED | IR3_REG_IMMED | IR3_REG_CONST)))
             return false;
       }
@@ -1760,10 +1777,7 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
           */
          if (m < instr->srcs_count) {
             struct ir3_register *reg = instr->srcs[m];
-            if (instr->dsts[0]->flags & IR3_REG_SHARED) {
-               if ((flags & IR3_REG_CONST) && (reg->flags & IR3_REG_CONST))
-                  return false;
-            } else {
+            if (!(instr->dsts[0]->flags & IR3_REG_SHARED)) {
                if ((flags & (IR3_REG_CONST | IR3_REG_SHARED)) &&
                    (reg->flags & (IR3_REG_CONST | IR3_REG_SHARED)))
                   return false;
@@ -1774,8 +1788,8 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
       }
       break;
    case 3:
-      valid_flags =
-         ir3_cat3_absneg(instr->opc, n) | IR3_REG_RELATIV | IR3_REG_SHARED;
+      valid_flags = ir3_cat3_absneg(compiler, instr->opc, n) | IR3_REG_RELATIV |
+                    IR3_REG_SHARED;
 
       switch (instr->opc) {
       case OPC_SHRM:
@@ -2065,4 +2079,106 @@ ir3_is_subreg_move(struct ir3_instruction *instr)
    }
 
    return IR3_SUBREG_MOVE_NONE;
+}
+
+inline unsigned
+ir3_cat2_absneg(opc_t opc)
+{
+   switch (opc) {
+   case OPC_ADD_F:
+   case OPC_MIN_F:
+   case OPC_MAX_F:
+   case OPC_MUL_F:
+   case OPC_SIGN_F:
+   case OPC_CMPS_F:
+   case OPC_ABSNEG_F:
+   case OPC_CMPV_F:
+   case OPC_FLOOR_F:
+   case OPC_CEIL_F:
+   case OPC_RNDNE_F:
+   case OPC_RNDAZ_F:
+   case OPC_TRUNC_F:
+   case OPC_BARY_F:
+      return IR3_REG_FABS | IR3_REG_FNEG;
+
+   case OPC_ADD_U:
+   case OPC_ADD_S:
+   case OPC_SUB_U:
+   case OPC_SUB_S:
+   case OPC_CMPS_U:
+   case OPC_CMPS_S:
+   case OPC_MIN_U:
+   case OPC_MIN_S:
+   case OPC_MAX_U:
+   case OPC_MAX_S:
+   case OPC_CMPV_U:
+   case OPC_CMPV_S:
+   case OPC_MUL_U24:
+   case OPC_MUL_S24:
+   case OPC_MULL_U:
+   case OPC_CLZ_S:
+      return 0;
+
+   case OPC_ABSNEG_S:
+      return IR3_REG_SABS | IR3_REG_SNEG;
+
+   case OPC_AND_B:
+   case OPC_OR_B:
+   case OPC_NOT_B:
+   case OPC_XOR_B:
+   case OPC_BFREV_B:
+   case OPC_CLZ_B:
+   case OPC_SHL_B:
+   case OPC_SHR_B:
+   case OPC_ASHR_B:
+   case OPC_MGEN_B:
+   case OPC_GETBIT_B:
+   case OPC_CBITS_B:
+      return IR3_REG_BNOT;
+
+   default:
+      return 0;
+   }
+}
+
+/* map cat3 instructions to valid abs/neg flags: */
+inline unsigned
+ir3_cat3_absneg(struct ir3_compiler *compiler, opc_t opc, unsigned src_n)
+{
+   switch (opc) {
+   case OPC_MAD_F16:
+   case OPC_MAD_F32:
+   case OPC_SEL_F16:
+   case OPC_SEL_F32:
+      return IR3_REG_FNEG;
+
+   case OPC_SEL_B16:
+   case OPC_SEL_B32:
+      return compiler->has_sel_b_fneg ? IR3_REG_FNEG : 0;
+
+   case OPC_SAD_S16:
+   case OPC_SAD_S32:
+      return src_n == 1 ? IR3_REG_SNEG : 0;
+
+   case OPC_MAD_U16:
+   case OPC_MADSH_U16:
+   case OPC_MAD_S16:
+   case OPC_MADSH_M16:
+   case OPC_MAD_U24:
+   case OPC_MAD_S24:
+   case OPC_SEL_S16:
+   case OPC_SEL_S32:
+      /* neg *may* work on 3rd src.. */
+
+   case OPC_SHRM:
+   case OPC_SHLM:
+   case OPC_SHRG:
+   case OPC_SHLG:
+   case OPC_ANDG:
+   case OPC_WMM:
+   case OPC_WMM_ACCU:
+
+   default:
+      return 0;
+   }
 }

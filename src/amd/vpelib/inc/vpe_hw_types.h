@@ -46,11 +46,17 @@ extern "C" {
  *         memory addresses.
  */
 union large_integer {
+    /**
+     * @brief struct of signed integer
+     */
     struct {
-        uint32_t low_part;
-        int32_t  high_part;
+        uint32_t low_part;  /**< Bits [0:31] of the integer */
+        int32_t  high_part; /**< Bits [32:63] of the integer */
     };
 
+    /**
+     * @brief struct of unsigned integer
+     */
     struct {
         uint32_t low_part;  /**< Bits [0:31] of the integer */
         int32_t  high_part; /**< Bits [32:63] of the integer */
@@ -81,31 +87,36 @@ enum vpe_plane_addr_type {
  */
 struct vpe_plane_address {
     enum vpe_plane_addr_type type; /**< Type of the plane address */
-    bool tmz_surface;              /**< Boolean to determine if the surface is allocated from tmz */
+    uint8_t tmz_surface;           /**< uint8_t to determine if the surface is allocated from tmz */
+    /** @union
+     *  @brief Union of plane address types
+     */
     union {
+        /** @brief Only used for RGB planes. Struct of two \ref PHYSICAL_ADDRESS_LOC to store
+         * address and meta address, and one \ref large_integer to store dcc constant color.
+         */
         struct {
-            PHYSICAL_ADDRESS_LOC addr;
-            PHYSICAL_ADDRESS_LOC meta_addr;
-            union large_integer  dcc_const_color;
-        } grph; /**< Only used for RGB planes. Struct of two \ref PHYSICAL_ADDRESS_LOC to
-                 * store address and meta address, and one \ref large_integer to store
-                 * dcc constant color.
-                 */
+            PHYSICAL_ADDRESS_LOC addr;            /**< Address of the plane */
+            PHYSICAL_ADDRESS_LOC meta_addr;       /**< Meta address of the plane */
+            union large_integer  dcc_const_color; /**< DCC constant color of the plane */
+        } grph;
 
+        /** @brief Only used for YUV planes. Struct of four \ref PHYSICAL_ADDRESS_LOC to store
+         *  address and meta addresses of both luma and chroma planes, and two \ref large_integer
+         *  to store dcc constant color for each plane. For packed YUV formats, the chroma plane
+         *  addresses should be blank.
+         */
         struct {
-            PHYSICAL_ADDRESS_LOC luma_addr;
-            PHYSICAL_ADDRESS_LOC luma_meta_addr;
-            union large_integer  luma_dcc_const_color;
+            PHYSICAL_ADDRESS_LOC luma_addr;            /**< Address of the luma plane */
+            PHYSICAL_ADDRESS_LOC luma_meta_addr;       /**< Meta address of the luma plane */
+            union large_integer  luma_dcc_const_color; /**< DCC constant color of the luma plane */
 
-            PHYSICAL_ADDRESS_LOC chroma_addr;
-            PHYSICAL_ADDRESS_LOC chroma_meta_addr;
-            union large_integer  chroma_dcc_const_color;
-        } video_progressive; /**<  Only used for YUV planes. Struct of four \ref
-                              * PHYSICAL_ADDRESS_LOC to store address and meta addresses of both
-                              * luma and chroma planes, and two \ref large_integer to store dcc
-                              * constant color for each plane. For packed YUV formats, the chroma
-                              * plane addresses should be blank.
-                              */
+            PHYSICAL_ADDRESS_LOC chroma_addr;          /**< Address of the chroma plane */
+            PHYSICAL_ADDRESS_LOC chroma_meta_addr;     /**< Meta address of the chroma plane */
+            union large_integer
+                chroma_dcc_const_color; /**< DCC constant color of the chroma plane */
+        } video_progressive;
+
     };
 };
 
@@ -182,13 +193,19 @@ struct vpe_plane_size {
 struct vpe_plane_dcc_param {
     bool enable;                     /**< Enable DCC */
 
-    uint32_t meta_pitch;             /**< DCC meta surface pitch in bytes */
-    bool     independent_64b_blks;   /**< DCC independent 64 byte blocks */
-    uint8_t  dcc_ind_blk;            /**< DCC independent block size */
+    union {
+        /** @brief DCC params for source, required for display DCC only */
+        struct {
+            uint32_t meta_pitch;           /**< DCC meta surface pitch in bytes */
+            bool     independent_64b_blks; /**< DCC independent 64 byte blocks */
+            uint8_t  dcc_ind_blk;          /**< DCC independent block size */
 
-    uint32_t meta_pitch_c;           /**< DCC meta surface pitch for chroma plane in bytes */
-    bool     independent_64b_blks_c; /**< DCC independent 64 byte blocks for chroma plane */
-    uint8_t  dcc_ind_blk_c;          /**< DCC independent block size for chroma plane */
+            uint32_t meta_pitch_c;         /**< DCC meta surface pitch for chroma plane in bytes */
+            bool     independent_64b_blks_c; /**< DCC independent 64 byte blocks for chroma plane */
+            uint8_t  dcc_ind_blk_c;          /**< DCC independent block size for chroma plane */
+        } src;
+
+    };
 };
 
 /** @enum vpe_surface_pixel_format
@@ -275,38 +292,38 @@ enum vpe_surface_pixel_format {
  *  @brief Surface swizzle modes
  */
 enum vpe_swizzle_mode_values {
-    VPE_SW_LINEAR   = 0,
-    VPE_SW_256B_S   = 1,
-    VPE_SW_256B_D   = 2,
-    VPE_SW_256B_R   = 3,
-    VPE_SW_4KB_Z    = 4,
-    VPE_SW_4KB_S    = 5,
-    VPE_SW_4KB_D    = 6,
-    VPE_SW_4KB_R    = 7,
-    VPE_SW_64KB_Z   = 8,
-    VPE_SW_64KB_S   = 9,
-    VPE_SW_64KB_D   = 10,
-    VPE_SW_64KB_R   = 11,
-    VPE_SW_VAR_Z    = 12,
-    VPE_SW_VAR_S    = 13,
-    VPE_SW_VAR_D    = 14,
-    VPE_SW_VAR_R    = 15,
-    VPE_SW_64KB_Z_T = 16,
-    VPE_SW_64KB_S_T = 17,
-    VPE_SW_64KB_D_T = 18,
-    VPE_SW_64KB_R_T = 19,
-    VPE_SW_4KB_Z_X  = 20,
-    VPE_SW_4KB_S_X  = 21,
-    VPE_SW_4KB_D_X  = 22,
-    VPE_SW_4KB_R_X  = 23,
-    VPE_SW_64KB_Z_X = 24,
-    VPE_SW_64KB_S_X = 25,
-    VPE_SW_64KB_D_X = 26,
-    VPE_SW_64KB_R_X = 27,
-    VPE_SW_VAR_Z_X  = 28,
-    VPE_SW_VAR_S_X  = 29,
-    VPE_SW_VAR_D_X  = 30,
-    VPE_SW_VAR_R_X  = 31,
+    VPE_SW_LINEAR   = 0,  /**< Linear swizzle mode */
+    VPE_SW_256B_S   = 1,  /**< 256B_S swizzle mode */
+    VPE_SW_256B_D   = 2,  /**< 256B_D swizzle mode */
+    VPE_SW_256B_R   = 3,  /**< 256B_R swizzle mode */
+    VPE_SW_4KB_Z    = 4,  /**< 4KB_Z swizzle mode */
+    VPE_SW_4KB_S    = 5,  /**< 4KB_S swizzle mode */
+    VPE_SW_4KB_D    = 6,  /**< 4KB_D swizzle mode */
+    VPE_SW_4KB_R    = 7,  /**< 4KB_R swizzle mode */
+    VPE_SW_64KB_Z   = 8,  /**< 64KB_Z swizzle mode */
+    VPE_SW_64KB_S   = 9,  /**< 64KB_S swizzle mode */
+    VPE_SW_64KB_D   = 10, /**< 64KB_D swizzle mode */
+    VPE_SW_64KB_R   = 11, /**< 64KB_R swizzle mode */
+    VPE_SW_VAR_Z    = 12, /**< VAR_Z swizzle mode */
+    VPE_SW_VAR_S    = 13, /**< VAR_S swizzle mode */
+    VPE_SW_VAR_D    = 14, /**< VAR_D swizzle mode */
+    VPE_SW_VAR_R    = 15, /**< VAR_R swizzle mode */
+    VPE_SW_64KB_Z_T = 16, /**< 64KB_Z_T swizzle mode */
+    VPE_SW_64KB_S_T = 17, /**< 64KB_S_T swizzle mode */
+    VPE_SW_64KB_D_T = 18, /**< 64KB_D_T swizzle mode */
+    VPE_SW_64KB_R_T = 19, /**< 64KB_R_T swizzle mode */
+    VPE_SW_4KB_Z_X  = 20, /**< 4KB_Z_X swizzle mode */
+    VPE_SW_4KB_S_X  = 21, /**< 4KB_S_X swizzle mode */
+    VPE_SW_4KB_D_X  = 22, /**< 4KB_D_X swizzle mode */
+    VPE_SW_4KB_R_X  = 23, /**< 4KB_R_X swizzle mode */
+    VPE_SW_64KB_Z_X = 24, /**< 64KB_Z_X swizzle mode */
+    VPE_SW_64KB_S_X = 25, /**< 64KB_S_X swizzle mode */
+    VPE_SW_64KB_D_X = 26, /**< 64KB_D_X swizzle mode */
+    VPE_SW_64KB_R_X = 27, /**< 64KB_R_X swizzle mode */
+    VPE_SW_VAR_Z_X  = 28, /**< SW VAR Z X */
+    VPE_SW_VAR_S_X  = 29, /**< SW VAR S X */
+    VPE_SW_VAR_D_X  = 30, /**< SW VAR D X */
+    VPE_SW_VAR_R_X  = 31, /**< SW VAR R X */
     VPE_SW_MAX      = 32,
     VPE_SW_UNKNOWN  = VPE_SW_MAX
 };

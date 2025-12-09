@@ -124,13 +124,13 @@ anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle)
 int
 anv_gem_handle_to_fd(struct anv_device *device, uint32_t gem_handle)
 {
-   unreachable("Unused");
+   UNREACHABLE("Unused");
 }
 
 uint32_t
 anv_gem_fd_to_handle(struct anv_device *device, int fd)
 {
-   unreachable("Unused");
+   UNREACHABLE("Unused");
 }
 
 VkResult

@@ -80,8 +80,6 @@
 #endif
 
 #include "c11/threads.h"
-#include "util/u_thread.h"
-#include "util/detect.h"
 #include "util/u_debug.h"
 #include "util/u_cpu_detect.h"
 
@@ -119,7 +117,7 @@ void lp_bld_init_native_targets()
    llvm::InitializeNativeTargetDisassembler();
 #if MESA_DEBUG
    {
-      char *env_llc_options = getenv("GALLIVM_LLC_OPTIONS");
+      char *env_llc_options = os_get_option_dup("GALLIVM_LLC_OPTIONS");
       if (env_llc_options) {
          char *option;
          char *options[64] = {(char *) "llc"};      // Warning without cast
@@ -135,6 +133,7 @@ void lp_bld_init_native_targets()
          }
          LLVMParseCommandLineOptions(n + 1, options, NULL);
       }
+      free(env_llc_options);
    }
 #endif
    lp_run_atexit_for_destructors();

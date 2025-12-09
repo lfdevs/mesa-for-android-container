@@ -246,7 +246,7 @@ pub trait SetFieldU64 {
     fn set_field_u64(&mut self, range: Range<usize>, val: u64);
 }
 
-impl<'a, BS: BitMutViewable> SetFieldU64 for BS {
+impl<BS: BitMutViewable> SetFieldU64 for BS {
     fn set_field_u64(&mut self, range: Range<usize>, val: u64) {
         let bits = range.end - range.start;
 

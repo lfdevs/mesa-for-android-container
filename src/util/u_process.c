@@ -79,9 +79,7 @@ __getProgramName()
          if (name)
             program_name = strdup(name + 1);
       }
-      if (path) {
-         free(path);
-      }
+      free(path);
       if (!program_name) {
          program_name = strdup(arg+1);
       }

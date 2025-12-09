@@ -41,6 +41,7 @@ int v3d_simulator_ioctl(int fd, unsigned long request, void *arg);
 void v3d_simulator_open_from_handle(int fd, int handle, uint32_t size);
 uint32_t v3d_simulator_get_mem_size(void);
 uint32_t v3d_simulator_get_mem_free(void);
+uint32_t v3d_simulator_get_raster_stride_align(int fd);
 
 #ifdef v3dX
 #  include "v3dx_simulator.h"
@@ -66,7 +67,7 @@ uint32_t v3d_simulator_get_mem_free(void);
       v3d_X_sim_thing = &v3d71_simulator_##thing;     \
       break;                                          \
    default:                                           \
-      unreachable("Unsupported hardware generation"); \
+      UNREACHABLE("Unsupported hardware generation"); \
    }                                                  \
    v3d_X_sim_thing;                                   \
 })

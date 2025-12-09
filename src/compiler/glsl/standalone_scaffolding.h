@@ -53,7 +53,7 @@ _mesa_reference_program_(struct gl_context *ctx, struct gl_program **ptr,
                          struct gl_program *prog);
 
 extern "C" struct gl_shader *
-_mesa_new_shader(GLuint name, gl_shader_stage stage);
+_mesa_new_shader(GLuint name, mesa_shader_stage stage);
 
 extern "C" void
 _mesa_delete_shader(struct gl_context *ctx, struct gl_shader *sh);
@@ -77,7 +77,7 @@ _mesa_program_state_flags(const gl_state_index16 state[STATE_LENGTH]);
 extern "C" char *
 _mesa_program_state_string(const gl_state_index16 state[STATE_LENGTH]);
 
-static inline gl_shader_stage
+static inline mesa_shader_stage
 _mesa_shader_enum_to_shader_stage(GLenum v)
 {
    switch (v) {

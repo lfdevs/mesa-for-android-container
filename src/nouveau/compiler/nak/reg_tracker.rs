@@ -1,6 +1,8 @@
 // Copyright © 2022 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
+use rustc_hash::FxHashMap;
+
 use crate::ir::*;
 
 use std::ops::{Index, IndexMut, Range};
@@ -14,7 +16,7 @@ pub struct RegTracker<T> {
 }
 
 fn new_array_with<T, const N: usize>(f: &impl Fn() -> T) -> [T; N] {
-    let mut v = Vec::new();
+    let mut v = Vec::with_capacity(N);
     for _ in 0..N {
         v.push(f());
     }
@@ -30,57 +32,6 @@ impl<T> RegTracker<T> {
             pred: new_array_with(f),
             upred: new_array_with(f),
             carry: new_array_with(f),
-        }
-    }
-
-    pub fn for_each_instr_pred_mut(
-        &mut self,
-        instr: &Instr,
-        mut f: impl FnMut(&mut T),
-    ) {
-        if let PredRef::Reg(reg) = &instr.pred.pred_ref {
-            for i in &mut self[*reg] {
-                f(i);
-            }
-        }
-    }
-
-    pub fn for_each_instr_src_mut(
-        &mut self,
-        instr: &Instr,
-        mut f: impl FnMut(usize, &mut T),
-    ) {
-        for (i, src) in instr.srcs().iter().enumerate() {
-            match &src.src_ref {
-                SrcRef::Reg(reg) => {
-                    for t in &mut self[*reg] {
-                        f(i, t);
-                    }
-                }
-                SrcRef::CBuf(CBufRef {
-                    buf: CBuf::BindlessUGPR(reg),
-                    ..
-                }) => {
-                    for t in &mut self[*reg] {
-                        f(i, t);
-                    }
-                }
-                _ => (),
-            }
-        }
-    }
-
-    pub fn for_each_instr_dst_mut(
-        &mut self,
-        instr: &Instr,
-        mut f: impl FnMut(usize, &mut T),
-    ) {
-        for (i, dst) in instr.dsts().iter().enumerate() {
-            if let Dst::Reg(reg) = dst {
-                for t in &mut self[*reg] {
-                    f(i, t);
-                }
-            }
         }
     }
 }
@@ -123,6 +74,113 @@ impl<T> IndexMut<RegRef> for RegTracker<T> {
             RegFile::Carry => &mut self.carry[range],
             RegFile::Bar => &mut [], // Barriers have a HW scoreboard
             RegFile::Mem => panic!("Not a register"),
+        }
+    }
+}
+
+/// Memory-light version of [RegTracker].
+///
+/// This version uses sparse hashmaps instead of dense arrays.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct SparseRegTracker<T: Default> {
+    regs: FxHashMap<RegRef, T>,
+}
+
+impl<T: Default + Clone + Eq> SparseRegTracker<T> {
+    pub fn for_each_pred(&mut self, f: impl FnMut(&mut T)) {
+        self.for_each_ref_mut(RegRef::new(RegFile::Pred, 0, 7), f);
+    }
+
+    pub fn for_each_carry(&mut self, f: impl FnMut(&mut T)) {
+        self.for_each_ref_mut(RegRef::new(RegFile::Carry, 0, 1), f);
+    }
+
+    pub fn merge_with(&mut self, other: &Self, mut f: impl FnMut(&mut T, &T)) {
+        use std::collections::hash_map::Entry;
+
+        for (k, v) in other.regs.iter() {
+            match self.regs.entry(*k) {
+                Entry::Occupied(mut occupied_entry) => {
+                    f(occupied_entry.get_mut(), v);
+                }
+                Entry::Vacant(vacant_entry) => {
+                    vacant_entry.insert((*v).clone());
+                }
+            }
+        }
+    }
+
+    pub fn retain(&mut self, mut f: impl FnMut(&mut T) -> bool) {
+        self.regs.retain(|_k, v| f(v));
+    }
+}
+
+/// Common behavior for [RegTracker] and [SparseRegTracker]
+pub trait RegRefIterable<T> {
+    fn for_each_ref_mut(&mut self, reg: RegRef, f: impl FnMut(&mut T));
+
+    fn for_each_instr_pred_mut(
+        &mut self,
+        instr: &Instr,
+        mut f: impl FnMut(&mut T),
+    ) {
+        if let PredRef::Reg(reg) = &instr.pred.pred_ref {
+            self.for_each_ref_mut(*reg, |t| f(t));
+        }
+    }
+
+    fn for_each_instr_src_mut(
+        &mut self,
+        instr: &Instr,
+        mut f: impl FnMut(usize, &mut T),
+    ) {
+        for (i, src) in instr.srcs().iter().enumerate() {
+            match &src.src_ref {
+                SrcRef::Reg(reg) => {
+                    self.for_each_ref_mut(*reg, |t| f(i, t));
+                }
+                SrcRef::CBuf(CBufRef {
+                    buf: CBuf::BindlessUGPR(reg),
+                    ..
+                }) => {
+                    self.for_each_ref_mut(*reg, |t| f(i, t));
+                }
+                _ => (),
+            }
+        }
+    }
+
+    fn for_each_instr_dst_mut(
+        &mut self,
+        instr: &Instr,
+        mut f: impl FnMut(usize, &mut T),
+    ) {
+        for (i, dst) in instr.dsts().iter().enumerate() {
+            if let Dst::Reg(reg) = dst {
+                self.for_each_ref_mut(*reg, |t| f(i, t));
+            }
+        }
+    }
+}
+
+impl<T: Default> RegRefIterable<T> for SparseRegTracker<T> {
+    fn for_each_ref_mut(&mut self, reg: RegRef, mut f: impl FnMut(&mut T)) {
+        match reg.file() {
+            RegFile::Bar => return, // Barriers have a HW scoreboard
+            RegFile::Mem => panic!("Not a register"),
+            _ => {}
+        }
+
+        for i in 0..reg.comps() {
+            f(self.regs.entry(reg.comp(i)).or_default());
+        }
+    }
+}
+
+impl<T> RegRefIterable<T> for RegTracker<T> {
+    fn for_each_ref_mut(&mut self, reg: RegRef, mut f: impl FnMut(&mut T)) {
+        for entry in &mut self[reg] {
+            f(entry);
         }
     }
 }

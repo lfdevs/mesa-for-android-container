@@ -62,7 +62,7 @@ struct llvmpipe_context {
    struct list_head list;
    /** Constant state objects */
    const struct pipe_blend_state *blend;
-   struct pipe_sampler_state *samplers[PIPE_SHADER_MESH_TYPES][PIPE_MAX_SAMPLERS];
+   struct pipe_sampler_state *samplers[MESA_SHADER_MESH_STAGES][PIPE_MAX_SAMPLERS];
 
    const struct pipe_depth_stencil_alpha_state *depth_stencil;
    const struct pipe_rasterizer_state *rasterizer;
@@ -83,24 +83,26 @@ struct llvmpipe_context {
    /** Other rendering state */
    unsigned sample_mask;
    unsigned min_samples;
+   uint8_t sample_locations[LP_MAX_SAMPLES];
+   bool sample_locations_enabled;
    struct pipe_blend_color blend_color;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_clip_state clip;
-   struct pipe_constant_buffer constants[PIPE_SHADER_MESH_TYPES][LP_MAX_TGSI_CONST_BUFFERS];
+   struct pipe_constant_buffer constants[MESA_SHADER_MESH_STAGES][LP_MAX_TGSI_CONST_BUFFERS];
    struct pipe_framebuffer_state framebuffer;
    struct pipe_poly_stipple poly_stipple;
    struct pipe_scissor_state scissors[PIPE_MAX_VIEWPORTS];
-   struct pipe_sampler_view *sampler_views[PIPE_SHADER_MESH_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   struct pipe_sampler_view *sampler_views[MESA_SHADER_MESH_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
 
-   struct pipe_shader_buffer ssbos[PIPE_SHADER_MESH_TYPES][LP_MAX_TGSI_SHADER_BUFFERS];
-   struct pipe_image_view images[PIPE_SHADER_MESH_TYPES][LP_MAX_TGSI_SHADER_IMAGES];
+   struct pipe_shader_buffer ssbos[MESA_SHADER_MESH_STAGES][LP_MAX_TGSI_SHADER_BUFFERS];
+   struct pipe_image_view images[MESA_SHADER_MESH_STAGES][LP_MAX_TGSI_SHADER_IMAGES];
    uint32_t fs_ssbo_write_mask;
-   unsigned num_samplers[PIPE_SHADER_MESH_TYPES];
-   unsigned num_sampler_views[PIPE_SHADER_MESH_TYPES];
-   unsigned num_images[PIPE_SHADER_MESH_TYPES];
+   unsigned num_samplers[MESA_SHADER_MESH_STAGES];
+   unsigned num_sampler_views[MESA_SHADER_MESH_STAGES];
+   unsigned num_images[MESA_SHADER_MESH_STAGES];
 
    unsigned num_vertex_buffers;
 

@@ -1,3 +1,6 @@
+// Copyright 2020 Red Hat.
+// SPDX-License-Identifier: MIT
+
 use crate::api::icd::*;
 use crate::api::types::*;
 use crate::api::util::*;
@@ -162,6 +165,10 @@ pub fn create_and_queue(
     block: bool,
     work: EventSig,
 ) -> CLResult<()> {
+    if deps.iter().any(|dep| dep.is_error()) {
+        return Err(CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST);
+    }
+
     let e = Event::new(&q, cmd_type, deps, work);
     if !event.is_null() {
         // SAFETY: we check for null and valid API use is to pass in a valid pointer

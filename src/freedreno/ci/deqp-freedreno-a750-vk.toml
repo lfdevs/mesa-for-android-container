@@ -4,26 +4,30 @@ deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
 caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 renderer_check = "Turnip Adreno .* 750"
 tests_per_group = 10000
+[deqp.env]
+# Enable additional tests that test fp32 denorm preserve.
+tu_enable_softfloat32 = "true"
 
 # force-gmem testing
 # Autotuner forces sysmem on most CTS tests
+# Also force-enable concurrent binning.
 [[deqp]]
 deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
 caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 prefix = "gmem-"
 fraction = 20
-tests_per_group = 1000
+tests_per_group = 10000
 [deqp.env]
-TU_DEBUG = "gmem,forcebin"
+TU_DEBUG = "gmem,forcebin,forcecb"
 
 # force-gmem with unaligned gmem store testing
 [[deqp]]
 deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
 caselists = ["/deqp-vk/mustpass/vk-main.txt"]
-include = ["dEQP-VK.renderpass.*"]
+include = ["dEQP-VK.renderpass2.*"]
 prefix = "gmem-unaligned-"
 fraction = 10
-tests_per_group = 1000
+tests_per_group = 10000
 [deqp.env]
 TU_DEBUG = "gmem,unaligned_store"
 
@@ -34,7 +38,7 @@ caselists = ["/deqp-vk/mustpass/vk-main.txt"]
 include = ["dEQP-VK.renderpass.*"]
 prefix = "bypass-"
 fraction = 10
-tests_per_group = 1000
+tests_per_group = 10000
 [deqp.env]
 TU_DEBUG = "sysmem"
 

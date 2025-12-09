@@ -32,7 +32,6 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "nir/nir_to_tgsi.h"
-#include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 
 #include "virgl_screen.h"
@@ -147,10 +146,6 @@ virgl_get_video_param(struct pipe_screen *screen,
          return vcaps ? vcaps->max_height : 0;
       case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
          return vcaps ? virgl_to_pipe_format(vcaps->prefered_format) : PIPE_FORMAT_NV12;
-      case PIPE_VIDEO_CAP_PREFERS_INTERLACED:
-         return vcaps ? vcaps->prefers_interlaced : false;
-      case PIPE_VIDEO_CAP_SUPPORTS_INTERLACED:
-         return vcaps ? vcaps->supports_interlaced : false;
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
          return vcaps ? vcaps->supports_progressive : true;
       case PIPE_VIDEO_CAP_MAX_LEVEL:
@@ -169,17 +164,17 @@ virgl_get_video_param(struct pipe_screen *screen,
 static void
 virgl_init_shader_caps(struct virgl_screen *vscreen)
 {
-   for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
       struct pipe_shader_caps *caps =
          (struct pipe_shader_caps *)&vscreen->base.shader_caps[i];
 
       switch (i) {
-      case PIPE_SHADER_TESS_CTRL:
-      case PIPE_SHADER_TESS_EVAL:
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
          if (!vscreen->caps.caps.v1.bset.has_tessellation_shaders)
             continue;
          break;
-      case PIPE_SHADER_COMPUTE:
+      case MESA_SHADER_COMPUTE:
          if (!(vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_COMPUTE_SHADER))
             continue;
          break;
@@ -199,20 +194,20 @@ virgl_init_shader_caps(struct virgl_screen *vscreen)
       caps->max_inputs =
          vscreen->caps.caps.v1.glsl_level < 150 ?
          vscreen->caps.caps.v2.max_vertex_attribs :
-         (i == PIPE_SHADER_VERTEX || i == PIPE_SHADER_GEOMETRY ?
+         (i == MESA_SHADER_VERTEX || i == MESA_SHADER_GEOMETRY ?
           vscreen->caps.caps.v2.max_vertex_attribs : 32);
 
       switch (i) {
-      case PIPE_SHADER_FRAGMENT:
+      case MESA_SHADER_FRAGMENT:
          caps->max_outputs = vscreen->caps.caps.v1.max_render_targets;
          break;
-      case PIPE_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_CTRL:
          if (vscreen->caps.caps.v2.host_feature_check_version >= 19) {
             caps->max_outputs = vscreen->caps.caps.v2.max_tcs_outputs;
             break;
          }
          FALLTHROUGH;
-      case PIPE_SHADER_TESS_EVAL:
+      case MESA_SHADER_TESS_EVAL:
          if (vscreen->caps.caps.v2.host_feature_check_version >= 19) {
             caps->max_outputs = vscreen->caps.caps.v2.max_tes_outputs;
             break;
@@ -238,14 +233,14 @@ virgl_init_shader_caps(struct virgl_screen *vscreen)
       int max_shader_buffers = VIRGL_SHADER_STAGE_CAP_V2(max_shader_storage_blocks, i);
       if (max_shader_buffers != INT_MAX) {
          caps->max_shader_buffers = max_shader_buffers;
-      } else if (i == PIPE_SHADER_FRAGMENT || i == PIPE_SHADER_COMPUTE) {
+      } else if (i == MESA_SHADER_FRAGMENT || i == MESA_SHADER_COMPUTE) {
          caps->max_shader_buffers = vscreen->caps.caps.v2.max_shader_buffer_frag_compute;
       } else {
          caps->max_shader_buffers = vscreen->caps.caps.v2.max_shader_buffer_other_stages;
       }
 
       caps->max_shader_images =
-         i == PIPE_SHADER_FRAGMENT || i == PIPE_SHADER_COMPUTE ?
+         i == MESA_SHADER_FRAGMENT || i == MESA_SHADER_COMPUTE ?
          vscreen->caps.caps.v2.max_shader_image_frag_compute :
          vscreen->caps.caps.v2.max_shader_image_other_stages;
 
@@ -909,7 +904,7 @@ static void virgl_disk_cache_create(struct virgl_screen *screen)
    struct mesa_sha1 sha1_ctx;
    _mesa_sha1_init(&sha1_ctx);
 
-#ifdef HAVE_DL_ITERATE_PHDR
+#ifdef HAVE_BUILD_ID
    const struct build_id_note *note =
       build_id_find_nhdr_for_addr(virgl_disk_cache_create);
    assert(note);
@@ -1076,7 +1071,7 @@ virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *c
    screen->compiler_options.lower_ldexp = true;
    screen->compiler_options.lower_image_offset_to_range_base = true;
    screen->compiler_options.lower_atomic_offset_to_range_base = true;
-   screen->compiler_options.support_indirect_outputs = BITFIELD_BIT(PIPE_SHADER_TESS_CTRL);
+   screen->compiler_options.support_indirect_outputs = BITFIELD_BIT(MESA_SHADER_TESS_CTRL);
 
    if (screen->caps.caps.v2.capability_bits & VIRGL_CAP_INDIRECT_INPUT_ADDR) {
       screen->compiler_options.support_indirect_inputs |= BITFIELD_BIT(MESA_SHADER_TESS_CTRL) |

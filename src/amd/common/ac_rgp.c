@@ -12,6 +12,7 @@
 #include "util/u_process.h"
 #include "util/u_math.h"
 
+#include "ac_shader_util.h"
 #include "ac_spm.h"
 #include "ac_sqtt.h"
 #include "ac_gpu_info.h"
@@ -362,7 +363,7 @@ static enum sqtt_gfxip_level ac_gfx_level_to_sqtt_gfxip_level(enum amd_gfx_level
    case GFX12:
       return SQTT_GFXIP_LEVEL_GFXIP_12;
    default:
-      unreachable("Invalid gfx level");
+      UNREACHABLE("Invalid gfx level");
    }
 }
 
@@ -394,7 +395,7 @@ static enum sqtt_memory_type ac_vram_type_to_sqtt_memory_type(uint32_t vram_type
    case AMD_VRAM_TYPE_LPDDR5:
       return SQTT_MEMORY_TYPE_LPDDR5;
    default:
-      unreachable("Invalid vram type");
+      UNREACHABLE("Invalid vram type");
    }
 }
 
@@ -461,12 +462,8 @@ static void ac_sqtt_fill_asic_info(const struct radeon_info *rad_info,
    chunk->l2_cache_size = rad_info->l2_cache_size;
    chunk->l1_cache_size = rad_info->tcp_cache_size;
    chunk->lds_size = rad_info->lds_size_per_workgroup;
-   if (rad_info->gfx_level >= GFX10) {
-      /* RGP expects the LDS size in CU mode. */
-      chunk->lds_size /= 2;
-   }
 
-   strncpy(chunk->gpu_name, rad_info->name, SQTT_GPU_NAME_MAX_SIZE - 1);
+   strncpy(chunk->gpu_name, ac_get_family_name(rad_info->family), SQTT_GPU_NAME_MAX_SIZE - 1);
 
    chunk->alu_per_clock = 0.0;
    chunk->texture_per_clock = 0.0;
@@ -480,7 +477,7 @@ static void ac_sqtt_fill_asic_info(const struct radeon_info *rad_info,
    chunk->max_memory_clock = rad_info->memory_freq_mhz * 1000000;
    chunk->memory_ops_per_clock = ac_memory_ops_per_clock(rad_info->vram_type);
    chunk->memory_chip_type = ac_vram_type_to_sqtt_memory_type(rad_info->vram_type);
-   chunk->lds_granularity = rad_info->lds_encode_granularity;
+   chunk->lds_granularity = ac_shader_get_lds_alloc_granularity(rad_info->gfx_level);
 
    for (unsigned se = 0; se < AMD_MAX_SE; se++) {
       for (unsigned sa = 0; sa < AMD_MAX_SA_PER_SE; sa++) {
@@ -712,7 +709,7 @@ static enum sqtt_version ac_gfx_level_to_sqtt_version(enum amd_gfx_level gfx_lev
    case GFX12:
       return SQTT_VERSION_3_3;
    default:
-      unreachable("Invalid gfx level");
+      UNREACHABLE("Invalid gfx level");
    }
 }
 
@@ -876,7 +873,7 @@ static enum elf_gfxip_level ac_gfx_level_to_elf_gfxip_level(enum amd_gfx_level g
    case GFX12:
       return EF_AMDGPU_MACH_AMDGCN_GFX1200;
    default:
-      unreachable("Invalid gfx level");
+      UNREACHABLE("Invalid gfx level");
    }
 }
 
@@ -1049,7 +1046,7 @@ ac_sqtt_dump_data(const struct radeon_info *rad_info, struct ac_sqtt_trace *sqtt
                                       sizeof(struct sqtt_code_object_database_record),
                                       record, &elf_size_calc, flags);
          /* Align to 4 bytes per the RGP file spec. */
-         code_object_record.size = ALIGN(elf_size_calc, 4);
+         code_object_record.size = align(elf_size_calc, 4);
          fseek(output, file_offset, SEEK_SET);
          fwrite(&code_object_record, sizeof(struct sqtt_code_object_database_record),
                 1, output);
@@ -1207,6 +1204,7 @@ ac_dump_rgp_capture(const struct radeon_info *info, struct ac_sqtt_trace *sqtt_t
                     const struct ac_spm_trace *spm_trace)
 {
 #if !defined(USE_LIBELF)
+   fprintf(stderr, "RGP capture can't be saved: libelf was not enabled during build\n");
    return -1;
 #else
    char filename[2048];

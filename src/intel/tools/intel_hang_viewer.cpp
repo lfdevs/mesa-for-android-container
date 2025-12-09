@@ -651,7 +651,7 @@ get_block_size(uint32_t type)
    case INTEL_HANG_DUMP_BLOCK_TYPE_MAP:      return sizeof(struct intel_hang_dump_block_map);
    case INTEL_HANG_DUMP_BLOCK_TYPE_EXEC:     return sizeof(struct intel_hang_dump_block_exec);
    case INTEL_HANG_DUMP_BLOCK_TYPE_HW_IMAGE: return sizeof(struct intel_hang_dump_block_hw_image);
-   default:                                  unreachable("invalid block");
+   default:                                  UNREACHABLE("invalid block");
    }
 }
 
@@ -717,7 +717,7 @@ parse_hang_file(const char *filename)
       }
 
       default:
-         unreachable("Invalid block type");
+         UNREACHABLE("Invalid block type");
       }
    }
 }

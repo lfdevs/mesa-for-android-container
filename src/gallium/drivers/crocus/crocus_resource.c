@@ -140,7 +140,7 @@ crocus_target_to_isl_surf_dim(enum pipe_texture_target target)
    case PIPE_MAX_TEXTURE_TYPES:
       break;
    }
-   unreachable("invalid texture type");
+   UNREACHABLE("invalid texture type");
 }
 
 static isl_surf_usage_flags_t
@@ -229,7 +229,7 @@ crocus_resource_configure_main(const struct crocus_screen *screen,
        devinfo->ver < 6) {
       /* align row pitch to 4 so we can keep using BLT engine */
       row_pitch_B = util_format_get_stride(templ->format, templ->width0);
-      row_pitch_B = ALIGN(row_pitch_B, 4);
+      row_pitch_B = align(row_pitch_B, 4);
    }
 
    const struct isl_surf_init_info init_info = {
@@ -497,7 +497,7 @@ crocus_resource_configure_aux(struct crocus_screen *screen,
       *alloc_flags |= BO_ALLOC_ZEROED;
       break;
    default:
-      unreachable("non-crocus aux");
+      UNREACHABLE("non-crocus aux");
    }
 
    /* Create the aux_state for the auxiliary buffer. */
@@ -799,7 +799,7 @@ crocus_resource_from_handle(struct pipe_screen *pscreen,
                                                whandle->handle);
       break;
    default:
-      unreachable("invalid winsys handle type");
+      UNREACHABLE("invalid winsys handle type");
    }
    if (!res->bo)
       goto fail;
@@ -1437,7 +1437,7 @@ crocus_map_tiled_memcpy(struct crocus_transfer *map)
    struct crocus_resource *res = (struct crocus_resource *) xfer->resource;
    struct isl_surf *surf = &res->surf;
 
-   xfer->stride = ALIGN(surf->row_pitch_B, 16);
+   xfer->stride = align(surf->row_pitch_B, 16);
    xfer->layer_stride = xfer->stride * box->height;
 
    unsigned x1, x2, y1, y2;
@@ -1894,7 +1894,7 @@ crocus_memobj_create_from_handle(struct pipe_screen *pscreen,
 
       break;
    default:
-      unreachable("invalid winsys handle type");
+      UNREACHABLE("invalid winsys handle type");
    }
 
    if (!bo) {

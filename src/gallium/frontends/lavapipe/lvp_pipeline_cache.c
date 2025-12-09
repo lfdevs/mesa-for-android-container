@@ -29,7 +29,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineCache(
     const VkAllocationCallbacks*                pAllocator,
     VkPipelineCache*                            pPipelineCache)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_device, device, _device);
    struct lvp_pipeline_cache *cache;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
@@ -47,7 +47,6 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineCache(
    else
      cache->alloc = device->vk.alloc;
 
-   cache->device = device;
    *pPipelineCache = lvp_pipeline_cache_to_handle(cache);
 
    return VK_SUCCESS;
@@ -58,8 +57,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyPipelineCache(
     VkPipelineCache                             _cache,
     const VkAllocationCallbacks*                pAllocator)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   LVP_FROM_HANDLE(lvp_pipeline_cache, cache, _cache);
+   VK_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_pipeline_cache, cache, _cache);
 
    if (!_cache)
       return;

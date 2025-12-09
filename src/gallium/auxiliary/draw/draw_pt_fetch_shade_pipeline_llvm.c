@@ -431,7 +431,7 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
    struct draw_llvm *llvm = fpme->llvm;
    unsigned i;
 
-   for (enum pipe_shader_type shader_type = PIPE_SHADER_VERTEX; shader_type <= PIPE_SHADER_GEOMETRY; shader_type++) {
+   for (mesa_shader_stage shader_type = MESA_SHADER_VERTEX; shader_type <= MESA_SHADER_GEOMETRY; shader_type++) {
       for (i = 0; i < ARRAY_SIZE(llvm->jit_resources[shader_type].constants); ++i) {
          /*
           * There could be a potential issue with rounding this up, as the
@@ -554,7 +554,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
       }
       /* Run vertex fetch shader */
       clipped = fpme->current_variant->jit_func(&fpme->llvm->vs_jit_context,
-                                                &fpme->llvm->jit_resources[PIPE_SHADER_VERTEX],
+                                                &fpme->llvm->jit_resources[MESA_SHADER_VERTEX],
                                                 llvm_vert_info.verts,
                                                 draw->pt.user.vbuffer,
                                                 fetch_info->count,
@@ -645,7 +645,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
    if ((opt & PT_SHADE) && gshader) {
       struct draw_vertex_shader *vshader = draw->vs.vertex_shader;
       draw_geometry_shader_run(gshader,
-                               draw->pt.user.constants[PIPE_SHADER_GEOMETRY],
+                               draw->pt.user.constants[MESA_SHADER_GEOMETRY],
                                vert_info,
                                prim_info,
                                tes_shader ? &tes_shader->info : &vshader->info,
@@ -730,9 +730,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
        FREE(gs_vert_info[i].verts);
    }
 
-   if (patch_lengths) {
-      FREE(patch_lengths);
-   }
+   FREE(patch_lengths);
 
    if (free_prim_info) {
       FREE(tes_elts_out);

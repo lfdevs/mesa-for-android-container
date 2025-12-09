@@ -230,7 +230,7 @@ _mesa_override_glsl_version(struct gl_constants *consts)
    const char *version;
    int n;
 
-   version = getenv(env_var);
+   version = os_get_option(env_var);
    if (!version) {
       return;
    }
@@ -291,7 +291,6 @@ compute_version(const struct gl_extensions *extensions,
    const bool ver_3_1 = (ver_3_0 &&
                          consts->GLSLVersion >= 140 &&
                          extensions->ARB_draw_instanced &&
-                         extensions->ARB_texture_buffer_object &&
                          extensions->ARB_uniform_buffer_object &&
                          extensions->EXT_texture_snorm &&
                          extensions->NV_primitive_restart &&

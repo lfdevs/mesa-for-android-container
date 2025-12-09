@@ -237,7 +237,7 @@ nir_deref_instr_has_complex_use(nir_deref_instr *deref,
          default:
             return true;
          }
-         unreachable("Switch default failed");
+         UNREACHABLE("Switch default failed");
       }
 
       default:
@@ -332,7 +332,7 @@ nir_deref_instr_get_const_offset(nir_deref_instr *deref,
          /* A cast doesn't contribute to the offset */
          break;
       default:
-         unreachable("Unsupported deref type");
+         UNREACHABLE("Unsupported deref type");
       }
    }
 
@@ -371,7 +371,7 @@ nir_build_deref_offset(nir_builder *b, nir_deref_instr *deref,
          /* A cast doesn't contribute to the offset */
          break;
       default:
-         unreachable("Unsupported deref type");
+         UNREACHABLE("Unsupported deref type");
       }
    }
 
@@ -475,7 +475,7 @@ nir_fixup_deref_types_instr(UNUSED struct nir_builder *b, nir_instr *instr, UNUS
    } else if (deref->deref_type == nir_deref_type_cast) {
       return false;
    } else {
-      unreachable("Unsupported deref type");
+      UNREACHABLE("Unsupported deref type");
    }
 
    if (deref->type == parent_derived_type)
@@ -606,7 +606,7 @@ compare_deref_paths(nir_deref_path *a_path, nir_deref_path *b_path,
       }
 
       default:
-         unreachable("Invalid deref type");
+         UNREACHABLE("Invalid deref type");
       }
    }
 
@@ -832,7 +832,7 @@ rematerialize_deref_in_block(nir_deref_instr *deref,
       break;
 
    default:
-      unreachable("Invalid deref instruction type");
+      UNREACHABLE("Invalid deref instruction type");
    }
 
    nir_def_init(&new_deref->instr, &new_deref->def,
@@ -931,7 +931,7 @@ nir_deref_instr_fixup_child_types(nir_deref_instr *parent)
       nir_deref_instr *child = nir_instr_as_deref(nir_src_parent_instr(use));
       switch (child->deref_type) {
       case nir_deref_type_var:
-         unreachable("nir_deref_type_var cannot be a child");
+         UNREACHABLE("nir_deref_type_var cannot be a child");
 
       case nir_deref_type_array:
       case nir_deref_type_array_wildcard:
@@ -963,11 +963,10 @@ opt_alu_of_cast(nir_alu_instr *alu)
    bool progress = false;
 
    for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
-      nir_instr *src_instr = alu->src[i].src.ssa->parent_instr;
-      if (src_instr->type != nir_instr_type_deref)
+      if (!nir_src_is_deref(alu->src[i].src))
          continue;
 
-      nir_deref_instr *src_deref = nir_instr_as_deref(src_instr);
+      nir_deref_instr *src_deref = nir_src_as_deref(alu->src[i].src);
       if (src_deref->deref_type != nir_deref_type_cast)
          continue;
 
@@ -1389,8 +1388,7 @@ opt_load_vec_deref(nir_builder *b, nir_intrinsic_instr *load)
          data = nir_bitcast_vector(b, &load->def, old_bit_size);
       data = resize_vector(b, data, old_num_comps);
 
-      nir_def_rewrite_uses_after(&load->def, data,
-                                 data->parent_instr);
+      nir_def_rewrite_uses_after(&load->def, data);
       return true;
    }
 
@@ -1566,4 +1564,50 @@ nir_lower_constant_to_temp(nir_shader *nir)
 
    nir_fixup_deref_modes(nir);
    nir_lower_global_vars_to_local(nir);
+}
+
+
+static bool
+update_image_format_intrin(nir_builder *b,
+                           nir_intrinsic_instr *intrin,
+                           void *state)
+{
+   switch (intrin->intrinsic) {
+#define CASE(op) case nir_intrinsic_image_deref_##op
+   CASE(load):
+   CASE(sparse_load):
+   CASE(store):
+   CASE(atomic):
+   CASE(atomic_swap):
+   CASE(format):
+   CASE(levels):
+   CASE(order):
+   CASE(size):
+   CASE(samples):
+   CASE(samples_identical):
+   CASE(texel_address):
+   CASE(load_raw_intel):
+   CASE(store_raw_intel):
+   CASE(descriptor_amd):
+   CASE(fragment_mask_load_amd):
+   CASE(store_block_agx): {
+      nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+      nir_variable *var = nir_deref_instr_get_variable(deref);
+      if (var == NULL)
+         return false;
+      nir_intrinsic_set_format(intrin, var->data.image.format);
+      return true;
+   }
+#undef CASE
+
+   default:
+      return false;
+   }
+}
+
+bool
+nir_update_image_intrinsic_from_var(nir_shader *nir)
+{
+   return nir_shader_intrinsics_pass(nir, update_image_format_intrin,
+                                     nir_metadata_all, NULL);
 }

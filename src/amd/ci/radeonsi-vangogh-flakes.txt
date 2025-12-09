@@ -1,22 +1,9 @@
-dEQP-GLES3.functional.occlusion_query.conservative_depth_clear
-dEQP-GLES3.functional.occlusion_query.conservative_depth_write_depth_clear_stencil_write
-dEQP-GLES3.functional.occlusion_query.conservative_depth_write_stencil_write
-dEQP-GLES3.functional.occlusion_query.conservative_scissor_depth_clear_stencil_write
-dEQP-GLES3.functional.occlusion_query.conservative_scissor_depth_write
-dEQP-GLES3.functional.occlusion_query.conservative_scissor_stencil_clear
-dEQP-GLES3.functional.occlusion_query.conservative_scissor_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.conservative_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.depth_clear
-dEQP-GLES3.functional.occlusion_query.depth_clear_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.depth_write
-dEQP-GLES3.functional.occlusion_query.depth_write_depth_clear
-dEQP-GLES3.functional.occlusion_query.scissor_depth_clear_stencil_write_stencil_clear
-dEQP-GLES3.functional.occlusion_query.scissor_depth_write_depth_clear
-dEQP-GLES3.functional.occlusion_query.stencil_write
+dEQP-GLES2.functional.fragment_ops.depth_stencil.stencil_ops.decr_decr_wrap_incr_wrap
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.r32f_r32f.cubemap_to_texture2d_array
 dEQP-GLES31.functional.geometry_shading.basic.output_256
 dEQP-GLES31.functional.geometry_shading.basic.output_max
 
+KHR-GLES31.core.explicit_uniform_location.uniform-loc-mix-with-implicit-max-array
 KHR-GLES31.core.shader_image_load_store.basic-allFormats-store-fs
 KHR-GLES31.core.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_MaxPatchVertices_Position_PointSize
 KHR-GLES31.core.tessellation_shader.vertex.vertex_ordering
@@ -35,4 +22,17 @@ spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB9_E5
 spec@arb_timer_query@timestamp-get
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
+spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object
 
+KHR-GL46.pipeline_statistics_query_tests_ARB.functional_primitives_vertices_submitted_and_clipping_input_output_primitives
+dEQP-GLES3.functional.occlusion_query.conservative_depth_write
+dEQP-GLES3.functional.occlusion_query.conservative_depth_write_depth_clear_stencil_write_stencil_clear
+dEQP-GLES3.functional.occlusion_query.conservative_scissor
+dEQP-GLES3.functional.occlusion_query.scissor_stencil_clear
+spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object
+spec@arb_timer_query@timestamp-get
+
+dEQP-GLES3.functional.occlusion_query.scissor_depth_write_stencil_write
+dEQP-GLES3.functional.occlusion_query.conservative_scissor_depth_clear_stencil_clear
+
+KHR-Single-GL46.arrays_of_arrays_gl.AtomicDeclaration

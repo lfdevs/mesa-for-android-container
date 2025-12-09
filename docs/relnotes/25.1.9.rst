@@ -1,0 +1,184 @@
+Mesa 25.1.9 Release Notes / 2025-08-27
+======================================
+
+Mesa 25.1.9 is a bug fix release which fixes bugs found since the 25.1.8 release.
+
+Mesa 25.1.9 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 25.1.9 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 412df33a1bb3c785ed698555a3972118a37c458e7accf6ae53f4bb87b3db454a  mesa-25.1.9.tar.xz
+    SHA512: 27d7202968f5639dda590d3647d72c6857cac74031e273edd651fc8ed7f04bda335bccd8a65a961cec368d45d6fe20d004b5375f095266459074f4bc74f5ed98  mesa-25.1.9.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Dragon Age Veilguard / Ability Wheel Targeting Visual Distortion
+- [AMD] glTexturePageCommitmentEXT triggers an error if level is higher than 0
+- System Crashes when starting VR on rx 9070 (xt)
+- [ANV] dEQP-VK.api.copy_and_blit.copy_commands2.image_to_buffer_transfer_queue.2d_images.whole_r32g32b32_uint_linear and possibly others asserts on LNL
+
+
+Changes
+-------
+
+Antonio Ospite (2):
+
+- nak/nouveau: silence errors about never used methods
+- compiler/rust: fix errors about hiding elided lifetime
+
+Caio Oliveira (1):
+
+- brw: Fix folding case for MAD instruction with all immediates
+
+Connor Abbott (1):
+
+- tu: Fix CmdBindTransformFeedbackBuffersEXT size handling
+
+David Rosca (8):
+
+- ac/vcn_dec: Add av1_intrabc_workaround
+- radeonsi/vcn: Enable AV1 decode workaround for gfx1153
+- radv/video: Enable AV1 decode workaround for gfx1153
+- radeonsi/vcn: Disable H264 encode 8x8 transform when CABAC is disabled
+- radeonsi/vcn: Disable H264/5 constrained intra pred with rate control
+- radeonsi/vcn: Fix compatibility with old FW for encode
+- radeonsi/vcn: Fix HEVC encode cu_qp_delta with old FW
+- radeonsi/vcn: Fix HEVC encode transform_skip with old FW
+
+Eric Engestrom (7):
+
+- docs: add sha sum for 25.1.8
+- .pick_status.json: Update to 47cca88f3cd8c77d944e278e0c4ee1573aa57e3f
+- .pick_status.json: Mark 85310e912c5a2fc542618a11b9e38ea9c433ed18 as denominated
+- .pick_status.json: Mark a34756bbedacdf2558c966466a71bfd3715fa295 as denominated
+- .pick_status.json: Mark c9746103f5e5b532188a5e172e1adab27507d60b as denominated
+- .pick_status.json: Mark 2cf626d17d6d8d14067986681d44a4bddf08e7b3 as denominated
+- .pick_status.json: Mark 39ffc3f629b9f75e1d128ac380f3617c5bc77273 as denominated
+
+Eric R. Smith (2):
+
+- mesa: fix off by one in MSRTT handling
+- panvk: revised occlusion query pointer fix
+
+Erik Faye-Lund (1):
+
+- pan/lib: clamp format size to 4
+
+Faith Ekstrand (3):
+
+- anv: Set the Shader capability when compiling the FP64 shader
+- subprojects: Stop calling add_languages() in paste-1-rs/meson.build
+- compiler/rust: Fix the DFS loop detection algorithm
+
+Georg Lehmann (1):
+
+- nir/uub: fix exclusive scans
+
+Gert Wollny (2):
+
+- r600/sfn: When splitting an ALU CF update possible start of next CF
+- r600/sfn: Fix AR use tracking off-by-one error
+
+Iván Briano (3):
+
+- anv: check for pending_db_mode when dirtying descriptor mode
+- anv: dirty descriptor state on CmdSetDescriptorBufferOffets
+- anv: fix capture/replay of sparse images with descriptor buffer
+
+Job Noorman (3):
+
+- ir3/array_to_ssa: fix updating/removing phis
+- ir3: don't vectorize nir_op_sdot_4x8_iadd[_sat]
+- ir3: emit descriptor prefetch in block dominated by its sources
+
+Karol Herbst (1):
+
+- aux/trace: move fence_server calls outside the locked area
+
+Lionel Landwerlin (2):
+
+- anv: fix R64* vertex buffer format support
+- brw: fix analysis dirtying with pulled constants
+
+Mark Collins (1):
+
+- freedreno/drm: Only initialize memory data source when Perfetto is active
+
+Mary Guillemard (1):
+
+- nouveau/headers: Fix nv_push rust push_inline_data implementation
+
+Mike Blumenkrantz (1):
+
+- zink: remove UNSYNCHRONIZED map flag during unmap flush for non-subdata calls
+
+Natalie Vock (1):
+
+- radv: Only expose indirect raytracing on gfx7+
+
+Nataraj Deshpande (1):
+
+- anv: add feature flags for linearly tiled ASTC images
+
+Patrick Lerda (1):
+
+- r600: fix evergreen gds atomic_counter_comp_swap
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- mesa/st: always use base_serialized_nir for draw
+
+Pohsiang (John) Hsu (1):
+
+- gallium/pipebuffer: fix multithread issue on pb_slab_manager_create_buffer
+
+Qiang Yu (1):
+
+- mesa: fix glTexPageCommitmentARB and glTexturePageCommitmentEXT level check
+
+Robert Mader (1):
+
+- gallium: Set and count all extra samplers
+
+Sagar Ghuge (3):
+
+- anv: Add missing ACCELERATION_STRUCTURE_READ in barrier handling
+- anv: Enable CS stall for ACCELERATION_STRUCTURE_COPY stage
+- anv: Add missing L3 flushes
+
+Samuel Pitoiset (5):
+
+- radv: fix reserving space for emitting push constants with DGC IES
+- radv: fix color attachment remapping with fast-GPL/ESO
+- radv: dirty some states from graphics pipeline earlier
+- radv: add missing L2 invalidate cache flush for non-coherent images
+- radv: fix hashing graphics pipeline when no stages are compiled
+
+Tapani Pälli (1):
+
+- isl/blorp: handle failing 96bpp linear blit case
+
+Yiwei Zhang (2):
+
+- venus: hide swapchainMaintenance1 behind wsi guard
+- vulkan/android: amend a missing case for IMPLEMENTATION_DEFINED AHB

@@ -28,8 +28,8 @@
 #include <vulkan/vulkan_core.h>
 
 #include "pvr_device_info.h"
-#include "usc/pvr_uscgen.h"
 #include "pvr_types.h"
+#include "pvr_usc.h"
 #include "util/hash_table.h"
 
 struct pvr_device;

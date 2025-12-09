@@ -24,6 +24,11 @@
 #include "d3d12_video_encoder_nalu_writer_hevc.h"
 #include <algorithm>
 
+d3d12_video_nalu_writer_hevc::d3d12_video_nalu_writer_hevc() {
+    m_rbsp_buffer.create_bitstream(MAX_COMPRESSED_NALU);
+    m_nalu_buffer.create_bitstream(2 * MAX_COMPRESSED_NALU);
+}
+
 // Writes the HEVC VPS structure into a bitstream passed in headerBitstream
 // Function resizes bitstream accordingly and puts result in byte vector
 void
@@ -141,44 +146,33 @@ d3d12_video_nalu_writer_hevc::generic_write_bytes( std::vector<BYTE> &headerBits
                                                 size_t &writtenBytes, 
                                                 void *pStructure)
 {
-    // Wrap pSPS into NALU and copy full NALU into output byte array
-    d3d12_video_encoder_bitstream rbsp, nalu;
-
     /*HEVCNaluHeader nalu is in all Hevc*ParameterSet structures at the beggining*/
     HEVCNaluHeader* nal_header = ((HEVCNaluHeader *) pStructure);
 
-    if (!rbsp.create_bitstream(MAX_COMPRESSED_NALU)) {
-        debug_printf("rbsp.create_bitstream(MAX_COMPRESSED_NALU) failed\n");
+    m_rbsp_buffer.clear();
+    m_nalu_buffer.clear();
+
+    m_rbsp_buffer.set_start_code_prevention(true);
+    if (write_bytes_from_struct(&m_rbsp_buffer, pStructure, nal_header->nal_unit_type) <= 0u) {
+        debug_printf("write_bytes_from_struct(&m_rbsp_buffer, pStructure, nal_header->nal_unit_type) didn't write any bytes.\n");
         assert(false);
     }
 
-    if (!nalu.create_bitstream(2 * MAX_COMPRESSED_NALU)) {
-        debug_printf("nalu.create_bitstream(2 * MAX_COMPRESSED_NALU) failed\n");
+    if (wrap_rbsp_into_nalu(&m_nalu_buffer, &m_rbsp_buffer, nal_header) <= 0u) {
+        debug_printf("wrap_rbsp_into_nalu(&m_nalu_buffer, &m_rbsp_buffer, nal_header) didn't write any bytes.\n");
         assert(false);
     }
 
-    rbsp.set_start_code_prevention(true);
-    if (write_bytes_from_struct(&rbsp, pStructure, nal_header->nal_unit_type) <= 0u) {
-        debug_printf("write_bytes_from_struct(&rbsp, pStructure, nal_header->nal_unit_type) didn't write any bytes.\n");
-        assert(false);
+    uint8_t *naluBytes    = m_nalu_buffer.get_bitstream_buffer();
+    size_t   naluByteSize = m_nalu_buffer.get_byte_count();
+
+    size_t startDstIndex = static_cast<size_t>(placingPositionStart - headerBitstream.begin());
+    size_t requiredSize = startDstIndex + naluByteSize;
+    if (headerBitstream.size() < requiredSize) {
+        headerBitstream.resize(requiredSize);
     }
 
-    if (wrap_rbsp_into_nalu(&nalu, &rbsp, nal_header) <= 0u) {
-        debug_printf("wrap_rbsp_into_nalu(&nalu, &rbsp, nal_header) didn't write any bytes.\n");
-        assert(false);
-    }
-
-    // Deep copy nalu into headerBitstream, nalu gets out of scope here and its destructor frees the nalu object buffer
-    // memory.
-    uint8_t *naluBytes    = nalu.get_bitstream_buffer();
-    size_t   naluByteSize = nalu.get_byte_count();
-
-    auto startDstIndex = std::distance(headerBitstream.begin(), placingPositionStart);
-    if (headerBitstream.size() < (startDstIndex + naluByteSize)) {
-        headerBitstream.resize(startDstIndex + naluByteSize);
-    }
-
-    std::copy_n(&naluBytes[0], naluByteSize, &headerBitstream.data()[startDstIndex]);
+    memcpy(&headerBitstream.data()[startDstIndex], naluBytes, naluByteSize);
 
     writtenBytes = naluByteSize;
 }
@@ -212,7 +206,7 @@ d3d12_video_nalu_writer_hevc::write_bytes_from_struct(d3d12_video_encoder_bitstr
         } break;
         default:
         {
-            unreachable("Unsupported NALU value");
+            UNREACHABLE("Unsupported NALU value");
         } break;        
     }
 }

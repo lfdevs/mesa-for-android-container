@@ -113,7 +113,7 @@ static uint32_t eval_op(struct mme_fermi_sim *sim, const struct mme_fermi_inst *
                res = ~(x & y);
                break;
             default:
-               unreachable("Unhandled ALU op");
+               UNREACHABLE("Unhandled ALU op");
          }
 
          return res;
@@ -130,7 +130,7 @@ static uint32_t eval_op(struct mme_fermi_sim *sim, const struct mme_fermi_inst *
          return load_state(sim, (x + load_imm(inst)) * 4);
       // TODO: reverse MME_FERMI_OP_UNK6
       default:
-         unreachable("Unhandled op");
+         UNREACHABLE("Unhandled op");
    }
 }
 
@@ -202,7 +202,7 @@ eval_inst(struct mme_fermi_sim *sim, const struct mme_fermi_inst *inst)
             emit_mthd(sim, (scratch >> 12) & 0x3f);
             break;
          default:
-            unreachable("Unhandled ASSIGN op");
+            UNREACHABLE("Unhandled ASSIGN op");
       }
    }
 }

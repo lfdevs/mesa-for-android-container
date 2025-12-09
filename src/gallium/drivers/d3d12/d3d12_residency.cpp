@@ -281,25 +281,79 @@ d3d12_deinit_residency(struct d3d12_screen *screen)
 }
 
 void
-d3d12_promote_to_permanent_residency(struct d3d12_screen *screen, struct d3d12_resource* resource)
+d3d12_promote_to_permanent_residency(
+   struct d3d12_screen *screen,
+   struct d3d12_resource** resources,
+   unsigned count,
+   ID3D12Fence* pResidencyFence, /* NULL implies usage of synchronous MakeResident */
+   uint64_t *pResidencyFenceValue /* Out: value to wait on for residency for this call */
+)
 {
+#if MESA_DEBUG
+   if (pResidencyFence && !pResidencyFenceValue)
+   {
+      debug_printf("D3D12: d3d12_promote_to_permanent_residency called with a fence but no fence value out parameter!\n");
+      assert(false);
+   }
+
+   if (pResidencyFence && pResidencyFenceValue) {
+      debug_printf("D3D12: promote_to_permanent_residency called with %u resources, current fence value: %" PRIu64 "\n", count, *pResidencyFenceValue);
+   }
+#endif // MESA_DEBUG
+
+   if (count == 0)
+      return;
+
    mtx_lock(&screen->submit_mutex);
-   uint64_t offset;
-   struct d3d12_bo *base_bo = d3d12_bo_get_base(resource->bo, &offset);
+   
+   ID3D12Pageable *pageables_to_make_resident[residency_batch_size];
+   unsigned num_to_make_resident = 0;
+   
+   auto flush_batch = [](struct d3d12_screen *screen, ID3D12Pageable **pageables, unsigned count, ID3D12Fence* pResidencyFence, uint64_t *pResidencyFenceValue) {
+      if (count > 0) {
+         ASSERTED HRESULT hr = S_OK;
 
-   /* Promote non-permanent resident resources to permanent residency*/
-   if(base_bo->residency_status != d3d12_permanently_resident) {
-
-      /* Mark as permanently resident*/
-      base_bo->residency_status = d3d12_permanently_resident;
-
-      /* If it wasn't made resident before, make it*/
-      bool was_made_resident = (base_bo->residency_status == d3d12_resident);
-      if(!was_made_resident) {
-         ID3D12Pageable *pageable = base_bo->res;
-         ASSERTED HRESULT hr = screen->dev->MakeResident(1, &pageable);
+         if (!pResidencyFence)
+         {
+            hr = screen->dev->MakeResident(count, pageables);
+            if(SUCCEEDED(hr))
+            {
+               debug_printf("D3D12: Promoted %u resources to permanent residency (synchronous)\n", count);
+            }
+         }
+         else
+         {
+            hr = screen->dev->EnqueueMakeResident(D3D12_RESIDENCY_FLAG_NONE, count, pageables,
+               pResidencyFence, (*pResidencyFenceValue) + 1);
+            if(SUCCEEDED(hr))
+            {
+               (*pResidencyFenceValue)++;
+               debug_printf("D3D12: Promoted %u resources to permanent residency (asynchronous) with fence object %p and fence value %" PRIu64 " and hr %x\n", count, pResidencyFence, *pResidencyFenceValue, (unsigned)hr);
+            }
+         }
          assert(SUCCEEDED(hr));
       }
+   };
+   
+   for (unsigned i = 0; i < count; ++i) {
+      uint64_t offset;
+      struct d3d12_bo *base_bo = d3d12_bo_get_base(resources[i]->bo, &offset);
+
+      if (base_bo->residency_status != d3d12_permanently_resident) {
+         bool needs_make_resident = (base_bo->residency_status == d3d12_evicted);
+         base_bo->residency_status = d3d12_permanently_resident;
+
+         if (needs_make_resident) {
+            assert(num_to_make_resident < residency_batch_size);
+            pageables_to_make_resident[num_to_make_resident++] = base_bo->res;
+            if (num_to_make_resident == residency_batch_size) {
+               flush_batch(screen, pageables_to_make_resident, num_to_make_resident, pResidencyFence, pResidencyFenceValue);
+               num_to_make_resident = 0;
+            }
+         }
+      }
    }
+   
+   flush_batch(screen, pageables_to_make_resident, num_to_make_resident, pResidencyFence, pResidencyFenceValue);
    mtx_unlock(&screen->submit_mutex);
 }

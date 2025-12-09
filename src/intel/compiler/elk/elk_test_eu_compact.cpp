@@ -49,7 +49,7 @@ get_compact_params_name(const testing::TestParamInfo<CompactParams> p)
       ss << "Align_16";
       break;
    default:
-      unreachable("invalid align");
+      UNREACHABLE("invalid align");
    }
    return ss.str();
 }

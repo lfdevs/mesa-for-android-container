@@ -39,6 +39,7 @@ const char *rnn_regname(struct rnn *rnn, uint32_t regbase, int color);
 struct rnndecaddrinfo *rnn_reginfo(struct rnn *rnn, uint32_t regbase);
 void rnn_reginfo_free(struct rnndecaddrinfo *info);
 const char *rnn_enumname(struct rnn *rnn, const char *name, uint32_t val);
+int rnn_enumval(struct rnn *rnn, const char *enumname, const char *enumval);
 
 struct rnndelem *rnn_regelem(struct rnn *rnn, const char *name);
 struct rnndelem *rnn_regoff(struct rnn *rnn, uint32_t offset);

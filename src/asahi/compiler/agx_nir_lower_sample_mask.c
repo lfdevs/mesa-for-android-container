@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "compiler/glsl/list.h"
+#include "compiler/list.h"
 #include "compiler/nir/nir_builder.h"
 #include "agx_compiler.h"
 #include "nir.h"

@@ -62,7 +62,7 @@ struct elk_bblock_link {
    }
 #endif
 
-   struct exec_node link;
+   struct brw_exec_node link;
    struct elk_bblock_t *block;
 
    /* Type of this CFG edge.  Because bblock_link_logical also implies
@@ -111,7 +111,7 @@ private:
    /**
     * \sa unlink_parents, unlink_children
     */
-   void unlink_list(exec_list *);
+   void unlink_list(brw_exec_list *);
 
 public:
    void unlink_parents()
@@ -125,7 +125,7 @@ public:
    }
 #endif
 
-   struct exec_node link;
+   struct brw_exec_node link;
    struct elk_cfg_t *cfg;
 
    int start_ip;
@@ -136,40 +136,40 @@ public:
     */
    int end_ip_delta;
 
-   struct exec_list instructions;
-   struct exec_list parents;
-   struct exec_list children;
+   struct brw_exec_list instructions;
+   struct brw_exec_list parents;
+   struct brw_exec_list children;
    int num;
 };
 
 static inline struct elk_backend_instruction *
 bblock_start(struct elk_bblock_t *block)
 {
-   return (struct elk_backend_instruction *)exec_list_get_head(&block->instructions);
+   return (struct elk_backend_instruction *)brw_exec_list_get_head(&block->instructions);
 }
 
 static inline const struct elk_backend_instruction *
 bblock_start_const(const struct elk_bblock_t *block)
 {
-   return (const struct elk_backend_instruction *)exec_list_get_head_const(&block->instructions);
+   return (const struct elk_backend_instruction *)brw_exec_list_get_head_const(&block->instructions);
 }
 
 static inline struct elk_backend_instruction *
 bblock_end(struct elk_bblock_t *block)
 {
-   return (struct elk_backend_instruction *)exec_list_get_tail(&block->instructions);
+   return (struct elk_backend_instruction *)brw_exec_list_get_tail(&block->instructions);
 }
 
 static inline const struct elk_backend_instruction *
 bblock_end_const(const struct elk_bblock_t *block)
 {
-   return (const struct elk_backend_instruction *)exec_list_get_tail_const(&block->instructions);
+   return (const struct elk_backend_instruction *)brw_exec_list_get_tail_const(&block->instructions);
 }
 
 static inline struct elk_bblock_t *
 bblock_next(struct elk_bblock_t *block)
 {
-   if (exec_node_is_tail_sentinel(block->link.next))
+   if (brw_exec_node_is_tail_sentinel(block->link.next))
       return NULL;
 
    return (struct elk_bblock_t *)block->link.next;
@@ -178,7 +178,7 @@ bblock_next(struct elk_bblock_t *block)
 static inline const struct elk_bblock_t *
 bblock_next_const(const struct elk_bblock_t *block)
 {
-   if (exec_node_is_tail_sentinel(block->link.next))
+   if (brw_exec_node_is_tail_sentinel(block->link.next))
       return NULL;
 
    return (const struct elk_bblock_t *)block->link.next;
@@ -187,7 +187,7 @@ bblock_next_const(const struct elk_bblock_t *block)
 static inline struct elk_bblock_t *
 bblock_prev(struct elk_bblock_t *block)
 {
-   if (exec_node_is_head_sentinel(block->link.prev))
+   if (brw_exec_node_is_head_sentinel(block->link.prev))
       return NULL;
 
    return (struct elk_bblock_t *)block->link.prev;
@@ -196,7 +196,7 @@ bblock_prev(struct elk_bblock_t *block)
 static inline const struct elk_bblock_t *
 bblock_prev_const(const struct elk_bblock_t *block)
 {
-   if (exec_node_is_head_sentinel(block->link.prev))
+   if (brw_exec_node_is_head_sentinel(block->link.prev))
       return NULL;
 
    return (const struct elk_bblock_t *)block->link.prev;
@@ -324,7 +324,7 @@ struct elk_cfg_t {
 #ifdef __cplusplus
    DECLARE_RALLOC_CXX_OPERATORS(elk_cfg_t)
 
-   elk_cfg_t(const elk_backend_shader *s, exec_list *instructions);
+   elk_cfg_t(const elk_backend_shader *s, brw_exec_list *instructions);
    elk_cfg_t(const elk_cfg_t &) = delete;
    ~elk_cfg_t();
 
@@ -360,7 +360,7 @@ struct elk_cfg_t {
    void *mem_ctx;
 
    /** Ordered list (by ip) of basic blocks */
-   struct exec_list block_list;
+   struct brw_exec_list block_list;
    struct elk_bblock_t **blocks;
    int num_blocks;
 };
@@ -368,25 +368,25 @@ struct elk_cfg_t {
 static inline struct elk_bblock_t *
 cfg_first_block(struct elk_cfg_t *cfg)
 {
-   return (struct elk_bblock_t *)exec_list_get_head(&cfg->block_list);
+   return (struct elk_bblock_t *)brw_exec_list_get_head(&cfg->block_list);
 }
 
 static inline const struct elk_bblock_t *
 cfg_first_block_const(const struct elk_cfg_t *cfg)
 {
-   return (const struct elk_bblock_t *)exec_list_get_head_const(&cfg->block_list);
+   return (const struct elk_bblock_t *)brw_exec_list_get_head_const(&cfg->block_list);
 }
 
 static inline struct elk_bblock_t *
 cfg_last_block(struct elk_cfg_t *cfg)
 {
-   return (struct elk_bblock_t *)exec_list_get_tail(&cfg->block_list);
+   return (struct elk_bblock_t *)brw_exec_list_get_tail(&cfg->block_list);
 }
 
 static inline const struct elk_bblock_t *
 cfg_last_block_const(const struct elk_cfg_t *cfg)
 {
-   return (const struct elk_bblock_t *)exec_list_get_tail_const(&cfg->block_list);
+   return (const struct elk_bblock_t *)brw_exec_list_get_tail_const(&cfg->block_list);
 }
 
 #ifdef __cplusplus
@@ -430,19 +430,19 @@ elk_cfg_t::last_block() const
       foreach_inst_in_block_safe (__type, __inst, __block)
 
 #define foreach_block(__block, __cfg)                          \
-   foreach_list_typed (elk_bblock_t, __block, link, &(__cfg)->block_list)
+   brw_foreach_list_typed (elk_bblock_t, __block, link, &(__cfg)->block_list)
 
 #define foreach_block_reverse(__block, __cfg)                  \
-   foreach_list_typed_reverse (elk_bblock_t, __block, link, &(__cfg)->block_list)
+   brw_foreach_list_typed_reverse (elk_bblock_t, __block, link, &(__cfg)->block_list)
 
 #define foreach_block_safe(__block, __cfg)                     \
-   foreach_list_typed_safe (elk_bblock_t, __block, link, &(__cfg)->block_list)
+   brw_foreach_list_typed_safe (elk_bblock_t, __block, link, &(__cfg)->block_list)
 
 #define foreach_block_reverse_safe(__block, __cfg)             \
-   foreach_list_typed_reverse_safe (elk_bblock_t, __block, link, &(__cfg)->block_list)
+   brw_foreach_list_typed_reverse_safe (elk_bblock_t, __block, link, &(__cfg)->block_list)
 
 #define foreach_inst_in_block(__type, __inst, __block)         \
-   foreach_in_list(__type, __inst, &(__block)->instructions)
+   brw_foreach_in_list(__type, __inst, &(__block)->instructions)
 
 #define foreach_inst_in_block_safe(__type, __inst, __block)    \
    for (__type *__inst = (__type *)__block->instructions.head_sentinel.next, \
@@ -452,10 +452,10 @@ elk_cfg_t::last_block() const
         __next = (__type *)__next->next)
 
 #define foreach_inst_in_block_reverse(__type, __inst, __block) \
-   foreach_in_list_reverse(__type, __inst, &(__block)->instructions)
+   brw_foreach_in_list_reverse(__type, __inst, &(__block)->instructions)
 
 #define foreach_inst_in_block_reverse_safe(__type, __inst, __block) \
-   foreach_in_list_reverse_safe(__type, __inst, &(__block)->instructions)
+   brw_foreach_in_list_reverse_safe(__type, __inst, &(__block)->instructions)
 
 #define foreach_inst_in_block_starting_from(__type, __scan_inst, __inst) \
    for (__type *__scan_inst = (__type *)__inst->next;          \

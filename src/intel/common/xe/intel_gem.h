@@ -27,7 +27,10 @@
 #include <stdint.h>
 #include <time.h>
 
+#include "common/intel_gem.h"
 #include "common/intel_engine.h"
+#include "drm-uapi/xe_drm.h"
+#include "util/os_time.h"
 
 bool xe_gem_read_render_timestamp(int fd, uint64_t *value);
 bool
@@ -42,3 +45,27 @@ bool xe_gem_can_render_on_fd(int fd);
 bool xe_gem_supports_protected_exec_queue(int fd);
 
 void intel_xe_gem_add_ext(uint64_t *ptr, uint32_t ext_name, void *data);
+
+static inline int
+xe_gem_exec_ioctl(int fd, const struct intel_device_info *info,
+                  struct drm_xe_exec *exec)
+{
+   int ret, retries;
+
+   if (unlikely(info->no_hw))
+      return 0;
+
+   for (retries = 0; retries < INTEL_EXEC_IOCTL_MAX_RETRIES; retries++) {
+      ret = intel_ioctl(fd, DRM_IOCTL_XE_EXEC, exec);
+
+      if (likely(!(ret && errno == ENOMEM)))
+         break;
+
+      if (unlikely(retries == INTEL_EXEC_IOCTL_RETRY_WARN))
+         fprintf(stderr, "intel: the execbuf ioctl keeps returning ENOMEM\n");
+
+      os_time_sleep(intel_exec_ioctl_sleep_us(retries));
+   }
+
+   return ret;
+}

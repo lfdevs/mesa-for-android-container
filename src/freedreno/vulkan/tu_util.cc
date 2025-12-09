@@ -12,6 +12,7 @@
 #include "util/u_math.h"
 #include "util/timespec.h"
 #include "util/os_file_notify.h"
+#include "util/os_file.h"
 #include "vk_enum_to_str.h"
 
 #include "tu_device.h"
@@ -53,6 +54,8 @@ static const struct debug_control tu_debug_options[] = {
    { "check_cmd_buffer_status", TU_DEBUG_CHECK_CMD_BUFFER_STATUS },
    { "comm", TU_DEBUG_COMM },
    { "nofdm", TU_DEBUG_NOFDM },
+   { "nocb", TU_DEBUG_NO_CONCURRENT_BINNING },
+   { "forcecb", TU_DEBUG_FORCE_CONCURRENT_BINNING },
    { NULL, 0 }
 };
 
@@ -74,31 +77,40 @@ const uint64_t tu_runtime_debug_flags =
 os_file_notifier_t tu_debug_notifier;
 struct tu_env tu_env;
 
+static uint64_t
+tu_env_get_file_flags(const char *path)
+{
+   char *str = os_read_file(path, NULL);
+   if (str) {
+      uint64_t flags = parse_debug_string(str, tu_debug_options);
+      free(str);
+      return flags;
+   }
+   return 0;
+}
+
 static void
 tu_env_notify(
    void *data, const char *path, bool created, bool deleted, bool dir_deleted)
 {
    uint64_t file_flags = 0;
    if (!deleted) {
-      FILE *file = fopen(path, "r");
-      if (file) {
-         char buf[512];
-         size_t len = fread(buf, 1, sizeof(buf) - 1, file);
-         fclose(file);
-         buf[len] = '\0';
-
-         file_flags = parse_debug_string(buf, tu_debug_options);
-      }
+      file_flags = tu_env_get_file_flags(path);
    }
 
    uint64_t runtime_flags = file_flags & tu_runtime_debug_flags;
-   if (unlikely(runtime_flags != file_flags)) {
-      mesa_logw(
-         "Certain options in TU_DEBUG_FILE don't support runtime changes: 0x%" PRIx64 ", ignoring",
-         file_flags & ~tu_runtime_debug_flags);
+   if ((tu_env.debug.load(std::memory_order_acquire) & tu_runtime_debug_flags) ^ runtime_flags) {
+      mesa_logd("TU_DEBUG_FILE: Runtime debug flags change detected. Flags set:");
+      for (unsigned i = 0; i < ARRAY_SIZE(tu_debug_options); i++) {
+         if (runtime_flags & tu_debug_options[i].flag)
+            mesa_logd("TU_DEBUG_FILE:   %s", tu_debug_options[i].string);
+      }
+
+      if (runtime_flags == 0)
+         mesa_logd("TU_DEBUG_FILE:   None");
    }
 
-   tu_env.debug.store(runtime_flags | tu_env.env_debug, std::memory_order_release);
+   tu_env.debug.store(runtime_flags | tu_env.start_debug, std::memory_order_release);
 
    if (unlikely(dir_deleted))
       mesa_logw(
@@ -116,11 +128,10 @@ tu_env_deinit(void)
 static void
 tu_env_init_once(void)
 {
-   tu_env.debug = parse_debug_string(os_get_option("TU_DEBUG"), tu_debug_options);
-   tu_env.env_debug = tu_env.debug & ~tu_runtime_debug_flags;
+   tu_env.start_debug = tu_env.debug = parse_debug_string(os_get_option("TU_DEBUG"), tu_debug_options);
 
    if (TU_DEBUG(STARTUP))
-      mesa_logi("TU_DEBUG=0x%" PRIx64 " (ENV: 0x%" PRIx64 ")", tu_env.debug.load(), tu_env.env_debug);
+      mesa_logi("TU_DEBUG=0x%" PRIx64, tu_env.debug.load());
 
    /* TU_DEBUG=rd functionality was moved to fd_rd_output. This debug option
     * should translate to the basic-level FD_RD_DUMP_ENABLE option.
@@ -130,11 +141,15 @@ tu_env_init_once(void)
 
    const char *debug_file = os_get_option("TU_DEBUG_FILE");
    if (debug_file) {
-      if (tu_env.debug != tu_env.env_debug) {
+      if ((tu_env.debug & tu_runtime_debug_flags) != 0) {
          mesa_logw("TU_DEBUG_FILE is set (%s), but TU_DEBUG is also set. "
-                   "Any runtime options (0x%" PRIx64 ") in TU_DEBUG will be ignored.",
+                   "Any runtime options (0x%" PRIx64 ") set in TU_DEBUG cannot be changed at runtime.",
                    debug_file, tu_env.debug & tu_runtime_debug_flags);
       }
+
+      uint64_t file_flags = tu_env_get_file_flags(debug_file);
+      tu_env.start_debug |= file_flags & ~tu_runtime_debug_flags;
+      tu_env.debug = file_flags | tu_env.start_debug;
 
       if (TU_DEBUG(STARTUP))
          mesa_logi("Watching TU_DEBUG_FILE: %s", debug_file);
@@ -259,7 +274,7 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
 
       /* Check that we did the math right. */
       min_layer_stride = tile_align_h * tile_align_w * pass->min_cpp;
-      assert(align(min_layer_stride, gmem_align) == min_layer_stride);
+      assert(util_is_aligned(min_layer_stride, gmem_align));
    }
 
    /* will force to sysmem, don't bother trying to have a valid tile config
@@ -274,11 +289,12 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
    /* There aren't that many different tile widths possible, so just walk all
     * of them finding which produces the lowest number of bins.
     */
-   const uint32_t max_tile_width = MIN2(
-      dev->physical_device->info->tile_max_w, util_align_npot(fb->width, tile_align_w));
+   const uint32_t max_tile_width =
+      MIN3(dev->physical_device->info->tile_max_w,
+           util_align_npot(fb->width, tile_align_w), fb->max_tile_w_constraint);
    const uint32_t max_tile_height =
-      MIN2(dev->physical_device->info->tile_max_h,
-           align(fb->height, tile_align_h));
+      MIN3(dev->physical_device->info->tile_max_h,
+           align(fb->height, tile_align_h), fb->max_tile_h_constraint);
    for (tile_size.width = tile_align_w; tile_size.width <= max_tile_width;
         tile_size.width += tile_align_w) {
       tile_size.height = pass->gmem_pixels[gmem_layout] / (tile_size.width * layers);
@@ -286,6 +302,19 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
       tile_size.height = ROUND_DOWN_TO(tile_size.height, tile_align_h);
       if (!tile_size.height)
          continue;
+
+      /* When using FDM, we need approximately square tiles to maintain
+       * proper density distribution across the framebuffer.
+       * Way to wide or tall tiles would distort the density mapping, causing
+       * areas intended for low density to receive higher density and vice
+       * versa.
+       */
+      uint32_t fdm_penalty = 0;
+      if (pass->has_fdm &&
+          (tile_size.width > tile_size.height * 2 ||
+           tile_size.height > tile_size.width * 2)) {
+         fdm_penalty = 1000;
+      }
 
       tile_count.width = DIV_ROUND_UP(fb->width, tile_size.width);
       tile_count.height = DIV_ROUND_UP(fb->height, tile_size.height);
@@ -300,14 +329,15 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
        * and amount of cache flushing), but the most square tiles in the case
        * of a tie (likely highest cache locality).
        */
-      if (tile_count.width * tile_count.height < best_tile_count ||
-          (tile_count.width * tile_count.height == best_tile_count &&
+      uint32_t total_tiles = tile_count.width * tile_count.height + fdm_penalty;
+      if (total_tiles < best_tile_count ||
+          (total_tiles == best_tile_count &&
            abs((int)(tile_size.width - tile_size.height)) <
               abs((int)(tiling->tile0.width - tiling->tile0.height)))) {
          tiling->possible = true;
          tiling->tile0 = tile_size;
          tiling->vsc.tile_count = tile_count;
-         best_tile_count = tile_count.width * tile_count.height;
+         best_tile_count = total_tiles;
       }
    }
 
@@ -349,7 +379,7 @@ tu_tiling_config_update_pipe_layout(struct tu_vsc_config *vsc,
     * area can prevent bin merging from happening. Maximize the size of each
     * pipe instead of minimizing it.
     */
-   if (fdm && dev->physical_device->info->a6xx.has_bin_mask &&
+   if (fdm && dev->physical_device->info->props.has_bin_mask &&
        !TU_DEBUG(NO_BIN_MERGING)) {
       vsc->pipe0.width = 4;
       vsc->pipe0.height = 8;

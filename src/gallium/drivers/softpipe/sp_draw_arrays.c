@@ -123,11 +123,11 @@ softpipe_draw_vbo(struct pipe_context *pipe,
 
    if (softpipe_screen(sp->pipe.screen)->use_llvm) {
       softpipe_prepare_vertex_sampling(sp,
-                                       sp->num_sampler_views[PIPE_SHADER_VERTEX],
-                                       sp->sampler_views[PIPE_SHADER_VERTEX]);
+                                       sp->num_sampler_views[MESA_SHADER_VERTEX],
+                                       sp->sampler_views[MESA_SHADER_VERTEX]);
       softpipe_prepare_geometry_sampling(sp,
-                                         sp->num_sampler_views[PIPE_SHADER_GEOMETRY],
-                                         sp->sampler_views[PIPE_SHADER_GEOMETRY]);
+                                         sp->num_sampler_views[MESA_SHADER_GEOMETRY],
+                                         sp->sampler_views[MESA_SHADER_GEOMETRY]);
    }
 
    if (sp->gs && !sp->gs->shader.tokens) {

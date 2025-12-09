@@ -1500,7 +1500,7 @@
   </enum>
 
   <group name="Subgroup arithmetic" length="6">
-    <exact bit="0:7">01101111</exact>
+    <exact bit="0:6">1101111</exact>
     <exact bit="15">1</exact>
     <zero bit="26:27 31:37 41"/>
     <exact bit="29">simd</exact>

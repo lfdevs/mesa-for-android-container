@@ -138,6 +138,13 @@ static bool ppir_node_is_identity_reg_mov(ppir_node *node)
    if (src->type != ppir_target_register)
       return false;
 
+   if (src->absolute || src->negate)
+      return false;
+
+   ppir_dest *dest = ppir_node_get_dest(node);
+   if (dest->modifier != ppir_outmod_none)
+      return false;
+
    return ppir_src_swizzle_is_identity(ppir_node_get_src(node, 0));
 }
 
@@ -374,7 +381,7 @@ static bool ppir_dce(ppir_compiler *comp)
    /* Block 0 is entry, it is always reachable */
    BITSET_SET(reachable, 0);
    /* Discard block is always reachable */
-   if (comp->uses_discard)
+   if (comp->discard_block)
       BITSET_SET(reachable, comp->discard_block->index);
    list_for_each_entry(ppir_block, block, &comp->block_list, list) {
       for (int i = 0; i < 2; i++) {

@@ -26,7 +26,7 @@ panvk_translate_sampler_mipmap_mode(VkSamplerMipmapMode mode)
    case VK_SAMPLER_MIPMAP_MODE_LINEAR:
       return MALI_MIPMAP_MODE_TRILINEAR;
    default:
-      unreachable("Invalid mipmap mode");
+      UNREACHABLE("Invalid mipmap mode");
    }
 }
 
@@ -45,7 +45,7 @@ panvk_translate_sampler_address_mode(VkSamplerAddressMode mode)
    case VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE:
       return MALI_WRAP_MODE_MIRRORED_CLAMP_TO_EDGE;
    default:
-      unreachable("Invalid wrap");
+      UNREACHABLE("Invalid wrap");
    }
 }
 
@@ -70,7 +70,7 @@ panvk_translate_reduction_mode(VkSamplerReductionMode reduction_mode)
    case VK_SAMPLER_REDUCTION_MODE_MAX:
       return MALI_REDUCTION_MODE_MAXIMUM;
    default:
-      unreachable("Invalid reduction mode");
+      UNREACHABLE("Invalid reduction mode");
    }
 }
 #endif

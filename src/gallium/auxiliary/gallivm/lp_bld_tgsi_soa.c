@@ -36,11 +36,8 @@
  * Brian Paul, and others.
  */
 
-#include "util/detect.h"
 #include "pipe/p_shader_tokens.h"
 #include "util/u_debug.h"
-#include "util/u_math.h"
-#include "util/u_memory.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_exec.h"
 #include "tgsi/tgsi_info.h"
@@ -56,7 +53,6 @@
 #include "lp_bld_gather.h"
 #include "lp_bld_init.h"
 #include "lp_bld_logic.h"
-#include "lp_bld_misc.h"
 #include "lp_bld_swizzle.h"
 #include "lp_bld_flow.h"
 #include "lp_bld_coro.h"
@@ -1524,7 +1520,7 @@ emit_fetch_system_value(
       break;
 
    case TGSI_SEMANTIC_INVOCATIONID:
-      if (info->processor == PIPE_SHADER_TESS_CTRL)
+      if (info->processor == MESA_SHADER_TESS_CTRL)
          res = bld->system_values.invocation_id;
       else
          res = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.invocation_id);
@@ -2051,7 +2047,7 @@ lp_build_lod_property(
        reg->Register.File == TGSI_FILE_IMMEDIATE) {
       lod_property = LP_SAMPLER_LOD_SCALAR;
    }
-   else if (bld_base->info->processor == PIPE_SHADER_FRAGMENT) {
+   else if (bld_base->info->processor == MESA_SHADER_FRAGMENT) {
       if (gallivm_perf & GALLIVM_PERF_NO_QUAD_LOD) {
          lod_property = LP_SAMPLER_LOD_PER_ELEMENT;
       }
@@ -2243,7 +2239,7 @@ emit_tex( struct lp_build_tgsi_soa_context *bld,
        * could also check all src regs if constant but I doubt such
        * cases exist in practice.
        */
-      if (bld->bld_base.info->processor == PIPE_SHADER_FRAGMENT) {
+      if (bld->bld_base.info->processor == MESA_SHADER_FRAGMENT) {
          if (gallivm_perf & GALLIVM_PERF_NO_QUAD_LOD) {
             lod_property = LP_SAMPLER_LOD_PER_ELEMENT;
          }
@@ -2412,7 +2408,7 @@ emit_sample(struct lp_build_tgsi_soa_context *bld,
        * could also check all src regs if constant but I doubt such
        * cases exist in practice.
        */
-      if (bld->bld_base.info->processor == PIPE_SHADER_FRAGMENT) {
+      if (bld->bld_base.info->processor == MESA_SHADER_FRAGMENT) {
          if (gallivm_perf & GALLIVM_PERF_NO_QUAD_LOD) {
             lod_property = LP_SAMPLER_LOD_PER_ELEMENT;
          }

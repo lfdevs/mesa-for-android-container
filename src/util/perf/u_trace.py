@@ -89,7 +89,7 @@ class Tracepoint(object):
         indirect_sizes = []
         for indirect in self.indirect_args:
             indirect.indirect_offset = ' + '.join(indirect_sizes) if len(indirect_sizes) > 0 else 0
-            indirect_sizes.append(f"sizeof({indirect.type}")
+            indirect_sizes.append(f"sizeof({indirect.type})")
 
         self.tp_perfetto = tp_perfetto
         self.tp_markers = tp_markers
@@ -428,7 +428,7 @@ ${trace_toggle_name}_variable_once(void)
      ;
 
    ${trace_toggle_name} =
-      parse_enable_string(getenv("${trace_toggle_name.upper()}"),
+      parse_enable_string(os_get_option("${trace_toggle_name.upper()}"),
                           default_value,
                           config_control);
 }
@@ -673,7 +673,14 @@ perfetto_utils_hdr_template = """\
 #ifndef ${guard_name}
 #define ${guard_name}
 
+#ifndef ANDROID_LIBPERFETTO
 #include <perfetto.h>
+#else
+#include <perfetto/tracing.h>
+#include <perfetto/trace/clock_snapshot.pbzero.h>
+#include <perfetto/trace/gpu/gpu_render_stage_event.pbzero.h>
+#include <perfetto/trace/gpu/vulkan_api_event.pbzero.h>
+#endif
 
 % for header in HEADERS:
 #include "${header.hdr}"
@@ -704,14 +711,14 @@ trace_payload_as_extra_${trace_name}(perfetto::protos::pbzero::GpuRenderStageEve
    % else:
    {
       auto data = event->add_extra_data();
-      data->set_name("${arg.name}");
+      data->set_name("${arg.name}", ${len(arg.name)});
 
     % if arg.is_indirect:
       const ${arg.type}* __${arg.var} = (const ${arg.type}*)((uint8_t *)indirect_data + ${arg.indirect_offset});
     % endif
-      sprintf(buf, "${arg.c_format}", ${arg.value_expr("payload")});
+      const int slen = sprintf(buf, "${arg.c_format}", ${arg.value_expr("payload")});
 
-      data->set_value(buf);
+      data->set_value(buf, slen);
    }
    % endif
   % endfor

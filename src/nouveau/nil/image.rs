@@ -19,6 +19,7 @@ pub const IMAGE_USAGE_2D_VIEW_BIT: ImageUsageFlags = 1 << 0;
 pub const IMAGE_USAGE_LINEAR_BIT: ImageUsageFlags = 1 << 1;
 pub const IMAGE_USAGE_SPARSE_RESIDENCY_BIT: ImageUsageFlags = 1 << 2;
 pub const IMAGE_USAGE_VIDEO_BIT: ImageUsageFlags = 1 << 3;
+pub const IMAGE_USAGE_UNCOMPRESSED_BIT: ImageUsageFlags = 1 << 4;
 
 #[derive(Clone, Debug, Copy, PartialEq, Default)]
 #[repr(u8)]
@@ -181,9 +182,9 @@ pub struct Image {
     pub array_stride_B: u64,
     pub align_B: u32,
     pub size_B: u64,
-    pub compressed: bool,
     pub tile_mode: u16,
     pub pte_kind: u8,
+    pub compressed_pte_kind: u8,
 }
 
 impl Image {
@@ -282,9 +283,9 @@ impl Image {
             array_stride_B: 0,
             align_B,
             size_B,
-            compressed: false,
             tile_mode: 0,
             pte_kind: 0,
+            compressed_pte_kind: 0,
             mip_tail_first_lod: 0,
         };
         image.levels[0] = level0;
@@ -366,9 +367,9 @@ impl Image {
             array_stride_B: 0,
             align_B: 0,
             size_B: 0,
-            compressed: false,
             tile_mode: 0,
             pte_kind: 0,
+            compressed_pte_kind: 0,
             mip_tail_first_lod: 0,
         };
 
@@ -432,12 +433,12 @@ impl Image {
             image.align_B = std::cmp::max(image.align_B, 1 << 16);
         }
 
-        image.pte_kind = Self::choose_pte_kind(
-            dev,
-            info.format,
-            info.samples,
-            image.compressed,
-        );
+        image.pte_kind =
+            Self::choose_pte_kind(dev, info.format, info.samples, false);
+        if (info.usage & IMAGE_USAGE_UNCOMPRESSED_BIT) == 0 {
+            image.compressed_pte_kind =
+                Self::choose_pte_kind(dev, info.format, info.samples, true);
+        }
 
         if info.modifier != DRM_FORMAT_MOD_INVALID {
             let bl_mod = BlockLinearModifier::try_from(info.modifier).unwrap();
@@ -448,10 +449,6 @@ impl Image {
             | (u16::from(image.levels[0].tiling.z_log2) << 8);
 
         image.align_B = std::cmp::max(image.align_B, 4096);
-        if image.pte_kind >= 0xb && image.pte_kind <= 0xe {
-            image.align_B = std::cmp::max(image.align_B, 1 << 16);
-        }
-
         image.size_B = image.size_B.next_multiple_of(image.align_B.into());
 
         image
@@ -753,9 +750,15 @@ impl Image {
         }
     }
 
-    fn gb202_choose_pte_kind(_format: Format, _compressed: bool) -> u8 {
+    fn gb202_choose_pte_kind(_format: Format, compressed: bool) -> u8 {
         use nvidia_headers::hwref::tu102::mmu::*;
-        return NV_MMU_PTE_KIND_GENERIC_MEMORY.try_into().unwrap();
+        if compressed {
+            NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE_DISABLE_PLC
+        } else {
+            NV_MMU_PTE_KIND_GENERIC_MEMORY
+        }
+        .try_into()
+        .unwrap()
     }
 
     fn tu102_choose_pte_kind(format: Format, compressed: bool) -> u8 {
@@ -793,7 +796,13 @@ impl Image {
                     NV_MMU_PTE_KIND_ZF32_X24S8
                 }
             }
-            PIPE_FORMAT_Z32_FLOAT => NV_MMU_PTE_KIND_GENERIC_MEMORY,
+            PIPE_FORMAT_Z32_FLOAT => {
+                if compressed {
+                    NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE_DISABLE_PLC
+                } else {
+                    NV_MMU_PTE_KIND_GENERIC_MEMORY
+                }
+            }
             PIPE_FORMAT_S8_UINT => {
                 if compressed {
                     NV_MMU_PTE_KIND_S8_COMPRESSIBLE_DISABLE_PLC
@@ -801,7 +810,13 @@ impl Image {
                     NV_MMU_PTE_KIND_S8
                 }
             }
-            _ => NV_MMU_PTE_KIND_GENERIC_MEMORY,
+            _ => {
+                if compressed {
+                    NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE_DISABLE_PLC
+                } else {
+                    NV_MMU_PTE_KIND_GENERIC_MEMORY
+                }
+            }
         }
         .try_into()
         .unwrap()

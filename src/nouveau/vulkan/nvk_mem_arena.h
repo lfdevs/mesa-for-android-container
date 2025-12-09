@@ -72,6 +72,9 @@ struct nvk_mem_arena {
     */
    uint32_t mem_count;
 
+   /* Non-zero if any maps of this arena are dirty */
+   uint32_t map_dirty;
+
    struct nvk_arena_mem mem[NVK_MEM_ARENA_MAX_MEM_COUNT];
 };
 
@@ -188,7 +191,23 @@ nvk_contiguous_mem_arena_map_offset(const struct nvk_mem_arena *arena,
 void *nvk_mem_arena_map(const struct nvk_mem_arena *arena,
                         uint64_t addr, size_t map_range_B);
 
-void nvk_mem_arena_copy_to_gpu(const struct nvk_mem_arena *arena,
+/** Mark the arena map dirty
+ *
+ * This should be called after writing data into the arena via a pointer
+ * returned by nvk_mem_arena_map().  It must be called after the write, not
+ * before, to ensure that the next call to nvk_mem_arena_flush_map() will
+ * flush out the new writes.
+ */
+static inline void
+nvk_mem_arena_set_map_dirty(struct nvk_mem_arena *arena)
+{
+   return p_atomic_set(&arena->map_dirty, 1);
+}
+
+void nvk_mem_arena_flush_map(struct nvk_device *dev,
+                             struct nvk_mem_arena *arena);
+
+void nvk_mem_arena_copy_to_gpu(struct nvk_mem_arena *arena,
                                uint64_t dst_addr,
                                const void *src, size_t size_B);
 

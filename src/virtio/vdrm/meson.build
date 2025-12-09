@@ -3,6 +3,10 @@
 
 inc_virtio_vdrm = include_directories('.')
 
+libvdrm_c_args = [no_override_init_args]
+if with_amdgpu_virtio
+  libvdrm_c_args += ['-DENABLE_DRM_AMDGPU']
+endif
 libvdrm = static_library(
   'libvdrm',
   [
@@ -17,7 +21,7 @@ libvdrm = static_library(
     inc_virtio,
     inc_virtio_gpu,
   ],
-  c_args : [ no_override_init_args ],
+  c_args : libvdrm_c_args,
   gnu_symbol_visibility: 'hidden',
   dependencies: [
     dep_libdrm,

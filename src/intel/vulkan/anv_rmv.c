@@ -72,7 +72,7 @@ fill_memory_info(const struct anv_physical_device *device,
       out_info->size = device->memory.heaps[1].size;
       break;
    default:
-      unreachable("invalid memory index");
+      UNREACHABLE("invalid memory index");
    }
 }
 
@@ -184,8 +184,7 @@ anv_rmv_log_bo_gtt_unmap_locked(struct anv_device *device,
          },
       },
    };
-   util_dynarray_append(&device->vk.memory_trace_data.tokens,
-                        struct vk_rmv_token, token);
+   util_dynarray_append(&device->vk.memory_trace_data.tokens, token);
 
    bo->gtt_mapped = false;
 }
@@ -220,8 +219,7 @@ anv_rmv_log_bo_gtt_map(struct anv_device *device,
             },
       },
    };
-   util_dynarray_append(&device->vk.memory_trace_data.tokens,
-                        struct vk_rmv_token, token);
+   util_dynarray_append(&device->vk.memory_trace_data.tokens, token);
 
    bo->gtt_mapped = true;
 
@@ -256,8 +254,7 @@ anv_rmv_log_bos_gtt_map(struct anv_device *device,
             },
          },
       };
-      util_dynarray_append(&device->vk.memory_trace_data.tokens,
-                           struct vk_rmv_token, token);
+      util_dynarray_append(&device->vk.memory_trace_data.tokens, token);
 
       bo->gtt_mapped = true;
    }
@@ -288,8 +285,7 @@ anv_rmv_log_vm_binds(struct anv_device *device,
             },
          },
       };
-      util_dynarray_append(&device->vk.memory_trace_data.tokens,
-                           struct vk_rmv_token, token);
+      util_dynarray_append(&device->vk.memory_trace_data.tokens, token);
    }
    simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
 }
@@ -478,17 +474,17 @@ anv_rmv_log_image_create(struct anv_device *device,
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &token);
    if (image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
       for (uint32_t b = 0; b < ARRAY_SIZE(image->bindings); b++) {
-         if (image->bindings[b].sparse_data.size != 0) {
+         if (image->bindings[b].memory_range.size != 0) {
             anv_rmv_log_vma_locked(device,
-                                   image->bindings[b].sparse_data.address,
-                                   image->bindings[b].sparse_data.size,
+                                   anv_address_physical(image->bindings[b].address),
+                                   image->bindings[b].memory_range.size,
                                    false /* internal */, true /* TODO: vram */,
                                    true /* in_invisible_vram */);
             log_resource_bind_locked(device,
                                      resource_id_locked(device, image),
                                      NULL,
-                                     image->bindings[b].sparse_data.address,
-                                     image->bindings[b].sparse_data.size);
+                                     anv_address_physical(image->bindings[b].address),
+                                     image->bindings[b].memory_range.size);
          }
       }
    }
@@ -502,9 +498,9 @@ anv_rmv_log_image_destroy(struct anv_device *device,
    simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
    if (image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
       for (uint32_t b = 0; b < ARRAY_SIZE(image->bindings); b++) {
-         if (image->bindings[b].sparse_data.size != 0) {
+         if (image->bindings[b].memory_range.size != 0) {
             struct vk_rmv_virtual_free_token token = {
-               .address = image->bindings[b].sparse_data.address,
+               .address = anv_address_physical(image->bindings[b].address),
             };
 
             vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_VIRTUAL_FREE, &token);
@@ -718,113 +714,6 @@ anv_rmv_log_descriptor_pool_create(struct anv_device *device,
       vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_BIND, &bind_token);
       simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
    }
-}
-
-void
-anv_rmv_log_graphics_pipeline_create(struct anv_device *device,
-                                     struct anv_graphics_pipeline *pipeline,
-                                     bool is_internal)
-{
-   struct vk_rmv_resource_create_token create_token = {
-      .type               = VK_RMV_RESOURCE_TYPE_PIPELINE,
-      .resource_id        = resource_id_locked(device, pipeline),
-      .is_driver_internal = is_internal,
-      .pipeline           = {
-         .is_internal   = is_internal,
-         .hash_lo       = 0,/* TODO pipeline->pipeline_hash; */
-         .shader_stages = pipeline->base.base.active_stages,
-      },
-   };
-
-   simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
-   vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &create_token);
-   for (unsigned s = 0; s < ARRAY_SIZE(pipeline->base.shaders); s++) {
-      struct anv_shader_bin *shader = pipeline->base.shaders[s];
-
-      if (!shader)
-         continue;
-
-      log_state_pool_bind_locked(device, create_token.resource_id,
-                                 &device->instruction_state_pool,
-                                 &shader->kernel);
-   }
-   simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
-}
-
-void
-anv_rmv_log_compute_pipeline_create(struct anv_device *device,
-                                    struct anv_compute_pipeline *pipeline,
-                                    bool is_internal)
-{
-   VkShaderStageFlagBits active_stages =
-      pipeline->base.type == ANV_PIPELINE_COMPUTE ?
-      VK_SHADER_STAGE_COMPUTE_BIT : VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-   simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
-   struct vk_rmv_resource_create_token create_token = {
-      .type               = VK_RMV_RESOURCE_TYPE_PIPELINE,
-      .resource_id        = resource_id_locked(device, pipeline),
-      .is_driver_internal = is_internal,
-      .pipeline           = {
-         .is_internal   = is_internal,
-         .hash_lo       = 0,/* TODO pipeline->pipeline_hash; */
-         .shader_stages = active_stages,
-      },
-   };
-
-   vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &create_token);
-   struct anv_shader_bin *shader = pipeline->cs;
-   log_state_pool_bind_locked(device, create_token.resource_id,
-                              &device->instruction_state_pool,
-                              &shader->kernel);
-   simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
-}
-
-void
-anv_rmv_log_rt_pipeline_create(struct anv_device *device,
-                               struct anv_ray_tracing_pipeline *pipeline,
-                               bool is_internal)
-{
-   simple_mtx_lock(&device->vk.memory_trace_data.token_mtx);
-
-   struct vk_rmv_resource_create_token create_token = {
-      .resource_id        = resource_id_locked(device, pipeline),
-      .type               = VK_RMV_RESOURCE_TYPE_PIPELINE,
-      .is_driver_internal = is_internal,
-      .pipeline           = {
-         .is_internal   = is_internal,
-         .hash_lo       = 0, /* TODO */
-         .shader_stages = pipeline->base.active_stages,
-      },
-   };
-   vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &create_token);
-
-   struct anv_state_pool *state_pool = &device->instruction_state_pool;
-   for (uint32_t i = 0; i < pipeline->group_count; i++) {
-      struct anv_rt_shader_group *group = &pipeline->groups[i];
-
-      if (group->imported)
-         continue;
-
-      if (group->general) {
-         log_state_pool_bind_locked(device, create_token.resource_id, state_pool,
-                                    &group->general->kernel);
-      }
-      if (group->closest_hit) {
-         log_state_pool_bind_locked(device, create_token.resource_id, state_pool,
-                                    &group->closest_hit->kernel);
-      }
-      if (group->any_hit) {
-         log_state_pool_bind_locked(device, create_token.resource_id, state_pool,
-                                    &group->any_hit->kernel);
-      }
-      if (group->intersection) {
-         log_state_pool_bind_locked(device, create_token.resource_id, state_pool,
-                                    &group->intersection->kernel);
-      }
-   }
-
-   simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
 }
 
 void

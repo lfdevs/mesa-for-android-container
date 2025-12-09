@@ -270,7 +270,7 @@ fetch_pipeline_generic(struct draw_pt_middle_end *middle,
     */
    if (fpme->opt & PT_SHADE) {
       draw_vertex_shader_run(vshader,
-                             draw->pt.user.constants[PIPE_SHADER_VERTEX],
+                             draw->pt.user.constants[MESA_SHADER_VERTEX],
                              fetch_info,
                              vert_info,
                              &vs_vert_info);
@@ -285,7 +285,7 @@ fetch_pipeline_generic(struct draw_pt_middle_end *middle,
 
    if ((fpme->opt & PT_SHADE) && gshader) {
       draw_geometry_shader_run(gshader,
-                               draw->pt.user.constants[PIPE_SHADER_GEOMETRY],
+                               draw->pt.user.constants[MESA_SHADER_GEOMETRY],
                                vert_info,
                                prim_info,
                                &vshader->info,

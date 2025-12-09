@@ -151,6 +151,6 @@ vk_standard_sample_locations_state(VkSampleCountFlagBits sample_count)
    case 4:  return &sample_locations_state_4x;
    case 8:  return &sample_locations_state_8x;
    case 16: return &sample_locations_state_16x;
-   default: unreachable("Sample count has no standard locations");
+   default: UNREACHABLE("Sample count has no standard locations");
    }
 }

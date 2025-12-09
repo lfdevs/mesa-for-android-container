@@ -55,7 +55,7 @@ nak_nir_workgroup_has_one_subgroup(const nir_shader *nir)
    case MESA_SHADER_TESS_EVAL:
    case MESA_SHADER_GEOMETRY:
    case MESA_SHADER_FRAGMENT:
-      unreachable("Shader stage does not have workgroups");
+      UNREACHABLE("Shader stage does not have workgroups");
       break;
 
    case MESA_SHADER_TESS_CTRL:
@@ -78,7 +78,7 @@ nak_nir_workgroup_has_one_subgroup(const nir_shader *nir)
    }
 
    default:
-      unreachable("Unknown shader stage");
+      UNREACHABLE("Unknown shader stage");
    }
 }
 
@@ -172,7 +172,7 @@ optimize_nir(nir_shader *nir, const struct nak_compiler *nak, bool allow_copies)
       OPT(nir, nir_opt_vectorize, vectorize_filter_cb, NULL);
       OPT(nir, nir_lower_phis_to_scalar, phi_vectorize_cb, NULL);
       OPT(nir, nir_lower_frexp);
-      OPT(nir, nir_copy_prop);
+      OPT(nir, nir_opt_copy_prop);
       OPT(nir, nir_opt_dce);
       OPT(nir, nir_opt_cse);
 
@@ -188,8 +188,7 @@ optimize_nir(nir_shader *nir, const struct nak_compiler *nak, bool allow_copies)
       OPT(nir, nir_opt_constant_folding);
 
       if (lower_flrp != 0) {
-         if (OPT(nir, nir_lower_flrp, lower_flrp, false /* always_precise */))
-            OPT(nir, nir_opt_constant_folding);
+         OPT(nir, nir_lower_flrp, lower_flrp, false /* always_precise */);
          /* Nothing should rematerialize any flrps */
          lower_flrp = 0;
       }
@@ -200,7 +199,7 @@ optimize_nir(nir_shader *nir, const struct nak_compiler *nak, bool allow_copies)
           * if we want any hope of nir_opt_if or nir_opt_loop_unroll to make
           * progress.
           */
-         OPT(nir, nir_copy_prop);
+         OPT(nir, nir_opt_copy_prop);
          OPT(nir, nir_opt_dce);
       }
       OPT(nir, nir_opt_if, nir_opt_if_optimize_phi_true_false);
@@ -247,7 +246,7 @@ lower_bit_size_cb(const nir_instr *instr, void *data)
           * 32-bit and so the bit size of the instruction is given by the
           * source.
           */
-         return alu->src[0].src.ssa->bit_size == 32 ? 0 : 32;
+         return alu->src[0].src.ssa->bit_size >= 32 ? 0 : 32;
 
       case nir_op_fabs:
       case nir_op_fadd:
@@ -334,7 +333,7 @@ nak_preprocess_nir(nir_shader *nir, const struct nak_compiler *nak)
 
    OPT(nir, nir_lower_io_vars_to_temporaries,
        nir_shader_get_entrypoint(nir),
-       true /* outputs */, false /* inputs */);
+       nir_var_shader_out);
 
    const nir_lower_tex_options tex_options = {
       .lower_txd_3d = true,
@@ -395,7 +394,7 @@ nak_varying_attr_addr(const struct nak_compiler *nak, gl_varying_slot slot)
       case VARYING_SLOT_PRIMITIVE_SHADING_RATE:
          return nak->sm >= 86 ? NAK_ATTR_VPRS_TABLE_INDEX
                               : NAK_ATTR_VIEWPORT_INDEX;
-      default: unreachable("Invalid varying slot");
+      default: UNREACHABLE("Invalid varying slot");
       }
    }
 }
@@ -409,10 +408,10 @@ nak_fs_out_addr(gl_frag_result slot, uint32_t blend_idx)
       return NAK_FS_OUT_DEPTH;
 
    case FRAG_RESULT_STENCIL:
-      unreachable("EXT_shader_stencil_export not supported");
+      UNREACHABLE("EXT_shader_stencil_export not supported");
 
    case FRAG_RESULT_COLOR:
-      unreachable("Vulkan alway uses explicit locations");
+      UNREACHABLE("Vulkan alway uses explicit locations");
 
    case FRAG_RESULT_SAMPLE_MASK:
       assert(blend_idx == 0);
@@ -436,7 +435,7 @@ nak_sysval_attr_addr(const struct nak_compiler *nak, gl_system_value sysval)
    case SYSTEM_VALUE_VERTEX_ID:     return NAK_ATTR_VERTEX_ID;
    case SYSTEM_VALUE_FRONT_FACE:    return NAK_ATTR_FRONT_FACE;
    case SYSTEM_VALUE_LAYER_ID:      return NAK_ATTR_RT_ARRAY_INDEX;
-   default: unreachable("Invalid system value");
+   default: UNREACHABLE("Invalid system value");
    }
 }
 
@@ -455,7 +454,7 @@ nak_sysval_sysval_idx(gl_system_value sysval)
    case SYSTEM_VALUE_SUBGROUP_LE_MASK:       return NAK_SV_LANEMASK_LE;
    case SYSTEM_VALUE_SUBGROUP_GT_MASK:       return NAK_SV_LANEMASK_GT;
    case SYSTEM_VALUE_SUBGROUP_GE_MASK:       return NAK_SV_LANEMASK_GE;
-   default: unreachable("Invalid system value");
+   default: UNREACHABLE("Invalid system value");
    }
 }
 
@@ -582,12 +581,16 @@ nak_nir_lower_system_value_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
          val = nir_imm_int(b, 0);
       } else {
          assert(!b->shader->info.workgroup_size_variable);
-         nir_def *tid_x = nak_nir_load_sysval(b, NAK_SV_TID_X,
-                                              ACCESS_CAN_REORDER);
-         nir_def *tid_y = nak_nir_load_sysval(b, NAK_SV_TID_Y,
-                                              ACCESS_CAN_REORDER);
-         nir_def *tid_z = nak_nir_load_sysval(b, NAK_SV_TID_Z,
-                                              ACCESS_CAN_REORDER);
+
+         nir_def *tid_x = b->shader->info.workgroup_size[0] > 1
+            ? nak_nir_load_sysval(b, NAK_SV_TID_X, ACCESS_CAN_REORDER)
+            : nir_imm_int(b, 0);
+         nir_def *tid_y = b->shader->info.workgroup_size[1] > 1
+            ? nak_nir_load_sysval(b, NAK_SV_TID_Y, ACCESS_CAN_REORDER)
+            : nir_imm_int(b, 0);
+         nir_def *tid_z = b->shader->info.workgroup_size[2] > 1
+            ? nak_nir_load_sysval(b, NAK_SV_TID_Z, ACCESS_CAN_REORDER)
+            : nir_imm_int(b, 0);
 
          const uint16_t *wg_size = b->shader->info.workgroup_size;
          nir_def *tid =
@@ -1028,8 +1031,14 @@ nak_postprocess_nir(nir_shader *nir,
 
    OPT(nir, nir_convert_to_lcssa, true, true);
    nir_divergence_analysis(nir);
-   if (nir->info.stage == MESA_SHADER_FRAGMENT)
-      OPT(nir, nir_opt_tex_skip_helpers, true);
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+      nir_opt_load_skip_helpers_options skip_helper_options = {
+         .no_add_divergence = true,
+      };
+      OPT(nir, nir_opt_load_skip_helpers, &skip_helper_options);
+   }
+
    OPT(nir, nak_nir_lower_scan_reduce, nak);
 
    nak_optimize_nir(nir, nak);
@@ -1039,7 +1048,7 @@ nak_postprocess_nir(nir_shader *nir,
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   OPT(nir, nir_lower_indirect_derefs, 0, UINT32_MAX);
+   OPT(nir, nir_lower_indirect_derefs_to_if_else_trees, 0, UINT32_MAX);
 
    if (nir->info.stage == MESA_SHADER_TESS_EVAL) {
       OPT(nir, nir_lower_tess_coord_z,
@@ -1050,7 +1059,7 @@ nak_postprocess_nir(nir_shader *nir,
     * relies on the workgroup size being the actual HW workgroup size in
     * nir_intrinsic_load_subgroup_id.
     */
-   if (gl_shader_stage_uses_workgroup(nir->info.stage) &&
+   if (mesa_shader_stage_uses_workgroup(nir->info.stage) &&
        nir->info.derivative_group == DERIVATIVE_GROUP_QUADS) {
       assert(nir->info.workgroup_size[0] % 2 == 0);
       assert(nir->info.workgroup_size[1] % 2 == 0);
@@ -1074,7 +1083,7 @@ nak_postprocess_nir(nir_shader *nir,
       break;
 
    case MESA_SHADER_FRAGMENT:
-      OPT(nir, nir_lower_indirect_derefs,
+      OPT(nir, nir_lower_indirect_derefs_to_if_else_trees,
           nir_var_shader_in | nir_var_shader_out, UINT32_MAX);
       OPT(nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
           type_size_vec4, nir_lower_io_lower_64bit_to_32_new |
@@ -1089,7 +1098,7 @@ nak_postprocess_nir(nir_shader *nir,
       break;
 
    default:
-      unreachable("Unsupported shader stage");
+      UNREACHABLE("Unsupported shader stage");
    }
 
    OPT(nir, nir_lower_doubles, NULL, nak->nir_options.lower_doubles_options);
@@ -1111,11 +1120,13 @@ nak_postprocess_nir(nir_shader *nir,
 
       if (progress) {
          OPT(nir, nir_opt_constant_folding);
-         OPT(nir, nir_copy_prop);
+         OPT(nir, nir_opt_copy_prop);
          OPT(nir, nir_opt_dce);
          OPT(nir, nir_opt_cse);
       }
    } while (progress);
+
+   OPT(nir, nir_opt_move, nir_move_comparisons | nir_move_load_ubo);
 
    if (nak->sm < 70) {
       const nir_split_conversions_options split_conv_opts = {
@@ -1139,7 +1150,7 @@ nak_postprocess_nir(nir_shader *nir,
    if (nak->sm >= 73) {
       OPT(nir, nak_nir_mark_lcssa_invariants);
       if (OPT(nir, nak_nir_lower_non_uniform_ldcx, nak)) {
-         OPT(nir, nir_copy_prop);
+         OPT(nir, nir_opt_copy_prop);
          OPT(nir, nir_opt_dce);
       }
    }

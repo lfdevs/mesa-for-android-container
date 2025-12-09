@@ -12,6 +12,7 @@ Skphp = { ".skpHp" }
 Pmode = { ".pack" }
 Denorm = { ".denorm" }
 Local = { ".local" }
+Unk = { ".unk" }
 
 Amount = { ASCII_DIGIT* }
 Left_shift = { ".ls" ~ Amount }

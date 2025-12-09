@@ -328,7 +328,7 @@ void rsBarrier()
 uint32_t
 invocation_id()
 {
-  return RS_WORKGROUP_SUBGROUPS == 1 ? gl_SubgroupID : gl_LocalInvocationID.x;
+  return RS_WORKGROUP_SUBGROUPS == 1 ? gl_SubgroupInvocationID : gl_LocalInvocationID.x;
 }
 
 //

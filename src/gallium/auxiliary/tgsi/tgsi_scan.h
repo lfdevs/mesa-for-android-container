@@ -57,7 +57,7 @@ struct tgsi_shader_info
    uint8_t num_system_values;
    uint8_t system_value_semantic_name[PIPE_MAX_SHADER_INPUTS];
 
-   uint8_t processor;
+   mesa_shader_stage processor;
 
    uint32_t file_mask[TGSI_FILE_COUNT];  /**< bitmask of declared registers */
    unsigned file_count[TGSI_FILE_COUNT];  /**< number of declared registers */

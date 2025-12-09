@@ -850,7 +850,9 @@ v3dX(clamp_for_format_and_type)(uint32_t rt_type,
    case V3D_INTERNAL_TYPE_8:
       return V3D_RENDER_TARGET_TYPE_CLAMP_8;
    case V3D_INTERNAL_TYPE_16I:
-      return V3D_RENDER_TARGET_TYPE_CLAMP_16I_CLAMPED;
+      return vk_format_is_snorm(vk_format) ?
+         V3D_RENDER_TARGET_TYPE_CLAMP_16I:
+         V3D_RENDER_TARGET_TYPE_CLAMP_16I_CLAMPED;
    case V3D_INTERNAL_TYPE_16UI:
       return V3D_RENDER_TARGET_TYPE_CLAMP_16UI_CLAMPED;
    case V3D_INTERNAL_TYPE_16F:
@@ -864,7 +866,7 @@ v3dX(clamp_for_format_and_type)(uint32_t rt_type,
    case V3D_INTERNAL_TYPE_32F:
       return V3D_RENDER_TARGET_TYPE_CLAMP_32F;
    default:
-      unreachable("Unknown internal render target type");
+      UNREACHABLE("Unknown internal render target type");
    }
 
    return V3D_RENDER_TARGET_TYPE_CLAMP_INVALID;
@@ -2034,7 +2036,15 @@ v3dX(cmd_buffer_emit_configuration_bits)(struct v3dv_cmd_buffer *cmd_buffer)
       if (!dyn->rs.rasterizer_discard_enable) {
          assert(BITSET_TEST(dyn->set, MESA_VK_DYNAMIC_RS_CULL_MODE));
          assert(BITSET_TEST(dyn->set, MESA_VK_DYNAMIC_RS_FRONT_FACE));
-         config.enable_forward_facing_primitive = !(dyn->rs.cull_mode & VK_CULL_MODE_FRONT_BIT);
+         const enum mesa_prim reduced_prim =
+            u_reduced_prim(vk_topology_to_mesa(dyn->ia.primitive_topology));
+         /* When drawing points and lines, they will be discarded if forward
+          * facing primitive is not enabled.
+          */
+         config.enable_forward_facing_primitive =
+            reduced_prim == MESA_PRIM_LINES ||
+            reduced_prim == MESA_PRIM_POINTS ||
+            !(dyn->rs.cull_mode & VK_CULL_MODE_FRONT_BIT);
          config.enable_reverse_facing_primitive = !(dyn->rs.cull_mode & VK_CULL_MODE_BACK_BIT);
          /* Seems like the hardware is backwards regarding this setting... */
          config.clockwise_primitives = dyn->rs.front_face == VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -2331,7 +2341,7 @@ v3d_gs_output_primitive(enum mesa_prim prim_type)
     case MESA_PRIM_TRIANGLE_STRIP:
         return GEOMETRY_SHADER_TRI_STRIP;
     default:
-        unreachable("Unsupported primitive type");
+        UNREACHABLE("Unsupported primitive type");
     }
 }
 
@@ -2366,7 +2376,7 @@ simd_width_to_gs_pack_mode(uint32_t width)
    case 1:
       return V3D_PACK_MODE_1_WAY;
    default:
-      unreachable("Invalid SIMD width");
+      UNREACHABLE("Invalid SIMD width");
    };
 }
 

@@ -1,5 +1,5 @@
 {
-    "$schema": "https://schema.khronos.org/vulkan/profiles-0.8.2-271.json",
+    "$schema": "https://schema.khronos.org/vulkan/profiles-0.8.2-326.json",
     "capabilities": {
         "vulkan10requirements": {
             "features": {
@@ -12,7 +12,6 @@
             "extensions": {
                 "VK_KHR_maintenance1": 1,
                 "VK_KHR_create_renderpass2": 1,
-                "VK_KHR_imageless_framebuffer": 1,
                 "VK_KHR_timeline_semaphore": 1,
                 "VK_EXT_custom_border_color": 1,
                 "VK_EXT_line_rasterization": 1,
@@ -38,7 +37,7 @@
                 "VkPhysicalDeviceLineRasterizationFeaturesEXT": {
                     "rectangularLines": true
                 },
-                "VkPhysicalDeviceDynamicRenderingFeatures": {
+                "VkPhysicalDeviceDynamicRenderingFeaturesKHR": {
                     "dynamicRendering": true
                 }
             }
@@ -53,9 +52,6 @@
                 },
                 "VkPhysicalDeviceTimelineSemaphoreFeatures": {
                     "timelineSemaphore": true
-                },
-                "VkPhysicalDeviceImagelessFramebufferFeatures": {
-                    "imagelessFramebuffer": true
                 }
             }
         },
@@ -64,20 +60,22 @@
                 "VkPhysicalDeviceVulkan12Features": {
                     "scalarBlockLayout": true,
                     "drawIndirectCount": true,
-                    "imagelessFramebuffer": true,
                     "timelineSemaphore": true
                 }
             }
         },
         "gl21_baseline_line_bresenham": {
-        	"features": {
+            "extensions": {
+                "VK_EXT_line_rasterization": 1
+            },
+            "features": {
                 "VkPhysicalDeviceLineRasterizationFeaturesEXT": {
                     "bresenhamLines": true
                 }
             }
         },
         "gl21_baseline_line_non_strict": {
-        	"properties": {
+            "properties": {
                 "VkPhysicalDeviceProperties": {
                     "limits": {
                         "strictLines": false
@@ -166,7 +164,7 @@
                     "tessellationShader": true,
                     "imageCubeArray": true
                 },
-                "VkPhysicalDeviceMaintenance4Features": {
+                "VkPhysicalDeviceMaintenance4FeaturesKHR": {
                     "maintenance4": true
                 },
                 "VkPhysicalDeviceMaintenance5FeaturesKHR": {
@@ -403,8 +401,10 @@
                 "VK_EXT_primitive_topology_list_restart": 1,
                 "VK_EXT_non_seamless_cube_map": 1,
                 "VK_KHR_pipeline_library": 1,
+                "VK_EXT_provoking_vertex": 1,
                 "VK_EXT_attachment_feedback_loop_layout": 1,
                 "VK_EXT_attachment_feedback_loop_dynamic_state": 1,
+                "VK_KHR_maintenance5": 1,
                 "VK_KHR_maintenance6": 1,
                 "VK_KHR_maintenance7": 1,
                 "VK_KHR_maintenance8": 1
@@ -427,8 +427,7 @@
                     "extendedDynamicState3DepthClipNegativeOneToOne": true
                 },
                 "VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT": {
-                    "primitiveTopologyListRestart": true,
-                    "primitiveTopologyPatchListRestart": true
+                    "primitiveTopologyListRestart": true
                 },
                 "VkPhysicalDeviceFeatures": {
                     "textureCompressionBC": true
@@ -448,6 +447,9 @@
                 "VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT": {
                     "attachmentFeedbackLoopDynamicState": true
                 },
+                "VkPhysicalDeviceMaintenance5FeaturesKHR": {
+                    "maintenance5": true
+                },
                 "VkPhysicalDeviceMaintenance6FeaturesKHR": {
                     "maintenance6": true
                 },
@@ -460,7 +462,10 @@
             },
             "properties": {
                 "VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT": {
-
+                    "graphicsPipelineLibraryFastLinking": true
+                },
+                "VkPhysicalDeviceMaintenance5PropertiesKHR": {
+                    "polygonModePointSize": true
                 }
             }
         },
@@ -634,12 +639,11 @@
         },
         "GL_ARB_sample_locations": {
             "extensions": {
-                "VK_EXT_extended_dynamic_state": 1,
                 "VK_EXT_sample_locations": 1
             },
-            "features": {
-                "VkPhysicalDeviceExtendedDynamicStateFeaturesEXT": {
-                    "extendedDynamicState": true
+            "properties": {
+                "VkPhysicalDeviceSampleLocationsPropertiesEXT": {
+                    "variableSampleLocations": true
                 }
             }
         },

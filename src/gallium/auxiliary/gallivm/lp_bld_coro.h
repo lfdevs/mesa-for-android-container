@@ -27,9 +27,7 @@
 #define LP_BLD_CORO_H
 
 #include <stdbool.h>
-#include "util/compiler.h"
-#include "gallivm/lp_bld.h"
-#include "gallivm/lp_bld_intr.h"
+#include "lp_bld_intr.h"
 
 #ifdef __cplusplus
 extern "C" {

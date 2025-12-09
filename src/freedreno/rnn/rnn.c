@@ -838,7 +838,7 @@ static int trytop (struct rnndb *db, char *file, xmlNode *node) {
 
 static char * find_file(const char *file_orig)
 {
-	const char *rnn_path = getenv("RNN_PATH");
+	const char *rnn_path = os_get_option("RNN_PATH");
 	char *fname;
 
 	if (!rnn_path)
@@ -968,7 +968,12 @@ static void copytypeinfo (struct rnntypeinfo *dst, struct rnntypeinfo *src, char
 	dst->min = src->min;
 	dst->max = src->max;
 	dst->align = src->align;
+	dst->radix = src->radix;
 	dst->addvariant = src->addvariant;
+	dst->minvalid = src->minvalid;
+	dst->maxvalid = src->maxvalid;
+	dst->alignvalid = src->alignvalid;
+	dst->radixvalid = src->radixvalid;
 	for (i = 0; i < src->valsnum; i++)
 		ADDARRAY(dst->vals, copyvalue(src->vals[i], file));
 	for (i = 0; i < src->bitfieldsnum; i++)

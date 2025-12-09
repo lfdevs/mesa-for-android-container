@@ -1354,6 +1354,8 @@ save_Bitmap(GLsizei width, GLsizei height,
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "glNewList -> glBitmap");
          return;
       }
+
+      ctx->ListState.Current.NeedsFlush = true;
    }
 
    n = alloc_instruction(ctx, OPCODE_BITMAP, 6 + POINTER_DWORDS);
@@ -13200,6 +13202,7 @@ _mesa_NewList(GLuint name, GLenum mode)
    ctx->ListState.CurrentPos = 0;
    ctx->ListState.LastInstSize = 0;
    ctx->ListState.Current.UseLoopback = false;
+   ctx->ListState.Current.NeedsFlush = false;
 
    vbo_save_NewList(ctx, name, mode);
 
@@ -13346,6 +13349,16 @@ _mesa_EndList(void)
    vbo_save_EndList(ctx);
 
    (void) alloc_instruction(ctx, OPCODE_END_OF_LIST, 0);
+
+   /* Ending a display list that's part of a share group should make that new display list
+    * immediately visible to other contexts, per Q 16.110 from
+    * https://www.opengl.org/archives/resources/faq/technical/displaylist.htm
+    * If this displaylist includes enqueued uploads to a VRAM vertex buffer or a bitmap,
+    * flush those now to ensure that other contexts can see them.
+    */
+   if (ctx->ListState.Current.NeedsFlush &&
+       ctx->Shared->RefCount > 1)
+      _mesa_flush(ctx);
 
    _mesa_HashLockMutex(&ctx->Shared->DisplayList);
 

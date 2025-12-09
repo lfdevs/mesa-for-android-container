@@ -171,7 +171,8 @@ init_ray_query_traversal_vars(void *ctx, nir_shader *shader, unsigned array_leng
    result.stack_base =
       rq_variable_create(ctx, shader, array_length, glsl_uint_type(), VAR_NAME("_stack_base"));
    result.stack_ptr = rq_variable_create(ctx, shader, array_length, glsl_uint_type(), VAR_NAME("_stack_ptr"));
-   result.stack = rq_variable_create(ctx, shader, array_length, glsl_array_type(glsl_uint_type(), 24 * 2, 0), VAR_NAME("_stack"));
+   result.stack = rq_variable_create(ctx, shader, array_length,
+                                     glsl_array_type(glsl_uint_type(), LVP_MAX_TLAS_DEPTH + LVP_MAX_BLAS_DEPTH, 0), VAR_NAME("_stack"));
    return result;
 }
 
@@ -366,7 +367,7 @@ lower_rq_load(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr,
    case nir_ray_query_value_intersection_instance_custom_index: {
       nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
       return nir_iand_imm(b,
-                          nir_build_load_global(b, 1, 32,
+                          nir_load_global(b, 1, 32,
                                                 nir_iadd_imm(b, instance_node_addr,
                                                              offsetof(struct lvp_bvh_instance_node,
                                                                       custom_instance_and_mask))),
@@ -374,7 +375,7 @@ lower_rq_load(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr,
    }
    case nir_ray_query_value_intersection_instance_id: {
       nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
-      return nir_build_load_global(
+      return nir_load_global(
          b, 1, 32,
          nir_iadd_imm(b, instance_node_addr, offsetof(struct lvp_bvh_instance_node, instance_id)));
    }
@@ -396,7 +397,7 @@ lower_rq_load(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr,
       nir_def *instance_node_addr = rq_load_var(b, index, intersection->instance_addr);
       nir_def *rows[3];
       for (unsigned r = 0; r < 3; ++r)
-         rows[r] = nir_build_load_global(
+         rows[r] = nir_load_global(
             b, 4, 32,
             nir_iadd_imm(b, instance_node_addr,
                          offsetof(struct lvp_bvh_instance_node, otw_matrix) + r * 16));
@@ -437,7 +438,7 @@ lower_rq_load(nir_builder *b, nir_def *index, nir_intrinsic_instr *instr,
       return lvp_load_vertex_position(
          b, rq_load_var(b, index, intersection->primitive_addr), column);
    default:
-      unreachable("Invalid nir_ray_query_value!");
+      UNREACHABLE("Invalid nir_ray_query_value!");
    }
 
    return NULL;
@@ -597,12 +598,12 @@ lvp_nir_lower_ray_queries(struct nir_shader *shader)
                continue;
 
             nir_deref_instr *ray_query_deref =
-               nir_instr_as_deref(intrinsic->src[0].ssa->parent_instr);
+               nir_def_as_deref(intrinsic->src[0].ssa);
             nir_def *index = NULL;
 
             if (ray_query_deref->deref_type == nir_deref_type_array) {
                index = ray_query_deref->arr.index.ssa;
-               ray_query_deref = nir_instr_as_deref(ray_query_deref->parent.ssa->parent_instr);
+               ray_query_deref = nir_def_as_deref(ray_query_deref->parent.ssa);
             }
 
             assert(ray_query_deref->deref_type == nir_deref_type_var);
@@ -635,7 +636,7 @@ lvp_nir_lower_ray_queries(struct nir_shader *shader)
                lower_rq_terminate(&builder, index, intrinsic, vars);
                break;
             default:
-               unreachable("Unsupported ray query intrinsic!");
+               UNREACHABLE("Unsupported ray query intrinsic!");
             }
 
             if (new_dest)

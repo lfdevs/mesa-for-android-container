@@ -12,6 +12,7 @@
 #include "panvk_cmd_pool.h"
 #include "panvk_device.h"
 #include "panvk_entrypoints.h"
+#include "vk_common_entrypoints.h"
 
 #include "vk_alloc.h"
 #include "vk_log.h"
@@ -41,6 +42,7 @@ panvk_CreateCommandPool(VkDevice _device,
    panvk_bo_pool_init(&pool->desc_bo_pool);
    panvk_bo_pool_init(&pool->varying_bo_pool);
    panvk_bo_pool_init(&pool->tls_bo_pool);
+   panvk_bo_pool_init(&pool->tls_big_bo_pool);
    list_inithead(&pool->push_sets);
    *pCmdPool = panvk_cmd_pool_to_handle(pool);
    return VK_SUCCESS;
@@ -62,6 +64,7 @@ panvk_DestroyCommandPool(VkDevice _device, VkCommandPool commandPool,
    panvk_bo_pool_cleanup(&pool->desc_bo_pool);
    panvk_bo_pool_cleanup(&pool->varying_bo_pool);
    panvk_bo_pool_cleanup(&pool->tls_bo_pool);
+   panvk_bo_pool_cleanup(&pool->tls_big_bo_pool);
 
    list_for_each_entry_safe(struct panvk_cmd_pool_obj, obj, &pool->push_sets,
                             node) {
@@ -70,4 +73,19 @@ panvk_DestroyCommandPool(VkDevice _device, VkCommandPool commandPool,
    }
 
    vk_free2(&device->vk.alloc, pAllocator, pool);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+panvk_ResetCommandPool(VkDevice _device, VkCommandPool commandPool,
+                       VkCommandPoolResetFlags flags)
+{
+   VK_FROM_HANDLE(panvk_cmd_pool, pool, commandPool);
+
+   const bool release_resources =
+      (flags & VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT) != 0;
+   if (release_resources) {
+      panvk_bo_pool_cleanup(&pool->tls_big_bo_pool);
+   }
+
+   return vk_common_ResetCommandPool(_device, commandPool, flags);
 }

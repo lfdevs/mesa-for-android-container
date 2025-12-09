@@ -13,12 +13,14 @@
 
 #include "lib/kmod/pan_kmod.h"
 
+#define PANVK_DEBUG(category) (unlikely(panvk_debug & PANVK_DEBUG_##category))
+
 enum panvk_debug_flags {
    PANVK_DEBUG_STARTUP = 1 << 0,
    PANVK_DEBUG_NIR = 1 << 1,
    PANVK_DEBUG_TRACE = 1 << 2,
    PANVK_DEBUG_SYNC = 1 << 3,
-   PANVK_DEBUG_AFBC = 1 << 4,
+   PANVK_DEBUG_NO_AFBC = 1 << 4,
    PANVK_DEBUG_LINEAR = 1 << 5,
    PANVK_DEBUG_DUMP = 1 << 6,
    PANVK_DEBUG_NO_KNOWN_WARN = 1 << 7,
@@ -26,7 +28,11 @@ enum panvk_debug_flags {
    PANVK_DEBUG_COPY_GFX = 1 << 9,
    PANVK_DEBUG_FORCE_SIMULTANEOUS = 1 << 10,
    PANVK_DEBUG_IMPLICIT_OTHERS_INV = 1 << 11,
+   PANVK_DEBUG_FORCE_BLACKHOLE = 1 << 12,
+   PANVK_DEBUG_WSI_AFBC = 1 << 13,
 };
+
+extern uint64_t panvk_debug;
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
     defined(VK_USE_PLATFORM_XCB_KHR) || \
@@ -39,8 +45,6 @@ struct panvk_instance {
    struct vk_instance vk;
 
    uint32_t api_version;
-
-   enum panvk_debug_flags debug_flags;
 
    struct driOptionCache dri_options;
    struct driOptionCache available_dri_options;

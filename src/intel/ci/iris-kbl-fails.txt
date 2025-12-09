@@ -87,9 +87,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode ful
 spec@!opengl 1.1@line-smooth-coverage,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
 
-# fails after Debian bookworm update
-spec@arb_viewport_array@display-list,Fail
-
 # Uprev Piglit in Mesa
 spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one,Fail
 spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-z,Fail
@@ -97,6 +94,7 @@ spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage,Fail
 spec@ext_external_objects@vk-image-display,Crash
 spec@ext_external_objects@vk-semaphores,Crash
 spec@ext_external_objects@vk-semaphores-2,Crash
+glx@glx-multithread-buffer-busy-tracking-bug,Fail
 
 # failed to create drawable
 # X Error of failed request:  BadValue (integer parameter out of range for operation)

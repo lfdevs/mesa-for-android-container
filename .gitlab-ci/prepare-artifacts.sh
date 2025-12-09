@@ -11,11 +11,17 @@ set -o xtrace
 
 CROSS_FILE=/cross_file-"$CROSS".txt
 
-# Delete unused bin and includes from artifacts to save space.
-rm -rf install/bin install/include
+if [ -d install/bin ]; then
+  # Keep pps-producer binary for tests that need it.
+  # Remove all other binaries to save space.
+  find install/bin -type f -not -name 'pps-producer' -delete
+fi
+
+# Delete unused includes from artifacts to save space.
+rm -rf install/include
 rm -f install/lib/*.a
 
-# Strip the drivers in the artifacts to cut 80% of the artifacts size.
+# Strip the drivers and binaries in the artifacts to cut 80% of the artifacts size.
 if [ -n "$CROSS" ]; then
     STRIP=$(sed -n -E "s/strip\s*=\s*\[?'(.*)'\]?/\1/p" "$CROSS_FILE")
     if [ -z "$STRIP" ]; then
@@ -26,26 +32,30 @@ else
     STRIP="strip"
 fi
 if [ -z "$ARTIFACTS_DEBUG_SYMBOLS" ]; then
-    find install -name \*.so -exec $STRIP --strip-debug {} \;
+    find install -type f -executable -exec $STRIP --strip-debug {} \;
 fi
+
+git_sha=$(git rev-parse --short=10 HEAD)
+echo "$(cat VERSION) (git-$git_sha)" > install/VERSION
 
 # Test runs don't pull down the git tree, so put the dEQP helper
 # script and associated bits there.
-git_sha=$(git rev-parse --short=10 HEAD)
-echo "$(cat VERSION) (git-$git_sha)" > install/VERSION
-cp -Rp .gitlab-ci/bare-metal install/
-cp -Rp .gitlab-ci/common install/
-cp -Rp .gitlab-ci/piglit install/
-cp -Rp .gitlab-ci/fossils.yml install/
-cp -Rp .gitlab-ci/fossils install/
-cp -Rp .gitlab-ci/fossilize-runner.sh install/
-cp -Rp .gitlab-ci/crosvm-init.sh install/
-cp -Rp .gitlab-ci/*.txt install/
-cp -Rp .gitlab-ci/report-flakes.py install/
-cp -Rp .gitlab-ci/setup-test-env.sh install/
-cp -Rp .gitlab-ci/*-runner.sh install/
-cp -Rp .gitlab-ci/bin/structured_logger.py install/
-cp -Rp .gitlab-ci/bin/custom_logger.py install/
+for f in \
+  .gitlab-ci/bare-metal \
+  .gitlab-ci/common \
+  .gitlab-ci/piglit \
+  .gitlab-ci/fossils.yml \
+  .gitlab-ci/fossils \
+  .gitlab-ci/crosvm-init.sh \
+  .gitlab-ci/*.txt \
+  .gitlab-ci/report-flakes.py \
+  .gitlab-ci/setup-test-env.sh \
+  .gitlab-ci/*-runner.sh \
+  .gitlab-ci/bin/structured_logger.py \
+  .gitlab-ci/bin/custom_logger.py \
+; do
+  cp -Rp "$f" install/
+done
 
 mapfile -t duplicate_files < <(
   find src/ -path '*/ci/*' \

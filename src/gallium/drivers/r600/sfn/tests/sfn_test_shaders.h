@@ -12,6 +12,7 @@ extern const char *red_triangle_fs_expect_from_nir_dce;
 
 extern const char *add_add_1_nir;
 extern const char *add_add_1_expect_from_nir;
+extern const char *add_add_1_expect_from_nir_scheduled;
 extern const char *add_add_1_expect_from_nir_copy_prop_fwd;
 extern const char *add_add_1_expect_from_nir_copy_prop_fwd_dce;
 extern const char *add_add_1_expect_from_nir_copy_prop_fwd_dce_bwd;

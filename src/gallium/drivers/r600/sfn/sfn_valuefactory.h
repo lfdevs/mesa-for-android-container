@@ -33,7 +33,7 @@ struct LiveRangeEntry {
    int m_start{-1};
    int m_end{-1};
    int m_index{-1};
-   int m_color{-1};
+   int m_color{g_registers_unused};
    bool m_alu_clause_local{false};
    std::bitset<use_unspecified> m_use;
    Register *m_register;
@@ -250,7 +250,7 @@ public:
 
    void allocate_const(nir_load_const_instr *load_const);
 
-   PRegister dest_from_string(const std::string& s);
+   PRegister dest_from_string(const std::string& s, int *dest_chan = nullptr);
    RegisterVec4 dest_vec4_from_string(const std::string& s,
                                       RegisterVec4::Swizzle& swz,
                                       Pin pin = pin_none);
@@ -311,7 +311,8 @@ private:
    uint32_t m_nowrite_idx;
 
    RegisterVec4 m_dummy_dest_pinned{
-      g_registers_end, pin_chan, {0, 1, 2, 3}
+      g_registers_unused, true, {0, 1, 2, 3},
+        pin_chan
    };
    ChannelCounts m_channel_counts;
    uint32_t m_required_array_registers{0};

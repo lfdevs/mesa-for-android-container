@@ -1,0 +1,12 @@
+diff --git a/src/sksl/SkSLString.h b/src/sksl/SkSLString.h
+index b3e411e..257a1ed 100644
+--- a/src/sksl/SkSLString.h
++++ b/src/sksl/SkSLString.h
+@@ -8,6 +8,7 @@
+ #ifndef SKSL_STRING
+ #define SKSL_STRING
+ 
++#include <cstdint>
+ #include <cstring>
+ 
+ #define SKSL_USE_STD_STRING

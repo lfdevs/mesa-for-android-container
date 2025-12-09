@@ -13,7 +13,6 @@
 #include "venus-protocol/vn_protocol_driver_buffer.h"
 #include "venus-protocol/vn_protocol_driver_buffer_view.h"
 
-#include "vn_android.h"
 #include "vn_device.h"
 #include "vn_device_memory.h"
 #include "vn_physical_device.h"
@@ -101,23 +100,6 @@ vn_buffer_reqs_cache_fini(struct vn_device *dev)
 
    if (VN_DEBUG(CACHE))
       vn_buffer_reqs_cache_debug_dump(&dev->buffer_reqs_cache);
-}
-
-static inline uint32_t
-vn_buffer_get_ahb_memory_type_bits(struct vn_device *dev)
-{
-   struct vn_buffer_reqs_cache *cache = &dev->buffer_reqs_cache;
-   if (unlikely(!cache->ahb_mem_type_bits_valid)) {
-      simple_mtx_lock(&cache->mutex);
-      if (!cache->ahb_mem_type_bits_valid) {
-         cache->ahb_mem_type_bits =
-            vn_android_get_ahb_buffer_memory_type_bits(dev);
-         cache->ahb_mem_type_bits_valid = true;
-      }
-      simple_mtx_unlock(&cache->mutex);
-   }
-
-   return cache->ahb_mem_type_bits;
 }
 
 static inline VkDeviceSize
@@ -386,19 +368,6 @@ vn_CreateBuffer(VkDevice device,
    VkResult result = vn_buffer_create(dev, pCreateInfo, alloc, &buf);
    if (result != VK_SUCCESS)
       return vn_error(dev->instance, result);
-
-   if (external_info &&
-       external_info->handleTypes ==
-          VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID) {
-      /* AHB backed buffer layers on top of renderer external memory, so here
-       * we combine the queried type bits from both buffer memory requirement
-       * and renderer external memory properties.
-       */
-      buf->requirements.memory.memoryRequirements.memoryTypeBits &=
-         vn_buffer_get_ahb_memory_type_bits(dev);
-
-      assert(buf->requirements.memory.memoryRequirements.memoryTypeBits);
-   }
 
    *pBuffer = vn_buffer_to_handle(buf);
 

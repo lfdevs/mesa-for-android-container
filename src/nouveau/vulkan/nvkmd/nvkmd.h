@@ -53,6 +53,9 @@ enum nvkmd_mem_flags {
 
    /** This memory object may be shared with other processes */
    NVKMD_MEM_SHARED     = 1 << 4,
+
+   /** This memory object has coherent CPU maps */
+   NVKMD_MEM_COHERENT   = 1 << 5,
 };
 
 #define NVKMD_MEM_PLACEMENT_FLAGS \
@@ -220,6 +223,12 @@ struct nvkmd_mem_ops {
                        struct vk_object_base *log_obj,
                        enum nvkmd_mem_map_flags flags,
                        void *map);
+
+   void (*sync_to_gpu)(struct nvkmd_mem *mem,
+                       uint64_t offset_B, uint64_t range_B);
+
+   void (*sync_from_gpu)(struct nvkmd_mem *mem,
+                         uint64_t offset_B, uint64_t range_B);
 
    VkResult (*export_dma_buf)(struct nvkmd_mem *mem,
                               struct vk_object_base *log_obj,
@@ -424,27 +433,20 @@ nvkmd_dev_get_drm_fd(struct nvkmd_dev *dev)
    return dev->ops->get_drm_fd(dev);
 }
 
-static inline VkResult MUST_CHECK
+VkResult MUST_CHECK
 nvkmd_dev_alloc_mem(struct nvkmd_dev *dev,
                     struct vk_object_base *log_obj,
                     uint64_t size_B, uint64_t align_B,
                     enum nvkmd_mem_flags flags,
-                    struct nvkmd_mem **mem_out)
-{
-   return dev->ops->alloc_mem(dev, log_obj, size_B, align_B, flags, mem_out);
-}
+                    struct nvkmd_mem **mem_out);
 
-static inline VkResult MUST_CHECK
+VkResult MUST_CHECK
 nvkmd_dev_alloc_tiled_mem(struct nvkmd_dev *dev,
                           struct vk_object_base *log_obj,
                           uint64_t size_B, uint64_t align_B,
                           uint8_t pte_kind, uint16_t tile_mode,
                           enum nvkmd_mem_flags flags,
-                          struct nvkmd_mem **mem_out)
-{
-   return dev->ops->alloc_tiled_mem(dev, log_obj, size_B, align_B,
-                                    pte_kind, tile_mode, flags, mem_out);
-}
+                          struct nvkmd_mem **mem_out);
 
 /* Implies NVKMD_MEM_CAN_MAP */
 VkResult MUST_CHECK
@@ -455,22 +457,15 @@ nvkmd_dev_alloc_mapped_mem(struct nvkmd_dev *dev,
                            enum nvkmd_mem_map_flags map_flags,
                            struct nvkmd_mem **mem_out);
 
-void
-nvkmd_dev_track_mem(struct nvkmd_dev *dev,
-                    struct nvkmd_mem *mem);
+VkResult MUST_CHECK
+nvkmd_dev_import_dma_buf(struct nvkmd_dev *dev,
+                         struct vk_object_base *log_obj,
+                         int fd, struct nvkmd_mem **mem_out);
 
 struct nvkmd_mem *
 nvkmd_dev_lookup_mem_by_va(struct nvkmd_dev *dev,
                            uint64_t addr,
                            uint64_t *offset_out);
-
-static inline VkResult MUST_CHECK
-nvkmd_dev_import_dma_buf(struct nvkmd_dev *dev,
-                         struct vk_object_base *log_obj,
-                         int fd, struct nvkmd_mem **mem_out)
-{
-   return dev->ops->import_dma_buf(dev, log_obj, fd, mem_out);
-}
 
 VkResult MUST_CHECK
 nvkmd_dev_alloc_va(struct nvkmd_dev *dev,
@@ -518,6 +513,39 @@ nvkmd_mem_overmap(struct nvkmd_mem *mem, struct vk_object_base *log_obj,
    return result;
 }
 
+void nvkmd_mem_sync_to_gpu(struct nvkmd_mem *mem, bool client_map,
+                           uint64_t offset_B, uint64_t range_B);
+void nvkmd_mem_sync_from_gpu(struct nvkmd_mem *mem, bool client_map,
+                             uint64_t offset_B, uint64_t range_B);
+
+static inline void
+nvkmd_mem_sync_map_to_gpu(struct nvkmd_mem *mem,
+                          uint64_t offset_B, uint64_t range_B)
+{
+   nvkmd_mem_sync_to_gpu(mem, false, offset_B, range_B);
+}
+
+static inline void
+nvkmd_mem_sync_client_map_to_gpu(struct nvkmd_mem *mem,
+                                 uint64_t offset_B, uint64_t range_B)
+{
+   nvkmd_mem_sync_to_gpu(mem, true, offset_B, range_B);
+}
+
+static inline void
+nvkmd_mem_sync_map_from_gpu(struct nvkmd_mem *mem,
+                            uint64_t offset_B, uint64_t range_B)
+{
+   nvkmd_mem_sync_from_gpu(mem, false, offset_B, range_B);
+}
+
+static inline void
+nvkmd_mem_sync_client_map_from_gpu(struct nvkmd_mem *mem,
+                                   uint64_t offset_B, uint64_t range_B)
+{
+   nvkmd_mem_sync_from_gpu(mem, true, offset_B, range_B);
+}
+
 static inline VkResult MUST_CHECK
 nvkmd_mem_export_dma_buf(struct nvkmd_mem *mem,
                       struct vk_object_base *log_obj,
@@ -560,14 +588,11 @@ nvkmd_ctx_wait(struct nvkmd_ctx *ctx,
    return ctx->ops->wait(ctx, log_obj, wait_count, waits);
 }
 
-static inline VkResult MUST_CHECK
+VkResult MUST_CHECK
 nvkmd_ctx_exec(struct nvkmd_ctx *ctx,
                struct vk_object_base *log_obj,
                uint32_t exec_count,
-               const struct nvkmd_ctx_exec *execs)
-{
-   return ctx->ops->exec(ctx, log_obj, exec_count, execs);
-}
+               const struct nvkmd_ctx_exec *execs);
 
 VkResult MUST_CHECK
 nvkmd_ctx_bind(struct nvkmd_ctx *ctx,

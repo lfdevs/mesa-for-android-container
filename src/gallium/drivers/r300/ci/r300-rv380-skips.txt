@@ -1,7 +1,3 @@
 # Timeouts
 KHR-GLES2.texture_3d.filtering.combinations.*linear_mipmap_linear
 KHR-GLES2.texture_3d.filtering.sizes.*linear_mipmap_linear
-
-# swtcl should test just the draw paths, fragment shaders and texturing are tested in normal run
-swtcl.*fragment.*
-swtcl.*texture.*

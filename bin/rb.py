@@ -57,7 +57,7 @@ TEST_CASES = {
     'gfxstrand': 'faith.ekstrand@collabora.com',
     'Faith': 'faith.ekstrand@collabora.com',
     'faith': 'faith.ekstrand@collabora.com',
-    'alyssa': 'alyssa@rosenzweig.io',
+    'alyssa': 'alyssa.rosenzweig@intel.com',
     'briano': 'ivan.briano@intel.com',
     'schurmann': 'daniel@schuermann.dev',
     'Schürmann': 'daniel@schuermann.dev',
@@ -67,7 +67,7 @@ for test in TEST_CASES:
     a, b = find_person(test), TEST_CASES[test]
     if a is None or a[1] != b:
         print(test, a, b)
-    assert(a[1] == b)
+    assert(a is not None and a[1] == b)
 
 # Now the tool itself
 if __name__ == "__main__":

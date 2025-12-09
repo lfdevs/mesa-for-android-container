@@ -49,7 +49,7 @@ shader_destroy(struct lvp_device *device, struct lvp_shader *shader, bool locked
 {
    if (!shader->pipeline_nir)
       return;
-   gl_shader_stage stage = shader->pipeline_nir->nir->info.stage;
+   mesa_shader_stage stage = shader->pipeline_nir->nir->info.stage;
    cso_destroy_func destroy[] = {
       device->queue.ctx->delete_vs_state,
       device->queue.ctx->delete_tcs_state,
@@ -86,7 +86,7 @@ lvp_pipeline_destroy(struct lvp_device *device, struct lvp_pipeline *pipeline, b
       vk_pipeline_layout_unref(&device->vk, &pipeline->layout->vk);
 
    for (unsigned i = 0; i < pipeline->num_groups; i++) {
-      LVP_FROM_HANDLE(lvp_pipeline, p, pipeline->groups[i]);
+      VK_FROM_HANDLE(lvp_pipeline, p, pipeline->groups[i]);
       lvp_pipeline_destroy(device, p, locked);
    }
 
@@ -108,15 +108,15 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyPipeline(
    VkPipeline                                  _pipeline,
    const VkAllocationCallbacks*                pAllocator)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   LVP_FROM_HANDLE(lvp_pipeline, pipeline, _pipeline);
+   VK_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_pipeline, pipeline, _pipeline);
 
    if (!_pipeline)
       return;
 
    if (pipeline->used) {
       simple_mtx_lock(&device->queue.lock);
-      util_dynarray_append(&device->queue.pipeline_destroys, struct lvp_pipeline*, pipeline);
+      util_dynarray_append(&device->queue.pipeline_destroys, pipeline);
       simple_mtx_unlock(&device->queue.lock);
    } else {
       lvp_pipeline_destroy(device, pipeline, false);
@@ -157,7 +157,7 @@ static bool
 remove_barriers(nir_shader *nir, bool is_compute)
 {
    return nir_shader_intrinsics_pass(nir, remove_barriers_impl,
-                                     nir_metadata_dominance,
+                                     nir_metadata_control_flow,
                                      (void*)is_compute);
 }
 
@@ -201,7 +201,7 @@ optimize(nir_shader *nir)
    do {
       progress = false;
 
-      NIR_PASS(progress, nir, nir_lower_flrp, 32|64, true);
+      NIR_PASS(progress, nir, nir_lower_flrp, 16|32|64, true);
       NIR_PASS(progress, nir, nir_split_array_vars, nir_var_function_temp);
       NIR_PASS(progress, nir, nir_shrink_vec_array_vars, nir_var_function_temp);
       NIR_PASS(progress, nir, nir_opt_deref);
@@ -209,7 +209,7 @@ optimize(nir_shader *nir)
 
       NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
 
-      NIR_PASS(progress, nir, nir_copy_prop);
+      NIR_PASS(progress, nir, nir_opt_copy_prop);
       NIR_PASS(progress, nir, nir_opt_dce);
 
       nir_opt_peephole_select_options peephole_select_options = {
@@ -231,7 +231,7 @@ optimize(nir_shader *nir)
           * things up if we want any hope of nir_opt_if or nir_opt_loop_unroll
           * to make progress.
           */
-         NIR_PASS(progress, nir, nir_copy_prop);
+         NIR_PASS(progress, nir, nir_opt_copy_prop);
          NIR_PASS(progress, nir, nir_opt_dce);
          NIR_PASS(progress, nir, nir_opt_remove_phis);
       }
@@ -279,7 +279,7 @@ compile_spirv(struct lvp_device *pdevice,
               const VkPipelineShaderStageCreateInfo *sinfo,
               nir_shader **nir)
 {
-   gl_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
+   mesa_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
    assert(stage <= LVP_SHADER_STAGES && stage != MESA_SHADER_NONE);
    VkResult result;
 
@@ -303,7 +303,7 @@ compile_spirv(struct lvp_device *pdevice,
    };
 
    result = vk_pipeline_shader_stage_to_nir(&pdevice->vk, pipeline_flags, sinfo,
-                                            &spirv_options, pdevice->physical_device->drv_options[stage],
+                                            &spirv_options, lvp_device_physical(pdevice)->drv_options[stage],
                                             NULL, nir);
    return result;
 }
@@ -333,6 +333,7 @@ lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_pipelin
    const struct nir_lower_sysvals_to_varyings_options sysvals_to_varyings = {
       .frag_coord = true,
       .point_coord = true,
+      .layer_id = true,
    };
    NIR_PASS(_, nir, nir_lower_sysvals_to_varyings, &sysvals_to_varyings);
 
@@ -359,7 +360,8 @@ lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_pipelin
    optimize(nir);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir), true, true);
+   NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir),
+            nir_var_shader_out | nir_var_shader_in);
    NIR_PASS(_, nir, nir_split_var_copies);
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
 
@@ -434,15 +436,14 @@ lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_pipelin
    lvp_shader_optimize(nir);
 
    if (nir->info.stage != MESA_SHADER_VERTEX)
-      nir_assign_io_var_locations(nir, nir_var_shader_in, &nir->num_inputs, nir->info.stage);
+      nir_assign_io_var_locations(nir, nir_var_shader_in);
    else {
       nir->num_inputs = util_last_bit64(nir->info.inputs_read);
       nir_foreach_shader_in_variable(var, nir) {
          var->data.driver_location = var->data.location - VERT_ATTRIB_GENERIC0;
       }
    }
-   nir_assign_io_var_locations(nir, nir_var_shader_out, &nir->num_outputs,
-                               nir->info.stage);
+   nir_assign_io_var_locations(nir, nir_var_shader_out);
 
    if (robustness)
       NIR_PASS(_, nir, lvp_nir_opt_robustness, pdevice, robustness);
@@ -452,15 +453,16 @@ VkResult
 lvp_spirv_to_nir(struct lvp_pipeline *pipeline, const void *pipeline_pNext,
                  const VkPipelineShaderStageCreateInfo *sinfo, nir_shader **out_nir)
 {
-   VkResult result = compile_spirv(pipeline->device, pipeline->flags, sinfo, out_nir);
+   struct lvp_device *device = lvp_pipeline_device(pipeline);
+   VkResult result = compile_spirv(device, pipeline->flags, sinfo, out_nir);
    if (result == VK_SUCCESS) {
       if (pipeline->type == LVP_PIPELINE_EXEC_GRAPH)
          lvp_lower_exec_graph(pipeline, *out_nir);
 
       struct vk_pipeline_robustness_state robustness;
-      vk_pipeline_robustness_state_fill(&pipeline->device->vk, &robustness, pipeline_pNext, sinfo->pNext);
+      vk_pipeline_robustness_state_fill(&device->vk, &robustness, pipeline_pNext, sinfo->pNext);
 
-      lvp_shader_lower(pipeline->device, *out_nir, pipeline->layout, &robustness);
+      lvp_shader_lower(device, *out_nir, pipeline->layout, &robustness);
    }
 
    return result;
@@ -476,7 +478,7 @@ static VkResult
 lvp_shader_compile_to_ir(struct lvp_pipeline *pipeline, const void *pipeline_pNext,
                          const VkPipelineShaderStageCreateInfo *sinfo)
 {
-   gl_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
+   mesa_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
    assert(stage <= LVP_SHADER_STAGES && stage != MESA_SHADER_NONE);
    nir_shader *nir;
    VkResult result = lvp_spirv_to_nir(pipeline, pipeline_pNext, sinfo, &nir);
@@ -562,7 +564,7 @@ lvp_shader_xfb_init(struct lvp_shader *shader)
 static void
 lvp_pipeline_xfb_init(struct lvp_pipeline *pipeline)
 {
-   gl_shader_stage stage = MESA_SHADER_VERTEX;
+   mesa_shader_stage stage = MESA_SHADER_VERTEX;
    if (pipeline->shaders[MESA_SHADER_GEOMETRY].pipeline_nir)
       stage = MESA_SHADER_GEOMETRY;
    else if (pipeline->shaders[MESA_SHADER_TESS_EVAL].pipeline_nir)
@@ -604,7 +606,7 @@ lvp_shader_compile_stage(struct lvp_device *device, struct lvp_shader *shader, n
       case MESA_SHADER_MESH:
          return device->queue.ctx->create_ms_state(device->queue.ctx, &shstate);
       default:
-         unreachable("illegal shader");
+         UNREACHABLE("illegal shader");
          break;
       }
    }
@@ -614,7 +616,8 @@ lvp_shader_compile_stage(struct lvp_device *device, struct lvp_shader *shader, n
 void *
 lvp_shader_compile(struct lvp_device *device, struct lvp_shader *shader, nir_shader *nir, bool locked)
 {
-   device->physical_device->pscreen->finalize_nir(device->physical_device->pscreen, nir);
+   const struct lvp_physical_device *pdev = lvp_device_physical(device);
+   pdev->pscreen->finalize_nir(pdev->pscreen, nir, true);
 
    if (!locked)
       simple_mtx_lock(&device->queue.lock);
@@ -787,7 +790,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
 
    if (libstate) {
       for (unsigned i = 0; i < libstate->libraryCount; i++) {
-         LVP_FROM_HANDLE(lvp_pipeline, p, libstate->pLibraries[i]);
+         VK_FROM_HANDLE(lvp_pipeline, p, libstate->pLibraries[i]);
          vk_graphics_pipeline_state_merge(&pipeline->graphics_state,
                                           &p->graphics_state);
          if (p->stages & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
@@ -830,11 +833,9 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
                                                    VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT |
                                                    VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT));
 
-   pipeline->device = device;
-
    for (uint32_t i = 0; i < pCreateInfo->stageCount; i++) {
       const VkPipelineShaderStageCreateInfo *sinfo = &pCreateInfo->pStages[i];
-      gl_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
+      mesa_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
       if (stage == MESA_SHADER_FRAGMENT) {
          if (!(pipeline->stages & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT))
             continue;
@@ -868,7 +869,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
    }
    if (libstate) {
        for (unsigned i = 0; i < libstate->libraryCount; i++) {
-          LVP_FROM_HANDLE(lvp_pipeline, p, libstate->pLibraries[i]);
+          VK_FROM_HANDLE(lvp_pipeline, p, libstate->pLibraries[i]);
           if (p->stages & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
              if (p->shaders[MESA_SHADER_FRAGMENT].pipeline_nir)
                 lvp_pipeline_nir_ref(&pipeline->shaders[MESA_SHADER_FRAGMENT].pipeline_nir, p->shaders[MESA_SHADER_FRAGMENT].pipeline_nir);
@@ -913,19 +914,20 @@ fail:
 void
 lvp_pipeline_shaders_compile(struct lvp_pipeline *pipeline, bool locked)
 {
+   struct lvp_device *device = lvp_pipeline_device(pipeline);
    if (pipeline->compiled)
       return;
    for (uint32_t i = 0; i < ARRAY_SIZE(pipeline->shaders); i++) {
       if (!pipeline->shaders[i].pipeline_nir)
          continue;
 
-      gl_shader_stage stage = i;
+      mesa_shader_stage stage = i;
       assert(stage == pipeline->shaders[i].pipeline_nir->nir->info.stage);
 
-      pipeline->shaders[stage].shader_cso = lvp_shader_compile(pipeline->device, &pipeline->shaders[stage],
+      pipeline->shaders[stage].shader_cso = lvp_shader_compile(device, &pipeline->shaders[stage],
          nir_shader_clone(NULL, pipeline->shaders[stage].pipeline_nir->nir), locked);
       if (pipeline->shaders[MESA_SHADER_TESS_EVAL].tess_ccw)
-         pipeline->shaders[MESA_SHADER_TESS_EVAL].tess_ccw_cso = lvp_shader_compile(pipeline->device, &pipeline->shaders[stage],
+         pipeline->shaders[MESA_SHADER_TESS_EVAL].tess_ccw_cso = lvp_shader_compile(device, &pipeline->shaders[stage],
             nir_shader_clone(NULL, pipeline->shaders[MESA_SHADER_TESS_EVAL].tess_ccw->nir), locked);
    }
    pipeline->compiled = true;
@@ -940,8 +942,8 @@ lvp_graphics_pipeline_create(
    VkPipeline *pPipeline,
    bool group)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   LVP_FROM_HANDLE(lvp_pipeline_cache, cache, _cache);
+   VK_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_pipeline_cache, cache, _cache);
    struct lvp_pipeline *pipeline;
    VkResult result;
 
@@ -1018,7 +1020,6 @@ lvp_compute_pipeline_init(struct lvp_pipeline *pipeline,
                           VkPipelineCreateFlagBits2KHR flags)
 {
    pipeline->flags = flags;
-   pipeline->device = device;
    pipeline->layout = lvp_pipeline_layout_from_handle(pCreateInfo->layout);
    vk_pipeline_layout_ref(&pipeline->layout->vk);
    pipeline->force_min_sample = false;
@@ -1030,7 +1031,7 @@ lvp_compute_pipeline_init(struct lvp_pipeline *pipeline,
       return result;
 
    struct lvp_shader *shader = &pipeline->shaders[MESA_SHADER_COMPUTE];
-   shader->shader_cso = lvp_shader_compile(pipeline->device, shader, nir_shader_clone(NULL, shader->pipeline_nir->nir), false);
+   shader->shader_cso = lvp_shader_compile(device, shader, nir_shader_clone(NULL, shader->pipeline_nir->nir), false);
    pipeline->compiled = true;
    if (pipeline->layout)
       shader->push_constant_size = pipeline->layout->push_constant_size;
@@ -1045,8 +1046,8 @@ lvp_compute_pipeline_create(
    VkPipelineCreateFlagBits2KHR flags,
    VkPipeline *pPipeline)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   LVP_FROM_HANDLE(lvp_pipeline_cache, cache, _cache);
+   VK_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_pipeline_cache, cache, _cache);
    struct lvp_pipeline *pipeline;
    VkResult result;
 
@@ -1120,8 +1121,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyShaderEXT(
     VkShaderEXT                                 _shader,
     const VkAllocationCallbacks*                pAllocator)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   LVP_FROM_HANDLE(lvp_shader, shader, _shader);
+   VK_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_shader, shader, _shader);
 
    if (!shader)
       return;
@@ -1137,7 +1138,7 @@ static VkShaderEXT
 create_shader_object(struct lvp_device *device, const VkShaderCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator)
 {
    nir_shader *nir = NULL;
-   gl_shader_stage stage = vk_to_mesa_shader_stage(pCreateInfo->stage);
+   mesa_shader_stage stage = vk_to_mesa_shader_stage(pCreateInfo->stage);
    assert(stage <= LVP_SHADER_STAGES && stage != MESA_SHADER_NONE);
    if (pCreateInfo->codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT) {
       VkShaderModuleCreateInfo minfo = {
@@ -1244,7 +1245,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateShadersEXT(
     const VkAllocationCallbacks*                pAllocator,
     VkShaderEXT*                                pShaders)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_device, device, _device);
    unsigned i;
    for (i = 0; i < createInfoCount; i++) {
       pShaders[i] = create_shader_object(device, &pCreateInfos[i], pAllocator);
@@ -1267,7 +1268,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetShaderBinaryDataEXT(
     size_t*                                     pDataSize,
     void*                                       pData)
 {
-   LVP_FROM_HANDLE(lvp_shader, shader, _shader);
+   VK_FROM_HANDLE(lvp_shader, shader, _shader);
    VkResult ret = VK_SUCCESS;
    if (pData) {
       if (*pDataSize < shader->blob.size + SHA1_DIGEST_LENGTH + VK_UUID_SIZE) {
@@ -1296,7 +1297,7 @@ lvp_exec_graph_pipeline_create(VkDevice _device, VkPipelineCache _cache,
                                VkPipelineCreateFlagBits2KHR flags,
                                VkPipeline *out_pipeline)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
+   VK_FROM_HANDLE(lvp_device, device, _device);
    struct lvp_pipeline *pipeline;
    VkResult result;
 

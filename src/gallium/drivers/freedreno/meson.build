@@ -223,7 +223,6 @@ freedreno_tracepoints = custom_target(
 files_libfreedreno += freedreno_tracepoints
 
 freedreno_includes = [
-  inc_mesa, inc_mapi,
   inc_src, inc_include, inc_gallium, inc_gallium_aux,
   inc_freedreno, include_directories('ir3'),
 ]
@@ -301,7 +300,8 @@ gmemtool = executable(
   'gmemtool',
   [
     'gmemtool.c',
-    freedreno_tracepoints[1]
+    freedreno_tracepoints[1],
+    freedreno_xml_header_files,
   ],
   include_directories : freedreno_includes,
   dependencies : [

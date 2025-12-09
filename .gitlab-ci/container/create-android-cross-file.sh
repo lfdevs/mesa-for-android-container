@@ -1,4 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# When changing this file, you need to bump the following
+# .gitlab-ci/image-tags.yml tags:
+# DEBIAN_BUILD_TAG
 
 ndk=$1
 arch=$2
@@ -22,6 +26,7 @@ cpp = ['ccache', '$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch2}${sdk_v
 c_ld = 'lld'
 cpp_ld = 'lld'
 strip = '$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+rust = ['rustc', '--target', '${arch2}']
 pkg-config = ['/usr/bin/pkgconf']
 
 [host_machine]
@@ -32,6 +37,7 @@ endian = 'little'
 
 [properties]
 needs_exe_wrapper = true
+bindgen_clang_arguments = ['-target', '${arch2}', '--sysroot', '$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot']
 pkg_config_libdir = '/usr/local/lib/${arch2}/pkgconfig/:/${ndk}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${arch2}/pkgconfig/'
 
 EOF

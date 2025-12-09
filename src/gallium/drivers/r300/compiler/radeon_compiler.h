@@ -14,13 +14,15 @@
 
 #define RC_DBG_LOG (1 << 0)
 
-#define RC_MATH_DX        0x00
-#define RC_MATH_IEEE      0x01
-#define RC_MATH_FF        0x02
+#define RC_MATH_DX   0x00
+#define RC_MATH_IEEE 0x01
+#define RC_MATH_FF   0x02
 
 struct rc_swizzle_caps;
 
-enum rc_program_type { RC_VERTEX_PROGRAM, RC_FRAGMENT_PROGRAM, RC_NUM_PROGRAM_TYPES };
+enum rc_program_type { RC_VERTEX_PROGRAM,
+                       RC_FRAGMENT_PROGRAM,
+                       RC_NUM_PROGRAM_TYPES };
 
 struct radeon_compiler {
    struct memory_pool Pool;
@@ -126,7 +128,7 @@ struct radeon_compiler_pass {
    int dump;                                           /* Dump the program if Debug == 1? */
    int predicate;                                      /* Run this pass? */
    void (*run)(struct radeon_compiler *c, void *user); /* The main entrypoint. */
-   void *user; /* Optional parameter which is passed to the run function. */
+   void *user;                                         /* Optional parameter which is passed to the run function. */
 };
 
 struct rc_program_stats {

@@ -183,11 +183,11 @@ lp_blit(struct pipe_context *pipe,
                                  lp->min_samples);
    util_blitter_save_framebuffer(lp->blitter, &lp->framebuffer);
    util_blitter_save_fragment_sampler_states(lp->blitter,
-                     lp->num_samplers[PIPE_SHADER_FRAGMENT],
-                     (void**)lp->samplers[PIPE_SHADER_FRAGMENT]);
+                     lp->num_samplers[MESA_SHADER_FRAGMENT],
+                     (void**)lp->samplers[MESA_SHADER_FRAGMENT]);
    util_blitter_save_fragment_sampler_views(lp->blitter,
-                     lp->num_sampler_views[PIPE_SHADER_FRAGMENT],
-                     lp->sampler_views[PIPE_SHADER_FRAGMENT]);
+                     lp->num_sampler_views[MESA_SHADER_FRAGMENT],
+                     lp->sampler_views[MESA_SHADER_FRAGMENT]);
    util_blitter_save_render_condition(lp->blitter, lp->render_cond_query,
                                       lp->render_cond_cond,
                                       lp->render_cond_mode);
@@ -266,6 +266,10 @@ llvmpipe_get_sample_position(struct pipe_context *pipe,
    case 4:
       out_value[0] = lp_sample_pos_4x[sample_index][0];
       out_value[1] = lp_sample_pos_4x[sample_index][1];
+      break;
+   case 8:
+      out_value[0] = lp_sample_pos_8x[sample_index][0];
+      out_value[1] = lp_sample_pos_8x[sample_index][1];
       break;
    default:
       break;

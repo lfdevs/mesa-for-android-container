@@ -103,7 +103,7 @@ libvulkan_broadcom = shared_library(
   ],
   dependencies : v3dv_deps,
   c_args : v3dv_flags,
-  link_args : [vulkan_icd_link_args, '-Wl,--build-id=sha1', ld_args_bsymbolic, ld_args_gc_sections],
+  link_args : [vulkan_icd_link_args, ld_args_build_id, ld_args_bsymbolic, ld_args_gc_sections],
   link_depends : vulkan_icd_link_depends,
   gnu_symbol_visibility : 'hidden',
   install : true,
@@ -122,16 +122,18 @@ if with_symbols_check
   )
 endif
 
+icd_file_name = libname_prefix + 'vulkan_broadcom.' + libname_suffix
+
 broadcom_icd = custom_target(
   'broadcom_icd',
   input : [vk_icd_gen, vk_api_xml],
-  output : 'broadcom_icd.@0@.json'.format(host_machine.cpu()),
+  output : 'broadcom_icd.' + vulkan_manifest_suffix,
   command : [
     prog_python, '@INPUT0@',
     '--api-version', '1.3', '--xml', '@INPUT1@',
     '--sizeof-pointer', sizeof_pointer,
-    '--lib-path', join_paths(get_option('prefix'), get_option('libdir'),
-    		  	     'libvulkan_broadcom.so'),
+    '--icd-lib-path', vulkan_icd_lib_path,
+    '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,
@@ -149,7 +151,8 @@ _dev_icd = custom_target(
     prog_python, '@INPUT0@',
     '--api-version', '1.3', '--xml', '@INPUT1@',
     '--sizeof-pointer', sizeof_pointer,
-    '--lib-path', meson.current_build_dir() / 'libvulkan_broadcom.so',
+    '--icd-lib-path', meson.current_build_dir(),
+    '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,

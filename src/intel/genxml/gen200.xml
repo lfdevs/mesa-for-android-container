@@ -1084,41 +1084,41 @@
     <field name="Grain Random Seed" dword="1" bits="15:0" type="uint" />
     <field name="MC Identity Flag" dword="1" bits="16:16" type="bool" />
     <field name="Clip To Restricted Range Flag" dword="1" bits="17:17" type="bool" />
-    <field name="Grain Noise Overlap Flag" dword="1" bits="17:17" type="bool" />
     <field name="Number of Luma Points" dword="1" bits="23:20" type="uint" />
-    <field name="Number of Chroma Cb Points" dword="1" bits="28:24" type="uint" />
-    <field name="Number of Chroma Cr Points" dword="1" bits="31:29" type="uint" />
+    <field name="Number of Chroma Cb Points" dword="1" bits="27:24" type="uint" />
+    <field name="Number of Chroma Cr Points" dword="1" bits="31:28" type="uint" />
     <field name="Grain Scaling Minus8" dword="2" bits="1:0" type="uint" />
     <field name="AR Coeff Lag" dword="2" bits="3:2" type="uint" />
     <field name="AR Coeff Shift Minus6" dword="2" bits="5:4" type="uint" />
     <field name="Grain Scale Shift" dword="2" bits="7:6" type="uint" />
+    <field name="Grain Noise Overlap Flag" dword="2" bits="8:8" type="bool" />
     <field name="Chroma Scaling From Luma Flag" dword="2" bits="31:31" type="bool" />
-    <group count="4" dword="3" size="4">
-      <field name="Point Luma Value" dword="0" bits="31:0" type="uint" />
+    <group count="14" dword="3" size="8">
+      <field name="Point Luma Value" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="4" dword="7" size="4">
-      <field name="Point Luma Scaling" dword="0" bits="31:0" type="uint" />
+    <group count="14" dword="7" size="8">
+      <field name="Point Luma Scaling" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="3" dword="11" size="3">
-      <field name="Point CB Value" dword="0" bits="31:0" type="uint" />
+    <group count="10" dword="11" size="8">
+      <field name="Point CB Value" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="3" dword="14" size="3">
-      <field name="Point CB Scaling" dword="0" bits="31:0" type="uint" />
+    <group count="10" dword="14" size="8">
+      <field name="Point CB Scaling" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="3" dword="17" size="3">
-      <field name="Point CR Value" dword="0" bits="31:0" type="uint" />
+    <group count="10" dword="17" size="8">
+      <field name="Point CR Value" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="3" dword="20" size="3">
-      <field name="Point CR Scaling" dword="0" bits="31:0" type="uint" />
+    <group count="10" dword="20" size="8">
+      <field name="Point CR Scaling" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="3" dword="23" size="6">
-      <field name="AR Coeff Luma Plus128" dword="0" bits="31:0" type="uint" />
+    <group count="24" dword="23" size="8">
+      <field name="AR Coeff Luma Plus128" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="3" dword="29" size="7">
-      <field name="AR Coeff Chroma CB Plus128" dword="0" bits="31:0" type="uint" />
+    <group count="25" dword="29" size="8">
+      <field name="AR Coeff Chroma CB Plus128" dword="0" bits="7:0" type="uint" />
     </group>
-    <group count="3" dword="36" size="7">
-      <field name="AR Coeff Chroma CR Plus128" dword="0" bits="31:0" type="uint" />
+    <group count="25" dword="36" size="8">
+      <field name="AR Coeff Chroma CR Plus128" dword="0" bits="7:0" type="uint" />
     </group>
     <field name="CB Mult" dword="43" bits="7:0" type="uint" />
     <field name="CB Luma Mult" dword="43" bits="15:8" type="uint" />
@@ -1921,10 +1921,49 @@
   <register name="BLT_TRTT_VA_RANGE" length="1" num="0x4484">
     <field name="TR-VA Base" dword="0" bits="12:0" type="uint" />
   </register>
+  <register name="CACHE_MODE_0" length="1" num="0x7000">
+    <field name="Hierarchical Z RAW Stall Optimization Disable" dword="0" bits="2:2" type="bool" />
+    <field name="Hierarchical Z Disable" dword="0" bits="3:3" type="bool" />
+    <field name="Late Z Alloc Disable" dword="0" bits="4:4" type="bool" />
+    <field name="Msaa Fast Clear Enabled" dword="0" bits="5:5" type="bool" />
+    <field name="Depth Related Cache Pipelined Flush Disable" dword="0" bits="8:8" type="bool" />
+    <field name="Sampler L2 TLB Prefetch Enable" dword="0" bits="9:9" type="bool" />
+    <field name="RCZ PMA Not-Promoted Allocation stall optimization Disable due to change in depth parameters" dword="0" bits="10:10" type="uint" />
+    <field name="Disable Repacking for Compression" dword="0" bits="15:15" type="bool" />
+    <field name="Hierarchical Z RAW Stall Optimization Disable Mask" dword="0" bits="18:18" type="bool" />
+    <field name="Hierarchical Z Disable Mask" dword="0" bits="19:19" type="bool" />
+    <field name="Late Z Alloc Disable Mask" dword="0" bits="20:20" type="bool" />
+    <field name="Msaa Fast Clear Enabled Mask" dword="0" bits="21:21" type="bool" />
+    <field name="Depth Related Cache Pipelined Flush Disable Mask" dword="0" bits="24:24" type="bool" />
+    <field name="Sampler L2 TLB Prefetch Enable Mask" dword="0" bits="25:25" type="bool" />
+    <field name="RCZ PMA Not-Promoted Allocation stall optimization Disable due to change in depth parameters Mask" dword="0" bits="26:26" type="bool" />
+    <field name="Disable Repacking for Compression Mask" dword="0" bits="31:31" type="bool" />
+  </register>
   <register name="COMP_CTX0_TRTT_VA_RANGE" length="1" num="0x4584">
     <field name="TR-VA Base" dword="0" bits="12:0" type="uint" />
   </register>
+  <register name="CS_CHICKEN1" length="1" num="0x2580">
+    <field name="Media And GPGPU Pre-emption Control" dword="0" bits="2:1" type="uint">
+      <value name="Mid-thread Pre-emption" value="0" />
+      <value name="Thread Group Pre-emption" value="1" />
+      <value name="Command Level Pre-emption" value="2" />
+    </field>
+    <field name="Disable Preemption and High Priority Pausing due to 3DPRIMITIVE Command" dword="0" bits="10:10" type="bool" />
+    <field name="Media And GPGPU Pre-emption Control Mask" dword="0" bits="18:17" type="uint" />
+    <field name="Disable Preemption and High Priority Pausing due to 3DPRIMITIVE Command Mask" dword="0" bits="26:26" type="bool" />
+  </register>
+  <register name="FF_MODE" length="1" num="0x6210">
+    <field name="Mesh Shader Autostrip Disable" dword="0" bits="15:15" type="bool" />
+    <field name="Mesh Shader Partial Autostrip Disable" dword="0" bits="16:16" type="bool" />
+    <field name="TE Autostrip Disable" dword="0" bits="31:31" type="bool" />
+  </register>
   <register name="GFX_TRTT_VA_RANGE" length="1" num="0x4404">
     <field name="TR-VA Base" dword="0" bits="12:0" type="uint" />
+  </register>
+  <register name="VFL_SCRATCH_PAD" length="1" num="0x62a8">
+    <field name="Autostrip Disable" dword="0" bits="6:6" type="uint" />
+    <field name="Partial Autostrip Disable" dword="0" bits="9:9" type="uint" />
+    <field name="Autostrip Disable Mask" dword="0" bits="22:22" type="bool" />
+    <field name="Partial Autostrip Disable Mask" dword="0" bits="25:25" type="bool" />
   </register>
 </genxml>

@@ -31,7 +31,7 @@ zink_filter(enum pipe_tex_filter filter)
    case PIPE_TEX_FILTER_NEAREST: return VK_FILTER_NEAREST;
    case PIPE_TEX_FILTER_LINEAR: return VK_FILTER_LINEAR;
    }
-   unreachable("unexpected filter");
+   UNREACHABLE("unexpected filter");
 }
 
 #endif

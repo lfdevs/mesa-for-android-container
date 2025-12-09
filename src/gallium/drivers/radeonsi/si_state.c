@@ -733,7 +733,7 @@ static bool si_check_blend_dst_sampler_noop(struct si_context *sctx)
           sel->info.writes_1_if_tex_is_1 != 0xff) {
          /* Now check if the texture is cleared to 1 */
          int unit = sctx->shader.ps.cso->info.writes_1_if_tex_is_1 - 1;
-         struct si_samplers *samp = &sctx->samplers[PIPE_SHADER_FRAGMENT];
+         struct si_samplers *samp = &sctx->samplers[MESA_SHADER_FRAGMENT];
          if ((1u << unit) & samp->enabled_mask) {
             struct si_texture* tex = (struct si_texture*) samp->views[unit]->texture;
             if (tex->is_depth &&
@@ -1415,9 +1415,10 @@ static void si_bind_rs_state(struct pipe_context *ctx, void *state)
    /* Used by si_get_vs_key_outputs in si_update_shaders: */
    if (old_rs->clip_plane_enable != rs->clip_plane_enable) {
       sctx->dirty_shaders_mask |=
-         BITFIELD_BIT(PIPE_SHADER_VERTEX) |
-         BITFIELD_BIT(PIPE_SHADER_TESS_EVAL) |
-         BITFIELD_BIT(PIPE_SHADER_GEOMETRY);
+         BITFIELD_BIT(MESA_SHADER_VERTEX) |
+         BITFIELD_BIT(MESA_SHADER_TESS_EVAL) |
+         BITFIELD_BIT(MESA_SHADER_GEOMETRY) |
+         BITFIELD_BIT(MESA_SHADER_MESH);
    }
 
    if (old_rs->line_smooth != rs->line_smooth ||
@@ -1760,16 +1761,17 @@ static void si_bind_dsa_state(struct pipe_context *ctx, void *state)
       si_ps_key_update_dsa(sctx);
       si_update_ps_inputs_read_or_disabled(sctx);
       sctx->dirty_shaders_mask |=
-         BITFIELD_BIT(PIPE_SHADER_VERTEX) |
-         BITFIELD_BIT(PIPE_SHADER_TESS_EVAL) |
-         BITFIELD_BIT(PIPE_SHADER_GEOMETRY) |
-         BITFIELD_BIT(PIPE_SHADER_FRAGMENT);
+         BITFIELD_BIT(MESA_SHADER_VERTEX) |
+         BITFIELD_BIT(MESA_SHADER_TESS_EVAL) |
+         BITFIELD_BIT(MESA_SHADER_GEOMETRY) |
+         BITFIELD_BIT(MESA_SHADER_FRAGMENT) |
+         BITFIELD_BIT(MESA_SHADER_MESH);
    }
 
    if (old_dsa->depth_enabled != dsa->depth_enabled ||
        old_dsa->stencil_enabled != dsa->stencil_enabled) {
       si_ps_key_update_framebuffer_blend_dsa_rasterizer(sctx);
-      sctx->dirty_shaders_mask |= BITFIELD_BIT(PIPE_SHADER_FRAGMENT);
+      sctx->dirty_shaders_mask |= BITFIELD_BIT(MESA_SHADER_FRAGMENT);
    }
 
    if (sctx->occlusion_query_mode == SI_OCCLUSION_QUERY_MODE_PRECISE_BOOLEAN &&
@@ -1836,12 +1838,12 @@ static void si_set_active_query_state(struct pipe_context *ctx, bool enable)
 
 void si_save_qbo_state(struct si_context *sctx, struct si_qbo_state *st)
 {
-   si_get_pipe_constant_buffer(sctx, PIPE_SHADER_COMPUTE, 0, &st->saved_const0);
+   si_get_pipe_constant_buffer(sctx, MESA_SHADER_COMPUTE, 0, &st->saved_const0);
 }
 
 void si_restore_qbo_state(struct si_context *sctx, struct si_qbo_state *st)
 {
-   sctx->b.set_constant_buffer(&sctx->b, PIPE_SHADER_COMPUTE, 0, true, &st->saved_const0);
+   sctx->b.set_constant_buffer(&sctx->b, MESA_SHADER_COMPUTE, 0, &st->saved_const0);
 }
 
 static void si_emit_db_render_state(struct si_context *sctx, unsigned index)
@@ -2422,19 +2424,6 @@ static bool si_is_format_supported(struct pipe_screen *screen, enum pipe_format 
  * framebuffer handling
  */
 
-static void si_choose_spi_color_formats(struct si_surface *surf, unsigned format, unsigned swap,
-                                        unsigned ntype, bool is_depth)
-{
-   struct ac_spi_color_formats formats = {};
-
-   ac_choose_spi_color_formats(format, swap, ntype, is_depth, true, &formats);
-
-   surf->spi_shader_col_format = formats.normal;
-   surf->spi_shader_col_format_alpha = formats.alpha;
-   surf->spi_shader_col_format_blend = formats.blend;
-   surf->spi_shader_col_format_blend_alpha = formats.blend_alpha;
-}
-
 static void si_initialize_color_surface(struct si_context *sctx, struct si_surface *surf)
 {
    struct si_texture *tex = (struct si_texture *)surf->base.texture;
@@ -2474,8 +2463,14 @@ static void si_initialize_color_surface(struct si_context *sctx, struct si_surfa
    ac_init_cb_surface(&sctx->screen->info, &cb_state, &surf->cb);
 
    /* Determine pixel shader export format */
-   si_choose_spi_color_formats(surf, format, swap, ntype, tex->is_depth);
+   struct ac_spi_color_formats formats = {};
+   const bool rbplus = sctx->screen->info.rbplus_allowed;
+   ac_choose_spi_color_formats(format, swap, ntype, tex->is_depth, rbplus, &formats);
 
+   surf->spi_shader_col_format = formats.normal;
+   surf->spi_shader_col_format_alpha = formats.alpha;
+   surf->spi_shader_col_format_blend = formats.blend;
+   surf->spi_shader_col_format_blend_alpha = formats.blend_alpha;
    surf->color_initialized = true;
 }
 
@@ -2595,7 +2590,7 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
     * We could implement the full workaround here, but it's a useless case.
     */
    if ((!state->width || !state->height) && (state->nr_cbufs || state->zsbuf.texture)) {
-      unreachable("the framebuffer shouldn't have zero area");
+      UNREACHABLE("the framebuffer shouldn't have zero area");
       return;
    }
 
@@ -2802,10 +2797,11 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
    si_update_ps_inputs_read_or_disabled(sctx);
    si_update_vrs_flat_shading(sctx);
    sctx->dirty_shaders_mask |=
-      BITFIELD_BIT(PIPE_SHADER_VERTEX) |
-      BITFIELD_BIT(PIPE_SHADER_TESS_EVAL) |
-      BITFIELD_BIT(PIPE_SHADER_GEOMETRY) |
-      BITFIELD_BIT(PIPE_SHADER_FRAGMENT);
+      BITFIELD_BIT(MESA_SHADER_VERTEX) |
+      BITFIELD_BIT(MESA_SHADER_TESS_EVAL) |
+      BITFIELD_BIT(MESA_SHADER_GEOMETRY) |
+      BITFIELD_BIT(MESA_SHADER_FRAGMENT) |
+      BITFIELD_BIT(MESA_SHADER_MESH);
 
    if (sctx->gfx_level < GFX12 && !sctx->decompression_enabled) {
       /* Prevent textures decompression when the framebuffer state
@@ -3647,7 +3643,7 @@ static void si_set_min_samples(struct pipe_context *ctx, unsigned min_samples)
    sctx->ps_iter_samples = min_samples;
 
    si_ps_key_update_framebuffer_rasterizer_sample_shading(sctx);
-   sctx->dirty_shaders_mask |= BITFIELD_BIT(PIPE_SHADER_FRAGMENT);
+   sctx->dirty_shaders_mask |= BITFIELD_BIT(MESA_SHADER_FRAGMENT);
 
    si_update_ps_iter_samples(sctx);
 }
@@ -3770,7 +3766,7 @@ static void cdna_emu_make_image_descriptor(struct si_screen *screen, struct si_t
       break;
 
    default:
-      unreachable("invalid texture target");
+      UNREACHABLE("invalid texture target");
    }
 
    unsigned stride = desc->block.bits / 8;
@@ -4535,7 +4531,7 @@ static void *si_create_vertex_elements(struct pipe_context *ctx, unsigned count,
             break;
          }
          default:
-            unreachable("bad format type");
+            UNREACHABLE("bad format type");
          }
       } else {
          switch (elements[i].src_format) {
@@ -4543,7 +4539,7 @@ static void *si_create_vertex_elements(struct pipe_context *ctx, unsigned count,
             fix_fetch.u.format = AC_FETCH_FORMAT_FLOAT;
             break;
          default:
-            unreachable("bad other format");
+            UNREACHABLE("bad other format");
          }
       }
 
@@ -4684,10 +4680,8 @@ static void si_bind_vertex_elements(struct pipe_context *ctx, void *state)
         * src_offset alignment, which is reflected in fix_fetch_opencode. */
        old->fix_fetch_opencode != v->fix_fetch_opencode ||
        memcmp(old->fix_fetch, v->fix_fetch, sizeof(v->fix_fetch[0]) *
-              MAX2(old->count, v->count))) {
+              MAX2(old->count, v->count)))
       si_vs_key_update_inputs(sctx);
-      sctx->dirty_shaders_mask |= BITFIELD_BIT(PIPE_SHADER_VERTEX);
-   }
 
    if (v->instance_divisor_is_fetched) {
       struct pipe_constant_buffer cb;
@@ -4738,8 +4732,7 @@ static void si_set_vertex_buffers(struct pipe_context *ctx, unsigned count,
       dst->buffer_offset = src->buffer_offset;
 
       /* Only unreference bound vertex buffers. */
-      pipe_resource_reference(&dst->buffer.resource, NULL);
-      dst->buffer.resource = src->buffer.resource;
+      pipe_resource_reference(&dst->buffer.resource, src->buffer.resource);
 
       if (src->buffer_offset & 3)
          unaligned |= BITFIELD_BIT(i);
@@ -4764,10 +4757,8 @@ static void si_set_vertex_buffers(struct pipe_context *ctx, unsigned count,
     * whether buffers are at least dword-aligned, since that should always
     * be the case in well-behaved applications anyway.
     */
-   if (sctx->vertex_elements->vb_alignment_check_mask & unaligned) {
+   if (sctx->vertex_elements->vb_alignment_check_mask & unaligned)
       si_vs_key_update_inputs(sctx);
-      sctx->dirty_shaders_mask |= BITFIELD_BIT(PIPE_SHADER_VERTEX);
-   }
 }
 
 static struct pipe_vertex_state *
@@ -4891,6 +4882,7 @@ void si_init_state_compute_functions(struct si_context *sctx)
    sctx->b.create_sampler_view = si_create_sampler_view;
    sctx->b.sampler_view_destroy = si_sampler_view_destroy;
    sctx->b.sampler_view_release = u_default_sampler_view_release;
+   sctx->b.resource_release = u_default_resource_release;
 }
 
 void si_init_state_functions(struct si_context *sctx)
@@ -4979,8 +4971,7 @@ void si_init_screen_state_functions(struct si_screen *sscreen)
                                 si_create_vertex_state, si_vertex_state_destroy);
 }
 
-static void si_init_compute_preamble_state(struct si_context *sctx,
-                                           struct si_pm4_state *pm4)
+void si_init_compute_preamble_state(struct si_context *sctx, struct si_pm4_state *pm4)
 {
    uint64_t border_color_va =
       sctx->border_color_buffer ? sctx->border_color_buffer->gpu_address : 0;
@@ -5021,7 +5012,7 @@ static void si_init_graphics_preamble_state(struct si_context *sctx,
 
    ac_init_graphics_preamble_state(&preamble_state, &pm4->base);
 
-   if (sctx->gfx_level >= GFX7) {
+   if (sctx->gfx_level >= GFX7 && sctx->gfx_level < GFX12) {
       /* If any sample location uses the -8 coordinate, the EXCLUSION fields should be set to 0. */
       ac_pm4_set_reg(&pm4->base, R_02882C_PA_SU_PRIM_FILTER_CNTL,
                      S_02882C_XMAX_RIGHT_EXCLUSION(1) |
@@ -5128,13 +5119,18 @@ static bool gfx10_init_gfx_preamble_state(struct si_context *sctx)
    }
 
    if (sctx->uses_userq_reg_shadowing) {
-      ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-      ac_pm4_cmd_add(&pm4->base, CC0_UPDATE_LOAD_ENABLES(1) | CC0_LOAD_PER_CONTEXT_STATE(1) |
-                        CC0_LOAD_CS_SH_REGS(1) | CC0_LOAD_GFX_SH_REGS(1) |
-                        CC0_LOAD_GLOBAL_UCONFIG(1));
-      ac_pm4_cmd_add(&pm4->base, CC1_UPDATE_SHADOW_ENABLES(1) | CC1_SHADOW_PER_CONTEXT_STATE(1) |
-                        CC1_SHADOW_CS_SH_REGS(1) | CC1_SHADOW_GFX_SH_REGS(1) |
-                        CC1_SHADOW_GLOBAL_UCONFIG(1) | CC1_SHADOW_GLOBAL_CONFIG(1));
+      /* In case of GFX11_5, CONTEXT_CONTROL packet is added in si_init_cp_reg_shaodwing()
+       * function.
+       */
+      if (sctx->gfx_level != GFX11_5) {
+         ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
+         ac_pm4_cmd_add(&pm4->base, CC0_UPDATE_LOAD_ENABLES(1) | CC0_LOAD_PER_CONTEXT_STATE(1) |
+                           CC0_LOAD_CS_SH_REGS(1) | CC0_LOAD_GFX_SH_REGS(1) |
+                           CC0_LOAD_GLOBAL_UCONFIG(1));
+         ac_pm4_cmd_add(&pm4->base, CC1_UPDATE_SHADOW_ENABLES(1) | CC1_SHADOW_PER_CONTEXT_STATE(1) |
+                           CC1_SHADOW_CS_SH_REGS(1) | CC1_SHADOW_GFX_SH_REGS(1) |
+                           CC1_SHADOW_GLOBAL_UCONFIG(1) | CC1_SHADOW_GLOBAL_CONFIG(1));
+      }
    } else if (sctx->is_gfx_queue && !sctx->uses_kernelq_reg_shadowing) {
       ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
       ac_pm4_cmd_add(&pm4->base, CC0_UPDATE_LOAD_ENABLES(1));

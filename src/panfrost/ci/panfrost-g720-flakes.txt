@@ -227,6 +227,9 @@ dEQP-VK.renderpass.suballocation.formats.r32_sint.input.load.store.clear_draw_us
 dEQP-VK.renderpass.suballocation.formats.r32g32_uint.input.load.dont_care.draw_use_input_aspect
 dEQP-VK.renderpass.suballocation.subpass_dependencies.external_subpass.render_size_64_64.render_passes_2
 
+# CTS bug, see https://github.com/KhronosGroup/VK-GL-CTS/commit/3871f1a1c1e5fa479baea4a82ecdd36c30cd7bc0
+dEQP-VK.renderpass2.depth_stencil_resolve.*_samplemask
+
 dEQP-VK.renderpass2.suballocation.formats.a8b8g8r8_sint_pack32.input.load.dont_care.draw
 dEQP-VK.renderpass2.suballocation.formats.a8b8g8r8_srgb_pack32.input.load.store.clear_draw
 

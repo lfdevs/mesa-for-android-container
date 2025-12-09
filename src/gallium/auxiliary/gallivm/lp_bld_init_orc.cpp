@@ -234,13 +234,18 @@ public:
 
    static void *lookup_in_jd(
          const char *func_name,
-         LLVMOrcJITDylibRef jd) {
+         LLVMOrcJITDylibRef jd,
+         llvm::ObjectCache *objcache) {
       using llvm::orc::JITDylib;
       using llvm::JITEvaluatedSymbol;
       using llvm::orc::ExecutorAddr;
       JITDylib* JD = ::unwrap(jd);
       LPJit* jit = get_instance();
+      auto &ircl = jit->lljit->getIRCompileLayer();
+      auto &irc = ircl.getCompiler();
+      auto &sc = dynamic_cast<llvm::orc::SimpleCompiler &>(irc);
       jit->lookup_mutex.lock();
+      sc.setObjectCache(objcache);
       auto func = ExitOnErr(jit->lljit->lookup(*JD, func_name));
       jit->lookup_mutex.unlock();
 #if LLVM_VERSION_MAJOR >= 15
@@ -257,12 +262,6 @@ public:
       ExitOnErr(es.removeJITDylib(* ::unwrap(jd)));
    }
 
-   static void set_object_cache(llvm::ObjectCache *objcache) {
-      auto &ircl = LPJit::get_instance()->lljit->getIRCompileLayer();
-      auto &irc = ircl.getCompiler();
-      auto &sc = dynamic_cast<llvm::orc::SimpleCompiler &>(irc);
-      sc.setObjectCache(objcache);
-   }
    LLVMTargetMachineRef tm;
 
 private:
@@ -340,7 +339,12 @@ LPJit::LPJit() :jit_dylib_count(0) {
          .setJITTargetMachineBuilder(std::move(JTMB))
 #ifdef USE_JITLINK
          .setObjectLinkingLayerCreator(
+#if LLVM_VERSION_MAJOR >= 21
+            /* LLVM 21 removed the Triple argument */
+            [&](ExecutionSession &ES) {
+#else
             [&](ExecutionSession &ES, const llvm::Triple &TT) {
+#endif
                return std::make_unique<ObjectLinkingLayer>(
                   ES, ExitOnErr(llvm::jitlink::InProcessMemoryManager::Create()));
             })
@@ -551,8 +555,8 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
 
    gallivm->cache = cache;
 
-   gallivm->_ts_context = context->ref;
-   gallivm->context = LLVMOrcThreadSafeContextGetContext(context->ref);
+   gallivm->_ts_context = context->tsref;
+   gallivm->context = context->ref;
 
    gallivm->module_name = LPJit::get_unique_name(name);
    gallivm->module = LLVMModuleCreateWithNameInContext(gallivm->module_name,
@@ -622,7 +626,6 @@ gallivm_free_ir(struct gallivm_state *gallivm)
    gallivm->_ts_context=NULL;
    gallivm->cache=NULL;
    LPJit::deregister_gallivm_state(gallivm);
-   LPJit::set_object_cache(NULL);
 }
 
 void
@@ -657,8 +660,6 @@ gallivm_compile_module(struct gallivm_state *gallivm)
          LPObjectCacheORC *objcache = new LPObjectCacheORC(gallivm->cache);
          gallivm->cache->jit_obj_cache = (void *)objcache;
       }
-      auto *objcache = (LPObjectCacheORC *)gallivm->cache->jit_obj_cache;
-      LPJit::set_object_cache(objcache);
    }
    /* defer compilation till first lookup by gallivm_jit_function */
 }
@@ -667,8 +668,14 @@ func_pointer
 gallivm_jit_function(struct gallivm_state *gallivm,
                      LLVMValueRef func, const char *func_name)
 {
+   LPObjectCacheORC *objcache = NULL;
+   if (gallivm->cache) {
+      assert(gallivm->cache->jit_obj_cache);
+      objcache = (LPObjectCacheORC *)gallivm->cache->jit_obj_cache;
+   }
+
    return pointer_to_func(
-      LPJit::lookup_in_jd(func_name, gallivm->_per_module_jd));
+      LPJit::lookup_in_jd(func_name, gallivm->_per_module_jd, objcache));
 }
 
 void

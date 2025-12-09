@@ -22,6 +22,8 @@ elif [[ "$arch" = "i386" ]]; then
     rust_target=i686-unknown-linux-gnu
 elif [[ "$arch" = "ppc64el" ]]; then
     rust_target=powerpc64le-unknown-linux-gnu
+elif [[ "$arch" = "riscv64" ]]; then
+    rust_target=riscv64gc-unknown-linux-gnu
 elif [[ "$arch" = "s390x" ]]; then
     rust_target=s390x-unknown-linux-gnu
 else

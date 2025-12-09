@@ -8,6 +8,7 @@
 #include "i915_drm_winsys.h"
 #include "i915_drm_public.h"
 #include "util/u_memory.h"
+#include "util/os_drm.h"
 
 #include "intel/common/intel_gem.h"
 
@@ -27,11 +28,11 @@ static int
 i915_drm_aperture_size(struct i915_winsys *iws)
 {
    struct i915_drm_winsys *idws = i915_drm_winsys(iws);
-   size_t aper_size, mappable_size;
 
-   drm_intel_get_aperture_sizes(idws->fd, &mappable_size, &aper_size);
-
-   return aper_size >> 20;
+   struct drm_i915_gem_get_aperture aperture = { 0 };
+   ASSERTED int ret = drm_ioctl(idws->fd, DRM_IOCTL_I915_GEM_GET_APERTURE, &aperture);
+   assert(ret == 0);
+   return aperture.aper_size >> 20;
 }
 
 static void

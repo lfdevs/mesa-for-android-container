@@ -27,6 +27,8 @@
  * SOFTWARE.
  */
 
+#include "pvr_csb.h"
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,10 +37,11 @@
 
 #include "hwdef/rogue_hw_utils.h"
 #include "pvr_bo.h"
-#include "pvr_csb.h"
 #include "pvr_debug.h"
+#include "pvr_device.h"
 #include "pvr_device_info.h"
-#include "pvr_private.h"
+#include "pvr_macros.h"
+#include "pvr_physical_device.h"
 #include "pvr_types.h"
 #include "util/list.h"
 #include "util/u_dynarray.h"
@@ -90,7 +93,7 @@ void pvr_csb_init(struct pvr_device *device,
    csb->status = VK_SUCCESS;
 
    if (stream_type == PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED)
-      util_dynarray_init(&csb->deferred_cs_mem, NULL);
+      csb->deferred_cs_mem = UTIL_DYNARRAY_INIT;
    else
       list_inithead(&csb->pvr_bo_list);
 }
@@ -201,7 +204,7 @@ pvr_csb_emit_link_unmarked(struct pvr_csb *csb, pvr_dev_addr_t addr, bool ret)
       break;
 
    default:
-      unreachable("Unknown stream type");
+      UNREACHABLE("Unknown stream type");
       break;
    }
 }
@@ -231,7 +234,7 @@ static bool pvr_csb_buffer_extend(struct pvr_csb *csb)
    const uint8_t stream_reserved_space =
       stream_link_space + ROGUE_VDMCTRL_GUARD_SIZE_DEFAULT;
    const uint32_t cache_line_size =
-      rogue_get_slc_cache_line_size(&csb->device->pdevice->dev_info);
+      pvr_get_slc_cache_line_size(&csb->device->pdevice->dev_info);
    size_t current_state_update_size = 0;
    struct pvr_bo *pvr_bo;
    VkResult result;
@@ -471,7 +474,7 @@ VkResult pvr_csb_emit_terminate(struct pvr_csb *csb)
       break;
 
    default:
-      unreachable("Unknown stream type");
+      UNREACHABLE("Unknown stream type");
       break;
    }
 

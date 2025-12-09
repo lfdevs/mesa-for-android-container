@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: https://s3.freedesktop.org/mesa-tracie-public/
+  download-url: "https://s3.freedesktop.org/mesa-tracie-public/"
 
 text: |-
   NOTE for faster runtime, try to sort tests so the longer running traces
@@ -52,7 +52,7 @@ traces:
       label: [skip, broken, slow]
       text: Broken minimap rendering since around !14643
     freedreno-a530:
-      checksum: b0a10ed261fdfeba76de4de5c2bd0aae
+      checksum: 5ec09d3cf604d9f52ce7c34e969a35a1
     freedreno-a618:
       checksum: 747fa9a4e47bbb37c24c3376a3f8255b
     zink-a618:
@@ -188,11 +188,11 @@ traces:
       checksum: 751e0e784ba2f003cfc456fe8699f1fa
       label: [hang]
     freedreno-a530:
-      checksum: 88188447495b819e5814368486deb0a0
+      checksum: 1a4fbb06c7453efe0c71455f6be475c1
     freedreno-a618:
-      checksum: eb810bd258c06f873a2d9718c5209c6d
+      checksum: 709d72f86faa9b768495888b49cad086
     zink-a618:
-      checksum: eefcef0b1167c1140c298f3908c31195
+      checksum: ac00716889f247788292e838139bc2ac
 
 # gimark requires an environment var to work around a bug, disable for now
 #  gputest/gimark-v2.trace:
@@ -345,6 +345,7 @@ traces:
   humus/VolumetricFogging2-v2.trace:
     freedreno-a306:
       checksum: aec880cec7ba460f3144b789bc517891
+      label: [hang]
     freedreno-a530:
       checksum: fa6ec09d80a2c42e3ed49f87b608e0c4
     freedreno-a618:

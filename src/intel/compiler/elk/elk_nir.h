@@ -115,8 +115,7 @@ static inline bool
 elk_nir_ubo_surface_index_is_pushable(nir_src src)
 {
    nir_intrinsic_instr *intrin =
-      src.ssa->parent_instr->type == nir_instr_type_intrinsic ?
-      nir_instr_as_intrinsic(src.ssa->parent_instr) : NULL;
+      nir_src_as_intrinsic(src);
 
    if (intrin && intrin->intrinsic == nir_intrinsic_resource_intel) {
       return (nir_intrinsic_resource_access_intel(intrin) &
@@ -135,9 +134,9 @@ elk_nir_ubo_surface_index_get_push_block(nir_src src)
    if (!elk_nir_ubo_surface_index_is_pushable(src))
       return UINT32_MAX;
 
-   assert(src.ssa->parent_instr->type == nir_instr_type_intrinsic);
+   assert(nir_src_is_intrinsic(src));
 
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(src.ssa->parent_instr);
+   nir_intrinsic_instr *intrin = nir_def_as_intrinsic(src.ssa);
    assert(intrin->intrinsic == nir_intrinsic_resource_intel);
 
    return nir_intrinsic_resource_block_intel(intrin);
@@ -157,9 +156,9 @@ elk_nir_ubo_surface_index_get_bti(nir_src src)
    if (nir_src_is_const(src))
       return nir_src_as_uint(src);
 
-   assert(src.ssa->parent_instr->type == nir_instr_type_intrinsic);
+   assert(nir_src_is_intrinsic(src));
 
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(src.ssa->parent_instr);
+   nir_intrinsic_instr *intrin = nir_def_as_intrinsic(src.ssa);
    if (!intrin || intrin->intrinsic != nir_intrinsic_resource_intel)
       return UINT32_MAX;
 
@@ -273,9 +272,6 @@ const struct glsl_type *elk_nir_get_var_type(const struct nir_shader *nir,
                                              nir_variable *var);
 
 void elk_nir_adjust_payload(nir_shader *shader);
-
-nir_shader *
-elk_nir_from_spirv(void *mem_ctx, const uint32_t *spirv, size_t spirv_size);
 
 #ifdef __cplusplus
 }

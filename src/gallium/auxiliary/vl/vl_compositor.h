@@ -131,9 +131,13 @@ struct vl_compositor_state
    struct vl_compositor_layer layers[VL_COMPOSITOR_MAX_LAYERS];
    bool interlaced;
    unsigned chroma_location;
+   enum pipe_video_vpp_transfer_characteristic in_transfer_characteristic;
+   enum pipe_video_vpp_transfer_characteristic out_transfer_characteristic;
+   vl_csc_matrix yuv2rgb;
+   vl_csc_matrix rgb2yuv;
+   vl_csc_matrix primaries;
 
-   vl_csc_matrix csc_matrix;
-   float luma_min, luma_max;
+   vl_csc_matrix csc_matrix; /* gfx compositor only */
 };
 
 struct vl_compositor
@@ -218,14 +222,6 @@ vl_compositor_init(struct vl_compositor *compositor, struct pipe_context *pipe, 
  */
 bool
 vl_compositor_init_state(struct vl_compositor_state *state, struct pipe_context *pipe);
-
-/**
- * set yuv -> rgba conversion matrix
- */
-bool
-vl_compositor_set_csc_matrix(struct vl_compositor_state *settings,
-                             const vl_csc_matrix *matrix,
-                             float luma_min, float luma_max);
 
 /**
  * reset dirty area, so it's cleared with the clear colour

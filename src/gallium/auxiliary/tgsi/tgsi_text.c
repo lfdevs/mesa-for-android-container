@@ -330,20 +330,20 @@ static void report_error( struct translate_ctx *ctx, const char *msg )
  */
 static bool parse_header( struct translate_ctx *ctx )
 {
-   enum pipe_shader_type processor;
+   mesa_shader_stage processor;
 
    if (str_match_nocase_whole( &ctx->cur, "FRAG" ))
-      processor = PIPE_SHADER_FRAGMENT;
+      processor = MESA_SHADER_FRAGMENT;
    else if (str_match_nocase_whole( &ctx->cur, "VERT" ))
-      processor = PIPE_SHADER_VERTEX;
+      processor = MESA_SHADER_VERTEX;
    else if (str_match_nocase_whole( &ctx->cur, "GEOM" ))
-      processor = PIPE_SHADER_GEOMETRY;
+      processor = MESA_SHADER_GEOMETRY;
    else if (str_match_nocase_whole( &ctx->cur, "TESS_CTRL" ))
-      processor = PIPE_SHADER_TESS_CTRL;
+      processor = MESA_SHADER_TESS_CTRL;
    else if (str_match_nocase_whole( &ctx->cur, "TESS_EVAL" ))
-      processor = PIPE_SHADER_TESS_EVAL;
+      processor = MESA_SHADER_TESS_EVAL;
    else if (str_match_nocase_whole( &ctx->cur, "COMP" ))
-      processor = PIPE_SHADER_COMPUTE;
+      processor = MESA_SHADER_COMPUTE;
    else {
       report_error( ctx, "Unknown header" );
       return false;
@@ -730,9 +730,9 @@ parse_register_dcl(
        * the second bracket */
 
       /* tessellation has similar constraints to geometry shader */
-      if ((ctx->processor == PIPE_SHADER_GEOMETRY && is_in) ||
-          (ctx->processor == PIPE_SHADER_TESS_EVAL && is_in) ||
-          (ctx->processor == PIPE_SHADER_TESS_CTRL && (is_in || is_out))) {
+      if ((ctx->processor == MESA_SHADER_GEOMETRY && is_in) ||
+          (ctx->processor == MESA_SHADER_TESS_EVAL && is_in) ||
+          (ctx->processor == MESA_SHADER_TESS_CTRL && (is_in || is_out))) {
          brackets[0] = brackets[1];
          *num_brackets = 1;
       } else {
@@ -1273,7 +1273,7 @@ static bool parse_declaration( struct translate_ctx *ctx )
    }
 
    is_vs_input = (file == TGSI_FILE_INPUT &&
-                  ctx->processor == PIPE_SHADER_VERTEX);
+                  ctx->processor == MESA_SHADER_VERTEX);
 
    cur = ctx->cur;
    eat_opt_white( &cur );
@@ -1482,7 +1482,7 @@ static bool parse_declaration( struct translate_ctx *ctx )
    cur = ctx->cur;
    eat_opt_white( &cur );
    if (*cur == ',' &&
-       file == TGSI_FILE_OUTPUT && ctx->processor == PIPE_SHADER_GEOMETRY) {
+       file == TGSI_FILE_OUTPUT && ctx->processor == MESA_SHADER_GEOMETRY) {
       cur++;
       eat_opt_white(&cur);
       if (str_match_nocase_whole(&cur, "STREAM")) {
@@ -1756,7 +1756,7 @@ static bool parse_property( struct translate_ctx *ctx )
          return false;
       }
       if (property_name == TGSI_PROPERTY_GS_INPUT_PRIM &&
-          ctx->processor == PIPE_SHADER_GEOMETRY) {
+          ctx->processor == MESA_SHADER_GEOMETRY) {
          ctx->implied_array_size = mesa_vertices_per_prim(values[0]);
       }
       break;
@@ -1810,8 +1810,8 @@ static bool translate( struct translate_ctx *ctx )
    if (!parse_header( ctx ))
       return false;
 
-   if (ctx->processor == PIPE_SHADER_TESS_CTRL ||
-       ctx->processor == PIPE_SHADER_TESS_EVAL)
+   if (ctx->processor == MESA_SHADER_TESS_CTRL ||
+       ctx->processor == MESA_SHADER_TESS_EVAL)
        ctx->implied_array_size = 32;
 
    while (*ctx->cur != '\0') {

@@ -121,6 +121,6 @@ isl_genX(emit_cpb_control_s)(const struct isl_device *dev, void *batch,
    uint32_t *dw = batch;
    GENX(3DSTATE_CPSIZE_CONTROL_BUFFER_pack)(NULL, dw, &cpb);
 #else
-   unreachable("Coarse pixel shading not supported");
+   UNREACHABLE("Coarse pixel shading not supported");
 #endif
 }

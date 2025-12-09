@@ -467,7 +467,9 @@ nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
    P_NV9097_SET_WINDOW_OFFSET_Y(p, 0);
 
    P_IMMD(p, NV9097, SET_ACTIVE_ZCULL_REGION, 0x3f);
-   P_IMMD(p, NV9097, SET_WINDOW_CLIP_ENABLE, V_FALSE);
+   P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_WINDOW_CLIP_ENABLED), 0);
+   P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_UPDATE_WINDOW_CLIP));
+   P_INLINE_DATA(p, 1);
    P_IMMD(p, NV9097, SET_CLIP_ID_TEST, ENABLE_FALSE);
 
 //   P_IMMD(p, NV9097, X_X_X_SET_CLEAR_CONTROL, {
@@ -690,8 +692,9 @@ void
 nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
                               const VkCommandBufferBeginInfo *pBeginInfo)
 {
+   const struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
    if (cmd->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
-      struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 9);
       P_MTHD(p, NV9097, INVALIDATE_SAMPLER_CACHE_NO_WFI);
       P_NV9097_INVALIDATE_SAMPLER_CACHE_NO_WFI(p, {
          .lines = LINES_ALL,
@@ -703,6 +706,13 @@ nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
       P_IMMD(p, NVA097, INVALIDATE_SHADER_CACHES_NO_WFI, {
          .constant = CONSTANT_TRUE,
       });
+      if (dev->vk.enabled_extensions.EXT_discard_rectangles) {
+         P_IMMD(p, NV9097,
+                SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_WINDOW_CLIP_ENABLED),
+                0);
+         P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_UPDATE_WINDOW_CLIP));
+         P_INLINE_DATA(p, 1);
+      }
    }
 
    cmd->state.gfx.descriptors.flush_root = nvk_cmd_flush_gfx_root_desc;
@@ -793,6 +803,7 @@ nvk_attachment_init(struct nvk_attachment *att,
 
    VK_FROM_HANDLE(nvk_image_view, iview, info->imageView);
    *att = (struct nvk_attachment) {
+      .flags = vk_get_rendering_attachment_flags(info),
       .vk_format = iview->vk.format,
       .iview = iview,
    };
@@ -907,7 +918,7 @@ nvk_cmd_set_sample_layout(struct nvk_cmd_buffer *cmd,
       break;
 
    default:
-      unreachable("Unknown sample layout");
+      UNREACHABLE("Unknown sample layout");
    }
 
    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_SET_ANTI_ALIAS));
@@ -1179,7 +1190,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
             P_NV9097_SET_COLOR_TARGET_LAYER(p, i, 0);
          }
 
-         P_IMMD(p, NV9097, SET_COLOR_COMPRESSION(i), nil_image->compressed);
+         P_IMMD(p, NV9097, SET_COLOR_COMPRESSION(i), image->is_compressed);
       } else {
          P_MTHD(p, NV9097, SET_COLOR_TARGET_A(i));
          P_NV9097_SET_COLOR_TARGET_A(p, i, 0);
@@ -1224,7 +1235,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 
       /* We want the combined Z/S format for the SET_ZT_FORMAT packet */
       const enum pipe_format zs_p_format =
-         nvk_format_to_pipe_format(iview->vk.format);
+         nvk_format_to_pipe_format(image->vk.format);
       const uint8_t zs_format = nil_format_to_depth_stencil(zs_p_format);
 
       if (pdev->info.cls_eng3d >= BLACKWELL_A) {
@@ -1269,7 +1280,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 
       P_IMMD(p, NV9097, SET_ZT_LAYER, base_array_layer);
 
-      P_IMMD(p, NV9097, SET_Z_COMPRESSION, nil_image.compressed);
+      P_IMMD(p, NV9097, SET_Z_COMPRESSION, image->is_compressed);
 
       if (nvk_cmd_buffer_3d_cls(cmd) >= MAXWELL_B) {
          P_IMMD(p, NVC597, SET_ZT_SPARSE, {
@@ -1470,7 +1481,8 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
+nvk_CmdEndRendering2KHR(VkCommandBuffer commandBuffer,
+                        const VkRenderingEndInfoKHR *pRenderingEndInfo)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    struct nvk_rendering_state *render = &cmd->state.gfx.render;
@@ -1495,12 +1507,19 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
 
    /* Translate render state back to VK for meta */
    VkRenderingAttachmentInfo vk_color_att[NVK_MAX_RTS];
+   VkRenderingAttachmentFlagsInfoKHR vk_color_att_flags[NVK_MAX_RTS];
    for (uint32_t i = 0; i < render->color_att_count; i++) {
       if (render->color_att[i].resolve_mode != VK_RESOLVE_MODE_NONE)
          need_resolve = true;
 
+      vk_color_att_flags[i] = (VkRenderingAttachmentFlagsInfoKHR) {
+         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_FLAGS_INFO_KHR,
+         .flags = render->color_att[i].flags,
+      };
+
       vk_color_att[i] = (VkRenderingAttachmentInfo) {
          .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+         .pNext = &vk_color_att_flags[i],
          .imageView = nvk_image_view_to_handle(render->color_att[i].iview),
          .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
          .resolveMode = render->color_att[i].resolve_mode,
@@ -1510,8 +1529,13 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
       };
    }
 
+   const VkRenderingAttachmentFlagsInfoKHR vk_depth_att_flags = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_FLAGS_INFO_KHR,
+      .flags = render->depth_att.flags,
+   };
    const VkRenderingAttachmentInfo vk_depth_att = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = &vk_depth_att_flags,
       .imageView = nvk_image_view_to_handle(render->depth_att.iview),
       .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
       .resolveMode = render->depth_att.resolve_mode,
@@ -1522,8 +1546,13 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
    if (render->depth_att.resolve_mode != VK_RESOLVE_MODE_NONE)
       need_resolve = true;
 
+   const VkRenderingAttachmentFlagsInfoKHR vk_stencil_att_flags = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_FLAGS_INFO_KHR,
+      .flags = render->stencil_att.flags,
+   };
    const VkRenderingAttachmentInfo vk_stencil_att = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = &vk_stencil_att_flags,
       .imageView = nvk_image_view_to_handle(render->stencil_att.iview),
       .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
       .resolveMode = render->stencil_att.resolve_mode,
@@ -1562,7 +1591,7 @@ nvk_CmdEndRendering(VkCommandBuffer commandBuffer)
 
 void
 nvk_cmd_bind_graphics_shader(struct nvk_cmd_buffer *cmd,
-                             const gl_shader_stage stage,
+                             const mesa_shader_stage stage,
                              struct nvk_shader *shader)
 {
    assert(stage < ARRAY_SIZE(cmd->state.gfx.shaders));
@@ -1693,7 +1722,7 @@ nvk_cmd_flush_gfx_shaders(struct nvk_cmd_buffer *cmd)
 
    u_foreach_bit(s, cmd->state.gfx.shaders_dirty &
                     NVK_SHADER_STAGE_GRAPHICS_BITS) {
-      gl_shader_stage stage = vk_to_mesa_shader_stage(1 << s);
+      mesa_shader_stage stage = vk_to_mesa_shader_stage(1 << s);
       uint32_t type = mesa_to_nv9097_shader_type(stage);
       types_dirty |= BITFIELD_BIT(type);
 
@@ -1736,7 +1765,7 @@ nvk_cmd_flush_gfx_shaders(struct nvk_cmd_buffer *cmd)
    if (cmd->state.gfx.shaders_dirty & NVK_SHADER_STAGE_VTGM_BITS) {
       struct nvk_shader *last_vtgm = NULL;
       u_foreach_bit(s, NVK_SHADER_STAGE_VTGM_BITS) {
-         gl_shader_stage stage = vk_to_mesa_shader_stage(1 << s);
+         mesa_shader_stage stage = vk_to_mesa_shader_stage(1 << s);
          if (cmd->state.gfx.shaders[stage] != NULL)
             last_vtgm = cmd->state.gfx.shaders[stage];
       }
@@ -1822,17 +1851,28 @@ nvk_flush_vi_state(struct nvk_cmd_buffer *cmd)
 
    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VI) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VI_BINDINGS_VALID)) {
-      u_foreach_bit(a, dyn->vi->attributes_valid) {
-         const struct nvk_va_format *fmt =
-            nvk_get_va_format(pdev, dyn->vi->attributes[a].format);
+      P_MTHD(p, NV9097, SET_VERTEX_ATTRIBUTE_A(0));
+      for (uint32_t a = 0; a < 32; a++) {
+         if (dyn->vi->attributes_valid & BITFIELD_BIT(a)) {
+            const struct nvk_va_format *fmt =
+               nvk_get_va_format(pdev, dyn->vi->attributes[a].format);
 
-         P_IMMD(p, NV9097, SET_VERTEX_ATTRIBUTE_A(a), {
-            .stream                 = dyn->vi->attributes[a].binding,
-            .offset                 = dyn->vi->attributes[a].offset,
-            .component_bit_widths   = fmt->bit_widths,
-            .numerical_type         = fmt->type,
-            .swap_r_and_b           = fmt->swap_rb,
-         });
+            P_NV9097_SET_VERTEX_ATTRIBUTE_A(p, a, {
+               .stream                 = dyn->vi->attributes[a].binding,
+               .source                 = SOURCE_ACTIVE,
+               .offset                 = dyn->vi->attributes[a].offset,
+               .component_bit_widths   = fmt->bit_widths,
+               .numerical_type         = fmt->type,
+               .swap_r_and_b           = fmt->swap_rb,
+            });
+         } else {
+            P_NV9097_SET_VERTEX_ATTRIBUTE_A(p, a, {
+               .source                 = SOURCE_INACTIVE,
+               /* Using RGBA32 gives us (0, 0, 0, 0) for inactive attributes. */
+               .component_bit_widths   = COMPONENT_BIT_WIDTHS_R32_G32_B32_A32,
+               .numerical_type         = NUMERICAL_TYPE_NUM_FLOAT,
+            });
+         }
       }
 
       u_foreach_bit(b, dyn->vi->bindings_valid) {
@@ -1885,7 +1925,7 @@ vk_to_nv9097_primitive_topology(VkPrimitiveTopology prim)
    case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
       return NV9097_BEGIN_OP_PATCH;
    default:
-      unreachable("Invalid primitive topology");
+      UNREACHABLE("Invalid primitive topology");
    }
 }
 
@@ -2068,6 +2108,74 @@ nvk_flush_vp_state(struct nvk_cmd_buffer *cmd)
             .xmax = xmax,
          });
          P_NV9097_SET_SCISSOR_VERTICAL(p, i, {
+            .ymin = ymin,
+            .ymax = ymax,
+         });
+      }
+   }
+}
+
+static uint32_t
+vk_to_nv9097_dr_mode(VkDiscardRectangleModeEXT vk_mode)
+{
+   STATIC_ASSERT(VK_DISCARD_RECTANGLE_MODE_INCLUSIVE_EXT ==
+                 NV9097_SET_WINDOW_CLIP_TYPE_V_INCLUSIVE);
+   STATIC_ASSERT(VK_DISCARD_RECTANGLE_MODE_EXCLUSIVE_EXT ==
+                 NV9097_SET_WINDOW_CLIP_TYPE_V_EXCLUSIVE);
+   assert(vk_mode <= NV9097_SET_WINDOW_CLIP_TYPE_V_EXCLUSIVE);
+   return vk_mode;
+}
+
+static void
+nvk_flush_dr_state(struct nvk_cmd_buffer *cmd)
+{
+   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+
+   const struct vk_dynamic_graphics_state *dyn =
+      &cmd->vk.dynamic_graphics_state;
+
+   /* VK_EXT_discard_rectangles */
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DR_ENABLE)) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
+      P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_WINDOW_CLIP_ENABLED),
+             dyn->dr.enable);
+      P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_UPDATE_WINDOW_CLIP));
+      P_INLINE_DATA(p, 1);
+   }
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DR_MODE)) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
+      P_IMMD(p, NV9097, SET_WINDOW_CLIP_TYPE, vk_to_nv9097_dr_mode(dyn->dr.mode));
+   }
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DR_RECTANGLES)) {
+      const uint32_t sr_max =
+         nvk_image_max_dimension(&pdev->info, VK_IMAGE_TYPE_2D);
+
+      struct nv_push *p =
+         nvk_cmd_buffer_push(cmd, 1 + 2 * NVK_MAX_DISCARD_RECTANGLES);
+
+      P_MTHD(p, NV9097, SET_WINDOW_CLIP_HORIZONTAL(0));
+      for (unsigned i = 0; i < NVK_MAX_DISCARD_RECTANGLES; i++) {
+         const bool is_rect_enabled = i < dyn->dr.rectangle_count;
+         uint32_t xmin = 0;
+         uint32_t xmax = 0;
+         uint32_t ymin = 0;
+         uint32_t ymax = 0;
+
+         if (is_rect_enabled) {
+            const VkRect2D *r = &dyn->dr.rectangles[i];
+
+            xmin = MIN2(sr_max, r->offset.x);
+            xmax = MIN2(sr_max, r->offset.x + r->extent.width);
+            ymin = MIN2(sr_max, r->offset.y);
+            ymax = MIN2(sr_max, r->offset.y + r->extent.height);
+         }
+
+         P_NV9097_SET_WINDOW_CLIP_HORIZONTAL(p, i, {
+            .xmin = xmin,
+            .xmax = xmax,
+         });
+         P_NV9097_SET_WINDOW_CLIP_VERTICAL(p, i, {
             .ymin = ymin,
             .ymax = ymax,
          });
@@ -2337,7 +2445,7 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
          break;
       case VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT:
       default:
-         unreachable("Unsupported depth bias representation");
+         UNREACHABLE("Unsupported depth bias representation");
       }
       /* TODO: The blob multiplies by 2 for some reason. We don't. */
       P_IMMD(p, NV9097, SET_DEPTH_BIAS, fui(dyn->rs.depth_bias.constant_factor));
@@ -2370,7 +2478,7 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
          break;
 
       default:
-         unreachable("Invalid line rasterization mode");
+         UNREACHABLE("Invalid line rasterization mode");
       }
    }
 
@@ -2522,7 +2630,7 @@ nvk_combine_fs_log2_rates(VkFragmentShadingRateCombinerOpKHR op,
       };
 
    default:
-      unreachable("Invalid FSR combiner op");
+      UNREACHABLE("Invalid FSR combiner op");
    }
 }
 
@@ -3413,6 +3521,7 @@ nvk_cmd_flush_gfx_dynamic_state(struct nvk_cmd_buffer *cmd)
    nvk_flush_ia_state(cmd);
    nvk_flush_ts_state(cmd);
    nvk_flush_vp_state(cmd);
+   nvk_flush_dr_state(cmd);
    nvk_flush_rs_state(cmd);
    nvk_flush_fsr_state(cmd);
    nvk_flush_ms_state(cmd);
@@ -3519,7 +3628,7 @@ nvk_cmd_flush_gfx_cbufs(struct nvk_cmd_buffer *cmd)
 
    /* Find cbuf maps for the 5 cbuf groups */
    const struct nvk_shader *cbuf_shaders[5] = { NULL, };
-   for (gl_shader_stage stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+   for (mesa_shader_stage stage = 0; stage < MESA_SHADER_STAGES; stage++) {
       const struct nvk_shader *shader = cmd->state.gfx.shaders[stage];
       if (shader == NULL)
          continue;
@@ -4854,46 +4963,51 @@ nvk_CmdBeginConditionalRenderingEXT(VkCommandBuffer commandBuffer,
     *     then the rendering commands are discarded,
     *     otherwise they are executed as normal."
     *
-    * The hardware compare a 64-bit value, as such we are required to copy it.
+    * The hardware compares a pair of 64-bit values, so we need to copy the
+    * input value into one operand and zero into the other operatnd.
     */
-   uint64_t tmp_addr;
-   VkResult result = nvk_cmd_buffer_cond_render_alloc(cmd, &tmp_addr);
-   if (result != VK_SUCCESS) {
-      vk_command_buffer_set_error(&cmd->vk, result);
-      return;
+   if (cmd->cond_render_mem == NULL) {
+      VkResult result = nvk_cmd_buffer_alloc_mem(cmd, false,
+                                                 &cmd->cond_render_mem);
+      if (result != VK_SUCCESS) {
+         vk_command_buffer_set_error(&cmd->vk, result);
+         return;
+      }
+
+      /* Zero-initialize the beginning of the buffer. As an invariant, the bytes
+       * for operand B and the upper half of operand A are always zero.
+       */
+      assert(cmd->cond_render_mem->mem->size_B > 32);
+      memset(cmd->cond_render_mem->mem->map, 0x00, 32);
    }
+   const uint64_t tmp_addr = cmd->cond_render_mem->mem->va->addr;
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 26);
+   /* Frustratingly, the u64s are not packed together */
+   const uint64_t operand_a_addr = tmp_addr + 0;
 
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 19);
+
+   /* Copy value into operand A */
    P_MTHD(p, NV90B5, OFFSET_IN_UPPER);
    P_NV90B5_OFFSET_IN_UPPER(p, addr >> 32);
    P_NV90B5_OFFSET_IN_LOWER(p, addr & 0xffffffff);
-   P_NV90B5_OFFSET_OUT_UPPER(p, tmp_addr >> 32);
-   P_NV90B5_OFFSET_OUT_LOWER(p, tmp_addr & 0xffffffff);
-   P_NV90B5_PITCH_IN(p, 4);
-   P_NV90B5_PITCH_OUT(p, 4);
+   P_NV90B5_OFFSET_OUT_UPPER(p, operand_a_addr >> 32);
+   P_NV90B5_OFFSET_OUT_LOWER(p, operand_a_addr & 0xffffffff);
+   P_NV90B5_PITCH_IN(p, 1);
+   P_NV90B5_PITCH_OUT(p, 1);
    P_NV90B5_LINE_LENGTH_IN(p, 4);
    P_NV90B5_LINE_COUNT(p, 1);
 
-   P_IMMD(p, NV90B5, SET_REMAP_COMPONENTS, {
-      .dst_x = DST_X_SRC_X,
-      .dst_y = DST_Y_SRC_X,
-      .dst_z = DST_Z_NO_WRITE,
-      .dst_w = DST_W_NO_WRITE,
-      .component_size = COMPONENT_SIZE_ONE,
-      .num_src_components = NUM_SRC_COMPONENTS_ONE,
-      .num_dst_components = NUM_DST_COMPONENTS_TWO,
-   });
-
    P_IMMD(p, NV90B5, LAUNCH_DMA, {
       .data_transfer_type = DATA_TRANSFER_TYPE_PIPELINED,
-      .multi_line_enable = MULTI_LINE_ENABLE_TRUE,
+      .multi_line_enable = MULTI_LINE_ENABLE_FALSE,
       .flush_enable = FLUSH_ENABLE_TRUE,
       .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
       .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
-      .remap_enable = REMAP_ENABLE_TRUE,
+      .remap_enable = REMAP_ENABLE_FALSE,
    });
 
+   /* Compare the operands */
    P_MTHD(p, NV9097, SET_RENDER_ENABLE_A);
    P_NV9097_SET_RENDER_ENABLE_A(p, tmp_addr >> 32);
    P_NV9097_SET_RENDER_ENABLE_B(p, tmp_addr & 0xfffffff0);

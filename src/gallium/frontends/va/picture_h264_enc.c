@@ -450,6 +450,9 @@ static void parseEncSliceParamsH264(vlVaContext *context,
    if (seq->pic_order_cnt_type == 0)
       slice->pic_order_cnt_lsb = vl_rbsp_u(rbsp, seq->log2_max_pic_order_cnt_lsb_minus4 + 4);
 
+   if (seq->pic_order_cnt_type == 1 && !seq->delta_pic_order_always_zero_flag)
+      slice->delta_pic_order_cnt0 = vl_rbsp_se(rbsp);
+
    if (pic->redundant_pic_cnt_present_flag)
       slice->redundant_pic_cnt = vl_rbsp_ue(rbsp);
 
@@ -467,11 +470,13 @@ static void parseEncSliceParamsH264(vlVaContext *context,
       }
    }
 
+   slice->num_ref_list0_mod_operations = 0;
+   slice->ref_pic_list_modification_flag_l0 = 0;
+
    if (slice->slice_type != PIPE_H264_SLICE_TYPE_I &&
        slice->slice_type != PIPE_H264_SLICE_TYPE_SI) {
       slice->ref_pic_list_modification_flag_l0 = vl_rbsp_u(rbsp, 1);
       if (slice->ref_pic_list_modification_flag_l0) {
-         slice->num_ref_list0_mod_operations = 0;
          while (true) {
             modification_of_pic_nums_idc = vl_rbsp_ue(rbsp);
             if (modification_of_pic_nums_idc == 3)
@@ -488,10 +493,12 @@ static void parseEncSliceParamsH264(vlVaContext *context,
       }
    }
 
+   slice->num_ref_list1_mod_operations = 0;
+   slice->ref_pic_list_modification_flag_l1 = 0;
+
    if (slice->slice_type == PIPE_H264_SLICE_TYPE_B) {
       slice->ref_pic_list_modification_flag_l1 = vl_rbsp_u(rbsp, 1);
       if (slice->ref_pic_list_modification_flag_l1) {
-         slice->num_ref_list1_mod_operations = 0;
          while (true) {
             modification_of_pic_nums_idc = vl_rbsp_ue(rbsp);
             if (modification_of_pic_nums_idc == 3)
@@ -508,6 +515,9 @@ static void parseEncSliceParamsH264(vlVaContext *context,
       }
    }
 
+   slice->num_ref_pic_marking_operations = 0;
+   slice->adaptive_ref_pic_marking_mode_flag = 0;
+
    if (nal_ref_idc != 0) {
       if (nal_unit_type == PIPE_H264_NAL_IDR_SLICE) {
          slice->no_output_of_prior_pics_flag = vl_rbsp_u(rbsp, 1);
@@ -515,7 +525,6 @@ static void parseEncSliceParamsH264(vlVaContext *context,
       } else {
          slice->adaptive_ref_pic_marking_mode_flag = vl_rbsp_u(rbsp, 1);
          if (slice->adaptive_ref_pic_marking_mode_flag) {
-            slice->num_ref_pic_marking_operations = 0;
             while (true) {
                memory_management_control_operation = vl_rbsp_ue(rbsp);
                if (memory_management_control_operation == 0)
@@ -581,7 +590,7 @@ static void parseEncHrdParamsH264(struct vl_rbsp *rbsp, pipe_h264_enc_hrd_params
 
 static void parseEncSpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
 {
-   unsigned i, profile_idc, num_ref_frames_in_pic_order_cnt_cycle;
+   unsigned i, profile_idc;
 
    context->desc.h264enc.seq.profile_idc = vl_rbsp_u(rbsp, 8);
    context->desc.h264enc.seq.enc_constraint_set_flags = vl_rbsp_u(rbsp, 6);
@@ -616,12 +625,12 @@ static void parseEncSpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
    if (context->desc.h264enc.seq.pic_order_cnt_type == 0)
       context->desc.h264enc.seq.log2_max_pic_order_cnt_lsb_minus4 = vl_rbsp_ue(rbsp);
    else if (context->desc.h264enc.seq.pic_order_cnt_type == 1) {
-      vl_rbsp_u(rbsp, 1); /* delta_pic_order_always_zero_flag */
-      vl_rbsp_se(rbsp); /* offset_for_non_ref_pic */
-      vl_rbsp_se(rbsp); /* offset_for_top_to_bottom_field */
-      num_ref_frames_in_pic_order_cnt_cycle = vl_rbsp_ue(rbsp);
-      for (i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; ++i)
-         vl_rbsp_se(rbsp); /* offset_for_ref_frame[i] */
+      context->desc.h264enc.seq.delta_pic_order_always_zero_flag = vl_rbsp_u(rbsp, 1);
+      context->desc.h264enc.seq.offset_for_non_ref_pic = vl_rbsp_se(rbsp);
+      context->desc.h264enc.seq.offset_for_top_to_bottom_field = vl_rbsp_se(rbsp);
+      context->desc.h264enc.seq.num_ref_frames_in_pic_order_cnt_cycle = vl_rbsp_ue(rbsp);
+      for (i = 0; i < context->desc.h264enc.seq.num_ref_frames_in_pic_order_cnt_cycle; ++i)
+         context->desc.h264enc.seq.offset_for_ref_frame[i] = vl_rbsp_se(rbsp);
    }
 
    context->desc.h264enc.seq.max_num_ref_frames = vl_rbsp_ue(rbsp);
@@ -751,7 +760,8 @@ static void parseEncPpsParamsH264(vlVaContext *context, struct vl_rbsp *rbsp)
    pic->deblocking_filter_control_present_flag = vl_rbsp_u(rbsp, 1);
    pic->constrained_intra_pred_flag = vl_rbsp_u(rbsp, 1);
    pic->redundant_pic_cnt_present_flag = vl_rbsp_u(rbsp, 1);
-   if (vl_rbsp_more_data(rbsp)) {
+   pic->more_rbsp_data = vl_rbsp_more_data(rbsp);
+   if (pic->more_rbsp_data) {
       pic->transform_8x8_mode_flag = vl_rbsp_u(rbsp, 1);
       if (vl_rbsp_u(rbsp, 1)) { /* pic_scaling_matrix_present_flag */
          debug_error("PPS scaling matrix not supported");

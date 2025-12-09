@@ -108,7 +108,7 @@ vn_BuildAccelerationStructuresKHR(
    const VkAccelerationStructureBuildRangeInfoKHR *const *ppBuildRangeInfos)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return vn_error(dev->instance, VK_ERROR_FEATURE_NOT_PRESENT);
 }
 
@@ -119,7 +119,7 @@ vn_CopyAccelerationStructureKHR(
    const VkCopyAccelerationStructureInfoKHR *pInfo)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return vn_error(dev->instance, VK_ERROR_FEATURE_NOT_PRESENT);
 }
 
@@ -130,7 +130,7 @@ vn_CopyAccelerationStructureToMemoryKHR(
    const VkCopyAccelerationStructureToMemoryInfoKHR *pInfo)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return vn_error(dev->instance, VK_ERROR_FEATURE_NOT_PRESENT);
 }
 
@@ -141,7 +141,7 @@ vn_CopyMemoryToAccelerationStructureKHR(
    const VkCopyMemoryToAccelerationStructureInfoKHR *pInfo)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return vn_error(dev->instance, VK_ERROR_FEATURE_NOT_PRESENT);
 }
 
@@ -156,6 +156,6 @@ vn_WriteAccelerationStructuresPropertiesKHR(
    size_t stride)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   unreachable("Unimplemented");
+   UNREACHABLE("Unimplemented");
    return vn_error(dev->instance, VK_ERROR_FEATURE_NOT_PRESENT);
 }

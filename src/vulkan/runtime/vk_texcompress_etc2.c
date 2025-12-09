@@ -437,6 +437,7 @@ etc2_init_pipeline(struct vk_device *device, struct vk_texcompress_etc2_state *e
 {
    const struct vk_device_dispatch_table *disp = &device->dispatch_table;
    VkDevice _device = vk_device_to_handle(device);
+   VkResult result;
 
    nir_shader *cs = etc2_build_shader(device, etc2->nir_options);
 
@@ -452,8 +453,11 @@ etc2_init_pipeline(struct vk_device *device, struct vk_texcompress_etc2_state *e
       .layout = etc2->pipeline_layout,
    };
 
-   return disp->CreateComputePipelines(_device, etc2->pipeline_cache, 1, &pipeline_create_info, etc2->allocator,
-                                       &etc2->pipeline);
+   result = disp->CreateComputePipelines(_device, etc2->pipeline_cache, 1, &pipeline_create_info, etc2->allocator,
+                                         &etc2->pipeline);
+
+   ralloc_free(cs);
+   return result;
 }
 
 static VkResult

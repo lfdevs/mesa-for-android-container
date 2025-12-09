@@ -68,11 +68,22 @@
 nir_variable *
 st_nir_state_variable_create(nir_shader *shader,
                              const struct glsl_type *type,
-                             const gl_state_index16 tokens[STATE_LENGTH])
+                             struct gl_program_parameter_list *param_list,
+                             const gl_state_index16 tokens[STATE_LENGTH],
+                             char *var_name,
+                             bool packed_driver_uniform_storage)
 {
-   char *name = _mesa_program_state_string(tokens);
+   char *name = var_name ? var_name : _mesa_program_state_string(tokens);
    nir_variable *var = nir_state_variable_create(shader, type, name, tokens);
-   free(name);
+
+   if (param_list) {
+      unsigned loc = _mesa_add_state_reference(param_list, tokens);
+      var->data.driver_location = packed_driver_uniform_storage ?
+         param_list->Parameters[loc].ValueOffset : loc;
+   }
+
+   if (!var_name)
+      free(name);
    return var;
 }
 
@@ -150,7 +161,8 @@ get_variable(nir_builder *b, nir_deref_path *path,
       return var;
 
    /* variable doesn't exist yet, so create it: */
-   return st_nir_state_variable_create(shader, glsl_vec4_type(), tokens);
+   return st_nir_state_variable_create(shader, glsl_vec4_type(), NULL,
+                                       tokens, NULL, false);
 }
 
 static bool
@@ -234,7 +246,7 @@ st_nir_lower_builtin(nir_shader *shader)
        * be eliminated beforehand to avoid trying to lower one of those
        * builtins
        */
-      progress |= nir_lower_indirect_var_derefs(shader, vars);
+      progress |= nir_lower_indirect_var_derefs_to_if_else_trees(shader, vars);
 
       if (nir_shader_intrinsics_pass(shader, lower_builtin_instr,
                                        nir_metadata_control_flow, NULL)) {

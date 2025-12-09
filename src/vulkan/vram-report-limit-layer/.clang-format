@@ -1,6 +1,6 @@
 BasedOnStyle: InheritParentConfig
 DisableFormat: false
 
-AlignConsecutiveBitFields: true
+AlignConsecutiveBitFields: Consecutive
 ColumnLimit: 80
 BreakStringLiterals: false

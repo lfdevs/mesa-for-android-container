@@ -77,7 +77,7 @@ create_load(nir_builder *b, nir_def *block, nir_def *offset,
             unsigned bit_size, unsigned num_components)
 {
    nir_def *def = nir_load_ubo_vec4(b, num_components, bit_size, block, offset);
-   return nir_instr_as_intrinsic(def->parent_instr);
+   return nir_def_as_intrinsic(def);
 }
 
 static nir_def *

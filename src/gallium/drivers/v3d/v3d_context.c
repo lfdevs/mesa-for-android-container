@@ -228,7 +228,7 @@ v3d_ensure_prim_counts_allocated(struct v3d_context *ctx)
 
         /* Init all 7 counters and 1 padding to 0 */
         uint32_t zeroes[8] = { 0 };
-        u_upload_data(ctx->uploader,
+        u_upload_data_ref(ctx->uploader,
                       0, sizeof(zeroes), 32, zeroes,
                       &ctx->prim_counts_offset,
                       &ctx->prim_counts);
@@ -236,23 +236,23 @@ v3d_ensure_prim_counts_allocated(struct v3d_context *ctx)
 
 void
 v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
-                             enum pipe_shader_type shader)
+                             mesa_shader_stage shader)
 {
         switch (shader) {
-        case PIPE_SHADER_VERTEX:
+        case MESA_SHADER_VERTEX:
                 v3d->dirty |= V3D_DIRTY_VERTTEX;
                 break;
-        case PIPE_SHADER_GEOMETRY:
+        case MESA_SHADER_GEOMETRY:
                 v3d->dirty |= V3D_DIRTY_GEOMTEX;
                 break;
-        case PIPE_SHADER_FRAGMENT:
+        case MESA_SHADER_FRAGMENT:
                 v3d->dirty |= V3D_DIRTY_FRAGTEX;
                 break;
-        case PIPE_SHADER_COMPUTE:
+        case MESA_SHADER_COMPUTE:
                 v3d->dirty |= V3D_DIRTY_COMPTEX;
                 break;
         default:
-                unreachable("Unsupported shader stage");
+                UNREACHABLE("Unsupported shader stage");
         }
 }
 
@@ -366,6 +366,38 @@ v3d_get_sample_position(struct pipe_context *pctx,
         }
 }
 
+static uint32_t
+v3d_get_reset_count(struct v3d_context *v3d, bool per_context)
+{
+        struct drm_v3d_get_param reset_counter = {
+                .param = per_context ? DRM_V3D_PARAM_CONTEXT_RESET_COUNTER :
+                                       DRM_V3D_PARAM_GLOBAL_RESET_COUNTER,
+        };
+        ASSERTED int ret =
+                v3d_ioctl(v3d->fd, DRM_IOCTL_V3D_GET_PARAM, &reset_counter);
+        assert(!ret);
+
+        return reset_counter.value;
+}
+
+static enum pipe_reset_status
+v3d_get_device_reset_status(struct pipe_context *pctx)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+
+        uint32_t global_reset_count = v3d_get_reset_count(v3d, false);
+        if (global_reset_count == v3d->global_reset_count)
+                return PIPE_NO_RESET;
+        v3d->global_reset_count = global_reset_count;
+
+        uint32_t context_reset_count = v3d_get_reset_count(v3d, true);
+        if (context_reset_count == v3d->context_reset_count)
+                return PIPE_INNOCENT_CONTEXT_RESET;
+        v3d->context_reset_count = context_reset_count;
+
+        return PIPE_GUILTY_CONTEXT_RESET;
+}
+
 bool
 v3d_render_condition_check(struct v3d_context *v3d)
 {
@@ -432,6 +464,13 @@ v3d_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         v3d->fd = screen->fd;
 
         slab_create_child(&v3d->transfer_pool, &screen->transfer_pool);
+
+        v3d->robust_buffer = flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS;
+        if (screen->devinfo.has_reset_counter) {
+                pctx->get_device_reset_status = v3d_get_device_reset_status;
+                v3d->global_reset_count = v3d_get_reset_count(v3d, false);
+                v3d->context_reset_count = v3d_get_reset_count(v3d, true);
+        }
 
         v3d->uploader = u_upload_create_default(&v3d->base);
         v3d->base.stream_uploader = v3d->uploader;

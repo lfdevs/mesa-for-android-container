@@ -48,7 +48,7 @@ svga_create_compute_state(struct pipe_context *pipe,
    struct svga_shader *shader = &cs->base;
    shader->id = svga->debug.shader_id++;
    shader->type = PIPE_SHADER_IR_TGSI;
-   shader->stage = PIPE_SHADER_COMPUTE;
+   shader->stage = MESA_SHADER_COMPUTE;
 
    /* Collect shader basic info */
    svga_tgsi_scan_shader(&cs->base);
@@ -73,7 +73,7 @@ svga_bind_compute_state(struct pipe_context *pipe, void *shader)
    svga->dirty |= SVGA_NEW_CS;
 
    /* Check if the shader uses samplers */
-   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_COMPUTE,
+   svga_set_curr_shader_use_samplers_flag(svga, MESA_SHADER_COMPUTE,
                                           svga_shader_use_samplers(&cs->base));
 }
 

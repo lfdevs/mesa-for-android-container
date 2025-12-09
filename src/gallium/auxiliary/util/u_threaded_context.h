@@ -476,7 +476,7 @@ struct tc_renderpass_info {
       uint8_t data8[8];
    };
    /* only valid if has_resolve is true and the resolve member of pipe_framebuffer_state is NULL */
-   struct pipe_resource *resolve;
+   struct pipe_resource *resolve[2]; //[color, depth]
 };
 
 static inline bool
@@ -531,6 +531,7 @@ struct tc_batch {
    uint64_t slots[TC_SLOTS_PER_BATCH];
    struct util_dynarray renderpass_infos;
 #if !defined(NDEBUG)
+   bool tc_set_vertex_elements_for_call_pending;
    bool closed;
 #endif
 };
@@ -597,6 +598,7 @@ struct threaded_context {
    bool use_forced_staging_uploads;
    bool add_all_gfx_bindings_to_buffer_list;
    bool add_all_compute_bindings_to_buffer_list;
+   bool add_all_mesh_bindings_to_buffer_list;
    uint8_t num_queries_active;
 
    /* Estimation of how much vram/gtt bytes are mmap'd in
@@ -626,6 +628,7 @@ struct threaded_context {
    bool seen_tcs;
    bool seen_tes;
    bool seen_gs;
+   bool seen_ts;
    /* whether the current renderpass has seen a set_framebuffer_state call */
    bool seen_fb_state;
    /* whether a renderpass is currently active */
@@ -636,9 +639,9 @@ struct threaded_context {
    bool flushing;
 
    bool seen_streamout_buffers;
-   bool seen_shader_buffers[PIPE_SHADER_TYPES];
-   bool seen_image_buffers[PIPE_SHADER_TYPES];
-   bool seen_sampler_buffers[PIPE_SHADER_TYPES];
+   bool seen_shader_buffers[MESA_SHADER_MESH_STAGES];
+   bool seen_image_buffers[MESA_SHADER_MESH_STAGES];
+   bool seen_sampler_buffers[MESA_SHADER_MESH_STAGES];
 
    int8_t last_completed;
    int8_t batch_generation;
@@ -652,8 +655,8 @@ struct threaded_context {
    unsigned fb_layers;
 
 #if TC_RESOLVE_STRICT
-   uint16_t fb_width;
-   uint16_t fb_height;
+   unsigned fb_width;
+   unsigned fb_height;
 #endif
 
    unsigned last, next, next_buf_list;
@@ -669,12 +672,12 @@ struct threaded_context {
     */
    uint32_t vertex_buffers[PIPE_MAX_ATTRIBS];
    uint32_t streamout_buffers[PIPE_MAX_SO_BUFFERS];
-   uint32_t const_buffers[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
-   uint32_t shader_buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
-   uint32_t image_buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];
-   uint32_t shader_buffers_writeable_mask[PIPE_SHADER_TYPES];
-   uint64_t image_buffers_writeable_mask[PIPE_SHADER_TYPES];
-   uint32_t sampler_buffers[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   uint32_t const_buffers[MESA_SHADER_MESH_STAGES][PIPE_MAX_CONSTANT_BUFFERS];
+   uint32_t shader_buffers[MESA_SHADER_MESH_STAGES][PIPE_MAX_SHADER_BUFFERS];
+   uint32_t image_buffers[MESA_SHADER_MESH_STAGES][PIPE_MAX_SHADER_IMAGES];
+   uint32_t shader_buffers_writeable_mask[MESA_SHADER_MESH_STAGES];
+   uint64_t image_buffers_writeable_mask[MESA_SHADER_MESH_STAGES];
+   uint32_t sampler_buffers[MESA_SHADER_MESH_STAGES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    struct tc_batch batch_slots[TC_MAX_BATCHES];
    struct tc_buffer_list buffer_lists[TC_MAX_BUFFER_LISTS];
@@ -685,6 +688,8 @@ struct threaded_context {
    struct tc_renderpass_info *renderpass_info_recording;
    /* accessed by driver thread */
    struct tc_renderpass_info *renderpass_info;
+   /* internal-only: if dsa/fs are bound between render passes */
+   void *pending_renderpass_dsa, *pending_renderpass_fs;
 };
 
 
@@ -730,7 +735,8 @@ tc_add_set_vertex_buffers_call(struct pipe_context *_pipe, unsigned count);
 
 struct pipe_vertex_buffer *
 tc_add_set_vertex_elements_and_buffers_call(struct pipe_context *_pipe,
-                                            unsigned count);
+                                            unsigned count,
+                                            bool account_for_unmaps);
 
 void
 tc_draw_vbo(struct pipe_context *_pipe, const struct pipe_draw_info *info,
@@ -860,13 +866,22 @@ tc_track_vertex_buffer(struct pipe_context *_pipe, unsigned index,
  * buffers.
  */
 static inline void
-tc_set_vertex_elements_for_call(struct pipe_vertex_buffer *buffers,
+tc_set_vertex_elements_for_call(struct pipe_context *_pipe,
+                                struct pipe_vertex_buffer *buffers,
                                 void *state)
 {
+#if !defined(NDEBUG)
+   struct threaded_context *tc = threaded_context(_pipe);
+   struct tc_batch *next = &tc->batch_slots[tc->next];
+   assert(next->tc_set_vertex_elements_for_call_pending);
+   next->tc_set_vertex_elements_for_call_pending = false;
+#endif
    void **ptr = (void**)buffers;
    ptr[-1] = state;
 }
 
+bool
+threaded_context_is_buffer_on_busy_list(struct pipe_context *_pipe, struct pipe_resource *resource);
 #ifdef __cplusplus
 }
 #endif

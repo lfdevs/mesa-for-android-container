@@ -142,6 +142,7 @@ section_end prepare_rootfs
 
 set +e
 STRUCTURED_LOG_FILE=results/job_detail.json
+export PYTHONPATH=$CI_INSTALL
 python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --update dut_job_type "${DEVICE_TYPE}"
 python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --update farm "${FARM}"
 ATTEMPTS=3

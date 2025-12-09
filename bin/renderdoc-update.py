@@ -16,7 +16,7 @@ if __name__ == '__main__':
         exit(1)
 
     file = 'include/renderdoc_app.h'
-    url = 'https://raw.githubusercontent.com/baldurk/renderdoc/v1.1/renderdoc/api/app/renderdoc_app.h'
+    url = 'https://raw.githubusercontent.com/baldurk/renderdoc/refs/tags/v1.5/renderdoc/api/app/renderdoc_app.h'
 
     print('Syncing {}...'.format(file), end=' ', flush=True)
     req = requests.get(url)

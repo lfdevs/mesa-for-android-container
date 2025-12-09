@@ -43,6 +43,7 @@ issues:
         'intel/executor': 'intel-executor'
         'iris': 'iris'
         'isl': 'ISL'
+        'kk': 'KosmicKrisp'
         'lima': 'lima'
         'lima/ppir': 'lima'
         'llvmpipe': 'llvmpipe'
@@ -62,6 +63,7 @@ issues:
         'panfrost': 'panfrost'
         'panvk': 'panvk'
         'pan/midgard': 'panfrost'
+        'poly': 'poly'
         'pvr': 'powervr'
         'r100': 'r100'
         'r200': 'r200'
@@ -268,8 +270,8 @@ merge_requests:
         '^src/intel/tools/': ['intel-tools']
         '^src/intel/vulkan/': ['ANV']
         '^src/intel/vulkan_hasvk/': ['hasvk']
+        '^src/kosmickrisp/': ['KosmicKrisp']
         '^src/loader/': ['loader']
-        '^src/mapi/': ['mapi']
         '^src/mesa/drivers/dri/i915/': ['i915']
         '^src/mesa/drivers/dri/i965/': ['i965']
         '^src/mesa/drivers/dri/nouveau/': ['vieux']
@@ -295,6 +297,7 @@ merge_requests:
         '^src/nouveau/winsys/': ['NVK']
         '^src/panfrost/': ['panfrost']
         '^src/panfrost/vulkan/': ['panvk']
+        '^src/poly/': ['poly']
         '^src/virtio/vulkan/': ['venus']
         '^src/virtio/venus-protocol/': ['venus']
         '^src/virtio/ci/': ['venus']
@@ -302,7 +305,7 @@ merge_requests:
         '^src/util/00-mesa-defaults.conf': ['drirc']
         '^src/vulkan/': ['vulkan']
         '^src/vulkan/wsi/': ['wsi']
-        '^VERSION$': ['maintainer-scripts']
+        '^VERSION$': ['mesa-release']
 
         'Android': ['android']
         'EGL': ['EGL']

@@ -4,8 +4,14 @@ nir-stress=dEQP-VK.draw.dynamic_rendering.multiple_interpolation.structured.no_s
 
 dEQP-VK.dynamic_rendering.graphics_pipeline_library.dedicated_allocation.formats..*.input.load.dont_care.draw
 dEQP-VK.dynamic_rendering.graphics_pipeline_library.suballocation.formats..*.input.load.dont_care.draw
+dEQP-VK.dynamic_rendering.graphics_pipeline_library.suballocation.formats.a8b8g8r8_unorm_pack32.input.load.store.self_dep_clear_draw
+dEQP-VK.dynamic_rendering.partial_secondary_cmd_buff.suballocation.subpass_dependencies.separate_channels.r8g8b8a8_unorm
 dEQP-VK.dynamic_rendering.primary_cmd_buff.dedicated_allocation.formats..*.input.load.dont_care.draw
+dEQP-VK.dynamic_rendering.primary_cmd_buff.dedicated_allocation.formats.r8g8b8a8_unorm.input.load.store.self_dep_draw
 dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats..*.input.load.dont_care.draw
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats..*.input.load.store.self_dep_clear_draw
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8g8b8a8_unorm.input.dont_care.store.self_dep_draw
+dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8g8b8a8_unorm.input.dont_care.store.self_dep_draw
 
 dEQP-VK.rasterization.culling.front_triangle_fan_point
 dEQP-VK.rasterization.primitives.dynamic_stipple.smooth_lines_with_adjacency_wide

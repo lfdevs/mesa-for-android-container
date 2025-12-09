@@ -389,7 +389,7 @@ nv50_compute_validate_surfaces(struct nv50_context *nv50)
          PUSH_DATAh(push, res->address + buffer->buffer_offset);
          PUSH_DATA (push, res->address + buffer->buffer_offset);
          PUSH_DATA (push, 0); /* pitch? */
-         PUSH_DATA (push, ALIGN(buffer->buffer_size, 256) - 1);
+         PUSH_DATA (push, align(buffer->buffer_size, 256) - 1);
          PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
          BCTX_REFN(nv50->bufctx_cp, CP_BUF, res, RDWR);
          util_range_add(&res->base, &res->valid_buffer_range,
@@ -420,7 +420,7 @@ nv50_compute_validate_surfaces(struct nv50_context *nv50)
             PUSH_DATAh(push, address);
             PUSH_DATA (push, address);
             PUSH_DATA (push, 0); /* pitch? */
-            PUSH_DATA (push, ALIGN(view->u.buf.size, 0x100) - 1);
+            PUSH_DATA (push, align(view->u.buf.size, 0x100) - 1);
             PUSH_DATA (push, NV50_COMPUTE_GLOBAL_MODE_LINEAR);
          } else {
             struct nv50_miptree *mt = nv50_miptree(view->resource);

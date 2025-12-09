@@ -134,11 +134,11 @@ modifier_is_supported(const struct intel_device_info *devinfo,
          return false;
       break;
    case I915_FORMAT_MOD_4_TILED_LNL_CCS:
-      if (devinfo->platform != INTEL_PLATFORM_LNL)
+      if (devinfo->ver < 20 || devinfo->has_local_mem)
          return false;
       break;
    case I915_FORMAT_MOD_4_TILED_BMG_CCS:
-      if (devinfo->platform != INTEL_PLATFORM_BMG)
+      if (devinfo->ver < 20 || !devinfo->has_local_mem)
          return false;
       break;
    case DRM_FORMAT_MOD_INVALID:
@@ -756,7 +756,7 @@ target_to_isl_surf_dim(enum pipe_texture_target target)
    case PIPE_MAX_TEXTURE_TYPES:
       break;
    }
-   unreachable("invalid texture type");
+   UNREACHABLE("invalid texture type");
 }
 
 static bool
@@ -801,6 +801,18 @@ iris_resource_configure_main(const struct iris_screen *screen,
    isl_surf_usage_flags_t usage = 0;
 
    if (res->mod_info && !isl_drm_modifier_has_aux(modifier))
+      usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+
+   /* On pre-Xe2 platforms, we still have a chance to disable CCS compression
+    * in the first query (iris_resource_disable_aux_on_first_query). But that
+    * function won't work on Xe2+ platforms because the compression state has
+    * been set in bo's allocation. We have to disable compression since the
+    * beginning of the image's life cycle in the below case on Xe2, unless a
+    * complicated bo or VMA manipulation is implemented. That is probably
+    * unworthy.
+    */
+   else if (screen->devinfo->ver >= 20 && !res->mod_info &&
+            (templ->bind & PIPE_BIND_SHARED))
       usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
 
    else if (!res->mod_info && res->external_format != PIPE_FORMAT_NONE)
@@ -968,23 +980,35 @@ iris_resource_init_aux_buf(struct iris_screen *screen,
 {
    const struct intel_device_info *devinfo = screen->devinfo;
 
-   if (isl_aux_usage_has_ccs(res->aux.usage) && devinfo->ver <= 11) {
-      /* Initialize the CCS on BDW-ICL to the PASS_THROUGH state. This avoids
-       * the need to ambiguate in some cases.
-       */
+   bool zero_aux = res->bo->zeroed;
+
+   /* Initialize CCS on BDW-ICL to the PASS_THROUGH state. We don't make use
+    * of the RESOLVED state for CCS, so this ensures that we won't have to
+    * perform an ambiguate operation.
+    */
+   if (isl_aux_usage_has_ccs(res->aux.usage) && devinfo->ver <= 11)
+      zero_aux = true;
+
+   /* Initialize HiZ on BDW-ICL to the CLEAR state. This allows us to skip
+    * initializing fast-clears and this ensures that we won't have to perform
+    * an ambiguate operation. Ambiguates are not allowed on non-8x4-aligned
+    * LODs for BDW and SKL.
+    */
+   if (res->aux.usage == ISL_AUX_USAGE_HIZ && devinfo->ver <= 11)
+      zero_aux = true;
+
+   if (zero_aux != res->bo->zeroed) {
       void* map = iris_bo_map(NULL, res->bo, MAP_WRITE | MAP_RAW);
       if (!map)
          return false;
 
       memset((char*)map + res->aux.offset, 0, res->aux.surf.size_B);
       iris_bo_unmap(res->bo);
-
-      res->aux.state = create_aux_state_map(res, ISL_AUX_STATE_PASS_THROUGH);
-   } else {
-      const enum isl_aux_state initial_state =
-         isl_aux_get_initial_state(devinfo, res->aux.usage, res->bo->zeroed);
-      res->aux.state = create_aux_state_map(res, initial_state);
    }
+
+   const enum isl_aux_state initial_state =
+      isl_aux_get_initial_state(devinfo, res->aux.usage, zero_aux);
+   res->aux.state = create_aux_state_map(res, initial_state);
    if (!res->aux.state)
       return false;
 
@@ -1339,7 +1363,7 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
                                              whandle->handle, flags);
       break;
    default:
-      unreachable("invalid winsys handle type");
+      UNREACHABLE("invalid winsys handle type");
    }
    if (!res->bo)
       goto fail;
@@ -1660,7 +1684,8 @@ iris_flush_resource(struct pipe_context *ctx, struct pipe_resource *resource)
 }
 
 static void
-iris_resource_disable_aux_on_first_query(struct pipe_resource *resource,
+iris_resource_disable_aux_on_first_query(struct iris_screen *screen,
+                                         struct pipe_resource *resource,
                                          unsigned usage)
 {
    struct iris_resource *res = (struct iris_resource *)resource;
@@ -1674,6 +1699,7 @@ iris_resource_disable_aux_on_first_query(struct pipe_resource *resource,
    if (!mod_with_aux &&
       (!(usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH) && res->aux.usage != 0) &&
        p_atomic_read(&resource->reference.count) == 1) {
+         assert(screen->devinfo->ver < 20);
          iris_resource_disable_aux(res);
    }
 }
@@ -1705,7 +1731,7 @@ iris_resource_get_param(struct pipe_screen *pscreen,
    bool result;
    unsigned handle;
 
-   iris_resource_disable_aux_on_first_query(resource, handle_usage);
+   iris_resource_disable_aux_on_first_query(screen, resource, handle_usage);
 
    struct iris_bo *bo = wants_cc ? res->aux.clear_color_bo :
                         wants_aux ? res->aux.bo : res->bo;
@@ -1831,7 +1857,7 @@ iris_resource_get_handle(struct pipe_screen *pscreen,
    bool mod_with_aux =
       res->mod_info && isl_drm_modifier_has_aux(res->mod_info->modifier);
 
-   iris_resource_disable_aux_on_first_query(resource, usage);
+   iris_resource_disable_aux_on_first_query(screen, resource, usage);
 
    assert(iris_bo_is_real(res->bo));
 
@@ -2228,7 +2254,7 @@ iris_map_tiled_memcpy(struct iris_transfer *map)
    struct iris_resource *res = (struct iris_resource *) xfer->resource;
    struct isl_surf *surf = &res->surf;
 
-   xfer->stride = ALIGN(surf->row_pitch_B, 16);
+   xfer->stride = align(surf->row_pitch_B, 16);
    xfer->layer_stride = xfer->stride * box->height;
 
    unsigned x1, x2, y1, y2;

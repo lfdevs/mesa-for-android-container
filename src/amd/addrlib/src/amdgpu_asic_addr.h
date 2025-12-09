@@ -27,12 +27,12 @@
 #define FAMILY_NV      0x8F //# 143 / Navi: 10
 #define FAMILY_VGH     0x90 //# 144 / Van Gogh
 #define FAMILY_NV3     0x91 //# 145 / Navi: 3x
-#define FAMILY_GFX1150 0x96
+#define FAMILY_STX     0x96
 #define FAMILY_PHX     0x94 //# 148 / Phoenix
 #define FAMILY_RMB     0x92 //# 146 / Rembrandt
 #define FAMILY_RPL     0x95 //# 149 / Raphael
 #define FAMILY_MDN     0x97 //# 151 / Mendocino
-#define FAMILY_GFX12   0x98
+#define FAMILY_NV4     0x98
 
 // AMDGPU_FAMILY_IS(familyId, familyName)
 #define FAMILY_IS(f, fn)     (f == FAMILY_##fn)
@@ -101,9 +101,9 @@
 #define AMDGPU_NAVI31_RANGE     0x01, 0x10 //# 01 <= x < 16
 #define AMDGPU_NAVI32_RANGE     0x20, 0xFF //# 32 <= x < 255
 #define AMDGPU_NAVI33_RANGE     0x10, 0x20 //# 16 <= x < 32
-#define AMDGPU_GFX1150_RANGE    0x01, 0x40 //# 1 <= x < 64
-#define AMDGPU_GFX1151_RANGE    0xC0, 0xFF //# 192 <= x < 255
-#define AMDGPU_GFX1152_RANGE    0x40, 0x50 //# 64 <= x < 80
+#define AMDGPU_STRIX1_RANGE     0x01, 0x40 //# 1 <= x < 64
+#define AMDGPU_STRIX_HALO_RANGE 0xC0, 0xFF //# 192 <= x < 255
+#define AMDGPU_KRACKAN1_RANGE   0x40, 0x50 //# 64 <= x < 80
 #define AMDGPU_GFX1153_RANGE    0x50, 0xC0 //# 80 <= x < 192
 #define AMDGPU_PHOENIX1_RANGE      0x01, 0x80 //# 1 <= x < 128
 #define AMDGPU_PHOENIX2_RANGE      0x80, 0xC0 //# 128 <= x < 192
@@ -181,9 +181,9 @@
 #define ASICREV_IS_NAVI31_P(r)         ASICREV_IS(r, NAVI31)
 #define ASICREV_IS_NAVI32_P(r)         ASICREV_IS(r, NAVI32)
 #define ASICREV_IS_NAVI33_P(r)         ASICREV_IS(r, NAVI33)
-#define ASICREV_IS_GFX1150(r)          ASICREV_IS(r, GFX1150)
-#define ASICREV_IS_GFX1151(r)          ASICREV_IS(r, GFX1151)
-#define ASICREV_IS_GFX1152(r)          ASICREV_IS(r, GFX1152)
+#define ASICREV_IS_STRIX1(r)           ASICREV_IS(r, STRIX1)
+#define ASICREV_IS_STRIX_HALO(r)       ASICREV_IS(r, STRIX_HALO)
+#define ASICREV_IS_KRACKAN1(r)         ASICREV_IS(r, KRACKAN1)
 #define ASICREV_IS_GFX1153(r)          ASICREV_IS(r, GFX1153)
 #define ASICREV_IS_PHOENIX(r)          ASICREV_IS(r, PHOENIX)
 #define ASICREV_IS_PHOENIX2(r)         ASICREV_IS(r, PHOENIX2)

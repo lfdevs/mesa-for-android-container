@@ -23,10 +23,16 @@
 
 #include "u_perfetto.h"
 
+#ifndef ANDROID_LIBPERFETTO
 #include <perfetto.h>
+#else
+#include <perfetto/tracing.h>
+#endif
 
 #include "c11/threads.h"
+#include "util/u_call_once.h"
 #include "util/macros.h"
+#include "util/timespec.h"
 
 /* perfetto requires string literals */
 #define UTIL_PERFETTO_CATEGORY_DEFAULT_STR "mesa.default"
@@ -59,6 +65,10 @@ clockid_to_perfetto_clock(UNUSED perfetto_clock_id clock)
 #endif
 }
 
+/* Default clock domain used for timestamps when not using the 'full'
+ * functions (which take an explicit timestamp and clock id). */
+static perfetto_clock_id util_perfetto_default_clock = CLOCK_BOOTTIME;
+
 static void
 util_perfetto_update_tracing_state(void)
 {
@@ -67,17 +77,46 @@ util_perfetto_update_tracing_state(void)
 }
 
 void
+util_perfetto_set_default_clock(perfetto_clock_id clock)
+{
+   p_atomic_set(&util_perfetto_default_clock, clock);
+}
+
+static perfetto_clock_id
+util_perfetto_get_default_clock()
+{
+   return p_atomic_read_relaxed(&util_perfetto_default_clock);
+}
+
+static perfetto::TraceTimestamp
+util_perfetto_now(perfetto_clock_id clock)
+{
+   uint32_t perfetto_clock = clockid_to_perfetto_clock(clock);
+#if DETECT_OS_POSIX
+   struct timespec time;
+   clock_gettime(clock, &time);
+   uint64_t timestamp = timespec_to_nsec(&time);
+#else
+   uint64_t timestamp = perfetto::base::GetWallTimeRawNs().count();
+#endif
+   return perfetto::TraceTimestamp{perfetto_clock, timestamp};
+}
+
+void
 util_perfetto_trace_begin(const char *name)
 {
    TRACE_EVENT_BEGIN(
       UTIL_PERFETTO_CATEGORY_DEFAULT_STR, nullptr,
+      util_perfetto_now(util_perfetto_get_default_clock()),
       [&](perfetto::EventContext ctx) { ctx.event()->set_name(name); });
 }
 
 void
 util_perfetto_trace_end(void)
 {
-   TRACE_EVENT_END(UTIL_PERFETTO_CATEGORY_DEFAULT_STR);
+   TRACE_EVENT_END(
+      UTIL_PERFETTO_CATEGORY_DEFAULT_STR,
+      util_perfetto_now(util_perfetto_get_default_clock()) );
 
    util_perfetto_update_tracing_state();
 }
@@ -86,7 +125,9 @@ void
 util_perfetto_trace_begin_flow(const char *fname, uint64_t id)
 {
    TRACE_EVENT_BEGIN(
-      UTIL_PERFETTO_CATEGORY_DEFAULT_STR, nullptr, perfetto::Flow::ProcessScoped(id),
+      UTIL_PERFETTO_CATEGORY_DEFAULT_STR, nullptr, 
+      util_perfetto_now(util_perfetto_get_default_clock()),
+      perfetto::Flow::ProcessScoped(id),
       [&](perfetto::EventContext ctx) { ctx.event()->set_name(fname); });
 }
 
@@ -125,8 +166,11 @@ util_perfetto_trace_full_end(const char *name, uint64_t track_id, perfetto_clock
 void
 util_perfetto_counter_set(const char *name, double value)
 {
-   TRACE_COUNTER(UTIL_PERFETTO_CATEGORY_DEFAULT_STR,
-                 perfetto::DynamicString(name), value);
+   TRACE_COUNTER(
+      UTIL_PERFETTO_CATEGORY_DEFAULT_STR,
+      perfetto::DynamicString(name),
+      util_perfetto_now(util_perfetto_get_default_clock()),
+      value);
 }
 
 uint64_t

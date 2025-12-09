@@ -673,6 +673,27 @@ vn_decode_VkFramebufferCreateFlagBits(struct vn_cs_decoder *dec, VkFramebufferCr
     vn_decode_int32_t(dec, (int32_t *)val);
 }
 
+/* enum VkQueryPoolCreateFlagBits */
+
+static inline size_t
+vn_sizeof_VkQueryPoolCreateFlagBits(const VkQueryPoolCreateFlagBits *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkQueryPoolCreateFlagBits(struct vn_cs_encoder *enc, const VkQueryPoolCreateFlagBits *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkQueryPoolCreateFlagBits(struct vn_cs_decoder *dec, VkQueryPoolCreateFlagBits *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
 /* enum VkRenderPassCreateFlagBits */
 
 static inline size_t
@@ -3594,6 +3615,48 @@ vn_encode_VkDepthBiasRepresentationEXT(struct vn_cs_encoder *enc, const VkDepthB
 
 static inline void
 vn_decode_VkDepthBiasRepresentationEXT(struct vn_cs_decoder *dec, VkDepthBiasRepresentationEXT *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
+/* enum VkScopeKHR */
+
+static inline size_t
+vn_sizeof_VkScopeKHR(const VkScopeKHR *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkScopeKHR(struct vn_cs_encoder *enc, const VkScopeKHR *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkScopeKHR(struct vn_cs_decoder *dec, VkScopeKHR *val)
+{
+    vn_decode_int32_t(dec, (int32_t *)val);
+}
+
+/* enum VkComponentTypeKHR */
+
+static inline size_t
+vn_sizeof_VkComponentTypeKHR(const VkComponentTypeKHR *val)
+{
+    assert(sizeof(*val) == sizeof(int32_t));
+    return vn_sizeof_int32_t((const int32_t *)val);
+}
+
+static inline void
+vn_encode_VkComponentTypeKHR(struct vn_cs_encoder *enc, const VkComponentTypeKHR *val)
+{
+    vn_encode_int32_t(enc, (const int32_t *)val);
+}
+
+static inline void
+vn_decode_VkComponentTypeKHR(struct vn_cs_decoder *dec, VkComponentTypeKHR *val)
 {
     vn_decode_int32_t(dec, (int32_t *)val);
 }

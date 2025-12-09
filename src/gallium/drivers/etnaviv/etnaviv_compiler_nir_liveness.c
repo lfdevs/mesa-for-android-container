@@ -26,6 +26,7 @@
 
 #include "etnaviv_compiler_nir.h"
 #include "compiler/nir/nir_worklist.h"
+#include "util/sparse_bitset.h"
 
 static void
 range_include(struct live_def *def, unsigned index)
@@ -38,7 +39,6 @@ range_include(struct live_def *def, unsigned index)
 
 struct live_defs_state {
    unsigned num_defs;
-   unsigned bitset_words;
 
    nir_function_impl *impl;
    nir_block *block; /* current block pointer */
@@ -54,13 +54,8 @@ static bool
 init_liveness_block(nir_block *block,
                     struct live_defs_state *state)
 {
-   block->live_in = reralloc(block, block->live_in, BITSET_WORD,
-                             state->bitset_words);
-   memset(block->live_in, 0, state->bitset_words * sizeof(BITSET_WORD));
-
-   block->live_out = reralloc(block, block->live_out, BITSET_WORD,
-                              state->bitset_words);
-   memset(block->live_out, 0, state->bitset_words * sizeof(BITSET_WORD));
+   u_sparse_bitset_init(&block->live_in, state->num_defs, block);
+   u_sparse_bitset_init(&block->live_out, state->num_defs, block);
 
    nir_block_worklist_push_head(&state->worklist, block);
 
@@ -72,7 +67,7 @@ set_src_live(nir_src *src, void *void_state)
 {
    struct live_defs_state *state = void_state;
 
-   nir_instr *instr = src->ssa->parent_instr;
+   nir_instr *instr = nir_def_instr(src->ssa);
 
    if (is_sysval(instr) || instr->type == nir_instr_type_deref)
       return true;
@@ -98,7 +93,7 @@ set_src_live(nir_src *src, void *void_state)
    unsigned i = state->live_map[src_index(state->impl, src)];
    assert(i != ~0u);
 
-   BITSET_SET(state->block->live_in, i);
+   u_sparse_bitset_set(&state->block->live_in, i);
    range_include(&state->defs[i], state->index);
 
    return true;
@@ -108,12 +103,7 @@ static bool
 propagate_across_edge(nir_block *pred, nir_block *succ,
                       struct live_defs_state *state)
 {
-   BITSET_WORD progress = 0;
-   for (unsigned i = 0; i < state->bitset_words; ++i) {
-      progress |= succ->live_in[i] & ~pred->live_out[i];
-      pred->live_out[i] |= succ->live_in[i];
-   }
-   return progress != 0;
+   return u_sparse_bitset_merge(&pred->live_out, &succ->live_in);
 }
 
 unsigned
@@ -162,7 +152,6 @@ etna_live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_ma
     * ahead and allocate live_in and live_out sets and add all of the
     * blocks to the worklist.
     */
-   state.bitset_words = BITSET_WORDS(state.num_defs);
    nir_foreach_block(block, impl) {
       init_liveness_block(block, &state);
    }
@@ -181,8 +170,7 @@ etna_live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_ma
       nir_block *block = nir_block_worklist_pop_head(&state.worklist);
       state.block = block;
 
-      memcpy(block->live_in, block->live_out,
-             state.bitset_words * sizeof(BITSET_WORD));
+      u_sparse_bitset_dup(&block->live_in, &block->live_out);
 
       state.index = block_live_index[block->index + 1];
 
@@ -198,7 +186,7 @@ etna_live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_ma
              * we don't expect any partial write_mask alus
              * so clearing live_in here is OK
              */
-            BITSET_CLEAR(block->live_in, state.index);
+            u_sparse_bitset_clear(&block->live_in, state.index);
          }
 
          /* don't set_src_live for not-emitted instructions */
@@ -235,7 +223,7 @@ etna_live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_ma
        * changed, add the predecessor to the work list so that we ensure
        * that the new information is used.
        */
-      set_foreach(block->predecessors, entry) {
+      set_foreach(&block->predecessors, entry) {
          nir_block *pred = (nir_block *)entry->key;
          if (propagate_across_edge(pred, block, &state))
             nir_block_worklist_push_tail(&state.worklist, pred);
@@ -247,12 +235,10 @@ etna_live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_ma
    /* apply live_in/live_out to ranges */
 
    nir_foreach_block(block, impl) {
-      int i;
-
-      BITSET_FOREACH_SET(i, block->live_in, state.num_defs)
+      U_SPARSE_BITSET_FOREACH_SET(&block->live_in, i)
          range_include(&state.defs[i], block_live_index[block->index]);
 
-      BITSET_FOREACH_SET(i, block->live_out, state.num_defs)
+      U_SPARSE_BITSET_FOREACH_SET(&block->live_out, i)
          range_include(&state.defs[i], block_live_index[block->index + 1]);
    }
 

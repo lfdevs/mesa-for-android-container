@@ -42,6 +42,7 @@ DEPS=(
     "llvm${LLVM_VERSION}-static"
     mold
     musl-dev
+    ninja-build
     py3-clang
     py3-cparser
     py3-mako
@@ -50,7 +51,6 @@ DEPS=(
     py3-ply
     py3-yaml
     python3-dev
-    samurai
     spirv-llvm-translator-dev
     spirv-tools-dev
     util-macros
@@ -60,11 +60,17 @@ DEPS=(
 
 apk --no-cache add "${DEPS[@]}" "${EPHEMERAL[@]}"
 
+# shellcheck disable=2016  # we're not trying to evaluate $PATH now
+echo 'export PATH="/usr/lib/ninja-build/bin/:$PATH"' > /etc/profile.d/ninja-path.sh
+source /etc/profile.d/ninja-path.sh
+
 pip3 install --break-system-packages sphinx===8.2.3 hawkmoth===0.19.0
 
 . .gitlab-ci/container/container_pre_build.sh
 
 . .gitlab-ci/container/install-meson.sh
+
+. .gitlab-ci/container/build-rust.sh build
 
 EXTRA_MESON_ARGS='--prefix=/usr' \
 . .gitlab-ci/container/build-wayland.sh

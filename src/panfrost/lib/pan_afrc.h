@@ -265,7 +265,7 @@ pan_afrc_block_size_from_modifier(uint64_t modifier)
    case AFRC_FORMAT_MOD_CU_SIZE_32:
       return 32;
    default:
-      unreachable("invalid coding unit size flag in modifier");
+      UNREACHABLE("invalid coding unit size flag in modifier");
    };
 }
 
@@ -313,7 +313,7 @@ pan_afrc_buffer_alignment_from_modifier(uint64_t modifier)
    case AFRC_FORMAT_MOD_CU_SIZE_32:
       return 2048;
    default:
-      unreachable("invalid coding unit size flag in modifier");
+      UNREACHABLE("invalid coding unit size flag in modifier");
    };
 }
 
@@ -419,7 +419,7 @@ pan_afrc_block_size(uint64_t modifier, unsigned index)
    case AFRC_FORMAT_MOD_CU_SIZE_32:
       return MALI_AFRC_BLOCK_SIZE_32;
    default:
-      unreachable("invalid code unit size");
+      UNREACHABLE("invalid code unit size");
    }
 }
 #endif

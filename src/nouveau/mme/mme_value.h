@@ -62,7 +62,7 @@ mme_is_zero(struct mme_value x)
    case MME_VALUE_TYPE_ZERO:  return true;
    case MME_VALUE_TYPE_IMM:   return x.imm == 0;
    case MME_VALUE_TYPE_REG:   return false;
-   default: unreachable("Invalid MME value type");
+   default: UNREACHABLE("Invalid MME value type");
    }
 }
 

@@ -7,7 +7,7 @@ subdir('kmod')
 pixel_format_versions = ['5', '6', '7', '9', '10', '12', '13']
 libpanfrost_pixel_format = []
 
-deps_for_libpanfrost = [dep_libdrm, idep_pan_packers, idep_mesautil]
+deps_for_libpanfrost = [dep_libdrm, idep_pan_packers, idep_mesautil, libpanfrost_model_dep]
 
 foreach ver : pixel_format_versions
   libpanfrost_pixel_format += static_library(
@@ -45,7 +45,6 @@ libpanfrost_lib_files = files(
   'pan_clear.c',
   'pan_earlyzs.c',
   'pan_samples.c',
-  'pan_shader.c',
   'pan_tiler.c',
   'pan_layout.c',
   'pan_scratch.c',
@@ -60,13 +59,13 @@ libpanfrost_lib = static_library(
   include_directories : [inc_include, inc_src, inc_panfrost],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies: [dep_libdrm, idep_nir, idep_mesautil],
+  dependencies: [dep_libdrm, idep_nir, idep_mesautil, libpanfrost_model_dep],
   build_by_default : false,
   link_with: [libpanfrost_pixel_format, libpanfrost_per_arch, libpankmod_lib],
 )
 
 libpanfrost_dep = declare_dependency(
-  link_with: [libpanfrost_lib, libpanfrost_decode, libpanfrost_midgard, libpanfrost_bifrost, libpanfrost_pixel_format, libpanfrost_per_arch],
+  link_with: [libpanfrost_lib, libpanfrost_decode, libpanfrost_compiler, libpanfrost_pixel_format, libpanfrost_per_arch],
   include_directories: [inc_include, inc_src, inc_panfrost],
   dependencies: [deps_for_libpanfrost, libpankmod_dep, idep_nir],
 )
@@ -119,7 +118,7 @@ if with_tests
         'tests/test-earlyzs.cpp',
         'tests/test-layout.cpp',
       ),
-      cpp_args : [cpp_msvc_compat_args, no_override_init_args],
+      cpp_args : cpp_msvc_compat_args,
       gnu_symbol_visibility : 'hidden',
       include_directories : [inc_include, inc_src, inc_panfrost],
       dependencies: [idep_gtest, libpanfrost_dep],

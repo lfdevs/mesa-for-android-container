@@ -52,6 +52,9 @@ nvk_memory_type_flags(const VkMemoryType *type,
    if (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
       flags |= NVKMD_MEM_CAN_MAP;
 
+   if (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+      flags |= NVKMD_MEM_COHERENT;
+
    if (handle_types != 0)
       flags |= NVKMD_MEM_SHARED;
 
@@ -130,6 +133,11 @@ nvk_AllocateMemory(VkDevice device,
    struct nvk_device_memory *mem;
    VkResult result = VK_SUCCESS;
 
+   mem = vk_device_memory_create(&dev->vk, pAllocateInfo,
+                                 pAllocator, sizeof(*mem));
+   if (!mem)
+      return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+
    const VkImportMemoryFdInfoKHR *fd_info =
       vk_find_struct_const(pAllocateInfo->pNext, IMPORT_MEMORY_FD_INFO_KHR);
    const VkExportMemoryAllocateInfo *export_info =
@@ -147,15 +155,15 @@ nvk_AllocateMemory(VkDevice device,
 
    const enum nvkmd_mem_flags flags = nvk_memory_type_flags(type, handle_types);
 
-   uint32_t alignment = (1ULL << 12);
-   if (flags & NVKMD_MEM_LOCAL)
-      alignment = (1ULL << 16);
+   uint32_t alignment = pdev->nvkmd->bind_align_B;
 
    uint8_t pte_kind = 0, tile_mode = 0;
-   if (dedicated_info != NULL) {
+   if (dedicated_info != NULL && dedicated_info->image != VK_NULL_HANDLE) {
       VK_FROM_HANDLE(nvk_image, image, dedicated_info->image);
-      if (image != NULL &&
-          image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+
+      mem->dedicated_image = image;
+
+      if (image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
          /* This image might be shared with GL so we need to set the BO flags
           * such that GL can bind and use it.
           */
@@ -168,11 +176,6 @@ nvk_AllocateMemory(VkDevice device,
 
    const uint64_t aligned_size =
       align64(pAllocateInfo->allocationSize, alignment);
-
-   mem = vk_device_memory_create(&dev->vk, pAllocateInfo,
-                                 pAllocator, sizeof(*mem));
-   if (!mem)
-      return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    const bool is_import = fd_info && fd_info->handleType;
    if (is_import) {
@@ -237,6 +240,7 @@ nvk_AllocateMemory(VkDevice device,
             goto fail_mem;
 
          memset(map, use_zero ? 0 : 0xF1, mem->mem->size_B);
+         nvkmd_mem_sync_map_to_gpu(mem->mem, 0, mem->mem->size_B);
          nvkmd_mem_unmap(mem->mem, 0);
       } else {
          result = nvk_upload_queue_fill(dev, &dev->upload,
@@ -389,6 +393,45 @@ nvk_FlushMappedMemoryRanges(VkDevice device,
                             uint32_t memoryRangeCount,
                             const VkMappedMemoryRange *pMemoryRanges)
 {
+   VK_FROM_HANDLE(nvk_device, dev, device);
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   const uint32_t nc_atom_size_B = pdev->info.nc_atom_size_B;
+
+   for (uint32_t i = 0; i < memoryRangeCount; i++) {
+      const VkMappedMemoryRange *range = &pMemoryRanges[i];
+      VK_FROM_HANDLE(nvk_device_memory, mem, range->memory);
+
+      /* From the Vulkan 1.4.305 spec:
+       *
+       *    "offset must be a multiple of
+       *    VkPhysicalDeviceLimits::nonCoherentAtomSize"
+       */
+      assert(range->offset % nc_atom_size_B == 0);
+
+      /* From the Vulkan 1.4.305 spec:
+       *
+       *    "If size is equal to VK_WHOLE_SIZE, the end of the current mapping
+       *    of memory must either be a multiple of
+       *    VkPhysicalDeviceLimits::nonCoherentAtomSize bytes from the
+       *    beginning of the memory object, or be equal to the end of the
+       *    memory object"
+       *
+       *    "If size is not equal to VK_WHOLE_SIZE, size must either be a
+       *    multiple of VkPhysicalDeviceLimits::nonCoherentAtomSize, or offset
+       *    plus size must equal the size of memory"
+       *
+       * Ensure that either the size is aligned or the range is the full
+       * object.
+       */
+      VkDeviceSize size =
+         vk_device_memory_range(&mem->vk, range->offset, range->size);
+      assert(size % nc_atom_size_B == 0 ||
+             (range->offset + size) == mem->vk.size);
+      size = ALIGN_POT(size, mem->mem->dev->pdev->dev_info.nc_atom_size_B);
+
+      nvkmd_mem_sync_client_map_to_gpu(mem->mem, range->offset, size);
+   }
+
    return VK_SUCCESS;
 }
 
@@ -397,6 +440,45 @@ nvk_InvalidateMappedMemoryRanges(VkDevice device,
                                  uint32_t memoryRangeCount,
                                  const VkMappedMemoryRange *pMemoryRanges)
 {
+   VK_FROM_HANDLE(nvk_device, dev, device);
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   const uint32_t nc_atom_size_B = pdev->info.nc_atom_size_B;
+
+   for (uint32_t i = 0; i < memoryRangeCount; i++) {
+      const VkMappedMemoryRange *range = &pMemoryRanges[i];
+      VK_FROM_HANDLE(nvk_device_memory, mem, range->memory);
+
+      /* From the Vulkan 1.4.305 spec:
+       *
+       *    "offset must be a multiple of
+       *    VkPhysicalDeviceLimits::nonCoherentAtomSize"
+       */
+      assert(range->offset % nc_atom_size_B == 0);
+
+      /* From the Vulkan 1.4.305 spec:
+       *
+       *    "If size is equal to VK_WHOLE_SIZE, the end of the current mapping
+       *    of memory must either be a multiple of
+       *    VkPhysicalDeviceLimits::nonCoherentAtomSize bytes from the
+       *    beginning of the memory object, or be equal to the end of the
+       *    memory object"
+       *
+       *    "If size is not equal to VK_WHOLE_SIZE, size must either be a
+       *    multiple of VkPhysicalDeviceLimits::nonCoherentAtomSize, or offset
+       *    plus size must equal the size of memory"
+       *
+       * Ensure that either the size is aligned or the range is the full
+       * object.
+       */
+      VkDeviceSize size =
+         vk_device_memory_range(&mem->vk, range->offset, range->size);
+      assert(size % nc_atom_size_B == 0 ||
+             (range->offset + size) == mem->vk.size);
+      size = ALIGN_POT(size, mem->mem->dev->pdev->dev_info.nc_atom_size_B);
+
+      nvkmd_mem_sync_client_map_from_gpu(mem->mem, range->offset, size);
+   }
+
    return VK_SUCCESS;
 }
 
@@ -433,7 +515,6 @@ nvk_GetDeviceMemoryOpaqueCaptureAddress(
    UNUSED VkDevice device,
    const VkDeviceMemoryOpaqueCaptureAddressInfo* pInfo)
 {
-   VK_FROM_HANDLE(nvk_device_memory, mem, pInfo->memory);
-
-   return mem->mem->va->addr;
+   /* Addresses are replayed at buffer and image creation, not memory. */
+   return 0;
 }

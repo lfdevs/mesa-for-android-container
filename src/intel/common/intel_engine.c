@@ -38,7 +38,7 @@ intel_engine_get_info(int fd, enum intel_kmd_type type)
    case INTEL_KMD_TYPE_XE:
       return xe_engine_get_info(fd);
    default:
-      unreachable("Missing");
+      UNREACHABLE("Missing");
       return NULL;
    }
 }
@@ -85,7 +85,7 @@ is_guc_semaphore_functional(int fd, const struct intel_device_info *info)
    case INTEL_KMD_TYPE_XE:
       return xe_engines_is_guc_semaphore_functional(fd, info);
    default:
-      unreachable("Missing");
+      UNREACHABLE("Missing");
       return false;
    }
 }

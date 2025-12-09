@@ -254,7 +254,7 @@ kernel_has_dynamic_config_support(struct intel_perf_config *perf, int fd)
    case INTEL_KMD_TYPE_XE:
       return true;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return false;
    }
 }
@@ -284,7 +284,7 @@ kmd_add_config(struct intel_perf_config *perf, int fd,
    case INTEL_KMD_TYPE_XE:
       return xe_add_config(perf, fd, config, guid);
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return 0;
    }
 }
@@ -325,6 +325,9 @@ compute_topology_builtins(struct intel_perf_config *perf)
    perf->sys_vars.n_l3_banks = devinfo->l3_banks;
    perf->sys_vars.n_l3_nodes = devinfo->l3_banks / 4;
    perf->sys_vars.n_sq_idis =  devinfo->num_slices;
+   perf->sys_vars.n_depth_pipes = devinfo->num_depth_pipes;
+   perf->sys_vars.n_geom_pipes = devinfo->num_geom_pipes;
+   perf->sys_vars.n_color_pipes = devinfo->num_color_pipes;
 
    perf->sys_vars.n_eu_slice0123 = 0;
    for (int s = 0; s < MIN2(4, devinfo->max_slices); s++) {
@@ -383,7 +386,7 @@ init_oa_sys_vars(struct intel_perf_config *perf,
          max_file = "device/tile0/gt0/freq0/max_freq";
          break;
       default:
-         unreachable("missing");
+         UNREACHABLE("missing");
          return false;
       }
 
@@ -716,7 +719,7 @@ oa_metrics_available(struct intel_perf_config *perf, int fd,
       oa_metrics_available = xe_oa_metrics_available(perf, fd, use_register_snapshots);
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       break;
    }
 
@@ -780,7 +783,7 @@ intel_perf_load_configuration(struct intel_perf_config *perf_cfg, int fd, const 
    case INTEL_KMD_TYPE_I915:
       return i915_perf_load_configurations(perf_cfg, fd, guid);
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return NULL;
    }
 }
@@ -845,7 +848,7 @@ intel_perf_remove_configuration(struct intel_perf_config *perf_cfg, int fd,
       xe_remove_config(perf_cfg, fd, config_id);
       break;
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
    }
 }
 
@@ -1239,7 +1242,7 @@ intel_perf_query_result_read_gt_frequency(struct intel_perf_query_result *result
       result->gt_frequency[1] = GET_FIELD(end, GFX9_RPSTAT0_CURR_GT_FREQ) * 50ULL / 3ULL;
       break;
    default:
-      unreachable("unexpected gen");
+      UNREACHABLE("unexpected gen");
    }
 
    /* Put the numbers into Hz. */
@@ -1280,7 +1283,7 @@ query_accumulator_offset(const struct intel_perf_query_info *query,
    case INTEL_PERF_QUERY_FIELD_TYPE_SRM_OA_PEC:
       return query->pec_offset + index;
    default:
-      unreachable("Invalid register type");
+      UNREACHABLE("Invalid register type");
       return 0;
    }
 }
@@ -1568,7 +1571,7 @@ intel_perf_get_oa_format(struct intel_perf_config *perf_cfg)
    case INTEL_KMD_TYPE_XE:
       return xe_perf_get_oa_format(perf_cfg);
    default:
-      unreachable("missing");
+      UNREACHABLE("missing");
       return 0;
    }
 }
@@ -1591,7 +1594,7 @@ intel_perf_stream_open(struct intel_perf_config *perf_config, int drm_fd,
                                  report_format, period_exponent,
                                  hold_preemption, enable, timeline);
    default:
-         unreachable("missing");
+         UNREACHABLE("missing");
          return 0;
    }
 }
@@ -1615,7 +1618,7 @@ intel_perf_stream_read_samples(struct intel_perf_config *perf_config,
    case INTEL_KMD_TYPE_XE:
       return xe_perf_stream_read_samples(perf_config, perf_stream_fd, buffer, buffer_len);
    default:
-         unreachable("missing");
+         UNREACHABLE("missing");
          return -1;
    }
 }
@@ -1630,7 +1633,7 @@ intel_perf_stream_set_state(struct intel_perf_config *perf_config,
    case INTEL_KMD_TYPE_XE:
       return xe_perf_stream_set_state(perf_stream_fd, enable);
    default:
-         unreachable("missing");
+         UNREACHABLE("missing");
          return -1;
    }
 }
@@ -1650,7 +1653,7 @@ intel_perf_stream_set_metrics_id(struct intel_perf_config *perf_config,
                                            exec_queue, metrics_set_id,
                                            timeline);
    default:
-         unreachable("missing");
+         UNREACHABLE("missing");
          return -1;
    }
 }

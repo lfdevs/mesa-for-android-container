@@ -33,7 +33,7 @@ static inline unsigned calc_da(pco_igrp *igrp)
    switch (igrp->hdr.alutype) {
    case PCO_ALUTYPE_MAIN:
    case PCO_ALUTYPE_BITWISE: {
-      for (enum pco_op_phase p = _PCO_OP_PHASE_COUNT; p-- > 0;) {
+      pco_foreach_phase_rev (p) {
          if (igrp->hdr.alutype == PCO_ALUTYPE_BITWISE || p > PCO_OP_PHASE_1)
             da += igrp->enc.len.instrs[p];
       }
@@ -48,7 +48,7 @@ static inline unsigned calc_da(pco_igrp *igrp)
       break;
 
    default:
-      unreachable();
+      UNREACHABLE("");
    }
 
    return da;
@@ -79,7 +79,7 @@ static inline void calc_lengths(pco_igrp *igrp, unsigned *offset_bytes)
    igrp->enc.len.dests = pco_dst_bytes(igrp->variant.dest);
    total_length += igrp->enc.len.dests;
 
-   for (enum pco_op_phase phase = 0; phase < _PCO_OP_PHASE_COUNT; ++phase) {
+   pco_foreach_phase_in_igrp (igrp, phase) {
       switch (igrp->hdr.alutype) {
       case PCO_ALUTYPE_MAIN:
          if (phase == PCO_OP_PHASE_BACKEND) {
@@ -102,7 +102,7 @@ static inline void calc_lengths(pco_igrp *igrp, unsigned *offset_bytes)
          break;
 
       default:
-         unreachable();
+         UNREACHABLE("");
       }
 
       total_length += igrp->enc.len.instrs[phase];
@@ -155,8 +155,10 @@ static inline void calc_align_padding(pco_igrp *last_igrp,
       *offset_bytes += padding;
 
       /* Pad the size of the penultimate igrp. */
-      pco_igrp *penultimate_igrp =
-         list_entry(last_igrp->link.prev, pco_igrp, link);
+      pco_igrp *penultimate_igrp = pco_prev_igrp(last_igrp);
+
+      /* If we only have one igrp then its offset will be zero. */
+      assert(penultimate_igrp);
 
       penultimate_igrp->enc.len.align_padding += padding;
       penultimate_igrp->enc.len.total += padding;

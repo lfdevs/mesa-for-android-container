@@ -102,7 +102,7 @@ v3dv_get_compatible_tfu_format(struct v3dv_device *device,
    case 4:  vk_format = VK_FORMAT_R32_SFLOAT;           break;
    case 2:  vk_format = VK_FORMAT_R16_SFLOAT;           break;
    case 1:  vk_format = VK_FORMAT_R8_UNORM;             break;
-   default: unreachable("unsupported format bit-size"); break;
+   default: UNREACHABLE("unsupported format bit-size"); break;
    };
 
    if (out_vk_format)
@@ -175,6 +175,7 @@ image_format_plane_features(struct v3dv_physical_device *pdevice,
       } else if (vk_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 ||
                  vk_format == VK_FORMAT_A2R10G10B10_UNORM_PACK32 ||
                  vk_format == VK_FORMAT_A2B10G10R10_UINT_PACK32 ||
+                 vk_format == VK_FORMAT_A2R10G10B10_UINT_PACK32 ||
                  vk_format == VK_FORMAT_B10G11R11_UFLOAT_PACK32) {
          /* To comply with shaderStorageImageExtendedFormats */
          flags |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT |
@@ -302,6 +303,7 @@ buffer_format_features(VkFormat vk_format, const struct v3dv_format *v3dv_format
                VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT |
                VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT;
    } else if (vk_format == VK_FORMAT_A2B10G10R10_UINT_PACK32 ||
+              vk_format == VK_FORMAT_A2R10G10B10_UINT_PACK32 ||
               vk_format == VK_FORMAT_B10G11R11_UFLOAT_PACK32) {
       flags |= VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT |
                VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT;
@@ -541,7 +543,7 @@ get_image_format_properties(
       pImageFormatProperties->maxMipLevels = V3D_MAX_MIP_LEVELS;
       break;
    default:
-      unreachable("bad VkImageType");
+      UNREACHABLE("bad VkImageType");
    }
 
    /* Our hw doesn't support 1D compressed textures. */
@@ -676,7 +678,7 @@ v3dv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
 
    /* Extract input structs */
    vk_foreach_struct_const(s, base_info->pNext) {
-      switch (s->sType) {
+      switch ((unsigned)s->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
          external_info = (const void *) s;
          break;
@@ -695,6 +697,9 @@ v3dv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
          default:
             assert("Unknown DRM format modifier");
          }
+         break;
+      case VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA:
+         /* Do nothing, v3dv_image_init will handle it */;
          break;
       default:
          vk_debug_ignored_stype(s->sType);

@@ -191,7 +191,7 @@ depth_bias(struct d3d12_rasterizer_state *state, enum mesa_prim reduced_prim)
       return state->base.offset_point;
 
    default:
-      unreachable("unexpected fill mode");
+      UNREACHABLE("unexpected fill mode");
    }
 }
 
@@ -213,7 +213,7 @@ topology_type(enum mesa_prim reduced_prim)
 
    default:
       debug_printf("mesa_prim: %s\n", u_prim_name(reduced_prim));
-      unreachable("unexpected enum mesa_prim");
+      UNREACHABLE("unexpected enum mesa_prim");
    }
 }
 
@@ -230,8 +230,28 @@ d3d12_rtv_format(struct d3d12_context *ctx, unsigned index)
       case DXGI_FORMAT_B8G8R8A8_UNORM:
       case DXGI_FORMAT_B8G8R8X8_UNORM:
          return DXGI_FORMAT_R8G8B8A8_UINT;
+      case DXGI_FORMAT_R10G10B10A2_UNORM:
+         return DXGI_FORMAT_R10G10B10A2_UINT;
+      case DXGI_FORMAT_R16_FLOAT:
+      case DXGI_FORMAT_R16_UNORM:
+      case DXGI_FORMAT_R16_SNORM:
+         return DXGI_FORMAT_R16_UINT;
+      case DXGI_FORMAT_R16G16_FLOAT:
+      case DXGI_FORMAT_R16G16_UNORM:
+      case DXGI_FORMAT_R16G16_SNORM:
+         return DXGI_FORMAT_R16G16_UINT;
+      case DXGI_FORMAT_R16G16B16A16_FLOAT:
+      case DXGI_FORMAT_R16G16B16A16_UNORM:
+      case DXGI_FORMAT_R16G16B16A16_SNORM:
+         return DXGI_FORMAT_R16G16B16A16_UINT;
+      case DXGI_FORMAT_R32_FLOAT:
+         return DXGI_FORMAT_R32_UINT;
+      case DXGI_FORMAT_R32G32_FLOAT:
+         return DXGI_FORMAT_R32G32_UINT;
+      case DXGI_FORMAT_R32G32B32A32_FLOAT:
+         return DXGI_FORMAT_R32G32B32A32_UINT;
       default:
-         unreachable("unsupported logic-op format");
+         UNREACHABLE("unsupported logic-op format");
       }
    }
 
@@ -283,34 +303,34 @@ create_gfx_pipeline_state(struct d3d12_context *ctx)
 
    nir_shader *last_vertex_stage_nir = NULL;
 
-   if (state->stages[PIPE_SHADER_VERTEX]) {
-      auto shader = state->stages[PIPE_SHADER_VERTEX];
+   if (state->stages[MESA_SHADER_VERTEX]) {
+      auto shader = state->stages[MESA_SHADER_VERTEX];
       pso_desc.VS = D3D12_SHADER_BYTECODE { shader->bytecode, shader->bytecode_length };
       last_vertex_stage_nir = shader->nir;
    }
 
-   if (state->stages[PIPE_SHADER_TESS_CTRL]) {
-      auto shader = state->stages[PIPE_SHADER_TESS_CTRL];
+   if (state->stages[MESA_SHADER_TESS_CTRL]) {
+      auto shader = state->stages[MESA_SHADER_TESS_CTRL];
       pso_desc.HS = D3D12_SHADER_BYTECODE{ shader->bytecode, shader->bytecode_length };
       last_vertex_stage_nir = shader->nir;
    }
 
-   if (state->stages[PIPE_SHADER_TESS_EVAL]) {
-      auto shader = state->stages[PIPE_SHADER_TESS_EVAL];
+   if (state->stages[MESA_SHADER_TESS_EVAL]) {
+      auto shader = state->stages[MESA_SHADER_TESS_EVAL];
       pso_desc.DS = D3D12_SHADER_BYTECODE{ shader->bytecode, shader->bytecode_length };
       last_vertex_stage_nir = shader->nir;
    }
 
-   if (state->stages[PIPE_SHADER_GEOMETRY]) {
-      auto shader = state->stages[PIPE_SHADER_GEOMETRY];
+   if (state->stages[MESA_SHADER_GEOMETRY]) {
+      auto shader = state->stages[MESA_SHADER_GEOMETRY];
       pso_desc.GS = D3D12_SHADER_BYTECODE{ shader->bytecode, shader->bytecode_length };
       last_vertex_stage_nir = shader->nir;
    }
 
    bool last_vertex_stage_writes_pos = (last_vertex_stage_nir->info.outputs_written & VARYING_BIT_POS) != 0;
-   if (last_vertex_stage_writes_pos && state->stages[PIPE_SHADER_FRAGMENT] &&
+   if (last_vertex_stage_writes_pos && state->stages[MESA_SHADER_FRAGMENT] &&
        !state->rast->base.rasterizer_discard) {
-      auto shader = state->stages[PIPE_SHADER_FRAGMENT];
+      auto shader = state->stages[MESA_SHADER_FRAGMENT];
       pso_desc.PS = D3D12_SHADER_BYTECODE{ shader->bytecode, shader->bytecode_length };
    }
 
@@ -347,7 +367,7 @@ create_gfx_pipeline_state(struct d3d12_context *ctx)
    D3D12_INPUT_LAYOUT_DESC& input_layout = (D3D12_INPUT_LAYOUT_DESC&)pso_desc.InputLayout;
    input_layout.pInputElementDescs = state->ves->elements;
    input_layout.NumElements = state->ves->num_elements;
-   copy_input_attribs(state->ves->elements, input_attribs, &input_layout, state->stages[PIPE_SHADER_VERTEX]->nir);
+   copy_input_attribs(state->ves->elements, input_attribs, &input_layout, state->stages[MESA_SHADER_VERTEX]->nir);
 
    pso_desc.IBStripCutValue = state->ib_strip_cut_value;
 
@@ -494,7 +514,7 @@ d3d12_gfx_pipeline_state_cache_invalidate(struct d3d12_context *ctx, const void 
 
 void
 d3d12_gfx_pipeline_state_cache_invalidate_shader(struct d3d12_context *ctx,
-                                                 enum pipe_shader_type stage,
+                                                 mesa_shader_stage stage,
                                                  struct d3d12_shader_selector *selector)
 {
    struct d3d12_shader *shader = selector->first;

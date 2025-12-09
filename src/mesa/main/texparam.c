@@ -1716,8 +1716,7 @@ _mesa_legal_get_tex_level_parameter_target(struct gl_context *ctx, GLenum target
        * GetTexLevelParameter.
        */
       return (_mesa_is_desktop_gl(ctx) && ctx->Version >= 31) ||
-             _mesa_has_OES_texture_buffer(ctx) ||
-             _mesa_has_ARB_texture_buffer_range(ctx);
+             _mesa_has_texture_buffer_range(ctx);
    case GL_TEXTURE_CUBE_MAP_ARRAY:
       return _mesa_has_texture_cube_map_array(ctx);
    }
@@ -1881,8 +1880,13 @@ get_tex_level_parameter_image(struct gl_context *ctx,
       case GL_TEXTURE_COMPRESSED_IMAGE_SIZE:
          if (_mesa_is_format_compressed(texFormat) &&
              !_mesa_is_proxy_texture(target)) {
-            *params = _mesa_format_image_size(texFormat, img->Width,
-                                              img->Height, img->Depth);
+            size_t image_size = _mesa_format_image_size(texFormat, img->Width,
+                                                        img->Height, img->Depth);
+            /* OpenGL can't report compressed texture sizes greater than
+             * INT_MAX because the return parameter of glGetTexLevelParameteriv
+             * is GLint *.
+             */
+            *params = MIN2(image_size, INT_MAX);
          } else {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "glGetTex%sLevelParameter[if]v(pname=%s)", suffix,
@@ -1931,8 +1935,7 @@ get_tex_level_parameter_image(struct gl_context *ctx,
 
       /* GL_ARB_texture_buffer_object */
       case GL_TEXTURE_BUFFER_DATA_STORE_BINDING:
-         if (!_mesa_has_ARB_texture_buffer_object(ctx) &&
-             !_mesa_has_OES_texture_buffer(ctx))
+         if (!_mesa_has_texture_buffer_object(ctx))
             goto invalid_pname;
          *params = 0;
          break;
@@ -2056,14 +2059,12 @@ get_tex_level_parameter_buffer(struct gl_context *ctx,
 
       /* GL_ARB_texture_buffer_range */
       case GL_TEXTURE_BUFFER_OFFSET:
-         if (!_mesa_has_ARB_texture_buffer_range(ctx) &&
-             !_mesa_has_OES_texture_buffer(ctx))
+         if (!_mesa_has_texture_buffer_range(ctx))
             goto invalid_pname;
          *params = texObj->BufferOffset;
          break;
       case GL_TEXTURE_BUFFER_SIZE:
-         if (!_mesa_has_ARB_texture_buffer_range(ctx) &&
-             !_mesa_has_OES_texture_buffer(ctx))
+         if (!_mesa_has_texture_buffer_range(ctx))
             goto invalid_pname;
          *params = (texObj->BufferSize == -1) ? bo->Size : texObj->BufferSize;
          break;

@@ -9,3 +9,4 @@ deqp_args = [
 ]
 version_check = "GL ES 2.0.*git"
 renderer_check = "Mali-T720"
+extensions_check = "/install/panfrost-t720-gles2-extensions.txt"

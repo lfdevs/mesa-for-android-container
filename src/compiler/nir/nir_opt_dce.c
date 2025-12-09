@@ -1,28 +1,40 @@
 /*
  * Copyright © 2014 Intel Corporation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  * Authors:
  *    Connor Abbott (cwabbott0@gmail.com)
  *
+ */
+
+/* Dead Code Elimination
+ *
+ * It eliminates those instructions whose results are unused and those that
+ * have no effect on instructions with side effects (like stores).
+ * To be precise, instructions are not dead if their result is needed by
+ * non-removable instructions.
+ *
+ * The algorithm walks the shader backwards and:
+ * - marks sources of non-removable instructions as live
+ * - if an instruction is live, mark all its sources as live as well
+ * - if a loop header phi source is marked as live and the source is not in
+ *   the block preceding the loop, the loop is walked backwards again
+ *   (beucase the phi source is likely after the phi)
+ *
+ * Why looking only at the number of uses of each instruction doesn't work:
+ * There could be a loop in the def-use graph where every instructions has
+ * non-zero uses, yet all of them are dead. Example:
+ *
+ * loop {
+ *    %1 = phi %0, %2
+ *
+ *    loop {
+ *       %2 = phi %1, %0
+ *    }
+ * }
+ *
+ * In this case, both phis have non-zero uses because they use each other,
+ * but they have no effect on the shader and can be removed.
  */
 
 #include "nir.h"
@@ -56,6 +68,7 @@ is_live(BITSET_WORD *defs_live, nir_instr *instr)
 {
    switch (instr->type) {
    case nir_instr_type_call:
+   case nir_instr_type_cmat_call:
    case nir_instr_type_jump:
       return true;
    case nir_instr_type_alu: {
@@ -88,16 +101,8 @@ is_live(BITSET_WORD *defs_live, nir_instr *instr)
       nir_undef_instr *undef = nir_instr_as_undef(instr);
       return is_def_live(&undef->def, defs_live);
    }
-   case nir_instr_type_parallel_copy: {
-      nir_parallel_copy_instr *pc = nir_instr_as_parallel_copy(instr);
-      nir_foreach_parallel_copy_entry(entry, pc) {
-         if (entry->dest_is_reg || is_def_live(&entry->dest.def, defs_live))
-            return true;
-      }
-      return false;
-   }
    default:
-      unreachable("unexpected instr type");
+      UNREACHABLE("unexpected instr type");
    }
 }
 
@@ -176,7 +181,7 @@ dce_cf_list(struct exec_list *cf_list, BITSET_WORD *defs_live,
          /* Fast path if the loop has no continues: we can remove instructions
           * as we mark the others live.
           */
-         struct set *predecessors = nir_loop_first_block(loop)->predecessors;
+         struct set *predecessors = &nir_loop_first_block(loop)->predecessors;
          if (predecessors->entries == 1 &&
              _mesa_set_next_entry(predecessors, NULL)->key == inner_state.preheader) {
             progress |= dce_cf_list(&loop->body, defs_live, parent_loop, dead_instrs);
@@ -211,7 +216,7 @@ dce_cf_list(struct exec_list *cf_list, BITSET_WORD *defs_live,
          break;
       }
       case nir_cf_node_function:
-         unreachable("Invalid cf type");
+         UNREACHABLE("Invalid cf type");
       }
    }
 
@@ -223,8 +228,7 @@ nir_opt_dce_impl(nir_function_impl *impl)
 {
    assert(impl->structured);
 
-   BITSET_WORD *defs_live = rzalloc_array(NULL, BITSET_WORD,
-                                          BITSET_WORDS(impl->ssa_alloc));
+   BITSET_WORD *defs_live = BITSET_RZALLOC(NULL, impl->ssa_alloc);
 
    struct exec_list dead_instrs;
    exec_list_make_empty(&dead_instrs);

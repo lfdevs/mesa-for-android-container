@@ -128,7 +128,7 @@ static struct zink_framebuffer_clear_data *
 add_new_clear(struct zink_framebuffer_clear *fb_clear)
 {
    struct zink_framebuffer_clear_data cd = {0};
-   util_dynarray_append(&fb_clear->clears, struct zink_framebuffer_clear_data, cd);
+   util_dynarray_append(&fb_clear->clears, cd);
    return zink_fb_clear_element(fb_clear, zink_fb_clear_count(fb_clear) - 1);
 }
 
@@ -419,7 +419,7 @@ static void
 set_clear_fb(struct pipe_context *pctx, struct pipe_surface *psurf, struct pipe_surface *zsurf)
 {
    struct pipe_framebuffer_state fb_state = {0};
-   uint16_t width, height;
+   unsigned width, height;
    if (psurf)
       pipe_surface_size(psurf, &width, &height);
    else

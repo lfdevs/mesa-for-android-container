@@ -82,6 +82,7 @@ print_constant_data(FILE* output, Program* program)
    }
 }
 
+#ifndef _WIN32
 /**
  * Determines the GPU type to use for CLRXdisasm
  */
@@ -155,6 +156,7 @@ get_branch_target(char** output, Program* program, const std::vector<bool>& refe
    }
    return false;
 }
+#endif
 
 bool
 print_asm_clrx(Program* program, std::vector<uint32_t>& binary, unsigned exec_size, FILE* output)
@@ -316,14 +318,23 @@ print_asm_llvm(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
                            llvm::StringRef(block_names[block_names.size() - 1].data()), 0);
    }
 
-   const char* features = "";
+   std::string features = "";
    if (program->gfx_level >= GFX10 && program->wave_size == 64) {
-      features = "+wavefrontsize64";
+      features += "+wavefrontsize64";
    }
+
+   /* Older versions have very incomplete true16 support. */
+#if LLVM_VERSION_MAJOR >= 20
+   if (program->gfx_level >= GFX11) {
+      if (!features.empty())
+         features += ",";
+      features += "+real-true16";
+   }
+#endif
 
    LLVMDisasmContextRef disasm =
       LLVMCreateDisasmCPUFeatures("amdgcn-mesa-mesa3d", ac_get_llvm_processor_name(program->family),
-                                  features, &symbols, 0, NULL, NULL);
+                                  features.c_str(), &symbols, 0, NULL, NULL);
 
    size_t pos = 0;
    bool invalid = false;

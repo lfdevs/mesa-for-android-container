@@ -76,7 +76,7 @@ lima_ctx_buff_alloc(struct lima_context *ctx, enum lima_ctx_buff buff,
 
    cbs->size = align(size, 0x40);
 
-   u_upload_alloc(ctx->uploader, 0, cbs->size, 0x40, &cbs->offset,
+   u_upload_alloc_ref(ctx->uploader, 0, cbs->size, 0x40, &cbs->offset,
                   &cbs->res, &ret);
 
    return ret;

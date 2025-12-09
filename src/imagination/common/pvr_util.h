@@ -30,20 +30,12 @@
 #include "pvr_types.h"
 
 #include "util/bitscan.h"
-#include "util/macros.h"
+#include "util/u_math.h"
 
 static inline bool pvr_dev_addr_is_aligned(pvr_dev_addr_t addr,
                                            const uint32_t alignment)
 {
-   assert(util_is_power_of_two_nonzero(alignment));
-   return ((uintptr_t)(addr.addr) & (alignment - 1)) == 0;
-}
-
-static inline bool ptr_is_aligned(const void *const ptr,
-                                  const uint32_t alignment)
-{
-   assert(util_is_power_of_two_nonzero(alignment));
-   return ((uintptr_t)(ptr) & (alignment - 1)) == 0;
+   return util_is_aligned(addr.addr, alignment);
 }
 
 /*****************************************************************************

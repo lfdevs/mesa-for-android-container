@@ -31,22 +31,23 @@ is_mqsad_compatible(struct mqsad *mqsad, nir_scalar ref, nir_scalar src0, nir_sc
       return false;
 
    /* Ensure that this MSAD doesn't depend on any previous MSAD. */
-   nir_instr_worklist *wl = nir_instr_worklist_create();
-   nir_instr_worklist_add_ssa_srcs(wl, &msad->instr);
-   nir_foreach_instr_in_worklist(instr, wl) {
+   nir_instr_worklist wl;
+   nir_instr_worklist_init(&wl);
+   nir_instr_worklist_add_ssa_srcs(&wl, &msad->instr);
+   nir_foreach_instr_in_worklist(instr, &wl) {
       if (instr->block != msad->instr.block || instr->index < mqsad->first_msad_index)
          continue;
 
       u_foreach_bit(i, mqsad->mask) {
          if (instr == &mqsad->msad[i]->instr) {
-            nir_instr_worklist_destroy(wl);
+            nir_instr_worklist_fini(&wl);
             return false;
          }
       }
 
-      nir_instr_worklist_add_ssa_srcs(wl, instr);
+      nir_instr_worklist_add_ssa_srcs(&wl, instr);
    }
-   nir_instr_worklist_destroy(wl);
+   nir_instr_worklist_fini(&wl);
 
    return true;
 }

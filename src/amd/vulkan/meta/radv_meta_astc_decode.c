@@ -17,6 +17,7 @@ decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_ivie
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    struct radv_meta_state *state = &device->meta_state;
    struct vk_texcompress_astc_write_descriptor_buffer desc_buffer;
+   struct radv_cmd_stream *cs = cmd_buffer->cs;
    VkFormat format = src_iview->image->vk.format;
    int blk_w = vk_format_get_blockwidth(format);
    int blk_h = vk_format_get_blockheight(format);
@@ -26,7 +27,7 @@ decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_ivie
                                                     radv_image_view_to_handle(dst_iview), format);
 
    VK_FROM_HANDLE(radv_buffer, luts_buf, state->astc_decode->luts_buf);
-   radv_cs_add_buffer(device->ws, cmd_buffer->cs, luts_buf->bo);
+   radv_cs_add_buffer(device->ws, cs->b, luts_buf->bo);
 
    radv_meta_bind_descriptors(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->astc_decode->p_layout,
                               VK_TEXCOMPRESS_ASTC_WRITE_DESC_SET_COUNT, desc_buffer.descriptors);
@@ -53,16 +54,8 @@ decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_ivie
 
    radv_CmdPushConstants2(radv_cmd_buffer_to_handle(cmd_buffer), &pc_info);
 
-   struct radv_dispatch_info info = {
-      .blocks[0] = DIV_ROUND_UP(extent->width, blk_w * 2),
-      .blocks[1] = DIV_ROUND_UP(extent->height, blk_h * 2),
-      .blocks[2] = extent->depth,
-      .offsets[0] = 0,
-      .offsets[1] = 0,
-      .offsets[2] = offset->z,
-      .unaligned = 0,
-   };
-   radv_compute_dispatch(cmd_buffer, &info);
+   radv_CmdDispatchBase(radv_cmd_buffer_to_handle(cmd_buffer), 0, 0, offset->z, DIV_ROUND_UP(extent->width, blk_w * 2),
+                        DIV_ROUND_UP(extent->height, blk_h * 2), extent->depth);
 }
 
 static VkImageViewType
@@ -74,7 +67,7 @@ get_view_type(const struct radv_image *image)
    case VK_IMAGE_TYPE_3D:
       return VK_IMAGE_VIEW_TYPE_3D;
    default:
-      unreachable("bad VkImageViewType");
+      UNREACHABLE("bad VkImageViewType");
    }
 }
 
@@ -84,6 +77,7 @@ image_view_init(struct radv_device *device, struct radv_image *image, VkFormat f
 {
    VkImageViewCreateInfo iview_create_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
       .image = radv_image_to_handle(image),
       .viewType = get_view_type(image),
       .format = format,

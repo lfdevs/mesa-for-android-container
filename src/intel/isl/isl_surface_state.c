@@ -123,7 +123,7 @@ get_surftype(enum isl_surf_dim dim, isl_surf_usage_flags_t usage)
 {
    switch (dim) {
    default:
-      unreachable("bad isl_surf_dim");
+      UNREACHABLE("bad isl_surf_dim");
    case ISL_SURF_DIM_1D:
       assert(!(usage & ISL_SURF_USAGE_CUBE_BIT));
       return SURFTYPE_1D;
@@ -445,7 +445,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       s.RenderTargetViewExtent = info->view->array_len - 1;
       break;
    default:
-      unreachable("bad SurfaceType");
+      UNREACHABLE("bad SurfaceType");
    }
 
 #if GFX_VER >= 7
@@ -473,15 +473,21 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
        *    SurfaceMinLOD is ignored.
        */
       s.MIPCountLOD = info->view->base_level;
-      s.SurfaceMinLOD = 0;
    } else {
       /* For non render target surfaces, the hardware interprets field
        * MIPCount/LOD as MIPCount.  The range of levels accessible by the
        * sampler engine is [SurfaceMinLOD, SurfaceMinLOD + MIPCountLOD].
        */
-      s.SurfaceMinLOD = info->view->base_level;
       s.MIPCountLOD = MAX(info->view->levels, 1) - 1;
    }
+
+   /* As noted above, the render target cache of the HW ignores SurfaceMinLOD.
+    * But the render target surface may also get sampled when
+    * EXT_shader_framebuffer_fetch_non_coherent is in use, so we still set
+    * SurfaceMinLOD to make sure sampling the render target also hits the
+    * correct LOD.
+    */
+   s.SurfaceMinLOD = info->view->base_level;
 
 #if GFX_VER >= 9
    s.MipTailStartLOD = info->surf->miptail_start_level;
@@ -554,12 +560,24 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    s.EnableUnormPathInColorPipe = true;
 #endif
 
-   s.CubeFaceEnablePositiveZ = 1;
-   s.CubeFaceEnableNegativeZ = 1;
-   s.CubeFaceEnablePositiveY = 1;
-   s.CubeFaceEnableNegativeY = 1;
-   s.CubeFaceEnablePositiveX = 1;
-   s.CubeFaceEnableNegativeX = 1;
+   /*
+    * Bspec 57023, RENDER_SURFACE_STATE, bit fields CubeFaceEnable*
+    * states that:
+    *
+    *    This field must be programmed to 1h (enabled) whenever Surface Type is
+    *    programmed to SURFTYPE_CUBE
+    *
+    * This used to work fine for non-cube surfaces on older hardware but on
+    * Xe2+, looks like this restriction is pretty strict.
+    */
+   if (info->view->usage & ISL_SURF_USAGE_CUBE_BIT) {
+      s.CubeFaceEnablePositiveZ = 1;
+      s.CubeFaceEnableNegativeZ = 1;
+      s.CubeFaceEnablePositiveY = 1;
+      s.CubeFaceEnableNegativeY = 1;
+      s.CubeFaceEnablePositiveX = 1;
+      s.CubeFaceEnableNegativeX = 1;
+   }
 
 #if GFX_VER >= 6
    /* From the Broadwell PRM for "Number of Multisamples":
@@ -749,7 +767,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
          case ISL_FORMAT_R16_UNORM:
             break;
          default:
-            unreachable("Incompatible HiZ Sampling format");
+            UNREACHABLE("Incompatible HiZ Sampling format");
          }
       }
 
@@ -909,7 +927,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
          s.ClearValueAddressEnable = true;
          s.ClearValueAddress = info->clear_address;
 #else
-         unreachable("Only Gfx11 and Gfx12 support indirect clear colors");
+         UNREACHABLE("Only Gfx11 and Gfx12 support indirect clear colors");
 #endif
       }
 
@@ -1080,6 +1098,12 @@ isl_genX(buffer_fill_state_s)(const struct isl_device *dev, void *state,
 
 #if GFX_VERx10 >= 200
    s.EnableSamplerRoutetoLSC = isl_format_support_sampler_route_to_lsc(info->format);
+   /* Per-application override.
+    *
+    * Bspec 57023: "Enable Sampler Route to LSC" programming note states that,
+    * this bit can be set for surface type SURFTYPE_2D or SURFTYPE_BUFFER.
+    */
+   s.EnableSamplerRoutetoLSC &= dev->sampler_route_to_lsc;
 #endif /* if GFX_VERx10 >= 200 */
 
    s.SurfaceBaseAddress = info->address;

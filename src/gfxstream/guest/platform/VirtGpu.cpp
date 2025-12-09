@@ -9,6 +9,7 @@
 
 #include "Sync.h"
 #include "util/log.h"
+#include "util/os_misc.h"
 
 namespace {
 
@@ -17,7 +18,7 @@ static VirtGpuDevice* sDevice = nullptr;
 }  // namespace
 
 VirtGpuDevice* createPlatformVirtGpuDevice(enum VirtGpuCapset capset, int32_t descriptor) {
-    if (getenv("VIRTGPU_KUMQUAT")) {
+    if (os_get_option("VIRTGPU_KUMQUAT")) {
         return kumquatCreateVirtGpuDevice(capset, descriptor);
     } else {
         return osCreateVirtGpuDevice(capset, descriptor);
@@ -50,7 +51,7 @@ void VirtGpuDevice::resetInstance() {
 namespace gfxstream {
 
 SyncHelper* createPlatformSyncHelper() {
-    if (getenv("VIRTGPU_KUMQUAT")) {
+    if (os_get_option("VIRTGPU_KUMQUAT")) {
         return kumquatCreateSyncHelper();
     } else {
         return osCreateSyncHelper();

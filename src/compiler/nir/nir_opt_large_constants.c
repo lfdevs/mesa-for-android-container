@@ -36,7 +36,7 @@ read_const_values(nir_const_value *dst, const void *src,
    switch (bit_size) {
    case 1:
       /* Booleans are special-cased to be 32-bit */
-      assert(((uintptr_t)src & 0x3) == 0);
+      assert(util_ptr_is_aligned(src, 4));
       for (unsigned i = 0; i < num_components; i++)
          dst[i].b = ((int32_t *)src)[i] != 0;
       break;
@@ -47,25 +47,25 @@ read_const_values(nir_const_value *dst, const void *src,
       break;
 
    case 16:
-      assert(((uintptr_t)src & 0x1) == 0);
+      assert(util_ptr_is_aligned(src, 2));
       for (unsigned i = 0; i < num_components; i++)
          dst[i].u16 = ((int16_t *)src)[i];
       break;
 
    case 32:
-      assert(((uintptr_t)src & 0x3) == 0);
+      assert(util_ptr_is_aligned(src, 4));
       for (unsigned i = 0; i < num_components; i++)
          dst[i].u32 = ((int32_t *)src)[i];
       break;
 
    case 64:
-      assert(((uintptr_t)src & 0x7) == 0);
+      assert(util_ptr_is_aligned(src, 8));
       for (unsigned i = 0; i < num_components; i++)
          dst[i].u64 = ((int64_t *)src)[i];
       break;
 
    default:
-      unreachable("Invalid bit size");
+      UNREACHABLE("Invalid bit size");
    }
 }
 
@@ -77,7 +77,7 @@ write_const_values(void *dst, const nir_const_value *src,
    switch (bit_size) {
    case 1:
       /* Booleans are special-cased to be 32-bit */
-      assert(((uintptr_t)dst & 0x3) == 0);
+      assert(util_ptr_is_aligned(dst, 4));
       u_foreach_bit(i, write_mask)
          ((int32_t *)dst)[i] = -(int)src[i].b;
       break;
@@ -88,25 +88,25 @@ write_const_values(void *dst, const nir_const_value *src,
       break;
 
    case 16:
-      assert(((uintptr_t)dst & 0x1) == 0);
+      assert(util_ptr_is_aligned(dst, 2));
       u_foreach_bit(i, write_mask)
          ((int16_t *)dst)[i] = src[i].u16;
       break;
 
    case 32:
-      assert(((uintptr_t)dst & 0x3) == 0);
+      assert(util_ptr_is_aligned(dst, 4));
       u_foreach_bit(i, write_mask)
          ((int32_t *)dst)[i] = src[i].u32;
       break;
 
    case 64:
-      assert(((uintptr_t)dst & 0x7) == 0);
+      assert(util_ptr_is_aligned(dst, 8));
       u_foreach_bit(i, write_mask)
          ((int64_t *)dst)[i] = src[i].u64;
       break;
 
    default:
-      unreachable("Invalid bit size");
+      UNREACHABLE("Invalid bit size");
    }
 }
 
@@ -481,6 +481,10 @@ nir_opt_large_constants(nir_shader *shader,
       /* Fix up indices after we sorted. */
       info->var->index = i;
 
+      /* Don't bother with dead variables. */
+      if (info->constant_data_size == 0)
+         info->is_constant = false;
+
       if (!info->is_constant)
          continue;
 
@@ -529,6 +533,17 @@ nir_opt_large_constants(nir_shader *shader,
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
+         if (instr->type == nir_instr_type_deref) {
+            /* Ensure all derefs accessing the lowered arrays get removed. */
+            nir_deref_instr *deref = nir_instr_as_deref(instr);
+            if (!nir_deref_mode_is(deref, nir_var_function_temp))
+               continue;
+
+            nir_variable *var = nir_deref_instr_get_variable(deref);
+            if (var && var_infos[var->index].is_constant)
+               nir_deref_instr_remove_if_unused(deref);
+         }
+
          if (instr->type != nir_instr_type_intrinsic)
             continue;
 

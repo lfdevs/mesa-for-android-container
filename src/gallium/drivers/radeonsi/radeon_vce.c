@@ -232,61 +232,57 @@ static void get_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_des
    enc->enc_pic.eo.num_ref_idx_l0_active_minus1 = pic->slice.num_ref_idx_l0_active_minus1;
    enc->enc_pic.eo.num_ref_idx_l1_active_minus1 = pic->slice.num_ref_idx_l1_active_minus1;
 
-   i = 0;
-   if (pic->slice.ref_pic_list_modification_flag_l0) {
-      for (; i < MIN2(4, pic->slice.num_ref_list0_mod_operations); i++) {
-         struct pipe_h264_ref_list_mod_entry *entry = &pic->slice.ref_list0_mod_operations[i];
-         switch (entry->modification_of_pic_nums_idc) {
-         case 0:
-            enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_SHORT_TERM_SUBTRACT;
-            enc->enc_pic.eo.enc_ref_list_modification_num[i] = entry->abs_diff_pic_num_minus1;
-            break;
-         case 2:
-            enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_LONG_TERM;
-            enc->enc_pic.eo.enc_ref_list_modification_num[i] = entry->long_term_pic_num;
-            break;
-         case 5:
-            enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_VIEW_ADD;
-            enc->enc_pic.eo.enc_ref_list_modification_num[i] = entry->abs_diff_pic_num_minus1;
-            break;
-         default:
-         case 3:
-            enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_END;
-            break;
-         }
+   for (i = 0; i < MIN2(4, pic->slice.num_ref_list0_mod_operations); i++) {
+      struct pipe_h264_ref_list_mod_entry *entry = &pic->slice.ref_list0_mod_operations[i];
+      switch (entry->modification_of_pic_nums_idc) {
+      case 0:
+         enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_SHORT_TERM_SUBTRACT;
+         enc->enc_pic.eo.enc_ref_list_modification_num[i] = entry->abs_diff_pic_num_minus1;
+         break;
+      case 2:
+         enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_LONG_TERM;
+         enc->enc_pic.eo.enc_ref_list_modification_num[i] = entry->long_term_pic_num;
+         break;
+      case 5:
+         enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_VIEW_ADD;
+         enc->enc_pic.eo.enc_ref_list_modification_num[i] = entry->abs_diff_pic_num_minus1;
+         break;
+      default:
+      case 3:
+         enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_END;
+         break;
       }
    }
    if (i < 4)
       enc->enc_pic.eo.enc_ref_list_modification_op[i] = REF_LIST_MODIFICATION_OP_END;
 
-   i = 0;
-   if (pic->pic_ctrl.nal_unit_type == PIPE_H264_NAL_IDR_SLICE) {
-      enc->enc_pic.eo.enc_decoded_picture_marking_op[i++] = pic->slice.long_term_reference_flag ? 6 : 0;
-   } else if (pic->slice.adaptive_ref_pic_marking_mode_flag) {
-      for (; i < MIN2(4, pic->slice.num_ref_pic_marking_operations); i++) {
-         struct pipe_h264_ref_pic_marking_entry *entry = &pic->slice.ref_pic_marking_operations[i];
-         enc->enc_pic.eo.enc_decoded_picture_marking_op[i] = entry->memory_management_control_operation;
-         switch (entry->memory_management_control_operation) {
-         case 1:
-            enc->enc_pic.eo.enc_decoded_picture_marking_num[i] = entry->difference_of_pic_nums_minus1;
-            break;
-         case 2:
-            enc->enc_pic.eo.enc_decoded_picture_marking_num[i] = entry->long_term_pic_num;
-            break;
-         case 3:
-            enc->enc_pic.eo.enc_decoded_picture_marking_num[i] = entry->difference_of_pic_nums_minus1;
-            enc->enc_pic.eo.enc_decoded_picture_marking_idx[i] = entry->long_term_frame_idx;
-            break;
-         case 4:
-            enc->enc_pic.eo.enc_decoded_picture_marking_idx[i] = entry->max_long_term_frame_idx_plus1;
-            break;
-         case 6:
-            enc->enc_pic.eo.enc_decoded_picture_marking_idx[i] = entry->long_term_frame_idx;
-            break;
-         default:
-            break;
-         }
+   for (i = 0; i < MIN2(4, pic->slice.num_ref_pic_marking_operations); i++) {
+      struct pipe_h264_ref_pic_marking_entry *entry = &pic->slice.ref_pic_marking_operations[i];
+      enc->enc_pic.eo.enc_decoded_picture_marking_op[i] = entry->memory_management_control_operation;
+      switch (entry->memory_management_control_operation) {
+      case 1:
+         enc->enc_pic.eo.enc_decoded_picture_marking_num[i] = entry->difference_of_pic_nums_minus1;
+         break;
+      case 2:
+         enc->enc_pic.eo.enc_decoded_picture_marking_num[i] = entry->long_term_pic_num;
+         break;
+      case 3:
+         enc->enc_pic.eo.enc_decoded_picture_marking_num[i] = entry->difference_of_pic_nums_minus1;
+         enc->enc_pic.eo.enc_decoded_picture_marking_idx[i] = entry->long_term_frame_idx;
+         break;
+      case 4:
+         enc->enc_pic.eo.enc_decoded_picture_marking_idx[i] = entry->max_long_term_frame_idx_plus1;
+         break;
+      case 6:
+         enc->enc_pic.eo.enc_decoded_picture_marking_idx[i] = entry->long_term_frame_idx;
+         break;
+      default:
+         break;
       }
+   }
+   if (pic->pic_ctrl.nal_unit_type == PIPE_H264_NAL_IDR_SLICE) {
+      assert(pic->slice.num_ref_pic_marking_operations == 0);
+      enc->enc_pic.eo.enc_decoded_picture_marking_op[i++] = pic->slice.long_term_reference_flag ? 6 : 0;
    }
    if (i < 4)
       enc->enc_pic.eo.enc_decoded_picture_marking_op[i] = 0;
@@ -368,7 +364,7 @@ static void encode(struct rvce_encoder *enc)
    task_info(enc, 0x00000003, 0);
 
    RVCE_BEGIN(0x05000001);                                      // context buffer
-   RVCE_READWRITE(enc->dpb.res->buf, enc->dpb.res->domains, 0); // encodeContextAddressHi/Lo
+   RVCE_READWRITE(enc->dpb->buf, enc->dpb->domains, 0); // encodeContextAddressHi/Lo
    RVCE_END();
 
    RVCE_BEGIN(0x05000004);                                   // video bitstream buffer
@@ -678,146 +674,27 @@ static void session(struct rvce_encoder *enc)
 
 static unsigned int write_sps(struct rvce_encoder *enc, uint8_t nal_byte, uint8_t *out)
 {
-   struct pipe_h264_enc_seq_param *sps = &enc->pic.seq;
+   struct pipe_h264_enc_seq_param sps = enc->pic.seq;
+   sps.log2_max_frame_num_minus4 = 3;
+
    struct radeon_bitstream bs;
-
    radeon_bs_reset(&bs, out, NULL);
-   radeon_bs_set_emulation_prevention(&bs, false);
-   radeon_bs_code_fixed_bits(&bs, 0x00000001, 32);
-   radeon_bs_code_fixed_bits(&bs, nal_byte, 8);
-   radeon_bs_set_emulation_prevention(&bs, true);
-   radeon_bs_code_fixed_bits(&bs, sps->profile_idc, 8);
-   radeon_bs_code_fixed_bits(&bs, sps->enc_constraint_set_flags, 6);
-   radeon_bs_code_fixed_bits(&bs, 0x0, 2); /* reserved_zero_2bits */
-   radeon_bs_code_fixed_bits(&bs, sps->level_idc, 8);
-   radeon_bs_code_ue(&bs, 0x0); /* seq_parameter_set_id */
-
-   if (sps->profile_idc == 100 || sps->profile_idc == 110 ||
-       sps->profile_idc == 122 || sps->profile_idc == 244 ||
-       sps->profile_idc == 44  || sps->profile_idc == 83 ||
-       sps->profile_idc == 86  || sps->profile_idc == 118 ||
-       sps->profile_idc == 128 || sps->profile_idc == 138) {
-      radeon_bs_code_ue(&bs, 0x1); /* chroma_format_idc */
-      radeon_bs_code_ue(&bs, 0x0); /* bit_depth_luma_minus8 */
-      radeon_bs_code_ue(&bs, 0x0); /* bit_depth_chroma_minus8 */
-      radeon_bs_code_fixed_bits(&bs, 0x0, 2); /* qpprime_y_zero_transform_bypass_flag + seq_scaling_matrix_present_flag */
-   }
-
-   radeon_bs_code_ue(&bs, 3); /* log2_max_frame_num_minus4 */
-   radeon_bs_code_ue(&bs, sps->pic_order_cnt_type);
-
-   if (sps->pic_order_cnt_type == 0)
-      radeon_bs_code_ue(&bs, sps->log2_max_pic_order_cnt_lsb_minus4);
-
-   radeon_bs_code_ue(&bs, sps->max_num_ref_frames);
-   radeon_bs_code_fixed_bits(&bs, sps->gaps_in_frame_num_value_allowed_flag, 1);
-   radeon_bs_code_ue(&bs, DIV_ROUND_UP(enc->base.width, 16) - 1);
-   radeon_bs_code_ue(&bs, DIV_ROUND_UP(enc->base.height, 16) - 1);
-   radeon_bs_code_fixed_bits(&bs, 0x1, 1); /* frame_mbs_only_flag */
-   radeon_bs_code_fixed_bits(&bs, 0x1, 1); /* direct_8x8_inference_flag */
-
-   radeon_bs_code_fixed_bits(&bs, sps->enc_frame_cropping_flag, 1);
-   if (sps->enc_frame_cropping_flag) {
-      radeon_bs_code_ue(&bs, sps->enc_frame_crop_left_offset);
-      radeon_bs_code_ue(&bs, sps->enc_frame_crop_right_offset);
-      radeon_bs_code_ue(&bs, sps->enc_frame_crop_top_offset);
-      radeon_bs_code_ue(&bs, sps->enc_frame_crop_bottom_offset);
-   }
-
-   radeon_bs_code_fixed_bits(&bs, sps->vui_parameters_present_flag, 1);
-   if (sps->vui_parameters_present_flag) {
-      radeon_bs_code_fixed_bits(&bs, (sps->vui_flags.aspect_ratio_info_present_flag), 1);
-      if (sps->vui_flags.aspect_ratio_info_present_flag) {
-         radeon_bs_code_fixed_bits(&bs, (sps->aspect_ratio_idc), 8);
-         if (sps->aspect_ratio_idc == PIPE_H2645_EXTENDED_SAR) {
-            radeon_bs_code_fixed_bits(&bs, (sps->sar_width), 16);
-            radeon_bs_code_fixed_bits(&bs, (sps->sar_height), 16);
-         }
-      }
-      radeon_bs_code_fixed_bits(&bs, sps->vui_flags.overscan_info_present_flag, 1);
-      if (sps->vui_flags.overscan_info_present_flag)
-         radeon_bs_code_fixed_bits(&bs, sps->vui_flags.overscan_appropriate_flag, 1);
-      radeon_bs_code_fixed_bits(&bs, sps->vui_flags.video_signal_type_present_flag, 1);
-      if (sps->vui_flags.video_signal_type_present_flag) {
-         radeon_bs_code_fixed_bits(&bs, sps->video_format, 3);
-         radeon_bs_code_fixed_bits(&bs, sps->video_full_range_flag, 1);
-         radeon_bs_code_fixed_bits(&bs, sps->vui_flags.colour_description_present_flag, 1);
-         if (sps->vui_flags.colour_description_present_flag) {
-            radeon_bs_code_fixed_bits(&bs, sps->colour_primaries, 8);
-            radeon_bs_code_fixed_bits(&bs, sps->transfer_characteristics, 8);
-            radeon_bs_code_fixed_bits(&bs, sps->matrix_coefficients, 8);
-         }
-      }
-      radeon_bs_code_fixed_bits(&bs, sps->vui_flags.chroma_loc_info_present_flag, 1);
-      if (sps->vui_flags.chroma_loc_info_present_flag) {
-         radeon_bs_code_ue(&bs, sps->chroma_sample_loc_type_top_field);
-         radeon_bs_code_ue(&bs, sps->chroma_sample_loc_type_bottom_field);
-      }
-      radeon_bs_code_fixed_bits(&bs, (sps->vui_flags.timing_info_present_flag), 1);
-      if (sps->vui_flags.timing_info_present_flag) {
-         radeon_bs_code_fixed_bits(&bs, (sps->num_units_in_tick), 32);
-         radeon_bs_code_fixed_bits(&bs, (sps->time_scale), 32);
-         radeon_bs_code_fixed_bits(&bs, (sps->vui_flags.fixed_frame_rate_flag), 1);
-      }
-      radeon_bs_code_fixed_bits(&bs, sps->vui_flags.nal_hrd_parameters_present_flag, 1);
-      if (sps->vui_flags.nal_hrd_parameters_present_flag)
-         radeon_bs_h264_hrd_parameters(&bs, &sps->nal_hrd_parameters);
-      radeon_bs_code_fixed_bits(&bs, sps->vui_flags.vcl_hrd_parameters_present_flag, 1);
-      if (sps->vui_flags.vcl_hrd_parameters_present_flag)
-         radeon_bs_h264_hrd_parameters(&bs, &sps->vcl_hrd_parameters);
-      if (sps->vui_flags.nal_hrd_parameters_present_flag || sps->vui_flags.vcl_hrd_parameters_present_flag)
-         radeon_bs_code_fixed_bits(&bs, sps->vui_flags.low_delay_hrd_flag, 1);
-      radeon_bs_code_fixed_bits(&bs, sps->vui_flags.pic_struct_present_flag, 1);
-      radeon_bs_code_fixed_bits(&bs, sps->vui_flags.bitstream_restriction_flag, 1);
-      if (sps->vui_flags.bitstream_restriction_flag) {
-         radeon_bs_code_fixed_bits(&bs, 0x1, 1); /* motion_vectors_over_pic_boundaries_flag */
-         radeon_bs_code_ue(&bs, 0x2); /* max_bytes_per_pic_denom */
-         radeon_bs_code_ue(&bs, 0x1); /* max_bits_per_mb_denom */
-         radeon_bs_code_ue(&bs, 0x10); /* log2_max_mv_length_horizontal */
-         radeon_bs_code_ue(&bs, 0x10); /* log2_max_mv_length_vertical */
-         radeon_bs_code_ue(&bs, sps->max_num_reorder_frames);
-         radeon_bs_code_ue(&bs, sps->max_dec_frame_buffering);
-      }
-   }
-
-   radeon_bs_code_fixed_bits(&bs, 0x1, 1);
-   radeon_bs_byte_align(&bs);
-
+   radeon_bs_h264_sps(&bs, nal_byte, &sps);
    return bs.bits_output / 8;
 }
 
 static unsigned int write_pps(struct rvce_encoder *enc, uint8_t nal_byte, uint8_t *out)
 {
+   struct pipe_h264_enc_pic_control pps = enc->pic.pic_ctrl;
+   pps.deblocking_filter_control_present_flag = enc->enc_pic.pc.enc_loop_filter_disable ||
+      enc->enc_pic.pc.enc_lf_beta_offset || enc->enc_pic.pc.enc_lf_alpha_c0_offset;
+   pps.chroma_qp_index_offset = 0;
+   pps.transform_8x8_mode_flag = 0;
+   pps.second_chroma_qp_index_offset = 0;
+
    struct radeon_bitstream bs;
-
    radeon_bs_reset(&bs, out, NULL);
-   radeon_bs_set_emulation_prevention(&bs, false);
-   radeon_bs_code_fixed_bits(&bs, 0x00000001, 32);
-   radeon_bs_code_fixed_bits(&bs, nal_byte, 8);
-   radeon_bs_set_emulation_prevention(&bs, true);
-   radeon_bs_code_ue(&bs, 0x0); /* pic_parameter_set_id */
-   radeon_bs_code_ue(&bs, 0x0); /* seq_parameter_set_id */
-   radeon_bs_code_fixed_bits(&bs, enc->enc_pic.pc.enc_cabac_enable, 1);
-   radeon_bs_code_fixed_bits(&bs, 0x0, 1); /* bottom_field_pic_order_in_frame_present_flag */
-   radeon_bs_code_ue(&bs, 0x0); /* num_slice_groups_minus_1 */
-   radeon_bs_code_ue(&bs, enc->enc_pic.pc.enc_num_default_active_ref_l0 - 1);
-   radeon_bs_code_ue(&bs, enc->enc_pic.pc.enc_num_default_active_ref_l1 - 1);
-   radeon_bs_code_fixed_bits(&bs, 0x0, 1); /* weighted_pred_flag */
-   radeon_bs_code_fixed_bits(&bs, 0x0, 2); /* weighted_bipred_idc */
-   radeon_bs_code_se(&bs, 0x0); /* pic_init_qp_minus26 */
-   radeon_bs_code_se(&bs, 0x0); /* pic_init_qs_minus26 */
-   radeon_bs_code_se(&bs, 0x0); /* chroma_qp_index_offset */
-   bool deblocking_filter_present_flag =
-      enc->enc_pic.pc.enc_loop_filter_disable ||
-      enc->enc_pic.pc.enc_lf_beta_offset ||
-      enc->enc_pic.pc.enc_lf_alpha_c0_offset;
-   radeon_bs_code_fixed_bits(&bs, deblocking_filter_present_flag, 1);
-   radeon_bs_code_fixed_bits(&bs, enc->enc_pic.pc.enc_use_constrained_intra_pred, 1);
-   radeon_bs_code_fixed_bits(&bs, 0x0, 1); /* redundant_pic_cnt_present_flag */
-
-   radeon_bs_code_fixed_bits(&bs, 0x1, 1);
-   radeon_bs_byte_align(&bs);
-
+   radeon_bs_h264_pps(&bs, nal_byte, &pps);
    return bs.bits_output / 8;
 }
 
@@ -836,15 +713,16 @@ static void rvce_destroy(struct pipe_video_codec *encoder)
 {
    struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
    if (enc->stream_handle) {
-      struct rvid_buffer fb;
-      si_vid_create_buffer(enc->screen, &fb, 512, PIPE_USAGE_STAGING);
+      struct rvce_fb_buffer fb = {
+         .res = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, 512)),
+      };
       enc->fb = &fb;
       session(enc);
       destroy(enc);
       flush(enc, PIPE_FLUSH_ASYNC, NULL);
-      si_vid_destroy_buffer(&fb);
+      si_resource_reference(&fb.res, NULL);
    }
-   si_vid_destroy_buffer(&enc->dpb);
+   si_resource_reference(&enc->dpb, NULL);
    enc->ws->cs_destroy(&enc->cs);
    FREE(enc);
 }
@@ -891,6 +769,26 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
    enc->pic = *pic;
    get_param(enc, pic);
 
+   /* VCE requires 16x16 aligned input surface. This is usually not an issue
+    * because surfaces allocated by us are always 16 aligned. However if app
+    * imports external buffer it may not be aligned and then we need to blit
+    * into internal surface used as input surface. */
+   if (source->height % 16) {
+      enc->source_copy = enc->base.context->create_video_buffer(enc->base.context, source);
+      assert(enc->source_copy);
+      struct vl_video_buffer *dst = (struct vl_video_buffer *)enc->source_copy;
+      for (unsigned i = 0; i < 2; i++) {
+         struct pipe_box box = {
+            .width = util_format_get_plane_width(source->buffer_format, i, source->width),
+            .height = util_format_get_plane_height(source->buffer_format, i, source->height),
+            .depth = 1,
+         };
+         si_resource_copy_region(enc->base.context, dst->resources[i], 0, 0, 0, 0, vid_buf->resources[i], 0, &box);
+      }
+      enc->base.context->flush(enc->base.context, NULL, 0);
+      vid_buf = (struct vl_video_buffer *)enc->source_copy;
+   }
+
    enc->get_buffer(vid_buf->resources[0], &enc->handle, &enc->luma);
    enc->get_buffer(vid_buf->resources[1], NULL, &enc->chroma);
 
@@ -900,8 +798,9 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
       unsigned dpb_size;
 
       dpb_size = get_dpb_size(enc, dpb_slots);
-      if (!enc->dpb.res) {
-         if (!si_vid_create_buffer(enc->screen, &enc->dpb, dpb_size, PIPE_USAGE_DEFAULT)) {
+      if (!enc->dpb) {
+         enc->dpb = si_resource(pipe_buffer_create(enc->screen, PIPE_BIND_CUSTOM, PIPE_USAGE_DEFAULT, dpb_size));
+         if (!enc->dpb) {
             RVID_ERR("Can't create DPB buffer.\n");
             return;
          }
@@ -912,16 +811,17 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
    }
 
    if (!enc->stream_handle) {
-      struct rvid_buffer fb;
       enc->stream_handle = si_vid_alloc_stream_handle();
-      si_vid_create_buffer(enc->screen, &fb, 512, PIPE_USAGE_STAGING);
+      struct rvce_fb_buffer fb = {
+         .res = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, 512)),
+      };
       enc->fb = &fb;
       session(enc);
       create(enc);
       config(enc);
       feedback(enc);
       flush(enc, PIPE_FLUSH_ASYNC, NULL);
-      si_vid_destroy_buffer(&fb);
+      si_resource_reference(&fb.res, NULL);
       need_rate_control = false;
    }
 
@@ -1015,13 +915,14 @@ static void rvce_encode_bitstream(struct pipe_video_codec *encoder,
    enc->bs_size = destination->width0;
    enc->bs_offset = 0;
 
-   *fb = enc->fb = CALLOC_STRUCT(rvid_buffer);
-   if (!si_vid_create_buffer(enc->screen, enc->fb, 512, PIPE_USAGE_STAGING)) {
+   *fb = enc->fb = CALLOC_STRUCT(rvce_fb_buffer);
+   enc->fb->res = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, 512));
+   if (!enc->fb->res) {
       RVID_ERR("Can't create feedback buffer.\n");
       return;
    }
 
-   enc->fb->user_data = si_vce_encode_headers(enc);
+   enc->fb->data = si_vce_encode_headers(enc);
 
    session(enc);
    encode(enc);
@@ -1035,6 +936,11 @@ static int rvce_end_frame(struct pipe_video_codec *encoder, struct pipe_video_bu
 
    flush(enc, picture->flush_flags, picture->out_fence);
 
+   if (enc->source_copy) {
+      enc->source_copy->destroy(enc->source_copy);
+      enc->source_copy = NULL;
+   }
+
    return 0;
 }
 
@@ -1042,7 +948,7 @@ static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, 
                               struct pipe_enc_feedback_metadata* metadata)
 {
    struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
-   struct rvid_buffer *fb = feedback;
+   struct rvce_fb_buffer *fb = feedback;
 
    uint32_t *ptr = enc->ws->buffer_map(enc->ws, fb->res->buf, NULL,
                                        PIPE_MAP_READ_WRITE | RADEON_MAP_TEMPORARY);
@@ -1057,8 +963,8 @@ static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, 
 
    metadata->present_metadata = PIPE_VIDEO_FEEDBACK_METADATA_TYPE_CODEC_UNIT_LOCATION;
 
-   if (fb->user_data) {
-      struct rvce_feedback_data *data = fb->user_data;
+   if (fb->data) {
+      struct rvce_feedback_data *data = fb->data;
       metadata->codec_unit_metadata_count = data->num_segments;
       for (unsigned i = 0; i < data->num_segments; i++) {
          metadata->codec_unit_metadata[i].offset = data->segments[i].offset;
@@ -1070,8 +976,8 @@ static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, 
             metadata->codec_unit_metadata[i].flags = PIPE_VIDEO_CODEC_UNIT_LOCATION_FLAG_SINGLE_NALU;
          }
       }
-      FREE(fb->user_data);
-      fb->user_data = NULL;
+      FREE(fb->data);
+      fb->data = NULL;
    } else {
       metadata->codec_unit_metadata_count = 1;
       metadata->codec_unit_metadata[0].offset = 0;
@@ -1079,7 +985,7 @@ static void rvce_get_feedback(struct pipe_video_codec *encoder, void *feedback, 
       metadata->codec_unit_metadata[0].flags = 0;
    }
 
-   si_vid_destroy_buffer(fb);
+   si_resource_reference(&fb->res, NULL);
    FREE(fb);
 }
 

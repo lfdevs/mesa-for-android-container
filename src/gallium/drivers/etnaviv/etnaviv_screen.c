@@ -151,7 +151,7 @@ etna_screen_get_device_vendor(struct pipe_screen *pscreen)
 }
 
 static void
-etna_init_single_shader_caps(struct etna_screen *screen, enum pipe_shader_type shader)
+etna_init_single_shader_caps(struct etna_screen *screen, mesa_shader_stage shader)
 {
    struct pipe_shader_caps *caps =
       (struct pipe_shader_caps *)&screen->base.shader_caps[shader];
@@ -171,7 +171,7 @@ etna_init_single_shader_caps(struct etna_screen *screen, enum pipe_shader_type s
     * of vertex elements - each element defines one vertex shader
     * input register.  For the fragment shader, this is the number
     * of varyings. */
-   caps->max_inputs = shader == PIPE_SHADER_FRAGMENT ?
+   caps->max_inputs = shader == MESA_SHADER_FRAGMENT ?
       screen->specs.max_varyings : screen->specs.vertex_max_elements;
    caps->max_outputs = screen->specs.max_vs_outputs;
    caps->max_temps = 64; /* Max native temporaries. */
@@ -183,13 +183,13 @@ etna_init_single_shader_caps(struct etna_screen *screen, enum pipe_shader_type s
    caps->integers = screen->info->halti >= 2;
 
    caps->max_texture_samplers =
-   caps->max_sampler_views = shader == PIPE_SHADER_FRAGMENT
+   caps->max_sampler_views = shader == MESA_SHADER_FRAGMENT
       ? screen->specs.fragment_sampler_count
       : screen->specs.vertex_sampler_count;
 
    caps->max_const_buffer0_size =
       ubo_enable ? 16384 /* 16384 so state tracker enables UBOs */ :
-      (shader == PIPE_SHADER_FRAGMENT
+      (shader == MESA_SHADER_FRAGMENT
        ? screen->specs.max_ps_uniforms * sizeof(float[4])
        : screen->specs.max_vs_uniforms * sizeof(float[4]));
 
@@ -201,8 +201,8 @@ etna_init_single_shader_caps(struct etna_screen *screen, enum pipe_shader_type s
 static void
 etna_init_shader_caps(struct etna_screen *screen)
 {
-   etna_init_single_shader_caps(screen, PIPE_SHADER_VERTEX);
-   etna_init_single_shader_caps(screen, PIPE_SHADER_FRAGMENT);
+   etna_init_single_shader_caps(screen, MESA_SHADER_VERTEX);
+   etna_init_single_shader_caps(screen, MESA_SHADER_FRAGMENT);
 }
 
 static void
@@ -232,6 +232,8 @@ etna_init_screen_caps(struct etna_screen *screen)
    caps->fs_position_is_sysval = true;
    caps->fs_face_is_integer_sysval = true; /* note: not integer */
    caps->fs_point_is_sysval = false;
+   caps->generate_mipmap =
+   caps->clear_scissored = screen->specs.use_blt;
 
    /* Memory */
    caps->constant_buffer_offset_alignment = 256;
@@ -255,9 +257,9 @@ etna_init_screen_caps(struct etna_screen *screen)
    caps->texrect = false;
 
    /* Stream output. */
-   caps->max_stream_output_buffers = DBG_ENABLED(ETNA_DBG_DEQP) ? 4 : 0;
-   caps->max_stream_output_separate_components = 0;
-   caps->max_stream_output_interleaved_components = 0;
+   caps->max_stream_output_buffers = VIV_FEATURE(screen, ETNA_FEATURE_HWTFB) || DBG_ENABLED(ETNA_DBG_DEQP) ? 4 : 0;
+   caps->max_stream_output_separate_components = 64;
+   caps->max_stream_output_interleaved_components = 64;
 
    caps->max_vertex_attrib_stride = 128;
    caps->max_vertex_element_src_offset = 255;
@@ -279,8 +281,11 @@ etna_init_screen_caps(struct etna_screen *screen)
 
    caps->min_texel_offset = -8;
    caps->max_texel_offset = 7;
+   caps->max_texture_gather_components =
+      (VIV_FEATURE(screen, ETNA_FEATURE_HALTI5) && DBG_ENABLED(ETNA_DBG_DEQP)) ? 4 : 0;
    caps->seamless_cube_map_per_texture =
    caps->seamless_cube_map = VIV_FEATURE(screen, ETNA_FEATURE_SEAMLESS_CUBE_MAP);
+   caps->texture_multisample = DBG_ENABLED(ETNA_DBG_DEQP);
 
    /* Render targets. */
    caps->max_render_targets = VIV_FEATURE(screen, ETNA_FEATURE_HALTI2) ?
@@ -383,7 +388,8 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
    bool supported = true;
 
    /* Requires split sampler support, which the driver doesn't support, yet. */
-   if (!util_format_is_compressed(format) &&
+   if (!DBG_ENABLED(ETNA_DBG_DEQP) &&
+       !util_format_is_compressed(format) &&
        util_format_get_blocksizebits(format) > 64)
       return false;
 
@@ -410,6 +416,9 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
        (util_format_is_pure_integer(format) || util_format_is_float(format)))
       supported = VIV_FEATURE(screen, ETNA_FEATURE_HALTI2);
 
+   if (format == PIPE_FORMAT_S8X24_UINT)
+      supported = VIV_FEATURE(screen, ETNA_FEATURE_HALTI5) &&
+                  !DBG_ENABLED(ETNA_DBG_NO_TEXDESC);
 
    if (etna_format_needs_yuv_tiler(format))
       supported = VIV_FEATURE(screen, ETNA_FEATURE_YUV420_TILER);
@@ -433,7 +442,8 @@ gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
       return false;
 
    /* Requires split target support, which the driver doesn't support, yet. */
-   if (util_format_get_blocksizebits(format) > 64)
+   if (!DBG_ENABLED(ETNA_DBG_DEQP) &&
+       util_format_get_blocksizebits(format) > 64)
       return false;
 
    if (sample_count > 1) {
@@ -495,6 +505,26 @@ gpu_supports_vertex_format(struct etna_screen *screen, enum pipe_format format)
    if (util_format_is_pure_integer(format))
       return VIV_FEATURE(screen, ETNA_FEATURE_HALTI2);
 
+   /* ARB_vertex_type_2_10_10_10_rev */
+   if (format == PIPE_FORMAT_R10G10B10A2_UNORM ||
+       format == PIPE_FORMAT_B10G10R10A2_UNORM ||
+       format == PIPE_FORMAT_R10G10B10A2_SNORM ||
+       format == PIPE_FORMAT_B10G10R10A2_SNORM ||
+       format == PIPE_FORMAT_R10G10B10A2_USCALED ||
+       format == PIPE_FORMAT_B10G10R10A2_USCALED ||
+       format == PIPE_FORMAT_R10G10B10A2_SSCALED ||
+       format == PIPE_FORMAT_B10G10R10A2_SSCALED)
+      return VIV_FEATURE(screen, ETNA_FEATURE_HALTI2);
+
+   return true;
+}
+
+static bool
+gpu_supports_depth_stencil_format(struct etna_screen *screen, enum pipe_format format)
+{
+   if (format == PIPE_FORMAT_S8_UINT)
+      return VIV_FEATURE(screen, ETNA_FEATURE_S8);
+
    return true;
 }
 
@@ -525,7 +555,12 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
    }
 
    if (usage & PIPE_BIND_DEPTH_STENCIL) {
-      if (translate_depth_format(format) != ETNA_NO_MATCH)
+      uint32_t fmt = translate_depth_format(format);
+
+      if (!gpu_supports_depth_stencil_format(screen, format))
+         fmt = ETNA_NO_MATCH;
+
+      if (fmt != ETNA_NO_MATCH)
          allowed |= PIPE_BIND_DEPTH_STENCIL;
    }
 
@@ -786,7 +821,7 @@ etna_get_specs(struct etna_screen *screen)
    uint32_t instruction_count = 0;
 
    /* Copy all relevant limits from etna_core_info. */
-   if (info->type == ETNA_CORE_GPU) {
+   if (etna_core_has_feature(info, ETNA_FEATURE_CORE_GPU)) {
       instruction_count = info->gpu.max_instructions;
       screen->specs.pixel_pipes = info->gpu.pixel_pipes;
 
@@ -794,7 +829,7 @@ etna_get_specs(struct etna_screen *screen)
          info = etna_gpu_get_core_info(screen->npu);
    }
 
-   if (info->type == ETNA_CORE_NPU) {
+   if (etna_core_has_feature(info, ETNA_FEATURE_CORE_NPU)) {
       if (etna_core_has_feature(info, ETNA_FEATURE_NN_XYDP0))
          screen->specs.nn_core_version = 8;
       else if (etna_core_has_feature(info, ETNA_FEATURE_VIP_V7))
@@ -1051,7 +1086,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    etna_init_shader_caps(screen);
    etna_init_screen_caps(screen);
 
-   util_dynarray_init(&screen->supported_pm_queries, NULL);
+   screen->supported_pm_queries = UTIL_DYNARRAY_INIT;
    slab_create_parent(&screen->transfer_pool, sizeof(struct etna_transfer), 16);
 
    if (screen->drm_version >= ETNA_DRM_VERSION_PERFMON)

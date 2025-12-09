@@ -24,27 +24,17 @@
 /** VK_EXT_headless_surface */
 
 #include "util/macros.h"
-#include "util/hash_table.h"
 #include "util/timespec.h"
-#include "util/u_thread.h"
-#include "util/xmlconfig.h"
 #include "vk_util.h"
-#include "vk_enum_to_str.h"
 #include "vk_instance.h"
 #include "vk_physical_device.h"
 #include "wsi_common_entrypoints.h"
 #include "wsi_common_private.h"
-#include "wsi_common_queue.h"
 
 #include "drm-uapi/drm_fourcc.h"
 
 struct wsi_headless {
    struct wsi_interface base;
-
-   struct wsi_device *wsi;
-
-   const VkAllocationCallbacks *alloc;
-   VkPhysicalDevice physical_device;
 };
 
 static VkResult
@@ -137,12 +127,9 @@ wsi_headless_surface_get_formats(VkIcdSurfaceBase *icd_surface,
                                  uint32_t* pSurfaceFormatCount,
                                  VkSurfaceFormatKHR* pSurfaceFormats)
 {
-   struct wsi_headless *wsi =
-      (struct wsi_headless *)wsi_device->wsi[VK_ICD_WSI_PLATFORM_HEADLESS];
-
    VK_OUTARRAY_MAKE_TYPED(VkSurfaceFormatKHR, out, pSurfaceFormats, pSurfaceFormatCount);
 
-   if (wsi->wsi->force_bgra8_unorm_first) {
+   if (wsi_device->force_bgra8_unorm_first) {
       vk_outarray_append_typed(VkSurfaceFormatKHR, &out, out_fmt) {
          out_fmt->format = VK_FORMAT_B8G8R8A8_UNORM;
          out_fmt->colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
@@ -172,12 +159,9 @@ wsi_headless_surface_get_formats2(VkIcdSurfaceBase *icd_surface,
                                   uint32_t* pSurfaceFormatCount,
                                   VkSurfaceFormat2KHR* pSurfaceFormats)
 {
-   struct wsi_headless *wsi =
-      (struct wsi_headless *)wsi_device->wsi[VK_ICD_WSI_PLATFORM_HEADLESS];
-
    VK_OUTARRAY_MAKE_TYPED(VkSurfaceFormat2KHR, out, pSurfaceFormats, pSurfaceFormatCount);
 
-   if (wsi->wsi->force_bgra8_unorm_first) {
+   if (wsi_device->force_bgra8_unorm_first) {
       vk_outarray_append_typed(VkSurfaceFormat2KHR, &out, out_fmt) {
          out_fmt->surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
          out_fmt->surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
@@ -240,22 +224,24 @@ wsi_headless_surface_get_present_rectangles(VkIcdSurfaceBase *surface,
 }
 
 struct wsi_headless_image {
-   struct wsi_image                             base;
-   bool                                         busy;
+   struct wsi_image base;
+
+   /* whether the host side ownership is taken by the app or the display */
+   bool busy_on_host;
+
+   /* whether the image may still be worked on by the device
+    *
+    * The headless display does not involve a presentation queue to wait for
+    * the gpu out-fence. To let the app acquire the most likely idle image, we
+    * use a second boolean to steer the app to acquire all the swapchain images
+    * in a loop.
+    */
+   bool busy_on_device;
 };
 
 struct wsi_headless_swapchain {
-   struct wsi_swapchain                        base;
-
-   VkExtent2D                                  extent;
-   VkFormat                                    vk_format;
-
-   struct u_vector                             modifiers;
-
-   VkPresentModeKHR                            present_mode;
-   bool                                        fifo_ready;
-
-   struct wsi_headless_image                       images[0];
+   struct wsi_swapchain base;
+   struct wsi_headless_image images[0];
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(wsi_headless_swapchain, base.base, VkSwapchainKHR,
                                VK_OBJECT_TYPE_SWAPCHAIN_KHR)
@@ -287,10 +273,17 @@ wsi_headless_swapchain_acquire_next_image(struct wsi_swapchain *wsi_chain,
    while (1) {
       /* Try to find a free image. */
       for (uint32_t i = 0; i < chain->base.image_count; i++) {
-         if (!chain->images[i].busy) {
+         if (!chain->images[i].busy_on_host) {
+            if (chain->images[i].busy_on_device) {
+               /* simple trick to avoid the just presented image */
+               chain->images[i].busy_on_device = false;
+               continue;
+            }
+
             /* We found a non-busy image */
             *image_index = i;
-            chain->images[i].busy = true;
+            chain->images[i].busy_on_host = true;
+            chain->images[i].busy_on_device = true;
             return VK_SUCCESS;
          }
       }
@@ -314,7 +307,7 @@ wsi_headless_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
    assert(image_index < chain->base.image_count);
 
-   chain->images[image_index].busy = false;
+   chain->images[image_index].busy_on_host = false;
 
    return VK_SUCCESS;
 }
@@ -331,102 +324,9 @@ wsi_headless_swapchain_destroy(struct wsi_swapchain *wsi_chain,
          wsi_destroy_image(&chain->base, &chain->images[i].base);
    }
 
-   u_vector_finish(&chain->modifiers);
-
    wsi_swapchain_finish(&chain->base);
 
    vk_free(pAllocator, chain);
-
-   return VK_SUCCESS;
-}
-
-static const struct VkDrmFormatModifierPropertiesEXT *
-get_modifier_props(const struct wsi_image_info *info, uint64_t modifier)
-{
-   for (uint32_t i = 0; i < info->modifier_prop_count; i++) {
-      if (info->modifier_props[i].drmFormatModifier == modifier)
-         return &info->modifier_props[i];
-   }
-   return NULL;
-}
-
-static VkResult
-wsi_create_null_image_mem(const struct wsi_swapchain *chain,
-                          const struct wsi_image_info *info,
-                          struct wsi_image *image)
-{
-   const struct wsi_device *wsi = chain->wsi;
-   VkResult result;
-
-   VkMemoryRequirements reqs;
-   wsi->GetImageMemoryRequirements(chain->device, image->image, &reqs);
-
-   const VkMemoryDedicatedAllocateInfo memory_dedicated_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
-      .pNext = NULL,
-      .image = image->image,
-      .buffer = VK_NULL_HANDLE,
-   };
-   const VkMemoryAllocateInfo memory_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext = &memory_dedicated_info,
-      .allocationSize = reqs.size,
-      .memoryTypeIndex =
-         wsi_select_device_memory_type(wsi, reqs.memoryTypeBits),
-   };
-   result = wsi->AllocateMemory(chain->device, &memory_info,
-                                &chain->alloc, &image->memory);
-   if (result != VK_SUCCESS)
-      return result;
-
-   image->dma_buf_fd = -1;
-
-   if (info->drm_mod_list.drmFormatModifierCount > 0) {
-      VkImageDrmFormatModifierPropertiesEXT image_mod_props = {
-         .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT,
-      };
-      result = wsi->GetImageDrmFormatModifierPropertiesEXT(chain->device,
-                                                           image->image,
-                                                           &image_mod_props);
-      if (result != VK_SUCCESS)
-         return result;
-
-      image->drm_modifier = image_mod_props.drmFormatModifier;
-      assert(image->drm_modifier != DRM_FORMAT_MOD_INVALID);
-
-      const struct VkDrmFormatModifierPropertiesEXT *mod_props =
-         get_modifier_props(info, image->drm_modifier);
-      image->num_planes = mod_props->drmFormatModifierPlaneCount;
-
-      for (uint32_t p = 0; p < image->num_planes; p++) {
-         const VkImageSubresource image_subresource = {
-            .aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT << p,
-            .mipLevel = 0,
-            .arrayLayer = 0,
-         };
-         VkSubresourceLayout image_layout;
-         wsi->GetImageSubresourceLayout(chain->device, image->image,
-                                        &image_subresource, &image_layout);
-         image->sizes[p] = image_layout.size;
-         image->row_pitches[p] = image_layout.rowPitch;
-         image->offsets[p] = image_layout.offset;
-      }
-   } else {
-      const VkImageSubresource image_subresource = {
-         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-         .mipLevel = 0,
-         .arrayLayer = 0,
-      };
-      VkSubresourceLayout image_layout;
-      wsi->GetImageSubresourceLayout(chain->device, image->image,
-                                     &image_subresource, &image_layout);
-
-      image->drm_modifier = DRM_FORMAT_MOD_INVALID;
-      image->num_planes = 1;
-      image->sizes[0] = reqs.size;
-      image->row_pitches[0] = image_layout.rowPitch;
-      image->offsets[0] = 0;
-   }
 
    return VK_SUCCESS;
 }
@@ -451,13 +351,46 @@ wsi_headless_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (chain == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
+   VkDrmFormatModifierPropertiesListEXT mod_list = {
+      .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,
+   };
+   VkFormatProperties2 props = {
+      .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
+      .pNext = &mod_list,
+   };
+   if (wsi_device->supports_modifiers) {
+      wsi_device->GetPhysicalDeviceFormatProperties2(
+         wsi_device->pdevice, pCreateInfo->imageFormat, &props);
+      assert(mod_list.drmFormatModifierCount > 0);
+   }
+
+   STACK_ARRAY(VkDrmFormatModifierPropertiesEXT, mod_props,
+               mod_list.drmFormatModifierCount);
+   STACK_ARRAY(uint64_t, mods, mod_list.drmFormatModifierCount);
+
+   if (mod_list.drmFormatModifierCount > 0) {
+      mod_list.pDrmFormatModifierProperties = mod_props;
+      wsi_device->GetPhysicalDeviceFormatProperties2(
+         wsi_device->pdevice, pCreateInfo->imageFormat, &props);
+
+      for (uint32_t i = 0; i < mod_list.drmFormatModifierCount; i++)
+         mods[i] = mod_props[i].drmFormatModifier;
+   }
+
    struct wsi_drm_image_params drm_params = {
       .base.image_type = WSI_IMAGE_TYPE_DRM,
       .same_gpu = true,
+      .num_modifier_lists = mod_list.drmFormatModifierCount > 0 ? 1 : 0,
+      .num_modifiers = &mod_list.drmFormatModifierCount,
+      .modifiers = (const uint64_t **)&mods,
    };
 
    result = wsi_swapchain_init(wsi_device, &chain->base, device,
                                pCreateInfo, &drm_params.base, pAllocator);
+
+   STACK_ARRAY_FINISH(mods);
+   STACK_ARRAY_FINISH(mod_props);
+
    if (result != VK_SUCCESS) {
       vk_free(pAllocator, chain);
       return result;
@@ -469,11 +402,6 @@ wsi_headless_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->base.queue_present = wsi_headless_swapchain_queue_present;
    chain->base.present_mode = wsi_swapchain_get_present_mode(wsi_device, pCreateInfo);
    chain->base.image_count = num_images;
-   chain->extent = pCreateInfo->imageExtent;
-   chain->vk_format = pCreateInfo->imageFormat;
-   chain->base.image_info.create_mem = wsi_create_null_image_mem;
-   chain->base.image_info.finish_create = NULL;
-
 
    for (uint32_t i = 0; i < chain->base.image_count; i++) {
       result = wsi_create_image(&chain->base, &chain->base.image_info,
@@ -481,7 +409,8 @@ wsi_headless_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       if (result != VK_SUCCESS)
          goto fail;
 
-      chain->images[i].busy = false;
+      chain->images[i].busy_on_host = false;
+      chain->images[i].busy_on_device = false;
    }
 
    *swapchain_out = &chain->base;
@@ -508,10 +437,6 @@ wsi_headless_init_wsi(struct wsi_device *wsi_device,
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto fail;
    }
-
-   wsi->physical_device = physical_device;
-   wsi->alloc = alloc;
-   wsi->wsi = wsi_device;
 
    wsi->base.get_support = wsi_headless_surface_get_support;
    wsi->base.get_capabilities2 = wsi_headless_surface_get_capabilities2;

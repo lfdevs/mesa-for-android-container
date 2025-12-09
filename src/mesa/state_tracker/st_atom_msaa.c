@@ -80,7 +80,7 @@ update_sample_locations(struct st_context *st)
                x = fb->SampleLocationTable[table_index*2];
                y = fb->SampleLocationTable[table_index*2+1];
             }
-            if (st->state.fb_orientation == Y_0_BOTTOM)
+            if (st->state.fb_orientation == Y_0_TOP)
                y = 1.0 - y;
 
             loc = roundf(CLAMP(x * 16.0f, 0.0f, 15.0f));

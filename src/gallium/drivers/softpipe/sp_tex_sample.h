@@ -163,11 +163,11 @@ struct sp_tgsi_sampler
 
 compute_lambda_func
 softpipe_get_lambda_func(const struct pipe_sampler_view *view,
-                         enum pipe_shader_type shader);
+                         mesa_shader_stage shader);
 
 compute_lambda_from_grad_func
 softpipe_get_lambda_from_grad_func(const struct pipe_sampler_view *view,
-                                   enum pipe_shader_type shader);
+                                   mesa_shader_stage shader);
 
 void *
 softpipe_create_sampler_state(struct pipe_context *pipe,

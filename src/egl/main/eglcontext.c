@@ -734,7 +734,7 @@ _eglQueryContextRenderBuffer(_EGLContext *ctx)
 
    switch (surf->Type) {
    default:
-      unreachable("bad EGLSurface type");
+      UNREACHABLE("bad EGLSurface type");
    case EGL_PIXMAP_BIT:
       /* - If the context is bound to a pixmap surface, then EGL_SINGLE_BUFFER
        *   will be returned.

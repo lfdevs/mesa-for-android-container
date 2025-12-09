@@ -415,7 +415,7 @@ LLVMValueRef ac_build_atomic_rmw(struct ac_llvm_context *ctx, LLVMAtomicRMWBinOp
       binop = AtomicRMWInst::FAdd;
       break;
    default:
-      unreachable("invalid LLVMAtomicRMWBinOp");
+      UNREACHABLE("invalid LLVMAtomicRMWBinOp");
       break;
    }
    unsigned SSID = unwrap(ctx->context)->getOrInsertSyncScopeID(sync_scope);

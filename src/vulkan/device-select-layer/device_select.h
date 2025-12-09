@@ -23,34 +23,68 @@
 #ifndef DEVICE_SELECT_H
 #define DEVICE_SELECT_H
 
+#include <vulkan/vulkan.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include "xf86drm.h"
 
+struct instance_info {
+   PFN_vkDestroyInstance DestroyInstance;
+   PFN_vkEnumeratePhysicalDevices EnumeratePhysicalDevices;
+   PFN_vkEnumeratePhysicalDeviceGroups EnumeratePhysicalDeviceGroups;
+   PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
+   PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties;
+   PFN_vkGetPhysicalDeviceProperties GetPhysicalDeviceProperties;
+   PFN_vkGetPhysicalDeviceProperties2 GetPhysicalDeviceProperties2;
+   bool has_pci_bus, has_vulkan11;
+   bool has_wayland, has_xcb;
+   bool zink, xwayland, xserver;
+
+   bool debug;
+   char *selection;
+   char *dri_prime;
+   bool force_default_device;
+};
+
 /* We don't use `drmPciDeviceInfo` because it uses 16-bit ids,
  * instead of Vulkan's 32-bit ones. */
 struct device_info {
-  uint32_t vendor_id;
-  uint32_t device_id;
+   uint32_t vendor_id;
+   uint32_t device_id;
 };
 
 struct device_pci_info {
-  struct device_info dev_info;
-  drmPciBusInfo bus_info;
-  bool has_bus_info;
-  bool cpu_device;
+   struct device_info dev_info;
+   drmPciBusInfo bus_info;
+   bool has_bus_info;
+   VkPhysicalDeviceType device_type;
 };
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
 int device_select_find_xcb_pci_default(struct device_pci_info *devices, uint32_t device_count);
 #else
-static inline int device_select_find_xcb_pci_default(struct device_pci_info *devices, uint32_t device_count) { return -1; }
+static inline int
+device_select_find_xcb_pci_default(struct device_pci_info *devices, uint32_t device_count)
+{
+   return -1;
+}
 #endif
 
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 int device_select_find_wayland_pci_default(struct device_pci_info *devices, uint32_t device_count);
 #else
-static inline int device_select_find_wayland_pci_default(struct device_pci_info *devices, uint32_t device_count) { return -1; }
+static inline int
+device_select_find_wayland_pci_default(struct device_pci_info *devices, uint32_t device_count)
+{
+   return -1;
+}
 #endif
+
+void device_select_get_properties(const struct instance_info *info, VkPhysicalDevice device,
+                                  VkPhysicalDeviceProperties2 *properties);
+
+uint32_t device_select_get_first(const struct instance_info *info, uint32_t physical_device_count,
+                                 VkPhysicalDevice *pPhysicalDevices, bool *expose_only_one_dev);
 
 #endif

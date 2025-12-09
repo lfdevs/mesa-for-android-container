@@ -216,7 +216,7 @@ debug_variable_length_prim(struct debug_stream *stream)
 
    len = 1 + (i + 2) / 2;
 
-   mesa_logi("3DPRIM, %s variable length %d indicies (%d dwords):", prim, i,
+   mesa_logi("3DPRIM, %s variable length %d indices (%d dwords):", prim, i,
              len);
    for (i = 0; i < len; i++)
       mesa_logi("\t0x%08x", ptr[i]);

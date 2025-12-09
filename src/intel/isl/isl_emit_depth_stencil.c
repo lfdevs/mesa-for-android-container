@@ -427,7 +427,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
          clear.DepthClearValue = info->depth_clear_value * ((1u << 16) - 1);
          break;
       default:
-         unreachable("Invalid depth type");
+         UNREACHABLE("Invalid depth type");
       }
 #endif
 #endif

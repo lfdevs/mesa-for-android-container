@@ -176,8 +176,8 @@ add_builtin_define(glcpp_parser_t *parser, const char *name, int value);
 
 %}
 
-%pure-parser
-%error-verbose
+%define api.pure
+%define parse.error verbose
 
 %locations
 %initial-action {
@@ -1450,6 +1450,21 @@ _token_paste(glcpp_parser_t *parser, token_t *token, token_t *other)
    return token;
 }
 
+/*
+ * Check to see if we need a space in between two tokens, for example to
+ * keep "+ +" from collapsing to "++"
+ */
+static bool
+need_space_between(int token1, int token2)
+{
+   if ( (token1 == '+' || token1 == '-') && token2 == token1 )
+      return true;
+   if (token1 == IDENTIFIER &&
+       (token2 == IDENTIFIER || token2 == INTEGER))
+      return true;
+   return false;
+}
+
 static void
 _token_list_print(glcpp_parser_t *parser, token_list_t *list)
 {
@@ -1458,8 +1473,13 @@ _token_list_print(glcpp_parser_t *parser, token_list_t *list)
    if (list == NULL)
       return;
 
-   for (node = list->head; node; node = node->next)
+   for (node = list->head; node; node = node->next) {
       _token_print(parser->output, node->token);
+      /* avoid accidental token concatenation */
+      if (node->next &&
+          need_space_between(node->token->type, node->next->token->type))
+         _mesa_string_buffer_append_char(parser->output, ' ');
+   }
 }
 
 void
@@ -2029,21 +2049,6 @@ _glcpp_parser_expand_node(glcpp_parser_t *parser, token_node_t *node,
          return _token_list_create_with_one_space(parser);
 
       replacement = _token_list_copy(parser, macro->replacements);
-
-      /* If needed insert space in front of replacements to isolate them from
-       * the code they will be inserted into. For example:
-       *
-       *    #define VALUE -1.0
-       *    int a = -VALUE;
-       *
-       * Should be evaluated to int a = - -1.0; not int a = --1.0;
-       */
-      if (node_prev &&
-          (node_prev->token->type == '-' || node_prev->token->type == '+') &&
-          node_prev->token->type == replacement->head->token->type) {
-         token_t *new_token = _token_create_ival(parser, SPACE, SPACE);
-         _token_list_prepend(parser, replacement, new_token);
-      }
 
       _glcpp_parser_apply_pastes(parser, replacement);
       return replacement;

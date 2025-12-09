@@ -24,7 +24,6 @@
 #include "nv50/nv50_screen.h"
 #include "nouveau_vp3_video.h"
 
-#include "vl/vl_decoder.h"
 #include "vl/vl_types.h"
 
 #include "util/u_video.h"

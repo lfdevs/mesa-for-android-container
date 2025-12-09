@@ -60,6 +60,8 @@ nir_analyze_range(struct hash_table *range_ht,
 
 uint64_t nir_def_bits_used(const nir_def *def);
 
+unsigned nir_def_num_lsb_zero(struct hash_table *numlsb_ht, nir_scalar def);
+
 #ifdef __cplusplus
 }
 #endif

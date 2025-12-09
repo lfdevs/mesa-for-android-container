@@ -25,6 +25,7 @@
 #pragma once
 
 #include "vpe_types.h"
+#include "hw_shared.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -108,7 +109,8 @@ struct mpc_denorm_clamp {
 
 struct mpc_funcs {
     void (*program_mpcc_mux)(struct mpc *mpc, enum mpc_mpccid mpcc_idx, enum mpc_mux_topsel topsel,
-        enum mpc_mux_botsel botsel, enum mpc_mux_outmux outmux, enum mpc_mux_oppid oppid);
+        enum mpc_mux_botsel botsel, enum mpc_mux_outmux outmux, enum mpc_mux_oppid oppid,
+        enum mpcc_blend_mode blend_mode);
 
     void (*program_mpcc_blending)(
         struct mpc *mpc, enum mpc_mpccid mpcc_idx, struct mpcc_blnd_cfg *blnd_cfg);

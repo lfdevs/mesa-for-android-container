@@ -30,7 +30,7 @@ vk_memory_trace_init(struct vk_device *device, const struct vk_rmv_device_info *
 {
    device->memory_trace_data.device_info = *device_info;
    device->memory_trace_data.is_enabled = true;
-   util_dynarray_init(&device->memory_trace_data.tokens, NULL);
+   device->memory_trace_data.tokens = UTIL_DYNARRAY_INIT;
    simple_mtx_init(&device->memory_trace_data.token_mtx, mtx_plain);
 
    device->memory_trace_data.next_resource_id = 1;
@@ -59,7 +59,7 @@ vk_memory_trace_finish(struct vk_device *device)
       }
    }
    util_dynarray_fini(&device->memory_trace_data.tokens);
-   if (_mesa_hash_table_num_entries(device->memory_trace_data.handle_table->table))
+   if (_mesa_hash_table_num_entries(&device->memory_trace_data.handle_table->table))
       fprintf(stderr,
               "mesa: Unfreed resources detected at device destroy, there may be memory leaks!\n");
    _mesa_hash_table_u64_destroy(device->memory_trace_data.handle_table);
@@ -73,7 +73,7 @@ vk_rmv_emit_token(struct vk_memory_trace_data *data, enum vk_rmv_token_type type
    token.type = type;
    token.timestamp = (uint64_t)os_time_get_nano();
    memcpy(&token.data, token_data, vk_rmv_token_size_from_type(type));
-   util_dynarray_append(&data->tokens, struct vk_rmv_token, token);
+   util_dynarray_append(&data->tokens, token);
 }
 
 uint32_t

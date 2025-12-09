@@ -8,7 +8,7 @@ rnn_src_path = dir_source_root + '/src/freedreno/registers'
 rnn_install_path = get_option('datadir') + '/freedreno/registers'
 rnn_path = rnn_src_path + ':' + get_option('prefix') + '/' + rnn_install_path
 
-dep_libarchive = dependency('libarchive', allow_fallback: true, required: false)
+dep_libarchive = dependency('libarchive', allow_fallback: true, required: false, disabler : true)
 dep_libxml2 = dependency('libxml-2.0', allow_fallback: true, required: false)
 prog_gzip = find_program('gzip', required: false)
 

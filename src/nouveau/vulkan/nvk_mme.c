@@ -12,6 +12,7 @@ static const nvk_mme_builder_func mme_builders[NVK_MME_COUNT] = {
    [NVK_MME_SELECT_CB0]                    = nvk_mme_select_cb0,
    [NVK_MME_BIND_CBUF_DESC]                = nvk_mme_bind_cbuf_desc,
    [NVK_MME_CLEAR]                         = nvk_mme_clear,
+   [NVK_MME_UPDATE_WINDOW_CLIP]            = nvk_mme_update_window_clip,
    [NVK_MME_BIND_IB]                       = nvk_mme_bind_ib,
    [NVK_MME_BIND_VB]                       = nvk_mme_bind_vb,
    [NVK_MME_SET_VB_ENABLES]                = nvk_mme_set_vb_enables,
@@ -87,7 +88,7 @@ nvk_mme_test_state_state(void *_ts, uint16_t addr)
    assert(ts->test->init != NULL && "Read uninitialized state");
    for (uint32_t i = 0;; i++) {
       if (ts->test->init[i].mthd == 0)
-         unreachable("Read uninitialized state");
+         UNREACHABLE("Read uninitialized state");
 
       if (ts->test->init[i].mthd == addr)
          return ts->test->init[i].data;

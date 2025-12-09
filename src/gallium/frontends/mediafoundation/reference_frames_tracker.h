@@ -47,16 +47,16 @@ class reference_frames_tracker
 {
  public:
    // pass control variables for current frame to reference tracker and compute reference frame states
-   virtual void begin_frame( reference_frames_tracker_dpb_async_token *pAsyncDPBToken,
-                             bool forceKey,
-                             bool markLTR,
-                             uint32_t markLTRIndex,
-                             bool useLTR,
-                             uint32_t useLTRBitmap,
-                             bool layerCountSet,
-                             uint32_t layerCount,
-                             bool dirtyRectFrameNumSet,
-                             uint32_t dirtyRectFrameNum ) = 0;
+   virtual HRESULT begin_frame( reference_frames_tracker_dpb_async_token *pAsyncDPBToken,
+                                bool forceKey,
+                                bool markLTR,
+                                uint32_t markLTRIndex,
+                                bool useLTR,
+                                uint32_t useLTRBitmap,
+                                bool layerCountSet,
+                                uint32_t layerCount,
+                                bool dirtyRectFrameNumSet,
+                                uint32_t dirtyRectFrameNum ) = 0;
 
    // moves the GOP state to the next frame for next frame
    virtual void advance_frame() = 0;

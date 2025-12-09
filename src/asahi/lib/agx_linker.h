@@ -26,6 +26,9 @@ struct agx_linked_shader {
     */
    bool uses_txf;
 
+   /* Whether the program is a no-op and can be skipped. */
+   bool no_op;
+
    /* Coefficient register bindings */
    struct agx_varyings_fs cf;
 

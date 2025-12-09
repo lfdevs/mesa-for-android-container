@@ -54,7 +54,7 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
        intrin->intrinsic != nir_intrinsic_load_uniform)
       return false;
 
-   if (intrin->src[0].ssa->parent_instr->type == nir_instr_type_load_const)
+   if (nir_src_is_const(intrin->src[0]))
       return false;
 
    struct hash_table *visited_instrs = _mesa_pointer_hash_table_create(NULL);

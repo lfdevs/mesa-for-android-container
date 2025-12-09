@@ -23,7 +23,7 @@ struct si_shader_info {
 
       bool use_aco_amd:1;
       bool writes_memory:1;
-      enum gl_subgroup_size subgroup_size;
+      uint8_t api_subgroup_size;
 
       uint8_t num_ubos;
       uint8_t num_ssbos;
@@ -32,7 +32,7 @@ struct si_shader_info {
       uint32_t image_buffers;
       uint32_t msaa_images;
 
-      unsigned shared_size;
+      unsigned task_payload_size;
       uint16_t workgroup_size[3];
       bool workgroup_size_variable:1;
       enum gl_derivative_group derivative_group:2;
@@ -75,6 +75,15 @@ struct si_shader_info {
          struct {
             uint8_t user_data_components_amd:4;
          } cs;
+
+         struct {
+            uint16_t max_vertices_out;
+            uint16_t max_primitives_out;
+         } mesh;
+
+         struct {
+            bool linear_taskmesh_dispatch : 1;
+         } task;
       };
    } base;
 
@@ -196,6 +205,8 @@ struct si_shader_variant_info {
    uint32_t vs_output_ps_input_cntl[NUM_TOTAL_VARYING_SLOTS];
    union si_ps_input_info ps_inputs[SI_NUM_INTERP];
    uint8_t num_ps_inputs;
+   uint8_t num_ps_per_primitive_inputs;
+   uint8_t num_ps_maybe_per_primitive_inputs;
    uint8_t ps_colors_read;
    uint8_t num_input_sgprs;
    uint8_t num_input_vgprs;
@@ -211,8 +222,10 @@ struct si_shader_variant_info {
    bool writes_stencil : 1;
    bool writes_sample_mask : 1;
    bool uses_discard : 1;
+   bool uses_mesh_scratch_ring : 1;
    uint8_t nr_pos_exports;
    uint8_t nr_param_exports;
+   uint8_t nr_prim_param_exports;
    uint8_t clipdist_mask;
    uint8_t culldist_mask;
    uint8_t num_streamout_vec4s;
@@ -220,6 +233,7 @@ struct si_shader_variant_info {
    uint8_t ngg_lds_scratch_size;
    uint16_t private_mem_vgprs;
    uint32_t ngg_lds_vertex_size; /* VS,TES: Cull+XFB, GS: GSVS size */
+   uint32_t shared_size;
    ac_nir_legacy_gs_info legacy_gs;
 };
 

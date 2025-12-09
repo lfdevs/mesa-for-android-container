@@ -53,5 +53,8 @@ dEQP-VK.reconvergence.maximal.compute.nesting4.7.38
 # investigated.
 dEQP-VK.api.command_buffers.many_indirect_disps_on_secondary
 
-# CTS bug
-dEQP-VK.api.debug_utils.long_labels_video_decode
+# These tests are expected to hang on GFX10+. I have a pending fix.
+dEQP-VK.sparse_resources.buffer.misc.null_address_read*
+
+# These tests require PCIe atomics, causing random hangs
+dEQP-VK.video.synchronization.*.basic.event.*

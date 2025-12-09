@@ -277,6 +277,11 @@ class Format:
                 self.be_alias = f"PIPE_FORMAT_{consume_str(self, source, 'big_endian', 'alias')}"
             consumed(self, source, 'big_endian')
 
+        # Allow shorter fourcc alias for fully descriptive YUV formats.
+        self.alias = None
+        if 'alias' in source:
+            self.alias = f"PIPE_FORMAT_{consume_str(self, source, 'alias')}"
+
         consumed(self, source)
         del(source)
 

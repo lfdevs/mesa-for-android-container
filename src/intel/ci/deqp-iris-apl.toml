@@ -2,7 +2,6 @@
 [[deqp]]
 deqp = "/deqp-gles/modules/gles2/deqp-gles2"
 caselists = ["/deqp-gles/mustpass/gles2-main.txt"]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -14,7 +13,6 @@ renderer_check = "APL"
 [[deqp]]
 deqp = "/deqp-gles/modules/gles3/deqp-gles3"
 caselists = ["/deqp-gles/mustpass/gles3-main.txt"]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -25,7 +23,6 @@ fraction = 3
 [[deqp]]
 deqp = "/deqp-gles/modules/gles31/deqp-gles31"
 caselists = ["/deqp-gles/mustpass/gles31-main.txt"]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -40,7 +37,6 @@ caselists = [
     "/deqp-gles/mustpass/gles3-khr-main.txt",
     "/deqp-gles/mustpass/gles31-khr-main.txt",
 ]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -56,7 +52,6 @@ caselists = [
     "/deqp-gl/mustpass/gl46-main.txt",
     "/deqp-gl/mustpass/gl46-khr-single.txt",
 ]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -67,7 +62,6 @@ deqp_args = [
 [[deqp]]
 deqp = "/deqp-gles/modules/gles3/deqp-gles3"
 caselists = ["/deqp-gles/mustpass/gles3-565-no-depth-no-stencil.txt"]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -78,7 +72,6 @@ prefix = "565-nozs-"
 [[deqp]]
 deqp = "/deqp-gles/modules/gles31/deqp-gles31"
 caselists = ["/deqp-gles/mustpass/gles31-565-no-depth-no-stencil.txt"]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -90,7 +83,6 @@ prefix = "565-nozs-"
 [[deqp]]
 deqp = "/deqp-gles/modules/gles3/deqp-gles3"
 caselists = ["/deqp-gles/mustpass/gles3-multisample.txt"]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
@@ -101,7 +93,6 @@ prefix = "multisample-"
 [[deqp]]
 deqp = "/deqp-gles/modules/gles31/deqp-gles31"
 caselists = ["/deqp-gles/mustpass/gles31-multisample.txt"]
-skips = ["/install/iris-skips.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",
     "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",

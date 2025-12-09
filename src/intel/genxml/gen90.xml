@@ -4115,7 +4115,13 @@
       <value name="Mid-cmdbuffer Preemption" value="0" />
       <value name="Object Level Preemption" value="1" />
     </field>
+    <field name="Media And GPGPU Pre-emption Control" dword="0" bits="2:1" type="uint">
+      <value name="Mid-thread Pre-emption" value="0" />
+      <value name="Thread Group Pre-emption" value="1" />
+      <value name="Command Level Pre-emption" value="2" />
+    </field>
     <field name="Replay Mode Mask" dword="0" bits="16:16" type="bool" />
+    <field name="Media And GPGPU Pre-emption Control Mask" dword="0" bits="18:17" type="uint" />
   </register>
   <register name="CS_DEBUG_MODE2" length="1" num="0x20d8">
     <field name="3D Rendering Instruction Disable" dword="0" bits="0:0" type="bool" />

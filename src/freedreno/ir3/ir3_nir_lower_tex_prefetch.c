@@ -25,7 +25,7 @@ typedef struct {
 static int
 coord_offset(nir_def *ssa, gl_system_value *bary_type)
 {
-   nir_instr *parent_instr = ssa->parent_instr;
+   nir_instr *parent_instr = nir_def_instr(ssa);
 
    /* The coordinate of a texture sampling instruction eligible for
     * pre-fetch is either going to be a load_interpolated_input/
@@ -68,11 +68,11 @@ coord_offset(nir_def *ssa, gl_system_value *bary_type)
       return -1;
 
    /* Happens with lowered load_barycentric_at_offset */
-   if (input->src[0].ssa->parent_instr->type != nir_instr_type_intrinsic)
+   if (!nir_src_is_intrinsic(input->src[0]))
       return -1;
 
    nir_intrinsic_instr *interp =
-      nir_instr_as_intrinsic(input->src[0].ssa->parent_instr);
+      nir_def_as_intrinsic(input->src[0].ssa);
 
    if (interp->intrinsic != nir_intrinsic_load_barycentric_pixel &&
        interp->intrinsic != nir_intrinsic_load_barycentric_sample &&
@@ -178,7 +178,8 @@ lower_tex_prefetch_block(nir_block *block, ir3_prefetch_state *state)
          continue;
 
       /* only prefetch for simple 2d tex fetch case */
-      if (tex->sampler_dim != GLSL_SAMPLER_DIM_2D || tex->is_array)
+      if (tex->sampler_dim != GLSL_SAMPLER_DIM_2D || tex->is_array ||
+          tex->is_sparse)
          continue;
 
       if (!ok_tex_samp(tex))
@@ -219,7 +220,7 @@ lower_tex_prefetch_func(nir_function_impl *impl, ir3_prefetch_state *state)
 
    nir_if *nif = nir_block_get_following_if(block);
    if (nif) {
-      nir_instr *cond = nif->condition.ssa->parent_instr;
+      nir_instr *cond = nir_def_instr(nif->condition.ssa);
       if (cond->type == nir_instr_type_intrinsic &&
           nir_instr_as_intrinsic(cond)->intrinsic ==
           nir_intrinsic_preamble_start_ir3) {

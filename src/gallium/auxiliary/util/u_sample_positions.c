@@ -68,7 +68,7 @@ u_default_sample_position(unsigned sample_count, unsigned sample_index)
    case  4: return u_default_sample_positions_4x[sample_index];
    case  8: return u_default_sample_positions_8x[sample_index];
    case 16: return u_default_sample_positions_16x[sample_index];
-   default: unreachable("Invalid sample count");
+   default: UNREACHABLE("Invalid sample count");
    }
 }
 

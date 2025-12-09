@@ -527,17 +527,14 @@ static void ppir_regalloc_reset_liveness_info(ppir_compiler *comp)
          continue;
       list_for_each_entry(ppir_instr, instr, &block->instr_list, list) {
 
-         if (instr->live_mask)
-            ralloc_free(instr->live_mask);
+         ralloc_free(instr->live_mask);
          instr->live_mask = rzalloc_array(comp, uint8_t,
                                           reg_mask_size(comp->reg_num));
 
-         if (instr->live_set)
-            ralloc_free(instr->live_set);
+         ralloc_free(instr->live_set);
          instr->live_set = rzalloc_array(comp, BITSET_WORD, comp->reg_num);
 
-         if (instr->live_internal)
-            ralloc_free(instr->live_internal);
+         ralloc_free(instr->live_internal);
          instr->live_internal = rzalloc_array(comp, BITSET_WORD, comp->reg_num);
       }
 

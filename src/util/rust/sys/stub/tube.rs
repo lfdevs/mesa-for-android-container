@@ -9,9 +9,8 @@ use crate::MesaResult;
 use crate::OwnedDescriptor;
 use crate::TubeType;
 
-pub struct Stub(());
-pub type Tube = Stub;
-pub type Listener = Stub;
+pub struct Tube;
+pub struct Listener;
 
 impl Tube {
     pub fn new<P: AsRef<Path>>(_path: P, _kind: TubeType) -> MesaResult<Tube> {
@@ -41,5 +40,11 @@ impl Listener {
 
     pub fn accept(&self) -> MesaResult<Tube> {
         Err(MesaError::Unsupported)
+    }
+}
+
+impl AsBorrowedDescriptor for Listener {
+    fn as_borrowed_descriptor(&self) -> &OwnedDescriptor {
+        unimplemented!()
     }
 }

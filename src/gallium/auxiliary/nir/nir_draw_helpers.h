@@ -31,7 +31,7 @@ extern "C" {
 #endif
 
 struct nir_shader;
-void
+bool
 nir_lower_pstipple_fs(struct nir_shader *shader,
                       unsigned *samplerUnitOut,
                       unsigned fixedUnit,

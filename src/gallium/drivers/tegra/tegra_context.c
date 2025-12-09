@@ -210,7 +210,7 @@ tegra_create_sampler_state(struct pipe_context *pcontext,
 }
 
 static void
-tegra_bind_sampler_states(struct pipe_context *pcontext, enum pipe_shader_type shader,
+tegra_bind_sampler_states(struct pipe_context *pcontext, mesa_shader_stage shader,
                           unsigned start_slot, unsigned num_samplers,
                           void **samplers)
 {
@@ -475,8 +475,8 @@ tegra_set_clip_state(struct pipe_context *pcontext,
 }
 
 static void
-tegra_set_constant_buffer(struct pipe_context *pcontext, enum pipe_shader_type shader,
-                          unsigned int index, bool take_ownership,
+tegra_set_constant_buffer(struct pipe_context *pcontext, mesa_shader_stage shader,
+                          unsigned int index,
                           const struct pipe_constant_buffer *buf)
 {
    struct tegra_context *context = to_tegra_context(pcontext);
@@ -488,7 +488,7 @@ tegra_set_constant_buffer(struct pipe_context *pcontext, enum pipe_shader_type s
       buf = &buffer;
    }
 
-   context->gpu->set_constant_buffer(context->gpu, shader, index, take_ownership, buf);
+   context->gpu->set_constant_buffer(context->gpu, shader, index, buf);
 }
 
 static void
@@ -543,7 +543,7 @@ tegra_set_viewport_states(struct pipe_context *pcontext, unsigned start_slot,
 }
 
 static void
-tegra_set_sampler_views(struct pipe_context *pcontext, enum pipe_shader_type shader,
+tegra_set_sampler_views(struct pipe_context *pcontext, mesa_shader_stage shader,
                         unsigned start_slot, unsigned num_views,
                         unsigned unbind_num_trailing_slots,
                         struct pipe_sampler_view **pviews)
@@ -593,7 +593,7 @@ tegra_set_debug_callback(struct pipe_context *pcontext,
 }
 
 static void
-tegra_set_shader_buffers(struct pipe_context *pcontext, enum pipe_shader_type shader,
+tegra_set_shader_buffers(struct pipe_context *pcontext, mesa_shader_stage shader,
                          unsigned start, unsigned count,
                          const struct pipe_shader_buffer *buffers,
                          unsigned writable_bitmask)
@@ -605,7 +605,7 @@ tegra_set_shader_buffers(struct pipe_context *pcontext, enum pipe_shader_type sh
 }
 
 static void
-tegra_set_shader_images(struct pipe_context *pcontext, enum pipe_shader_type shader,
+tegra_set_shader_images(struct pipe_context *pcontext, mesa_shader_stage shader,
                         unsigned start, unsigned count,
                         unsigned unbind_num_trailing_slots,
                         const struct pipe_image_view *images)
@@ -1355,6 +1355,7 @@ tegra_screen_context_create(struct pipe_screen *pscreen, void *priv,
    context->base.create_sampler_view = tegra_create_sampler_view;
    context->base.sampler_view_destroy = tegra_sampler_view_destroy;
    context->base.sampler_view_release = u_default_sampler_view_release;
+   context->base.resource_release = u_default_resource_release;
 
    context->base.create_surface = tegra_create_surface;
    context->base.surface_destroy = tegra_surface_destroy;

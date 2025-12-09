@@ -1,8 +1,18 @@
+KHR-GL46.packed_depth_stencil.blit.depth32f_stencil8
 KHR-GL46.shader_storage_buffer_object.advanced-usage-sync-cs
 KHR-GL46.texture_barrier.disjoint-texels
 KHR-GL46.texture_barrier_ARB.same-texel-rw-multipass
+KHR-GLES3.packed_depth_stencil.blit.depth24_stencil8
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreCS
 KHR-GLES31.core.shader_storage_buffer_object.advanced-usage-sync-cs
+
+dEQP-GLES3.functional.occlusion_query.conservative_depth_clear
+dEQP-GLES3.functional.occlusion_query.conservative_scissor_depth_clear_stencil_clear
+dEQP-GLES3.functional.occlusion_query.conservative_stencil_clear
+dEQP-GLES3.functional.occlusion_query.depth_write_depth_clear_stencil_write_stencil_clear
+dEQP-GLES3.functional.occlusion_query.scissor_depth_write_stencil_write
+dEQP-GLES31.functional.fbo.no_attachments.maximums.all
+dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d.rgba8i.size_pot.clamp_to_edge_repeat
 
 glx@glx-buffer-age
 glx@glx-buffer-age vblank_mode=0
@@ -11,6 +21,34 @@ glx@glx-multithread-clearbuffer
 glx@glx-multithread-texture
 glx@glx-swap-singlebuffer
 spec@!opengl 1.0@gl-1.0-ortho-pos
+spec@!opengl 1.0@gl-1.0-readpixsanity
+spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev
+spec@!opengl 1.1@draw-pixels
+spec@amd_shader_trinary_minmax@execution@built-in-functions@tcs-mid3-vec2-vec2-vec2
+spec@arb_buffer_storage@bufferstorage-persistent_gles3 read
+spec@arb_buffer_storage@bufferstorage-persistent_gles3 read client-storage
+spec@arb_buffer_storage@bufferstorage-persistent_gles3 read coherent client-storage
+spec@arb_direct_state_access@gettextureimage-formats init-by-rendering
+spec@arb_es3_compatibility@es3-drawarrays-primrestart-fixedindex
+spec@arb_pixel_buffer_object@cubemap npot pbo
 spec@arb_shader_image_load_store@coherency
 spec@arb_shader_image_load_store@coherency@Vertex-Geometry shader/'coherent' qualifier coherency test/256x256
+spec@arb_sync@clientwaitsync-timeout
+spec@arb_sync@clientwaitsync-timeout@read
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-bitand-neg-uint-uvec3
+spec@arb_texture_gather@texturegather@vs-r-none-float-2darray
 spec@arb_timer_query@timestamp-get
+spec@ext_depth_bounds_test@depth_bounds
+spec@ext_external_objects@vk-ping-pong-multi-sem
+spec@ext_external_objects@vk-ping-pong-single-sem
+spec@ext_framebuffer_multisample@accuracy all_samples depth_draw small depthstencil
+spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw small depthstencil
+spec@ext_framebuffer_object@getteximage-formats init-by-rendering
+spec@glsl-1.10@execution@built-in-functions@fs-op-selection-bool-vec4-vec4
+spec@glsl-1.30@execution@tex-miplevel-selection texturelod 2d
+spec@glsl-4.30@execution@built-in-functions@cs-greaterthanequal-uvec4-uvec4
+spec@glsl-4.50@execution@ssbo-atomiccompswap-int
+spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb
+spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb@sRGB decode
+spec@nv_copy_image@nv_copy_image-formats --samples=2
+spec@nv_copy_image@nv_copy_image-formats --samples=4

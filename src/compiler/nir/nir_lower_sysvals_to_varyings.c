@@ -31,6 +31,48 @@
  * varyings and should be called just after spirv_to_nir() when needed.
  */
 
+static bool
+lower_sysvals_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void * data)
+{
+   const struct nir_lower_sysvals_to_varyings_options *options = data;
+
+   gl_varying_slot slot;
+   const struct glsl_type *type;
+   switch (intrin->intrinsic) {
+#define SYSVAL_TO_VARYING(sysval, varying, typ)    \
+   case nir_intrinsic_load_##sysval:               \
+      if (!options->sysval)                        \
+         return false;                             \
+      slot = VARYING_SLOT_##varying;               \
+      type = glsl_##typ##_type();                  \
+      break;
+
+   SYSVAL_TO_VARYING(frag_coord, POS, vec4);
+   SYSVAL_TO_VARYING(point_coord, PNTC, vec2);
+   SYSVAL_TO_VARYING(front_face, FACE, bool);
+   SYSVAL_TO_VARYING(layer_id, LAYER, uint);
+   SYSVAL_TO_VARYING(view_index, VIEW_INDEX, uint);
+
+#undef SYSVAL_TO_VARYING
+
+   default:
+      return false;
+   }
+
+   nir_variable *var =
+      nir_get_variable_with_location(b->shader, nir_var_shader_in,
+                                     slot, type);
+   if (b->shader->info.stage == MESA_SHADER_FRAGMENT &&
+       glsl_type_is_integer(type))
+      var->data.interpolation = INTERP_MODE_FLAT;
+
+   b->cursor = nir_before_instr(&intrin->instr);
+   nir_def *val = nir_load_var(b, var);
+   nir_def_replace(&intrin->def, val);
+
+   return true;
+}
+
 bool
 nir_lower_sysvals_to_varyings(nir_shader *shader,
                               const struct nir_lower_sysvals_to_varyings_options *options)
@@ -51,6 +93,8 @@ nir_lower_sysvals_to_varyings(nir_shader *shader,
          SYSVAL_TO_VARYING(frag_coord, FRAG_COORD, POS);
          SYSVAL_TO_VARYING(point_coord, POINT_COORD, PNTC);
          SYSVAL_TO_VARYING(front_face, FRONT_FACE, FACE);
+         SYSVAL_TO_VARYING(layer_id, LAYER_ID, LAYER);
+         SYSVAL_TO_VARYING(view_index, VIEW_INDEX, VIEW_INDEX);
 
 #undef SYSVAL_TO_VARYING
 
@@ -62,11 +106,10 @@ nir_lower_sysvals_to_varyings(nir_shader *shader,
    if (progress)
       nir_fixup_deref_modes(shader);
 
-   /* Nothing this does actually changes anything tracked by metadata.
-    * If we ever made this pass more complicated, we might need to care
-    * more about metadata.
-    */
-   nir_shader_preserve_all_metadata(shader);
+   progress |= nir_shader_intrinsics_pass(shader, lower_sysvals_intrin,
+                                          nir_metadata_control_flow |
+                                          nir_metadata_loop_analysis,
+                                          (void *)options);
 
    return progress;
 }

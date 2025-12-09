@@ -13,13 +13,10 @@ gallium_dri_drivers = []
 gallium_dri_link_with = []
 gallium_dri_link_whole = []
 
-if with_gallium_va or with_gallium_vdpau
+if with_gallium_va
   gallium_dri_link_with += [libgalliumvlwinsys]
   if with_gallium_va
     gallium_dri_link_whole += [libva_st]
-  endif
-  if with_gallium_vdpau
-    gallium_dri_link_whole += [libvdpau_st]
   endif
 endif
 
@@ -44,7 +41,7 @@ libgallium_dri = shared_library(
   libgallium_name,
   files('dri_target.c'),
   include_directories : [
-    inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_drivers,
+    inc_include, inc_src, inc_mesa, inc_gallium, inc_gallium_aux, inc_util, inc_gallium_drivers,
     inc_gallium_winsys, include_directories('../../frontends/dri'),
   ],
   gnu_symbol_visibility : 'hidden',
@@ -62,7 +59,7 @@ libgallium_dri = shared_library(
     driver_kmsro, driver_v3d, driver_vc4, driver_freedreno, driver_etnaviv,
     driver_tegra, driver_i915, driver_svga, driver_virgl,
     driver_panfrost, driver_iris, driver_lima, driver_zink, driver_d3d12,
-    driver_asahi, driver_crocus
+    driver_asahi, driver_crocus, driver_rocket, driver_ethosu
   ],
   install : true,
   name_suffix : libname_suffix,
@@ -70,21 +67,15 @@ libgallium_dri = shared_library(
 
 shared_glapi_lib = libgallium_dri
 
-if with_gallium_va or with_gallium_vdpau
+if with_gallium_va
   va_drivers = []
-  vdpau_drivers = []
   foreach d : [[with_gallium_r600, 'r600'],
               [with_gallium_radeonsi, 'radeonsi'],
               [with_gallium_nouveau, 'nouveau'],
               [with_gallium_virgl, 'virtio_gpu'],
               [with_gallium_d3d12_video, 'd3d12']]
     if d[0]
-      if with_gallium_va
-        va_drivers += '@0@_drv_video.so'.format(d[1])
-      endif
-      if with_gallium_vdpau
-        vdpau_drivers += 'libvdpau_@0@.so.@1@.@2@.0'.format(d[1], VDPAU_MAJOR, VDPAU_MINOR)
-      endif
+      va_drivers += '@0@_drv_video.so'.format(d[1])
     endif
   endforeach
 
@@ -94,17 +85,6 @@ if with_gallium_va or with_gallium_vdpau
       libgallium_dri.full_path(),
       va_drivers_path,
       va_drivers,
-      '--megadriver-libdir', get_option('libdir'),
-      install_tag : 'runtime',
-    )
-  endif
-
-  if vdpau_drivers.length() > 0
-    meson.add_install_script(
-      install_megadrivers,
-      libgallium_dri.full_path(),
-      vdpau_drivers_path,
-      vdpau_drivers,
       '--megadriver-libdir', get_option('libdir'),
       install_tag : 'runtime',
     )

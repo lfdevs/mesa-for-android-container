@@ -26,7 +26,7 @@
 
 #include "util/hash_table.h"
 
-#include "panfrost/util/pan_ir.h"
+#include "panfrost/compiler/pan_compiler.h"
 
 #include "drm-uapi/drm_fourcc.h"
 

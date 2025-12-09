@@ -24,10 +24,9 @@
 #include "util/format/u_format.h"
 #include "util/macros.h"
 #include "v3d_context.h"
-#include "broadcom/common/v3d_macros.h"
 #include "broadcom/common/v3d_tiling.h"
 #include "broadcom/common/v3d_util.h"
-#include "broadcom/cle/v3dx_pack.h"
+#include "v3dx_format_table.h"
 
 #define PIPE_CLEAR_COLOR_BUFFERS (PIPE_CLEAR_COLOR0 |                   \
                                   PIPE_CLEAR_COLOR1 |                   \
@@ -392,11 +391,12 @@ v3d_rcl_emit_generic_per_tile_list(struct v3d_job *job, int layer)
  * Note: rt_type is in fact a "enum V3DX(Internal_Type)".
  *
  */
-static uint32_t
-v3dX(clamp_for_format_and_type)(uint32_t rt_type,
+
+#if V3D_VERSION == 42
+static enum V3DX(Render_Target_Clamp)
+v3dX(clamp_for_format_and_type)(enum V3DX(Internal_Type) rt_type,
                                 enum pipe_format format)
 {
-#if V3D_VERSION == 42
         if (util_format_is_srgb(format)) {
                 return V3D_RENDER_TARGET_CLAMP_NORM;
         } else if (util_format_is_pure_integer(format)) {
@@ -404,8 +404,15 @@ v3dX(clamp_for_format_and_type)(uint32_t rt_type,
         } else {
                 return V3D_RENDER_TARGET_CLAMP_NONE;
         }
+        UNREACHABLE("Wrong V3D_VERSION");
+}
 #endif
+
 #if V3D_VERSION >= 71
+static enum V3DX(Render_Target_Type_Clamp)
+v3dX(clamp_for_format_and_type)(enum V3DX(Internal_Type) rt_type,
+                                enum pipe_format format)
+{
         switch (rt_type) {
         case V3D_INTERNAL_TYPE_8I:
                 return V3D_RENDER_TARGET_TYPE_CLAMP_8I_CLAMPED;
@@ -414,7 +421,15 @@ v3dX(clamp_for_format_and_type)(uint32_t rt_type,
         case V3D_INTERNAL_TYPE_8:
                 return V3D_RENDER_TARGET_TYPE_CLAMP_8;
         case V3D_INTERNAL_TYPE_16I:
-                return V3D_RENDER_TARGET_TYPE_CLAMP_16I_CLAMPED;
+                /* For the 16-bit snorm case we need to take care of sign
+                 * extension. Consider F2SNORM16 for -1.0f. We get
+                 * 0x00008000. This is greater than 2**15 therefore gets
+                 * clamped to 00007fff. If we didn't disable clamping here, we
+                 * would need to sign extend after F2SNORM16 in the shader.
+                 */
+                return util_format_is_snorm(format) ?
+                       V3D_RENDER_TARGET_TYPE_CLAMP_16I :
+                       V3D_RENDER_TARGET_TYPE_CLAMP_16I_CLAMPED;
         case V3D_INTERNAL_TYPE_16UI:
                 return V3D_RENDER_TARGET_TYPE_CLAMP_16UI_CLAMPED;
         case V3D_INTERNAL_TYPE_16F:
@@ -428,12 +443,13 @@ v3dX(clamp_for_format_and_type)(uint32_t rt_type,
         case V3D_INTERNAL_TYPE_32F:
                 return V3D_RENDER_TARGET_TYPE_CLAMP_32F;
         default:
-                unreachable("Unknown internal render target type");
+                UNREACHABLE("Unknown internal render target type");
         }
         return V3D_RENDER_TARGET_TYPE_CLAMP_INVALID;
-#endif
-        unreachable("Wrong V3D_VERSION");
+
+        UNREACHABLE("Wrong V3D_VERSION");
 }
+#endif
 
 #if V3D_VERSION >= 71
 static void

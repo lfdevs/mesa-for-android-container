@@ -73,13 +73,9 @@ ENCODER_CUSTOM_RESOURCE_POSTPROCESS = [
     "vkCreateDevice",
     "vkMapMemoryIntoAddressSpaceGOOGLE",
     "vkGetPhysicalDeviceFeatures2",
-    "vkGetPhysicalDeviceFeatures2KHR",
     "vkGetPhysicalDeviceProperties2",
-    "vkGetPhysicalDeviceProperties2KHR",
     "vkCreateDescriptorUpdateTemplate",
-    "vkCreateDescriptorUpdateTemplateKHR",
     "vkGetPhysicalDeviceExternalSemaphoreProperties",
-    "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR",
 ]
 
 ENCODER_EXPLICIT_FLUSHED_APIS = [

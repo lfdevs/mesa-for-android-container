@@ -29,13 +29,15 @@
 #include "hwdef/rogue_hw_utils.h"
 #include "pvr_bo.h"
 #include "pvr_common.h"
+#include "pvr_csb.h"
+#include "pvr_device.h"
 #include "pvr_device_info.h"
 #include "pvr_job_transfer.h"
 #include "pvr_pds.h"
-#include "pvr_private.h"
+#include "pvr_physical_device.h"
 #include "pvr_transfer_frag_store.h"
 #include "pvr_types.h"
-#include "usc/pvr_uscgen.h"
+#include "pvr_usc.h"
 #include "util/hash_table.h"
 #include "util/macros.h"
 #include "util/ralloc.h"
@@ -53,10 +55,13 @@ struct pvr_transfer_frag_store_entry_data {
    struct pvr_tq_frag_sh_reg_layout sh_reg_layout;
 };
 
-#define to_pvr_entry_data(_entry) \
-   _Generic((_entry), \
-            struct hash_entry *: (struct pvr_transfer_frag_store_entry_data *)((_entry)->data), \
-            const struct hash_entry *: (const struct pvr_transfer_frag_store_entry_data *)((_entry)->data))
+#define to_pvr_entry_data(_entry)                                          \
+   _Generic((_entry),                                                      \
+      struct hash_entry *: (struct pvr_transfer_frag_store_entry_data      \
+                               *)((_entry)->data),                         \
+      const struct hash_entry *: (                                         \
+               const struct pvr_transfer_frag_store_entry_data *)((_entry) \
+                                                                     ->data))
 
 VkResult pvr_transfer_frag_store_init(struct pvr_device *device,
                                       struct pvr_transfer_frag_store *store)
@@ -121,10 +126,10 @@ static uint32_t pvr_transfer_frag_shader_key(
    hash |= layer->sample;
 
    shift_hash(hash, 1U);
-   hash |= (uint32_t) false;
+   hash |= (uint32_t)false;
 
    shift_hash(hash, 1U);
-   hash |= (uint32_t) false;
+   hash |= (uint32_t)false;
 
    shift_hash(hash, pixel_src_bits);
    hash |= (uint32_t)layer->pbe_format;
@@ -183,11 +188,10 @@ static VkResult pvr_transfer_frag_store_entry_data_compile(
       offsetof(struct pvr_combined_image_sampler_descriptor, sampler) / 4;
 
    const uint32_t cache_line_size =
-      rogue_get_slc_cache_line_size(&device->pdevice->dev_info);
+      pvr_get_slc_cache_line_size(&device->pdevice->dev_info);
 
    struct pvr_tq_frag_sh_reg_layout *sh_reg_layout = &entry_data->sh_reg_layout;
    uint32_t next_free_sh_reg = 0;
-   struct util_dynarray shader;
    VkResult result;
 
    /* TODO: Allocate all combined image samplers if needed? Otherwise change the
@@ -208,17 +212,19 @@ static VkResult pvr_transfer_frag_store_entry_data_compile(
 
    sh_reg_layout->driver_total = next_free_sh_reg;
 
-   pvr_uscgen_tq_frag(shader_props,
-                      &entry_data->sh_reg_layout,
-                      num_usc_temps_out,
-                      &shader);
+   pco_shader *tq =
+      pvr_uscgen_tq(device->pdevice->pco_ctx, shader_props, sh_reg_layout);
+
+   *num_usc_temps_out = pco_shader_data(tq)->common.temps;
 
    result = pvr_gpu_upload_usc(device,
-                               util_dynarray_begin(&shader),
-                               util_dynarray_num_elements(&shader, uint8_t),
+                               pco_shader_binary_data(tq),
+                               pco_shader_binary_size(tq),
                                cache_line_size,
                                &entry_data->usc_upload);
-   util_dynarray_fini(&shader);
+
+   ralloc_free(tq);
+
    if (result != VK_SUCCESS)
       return result;
 

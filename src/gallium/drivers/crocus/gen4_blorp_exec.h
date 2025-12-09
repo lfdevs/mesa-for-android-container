@@ -172,7 +172,7 @@ blorp_emit_pipeline(struct blorp_batch *blorp_batch,
 {
    struct crocus_batch *batch = blorp_batch->driver_batch;
 
-   emit_urb_config(blorp_batch, params, NULL);
+   emit_urb_config(blorp_batch, params);
 
    blorp_emit(blorp_batch, GENX(3DSTATE_PIPELINED_POINTERS), pp) {
       pp.PointertoVSState = blorp_emit_vs_state(blorp_batch);

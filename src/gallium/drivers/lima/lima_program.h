@@ -27,7 +27,7 @@
 
 #include "pipe/p_defines.h"
 
-const void *lima_program_get_compiler_options(enum pipe_shader_type shader);
+const void *lima_program_get_compiler_options(mesa_shader_stage shader);
 
 bool lima_update_vs_state(struct lima_context *ctx);
 bool lima_update_fs_state(struct lima_context *ctx);

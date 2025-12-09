@@ -113,10 +113,11 @@ st_nir_lookup_parameter_index(struct gl_program *prog, nir_variable *var)
 }
 
 static void
-st_nir_assign_uniform_locations(struct gl_context *ctx,
+st_nir_assign_uniform_locations(struct st_context *st,
                                 struct gl_program *prog,
-                                nir_shader *nir)
+                                nir_shader *nir, bool is_before_variants)
 {
+   struct gl_context *ctx = st->ctx;
    int shaderidx = 0;
    int imageidx = 0;
 
@@ -134,6 +135,9 @@ st_nir_assign_uniform_locations(struct gl_context *ctx,
             imageidx += type_size(uniform->type);
          }
       } else if (uniform->state_slots) {
+         if (st->allow_st_finalize_nir_twice && !is_before_variants)
+            continue;
+
          const gl_state_index16 *const stateTokens = uniform->state_slots[0].tokens;
 
          unsigned comps;
@@ -203,6 +207,26 @@ filter_64_bit_instr(const nir_instr *const_instr, UNUSED const void *data)
    return lower;
 }
 
+static bool
+filter_double_subgroup(const nir_intrinsic_instr *intr, UNUSED const void *data)
+{
+   switch(intr->intrinsic) {
+   case nir_intrinsic_vote_feq:
+      return intr->src[0].ssa->bit_size == 64;
+   case nir_intrinsic_reduce:
+   case nir_intrinsic_exclusive_scan:
+   case nir_intrinsic_inclusive_scan: {
+      if (intr->src[0].ssa->bit_size != 64)
+         return false;
+      unsigned op = nir_intrinsic_reduction_op(intr);
+      nir_alu_type type = nir_op_infos[op].output_type;
+      return type == nir_type_float;
+   }
+   default:
+      return false;
+   }
+}
+
 /* Second third of converting glsl_to_nir. This creates uniforms, gathers
  * info on varyings, etc after NIR link time opts have been applied.
  */
@@ -261,8 +285,6 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
    if (!screen->caps.nir_atomics_as_deref)
       NIR_PASS(_, nir, gl_nir_lower_atomics, shader_program, true);
 
-   NIR_PASS(_, nir, nir_opt_intrinsics);
-
    /* Lower 64-bit ops. */
    if (nir->options->lower_int64_options ||
        nir->options->lower_doubles_options) {
@@ -270,13 +292,38 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
       bool revectorize = false;
 
       if (nir->options->lower_doubles_options) {
+         /* 64-bit subgroup ops like vote_feq and inclusive_scan are secretly
+          * fp64 operations, so lower them first to make the ALU operation
+          * appear for nir_lower_doubles to lower after.
+          *
+          * Create GL_KHR_shader_subgroup like uvec4 ballots, drivers have to further
+          * lower that on their own.
+          */
+         nir_lower_subgroups_options subgroup_opts = {0};
+         subgroup_opts.filter = filter_double_subgroup;
+         subgroup_opts.subgroup_size = 0;
+         subgroup_opts.ballot_bit_size = 32;
+         subgroup_opts.ballot_components = 4;
+         subgroup_opts.lower_vote_feq = true;
+         subgroup_opts.lower_reduce = true;
+
          /* nir_lower_doubles is not prepared for vector ops, so if the backend doesn't
           * request lower_alu_to_scalar until now, lower all 64 bit ops, and try to
           * vectorize them afterwards again */
-         if (!nir->options->lower_to_scalar) {
+         bool scalarize = !nir->options->lower_to_scalar;
+
+         if (nir->options->lower_doubles_options & nir_lower_fp64_full_software) {
+            NIR_PASS(lowered_64bit_ops, nir, nir_lower_subgroups, &subgroup_opts);
+            /* Subgroup lowering may generate 64-bit vector ALU operations. */
+            if (lowered_64bit_ops)
+               scalarize = true;
+         }
+
+         if (scalarize) {
             NIR_PASS(revectorize, nir, nir_lower_alu_to_scalar, filter_64_bit_instr, nullptr);
             NIR_PASS(revectorize, nir, nir_lower_phis_to_scalar, NULL, NULL);
          }
+
          /* doubles lowering requires frexp to be lowered first if it will be,
           * since the pass generates other 64-bit ops.  Most backends lower
           * frexp, and using doubles is rare, and using frexp is even more rare
@@ -313,6 +360,8 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
       NIR_PASS(_, nir, nir_lower_atomics_to_ssbo, align_offset_state);
    }
 
+   NIR_PASS(_, nir, nir_opt_intrinsics);
+
    st_set_prog_affected_state_flags(prog);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
@@ -321,7 +370,7 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
       st_finalize_nir(st, prog, shader_program, nir, true, false);
 
       if (screen->finalize_nir)
-         screen->finalize_nir(screen, nir);
+         screen->finalize_nir(screen, nir, false);
    }
 
    if (st->ctx->_Shader->Flags & GLSL_DUMP) {
@@ -386,7 +435,7 @@ st_link_glsl_to_nir(struct gl_context *ctx,
                     struct gl_shader_program *shader_program)
 {
    struct st_context *st = st_context(ctx);
-   struct gl_linked_shader *linked_shader[MESA_SHADER_STAGES];
+   struct gl_linked_shader *linked_shader[MESA_SHADER_MESH_STAGES];
    unsigned num_shaders = 0;
 
    /* Return early if we are loading the shader from on-disk cache */
@@ -403,7 +452,7 @@ st_link_glsl_to_nir(struct gl_context *ctx,
          return GL_FALSE;
    }
 
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (shader_program->_LinkedShaders[i])
          linked_shader[num_shaders++] = shader_program->_LinkedShaders[i];
    }
@@ -442,6 +491,8 @@ st_link_glsl_to_nir(struct gl_context *ctx,
           */
          if (_mesa_is_desktop_gl(st->ctx) && st->ctx->Const.GLSLVersion >= 400)
             st->ctx->SoftFP64 = glsl_float64_funcs_to_nir(st->ctx, options);
+         else
+            _mesa_warning(NULL, "Mesa full software implementation of FP64 requires OpenGL >= 4.0\n");
       }
    }
 
@@ -466,9 +517,7 @@ st_link_glsl_to_nir(struct gl_context *ctx,
    for (unsigned i = 0; i < num_shaders; i++) {
       struct gl_linked_shader *shader = linked_shader[i];
       nir_shader *nir = shader->Program->nir;
-      gl_shader_stage stage = shader->Stage;
-      const struct gl_shader_compiler_options *options =
-            &ctx->Const.ShaderCompilerOptions[stage];
+      mesa_shader_stage stage = shader->Stage;
 
       /* Since IO is lowered, we won't need the IO variables from now on.
        * nir_build_program_resource_list was the last pass that needed them.
@@ -479,17 +528,18 @@ st_link_glsl_to_nir(struct gl_context *ctx,
       /* If there are forms of indirect addressing that the driver
        * cannot handle, perform the lowering pass.
        */
-      if (options->EmitNoIndirectTemp || options->EmitNoIndirectUniform) {
+      if (!ctx->screen->shader_caps[stage].indirect_temp_addr ||
+          !ctx->screen->shader_caps[stage].indirect_const_addr) {
          nir_variable_mode mode = (nir_variable_mode)0;
 
-         mode |= options->EmitNoIndirectTemp ?
+         mode |= !ctx->screen->shader_caps[stage].indirect_temp_addr ?
             nir_var_function_temp : (nir_variable_mode)0;
-         mode |= options->EmitNoIndirectUniform ?
+         mode |= !ctx->screen->shader_caps[stage].indirect_const_addr ?
             nir_var_uniform | nir_var_mem_ubo | nir_var_mem_ssbo :
             (nir_variable_mode)0;
 
          if (mode)
-            nir_lower_indirect_derefs(nir, mode, UINT32_MAX);
+            nir_lower_indirect_derefs_to_if_else_trees(nir, mode, UINT32_MAX);
       }
 
       /* This needs to run after the initial pass of nir_lower_vars_to_ssa, so
@@ -591,15 +641,15 @@ st_link_glsl_to_nir(struct gl_context *ctx,
 
    struct pipe_context *pctx = st_context(ctx)->pipe;
    if (pctx->link_shader) {
-      void *driver_handles[PIPE_SHADER_TYPES];
+      void *driver_handles[MESA_SHADER_MESH_STAGES];
       memset(driver_handles, 0, sizeof(driver_handles));
 
-      for (uint32_t i = 0; i < MESA_SHADER_STAGES; ++i) {
+      for (uint32_t i = 0; i < MESA_SHADER_MESH_STAGES; ++i) {
          struct gl_linked_shader *shader = shader_program->_LinkedShaders[i];
          if (shader) {
             struct gl_program *p = shader->Program;
             if (p && p->variants) {
-               enum pipe_shader_type type = pipe_shader_type_from_mesa(shader->Stage);
+               mesa_shader_stage type = shader->Stage;
                driver_handles[type] = p->variants->driver_shader;
             }
          }
@@ -685,7 +735,7 @@ st_finalize_nir(struct st_context *st, struct gl_program *prog,
       NIR_PASS(_, nir, nir_lower_tex, &opts);
    }
 
-   st_nir_assign_uniform_locations(st->ctx, prog, nir);
+   st_nir_assign_uniform_locations(st, prog, nir, is_before_variants);
 
    /* Set num_uniforms in number of attribute slots (vec4s) */
    nir->num_uniforms = DIV_ROUND_UP(prog->Parameters->NumParameterValues, 4);

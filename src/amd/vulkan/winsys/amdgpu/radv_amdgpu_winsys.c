@@ -73,7 +73,7 @@ radv_amdgpu_winsys_query_value(struct radeon_winsys *rws, enum radeon_value_id v
       ac_drm_query_sensor_info(ws->dev, AMDGPU_INFO_SENSOR_GFX_MCLK, 4, &retval);
       return retval;
    default:
-      unreachable("invalid query value");
+      UNREACHABLE("invalid query value");
    }
 
    return 0;
@@ -85,14 +85,6 @@ radv_amdgpu_winsys_read_registers(struct radeon_winsys *rws, unsigned reg_offset
    struct radv_amdgpu_winsys *ws = (struct radv_amdgpu_winsys *)rws;
 
    return ac_drm_read_mm_registers(ws->dev, reg_offset / 4, num_registers, 0xffffffff, 0, out) == 0;
-}
-
-static const char *
-radv_amdgpu_winsys_get_chip_name(struct radeon_winsys *rws)
-{
-   ac_drm_device *dev = ((struct radv_amdgpu_winsys *)rws)->dev;
-
-   return ac_drm_get_marketing_name(dev);
 }
 
 static bool
@@ -148,8 +140,11 @@ radv_amdgpu_winsys_destroy(struct radeon_winsys *rws)
    u_rwlock_destroy(&ws->global_bo_list.lock);
    free(ws->global_bo_list.bos);
 
-   if (ws->reserve_vmid)
-      ac_drm_vm_unreserve_vmid(ws->dev, 0);
+   ac_drm_cs_destroy_syncobj(ws->dev, ws->vm_timeline_syncobj);
+   simple_mtx_destroy(&ws->vm_ioctl_lock);
+
+   if (ws->bo_history_logfile)
+      fclose(ws->bo_history_logfile);
 
    u_rwlock_destroy(&ws->log_bo_list_lock);
    ac_drm_device_deinitialize(ws->dev);
@@ -179,8 +174,29 @@ radv_amdgpu_winsys_get_sync_provider(struct radeon_winsys *rws)
    return p->clone(p);
 }
 
+static int
+radv_amdgpu_winsys_reserve_vmid(struct radeon_winsys *rws)
+{
+   struct radv_amdgpu_winsys *ws = (struct radv_amdgpu_winsys *)rws;
+   return ac_drm_vm_reserve_vmid(ws->dev, 0);
+}
+
+static void
+radv_amdgpu_winsys_unreserve_vmid(struct radeon_winsys *rws)
+{
+   struct radv_amdgpu_winsys *ws = (struct radv_amdgpu_winsys *)rws;
+   ac_drm_vm_unreserve_vmid(ws->dev, 0);
+}
+
+static uint64_t
+radv_amdgpu_winsys_filter_perftest_flags(uint64_t perftest_flags)
+{
+   return perftest_flags &
+          (RADV_PERFTEST_NO_GTT_SPILL | RADV_PERFTEST_LOCAL_BOS | RADV_PERFTEST_NO_SAM | RADV_PERFTEST_SAM);
+}
+
 VkResult
-radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags, bool reserve_vmid, bool is_virtio,
+radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags, bool is_virtio,
                           struct radeon_winsys **winsys)
 {
    VkResult result = VK_SUCCESS;
@@ -188,6 +204,8 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    uint32_t drm_major, drm_minor, r;
    ac_drm_device *dev;
    struct radv_amdgpu_winsys *ws = NULL;
+
+   perftest_flags = radv_amdgpu_winsys_filter_perftest_flags(perftest_flags);
 
    r = ac_drm_device_initialize(fd, is_virtio, &drm_major, &drm_minor, &dev);
    if (r) {
@@ -211,9 +229,9 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
       ++ws->refcount;
    }
 
-   if (is_virtio && (perftest_flags & (RADV_PERFTEST_BO_LIST | RADV_PERFTEST_LOCAL_BOS))) {
+   if (is_virtio && (perftest_flags & RADV_PERFTEST_LOCAL_BOS)) {
       /* virtio doesn't support VM_ALWAYS_VALID, so disable options that requires it. */
-      fprintf(stderr, "localbos and bolist options are not supported values for RADV_PERFTEST with virtio.\n");
+      fprintf(stderr, "RADV_PERFTEST=localbos is not supported with virtio.\n");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
 
@@ -224,7 +242,7 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
       /* Check that options don't differ from the existing winsys. */
       if (((debug_flags & RADV_DEBUG_ALL_BOS) && !ws->debug_all_bos) ||
           ((debug_flags & RADV_DEBUG_HANG) && !ws->debug_log_bos) ||
-          ((debug_flags & RADV_DEBUG_NO_IBS) && ws->use_ib_bos) || (perftest_flags != ws->perftest)) {
+          ((debug_flags & RADV_DEBUG_NO_IB_CHAINING) && ws->chain_ib) || (perftest_flags != ws->perftest)) {
          fprintf(stderr, "radv/amdgpu: Found options that differ from the existing winsys.\n");
          return VK_ERROR_INITIALIZATION_FAILED;
       }
@@ -271,29 +289,21 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    ws->info.ip[AMD_IP_SDMA].num_queues = MIN2(ws->info.ip[AMD_IP_SDMA].num_queues, MAX_RINGS_PER_TYPE);
    ws->info.ip[AMD_IP_COMPUTE].num_queues = MIN2(ws->info.ip[AMD_IP_COMPUTE].num_queues, MAX_RINGS_PER_TYPE);
 
-   ws->use_ib_bos = true;
-
+   ws->chain_ib = !(debug_flags & RADV_DEBUG_NO_IB_CHAINING);
    ws->debug_all_bos = !!(debug_flags & RADV_DEBUG_ALL_BOS);
    ws->debug_log_bos = debug_flags & RADV_DEBUG_HANG;
-   if (debug_flags & RADV_DEBUG_NO_IBS)
-      ws->use_ib_bos = false;
+   ws->dump_ibs = !!(debug_flags & RADV_DEBUG_DUMP_IBS);
 
-   ws->reserve_vmid = reserve_vmid;
-   if (ws->reserve_vmid) {
-      r = ac_drm_vm_reserve_vmid(ws->dev, 0);
-      if (r) {
-         fprintf(stderr, "radv/amdgpu: failed to reserve vmid.\n");
-         result = VK_ERROR_INITIALIZATION_FAILED;
-         goto winsys_fail;
-      }
+   if (debug_flags & RADV_DEBUG_DUMP_BO_HISTORY) {
+      ws->bo_history_logfile = fopen("/tmp/radv_bo_history.log", "w+");
+      if (!ws->bo_history_logfile)
+         fprintf(stderr, "radv/amdgpu: Failed to create /tmp/radv_bo_history.log.\n");
    }
+
    int num_sync_types = 0;
 
    ws->syncobj_sync_type = vk_drm_syncobj_get_type_from_provider(ac_drm_device_get_sync_provider(dev));
    if (ws->syncobj_sync_type.features) {
-      /* multi wait is always supported */
-      ws->syncobj_sync_type.features |= VK_SYNC_FEATURE_GPU_MULTI_WAIT;
-
       if (!ws->info.has_timeline_syncobj && ws->syncobj_sync_type.features & VK_SYNC_FEATURE_TIMELINE) {
          /* Disable timeline feature if it was disabled in the driver. */
          assert(is_virtio);
@@ -311,6 +321,11 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    ws->sync_types[num_sync_types++] = NULL;
    assert(num_sync_types <= ARRAY_SIZE(ws->sync_types));
 
+   if (ac_drm_cs_create_syncobj2(ws->dev, 0, &ws->vm_timeline_syncobj))
+      goto winsys_fail;
+
+   simple_mtx_init(&ws->vm_ioctl_lock, mtx_plain);
+
    ws->perftest = perftest_flags;
    ws->zero_all_vram_allocs = debug_flags & RADV_DEBUG_ZERO_VRAM;
    u_rwlock_init(&ws->global_bo_list.lock);
@@ -319,12 +334,14 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
    ws->base.query_info = radv_amdgpu_winsys_query_info;
    ws->base.query_value = radv_amdgpu_winsys_query_value;
    ws->base.read_registers = radv_amdgpu_winsys_read_registers;
-   ws->base.get_chip_name = radv_amdgpu_winsys_get_chip_name;
    ws->base.query_gpuvm_fault = radv_amdgpu_winsys_query_gpuvm_fault;
    ws->base.destroy = radv_amdgpu_winsys_destroy;
    ws->base.get_fd = radv_amdgpu_winsys_get_fd;
    ws->base.get_sync_types = radv_amdgpu_winsys_get_sync_types;
    ws->base.get_sync_provider = radv_amdgpu_winsys_get_sync_provider;
+   ws->base.copy_sync_payloads = vk_drm_syncobj_copy_payloads;
+   ws->base.reserve_vmid = radv_amdgpu_winsys_reserve_vmid;
+   ws->base.unreserve_vmid = radv_amdgpu_winsys_unreserve_vmid;
    radv_amdgpu_bo_init_functions(ws);
    radv_amdgpu_cs_init_functions(ws);
 

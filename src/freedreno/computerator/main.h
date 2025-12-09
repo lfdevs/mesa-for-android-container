@@ -50,7 +50,7 @@ struct perfcntr {
 /* per-generation entry-points: */
 struct backend {
    struct kernel *(*assemble)(struct backend *b, FILE *in);
-   void (*disassemble)(struct kernel *kernel, FILE *out);
+   void (*disassemble)(struct kernel *kernel, struct ir3_disasm_options *);
    void (*emit_grid)(struct kernel *kernel, uint32_t grid[3],
                      struct fd_submit *submit);
 

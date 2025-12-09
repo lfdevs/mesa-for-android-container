@@ -183,9 +183,10 @@ struct pvr_renderpass_hwsetup_subpass {
    struct {
       enum pvr_renderpass_hwsetup_input_access type;
       uint32_t on_chip_rt;
-   } * input_access;
+   } *input_access;
 
    uint8_t output_register_mask;
+   bool has_stencil_self_dep;
 };
 
 struct pvr_renderpass_colorinit {
@@ -194,6 +195,15 @@ struct pvr_renderpass_colorinit {
 
    /* Type of operation either clear or load. */
    VkAttachmentLoadOp op;
+};
+
+struct pvr_load_op_state {
+   uint32_t load_op_count;
+
+   /* Load op array indexed by HW render view (not by the index in the view
+    * mask).
+    */
+   struct pvr_load_op *load_ops;
 };
 
 struct pvr_renderpass_hwsetup_render {
@@ -218,6 +228,16 @@ struct pvr_renderpass_hwsetup_render {
     * render.
     */
    uint32_t ds_attach_idx;
+
+   /* Index of the attachment to use for depth/stencil resolve load/store in
+    * this render.
+    */
+   uint32_t ds_attach_resolve_idx;
+
+   /* Resolve mode to perform for this render originally set for each subpass.
+    */
+   VkResolveModeFlagBits stencil_resolve_mode;
+   VkResolveModeFlagBits depth_resolve_mode;
 
    /* Operation on the on-chip depth at the start of the render.
     * Either load from 'ds_attach_idx', clear using 'ds_attach_idx' or leave
@@ -254,7 +274,12 @@ struct pvr_renderpass_hwsetup_render {
    /* true if this HW render has lasting effects on its attachments. */
    bool has_side_effects;
 
-   struct pvr_load_op *load_op;
+   bool requires_frag_pr;
+
+   /* View mask for multiview. */
+   uint32_t view_mask;
+
+   struct pvr_load_op_state *load_op_state;
 };
 
 struct pvr_renderpass_hw_map {

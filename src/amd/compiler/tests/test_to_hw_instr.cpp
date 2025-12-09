@@ -218,7 +218,6 @@ BEGIN_TEST(to_hw_instr.swap_subdword)
       bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v1b), Definition(v0_hi, v1b),
                  Operand(v0_hi, v1b), Operand(v0_lo, v1b));
 
-      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //! s_endpgm
 
       finish_to_hw_instr_test();
@@ -369,7 +368,6 @@ BEGIN_TEST(to_hw_instr.subdword_constant)
       bld.pseudo(aco_opcode::p_unit_test, Operand::c32(17u));
       bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v1b), Operand::zero(1));
 
-      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //! s_endpgm
 
       finish_to_hw_instr_test();
@@ -500,7 +498,6 @@ BEGIN_TEST(to_hw_instr.extract)
 
          finish_to_hw_instr_test();
 
-         //~gfx11_.*! s_sendmsg sendmsg(dealloc_vgprs)
          //! s_endpgm
       }
    }
@@ -618,7 +615,6 @@ BEGIN_TEST(to_hw_instr.insert)
 
       finish_to_hw_instr_test();
 
-      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //! s_endpgm
    }
 END_TEST
@@ -838,7 +834,6 @@ BEGIN_TEST(to_hw_instr.pack2x16_constant)
       bld.pseudo(aco_opcode::p_parallelcopy, Definition(v0_lo, v2b), Definition(v0_hi, v2b),
                  Operand(v1_lo, v2b), Operand::c16(0x00f0));
 
-      //~gfx11! s_sendmsg sendmsg(dealloc_vgprs)
       //! s_endpgm
 
       finish_to_hw_instr_test();
@@ -855,7 +850,6 @@ BEGIN_TEST(to_hw_instr.mov_b16_sgpr_src)
    bld.pseudo(aco_opcode::p_extract_vector, Definition(PhysReg(256), v2b), Operand(PhysReg(0), s1),
               Operand::c32(1));
 
-   //! s_sendmsg sendmsg(dealloc_vgprs)
    //! s_endpgm
 
    finish_to_hw_instr_test();

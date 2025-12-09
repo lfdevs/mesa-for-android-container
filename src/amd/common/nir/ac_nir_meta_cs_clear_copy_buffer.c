@@ -419,7 +419,7 @@ ac_prepare_cs_clear_copy_buffer(const struct ac_cs_clear_copy_buffer_options *op
          break;
 
       case GFX12:
-         unreachable("cp_sdma_ge_use_system_memory_scope should be true, so we should never get here");
+         UNREACHABLE("cp_sdma_ge_use_system_memory_scope should be true, so we should never get here");
       }
    }
 

@@ -19,3 +19,52 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_revers
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_dst_y,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_y,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag,Fail
+
+# EGL
+# Usual Zink failures
+wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.shrink,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_height,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_width,Fail
+
+# Turnip-specific failures
+#
+# Looks like zink doing things wrong, hits the following VVL errors:
+# Validation Error: [ UNASSIGNED-GeneralParameterError-RequiredHandle ] | MessageID = 0x8fdcb17b
+# vkCmdPipelineBarrier2(): pDependencyInfo->pImageMemoryBarriers[0].image is VK_NULL_HANDLE.
+# Objects: 1
+#     [0] VkCommandBuffer 0x55cf2bb130[zink barrier cmdbuf]
+#
+# Validation Error: [ VUID-VkImageMemoryBarrier2-image-parameter ] | MessageID = 0xa2d5467b
+# vkCmdPipelineBarrier2(): pDependencyInfo->pImageMemoryBarriers[0].image Invalid VkImage Object 0x0.
+# The Vulkan spec states: image must be a valid VkImage handle (https://docs.vulkan.org/spec/latest/chapters/synchronization.html#VUID-VkImageMemoryBarrier2-image-parameter)
+x11-dEQP-EGL.functional.fence_sync.valid.egl_fence_persistent_buffer,Crash
+x11-dEQP-EGL.functional.image.modify.renderbuffer_depth16_renderbuffer_clear_depth,Fail
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.reads.local_array.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.reads.shader_storage_block.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.reads.uniform_block.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.writes.local_array.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.writes.shader_storage_block.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.writes.uniform_block.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.reads.local_array.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.reads.shader_storage_block.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.reads.uniform_block.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.writes.local_array.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.writes.shader_storage_block.compute,Crash
+x11-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.writes.uniform_block.compute,Crash
+wayland-dEQP-EGL.functional.fence_sync.valid.egl_fence_persistent_buffer,Crash
+wayland-dEQP-EGL.functional.image.modify.renderbuffer_depth16_renderbuffer_clear_depth,Fail
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.reads.local_array.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.reads.shader_storage_block.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.reads.uniform_block.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.writes.local_array.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.writes.shader_storage_block.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds_non_robust.reset_status.writes.uniform_block.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.reads.local_array.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.reads.shader_storage_block.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.reads.uniform_block.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.writes.local_array.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.writes.shader_storage_block.compute,Crash
+wayland-dEQP-EGL.functional.robustness.reset_context.shaders.out_of_bounds.reset_status.writes.uniform_block.compute,Crash
+
+x11-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb888_window,Crash

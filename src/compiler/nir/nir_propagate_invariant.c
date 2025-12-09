@@ -141,11 +141,10 @@ propagate_invariant_instr(nir_instr *instr, struct set *invariants)
    }
 
    case nir_instr_type_call:
-      unreachable("This pass must be run after function inlining");
+      UNREACHABLE("This pass must be run after function inlining");
 
-   case nir_instr_type_parallel_copy:
    default:
-      unreachable("Cannot have this instruction type");
+      UNREACHABLE("Cannot have this instruction type");
    }
 }
 

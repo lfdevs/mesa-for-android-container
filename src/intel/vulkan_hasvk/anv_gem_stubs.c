@@ -113,30 +113,30 @@ anv_gem_set_caching(struct anv_device *device, uint32_t gem_handle,
 int
 anv_gem_set_context_param(int fd, uint32_t context, uint32_t param, uint64_t value)
 {
-   unreachable("Unused");
+   UNREACHABLE("Unused");
 }
 
 bool
 anv_gem_has_context_priority(int fd, int priority)
 {
-   unreachable("Unused");
+   UNREACHABLE("Unused");
 }
 
 int
 anv_gem_context_get_reset_stats(int fd, int context,
                                 uint32_t *active, uint32_t *pending)
 {
-   unreachable("Unused");
+   UNREACHABLE("Unused");
 }
 
 int
 anv_gem_handle_to_fd(struct anv_device *device, uint32_t gem_handle)
 {
-   unreachable("Unused");
+   UNREACHABLE("Unused");
 }
 
 uint32_t
 anv_gem_fd_to_handle(struct anv_device *device, int fd)
 {
-   unreachable("Unused");
+   UNREACHABLE("Unused");
 }

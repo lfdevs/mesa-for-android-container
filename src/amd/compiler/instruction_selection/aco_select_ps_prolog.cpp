@@ -304,7 +304,7 @@ select_ps_prolog(Program* program, void* pinfo, ac_shader_config* config,
 
    program->config->float_mode = program->blocks[0].fp_mode.val;
 
-   append_logical_end(ctx.block);
+   append_logical_end(&ctx);
 
    build_end_with_regs(&ctx, regs);
 

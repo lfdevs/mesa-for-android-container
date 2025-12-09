@@ -28,11 +28,10 @@
 
 #include "pvr_device_info.h"
 
-static const struct pvr_device_ident pvr_device_ident_33_V_11_3 = {
-   .device_id = 0x33011003,
-   .series_name = "A-Series",
-   .public_name = "AXE-1-16M",
-};
+#define PVR_DEVICE_IDENT_33_V_11_3                     \
+   .device_id = 0x33011003, .series_name = "A-Series", \
+   .public_name = "AXE-1-16M", .arch = PVR_DEVICE_ARCH_ROGUE
+
 
 static const struct pvr_device_features pvr_device_features_33_V_11_3 = {
    .has_common_store_size_in_dwords = true,
@@ -61,8 +60,10 @@ static const struct pvr_device_features pvr_device_features_33_V_11_3 = {
    .has_tpu_border_colour_enhanced = true,
    .has_tpu_extended_integer_lookup = true,
    .has_tpu_image_state_v2 = true,
+   .has_tpu_parallel_instances = true,
    .has_unified_store_depth = true,
    .has_usc_f16sop_u8 = true,
+   .has_usc_itr_parallel_instances = true,
    .has_usc_min_output_registers_per_pix = true,
    .has_usc_pixel_partition_mask = true,
    .has_usc_slots = true,
@@ -85,7 +86,9 @@ static const struct pvr_device_features pvr_device_features_33_V_11_3 = {
    .slc_cache_line_size_bits = 512U,
    .tile_size_x = 16U,
    .tile_size_y = 16U,
+   .tpu_parallel_instances = 1U,
    .unified_store_depth = 64U,
+   .usc_itr_parallel_instances = 4U,
    .usc_min_output_registers_per_pix = 1U,
    .usc_slots = 14U,
    .uvs_banks = 2U,
@@ -94,9 +97,6 @@ static const struct pvr_device_features pvr_device_features_33_V_11_3 = {
    .vdm_cam_size = 32U,
 
    .has_s8xe = true,
-   .has_usc_itr_parallel_instances = true,
-
-   .usc_itr_parallel_instances = 4U,
 };
 
 static const struct pvr_device_enhancements pvr_device_enhancements_33_15_11_3 = {
@@ -108,6 +108,20 @@ static const struct pvr_device_enhancements pvr_device_enhancements_33_15_11_3 =
 
 static const struct pvr_device_quirks pvr_device_quirks_33_15_11_3 = {
    .has_brn70165 = true,
+   .has_brn74056 = true,
+};
+
+static const struct pvr_device_info pvr_device_info_33_15_11_3 = {
+   .ident = {
+      PVR_DEVICE_IDENT_33_V_11_3,
+      .b = 33,
+      .v = 15,
+      .n = 11,
+      .c = 3,
+   },
+   .features = pvr_device_features_33_V_11_3,
+   .enhancements = pvr_device_enhancements_33_15_11_3,
+   .quirks = pvr_device_quirks_33_15_11_3,
 };
 
 #endif /* AXE_1_16M_H */

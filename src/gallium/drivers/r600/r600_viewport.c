@@ -7,6 +7,7 @@
 #include "util/u_viewport.h"
 #include "tgsi/tgsi_scan.h"
 #include "r600d.h"
+#include "r600_inline.h"
 
 #define R600_R_028C0C_PA_CL_GB_VERT_CLIP_ADJ         0x028C0C
 #define CM_R_028BE8_PA_CL_GB_VERT_CLIP_ADJ           0x28be8
@@ -136,6 +137,18 @@ void evergreen_apply_scissor_bug_workaround(struct r600_common_context *rctx,
 	}
 }
 
+void cayman_apply_scissor_workaround_1x1(struct r600_common_context *rctx,
+					 struct radeon_cmdbuf *cs)
+{
+	radeon_set_context_reg_seq(cs, R_02820C_PA_SC_CLIPRECT_RULE, 1);
+	radeon_emit(cs, V_02820C_OUT | V_02820C_IN_1 | V_02820C_IN_2 |
+		    V_02820C_IN_21 | V_02820C_IN_3 | V_02820C_IN_31 |
+		    V_02820C_IN_32 | V_02820C_IN_321);
+	radeon_set_context_reg_seq(cs, R_028210_PA_SC_CLIPRECT_0_TL, 2);
+	radeon_emit(cs, S_028240_TL_X(1) | S_028240_TL_Y(0));
+	radeon_emit(cs, S_028244_BR_X(2) | S_028244_BR_Y(1));
+}
+
 static void r600_emit_one_scissor(struct r600_common_context *rctx,
 				  struct radeon_cmdbuf *cs,
 				  struct r600_signed_scissor *vp_scissor,
@@ -153,6 +166,12 @@ static void r600_emit_one_scissor(struct r600_common_context *rctx,
 	if (scissor)
 		r600_clip_scissor(&final, scissor);
 
+	const bool cayman_1x1_workaround = rctx->gfx_level == CAYMAN &&
+		!rctx->window_rectangles.fbo_cayman_workaround &&
+		final.minx == 0 && final.miny == 0 &&
+		final.maxx == 1 && final.maxy == 1 &&
+		!rctx->window_rectangles.number;
+
 	evergreen_apply_scissor_bug_workaround(rctx, &final);
 
 	radeon_emit(cs, S_028250_TL_X(final.minx) |
@@ -160,6 +179,15 @@ static void r600_emit_one_scissor(struct r600_common_context *rctx,
 			S_028250_WINDOW_OFFSET_DISABLE(1));
 	radeon_emit(cs, S_028254_BR_X(final.maxx) |
 			S_028254_BR_Y(final.maxy));
+
+	if (unlikely(cayman_1x1_workaround)) {
+		cayman_apply_scissor_workaround_1x1(rctx, cs);
+		rctx->window_rectangles.viewport_cayman_workaround = true;
+	} else if (unlikely(rctx->window_rectangles.viewport_cayman_workaround &&
+			    !rctx->window_rectangles.number)) {
+		r600_disable_cliprect_rule(cs);
+		rctx->window_rectangles.viewport_cayman_workaround = false;
+	}
 }
 
 /* the range is [-MAX, MAX] */

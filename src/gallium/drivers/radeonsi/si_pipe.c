@@ -58,10 +58,6 @@ static const struct debug_named_value radeonsi_debug_options[] = {
    {"nofastdlist", DBG(NO_FAST_DISPLAY_LIST), "Disable fast display lists"},
    {"nodmashaders", DBG(NO_DMA_SHADERS), "Disable uploading shaders via CP DMA and map them directly."},
 
-   /* Multimedia options: */
-   { "noefc", DBG(NO_EFC), "Disable hardware based encoder colour format conversion."},
-   {"lowlatencyenc", DBG(LOW_LATENCY_ENCODE), "Enable low latency encoding."},
-
    /* 3D engine options: */
    {"nongg", DBG(NO_NGG), "Disable NGG and use the legacy pipeline."},
    {"nggc", DBG(ALWAYS_NGG_CULLING_ALL), "Always use NGG culling even when it can hurt."},
@@ -88,6 +84,7 @@ static const struct debug_named_value radeonsi_debug_options[] = {
 
    {"tmz", DBG(TMZ), "Force allocation of scanout/depth/stencil buffer as encrypted"},
    {"sqtt", DBG(SQTT), "Enable SQTT"},
+   {"export_modifier", DBG(EXPORT_MODIFIER), "Export real modifier instead of DRM_FORMAT_MOD_INVALID"},
 
    DEBUG_NAMED_VALUE_END /* must be last */
 };
@@ -100,6 +97,8 @@ static const struct debug_named_value radeonsi_shader_debug_options[] = {
    {"tcs", DBG(TCS), "Print tessellation control shaders"},
    {"tes", DBG(TES), "Print tessellation evaluation shaders"},
    {"cs", DBG(CS), "Print compute shaders"},
+   {"ts", DBG(TS), "Print task shaders"},
+   {"ms", DBG(MS), "Print mesh shaders"},
 
    {"initnir", DBG(INIT_NIR), "Print initial input NIR when shaders are created"},
    {"nir", DBG(NIR), "Print final NIR after lowering when shader variants are created"},
@@ -122,8 +121,22 @@ static const struct debug_named_value radeonsi_shader_debug_options[] = {
    {"checkir", DBG(CHECK_IR), "Enable additional sanity checks on shader IR"},
    {"mono", DBG(MONOLITHIC_SHADERS), "Use old-style monolithic shaders compiled on demand"},
    {"nooptvariant", DBG(NO_OPT_VARIANT), "Disable compiling optimized shader variants."},
-   {"useaco", DBG(USE_ACO), "Use ACO as shader compiler when possible"},
    {"usellvm", DBG(USE_LLVM), "Use LLVM as shader compiler when possible"},
+
+   DEBUG_NAMED_VALUE_END /* must be last */
+};
+
+static const struct debug_named_value radeonsi_multimedia_debug_options[] = {
+   /* Multimedia options: */
+   {"noefc", DBG(NO_EFC), "Disable hardware based encoder colour format conversion."},
+   {"lowlatencyenc", DBG(LOW_LATENCY_ENCODE), "Enable low latency encoding."},
+   {"novideotiling", DBG(NO_VIDEO_TILING), "Disable tiling for video."},
+   {"nodectier1", DBG(NO_DECODE_TIER1), "Disable tier1 for video decode."},
+   {"nodectier2", DBG(NO_DECODE_TIER2), "Disable tier2 for video decode."},
+   {"nodectier3", DBG(NO_DECODE_TIER3), "Disable tier3 for video decode."},
+   {"noenctier2", DBG(NO_ENCODE_TIER2), "Disable tier2 for video encode."},
+
+   DEBUG_NAMED_VALUE_END /* must be last */
 };
 
 static const struct debug_named_value test_options[] = {
@@ -227,7 +240,6 @@ static void si_destroy_context(struct pipe_context *context)
    si_resource_reference(&sctx->wait_mem_scratch_tmz, NULL);
    si_resource_reference(&sctx->small_prim_cull_info_buf, NULL);
    si_resource_reference(&sctx->pipeline_stats_query_buf, NULL);
-   si_resource_reference(&sctx->last_const_upload_buffer, NULL);
 
    if (sctx->cs_preamble_state)
       si_pm4_free_state(sctx, sctx->cs_preamble_state, ~0);
@@ -379,6 +391,13 @@ static void si_destroy_context(struct pipe_context *context)
       _mesa_hash_table_u64_destroy(sctx->ps_resolve_shaders);
    }
 
+   si_resource_reference(&sctx->task_wait_buf, NULL);
+   si_resource_reference(&sctx->task_ring, NULL);
+   si_resource_reference(&sctx->task_scratch_buffer, NULL);
+   si_resource_reference(&sctx->mesh_scratch_ring, NULL);
+   if (sctx->task_preamble_state)
+      si_pm4_free_state(sctx, sctx->task_preamble_state, ~0);
+
    FREE(sctx);
 }
 
@@ -508,14 +527,13 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
 
    struct si_context *sctx = CALLOC_STRUCT(si_context);
    struct radeon_winsys *ws = sscreen->ws;
-   int shader, i;
 
    if (!sctx) {
       mesa_loge("can't allocate a context");
       return NULL;
    }
 
-   sctx->is_gfx_queue = sscreen->info.gfx_level == GFX6 ||
+   sctx->is_gfx_queue = sscreen->info.has_cs_regalloc_hang_bug ||
                         /* Compute queues hang on Raven and derivatives, see:
                          * https://gitlab.freedesktop.org/mesa/mesa/-/issues/12310 */
                         ((sscreen->info.family == CHIP_RAVEN ||
@@ -643,7 +661,6 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
 #endif
 
    sctx->ngg = sscreen->use_ngg;
-   si_shader_change_notify(sctx);
 
    sctx->b.emit_string_marker = si_emit_string_marker;
    sctx->b.set_debug_callback = si_set_debug_callback;
@@ -725,9 +742,12 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
          si_init_draw_functions_GFX12(sctx);
          break;
       default:
-         unreachable("unhandled gfx level");
+         UNREACHABLE("unhandled gfx level");
       }
    }
+
+   if (screen->caps.mesh_shader)
+      si_init_task_mesh_shader_functions(sctx);
 
    sctx->sample_mask = 0xffff;
 
@@ -759,10 +779,12 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
       }
       sctx->null_const_buf.buffer_size = sctx->null_const_buf.buffer->width0;
 
-      unsigned start_shader = sctx->is_gfx_queue ? 0 : PIPE_SHADER_COMPUTE;
-      for (shader = start_shader; shader < SI_NUM_SHADERS; shader++) {
-         for (i = 0; i < SI_NUM_CONST_BUFFERS; i++) {
-            sctx->b.set_constant_buffer(&sctx->b, shader, i, false, &sctx->null_const_buf);
+      for (unsigned shader = 0; shader < SI_NUM_SHADERS; shader++) {
+         if (!sctx->is_gfx_queue && shader != MESA_SHADER_COMPUTE)
+            continue;
+
+         for (unsigned i = 0; i < SI_NUM_CONST_BUFFERS; i++) {
+            sctx->b.set_constant_buffer(&sctx->b, shader, i, &sctx->null_const_buf);
          }
       }
 
@@ -776,11 +798,11 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
    sctx->tex_handles = _mesa_hash_table_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
    sctx->img_handles = _mesa_hash_table_create(NULL, _mesa_hash_pointer, _mesa_key_pointer_equal);
 
-   util_dynarray_init(&sctx->resident_tex_handles, NULL);
-   util_dynarray_init(&sctx->resident_img_handles, NULL);
-   util_dynarray_init(&sctx->resident_tex_needs_color_decompress, NULL);
-   util_dynarray_init(&sctx->resident_img_needs_color_decompress, NULL);
-   util_dynarray_init(&sctx->resident_tex_needs_depth_decompress, NULL);
+   sctx->resident_tex_handles = UTIL_DYNARRAY_INIT;
+   sctx->resident_img_handles = UTIL_DYNARRAY_INIT;
+   sctx->resident_tex_needs_color_decompress = UTIL_DYNARRAY_INIT;
+   sctx->resident_img_needs_color_decompress = UTIL_DYNARRAY_INIT;
+   sctx->resident_tex_needs_depth_decompress = UTIL_DYNARRAY_INIT;
 
    sctx->dirty_implicit_resources = _mesa_pointer_hash_table_create(NULL);
    if (!sctx->dirty_implicit_resources) {
@@ -850,7 +872,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
             saux->b.destroy(&saux->b);
 
             saux = (struct si_context *)si_create_context(&sscreen->b, context_flags);
-            saux->b.set_log_context(&saux->b, &sscreen->aux_contexts[i].log);
+            if (sscreen->options.aux_debug)
+               saux->b.set_log_context(&saux->b, &sscreen->aux_contexts[i].log);
 
             sscreen->aux_contexts[i].ctx = &saux->b;
          }
@@ -1169,8 +1192,8 @@ static void si_disk_cache_create(struct si_screen *sscreen)
    _mesa_sha1_final(&ctx, sha1);
    mesa_bytes_to_hex(cache_id, sha1, 20);
 
-   sscreen->disk_shader_cache = disk_cache_create(sscreen->info.name, cache_id,
-                                                  sscreen->info.address32_hi);
+   sscreen->disk_shader_cache = disk_cache_create(ac_get_family_name(sscreen->info.family),
+                                                  cache_id, sscreen->info.address32_hi);
 }
 
 static void si_set_max_shader_compiler_threads(struct pipe_screen *screen, unsigned max_threads)
@@ -1184,7 +1207,7 @@ static void si_set_max_shader_compiler_threads(struct pipe_screen *screen, unsig
 }
 
 static bool si_is_parallel_shader_compilation_finished(struct pipe_screen *screen, void *shader,
-                                                       enum pipe_shader_type shader_type)
+                                                       mesa_shader_stage shader_type)
 {
    struct si_shader_selector *sel = (struct si_shader_selector *)shader;
 
@@ -1264,6 +1287,14 @@ static void si_setup_force_shader_use_aco(struct si_screen *sscreen, bool suppor
    fclose(f);
 }
 
+static bool
+is_pro_graphics(struct si_screen *sscreen)
+{
+   return  strstr(sscreen->info.marketing_name, "Pro") ||
+           strstr(sscreen->info.marketing_name, "PRO") ||
+           strstr(sscreen->info.marketing_name, "Frontier");
+}
+
 static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
                                                        const struct pipe_screen_config *config)
 {
@@ -1297,6 +1328,7 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    sscreen->debug_flags = debug_get_flags_option("R600_DEBUG", radeonsi_debug_options, 0);
    sscreen->debug_flags |= debug_get_flags_option("AMD_DEBUG", radeonsi_debug_options, 0);
    sscreen->shader_debug_flags = debug_get_flags_option("AMD_DEBUG", radeonsi_shader_debug_options, 0);
+   sscreen->multimedia_debug_flags = debug_get_flags_option("AMD_DEBUG", radeonsi_multimedia_debug_options, 0);
    test_flags = debug_get_flags_option("AMD_TEST", test_options, 0);
 
    if (sscreen->debug_flags & DBG(NO_DISPLAY_DCC)) {
@@ -1312,17 +1344,8 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    bool support_aco = aco_is_gpu_supported(&sscreen->info);
 
 #if AMD_LLVM_AVAILABLE
-   /* For GFX11.5, LLVM < 19 is missing a workaround that can cause GPU hangs. ACO is the only
-    * alternative that has the workaround and is always available. Same for GFX12.
-    */
-   if ((sscreen->info.gfx_level == GFX12 && LLVM_VERSION_MAJOR < 20) ||
-       (sscreen->info.gfx_level == GFX11_5 && LLVM_VERSION_MAJOR < 19))
-      sscreen->use_aco = true;
-   else if (sscreen->info.gfx_level >= GFX10)
-      sscreen->use_aco = (sscreen->shader_debug_flags & DBG(USE_ACO));
-   else
-      sscreen->use_aco = support_aco && sscreen->info.has_image_opcodes &&
-                         !(sscreen->shader_debug_flags & DBG(USE_LLVM));
+   sscreen->use_aco = support_aco && sscreen->info.has_image_opcodes &&
+                      !(sscreen->shader_debug_flags & DBG(USE_LLVM));
 #else
    sscreen->use_aco = true;
 #endif
@@ -1380,7 +1403,7 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
       sscreen->use_ngg = !(sscreen->debug_flags & DBG(NO_NGG)) &&
                          sscreen->info.gfx_level >= GFX10 &&
                          (sscreen->info.family != CHIP_NAVI14 ||
-                          sscreen->info.is_pro_graphics);
+                          is_pro_graphics(sscreen));
       sscreen->use_ngg_culling = sscreen->use_ngg &&
                                  sscreen->info.max_render_backends >= 2 &&
                                  !(sscreen->debug_flags & DBG(NO_NGG_CULLING));
@@ -1401,7 +1424,7 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    si_init_screen_caps(sscreen);
 
    if (sscreen->debug_flags & DBG(INFO))
-      ac_print_gpu_info(&sscreen->info, stdout);
+      ac_print_gpu_info(stdout, &sscreen->info, ws->get_fd(ws));
 
    slab_create_parent(&sscreen->pool_transfers, sizeof(struct si_transfer), 64);
 
@@ -1498,6 +1521,8 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
 
    if (!debug_get_bool_option("RADEON_DISABLE_PERFCOUNTERS", false))
       si_init_perfcounters(sscreen);
+
+   ac_get_task_info(&sscreen->info, &sscreen->task_info);
 
    if (sscreen->debug_flags & DBG(NO_OUT_OF_ORDER))
       sscreen->info.has_out_of_order_rast = false;

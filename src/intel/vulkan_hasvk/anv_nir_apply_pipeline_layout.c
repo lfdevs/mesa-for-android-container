@@ -75,7 +75,7 @@ addr_format_for_desc_type(VkDescriptorType desc_type,
       return nir_address_format_32bit_index_offset;
 
    default:
-      unreachable("Unsupported descriptor type");
+      UNREACHABLE("Unsupported descriptor type");
    }
 }
 
@@ -227,7 +227,7 @@ nir_deref_find_descriptor(nir_deref_instr *deref,
 
    nir_intrinsic_instr *intrin = nir_src_as_intrinsic(deref->parent);
    if (!intrin || intrin->intrinsic != nir_intrinsic_load_vulkan_descriptor)
-      return false;
+      return NULL;
 
    return find_descriptor_for_index_src(intrin->src[0], state);
 }
@@ -318,7 +318,7 @@ build_res_index(nir_builder *b, uint32_t set, uint32_t binding,
    }
 
    default:
-      unreachable("Unsupported address format");
+      UNREACHABLE("Unsupported address format");
    }
 }
 
@@ -372,7 +372,7 @@ build_res_reindex(nir_builder *b, nir_def *orig, nir_def *delta,
                          nir_channel(b, orig, 1));
 
    default:
-      unreachable("Unhandled address format");
+      UNREACHABLE("Unhandled address format");
    }
 }
 
@@ -417,7 +417,7 @@ build_desc_addr(nir_builder *b,
       return index;
 
    default:
-      unreachable("Unhandled address format");
+      UNREACHABLE("Unhandled address format");
    }
 }
 
@@ -832,7 +832,7 @@ lower_get_ssbo_size(nir_builder *b, nir_intrinsic_instr *intrin,
       break;
 
    default:
-      unreachable("Unsupported address format");
+      UNREACHABLE("Unsupported address format");
    }
 
    return true;
@@ -902,21 +902,19 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *intrin,
    if (!anv_use_relocations(state->pdevice)) {
       unsigned load_size = intrin->def.num_components *
                            intrin->def.bit_size / 8;
-      unsigned load_align = intrin->def.bit_size / 8;
 
       assert(load_size < b->shader->constant_data_size);
       unsigned max_offset = b->shader->constant_data_size - load_size;
       offset = nir_umin(b, offset, nir_imm_int(b, max_offset));
 
       nir_def *const_data_base_addr = nir_pack_64_2x32_split(b,
-         nir_load_reloc_const_intel(b, ELK_SHADER_RELOC_CONST_DATA_ADDR_LOW),
-         nir_load_reloc_const_intel(b, ELK_SHADER_RELOC_CONST_DATA_ADDR_HIGH));
+         nir_load_reloc_const_intel(b, INTEL_SHADER_RELOC_CONST_DATA_ADDR_LOW),
+         nir_load_reloc_const_intel(b, INTEL_SHADER_RELOC_CONST_DATA_ADDR_HIGH));
 
-      data = nir_load_global_constant(b, nir_iadd(b, const_data_base_addr,
-                                                     nir_u2u64(b, offset)),
-                                      load_align,
-                                      intrin->def.num_components,
-                                      intrin->def.bit_size);
+      data = nir_load_global_constant(b, intrin->def.num_components,
+                                      intrin->def.bit_size,
+                                      nir_iadd(b, const_data_base_addr,
+                                               nir_u2u64(b, offset)));
    } else {
       nir_def *index = nir_imm_int(b, state->constants_offset);
 
@@ -1134,9 +1132,7 @@ lower_gfx7_tex_swizzle(nir_builder *b, nir_tex_instr *tex, unsigned plane,
    nir_def *swiz_tex_res = nir_vec(b, swiz_comps, 4);
 
    /* Rewrite uses before we insert so we don't rewrite this use */
-   nir_def_rewrite_uses_after(&tex->def,
-                                  swiz_tex_res,
-                                  swiz_tex_res->parent_instr);
+   nir_def_rewrite_uses_after(&tex->def, swiz_tex_res);
 }
 
 static bool

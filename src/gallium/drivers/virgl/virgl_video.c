@@ -67,7 +67,6 @@
 
 #include <string.h>
 
-#include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 #include "util/u_video.h"
 #include "util/u_memory.h"

@@ -70,7 +70,7 @@ move_out_of_loop(nir_builder *b, nir_intrinsic_instr *instr)
    b->cursor = nir_before_cf_node(node);
    nir_def *false_val = nir_imm_false(b);
    nir_block *after_loop = nir_cf_node_cf_tree_next(node);
-   set_foreach(after_loop->predecessors, entry) {
+   set_foreach(&after_loop->predecessors, entry) {
       nir_phi_instr_add_src(phi_instr, (nir_block *)entry->key, false_val);
    }
 
@@ -132,7 +132,7 @@ lower_discard_if(nir_builder *b, nir_intrinsic_instr *instr, void *cb_data)
       nir_terminate(b);
       break;
    default:
-      unreachable("bad intrinsic");
+      UNREACHABLE("bad intrinsic");
    }
    nir_pop_if(b, if_stmt);
    nir_instr_remove(&instr->instr);

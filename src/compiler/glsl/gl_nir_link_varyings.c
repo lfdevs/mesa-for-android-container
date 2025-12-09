@@ -35,6 +35,7 @@
 #include "util/hash_table.h"
 #include "util/u_math.h"
 #include "util/perf/cpu_trace.h"
+#include "pipe/p_screen.h"
 
 #include "nir.h"
 #include "nir_builder.h"
@@ -74,7 +75,7 @@ compare_attr(const void *a, const void *b)
  * geometry shader inputs).
  */
 static const struct glsl_type *
-get_varying_type(const nir_variable *var, gl_shader_stage stage)
+get_varying_type(const nir_variable *var, mesa_shader_stage stage)
 {
    const struct glsl_type *type = var->type;
    if (nir_is_arrayed_io(var, stage)) {
@@ -147,30 +148,39 @@ cross_validate_types_and_qualifiers(const struct gl_constants *consts,
                                     struct gl_shader_program *prog,
                                     const nir_variable *input,
                                     const nir_variable *output,
-                                    gl_shader_stage consumer_stage,
-                                    gl_shader_stage producer_stage)
+                                    mesa_shader_stage consumer_stage,
+                                    mesa_shader_stage producer_stage)
 {
    /* Check that the types match between stages.
     */
-   const struct glsl_type *type_to_match = input->type;
+   const struct glsl_type *input_type_to_match = input->type;
+   const struct glsl_type *output_type_to_match = output->type;
 
    /* VS -> GS, VS -> TCS, VS -> TES, TES -> GS */
-   const bool extra_array_level = (producer_stage == MESA_SHADER_VERTEX &&
-                                   consumer_stage != MESA_SHADER_FRAGMENT) ||
-                                  consumer_stage == MESA_SHADER_GEOMETRY;
-   if (extra_array_level) {
-      assert(glsl_type_is_array(type_to_match));
-      type_to_match = glsl_get_array_element(type_to_match);
+   const bool input_extra_array_level =
+      (producer_stage == MESA_SHADER_VERTEX &&
+       consumer_stage != MESA_SHADER_FRAGMENT) ||
+      consumer_stage == MESA_SHADER_GEOMETRY;
+   if (input_extra_array_level) {
+      assert(glsl_type_is_array(input_type_to_match));
+      input_type_to_match = glsl_get_array_element(input_type_to_match);
    }
 
-   if (type_to_match != output->type) {
-      if (glsl_type_is_struct(output->type)) {
+   /* MS -> FS */
+   const bool output_extra_array_level = producer_stage == MESA_SHADER_MESH;
+   if (output_extra_array_level) {
+      assert(glsl_type_is_array(output_type_to_match));
+      output_type_to_match = glsl_get_array_element(output_type_to_match);
+   }
+
+   if (input_type_to_match != output_type_to_match) {
+      if (glsl_type_is_struct(output_type_to_match)) {
          /* Structures across shader stages can have different name
           * and considered to match in type if and only if structure
           * members match in name, type, qualification, and declaration
           * order. The precision doesn’t need to match.
           */
-         if (!glsl_record_compare(output->type, type_to_match,
+         if (!glsl_record_compare(output_type_to_match, input_type_to_match,
                                   false, /* match_name */
                                   true, /* match_locations */
                                   false /* match_precision */)) {
@@ -184,7 +194,7 @@ cross_validate_types_and_qualifiers(const struct gl_constants *consts,
                   _mesa_shader_stage_to_string(consumer_stage),
                   glsl_get_type_name(input->type));
          }
-      } else if (!glsl_type_is_array(output->type) ||
+      } else if (!glsl_type_is_array(output_type_to_match) ||
                  !is_gl_identifier(output->name)) {
          /* There is a bit of a special case for gl_TexCoord.  This
           * built-in is unsized by default.  Applications that variable
@@ -260,6 +270,18 @@ cross_validate_types_and_qualifiers(const struct gl_constants *consts,
                    (output->data.patch) ? "has" : "lacks",
                    _mesa_shader_stage_to_string(consumer_stage),
                    (input->data.patch) ? "has" : "lacks");
+      return;
+   }
+
+   if (input->data.per_primitive != output->data.per_primitive) {
+      linker_error(prog,
+                   "%s shader output `%s' %s perprimitiveEXT qualifier, "
+                   "but %s shader input %s perprimitiveEXT qualifier\n",
+                   _mesa_shader_stage_to_string(producer_stage),
+                   output->name,
+                   (output->data.per_primitive) ? "has" : "lacks",
+                   _mesa_shader_stage_to_string(consumer_stage),
+                   (input->data.per_primitive) ? "has" : "lacks");
       return;
    }
 
@@ -355,8 +377,8 @@ cross_validate_front_and_back_color(const struct gl_constants *consts,
                                     const nir_variable *input,
                                     const nir_variable *front_color,
                                     const nir_variable *back_color,
-                                    gl_shader_stage consumer_stage,
-                                    gl_shader_stage producer_stage)
+                                    mesa_shader_stage consumer_stage,
+                                    mesa_shader_stage producer_stage)
 {
    if (front_color != NULL && front_color->data.assigned)
       cross_validate_types_and_qualifiers(consts, prog, input, front_color,
@@ -368,7 +390,7 @@ cross_validate_front_and_back_color(const struct gl_constants *consts,
 }
 
 static unsigned
-compute_variable_location_slot(nir_variable *var, gl_shader_stage stage)
+compute_variable_location_slot(nir_variable *var, mesa_shader_stage stage)
 {
    unsigned location_start = VARYING_SLOT_VAR0;
 
@@ -402,6 +424,7 @@ struct explicit_location_info {
    bool centroid;
    bool sample;
    bool patch;
+   bool per_primitive;
 };
 
 static bool
@@ -415,8 +438,9 @@ check_location_aliasing(struct explicit_location_info explicit_locations[][4],
                         bool centroid,
                         bool sample,
                         bool patch,
+                        bool per_primitive,
                         struct gl_shader_program *prog,
-                        gl_shader_stage stage)
+                        mesa_shader_stage stage)
 {
    unsigned last_comp;
    unsigned base_type_bit_size;
@@ -521,7 +545,8 @@ check_location_aliasing(struct explicit_location_info explicit_locations[][4],
 
                if (info->centroid != centroid ||
                    info->sample != sample ||
-                   info->patch != patch) {
+                   info->patch != patch ||
+                   info->per_primitive != per_primitive) {
                   linker_error(prog,
                                "%s shader has multiple %sputs sharing the "
                                "same location that don't have the same "
@@ -541,6 +566,7 @@ check_location_aliasing(struct explicit_location_info explicit_locations[][4],
             info->centroid = centroid;
             info->sample = sample;
             info->patch = patch;
+            info->per_primitive = per_primitive;
          }
 
          comp++;
@@ -644,7 +670,7 @@ resize_tes_inputs(const struct gl_constants *consts,
          var->data.explicit_location = false;
          var->data.mode = nir_var_mem_constant;
 
-         nir_constant *val = rzalloc(var, nir_constant);
+         nir_constant *val = rzalloc(tes->Program->nir, nir_constant);
          val->values[0].i32 = num_vertices;
          var->constant_initializer = val;
 
@@ -716,6 +742,7 @@ validate_explicit_variable_location(const struct gl_constants *consts,
                                       field->centroid,
                                       field->sample,
                                       field->patch,
+                                      field->per_primitive,
                                       prog, sh->Stage)) {
             return false;
          }
@@ -727,6 +754,7 @@ validate_explicit_variable_location(const struct gl_constants *consts,
                                        var->data.centroid,
                                        var->data.sample,
                                        var->data.patch,
+                                       var->data.per_primitive,
                                        prog, sh->Stage)) {
       return false;
    }
@@ -742,20 +770,27 @@ validate_explicit_variable_location(const struct gl_constants *consts,
 bool
 gl_nir_validate_first_and_last_interface_explicit_locations(const struct gl_constants *consts,
                                                             struct gl_shader_program *prog,
-                                                            gl_shader_stage first_stage,
-                                                            gl_shader_stage last_stage)
+                                                            mesa_shader_stage first_stage,
+                                                            mesa_shader_stage last_stage)
 {
    /* VS inputs and FS outputs are validated in
     * assign_attribute_or_color_locations()
+    *
+    * TS and MS has no inputs, TS has no outputs.
     */
-   bool validate_first_stage = first_stage != MESA_SHADER_VERTEX;
-   bool validate_last_stage = last_stage != MESA_SHADER_FRAGMENT;
+   bool validate_first_stage =
+      first_stage != MESA_SHADER_VERTEX &&
+      first_stage != MESA_SHADER_TASK &&
+      first_stage != MESA_SHADER_MESH;
+   bool validate_last_stage =
+      last_stage != MESA_SHADER_FRAGMENT &&
+      last_stage != MESA_SHADER_TASK;
    if (!validate_first_stage && !validate_last_stage)
       return true;
 
    struct explicit_location_info explicit_locations[MAX_VARYING][4];
 
-   gl_shader_stage stages[2] = { first_stage, last_stage };
+   mesa_shader_stage stages[2] = { first_stage, last_stage };
    bool validate_stage[2] = { validate_first_stage, validate_last_stage };
    nir_variable_mode var_mode[2] = { nir_var_shader_in, nir_var_shader_out };
 
@@ -763,7 +798,7 @@ gl_nir_validate_first_and_last_interface_explicit_locations(const struct gl_cons
       if (!validate_stage[i])
          continue;
 
-      gl_shader_stage stage = stages[i];
+      mesa_shader_stage stage = stages[i];
 
       struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
       assert(sh);
@@ -1941,8 +1976,7 @@ xfb_decl_store(struct xfb_decl *xfb_decl, const struct gl_constants *consts,
       assert(last_component < max_components);
 
       if (!used_components[buffer]) {
-         used_components[buffer] =
-            rzalloc_array(mem_ctx, BITSET_WORD, BITSET_WORDS(max_components));
+         used_components[buffer] = BITSET_RZALLOC(mem_ctx, max_components);
       }
       used = used_components[buffer];
 
@@ -2059,7 +2093,7 @@ xfb_decl_store(struct xfb_decl *xfb_decl, const struct gl_constants *consts,
       if (max_member_alignment && has_xfb_qualifiers) {
          max_member_alignment[buffer] = MAX2(max_member_alignment[buffer],
                                              _mesa_gl_datatype_is_64bit(xfb_decl->type) ? 2 : 1);
-         info->Buffers[buffer].Stride = ALIGN(xfb_offset,
+         info->Buffers[buffer].Stride = align(xfb_offset,
                                               max_member_alignment[buffer]);
       } else {
          info->Buffers[buffer].Stride = xfb_offset;
@@ -2449,8 +2483,8 @@ struct varying_matches
     */
    unsigned matches_capacity;
 
-   gl_shader_stage producer_stage;
-   gl_shader_stage consumer_stage;
+   mesa_shader_stage producer_stage;
+   mesa_shader_stage consumer_stage;
 };
 
 /**
@@ -2514,8 +2548,8 @@ varying_matches_not_xfb_comparator(const void *x_generic, const void *y_generic)
 }
 
 static bool
-is_unpackable_tess(gl_shader_stage producer_stage,
-                   gl_shader_stage consumer_stage)
+is_unpackable_tess(mesa_shader_stage producer_stage,
+                   mesa_shader_stage consumer_stage)
 {
    if (consumer_stage == MESA_SHADER_TESS_EVAL ||
        consumer_stage == MESA_SHADER_TESS_CTRL ||
@@ -2529,8 +2563,8 @@ static void
 init_varying_matches(void *mem_ctx, struct varying_matches *vm,
                      const struct gl_constants *consts,
                      const struct gl_extensions *exts,
-                     gl_shader_stage producer_stage,
-                     gl_shader_stage consumer_stage,
+                     mesa_shader_stage producer_stage,
+                     mesa_shader_stage consumer_stage,
                      bool sso)
 {
    /* Tessellation shaders treat inputs and outputs as shared memory and can
@@ -2647,7 +2681,8 @@ varying_matches_compute_packing_class(const nir_variable *var)
                                   (var->data.centroid << 3) |
                                   (var->data.sample << 4) |
                                   (var->data.patch << 5) |
-                                  (var->data.must_be_shader_input << 6);
+                                  (var->data.must_be_shader_input << 6) |
+                                  (var->data.per_primitive << 7);
 
    return packing_class;
 }
@@ -2891,7 +2926,7 @@ varying_matches_assign_locations(struct varying_matches *vm,
           (previous_packing_class != vm->matches[i].packing_class) ||
           (vm->matches[i].packing_order == PACKING_ORDER_VEC3 &&
            dont_pack_vec3)) {
-         *location = ALIGN(*location, 4);
+         *location = align(*location, 4);
       }
 
       previous_var_xfb = var->data.is_xfb;
@@ -2932,7 +2967,7 @@ varying_matches_assign_locations(struct varying_matches *vm,
             break;
          }
 
-         *location = ALIGN(*location + 1, 4);
+         *location = align(*location + 1, 4);
          slot_end = *location + num_components - 1;
       }
 
@@ -3098,7 +3133,7 @@ struct tfeedback_candidate_generator_state {
     */
    struct hash_table *tfeedback_candidates;
 
-   gl_shader_stage stage;
+   mesa_shader_stage stage;
 
    /**
     * Pointer to the toplevel variable that is being traversed.
@@ -3194,9 +3229,9 @@ tfeedback_candidate_generator(struct tfeedback_candidate_generator_state *state,
           * (c) each double-precision variable captured must be aligned to a
           *     multiple of eight bytes relative to the beginning of a vertex.
           */
-         state->xfb_offset_floats = ALIGN(state->xfb_offset_floats, 2);
+         state->xfb_offset_floats = align(state->xfb_offset_floats, 2);
          /* 64-bit members of structs are also aligned. */
-         state->varying_floats = ALIGN(state->varying_floats, 2);
+         state->varying_floats = align(state->varying_floats, 2);
       }
 
       candidate->xfb_offset_floats = state->xfb_offset_floats;
@@ -3463,7 +3498,8 @@ should_add_varying_match_record(nir_variable *const input_var,
  * processing of
  */
 static bool
-assign_initial_varying_locations(const struct gl_constants *consts,
+assign_initial_varying_locations(const struct pipe_screen *screen,
+                                 const struct gl_constants *consts,
                                  const struct gl_extensions *exts,
                                  void *mem_ctx,
                                  struct gl_shader_program *prog,
@@ -3613,12 +3649,17 @@ assign_initial_varying_locations(const struct gl_constants *consts,
        *    before its content is modified by another lowering pass (e.g.
        *    \c gl_Position is transformed by \c nir_lower_viewport_transform).
        */
+      const unsigned lower_builtin_vars_xfb =
+         producer->Stage == MESA_SHADER_VERTEX ||
+         producer->Stage == MESA_SHADER_GEOMETRY ?
+         ((screen->caps.viewport_transform_lowered ? VARYING_BIT_POS : 0) |
+          (screen->caps.psiz_clamped ? VARYING_BIT_PSIZ : 0)) : 0;
       const bool lowered =
          (vm->disable_xfb_packing && xfb_decls[i].is_subscripted) ||
          (matched_candidate->toplevel_var->data.explicit_location &&
           matched_candidate->toplevel_var->data.location < VARYING_SLOT_VAR0 &&
           (!consumer || consumer->Stage == MESA_SHADER_FRAGMENT) &&
-          (consts->ShaderCompilerOptions[producer->Stage].LowerBuiltinVariablesXfb &
+          (lower_builtin_vars_xfb &
               BITFIELD_BIT(matched_candidate->toplevel_var->data.location)));
 
       if (lowered) {
@@ -3895,7 +3936,7 @@ remove_unused_shader_inputs_and_outputs(struct gl_shader_program *prog,
 
 static void
 linker_error_io_limit_exceeded(struct gl_shader_program *prog, gl_api api,
-                               gl_shader_stage stage, unsigned num_comps,
+                               mesa_shader_stage stage, unsigned num_comps,
                                unsigned max_comps, const char *in_or_out_name)
 {
    if (api == API_OPENGLES2 || prog->IsES) {
@@ -3912,7 +3953,115 @@ linker_error_io_limit_exceeded(struct gl_shader_program *prog, gl_api api,
 }
 
 static bool
-link_varyings(struct gl_shader_program *prog, unsigned first,
+check_against_input_limit(struct gl_shader_program *prog,
+                          const struct gl_constants *consts,
+                          gl_api api, nir_shader *nir)
+{
+   uint64_t inputs_read = nir->info.inputs_read;
+   uint32_t patch_inputs_read = nir->info.patch_inputs_read;
+   uint16_t inputs_read_16bit = nir->info.inputs_read_16bit;
+
+   if (nir->info.stage == MESA_SHADER_TESS_EVAL) {
+      /* These don't count against the limit. */
+      inputs_read &= ~(VARYING_BIT_TESS_LEVEL_INNER |
+                       VARYING_BIT_TESS_LEVEL_OUTER);
+   } else if (nir->info.stage == MESA_SHADER_GEOMETRY) {
+      inputs_read &= ~VARYING_BIT_PRIMITIVE_ID;
+   } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+      inputs_read &= ~(VARYING_BIT_POS |
+                       VARYING_BIT_FACE |
+                       VARYING_BIT_PNTC);
+   }
+
+   unsigned num_input_comps = (util_bitcount64(inputs_read) +
+                               util_bitcount(inputs_read_16bit)) * 4;
+   unsigned num_patch_input_comps = util_bitcount(patch_inputs_read) * 4;
+   unsigned max_input_comps =
+      consts->Program[nir->info.stage].MaxInputComponents;
+
+   if (num_input_comps > max_input_comps) {
+      linker_error_io_limit_exceeded(prog, api, nir->info.stage, num_input_comps,
+                                     max_input_comps, "input");
+      return false;
+   }
+
+   if (nir->info.stage == MESA_SHADER_TESS_EVAL &&
+       num_patch_input_comps > consts->MaxTessPatchComponents) {
+      linker_error_io_limit_exceeded(prog, api, nir->info.stage,
+                                     num_patch_input_comps,
+                                     consts->MaxTessPatchComponents,
+                                     "patch input");
+      return false;
+   }
+
+   return true;
+}
+
+static bool
+check_against_output_limit(struct gl_shader_program *prog,
+                           const struct gl_constants *consts,
+                           gl_api api, nir_shader *nir)
+{
+   uint64_t outputs_written = nir->info.outputs_written;
+   uint32_t patch_outputs_written = nir->info.patch_outputs_written;
+   uint16_t outputs_written_16bit = nir->info.outputs_written_16bit;
+
+   if (nir->info.stage == MESA_SHADER_VERTEX ||
+       nir->info.stage == MESA_SHADER_TESS_EVAL ||
+       nir->info.stage == MESA_SHADER_GEOMETRY ||
+       nir->info.stage == MESA_SHADER_MESH) {
+      /* The FS cannot or might not read the following.
+       * We could make it more accurate if needed.
+       */
+      outputs_written &= ~(VARYING_BIT_POS |
+                           VARYING_BIT_PSIZ |
+                           VARYING_BIT_CLIP_VERTEX |
+                           /* In theory, these shouldn't count against
+                            * limits if the FS doesn't read them.
+                            */
+                           VARYING_BIT_CLIP_DIST0 |
+                           VARYING_BIT_CLIP_DIST1 |
+                           VARYING_BIT_CULL_DIST0 |
+                           VARYING_BIT_CULL_DIST1 |
+                           VARYING_BIT_LAYER |
+                           VARYING_BIT_VIEWPORT |
+                           VARYING_BIT_VIEWPORT_MASK |
+                           VARYING_BIT_PRIMITIVE_INDICES);
+   } else if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
+      /* These don't count against the limit. */
+      outputs_written &= ~(VARYING_BIT_TESS_LEVEL_INNER |
+                           VARYING_BIT_TESS_LEVEL_OUTER |
+                           VARYING_BIT_BOUNDING_BOX0 |
+                           VARYING_BIT_BOUNDING_BOX1);
+   }
+
+   unsigned num_output_comps = (util_bitcount64(outputs_written) +
+                                util_bitcount(outputs_written_16bit)) * 4;
+   unsigned num_patch_output_comps = util_bitcount(patch_outputs_written) * 4;
+   unsigned max_output_comps =
+      consts->Program[nir->info.stage].MaxOutputComponents;
+
+   if (num_output_comps > max_output_comps) {
+      linker_error_io_limit_exceeded(prog, api, nir->info.stage, num_output_comps,
+                                     max_output_comps, "output");
+      return false;
+   }
+
+   if (nir->info.stage == MESA_SHADER_TESS_CTRL &&
+       num_patch_output_comps > consts->MaxTessPatchComponents) {
+      linker_error_io_limit_exceeded(prog, api, nir->info.stage,
+                                     num_patch_output_comps,
+                                     consts->MaxTessPatchComponents,
+                                     "patch output");
+      return false;
+   }
+
+   return true;
+}
+
+static bool
+link_varyings(const struct pipe_screen *screen,
+              struct gl_shader_program *prog, unsigned first,
               unsigned last, const struct gl_constants *consts,
               const struct gl_extensions *exts, gl_api api, void *mem_ctx)
 {
@@ -3972,10 +4121,10 @@ link_varyings(struct gl_shader_program *prog, unsigned first,
          return false;
    }
 
-   struct gl_linked_shader *linked_shader[MESA_SHADER_STAGES];
+   struct gl_linked_shader *linked_shader[MESA_SHADER_MESH_STAGES];
    unsigned num_shaders = 0;
 
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (prog->_LinkedShaders[i])
          linked_shader[num_shaders++] = prog->_LinkedShaders[i];
    }
@@ -3984,7 +4133,7 @@ link_varyings(struct gl_shader_program *prog, unsigned first,
    if (last < MESA_SHADER_FRAGMENT &&
        (num_xfb_decls != 0 || prog->SeparateShader)) {
          struct gl_linked_shader *producer = prog->_LinkedShaders[last];
-         if (!assign_initial_varying_locations(consts, exts, mem_ctx, prog,
+         if (!assign_initial_varying_locations(screen, consts, exts, mem_ctx, prog,
                                                producer, NULL, num_xfb_decls,
                                                xfb_decls, &vm))
             return false;
@@ -3997,7 +4146,7 @@ link_varyings(struct gl_shader_program *prog, unsigned first,
 
    if (prog->SeparateShader) {
       struct gl_linked_shader *consumer = linked_shader[0];
-      if (!assign_initial_varying_locations(consts, exts, mem_ctx, prog, NULL,
+      if (!assign_initial_varying_locations(screen, consts, exts, mem_ctx, prog, NULL,
                                             consumer, 0, NULL, &vm))
          return false;
    }
@@ -4013,7 +4162,7 @@ link_varyings(struct gl_shader_program *prog, unsigned first,
             linked_shader[i + 1]->Stage == MESA_SHADER_FRAGMENT ?
             num_xfb_decls : 0;
 
-         if (!assign_initial_varying_locations(consts, exts, mem_ctx, prog,
+         if (!assign_initial_varying_locations(screen, consts, exts, mem_ctx, prog,
                                                linked_shader[i],
                                                linked_shader[i + 1],
                                                stage_num_xfb_decls, xfb_decls,
@@ -4197,100 +4346,12 @@ link_varyings(struct gl_shader_program *prog, unsigned first,
             continue;
 
          nir_shader *nir = prog->_LinkedShaders[i]->Program->nir;
-         nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-         if (i != first) {
-            uint64_t inputs_read = nir->info.inputs_read;
-            uint32_t patch_inputs_read = nir->info.patch_inputs_read;
-            uint16_t inputs_read_16bit = nir->info.inputs_read_16bit;
+         if (i != first && !check_against_input_limit(prog, consts, api, nir))
+            return false;
 
-            if (nir->info.stage == MESA_SHADER_TESS_EVAL) {
-               /* These don't count against the limit. */
-               inputs_read &= ~(VARYING_BIT_TESS_LEVEL_INNER |
-                                VARYING_BIT_TESS_LEVEL_OUTER);
-            } else if (nir->info.stage == MESA_SHADER_GEOMETRY) {
-               inputs_read &= ~VARYING_BIT_PRIMITIVE_ID;
-            } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-               inputs_read &= ~(VARYING_BIT_POS |
-                                VARYING_BIT_FACE |
-                                VARYING_BIT_PNTC);
-            }
-
-            unsigned num_input_comps = (util_bitcount64(inputs_read) +
-                                        util_bitcount(inputs_read_16bit)) * 4;
-            unsigned num_patch_input_comps = util_bitcount(patch_inputs_read) * 4;
-            unsigned max_input_comps =
-               consts->Program[nir->info.stage].MaxInputComponents;
-
-            if (num_input_comps > max_input_comps) {
-               linker_error_io_limit_exceeded(prog, api, i, num_input_comps,
-                                              max_input_comps, "input");
-               return false;
-            }
-
-            if (nir->info.stage == MESA_SHADER_TESS_EVAL &&
-                num_patch_input_comps > consts->MaxTessPatchComponents) {
-               linker_error_io_limit_exceeded(prog, api, i,
-                                              num_patch_input_comps,
-                                              consts->MaxTessPatchComponents,
-                                              "patch input");
-               return false;
-            }
-         }
-
-         if (i != last) {
-            uint64_t outputs_written = nir->info.outputs_written;
-            uint32_t patch_outputs_written = nir->info.patch_outputs_written;
-            uint16_t outputs_written_16bit = nir->info.outputs_written_16bit;
-
-            if (nir->info.stage == MESA_SHADER_VERTEX ||
-                nir->info.stage == MESA_SHADER_TESS_EVAL ||
-                nir->info.stage == MESA_SHADER_GEOMETRY) {
-               /* The FS cannot or might not read the following.
-                * We could make it more accurate if needed.
-                */
-               outputs_written &= ~(VARYING_BIT_POS |
-                                    VARYING_BIT_PSIZ |
-                                    VARYING_BIT_CLIP_VERTEX |
-                                    /* In theory, these shouldn't count against
-                                     * limits if the FS doesn't read them.
-                                     */
-                                    VARYING_BIT_CLIP_DIST0 |
-                                    VARYING_BIT_CLIP_DIST1 |
-                                    VARYING_BIT_CULL_DIST0 |
-                                    VARYING_BIT_CULL_DIST1 |
-                                    VARYING_BIT_LAYER |
-                                    VARYING_BIT_VIEWPORT |
-                                    VARYING_BIT_VIEWPORT_MASK);
-            } else if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
-               /* These don't count against the limit. */
-               outputs_written &= ~(VARYING_BIT_TESS_LEVEL_INNER |
-                                    VARYING_BIT_TESS_LEVEL_OUTER |
-                                    VARYING_BIT_BOUNDING_BOX0 |
-                                    VARYING_BIT_BOUNDING_BOX1);
-            }
-
-            unsigned num_output_comps = (util_bitcount64(outputs_written) +
-                                         util_bitcount(outputs_written_16bit)) * 4;
-            unsigned num_patch_output_comps = util_bitcount(patch_outputs_written) * 4;
-            unsigned max_output_comps =
-               consts->Program[nir->info.stage].MaxOutputComponents;
-
-            if (num_output_comps > max_output_comps) {
-               linker_error_io_limit_exceeded(prog, api, i, num_output_comps,
-                                              max_output_comps, "output");
-               return false;
-            }
-
-            if (nir->info.stage == MESA_SHADER_TESS_CTRL &&
-                num_patch_output_comps > consts->MaxTessPatchComponents) {
-               linker_error_io_limit_exceeded(prog, api, i,
-                                              num_patch_output_comps,
-                                              consts->MaxTessPatchComponents,
-                                              "patch output");
-               return false;
-            }
-         }
+         if (i != last && !check_against_output_limit(prog, consts, api, nir))
+            return false;
       }
    }
 
@@ -4319,35 +4380,157 @@ gl_assign_attribute_or_color_locations(const struct gl_constants *consts,
    return true;
 }
 
+static bool
+link_vertex_pipeline_varyings(const struct pipe_screen *screen,
+                              const struct gl_constants *consts,
+                              const struct gl_extensions *exts,
+                              gl_api api, struct gl_shader_program *prog,
+                              void *mem_ctx)
+{
+   unsigned first = MESA_SHADER_MESH_STAGES;
+   unsigned last = 0;
+
+   /* Determine first and last stage. */
+   for (unsigned i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
+      if (!prog->_LinkedShaders[i])
+         continue;
+      if (first == MESA_SHADER_MESH_STAGES)
+         first = i;
+      last = i;
+   }
+
+   bool r = link_varyings(screen, prog, first, last, consts, exts, api, mem_ctx);
+
+   return r;
+}
+
+static bool
+link_mesh_pipeline_varyings(const struct pipe_screen *screen,
+                            const struct gl_constants *consts,
+                            const struct gl_extensions *exts,
+                            gl_api api, struct gl_shader_program *prog,
+                            void *mem_ctx)
+{
+   /* Task shader does not have varying to link. */
+   if (!prog->_LinkedShaders[MESA_SHADER_MESH])
+      return true;
+
+   struct varying_matches vm;
+
+   if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT]) {
+      if (!prog->SeparateShader) {
+         remove_unused_shader_inputs_and_outputs(prog, MESA_SHADER_FRAGMENT,
+                                                 nir_var_shader_out);
+      }
+
+      if (!assign_initial_varying_locations(screen, consts, exts, mem_ctx, prog,
+                                            prog->_LinkedShaders[MESA_SHADER_MESH],
+                                            prog->_LinkedShaders[MESA_SHADER_FRAGMENT],
+                                            0, NULL, &vm))
+         return false;
+
+      nir_shader *mesh_nir = prog->_LinkedShaders[MESA_SHADER_MESH]->Program->nir;
+      nir_shader *frag_nir = prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program->nir;
+
+      gl_nir_opts(mesh_nir);
+      gl_nir_opts(frag_nir);
+
+      nir_link_varying_precision(mesh_nir, frag_nir);
+
+      remove_unused_shader_inputs_and_outputs(prog, MESA_SHADER_MESH,
+                                              nir_var_shader_out);
+      remove_unused_shader_inputs_and_outputs(prog, MESA_SHADER_FRAGMENT,
+                                              nir_var_shader_in);
+
+      if (!prog->SeparateShader) {
+         NIR_PASS(_, prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program->nir,
+                  nir_remove_dead_variables, nir_var_shader_out, NULL);
+      }
+
+      const uint64_t reserved_out_slots =
+         reserved_varying_slot(prog->_LinkedShaders[MESA_SHADER_MESH],
+                               nir_var_shader_out);
+      const uint64_t reserved_in_slots =
+         reserved_varying_slot(prog->_LinkedShaders[MESA_SHADER_FRAGMENT],
+                               nir_var_shader_in);
+
+      if (!assign_final_varying_locations(consts, exts, mem_ctx, prog,
+                                          prog->_LinkedShaders[MESA_SHADER_MESH],
+                                          prog->_LinkedShaders[MESA_SHADER_FRAGMENT],
+                                          0, NULL,
+                                          reserved_out_slots | reserved_in_slots, &vm))
+         return false;
+   } else {
+      if (prog->SeparateShader) {
+         if (!assign_initial_varying_locations(screen, consts, exts, mem_ctx, prog,
+                                               prog->_LinkedShaders[MESA_SHADER_MESH],
+                                               NULL, 0, NULL, &vm))
+            return false;
+      } else {
+         remove_unused_shader_inputs_and_outputs(prog, MESA_SHADER_MESH,
+                                                 nir_var_shader_out);
+      }
+
+      /* Still optimize shader if no linking is required. */
+      gl_nir_opts(prog->_LinkedShaders[MESA_SHADER_MESH]->Program->nir);
+
+      if (prog->SeparateShader) {
+         /* Sort inputs / outputs into a canonical order.  This is necessary so
+          * that inputs / outputs of separable shaders will be assigned
+          * predictable locations regardless of the order in which declarations
+          * appeared in the shader source.
+          */
+         canonicalize_shader_io(prog->_LinkedShaders[MESA_SHADER_MESH]->Program->nir,
+                                nir_var_shader_out);
+
+         const uint64_t reserved_out_slots =
+            reserved_varying_slot(prog->_LinkedShaders[MESA_SHADER_MESH],
+                                  nir_var_shader_out);
+         if (!assign_final_varying_locations(consts, exts, mem_ctx, prog,
+                                             prog->_LinkedShaders[MESA_SHADER_MESH],
+                                             NULL, 0, NULL, reserved_out_slots, &vm))
+            return false;
+      }
+   }
+
+   assert(prog->data->LinkStatus != LINKING_FAILURE);
+
+   gl_nir_lower_optimize_varyings(consts, prog, false);
+
+   /* Check IO limits after linkage. */
+   if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT]) {
+      nir_shader *mesh_nir = prog->_LinkedShaders[MESA_SHADER_MESH]->Program->nir;
+      nir_shader *frag_nir = prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program->nir;
+      nir_shader_gather_info(mesh_nir, nir_shader_get_entrypoint(mesh_nir));
+      nir_shader_gather_info(frag_nir, nir_shader_get_entrypoint(frag_nir));
+
+      if (!check_against_input_limit(prog, consts, api, frag_nir) ||
+          !check_against_output_limit(prog, consts, api, mesh_nir))
+         return false;
+   }
+
+   return true;
+}
+
 bool
-gl_nir_link_varyings(const struct gl_constants *consts,
+gl_nir_link_varyings(const struct pipe_screen *screen,
+                     const struct gl_constants *consts,
                      const struct gl_extensions *exts,
                      gl_api api, struct gl_shader_program *prog)
 {
    void *mem_ctx = ralloc_context(NULL);
 
-   unsigned first, last;
-
    MESA_TRACE_FUNC();
-
-   first = MESA_SHADER_STAGES;
-   last = 0;
 
    /* We need to initialise the program resource list because the varying
     * packing pass my start inserting varyings onto the list.
     */
    init_program_resource_list(prog);
 
-   /* Determine first and last stage. */
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
-      if (!prog->_LinkedShaders[i])
-         continue;
-      if (first == MESA_SHADER_STAGES)
-         first = i;
-      last = i;
-   }
-
-   bool r = link_varyings(prog, first, last, consts, exts, api, mem_ctx);
+   bool r =
+      prog->_LinkedShaders[MESA_SHADER_TASK] || prog->_LinkedShaders[MESA_SHADER_MESH] ?
+      link_mesh_pipeline_varyings(screen, consts, exts, api, prog, mem_ctx) :
+      link_vertex_pipeline_varyings(screen, consts, exts, api, prog, mem_ctx);
 
    ralloc_free(mem_ctx);
    return r;

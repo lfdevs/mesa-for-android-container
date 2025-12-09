@@ -129,12 +129,20 @@ struct pan_fb_bifrost_info {
    } pre_post;
 };
 
+struct pan_bbox {
+   unsigned minx, miny, maxx, maxy;
+};
+
 struct pan_fb_info {
    unsigned width, height;
-   struct {
-      /* Max values are inclusive */
-      unsigned minx, miny, maxx, maxy;
-   } extent;
+   /* Draw-extent controlled by viewports/scissors.
+    * Max values are exclusive */
+   struct pan_bbox draw_extent;
+   /* frame_bounding_box controls the bounding box in the framebuffer
+    * descriptor for the entire pass. This is being controlled by the
+    * renderArea of a renderpass in Vulkan. On GL, this covers the
+    * entire frame. Max values are exclusive. */
+   struct pan_bbox frame_bounding_box;
    unsigned nr_samples;
    unsigned force_samples; /* samples used for rasterization */
    unsigned rt_count;
@@ -162,6 +170,9 @@ struct pan_fb_info {
    /* Only used on Valhall */
    bool sprite_coord_origin;
    bool first_provoking_vertex;
+
+   /* indicates whether pixel local storage is enabled */
+   bool pls_enabled;
 };
 
 static inline unsigned
@@ -253,7 +264,7 @@ pan_sample_pattern(unsigned samples)
       return MALI_SAMPLE_PATTERN_D3D_16X_GRID;
 #endif
    default:
-      unreachable("Unsupported sample count");
+      UNREACHABLE("Unsupported sample count");
    }
 }
 

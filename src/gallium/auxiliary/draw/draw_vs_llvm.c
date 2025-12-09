@@ -76,8 +76,7 @@ vs_llvm_delete(struct draw_vertex_shader *dvs)
    }
 
    assert(shader->variants_cached == 0);
-   if (dvs->state.ir.nir)
-      ralloc_free(dvs->state.ir.nir);
+   ralloc_free(dvs->state.ir.nir);
    FREE((void*) dvs->state.tokens);
    FREE(dvs);
 }

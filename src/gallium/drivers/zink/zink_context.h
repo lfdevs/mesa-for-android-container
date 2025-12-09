@@ -62,12 +62,18 @@ zink_fb_clear_enabled(const struct zink_context *ctx, unsigned idx)
    return ctx->clears_enabled & (PIPE_CLEAR_COLOR0 << idx);
 }
 
-static inline uint32_t
+static ALWAYS_INLINE uint32_t
 zink_program_cache_stages(uint32_t stages_present)
 {
    return (stages_present & ((1 << MESA_SHADER_TESS_CTRL) |
                              (1 << MESA_SHADER_TESS_EVAL) |
                              (1 << MESA_SHADER_GEOMETRY))) >> 1;
+}
+
+static ALWAYS_INLINE uint32_t
+zink_mesh_cache_stages(uint32_t stages_present)
+{
+   return !!(stages_present & BITFIELD_BIT(MESA_SHADER_TASK));
 }
 
 static ALWAYS_INLINE bool
@@ -85,8 +91,42 @@ zink_is_zsbuf_write(const struct zink_context *ctx)
           ctx->dynamic_fb.tc_info.zsbuf_clear || ctx->dynamic_fb.tc_info.zsbuf_clear_partial;
 }
 
+#define ALL_READ_ACCESS_FLAGS \
+    (VK_ACCESS_INDIRECT_COMMAND_READ_BIT | \
+    VK_ACCESS_INDEX_READ_BIT | \
+    VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | \
+    VK_ACCESS_UNIFORM_READ_BIT | \
+    VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | \
+    VK_ACCESS_SHADER_READ_BIT | \
+    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | \
+    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | \
+    VK_ACCESS_TRANSFER_READ_BIT |\
+    VK_ACCESS_HOST_READ_BIT |\
+    VK_ACCESS_MEMORY_READ_BIT |\
+    VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT |\
+    VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT |\
+    VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT |\
+    VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR |\
+    VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR |\
+    VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT |\
+    VK_ACCESS_COMMAND_PREPROCESS_READ_BIT_NV |\
+    VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR |\
+    VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR)
+static ALWAYS_INLINE bool
+zink_resource_access_is_write(VkAccessFlags flags)
+{
+   return (flags & ~ALL_READ_ACCESS_FLAGS) > 0;
+}
+
 void
 zink_fence_wait(struct pipe_context *ctx);
+
+static ALWAYS_INLINE void
+zink_update_dirty_gfx_stages(struct zink_context *ctx, uint32_t pstages)
+{
+   ctx->dirty_gfx_stages |= (pstages & BITFIELD_MASK(MESA_SHADER_COMPUTE));
+   ctx->dirty_mesh_stages |= (pstages & (BITFIELD_BIT(MESA_SHADER_FRAGMENT) | BITFIELD_BIT(MESA_SHADER_MESH) | BITFIELD_BIT(MESA_SHADER_TASK)));
+}
 
 void
 zink_wait_on_batch(struct zink_context *ctx, uint64_t batch_id);
@@ -105,19 +145,21 @@ zink_update_fbfetch(struct zink_context *ctx);
 bool
 zink_resource_access_is_write(VkAccessFlags flags);
 
-void
-zink_resource_buffer_barrier(struct zink_context *ctx, struct zink_resource *res, VkAccessFlags flags, VkPipelineStageFlags pipeline);
-void
-zink_resource_buffer_barrier2(struct zink_context *ctx, struct zink_resource *res, VkAccessFlags flags, VkPipelineStageFlags pipeline);
+static ALWAYS_INLINE void
+zink_buffer_barrier(struct zink_context *ctx, struct zink_resource *res, VkAccessFlags flags, VkPipelineStageFlags pipeline)
+{
+   if (res->obj->access) {
+      zink_screen(ctx->base.screen)->buffer_barrier(ctx, res, flags, pipeline);
+   } else {
+      res->obj->access = res->obj->unordered_access = flags;
+      res->obj->access_stage = res->obj->unordered_access_stage = pipeline;
+   }
+}
+
 void
 zink_resource_image_barrier_init(VkImageMemoryBarrier *imb, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
 void
 zink_resource_image_barrier2_init(VkImageMemoryBarrier2 *imb, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
-void
-zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
-                      VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
-void
-zink_resource_image_barrier2(struct zink_context *ctx, struct zink_resource *res, VkImageLayout new_layout, VkAccessFlags flags, VkPipelineStageFlags pipeline);
 bool
 zink_check_unordered_transfer_access(struct zink_resource *res, unsigned level, const struct pipe_box *box);
 bool
@@ -141,11 +183,8 @@ zink_batch_no_rp(struct zink_context *ctx);
 void
 zink_batch_no_rp_safe(struct zink_context *ctx);
 
-void
-zink_update_vk_sample_locations(struct zink_context *ctx);
-
 static inline VkPipelineStageFlags
-zink_pipeline_flags_from_pipe_stage(gl_shader_stage pstage)
+zink_pipeline_flags_from_pipe_stage(mesa_shader_stage pstage)
 {
    switch (pstage) {
    case MESA_SHADER_VERTEX:
@@ -160,8 +199,12 @@ zink_pipeline_flags_from_pipe_stage(gl_shader_stage pstage)
       return VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
    case MESA_SHADER_COMPUTE:
       return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+   case MESA_SHADER_TASK:
+      return VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT;
+   case MESA_SHADER_MESH:
+      return VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
    default:
-      unreachable("unknown shader stage");
+      UNREACHABLE("unknown shader stage");
    }
 }
 
@@ -245,7 +288,7 @@ zink_component_mapping(enum pipe_swizzle swizzle)
    case PIPE_SWIZZLE_0: return VK_COMPONENT_SWIZZLE_ZERO;
    case PIPE_SWIZZLE_1: return VK_COMPONENT_SWIZZLE_ONE;
    default:
-      unreachable("unexpected swizzle");
+      UNREACHABLE("unexpected swizzle");
    }
 }
 

@@ -274,6 +274,7 @@ CHIPSET(0x7dd1, arl_h, "ARL", "Intel(R) Graphics")
 CHIPSET(0xb640, arl_u, "ARL", "Intel(R) Graphics")
 
 CHIPSET(0xe202, bmg, "BMG G21", "Intel(R) Graphics")
+CHIPSET(0xe209, bmg, "BMG G21", "Intel(R) Graphics")
 CHIPSET(0xe20b, bmg, "BMG G21", "Intel(R) Arc(tm) B580 Graphics")
 CHIPSET(0xe20c, bmg, "BMG G21", "Intel(R) Arc(tm) B570 Graphics")
 CHIPSET(0xe20d, bmg, "BMG G21", "Intel(R) Graphics")
@@ -302,3 +303,10 @@ CHIPSET(0xb0b0, ptl, "PTL", "Intel(R) Graphics")
 
 CHIPSET(0xfd80, wcl, "WCL", "Intel(R) Graphics")
 CHIPSET(0xfd81, wcl, "WCL", "Intel(R) Graphics")
+
+CHIPSET(0xd740, nvl_s_hx_ul, "NVL-S", "Intel(R) Graphics", FORCE_PROBE)
+CHIPSET(0xd741, nvl_u_h, "NVL-U", "Intel(R) Graphics", FORCE_PROBE)
+CHIPSET(0xd742, nvl_u_h, "NVL-H", "Intel(R) Graphics", FORCE_PROBE)
+CHIPSET(0xd743, nvl_s_hx_ul, "NVL-HX", "Intel(R) Graphics", FORCE_PROBE)
+CHIPSET(0xd744, nvl_s_hx_ul, "NVL-UL", "Intel(R) Graphics", FORCE_PROBE)
+CHIPSET(0xd745, nvl_s_hx_ul, "NVL-HX", "Intel(R) Graphics", FORCE_PROBE)

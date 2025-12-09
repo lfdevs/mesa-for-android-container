@@ -227,7 +227,7 @@ intel_compute_threads_group_dispatch_size(uint32_t hw_threads_in_wg)
     * compute overdispatch disabled set to 1, then we need to use TG Size 1.
     */
    switch (hw_threads_in_wg) {
-   case 1 ... 16:
+   case 0 ... 16:
       return 0;
    case 17 ... 32:
       return 1;

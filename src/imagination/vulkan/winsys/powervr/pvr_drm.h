@@ -48,7 +48,6 @@ struct pvr_drm_winsys {
     */
    struct u_rwlock dmabuf_bo_lock;
 
-
    /* This array holds all our 'struct pvr_drm_winsys_bo' allocations. We use
     * this so we can add a refcount to our BOs and check if a particular BO was
     * already allocated in this device using its GEM handle. This is necessary

@@ -226,7 +226,7 @@ mme_value_alu_reg(struct mme_value val)
       assert(val.reg <= 23);
       return MME_TU104_REG_R0 + val.reg;
    }
-   unreachable("Invalid value type");
+   UNREACHABLE("Invalid value type");
 }
 
 static void
@@ -329,7 +329,7 @@ mme_to_tu104_alu_op(enum mme_alu_op op)
    ALU_CASE(DWRITE)
 #undef ALU_CASE
    default:
-      unreachable("Unsupported MME ALU op");
+      UNREACHABLE("Unsupported MME ALU op");
    }
 }
 
@@ -364,7 +364,7 @@ mme_tu104_alu_to(struct mme_builder *b,
          break;
 
       default:
-         unreachable("Unknown MME value type");
+         UNREACHABLE("Unknown MME value type");
       }
 
       mme_and_to(b, dst, x, not_y);
@@ -650,7 +650,7 @@ mme_cmp_to_tu104_branch_op(enum mme_cmp_op op)
    CMP_CASE(EQ)
 #undef CMP_CASE
    default:
-      unreachable("Unsupported MME CMP op");
+      UNREACHABLE("Unsupported MME CMP op");
    }
 }
 

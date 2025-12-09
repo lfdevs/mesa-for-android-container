@@ -139,17 +139,17 @@ struct iris_vtable {
                                     const struct intel_vue_map *vue_map);
    void (*populate_vs_key)(const struct iris_context *ice,
                            const struct shader_info *info,
-                           gl_shader_stage last_stage,
+                           mesa_shader_stage last_stage,
                            struct iris_vs_prog_key *key);
    void (*populate_tcs_key)(const struct iris_context *ice,
                             struct iris_tcs_prog_key *key);
    void (*populate_tes_key)(const struct iris_context *ice,
                             const struct shader_info *info,
-                            gl_shader_stage last_stage,
+                            mesa_shader_stage last_stage,
                             struct iris_tes_prog_key *key);
    void (*populate_gs_key)(const struct iris_context *ice,
                            const struct shader_info *info,
-                           gl_shader_stage last_stage,
+                           mesa_shader_stage last_stage,
                            struct iris_gs_prog_key *key);
    void (*populate_fs_key)(const struct iris_context *ice,
                            const struct shader_info *info,
@@ -207,6 +207,7 @@ struct iris_screen {
       bool enable_vf_distribution;
       bool enable_te_distribution;
       unsigned generated_indirect_threshold;
+      bool disable_threaded_context;
    } driconf;
 
    /** Does the kernel support various features (KERNEL_HAS_* bitfield)? */

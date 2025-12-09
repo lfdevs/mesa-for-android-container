@@ -10,6 +10,9 @@ pub mod stub;
 #[cfg(windows)]
 pub mod windows;
 
+// Only Linux works for all cases.  Windows works for HANDLEs.
+// Tracking bug: https://gitlab.freedesktop.org/mesa/mesa/-/issues/13826
+
 cfg_if::cfg_if! {
     if #[cfg(any(target_os = "android", target_os = "linux"))] {
         pub use linux as platform;

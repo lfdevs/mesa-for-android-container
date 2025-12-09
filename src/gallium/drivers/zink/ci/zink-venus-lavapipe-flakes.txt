@@ -39,3 +39,5 @@ KHR-GL46.layout_location.sampler_2d_shadow
 # uprev Piglit in Mesa
 spec@ext_framebuffer_multisample@accuracy all_samples depth_draw small depthstencil
 
+# fails in nightly CI, but not in pre-merge?
+KHR-GL46.direct_state_access.vertex_arrays_vertex_buffers_errors

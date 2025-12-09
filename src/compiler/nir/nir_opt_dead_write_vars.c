@@ -103,7 +103,7 @@ update_unused_writes(struct util_dynarray *unused_writes,
       .dst = dst,
    };
 
-   util_dynarray_append(unused_writes, struct write_entry, new_entry);
+   util_dynarray_append(unused_writes, new_entry);
 
    return progress;
 }
@@ -133,16 +133,16 @@ ends_program(nir_block *block)
 }
 
 static bool
-remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block)
+remove_dead_write_vars_local(nir_shader *shader, nir_block *block,
+                             struct util_dynarray *unused_writes)
 {
    bool progress = false;
 
-   struct util_dynarray unused_writes;
-   util_dynarray_init(&unused_writes, mem_ctx);
+   util_dynarray_clear(unused_writes);
 
    nir_foreach_instr_safe(instr, block) {
       if (instr->type == nir_instr_type_call) {
-         clear_unused_for_modes(&unused_writes, nir_var_shader_out |
+         clear_unused_for_modes(unused_writes, nir_var_shader_out |
                                                    nir_var_shader_temp |
                                                    nir_var_function_temp |
                                                    nir_var_mem_ssbo |
@@ -158,7 +158,7 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
       switch (intrin->intrinsic) {
       case nir_intrinsic_barrier: {
          if (nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_RELEASE) {
-            clear_unused_for_modes(&unused_writes,
+            clear_unused_for_modes(unused_writes,
                                    nir_intrinsic_memory_modes(intrin));
          }
          break;
@@ -166,7 +166,7 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
 
       case nir_intrinsic_emit_vertex:
       case nir_intrinsic_emit_vertex_with_counter: {
-         clear_unused_for_modes(&unused_writes, nir_var_shader_out);
+         clear_unused_for_modes(unused_writes, nir_var_shader_out);
          break;
       }
 
@@ -174,7 +174,7 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
       case nir_intrinsic_rt_execute_callable: {
          /* Mark payload as it can be used by the callee */
          nir_deref_instr *src = nir_src_as_deref(intrin->src[1]);
-         clear_unused_for_read(&unused_writes, src);
+         clear_unused_for_read(unused_writes, src);
          break;
       }
 
@@ -182,7 +182,7 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
       case nir_intrinsic_rt_trace_ray: {
          /* Mark payload as it can be used by the callees */
          nir_deref_instr *src = nir_src_as_deref(intrin->src[10]);
-         clear_unused_for_read(&unused_writes, src);
+         clear_unused_for_read(unused_writes, src);
          break;
       }
 
@@ -190,7 +190,7 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
          nir_deref_instr *src = nir_src_as_deref(intrin->src[0]);
          if (nir_deref_mode_must_be(src, nir_var_read_only_modes))
             break;
-         clear_unused_for_read(&unused_writes, src);
+         clear_unused_for_read(unused_writes, src);
          break;
       }
 
@@ -205,12 +205,12 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
              * predictable for the programmer than allowing two non-volatile
              * writes to be combined with a volatile write between them.
              */
-            clear_unused_for_read(&unused_writes, dst);
+            clear_unused_for_read(unused_writes, dst);
             break;
          }
 
          nir_component_mask_t mask = nir_intrinsic_write_mask(intrin);
-         progress |= update_unused_writes(&unused_writes, intrin, dst, mask);
+         progress |= update_unused_writes(unused_writes, intrin, dst, mask);
          break;
       }
 
@@ -219,8 +219,8 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
          nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
 
          if (nir_intrinsic_dst_access(intrin) & ACCESS_VOLATILE) {
-            clear_unused_for_read(&unused_writes, src);
-            clear_unused_for_read(&unused_writes, dst);
+            clear_unused_for_read(unused_writes, src);
+            clear_unused_for_read(unused_writes, dst);
             break;
          }
 
@@ -231,9 +231,9 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
             break;
          }
 
-         clear_unused_for_read(&unused_writes, src);
+         clear_unused_for_read(unused_writes, src);
          nir_component_mask_t mask = (1 << glsl_get_vector_elements(dst->type)) - 1;
-         progress |= update_unused_writes(&unused_writes, intrin, dst, mask);
+         progress |= update_unused_writes(unused_writes, intrin, dst, mask);
          break;
       }
 
@@ -249,7 +249,7 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
     * eliminate any shared writes, since no one will ever read it again.
     */
    if (ends_program(block)) {
-      util_dynarray_foreach_reverse(&unused_writes, struct write_entry, entry) {
+      util_dynarray_foreach_reverse(unused_writes, struct write_entry, entry) {
          if (nir_deref_mode_may_be(entry->dst, nir_var_mem_shared) &&
              nir_deref_mode_is(entry->dst, nir_var_mem_shared)) {
             nir_instr_remove(&entry->intrin->instr);
@@ -262,14 +262,15 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
 }
 
 static bool
-remove_dead_write_vars_impl(void *mem_ctx, nir_shader *shader, nir_function_impl *impl)
+remove_dead_write_vars_impl(nir_shader *shader, nir_function_impl *impl,
+                            struct util_dynarray *unused_writes)
 {
    bool progress = false;
 
    nir_metadata_require(impl, nir_metadata_block_index);
 
    nir_foreach_block(block, impl)
-      progress |= remove_dead_write_vars_local(mem_ctx, shader, block);
+      progress |= remove_dead_write_vars_local(shader, block, unused_writes);
 
    return nir_progress(progress, impl, nir_metadata_control_flow);
 }
@@ -277,13 +278,14 @@ remove_dead_write_vars_impl(void *mem_ctx, nir_shader *shader, nir_function_impl
 bool
 nir_opt_dead_write_vars(nir_shader *shader)
 {
-   void *mem_ctx = ralloc_context(NULL);
    bool progress = false;
 
+   struct util_dynarray unused_writes = UTIL_DYNARRAY_INIT;
+
    nir_foreach_function_impl(impl, shader) {
-      progress |= remove_dead_write_vars_impl(mem_ctx, shader, impl);
+      progress |= remove_dead_write_vars_impl(shader, impl, &unused_writes);
    }
 
-   ralloc_free(mem_ctx);
+   util_dynarray_fini(&unused_writes);
    return progress;
 }

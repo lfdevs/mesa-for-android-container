@@ -27,6 +27,7 @@
 #include "linker_util.h"
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
+#include "util/u_range_remap.h"
 #include "main/consts_exts.h"
 #include "main/shader_types.h"
 
@@ -44,6 +45,111 @@ struct uniform_array_info {
    /** Set of bit-flags to note which array elements have been accessed. */
    BITSET_WORD *indices;
 };
+
+/**
+ * Recursive part of the public mark_array_elements_referenced function.
+ *
+ * The recursion occurs when an entire array-of- is accessed.  See the
+ * implementation for more details.
+ *
+ * \param dr                List of array_deref_range elements to be
+ *                          processed.
+ * \param count             Number of array_deref_range elements to be
+ *                          processed.
+ * \param scale             Current offset scale.
+ * \param linearized_index  Current accumulated linearized array index.
+ */
+static void
+_mark_array_elements_referenced(const struct array_deref_range *dr,
+                                unsigned count, unsigned scale,
+                                unsigned linearized_index,
+                                BITSET_WORD *bits)
+{
+   /* Walk through the list of array dereferences in least- to
+    * most-significant order.  Along the way, accumulate the current
+    * linearized offset and the scale factor for each array-of-.
+    */
+   for (unsigned i = 0; i < count; i++) {
+      if (dr[i].index < dr[i].size) {
+         linearized_index += dr[i].index * scale;
+         scale *= dr[i].size;
+      } else {
+         /* For each element in the current array, update the count and
+          * offset, then recurse to process the remaining arrays.
+          *
+          * There is some inefficency here if the last eBITSET_WORD *bitslement in the
+          * array_deref_range list specifies the entire array.  In that case,
+          * the loop will make recursive calls with count == 0.  In the call,
+          * all that will happen is the bit will be set.
+          */
+         for (unsigned j = 0; j < dr[i].size; j++) {
+            _mark_array_elements_referenced(&dr[i + 1],
+                                            count - (i + 1),
+                                            scale * dr[i].size,
+                                            linearized_index + (j * scale),
+                                            bits);
+         }
+
+         return;
+      }
+   }
+
+   BITSET_SET(bits, linearized_index);
+}
+
+/**
+ * Mark a set of array elements as accessed.
+ *
+ * If every \c array_deref_range is for a single index, only a single
+ * element will be marked.  If any \c array_deref_range is for an entire
+ * array-of-, then multiple elements will be marked.
+ *
+ * Items in the \c array_deref_range list appear in least- to
+ * most-significant order.  This is the \b opposite order the indices
+ * appear in the GLSL shader text.  An array access like
+ *
+ *     x = y[1][i][3];
+ *
+ * would appear as
+ *
+ *     { { 3, n }, { m, m }, { 1, p } }
+ *
+ * where n, m, and p are the sizes of the arrays-of-arrays.
+ *
+ * The set of marked array elements can later be queried by
+ * \c ::is_linearized_index_referenced.
+ *
+ * \param dr     List of array_deref_range elements to be processed.
+ * \param count  Number of array_deref_range elements to be processed.
+ */
+static void
+mark_array_elements_referenced(const struct array_deref_range *dr,
+                               unsigned count, unsigned array_depth,
+                               BITSET_WORD *bits)
+{
+   if (count != array_depth)
+      return;
+
+   /* Single dimension array fast path. This is the most common path as most
+    * arrays are only one dimension. This path is around 3x faster on large
+    * arrays than _mark_array_elements_referenced().
+    */
+   if (count == 1) {
+      if (dr[0].size == 0)
+         return;
+
+      if (dr[0].index < dr[0].size) {
+         BITSET_SET(bits, dr[0].index);
+      } else {
+         /* Accessed by non-constant index so set everything as referenced */
+         BITSET_SET_RANGE(bits, 0, dr[0].size - 1);
+      }
+
+      return;
+   }
+
+   _mark_array_elements_referenced(dr, count, 1, 0, bits);
+}
 
 static unsigned
 uniform_storage_size(const struct glsl_type *type)
@@ -117,7 +223,7 @@ update_array_sizes(struct gl_shader_program *prog, nir_variable *var,
    struct uniform_array_info *ainfo = NULL;
    int words = BITSET_WORDS(glsl_array_size(var->type));
    int max_array_size = 0;
-   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+   for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
       struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
       if (!sh)
          continue;
@@ -166,8 +272,8 @@ update_array_sizes(struct gl_shader_program *prog, nir_variable *var,
 }
 
 static void
-nir_setup_uniform_remap_tables(const struct gl_constants *consts,
-                               struct gl_shader_program *prog)
+setup_uniform_remap_tables(const struct gl_constants *consts,
+                           struct gl_shader_program *prog)
 {
    unsigned total_entries = prog->NumExplicitUniformLocations;
 
@@ -175,17 +281,12 @@ nir_setup_uniform_remap_tables(const struct gl_constants *consts,
     * that we can keep track of unused uniforms with explicit locations.
     */
    assert(!prog->data->spirv ||
-          (prog->data->spirv && !prog->UniformRemapTable));
-   if (!prog->UniformRemapTable) {
-      prog->UniformRemapTable = rzalloc_array(prog,
-                                              struct gl_uniform_storage *,
-                                              prog->NumUniformRemapTable);
-   }
+          (prog->data->spirv && list_is_empty(&prog->UniformRemapTable->r_list)));
 
    union gl_constant_value *data =
       rzalloc_array(prog->data,
                     union gl_constant_value, prog->data->NumUniformDataSlots);
-   if (!prog->UniformRemapTable || !data) {
+   if (!data) {
       linker_error(prog, "Out of memory during linking.\n");
       return;
    }
@@ -216,19 +317,17 @@ nir_setup_uniform_remap_tables(const struct gl_constants *consts,
       unsigned num_slots = glsl_get_component_slots(uniform->type);
 
       uniform->storage = &data[data_pos];
+      data_pos += num_slots * entries;
 
-      /* Set remap table entries point to correct gl_uniform_storage. */
-      for (unsigned j = 0; j < entries; j++) {
-         unsigned element_loc = uniform->remap_location + j;
-         prog->UniformRemapTable[element_loc] = uniform;
-
-         data_pos += num_slots;
-      }
+      /* Set remap table entry to the correct gl_uniform_storage. */
+      util_range_insert_remap(uniform->remap_location,
+                              uniform->remap_location + entries - 1,
+                              prog->UniformRemapTable, uniform);
    }
 
    /* Reserve locations for rest of the uniforms. */
    if (prog->data->spirv)
-      link_util_update_empty_uniform_locations(prog);
+      link_util_update_empty_uniform_locations(consts, prog);
 
    for (unsigned i = 0; i < prog->data->NumUniformStorage; i++) {
       struct gl_uniform_storage *uniform = &prog->data->UniformStorage[i];
@@ -260,36 +359,27 @@ nir_setup_uniform_remap_tables(const struct gl_constants *consts,
 
       unsigned location =
          link_util_find_empty_block(prog, &prog->data->UniformStorage[i]);
-
       if (location == -1) {
-         location = prog->NumUniformRemapTable;
+         linker_error(prog, "Unable to find empty block for %u entries",
+                      MAX2(1, prog->data->UniformStorage[i].array_elements));
+      }
 
-         /* resize remap table to fit new entries */
-         prog->UniformRemapTable =
-            reralloc(prog,
-                     prog->UniformRemapTable,
-                     struct gl_uniform_storage *,
-                     prog->NumUniformRemapTable + entries);
-         prog->NumUniformRemapTable += entries;
+      unsigned num_slots = glsl_get_component_slots(uniform->type);
+      if (uniform->block_index == -1) {
+         uniform->storage = &data[data_pos];
+         data_pos += num_slots * entries;
       }
 
       /* set the base location in remap table for the uniform */
       uniform->remap_location = location;
 
-      unsigned num_slots = glsl_get_component_slots(uniform->type);
-
-      if (uniform->block_index == -1)
-         uniform->storage = &data[data_pos];
-
-      /* Set remap table entries point to correct gl_uniform_storage. */
-      for (unsigned j = 0; j < entries; j++) {
-         unsigned element_loc = uniform->remap_location + j;
-         prog->UniformRemapTable[element_loc] = uniform;
-
-         if (uniform->block_index == -1)
-            data_pos += num_slots;
-      }
+      /* Set remap table entry to the correct gl_uniform_storage. */
+      util_range_insert_remap(uniform->remap_location,
+                              uniform->remap_location + entries - 1,
+                              prog->UniformRemapTable, uniform);
    }
+
+   util_range_switch_to_sorted_array(prog->UniformRemapTable);
 
    /* Verify that total amount of entries for explicit and implicit locations
     * is less than MAX_UNIFORM_LOCATIONS.
@@ -477,7 +567,7 @@ add_var_use_deref(nir_deref_instr *deref, struct hash_table *live,
       ainfo = ralloc(live, struct uniform_array_info);
 
       unsigned num_bits = MAX2(1, glsl_get_aoa_size(deref->var->type));
-      ainfo->indices = rzalloc_array(live, BITSET_WORD, BITSET_WORDS(num_bits));
+      ainfo->indices = BITSET_RZALLOC(live, num_bits);
 
       ainfo->deref_list = ralloc(live, struct util_dynarray);
       util_dynarray_init(ainfo->deref_list, live);
@@ -495,10 +585,10 @@ add_var_use_deref(nir_deref_instr *deref, struct hash_table *live,
          array_depth++;
       }
 
-      link_util_mark_array_elements_referenced(*derefs, num_derefs, array_depth,
-                                               ainfo->indices);
+      mark_array_elements_referenced(*derefs, num_derefs, array_depth,
+                                     ainfo->indices);
 
-      util_dynarray_append(ainfo->deref_list, nir_deref_instr *, deref);
+      util_dynarray_append(ainfo->deref_list, deref);
    }
 
    assert(deref->modes == deref->var->data.mode);
@@ -635,7 +725,7 @@ struct nir_link_uniforms_state {
    int top_level_array_stride;
 
    struct type_tree_entry *current_type;
-   struct hash_table *referenced_uniforms[MESA_SHADER_STAGES];
+   struct hash_table *referenced_uniforms[MESA_SHADER_MESH_STAGES];
    struct hash_table *uniform_hash;
 };
 
@@ -1201,7 +1291,7 @@ static int
 nir_link_uniform(const struct gl_constants *consts,
                  struct gl_shader_program *prog,
                  struct gl_program *stage_program,
-                 gl_shader_stage stage,
+                 mesa_shader_stage stage,
                  const struct glsl_type *type,
                  unsigned index_in_parent,
                  int location,
@@ -1545,7 +1635,7 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
 
    if (!prog->data->spirv) {
       /* Gather information on uniform use */
-      for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+      for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
          struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
          if (!sh)
             continue;
@@ -1560,7 +1650,7 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
 
       if(!consts->DisableUniformArrayResize) {
          /* Resize uniform arrays based on the maximum array index */
-         for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+         for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
             struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
             if (!sh)
                continue;
@@ -1576,7 +1666,7 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
    if (!prog->data->spirv) {
       struct set *storage_counted =
          _mesa_set_create(NULL, _mesa_hash_string, _mesa_key_string_equal);
-      for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+      for (unsigned stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
          struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
          if (!sh)
             continue;
@@ -1612,7 +1702,7 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
    state.uniform_hash = _mesa_hash_table_create(NULL, _mesa_hash_string,
                                                 _mesa_key_string_equal);
 
-   for (unsigned shader_type = 0; shader_type < MESA_SHADER_STAGES; shader_type++) {
+   for (unsigned shader_type = 0; shader_type < MESA_SHADER_MESH_STAGES; shader_type++) {
       struct gl_linked_shader *sh = prog->_LinkedShaders[shader_type];
       if (!sh)
          continue;
@@ -1928,10 +2018,7 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
 
    assert(prog->data->spirv || prog->data->NumUniformStorage == storage_size);
 
-   if (prog->data->spirv)
-      prog->NumUniformRemapTable = state.max_uniform_location;
-
-   nir_setup_uniform_remap_tables(consts, prog);
+   setup_uniform_remap_tables(consts, prog);
    gl_nir_set_uniform_initializers(consts, prog);
 
    _mesa_hash_table_destroy(state.uniform_hash, hash_free_uniform_name);

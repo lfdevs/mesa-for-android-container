@@ -15,7 +15,7 @@
 #include "radv_queue.h"
 #include "radv_radeon_winsys.h"
 
-void radv_emit_spm_setup(struct radv_device *device, struct radeon_cmdbuf *cs, enum radv_queue_family qf);
+void radv_emit_spm_setup(struct radv_device *device, struct radv_cmd_stream *cs);
 
 bool radv_spm_init(struct radv_device *device);
 

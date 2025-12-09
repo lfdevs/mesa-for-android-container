@@ -46,25 +46,26 @@ TAG(do_block_4)(struct lp_rasterizer_task *task,
                 int x, int y,
                 const int64_t *c)
 {
+   static_assert(LP_MAX_SAMPLES <= 8, "Code below assumes max of 8 samples");
 #ifndef MULTISAMPLE
-   unsigned mask = 0xffff;
+   uint64_t mask[2] = { 0xffff, 0 };
 #else
-   uint64_t mask = UINT64_MAX;
+   uint64_t mask[2] = { UINT64_MAX, UINT64_MAX };
 #endif
 
    for (unsigned j = 0; j < NR_PLANES; j++) {
 #ifndef MULTISAMPLE
 #ifdef RASTER_64
-      mask &= ~BUILD_MASK_LINEAR(((c[j] - 1) >> (int64_t)FIXED_ORDER),
-                                 -plane[j].dcdx >> FIXED_ORDER,
-                                 plane[j].dcdy >> FIXED_ORDER);
+      mask[0] &= ~BUILD_MASK_LINEAR(((c[j] - 1) >> (int64_t)FIXED_ORDER),
+                                    -plane[j].dcdx >> FIXED_ORDER,
+                                    plane[j].dcdy >> FIXED_ORDER);
 #else
-      mask &= ~BUILD_MASK_LINEAR((c[j] - 1),
-                                 -plane[j].dcdx,
-                                 plane[j].dcdy);
+      mask[0] &= ~BUILD_MASK_LINEAR((c[j] - 1),
+                                    -plane[j].dcdx,
+                                    plane[j].dcdy);
 #endif
 #else
-      for (unsigned s = 0; s < 4; s++) {
+      for (unsigned s = 0; s < task->scene->fb_max_samples; s++) {
          int64_t new_c = (c[j]) + ((IMUL64(task->scene->fixed_sample_pos[s][1], plane[j].dcdy) + IMUL64(task->scene->fixed_sample_pos[s][0], -plane[j].dcdx)) >> FIXED_ORDER);
          uint32_t build_mask;
 #ifdef RASTER_64
@@ -76,14 +77,14 @@ TAG(do_block_4)(struct lp_rasterizer_task *task,
                                         -plane[j].dcdx,
                                         plane[j].dcdy);
 #endif
-         mask &= ~((uint64_t)build_mask << (s * 16));
+         mask[s / 4] &= ~((uint64_t)build_mask << ((s % 4) * 16));
       }
 #endif
    }
 
    /* Now pass to the shader:
     */
-   if (mask)
+   if (mask[0] | mask[1])
       lp_rast_shade_quads_mask_sample(task, &tri->inputs, x, y, mask);
 }
 

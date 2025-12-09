@@ -30,10 +30,11 @@
 #include "pvr_bo.h"
 #include "pvr_csb.h"
 #include "pvr_csb_enum_helpers.h"
+#include "pvr_device.h"
 #include "pvr_device_info.h"
 #include "pvr_dump.h"
 #include "pvr_dump_bo.h"
-#include "pvr_private.h"
+#include "pvr_physical_device.h"
 #include "pvr_util.h"
 #include "util/list.h"
 #include "util/macros.h"
@@ -2358,7 +2359,7 @@ static bool dump_first_buffer(struct pvr_dump_buffer_ctx *const ctx,
       break;
 
    default:
-      unreachable("Unknown stream type");
+      UNREACHABLE("Unknown stream type");
    }
 
    if (!ret)

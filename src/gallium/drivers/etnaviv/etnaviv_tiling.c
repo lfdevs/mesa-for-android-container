@@ -98,3 +98,61 @@ etna_texture_untile(void *dest, void *src, unsigned basex, unsigned basey,
       printf("etna_texture_tile: unhandled element size %i\n", elmtsize);
    }
 }
+
+#define DO_TILE_2LAYER(type)                                                           \
+   src_stride /= sizeof(type) * 2;                                                     \
+   dst_stride = (dst_stride * TEX_TILE_HEIGHT) / sizeof(type);                         \
+   for (unsigned srcy = 0; srcy < height; ++srcy) {                                    \
+      unsigned dsty = basey + srcy;                                                    \
+      unsigned ty = (dsty / TEX_TILE_HEIGHT) * dst_stride +                            \
+                    (dsty % TEX_TILE_HEIGHT) * TEX_TILE_WIDTH;                         \
+      for (unsigned srcx = 0; srcx < width; ++srcx) {                                  \
+         unsigned dstx = basex + srcx;                                                 \
+         unsigned dst_idx = ty + (dstx / TEX_TILE_WIDTH) * TEX_TILE_WORDS +            \
+                           (dstx % TEX_TILE_WIDTH);                                    \
+         ((type *)dest0)[dst_idx] = ((type *)src)[(srcy * src_stride + srcx) * 2 + 0]; \
+         ((type *)dest1)[dst_idx] = ((type *)src)[(srcy * src_stride + srcx) * 2 + 1]; \
+      }                                                                                \
+   }
+
+#define DO_UNTILE_2LAYER(type)                                             \
+   src_stride = (src_stride * TEX_TILE_HEIGHT) / sizeof(type);             \
+   dst_stride /= sizeof(type) * 2;                                         \
+   for (unsigned dsty = 0; dsty < height; ++dsty) {                        \
+      unsigned srcy = basey + dsty;                                        \
+      unsigned sy = (srcy / TEX_TILE_HEIGHT) * src_stride +                \
+                    (srcy % TEX_TILE_HEIGHT) * TEX_TILE_WIDTH;             \
+      for (unsigned dstx = 0; dstx < width; ++dstx) {                      \
+         unsigned srcx = basex + dstx;                                     \
+         ((type *)dest)[(dsty * dst_stride + dstx) * 2 + 0] =              \
+            ((type *)src0)[sy + (srcx / TEX_TILE_WIDTH) * TEX_TILE_WORDS + \
+                          (srcx % TEX_TILE_WIDTH)];                        \
+         ((type *)dest)[(dsty * dst_stride + dstx) * 2 + 1] =              \
+            ((type *)src1)[sy + (srcx / TEX_TILE_WIDTH) * TEX_TILE_WORDS + \
+                          (srcx % TEX_TILE_WIDTH)];                        \
+      }                                                                    \
+   }
+
+void
+etna_texture_tile_rgba32f(void *dest, void *src,
+                          unsigned basex, unsigned basey,
+                          unsigned dst_stride, unsigned width, unsigned height,
+                          unsigned src_stride, unsigned layer_stride)
+{
+    void *dest0 = dest;
+    void *dest1 = dest + layer_stride;
+
+    DO_TILE_2LAYER(uint64_t);
+}
+
+void
+etna_texture_untile_rgba32f(void *dest, void *src,
+                            unsigned basex, unsigned basey,
+                            unsigned src_stride, unsigned width, unsigned height,
+                            unsigned dst_stride, unsigned layer_stride)
+{
+   void *src0 = src;
+   void *src1 = src + layer_stride;
+
+   DO_UNTILE_2LAYER(uint64_t);
+}

@@ -111,18 +111,18 @@ You will need to install Python 3 and Meson as a module using pip. This
 is because we use Python for generating code, and rely on external
 modules (Mako). You also need pkg-config (a hard dependency of Meson),
 Flex, and Bison. The easiest way to install everything you need is with
-`Chocolatey <https://chocolatey.org/>`__.
+`WinGet <https://github.com/microsoft/winget-cli>`__.
 
 .. code-block:: sh
 
-   choco install python3 winflexbison pkgconfiglite
+   winget install python3 WinFlexBison.win_flex_bison bloodrock.pkg-config-lite
 
-You can even use Chocolatey to install MinGW and Ninja (Ninja can be
+You can even use WinGet to install MinGW and Ninja (Ninja can be
 used with MSVC as well)
 
 .. code-block:: sh
 
-   choco install ninja mingw
+   winget install Ninja-build.Ninja MartinStorsjo.LLVM-MinGW.UCRT
 
 Then install Meson using pip
 
@@ -217,7 +217,7 @@ Windows specific instructions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 On Windows you have a couple of choices for compilers. If you installed
-MinGW with Chocolatey and want to use Ninja you should be able to open
+MinGW with winget and want to use Ninja you should be able to open
 any shell and follow the instructions above. If you want to you MSVC,
 clang-cl, or ICL (the Intel Compiler), read on.
 

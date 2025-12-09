@@ -39,7 +39,7 @@ color_depth_for_cpp(int cpp)
    case 2: return COLOR_DEPTH_565;
    case 1: return COLOR_DEPTH_8bit;
    default:
-      unreachable("not reached");
+      UNREACHABLE("not reached");
    }
 }
 

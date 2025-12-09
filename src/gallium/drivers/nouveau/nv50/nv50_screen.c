@@ -104,11 +104,11 @@ nv50_screen_is_format_supported(struct pipe_screen *pscreen,
 static void
 nv50_init_shader_caps(struct nv50_screen *screen)
 {
-   for (unsigned i = 0; i <= PIPE_SHADER_COMPUTE; i++) {
+   for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++) {
       struct pipe_shader_caps *caps =
          (struct pipe_shader_caps *)&screen->base.base.shader_caps[i];
 
-      if (i == PIPE_SHADER_TESS_CTRL || i == PIPE_SHADER_TESS_EVAL)
+      if (i == MESA_SHADER_TESS_CTRL || i == MESA_SHADER_TESS_EVAL)
          continue;
 
       caps->max_instructions =
@@ -116,7 +116,7 @@ nv50_init_shader_caps(struct nv50_screen *screen)
       caps->max_tex_instructions =
       caps->max_tex_indirections = 16384;
       caps->max_control_flow_depth = 4;
-      caps->max_inputs = i == PIPE_SHADER_VERTEX ? 32 : 15;
+      caps->max_inputs = i == MESA_SHADER_VERTEX ? 32 : 15;
       caps->max_outputs = 16;
       caps->max_const_buffer0_size = 65536;
       caps->max_const_buffers = NV50_MAX_PIPE_CONSTBUFS;
@@ -130,7 +130,7 @@ nv50_init_shader_caps(struct nv50_screen *screen)
       /* The chip could handle more sampler views than samplers */
       caps->max_sampler_views = MIN2(16, PIPE_MAX_SAMPLERS);
       caps->max_shader_buffers =
-      caps->max_shader_images = i == PIPE_SHADER_COMPUTE ? NV50_MAX_GLOBALS - 1 : 0;
+      caps->max_shader_images = i == MESA_SHADER_COMPUTE ? NV50_MAX_GLOBALS - 1 : 0;
       caps->supported_irs = 1 << PIPE_SHADER_IR_NIR;
    }
 }

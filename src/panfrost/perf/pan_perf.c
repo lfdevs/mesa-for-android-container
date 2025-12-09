@@ -88,12 +88,12 @@ pan_perf_init(struct pan_perf *perf, int fd)
    const struct pan_model *model =
       pan_get_model(props.gpu_id, props.gpu_variant);
    if (model == NULL)
-      unreachable("Invalid GPU ID");
+      UNREACHABLE("Invalid GPU ID");
 
    perf->cfg = pan_lookup_counters(model->performance_counters);
 
    if (perf->cfg == NULL)
-      unreachable("Performance counters missing!");
+      UNREACHABLE("Performance counters missing!");
 
    // Generally counter blocks are laid out in the following order:
    // Job manager, tiler, one or more L2 caches, and one or more shader cores.

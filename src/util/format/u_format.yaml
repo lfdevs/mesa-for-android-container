@@ -649,6 +649,12 @@
   block: {width: 1, height: 1, depth: 1}
   channels: [X8, UN24]
   swizzles: [Y, _, _, _]
+- name: Z24_UNORM_PACKED
+  layout: plain
+  colorspace: ZS
+  block: {width: 1, height: 1, depth: 1}
+  channels: [UN24]
+  swizzles: [X, _, _, _]
 - name: Z32_FLOAT_S8X24_UINT
   layout: plain
   colorspace: ZS
@@ -685,39 +691,45 @@
 
 # YUV formats
 # http://www.fourcc.org/yuv.php#UYVY
-- name: UYVY
+- name: U8Y8V8Y8_422_UNORM
+  alias: UYVY
   layout: subsampled
   colorspace: YUV
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
-- name: VYUY
+- name: V8Y8U8Y8_422_UNORM
+  alias: VYUY
   layout: subsampled
   colorspace: YUV
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
 # http://www.fourcc.org/yuv.php#YUYV (a.k.a http://www.fourcc.org/yuv.php#YUY2)
-- name: YUYV
+- name: Y8U8Y8V8_422_UNORM
+  alias: YUYV
   layout: subsampled
   colorspace: YUV
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
-- name: YVYU
+- name: Y8V8Y8U8_422_UNORM
+  alias: YVYU
   layout: subsampled
   colorspace: YUV
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
 
-- name: AYUV
+- name: A8Y8U8V8_444_UNORM
+  alias: AYUV
   layout: other
   colorspace: YUV
   block: {width: 4, height: 4, depth: 1}
   channels: [UN8]
   swizzles: [X, Y, Z, W]
-- name: XYUV
+- name: X8Y8U8V8_444_UNORM
+  alias: XYUV
   layout: other
   colorspace: YUV
   block: {width: 4, height: 4, depth: 1}
@@ -725,55 +737,76 @@
   swizzles: [X, Y, Z, 1]
 
 # same subsampling but with rgb channels
-- name: R8G8_B8G8_UNORM
+- name: R8G8_B8G8_422_UNORM
+  alias: R8G8_B8G8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
-- name: G8R8_G8B8_UNORM
+- name: G8R8_G8B8_422_UNORM
+  alias: G8R8_G8B8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
-- name: G8R8_B8R8_UNORM
+- name: G8R8_B8R8_422_UNORM
+  alias: G8R8_B8R8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [Z, Y, X, 1]
-- name: R8G8_R8B8_UNORM
+- name: R8G8_R8B8_422_UNORM
+  alias: R8G8_R8B8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [Z, Y, X, 1]
-- name: B8R8_G8R8_UNORM
+- name: B8R8_G8R8_422_UNORM
+  alias: B8R8_G8R8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [Y, X, Z, 1]
-- name: R8B8_R8G8_UNORM
+- name: R8B8_R8G8_422_UNORM
+  alias: R8B8_R8G8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [Y, X, Z, 1]
-- name: G8B8_G8R8_UNORM
+- name: G8B8_G8R8_422_UNORM
+  alias: G8B8_G8R8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
-- name: B8G8_R8G8_UNORM
+- name: B8G8_R8G8_422_UNORM
+  alias: B8G8_R8G8_UNORM
   layout: subsampled
   colorspace: RGB
   block: {width: 2, height: 1, depth: 1}
   channels: [UN8, UN8, UN8, UN8]
   swizzles: [X, Y, Z, 1]
 
+# 16 bit versions
+- name: R16G16_R16B16_422_UNORM
+  layout: subsampled
+  colorspace: RGB
+  block: {width: 2, height: 1, depth: 1}
+  channels: [UN16, UN16, UN16, UN16]
+  swizzles: [X, Y, Z, 1]
+- name: X6R10X6G10_X6R10X6B10_422_UNORM
+  layout: subsampled
+  colorspace: RGB
+  block: {width: 2, height: 1, depth: 1}
+  channels: [UN16, UN16, UN16, UN16]
+  swizzles: [X, Y, Z, 1]
 
 # some special formats not fitting anywhere else
 - name: R11G11B10_FLOAT
@@ -1964,31 +1997,36 @@
   swizzles: [X, Y, Z, 1]
 
 
-- name: YV12
+- name: Y8_V8_U8_420_UNORM
+  alias: YV12
   layout: planar3
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: YV16
+- name: Y8_V8_U8_422_UNORM
+  alias: YV16
   layout: planar3
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: IYUV
+- name: Y8_U8_V8_420_UNORM
+  alias: IYUV
   layout: planar3
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: NV12
+- name: Y8_U8V8_420_UNORM
+  alias: NV12
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: NV21
+- name: Y8_V8U8_420_UNORM
+  alias: NV21
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
@@ -2000,13 +2038,15 @@
   block: {width: 1, height: 1, depth: 1}
   channels: [UN8]
   swizzles: [X, 0, 0, 1]
-- name: NV15
+- name: Y10_U10V10_420_UNORM
+  alias: NV15
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: NV20
+- name: Y10_U10V10_422_UNORM
+  alias: NV20
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
@@ -2081,7 +2121,8 @@
   block: {width: 1, height: 1, depth: 1}
   channels: [UN8]
   swizzles: [X, Y, Z, W]
-- name: R8_G8_B8_UNORM
+- name: R8_G8_B8_444_UNORM
+  alias: R8_G8_B8_UNORM
   layout: planar3
   colorspace: RGB
   block: {width: 1, height: 1, depth: 1}
@@ -2098,6 +2139,32 @@
   colorspace: RGB
   block: {width: 1, height: 1, depth: 1}
   channels: [X4, UN12]
+  swizzles: [X, Y, Z, W]
+
+# VK_EXT_ycbcr_2plane_444_formats
+- name: G8_B8R8_444_UNORM
+  layout: planar2
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [UN8]
+  swizzles: [X, Y, Z, W]
+- name: X6G10_X6B10X6R10_444_UNORM
+  layout: planar2
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X6, UN10]
+  swizzles: [X, Y, Z, W]
+- name: X4G12_X4B12X4R12_444_UNORM
+  layout: planar2
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X4, UN12]
+  swizzles: [X, Y, Z, W]
+- name: Y16_U16V16_444_UNORM
+  layout: planar2
+  colorspace: YUV
+  block: {width: 1, height: 1, depth: 1}
+  channels: []
   swizzles: [X, Y, Z, W]
 
 # for YUV420_8BIT, each 2x2 block needs 6 8 bit values to describe it
@@ -2160,7 +2227,29 @@
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: NV16
+- name: Y8_U8V8_422_UNORM
+  alias: NV16
+  layout: planar2
+  colorspace: YUV
+  block: {width: 1, height: 1, depth: 1}
+  channels: []
+  swizzles: [X, Y, Z, W]
+- name: Y8_V8U8_422_UNORM
+  alias: NV61
+  layout: planar2
+  colorspace: YUV
+  block: {width: 1, height: 1, depth: 1}
+  channels: []
+  swizzles: [X, Y, Z, W]
+- name: Y8_U8V8_444_UNORM
+  alias: NV24
+  layout: planar2
+  colorspace: YUV
+  block: {width: 1, height: 1, depth: 1}
+  channels: []
+  swizzles: [X, Y, Z, W]
+- name: Y8_V8U8_444_UNORM
+  alias: NV42
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
@@ -2242,25 +2331,29 @@
   swizzles: [X, Y, Z, W]
 
 
-- name: P010
+- name: X6Y10_X6U10X6V10_420_UNORM
+  alias: P010
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: P012
+- name: X4Y12_X4U12X4V12_420_UNORM
+  alias: P012
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: P016
+- name: Y16_U16V16_420_UNORM
+  alias: P016
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]
-- name: P030
+- name: Y10Y10Y10X2_U10V10U10X2V10U10V10X2_420_UNORM
+  alias: P030
   layout: planar2
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
@@ -2268,19 +2361,22 @@
   swizzles: [X, Y, Z, W]
 
 
-- name: Y210
+- name: X6Y10X6U10X6Y10X6V10_422_UNORM
+  alias: Y210
   layout: subsampled
   colorspace: YUV
   block: {width: 2, height: 1, depth: 1}
   channels: [X64]
   swizzles: [X, Y, Z, 1]
-- name: Y212
+- name: X4Y12X4U12X4Y12X4V12_422_UNORM
+  alias: Y212
   layout: subsampled
   colorspace: YUV
   block: {width: 2, height: 1, depth: 1}
   channels: [X64]
   swizzles: [X, Y, Z, 1]
-- name: Y216
+- name: Y16U16Y16V16_422_UNORM
+  alias: Y216
   layout: subsampled
   colorspace: YUV
   block: {width: 2, height: 1, depth: 1}
@@ -2288,19 +2384,22 @@
   swizzles: [X, Y, Z, 1]
 
 
-- name: Y410
+- name: U10Y10V10A2_444_UNORM
+  alias: Y410
   layout: other
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: [UN10, UN10, UN10, UN2]
   swizzles: [Y, Z, X, W]
-- name: Y412
+- name: X4U12X4Y12X4V12X4A12_444_UNORM
+  alias: Y412
   layout: other
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}
   channels: [UN16, UN16, UN16, UN16]
   swizzles: [Y, Z, X, W]
-- name: Y416
+- name: U16Y16V16A16_444_UNORM
+  alias: Y416
   layout: other
   colorspace: YUV
   block: {width: 1, height: 1, depth: 1}

@@ -7,6 +7,7 @@
 /* Bottom-up local scheduler to reduce register pressure */
 
 #include "util/dag.h"
+#include "util/sparse_bitset.h"
 #include "agx_compiler.h"
 #include "agx_opcodes.h"
 
@@ -15,7 +16,7 @@ struct sched_ctx {
    struct dag *dag;
 
    /* Live set */
-   BITSET_WORD *live;
+   struct u_sparse_bitset live;
 };
 
 struct sched_node {
@@ -121,13 +122,13 @@ create_dag(agx_context *ctx, agx_block *block, void *memctx)
  *      live_in = (live_out - KILL) + GEN
  */
 static signed
-calculate_pressure_delta(agx_instr *I, BITSET_WORD *live)
+calculate_pressure_delta(agx_instr *I, struct u_sparse_bitset *live)
 {
    signed delta = 0;
 
    /* Destinations must be unique */
    agx_foreach_ssa_dest(I, d) {
-      if (BITSET_TEST(live, I->dest[d].value))
+      if (u_sparse_bitset_test(live, I->dest[d].value))
          delta -= agx_index_size_16(I->dest[d]);
    }
 
@@ -142,7 +143,7 @@ calculate_pressure_delta(agx_instr *I, BITSET_WORD *live)
          }
       }
 
-      if (!dupe && !BITSET_TEST(live, I->src[src].value))
+      if (!dupe && !u_sparse_bitset_test(live, I->src[src].value))
          delta += agx_index_size_16(I->src[src]);
    }
 
@@ -185,7 +186,7 @@ choose_instr(struct sched_ctx *s)
       if (n->instr->op == AGX_OPCODE_WAIT_PIX)
          return n;
 
-      int32_t delta = calculate_pressure_delta(n->instr, s->live);
+      int32_t delta = calculate_pressure_delta(n->instr, &s->live);
 
       if (delta < min_delta) {
          best = n;
@@ -204,18 +205,16 @@ pressure_schedule_block(agx_context *ctx, agx_block *block, struct sched_ctx *s)
    signed orig_max_pressure = 0;
    unsigned nr_ins = 0;
 
-   memcpy(s->live, block->live_out,
-          BITSET_WORDS(ctx->alloc) * sizeof(BITSET_WORD));
+   u_sparse_bitset_dup(&s->live, &block->live_out);
 
    agx_foreach_instr_in_block_rev(block, I) {
-      pressure += calculate_pressure_delta(I, s->live);
+      pressure += calculate_pressure_delta(I, &s->live);
       orig_max_pressure = MAX2(pressure, orig_max_pressure);
-      agx_liveness_ins_update(s->live, I);
+      agx_liveness_ins_update(&s->live, I);
       nr_ins++;
    }
 
-   memcpy(s->live, block->live_out,
-          BITSET_WORDS(ctx->alloc) * sizeof(BITSET_WORD));
+   u_sparse_bitset_dup(&s->live, &block->live_out);
 
    /* off by a constant, that's ok */
    signed max_pressure = 0;
@@ -226,12 +225,12 @@ pressure_schedule_block(agx_context *ctx, agx_block *block, struct sched_ctx *s)
 
    while (!list_is_empty(&s->dag->heads)) {
       struct sched_node *node = choose_instr(s);
-      pressure += calculate_pressure_delta(node->instr, s->live);
+      pressure += calculate_pressure_delta(node->instr, &s->live);
       max_pressure = MAX2(pressure, max_pressure);
       dag_prune_head(s->dag, &node->dag);
 
       schedule[nr_ins++] = node;
-      agx_liveness_ins_update(s->live, node->instr);
+      agx_liveness_ins_update(&s->live, node->instr);
    }
 
    /* Bail if it looks like it's worse */
@@ -254,14 +253,10 @@ agx_pressure_schedule(agx_context *ctx)
 {
    agx_compute_liveness(ctx);
    void *memctx = ralloc_context(ctx);
-   BITSET_WORD *live =
-      ralloc_array(memctx, BITSET_WORD, BITSET_WORDS(ctx->alloc));
 
    agx_foreach_block(ctx, block) {
-      struct sched_ctx sctx = {
-         .dag = create_dag(ctx, block, memctx),
-         .live = live,
-      };
+      struct sched_ctx sctx = {.dag = create_dag(ctx, block, memctx)};
+      u_sparse_bitset_init(&sctx.live, ctx->alloc, memctx);
 
       pressure_schedule_block(ctx, block, &sctx);
    }

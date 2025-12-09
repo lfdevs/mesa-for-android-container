@@ -31,9 +31,10 @@ extern "C" {
 
 #define VISUAL_CONFIRM_HEIGHT 8
 
-struct vpe_color vpe_get_visual_confirm_color(enum vpe_surface_pixel_format format,
-    struct vpe_color_space cs, enum color_space output_cs, struct transfer_func *output_tf,
-    enum vpe_surface_pixel_format output_format, bool enable_3dLut);
+struct vpe_color vpe_get_visual_confirm_color(struct vpe_priv *vpe_priv,
+    enum vpe_surface_pixel_format format, struct vpe_color_space cs, enum color_space output_cs,
+    struct transfer_func *output_tf, enum vpe_surface_pixel_format output_format,
+    bool enable_3dLut);
 
 enum vpe_status vpe_create_visual_confirm_segs(
     struct vpe_priv *vpe_priv, const struct vpe_build_param *params, uint32_t max_seg_width);

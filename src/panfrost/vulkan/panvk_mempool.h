@@ -82,6 +82,11 @@ struct panvk_pool {
     */
    struct panvk_bo_pool *bo_pool;
 
+   /* Before allocating a new big BO, check if the BO pool has a sufficiently sized BO.
+    * When returning big BOs, if big_bo_pool != NULL, return them to this big_bo_pool.
+    */
+   struct panvk_bo_pool *big_bo_pool;
+
    /* BOs allocated by this pool */
    struct list_head bos;
    struct list_head big_bos;
@@ -105,6 +110,7 @@ to_panvk_pool(struct pan_pool *pool)
 
 void panvk_pool_init(struct panvk_pool *pool, struct panvk_device *dev,
                      struct panvk_bo_pool *bo_pool,
+                     struct panvk_bo_pool *big_bo_pool,
                      const struct panvk_pool_properties *props);
 
 void panvk_pool_reset(struct panvk_pool *pool);
@@ -203,14 +209,10 @@ panvk_pool_upload_aligned(struct panvk_pool *pool, const void *data, size_t sz,
    };
 
    struct panvk_priv_mem mem = panvk_pool_alloc_mem(pool, info);
-   memcpy(panvk_priv_mem_host_addr(mem), data, sz);
+   void *host_addr = panvk_priv_mem_host_addr(mem);
+   if (likely(host_addr != NULL))
+      memcpy(host_addr, data, sz);
    return mem;
-}
-
-static inline struct panvk_priv_mem
-panvk_pool_upload(struct panvk_pool *pool, const void *data, size_t sz)
-{
-   return panvk_pool_upload_aligned(pool, data, sz, sz);
 }
 
 #define panvk_pool_alloc_desc(pool, name)                                      \

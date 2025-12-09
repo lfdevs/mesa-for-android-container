@@ -59,7 +59,7 @@ d3d12_init_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
    batch->bos = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
                                         _mesa_key_pointer_equal);
 
-   util_dynarray_init(&batch->local_bos, NULL);
+   batch->local_bos = UTIL_DYNARRAY_INIT;
 
    batch->surfaces = _mesa_set_create(NULL, _mesa_hash_pointer,
                                       _mesa_key_pointer_equal);
@@ -89,7 +89,7 @@ d3d12_init_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
       if (!batch->sampler_tables || !batch->sampler_views || !batch->view_heap || !batch->queries)
          return false;
 
-      util_dynarray_init(&batch->zombie_samplers, NULL);
+      batch->zombie_samplers = UTIL_DYNARRAY_INIT;
 
       batch->sampler_heap =
          d3d12_descriptor_heap_new(screen->dev,
@@ -264,7 +264,7 @@ d3d12_start_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
       ctx->cmdlist->SetDescriptorHeaps(2, heaps);
 
       ctx->cmdlist_dirty = ~0;
-      for (int i = 0; i < PIPE_SHADER_TYPES; ++i)
+      for (int i = 0; i < MESA_SHADER_STAGES; ++i)
          ctx->shader_dirty[i] = ~0;
    
       if (!ctx->queries_disabled)
@@ -356,7 +356,7 @@ d3d12_batch_acquire_reference(struct d3d12_batch *batch,
    if (batch->ctx_id != D3D12_CONTEXT_NO_ID) {
       if ((bo->local_reference_mask[batch->ctx_id] & (1 << batch->ctx_index)) == 0) {
          d3d12_bo_reference(bo);
-         util_dynarray_append(&batch->local_bos, d3d12_bo*, bo);
+         util_dynarray_append(&batch->local_bos, bo);
          bo->local_reference_mask[batch->ctx_id] |= (1 << batch->ctx_index);
          bo->local_reference_state[batch->ctx_id][batch->ctx_index] = batch_bo_reference_none;
       }

@@ -1,3 +1,9 @@
+/*
+ * Copyright 2022 Red Hat.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "CL/cl.h"
 
 #include "nir.h"
@@ -38,8 +44,8 @@ rusticl_lower_intrinsics_instr(
 
         val = intrins->src[0].ssa;
 
-        if (val->parent_instr->type == nir_instr_type_deref) {
-            nir_deref_instr *deref = nir_instr_as_deref(val->parent_instr);
+        if (nir_def_is_deref(val)) {
+            nir_deref_instr *deref = nir_def_as_deref(val);
             nir_variable *var = nir_deref_instr_get_variable(deref);
             assert(var);
             val = nir_imm_intN_t(b, var->data.binding, val->bit_size);
@@ -110,7 +116,7 @@ rusticl_lower_input_instr(struct nir_builder *b, nir_instr *instr, void *_)
       nir_load_ubo(b, intrins->num_components, intrins->def.bit_size,
                    ubo_idx, nir_iadd_imm(b, uniform_offset, nir_intrinsic_base(intrins)));
 
-   nir_intrinsic_instr *load = nir_instr_as_intrinsic(load_result->parent_instr);
+   nir_intrinsic_instr *load = nir_def_as_intrinsic(load_result);
 
    nir_intrinsic_set_align_mul(load, nir_intrinsic_align_mul(intrins));
    nir_intrinsic_set_align_offset(load, nir_intrinsic_align_offset(intrins));

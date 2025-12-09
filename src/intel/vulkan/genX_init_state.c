@@ -106,7 +106,7 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
       else if (ppipes_of[2] == 1 && ppipes_of[1] == 1 && ppipes_of[0] == 1)
          intel_compute_pixel_hash_table_3way(8, 16, 3, 3, 0, p.ThreeWayTableEntry[0]);
       else
-         unreachable("Illegal fusing.");
+         UNREACHABLE("Illegal fusing.");
    }
 
    anv_batch_emit(batch, GENX(3DSTATE_3D_MODE), p) {
@@ -200,7 +200,14 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
     */
    const struct intel_l3_config *cfg = intel_get_default_l3_config(device->info);
    genX(emit_l3_config)(batch, device, cfg);
-   device->l3_config = cfg;
+   device->l3_config = device->l3_slm_config = cfg;
+#else
+   device->l3_config = intel_get_l3_config(
+      device->info,
+      intel_get_default_l3_weights(device->info, true, false /* slm */));
+   device->l3_slm_config = intel_get_l3_config(
+      device->info,
+      intel_get_default_l3_weights(device->info, true, true /* slm */));
 #endif
 
 #if GFX_VERx10 == 125
@@ -371,6 +378,12 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
    }
 #endif
 
+   /* Always use Thread Group Preemption granularity level for Media/GPGPU */
+   anv_batch_write_reg(batch, GENX(CS_CHICKEN1), cc1) {
+      cc1.MediaAndGPGPUPreemptionControl = ThreadGroupPreemption;
+      cc1.MediaAndGPGPUPreemptionControlMask = 0x3;
+   }
+
    state_system_mem_fence_address_emit(device, batch);
 }
 
@@ -500,14 +513,24 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
     * corruption.
     */
    anv_batch_write_reg(batch, GENX(CS_CHICKEN1), cc1) {
+#if GFX_VERx10 < 200
       cc1.ReplayMode = MidcmdbufferPreemption;
       cc1.ReplayModeMask = true;
-
+#endif
 #if GFX_VERx10 == 120
       cc1.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommand = true;
       cc1.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommandMask = true;
 #endif
    }
+
+#if GFX_VER == 20
+   if (intel_device_info_is_bmg_g31(devinfo)) {
+      anv_batch_write_reg(batch, GENX(CACHE_MODE_0), cm0) {
+         cm0.MsaaFastClearEnabled = true;
+         cm0.MsaaFastClearEnabledMask = true;
+      }
+   }
+#endif
 
 #if INTEL_NEEDS_WA_1806527549
    /* Wa_1806527549 says to disable the following HiZ optimization when the
@@ -904,21 +927,12 @@ genX(init_physical_device_state)(ASSERTED struct anv_physical_device *pdevice)
    pdevice->cmd_capture_data = genX(cmd_capture_data);
 
    pdevice->gpgpu_pipeline_value = GPGPU;
-
-   struct GENX(VERTEX_ELEMENT_STATE) empty_ve = {
-      .Valid = true,
-      .Component0Control = VFCOMP_STORE_0,
-      .Component1Control = VFCOMP_STORE_0,
-      .Component2Control = VFCOMP_STORE_0,
-      .Component3Control = VFCOMP_STORE_0,
-   };
-   GENX(VERTEX_ELEMENT_STATE_pack)(NULL, pdevice->empty_vs_input, &empty_ve);
 }
 
 VkResult
 genX(init_device_state)(struct anv_device *device)
 {
-   VkResult res;
+   VkResult res = VK_SUCCESS;
 
    device->slice_hash = (struct anv_state) { 0 };
    for (uint32_t i = 0; i < device->queue_count; i++) {
@@ -1067,7 +1081,7 @@ genX(emit_l3_config)(struct anv_batch *batch,
 #if GFX_VER >= 12
          l3cr.L3FullWayAllocationEnable = true;
 #else
-         unreachable("Invalid L3$ config");
+         UNREACHABLE("Invalid L3$ config");
 #endif
       } else {
 #if GFX_VER < 11
@@ -1159,7 +1173,7 @@ genX(emit_sample_pattern)(struct anv_batch *batch,
             }
             break;
          default:
-            unreachable("Invalid sample count");
+            UNREACHABLE("Invalid sample count");
          }
       }
    }
@@ -1170,7 +1184,7 @@ vk_to_intel_tex_filter(VkFilter filter, bool anisotropyEnable)
 {
    switch (filter) {
    default:
-      unreachable("Invalid filter");
+      UNREACHABLE("Invalid filter");
    case VK_FILTER_NEAREST:
       return anisotropyEnable ?
 #if GFX_VER >= 30

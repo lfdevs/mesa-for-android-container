@@ -261,6 +261,9 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
             }
          } break;
 #endif
+         case VAConfigAttribDecProcessing:
+            value = 1;
+            break;
          default:
             value = VA_ATTRIB_NOT_SUPPORTED;
             break;
@@ -571,7 +574,7 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
 
          case VAConfigAttribEncROI:
          {
-            union pipe_enc_cap_roi roi_pipe_caps = {};
+            union pipe_enc_cap_roi roi_pipe_caps = { 0 };
             roi_pipe_caps.value = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
                                              PIPE_VIDEO_ENTRYPOINT_ENCODE,
                                              PIPE_VIDEO_CAP_ENC_ROI);
@@ -579,7 +582,7 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
                value = VA_ATTRIB_NOT_SUPPORTED;
             else
             {
-               VAConfigAttribValEncROI roi_va_caps = {};
+               VAConfigAttribValEncROI roi_va_caps = { 0 };
                roi_va_caps.bits.num_roi_regions = roi_pipe_caps.bits.num_roi_regions;
                roi_va_caps.bits.roi_rc_priority_support = roi_pipe_caps.bits.roi_rc_priority_support;
                roi_va_caps.bits.roi_rc_qp_delta_support = roi_pipe_caps.bits.roi_rc_qp_delta_support;

@@ -13,7 +13,6 @@ test-spirv2dxil-windows:
     - job: windows-msvc
     - job: windows_test_msvc
       optional: true
-    - !reference [.required-for-hardware-jobs, needs]
   variables:
     GIT_STRATEGY: none # testing doesn't build anything from source
   script:
@@ -36,11 +35,10 @@ test-dozen-deqp:
     - job: windows-msvc
     - job: windows_test_msvc
       optional: true
-    - !reference [.required-for-hardware-jobs, needs]
   variables:
     GIT_STRATEGY: none # testing doesn't build anything from source
     DZN_AGILITY_RELATIVE_PATH: "D3D12\\"
-    DZN_AGILITY_SDK_VERSION: 614
+    DZN_AGILITY_SDK_VERSION: 618
     DEQP_FRACTION: 4
   script:
     - . _install/deqp_runner_run.ps1

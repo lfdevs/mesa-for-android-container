@@ -67,7 +67,7 @@ contains_other_jump(nir_cf_node *node, nir_instr *expected_jump)
       return false;
 
    default:
-      unreachable("Unhandled cf node type");
+      UNREACHABLE("Unhandled cf node type");
    }
 }
 
@@ -99,7 +99,7 @@ nir_is_terminator_condition_with_two_inputs(nir_scalar cond)
    if (!nir_scalar_is_alu(cond))
       return false;
 
-   nir_alu_instr *alu = nir_instr_as_alu(cond.def->parent_instr);
+   nir_alu_instr *alu = nir_def_as_alu(cond.def);
    return nir_alu_instr_is_comparison(alu) &&
           nir_op_infos[alu->op].num_inputs == 2;
 }
@@ -110,7 +110,7 @@ nir_is_supported_terminator_condition(nir_scalar cond)
    if (!nir_scalar_is_alu(cond))
       return false;
 
-   nir_alu_instr *alu = nir_instr_as_alu(cond.def->parent_instr);
+   nir_alu_instr *alu = nir_def_as_alu(cond.def);
    return nir_alu_instr_is_comparison(alu) &&
           (nir_op_infos[alu->op].num_inputs == 2 ||
            (alu->op == nir_op_inot &&

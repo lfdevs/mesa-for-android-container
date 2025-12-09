@@ -10,7 +10,7 @@ libsthgl = static_library(
   'sthgl',
   files_libsthgl,
   include_directories : [
-    inc_include, inc_util, inc_mesa, inc_mapi, inc_src,
+    inc_include, inc_util, inc_mesa, inc_src,
     inc_gallium, inc_gallium_aux
   ],
   gnu_symbol_visibility : 'hidden',

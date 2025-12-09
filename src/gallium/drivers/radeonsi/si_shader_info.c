@@ -144,12 +144,18 @@ static void scan_io_usage(const nir_shader *nir, struct si_shader_info *info,
          /* Call the translation functions to validate the semantic (call assertions in them). */
          if (nir->info.stage != MESA_SHADER_FRAGMENT &&
              semantic != VARYING_SLOT_EDGE) {
-            if (semantic == VARYING_SLOT_TESS_LEVEL_INNER ||
+            /* VARYING_SLOT_PRIMITIVE_INDICES = VARYING_SLOT_TESS_LEVEL_INNER */
+            if ((nir->info.stage != MESA_SHADER_MESH &&
+                 semantic == VARYING_SLOT_TESS_LEVEL_INNER) ||
                 semantic == VARYING_SLOT_TESS_LEVEL_OUTER ||
                 (semantic >= VARYING_SLOT_PATCH0 && semantic <= VARYING_SLOT_PATCH31)) {
                ac_shader_io_get_unique_index_patch(semantic);
                ac_shader_io_get_unique_index_patch(slot_semantic);
-            } else {
+            } else if (!(nir->info.stage == MESA_SHADER_MESH &&
+                         semantic == VARYING_SLOT_PRIMITIVE_INDICES)) {
+               /* We don't have unique index for primitive indices because it won't be
+                * passed to next shader stage.
+                */
                si_shader_io_get_unique_index(semantic);
                si_shader_io_get_unique_index(slot_semantic);
             }
@@ -216,6 +222,14 @@ static void scan_io_usage(const nir_shader *nir, struct si_shader_info *info,
                      if (index < nir->info.clip_distance_array_size)
                         info->clipdist_mask |= BITFIELD_BIT(index);
                   }
+               }
+            } else if (nir->info.stage == MESA_SHADER_MESH) {
+               if (slot_semantic != VARYING_SLOT_POS &&
+                   slot_semantic != VARYING_SLOT_PSIZ &&
+                   slot_semantic != VARYING_SLOT_LAYER &&
+                   slot_semantic != VARYING_SLOT_PRIMITIVE_INDICES) {
+                  info->outputs_written_before_ps |=
+                     BITFIELD64_BIT(si_shader_io_get_unique_index(slot_semantic));
                }
             }
 
@@ -341,6 +355,7 @@ static void scan_instruction(const struct nir_shader *nir, struct si_shader_info
       case nir_intrinsic_load_per_vertex_output:
       case nir_intrinsic_store_output:
       case nir_intrinsic_store_per_vertex_output:
+      case nir_intrinsic_store_per_primitive_output:
          scan_io_usage(nir, info, intr, false, colors_lowered);
          break;
       case nir_intrinsic_load_deref:
@@ -350,7 +365,7 @@ static void scan_instruction(const struct nir_shader *nir, struct si_shader_info
       case nir_intrinsic_interp_deref_at_centroid:
       case nir_intrinsic_interp_deref_at_sample:
       case nir_intrinsic_interp_deref_at_offset:
-         unreachable("these opcodes should have been lowered");
+         UNREACHABLE("these opcodes should have been lowered");
          break;
       case nir_intrinsic_ordered_add_loop_gfx12_amd:
          info->uses_atomic_ordered_add = true;
@@ -383,6 +398,8 @@ void si_nir_scan_shader(struct si_screen *sscreen, struct nir_shader *nir,
       nir->info.use_aco_amd = aco_is_gpu_supported(&sscreen->info) &&
                               sscreen->info.has_image_opcodes &&
                               (sscreen->use_aco || nir->info.use_aco_amd || force_use_aco ||
+                               nir->info.stage == MESA_SHADER_MESH ||
+                               nir->info.stage == MESA_SHADER_TASK ||
                                /* Use ACO for streamout on gfx12 because it's faster. */
                                (sscreen->info.gfx_level >= GFX12 && nir->xfb_info &&
                                 nir->xfb_info->output_count));
@@ -402,7 +419,7 @@ void si_nir_scan_shader(struct si_screen *sscreen, struct nir_shader *nir,
 
    info->base.use_aco_amd = nir->info.use_aco_amd;
    info->base.writes_memory = nir->info.writes_memory;
-   info->base.subgroup_size = nir->info.subgroup_size;
+   info->base.api_subgroup_size = nir->info.api_subgroup_size;
 
    info->base.num_ubos = nir->info.num_ubos;
    info->base.num_ssbos = nir->info.num_ssbos;
@@ -411,7 +428,7 @@ void si_nir_scan_shader(struct si_screen *sscreen, struct nir_shader *nir,
    info->base.image_buffers = nir->info.image_buffers[0];
    info->base.msaa_images = nir->info.msaa_images[0];
 
-   info->base.shared_size = nir->info.shared_size;
+   info->base.task_payload_size = nir->info.task_payload_size;
    memcpy(info->base.workgroup_size, nir->info.workgroup_size, sizeof(nir->info.workgroup_size));
    info->base.workgroup_size_variable = nir->info.workgroup_size_variable;
    info->base.derivative_group = nir->info.derivative_group;
@@ -457,8 +474,19 @@ void si_nir_scan_shader(struct si_screen *sscreen, struct nir_shader *nir,
       info->base.cs.user_data_components_amd = nir->info.cs.user_data_components_amd;
       break;
 
+   case MESA_SHADER_MESH:
+      info->base.mesh.max_vertices_out = nir->info.mesh.max_vertices_out;
+      info->base.mesh.max_primitives_out = nir->info.mesh.max_primitives_out;
+      break;
+
+   case MESA_SHADER_TASK:
+      info->base.task.linear_taskmesh_dispatch =
+         nir->info.mesh.ts_mesh_dispatch_dimensions[1] == 1 &&
+         nir->info.mesh.ts_mesh_dispatch_dimensions[2] == 1;
+      break;
+
    default:
-      unreachable("unexpected shader stage");
+      UNREACHABLE("unexpected shader stage");
    }
 
    /* Get options from shader profiles. */
@@ -668,7 +696,7 @@ void si_nir_scan_shader(struct si_screen *sscreen, struct nir_shader *nir,
 }
 
 enum ac_hw_stage
-si_select_hw_stage(const gl_shader_stage stage, const union si_shader_key *const key,
+si_select_hw_stage(const mesa_shader_stage stage, const union si_shader_key *const key,
                    const enum amd_gfx_level gfx_level)
 {
    switch (stage) {
@@ -689,12 +717,15 @@ si_select_hw_stage(const gl_shader_stage stage, const union si_shader_key *const
          return AC_HW_NEXT_GEN_GEOMETRY_SHADER;
       else
          return AC_HW_LEGACY_GEOMETRY_SHADER;
+   case MESA_SHADER_MESH:
+      return AC_HW_NEXT_GEN_GEOMETRY_SHADER;
    case MESA_SHADER_FRAGMENT:
       return AC_HW_PIXEL_SHADER;
+   case MESA_SHADER_TASK:
    case MESA_SHADER_COMPUTE:
    case MESA_SHADER_KERNEL:
       return AC_HW_COMPUTE_SHADER;
    default:
-      unreachable("Unsupported HW stage");
+      UNREACHABLE("Unsupported HW stage");
    }
 }

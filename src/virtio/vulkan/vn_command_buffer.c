@@ -12,6 +12,7 @@
 
 #include "venus-protocol/vn_protocol_driver_command_buffer.h"
 #include "venus-protocol/vn_protocol_driver_command_pool.h"
+#include "vk_synchronization.h"
 
 #include "vn_descriptor_set.h"
 #include "vn_device.h"
@@ -112,7 +113,7 @@ vn_cmd_get_cached_storage(struct vn_command_buffer *cmd,
       barriers_size = barrier_count * sizeof(VkImageMemoryBarrier2);
       break;
    default:
-      unreachable("invalid barrier_type");
+      UNREACHABLE("invalid barrier_type");
    }
 
    size_t total_size =
@@ -217,8 +218,6 @@ vn_cmd_fix_image_memory_barrier_common(const struct vn_image *img,
    if (*old_layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
        *new_layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
       return result;
-
-   assert(img->wsi.is_wsi);
 
    /* prime blit src or no layout transition */
    if (img->wsi.is_prime_blit_src || *old_layout == *new_layout) {
@@ -1582,23 +1581,6 @@ vn_CmdSetEvent(VkCommandBuffer commandBuffer,
                                 false);
 }
 
-static VkPipelineStageFlags2
-vn_dependency_info_collect_src_stage_mask(const VkDependencyInfo *dep_info)
-{
-   VkPipelineStageFlags2 mask = 0;
-
-   for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++)
-      mask |= dep_info->pMemoryBarriers[i].srcStageMask;
-
-   for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++)
-      mask |= dep_info->pBufferMemoryBarriers[i].srcStageMask;
-
-   for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++)
-      mask |= dep_info->pImageMemoryBarriers[i].srcStageMask;
-
-   return mask;
-}
-
 void
 vn_CmdSetEvent2(VkCommandBuffer commandBuffer,
                 VkEvent event,
@@ -1613,7 +1595,7 @@ vn_CmdSetEvent2(VkCommandBuffer commandBuffer,
    VN_CMD_ENQUEUE(vkCmdSetEvent2, commandBuffer, event, pDependencyInfo);
 
    const VkPipelineStageFlags2 src_stage_mask =
-      vn_dependency_info_collect_src_stage_mask(pDependencyInfo);
+      vk_collect_dependency_info_src_stages(pDependencyInfo);
    vn_event_feedback_cmd_record(commandBuffer, event, src_stage_mask,
                                 VK_EVENT_SET, true);
 }
@@ -2389,7 +2371,7 @@ vn_CmdPushDescriptorSetWithTemplate2(VkCommandBuffer commandBuffer,
       stage_flags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
       break;
    default:
-      unreachable("bad pipeline bind point in the template");
+      UNREACHABLE("bad pipeline bind point in the template");
       break;
    }
    const VkPushDescriptorSetInfo info = {
@@ -2783,4 +2765,39 @@ vn_CmdSetAttachmentFeedbackLoopEnableEXT(VkCommandBuffer commandBuffer,
 {
    VN_CMD_ENQUEUE(vkCmdSetAttachmentFeedbackLoopEnableEXT, commandBuffer,
                   aspectMask);
+}
+
+void
+vn_CmdDrawMeshTasksEXT(VkCommandBuffer commandBuffer,
+                       uint32_t groupCountX,
+                       uint32_t groupCountY,
+                       uint32_t groupCountZ)
+{
+   VN_CMD_ENQUEUE(vkCmdDrawMeshTasksEXT, commandBuffer, groupCountX,
+                  groupCountY, groupCountZ);
+}
+
+void
+vn_CmdDrawMeshTasksIndirectEXT(VkCommandBuffer commandBuffer,
+                               VkBuffer buffer,
+                               VkDeviceSize offset,
+                               uint32_t drawCount,
+                               uint32_t stride)
+{
+   VN_CMD_ENQUEUE(vkCmdDrawMeshTasksIndirectEXT, commandBuffer, buffer,
+                  offset, drawCount, stride);
+}
+
+void
+vn_CmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer commandBuffer,
+                                    VkBuffer buffer,
+                                    VkDeviceSize offset,
+                                    VkBuffer countBuffer,
+                                    VkDeviceSize countBufferOffset,
+                                    uint32_t maxDrawCount,
+                                    uint32_t stride)
+{
+   VN_CMD_ENQUEUE(vkCmdDrawMeshTasksIndirectCountEXT, commandBuffer, buffer,
+                  offset, countBuffer, countBufferOffset, maxDrawCount,
+                  stride);
 }

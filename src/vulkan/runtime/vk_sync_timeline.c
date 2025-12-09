@@ -563,6 +563,8 @@ vk_sync_timeline_wait(struct vk_device *device,
                       uint64_t abs_timeout_ns)
 {
    struct vk_sync_timeline_state *state = to_vk_sync_timeline_state(sync);
+   if (wait_value == 0)
+      return VK_SUCCESS;
 
    mtx_lock(&state->mutex);
    VkResult result = vk_sync_timeline_wait_locked(device, state,

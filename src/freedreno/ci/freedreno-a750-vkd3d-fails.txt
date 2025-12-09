@@ -1,5 +1,10 @@
 test_shader_instructions,Fail
-test_line_rasterization,Fail
+test_large_texel_buffer_view,Fail
+test_derivative_hoisting_dxil,Fail
+test_sparse_depth_stencil_rendering,Fail
 
-# error: src->ssa->num_components == num_components (../src/compiler/nir/nir_validate.c:205)
-test_shader_waveop_maximal_convergence,Crash
+# msm_dpu ae01000.display-controller: [drm:hangcheck_handler] *ERROR* 67.5.20.1: hangcheck detected gpu lockup rb 2!
+# msm_dpu ae01000.display-controller: [drm:hangcheck_handler] *ERROR* 67.5.20.1:     completed fence: 4294967112
+# msm_dpu ae01000.display-controller: [drm:hangcheck_handler] *ERROR* 67.5.20.1:     submitted fence: 4294967115
+# *** gpu fault: ttbr0=00000008b80fc000 iova=0000000100691300 dir=READ type=TRANSLATION source=UCHE (3736059565,3736059565,3736059565,3736059565)
+test_fence_pending_signal_cpu_rewind_plain,Crash

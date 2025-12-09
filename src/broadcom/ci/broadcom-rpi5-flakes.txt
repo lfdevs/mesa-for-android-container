@@ -18,11 +18,8 @@ spec@amd_performance_monitor@api
 spec@amd_performance_monitor@api@test_counter_string_small_buffer
 spec@amd_performance_monitor@vc4
 spec@arb_occlusion_query@occlusion_query_order
-spec@arb_texture_buffer_object@formats \(fs- arb\)
-spec@arb_texture_buffer_object@formats \(vs- arb\)
-spec@arb_texture_buffer_object@formats \(vs- arb\)@GL_ALPHA16F_ARB
-spec@arb_texture_buffer_object@formats \(vs- arb\)@GL_ALPHA32F_ARB
 spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x130-501x130
+spec@arb_timer_query@timestamp-get
 spec@ext_framebuffer_blit@fbo-blit-check-limits
 spec@ext_framebuffer_blit@fbo-sys-blit
 spec@ext_framebuffer_blit@fbo-sys-sub-blit
@@ -89,7 +86,9 @@ dEQP-VK.binding_model.shader_access.primary_cmd_buf.bind.sampler_immutable.tess_
 dEQP-VK.binding_model.shader_access.secondary_cmd_buf.bind.sampler_immutable.vertex_fragment.multiple_descriptor_sets.single_descriptor.3d
 dEQP-VK.binding_model.shader_access.secondary_cmd_buf.bind.with_template.sampler_mutable.tess_ctrl.multiple_descriptor_sets.single_descriptor.3d
 dEQP-VK.clipping.user_defined.clip_distance.vert.8
+dEQP-VK.draw.dynamic_rendering.complete_secondary_cmd_buff.multiple_interpolation.separate.no_sample_decoration.4_samples
 dEQP-VK.draw.dynamic_rendering.partial_secondary_cmd_buff.instanced.draw_indexed_indirect_vk_primitive_topology_line_strip_attrib_divisor_2
+dEQP-VK.draw.dynamic_rendering.partial_secondary_cmd_buff.multiple_interpolation.structured.no_sample_decoration.4_samples
 dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.instanced.draw_indexed_vk_primitive_topology_triangle_fan_khr_attrib_divisor_2_multiview_maintenance_5
 dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.multiple_interpolation.structured.no_sample_decoration.4_samples
 dEQP-VK.draw.renderpass.indexed_draw.draw_indexed_triangle_list_offset_negative_large
@@ -200,3 +199,9 @@ spec@!opengl 1.0@gl-1.0-drawbuffer-modes
 x11-dEQP-EGL.functional.preserve_swap.no_preserve.read_before_swap.pre_clear_post_render
 x11-dEQP-EGL.functional.preserve_swap.no_preserve.no_read_before_swap.post_render
 x11-dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_sync.images.texture_source.create_texture_render
+
+spec@egl_chromium_sync_control@conformance
+spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
+
+# It works with ci-tron, but fails with baremetal. Maybe a kernel issue?
+dEQP-VK.image.mutable.2d_array.r8g8b8a8_sint_r32_sfloat_draw_copy_resolve

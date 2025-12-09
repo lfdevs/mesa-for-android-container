@@ -1,3 +1,9 @@
+/*
+ * Copyright 2022 LingMan
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "rusticl_system_bindings.h"
 
 #include "git_sha1.h"

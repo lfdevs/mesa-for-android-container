@@ -76,30 +76,12 @@ d3d12_video_encoder_references_manager_av1::is_current_frame_used_as_reference()
    return m_isCurrentFrameUsedAsReference;
 }
 
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
 void
-d3d12_video_encoder_references_manager_av1::begin_frame1(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 curFrameData,
-                                                          bool bUsedAsReference,
-                                                          struct pipe_picture_desc *picture)
+d3d12_video_encoder_references_manager_av1::begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1& curFrameData,
+                                                        bool bUsedAsReference,
+                                                        struct pipe_picture_desc *picture)
 {
    m_CurrentFramePicParams = *curFrameData.pAV1PicData;
-   begin_frame_impl(bUsedAsReference, picture);
-}
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
-
-void
-d3d12_video_encoder_references_manager_av1::begin_frame(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA curFrameData,
-                                                         bool bUsedAsReference,
-                                                         struct pipe_picture_desc *picture)
-{
-   m_CurrentFramePicParams = *curFrameData.pAV1PicData;
-   begin_frame_impl(bUsedAsReference, picture);
-}
-
-void
-d3d12_video_encoder_references_manager_av1::begin_frame_impl(bool bUsedAsReference,
-                                                              struct pipe_picture_desc *picture)
-{
    m_isCurrentFrameUsedAsReference = bUsedAsReference;
 
    if (m_CurrentFramePicParams.FrameType == D3D12_VIDEO_ENCODER_AV1_FRAME_TYPE_KEY_FRAME)
@@ -312,24 +294,9 @@ d3d12_video_encoder_references_manager_av1::get_dpb_physical_slot_refcount_from_
    return refCount;
 }
 
-#if D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
-bool
-d3d12_video_encoder_references_manager_av1::get_current_frame_picture_control_data1(
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation)
-{
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA picData = {};
-   picData.DataSize = codecAllocation.DataSize;
-   picData.pAV1PicData = codecAllocation.pAV1PicData;
-   bool res = get_current_frame_picture_control_data(picData);
-   codecAllocation.DataSize = picData.DataSize;
-   codecAllocation.pAV1PicData = picData.pAV1PicData;
-   return res;
-}
-#endif // D3D12_VIDEO_USE_NEW_ENCODECMDLIST4_INTERFACE
-
 bool
 d3d12_video_encoder_references_manager_av1::get_current_frame_picture_control_data(
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA &codecAllocation)
+   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation)
 {
    assert(m_CurrentFrameReferencesData.pVirtualDPBEntries.size() == NUM_REF_FRAMES);
    assert(codecAllocation.DataSize == sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_CODEC_DATA));

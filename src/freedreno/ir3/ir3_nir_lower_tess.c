@@ -116,7 +116,7 @@ shader_io_get_unique_index(gl_varying_slot slot)
       return 13 + (slot - VARYING_SLOT_VAR0);
    }
    default:
-      unreachable("illegal slot in get unique index\n");
+      UNREACHABLE("illegal slot in get unique index\n");
    }
 }
 
@@ -144,7 +144,7 @@ build_local_offset(nir_builder *b, struct state *state, nir_def *vertex,
                                  comp * 4);
       break;
    default:
-      unreachable("bad shader stage");
+      UNREACHABLE("bad shader stage");
    }
 
    nir_def *vertex_offset = nir_imul24(b, vertex, vertex_stride);
@@ -437,7 +437,7 @@ build_per_vertex_offset(nir_builder *b, struct state *state,
                                     comp);
          break;
       default:
-         unreachable("bad shader state");
+         UNREACHABLE("bad shader state");
       }
 
       attr_offset = nir_iadd(b, attr_offset,
@@ -478,7 +478,7 @@ tess_level_components(struct state *state, uint32_t *inner, uint32_t *outer)
       *outer = 2;
       break;
    default:
-      unreachable("bad");
+      UNREACHABLE("bad");
    }
 }
 
@@ -508,7 +508,7 @@ build_tessfactor_base(nir_builder *b, gl_varying_slot slot, uint32_t comp,
       offset = 1 + outer_levels;
       break;
    default:
-      unreachable("bad");
+      UNREACHABLE("bad");
    }
 
    return nir_iadd_imm(b, patch_offset, offset + comp);
@@ -569,11 +569,6 @@ lower_tess_ctrl_block(nir_block *block, nir_builder *b, struct state *state)
 
          nir_def *address, *offset;
 
-         /* note if vectorization of the tess level loads ever happens:
-          * "ldg" across 16-byte boundaries can behave incorrectly if results
-          * are never used. most likely some issue with (sy) not properly
-          * syncing with values coming from a second memory transaction.
-          */
          gl_varying_slot location = nir_intrinsic_io_semantics(intr).location;
          if (is_tess_levels(location)) {
             assert(intr->def.num_components == 1);
@@ -759,11 +754,6 @@ lower_tess_eval_block(nir_block *block, nir_builder *b, struct state *state)
 
          nir_def *address, *offset;
 
-         /* note if vectorization of the tess level loads ever happens:
-          * "ldg" across 16-byte boundaries can behave incorrectly if results
-          * are never used. most likely some issue with (sy) not properly
-          * syncing with values coming from a second memory transaction.
-          */
          gl_varying_slot location = nir_intrinsic_io_semantics(intr).location;
          if (is_tess_levels(location)) {
             assert(intr->def.num_components == 1);
@@ -1030,14 +1020,14 @@ ir3_nir_lower_gs(nir_shader *shader)
       exec_list_push_tail(&state.new_outputs, &output->node);
 
       /* Rewrite the original output to be a shadow variable. */
-      var->name = ralloc_asprintf(var, "%s@gs-temp", output->name);
+      nir_variable_set_namef(shader, var, "%s@gs-temp", output->name);
       var->data.mode = nir_var_shader_temp;
 
       /* Clone the shadow variable to create the emit shadow variable that
        * we'll assign in the emit conditionals.
        */
       nir_variable *emit_output = nir_variable_clone(var, shader);
-      emit_output->name = ralloc_asprintf(var, "%s@emit-temp", output->name);
+      nir_variable_set_namef(shader, emit_output, "%s@emit-temp", output->name);
       exec_list_push_tail(&state.emit_outputs, &emit_output->node);
    }
 
@@ -1065,7 +1055,7 @@ ir3_nir_lower_gs(nir_shader *shader)
     * them to this new if statement, rather than emitting this code at every
     * return statement.
     */
-   assert(impl->end_block->predecessors->entries == 1);
+   assert(impl->end_block->predecessors.entries == 1);
    nir_block *block = nir_impl_last_block(impl);
    b.cursor = nir_after_block_before_jump(block);
 

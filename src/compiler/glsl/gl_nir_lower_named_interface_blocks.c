@@ -147,7 +147,8 @@ flatten_named_interface_deref(void *mem_ctx, nir_builder *b,
                               struct hash_table *interface_namespace,
                               bool is_src0)
 {
-   nir_variable_mode mask = nir_var_shader_in | nir_var_shader_out;
+   nir_variable_mode mask = nir_var_shader_in | nir_var_shader_out |
+                            nir_var_any_pixel_local;
 
    if (!nir_deref_mode_is_one_of(deref, mask))
       return false;
@@ -252,7 +253,8 @@ lower_named_interface_blocks(struct gl_linked_shader *sh)
     * hash table so they can be used in the second pass.
     */
    nir_foreach_variable_with_modes_safe(var, sh->Program->nir,
-                                        nir_var_shader_in | nir_var_shader_out) {
+                                        nir_var_shader_in | nir_var_shader_out |
+                                        nir_var_any_pixel_local) {
       const struct glsl_type * iface_t = glsl_without_array(var->type);
       if (iface_t != var->interface_type)
          continue;
@@ -269,8 +271,8 @@ lower_named_interface_blocks(struct gl_linked_shader *sh)
             const struct glsl_struct_field *field_data =
                glsl_get_struct_field_data(iface_t, i);
 
-            nir_variable *new_var = rzalloc(sh->Program->nir, nir_variable);
-            new_var->name = ralloc_strdup(new_var, field_name);
+            nir_variable *new_var = nir_variable_create_zeroed(sh->Program->nir);
+            nir_variable_set_name(sh->Program->nir, new_var, field_name);
             if (!glsl_type_is_array(var->type)) {
                new_var->type =  glsl_get_struct_field(iface_t, i);
             } else {
@@ -283,15 +285,20 @@ lower_named_interface_blocks(struct gl_linked_shader *sh)
             new_var->data.explicit_location = (new_var->data.location >= 0);
             new_var->data.offset = field_data->offset;
             new_var->data.explicit_offset = (field_data->offset >= 0);
-            new_var->data.xfb.buffer = field_data->xfb_buffer;
             new_var->data.explicit_xfb_buffer = field_data->explicit_xfb_buffer;
             new_var->data.interpolation = field_data->interpolation;
             new_var->data.centroid = field_data->centroid;
             new_var->data.sample = field_data->sample;
             new_var->data.patch = field_data->patch;
+            new_var->data.per_primitive = field_data->per_primitive;
             new_var->data.stream = var->data.stream;
             new_var->data.how_declared = var->data.how_declared;
             new_var->data.from_named_ifc_block = 1;
+
+            if (new_var->data.mode & nir_var_any_pixel_local)
+               new_var->data.image.format = field_data->image_format;
+            else
+               new_var->data.xfb.buffer = field_data->xfb_buffer;
 
             new_var->interface_type = var->type;
             _mesa_hash_table_insert(interface_namespace, iface_field_name,
@@ -314,7 +321,8 @@ lower_named_interface_blocks(struct gl_linked_shader *sh)
     * needed now that the default interface block has been lowered away.
     */
    nir_foreach_variable_with_modes(var, sh->Program->nir,
-                                   nir_var_shader_in | nir_var_shader_out) {
+                                   nir_var_shader_in | nir_var_shader_out |
+                                   nir_var_any_pixel_local) {
 
       if (var->data.mode == nir_var_shader_in) {
          if (sh->Program->nir->info.stage == MESA_SHADER_TESS_EVAL &&
@@ -330,9 +338,7 @@ lower_named_interface_blocks(struct gl_linked_shader *sh)
             var->data.compact =
                glsl_type_is_scalar(glsl_without_array(var->type));
          }
-      } else {
-         assert(var->data.mode == nir_var_shader_out);
-
+      } else if (var->data.mode == nir_var_shader_out) {
          if (sh->Program->nir->info.stage == MESA_SHADER_TESS_CTRL &&
              (var->data.location == VARYING_SLOT_TESS_LEVEL_INNER ||
               var->data.location == VARYING_SLOT_TESS_LEVEL_OUTER)) {
@@ -362,7 +368,7 @@ lower_named_interface_blocks(struct gl_linked_shader *sh)
 void
 gl_nir_lower_named_interface_blocks(struct gl_shader_program *prog)
 {
-   for (unsigned int i = 0; i < MESA_SHADER_STAGES; i++) {
+   for (unsigned int i = 0; i < MESA_SHADER_MESH_STAGES; i++) {
       if (prog->_LinkedShaders[i] != NULL) {
          NIR_PASS(_, prog->_LinkedShaders[i]->Program->nir, nir_split_var_copies);
          lower_named_interface_blocks(prog->_LinkedShaders[i]);

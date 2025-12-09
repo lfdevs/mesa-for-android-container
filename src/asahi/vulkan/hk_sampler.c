@@ -73,7 +73,7 @@ translate_mipfilter(VkSamplerMipmapMode mode)
       return AGX_MIP_FILTER_LINEAR;
 
    default:
-      unreachable("Invalid filter");
+      UNREACHABLE("Invalid filter");
    }
 }
 
@@ -129,7 +129,7 @@ translate_border_color(VkBorderColor color, bool custom_to_1,
       return AGX_BORDER_COLOUR_OPAQUE_WHITE;
 
    default:
-      unreachable("invalid");
+      UNREACHABLE("invalid");
    }
 }
 

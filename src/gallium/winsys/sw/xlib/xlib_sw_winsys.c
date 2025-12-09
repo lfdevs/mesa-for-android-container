@@ -308,7 +308,7 @@ xlib_sw_display(struct xlib_drawable *xlib_drawable,
    struct pipe_box _box = {};
 
    if (firsttime) {
-      no_swap = getenv("SP_NO_RAST") != NULL;
+      no_swap = os_get_option("SP_NO_RAST") != NULL;
       firsttime = 0;
    }
 

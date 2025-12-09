@@ -45,7 +45,7 @@ insert_store(nir_builder *b, nir_def *reg, nir_alu_instr *vec,
    }
 
    /* No sense storing from undef, just return the write mask */
-   if (src->parent_instr->type == nir_instr_type_undef)
+   if (nir_def_is_undef(src))
       return write_mask;
 
    b->cursor = nir_before_instr(&vec->instr);
@@ -85,11 +85,9 @@ try_coalesce(nir_builder *b, nir_def *reg, nir_alu_instr *vec,
          return 0;
    }
 
-   if (vec->src[start_idx].src.ssa->parent_instr->type != nir_instr_type_alu)
+   nir_alu_instr *src_alu = nir_src_as_alu(vec->src[start_idx].src);
+   if (!src_alu)
       return 0;
-
-   nir_alu_instr *src_alu =
-      nir_instr_as_alu(vec->src[start_idx].src.ssa->parent_instr);
 
    if (has_replicated_dest(src_alu)) {
       /* The fdot instruction is special: It replicates its result to all

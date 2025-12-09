@@ -734,7 +734,7 @@ _debug_message(void *data,
       severity = MESA_DEBUG_SEVERITY_NOTIFICATION;
       break;
    default:
-      unreachable("invalid debug type");
+      UNREACHABLE("invalid debug type");
    }
    _mesa_gl_vdebugf(ctx, id, source, type, severity, fmt, args);
 }

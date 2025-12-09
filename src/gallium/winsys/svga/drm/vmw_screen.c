@@ -146,7 +146,7 @@ vmw_winsys_create( int fd )
    vws->base.have_rasterizer_state_v2_cmd =
       vws->ioctl.have_drm_2_20 && vws->base.have_sm5;
 
-   getenv_val = getenv("SVGA_FORCE_KERNEL_UNMAPS");
+   getenv_val = os_get_option("SVGA_FORCE_KERNEL_UNMAPS");
    vws->cache_maps = !getenv_val || strcmp(getenv_val, "0") == 0;
    vws->fence_ops = vmw_fence_ops_create(vws);
    if (!vws->fence_ops)

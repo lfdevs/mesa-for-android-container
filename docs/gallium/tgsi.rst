@@ -3563,18 +3563,6 @@ A bit mask of viewports to broadcast the current primitive to. See
 :ext:`GL_NV_viewport_array2` for more details.
 
 
-TGSI_SEMANTIC_TESS_DEFAULT_OUTER_LEVEL
-""""""""""""""""""""""""""""""""""""""
-
-A system value equal to the default_outer_level array set via set_tess_level.
-
-
-TGSI_SEMANTIC_TESS_DEFAULT_INNER_LEVEL
-""""""""""""""""""""""""""""""""""""""
-
-A system value equal to the default_inner_level array set via set_tess_level.
-
-
 Declaration Interpolate
 ^^^^^^^^^^^^^^^^^^^^^^^
 

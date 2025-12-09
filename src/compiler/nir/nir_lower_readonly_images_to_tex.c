@@ -125,7 +125,7 @@ lower_readonly_image_instr_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
       num_srcs = 1;
       break;
    default:
-      unreachable("Unsupported intrinsic");
+      UNREACHABLE("Unsupported intrinsic");
    }
 
    b->cursor = nir_before_instr(&intrin->instr);
@@ -194,7 +194,7 @@ lower_readonly_image_instr_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
       break;
 
    default:
-      unreachable("Unsupported intrinsic");
+      UNREACHABLE("Unsupported intrinsic");
    }
 
    nir_builder_instr_insert(b, &tex->instr);

@@ -16,7 +16,6 @@ lib = static_library(
   'src/lib.rs',
   override_options : ['rust_std=2021', 'build.rust_std=2021'],
   rust_abi : 'rust',
-  native : true,
   rust_args: zerocopy_args,
   link_with : [zerocopy_derive]
 )

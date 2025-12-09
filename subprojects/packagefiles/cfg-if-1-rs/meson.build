@@ -13,7 +13,6 @@ lib = static_library(
   'src/lib.rs',
   override_options : ['rust_std=2018', 'build.rust_std=2018'],
   rust_abi : 'rust',
-  native : true,
 )
 
 dep_cfg_if = declare_dependency(

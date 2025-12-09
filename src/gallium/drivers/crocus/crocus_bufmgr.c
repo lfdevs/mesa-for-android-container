@@ -51,11 +51,11 @@
 #include <time.h>
 
 #include "errno.h"
-#include "common/intel_mem.h"
 #include "dev/intel_debug.h"
 #include "common/intel_gem.h"
 #include "dev/intel_device_info.h"
 #include "util/u_debug.h"
+#include "util/cache_ops.h"
 #include "util/macros.h"
 #include "util/hash_table.h"
 #include "util/list.h"
@@ -896,7 +896,7 @@ crocus_bo_map_cpu(struct util_debug_callback *dbg,
        * out of any cache.)
        */
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
-      intel_invalidate_range(bo->map_cpu, bo->size);
+      util_flush_inval_range(bo->map_cpu, bo->size);
 #endif
    }
 

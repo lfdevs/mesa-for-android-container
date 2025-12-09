@@ -71,9 +71,11 @@ static const struct debug_control_bitset debug_control[] = {
    OPT1("blorp",             DEBUG_BLORP),
    OPT1("nodualobj",         DEBUG_NO_DUAL_OBJECT_GS),
    OPT1("optimizer",         DEBUG_OPTIMIZER),
+   OPT1("mda",               DEBUG_MDA),
    OPT1("ann",               DEBUG_ANNOTATION),
    OPT1("no8",               DEBUG_NO8),
    OPT1("no-oaconfig",       DEBUG_NO_OACONFIG),
+   OPT1("no-fill-opt",       DEBUG_NO_FILL_OPT),
    OPT1("spill_fs",          DEBUG_SPILL_FS),
    OPT1("spill_vec4",        DEBUG_SPILL_VEC4),
    OPT1("cs",                DEBUG_CS),
@@ -87,6 +89,7 @@ static const struct debug_control_bitset debug_control[] = {
    OPT1("do32",              DEBUG_DO32),
    OPT1("norbc",             DEBUG_NO_CCS),
    OPT1("noccs",             DEBUG_NO_CCS),
+   OPT1("noccs-modifier",    DEBUG_NO_CCS_MODIFIER),
    OPT1("nohiz",             DEBUG_NO_HIZ),
    OPT1("color",             DEBUG_COLOR),
    OPT1("reemit",            DEBUG_REEMIT),
@@ -153,7 +156,7 @@ static const struct debug_control simd_control[] = {
 };
 
 uint64_t
-intel_debug_flag_for_shader_stage(gl_shader_stage stage)
+intel_debug_flag_for_shader_stage(mesa_shader_stage stage)
 {
    uint64_t flags[] = {
       [MESA_SHADER_VERTEX] = DEBUG_VS,
@@ -253,9 +256,9 @@ static void
 process_intel_debug_variable_once(void)
 {
    BITSET_ZERO(intel_debug);
-   parse_debug_bitset(getenv("INTEL_DEBUG"), debug_control);
+   parse_debug_bitset(os_get_option("INTEL_DEBUG"), debug_control);
 
-   intel_simd = parse_debug_string(getenv("INTEL_SIMD_DEBUG"), simd_control);
+   intel_simd = parse_debug_string(os_get_option("INTEL_SIMD_DEBUG"), simd_control);
    intel_debug_batch_frame_start =
       debug_get_num_option("INTEL_DEBUG_BATCH_FRAME_START", 0);
    intel_debug_batch_frame_stop =

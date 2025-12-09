@@ -50,7 +50,6 @@ EPHEMERAL=(
     patch
     pkgconf
     python-is-python3
-    python3-distutils
     xz-utils
 )
 

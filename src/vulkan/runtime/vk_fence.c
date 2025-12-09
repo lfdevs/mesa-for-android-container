@@ -473,7 +473,7 @@ vk_common_GetFenceFdKHR(VkDevice _device,
       break;
 
    default:
-      unreachable("Invalid fence export handle type");
+      UNREACHABLE("Invalid fence export handle type");
    }
 
    /* From the Vulkan 1.2.194 spec:

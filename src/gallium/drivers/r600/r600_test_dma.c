@@ -255,8 +255,8 @@ void r600_test_dma(struct r600_common_screen *rscreen)
 		dst = screen->resource_create(screen, &tdst);
 		assert(src);
 		assert(dst);
-		rdst = (struct r600_texture*)dst;
-		rsrc = (struct r600_texture*)src;
+		rdst = r600_as_texture(dst);
+		rsrc = r600_as_texture(src);
 		alloc_cpu_texture(&src_cpu, &tsrc, bpp);
 		alloc_cpu_texture(&dst_cpu, &tdst, bpp);
 
