@@ -187,7 +187,7 @@ struct queue_present_cac_plane_adjust_info_valve {
       uint32_t dst_height;
 };
 
-#define VK_STRUCTURE_TYPE_QUEUE_PRESENT_SET_MODE_INFO_VALVE 1000002101
+#define VK_STRUCTURE_TYPE_QUEUE_PRESENT_SET_MODE_INFO_VALVE 1000002102
 #define VK_STRUCTURE_TYPE_QUEUE_PRESENT_SET_MODE_INFO_VALVE_cast struct VkQueuePresentSetModeVALVE
 struct VkQueuePresentSetModeVALVE 
 {
