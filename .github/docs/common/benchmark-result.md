@@ -240,3 +240,111 @@ MESA: error: kgsl_pipe_get_param:103: invalid param id: 13
 ```
 ### vkmark
 Not working.  
+## Adreno 840
+### glmark2
+```log
+MESA-LOADER: failed to retrieve device information
+MESA: error: kgsl_pipe_get_param:103: invalid param id: 13
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      freedreno
+    GL_RENDERER:    Adreno (TM) 840
+    GL_VERSION:     4.6 (Compatibility Profile) Mesa 26.0.0-devel (git-85997e912c)
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=0 samples=0
+    Surface Size:   800x600 windowed
+=======================================================
+[build] use-vbo=false: FPS: 3791 FrameTime: 0.264 ms
+[build] use-vbo=true: FPS: 3583 FrameTime: 0.279 ms
+[texture] texture-filter=nearest: FPS: 3417 FrameTime: 0.293 ms
+[texture] texture-filter=linear: FPS: 3846 FrameTime: 0.260 ms
+[texture] texture-filter=mipmap: FPS: 3049 FrameTime: 0.328 ms
+[shading] shading=gouraud: FPS: 3529 FrameTime: 0.283 ms
+[shading] shading=blinn-phong-inf: FPS: 3451 FrameTime: 0.290 ms
+[shading] shading=phong: FPS: 4112 FrameTime: 0.243 ms
+[shading] shading=cel: FPS: 4173 FrameTime: 0.240 ms
+[bump] bump-render=high-poly: FPS: 4185 FrameTime: 0.239 ms
+[bump] bump-render=normals: FPS: 4103 FrameTime: 0.244 ms
+[bump] bump-render=height: FPS: 3354 FrameTime: 0.298 ms
+[effect2d] kernel=0,1,0;1,-4,1;0,1,0;: FPS: 3291 FrameTime: 0.304 ms
+[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: FPS: 3106 FrameTime: 0.322 ms
+[pulsar] light=false:quads=5:texture=false: FPS: 3346 FrameTime: 0.299 ms
+[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: FPS: 1955 FrameTime: 0.512 ms
+[desktop] effect=shadow:windows=4: FPS: 2444 FrameTime: 0.409 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 547 FrameTime: 1.829 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: FPS: 1209 FrameTime: 0.828 ms
+[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 615 FrameTime: 1.627 ms
+[ideas] speed=duration: FPS: 1593 FrameTime: 0.628 ms
+[jellyfish] <default>: FPS: 3489 FrameTime: 0.287 ms
+[terrain] <default>: FPS: 809 FrameTime: 1.237 ms
+[shadow] <default>: FPS: 3145 FrameTime: 0.318 ms
+[refract] <default>: FPS: 1569 FrameTime: 0.638 ms
+[conditionals] fragment-steps=0:vertex-steps=0: FPS: 3256 FrameTime: 0.307 ms
+[conditionals] fragment-steps=5:vertex-steps=0: FPS: 3241 FrameTime: 0.309 ms
+[conditionals] fragment-steps=0:vertex-steps=5: FPS: 3028 FrameTime: 0.330 ms
+[function] fragment-complexity=low:fragment-steps=5: FPS: 3169 FrameTime: 0.316 ms
+[function] fragment-complexity=medium:fragment-steps=5: FPS: 3198 FrameTime: 0.313 ms
+[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: FPS: 3184 FrameTime: 0.314 ms
+[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: FPS: 3167 FrameTime: 0.316 ms
+[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: FPS: 3347 FrameTime: 0.299 ms
+=======================================================
+                                  glmark2 Score: 2947
+=======================================================
+```
+### glmark2-es2
+```log
+MESA-LOADER: failed to retrieve device information
+MESA: error: kgsl_pipe_get_param:103: invalid param id: 13
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      freedreno
+    GL_RENDERER:    Adreno (TM) 840
+    GL_VERSION:     OpenGL ES 3.2 Mesa 26.0.0-devel (git-85997e912c)
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=0 samples=0
+    Surface Size:   800x600 windowed
+=======================================================
+[build] use-vbo=false: FPS: 3657 FrameTime: 0.273 ms
+[build] use-vbo=true: FPS: 3641 FrameTime: 0.275 ms
+[texture] texture-filter=nearest: FPS: 3459 FrameTime: 0.289 ms
+[texture] texture-filter=linear: FPS: 3523 FrameTime: 0.284 ms
+[texture] texture-filter=mipmap: FPS: 3560 FrameTime: 0.281 ms
+[shading] shading=gouraud: FPS: 4238 FrameTime: 0.236 ms
+[shading] shading=blinn-phong-inf: FPS: 3938 FrameTime: 0.254 ms
+[shading] shading=phong: FPS: 3308 FrameTime: 0.302 ms
+[shading] shading=cel: FPS: 3271 FrameTime: 0.306 ms
+[bump] bump-render=high-poly: FPS: 3254 FrameTime: 0.307 ms
+[bump] bump-render=normals: FPS: 3356 FrameTime: 0.298 ms
+[bump] bump-render=height: FPS: 3360 FrameTime: 0.298 ms
+[effect2d] kernel=0,1,0;1,-4,1;0,1,0;: FPS: 3367 FrameTime: 0.297 ms
+[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: FPS: 3305 FrameTime: 0.303 ms
+[pulsar] light=false:quads=5:texture=false: FPS: 3304 FrameTime: 0.303 ms
+[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: FPS: 1748 FrameTime: 0.572 ms
+[desktop] effect=shadow:windows=4: FPS: 2472 FrameTime: 0.405 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 392 FrameTime: 2.553 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: FPS: 1273 FrameTime: 0.786 ms
+[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 583 FrameTime: 1.717 ms
+[ideas] speed=duration: FPS: 1192 FrameTime: 0.839 ms
+[jellyfish] <default>: FPS: 3169 FrameTime: 0.316 ms
+[terrain] <default>: FPS: 788 FrameTime: 1.269 ms
+[shadow] <default>: FPS: 3095 FrameTime: 0.323 ms
+[refract] <default>: FPS: 1600 FrameTime: 0.625 ms
+[conditionals] fragment-steps=0:vertex-steps=0: FPS: 3394 FrameTime: 0.295 ms
+[conditionals] fragment-steps=5:vertex-steps=0: FPS: 3396 FrameTime: 0.294 ms
+[conditionals] fragment-steps=0:vertex-steps=5: FPS: 3284 FrameTime: 0.305 ms
+[function] fragment-complexity=low:fragment-steps=5: FPS: 3285 FrameTime: 0.304 ms
+[function] fragment-complexity=medium:fragment-steps=5: FPS: 3317 FrameTime: 0.302 ms
+[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: FPS: 3444 FrameTime: 0.290 ms
+[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: FPS: 3391 FrameTime: 0.295 ms
+[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: FPS: 3404 FrameTime: 0.294 ms
+=======================================================
+                                  glmark2 Score: 2901
+=======================================================
+```
+### vkmark
+Not working.  
+```log
+Error: filesystem error: directory iterator cannot open directory: Permission denied [/dev/dri]
+```
