@@ -196,6 +196,17 @@ struct VkQueuePresentSetModeVALVE
       VkDisplayModeKHR   displayMode;
 };
 
+#define VK_STRUCTURE_TYPE_QUEUE_PRESENT_UPDATE_CAC_INFO_VALVE (VkStructureType) 1000002103
+#define VK_STRUCTURE_TYPE_QUEUE_PRESENT_UPDATE_CAC_INFO_VALVE_cast struct queue_present_update_cac_info_valve
+
+struct queue_present_update_cac_info_valve {
+      VkStructureType    sType;
+      const void*        pNext;
+      VkRect2D src_rgb[VALVESURFACEPLANESMAX];
+      VkRect2D dst_rgb[VALVESURFACEPLANESMAX];
+};
+
+
 #define VK_PRIMITIVE_TOPOLOGY_META_RECT_LIST_MESA (VkPrimitiveTopology)11
 #define VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA \
    (VkImageViewCreateFlagBits)0x80000000
