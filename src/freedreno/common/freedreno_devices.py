@@ -878,6 +878,7 @@ a7xx_gen1 = A7XXProps(
         fs_must_have_non_zero_constlen_quirk = True,
         enable_tp_ubwc_flag_hint = True,
         reading_shading_rate_requires_smask_quirk = True,
+        compute_constlen_quirk = True,
     )
 
 a7xx_gen2 = A7XXProps(
