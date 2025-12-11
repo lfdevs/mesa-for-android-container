@@ -983,6 +983,8 @@ static bool
 use_sysmem_rendering(struct tu_cmd_buffer *cmd,
                      struct tu_renderpass_result **autotune_result)
 {
+   return true;
+   
    if (TU_DEBUG(SYSMEM))
       return true;
 
