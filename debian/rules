@@ -164,6 +164,8 @@ ifeq ($(DEB_HOST_ARCH), i386)
 	confflags_SSE2 = -Dsse2=false
 endif
 
+VULKAN_DRIVERS = freedreno
+
 empty:=
 space := $(empty) $(empty)
 comma := ,
@@ -183,21 +185,13 @@ confflags += \
 	-Ddri-drivers-path=/usr/lib/$(DEB_HOST_MULTIARCH)/dri \
 	-Dplatforms="[$(EGL_PLATFORMS_LIST)]" \
 	-Dvulkan-drivers="[$(VULKAN_DRIVERS_LIST)]" \
-	-Dvulkan-layers="[$(VULKAN_LAYERS_LIST)]" \
-	-Dglvnd=enabled \
-	-Dshared-glapi=enabled \
-	-Db_ndebug=true \
-	-Dbuild-tests=true \
-	-Dtools=drm-shim \
-	$(confflags_DIRECT_RENDERING) \
-	$(confflags_GBM) \
-	$(confflags_GALLIUM) \
-	$(confflags_GLES) \
-	$(confflags_OSMESA) \
-	$(confflags_SSE2) \
-	$(confflags_VALGRIND) \
-	$(confflags_TEFLON)
-
+	-Dvulkan-layers= \
+	-Dgallium-drivers= \
+	-Dbuild-tests=false \
+	-Dlibunwind=disabled \
+	-Dmicrosoft-clc=disabled \
+	-Dvalgrind=disabled \
+	-Dfreedreno-kmds=kgsl
 
 rewrite_wrap_files:
 	cp -r subprojects subprojects-save
@@ -217,7 +211,7 @@ override_dh_clean: regen_control
 	rm -rf bin/install-sh bin/ltmain.sh
 	rm -rf src/intel/vulkan/grl/parser.out
 	rm -rf src/intel/vulkan/grl/parsetab.py
-	for file in debian/*.links.in; do rm -f $${file%%.in}; done
+	for file in debian/*.links.in; do [ -f "$$file" ] && rm -f $${file%%.in} || true; done
 	find -name '*.pyc' -delete
 	find -name '__pycache__' -delete
 	if [ -f subprojects/rewrite ]; then \
@@ -232,13 +226,15 @@ override_dh_auto_configure: rewrite_wrap_files
 		$(confflags)
 
 override_dh_auto_install:
-	dh_auto_install
+	dh_auto_install --destdir=debian/tmp
 	debian/merge-vulkan-driver-manifests.sh debian/tmp
 	for file in debian/*.links.in; \
 	do \
-		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
-			$${file} > $${file%%.in}; \
-	done
+        if [ -f "$$file" ]; then \
+            sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
+                $${file} > $${file%%.in}; \
+        fi; \
+    done || true
 
 # some tests are expected to fail for now, drop this when upstream has
 # better cross-build testing in place and expected failures fixed
@@ -249,46 +245,10 @@ allpkg = $(shell dh_listpackages -a)
 
 override_dh_installchangelogs:
 	dh_installchangelogs -a
-	dh_installchangelogs -pmesa-common-dev
 
 override_dh_install:
 	# purge .la files
 	find debian/tmp/ -name '*.la' -exec rm '{}' ';'
-
-	# Get rid of some files which aren't installed. Do not
-	# use -f to ensure we notice disappearing files:
-	rm debian/tmp/usr/lib/*/libEGL_mesa.so
-	rm debian/tmp/usr/lib/*/libGLX_mesa.so
-	# use -f here though
-	rm -f debian/tmp/usr/lib/*/libgrl.a
-
-	# Copy the hardlinked *_dri.so correctly.
-	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_dri.so \
-	   debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-
-  ifneq ($(DEB_HOST_ARCH_OS), hurd)
-	# Copy the hardlinked vdpau drivers correctly.
-	install -m755 -d debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
-	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/libvdpau*.so* \
-	   debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
-
-    ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
-	# Copy the hardlinked va drivers correctly.
-	install -m755 -d debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_drv_video.so \
-	   debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-    endif
-  endif
-
-  ifneq (,$(filter $(DEB_HOST_ARCH), $(RUSTICL_ARCHS)))
-	install -m755 -d debian/mesa-opencl-icd/etc/OpenCL/vendors
-	mv debian/tmp/etc/OpenCL/vendors/rusticl.icd \
-	   debian/mesa-opencl-icd/etc/OpenCL/vendors
-	install -m755 -d debian/mesa-opencl-icd/usr/lib/${DEB_HOST_MULTIARCH}/
-	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/libRusticlOpenCL* \
-	   debian/mesa-opencl-icd/usr/lib/${DEB_HOST_MULTIARCH}/
-  endif
 
 	dh_install -a
 
@@ -298,6 +258,9 @@ override_dh_install:
 		install -m 644 debian/local/control debian/$$p/usr/share/bug/$$p && \
 		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
 	done
+
+override_dh_shlibdeps:
+	dh_shlibdeps -- --ignore-missing-info
 
 override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4

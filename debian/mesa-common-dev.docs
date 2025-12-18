@@ -1,4 +1,0 @@
-docs/*.rst
-docs/relnotes/*
-docs/_extra/specs/*.spec
-docs/_extra/specs/OLD/*.spec
