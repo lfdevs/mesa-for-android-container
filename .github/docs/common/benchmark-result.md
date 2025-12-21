@@ -239,7 +239,34 @@ MESA: error: kgsl_pipe_get_param:103: invalid param id: 13
 =======================================================
 ```
 ### vkmark
-Not working.  
+```log
+ERROR:             VkInstanceCreateInfo::pApplicationInfo::apiVersion has value of 0 which is not permitted. If apiVersion is not 0, then it must be greater than or equal to the value of VK_API_VERSION_1_0 [VUID-VkApplicationInfo-apiVersion]
+=======================================================
+    vkmark 2017.08
+=======================================================
+    Vendor ID:      0x5143
+    Device ID:      0x7030002
+    Device Name:    Turnip Adreno (TM) 725
+    Driver Version: 105263203
+    Device UUID:    466cf642916cf7fc02d522f73fb55282
+=======================================================
+[vertex] device-local=true: FPS: 293 FrameTime: 3.413 ms
+[vertex] device-local=false: FPS: 256 FrameTime: 3.906 ms
+[texture] anisotropy=0: FPS: 246 FrameTime: 4.065 ms
+[texture] anisotropy=16: FPS: 248 FrameTime: 4.032 ms
+[shading] shading=gouraud: FPS: 259 FrameTime: 3.861 ms
+[shading] shading=blinn-phong-inf: FPS: 326 FrameTime: 3.067 ms
+[shading] shading=phong: FPS: 249 FrameTime: 4.016 ms
+[shading] shading=cel: FPS: 252 FrameTime: 3.968 ms
+[effect2d] kernel=edge: FPS: 263 FrameTime: 3.802 ms
+[effect2d] kernel=blur: FPS: 251 FrameTime: 3.984 ms
+[desktop] <default>: FPS: 249 FrameTime: 4.016 ms
+[cube] <default>: FPS: 249 FrameTime: 4.016 ms
+[clear] <default>: FPS: 283 FrameTime: 3.534 ms
+=======================================================
+                                   vkmark Score: 263
+=======================================================
+```
 ## Adreno 840
 ### glmark2
 ```log

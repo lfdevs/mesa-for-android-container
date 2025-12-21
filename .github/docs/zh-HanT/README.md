@@ -15,18 +15,19 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 |          GPU           | OpenGL | OpenGL ES | Vulkan (Zink) | Vulkan |
 | :--------------------: | :----: | :-------: | :-----------: | :----: |
 |     **Adreno 660**     |  ✔️支援  |   ✔️支援    |     ✔️支援      |  ✔️支援  |
-| **Adreno 730/740/750** |  ✔️支援  |   ✔️支援    |     ✔️支援      |  ❌不支援  |
+| **Adreno 730/740/750** |  ✔️支援  |   ✔️支援    |     ✔️支援      |  ✔️支援  |
 |     **Adreno 840**     |  ✔️支援  |   ✔️支援    |     ❔未測試      |  ❌不支援  |
 ## 安裝
 本專案的 Releases 有兩種形式的安裝包，一種可以使用 Linux 發行版的套件管理器安裝，另一種只能直接解壓來安裝。推薦使用第一種安裝包，若需要最新的 Mesa 功能（例如 Adreno 840 的支援），則可以使用第二種。  
+若常規的 Release（標題不帶 `turnip-` 前綴）中的 Turnip 驅動無法正常運作，可使用**未打補丁的 Turnip 驅動**（標題帶 `turnip-` 前綴），直接覆蓋安裝即可。  
 ### 使用套件管理器  
 根據所使用的 Linux 發行版，前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下載對應 Release 的所有套件，並依照 Release 說明中的安裝指示進行安裝。以下為一些主流 Linux 發行版對應的最新 Release：  
 
-| Linux 發行版  |                                                              最新 Release                                                              |
-| :--------: | :----------------------------------------------------------------------------------------------------------------------------------: |
-|   Debian   |            [25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-adreno)            |
-|   Ubuntu   | [25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-adreno) |
-| Arch Linux |              [26.0.0-2.1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-26.0.0-devel-20251209)              |
+| Linux 發行版  |                                                              最新 Release                                                              |                                                               未打補丁的 Turnip 驅動                                                               |
+| :--------: | :----------------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------------------------------: |
+|   Debian   |            [25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-adreno)            |            [turnip-25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-turnip)            |
+|   Ubuntu   | [25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-adreno) | [turnip-25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-turnip) |
+| Arch Linux |              [26.0.0-1.1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-26.0.0-devel-20251209)              |              [turnip-26.0.0-2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-26.0.0-devel-20251215)              |
 ### 直接解壓  
 ℹ️**注意**：Releases 中 `.tar.gz` 格式的安裝包僅能覆蓋原有的 Mesa 驅動程式，卸載時需手動刪除解壓出來的檔案，僅供測試使用。  
 
@@ -127,11 +128,11 @@ sudo rm -rf /tmp/mesa-install-tmp
 
 詳細的測試結果： [benchmark-result](../common/benchmark-result.md)  
 
-| 裝置 | 型號 | SoC | GPU | glmark2 | glmark2-es2 | vkmark |
-| :--------------: | :--------: | :-----------: | :--------: | ------: | ----------: | -----: |
-| Redmi K40 Pro | M2012K11G | 高通驍龍 888 | Adreno 660 | 842 | 771 | 1170 |
-| Xiaomi Pad 6 Pro | 23046RP50C | 高通驍龍 8+ Gen 1 | Adreno 730 | 1169 | 1143 | 無法運作 |
-| Xiaomi 17 Pro Max | 2509FPN0BC | 高通驍龍 8 Elite Gen 5 | Adreno 840 | 2947 | 2901 | 無法運作 |
+|        裝置         |     型號     |        SoC         |    GPU     | glmark2 | glmark2-es2 | vkmark |
+| :---------------: | :--------: | :----------------: | :--------: | ------: | ----------: | -----: |
+|   Redmi K40 Pro   | M2012K11G  |      高通驍龍 888      | Adreno 660 |     842 |         771 |   1170 |
+| Xiaomi Pad 6 Pro  | 23046RP50C |   高通驍龍 8+ Gen 1    | Adreno 730 |    1169 |        1143 |    263 |
+| Xiaomi 17 Pro Max | 2509FPN0BC | 高通驍龍 8 Elite Gen 5 | Adreno 840 |    2947 |        2901 |   無法運作 |
 ## 感謝
   - [Lucas Fryzek](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/21570)：Mesa Freedreno 驅動程式的 KGSL 後端程式碼的作者。  
   - [xMeM](https://github.com/xMeM/termux-packages/commit/401982b8d9eaef70669762bfff2a963341c65e52)：將 Freedreno 驅動程式的 KGSL 後端移植至 Termux:X11。  

@@ -13,21 +13,22 @@ A [Mesa](https://gitlab.freedesktop.org/mesa/mesa) build for containers on Andro
   - Only drivers relevant to the vast majority of Android devices are compiled to reduce the package size.  
 ## Compatibility
 
-|          GPU           | OpenGL | OpenGL ES | Vulkan (Zink) | Vulkan |
-| :--------------------: | :----: | :-------: | :-----------: | :----: |
-|     **Adreno 660**     |  ✔️ Supported  |   ✔️ Supported    |     ✔️ Supported      |  ✔️ Supported  |
-| **Adreno 730/740/750** |  ✔️ Supported  |   ✔️ Supported    |     ✔️ Supported      |  ❌ Not supported  |
-|     **Adreno 840**     |  ✔️ Supported  |   ✔️ Supported    |     ❔ Untested      |  ❌ Not supported  |
+|          GPU           |    OpenGL    |  OpenGL ES   | Vulkan (Zink) |     Vulkan      |
+| :--------------------: | :----------: | :----------: | :-----------: | :-------------: |
+|     **Adreno 660**     | ✔️ Supported | ✔️ Supported | ✔️ Supported  |  ✔️ Supported   |
+| **Adreno 730/740/750** | ✔️ Supported | ✔️ Supported | ✔️ Supported  |  ✔️ Supported   |
+|     **Adreno 840**     | ✔️ Supported | ✔️ Supported |  ❔ Untested   | ❌ Not supported |
 ## Installation
 This project's Releases provide two types of installation packages: one installable via the Linux distribution's package manager, and another that must be installed by direct extraction. The first type is recommended; however, if you need the latest Mesa features (such as Adreno 840 support), use the second type.  
+If the Turnip driver from the standard release (whose release title doesn't have the `turnip-` prefix) fails to work properly, you can use the **unpatched Turnip driver** (whose release title does have the `turnip-` prefix) by directly installing it over the standard one.  
 ### Using the Package Manager
 Depending on your Linux distribution, go to [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) and download all corresponding packages for a specific release, then follow the installation instructions provided in the release notes. Below are the latest releases for some popular Linux distributions:  
 
-| Linux Distribution  |                                                              Latest Release                                                              |
-| :--------: | :----------------------------------------------------------------------------------------------------------------------------------: |
-|   Debian   |            [25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-adreno)            |
-|   Ubuntu   | [25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-adreno) |
-| Arch Linux |              [26.0.0-2.1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-26.0.0-devel-20251209)              |
+| Linux Distribution |                                                            Latest Release                                                            |                                                           Unpatched Turnip driver                                                           |
+| :----------------: | :----------------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------------------------------: |
+|       Debian       |            [25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-adreno)            |            [turnip-25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-turnip)            |
+|       Ubuntu       | [25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-adreno) | [turnip-25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-turnip) |
+|     Arch Linux     |              [26.0.0-1.1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-26.0.0-devel-20251209)              |              [turnip-26.0.0-2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-26.0.0-devel-20251215)              |
 ### Direct Extraction  
 ℹ️ **Note**: The `.tar.gz` installation packages in Releases can only overwrite the existing Mesa drivers. To uninstall, you must manually delete the extracted files. These packages are intended for testing purposes only.  
 
@@ -129,7 +130,7 @@ Detailed test results: [benchmark-result](docs/common/benchmark-result.md)
 |      Device       |   Model    |                SoC                |    GPU     | glmark2 | glmark2-es2 |      vkmark |
 | :---------------: | :--------: | :-------------------------------: | :--------: | ------: | ----------: | ----------: |
 |   Redmi K40 Pro   | M2012K11G  |      Qualcomm Snapdragon 888      | Adreno 660 |     842 |         771 |        1170 |
-| Xiaomi Pad 6 Pro  | 23046RP50C |   Qualcomm Snapdragon 8+ Gen 1    | Adreno 730 |    1169 |        1143 | Not working |
+| Xiaomi Pad 6 Pro  | 23046RP50C |   Qualcomm Snapdragon 8+ Gen 1    | Adreno 730 |    1169 |        1143 |         263 |
 | Xiaomi 17 Pro Max | 2509FPN0BC | Qualcomm Snapdragon 8 Elite Gen 5 | Adreno 840 |    2947 |        2901 | Not working |
 ## Acknowledgements
   - [Lucas Fryzek](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/21570): Author of the KGSL backend code for the Mesa Freedreno driver.  
