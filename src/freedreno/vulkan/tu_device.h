@@ -82,6 +82,11 @@ struct tu_queue_family {
    const VkQueueFamilyProperties *properties;
 };
 
+enum tu_kgsl_sync_impl_type {
+   TU_KGSL_SYNC_IMPL_TYPE_SYNCOBJ,
+   TU_KGSL_SYNC_IMPL_TYPE_TIMELINE,
+};
+
 extern uint64_t os_page_size;
 
 struct tu_physical_device
@@ -176,7 +181,9 @@ struct tu_physical_device
 
    struct tu_memory_heap heap;
 
+   enum tu_kgsl_sync_impl_type kgsl_sync_impl_type;
    struct vk_sync_type syncobj_type;
+   struct vk_sync_binary_type binary_type;
    struct vk_sync_timeline_type timeline_type;
    const struct vk_sync_type *sync_types[3];
 
