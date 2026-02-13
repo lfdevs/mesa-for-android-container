@@ -1423,6 +1423,102 @@ kgsl_bind_finalize(struct tu_kgsl_queue_submit *submit)
    }
 }
 
+struct kgsl_profiling {
+   struct kgsl_command_object *cmd_obj;
+   struct kgsl_cmdbatch_profiling_buffer *buffer;
+
+   uint64_t gpu_offset;
+#if HAVE_PERFETTO
+   uint64_t start_ts;
+#endif
+};
+
+static void
+kgsl_profiling_alloc(struct kgsl_profiling *profiling,
+                     struct tu_queue *queue,
+                     struct tu_u_trace_submission_data *u_trace_submission_data)
+{
+   mtx_lock(&queue->device->kgsl_profiling_mutex);
+   tu_suballoc_bo_alloc(&u_trace_submission_data->kgsl_timestamp_bo,
+                        &queue->device->kgsl_profiling_suballoc,
+                        sizeof(struct kgsl_cmdbatch_profiling_buffer), 4);
+   mtx_unlock(&queue->device->kgsl_profiling_mutex);
+
+   profiling->cmd_obj = (struct kgsl_command_object *)
+      vk_alloc(&queue->device->vk.alloc, sizeof(*profiling->cmd_obj),
+               alignof(struct kgsl_command_object),
+               VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+   struct tu_suballoc_bo *bo = &u_trace_submission_data->kgsl_timestamp_bo;
+
+   *profiling->cmd_obj = (struct kgsl_command_object) {
+      .offset = bo->iova - bo->bo->iova,
+      .gpuaddr = bo->bo->iova,
+      .size = sizeof(struct kgsl_cmdbatch_profiling_buffer),
+      .flags = KGSL_OBJLIST_MEMOBJ | KGSL_OBJLIST_PROFILE,
+      .id = bo->bo->gem_handle,
+   };
+
+   profiling->buffer =
+      (struct kgsl_cmdbatch_profiling_buffer *) tu_suballoc_bo_map(bo);
+   memset(profiling->buffer, 0, sizeof(*profiling->buffer));
+}
+
+static void
+kgsl_profiling_free(struct kgsl_profiling *profiling,
+                    struct tu_queue *queue,
+                    struct tu_u_trace_submission_data *u_trace_submission_data)
+{
+   mtx_lock(&queue->device->kgsl_profiling_mutex);
+   tu_suballoc_bo_free(&queue->device->kgsl_profiling_suballoc,
+                       &u_trace_submission_data->kgsl_timestamp_bo);
+   mtx_unlock(&queue->device->kgsl_profiling_mutex);
+}
+
+#if HAVE_PERFETTO
+static int
+kgsl_profiling_end_perfetto_submit(struct kgsl_profiling *profiling,
+                                   struct tu_queue *queue)
+{
+   /* We need to wait for KGSL to queue the GPU command before we can read
+    * the timestamp. Since this is just for profiling and doesn't take too
+    * long, we can just busy-wait for it.
+    */
+   while (p_atomic_read(&profiling->buffer->gpu_ticks_queued) == 0);
+
+   struct kgsl_perfcounter_read_group perf = {
+      .groupid = KGSL_PERFCOUNTER_GROUP_ALWAYSON,
+      .countable = 0,
+      .value = 0
+   };
+
+   struct kgsl_perfcounter_read req = {
+      .reads = &perf,
+      .count = 1,
+   };
+
+   int ret = safe_ioctl(queue->device->fd, IOCTL_KGSL_PERFCOUNTER_READ, &req);
+   /* Older KGSL has some kind of garbage in upper 32 bits */
+   uint64_t offseted_gpu_ts = perf.value & 0xffffffff;
+
+   profiling->gpu_offset = tu_device_ticks_to_ns(
+      queue->device, offseted_gpu_ts - profiling->buffer->gpu_ticks_queued);
+
+   struct tu_perfetto_clocks clocks = {
+      .cpu = profiling->buffer->wall_clock_ns,
+      .gpu_ts = tu_device_ticks_to_ns(queue->device,
+                                      profiling->buffer->gpu_ticks_queued),
+      .gpu_ts_offset = profiling->gpu_offset,
+   };
+
+   clocks = tu_perfetto_end_submit(queue, queue->device->submit_count,
+                                   profiling->start_ts, &clocks);
+   profiling->gpu_offset = clocks.gpu_ts_offset;
+
+   return ret;
+}
+#endif
+
 static VkResult
 kgsl_queue_submit(struct tu_queue *queue, void *_submit,
                   struct vk_sync_wait *waits, uint32_t wait_count,
@@ -1431,10 +1527,6 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
 {
    struct tu_kgsl_queue_submit *submit =
       (struct tu_kgsl_queue_submit *)_submit;
-
-#if HAVE_PERFETTO
-   uint64_t start_ts = tu_perfetto_begin_submit();
-#endif
 
    if (submit->commands.size == 0 && submit->bind_cmds.size == 0) {
       /* This handles the case where we have a wait and no commands to submit.
@@ -1502,38 +1594,13 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
    if (submit->bind_cmds.size != 0)
       kgsl_bind_finalize(submit);
 
+
+   struct kgsl_profiling profiling = { 0 };
    if (u_trace_submission_data) {
-      mtx_lock(&queue->device->kgsl_profiling_mutex);
-      tu_suballoc_bo_alloc(&u_trace_submission_data->kgsl_timestamp_bo,
-                           &queue->device->kgsl_profiling_suballoc,
-                           sizeof(struct kgsl_cmdbatch_profiling_buffer), 4);
-      mtx_unlock(&queue->device->kgsl_profiling_mutex);
-   }
-
-   uint32_t obj_count = 0;
-   if (u_trace_submission_data)
-      obj_count++;
-
-   struct kgsl_command_object *objs = (struct kgsl_command_object *)
-      vk_alloc(&queue->device->vk.alloc, sizeof(*objs) * obj_count,
-               alignof(struct kgsl_command_object),
-               VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-   struct kgsl_cmdbatch_profiling_buffer *profiling_buffer = NULL;
-   uint32_t obj_idx = 0;
-   if (u_trace_submission_data) {
-      struct tu_suballoc_bo *bo = &u_trace_submission_data->kgsl_timestamp_bo;
-
-      objs[obj_idx++] = (struct kgsl_command_object) {
-         .offset = bo->iova - bo->bo->iova,
-         .gpuaddr = bo->bo->iova,
-         .size = sizeof(struct kgsl_cmdbatch_profiling_buffer),
-         .flags = KGSL_OBJLIST_MEMOBJ | KGSL_OBJLIST_PROFILE,
-         .id = bo->bo->gem_handle,
-      };
-      profiling_buffer =
-         (struct kgsl_cmdbatch_profiling_buffer *) tu_suballoc_bo_map(bo);
-      memset(profiling_buffer, 0, sizeof(*profiling_buffer));
+#if HAVE_PERFETTO
+      profiling.start_ts = tu_perfetto_begin_submit();
+#endif
+      kgsl_profiling_alloc(&profiling, queue, u_trace_submission_data);
    }
 
    const struct kgsl_syncobj *wait_semaphores[wait_count];
@@ -1581,7 +1648,6 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
 
    int ret;
    uint32_t timestamp = 0;
-   uint64_t gpu_offset = 0;
 
    if (submit->bind_cmds.size == 0) {
       struct kgsl_gpu_command req = {
@@ -1596,11 +1662,11 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
          .context_id = queue->msm_queue_id,
       };
 
-      if (obj_idx) {
+      if (profiling.cmd_obj) {
          req.flags |= KGSL_CMDBATCH_PROFILING;
-         req.objlist = (uintptr_t) objs;
+         req.objlist = (uintptr_t) profiling.cmd_obj;
          req.objsize = sizeof(struct kgsl_command_object);
-         req.numobjs = obj_idx;
+         req.numobjs = 1;
       }
 
       ret = safe_ioctl(queue->device->physical_device->local_fd,
@@ -1650,42 +1716,8 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
    }
 
 #if HAVE_PERFETTO
-   if (profiling_buffer) {
-      /* We need to wait for KGSL to queue the GPU command before we can read
-       * the timestamp. Since this is just for profiling and doesn't take too
-       * long, we can just busy-wait for it.
-       */
-      while (p_atomic_read(&profiling_buffer->gpu_ticks_queued) == 0);
-
-      struct kgsl_perfcounter_read_group perf = {
-         .groupid = KGSL_PERFCOUNTER_GROUP_ALWAYSON,
-         .countable = 0,
-         .value = 0
-      };
-
-      struct kgsl_perfcounter_read req = {
-         .reads = &perf,
-         .count = 1,
-      };
-
-      ret = safe_ioctl(queue->device->fd, IOCTL_KGSL_PERFCOUNTER_READ, &req);
-      /* Older KGSL has some kind of garbage in upper 32 bits */
-      uint64_t offseted_gpu_ts = perf.value & 0xffffffff;
-
-      gpu_offset = tu_device_ticks_to_ns(
-         queue->device, offseted_gpu_ts - profiling_buffer->gpu_ticks_queued);
-
-      struct tu_perfetto_clocks clocks = {
-         .cpu = profiling_buffer->wall_clock_ns,
-         .gpu_ts = tu_device_ticks_to_ns(queue->device,
-                                         profiling_buffer->gpu_ticks_queued),
-         .gpu_ts_offset = gpu_offset,
-      };
-
-      clocks = tu_perfetto_end_submit(queue, queue->device->submit_count,
-                                      start_ts, &clocks);
-      gpu_offset = clocks.gpu_ts_offset;
-   }
+   if (profiling.buffer)
+      ret = kgsl_profiling_end_perfetto_submit(&profiling, queue);
 #endif
 
    kgsl_syncobj_destroy(&wait_sync);
@@ -1709,19 +1741,12 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
       signal_sync->timestamp = timestamp;
    }
 
-   if (u_trace_submission_data) {
-      struct tu_u_trace_submission_data *submission_data =
-         u_trace_submission_data;
-      submission_data->gpu_ts_offset = gpu_offset;
-   }
+   if (u_trace_submission_data)
+      u_trace_submission_data->gpu_ts_offset = profiling.gpu_offset;
 
 fail_submit:
-   if (result != VK_SUCCESS && u_trace_submission_data) {
-      mtx_lock(&queue->device->kgsl_profiling_mutex);
-      tu_suballoc_bo_free(&queue->device->kgsl_profiling_suballoc,
-                          &u_trace_submission_data->kgsl_timestamp_bo);
-      mtx_unlock(&queue->device->kgsl_profiling_mutex);
-   }
+   if (result != VK_SUCCESS && u_trace_submission_data)
+      kgsl_profiling_free(&profiling, queue, u_trace_submission_data);
 
    return result;
 }
