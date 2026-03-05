@@ -775,6 +775,11 @@ endif
 dep_libdrm_amdgpu = null_dep
 dep_libdrm_intel = null_dep
 
+dep_dbus = dependency(
+  'dbus-1',
+  required : true,
+)
+
 _drm_ver = '2.4.109'
 
 _libdrm_checks = {

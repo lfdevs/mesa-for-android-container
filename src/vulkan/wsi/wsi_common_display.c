@@ -98,6 +98,8 @@
 #include "libdisplay-info/cta.h"
 #endif
 
+#include "rtkit.h"
+
 #if 0
 #define wsi_display_debug(...) fprintf(stderr, __VA_ARGS__)
 #define wsi_display_debug_code(...)     __VA_ARGS__
@@ -2196,6 +2198,17 @@ static drmEventContext event_context = {
 static void *
 wsi_display_wait_thread(void *data)
 {
+   struct sched_param p;
+   memset(&p, 0, sizeof(p));
+   p.sched_priority = 3;
+   if (sched_setscheduler(0, SCHED_RR|SCHED_RESET_ON_FORK, &p) < 0 && errno == EPERM) {
+      DBusError err;
+      dbus_error_init(&err);
+      DBusConnection *system_bus = dbus_bus_get(DBUS_BUS_SYSTEM, &err);
+      assert(system_bus);
+      rtkit_make_realtime(system_bus, 0, p.sched_priority);
+   }
+
    struct wsi_display *wsi = data;
    struct pollfd pollfd = {
       .fd = wsi->fd,
