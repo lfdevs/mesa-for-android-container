@@ -455,6 +455,137 @@ jobs:
             /home/runner/archlinuxarm-PKGBUILDs/extra/mesa/sha256sums.txt
           retention-days: 90
 
+  void-linux:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: ghcr.io/void-linux/void-glibc-full:latest
+      options: --privileged --user root
+
+    steps:
+      - name: Install dependencies
+        run: |
+          xbps-install -Syu
+          xbps-install -y bash base-devel git ccache meson ninja pkg-config python3 \
+            flex bison \
+            libdrm-devel \
+            libX11-devel libxcb-devel \
+            wayland-devel wayland-protocols \
+            zlib-devel expat-devel \
+            llvm18-devel clang18 \
+            libxml2-devel \
+            libarchive-devel \
+            python3-Mako python3-packaging python3-yaml python3-ply \
+            libffi-devel \
+            libzstd-devel \
+            glslang \
+            xbps-devel
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-void-turnip-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ runner.arch }}-void-turnip-
+
+      - name: Configure ccache
+        run: |
+          export CCACHE_DIR=/root/.ccache
+          ccache --max-size=2G
+          ccache --zero-stats
+
+      - name: Clone repository
+        run: |
+          cd ~
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone -b ${{ github.event.inputs.tag }} --depth 1 https://github.com/lfdevs/mesa-for-android-container.git
+
+      - name: Set release name suffix
+        shell: bash
+        run: |
+          cd ~/mesa-for-android-container
+          version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
+          build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_void_arm64" >> "$GITHUB_ENV"
+
+      - name: Build Mesa
+        shell: bash
+        run: |
+          export CCACHE_DIR=/root/.ccache
+          cd ~/mesa-for-android-container
+          meson setup build/ \
+            --prefix=/usr \
+            -Dplatforms=x11,wayland \
+            -Dgallium-drivers= \
+            -Dgallium-va=disabled \
+            -Dgallium-mediafoundation=disabled \
+            -Dvulkan-drivers=freedreno \
+            -Dvulkan-layers= \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Dopengl=false \
+            -Dgbm=disabled \
+            -Dglx=disabled \
+            -Dxlib-lease=disabled \
+            -Dfreedreno-kmds=kgsl \
+            -Degl=disabled \
+            -Dglvnd=disabled \
+            -Dintel-rt=disabled \
+            -Dmicrosoft-clc=disabled \
+            -Dllvm=disabled \
+            -Dvalgrind=disabled \
+            -Dbuild-tests=false \
+            -Dlibunwind=disabled \
+            -Dlmsensors=disabled \
+            -Dandroid-libbacktrace=disabled \
+            -Dbuildtype=release
+          ninja -C build/
+
+      - name: Save ccache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-void-turnip-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Package Mesa
+        shell: bash
+        run: |
+          cd ~/mesa-for-android-container
+          raw_version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
+          version=${raw_version//-/.}
+          mkdir /tmp/mesa-install-tmp
+          DESTDIR=/tmp/mesa-install-tmp meson install -C build/
+          cd /tmp
+          xbps-create \
+            -A aarch64 \
+            -n "turnip-mesa-for-android-container-${version}_1" \
+            -s "Turnip (unpatched) Mesa for Android Container (Vulkan/kgsl only)" \
+            -D "libdrm>=2.4.0" \
+            -H "https://github.com/lfdevs/mesa-for-android-container" \
+            -l "MIT" \
+            -M "lfdevs" \
+            mesa-install-tmp
+          mkdir -p /tmp/xbps-repo
+          mv /tmp/turnip-mesa-for-android-container-*.xbps /tmp/xbps-repo/
+          cd /tmp/xbps-repo
+          xbps-rindex -a *.xbps
+          rm -rf /tmp/mesa-install-tmp
+          find . -maxdepth 1 -name "*.xbps" -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
+          path: |
+            /tmp/xbps-repo/*.xbps
+            /tmp/xbps-repo/*-repodata
+            /tmp/xbps-repo/sha256sums.txt
+          retention-days: 90
+
+
   draft-release:
     if: ${{ github.event.inputs.draft_release == 'true' }}
     needs:
@@ -462,6 +593,7 @@ jobs:
       - ubuntu-noble
       - fedora-43
       - archlinux
+      - void-linux
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -492,3 +624,4 @@ jobs:
           files: |
             ./artifacts/**/*.tar.gz
             ./artifacts/**/*.pkg.tar.xz
+            ./artifacts/**/*.xbps
