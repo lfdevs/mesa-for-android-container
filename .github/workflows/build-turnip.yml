@@ -468,7 +468,7 @@ jobs:
           xbps-install -y bash base-devel git ccache meson ninja pkg-config python3 \
             flex bison \
             libdrm-devel \
-            libX11-devel libxcb-devel \
+            libX11-devel libxcb-devel libxshmfence-devel \
             wayland-devel wayland-protocols \
             zlib-devel expat-devel \
             llvm18-devel clang18 \
