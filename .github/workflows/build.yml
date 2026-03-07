@@ -525,7 +525,8 @@ jobs:
         run: |
           echo "Packaging Mesa..."
           cd ~/mesa-for-android-container
-          version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
+          raw_version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
+          version=${raw_version//-/.}
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           cd /tmp
