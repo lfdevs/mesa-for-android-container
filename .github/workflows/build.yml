@@ -451,7 +451,8 @@ jobs:
             libarchive-devel \
             python3-Mako python3-packaging python3-yaml python3-ply \
             libffi-devel \
-            libzstd-devel
+            libzstd-devel \
+            glslang
 
       - name: Cache ccache
         uses: actions/cache@v4
