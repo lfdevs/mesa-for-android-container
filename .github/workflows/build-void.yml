@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           xbps-install -Syu
-          xbps-install -y base-devel git ccache meson ninja pkg-config python3 \
+          xbps-install -y bash base-devel git ccache meson ninja pkg-config python3 \
             flex bison \
             libdrm-devel \
             libX11-devel libxcb-devel libXext-devel libXfixes-devel libXrandr-devel \
