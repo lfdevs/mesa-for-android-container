@@ -478,7 +478,6 @@ jobs:
             libffi-devel \
             libzstd-devel \
             glslang \
-            xbps-devel
 
       - name: Cache ccache
         uses: actions/cache@v4
