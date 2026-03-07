@@ -525,12 +525,26 @@ jobs:
         run: |
           echo "Packaging Mesa..."
           cd ~/mesa-for-android-container
+          version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
-          tar -zcvf mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
+          cd /tmp
+          xbps-create \
+            -A aarch64 \
+            -n "mesa-for-android-container-${version}_1" \
+            -s "Mesa for Android Container (freedreno/turnip with kgsl)" \
+            -D "libdrm>=2.4.0 libglvnd>=1.3.0" \
+            -H "https://github.com/${{ github.repository }}" \
+            -l "MIT" \
+            -M "${{ github.repository_owner }}" \
+            mesa-install-tmp
+          mkdir -p /tmp/xbps-repo
+          mv /tmp/mesa-for-android-container-*.xbps /tmp/xbps-repo/
+          cd /tmp/xbps-repo
+          xbps-rindex -a *.xbps
           rm -rf /tmp/mesa-install-tmp
           echo "Calculating sha256 checksums..."
-          find . -maxdepth 1 \( -name "*.tar.gz" \) -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
+          find . -maxdepth 1 -name "*.xbps" -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
           cat sha256sums.txt && echo
           echo "Packaging completed successfully!"
 
@@ -539,8 +553,9 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            /tmp/xbps-repo/*.xbps
+            /tmp/xbps-repo/*-repodata
+            /tmp/xbps-repo/sha256sums.txt
           retention-days: 90
 
   draft-release:
@@ -587,3 +602,4 @@ jobs:
           files: |
             ./artifacts/**/*.tar.gz
             ./artifacts/**/*.tar
+            ./artifacts/**/*.xbps
