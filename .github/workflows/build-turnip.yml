@@ -551,37 +551,24 @@ jobs:
       - name: Package Mesa
         shell: bash
         run: |
+          echo "Packaging Mesa..."
           cd ~/mesa-for-android-container
-          raw_version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
-          version=${raw_version//-/.}
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
-          cd /tmp
-          xbps-create \
-            -A aarch64 \
-            -n "turnip-mesa-for-android-container-${version}_1" \
-            -s "Turnip (unpatched) Mesa for Android Container (Vulkan/kgsl only)" \
-            -D "libdrm>=2.4.0" \
-            -H "https://github.com/lfdevs/mesa-for-android-container" \
-            -l "MIT" \
-            -M "lfdevs" \
-            mesa-install-tmp
-          mkdir -p /tmp/xbps-repo
-          mv /tmp/turnip-mesa-for-android-container-*.xbps /tmp/xbps-repo/
-          cd /tmp/xbps-repo
-          xbps-rindex -a *.xbps
+          tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
           rm -rf /tmp/mesa-install-tmp
-          find . -maxdepth 1 -name "*.xbps" -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
-          cat sha256sums.txt
+          echo "Calculating sha256 checksums..."
+          find . -maxdepth 1 \( -name "*.tar.gz" \) -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
+          cat sha256sums.txt && echo
+          echo "Packaging completed successfully!"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            /tmp/xbps-repo/*.xbps
-            /tmp/xbps-repo/*-repodata
-            /tmp/xbps-repo/sha256sums.txt
+            ~/mesa-for-android-container/*.tar.gz
+            ~/mesa-for-android-container/sha256sums.txt
           retention-days: 90
 
 
@@ -623,4 +610,3 @@ jobs:
           files: |
             ./artifacts/**/*.tar.gz
             ./artifacts/**/*.pkg.tar.xz
-            ./artifacts/**/*.xbps
