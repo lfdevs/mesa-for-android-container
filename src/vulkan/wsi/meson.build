@@ -62,7 +62,8 @@ libvulkan_wsi = static_library(
   [files_vulkan_wsi, wsi_entrypoints],
   include_directories : [inc_include, inc_src],
   dependencies : [
-    vulkan_wsi_deps, dep_libdrm, dep_dbus, dep_libudev, idep_vulkan_util_headers,
+    vulkan_wsi_deps, dep_libdrm, dep_dbus.found() ? dep_dbus : [], dep_libudev,
+    idep_vulkan_util_headers,
     idep_vulkan_runtime_headers, idep_xmlconfig, idep_mesautil, platform_deps,
     idep_blake3
   ],

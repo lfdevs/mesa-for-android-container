@@ -775,10 +775,10 @@ endif
 dep_libdrm_amdgpu = null_dep
 dep_libdrm_intel = null_dep
 
-dep_dbus = dependency(
-  'dbus-1',
-  required : true,
-)
+dep_dbus = disabler()
+if host_machine.system() == 'linux' and host_machine.cpu_family() == 'aarch64'
+  dep_dbus = dependency('dbus-1', required : true)
+endif
 
 _drm_ver = '2.4.109'
 
