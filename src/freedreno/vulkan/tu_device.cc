@@ -1289,11 +1289,24 @@ tu_get_properties(struct tu_physical_device *pdevice,
    props->optimalBufferCopyRowPitchAlignment = 128;
    props->nonCoherentAtomSize = 64;
 
-   props->apiVersion =
+   /* HACK: Expose Vulkan 1.3 on devices without multiview.
+    * Current Minecraft renderer checks for VK1.2 presence and refuses to
+    * start on VK1.0 exposed here in the case if the device has no multiview
+    * This makes it boot on these devices. This is not conformant, but I don't
+    * care. Sigh.
+    */
+
+   /*props->apiVersion =
       tu_has_multiview(pdevice) ?
          ((pdevice->info->chip >= 7) ? TU_API_VERSION :
             VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION))
          : VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION);
+   */
+
+   props->apiVersion = pdevice->info->chip >= 7 ?
+      TU_API_VERSION : // expose current api on gen7 devices anyway
+      VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION);
+
    props->driverVersion = vk_get_driver_version();
    props->vendorID = pdevice->instance->drirc.debug.force_vk_vendor != 0 ?
                      pdevice->instance->drirc.debug.force_vk_vendor : 0x5143;
