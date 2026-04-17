@@ -1743,6 +1743,14 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
    };
    VkPipelineCreationFeedback stage_feedbacks[MESA_SHADER_STAGES] = { 0 };
 
+   /* === ДОБАВЛЕНО: Идентификация GPU Adreno 8xx === */
+   const uint64_t chip_id = builder->device->physical_device->dev_id.chip_id;
+   const bool is_a810 = chip_id == 0x44010000ull;
+   const bool is_a825 = chip_id == 0x44030000ull;
+   const bool is_a829 = chip_id == 0x44030A20ull;
+   const bool is_target_gpu = is_a810 || is_a825 || is_a829;
+   /* === КОНЕЦ ДОБАВЛЕНИЯ === */
+
    const bool executable_info =
       builder->create_flags &
       VK_PIPELINE_CREATE_2_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR;
@@ -1849,8 +1857,9 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
 
    if (builder->state &
        VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
+      /* === ИЗМЕНЕНО: Отключаем custom_resolve на A810 === */
       keys[MESA_SHADER_FRAGMENT].custom_resolve =
-         builder->graphics_state.rp->custom_resolve;
+         is_a810 ? false : builder->graphics_state.rp->custom_resolve;
 
       if (builder->device->physical_device->instance->drirc.misc.emulate_alpha_to_coverage) {
          keys[MESA_SHADER_FRAGMENT].emulate_alpha_to_coverage = true;
@@ -1903,7 +1912,9 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
          }
       }
 
-      keys[last_pre_rast_stage].fdm_per_layer = builder->fdm_per_layer;
+      /* === ИЗМЕНЕНО: Отключаем FDM per layer на A810 === */
+      keys[last_pre_rast_stage].fdm_per_layer =
+         is_a810 ? false : builder->fdm_per_layer;
    }
 
    if (builder->state & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
@@ -1944,8 +1955,9 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
        * just checked in tu6_emit_fs_inputs.  We will also copy the value to
        * tu_shader_key::force_sample_interp in a bit.
        */
+      /* === ИЗМЕНЕНО: Отключаем force_sample_interp на A810 === */
       keys[MESA_SHADER_FRAGMENT].force_sample_interp =
-         !builder->rasterizer_discard && msaa_info && msaa_info->sampleShadingEnable;
+         is_a810 ? false : (!builder->rasterizer_discard && msaa_info && msaa_info->sampleShadingEnable);
    }
 
    unsigned char pipeline_blake3[BLAKE3_KEY_LEN];

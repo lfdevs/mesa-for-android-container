@@ -57,6 +57,34 @@ DEBUG_GET_ONCE_OPTION(ir3_shader_override_path, "IR3_SHADER_OVERRIDE_PATH",
 enum ir3_shader_debug ir3_shader_debug = 0;
 const char *ir3_shader_override_path = NULL;
 
+struct ir3_gpu_profile
+ir3_get_gpu_profile(uint32_t chip_id)
+{
+    switch (chip_id) {
+    case 0x44010000: /* Adreno 810 */
+        return (struct ir3_gpu_profile){90, 4, 4, false};
+    case 0x44030000: /* Adreno 825 */
+        return (struct ir3_gpu_profile){85, 8, 8, true};
+    case 0x44030A20: /* Adreno 829 */
+        return (struct ir3_gpu_profile){80, 10, 8, true};
+    case 0x44050001: /* Adreno 830 */
+        return (struct ir3_gpu_profile){75, 16, 12, true};
+    case 0x43050A31: /* Adreno 830 variant */
+        return (struct ir3_gpu_profile){75, 16, 12, true};
+    case 0x43050A32: /* Adreno 840 */
+        return (struct ir3_gpu_profile){70, 20, 16, true};
+    default:
+        return (struct ir3_gpu_profile){85, 8, 8, false};
+    }
+}
+
+uint32_t
+ir3_effective_reg_size(struct ir3_compiler *compiler)
+{
+    struct ir3_gpu_profile profile = ir3_get_gpu_profile(compiler->dev_id->chip_id);
+    return compiler->reg_size_vec4 * profile.reg_efficiency / 100;
+}
+
 void
 ir3_compiler_destroy(struct ir3_compiler *compiler)
 {
@@ -217,6 +245,12 @@ ir3_compiler_debug_init(void)
    util_call_once(&once, __debug_init);
 }
 
+static inline bool
+ir3_is_a810(const struct fd_dev_id *dev_id)
+{
+   return dev_id->chip_id == 0x44010000;
+}
+
 struct ir3_compiler *
 ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
                     const struct fd_dev_info *dev_info,
@@ -232,6 +266,9 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    compiler->is_64bit = fd_dev_64b(dev_id);
    compiler->options = *options;
    compiler->info = dev_info;
+
+   if (ir3_is_a810(dev_id))
+      ir3_shader_debug |= IR3_DBG_NODESCPREFETCH;
 
    /* TODO see if older GPU's were different here */
    compiler->branchstack_size = dev_info->props.has_dual_wave_dispatch ? 512 : 256;

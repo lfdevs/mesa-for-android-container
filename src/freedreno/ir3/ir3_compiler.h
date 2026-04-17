@@ -58,6 +58,13 @@ struct ir3_compiler_options {
    uint64_t uche_trap_base;
 };
 
+struct ir3_gpu_profile {
+    uint32_t reg_efficiency;
+    uint32_t max_sy_inflight;
+    uint32_t max_ss_inflight;
+    bool force_double_threadsize;
+};
+
 struct ir3_compiler {
    struct fd_device *dev;
    const struct fd_dev_id *dev_id;
@@ -388,6 +395,52 @@ bool ir3_shader_bisect_need_shader_key(void);
 void ir3_shader_bisect_dump_id(struct ir3_shader_variant *v);
 bool ir3_shader_bisect_select(struct ir3_shader_variant *v);
 bool ir3_shader_bisect_disasm_select(struct ir3_shader_variant *v);
+
+/* ========== A8XX HELPER FUNCTIONS ========== */
+
+struct ir3_gpu_profile;
+struct ir3_gpu_profile ir3_get_gpu_profile(uint32_t chip_id);
+uint32_t ir3_effective_reg_size(struct ir3_compiler *compiler);
+
+static inline bool
+ir3_force_double_threadsize(struct ir3_compiler *compiler)
+{
+   if (compiler->gen >= 8) {
+      struct ir3_gpu_profile profile = ir3_get_gpu_profile(compiler->dev_id->chip_id);
+      return profile.force_double_threadsize;
+   }
+   return compiler->info->props.supports_double_threadsize;
+}
+
+/* Helper function to check if A8XX should use aggressive const limits */
+static inline bool
+ir3_use_aggressive_const_limits(struct ir3_compiler *compiler)
+{
+   return compiler->gen >= 8;
+}
+
+/* Helper function to get optimal delay slots for current gen */
+static inline unsigned
+ir3_get_alu_to_alu_delay(struct ir3_compiler *compiler)
+{
+   if (compiler->gen >= 8)
+      return 1;
+   if (compiler->gen >= 7)
+      return 2;
+   return 3;
+}
+
+static inline unsigned
+ir3_get_non_alu_delay(struct ir3_compiler *compiler)
+{
+   if (compiler->gen >= 8)
+      return 4;
+   if (compiler->gen >= 7)
+      return 5;
+   return 6;
+}
+
+/* ========== END A8XX HELPER FUNCTIONS ========== */
 
 ENDC;
 
