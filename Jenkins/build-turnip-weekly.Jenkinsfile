@@ -1,4 +1,4 @@
-pipeline {
+﻿pipeline {
     agent { label 'linux-arm64' }
 
     triggers {
@@ -163,11 +163,6 @@ pipeline {
                         cp mesa-source-prepared.tar.gz "$WORKSPACE/"
                     '''
 
-                    stash(
-                        name: 'mesa-source-prepared',
-                        includes: 'mesa-source-prepared.tar.gz',
-                        allowEmpty: false
-                    )
                 }
             }
         }
@@ -184,7 +179,7 @@ pipeline {
                         docker {
                             image 'debian:trixie-slim'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -193,7 +188,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/bash
                                 set -euo pipefail
@@ -322,7 +316,7 @@ pipeline {
                         docker {
                             image 'ubuntu:noble'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -331,7 +325,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/bash
                                 set -euo pipefail
@@ -456,7 +449,7 @@ pipeline {
                         docker {
                             image 'fedora:43'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -465,7 +458,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/bash
                                 set -euo pipefail
@@ -589,7 +581,7 @@ pipeline {
                         docker {
                             image 'lfdevs/archlinuxarm:base-devel'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -598,7 +590,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/bash
                                 set -euo pipefail
@@ -729,7 +720,7 @@ pipeline {
                         docker {
                             image 'ghcr.io/void-linux/void-glibc-full:latest'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -738,7 +729,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/sh
                                 set -eu

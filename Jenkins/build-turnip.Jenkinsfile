@@ -1,4 +1,4 @@
-pipeline {
+﻿pipeline {
     agent { label 'linux-arm64' }
 
     parameters {
@@ -47,11 +47,6 @@ pipeline {
                         cp mesa-source-prepared.tar.gz "$WORKSPACE/"
                     '''
 
-                    stash(
-                        name: 'mesa-source-prepared',
-                        includes: 'mesa-source-prepared.tar.gz',
-                        allowEmpty: false
-                    )
                 }
             }
         }
@@ -68,7 +63,7 @@ pipeline {
                         docker {
                             image 'debian:trixie-slim'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -77,7 +72,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/bash
                                 set -euo pipefail
@@ -168,11 +162,6 @@ pipeline {
                                 artifacts: 'turnip_*debian_trixie*.tar.gz, sha256sums_debian_trixie.txt',
                                 fingerprint: true
                             )
-                            stash(
-                                name: 'release-artifacts-debian-trixie',
-                                includes: 'turnip_*debian_trixie*.tar.gz, sha256sums_debian_trixie.txt',
-                                allowEmpty: true
-                            )
                         }
                     }
                     post {
@@ -186,7 +175,7 @@ pipeline {
                         docker {
                             image 'ubuntu:noble'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -195,7 +184,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/bash
                                 set -euo pipefail
@@ -288,11 +276,6 @@ pipeline {
                                 artifacts: 'turnip_*ubuntu_noble*.tar.gz, sha256sums_ubuntu_noble.txt',
                                 fingerprint: true
                             )
-                            stash(
-                                name: 'release-artifacts-ubuntu-noble',
-                                includes: 'turnip_*ubuntu_noble*.tar.gz, sha256sums_ubuntu_noble.txt',
-                                allowEmpty: true
-                            )
                         }
                     }
                     post {
@@ -306,7 +289,7 @@ pipeline {
                         docker {
                             image 'fedora:43'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -315,7 +298,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/bash
                                 set -euo pipefail
@@ -406,11 +388,6 @@ pipeline {
                                 artifacts: 'turnip_*fedora_43*.tar.gz, sha256sums_fedora_43.txt',
                                 fingerprint: true
                             )
-                            stash(
-                                name: 'release-artifacts-fedora-43',
-                                includes: 'turnip_*fedora_43*.tar.gz, sha256sums_fedora_43.txt',
-                                allowEmpty: true
-                            )
                         }
                     }
                     post {
@@ -424,7 +401,7 @@ pipeline {
                         docker {
                             image 'lfdevs/archlinuxarm:base-devel'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -511,11 +488,6 @@ pipeline {
                                 artifacts: 'vulkan-freedreno*.pkg.tar.xz, sha256sums_archlinux.txt',
                                 fingerprint: true
                             )
-                            stash(
-                                name: 'release-artifacts-archlinux',
-                                includes: 'vulkan-freedreno*.pkg.tar.xz, sha256sums_archlinux.txt',
-                                allowEmpty: true
-                            )
                         }
                     }
                     post {
@@ -531,7 +503,7 @@ pipeline {
                         docker {
                             image 'ghcr.io/void-linux/void-glibc-full:latest'
                             args  '--privileged --user root'
-                            reuseNode false
+                            reuseNode true
                             label 'linux-arm64'
                         }
                     }
@@ -540,7 +512,6 @@ pipeline {
                     }
                     steps {
                         script {
-                            unstash 'mesa-source-prepared'
 
                             sh '''#!/bin/sh
                                 set -eu
@@ -638,11 +609,6 @@ pipeline {
                                 artifacts: 'turnip_*void*.tar.gz, sha256sums_void.txt',
                                 fingerprint: true
                             )
-                            stash(
-                                name: 'release-artifacts-void',
-                                includes: 'turnip_*void*.tar.gz, sha256sums_void.txt',
-                                allowEmpty: true
-                            )
                         }
                     }
                     post {
@@ -663,11 +629,6 @@ pipeline {
             steps {
                 script {
                     // Restore all build artifacts from parallel stages into this workspace
-                    unstash 'release-artifacts-debian-trixie'
-                    unstash 'release-artifacts-ubuntu-noble'
-                    unstash 'release-artifacts-fedora-43'
-                    unstash 'release-artifacts-archlinux'
-                    unstash 'release-artifacts-void'
 
                     sh '''#!/bin/bash
                         set -euo pipefail
